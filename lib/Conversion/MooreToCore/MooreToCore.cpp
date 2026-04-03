@@ -52,9 +52,14 @@ namespace {
 
 /// Cache for identified structs and field GEP paths keyed by class symbol.
 struct ClassTypeCache {
+  struct TypeInfoInfo {
+    LLVM::GlobalOp global;
+  };
+
   struct ClassStructInfo {
     LLVM::LLVMStructType classBody;
     LLVM::LLVMStructType headerTy;
+    TypeInfoInfo typeInfo;
 
     unsigned headerFieldIndex = 0;
     unsigned typeInfoFieldIndex = 0;
@@ -94,11 +99,23 @@ struct ClassTypeCache {
     return std::nullopt;
   }
 
+  std::optional<TypeInfoInfo> getTypeInfo(SymbolRefAttr classSym) const {
+    if (auto it = classToTypeInfoMap.find(classSym);
+        it != classToTypeInfoMap.end())
+      return it->second;
+    return std::nullopt;
+  }
+
+  void setTypeInfo(SymbolRefAttr classSym, const TypeInfoInfo &info) {
+    classToTypeInfoMap[classSym] = info;
+  }
+
 private:
   // Keyed by the SymbolRefAttr of the class.
   // Kept private so all accesses are done with helpers which preserve
   // invariants
   DenseMap<Attribute, ClassStructInfo> classToStructMap;
+  DenseMap<Attribute, TypeInfoInfo> classToTypeInfoMap;
 };
 
 /// Cache for external function declarations. Avoids redundant symbol table
@@ -157,6 +174,66 @@ static LLVM::LLVMStructType getClassObjectHeaderType(MLIRContext *ctx) {
                              LLVM::LLVMPointerType::get(ctx)});
 }
 
+static std::string getTypeInfoName(SymbolRefAttr className) {
+  return className.getRootReference().str() + "::typeinfo";
+}
+
+static FailureOr<ClassTypeCache::TypeInfoInfo>
+getOrCreateTypeInfo(ModuleOp mod, SymbolRefAttr classSym,
+                    ClassTypeCache &cache) {
+  if (auto info = cache.getTypeInfo(classSym))
+    return *info;
+
+  MLIRContext *ctx = mod.getContext();
+  auto ptrTy = LLVM::LLVMPointerType::get(ctx);
+  auto typeInfoTy = LLVM::LLVMStructType::getLiteral(ctx, {ptrTy});
+
+  auto globalName = getTypeInfoName(classSym);
+  auto global = mod.lookupSymbol<LLVM::GlobalOp>(globalName);
+  if (!global) {
+    OpBuilder builder = OpBuilder::atBlockBegin(mod.getBody());
+    global = LLVM::GlobalOp::create(
+        builder, mod.getLoc(), typeInfoTy,
+        /*isConstant=*/true, LLVM::Linkage::Internal, globalName, Attribute());
+
+    Block *block = new Block();
+    global.getInitializerRegion().push_back(block);
+    builder.setInsertionPointToStart(block);
+
+    if (auto *classOp = mod.lookupSymbol(classSym)) {
+      auto classDecl = dyn_cast<ClassDeclOp>(classOp);
+      if (classDecl && classDecl.getBaseAttr()) {
+        auto baseInfo =
+            getOrCreateTypeInfo(mod, classDecl.getBaseAttr(), cache);
+        if (failed(baseInfo))
+          return failure();
+        auto baseAddr =
+            LLVM::AddressOfOp::create(builder, mod.getLoc(), baseInfo->global);
+        auto undef = LLVM::UndefOp::create(builder, mod.getLoc(), typeInfoTy)
+                         .getResult();
+        auto init = LLVM::InsertValueOp::create(builder, mod.getLoc(), undef,
+                                                baseAddr.getResult(),
+                                                ArrayRef<int64_t>{0});
+        LLVM::ReturnOp::create(builder, mod.getLoc(), init);
+        ClassTypeCache::TypeInfoInfo info{global};
+        cache.setTypeInfo(classSym, info);
+        return info;
+      }
+    }
+
+    auto undef =
+        LLVM::UndefOp::create(builder, mod.getLoc(), typeInfoTy).getResult();
+    auto nullPtr =
+        LLVM::ZeroOp::create(builder, mod.getLoc(), ptrTy).getResult();
+    auto init = LLVM::InsertValueOp::create(builder, mod.getLoc(), undef,
+                                            nullPtr, ArrayRef<int64_t>{0});
+    LLVM::ReturnOp::create(builder, mod.getLoc(), init);
+  }
+
+  ClassTypeCache::TypeInfoInfo info{global};
+  cache.setTypeInfo(classSym, info);
+  return info;
+}
 static LogicalResult resolveClassStructBody(ClassDeclOp op,
                                             TypeConverter const &typeConverter,
                                             ClassTypeCache &cache) {
@@ -167,10 +244,15 @@ static LogicalResult resolveClassStructBody(ClassDeclOp op,
     // We already have a resolved class struct body.
     return success();
 
+  if (failed(getOrCreateTypeInfo(op->getParentOfType<ModuleOp>(), classSym,
+                                 cache)))
+    return op.emitOpError() << "Failed to create RTTI for class";
+
   // Otherwise we need to resolve.
   ClassTypeCache::ClassStructInfo structBody;
   SmallVector<Type> structBodyMembers;
   structBody.headerTy = getClassObjectHeaderType(op.getContext());
+  structBody.typeInfo = *cache.getTypeInfo(classSym);
   structBodyMembers.push_back(structBody.headerTy);
 
   // Base-first (prefix) layout for single inheritance.
@@ -989,6 +1071,7 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
       return op.emitError() << "Could not resolve class struct for " << sym;
 
     auto structTy = cache.getStructInfo(sym)->classBody;
+    auto typeInfo = cache.getStructInfo(sym)->typeInfo;
 
     // Check that all struct members have data layout support. Types like
     // !sim.dstring or !sim.queue don't have a known size, which would cause
@@ -1013,6 +1096,21 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
     auto mallocFn = funcCache.getOrCreate(rewriter, "malloc", {i64Ty}, {ptrTy});
     auto call =
         func::CallOp::create(rewriter, loc, mallocFn, ValueRange{cSize});
+
+    auto typeInfoAddr =
+        LLVM::AddressOfOp::create(rewriter, loc, typeInfo.global);
+    auto i32Ty = IntegerType::get(ctx, 32);
+    auto headerIdx = LLVM::ConstantOp::create(
+        rewriter, loc, i32Ty,
+        rewriter.getI32IntegerAttr(cache.getStructInfo(sym)->headerFieldIndex));
+    auto typeInfoIdx = LLVM::ConstantOp::create(
+        rewriter, loc, i32Ty,
+        rewriter.getI32IntegerAttr(
+            cache.getStructInfo(sym)->typeInfoFieldIndex));
+    auto headerPtr =
+        LLVM::GEPOp::create(rewriter, loc, ptrTy, structTy, call.getResult(0),
+                            ValueRange{headerIdx, typeInfoIdx});
+    LLVM::StoreOp::create(rewriter, loc, typeInfoAddr, headerPtr);
 
     // Replace the new op with the malloc pointer (no cast needed with opaque
     // ptrs).
