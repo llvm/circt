@@ -591,3 +591,59 @@ firrtl.circuit "WireInferFromConnect" {
     firrtl.matchingconnect %b, %w : !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "WireInferSecondDomain"
+firrtl.circuit "WireInferSecondDomain" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @WireInferSecondDomain(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %a: !firrtl.uint<1> domains [%A]
+  ) {
+    // CHECK: %w = firrtl.wire domains[%A, %PowerDomain] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain()>]
+    %w = firrtl.wire domains [%A] : !firrtl.uint<1> domains [!firrtl.domain<@ClockDomain()>]
+    firrtl.matchingconnect %w, %a : !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "DoNotReUseAnonDomain"
+firrtl.circuit "DoNotReUseAnonDomain" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @DoNotReUseAnonDomain() {
+    // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: %ClockDomain = firrtl.domain.anon  : !firrtl.domain<@ClockDomain()>
+    // CHECK: %PowerDomain = firrtl.domain.anon  : !firrtl.domain<@PowerDomain()>
+    // CHECK: %w1 = firrtl.wire domains[%ClockDomain, %PowerDomain] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain()>]
+    // CHECK: %ClockDomain_0 = firrtl.domain.anon  {name = "ClockDomain"} : !firrtl.domain<@ClockDomain()>
+    // CHECK: %PowerDomain_1 = firrtl.domain.anon  {name = "PowerDomain"} : !firrtl.domain<@PowerDomain()>
+    // CHECK: %w2 = firrtl.wire domains[%ClockDomain_0, %PowerDomain_1] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain()>]
+    // CHECK: firrtl.matchingconnect %w1, %c0_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %w2, %c0_ui1 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %w1 = firrtl.wire : !firrtl.uint<1>
+    %w2 = firrtl.wire : !firrtl.uint<1>
+    firrtl.matchingconnect %w1, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %w2, %c0_ui1 : !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "ReUseAnonDomain"
+firrtl.circuit "ReUseAnonDomain" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  firrtl.module @ReUseAnonDomain() {
+  // CHECK: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK: %ClockDomain = firrtl.domain.anon  : !firrtl.domain<@ClockDomain()>
+  // CHECK: %PowerDomain = firrtl.domain.anon  : !firrtl.domain<@PowerDomain()>
+  // CHECK: %w1 = firrtl.wire domains[%ClockDomain, %PowerDomain] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain()>]
+  // CHECK: %w2 = firrtl.wire domains[%ClockDomain, %PowerDomain] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain()>]
+  // CHECK: firrtl.matchingconnect %w1, %c0_ui1 : !firrtl.uint<1>
+  // CHECK: firrtl.matchingconnect %w2, %w1 : !firrtl.uint<1>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %w1 = firrtl.wire : !firrtl.uint<1>
+    %w2 = firrtl.wire : !firrtl.uint<1>
+    firrtl.matchingconnect %w1, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %w2, %w1 : !firrtl.uint<1>
+  }
+}
