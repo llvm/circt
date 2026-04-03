@@ -914,9 +914,11 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
   for (auto rhs : op->getOperands()) {
     if (!isa<FIRRTLBaseType>(rhs.getType()))
       continue;
-    if (auto *op = rhs.getDefiningOp();
-        op && op->hasTrait<OpTrait::ConstantLike>())
-      continue;
+    if (auto *op = rhs.getDefiningOp()) {
+      // Skip constants and invalid values - they are domain-agnostic.
+      if (op->hasTrait<OpTrait::ConstantLike>() || isa<InvalidValueOp>(op))
+        continue;
+    }
     if (failed(unifyAssociations(info, allocator, table, op, lhs, rhs)))
       return failure();
     lhs = rhs;
@@ -924,9 +926,11 @@ static LogicalResult processOp(const DomainInfo &info, TermAllocator &allocator,
   for (auto rhs : op->getResults()) {
     if (!isa<FIRRTLBaseType>(rhs.getType()))
       continue;
-    if (auto *op = rhs.getDefiningOp();
-        op && op->hasTrait<OpTrait::ConstantLike>())
-      continue;
+    if (auto *op = rhs.getDefiningOp()) {
+      // Skip constants and invalid values - they are domain-agnostic.
+      if (op->hasTrait<OpTrait::ConstantLike>() || isa<InvalidValueOp>(op))
+        continue;
+    }
     if (failed(unifyAssociations(info, allocator, table, op, lhs, rhs)))
       return failure();
     lhs = rhs;
