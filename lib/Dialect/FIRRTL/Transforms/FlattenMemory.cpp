@@ -189,8 +189,8 @@ struct FlattenMemoryPass
                 auto mBit = builder.createOrFold<BitsPrimOp>(
                     realOldField, m.index(), m.index());
                 // Check how many times the mask bit needs to be prepend.
-                for (size_t repeat = 0;
-                     repeat < maskWidths[maskWidths.size() - 1 - m.index()];
+                for (size_t repeat = 0, end = maskWidths[maskWidths.size() - 1 - m.index()];
+                     repeat < end;
                      repeat++)
                   if ((m.index() == 0 && repeat == 0) || !catMasks)
                     catMasks = mBit;
