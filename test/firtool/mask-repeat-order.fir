@@ -8,7 +8,7 @@ FIRRTL version 6.0.0
 
 circuit MaskNested:
   ; CHECK-LABEL: module MaskNested(
-  ; CHECK: .W0_mask ({{[{][{]3[{]wen[}][}], mem_wr_mask_b_1, mem_wr_mask_b_0[}]}})
+  ; CHECK{LITERAL}: .W0_mask ({{3{wen}}, mem_wr_mask_b_1, mem_wr_mask_b_0})
   public module MaskNested:
     input clock: Clock
     input wen: UInt<1>
