@@ -184,14 +184,12 @@ struct FlattenMemoryPass
             if ((name == "mask" || name == "wmask") &&
                 (maskWidths.size() != totalmaskWidths)) {
               Value catMasks;
-              for (const auto &m : llvm::enumerate(maskWidths)) {
+              for (const auto &m : llvm::enumerate(llvm::reverse(maskWidths))) {
                 // Get the mask bit.
                 auto mBit = builder.createOrFold<BitsPrimOp>(
                     realOldField, m.index(), m.index());
                 // Check how many times the mask bit needs to be prepend.
-                for (size_t repeat = 0, end = maskWidths[maskWidths.size() - 1 - m.index()];
-                     repeat < end;
-                     repeat++)
+                for (size_t repeat = 0; repeat < m.value(); repeat++)
                   if ((m.index() == 0 && repeat == 0) || !catMasks)
                     catMasks = mBit;
                   else
