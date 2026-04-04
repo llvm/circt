@@ -460,11 +460,13 @@ public:
   /// Get the NPN canonical form for this cut.
   /// This is used for efficient pattern matching against library components.
   const NPNClass &getNPNClass() const;
+  const NPNClass &getNPNClass(const NPNTable *npnTable) const;
 
   /// Get the permutated inputs for this cut based on the given pattern NPN.
   /// Returns indices into the inputs vector.
   void
-  getPermutatedInputIndices(const NPNClass &patternNPN,
+  getPermutatedInputIndices(const NPNTable *npnTable,
+                            const NPNClass &patternNPN,
                             SmallVectorImpl<unsigned> &permutedIndices) const;
 
   /// Get arrival times for each input of this cut.
@@ -551,6 +553,9 @@ struct CutRewriterOptions {
 
   /// Run priority cuts enumeration and dump the cut sets.
   bool testPriorityCuts = false;
+
+  /// Optional lookup table used to accelerate 4-input NPN canonicalization.
+  const NPNTable *npnTable = nullptr;
 };
 
 //===----------------------------------------------------------------------===//
@@ -618,6 +623,9 @@ public:
 
   /// Clear all cut sets and reset the enumerator.
   void clear();
+
+  /// Get the cut rewriter options used for this enumeration.
+  const CutRewriterOptions &getOptions() const { return options; }
 
   /// Record that one cut was successfully rewritten.
   void noteCutRewritten() { ++stats.numCutsRewritten; }

@@ -361,24 +361,25 @@ bool Cut::isTrivialCut() const {
   return rootIndex == 0 && inputs.size() == 1;
 }
 
-const NPNClass &Cut::getNPNClass() const {
-  // If the NPN is already computed, return it
+const NPNClass &Cut::getNPNClass() const { return getNPNClass(nullptr); }
+
+const NPNClass &Cut::getNPNClass(const NPNTable *npnTable) const {
   if (npnClass)
     return *npnClass;
 
   const auto &truthTable = *getTruthTable();
-
-  // Compute the NPN canonical form
-  auto canonicalForm = NPNClass::computeNPNCanonicalForm(truthTable);
+  NPNClass canonicalForm;
+  if (!npnTable || !npnTable->lookup(truthTable, canonicalForm))
+    canonicalForm = NPNClass::computeNPNCanonicalForm(truthTable);
 
   npnClass.emplace(std::move(canonicalForm));
   return *npnClass;
 }
 
 void Cut::getPermutatedInputIndices(
-    const NPNClass &patternNPN,
+    const NPNTable *npnTable, const NPNClass &patternNPN,
     SmallVectorImpl<unsigned> &permutedIndices) const {
-  auto npnClass = getNPNClass();
+  const auto &npnClass = getNPNClass(npnTable);
   npnClass.getInputPermutation(patternNPN, permutedIndices);
 }
 
@@ -1210,7 +1211,7 @@ CutRewriter::getMatchingPatternsFromTruthTable(const Cut &cut) const {
   if (patterns.npnToPatternMap.empty())
     return {};
 
-  auto &npnClass = cut.getNPNClass();
+  auto &npnClass = cut.getNPNClass(options.npnTable);
   auto it = patterns.npnToPatternMap.find(
       {npnClass.truthTable.table, npnClass.truthTable.numInputs});
   if (it == patterns.npnToPatternMap.end())
@@ -1294,7 +1295,7 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
     auto matchResult = pattern->match(cutEnumerator, cut);
     if (!matchResult)
       continue;
-    auto &cutNPN = cut.getNPNClass();
+    auto &cutNPN = cut.getNPNClass(options.npnTable);
 
     // Get the input mapping from pattern's NPN class to cut's NPN class
     SmallVector<unsigned> inputMapping;
