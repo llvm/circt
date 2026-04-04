@@ -1,4 +1,5 @@
 // RUN: circt-opt -hw-imdce=print-liveness --split-input-file --allow-unregistered-dialect %s | FileCheck %s --check-prefixes=LIVENESS
+// RUN: circt-opt -hw-imdce --split-input-file --allow-unregistered-dialect %s | FileCheck %s --check-prefixes=ELIMINATE
 
 module {
 
@@ -34,6 +35,10 @@ module {
   // LIVENESS-LABEL: hw.module public @dead_module_dead_user
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = []
+  // ELIMINATE-LABEL:   hw.module public @dead_module_dead_user(out const : i1) {
+  // ELIMINATE:           %[[CONSTANT_0:.*]] = hw.constant false
+  // ELIMINATE:           hw.output %[[CONSTANT_0]] : i1
+  // ELIMINATE:         }
   hw.module public @dead_module_dead_user(out const : i1) {
     // LIVENESS: hw.constant false
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -60,6 +65,10 @@ module {
   // LIVENESS-LABEL: hw.module private @dead_port_alive_module
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["DEAD", "LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @dead_port_alive_module(in 
+  // ELIMINATE-SAME:      %[[SOURCE2:.*]] : i1, out dest : i1) {
+  // ELIMINATE:           hw.output %[[SOURCE2]] : i1
+  // ELIMINATE:         }
   hw.module private @dead_port_alive_module(in %source1 : i1, in %source2 : i1, out dest : i1) {
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
@@ -69,6 +78,11 @@ module {
   // LIVENESS-LABEL: hw.module public @public_with_dead_port
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["DEAD", "LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @public_with_dead_port(in 
+  // ELIMINATE-SAME:      %[[SOURCE1:.*]] : i1, in
+  // ELIMINATE-SAME:      %[[SOURCE2:.*]] : i1, out dest : i1) {
+  // ELIMINATE:           hw.output %[[SOURCE2]] : i1
+  // ELIMINATE:         }
   hw.module public @public_with_dead_port(in %source1 : i1, in %source2 : i1, out dest : i1) {
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
@@ -78,6 +92,13 @@ module {
   // LIVENESS-LABEL: hw.module public @dead_port_alive_module_user
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = []
+  // ELIMINATE-LABEL:   hw.module public @dead_port_alive_module_user(out dest1 : i1, out dest2 : i1) {
+  // ELIMINATE:           %[[CONSTANT_0:.*]] = hw.constant false
+  // ELIMINATE:           %[[CONSTANT_1:.*]] = hw.constant true
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "dead_port_alive_module_instance" @dead_port_alive_module(source2: %[[CONSTANT_1]]: i1) -> (dest: i1)
+  // ELIMINATE:           %[[INSTANCE_1:.*]] = hw.instance "public_with_dead_port_instance" @public_with_dead_port(source1: %[[CONSTANT_0]]: i1, source2: %[[CONSTANT_1]]: i1) -> (dest: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]], %[[INSTANCE_1]] : i1, i1
+  // ELIMINATE:         }
   hw.module public @dead_port_alive_module_user(out dest1 : i1, out dest2 : i1) {
     // LIVENESS: hw.constant false
     // LIVENESS-SAME: "op-liveness" = "DEAD"
@@ -117,6 +138,12 @@ module {
   // LIVENESS-LABEL: hw.module private @Child2
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @Child2(in
+  // ELIMINATE-SAME:      %[[INPUT:.*]] : i1, in
+  // ELIMINATE-SAME:      %[[CLOCK:.*]] : !seq.clock, out output : i1) {
+  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[INPUT]] clock %[[CLOCK]] {firrtl.random_init_start = 0 : ui64} : i1
+  // ELIMINATE:           hw.output %[[FIRREG_0]] : i1
+  // ELIMINATE:         }
   hw.module private @Child2(in %input : i1, in %clock : !seq.clock, out output: i1) {
     // LIVENESS: seq.firreg
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -130,6 +157,11 @@ module {
   // LIVENESS-LABEL: hw.module public @Top
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["DEAD", "DEAD"]
+  // ELIMINATE-LABEL:   hw.module public @Top(in
+  // ELIMINATE-SAME:      %[[CLOCK:.*]] : !seq.clock, in
+  // ELIMINATE-SAME:      %[[INPUT:.*]] : i1) {
+  // ELIMINATE:           hw.output
+  // ELIMINATE:         }
   hw.module public @Top(in %clock: !seq.clock, in %input : i1) {
     // LIVENESS: hw.instance "child1_instance"
     // LIVENESS-SAME: "op-liveness" = "DEAD"
@@ -149,6 +181,12 @@ module {
   // LIVENESS-LABEL: hw.module private @SingleDriver
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @SingleDriver(in
+  // ELIMINATE-SAME:      %[[A:.*]] : i1, out b : i1) {
+  // ELIMINATE:           %[[CONSTANT_0:.*]] = hw.constant false
+  // ELIMINATE:           %[[AND_0:.*]] = comb.and %[[A]], %[[CONSTANT_0]] : i1
+  // ELIMINATE:           hw.output %[[AND_0]] : i1
+  // ELIMINATE:         }
   hw.module private @SingleDriver(in %a : i1, out b : i1, out c : i1) {
     // LIVENESS: hw.constant false
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -170,6 +208,11 @@ module {
   // LIVENESS-LABEL: hw.module public @UnusedOutput
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @UnusedOutput(in
+  // ELIMINATE-SAME:      %[[A:.*]] : i1, out b : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "SingleDriverInstance" @SingleDriver(a: %[[A]]: i1) -> (b: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]] : i1
+  // ELIMINATE:         }
   hw.module public @UnusedOutput(in %a : i1, out b : i1) {
     // LIVENESS: hw.instance "SingleDriverInstance"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -195,6 +238,9 @@ module {
   // LIVENESS-LABEL: hw.module public @DeleteEmptyModule
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = []
+  // ELIMINATE-LABEL:   hw.module public @DeleteEmptyModule() {
+  // ELIMINATE:           hw.output
+  // ELIMINATE:         }
   hw.module public @DeleteEmptyModule() {
     // LIVENESS: hw.constant true
     // LIVENESS-SAME: "op-liveness" = "DEAD"
@@ -212,6 +258,10 @@ module {
   // LIVENESS-LABEL: hw.module private @multiple_remove_ports
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["DEAD", "DEAD", "LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @multiple_remove_ports(in
+  // ELIMINATE-SAME:      %[[SOURCE3:.*]] : i1, out result : i1) {
+  // ELIMINATE:           hw.output %[[SOURCE3]] : i1
+  // ELIMINATE:         }
   hw.module private @multiple_remove_ports(in %source1 : i1, in %source2 : i1, in %source3 : i1, out result : i1) {
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
@@ -221,6 +271,11 @@ module {
   // LIVENESS-LABEL: hw.module public @mrp_user
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @mrp_user(in
+  // ELIMINATE-SAME:      %[[IN:.*]] : i1, out result : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "mrp_instance" @multiple_remove_ports(source3: %[[IN]]: i1) -> (result: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]] : i1
+  // ELIMINATE:         }
   hw.module public @mrp_user(in %in : i1, out result : i1) {
     // Result used -> instance alive
     // LIVENESS: hw.instance "mrp_instance"
@@ -239,6 +294,12 @@ module {
   // LIVENESS-LABEL: hw.module public @DeadOpsInBody
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @DeadOpsInBody(in
+  // ELIMINATE-SAME:      %[[A:.*]] : i1, in
+  // ELIMINATE-SAME:      %[[CLK:.*]] : !seq.clock, out result : i1) {
+  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[A]] clock %[[CLK]] : i1
+  // ELIMINATE:           hw.output %[[A]] : i1
+  // ELIMINATE:         }
   hw.module public @DeadOpsInBody(in %a: i1, in %clk: !seq.clock, out result: i1) {
     // LIVENESS: seq.firreg
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -260,6 +321,10 @@ module {
   // LIVENESS-LABEL: hw.module private @NestedBottom
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @NestedBottom(in
+  // ELIMINATE-SAME:      %[[X:.*]] : i1, out y : i1) {
+  // ELIMINATE:           hw.output %[[X]] : i1
+  // ELIMINATE:         }
   hw.module private @NestedBottom(in %x: i1, out y: i1, out dead: i1) {
     // LIVENESS: hw.constant false
     // LIVENESS-SAME: "op-liveness" = "DEAD"
@@ -277,6 +342,11 @@ module {
   // LIVENESS-LABEL: hw.module private @NestedMiddle
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @NestedMiddle(in
+  // ELIMINATE-SAME:      %[[X:.*]] : i1, out y : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "bot" @NestedBottom(x: %[[X]]: i1) -> (y: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]] : i1
+  // ELIMINATE:         }
   hw.module private @NestedMiddle(in %x: i1, out y: i1) {
     // LIVENESS: hw.instance "bot"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -290,6 +360,11 @@ module {
   // LIVENESS-LABEL: hw.module public @NestedTop
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @NestedTop(in
+  // ELIMINATE-SAME:      %[[X:.*]] : i1, out y : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "mid" @NestedMiddle(x: %[[X]]: i1) -> (y: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]] : i1
+  // ELIMINATE:         }
   hw.module public @NestedTop(in %x: i1, out y: i1) {
     // LIVENESS: hw.instance "mid"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -307,6 +382,13 @@ module {
   // LIVENESS-LABEL: hw.module public @SideEffectPreserved
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @SideEffectPreserved(in
+  // ELIMINATE-SAME:      %[[A:.*]] : i1, in
+  // ELIMINATE-SAME:      %[[CLK:.*]] : !seq.clock, out result : i1) {
+  // ELIMINATE:           %[[CONSTANT_0:.*]] = hw.constant true
+  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[A]] clock %[[CLK]] reset sync %[[CONSTANT_0]], %[[A]] : i1
+  // ELIMINATE:           hw.output %[[A]] : i1
+  // ELIMINATE:         }
   hw.module public @SideEffectPreserved(in %a: i1, in %clk: !seq.clock, out result: i1) {
     // LIVENESS: hw.constant true
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -329,6 +411,11 @@ module {
   // LIVENESS-LABEL: hw.module private @SharedModule
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @SharedModule(in
+  // ELIMINATE-SAME:      %[[A:.*]] : i1, in
+  // ELIMINATE-SAME:      %[[B:.*]] : i1, out x : i1, out y : i1) {
+  // ELIMINATE:           hw.output %[[A]], %[[B]] : i1, i1
+  // ELIMINATE:         }
   hw.module private @SharedModule(in %a: i1, in %b: i1, out x: i1, out y: i1) {
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE"]
@@ -338,6 +425,11 @@ module {
   // LIVENESS-LABEL: hw.module public @SharedUser1
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @SharedUser1(in
+  // ELIMINATE-SAME:      %[[IN:.*]] : i1, out out : i1) {
+  // ELIMINATE:           %[[VAL_0:.*]], %[[INSTANCE_0:.*]] = hw.instance "s1" @SharedModule(a: %[[IN]]: i1, b: %[[IN]]: i1) -> (x: i1, y: i1)
+  // ELIMINATE:           hw.output %[[VAL_0]] : i1
+  // ELIMINATE:         }
   hw.module public @SharedUser1(in %in: i1, out out: i1) {
     // LIVENESS: hw.instance "s1"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -351,6 +443,11 @@ module {
   // LIVENESS-LABEL: hw.module public @SharedUser2
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @SharedUser2(in
+  // ELIMINATE-SAME:      %[[IN:.*]] : i1, out out : i1) {
+  // ELIMINATE:           %[[VAL_0:.*]], %[[INSTANCE_0:.*]] = hw.instance "s2" @SharedModule(a: %[[IN]]: i1, b: %[[IN]]: i1) -> (x: i1, y: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]] : i1
+  // ELIMINATE:         }
   hw.module public @SharedUser2(in %in: i1, out out: i1) {
     // LIVENESS: hw.instance "s2"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -367,6 +464,14 @@ module {
   // LIVENESS-LABEL: hw.module public @DeadOpsVariety
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE", "DEAD"]
+  // ELIMINATE-LABEL:   hw.module public @DeadOpsVariety(
+  // ELIMINATE-SAME:      in %a : i1,
+  // ELIMINATE-SAME:      in %b : i1,
+  // ELIMINATE-SAME:      in %[[CLK:.*]] : !seq.clock,
+  // ELIMINATE-SAME:      out result : i1) {
+  // ELIMINATE:           %[[AND_0:.*]] = comb.and %a, %b : i1
+  // ELIMINATE:           hw.output %[[AND_0]] : i1
+  // ELIMINATE:         }
   hw.module public @DeadOpsVariety(in %a: i1, in %b: i1, in %clk: !seq.clock, out result: i1) {
     // LIVENESS: comb.or
     // LIVENESS-SAME: "op-liveness" = "DEAD"
@@ -395,6 +500,10 @@ module {
   // LIVENESS-LABEL: hw.module public @DeadConstantChain
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @DeadConstantChain(in
+  // ELIMINATE-SAME:      %[[A:.*]] : i1, out result : i1) {
+  // ELIMINATE:           hw.output %[[A]] : i1
+  // ELIMINATE:         }
   hw.module public @DeadConstantChain(in %a: i1, out result: i1) {
     // LIVENESS: hw.constant false
     // LIVENESS-SAME: "op-liveness" = "DEAD"
@@ -415,6 +524,11 @@ module {
   // LIVENESS-LABEL: hw.module private @AlternatingPorts
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE", "DEAD", "LIVE", "DEAD"]
+  // ELIMINATE-LABEL:   hw.module private @AlternatingPorts(in
+  // ELIMINATE-SAME:      %[[LIVE1:.*]] : i1, in
+  // ELIMINATE-SAME:      %[[LIVE2:.*]] : i1, out out1 : i1, out out2 : i1) {
+  // ELIMINATE:           hw.output %[[LIVE1]], %[[LIVE2]] : i1, i1
+  // ELIMINATE:         }
   hw.module private @AlternatingPorts(
     in %live1: i1, in %dead1: i1, in %live2: i1, in %dead2: i1,
     out out1: i1, out dead_out1: i1, out out2: i1, out dead_out2: i1
@@ -427,6 +541,11 @@ module {
   // LIVENESS-LABEL: hw.module public @AlternatingUser
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @AlternatingUser(in
+  // ELIMINATE-SAME:      %[[X:.*]] : i1, out r1 : i1, out r2 : i1) {
+  // ELIMINATE:           %[[VAL_0:.*]], %[[INSTANCE_0:.*]] = hw.instance "alt" @AlternatingPorts(live1: %[[X]]: i1, live2: %[[X]]: i1) -> (out1: i1, out2: i1)
+  // ELIMINATE:           hw.output %[[VAL_0]], %[[INSTANCE_0]] : i1, i1
+  // ELIMINATE:         }
   hw.module public @AlternatingUser(in %x: i1, out r1: i1, out r2: i1) {
     // LIVENESS: hw.instance "alt"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -443,11 +562,17 @@ module {
   // - External modules have unknown implementations
   // - Instances targeting externals are conservatively kept alive
 
+  // ELIMINATE:         hw.module.extern private @ExternalMod(in %[[VAL_1:.*]] : i1, out b : i1)
   hw.module.extern private @ExternalMod(in %a: i1, out b: i1)
 
   // LIVENESS-LABEL: hw.module public @UseExternal
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @UseExternal(in
+  // ELIMINATE-SAME:      %[[X:.*]] : i1, out result : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "ext" @ExternalMod(a: %[[X]]: i1) -> (b: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]] : i1
+  // ELIMINATE:         }
   hw.module public @UseExternal(in %x: i1, out result: i1) {
     // LIVENESS: hw.instance "ext"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -458,11 +583,17 @@ module {
     hw.output %b : i1
   }
 
+  // ELIMINATE:         hw.module.extern private @UnusedExternal(in %[[VAL_1]] : i1, out b : i1)
   hw.module.extern private @UnusedExternal(in %a: i1, out b: i1)
 
   // LIVENESS-LABEL: hw.module public @DeadExternal
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @DeadExternal(in
+  // ELIMINATE-SAME:      %[[X:.*]] : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "dead_ext" @UnusedExternal(a: %[[X]]: i1) -> (b: i1)
+  // ELIMINATE:           hw.output
+  // ELIMINATE:         }
   hw.module public @DeadExternal(in %x: i1) {
     // LIVENESS: hw.instance "dead_ext"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -479,6 +610,10 @@ module {
   // LIVENESS-LABEL: hw.module private @NativeMod
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @NativeMod(in
+  // ELIMINATE-SAME:      %[[X:.*]] : i1, out y : i1) {
+  // ELIMINATE:           hw.output %[[X]] : i1
+  // ELIMINATE:         }
   hw.module private @NativeMod(in %x: i1, out y: i1) {
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
@@ -488,6 +623,11 @@ module {
   // LIVENESS-LABEL: hw.module public @NativeModUser
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @NativeModUser(in
+  // ELIMINATE-SAME:      %[[VAL_1]] : i1, out result : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "native_inst" @NativeMod(x: %[[VAL_1]]: i1) -> (y: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]] : i1
+  // ELIMINATE:         }
   hw.module public @NativeModUser(in %a: i1, out result: i1) {
     // LIVENESS: hw.instance "native_inst"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -503,11 +643,17 @@ module {
   //   markInstanceLike takes the conservative path: the instance and all its
   //   operands are marked alive regardless of output use.
 
+  // ELIMINATE:         hw.module.extern private @ConservativeExtern(in %[[VAL_0:.*]] : i1, out y : i1)
   hw.module.extern private @ConservativeExtern(in %x: i1, out y: i1)
 
   // LIVENESS-LABEL: hw.module public @ConservativeExternUser
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @ConservativeExternUser(in
+  // ELIMINATE-SAME:      %[[VAL_1]] : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "extern_inst" @ConservativeExtern(x: %[[VAL_1]]: i1) -> (y: i1)
+  // ELIMINATE:           hw.output
+  // ELIMINATE:         }
   hw.module public @ConservativeExternUser(in %a: i1) {
     // LIVENESS: hw.instance "extern_inst"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -532,6 +678,12 @@ module {
   // LIVENESS-LABEL: hw.module private @SideEffectMod
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @SideEffectMod(in
+  // ELIMINATE-SAME:      %[[VAL_0]] : i1, in
+  // ELIMINATE-SAME:      %[[CLK:.*]] : !seq.clock, out y : i1) {
+  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[VAL_0]] clock %[[CLK]] {firrtl.random_init_start = 0 : ui64} : i1
+  // ELIMINATE:           hw.output %[[FIRREG_0]] : i1
+  // ELIMINATE:         }
   hw.module private @SideEffectMod(in %x: i1, in %clk: !seq.clock, out y: i1) {
     // LIVENESS: seq.firreg
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -545,6 +697,11 @@ module {
   // LIVENESS-LABEL: hw.module public @SideEffectModUser
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["DEAD", "DEAD"]
+  // ELIMINATE-LABEL:   hw.module public @SideEffectModUser(in
+  // ELIMINATE-SAME:      %[[VAL_1]] : i1, in
+  // ELIMINATE-SAME:      %[[C:.*]] : !seq.clock) {
+  // ELIMINATE:           hw.output
+  // ELIMINATE:         }
   hw.module public @SideEffectModUser(in %a: i1, in %c: !seq.clock) {
     // LIVENESS: hw.instance "side_effect_inst"
     // LIVENESS-SAME: "op-liveness" = "DEAD"
@@ -567,6 +724,10 @@ module {
   // LIVENESS-LABEL: hw.module private @Gated
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module private @Gated(in
+  // ELIMINATE-SAME:      %[[VAL_0]] : i1, out y : i1) {
+  // ELIMINATE:           hw.output %[[VAL_0]] : i1
+  // ELIMINATE:         }
   hw.module private @Gated(in %x: i1, out y: i1) {
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
@@ -576,6 +737,11 @@ module {
   // LIVENESS-LABEL: hw.module public @GatedUser
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @GatedUser(in
+  // ELIMINATE-SAME:      %[[VAL_1]] : i1, out result : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "g_live" @Gated(x: %[[VAL_1]]: i1) -> (y: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]] : i1
+  // ELIMINATE:         }
   hw.module public @GatedUser(in %a: i1, out result: i1) {
     // LIVENESS: hw.instance "g_live"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -589,6 +755,10 @@ module {
   // LIVENESS-LABEL: hw.module public @GatedDead
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+  // ELIMINATE-LABEL:   hw.module public @GatedDead(in
+  // ELIMINATE-SAME:      %[[B:.*]] : i1) {
+  // ELIMINATE:           hw.output
+  // ELIMINATE:         }
   hw.module public @GatedDead(in %b: i1) {
     // LIVENESS: hw.instance "g_dead"
     // LIVENESS-SAME: "op-liveness" = "DEAD"
@@ -605,11 +775,19 @@ module {
   //   target alive and marks all its operands alive, regardless of output use.
   // - "ext_live" has its result consumed; "ext_dead" does not — both are LIVE.
 
+  // ELIMINATE:         hw.module.extern private @MultiExt(in %[[VAL_1]] : i1, out b : i1)
   hw.module.extern private @MultiExt(in %a: i1, out b: i1)
 
   // LIVENESS-LABEL: hw.module public @MultiExtUser
   // LIVENESS-SAME: "op-liveness" = "LIVE"
   // LIVENESS-SAME: "val-liveness" = ["LIVE", "LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @MultiExtUser(in
+  // ELIMINATE-SAME:      %[[VAL_0]] : i1, in
+  // ELIMINATE-SAME:      %[[Y:.*]] : i1, out result : i1) {
+  // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "ext_live" @MultiExt(a: %[[VAL_0]]: i1) -> (b: i1)
+  // ELIMINATE:           %[[INSTANCE_1:.*]] = hw.instance "ext_dead" @MultiExt(a: %[[Y]]: i1) -> (b: i1)
+  // ELIMINATE:           hw.output %[[INSTANCE_0]] : i1
+  // ELIMINATE:         }
   hw.module public @MultiExtUser(in %x: i1, in %y: i1, out result: i1) {
     // LIVENESS: hw.instance "ext_live"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
@@ -622,5 +800,45 @@ module {
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
     hw.output %b1 : i1
+  }
+}
+
+// -----
+
+// ===== Non-executable module with non-empty body =====
+// - @DeadWithBody is non-executable
+// - rewriteModuleSignature runs for all modules, clearing
+//   dead ports and body
+// - Module is kept as an empty shell
+
+module {
+
+  // LIVENESS-LABEL: hw.module private @DeadWithBody
+  // LIVENESS-SAME: "op-liveness" = "DEAD"
+  // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+  // ELIMINATE-LABEL:   hw.module private @DeadWithBody() {
+  // ELIMINATE:           hw.output
+  // ELIMINATE:         }
+  hw.module private @DeadWithBody(in %x : i1, out y : i1) {
+    // LIVENESS: hw.constant false
+    // LIVENESS-SAME: "op-liveness" = "DEAD"
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    %c = hw.constant false
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["DEAD"]
+    hw.output %c : i1
+  }
+
+  // LIVENESS-LABEL: hw.module public @Root
+  // LIVENESS-SAME: "op-liveness" = "LIVE"
+  // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+  // ELIMINATE-LABEL:   hw.module public @Root(in
+  // ELIMINATE-SAME:      %[[X:.*]] : i1, out y : i1) {
+  // ELIMINATE:           hw.output %[[X]] : i1
+  // ELIMINATE:         }
+  hw.module public @Root(in %x : i1, out y : i1) {
+    // LIVENESS: hw.output
+    // LIVENESS-SAME: "val-liveness" = ["LIVE"]
+    hw.output %x : i1
   }
 }
