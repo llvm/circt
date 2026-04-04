@@ -15,6 +15,8 @@
 // References:
 //  "Combinational and Sequential Mapping with Priority Cuts", Alan Mishchenko,
 //  Sungmin Cho, Satrajit Chatterjee and Robert Brayton, ICCAD 2007
+//  "Improvements to technology mapping for LUT-based FPGAs", Alan Mishchenko,
+//  Satrajit Chatterjee and Robert Brayton, FPGA 2006
 //
 //===----------------------------------------------------------------------===//
 
@@ -586,10 +588,16 @@ void Cut::computeTruthTableFromOperands(const LogicNetwork &network) {
   computeTruthTable(network);
 }
 
-bool Cut::dominates(const Cut &other) const { return dominates(other.inputs); }
+bool Cut::dominates(const Cut &other) const {
+  return dominates(other.inputs, other.signature);
+}
 
-bool Cut::dominates(ArrayRef<uint32_t> otherInputs) const {
+bool Cut::dominates(ArrayRef<uint32_t> otherInputs, uint64_t otherSig) const {
+
   if (getInputSize() > otherInputs.size())
+    return false;
+
+  if ((signature & otherSig) != signature)
     return false;
 
   return std::includes(otherInputs.begin(), otherInputs.end(), inputs.begin(),
@@ -602,6 +610,7 @@ static Cut getAsTrivialCut(uint32_t index, const LogicNetwork &network) {
   cut.inputs.push_back(index);
   // Compute truth table eagerly for trivial cut
   cut.computeTruthTable(network);
+  cut.setSignature(1ULL << (index % 64)); // Set signature bit for this input
   return cut;
 }
 
@@ -871,7 +880,9 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
               "result type but found: "
            << logicOp->getResult(0).getType();
 
-  SmallVector<const CutSet *, 2> operandCutSets;
+  // A vector to hold cut sets for each operand along with their max cut input
+  // size.
+  SmallVector<std::pair<const CutSet *, unsigned>, 2> operandCutSets;
   operandCutSets.reserve(numFanins);
 
   // Collect cut sets for each fanin (using LogicNetwork edges)
@@ -881,7 +892,13 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
     if (!operandCutSet)
       return logicOp->emitError("Failed to get cut set for fanin index ")
              << faninIndex;
-    operandCutSets.push_back(operandCutSet);
+
+    // Find the largest cut size among the operand's cuts for sorting heuristic
+    // later.
+    unsigned maxInputCutSize = 0;
+    for (auto *cut : operandCutSet->getCuts())
+      maxInputCutSize = std::max(maxInputCutSize, cut->getInputSize());
+    operandCutSets.push_back(std::make_pair(operandCutSet, maxInputCutSize));
   }
 
   // Create the trivial cut for this node's output
@@ -898,14 +915,24 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
     resultCutSet->finalize(options, matchCut, logicNetwork);
   });
 
+  // Sort operand cut sets by their largest cut size in descending order. This
+  // heuristic improves efficiency of the k-way merge when generating cuts for
+  // the current node by maximizing the chance of early pruning when the merged
+  // cut exceeds the input size limit.
+  llvm::stable_sort(operandCutSets,
+                    [](const std::pair<const CutSet *, unsigned> &a,
+                       const std::pair<const CutSet *, unsigned> &b) {
+                      return a.second > b.second;
+                    });
+
   // Cache maxCutInputSize to avoid repeated access
   unsigned maxInputSize = options.maxCutInputSize;
 
   // This lambda generates nested loops at runtime to iterate over all
   // combinations of cuts from N operands
-  auto enumerateCutCombinations =
-      [&](auto &&self, unsigned operandIdx,
-          SmallVector<const Cut *, 3> &cutPtrs) -> void {
+  auto enumerateCutCombinations = [&](auto &&self, unsigned operandIdx,
+                                      SmallVector<const Cut *, 3> &cutPtrs,
+                                      uint64_t currentSig) -> void {
     // Base case: all operands processed, create merged cut
     if (operandIdx == numFanins) {
       // Efficient k-way merge: inputs are sorted, so dedup and constant
@@ -990,6 +1017,7 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
       // Store operand cuts for lazy truth table computation using fast
       // incremental method (after duplicate removal in finalize)
       mergedCut->setOperandCuts(cutPtrs);
+      mergedCut->setSignature(currentSig);
       resultCutSet->addCut(mergedCut);
 
       LLVM_DEBUG({
@@ -1006,21 +1034,26 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
     }
 
     // Recursive case: iterate over cuts for current operand
-    const CutSet *currentCutSet = operandCutSets[operandIdx];
+    const CutSet *currentCutSet = operandCutSets[operandIdx].first;
     for (const Cut *cut : currentCutSet->getCuts()) {
+      uint64_t cutSig = cut->getSignature();
+      uint64_t newSig = currentSig | cutSig;
+      if (static_cast<unsigned>(llvm::popcount(newSig)) > maxInputSize)
+        continue; // Early rejection based on signature
+
       cutPtrs.push_back(cut);
 
       // Recurse to next operand
-      self(self, operandIdx + 1, cutPtrs);
+      self(self, operandIdx + 1, cutPtrs, newSig);
 
       cutPtrs.pop_back();
     }
   };
 
-  // Start recursion with an empty cut pointer list.
+  // Start the recursion with empty cut pointer list and zero signature
   SmallVector<const Cut *, 3> cutPtrs;
   cutPtrs.reserve(numFanins);
-  enumerateCutCombinations(enumerateCutCombinations, 0, cutPtrs);
+  enumerateCutCombinations(enumerateCutCombinations, 0, cutPtrs, 0ULL);
 
   return success();
 }

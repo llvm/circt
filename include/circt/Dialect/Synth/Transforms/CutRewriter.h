@@ -397,6 +397,11 @@ class Cut {
   /// The root node produces the output of the cut.
   uint32_t rootIndex = 0;
 
+  /// Signature bitset for fast cut size estimation.
+  /// Bit i is set if value with index i is in the cut's inputs.
+  /// This enables O(1) estimation of merged cut size using popcount.
+  uint64_t signature = 0;
+
   /// Operand cuts used to create this cut (for lazy TT computation).
   /// Stored to enable fast incremental truth table computation after
   /// duplicate removal. Using raw pointers is safe since cuts are allocated
@@ -418,11 +423,20 @@ public:
   /// Set the root index of this cut.
   void setRootIndex(uint32_t idx) { rootIndex = idx; }
 
-  /// Check if this cut dominates another cut.
+  /// Get the signature of this cut.
+  uint64_t getSignature() const { return signature; }
+
+  /// Set the signature of this cut.
+  void setSignature(uint64_t sig) { signature = sig; }
+
+  /// Check if this cut dominates another (i.e., this cut's inputs are a subset
+  /// of the other's inputs). Uses signature pre-filtering for speed.
+  /// Both cuts must have sorted inputs.
   bool dominates(const Cut &other) const;
 
-  /// Check if this cut dominates another sorted input set.
-  bool dominates(ArrayRef<uint32_t> otherInputs) const;
+  /// Check if this cut dominates a set of sorted inputs with the given
+  /// signature.
+  bool dominates(ArrayRef<uint32_t> otherInputs, uint64_t otherSig) const;
 
   void dump(llvm::raw_ostream &os, const LogicNetwork &network) const;
 
