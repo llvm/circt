@@ -192,7 +192,11 @@ expandInputPermutation(const std::array<uint8_t, 4> &permutation) {
 }
 
 struct NPNTransform4 {
+  // Maps each output minterm in the transformed table back to the minterm to
+  // read from the source table.
   std::array<uint8_t, 16> outputToSource = {};
+  // Inverse mapping used when reconstructing an original table from a chosen
+  // canonical representative.
   std::array<uint8_t, 16> inverseOutputToSource = {};
   std::array<uint8_t, 4> inputPermutation = {};
   uint8_t inputNegation = 0;
@@ -217,6 +221,8 @@ void buildCanonicalOrderNPNTransforms4(
   transforms.clear();
   transforms.reserve(24 * 16 * 2);
 
+  // Enumerate the full 4-input NPN group in a deterministic order so table
+  // construction picks stable representatives and encodings.
   for (unsigned negMask = 0; negMask != 16; ++negMask) {
     std::array<unsigned, 4> permutation = {0, 1, 2, 3};
     do {
@@ -257,6 +263,8 @@ void collectNPN4Representatives(ArrayRef<NPNTransform4> transforms,
     if (seen.test(seed))
       continue;
 
+    // Walk the full NPN orbit of this truth table and pick the numerically
+    // smallest member as the canonical representative.
     uint16_t representative = seed;
     for (const auto &transform : transforms) {
       uint16_t member = applyNPNTransform4(seed, transform.outputToSource,
@@ -286,6 +294,8 @@ NPNTable::NPNTable() {
 
   llvm::BitVector initialized(entries4.size(), false);
   auto isBetterEntry = [&](const Entry4 &candidate, const Entry4 &current) {
+    // Multiple transforms can map the same function to the same
+    // representative. Pick a deterministic encoding for the stored witness.
     if (candidate.representative != current.representative)
       return candidate.representative < current.representative;
     if (candidate.inputNegation != current.inputNegation)
@@ -295,6 +305,8 @@ NPNTable::NPNTable() {
 
   for (uint16_t representative : representatives) {
     for (const auto &transform : transforms) {
+      // Starting from the canonical representative, populate every equivalent
+      // member with the transform needed to recover the representative.
       uint16_t member =
           applyNPNTransform4(representative, transform.inverseOutputToSource,
                              transform.outputNegation);
