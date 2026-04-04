@@ -52,7 +52,8 @@ toCadicalConfigName(CadicalSATSolverOptions::CadicalSolverConfig config) {
 class CadicalSATSolver : public IncrementalSATSolver {
 public:
   explicit CadicalSATSolver(const CadicalSATSolverOptions &options) {
-    if (options.config != CadicalSolverConfig::Default) {
+    if (options.config !=
+        CadicalSATSolverOptions::CadicalSolverConfig::Default) {
       bool configured = solver.configure(toCadicalConfigName(options.config));
       assert(configured && "invalid CaDiCaL configuration");
       (void)configured;
