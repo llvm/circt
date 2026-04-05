@@ -685,3 +685,21 @@ firrtl.circuit "WireWithCreateDomain" {
     %w = firrtl.wire domains[%my_domain] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
   }
 }
+
+// -----
+
+// Test that a domain wire used by another wire (via domain association) and by
+// a domain.define op is properly lowered.  All domain-related ops should be
+// removed, leaving just the wire.
+firrtl.circuit "DomainWireUsedByWire" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @DomainWireUsedByWire()
+  // CHECK-NEXT:    %w = firrtl.wire : !firrtl.uint<1>
+  // CHECK-NEXT:  }
+  firrtl.module @DomainWireUsedByWire() {
+    %domain_wire = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    %w = firrtl.wire domains[%domain_wire] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    %actual_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %domain_wire, %actual_domain : !firrtl.domain<@ClockDomain()>
+  }
+}

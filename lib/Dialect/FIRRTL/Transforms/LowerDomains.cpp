@@ -660,13 +660,18 @@ LogicalResult LowerModule::lowerModule() {
           SmallVector<Value> dsts;
           DomainDefineOp lastDefineOp;
           for (auto *user : llvm::make_early_inc_range(wireOp->getUsers())) {
+            // This domain is associated with another wire.  Nothing to do.
+            if (isa<WireOp>(user))
+              continue;
+
             auto domainDefineOp = dyn_cast<DomainDefineOp>(user);
             if (operationsToErase.contains(domainDefineOp))
               continue;
             if (!domainDefineOp) {
-              auto diag = wireOp.emitOpError()
-                          << "cannot be lowered by `LowerDomains` because it "
-                             "has a user that is not a domain define op";
+              auto diag =
+                  wireOp.emitOpError()
+                  << "cannot be lowered by `LowerDomains` because it "
+                     "has a user that is not a domain define op or wire";
               diag.attachNote(user->getLoc()) << "is one such user";
               return WalkResult::interrupt();
             }
