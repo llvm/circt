@@ -1439,10 +1439,21 @@ static LogicalResult updateInstance(PassGlobals &globals,
   return success();
 }
 
+/// Represents a delayed update to a wire's domain associations that need domain
+/// wire proxies created to avoid use-before-def.
+struct DelayedWireUpdate {
+  /// The wire operation that has deferred domain associations.
+  WireOp wireOp;
+  /// Domain associations operands that violate use-before-def.
+  SmallVector<Value> deferredOperands;
+};
+
 /// Update a wire operation with inferred domain associations.
-static LogicalResult updateWire(PassGlobals &globals, TermAllocator &allocator,
-                                DomainTable &table, WireOp wireOp,
-                                OpBuilder &builder) {
+/// Collects updates that need domain wire proxies into delayedUpdates.
+static LogicalResult
+updateWire(PassGlobals &globals, TermAllocator &allocator, DomainTable &table,
+           WireOp wireOp, OpBuilder &builder,
+           SmallVectorImpl<DelayedWireUpdate> &delayedUpdates) {
   auto guard = OpBuilder::InsertionGuard(builder);
   builder.setInsertionPoint(wireOp);
 
@@ -1453,11 +1464,25 @@ static LogicalResult updateWire(PassGlobals &globals, TermAllocator &allocator,
   auto *row =
       getDomainAssociationAsRow(globals, allocator, table, wireOp.getResult());
 
-  SmallVector<Value> domainOperands;
+  SmallVector<Value> safeOperands;
+  SmallVector<Value> deferredOperands;
+
+  // Lambda to add a domain operand, checking for use-before-def
+  auto addDomainOperand = [&](Value domain) {
+    auto *defOp = domain.getDefiningOp();
+    // If domain is NOT a block argument AND is defined after the wire, defer it
+    if (defOp && defOp->getBlock() == wireOp->getBlock() &&
+        !defOp->isBeforeInBlock(wireOp.getOperation())) {
+      deferredOperands.push_back(domain);
+    } else {
+      safeOperands.push_back(domain);
+    }
+  };
+
   for (auto [i, element] :
        llvm::enumerate(llvm::map_range(row->elements, find))) {
     if (auto *val = dyn_cast<ValueTerm>(element)) {
-      domainOperands.push_back(val->value);
+      addDomainOperand(val->value);
       continue;
     }
     if (auto *var = dyn_cast<VariableTerm>(element)) {
@@ -1466,14 +1491,21 @@ static LogicalResult updateWire(PassGlobals &globals, TermAllocator &allocator,
       auto domainName = domainDecl.getNameAttr();
       auto anonDomain = DomainCreateAnonOp::create(builder, wireOp.getLoc(),
                                                    domainType, domainName);
-      domainOperands.push_back(anonDomain);
+      addDomainOperand(anonDomain);
       auto *val = allocator.allocVal(anonDomain);
       solve(globals, var, val);
       continue;
     }
     assert(0 && "unhandled domain type");
   }
-  wireOp.getDomainsMutable().assign(domainOperands);
+
+  // Set the safe operands immediately
+  wireOp.getDomainsMutable().assign(safeOperands);
+
+  // If there are deferred operands, save them to append later
+  if (!deferredOperands.empty())
+    delayedUpdates.push_back({wireOp, std::move(deferredOperands)});
+
   return success();
 }
 
@@ -1486,14 +1518,55 @@ static LogicalResult updateModuleBody(PassGlobals &globals,
   // created there, avoiding use-before-def issues.
   OpBuilder builder(moduleOp.getContext());
   builder.setInsertionPointToEnd(moduleOp.getBodyBlock());
+
+  // Collect delayed wire updates to avoid interleaving isBeforeInBlock with
+  // insertions
+  SmallVector<DelayedWireUpdate> delayedUpdates;
+
   auto result = moduleOp.getBodyBlock()->walk([&](Operation *op) -> WalkResult {
     if (auto wire = dyn_cast<WireOp>(op))
-      return updateWire(globals, allocator, table, wire, builder);
+      return updateWire(globals, allocator, table, wire, builder,
+                        delayedUpdates);
     if (auto instance = dyn_cast<FInstanceLike>(op))
       return updateInstance(globals, allocator, table, instance, builder);
     return success();
   });
-  return failure(result.wasInterrupted());
+  if (result.wasInterrupted())
+    return failure();
+
+  // Apply delayed associations.  Create domain type wires, use this wire in the
+  // association, and then define this wire with the true domain.
+  for (auto &update : delayedUpdates) {
+    auto wireOp = update.wireOp;
+    // Create domain wires for deferred operands to avoid use-before-def
+    builder.setInsertionPoint(wireOp);
+
+    SmallVector<Value> proxyOperands;
+    for (auto domain : update.deferredOperands) {
+      auto domainType = cast<DomainType>(domain.getType());
+      auto domainWire = WireOp::create(
+          builder, wireOp.getLoc(), domainType, builder.getStringAttr(""),
+          NameKindEnumAttr::get(builder.getContext(),
+                                NameKindEnum::DroppableName),
+          builder.getArrayAttr({}), nullptr, nullptr);
+
+      // Collect the domain wire proxy to append to operands.
+      proxyOperands.push_back(domainWire.getResult());
+
+      // Add domain.define
+      builder.setInsertionPointToEnd(wireOp->getBlock());
+      DomainDefineOp::create(builder, wireOp.getLoc(), domainWire.getResult(),
+                             domain);
+
+      // Reset insertion point for next domain wire
+      builder.setInsertionPoint(wireOp);
+    }
+
+    // Append the proxy operands to the existing safe operands
+    wireOp.getDomainsMutable().append(proxyOperands);
+  }
+
+  return success();
 }
 
 /// Write the domain associations recorded in the domain table back to the IR.

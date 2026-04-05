@@ -647,3 +647,23 @@ firrtl.circuit "ReUseAnonDomain" {
     firrtl.matchingconnect %w2, %w1 : !firrtl.uint<1>
   }
 }
+
+// Use-before-def scenario: wire uses domain that is defined after it.  This
+// tests that InferDomains creates domain wire proxies to avoid violations.
+// See: https://github.com/llvm/circt/issues/10116
+// CHECK-LABEL: firrtl.circuit "UseBeforeDef"
+firrtl.circuit "UseBeforeDef" {
+  firrtl.domain @ClockDomain
+  firrtl.extmodule private @Bar(out D: !firrtl.domain<@ClockDomain()>, out c: !firrtl.uint<1> domains [D]) attributes {convention = #firrtl<convention scalarized>}
+  // CHECK-LABEL: firrtl.module @UseBeforeDef
+  firrtl.module @UseBeforeDef() attributes {convention = #firrtl<convention scalarized>} {
+    // CHECK: [[DOMAIN_WIRE:%.+]] = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    // CHECK-NEXT: %w = firrtl.wire interesting_name domains{{\[}}[[DOMAIN_WIRE]]] : !firrtl.uint<1>
+    // CHECK-NEXT: %bar_D, %bar_c = firrtl.instance bar interesting_name @Bar
+    // CHECK-NEXT: firrtl.matchingconnect %w, %bar_c
+    // CHECK-NEXT: firrtl.domain.define [[DOMAIN_WIRE]], %bar_D
+    %w = firrtl.wire interesting_name : !firrtl.uint<1>
+    %bar_D, %bar_c = firrtl.instance bar interesting_name @Bar(out D: !firrtl.domain<@ClockDomain()>, out c: !firrtl.uint<1> domains [D])
+    firrtl.matchingconnect %w, %bar_c : !firrtl.uint<1>
+  }
+}
