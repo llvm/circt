@@ -194,6 +194,15 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
               valueToIndex[result] = constIdx;
               return success();
             })
+            .Case<synth::ChoiceOp>([&](synth::ChoiceOp choiceOp) {
+              if (!choiceOp.getType().isInteger(1)) {
+                handleOtherResults(choiceOp);
+                return success();
+              }
+              addGate(choiceOp, LogicNetworkGate::Choice, choiceOp.getResult(),
+                      {});
+              return success();
+            })
             .Default([&](Operation *defaultOp) {
               handleOtherResults(defaultOp);
               return success();
@@ -242,11 +251,12 @@ static bool compareDelayAndArea(OptimizationStrategy strategy, double newArea,
 
 LogicalResult circt::synth::topologicallySortLogicNetwork(Operation *topOp) {
   const auto isOperationReady = [](Value value, Operation *op) -> bool {
-    // Topologically sort AIG ops and dataflow ops. Other operations can be
-    // scheduled.
-    return !(isa<aig::AndInverterOp>(op) ||
-             isa<comb::XorOp, comb::AndOp, comb::OrOp, comb::ExtractOp,
-                 comb::ReplicateOp, comb::ConcatOp>(op));
+    // Topologically sort AIG ops and dataflow ops. Other operations
+    // can be scheduled.
+    return !(
+        isa<aig::AndInverterOp, synth::ChoiceOp, comb::XorOp, comb::AndOp,
+            comb::OrOp, comb::ExtractOp, comb::ReplicateOp, comb::ConcatOp>(
+            op));
   };
 
   if (failed(topologicallySortGraphRegionBlocks(topOp, isOperationReady)))
@@ -287,8 +297,13 @@ FailureOr<BinaryTruthTable> circt::synth::getTruthTable(ValueRange values,
     if (op.getNumResults() == 0)
       continue;
 
-    // Support AIG and XOR operations
-    if (auto andOp = dyn_cast<aig::AndInverterOp>(&op)) {
+    if (auto choiceOp = dyn_cast<synth::ChoiceOp>(&op)) {
+      auto it = eval.find(choiceOp.getInputs().front());
+      if (it == eval.end())
+        return choiceOp.emitError("Input value not found in evaluation map");
+      eval[choiceOp.getResult()] = it->second;
+    } else if (auto andOp = dyn_cast<aig::AndInverterOp>(&op)) {
+      // Support AIG and XOR operations
       SmallVector<llvm::APInt, 2> inputs;
       inputs.reserve(andOp.getInputs().size());
       for (auto input : andOp.getInputs()) {
@@ -868,6 +883,35 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
   assert(logicOp && logicOp->getNumResults() == 1 &&
          "Logic operation must have a single result");
 
+  if (gate.getKind() == LogicNetworkGate::Choice) {
+    auto choiceOp = cast<synth::ChoiceOp>(logicOp);
+    auto *resultCutSet = createNewCutSet(nodeIndex);
+    Cut *primaryInputCut = cutAllocator.create(Cut::getTrivialCut(nodeIndex));
+    processingOrder.push_back(nodeIndex);
+    resultCutSet->addCut(primaryInputCut);
+
+    for (Value operand : choiceOp.getInputs()) {
+      auto *operandCutSet = getCutSet(logicNetwork.getIndex(operand));
+      if (!operandCutSet)
+        return logicOp->emitError("Failed to get cut set for choice operand");
+
+      // Choice nodes do not introduce new logic. They forward each non-trivial
+      // operand cut as an equivalent alternative for the same root.
+      for (const Cut *operandCut : operandCutSet->getCuts()) {
+        if (operandCut->isTrivialCut())
+          continue;
+
+        resultCutSet->addCut(cutAllocator.create(
+            nodeIndex, operandCut->inputs, operandCut->getSignature(),
+            ArrayRef<const Cut *>{operandCut}, *operandCut->getTruthTable()));
+      }
+    }
+
+    // Finalize cut set: remove duplicates, limit size, and match patterns
+    resultCutSet->finalize(options, matchCut, logicNetwork);
+    return success();
+  }
+
   unsigned numFanins = gate.getNumFanins();
 
   // Validate operation constraints
@@ -909,12 +953,6 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
   auto *resultCutSet = createNewCutSet(nodeIndex);
   processingOrder.push_back(nodeIndex);
   resultCutSet->addCut(primaryInputCut);
-
-  // Schedule cut set finalization when exiting this scope
-  llvm::scope_exit prune([&]() {
-    // Finalize cut set: remove duplicates, limit size, and match patterns
-    resultCutSet->finalize(options, matchCut, logicNetwork);
-  });
 
   // Sort operand cut sets by their largest cut size in descending order. This
   // heuristic improves efficiency of the k-way merge when generating cuts for
@@ -1011,14 +1049,8 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
       }
 
       // Create the merged cut.
-      Cut *mergedCut = cutAllocator.create();
-      mergedCut->setRootIndex(nodeIndex);
-      mergedCut->inputs = std::move(mergedInputs);
-
-      // Store operand cuts for lazy truth table computation using fast
-      // incremental method (after duplicate removal in finalize)
-      mergedCut->setOperandCuts(cutPtrs);
-      mergedCut->setSignature(currentSig);
+      Cut *mergedCut = cutAllocator.create(nodeIndex, mergedInputs, currentSig,
+                                           ArrayRef<const Cut *>(cutPtrs));
       resultCutSet->addCut(mergedCut);
 
       LLVM_DEBUG({
@@ -1055,6 +1087,9 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
   SmallVector<const Cut *, 3> cutPtrs;
   cutPtrs.reserve(numFanins);
   enumerateCutCombinations(enumerateCutCombinations, 0, cutPtrs, 0ULL);
+
+  // Finalize cut set: remove duplicates, limit size, and match patterns
+  resultCutSet->finalize(options, matchCut, logicNetwork);
 
   return success();
 }

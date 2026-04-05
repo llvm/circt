@@ -41,3 +41,30 @@ hw.module @add(in %a : i2, in %b : i2, out result : i2) {
   %13 = comb.concat %12, %6 : i1, i1
   hw.output %13 : i2
 }
+
+// CHECK-LABEL: hw.module @choice_slow_branch
+// LUT-NEXT:   %[[OUT:.+]] = comb.truth_table %c, %b, %a -> [false, false, false, false, false, false, false, true]
+// LUT-SAME:   test.arrival_times = [1]
+// LUT-NEXT:   hw.output %[[OUT]] : i1
+// LUT2-NEXT:  %[[AB:.+]] = comb.truth_table %b, %a -> [false, false, false, true]
+// LUT2-SAME:  test.arrival_times = [1]
+// LUT2-NEXT:  %[[OUT:.+]] = comb.truth_table %[[AB]], %c -> [false, false, false, true]
+// LUT2-SAME:  test.arrival_times = [2]
+// LUT2-NEXT:  hw.output %[[OUT]] : i1
+hw.module @choice_slow_branch(in %a : i1, in %b : i1, in %c : i1,
+                              out y : i1) {
+  %fast0 = synth.aig.and_inv %a, %b : i1
+  %fast = synth.aig.and_inv %fast0, %c : i1
+
+  %na = synth.aig.and_inv not %a : i1
+  %a2 = synth.aig.and_inv not %na : i1
+  %nb = synth.aig.and_inv not %b : i1
+  %b2 = synth.aig.and_inv not %nb : i1
+  %nc = synth.aig.and_inv not %c : i1
+  %c2 = synth.aig.and_inv not %nc : i1
+  %slow0 = synth.aig.and_inv %a2, %b2 : i1
+  %slow = synth.aig.and_inv %slow0, %c2 : i1
+
+  %choice = synth.choice %slow, %fast : i1
+  hw.output %choice : i1
+}
