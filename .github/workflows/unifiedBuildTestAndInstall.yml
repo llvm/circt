@@ -163,18 +163,6 @@ jobs:
         run: |
           CACHE_KEY="${{ inputs.runner }}-${{ inputs.cmake_c_compiler }}-${{ inputs.cmake_cxx_compiler }}-${{ inputs.cmake_build_type }}-${{ inputs.build_shared_libs }}-${{ inputs.llvm_enable_assertions }}-${{ inputs.llvm_force_enable_stats}}"
           echo "pattern=$CACHE_KEY" >> $GITHUB_OUTPUT
-
-      - name: Setup OSS CAD Suite
-        shell: bash
-        run: |
-          VERSION=${{ env.oss-cad-version }}
-          ARCH=$(echo ${{ runner.arch }} | tr '[:upper:]' '[:lower:]')
-          OS=$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]' | sed 's/macos/darwin/')
-          ARTIFACT=oss-cad-suite-"$OS"-"$ARCH"-$(echo $VERSION | tr -d '-')
-          echo https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${VERSION}/${ARTIFACT}.tgz
-          wget -q -O - https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${VERSION}/${ARTIFACT}.tgz | tar -zx
-          echo "$(pwd)/oss-cad-suite/bin" >> $GITHUB_PATH
-
       - name: Clone llvm/circt
         uses: actions/checkout@v3
         with:
@@ -198,6 +186,16 @@ jobs:
         shell: bash
         run: |
           echo setup=./utils/find-vs.ps1 >> "$GITHUB_OUTPUT"
+      - name: Setup OSS CAD Suite
+        shell: bash
+        run: |
+          VERSION=${{ env.oss-cad-version }}
+          ARCH=$(echo ${{ runner.arch }} | tr '[:upper:]' '[:lower:]')
+          OS=$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]' | sed 's/macos/darwin/')
+          ARTIFACT=oss-cad-suite-"$OS"-"$ARCH"-$(echo $VERSION | tr -d '-')
+          echo https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${VERSION}/${ARTIFACT}.tgz
+          wget -q -O - https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${VERSION}/${ARTIFACT}.tgz | tar -zx
+          echo "$(pwd)/oss-cad-suite/bin" >> $GITHUB_PATH
 # Setup Caching
 #
 # Use sccache as it works on Windows.  Disable caching for non-release Windows
@@ -230,7 +228,7 @@ jobs:
             -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
             -DCIRCT_RELEASE_TAG=firtool \
             -DCIRCT_RELEASE_TAG_ENABLED=ON \
-            -DCIRCT_SLANG_FRONTEND_ENABLED=ON
+            -DCIRCT_SLANG_FRONTEND_ENABLED=ON \
             -DCMAKE_CXX_COMPILER=${{ inputs.cmake_cxx_compiler }} \
             -DCMAKE_C_COMPILER=${{ inputs.cmake_c_compiler }} \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF \
