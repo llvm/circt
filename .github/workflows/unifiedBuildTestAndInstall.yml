@@ -193,9 +193,21 @@ jobs:
           ARCH=$(echo ${{ runner.arch }} | tr '[:upper:]' '[:lower:]')
           OS=$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]' | sed 's/macos/darwin/')
           ARTIFACT=oss-cad-suite-"$OS"-"$ARCH"-$(echo $VERSION | tr -d '-')
-          echo https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${VERSION}/${ARTIFACT}.tgz
           wget -q -O - https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${VERSION}/${ARTIFACT}.tgz | tar -zx
           echo "$(pwd)/oss-cad-suite/bin" >> $GITHUB_PATH
+      - name: Setup Python
+        run: |
+          pip config set global.break-system-packages true
+          pip install \
+            pycapnp \
+            psutil \
+            pybind11==2.11.2 \
+            nanobind==2.9.2 \
+            numpy \
+            jinja2 \
+            cocotb~=1.9 \
+            cocotb_test~=0.2 \
+            click
 # Setup Caching
 #
 # Use sccache as it works on Windows.  Disable caching for non-release Windows
