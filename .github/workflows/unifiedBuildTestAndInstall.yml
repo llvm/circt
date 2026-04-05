@@ -167,7 +167,7 @@ jobs:
       - name: Setup OSS CAD Suite
         shell: bash
         run: |
-          VERSION=${{ env.tabby-cad-version }}
+          VERSION=${{ env.oss-cad-version }}
           ARCH=$(echo ${{ runner.arch }} | tr '[:upper:]' '[:lower:]')
           OS=$(echo ${{ runner.os }} | tr '[:upper:]' '[:lower:]' | sed 's/macos/darwin/')
           ARTIFACT=oss-cad-suite-"$OS"-"$ARCH"-$(echo $VERSION | tr -d '-')
