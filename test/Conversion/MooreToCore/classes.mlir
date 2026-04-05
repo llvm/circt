@@ -41,8 +41,9 @@ func.func @ClassType(%arg0: !moore.class<@PropertyCombo>) {
 // CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"C::typeinfo" : !llvm.ptr
 // CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
-// CHECK:   [[GEP:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>
-// CHECK:   llvm.store [[TYPEINFO]], [[GEP]] : !llvm.ptr, !llvm.ptr
+// CHECK:   [[HEADERPTR:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>
+// CHECK:   [[TYPEINFOPTR:%.*]] = llvm.getelementptr [[HEADERPTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<(ptr, ptr)>
+// CHECK:   llvm.store [[TYPEINFO]], [[TYPEINFOPTR]] : !llvm.ptr, !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
@@ -67,8 +68,9 @@ moore.class.classdecl @C {
 // CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"D::typeinfo" : !llvm.ptr
 // CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
-// CHECK:   [[GEP:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"D", (struct<(ptr, ptr)>, struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>, i32, i64, i16)>
-// CHECK:   llvm.store [[TYPEINFO]], [[GEP]] : !llvm.ptr, !llvm.ptr
+// CHECK:   [[HEADERPTR:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"D", (struct<(ptr, ptr)>, struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>, i32, i64, i16)>
+// CHECK:   [[TYPEINFOPTR:%.*]] = llvm.getelementptr [[HEADERPTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<(ptr, ptr)>
+// CHECK:   llvm.store [[TYPEINFO]], [[TYPEINFOPTR]] : !llvm.ptr, !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
@@ -153,8 +155,9 @@ moore.class.classdecl @G extends @C {
 // CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"VirtualC::typeinfo" : !llvm.ptr
 // CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
-// CHECK:   [[GEP:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"VirtualC", (struct<(ptr, ptr)>, i32)>
-// CHECK:   llvm.store [[TYPEINFO]], [[GEP]] : !llvm.ptr, !llvm.ptr
+// CHECK:   [[HEADERPTR:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"VirtualC", (struct<(ptr, ptr)>, i32)>
+// CHECK:   [[TYPEINFOPTR:%.*]] = llvm.getelementptr [[HEADERPTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<(ptr, ptr)>
+// CHECK:   llvm.store [[TYPEINFO]], [[TYPEINFOPTR]] : !llvm.ptr, !llvm.ptr
 // CHECK:   return
 
 func.func private @test_new7() {
