@@ -16,6 +16,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/MathExtras.h"
 #include <algorithm>
+#include <array>
 #include <cassert>
 
 using namespace circt;
@@ -24,6 +25,92 @@ using llvm::APInt;
 //===----------------------------------------------------------------------===//
 // BinaryTruthTable
 //===----------------------------------------------------------------------===//
+
+namespace {
+
+static llvm::APInt
+expandTruthTableToInputSpaceSmall(const llvm::APInt &tt,
+                                  ArrayRef<unsigned> mapping,
+                                  unsigned numExpandedInputs) {
+  assert(numExpandedInputs <= 6 && "small fast path requires <= 6 inputs");
+
+  unsigned numOrigInputs = mapping.size();
+  unsigned expandedSize = 1U << numExpandedInputs;
+  // `kVarMasks[i]` marks rows where expanded input `i` is 1. For example,
+  // `kVarMasks[0] = 0b1010...` and `kVarMasks[1] = 0b1100...`, matching the
+  // standard packed truth-table row order where input 0 is the LSB.
+  static constexpr uint64_t kVarMasks[6] = {
+      0xAAAAAAAAAAAAAAAAULL, // input 0: 1010...
+      0xCCCCCCCCCCCCCCCCULL, // input 1: 1100...
+      0xF0F0F0F0F0F0F0F0ULL, // input 2: 11110000...
+      0xFF00FF00FF00FF00ULL, // input 3: 8 zeros, 8 ones
+      0xFFFF0000FFFF0000ULL, // input 4: 16 zeros, 16 ones
+      0xFFFFFFFF00000000ULL  // input 5: 32 zeros, 32 ones
+  };
+
+  uint64_t sizeMask = llvm::maskTrailingOnes<uint64_t>(expandedSize);
+  unsigned origSize = 1U << numOrigInputs;
+  uint64_t origMask = llvm::maskTrailingOnes<uint64_t>(origSize);
+  uint64_t origTT = tt.getZExtValue() & origMask;
+
+  // `constrainMasks[i][b]` is the set of expanded rows where original input
+  // `i`, after remapping into the expanded space, observes bit value `b`.
+  std::array<std::array<uint64_t, 2>, 6> constrainMasks{};
+  for (unsigned i = 0; i < numOrigInputs; ++i) {
+    uint64_t posMask = kVarMasks[mapping[i]] & sizeMask;
+    constrainMasks[i][0] = (~posMask) & sizeMask;
+    constrainMasks[i][1] = posMask;
+  }
+
+  uint64_t activePatterns = origTT;
+  bool useComplementResult = false;
+  uint64_t result = 0;
+  // If the original truth table has more 1s than 0s, it's more efficient to
+  // iterate over the 0 patterns.
+  if (static_cast<unsigned>(llvm::popcount(origTT)) > (origSize / 2)) {
+    activePatterns = (~origTT) & origMask;
+    useComplementResult = true;
+    result = sizeMask;
+  }
+
+  while (activePatterns) {
+    unsigned origIdx = llvm::countr_zero(activePatterns);
+    activePatterns &= activePatterns - 1;
+
+    uint64_t pattern = sizeMask;
+    for (unsigned i = 0; i < numOrigInputs; ++i)
+      pattern &= constrainMasks[i][(origIdx >> i) & 1U];
+
+    if (useComplementResult)
+      result &= ~pattern;
+    else
+      result |= pattern;
+  }
+
+  return llvm::APInt(expandedSize, result);
+}
+
+static llvm::APInt
+expandTruthTableToInputSpaceGeneric(const llvm::APInt &tt,
+                                    ArrayRef<unsigned> mapping,
+                                    unsigned numExpandedInputs) {
+  unsigned numOrigInputs = mapping.size();
+  unsigned expandedSize = 1U << numExpandedInputs;
+
+  llvm::APInt result = llvm::APInt::getZero(expandedSize);
+  for (unsigned expandedIdx = 0; expandedIdx < expandedSize; ++expandedIdx) {
+    unsigned origIdx = 0;
+    for (unsigned i = 0; i < numOrigInputs; ++i)
+      if ((expandedIdx >> mapping[i]) & 1U)
+        origIdx |= 1U << i;
+    if (tt[origIdx])
+      result.setBit(expandedIdx);
+  }
+
+  return result;
+}
+
+} // namespace
 
 llvm::APInt BinaryTruthTable::getOutput(const llvm::APInt &input) const {
   assert(input.getBitWidth() == numInputs && "Input width mismatch");
@@ -140,6 +227,31 @@ void BinaryTruthTable::dump(llvm::raw_ostream &os) const {
     }
     os << "\n";
   }
+}
+
+llvm::APInt
+circt::detail::expandTruthTableToInputSpace(const llvm::APInt &tt,
+                                            ArrayRef<unsigned> mapping,
+                                            unsigned numExpandedInputs) {
+  unsigned numOrigInputs = mapping.size();
+  unsigned expandedSize = 1U << numExpandedInputs;
+
+  if (numOrigInputs == numExpandedInputs) {
+    bool isIdentity = true;
+    for (unsigned i = 0; i < numOrigInputs && isIdentity; ++i)
+      isIdentity = mapping[i] == i;
+    if (isIdentity)
+      return tt.zext(expandedSize);
+  }
+
+  if (tt.isZero())
+    return llvm::APInt::getZero(expandedSize);
+  if (tt.isAllOnes())
+    return llvm::APInt::getAllOnes(expandedSize);
+
+  if (numExpandedInputs <= 6)
+    return expandTruthTableToInputSpaceSmall(tt, mapping, numExpandedInputs);
+  return expandTruthTableToInputSpaceGeneric(tt, mapping, numExpandedInputs);
 }
 
 //===----------------------------------------------------------------------===//
