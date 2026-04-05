@@ -25,6 +25,7 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -259,6 +260,16 @@ static std::string getVTableName(SymbolRefAttr className) {
   return className.getRootReference().str() + "::vtable";
 }
 
+static VTableOp findVTableOp(ModuleOp mod, SymbolRefAttr classSym) {
+  auto vtableSym =
+      SymbolRefAttr::get(classSym.getRootReference(),
+                         FlatSymbolRefAttr::get(mod.getContext(), "vtable"));
+  for (auto candidate : mod.getOps<VTableOp>())
+    if (candidate.getSymNameAttr() == vtableSym)
+      return candidate;
+  return {};
+}
+
 static void
 collectVTableEntries(VTableOp op,
                      llvm::SmallDenseMap<StringRef, unsigned> &slots,
@@ -291,16 +302,7 @@ static FailureOr<ClassTypeCache::VTableInfo> getOrCreateVTableInfo(
   if (auto info = cache.getVTableInfo(classSym))
     return *info;
 
-  auto vtableSym =
-      SymbolRefAttr::get(classSym.getRootReference(),
-                         FlatSymbolRefAttr::get(mod.getContext(), "vtable"));
-  VTableOp vtableOp;
-  for (auto candidate : mod.getOps<VTableOp>()) {
-    if (candidate.getSymNameAttr() == vtableSym) {
-      vtableOp = candidate;
-      break;
-    }
-  }
+  VTableOp vtableOp = findVTableOp(mod, classSym);
   if (!vtableOp)
     return failure();
 
@@ -1187,9 +1189,11 @@ struct ClassUpcastOpConversion : public OpConversionPattern<ClassUpcastOp> {
 /// moore.class.new lowering: heap-allocate storage for the class object.
 struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
   ClassNewOpConversion(TypeConverter &tc, MLIRContext *ctx,
-                       ClassTypeCache &cache, FunctionCache &funcCache)
+                       ClassTypeCache &cache,
+                       SymbolTableCollection &symbolTables,
+                       LLVMTypeConverter &llvmTypeConverter)
       : OpConversionPattern<ClassNewOp>(tc, ctx), cache(cache),
-        funcCache(funcCache) {}
+        symbolTables(symbolTables), llvmTypeConverter(llvmTypeConverter) {}
 
   LogicalResult
   matchAndRewrite(ClassNewOp op, OpAdaptor adaptor,
@@ -1226,11 +1230,15 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
     auto cSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
                                           rewriter.getI64IntegerAttr(byteSize));
 
-    // Get or declare malloc and call it.
+    // Get or declare malloc as an LLVM function and call it directly so later
+    // LLVM verification does not depend on converting an intervening func.func.
     auto ptrTy = LLVM::LLVMPointerType::get(ctx); // opaque pointer result
-    auto mallocFn = funcCache.getOrCreate(rewriter, "malloc", {i64Ty}, {ptrTy});
-    auto call =
-        func::CallOp::create(rewriter, loc, mallocFn, ValueRange{cSize});
+    auto mallocFn =
+        LLVM::lookupOrCreateMallocFn(rewriter, mod, i64Ty, &symbolTables);
+    if (failed(mallocFn))
+      return op.emitError() << "Could not create LLVM malloc declaration";
+    auto call = LLVM::CallOp::create(rewriter, loc, mallocFn.value(),
+                                     ValueRange{cSize});
 
     auto typeInfoAddr =
         LLVM::AddressOfOp::create(rewriter, loc, typeInfo.global);
@@ -1242,20 +1250,42 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
         rewriter, loc, i32Ty,
         rewriter.getI32IntegerAttr(
             cache.getStructInfo(sym)->typeInfoFieldIndex));
-    auto headerPtr =
-        LLVM::GEPOp::create(rewriter, loc, ptrTy, structTy, call.getResult(0),
-                            ValueRange{headerIdx, typeInfoIdx});
-    LLVM::StoreOp::create(rewriter, loc, typeInfoAddr, headerPtr);
+    auto headerBasePtr =
+        LLVM::GEPOp::create(rewriter, loc, ptrTy, structTy, call.getResult(),
+                            ValueRange{headerIdx});
+    auto typeInfoPtr = LLVM::GEPOp::create(
+        rewriter, loc, ptrTy, cache.getStructInfo(sym)->headerTy, headerBasePtr,
+        ValueRange{headerIdx, typeInfoIdx});
+    LLVM::StoreOp::create(rewriter, loc, typeInfoAddr, typeInfoPtr);
+
+    if (findVTableOp(mod, sym)) {
+      auto vtableInfo = getOrCreateVTableInfo(
+          mod, sym, rewriter, llvmTypeConverter, symbolTables, cache);
+      if (failed(vtableInfo))
+        return op.emitError() << "Could not create vtable for " << sym;
+
+      auto vtableAddr =
+          LLVM::AddressOfOp::create(rewriter, loc, vtableInfo->global);
+      auto vtableIdx = LLVM::ConstantOp::create(
+          rewriter, loc, i32Ty,
+          rewriter.getI32IntegerAttr(
+              cache.getStructInfo(sym)->vtableFieldIndex));
+      auto vtablePtr = LLVM::GEPOp::create(
+          rewriter, loc, ptrTy, cache.getStructInfo(sym)->headerTy,
+          headerBasePtr, ValueRange{headerIdx, vtableIdx});
+      LLVM::StoreOp::create(rewriter, loc, vtableAddr, vtablePtr);
+    }
 
     // Replace the new op with the malloc pointer (no cast needed with opaque
     // ptrs).
-    rewriter.replaceOp(op, call.getResult(0));
+    rewriter.replaceOp(op, call.getResult());
     return success();
   }
 
 private:
   ClassTypeCache &cache; // shared, owned by the pass
-  FunctionCache &funcCache;
+  SymbolTableCollection &symbolTables;
+  LLVMTypeConverter &llvmTypeConverter;
 };
 
 struct ClassDeclOpConversion : public OpConversionPattern<ClassDeclOp> {
@@ -1294,6 +1324,74 @@ struct VTableOpConversion : public OpConversionPattern<VTableOp> {
                                      cache)))
       return op.emitOpError() << "Failed to create LLVM vtable global";
     rewriter.eraseOp(op);
+    return success();
+  }
+
+private:
+  ClassTypeCache &cache;
+  SymbolTableCollection &symbolTables;
+  LLVMTypeConverter &llvmTypeConverter;
+};
+
+struct VTableLoadMethodOpConversion
+    : public OpConversionPattern<VTableLoadMethodOp> {
+  VTableLoadMethodOpConversion(TypeConverter &tc, MLIRContext *ctx,
+                               ClassTypeCache &cache,
+                               SymbolTableCollection &symbolTables,
+                               LLVMTypeConverter &llvmTypeConverter)
+      : OpConversionPattern<VTableLoadMethodOp>(tc, ctx), cache(cache),
+        symbolTables(symbolTables), llvmTypeConverter(llvmTypeConverter) {}
+
+  LogicalResult
+  matchAndRewrite(VTableLoadMethodOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto objectTy = cast<ClassHandleType>(op.getObject().getType());
+    auto classSym = objectTy.getClassSym();
+    auto methodName = op.getMethodSymAttr().getLeafReference();
+    if (!methodName)
+      return rewriter.notifyMatchFailure(op, "missing method symbol");
+
+    auto mod = op->getParentOfType<ModuleOp>();
+    if (failed(resolveClassStructBody(mod, classSym, *typeConverter, cache)))
+      return op.emitError()
+             << "Could not resolve class struct for " << classSym;
+
+    auto vtableInfo = getOrCreateVTableInfo(
+        mod, classSym, rewriter, llvmTypeConverter, symbolTables, cache);
+    if (failed(vtableInfo))
+      return op.emitError() << "Could not resolve vtable for " << classSym;
+
+    auto slotIt = vtableInfo->methodSlot.find(methodName.getValue());
+    if (slotIt == vtableInfo->methodSlot.end())
+      return op.emitError() << "No vtable slot for method " << methodName;
+
+    auto structTy = cache.getStructInfo(classSym)->classBody;
+    auto ptrTy = LLVM::LLVMPointerType::get(rewriter.getContext());
+    auto i32Ty = rewriter.getI32Type();
+    auto zero = LLVM::ConstantOp::create(rewriter, op.getLoc(), i32Ty,
+                                         rewriter.getI32IntegerAttr(0));
+    auto vtableIdx = LLVM::ConstantOp::create(
+        rewriter, op.getLoc(), i32Ty,
+        rewriter.getI32IntegerAttr(
+            cache.getStructInfo(classSym)->vtableFieldIndex));
+    auto slotIdx =
+        LLVM::ConstantOp::create(rewriter, op.getLoc(), i32Ty,
+                                 rewriter.getI32IntegerAttr(slotIt->second));
+
+    auto headerBasePtr =
+        LLVM::GEPOp::create(rewriter, op.getLoc(), ptrTy, structTy,
+                            adaptor.getObject(), ValueRange{zero});
+    auto vtablePtrPtr = LLVM::GEPOp::create(
+        rewriter, op.getLoc(), ptrTy, cache.getStructInfo(classSym)->headerTy,
+        headerBasePtr, ValueRange{zero, vtableIdx});
+    auto vtablePtr =
+        LLVM::LoadOp::create(rewriter, op.getLoc(), ptrTy, vtablePtrPtr);
+    auto slotPtr =
+        LLVM::GEPOp::create(rewriter, op.getLoc(), ptrTy, vtableInfo->tableTy,
+                            vtablePtr, ValueRange{zero, slotIdx});
+    auto methodPtr =
+        LLVM::LoadOp::create(rewriter, op.getLoc(), ptrTy, slotPtr);
+    rewriter.replaceOp(op, methodPtr.getResult());
     return success();
   }
 
@@ -3429,7 +3527,11 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   patterns.add<VTableOpConversion>(typeConverter, patterns.getContext(),
                                    classCache, symbolTables, llvmTypeConverter);
   patterns.add<ClassNewOpConversion>(typeConverter, patterns.getContext(),
-                                     classCache, funcCache);
+                                     classCache, symbolTables,
+                                     llvmTypeConverter);
+  patterns.add<VTableLoadMethodOpConversion>(typeConverter,
+                                             patterns.getContext(), classCache,
+                                             symbolTables, llvmTypeConverter);
   patterns.add<ClassPropertyRefOpConversion>(typeConverter,
                                              patterns.getContext(), classCache);
 
