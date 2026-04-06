@@ -151,10 +151,10 @@ jobs:
           config=$(cat <<EOF
           [
             {
-              "name": "gcc-debug-assert=off-shared=off",
+              "name": "Linux (GCC)",
               "install_target": "",
               "package_name_prefix": "",
-              "cmake_build_type": "debug",
+              "cmake_build_type": "relwithdebinfo",
               "llvm_enable_assertions": "ON",
               "build_shared_libs": "ON",
               "llvm_force_enable_stats": "ON",
@@ -164,10 +164,10 @@ jobs:
               "cmake_cxx_compiler": "g++"
             },
             {
-              "name": "clang-release-assert=off-shared=off",
+              "name": "Linux (Clang)",
               "install_target": "",
               "package_name_prefix": "",
-              "cmake_build_type": "release",
+              "cmake_build_type": "relwithdebinfo",
               "llvm_enable_assertions": "OFF",
               "build_shared_libs": "OFF",
               "llvm_force_enable_stats": "ON",
@@ -175,6 +175,19 @@ jobs:
               "runner": "ubuntu-24.04",
               "cmake_c_compiler": "clang",
               "cmake_cxx_compiler": "clang++"
+            },
+            {
+              "name": "Windows",
+              "install_target": "",
+              "package_name_prefix": "",
+              "cmake_build_type": "relwithdebinfo",
+              "llvm_enable_assertions": "ON",
+              "build_shared_libs": "OFF",
+              "llvm_force_enable_stats": "ON",
+              "run_tests": true,
+              "runner": "windows-2022",
+              "cmake_c_compiler": "cl",
+              "cmake_cxx_compiler": "cl"
             }
           ]
           EOF
@@ -192,7 +205,7 @@ jobs:
 
   # Build CIRCT and run its tests.
   build-and-test:
-    name: Build and Test
+    name: "Test: ${{ matrix.generated.name }}"
     needs:
       - sanity-check
       - choose-matrix
