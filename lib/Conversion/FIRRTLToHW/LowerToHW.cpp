@@ -2079,15 +2079,16 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(ForceOp op);
 
   std::optional<Value> getLoweredFmtOperand(Value operand);
+  FailureOr<Value> lowerSimFormatString(StringRef formatString,
+                                        ValueRange substitutions);
   LogicalResult loweredFmtOperands(ValueRange operands,
                                    SmallVectorImpl<Value> &loweredOperands);
   FailureOr<Value> callFileDescriptorLib(const FileDescriptorInfo &info);
-  // Lower statemens that use file descriptors such as printf, fprintf and
-  // fflush. `fn` is a function that takes a file descriptor and build an always
-  // and if-procedural block.
+  // Lower statements that use file descriptors such as printf, fprintf and
+  // fflush. `fn` takes a file descriptor and effective condition.
   LogicalResult lowerStatementWithFd(
       const FileDescriptorInfo &fileDescriptorInfo, Value clock, Value cond,
-      const std::function<LogicalResult(Value)> &fn, bool usePrintfCond);
+      const std::function<LogicalResult(Value, Value)> &fn, bool usePrintfCond);
   // Lower a printf-like operation. `fileDescriptorInfo` is a pair of the
   // file name and whether it requires format string substitution.
   template <class T>
@@ -2152,9 +2153,6 @@ private:
   /// caches a known ReadInOutOp for the given value and is managed by
   /// `getReadValue(v)`.
   DenseMap<Value, Value> readInOutCreated;
-
-  /// This keeps track of the file descriptors for each file name.
-  DenseMap<StringAttr, sv::RegOp> fileNameToFileDescriptor;
 
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
@@ -2792,7 +2790,7 @@ std::optional<Value> FIRRTLLowering::getLoweredFmtOperand(Value operand) {
   // Handle special substitutions.
   if (type_isa<FStringType>(operand.getType())) {
     if (isa<TimeOp>(operand.getDefiningOp()))
-      return sv::TimeOp::create(builder);
+      return sim::TimeOp::create(builder);
     if (isa<HierarchicalModuleNameOp>(operand.getDefiningOp()))
       return {nullptr};
   }
@@ -2809,8 +2807,7 @@ std::optional<Value> FIRRTLLowering::getLoweredFmtOperand(Value operand) {
   // it as signed decimal and have to wrap it in $signed().
   if (auto intTy = firrtl::type_cast<IntType>(operand.getType()))
     if (intTy.isSigned())
-      loweredValue = sv::SystemFunctionOp::create(
-          builder, loweredValue.getType(), "signed", loweredValue);
+      loweredValue = sim::CastSignedOp::create(builder, loweredValue);
 
   return loweredValue;
 }
@@ -2829,49 +2826,205 @@ FIRRTLLowering::loweredFmtOperands(mlir::ValueRange operands,
   return success();
 }
 
-LogicalResult FIRRTLLowering::lowerStatementWithFd(
-    const FileDescriptorInfo &fileDescriptor, Value clock, Value cond,
-    const std::function<LogicalResult(Value)> &fn, bool usePrintfCond) {
-  // Emit an "#ifndef SYNTHESIS" guard into the always block.
-  bool failed = false;
-  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
-  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
-    addToAlwaysBlock(clock, [&]() {
-      // TODO: This is not printf specific anymore. Replace "Printf" with "FD"
-      // or similar but be aware that changing macro name breaks existing uses.
-      circuitState.usedPrintf = true;
-      if (usePrintfCond)
-        circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
+FailureOr<Value>
+FIRRTLLowering::lowerSimFormatString(StringRef formatString,
+                                     ValueRange substitutions) {
+  SmallVector<Value> fragments;
+  size_t subIdx = 0;
+  auto getWidthAttr = [&](StringRef width) -> IntegerAttr {
+    if (width.empty())
+      return {};
+    unsigned parsedWidth = 0;
+    if (width.getAsInteger(10, parsedWidth))
+      return {};
+    return builder.getI32IntegerAttr(parsedWidth);
+  };
 
-      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
-      Value ifCond = cond;
-      if (usePrintfCond) {
-        ifCond =
-            sv::MacroRefExprOp::create(builder, cond.getType(), "PRINTF_COND_");
-        ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
+  auto appendLiteral = [&](StringRef text) {
+    if (text.empty())
+      return;
+    fragments.push_back(sim::FormatLiteralOp::create(
+        builder, builder.getLoc(), builder.getStringAttr(text)));
+  };
+
+  SmallString<32> pendingLiteral;
+  for (size_t i = 0, e = formatString.size(); i != e; ++i) {
+    char c = formatString[i];
+    if (c == '%') {
+      if (i + 1 >= e) {
+        pendingLiteral.push_back(c);
+        continue;
       }
 
-      addIfProceduralBlock(ifCond, [&]() {
-        // `fd`represents a file decriptor. Use the stdout or the one opened
-        // using $fopen.
-        Value fd;
-        if (fileDescriptor.isDefaultFd()) {
-          // Emit the sv.fwrite, writing to stderr by default.
-          fd = hw::ConstantOp::create(builder, APInt(32, 0x80000002));
-        } else {
-          // Call the library function to get the FD.
-          auto fdOrError = callFileDescriptorLib(fileDescriptor);
-          if (llvm::failed(fdOrError)) {
-            failed = true;
-            return;
-          }
-          fd = *fdOrError;
-        }
-        failed = llvm::failed(fn(fd));
-      });
-    });
-  });
-  return failure(failed);
+      // Flush pending literal before formatting fragment.
+      appendLiteral(pendingLiteral);
+      pendingLiteral.clear();
+
+      SmallString<6> width;
+      c = formatString[++i];
+      while (isdigit(c)) {
+        width.push_back(c);
+        if (i + 1 >= e)
+          break;
+        c = formatString[++i];
+      }
+
+      if (c == '%') {
+        pendingLiteral.push_back('%');
+        continue;
+      }
+
+      if (c == 'm') {
+        UnitAttr useEscapes;
+        fragments.push_back(sim::FormatHierPathOp::create(
+            builder, builder.getLoc(), useEscapes));
+        continue;
+      }
+      if (c == 'M') {
+        fragments.push_back(sim::FormatHierPathOp::create(
+            builder, builder.getLoc(), builder.getUnitAttr()));
+        continue;
+      }
+
+      if (subIdx >= substitutions.size())
+        return emitError(builder.getLoc(),
+                         "format string has too few operands");
+
+      auto loweredValue = getLoweredFmtOperand(substitutions[subIdx++]);
+      if (!loweredValue || !*loweredValue)
+        return failure();
+
+      auto widthAttr = getWidthAttr(width);
+      switch (c) {
+      case 'b':
+        fragments.push_back(sim::FormatBinOp::create(
+            builder, *loweredValue,
+            /*isLeftAligned=*/builder.getBoolAttr(false),
+            /*paddingChar=*/builder.getI8IntegerAttr(48), widthAttr));
+        break;
+      case 'd': {
+        UnitAttr isSigned;
+        if (auto intTy = dyn_cast<IntType>(substitutions[subIdx - 1].getType()))
+          if (intTy.isSigned())
+            isSigned = builder.getUnitAttr();
+        fragments.push_back(sim::FormatDecOp::create(
+            builder, *loweredValue,
+            /*isLeftAligned=*/builder.getBoolAttr(false),
+            /*paddingChar=*/builder.getI8IntegerAttr(32), widthAttr, isSigned));
+        break;
+      }
+      case 't': {
+        fragments.push_back(sim::FormatDecOp::create(
+            builder, *loweredValue,
+            /*isLeftAligned=*/builder.getBoolAttr(false),
+            /*paddingChar=*/builder.getI8IntegerAttr(32), widthAttr,
+            /*isSigned=*/nullptr));
+        break;
+      }
+      case 'x':
+      case 'X':
+        fragments.push_back(sim::FormatHexOp::create(
+            builder, *loweredValue,
+            /*isHexUppercase=*/builder.getBoolAttr(c == 'X'),
+            /*isLeftAligned=*/builder.getBoolAttr(false),
+            /*paddingChar=*/builder.getI8IntegerAttr(48), widthAttr));
+        break;
+      case 'c':
+        fragments.push_back(sim::FormatCharOp::create(builder, *loweredValue));
+        break;
+      default:
+        return emitError(builder.getLoc(), "unsupported format specifier '%")
+               << c << "'";
+      }
+      continue;
+    }
+
+    if (c == '{' && i + 3 < e && formatString.slice(i, i + 4) == "{{}}") {
+      appendLiteral(pendingLiteral);
+      pendingLiteral.clear();
+
+      if (subIdx >= substitutions.size())
+        return emitError(builder.getLoc(),
+                         "format string has too few substitutions");
+
+      auto substitution = substitutions[subIdx++];
+      if (!type_isa<FStringType>(substitution.getType()))
+        return emitError(builder.getLoc(),
+                         "expected fstring operand for '{{}}' substitution");
+
+      auto result =
+          TypeSwitch<Operation *, LogicalResult>(substitution.getDefiningOp())
+              .Case<TimeOp>([&](auto) {
+                auto time = sim::TimeOp::create(builder);
+                IntegerAttr specifierWidth;
+                UnitAttr isSigned;
+                fragments.push_back(sim::FormatDecOp::create(
+                    builder, time,
+                    /*isLeftAligned=*/builder.getBoolAttr(false),
+                    /*paddingChar=*/builder.getI8IntegerAttr(32),
+                    specifierWidth, isSigned));
+                return success();
+              })
+              .Case<HierarchicalModuleNameOp>([&](auto) {
+                UnitAttr useEscapes;
+                fragments.push_back(sim::FormatHierPathOp::create(
+                    builder, builder.getLoc(), useEscapes));
+                return success();
+              })
+              .Default([&](auto) {
+                emitError(builder.getLoc(),
+                          "has a substitution with an unimplemented lowering")
+                        .attachNote(substitution.getLoc())
+                    << "op with an unimplemented lowering is here";
+                return failure();
+              });
+      if (failed(result))
+        return failure();
+      i += 3;
+      continue;
+    }
+
+    pendingLiteral.push_back(c);
+  }
+
+  appendLiteral(pendingLiteral);
+
+  if (subIdx != substitutions.size())
+    return emitError(builder.getLoc(),
+                     "format string did not consume all operands");
+
+  if (fragments.empty())
+    return sim::FormatLiteralOp::create(builder, builder.getLoc(),
+                                        builder.getStringAttr(""))
+        .getResult();
+  if (fragments.size() == 1)
+    return fragments.front();
+  return sim::FormatStringConcatOp::create(builder, fragments).getResult();
+}
+
+LogicalResult FIRRTLLowering::lowerStatementWithFd(
+    const FileDescriptorInfo &fileDescriptor, Value clock, Value cond,
+    const std::function<LogicalResult(Value, Value)> &fn, bool usePrintfCond) {
+  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
+
+  // TODO: This is not printf specific anymore. Replace "Printf" with "FD"
+  // or similar but be aware that changing macro name breaks existing uses.
+  circuitState.usedPrintf = true;
+  if (usePrintfCond)
+    circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
+
+  Value fd;
+  if (fileDescriptor.isDefaultFd()) {
+    // Default stream remains stderr.
+    fd = hw::ConstantOp::create(builder, APInt(32, 0x80000002));
+  } else {
+    auto fdOrError = callFileDescriptorLib(fileDescriptor);
+    if (failed(fdOrError))
+      return failure();
+    fd = *fdOrError;
+  }
+
+  return fn(fd, cond);
 }
 
 FailureOr<Value>
@@ -2879,26 +3032,14 @@ FIRRTLLowering::callFileDescriptorLib(const FileDescriptorInfo &info) {
   circuitState.usedFileDescriptorLib = true;
   circuitState.addFragment(theModule, "CIRCT_LIB_LOGGING_FRAGMENT");
 
-  Value fileName;
+  SmallVector<Value> fileNameOperands;
   if (info.isSubstitutionRequired()) {
-    SmallVector<Value> fileNameOperands;
     if (failed(loweredFmtOperands(info.getSubstitutions(), fileNameOperands)))
       return failure();
-
-    fileName = sv::SFormatFOp::create(builder, info.getOutputFileFormat(),
-                                      fileNameOperands)
-                   .getResult();
-  } else {
-    // If substitution is not required, just use the output file name.
-    fileName = sv::ConstantStrOp::create(builder, info.getOutputFileFormat())
-                   .getResult();
   }
-
-  return sv::FuncCallProceduralOp::create(
-             builder, mlir::TypeRange{builder.getIntegerType(32)},
-             builder.getStringAttr("__circt_lib_logging::FileDescriptor::get"),
-             ValueRange{fileName})
-      ->getResult(0);
+  return sim::GetFileOp::create(builder, builder.getLoc(),
+                                info.getOutputFileFormat(), fileNameOperands)
+      .getDescriptor();
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
@@ -5275,21 +5416,21 @@ static LogicalResult resolveFormatString(Location loc,
 template <class T>
 LogicalResult FIRRTLLowering::visitPrintfLike(
     T op, const FileDescriptorInfo &fileDescriptorInfo, bool usePrintfCond) {
-  auto clock = getLoweredNonClockValue(op.getClock());
+  auto clock = getLoweredValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
     return failure();
 
-  StringAttr formatString;
-  if (failed(resolveFormatString(op.getLoc(), op.getFormatString(),
-                                 op.getSubstitutions(), formatString)))
+  auto formatString =
+      lowerSimFormatString(op.getFormatString(), op.getSubstitutions());
+  if (failed(formatString))
     return failure();
 
-  auto fn = [&](Value fd) {
-    SmallVector<Value> operands;
-    if (failed(loweredFmtOperands(op.getSubstitutions(), operands)))
-      return failure();
-    sv::FWriteOp::create(builder, op.getLoc(), fd, formatString, operands);
+  auto fn = [&](Value fd, Value effectiveCond) {
+    auto printOp = sim::PrintFormattedOp::create(builder, *formatString, fd,
+                                                 clock, effectiveCond);
+    if (usePrintfCond)
+      printOp.setUsePrintfCondAttr(builder.getBoolAttr(true));
     return success();
   };
 
@@ -5311,13 +5452,13 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
 
 // FFlush lowers into $fflush statement.
 LogicalResult FIRRTLLowering::visitStmt(FFlushOp op) {
-  auto clock = getLoweredNonClockValue(op.getClock());
+  auto clock = getLoweredValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
     return failure();
 
-  auto fn = [&](Value fd) {
-    sv::FFlushOp::create(builder, op.getLoc(), fd);
+  auto fn = [&](Value fd, Value effectiveCond) {
+    sim::FFlushOp::create(builder, fd, clock, effectiveCond);
     return success();
   };
 

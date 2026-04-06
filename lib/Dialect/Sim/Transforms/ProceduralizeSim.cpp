@@ -201,7 +201,11 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     // Create the procedural print operation and prune the operations outside of
     // the TriggeredOp.
     builder.setInsertionPoint(condBlock->getTerminator());
-    PrintFormattedProcOp::create(builder, printOp.getLoc(), procPrintInput);
+    Value stream{};
+    if (printOp->getNumOperands() == 4)
+      stream = printOp->getOperand(1);
+    PrintFormattedProcOp::create(builder, printOp.getLoc(), procPrintInput,
+                                 stream);
     cleanupList.push_back(printOp.getInput().getDefiningOp());
     printOp.erase();
   }

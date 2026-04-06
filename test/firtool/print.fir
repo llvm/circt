@@ -43,26 +43,20 @@ circuit PrintTest:
     ; CHECK-NEXT: $fwrite(32'h80000002, "literals: %%\n");
     printf(clock, cond, "literals: %%\n")
 
-    ; CHECK-NEXT: $fwrite(32'h80000002, "[%0t]: %m\n", $time);
+    ; CHECK:      $fwrite(32'h80000002, "[%0t]: %m\n", _GEN);
     ; CHECK-NEXT: end
     printf(clock, cond, "[{{SimulationTime}}]: {{HierarchicalModuleName}}\n")
 
     ; CHECK:      if (cond) begin
-    ; CHECK-NEXT: ___circt_lib_logging3A3AFileDescriptor3A3Aget_0_1 = __circt_lib_logging::FileDescriptor::get("test.txt");
     ; CHECK-NEXT: $fwrite(___circt_lib_logging3A3AFileDescriptor3A3Aget_0_1, "hello");
     fprintf(clock, cond, "test.txt", "hello")
 
-    ; CHECK-NEXT: ___circt_lib_logging3A3AFileDescriptor3A3Aget_0_0 = __circt_lib_logging::FileDescriptor::get($sformatf("%m%c.txt",
-    ; CHECK-NEXT:                                                                                                        8'h61));
     ; CHECK-NEXT: $fwrite(___circt_lib_logging3A3AFileDescriptor3A3Aget_0_0,
-    ; CHECK-NEXT:         "[%0t]: static file name (w/ substitution)\n", $time);
+    ; CHECK-NEXT:         "[%0t]: static file name (w/ substitution)\n", _GEN);
     node c = UInt<8>(97)
     fprintf(clock, cond, "{{HierarchicalModuleName}}%c.txt", c, "[{{SimulationTime}}]: static file name (w/ substitution)\n")
 
     ; CHECK-NEXT: $fflush(32'h80000002);
-    ; CHECK-NEXT: ___circt_lib_logging3A3AFileDescriptor3A3Aget_0 = __circt_lib_logging::FileDescriptor::get($sformatf("%0t%d.txt",
-    ; CHECK-NEXT:                                                                                                      $time,
-    ; CHECK-NEXT:                                                                                                      a));
     fflush(clock, cond)
 
     ; CHECK-NEXT: $fflush(___circt_lib_logging3A3AFileDescriptor3A3Aget_0);
