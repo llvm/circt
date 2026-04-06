@@ -740,9 +740,9 @@ struct StmtVisitor {
 
   // Handle return statements.
   LogicalResult visit(const slang::ast::ReturnStatement &stmt) {
-    Operation *parentOp =
-        builder.getInsertionBlock() ? builder.getInsertionBlock()->getParentOp()
-                                    : nullptr;
+    Operation *parentOp = builder.getInsertionBlock()
+                              ? builder.getInsertionBlock()->getParentOp()
+                              : nullptr;
     if (!parentOp)
       return mlir::emitError(loc) << "return statement is not within an op";
 
