@@ -38,7 +38,7 @@ func.func @ClassType(%arg0: !moore.class<@PropertyCombo>) {
 
 // CHECK-LABEL: func.func private @test_new2
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(32 : i64) : i64
-// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"C::typeinfo" : !llvm.ptr
 // CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
 // CHECK:   [[HEADERPTR:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>
@@ -65,7 +65,7 @@ moore.class.classdecl @C {
 
 // CHECK-LABEL: func.func private @test_new3
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(64 : i64) : i64
-// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"D::typeinfo" : !llvm.ptr
 // CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
 // CHECK:   [[HEADERPTR:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"D", (struct<(ptr, ptr)>, struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>, i32, i64, i16)>
@@ -90,7 +90,7 @@ moore.class.classdecl @D extends @C {
 
 // CHECK-LABEL: func.func private @test_new4
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(64 : i64) : i64
-// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
@@ -152,7 +152,7 @@ moore.class.classdecl @G extends @C {
 
 // CHECK-LABEL: func.func private @test_new7
 // CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(24 : i64) : i64
-// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"VirtualC::typeinfo" : !llvm.ptr
 // CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
 // CHECK:   [[HEADERPTR:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"VirtualC", (struct<(ptr, ptr)>, i32)>

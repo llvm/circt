@@ -25,6 +25,7 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/ControlFlow/Transforms/StructuralTypeConversions.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -1229,11 +1230,15 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
     auto cSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
                                           rewriter.getI64IntegerAttr(byteSize));
 
-    // Get or declare malloc and call it.
+    // Get or declare malloc as an LLVM function and call it directly so later
+    // LLVM verification does not depend on converting an intervening func.func.
     auto ptrTy = LLVM::LLVMPointerType::get(ctx); // opaque pointer result
-    auto mallocFn = funcCache.getOrCreate(rewriter, "malloc", {i64Ty}, {ptrTy});
-    auto call =
-        func::CallOp::create(rewriter, loc, mallocFn, ValueRange{cSize});
+    auto mallocFn =
+        LLVM::lookupOrCreateMallocFn(rewriter, mod, i64Ty, &symbolTables);
+    if (failed(mallocFn))
+      return op.emitError() << "Could not create LLVM malloc declaration";
+    auto call = LLVM::CallOp::create(rewriter, loc, mallocFn.value(),
+                                     ValueRange{cSize});
 
     auto typeInfoAddr =
         LLVM::AddressOfOp::create(rewriter, loc, typeInfo.global);
@@ -1246,7 +1251,7 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
         rewriter.getI32IntegerAttr(
             cache.getStructInfo(sym)->typeInfoFieldIndex));
     auto headerBasePtr =
-        LLVM::GEPOp::create(rewriter, loc, ptrTy, structTy, call.getResult(0),
+        LLVM::GEPOp::create(rewriter, loc, ptrTy, structTy, call.getResult(),
                             ValueRange{headerIdx});
     auto typeInfoPtr = LLVM::GEPOp::create(
         rewriter, loc, ptrTy, cache.getStructInfo(sym)->headerTy, headerBasePtr,
@@ -1273,13 +1278,12 @@ struct ClassNewOpConversion : public OpConversionPattern<ClassNewOp> {
 
     // Replace the new op with the malloc pointer (no cast needed with opaque
     // ptrs).
-    rewriter.replaceOp(op, call.getResult(0));
+    rewriter.replaceOp(op, call.getResult());
     return success();
   }
 
 private:
   ClassTypeCache &cache; // shared, owned by the pass
-  FunctionCache &funcCache;
   SymbolTableCollection &symbolTables;
   LLVMTypeConverter &llvmTypeConverter;
 };
