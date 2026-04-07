@@ -193,7 +193,7 @@ jobs:
           EOF
           )
 
-          echo Test Matrix:" >> $GITHUB_STEP_SUMMARY
+          echo "Test Matrix:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
           echo "$config" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
