@@ -47,10 +47,11 @@ firrtl.circuit "Versions" {
     firrtl.connect %out, %in : !firrtl.uint<1>, !firrtl.uint<1>
 
     // RegReset: 'regreset' on >= 3.0.0; 'reg ... with :' on older versions.
-    // LATEST: regreset r : UInt<1>
-    // V200:   reg r : UInt<1>
-    // V300:   regreset r : UInt<1>
-    // V400:   regreset r : UInt<1>
+    // LATEST:    regreset r : UInt<1>
+    // V200:      reg r : UInt<1>, clk with :
+    // V200-NEXT:   reset => (rst, in)
+    // V300:      regreset r : UInt<1>
+    // V400:      regreset r : UInt<1>
     %r = firrtl.regreset %clk, %rst, %in
         : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
   }
