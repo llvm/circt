@@ -180,7 +180,7 @@ jobs:
               "name": "Windows",
               "install_target": "",
               "package_name_prefix": "",
-              "cmake_build_type": "relwithdebinfo",
+              "cmake_build_type": "release",
               "llvm_enable_assertions": "ON",
               "build_shared_libs": "OFF",
               "llvm_force_enable_stats": "ON",
