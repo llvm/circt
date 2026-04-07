@@ -196,6 +196,7 @@ jobs:
           key: ${{ steps.cache-key.outputs.pattern }}
           max-size: 500M
           variant: sccache
+          save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Configure sccache
         id: configure-sccache
         if: runner.os != 'Windows' || inputs.cmake_build_type == 'release'
