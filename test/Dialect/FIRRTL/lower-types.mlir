@@ -1602,4 +1602,3 @@ firrtl.circuit "InstanceChoiceTest" {
     firrtl.matchingconnect %out_y, %3 : !firrtl.uint<8>
   }
 }
-
