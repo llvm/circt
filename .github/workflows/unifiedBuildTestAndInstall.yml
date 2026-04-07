@@ -175,13 +175,17 @@ jobs:
         shell: bash
         run: |
           echo setup=./utils/find-vs.ps1 >> "$GITHUB_OUTPUT"
-# Setup Caching
+# Setup Caching.  Caching has several constraints:
 #
-# Use sccache as it works on Windows.  Disable caching for non-release Windows
-# builds due to a bug between cmake and sccache. See:
-#   - https://gitlab.kitware.com/cmake/cmake/-/issues/22529
+# 1. RelWithDebInfo and Debug builds require very large caches, roughly ~4.5GiB.
+# 2. Release builds fit in ~100MiB.
+# 3. Windows caching is broken on non-release builds [1].
+#
+# Taken together, disable caching on non-release builds.
+#
+# [1]: https://gitlab.kitware.com/cmake/cmake/-/issues/22529
       - name: sccache
-        if: runner.os != 'Windows' || inputs.cmake_build_type == 'release'
+        if: inputs.cmake_build_type == 'release'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ${{ inputs.runner }}-${{ inputs.cmake_c_compiler }}-${{ inputs.cmake_cxx_compiler }}-${{ inputs.cmake_build_type }}-${{ inputs.build_shared_libs }}-${{ inputs.llvm_enable_assertions }}-${{ inputs.llvm_force_enable_stats}}
@@ -190,7 +194,7 @@ jobs:
           save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Configure sccache
         id: configure-sccache
-        if: runner.os != 'Windows' || inputs.cmake_build_type == 'release'
+        if: inputs.cmake_build_type == 'release'
         shell: bash
         run:
           echo enable_sccache="-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_OUTPUT

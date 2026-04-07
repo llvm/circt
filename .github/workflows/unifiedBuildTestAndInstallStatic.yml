@@ -96,7 +96,12 @@ jobs:
           fetch-depth: 1
           ref: v3.1.5
           path: build/mimalloc
-# Setup Caching
+# Setup Caching.  Caching has a couple of constraints:
+#
+# 1. RelWithDebInfo and Debug builds require very large caches, roughly ~4.5GiB.
+# 2. Release builds fit in ~100MiB.
+#
+# Taken together, disable caching on non-release builds.
       - name: sccache
         if: inputs.cmake_build_type == 'release'
         uses: hendrikmuhs/ccache-action@v1.2
