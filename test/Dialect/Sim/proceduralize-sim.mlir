@@ -262,3 +262,41 @@ hw.module @condition_as_val(in %clk: !seq.clock, in %condval: i1) {
     %bin = sim.fmt.bin %condval specifierWidth 1 : i1
     sim.print %bin on %clk if %condval
 }
+
+// CHECK-LABEL: @print_time
+// CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
+// CHECK-NEXT:  hw.triggered posedge %[[TRG]] {
+// CHECK-NEXT:    %[[TIME:.*]] = sim.time
+// CHECK-NEXT:    %[[FMT:.*]] = sim.fmt.dec %[[TIME]] : i64
+// CHECK-NEXT:    sim.proc.print %[[FMT]]
+// CHECK-NEXT:  }
+
+hw.module @print_time(in %clk : !seq.clock) {
+  %true = hw.constant true
+  %time = sim.time
+  %fmt = sim.fmt.dec %time : i64
+  sim.print %fmt on %clk if %true
+}
+
+// CHECK-LABEL: @print_and_flush_file
+// CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
+// CHECK-NEXT:  hw.triggered posedge %[[TRG]](%[[CARG:.*]], %[[VARG:.*]]) : i1, i8 {
+// CHECK-NEXT:  ^bb0(%[[COND:.*]]: i1, %[[VAL:.*]]: i8):
+// CHECK-DAG:     %[[LIT:.*]] = sim.fmt.literal "v="
+// CHECK-DAG:     %[[NAME:.*]] = sim.get_file "out_%0d.log"(%[[VAL]]) : (i8) -> i32
+// CHECK-DAG:     %[[HEX:.*]] = sim.fmt.hex %[[VAL]], isUpper false : i8
+// CHECK-DAG:     %[[MSG:.*]] = sim.fmt.concat (%[[LIT]], %[[HEX]])
+// CHECK:         scf.if %[[COND]] {
+// CHECK-NEXT:      sim.proc.print %[[MSG]] to %[[NAME]]
+// CHECK-NEXT:      sim.proc.fflush %[[NAME]]
+// CHECK-NEXT:    }
+// CHECK-NEXT:  }
+
+hw.module @print_and_flush_file(in %clk : !seq.clock, in %cond : i1, in %val : i8) {
+  %lit = sim.fmt.literal "v="
+  %hex = sim.fmt.hex %val, isUpper false : i8
+  %msg = sim.fmt.concat (%lit, %hex)
+  %fd = sim.get_file "out_%0d.log"(%val) : (i8) -> i32
+  sim.print %msg to %fd on %clk if %cond
+  sim.fflush %fd on %clk if %cond
+}

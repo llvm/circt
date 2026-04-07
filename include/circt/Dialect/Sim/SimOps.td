@@ -502,6 +502,16 @@ def FormatHierPathOp : SimOp<"fmt.hier_path", [Pure]> {
   let assemblyFormat = "(`escaped` $useEscapes^)? attr-dict";
 }
 
+def TimeOp : SimOp<"time", [Pure]> {
+  let summary = "Current simulation time";
+  let description = [{
+    Returns the current simulation time as an `i64` value.
+  }];
+
+  let results = (outs I64:$result);
+  let assemblyFormat = "attr-dict";
+}
+
 def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   let summary = "Concatenate format strings";
   let description = [{
@@ -560,11 +570,13 @@ def PrintFormattedOp : SimOp<"print"> {
   }];
   let arguments = (ins
     FormatStringType:$input,
+    Optional<I32>:$stream,
     ClockType:$clock,
-    I1:$condition
+    I1:$condition,
+    DefaultValuedAttr<BoolAttr, "false">:$usePrintfCond
   );
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = "$input `on` $clock `if` $condition attr-dict";
+  let assemblyFormat = "$input (`to` $stream^)? `on` $clock `if` $condition attr-dict";
 }
 
 def PrintFormattedProcOp : SimOp<"proc.print"> {
@@ -574,10 +586,43 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
 
     This operation must be within a procedural region.
   }];
-  let arguments = (ins FormatStringType:$input);
+  let arguments = (ins 
+    FormatStringType:$input, 
+    Optional<I32>:$stream, 
+    DefaultValuedAttr<BoolAttr, "false">:$usePrintfCond
+  );
   let hasVerifier = true;
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = "$input attr-dict";
+  let assemblyFormat = "$input (`to` $stream^)? attr-dict";
+}
+
+def GetFileOp : SimOp<"get_file"> {
+  let summary = "Get a file descriptor for a formatted file name";
+  let description = [{
+    Looks up the descriptor for a file name in a process-global mapping.
+    If no descriptor exists, opens the file and records the new descriptor.
+  }];
+
+  let arguments = (ins StrAttr:$fileNameFormat,
+                       Variadic<AnyType>:$fileNameOperands);
+  let results = (outs I32:$descriptor);
+  let assemblyFormat = [{
+    $fileNameFormat `(` $fileNameOperands `)` attr-dict
+      `:` functional-type($fileNameOperands, results)
+  }];
+}
+
+def FFlushOp : SimOp<"fflush"> {
+  let summary = "Flush a file stream on a given clock and condition";
+  let arguments = (ins I32:$stream, ClockType:$clock, I1:$condition);
+  let assemblyFormat = "$stream `on` $clock `if` $condition attr-dict";
+}
+
+def FFlushProcOp : SimOp<"proc.fflush"> {
+  let summary = "Flush a file stream within a procedural region";
+  let arguments = (ins I32:$stream);
+  let hasVerifier = 1;
+  let assemblyFormat = "$stream attr-dict";
 }
 
 //===----------------------------------------------------------------------===//

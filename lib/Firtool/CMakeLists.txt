@@ -12,6 +12,7 @@ add_circt_library(CIRCTFirtool
   CIRCTSeqToSV
   CIRCTSimToSV
   CIRCTSeqTransforms
+  CIRCTSimTransforms
   CIRCTSVTransforms
   CIRCTTransforms
   CIRCTVerifToSV
