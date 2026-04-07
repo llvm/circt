@@ -1310,9 +1310,13 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
   // Externalize memories conditionally (only in the top-level component because
   // Calyx compiler requires it as a well-formness check).
   if (componentOp->hasAttr("toplevel")) {
-    memoryOp->setAttr(
+     // do nothing to mean ref.
+     //memoryOp->setAttr("ref");
+
+    /*memoryOp->setAttr(
         "external", IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 1)));
 
+    */
   } else {
     memoryOp->setAttr(
         "external", IntegerAttr::get(rewriter.getI1Type(), llvm::APInt(1, 0)));
