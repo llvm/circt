@@ -48,6 +48,7 @@ void exportVerilog(MlirContext ctx, bool disableOptimization) {
 
   MlirLogicalResult result =
       circtFirtoolPopulatePreprocessTransforms(pm, options);
+  (void)result;
   assert(mlirLogicalResultIsSuccess(result));
 
   result = circtFirtoolPopulateCHIRRTLToLowFIRRTL(pm, options);
