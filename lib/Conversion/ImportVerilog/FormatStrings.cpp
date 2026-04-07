@@ -296,6 +296,10 @@ struct FormatStringParser {
   /// Emit an expression argument with the appropriate default formatting.
   LogicalResult emitDefault(const slang::ast::Expression &expr) {
     FormatOptions options;
+    // Without an explicit format string, default formatting is not limited to
+    // integers, the string-typed arguments also be concerned.
+    if (expr.type->isString())
+      return emitString(expr, options);
     return emitInteger(expr, options, defaultFormat);
   }
 };
