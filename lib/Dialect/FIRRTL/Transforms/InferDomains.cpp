@@ -368,8 +368,19 @@ public:
   LogicalResult updateModuleDomainInfo(FModuleOp moduleOp,
                                        const ExportTable &exportTable,
                                        ArrayAttr &result);
-  LogicalResult updateInstance(FInstanceLike op, OpBuilder &builder);
-  LogicalResult updateWire(WireOp wireOp, OpBuilder &builder);
+  DomainValue
+  solveVarWithAnonDomain(OpBuilder &builder,
+                         DenseMap<DomainValue, DomainValue> &domainsInScope,
+                         Operation *user, DomainType type, VariableTerm *var);
+  DomainValue
+  getDomainInScope(OpBuilder &builder,
+                   DenseMap<DomainValue, DomainValue> &domainsInScope,
+                   DomainValue domain);
+  LogicalResult
+  updateInstance(DenseMap<DomainValue, DomainValue> &domainsInScope,
+                 FInstanceLike op);
+  LogicalResult updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
+                           WireOp wireOp);
   LogicalResult updateModuleBody(FModuleOp moduleOp);
   LogicalResult updateModule(FModuleOp moduleOp);
 
@@ -1333,13 +1344,57 @@ LogicalResult PassState::updateModuleDomainInfo(FModuleOp moduleOp,
   return success();
 }
 
-LogicalResult PassState::updateInstance(FInstanceLike op, OpBuilder &builder) {
+DomainValue PassState::solveVarWithAnonDomain(
+    OpBuilder &builder, DenseMap<DomainValue, DomainValue> &domainsInScope,
+    Operation *user, DomainType type, VariableTerm *var) {
+  auto name = type.getName().getAttr();
+  DomainValue anon =
+      DomainCreateAnonOp::create(builder, user->getLoc(), type, name);
+  dirty();
+  LLVM_DEBUG(llvm::dbgs().indent(6) << "create anon " << render(anon) << "\n");
+  solve(var, allocVal(anon));
+  domainsInScope[anon] = anon;
+  return anon;
+}
+
+DomainValue
+PassState::getDomainInScope(OpBuilder &builder,
+                            DenseMap<DomainValue, DomainValue> &domainsInScope,
+                            DomainValue domain) {
+  auto &domainInScope = domainsInScope[domain];
+  if (domainInScope)
+    return domainInScope;
+
+  domainInScope = cast<DomainValue>(
+      WireOp::create(builder, domain.getLoc(), domain.getType(),
+                     domain.getType().getName().getAttr())
+          .getResult());
+
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointAfterValue(domain);
+  DomainDefineOp::create(builder, domain.getLoc(), domainInScope, domain);
+  dirty();
+  LLVM_DEBUG(llvm::dbgs().indent(6) << "bounce wire " << render(domainInScope)
+                                    << " := " << render(domain) << "\n");
+  return domainInScope;
+}
+
+LogicalResult
+PassState::updateInstance(DenseMap<DomainValue, DomainValue> &domainsInScope,
+                          FInstanceLike op) {
   LLVM_DEBUG(llvm::dbgs().indent(4) << "update " << render(op) << "\n");
+  OpBuilder builder(op.getContext());
+  builder.setInsertionPointAfter(op);
   auto numPorts = op->getNumResults();
+
+  for (size_t i = 0; i < numPorts; ++i)
+    if (auto port = dyn_cast<DomainValue>(op->getResult(i)))
+      if (op.getPortDirection(i) == Direction::Out)
+        domainsInScope[port] = port;
+
   for (size_t i = 0; i < numPorts; ++i) {
     auto port = dyn_cast<DomainValue>(op->getResult(i));
     auto direction = op.getPortDirection(i);
-
     // If the port is an input domain, we may need to drive the input with
     // a value. If we don't know what value to drive to the port, drive an
     // anonymous domain.
@@ -1347,33 +1402,18 @@ LogicalResult PassState::updateInstance(FInstanceLike op, OpBuilder &builder) {
       auto loc = port.getLoc();
       auto *term = getTermForDomain(port);
       if (auto *var = dyn_cast<VariableTerm>(term)) {
-        auto domainType = cast<DomainType>(op->getResult(i).getType());
-        auto domainTypeID = getDomainTypeID(domainType);
-        auto domainDecl = getDomain(domainTypeID);
-        auto name = domainDecl.getNameAttr();
-        DomainValue anon;
-        {
-          OpBuilder::InsertionGuard guard(builder);
-          builder.setInsertionPointAfter(op);
-          auto op = DomainCreateAnonOp::create(builder, loc, domainType, name);
-          dirty();
-          LLVM_DEBUG(llvm::dbgs().indent(6)
-                     << "create " << render(op.getOperation()) << "\n");
-          anon = op;
-        }
-        solve(var, allocVal(anon));
+        auto domain = solveVarWithAnonDomain(builder, domainsInScope, op,
+                                             port.getType(), var);
         LLVM_DEBUG(llvm::dbgs().indent(6) << "connect " << render(port)
-                                          << " := " << render(anon) << "\n");
-        // Create domain.define at the end of the block to avoid use-before-def.
-        DomainDefineOp::create(builder, loc, port, anon);
+                                          << " := " << render(domain) << "\n");
+        DomainDefineOp::create(builder, loc, port, domain);
         continue;
       }
       if (auto *val = dyn_cast<ValueTerm>(term)) {
-        auto value = val->value;
+        auto domain = getDomainInScope(builder, domainsInScope, val->value);
         LLVM_DEBUG(llvm::dbgs().indent(6) << "connect " << render(port)
-                                          << " := " << render(value) << "\n");
-        // Create domain.define at the end of the block to avoid use-before-def.
-        DomainDefineOp::create(builder, loc, port, value);
+                                          << " := " << render(domain) << "\n");
+        DomainDefineOp::create(builder, loc, port, domain);
         continue;
       }
       llvm_unreachable("unhandled domain term type");
@@ -1383,32 +1423,30 @@ LogicalResult PassState::updateInstance(FInstanceLike op, OpBuilder &builder) {
   return success();
 }
 
-LogicalResult PassState::updateWire(WireOp wireOp, OpBuilder &builder) {
-  OpBuilder::InsertionGuard guard(builder);
-  builder.setInsertionPoint(wireOp);
-
+LogicalResult
+PassState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
+                      WireOp wireOp) {
   auto result = wireOp.getResult();
   if (!isa<FIRRTLBaseType>(result.getType()))
     return success();
 
+  LLVM_DEBUG(llvm::dbgs().indent(4) << "update " << render(wireOp) << "\n");
+  OpBuilder builder(wireOp);
   auto *row = getDomainAssociationAsRow(wireOp.getResult());
 
   SmallVector<Value> domainOperands;
   for (auto [i, element] : llvm::enumerate(
            llvm::map_range(row->elements, [&](auto e) { return find(e); }))) {
     if (auto *val = dyn_cast<ValueTerm>(element)) {
-      domainOperands.push_back(val->value);
+      domainOperands.push_back(
+          getDomainInScope(builder, domainsInScope, val->value));
       continue;
     }
     if (auto *var = dyn_cast<VariableTerm>(element)) {
-      auto domainDecl = getDomain(DomainTypeID{i});
-      auto domainType = DomainType::getFromDomainOp(domainDecl);
-      auto domainName = domainDecl.getNameAttr();
-      auto anonDomain = DomainCreateAnonOp::create(builder, wireOp.getLoc(),
-                                                   domainType, domainName);
-      domainOperands.push_back(anonDomain);
-      auto *val = allocVal(anonDomain);
-      solve(var, val);
+      auto type = DomainType::getFromDomainOp(getDomain(DomainTypeID{i}));
+      auto domain =
+          solveVarWithAnonDomain(builder, domainsInScope, wireOp, type, var);
+      domainOperands.push_back(domain);
       continue;
     }
     assert(0 && "unhandled domain type");
@@ -1418,16 +1456,25 @@ LogicalResult PassState::updateWire(WireOp wireOp, OpBuilder &builder) {
 }
 
 LogicalResult PassState::updateModuleBody(FModuleOp moduleOp) {
-  // Set insertion point to end of block so all domain.define operations are
-  // created there, avoiding use-before-def issues.
-  OpBuilder builder(moduleOp.getContext());
-  builder.setInsertionPointToEnd(moduleOp.getBodyBlock());
+  DenseMap<DomainValue, DomainValue> domainsInScope;
+
+  for (size_t i = 0, e = moduleOp.getNumPorts(); i < e; ++i)
+    if (auto port = dyn_cast<DomainValue>(moduleOp.getArgument(i)))
+      if (moduleOp.getPortDirection(i) == Direction::In)
+        domainsInScope[port] = port;
+
   auto result = moduleOp.getBodyBlock()->walk([&](Operation *op) -> WalkResult {
-    if (auto wire = dyn_cast<WireOp>(op))
-      return updateWire(wire, builder);
-    if (auto instance = dyn_cast<FInstanceLike>(op))
-      return updateInstance(instance, builder);
-    return success();
+    return TypeSwitch<Operation *, WalkResult>(op)
+        .Case<WireOp>(
+            [&](auto wire) { return updateWire(domainsInScope, wire); })
+        .Case<FInstanceLike>([&](auto instance) {
+          return updateInstance(domainsInScope, instance);
+        })
+        .Case<DomainCreateOp, DomainCreateAnonOp>([&](auto domain) {
+          domainsInScope[domain] = domain;
+          return success();
+        })
+        .Default([&](auto op) { return success(); });
   });
   return failure(result.wasInterrupted());
 }
