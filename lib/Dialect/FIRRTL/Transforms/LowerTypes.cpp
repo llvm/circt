@@ -1347,7 +1347,8 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
                    ArrayAttr attrs) -> Value {
     return WireOp::create(*builder,
                           mapLoweredType(op.getDataRaw().getType(), field.type),
-                          "", NameKindEnum::DroppableName, attrs, StringAttr{})
+                          "", NameKindEnum::DroppableName, attrs, StringAttr{},
+                          false, op.getDomains())
         .getResult();
   };
   return lowerProducer(op, clone);

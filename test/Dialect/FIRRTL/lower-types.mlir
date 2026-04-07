@@ -1550,6 +1550,16 @@ firrtl.circuit "Domains" {
   }
 }
 
+// Test that domain operands on wires are preserved when lowering bundle types.
+// CHECK-LABEL: firrtl.circuit "WireWithDomains"
+firrtl.circuit "WireWithDomains" {
+  firrtl.domain @ClockDomain
+  firrtl.module @WireWithDomains(in %A: !firrtl.domain<@ClockDomain()>) {
+    // CHECK-COUNT-2: firrtl.wire domains[%A] : !firrtl.uint<1>
+    %w = firrtl.wire domains[%A] : !firrtl.bundle<a: uint<1>, b: uint<1>> domains[!firrtl.domain<@ClockDomain()>]
+  }
+}
+
 // Test InstanceChoiceOp lowering with bundle types
 // CHECK-LABEL: firrtl.circuit "InstanceChoiceTest"
 firrtl.circuit "InstanceChoiceTest" {
