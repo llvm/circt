@@ -117,12 +117,3 @@ jobs:
       - name: Integration Test CIRCT
         run: |
           ninja -C build check-circt-integration -j$(nproc)
-  # Clean up cache after build completes
-  cleanup-cache:
-    needs: build-circt
-    if: always() # Run even if build fails
-    uses: ./.github/workflows/cleanupCache.yml
-    permissions:
-      actions: write
-    with:
-      cache_key_pattern: ${{ needs.build-circt.outputs.cache-key-pattern }}
