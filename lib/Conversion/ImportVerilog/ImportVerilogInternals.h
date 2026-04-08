@@ -294,9 +294,10 @@ struct Context {
   Value convertToSimpleBitVector(Value value);
 
   /// Helper function to insert the necessary operations to cast a value from
-  /// one type to another.
+  /// one type to another. If `fallible` is true, conversion failures are
+  /// reported by returning a null value without emitting diagnostics.
   Value materializeConversion(Type type, Value value, bool isSigned,
-                              Location loc);
+                              Location loc, bool fallible = false);
 
   /// Helper function to materialize an `SVInt` as an SSA value.
   Value materializeSVInt(const slang::SVInt &svint,
