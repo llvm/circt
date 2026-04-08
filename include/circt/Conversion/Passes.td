@@ -864,12 +864,6 @@ def ConvertCombToSynth : Pass<"convert-comb-to-synth", "hw::HWModuleOp"> {
   let options =
       [ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
                   "Specify additional legal ops to partially legalize Comb">,
-       Option<"targetIR", "target-ir", "circt::CombToSynthTargetIR",
-              /*default=*/"circt::CombToSynthTargetIR::AIG", "Target IR kind",
-              [{::llvm::cl::values(
-             clEnumValN(circt::CombToSynthTargetIR::AIG, "aig", "Lower to AIG"),
-             clEnumValN(circt::CombToSynthTargetIR::MIG, "mig", "Lower to MIG")
-           )}]>,
        Option<"maxEmulationUnknownBits", "max-emulation-unknown-bits",
               "uint32_t", "10",
               "Maximum number of unknown bits to emulate in a table lookup">];

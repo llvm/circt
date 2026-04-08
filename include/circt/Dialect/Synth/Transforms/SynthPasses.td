@@ -258,7 +258,7 @@ def StructuralHash : Pass<"synth-structural-hash", "hw::HWModuleOp"> {
   let summary = "Structural hashing (CSE) for Synth operations";
   let description = [{
     This pass performs aggressive structural hashing-based CSE for Synth dialect
-    operations (AIG/MIG), domain-specific to AIG/MIG operations to enable operand
+    operations, domain-specific to AIG operations to enable operand
     reordering based on structural properties and inversion flag consideration
     for canonicalization.
   }];

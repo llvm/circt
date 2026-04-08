@@ -6,9 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This pass performs structural hashing for Synth dialect operations
-// (AIG/MIG). Unlike MLIR's general CSE pass, this is domain-specific to
-// AIG/MIG operations, allowing it to reorder operands based on their
+// This pass performs structural hashing for Synth dialect operations.
+// Unlike MLIR's general CSE pass, this is domain-specific to AIG
+// operations, allowing it to reorder operands based on their
 // structural properties and take inversion flags into account for
 // canonicalization.
 //
@@ -244,9 +244,8 @@ uint64_t StructuralHashDriver::getNumber(Value v) {
 
 llvm::LogicalResult StructuralHashDriver::run(hw::HWModuleOp moduleOp) {
   auto isOperationReady = [&](Value value, Operation *op) -> bool {
-    // Otherthan target ops, all other ops are always ready.
-    return !isa<circt::synth::aig::AndInverterOp,
-                circt::synth::mig::MajorityInverterOp>(op);
+    // Other than target ops, all other ops are always ready.
+    return !isa<circt::synth::aig::AndInverterOp>(op);
   };
 
   if (!mlir::sortTopologically(moduleOp.getBodyBlock(), isOperationReady))
@@ -261,8 +260,7 @@ llvm::LogicalResult StructuralHashDriver::run(hw::HWModuleOp moduleOp) {
   for (auto &op :
        llvm::make_early_inc_range(moduleOp.getBodyBlock()->getOperations())) {
     mlir::TypeSwitch<Operation *>(&op)
-        .Case<circt::synth::aig::AndInverterOp,
-              circt::synth::mig::MajorityInverterOp>([&](auto invertibleOp) {
+        .Case<circt::synth::aig::AndInverterOp>([&](auto invertibleOp) {
           visitOp(invertibleOp, invertibleOp.getInverted());
         })
         .Default([&](Operation *op) {});

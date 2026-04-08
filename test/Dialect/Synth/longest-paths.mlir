@@ -124,21 +124,12 @@ hw.module private @comb_others(in %a : i2, in %b : i2, out x : i1) {
   hw.output %0 : i1
 }
 
-// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.a[0], delay=1, history=[{{.+}}])}}
-// expected-remark-re @below {{endPoint=Object($root.y[0]), startPoint=Object($root.a[0], delay=2, history=[{{.+}}])}}
-hw.module private @mig(in %a : i1, out x : i1, out y : i1) {
-  %p = synth.mig.maj_inv %a, %a, %a : i1
-  %q = synth.mig.maj_inv %a, %a, %a, %a, %a : i1
-  hw.output %p, %q : i1, i1
-}
-
-
 // Make sure that the parameter doesn't cause crash
-// expected-remark-re @below {{endPoint=Object($root.o1[0]), startPoint=Object($root.a[0], delay=2, history=[{{.+}}])}}
+// expected-remark-re @below {{endPoint=Object($root.o1[0]), startPoint=Object($root.a[0], delay=3, history=[{{.+}}])}}
 hw.module @parameter<in: i1> (in %a: i1, out o1: i1) {
   %param = hw.param.value i1 = #hw.param.decl.ref<"in">
   %0 = synth.aig.and_inv %a, %param : i1
-  %1 = synth.mig.maj_inv %0, %a, %param : i1
+  %1 = comb.or %0, %a, %param : i1
   hw.output %1 : i1
 }
 

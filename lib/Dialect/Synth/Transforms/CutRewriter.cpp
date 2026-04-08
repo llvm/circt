@@ -183,31 +183,6 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
               addGate(xorOp, LogicNetworkGate::Xor2, {lhsSignal, rhsSignal});
               return success();
             })
-            .Case<synth::mig::MajorityInverterOp>(
-                [&](synth::mig::MajorityInverterOp majOp) {
-                  if (majOp->getNumOperands() == 1) {
-                    // Single input = inverter
-                    const Signal inputSignal = getOrCreateSignal(
-                        majOp.getOperand(0), majOp.isInverted(0));
-                    handleSingleInputGate(majOp, majOp.getResult(),
-                                          inputSignal);
-                    return success();
-                  }
-                  if (majOp->getNumOperands() != 3) {
-                    // Variadic MAJ is treated as primary inputs.
-                    handleOtherResults(majOp);
-                    return success();
-                  }
-                  const Signal aSignal = getOrCreateSignal(majOp.getOperand(0),
-                                                           majOp.isInverted(0));
-                  const Signal bSignal = getOrCreateSignal(majOp.getOperand(1),
-                                                           majOp.isInverted(1));
-                  const Signal cSignal = getOrCreateSignal(majOp.getOperand(2),
-                                                           majOp.isInverted(2));
-                  addGate(majOp, LogicNetworkGate::Maj3,
-                          {aSignal, bSignal, cSignal});
-                  return success();
-                })
             .Case<hw::ConstantOp>([&](hw::ConstantOp constOp) {
               Value result = constOp.getResult();
               if (!result.getType().isInteger(1)) {
@@ -267,9 +242,9 @@ static bool compareDelayAndArea(OptimizationStrategy strategy, double newArea,
 
 LogicalResult circt::synth::topologicallySortLogicNetwork(Operation *topOp) {
   const auto isOperationReady = [](Value value, Operation *op) -> bool {
-    // Topologically sort AIG ops, MIG ops, and dataflow ops. Other operations
-    // can be scheduled.
-    return !(isa<aig::AndInverterOp, mig::MajorityInverterOp>(op) ||
+    // Topologically sort AIG ops and dataflow ops. Other operations can be
+    // scheduled.
+    return !(isa<aig::AndInverterOp>(op) ||
              isa<comb::XorOp, comb::AndOp, comb::OrOp, comb::ExtractOp,
                  comb::ReplicateOp, comb::ConcatOp>(op));
   };
@@ -312,7 +287,7 @@ FailureOr<BinaryTruthTable> circt::synth::getTruthTable(ValueRange values,
     if (op.getNumResults() == 0)
       continue;
 
-    // Support AIG, XOR, and MIG operations
+    // Support AIG and XOR operations
     if (auto andOp = dyn_cast<aig::AndInverterOp>(&op)) {
       SmallVector<llvm::APInt, 2> inputs;
       inputs.reserve(andOp.getInputs().size());
@@ -335,16 +310,6 @@ FailureOr<BinaryTruthTable> circt::synth::getTruthTable(ValueRange values,
         result ^= it->second;
       }
       eval[xorOp.getResult()] = result;
-    } else if (auto migOp = dyn_cast<synth::mig::MajorityInverterOp>(&op)) {
-      SmallVector<llvm::APInt, 3> inputs;
-      inputs.reserve(migOp.getInputs().size());
-      for (auto input : migOp.getInputs()) {
-        auto it = eval.find(input);
-        if (it == eval.end())
-          return migOp.emitError("Input value not found in evaluation map");
-        inputs.push_back(it->second);
-      }
-      eval[migOp.getResult()] = migOp.evaluate(inputs);
     } else if (!isa<hw::OutputOp>(&op)) {
       return op.emitError("Unsupported operation for truth table simulation");
     }

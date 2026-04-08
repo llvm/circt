@@ -25,13 +25,6 @@
 namespace circt {
 namespace synth {
 
-enum TargetIR {
-  // Lower to And-Inverter Graph
-  AIG,
-  // Lower to Majority-Inverter Graph
-  MIG
-};
-
 /// Options for the aig lowering pipeline.
 struct CombLoweringPipelineOptions
     : public mlir::PassPipelineOptions<CombLoweringPipelineOptions> {
@@ -43,9 +36,6 @@ struct CombLoweringPipelineOptions
       *this, "timing-aware",
       llvm::cl::desc("Lower operators in a timing-aware fashion"),
       llvm::cl::init(false)};
-  PassOptions::Option<TargetIR> targetIR{
-      *this, "lowering-target", llvm::cl::desc("Target IR to lower to"),
-      llvm::cl::init(TargetIR::AIG)};
   PassOptions::Option<OptimizationStrategy> synthesisStrategy{
       *this, "synthesis-strategy", llvm::cl::desc("Synthesis strategy to use"),
       llvm::cl::values(

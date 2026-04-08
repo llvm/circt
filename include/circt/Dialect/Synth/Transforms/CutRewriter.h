@@ -117,7 +117,7 @@ struct LogicNetworkGate {
     PrimaryInput = 1, ///< Primary input to the network
     And2 = 2,         ///< AND gate (2-input, aig::AndInverterOp)
     Xor2 = 3,         ///< XOR gate (2-input)
-    Maj3 = 4,         ///< Majority gate (3-input, mig::MajOp)
+    Maj3 = 4,         ///< Reserved 3-input gate kind
     Identity = 5      ///< Identity gate (used for 1-input inverter)
   };
 

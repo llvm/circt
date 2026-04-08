@@ -114,7 +114,7 @@ static cl::opt<bool>
 enum Until { UntilCombLowering, UntilMapping, UntilEnd };
 
 static auto runUntilValues = llvm::cl::values(
-    clEnumValN(UntilCombLowering, "comb-lowering", "Lowering Comb to AIG/MIG"),
+    clEnumValN(UntilCombLowering, "comb-lowering", "Lowering Comb to AIG"),
     clEnumValN(UntilMapping, "mapping", "Run technology/lut mapping"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
 
@@ -211,12 +211,6 @@ static cl::opt<int>
                  cl::desc("Lower to generic a truth table op with K inputs"),
                  cl::init(0), cl::cat(mainCategory));
 
-static cl::opt<TargetIR>
-    targetIR("target-ir", cl::desc("Target IR to lower to"),
-             cl::values(clEnumValN(TargetIR::AIG, "aig", "AIG operation"),
-                        clEnumValN(TargetIR::MIG, "mig", "MIG operation")),
-             cl::init(TargetIR::AIG), cl::cat(mainCategory));
-
 // Opt-in to enable the parameterize constant ports pass.
 // NOTE: This is always beneficial for middle-end optimizations but currently
 // it's opt-in since it's necessary to run monomorphization (currently not
@@ -265,7 +259,6 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     circt::synth::CombLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;
     loweringOptions.timingAware = !disableTimingAware;
-    loweringOptions.targetIR = targetIR;
     loweringOptions.synthesisStrategy = synthesisStrategy;
     circt::synth::buildCombLoweringPipeline(pm, loweringOptions);
     if (untilReached(UntilCombLowering))

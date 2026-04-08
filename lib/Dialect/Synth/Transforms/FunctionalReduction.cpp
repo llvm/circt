@@ -88,7 +88,6 @@ private:
   void addOrClauses(int outVar, llvm::ArrayRef<int> inputLits);
   void addXorClauses(int outVar, int lhsLit, int rhsLit);
   void addParityClauses(int outVar, llvm::ArrayRef<int> inputLits);
-  void addMajorityClauses(int outVar, llvm::ArrayRef<int> inputLits);
   void encodeValue(Value value);
 
   IncrementalSATSolver &solver;
@@ -98,8 +97,7 @@ private:
 };
 
 static bool isFunctionalReductionSimulatableOp(Operation *op) {
-  return isa<aig::AndInverterOp, mig::MajorityInverterOp, comb::AndOp,
-             comb::OrOp, comb::XorOp>(op);
+  return isa<aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp>(op);
 }
 
 EquivResult FunctionalReductionSATBuilder::verify(Value lhs, Value rhs) {
@@ -212,59 +210,6 @@ void FunctionalReductionSATBuilder::addParityClauses(
   }
 }
 
-static void enumerateLiteralSubsets(
-    llvm::ArrayRef<int> inputLits, size_t subsetSize,
-    llvm::function_ref<void(llvm::ArrayRef<int>)> callback) {
-  SmallVector<int> subset;
-  subset.reserve(subsetSize);
-  std::function<void(size_t, size_t)> visit = [&](size_t start,
-                                                  size_t remaining) {
-    if (remaining == 0) {
-      callback(subset);
-      return;
-    }
-    for (size_t i = start; i + remaining <= inputLits.size(); ++i) {
-      subset.push_back(inputLits[i]);
-      visit(i + 1, remaining - 1);
-      subset.pop_back();
-    }
-  };
-  visit(0, subsetSize);
-}
-
-void FunctionalReductionSATBuilder::addMajorityClauses(
-    int outVar, llvm::ArrayRef<int> inputLits) {
-  assert(inputLits.size() % 2 == 1 &&
-         "majority requires an odd number of inputs");
-  size_t threshold = inputLits.size() / 2 + 1;
-
-  // If any threshold-sized subset is all true, the majority output must be
-  // true as well. For 5 inputs, these are all 3-input subsets.
-  enumerateLiteralSubsets(inputLits, threshold,
-                          [&](llvm::ArrayRef<int> subset) {
-                            SmallVector<int> clause;
-                            clause.reserve(subset.size() + 1);
-                            for (int lit : subset)
-                              clause.push_back(-lit);
-                            clause.push_back(outVar);
-                            solver.addClause(clause);
-                          });
-
-  // Conversely, if any threshold-sized subset is all false, the majority
-  // output must be false. Writing that implication in positive-literal form is
-  // equivalent to `outVar ->` not(all literals in the subset are false).
-  // For example with 3-input majority, `(-outVar v a v b)` prevents
-  // `outVar = 1` when both `a` and `b` are 0.
-  enumerateLiteralSubsets(inputLits, threshold,
-                          [&](llvm::ArrayRef<int> subset) {
-                            SmallVector<int> clause;
-                            clause.reserve(subset.size() + 1);
-                            clause.push_back(-outVar);
-                            clause.append(subset.begin(), subset.end());
-                            solver.addClause(clause);
-                          });
-}
-
 void FunctionalReductionSATBuilder::encodeValue(Value value) {
   SmallVector<std::pair<Value, bool>> worklist;
   worklist.push_back({value, false});
@@ -318,12 +263,6 @@ void FunctionalReductionSATBuilder::encodeValue(Value value) {
                llvm::zip(andOp.getInputs(), andOp.getInverted()))
             inputLits.push_back(getLiteral(input, inverted));
           addAndClauses(outVar, inputLits);
-        })
-        .Case<mig::MajorityInverterOp>([&](auto majOp) {
-          for (auto [input, inverted] :
-               llvm::zip(majOp.getInputs(), majOp.getInverted()))
-            inputLits.push_back(getLiteral(input, inverted));
-          addMajorityClauses(outVar, inputLits);
         })
         .Case<comb::AndOp>([&](auto andOp) {
           for (auto input : andOp.getInputs())
@@ -486,7 +425,7 @@ void FunctionalReductionSolver::collectValues() {
   }
 
   // Walk operations and collect i1 results
-  // - AIG/MIG operations: add to allValues for simulation
+  // - AIG operations: add to allValues for simulation
   // - Unknown operations: treat as inputs (assign random patterns)
   module.walk([&](Operation *op) {
     for (auto result : op->getResults()) {
@@ -545,7 +484,7 @@ llvm::APInt FunctionalReductionSolver::simulateValue(Value v) {
   if (!op)
     return simSignatures.at(v);
   return llvm::TypeSwitch<Operation *, llvm::APInt>(op)
-      .Case<mig::MajorityInverterOp, aig::AndInverterOp>([&](auto op) {
+      .Case<aig::AndInverterOp>([&](auto op) {
         SmallVector<llvm::APInt> inputSigs;
         for (auto input : op.getInputs())
           inputSigs.push_back(simSignatures.at(input));
