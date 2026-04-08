@@ -1977,6 +1977,10 @@ mlir::LogicalResult
 circt::firrtl::exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
                              std::optional<size_t> targetLineLength,
                              FIRVersion version) {
+  if (version < minimumFIRVersion)
+    return module.emitError("--firrtl-version ")
+           << version << " is below the minimum supported "
+           << "version " << minimumFIRVersion;
   Emitter emitter(os, version,
                   targetLineLength.value_or(defaultTargetLineLength));
   for (auto &op : *module.getBody()) {
@@ -2002,19 +2006,12 @@ void circt::firrtl::registerToFIRFileTranslation() {
       [](ModuleOp module, llvm::raw_ostream &os) -> mlir::LogicalResult {
         FIRVersion version = exportFIRVersion;
         if (!firrtlVersionStr.empty()) {
-          StringRef str = firrtlVersionStr;
-          uint16_t major, minor, patch;
-          if (str.consumeInteger(10, major) || !str.consume_front(".") ||
-              str.consumeInteger(10, minor) || !str.consume_front(".") ||
-              str.consumeInteger(10, patch) || !str.empty())
+          auto ver = FIRVersion::fromString(firrtlVersionStr);
+          if (!ver)
             return module.emitError("invalid --firrtl-version: '")
                    << firrtlVersionStr
                    << "', expected format 'major.minor.patch'";
-          version = FIRVersion(major, minor, patch);
-          if (version < minimumFIRVersion)
-            return module.emitError("--firrtl-version ")
-                   << firrtlVersionStr << " is below the minimum supported "
-                   << "version " << minimumFIRVersion;
+          version = *ver;
         }
         return exportFIRFile(module, os, targetLineLength, version);
       },

@@ -665,18 +665,10 @@ ParseResult FIRParser::parseVersionLit(const Twine &message) {
   auto spelling = getTokenSpelling();
   if (getToken().getKind() != FIRToken::version)
     return emitError(message), failure();
-  // form a.b.c
-  auto [a, d] = spelling.split(".");
-  auto [b, c] = d.split(".");
-  APInt aInt, bInt, cInt;
-  if (a.getAsInteger(10, aInt) || b.getAsInteger(10, bInt) ||
-      c.getAsInteger(10, cInt))
+  auto ver = FIRVersion::fromString(spelling);
+  if (!ver)
     return emitError("failed to parse version string"), failure();
-  version.major = aInt.getLimitedValue(UINT32_MAX);
-  version.minor = bInt.getLimitedValue(UINT32_MAX);
-  version.patch = cInt.getLimitedValue(UINT32_MAX);
-  if (version.major != aInt || version.minor != bInt || version.patch != cInt)
-    return emitError("integers out of range"), failure();
+  version = *ver;
   if (version < minimumFIRVersion)
     return emitError() << "FIRRTL version must be >=" << minimumFIRVersion,
            failure();
