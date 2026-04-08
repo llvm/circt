@@ -115,8 +115,14 @@ struct ModuleUpdateInfo {
 } // namespace
 
 namespace {
-struct PassGlobals {
-  PassGlobals(CircuitOp circuit) : circuit(circuit) { processCircuit(circuit); }
+struct CircuitState {
+  CircuitState(CircuitOp circuit, InstanceGraph &instanceGraph,
+               InferDomainsMode mode)
+      : circuit(circuit), instanceGraph(instanceGraph), mode(mode) {
+    processCircuit(circuit);
+  }
+
+  LogicalResult run();
 
   ArrayRef<DomainOp> getDomains() const { return domainTable; }
   size_t getNumDomains() const { return domainTable.size(); }
@@ -142,6 +148,8 @@ struct PassGlobals {
   }
 
 private:
+  LogicalResult runOnModule(Operation *module);
+
   void processDomain(DomainOp op) {
     auto index = domainTable.size();
     auto domainType = DomainType::getFromDomainOp(op);
@@ -155,6 +163,8 @@ private:
   }
 
   CircuitOp circuit;
+  InstanceGraph &instanceGraph;
+  InferDomainsMode mode;
   SmallVector<DomainOp> domainTable;
   DenseMap<Type, DomainTypeID> typeIDTable;
   DenseMap<VariableTerm *, size_t> variableIDTable;
@@ -246,9 +256,9 @@ struct PendingUpdates {
 using ExportTable = DenseMap<DomainValue, TinyPtrVector<DomainValue>>;
 
 namespace {
-class PassState {
+class ModuleState {
 public:
-  explicit PassState(PassGlobals &globals) : globals(globals) {}
+  explicit ModuleState(CircuitState &globals) : globals(globals) {}
 
   ArrayRef<DomainOp> getDomains() { return globals.getDomains(); }
   size_t getNumDomains() { return globals.getNumDomains(); }
@@ -395,7 +405,7 @@ public:
   LogicalResult checkAndInferModule(FModuleOp moduleOp);
 
 private:
-  PassGlobals &globals;
+  CircuitState &globals;
   DenseMap<Value, Term *> termTable;
   DenseMap<Value, Term *> associationTable;
   llvm::BumpPtrAllocator allocator;
@@ -403,12 +413,12 @@ private:
 } // namespace
 
 template <typename T>
-void PassState::render(Operation *op, T &out) {
+void ModuleState::render(Operation *op, T &out) {
   op->print(out, getAsmState());
 }
 
 template <typename T>
-void PassState::render(Value value, T &out) {
+void ModuleState::render(Value value, T &out) {
   if (!value) {
     out << "null";
     return;
@@ -427,7 +437,7 @@ void PassState::render(Value value, T &out) {
 
 template <typename T>
 // NOLINTNEXTLINE(misc-no-recursion)
-void PassState::render(Term *term, T &out) {
+void ModuleState::render(Term *term, T &out) {
   if (!term) {
     out << "null";
     return;
@@ -453,25 +463,25 @@ void PassState::render(Term *term, T &out) {
 }
 
 template <typename T>
-struct PassState::Render {
-  PassState *state;
+struct ModuleState::Render {
+  ModuleState *state;
   T subject;
 };
 
 template <typename T>
-PassState::Render<T> PassState::render(T &&subject) {
+ModuleState::Render<T> ModuleState::render(T &&subject) {
   return Render<T>{this, std::forward<T>(subject)};
 }
 
 template <typename T>
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &out,
-                                     PassState::Render<T> r) {
+                                     ModuleState::Render<T> r) {
   r.state->render(r.subject, out);
   return out;
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-Term *PassState::find(Term *x) {
+Term *ModuleState::find(Term *x) {
   if (!x)
     return nullptr;
 
@@ -488,13 +498,13 @@ Term *PassState::find(Term *x) {
   return x;
 }
 
-LogicalResult PassState::unify(VariableTerm *x, Term *y) {
+LogicalResult ModuleState::unify(VariableTerm *x, Term *y) {
   assert(!x->leader);
   x->leader = y;
   return success();
 }
 
-LogicalResult PassState::unify(ValueTerm *xv, Term *y) {
+LogicalResult ModuleState::unify(ValueTerm *xv, Term *y) {
   if (auto *yv = dyn_cast<VariableTerm>(y)) {
     yv->leader = xv;
     return success();
@@ -507,7 +517,7 @@ LogicalResult PassState::unify(ValueTerm *xv, Term *y) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-LogicalResult PassState::unify(RowTerm *lhsRow, Term *rhs) {
+LogicalResult ModuleState::unify(RowTerm *lhsRow, Term *rhs) {
   if (auto *rhsVar = dyn_cast<VariableTerm>(rhs)) {
     rhsVar->leader = lhsRow;
     return success();
@@ -522,7 +532,7 @@ LogicalResult PassState::unify(RowTerm *lhsRow, Term *rhs) {
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-LogicalResult PassState::unify(Term *lhs, Term *rhs) {
+LogicalResult ModuleState::unify(Term *lhs, Term *rhs) {
   if (!lhs || !rhs)
     return success();
   lhs = find(lhs);
@@ -542,35 +552,35 @@ LogicalResult PassState::unify(Term *lhs, Term *rhs) {
   return failure();
 }
 
-void PassState::solve(Term *lhs, Term *rhs) {
+void ModuleState::solve(Term *lhs, Term *rhs) {
   [[maybe_unused]] auto result = unify(lhs, rhs);
   assert(result.succeeded());
 }
 
-RowTerm *PassState::allocRow(size_t size) {
+RowTerm *ModuleState::allocRow(size_t size) {
   SmallVector<Term *> elements;
   elements.resize(size);
   return allocRow(elements);
 }
 
-RowTerm *PassState::allocRow(ArrayRef<Term *> elements) {
+RowTerm *ModuleState::allocRow(ArrayRef<Term *> elements) {
   auto ds = allocArray(elements);
   return alloc<RowTerm>(ds);
 }
 
-VariableTerm *PassState::allocVar() { return alloc<VariableTerm>(); }
+VariableTerm *ModuleState::allocVar() { return alloc<VariableTerm>(); }
 
-ValueTerm *PassState::allocVal(DomainValue value) {
+ValueTerm *ModuleState::allocVal(DomainValue value) {
   return alloc<ValueTerm>(value);
 }
 
 template <typename T, typename... Args>
-T *PassState::alloc(Args &&...args) {
+T *ModuleState::alloc(Args &&...args) {
   static_assert(std::is_base_of_v<Term, T>, "T must be a term");
   return new (allocator) T(std::forward<Args>(args)...);
 }
 
-ArrayRef<Term *> PassState::allocArray(ArrayRef<Term *> elements) {
+ArrayRef<Term *> ModuleState::allocArray(ArrayRef<Term *> elements) {
   auto size = elements.size();
   if (size == 0)
     return {};
@@ -584,14 +594,14 @@ ArrayRef<Term *> PassState::allocArray(ArrayRef<Term *> elements) {
   return ArrayRef(result, size);
 }
 
-DomainValue PassState::getOptUnderlyingDomain(DomainValue value) {
+DomainValue ModuleState::getOptUnderlyingDomain(DomainValue value) {
   auto *term = getOptTermForDomain(value);
   if (auto *val = llvm::dyn_cast_if_present<ValueTerm>(term))
     return val->value;
   return nullptr;
 }
 
-Term *PassState::getOptTermForDomain(DomainValue value) {
+Term *ModuleState::getOptTermForDomain(DomainValue value) {
   assert(isa<DomainType>(value.getType()));
   auto it = termTable.find(value);
   if (it == termTable.end())
@@ -599,7 +609,7 @@ Term *PassState::getOptTermForDomain(DomainValue value) {
   return find(it->second);
 }
 
-Term *PassState::getTermForDomain(DomainValue value) {
+Term *ModuleState::getTermForDomain(DomainValue value) {
   assert(isa<DomainType>(value.getType()));
   if (auto *term = getOptTermForDomain(value))
     return term;
@@ -608,7 +618,7 @@ Term *PassState::getTermForDomain(DomainValue value) {
   return term;
 }
 
-void PassState::setTermForDomain(DomainValue value, Term *term) {
+void ModuleState::setTermForDomain(DomainValue value, Term *term) {
   assert(term);
   assert(!termTable.contains(value));
   termTable.insert({value, term});
@@ -616,7 +626,7 @@ void PassState::setTermForDomain(DomainValue value, Term *term) {
              << "set " << render(value) << " := " << render(term) << "\n");
 }
 
-Term *PassState::getOptDomainAssociation(Value value) {
+Term *ModuleState::getOptDomainAssociation(Value value) {
   assert(isa<FIRRTLBaseType>(value.getType()));
   auto it = associationTable.find(value);
   if (it == associationTable.end())
@@ -624,13 +634,13 @@ Term *PassState::getOptDomainAssociation(Value value) {
   return find(it->second);
 }
 
-Term *PassState::getDomainAssociation(Value value) {
+Term *ModuleState::getDomainAssociation(Value value) {
   auto *term = getOptDomainAssociation(value);
   assert(term);
   return term;
 }
 
-void PassState::setDomainAssociation(Value value, Term *term) {
+void ModuleState::setDomainAssociation(Value value, Term *term) {
   assert(isa<FIRRTLBaseType>(value.getType()));
   assert(term);
   term = find(term);
@@ -641,7 +651,7 @@ void PassState::setDomainAssociation(Value value, Term *term) {
   });
 }
 
-void PassState::processDomainDefinition(DomainValue domain) {
+void ModuleState::processDomainDefinition(DomainValue domain) {
   assert(isa<DomainType>(domain.getType()));
   auto *newTerm = allocVal(domain);
   auto *oldTerm = getOptTermForDomain(domain);
@@ -654,7 +664,7 @@ void PassState::processDomainDefinition(DomainValue domain) {
   assert(result.succeeded());
 }
 
-RowTerm *PassState::getDomainAssociationAsRow(Value value) {
+RowTerm *ModuleState::getDomainAssociationAsRow(Value value) {
   assert(isa<FIRRTLBaseType>(value.getType()));
   auto *term = getOptDomainAssociation(value);
 
@@ -680,7 +690,7 @@ RowTerm *PassState::getDomainAssociationAsRow(Value value) {
   return nullptr;
 }
 
-void PassState::noteLocation(mlir::InFlightDiagnostic &diag, Operation *op) {
+void ModuleState::noteLocation(mlir::InFlightDiagnostic &diag, Operation *op) {
   auto &note = diag.attachNote(op->getLoc());
   if (auto mod = dyn_cast<FModuleOp>(op)) {
     note << "in module " << mod.getModuleNameAttr();
@@ -703,10 +713,9 @@ void PassState::noteLocation(mlir::InFlightDiagnostic &diag, Operation *op) {
 }
 
 template <typename T>
-void PassState::emitDuplicatePortDomainError(T op, size_t i,
-                                             DomainTypeID domainTypeID,
-                                             IntegerAttr domainPortIndexAttr1,
-                                             IntegerAttr domainPortIndexAttr2) {
+void ModuleState::emitDuplicatePortDomainError(
+    T op, size_t i, DomainTypeID domainTypeID, IntegerAttr domainPortIndexAttr1,
+    IntegerAttr domainPortIndexAttr2) {
   auto portName = op.getPortNameAttr(i);
   auto portLoc = op.getPortLocation(i);
   auto domainDecl = getDomain(domainTypeID);
@@ -729,7 +738,7 @@ void PassState::emitDuplicatePortDomainError(T op, size_t i,
 /// Emit an error when we fail to infer the concrete domain to drive to a
 /// domain port.
 template <typename T>
-void PassState::emitDomainPortInferenceError(T op, size_t i) {
+void ModuleState::emitDomainPortInferenceError(T op, size_t i) {
   auto name = op.getPortNameAttr(i);
   auto diag = emitError(op->getLoc());
   auto info = op.getDomainInfo();
@@ -750,7 +759,7 @@ void PassState::emitDomainPortInferenceError(T op, size_t i) {
 }
 
 template <typename T>
-void PassState::emitAmbiguousPortDomainAssociation(
+void ModuleState::emitAmbiguousPortDomainAssociation(
     T op, const llvm::TinyPtrVector<DomainValue> &exports, DomainTypeID typeID,
     size_t i) {
   auto portName = op.getPortNameAttr(i);
@@ -769,8 +778,9 @@ void PassState::emitAmbiguousPortDomainAssociation(
 }
 
 template <typename T>
-void PassState::emitMissingPortDomainAssociationError(T op, DomainTypeID typeID,
-                                                      size_t i) {
+void ModuleState::emitMissingPortDomainAssociationError(T op,
+                                                        DomainTypeID typeID,
+                                                        size_t i) {
   auto domainName = getDomain(typeID).getNameAttr();
   auto portName = op.getPortNameAttr(i);
   auto diag = emitError(op.getPortLocation(i))
@@ -779,8 +789,8 @@ void PassState::emitMissingPortDomainAssociationError(T op, DomainTypeID typeID,
   noteLocation(diag, op);
 }
 
-LogicalResult PassState::unifyAssociations(Operation *op, Value lhs,
-                                           Value rhs) {
+LogicalResult ModuleState::unifyAssociations(Operation *op, Value lhs,
+                                             Value rhs) {
   if (!lhs || !rhs)
     return success();
 
@@ -824,7 +834,7 @@ LogicalResult PassState::unifyAssociations(Operation *op, Value lhs,
   return success();
 }
 
-LogicalResult PassState::processModulePorts(FModuleOp moduleOp) {
+LogicalResult ModuleState::processModulePorts(FModuleOp moduleOp) {
   auto numDomains = getNumDomains();
   auto domainInfo = moduleOp.getDomainInfoAttr();
   auto numPorts = moduleOp.getNumPorts();
@@ -884,7 +894,7 @@ LogicalResult PassState::processModulePorts(FModuleOp moduleOp) {
 }
 
 template <typename T>
-LogicalResult PassState::processInstancePorts(T op) {
+LogicalResult ModuleState::processInstancePorts(T op) {
   auto numDomains = getNumDomains();
   auto domainInfo = op.getDomainInfoAttr();
   auto numPorts = op.getNumPorts();
@@ -937,8 +947,8 @@ LogicalResult PassState::processInstancePorts(T op) {
   return success();
 }
 
-FInstanceLike PassState::fixInstancePorts(FInstanceLike op,
-                                          const ModuleUpdateInfo &update) {
+FInstanceLike ModuleState::fixInstancePorts(FInstanceLike op,
+                                            const ModuleUpdateInfo &update) {
   auto clone = op.cloneWithInsertedPortsAndReplaceUses(update.portInsertions);
   clone.setDomainInfoAttr(update.portDomainInfo);
   op->erase();
@@ -947,7 +957,7 @@ FInstanceLike PassState::fixInstancePorts(FInstanceLike op,
   return clone;
 }
 
-LogicalResult PassState::processOp(FInstanceLike op) {
+LogicalResult ModuleState::processOp(FInstanceLike op) {
   auto moduleName =
       cast<StringAttr>(cast<ArrayAttr>(op.getReferencedModuleNamesAttr())[0]);
   auto updateTable = getModuleUpdateTable();
@@ -957,7 +967,7 @@ LogicalResult PassState::processOp(FInstanceLike op) {
   return processInstancePorts(op);
 }
 
-LogicalResult PassState::processOp(UnsafeDomainCastOp op) {
+LogicalResult ModuleState::processOp(UnsafeDomainCastOp op) {
   auto domains = op.getDomains();
   if (domains.empty())
     return unifyAssociations(op, op.getInput(), op.getResult());
@@ -976,7 +986,7 @@ LogicalResult PassState::processOp(UnsafeDomainCastOp op) {
   return success();
 }
 
-LogicalResult PassState::processOp(DomainDefineOp op) {
+LogicalResult ModuleState::processOp(DomainDefineOp op) {
   auto src = op.getSrc();
   auto dst = op.getDest();
 
@@ -994,7 +1004,7 @@ LogicalResult PassState::processOp(DomainDefineOp op) {
   return failure();
 }
 
-LogicalResult PassState::processOp(WireOp op) {
+LogicalResult ModuleState::processOp(WireOp op) {
   // If the wire has explicit domain operands, seed the domain table with them
   // as constraints. When this op is visited, connections have not yet been
   // processed (wire declarations precede their uses), so the existing row
@@ -1017,7 +1027,7 @@ LogicalResult PassState::processOp(WireOp op) {
   return success();
 }
 
-LogicalResult PassState::processOp(Operation *op) {
+LogicalResult ModuleState::processOp(Operation *op) {
   LLVM_DEBUG(llvm::dbgs().indent(4) << "process " << render(op) << "\n");
   if (auto instance = dyn_cast<FInstanceLike>(op))
     return processOp(instance);
@@ -1063,14 +1073,14 @@ LogicalResult PassState::processOp(Operation *op) {
   return success();
 }
 
-LogicalResult PassState::processModuleBody(FModuleOp moduleOp) {
+LogicalResult ModuleState::processModuleBody(FModuleOp moduleOp) {
   return failure(
       moduleOp.getBody()
           .walk([&](Operation *op) -> WalkResult { return processOp(op); })
           .wasInterrupted());
 }
 
-LogicalResult PassState::processModule(FModuleOp moduleOp) {
+LogicalResult ModuleState::processModule(FModuleOp moduleOp) {
   LLVM_DEBUG(llvm::dbgs().indent(2) << "processing:\n");
   if (failed(processModulePorts(moduleOp)))
     return failure();
@@ -1079,7 +1089,7 @@ LogicalResult PassState::processModule(FModuleOp moduleOp) {
   return success();
 }
 
-ExportTable PassState::initializeExportTable(FModuleOp moduleOp) {
+ExportTable ModuleState::initializeExportTable(FModuleOp moduleOp) {
   ExportTable exports;
   size_t numPorts = moduleOp.getNumPorts();
   for (size_t i = 0; i < numPorts; ++i) {
@@ -1104,9 +1114,9 @@ ExportTable PassState::initializeExportTable(FModuleOp moduleOp) {
   return exports;
 }
 
-void PassState::ensureSolved(Namespace &ns, DomainTypeID typeID, size_t ip,
-                             LocationAttr loc, VariableTerm *var,
-                             PendingUpdates &pending) {
+void ModuleState::ensureSolved(Namespace &ns, DomainTypeID typeID, size_t ip,
+                               LocationAttr loc, VariableTerm *var,
+                               PendingUpdates &pending) {
   if (pending.solutions.contains(var))
     return;
 
@@ -1129,9 +1139,10 @@ void PassState::ensureSolved(Namespace &ns, DomainTypeID typeID, size_t ip,
   pending.insertions.push_back({ip, portInfo});
 }
 
-void PassState::ensureExported(Namespace &ns, const ExportTable &exports,
-                               DomainTypeID typeID, size_t ip, LocationAttr loc,
-                               ValueTerm *val, PendingUpdates &pending) {
+void ModuleState::ensureExported(Namespace &ns, const ExportTable &exports,
+                                 DomainTypeID typeID, size_t ip,
+                                 LocationAttr loc, ValueTerm *val,
+                                 PendingUpdates &pending) {
   auto value = val->value;
   assert(isa<DomainType>(value.getType()));
   if (isPort(value) || exports.contains(value) ||
@@ -1157,7 +1168,7 @@ void PassState::ensureExported(Namespace &ns, const ExportTable &exports,
   pending.insertions.push_back({ip, portInfo});
 }
 
-void PassState::getUpdatesForDomainAssociationOfPort(
+void ModuleState::getUpdatesForDomainAssociationOfPort(
     Namespace &ns, PendingUpdates &pending, DomainTypeID typeID, size_t ip,
     LocationAttr loc, Term *term, const ExportTable &exports) {
   if (auto *var = dyn_cast<VariableTerm>(term)) {
@@ -1171,7 +1182,7 @@ void PassState::getUpdatesForDomainAssociationOfPort(
   llvm_unreachable("invalid domain association");
 }
 
-void PassState::getUpdatesForDomainAssociationOfPort(
+void ModuleState::getUpdatesForDomainAssociationOfPort(
     Namespace &ns, const ExportTable &exports, size_t ip, LocationAttr loc,
     RowTerm *row, PendingUpdates &pending) {
   for (auto [index, term] : llvm::enumerate(row->elements))
@@ -1179,10 +1190,10 @@ void PassState::getUpdatesForDomainAssociationOfPort(
                                          loc, find(term), exports);
 }
 
-void PassState::getUpdatesForModulePorts(FModuleOp moduleOp,
-                                         const ExportTable &exports,
-                                         Namespace &ns,
-                                         PendingUpdates &pending) {
+void ModuleState::getUpdatesForModulePorts(FModuleOp moduleOp,
+                                           const ExportTable &exports,
+                                           Namespace &ns,
+                                           PendingUpdates &pending) {
   for (size_t i = 0, e = moduleOp.getNumPorts(); i < e; ++i) {
     auto port = moduleOp.getArgument(i);
     auto type = port.getType();
@@ -1195,9 +1206,9 @@ void PassState::getUpdatesForModulePorts(FModuleOp moduleOp,
   }
 }
 
-void PassState::getUpdatesForModule(FModuleOp moduleOp,
-                                    const ExportTable &exports,
-                                    PendingUpdates &pending) {
+void ModuleState::getUpdatesForModule(FModuleOp moduleOp,
+                                      const ExportTable &exports,
+                                      PendingUpdates &pending) {
   Namespace ns;
   auto names = moduleOp.getPortNamesAttr();
   for (auto name : names.getAsRange<StringAttr>())
@@ -1205,8 +1216,8 @@ void PassState::getUpdatesForModule(FModuleOp moduleOp,
   getUpdatesForModulePorts(moduleOp, exports, ns, pending);
 }
 
-void PassState::applyUpdatesToModule(FModuleOp moduleOp, ExportTable &exports,
-                                     const PendingUpdates &pending) {
+void ModuleState::applyUpdatesToModule(FModuleOp moduleOp, ExportTable &exports,
+                                       const PendingUpdates &pending) {
   LLVM_DEBUG(llvm::dbgs().indent(2) << "applying updates:\n");
   // Put the domain ports in place.
   moduleOp.insertPorts(pending.insertions);
@@ -1235,7 +1246,7 @@ void PassState::applyUpdatesToModule(FModuleOp moduleOp, ExportTable &exports,
   }
 }
 
-SmallVector<Attribute> PassState::copyPortDomainAssociations(
+SmallVector<Attribute> ModuleState::copyPortDomainAssociations(
     FModuleOp moduleOp, ArrayAttr moduleDomainInfo, size_t portIndex) {
   SmallVector<Attribute> result(getNumDomains());
   auto oldAssociations = getPortDomainAssociation(moduleDomainInfo, portIndex);
@@ -1247,7 +1258,7 @@ SmallVector<Attribute> PassState::copyPortDomainAssociations(
   return result;
 }
 
-LogicalResult PassState::driveModuleOutputDomainPorts(FModuleOp moduleOp) {
+LogicalResult ModuleState::driveModuleOutputDomainPorts(FModuleOp moduleOp) {
   auto builder = OpBuilder::atBlockEnd(moduleOp.getBodyBlock());
   for (size_t i = 0, e = moduleOp.getNumPorts(); i < e; ++i) {
     auto port = dyn_cast<DomainValue>(moduleOp.getArgument(i));
@@ -1272,9 +1283,8 @@ LogicalResult PassState::driveModuleOutputDomainPorts(FModuleOp moduleOp) {
   return success();
 }
 
-LogicalResult PassState::updateModuleDomainInfo(FModuleOp moduleOp,
-                                                const ExportTable &exportTable,
-                                                ArrayAttr &result) {
+LogicalResult ModuleState::updateModuleDomainInfo(
+    FModuleOp moduleOp, const ExportTable &exportTable, ArrayAttr &result) {
   // At this point, all domain variables mentioned in ports have been
   // solved by generalizing the moduleOp (adding input domain ports). Now, we
   // have to form the new port domain information for the moduleOp by examining
@@ -1344,7 +1354,7 @@ LogicalResult PassState::updateModuleDomainInfo(FModuleOp moduleOp,
   return success();
 }
 
-DomainValue PassState::solveVarWithAnonDomain(
+DomainValue ModuleState::solveVarWithAnonDomain(
     OpBuilder &builder, DenseMap<DomainValue, DomainValue> &domainsInScope,
     Operation *user, DomainType type, VariableTerm *var) {
   auto name = type.getName().getAttr();
@@ -1357,10 +1367,9 @@ DomainValue PassState::solveVarWithAnonDomain(
   return anon;
 }
 
-DomainValue
-PassState::getDomainInScope(OpBuilder &builder,
-                            DenseMap<DomainValue, DomainValue> &domainsInScope,
-                            DomainValue domain) {
+DomainValue ModuleState::getDomainInScope(
+    OpBuilder &builder, DenseMap<DomainValue, DomainValue> &domainsInScope,
+    DomainValue domain) {
   auto &domainInScope = domainsInScope[domain];
   if (domainInScope)
     return domainInScope;
@@ -1380,8 +1389,8 @@ PassState::getDomainInScope(OpBuilder &builder,
 }
 
 LogicalResult
-PassState::updateInstance(DenseMap<DomainValue, DomainValue> &domainsInScope,
-                          FInstanceLike op) {
+ModuleState::updateInstance(DenseMap<DomainValue, DomainValue> &domainsInScope,
+                            FInstanceLike op) {
   LLVM_DEBUG(llvm::dbgs().indent(4) << "update " << render(op) << "\n");
   OpBuilder builder(op.getContext());
   builder.setInsertionPointAfter(op);
@@ -1424,8 +1433,8 @@ PassState::updateInstance(DenseMap<DomainValue, DomainValue> &domainsInScope,
 }
 
 LogicalResult
-PassState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
-                      WireOp wireOp) {
+ModuleState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
+                        WireOp wireOp) {
   auto result = wireOp.getResult();
   if (!isa<FIRRTLBaseType>(result.getType()))
     return success();
@@ -1455,7 +1464,7 @@ PassState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
   return success();
 }
 
-LogicalResult PassState::updateModuleBody(FModuleOp moduleOp) {
+LogicalResult ModuleState::updateModuleBody(FModuleOp moduleOp) {
   DenseMap<DomainValue, DomainValue> domainsInScope;
 
   for (size_t i = 0, e = moduleOp.getNumPorts(); i < e; ++i)
@@ -1479,7 +1488,7 @@ LogicalResult PassState::updateModuleBody(FModuleOp moduleOp) {
   return failure(result.wasInterrupted());
 }
 
-LogicalResult PassState::updateModule(FModuleOp moduleOp) {
+LogicalResult ModuleState::updateModule(FModuleOp moduleOp) {
   auto exports = initializeExportTable(moduleOp);
   PendingUpdates pending;
   getUpdatesForModule(moduleOp, exports, pending);
@@ -1521,7 +1530,7 @@ LogicalResult PassState::updateModule(FModuleOp moduleOp) {
   return success();
 }
 
-LogicalResult PassState::checkModulePorts(FModuleLike moduleOp) {
+LogicalResult ModuleState::checkModulePorts(FModuleLike moduleOp) {
   auto numDomains = getNumDomains();
   auto domainInfo = moduleOp.getDomainInfoAttr();
   auto numPorts = moduleOp.getNumPorts();
@@ -1563,7 +1572,7 @@ LogicalResult PassState::checkModulePorts(FModuleLike moduleOp) {
   return success();
 }
 
-LogicalResult PassState::checkModuleDomainPortDrivers(FModuleOp moduleOp) {
+LogicalResult ModuleState::checkModuleDomainPortDrivers(FModuleOp moduleOp) {
   for (size_t i = 0, e = moduleOp.getNumPorts(); i < e; ++i) {
     auto port = dyn_cast<DomainValue>(moduleOp.getArgument(i));
     if (!port || moduleOp.getPortDirection(i) != Direction::Out ||
@@ -1580,7 +1589,7 @@ LogicalResult PassState::checkModuleDomainPortDrivers(FModuleOp moduleOp) {
   return success();
 }
 
-LogicalResult PassState::checkInstanceDomainPortDrivers(FInstanceLike op) {
+LogicalResult ModuleState::checkInstanceDomainPortDrivers(FInstanceLike op) {
   for (size_t i = 0, e = op->getNumResults(); i < e; ++i) {
     auto port = dyn_cast<DomainValue>(op->getResult(i));
 
@@ -1599,14 +1608,14 @@ LogicalResult PassState::checkInstanceDomainPortDrivers(FInstanceLike op) {
   return success();
 }
 
-LogicalResult PassState::checkModuleBody(FModuleOp moduleOp) {
+LogicalResult ModuleState::checkModuleBody(FModuleOp moduleOp) {
   auto result = moduleOp.getBody().walk([&](FInstanceLike op) -> WalkResult {
     return checkInstanceDomainPortDrivers(op);
   });
   return failure(result.wasInterrupted());
 }
 
-LogicalResult PassState::inferModule(FModuleOp moduleOp) {
+LogicalResult ModuleState::inferModule(FModuleOp moduleOp) {
   LLVM_DEBUG(llvm::dbgs() << "infer: " << moduleOp.getModuleName() << "\n");
   if (failed(processModule(moduleOp)))
     return failure();
@@ -1614,7 +1623,7 @@ LogicalResult PassState::inferModule(FModuleOp moduleOp) {
   return updateModule(moduleOp);
 }
 
-LogicalResult PassState::checkModule(FModuleOp moduleOp) {
+LogicalResult ModuleState::checkModule(FModuleOp moduleOp) {
   LLVM_DEBUG(llvm::dbgs() << "check: " << moduleOp.getModuleName() << "\n");
   if (failed(checkModulePorts(moduleOp)))
     return failure();
@@ -1628,12 +1637,12 @@ LogicalResult PassState::checkModule(FModuleOp moduleOp) {
   return processModule(moduleOp);
 }
 
-LogicalResult PassState::checkModule(FExtModuleOp extModuleOp) {
+LogicalResult ModuleState::checkModule(FExtModuleOp extModuleOp) {
   LLVM_DEBUG(llvm::dbgs() << "check: " << extModuleOp.getModuleName() << "\n");
   return checkModulePorts(extModuleOp);
 }
 
-LogicalResult PassState::checkAndInferModule(FModuleOp moduleOp) {
+LogicalResult ModuleState::checkAndInferModule(FModuleOp moduleOp) {
   LLVM_DEBUG(llvm::dbgs() << "check/infer: " << moduleOp.getModuleName()
                           << "\n");
 
@@ -1736,10 +1745,9 @@ static LogicalResult stripCircuit(MLIRContext *context, CircuitOp circuit) {
 // InferDomainsPass: Top-level pass implementation.
 //===---------------------------------------------------------------------------
 
-static LogicalResult runOnModuleLike(InferDomainsMode mode,
-                                     PassGlobals &globals, Operation *op) {
+LogicalResult CircuitState::runOnModule(Operation *op) {
   assert(mode != InferDomainsMode::Strip);
-  PassState state(globals);
+  ModuleState state(*this);
   if (auto moduleOp = dyn_cast<FModuleOp>(op)) {
     if (mode == InferDomainsMode::Check)
       return state.checkModule(moduleOp);
@@ -1754,6 +1762,22 @@ static LogicalResult runOnModuleLike(InferDomainsMode mode,
     return state.checkModule(extModuleOp);
 
   return success();
+}
+
+LogicalResult CircuitState::run() {
+  DenseSet<Operation *> errored;
+  instanceGraph.walkPostOrder([&](auto &node) {
+    auto moduleOp = node.getModule();
+    for (auto *inst : node) {
+      if (errored.contains(inst->getTarget()->getModule())) {
+        errored.insert(moduleOp);
+        return;
+      }
+    }
+    if (failed(runOnModule(node.getModule())))
+      errored.insert(moduleOp);
+  });
+  return success(errored.empty());
 }
 
 namespace {
@@ -1771,20 +1795,8 @@ struct InferDomainsPass
     }
 
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    PassGlobals globals(circuit);
-    DenseSet<Operation *> errored;
-    instanceGraph.walkPostOrder([&](auto &node) {
-      auto moduleOp = node.getModule();
-      for (auto *inst : node) {
-        if (errored.contains(inst->getTarget()->getModule())) {
-          errored.insert(moduleOp);
-          return;
-        }
-      }
-      if (failed(runOnModuleLike(mode, globals, node.getModule())))
-        errored.insert(moduleOp);
-    });
-    if (errored.size())
+    CircuitState state(circuit, instanceGraph, mode);
+    if (failed(state.run()))
       signalPassFailure();
   }
 };
