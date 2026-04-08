@@ -121,7 +121,7 @@ def MemoryPortOp : CHIRRTLOp<"memoryport", [InferTypeOpInterface,
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::OpaqueProperties properties,
+                                          mlir::PropertyRef properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -178,7 +178,7 @@ def MemoryDebugPortOp : CHIRRTLOp<"debugport", [InferTypeOpInterface,
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::OpaqueProperties properties,
+                                          mlir::PropertyRef properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];

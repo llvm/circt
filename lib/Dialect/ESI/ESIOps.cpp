@@ -56,7 +56,7 @@ LogicalResult SnoopValidReadyOp::verify() {
 
 LogicalResult SnoopValidReadyOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto i1 = IntegerType::get(context, 1);
   results.push_back(i1);
@@ -74,7 +74,7 @@ LogicalResult SnoopTransactionOp::verify() {
 
 LogicalResult SnoopTransactionOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto i1 = IntegerType::get(context, 1);
   results.push_back(i1);
@@ -236,7 +236,7 @@ LogicalResult UnwrapFIFOOp::verify() {
 LogicalResult
 UnwrapFIFOOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
                                ValueRange operands, DictionaryAttr,
-                               mlir::OpaqueProperties, mlir::RegionRange,
+                               mlir::PropertyRef, mlir::RegionRange,
                                SmallVectorImpl<Type> &inferredResulTypes) {
   inferredResulTypes.push_back(
       cast<ChannelType>(operands[0].getType()).getInner());
@@ -256,7 +256,7 @@ circt::esi::ChannelType WrapValidOnlyOp::channelType() {
 LogicalResult
 WrapValidOnlyOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
                                   ValueRange operands, DictionaryAttr,
-                                  mlir::OpaqueProperties, mlir::RegionRange,
+                                  mlir::PropertyRef, mlir::RegionRange,
                                   SmallVectorImpl<Type> &inferredResulTypes) {
   auto chanType = ChannelType::get(context, operands[0].getType(),
                                    ChannelSignaling::ValidOnly, 0);
@@ -276,7 +276,7 @@ LogicalResult UnwrapValidOnlyOp::verify() {
 
 LogicalResult UnwrapValidOnlyOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location>, ValueRange operands,
-    DictionaryAttr, mlir::OpaqueProperties, mlir::RegionRange,
+    DictionaryAttr, mlir::PropertyRef, mlir::RegionRange,
     SmallVectorImpl<Type> &inferredResulTypes) {
   inferredResulTypes.push_back(
       cast<ChannelType>(operands[0].getType()).getInner());
@@ -352,7 +352,7 @@ LogicalResult WrapWindow::verify() {
 LogicalResult
 UnwrapWindow::inferReturnTypes(MLIRContext *, std::optional<Location>,
                                ValueRange operands, DictionaryAttr,
-                               mlir::OpaqueProperties, mlir::RegionRange,
+                               mlir::PropertyRef, mlir::RegionRange,
                                SmallVectorImpl<Type> &inferredReturnTypes) {
   auto windowType = cast<WindowType>(operands.front().getType());
   inferredReturnTypes.push_back(windowType.getLoweredType());

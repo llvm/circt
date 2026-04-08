@@ -140,7 +140,7 @@ class NoneType;
 class OpAsmDialectInterface;
 class OpAsmParser;
 class OpAsmPrinter;
-class OpaqueProperties;
+class PropertyRef;
 class OpBuilder;
 class OperandRange;
 class Operation;
@@ -247,7 +247,6 @@ using mlir::MutableOperandRange;       // NOLINT(misc-unused-using-decls)
 using mlir::NamedAttribute;            // NOLINT(misc-unused-using-decls)
 using mlir::NamedAttrList;             // NOLINT(misc-unused-using-decls)
 using mlir::NoneType;                  // NOLINT(misc-unused-using-decls)
-using mlir::OpaqueProperties;          // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmDialectInterface;     // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmParser;               // NOLINT(misc-unused-using-decls)
 using mlir::OpAsmPrinter;              // NOLINT(misc-unused-using-decls)
@@ -267,6 +266,7 @@ using mlir::OwningOpRef;               // NOLINT(misc-unused-using-decls)
 using mlir::ParseResult;               // NOLINT(misc-unused-using-decls)
 using mlir::Pass;                      // NOLINT(misc-unused-using-decls)
 using mlir::PatternRewriter;           // NOLINT(misc-unused-using-decls)
+using mlir::PropertyRef;               // NOLINT(misc-unused-using-decls)
 using mlir::Region;                    // NOLINT(misc-unused-using-decls)
 using mlir::RegionKind;                // NOLINT(misc-unused-using-decls)
 using mlir::RewritePatternSet;         // NOLINT(misc-unused-using-decls)

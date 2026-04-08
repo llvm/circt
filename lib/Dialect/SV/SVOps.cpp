@@ -1859,7 +1859,7 @@ static Type getElementTypeOfWidth(Type type, int32_t width) {
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto width = adaptor.getWidthAttr();
@@ -1912,7 +1912,7 @@ OpFoldResult IndexedPartSelectInOutOp::fold(FoldAdaptor) {
 
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto width = adaptor.getWidthAttr();
@@ -1942,7 +1942,7 @@ LogicalResult IndexedPartSelectOp::verify() {
 
 LogicalResult StructFieldInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto field = adaptor.getFieldAttr();

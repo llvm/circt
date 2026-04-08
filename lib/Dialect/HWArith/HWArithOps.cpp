@@ -91,7 +91,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 LogicalResult AddOp::inferReturnTypes(MLIRContext *context,
                                       std::optional<Location> loc,
                                       ValueRange operands, DictionaryAttr attrs,
-                                      mlir::OpaqueProperties properties,
+                                      mlir::PropertyRef properties,
                                       mlir::RegionRange regions,
                                       SmallVectorImpl<Type> &results) {
   auto lhs = cast<IntegerType>(operands[0].getType());
@@ -110,7 +110,7 @@ LogicalResult AddOp::inferReturnTypes(MLIRContext *context,
 LogicalResult SubOp::inferReturnTypes(MLIRContext *context,
                                       std::optional<Location> loc,
                                       ValueRange operands, DictionaryAttr attrs,
-                                      mlir::OpaqueProperties properties,
+                                      mlir::PropertyRef properties,
                                       mlir::RegionRange regions,
                                       SmallVectorImpl<Type> &results) {
   auto lhs = cast<IntegerType>(operands[0].getType());
@@ -144,7 +144,7 @@ getSignedInheritedSignedness(IntegerType lhs, IntegerType rhs) {
 LogicalResult MulOp::inferReturnTypes(MLIRContext *context,
                                       std::optional<Location> loc,
                                       ValueRange operands, DictionaryAttr attrs,
-                                      mlir::OpaqueProperties properties,
+                                      mlir::PropertyRef properties,
                                       mlir::RegionRange regions,
                                       SmallVectorImpl<Type> &results) {
   auto lhs = cast<IntegerType>(operands[0].getType());
@@ -165,7 +165,7 @@ LogicalResult MulOp::inferReturnTypes(MLIRContext *context,
 LogicalResult DivOp::inferReturnTypes(MLIRContext *context,
                                       std::optional<Location> loc,
                                       ValueRange operands, DictionaryAttr attrs,
-                                      mlir::OpaqueProperties properties,
+                                      mlir::PropertyRef properties,
                                       mlir::RegionRange regions,
                                       SmallVectorImpl<Type> &results) {
   auto lhs = cast<IntegerType>(operands[0].getType());

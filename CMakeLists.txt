@@ -574,6 +574,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
 
     set(BUILD_SHARED_LIBS OFF)
     set(SLANG_USE_MIMALLOC OFF)
+    set(SLANG_USE_THREADS OFF)  # avoid race condition in BS::thread_pool
     FetchContent_MakeAvailable(slang)
 
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})

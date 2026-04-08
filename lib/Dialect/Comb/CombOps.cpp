@@ -496,7 +496,7 @@ void ConcatOp::build(OpBuilder &builder, OperationState &result, Value hd,
 
 LogicalResult ConcatOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   unsigned resultWidth = getTotalWidth(operands);
   results.push_back(IntegerType::get(context, resultWidth));
