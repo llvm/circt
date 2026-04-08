@@ -1795,6 +1795,24 @@ LogicalResult Context::convertNInputPrimitive(
                         moore::XorOp::create(builder, loc, nextInput, inputVal);
                   return nextInput;
                 }))
+          .Case("nand", ([&] {
+                  for (Value inputVal : llvm::drop_begin(inputVals))
+                    nextInput =
+                        moore::AndOp::create(builder, loc, nextInput, inputVal);
+                  return moore::NotOp::create(builder, loc, nextInput);
+                }))
+          .Case("nor", ([&] {
+                  for (Value inputVal : llvm::drop_begin(inputVals))
+                    nextInput =
+                        moore::OrOp::create(builder, loc, nextInput, inputVal);
+                  return moore::NotOp::create(builder, loc, nextInput);
+                }))
+          .Case("xnor", ([&] {
+                  for (Value inputVal : llvm::drop_begin(inputVals))
+                    nextInput =
+                        moore::XorOp::create(builder, loc, nextInput, inputVal);
+                  return moore::NotOp::create(builder, loc, nextInput);
+                }))
           .Default([&] {
             mlir::emitError(loc)
                 << "unsupported primitive `" << primName << "`";
