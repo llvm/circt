@@ -18,7 +18,7 @@ def Synth_Dialect : Dialect {
   let description = [{
     The Synth dialect provides operations and types for logic synthesis,
     including meta operations for synthesis decisions, logic representations
-    like AIG and MIG, and synthesis pipeline infrastructure.
+    like AIG, and synthesis pipeline infrastructure.
   }];
 
   let hasConstantMaterializer = 1;

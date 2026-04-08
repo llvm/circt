@@ -126,19 +126,6 @@ hw.module private @nested(in %a : i1, in %b : i1, in %c : i1, out x : i1) {
   hw.output %or : i1
 }
 
-// Test MIG (Majority-Inverter Graph) operations
-// CHECK:      Resource Usage Analysis for module: mig_test
-// CHECK-NEXT: ========================================
-// CHECK-NEXT: Total:
-// CHECK-NEXT:   synth.mig.maj_inv_3: 4
-// CHECK-NEXT:   synth.mig.maj_inv_5: 4
-
-hw.module private @mig_test(in %a : i4, in %b : i4, in %c : i4, out x : i4) {
-  %maj1 = synth.mig.maj_inv %a, %b, %c : i4
-  %maj2 = synth.mig.maj_inv %a, %b, %c, %a, %b : i4
-  hw.output %maj2 : i4
-}
-
 // Test truth table operations
 // CHECK:      Resource Usage Analysis for module: lut_test
 // CHECK-NEXT: ========================================

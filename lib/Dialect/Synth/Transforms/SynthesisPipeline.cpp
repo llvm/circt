@@ -81,25 +81,14 @@ void circt::synth::buildCombLoweringPipeline(
   pm.addPass(comb::createBalanceMux(balanceOptions));
 
   // Lower variadic ops before running full lowering to target IR.
-  if (options.targetIR.getValue() == TargetIR::AIG) {
-    // For AIG, lower variadic XoR since AIG cannot keep variadic
-    // representation.
-    pm.addPass(createLowerVariadicPass<comb::XorOp>(
-        options.timingAware,
-        options.synthesisStrategy == OptimizationStrategyArea));
-  } else if (options.targetIR.getValue() == TargetIR::MIG) {
-    // For MIG, lower variadic And, Or, and Xor since MIG cannot keep variadic
-    // representation.
-    pm.addPass(createLowerVariadicPass<comb::AndOp, comb::OrOp, comb::XorOp>(
-        options.timingAware));
-  }
+  // For AIG, lower variadic XoR since AIG cannot keep variadic
+  // representation.
+  pm.addPass(createLowerVariadicPass<comb::XorOp>(
+      options.timingAware,
+      options.synthesisStrategy == OptimizationStrategyArea));
 
   pm.addPass(circt::hw::createHWAggregateToComb());
-  circt::ConvertCombToSynthOptions convOptions;
-  convOptions.targetIR = options.targetIR.getValue() == TargetIR::AIG
-                             ? CombToSynthTargetIR::AIG
-                             : CombToSynthTargetIR::MIG;
-  pm.addPass(circt::createConvertCombToSynth(convOptions));
+  pm.addPass(circt::createConvertCombToSynth());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
   pm.addPass(createCSEPass());

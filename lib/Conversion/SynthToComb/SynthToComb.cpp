@@ -66,73 +66,6 @@ struct SynthAndInverterOpConversion
   }
 };
 
-struct SynthMajorityInverterOpConversion
-    : OpConversionPattern<synth::mig::MajorityInverterOp> {
-  using OpConversionPattern<
-      synth::mig::MajorityInverterOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(synth::mig::MajorityInverterOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto getOperand = [&](unsigned idx) {
-      auto input = adaptor.getInputs()[idx];
-      if (!op.getInverted()[idx])
-        return input;
-      auto width = input.getType().getIntOrFloatBitWidth();
-      auto allOnes = hw::ConstantOp::create(rewriter, op.getLoc(),
-                                            APInt::getAllOnes(width));
-      return rewriter.createOrFold<comb::XorOp>(op.getLoc(), input, allOnes,
-                                                true);
-    };
-
-    if (op.getNumOperands() == 1) {
-      rewriter.replaceOp(op, getOperand(0));
-      return success();
-    }
-
-    SmallVector<Value> inputs;
-    inputs.reserve(op.getNumOperands());
-    for (size_t i = 0, e = op.getNumOperands(); i < e; ++i)
-      inputs.push_back(getOperand(i));
-
-    // MAJ_n(x_0, ..., x_n) is the OR of all conjunctions over threshold-sized
-    // subsets, where threshold = floor(n / 2) + 1.
-    auto getProduct = [&](ArrayRef<unsigned> indices) {
-      SmallVector<Value> productOperands;
-      productOperands.reserve(indices.size());
-      for (auto idx : indices)
-        productOperands.push_back(inputs[idx]);
-      return rewriter.createOrFold<comb::AndOp>(op.getLoc(), productOperands,
-                                                true);
-    };
-
-    SmallVector<Value> operands;
-    SmallVector<unsigned> subset;
-    const unsigned threshold = op.getNumOperands() / 2 + 1;
-
-    auto enumerateProducts = [&](auto &&self, unsigned start) -> void {
-      if (subset.size() == threshold) {
-        operands.push_back(getProduct(subset));
-        return;
-      }
-
-      const unsigned remaining = threshold - subset.size();
-      assert(start + remaining <= op.getNumOperands() &&
-             "Not enough operands left to reach threshold");
-      for (unsigned i = start, e = op.getNumOperands() - remaining; i <= e;
-           ++i) {
-        subset.push_back(i);
-        self(self, i + 1);
-        subset.pop_back();
-      }
-    };
-    enumerateProducts(enumerateProducts, 0);
-
-    rewriter.replaceOp(
-        op, rewriter.createOrFold<comb::OrOp>(op.getLoc(), operands, true));
-    return success();
-  }
-};
-
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -149,8 +82,8 @@ struct ConvertSynthToCombPass
 } // namespace
 
 static void populateSynthToCombConversionPatterns(RewritePatternSet &patterns) {
-  patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion,
-               SynthMajorityInverterOpConversion>(patterns.getContext());
+  patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion>(
+      patterns.getContext());
 }
 
 void ConvertSynthToCombPass::runOnOperation() {

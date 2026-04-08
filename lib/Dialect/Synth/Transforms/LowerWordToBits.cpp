@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This pass implements bit-blasting for logic synthesis operations.
-// It converts multi-bit operations (AIG, MIG, combinatorial) into equivalent
+// It converts multi-bit operations (AIG, combinatorial) into equivalent
 // single-bit operations, enabling more efficient synthesis and optimization.
 //
 //===----------------------------------------------------------------------===//
@@ -43,8 +43,8 @@ using namespace synth;
 
 /// Check if an operation should be lowered to bit-level operations.
 static bool shouldLowerOperation(Operation *op) {
-  return isa<ChoiceOp, aig::AndInverterOp, mig::MajorityInverterOp, comb::AndOp,
-             comb::OrOp, comb::XorOp, comb::MuxOp>(op);
+  return isa<ChoiceOp, aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp,
+             comb::MuxOp>(op);
 }
 
 namespace {
@@ -168,22 +168,6 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
         std::swap(operandKnownBits.Zero, operandKnownBits.One);
       result &= operandKnownBits;
     }
-  } else if (auto mig = dyn_cast<mig::MajorityInverterOp>(op)) {
-    // Give up if it's not a 3-input majority inverter.
-    if (mig.getNumOperands() == 3) {
-      std::array<llvm::KnownBits, 3> operandsKnownBits;
-      for (auto [i, operand, inverted] :
-           llvm::enumerate(mig.getInputs(), mig.getInverted())) {
-        operandsKnownBits[i] = computeKnownBits(operand);
-        // Complement the known bits by swapping Zero and One
-        if (inverted)
-          std::swap(operandsKnownBits[i].Zero, operandsKnownBits[i].One);
-      }
-
-      result = (operandsKnownBits[0] & operandsKnownBits[1]) |
-               (operandsKnownBits[0] & operandsKnownBits[2]) |
-               (operandsKnownBits[1] & operandsKnownBits[2]);
-    }
   } else if (auto choice = dyn_cast<ChoiceOp>(op)) {
     result = computeKnownBits(choice.getInputs().front());
     for (auto input : choice.getInputs().drop_front()) {
@@ -264,7 +248,7 @@ ArrayRef<Value> BitBlaster::lowerValueToBits(Value value) {
         };
         return lowerOp(op, createOp);
       })
-      .Case<aig::AndInverterOp, mig::MajorityInverterOp>(
+      .Case<aig::AndInverterOp>(
           [&](auto op) { return lowerInvertibleOperations(op); })
       .Case<comb::AndOp, comb::OrOp, comb::XorOp>(
           [&](auto op) { return lowerCombLogicOperations(op); })

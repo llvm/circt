@@ -9,17 +9,15 @@
 // This is the main Comb to Synth Conversion Pass Implementation.
 //
 //  High-level Comb Operations
-//             |             |
-//             v             |
-//   +-------------------+   |
-//   | and, or, xor, mux |   |
-//   +---------+---------+   |
-//             |             |
-//     +-------+--------+    |
-//     v                v    v
-//     +-----+         +-----+
-//     | AIG |-------->| MIG |
-//     +-----+         +-----+
+//             |
+//             v
+//   +-------------------+
+//   | and, or, xor, mux |
+//   +---------+---------+
+//             |
+//          +-----+
+//          | AIG |
+//          +-----+
 //
 //===----------------------------------------------------------------------===//
 
@@ -112,19 +110,10 @@ static Value createShiftLogic(ConversionPatternRewriter &rewriter, Location loc,
                                             outOfBoundsValue);
 }
 
-// Return a majority operation if MIG is enabled, otherwise return a majority
-// function implemented with Comb operations. In that case `carry` has slightly
-// smaller depth than the other inputs.
+// Return a majority function implemented with Comb operations. `carry` has
+// slightly smaller depth than the other inputs.
 static Value createMajorityFunction(OpBuilder &rewriter, Location loc, Value a,
-                                    Value b, Value carry,
-                                    bool useMajorityInverterOp) {
-  if (useMajorityInverterOp) {
-    std::array<Value, 3> inputs = {a, b, carry};
-    std::array<bool, 3> inverts = {false, false, false};
-    return synth::mig::MajorityInverterOp::create(rewriter, loc, inputs,
-                                                  inverts);
-  }
-
+                                    Value b, Value carry) {
   // maj(a, b, c) = (c & (a ^ b)) | (a & b)
   auto aXnorB = comb::XorOp::create(rewriter, loc, ValueRange{a, b}, true);
   auto andOp =
@@ -313,91 +302,6 @@ struct CombOrToAIGConversion : OpConversionPattern<OrOp> {
         rewriter, op.getLoc(), adaptor.getInputs(), allInverts);
     replaceOpWithNewOpAndCopyNamehint<synth::aig::AndInverterOp>(
         rewriter, op, andOp,
-        /*invert=*/true);
-    return success();
-  }
-};
-
-struct CombOrToMIGConversion : OpConversionPattern<OrOp> {
-  using OpConversionPattern<OrOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(OrOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (op.getNumOperands() != 2)
-      return failure();
-    SmallVector<Value, 3> inputs(adaptor.getInputs());
-    auto one = hw::ConstantOp::create(
-        rewriter, op.getLoc(),
-        APInt::getAllOnes(hw::getBitWidth(op.getType())));
-    inputs.push_back(one);
-    std::array<bool, 3> inverts = {false, false, false};
-    replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(
-        rewriter, op, inputs, inverts);
-    return success();
-  }
-};
-
-struct AndInverterToMIGConversion
-    : OpConversionPattern<synth::aig::AndInverterOp> {
-  using OpConversionPattern<synth::aig::AndInverterOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(synth::aig::AndInverterOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (op.getNumOperands() > 2)
-      return failure();
-    if (op.getNumOperands() == 1) {
-      SmallVector<bool, 1> inverts{op.getInverted()[0]};
-      replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(
-          rewriter, op, adaptor.getInputs(), inverts);
-      return success();
-    }
-    SmallVector<Value, 3> inputs(adaptor.getInputs());
-    auto one = hw::ConstantOp::create(
-        rewriter, op.getLoc(), APInt::getZero(hw::getBitWidth(op.getType())));
-    inputs.push_back(one);
-    SmallVector<bool, 3> inverts(adaptor.getInverted());
-    inverts.push_back(false);
-    replaceOpWithNewOpAndCopyNamehint<synth::mig::MajorityInverterOp>(
-        rewriter, op, inputs, inverts);
-    return success();
-  }
-};
-
-struct MajorityInverterToAIGConversion
-    : OpConversionPattern<synth::mig::MajorityInverterOp> {
-  using OpConversionPattern<
-      synth::mig::MajorityInverterOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(synth::mig::MajorityInverterOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    // Only handle 1 or 3-input majority inverter for now.
-    if (op.getNumOperands() > 3)
-      return failure();
-
-    if (op.getNumOperands() == 1) {
-      bool inverts[1] = {op.getInverted()[0]};
-      replaceOpWithNewOpAndCopyNamehint<synth::aig::AndInverterOp>(
-          rewriter, op, adaptor.getInputs(), inverts);
-      return success();
-    }
-
-    assert(op.getNumOperands() == 3 && "Expected 3 operands for majority op");
-    auto getProduct = [&](unsigned idx1, unsigned idx2) {
-      bool inverts[2] = {op.getInverted()[idx1], op.getInverted()[idx2]};
-      return synth::aig::AndInverterOp::create(
-          rewriter, op.getLoc(),
-          ValueRange{adaptor.getInputs()[idx1], adaptor.getInputs()[idx2]},
-          inverts);
-    };
-
-    // Majority is the OR of the three pairwise products. Materialize that OR as
-    // a NOR followed by an inverter so it stays in AIG form.
-    Value products[3] = {getProduct(0, 1), getProduct(0, 2), getProduct(1, 2)};
-    bool allInverted[3] = {true, true, true};
-    auto notOr = synth::aig::AndInverterOp::create(rewriter, op.getLoc(),
-                                                   products, allInverted);
-    replaceOpWithNewOpAndCopyNamehint<synth::aig::AndInverterOp>(
-        rewriter, op, notOr,
         /*invert=*/true);
     return success();
   }
@@ -801,7 +705,6 @@ LazyKoggeStonePrefixTree::getGroupAndPropagate(int64_t level, int64_t i) {
   return prefixCache[key];
 }
 
-template <bool lowerToMIG>
 struct CombAddOpConversion : OpConversionPattern<AddOp> {
   using OpConversionPattern<AddOp>::OpConversionPattern;
 
@@ -864,7 +767,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       }
 
       carry = createMajorityFunction(rewriter, op.getLoc(), aBits[i], bBits[i],
-                                     carry, lowerToMIG);
+                                     carry);
     }
     LLVM_DEBUG(llvm::dbgs() << "Lower comb.add to Ripple-Carry Adder of width "
                             << width << "\n");
@@ -1440,8 +1343,7 @@ struct ConvertCombToSynthPass
 
 static void
 populateCombToAIGConversionPatterns(RewritePatternSet &patterns,
-                                    uint32_t maxEmulationUnknownBits,
-                                    bool lowerToMIG) {
+                                    uint32_t maxEmulationUnknownBits) {
   patterns.add<
       // Bitwise Logical Ops
       CombAndOpConversion, CombXorOpConversion, CombMuxOpConversion,
@@ -1456,15 +1358,9 @@ populateCombToAIGConversionPatterns(RewritePatternSet &patterns,
 
   patterns.add(comb::convertSubToAdd);
 
-  if (lowerToMIG) {
-    patterns.add<CombOrToMIGConversion, CombLowerVariadicOp<OrOp>,
-                 AndInverterToMIGConversion,
-                 circt::synth::AndInverterVariadicOpConversion,
-                 CombAddOpConversion</*useMIG=*/true>>(patterns.getContext());
-  } else {
-    patterns.add<CombOrToAIGConversion, MajorityInverterToAIGConversion,
-                 CombAddOpConversion</*useMIG=*/false>>(patterns.getContext());
-  }
+  patterns
+      .add<CombOrToAIGConversion, circt::synth::AndInverterVariadicOpConversion,
+           CombAddOpConversion>(patterns.getContext());
 
   // Add div/mod patterns with a threshold given by the pass option.
   patterns.add<CombDivUOpConversion, CombModUOpConversion, CombDivSOpConversion,
@@ -1490,21 +1386,13 @@ void ConvertCombToSynthPass::runOnOperation() {
 
   target.addLegalDialect<synth::SynthDialect>();
 
-  if (targetIR == CombToSynthTargetIR::AIG) {
-    // AIG is target dialect.
-    target.addIllegalOp<synth::mig::MajorityInverterOp>();
-  } else if (targetIR == CombToSynthTargetIR::MIG) {
-    target.addIllegalOp<synth::aig::AndInverterOp>();
-  }
-
   // If additional legal ops are specified, add them to the target.
   if (!additionalLegalOps.empty())
     for (const auto &opName : additionalLegalOps)
       target.addLegalOp(OperationName(opName, &getContext()));
 
   RewritePatternSet patterns(&getContext());
-  populateCombToAIGConversionPatterns(patterns, maxEmulationUnknownBits,
-                                      targetIR == CombToSynthTargetIR::MIG);
+  populateCombToAIGConversionPatterns(patterns, maxEmulationUnknownBits);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

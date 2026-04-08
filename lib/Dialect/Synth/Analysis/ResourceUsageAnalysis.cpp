@@ -57,19 +57,6 @@ static bool accumulateResourceCounts(Operation *op,
                 logicOp.getType().getIntOrFloatBitWidth();
             return true;
           })
-      // Majority-inverter graph (MIG) - include input count in the name.
-      // Gate count = (num_inputs / 2) * bitwidth
-      // Each MIG gate consumes 3 inputs and produces 1 output, so a variadic
-      // MIG operation with N inputs requires N/2 gates (rounded down).
-      .Case<synth::mig::MajorityInverterOp>([&](auto logicOp) {
-        uint64_t count = logicOp.getType().getIntOrFloatBitWidth();
-        // Concatenate input count to the operation name.
-        std::string name = (Twine(logicOp->getName().getStringRef()) + "_" +
-                            Twine(logicOp.getNumOperands()))
-                               .str();
-        counts[name] += count;
-        return true;
-      })
       // Truth tables (LUTs) - count both the total number of truth tables and
       // the per-input breakdown.
       .Case<comb::TruthTableOp>([&](auto op) {
