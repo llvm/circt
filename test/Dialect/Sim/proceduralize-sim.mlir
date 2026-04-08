@@ -278,6 +278,27 @@ hw.module @print_time(in %clk : !seq.clock) {
   sim.print %fmt on %clk if %true
 }
 
+// CHECK-LABEL: @print_hier_path
+// CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
+// CHECK-NEXT:  hw.triggered posedge %[[TRG]](%[[COND:.*]]) : i1 {
+// CHECK-NEXT:  ^bb0(%[[ARGCOND:.*]]: i1):
+// CHECK-DAG:     %[[LIT0:.*]] = sim.fmt.literal "["
+// CHECK-DAG:     %[[PATH:.*]] = sim.fmt.hier_path
+// CHECK-DAG:     %[[LIT1:.*]] = sim.fmt.literal "]"
+// CHECK-DAG:     %[[CAT:.*]] = sim.fmt.concat (%[[LIT0]], %[[PATH]], %[[LIT1]])
+// CHECK:         scf.if %[[ARGCOND]] {
+// CHECK-NEXT:      sim.proc.print %[[CAT]]
+// CHECK-NEXT:    }
+// CHECK-NEXT:  }
+
+hw.module @print_hier_path(in %clk : !seq.clock, in %cond : i1) {
+  %lb = sim.fmt.literal "["
+  %hp = sim.fmt.hier_path
+  %rb = sim.fmt.literal "]"
+  %msg = sim.fmt.concat (%lb, %hp, %rb)
+  sim.print %msg on %clk if %cond
+}
+
 // CHECK-LABEL: @print_and_flush_file
 // CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
 // CHECK-NEXT:  hw.triggered posedge %[[TRG]](%[[CARG:.*]], %[[VARG:.*]]) : i1, i8 {
