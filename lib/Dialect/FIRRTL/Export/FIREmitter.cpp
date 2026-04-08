@@ -317,10 +317,7 @@ private:
     if (version >= minVersion)
       return true;
 
-    SmallString<32> msg;
-    llvm::raw_svector_ostream os(msg);
-    os << feature << " requires FIRRTL " << minVersion;
-    emitOpError(op, msg);
+    emitOpError(op, feature + " requires FIRRTL ") << minVersion;
     return false;
   }
 
