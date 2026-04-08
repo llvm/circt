@@ -767,7 +767,7 @@ OpFoldResult ConstantTimeOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult ConstantRealOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   ConstantRealOp::Adaptor adaptor(operands, attrs, properties);
   results.push_back(RealType::get(
@@ -782,7 +782,7 @@ LogicalResult ConstantRealOp::inferReturnTypes(
 
 LogicalResult ConcatOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Domain domain = Domain::TwoValued;
   unsigned width = 0;
@@ -802,7 +802,7 @@ LogicalResult ConcatOp::inferReturnTypes(
 
 LogicalResult ConcatRefOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Domain domain = Domain::TwoValued;
   unsigned width = 0;

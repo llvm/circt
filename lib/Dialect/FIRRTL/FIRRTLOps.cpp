@@ -2296,7 +2296,7 @@ void ExtClassOp::build(OpBuilder &builder, OperationState &result,
       llvm::all_of(ports,
                    [](const auto &port) { return port.annotations.empty(); }) &&
       "class ports may not have annotations");
-  buildClass<ClassOp>(builder, result, name, ports);
+  buildClass<ExtClassOp>(builder, result, name, ports);
 }
 
 void ExtClassOp::print(OpAsmPrinter &p) {
@@ -3774,7 +3774,7 @@ void NodeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 LogicalResult NodeOp::inferReturnTypes(
     mlir::MLIRContext *context, std::optional<mlir::Location> location,
     ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes,
-    ::mlir::OpaqueProperties properties, ::mlir::RegionRange regions,
+    ::mlir::PropertyRef properties, ::mlir::RegionRange regions,
     ::llvm::SmallVectorImpl<::mlir::Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
@@ -5141,7 +5141,7 @@ ParseResult IsTagOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 FIRRTLType IsTagOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
-                                    OpaqueProperties properties,
+                                    PropertyRef properties,
                                     mlir::RegionRange regions,
                                     std::optional<Location> loc) {
   Adaptor adaptor(operands, attrs, properties, regions);
@@ -5395,7 +5395,7 @@ FIRRTLType OpenSubindexOp::inferReturnType(Type type, uint32_t fieldIndex,
 }
 
 FIRRTLType SubtagOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
-                                     OpaqueProperties properties,
+                                     PropertyRef properties,
                                      mlir::RegionRange regions,
                                      std::optional<Location> loc) {
   Adaptor adaptor(operands, attrs, properties, regions);
@@ -5464,7 +5464,7 @@ void MultibitMuxOp::print(OpAsmPrinter &p) {
 
 FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
                                           DictionaryAttr attrs,
-                                          OpaqueProperties properties,
+                                          PropertyRef properties,
                                           mlir::RegionRange regions,
                                           std::optional<Location> loc) {
   if (operands.size() < 2)
@@ -5485,7 +5485,7 @@ FIRRTLType MultibitMuxOp::inferReturnType(ValueRange operands,
 
 LogicalResult ObjectSubfieldOp::inferReturnTypes(
     MLIRContext *context, std::optional<mlir::Location> location,
-    ValueRange operands, DictionaryAttr attributes, OpaqueProperties properties,
+    ValueRange operands, DictionaryAttr attributes, PropertyRef properties,
     RegionRange regions, llvm::SmallVectorImpl<Type> &inferredReturnTypes) {
   auto type =
       inferReturnType(operands, attributes, properties, regions, location);
@@ -5703,7 +5703,7 @@ FIRRTLType impl::inferComparisonResult(FIRRTLType lhs, FIRRTLType rhs,
 }
 
 FIRRTLType CatPrimOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
-                                      OpaqueProperties properties,
+                                      PropertyRef properties,
                                       mlir::RegionRange regions,
                                       std::optional<Location> loc) {
   // If no operands, return a 0-bit UInt
@@ -6073,7 +6073,7 @@ FIRRTLType MuxPrimOp::inferReturnType(FIRRTLType sel, FIRRTLType high,
 
 FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
                                                 DictionaryAttr attrs,
-                                                OpaqueProperties properties,
+                                                PropertyRef properties,
                                                 mlir::RegionRange regions,
                                                 std::optional<Location> loc) {
   auto highType = type_dyn_cast<FIRRTLBaseType>(operands[1].getType());
@@ -6086,7 +6086,7 @@ FIRRTLType Mux2CellIntrinsicOp::inferReturnType(ValueRange operands,
 
 FIRRTLType Mux4CellIntrinsicOp::inferReturnType(ValueRange operands,
                                                 DictionaryAttr attrs,
-                                                OpaqueProperties properties,
+                                                PropertyRef properties,
                                                 mlir::RegionRange regions,
                                                 std::optional<Location> loc) {
   SmallVector<FIRRTLBaseType> types;
@@ -6831,7 +6831,7 @@ void RWProbeOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
                                          DictionaryAttr attrs,
-                                         OpaqueProperties properties,
+                                         PropertyRef properties,
                                          mlir::RegionRange regions,
                                          std::optional<Location> loc) {
   Type inType = operands[0].getType();
@@ -6843,7 +6843,7 @@ FIRRTLType RefResolveOp::inferReturnType(ValueRange operands,
 }
 
 FIRRTLType RefSendOp::inferReturnType(ValueRange operands, DictionaryAttr attrs,
-                                      OpaqueProperties properties,
+                                      PropertyRef properties,
                                       mlir::RegionRange regions,
                                       std::optional<Location> loc) {
   Type inType = operands[0].getType();
@@ -7394,7 +7394,7 @@ Type DomainSubfieldOp::inferReturnType(Type inType, uint32_t fieldIndex,
 
 Type DomainSubfieldOp::inferReturnType(ValueRange operands,
                                        mlir::DictionaryAttr attrs,
-                                       mlir::OpaqueProperties properties,
+                                       mlir::PropertyRef properties,
                                        mlir::RegionRange regions,
                                        std::optional<Location> loc) {
   Adaptor adaptor(operands, attrs, properties, regions);
@@ -7414,7 +7414,7 @@ DomainSubfieldOp DomainSubfieldOp::create(OpBuilder &builder, Type resultType,
 
 LogicalResult DomainSubfieldOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   Adaptor adaptor(operands, attributes, properties, regions);
   auto resultType = inferReturnType(adaptor.getInput().getType(),
