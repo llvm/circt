@@ -4,7 +4,7 @@
 
 
 firrtl.circuit "Foo" attributes {
-  select_inst_choice = ["Platform=FPGA" ,"Performance=Fast"]
+  select_inst_choice = ["Platform=FPGA" ,"Performance?=Fast", "NotExist?=test"]
 }
 {
 

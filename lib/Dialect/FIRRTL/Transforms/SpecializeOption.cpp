@@ -9,6 +9,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 
@@ -30,6 +31,7 @@ struct SpecializeOptionPass
 
   void runOnOperation() override {
     auto circuit = getOperation();
+    auto &symTbl = getAnalysis<SymbolTable>();
 
     DenseMap<StringAttr, OptionCaseOp> selected;
     if (auto choiceAttr = circuit.getSelectInstChoiceAttr()) {
@@ -43,8 +45,14 @@ struct SpecializeOptionPass
         }
 
         std::string optionName = optionAndCase.substr(0, eq);
-        auto optionOp = circuit.lookupSymbol<OptionOp>(optionName);
+        // If the option is specified with `?=`, allow the absence of option.
+        bool allowNonExistent = !optionName.empty() && optionName.back() == '?';
+        if (allowNonExistent)
+          optionName.pop_back();
+        auto optionOp = symTbl.lookup<OptionOp>(optionName);
         if (!optionOp) {
+          if (allowNonExistent)
+            continue;
           mlir::emitError(circuit.getLoc(), "unknown option \"")
               << optionName << '"';
           return signalPassFailure();
