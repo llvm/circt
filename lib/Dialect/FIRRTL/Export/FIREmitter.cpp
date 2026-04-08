@@ -313,12 +313,12 @@ private:
   }
 
   /// Return false and emit an error if the target version is below minVersion.
-  bool requireVersion(FIRVersion minVersion, Operation *op, Twine feature) {
+  LogicalResult requireVersion(FIRVersion minVersion, Operation *op,
+                               Twine feature) {
     if (version >= minVersion)
-      return true;
+      return success();
 
-    emitOpError(op, feature + " requires FIRRTL ") << minVersion;
-    return false;
+    return emitOpError(op, feature + " requires FIRRTL ") << minVersion;
   }
 
   /// Return the name used during emission of a `Value`, or none if the value
@@ -454,7 +454,7 @@ void Emitter::emitCircuit(CircuitOp op) {
 void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers, Operation *op) {
   if (layers.empty())
     return;
-  if (!requireVersion(FIRVersion(4, 0, 0), op, "enabled layers"))
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "enabled layers")))
     return;
   for (auto layer : layers) {
     ps << PP::space;
@@ -468,7 +468,7 @@ void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers, Operation *op) {
 void Emitter::emitKnownLayers(ArrayRef<Attribute> layers, Operation *op) {
   if (layers.empty())
     return;
-  if (!requireVersion(nextFIRVersion, op, "known layers"))
+  if (failed(requireVersion(nextFIRVersion, op, "known layers")))
     return;
   for (auto layer : layers) {
     ps << PP::space;
@@ -681,7 +681,7 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
 }
 
 void Emitter::emitDeclaration(DomainOp op) {
-  if (!requireVersion(missingSpecFIRVersion, op, "domains"))
+  if (failed(requireVersion(missingSpecFIRVersion, op, "domains")))
     return;
   startStatement();
   ps << "domain " << PPExtString(op.getSymName()) << " :";
@@ -697,10 +697,10 @@ void Emitter::emitDeclaration(DomainOp op) {
 
 /// Emit a layer definition.
 void Emitter::emitDeclaration(LayerOp op) {
-  if (!requireVersion(FIRVersion(3, 3, 0), op, "layers"))
+  if (failed(requireVersion(FIRVersion(3, 3, 0), op, "layers")))
     return;
   if (op.getConvention() == LayerConvention::Inline &&
-      !requireVersion(FIRVersion(4, 1, 0), op, "inline layers"))
+      failed(requireVersion(FIRVersion(4, 1, 0), op, "inline layers")))
     return;
   startStatement();
   ps << "layer " << PPExtString(op.getSymName()) << ", "
@@ -727,7 +727,7 @@ void Emitter::emitDeclaration(LayerOp op) {
 
 /// Emit an option declaration.
 void Emitter::emitDeclaration(OptionOp op) {
-  if (!requireVersion(missingSpecFIRVersion, op, "option groups"))
+  if (failed(requireVersion(missingSpecFIRVersion, op, "option groups")))
     return;
   startStatement();
   ps << "option " << PPExtString(legalize(op.getSymNameAttr())) << " :";
@@ -744,7 +744,7 @@ void Emitter::emitDeclaration(OptionOp op) {
 
 /// Emit a formal test definition.
 void Emitter::emitDeclaration(FormalOp op) {
-  if (!requireVersion(FIRVersion(4, 0, 0), op, "formal tests"))
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "formal tests")))
     return;
   emitFormalLike(op, "formal", op.getSymNameAttr(),
                  op.getModuleNameAttr().getAttr(), op.getParameters());
@@ -752,7 +752,7 @@ void Emitter::emitDeclaration(FormalOp op) {
 
 /// Emit a simulation test definition.
 void Emitter::emitDeclaration(SimulationOp op) {
-  if (!requireVersion(nextFIRVersion, op, "simulation tests"))
+  if (failed(requireVersion(nextFIRVersion, op, "simulation tests")))
     return;
   emitFormalLike(op, "simulation", op.getSymNameAttr(),
                  op.getModuleNameAttr().getAttr(), op.getParameters());
@@ -1041,7 +1041,7 @@ void Emitter::emitStatement(PrintFOp op) {
 }
 
 void Emitter::emitStatement(FPrintFOp op) {
-  if (!requireVersion(nextFIRVersion, op, "fprintf"))
+  if (failed(requireVersion(nextFIRVersion, op, "fprintf")))
     return;
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
@@ -1077,7 +1077,7 @@ void Emitter::emitStatement(FPrintFOp op) {
 }
 
 void Emitter::emitStatement(FFlushOp op) {
-  if (!requireVersion(nextFIRVersion, op, "fflush"))
+  if (failed(requireVersion(nextFIRVersion, op, "fflush")))
     return;
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
@@ -1175,7 +1175,7 @@ void Emitter::emitStatement(MatchingConnectOp op) {
 }
 
 void Emitter::emitStatement(PropAssignOp op) {
-  if (!requireVersion(FIRVersion(3, 1, 0), op, "properties"))
+  if (failed(requireVersion(FIRVersion(3, 1, 0), op, "properties")))
     return;
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
@@ -1205,8 +1205,8 @@ void Emitter::emitStatement(InstanceOp op) {
 }
 
 void Emitter::emitStatement(InstanceChoiceOp op) {
-  if (!requireVersion(missingSpecFIRVersion, op,
-                      "option groups/instance choices"))
+  if (failed(requireVersion(missingSpecFIRVersion, op,
+                            "option groups/instance choices")))
     return;
   startStatement();
   auto legalName = legalize(op.getNameAttr());
@@ -1360,7 +1360,7 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
 }
 
 void Emitter::emitStatement(DomainDefineOp op) {
-  if (!requireVersion(missingSpecFIRVersion, op, "domains"))
+  if (failed(requireVersion(missingSpecFIRVersion, op, "domains")))
     return;
   // If the source is an anonymous domain, then we can skip emitting this op.
   if (isa_and_nonnull<DomainCreateAnonOp>(op.getSrc().getDefiningOp()))
@@ -1428,7 +1428,7 @@ void Emitter::emitStatement(RefReleaseInitialOp op) {
 }
 
 void Emitter::emitStatement(LayerBlockOp op) {
-  if (!requireVersion(FIRVersion(3, 3, 0), op, "layers"))
+  if (failed(requireVersion(FIRVersion(3, 3, 0), op, "layers")))
     return;
   startStatement();
   ps << "layerblock " << op.getLayerName().getLeafReference() << " :";
@@ -1462,7 +1462,7 @@ void Emitter::emitStatement(InvalidValueOp op) {
 }
 
 void Emitter::emitStatement(GenericIntrinsicOp op) {
-  if (!requireVersion(FIRVersion(4, 0, 0), op, "generic intrinsics"))
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "generic intrinsics")))
     return;
   startStatement();
   if (op.use_empty())
@@ -1482,7 +1482,7 @@ void Emitter::emitStatement(DomainCreateAnonOp op) {
 }
 
 void Emitter::emitStatement(DomainCreateOp op) {
-  if (!requireVersion(missingSpecFIRVersion, op, "domains"))
+  if (failed(requireVersion(missingSpecFIRVersion, op, "domains")))
     return;
   startStatement();
   auto name = legalize(op.getNameAttr());
@@ -1690,7 +1690,7 @@ void Emitter::emitExpression(UninferredResetCastOp op) {
 }
 
 void Emitter::emitExpression(FIntegerConstantOp op) {
-  if (!requireVersion(FIRVersion(3, 1, 0), op, "Integers"))
+  if (failed(requireVersion(FIRVersion(3, 1, 0), op, "Integers")))
     return;
   ps << "Integer(";
   ps.addAsString(op.getValue());
@@ -1698,13 +1698,13 @@ void Emitter::emitExpression(FIntegerConstantOp op) {
 }
 
 void Emitter::emitExpression(BoolConstantOp op) {
-  if (!requireVersion(missingSpecFIRVersion, op, "Bools"))
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Bools")))
     return;
   ps << "Bool(" << (op.getValue() ? "true" : "false") << ")";
 }
 
 void Emitter::emitExpression(DoubleConstantOp op) {
-  if (!requireVersion(missingSpecFIRVersion, op, "Doubles"))
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Doubles")))
     return;
   ps << "Double(";
   // Use APFloat::toString.
@@ -1718,7 +1718,7 @@ void Emitter::emitExpression(DoubleConstantOp op) {
 }
 
 void Emitter::emitExpression(StringConstantOp op) {
-  if (!requireVersion(FIRVersion(3, 1, 0), op, "Strings"))
+  if (failed(requireVersion(FIRVersion(3, 1, 0), op, "Strings")))
     return;
   ps << "String(";
   ps.writeQuotedEscaped(op.getValue());
@@ -1726,13 +1726,13 @@ void Emitter::emitExpression(StringConstantOp op) {
 }
 
 void Emitter::emitExpression(ListCreateOp op) {
-  if (!requireVersion(FIRVersion(4, 0, 0), op, "Lists"))
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "Lists")))
     return;
   return emitLiteralExpression(op.getType(), op.getElements());
 }
 
 void Emitter::emitExpression(UnresolvedPathOp op) {
-  if (!requireVersion(missingSpecFIRVersion, op, "Paths"))
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Paths")))
     return;
   ps << "path(";
   ps.writeQuotedEscaped(op.getTarget());
@@ -1740,7 +1740,7 @@ void Emitter::emitExpression(UnresolvedPathOp op) {
 }
 
 void Emitter::emitExpression(GenericIntrinsicOp op) {
-  if (!requireVersion(FIRVersion(4, 0, 0), op, "generic intrinsics"))
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "generic intrinsics")))
     return;
   emitGenericIntrinsic(op);
 }
@@ -1794,7 +1794,7 @@ void Emitter::emitExpression(CatPrimOp op) {
 }
 
 void Emitter::emitExpression(UnsafeDomainCastOp op) {
-  if (!requireVersion(nextFIRVersion, op, "unsafe_domain_cast"))
+  if (failed(requireVersion(nextFIRVersion, op, "unsafe_domain_cast")))
     return;
   ps << "unsafe_domain_cast(" << PP::ibox0;
   interleaveComma(op.getOperands(),
@@ -1803,7 +1803,8 @@ void Emitter::emitExpression(UnsafeDomainCastOp op) {
 }
 
 void Emitter::emitExpression(UnknownValueOp op) {
-  if (!requireVersion(nextFIRVersion, op, "unknown property expressions"))
+  if (failed(
+          requireVersion(nextFIRVersion, op, "unknown property expressions")))
     return;
   ps << "Unknown(";
   emitType(op.getType());
