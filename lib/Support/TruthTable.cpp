@@ -13,6 +13,7 @@
 #include "circt/Support/TruthTable.h"
 
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/MathExtras.h"
 #include <algorithm>
@@ -181,7 +182,162 @@ llvm::SmallVector<unsigned> invertPermutation(ArrayRef<unsigned> permutation) {
   return inverse;
 }
 
+llvm::SmallVector<unsigned>
+expandInputPermutation(const std::array<uint8_t, 4> &permutation) {
+  llvm::SmallVector<unsigned> result;
+  result.reserve(permutation.size());
+  for (uint8_t index : permutation)
+    result.push_back(index);
+  return result;
+}
+
+struct NPNTransform4 {
+  // Maps each output minterm in the transformed table back to the minterm to
+  // read from the source table.
+  std::array<uint8_t, 16> outputToSource = {};
+  // Inverse mapping used when reconstructing an original table from a chosen
+  // canonical representative.
+  std::array<uint8_t, 16> inverseOutputToSource = {};
+  std::array<uint8_t, 4> inputPermutation = {};
+  uint8_t inputNegation = 0;
+  bool outputNegation = false;
+};
+
+uint16_t applyNPNTransform4(uint16_t truthTable,
+                            const std::array<uint8_t, 16> &outputToSource,
+                            bool outputNegation) {
+  uint16_t result = 0;
+  for (unsigned output = 0; output != 16; ++output) {
+    unsigned bit = (truthTable >> outputToSource[output]) & 1u;
+    if (outputNegation)
+      bit ^= 1u;
+    result |= static_cast<uint16_t>(bit << output);
+  }
+  return result;
+}
+
+void buildCanonicalOrderNPNTransforms4(
+    llvm::SmallVectorImpl<NPNTransform4> &transforms) {
+  transforms.clear();
+  transforms.reserve(24 * 16 * 2);
+
+  // Enumerate the full 4-input NPN group in a deterministic order so table
+  // construction picks stable representatives and encodings.
+  for (unsigned negMask = 0; negMask != 16; ++negMask) {
+    std::array<unsigned, 4> permutation = {0, 1, 2, 3};
+    do {
+      std::array<unsigned, 4> inversePermutation = {};
+      for (unsigned i = 0; i != 4; ++i)
+        inversePermutation[permutation[i]] = i;
+
+      uint8_t currentNegMask = permuteNegationMask(negMask, permutation);
+      for (unsigned outputNegation = 0; outputNegation != 2; ++outputNegation) {
+        NPNTransform4 transform;
+        transform.inputNegation = currentNegMask;
+        transform.outputNegation = outputNegation;
+        for (unsigned i = 0; i != 4; ++i)
+          transform.inputPermutation[i] = permutation[i];
+
+        for (unsigned output = 0; output != 16; ++output) {
+          unsigned source = 0;
+          for (unsigned input = 0; input != 4; ++input) {
+            unsigned bit = (output >> inversePermutation[input]) & 1u;
+            bit ^= (negMask >> input) & 1u;
+            source |= bit << input;
+          }
+          transform.outputToSource[output] = source;
+          transform.inverseOutputToSource[source] = output;
+        }
+        transforms.push_back(transform);
+      }
+    } while (std::next_permutation(permutation.begin(), permutation.end()));
+  }
+}
+
+void collectNPN4Representatives(ArrayRef<NPNTransform4> transforms,
+                                llvm::SmallVectorImpl<uint16_t> &reps) {
+  llvm::BitVector seen(1u << 16, false);
+  reps.clear();
+
+  for (unsigned seed = 0; seed != (1u << 16); ++seed) {
+    if (seen.test(seed))
+      continue;
+
+    // Walk the full NPN orbit of this truth table and pick the numerically
+    // smallest member as the canonical representative.
+    uint16_t representative = seed;
+    for (const auto &transform : transforms) {
+      uint16_t member = applyNPNTransform4(seed, transform.outputToSource,
+                                           transform.outputNegation);
+      seen.set(member);
+      representative = std::min(representative, member);
+    }
+    reps.push_back(representative);
+  }
+}
+
 } // anonymous namespace
+
+void circt::collectCanonicalNPN4Representatives(
+    llvm::SmallVectorImpl<uint16_t> &representatives) {
+  llvm::SmallVector<NPNTransform4, 24 * 16 * 2> transforms;
+  buildCanonicalOrderNPNTransforms4(transforms);
+  collectNPN4Representatives(transforms, representatives);
+}
+
+NPNTable::NPNTable() {
+  llvm::SmallVector<uint16_t, 222> representatives;
+  collectCanonicalNPN4Representatives(representatives);
+
+  llvm::SmallVector<NPNTransform4, 24 * 16 * 2> transforms;
+  buildCanonicalOrderNPNTransforms4(transforms);
+
+  llvm::BitVector initialized(entries4.size(), false);
+  auto isBetterEntry = [&](const Entry4 &candidate, const Entry4 &current) {
+    // Multiple transforms can map the same function to the same
+    // representative. Pick a deterministic encoding for the stored witness.
+    if (candidate.representative != current.representative)
+      return candidate.representative < current.representative;
+    if (candidate.inputNegation != current.inputNegation)
+      return candidate.inputNegation < current.inputNegation;
+    return candidate.outputNegation < current.outputNegation;
+  };
+
+  for (uint16_t representative : representatives) {
+    for (const auto &transform : transforms) {
+      // Starting from the canonical representative, populate every equivalent
+      // member with the transform needed to recover the representative.
+      uint16_t member =
+          applyNPNTransform4(representative, transform.inverseOutputToSource,
+                             transform.outputNegation);
+
+      Entry4 candidate;
+      candidate.representative = representative;
+      candidate.inputPermutation = transform.inputPermutation;
+      candidate.inputNegation = transform.inputNegation;
+      candidate.outputNegation = transform.outputNegation;
+
+      if (!initialized.test(member) ||
+          isBetterEntry(candidate, entries4[member])) {
+        entries4[member] = candidate;
+        initialized.set(member);
+      }
+    }
+  }
+
+  assert(initialized.all() && "expected to populate all 4-input NPN entries");
+}
+
+bool NPNTable::lookup(const BinaryTruthTable &tt, NPNClass &result) const {
+  if (tt.numInputs != 4 || tt.numOutputs != 1)
+    return false;
+
+  const auto &entry = entries4[tt.table.getZExtValue()];
+  result = NPNClass(BinaryTruthTable(4, 1, APInt(16, entry.representative)),
+                    expandInputPermutation(entry.inputPermutation),
+                    entry.inputNegation, entry.outputNegation);
+  return true;
+}
 
 void NPNClass::getInputPermutation(
     const NPNClass &targetNPN,

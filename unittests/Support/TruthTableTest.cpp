@@ -246,6 +246,41 @@ TEST(NPNClassTest, Commutativity) {
   EXPECT_TRUE(canonical1.equivalentOtherThanPermutation(canonical2));
 }
 
+TEST(NPNTableTest, LookupMatchesGenericCanonicalization) {
+  NPNTable table;
+  for (uint16_t truthTableValue :
+       {uint16_t(0x0000), uint16_t(0x0001), uint16_t(0x0008), uint16_t(0x0069),
+        uint16_t(0x0096), uint16_t(0x00E8), uint16_t(0x6996), uint16_t(0x8000),
+        uint16_t(0x9669), uint16_t(0xFEE8), uint16_t(0xFFFE),
+        uint16_t(0xFFFF)}) {
+    BinaryTruthTable tt(4, 1, APInt(16, truthTableValue));
+    NPNClass expected = NPNClass::computeNPNCanonicalForm(tt);
+    NPNClass actual;
+    ASSERT_TRUE(table.lookup(tt, actual));
+    EXPECT_EQ(actual.truthTable, expected.truthTable);
+    EXPECT_EQ(actual.inputNegation, expected.inputNegation);
+    EXPECT_EQ(actual.outputNegation, expected.outputNegation);
+    EXPECT_EQ(actual.inputPermutation, expected.inputPermutation);
+  }
+}
+
+TEST(NPNTableTest, LookupRejectsUnsupportedShapes) {
+  NPNTable table;
+  NPNClass result;
+
+  EXPECT_FALSE(table.lookup(BinaryTruthTable(3, 1, APInt(8, 0x96)), result));
+  EXPECT_FALSE(
+      table.lookup(BinaryTruthTable(5, 1, APInt(32, 0x69969669)), result));
+  EXPECT_FALSE(
+      table.lookup(BinaryTruthTable(4, 2, APInt(32, 0x12345678)), result));
+}
+
+TEST(NPNTableTest, Has222DistinctRepresentatives) {
+  SmallVector<uint16_t, 222> representatives;
+  collectCanonicalNPN4Representatives(representatives);
+  EXPECT_EQ(representatives.size(), 222u);
+}
+
 TEST(BinaryTruthTableTest, MultiBitOutput) {
   // Test 2-input, 2-output function: f(a,b) = (a&b, a|b)
   BinaryTruthTable tt(2, 2);
