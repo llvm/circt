@@ -13,7 +13,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/SynthVisitors.h"
@@ -23,6 +22,7 @@
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
@@ -89,6 +89,8 @@ private:
   void addOrClauses(int outVar, llvm::ArrayRef<int> inputLits);
   void addXorClauses(int outVar, int lhsLit, int rhsLit);
   void addParityClauses(int outVar, llvm::ArrayRef<int> inputLits);
+  void addTruthTableClauses(int outVar, llvm::ArrayRef<int> inputLits,
+                            const llvm::APInt &truthTable);
   void addMajorityClauses(int outVar, llvm::ArrayRef<int> inputLits);
   void encodeValue(Value value);
 
@@ -212,6 +214,24 @@ void FunctionalReductionSATBuilder::addParityClauses(
   }
 }
 
+void FunctionalReductionSATBuilder::addTruthTableClauses(
+    int outVar, llvm::ArrayRef<int> inputLits, const llvm::APInt &truthTable) {
+  size_t numRows = size_t{1} << inputLits.size();
+  assert(truthTable.getBitWidth() == numRows &&
+         "truth table width must match the number of inputs");
+
+  for (size_t assignment = 0; assignment < numRows; ++assignment) {
+    SmallVector<int> clause;
+    clause.reserve(inputLits.size() + 1);
+    for (auto [index, lit] : llvm::enumerate(inputLits)) {
+      bool assignmentBit = (assignment >> index) & 1;
+      clause.push_back(assignmentBit ? -lit : lit);
+    }
+    clause.push_back(truthTable[assignment] ? outVar : -outVar);
+    solver.addClause(clause);
+  }
+}
+
 static void enumerateLiteralSubsets(
     llvm::ArrayRef<int> inputLits, size_t subsetSize,
     llvm::function_ref<void(llvm::ArrayRef<int>)> callback) {
@@ -316,20 +336,22 @@ void FunctionalReductionSATBuilder::encodeValue(Value value) {
       inputLits.push_back(getLiteral(input, inverted));
     });
 
-    switch (getBooleanLogicKind(op)) {
-    case BooleanLogicKind::And:
-      addAndClauses(outVar, inputLits);
-      break;
-    case BooleanLogicKind::Or:
-      addOrClauses(outVar, inputLits);
-      break;
-    case BooleanLogicKind::Xor:
-      addParityClauses(outVar, inputLits);
-      break;
-    case BooleanLogicKind::Majority:
-      addMajorityClauses(outVar, inputLits);
-      break;
+    if (auto logicKind = getBooleanLogicKind(op)) {
+      switch (*logicKind) {
+      case BooleanLogicKind::And:
+        addAndClauses(outVar, inputLits);
+        break;
+      case BooleanLogicKind::Xor:
+        addParityClauses(outVar, inputLits);
+        break;
+      case BooleanLogicKind::Majority:
+        addMajorityClauses(outVar, inputLits);
+        break;
+      }
+      continue;
     }
+
+    addTruthTableClauses(outVar, inputLits, getSingleBitTruthTable(op));
   }
 }
 

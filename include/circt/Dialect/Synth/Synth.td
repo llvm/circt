@@ -10,6 +10,7 @@
 #define CIRCT_SYNTH_DIALECT_TD
 
 include "mlir/IR/DialectBase.td"
+include "circt/Dialect/Synth/SynthOpInterfaces.td"
 
 def Synth_Dialect : Dialect {
   let name = "synth";

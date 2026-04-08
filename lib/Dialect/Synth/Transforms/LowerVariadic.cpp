@@ -159,7 +159,8 @@ struct OperandPairLess {
   }
 };
 
-static OperandKey getSortedOperandKey(aig::AndInverterOp op) {
+template <typename OpTy>
+static OperandKey getSortedOperandKey(OpTy op) {
   OperandKey key;
   for (size_t i = 0, e = op.getNumOperands(); i < e; ++i)
     key.emplace_back(op.getOperand(i), op.isInverted(i));
@@ -169,7 +170,7 @@ static OperandKey getSortedOperandKey(aig::AndInverterOp op) {
 }
 
 static void simplifyWithExistingOperations(
-    aig::AndInverterOp op, mlir::IRRewriter &rewriter,
+    AndInverterOp op, mlir::IRRewriter &rewriter,
     llvm::DenseMap<OperandKey, mlir::Value> &seenExpressions) {
 
   if (op.getNumOperands() <= 2)
@@ -249,14 +250,14 @@ void LowerVariadicPass::runOnOperation() {
     llvm::DenseMap<OperandKey, mlir::Value> seenExpressions;
     // First collect all the andInverterOp operations in the block.
     for (auto &op : moduleOp.getBodyBlock()->getOperations()) {
-      if (auto andInverterOp = llvm::dyn_cast<aig::AndInverterOp>(op)) {
+      if (auto andInverterOp = llvm::dyn_cast<AndInverterOp>(op)) {
         OperandKey key = getSortedOperandKey(andInverterOp);
         seenExpressions[key] = andInverterOp.getResult();
       }
     }
     // Now try to replace operations with subsets.
     for (auto &op : moduleOp.getBodyBlock()->getOperations()) {
-      if (auto andInverterOp = llvm::dyn_cast<aig::AndInverterOp>(op)) {
+      if (auto andInverterOp = llvm::dyn_cast<AndInverterOp>(op)) {
         simplifyWithExistingOperations(andInverterOp, rewriter,
                                        seenExpressions);
       }
@@ -275,7 +276,7 @@ void LowerVariadicPass::runOnOperation() {
     rewriter.setInsertionPoint(op);
 
     // Handle AndInverterOp specially to preserve inversion flags.
-    if (auto andInverterOp = dyn_cast<aig::AndInverterOp>(op)) {
+    if (auto andInverterOp = dyn_cast<AndInverterOp>(op)) {
       auto result = replaceWithBalancedTree(
           analysis, rewriter, op,
           // Check if each operand is inverted.
@@ -284,7 +285,23 @@ void LowerVariadicPass::runOnOperation() {
           },
           // Create binary AndInverterOp with inversion flags.
           [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
-            return aig::AndInverterOp::create(
+            return AndInverterOp::create(
+                rewriter, op->getLoc(), lhs.getValue(), rhs.getValue(),
+                lhs.isInverted(), rhs.isInverted());
+          });
+      if (failed(result))
+        return signalPassFailure();
+      continue;
+    }
+
+    if (auto xorInverterOp = dyn_cast<XorInverterOp>(op)) {
+      auto result = replaceWithBalancedTree(
+          analysis, rewriter, op,
+          [&](OpOperand &operand) {
+            return xorInverterOp.isInverted(operand.getOperandNumber());
+          },
+          [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
+            return XorInverterOp::create(
                 rewriter, op->getLoc(), lhs.getValue(), rhs.getValue(),
                 lhs.isInverted(), rhs.isInverted());
           });

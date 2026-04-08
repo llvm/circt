@@ -24,8 +24,6 @@
 using namespace mlir;
 using namespace circt;
 using namespace circt::synth;
-using namespace circt::synth::mig;
-using namespace circt::synth::aig;
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.cpp.inc"
@@ -285,7 +283,7 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
       continue;
     }
 
-    if (auto andInverterOp = value.getDefiningOp<synth::aig::AndInverterOp>()) {
+    if (auto andInverterOp = value.getDefiningOp<synth::AndInverterOp>()) {
       if (andInverterOp.getInputs().size() == 1 &&
           andInverterOp.isInverted(0)) {
         value = andInverterOp.getOperand(0);
@@ -332,7 +330,7 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   }
 
   // build new op with reduced input values
-  replaceOpWithNewOpAndCopyNamehint<synth::aig::AndInverterOp>(
+  replaceOpWithNewOpAndCopyNamehint<synth::AndInverterOp>(
       rewriter, op, uniqueValues, uniqueInverts);
   return success();
 }
@@ -348,6 +346,112 @@ APInt AndInverterOp::evaluate(ArrayRef<APInt> inputs) {
     else
       result &= input;
   }
+  return result;
+}
+
+LogicalResult XorInverterOp::verify() {
+  if (getNumOperands() < 1)
+    return emitOpError("requires at least one operand");
+  return success();
+}
+
+OpFoldResult XorInverterOp::fold(FoldAdaptor adaptor) {
+  if (getNumOperands() == 1 && !isInverted(0))
+    return getOperand(0);
+
+  SmallVector<APInt, 4> inputValues;
+  inputValues.reserve(adaptor.getInputs().size());
+  for (Attribute input : adaptor.getInputs()) {
+    auto attr = dyn_cast_or_null<IntegerAttr>(input);
+    if (!attr)
+      return {};
+    inputValues.push_back(attr.getValue());
+  }
+  return IntegerAttr::get(getType(), evaluate(inputValues));
+}
+
+LogicalResult XorInverterOp::canonicalize(XorInverterOp op,
+                                          PatternRewriter &rewriter) {
+  SmallDenseMap<Value, bool> parityByValue;
+  SmallVector<Value> valueOrder;
+  APInt constValue =
+      APInt::getZero(op.getResult().getType().getIntOrFloatBitWidth());
+  bool sawSimplification = false;
+  bool invertResult = false;
+
+  for (auto [value, inverted] : llvm::zip(op.getInputs(), op.getInverted())) {
+    if (inverted) {
+      invertResult = !invertResult;
+      sawSimplification = true;
+    }
+
+    if (auto constOp = value.getDefiningOp<hw::ConstantOp>()) {
+      constValue ^= constOp.getValue();
+      sawSimplification = true;
+      continue;
+    }
+
+    if (auto xorOp = value.getDefiningOp<synth::XorInverterOp>()) {
+      if (xorOp.getInputs().size() == 1) {
+        value = xorOp.getOperand(0);
+        if (xorOp.isInverted(0))
+          invertResult = !invertResult;
+        sawSimplification = true;
+      }
+    }
+
+    auto [it, inserted] = parityByValue.try_emplace(value, false);
+    if (inserted)
+      valueOrder.push_back(value);
+    else
+      sawSimplification = true;
+    it->second = !it->second;
+  }
+
+  if (invertResult)
+    constValue.flipAllBits();
+
+  SmallVector<Value> newValues;
+  SmallVector<bool> newInverts;
+  for (Value value : valueOrder) {
+    if (!parityByValue.lookup(value))
+      continue;
+    newValues.push_back(value);
+    newInverts.push_back(false);
+  }
+
+  if (!constValue.isZero()) {
+    auto constOp = hw::ConstantOp::create(rewriter, op.getLoc(), constValue);
+    newValues.push_back(constOp);
+    newInverts.push_back(false);
+  }
+
+  if (newValues.empty()) {
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, constValue);
+    return success();
+  }
+
+  if (newValues.size() == 1 && constValue.isZero()) {
+    rewriter.replaceOp(op, newValues.front());
+    return success();
+  }
+
+  if (!sawSimplification && constValue.isZero())
+    return failure();
+
+  replaceOpWithNewOpAndCopyNamehint<synth::XorInverterOp>(rewriter, op,
+                                                          newValues,
+                                                          newInverts);
+  return success();
+}
+
+APInt XorInverterOp::evaluate(ArrayRef<APInt> inputs) {
+  assert(inputs.size() == getNumOperands() &&
+         "Expected as many inputs as operands");
+  assert(!inputs.empty() && "Expected non-empty input list");
+  APInt result = APInt::getZero(inputs.front().getBitWidth());
+  for (auto [idx, input] : llvm::enumerate(inputs))
+    result ^= isInverted(idx) ? ~input : input;
   return result;
 }
 

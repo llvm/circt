@@ -24,36 +24,32 @@ hw.module @functional_reduction_sat(in %a: i1, in %b: i1, in %c: i1, in %d: i1,
   hw.output %2, %3, %4 : i1, i1, i1
 }
 
-// SAT should also prove equivalence across the newly supported comb and MIG
-// nodes.
+// SAT should also prove equivalence across synth AND/XOR and MIG nodes.
 // RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 functional_reduction_supported_ops_sat --c2 functional_reduction_supported_ops_sat | FileCheck %s --check-prefix=MIXED
 // MIXED: c1 == c2
 // CHECK-LABEL: hw.module @functional_reduction_supported_ops_sat
 hw.module @functional_reduction_supported_ops_sat(
     in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1,
     out out0: i1, out out1: i1, out out2: i1, out out3: i1,
-    out out4: i1, out out5: i1, out out6: i1, out out7: i1,
-    out out8: i1, out out9: i1) {
-  // CHECK: hw.output %[[ORCHOICE:.+]], %[[ORCHOICE]],
-  // CHECK-SAME:      %[[ANDCHOICE:.+]], %[[ANDCHOICE]],
+    out out4: i1, out out5: i1, out out6: i1, out out7: i1) {
+  // CHECK: hw.output %[[ANDCHOICE:.+]], %[[ANDCHOICE]],
   // CHECK-SAME:      %[[XORCHOICE:.+]], %[[XORCHOICE]],
   // CHECK-SAME:      %[[MAJCHOICE:.+]], %[[MAJCHOICE]],
   // CHECK-SAME:      %[[MIG5_CHOICE:.+]], %[[MIG5_CHOICE]]
   %false = hw.constant false
-  %0 = comb.or %a, %b, %c : i1
-  %1 = comb.or %c, %b, %a : i1
-  %2 = comb.and %a, %b : i1
-  %3 = synth.mig.maj_inv %a, %b, %false : i1
-  %4 = comb.xor %a, %b : i1
-  %5 = comb.xor %b, %a : i1
-  %6 = synth.mig.maj_inv %a, %b, %c : i1
-  %7 = comb.and %c, %4 : i1
-  %8 = comb.or %2, %7 : i1
-  %9 = synth.mig.maj_inv %a, %b, %c, %d, %e : i1
-  %10 = synth.mig.maj_inv %b, %c, %d : i1
-  %11 = synth.mig.maj_inv %b, %d, %e : i1
-  %12 = synth.mig.maj_inv %b, %c, %e : i1
-  %13 = synth.mig.maj_inv %a, %12, %11 : i1
-  %14 = synth.mig.maj_inv %a, %10, %13 : i1
-  hw.output %0, %1, %2, %3, %4, %5, %6, %8, %9, %14 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
+  %0 = synth.aig.and_inv %a, %b : i1
+  %1 = synth.mig.maj_inv %a, %b, %false : i1
+  %2 = synth.xor_inv %a, %b : i1
+  %3 = synth.xor_inv %b, %a : i1
+  %4 = synth.mig.maj_inv %a, %b, %c : i1
+  %5 = synth.aig.and_inv %c, %2 : i1
+  %6 = synth.aig.and_inv not %0, not %5 : i1
+  %7 = synth.aig.and_inv not %6 : i1
+  %8 = synth.mig.maj_inv %a, %b, %c, %d, %e : i1
+  %9 = synth.mig.maj_inv %b, %c, %d : i1
+  %10 = synth.mig.maj_inv %b, %d, %e : i1
+  %11 = synth.mig.maj_inv %b, %c, %e : i1
+  %12 = synth.mig.maj_inv %a, %11, %10 : i1
+  %13 = synth.mig.maj_inv %a, %9, %12 : i1
+  hw.output %0, %1, %2, %3, %4, %7, %8, %13 : i1, i1, i1, i1, i1, i1, i1, i1
 }

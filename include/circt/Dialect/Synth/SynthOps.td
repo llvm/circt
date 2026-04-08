@@ -24,7 +24,8 @@ class SynthOp<string mnemonic, list<Trait> traits = []> :
     Op<Synth_Dialect, mnemonic, traits>;
 
 def MajorityInverterOp : SynthOp<"mig.maj_inv",
-                                 [SameOperandsAndResultType, Pure]> {
+                                 [SameOperandsAndResultType, Pure,
+                                  DeclareOpInterfaceMethods<BooleanLogicOpInterface>]> {
   let summary = "Majority-Inverter operation";
   let description = [{
     The `synth.mig.maj_inv` operation represents a Majority-Inverter in the
@@ -56,7 +57,7 @@ def MajorityInverterOp : SynthOp<"mig.maj_inv",
     custom<VariadicInvertibleOperands>($inputs, type($result), $inverted,
                                        attr-dict)
   }];
-  let cppNamespace = "::circt::synth::mig";
+  let cppNamespace = "::circt::synth";
   let extraClassDeclaration = [{
     // Evaluate the operation with the given input values.
     APInt evaluate(ArrayRef<APInt> inputs);
@@ -69,7 +70,9 @@ def MajorityInverterOp : SynthOp<"mig.maj_inv",
 
 }
 
-def AndInverterOp : SynthOp<"aig.and_inv", [SameOperandsAndResultType, Pure]> {
+def AndInverterOp : SynthOp<"aig.and_inv",
+                            [SameOperandsAndResultType, Pure,
+                             DeclareOpInterfaceMethods<BooleanLogicOpInterface>]> {
   let summary = "AIG dialect AND operation";
   let description = [{
     The `synth.aig.and_inv` operation represents an And-Inverter in the AIG dialect.
@@ -131,7 +134,57 @@ def AndInverterOp : SynthOp<"aig.and_inv", [SameOperandsAndResultType, Pure]> {
   }];
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
-  let cppNamespace = "::circt::synth::aig";
+  let cppNamespace = "::circt::synth";
+}
+
+def XorInverterOp : SynthOp<"xor_inv",
+                            [SameOperandsAndResultType, Pure,
+                             DeclareOpInterfaceMethods<BooleanLogicOpInterface>]> {
+  let summary = "XOR-Inverter operation";
+  let description = [{
+    The `synth.xor_inv` operation represents a variadic bitwise XOR whose
+    operands may be inverted independently before parity is evaluated.
+
+    Example:
+    ```mlir
+      %r1 = synth.xor_inv %a, %b : i3
+      %r2 = synth.xor_inv not %a, %b, not %c : i3
+      %r3 = synth.xor_inv not %a : i3
+    ```
+  }];
+  let arguments = (ins Variadic<AnyType>:$inputs, DenseBoolArrayAttr:$inverted);
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
+
+  let assemblyFormat = [{
+    custom<VariadicInvertibleOperands>($inputs, type($result), $inverted, attr-dict)
+  }];
+
+  let builders = [OpBuilder<(ins "Value":$input, CArg<"bool", "false">:$invert),
+                            [{
+      SmallVector<bool> inverted {invert};
+      return build($_builder, $_state, {input}, inverted);
+    }]>,
+                  OpBuilder<(ins "Value":$lhs, "Value":$rhs,
+                                CArg<"bool", "false">:$invertLhs,
+                                CArg<"bool", "false">:$invertRhs),
+                            [{
+      SmallVector<bool> inverted {invertLhs, invertRhs};
+      return build($_builder, $_state, {lhs, rhs}, inverted);
+    }]>];
+
+  let extraClassDeclaration = [{
+    // Evaluate the operation with the given input values.
+    APInt evaluate(ArrayRef<APInt> inputs);
+
+    // Check if the input is inverted.
+    bool isInverted(size_t idx) {
+      return getInverted()[idx];
+    }
+  }];
+  let cppNamespace = "::circt::synth";
 }
 
 def ChoiceOp : SynthOp<"choice", [SameOperandsAndResultType, Pure]> {

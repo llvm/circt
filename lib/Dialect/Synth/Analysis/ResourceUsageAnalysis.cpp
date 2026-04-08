@@ -50,7 +50,8 @@ static bool accumulateResourceCounts(Operation *op,
   return TypeSwitch<Operation *, bool>(op)
       // Variadic logic operations (AND, OR, XOR, AIG).
       // Gate count = (num_inputs - 1) * bitwidth
-      .Case<synth::aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp>(
+      .Case<synth::AndInverterOp, synth::XorInverterOp, comb::AndOp,
+            comb::OrOp, comb::XorOp>(
           [&](auto logicOp) {
             counts[logicOp->getName().getStringRef()] +=
                 (logicOp.getNumOperands() - 1) *
@@ -61,7 +62,7 @@ static bool accumulateResourceCounts(Operation *op,
       // Gate count = (num_inputs / 2) * bitwidth
       // Each MIG gate consumes 3 inputs and produces 1 output, so a variadic
       // MIG operation with N inputs requires N/2 gates (rounded down).
-      .Case<synth::mig::MajorityInverterOp>([&](auto logicOp) {
+      .Case<synth::MajorityInverterOp>([&](auto logicOp) {
         uint64_t count = logicOp.getType().getIntOrFloatBitWidth();
         // Concatenate input count to the operation name.
         std::string name = (Twine(logicOp->getName().getStringRef()) + "_" +

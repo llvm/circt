@@ -44,10 +44,10 @@ struct SynthChoiceOpConversion : OpConversionPattern<synth::ChoiceOp> {
 };
 
 struct SynthAndInverterOpConversion
-    : OpConversionPattern<synth::aig::AndInverterOp> {
-  using OpConversionPattern<synth::aig::AndInverterOp>::OpConversionPattern;
+    : OpConversionPattern<synth::AndInverterOp> {
+  using OpConversionPattern<synth::AndInverterOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(synth::aig::AndInverterOp op, OpAdaptor adaptor,
+  matchAndRewrite(synth::AndInverterOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Convert to comb.and + comb.xor + hw.constant
     auto width = op.getResult().getType().getIntOrFloatBitWidth();
@@ -67,11 +67,10 @@ struct SynthAndInverterOpConversion
 };
 
 struct SynthMajorityInverterOpConversion
-    : OpConversionPattern<synth::mig::MajorityInverterOp> {
-  using OpConversionPattern<
-      synth::mig::MajorityInverterOp>::OpConversionPattern;
+    : OpConversionPattern<synth::MajorityInverterOp> {
+  using OpConversionPattern<synth::MajorityInverterOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(synth::mig::MajorityInverterOp op, OpAdaptor adaptor,
+  matchAndRewrite(synth::MajorityInverterOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto getOperand = [&](unsigned idx) {
       auto input = adaptor.getInputs()[idx];
@@ -133,6 +132,27 @@ struct SynthMajorityInverterOpConversion
   }
 };
 
+struct SynthXorInverterOpConversion
+    : OpConversionPattern<synth::XorInverterOp> {
+  using OpConversionPattern<synth::XorInverterOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(synth::XorInverterOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto width = op.getResult().getType().getIntOrFloatBitWidth();
+    auto allOnes =
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt::getAllOnes(width));
+    SmallVector<Value> operands;
+    operands.reserve(op.getNumOperands());
+    for (auto [input, inverted] : llvm::zip(adaptor.getInputs(), op.getInverted()))
+      operands.push_back(inverted ? rewriter.createOrFold<comb::XorOp>(
+                                        op.getLoc(), input, allOnes, true)
+                                  : input);
+    rewriter.replaceOp(
+        op, rewriter.createOrFold<comb::XorOp>(op.getLoc(), operands, true));
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -150,7 +170,8 @@ struct ConvertSynthToCombPass
 
 static void populateSynthToCombConversionPatterns(RewritePatternSet &patterns) {
   patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion,
-               SynthMajorityInverterOpConversion>(patterns.getContext());
+               SynthMajorityInverterOpConversion,
+               SynthXorInverterOpConversion>(patterns.getContext());
 }
 
 void ConvertSynthToCombPass::runOnOperation() {

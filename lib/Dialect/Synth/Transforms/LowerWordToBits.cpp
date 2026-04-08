@@ -87,8 +87,6 @@ private:
   ArrayRef<Value> lowerBooleanLogicOperation(Operation *op);
   template <typename OpTy>
   ArrayRef<Value> lowerInvertibleOperations(OpTy op);
-  template <typename OpTy>
-  ArrayRef<Value> lowerCombLogicOperations(OpTy op);
   ArrayRef<Value> lowerCombMux(comb::MuxOp op);
   ArrayRef<Value>
   lowerOp(Operation *op,
@@ -156,7 +154,7 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
     return insertKnownBits(value, llvm::KnownBits(width));
 
   llvm::KnownBits result(width);
-  if (auto aig = dyn_cast<aig::AndInverterOp>(op)) {
+  if (auto aig = dyn_cast<AndInverterOp>(op)) {
     // Initialize to all ones for AND operation
     result.One = APInt::getAllOnes(width);
     result.Zero = APInt::getZero(width);
@@ -169,7 +167,22 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
         std::swap(operandKnownBits.Zero, operandKnownBits.One);
       result &= operandKnownBits;
     }
-  } else if (auto mig = dyn_cast<mig::MajorityInverterOp>(op)) {
+  } else if (auto xorOp = dyn_cast<XorInverterOp>(op)) {
+    result = llvm::KnownBits(width);
+    bool initialized = false;
+    for (auto [operand, inverted] :
+         llvm::zip(xorOp.getInputs(), xorOp.getInverted())) {
+      auto operandKnownBits = computeKnownBits(operand);
+      if (inverted)
+        std::swap(operandKnownBits.Zero, operandKnownBits.One);
+      if (!initialized) {
+        result = operandKnownBits;
+        initialized = true;
+      } else {
+        result = result ^ operandKnownBits;
+      }
+    }
+  } else if (auto mig = dyn_cast<MajorityInverterOp>(op)) {
     // Give up if it's not a 3-input majority inverter.
     if (mig.getNumOperands() == 3) {
       std::array<llvm::KnownBits, 3> operandsKnownBits;
@@ -283,12 +296,7 @@ ArrayRef<Value> BitBlaster::lowerBooleanLogicOperation(Operation *op) {
   return dispatchBooleanLogicVisitor<ArrayRef<Value>>(
       op,
       [&](auto logicOp) -> ArrayRef<Value> {
-        using OpTy = std::decay_t<decltype(logicOp)>;
-        if constexpr (std::is_same_v<OpTy, aig::AndInverterOp> ||
-                      std::is_same_v<OpTy, mig::MajorityInverterOp>)
-          return lowerInvertibleOperations(logicOp);
-        else
-          return lowerCombLogicOperations(logicOp);
+        return lowerInvertibleOperations(logicOp);
       },
       [&](Operation *logicOp) -> ArrayRef<Value> {
         logicOp->emitOpError("unsupported boolean logic node");
@@ -359,15 +367,6 @@ template <typename OpTy>
 ArrayRef<Value> BitBlaster::lowerInvertibleOperations(OpTy op) {
   auto createOp = [&](OpBuilder &builder, ValueRange operands) {
     return builder.createOrFold<OpTy>(op.getLoc(), operands, op.getInverted());
-  };
-  return lowerOp(op, createOp);
-}
-
-template <typename OpTy>
-ArrayRef<Value> BitBlaster::lowerCombLogicOperations(OpTy op) {
-  auto createOp = [&](OpBuilder &builder, ValueRange operands) {
-    return builder.createOrFold<OpTy>(op.getLoc(), operands,
-                                      op.getTwoStateAttr());
   };
   return lowerOp(op, createOp);
 }

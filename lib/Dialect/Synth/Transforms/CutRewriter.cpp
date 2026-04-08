@@ -150,7 +150,7 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
   for (Operation &op : block->getOperations()) {
     LogicalResult result =
         llvm::TypeSwitch<Operation *, LogicalResult>(&op)
-            .Case<aig::AndInverterOp>([&](aig::AndInverterOp andOp) {
+            .Case<AndInverterOp>([&](AndInverterOp andOp) {
               const auto inputs = andOp.getInputs();
               if (inputs.size() == 1) {
                 // Single-input AND is a buffer or NOT gate
@@ -170,20 +170,25 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
               }
               return success();
             })
-            .Case<comb::XorOp>([&](comb::XorOp xorOp) {
+            .Case<XorInverterOp>([&](XorInverterOp xorOp) {
+              if (xorOp->getNumOperands() == 1) {
+                const Signal inputSignal =
+                    getOrCreateSignal(xorOp.getOperand(0), xorOp.isInverted(0));
+                handleSingleInputGate(xorOp, xorOp.getResult(), inputSignal);
+                return success();
+              }
               if (xorOp->getNumOperands() != 2) {
                 handleOtherResults(xorOp);
                 return success();
               }
               const Signal lhsSignal =
-                  getOrCreateSignal(xorOp.getOperand(0), false);
+                  getOrCreateSignal(xorOp.getOperand(0), xorOp.isInverted(0));
               const Signal rhsSignal =
-                  getOrCreateSignal(xorOp.getOperand(1), false);
+                  getOrCreateSignal(xorOp.getOperand(1), xorOp.isInverted(1));
               addGate(xorOp, LogicNetworkGate::Xor2, {lhsSignal, rhsSignal});
               return success();
             })
-            .Case<synth::mig::MajorityInverterOp>(
-                [&](synth::mig::MajorityInverterOp majOp) {
+            .Case<MajorityInverterOp>([&](MajorityInverterOp majOp) {
                   if (majOp->getNumOperands() == 1) {
                     // Single input = inverter
                     const Signal inputSignal = getOrCreateSignal(
@@ -268,8 +273,8 @@ LogicalResult circt::synth::topologicallySortLogicNetwork(Operation *topOp) {
   const auto isOperationReady = [](Value value, Operation *op) -> bool {
     // Topologically sort AIG ops, MIG ops, and dataflow ops. Other operations
     // can be scheduled.
-    return !(isa<aig::AndInverterOp, mig::MajorityInverterOp>(op) ||
-             isa<comb::XorOp, comb::AndOp, comb::OrOp, comb::ExtractOp,
+    return !(isa<AndInverterOp, XorInverterOp, MajorityInverterOp>(op) ||
+             isa<comb::ExtractOp,
                  comb::ReplicateOp, comb::ConcatOp>(op));
   };
 

@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_SYNTH_SYNTHOPS_H
 
 #include "circt/Dialect/Synth/SynthDialect.h"
+#include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
@@ -33,10 +34,10 @@
 namespace circt {
 namespace synth {
 struct AndInverterVariadicOpConversion
-    : mlir::OpRewritePattern<aig::AndInverterOp> {
-  using OpRewritePattern<aig::AndInverterOp>::OpRewritePattern;
+    : mlir::OpRewritePattern<AndInverterOp> {
+  using OpRewritePattern<AndInverterOp>::OpRewritePattern;
   mlir::LogicalResult
-  matchAndRewrite(aig::AndInverterOp op,
+  matchAndRewrite(AndInverterOp op,
                   mlir::PatternRewriter &rewriter) const override;
 };
 
@@ -129,6 +130,15 @@ T buildBalancedTreeWithArrivalTimes(llvm::ArrayRef<T> elements,
 
   return pq.top();
 }
+
+// Transitional aliases while Synth users migrate to the flattened C++ API.
+namespace aig {
+using AndInverterOp = ::circt::synth::AndInverterOp;
+} // namespace aig
+
+namespace mig {
+using MajorityInverterOp = ::circt::synth::MajorityInverterOp;
+} // namespace mig
 
 } // namespace synth
 } // namespace circt

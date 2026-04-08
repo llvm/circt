@@ -81,17 +81,11 @@ void circt::synth::buildCombLoweringPipeline(
   pm.addPass(comb::createBalanceMux(balanceOptions));
 
   // Lower variadic ops before running full lowering to target IR.
-  if (options.targetIR.getValue() == TargetIR::AIG) {
-    // For AIG, lower variadic XoR since AIG cannot keep variadic
-    // representation.
-    pm.addPass(createLowerVariadicPass<comb::XorOp>(
-        options.timingAware,
-        options.synthesisStrategy == OptimizationStrategyArea));
-  } else if (options.targetIR.getValue() == TargetIR::MIG) {
-    // For MIG, lower variadic And, Or, and Xor since MIG cannot keep variadic
-    // representation.
-    pm.addPass(createLowerVariadicPass<comb::AndOp, comb::OrOp, comb::XorOp>(
-        options.timingAware));
+  if (options.targetIR.getValue() == TargetIR::MIG) {
+    // For MIG, lower variadic And and Or before conversion. XOR is preserved
+    // as synth.xor_inv.
+    pm.addPass(
+        createLowerVariadicPass<comb::AndOp, comb::OrOp>(options.timingAware));
   }
 
   pm.addPass(circt::hw::createHWAggregateToComb());
