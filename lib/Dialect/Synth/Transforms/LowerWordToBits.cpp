@@ -15,6 +15,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Dialect/Synth/SynthVisitors.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Operation.h"
@@ -43,8 +44,7 @@ using namespace synth;
 
 /// Check if an operation should be lowered to bit-level operations.
 static bool shouldLowerOperation(Operation *op) {
-  return isa<ChoiceOp, aig::AndInverterOp, mig::MajorityInverterOp, comb::AndOp,
-             comb::OrOp, comb::XorOp, comb::MuxOp>(op);
+  return isa<ChoiceOp, comb::MuxOp>(op) || isBooleanLogicOp(op);
 }
 
 namespace {
@@ -84,6 +84,7 @@ private:
   /// Lower a multi-bit value to individual bits.
   /// This is the main entry point for bit-blasting a value.
   ArrayRef<Value> lowerValueToBits(Value value);
+  ArrayRef<Value> lowerBooleanLogicOperation(Operation *op);
   template <typename OpTy>
   ArrayRef<Value> lowerInvertibleOperations(OpTy op);
   template <typename OpTy>
@@ -264,18 +265,34 @@ ArrayRef<Value> BitBlaster::lowerValueToBits(Value value) {
         };
         return lowerOp(op, createOp);
       })
-      .Case<aig::AndInverterOp, mig::MajorityInverterOp>(
-          [&](auto op) { return lowerInvertibleOperations(op); })
-      .Case<comb::AndOp, comb::OrOp, comb::XorOp>(
-          [&](auto op) { return lowerCombLogicOperations(op); })
       .Case<comb::MuxOp>([&](comb::MuxOp op) { return lowerCombMux(op); })
       .Default([&](auto op) {
+        if (isBooleanLogicOp(op))
+          return lowerBooleanLogicOperation(op);
+
         OpBuilder builder(value.getContext());
         builder.setInsertionPoint(op);
         SmallVector<Value> results;
         comb::extractBits(builder, value, results);
 
         return insertBits(value, std::move(results));
+      });
+}
+
+ArrayRef<Value> BitBlaster::lowerBooleanLogicOperation(Operation *op) {
+  return dispatchBooleanLogicVisitor<ArrayRef<Value>>(
+      op,
+      [&](auto logicOp) -> ArrayRef<Value> {
+        using OpTy = std::decay_t<decltype(logicOp)>;
+        if constexpr (std::is_same_v<OpTy, aig::AndInverterOp> ||
+                      std::is_same_v<OpTy, mig::MajorityInverterOp>)
+          return lowerInvertibleOperations(logicOp);
+        else
+          return lowerCombLogicOperations(logicOp);
+      },
+      [&](Operation *logicOp) -> ArrayRef<Value> {
+        logicOp->emitOpError("unsupported boolean logic node");
+        llvm_unreachable("unsupported boolean logic node");
       });
 }
 

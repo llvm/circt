@@ -23,6 +23,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Dialect/Synth/SynthVisitors.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/TruthTable.h"
 #include "circt/Support/UnusedOpPruner.h"
@@ -310,39 +311,16 @@ FailureOr<BinaryTruthTable> circt::synth::getTruthTable(ValueRange values,
     if (op.getNumResults() == 0)
       continue;
 
-    // Support AIG, XOR, and MIG operations
-    if (auto andOp = dyn_cast<aig::AndInverterOp>(&op)) {
-      SmallVector<llvm::APInt, 2> inputs;
-      inputs.reserve(andOp.getInputs().size());
-      for (auto input : andOp.getInputs()) {
+    if (isBooleanLogicOp(&op)) {
+      SmallVector<llvm::APInt, 4> inputs;
+      inputs.reserve(op.getNumOperands());
+      for (Value input : op.getOperands()) {
         auto it = eval.find(input);
         if (it == eval.end())
-          return andOp.emitError("Input value not found in evaluation map");
+          return op.emitError("input value not found in evaluation map");
         inputs.push_back(it->second);
       }
-      eval[andOp.getResult()] = andOp.evaluate(inputs);
-    } else if (auto xorOp = dyn_cast<comb::XorOp>(&op)) {
-      auto it = eval.find(xorOp.getOperand(0));
-      if (it == eval.end())
-        return xorOp.emitError("Input value not found in evaluation map");
-      llvm::APInt result = it->second;
-      for (unsigned i = 1; i < xorOp.getNumOperands(); ++i) {
-        it = eval.find(xorOp.getOperand(i));
-        if (it == eval.end())
-          return xorOp.emitError("Input value not found in evaluation map");
-        result ^= it->second;
-      }
-      eval[xorOp.getResult()] = result;
-    } else if (auto migOp = dyn_cast<synth::mig::MajorityInverterOp>(&op)) {
-      SmallVector<llvm::APInt, 3> inputs;
-      inputs.reserve(migOp.getInputs().size());
-      for (auto input : migOp.getInputs()) {
-        auto it = eval.find(input);
-        if (it == eval.end())
-          return migOp.emitError("Input value not found in evaluation map");
-        inputs.push_back(it->second);
-      }
-      eval[migOp.getResult()] = migOp.evaluate(inputs);
+      eval[op.getResult(0)] = evaluateBooleanLogicOp(&op, inputs);
     } else if (!isa<hw::OutputOp>(&op)) {
       return op.emitError("Unsupported operation for truth table simulation");
     }

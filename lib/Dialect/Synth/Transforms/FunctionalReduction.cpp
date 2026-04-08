@@ -16,6 +16,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Dialect/Synth/SynthVisitors.h"
 #include "circt/Dialect/Synth/Transforms/CutRewriter.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/SATSolver.h"
@@ -98,8 +99,7 @@ private:
 };
 
 static bool isFunctionalReductionSimulatableOp(Operation *op) {
-  return isa<aig::AndInverterOp, mig::MajorityInverterOp, comb::AndOp,
-             comb::OrOp, comb::XorOp>(op);
+  return isBooleanLogicOp(op);
 }
 
 EquivResult FunctionalReductionSATBuilder::verify(Value lhs, Value rhs) {
@@ -312,36 +312,24 @@ void FunctionalReductionSATBuilder::encodeValue(Value value) {
 
     SmallVector<int> inputLits;
     inputLits.reserve(op->getNumOperands());
-    TypeSwitch<Operation *>(op)
-        .Case<aig::AndInverterOp>([&](auto andOp) {
-          for (auto [input, inverted] :
-               llvm::zip(andOp.getInputs(), andOp.getInverted()))
-            inputLits.push_back(getLiteral(input, inverted));
-          addAndClauses(outVar, inputLits);
-        })
-        .Case<mig::MajorityInverterOp>([&](auto majOp) {
-          for (auto [input, inverted] :
-               llvm::zip(majOp.getInputs(), majOp.getInverted()))
-            inputLits.push_back(getLiteral(input, inverted));
-          addMajorityClauses(outVar, inputLits);
-        })
-        .Case<comb::AndOp>([&](auto andOp) {
-          for (auto input : andOp.getInputs())
-            inputLits.push_back(getLiteral(input));
-          addAndClauses(outVar, inputLits);
-        })
-        .Case<comb::OrOp>([&](auto orOp) {
-          for (auto input : orOp.getInputs())
-            inputLits.push_back(getLiteral(input));
-          addOrClauses(outVar, inputLits);
-        })
-        .Case<comb::XorOp>([&](auto xorOp) {
-          for (auto input : xorOp.getInputs())
-            inputLits.push_back(getLiteral(input));
-          addParityClauses(outVar, inputLits);
-        })
-        .Default(
-            [](Operation *) { llvm_unreachable("unexpected supported op"); });
+    forEachBooleanLogicOperand(op, [&](Value input, bool inverted) {
+      inputLits.push_back(getLiteral(input, inverted));
+    });
+
+    switch (getBooleanLogicKind(op)) {
+    case BooleanLogicKind::And:
+      addAndClauses(outVar, inputLits);
+      break;
+    case BooleanLogicKind::Or:
+      addOrClauses(outVar, inputLits);
+      break;
+    case BooleanLogicKind::Xor:
+      addParityClauses(outVar, inputLits);
+      break;
+    case BooleanLogicKind::Majority:
+      addMajorityClauses(outVar, inputLits);
+      break;
+    }
   }
 }
 
@@ -544,40 +532,19 @@ llvm::APInt FunctionalReductionSolver::simulateValue(Value v) {
   Operation *op = v.getDefiningOp();
   if (!op)
     return simSignatures.at(v);
-  return llvm::TypeSwitch<Operation *, llvm::APInt>(op)
-      .Case<mig::MajorityInverterOp, aig::AndInverterOp>([&](auto op) {
-        SmallVector<llvm::APInt> inputSigs;
-        for (auto input : op.getInputs())
-          inputSigs.push_back(simSignatures.at(input));
-        return op.evaluate(inputSigs);
-      })
-      .Case<comb::AndOp>([&](auto op) {
-        APInt result = APInt::getAllOnes(numPatterns);
-        for (auto input : op.getInputs())
-          result &= simSignatures.at(input);
-        return result;
-      })
-      .Case<comb::OrOp>([&](auto op) {
-        APInt result = APInt::getZero(numPatterns);
-        for (auto input : op.getInputs())
-          result |= simSignatures.at(input);
-        return result;
-      })
-      .Case<comb::XorOp>([&](auto op) {
-        APInt result = APInt::getZero(numPatterns);
-        for (auto input : op.getInputs())
-          result ^= simSignatures.at(input);
-        return result;
-      })
-      .Case([&](hw::ConstantOp op) {
-        return op.getValue().isZero() ? APInt::getZero(numPatterns)
-                                      : APInt::getAllOnes(numPatterns);
-      })
-      .Default([&](Operation *) {
-        // Unknown operation - treat as input (already assigned a random
-        // pattern)
-        return simSignatures.at(v);
-      });
+  if (isBooleanLogicOp(op)) {
+    SmallVector<llvm::APInt> inputSigs;
+    inputSigs.reserve(op->getNumOperands());
+    for (Value input : op->getOperands())
+      inputSigs.push_back(simSignatures.at(input));
+    return evaluateBooleanLogicOp(op, inputSigs);
+  }
+  if (auto constantOp = dyn_cast<hw::ConstantOp>(op))
+    return constantOp.getValue().isZero() ? APInt::getZero(numPatterns)
+                                          : APInt::getAllOnes(numPatterns);
+
+  // Unknown operation - treat as input (already assigned a random pattern)
+  return simSignatures.at(v);
 }
 
 //===----------------------------------------------------------------------===//
