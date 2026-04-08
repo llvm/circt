@@ -213,6 +213,15 @@ void collectCanonicalNPN4Representatives(
 /// Returns: APInt mask with numBits = 2^numVars
 llvm::APInt createVarMask(unsigned numVars, unsigned varIndex, bool positive);
 
+namespace detail {
+/// Expand a truth table to a larger input space using the given input mapping.
+/// `inputMapping[i]` gives the destination input position for original input
+/// `i`.
+llvm::APInt expandTruthTableToInputSpace(const llvm::APInt &tt,
+                                         ArrayRef<unsigned> inputMapping,
+                                         unsigned numExpandedInputs);
+} // namespace detail
+
 /// Compute cofactor of a Boolean function for a given variable.
 ///
 /// A cofactor of a function f with respect to variable x is the function

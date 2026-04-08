@@ -305,6 +305,45 @@ TEST(BinaryTruthTableTest, MultiBitOutput) {
   EXPECT_EQ(tt.table.getBitWidth(), 8u); // 2^2 * 2 = 8 bits
 }
 
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceIdentity) {
+  APInt tt(8, 0b11101000);
+  SmallVector<unsigned> mapping = {0, 1, 2};
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 3), tt);
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceSparse) {
+  // 2-input AND embedded into inputs [x0, x2].
+  APInt tt(4, 0b1000);
+  SmallVector<unsigned> mapping = {0, 2};
+  APInt expanded = circt::detail::expandTruthTableToInputSpace(tt, mapping, 3);
+  EXPECT_EQ(expanded, APInt(8, 0b10100000));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceDense) {
+  // 2-input OR embedded into inputs [x1, x2].
+  APInt tt(4, 0b1110);
+  SmallVector<unsigned> mapping = {1, 2};
+  APInt expanded = circt::detail::expandTruthTableToInputSpace(tt, mapping, 3);
+  EXPECT_EQ(expanded, APInt(8, 0b11111100));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPath) {
+  // 3-input parity embedded into inputs [x0, x3, x6].
+  APInt tt(8, 0b10010110);
+  SmallVector<unsigned> mapping = {0, 3, 6};
+  APInt expanded = circt::detail::expandTruthTableToInputSpace(tt, mapping, 7);
+
+  APInt expected(128, 0);
+  for (unsigned expandedIdx = 0; expandedIdx < 128; ++expandedIdx) {
+    unsigned origIdx = ((expandedIdx >> 0) & 1U) |
+                       (((expandedIdx >> 3) & 1U) << 1) |
+                       (((expandedIdx >> 6) & 1U) << 2);
+    if (tt[origIdx])
+      expected.setBit(expandedIdx);
+  }
+  EXPECT_EQ(expanded, expected);
+}
+
 TEST(BinaryTruthTableTest, MultiBitOutputPermutation) {
   // Create 2-input, 2-output function: f(a,b) = (a&b, a^b)
   BinaryTruthTable original(2, 2);

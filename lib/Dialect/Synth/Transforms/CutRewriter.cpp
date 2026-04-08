@@ -468,90 +468,126 @@ static inline llvm::APInt applyGateSemantics(LogicNetworkGate::Kind kind,
   }
 }
 
-/// Simulate a gate and return its truth table.
-static llvm::APInt simulateGate(const LogicNetwork &network, uint32_t index,
-                                llvm::DenseMap<uint32_t, llvm::APInt> &cache,
-                                unsigned numInputs) {
-  // Check cache first
-  auto cacheIt = cache.find(index);
-  if (cacheIt != cache.end())
-    return cacheIt->second;
+namespace {
 
-  const auto &gate = network.getGate(index);
-  llvm::APInt result;
-
-  auto getEdgeTT = [&](const Signal &edge) {
-    auto tt = simulateGate(network, edge.getIndex(), cache, numInputs);
-    if (edge.isInverted())
-      tt.flipAllBits();
-    return tt;
-  };
-
-  switch (gate.getKind()) {
-  case LogicNetworkGate::Constant: {
-    // Constant 0 or 1 - return all zeros or all ones
-    if (index == LogicNetwork::kConstant0)
-      result = llvm::APInt::getZero(1U << numInputs);
-    else
-      result = llvm::APInt::getAllOnes(1U << numInputs);
-    break;
+// Helper class to build a merged truth table for a cut based on its operand
+// cuts
+struct MergedTruthTableBuilder {
+  MergedTruthTableBuilder(ArrayRef<uint32_t> mergedInputs,
+                          ArrayRef<const Cut *> operandCuts)
+      : mergedInputs(mergedInputs), numMergedInputs(mergedInputs.size()),
+        operandCuts(operandCuts) {
+    assert(llvm::is_sorted(mergedInputs) && "merged inputs must be sorted");
+    assert(llvm::adjacent_find(mergedInputs) == mergedInputs.end() &&
+           "merged inputs must be unique");
   }
 
-  case LogicNetworkGate::PrimaryInput:
-    // Should be in cache already as cut input
-    llvm_unreachable("Primary input not in cache - not a cut input?");
+  ArrayRef<uint32_t> mergedInputs;
+  unsigned numMergedInputs;
+  ArrayRef<const Cut *> operandCuts;
 
-  case LogicNetworkGate::And2:
-  case LogicNetworkGate::Xor2: {
-    result = applyGateSemantics(gate.getKind(), getEdgeTT(gate.edges[0]),
-                                getEdgeTT(gate.edges[1]));
-    break;
+  std::optional<unsigned> findMergedInputPosition(uint32_t operandIdx) const {
+    auto *it = llvm::find(mergedInputs, operandIdx);
+    if (it == mergedInputs.end())
+      return std::nullopt;
+    return static_cast<unsigned>(std::distance(mergedInputs.begin(), it));
   }
 
-  case LogicNetworkGate::Maj3: {
-    result =
-        applyGateSemantics(gate.getKind(), getEdgeTT(gate.edges[0]),
-                           getEdgeTT(gate.edges[1]), getEdgeTT(gate.edges[2]));
-    break;
+  const Cut *findOperandCut(uint32_t operandIdx) const {
+    for (const Cut *cut : operandCuts) {
+      if (!cut)
+        continue;
+      uint32_t cutOutput =
+          cut->isTrivialCut() ? cut->inputs[0] : cut->getRootIndex();
+      if (cutOutput == operandIdx)
+        return cut;
+    }
+    return nullptr;
   }
 
-  case LogicNetworkGate::Identity: {
-    result = applyGateSemantics(gate.getKind(), getEdgeTT(gate.edges[0]));
-    break;
-  }
+  void getInputMapping(const Cut *cut,
+                       SmallVectorImpl<unsigned> &mapping) const {
+    mapping.clear();
+    mapping.reserve(cut->inputs.size());
+    for (uint32_t idx : cut->inputs) {
+      auto *it = llvm::find(mergedInputs, idx);
+      assert(it != mergedInputs.end() &&
+             "cut input must exist in merged inputs");
+      mapping.push_back(static_cast<unsigned>(it - mergedInputs.begin()));
+    }
   }
 
-  cache[index] = result;
-  return result;
-}
+  llvm::APInt expandCutTruthTable(const Cut *cut) const {
+    const auto &cutTT = *cut->getTruthTable();
+    SmallVector<unsigned, 8> inputMapping;
+    getInputMapping(cut, inputMapping);
+    return circt::detail::expandTruthTableToInputSpace(
+        cutTT.table, inputMapping, numMergedInputs);
+  }
 
-void Cut::computeTruthTable(const LogicNetwork &network) {
+  llvm::APInt expandOperand(uint32_t operandIdx, bool isInverted) const {
+    llvm::APInt result(1, 0);
+    if (operandIdx == LogicNetwork::kConstant0) {
+      result = llvm::APInt::getZero(1U << numMergedInputs);
+    } else if (operandIdx == LogicNetwork::kConstant1) {
+      result = llvm::APInt::getAllOnes(1U << numMergedInputs);
+    } else if (auto pos = findMergedInputPosition(operandIdx)) {
+      // Direct cut inputs already live in the merged input space.
+      result = circt::createVarMask(numMergedInputs, *pos, true);
+    } else if (const Cut *cut = findOperandCut(operandIdx)) {
+      // Internal operands reuse the operand cut truth table after expanding it
+      // to this root cut's merged input space.
+      result = expandCutTruthTable(cut);
+    } else {
+      llvm_unreachable("Operand not found in cuts or merged inputs");
+    }
+
+    if (isInverted)
+      result.flipAllBits();
+    return result;
+  }
+
+  BinaryTruthTable computeForGate(const LogicNetworkGate &rootGate) const {
+    auto getEdgeTT = [&](unsigned edgeIdx) {
+      const auto &edge = rootGate.edges[edgeIdx];
+      return expandOperand(edge.getIndex(), edge.isInverted());
+    };
+
+    switch (rootGate.getKind()) {
+    case LogicNetworkGate::And2:
+    case LogicNetworkGate::Xor2:
+      return BinaryTruthTable(
+          numMergedInputs, 1,
+          applyGateSemantics(rootGate.getKind(), getEdgeTT(0), getEdgeTT(1)));
+    case LogicNetworkGate::Maj3:
+      return BinaryTruthTable(numMergedInputs, 1,
+                              applyGateSemantics(rootGate.getKind(),
+                                                 getEdgeTT(0), getEdgeTT(1),
+                                                 getEdgeTT(2)));
+    case LogicNetworkGate::Identity:
+      return BinaryTruthTable(
+          numMergedInputs, 1,
+          applyGateSemantics(rootGate.getKind(), getEdgeTT(0)));
+    default:
+      llvm_unreachable("Unsupported operation for truth table computation");
+    }
+  }
+};
+
+} // namespace
+
+void Cut::computeTruthTableFromOperands(const LogicNetwork &network) {
   if (isTrivialCut()) {
-    // For a trivial cut, a truth table is simply the identity function.
-    // 0 -> 0, 1 -> 1
-    truthTable.emplace(1, 1, llvm::APInt(2, 2));
+    assert(truthTable && "trivial cuts should have their truth table pre-set");
     return;
   }
 
-  unsigned numInputs = inputs.size();
-  if (numInputs >= maxTruthTableInputs) {
-    llvm_unreachable("Too many inputs for truth table computation");
-  }
+  assert(!operandCuts.empty() &&
+         "non-trivial cuts must carry operand cuts for truth table expansion");
 
-  // Initialize cache with input variable masks
-  llvm::DenseMap<uint32_t, llvm::APInt> cache;
-  for (unsigned i = 0; i < numInputs; ++i) {
-    cache[inputs[i]] = circt::createVarMask(numInputs, i, true);
-  }
-
-  // Simulate from root
-  llvm::APInt result = simulateGate(network, rootIndex, cache, numInputs);
-
-  truthTable.emplace(numInputs, 1, result);
-}
-
-void Cut::computeTruthTableFromOperands(const LogicNetwork &network) {
-  computeTruthTable(network);
+  const auto &rootGate = network.getGate(rootIndex);
+  truthTable.emplace(
+      MergedTruthTableBuilder(inputs, operandCuts).computeForGate(rootGate));
 }
 
 bool Cut::dominates(const Cut &other) const {
@@ -570,12 +606,12 @@ bool Cut::dominates(ArrayRef<uint32_t> otherInputs, uint64_t otherSig) const {
                        inputs.end());
 }
 
-static Cut getAsTrivialCut(uint32_t index, const LogicNetwork &network) {
-  // Create a trivial cut for a value
+Cut Cut::getTrivialCut(uint32_t index) {
   Cut cut;
   cut.inputs.push_back(index);
-  // Compute truth table eagerly for trivial cut
-  cut.computeTruthTable(network);
+  // The truth table for a trivial cut is just the identity function on its
+  // single input.
+  cut.setTruthTable(BinaryTruthTable(1, 1, llvm::APInt(2, 2)));
   cut.setSignature(1ULL << (index % 64)); // Set signature bit for this input
   return cut;
 }
@@ -868,8 +904,7 @@ LogicalResult CutEnumerator::visitLogicOp(uint32_t nodeIndex) {
   }
 
   // Create the trivial cut for this node's output
-  Cut *primaryInputCut =
-      cutAllocator.create(getAsTrivialCut(nodeIndex, logicNetwork));
+  Cut *primaryInputCut = cutAllocator.create(Cut::getTrivialCut(nodeIndex));
 
   auto *resultCutSet = createNewCutSet(nodeIndex);
   processingOrder.push_back(nodeIndex);
@@ -1061,7 +1096,7 @@ const CutSet *CutEnumerator::getCutSet(uint32_t index) {
   if (it == cutSets.end()) {
     // Create new cut set for an unprocessed value (primary input or other)
     CutSet *cutSet = cutSetAllocator.create();
-    Cut *trivialCut = cutAllocator.create(getAsTrivialCut(index, logicNetwork));
+    Cut *trivialCut = cutAllocator.create(Cut::getTrivialCut(index));
     cutSet->addCut(trivialCut);
     auto [newIt, inserted] = cutSets.insert({index, cutSet});
     assert(inserted && "Cut set already exists for this index");
