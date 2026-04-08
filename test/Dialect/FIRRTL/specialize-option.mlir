@@ -4,7 +4,7 @@
 
 
 firrtl.circuit "Foo" attributes {
-  select_inst_choice = ["Platform=FPGA" ,"Performance?=Fast", "NotExist?=test"]
+  select_inst_choice = ["Platform=FPGA" ,"Performance?=<default>", "NotExist?=test"]
 }
 {
 
@@ -39,7 +39,7 @@ firrtl.module @Foo() {
   firrtl.instance_choice inst_default @DefaultTarget alternatives @Platform
     { @ASIC -> @ASICTarget } ()
 
-  // CHECK: firrtl.instance inst_perf @FastTarget()
+  // CHECK: firrtl.instance inst_perf @DefaultTarget()
   firrtl.instance_choice inst_perf @DefaultTarget alternatives @Performance
     { @Fast -> @FastTarget } ()
 

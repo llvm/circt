@@ -59,6 +59,11 @@ struct SpecializeOptionPass
         }
 
         std::string caseName = optionAndCase.substr(eq + 1);
+        if (caseName == "<default>") {
+          selected[StringAttr::get(&getContext(), optionName)] = {};
+          continue;
+        }
+
         auto caseOp = optionOp.lookupSymbol<OptionCaseOp>(caseName);
         if (!caseOp) {
           mlir::emitError(circuit.getLoc(), "invalid option case \"")
@@ -80,8 +85,12 @@ struct SpecializeOptionPass
                 target = inst.getDefaultTargetAttr();
               else
                 return;
-            } else
-              target = inst.getTargetOrDefaultAttr(it->second);
+            } else {
+              if (it->second)
+                target = inst.getTargetOrDefaultAttr(it->second);
+              else
+                target = inst.getDefaultTargetAttr();
+            }
 
             ImplicitLocOpBuilder builder(inst.getLoc(), inst);
             auto newInst = InstanceOp::create(
