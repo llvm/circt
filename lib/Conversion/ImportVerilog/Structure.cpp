@@ -298,12 +298,15 @@ struct ModuleVisitor : public BaseVisitor {
   expandInterfaceInstance(const slang::ast::InstanceSymbol &instNode) {
     auto prefix = (Twine(blockNamePrefix) + instNode.name + "_").str();
     auto lowering = std::make_unique<InterfaceLowering>();
+    Context::ValueSymbolScope scope(context.valueSymbols);
 
     auto recordMember = [&](const slang::ast::Symbol &sym,
                             Value value) -> void {
       lowering->expandedMembers[&sym] = value;
       auto nameAttr = builder.getStringAttr(sym.name);
       lowering->expandedMembersByName[nameAttr] = value;
+      if (auto *valueSym = sym.as_if<slang::ast::ValueSymbol>())
+        context.valueSymbols.insert(valueSym, value);
     };
 
     for (const auto &member : instNode.body.members()) {
@@ -371,6 +374,24 @@ struct ModuleVisitor : public BaseVisitor {
       if (port->internalSymbol) {
         recordMember(*port->internalSymbol, lvalue);
       }
+    }
+
+    // Lower executable interface body members now that all interface signals
+    // and port bindings are available in the scoped `valueSymbols` table.
+    for (const auto &member : instNode.body.members()) {
+      switch (member.kind) {
+      case slang::ast::SymbolKind::ContinuousAssign:
+      case slang::ast::SymbolKind::ProceduralBlock:
+      case slang::ast::SymbolKind::StatementBlock:
+        break;
+      default:
+        continue;
+      }
+      auto memberLoc = context.convertLocation(member.location);
+      if (failed(member.visit(ModuleVisitor(context, memberLoc, prefix))))
+        return failure();
+      if (failed(context.flushPendingMonitors()))
+        return failure();
     }
 
     context.interfaceInstanceStorage.push_back(std::move(lowering));
@@ -1592,7 +1613,6 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   ValueSymbolScope scope(valueSymbols);
   VirtualInterfaceMemberScope vifMemberScope(virtualIfaceMembers);
-
   if (isMethod) {
     if (const auto *classTy =
             subroutine.thisVar->getType().as_if<slang::ast::ClassType>()) {

@@ -104,6 +104,28 @@ static uint64_t getTimeScaleInFemtoseconds(Context &context) {
   return scale;
 }
 
+/// Resolve a hierarchical value that refers to a member of an expanded
+/// interface instance.
+static Value lookupExpandedInterfaceMember(
+    Context &context, const slang::ast::HierarchicalValueExpression &expr) {
+  auto nameAttr = context.builder.getStringAttr(expr.symbol.name);
+  for (const auto &element : expr.ref.path) {
+    auto *inst = element.symbol->as_if<slang::ast::InstanceSymbol>();
+    if (!inst)
+      continue;
+    auto *lowering = context.interfaceInstances.lookup(inst);
+    if (!lowering)
+      continue;
+    if (auto it = lowering->expandedMembers.find(&expr.symbol);
+        it != lowering->expandedMembers.end())
+      return it->second;
+    if (auto it = lowering->expandedMembersByName.find(nameAttr);
+        it != lowering->expandedMembersByName.end())
+      return it->second;
+  }
+  return {};
+}
+
 static Value visitClassProperty(Context &context,
                                 const slang::ast::ClassPropertySymbol &expr) {
   auto loc = context.convertLocation(expr.location);
@@ -902,6 +924,16 @@ struct RvalueExprVisitor : public ExprVisitor {
         if (context.rvalueReadCallback)
           context.rvalueReadCallback(readOp);
         value = readOp.getResult();
+      }
+      return value;
+    }
+
+    if (auto value = lookupExpandedInterfaceMember(context, expr)) {
+      if (isa<moore::RefType>(value.getType())) {
+        auto readOp = moore::ReadOp::create(builder, hierLoc, value);
+        if (context.rvalueReadCallback)
+          context.rvalueReadCallback(readOp);
+        return readOp.getResult();
       }
       return value;
     }
@@ -2279,6 +2311,9 @@ struct LvalueExprVisitor : public ExprVisitor {
   Value visit(const slang::ast::HierarchicalValueExpression &expr) {
     // Handle local variables.
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
+      return value;
+
+    if (auto value = lookupExpandedInterfaceMember(context, expr))
       return value;
 
     // Handle global variables.
