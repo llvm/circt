@@ -360,9 +360,17 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
     frames.push_back(std::move(frameInfo));
   }
 
-  // Set frameBytes from the lowered type's bit width.
+  // Set frameBytes from the lowered type's bit width. Fall back to the
+  // maximum computed frame expectedSize if the type system can't report width
+  // (e.g. opaque union types).
   std::ptrdiff_t loweredBits = windowType->getLoweredType()->getBitWidth();
-  frameBytes = loweredBits > 0 ? (loweredBits + 7) / 8 : 0;
+  if (loweredBits > 0) {
+    frameBytes = (loweredBits + 7) / 8;
+  } else {
+    frameBytes = 0;
+    for (const auto &f : frames)
+      frameBytes = std::max(frameBytes, f.expectedSize);
+  }
 }
 
 bool ReadChannelPort::translateIncoming(MessageData &data) {

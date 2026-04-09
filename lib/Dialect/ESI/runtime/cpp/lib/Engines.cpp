@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <queue>
 
 using namespace esi;
 
@@ -288,6 +289,12 @@ protected:
   void writeImpl(const MessageData &) override;
   bool tryWriteImpl(const MessageData &data) override;
 
+  /// Break an oversized message into frame-sized pieces and enqueue them.
+  void enqueueFrames(const MessageData &data);
+
+  /// Poll for ability to send more data and send if able.
+  bool pollImpl() override;
+
   // Size of buffer based on type.
   size_t bufferSize;
   // Owning engine.
@@ -298,6 +305,10 @@ protected:
 
   // Thread protection.
   std::mutex bufferMutex;
+
+  // FIFO of frame-sized messages to send. When a message is larger than
+  // bufferSize, it's broken into frame-sized pieces and enqueued here.
+  std::queue<MessageData> pendingFrames;
 
   // Identifing information.
   AppIDPath idPath;
@@ -394,6 +405,24 @@ void OneItemBuffersFromHostWritePort::connectImpl(
   *static_cast<uint8_t *>(completion_buffer->getPtr()) = 1;
 }
 
+void OneItemBuffersFromHostWritePort::enqueueFrames(const MessageData &data) {
+  // Determine frame size: use translationInfo->frameBytes if available,
+  // otherwise fall back to typeBitWidth.
+  size_t frameBytes = (type->getBitWidth() + 7) / 8;
+  if (translationInfo && translationInfo->frameBytes > 0)
+    frameBytes = translationInfo->frameBytes;
+  assert(data.getSize() % frameBytes == 0 &&
+         "Data size must be a multiple of frame size");
+
+  const uint8_t *ptr = data.getBytes();
+  size_t numFrames = data.getSize() / frameBytes;
+  std::lock_guard<std::mutex> lock(bufferMutex);
+  for (size_t i = 0; i < numFrames; ++i) {
+    pendingFrames.emplace(ptr, frameBytes);
+    ptr += frameBytes;
+  }
+}
+
 void OneItemBuffersFromHostWritePort::writeImpl(const MessageData &data) {
   while (!tryWriteImpl(data))
     // Wait for the device to read the last data we sent.
@@ -402,49 +431,62 @@ void OneItemBuffersFromHostWritePort::writeImpl(const MessageData &data) {
 
 bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
   Logger &logger = engine->conn.getLogger();
+  bool ret = false;
 
-  // Check to see if there's an outstanding write.
+  // If there are no pending frames but the message is oversized, enqueue it.
+  if (!pendingFrames.empty())
+    return false;
+
+  enqueueFrames(data);
+  return true;
+}
+
+bool OneItemBuffersFromHostWritePort::pollImpl() {
+  Logger &logger = engine->conn.getLogger();
+
+  // Check to see if the device is ready.
   completion_buffer->flush();
   uint8_t *completion =
       reinterpret_cast<uint8_t *>(completion_buffer->getPtr());
-  if (*completion == 0) {
-    logger.trace(
-        [this](std::string &subsystem, std::string &msg,
-               std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "OneItemBuffersFromHost";
-          msg = identifier() + " write failed: buffer not ready";
-          details = std::make_unique<std::map<std::string, std::any>>();
-          (*details)["channel"] = identifier();
-        });
+  if (*completion == 0)
     return false;
-  }
 
-  // If the buffer is empty, use it.
   std::lock_guard<std::mutex> lock(bufferMutex);
+
+  // Determine what to send: next frame from queue, or the original message.
+  const uint8_t *src;
+  size_t sendSize;
+  if (pendingFrames.empty())
+    return false;
+
+  MessageData frame = std::move(pendingFrames.front());
+  pendingFrames.pop();
+  src = frame.getBytes();
+  sendSize = frame.getSize();
+
   void *bufferData = data_buffer->getPtr();
-  std::memcpy(bufferData, data.getBytes(), data.getSize());
+  std::memcpy(bufferData, src, sendSize);
   data_buffer->flush();
-  // Indicate that the buffer is now in use.
   *completion = 0;
   completion_buffer->flush();
-  // Write the *device-visible* address of the data buffer and completion buffer
-  // to the MMIO space.
   engine->mmio->write(BufferPtrOffset,
                       reinterpret_cast<uint64_t>(data_buffer->getDevicePtr()));
   engine->mmio->write(
       CompletionPtrOffset,
       reinterpret_cast<uint64_t>(completion_buffer->getDevicePtr()));
 
-  logger.trace(
-      [this, data](std::string &subsystem, std::string &msg,
+  logger.trace([this, sendSize](
+                   std::string &subsystem, std::string &msg,
                    std::unique_ptr<std::map<std::string, std::any>> &details) {
-        subsystem = "OneItemBuffersFromHost";
-        msg = "initiated transfer of message";
-        details = std::make_unique<std::map<std::string, std::any>>();
-        (*details)["channel"] = identifier();
-        (*details)["data_size"] = data.getSize();
-        (*details)["message_data"] = data.toHex();
-      });
+    subsystem = "OneItemBuffersFromHost";
+    msg = "initiated transfer";
+    details = std::make_unique<std::map<std::string, std::any>>();
+    (*details)["channel"] = identifier();
+    (*details)["data_size"] = sendSize;
+  });
+
+  // We initiated a transfer, so return true to indicate that an action
+  // occurred.
   return true;
 }
 
