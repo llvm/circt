@@ -5145,3 +5145,25 @@ module DynamicArrayDeleteTest;
   end
 
 endmodule
+
+// CHECK-LABEL: moore.module @DisplayWithStringArg() {
+// CHECK:   [[I:%.+]] = moore.variable : <i32>
+// CHECK:   [[S:%.+]] = moore.variable : <string>
+// CHECK:   moore.procedure initial {
+// CHECK:     [[READ_I:%.+]] = moore.read [[I]] : <i32>
+// CHECK:     [[INT_FMT:%.+]] = moore.fmt.int decimal [[READ_I]], align right, pad space signed : i32
+// CHECK:     [[READ_S:%.+]] = moore.read [[S]] : <string>
+// CHECK:     [[STR_FMT:%.+]] = moore.fmt.string [[READ_S]]
+// CHECK:     [[NL:%.+]] = moore.fmt.literal "\0A"
+// CHECK:     [[CONCAT_FMT:%.+]] = moore.fmt.concat ([[INT_FMT]], [[STR_FMT]], [[NL]])
+// CHECK:     moore.builtin.display [[CONCAT_FMT]]
+// CHECK:     moore.return
+// CHECK:   }
+// CHECK:   moore.output
+// CHECK: }
+module DisplayWithStringArg;
+  int i;
+  string s;
+  initial $display(i, s);
+endmodule
+
