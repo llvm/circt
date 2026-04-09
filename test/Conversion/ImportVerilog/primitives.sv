@@ -132,3 +132,29 @@ module multi_nand_prim;
     logic A, B, C, D, Q;
     nand a (Q, A, B, C, D);
 endmodule
+
+// CHECK-LABEL: moore.module @not_prim()
+// CHECK: [[A:%.+]] = moore.variable : <l1>
+// CHECK: [[Q:%.+]] = moore.variable : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
+// CHECK: [[NOT:%.+]] = moore.not [[RD_A]] : l1
+// CHECK: moore.assign [[Q]], [[NOT]] : l1
+
+module not_prim;
+    logic A, Q;
+    not n (Q, A);
+endmodule
+
+// CHECK-LABEL: moore.module @multi_not_prim()
+// CHECK: [[A:%.+]] = moore.variable : <l1>
+// CHECK: [[Q0:%.+]] = moore.variable : <l1>
+// CHECK: [[Q1:%.+]] = moore.variable : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
+// CHECK: [[NOT:%.+]] = moore.not [[RD_A]] : l1
+// CHECK: moore.assign [[Q0]], [[NOT]] : l1
+// CHECK: moore.assign [[Q1]], [[NOT]] : l1
+
+module multi_not_prim;
+    logic A, Q0, Q1;
+    not n (Q0, Q1, A);
+endmodule
