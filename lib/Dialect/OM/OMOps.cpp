@@ -832,6 +832,56 @@ void StringConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 //===----------------------------------------------------------------------===//
+// PropEqOp
+//===----------------------------------------------------------------------===//
+
+FailureOr<mlir::Attribute>
+PropEqOp::evaluateBinaryEquality(mlir::Attribute lhsAttr,
+                                 mlir::Attribute rhsAttr) {
+  auto resultType = mlir::IntegerType::get(getContext(), 1);
+
+  // String equality.
+  if (auto lhs = dyn_cast<mlir::StringAttr>(lhsAttr))
+    if (auto rhs = dyn_cast<mlir::StringAttr>(rhsAttr))
+      return mlir::Attribute(
+          mlir::IntegerAttr::get(resultType, lhs == rhs ? 1 : 0));
+
+  // OM integer equality (arbitrary precision).
+  if (auto lhs = dyn_cast<om::IntegerAttr>(lhsAttr))
+    if (auto rhs = dyn_cast<om::IntegerAttr>(rhsAttr)) {
+      APSInt lhsVal = lhs.getValue().getAPSInt();
+      APSInt rhsVal = rhs.getValue().getAPSInt();
+      if (lhsVal.getBitWidth() > rhsVal.getBitWidth())
+        rhsVal = rhsVal.extend(lhsVal.getBitWidth());
+      else if (rhsVal.getBitWidth() > lhsVal.getBitWidth())
+        lhsVal = lhsVal.extend(rhsVal.getBitWidth());
+      return mlir::Attribute(
+          mlir::IntegerAttr::get(resultType, lhsVal == rhsVal ? 1 : 0));
+    }
+
+  // Boolean (i1) equality.
+  if (auto lhs = dyn_cast<mlir::IntegerAttr>(lhsAttr))
+    if (auto rhs = dyn_cast<mlir::IntegerAttr>(rhsAttr))
+      return mlir::Attribute(
+          mlir::IntegerAttr::get(resultType, lhs == rhs ? 1 : 0));
+
+  return failure();
+}
+
+OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
+  auto lhsAttr = adaptor.getLhs();
+  auto rhsAttr = adaptor.getRhs();
+  if (!lhsAttr || !rhsAttr)
+    return {};
+
+  auto result = evaluateBinaryEquality(lhsAttr, rhsAttr);
+  if (failed(result))
+    return {};
+
+  return *result;
+}
+
+//===----------------------------------------------------------------------===//
 // UnknownValueOp
 //===----------------------------------------------------------------------===//
 

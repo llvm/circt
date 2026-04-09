@@ -536,6 +536,37 @@ def StringConcatOp : OMOp<"string.concat", [Pure, SameOperandsAndResultType]> {
   let hasCanonicalizer = 1;
 }
 
+class BinaryEqualityOpBase<string mnemonic, list<Trait> traits = []> :
+    OMOp<mnemonic, [
+      Pure,
+      AllTypesMatch<["lhs", "rhs"]>,
+      DeclareOpInterfaceMethods<BinaryEqualityInterface>
+    ] # traits> {
+  let arguments = (ins AnyTypeOf<[StringType, OMIntegerType, I1]>:$lhs,
+                       AnyTypeOf<[StringType, OMIntegerType, I1]>:$rhs);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
+}
+
+def PropEqOp : BinaryEqualityOpBase<"prop.eq"> {
+  let summary = "Compare two OM property values for equality";
+  let description = [{
+    Compare two OM property values (String, Integer, or Bool) for equality,
+    returning a 1-bit integer (i1) result. Returns 1 if the values are equal,
+    0 otherwise. Both operands must have the same type.
+
+    Example:
+    ```mlir
+    %2 = om.prop.eq %0, %1 : !om.string
+    %3 = om.prop.eq %4, %5 : !om.integer
+    %6 = om.prop.eq %7, %8 : i1
+    ```
+  }];
+
+  let results = (outs I1:$result);
+
+  let hasFolder = 1;
+}
+
 def PropertyAssertOp : OMOp<"property_assert"> {
   let summary = "Assert that a boolean property holds at evaluation time";
   let description = [{

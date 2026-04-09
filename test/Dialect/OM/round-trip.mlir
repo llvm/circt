@@ -196,6 +196,29 @@ om.class @StringConcat() {
   om.class.fields
 }
 
+// CHECK-LABEL: @PropEq
+om.class @PropEq() {
+  %0 = om.constant "hello" : !om.string
+  %1 = om.constant "world" : !om.string
+
+  // CHECK: om.prop.eq %0, %1 : !om.string
+  %2 = om.prop.eq %0, %1 : !om.string
+
+  %3 = om.constant #om.integer<1 : i8> : !om.integer
+  %4 = om.constant #om.integer<2 : i8> : !om.integer
+
+  // CHECK: om.prop.eq %3, %4 : !om.integer
+  %5 = om.prop.eq %3, %4 : !om.integer
+
+  %6 = om.constant true
+  %7 = om.constant false
+
+  // CHECK: om.prop.eq %6, %7 : i1
+  %8 = om.prop.eq %6, %7 : i1
+
+  om.class.fields
+}
+
 // CHECK-LABEL: @LinkedList
 // CHECK-SAME: -> (prev: !om.class.type<@LinkedList>)
 om.class @LinkedList(%prev: !om.class.type<@LinkedList>) -> (prev: !om.class.type<@LinkedList>) {
