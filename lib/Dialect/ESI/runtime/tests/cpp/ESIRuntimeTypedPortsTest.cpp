@@ -186,6 +186,17 @@ TEST(TypedPortsTest, NullPortTypeThrows) {
                AcceleratorMismatchError);
 }
 
+// A type that is not integral and has no _ESI_ID — should hit fallback.
+struct UnknownCppType {
+  double x;
+};
+
+TEST(TypedPortsTest, FallbackThrows) {
+  UIntType uint32("ui32", 32);
+  EXPECT_THROW(verifyTypeCompatibility<UnknownCppType>(&uint32),
+               AcceleratorMismatchError);
+}
+
 //===----------------------------------------------------------------------===//
 // TypedWritePort round-trip tests (verify MessageData encoding)
 //===----------------------------------------------------------------------===//
@@ -415,6 +426,137 @@ TEST(TypedPortsTest, TypedFunctionCallRoundTrip) {
 
   // Verify the written arg matches — si24 wire size is 3 bytes.
   ASSERT_EQ(mockWrite.lastWritten.getSize(), 3u);
+  delete func;
+}
+
+//===----------------------------------------------------------------------===//
+// SegmentedMessageData tests via TypedWritePort
+//===----------------------------------------------------------------------===//
+
+/// A minimal SegmentedMessageData for testing.
+#pragma pack(push, 1)
+struct TestSegmented : public SegmentedMessageData {
+  struct {
+    uint32_t a;
+    uint16_t b;
+  } header;
+
+  std::vector<uint32_t> items;
+
+  size_t numSegments() const override { return 2; }
+  Segment segment(size_t idx) const override {
+    if (idx == 0)
+      return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};
+    return {reinterpret_cast<const uint8_t *>(items.data()),
+            items.size() * sizeof(uint32_t)};
+  }
+};
+#pragma pack(pop)
+
+TEST(TypedPortsTest, TypedWritePortSegmentedMessageData) {
+  // Use any type — SegmentedMessageData skips type checks.
+  UIntType uint32("ui32", 32);
+  MockWritePort mock(&uint32);
+
+  TypedWritePort<TestSegmented, true> typed(mock);
+  typed.connect();
+
+  TestSegmented msg;
+  msg.header.a = 0x12345678;
+  msg.header.b = 0xABCD;
+  msg.items = {1, 2, 3};
+
+  // write(const T&) should flatten via toMessageData().
+  typed.write(msg);
+
+  // Expected: 6 bytes header + 12 bytes data = 18 bytes.
+  EXPECT_EQ(mock.lastWritten.getSize(), 18u);
+
+  // Verify header bytes.
+  const uint8_t *bytes = mock.lastWritten.getBytes();
+  uint32_t gotA;
+  uint16_t gotB;
+  std::memcpy(&gotA, bytes, 4);
+  std::memcpy(&gotB, bytes + 4, 2);
+  EXPECT_EQ(gotA, 0x12345678u);
+  EXPECT_EQ(gotB, 0xABCDu);
+
+  // Verify item bytes.
+  uint32_t gotItems[3];
+  std::memcpy(gotItems, bytes + 6, 12);
+  EXPECT_EQ(gotItems[0], 1u);
+  EXPECT_EQ(gotItems[1], 2u);
+  EXPECT_EQ(gotItems[2], 3u);
+}
+
+TEST(TypedPortsTest, TypedWritePortSegmentedNoTypeCheck) {
+  // SegmentedMessageData type against a mismatched port type — works because
+  // SkipTypeCheck=true bypasses verifyTypeCompatibility entirely.
+  SIntType sint8("si8", 8);
+  MockWritePort mock(&sint8);
+
+  TypedWritePort<TestSegmented, true> typed(mock);
+  EXPECT_NO_THROW(typed.connect());
+
+  TestSegmented msg;
+  msg.header.a = 42;
+  msg.header.b = 7;
+  msg.items = {100};
+
+  typed.write(msg);
+  // 6 bytes header + 4 bytes data = 10 bytes.
+  EXPECT_EQ(mock.lastWritten.getSize(), 10u);
+}
+
+TEST(TypedPortsTest, TypedFunctionSegmentedArg) {
+  // Arg type is SegmentedMessageData — type check is skipped for it.
+  // Use an arbitrary inner type for the arg channel since it won't be checked.
+  UIntType argInner("ui32", 32);
+  ChannelType argChanType("channel<ui32>", &argInner);
+  UIntType resultInner("ui16", 16);
+  ChannelType resultChanType("channel<ui16>", &resultInner);
+
+  BundleType::ChannelVector channels = {
+      {"arg", BundleType::Direction::To, &argChanType},
+      {"result", BundleType::Direction::From, &resultChanType},
+  };
+  BundleType bundleType("func_bundle", channels);
+
+  MockWritePort mockWrite(&argInner);
+  MockReadPort mockRead(&resultInner);
+
+  // Set up mock read to return a known uint16_t value.
+  uint16_t expected = 99;
+  mockRead.nextResponse = MessageData::from(expected);
+
+  auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
+                                                    mockWrite, mockRead);
+
+  TypedFunction<TestSegmented, uint16_t, true> typed(func);
+  typed.connect();
+
+  TestSegmented arg;
+  arg.header.a = 0xDEAD;
+  arg.header.b = 0xBE;
+  arg.items = {10, 20};
+
+  uint16_t result = typed.call(arg).get();
+  EXPECT_EQ(result, 99u);
+
+  // Verify the flattened arg: 6 bytes header + 8 bytes items = 14 bytes.
+  EXPECT_EQ(mockWrite.lastWritten.getSize(), 14u);
+
+  const uint8_t *bytes = mockWrite.lastWritten.getBytes();
+  uint32_t gotA;
+  std::memcpy(&gotA, bytes, 4);
+  EXPECT_EQ(gotA, 0xDEADu);
+
+  uint32_t gotItem0, gotItem1;
+  std::memcpy(&gotItem0, bytes + 6, 4);
+  std::memcpy(&gotItem1, bytes + 10, 4);
+  EXPECT_EQ(gotItem0, 10u);
+  EXPECT_EQ(gotItem1, 20u);
+
   delete func;
 }
 

@@ -358,7 +358,7 @@ public:
     static Function *get(AppID id, BundleType *type, WriteChannelPort &arg,
                          ReadChannelPort &result);
 
-    void connect();
+    void connect(const ChannelPort::ConnectOptions &options = {});
     std::future<MessageData> call(const MessageData &arg);
 
     const esi::Type *getArgType() const {
@@ -417,7 +417,8 @@ public:
     /// sufficiently fast that it could be called in the same thread as the
     /// port callback.
     void connect(std::function<MessageData(const MessageData &)> callback,
-                 bool quick = false);
+                 bool quick = false,
+                 const ChannelPort::ConnectOptions &options = {});
 
     const esi::Type *getArgType() const {
       return dynamic_cast<const ChannelType *>(type->findChannel("arg").first)

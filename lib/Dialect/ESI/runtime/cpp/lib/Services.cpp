@@ -291,15 +291,16 @@ FuncService::Function *FuncService::Function::get(AppID id, BundleType *type,
   return nullptr;
 }
 
-void FuncService::Function::connect() {
+void FuncService::Function::connect(
+    const ChannelPort::ConnectOptions &options) {
   if (connected)
     throw std::runtime_error("Function is already connected");
   if (channels.size() != 2)
     throw std::runtime_error("FuncService must have exactly two channels");
   arg = &getRawWrite("arg");
-  arg->connect();
+  arg->connect(options);
   result = &getRawRead("result");
-  result->connect();
+  result->connect(options);
   connected = true;
 }
 
@@ -340,11 +341,12 @@ CallService::Callback *CallService::Callback::get(AcceleratorConnection &acc,
 }
 
 void CallService::Callback::connect(
-    std::function<MessageData(const MessageData &)> callback, bool quick) {
+    std::function<MessageData(const MessageData &)> callback, bool quick,
+    const ChannelPort::ConnectOptions &options) {
   if (channels.size() != 2)
     throw std::runtime_error("CallService must have exactly two channels");
   result = &getRawWrite("result");
-  result->connect();
+  result->connect(options);
   arg = &getRawRead("arg");
   if (quick) {
     // If it's quick, we can just call the callback directly.
@@ -355,7 +357,7 @@ void CallService::Callback::connect(
     });
   } else {
     // If it's not quick, we need to use the service thread.
-    arg->connect();
+    arg->connect(options);
     acc.getServiceThread()->addListener(
         {arg}, [this, callback](ReadChannelPort *, MessageData argMsg) -> void {
           MessageData resultMsg = callback(std::move(argMsg));

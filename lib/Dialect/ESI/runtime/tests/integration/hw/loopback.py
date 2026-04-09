@@ -39,6 +39,8 @@ from pycde.types import (Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, SInt, TypeAlias, UInt)
 from pycde import esi
 
+from esitester import SerialCoordTranslator
+
 SendI8 = Bundle([BundledChannel("send", ChannelDirection.FROM, Bits(8))])
 RecvI8 = Bundle([BundledChannel("recv", ChannelDirection.TO, Bits(8))])
 SendI0 = Bundle([BundledChannel("send", ChannelDirection.FROM, Bits(0))])
@@ -246,6 +248,12 @@ class Top(Module):
     LoopbackStruct()
     LoopbackOddStruct()
     LoopbackArray()
+    SerialCoordTranslator(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="coord_translator_serial",
+        appid=AppID("coord_translator_serial"),
+    )
 
 
 if __name__ == "__main__":

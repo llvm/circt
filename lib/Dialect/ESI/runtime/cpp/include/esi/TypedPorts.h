@@ -83,6 +83,8 @@ MessageData toMessageData(const T &data, WireInfo wi) {
       std::memcpy(buf.data(), &data, std::min(wi.bytes, sizeof(T)));
       return MessageData(std::move(buf));
     }
+  } else if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
+    return data.toMessageData();
   }
   return MessageData(reinterpret_cast<const uint8_t *>(&data), sizeof(T));
 }
@@ -205,17 +207,22 @@ void verifyTypeCompatibility(const Type *portType) {
                                      std::to_string(width) +
                                      " should use a smaller C++ type than " +
                                      std::to_string(sizeof(T) * 8) + "-bit");
+  } else {
+    throw AcceleratorMismatchError(
+        std::string("Cannot verify type compatibility for C++ type '") +
+        typeid(T).name() + "' against ESI port type '" +
+        portType->toString(/*oneLine=*/true) + "'");
   }
 }
 
 //===----------------------------------------------------------------------===//
-// TypedWritePort<T, CheckValue>
+// TypedWritePort<T, SkipTypeCheck = false>
 //
-// When CheckValue is true, write() and tryWrite() verify that the value fits
-// in the ESI port's actual bit width before sending.
+// When SkipTypeCheck is false, the `connect` method doesn't run the type check
+// since T doesn't have any query-able type information.
 //===----------------------------------------------------------------------===//
 
-template <typename T, bool CheckValue = false>
+template <typename T, bool SkipTypeCheck = false>
 class TypedWritePort {
 public:
   explicit TypedWritePort(WriteChannelPort &port) : inner(&port) {}
@@ -225,22 +232,13 @@ public:
   void connect(const ChannelPort::ConnectOptions &opts = {}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
-    verifyTypeCompatibility<T>(inner->getType());
+    if (!SkipTypeCheck)
+      verifyTypeCompatibility<T>(inner->getType());
     wireInfo_ = getWireInfo(inner->getType());
     inner->connect(opts);
   }
 
-  void write(const T &data) {
-    if constexpr (CheckValue)
-      checkValueRange(data);
-    if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
-      // T implements SegmentedMessageData — flatten via toMessageData()
-      // which the port (or backend) can then chunk as needed.
-      inner->write(data.toMessageData());
-    } else {
-      inner->write(toMessageData(data, wireInfo_));
-    }
-  }
+  void write(const T &data) { inner->write(toMessageData(data, wireInfo_)); }
 
   /// Write by taking ownership. If T is a SegmentedMessageData, this hands
   /// the message directly to the port's segmented write path.
@@ -254,8 +252,6 @@ public:
   }
 
   bool tryWrite(const T &data) {
-    if constexpr (CheckValue)
-      checkValueRange(data);
     return inner->tryWrite(toMessageData(data, wireInfo_));
   }
 
@@ -269,32 +265,6 @@ public:
 private:
   WriteChannelPort *inner;
   WireInfo wireInfo_;
-
-  void checkValueRange(const T &data) {
-    static_assert(std::is_integral_v<T>,
-                  "Value range checking only supported for integral types");
-    const Type *pt = unwrapTypeAlias(inner->getType());
-    auto *bvType = dynamic_cast<const BitVectorType *>(pt);
-    if (!bvType)
-      return;
-    uint64_t width = bvType->getWidth();
-    if (width >= sizeof(T) * 8)
-      return; // Full-width; any value is valid.
-    if constexpr (std::is_signed_v<T>) {
-      int64_t minVal = -(int64_t(1) << (width - 1));
-      int64_t maxVal = (int64_t(1) << (width - 1)) - 1;
-      if (data < minVal || data > maxVal)
-        throw AcceleratorMismatchError(
-            "Value " + std::to_string(data) + " out of range for " +
-            std::to_string(width) + "-bit signed type");
-    } else {
-      uint64_t maxVal = (uint64_t(1) << width) - 1;
-      if (static_cast<uint64_t>(data) > maxVal)
-        throw AcceleratorMismatchError(
-            "Value " + std::to_string(data) + " out of range for " +
-            std::to_string(width) + "-bit unsigned type");
-    }
-  }
 };
 
 /// Specialization for void — write takes no data argument.
@@ -447,7 +417,7 @@ private:
 // return type of BundlePort::getAs<FuncService::Function>()).
 //===----------------------------------------------------------------------===//
 
-template <typename ArgT, typename ResultT>
+template <typename ArgT, typename ResultT, bool SkipTypeCheck = false>
 class TypedFunction {
 public:
   /// Implicit conversion from Function* (returned by getAs<>()).
@@ -458,11 +428,14 @@ public:
     if (!inner)
       throw AcceleratorMismatchError(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
-    verifyTypeCompatibility<ArgT>(inner->getArgType());
-    verifyTypeCompatibility<ResultT>(inner->getResultType());
+    if constexpr (!SkipTypeCheck) {
+      verifyTypeCompatibility<ArgT>(inner->getArgType());
+      verifyTypeCompatibility<ResultT>(inner->getResultType());
+    }
     argWireInfo_ = getWireInfo(inner->getArgType());
     resWireInfo_ = getWireInfo(inner->getResultType());
-    inner->connect();
+    inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
+                                               /*translateMessage=*/false));
   }
 
   std::future<ResultT> call(const ArgT &arg) {
@@ -485,8 +458,8 @@ private:
 };
 
 /// Partial specialization: void argument, typed result.
-template <typename ResultT>
-class TypedFunction<void, ResultT> {
+template <typename ResultT, bool SkipTypeCheck>
+class TypedFunction<void, ResultT, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedFunction(services::FuncService::Function *func) : inner(func) {}
@@ -495,9 +468,12 @@ public:
     if (!inner)
       throw AcceleratorMismatchError(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
-    verifyTypeCompatibility<void>(inner->getArgType());
-    verifyTypeCompatibility<ResultT>(inner->getResultType());
-    inner->connect();
+    if constexpr (!SkipTypeCheck) {
+      verifyTypeCompatibility<void>(inner->getArgType());
+      verifyTypeCompatibility<ResultT>(inner->getResultType());
+    }
+    inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
+                                               /*translateMessage=*/false));
   }
 
   std::future<ResultT> call() {
@@ -519,8 +495,8 @@ private:
 };
 
 /// Partial specialization: typed argument, void result.
-template <typename ArgT>
-class TypedFunction<ArgT, void> {
+template <typename ArgT, bool SkipTypeCheck>
+class TypedFunction<ArgT, void, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedFunction(services::FuncService::Function *func) : inner(func) {}
@@ -529,10 +505,13 @@ public:
     if (!inner)
       throw AcceleratorMismatchError(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
-    verifyTypeCompatibility<ArgT>(inner->getArgType());
-    verifyTypeCompatibility<void>(inner->getResultType());
+    if constexpr (!SkipTypeCheck) {
+      verifyTypeCompatibility<ArgT>(inner->getArgType());
+      verifyTypeCompatibility<void>(inner->getResultType());
+    }
     argWireInfo_ = getWireInfo(inner->getArgType());
-    inner->connect();
+    inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
+                                               /*translateMessage=*/false));
   }
 
   std::future<void> call(const ArgT &arg) {
@@ -550,8 +529,8 @@ private:
 };
 
 /// Full specialization: void argument, void result.
-template <>
-class TypedFunction<void, void> {
+template <bool SkipTypeCheck>
+class TypedFunction<void, void, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedFunction(services::FuncService::Function *func) : inner(func) {}
@@ -560,9 +539,12 @@ public:
     if (!inner)
       throw AcceleratorMismatchError(
           "TypedFunction: null Function pointer (getAs failed or wrong type)");
-    verifyTypeCompatibility<void>(inner->getArgType());
-    verifyTypeCompatibility<void>(inner->getResultType());
-    inner->connect();
+    if constexpr (!SkipTypeCheck) {
+      verifyTypeCompatibility<void>(inner->getArgType());
+      verifyTypeCompatibility<void>(inner->getResultType());
+    }
+    inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
+                                               /*translateMessage=*/false));
   }
 
   std::future<void> call() {
@@ -587,7 +569,7 @@ private:
 // from Callback* (the return type of BundlePort::getAs<Callback>()).
 //===----------------------------------------------------------------------===//
 
-template <typename ArgT, typename ResultT>
+template <typename ArgT, typename ResultT, bool SkipTypeCheck = false>
 class TypedCallback {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
@@ -598,8 +580,10 @@ public:
     if (!inner)
       throw AcceleratorMismatchError(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-    verifyTypeCompatibility<ArgT>(inner->getArgType());
-    verifyTypeCompatibility<ResultT>(inner->getResultType());
+    if constexpr (!SkipTypeCheck) {
+      verifyTypeCompatibility<ArgT>(inner->getArgType());
+      verifyTypeCompatibility<ResultT>(inner->getResultType());
+    }
     inner->connect(
         [cb = std::move(callback), argType = inner->getArgType(),
          resType = inner->getResultType()](
@@ -607,7 +591,9 @@ public:
           ResultT result = cb(fromMessageData<ArgT>(argData, argType));
           return toMessageData(result, resType);
         },
-        quick);
+        quick,
+        ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
+                                    /*translateMessage=*/false));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -618,8 +604,8 @@ private:
 };
 
 /// Partial specialization: void argument, typed result.
-template <typename ResultT>
-class TypedCallback<void, ResultT> {
+template <typename ResultT, bool SkipTypeCheck>
+class TypedCallback<void, ResultT, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
@@ -628,15 +614,19 @@ public:
     if (!inner)
       throw AcceleratorMismatchError(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-    verifyTypeCompatibility<void>(inner->getArgType());
-    verifyTypeCompatibility<ResultT>(inner->getResultType());
+    if constexpr (!SkipTypeCheck) {
+      verifyTypeCompatibility<void>(inner->getArgType());
+      verifyTypeCompatibility<ResultT>(inner->getResultType());
+    }
     WireInfo rwb = getWireInfo(inner->getResultType());
     inner->connect(
         [cb = std::move(callback), rwb](const MessageData &) -> MessageData {
           ResultT result = cb();
           return toMessageData(result, rwb);
         },
-        quick);
+        quick,
+        ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
+                                    /*translateMessage=*/false));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -647,8 +637,8 @@ private:
 };
 
 /// Partial specialization: typed argument, void result.
-template <typename ArgT>
-class TypedCallback<ArgT, void> {
+template <typename ArgT, bool SkipTypeCheck>
+class TypedCallback<ArgT, void, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
@@ -657,8 +647,10 @@ public:
     if (!inner)
       throw AcceleratorMismatchError(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-    verifyTypeCompatibility<ArgT>(inner->getArgType());
-    verifyTypeCompatibility<void>(inner->getResultType());
+    if constexpr (!SkipTypeCheck) {
+      verifyTypeCompatibility<ArgT>(inner->getArgType());
+      verifyTypeCompatibility<void>(inner->getResultType());
+    }
     inner->connect(
         [cb = std::move(callback), argType = inner->getArgType()](
             const MessageData &argData) -> MessageData {
@@ -666,7 +658,9 @@ public:
           uint8_t zero = 0;
           return MessageData(&zero, 1);
         },
-        quick);
+        quick,
+        ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
+                                    /*translateMessage=*/false));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -677,8 +671,8 @@ private:
 };
 
 /// Full specialization: void argument, void result.
-template <>
-class TypedCallback<void, void> {
+template <bool SkipTypeCheck>
+class TypedCallback<void, void, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
@@ -687,15 +681,19 @@ public:
     if (!inner)
       throw AcceleratorMismatchError(
           "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-    verifyTypeCompatibility<void>(inner->getArgType());
-    verifyTypeCompatibility<void>(inner->getResultType());
+    if constexpr (!SkipTypeCheck) {
+      verifyTypeCompatibility<void>(inner->getArgType());
+      verifyTypeCompatibility<void>(inner->getResultType());
+    }
     inner->connect(
         [cb = std::move(callback)](const MessageData &) -> MessageData {
           cb();
           uint8_t zero = 0;
           return MessageData(&zero, 1);
         },
-        quick);
+        quick,
+        ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
+                                    /*translateMessage=*/false));
   }
 
   services::CallService::Callback &raw() { return *inner; }

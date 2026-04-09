@@ -1807,6 +1807,11 @@ struct SerialCoordData {
 };
 static_assert(sizeof(SerialCoordData) == sizeof(SerialCoordHeader),
               "Size mismatch");
+#pragma pack(pop)
+
+// Note: this application is intended to test hardware. As such, we need
+// to be able to send batches. So this is not the typical way one would define a
+// message struct. It's closer to a streaming style.
 struct SerialCoordInput : SegmentedMessageData {
 private:
   SerialCoordHeader header;
@@ -1839,7 +1844,6 @@ public:
       throw std::out_of_range("SerialCoordInput: invalid segment index");
   }
 };
-#pragma pack(pop)
 
 #pragma pack(push, 1)
 struct SerialCoordOutputHeader {
@@ -1883,7 +1887,8 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     throw std::runtime_error(
         "Serial coord translate test: no 'translate_coords_serial' port found");
 
-  TypedWritePort<SerialCoordInput> argPort(portIter->second.getRawWrite("arg"));
+  TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
+      portIter->second.getRawWrite("arg"));
   ReadChannelPort &resultPort = portIter->second.getRawRead("result");
 
   argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
