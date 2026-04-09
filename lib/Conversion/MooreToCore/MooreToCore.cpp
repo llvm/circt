@@ -1408,14 +1408,28 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
     if (!resultType)
       return rewriter.notifyMatchFailure(op.getLoc(), "invalid variable type");
 
+    if (auto refType = dyn_cast<RefType>(op.getResult().getType())) {
+      if (isa<ClassHandleType>(refType.getNestedType())) {
+        auto ptrTy = dyn_cast<LLVM::LLVMPointerType>(resultType);
+        if (!ptrTy)
+          return rewriter.notifyMatchFailure(
+              op.getLoc(),
+              "class handle variable did not convert to !llvm.ptr");
+
+        Value init = adaptor.getInitial();
+        rewriter.replaceOp(op, init);
+        return success();
+      }
+    }
+
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
     if (!init) {
-      auto refType = dyn_cast<llhd::RefType>(resultType);
-      if (!refType)
+      auto llhdRefType = dyn_cast<llhd::RefType>(resultType);
+      if (!llhdRefType)
         return rewriter.notifyMatchFailure(
             op.getLoc(), "variable type did not convert to llhd::RefType");
-      init = createZeroValue(refType.getNestedType(), loc, rewriter);
+      init = createZeroValue(llhdRefType.getNestedType(), loc, rewriter);
       if (!init)
         return failure();
     }
@@ -2514,6 +2528,10 @@ struct ReadOpConversion : public OpConversionPattern<ReadOp> {
   matchAndRewrite(ReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     if (isa<LLVM::LLVMPointerType>(adaptor.getInput().getType())) {
+      if (isa<ClassHandleType>(op.getType())) {
+        rewriter.replaceOp(op, adaptor.getInput());
+        return success();
+      }
       auto resultTy = typeConverter->convertType(op.getType());
       rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, resultTy,
                                                 adaptor.getInput());
@@ -3451,6 +3469,8 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     if (isa<OpenArrayType, OpenUnpackedArrayType>(type.getNestedType()))
       return LLVM::LLVMPointerType::get(type.getContext());
+    if (isa<ClassHandleType>(type.getNestedType()))
+      return LLVM::LLVMPointerType::get(type.getContext());
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
       return llhd::RefType::get(innerType);
     return {};
@@ -3548,6 +3568,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   patterns.add<VTableLoadMethodOpConversion>(typeConverter,
                                              patterns.getContext(), classCache,
                                              symbolTables, llvmTypeConverter);
+  patterns.add<VariableOpConversion>(typeConverter, patterns.getContext());
   patterns.add<ClassPropertyRefOpConversion>(typeConverter,
                                              patterns.getContext(), classCache);
 
@@ -3555,7 +3576,6 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   patterns.add<
     ClassUpcastOpConversion,
     // Patterns of declaration operations.
-    VariableOpConversion,
     NetOpConversion,
 
     // Patterns for conversion operations.

@@ -26,15 +26,16 @@
 
 // CHECK-LABEL: hw.module @top()
 // CHECK:      %[[NULL:.*]] = llvm.mlir.zero : !llvm.ptr
-// CHECK:      %t = llhd.sig %[[NULL]] : !llvm.ptr
 // CHECK:      llhd.process {
-// CHECK:      %[[HANDLE:.*]] = llhd.prb %t : !llvm.ptr
-// CHECK:      llvm.getelementptr %[[HANDLE]]
+// CHECK:      llvm.getelementptr %[[NULL]]
 // CHECK:      llvm.load
 // CHECK:      llvm.getelementptr
 // CHECK:      llvm.load
-// CHECK:      llvm.call %{{.*}}(%[[HANDLE]], %{{.*}}) : !llvm.ptr, (!llvm.ptr, i32) -> i32
+// CHECK:      llvm.call %{{.*}}(%[[NULL]], %{{.*}}) : !llvm.ptr, (!llvm.ptr, i32) -> i32
 // CHECK:      llhd.drv
+// CHECK-NOT:  llvm.call @malloc
+// CHECK-NOT:  llhd.sig %{{.*}} : !llvm.ptr
+// CHECK-NOT:  llhd.prb %{{.*}} : !llvm.ptr
 
 class testClassVirtualInt;
   int bias;
