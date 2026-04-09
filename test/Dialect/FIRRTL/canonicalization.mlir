@@ -4023,4 +4023,74 @@ firrtl.module @StringConcatCanonicalization(in %str1: !firrtl.string, in %str2: 
   firrtl.propassign %out7, %nested : !firrtl.string
 }
 
+// CHECK-LABEL: firrtl.module @PropEqFold
+firrtl.module @PropEqFold(in %str: !firrtl.string, in %b: !firrtl.bool,
+                          in %i: !firrtl.integer,
+                          out %out1: !firrtl.bool, out %out2: !firrtl.bool,
+                          out %out3: !firrtl.bool, out %out4: !firrtl.bool,
+                          out %out5: !firrtl.bool, out %out6: !firrtl.bool,
+                          out %out7: !firrtl.bool, out %out8: !firrtl.bool,
+                          out %out9: !firrtl.bool) {
+  %s1 = firrtl.string "hello"
+  %s2 = firrtl.string "hello"
+  %s3 = firrtl.string "world"
+
+  // CHECK-DAG: [[TRUE:%.+]] = firrtl.bool true
+  // CHECK-DAG: [[FALSE:%.+]] = firrtl.bool false
+
+  // Equal constant strings fold to true.
+  // CHECK: firrtl.propassign %out1, [[TRUE]]
+  %0 = firrtl.prop.eq %s1, %s2 : !firrtl.string
+  firrtl.propassign %out1, %0 : !firrtl.bool
+
+  // Unequal constant strings fold to false.
+  // CHECK: firrtl.propassign %out2, [[FALSE]]
+  %1 = firrtl.prop.eq %s1, %s3 : !firrtl.string
+  firrtl.propassign %out2, %1 : !firrtl.bool
+
+  // Non-constant string operands do not fold.
+  // CHECK: [[EQ:%.+]] = firrtl.prop.eq %str, %str : !firrtl.string
+  // CHECK: firrtl.propassign %out3, [[EQ]]
+  %2 = firrtl.prop.eq %str, %str : !firrtl.string
+  firrtl.propassign %out3, %2 : !firrtl.bool
+
+  // Equal constant booleans fold to true.
+  %t1 = firrtl.bool true
+  %t2 = firrtl.bool true
+  %f1 = firrtl.bool false
+  // CHECK: firrtl.propassign %out4, [[TRUE]]
+  %3 = firrtl.prop.eq %t1, %t2 : !firrtl.bool
+  firrtl.propassign %out4, %3 : !firrtl.bool
+
+  // Unequal constant booleans fold to false.
+  // CHECK: firrtl.propassign %out5, [[FALSE]]
+  %4 = firrtl.prop.eq %t1, %f1 : !firrtl.bool
+  firrtl.propassign %out5, %4 : !firrtl.bool
+
+  // Non-constant bool operands do not fold.
+  // CHECK: [[BEQB:%.+]] = firrtl.prop.eq %b, %b : !firrtl.bool
+  // CHECK: firrtl.propassign %out6, [[BEQB]]
+  %5 = firrtl.prop.eq %b, %b : !firrtl.bool
+  firrtl.propassign %out6, %5 : !firrtl.bool
+
+  // Equal constant integers fold to true.
+  %i1 = firrtl.integer 42
+  %i2 = firrtl.integer 42
+  %i3 = firrtl.integer 0
+  // CHECK: firrtl.propassign %out7, [[TRUE]]
+  %6 = firrtl.prop.eq %i1, %i2 : !firrtl.integer
+  firrtl.propassign %out7, %6 : !firrtl.bool
+
+  // Unequal constant integers fold to false.
+  // CHECK: firrtl.propassign %out8, [[FALSE]]
+  %7 = firrtl.prop.eq %i1, %i3 : !firrtl.integer
+  firrtl.propassign %out8, %7 : !firrtl.bool
+
+  // Non-constant integer operands do not fold.
+  // CHECK: [[IEQI:%.+]] = firrtl.prop.eq %i, %i : !firrtl.integer
+  // CHECK: firrtl.propassign %out9, [[IEQI]]
+  %8 = firrtl.prop.eq %i, %i : !firrtl.integer
+  firrtl.propassign %out9, %8 : !firrtl.bool
+}
+
 }

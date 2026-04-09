@@ -1471,6 +1471,27 @@ def StringConcatOp : FIRRTLOp<"string.concat", [Pure, SameOperandsAndResultType]
   let hasCanonicalizer = 1;
 }
 
+def PropEqOp : FIRRTLOp<"prop.eq", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
+  let summary = "Compare two property values for equality";
+  let description = [{
+    Compares two property values (String, Bool, or Integer) of the same type
+    for equality, producing a boolean result.
+
+    Example:
+    ```mlir
+    %result = firrtl.prop.eq %lhs, %rhs : !firrtl.string
+    ```
+  }];
+
+  let arguments = (ins AnyTypeOf<[StringType, BoolType, FIntegerType]>:$lhs,
+                       AnyTypeOf<[StringType, BoolType, FIntegerType]>:$rhs);
+  let results = (outs BoolType:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
+
+  let hasFolder = 1;
+}
+
 def UnknownValueOp : FIRRTLOp<"unknown", [
   Pure,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,

@@ -152,6 +152,27 @@ firrtl.module @PropertyStringOps() {
   %3 = firrtl.string.concat %0, %1, %2 : !firrtl.string
 }
 
+// CHECK-LABEL: firrtl.module @PropertyPropEq
+firrtl.module @PropertyPropEq() {
+  %0 = firrtl.string "hello"
+  %1 = firrtl.string "world"
+
+  // CHECK: firrtl.prop.eq %0, %1 : !firrtl.string
+  %2 = firrtl.prop.eq %0, %1 : !firrtl.string
+
+  %3 = firrtl.bool true
+  %4 = firrtl.bool false
+
+  // CHECK: firrtl.prop.eq %3, %4 : !firrtl.bool
+  %5 = firrtl.prop.eq %3, %4 : !firrtl.bool
+
+  %6 = firrtl.integer 42
+  %7 = firrtl.integer 0
+
+  // CHECK: firrtl.prop.eq %6, %7 : !firrtl.integer
+  %8 = firrtl.prop.eq %6, %7 : !firrtl.integer
+}
+
 // CHECK-LABEL: firrtl.module @PropertyListOps
 firrtl.module @PropertyListOps() {
   %0 = firrtl.integer 0
