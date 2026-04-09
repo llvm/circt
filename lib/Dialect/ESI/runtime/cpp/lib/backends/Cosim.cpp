@@ -52,8 +52,16 @@ public:
   }
 
 protected:
-  void writeImpl(const MessageData &data) override {
-    // Add trace logging before sending the message.
+  /// Get the wire frame size in bytes. For windowed types, this is the
+  /// lowered type's width; otherwise, the port type's width.
+  size_t getFrameBytes() const {
+    if (translationInfo)
+      return translationInfo->frameBytes;
+    std::ptrdiff_t bw = type->getBitWidth();
+    return bw > 0 ? (bw + 7) / 8 : 0;
+  }
+
+  void writeSingle(const MessageData &data) {
     conn.getLogger().trace(
         [this,
          &data](std::string &subsystem, std::string &msg,
@@ -67,6 +75,24 @@ protected:
         });
 
     client.writeToServer(name, data);
+  }
+
+  void writeImpl(const MessageData &data) override {
+    // If the message is larger than one frame, chunk it. The cosim endpoint
+    // expects messages sized to the port's wire frame width.
+    size_t frameBytes = getFrameBytes();
+    if (frameBytes > 0 && data.getSize() > frameBytes) {
+      const uint8_t *ptr = data.getBytes();
+      size_t remaining = data.getSize();
+      while (remaining > 0) {
+        size_t chunk = std::min(remaining, frameBytes);
+        writeSingle(MessageData(ptr, chunk));
+        ptr += chunk;
+        remaining -= chunk;
+      }
+    } else {
+      writeSingle(data);
+    }
   }
 
   bool tryWriteImpl(const MessageData &data) override {

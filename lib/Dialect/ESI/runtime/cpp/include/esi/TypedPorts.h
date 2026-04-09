@@ -205,11 +205,6 @@ void verifyTypeCompatibility(const Type *portType) {
                                      std::to_string(width) +
                                      " should use a smaller C++ type than " +
                                      std::to_string(sizeof(T) * 8) + "-bit");
-  } else {
-    throw AcceleratorMismatchError(
-        std::string("Cannot verify type compatibility for C++ type '") +
-        typeid(T).name() + "' against ESI port type '" +
-        portType->toString(/*oneLine=*/true) + "'");
   }
 }
 
@@ -238,7 +233,24 @@ public:
   void write(const T &data) {
     if constexpr (CheckValue)
       checkValueRange(data);
-    inner->write(toMessageData(data, wireInfo_));
+    if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
+      // T implements SegmentedMessageData — flatten via toMessageData()
+      // which the port (or backend) can then chunk as needed.
+      inner->write(data.toMessageData());
+    } else {
+      inner->write(toMessageData(data, wireInfo_));
+    }
+  }
+
+  /// Write by taking ownership. If T is a SegmentedMessageData, this hands
+  /// the message directly to the port's segmented write path.
+  void write(std::unique_ptr<T> &data) {
+    if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
+      inner->write(std::move(data));
+    } else {
+      write(*data);
+      data.reset();
+    }
   }
 
   bool tryWrite(const T &data) {

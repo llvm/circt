@@ -188,6 +188,8 @@ protected:
     /// Size of the 'into' type in bytes (for fixed-size types).
     /// For types with lists, this is the size of the fixed header portion.
     size_t intoTypeBytes = 0;
+    /// Number of bytes per wire frame (from the lowered type's bit width).
+    size_t frameBytes = 0;
     /// True if the window contains a list field (variable-size message).
     bool hasListField = false;
   };
@@ -209,7 +211,7 @@ public:
 
   virtual void connect(const ConnectOptions &options = {}) override {
     translateMessages = options.translateMessage && translationInfo;
-    if (translateMessages)
+    if (translationInfo)
       translationInfo->precomputeFrameInfo();
     connectImpl(options);
     connected = true;
@@ -230,6 +232,14 @@ public:
     } else {
       writeImpl(data);
     }
+  }
+
+  /// Write a multi-segment message. Takes ownership so the backend can hold
+  /// the message across partial writes / async completions. Default flattens
+  /// and calls the regular write(). Backends override for scatter-gather /
+  /// chunked-DMA support.
+  virtual void write(std::unique_ptr<SegmentedMessageData> msg) {
+    write(msg->toMessageData());
   }
 
   /// A basic non-blocking write API. Returns true if any of the data was queued

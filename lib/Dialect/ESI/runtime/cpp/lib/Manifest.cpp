@@ -664,8 +664,15 @@ const Type *parseType(const nlohmann::json &typeJson, Context &cache) {
   if (f != typeParsers.end())
     t = f->second(typeJson, cache);
   else
+    // TODO: Add a UnionType class so union types are first-class rather than
+    // opaque.
     // Types we don't know about are opaque.
     t = new Type(id);
+
+  // Store hwBitwidth from the manifest so even opaque/unrecognized types
+  // (e.g. unions) report their width correctly.
+  if (typeJson.contains("hwBitwidth"))
+    t->setHWBitwidth(typeJson.at("hwBitwidth").get<std::ptrdiff_t>());
 
   // Insert into the cache.
   cache.registerType(t);

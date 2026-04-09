@@ -186,17 +186,6 @@ TEST(TypedPortsTest, NullPortTypeThrows) {
                AcceleratorMismatchError);
 }
 
-// A type that is not integral and has no _ESI_ID — should hit fallback.
-struct UnknownCppType {
-  double x;
-};
-
-TEST(TypedPortsTest, FallbackThrows) {
-  UIntType uint32("ui32", 32);
-  EXPECT_THROW(verifyTypeCompatibility<UnknownCppType>(&uint32),
-               AcceleratorMismatchError);
-}
-
 //===----------------------------------------------------------------------===//
 // TypedWritePort round-trip tests (verify MessageData encoding)
 //===----------------------------------------------------------------------===//

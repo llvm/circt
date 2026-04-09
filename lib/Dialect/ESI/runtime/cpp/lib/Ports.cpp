@@ -359,6 +359,10 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
 
     frames.push_back(std::move(frameInfo));
   }
+
+  // Set frameBytes from the lowered type's bit width.
+  std::ptrdiff_t loweredBits = windowType->getLoweredType()->getBitWidth();
+  frameBytes = loweredBits > 0 ? (loweredBits + 7) / 8 : 0;
 }
 
 bool ReadChannelPort::translateIncoming(MessageData &data) {
