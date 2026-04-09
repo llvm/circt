@@ -1657,6 +1657,19 @@ void StringConcatOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<FlattenStringConcat, MergeAdjacentStringConstants>(context);
 }
 
+//===----------------------------------------------------------------------===//
+// PropEqOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
+  auto lhsAttr = adaptor.getLhs();
+  auto rhsAttr = adaptor.getRhs();
+  if (!lhsAttr || !rhsAttr)
+    return {};
+
+  return BoolAttr::get(getContext(), lhsAttr == rhsAttr);
+}
+
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
   auto op = (*this);
   // BitCast is redundant if input and result types are same.
