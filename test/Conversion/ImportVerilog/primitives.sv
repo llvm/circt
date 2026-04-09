@@ -9,10 +9,10 @@
 // CHECK: [[A:%.+]] = moore.variable : <l1>
 // CHECK: [[B:%.+]] = moore.variable : <l1>
 // CHECK: [[Q:%.+]] = moore.variable : <l1>
-// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
-// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : !moore.ref<l1> -> l1
 // CHECK: [[AND:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
-// CHECK: moore.assign [[Q]], [[AND]] : l1
+// CHECK: moore.assign [[Q]], [[AND]] : !moore.ref<l1>, l1
 
 module and_prim;
     logic A, B, Q;
@@ -23,10 +23,10 @@ endmodule
 // CHECK: [[A:%.+]] = moore.variable : <l1>
 // CHECK: [[B:%.+]] = moore.variable : <l1>
 // CHECK: [[Q:%.+]] = moore.variable : <l1>
-// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
-// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : !moore.ref<l1> -> l1
 // CHECK: [[OR:%.+]] = moore.or [[RD_A]], [[RD_B]] : l1
-// CHECK: moore.assign [[Q]], [[OR]] : l1
+// CHECK: moore.assign [[Q]], [[OR]] : !moore.ref<l1>, l1
 
 module or_prim;
     logic A, B, Q;
@@ -37,10 +37,10 @@ endmodule
 // CHECK: [[A:%.+]] = moore.variable : <l1>
 // CHECK: [[B:%.+]] = moore.variable : <l1>
 // CHECK: [[Q:%.+]] = moore.variable : <l1>
-// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
-// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : !moore.ref<l1> -> l1
 // CHECK: [[XOR:%.+]] = moore.xor [[RD_A]], [[RD_B]] : l1
-// CHECK: moore.assign [[Q]], [[XOR]] : l1
+// CHECK: moore.assign [[Q]], [[XOR]] : !moore.ref<l1>, l1
 
 module xor_prim;
     logic A, B, Q;
@@ -53,14 +53,14 @@ endmodule
 // CHECK: [[C:%.+]] = moore.variable : <l1>
 // CHECK: [[D:%.+]] = moore.variable : <l1>
 // CHECK: [[Q:%.+]] = moore.variable : <l1>
-// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
-// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
-// CHECK: [[RD_C:%.+]] = moore.read [[C]] : <l1>
-// CHECK: [[RD_D:%.+]] = moore.read [[D]] : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_C:%.+]] = moore.read [[C]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_D:%.+]] = moore.read [[D]] : !moore.ref<l1> -> l1
 // CHECK: [[AND0:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
 // CHECK: [[AND1:%.+]] = moore.and [[AND0]], [[RD_C]] : l1
 // CHECK: [[AND2:%.+]] = moore.and [[AND1]], [[RD_D]] : l1
-// CHECK: moore.assign [[Q]], [[AND2]] : l1
+// CHECK: moore.assign [[Q]], [[AND2]] : !moore.ref<l1>, l1
 
 module multi_and_prim;
     logic A, B, C, D, Q;
@@ -71,11 +71,11 @@ endmodule
 // CHECK: [[A:%.+]] = moore.variable : <l1>
 // CHECK: [[B:%.+]] = moore.variable : <l1>
 // CHECK: [[Q:%.+]] = moore.variable : <l1>
-// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
-// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : !moore.ref<l1> -> l1
 // CHECK: [[AND:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
 // CHECK: [[NOT_AND:%.+]] = moore.not [[AND]] : l1
-// CHECK: moore.assign [[Q]], [[NOT_AND]] : l1
+// CHECK: moore.assign [[Q]], [[NOT_AND]] : !moore.ref<l1>, l1
 
 module nand_prim;
     logic A, B, Q;
@@ -86,11 +86,11 @@ endmodule
 // CHECK: [[A:%.+]] = moore.variable : <l1>
 // CHECK: [[B:%.+]] = moore.variable : <l1>
 // CHECK: [[Q:%.+]] = moore.variable : <l1>
-// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
-// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : !moore.ref<l1> -> l1
 // CHECK: [[OR:%.+]] = moore.or [[RD_A]], [[RD_B]] : l1
 // CHECK: [[NOT_OR:%.+]] = moore.not [[OR]] : l1
-// CHECK: moore.assign [[Q]], [[NOT_OR]] : l1
+// CHECK: moore.assign [[Q]], [[NOT_OR]] : !moore.ref<l1>, l1
 
 module nor_prim;
     logic A, B, Q;
@@ -101,11 +101,11 @@ endmodule
 // CHECK: [[A:%.+]] = moore.variable : <l1>
 // CHECK: [[B:%.+]] = moore.variable : <l1>
 // CHECK: [[Q:%.+]] = moore.variable : <l1>
-// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
-// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : !moore.ref<l1> -> l1
 // CHECK: [[XOR:%.+]] = moore.xor [[RD_A]], [[RD_B]] : l1
 // CHECK: [[NOT_XOR:%.+]] = moore.not [[XOR]] : l1
-// CHECK: moore.assign [[Q]], [[NOT_XOR]] : l1
+// CHECK: moore.assign [[Q]], [[NOT_XOR]] : !moore.ref<l1>, l1
 
 module xnor_prim;
     logic A, B, Q;
@@ -118,15 +118,15 @@ endmodule
 // CHECK: [[C:%.+]] = moore.variable : <l1>
 // CHECK: [[D:%.+]] = moore.variable : <l1>
 // CHECK: [[Q:%.+]] = moore.variable : <l1>
-// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
-// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
-// CHECK: [[RD_C:%.+]] = moore.read [[C]] : <l1>
-// CHECK: [[RD_D:%.+]] = moore.read [[D]] : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_C:%.+]] = moore.read [[C]] : !moore.ref<l1> -> l1
+// CHECK: [[RD_D:%.+]] = moore.read [[D]] : !moore.ref<l1> -> l1
 // CHECK: [[AND0:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
 // CHECK: [[AND1:%.+]] = moore.and [[AND0]], [[RD_C]] : l1
 // CHECK: [[AND2:%.+]] = moore.and [[AND1]], [[RD_D]] : l1
 // CHECK: [[NOT_AND:%.+]] = moore.not [[AND2]] : l1
-// CHECK: moore.assign [[Q]], [[NOT_AND]] : l1
+// CHECK: moore.assign [[Q]], [[NOT_AND]] : !moore.ref<l1>, l1
 
 module multi_nand_prim;
     logic A, B, C, D, Q;

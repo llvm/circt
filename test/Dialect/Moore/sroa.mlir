@@ -12,8 +12,8 @@ func.func @SplitStructs(%arg0: !moore.i42, %arg1: !moore.i1337) {
   %1 = moore.struct_extract_ref %x, "b" : <struct<{a: i42, b: i1337}>> -> <i1337>
   // CHECK: moore.blocking_assign %x.a, %arg0
   // CHECK: moore.blocking_assign %x.b, %arg1
-  moore.blocking_assign %0, %arg0 : !moore.i42
-  moore.blocking_assign %1, %arg1 : !moore.i1337
+  moore.blocking_assign %0, %arg0 : !moore.ref<i42>, i42
+  moore.blocking_assign %1, %arg1 : !moore.ref<i1337>, i1337
 
   // Anonymous variables
 
@@ -25,8 +25,8 @@ func.func @SplitStructs(%arg0: !moore.i42, %arg1: !moore.i1337) {
   %4 = moore.struct_extract_ref %2, "b" : <struct<{a: i42, b: i1337}>> -> <i1337>
   // CHECK: moore.blocking_assign [[A]], %arg0
   // CHECK: moore.blocking_assign [[B]], %arg1
-  moore.blocking_assign %3, %arg0 : !moore.i42
-  moore.blocking_assign %4, %arg1 : !moore.i1337
+  moore.blocking_assign %3, %arg0 : !moore.ref<i42>, i42
+  moore.blocking_assign %4, %arg1 : !moore.ref<i1337>, i1337
 
   return
 }
@@ -48,9 +48,9 @@ func.func @SplitNestedStructs(%arg0: !moore.i42, %arg1: !moore.i1337, %arg2: !mo
   // CHECK: moore.blocking_assign %k.a.y, %arg1
   // CHECK: moore.blocking_assign %k.b.u, %arg1
   // CHECK: moore.blocking_assign %k.b.v, %arg2
-  moore.blocking_assign %2, %arg0 : !moore.i42
-  moore.blocking_assign %3, %arg1 : !moore.i1337
-  moore.blocking_assign %4, %arg1 : !moore.i1337
-  moore.blocking_assign %5, %arg2 : !moore.i9001
+  moore.blocking_assign %2, %arg0 : !moore.ref<i42>, i42
+  moore.blocking_assign %3, %arg1 : !moore.ref<i1337>, i1337
+  moore.blocking_assign %4, %arg1 : !moore.ref<i1337>, i1337
+  moore.blocking_assign %5, %arg2 : !moore.ref<i9001>, i9001
   return
 }

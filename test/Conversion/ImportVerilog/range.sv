@@ -11,7 +11,7 @@ module RangeTest;
   // CHECK: moore.procedure initial {
   initial begin
     // CHECK: %[[CONST:.*]] = moore.constant 1 : i32 loc(#[[CONST_LOC:loc[0-9]+]])
-    // CHECK: moore.blocking_assign %a, %[[CONST]] : i32 loc(#[[ASSIGN_LOC:loc[0-9]+]])
+    // CHECK: moore.blocking_assign %a, %[[CONST]] : !moore.ref<i32>, i32 loc(#[[ASSIGN_LOC:loc[0-9]+]])
     a = 1;
   end
 endmodule
