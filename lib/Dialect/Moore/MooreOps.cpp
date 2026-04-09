@@ -1412,7 +1412,8 @@ template <typename OpTy>
 static LogicalResult verifyAssignLikeOp(OpTy op) {
   Type dstElemType = getLocationElementType(op.getDst().getType());
   if (!dstElemType)
-    return op.emitOpError("destination must be a !moore.ref<T> or !moore.ptr<T>");
+    return op.emitOpError(
+        "destination must be a !moore.ref<T> or !moore.ptr<T>");
   if (dstElemType != op.getSrc().getType())
     return op.emitOpError("source type (")
            << op.getSrc().getType() << ") does not match destination element "

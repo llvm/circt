@@ -953,9 +953,8 @@ struct RvalueExprVisitor : public ExprVisitor {
 
     // Determine the right-hand side value of the assignment.
     context.lvalueStack.push_back(lhs);
-    auto rhs =
-        context.convertRvalueExpression(expr.right(),
-                                        getLocationElementType(lhs.getType()));
+    auto rhs = context.convertRvalueExpression(
+        expr.right(), getLocationElementType(lhs.getType()));
     context.lvalueStack.pop_back();
     if (!rhs)
       return {};
@@ -2314,8 +2313,8 @@ struct LvalueExprVisitor : public ExprVisitor {
       Value value;
       if (stream.constantWithWidth.has_value()) {
         value = context.convertLvalueExpression(*stream.withExpr);
-        auto type = cast<moore::UnpackedType>(getLocationElementType(
-            value.getType()));
+        auto type =
+            cast<moore::UnpackedType>(getLocationElementType(value.getType()));
         auto intType = moore::RefType::get(moore::IntType::get(
             context.getContext(), type.getBitSize().value(), type.getDomain()));
         // Do not care if it's signed, because we will not do expansion.
