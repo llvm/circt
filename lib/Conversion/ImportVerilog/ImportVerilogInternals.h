@@ -20,6 +20,7 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "slang/ast/ASTVisitor.h"
+#include "slang/text/SourceManager.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/Debug.h"
 #include <map>
@@ -133,6 +134,24 @@ struct HierPathInfo {
   std::optional<unsigned int> idx;
   slang::ast::ArgumentDirection direction;
   const slang::ast::ValueSymbol *valueSym;
+};
+
+// A slang::SourceLocation for deterministic comparisons. Comparisons use the
+// buffer's sortKey rather than bufferId.
+struct LocationKey {
+  uint64_t sortKey;
+  size_t offset;
+
+  static LocationKey get(const slang::SourceLocation &loc,
+                         const slang::SourceManager &mgr) {
+    return {
+        mgr.getSortKey(loc.buffer()),
+        loc.offset(),
+    };
+  }
+
+  std::strong_ordering operator<=>(const LocationKey &) const = default;
+  bool operator==(const LocationKey &) const = default;
 };
 
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
@@ -327,6 +346,9 @@ struct Context {
   Value convertInsideCheck(Value insideLhs, Location loc,
                            const slang::ast::Expression &expr);
 
+  /// Populate the bufferIdOrder map from sourceLoader::fileInfo.
+  void populateBufferIdOrder();
+
   const ImportVerilogOptions &options;
   slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;
@@ -339,7 +361,9 @@ struct Context {
 
   /// The top-level operations ordered by their Slang source location. This is
   /// used to produce IR that follows the source file order.
-  std::map<slang::SourceLocation, Operation *> orderedRootOps;
+  //
+  // The key is {sortKey(loc.bufferId), loc.offset}.
+  std::map<LocationKey, Operation *> orderedRootOps;
 
   /// How we have lowered modules to MLIR.
   DenseMap<const slang::ast::InstanceBodySymbol *,
