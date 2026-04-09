@@ -351,8 +351,8 @@ endmodule
 
 // -----
 
-module not_prim;
-    logic A, Q;
-    // expected-error @below {{unsupported instance of primitive `not`}}
-    not u1 (Q, A);
+module unsupported_prim;
+    logic A, B, C, D;
+    // expected-error @below {{unsupported instance of primitive `rcmos`}}
+    rcmos u1 (A, B, C, D);
 endmodule

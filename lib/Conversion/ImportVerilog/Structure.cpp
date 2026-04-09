@@ -1765,6 +1765,9 @@ LogicalResult Context::convertPrimitiveInstance(
   case slang::ast::PrimitiveSymbol::PrimitiveKind::NInput:
     return this->convertNInputPrimitive(prim);
     break;
+  case slang::ast::PrimitiveSymbol::PrimitiveKind::NOutput:
+    return this->convertNOutputPrimitive(prim);
+    break;
   default:
     return mlir::emitError(convertLocation(prim.location))
            << "unsupported instance of primitive `" << prim.primitiveType.name
@@ -1854,6 +1857,53 @@ LogicalResult Context::convertNInputPrimitive(
     return failure();
 
   moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
+  return success();
+}
+
+LogicalResult Context::convertNOutputPrimitive(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  auto loc = convertLocation(prim.location);
+  auto primName = prim.primitiveType.name;
+
+  auto portConns = prim.getPortConnections();
+  assert(portConns.size() >= 2 &&
+         "n-output primitives should have at least 2 ports");
+
+  // Get SSA values corresponding to operands (and unwrap where necessary)
+  SmallVector<Value> outputVals;
+  outputVals.reserve(portConns.size() - 1);
+  for (const auto *outputConn : portConns.subspan(0, portConns.size() - 1)) {
+    auto &output = outputConn->as<slang::ast::AssignmentExpression>().left();
+    auto outputVal = this->convertLvalueExpression(output);
+    if (!outputVal)
+      return failure();
+    outputVals.push_back(outputVal);
+  }
+
+  auto inputVal = this->convertRvalueExpression(*portConns.back());
+  if (!inputVal)
+    return failure();
+
+  auto result =
+      llvm::StringSwitch<std::function<Value()>>(prim.primitiveType.name)
+          .Case("not",
+                ([&] { return moore::NotOp::create(builder, loc, inputVal); }))
+          .Default([&] {
+            mlir::emitError(loc)
+                << "unsupported primitive `" << primName << "`";
+            return Value();
+          })();
+
+  if (!result)
+    return failure();
+
+  for (auto outputVal : outputVals) {
+    auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
+    Value converted = materializeConversion(dstType, result, false, loc);
+    if (!converted)
+      return failure();
+    moore::ContinuousAssignOp::create(builder, loc, outputVal, converted);
+  }
   return success();
 }
 

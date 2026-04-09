@@ -278,6 +278,9 @@ struct Context {
   LogicalResult
   convertNInputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
+  LogicalResult
+  convertNOutputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
+
   /// Helper function to convert a value to its "truthy" boolean value.
   Value convertToBool(Value value);
 
