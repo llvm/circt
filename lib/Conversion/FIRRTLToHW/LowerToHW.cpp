@@ -5288,6 +5288,9 @@ LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError("lower-to-core does not support firrtl.force");
+
   auto srcVal = getLoweredValue(op.getSrc());
   if (!srcVal)
     return failure();
@@ -5308,6 +5311,10 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError(
+        "lower-to-core does not support firrtl.ref.force");
+
   auto src = getLoweredNonClockValue(op.getSrc());
   auto clock = getLoweredNonClockValue(op.getClock());
   auto pred = getLoweredValue(op.getPredicate());
@@ -5329,6 +5336,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   return success();
 }
 LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError(
+        "lower-to-core does not support firrtl.ref.force_initial");
+
   auto src = getLoweredNonClockValue(op.getSrc());
   auto pred = getLoweredValue(op.getPredicate());
   if (!src || !pred)
@@ -5349,6 +5360,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
   return success();
 }
 LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError(
+        "lower-to-core does not support firrtl.ref.release");
+
   auto clock = getLoweredNonClockValue(op.getClock());
   auto pred = getLoweredValue(op.getPredicate());
   if (!clock || !pred)
@@ -5369,6 +5384,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
   return success();
 }
 LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError(
+        "lower-to-core does not support firrtl.ref.release_initial");
+
   auto destVal = getPossiblyInoutLoweredValue(op.getDest());
   auto pred = getLoweredValue(op.getPredicate());
   if (!destVal || !pred)
@@ -5971,6 +5990,11 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   // of other values. Therefore we can delete the attach op here.
   if (getSingleNonInstanceOperand(op))
     return success();
+
+  if (circuitState.lowerToCore)
+    return op.emitOpError(
+        "lower-to-core does not support firrtl.attach that requires SV "
+        "lowering");
 
   // If all operands of the attach are internal to this module (none of them
   // are ports), then they can all be replaced with a single wire, and we can

@@ -1,6 +1,8 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(lower-firrtl-to-hw{lower-to-core=true})' %s | FileCheck %s
 
 firrtl.circuit "LowerToCore" {
+  firrtl.extmodule @AnalogSink(in a: !firrtl.analog<8>)
+
   // CHECK-LABEL: hw.module @LowerToCore(
   firrtl.module @LowerToCore(
       in %clock: !firrtl.clock,
@@ -27,5 +29,14 @@ firrtl.circuit "LowerToCore" {
         : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<4>, !firrtl.fstring
 
     firrtl.skip
+  }
+
+  // CHECK-LABEL: hw.module @AttachToPort(inout %a : i8)
+  // CHECK-NEXT: hw.instance "sink" @AnalogSink(a: %a: !hw.inout<i8>) -> ()
+  // CHECK-NEXT: hw.output
+  // CHECK-NOT: sv.
+  firrtl.module @AttachToPort(out %a: !firrtl.analog<8>) {
+    %sink = firrtl.instance sink @AnalogSink(in a: !firrtl.analog<8>)
+    firrtl.attach %a, %sink : !firrtl.analog<8>, !firrtl.analog<8>
   }
 }
