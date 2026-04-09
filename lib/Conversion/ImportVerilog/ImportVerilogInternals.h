@@ -346,9 +346,6 @@ struct Context {
   Value convertInsideCheck(Value insideLhs, Location loc,
                            const slang::ast::Expression &expr);
 
-  /// Populate the bufferIdOrder map from sourceLoader::fileInfo.
-  void populateBufferIdOrder();
-
   const ImportVerilogOptions &options;
   slang::ast::Compilation &compilation;
   mlir::ModuleOp intoModuleOp;
@@ -361,8 +358,6 @@ struct Context {
 
   /// The top-level operations ordered by their Slang source location. This is
   /// used to produce IR that follows the source file order.
-  //
-  // The key is {sortKey(loc.bufferId), loc.offset}.
   std::map<LocationKey, Operation *> orderedRootOps;
 
   /// How we have lowered modules to MLIR.
