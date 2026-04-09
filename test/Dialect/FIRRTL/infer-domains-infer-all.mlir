@@ -656,3 +656,68 @@ firrtl.circuit "NoBounceDomainForInstanceWithTightDomainCycle" {
     firrtl.matchingconnect %foo_i, %foo_o : !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: "ProbeWire"
+firrtl.circuit "ProbeWire" {
+  firrtl.domain @ClockDomain
+  // CHECK: firrtl.module @ProbeWire(in %ClockDomain: !firrtl.domain<@ClockDomain()>, out %probe: !firrtl.probe<uint<1>> domains [%ClockDomain]) {
+  firrtl.module @ProbeWire(out %probe: !firrtl.probe<uint<1>>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: %w = firrtl.wire domains[%ClockDomain] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    %w = firrtl.wire : !firrtl.uint<1>
+    %0 = firrtl.ref.send %w : !firrtl.uint<1>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<uint<1>>
+    firrtl.matchingconnect %w, %c0_ui1 : !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: "ProbePort"
+firrtl.circuit "ProbePort" {
+  firrtl.domain @ClockDomain
+  // firrtl.module @ProbePort(in %ClockDomain: !firrtl.domain<@ClockDomain()>, in %i: !firrtl.uint<1> domains [%ClockDomain], out %probe: !firrtl.probe<uint<1>> domains [%ClockDomain])
+  firrtl.module @ProbePort(in %i: !firrtl.uint<1>, out %probe: !firrtl.probe<uint<1>>) {
+    %0 = firrtl.ref.send %i : !firrtl.uint<1>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<uint<1>>
+  }
+}
+
+// CHECK-LABEL: "ProbeOutputPort"
+firrtl.circuit "ProbeOutputPort" {
+  firrtl.domain @ClockDomain
+  // firrtl.module @ProbeOutputPort(in %ClockDomain: !firrtl.domain<@ClockDomain()>, in %i: !firrtl.uint<1> domains [%ClockDomain], out %o: !firrtl.probe<uint<1>> domains [%ClockDomain])
+  firrtl.module @ProbeOutputPort(out %o: !firrtl.uint<1>, out %probe: !firrtl.probe<uint<1>>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %c0_ui1 : !firrtl.uint<1>
+    %0 = firrtl.ref.send %o : !firrtl.uint<1>
+    firrtl.ref.define %probe, %0 : !firrtl.probe<uint<1>>
+  }
+}
+
+// CHECK-LABEL: "ResolveForceableWire"
+firrtl.circuit "ResolveForceableWire" {
+  firrtl.domain @ClockDomain
+  // CHECK: firrtl.module @ResolveForceableWire(in %ClockDomain: !firrtl.domain<@ClockDomain()>, out %o: !firrtl.uint<1> domains [%ClockDomain])
+  firrtl.module @ResolveForceableWire(out %o : !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: %w, %w_ref = firrtl.wire forceable domains[%ClockDomain] : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>> domains[!firrtl.domain<@ClockDomain()>]
+    %w, %w_ref = firrtl.wire forceable : !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+    firrtl.matchingconnect %w, %c0_ui1 : !firrtl.uint<1>
+    %data = firrtl.ref.resolve %w_ref : !firrtl.rwprobe<uint<1>>
+    firrtl.matchingconnect %o, %data : !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: "ResolveRWProbeOfInnerSym"
+firrtl.circuit "ResolveRWProbeOfInnerSym" {
+  firrtl.domain @ClockDomain
+  // CHECK: firrtl.module @ResolveRWProbeOfInnerSym(in %ClockDomain: !firrtl.domain<@ClockDomain()>, out %o: !firrtl.uint<1> domains [%ClockDomain])
+  firrtl.module @ResolveRWProbeOfInnerSym(out %o: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK: %w = firrtl.wire sym @sym domains[%ClockDomain] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    %w = firrtl.wire sym @sym : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %c0_ui1 : !firrtl.uint<1>
+    %w_ref = firrtl.ref.rwprobe <@ResolveRWProbeOfInnerSym::@sym> : !firrtl.rwprobe<uint<1>>
+    %data = firrtl.ref.resolve %w_ref : !firrtl.rwprobe<uint<1>>
+    firrtl.matchingconnect %o, %data : !firrtl.uint<1>
+  }
+}

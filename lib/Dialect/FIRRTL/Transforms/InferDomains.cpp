@@ -43,6 +43,8 @@ namespace firrtl {
 using namespace circt;
 using namespace firrtl;
 
+using hw::InnerRefNamespace;
+using hw::InnerSymbolTableCollection;
 using llvm::concat;
 using mlir::AsmState;
 using mlir::ReverseIterator;
@@ -89,6 +91,23 @@ static bool isDriven(DomainValue port) {
   return false;
 }
 
+/// True if a value of the given type could be associated with a domain.
+static bool isHardware(Type type) {
+  return type_isa<FIRRTLBaseType, RefType>(type);
+}
+
+/// True if the given value could be association with a domain.
+static bool isHardware(Value value) {
+  if (!isHardware(value.getType()))
+    return false;
+
+  if (auto *op = value.getDefiningOp())
+    if (op->hasTrait<OpTrait::ConstantLike>())
+      return false;
+
+  return true;
+}
+
 //====--------------------------------------------------------------------------
 // Global State.
 //====--------------------------------------------------------------------------
@@ -117,8 +136,9 @@ struct ModuleUpdateInfo {
 namespace {
 struct CircuitState {
   CircuitState(CircuitOp circuit, InstanceGraph &instanceGraph,
-               InferDomainsMode mode)
-      : circuit(circuit), instanceGraph(instanceGraph), mode(mode) {
+               InnerRefNamespace &innerRefNamespace, InferDomainsMode mode)
+      : circuit(circuit), instanceGraph(instanceGraph),
+        innerRefNamespace(innerRefNamespace), mode(mode) {
     processCircuit(circuit);
   }
 
@@ -147,6 +167,8 @@ struct CircuitState {
     return moduleUpdateTable;
   }
 
+  InnerRefNamespace &getInnerRefNamespace() { return innerRefNamespace; }
+
 private:
   LogicalResult runOnModule(Operation *module);
 
@@ -164,6 +186,7 @@ private:
 
   CircuitOp circuit;
   InstanceGraph &instanceGraph;
+  InnerRefNamespace &innerRefNamespace;
   InferDomainsMode mode;
   SmallVector<DomainOp> domainTable;
   DenseMap<Type, DomainTypeID> typeIDTable;
@@ -334,6 +357,9 @@ public:
                                              size_t i);
 
   LogicalResult unifyAssociations(Operation *op, Value lhs, Value rhs);
+  template <typename T>
+  LogicalResult unifyAssociations(Operation *op, T &&range);
+  LogicalResult unifyAssociations(Operation *op);
 
   LogicalResult processModulePorts(FModuleOp moduleOp);
   template <typename T>
@@ -344,6 +370,7 @@ public:
   LogicalResult processOp(UnsafeDomainCastOp op);
   LogicalResult processOp(DomainDefineOp op);
   LogicalResult processOp(WireOp op);
+  LogicalResult processOp(RWProbeOp op);
   LogicalResult processOp(Operation *op);
   LogicalResult processModuleBody(FModuleOp moduleOp);
   LogicalResult processModule(FModuleOp moduleOp);
@@ -627,7 +654,7 @@ void ModuleState::setTermForDomain(DomainValue value, Term *term) {
 }
 
 Term *ModuleState::getOptDomainAssociation(Value value) {
-  assert(isa<FIRRTLBaseType>(value.getType()));
+  assert(isHardware(value));
   auto it = associationTable.find(value);
   if (it == associationTable.end())
     return nullptr;
@@ -641,7 +668,7 @@ Term *ModuleState::getDomainAssociation(Value value) {
 }
 
 void ModuleState::setDomainAssociation(Value value, Term *term) {
-  assert(isa<FIRRTLBaseType>(value.getType()));
+  assert(isHardware(value));
   assert(term);
   term = find(term);
   associationTable.insert({value, term});
@@ -665,7 +692,7 @@ void ModuleState::processDomainDefinition(DomainValue domain) {
 }
 
 RowTerm *ModuleState::getDomainAssociationAsRow(Value value) {
-  assert(isa<FIRRTLBaseType>(value.getType()));
+  assert(isHardware(value));
   auto *term = getOptDomainAssociation(value);
 
   // If the term is unknown, allocate a fresh row and set the association.
@@ -834,6 +861,25 @@ LogicalResult ModuleState::unifyAssociations(Operation *op, Value lhs,
   return success();
 }
 
+template <typename T>
+LogicalResult ModuleState::unifyAssociations(Operation *op, T &&range) {
+  Value lhs;
+  for (auto rhs : std::forward<T>(range)) {
+    if (!isHardware(rhs))
+      continue;
+    if (failed(unifyAssociations(op, lhs, rhs)))
+      return failure();
+    lhs = rhs;
+  }
+
+  return success();
+}
+
+LogicalResult ModuleState::unifyAssociations(Operation *op) {
+  return unifyAssociations(
+      op, llvm::concat<Value>(op->getOperands(), op->getResults()));
+}
+
 LogicalResult ModuleState::processModulePorts(FModuleOp moduleOp) {
   auto numDomains = getNumDomains();
   auto domainInfo = moduleOp.getDomainInfoAttr();
@@ -856,8 +902,7 @@ LogicalResult ModuleState::processModulePorts(FModuleOp moduleOp) {
 
   for (size_t i = 0; i < numPorts; ++i) {
     BlockArgument port = moduleOp.getArgument(i);
-    auto type = type_dyn_cast<FIRRTLBaseType>(port.getType());
-    if (!type)
+    if (!isHardware(port))
       continue;
 
     LLVM_DEBUG(llvm::dbgs().indent(4)
@@ -913,8 +958,7 @@ LogicalResult ModuleState::processInstancePorts(T op) {
 
   for (size_t i = 0; i < numPorts; ++i) {
     Value port = op->getResult(i);
-    auto type = type_dyn_cast<FIRRTLBaseType>(port.getType());
-    if (!type)
+    if (!isHardware(port))
       continue;
 
     SmallVector<IntegerAttr> associations(numDomains);
@@ -1012,7 +1056,7 @@ LogicalResult ModuleState::processOp(WireOp op) {
   // between an explicit wire domain and a connection's inferred domain is
   // caught later by the connection's own processOp.
   if (op.getDomains().empty())
-    return success();
+    return unifyAssociations(op, op.getResults());
 
   // Build a row with the explicitly-specified domain slots filled in and set
   // it as the association for this wire result.
@@ -1022,9 +1066,26 @@ LogicalResult ModuleState::processOp(WireOp op) {
     auto typeID = getDomainTypeID(domainValue);
     elements[typeID.index] = getTermForDomain(domainValue);
   }
-  setDomainAssociation(op.getResult(), allocRow(elements));
+
+  auto *row = allocRow(elements);
+  for (auto result : op.getResults())
+    setDomainAssociation(result, row);
 
   return success();
+}
+
+LogicalResult ModuleState::processOp(RWProbeOp op) {
+  auto target = globals.getInnerRefNamespace().lookup(op.getTarget());
+
+  if (target.isPort()) {
+    auto targetOp = cast<FModuleOp>(target.getOp());
+    auto targetValue = targetOp.getArgument(target.getPort());
+    return unifyAssociations(op, targetValue, op.getResult());
+  }
+
+  auto targetOp = cast<hw::InnerSymbolOpInterface>(target.getOp());
+  auto targetValue = targetOp.getTargetResult();
+  return unifyAssociations(op, targetValue, op.getResult());
 }
 
 LogicalResult ModuleState::processOp(Operation *op) {
@@ -1037,6 +1098,8 @@ LogicalResult ModuleState::processOp(Operation *op) {
     return processOp(cast);
   if (auto def = dyn_cast<DomainDefineOp>(op))
     return processOp(def);
+  if (auto probe = dyn_cast<RWProbeOp>(op))
+    return processOp(probe);
   if (auto create = dyn_cast<DomainCreateOp>(op)) {
     processDomainDefinition(create);
     return success();
@@ -1046,31 +1109,7 @@ LogicalResult ModuleState::processOp(Operation *op) {
     return success();
   }
 
-  // For all other operations (including connections), propagate domains from
-  // operands to results. This is a conservative approach - all operands and
-  // results share the same domain associations.
-  Value lhs;
-  for (auto rhs : op->getOperands()) {
-    if (!isa<FIRRTLBaseType>(rhs.getType()))
-      continue;
-    if (auto *op = rhs.getDefiningOp();
-        op && op->hasTrait<OpTrait::ConstantLike>())
-      continue;
-    if (failed(unifyAssociations(op, lhs, rhs)))
-      return failure();
-    lhs = rhs;
-  }
-  for (auto rhs : op->getResults()) {
-    if (!isa<FIRRTLBaseType>(rhs.getType()))
-      continue;
-    if (auto *op = rhs.getDefiningOp();
-        op && op->hasTrait<OpTrait::ConstantLike>())
-      continue;
-    if (failed(unifyAssociations(op, lhs, rhs)))
-      return failure();
-    lhs = rhs;
-  }
-  return success();
+  return unifyAssociations(op);
 }
 
 LogicalResult ModuleState::processModuleBody(FModuleOp moduleOp) {
@@ -1196,8 +1235,7 @@ void ModuleState::getUpdatesForModulePorts(FModuleOp moduleOp,
                                            PendingUpdates &pending) {
   for (size_t i = 0, e = moduleOp.getNumPorts(); i < e; ++i) {
     auto port = moduleOp.getArgument(i);
-    auto type = port.getType();
-    if (!isa<FIRRTLBaseType>(type))
+    if (!isHardware(port))
       continue;
 
     getUpdatesForDomainAssociationOfPort(
@@ -1305,48 +1343,46 @@ LogicalResult ModuleState::updateModuleDomainInfo(
       continue;
     }
 
-    if (isa<FIRRTLBaseType>(type)) {
-      auto associations =
-          copyPortDomainAssociations(moduleOp, oldModuleDomainInfo, i);
-      auto *row = cast<RowTerm>(getDomainAssociation(port));
-      for (size_t domainIndex = 0; domainIndex < numDomains; ++domainIndex) {
-        auto domainTypeID = DomainTypeID{domainIndex};
-        if (associations[domainIndex])
-          continue;
-
-        auto domain = cast<ValueTerm>(find(row->elements[domainIndex]))->value;
-        auto &exports = exportTable.at(domain);
-        if (exports.empty()) {
-          auto portName = moduleOp.getPortNameAttr(i);
-          auto portLoc = moduleOp.getPortLocation(i);
-          auto domainDecl = getDomain(domainTypeID);
-          auto domainName = domainDecl.getNameAttr();
-          auto diag = emitError(portLoc)
-                      << "private " << domainName << " association for port "
-                      << portName;
-          diag.attachNote(domain.getLoc()) << "associated domain: " << domain;
-          noteLocation(diag, moduleOp);
-          return failure();
-        }
-
-        if (exports.size() > 1) {
-          emitAmbiguousPortDomainAssociation(moduleOp, exports, domainTypeID,
-                                             i);
-          return failure();
-        }
-
-        auto argument = cast<BlockArgument>(exports[0]);
-        auto domainPortIndex = argument.getArgNumber();
-        associations[domainTypeID.index] = IntegerAttr::get(
-            IntegerType::get(context, 32, IntegerType::Unsigned),
-            domainPortIndex);
-      }
-
-      newModuleDomainInfo[i] = ArrayAttr::get(context, associations);
+    if (!isHardware(port)) {
+      newModuleDomainInfo[i] = ArrayAttr::get(context, {});
       continue;
     }
 
-    newModuleDomainInfo[i] = ArrayAttr::get(context, {});
+    auto associations =
+        copyPortDomainAssociations(moduleOp, oldModuleDomainInfo, i);
+    auto *row = cast<RowTerm>(getDomainAssociation(port));
+    for (size_t domainIndex = 0; domainIndex < numDomains; ++domainIndex) {
+      auto domainTypeID = DomainTypeID{domainIndex};
+      if (associations[domainIndex])
+        continue;
+
+      auto domain = cast<ValueTerm>(find(row->elements[domainIndex]))->value;
+      auto &exports = exportTable.at(domain);
+      if (exports.empty()) {
+        auto portName = moduleOp.getPortNameAttr(i);
+        auto portLoc = moduleOp.getPortLocation(i);
+        auto domainDecl = getDomain(domainTypeID);
+        auto domainName = domainDecl.getNameAttr();
+        auto diag = emitError(portLoc) << "private " << domainName
+                                       << " association for port " << portName;
+        diag.attachNote(domain.getLoc()) << "associated domain: " << domain;
+        noteLocation(diag, moduleOp);
+        return failure();
+      }
+
+      if (exports.size() > 1) {
+        emitAmbiguousPortDomainAssociation(moduleOp, exports, domainTypeID, i);
+        return failure();
+      }
+
+      auto argument = cast<BlockArgument>(exports[0]);
+      auto domainPortIndex = argument.getArgNumber();
+      associations[domainTypeID.index] =
+          IntegerAttr::get(IntegerType::get(context, 32, IntegerType::Unsigned),
+                           domainPortIndex);
+    }
+
+    newModuleDomainInfo[i] = ArrayAttr::get(context, associations);
   }
 
   result = ArrayAttr::get(moduleOp.getContext(), newModuleDomainInfo);
@@ -1436,7 +1472,7 @@ LogicalResult
 ModuleState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
                         WireOp wireOp) {
   auto result = wireOp.getResult();
-  if (!isa<FIRRTLBaseType>(result.getType()))
+  if (!isHardware(result))
     return success();
 
   LLVM_DEBUG(llvm::dbgs().indent(4) << "update " << render(wireOp) << "\n");
@@ -1542,8 +1578,7 @@ LogicalResult ModuleState::checkModulePorts(FModuleLike moduleOp) {
   }
 
   for (size_t i = 0; i < numPorts; ++i) {
-    auto type = type_dyn_cast<FIRRTLBaseType>(moduleOp.getPortType(i));
-    if (!type)
+    if (!isHardware(moduleOp.getPortType(i)))
       continue;
 
     // Record the domain associations of this port.
@@ -1795,7 +1830,12 @@ struct InferDomainsPass
     }
 
     auto &instanceGraph = getAnalysis<InstanceGraph>();
-    CircuitState state(circuit, instanceGraph, mode);
+    auto &symbolTable = getAnalysis<SymbolTable>();
+    auto &innerSymbolTableCollection =
+        getAnalysis<InnerSymbolTableCollection>();
+    circt::hw::InnerRefNamespace innerRefNamespace{symbolTable,
+                                                   innerSymbolTableCollection};
+    CircuitState state(circuit, instanceGraph, innerRefNamespace, mode);
     if (failed(state.run()))
       signalPassFailure();
   }
