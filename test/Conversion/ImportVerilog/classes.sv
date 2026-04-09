@@ -612,6 +612,60 @@ function void testVirtualDispatch (testClassVirtual t);
     t.testFun();
 endfunction
 
+/// Check virtual dispatch with a nontrivial method body.
+
+// CHECK-LABEL: moore.class.classdecl @testClassVirtualInt {
+// CHECK:      moore.class.propertydecl @bias : !moore.i32
+// CHECK:      moore.class.methoddecl @adjust -> @"testClassVirtualInt::adjust" : (!moore.class<@testClassVirtualInt>, !moore.i32) -> !moore.i32
+// CHECK:      }
+// CHECK-LABEL: moore.class.classdecl @testDerivedVirtualInt extends @testClassVirtualInt {
+// CHECK:      moore.class.propertydecl @delta : !moore.i32
+// CHECK:      moore.class.methoddecl @adjust -> @"testDerivedVirtualInt::adjust" : (!moore.class<@testDerivedVirtualInt>, !moore.i32) -> !moore.i32
+// CHECK:      }
+// CHECK-LABEL: func.func private @"testDerivedVirtualInt::adjust"(%arg0: !moore.class<@testDerivedVirtualInt>, %arg1: !moore.i32) -> !moore.i32 {
+// CHECK:        [[DELTA_REF:%.+]] = moore.class.property_ref %arg0[@delta] : <@testDerivedVirtualInt> -> <i32>
+// CHECK:        [[DELTA:%.+]] = moore.read [[DELTA_REF]] : <i32>
+// CHECK:        [[CMP:%.+]] = moore.slt %arg1, [[DELTA]] : i32 -> i1
+// CHECK:        [[COND:%.+]] = moore.to_builtin_int [[CMP]] : i1
+// CHECK:        cf.cond_br [[COND]],
+// CHECK:      ^bb1:
+// CHECK:        [[UPCAST:%.+]] = moore.class.upcast %arg0 : <@testDerivedVirtualInt> to <@testClassVirtualInt>
+// CHECK:        [[BIAS_REF:%.+]] = moore.class.property_ref [[UPCAST]][@bias] : <@testClassVirtualInt> -> <i32>
+// CHECK:        [[BIAS:%.+]] = moore.read [[BIAS_REF]] : <i32>
+// CHECK:        [[ADD:%.+]] = moore.add %arg1, [[BIAS]] : i32
+// CHECK:        return [[ADD]] : !moore.i32
+// CHECK:      ^bb2:
+// CHECK:        [[DELTA_REF2:%.+]] = moore.class.property_ref %arg0[@delta] : <@testDerivedVirtualInt> -> <i32>
+// CHECK:        [[DELTA2:%.+]] = moore.read [[DELTA_REF2]] : <i32>
+// CHECK:        [[SUB:%.+]] = moore.sub %arg1, [[DELTA2]] : i32
+// CHECK:        return [[SUB]] : !moore.i32
+// CHECK:      }
+// CHECK-LABEL: func.func private @testVirtualDispatchInt(%arg0: !moore.class<@testClassVirtualInt>, %arg1: !moore.i32) -> !moore.i32 {
+// CHECK:        [[VMETH:%.+]] = moore.vtable.load_method %arg0 : @adjust of <@testClassVirtualInt> -> (!moore.class<@testClassVirtualInt>, !moore.i32) -> !moore.i32
+// CHECK:        [[CALL:%.+]] = call_indirect [[VMETH]](%arg0, %arg1) : (!moore.class<@testClassVirtualInt>, !moore.i32) -> !moore.i32
+// CHECK:        return [[CALL]] : !moore.i32
+// CHECK:      }
+
+class testClassVirtualInt;
+   int bias;
+   virtual function int adjust(int x);
+      return x + bias;
+   endfunction
+endclass
+
+class testDerivedVirtualInt extends testClassVirtualInt;
+   int delta;
+   virtual function int adjust(int x);
+      if (x < delta)
+         return x + bias;
+      return x - delta;
+   endfunction
+endclass
+
+function int testVirtualDispatchInt(testClassVirtualInt t, int x);
+    return t.adjust(x);
+endfunction
+
 /// Check pure virtual forward declarations
 
 // CHECK-LABEL:  moore.class.classdecl @virtualFunctionClass {
