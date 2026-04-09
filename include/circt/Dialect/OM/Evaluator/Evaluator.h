@@ -443,6 +443,9 @@ private:
   FailureOr<EvaluatorValuePtr>
   evaluateStringConcat(StringConcatOp op, ActualParameters actualParams,
                        Location loc);
+  FailureOr<EvaluatorValuePtr>
+  evaluateBinaryEquality(BinaryEqualityOp op, ActualParameters actualParams,
+                         Location loc);
   FailureOr<evaluator::EvaluatorValuePtr>
   evaluateBasePathCreate(FrozenBasePathCreateOp op,
                          ActualParameters actualParams, Location loc);

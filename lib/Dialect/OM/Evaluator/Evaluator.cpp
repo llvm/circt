@@ -160,6 +160,12 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
+                .Case([&](BinaryEqualityOp op) {
+                  evaluator::EvaluatorValuePtr result =
+                      evaluator::AttributeValue::get(op.getResult().getType(),
+                                                     loc);
+                  return success(result);
+                })
                 .Case<ListCreateOp, ListConcatOp, StringConcatOp,
                       ObjectFieldOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
@@ -391,6 +397,9 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             })
             .Case([&](StringConcatOp op) {
               return evaluateStringConcat(op, actualParams, loc);
+            })
+            .Case([&](BinaryEqualityOp op) {
+              return evaluateBinaryEquality(op, actualParams, loc);
             })
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams, loc);
@@ -796,6 +805,73 @@ circt::om::Evaluator::evaluateStringConcat(StringConcatOp op,
   // Finalize the op result value.
   auto *handleValue = cast<evaluator::AttributeValue>(handle.value().get());
   auto resultStatus = handleValue->setAttr(resultStr);
+  if (failed(resultStatus))
+    return resultStatus;
+
+  auto finalizeStatus = handleValue->finalize();
+  if (failed(finalizeStatus))
+    return finalizeStatus;
+
+  return handle;
+}
+
+// Evaluator dispatch function for binary property equality operations.
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateBinaryEquality(BinaryEqualityOp op,
+                                             ActualParameters actualParams,
+                                             Location loc) {
+  // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
+  auto handle = getOrCreateValue(op.getResult(), actualParams, loc);
+  if (failed(handle))
+    return handle;
+
+  // If it's fully evaluated, we can return it.
+  if (handle.value()->isFullyEvaluated())
+    return handle;
+
+  // Evaluate both operands, returning the partially evaluated handle if either
+  // isn't ready yet.
+  auto lhsResult = evaluateValue(op.getLhs(), actualParams, loc);
+  if (failed(lhsResult))
+    return lhsResult;
+  if (!lhsResult.value()->isFullyEvaluated())
+    return handle;
+
+  auto rhsResult = evaluateValue(op.getRhs(), actualParams, loc);
+  if (failed(rhsResult))
+    return rhsResult;
+  if (!rhsResult.value()->isFullyEvaluated())
+    return handle;
+
+  // Check if any operand is unknown and propagate the unknown flag.
+  if (lhsResult.value()->isUnknown() || rhsResult.value()->isUnknown()) {
+    handle.value()->markUnknown();
+    return handle;
+  }
+
+  // Extract the underlying attribute, handling both AttributeValue and
+  // ReferenceValue cases.
+  auto extractAttr = [](evaluator::EvaluatorValue *value) -> mlir::Attribute {
+    return llvm::TypeSwitch<evaluator::EvaluatorValue *, mlir::Attribute>(value)
+        .Case([](evaluator::AttributeValue *val) { return val->getAttr(); })
+        .Case([](evaluator::ReferenceValue *val) -> mlir::Attribute {
+          return cast<evaluator::AttributeValue>(val->getStrippedValue()->get())
+              ->getAttr();
+        });
+  };
+
+  mlir::Attribute lhs = extractAttr(lhsResult.value().get());
+  mlir::Attribute rhs = extractAttr(rhsResult.value().get());
+  assert(lhs && rhs && "expected attribute for BinaryEqualityOp operands");
+
+  // Perform the binary equality operation.
+  FailureOr<mlir::Attribute> result = op.evaluateBinaryEquality(lhs, rhs);
+  if (failed(result))
+    return op->emitError("failed to evaluate binary equality operation");
+
+  // Finalize the op result value.
+  auto *handleValue = cast<evaluator::AttributeValue>(handle.value().get());
+  auto resultStatus = handleValue->setAttr(*result);
   if (failed(resultStatus))
     return resultStatus;
 

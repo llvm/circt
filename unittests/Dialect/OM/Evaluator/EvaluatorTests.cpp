@@ -1880,4 +1880,79 @@ om.class @SubfieldFalse() -> () {
       evaluator.instantiate(StringAttr::get(&context, "SubfieldFalse"), {})));
 }
 
+TEST(EvaluatorTests, PropEqTests) {
+  StringRef mod = R"MLIR(
+om.class @PropEqString(%s: !om.string) -> (equal: i1, not_equal: i1, unknown: i1) {
+  %a    = om.constant "hello" : !om.string
+  %b    = om.constant "hello" : !om.string
+  %c    = om.constant "world" : !om.string
+  %eq   = om.prop.eq %a, %b : !om.string
+  %neq  = om.prop.eq %a, %c : !om.string
+  %unk  = om.prop.eq %a, %s : !om.string
+  om.class.fields %eq, %neq, %unk : i1, i1, i1
+}
+
+om.class @PropEqBool(%b: i1) -> (equal: i1, not_equal: i1, unknown: i1) {
+  %t    = om.constant true
+  %f    = om.constant false
+  %eq   = om.prop.eq %t, %t : i1
+  %neq  = om.prop.eq %t, %f : i1
+  %unk  = om.prop.eq %t, %b : i1
+  om.class.fields %eq, %neq, %unk : i1, i1, i1
+}
+
+om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: i1) {
+  %a    = om.constant #om.integer<42 : si64> : !om.integer
+  %b    = om.constant #om.integer<42 : si64> : !om.integer
+  %c    = om.constant #om.integer<0 : si64> : !om.integer
+  %eq   = om.prop.eq %a, %b : !om.integer
+  %neq  = om.prop.eq %a, %c : !om.integer
+  %unk  = om.prop.eq %a, %n : !om.integer
+  om.class.fields %eq, %neq, %unk : i1, i1, i1
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
+
+  // Helper: extract the i1 integer value from a field of an ObjectValue.
+  auto getInt = [](evaluator::ObjectValue *obj, StringRef fieldName,
+                   MLIRContext *ctx) {
+    return llvm::cast<evaluator::AttributeValue>(
+               obj->getField(StringAttr::get(ctx, fieldName)).value().get())
+        ->getAs<mlir::IntegerAttr>()
+        .getValue()
+        .getZExtValue();
+  };
+
+  const std::pair<StringRef, Type> cases[] = {
+      {"PropEqString", StringType::get(&context)},
+      {"PropEqBool", mlir::IntegerType::get(&context, 1)},
+      {"PropEqInteger", OMIntegerType::get(&context)},
+  };
+  for (auto [className, paramType] : cases) {
+    auto unknown = evaluator::AttributeValue::get(paramType, unknownLoc);
+    unknown->markUnknown();
+    auto result =
+        evaluator.instantiate(StringAttr::get(&context, className), {unknown});
+    ASSERT_TRUE(succeeded(result));
+    auto *obj = llvm::cast<evaluator::ObjectValue>(result.value().get());
+    ASSERT_EQ(getInt(obj, "equal", &context), 1ul);
+    ASSERT_EQ(getInt(obj, "not_equal", &context), 0ul);
+    ASSERT_TRUE(obj->getField(StringAttr::get(&context, "unknown"))
+                    .value()
+                    ->isUnknown());
+  }
+}
+
 } // namespace
