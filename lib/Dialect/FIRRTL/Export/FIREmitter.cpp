@@ -202,6 +202,12 @@ struct Emitter {
   HANDLE(StringConcatOp, "string_concat");
 #undef HANDLE
 
+  void emitExpression(PropEqOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "property equality")))
+      return;
+    emitPrimExpr("prop_eq", op);
+  }
+
   // Attributes
   void emitAttribute(MemDirAttr attr);
   void emitAttribute(RUWBehaviorAttr attr);
@@ -1544,7 +1550,7 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp, StringConcatOp,
+          UnknownValueOp, StringConcatOp, PropEqOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions

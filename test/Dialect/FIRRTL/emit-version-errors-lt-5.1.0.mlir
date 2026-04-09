@@ -126,3 +126,15 @@ firrtl.circuit "KnownLayers" {
   firrtl.extmodule @ExtWithKnownLayers() attributes {knownLayers = [@GroupA]}
   firrtl.module @KnownLayers() {}
 }
+
+// -----
+
+// prop.eq expression requires >= 5.1.0.
+firrtl.circuit "PropEq" {
+  firrtl.module @PropEq(in %a : !firrtl.string, in %b : !firrtl.string,
+                        out %eq : !firrtl.bool) {
+    // expected-error @below {{'firrtl.prop.eq' op property equality requires FIRRTL 5.1.0}}
+    %0 = firrtl.prop.eq %a, %b : !firrtl.string
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+}
