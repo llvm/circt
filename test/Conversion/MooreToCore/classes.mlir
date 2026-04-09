@@ -129,18 +129,17 @@ moore.class.classdecl @F extends @C {
 /// Check that property_ref lowers to GEP
 
 // CHECK-LABEL: func.func private @test_new6
-// CHECK-SAME: (%arg0: !llvm.ptr) -> !llhd.ref<i32> {
+// CHECK-SAME: (%arg0: !llvm.ptr) -> !llvm.ptr {
 // CHECK:   [[CONSTIDX:%.+]] = llvm.mlir.constant(2 : i32) : i32
 // CHECK:   [[GEP:%.+]] = llvm.getelementptr %arg0[[[CONSTIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"G", (struct<(ptr, ptr)>, struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>, i32, i32, i32)>
-// CHECK:   [[CONV:%.+]] = builtin.unrealized_conversion_cast [[GEP]] : !llvm.ptr to !llhd.ref<i32>
-// CHECK:   return [[CONV]] : !llhd.ref<i32>
+// CHECK:   return [[GEP]] : !llvm.ptr
 
 // CHECK-NOT: moore.class.property_ref
 // CHECK-NOT: moore.class.classdecl
 
-func.func private @test_new6(%arg0: !moore.class<@G>) -> !moore.ref<i32> {
-  %gep = moore.class.property_ref %arg0[@d] : <@G> -> !moore.ref<i32>
-  return %gep : !moore.ref<i32>
+func.func private @test_new6(%arg0: !moore.class<@G>) -> !moore.ptr<i32> {
+  %gep = moore.class.property_ref %arg0[@d] : <@G> -> !moore.ptr<i32>
+  return %gep : !moore.ptr<i32>
 }
 moore.class.classdecl @G extends @C {
   moore.class.propertydecl @d : !moore.i32

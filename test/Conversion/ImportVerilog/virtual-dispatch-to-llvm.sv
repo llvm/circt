@@ -26,14 +26,14 @@
 
 // CHECK-LABEL: hw.module @top()
 // CHECK:      %[[NULL:.*]] = llvm.mlir.zero : !llvm.ptr
-// CHECK-NOT:  llhd.sig %[[NULL]] : !llvm.ptr
+// CHECK:      %t = llhd.sig %[[NULL]] : !llvm.ptr
 // CHECK:      llhd.process {
-// CHECK-NOT:  llhd.prb
-// CHECK:      llvm.getelementptr %[[NULL]]
+// CHECK:      %[[HANDLE:.*]] = llhd.prb %t : !llvm.ptr
+// CHECK:      llvm.getelementptr %[[HANDLE]]
 // CHECK:      llvm.load
 // CHECK:      llvm.getelementptr
 // CHECK:      llvm.load
-// CHECK:      llvm.call %{{.*}}(%[[NULL]], %{{.*}}) : !llvm.ptr, (!llvm.ptr, i32) -> i32
+// CHECK:      llvm.call %{{.*}}(%[[HANDLE]], %{{.*}}) : !llvm.ptr, (!llvm.ptr, i32) -> i32
 // CHECK:      llhd.drv
 
 class testClassVirtualInt;

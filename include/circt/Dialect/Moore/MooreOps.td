@@ -458,8 +458,6 @@ def AssignedVariableOp : MooreOp<"assigned_variable", [
 
 def ReadOp : MooreOp<"read", [
   DeclareOpInterfaceMethods<PromotableMemOpInterface>,
-  TypesMatchWith<"input and result types match",
-    "input", "result", "cast<RefType>($_self).getNestedType()">
 ]> {
   let summary = "Read the current value of a declaration";
   let description = [{
@@ -467,11 +465,23 @@ def ReadOp : MooreOp<"read", [
     exact point at which declarations that can be targeted by all possible 
     expressions are read. It's similar to llvm.load.
   }];
-  let arguments = (ins Arg<RefType, "", [MemRead]>:$input);
+  let arguments = (ins Arg<AnyTypeOf<[RefType, PtrType]>, "", [MemRead]>:$input);
   let results = (outs UnpackedType:$result);
   let assemblyFormat = [{
-    $input attr-dict `:` type($input)
+    $input attr-dict `:` type($input) `->` type($result)
   }];
+  let hasVerifier = 1;
+  let builders = [
+    OpBuilder<(ins "mlir::Value":$input), [{
+      mlir::Type inputType = input.getType();
+      mlir::Type resultType;
+      if (auto refType = llvm::dyn_cast<moore::RefType>(inputType))
+        resultType = refType.getNestedType();
+      else
+        resultType = llvm::cast<moore::PtrType>(inputType).getNestedType();
+      build($_builder, $_state, resultType, input);
+    }]>,
+  ];
 }
 
 def GlobalVariableOp : MooreOp<"global_variable", [
@@ -523,19 +533,20 @@ def GetGlobalVariableOp : MooreOp<"get_global_variable", [
 //===----------------------------------------------------------------------===//
 
 class AssignOpBase<string mnemonic, list<Trait> traits = []> :
-    MooreOp<mnemonic, traits # [TypesMatchWith<"src and dst types match",
-    "src", "dst", "RefType::get(cast<UnpackedType>($_self))">]> {
-  let arguments = (ins RefType:$dst, UnpackedType:$src);
+    MooreOp<mnemonic, traits> {
+  let arguments = (ins AnyTypeOf<[RefType, PtrType]>:$dst, UnpackedType:$src);
   let assemblyFormat = [{
-    $dst `,` $src attr-dict `:` type($src)
+    $dst `,` $src attr-dict `:` type($dst) `,` type($src)
   }];
+  let hasVerifier = 1;
 }
 
 class DelayedAssignOpBase<string mnemonic, list<Trait> traits = []> :
     AssignOpBase<mnemonic, traits> {
-  let arguments = (ins RefType:$dst, UnpackedType:$src, TimeType:$delay);
+  let arguments = (ins AnyTypeOf<[RefType, PtrType]>:$dst, UnpackedType:$src,
+                       TimeType:$delay);
   let assemblyFormat = [{
-    $dst `,` $src `,` $delay attr-dict `:` type($src)
+    $dst `,` $src `,` $delay attr-dict `:` type($dst) `,` type($src)
   }];
 }
 
@@ -577,7 +588,7 @@ def BlockingAssignOp : AssignOpBase<"blocking_assign", [
     See IEEE 1800-2017 § 10.4.1 "Blocking procedural assignments".
   }];
   let arguments = (ins
-    Arg<RefType, "", [MemWrite]>:$dst,
+    Arg<AnyTypeOf<[RefType, PtrType]>, "", [MemWrite]>:$dst,
     UnpackedType:$src
   );
 }
@@ -3271,14 +3282,14 @@ def ClassNewOp
 def ClassPropertyRefOp
     : MooreOp<"class.property_ref", [Pure,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>,]> {
-  let summary = "Get a !moore.ref to a class property";
+  let summary = "Get a !moore.ptr to a class property";
   let description = [{
-    Construct a reference to a class instance's property field. Translates
-    to a fixed offset from the the class handle into its data struct.
+    Construct an address to a class instance's property field. Translates
+    to a fixed offset from the class handle into its data struct.
   }];
   let arguments = (ins ClassHandleType:$instance,
       FlatSymbolRefAttr:$property);
-  let results = (outs RefType:$propertyRef);
+  let results = (outs PtrType:$propertyRef);
   let assemblyFormat = "$instance`[`$property`]` `:` type($instance) `->` "
                        "type($propertyRef) attr-dict";
 }

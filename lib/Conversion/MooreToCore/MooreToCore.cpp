@@ -3456,6 +3456,12 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return {};
   });
 
+  typeConverter.addConversion([&](PtrType type) -> std::optional<Type> {
+    if (typeConverter.convertType(type.getNestedType()))
+      return LLVM::LLVMPointerType::get(type.getContext());
+    return {};
+  });
+
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
   typeConverter.addConversion([](FloatType type) { return type; });
