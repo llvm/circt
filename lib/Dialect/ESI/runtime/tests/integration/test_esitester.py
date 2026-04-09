@@ -129,6 +129,16 @@ class TestCosimEsitesterDma:
         "tohostdma[32].toHostCycles: 0",
     ])
 
+  def test_serial_coords(self, host: str, port: int) -> None:
+    conn = f"{host}:{port}"
+    stdout = run_cmd(
+        ["esitester", "cosim", conn, "serial_coords", "-n", "40", "-b", "33"])
+    check_lines(stdout, [
+        "Serial coord translate test results:",
+        "coord[0]=",
+        "Serial coord translate test passed",
+    ])
+
 
 @cosim_test(HW_DIR / "esitester.py", args=("{tmp_dir}", "cosim"))
 def test_channel_python(conn: AcceleratorConnection) -> None:

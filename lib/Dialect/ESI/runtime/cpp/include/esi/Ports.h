@@ -239,6 +239,9 @@ public:
   /// and calls the regular write(). Backends override for scatter-gather /
   /// chunked-DMA support.
   virtual void write(std::unique_ptr<SegmentedMessageData> msg) {
+    if (!msg)
+      throw std::runtime_error(
+          "WriteChannelPort::write: null SegmentedMessageData");
     write(msg->toMessageData());
   }
 

@@ -65,6 +65,8 @@ MessageData SegmentedMessageData::toMessageData() const {
   buf.reserve(total);
   for (size_t i = 0, e = numSegments(); i < e; ++i) {
     Segment seg = segment(i);
+    if (seg.size == 0)
+      continue;
     buf.insert(buf.end(), seg.data, seg.data + seg.size);
   }
   return MessageData(std::move(buf));
@@ -75,16 +77,28 @@ MessageData SegmentedMessageData::toMessageData() const {
 //===----------------------------------------------------------------------===//
 
 std::span<const uint8_t> SegmentedMessageDataCursor::remaining() const {
-  if (done())
-    return {};
-  Segment seg = msg.segment(segIdx);
-  return {seg.data + offset, seg.size - offset};
+  // Skip past any empty segments.
+  while (!done()) {
+    Segment seg = msg.segment(segIdx);
+    if (seg.size > offset)
+      return {seg.data + offset, seg.size - offset};
+    // This shouldn't happen in normal use (advance handles crossing),
+    // but guard against empty segments at the current position.
+    break;
+  }
+  return {};
 }
 
 void SegmentedMessageDataCursor::advance(size_t n) {
   while (n > 0 && !done()) {
     Segment seg = msg.segment(segIdx);
     size_t left = seg.size - offset;
+    if (left == 0) {
+      // Skip empty segments.
+      ++segIdx;
+      offset = 0;
+      continue;
+    }
     if (n < left) {
       offset += n;
       return;

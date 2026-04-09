@@ -156,22 +156,23 @@ A generated type with a variable-length list looks like:
 
 ```c++
   struct Packet : public SegmentedMessageData {
-    // Packed — in-memory layout IS the wire format.
+    // Packed POD header — in-memory layout matches the wire format.
 #pragma pack(push, 1)
-    struct {
+    struct Header {
       uint32_t id;
       uint16_t flags;
-    } header;
-
-    std::vector<uint32_t> items;  // variable-length
+    };
 #pragma pack(pop)
+
+    Header header;
+    std::vector<uint32_t> items;  // variable-length
 
     // --- SegmentedMessageData interface ---
 
     size_t numSegments() const override { return 2; }
     Segment segment(size_t i) const override {
       if (i == 0)
-        return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};
+        return {reinterpret_cast<const uint8_t *>(&header), sizeof(Header)};
       return {reinterpret_cast<const uint8_t *>(items.data()),
               items.size() * sizeof(uint32_t)};
     }

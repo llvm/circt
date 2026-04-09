@@ -560,4 +560,20 @@ TEST(TypedPortsTest, TypedFunctionSegmentedArg) {
   delete func;
 }
 
+// A plain struct without _ESI_ID — not integral, not void, not bool.
+struct UnrecognizedCppType {
+  double x;
+  double y;
+};
+
+TEST(TypedPortsTest, VerifyTypeCompatibilityThrowsForUnsupportedType) {
+  UIntType uint32("ui32", 32);
+  EXPECT_THROW(verifyTypeCompatibility<UnrecognizedCppType>(&uint32),
+               AcceleratorMismatchError);
+
+  SIntType sint16("si16", 16);
+  EXPECT_THROW(verifyTypeCompatibility<UnrecognizedCppType>(&sint16),
+               AcceleratorMismatchError);
+}
+
 } // namespace

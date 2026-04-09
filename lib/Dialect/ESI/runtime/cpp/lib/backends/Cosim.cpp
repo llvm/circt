@@ -82,13 +82,17 @@ protected:
     // expects messages sized to the port's wire frame width.
     size_t frameBytes = getFrameBytes();
     if (frameBytes > 0 && data.getSize() > frameBytes) {
+      if (data.getSize() % frameBytes != 0)
+        throw std::runtime_error(
+            "Cosim write: message size (" + std::to_string(data.getSize()) +
+            ") is not a multiple of frame size (" +
+            std::to_string(frameBytes) + ")");
       const uint8_t *ptr = data.getBytes();
       size_t remaining = data.getSize();
       while (remaining > 0) {
-        size_t chunk = std::min(remaining, frameBytes);
-        writeSingle(MessageData(ptr, chunk));
-        ptr += chunk;
-        remaining -= chunk;
+        writeSingle(MessageData(ptr, frameBytes));
+        ptr += frameBytes;
+        remaining -= frameBytes;
       }
     } else {
       writeSingle(data);
