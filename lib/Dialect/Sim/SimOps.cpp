@@ -527,6 +527,8 @@ LogicalResult FormatStringConcatOp::verify() {
 
 LogicalResult FormatStringConcatOp::canonicalize(FormatStringConcatOp op,
                                                  PatternRewriter &rewriter) {
+  // Any helper literals created during canonicalization must dominate `op`.
+  rewriter.setInsertionPoint(op);
 
   auto fmtStrType = FormatStringType::get(op.getContext());
 
