@@ -1113,8 +1113,6 @@ struct ClassPropertyRefOpConversion
     Location loc = op.getLoc();
     MLIRContext *ctx = rewriter.getContext();
 
-    // Convert result type; we expect !llhd.ref<someT>.
-    Type dstTy = getTypeConverter()->convertType(op.getPropertyRef().getType());
     // Operand is a !llvm.ptr
     Value instRef = adaptor.getInstance();
 
@@ -1150,12 +1148,10 @@ struct ClassPropertyRefOpConversion
     auto gep =
         LLVM::GEPOp::create(rewriter, loc, ptrTy, structTy, instRef, idxVals);
 
-    // Wrap pointer back to !llhd.ref<someT>.
-    Value fieldRef = UnrealizedConversionCastOp::create(rewriter, loc, dstTy,
-                                                        gep.getResult())
-                         .getResult(0);
-
-    rewriter.replaceOp(op, fieldRef);
+    // Class object fields live in heap memory. Model field access uniformly as
+    // raw LLVM pointers and let surrounding conversions materialize refs only
+    // where a non-class context still requires them.
+    rewriter.replaceOp(op, gep.getResult());
     return success();
   }
 
@@ -2517,6 +2513,44 @@ struct ReadOpConversion : public OpConversionPattern<ReadOp> {
   LogicalResult
   matchAndRewrite(ReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    auto getUndrivenSignalInit = [](Value value) -> Value {
+      auto refTy = dyn_cast<llhd::RefType>(value.getType());
+      if (!refTy || !isa<LLVM::LLVMPointerType>(refTy.getNestedType()))
+        return {};
+      auto signal = value.getDefiningOp<llhd::SignalOp>();
+      if (!signal)
+        return {};
+      if (llvm::any_of(signal->getUses(), [](OpOperand &use) {
+            return isa<llhd::DriveOp>(use.getOwner()) &&
+                   use.getOperandNumber() == 0;
+          }))
+        return {};
+      return signal.getInit();
+    };
+
+    auto getRawPointer = [](Value value) -> Value {
+      if (isa<LLVM::LLVMPointerType>(value.getType()))
+        return value;
+      if (auto cast = value.getDefiningOp<UnrealizedConversionCastOp>())
+        if (cast.getInputs().size() == 1 &&
+            isa<LLVM::LLVMPointerType>(cast.getInputs().front().getType()))
+          return cast.getInputs().front();
+      return {};
+    };
+
+    if (auto init = getUndrivenSignalInit(adaptor.getInput())) {
+      auto signal = adaptor.getInput().getDefiningOp<llhd::SignalOp>();
+      rewriter.replaceOp(op, init);
+      if (signal && signal.use_empty())
+        rewriter.eraseOp(signal);
+      return success();
+    }
+
+    if (auto rawPtr = getRawPointer(adaptor.getInput())) {
+      auto resultTy = typeConverter->convertType(op.getType());
+      rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, resultTy, rawPtr);
+      return success();
+    }
     rewriter.replaceOpWithNewOp<llhd::ProbeOp>(op, adaptor.getInput());
     return success();
   }
@@ -2549,6 +2583,22 @@ struct AssignOpConversion : public OpConversionPattern<OpTy> {
   LogicalResult
   matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    auto getRawPointer = [](Value value) -> Value {
+      if (isa<LLVM::LLVMPointerType>(value.getType()))
+        return value;
+      if (auto cast = value.template getDefiningOp<UnrealizedConversionCastOp>())
+        if (cast.getInputs().size() == 1 &&
+            isa<LLVM::LLVMPointerType>(cast.getInputs().front().getType()))
+          return cast.getInputs().front();
+      return {};
+    };
+
+    if (auto rawPtr = getRawPointer(adaptor.getDst())) {
+      LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getSrc(), rawPtr);
+      rewriter.eraseOp(op);
+      return success();
+    }
+
     // Determine the delay for the assignment.
     Value delay;
     if constexpr (std::is_same_v<OpTy, ContinuousAssignOp> ||
