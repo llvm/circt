@@ -54,6 +54,20 @@ class Verilator(Simulator):
         self.verilator_bin = str(Path(vpath).parent / "verilator_bin")
       else:
         self.verilator_bin = vpath
+    self.verilator_bin = self._find_verilator_bin()
+
+  def _find_verilator_bin(self) -> str:
+    verilator_bin_path = shutil.which(self.verilator_bin)
+    if verilator_bin_path:
+      return str(Path(verilator_bin_path).resolve())
+
+    verilator_bin_path = Path(self.verilator_bin)
+    if verilator_bin_path.is_file():
+      return str(verilator_bin_path.resolve())
+
+    raise RuntimeError(
+        "Cannot find verilator_bin. Set VERILATOR_PATH to an absolute path "
+        "or ensure verilator_bin is in PATH.")
 
   def _find_verilator_root(self) -> Path:
     """Locate VERILATOR_ROOT for runtime includes and sources.
@@ -67,16 +81,14 @@ class Verilator(Simulator):
       if root.is_dir():
         return root
     # verilator_bin is typically in $PREFIX/bin/
-    verilator_bin_path = shutil.which(self.verilator_bin)
-    if verilator_bin_path:
-      prefix = Path(verilator_bin_path).resolve().parent.parent
-      # Source-tree layout: $VERILATOR_ROOT/bin/verilator_bin
-      if (prefix / "include" / "verilated.h").exists():
-        return prefix
-      # System package layout: $PREFIX/share/verilator/include/verilated.h
-      pkg_root = prefix / "share" / "verilator"
-      if (pkg_root / "include" / "verilated.h").exists():
-        return pkg_root
+    prefix = Path(self.verilator_bin).resolve().parent.parent
+    # Source-tree layout: $VERILATOR_ROOT/bin/verilator_bin
+    if (prefix / "include" / "verilated.h").exists():
+      return prefix
+    # System package layout: $PREFIX/share/verilator/include/verilated.h
+    pkg_root = prefix / "share" / "verilator"
+    if (pkg_root / "include" / "verilated.h").exists():
+      return pkg_root
     raise RuntimeError(
         "Cannot find VERILATOR_ROOT. Set the VERILATOR_ROOT environment "
         "variable or ensure verilator_bin is in PATH.")
@@ -121,6 +133,7 @@ class Verilator(Simulator):
         "-j",
         "0",
         "--output-split",
+        "10000",
         "--autoflush",
         "--assert",
     ]
@@ -135,6 +148,8 @@ class Verilator(Simulator):
       build_dir = str(Path.cwd() / "obj_dir" / "cmake_build")
       cmake_cmd = ["cmake", "-G", "Ninja", "-S", build_dir, "-B", build_dir]
       ninja_cmd = ["ninja", "-C", build_dir]
+      print(
+          f"Running with CMake + Ninja. Verilator command:\n  {' '.join(cmd)}")
       return [cmd, cmake_cmd, ninja_cmd]
 
     # -- make fallback --
@@ -152,7 +167,24 @@ class Verilator(Simulator):
     make_cmd = ["make", "-C", "obj_dir", "-f", f"V{top}.mk", "-j"]
     return [cmd, make_cmd]
 
-  def _write_cmake(self, obj_dir: Path) -> Path:
+  def _depfile_path(self, obj_dir: Path) -> Path:
+    return obj_dir / f"V{self.sources.top}__ver.d"
+
+  def _generated_cpp_sources(self, depfile: Path) -> List[Path]:
+    depfile_contents = depfile.read_text().replace("\\\n", " ")
+    targets, sep, _ = depfile_contents.partition(":")
+    if not sep:
+      raise RuntimeError(f"Malformed Verilator depfile: {depfile}")
+
+    generated_sources = [(Path.cwd() / path).resolve()
+                         for path in targets.split()
+                         if path.endswith(".cpp")]
+    if not generated_sources:
+      raise RuntimeError(
+          f"No generated C++ sources found in depfile: {depfile}")
+    return generated_sources
+
+  def _write_cmake(self, obj_dir: Path, generated_sources: List[Path]) -> Path:
     """Write a CMakeLists.txt for building the verilated simulation.
 
     Returns the path to the CMake build directory."""
@@ -173,6 +205,7 @@ class Verilator(Simulator):
     if random_cpp.exists():
       runtime_sources.append(random_cpp)
 
+    generated_src = "\n  ".join(str(source) for source in generated_sources)
     rt_src = "\n  ".join(str(s) for s in runtime_sources)
     driver = str(Verilator.DefaultDriver)
     inc = str(include_dir)
@@ -193,10 +226,8 @@ class Verilator(Simulator):
 cmake_minimum_required(VERSION 3.20)
 project({exe_name} CXX)
 
-file(GLOB GENERATED_SOURCES "${{CMAKE_CURRENT_SOURCE_DIR}}/../*.cpp")
-
 add_executable({exe_name}
-  ${{GENERATED_SOURCES}}
+  {generated_src}
   {rt_src}
   {driver}
 )
@@ -214,6 +245,7 @@ target_compile_definitions({exe_name} PRIVATE
 find_package(Threads REQUIRED)
 target_link_libraries({exe_name} PRIVATE
   Threads::Threads
+  z
   {dpi_link}
 )
 """
@@ -222,15 +254,58 @@ target_link_libraries({exe_name} PRIVATE
     (build_dir / "CMakeLists.txt").write_text(content)
     return build_dir
 
+  def _run_compile_command(self, cmd: List[str]) -> int:
+    ret = self._start_process_with_callbacks(cmd,
+                                             env=Simulator.get_env(),
+                                             cwd=None,
+                                             stdout_cb=self._compile_stdout_cb,
+                                             stderr_cb=self._compile_stderr_cb,
+                                             wait=True)
+    if isinstance(ret, int) and ret != 0:
+      print("====== Compilation failure")
+
+      # Always print both stdout and stderr so that linker errors (which go
+      # to stdout for cmake/ninja) are not silently hidden.
+      if self._compile_stdout_log is not None:
+        self._compile_stdout_log.seek(0)
+        stdout_content = self._compile_stdout_log.read()
+        if stdout_content:
+          print(stdout_content)
+      if self._compile_stderr_log is not None:
+        self._compile_stderr_log.seek(0)
+        stderr_content = self._compile_stderr_log.read()
+        if stderr_content:
+          print(stderr_content)
+
+    return ret if isinstance(ret, int) else 1
+
   def compile(self) -> int:
-    """Set VERILATOR_ROOT, write the CMakeLists.txt (if using cmake), then
-    delegate to the base class which runs all commands from
-    :meth:`compile_commands`."""
+    """Set VERILATOR_ROOT and run the Verilator compile flow.
+
+    For the CMake path, run Verilator first so the generated depfile can be
+    used to enumerate the emitted C++ sources before configuring Ninja."""
     verilator_root = self._find_verilator_root()
     os.environ["VERILATOR_ROOT"] = str(verilator_root)
-    if self._use_cmake:
-      self._write_cmake(Path.cwd() / "obj_dir")
-    return super().compile()
+    if not self._use_cmake:
+      return super().compile()
+
+    cmds = self.compile_commands()
+    self.run_dir.mkdir(parents=True, exist_ok=True)
+
+    ret = self._run_compile_command(cmds[0])
+    if ret != 0:
+      return ret
+
+    obj_dir = Path.cwd() / "obj_dir"
+    depfile = self._depfile_path(obj_dir)
+    self._write_cmake(obj_dir, self._generated_cpp_sources(depfile))
+
+    for cmd in cmds[1:]:
+      print(f"Running command:\n  {' '.join(cmd)}")
+      ret = self._run_compile_command(cmd)
+      if ret != 0:
+        return ret
+    return 0
 
   @property
   def waveform_extension(self) -> str:
