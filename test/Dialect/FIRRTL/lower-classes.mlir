@@ -435,6 +435,30 @@ firrtl.circuit "StringCat" {
     // CHECK: om.class.fields %[[CONCAT]]
     firrtl.propassign %c, %0 : !firrtl.string
   }
+
+  // CHECK-LABEL: om.class @PropEqStringClass
+  firrtl.class @PropEqStringClass(in %a: !firrtl.string, in %b: !firrtl.string, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.string
+    %0 = firrtl.prop.eq %a, %b : !firrtl.string
+    // CHECK: om.class.fields %[[EQ]]
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @PropEqBoolClass
+  firrtl.class @PropEqBoolClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : i1
+    %0 = firrtl.prop.eq %a, %b : !firrtl.bool
+    // CHECK: om.class.fields %[[EQ]]
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @PropEqIntegerClass
+  firrtl.class @PropEqIntegerClass(in %a: !firrtl.integer, in %b: !firrtl.integer, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.integer
+    %0 = firrtl.prop.eq %a, %b : !firrtl.integer
+    // CHECK: om.class.fields %[[EQ]]
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
 }
 
 // CHECK-LABEL: firrtl.circuit "AltBasePath"
