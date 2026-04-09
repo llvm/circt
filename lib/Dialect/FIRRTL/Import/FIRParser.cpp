@@ -2000,6 +2000,7 @@ private:
   ParseResult parseListConcatExp(Value &result);
   ParseResult parseCatExp(Value &result);
   ParseResult parseStringConcatExp(Value &result);
+  ParseResult parsePropEqExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
   ParseResult parseUnknownProperty(Value &result);
 
@@ -2398,6 +2399,12 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
 
   case FIRToken::lp_string_concat:
     if (parseStringConcatExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_prop_eq:
+    if (requireFeature(missingSpecFIRVersion, "property equality") ||
+        parsePropEqExp(result))
       return failure();
     break;
 
@@ -2875,6 +2882,37 @@ ParseResult FIRStmtParser::parseStringConcatExp(Value &result) {
   locationProcessor.setLoc(loc);
   auto type = StringType::get(builder.getContext());
   result = builder.create<StringConcatOp>(type, operands);
+  return success();
+}
+
+/// prop_eq-exp ::= 'prop_eq(' expr ',' expr ')'
+ParseResult FIRStmtParser::parsePropEqExp(Value &result) {
+  consumeToken(FIRToken::lp_prop_eq);
+
+  auto loc = getToken().getLoc();
+  Value lhs, rhs;
+  locationProcessor.setLoc(loc);
+  if (parseExp(lhs, "expected lhs expression in prop_eq expression") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(rhs, "expected rhs expression in prop_eq expression") ||
+      parseToken(FIRToken::r_paren, "expected ')'"))
+    return failure();
+
+  auto isValidType = [](Type t) {
+    return type_isa<StringType>(t) || type_isa<BoolType>(t) ||
+           type_isa<FIntegerType>(t);
+  };
+  if (!isValidType(lhs.getType()))
+    return emitError(loc,
+                     "lhs of prop_eq must be String, Bool, or Integer type");
+  if (!isValidType(rhs.getType()))
+    return emitError(loc,
+                     "rhs of prop_eq must be String, Bool, or Integer type");
+  if (lhs.getType() != rhs.getType())
+    return emitError(loc, "prop_eq operands must have the same type");
+
+  locationProcessor.setLoc(loc);
+  result = PropEqOp::create(builder, lhs, rhs);
   return success();
 }
 

@@ -1686,6 +1686,32 @@ circuit StringOps :
     propassign c, string_concat(a, b)
 
 ;// -----
+FIRRTL version 5.1.0
+
+; CHECK-LABEL: firrtl.circuit "PropEq"
+circuit PropEq :
+  public module PropEq :
+    input a : String
+    input b : String
+    output eq : Bool
+
+    ; CHECK: [[EQ:%.+]] = firrtl.prop.eq %a, %b : !firrtl.string
+    ; CHECK: firrtl.propassign %eq, [[EQ]]
+    propassign eq, prop_eq(a, b)
+
+;// -----
+FIRRTL version 5.0.0
+
+circuit PropEqVersionError :
+  public module PropEqVersionError :
+    input a : String
+    input b : String
+    output c : String
+
+    ; expected-error @+1 {{property equality are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    propassign c, prop_eq(a, b)
+
+;// -----
 FIRRTL version 3.1.0
 
 ; CHECK-LABEL: circuit "BundleOfProps"
