@@ -116,8 +116,10 @@ struct BaseVisitor {
         context.materializeConstant(param.getValue(), param.getType(), loc);
     if (!value)
       return;
-    if (builder.getInsertionBlock()->getParentOp() == context.intoModuleOp)
-      context.orderedRootOps.insert({param.location, value.getDefiningOp()});
+    if (builder.getInsertionBlock()->getParentOp() == context.intoModuleOp) {
+      auto key = LocationKey::get(param.location, context.sourceManager);
+      context.orderedRootOps.insert({key, value.getDefiningOp()});
+    }
 
     // Prefix the parameter name with the surrounding namespace to create
     // somewhat sane names in the IR.
@@ -1200,7 +1202,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 
   // Pick an insertion point for this module according to the source file
   // location.
-  auto it = orderedRootOps.upper_bound(module->location);
+  auto key = LocationKey::get(module->location, sourceManager);
+  auto it = orderedRootOps.upper_bound(key);
   if (it == orderedRootOps.end())
     builder.setInsertionPointToEnd(intoModuleOp.getBody());
   else
@@ -1209,7 +1212,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   // Create an empty module that corresponds to this module.
   auto moduleOp =
       moore::SVModuleOp::create(builder, loc, module->name, moduleType);
-  orderedRootOps.insert(it, {module->location, moduleOp});
+  orderedRootOps.insert(it, {key, moduleOp});
   moduleOp.getBodyRegion().push_back(block.release());
   lowering.op = moduleOp;
 
@@ -1506,7 +1509,8 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
   // Pick an insertion point for this function according to the source file
   // location.
   OpBuilder::InsertionGuard g(builder);
-  auto it = orderedRootOps.upper_bound(subroutine.location);
+  auto locationKey = LocationKey::get(subroutine.location, sourceManager);
+  auto it = orderedRootOps.upper_bound(locationKey);
   if (it == orderedRootOps.end())
     builder.setInsertionPointToEnd(intoModuleOp.getBody());
   else
@@ -1546,7 +1550,7 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
     lowering->op = op;
     funcOp = op;
   }
-  orderedRootOps.insert(it, {subroutine.location, funcOp});
+  orderedRootOps.insert(it, {locationKey, funcOp});
 
   // Store the captured symbols so call sites can look them up.
   if (capturesIt != functionCaptures.end())
@@ -2148,7 +2152,8 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
   // Pick an insertion point for this function according to the source file
   // location.
   OpBuilder::InsertionGuard g(builder);
-  auto it = orderedRootOps.upper_bound(cls.location);
+  auto locationKey = LocationKey::get(cls.location, sourceManager);
+  auto it = orderedRootOps.upper_bound(locationKey);
   if (it == orderedRootOps.end())
     builder.setInsertionPointToEnd(intoModuleOp.getBody());
   else
@@ -2162,7 +2167,7 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
 
   SymbolTable::setSymbolVisibility(classDeclOp,
                                    SymbolTable::Visibility::Public);
-  orderedRootOps.insert(it, {cls.location, classDeclOp});
+  orderedRootOps.insert(it, {locationKey, classDeclOp});
   lowering->op = classDeclOp;
 
   symbolTable.insert(classDeclOp);
@@ -2231,7 +2236,8 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
   // Pick an insertion point for this variable according to the source file
   // location.
   OpBuilder::InsertionGuard g(builder);
-  auto it = orderedRootOps.upper_bound(var.location);
+  auto locationKey = LocationKey::get(var.location, sourceManager);
+  auto it = orderedRootOps.upper_bound(locationKey);
   if (it == orderedRootOps.end())
     builder.setInsertionPointToEnd(intoModuleOp.getBody());
   else
@@ -2274,7 +2280,7 @@ Context::convertGlobalVariable(const slang::ast::VariableSymbol &var) {
   // Create the variable op itself.
   auto varOp = moore::GlobalVariableOp::create(builder, loc, symName,
                                                cast<moore::UnpackedType>(type));
-  orderedRootOps.insert({var.location, varOp});
+  orderedRootOps.insert({locationKey, varOp});
   globalVariables.insert({&var, varOp});
 
   // Add the variable to the symbol table of the MLIR module, which uniquifies
