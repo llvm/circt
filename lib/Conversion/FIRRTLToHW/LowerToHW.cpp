@@ -229,9 +229,8 @@ struct CircuitLoweringState {
                        const InstanceChoiceMacroTable &macroTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        lowerToCore(lowerToCore),
-        verificationFlavor(verificationFlavor), nlaTable(nlaTable),
-        macroTable(macroTable) {
+        lowerToCore(lowerToCore), verificationFlavor(verificationFlavor),
+        nlaTable(nlaTable), macroTable(macroTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -644,9 +643,10 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
-    bool enableAnnotationWarning,
-    firrtl::VerificationFlavor verificationFlavor, bool lowerToCore) {
+std::unique_ptr<mlir::Pass>
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
+                                 firrtl::VerificationFlavor verificationFlavor,
+                                 bool lowerToCore) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
@@ -2076,12 +2076,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
       Operation *op, StringRef labelPrefix, Value clock, Value predicate,
       Value enable, StringAttr messageAttr, ValueRange operands,
       StringAttr nameAttr, bool isConcurrent, EventControl eventControl);
-  LogicalResult lowerVerificationStatementToCore(Operation *op,
-                                                 StringRef labelPrefix,
-                                                 Value clock, Value predicate,
-                                                 Value enable,
-                                                 StringAttr nameAttr,
-                                                 EventControl eventControl);
+  LogicalResult lowerVerificationStatementToCore(
+      Operation *op, StringRef labelPrefix, Value clock, Value predicate,
+      Value enable, StringAttr nameAttr, EventControl eventControl);
 
   LogicalResult visitStmt(SkipOp op);
 
@@ -2843,8 +2840,9 @@ FIRRTLLowering::loweredFmtOperands(mlir::ValueRange operands,
   return success();
 }
 
-FailureOr<Value> FIRRTLLowering::lowerSimFormatString(
-    StringRef originalFormatString, ValueRange operands) {
+FailureOr<Value>
+FIRRTLLowering::lowerSimFormatString(StringRef originalFormatString,
+                                     ValueRange operands) {
   SmallVector<Value> fragments;
 
   auto emitLiteral = [&](StringRef text) {
@@ -2880,13 +2878,12 @@ FailureOr<Value> FIRRTLLowering::lowerSimFormatString(
           .getResult();
     case 'd': {
       UnitAttr signedAttr;
-      if (auto intTy = dyn_cast<IntType>(operand.getType()); intTy &&
-                                                             intTy.isSigned())
+      if (auto intTy = dyn_cast<IntType>(operand.getType());
+          intTy && intTy.isSigned())
         signedAttr = builder.getUnitAttr();
-      return sim::FormatDecOp::create(builder, loweredValue,
-                                      builder.getBoolAttr(false),
-                                      builder.getI8IntegerAttr(' '), widthAttr,
-                                      signedAttr)
+      return sim::FormatDecOp::create(
+                 builder, loweredValue, builder.getBoolAttr(false),
+                 builder.getI8IntegerAttr(' '), widthAttr, signedAttr)
           .getResult();
     }
     case 'x':
@@ -2987,28 +2984,26 @@ FailureOr<Value> FIRRTLLowering::lowerSimFormatString(
         return failure();
       }
 
-      auto result = TypeSwitch<Operation *, LogicalResult>(
-                        substitution.getDefiningOp())
-                        .template Case<HierarchicalModuleNameOp>([&](auto) {
-                          fragments.push_back(
-                              sim::FormatHierPathOp::create(
-                                  builder, /*useEscapes=*/false));
-                          return success();
-                        })
-                        .template Case<TimeOp>([&](auto) {
-                          emitError(builder.getLoc(),
-                                    "lower-to-core does not support "
-                                    "{{SimulationTime}} in printf");
-                          return failure();
-                        })
-                        .Default([&](auto) {
-                          emitError(builder.getLoc(), "has a substitution with "
-                                                      "an unimplemented "
-                                                      "lowering")
-                                  .attachNote(substitution.getLoc())
-                              << "op with an unimplemented lowering is here";
-                          return failure();
-                        });
+      auto result =
+          TypeSwitch<Operation *, LogicalResult>(substitution.getDefiningOp())
+              .template Case<HierarchicalModuleNameOp>([&](auto) {
+                fragments.push_back(sim::FormatHierPathOp::create(
+                    builder, /*useEscapes=*/false));
+                return success();
+              })
+              .template Case<TimeOp>([&](auto) {
+                emitError(builder.getLoc(), "lower-to-core does not support "
+                                            "{{SimulationTime}} in printf");
+                return failure();
+              })
+              .Default([&](auto) {
+                emitError(builder.getLoc(), "has a substitution with "
+                                            "an unimplemented "
+                                            "lowering")
+                        .attachNote(substitution.getLoc())
+                    << "op with an unimplemented lowering is here";
+                return failure();
+              });
       if (failed(result))
         return failure();
       i += 3;
@@ -5312,8 +5307,7 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
 
 LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   if (circuitState.lowerToCore)
-    return op.emitOpError(
-        "lower-to-core does not support firrtl.ref.force");
+    return op.emitOpError("lower-to-core does not support firrtl.ref.force");
 
   auto src = getLoweredNonClockValue(op.getSrc());
   auto clock = getLoweredNonClockValue(op.getClock());
@@ -5361,8 +5355,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
 }
 LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
   if (circuitState.lowerToCore)
-    return op.emitOpError(
-        "lower-to-core does not support firrtl.ref.release");
+    return op.emitOpError("lower-to-core does not support firrtl.ref.release");
 
   auto clock = getLoweredNonClockValue(op.getClock());
   auto pred = getLoweredValue(op.getPredicate());
@@ -5524,8 +5517,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   if (!clock || !cond)
     return failure();
 
-  auto formatString = lowerSimFormatString(op.getFormatString(),
-                                           op.getSubstitutions());
+  auto formatString =
+      lowerSimFormatString(op.getFormatString(), op.getSubstitutions());
   if (failed(formatString))
     return failure();
 
@@ -5535,8 +5528,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 
 LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
   if (circuitState.lowerToCore)
-    return op.emitOpError(
-        "lower-to-core does not support firrtl.fprintf yet");
+    return op.emitOpError("lower-to-core does not support firrtl.fprintf yet");
 
   StringAttr outputFileAttr;
   if (failed(resolveFormatString(op.getLoc(), op.getOutputFileAttr(),
@@ -5552,8 +5544,7 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
 // FFlush lowers into $fflush statement.
 LogicalResult FIRRTLLowering::visitStmt(FFlushOp op) {
   if (circuitState.lowerToCore)
-    return op.emitOpError(
-        "lower-to-core does not support firrtl.fflush yet");
+    return op.emitOpError("lower-to-core does not support firrtl.fflush yet");
 
   auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
