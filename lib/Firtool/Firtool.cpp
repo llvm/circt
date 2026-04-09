@@ -306,7 +306,8 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
        /*lintXmrsInDesign=*/opt.getLintXmrsInDesign()}));
 
   pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),
-                                       opt.getVerificationFlavor()));
+                                       opt.getVerificationFlavor(),
+                                       opt.shouldLowerToCore()));
 
   if (!opt.shouldDisableOptimization()) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
@@ -662,6 +663,12 @@ struct FirtoolCmdOptions {
           "Warn about annotations that were not removed by lower-to-hw"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> lowerToCore{
+      "lower-to-core",
+      llvm::cl::desc("Prefer core dialects over direct SV lowering for FIRRTL "
+                     "verification and printf operations"),
+      llvm::cl::init(false)};
+
   llvm::cl::opt<bool> addMuxPragmas{
       "add-mux-pragmas",
       llvm::cl::desc("Annotate mux pragmas for memory array access"),
@@ -822,7 +829,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
       lowerMemories(false), blackBoxRootPath(""), replSeqMem(false),
       replSeqMemFile(""), ignoreReadEnableMem(false),
       disableRandom(RandomKind::None), outputAnnotationFilename(""),
-      enableAnnotationWarning(false), addMuxPragmas(false),
+      enableAnnotationWarning(false), lowerToCore(false), addMuxPragmas(false),
       verificationFlavor(firrtl::VerificationFlavor::None),
       emitSeparateAlwaysBlocks(false),
       addVivadoRAMAddressConflictSynthesisBugWorkaround(false),
@@ -863,6 +870,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableRandom = clOptions->disableRandom;
   outputAnnotationFilename = clOptions->outputAnnotationFilename;
   enableAnnotationWarning = clOptions->enableAnnotationWarning;
+  lowerToCore = clOptions->lowerToCore;
   addMuxPragmas = clOptions->addMuxPragmas;
   verificationFlavor = clOptions->verificationFlavor;
   emitSeparateAlwaysBlocks = clOptions->emitSeparateAlwaysBlocks;
