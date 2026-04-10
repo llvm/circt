@@ -83,10 +83,10 @@ protected:
     size_t frameBytes = getFrameBytes();
     if (frameBytes > 0 && data.getSize() > frameBytes) {
       if (data.getSize() % frameBytes != 0)
-        throw std::runtime_error(
-            "Cosim write: message size (" + std::to_string(data.getSize()) +
-            ") is not a multiple of frame size (" +
-            std::to_string(frameBytes) + ")");
+        throw std::runtime_error("Cosim write: message size (" +
+                                 std::to_string(data.getSize()) +
+                                 ") is not a multiple of frame size (" +
+                                 std::to_string(frameBytes) + ")");
       const uint8_t *ptr = data.getBytes();
       size_t remaining = data.getSize();
       while (remaining > 0) {
