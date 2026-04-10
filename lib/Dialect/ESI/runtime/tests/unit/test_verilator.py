@@ -50,17 +50,19 @@ class TestCompileCommands:
   def test_uses_verilator_bin(self, tmp_path):
     v = _make_verilator(tmp_path)
     cmds = v.compile_commands()
-    assert cmds[0][0] == "verilator_bin"
+    assert Path(cmds[0][0]).name == "verilator_bin"
+    assert cmds[0][0] == v.verilator_bin
 
   def test_cmake_and_ninja_commands(self, tmp_path):
     v = _make_verilator(tmp_path)
     cmds = v.compile_commands()
-    # cmake+ninja present => 3 commands
+    # cmake+ninja present => 4 steps, including a Python callback.
     if v._use_cmake:
-      assert len(cmds) == 3
-      assert cmds[1][0] == "cmake"
-      assert "-G" in cmds[1] and "Ninja" in cmds[1]
-      assert cmds[2][0] == "ninja"
+      assert len(cmds) == 4
+      assert callable(cmds[1])
+      assert cmds[2][0] == "cmake"
+      assert "-G" in cmds[2] and "Ninja" in cmds[2]
+      assert cmds[3][0] == "ninja"
 
   def test_no_exe_or_build_flags_cmake(self, tmp_path):
     """When using cmake, --exe and --build should not appear."""
@@ -92,7 +94,8 @@ class TestCompileCommands:
     v = _make_verilator(tmp_path, debug=True)
     cmd = v.compile_commands()[0]
     assert "--trace-fst" in cmd
-    assert "--trace-params" in cmd
+    assert "--trace-structs" in cmd
+    assert "--trace-underscore" in cmd
 
   def test_respects_verilator_path_env(self, tmp_path):
     with mock.patch.dict(os.environ,

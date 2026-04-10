@@ -9,7 +9,7 @@ import socket
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Callable, IO
+from typing import Dict, List, Optional, Callable, IO, Union
 import threading
 
 _thisdir = Path(__file__).parent
@@ -107,6 +107,10 @@ class SimProcess:
 
 class Simulator:
 
+  CompileCommand = List[str]
+  CompileFunction = Callable[[], Optional[int]]
+  CompileStep = Union[CompileCommand, CompileFunction]
+
   # Some RTL simulators don't use stderr for error messages. Everything goes to
   # stdout. Boo! They should feel bad about this. Also, they can specify that
   # broken behavior by overriding this.
@@ -198,37 +202,57 @@ class Simulator:
         _thisdir.parent / "lib")
     return env
 
-  def compile_commands(self) -> List[List[str]]:
-    """Compile the sources. Returns the exit code of the simulation compiler."""
+  def compile_commands(self) -> List[CompileStep]:
+    """Return the compile steps for the simulator.
+
+    Each step may be either a shell command (`List[str]`) or a Python callback
+    (`Callable[[], Optional[int]]`). Python callbacks should return `0` or
+    `None` on success and a non-zero integer on failure.
+    """
     assert False, "Must be implemented by subclass"
+
+  def _run_compile_command(self, cmd: CompileCommand) -> int:
+    ret = self._start_process_with_callbacks(
+        cmd,
+        env=Simulator.get_env(),
+        cwd=None,
+        stdout_cb=self._compile_stdout_cb,
+        stderr_cb=self._compile_stderr_cb,
+        wait=True)
+    if isinstance(ret, int) and ret != 0:
+      print("====== Compilation failure")
+
+      # Always print both stdout and stderr so that linker errors (which go
+      # to stdout for cmake/ninja) are not silently hidden.
+      if self._compile_stdout_log is not None:
+        self._compile_stdout_log.seek(0)
+        stdout_content = self._compile_stdout_log.read()
+        if stdout_content:
+          print(stdout_content)
+      if self._compile_stderr_log is not None:
+        self._compile_stderr_log.seek(0)
+        stderr_content = self._compile_stderr_log.read()
+        if stderr_content:
+          print(stderr_content)
+
+    return ret if isinstance(ret, int) else 1
+
+  def _run_compile_step(self, step: CompileStep) -> int:
+    if callable(step):
+      ret = step()
+      if ret is None:
+        return 0
+      if not isinstance(ret, int):
+        raise TypeError("compile step callback must return int or None")
+      return ret
+    return self._run_compile_command(step)
 
   def compile(self) -> int:
     cmds = self.compile_commands()
     self.run_dir.mkdir(parents=True, exist_ok=True)
-    for cmd in cmds:
-      ret = self._start_process_with_callbacks(
-          cmd,
-          env=Simulator.get_env(),
-          cwd=None,
-          stdout_cb=self._compile_stdout_cb,
-          stderr_cb=self._compile_stderr_cb,
-          wait=True)
-      if isinstance(ret, int) and ret != 0:
-        print("====== Compilation failure")
-
-        # Always print both stdout and stderr so that linker errors (which go
-        # to stdout for cmake/ninja) are not silently hidden.
-        if self._compile_stdout_log is not None:
-          self._compile_stdout_log.seek(0)
-          stdout_content = self._compile_stdout_log.read()
-          if stdout_content:
-            print(stdout_content)
-        if self._compile_stderr_log is not None:
-          self._compile_stderr_log.seek(0)
-          stderr_content = self._compile_stderr_log.read()
-          if stderr_content:
-            print(stderr_content)
-
+    for step in cmds:
+      ret = self._run_compile_step(step)
+      if ret != 0:
         return ret
     return 0
 
