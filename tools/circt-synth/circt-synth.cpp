@@ -193,6 +193,11 @@ static cl::opt<bool> enableFunctionalReduction(
     "enable-functional-reduction",
     cl::desc("Enable FunctionalReduction during synth optimization"),
     cl::init(false), cl::cat(mainCategory));
+static cl::opt<int64_t> functionalReductionConflictLimit(
+    "functional-reduction-conflict-limit",
+    cl::desc("Per-SAT-call conflict budget for FunctionalReduction. "
+             "-1 disables the limit."),
+    cl::init(100), cl::cat(mainCategory));
 
 static cl::opt<int> maxCutSizePerRoot("max-cut-size-per-root",
                                       cl::desc("Maximum cut size per root"),
@@ -273,6 +278,8 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     optimizationOptions.disableSOPBalancing.setValue(!enableSOPBalancing);
     optimizationOptions.disableFunctionalReduction.setValue(
         !enableFunctionalReduction);
+    optimizationOptions.functionalReductionConflictLimit.setValue(
+        functionalReductionConflictLimit);
 
     circt::synth::buildSynthOptimizationPipeline(pm, optimizationOptions);
     if (untilReached(UntilMapping))

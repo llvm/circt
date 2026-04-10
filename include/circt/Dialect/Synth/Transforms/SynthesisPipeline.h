@@ -72,6 +72,12 @@ struct SynthOptimizationPipelineOptions
       llvm::cl::desc("Disable FunctionalReduction pass"),
       llvm::cl::init(false)};
 
+  PassOptions::Option<int64_t> functionalReductionConflictLimit{
+      *this, "functional-reduction-conflict-limit",
+      llvm::cl::desc("Per-SAT-call conflict budget for FunctionalReduction. "
+                     "-1 disables the limit."),
+      llvm::cl::init(100)};
+
   PassOptions::Option<bool> timingAware{
       *this, "timing-aware",
       llvm::cl::desc("Lower operators in a timing-aware fashion"),
