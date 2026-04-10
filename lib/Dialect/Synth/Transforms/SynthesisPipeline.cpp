@@ -122,8 +122,12 @@ void circt::synth::buildSynthOptimizationPipeline(
     pm.addPass(createStructuralHash());
   }
 
-  if (!options.disableFunctionalReduction && hasIncrementalSATSolverBackend())
-    pm.addPass(createFunctionalReduction());
+  if (!options.disableFunctionalReduction && hasIncrementalSATSolverBackend()) {
+    FunctionalReductionOptions functionalReductionOptions;
+    functionalReductionOptions.conflictLimit =
+        options.functionalReductionConflictLimit;
+    pm.addPass(createFunctionalReduction(functionalReductionOptions));
+  }
 
   if (!options.abcCommands.empty()) {
     synth::ABCRunnerOptions abcOptions;
