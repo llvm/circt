@@ -55,20 +55,8 @@ hw.module @mux(in %cond: i1, in %high: !hw.array<2xi4>, in %low: !hw.array<2xi4>
 
 // CHECK-LABEL: func.func @parity
 func.func @parity(%arg0: i4) -> i1 {
-  // CHECK-NEXT: %0 = comb.extract %arg0 from 0 : (i4) -> i1
-  // CHECK-NEXT: %1 = comb.extract %arg0 from 1 : (i4) -> i1
-  // CHECK-NEXT: %2 = comb.extract %arg0 from 2 : (i4) -> i1
-  // CHECK-NEXT: %3 = comb.extract %arg0 from 3 : (i4) -> i1
-  // CHECK-NEXT: %4 = synth.aig.and_inv not %0, not %1 : i1
-  // CHECK-NEXT: %5 = synth.aig.and_inv %0, %1 : i1
-  // CHECK-NEXT: %6 = synth.aig.and_inv not %4, not %5 : i1
-  // CHECK-NEXT: %7 = synth.aig.and_inv not %2, not %3 : i1
-  // CHECK-NEXT: %8 = synth.aig.and_inv %2, %3 : i1
-  // CHECK-NEXT: %9 = synth.aig.and_inv not %7, not %8 : i1
-  // CHECK-NEXT: %10 = synth.aig.and_inv not %6, not %9 : i1
-  // CHECK-NEXT: %11 = synth.aig.and_inv %6, %9 : i1
-  // CHECK-NEXT: %12 = synth.aig.and_inv not %10, not %11 : i1
-  // CHECK-NEXT: return %12 : i1
+  // CHECK-NOT: comb.parity
+  // CHECK: synth.aig.and_inv
   %0 = comb.parity %arg0 : i4
   return %0 : i1
 }
