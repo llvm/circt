@@ -122,3 +122,17 @@ hw.module @Issue8885(in %a : i2, in %b : i2) {
   %5 = synth.aig.and_inv %0, %2 {sv.namehint = "and1"} : i1
   %6 = synth.aig.and_inv not %4, not %5 {sv.namehint = "xor0"} : i1
 }
+
+// ROOT8-LABEL: Enumerating cuts for module: choice_expanded_truth_table
+// ROOT8: choice 4 cuts: {choice}@t2d0 {a, b, c}@t128d1 {a, bc}@t8d2 {c, ab}@t8d2
+// ROOT8: out 5 cuts: {out}@t2d0 {a, b, c, d}@t32768d1 {d, choice}@t8d2 {a, d, bc}@t128d2 {c, d, ab}@t128d2
+hw.module @choice_expanded_truth_table(in %a : i1, in %b : i1, in %c : i1,
+                                       in %d : i1, out y : i1) {
+  %ab = synth.aig.and_inv %a, %b {sv.namehint = "ab"} : i1
+  %abc_left = synth.aig.and_inv %ab, %c {sv.namehint = "abc_left"} : i1
+  %bc = synth.aig.and_inv %b, %c {sv.namehint = "bc"} : i1
+  %abc_right = synth.aig.and_inv %a, %bc {sv.namehint = "abc_right"} : i1
+  %choice = synth.choice %abc_left, %abc_right {sv.namehint = "choice"} : i1
+  %out = synth.aig.and_inv %choice, %d {sv.namehint = "out"} : i1
+  hw.output %out : i1
+}
