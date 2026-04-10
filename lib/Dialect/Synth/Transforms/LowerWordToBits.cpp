@@ -181,6 +181,10 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
         result = result ^ operandKnownBits;
       }
     }
+  } else if (auto dot = dyn_cast<DotOp>(op)) {
+    (void)dot;
+  } else if (auto onehot = dyn_cast<OneHotOp>(op)) {
+    (void)onehot;
   } else if (auto mig = dyn_cast<MajorityInverterOp>(op)) {
     // Give up if it's not a 3-input majority inverter.
     if (mig.getNumOperands() == 3) {
@@ -293,7 +297,7 @@ ArrayRef<Value> BitBlaster::lowerValueToBits(Value value) {
 
 ArrayRef<Value> BitBlaster::lowerBooleanLogicOperation(Operation *op) {
   return llvm::TypeSwitch<Operation *, ArrayRef<Value>>(op)
-      .Case<AndInverterOp, XorInverterOp, MajorityInverterOp>(
+      .Case<AndInverterOp, XorInverterOp, DotOp, OneHotOp, MajorityInverterOp>(
           [&](auto logicOp) { return lowerInvertibleOperations(logicOp); })
       .Default([&](Operation *logicOp) -> ArrayRef<Value> {
         logicOp->emitOpError("unsupported boolean logic node");

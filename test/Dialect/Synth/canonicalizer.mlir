@@ -134,6 +134,17 @@ hw.module @parameter<in: i8> (in %a: i8, out o1: i8) {
   hw.output %1 : i8
 }
 
+// CHECK-LABEL: hw.module @three_input_fold
+hw.module @three_input_fold(out o1 : i2, out o2 : i2) {
+  %c1 = hw.constant 1 : i2
+  %c2 = hw.constant 2 : i2
+  %c3 = hw.constant 3 : i2
+  %0 = synth.dot %c1, %c2, %c3 : i2
+  %1 = synth.onehot %c1, %c2, not %c3 : i2
+  // CHECK: hw.output %c-2_i2, %c-1_i2 : i2, i2
+  hw.output %0, %1 : i2, i2
+}
+
 // CHECK-LABEL: hw.module @choice_single_operand
 hw.module @choice_single_operand(in %a: i4, out o: i4) {
   // CHECK-NEXT: hw.output %a : i4
@@ -151,5 +162,4 @@ func.func @test_transitive_merge(%x: i32, %y: i32, %z: i32, %u: i32, %v: i32) ->
   // CHECK-NEXT: return %[[MEGA_CHOICE]], %[[MEGA_CHOICE]] : i32
   return %1, %2 : i32, i32
 }
-
 

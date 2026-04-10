@@ -23,3 +23,11 @@ hw.module @choice(in %a: i4, in %b: i4) {
   %0 = synth.choice %a : i4
   %1 = synth.choice %a, %b, %a : i4
 }
+
+// CHECK-LABEL: @ThreeInput
+// CHECK: %[[DOT:.+]] = synth.dot not %a, %b, %c : i4
+// CHECK-NEXT: %[[ONEHOT:.+]] = synth.onehot %a, not %b, %c : i4
+hw.module @ThreeInput(in %a: i4, in %b: i4, in %c: i4) {
+  %0 = synth.dot not %a, %b, %c : i4
+  %1 = synth.onehot %a, not %b, %c : i4
+}

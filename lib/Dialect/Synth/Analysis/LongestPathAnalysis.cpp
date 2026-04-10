@@ -669,6 +669,10 @@ private:
                       SmallVectorImpl<OpenPath> &results);
   LogicalResult visit(XorInverterOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results);
+  LogicalResult visit(DotOp op, size_t bitPos,
+                      SmallVectorImpl<OpenPath> &results);
+  LogicalResult visit(OneHotOp op, size_t bitPos,
+                      SmallVectorImpl<OpenPath> &results);
   LogicalResult visit(mig::MajorityInverterOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results);
   LogicalResult visit(comb::AndOp op, size_t bitPos,
@@ -876,6 +880,16 @@ LogicalResult LocalVisitor::visit(aig::AndInverterOp op, size_t bitPos,
 }
 
 LogicalResult LocalVisitor::visit(XorInverterOp op, size_t bitPos,
+                                  SmallVectorImpl<OpenPath> &results) {
+  return addLogicOp(op, bitPos, results);
+}
+
+LogicalResult LocalVisitor::visit(DotOp op, size_t bitPos,
+                                  SmallVectorImpl<OpenPath> &results) {
+  return addLogicOp(op, bitPos, results);
+}
+
+LogicalResult LocalVisitor::visit(OneHotOp op, size_t bitPos,
                                   SmallVectorImpl<OpenPath> &results) {
   return addLogicOp(op, bitPos, results);
 }
@@ -1173,8 +1187,9 @@ LogicalResult LocalVisitor::visitValue(Value value, size_t bitPos,
   auto result =
       TypeSwitch<Operation *, LogicalResult>(op)
           .Case<comb::ConcatOp, comb::ExtractOp, comb::ReplicateOp,
-                aig::AndInverterOp, XorInverterOp, mig::MajorityInverterOp,
-                comb::AndOp, comb::OrOp, comb::MuxOp, comb::XorOp,
+                aig::AndInverterOp, XorInverterOp, DotOp, OneHotOp,
+                mig::MajorityInverterOp, comb::AndOp, comb::OrOp, comb::MuxOp,
+                comb::XorOp,
                 comb::TruthTableOp,
                 seq::FirRegOp, seq::CompRegOp, seq::FirMemReadOp,
                 seq::FirMemReadWriteOp, hw::WireOp>([&](auto op) {
@@ -1321,8 +1336,9 @@ LogicalResult LocalVisitor::initializeAndRun() {
               return markRegEndPoint(op.getMemory(), op.getWriteData(), {}, {},
                                      op.getEnable());
             })
-            .Case<aig::AndInverterOp, XorInverterOp, comb::AndOp, comb::OrOp,
-                  comb::XorOp, comb::MuxOp, seq::FirMemReadOp>([&](auto op) {
+            .Case<aig::AndInverterOp, XorInverterOp, DotOp, OneHotOp,
+                  comb::AndOp, comb::OrOp, comb::XorOp, comb::MuxOp,
+                  seq::FirMemReadOp>([&](auto op) {
               // NOTE: Visiting and-inverter is not necessary but
               // useful to reduce recursion depth.
               for (size_t i = 0, e = getBitWidth(op); i < e; ++i)

@@ -47,30 +47,33 @@ static bool accumulateResourceCounts(Operation *op,
                                      llvm::StringMap<uint64_t> &counts) {
   if (op->getNumResults() != 1 || !op->getResult(0).getType().isInteger())
     return false;
+  if (auto logicOp = dyn_cast<synth::BooleanLogicOpInterface>(op)) {
+    uint64_t count = op->getResult(0).getType().getIntOrFloatBitWidth();
+    if (isa<synth::MajorityInverterOp>(op)) {
+      std::string name = (Twine(op->getName().getStringRef()) + "_" +
+                          Twine(logicOp.getNumLogicInputs()))
+                             .str();
+      counts[name] += count;
+      return true;
+    }
+    if (isa<synth::DotOp, synth::OneHotOp>(op)) {
+      counts[op->getName().getStringRef()] += count;
+      return true;
+    }
+    counts[op->getName().getStringRef()] +=
+        (logicOp.getNumLogicInputs() - 1) * count;
+    return true;
+  }
   return TypeSwitch<Operation *, bool>(op)
-      // Variadic logic operations (AND, OR, XOR, AIG).
+      // Variadic comb logic operations.
       // Gate count = (num_inputs - 1) * bitwidth
-      .Case<synth::AndInverterOp, synth::XorInverterOp, comb::AndOp,
-            comb::OrOp, comb::XorOp>(
+      .Case<comb::AndOp, comb::OrOp, comb::XorOp>(
           [&](auto logicOp) {
             counts[logicOp->getName().getStringRef()] +=
                 (logicOp.getNumOperands() - 1) *
                 logicOp.getType().getIntOrFloatBitWidth();
             return true;
           })
-      // Majority-inverter graph (MIG) - include input count in the name.
-      // Gate count = (num_inputs / 2) * bitwidth
-      // Each MIG gate consumes 3 inputs and produces 1 output, so a variadic
-      // MIG operation with N inputs requires N/2 gates (rounded down).
-      .Case<synth::MajorityInverterOp>([&](auto logicOp) {
-        uint64_t count = logicOp.getType().getIntOrFloatBitWidth();
-        // Concatenate input count to the operation name.
-        std::string name = (Twine(logicOp->getName().getStringRef()) + "_" +
-                            Twine(logicOp.getNumOperands()))
-                               .str();
-        counts[name] += count;
-        return true;
-      })
       // Truth tables (LUTs) - count both the total number of truth tables and
       // the per-input breakdown.
       .Case<comb::TruthTableOp>([&](auto op) {

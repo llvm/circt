@@ -272,7 +272,7 @@ LogicalResult circt::synth::topologicallySortLogicNetwork(Operation *topOp) {
   const auto isOperationReady = [](Value value, Operation *op) -> bool {
     // Topologically sort AIG ops, MIG ops, and dataflow ops. Other operations
     // can be scheduled.
-    return !(isa<AndInverterOp, XorInverterOp, MajorityInverterOp>(op) ||
+    return !(isBooleanLogicOp(op) ||
              isa<comb::ExtractOp,
                  comb::ReplicateOp, comb::ConcatOp>(op));
   };
