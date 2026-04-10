@@ -856,7 +856,7 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
 // ConvertCombToSynth
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToSynth : Pass<"convert-comb-to-synth", "hw::HWModuleOp"> {
+def ConvertCombToSynth : Pass<"convert-comb-to-synth"> {
   let summary = "Lower Comb ops to Synth ops.";
   let dependentDialects = ["circt::comb::CombDialect",
                            "circt::synth::SynthDialect"];

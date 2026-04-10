@@ -52,3 +52,11 @@ hw.module @mux(in %cond: i1, in %high: !hw.array<2xi4>, in %low: !hw.array<2xi4>
   %0 = comb.mux %cond, %high, %low : !hw.array<2xi4>
   hw.output %0 : !hw.array<2xi4>
 }
+
+// CHECK-LABEL: func.func @parity
+func.func @parity(%arg0: i4) -> i1 {
+  // CHECK-NOT: comb.parity
+  // CHECK: synth.aig.and_inv
+  %0 = comb.parity %arg0 : i4
+  return %0 : i1
+}
