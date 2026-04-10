@@ -2447,10 +2447,15 @@ struct YieldOpConversion : public OpConversionPattern<YieldOp> {
   LogicalResult
   matchAndRewrite(YieldOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (isa<llhd::GlobalSignalOp>(op->getParentOp()))
+    Operation *parent = op->getParentOp();
+    if (isa<llhd::GlobalSignalOp>(parent))
       rewriter.replaceOpWithNewOp<llhd::YieldOp>(op, adaptor.getResult());
-    else
+    else if (isa<scf::ExecuteRegionOp, scf::ForOp, scf::IfOp,
+                 scf::IndexSwitchOp, scf::WhileOp>(parent))
       rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getResult());
+    else
+      return rewriter.notifyMatchFailure(
+          op, "yield parent has not been converted to a legal region op yet");
     return success();
   }
 };
