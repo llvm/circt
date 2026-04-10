@@ -212,13 +212,12 @@ class Simulator:
     assert False, "Must be implemented by subclass"
 
   def _run_compile_command(self, cmd: CompileCommand) -> int:
-    ret = self._start_process_with_callbacks(
-        cmd,
-        env=Simulator.get_env(),
-        cwd=None,
-        stdout_cb=self._compile_stdout_cb,
-        stderr_cb=self._compile_stderr_cb,
-        wait=True)
+    ret = self._start_process_with_callbacks(cmd,
+                                             env=Simulator.get_env(),
+                                             cwd=None,
+                                             stdout_cb=self._compile_stdout_cb,
+                                             stderr_cb=self._compile_stderr_cb,
+                                             wait=True)
     if isinstance(ret, int) and ret != 0:
       print("====== Compilation failure")
 
