@@ -65,4 +65,20 @@ def IntegerBinaryArithmeticInterface : OpInterface<"IntegerBinaryArithmeticOp"> 
   ];
 }
 
+def BinaryEqualityInterface : OpInterface<"BinaryEqualityOp"> {
+  let cppNamespace = "circt::om";
+  let description = "Common interface for binary property equality ops.";
+  let methods = [
+    InterfaceMethod<"Get the lhs Value",
+      "mlir::Value", "getLhs", (ins)>,
+    InterfaceMethod<"Get the rhs Value",
+      "mlir::Value", "getRhs", (ins)>,
+    InterfaceMethod<"Get the result Value",
+      "mlir::Value", "getResult", (ins)>,
+    InterfaceMethod<"Evaluate the binary equality operation",
+      "mlir::FailureOr<mlir::Attribute>", "evaluateBinaryEquality",
+      (ins "mlir::Attribute":$lhs, "mlir::Attribute":$rhs)>
+  ];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPINTERFACES_TD
