@@ -84,6 +84,8 @@ func.func @FormatStrings() {
   sim.fmt.hier_path
   // CHECK: sim.fmt.hier_path escaped
   sim.fmt.hier_path escaped
+  // CHECK: sim.time
+  %t = sim.time
   return
 }
 

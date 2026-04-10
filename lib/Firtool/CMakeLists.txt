@@ -6,12 +6,14 @@ add_circt_library(CIRCTFirtool
   CIRCTFIRRTLToHW
   CIRCTFIRRTLTransforms
   CIRCTHWToBTOR2
+  CIRCTHWToSV
   CIRCTHWTransforms
   CIRCTLTLToCore
   CIRCTOMTransforms
   CIRCTSeqToSV
   CIRCTSimToSV
   CIRCTSeqTransforms
+  CIRCTSimTransforms
   CIRCTSVTransforms
   CIRCTTransforms
   CIRCTVerifToSV

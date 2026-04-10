@@ -19,12 +19,17 @@
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Operation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/WalkResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/RegionUtils.h"
 
 #define DEBUG_TYPE "lower-sim-to-sv"
 
@@ -39,7 +44,8 @@ using namespace sim;
 /// Check whether an op should be placed inside an ifdef guard that prevents it
 /// from affecting synthesis runs.
 static bool needsIfdefGuard(Operation *op) {
-  return isa<ClockedTerminateOp, ClockedPauseOp, TerminateOp, PauseOp>(op);
+  return isa<ClockedTerminateOp, ClockedPauseOp, TerminateOp, PauseOp,
+             PrintFormattedProcOp, FFlushProcOp>(op);
 }
 
 /// Check whether an op should be placed inside an always process triggered on a
@@ -53,12 +59,116 @@ static std::pair<Value, Value> needsClockAndConditionWrapper(Operation *op) {
       .Default({});
 }
 
+static Value getDefaultStderrFD(OpBuilder &builder, Location loc) {
+  return hw::ConstantOp::create(builder, loc, APInt(32, 0x80000002));
+}
+
+struct LoweredFormatString {
+  SmallString<64> format;
+  SmallVector<Value> operands;
+};
+
+static void appendEscapedLiteral(SmallString<64> &result, StringRef literal) {
+  for (char c : literal) {
+    if (c == '%')
+      result += "%%";
+    else
+      result.push_back(c);
+  }
+}
+
+static void appendDecimalSpecifier(SmallString<64> &result,
+                                   std::optional<uint32_t> width) {
+  result.push_back('%');
+  if (width)
+    result += Twine(*width).str();
+  result.push_back('d');
+}
+
+static LogicalResult lowerFormatString(Value input, LoweredFormatString &out,
+                                       ConversionPatternRewriter &rewriter) {
+  Operation *op = input.getDefiningOp();
+  return TypeSwitch<Operation *, LogicalResult>(op)
+      .Case<FormatLiteralOp>([&](auto lit) {
+        appendEscapedLiteral(out.format, lit.getLiteral());
+        return success();
+      })
+      .Case<FormatStringConcatOp>([&](auto concat) {
+        for (Value sub : concat.getInputs())
+          if (failed(lowerFormatString(sub, out, rewriter)))
+            return failure();
+        return success();
+      })
+      .Case<FormatBinOp>([&](auto fmt) {
+        out.format.push_back('%');
+        if (fmt.getSpecifierWidth())
+          out.format += Twine(*fmt.getSpecifierWidth()).str();
+        out.format.push_back('b');
+        out.operands.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatDecOp>([&](auto fmt) {
+        if (fmt.getValue().template getDefiningOp<sim::TimeOp>()) {
+          out.format.push_back('%');
+          if (fmt.getSpecifierWidth())
+            out.format += Twine(*fmt.getSpecifierWidth()).str();
+          else
+            out.format.push_back('0');
+          out.format.push_back('t');
+          out.operands.push_back(fmt.getValue());
+        } else {
+          appendDecimalSpecifier(out.format, fmt.getSpecifierWidth());
+
+          Value operand = fmt.getValue();
+          if (fmt.getIsSigned()) {
+            operand = sv::SystemFunctionOp::create(
+                rewriter, fmt.getLoc(), operand.getType(), "signed", operand);
+          }
+          out.operands.push_back(operand);
+        }
+        return success();
+      })
+      .Case<FormatHexOp>([&](auto fmt) {
+        out.format.push_back('%');
+        if (fmt.getSpecifierWidth())
+          out.format += Twine(*fmt.getSpecifierWidth()).str();
+        out.format.push_back(fmt.getIsHexUppercase() ? 'X' : 'x');
+        out.operands.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatOctOp>([&](auto fmt) {
+        out.format.push_back('%');
+        if (fmt.getSpecifierWidth())
+          out.format += Twine(*fmt.getSpecifierWidth()).str();
+        out.format.push_back('o');
+        out.operands.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatCharOp>([&](auto fmt) {
+        out.format += "%c";
+        out.operands.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatHierPathOp>([&](auto fmt) {
+        out.format += fmt.getUseEscapes() ? "%M" : "%m";
+        return success();
+      })
+      .Default([](Operation *) { return failure(); });
+}
+
+static bool isFormatOp(Operation *op) {
+  return isa<FormatLiteralOp, FormatStringConcatOp, FormatBinOp, FormatDecOp,
+             FormatHexOp, FormatOctOp, FormatCharOp, FormatHierPathOp,
+             FormatScientificOp, FormatFloatOp, FormatGeneralOp>(op);
+}
+
 namespace {
 
 struct SimConversionState {
   hw::HWModuleOp module;
   bool usedSynthesisMacro = false;
   SetVector<StringAttr> dpiCallees;
+  SmallVector<Value> formatCleanupRoots;
 };
 
 template <typename T>
@@ -281,6 +391,144 @@ public:
   }
 };
 
+class GetFileLowering : public SimConversionPattern<GetFileOp> {
+public:
+  using SimConversionPattern<GetFileOp>::SimConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(GetFileOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Value fileName;
+    if (adaptor.getFileNameOperands().empty()) {
+      fileName = sv::ConstantStrOp::create(rewriter, op.getLoc(),
+                                           op.getFileNameFormat());
+    } else {
+      fileName =
+          sv::SFormatFOp::create(rewriter, op.getLoc(), op.getFileNameFormat(),
+                                 adaptor.getFileNameOperands());
+    }
+
+    Value fd;
+    auto callee =
+        rewriter.getStringAttr("__circt_lib_logging::FileDescriptor::get");
+    if (op->getParentOp() &&
+        op->getParentOp()->hasTrait<sv::ProceduralRegion>()) {
+      fd = sv::FuncCallProceduralOp::create(rewriter, op.getLoc(),
+                                            TypeRange{rewriter.getI32Type()},
+                                            callee, ValueRange{fileName})
+               ->getResult(0);
+    } else {
+      fd = sv::FuncCallOp::create(rewriter, op.getLoc(),
+                                  TypeRange{rewriter.getI32Type()}, callee,
+                                  ValueRange{fileName})
+               ->getResult(0);
+    }
+    rewriter.replaceOp(op, fd);
+    return success();
+  }
+};
+
+class PrintFormattedProcLowering
+    : public SimConversionPattern<PrintFormattedProcOp> {
+public:
+  using SimConversionPattern<PrintFormattedProcOp>::SimConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(PrintFormattedProcOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Value originalInput = op.getInput();
+
+    LoweredFormatString lowered;
+    if (failed(lowerFormatString(adaptor.getInput(), lowered, rewriter)))
+      return rewriter.notifyMatchFailure(op, "unsupported format string");
+
+    Value stream = adaptor.getStream();
+    if (!stream)
+      stream = getDefaultStderrFD(rewriter, op.getLoc());
+
+    auto buildFwrite = [&]() {
+      sv::FWriteOp::create(rewriter, op.getLoc(), stream,
+                           rewriter.getStringAttr(lowered.format),
+                           lowered.operands);
+    };
+
+    if (op.getUsePrintfCond()) {
+      Value printfCond = sv::MacroRefExprOp::create(
+          rewriter, op->getLoc(), rewriter.getI1Type(), "PRINTF_COND_");
+      sv::IfOp::create(rewriter, op->getLoc(), printfCond,
+                       [&]() { buildFwrite(); });
+    } else {
+      buildFwrite();
+    }
+    rewriter.eraseOp(op);
+
+    state.formatCleanupRoots.push_back(originalInput);
+
+    return success();
+  }
+};
+
+class FFlushProcLowering : public SimConversionPattern<FFlushProcOp> {
+public:
+  using SimConversionPattern<FFlushProcOp>::SimConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FFlushProcOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    sv::FFlushOp::create(rewriter, op.getLoc(), adaptor.getStream());
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+class ScfIfLowering : public OpConversionPattern<mlir::scf::IfOp> {
+public:
+  using OpConversionPattern<mlir::scf::IfOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(mlir::scf::IfOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    if (op.getNumResults() != 0)
+      return rewriter.notifyMatchFailure(op, "resultful scf.if unsupported");
+
+    auto *parentOp = op->getParentOp();
+    if (!parentOp || !parentOp->hasTrait<sv::ProceduralRegion>())
+      return rewriter.notifyMatchFailure(
+          op, "scf.if parent is not an SV procedural region");
+
+    auto cloneWithoutYield = [&](Block &from) {
+      for (auto &nested : from.without_terminator())
+        rewriter.clone(nested);
+    };
+
+    if (op.getElseRegion().empty()) {
+      sv::IfOp::create(rewriter, op.getLoc(), adaptor.getCondition(), [&]() {
+        cloneWithoutYield(op.getThenRegion().front());
+      });
+    } else {
+      sv::IfOp::create(
+          rewriter, op.getLoc(), adaptor.getCondition(),
+          [&]() { cloneWithoutYield(op.getThenRegion().front()); },
+          [&]() { cloneWithoutYield(op.getElseRegion().front()); });
+    }
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+class TimeLowering : public SimConversionPattern<sim::TimeOp> {
+public:
+  using SimConversionPattern<sim::TimeOp>::SimConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(sim::TimeOp op, OpAdaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<sv::TimeOp>(op);
+    return success();
+  }
+};
+
 // A helper struct to lower DPI function/call.
 struct LowerDPIFunc {
   llvm::DenseMap<StringAttr, StringAttr> symbolToFragment;
@@ -373,6 +621,14 @@ void LowerDPIFunc::addFragments(hw::HWModuleOp module,
         ArrayAttr::get(module.getContext(), fragments.takeVector()));
 }
 
+static bool isInProceduralRegion(Operation *op) {
+  auto *parentOp = op->getParentOp();
+  while (parentOp && !parentOp->hasTrait<sv::ProceduralRegion>()) {
+    parentOp = parentOp->getParentOp();
+  }
+  return parentOp;
+}
+
 static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
   bool usedSynthesisMacro = false;
 
@@ -382,11 +638,16 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
     // Move the op into an ifdef guard if needed.
     if (needsIfdefGuard(op)) {
       // Try to reuse an ifdef guard immediately before the op.
+      bool isProcedural = isInProceduralRegion(op);
       Block *block = nullptr;
       if (op->getPrevNode())
         block = TypeSwitch<Operation *, Block *>(op->getPrevNode())
                     .Case<sv::IfDefOp, sv::IfDefProceduralOp>(
                         [&](auto guardOp) -> Block * {
+                          bool guardIsProcedural = isa<sv::IfDefProceduralOp>(
+                              guardOp.getOperation());
+                          if (guardIsProcedural != isProcedural)
+                            return nullptr;
                           if (guardOp.getCond().getIdent().getAttr() ==
                                   "SYNTHESIS" &&
                               guardOp.hasElse())
@@ -398,7 +659,7 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
       // If there was no pre-existing guard, create one.
       if (!block) {
         OpBuilder builder(op);
-        if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+        if (isProcedural)
           block = sv::IfDefProceduralOp::create(
                       builder, loc, "SYNTHESIS", [] {}, [] {})
                       .getElseBlock();
@@ -477,8 +738,22 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
 
     std::atomic<bool> usedSynthesisMacro = false;
     auto lowerModule = [&](hw::HWModuleOp module) {
-      if (moveOpsIntoIfdefGuardsAndProcesses(module))
-        usedSynthesisMacro = true;
+      bool moduleNeeds = moveOpsIntoIfdefGuardsAndProcesses(module);
+      module.walk([&](Operation *op) {
+        StringRef condName;
+        if (auto ifdef = dyn_cast<sv::IfDefOp>(op))
+          condName = ifdef.getCond().getName();
+        else if (auto ifdefP = dyn_cast<sv::IfDefProceduralOp>(op))
+          condName = ifdefP.getCond().getName();
+
+        if (condName == "SYNTHESIS") {
+          moduleNeeds = true;
+          return WalkResult::interrupt();
+        }
+        return WalkResult::advance();
+      });
+      if (moduleNeeds)
+        usedSynthesisMacro.store(true);
 
       SimConversionState state;
       ConversionTarget target(*context);
@@ -487,6 +762,10 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       target.addLegalDialect<hw::HWDialect>();
       target.addLegalDialect<seq::SeqDialect>();
       target.addLegalDialect<comb::CombDialect>();
+      target.addLegalOp<FormatLiteralOp, FormatStringConcatOp, FormatBinOp,
+                        FormatDecOp, FormatHexOp, FormatOctOp, FormatCharOp,
+                        FormatHierPathOp, FormatScientificOp, FormatFloatOp,
+                        FormatGeneralOp>();
 
       RewritePatternSet patterns(context);
       patterns.add<PlusArgsTestLowering>(context, state);
@@ -496,10 +775,40 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<TerminateOp>(convert);
       patterns.add<PauseOp>(convert);
       patterns.add<DPICallLowering>(context, state);
+      patterns.add<GetFileLowering>(context, state);
+      patterns.add<PrintFormattedProcLowering>(context, state);
+      patterns.add<FFlushProcLowering>(context, state);
+      patterns.add<ScfIfLowering>(context);
+      patterns.add<TimeLowering>(context, state);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 
       if (failed(result))
         return result;
+
+      SmallVector<Operation *> worklist;
+      llvm::SmallDenseSet<Operation *> queued;
+      llvm::SmallDenseSet<Operation *> erased;
+      auto enqueueFormatDef = [&](Value value) {
+        if (auto *defOp = value.getDefiningOp(); defOp && isFormatOp(defOp))
+          if (queued.insert(defOp).second)
+            worklist.push_back(defOp);
+      };
+      for (Value root : state.formatCleanupRoots)
+        enqueueFormatDef(root);
+
+      while (!worklist.empty()) {
+        Operation *candidate = worklist.pop_back_val();
+        queued.erase(candidate);
+        if (erased.contains(candidate))
+          continue;
+        if (!candidate->use_empty())
+          continue;
+        if (auto concat = dyn_cast<FormatStringConcatOp>(candidate))
+          for (Value input : concat.getInputs())
+            enqueueFormatDef(input);
+        erased.insert(candidate);
+        candidate->erase();
+      }
 
       // Set the emit fragment.
       lowerDPIFunc.addFragments(module, state.dpiCallees.takeVector());
@@ -513,7 +822,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
             context, circuit.getOps<hw::HWModuleOp>(), lowerModule)))
       return signalPassFailure();
 
-    if (usedSynthesisMacro) {
+    if (usedSynthesisMacro.load()) {
       Operation *op = circuit.lookupSymbol("SYNTHESIS");
       if (op) {
         if (!isa<sv::MacroDeclOp>(op)) {

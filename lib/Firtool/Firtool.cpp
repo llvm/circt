@@ -7,13 +7,16 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Firtool/Firtool.h"
+#include "circt/Conversion/HWToSV.h"
 #include "circt/Conversion/Passes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Transforms/Passes.h"
@@ -334,6 +337,8 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
       verif::createLowerSymbolicValuesPass({opt.getSymbolicValueLowering()}));
 
   pm.addPass(seq::createExternalizeClockGate(opt.getClockGateOptions()));
+  pm.nest<hw::HWModuleOp>().addPass(circt::sim::createProceduralizeSim());
+  pm.nest<hw::HWModuleOp>().addPass(circt::createLowerHWToSVPass());
   pm.addPass(circt::createLowerSimToSVPass());
   pm.addPass(circt::createLowerSeqToSVPass(
       {/*disableRegRandomization=*/!opt.isRandomEnabled(

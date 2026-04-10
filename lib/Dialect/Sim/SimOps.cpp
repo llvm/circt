@@ -623,27 +623,35 @@ LogicalResult PrintFormattedOp::canonicalize(PrintFormattedOp op,
   return failure();
 }
 
-LogicalResult PrintFormattedProcOp::verify() {
+static LogicalResult verifyInProceduralRegion(Operation *op) {
   // Check if we know for sure that the parent is not procedural.
-  auto *parentOp = getOperation()->getParentOp();
+  auto *parentOp = op->getParentOp();
 
   if (!parentOp)
-    return emitOpError("must be within a procedural region.");
+    return op->emitOpError("must be within a procedural region.");
 
   if (isa_and_nonnull<hw::HWDialect>(parentOp->getDialect())) {
     if (!isa<hw::TriggeredOp>(parentOp))
-      return emitOpError("must be within a procedural region.");
+      return op->emitOpError("must be within a procedural region.");
     return success();
   }
 
   if (isa_and_nonnull<sv::SVDialect>(parentOp->getDialect())) {
     if (!parentOp->hasTrait<sv::ProceduralRegion>())
-      return emitOpError("must be within a procedural region.");
+      return op->emitOpError("must be within a procedural region.");
     return success();
   }
 
   // Don't fail for dialects that are not explicitly handled.
   return success();
+}
+
+LogicalResult PrintFormattedProcOp::verify() {
+  return verifyInProceduralRegion(getOperation());
+}
+
+LogicalResult FFlushProcOp::verify() {
+  return verifyInProceduralRegion(getOperation());
 }
 
 LogicalResult PrintFormattedProcOp::canonicalize(PrintFormattedProcOp op,
