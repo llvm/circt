@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRParser.h"
-#include "FIRAnnotations.h"
 #include "FIRLexer.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
@@ -6500,33 +6499,6 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
   if (failed(result))
     return result;
-
-  // Scan for printf-encoded verif's to error on their use, no longer supported.
-  {
-    size_t numVerifPrintfs = 0;
-    std::optional<Location> printfLoc;
-
-    deferredModule.moduleOp.walk([&](PrintFOp printFOp) {
-      if (!circt::firrtl::isRecognizedPrintfEncodedVerif(printFOp))
-        return;
-      ++numVerifPrintfs;
-      if (!printfLoc)
-        printfLoc = printFOp.getLoc();
-    });
-
-    if (numVerifPrintfs > 0) {
-      auto diag =
-          mlir::emitError(deferredModule.moduleOp.getLoc(), "module contains ")
-          << numVerifPrintfs
-          << " printf-encoded verification operation(s), which are no longer "
-             "supported.";
-      diag.attachNote(*printfLoc)
-          << "example printf here, this is now just a printf and nothing more";
-      diag.attachNote() << "For more information, see "
-                           "https://github.com/llvm/circt/issues/6970";
-      return diag;
-    }
-  }
 
   return success();
 }
