@@ -99,3 +99,22 @@ func.func @DynamicStrings(%idx: i32) {
   %char = sim.string.get %str[%idx]
   return
 }
+
+hw.module @PrintFormattedWithStream(in %clock: !seq.clock, in %condition: i1, in %idx: i32) {
+  // CHECK: %[[FMT:.*]] = sim.fmt.literal "literal string"
+  %str = sim.fmt.literal "literal string"
+  // CHECK: %[[FN0:.*]] = sim.fmt.literal "output_"
+  %fn0 = sim.fmt.literal "output_"
+  // CHECK: %[[FN1:.*]] = sim.fmt.dec %idx : i32
+  %fn1 = sim.fmt.dec %idx : i32
+  // CHECK: %[[FN2:.*]] = sim.fmt.literal ".txt"
+  %fn2 = sim.fmt.literal ".txt"
+  // CHECK: %[[FNAME:.*]] = sim.fmt.concat (%[[FN0]], %[[FN1]], %[[FN2]])
+  %fileName = sim.fmt.concat (%fn0, %fn1, %fn2)
+  // CHECK: %[[FILE:.*]] = sim.get_file %[[FNAME]]
+  %file = sim.get_file %fileName
+  // CHECK: sim.print %[[FMT]] on %clock if %condition
+  sim.print %str on %clock if %condition
+  // CHECK: sim.print %[[FMT]] on %clock if %condition to %[[FILE]]
+  sim.print %str on %clock if %condition to %file
+}

@@ -561,10 +561,20 @@ def PrintFormattedOp : SimOp<"print"> {
   let arguments = (ins
     FormatStringType:$input,
     ClockType:$clock,
-    I1:$condition
+    I1:$condition,
+    Optional<OutputStreamType>:$stream
   );
+  let builders = [
+    OpBuilder<(ins
+      "Value":$input,
+      "Value":$clock,
+      "Value":$condition
+    ), [{
+      build($_builder, $_state, input, clock, condition, mlir::Value());
+    }]>
+  ];
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = "$input `on` $clock `if` $condition attr-dict";
+  let assemblyFormat = "$input `on` $clock `if` $condition (`to` $stream^)? attr-dict";
 }
 
 def PrintFormattedProcOp : SimOp<"proc.print"> {
@@ -574,10 +584,38 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
 
     This operation must be within a procedural region.
   }];
-  let arguments = (ins FormatStringType:$input);
+  let arguments = (ins 
+    FormatStringType:$input,
+    Optional<OutputStreamType>:$stream
+  );
+  let builders = [
+    OpBuilder<(ins
+      "Value":$input
+    ), [{
+      build($_builder, $_state, input, mlir::Value());
+    }]>
+  ];
   let hasVerifier = true;
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = "$input attr-dict";
+  let assemblyFormat = "$input (`to` $stream^)? attr-dict";
+}
+
+def GetFileOp : SimOp<"get_file", [Pure]> {
+  let summary = "Get an output stream for a formatted file name";
+  let description = [{
+    Resolves a file name from a `!sim.fstring` value and returns an output
+    stream resource that can be consumed by `sim.print` or `sim.proc.print`.
+    The file-name format string should be constructed using `sim.fmt.*`
+    operations, just like any other Sim format-string value.
+    The file-name format string is evaluated whenever the stream is accessed.
+
+    The concrete runtime representation and lifetime management of the returned
+    stream are backend-defined.
+  }];
+
+  let arguments = (ins FormatStringType:$fileName);
+  let results = (outs OutputStreamType:$result);
+  let assemblyFormat = "$fileName attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
