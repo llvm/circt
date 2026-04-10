@@ -192,22 +192,32 @@ class Verilator(Simulator):
   def _depfile_path(self, obj_dir: Path) -> Path:
     return obj_dir / f"V{self.sources.top}__ver.d"
 
-  def _write_cmake_from_depfile(self) -> int:
-    obj_dir = Path.cwd() / "obj_dir"
-    depfile = self._depfile_path(obj_dir)
-    self._write_cmake(obj_dir, self._generated_cpp_sources(depfile))
-    return 0
-
-  def _generated_cpp_sources(self, depfile: Path) -> List[Path]:
+  def _generated_targets(self, depfile: Path) -> List[Path]:
     depfile_contents = depfile.read_text().replace("\\\n", " ")
     separator = re.search(r":\s", depfile_contents)
     if separator is None:
       raise RuntimeError(f"Malformed Verilator depfile: {depfile}")
-    targets = depfile_contents[:separator.start()]
+    return [(Path.cwd() / path).resolve()
+            for path in depfile_contents[:separator.start()].split()]
 
-    generated_sources = [(Path.cwd() / path).resolve()
-                         for path in targets.split()
-                         if path.endswith(".cpp")]
+  def _write_cmake_from_depfile(self) -> int:
+    obj_dir = Path.cwd() / "obj_dir"
+    depfile = self._depfile_path(obj_dir)
+    generated_targets = self._generated_targets(depfile)
+    generated_sources = [
+        path for path in generated_targets if path.suffix == ".cpp"
+    ]
+    pch_header = next(
+        (path for path in generated_targets if path.name.endswith("__pch.h")),
+        None)
+    self._write_cmake(obj_dir, generated_sources, pch_header)
+    return 0
+
+  def _generated_cpp_sources(self, depfile: Path) -> List[Path]:
+    generated_sources = [
+        path for path in self._generated_targets(depfile)
+        if path.suffix == ".cpp"
+    ]
     if not generated_sources:
       raise RuntimeError(
           f"No generated C++ sources found in depfile: {depfile}")
@@ -215,14 +225,11 @@ class Verilator(Simulator):
 
   def _write_cmake(self,
                    obj_dir: Path,
-                   generated_sources: Optional[List[Path]] = None) -> Path:
+                   generated_sources: List[Path],
+                   pch_header: Optional[Path] = None) -> Path:
     """Write a CMakeLists.txt for building the verilated simulation.
 
     Returns the path to the CMake build directory."""
-    if generated_sources is None:
-      depfile = self._depfile_path(obj_dir)
-      generated_sources = self._generated_cpp_sources(
-          depfile) if depfile.exists() else []
 
     verilator_root = self._find_verilator_root()
     include_dir = verilator_root / "include"
@@ -258,6 +265,21 @@ class Verilator(Simulator):
       dpi_paths = self.sources.dpi_so_paths()
       dpi_link = "\n  ".join(str(p) for p in dpi_paths)
 
+    pch_setup = ""
+    if pch_header is not None:
+      runtime_and_driver = "\n  ".join(
+          [str(source) for source in runtime_sources] + [driver])
+      pch_setup = f"""
+target_precompile_headers({exe_name} PRIVATE
+  {pch_header}
+)
+
+set_source_files_properties(
+  {runtime_and_driver}
+  PROPERTIES SKIP_PRECOMPILE_HEADERS ON
+)
+"""
+
     content = f"""\
 cmake_minimum_required(VERSION 3.20)
 project({exe_name} CXX)
@@ -277,6 +299,7 @@ target_include_directories({exe_name} PRIVATE
 target_compile_definitions({exe_name} PRIVATE
   {defs_str}
 )
+{pch_setup}
 
 find_package(Threads REQUIRED)
 find_package(ZLIB REQUIRED)
