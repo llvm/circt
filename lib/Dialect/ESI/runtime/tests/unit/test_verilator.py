@@ -50,17 +50,19 @@ class TestCompileCommands:
   def test_uses_verilator_bin(self, tmp_path):
     v = _make_verilator(tmp_path)
     cmds = v.compile_commands()
-    assert cmds[0][0] == "verilator_bin"
+    assert Path(cmds[0][0]).name == "verilator_bin"
+    assert cmds[0][0] == v.verilator_bin
 
   def test_cmake_and_ninja_commands(self, tmp_path):
     v = _make_verilator(tmp_path)
     cmds = v.compile_commands()
-    # cmake+ninja present => 3 commands
+    # cmake+ninja present => 4 steps, including a Python callback.
     if v._use_cmake:
-      assert len(cmds) == 3
-      assert cmds[1][0] == "cmake"
-      assert "-G" in cmds[1] and "Ninja" in cmds[1]
-      assert cmds[2][0] == "ninja"
+      assert len(cmds) == 4
+      assert callable(cmds[1])
+      assert cmds[2][0] == "cmake"
+      assert "-G" in cmds[2] and "Ninja" in cmds[2]
+      assert cmds[3][0] == "ninja"
 
   def test_no_exe_or_build_flags_cmake(self, tmp_path):
     """When using cmake, --exe and --build should not appear."""
@@ -92,7 +94,8 @@ class TestCompileCommands:
     v = _make_verilator(tmp_path, debug=True)
     cmd = v.compile_commands()[0]
     assert "--trace-fst" in cmd
-    assert "--trace-params" in cmd
+    assert "--trace-structs" in cmd
+    assert "--trace-underscore" in cmd
 
   def test_respects_verilator_path_env(self, tmp_path):
     with mock.patch.dict(os.environ,
@@ -231,15 +234,17 @@ class TestWriteCmake:
   def test_generates_cmake(self, tmp_path):
     obj_dir = tmp_path / "obj_dir"
     obj_dir.mkdir()
+    generated_sources = [obj_dir / "VTestTop.cpp"]
     root = tmp_path / "verilator"
     (root / "include").mkdir(parents=True)
     (root / "include" / "verilated.h").touch()
     with mock.patch.dict(os.environ, {"VERILATOR_ROOT": str(root)}):
       v = _make_verilator(tmp_path, dpi_so=[])
-      build_dir = v._write_cmake(obj_dir)
+      build_dir = v._write_cmake(obj_dir, generated_sources)
       assert (build_dir / "CMakeLists.txt").exists()
       content = (build_dir / "CMakeLists.txt").read_text()
       assert "VTestTop" in content
+      assert str(generated_sources[0]) in content
       assert "verilated.cpp" in content
       assert "verilated_threads.cpp" in content
       assert "driver.cpp" in content
@@ -247,15 +252,34 @@ class TestWriteCmake:
   def test_trace_sources_in_debug(self, tmp_path):
     obj_dir = tmp_path / "obj_dir"
     obj_dir.mkdir()
+    generated_sources = [obj_dir / "VTestTop.cpp"]
     root = tmp_path / "verilator"
     (root / "include").mkdir(parents=True)
     (root / "include" / "verilated.h").touch()
     with mock.patch.dict(os.environ, {"VERILATOR_ROOT": str(root)}):
       v = _make_verilator(tmp_path, debug=True, dpi_so=[])
-      build_dir = v._write_cmake(obj_dir)
+      build_dir = v._write_cmake(obj_dir, generated_sources)
       content = (build_dir / "CMakeLists.txt").read_text()
       assert "verilated_fst_c.cpp" in content
       assert "TRACE" in content
+
+  def test_enables_pch_when_generated_header_exists(self, tmp_path):
+    obj_dir = tmp_path / "obj_dir"
+    obj_dir.mkdir()
+    generated_sources = [obj_dir / "VTestTop.cpp"]
+    pch_header = obj_dir / "VTestTop__pch.h"
+    root = tmp_path / "verilator"
+    (root / "include").mkdir(parents=True)
+    (root / "include" / "verilated.h").touch()
+    with mock.patch.dict(os.environ, {"VERILATOR_ROOT": str(root)}):
+      v = _make_verilator(tmp_path, dpi_so=[])
+      build_dir = v._write_cmake(obj_dir, generated_sources, pch_header)
+      content = (build_dir / "CMakeLists.txt").read_text()
+      assert "target_precompile_headers(VTestTop PRIVATE" in content
+      assert "VTestTop__pch.h" in content
+      assert "SKIP_PRECOMPILE_HEADERS ON" in content
+      assert "verilated.cpp" in content
+      assert "driver.cpp" in content
 
 
 class TestRunCommand:
