@@ -25,6 +25,9 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Rewrite/PatternApplicator.h"
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/ArrayRef.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.h.inc"
@@ -139,6 +142,35 @@ using AndInverterOp = ::circt::synth::AndInverterOp;
 namespace mig {
 using MajorityInverterOp = ::circt::synth::MajorityInverterOp;
 } // namespace mig
+
+inline bool isBooleanLogicOp(mlir::Operation *op) {
+  return mlir::isa<BooleanLogicOpInterface>(op);
+}
+
+inline BooleanLogicOpInterface
+getBooleanLogicOpInterface(mlir::Operation *op) {
+  auto logicOp = mlir::dyn_cast<BooleanLogicOpInterface>(op);
+  if (logicOp)
+    return logicOp;
+  op->emitOpError("unsupported boolean logic node");
+  llvm_unreachable("unsupported boolean logic node");
+}
+
+template <typename CallbackT>
+void forEachBooleanLogicOperand(mlir::Operation *op, CallbackT &&callback) {
+  auto logicOp = getBooleanLogicOpInterface(op);
+  for (unsigned i = 0, e = logicOp.getNumLogicInputs(); i < e; ++i)
+    callback(logicOp.getLogicInput(i), logicOp.isLogicInputInverted(i));
+}
+
+inline llvm::APInt
+evaluateBooleanLogicOp(mlir::Operation *op, llvm::ArrayRef<llvm::APInt> inputs) {
+  return getBooleanLogicOpInterface(op).evaluateBooleanLogic(inputs);
+}
+
+inline llvm::APInt getSingleBitTruthTable(mlir::Operation *op) {
+  return getBooleanLogicOpInterface(op).getSingleBitTruthTable();
+}
 
 } // namespace synth
 } // namespace circt

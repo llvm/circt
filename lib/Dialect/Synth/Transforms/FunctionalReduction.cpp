@@ -15,7 +15,6 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
-#include "circt/Dialect/Synth/SynthVisitors.h"
 #include "circt/Dialect/Synth/Transforms/CutRewriter.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/SATSolver.h"
@@ -336,22 +335,17 @@ void FunctionalReductionSATBuilder::encodeValue(Value value) {
       inputLits.push_back(getLiteral(input, inverted));
     });
 
-    if (auto logicKind = getBooleanLogicKind(op)) {
-      switch (*logicKind) {
-      case BooleanLogicKind::And:
-        addAndClauses(outVar, inputLits);
-        break;
-      case BooleanLogicKind::Xor:
-        addParityClauses(outVar, inputLits);
-        break;
-      case BooleanLogicKind::Majority:
-        addMajorityClauses(outVar, inputLits);
-        break;
-      }
-      continue;
-    }
-
-    addTruthTableClauses(outVar, inputLits, getSingleBitTruthTable(op));
+    llvm::TypeSwitch<Operation *>(op)
+        .Case<AndInverterOp>(
+            [&](AndInverterOp) { addAndClauses(outVar, inputLits); })
+        .Case<XorInverterOp>(
+            [&](XorInverterOp) { addParityClauses(outVar, inputLits); })
+        .Case<MajorityInverterOp>(
+            [&](MajorityInverterOp) { addMajorityClauses(outVar, inputLits); })
+        .Default(
+            [&](Operation *) {
+              addTruthTableClauses(outVar, inputLits, getSingleBitTruthTable(op));
+            });
   }
 }
 

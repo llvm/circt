@@ -15,7 +15,6 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
-#include "circt/Dialect/Synth/SynthVisitors.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Operation.h"
@@ -293,12 +292,10 @@ ArrayRef<Value> BitBlaster::lowerValueToBits(Value value) {
 }
 
 ArrayRef<Value> BitBlaster::lowerBooleanLogicOperation(Operation *op) {
-  return dispatchBooleanLogicVisitor<ArrayRef<Value>>(
-      op,
-      [&](auto logicOp) -> ArrayRef<Value> {
-        return lowerInvertibleOperations(logicOp);
-      },
-      [&](Operation *logicOp) -> ArrayRef<Value> {
+  return llvm::TypeSwitch<Operation *, ArrayRef<Value>>(op)
+      .Case<AndInverterOp, XorInverterOp, MajorityInverterOp>(
+          [&](auto logicOp) { return lowerInvertibleOperations(logicOp); })
+      .Default([&](Operation *logicOp) -> ArrayRef<Value> {
         logicOp->emitOpError("unsupported boolean logic node");
         llvm_unreachable("unsupported boolean logic node");
       });
