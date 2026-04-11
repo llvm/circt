@@ -189,7 +189,7 @@ jobs:
           echo enable_sccache="-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_OUTPUT
 # Configure
       - name: Configure CIRCT
-        # Use one long line for `cmake` so that this works on Linux/macOS AND Windows.
+        shell: bash
         run: |
           ${{ steps.setup-windows.outputs.setup }}
           mkdir build
@@ -211,7 +211,8 @@ jobs:
             cl)      CMAKE_CXX_COMPILER="cl" ;;
           esac
 
-          # Run cmake
+          # Run cmake.  Use one long line for `cmake` so that this works on
+          # Linux/macOS AND Windows.
           cmake -G Ninja -S "$(pwd)/../llvm/llvm" -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DBUILD_SHARED_LIBS=${{ inputs.build_shared_libs }} -DLLVM_BUILD_TOOLS=ON -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_ENABLE_ASSERTIONS=${{ inputs.llvm_enable_assertions }} -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_FORCE_ENABLE_STATS=ON -DLLVM_ENABLE_ZSTD=OFF -DVERILATOR_DISABLE=ON -DCIRCT_RELEASE_TAG_ENABLED=ON -DCIRCT_RELEASE_TAG=firtool -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DCMAKE_C_COMPILER="$CMAKE_C_COMPILER" -DCMAKE_CXX_COMPILER="$CMAKE_CXX_COMPILER" ${{ steps.configure-sccache.outputs.enable_sccache }} -DCMAKE_INSTALL_PREFIX="$(pwd)/../install" -DLLVM_INSTALL_UTILS=ON -DCIRCT_SLANG_FRONTEND_ENABLED=ON -DLLVM_LIT_ARGS="$LLVM_LIT_ARGS" ${{ steps.setup-linux.outputs.cmake }} ${{ steps.setup-macos.outputs.cmake }} ${{ steps.setup-windows.outputs.cmake }}
 # Optionally test
       - name: Test CIRCT
