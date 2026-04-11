@@ -503,12 +503,22 @@ LogicalResult RemoveUnusedArcArgumentsPattern::matchAndRewrite(
   for (auto user : mutableUsers)
     for (int i = toDelete.size() - 1; i >= 0; --i)
       if (toDelete[i])
-        user.getArgOperandsMutable().erase(i);
+        rewriter.modifyOpInPlace(
+            user, [&]() { user.getArgOperandsMutable().erase(i); });
 
-  if (failed(op.eraseArguments(toDelete)))
-    return failure();
-  op.setFunctionType(
-      rewriter.getFunctionType(op.getArgumentTypes(), op.getResultTypes()));
+  bool matchFailure = false;
+  rewriter.modifyOpInPlace(op, [&]() {
+    if (failed(op.eraseArguments(toDelete))) {
+      matchFailure = true;
+      return;
+    }
+
+    op.setFunctionType(
+        rewriter.getFunctionType(op.getArgumentTypes(), op.getResultTypes()));
+  });
+
+  if (matchFailure)
+    return rewriter.notifyMatchFailure(op, "failed to erase arguments");
 
   statistics.removeUnusedArcArgumentsPatternNumArgsRemoved += toDelete.count();
   return success();
@@ -695,7 +705,8 @@ MergeVectorizeOps::matchAndRewrite(VectorizeOp vecOp,
     auto retOp = cast<VectorizeReturnOp>(otherBlock.getTerminator());
     rewriter.replaceAllUsesWith(currentBlock.getArgument(argNewPos),
                                 argMapping.lookupOrDefault(retOp.getValue()));
-    currentBlock.eraseArgument(argNewPos);
+    rewriter.modifyOpInPlace(vecOp,
+                             [&]() { currentBlock.eraseArgument(argNewPos); });
     vecOpsToRemove.push_back(otherVecOp);
     // We erased an arg so the padding decreased by 1
     paddedBy--;
@@ -765,7 +776,8 @@ LogicalResult KeepOneVecOp::matchAndRewrite(VectorizeOp vecOp,
   if (argsToRemove.none())
     return failure();
 
-  currentBlock.eraseArguments(argsToRemove);
+  rewriter.modifyOpInPlace(
+      vecOp, [&]() { currentBlock.eraseArguments(argsToRemove); });
   return updateInputOperands(vecOp, newOperands);
 }
 
