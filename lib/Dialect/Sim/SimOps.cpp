@@ -15,6 +15,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/PatternMatch.h"
@@ -639,7 +640,7 @@ LogicalResult PrintFormattedProcOp::verify() {
   }
 
   if (isa_and_nonnull<sv::SVDialect>(parentOp->getDialect())) {
-    if (!parentOp->hasTrait<sv::ProceduralRegion>())
+    if (!parentOp->hasTrait<ProceduralRegion>())
       return emitOpError("must be within a procedural region.");
     return success();
   }

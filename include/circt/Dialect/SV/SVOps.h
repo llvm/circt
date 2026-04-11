@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVTypes.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
@@ -169,15 +170,6 @@ struct CaseInfo {
 LogicalResult verifyInProceduralRegion(Operation *op);
 /// Return true if the specified operation is not in a procedural region.
 LogicalResult verifyInNonProceduralRegion(Operation *op);
-
-/// Signals that an operations regions are procedural.
-template <typename ConcreteType>
-class ProceduralRegion
-    : public mlir::OpTrait::TraitBase<ConcreteType, ProceduralRegion> {
-  static LogicalResult verifyTrait(Operation *op) {
-    return mlir::OpTrait::impl::verifyAtLeastNRegions(op, 1);
-  }
-};
 
 /// This class verifies that the specified op is located in a procedural region.
 template <typename ConcreteType>

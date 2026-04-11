@@ -37,6 +37,7 @@
 #include "circt/Support/Path.h"
 #include "circt/Support/PrettyPrinter.h"
 #include "circt/Support/PrettyPrinterHelpers.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "circt/Support/Version.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"

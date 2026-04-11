@@ -24,6 +24,7 @@
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Support/LoweringOptions.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Pass/Pass.h"

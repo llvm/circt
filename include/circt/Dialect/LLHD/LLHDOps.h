@@ -14,6 +14,7 @@
 #include "circt/Dialect/LLHD/LLHDEnums.h.inc"
 #include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
@@ -31,15 +32,6 @@ namespace llhd {
 
 unsigned getLLHDTypeWidth(Type type);
 Type getLLHDElementType(Type type);
-
-/// Signals that an operations regions are procedural.
-template <typename ConcreteType>
-class ProceduralRegion
-    : public mlir::OpTrait::TraitBase<ConcreteType, ProceduralRegion> {
-  static LogicalResult verifyTrait(Operation *op) {
-    return mlir::OpTrait::impl::verifyNRegions(op, 1);
-  }
-};
 
 void registerDestructableIntegerExternalModel(mlir::DialectRegistry &registry);
 
