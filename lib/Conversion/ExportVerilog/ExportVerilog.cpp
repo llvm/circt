@@ -4091,6 +4091,11 @@ private:
   LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(CaseOp op);
+  template <typename OpTy, typename EmitPrefixFn>
+  LogicalResult
+  emitFormattedWriteLikeOp(OpTy op, StringRef callee, StringRef formatString,
+                           ValueRange substitutions, EmitPrefixFn emitPrefix);
+  LogicalResult visitSV(WriteOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(FFlushOp op);
   LogicalResult visitSV(VerbatimOp op);
@@ -4619,7 +4624,11 @@ LogicalResult StmtEmitter::visitSV(FFlushOp op) {
   return success();
 }
 
-LogicalResult StmtEmitter::visitSV(FWriteOp op) {
+template <typename OpTy, typename EmitPrefixFn>
+LogicalResult StmtEmitter::emitFormattedWriteLikeOp(OpTy op, StringRef callee,
+                                                    StringRef formatString,
+                                                    ValueRange substitutions,
+                                                    EmitPrefixFn emitPrefix) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
@@ -4628,20 +4637,17 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   ops.insert(op);
 
   ps.addCallback({op, true});
-  ps << "$fwrite(";
+  ps << callee;
   ps.scopedBox(PP::ibox0, [&]() {
-    emitExpression(op.getFd(), ops);
-
-    ps << "," << PP::space;
-    ps.writeQuotedEscaped(op.getFormatString());
-
+    emitPrefix(ops);
+    ps.writeQuotedEscaped(formatString);
     // TODO: if any of these breaks, it'd be "nice" to break
     // after the comma, instead of:
     // $fwrite(5, "...", a + b,
     //         longexpr_goes
     //         + here, c);
     // (without forcing breaking between all elements, like braced list)
-    for (auto operand : op.getSubstitutions()) {
+    for (auto operand : substitutions) {
       ps << "," << PP::space;
       emitExpression(operand, ops);
     }
@@ -4650,6 +4656,21 @@ LogicalResult StmtEmitter::visitSV(FWriteOp op) {
   ps.addCallback({op, false});
   emitLocationInfoAndNewLine(ops);
   return success();
+}
+
+LogicalResult StmtEmitter::visitSV(WriteOp op) {
+  return emitFormattedWriteLikeOp(op, "$write(", op.getFormatString(),
+                                  op.getSubstitutions(),
+                                  [&](SmallPtrSetImpl<Operation *> &) {});
+}
+
+LogicalResult StmtEmitter::visitSV(FWriteOp op) {
+  return emitFormattedWriteLikeOp(op, "$fwrite(", op.getFormatString(),
+                                  op.getSubstitutions(),
+                                  [&](SmallPtrSetImpl<Operation *> &ops) {
+                                    emitExpression(op.getFd(), ops);
+                                    ps << "," << PP::space;
+                                  });
 }
 
 LogicalResult StmtEmitter::visitSV(VerbatimOp op) {

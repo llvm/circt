@@ -501,3 +501,15 @@ sv.verbatim.source @VerbatimTestModule.v<WIDTH: i32 = 8> attributes {
 sv.verbatim.module @VerbatimTestModule<WIDTH: i32 = 8>(in %clk: i1, out out: i1) attributes {
   source = @VerbatimTestModule.v
 }
+
+// CHECK-LABEL: hw.module @test_write(in %c0 : i32, in %c1 : i8) {
+// CHECK: sv.write "stdout"
+// CHECK-NEXT: sv.write "%d"(%c0) : i32
+// CHECK-NEXT: sv.write "%d %d"(%c0, %c1) : i32, i8
+hw.module @test_write(in %c0 : i32, in %c1 : i8) {
+  sv.initial {
+    sv.write "stdout"
+    sv.write "%d"(%c0) : i32
+    sv.write "%d %d"(%c0, %c1) : i32, i8
+  }
+}

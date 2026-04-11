@@ -513,6 +513,19 @@ def AliasOp : SVOp<"alias"> {
   let hasVerifier = 1;
 }
 
+def WriteOp : SVOp<"write", [ProceduralOp]> {
+  let summary = "'$write' statement";
+
+  let arguments = (ins StrAttr:$format_string,
+                       Variadic<AnyType>:$substitutions);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $format_string attr-dict (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?
+  }];
+}
+
 def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
 
