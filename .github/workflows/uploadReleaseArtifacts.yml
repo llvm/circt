@@ -158,4 +158,3 @@ jobs:
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
-      cmake_cxx_compiler: ${{ matrix.generated.cmake_cxx_compiler }}

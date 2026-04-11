@@ -167,8 +167,7 @@ configLinuxRunner=$(cat <<EOF
 [
   {
     "runner": "ubuntu-24.04",
-    "cmake_c_compiler": "clang",
-    "cmake_cxx_compiler": "clang++"
+    "cmake_c_compiler": "clang"
   }
 ]
 EOF
@@ -177,13 +176,11 @@ configMacOsRunner=$(cat <<EOF
 [
   {
     "runner": "macos-15-intel",
-    "cmake_c_compiler": "clang",
-    "cmake_cxx_compiler": "clang++"
+    "cmake_c_compiler": "clang"
   },
   {
     "runner": "macos-15",
-    "cmake_c_compiler": "clang",
-    "cmake_cxx_compiler": "clang++"
+    "cmake_c_compiler": "clang"
   }
 ]
 EOF
@@ -192,8 +189,7 @@ configWindowsRunner=$(cat <<EOF
 [
   {
     "runner": "windows-2022",
-    "cmake_c_compiler": "cl",
-    "cmake_cxx_compiler": "cl"
+    "cmake_c_compiler": "cl"
   }
 ]
 EOF
