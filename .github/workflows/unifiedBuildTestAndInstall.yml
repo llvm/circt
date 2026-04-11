@@ -191,6 +191,7 @@ jobs:
           # Z3 zips always extract into a folder like 'z3-4.13.0-x64-win'
           Z3_DIR=$(find . -maxdepth 1 -type d -name "z3-*" | head -n 1)
           echo "$(pwd)/$Z3_DIR/bin" >> $GITHUB_PATH
+          z3 --version
           #--------------------------------------- Setup VS Code dev environment
           echo setup=./utils/find-vs.ps1 >> "$GITHUB_OUTPUT"
 # Setup Caching.  Caching has several constraints:
