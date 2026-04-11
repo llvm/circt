@@ -134,7 +134,6 @@ jobs:
     with:
       cmake_build_type: ${{ matrix.generated.cmake_build_type }}
       llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
-      llvm_force_enable_stats: ${{ matrix.generated.llvm_force_enable_stats }}
       run_tests: ${{ matrix.generated.run_tests }}
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
@@ -155,7 +154,6 @@ jobs:
       cmake_build_type: ${{ matrix.generated.cmake_build_type }}
       build_shared_libs: ${{ matrix.generated.build_shared_libs }}
       llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
-      llvm_force_enable_stats: ${{ matrix.generated.llvm_force_enable_stats }}
       run_tests: ${{ matrix.generated.run_tests }}
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}

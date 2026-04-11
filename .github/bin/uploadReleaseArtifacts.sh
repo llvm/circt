@@ -154,7 +154,6 @@ configStatic=$(cat <<EOF
   {
     "cmake_build_type": "$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions": "$OPT_ASSERTIONS",
-    "llvm_force_enable_stats": "ON",
     "run_tests": $OPT_RUN_TESTS,
     "install_target": "$binaryTargets",
     "package_name_prefix": "firrtl-bin"
@@ -210,7 +209,6 @@ configNativeFullShared=$(cat <<EOF
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"ON",
-    "llvm_force_enable_stats":"ON",
     "run_tests": $OPT_RUN_TESTS
   }
 ]
@@ -225,7 +223,6 @@ configNativeFullStatic=$(cat <<EOF
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"OFF",
-    "llvm_force_enable_stats":"ON",
     "run_tests": $OPT_RUN_TESTS
   }
 ]
@@ -240,7 +237,6 @@ configNativeFirtool=$(cat <<EOF
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"OFF",
-    "llvm_force_enable_stats":"ON",
     "run_tests": $OPT_RUN_TESTS
   }
 ]
