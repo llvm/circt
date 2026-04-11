@@ -316,9 +316,10 @@ static LogicalResult collapseControl(OpTy controlOp,
 
   if (isa<OpTy>(controlOp->getParentOp())) {
     Block *controlBody = controlOp.getBodyBlock();
+    // FIXME: Use rewriter to move controlOp. This currently causes infinite
+    // loop due to ParOp -> IfOp -> ParOp canonicalization loop.
     for (auto &op : make_early_inc_range(*controlBody))
       op.moveBefore(controlOp);
-
     rewriter.eraseOp(controlOp);
     return success();
   }
@@ -2440,8 +2441,7 @@ static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
   rewriter.setInsertionPointAfter(ifOp);
   SeqOpTy seqOp = SeqOpTy::create(rewriter, ifOp.getLoc());
   Block *body = seqOp.getBodyBlock();
-  ifOp->remove();
-  body->push_back(ifOp);
+  rewriter.moveOpBefore(ifOp, body, body->end());
   rewriter.setInsertionPointToEnd(body);
   EnableOp::create(rewriter, seqOp.getLoc(), lastThenEnableOp->getGroupName());
 
@@ -2649,10 +2649,6 @@ static LogicalResult zeroRepeat(OpTy op, PatternRewriter &rewriter) {
   static_assert(IsAny<OpTy, RepeatOp, StaticRepeatOp>(),
                 "Should be a RepeatOp or StaticPRepeatOp");
   if (op.getCount() == 0) {
-    Block *controlBody = op.getBodyBlock();
-    for (auto &op : make_early_inc_range(*controlBody))
-      op.erase();
-
     rewriter.eraseOp(op);
     return success();
   }

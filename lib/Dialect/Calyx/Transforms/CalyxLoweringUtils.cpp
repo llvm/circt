@@ -802,7 +802,7 @@ BuildBasicBlockRegs::partiallyLowerFuncToComp(mlir::func::FuncOp funcOp,
       auto reg = createRegister(arg.value().getLoc(), rewriter, getComponent(),
                                 width, name);
       getState().addBlockArgReg(block, reg, arg.index());
-      arg.value().replaceAllUsesWith(reg.getOut());
+      rewriter.replaceAllUsesWith(arg.value(), reg.getOut());
     }
   });
   return success();
