@@ -154,7 +154,6 @@ configStatic=$(cat <<EOF
   {
     "cmake_build_type": "$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions": "$OPT_ASSERTIONS",
-    "llvm_force_enable_stats": "ON",
     "run_tests": $OPT_RUN_TESTS,
     "install_target": "$binaryTargets",
     "package_name_prefix": "firrtl-bin"
@@ -168,8 +167,7 @@ configLinuxRunner=$(cat <<EOF
 [
   {
     "runner": "ubuntu-24.04",
-    "cmake_c_compiler": "clang",
-    "cmake_cxx_compiler": "clang++"
+    "cmake_c_compiler": "clang"
   }
 ]
 EOF
@@ -178,13 +176,11 @@ configMacOsRunner=$(cat <<EOF
 [
   {
     "runner": "macos-15-intel",
-    "cmake_c_compiler": "clang",
-    "cmake_cxx_compiler": "clang++"
+    "cmake_c_compiler": "clang"
   },
   {
     "runner": "macos-15",
-    "cmake_c_compiler": "clang",
-    "cmake_cxx_compiler": "clang++"
+    "cmake_c_compiler": "clang"
   }
 ]
 EOF
@@ -193,8 +189,7 @@ configWindowsRunner=$(cat <<EOF
 [
   {
     "runner": "windows-2022",
-    "cmake_c_compiler": "cl",
-    "cmake_cxx_compiler": "cl"
+    "cmake_c_compiler": "cl"
   }
 ]
 EOF
@@ -210,7 +205,6 @@ configNativeFullShared=$(cat <<EOF
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"ON",
-    "llvm_force_enable_stats":"ON",
     "run_tests": $OPT_RUN_TESTS
   }
 ]
@@ -225,7 +219,6 @@ configNativeFullStatic=$(cat <<EOF
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"OFF",
-    "llvm_force_enable_stats":"ON",
     "run_tests": $OPT_RUN_TESTS
   }
 ]
@@ -240,7 +233,6 @@ configNativeFirtool=$(cat <<EOF
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"OFF",
-    "llvm_force_enable_stats":"ON",
     "run_tests": $OPT_RUN_TESTS
   }
 ]

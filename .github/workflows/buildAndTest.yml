@@ -158,11 +158,9 @@ jobs:
               "cmake_build_type": "release",
               "llvm_enable_assertions": "ON",
               "build_shared_libs": "ON",
-              "llvm_force_enable_stats": "ON",
               "run_tests": true,
               "runner": "ubuntu-24.04",
-              "cmake_c_compiler": "gcc",
-              "cmake_cxx_compiler": "g++"
+              "cmake_c_compiler": "gcc"
             },
             {
               "name": "Linux (Clang)",
@@ -171,11 +169,9 @@ jobs:
               "cmake_build_type": "release",
               "llvm_enable_assertions": "OFF",
               "build_shared_libs": "OFF",
-              "llvm_force_enable_stats": "ON",
               "run_tests": true,
               "runner": "ubuntu-24.04",
-              "cmake_c_compiler": "clang",
-              "cmake_cxx_compiler": "clang++"
+              "cmake_c_compiler": "clang"
             },
             {
               "name": "Windows",
@@ -184,11 +180,9 @@ jobs:
               "cmake_build_type": "release",
               "llvm_enable_assertions": "ON",
               "build_shared_libs": "OFF",
-              "llvm_force_enable_stats": "ON",
               "run_tests": true,
               "runner": "windows-2022",
-              "cmake_c_compiler": "cl",
-              "cmake_cxx_compiler": "cl"
+              "cmake_c_compiler": "cl"
             }
           ]
           EOF
@@ -223,12 +217,10 @@ jobs:
       cmake_build_type: ${{ matrix.generated.cmake_build_type }}
       build_shared_libs: ${{ matrix.generated.build_shared_libs }}
       llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
-      llvm_force_enable_stats: ${{ matrix.generated.llvm_force_enable_stats }}
       run_tests: ${{ matrix.generated.run_tests }}
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
-      cmake_cxx_compiler: ${{ matrix.generated.cmake_cxx_compiler }}
 
   # --- end of build-circt job.
 
