@@ -45,3 +45,20 @@ hw.module @functional_reduction_supported_ops_sat(
   %5 = comb.xor %b, %a : i1
   hw.output %0, %1, %2, %3, %4, %5 : i1, i1, i1, i1, i1, i1
 }
+
+// SAT should satisfy inversion equivalences
+// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 functional_reduction_inversion_equiv_sat --c2 functional_reduction_inversion_equiv_sat | FileCheck %s --check-prefix=INVERSION
+// INVERSION: c1 == c2
+// CHECK-LABEL: hw.module @functional_reduction_inversion_equiv_sat
+hw.module @functional_reduction_inversion_equiv_sat(in %a: i1, in %b: i1,
+                                                    out out0: i1, out out1: i1) {
+  // CHECK: %[[AND:.+]] = synth.aig.and_inv not %a, not %b : i1
+  // CHECK: %[[OR:.+]] = comb.or %a, %b : i1
+  // CHECK: %[[NOTMEMBER:.+]] = synth.aig.and_inv not %[[OR]]
+  // CHECK: %[[CHOICE:.+]] = synth.choice %[[AND]], %[[NOTMEMBER]]
+  // CHECK: %[[CHOICENOT:.+]] = synth.aig.and_inv not %[[CHOICE]]
+  // CHECK: hw.output %[[CHOICE]], %[[CHOICENOT]]
+  %0 = synth.aig.and_inv not %a, not %b : i1
+  %1 = comb.or %a, %b : i1
+  hw.output %0, %1 : i1, i1
+}
