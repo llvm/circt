@@ -420,8 +420,11 @@ void OneItemBuffersFromHostWritePort::writeImpl(const MessageData &data) {
 
 bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
   // We don't want to provide an infinite buffer, so limit it to one message.
-  if (!pendingFrames.empty())
-    return false;
+  {
+    std::lock_guard<std::mutex> lock(bufferMutex);
+    if (!pendingFrames.empty())
+      return false;
+  }
 
   enqueueFrames(data);
   return true;

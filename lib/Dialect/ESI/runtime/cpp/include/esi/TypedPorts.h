@@ -218,8 +218,9 @@ void verifyTypeCompatibility(const Type *portType) {
 //===----------------------------------------------------------------------===//
 // TypedWritePort<T, SkipTypeCheck = false>
 //
-// When SkipTypeCheck is false, the `connect` method doesn't run the type check
-// since T doesn't have any query-able type information.
+// When SkipTypeCheck is false, the `connect` method runs the type check via
+// `verifyTypeCompatibility<T>()`. When SkipTypeCheck is true, `connect`
+// skips that verification.
 //===----------------------------------------------------------------------===//
 
 template <typename T, bool SkipTypeCheck = false>
@@ -243,6 +244,8 @@ public:
   /// Write by taking ownership. If T is a SegmentedMessageData, this hands
   /// the message directly to the port's segmented write path.
   void write(std::unique_ptr<T> &data) {
+    if (!data)
+      throw std::runtime_error("TypedWritePort::write: null unique_ptr");
     if constexpr (std::is_base_of_v<SegmentedMessageData, T>) {
       inner->write(std::move(data));
     } else {
@@ -435,7 +438,7 @@ public:
     argWireInfo_ = getWireInfo(inner->getArgType());
     resWireInfo_ = getWireInfo(inner->getResultType());
     inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/false));
+                                               /*translateMessage=*/true));
   }
 
   std::future<ResultT> call(const ArgT &arg) {
@@ -473,7 +476,7 @@ public:
       verifyTypeCompatibility<ResultT>(inner->getResultType());
     }
     inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/false));
+                                               /*translateMessage=*/true));
   }
 
   std::future<ResultT> call() {
@@ -511,7 +514,7 @@ public:
     }
     argWireInfo_ = getWireInfo(inner->getArgType());
     inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/false));
+                                               /*translateMessage=*/true));
   }
 
   std::future<void> call(const ArgT &arg) {
@@ -544,7 +547,7 @@ public:
       verifyTypeCompatibility<void>(inner->getResultType());
     }
     inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/false));
+                                               /*translateMessage=*/true));
   }
 
   std::future<void> call() {
@@ -593,7 +596,7 @@ public:
         },
         quick,
         ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/false));
+                                    /*translateMessage=*/true));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -626,7 +629,7 @@ public:
         },
         quick,
         ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/false));
+                                    /*translateMessage=*/true));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -660,7 +663,7 @@ public:
         },
         quick,
         ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/false));
+                                    /*translateMessage=*/true));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -693,7 +696,7 @@ public:
         },
         quick,
         ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/false));
+                                    /*translateMessage=*/true));
   }
 
   services::CallService::Callback &raw() { return *inner; }

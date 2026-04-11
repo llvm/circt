@@ -434,24 +434,25 @@ TEST(TypedPortsTest, TypedFunctionCallRoundTrip) {
 //===----------------------------------------------------------------------===//
 
 /// A minimal SegmentedMessageData for testing.
-#pragma pack(push, 1)
 struct TestSegmented : public SegmentedMessageData {
-  struct {
+#pragma pack(push, 1)
+  struct Header {
     uint32_t a;
     uint16_t b;
-  } header;
+  };
+#pragma pack(pop)
 
+  Header header;
   std::vector<uint32_t> items;
 
   size_t numSegments() const override { return 2; }
   Segment segment(size_t idx) const override {
     if (idx == 0)
-      return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};
+      return {reinterpret_cast<const uint8_t *>(&header), sizeof(Header)};
     return {reinterpret_cast<const uint8_t *>(items.data()),
             items.size() * sizeof(uint32_t)};
   }
 };
-#pragma pack(pop)
 
 TEST(TypedPortsTest, TypedWritePortSegmentedMessageData) {
   // Use any type — SegmentedMessageData skips type checks.

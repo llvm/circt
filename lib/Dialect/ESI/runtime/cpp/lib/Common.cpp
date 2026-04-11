@@ -77,14 +77,15 @@ MessageData SegmentedMessageData::toMessageData() const {
 //===----------------------------------------------------------------------===//
 
 std::span<const uint8_t> SegmentedMessageDataCursor::remaining() const {
-  // Skip past any empty segments.
-  while (!done()) {
-    Segment seg = msg.segment(segIdx);
-    if (seg.size > offset)
-      return {seg.data + offset, seg.size - offset};
-    // This shouldn't happen in normal use (advance handles crossing),
-    // but guard against empty segments at the current position.
-    break;
+  // Scan forward past empty segments without mutating cursor state.
+  size_t idx = segIdx;
+  size_t off = offset;
+  while (idx < msg.numSegments()) {
+    Segment seg = msg.segment(idx);
+    if (seg.size > off)
+      return {seg.data + off, seg.size - off};
+    ++idx;
+    off = 0;
   }
   return {};
 }

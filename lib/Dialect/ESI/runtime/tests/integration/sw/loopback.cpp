@@ -255,7 +255,7 @@ static void serialCoordTranslateTest(Accelerator *accel) {
   SerialCoordInput batch(xTrans, yTrans, coords);
   // TODO: List results are currently not supported so we cannot compare the
   // results.
-  auto result = translateCoords.call(batch).get();
+  (void)translateCoords.call(batch).get();
 }
 
 int main(int argc, const char *argv[]) {
