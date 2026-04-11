@@ -97,13 +97,17 @@ jobs:
               config=$(.github/bin/uploadReleaseArtifacts.sh -e ${{ github.event_name }})
               ;;
             "workflow_dispatch")
-              config=$(.github/bin/uploadReleaseArtifacts.sh \
-                -b ${{ inputs.cmake_build_type }} \
-                -e ${{ github.event_name }} \
-                -o ${{ inputs.os }} \
-                ${{ inputs.llvm_enable_assertions && '-a' || ' ' }} \
-                ${{ inputs.run_tests && '-t' || ' ' }})
-              ;;
+                if [[ "${{ inputs.manual_release }}" == "true" ]]; then
+                  config=$(.github/bin/uploadReleaseArtifacts.sh -e release)
+                else
+                  config=$(.github/bin/uploadReleaseArtifacts.sh \
+                    -b ${{ inputs.cmake_build_type }} \
+                    -e ${{ github.event_name }} \
+                    -o ${{ inputs.os }} \
+                    ${{ inputs.llvm_enable_assertions && '-a' || ' ' }} \
+                    ${{ inputs.run_tests && '-t' || ' ' }})
+                fi
+                ;;
           esac
 
           echo "Build Matrix:" >> $GITHUB_STEP_SUMMARY
