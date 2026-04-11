@@ -174,25 +174,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          #--------------------------------------- Install latest z3
-          # 1. Query the GitHub API for the latest release and find the win zip
-          # URL.  This grabs the browser_download_url for the file ending in
-          # -x64-win.zip.
-          Z3_URL=$(curl -s https://api.github.com/repos/Z3Prover/z3/releases/latest | grep "browser_download_url" | grep "x64-win.zip" | cut -d '"' -f 4)
-          echo "Found latest Z3 at: $Z3_URL"
-
-          # 2. Download it.
-          curl -L --retry 3 "$Z3_URL" -o z3.zip
-
-          # 3. Unzip it.
-          unzip -q z3.zip
-
-          # 4. Find the folder name that was just created and add its bin to PATH
-          # Z3 zips always extract into a folder like 'z3-4.13.0-x64-win'
-          Z3_DIR=$(find . -maxdepth 1 -type d -name "z3-*" | head -n 1)
-          echo "$(pwd)/$Z3_DIR/bin" >> $GITHUB_PATH
-          z3 --version
-          #--------------------------------------- Setup VS Code dev environment
+          choco install z3
           echo setup=./utils/find-vs.ps1 >> "$GITHUB_OUTPUT"
 # Setup Caching.  Caching has several constraints:
 #
