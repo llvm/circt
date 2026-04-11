@@ -887,7 +887,7 @@ def ConvertSynthToComb: Pass<"convert-synth-to-comb"> {
 // ConvertCombToDatapath
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToDatapath: Pass<"convert-comb-to-datapath",  "hw::HWModuleOp"> {
+def ConvertCombToDatapath: Pass<"convert-comb-to-datapath"> {
   let summary = "Lower Comb ops to Datapath ops";
   let description = [{
     This pass converts arithmetic Comb operations into Datapath operations that
