@@ -142,3 +142,19 @@ hw.module @ProceduralPrint(in %trigger: i1, in %condition: i1) {
     }
   }
 }
+
+// CHECK-LABEL: hw.module @StdoutAndStderr
+hw.module @StdoutAndStderr(in %clock: !seq.clock, in %condition: i1) {
+  // CHECK: %[[STDOUT_STR:.*]] = sim.fmt.literal "Hello, stdout!"
+  // CHECK: %[[STDERR_STR:.*]] = sim.fmt.literal "Hello, stderr!"
+  %stdout_str = sim.fmt.literal "Hello, stdout!"
+  %stderr_str = sim.fmt.literal "Hello, stderr!"
+  // CHECK: %[[STDOUT:.*]] = sim.stdout_stream
+  // CHECK: %[[STDERR:.*]] = sim.stderr_stream
+  %stdout = sim.stdout_stream
+  %stderr = sim.stderr_stream
+  // CHECK: sim.print %[[STDOUT_STR]] on %clock if %condition to %[[STDOUT]]
+  // CHECK: sim.print %[[STDERR_STR]] on %clock if %condition to %[[STDERR]]
+  sim.print %stdout_str on %clock if %condition to %stdout
+  sim.print %stderr_str on %clock if %condition to %stderr
+}
