@@ -197,7 +197,7 @@ jobs:
 
           # Add Valgrind arg
           LLVM_LIT_ARGS="--show-skipped --show-unsupported --show-xfail -v"
-          if [[ ${{ inputs.valgrind }} ]]; then
+          if [[ "${{ inputs.valgrind }}" == "true" ]]; then
             LLVM_LIT_ARGS="$LLVM_LIT_ARGS --vg"
           fi
 
