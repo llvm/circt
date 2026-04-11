@@ -52,54 +52,28 @@ public:
   }
 
 protected:
-  /// Get the wire frame size in bytes. For windowed types, this is the
-  /// lowered type's width; otherwise, the port type's width.
-  size_t getFrameBytes() const {
-    if (translationInfo)
-      return translationInfo->frameBytes;
-    std::ptrdiff_t bw = type->getBitWidth();
-    return bw > 0 ? (bw + 7) / 8 : 0;
-  }
-
-  void writeSingle(const MessageData &data) {
-    conn.getLogger().trace(
-        [this,
-         &data](std::string &subsystem, std::string &msg,
-                std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "cosim_write";
-          msg = "Writing message to channel '" + name + "'";
-          details = std::make_unique<std::map<std::string, std::any>>();
-          (*details)["channel"] = name;
-          (*details)["data_size"] = data.getSize();
-          (*details)["message_data"] = data.toHex();
-        });
-
-    client.writeToServer(name, data);
-  }
-
   void writeImpl(const MessageData &data) override {
-    // If the message is larger than one frame, chunk it. The cosim endpoint
-    // expects messages sized to the port's wire frame width.
-    size_t frameBytes = getFrameBytes();
-    if (frameBytes > 0 && data.getSize() > frameBytes) {
-      if (data.getSize() % frameBytes != 0)
-        throw std::runtime_error("Cosim write: message size (" +
-                                 std::to_string(data.getSize()) +
-                                 ") is not a multiple of frame size (" +
-                                 std::to_string(frameBytes) + ")");
-      const uint8_t *ptr = data.getBytes();
-      size_t remaining = data.getSize();
-      while (remaining > 0) {
-        writeSingle(MessageData(ptr, frameBytes));
-        ptr += frameBytes;
-        remaining -= frameBytes;
-      }
-    } else {
-      writeSingle(data);
+    auto frames = getMessageFrames(data);
+    for (const auto &frame : frames) {
+      conn.getLogger().trace(
+          [this,
+           &data](std::string &subsystem, std::string &msg,
+                  std::unique_ptr<std::map<std::string, std::any>> &details) {
+            subsystem = "cosim_write";
+            msg = "Writing message to channel '" + name + "'";
+            details = std::make_unique<std::map<std::string, std::any>>();
+            (*details)["channel"] = name;
+            (*details)["data_size"] = data.getSize();
+            (*details)["message_data"] = data.toHex();
+          });
+
+      client.writeToServer(name, frame);
     }
   }
-
   bool tryWriteImpl(const MessageData &data) override {
+    // For simplicity, this implementation does not support backpressure and
+    // always returns true. A more complex implementation could track pending
+    // messages and return false if there are too many.
     writeImpl(data);
     return true;
   }

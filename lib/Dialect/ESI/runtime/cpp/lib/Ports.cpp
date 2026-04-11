@@ -562,3 +562,22 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
     }
   }
 }
+
+std::vector<MessageData>
+WriteChannelPort::getMessageFrames(const MessageData &data) {
+  size_t frameBytes = getFrameSizeBytes();
+  assert(frameBytes > 0 && "Frame size must be greater than 0");
+  if (data.getSize() % frameBytes != 0)
+    throw std::runtime_error(
+        "write message size (" + std::to_string(data.getSize()) +
+        ") is not a multiple of frame size (" + std::to_string(frameBytes) +
+        ") on type " + type->toString());
+  std::vector<MessageData> frames;
+  size_t numFrames = data.getSize() / frameBytes;
+  const uint8_t *ptr = data.getBytes();
+  for (size_t i = 0; i < numFrames; ++i) {
+    frames.emplace_back(ptr, frameBytes);
+    ptr += frameBytes;
+  }
+  return frames;
+}

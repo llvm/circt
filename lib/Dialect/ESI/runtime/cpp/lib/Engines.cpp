@@ -277,7 +277,7 @@ public:
                                   const std::string &channelName)
       : WriteChannelPort(type), engine(engine), idPath(idPath),
         channelName(channelName) {
-    bufferSize = type->getBitWidth() / 8;
+    frameSizeBytes = utils::bitsToBytes(type->getBitWidth());
   }
 
   // Connect allocate a buffer and prime the pump.
@@ -296,7 +296,7 @@ protected:
   bool pollImpl() override;
 
   // Size of buffer based on type.
-  size_t bufferSize;
+  size_t frameSizeBytes;
   // Owning engine.
   OneItemBuffersFromHost *engine;
   // Single buffer.
@@ -307,7 +307,7 @@ protected:
   std::mutex bufferMutex;
 
   // FIFO of frame-sized messages to send. When a message is larger than
-  // bufferSize, it's broken into frame-sized pieces and enqueued here.
+  // frameSizeBytes, it's broken into frame-sized pieces and enqueued here.
   std::queue<MessageData> pendingFrames;
 
   // Identifing information.
@@ -397,7 +397,7 @@ void OneItemBuffersFromHost::connect() {
 void OneItemBuffersFromHostWritePort::connectImpl(
     const ChannelPort::ConnectOptions &options) {
   engine->connect();
-  data_buffer = engine->hostMem->allocate(std::max(bufferSize, (size_t)512),
+  data_buffer = engine->hostMem->allocate(std::max(frameSizeBytes, (size_t)512),
                                           {false, false});
   completion_buffer = engine->hostMem->allocate(512, {true, false});
   // Set the last byte to '1' to indicate that the buffer is ready to be filled
@@ -406,21 +406,10 @@ void OneItemBuffersFromHostWritePort::connectImpl(
 }
 
 void OneItemBuffersFromHostWritePort::enqueueFrames(const MessageData &data) {
-  // Determine frame size: use translationInfo->frameBytes if available,
-  // otherwise fall back to typeBitWidth.
-  size_t frameBytes = (type->getBitWidth() + 7) / 8;
-  if (translationInfo && translationInfo->frameBytes > 0)
-    frameBytes = translationInfo->frameBytes;
-  assert(data.getSize() % frameBytes == 0 &&
-         "Data size must be a multiple of frame size");
-
-  const uint8_t *ptr = data.getBytes();
-  size_t numFrames = data.getSize() / frameBytes;
+  auto frames = getMessageFrames(data);
   std::lock_guard<std::mutex> lock(bufferMutex);
-  for (size_t i = 0; i < numFrames; ++i) {
-    pendingFrames.emplace(ptr, frameBytes);
-    ptr += frameBytes;
-  }
+  for (const auto &frame : frames)
+    pendingFrames.push(frame);
 }
 
 void OneItemBuffersFromHostWritePort::writeImpl(const MessageData &data) {
@@ -430,10 +419,7 @@ void OneItemBuffersFromHostWritePort::writeImpl(const MessageData &data) {
 }
 
 bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
-  Logger &logger = engine->conn.getLogger();
-  bool ret = false;
-
-  // If there are no pending frames but the message is oversized, enqueue it.
+  // We don't want to provide an infinite buffer, so limit it to one message.
   if (!pendingFrames.empty())
     return false;
 

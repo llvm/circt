@@ -127,6 +127,13 @@ public:
     return false;
   }
 
+  /// Get the size of each frame in bytes. For windowed types, this is the
+  /// lowered type's width; otherwise, the port type's width.
+  size_t getFrameSizeBytes() const {
+    if (translationInfo)
+      return translationInfo->frameBytes;
+    return utils::bitsToBytes(type->getBitWidth());
+  }
   const Type *getType() const { return type; }
 
 protected:
@@ -286,6 +293,9 @@ protected:
 
   /// Implementation for tryWrite(). Subclasses must implement this.
   virtual bool tryWriteImpl(const MessageData &data) = 0;
+
+  /// Break a message into its frames.
+  std::vector<MessageData> getMessageFrames(const MessageData &data);
 
   /// Whether to translate outgoing data if the port type is a window type. Set
   /// by the connect() method.
