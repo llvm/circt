@@ -200,7 +200,7 @@ jobs:
 
   # Build CIRCT and run its tests.
   build-and-test:
-    name: "Test: ${{ matrix.generated.name }}"
+    name: "UBTI Native: ${{ matrix.generated.name }}"
     needs:
       - sanity-check
       - choose-matrix
