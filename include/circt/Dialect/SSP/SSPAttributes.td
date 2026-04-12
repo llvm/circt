@@ -25,7 +25,7 @@ def DependenceAttr : AttrDef<SSPDialect, "Dependence"> {
   }];
 
   let parameters = (ins "unsigned":$operandIdx,
-                        OptionalParameter<"::mlir::FlatSymbolRefAttr">:$sourceRef,
+                        OptionalParameter<"::mlir::StringAttr">:$sourceRef,
                         OptionalParameter<"::mlir::ArrayAttr">:$properties);
 
   let mnemonic = "dependence";
