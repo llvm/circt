@@ -310,8 +310,8 @@ config=$(echo "$config" | jq '
     elif .install_target == "install" then "/install-full"
     else "/install-\(.install_target | split(" ") | map(select(. != "")) | length)"
     end;
-  .native |= map(. + {name: "\(.runner)/\(.cmake_c_compiler)/\(.cmake_build_type)/\(libs)-libs/asserts-\(asserts)\(tests)\(install)"}) |
-  .static |= map(. + {name: "\(.cmake_build_type)/asserts-\(asserts)\(tests)\(install)"})
+  .native |= map(. + {name: "native/\(.runner)/\(.cmake_c_compiler)/\(.cmake_build_type)/\(libs)-libs/asserts-\(asserts)\(tests)\(install)"}) |
+  .static |= map(. + {name: "static/\(.cmake_build_type)/asserts-\(asserts)\(tests)\(install)"})
 ')
 
 # Return the final `config` JSON.
