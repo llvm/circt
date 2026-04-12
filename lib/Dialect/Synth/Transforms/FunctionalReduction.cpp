@@ -494,10 +494,9 @@ llvm::APInt FunctionalReductionSolver::simulateValue(Value v) {
     return simSignatures.at(v);
   return llvm::TypeSwitch<Operation *, llvm::APInt>(op)
       .Case<aig::AndInverterOp>([&](auto op) {
-        SmallVector<llvm::APInt> inputSigs;
-        for (auto input : op.getInputs())
-          inputSigs.push_back(simSignatures.at(input));
-        return op.evaluate(inputSigs);
+        return op.evaluateBooleanLogic([&](unsigned i) -> const APInt & {
+          return simSignatures.at(op.getInput(i));
+        });
       })
       .Case<comb::AndOp>([&](auto op) {
         APInt result = APInt::getAllOnes(numPatterns);

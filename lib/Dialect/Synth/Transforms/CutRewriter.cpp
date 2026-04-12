@@ -24,6 +24,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/TruthTable.h"
@@ -302,17 +303,16 @@ FailureOr<BinaryTruthTable> circt::synth::getTruthTable(ValueRange values,
       if (it == eval.end())
         return choiceOp.emitError("Input value not found in evaluation map");
       eval[choiceOp.getResult()] = it->second;
-    } else if (auto andOp = dyn_cast<aig::AndInverterOp>(&op)) {
+    } else if (auto logicOp = dyn_cast<BooleanLogicOpInterface>(&op)) {
       // Support AIG and XOR operations
-      SmallVector<llvm::APInt, 2> inputs;
-      inputs.reserve(andOp.getInputs().size());
-      for (auto input : andOp.getInputs()) {
-        auto it = eval.find(input);
-        if (it == eval.end())
-          return andOp.emitError("Input value not found in evaluation map");
-        inputs.push_back(it->second);
-      }
-      eval[andOp.getResult()] = andOp.evaluate(inputs);
+      for (auto value : logicOp.getInputs())
+        if (!eval.contains(value))
+          return logicOp->emitError("Input value not found in evaluation map");
+
+      eval[logicOp.getResult()] =
+          logicOp.evaluateBooleanLogic([&](unsigned i) -> const APInt & {
+            return eval.find(logicOp.getInput(i))->second;
+          });
     } else if (auto xorOp = dyn_cast<comb::XorOp>(&op)) {
       auto it = eval.find(xorOp.getOperand(0));
       if (it == eval.end())

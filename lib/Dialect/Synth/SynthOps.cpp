@@ -109,6 +109,8 @@ LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
 // AIG Operations
 //===----------------------------------------------------------------------===//
 
+bool AndInverterOp::areInputsPermutationInvariant() { return true; }
+
 OpFoldResult AndInverterOp::fold(FoldAdaptor adaptor) {
   if (getNumOperands() == 1 && !isInverted(0))
     return getOperand(0);
@@ -208,17 +210,36 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   return success();
 }
 
-APInt AndInverterOp::evaluate(ArrayRef<APInt> inputs) {
-  assert(inputs.size() == getNumOperands() &&
-         "Expected as many inputs as operands");
-  assert(!inputs.empty() && "Expected non-empty input list");
-  APInt result = APInt::getAllOnes(inputs.front().getBitWidth());
-  for (auto [idx, input] : llvm::enumerate(inputs)) {
-    if (isInverted(idx))
+APInt AndInverterOp::evaluateBooleanLogic(
+    llvm::function_ref<const APInt &(unsigned)> getInputValue) {
+  assert(getNumOperands() > 0 && "Expected non-empty input list");
+  APInt result = APInt::getAllOnes(getInputValue(0).getBitWidth());
+  for (auto [idx, inverted] : llvm::enumerate(getInverted())) {
+    const APInt &input = getInputValue(idx);
+    if (inverted)
       result &= ~input;
     else
       result &= input;
   }
+  return result;
+}
+
+llvm::KnownBits AndInverterOp::computeKnownBits(
+    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
+  assert(getNumOperands() > 0 && "Expected non-empty input list");
+
+  auto width = getInputKnownBits(0).getBitWidth();
+  llvm::KnownBits result(width);
+  result.One = APInt::getAllOnes(width);
+  result.Zero = APInt::getZero(width);
+
+  for (auto [i, inverted] : llvm::enumerate(getInverted())) {
+    auto operandKnownBits = getInputKnownBits(i);
+    if (inverted)
+      std::swap(operandKnownBits.Zero, operandKnownBits.One);
+    result &= operandKnownBits;
+  }
+
   return result;
 }
 

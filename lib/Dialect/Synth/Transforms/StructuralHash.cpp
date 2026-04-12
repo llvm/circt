@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/Naming.h"
@@ -100,9 +101,9 @@ namespace {
 class StructuralHashDriver {
 public:
   StructuralHashDriver() = default;
-  void visitOp(Operation *op, ArrayRef<bool> inverted);
-  void visitUnaryOp(Operation *op, bool inverted);
-  void visitVariadicOp(Operation *op, ArrayRef<bool> inverted);
+  void visitOp(BooleanLogicOpInterface op);
+  void visitUnaryOp(BooleanLogicOpInterface op);
+  void visitVariadicOp(BooleanLogicOpInterface op);
   uint64_t getNumber(Value v);
 
   /// Runs the structural hashing pass on the given module.
@@ -116,7 +117,7 @@ private:
   uint64_t constantCounter = 0;
 
   /// Hash table mapping structural keys to canonical operations for CSE.
-  DenseMap<StructuralHashKey, Operation *> hashTable;
+  DenseMap<StructuralHashKey, BooleanLogicOpInterface> hashTable;
 
   /// Maps inverted values to their non-inverted equivalents for propagation.
   /// For example, if we have:
@@ -130,48 +131,49 @@ private:
 };
 } // namespace
 
-void StructuralHashDriver::visitOp(Operation *op, ArrayRef<bool> inverted) {
+void StructuralHashDriver::visitOp(BooleanLogicOpInterface op) {
   /// Dispatches to the appropriate visitor based on the number of operands.
   /// For unary operations, calls visitUnaryOp; for variadic operations,
   /// calls visitVariadicOp.
-  if (op->getNumOperands() == 1) {
-    visitUnaryOp(op, inverted[0]);
+  if (op.getInputs().size() == 1) {
+    visitUnaryOp(op);
     return;
   }
-  visitVariadicOp(op, inverted);
+  visitVariadicOp(op);
 }
 
 /// Handles unary operations (single operand).
 /// If not inverted, replaces the operation with its operand.
 /// If inverted, attempts to propagate inversion through the inversion map
 /// or records the inversion for later propagation.
-void StructuralHashDriver::visitUnaryOp(Operation *op, bool inverted) {
+void StructuralHashDriver::visitUnaryOp(BooleanLogicOpInterface logicOp) {
+  Operation *op = logicOp.getOperation();
+  auto [input, inverted] = logicOp.getInputPair(0);
   if (!inverted) {
-    op->replaceAllUsesWith(ArrayRef<Value>{op->getOperand(0)});
+    op->replaceAllUsesWith(ArrayRef<Value>{input});
     op->erase();
     return;
   }
-  // Check if we can propagate inversion through the inversion map.
-  auto operand = op->getOperand(0);
-  auto it = inversion.find(operand);
+  auto it = inversion.find(input);
   if (it != inversion.end()) {
     // Found, replace the operand with the mapped value
     op->replaceAllUsesWith(ArrayRef<Value>{it->second});
     op->erase();
   } else {
     // Not found, insert into the map
-    inversion[op->getResult(0)] = operand;
+    inversion[logicOp.getResult()] = input;
   }
 }
 
 /// Computes a structural hash key, sorts operands for canonicalization,
 /// and performs CSE by checking the hash table for equivalent operations.
-void StructuralHashDriver::visitVariadicOp(Operation *op,
-                                           ArrayRef<bool> inverted) {
+void StructuralHashDriver::visitVariadicOp(BooleanLogicOpInterface logicOp) {
+  Operation *op = logicOp.getOperation();
+  auto inversions = logicOp.getInverted();
 
   // Compute the structural hash key for the operation.
   StructuralHashKey key(op->getName(), {});
-  for (auto [input, inverted] : llvm::zip(op->getOperands(), inverted)) {
+  for (auto [input, inverted] : llvm::zip(op->getOperands(), inversions)) {
     bool isInverted = inverted;
     // Check if we can propagate inversion through the inversion map
     auto it = inversion.find(input);
@@ -188,27 +190,29 @@ void StructuralHashDriver::visitVariadicOp(Operation *op,
     (void)getNumber(input);
   }
 
-  // Sort operands based on their assigned numbers.
-  llvm::sort(key.operandPairs, [&](auto a, auto b) {
-    size_t aNum = getNumber(a.getPointer());
-    size_t bNum = getNumber(b.getPointer());
-    if (aNum != bNum)
-      return aNum < bNum;
-    return a.getInt() < b.getInt();
-  });
+  // Canonicalize operand order only when the operation semantics permit
+  // reordering full (input, inverted) pairs.
+  if (logicOp.areInputsPermutationInvariant()) {
+    llvm::sort(key.operandPairs, [&](auto a, auto b) {
+      size_t aNum = getNumber(a.getPointer());
+      size_t bNum = getNumber(b.getPointer());
+      if (aNum != bNum)
+        return aNum < bNum;
+      return a.getInt() < b.getInt();
+    });
+  }
 
   // Insert the key into the hash table.
-  auto [it, inserted] = hashTable.try_emplace(key, op);
+  auto [it, inserted] = hashTable.try_emplace(key, logicOp);
   if (inserted) {
     // New entry, keep the operation and sort its operands.
     op->setOperands(llvm::to_vector<3>(llvm::map_range(
         key.operandPairs, [](auto p) { return p.getPointer(); })));
     SmallVector<bool, 3> newInversion(
         llvm::map_range(key.operandPairs, [](auto p) { return p.getInt(); }));
-    op->setAttr("inverted",
-                mlir::DenseBoolArrayAttr::get(op->getContext(), newInversion));
+    logicOp.setInverted(newInversion);
     // Assign a number to the result for future sorting.
-    (void)getNumber(op->getResult(0));
+    (void)getNumber(logicOp.getResult());
   } else {
     LDBG() << "Structural Hash: Replacing " << *op << " with " << *(it->second)
            << "\n";
@@ -245,7 +249,7 @@ uint64_t StructuralHashDriver::getNumber(Value v) {
 llvm::LogicalResult StructuralHashDriver::run(hw::HWModuleOp moduleOp) {
   auto isOperationReady = [&](Value value, Operation *op) -> bool {
     // Other than target ops, all other ops are always ready.
-    return !isa<circt::synth::aig::AndInverterOp>(op);
+    return !isa<BooleanLogicOpInterface>(op);
   };
 
   if (!mlir::sortTopologically(moduleOp.getBodyBlock(), isOperationReady))
@@ -257,13 +261,9 @@ llvm::LogicalResult StructuralHashDriver::run(hw::HWModuleOp moduleOp) {
   // Process target ops.
   // NOTE: Don't use walk here since the pass currently doesn't handle nested
   // regions.
-  for (auto &op :
-       llvm::make_early_inc_range(moduleOp.getBodyBlock()->getOperations())) {
-    mlir::TypeSwitch<Operation *>(&op)
-        .Case<circt::synth::aig::AndInverterOp>([&](auto invertibleOp) {
-          visitOp(invertibleOp, invertibleOp.getInverted());
-        })
-        .Default([&](Operation *op) {});
+  for (auto op :
+       llvm::make_early_inc_range(moduleOp.getOps<BooleanLogicOpInterface>())) {
+    visitOp(op);
   }
 
   // Run DCE to remove dangling ops.

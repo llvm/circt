@@ -6,6 +6,7 @@
 
 add_circt_dialect_library(CIRCTSynth
   SynthDialect.cpp
+  SynthOpInterfaces.cpp
   SynthOps.cpp
 
   ADDITIONAL_HEADER_DIRS
@@ -13,6 +14,7 @@ add_circt_dialect_library(CIRCTSynth
 
   DEPENDS
   MLIRSynthIncGen
+  MLIRSynthOpInterfacesIncGen
 
   LINK_COMPONENTS
   Support
