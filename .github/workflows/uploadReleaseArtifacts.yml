@@ -20,6 +20,11 @@ on:
         default: false
         type: boolean
 
+      run_integration_tests:
+        description: Run CIRCT integration tests
+        default: false
+        type: boolean
+
       llvm_enable_assertions:
         description: Build with assertions.
         default: false
@@ -105,7 +110,8 @@ jobs:
                     -e ${{ github.event_name }} \
                     -o ${{ inputs.os }} \
                     ${{ inputs.llvm_enable_assertions && '-a' || ' ' }} \
-                    ${{ inputs.run_tests && '-t' || ' ' }})
+                    ${{ inputs.run_tests && '-t' || ' ' }} \
+                    ${{ inputs.run_integration_tests && '-u' || ' ' }})
                 fi
                 ;;
           esac
@@ -140,6 +146,7 @@ jobs:
       cmake_build_type: ${{ matrix.generated.cmake_build_type }}
       llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
       run_tests: ${{ matrix.generated.run_tests }}
+      run_integration_tests: ${{ matrix.generated.run_integration_tests }}
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
 
@@ -161,6 +168,7 @@ jobs:
       build_shared_libs: ${{ matrix.generated.build_shared_libs }}
       llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
       run_tests: ${{ matrix.generated.run_tests }}
+      run_integration_tests: ${{ matrix.generated.run_integration_tests }}
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}

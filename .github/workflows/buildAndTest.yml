@@ -159,6 +159,7 @@ jobs:
               "llvm_enable_assertions": "ON",
               "build_shared_libs": "ON",
               "run_tests": true,
+              "run_integration_tests": false,
               "runner": "ubuntu-24.04",
               "cmake_c_compiler": "gcc"
             },
@@ -170,8 +171,21 @@ jobs:
               "llvm_enable_assertions": "OFF",
               "build_shared_libs": "OFF",
               "run_tests": true,
+              "run_integration_tests": false,
               "runner": "ubuntu-24.04",
               "cmake_c_compiler": "clang"
+            },
+            {
+              "name": "Linux (GCC) Integration",
+              "install_target": "",
+              "package_name_prefix": "",
+              "cmake_build_type": "release",
+              "llvm_enable_assertions": "ON",
+              "build_shared_libs": "ON",
+              "run_tests": true,
+              "run_integration_tests": true,
+              "runner": "ubuntu-24.04",
+              "cmake_c_compiler": "gcc"
             },
             {
               "name": "Windows",
@@ -181,6 +195,7 @@ jobs:
               "llvm_enable_assertions": "ON",
               "build_shared_libs": "OFF",
               "run_tests": true,
+              "run_integration_tests": false,
               "runner": "windows-2022",
               "cmake_c_compiler": "cl"
             }
@@ -218,6 +233,7 @@ jobs:
       build_shared_libs: ${{ matrix.generated.build_shared_libs }}
       llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
       run_tests: ${{ matrix.generated.run_tests }}
+      run_integration_tests: ${{ matrix.generated.run_integration_tests }}
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
