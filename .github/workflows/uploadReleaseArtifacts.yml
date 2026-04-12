@@ -125,6 +125,7 @@ jobs:
       native: ${{ steps.get-config.outputs.native }}
 
   publish-static:
+    name: "UBTI Static: ${{ matrix.generated.name }}"
     needs:
       - choose-matrix
     if: ${{ needs.choose-matrix.outputs.static != '[]' }}
@@ -143,6 +144,7 @@ jobs:
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
 
   publish-native:
+    name: "UBTI Native: ${{ matrix.generated.name }}"
     needs:
       - choose-matrix
     if: ${{ needs.choose-matrix.outputs.native != '[]' }}

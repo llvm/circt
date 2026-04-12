@@ -199,7 +199,6 @@ EOF
 configNativeFullShared=$(cat <<EOF
 [
   {
-    "name":"CIRCT-full shared",
     "install_target":"install",
     "package_name_prefix":"circt-full-shared",
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
@@ -213,7 +212,6 @@ EOF
 configNativeFullStatic=$(cat <<EOF
 [
   {
-    "name":"CIRCT-full static",
     "install_target":"install",
     "package_name_prefix":"circt-full-static",
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
@@ -227,7 +225,6 @@ EOF
 configNativeFirtool=$(cat <<EOF
 [
   {
-    "name": "firtool",
     "install_target": "$binaryTargets",
     "package_name_prefix": "firrtl-bin",
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
@@ -292,6 +289,30 @@ for os in "${OPT_OS[@]}"; do
       ;;
   esac
 done
+
+# Set a human-readable name for the native and static configurations.  This
+# produces the following for the native UBTI build:
+#
+#   <runner>/<compiler>/<build-type>/<shared-vs-static>/<asserts>(/test)?(/install-(full|<n>))?
+#
+# and the following for the static UBTI build:
+#
+#   <build-type>/<asserts>(/test)?(/install-(full|<n>))?
+#
+# This is intended to be used to set the matrix job name in order to make this
+# readable on GitHub when trying to see what is running or what failed.
+config=$(echo "$config" | jq '
+  def libs: if .build_shared_libs == "ON" then "shared" else "static" end;
+  def asserts: if .llvm_enable_assertions == "ON" then "on" else "off" end;
+  def tests: if .run_tests then "/test" else "" end;
+  def install:
+    if (.install_target // "") == "" then ""
+    elif .install_target == "install" then "/install-full"
+    else "/install-\(.install_target | split(" ") | map(select(. != "")) | length)"
+    end;
+  .native |= map(. + {name: "\(.runner)/\(.cmake_c_compiler)/\(.cmake_build_type)/\(libs)-libs/asserts-\(asserts)\(tests)\(install)"}) |
+  .static |= map(. + {name: "\(.cmake_build_type)/asserts-\(asserts)\(tests)\(install)"})
+')
 
 # Return the final `config` JSON.
 echo "$config"
