@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This header file defines the `ProceduralRegion` trait.
+// This header file defines traits for (non-)procedural regions and operations.
 //
 //===----------------------------------------------------------------------===//
 
@@ -19,7 +19,18 @@
 
 namespace circt {
 
+/// Returns `success` if the operation has no closer surrounding parent
+/// marked as procedural region than its closest parent marked as
+/// non-procedural region.
+/// Also returns `success` if no parent is marked as either procedural or
+/// non-procedural region.
 LogicalResult verifyNotInProceduralRegion(Operation *op);
+
+/// Returns `success` if the operation has no closer surrounding parent
+/// marked as non-procedural region than its closest parent marked as
+/// procedural region.
+/// Also returns `success` if no parent is marked as either procedural or
+/// non-procedural region.
 LogicalResult verifyNotInNonProceduralRegion(Operation *op);
 
 /// Signals that an operation's regions are procedural.
