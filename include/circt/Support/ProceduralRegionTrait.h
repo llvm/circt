@@ -13,6 +13,7 @@
 #ifndef CIRCT_SUPPORT_PROCEDURALREGIONTRAIT_H
 #define CIRCT_SUPPORT_PROCEDURALREGIONTRAIT_H
 
+#include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
 #include "llvm/Support/LogicalResult.h"
 
