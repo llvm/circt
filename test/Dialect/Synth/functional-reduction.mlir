@@ -41,3 +41,16 @@ hw.module @test_supported_ops(in %a: i1, in %b: i1, in %c: i1,
   %5 = comb.and %b, %a {synth.test.fc_equiv_class = 5} : i1
   hw.output %0, %1, %2, %3, %4, %5 : i1, i1, i1, i1, i1, i1
 }
+
+// CHECK-LABEL: hw.module @test_inversion_equiv
+hw.module @test_inversion_equiv(in %a: i1, in %b: i1, out out0: i1, out out1: i1) {
+  // CHECK: %[[AND:.+]] = synth.aig.and_inv not %a, not %b
+  // CHECK: %[[OR:.+]] = comb.or %a, %b
+  // CHECK: %[[NOTMEMBER:.+]] = synth.aig.and_inv not %[[OR]]
+  // CHECK: %[[CHOICE:.+]] = synth.choice %[[AND]], %[[NOTMEMBER]] : i1
+  // CHECK: %[[CHOICENOT:.+]] = synth.aig.and_inv not %[[CHOICE]]
+  // CHECK: hw.output %[[CHOICE]], %[[CHOICENOT]]
+  %0 = synth.aig.and_inv not %a, not %b {synth.test.fc_equiv_class = 10} : i1
+  %1 = comb.or %a, %b {synth.test.fc_equiv_class = 10} : i1
+  hw.output %0, %1 : i1, i1
+}

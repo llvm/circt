@@ -76,7 +76,8 @@ public:
                                 llvm::DenseSet<Value> &encodedValues,
                                 int &nextFreshVar);
 
-  EquivResult verify(Value lhs, Value rhs);
+  // If inverted, negates rhs in the SAT encoding to check lhs == NOT(rhs).
+  EquivResult verify(Value lhs, Value rhs, bool inverted);
 
 private:
   int getOrCreateVar(Value value);
@@ -100,13 +101,16 @@ static bool isFunctionalReductionSimulatableOp(Operation *op) {
   return isa<aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp>(op);
 }
 
-EquivResult FunctionalReductionSATBuilder::verify(Value lhs, Value rhs) {
+EquivResult FunctionalReductionSATBuilder::verify(Value lhs, Value rhs,
+                                                  bool inverted) {
   encodeValue(lhs);
   encodeValue(rhs);
 
   int lhsVar = getOrCreateVar(lhs);
   int rhsVar = getOrCreateVar(rhs);
 
+  if (inverted)
+    rhsVar = -rhsVar;
   // Check the two halves of the XOR miter separately. If either assignment is
   // satisfiable, the solver found a distinguishing input pattern.
   solver.assume(lhsVar);
@@ -328,7 +332,7 @@ private:
   // Test transformation helpers.
   static Attribute getTestEquivClass(Value value);
   static bool matchesTestEquivClass(Value lhs, Value rhs);
-  EquivResult verifyEquivalence(Value lhs, Value rhs);
+  EquivResult verifyEquivalence(Value lhs, Value rhs, bool inverted);
 
   // Module being processed
   hw::HWModuleOp module;
@@ -348,12 +352,15 @@ private:
   // Simulation signatures: value -> APInt simulation result
   llvm::DenseMap<Value, llvm::APInt> simSignatures;
 
-  // Equivalence candidates: groups of values with identical simulation
-  // signatures
-  SmallVector<SmallVector<Value>> equivCandidates;
+  // Equivalence candidates: groups of values with identical or inverted
+  // simulation signatures, tracked with an inversion flag
+  SmallVector<SmallVector<std::pair<Value, bool>>> equivCandidates;
 
-  // Proven equivalences: representative -> proven equivalent members.
-  llvm::MapVector<Value, SmallVector<Value>> provenEquivalences;
+  // Proven equivalences: representative -> proven equivalent members with
+  // inversion flag indicating whether the member is inverted relative to
+  // representative
+  llvm::MapVector<Value, SmallVector<std::pair<Value, bool>>>
+      provenEquivalences;
 
   std::unique_ptr<IncrementalSATSolver> satSolver;
   std::unique_ptr<FunctionalReductionSATBuilder> satBuilder;
@@ -384,7 +391,9 @@ bool FunctionalReductionSolver::matchesTestEquivClass(Value lhs, Value rhs) {
   return lhsClass && rhsClass && lhsClass == rhsClass;
 }
 
-EquivResult FunctionalReductionSolver::verifyEquivalence(Value lhs, Value rhs) {
+EquivResult FunctionalReductionSolver::verifyEquivalence(Value lhs, Value rhs,
+                                                         bool inverted) {
+
   if (testTransformation) {
     if (matchesTestEquivClass(lhs, rhs))
       return EquivResult::Proved;
@@ -393,7 +402,7 @@ EquivResult FunctionalReductionSolver::verifyEquivalence(Value lhs, Value rhs) {
   assert(satBuilder && "SAT builder must be initialized before verification");
   // SAT-based equivalence checking builds a miter for the two candidate nodes
   // and proves that no input assignment can make them differ.
-  return satBuilder->verify(lhs, rhs);
+  return satBuilder->verify(lhs, rhs, inverted);
 }
 
 void FunctionalReductionSolver::initializeSATState() {
@@ -524,16 +533,28 @@ llvm::APInt FunctionalReductionSolver::simulateValue(Value v) {
 //===----------------------------------------------------------------------===//
 
 void FunctionalReductionSolver::buildEquivalenceClasses() {
-  // Map from signature to list of values
-  llvm::MapVector<llvm::APInt, SmallVector<Value>> sigGroups;
-
-  for (auto value : allValues)
-    sigGroups[simSignatures.at(value)].push_back(value);
+  // Map from canonical signature to list of {value, inverted pairs}
+  // Inverted signals share the same canonical signature since inversion
+  // is zero cost in synthesis
+  llvm::MapVector<llvm::APInt, SmallVector<std::pair<Value, bool>>> sigGroups;
+  for (auto value : allValues) {
+    auto signature = simSignatures.at(value);
+    bool inverted = false;
+    if (signature.isNegative()) {
+      inverted = true;
+      signature.flipAllBits();
+    }
+    sigGroups[signature].push_back({value, inverted});
+  }
 
   // Build equivalence candidates for groups with >1 member.
+  // Re-normalize so inverted is relative to representative (first member)
   for (auto &[hash, members] : sigGroups) {
     if (members.size() <= 1)
       continue;
+    bool repInverted = members.front().second;
+    for (auto &[_, inv] : members)
+      inv ^= repInverted;
     equivCandidates.push_back(std::move(members));
   }
   stats.numEquivClasses = equivCandidates.size();
@@ -558,14 +579,18 @@ void FunctionalReductionSolver::verifyCandidates() {
   for (auto &members : equivCandidates) {
     if (members.empty())
       continue;
-    auto representative = members.front();
+    auto [representative, repInversion] = members.front();
+    assert(!repInversion && "representative must not be inverted");
+    (void)repInversion;
     auto &provenMembers = provenEquivalences[representative];
-    // Representative is the canonical node for this class.
-    for (auto member : llvm::ArrayRef<Value>(members).drop_front()) {
-      EquivResult result = verifyEquivalence(representative, member);
+    // Representative is the canonical node for this class. Members can be
+    // inverted relative to the representative, tracked by the inversion flag
+    for (auto [member, inverted] :
+         llvm::ArrayRef<std::pair<Value, bool>>(members).drop_front()) {
+      EquivResult result = verifyEquivalence(representative, member, inverted);
       if (result == EquivResult::Proved) {
         stats.numProvedEquiv++;
-        provenMembers.push_back(member);
+        provenMembers.push_back({member, inverted});
       } else if (result == EquivResult::Disproved) {
         stats.numDisprovedEquiv++;
         // TODO: Refine equivalence classes based on counterexamples from SAT
@@ -594,17 +619,54 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
     auto &[representative, members] = provenEquivSet;
     if (members.empty())
       continue;
+
+    builder.setInsertionPointAfterValue(members.back().first);
+
     SmallVector<Value> operands;
     operands.reserve(members.size() + 1);
     operands.push_back(representative);
-    operands.append(members);
-    builder.setInsertionPointAfterValue(members.back());
+
+    llvm::SmallPtrSet<Operation *, 8> createdInverters;
+    for (auto [member, inverted] : members) {
+      if (!inverted) {
+        operands.push_back(member);
+        continue;
+      }
+      // If the member is inverted relative to the representative, we
+      // create an inverter for the choice operand
+      auto inverter =
+          aig::AndInverterOp::create(builder, member.getLoc(), member, true);
+      createdInverters.insert(inverter);
+      operands.push_back(inverter.getResult());
+    }
+
     auto choice = synth::ChoiceOp::create(builder, representative.getLoc(),
                                           representative.getType(), operands);
+
+    // If there is an inverted member, we need to create an inverter for the
+    // choice result as well
+    auto choiceNot = createdInverters.empty()
+                         ? nullptr
+                         : aig::AndInverterOp::create(builder, choice.getLoc(),
+                                                      choice, true);
+
     stats.numMergedNodes += members.size() + 1;
+
+    auto replaceValue = [&](Value value, bool inverted) {
+      if (inverted)
+        value.replaceUsesWithIf(choiceNot, [&](OpOperand &use) {
+          // Only replace uses that are not the inverters we just created. This
+          // is necessary to avoid creatng an immediate cycle when merging an
+          // inverted node into its representative.
+          return !createdInverters.contains(use.getOwner());
+        });
+      else
+        value.replaceAllUsesExcept(choice, choice);
+    };
+
     representative.replaceAllUsesExcept(choice, choice);
-    for (auto value : members)
-      value.replaceAllUsesExcept(choice, choice);
+    for (auto [value, inverted] : members)
+      replaceValue(value, inverted);
   }
 
   LLVM_DEBUG(llvm::dbgs() << "FunctionalReduction: Merged "
