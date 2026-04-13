@@ -410,41 +410,12 @@ struct LowerWordToBitsPass
 } // namespace
 
 void LowerWordToBitsPass::runOnOperation() {
-  auto *op = getOperation();
-  // Check if the op contains target operations.
-  bool hasDirectTargets = false;
-  op->walk([&](Operation *inner) -> WalkResult {
-    if (inner->getParentOp() == op && shouldLowerOperation(inner)) {
-      hasDirectTargets = true;
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
-  });
+  BitBlaster driver(getOperation());
+  if (failed(driver.run()))
+    return signalPassFailure();
 
-  // If so we run BitBlaster directly on it.
-  if (hasDirectTargets) {
-    BitBlaster driver(op);
-    if (failed(driver.run()))
-      return signalPassFailure();
-    numLoweredBits += driver.numLoweredBits;
-    numLoweredConstants += driver.numLoweredConstants;
-    numLoweredOps += driver.numLoweredOps;
-    return;
-  }
-
-  // Otherwise we iterate over the children.
-  for (auto &region : op->getRegions()) {
-    for (auto &block : region) {
-      for (auto &childOp : block) {
-        if (childOp.getNumRegions() == 0)
-          continue;
-        BitBlaster driver(&childOp);
-        if (failed(driver.run()))
-          return signalPassFailure();
-        numLoweredBits += driver.numLoweredBits;
-        numLoweredConstants += driver.numLoweredConstants;
-        numLoweredOps += driver.numLoweredOps;
-      }
-    }
-  }
+  // Update statistics
+  numLoweredBits += driver.numLoweredBits;
+  numLoweredConstants += driver.numLoweredConstants;
+  numLoweredOps += driver.numLoweredOps;
 }
