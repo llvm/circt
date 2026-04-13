@@ -424,7 +424,8 @@ void LowerWordToBitsPass::runOnOperation() {
   // If so we run BitBlaster directly on it.
   if (hasDirectTargets) {
     BitBlaster driver(op);
-    if (failed(driver.run())) return signalPassFailure();
+    if (failed(driver.run()))
+      return signalPassFailure();
     numLoweredBits += driver.numLoweredBits;
     numLoweredConstants += driver.numLoweredConstants;
     numLoweredOps += driver.numLoweredOps;
@@ -435,9 +436,11 @@ void LowerWordToBitsPass::runOnOperation() {
   for (auto &region : op->getRegions()) {
     for (auto &block : region) {
       for (auto &childOp : block) {
-        if (childOp.getNumRegions() == 0) continue;
+        if (childOp.getNumRegions() == 0)
+          continue;
         BitBlaster driver(&childOp);
-        if (failed(driver.run())) return signalPassFailure();
+        if (failed(driver.run()))
+          return signalPassFailure();
         numLoweredBits += driver.numLoweredBits;
         numLoweredConstants += driver.numLoweredConstants;
         numLoweredOps += driver.numLoweredOps;
