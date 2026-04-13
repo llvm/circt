@@ -99,3 +99,13 @@ hw.module @Choice(in %a: i2, in %b: i2, in %c: i2, out f: i2, out g: i2) {
   // CHECK-NEXT: hw.output %[[CONCAT1]], %[[CONCAT2]]
   hw.output %0, %1 : i2, i2
 }
+
+// CHECK-LABEL: func.func @Basic_No_Module
+func.func @Basic_No_Module(%arg0: i2, %arg1: i2) -> i2 {
+  // CHECK: comb.extract
+  // CHECK: synth.aig.and_inv
+  // CHECK: comb.concat
+  %0 = synth.aig.and_inv not %arg0, %arg1 : i2
+  %1 = synth.aig.and_inv not %0, not %0 : i2
+  return %1 : i2
+}
