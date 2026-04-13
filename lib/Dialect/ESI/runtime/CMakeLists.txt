@@ -295,6 +295,11 @@ target_link_libraries(esitester PRIVATE
   ESICppRuntime
   CLI11::CLI11
 )
+add_dependencies(ESIRuntime esitester)
+install(TARGETS esitester
+  DESTINATION ${ESIRT_INSTALL_BINDIR}
+  COMPONENT ESIRuntime
+)
 # Install PDB files for Windows Debug builds
 if(WIN32 AND MSVC)
   install(FILES $<TARGET_PDB_FILE:esitester>
