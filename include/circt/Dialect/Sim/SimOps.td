@@ -584,7 +584,7 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
 
     This operation must be within a procedural region.
   }];
-  let arguments = (ins 
+  let arguments = (ins
     FormatStringType:$input,
     Optional<OutputStreamType>:$stream
   );
@@ -685,13 +685,13 @@ def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
   let description = [{
     Converts an integer value to a string following Verilog semantics, where
     string literals are represented as right-aligned bitvectors.
-    
+
     The operation reads the integer byte-by-byte, interpreting each non-zero
     byte as an ASCII character. Zero-valued bytes are skipped and
     not included in the output string. See Sec 6.16 of the standard saying
-    "A string variable shall not contain the special character "\0". 
+    "A string variable shall not contain the special character "\0".
     Assigning the value 0 to a string character shall be ignored"
-    
+
     Example:
       Consider the hex value 0x00_00_00_48_00_00_6C_6F
       Reading from MSB to LSB and filtering out null bytes:
@@ -809,7 +809,7 @@ TypesMatchWith<"queue and element types must match",
 AllTypesMatch<["queue", "outQueue"]>]> {
   let summary = "Push an element to the front of a queue";
   let description = [{
-    Adds an element to the front of the queue. If the queue is a bounded 
+    Adds an element to the front of the queue. If the queue is a bounded
     queue which is full, then this will erase the final element of the queue,
     as to keep the queue within-bounds.
   }];
@@ -847,7 +847,7 @@ AllTypesMatch<["queue", "outQueue"]>]> {
   let summary = "Removes the first element of a queue";
   let description = [{
     Removes an element from the front of a queue.
-    
+
     If the queue is empty, this has no effect, and the value of `popped`
     will be the same as obtained by reading a non-existent array element
     from an array with the same element type,
@@ -967,7 +967,7 @@ def QueueResizeOp : SimOp<"queue.resize", [Pure]> {
   let description = [{
     Converts between two queues with different bounds, but the same element
     type.
-    
+
     If $result has a smaller bound than the size of $input, elements at the end
     of the queue will be discarded to ensure it fits within the space provided.
   }];
