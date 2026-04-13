@@ -40,7 +40,11 @@ public:
   virtual ~Type() = default;
 
   ID getID() const { return id; }
-  virtual std::ptrdiff_t getBitWidth() const { return -1; }
+  virtual std::ptrdiff_t getBitWidth() const { return hwBitwidth; }
+
+  /// Set from manifest JSON hwBitwidth. Allows types without specialized
+  /// parsers (e.g. union types) to still report their width.
+  void setHWBitwidth(std::ptrdiff_t bw) { hwBitwidth = bw; }
 
   /// Serialize an object to a MutableBitVector (LSB-first stream). The object
   /// should be passed via std::any. Implementations append fields in the order
@@ -90,6 +94,7 @@ public:
 
 protected:
   ID id;
+  std::ptrdiff_t hwBitwidth = -1;
 };
 
 /// Bundles represent a collection of channels. Services exclusively expose

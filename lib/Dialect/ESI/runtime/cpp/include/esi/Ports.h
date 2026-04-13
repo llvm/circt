@@ -127,6 +127,13 @@ public:
     return false;
   }
 
+  /// Get the size of each frame in bytes. For windowed types, this is the
+  /// lowered type's width; otherwise, the port type's width.
+  size_t getFrameSizeBytes() const {
+    if (translationInfo)
+      return translationInfo->frameBytes;
+    return utils::bitsToBytes(type->getBitWidth());
+  }
   const Type *getType() const { return type; }
 
 protected:
@@ -188,6 +195,8 @@ protected:
     /// Size of the 'into' type in bytes (for fixed-size types).
     /// For types with lists, this is the size of the fixed header portion.
     size_t intoTypeBytes = 0;
+    /// Number of bytes per wire frame (from the lowered type's bit width).
+    size_t frameBytes = 0;
     /// True if the window contains a list field (variable-size message).
     bool hasListField = false;
   };
@@ -209,7 +218,7 @@ public:
 
   virtual void connect(const ConnectOptions &options = {}) override {
     translateMessages = options.translateMessage && translationInfo;
-    if (translateMessages)
+    if (translationInfo)
       translationInfo->precomputeFrameInfo();
     connectImpl(options);
     connected = true;
@@ -230,6 +239,17 @@ public:
     } else {
       writeImpl(data);
     }
+  }
+
+  /// Write a multi-segment message. Takes ownership so the backend can hold
+  /// the message across partial writes / async completions. Default flattens
+  /// and calls the regular write(). Backends override for scatter-gather /
+  /// chunked-DMA support.
+  virtual void write(std::unique_ptr<SegmentedMessageData> msg) {
+    if (!msg)
+      throw std::runtime_error(
+          "WriteChannelPort::write: null SegmentedMessageData");
+    write(msg->toMessageData());
   }
 
   /// A basic non-blocking write API. Returns true if any of the data was queued
@@ -273,6 +293,9 @@ protected:
 
   /// Implementation for tryWrite(). Subclasses must implement this.
   virtual bool tryWriteImpl(const MessageData &data) = 0;
+
+  /// Break a message into its frames.
+  std::vector<MessageData> getMessageFrames(const MessageData &data);
 
   /// Whether to translate outgoing data if the port type is a window type. Set
   /// by the connect() method.

@@ -4,9 +4,11 @@
 #include "esi/CLI.h"
 #include "esi/Manifest.h"
 #include "esi/Services.h"
+#include "esi/TypedPorts.h"
 
 #include <cstdint>
 #include <iostream>
+#include <random>
 #include <stdexcept>
 
 using namespace esi;
@@ -143,6 +145,119 @@ static void runArrayFunc(Accelerator *accel) {
   std::cout << "array func ok: " << (int)low << " " << (int)high << "\n";
 }
 
+//
+// SerialCoordTranslator test
+//
+
+struct Coord {
+  uint32_t y; // SV ordering: last declared field first in memory
+  uint32_t x;
+};
+#pragma pack(push, 1)
+struct SerialCoordHeader {
+  uint16_t coordsCount;
+  uint32_t yTranslation;
+  uint32_t xTranslation;
+};
+static_assert(sizeof(SerialCoordHeader) == 10, "Size mismatch");
+struct SerialCoordData {
+  SerialCoordData(uint32_t x, uint32_t y) : _pad_head(0), y(y), x(x) {}
+  uint16_t _pad_head;
+  uint32_t y;
+  uint32_t x;
+};
+static_assert(sizeof(SerialCoordData) == sizeof(SerialCoordHeader),
+              "Size mismatch");
+#pragma pack(pop)
+
+// Note: this application is intended to test hardware. As such, we need
+// to be able to send batches. So this is not the typical way one would define a
+// message struct. It's closer to a streaming style.
+struct SerialCoordInput : SegmentedMessageData {
+private:
+  SerialCoordHeader header;
+  std::vector<SerialCoordData> coords;
+  SerialCoordHeader footer;
+
+public:
+  SerialCoordInput(uint32_t xTrans, uint32_t yTrans,
+                   std::vector<SerialCoordData> &coords)
+      : coords(coords) {
+    header.coordsCount = (uint16_t)coords.size();
+    header.xTranslation = xTrans;
+    header.yTranslation = yTrans;
+    footer.coordsCount = 0;
+  }
+
+  size_t numSegments() const override { return 3; }
+  Segment segment(size_t idx) const override {
+    if (idx == 0)
+      return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};
+    else if (idx == 1)
+      return {reinterpret_cast<const uint8_t *>(coords.data()),
+              coords.size() * sizeof(SerialCoordData)};
+    else if (idx == 2)
+      return {reinterpret_cast<const uint8_t *>(&footer), sizeof(footer)};
+    else
+      throw std::out_of_range("SerialCoordInput: invalid segment index");
+  }
+};
+
+#pragma pack(push, 1)
+struct SerialCoordOutputHeader {
+  uint8_t _pad[6];
+  uint16_t coordsCount;
+};
+struct SerialCoordOutputData {
+  uint32_t y;
+  uint32_t x;
+};
+union SerialCoordOutputFrame {
+  SerialCoordOutputHeader header;
+  SerialCoordOutputData data;
+};
+#pragma pack(pop)
+static_assert(sizeof(SerialCoordOutputFrame) == 8, "Size mismatch");
+
+static void serialCoordTranslateTest(Accelerator *accel) {
+  size_t numCoords = 100;
+  uint32_t xTrans = 10, yTrans = 20;
+
+  // Generate random coordinates.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<Coord> inputCoords;
+  inputCoords.reserve(numCoords);
+  for (uint32_t i = 0; i < numCoords; ++i)
+    inputCoords.push_back({dist(rng), dist(rng)});
+
+  auto child = accel->getChildren().find(AppID("coord_translator_serial"));
+  if (child == accel->getChildren().end())
+    throw std::runtime_error("Serial coord translate test: no "
+                             "'coord_translator_serial' child found");
+
+  auto &ports = child->second->getPorts();
+  auto portIter = ports.find(AppID("translate_coords_serial"));
+  if (portIter == ports.end())
+    throw std::runtime_error(
+        "Serial coord translate test: no 'translate_coords_serial' port found");
+
+  TypedFunction<SerialCoordInput, SerialCoordOutputFrame,
+                /*SkipTypeCheck=*/true>
+      translateCoords(
+          portIter->second.getAs<services::FuncService::Function>());
+
+  translateCoords.connect();
+
+  std::vector<SerialCoordData> coords;
+  for (auto &c : inputCoords)
+    coords.emplace_back(c.x, c.y);
+  SerialCoordInput batch(xTrans, yTrans, coords);
+  // TODO: List results are currently not supported so we cannot compare the
+  // results.
+  (void)translateCoords.call(batch).get();
+}
+
 int main(int argc, const char *argv[]) {
   CliParser cli("loopback-cpp");
   cli.description("Loopback cosim test using generated ESI headers.");
@@ -166,6 +281,7 @@ int main(int argc, const char *argv[]) {
     runStructFunc(accel);
     runOddStructFunc(accel);
     runArrayFunc(accel);
+    serialCoordTranslateTest(accel);
 
     conn->disconnect();
   } catch (std::exception &e) {

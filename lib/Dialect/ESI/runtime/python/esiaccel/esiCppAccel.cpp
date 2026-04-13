@@ -365,7 +365,7 @@ NB_MODULE(esiCppAccel, m) {
              MessageData data(dataVec);
              return self.call(data);
            })
-      .def("connect", &FuncService::Function::connect);
+      .def("connect", [](FuncService::Function &self) { self.connect(); });
 
   nb::class_<CallService::Callback, ServicePort>(m, "Callback")
       .def("connect", [](CallService::Callback &self,

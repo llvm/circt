@@ -23,6 +23,7 @@
 #include "esi/CLI.h"
 #include "esi/Manifest.h"
 #include "esi/Services.h"
+#include "esi/TypedPorts.h"
 
 #include <atomic>
 #include <chrono>
@@ -1797,17 +1798,52 @@ struct SerialCoordHeader {
   uint32_t yTranslation;
   uint32_t xTranslation;
 };
+static_assert(sizeof(SerialCoordHeader) == 10, "Size mismatch");
 struct SerialCoordData {
+  SerialCoordData(uint32_t x, uint32_t y) : _pad_head(0), y(y), x(x) {}
   uint16_t _pad_head;
   uint32_t y;
   uint32_t x;
 };
-union SerialCoordInputFrame {
-  SerialCoordHeader header;
-  SerialCoordData data;
-};
+static_assert(sizeof(SerialCoordData) == sizeof(SerialCoordHeader),
+              "Size mismatch");
 #pragma pack(pop)
-static_assert(sizeof(SerialCoordInputFrame) == 10, "Size mismatch");
+
+// Note: this application is intended to test hardware. As such, we need
+// to be able to send batches. So this is not the typical way one would define a
+// message struct. It's closer to a streaming style.
+struct SerialCoordInput : SegmentedMessageData {
+private:
+  SerialCoordHeader header;
+  std::vector<SerialCoordData> coords;
+
+public:
+  SerialCoordInput() {
+    header.coordsCount = 0;
+    header.xTranslation = 0;
+    header.yTranslation = 0;
+  }
+  void yTranslation(uint32_t yTrans) { header.yTranslation = yTrans; }
+  uint32_t yTranslation() const { return header.yTranslation; }
+  void xTranslation(uint32_t xTrans) { header.xTranslation = xTrans; }
+  uint32_t xTranslation() const { return header.xTranslation; }
+  void appendCoord(uint32_t x, uint32_t y) {
+    coords.emplace_back(x, y);
+    header.coordsCount = (uint16_t)coords.size();
+  }
+  const std::vector<SerialCoordData> &getCoords() const { return coords; }
+
+  size_t numSegments() const override { return 2; }
+  Segment segment(size_t idx) const override {
+    if (idx == 0)
+      return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};
+    else if (idx == 1)
+      return {reinterpret_cast<const uint8_t *>(coords.data()),
+              coords.size() * sizeof(SerialCoordData)};
+    else
+      throw std::out_of_range("SerialCoordInput: invalid segment index");
+  }
+};
 
 #pragma pack(push, 1)
 struct SerialCoordOutputHeader {
@@ -1837,9 +1873,8 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
   std::uniform_int_distribution<uint32_t> dist(0, 1000000);
   std::vector<Coord> inputCoords;
   inputCoords.reserve(numCoords);
-  for (uint32_t i = 0; i < numCoords; ++i) {
+  for (uint32_t i = 0; i < numCoords; ++i)
     inputCoords.push_back({dist(rng), dist(rng)});
-  }
 
   auto child = accel->getChildren().find(AppID("coord_translator_serial"));
   if (child == accel->getChildren().end())
@@ -1852,7 +1887,8 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     throw std::runtime_error(
         "Serial coord translate test: no 'translate_coords_serial' port found");
 
-  WriteChannelPort &argPort = portIter->second.getRawWrite("arg");
+  TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
+      portIter->second.getRawWrite("arg"));
   ReadChannelPort &resultPort = portIter->second.getRawRead("result");
 
   argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
@@ -1865,28 +1901,19 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     // Send Header. Only the first header needs the translation values, test the
     // subsequent ones with zero translation to verify that the hardware
     // correctly applies the first header's translation to the whole list.
-    SerialCoordInputFrame headerFrame;
-    headerFrame.header.coordsCount = (uint16_t)batchSize;
-    headerFrame.header.xTranslation = sent == 0 ? xTrans : 0;
-    headerFrame.header.yTranslation = sent == 0 ? yTrans : 0;
-    argPort.write(MessageData(reinterpret_cast<const uint8_t *>(&headerFrame),
-                              sizeof(headerFrame)));
-
+    auto batch = std::make_unique<SerialCoordInput>();
+    batch->xTranslation(sent == 0 ? xTrans : 0);
+    batch->yTranslation(sent == 0 ? yTrans : 0);
     // Send Data
     for (size_t i = 0; i < batchSize; ++i) {
-      SerialCoordInputFrame dataFrame;
-      dataFrame.data._pad_head = 0;
-      dataFrame.data.x = inputCoords[sent + i].x;
-      dataFrame.data.y = inputCoords[sent + i].y;
-      argPort.write(MessageData(reinterpret_cast<const uint8_t *>(&dataFrame),
-                                sizeof(dataFrame)));
+      batch->appendCoord(inputCoords[sent + i].x, inputCoords[sent + i].y);
     }
+    argPort.write(batch);
     sent += batchSize;
   }
   // Send final header with count=0 to signal end of input
-  SerialCoordHeader footerData{0, 0, 0};
-  auto footer = MessageData::from(footerData);
-  argPort.write(footer);
+  auto footerData = std::make_unique<SerialCoordInput>();
+  argPort.write(footerData);
 
   // Read results. The hardware echoes headers (with count) followed by
   // translated data frames, then autonomously sends a footer header with

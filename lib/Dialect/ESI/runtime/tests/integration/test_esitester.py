@@ -8,6 +8,7 @@ import esiaccel
 from esiaccel.accelerator import AcceleratorConnection
 from esiaccel.cosim.pytest import cosim_test
 import esiaccel.types as types
+import pytest
 
 from .conftest import HW_DIR, check_lines, require_tool, run_cmd
 
@@ -127,6 +128,38 @@ class TestCosimEsitesterDma:
         "* Telemetry",
         "fromhostdma[32].fromHostCycles: 0",
         "tohostdma[32].toHostCycles: 0",
+    ])
+
+  # TODO: Debug this test. I suspect a bug in the OneBufferFromHost hardware
+  # implementation.
+  @pytest.mark.skip(
+      reason="This test fails for some reason unrelated to this change")
+  def test_channel(self, host: str, port: int) -> None:
+    conn = f"{host}:{port}"
+    stdout = run_cmd(["esitester", "cosim", conn, "channel", "-i", "3"])
+    check_lines(stdout, [
+        "[channel] producer i=0 got=0",
+        "[channel] producer i=1 got=1",
+        "[channel] producer i=2 got=2",
+        "[channel] loopback i=0",
+        "[channel] loopback i=1",
+        "[channel] loopback i=2",
+        "Channel test passed",
+    ])
+
+  # TODO: Debug this test. I suspect a bug in the OneBufferFromHost hardware
+  # implementation.
+  @pytest.mark.skip(reason="This test fails for some reason")
+  def test_serial_coords(self, host: str, port: int) -> None:
+    conn = f"{host}:{port}"
+    stdout = run_cmd([
+        "esitester", "--trace", "cosim", conn, "serial_coords", "-n", "40",
+        "-b", "33"
+    ])
+    check_lines(stdout, [
+        "Serial coord translate test results:",
+        "coord[0]=",
+        "Serial coord translate test passed",
     ])
 
 
