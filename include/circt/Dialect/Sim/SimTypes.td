@@ -30,14 +30,14 @@ def FormatStringType : SimTypeDef<"FormatString"> {
 def DynamicStringType : SimTypeDef<"DynamicString"> {
   let mnemonic = "dstring";
 
-  let summary = "String type with variable length"; 
+  let summary = "String type with variable length";
   let description = [{
-    The dynamic string type represents a string with a variable length that is 
+    The dynamic string type represents a string with a variable length that is
     only known at runtime. The contents of the string are held as an array of
-    `i8` bytes. The interpretation of these bytes as a concrete character 
-    encoding is undefined, but treating the bytes as a UTF-8 string is 
+    `i8` bytes. The interpretation of these bytes as a concrete character
+    encoding is undefined, but treating the bytes as a UTF-8 string is
     recommended. A string's length must fit into an `i64`.
-    
+
     Even though practical lowerings of this type likely have to hold the string
     contents in dynamically-allocated heap memory, *this type has value
     semantics*. If the same string SSA value is passed to multiple users, any
@@ -47,9 +47,9 @@ def DynamicStringType : SimTypeDef<"DynamicString"> {
 
 def QueueType : SimTypeDef<"Queue"> {
   let mnemonic = "queue";
-  let summary = "a queue type"; 
+  let summary = "a queue type";
   let description = [{
-    An ordered container of elements with an optional upper bound 
+    An ordered container of elements with an optional upper bound
     on the number of elements that it can hold. If this bound is 0, then the
     queue has unrestricted capacity.
 
