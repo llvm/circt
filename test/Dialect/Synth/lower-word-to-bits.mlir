@@ -1,4 +1,4 @@
-// RUN: circt-opt %s  --pass-pipeline='builtin.module(any(synth-lower-word-to-bits ))'| FileCheck %s
+// RUN: circt-opt %s  --pass-pipeline='builtin.module(any(synth-lower-word-to-bits))'| FileCheck %s
 // CHECK: hw.module @Basic
 hw.module @Basic(in %a: i2, in %b: i2, out f: i2) {
   %0 = synth.aig.and_inv not %a, %b : i2
@@ -104,6 +104,7 @@ hw.module @Choice(in %a: i2, in %b: i2, in %c: i2, out f: i2, out g: i2) {
 func.func @Basic_No_Module(%arg0: i2, %arg1: i2) -> i2 {
   // CHECK: comb.extract
   // CHECK: synth.aig.and_inv
+  // CHECK-SAME: i1
   // CHECK: comb.concat
   %0 = synth.aig.and_inv not %arg0, %arg1 : i2
   %1 = synth.aig.and_inv not %0, not %0 : i2
