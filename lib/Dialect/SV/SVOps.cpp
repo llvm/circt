@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
@@ -56,14 +57,14 @@ bool sv::isExpression(Operation *op) {
 }
 
 LogicalResult sv::verifyInProceduralRegion(Operation *op) {
-  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+  if (op->getParentOp()->hasTrait<ProceduralRegion>())
     return success();
   op->emitError() << op->getName() << " should be in a procedural region";
   return failure();
 }
 
 LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
-  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+  if (!op->getParentOp()->hasTrait<ProceduralRegion>())
     return success();
   op->emitError() << op->getName() << " should be in a non-procedural region";
   return failure();

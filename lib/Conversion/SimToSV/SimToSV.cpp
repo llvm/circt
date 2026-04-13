@@ -19,6 +19,7 @@
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/Namespace.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -398,7 +399,7 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
       // If there was no pre-existing guard, create one.
       if (!block) {
         OpBuilder builder(op);
-        if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
+        if (op->getParentOp()->hasTrait<ProceduralRegion>())
           block = sv::IfDefProceduralOp::create(
                       builder, loc, "SYNTHESIS", [] {}, [] {})
                       .getElseBlock();
