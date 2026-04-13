@@ -58,7 +58,7 @@ namespace {
 /// while maintaining correctness and optimizing for constant propagation.
 class BitBlaster {
 public:
-  explicit BitBlaster(hw::HWModuleOp moduleOp) : moduleOp(moduleOp) {}
+  explicit BitBlaster(Operation *topOp) : topOp(topOp) {}
 
   /// Run the bit-blasting algorithm on the module.
   LogicalResult run();
@@ -131,8 +131,8 @@ private:
   /// Cached boolean constants (false at index 0, true at index 1)
   std::array<Value, 2> constants;
 
-  /// Reference to the module being processed
-  hw::HWModuleOp moduleOp;
+  /// Reference to the top-level operation being processed
+  Operation *topOp;
 };
 
 } // namespace
@@ -267,18 +267,18 @@ LogicalResult BitBlaster::run() {
   // Topologically sort operations in graph regions so that walk visits them in
   // the topological order.
   if (failed(topologicallySortGraphRegionBlocks(
-          moduleOp, [](Value value, Operation *op) -> bool {
+          topOp, [](Value value, Operation *op) -> bool {
             // Otherthan target ops, all other ops are always ready.
             return !(shouldLowerOperation(op) ||
                      isa<comb::ExtractOp, comb::ReplicateOp, comb::ConcatOp,
                          comb::ReplicateOp>(op));
           }))) {
     // If we failed to topologically sort operations we cannot proceed.
-    return mlir::emitError(moduleOp.getLoc(), "there is a combinational cycle");
+    return mlir::emitError(topOp->getLoc(), "there is a combinational cycle");
   }
 
   // Lower target operations
-  moduleOp.walk([&](Operation *op) {
+  topOp->walk([&](Operation *op) {
     // If the block is in a graph region, topologically sort it first.
     if (shouldLowerOperation(op))
       (void)lowerValueToBits(op->getResult(0));
@@ -315,7 +315,8 @@ LogicalResult BitBlaster::run() {
 
 Value BitBlaster::getBoolConstant(bool value) {
   if (!constants[value]) {
-    auto builder = OpBuilder::atBlockBegin(moduleOp.getBodyBlock());
+    auto &entryBlock = topOp->getRegion(0).front();
+    auto builder = OpBuilder::atBlockBegin(&entryBlock);
     constants[value] = hw::ConstantOp::create(builder, builder.getUnknownLoc(),
                                               builder.getI1Type(), value);
   }

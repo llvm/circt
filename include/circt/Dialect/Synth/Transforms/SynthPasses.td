@@ -107,7 +107,7 @@ def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
   ];
 }
 
-def LowerWordToBits : Pass<"synth-lower-word-to-bits", "hw::HWModuleOp"> {
+def LowerWordToBits : Pass<"synth-lower-word-to-bits"> {
   let summary = "Lower multi-bit AndInverter to single-bit ones";
   let dependentDialects = ["comb::CombDialect"];
   let statistics = [
