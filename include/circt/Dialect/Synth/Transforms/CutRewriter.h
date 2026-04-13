@@ -28,6 +28,7 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/raw_ostream.h"
+#include <limits>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -131,6 +132,12 @@ struct LogicNetworkGate {
   /// inversion bit is encoded in each edge.
   Signal edges[3];
 
+  /// Number of uses by logic gates in this network.
+  unsigned logicFanoutCount = 0;
+
+  /// Number of uses outside the logic network.
+  unsigned externalUseCount = 0;
+
   LogicNetworkGate() : opAndKind(nullptr, Constant), edges{} {}
   LogicNetworkGate(Operation *op, Kind kind,
                    llvm::ArrayRef<Signal> operands = {})
@@ -171,11 +178,18 @@ struct LogicNetworkGate {
     return k == And2 || k == Xor2 || k == Maj3 || k == Identity || k == Choice;
   }
 
-  /// Check if this should always be a cut input (PI or constant).
-  bool isAlwaysCutInput() const {
+  /// Check if this gate is a cut leaf (PI or constant).
+  bool isCutLeaf() const {
     Kind k = getKind();
     return k == PrimaryInput || k == Constant;
   }
+
+  unsigned getTotalRefCount() const {
+    unsigned refCount = logicFanoutCount + externalUseCount;
+    return refCount == 0 ? 1 : refCount;
+  }
+
+  bool isPrimaryOutput() const { return externalUseCount != 0; }
 };
 
 /// Flat logic network representation for efficient cut enumeration.
@@ -258,6 +272,16 @@ public:
   /// Get the total number of nodes in the network.
   size_t size() const { return gates.size(); }
 
+  /// Get the total reference count used by area-flow estimation.
+  unsigned getTotalRefCount(uint32_t index) const {
+    return gates[index].getTotalRefCount();
+  }
+
+  /// Check if a node is observed outside the logic network.
+  bool isPrimaryOutput(uint32_t index) const {
+    return gates[index].isPrimaryOutput();
+  }
+
   /// Add a primary input to the network.
   uint32_t addPrimaryInput(Value value);
 
@@ -279,6 +303,9 @@ public:
   void clear();
 
 private:
+  void recordLogicUse(uint32_t index) { ++gates[index].logicFanoutCount; }
+  void recordExternalUse(uint32_t index) { ++gates[index].externalUseCount; }
+
   /// Map from MLIR Value to network index.
   llvm::DenseMap<Value, uint32_t> valueToIndex;
 
@@ -349,8 +376,10 @@ class MatchedPattern {
 private:
   const CutRewritePattern *pattern = nullptr; ///< The matched library pattern
   SmallVector<DelayType, 1>
-      arrivalTimes;  ///< Arrival times of outputs from this pattern
-  double area = 0.0; ///< Area cost of this pattern
+      arrivalTimes; ///< Arrival times of outputs from this pattern
+  /// Saved match data we reuse during area-flow reselection.
+  MatchResult matchResult;
+  SmallVector<unsigned, 6> patternInputToCutInput;
 
 public:
   /// Default constructor creates an invalid matched pattern.
@@ -358,18 +387,38 @@ public:
 
   /// Constructor for a valid matched pattern.
   MatchedPattern(const CutRewritePattern *pattern,
-                 SmallVector<DelayType, 1> arrivalTimes, double area)
-      : pattern(pattern), arrivalTimes(std::move(arrivalTimes)), area(area) {}
+                 SmallVector<DelayType, 1> arrivalTimes,
+                 MatchResult matchResult,
+                 ArrayRef<unsigned> patternInputToCutInput)
+      : pattern(pattern), arrivalTimes(std::move(arrivalTimes)),
+        matchResult(std::move(matchResult)),
+        patternInputToCutInput(patternInputToCutInput.begin(),
+                               patternInputToCutInput.end()) {}
 
   /// Get the arrival time of signals through this pattern.
   DelayType getArrivalTime(unsigned outputIndex) const;
   ArrayRef<DelayType> getArrivalTimes() const;
+  DelayType getWorstOutputArrivalTime() const;
 
   /// Get the library pattern that was matched.
   const CutRewritePattern *getPattern() const;
 
   /// Get the area cost of using this pattern.
   double getArea() const;
+
+  /// Get the per-input delays used when scoring this match.
+  ArrayRef<DelayType> getDelays() const;
+
+  /// Get the cached match payload used to rebuild this match.
+  const MatchResult &getMatchResult() const { return matchResult; }
+
+  /// Get the mapping from pattern input indices to cut input indices.
+  ArrayRef<unsigned> getInputPermutation() const {
+    return patternInputToCutInput;
+  }
+
+  /// Get the delay for a cut input after accounting for input permutation.
+  DelayType getDelayForCutInput(unsigned cutInputIndex) const;
 };
 
 /// Represents a cut in the combinational logic network.
@@ -529,6 +578,15 @@ private:
   bool isFrozen = false; ///< Whether cut set is finalized
 
 public:
+  /// Latest time this node is allowed to arrive.
+  DelayType requiredTime = std::numeric_limits<DelayType>::max();
+
+  /// Arrival time of the currently selected cut.
+  DelayType bestArrivalTime = 0;
+
+  /// Current area-flow score for the selected cut.
+  double areaFlow = 0.0;
+
   /// Check if this cut set has a valid matched pattern.
   bool isMatched() const { return bestCut; }
 
@@ -551,6 +609,9 @@ public:
 
   /// Get read-only access to all cuts in this set.
   ArrayRef<Cut *> getCuts() const;
+
+  /// Replace the currently selected cut during area recovery.
+  void setBestCut(Cut *cut) { bestCut = cut; }
 };
 
 /// Configuration options for the cut-based rewriting algorithm.
@@ -657,6 +718,12 @@ public:
   void noteCutRewritten() { ++stats.numCutsRewritten; }
 
   void dump() const;
+
+  /// Compute required times from the current timing-feasible seed mapping.
+  void computeRequiredTimes();
+
+  /// Re-select cuts using area-flow while preserving required times.
+  void reselectCutsForAreaFlow();
 
   /// Get cut sets (indexed by LogicNetwork index).
   const llvm::DenseMap<uint32_t, CutSet *> &getCutSets() const {
