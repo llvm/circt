@@ -166,7 +166,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install iverilog libsystemc-dev ninja-build z3
+          sudo apt-get install iverilog libsystemc-dev ninja-build valgrind z3
           echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON" >> "$GITHUB_OUTPUT"
       - name: Restore Verilator Cache (Linux)
         if: inputs.run_integration_tests && runner.os == 'Linux'
