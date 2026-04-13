@@ -15,4 +15,16 @@ def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {
   let cppNamespace = "::circt";
 }
 
+def NonProceduralRegion : NativeOpTrait<"NonProceduralRegion"> {
+  let cppNamespace = "::circt";
+}
+
+def ProceduralOp : NativeOpTrait<"ProceduralOp"> {
+  let cppNamespace = "::circt";
+}
+
+def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
+  let cppNamespace = "::circt";
+}
+
 #endif // CIRCT_SUPPORT_PROCDURALREGIONTRAIT_TD

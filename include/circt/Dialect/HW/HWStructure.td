@@ -18,6 +18,7 @@ include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
+include "circt/Support/ProceduralRegionTrait.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
@@ -114,7 +115,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 def HWModuleOp : HWModuleOpBase<"module",
       [IsolatedFromAbove, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">,
-       HWEmittableModuleLike]>{
+       HWEmittableModuleLike, NonProceduralRegion]>{
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given
@@ -621,7 +622,8 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
 }
 
 def TriggeredOp : HWOp<"triggered", [
-    IsolatedFromAbove, SingleBlock, NoTerminator]> {
+    IsolatedFromAbove, SingleBlock, NoTerminator, NonProceduralOp,
+    ProceduralRegion]> {
   let summary = "A procedural region with a trigger condition";
   let description = [{
     A procedural region that can be triggered by an event. The trigger
