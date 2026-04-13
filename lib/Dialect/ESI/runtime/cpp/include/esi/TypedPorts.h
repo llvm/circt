@@ -438,7 +438,7 @@ public:
     argWireInfo_ = getWireInfo(inner->getArgType());
     resWireInfo_ = getWireInfo(inner->getResultType());
     inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/true));
+                                               /*translateMessage=*/false));
   }
 
   std::future<ResultT> call(const ArgT &arg) {
@@ -476,7 +476,7 @@ public:
       verifyTypeCompatibility<ResultT>(inner->getResultType());
     }
     inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/true));
+                                               /*translateMessage=*/false));
   }
 
   std::future<ResultT> call() {
@@ -514,7 +514,7 @@ public:
     }
     argWireInfo_ = getWireInfo(inner->getArgType());
     inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/true));
+                                               /*translateMessage=*/false));
   }
 
   std::future<void> call(const ArgT &arg) {
@@ -547,7 +547,7 @@ public:
       verifyTypeCompatibility<void>(inner->getResultType());
     }
     inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/true));
+                                               /*translateMessage=*/false));
   }
 
   std::future<void> call() {
@@ -596,7 +596,7 @@ public:
         },
         quick,
         ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/true));
+                                    /*translateMessage=*/false));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -629,7 +629,7 @@ public:
         },
         quick,
         ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/true));
+                                    /*translateMessage=*/false));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -663,7 +663,7 @@ public:
         },
         quick,
         ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/true));
+                                    /*translateMessage=*/false));
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -696,7 +696,7 @@ public:
         },
         quick,
         ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/true));
+                                    /*translateMessage=*/false));
   }
 
   services::CallService::Callback &raw() { return *inner; }
