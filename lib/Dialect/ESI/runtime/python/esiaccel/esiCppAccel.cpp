@@ -168,6 +168,10 @@ NB_MODULE(esiCppAccel, m) {
       .def_prop_ro("element", &ArrayType::getElementType,
                    nb::rv_policy::reference)
       .def_prop_ro("size", &ArrayType::getSize);
+  nb::class_<UnionType, Type>(m, "UnionType")
+      .def(nb::init<const Type::ID &, const UnionType::FieldVector &>(),
+           nb::arg("id"), nb::arg("fields"))
+      .def_prop_ro("fields", &UnionType::getFields, nb::rv_policy::reference);
 
   nb::class_<Constant>(m, "Constant")
       .def_prop_ro("value", [](Constant &c) { return c.value; })

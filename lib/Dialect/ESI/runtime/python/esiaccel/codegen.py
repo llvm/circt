@@ -151,6 +151,14 @@ class CppTypePlanner:
       parts.append(self._sanitize_name(field_type.id))
     return self._reserve_name("_".join(parts), is_alias=False)
 
+  def _auto_union_name(self, union_type: types.UnionType) -> str:
+    """Derive a deterministic name for anonymous unions from their fields."""
+    parts = ["_union"]
+    for field_name, field_type in union_type.fields:
+      parts.append(field_name)
+      parts.append(self._sanitize_name(field_type.id))
+    return self._reserve_name("_".join(parts), is_alias=False)
+
   def _iter_type_children(self, t: types.ESIType) -> List[types.ESIType]:
     """Return child types in a stable order for traversal."""
     if isinstance(t, types.TypeAlias):
@@ -160,6 +168,8 @@ class CppTypePlanner:
     if isinstance(t, types.ChannelType):
       return [t.inner]
     if isinstance(t, types.StructType):
+      return [field_type for _, field_type in t.fields]
+    if isinstance(t, types.UnionType):
       return [field_type for _, field_type in t.fields]
     if isinstance(t, types.ArrayType):
       return [t.element_type]
@@ -192,16 +202,16 @@ class CppTypePlanner:
     self._visit_types(t, visited, visit)
 
   def _collect_structs(self, t: types.ESIType, visited: Set[str]) -> None:
-    """Scan for structs needing auto-names and reserve them (recursive)."""
+    """Scan for structs/unions needing auto-names and reserve them (recursive)."""
 
-    # Visit callback: assign auto-names to unnamed structs.
-    def visit(struct_type: types.ESIType) -> None:
-      if not isinstance(struct_type, types.StructType):
+    # Visit callback: assign auto-names to unnamed structs and unions.
+    def visit(current_type: types.ESIType) -> None:
+      if current_type in self.type_id_map:
         return
-      if struct_type in self.type_id_map:
-        return
-      struct_name = self._auto_struct_name(struct_type)
-      self.type_id_map[struct_type] = struct_name
+      if isinstance(current_type, types.StructType):
+        self.type_id_map[current_type] = self._auto_struct_name(current_type)
+      elif isinstance(current_type, types.UnionType):
+        self.type_id_map[current_type] = self._auto_union_name(current_type)
 
     self._visit_types(t, visited, visit)
 
@@ -210,15 +220,17 @@ class CppTypePlanner:
     """Collect types that require top-level declarations for a given type."""
     deps: Set[types.ESIType] = set()
 
-    # Visit callback: collect structs and non-struct aliases used by a type.
+    # Visit callback: collect structs, unions, and non-struct aliases used by
+    # a type.
     def visit(current: types.ESIType) -> None:
       if isinstance(current, types.TypeAlias):
         inner = current.inner_type
-        if inner is not None and isinstance(inner, types.StructType):
+        if inner is not None and isinstance(
+            inner, (types.StructType, types.UnionType)):
           deps.add(inner)
         else:
           deps.add(current)
-      elif isinstance(current, types.StructType):
+      elif isinstance(current, (types.StructType, types.UnionType)):
         deps.add(current)
 
     self._visit_types(wrapped, set(), visit)
@@ -228,7 +240,8 @@ class CppTypePlanner:
     """Collect and order types for deterministic emission."""
     emit_types: List[types.ESIType] = []
     for esi_type in self.type_id_map.keys():
-      if isinstance(esi_type, (types.StructType, types.TypeAlias)):
+      if isinstance(esi_type,
+                    (types.StructType, types.UnionType, types.TypeAlias)):
         emit_types.append(esi_type)
 
     # Prefer alias-reserved names first, then lexicographic for determinism.
@@ -257,7 +270,7 @@ class CppTypePlanner:
         inner = current.inner_type
         if inner is not None:
           deps.update(self._collect_decls_from_type(inner))
-      elif isinstance(current, types.StructType):
+      elif isinstance(current, (types.StructType, types.UnionType)):
         for _, field_type in current.fields:
           deps.update(self._collect_decls_from_type(field_type))
       for dep in sorted(deps, key=lambda dep: self.type_id_map[dep]):
@@ -325,7 +338,7 @@ class CppTypeEmitter:
 
   def _cpp_type(self, wrapped: types.ESIType) -> str:
     """Resolve an ESI type to its C++ identifier."""
-    if isinstance(wrapped, (types.TypeAlias, types.StructType)):
+    if isinstance(wrapped, (types.TypeAlias, types.StructType, types.UnionType)):
       return self.type_id_map[wrapped]
     if isinstance(wrapped, types.BundleType):
       return "void"
@@ -389,6 +402,53 @@ class CppTypeEmitter:
     )
     hdr.write("};\n\n")
 
+  def _field_byte_width(self, field_type: types.ESIType) -> int:
+    """Compute the byte width of a field type, rounding up to full bytes."""
+    return (field_type.bit_width + 7) // 8
+
+  def _emit_union(self, hdr: TextIO, union_type: types.UnionType) -> None:
+    """Emit a packed union declaration plus its type id string.
+
+    Fields narrower than the union width get wrapper structs with a ``_pad``
+    byte array so that the data sits at the MSB end (matching SV packed union
+    layout where padding occupies the LSBs / lower addresses).
+    """
+    union_name = self.type_id_map[union_type]
+    union_bytes = self._field_byte_width(union_type)
+    fields = list(union_type.fields)
+
+    # First pass: emit wrapper structs for fields that need padding.
+    wrapper_names: Dict[str, str] = {}
+    for field_name, field_type in fields:
+      field_bytes = self._field_byte_width(field_type)
+      pad_bytes = union_bytes - field_bytes
+      if pad_bytes > 0:
+        wrapper = f"{union_name}_{field_name}"
+        wrapper_names[field_name] = wrapper
+        hdr.write(f"struct {wrapper} {{\n")
+        hdr.write(f"  uint8_t _pad[{pad_bytes}];\n")
+        field_cpp = self._cpp_type(field_type)
+        hdr.write(f"  {field_cpp} {field_name};\n")
+        hdr.write("};\n")
+
+    # Second pass: emit the union itself.
+    union_field_decls: List[str] = []
+    for field_name, field_type in fields:
+      if field_name in wrapper_names:
+        union_field_decls.append(
+            f"{wrapper_names[field_name]} {field_name};")
+      else:
+        field_cpp = self._cpp_type(field_type)
+        union_field_decls.append(f"{field_cpp} {field_name};")
+    hdr.write(f"union {union_name} {{\n")
+    for decl in union_field_decls:
+      hdr.write(f"  {decl}\n")
+    hdr.write("\n")
+    hdr.write(
+        f"  static constexpr std::string_view _ESI_ID = \"{union_type.id}\";\n"
+    )
+    hdr.write("};\n\n")
+
   def _emit_alias(self, hdr: TextIO, alias_type: types.TypeAlias) -> None:
     """Emit a using alias when the alias targets a different C++ type."""
     inner_wrapped = alias_type.inner_type
@@ -428,6 +488,8 @@ class CppTypeEmitter:
         try:
           if isinstance(emit_type, types.StructType):
             self._emit_struct(hdr, emit_type)
+          elif isinstance(emit_type, types.UnionType):
+            self._emit_union(hdr, emit_type)
           elif isinstance(emit_type, types.TypeAlias):
             self._emit_alias(hdr, emit_type)
         except ValueError as e:

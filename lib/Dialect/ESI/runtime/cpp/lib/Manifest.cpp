@@ -575,6 +575,15 @@ StructType *parseStruct(const nlohmann::json &typeJson, Context &cache) {
   return new StructType(typeJson.at("id"), fields);
 }
 
+UnionType *parseUnion(const nlohmann::json &typeJson, Context &cache) {
+  assert(typeJson.at("mnemonic") == "union");
+  std::vector<std::pair<std::string, const Type *>> fields;
+  for (auto &fieldJson : typeJson["fields"])
+    fields.emplace_back(fieldJson.at("name"),
+                        parseType(fieldJson["type"], cache));
+  return new UnionType(typeJson.at("id"), fields);
+}
+
 ArrayType *parseArray(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "array");
   uint64_t size = typeJson.at("size");
@@ -640,6 +649,7 @@ const std::map<std::string_view, TypeParser> typeParsers = {
     {"int", parseInt},
     {"alias", parseTypeAlias},
     {"struct", parseStruct},
+    {"union", parseUnion},
     {"array", parseArray},
     {"window", parseWindow},
     {"list", parseList},
@@ -664,8 +674,6 @@ const Type *parseType(const nlohmann::json &typeJson, Context &cache) {
   if (f != typeParsers.end())
     t = f->second(typeJson, cache);
   else
-    // TODO: Add a UnionType class so union types are first-class rather than
-    // opaque.
     // Types we don't know about are opaque.
     t = new Type(id);
 
