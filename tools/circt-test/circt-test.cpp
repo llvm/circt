@@ -1302,6 +1302,11 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   llvm::sys::path::append(verilogPath, "design");
   firtoolOptions.setOutputFilename(verilogPath);
 
+  // Set verification mode to All if verifyPasses is enabled.
+  if (opts.verifyPasses)
+    firtoolOptions.setVerificationMode(
+        firtool::FirtoolOptions::VerificationMode::All);
+
   PassManager pm(context);
   pm.enableVerifier(opts.verifyPasses);
   if (failed(firtool::populateHWToSV(pm, firtoolOptions)))
