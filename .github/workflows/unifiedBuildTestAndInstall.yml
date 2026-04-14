@@ -146,6 +146,23 @@ jobs:
     permissions:
       contents: write # Upload assets to release.
     steps:
+# Canonicalize inputs (which could come from workflow_dispatch or workflow_call)
+# which may be slightly different.  E.g., change `true` to `ON` or `Release` to
+# `release`.  This guarantees that we get cache hits regardless of input casing.
+      - name: Canonicalize inputs
+        id: canonicalize
+        shell: bash
+        run: |
+          on_off() { case "${1,,}" in on|true) echo "ON" ;; *) echo "OFF" ;; esac; }
+          echo "cmake_build_type=${INPUT_BUILD_TYPE,,}" >> $GITHUB_OUTPUT
+          echo "cmake_c_compiler=${INPUT_COMPILER,,}" >> $GITHUB_OUTPUT
+          echo "build_shared_libs=$(on_off "${INPUT_SHARED}")" >> $GITHUB_OUTPUT
+          echo "llvm_enable_assertions=$(on_off "${INPUT_ASSERTIONS}")" >> $GITHUB_OUTPUT
+        env:
+          INPUT_BUILD_TYPE: ${{ inputs.cmake_build_type }}
+          INPUT_COMPILER: ${{ inputs.cmake_c_compiler }}
+          INPUT_SHARED: ${{ inputs.build_shared_libs }}
+          INPUT_ASSERTIONS: ${{ inputs.llvm_enable_assertions }}
       - name: Clone llvm/circt
         uses: actions/checkout@v3
         with:
@@ -166,7 +183,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install iverilog libsystemc-dev ninja-build z3
+          sudo apt-get install iverilog libsystemc-dev ninja-build valgrind z3
           echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON" >> "$GITHUB_OUTPUT"
       - name: Restore Verilator Cache (Linux)
         if: inputs.run_integration_tests && runner.os == 'Linux'
@@ -263,9 +280,7 @@ jobs:
           pip install pycapnp psutil pybind11==2.11.2 nanobind==2.9.2 numpy jinja2 cocotb~=1.9 cocotb_test~=0.2 click
 
           echo cmake="-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON" >> "$GITHUB_OUTPUT"
-# Setup Caching.  Canonicalize inputs (which could come from workflow_dispatch
-# or workflow_call) and may be slightly different.  E.g., change `true` to `ON`.
-# This will guarantee that we get cache hits.
+# Setup Caching.
 #
 # Caching has several constraints:
 #
@@ -276,24 +291,17 @@ jobs:
 # Taken together, disable caching on non-release builds.
 #
 # [1]: https://gitlab.kitware.com/cmake/cmake/-/issues/22529
-      - name: Canonicalize inputs
-        id: canonicalize
-        shell: bash
-        run: |
-          on_off() { case "${1,,}" in on|true) echo "ON" ;; *) echo "OFF" ;; esac; }
-          echo "build_shared_libs=$(on_off '${{ inputs.build_shared_libs }}')" >> $GITHUB_OUTPUT
-          echo "llvm_enable_assertions=$(on_off '${{ inputs.llvm_enable_assertions }}')" >> $GITHUB_OUTPUT
       - name: sccache
-        if: inputs.cmake_build_type == 'release'
+        if: steps.canonicalize.outputs.cmake_build_type == 'release'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ inputs.runner }}-${{ inputs.cmake_c_compiler }}-${{ inputs.cmake_build_type }}-${{ steps.canonicalize.outputs.build_shared_libs }}-${{ steps.canonicalize.outputs.llvm_enable_assertions }}
+          key: ${{ inputs.runner }}-${{ steps.canonicalize.outputs.cmake_c_compiler }}-${{ steps.canonicalize.outputs.cmake_build_type }}-${{ steps.canonicalize.outputs.build_shared_libs }}-${{ steps.canonicalize.outputs.llvm_enable_assertions }}
           max-size: 500M
           variant: sccache
           save: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
       - name: Configure sccache
         id: configure-sccache
-        if: inputs.cmake_build_type == 'release'
+        if: steps.canonicalize.outputs.cmake_build_type == 'release'
         shell: bash
         run:
           echo enable_sccache="-DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_OUTPUT
@@ -309,7 +317,7 @@ jobs:
           # Add Valgrind arg
           LLVM_LIT_ARGS="--show-skipped --show-unsupported --show-xfail -v"
           if [[ "${{ inputs.valgrind }}" == "true" ]]; then
-            LLVM_LIT_ARGS="$LLVM_LIT_ARGS --vg"
+            LLVM_LIT_ARGS="$LLVM_LIT_ARGS --vg --vg-arg=--track-origins=yes"
           fi
 
           # Set CMAKE_CXX_COMPILER based on CMAKE_C_COMPILER
