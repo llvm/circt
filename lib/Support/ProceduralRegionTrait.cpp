@@ -18,10 +18,8 @@ LogicalResult verifyNotInProceduralRegion(Operation *op) {
   while ((parent = parent->getParentOp())) {
     if (parent->hasTrait<NonProceduralRegion>())
       return success();
-    if (parent->hasTrait<ProceduralRegion>()) {
-      op->emitError() << op->getName() << " must not be in a procedural region";
-      return failure();
-    }
+    if (parent->hasTrait<ProceduralRegion>())
+      return op->emitOpError("must not be in a procedural region");
   }
   return success();
 }
@@ -31,11 +29,8 @@ LogicalResult verifyNotInNonProceduralRegion(Operation *op) {
   while ((parent = parent->getParentOp())) {
     if (parent->hasTrait<ProceduralRegion>())
       return success();
-    if (parent->hasTrait<NonProceduralRegion>()) {
-      op->emitError() << op->getName()
-                      << " must not be in a non-procedural region";
-      return failure();
-    }
+    if (parent->hasTrait<NonProceduralRegion>())
+      return op->emitOpError("must not be in a non-procedural region");
   }
   return success();
 }

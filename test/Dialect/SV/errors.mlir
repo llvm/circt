@@ -35,42 +35,42 @@ hw.module @Aliasing(inout %a : i42, inout %b : i42,
 // -----
 hw.module @Fwrite() {
   %fd = hw.constant 0x80000002 : i32
-  // expected-error @+1 {{sv.fwrite must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.fwrite' op must not be in a non-procedural region}}
   sv.fwrite %fd, "error"
 }
 
 // -----
 hw.module @Bpassign(in %arg0: i1) {
   %reg = sv.reg : !hw.inout<i1>
-  // expected-error @+1 {{sv.bpassign must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.bpassign' op must not be in a non-procedural region}}
   sv.bpassign %reg, %arg0 : i1
 }
 
 // -----
 hw.module @Passign(in %arg0: i1) {
   %reg = sv.reg : !hw.inout<i1>
-  // expected-error @+1 {{sv.passign must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.passign' op must not be in a non-procedural region}}
   sv.passign %reg, %arg0 : i1
 }
 
 // -----
 hw.module @ForcePassign(in %arg0: i1) {
   %reg = sv.reg : !hw.inout<i1>
-  // expected-error @+1 {{sv.force must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.force' op must not be in a non-procedural region}}
   sv.force %reg, %arg0 : i1
 }
 
 // -----
 hw.module @ReleasePassign(in %arg0: i1) {
   %reg = sv.reg : !hw.inout<i1>
-  // expected-error @+1 {{sv.release must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.release' op must not be in a non-procedural region}}
   sv.release %reg : !hw.inout<i1>
 }
 
 // -----
 hw.module @IfOp(in %arg0: i1) {
   %fd = hw.constant 0x80000002 : i32
-  // expected-error @+1 {{sv.if must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.if' op must not be in a non-procedural region}}
   sv.if %arg0 {
     sv.fwrite %fd, "Foo"
   }
@@ -78,38 +78,38 @@ hw.module @IfOp(in %arg0: i1) {
 
 // -----
 hw.module @FatalProcedural() {
-  // expected-error @+1 {{sv.fatal.procedural must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.fatal.procedural' op must not be in a non-procedural region}}
   sv.fatal.procedural 1
 }
 
 // -----
 hw.module @Finish() {
-  // expected-error @+1 {{sv.finish must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.finish' op must not be in a non-procedural region}}
   sv.finish 1
 }
 
 // -----
 hw.module @ErrorProcedural() {
-  // expected-error @+1 {{sv.error.procedural must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.error.procedural' op must not be in a non-procedural region}}
   sv.error.procedural
 }
 
 // -----
 hw.module @WarningProcedural() {
-  // expected-error @+1 {{sv.warning.procedural must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.warning.procedural' op must not be in a non-procedural region}}
   sv.warning.procedural
 }
 
 // -----
 hw.module @InfoProcedural() {
-  // expected-error @+1 {{sv.info.procedural must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.info.procedural' op must not be in a non-procedural region}}
   sv.info.procedural
 }
 
 // -----
 hw.module @ErrorInProcedural() {
   sv.initial {
-    // expected-error @+1 {{sv.error must not be in a procedural region}}
+    // expected-error @+1 {{'sv.error' op must not be in a procedural region}}
     sv.error
   }
 }
@@ -117,7 +117,7 @@ hw.module @ErrorInProcedural() {
 // -----
 hw.module @WarningInProcedural() {
   sv.initial {
-    // expected-error @+1 {{sv.warning must not be in a procedural region}}
+    // expected-error @+1 {{'sv.warning' op must not be in a procedural region}}
     sv.warning
   }
 }
@@ -125,7 +125,7 @@ hw.module @WarningInProcedural() {
 // -----
 hw.module @InfoInProcedural() {
   sv.initial {
-    // expected-error @+1 {{sv.info must not be in a procedural region}}
+    // expected-error @+1 {{'sv.info' op must not be in a procedural region}}
     sv.info
   }
 }
@@ -133,7 +133,7 @@ hw.module @InfoInProcedural() {
 // -----
 hw.module @CaseZ(in %arg8: i8) {
   %fd = hw.constant 0x80000002 : i32
-  // expected-error @+1 {{sv.case must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.case' op must not be in a non-procedural region}}
   sv.case %arg8 : i8
     case b0000001x: {
       sv.fwrite %fd, "x"
@@ -146,7 +146,7 @@ hw.module @CaseZ(in %arg8: i8) {
 // -----
 hw.module @Initial() {
   sv.initial {
-    // expected-error @+1 {{sv.initial must not be in a procedural region}}
+    // expected-error @+1 {{'sv.initial' op must not be in a procedural region}}
     sv.initial {}
   }
 }
@@ -154,7 +154,7 @@ hw.module @Initial() {
 // -----
 hw.module @IfDef() {
   sv.initial {
-    // expected-error @+1 {{sv.ifdef must not be in a procedural region}}
+    // expected-error @+1 {{'sv.ifdef' op must not be in a procedural region}}
     sv.ifdef @SYNTHESIS {}
   }
 }
@@ -162,7 +162,7 @@ hw.module @IfDef() {
 // -----
 hw.module @Always(in %arg0: i1) {
   sv.initial {
-    // expected-error @+1 {{sv.always must not be in a procedural region}}
+    // expected-error @+1 {{'sv.always' op must not be in a procedural region}}
     sv.always posedge %arg0 {}
   }
 }
@@ -170,7 +170,7 @@ hw.module @Always(in %arg0: i1) {
 // -----
 hw.module @AlwaysFF(in %arg0: i1) {
   sv.initial {
-    // expected-error @+1 {{sv.alwaysff must not be in a procedural region}}
+    // expected-error @+1 {{'sv.alwaysff' op must not be in a procedural region}}
     sv.alwaysff (posedge %arg0) {}
   }
 }
@@ -178,26 +178,26 @@ hw.module @AlwaysFF(in %arg0: i1) {
 // -----
 hw.module @Wire() {
   sv.initial {
-    // expected-error @+1 {{sv.wire must not be in a procedural region}}
+    // expected-error @+1 {{'sv.wire' op must not be in a procedural region}}
     %wire = sv.wire : !hw.inout<i1>
   }
 }
 
 // -----
 hw.module @Assert(in %arg0: i1) {
-  // expected-error @+1 {{sv.assert must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.assert' op must not be in a non-procedural region}}
   sv.assert %arg0, immediate
 }
 
 // -----
 hw.module @Assume(in %arg0: i1) {
-  // expected-error @+1 {{sv.assume must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.assume' op must not be in a non-procedural region}}
   sv.assume %arg0, immediate
 }
 
 // -----
 hw.module @Cover(in %arg0: i1) {
-  // expected-error @+1 {{sv.cover must not be in a non-procedural region}}
+  // expected-error @+1 {{'sv.cover' op must not be in a non-procedural region}}
   sv.cover %arg0, immediate
 }
 
