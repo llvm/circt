@@ -920,6 +920,15 @@ def PopulateInstanceChoiceSymbols : Pass<"firrtl-populate-instance-choice-symbol
   let dependentDialects = ["sv::SVDialect"];
 }
 
+def CheckInstanceChoice : Pass<"firrtl-check-instance-choice", "firrtl::CircuitOp"> {
+  let summary = "Check for nested instance choices";
+  let description = [{
+    This pass checks that there are no nested instance choices in the design.
+    A module that is instantiated via an instance choice operation cannot
+    contain any instance choice operations itself.
+  }];
+}
+
 def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
   let summary = "Infer and type check all firrtl domains";
   let description = [{
