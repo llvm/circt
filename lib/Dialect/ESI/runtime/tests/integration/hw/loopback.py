@@ -39,7 +39,7 @@ from pycde.types import (Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, SInt, TypeAlias, UInt)
 from pycde import esi
 
-from esitester import SerialCoordTranslator
+from esiaccel.esitester import SerialCoordTranslator
 
 SendI8 = Bundle([BundledChannel("send", ChannelDirection.FROM, Bits(8))])
 RecvI8 = Bundle([BundledChannel("recv", ChannelDirection.TO, Bits(8))])

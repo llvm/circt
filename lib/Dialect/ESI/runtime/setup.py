@@ -99,10 +99,16 @@ class CMakeBuild(build_py):
       cxx = os.getenv("CXX")
       if cxx is not None:
         cmake_args.append("-DCMAKE_CXX_COMPILER={}".format(cxx))
+      cxxflags = os.getenv("CXXFLAGS")
+      if cxxflags is not None:
+        cmake_args.append("-DCMAKE_CXX_FLAGS={}".format(cxxflags))
 
       cc = os.getenv("CC")
       if cc is not None:
         cmake_args.append("-DCMAKE_C_COMPILER={}".format(cc))
+      cflags = os.getenv("CFLAGS")
+      if cflags is not None:
+        cmake_args.append("-DCMAKE_C_FLAGS={}".format(cflags))
 
       if "VCPKG_INSTALLATION_ROOT" in os.environ:
         cmake_args.append(

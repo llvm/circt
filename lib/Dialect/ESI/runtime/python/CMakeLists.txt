@@ -6,6 +6,7 @@ set(ESIPythonRuntimeSources
   esiaccel/__init__.py
   esiaccel/accelerator.py
   esiaccel/codegen.py
+  esiaccel/esitester.py
   esiaccel/types.py
   esiaccel/utils.py
   esiaccel/cosim/questa.py
