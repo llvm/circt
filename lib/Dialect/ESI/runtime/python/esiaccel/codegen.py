@@ -338,7 +338,8 @@ class CppTypeEmitter:
 
   def _cpp_type(self, wrapped: types.ESIType) -> str:
     """Resolve an ESI type to its C++ identifier."""
-    if isinstance(wrapped, (types.TypeAlias, types.StructType, types.UnionType)):
+    if isinstance(wrapped,
+                  (types.TypeAlias, types.StructType, types.UnionType)):
       return self.type_id_map[wrapped]
     if isinstance(wrapped, types.BundleType):
       return "void"
@@ -435,8 +436,7 @@ class CppTypeEmitter:
     union_field_decls: List[str] = []
     for field_name, field_type in fields:
       if field_name in wrapper_names:
-        union_field_decls.append(
-            f"{wrapper_names[field_name]} {field_name};")
+        union_field_decls.append(f"{wrapper_names[field_name]} {field_name};")
       else:
         field_cpp = self._cpp_type(field_type)
         union_field_decls.append(f"{field_cpp} {field_name};")
@@ -445,8 +445,7 @@ class CppTypeEmitter:
       hdr.write(f"  {decl}\n")
     hdr.write("\n")
     hdr.write(
-        f"  static constexpr std::string_view _ESI_ID = \"{union_type.id}\";\n"
-    )
+        f"  static constexpr std::string_view _ESI_ID = \"{union_type.id}\";\n")
     hdr.write("};\n\n")
 
   def _emit_alias(self, hdr: TextIO, alias_type: types.TypeAlias) -> None:
