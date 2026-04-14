@@ -1,4 +1,4 @@
-// RUN: circt-opt %s  --pass-pipeline='builtin.module(any(synth-lower-word-to-bits))'| FileCheck %s
+// RUN: circt-opt %s --synth-lower-word-to-bits | FileCheck %s
 // CHECK: hw.module @Basic
 hw.module @Basic(in %a: i2, in %b: i2, out f: i2) {
   %0 = synth.aig.and_inv not %a, %b : i2

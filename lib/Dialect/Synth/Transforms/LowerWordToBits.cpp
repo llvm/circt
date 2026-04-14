@@ -18,12 +18,15 @@
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Support/LogicalResult.h"
+#include <array>
 
 #define DEBUG_TYPE "synth-lower-word-to-bits"
 
@@ -101,8 +104,8 @@ private:
   const llvm::KnownBits &computeKnownBits(Value value);
 
   /// Get or create a boolean constant (0 or 1).
-  /// Constants are cached to avoid duplication.
-  Value getBoolConstant(bool value);
+  /// Constants are cached by block to avoid duplication.
+  Value getBoolConstant(bool value, Block *block);
 
   //===--------------------------------------------------------------------===//
   // Helper Methods
@@ -127,8 +130,8 @@ private:
   /// Cache for computed known bits information
   llvm::MapVector<Value, llvm::KnownBits> knownBits;
 
-  /// Cached boolean constants (false at index 0, true at index 1)
-  std::array<Value, 2> constants;
+  /// Cached boolean constants by block (false at index 0, true at index 1)
+  llvm::DenseMap<Block *, std::array<Value, 2>> constantsByBlock;
 
   /// Reference to the top-level operation being processed
   Operation *topOp;
@@ -208,7 +211,7 @@ Value BitBlaster::extractBit(Value value, size_t index) {
       })
       .Case<hw::ConstantOp>([&](hw::ConstantOp op) {
         auto value = op.getValue();
-        return getBoolConstant(value[index]);
+        return getBoolConstant(value[index], op->getBlock());
       })
       .Default([&](auto op) { return lowerValueToBits(value)[index]; });
 }
@@ -304,14 +307,14 @@ LogicalResult BitBlaster::run() {
   return success();
 }
 
-Value BitBlaster::getBoolConstant(bool value) {
-  if (!constants[value]) {
-    auto &entryBlock = topOp->getRegion(0).front();
-    auto builder = OpBuilder::atBlockBegin(&entryBlock);
-    constants[value] = hw::ConstantOp::create(builder, builder.getUnknownLoc(),
-                                              builder.getI1Type(), value);
+Value BitBlaster::getBoolConstant(bool value, Block *block) {
+  auto &blockConstants = constantsByBlock[block];
+  if (!blockConstants[value]) {
+    auto builder = OpBuilder::atBlockBegin(block);
+    blockConstants[value] = hw::ConstantOp::create(
+        builder, builder.getUnknownLoc(), builder.getI1Type(), value);
   }
-  return constants[value];
+  return blockConstants[value];
 }
 
 ArrayRef<Value>
@@ -364,7 +367,7 @@ ArrayRef<Value> BitBlaster::lowerOp(
     operands.reserve(op->getNumOperands());
     if (knownMask[i]) {
       // Use known constant value
-      results.push_back(getBoolConstant(known.One[i]));
+      results.push_back(getBoolConstant(known.One[i], op->getBlock()));
       continue;
     }
 
