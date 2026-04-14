@@ -55,3 +55,11 @@ hw.module @icmp_signed(in %lhs: i4, in %rhs: i4, out out_ugt: i1, out out_uge: i
   %ule = comb.icmp sle %lhs, %rhs {synth.test.arch = "BRENT-KUNG"} : i4
   hw.output %ugt, %uge, %ult, %ule : i1, i1, i1, i1
 }
+
+// RUN: circt-lec %t.mlir %s -c1=icmp_eq_ne -c2=icmp_eq_ne --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ICMP_EQ_NE
+// COMB_ICMP_EQ_NE: c1 == c2
+hw.module @icmp_eq_ne(in %lhs: i3, in %rhs: i3, out out_eq: i1, out out_ne: i1) {
+  %eq = comb.icmp eq %lhs, %rhs : i3
+  %ne = comb.icmp ne %lhs, %rhs : i3
+  hw.output %eq, %ne : i1, i1
+}
