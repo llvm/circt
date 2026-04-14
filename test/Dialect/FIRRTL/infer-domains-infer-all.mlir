@@ -736,7 +736,7 @@ firrtl.circuit "DriveWireWithAnonDomain" {
 firrtl.circuit "DriveWireWithInputDomain" {
   firrtl.domain @ClockDomain
 
-  // firrtl.module @DriveWireWithInputDomain(in %ClockDomain: !firrtl.domain<@ClockDomain()>, in %i: !firrtl.uint<1> domains [%ClockDomain])
+  // CHECK-LABEL: firrtl.module @DriveWireWithInputDomain(in %ClockDomain: !firrtl.domain<@ClockDomain()>, in %i: !firrtl.uint<1> domains [%ClockDomain])
   firrtl.module @DriveWireWithInputDomain(in %i: !firrtl.uint<1>) {
     %w = firrtl.wire : !firrtl.domain<@ClockDomain()>
     // CHECK: firrtl.domain.define %w, %ClockDomain : !firrtl.domain<@ClockDomain()>
