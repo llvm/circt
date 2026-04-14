@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Naming.h"
 #include "circt/Support/SATSolver.h"
@@ -248,9 +249,11 @@ int64_t AndInverterOp::getLogicDepthCost() {
   return llvm::Log2_64_Ceil(getNumOperands());
 }
 
-uint64_t AndInverterOp::getLogicAreaCost() {
-  return static_cast<uint64_t>(getNumOperands() - 1) *
-         getType().getIntOrFloatBitWidth();
+std::optional<uint64_t> AndInverterOp::getLogicAreaCost() {
+  int64_t bitWidth = hw::getBitWidth(getType());
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<uint64_t>(getNumOperands() - 1) * bitWidth;
 }
 
 void AndInverterOp::emitCNF(

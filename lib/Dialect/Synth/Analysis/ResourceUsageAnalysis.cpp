@@ -50,8 +50,10 @@ static bool accumulateResourceCounts(Operation *op,
     return false;
   return TypeSwitch<Operation *, bool>(op)
       .Case<BooleanLogicOpInterface>([&](auto logicOp) {
-        counts[op->getName().getStringRef()] += logicOp.getLogicAreaCost();
-        return true;
+        if (auto areaCost = logicOp.getLogicAreaCost()) {
+          counts[op->getName().getStringRef()] += *areaCost;
+          return true;
+        }
       })
       // Variadic comb logic operations.
       // Gate count = (num_inputs - 1) * bitwidth

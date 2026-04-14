@@ -45,7 +45,6 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
         return {concreteOp->getOperand(index), concreteOp.isInverted(index)};
       }]
     >,
-
     InterfaceMethod<[{
         Get the logical input value at the specified index.
       }],
@@ -66,7 +65,8 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
     InterfaceMethod<[{
         Get the inversion flags for all logical inputs.
       }],
-      "::llvm::ArrayRef<bool>", "getInverted", (ins)>,
+      "::llvm::ArrayRef<bool>", "getInverted", (ins)
+    >,
     InterfaceMethod<[{
         Set the inversion flags for all logical inputs.
       }],
@@ -110,14 +110,18 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
         Return the abstract logic depth cost contributed by this operation.
         This is the per-node delay used by analyses such as longest path.
       }],
-      "int64_t", "getLogicDepthCost", (ins)
+      "int64_t", "getLogicDepthCost", (ins), "",
+      [{
+        return 1;
+      }]
     >,
     InterfaceMethod<[{
         Return the abstract logic area cost contributed by this operation.
         This is the local resource cost used by analyses such as resource
-        usage.
+        usage. Implementations may return `std::nullopt` to indicate that
+        the area cost is unknown.
       }],
-      "uint64_t", "getLogicAreaCost", (ins)
+      "std::optional<uint64_t>", "getLogicAreaCost", (ins)
     >,
     InterfaceMethod<[{
         Emit CNF clauses encoding `outVar <=> op(inputVars...)`.
