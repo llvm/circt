@@ -15,6 +15,7 @@ include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Sim/SimDialect.td"
 include "circt/Dialect/Sim/SimOpInterfaces.td"
 include "circt/Dialect/Sim/SimTypes.td"
+include "circt/Support/ProceduralRegionTrait.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
@@ -546,7 +547,7 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   }];
 }
 
-def PrintFormattedOp : SimOp<"print"> {
+def PrintFormattedOp : SimOp<"print", [NonProceduralOp]> {
   let summary = "Print a formatted string on a given clock and condition";
   let description = [{
     Evaluate a format string and print it to the simulation console on the
@@ -577,7 +578,7 @@ def PrintFormattedOp : SimOp<"print"> {
   let assemblyFormat = "$input `on` $clock `if` $condition (`to` $stream^)? attr-dict";
 }
 
-def PrintFormattedProcOp : SimOp<"proc.print"> {
+def PrintFormattedProcOp : SimOp<"proc.print", [ProceduralOp]> {
   let summary = "Print a formatted string within a procedural region";
   let description = [{
     Evaluate a format string and print it to the simulation console.
@@ -595,7 +596,6 @@ def PrintFormattedProcOp : SimOp<"proc.print"> {
       build($_builder, $_state, input, mlir::Value());
     }]>
   ];
-  let hasVerifier = true;
   let hasCanonicalizeMethod = true;
   let assemblyFormat = "$input (`to` $stream^)? attr-dict";
 }
@@ -1026,7 +1026,7 @@ def QueueConcatOp : SimOp<"queue.concat", [Pure]> {
 // Simulation Control
 //===----------------------------------------------------------------------===//
 
-def ClockedTerminateOp : SimOp<"clocked_terminate"> {
+def ClockedTerminateOp : SimOp<"clocked_terminate", [NonProceduralOp]> {
   let summary = "Terminate the simulation";
   let description = [{
     Implements the semantics of `sim.terminate` if the given condition is true
@@ -1045,7 +1045,7 @@ def ClockedTerminateOp : SimOp<"clocked_terminate"> {
   }];
 }
 
-def ClockedPauseOp : SimOp<"clocked_pause"> {
+def ClockedPauseOp : SimOp<"clocked_pause", [NonProceduralOp]> {
   let summary = "Pause the simulation";
   let description = [{
     Implements the semantics of `sim.pause` if the given condition is true on
@@ -1062,7 +1062,7 @@ def ClockedPauseOp : SimOp<"clocked_pause"> {
   }];
 }
 
-def TerminateOp : SimOp<"terminate"> {
+def TerminateOp : SimOp<"terminate", [ProceduralOp]> {
   let summary = "Terminate the simulation";
   let description = [{
     Terminate the simulation with a success or failure exit code. Depending on
@@ -1092,7 +1092,7 @@ def TerminateOp : SimOp<"terminate"> {
   }];
 }
 
-def PauseOp : SimOp<"pause"> {
+def PauseOp : SimOp<"pause", [ProceduralOp]> {
   let summary = "Pause the simulation";
   let description = [{
     Interrupt the simulation and give control back to the user in case of an

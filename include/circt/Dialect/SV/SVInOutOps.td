@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Support/ProceduralRegionTrait.td"
 include "circt/Types.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 

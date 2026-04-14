@@ -11,7 +11,23 @@
 
 include "mlir/IR/OpBase.td"
 
+// Note:  The procedural and non-procedural traits are intended to be mutually
+//        exclusive. If an operation or region is not strictly procedural or
+//        non-procedural, it should carry neither trait.
+
 def ProceduralRegion : NativeOpTrait<"ProceduralRegion"> {
+  let cppNamespace = "::circt";
+}
+
+def NonProceduralRegion : NativeOpTrait<"NonProceduralRegion"> {
+  let cppNamespace = "::circt";
+}
+
+def ProceduralOp : NativeOpTrait<"ProceduralOp"> {
+  let cppNamespace = "::circt";
+}
+
+def NonProceduralOp : NativeOpTrait<"NonProceduralOp"> {
   let cppNamespace = "::circt";
 }
 

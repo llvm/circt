@@ -166,32 +166,6 @@ struct CaseInfo {
 // Other Supporting Logic
 //===----------------------------------------------------------------------===//
 
-/// Return true if the specified operation is in a procedural region.
-LogicalResult verifyInProceduralRegion(Operation *op);
-/// Return true if the specified operation is not in a procedural region.
-LogicalResult verifyInNonProceduralRegion(Operation *op);
-
-/// This class verifies that the specified op is located in a procedural region.
-template <typename ConcreteType>
-class ProceduralOp
-    : public mlir::OpTrait::TraitBase<ConcreteType, ProceduralOp> {
-public:
-  static LogicalResult verifyTrait(Operation *op) {
-    return verifyInProceduralRegion(op);
-  }
-};
-
-/// This class verifies that the specified op is not located in a procedural
-/// region.
-template <typename ConcreteType>
-class NonProceduralOp
-    : public mlir::OpTrait::TraitBase<ConcreteType, NonProceduralOp> {
-public:
-  static LogicalResult verifyTrait(Operation *op) {
-    return verifyInNonProceduralRegion(op);
-  }
-};
-
 /// This class provides a verifier for ops that are expecting their parent
 /// to be one of the given parent ops
 template <typename ConcreteType>

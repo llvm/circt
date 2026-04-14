@@ -18,6 +18,7 @@ include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Support/ProceduralRegionTrait.td"
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -48,6 +49,7 @@ def OrderedOutputOp : SVOp<"ordered", [SingleBlock, NoTerminator, NoRegionArgume
 def IfDefOp : SVOp<"ifdef", [
     NoRegionArguments,
     NonProceduralOp,
+    NonProceduralRegion,
     GraphRegionNoTerminator,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {

@@ -26,20 +26,63 @@ hw.module @fmt_infinite_concat_canonicalize(in %val : i8, out res: !sim.fstring)
 
 // -----
 
-hw.module @proc_print_hw() {
+hw.module @procedural_ops_print() {
   %lit = sim.fmt.literal "Nope"
-  // expected-error @below {{must be within a procedural region.}}
+  // expected-error @below {{must not be in a non-procedural region}}
   sim.proc.print %lit
 }
 
 // -----
 
-sv.macro.decl @SOMEMACRO
-hw.module @proc_print_sv() {
-  %lit = sim.fmt.literal "Nope"
-  sv.ifdef  @SOMEMACRO {
-    // expected-error @below {{must be within a procedural region.}}
-    sim.proc.print %lit
+hw.module @procedural_ops_pause() {
+  // expected-error @below {{must not be in a non-procedural region}}
+  sim.pause quiet
+}
+
+// -----
+
+hw.module @procedural_ops_terminate() {
+  // expected-error @below {{must not be in a non-procedural region}}
+  sim.terminate success, quiet
+}
+
+// -----
+
+hw.module @nonprocedural_ops_print(in %trigger : i1, in %clock : !seq.clock, in %cond : i1) {
+  hw.triggered posedge %trigger {
+    %lit = sim.fmt.literal "Nope"
+    // expected-error @below {{must not be in a procedural region}}
+    sim.print %lit on %clock if %cond
+  }
+}
+
+// -----
+
+hw.module @nonprocedural_ops_pause(in %trigger : i1, in %clock : !seq.clock, in %cond : i1) {
+  hw.triggered posedge %trigger {
+    // expected-error @below {{must not be in a procedural region}}
+    sim.clocked_pause %clock, %cond, quiet
+  }
+}
+
+// -----
+
+hw.module @nonprocedural_ops_terminate(in %trigger : i1, in %clock : !seq.clock, in %cond : i1) {
+  hw.triggered posedge %trigger {
+    // expected-error @below {{must not be in a procedural region}}
+    sim.clocked_terminate %clock, %cond, success, quiet
+  }
+}
+
+// -----
+
+hw.module @nonproc_print_scf_if(in %trigger : i1, in %clock : !seq.clock, in %cond : i1) {
+  hw.triggered posedge %trigger {
+    %lit = sim.fmt.literal "Nope"
+    scf.if %cond {
+      // expected-error @below {{must not be in a procedural region}}
+      sim.print %lit on %clock if %cond
+    }
   }
 }
 

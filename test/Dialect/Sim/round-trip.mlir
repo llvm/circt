@@ -100,6 +100,7 @@ func.func @DynamicStrings(%idx: i32) {
   return
 }
 
+// CHECK-LABEL: hw.module @PrintFormattedWithStream
 hw.module @PrintFormattedWithStream(in %clock: !seq.clock, in %condition: i1, in %idx: i32) {
   // CHECK: %[[FMT:.*]] = sim.fmt.literal "literal string"
   %str = sim.fmt.literal "literal string"
@@ -117,4 +118,27 @@ hw.module @PrintFormattedWithStream(in %clock: !seq.clock, in %condition: i1, in
   sim.print %str on %clock if %condition
   // CHECK: sim.print %[[FMT]] on %clock if %condition to %[[FILE]]
   sim.print %str on %clock if %condition to %file
+}
+
+// CHECK-LABEL: hw.module @ProceduralPrint
+hw.module @ProceduralPrint(in %trigger: i1, in %condition: i1) {
+// CHECK-NEXT: hw.triggered
+  hw.triggered posedge %trigger (%condition) : i1 {
+  ^bb0(%c : i1):
+    // CHECK-COUNT-3: sim.fmt.literal
+    %foo = sim.fmt.literal "foo"
+    %bar = sim.fmt.literal "bar"
+    %baz = sim.fmt.literal "baz"
+    // CHECK-NEXT: sim.proc.print
+    sim.proc.print %foo
+    // CHECK-NEXT: scf.if
+    scf.if %c {
+      // CHECK: sim.proc.print
+      sim.proc.print %bar
+      // CHECK: else
+    } else {
+      // CHECK: sim.proc.print
+      sim.proc.print %baz
+    }
+  }
 }
