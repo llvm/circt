@@ -419,6 +419,72 @@ class ArrayType(ESIType):
 __esi_mapping[cpp.ArrayType] = ArrayType
 
 
+class UnionType(ESIType):
+
+  def __init__(self, id: str, fields: List[Tuple[str, "ESIType"]]):
+    cpp_fields = [(name, field_type.cpp_type) for name, field_type in fields]
+    self._init_from_cpp(cpp.UnionType(id, cpp_fields))
+
+  def _init_from_cpp(self, cpp_type: cpp.UnionType):
+    """Initialize instance attributes from a C++ type object."""
+    super()._init_from_cpp(cpp_type)
+    self.fields = [(name, _get_esi_type(ty)) for (name, ty) in cpp_type.fields]
+
+  @property
+  def bit_width(self) -> int:
+    widths = [ty.bit_width for (_, ty) in self.fields]
+    if any([w < 0 for w in widths]):
+      return -1
+    return max(widths) if widths else 0
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    if not isinstance(obj, dict):
+      return (False, "must be a dict with exactly one field")
+    if len(obj) != 1:
+      return (False, f"union must have exactly 1 active field, got {len(obj)}")
+    field_names = {name for name, _ in self.fields}
+    active_name = next(iter(obj))
+    if active_name not in field_names:
+      return (False, f"unknown field '{active_name}' in union")
+    for (fname, ftype) in self.fields:
+      if fname == active_name:
+        return ftype.is_valid(obj[active_name])
+    return (False, f"unknown field '{active_name}' in union")
+
+  def serialize(self, obj) -> bytearray:
+    if not isinstance(obj, dict) or len(obj) != 1:
+      raise ValueError("union value must be a dict with exactly one field")
+    active_name = next(iter(obj))
+    for (fname, ftype) in self.fields:
+      if fname == active_name:
+        field_bytes = ftype.serialize(obj[active_name])
+        # In a packed union, padding is at LSB (beginning of byte stream)
+        # and field data is at MSB (end of byte stream).
+        union_bytes = (self.bit_width + 7) // 8
+        pad_len = union_bytes - len(field_bytes)
+        if pad_len > 0:
+          return bytearray(pad_len) + field_bytes
+        return field_bytes
+    raise ValueError(f"unknown field '{active_name}' in union")
+
+  def deserialize(self, data: bytearray) -> Tuple[Dict[str, Any], bytearray]:
+    union_bytes = (self.bit_width + 7) // 8
+    union_data = data[:union_bytes]
+    remaining = data[union_bytes:]
+    result = {}
+    for (fname, ftype) in self.fields:
+      # In a packed union, field data is at MSB (end of byte stream).
+      # Skip the LSB padding to reach each field's data.
+      field_bytes = (ftype.bit_width + 7) // 8
+      pad_len = union_bytes - field_bytes
+      (fval, _) = ftype.deserialize(bytearray(union_data[pad_len:]))
+      result[fname] = fval
+    return (result, remaining)
+
+
+__esi_mapping[cpp.UnionType] = UnionType
+
+
 class TypeAlias(ESIType):
 
   def __init__(self, id: str, name: str, inner_type: "ESIType"):

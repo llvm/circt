@@ -348,6 +348,37 @@ private:
   std::vector<Frame> frames;
 };
 
+/// Unions are a tagged collection of fields where only one field is active
+/// at a time. All fields share the same bit range (the width is the max of
+/// all field widths, matching SystemVerilog packed-union semantics).
+class UnionType : public Type {
+public:
+  using FieldVector = std::vector<std::pair<std::string, const Type *>>;
+  using Type::deserialize;
+
+  UnionType(const ID &id, const FieldVector &fields)
+      : Type(id), fields(fields) {}
+
+  const FieldVector &getFields() const { return fields; }
+  std::ptrdiff_t getBitWidth() const override {
+    std::ptrdiff_t maxWidth = 0;
+    for (auto [name, ty] : getFields()) {
+      std::ptrdiff_t fieldWidth = ty->getBitWidth();
+      if (fieldWidth < 0)
+        return -1;
+      maxWidth = std::max(maxWidth, fieldWidth);
+    }
+    return maxWidth;
+  }
+
+  void ensureValid(const std::any &obj) const override;
+  MutableBitVector serialize(const std::any &obj) const override;
+  std::any deserialize(BitVector &data) const override;
+
+private:
+  FieldVector fields;
+};
+
 /// Lists represent variable-length sequences of elements of a single type.
 /// Unlike arrays which have a fixed size, lists can have any length.
 class ListType : public Type {

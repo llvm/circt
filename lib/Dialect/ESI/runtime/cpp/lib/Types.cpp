@@ -85,6 +85,23 @@ static void dumpType(std::ostream &os, const esi::Type *type, int level = 0,
     os << "window[";
     dumpType(os, windowType->getIntoType(), level + 1, oneLine);
     os << "]";
+  } else if (auto *unionType = dynamic_cast<const esi::UnionType *>(type)) {
+    os << "union {";
+    const auto &fields = unionType->getFields();
+    for (size_t i = 0; i < fields.size(); ++i) {
+      if (!oneLine)
+        os << std::endl << std::string(level + 2, ' ');
+      else if (i > 0)
+        os << " ";
+      const auto &[name, fieldType] = fields[i];
+      os << name << ": ";
+      dumpType(os, fieldType, level + 1, oneLine);
+      if (i < fields.size() - 1)
+        os << ",";
+    }
+    if (!oneLine)
+      os << std::endl << std::string(level, ' ');
+    os << "}";
   } else if (auto *listType = dynamic_cast<const esi::ListType *>(type)) {
     os << "list<";
     dumpType(os, listType->getElementType(), level + 1, oneLine);
@@ -428,6 +445,85 @@ std::any ArrayType::deserialize(BitVector &data) const {
   }
   if (isReverse())
     std::reverse(result.begin(), result.end());
+  return std::any(result);
+}
+
+void UnionType::ensureValid(const std::any &obj) const {
+  try {
+    auto unionData = std::any_cast<std::map<std::string, std::any>>(obj);
+
+    if (unionData.size() != 1) {
+      throw std::runtime_error(std::format(
+          "union must have exactly 1 active field, got {}", unionData.size()));
+    }
+
+    auto &[activeName, activeValue] = *unionData.begin();
+    for (const auto &[fieldName, fieldType] : fields) {
+      if (fieldName == activeName) {
+        try {
+          fieldType->ensureValid(activeValue);
+        } catch (const std::runtime_error &e) {
+          throw std::runtime_error(
+              std::format("invalid field '{}': {}", activeName, e.what()));
+        }
+        return;
+      }
+    }
+    throw std::runtime_error(
+        std::format("unknown field '{}' in union", activeName));
+  } catch (const std::bad_any_cast &) {
+    throw std::runtime_error(
+        std::format("must be std::map<std::string, std::any>, but got {}",
+                    obj.type().name()));
+  }
+}
+
+MutableBitVector UnionType::serialize(const std::any &obj) const {
+  ensureValid(obj);
+  auto unionData = std::any_cast<std::map<std::string, std::any>>(obj);
+  auto &[activeName, activeValue] = *unionData.begin();
+
+  const Type *activeType = nullptr;
+  for (const auto &[fieldName, fieldType] : fields) {
+    if (fieldName == activeName) {
+      activeType = fieldType;
+      break;
+    }
+  }
+
+  MutableBitVector fieldBits = activeType->serialize(activeValue);
+  std::ptrdiff_t unionWidth = getBitWidth();
+  // In a packed union, field data occupies the MSBs and padding (zeros)
+  // occupies the LSBs. Shift field data up by the padding amount.
+  if (fieldBits.width() < static_cast<uint64_t>(unionWidth)) {
+    uint64_t padBits = unionWidth - fieldBits.width();
+    fieldBits <<= padBits;
+    return fieldBits;
+  }
+  return fieldBits;
+}
+
+std::any UnionType::deserialize(BitVector &data) const {
+  // Deserialize all fields from the same bit range, since we don't know
+  // which field is active in a packed union.
+  std::ptrdiff_t unionWidth = getBitWidth();
+  if (data.width() < static_cast<uint64_t>(unionWidth))
+    throw std::runtime_error(std::format("Insufficient data for union type. "
+                                         " Expected {} bits, got {} bits",
+                                         unionWidth, data.width()));
+
+  BitVector unionBits = data.slice(0, unionWidth);
+  std::map<std::string, std::any> result;
+  for (const auto &[fieldName, fieldType] : fields) {
+    // In a packed union, field data is at the MSBs. Skip the LSB padding
+    // to reach each field's data.
+    std::ptrdiff_t fieldWidth = fieldType->getBitWidth();
+    uint64_t padBits = unionWidth - fieldWidth;
+    BitVector fieldData(unionBits);
+    fieldData >>= padBits;
+    result[fieldName] = fieldType->deserialize(fieldData);
+  }
+  data >>= unionWidth;
   return std::any(result);
 }
 } // namespace esi
