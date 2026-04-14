@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --synth-structural-hash | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(any(synth-structural-hash))' | FileCheck %s
 
 // CHECK-LABEL: hw.module @test_structural_hash
 hw.module @test_structural_hash(in %a: i2, in %b: i2, in %c: i2, out out1: i2,
@@ -42,4 +42,13 @@ hw.module @topo_sort(in %a: i2, in %b: i2, out out1: i2, out out2: i2, out out3:
 hw.module @port_removal(in %a: i2) {
   // CHECK-NEXT: hw.output
   %0 = synth.aig.and_inv not %a : i2
+}
+
+// CHECK-LABEL: func.func @test_func
+func.func @test_func(%a: i2, %b: i2) -> (i2, i2) {
+  // CHECK-NEXT: %[[VAL0:.+]] = synth.aig.and_inv %arg0, %arg1 : i2
+  // CHECK-NEXT: return %[[VAL0]], %[[VAL0]]
+  %0 = synth.aig.and_inv %a, %b : i2
+  %1 = synth.aig.and_inv %b, %a : i2
+  return %0, %1 : i2, i2
 }
