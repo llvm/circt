@@ -16,6 +16,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/InstanceGraph.h"
@@ -48,15 +49,21 @@ static bool accumulateResourceCounts(Operation *op,
   if (op->getNumResults() != 1 || !op->getResult(0).getType().isInteger())
     return false;
   return TypeSwitch<Operation *, bool>(op)
-      // Variadic logic operations (AND, OR, XOR, AIG).
+      .Case<BooleanLogicOpInterface>([&](auto logicOp) {
+        if (auto areaCost = logicOp.getLogicAreaCost()) {
+          counts[op->getName().getStringRef()] += *areaCost;
+          return true;
+        }
+        return false;
+      })
+      // Variadic comb logic operations.
       // Gate count = (num_inputs - 1) * bitwidth
-      .Case<synth::aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp>(
-          [&](auto logicOp) {
-            counts[logicOp->getName().getStringRef()] +=
-                (logicOp.getNumOperands() - 1) *
-                logicOp.getType().getIntOrFloatBitWidth();
-            return true;
-          })
+      .Case<comb::AndOp, comb::OrOp, comb::XorOp>([&](auto logicOp) {
+        counts[logicOp->getName().getStringRef()] +=
+            static_cast<uint64_t>(logicOp.getNumOperands() - 1) *
+            logicOp.getType().getIntOrFloatBitWidth();
+        return true;
+      })
       // Truth tables (LUTs) - count both the total number of truth tables and
       // the per-input breakdown.
       .Case<comb::TruthTableOp>([&](auto op) {

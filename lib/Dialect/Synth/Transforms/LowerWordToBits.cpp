@@ -84,8 +84,7 @@ private:
   /// Lower a multi-bit value to individual bits.
   /// This is the main entry point for bit-blasting a value.
   ArrayRef<Value> lowerValueToBits(Value value);
-  template <typename OpTy>
-  ArrayRef<Value> lowerInvertibleOperations(OpTy op);
+  ArrayRef<Value> lowerBooleanLogicOperation(BooleanLogicOpInterface op);
   template <typename OpTy>
   ArrayRef<Value> lowerCombLogicOperations(OpTy op);
   ArrayRef<Value> lowerCombMux(comb::MuxOp op);
@@ -155,20 +154,12 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
     return insertKnownBits(value, llvm::KnownBits(width));
 
   llvm::KnownBits result(width);
-  if (auto aig = dyn_cast<aig::AndInverterOp>(op)) {
-    // Initialize to all ones for AND operation
-    result.One = APInt::getAllOnes(width);
-    result.Zero = APInt::getZero(width);
-
-    for (auto [operand, inverted] :
-         llvm::zip(aig.getInputs(), aig.getInverted())) {
-      auto operandKnownBits = computeKnownBits(operand);
-      if (inverted)
-        // Complement the known bits by swapping Zero and One
-        std::swap(operandKnownBits.Zero, operandKnownBits.One);
-      result &= operandKnownBits;
-    }
-  } else if (auto choice = dyn_cast<ChoiceOp>(op)) {
+  if (auto logicOp = dyn_cast<BooleanLogicOpInterface>(op))
+    result =
+        logicOp.computeKnownBits([&](unsigned i) -> const llvm::KnownBits & {
+          return computeKnownBits(logicOp.getInput(i));
+        });
+  else if (auto choice = dyn_cast<ChoiceOp>(op)) {
     result = computeKnownBits(choice.getInputs().front());
     for (auto input : choice.getInputs().drop_front()) {
       auto known = computeKnownBits(input);
@@ -248,8 +239,8 @@ ArrayRef<Value> BitBlaster::lowerValueToBits(Value value) {
         };
         return lowerOp(op, createOp);
       })
-      .Case<aig::AndInverterOp>(
-          [&](auto op) { return lowerInvertibleOperations(op); })
+      .Case<BooleanLogicOpInterface>(
+          [&](auto op) { return lowerBooleanLogicOperation(op); })
       .Case<comb::AndOp, comb::OrOp, comb::XorOp>(
           [&](auto op) { return lowerCombLogicOperations(op); })
       .Case<comb::MuxOp>([&](comb::MuxOp op) { return lowerCombMux(op); })
@@ -323,12 +314,12 @@ Value BitBlaster::getBoolConstant(bool value) {
   return constants[value];
 }
 
-template <typename OpTy>
-ArrayRef<Value> BitBlaster::lowerInvertibleOperations(OpTy op) {
+ArrayRef<Value>
+BitBlaster::lowerBooleanLogicOperation(BooleanLogicOpInterface op) {
   auto createOp = [&](OpBuilder &builder, ValueRange operands) {
-    return builder.createOrFold<OpTy>(op.getLoc(), operands, op.getInverted());
+    return op.cloneWithSameInversion(builder, operands);
   };
-  return lowerOp(op, createOp);
+  return lowerOp(op.getOperation(), createOp);
 }
 
 template <typename OpTy>

@@ -23,7 +23,14 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 class SynthOp<string mnemonic, list<Trait> traits = []> :
     Op<Synth_Dialect, mnemonic, traits>;
 
-def AndInverterOp : SynthOp<"aig.and_inv", [SameOperandsAndResultType, Pure]> {
+def AndInverterOp :
+  SynthOp<"aig.and_inv",
+          [SameOperandsAndResultType, Pure,
+           DeclareOpInterfaceMethods<BooleanLogicOpInterface,
+                                     ["areInputsPermutationInvariant",
+                                      "getLogicDepthCost",
+                                      "getLogicAreaCost",
+                                      "emitCNF"]>]> {
   let summary = "AIG dialect AND operation";
   let description = [{
     The `synth.aig.and_inv` operation represents an And-Inverter in the AIG dialect.
@@ -74,15 +81,6 @@ def AndInverterOp : SynthOp<"aig.and_inv", [SameOperandsAndResultType, Pure]> {
       return build($_builder, $_state, {lhs, rhs}, inverted);
     }]>];
 
-  let extraClassDeclaration = [{
-    // Evaluate the operation with the given input values.
-    APInt evaluate(ArrayRef<APInt> inputs);
-
-    // Check if the input is inverted.
-    bool isInverted(size_t idx) {
-      return getInverted()[idx];
-    }
-  }];
   let hasFolder = 1;
   let hasCanonicalizeMethod = 1;
   let cppNamespace = "::circt::synth::aig";

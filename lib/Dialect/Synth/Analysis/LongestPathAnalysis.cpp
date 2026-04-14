@@ -1035,8 +1035,9 @@ LogicalResult LocalVisitor::visit(comb::ConcatOp op, size_t bitPos,
 
 LogicalResult LocalVisitor::addLogicOp(Operation *op, size_t bitPos,
                                        SmallVectorImpl<OpenPath> &results) {
-  auto size = op->getNumOperands();
-  auto cost = llvm::Log2_64_Ceil(size);
+  auto cost = isa<BooleanLogicOpInterface>(op)
+                  ? cast<BooleanLogicOpInterface>(op).getLogicDepthCost()
+                  : llvm::Log2_64_Ceil(op->getNumOperands());
   // Create edges each operand with cost ceil(log(size)).
   for (auto operand : op->getOperands())
     if (failed(addEdge(operand, bitPos, cost, results)))
