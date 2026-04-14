@@ -188,10 +188,13 @@ jobs:
           echo /opt/verilator/bin >> "$GITHUB_PATH"
           echo /opt/yosys/bin >> "$GITHUB_PATH"
 
+          # Verilator runtime dependencies.
+          sudo apt-get update
+          sudo apt-get install help2man perl make help2man libfl-dev libfl2 perl zlib1g zlib1g-dev
+
           if [[ "${{ steps.cache-verilator.outputs.cache-hit }}" != "true" ]]; then
             # Build and install Verilator from source.
-            sudo apt-get update
-            sudo apt-get install autoconf bison flex help2man libfl-dev libfl2 perl zlib1g zlib1g-dev
+            sudo apt-get install autoconf bison flex
             git clone https://github.com/verilator/verilator
             pushd verilator
             git checkout v${{ env.verilator-version-linux }}

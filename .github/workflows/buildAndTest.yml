@@ -152,30 +152,6 @@ jobs:
           config=$(cat <<EOF
           [
             {
-              "name": "Linux (GCC)",
-              "install_target": "",
-              "package_name_prefix": "",
-              "cmake_build_type": "release",
-              "llvm_enable_assertions": "ON",
-              "build_shared_libs": "ON",
-              "run_tests": true,
-              "run_integration_tests": false,
-              "runner": "ubuntu-24.04",
-              "cmake_c_compiler": "gcc"
-            },
-            {
-              "name": "Linux (Clang)",
-              "install_target": "",
-              "package_name_prefix": "",
-              "cmake_build_type": "release",
-              "llvm_enable_assertions": "OFF",
-              "build_shared_libs": "OFF",
-              "run_tests": true,
-              "run_integration_tests": false,
-              "runner": "ubuntu-24.04",
-              "cmake_c_compiler": "clang"
-            },
-            {
               "name": "Linux (GCC) Integration",
               "install_target": "",
               "package_name_prefix": "",
@@ -188,7 +164,19 @@ jobs:
               "cmake_c_compiler": "gcc"
             },
             {
-              "name": "Windows",
+              "name": "Linux (Clang) Test",
+              "install_target": "",
+              "package_name_prefix": "",
+              "cmake_build_type": "release",
+              "llvm_enable_assertions": "OFF",
+              "build_shared_libs": "OFF",
+              "run_tests": true,
+              "run_integration_tests": false,
+              "runner": "ubuntu-24.04",
+              "cmake_c_compiler": "clang"
+            },
+            {
+              "name": "Windows Test",
               "install_target": "",
               "package_name_prefix": "",
               "cmake_build_type": "release",
