@@ -317,7 +317,7 @@ jobs:
           # Add Valgrind arg
           LLVM_LIT_ARGS="--show-skipped --show-unsupported --show-xfail -v"
           if [[ "${{ inputs.valgrind }}" == "true" ]]; then
-            LLVM_LIT_ARGS="$LLVM_LIT_ARGS --vg"
+            LLVM_LIT_ARGS="$LLVM_LIT_ARGS --vg --vg-arg=--track-origins=yes"
           fi
 
           # Set CMAKE_CXX_COMPILER based on CMAKE_C_COMPILER
