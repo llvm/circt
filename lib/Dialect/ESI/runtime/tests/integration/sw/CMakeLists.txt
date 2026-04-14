@@ -10,11 +10,11 @@ if (NOT LOOPBACK_GENERATED_DIR)
   message(FATAL_ERROR "LOOPBACK_GENERATED_DIR must be set")
 endif()
 
-# Optional hint roots to help locate the ESI runtime headers and libraries.
-set(ESI_RUNTIME_ROOT "$ENV{ESI_RUNTIME_ROOT}" CACHE PATH
-  "ESI runtime build/install root")
+option(ESI_RUNTIME_ROOT "Path to ESI runtime installation or build directory" "")
 if (NOT ESI_RUNTIME_ROOT)
   message(FATAL_ERROR "ESI_RUNTIME_ROOT must be set or available in the environment")
+else()
+  message(STATUS "Using ESI runtime root: ${ESI_RUNTIME_ROOT}")
 endif()
 
 set(ESIACCEL_CONFIG "${ESI_RUNTIME_ROOT}/cmake/esiaccelConfig.cmake")
@@ -84,7 +84,9 @@ endif()
 
 find_path(CLI11_INCLUDE_DIR
   NAMES CLI/CLI.hpp
-  PATHS "${ESI_RUNTIME_ROOT}"
+  PATHS
+    "${ESI_RUNTIME_ROOT}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/"
   PATH_SUFFIXES _deps/cli11_proj-src/include)
 
 if (NOT CLI11_INCLUDE_DIR)

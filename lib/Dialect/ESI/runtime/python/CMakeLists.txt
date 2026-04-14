@@ -99,7 +99,7 @@ if(Python3_FOUND)
         )
       else()
         install(FILES "${CMAKE_CURRENT_BINARY_DIR}/esiaccel/esiCppAccel.pyi"
-          DESTINATION python/esiaccel
+          DESTINATION esiaccel
           COMPONENT ESIRuntime
         )
       endif()
@@ -110,7 +110,7 @@ if(Python3_FOUND)
         INSTALL_RPATH "$ORIGIN/lib")
     else()
       set_target_properties(esiCppAccel PROPERTIES
-        INSTALL_RPATH "$ORIGIN/../../lib")
+        INSTALL_RPATH "$ORIGIN/../lib")
     endif()
     set_target_properties(esiCppAccel PROPERTIES
       INSTALL_RPATH_USE_LINK_PATH FALSE)
@@ -122,7 +122,7 @@ if(Python3_FOUND)
       )
     else()
       install(TARGETS esiCppAccel
-        DESTINATION python/esiaccel
+        DESTINATION esiaccel
         COMPONENT ESIRuntime
       )
     endif()

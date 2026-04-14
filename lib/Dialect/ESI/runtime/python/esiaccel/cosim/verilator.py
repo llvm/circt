@@ -181,8 +181,11 @@ class Verilator(Simulator):
       cflags.append("-DTRACE")
     verilator_cmd += ["-CFLAGS", " ".join(cflags)]
     if self.sources.dpi_so:
+      dpi_so_paths = self.sources.dpi_so_paths()
       verilator_cmd += [
-          "-LDFLAGS", " ".join(["-l" + so for so in self.sources.dpi_so])
+          "-LDFLAGS",
+          " ".join(["-l" + so for so in self.sources.dpi_so]) + " " +
+          " ".join(["-L" + so.parent.as_posix() for so in dpi_so_paths]),
       ]
     verilator_cmd += [str(p) for p in self.sources.rtl_sources]
     top = self.sources.top

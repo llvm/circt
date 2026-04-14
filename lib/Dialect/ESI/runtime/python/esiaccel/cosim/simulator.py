@@ -60,14 +60,31 @@ class SourceFiles:
     """Return a list of all the DPI shared object files."""
 
     def find_so(name: str) -> Path:
-      for path in Simulator.get_env().get("LD_LIBRARY_PATH", "").split(":"):
+
+      def check_path(p: Path) -> Optional[Path]:
         if os.name == "nt":
-          so = Path(path) / f"{name}.dll"
+          so = p / f"{name}.dll"
         else:
-          so = Path(path) / f"lib{name}.so"
-        if so.exists():
-          return so
-      raise FileNotFoundError(f"Could not find {name}.so in LD_LIBRARY_PATH")
+          so = p / f"lib{name}.so"
+        return so if so.exists() else None
+
+      for path in Simulator.get_env().get("LD_LIBRARY_PATH", "").split(":"):
+        p = check_path(Path(path))
+        if p is not None:
+          return p
+
+      # If it's not in LD_LIBRARY_PATH, check a couple of parent directories
+      # relative to this file.
+      search_parent = _thisdir.parent
+      p = check_path(search_parent / "lib")
+      if p is not None:
+        return p
+      search_parent = search_parent.parent
+      p = check_path(search_parent / "lib")
+      if p is not None:
+        return p
+
+      raise FileNotFoundError(f"Could not find {name}.so")
 
     return [find_so(name) for name in self.dpi_so]
 
@@ -197,9 +214,9 @@ class Simulator:
 
     env = os.environ.copy()
     env["LIBRARY_PATH"] = env.get("LIBRARY_PATH", "") + ":" + str(
-        _thisdir.parent / "lib")
+        _thisdir.parent / "lib") + ":" + str(_thisdir.parent.parent / "lib")
     env["LD_LIBRARY_PATH"] = env.get("LD_LIBRARY_PATH", "") + ":" + str(
-        _thisdir.parent / "lib")
+        _thisdir.parent / "lib") + ":" + str(_thisdir.parent.parent / "lib")
     return env
 
   def compile_commands(self) -> List[CompileStep]:

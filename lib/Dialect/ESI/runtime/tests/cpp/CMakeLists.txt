@@ -54,6 +54,10 @@ add_executable(ESIRuntimeCppTests
 # <runtime-build-root>/tests/cpp/ — rather than the global bin/ directory.
 set_target_properties(ESIRuntimeCppTests PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+install(TARGETS ESIRuntimeCppTests
+  DESTINATION bin
+  COMPONENT ESIRuntimeTests
+)
 
 target_link_libraries(ESIRuntimeCppTests PRIVATE
   ESICppRuntime

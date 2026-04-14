@@ -48,6 +48,9 @@ def _find_binary() -> Path | None:
     candidate = get_runtime_root() / "tests" / "cpp" / _BIN_NAME
     if candidate.is_file():
       return candidate
+    candidate = get_runtime_root() / "bin" / _BIN_NAME
+    if candidate.is_file():
+      return candidate
   except ImportError:
     pass
 
