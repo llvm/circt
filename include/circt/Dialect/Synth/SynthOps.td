@@ -27,7 +27,10 @@ def AndInverterOp :
   SynthOp<"aig.and_inv",
           [SameOperandsAndResultType, Pure,
            DeclareOpInterfaceMethods<BooleanLogicOpInterface,
-                                     ["areInputsPermutationInvariant"]>]> {
+                                     ["areInputsPermutationInvariant",
+                                      "getLogicDepthCost",
+                                      "getLogicAreaCost",
+                                      "emitCNF"]>]> {
   let summary = "AIG dialect AND operation";
   let description = [{
     The `synth.aig.and_inv` operation represents an And-Inverter in the AIG dialect.

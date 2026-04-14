@@ -107,6 +107,30 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
       (ins "::llvm::function_ref<const ::llvm::KnownBits &(unsigned)>":$getInputKnownBits)
     >,
     InterfaceMethod<[{
+        Return the abstract logic depth cost contributed by this operation.
+        This is the per-node delay used by analyses such as longest path.
+      }],
+      "int64_t", "getLogicDepthCost", (ins)
+    >,
+    InterfaceMethod<[{
+        Return the abstract logic area cost contributed by this operation.
+        This is the local resource cost used by analyses such as resource
+        usage.
+      }],
+      "uint64_t", "getLogicAreaCost", (ins)
+    >,
+    InterfaceMethod<[{
+        Emit CNF clauses encoding `outVar <=> op(inputVars...)`.
+        The provided `inputVars` correspond to this operation's operands in
+        operand order. Implementations are responsible for applying any
+        per-input inversion described by the operation itself.
+      }],
+      "void", "emitCNF",
+      (ins "int":$outVar, "::llvm::ArrayRef<int>":$inputVars,
+           "::llvm::function_ref<void(::llvm::ArrayRef<int>)>":$addClause,
+           "::llvm::function_ref<int()>":$newVar)
+    >,
+    InterfaceMethod<[{
         Clone or fold this operation with the provided inputs while preserving
         the existing inversion flags.
       }],

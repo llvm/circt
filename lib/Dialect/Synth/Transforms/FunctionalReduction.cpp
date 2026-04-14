@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/CutRewriter.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
@@ -84,11 +85,7 @@ private:
   // Create a fresh SAT variable for an intermediate Boolean subexpression that
   // does not correspond to an MLIR value.
   int createAuxVar();
-  int getLiteral(Value value, bool inverted = false);
-  void addAndClauses(int outVar, llvm::ArrayRef<int> inputLits);
-  void addOrClauses(int outVar, llvm::ArrayRef<int> inputLits);
-  void addXorClauses(int outVar, int lhsLit, int rhsLit);
-  void addParityClauses(int outVar, llvm::ArrayRef<int> inputLits);
+  SmallVector<int> getOperandVars(ValueRange operands);
   void encodeValue(Value value);
 
   IncrementalSATSolver &solver;
@@ -98,7 +95,7 @@ private:
 };
 
 static bool isFunctionalReductionSimulatableOp(Operation *op) {
-  return isa<aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp>(op);
+  return isa<BooleanLogicOpInterface, comb::AndOp, comb::OrOp, comb::XorOp>(op);
 }
 
 EquivResult FunctionalReductionSATBuilder::verify(Value lhs, Value rhs,
@@ -144,74 +141,13 @@ int FunctionalReductionSATBuilder::createAuxVar() {
   return freshVar;
 }
 
-int FunctionalReductionSATBuilder::getLiteral(Value value, bool inverted) {
-  int lit = getOrCreateVar(value);
-  return inverted ? -lit : lit;
-}
-
-void FunctionalReductionSATBuilder::addAndClauses(
-    int outVar, llvm::ArrayRef<int> inputLits) {
-  // Tseitin encoding (https://en.wikipedia.org/wiki/Tseytin_transformation)
-  // for `outVar <=> and(inputLits)`. This keeps the CNF linear in the gate size
-  // while preserving satisfiability.
-  for (int lit : inputLits)
-    solver.addClause({-outVar, lit});
-
-  SmallVector<int> clause;
-  for (int lit : inputLits)
-    clause.push_back(-lit);
-  clause.push_back(outVar);
-  solver.addClause(clause);
-}
-
-void FunctionalReductionSATBuilder::addOrClauses(
-    int outVar, llvm::ArrayRef<int> inputLits) {
-  // Encode `outVar <=> or(inputLits)`.
-  //
-  // `(-lit v outVar)` for each input enforces `lit -> outVar`, i.e. any true
-  // input forces the OR result high.
-  for (int lit : inputLits)
-    solver.addClause({-lit, outVar});
-
-  SmallVector<int> clause;
-  clause.reserve(inputLits.size() + 1);
-  // `(-outVar v lit0 v lit1 ...)` enforces `outVar -> (lit0 v lit1 ...)`.
-  // Together these clauses make `outVar` exactly the OR of the inputs.
-  clause.push_back(-outVar);
-  clause.append(inputLits.begin(), inputLits.end());
-  solver.addClause(clause);
-}
-
-void FunctionalReductionSATBuilder::addXorClauses(int outVar, int lhsLit,
-                                                  int rhsLit) {
-  // Encode `outVar <=> (lhsLit xor rhsLit)` with the four satisfying rows of
-  // the 2-input XOR truth table. This is the standard definitional CNF for a
-  // binary XOR.
-  solver.addClause({-lhsLit, -rhsLit, -outVar});
-  solver.addClause({lhsLit, rhsLit, -outVar});
-  solver.addClause({lhsLit, -rhsLit, outVar});
-  solver.addClause({-lhsLit, rhsLit, outVar});
-}
-
-void FunctionalReductionSATBuilder::addParityClauses(
-    int outVar, llvm::ArrayRef<int> inputLits) {
-  assert(!inputLits.empty() && "parity requires at least one input");
-  if (inputLits.size() == 1) {
-    solver.addClause({-outVar, inputLits.front()});
-    solver.addClause({outVar, -inputLits.front()});
-    return;
-  }
-
-  int accumulatedLit = inputLits.front();
-  // Variadic XOR does not have a compact direct CNF encoding like AND/OR, so
-  // encode it as a chain of binary XORs and give each intermediate result its
-  // own auxiliary SAT variable.
-  for (auto [index, lit] : llvm::enumerate(inputLits.drop_front())) {
-    bool isLast = index + 2 == inputLits.size();
-    int outLit = isLast ? outVar : createAuxVar();
-    addXorClauses(outLit, accumulatedLit, lit);
-    accumulatedLit = outLit;
-  }
+SmallVector<int>
+FunctionalReductionSATBuilder::getOperandVars(ValueRange operands) {
+  SmallVector<int> vars;
+  vars.reserve(operands.size());
+  for (auto operand : operands)
+    vars.push_back(getOrCreateVar(operand));
+  return vars;
 }
 
 void FunctionalReductionSATBuilder::encodeValue(Value value) {
@@ -258,30 +194,28 @@ void FunctionalReductionSATBuilder::encodeValue(Value value) {
 
     encodedValues.insert(current);
     int outVar = getOrCreateVar(current);
+    auto addClause = [&](llvm::ArrayRef<int> clause) {
+      solver.addClause(clause);
+    };
 
-    SmallVector<int> inputLits;
-    inputLits.reserve(op->getNumOperands());
     TypeSwitch<Operation *>(op)
-        .Case<aig::AndInverterOp>([&](auto andOp) {
-          for (auto [input, inverted] :
-               llvm::zip(andOp.getInputs(), andOp.getInverted()))
-            inputLits.push_back(getLiteral(input, inverted));
-          addAndClauses(outVar, inputLits);
+        .Case<BooleanLogicOpInterface>([&](auto logicOp) {
+          auto inputVars = getOperandVars(logicOp.getInputs());
+          logicOp.emitCNF(outVar, inputVars, addClause,
+                          [&]() { return createAuxVar(); });
         })
         .Case<comb::AndOp>([&](auto andOp) {
-          for (auto input : andOp.getInputs())
-            inputLits.push_back(getLiteral(input));
-          addAndClauses(outVar, inputLits);
+          auto inputLits = getOperandVars(andOp.getInputs());
+          circt::addAndClauses(outVar, inputLits, addClause);
         })
         .Case<comb::OrOp>([&](auto orOp) {
-          for (auto input : orOp.getInputs())
-            inputLits.push_back(getLiteral(input));
-          addOrClauses(outVar, inputLits);
+          auto inputLits = getOperandVars(orOp.getInputs());
+          circt::addOrClauses(outVar, inputLits, addClause);
         })
         .Case<comb::XorOp>([&](auto xorOp) {
-          for (auto input : xorOp.getInputs())
-            inputLits.push_back(getLiteral(input));
-          addParityClauses(outVar, inputLits);
+          auto inputLits = getOperandVars(xorOp.getInputs());
+          circt::addParityClauses(outVar, getOperandVars(xorOp.getInputs()),
+                                  addClause, [&]() { return createAuxVar(); });
         })
         .Default(
             [](Operation *) { llvm_unreachable("unexpected supported op"); });
@@ -493,7 +427,7 @@ llvm::APInt FunctionalReductionSolver::simulateValue(Value v) {
   if (!op)
     return simSignatures.at(v);
   return llvm::TypeSwitch<Operation *, llvm::APInt>(op)
-      .Case<aig::AndInverterOp>([&](auto op) {
+      .Case<BooleanLogicOpInterface>([&](auto op) {
         return op.evaluateBooleanLogic([&](unsigned i) -> const APInt & {
           return simSignatures.at(op.getInput(i));
         });

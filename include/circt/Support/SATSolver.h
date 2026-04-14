@@ -14,6 +14,8 @@
 #define CIRCT_SUPPORT_SATSOLVER_H
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include <memory>
 
 namespace circt {
@@ -189,6 +191,23 @@ public:
     add(0);
   }
 };
+
+/// Emit clauses encoding `outVar <=> and(inputLits)`.
+void addAndClauses(int outVar, llvm::ArrayRef<int> inputLits,
+                   llvm::function_ref<void(llvm::ArrayRef<int>)> addClause);
+
+/// Emit clauses encoding `outVar <=> or(inputLits)`.
+void addOrClauses(int outVar, llvm::ArrayRef<int> inputLits,
+                  llvm::function_ref<void(llvm::ArrayRef<int>)> addClause);
+
+/// Emit clauses encoding `outVar <=> (lhsLit xor rhsLit)`.
+void addXorClauses(int outVar, int lhsLit, int rhsLit,
+                   llvm::function_ref<void(llvm::ArrayRef<int>)> addClause);
+
+/// Emit clauses encoding `outVar <=> parity(inputLits)`.
+void addParityClauses(int outVar, llvm::ArrayRef<int> inputLits,
+                      llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+                      llvm::function_ref<int()> newVar);
 
 /// Construct a Z3-backed incremental IPASIR-style SAT solver.
 std::unique_ptr<IncrementalSATSolver> createZ3SATSolver();

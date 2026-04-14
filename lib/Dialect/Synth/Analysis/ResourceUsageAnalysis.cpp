@@ -47,16 +47,19 @@ static bool accumulateResourceCounts(Operation *op,
                                      llvm::StringMap<uint64_t> &counts) {
   if (op->getNumResults() != 1 || !op->getResult(0).getType().isInteger())
     return false;
+  if (auto logicOp = dyn_cast<BooleanLogicOpInterface>(op)) {
+    counts[op->getName().getStringRef()] += logicOp.getLogicAreaCost();
+    return true;
+  }
   return TypeSwitch<Operation *, bool>(op)
-      // Variadic logic operations (AND, OR, XOR, AIG).
+      // Variadic comb logic operations.
       // Gate count = (num_inputs - 1) * bitwidth
-      .Case<synth::aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp>(
-          [&](auto logicOp) {
-            counts[logicOp->getName().getStringRef()] +=
-                (logicOp.getNumOperands() - 1) *
-                logicOp.getType().getIntOrFloatBitWidth();
-            return true;
-          })
+      .Case<comb::AndOp, comb::OrOp, comb::XorOp>([&](auto logicOp) {
+        counts[logicOp->getName().getStringRef()] +=
+            static_cast<uint64_t>(logicOp.getNumOperands() - 1) *
+            logicOp.getType().getIntOrFloatBitWidth();
+        return true;
+      })
       // Truth tables (LUTs) - count both the total number of truth tables and
       // the per-input breakdown.
       .Case<comb::TruthTableOp>([&](auto op) {

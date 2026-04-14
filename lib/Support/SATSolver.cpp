@@ -249,6 +249,58 @@ void Z3SATSolver::addClauseInternal(llvm::ArrayRef<int> lits) {
 
 } // namespace
 
+void addAndClauses(int outVar, llvm::ArrayRef<int> inputLits,
+                   llvm::function_ref<void(llvm::ArrayRef<int>)> addClause) {
+  for (int lit : inputLits)
+    addClause({-outVar, lit});
+
+  llvm::SmallVector<int> clause;
+  clause.reserve(inputLits.size() + 1);
+  for (int lit : inputLits)
+    clause.push_back(-lit);
+  clause.push_back(outVar);
+  addClause(clause);
+}
+
+void addOrClauses(int outVar, llvm::ArrayRef<int> inputLits,
+                  llvm::function_ref<void(llvm::ArrayRef<int>)> addClause) {
+  for (int lit : inputLits)
+    addClause({-lit, outVar});
+
+  llvm::SmallVector<int> clause;
+  clause.reserve(inputLits.size() + 1);
+  clause.push_back(-outVar);
+  clause.append(inputLits.begin(), inputLits.end());
+  addClause(clause);
+}
+
+void addXorClauses(int outVar, int lhsLit, int rhsLit,
+                   llvm::function_ref<void(llvm::ArrayRef<int>)> addClause) {
+  addClause({-lhsLit, -rhsLit, -outVar});
+  addClause({lhsLit, rhsLit, -outVar});
+  addClause({lhsLit, -rhsLit, outVar});
+  addClause({-lhsLit, rhsLit, outVar});
+}
+
+void addParityClauses(int outVar, llvm::ArrayRef<int> inputLits,
+                      llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+                      llvm::function_ref<int()> newVar) {
+  assert(!inputLits.empty() && "parity requires at least one input");
+  if (inputLits.size() == 1) {
+    addClause({-outVar, inputLits.front()});
+    addClause({outVar, -inputLits.front()});
+    return;
+  }
+
+  int accumulatedLit = inputLits.front();
+  for (auto [index, lit] : llvm::enumerate(inputLits.drop_front())) {
+    bool isLast = index + 2 == inputLits.size();
+    int outLit = isLast ? outVar : newVar();
+    addXorClauses(outLit, accumulatedLit, lit, addClause);
+    accumulatedLit = outLit;
+  }
+}
+
 std::unique_ptr<IncrementalSATSolver> createZ3SATSolver() {
 #if LLVM_WITH_Z3
   return std::make_unique<Z3SATSolver>();

@@ -10,6 +10,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Naming.h"
+#include "circt/Support/SATSolver.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Matchers.h"
@@ -241,6 +242,32 @@ llvm::KnownBits AndInverterOp::computeKnownBits(
   }
 
   return result;
+}
+
+int64_t AndInverterOp::getLogicDepthCost() {
+  return llvm::Log2_64_Ceil(getNumOperands());
+}
+
+uint64_t AndInverterOp::getLogicAreaCost() {
+  return static_cast<uint64_t>(getNumOperands() - 1) *
+         getType().getIntOrFloatBitWidth();
+}
+
+void AndInverterOp::emitCNF(
+    int outVar, llvm::ArrayRef<int> inputVars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  (void)newVar;
+  assert(inputVars.size() == getInputs().size() &&
+         "expected one SAT variable per operand");
+
+  SmallVector<int> inputLits;
+  inputLits.reserve(inputVars.size());
+  for (auto [inputVar, inverted] : llvm::zip(inputVars, getInverted())) {
+    assert(inputVar > 0 && "input SAT variables must be positive");
+    inputLits.push_back(inverted ? -inputVar : inputVar);
+  }
+  circt::addAndClauses(outVar, inputLits, addClause);
 }
 
 static Value lowerVariadicAndInverterOp(AndInverterOp op, OperandRange operands,
