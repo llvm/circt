@@ -54,6 +54,7 @@ static bool accumulateResourceCounts(Operation *op,
           counts[op->getName().getStringRef()] += *areaCost;
           return true;
         }
+        return false;
       })
       // Variadic comb logic operations.
       // Gate count = (num_inputs - 1) * bitwidth

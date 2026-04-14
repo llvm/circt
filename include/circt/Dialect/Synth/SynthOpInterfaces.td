@@ -41,8 +41,7 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
       }],
       "::std::pair<::mlir::Value, bool>", "getInputPair", (ins "unsigned":$index), "",
       [{
-        auto concreteOp = mlir::cast<ConcreteOp>($_op);
-        return {concreteOp->getOperand(index), concreteOp.isInverted(index)};
+        return {$_op.getInput(index), $_op.isInverted(index)};
       }]
     >,
     InterfaceMethod<[{
