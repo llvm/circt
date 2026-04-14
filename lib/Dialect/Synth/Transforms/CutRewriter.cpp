@@ -304,7 +304,6 @@ FailureOr<BinaryTruthTable> circt::synth::getTruthTable(ValueRange values,
         return choiceOp.emitError("Input value not found in evaluation map");
       eval[choiceOp.getResult()] = it->second;
     } else if (auto logicOp = dyn_cast<BooleanLogicOpInterface>(&op)) {
-      // Support AIG and XOR operations
       for (auto value : logicOp.getInputs())
         if (!eval.contains(value))
           return logicOp->emitError("Input value not found in evaluation map");
@@ -314,6 +313,7 @@ FailureOr<BinaryTruthTable> circt::synth::getTruthTable(ValueRange values,
             return eval.find(logicOp.getInput(i))->second;
           });
     } else if (auto xorOp = dyn_cast<comb::XorOp>(&op)) {
+      // TODO: Define Xor as Synth op.
       auto it = eval.find(xorOp.getOperand(0));
       if (it == eval.end())
         return xorOp.emitError("Input value not found in evaluation map");

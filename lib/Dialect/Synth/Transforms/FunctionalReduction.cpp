@@ -214,8 +214,8 @@ void FunctionalReductionSATBuilder::encodeValue(Value value) {
         })
         .Case<comb::XorOp>([&](auto xorOp) {
           auto inputLits = getOperandVars(xorOp.getInputs());
-          circt::addParityClauses(outVar, getOperandVars(xorOp.getInputs()),
-                                  addClause, [&]() { return createAuxVar(); });
+          circt::addParityClauses(outVar, inputLits, addClause,
+                                  [&]() { return createAuxVar(); });
         })
         .Default(
             [](Operation *) { llvm_unreachable("unexpected supported op"); });

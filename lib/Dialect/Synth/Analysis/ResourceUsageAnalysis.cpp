@@ -16,6 +16,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/InstanceGraph.h"
@@ -47,11 +48,11 @@ static bool accumulateResourceCounts(Operation *op,
                                      llvm::StringMap<uint64_t> &counts) {
   if (op->getNumResults() != 1 || !op->getResult(0).getType().isInteger())
     return false;
-  if (auto logicOp = dyn_cast<BooleanLogicOpInterface>(op)) {
-    counts[op->getName().getStringRef()] += logicOp.getLogicAreaCost();
-    return true;
-  }
   return TypeSwitch<Operation *, bool>(op)
+      .Case<BooleanLogicOpInterface>([&](auto logicOp) {
+        counts[op->getName().getStringRef()] += logicOp.getLogicAreaCost();
+        return true;
+      })
       // Variadic comb logic operations.
       // Gate count = (num_inputs - 1) * bitwidth
       .Case<comb::AndOp, comb::OrOp, comb::XorOp>([&](auto logicOp) {
