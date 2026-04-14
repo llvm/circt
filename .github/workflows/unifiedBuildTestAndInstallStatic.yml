@@ -29,6 +29,11 @@ on:
         required: true
         type: boolean
         default: false
+      run_integration_tests:
+        description: "Run integration tests"
+        required: false
+        type: boolean
+        default: false
       install_target:
         description: "Install steps to run (empty if do not install)"
         required: false
@@ -49,6 +54,11 @@ on:
         description: "If true, then run tests, otherwise skip tests"
         required: true
         type: boolean
+      run_integration_tests:
+        description: "If true, then run integration tests, otherwise skip integration tests"
+        required: true
+        type: boolean
+        default: false
       install_target:
         description: "Install steps to run"
         required: false
@@ -125,6 +135,10 @@ jobs:
         if: inputs.run_tests
         run: |
           ninja -C build check-circt check-circt-unit
+      - name: Integration Test CIRCT
+        if: inputs.run_integration_tests
+        run: |
+          ninja -C build check-circt-integration
       - name: Install
         if: inputs.install_target
         run: |

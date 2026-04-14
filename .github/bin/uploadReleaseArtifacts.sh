@@ -15,6 +15,7 @@ OPTIONS:
     -h                    Display available options
     -o                    OS to target: [linux, macos, windows]
     -t                    Run tests
+    -u                    Run integration tests
 EOF
 }
 
@@ -27,6 +28,7 @@ OPT_CMAKE_BUILD_TYPE=
 OPT_GITHUB_EVENT_NAME=
 OPT_OS=()
 OPT_RUN_TESTS=false
+OPT_RUN_INTEGRATION_TESTS=false
 while getopts "ab:e:ho:t" option; do
   case $option in
     a)
@@ -71,6 +73,9 @@ while getopts "ab:e:ho:t" option; do
       ;;
     t)
       OPT_RUN_TESTS=true
+      ;;
+    u)
+      OPT_RUN_INTEGRATION_TESTS=true
       ;;
     *)
       echo "uknown option"
@@ -155,6 +160,7 @@ configStatic=$(cat <<EOF
     "cmake_build_type": "$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions": "$OPT_ASSERTIONS",
     "run_tests": $OPT_RUN_TESTS,
+    "run_integration_tests": $OPT_RUN_INTEGRATION_TESTS,
     "install_target": "$binaryTargets",
     "package_name_prefix": "firrtl-bin"
   }
@@ -204,7 +210,8 @@ configNativeFullShared=$(cat <<EOF
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"ON",
-    "run_tests": $OPT_RUN_TESTS
+    "run_tests": $OPT_RUN_TESTS,
+    "run_integration_tests": $OPT_RUN_INTEGRATION_TESTS
   }
 ]
 EOF
@@ -217,7 +224,8 @@ configNativeFullStatic=$(cat <<EOF
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"OFF",
-    "run_tests": $OPT_RUN_TESTS
+    "run_tests": $OPT_RUN_TESTS,
+    "run_integration_tests": $OPT_RUN_INTEGRATION_TESTS
   }
 ]
 EOF
@@ -230,7 +238,8 @@ configNativeFirtool=$(cat <<EOF
     "cmake_build_type":"$OPT_CMAKE_BUILD_TYPE",
     "llvm_enable_assertions":"$OPT_ASSERTIONS",
     "build_shared_libs":"OFF",
-    "run_tests": $OPT_RUN_TESTS
+    "run_tests": $OPT_RUN_TESTS,
+    "run_integration_tests": $OPT_RUN_INTEGRATION_TESTS
   }
 ]
 EOF
@@ -305,13 +314,14 @@ config=$(echo "$config" | jq '
   def libs: if .build_shared_libs == "ON" then "shared" else "static" end;
   def asserts: if .llvm_enable_assertions == "ON" then "on" else "off" end;
   def tests: if .run_tests then "/test" else "" end;
+  def integrationTests: if .run_integration_tests then "/integration-test" else "" end;
   def install:
     if (.install_target // "") == "" then ""
     elif .install_target == "install" then "/install-full"
     else "/install-\(.install_target | split(" ") | map(select(. != "")) | length)"
     end;
-  .native |= map(. + {name: "native/\(.runner)/\(.cmake_c_compiler)/\(.cmake_build_type)/\(libs)-libs/asserts-\(asserts)\(tests)\(install)"}) |
-  .static |= map(. + {name: "static/\(.cmake_build_type)/asserts-\(asserts)\(tests)\(install)"})
+  .native |= map(. + {name: "native/\(.runner)/\(.cmake_c_compiler)/\(.cmake_build_type)/\(libs)-libs/asserts-\(asserts)\(tests)\(integrationTests)\(install)"}) |
+  .static |= map(. + {name: "static/\(.cmake_build_type)/asserts-\(asserts)\(tests)\(integrationTests)\(install)"})
 ')
 
 # Return the final `config` JSON.
