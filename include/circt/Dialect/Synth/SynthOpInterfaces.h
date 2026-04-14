@@ -17,12 +17,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/KnownBits.h"
 
-namespace circt {
-namespace synth {
-class BooleanLogicOpInterface;
-} // namespace synth
-} // namespace circt
-
 #include "circt/Dialect/Synth/SynthOpInterfaces.h.inc"
 
 #endif // CIRCT_DIALECT_SYNTH_SYNTHOPINTERFACES_H
