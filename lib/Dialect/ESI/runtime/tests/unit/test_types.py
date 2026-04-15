@@ -1,3 +1,5 @@
+import pytest
+
 import esiaccel.types as types
 
 
@@ -150,3 +152,76 @@ def test_union_padding_with_struct():
   (result, leftover) = union_type.deserialize(serialized)
   assert leftover == bytearray()
   assert result["narrow"] == {"x": 0xAA, "y": 0xBB}
+
+
+def test_list_type_not_supported_for_host():
+  element_type = types.UIntType("ui8", 8)
+  list_type = types._get_esi_type(
+      types.cpp.ListType("!esi.list<ui8>", element_type.cpp_type))
+
+  assert isinstance(list_type, types.ListType)
+  assert isinstance(list_type.element_type, types.UIntType)
+  assert list_type.element_type.id == element_type.id
+  assert list_type.bit_width == -1
+
+  supports_host, reason = list_type.supports_host
+  assert not supports_host
+  assert reason == "list types require an enclosing window encoding"
+
+  valid, invalid_reason = list_type.is_valid([0x12, 0x34])
+  assert valid
+  assert invalid_reason is None
+
+  valid, invalid_reason = list_type.is_valid("not a list")
+  assert not valid
+  assert "must be a list" in invalid_reason
+
+  valid, invalid_reason = list_type.is_valid([0x12, 0x1FF])
+  assert not valid
+  assert invalid_reason == "invalid element 1: out of range: 511"
+
+  with pytest.raises(ValueError, match="cannot be serialized without a window"):
+    list_type.serialize([0x12, 0x34])
+
+  with pytest.raises(ValueError,
+                     match="cannot be deserialized without a window"):
+    list_type.deserialize(bytearray([0x12, 0x34]))
+
+
+def test_window_type_not_supported_for_host():
+  uint8 = types.UIntType("ui8", 8)
+  into_type = types.StructType("!hw.struct<header: ui8, data: ui8>",
+                               [("header", uint8), ("data", uint8)])
+  header_type = types.StructType("!hw.struct<header: ui8>", [("header", uint8)])
+  data_type = types.StructType("!hw.struct<data: ui8>", [("data", uint8)])
+  lowered_type = types.UnionType(
+      "!hw.union<header: !hw.struct<header: ui8>, data: !hw.struct<data: ui8>>",
+      [("header", header_type), ("data", data_type)])
+  window_type = types.WindowType(
+      '!esi.window<"test_window", !hw.struct<header: ui8, data: ui8>, '
+      '[<"header", [<"header">]>, <"data", [<"data">]>]>',
+      "test_window",
+      into_type,
+      lowered_type,
+      [
+          types.WindowType.Frame("header",
+                                 [types.WindowType.Field("header", 0, 0)]),
+          types.WindowType.Frame("data",
+                                 [types.WindowType.Field("data", 0, 0)]),
+      ],
+  )
+
+  supports_host, reason = window_type.supports_host
+  assert not supports_host
+  assert reason is not None
+  assert "not yet supported" in reason
+
+  valid, invalid_reason = window_type.is_valid({"header": 1, "data": 2})
+  assert not valid
+  assert invalid_reason == reason
+
+  with pytest.raises(ValueError, match="not yet supported"):
+    window_type.serialize({"header": 1, "data": 2})
+
+  with pytest.raises(ValueError, match="not yet supported"):
+    window_type.deserialize(bytearray([1, 2]))
