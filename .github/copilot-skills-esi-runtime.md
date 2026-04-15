@@ -52,6 +52,17 @@ python3 -m pytest lib/Dialect/ESI/runtime/tests/ -v
 
 Option 2 is recommended because the build tree's `esiaccel/` has the correct cosim SystemVerilog files, driver, and native extension.
 
+If the venv already has an editable `esiaccel` install (for example, an
+existing `__editable__.esiaccel-*.pth` in site-packages), `esiaccel-build.pth`
+may not take precedence by itself. In that case, set:
+
+```bash
+export PYTHONPATH=$PWD/lib/Dialect/ESI/runtime/build/python${PYTHONPATH:+:$PYTHONPATH}
+```
+
+for the shell running pytest, or remove the editable install before relying on
+the `.pth` file.
+
 Additionally, the verilator linker needs `libEsiCosimDpiServer.so`. The cosim pytest framework looks for it at `<esiaccel-package>/lib/`. If using the build tree via `.pth`, create symlinks:
 ```bash
 mkdir -p lib/Dialect/ESI/runtime/build/python/esiaccel/lib
@@ -61,6 +72,28 @@ ln -sf ../../libESICppRuntime.so .
 ln -sf ../../libCosimBackend.so .
 ln -sf ../../libCosimRpc.so .
 ```
+
+### Debugging the test environment
+
+Do **not** modify test infrastructure, package import logic, or simulator lookup paths just because the runtime/test invocation is unclear. In particular, do not patch files like `tests/conftest.py`, `esiaccel/cosim/simulator.py`, or other harness code as a substitute for figuring out the correct local setup.
+
+Before changing any infrastructure, first verify what Python and pytest are actually using:
+
+```bash
+cd <repo-root>
+source .venv/bin/activate
+
+python3 -c 'import sys, esiaccel, esiaccel.codegen; print(sys.executable); print(esiaccel.__file__); print(esiaccel.codegen.__file__)'
+python3 -m pytest --version
+python3 -m pytest lib/Dialect/ESI/runtime/tests/unit/test_types.py -q
+```
+
+If the wrong `esiaccel` package is being imported, fix the environment outside the repo first:
+- prefer the `.pth`-file approach above for build-tree `esiaccel`
+- or set `PYTHONPATH`/`LD_LIBRARY_PATH`/`PATH` correctly in the shell running pytest
+- confirm the imported module paths again before rerunning tests
+
+Only change infrastructure or test harness files when there is a demonstrated product bug in that infrastructure and not merely uncertainty about how to run the tests locally.
 
 ### GTest unit tests
 

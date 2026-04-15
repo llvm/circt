@@ -419,6 +419,102 @@ class ArrayType(ESIType):
 __esi_mapping[cpp.ArrayType] = ArrayType
 
 
+class ListType(ESIType):
+
+  def __init__(self, id: str, element_type: "ESIType"):
+    self._init_from_cpp(cpp.ListType(id, element_type.cpp_type))
+
+  def _init_from_cpp(self, cpp_type: cpp.ListType):
+    super()._init_from_cpp(cpp_type)
+    self.element_type = _get_esi_type(cpp_type.element)
+
+  @property
+  def supports_host(self) -> Tuple[bool, Optional[str]]:
+    return (False, "list types require an enclosing window encoding")
+
+  @property
+  def bit_width(self) -> int:
+    return -1
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    if not isinstance(obj, list):
+      return (False, f"must be a list, not {type(obj)}")
+    for (idx, element) in enumerate(obj):
+      valid, reason = self.element_type.is_valid(element)
+      if not valid:
+        return (False, f"invalid element {idx}: {reason}")
+    return (True, None)
+
+  def serialize(self, obj) -> bytearray:
+    raise ValueError("list type cannot be serialized without a window")
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    raise ValueError("list type cannot be deserialized without a window")
+
+
+__esi_mapping[cpp.ListType] = ListType
+
+
+class WindowType(ESIType):
+
+  _HOST_UNSUPPORTED_REASON = (
+      "window types require into/lowered translation and are not yet "
+      "supported for host communication")
+
+  class Field(NamedTuple):
+    name: str
+    num_items: int
+    bulk_count_width: int
+
+  class Frame(NamedTuple):
+    name: str
+    fields: List["WindowType.Field"]
+
+  def __init__(self, id: str, name: str, into_type: "ESIType",
+               lowered_type: "ESIType", frames: List["WindowType.Frame"]):
+    cpp_frames = [
+        cpp.WindowFrame(frame.name, [
+            cpp.WindowField(field.name, field.num_items,
+                            field.bulk_count_width) for field in frame.fields
+        ]) for frame in frames
+    ]
+    self._init_from_cpp(
+        cpp.WindowType(id, name, into_type.cpp_type, lowered_type.cpp_type,
+                       cpp_frames))
+
+  def _init_from_cpp(self, cpp_type: cpp.WindowType):
+    super()._init_from_cpp(cpp_type)
+    self.name = cpp_type.name
+    self.into_type = _get_esi_type(cpp_type.into)
+    self.lowered_type = _get_esi_type(cpp_type.lowered)
+    self.frames = [
+        WindowType.Frame(frame.name, [
+            WindowType.Field(field.name, field.num_items,
+                             field.bulk_count_width) for field in frame.fields
+        ]) for frame in cpp_type.frames
+    ]
+
+  @property
+  def supports_host(self) -> Tuple[bool, Optional[str]]:
+    return (False, self._HOST_UNSUPPORTED_REASON)
+
+  @property
+  def bit_width(self) -> int:
+    return self.lowered_type.bit_width
+
+  def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
+    return (False, self._HOST_UNSUPPORTED_REASON)
+
+  def serialize(self, obj) -> bytearray:
+    raise ValueError(self._HOST_UNSUPPORTED_REASON)
+
+  def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
+    raise ValueError(self._HOST_UNSUPPORTED_REASON)
+
+
+__esi_mapping[cpp.WindowType] = WindowType
+
+
 class UnionType(ESIType):
 
   def __init__(self, id: str, fields: List[Tuple[str, "ESIType"]]):
