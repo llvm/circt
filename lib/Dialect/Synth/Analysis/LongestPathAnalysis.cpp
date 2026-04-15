@@ -665,7 +665,7 @@ private:
                                SmallVectorImpl<OpenPath> &results);
 
   // Bit-logical ops.
-  LogicalResult visit(aig::AndInverterOp op, size_t bitPos,
+  LogicalResult visit(BooleanLogicOpInterface op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results);
   LogicalResult visit(comb::AndOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results);
@@ -865,9 +865,8 @@ LogicalResult LocalVisitor::addEdge(Value to, size_t bitPos, int64_t delay,
   return success();
 }
 
-LogicalResult LocalVisitor::visit(aig::AndInverterOp op, size_t bitPos,
+LogicalResult LocalVisitor::visit(BooleanLogicOpInterface op, size_t bitPos,
                                   SmallVectorImpl<OpenPath> &results) {
-
   return addLogicOp(op, bitPos, results);
 }
 
@@ -1153,7 +1152,7 @@ LogicalResult LocalVisitor::visitValue(Value value, size_t bitPos,
   auto result =
       TypeSwitch<Operation *, LogicalResult>(op)
           .Case<comb::ConcatOp, comb::ExtractOp, comb::ReplicateOp,
-                aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::MuxOp,
+                BooleanLogicOpInterface, comb::AndOp, comb::OrOp, comb::MuxOp,
                 comb::XorOp, comb::TruthTableOp, seq::FirRegOp, seq::CompRegOp,
                 seq::FirMemReadOp, seq::FirMemReadWriteOp, hw::WireOp>(
               [&](auto op) {
@@ -1300,12 +1299,13 @@ LogicalResult LocalVisitor::initializeAndRun() {
               return markRegEndPoint(op.getMemory(), op.getWriteData(), {}, {},
                                      op.getEnable());
             })
-            .Case<aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp,
+            .Case<BooleanLogicOpInterface, comb::AndOp, comb::OrOp, comb::XorOp,
                   comb::MuxOp, seq::FirMemReadOp>([&](auto op) {
               // NOTE: Visiting and-inverter is not necessary but
               // useful to reduce recursion depth.
-              for (size_t i = 0, e = getBitWidth(op); i < e; ++i)
-                if (failed(getOrComputePaths(op, i)))
+              Value result = op->getResult(0);
+              for (size_t i = 0, e = getBitWidth(result); i < e; ++i)
+                if (failed(getOrComputePaths(result, i)))
                   return failure();
               return success();
             })
