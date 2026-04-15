@@ -158,3 +158,15 @@ module multi_not_prim;
     logic A, Q0, Q1;
     not n (Q0, Q1, A);
 endmodule
+
+// CHECK-LABEL: moore.module @buf_prim()
+// CHECK: [[A:%.+]] = moore.variable : <l1>
+// CHECK: [[Q:%.+]] = moore.variable : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
+// CHECK: [[NOT:%.+]] = moore.bool_cast [[RD_A]] : l1
+// CHECK: moore.assign [[Q]], [[NOT]] : l1
+
+module buf_prim;
+    logic A, Q;
+    buf n (Q, A);
+endmodule

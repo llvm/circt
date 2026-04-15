@@ -1888,6 +1888,9 @@ LogicalResult Context::convertNOutputPrimitive(
       llvm::StringSwitch<std::function<Value()>>(prim.primitiveType.name)
           .Case("not",
                 ([&] { return moore::NotOp::create(builder, loc, inputVal); }))
+          .Case("buf", ([&] {
+                  return moore::BoolCastOp::create(builder, loc, inputVal);
+                }))
           .Default([&] {
             mlir::emitError(loc)
                 << "unsupported primitive `" << primName << "`";
