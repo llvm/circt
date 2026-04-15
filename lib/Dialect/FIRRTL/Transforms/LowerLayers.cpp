@@ -238,6 +238,10 @@ class LowerLayersPass
   /// Update the value's type to remove any layers from any probe types.
   void removeLayersFromValue(Value value);
 
+  /// Remove any layers from the result of the cast. If the cast becomes a nop,
+  /// remove the cast itself from the IR.
+  void removeLayersFromRefCast(RefCastOp cast);
+
   /// Lower an inline layerblock to an ifdef block.
   void lowerInlineLayerBlock(LayerOp layer, LayerBlockOp layerBlock);
 
@@ -319,6 +323,22 @@ void LowerLayersPass::removeLayersFromValue(Value value) {
   if (!type || !type.getLayer())
     return;
   value.setType(type.removeLayer());
+}
+
+void LowerLayersPass::removeLayersFromRefCast(RefCastOp cast) {
+  auto result = cast.getResult();
+  auto oldType = result.getType();
+  if (oldType.getLayer()) {
+    auto input = cast.getInput();
+    auto srcType = input.getType();
+    auto newType = oldType.removeLayer();
+    if (newType == srcType) {
+      result.replaceAllUsesWith(input);
+      cast->erase();
+      return;
+    }
+    result.setType(newType);
+  }
 }
 
 void LowerLayersPass::removeLayersFromPorts(FModuleLike moduleLike) {
@@ -501,7 +521,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     //
     // The handling of (2) and (3) is diffuse in the code below due to needing
     // to split things based on whether a value has a defining operation or not.
-    auto baseType = type_cast<FIRRTLBaseType>(value.getType());
+    auto baseType = type_dyn_cast<FIRRTLBaseType>(value.getType());
     if (baseType && baseType.getBitWidthOrSentinel() == 0) {
       OpBuilder::InsertionGuard guard(localBuilder);
       auto zeroUIntType = UIntType::get(localBuilder.getContext(), 0);
@@ -562,19 +582,6 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   // check if this was an instance that we created and to do fast module
   // dereferencing (avoiding a symbol table).
   DenseMap<Operation *, FModuleOp> createdInstances;
-
-  // Check that the preconditions for this pass are met.  Reject any ops which
-  // must have been removed before this runs.
-  auto opPreconditionCheck = [](Operation *op) -> LogicalResult {
-    // LowerXMR op removal postconditions.
-    if (isa<RefCastOp, RefDefineOp, RefResolveOp, RefSendOp, RefSubOp,
-            RWProbeOp>(op))
-      return op->emitOpError()
-             << "cannot be handled by the lower-layers pass.  This should have "
-                "already been removed by the lower-xmr pass.";
-
-    return success();
-  };
 
   // Utility to determine the domain type of some value.  This looks backwards
   // through connections to find the source driver in the module and gets the
@@ -673,12 +680,15 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
   // before parents.  Any nested regions _within_ the layer block are also
   // visited before the outer layer block.
   auto result = moduleOp.walk<mlir::WalkOrder::PostOrder>([&](Operation *op) {
-    if (failed(opPreconditionCheck(op)))
-      return WalkResult::interrupt();
-
+    if (auto cast = dyn_cast<RefCastOp>(op)) {
+      removeLayersFromRefCast(cast);
+      return WalkResult::advance();
+    }
     // Strip layer requirements from any op that might represent a probe.
+
     for (auto result : op->getResults())
       removeLayersFromValue(result);
+    
 
     // If the op is an instance, clear the enablelayers attribute.
     if (auto instance = dyn_cast<InstanceOp>(op))
@@ -699,41 +709,60 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     // After this point, we are dealing with a bind convention layer block.
     assert(layer.getConvention() == LayerConvention::Bind);
 
-    // Utilities and mutable state that results from creating ports.  Due to the
-    // way in which this pass works and its phase ordering, the only types of
-    // ports that can be created are domain type ports.
+    // Utilities and mutable state that results from creating ports.  Ports can
+    // be domain type ports or probe (RefType) ports.
     SmallVector<PortInfo> ports;
-    SmallVector<Value> connectValues;
+    SmallVector<ConnectInfo> connectValues;
     Namespace portNs;
+    Block *body = layerBlock.getBody(0);
+    OpBuilder builder(moduleOp);
 
-    // Create an input port for a domain-type operand.  The source is not in the
-    // current layer block.
-    auto createInputPort = [&](Value src, Location loc) -> LogicalResult {
+    // Create an input port for an operand that is captured from outside.
+    auto createInputPort = [&](Value operand, Location loc) -> LogicalResult {
+      // If the value is a ref, we must resolve the ref inside the parent,
+      // passing the input as a value instead of a ref. Inside the layer, we
+      // convert (ref.send) the value back into a ref.
+      auto type = operand.getType();
+      ConnectKind kind = ConnectKind::NonRef;
+      bool isProbe = false;
+      if (auto refType = dyn_cast<RefType>(type)) {
+        type = refType.getType();
+        kind = ConnectKind::Ref;
+        isProbe = true;
+      }
+
+      // Check if this is a domain type (only for non-probe types)
       Attribute domain;
-      if (failed(getDomain(src, domain)))
-        return failure();
+      bool isDomain = !isProbe && succeeded(getDomain(operand, domain));
 
+      const auto &[nameHint, rootKnown] =
+          getFieldName(FieldRef(operand, 0), true);
       StringAttr name;
-      auto [nameHint, rootKnown] = getFieldName(FieldRef(src, 0), true);
+
       if (rootKnown)
-        name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
+        name = StringAttr::get(operand.getContext(), portNs.newName(nameHint));
       else
-        name = StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
+        name = StringAttr::get(
+            operand.getContext(),
+            portNs.newName(isDomain ? "anonDomain" : "anonRef"));
+
       // Domain type ports have no associations (domain info is in the type).
-      auto domainInfo = ArrayAttr::get(src.getContext(), {});
-      PortInfo port(
-          /*name=*/name,
-          /*type=*/src.getType(),
-          /*dir=*/Direction::In,
-          /*symName=*/{},
-          /*location=*/loc,
-          /*annos=*/{},
-          /*domains=*/domainInfo);
-      ports.push_back(port);
-      connectValues.push_back(src);
-      BlockArgument replacement =
-          layerBlock.getBody()->addArgument(port.type, port.loc);
-      src.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+      auto domainInfo = ArrayAttr::get(operand.getContext(), {});
+      ports.push_back({name, type, Direction::In,
+                       /*symName=*/{},
+                       /*location=*/loc,
+                       /*annos=*/{}, /*domains=*/domainInfo});
+
+      // Update the layer block's body with arguments as we will swap this body
+      // into the module when we create it.  If this is a ref type, then add a
+      // refsend to convert from the non-ref type input port.
+      Value replacement = body->addArgument(type, loc);
+      if (kind == ConnectKind::Ref) {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointToStart(body);
+        replacement = RefSendOp::create(builder, loc, replacement);
+      }
+      operand.replaceUsesWithIf(replacement, [&](OpOperand &use) {
         auto *user = use.getOwner();
         if (!layerBlock->isAncestor(user))
           return false;
@@ -743,11 +772,13 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         // will _later_ be spilled.
         if (auto connectLike = dyn_cast<FConnectLike>(user)) {
           auto *destDefiningOp = connectLike.getDest().getDefiningOp();
-          return connectLike.getSrc() == src &&
+          return connectLike.getSrc() == operand &&
                  !createdInstances.contains(destDefiningOp);
         }
-        return false;
+        return isa<RefType>(use.get().getType());
       });
+
+      connectValues.push_back({operand, kind});
       return success();
     };
 
@@ -767,56 +798,107 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       return loc;
     };
 
-    // Source is in the current layer block.  The destination is not in the
-    // current layer block.
+    // Create an output port for values escaping the layer block.
+    // Handles both probe types (RefType) and domain types.
+    // Parameters: src is the value INSIDE the layer, dest is the value OUTSIDE.
     auto createOutputPort = [&](Value src, Value dest) -> LogicalResult {
-      Attribute domain;
-      if (failed(getDomain(src, domain)))
-        return failure();
+      auto loc = getPortLoc(dest);
+      auto portNum = ports.size();
 
+      // Determine if this is a domain type or probe type
+      bool isDomain = isa<DomainType>(src.getType());
+      Type portType;
+      ConnectKind kind = ConnectKind::NonRef;
       StringAttr name;
-      auto [nameHint, rootKnown] = getFieldName(FieldRef(src, 0), true);
-      if (rootKnown)
-        name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
-      else
-        name = StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
+
+      if (isDomain) {
+        // Domain type output port
+        Attribute domain;
+        if (failed(getDomain(src, domain)))
+          return failure();
+
+        auto [nameHint, rootKnown] = getFieldName(FieldRef(src, 0), true);
+        if (rootKnown)
+          name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
+        else
+          name =
+              StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
+
+        portType = src.getType();
+      } else {
+        // Probe type output port
+        const auto &[nameHint, rootKnown] =
+            getFieldName(FieldRef(dest, 0), true);
+        if (rootKnown)
+          name = StringAttr::get(dest.getContext(), portNs.newName(nameHint));
+        else
+          name = StringAttr::get(dest.getContext(), portNs.newName("anonRef"));
+
+        if (auto oldRef = dyn_cast<RefType>(dest.getType())) {
+          portType = oldRef;
+          kind = ConnectKind::Ref;
+        } else {
+          // dest is a hardware type, convert it to a ref type
+          auto baseType = dyn_cast<FIRRTLBaseType>(dest.getType());
+          if (!baseType) {
+            // Not a base type and not a domain type, skip
+            return failure();
+          }
+          portType = RefType::get(baseType.getPassiveType(),
+                                  /*forceable=*/false);
+        }
+      }
+
       // Domain type ports have no associations (domain info is in the type).
       auto domainInfo = ArrayAttr::get(src.getContext(), {});
-      PortInfo port(
-          /*name=*/name,
-          /*type=*/src.getType(),
-          /*dir=*/Direction::Out,
-          /*symName=*/{},
-          /*location=*/getPortLoc(dest),
-          /*annos=*/{},
-          /*domains=*/domainInfo);
-      ports.push_back(port);
-      connectValues.push_back(dest);
-      BlockArgument replacement =
-          layerBlock.getBody()->addArgument(port.type, port.loc);
-      dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
-        auto *user = use.getOwner();
-        if (!layerBlock->isAncestor(user))
+      ports.push_back({name, portType, Direction::Out,
+                       /*symName=*/{}, /*location=*/loc,
+                       /*annos=*/{}, /*domains=*/domainInfo});
+
+      Value replacement = body->addArgument(portType, loc);
+      connectValues.push_back({dest, kind});
+
+      if (isDomain) {
+        // Domain output: replace destination uses inside the layer
+        dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+          auto *user = use.getOwner();
+          if (!layerBlock->isAncestor(user))
+            return false;
+          // Replace connection destinations.
+          if (auto connectLike = dyn_cast<FConnectLike>(user))
+            return connectLike.getDest() == dest;
           return false;
-        // Replace connection destinations.
-        if (auto connectLike = dyn_cast<FConnectLike>(user))
-          return connectLike.getDest() == dest;
-        return false;
-      });
+        });
+      } else if (kind == ConnectKind::Ref) {
+        // Probe output with ref destination: replace ref uses
+        dest.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+          auto *user = use.getOwner();
+          if (!layerBlock->isAncestor(user))
+            return false;
+          if (auto connectLike = dyn_cast<FConnectLike>(user)) {
+            if (use.getOperandNumber() == 0)
+              return true;
+          }
+          return false;
+        });
+      } else {
+        // Probe output with non-ref destination: add ref.define + ref.send
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointAfterValue(src);
+        RefDefineOp::create(builder, loc, body->getArgument(portNum),
+                            RefSendOp::create(builder, loc, src)->getResult(0));
+      }
+
       return success();
     };
 
     // Clear the replacements so that none are re-used across layer blocks.
     replacements.clear();
-    OpBuilder builder(moduleOp);
     SmallVector<hw::InnerSymAttr> innerSyms;
     SmallVector<sv::VerbatimOp> verbatims;
+    SmallVector<RWProbeOp> rwprobes;
     DenseSet<Operation *> spilledSubOps;
     auto layerBlockWalkResult = layerBlock.walk([&](Operation *op) {
-      // Error if pass preconditions are not met.
-      if (failed(opPreconditionCheck(op)))
-        return WalkResult::interrupt();
-
       // Specialized handling of subfields, subindexes, and subaccesses which
       // need to be spilled and nodes that referred to spilled nodes.  If these
       // are kept in the module, then the XMR is going to be bidirectional.  Fix
@@ -836,7 +918,9 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
           return WalkResult::advance();
 
         // Otherwise, capture the input operand, if possible.
-        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive()) {
+        if (auto baseType =
+                firrtl::type_dyn_cast<FIRRTLBaseType>(input.getType());
+            baseType && baseType.isPassive()) {
           subOp.getInputMutable().assign(getReplacement(subOp, input));
           return WalkResult::advance();
         }
@@ -867,7 +951,9 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         }
 
         // Otherwise, capture the input operand, if possible.
-        if (firrtl::type_cast<FIRRTLBaseType>(input.getType()).isPassive()) {
+        if (auto baseType =
+                firrtl::type_dyn_cast<FIRRTLBaseType>(input.getType());
+            baseType && baseType.isPassive()) {
           subOp.getInputMutable().assign(getReplacement(subOp, input));
           if (!isAncestorOfValueOwner(layerBlock, index))
             subOp.getIndexMutable().assign(getReplacement(subOp, index));
@@ -935,47 +1021,80 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         return WalkResult::advance();
       }
 
-      // Handle domain define ops.  The destination must be within the current
-      // layer block.  The source may be outside it.  These, unlike other XMR
-      // captures, need to create ports as there is no XMR representation for
-      // domains.  When creating these, look through any intermediate wires as
-      // these need to know the domain kind when creating the port and wires do
-      // not presently have this.
-      //
-      // TODO: Stop looking through wires when wires support domain info [1].
-      //
-      // [1]: https://github.com/llvm/circt/issues/9398
-      if (auto domainDefineOp = dyn_cast<DomainDefineOp>(op)) {
-        auto src = domainDefineOp.getSrc();
-        auto dest = domainDefineOp.getDest();
-        auto srcInLayerBlock = isAncestorOfValueOwner(layerBlock, src);
-        auto destInLayerBlock = isAncestorOfValueOwner(layerBlock, dest);
+      // Handle FConnectLike operations that involve domain types or probe
+      // types. These require special port creation since they can cross layer
+      // boundaries.
+      if (auto connect = dyn_cast<FConnectLike>(op)) {
+        auto src = connect.getSrc();
+        auto dst = connect.getDest();
 
-        if (srcInLayerBlock) {
-          // The source and destination are in the current block.  Do nothing.
-          if (destInLayerBlock)
+        // Check if this connection involves domain or probe types
+        bool isDomainConnect =
+            isa<DomainType>(src.getType()) || isa<DomainType>(dst.getType());
+        bool isProbeConnect =
+            isa<RefType>(src.getType()) || isa<RefType>(dst.getType());
+
+        if (isDomainConnect || isProbeConnect) {
+          auto srcInLayerBlock = isAncestorOfValueOwner(layerBlock, src);
+          auto dstInLayerBlock = isAncestorOfValueOwner(layerBlock, dst);
+
+          // Both source and destination outside the layer: move the connect out
+          if (!srcInLayerBlock && !dstInLayerBlock) {
+            connect->moveBefore(layerBlock);
             return WalkResult::advance();
-          // The source is in the current layer block, but the destination is
-          // outside it.  This is not possible except in situations where we
-          // have moved an instance out of the layer block.  I.e., this is due
-          // to a child layer (which has already been processed) capturing
-          // something from the current layer block.
-          return WalkResult(createOutputPort(src, dest));
+          }
+
+          // Source inside, destination outside: create output port
+          if (srcInLayerBlock && !dstInLayerBlock) {
+            if (failed(createOutputPort(src, dst)))
+              return WalkResult::interrupt();
+            // For probe connects with non-ref destination, erase the connect
+            // since ref.define was created instead
+            if (isProbeConnect && !isa<RefType>(dst.getType()))
+              connect.erase();
+            return WalkResult::advance();
+          }
+
+          // Source outside, destination inside: create input port
+          if (!srcInLayerBlock && dstInLayerBlock) {
+            if (failed(createInputPort(src, op->getLoc())))
+              return WalkResult::interrupt();
+            return WalkResult::advance();
+          }
+
+          // Both inside the layer block: nothing to do
+          return WalkResult::advance();
         }
+      }
 
-        // The source is _not_ in the current block.  Create an input domain
-        // type port with the right kind.  To find the right kind, we need to
-        // look through wires to the original source.
-        if (destInLayerBlock)
-          return WalkResult(createInputPort(src, domainDefineOp.getLoc()));
-
-        // The source and destination are outside the layer block.  Bubble this
-        // up.  Note: this code is only reachable for situations where a prior
-        // instance, created from a bind layer has been bubbled up. This flavor
-        // of construction is otherwise illegal.
-        domainDefineOp->moveBefore(layerBlock);
+      if (auto rwprobe = dyn_cast<RWProbeOp>(op)) {
+        rwprobes.push_back(rwprobe);
         return WalkResult::advance();
       }
+
+      // Pre-emptively de-squiggle connections that we are creating.  This will
+      // later be cleaned up by the de-squiggling pass.  However, there is no
+      // point in creating deeply squiggled connections if we don't have to.
+      //
+      // This pattern matches the following structure.  Move the ref.resolve
+      // outside the layer block.  The matching connect will be moved outside in
+      // the next loop iteration:
+      //     %0 = ...
+      //     %1 = ...
+      //     firrtl.layerblock {
+      //       %2 = ref.resolve %0
+      //       firrtl.matchingconnect %1, %2
+      //     }
+      if (auto refResolve = dyn_cast<RefResolveOp>(op))
+        if (refResolve.getResult().hasOneUse() &&
+            refResolve.getRef().getParentBlock() != body)
+          if (auto connect = dyn_cast<MatchingConnectOp>(
+                  *refResolve.getResult().getUsers().begin()))
+            if (connect.getDest().getParentBlock() != body) {
+              refResolve->moveBefore(layerBlock);
+              return WalkResult::advance();
+            }
+
 
       // Handle captures.  For any captured operands, convert them to a suitable
       // replacement value.  The `getReplacement` function will automatically
@@ -987,6 +1106,68 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         //
         // Note: This check is what avoids handling ConnectOp destinations.
         if (isAncestorOfValueOwner(layerBlock, operand))
+          continue;
+
+        // Handle probe-typed operands.
+        if (auto refType = dyn_cast<RefType>(operand.getType())) {
+          // Special case: if the operand is an XMR ref, clone it instead of
+          // creating an input port. This preserves rwprobe types.
+          if (auto xmrRefOp = operand.getDefiningOp<XMRRefOp>()) {
+            OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(body);
+            // Clone the XMR ref with layer color stripped from the result type
+            auto clonedType = refType.removeLayer();
+            auto clonedXmr = XMRRefOp::create(builder, xmrRefOp.getLoc(),
+                                              clonedType, xmrRefOp.getRefAttr(),
+                                              xmrRefOp.getVerbatimSuffixAttr());
+
+            // Replace uses of the original XMR inside the layer block
+            operand.replaceUsesWithIf(clonedXmr, [&](OpOperand &use) {
+              return layerBlock->isAncestor(use.getOwner());
+            });
+            continue;
+          }
+
+          // For non-XMR probe operands, create input ports with the base type
+          // and use ref.send inside the layer module (same approach as
+          // f1386fc).
+          const auto &[portName, _] = getFieldName(FieldRef(operand, 0), true);
+          auto name = builder.getStringAttr(portNs.newName(portName));
+          auto domainInfo = ArrayAttr::get(operand.getContext(), {});
+          auto baseType = refType.getType();
+
+          // Create an input port with the base type (not RefType)
+          ports.push_back({name, baseType, Direction::In,
+                           /*symName=*/{},
+                           /*location=*/op->getLoc(),
+                           /*annos=*/{}, /*domains=*/domainInfo});
+
+          // Add argument to the layer block body and convert to ref with
+          // ref.send
+          Value replacement = body->addArgument(baseType, op->getLoc());
+          OpBuilder::InsertionGuard guard(builder);
+          builder.setInsertionPointToStart(body);
+          replacement = RefSendOp::create(builder, op->getLoc(), replacement);
+
+          // Replace uses of the probe inside the layer block
+          operand.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+            auto *user = use.getOwner();
+            if (!layerBlock->isAncestor(user))
+              return false;
+            if (auto connectLike = dyn_cast<FConnectLike>(user)) {
+              if (use.getOperandNumber() == 0)
+                return false;
+            }
+            return true;
+          });
+
+          connectValues.push_back({operand, ConnectKind::NonRef});
+          continue;
+        }
+
+        // Skip domain-typed operands as they should have been handled by the
+        // domain-specific handlers above (FConnectLike, DomainDefineOp).
+        if (isa<DomainType>(operand.getType()))
           continue;
 
         op->setOperand(i, getReplacement(op, operand));
@@ -1029,7 +1210,10 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         llvm::dbgs() << "          - name: " << port.getName() << "\n"
                      << "            type: " << port.type << "\n"
                      << "            direction: " << port.direction << "\n"
-                     << "            value: " << value << "\n";
+                     << "            value: " << value.value << "\n"
+                     << "            kind: "
+                     << (value.kind == ConnectKind::NonRef ? "NonRef" : "Ref")
+                     << "\n";
       }
     });
 
@@ -1051,12 +1235,59 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         /*annotations=*/ArrayRef<Attribute>{},
         /*portAnnotations=*/ArrayRef<Attribute>{}, /*lowerToBind=*/false,
         /*doNotPrint=*/true, innerSym);
-    for (auto [lhs, rhs] : llvm::zip(instanceOp.getResults(), connectValues))
-      if (instanceOp.getPortDirection(lhs.getResultNumber()) == Direction::In)
-        DomainDefineOp::create(builder, builder.getUnknownLoc(), lhs, rhs);
-      else {
-        DomainDefineOp::create(builder, builder.getUnknownLoc(), rhs, lhs);
+
+    // Connect instance ports to values.
+    assert(ports.size() == connectValues.size() &&
+           "the number of instance ports and values to connect to them must be "
+           "equal");
+
+    // Set insertion point after the instance for all port connections
+    builder.setInsertionPointAfter(instanceOp);
+
+    for (unsigned portNum = 0, e = newModule.getNumPorts(); portNum < e;
+         ++portNum) {
+      if (instanceOp.getPortDirection(portNum) == Direction::In) {
+        auto src = connectValues[portNum].value;
+        auto portType = instanceOp.getResult(portNum).getType();
+
+        // Handle domain type input ports
+        if (isa<DomainType>(portType)) {
+          DomainDefineOp::create(builder,
+                                 newModule.getPortLocationAttr(portNum),
+                                 instanceOp.getResult(portNum), src);
+        } else {
+          // Handle regular input ports. If src is a RefType, resolve it first.
+          // Note: Input ports are always base types (not RefType) since we use
+          // ref.send inside the module to convert back to probes.
+          if (isa<RefType>(src.getType()))
+            src = RefResolveOp::create(
+                builder, newModule.getPortLocationAttr(portNum), src);
+          MatchingConnectOp::create(builder,
+                                    newModule.getPortLocationAttr(portNum),
+                                    instanceOp.getResult(portNum), src);
+        }
+      } else if (isa<RefType>(instanceOp.getResult(portNum).getType())) {
+        // Output port is a RefType
+        if (connectValues[portNum].kind == ConnectKind::Ref)
+          // Destination is also a ref, use ref.define
+          RefDefineOp::create(builder, getPortLoc(connectValues[portNum].value),
+                              connectValues[portNum].value,
+                              instanceOp.getResult(portNum));
+        else
+          // Destination is not a ref, resolve the port first
+          MatchingConnectOp::create(
+              builder, getPortLoc(connectValues[portNum].value),
+              connectValues[portNum].value,
+              RefResolveOp::create(builder,
+                                   newModule.getPortLocationAttr(portNum),
+                                   instanceOp.getResult(portNum)));
+      } else {
+        // Output port is a domain type
+        DomainDefineOp::create(builder, builder.getUnknownLoc(),
+                               connectValues[portNum].value,
+                               instanceOp.getResult(portNum));
       }
+    }
 
     auto outputFile = outputFileForLayer(moduleOp.getModuleNameAttr(),
                                          layerBlock.getLayerName());
@@ -1081,6 +1312,34 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       LLVM_DEBUG(llvm::dbgs() << "          - ref: " << oldInnerRef << "\n"
                               << "            splice: " << splice.first << ", "
                               << splice.second << "\n";);
+    }
+
+    // Update RWProbe operations.
+    for (auto rwprobe : rwprobes) {
+      auto targetRef = rwprobe.getTarget();
+      auto mapped = innerRefMap.find(targetRef);
+      if (mapped == innerRefMap.end()) {
+        assert(targetRef.getModule() == moduleOp.getNameAttr());
+        auto ist = hw::InnerSymbolTable::get(moduleOp);
+        if (failed(ist))
+          return WalkResult::interrupt();
+        auto target = ist->lookup(targetRef.getName());
+        assert(target);
+        auto fieldref = getFieldRefForTarget(target);
+        rwprobe
+            .emitError(
+                "rwprobe capture not supported with bind convention layer")
+            .attachNote(fieldref.getLoc())
+            .append("rwprobe target outside of bind layer");
+        return WalkResult::interrupt();
+      }
+
+      if (mapped->second.second != newModule.getModuleNameAttr())
+        return rwprobe.emitError("rwprobe target refers to different module"),
+               WalkResult::interrupt();
+
+      rwprobe.setTargetAttr(
+          hw::InnerRefAttr::get(mapped->second.second, targetRef.getName()));
     }
 
     // Update verbatims that target operations extracted alongside.
