@@ -280,7 +280,6 @@ def test_windowed_list_header_padding_matches_frame_width():
   ])
 
   hdr = _generate_header([window])
-  print(hdr)
   assert "struct coords_only : public esi::SegmentedMessageData" in hdr
   assert "struct header_frame {\n    uint8_t _pad[6];\n    count_type coords_count;\n  };" in hdr
   assert "header_frame footer{};" in hdr
