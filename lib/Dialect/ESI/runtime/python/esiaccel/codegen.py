@@ -515,6 +515,22 @@ class CppTypeEmitter:
       return f"{field_cpp} {field_name} : {wrapped.bit_width};"
     return f"{field_cpp} {field_name};"
 
+  def _format_window_ctor_param(self, field_name: str,
+                                field_type: types.ESIType) -> str:
+    """Emit a constructor parameter for generated window helpers.
+
+    Small scalar header fields are cheaper to pass by value than by reference.
+    Larger aggregates stay as const references.
+    """
+    if isinstance(field_type, types.ArrayType):
+      base_cpp, suffix = self._array_base_and_suffix(field_type)
+      return f"const {base_cpp} (&{field_name}){suffix}"
+    field_cpp = self._cpp_type(field_type)
+    wrapped = self._unwrap_aliases(field_type)
+    if isinstance(wrapped, (types.BitsType, types.IntType)):
+      return f"{field_cpp} {field_name}"
+    return f"const {field_cpp} &{field_name}"
+
   def _field_byte_width(self, field_type: types.ESIType) -> int:
     """Compute the byte width of a field type, rounding up to full bytes."""
     return (field_type.bit_width + 7) // 8
@@ -680,32 +696,24 @@ class CppTypeEmitter:
     """Emit a SegmentedMessageData helper for a serial list window."""
     info = self._analyze_window(window_type)
     ctor_params = [
-        f"const {self._cpp_type(field_type)} &{name}"
+        self._format_window_ctor_param(name, field_type)
         for name, field_type in info["ctor_params"]
     ]
-    ctor_params.append(
+    value_ctor_params = list(ctor_params)
+    value_ctor_params.append(
         f"const std::vector<value_type> &{info['list_field_name']}")
-    ctor_signature = ", ".join(ctor_params)
+    value_ctor_signature = ", ".join(value_ctor_params)
+    frame_ctor_params = list(ctor_params)
+    frame_ctor_params.append("std::vector<data_frame> frames")
+    frame_ctor_signature = ", ".join(frame_ctor_params)
+    helper_args = ", ".join(name for name, _ in info["ctor_params"])
+    helper_call = f"{helper_args}, std::move(frames)" if helper_args else "std::move(frames)"
 
     hdr.write(
         f"struct {info['window_name']} : public esi::SegmentedMessageData {{\n")
     hdr.write("public:\n")
     hdr.write(f"  using value_type = {info['element_cpp']};\n")
     hdr.write(f"  using count_type = {info['count_cpp']};\n\n")
-    hdr.write("private:\n")
-    hdr.write("  struct header_frame {\n")
-    if info["header_pad_bytes"] > 0:
-      hdr.write(f"    uint8_t _pad[{info['header_pad_bytes']}];\n")
-    for field_name, field_type in info["header_fields"]:
-      if field_type is None:
-        if info["count_width"] % 8 == 0:
-          decl = f"{info['count_cpp']} {field_name};"
-        else:
-          decl = f"{info['count_cpp']} {field_name} : {info['count_width']};"
-      else:
-        decl = self._format_window_field_decl(field_name, field_type)
-      hdr.write(f"    {decl}\n")
-    hdr.write("  };\n")
     hdr.write("  struct data_frame {\n")
     if info["data_pad_bytes"] > 0:
       hdr.write(f"    uint8_t _pad[{info['data_pad_bytes']}];\n")
@@ -713,33 +721,53 @@ class CppTypeEmitter:
       decl = self._format_window_field_decl(field_name, field_type)
       hdr.write(f"    {decl}\n")
     hdr.write("  };\n\n")
+    hdr.write("private:\n")
+    hdr.write("  struct header_frame {\n")
+    if info["header_pad_bytes"] > 0:
+      hdr.write(f"    uint8_t _pad[{info['header_pad_bytes']}];\n")
+    for field_name, field_type in info["header_fields"]:
+      if field_type is None:
+        if info["count_width"] % 8 == 0:
+          decl = f"count_type {field_name};"
+        else:
+          decl = f"count_type {field_name} : {info['count_width']};"
+      else:
+        decl = self._format_window_field_decl(field_name, field_type)
+      hdr.write(f"    {decl}\n")
+    hdr.write("  };\n\n")
     hdr.write("  header_frame header{};\n")
     hdr.write("  std::vector<data_frame> data_frames;\n")
     hdr.write("  header_frame footer{};\n\n")
-    hdr.write("public:\n")
-    hdr.write(f"  {info['window_name']}({ctor_signature}) {{\n")
-    hdr.write(f"    if ({info['list_field_name']}.empty())\n")
+    hdr.write(f"  void construct({frame_ctor_signature}) {{\n")
+    hdr.write("    if (frames.empty())\n")
     hdr.write(
         f"      throw std::invalid_argument(\"{info['window_name']}: bulk windowed lists cannot be empty\");\n"
     )
     hdr.write(
-        f"    if ({info['list_field_name']}.size() > std::numeric_limits<count_type>::max())\n"
-    )
+        "    if (frames.size() > std::numeric_limits<count_type>::max())\n")
     hdr.write(
         f"      throw std::invalid_argument(\"{info['window_name']}: list too large for encoded count\");\n"
     )
     hdr.write(
-        f"    header.{info['count_field_name']} = static_cast<count_type>({info['list_field_name']}.size());\n"
+        f"    header.{info['count_field_name']} = static_cast<count_type>(frames.size());\n"
     )
     for name, _ in info["ctor_params"]:
       hdr.write(f"    header.{name} = {name};\n")
     hdr.write(f"    footer.{info['count_field_name']} = 0;\n")
-    hdr.write(f"    data_frames.reserve({info['list_field_name']}.size());\n")
+    hdr.write("    data_frames = std::move(frames);\n")
+    hdr.write("  }\n\n")
+    hdr.write("public:\n")
+    hdr.write(f"  {info['window_name']}({frame_ctor_signature}) {{\n")
+    hdr.write(f"    construct({helper_call});\n")
+    hdr.write("  }\n\n")
+    hdr.write(f"  {info['window_name']}({value_ctor_signature}) {{\n")
+    hdr.write("    std::vector<data_frame> frames;\n")
+    hdr.write(f"    frames.reserve({info['list_field_name']}.size());\n")
     hdr.write(f"    for (const auto &element : {info['list_field_name']}) {{\n")
-    hdr.write("      data_frame frame{};\n")
+    hdr.write("      auto &frame = frames.emplace_back();\n")
     hdr.write(f"      frame.{info['list_field_name']} = element;\n")
-    hdr.write("      data_frames.push_back(frame);\n")
     hdr.write("    }\n")
+    hdr.write(f"    construct({helper_call});\n")
     hdr.write("  }\n\n")
     hdr.write("  size_t numSegments() const override { return 3; }\n")
     hdr.write("  esi::Segment segment(size_t idx) const override {\n")
@@ -792,6 +820,7 @@ class CppTypeEmitter:
         #include <limits>
         #include <stdexcept>
         #include <string_view>
+        #include <utility>
         #include <vector>
 
         #include "esi/Common.h"

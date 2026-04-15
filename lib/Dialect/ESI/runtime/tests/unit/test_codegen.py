@@ -231,12 +231,19 @@ def test_windowed_list_bulk_message_wrapper():
   assert "struct serial_coord_args : public esi::SegmentedMessageData" in hdr
   assert "using value_type = Coord;" in hdr
   assert "using count_type = uint16_t;" in hdr
-  assert "uint16_t coords_count;" in hdr
+  assert "count_type coords_count;" in hdr
   assert "uint8_t _pad[2];" in hdr
   assert "Coord coords;" in hdr
+  assert hdr.index("struct data_frame {") < hdr.index(
+      "private:\n  struct header_frame {")
   assert "std::vector<data_frame> data_frames;" in hdr
   assert "esi::Segment segment(size_t idx) const override" in hdr
   assert "footer.coords_count = 0;" in hdr
+  assert "const std::vector<value_type> &coords" in hdr
+  assert "void construct(uint32_t x_translation, uint32_t y_translation, std::vector<data_frame> frames)" in hdr
+  assert "construct(x_translation, y_translation, std::move(frames));" in hdr
+  assert "auto &frame = frames.emplace_back();" in hdr
+  assert "for (const auto &element : coords) {" in hdr
   assert "frame.coords = element;" in hdr
   assert '!esi.window<\\"serial_coord_args\\"' in hdr
   assert 'throw std::out_of_range("serial_coord_args: invalid segment index")' in hdr
@@ -273,6 +280,8 @@ def test_windowed_list_header_padding_matches_frame_width():
   ])
 
   hdr = _generate_header([window])
+  print(hdr)
   assert "struct coords_only : public esi::SegmentedMessageData" in hdr
-  assert "struct header_frame {\n    uint8_t _pad[6];\n    uint16_t coords_count;\n  };" in hdr
+  assert "struct header_frame {\n    uint8_t _pad[6];\n    count_type coords_count;\n  };" in hdr
   assert "header_frame footer{};" in hdr
+  assert "void construct(std::vector<data_frame> frames)" in hdr
