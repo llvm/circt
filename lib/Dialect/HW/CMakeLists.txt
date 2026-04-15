@@ -10,6 +10,7 @@ set(CIRCT_HW_Sources
   HWModuleOpInterface.cpp
   HWOpInterfaces.cpp
   HWOps.cpp
+  HWProbeOps.cpp
   HWTypeInterfaces.cpp
   HWTypes.cpp
   ModuleImplementation.cpp

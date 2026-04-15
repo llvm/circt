@@ -13,5 +13,6 @@ include "circt/Dialect/HW/HWMiscOps.td"
 include "circt/Dialect/HW/HWAggregates.td"
 include "circt/Dialect/HW/HWStructure.td"
 include "circt/Dialect/HW/HWTypeDecls.td"
+include "circt/Dialect/HW/HWProbeOps.td"
 
 #endif // CIRCT_DIALECT_HW_HWOPS_TD
