@@ -275,43 +275,44 @@ void LowerVariadicPass::runOnOperation() {
     rewriter.setInsertionPoint(op);
 
     // Handle AndInverterOp specially to preserve inversion flags.
-    if (auto andInverterOp = dyn_cast<aig::AndInverterOp>(op)) {
-      auto result = replaceWithBalancedTree(
-          analysis, rewriter, op,
-          // Check if each operand is inverted.
-          [&](OpOperand &operand) {
-            return andInverterOp.isInverted(operand.getOperandNumber());
-          },
-          // Create binary AndInverterOp with inversion flags.
-          [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
-            return aig::AndInverterOp::create(
-                rewriter, op->getLoc(), lhs.getValue(), rhs.getValue(),
-                lhs.isInverted(), rhs.isInverted());
-          });
-      if (failed(result))
-        return signalPassFailure();
-      continue;
-    }
-
-    // Handle commutative operations (and, or, xor, mul, add, etc.) using
-    // delay-aware lowering to minimize critical path.
-    if (isa_and_nonnull<comb::CombDialect>(op->getDialect()) &&
-        op->hasTrait<OpTrait::IsCommutative>()) {
-      auto result = replaceWithBalancedTree(
-          analysis, rewriter, op,
-          // No inversion flags for standard commutative operations.
-          [](OpOperand &) { return false; },
-          // Create binary operation with the same operation type.
-          [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
-            OperationState state(op->getLoc(), op->getName());
-            state.addOperands(ValueRange{lhs.getValue(), rhs.getValue()});
-            state.addTypes(op->getResult(0).getType());
-            auto *newOp = Operation::create(state);
-            rewriter.insert(newOp);
-            return newOp->getResult(0);
-          });
-      if (failed(result))
-        return signalPassFailure();
-    }
+    auto result =
+        mlir::TypeSwitch<Operation *, LogicalResult>(op)
+            .Case<aig::AndInverterOp>([&](auto op) {
+              return replaceWithBalancedTree(
+                  analysis, rewriter, op,
+                  // Check if each operand is inverted.
+                  [&](OpOperand &operand) {
+                    return op.isInverted(operand.getOperandNumber());
+                  },
+                  // Create binary AndInverterOp with inversion flags.
+                  [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
+                    return decltype(op)::create(
+                        rewriter, op->getLoc(), lhs.getValue(), rhs.getValue(),
+                        lhs.isInverted(), rhs.isInverted());
+                  });
+            })
+            .Default([&](Operation *op) {
+              // Handle commutative operations (and, or, xor, mul, add, etc.)
+              // using delay-aware lowering to minimize critical path.
+              if (isa_and_nonnull<comb::CombDialect>(op->getDialect()) &&
+                  op->hasTrait<OpTrait::IsCommutative>())
+                return replaceWithBalancedTree(
+                    analysis, rewriter, op,
+                    // No inversion flags for standard commutative operations.
+                    [](OpOperand &) { return false; },
+                    // Create binary operation with the same operation type.
+                    [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
+                      OperationState state(op->getLoc(), op->getName());
+                      state.addOperands(
+                          ValueRange{lhs.getValue(), rhs.getValue()});
+                      state.addTypes(op->getResult(0).getType());
+                      auto *newOp = Operation::create(state);
+                      rewriter.insert(newOp);
+                      return newOp->getResult(0);
+                    });
+              return success();
+            });
+    if (failed(result))
+      return signalPassFailure();
   }
 }
