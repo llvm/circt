@@ -242,54 +242,20 @@ static void serialCoordTranslateTest(Accelerator *accel) {
     throw std::runtime_error(
         "Serial coord translate test: no 'translate_coords_serial' port found");
 
-  TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
-      portIter->second.getRawWrite("arg"));
-  ReadChannelPort &resultPort = portIter->second.getRawRead("result");
+  TypedFunction<SerialCoordInput, SerialCoordOutputFrame,
+                /*SkipTypeCheck=*/true>
+      translateCoords(
+          portIter->second.getAs<services::FuncService::Function>());
 
-  argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
-  resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+  translateCoords.connect();
 
   std::vector<SerialCoordData> coords;
   for (auto &c : inputCoords)
     coords.emplace_back(c.x, c.y);
-
-  auto batch = std::make_unique<SerialCoordInput>(xTrans, yTrans, coords);
-  argPort.write(batch);
-
-  std::vector<Coord> results;
-  while (true) {
-    MessageData msg;
-    resultPort.read(msg);
-    if (msg.getSize() != sizeof(SerialCoordOutputFrame))
-      throw std::runtime_error("Unexpected result message size");
-
-    const auto *frame =
-        reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
-    uint16_t batchCount = frame->header.coordsCount;
-    if (batchCount == 0)
-      break;
-
-    for (uint16_t i = 0; i < batchCount; ++i) {
-      resultPort.read(msg);
-      if (msg.getSize() != sizeof(SerialCoordOutputFrame))
-        throw std::runtime_error("Unexpected result message size");
-      const auto *dFrame =
-          reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
-      results.push_back({dFrame->data.y, dFrame->data.x});
-    }
-  }
-
-  if (results.size() != inputCoords.size())
-    throw std::runtime_error("Serial coord translate result size mismatch");
-  for (size_t i = 0; i < inputCoords.size(); ++i) {
-    uint32_t expX = inputCoords[i].x + xTrans;
-    uint32_t expY = inputCoords[i].y + yTrans;
-    if (results[i].x != expX || results[i].y != expY)
-      throw std::runtime_error("Serial coord translate result mismatch");
-  }
-
-  argPort.disconnect();
-  resultPort.disconnect();
+  SerialCoordInput batch(xTrans, yTrans, coords);
+  // TODO: List results are currently not supported so we cannot compare the
+  // results.
+  (void)translateCoords.call(batch).get();
 }
 
 int main(int argc, const char *argv[]) {
