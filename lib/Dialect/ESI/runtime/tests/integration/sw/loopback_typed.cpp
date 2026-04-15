@@ -8,7 +8,9 @@
 
 #include <cstdint>
 #include <iostream>
+#include <random>
 #include <stdexcept>
+#include <vector>
 
 using namespace esi;
 
@@ -169,6 +171,106 @@ static void runSInt4Loopback(Accelerator *accel) {
             << " neg=" << (int)negResult << "\n";
 }
 
+//
+// SerialCoordTranslator test
+//
+
+using SerialCoordInput = esi_system::serial_coord_args;
+using SerialCoordValue = SerialCoordInput::value_type;
+
+#pragma pack(push, 1)
+struct SerialCoordOutputHeader {
+  uint8_t _pad[6];
+  uint16_t coordsCount;
+};
+struct SerialCoordOutputData {
+  uint32_t y;
+  uint32_t x;
+};
+union SerialCoordOutputFrame {
+  SerialCoordOutputHeader header;
+  SerialCoordOutputData data;
+};
+#pragma pack(pop)
+static_assert(sizeof(SerialCoordOutputFrame) == 8, "Size mismatch");
+
+static void serialCoordTranslateTest(Accelerator *accel) {
+  size_t numCoords = 100;
+  uint32_t xTrans = 10, yTrans = 20;
+
+  // Generate random coordinates.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<SerialCoordValue> coords;
+  coords.reserve(numCoords);
+  for (uint32_t i = 0; i < numCoords; ++i)
+    coords.emplace_back(dist(rng), dist(rng));
+
+  auto child = accel->getChildren().find(AppID("coord_translator_serial"));
+  if (child == accel->getChildren().end())
+    throw std::runtime_error("Serial coord translate test: no "
+                             "'coord_translator_serial' child found");
+
+  auto &ports = child->second->getPorts();
+  auto portIter = ports.find(AppID("translate_coords_serial"));
+  if (portIter == ports.end())
+    throw std::runtime_error(
+        "Serial coord translate test: no 'translate_coords_serial' port found");
+
+  auto *func = portIter->second.getAs<services::FuncService::Function>();
+  if (!func)
+    throw std::runtime_error(
+        "Serial coord translate test: port is not a FuncService::Function");
+
+  // Keep the raw result channel here: the serial window reply arrives as
+  // multiple frames, while FuncService::Function / TypedFunction only waits
+  // for a single result message.
+  TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
+      func->getRawWrite("arg"));
+  ReadChannelPort &resultPort = func->getRawRead("result");
+
+  argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+  resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+
+  auto batch = std::make_unique<SerialCoordInput>(xTrans, yTrans, coords);
+  argPort.write(batch);
+
+  std::vector<SerialCoordValue> results;
+  while (true) {
+    MessageData msg;
+    resultPort.read(msg);
+    if (msg.getSize() != sizeof(SerialCoordOutputFrame))
+      throw std::runtime_error("Unexpected result message size");
+
+    const auto *frame =
+        reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
+    uint16_t batchCount = frame->header.coordsCount;
+    if (batchCount == 0)
+      break;
+
+    for (uint16_t i = 0; i < batchCount; ++i) {
+      resultPort.read(msg);
+      if (msg.getSize() != sizeof(SerialCoordOutputFrame))
+        throw std::runtime_error("Unexpected result message size");
+      const auto *dFrame =
+          reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
+      results.push_back({dFrame->data.y, dFrame->data.x});
+    }
+  }
+
+  if (results.size() != coords.size())
+    throw std::runtime_error("Serial coord translate result size mismatch");
+  for (size_t i = 0; i < coords.size(); ++i) {
+    uint32_t expX = coords[i].x + xTrans;
+    uint32_t expY = coords[i].y + yTrans;
+    if (results[i].x != expX || results[i].y != expY)
+      throw std::runtime_error("Serial coord translate result mismatch");
+  }
+
+  argPort.disconnect();
+  resultPort.disconnect();
+}
+
 int main(int argc, const char *argv[]) {
   CliParser cli("loopback-typed-cpp");
   cli.description(
@@ -194,6 +296,7 @@ int main(int argc, const char *argv[]) {
     runStructFunc(accel);
     runOddStructFunc(accel);
     runArrayFunc(accel);
+    serialCoordTranslateTest(accel);
 
     conn->disconnect();
   } catch (std::exception &e) {

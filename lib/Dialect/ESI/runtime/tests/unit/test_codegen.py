@@ -172,3 +172,75 @@ def test_union_field_order_preserved():
   # Wrapped fields use wrapper struct types as union members.
   assert "_union_z_ui8_m_si16_a_ui32_z z;" in union_body
   assert "_union_z_ui8_m_si16_a_ui32_m m;" in union_body
+
+
+def test_windowed_list_bulk_message_wrapper():
+  """Bulk-encoded list windows emit a SegmentedMessageData helper."""
+  uint16 = types.UIntType("ui16", 16)
+  uint32 = types.UIntType("ui32", 32)
+  coord_struct_id = "!hw.struct<x: ui32, y: ui32>"
+  coord_alias_id = (
+    f"!hw.typealias<@esi_runtime_codegen::@Coord, {coord_struct_id}>")
+  coord_list_id = f"!esi.list<{coord_alias_id}>"
+  arg_struct_id = (
+    f"!hw.struct<x_translation: ui32, y_translation: ui32, coords: "
+    f"{coord_list_id}>")
+  header_struct_id = (
+    "!hw.struct<x_translation: ui32, y_translation: ui32, coords_count: "
+    "ui16>")
+  data_struct_id = f"!hw.struct<coords: !hw.array<1x{coord_alias_id}>>"
+  lowered_id = f"!hw.union<header: {header_struct_id}, data: {data_struct_id}>"
+  serial_args_id = (
+    f'!esi.window<"serial_coord_args", {arg_struct_id}, '
+    '[<"header", [<"x_translation">, <"y_translation">, '
+    '<"coords" countWidth 16>]>, <"data", [<"coords", 1>]>]>')
+
+  coord_inner = types.StructType(coord_struct_id, [("x", uint32), ("y", uint32)])
+  coord = types.TypeAlias(coord_alias_id, "Coord", coord_inner)
+  coord_list = types.ListType(coord_list_id, coord)
+  arg_struct = types.StructType(arg_struct_id, [("x_translation", uint32),
+                        ("y_translation", uint32),
+                        ("coords", coord_list)])
+  header_struct = types.StructType(header_struct_id,
+                   [("x_translation", uint32),
+                  ("y_translation", uint32),
+                  ("coords_count", uint16)])
+  data_struct = types.StructType(
+    data_struct_id,
+    [("coords", types.ArrayType(f"!hw.array<1x{coord_alias_id}>", coord, 1))],
+  )
+  lowered = types.UnionType(lowered_id, [("header", header_struct),
+                     ("data", data_struct)])
+  serial_args = types.WindowType(serial_args_id, "serial_coord_args", arg_struct,
+                 lowered, [
+                   types.WindowType.Frame(
+                     "header",
+                     [
+                       types.WindowType.Field(
+                         "x_translation", 0, 0),
+                       types.WindowType.Field(
+                         "y_translation", 0, 0),
+                       types.WindowType.Field(
+                         "coords", 0, 16),
+                     ],
+                   ),
+                   types.WindowType.Frame(
+                     "data",
+                     [types.WindowType.Field("coords", 1, 0)],
+                   ),
+                 ])
+
+  hdr = _generate_header([coord, serial_args])
+  assert "Unsupported type" not in hdr
+  assert "struct serial_coord_args : public esi::SegmentedMessageData" in hdr
+  assert "using value_type = Coord;" in hdr
+  assert "using count_type = uint16_t;" in hdr
+  assert "uint16_t coords_count;" in hdr
+  assert "uint8_t _pad[2];" in hdr
+  assert "Coord coords;" in hdr
+  assert "std::vector<data_frame> data_frames;" in hdr
+  assert "esi::Segment segment(size_t idx) const override" in hdr
+  assert "footer.coords_count = 0;" in hdr
+  assert "frame.coords = element;" in hdr
+  assert '!esi.window<\\"serial_coord_args\\"' in hdr
+  assert 'throw std::out_of_range("serial_coord_args: invalid segment index")' in hdr
