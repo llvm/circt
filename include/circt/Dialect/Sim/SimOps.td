@@ -618,6 +618,28 @@ def GetFileOp : SimOp<"get_file", [Pure]> {
   let assemblyFormat = "$fileName attr-dict";
 }
 
+def StdoutStreamOp : SimOp<"stdout_stream", [Pure]> {
+  let summary = "The standard output stream";
+  let description = [{
+    Returns a reference to the standard output stream, which can be consumed
+    by `sim.print` or `sim.proc.print`.
+  }];
+
+  let results = (outs OutputStreamType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
+def StderrStreamOp : SimOp<"stderr_stream", [Pure]> {
+  let summary = "The standard error stream";
+  let description = [{
+    Returns a reference to the standard error stream, which can be consumed
+    by `sim.print` or `sim.proc.print`.
+  }];
+
+  let results = (outs OutputStreamType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Dynamic Strings
 //===----------------------------------------------------------------------===//
