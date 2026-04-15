@@ -18,6 +18,7 @@ jobs:
         compiler:
           - clang
           - gcc
+          - clang-19
         valgrind: [false, true]
         exclude:
           - build-type: Debug
@@ -31,6 +32,11 @@ jobs:
           # TODO: This corner is failing and has been for some time. #5253.
           - build-type: Release
             compiler: gcc
+            valgrind: true
+          # clang-19 is used for valgrind builds instead of clang.
+          - compiler: clang-19
+            valgrind: false
+          - compiler: clang
             valgrind: true
     permissions:
       contents: write
