@@ -589,15 +589,18 @@ class CppTypeEmitter:
         data_fields.append((field.name, field_type))
         data_bytes += self._type_byte_width(field_type)
 
+    frame_bytes = max(header_bytes, data_bytes)
+
     return {
         "ctor_params": ctor_params,
         "count_cpp": count_cpp,
         "count_field_name": count_field_name,
         "count_width": count_width,
         "data_fields": data_fields,
-        "data_pad_bytes": max(header_bytes, data_bytes) - data_bytes,
+        "data_pad_bytes": frame_bytes - data_bytes,
         "element_cpp": self._cpp_type(list_type.element_type),
         "header_fields": header_fields,
+        "header_pad_bytes": frame_bytes - header_bytes,
         "list_field_name": list_field_name,
         "window_name": self.type_id_map[window_type],
     }
@@ -691,6 +694,8 @@ class CppTypeEmitter:
     hdr.write(f"  using count_type = {info['count_cpp']};\n\n")
     hdr.write("private:\n")
     hdr.write("  struct header_frame {\n")
+    if info["header_pad_bytes"] > 0:
+      hdr.write(f"    uint8_t _pad[{info['header_pad_bytes']}];\n")
     for field_name, field_type in info["header_fields"]:
       if field_type is None:
         if info["count_width"] % 8 == 0:

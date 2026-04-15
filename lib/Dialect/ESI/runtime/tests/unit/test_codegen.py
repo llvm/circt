@@ -244,3 +244,41 @@ def test_windowed_list_bulk_message_wrapper():
   assert "frame.coords = element;" in hdr
   assert '!esi.window<\\"serial_coord_args\\"' in hdr
   assert 'throw std::out_of_range("serial_coord_args: invalid segment index")' in hdr
+
+
+def test_windowed_list_header_padding_matches_frame_width():
+  """Headers pad out to the data frame width for count-only windows."""
+  uint16 = types.UIntType("ui16", 16)
+  uint32 = types.UIntType("ui32", 32)
+  element_id = "!hw.struct<x: ui32, y: ui32>"
+  list_id = f"!esi.list<{element_id}>"
+  arg_struct_id = f"!hw.struct<coords: {list_id}>"
+  header_struct_id = "!hw.struct<coords_count: ui16>"
+  data_struct_id = f"!hw.struct<coords: !hw.array<1x{element_id}>>"
+  lowered_id = f"!hw.union<header: {header_struct_id}, data: {data_struct_id}>"
+  window_id = (
+      f'!esi.window<"coords_only", {arg_struct_id}, '
+      '[<"header", [<"coords" countWidth 16>]>, '
+      '<"data", [<"coords", 1>]>]>')
+
+  element = types.StructType(element_id, [("x", uint32), ("y", uint32)])
+  coord_list = types.ListType(list_id, element)
+  arg_struct = types.StructType(arg_struct_id, [("coords", coord_list)])
+  header_struct = types.StructType(header_struct_id, [("coords_count", uint16)])
+  data_struct = types.StructType(
+      data_struct_id,
+      [("coords", types.ArrayType(f"!hw.array<1x{element_id}>", element, 1))],
+  )
+  lowered = types.UnionType(lowered_id, [("header", header_struct),
+                                         ("data", data_struct)])
+  window = types.WindowType(window_id, "coords_only", arg_struct, lowered, [
+      types.WindowType.Frame(
+          "header", [types.WindowType.Field("coords", 0, 16)]),
+      types.WindowType.Frame(
+          "data", [types.WindowType.Field("coords", 1, 0)]),
+  ])
+
+  hdr = _generate_header([window])
+  assert "struct coords_only : public esi::SegmentedMessageData" in hdr
+  assert "struct header_frame {\n    uint8_t _pad[6];\n    uint16_t coords_count;\n  };" in hdr
+  assert "header_frame footer{};" in hdr
