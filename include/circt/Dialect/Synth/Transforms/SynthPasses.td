@@ -264,7 +264,7 @@ def StructuralHash : Pass<"synth-structural-hash"> {
   }];
 }
 
-def MaximumAndCover : Pass<"synth-maximum-and-cover", "hw::HWModuleOp"> {
+def MaximumAndCover : Pass<"synth-maximum-and-cover"> {
   let summary = "Maximum And Cover for And-Inverter";
   let description = [{
     This pass performs maximum AND-cover optimization by collapsing single-fanout
