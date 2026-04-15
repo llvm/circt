@@ -21,12 +21,6 @@ jobs:
 
   build-linux:
     name: Build and Test
-    # Run on an internal MSFT subscription. Please DO NOT use this for any other
-    # workflows without talking to John Demme (john.demme@microsoft.com, GH
-    # teqdruid) first. We may lose funding for this if it ends up costing too
-    # much.
-    # If individual jobs fail due to timeouts or disconnects, please report to
-    # John and re-run the job.
     runs-on: Ubuntu-latest
     container:
       image: ghcr.io/circt/images/pycde-esi-test:latest
@@ -37,47 +31,50 @@ jobs:
       # Clone the CIRCT repo. Do not clone the submodule since we won't be
       # building CIRCT or PyCDE in this workflow.
       - name: Get CIRCT
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
         with:
           submodules: false
 
       - name: Setup venv and install dependencies
-        working-directory: /__w/circt/lib/Dialect/ESI/runtime
+        working-directory: lib/Dialect/ESI/runtime
         run: |
           set -o errexit
-          echo "Workspace: $GITHUB_WORKSPACE"
-          echo "Working directory: $PWD"
-          whoami
           apt update
           apt install -y python3-venv
           python3 -m venv venv
           . venv/bin/activate
           pip install --upgrade pip
-          pip install -r frontends/PyCDE/python/requirements.txt
+          pip install pytest nanobind
           pip install pycde --pre
 
       # --------
       # Build and test CIRCT
       # --------
 
-      - name: Test ESI runtime (pytest)
-        working-directory: /__w/circt/lib/Dialect/ESI/runtime
+      - name: Build ESI runtime
+        working-directory: lib/Dialect/ESI/runtime
         run: |
           set -o errexit
           . venv/bin/activate
+
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_C_COMPILER=clang
-          ninja -C build -j$(nproc) ESIRuntime ESIRuntimeCppTests
+          ninja -C build -j$(nproc)
 
           # Install the ESI C++ runtime into the esiaccel Python package tree
           # so that cmake-based tests can find headers, libraries, and the
           # esiaccelConfig.cmake.
           cmake --install build \
-            --prefix esiaccel_install \
-            --component ESIRuntime
-          export PYTHONPATH="$PWD/esiaccel_install/python"
-          export PATH="$PWD/build/bin:$PATH"
-          export LD_LIBRARY_PATH="$PWD/build/lib:$LD_LIBRARY_PATH"
-          python3 -m pytest lib/Dialect/ESI/runtime/tests/ -v --log-cli-level=INFO
+            --prefix esiaccel_install
+
+      - name: Test ESI runtime (pytest)
+        working-directory: lib/Dialect/ESI/runtime
+        run: |
+          set -o errexit
+          . venv/bin/activate
+
+          export PYTHONPATH="$PWD/esiaccel_install/"
+          export PATH="$PWD/esiaccel_install/bin:$PATH"
+          python3 -m pytest tests/ -v --log-cli-level=INFO

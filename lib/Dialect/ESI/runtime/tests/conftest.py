@@ -11,4 +11,10 @@ collect_ignore_glob = [
 
 def get_runtime_root() -> Path:
   import esiaccel
-  return Path(esiaccel.__file__).resolve().parent.parent.parent
+  p = Path(esiaccel.__file__).resolve().parent.parent
+  if (p / "lib").exists():
+    return p
+  p = Path(esiaccel.__file__).resolve().parent.parent.parent
+  if p.exists():
+    return p
+  raise FileNotFoundError("Could not determine ESI runtime root directory")
