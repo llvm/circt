@@ -688,7 +688,6 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     for (auto result : op->getResults())
       removeLayersFromValue(result);
-    
 
     // If the op is an instance, clear the enablelayers attribute.
     if (auto instance = dyn_cast<InstanceOp>(op))
@@ -1094,7 +1093,6 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
               refResolve->moveBefore(layerBlock);
               return WalkResult::advance();
             }
-
 
       // Handle captures.  For any captured operands, convert them to a suitable
       // replacement value.  The `getReplacement` function will automatically
