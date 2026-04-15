@@ -417,10 +417,8 @@ class CppTypeEmitter:
     """Get the textual code for the storage class of an integer type."""
     assert isinstance(type, (types.BitsType, types.IntType))
 
-    return self._storage_type(type.bit_width,
-                              not isinstance(type,
-                                             (types.BitsType,
-                                              types.UIntType)))
+    return self._storage_type(
+        type.bit_width, not isinstance(type, (types.BitsType, types.UIntType)))
 
   def _storage_type(self, bit_width: int, signed: bool) -> str:
     """Get the textual code for a byte-addressable integer storage type."""
