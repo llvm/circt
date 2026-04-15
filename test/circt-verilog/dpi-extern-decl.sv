@@ -7,9 +7,9 @@
 
 // --- HW-level checks: declarations survive lowering with correct types ---
 
-// CHECK-DAG: func.func private @void_dpi(i32)
-// CHECK-DAG: func.func private @nonvoid_dpi(i32) -> i32
-// CHECK-DAG: func.func private @dpi_with_output(i32, !llhd.ref<i32>)
+// CHECK-DAG: sim.func.dpi private @void_dpi(in %a : i32)
+// CHECK-DAG: sim.func.dpi private @nonvoid_dpi(in %a : i32, return return : i32)
+// CHECK-DAG: sim.func.dpi private @dpi_with_output(in %a : i32, out b : i32)
 
 import "DPI-C" function void void_dpi(input int a);
 import "DPI-C" function int nonvoid_dpi(input int a);
@@ -19,9 +19,9 @@ import "DPI-C" function void dpi_with_output(input int a, output int b);
 module DpiCallTest(input int in_val, output int out_val);
   int result;
 
-  // CHECK: func.call @void_dpi
-  // CHECK: func.call @nonvoid_dpi
-  // CHECK: func.call @dpi_with_output
+  // CHECK: sim.func.dpi.call @void_dpi
+  // CHECK: sim.func.dpi.call @nonvoid_dpi
+  // CHECK: sim.func.dpi.call @dpi_with_output
 
   always_comb begin
     void_dpi(in_val);
@@ -37,8 +37,8 @@ endmodule
 import "DPI-C" function chandle chandle_init(input int size);
 import "DPI-C" function void chandle_tick(input chandle ctx, input int a);
 
-// CHECK: func.func private @chandle_init(i32) -> !llvm.ptr
-// CHECK: func.func private @chandle_tick(!llvm.ptr, i32)
+// CHECK: sim.func.dpi private @chandle_init(in %size : i32, return return : !llvm.ptr)
+// CHECK: sim.func.dpi private @chandle_tick(in %ctx : !llvm.ptr, in %a : i32)
 
 // CHECK-LABEL: hw.module @ChandleTest
 module ChandleTest(input logic clock, input int in_val);

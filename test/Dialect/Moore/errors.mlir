@@ -179,6 +179,16 @@ moore.global_variable @Foo : !moore.i42 init {
 
 // -----
 
+// expected-error @below {{'return' argument must be the last argument}}
+moore.func.dpi @dpi_bad_return_pos(return ret : !moore.i32, in %other : !moore.i32)
+
+// -----
+
+// expected-error @below {{'return' argument must be the last argument}}
+moore.func.dpi @dpi_bad_multi_return(return a : !moore.i32, return b : !moore.i32)
+
+// -----
+
 // UnionCreateOp verifier: input type mismatch
 %0 = moore.constant 42 : i16
 // expected-error @below {{op input type '!moore.i16' does not match union field 'x' type '!moore.i32'}}

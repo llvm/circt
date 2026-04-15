@@ -1433,7 +1433,7 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // Check if there already is a declaration for this function.
   auto &lowering = functions[&subroutine];
   if (lowering) {
-    if (!lowering->op)
+    if (!lowering->op.getOperation())
       return {};
     return lowering.get();
   }
@@ -1517,6 +1517,48 @@ static FunctionType getFunctionSignature(
   return FunctionType::get(context.getContext(), inputTypes, outputTypes);
 }
 
+static FailureOr<SmallVector<moore::DPIArgInfo>>
+getDPISignature(Context &context,
+                const slang::ast::SubroutineSymbol &subroutine) {
+  using slang::ast::ArgumentDirection;
+
+  SmallVector<moore::DPIArgInfo> args;
+  args.reserve(subroutine.getArguments().size() +
+               (!subroutine.getReturnType().isVoid() ? 1 : 0));
+
+  for (const auto *arg : subroutine.getArguments()) {
+    auto type = context.convertType(arg->getType());
+    if (!type)
+      return failure();
+    moore::DPIArgDirection dir;
+    switch (arg->direction) {
+    case ArgumentDirection::In:
+      dir = moore::DPIArgDirection::In;
+      break;
+    case ArgumentDirection::Out:
+      dir = moore::DPIArgDirection::Out;
+      break;
+    case ArgumentDirection::InOut:
+      dir = moore::DPIArgDirection::InOut;
+      break;
+    case ArgumentDirection::Ref:
+      llvm_unreachable("'ref' is not legal for DPI functions");
+    }
+    args.push_back(
+        {StringAttr::get(context.getContext(), arg->name), type, dir});
+  }
+
+  if (!subroutine.getReturnType().isVoid()) {
+    auto type = context.convertType(subroutine.getReturnType());
+    if (!type)
+      return failure();
+    args.push_back({StringAttr::get(context.getContext(), "return"), type,
+                    moore::DPIArgDirection::Return});
+  }
+
+  return args;
+}
+
 /// Convert a function and its arguments to a function declaration in the IR.
 /// This does not convert the function body.
 FunctionLowering *
@@ -1524,9 +1566,6 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
                              mlir::StringRef qualifiedName,
                              llvm::SmallVectorImpl<Type> &extraParams) {
   auto loc = convertLocation(subroutine.location);
-  std::unique_ptr<FunctionLowering> lowering =
-      std::make_unique<FunctionLowering>();
-
   // Pick an insertion point for this function according to the source file
   // location.
   OpBuilder::InsertionGuard g(builder);
@@ -1557,30 +1596,46 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
   if (!funcTy)
     return nullptr;
 
-  // Create a coroutine for tasks (which can suspend) or a function for
-  // functions (which cannot).
-  Operation *funcOp;
-  if (subroutine.subroutineKind == slang::ast::SubroutineKind::Task) {
+  std::unique_ptr<FunctionLowering> lowering;
+  Operation *insertedOp = nullptr;
+  if (!subroutine.thisVar &&
+      subroutine.flags.has(slang::ast::MethodFlags::DPIImport)) {
+    // DPI-imported function: create a moore.func.dpi declaration.
+    auto dpiSig = getDPISignature(*this, subroutine);
+    if (failed(dpiSig))
+      return nullptr;
+
+    auto dpiOp = moore::DPIFuncOp::create(
+        builder, loc, StringAttr::get(getContext(), qualifiedName), *dpiSig,
+        /*argumentLocs=*/ArrayAttr(),
+        StringAttr::get(getContext(), subroutine.name));
+    SymbolTable::setSymbolVisibility(dpiOp, SymbolTable::Visibility::Private);
+    lowering = std::make_unique<FunctionLowering>(dpiOp);
+    insertedOp = dpiOp;
+  } else if (subroutine.subroutineKind == slang::ast::SubroutineKind::Task) {
+    // Create a coroutine for tasks (which can suspend).
     auto op = moore::CoroutineOp::create(builder, loc, qualifiedName, funcTy);
     SymbolTable::setSymbolVisibility(op, SymbolTable::Visibility::Private);
-    lowering->op = op;
-    funcOp = op;
+    lowering = std::make_unique<FunctionLowering>(op);
+    insertedOp = op;
   } else {
-    auto op = mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
-    SymbolTable::setSymbolVisibility(op, SymbolTable::Visibility::Private);
-    lowering->op = op;
-    funcOp = op;
+    // Create a function for regular functions (which cannot suspend).
+    auto funcOp =
+        mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
+    SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
+    lowering = std::make_unique<FunctionLowering>(funcOp);
+    insertedOp = funcOp;
   }
-  orderedRootOps.insert(it, {locationKey, funcOp});
+  orderedRootOps.insert(it, {locationKey, insertedOp});
 
   // Store the captured symbols so call sites can look them up.
   if (capturesIt != functionCaptures.end())
     lowering->capturedSymbols.assign(capturesIt->second.begin(),
                                      capturesIt->second.end());
 
-  // Add the function to the symbol table of the MLIR module, which uniquifies
+  // Add the op to the symbol table of the MLIR module, which uniquifies
   // its name.
-  symbolTable.insert(funcOp);
+  symbolTable.insert(insertedOp);
   functions[&subroutine] = std::move(lowering);
 
   // Schedule the body to be defined later.
@@ -1689,7 +1744,7 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
     if (!type)
       return failure();
     returnVar = moore::VariableOp::create(
-        builder, lowering->op.getLoc(),
+        builder, lowering->op->getLoc(),
         moore::RefType::get(cast<moore::UnpackedType>(type)), StringAttr{},
         Value{});
     valueSymbols.insert(subroutine.returnValVar, returnVar);
@@ -1720,14 +1775,14 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // If there was no explicit return statement provided by the user, insert a
   // default one.
   if (builder.getBlock()) {
-    if (lowering->isCoroutine()) {
-      moore::ReturnOp::create(builder, lowering->op.getLoc());
+    if (isa<moore::CoroutineOp>(lowering->op.getOperation())) {
+      moore::ReturnOp::create(builder, lowering->op->getLoc());
     } else if (returnVar && !subroutine.getReturnType().isVoid()) {
       Value read =
           moore::ReadOp::create(builder, returnVar.getLoc(), returnVar);
-      mlir::func::ReturnOp::create(builder, lowering->op.getLoc(), read);
+      mlir::func::ReturnOp::create(builder, lowering->op->getLoc(), read);
     } else {
-      mlir::func::ReturnOp::create(builder, lowering->op.getLoc(),
+      mlir::func::ReturnOp::create(builder, lowering->op->getLoc(),
                                    ValueRange{});
     }
   }
@@ -2163,8 +2218,9 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
     // Grab the function type from the declaration.
     FunctionType fnTy = cast<FunctionType>(lowering->op.getFunctionType());
     // Emit the method decl into the class body, preserving source order.
-    moore::ClassMethodDeclOp::create(builder, loc, fn.name, fnTy,
-                                     SymbolRefAttr::get(lowering->op));
+    moore::ClassMethodDeclOp::create(
+        builder, loc, fn.name, fnTy,
+        SymbolRefAttr::get(lowering->op.getNameAttr()));
 
     return success();
   }

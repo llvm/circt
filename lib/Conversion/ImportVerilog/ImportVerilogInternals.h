@@ -94,8 +94,9 @@ struct ModuleLowering {
 };
 
 /// Function lowering information. The `op` field holds either a `func::FuncOp`
-/// (for SystemVerilog functions) or a `moore::CoroutineOp` (for tasks),
-/// accessed through the `FunctionOpInterface`.
+/// (for SystemVerilog functions), a `moore::CoroutineOp` (for tasks), or a
+/// `moore::DPIFuncOp` (for DPI-imported functions), all accessed through the
+/// `FunctionOpInterface`.
 struct FunctionLowering {
   mlir::FunctionOpInterface op;
 
@@ -104,8 +105,7 @@ struct FunctionLowering {
   /// during declaration.
   SmallVector<const slang::ast::ValueSymbol *, 4> capturedSymbols;
 
-  /// Whether this is a coroutine (task) or a regular function.
-  bool isCoroutine() { return isa<moore::CoroutineOp>(op.getOperation()); }
+  explicit FunctionLowering(mlir::FunctionOpInterface op) : op(op) {}
 };
 
 // Class lowering information.
