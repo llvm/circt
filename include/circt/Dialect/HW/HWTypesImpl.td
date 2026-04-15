@@ -311,4 +311,56 @@ def HWStringTypeImpl : HWType<"String"> {
   let mnemonic = "string";
 }
 
+//===----------------------------------------------------------------------===//
+// Probe types
+//===----------------------------------------------------------------------===//
+
+def ProbeTypeImpl : HWType<"Probe"> {
+  let summary = "Read-only probe reference type";
+  let description = [{
+    A probe type represents a read-only reference to a hardware value that can
+    cross module boundaries. Probes are used to observe values remotely without
+    creating actual signal connections. After lowering, probes are converted to
+    XMRs (cross-module references).
+
+    Syntax: `!hw.probe<T>` where T is the inner type being referenced.
+  }];
+
+  let mnemonic = "probe";
+  let parameters = (ins "::mlir::Type":$innerType);
+  let genVerifyDecl = 1;
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$innerType), [{
+      return $_get(innerType.getContext(), innerType);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $innerType `>`";
+}
+
+def RWProbeTypeImpl : HWType<"RWProbe"> {
+  let summary = "Read-write (forceable) probe reference type";
+  let description = [{
+    An RWProbe type represents a read-write reference to a hardware value that
+    supports force and release operations. Unlike regular probes, RWProbes must
+    reference local values within the same module (via inner symbols) and enable
+    procedural overriding of the target value.
+
+    Syntax: `!hw.rwprobe<T>` where T is the inner type being referenced.
+  }];
+
+  let mnemonic = "rwprobe";
+  let parameters = (ins "::mlir::Type":$innerType);
+  let genVerifyDecl = 1;
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$innerType), [{
+      return $_get(innerType.getContext(), innerType);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $innerType `>`";
+}
+
 #endif // CIRCT_DIALECT_HW_HWTYPESIMPL_TD

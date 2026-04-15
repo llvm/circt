@@ -92,6 +92,21 @@ def HWStringType :
       "a HW string", "::circt::hw::StringType">,
     BuildableType<"::circt::hw::StringType::get($_builder.getContext())">;
 
+// A handle to refer to circt::hw::ProbeType in ODS.
+def ProbeType : DialectType<HWDialect,
+    CPred<"::circt::hw::type_isa<circt::hw::ProbeType>($_self)">,
+    "a probe type", "::circt::hw::ProbeType">;
+
+// A handle to refer to circt::hw::RWProbeType in ODS.
+def RWProbeType : DialectType<HWDialect,
+    CPred<"::circt::hw::type_isa<circt::hw::RWProbeType>($_self)">,
+    "an rwprobe type", "::circt::hw::RWProbeType">;
+
+// Any probe type (Probe or RWProbe)
+def AnyProbeType : DialectType<HWDialect,
+    CPred<"::circt::hw::type_isa<circt::hw::ProbeType, circt::hw::RWProbeType>($_self)">,
+    "a probe or rwprobe type">;
+
 /// A flat symbol reference or a reference to a name within a module.
 def NameRefAttr : Attr<
   CPred<"llvm::isa<::mlir::FlatSymbolRefAttr, ::circt::hw::InnerRefAttr>($_self)">,
