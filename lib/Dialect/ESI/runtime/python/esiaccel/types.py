@@ -474,9 +474,10 @@ class WindowType(ESIType):
                lowered_type: "ESIType", frames: List["WindowType.Frame"]):
     cpp_frames = [
         cpp.WindowFrame(frame.name, [
-            cpp.WindowField(field.name, field.num_items,
-                            field.bulk_count_width) for field in frame.fields
-        ]) for frame in frames
+            cpp.WindowField(field.name, field.num_items, field.bulk_count_width)
+            for field in frame.fields
+        ])
+        for frame in frames
     ]
     self._init_from_cpp(
         cpp.WindowType(id, name, into_type.cpp_type, lowered_type.cpp_type,
