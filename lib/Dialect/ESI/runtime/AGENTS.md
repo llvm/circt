@@ -97,7 +97,7 @@ Only change infrastructure or test harness files when there is a demonstrated pr
 
 ### GTest unit tests
 
-The GTest-based unit tests live in `unittests/Dialect/ESI/runtime/` and require a full CIRCT build (they link against `esiaccel::ESICppRuntime` via the CIRCT cmake infrastructure). They can't be built from the standalone runtime cmake.
+The GTest-based unit tests live in `lib/Dialect/ESI/runtime/tests/cpp` and they are built with the ESIRuntimeCppTests target. They can be run independently or they are run by pytest if the binary is present.
 
 ## Key architecture notes
 
