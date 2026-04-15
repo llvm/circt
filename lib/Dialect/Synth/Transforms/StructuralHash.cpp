@@ -14,7 +14,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
@@ -28,6 +27,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseMapInfo.h"
 #include "llvm/ADT/PointerIntPair.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/DebugLog.h"
 #include "llvm/Support/LogicalResult.h"
 
@@ -106,10 +106,10 @@ public:
   void visitVariadicOp(BooleanLogicOpInterface op);
   uint64_t getNumber(Value v);
 
-  /// Runs the structural hashing pass on the given module.
+  /// Runs the structural hashing pass on the given operation.
   /// Performs topological sorting, assigns value numbers to arguments,
   /// processes target operations, and cleans up unused operations.
-  llvm::LogicalResult run(hw::HWModuleOp op);
+  llvm::LogicalResult run(Operation *op);
 
 private:
   /// Maps values to unique numbers for deterministic operand sorting.
@@ -246,34 +246,39 @@ uint64_t StructuralHashDriver::getNumber(Value v) {
       .first->second;
 }
 
-llvm::LogicalResult StructuralHashDriver::run(hw::HWModuleOp moduleOp) {
+llvm::LogicalResult StructuralHashDriver::run(Operation *moduleOp) {
   auto isOperationReady = [&](Value value, Operation *op) -> bool {
     // Other than target ops, all other ops are always ready.
     return !isa<BooleanLogicOpInterface>(op);
   };
 
-  if (!mlir::sortTopologically(moduleOp.getBodyBlock(), isOperationReady))
+  if (moduleOp->getNumRegions() != 1 ||
+      moduleOp->getRegion(0).getBlocks().size() != 1)
+    return llvm::success();
+
+  Block &block = moduleOp->getRegion(0).front();
+  if (!mlir::sortTopologically(&block, isOperationReady))
     return failure();
 
-  for (auto arg : moduleOp.getBodyBlock()->getArguments())
+  for (auto arg : block.getArguments())
     (void)getNumber(arg);
 
   // Process target ops.
   // NOTE: Don't use walk here since the pass currently doesn't handle nested
   // regions.
   for (auto op :
-       llvm::make_early_inc_range(moduleOp.getOps<BooleanLogicOpInterface>())) {
+       llvm::make_early_inc_range(block.getOps<BooleanLogicOpInterface>())) {
     visitOp(op);
   }
 
   // Run DCE to remove dangling ops.
-  mlir::PatternRewriter rewriter(moduleOp.getContext());
+  mlir::PatternRewriter rewriter(moduleOp->getContext());
   (void)mlir::runRegionDCE(rewriter, moduleOp->getRegions());
   return mlir::success();
 }
 
 void StructuralHashPass::runOnOperation() {
-  auto topOp = getOperation();
+  auto *topOp = getOperation();
   StructuralHashDriver driver;
   if (failed(driver.run(topOp)))
     return signalPassFailure();

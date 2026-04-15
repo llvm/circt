@@ -254,7 +254,7 @@ def ABCRunner : ExternalSolverPass<"synth-abc-runner"> {
   ];
 }
 
-def StructuralHash : Pass<"synth-structural-hash", "hw::HWModuleOp"> {
+def StructuralHash : Pass<"synth-structural-hash"> {
   let summary = "Structural hashing (CSE) for Synth operations";
   let description = [{
     This pass performs aggressive structural hashing-based CSE for Synth dialect
