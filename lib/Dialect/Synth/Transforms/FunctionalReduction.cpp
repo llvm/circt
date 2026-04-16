@@ -550,27 +550,34 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
   // Build all replacement IR first, then perform use rewrites in a second
   // phase. This keeps `isBeforeInBlock` queries anchored to the final block
   // order instead of an order that is still being mutated by insertion.
+  struct PlannedMember {
+    Value original;
+    bool inverted;
+    aig::AndInverterOp operandInverter;
+  };
   struct MergeRewritePlan {
     Value representative;
-    SmallVector<std::pair<Value, bool>> members;
-    llvm::SmallPtrSet<Operation *, 8> createdInverters;
+    SmallVector<PlannedMember> members;
     synth::ChoiceOp choice;
     aig::AndInverterOp choiceNot;
   };
 
   mlir::OpBuilder builder(module.getContext());
-  auto replaceDominatedUses = [](Value from, Value to, Operation *defOp,
-                                 auto &&shouldReplaceOwner) {
-    from.replaceUsesWithIf(to, [&](OpOperand &use) {
-      auto *user = use.getOwner();
-      // Restrict rewrites to uses after the replacement value's definition in
-      // the same block so merging cannot introduce use-before-def edges or SSA
-      // cycles.
-      return shouldReplaceOwner(user) &&
-             user->getBlock() == defOp->getBlock() &&
-             defOp->isBeforeInBlock(user);
-    });
-  };
+  auto replaceDominatedUses =
+      [](Value from, Value to,
+         llvm::function_ref<bool(Operation *)> shouldReplaceOwner) {
+        auto *defOp = to.getDefiningOp();
+        assert(defOp && "replacement value must be defined by an operation");
+        from.replaceUsesWithIf(to, [&](OpOperand &use) {
+          auto *user = use.getOwner();
+          // Restrict rewrites to uses after the replacement value's definition
+          // in the same block so merging cannot introduce use-before-def edges
+          // or SSA cycles.
+          return shouldReplaceOwner(user) &&
+                 user->getBlock() == defOp->getBlock() &&
+                 defOp->isBeforeInBlock(user);
+        });
+      };
 
   SmallVector<MergeRewritePlan> rewritePlans;
   rewritePlans.reserve(provenEquivalences.size());
@@ -585,18 +592,22 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
     operands.reserve(members.size() + 1);
     operands.push_back(representative);
 
-    llvm::SmallPtrSet<Operation *, 8> createdInverters;
+    SmallVector<PlannedMember> plannedMembers;
+    plannedMembers.reserve(members.size());
+    bool hasInvertedMember = false;
     for (auto [member, inverted] : members) {
+      auto &planned =
+          plannedMembers.emplace_back(PlannedMember{member, inverted, {}});
       if (!inverted) {
         operands.push_back(member);
         continue;
       }
+      hasInvertedMember = true;
       // If the member is inverted relative to the representative, we
       // create an inverter for the choice operand
-      auto inverter =
+      planned.operandInverter =
           aig::AndInverterOp::create(builder, member.getLoc(), member, true);
-      createdInverters.insert(inverter);
-      operands.push_back(inverter.getResult());
+      operands.push_back(planned.operandInverter.getResult());
     }
 
     auto choice = synth::ChoiceOp::create(builder, representative.getLoc(),
@@ -604,41 +615,41 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
 
     // If there is an inverted member, we need to create an inverter for the
     // choice result as well
-    auto choiceNot = createdInverters.empty()
+    auto choiceNot = !hasInvertedMember
                          ? nullptr
                          : aig::AndInverterOp::create(builder, choice.getLoc(),
                                                       choice, true);
 
     stats.numMergedNodes += members.size() + 1;
-    rewritePlans.push_back({representative, members,
-                            std::move(createdInverters), choice, choiceNot});
+    rewritePlans.push_back(
+        {representative, std::move(plannedMembers), choice, choiceNot});
   }
 
   for (auto &plan : rewritePlans) {
-    auto replaceValue = [&](Value value, bool inverted) {
-      if (inverted)
-        replaceDominatedUses(value, plan.choiceNot,
-                             plan.choiceNot.getOperation(),
+    auto replaceValue = [&](const PlannedMember &member) {
+      if (member.inverted)
+        replaceDominatedUses(member.original, plan.choiceNot,
                              [&](Operation *user) {
-                               // Only replace uses that are not the inverters
-                               // we just created. This is necessary to avoid
-                               // creating an immediate cycle when merging an
-                               // inverted node into its representative.
-                               return !plan.createdInverters.contains(user) &&
+                               // Do not rewrite the freshly created operand
+                               // inverter or the choice result inverter. This
+                               // avoids creating an immediate cycle when
+                               // merging an inverted node into its
+                               // representative.
+                               return user != member.operandInverter &&
                                       user != plan.choiceNot.getOperation();
                              });
       else
-        replaceDominatedUses(value, plan.choice, plan.choice.getOperation(),
+        replaceDominatedUses(member.original, plan.choice,
                              [&](Operation *user) {
                                return user != plan.choice.getOperation();
                              });
     };
 
     replaceDominatedUses(
-        plan.representative, plan.choice, plan.choice.getOperation(),
+        plan.representative, plan.choice,
         [&](Operation *user) { return user != plan.choice.getOperation(); });
-    for (auto [value, inverted] : plan.members)
-      replaceValue(value, inverted);
+    for (const auto &member : plan.members)
+      replaceValue(member);
   }
 
   LLVM_DEBUG(llvm::dbgs() << "FunctionalReduction: Merged "
