@@ -23,14 +23,25 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 class SynthOp<string mnemonic, list<Trait> traits = []> :
     Op<Synth_Dialect, mnemonic, traits>;
 
-def AndInverterOp :
-  SynthOp<"aig.and_inv",
-          [SameOperandsAndResultType, Pure,
-           DeclareOpInterfaceMethods<BooleanLogicOpInterface,
-                                     ["areInputsPermutationInvariant",
-                                      "getLogicDepthCost",
-                                      "getLogicAreaCost",
-                                      "emitCNF"]>]> {
+class InvertibleOperandsOp<string mnemonic, list<Trait> traits = []>
+  : SynthOp<mnemonic,[
+      // Share the BooleanLogicOpInterface contract and invertible operand
+      // syntax across Synth ops such as `synth.aig.and_inv`.
+      SameOperandsAndResultType, Pure,
+      DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
+        "areInputsPermutationInvariant", "getLogicDepthCost",
+        "getLogicAreaCost", "emitCNF"
+      ]> ] # traits> {
+  // TODO: Restrict to HWIntegerType.
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       DenseBoolArrayAttr:$inverted);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = [{
+    custom<VariadicInvertibleOperands>($inputs, type($result), $inverted, attr-dict)
+  }];
+}
+
+def AndInverterOp : InvertibleOperandsOp<"aig.and_inv"> {
   let summary = "AIG dialect AND operation";
   let description = [{
     The `synth.aig.and_inv` operation represents an And-Inverter in the AIG dialect.
@@ -59,13 +70,6 @@ def AndInverterOp :
     scalability. This approach enables a form of vectorization, allowing for
     batch processing of logic synthesis when multibit operations are constructed
     in a similar manner.
-  }];
-  // TODO: Restrict to HWIntegerType.
-  let arguments = (ins Variadic<AnyType>:$inputs, DenseBoolArrayAttr:$inverted);
-  let results = (outs AnyType:$result);
-
-  let assemblyFormat = [{
-    custom<VariadicInvertibleOperands>($inputs, type($result), $inverted, attr-dict)
   }];
 
   let builders = [OpBuilder<(ins "Value":$input, CArg<"bool", "false">:$invert),
