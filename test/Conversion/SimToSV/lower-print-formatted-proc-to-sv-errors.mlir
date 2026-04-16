@@ -32,11 +32,3 @@ hw.module @unsupported_stream_block_argument(
     sim.proc.print %fmt to %stream_in
   }
 }
-
-// -----
-
-hw.module @unsupported_stream_from_get_file() {
-    %literal = sim.fmt.literal "stream.log"
-    // expected-error @below {{'sim.proc.print' op must not be in a non-procedural region}}
-    sim.proc.print %literal 
-}

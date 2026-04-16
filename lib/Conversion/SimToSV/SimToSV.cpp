@@ -27,6 +27,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/RegionUtils.h"
+#include "llvm/ADT/Twine.h"
 
 #define DEBUG_TYPE "lower-sim-to-sv"
 
@@ -500,7 +501,7 @@ static LogicalResult appendIntegerSpecifier(SmallString<128> &formatString,
     return failure();
 
   if (width.has_value())
-    formatString += std::to_string(width.value());
+    llvm::Twine(width.value()).toVector(formatString);
 
   formatString.push_back(spec);
   return success();
@@ -514,9 +515,9 @@ static void appendFloatSpecifier(SmallString<128> &formatString,
   if (isLeftAligned)
     formatString.push_back('-');
   if (fieldWidth.has_value())
-    formatString += std::to_string(fieldWidth.value());
+    llvm::Twine(fieldWidth.value()).toVector(formatString);
   formatString.push_back('.');
-  formatString += std::to_string(fracDigits);
+  llvm::Twine(fracDigits).toVector(formatString);
   formatString.push_back(spec);
 }
 
@@ -702,9 +703,8 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
 
     std::atomic<bool> usedSynthesisMacro = false;
     auto lowerModule = [&](hw::HWModuleOp module) {
-      if (failed(lowerPrintFormattedProcToSV(module))) {
+      if (failed(lowerPrintFormattedProcToSV(module)))
         return failure();
-      }
 
       if (moveOpsIntoIfdefGuardsAndProcesses(module))
         usedSynthesisMacro = true;
