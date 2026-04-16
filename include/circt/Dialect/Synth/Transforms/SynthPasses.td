@@ -85,7 +85,7 @@ def GenericLutMapper : CutRewriterPassBase<"synth-generic-lut-mapper",
   let dependentDialects = ["comb::CombDialect"];
 }
 
-def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
+def LowerVariadic : Pass<"synth-lower-variadic"> {
   let summary = "Lower variadic operations to binary operations";
   let description = [{
     This pass lowers variadic operations to binary operations using a

@@ -27,6 +27,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/Error.h"
+#include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/raw_ostream.h"
 #include <iterator>
 #include <vector>
@@ -207,26 +208,38 @@ static void simplifyWithExistingOperations(
 }
 
 void LowerVariadicPass::runOnOperation() {
+  if (getOperation()->getNumRegions() != 1 ||
+      getOperation()->getRegion(0).getBlocks().size() != 1)
+    return;
   // Topologically sort operations in graph regions to ensure operands are
   // defined before uses.
+  mlir::Block &bodyBlock = getOperation()->getRegion(0).getBlocks().front();
+  auto *moduleOp = getOperation();
+
   if (!mlir::sortTopologically(
-          getOperation().getBodyBlock(), [](Value val, Operation *op) -> bool {
+          &bodyBlock, [](Value val, Operation *op) -> bool {
             if (isa_and_nonnull<hw::HWDialect>(op->getDialect()))
               return isa<hw::InstanceOp>(op);
             return !isa_and_nonnull<comb::CombDialect, synth::SynthDialect>(
                 op->getDialect());
           })) {
-    mlir::emitError(getOperation().getLoc())
+    mlir::emitError(moduleOp->getLoc())
         << "Failed to topologically sort graph region blocks";
     return signalPassFailure();
   }
 
   // Get longest path analysis if timing-aware lowering is enabled.
   synth::IncrementalLongestPathAnalysis *analysis = nullptr;
-  if (timingAware.getValue())
-    analysis = &getAnalysis<synth::IncrementalLongestPathAnalysis>();
-
-  auto moduleOp = getOperation();
+  if (timingAware.getValue()) {
+    if (!dyn_cast<hw::HWModuleOp>(moduleOp)) {
+      moduleOp->emitWarning(
+          "Longest Path Analysis failed: expected 'hw.module', but found '")
+          << moduleOp->getName().getStringRef()
+          << "'. Only HWModuleOps are currently supported.";
+    } else {
+      analysis = &getAnalysis<synth::IncrementalLongestPathAnalysis>();
+    }
+  }
 
   // Build set of operation names to lower if specified.
   SmallVector<OperationName> names;
@@ -248,14 +261,14 @@ void LowerVariadicPass::runOnOperation() {
   if (reuseSubsets) {
     llvm::DenseMap<OperandKey, mlir::Value> seenExpressions;
     // First collect all the andInverterOp operations in the block.
-    for (auto &op : moduleOp.getBodyBlock()->getOperations()) {
+    for (auto &op : bodyBlock.getOperations()) {
       if (auto andInverterOp = llvm::dyn_cast<aig::AndInverterOp>(op)) {
         OperandKey key = getSortedOperandKey(andInverterOp);
         seenExpressions[key] = andInverterOp.getResult();
       }
     }
     // Now try to replace operations with subsets.
-    for (auto &op : moduleOp.getBodyBlock()->getOperations()) {
+    for (auto &op : bodyBlock.getOperations()) {
       if (auto andInverterOp = llvm::dyn_cast<aig::AndInverterOp>(op)) {
         simplifyWithExistingOperations(andInverterOp, rewriter,
                                        seenExpressions);
@@ -265,8 +278,7 @@ void LowerVariadicPass::runOnOperation() {
 
   // FIXME: Currently only top-level operations are lowered due to the lack of
   //        topological sorting in across nested regions.
-  for (auto &opRef :
-       llvm::make_early_inc_range(moduleOp.getBodyBlock()->getOperations())) {
+  for (auto &opRef : llvm::make_early_inc_range(bodyBlock.getOperations())) {
     auto *op = &opRef;
     // Skip operations that don't need lowering or are already binary.
     if (!shouldLower(op) || op->getNumOperands() <= 2)
