@@ -233,6 +233,8 @@ struct LatticeValue {
 struct LatticeNode {
   enum class Kind { BlockEntry, BlockExit, Probe, Drive, Signal };
   const Kind kind;
+  /// Dirty flag to prevent duplicate pushes to worklist.
+  bool dirty = false;
   LatticeNode(Kind kind) : kind(kind) {}
 };
 
@@ -715,7 +717,7 @@ struct Promoter {
   /// definitions forwards.
   Lattice lattice;
   /// A worklist of lattice nodes used within calls to `propagate*`.
-  SmallPtrSet<LatticeNode *, 4> dirtyNodes;
+  SmallVector<LatticeNode *> dirtyNodes;
 
   /// Helper to clean up unused ops.
   UnusedOpPruner pruner;
@@ -1091,10 +1093,14 @@ void Promoter::constructLattice() {
 void Promoter::propagateBackward() {
   for (auto *node : lattice.nodes)
     propagateBackward(node);
+  SmallVector<LatticeNode *> nodes;
   while (!dirtyNodes.empty()) {
-    auto *node = *dirtyNodes.begin();
-    dirtyNodes.erase(node);
-    propagateBackward(node);
+    std::swap(dirtyNodes, nodes);
+    for (auto *node : nodes) {
+      node->dirty = false;
+      propagateBackward(node);
+    }
+    nodes.clear();
   }
 }
 
@@ -1182,10 +1188,14 @@ void Promoter::propagateForward(bool optimisticMerges,
                                 DominanceInfo &dominance) {
   for (auto *node : lattice.nodes)
     propagateForward(node, optimisticMerges, dominance);
+  SmallVector<LatticeNode *> nodes;
   while (!dirtyNodes.empty()) {
-    auto *node = *dirtyNodes.begin();
-    dirtyNodes.erase(node);
-    propagateForward(node, optimisticMerges, dominance);
+    std::swap(dirtyNodes, nodes);
+    for (auto *node : nodes) {
+      node->dirty = false;
+      propagateForward(node, optimisticMerges, dominance);
+    }
+    nodes.clear();
   }
 }
 
@@ -1347,7 +1357,10 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
 /// Mark a lattice node to be updated during propagation.
 void Promoter::markDirty(LatticeNode *node) {
   assert(node);
-  dirtyNodes.insert(node);
+  if (node->dirty)
+    return;
+  node->dirty = true;
+  dirtyNodes.push_back(node);
 }
 
 //===----------------------------------------------------------------------===//
