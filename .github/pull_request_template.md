@@ -6,6 +6,7 @@ including the requirements for human review, transparency, and accountability.
 
 Using an LLM is allowed, but copy-pasting an LLM-generated PR description is heavily discouraged.
 
-AI-assisted-by: <fill this in for substantial AI-generated content, e.g., "Claude Code: Opus 4.6">
+Include the following message trailer in commits and Pull Requests when AI tools were used:
+Assisted-by: <tool>:<model>
 
 -->
