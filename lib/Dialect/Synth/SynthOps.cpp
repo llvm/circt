@@ -31,6 +31,27 @@ using namespace circt::synth::aig;
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.cpp.inc"
 
+namespace {
+
+inline APInt applyInversion(APInt value, bool inverted) {
+  if (inverted)
+    value.flipAllBits();
+  return value;
+}
+
+inline llvm::KnownBits applyInversion(llvm::KnownBits value, bool inverted) {
+  if (inverted)
+    std::swap(value.Zero, value.One);
+  return value;
+}
+
+inline int applyInversion(int lit, bool inverted) {
+  assert(lit != 0 && "expected non-zero SAT literal");
+  return inverted ? -lit : lit;
+}
+
+} // namespace
+
 LogicalResult ChoiceOp::verify() {
   if (getNumOperands() < 1)
     return emitOpError("requires at least one operand");
@@ -108,7 +129,7 @@ LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// AIG Operations
+// AndInverterOp
 //===----------------------------------------------------------------------===//
 
 bool AndInverterOp::areInputsPermutationInvariant() { return true; }
@@ -218,10 +239,7 @@ APInt AndInverterOp::evaluateBooleanLogic(
   APInt result = APInt::getAllOnes(getInputValue(0).getBitWidth());
   for (auto [idx, inverted] : llvm::enumerate(getInverted())) {
     const APInt &input = getInputValue(idx);
-    if (inverted)
-      result &= ~input;
-    else
-      result &= input;
+    result &= applyInversion(input, inverted);
   }
   return result;
 }
@@ -235,12 +253,8 @@ llvm::KnownBits AndInverterOp::computeKnownBits(
   result.One = APInt::getAllOnes(width);
   result.Zero = APInt::getZero(width);
 
-  for (auto [i, inverted] : llvm::enumerate(getInverted())) {
-    auto operandKnownBits = getInputKnownBits(i);
-    if (inverted)
-      std::swap(operandKnownBits.Zero, operandKnownBits.One);
-    result &= operandKnownBits;
-  }
+  for (auto [i, inverted] : llvm::enumerate(getInverted()))
+    result &= applyInversion(getInputKnownBits(i), inverted);
 
   return result;
 }
@@ -268,7 +282,7 @@ void AndInverterOp::emitCNF(
   inputLits.reserve(inputVars.size());
   for (auto [inputVar, inverted] : llvm::zip(inputVars, getInverted())) {
     assert(inputVar > 0 && "input SAT variables must be positive");
-    inputLits.push_back(inverted ? -inputVar : inputVar);
+    inputLits.push_back(applyInversion(inputVar, inverted));
   }
   circt::addAndClauses(outVar, inputLits, addClause);
 }

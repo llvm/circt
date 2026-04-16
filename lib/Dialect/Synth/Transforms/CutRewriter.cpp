@@ -148,29 +148,37 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
     }
   };
 
+  auto getInvertibleSignal = [&](auto op, unsigned index) {
+    return getOrCreateSignal(op.getOperand(index), op.isInverted(index));
+  };
+
+  auto handleInvertibleBinaryGate = [&](auto logicOp,
+                                        LogicNetworkGate::Kind kind) {
+    if (!logicOp.getType().isInteger(1)) {
+      handleOtherResults(logicOp);
+      return success();
+    }
+    if (logicOp->getNumOperands() == 1) {
+      const Signal inputSignal = getInvertibleSignal(logicOp, 0);
+      handleSingleInputGate(logicOp, logicOp.getResult(), inputSignal);
+      return success();
+    }
+    if (logicOp->getNumOperands() != 2) {
+      handleOtherResults(logicOp);
+      return success();
+    }
+    const Signal lhsSignal = getInvertibleSignal(logicOp, 0);
+    const Signal rhsSignal = getInvertibleSignal(logicOp, 1);
+    addGate(logicOp, kind, {lhsSignal, rhsSignal});
+    return success();
+  };
+
   // Process operations in topological order
   for (Operation &op : block->getOperations()) {
     LogicalResult result =
         llvm::TypeSwitch<Operation *, LogicalResult>(&op)
             .Case<aig::AndInverterOp>([&](aig::AndInverterOp andOp) {
-              const auto inputs = andOp.getInputs();
-              if (inputs.size() == 1) {
-                // Single-input AND is a buffer or NOT gate
-                const Signal inputSignal =
-                    getOrCreateSignal(inputs[0], andOp.isInverted(0));
-                handleSingleInputGate(andOp, andOp.getResult(), inputSignal);
-              } else if (inputs.size() == 2) {
-                const Signal lhsSignal =
-                    getOrCreateSignal(inputs[0], andOp.isInverted(0));
-                const Signal rhsSignal =
-                    getOrCreateSignal(inputs[1], andOp.isInverted(1));
-                addGate(andOp, LogicNetworkGate::And2, {lhsSignal, rhsSignal});
-              } else {
-                // Variadic AND gates with >2 inputs are treated as primary
-                // inputs.
-                handleOtherResults(andOp);
-              }
-              return success();
+              return handleInvertibleBinaryGate(andOp, LogicNetworkGate::And2);
             })
             .Case<comb::XorOp>([&](comb::XorOp xorOp) {
               if (xorOp->getNumOperands() != 2) {

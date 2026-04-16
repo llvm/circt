@@ -46,8 +46,8 @@ using namespace synth;
 
 /// Check if an operation should be lowered to bit-level operations.
 static bool shouldLowerOperation(Operation *op) {
-  return isa<ChoiceOp, aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp,
-             comb::MuxOp>(op);
+  return isa<ChoiceOp, BooleanLogicOpInterface, comb::AndOp, comb::OrOp,
+             comb::XorOp, comb::MuxOp>(op);
 }
 
 namespace {
