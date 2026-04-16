@@ -289,7 +289,8 @@ class CppTypePlanner:
     """Collect types that require top-level declarations for a given type."""
     deps: Set[types.ESIType] = set()
 
-    # Visit callback: collect structs and non-struct aliases used by a type.
+    # Visit callback: collect structs, unions, and non-struct aliases used by a
+    # type.
     def visit(current: types.ESIType) -> None:
       if isinstance(current, types.TypeAlias):
         inner = current.inner_type
@@ -299,9 +300,7 @@ class CppTypePlanner:
           deps.add(inner)
         else:
           deps.add(current)
-      elif isinstance(current, types.StructType):
-        deps.add(current)
-      elif isinstance(current, types.UnionType):
+      elif isinstance(current, (types.StructType, types.UnionType)):
         deps.add(current)
       elif self._is_supported_window(current):
         deps.add(current)
@@ -374,10 +373,7 @@ class CppTypePlanner:
         inner = current.inner_type
         if inner is not None:
           deps.update(self._collect_decls_from_type(inner))
-      elif isinstance(current, types.StructType):
-        for _, field_type in current.fields:
-          deps.update(self._collect_decls_from_type(field_type))
-      elif isinstance(current, types.UnionType):
+      elif isinstance(current, (types.StructType, types.UnionType)):
         for _, field_type in current.fields:
           deps.update(self._collect_decls_from_type(field_type))
       elif self._is_supported_window(current):
@@ -531,6 +527,15 @@ class CppTypeEmitter:
       return f"{field_cpp} {field_name}"
     return f"const {field_cpp} &{field_name}"
 
+  def _emit_window_field_copy(self, hdr: TextIO, dest_expr: str, src_expr: str,
+                              field_type: types.ESIType) -> None:
+    """Copy a generated window field, preserving array semantics."""
+    if isinstance(field_type, types.ArrayType):
+      hdr.write(
+          f"    std::memcpy(&{dest_expr}, &{src_expr}, sizeof({dest_expr}));\n")
+      return
+    hdr.write(f"    {dest_expr} = {src_expr};\n")
+
   def _field_byte_width(self, field_type: types.ESIType) -> int:
     """Compute the byte width of a field type, rounding up to full bytes."""
     return (field_type.bit_width + 7) // 8
@@ -663,6 +668,7 @@ class CppTypeEmitter:
     union_bytes = self._field_byte_width(union_type)
     fields = list(union_type.fields)
 
+    # First pass: emit wrapper structs for fields that need padding.
     wrapper_names: Dict[str, str] = {}
     for field_name, field_type in fields:
       field_bytes = self._field_byte_width(field_type)
@@ -676,6 +682,7 @@ class CppTypeEmitter:
         hdr.write(f"  {field_cpp} {field_name};\n")
         hdr.write("};\n")
 
+    # Second pass: emit the union itself.
     union_field_decls: List[str] = []
     for field_name, field_type in fields:
       if field_name in wrapper_names:
@@ -752,7 +759,10 @@ class CppTypeEmitter:
         f"    header.{info['count_field_name']} = static_cast<count_type>(frames.size());\n"
     )
     for name, _ in info["ctor_params"]:
-      hdr.write(f"    header.{name} = {name};\n")
+      field_type = next(
+          field_type for field_name, field_type in info["ctor_params"]
+          if field_name == name)
+      self._emit_window_field_copy(hdr, f"header.{name}", name, field_type)
     hdr.write(f"    footer.{info['count_field_name']} = 0;\n")
     hdr.write("    data_frames = std::move(frames);\n")
     hdr.write("  }\n\n")
@@ -765,7 +775,15 @@ class CppTypeEmitter:
     hdr.write(f"    frames.reserve({info['list_field_name']}.size());\n")
     hdr.write(f"    for (const auto &element : {info['list_field_name']}) {{\n")
     hdr.write("      auto &frame = frames.emplace_back();\n")
-    hdr.write(f"      frame.{info['list_field_name']} = element;\n")
+    list_field_type = next(
+        field_type for field_name, field_type in info["data_fields"]
+        if field_name == info["list_field_name"])
+    if isinstance(list_field_type, types.ArrayType):
+      hdr.write(
+          f"      std::memcpy(&frame.{info['list_field_name']}, &element, sizeof(frame.{info['list_field_name']}));\n"
+      )
+    else:
+      hdr.write(f"      frame.{info['list_field_name']} = element;\n")
     hdr.write("    }\n")
     hdr.write(f"    construct({helper_call});\n")
     hdr.write("  }\n\n")
@@ -817,6 +835,7 @@ class CppTypeEmitter:
         #include <cstdint>
         #include <cstddef>
         #include <any>
+        #include <cstring>
         #include <limits>
         #include <stdexcept>
         #include <string_view>

@@ -284,3 +284,63 @@ def test_windowed_list_header_padding_matches_frame_width():
   assert "struct header_frame {\n    uint8_t _pad[6];\n    count_type coords_count;\n  };" in hdr
   assert "header_frame footer{};" in hdr
   assert "void construct(std::vector<data_frame> frames)" in hdr
+
+
+def test_windowed_list_arrays_in_header_and_value_type():
+  """Window helpers copy array header fields and array-valued elements."""
+  uint8 = types.UIntType("ui8", 8)
+  uint16 = types.UIntType("ui16", 16)
+  header_array_id = "!hw.array<2xui16>"
+  value_array_id = "!hw.array<4xui8>"
+  list_id = f"!esi.list<{value_array_id}>"
+  arg_struct_id = (
+      f"!hw.struct<header_words: {header_array_id}, payloads: {list_id}>")
+  header_struct_id = (
+      f"!hw.struct<header_words: {header_array_id}, payloads_count: ui16>")
+  data_struct_id = f"!hw.struct<payloads: !hw.array<1x{value_array_id}>>"
+  lowered_id = f"!hw.union<header: {header_struct_id}, data: {data_struct_id}>"
+  window_id = (f'!esi.window<"array_payloads", {arg_struct_id}, '
+               '[<"header", [<"header_words">, <"payloads" countWidth 16>]>, '
+               '<"data", [<"payloads", 1>]>]>')
+
+  header_array = types.ArrayType(header_array_id, uint16, 2)
+  value_array = types.ArrayType(value_array_id, uint8, 4)
+  payload_list = types.ListType(list_id, value_array)
+  arg_struct = types.StructType(arg_struct_id, [("header_words", header_array),
+                                                ("payloads", payload_list)])
+  header_struct = types.StructType(header_struct_id,
+                                   [("header_words", header_array),
+                                    ("payloads_count", uint16)])
+  data_struct = types.StructType(
+      data_struct_id,
+      [("payloads",
+        types.ArrayType(f"!hw.array<1x{value_array_id}>", value_array, 1))],
+  )
+  lowered = types.UnionType(lowered_id, [("header", header_struct),
+                                         ("data", data_struct)])
+  window = types.WindowType(window_id, "array_payloads", arg_struct, lowered, [
+      types.WindowType.Frame(
+          "header",
+          [
+              types.WindowType.Field("header_words", 0, 0),
+              types.WindowType.Field("payloads", 0, 16),
+          ],
+      ),
+      types.WindowType.Frame(
+          "data",
+          [types.WindowType.Field("payloads", 1, 0)],
+      ),
+  ])
+
+  hdr = _generate_header([window])
+  assert "#include <cstring>" in hdr
+  assert "struct array_payloads : public esi::SegmentedMessageData" in hdr
+  assert "using value_type = uint8_t[4];" in hdr
+  assert "using count_type = uint16_t;" in hdr
+  assert "uint16_t header_words[2];" in hdr
+  assert "uint8_t payloads[4];" in hdr
+  assert "array_payloads(const uint16_t (&header_words)[2], const std::vector<value_type> &payloads)" in hdr
+  assert "void construct(const uint16_t (&header_words)[2], std::vector<data_frame> frames)" in hdr
+  assert "std::memcpy(&header.header_words, &header_words, sizeof(header.header_words));" in hdr
+  assert "std::memcpy(&frame.payloads, &element, sizeof(frame.payloads));" in hdr
+  assert 'throw std::out_of_range("array_payloads: invalid segment index")' in hdr
