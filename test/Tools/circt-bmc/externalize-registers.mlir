@@ -39,6 +39,10 @@ hw.module @two_reg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32
 }
 
 // CHECK:  hw.module @named_regs(in [[CLK:%.+]] : !seq.clock, in [[IN0:%.+]] : i32, in [[IN1:%.+]] : i32, in %firstreg_state : i32, in %secondreg_state : i32, out {{.+}} : i32, out {{.+}} : i32, out {{.+}} : i32) attributes {initial_values = [unit, unit], num_regs = 2 : i32} {
+// CHECK:    dbg.variable "in0", [[IN0]] : i32
+// CHECK:    dbg.variable "in1", [[IN1]] : i32
+// CHECK:    dbg.variable "firstreg", %firstreg_state : i32
+// CHECK:    dbg.variable "secondreg", %secondreg_state : i32
 // CHECK:    [[ADD:%.+]] = comb.add [[IN0]], [[IN1]]
 // CHECK:    hw.output %secondreg_state, [[ADD]], %firstreg_state
 // CHECK:  }

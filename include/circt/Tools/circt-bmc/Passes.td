@@ -46,9 +46,9 @@ def ExternalizeRegisters : Pass<"externalize-registers", "::mlir::ModuleOp"> {
   let summary = "Removes registers and adds corresponding input and output ports";
 
   let dependentDialects = [
-    "circt::seq::SeqDialect", "circt::hw::HWDialect"
+    "circt::debug::DebugDialect", "circt::seq::SeqDialect",
+    "circt::hw::HWDialect"
   ];
 }
 
 #endif // CIRCT_TOOLS_CIRCT_BMC_PASSES_TD
-

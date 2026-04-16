@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -50,6 +51,8 @@ private:
   DenseMap<StringAttr, SmallVector<Type>> addedOutputs;
   DenseMap<StringAttr, SmallVector<StringAttr>> addedOutputNames;
   DenseMap<StringAttr, SmallVector<Attribute>> initialValues;
+
+  void materializeDebugVariables(HWModuleOp module);
 
   LogicalResult externalizeReg(HWModuleOp module, Operation *op, Twine regName,
                                Value clock, Attribute initState, Value reset,
@@ -204,7 +207,48 @@ void ExternalizeRegistersPass::runOnOperation() {
       module->setAttr("initial_values",
                       ArrayAttr::get(&getContext(),
                                      initialValues[module.getSymNameAttr()]));
+      materializeDebugVariables(module);
     }
+  }
+}
+
+void ExternalizeRegistersPass::materializeDebugVariables(HWModuleOp module) {
+  auto *body = module.getBodyBlock();
+  DenseSet<Value> trackedValues;
+  for (auto varOp : body->getOps<debug::VariableOp>())
+    trackedValues.insert(varOp.getValue());
+
+  DenseSet<StringAttr> outputPortNames;
+  for (auto &port : module.getPortList())
+    if (port.isOutput())
+      outputPortNames.insert(port.name);
+
+  OpBuilder builder = OpBuilder::atBlockBegin(body);
+  StringRef stateSuffix = "_state";
+  for (auto &port : module.getPortList()) {
+    if (port.isOutput())
+      continue;
+    if (isa<seq::ClockType>(port.type))
+      continue;
+    if (!port.name || port.name.getValue().empty())
+      continue;
+
+    auto value = body->getArgument(port.argNum);
+    if (!trackedValues.insert(value).second)
+      continue;
+
+    StringAttr debugName = port.name;
+    auto portName = port.name.getValue();
+    if (portName.ends_with(stateSuffix)) {
+      auto baseName = portName.drop_back(stateSuffix.size());
+      auto nextNameAttr =
+          builder.getStringAttr((Twine(baseName) + "_next").str());
+      if (outputPortNames.contains(nextNameAttr))
+        debugName = builder.getStringAttr(baseName);
+    }
+
+    debug::VariableOp::create(builder, value.getLoc(), debugName, value,
+                              /*scope=*/Value{});
   }
 }
 
