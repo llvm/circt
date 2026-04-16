@@ -1823,6 +1823,9 @@ LogicalResult Context::convertPrimitiveInstance(
   case slang::ast::PrimitiveSymbol::PrimitiveKind::NOutput:
     return this->convertNOutputPrimitive(prim);
     break;
+  case slang::ast::PrimitiveSymbol::PrimitiveKind::Fixed:
+    return this->convertFixedPrimitive(prim);
+    break;
   default:
     return mlir::emitError(convertLocation(prim.location))
            << "unsupported instance of primitive `" << prim.primitiveType.name
@@ -1962,6 +1965,55 @@ LogicalResult Context::convertNOutputPrimitive(
       return failure();
     moore::ContinuousAssignOp::create(builder, loc, outputVal, converted);
   }
+  return success();
+}
+
+LogicalResult Context::convertFixedPrimitive(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  auto primName = prim.primitiveType.name;
+  auto loc = convertLocation(prim.location);
+
+  // Fixed primitives cover a few different cases, so dispatch those separately
+
+  if (primName == "pullup" || primName == "pulldown")
+    return convertPullGatePrimitive(prim);
+
+  // Remaining fixed primitives still need handling
+  mlir::emitError(loc) << "unsupported primitive `" << primName << "`";
+  return failure();
+}
+
+LogicalResult Context::convertPullGatePrimitive(
+    const slang::ast::PrimitiveInstanceSymbol &prim) {
+  assert((prim.primitiveType.name == "pullup" ||
+          prim.primitiveType.name == "pulldown") &&
+         "expected pullup or pulldown primitive");
+  auto loc = convertLocation(prim.location);
+  auto primName = prim.primitiveType.name;
+
+  auto portConns = prim.getPortConnections();
+  // Slang should ensure this for us
+  assert(portConns.size() == 1 &&
+         "pullup/pulldown primitives should have exactly one port");
+
+  Value portVal = this->convertLvalueExpression(
+      portConns.front()->as<slang::ast::AssignmentExpression>().left());
+
+  auto dstType = cast<moore::RefType>(portVal.getType()).getNestedType();
+  auto dstTypeWidth = dstType.getBitSize();
+  // This should be caught elsewhere
+  assert(dstTypeWidth &&
+         "expected fixed-width type for pullup/pulldown primitive");
+  auto constVal = primName == "pullup" ? -1 : 0;
+  auto c = moore::ConstantOp::create(
+      builder, loc,
+      moore::IntType::getInt(this->getContext(), dstTypeWidth.value()),
+      constVal);
+
+  Value converted = materializeConversion(dstType, c, false, loc);
+  if (!converted)
+    return failure();
+  moore::ContinuousAssignOp::create(builder, loc, portVal, converted);
   return success();
 }
 

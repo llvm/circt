@@ -351,8 +351,7 @@ endmodule
 
 // -----
 
-module unsupported_prim;
-    logic A, B, C, D;
-    // expected-error @below {{unsupported instance of primitive `rcmos`}}
-    rcmos u1 (A, B, C, D);
+module unsupported_prim(inout A, inout B);
+    // expected-error @below {{unsupported instance of primitive `tran`}}
+    tran u1 (A, B);
 endmodule
