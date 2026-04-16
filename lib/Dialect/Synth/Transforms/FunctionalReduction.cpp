@@ -228,7 +228,7 @@ void FunctionalReductionSATBuilder::encodeValue(Value value) {
 
 class FunctionalReductionSolver {
 public:
-  FunctionalReductionSolver(hw::HWModuleOp module, unsigned numPatterns,
+  FunctionalReductionSolver(Operation *module, unsigned numPatterns,
                             unsigned seed, bool testTransformation,
                             std::unique_ptr<IncrementalSATSolver> satSolver)
       : module(module), numPatterns(numPatterns), seed(seed),
@@ -268,8 +268,8 @@ private:
   static bool matchesTestEquivClass(Value lhs, Value rhs);
   EquivResult verifyEquivalence(Value lhs, Value rhs, bool inverted);
 
-  // Module being processed
-  hw::HWModuleOp module;
+  // Operation being processed
+  Operation *module;
 
   // Configuration
   unsigned numPatterns;
@@ -359,18 +359,23 @@ void FunctionalReductionSolver::initializeSATState() {
 //===----------------------------------------------------------------------===//
 
 void FunctionalReductionSolver::collectValues() {
-  // Collect block arguments (primary inputs) that are i1
-  for (auto arg : module.getBodyBlock()->getArguments()) {
-    if (arg.getType().isInteger(1)) {
-      primaryInputs.push_back(arg);
-      allValues.push_back(arg);
+  // Collect block arguments of the direct regions of `module` as primary
+  // inputs. These are the "ports" of the logic network being analyzed.
+  for (auto &region : module->getRegions()) {
+    for (auto &block : region) {
+      for (auto arg : block.getArguments()) {
+        if (arg.getType().isInteger(1)) {
+          primaryInputs.push_back(arg);
+          allValues.push_back(arg);
+        }
+      }
     }
   }
 
   // Walk operations and collect i1 results
-  // - AIG operations: add to allValues for simulation
+  // - AIG/comb operations: add to allValues for simulation
   // - Unknown operations: treat as inputs (assign random patterns)
-  module.walk([&](Operation *op) {
+  module->walk([&](Operation *op) {
     for (auto result : op->getResults()) {
       if (!result.getType().isInteger(1))
         continue;
@@ -383,6 +388,23 @@ void FunctionalReductionSolver::collectValues() {
       }
     }
   });
+
+  // Collect any i1 operands of simulatable ops that are defined outside the
+  // scope of `module` (e.g. block arguments of a nested op when the solver is
+  // run on a container op). Treat them as additional primary inputs so that
+  // simulation patterns are assigned to them before propagation.
+  llvm::DenseSet<Value> allValuesSet(allValues.begin(), allValues.end());
+  for (auto value : allValues) {
+    Operation *op = value.getDefiningOp();
+    if (!op || !isFunctionalReductionSimulatableOp(op))
+      continue;
+    for (auto operand : op->getOperands()) {
+      if (operand.getType().isInteger(1) && !allValuesSet.count(operand)) {
+        primaryInputs.push_back(operand);
+        allValuesSet.insert(operand);
+      }
+    }
+  }
 
   LLVM_DEBUG(llvm::dbgs() << "FunctionalReduction: Collected "
                           << primaryInputs.size()
@@ -547,7 +569,7 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
   if (provenEquivalences.empty())
     return;
 
-  mlir::OpBuilder builder(module.getContext());
+  mlir::OpBuilder builder(module->getContext());
   for (auto &provenEquivSet : provenEquivalences) {
     auto &[representative, members] = provenEquivSet;
     if (members.empty())
@@ -684,18 +706,17 @@ struct FunctionalReductionPass
   }
 
   void runOnOperation() override {
-    auto module = getOperation();
+    Operation *op = getOperation();
     LLVM_DEBUG(llvm::dbgs() << "Running FunctionalReduction pass on "
-                            << module.getName() << "\n");
+                            << op->getName() << "\n");
 
     if (numRandomPatterns == 0 || (numRandomPatterns & 63U) != 0) {
-      module.emitError()
+      op->emitError()
           << "'num-random-patterns' must be a positive multiple of 64";
       return signalPassFailure();
     }
     if (conflictLimit < -1) {
-      module.emitError()
-          << "'conflict-limit' must be greater than or equal to -1";
+      op->emitError() << "'conflict-limit' must be greater than or equal to -1";
       return signalPassFailure();
     }
 
@@ -703,17 +724,16 @@ struct FunctionalReductionPass
     if (!testTransformation) {
       satSolver = createFunctionalReductionSATSolver(this->satSolver);
       if (!satSolver) {
-        module.emitError() << "unsupported or unavailable SAT solver '"
-                           << this->satSolver
-                           << "' (expected auto, z3, or cadical)";
+        op->emitError() << "unsupported or unavailable SAT solver '"
+                        << this->satSolver
+                        << "' (expected auto, z3, or cadical)";
         return signalPassFailure();
       }
       satSolver->setConflictLimit(static_cast<int>(conflictLimit));
     }
 
-    FunctionalReductionSolver fcSolver(module, numRandomPatterns, seed,
-                                       testTransformation,
-                                       std::move(satSolver));
+    FunctionalReductionSolver fcSolver(
+        op, numRandomPatterns, seed, testTransformation, std::move(satSolver));
     auto stats = fcSolver.run();
     if (failed(stats))
       return signalPassFailure();

@@ -288,7 +288,7 @@ def SOPBalancing : CutRewriterPassBase<"synth-sop-balancing", "hw::HWModuleOp"> 
   let dependentDialects = ["synth::SynthDialect", "comb::CombDialect"];
 }
 
-def FunctionalReduction : Pass<"synth-functional-reduction", "hw::HWModuleOp"> {
+def FunctionalReduction : Pass<"synth-functional-reduction"> {
   let summary = "Functional reduction by simulation-guided candidate merging";
   let description = [{
     This pass performs functional reduction for single-bit `synth` logic. It

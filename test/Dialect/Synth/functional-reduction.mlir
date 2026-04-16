@@ -42,6 +42,19 @@ hw.module @test_supported_ops(in %a: i1, in %b: i1, in %c: i1,
   hw.output %0, %1, %2, %3, %4, %5 : i1, i1, i1, i1, i1, i1
 }
 
+// Test that the pass works on non-hw ops (func.func).
+// CHECK-LABEL: func @test_func
+func.func @test_func(%a: i1, %b: i1, %c: i1, %d: i1) -> (i1, i1) {
+  // CHECK: %[[R0:.+]] = synth.aig.and_inv %arg0, not %arg1, %arg2, not %arg3
+  // CHECK-NEXT: %[[CHOICE:.+]] = synth.choice
+  // CHECK: return %[[CHOICE]], %[[CHOICE]]
+  %0 = synth.aig.and_inv %a, not %b : i1
+  %1 = synth.aig.and_inv %c, not %d : i1
+  %2 = synth.aig.and_inv %0, %1 {synth.test.fc_equiv_class = 20} : i1
+  %3 = synth.aig.and_inv %a, not %b, %c, not %d {synth.test.fc_equiv_class = 20} : i1
+  func.return %2, %3 : i1, i1
+}
+
 // CHECK-LABEL: hw.module @test_inversion_equiv
 hw.module @test_inversion_equiv(in %a: i1, in %b: i1, out out0: i1, out out1: i1) {
   // CHECK: %[[AND:.+]] = synth.aig.and_inv not %a, not %b
