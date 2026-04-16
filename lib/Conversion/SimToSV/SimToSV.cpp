@@ -468,14 +468,13 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
 
 namespace {
 
-static LogicalResult emitLoweringError(Location loc, const Twine &reason) {
-  mlir::emitError(loc) << "cannot lower 'sim.proc.print' to sv.write: "
-                       << reason;
-  return failure();
+LogicalResult emitLoweringError(Location loc, const Twine &reason) {
+  return mlir::emitError(loc)
+         << "cannot lower 'sim.proc.print' to sv.write: " << reason;
 }
 
-static void appendLiteralToFWriteFormat(SmallString<128> &formatString,
-                                        StringRef literal) {
+void appendLiteralToFWriteFormat(SmallString<128> &formatString,
+                                 StringRef literal) {
   for (char ch : literal) {
     if (ch == '%')
       formatString += "%%";
@@ -484,11 +483,9 @@ static void appendLiteralToFWriteFormat(SmallString<128> &formatString,
   }
 }
 
-static LogicalResult appendIntegerSpecifier(SmallString<128> &formatString,
-                                            bool isLeftAligned,
-                                            uint8_t paddingChar,
-                                            std::optional<int32_t> width,
-                                            char spec) {
+LogicalResult appendIntegerSpecifier(SmallString<128> &formatString,
+                                     bool isLeftAligned, uint8_t paddingChar,
+                                     std::optional<int32_t> width, char spec) {
   formatString.push_back('%');
   if (isLeftAligned)
     formatString.push_back('-');
@@ -507,10 +504,9 @@ static LogicalResult appendIntegerSpecifier(SmallString<128> &formatString,
   return success();
 }
 
-static void appendFloatSpecifier(SmallString<128> &formatString,
-                                 bool isLeftAligned,
-                                 std::optional<int32_t> fieldWidth,
-                                 int32_t fracDigits, char spec) {
+void appendFloatSpecifier(SmallString<128> &formatString, bool isLeftAligned,
+                          std::optional<int32_t> fieldWidth, int32_t fracDigits,
+                          char spec) {
   formatString.push_back('%');
   if (isLeftAligned)
     formatString.push_back('-');
@@ -521,8 +517,8 @@ static void appendFloatSpecifier(SmallString<128> &formatString,
   formatString.push_back(spec);
 }
 
-static LogicalResult
-getFlattenedFormatFragments(Value input, SmallVectorImpl<Value> &fragments) {
+LogicalResult getFlattenedFormatFragments(Value input,
+                                          SmallVectorImpl<Value> &fragments) {
   if (auto concat = input.getDefiningOp<FormatStringConcatOp>()) {
     if (failed(concat.getFlattenedInputs(fragments)))
       return emitLoweringError(input.getLoc(),
@@ -534,9 +530,10 @@ getFlattenedFormatFragments(Value input, SmallVectorImpl<Value> &fragments) {
   return success();
 }
 
-static LogicalResult
-appendFormatFragmentToFWrite(Value fragment, SmallString<128> &formatString,
-                             SmallVectorImpl<Value> &args, OpBuilder &builder) {
+LogicalResult appendFormatFragmentToFWrite(Value fragment,
+                                           SmallString<128> &formatString,
+                                           SmallVectorImpl<Value> &args,
+                                           OpBuilder &builder) {
   Operation *fragmentOp = fragment.getDefiningOp();
   if (!fragmentOp)
     return emitLoweringError(fragment.getLoc(),
@@ -639,10 +636,10 @@ appendFormatFragmentToFWrite(Value fragment, SmallString<128> &formatString,
       });
 }
 
-static LogicalResult foldFormatStringToFWrite(Value input,
-                                              SmallString<128> &formatString,
-                                              SmallVectorImpl<Value> &args,
-                                              OpBuilder &builder) {
+LogicalResult foldFormatStringToFWrite(Value input,
+                                       SmallString<128> &formatString,
+                                       SmallVectorImpl<Value> &args,
+                                       OpBuilder &builder) {
   SmallVector<Value, 8> fragments;
   if (failed(getFlattenedFormatFragments(input, fragments)))
     return failure();
