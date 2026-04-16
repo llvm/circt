@@ -46,6 +46,8 @@ using namespace synth;
 
 /// Check if an operation should be lowered to bit-level operations.
 static bool shouldLowerOperation(Operation *op) {
+  // Lower all Synth boolean ops through the interface instead of maintaining a
+  // per-op allowlist here.
   return isa<ChoiceOp, BooleanLogicOpInterface, comb::AndOp, comb::OrOp,
              comb::XorOp, comb::MuxOp>(op);
 }

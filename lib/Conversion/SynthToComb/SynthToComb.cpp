@@ -32,13 +32,15 @@ using namespace comb;
 
 namespace {
 
+// Return a value that represents the inverted input if `inverted` is true,
 static Value materializeInvertedInput(Location loc, Value input, bool inverted,
-                                      ConversionPatternRewriter &rewriter) {
+                                      ConversionPatternRewriter &rewriter,
+                                      hw::ConstantOp &allOnes) {
   if (!inverted)
     return input;
   auto width = input.getType().getIntOrFloatBitWidth();
-  auto allOnes =
-      hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
+  if (!allOnes)
+    allOnes = hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
   return rewriter.createOrFold<comb::XorOp>(loc, input, allOnes, true);
 }
 
@@ -56,6 +58,8 @@ struct SynthChoiceOpConversion : OpConversionPattern<synth::ChoiceOp> {
 template <typename SynthOp>
 struct SynthInverterOpConversion : OpConversionPattern<SynthOp> {
   using OpConversionPattern<SynthOp>::OpConversionPattern;
+  // Subclasses provide the target comb op after generic input inversion has
+  // been materialized.
   virtual Value createOp(Location loc, ArrayRef<Value> inputs,
                          ConversionPatternRewriter &rewriter) const = 0;
 
@@ -64,10 +68,12 @@ struct SynthInverterOpConversion : OpConversionPattern<SynthOp> {
                   ConversionPatternRewriter &rewriter) const override {
     SmallVector<Value> operands;
     operands.reserve(op.getNumOperands());
+    hw::ConstantOp allOnes;
     for (auto [input, inverted] :
          llvm::zip(adaptor.getInputs(), op.getInverted()))
-      operands.push_back(
-          materializeInvertedInput(op.getLoc(), input, inverted, rewriter));
+      operands.push_back(materializeInvertedInput(op.getLoc(), input, inverted,
+                                                  rewriter, allOnes));
+    // `createOp` now only needs to encode the core boolean operator.
     rewriter.replaceOp(op, createOp(op.getLoc(), operands, rewriter));
     return success();
   }
@@ -82,7 +88,6 @@ struct SynthAndInverterOpConversion
     return rewriter.createOrFold<comb::AndOp>(loc, inputs, true);
   }
 };
-
 
 } // namespace
 

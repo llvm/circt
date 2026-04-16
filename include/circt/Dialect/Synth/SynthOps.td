@@ -25,6 +25,8 @@ class SynthOp<string mnemonic, list<Trait> traits = []> :
 
 class InvertibleOperandsOp<string mnemonic, list<Trait> traits = []>
   : SynthOp<mnemonic,[
+      // Share the BooleanLogicOpInterface contract and invertible operand
+      // syntax across Synth ops such as `synth.aig.and_inv`.
       SameOperandsAndResultType, Pure,
       DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
         "areInputsPermutationInvariant", "getLogicDepthCost",

@@ -33,6 +33,8 @@ using namespace circt::synth::aig;
 
 namespace {
 
+// Keep inversion semantics identical across folding, analysis, and CNF
+// lowering so new invertible Synth ops can reuse the same helpers.
 inline APInt applyInversion(APInt value, bool inverted) {
   if (inverted)
     value.flipAllBits();
@@ -239,6 +241,7 @@ APInt AndInverterOp::evaluateBooleanLogic(
   APInt result = APInt::getAllOnes(getInputValue(0).getBitWidth());
   for (auto [idx, inverted] : llvm::enumerate(getInverted())) {
     const APInt &input = getInputValue(idx);
+    // Model each operand inversion before intersecting with the running AND.
     result &= applyInversion(input, inverted);
   }
   return result;
