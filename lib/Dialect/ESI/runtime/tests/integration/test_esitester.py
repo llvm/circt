@@ -130,10 +130,6 @@ class TestCosimEsitesterDma:
         "tohostdma[32].toHostCycles: 0",
     ])
 
-  # TODO: Debug this test. I suspect a bug in the OneBufferFromHost hardware
-  # implementation.
-  @pytest.mark.skip(
-      reason="This test fails for some reason unrelated to this change")
   def test_channel(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
     stdout = run_cmd(["esitester", "cosim", conn, "channel", "-i", "3"])
@@ -147,9 +143,6 @@ class TestCosimEsitesterDma:
         "Channel test passed",
     ])
 
-  # TODO: Debug this test. I suspect a bug in the OneBufferFromHost hardware
-  # implementation.
-  @pytest.mark.skip(reason="This test fails for some reason")
   def test_serial_coords(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
     stdout = run_cmd([
