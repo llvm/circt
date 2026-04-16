@@ -227,15 +227,13 @@ static void emitInstructionDecorator(ArrayRef<OperandType> operandTypes,
 }
 
 static std::string getFunctionName(const Operator &op) {
-  // TODO: get this from a tablegen field directly instead of inferring it from
-  // the op name
-  std::string opName = op.getOperationName();
-  size_t dotPos = opName.find_last_of('.');
-  std::string mnemonic = opName;
-  if (dotPos != std::string::npos)
-    mnemonic = opName.substr(dotPos + 1);
+  // Get the mnemonic from the tablegen field
+  auto isaMnemonic = op.getDef().getValueAsOptionalString("isaMnemonic");
+  if (!isaMnemonic || isaMnemonic->empty())
+    PrintFatalError(op.getLoc(),
+                    "isaMnemonic field must be set for instruction operations");
 
-  return mnemonic;
+  return isaMnemonic->str();
 }
 
 static void emitFunctionSignature(StringRef opMnemonic,
