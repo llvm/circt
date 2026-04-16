@@ -26,6 +26,8 @@
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/RegionUtils.h"
+#include "llvm/ADT/Twine.h"
 
 #define DEBUG_TYPE "lower-sim-to-sv"
 
@@ -465,6 +467,226 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
 }
 
 namespace {
+
+LogicalResult emitLoweringError(Location loc, const Twine &reason) {
+  return mlir::emitError(loc)
+         << "cannot lower 'sim.proc.print' to sv.write: " << reason;
+}
+
+void appendLiteralToFWriteFormat(SmallString<128> &formatString,
+                                 StringRef literal) {
+  for (char ch : literal) {
+    if (ch == '%')
+      formatString += "%%";
+    else
+      formatString.push_back(ch);
+  }
+}
+
+LogicalResult appendIntegerSpecifier(SmallString<128> &formatString,
+                                     bool isLeftAligned, uint8_t paddingChar,
+                                     std::optional<int32_t> width, char spec) {
+  formatString.push_back('%');
+  if (isLeftAligned)
+    formatString.push_back('-');
+
+  // SystemVerilog formatting only has built-in support for '0' and ' '. Keep
+  // this lowering strict to avoid silently changing formatting semantics.
+  if (paddingChar == '0')
+    formatString.push_back('0');
+  else if (paddingChar != ' ')
+    return failure();
+
+  if (width.has_value())
+    llvm::Twine(width.value()).toVector(formatString);
+
+  formatString.push_back(spec);
+  return success();
+}
+
+void appendFloatSpecifier(SmallString<128> &formatString, bool isLeftAligned,
+                          std::optional<int32_t> fieldWidth, int32_t fracDigits,
+                          char spec) {
+  formatString.push_back('%');
+  if (isLeftAligned)
+    formatString.push_back('-');
+  if (fieldWidth.has_value())
+    llvm::Twine(fieldWidth.value()).toVector(formatString);
+  formatString.push_back('.');
+  llvm::Twine(fracDigits).toVector(formatString);
+  formatString.push_back(spec);
+}
+
+LogicalResult getFlattenedFormatFragments(Value input,
+                                          SmallVectorImpl<Value> &fragments) {
+  if (auto concat = input.getDefiningOp<FormatStringConcatOp>()) {
+    if (failed(concat.getFlattenedInputs(fragments)))
+      return emitLoweringError(input.getLoc(),
+                               "cyclic sim.fmt.concat is unsupported");
+    return success();
+  }
+
+  fragments.push_back(input);
+  return success();
+}
+
+LogicalResult appendFormatFragmentToFWrite(Value fragment,
+                                           SmallString<128> &formatString,
+                                           SmallVectorImpl<Value> &args,
+                                           OpBuilder &builder) {
+  Operation *fragmentOp = fragment.getDefiningOp();
+  if (!fragmentOp)
+    return emitLoweringError(fragment.getLoc(),
+                             "block argument format strings are unsupported as "
+                             "sim.proc.print input");
+
+  return TypeSwitch<Operation *, LogicalResult>(fragmentOp)
+      .Case<FormatLiteralOp>([&](auto literal) -> LogicalResult {
+        appendLiteralToFWriteFormat(formatString, literal.getLiteral());
+        return success();
+      })
+      .Case<FormatHierPathOp>([&](auto hierPath) -> LogicalResult {
+        formatString += hierPath.getUseEscapes() ? "%M" : "%m";
+        return success();
+      })
+      .Case<FormatCharOp>([&](auto fmt) -> LogicalResult {
+        formatString += "%c";
+        args.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatDecOp>([&](auto fmt) -> LogicalResult {
+        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
+                                          fmt.getPaddingChar(),
+                                          fmt.getSpecifierWidth(), 'd'))) {
+          return emitLoweringError(
+              fmt.getLoc(), "sim.fmt.dec only supports paddingChar 32 (' ') "
+                            "or 48 ('0') for SystemVerilog lowering");
+        }
+        // Match sim.fmt.dec signedness semantics explicitly in SV.
+        if (fmt.getIsSigned()) {
+          auto signedValue = sv::SystemFunctionOp::create(
+              builder, fmt.getLoc(), fmt.getValue().getType(), "signed",
+              ValueRange{fmt.getValue()});
+          args.push_back(signedValue);
+        } else {
+          auto unsignedValue = sv::SystemFunctionOp::create(
+              builder, fmt.getLoc(), fmt.getValue().getType(), "unsigned",
+              ValueRange{fmt.getValue()});
+          args.push_back(unsignedValue);
+        }
+        return success();
+      })
+      .Case<FormatHexOp>([&](auto fmt) -> LogicalResult {
+        if (failed(appendIntegerSpecifier(
+                formatString, fmt.getIsLeftAligned(), fmt.getPaddingChar(),
+                fmt.getSpecifierWidth(),
+                fmt.getIsHexUppercase() ? 'X' : 'x'))) {
+          return emitLoweringError(
+              fmt.getLoc(), "sim.fmt.hex only supports paddingChar 32 (' ') "
+                            "or 48 ('0') for SystemVerilog lowering");
+        }
+        args.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatOctOp>([&](auto fmt) -> LogicalResult {
+        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
+                                          fmt.getPaddingChar(),
+                                          fmt.getSpecifierWidth(), 'o'))) {
+          return emitLoweringError(
+              fmt.getLoc(), "sim.fmt.oct only supports paddingChar 32 (' ') "
+                            "or 48 ('0') for SystemVerilog lowering");
+        }
+        args.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatBinOp>([&](auto fmt) -> LogicalResult {
+        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
+                                          fmt.getPaddingChar(),
+                                          fmt.getSpecifierWidth(), 'b'))) {
+          return emitLoweringError(
+              fmt.getLoc(), "sim.fmt.bin only supports paddingChar 32 (' ') "
+                            "or 48 ('0') for SystemVerilog lowering");
+        }
+        args.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatScientificOp>([&](auto fmt) -> LogicalResult {
+        appendFloatSpecifier(formatString, fmt.getIsLeftAligned(),
+                             fmt.getFieldWidth(), fmt.getFracDigits(), 'e');
+        args.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatFloatOp>([&](auto fmt) -> LogicalResult {
+        appendFloatSpecifier(formatString, fmt.getIsLeftAligned(),
+                             fmt.getFieldWidth(), fmt.getFracDigits(), 'f');
+        args.push_back(fmt.getValue());
+        return success();
+      })
+      .Case<FormatGeneralOp>([&](auto fmt) -> LogicalResult {
+        appendFloatSpecifier(formatString, fmt.getIsLeftAligned(),
+                             fmt.getFieldWidth(), fmt.getFracDigits(), 'g');
+        args.push_back(fmt.getValue());
+        return success();
+      })
+      .Default([&](auto unsupportedOp) {
+        return emitLoweringError(unsupportedOp->getLoc(),
+                                 Twine("unsupported format fragment '") +
+                                     unsupportedOp->getName().getStringRef() +
+                                     "'");
+      });
+}
+
+LogicalResult foldFormatStringToFWrite(Value input,
+                                       SmallString<128> &formatString,
+                                       SmallVectorImpl<Value> &args,
+                                       OpBuilder &builder) {
+  SmallVector<Value, 8> fragments;
+  if (failed(getFlattenedFormatFragments(input, fragments)))
+    return failure();
+  for (auto fragment : fragments)
+    if (failed(appendFormatFragmentToFWrite(fragment, formatString, args,
+                                            builder)))
+      return failure();
+  return success();
+}
+
+LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module) {
+  SmallVector<PrintFormattedProcOp> printOps;
+  module.walk([&](PrintFormattedProcOp op) { printOps.push_back(op); });
+
+  llvm::SmallPtrSet<Operation *, 8> dceRoots;
+
+  for (auto printOp : printOps) {
+    OpBuilder builder(printOp);
+    SmallString<128> formatString;
+    SmallVector<Value> args;
+    if (failed(foldFormatStringToFWrite(printOp.getInput(), formatString, args,
+                                        builder))) {
+      return failure();
+    }
+    auto stream = printOp.getStream();
+    if (!stream) {
+      // no stream is specified, emit sv.write.
+      sv::WriteOp::create(builder, printOp.getLoc(), formatString, args);
+    } else {
+      // Stream-based printing is not supported yet.
+      return printOp->emitError(
+          "lowering 'sim.proc.print' with a stream is not supported yet");
+    }
+    auto *procRoot =
+        printOp->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();
+    if (procRoot)
+      dceRoots.insert(procRoot);
+    printOp.erase();
+  }
+
+  mlir::IRRewriter rewriter(module);
+  for (Operation *dceRoot : dceRoots)
+    (void)mlir::runRegionDCE(rewriter, dceRoot->getRegions());
+
+  return success();
+}
+
 struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
   void runOnOperation() override {
     auto circuit = getOperation();
@@ -478,6 +700,9 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
 
     std::atomic<bool> usedSynthesisMacro = false;
     auto lowerModule = [&](hw::HWModuleOp module) {
+      if (failed(lowerPrintFormattedProcToSV(module)))
+        return failure();
+
       if (moveOpsIntoIfdefGuardsAndProcesses(module))
         usedSynthesisMacro = true;
 
