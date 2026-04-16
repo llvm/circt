@@ -233,6 +233,7 @@ struct LatticeValue {
 struct LatticeNode {
   enum class Kind { BlockEntry, BlockExit, Probe, Drive, Signal };
   const Kind kind;
+  /// Dirty flag to prevent duplicate pushes to worklist.
   bool dirty = false;
   LatticeNode(Kind kind) : kind(kind) {}
 };
