@@ -144,6 +144,12 @@ struct ImportVerilogOptions {
 
   /// A list of command files to process for compilation.
   std::vector<std::string> commandFiles;
+
+  //===--------------------------------------------------------------------===//
+  // Misc slang options
+  //===--------------------------------------------------------------------===//
+  /// A list of arbitrary arguments to pass to the Slang CLI.
+  std::vector<std::string> slangArgs;
 };
 
 /// Parse files in a source manager as Verilog source code and populate the
