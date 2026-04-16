@@ -547,8 +547,34 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
   if (provenEquivalences.empty())
     return;
 
+  // Build all replacement IR first, then perform use rewrites in a second
+  // phase. This keeps `isBeforeInBlock` queries anchored to the final block
+  // order instead of an order that is still being mutated by insertion.
+  struct MergeRewritePlan {
+    Value representative;
+    SmallVector<std::pair<Value, bool>> members;
+    llvm::SmallPtrSet<Operation *, 8> createdInverters;
+    synth::ChoiceOp choice;
+    aig::AndInverterOp choiceNot;
+  };
+
   mlir::OpBuilder builder(module.getContext());
-  for (auto &provenEquivSet : provenEquivalences) {
+  auto replaceDominatedUses = [](Value from, Value to, Operation *defOp,
+                                 auto &&shouldReplaceOwner) {
+    from.replaceUsesWithIf(to, [&](OpOperand &use) {
+      auto *user = use.getOwner();
+      // Restrict rewrites to uses after the replacement value's definition in
+      // the same block so merging cannot introduce use-before-def edges or SSA
+      // cycles.
+      return shouldReplaceOwner(user) &&
+             user->getBlock() == defOp->getBlock() &&
+             defOp->isBeforeInBlock(user);
+    });
+  };
+
+  SmallVector<MergeRewritePlan> rewritePlans;
+  rewritePlans.reserve(provenEquivalences.size());
+  for (auto provenEquivSet : provenEquivalences) {
     auto &[representative, members] = provenEquivSet;
     if (members.empty())
       continue;
@@ -584,21 +610,34 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
                                                       choice, true);
 
     stats.numMergedNodes += members.size() + 1;
+    rewritePlans.push_back({representative, members,
+                            std::move(createdInverters), choice, choiceNot});
+  }
 
+  for (auto &plan : rewritePlans) {
     auto replaceValue = [&](Value value, bool inverted) {
       if (inverted)
-        value.replaceUsesWithIf(choiceNot, [&](OpOperand &use) {
-          // Only replace uses that are not the inverters we just created. This
-          // is necessary to avoid creatng an immediate cycle when merging an
-          // inverted node into its representative.
-          return !createdInverters.contains(use.getOwner());
-        });
+        replaceDominatedUses(value, plan.choiceNot,
+                             plan.choiceNot.getOperation(),
+                             [&](Operation *user) {
+                               // Only replace uses that are not the inverters
+                               // we just created. This is necessary to avoid
+                               // creating an immediate cycle when merging an
+                               // inverted node into its representative.
+                               return !plan.createdInverters.contains(user) &&
+                                      user != plan.choiceNot.getOperation();
+                             });
       else
-        value.replaceAllUsesExcept(choice, choice);
+        replaceDominatedUses(value, plan.choice, plan.choice.getOperation(),
+                             [&](Operation *user) {
+                               return user != plan.choice.getOperation();
+                             });
     };
 
-    representative.replaceAllUsesExcept(choice, choice);
-    for (auto [value, inverted] : members)
+    replaceDominatedUses(
+        plan.representative, plan.choice, plan.choice.getOperation(),
+        [&](Operation *user) { return user != plan.choice.getOperation(); });
+    for (auto [value, inverted] : plan.members)
       replaceValue(value, inverted);
   }
 
