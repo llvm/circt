@@ -8,7 +8,7 @@ Contributors may use AI tools to assist with their work, but must:
 
 - **Keep a human in the loop** - All AI-generated content must be reviewed and understood by the contributor before submission
 - **Take full accountability** - The contributor is the author and is responsible for their contributions
-- **Be transparent** - Label contributions containing substantial AI-generated content (e.g., using `AI-assisted-by:` in commit messages)
+- **Be transparent** - Label contributions containing substantial AI-generated content with a commit message trailer: `Assited-by: <tool>:<model>`, e.g., `Assisted-by: Claude:claude-sonnet-4-6`.
 - **Ensure quality** - Contributions should be worth more to the project than the time required to review them
 
 ## What This Means
