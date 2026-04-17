@@ -133,7 +133,7 @@ if(Python3_FOUND)
     )
 
     foreach(pysrc ${ESIPythonRuntimeSources})
-      # Copy each of the Python sources to the build dir.
+      # Symlink each Python source into the build dir.
       add_custom_command(
           OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
           COMMAND ${CMAKE_COMMAND} -E create_symlink

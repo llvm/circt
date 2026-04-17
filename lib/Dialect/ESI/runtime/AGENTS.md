@@ -67,7 +67,7 @@ source .venv/bin/activate
 export CIRCT_BUILD=$PWD/build/default
 
 export LD_LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LD_LIBRARY_PATH
-export LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LD_LIBRARY_PATH
+export LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LIBRARY_PATH
 export PYTHONPATH=$PYTHONPATH:$CIRCT_BUILD/tools/circt/python_packages/pycde:$CIRCT_BUILD/tools/circt/lib/Dialect/ESI/runtime/python
 export PATH=$CIRCT_BUILD/bin:$PWD/ext/bin:$PATH
 
@@ -101,7 +101,7 @@ source .venv/bin/activate
 
 export CIRCT_BUILD=$PWD/build/default
 export LD_LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LD_LIBRARY_PATH
-export LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LD_LIBRARY_PATH
+export LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LIBRARY_PATH
 export PYTHONPATH=$PYTHONPATH:$CIRCT_BUILD/tools/circt/python_packages/pycde:$CIRCT_BUILD/tools/circt/lib/Dialect/ESI/runtime/python
 export PATH=$CIRCT_BUILD/bin:$PWD/ext/bin:$PATH
 

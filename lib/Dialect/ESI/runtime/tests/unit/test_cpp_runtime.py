@@ -49,7 +49,7 @@ def _find_binary() -> Path | None:
     candidate = get_runtime_root() / "bin" / _BIN_NAME
     if candidate.is_file():
       return candidate
-  except ImportError:
+  except (ImportError, FileNotFoundError):
     pass
 
   return None
