@@ -278,6 +278,10 @@ struct CLOptions {
           "One or more command files, which are independent compilation units "
           "where modules are automatically instantiated."),
       cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
+
+  cl::list<std::string> slangArgs{"Xslang",
+                                  cl::desc("Pass <arg> to the Slang CLI"),
+                                  cl::value_desc("arg"), cl::cat(cat)};
 };
 } // namespace
 
@@ -346,6 +350,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
   options.singleUnit = opts.singleUnit;
   options.libraryFiles = opts.libraryFiles;
   options.commandFiles = opts.commandFiles;
+  options.slangArgs = opts.slangArgs;
 
   // Open the output file.
   std::string errorMessage;
