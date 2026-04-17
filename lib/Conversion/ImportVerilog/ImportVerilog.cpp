@@ -290,8 +290,8 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   driver.options.singleUnit = options.singleUnit;
 
   // Parse pass through options.
+  driver.addStandardArgs();
   if (!options.slangArgs.empty()) {
-    driver.addStandardArgs();
     SmallVector<const char *> slangArgs;
     slangArgs.push_back("slang"); // dummy program name
     for (const auto &arg : options.slangArgs)
