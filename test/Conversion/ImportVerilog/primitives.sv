@@ -182,21 +182,21 @@ module pullup_prim;
 endmodule
 
 // CHECK-LABEL: moore.module @pulldown_prim()
-// CHECK: [[A:%.+]] = moore.variable : <l1>
+// CHECK: [[A:%.+]] = moore.net wire : <l1>
 // CHECK: [[ZERO:%.+]] = moore.constant 0 : l1
 // CHECK: moore.assign [[A]], [[ZERO]] : l1
 
 module pulldown_prim;
-    logic A;
+    wire A;
     pulldown n (A);
 endmodule
 
 // CHECK-LABEL: moore.module @wide_pullup_prim()
-// CHECK: [[A:%.+]] = moore.variable : <l4>
+// CHECK: [[A:%.+]] = moore.net wire : <l4>
 // CHECK: [[ONES:%.+]] = moore.constant -1 : l4
 // CHECK: moore.assign [[A]], [[ONES]] : l4
 
 module wide_pullup_prim;
-    logic [3:0] A;
+    wire [3:0] A;
     pullup n (A);
 endmodule
