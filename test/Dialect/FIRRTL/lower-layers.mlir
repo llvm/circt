@@ -1122,3 +1122,24 @@ firrtl.circuit "EmptyLayerBlocks" {
     }
   }
 }
+
+// -----
+
+firrtl.circuit "DoNotIncludeDummyBindfiles" {
+  firrtl.layer @A bind {}
+
+  firrtl.module public @Child1() {}
+  firrtl.module public @Child2() {
+    firrtl.layerblock @A {
+      %c = firrtl.wire : !firrtl.uint<1>
+    }
+  }
+
+  firrtl.module public @DoNotIncludeDummyBindfiles() {
+    firrtl.instance child1 @Child1()
+    firrtl.instance child2 @Child2()
+  }
+
+  // CHECK-NOT: sv.include local "layers-Child1-A.sv"
+  // CHECK: sv.include local "layers-Child2-A.sv"
+}

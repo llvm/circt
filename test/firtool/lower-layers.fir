@@ -300,7 +300,7 @@ circuit Foo:
   layer A, bind, "A":
   layer B, bind, "B":
 
-  extmodule Baz:
+  extmodule Baz knownlayer A knownlayer B:
 
   public module Bar:
     ; This instance of an extmodule prevents Foo/bar from being DCE'd.
