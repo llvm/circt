@@ -577,6 +577,10 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set(SLANG_USE_THREADS OFF)  # avoid race condition in BS::thread_pool
     FetchContent_MakeAvailable(slang)
 
+    if(LLVM_ENABLE_ASSERTIONS)
+      target_compile_definitions(slang_slang PUBLIC SLANG_ASSERT_ENABLED=1)
+    endif()
+
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
     set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
 

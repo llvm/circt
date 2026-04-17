@@ -14,6 +14,12 @@ set(CMAKE_DISABLE_PRECOMPILE_HEADERS ON)
 # potentially built or modified by code compiled in the Slang compilation unit.
 add_compile_definitions($<$<CONFIG:Debug>:SLANG_DEBUG>)
 
+# Keep header-defined slang assertion behavior in sync with the linked slang
+# library for LLVM assertions-enabled builds, including non-Debug configs.
+if(LLVM_ENABLE_ASSERTIONS)
+  add_compile_definitions(SLANG_ASSERT_ENABLED=1)
+endif()
+
 # HACK: When the `OBJECT` argument is passed to `llvm_add_library()`,
 # `COMPILE_DEFINITIONS` are not correctly inherited. For that reason, we
 # manually set it here.
