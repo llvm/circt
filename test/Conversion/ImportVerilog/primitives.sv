@@ -172,12 +172,12 @@ module buf_prim;
 endmodule
 
 // CHECK-LABEL: moore.module @pullup_prim()
-// CHECK: [[A:%.+]] = moore.variable : <l1>
+// CHECK: [[A:%.+]] = moore.net wire : <l1>
 // CHECK: [[ONE:%.+]] = moore.constant 1 : l1
 // CHECK: moore.assign [[A]], [[ONE]] : l1
 
 module pullup_prim;
-    logic A;
+    wire A;
     pullup n (A);
 endmodule
 
