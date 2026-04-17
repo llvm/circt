@@ -136,7 +136,7 @@ if(Python3_FOUND)
       # Copy each of the Python sources to the build dir.
       add_custom_command(
           OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
-          COMMAND ${CMAKE_COMMAND} -E copy
+          COMMAND ${CMAKE_COMMAND} -E create_symlink
               ${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}
               ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
           DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}
