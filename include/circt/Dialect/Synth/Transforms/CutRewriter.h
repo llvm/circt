@@ -718,6 +718,9 @@ public:
   /// Re-select cuts using area-flow while preserving required times.
   void reselectCutsForAreaFlow();
 
+  /// Re-select cuts using exact-area deref/ref while preserving required times.
+  void reselectCutsForExactArea();
+
   /// Get cut sets (indexed by LogicNetwork index).
   const llvm::DenseMap<uint32_t, CutSet *> &getCutSets() const {
     return cutSets;

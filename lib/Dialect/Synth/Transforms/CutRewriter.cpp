@@ -1485,6 +1485,178 @@ void CutEnumerator::reselectCutsForAreaFlow() {
   }
 }
 
+// Pick cuts again using exact-area deref/ref while staying within the timing
+// bound set by the current mapping.
+void CutEnumerator::reselectCutsForExactArea() {
+  SmallVector<unsigned, 0> selectedRefCounts(logicNetwork.size(), 0);
+  for (auto [index, gate] : llvm::enumerate(logicNetwork.getGates()))
+    selectedRefCounts[index] = gate.getExternalUseCount();
+
+  auto referenceNode = [&](auto &&self, uint32_t index) -> double {
+    auto *cutSet = getNonLeafCutSet(cutSets, logicNetwork, index);
+    if (!cutSet)
+      return 0.0;
+
+    if (selectedRefCounts[index]++ > 0)
+      return 0.0;
+
+    auto *bestCut = cutSet->getBestMatchedCut();
+    if (!bestCut)
+      return 0.0;
+
+    double area = bestCut->getMatchedPattern()->getArea();
+    for (uint32_t inputIndex : bestCut->inputs)
+      area += self(self, inputIndex);
+    return area;
+  };
+
+  auto dereferenceNode = [&](auto &&self, uint32_t index) -> double {
+    auto *cutSet = getNonLeafCutSet(cutSets, logicNetwork, index);
+    if (!cutSet)
+      return 0.0;
+
+    assert(selectedRefCounts[index] != 0 &&
+           "selected reference count underflow");
+    if (--selectedRefCounts[index] > 0)
+      return 0.0;
+
+    auto *bestCut = cutSet->getBestMatchedCut();
+    if (!bestCut)
+      return 0.0;
+
+    double area = bestCut->getMatchedPattern()->getArea();
+    for (uint32_t inputIndex : bestCut->inputs)
+      area += self(self, inputIndex);
+    return area;
+  };
+
+  auto referenceCut = [&](Cut *cut) -> double {
+    if (!cut)
+      return 0.0;
+    double area = cut->getMatchedPattern()->getArea();
+    for (uint32_t inputIndex : cut->inputs)
+      area += referenceNode(referenceNode, inputIndex);
+    return area;
+  };
+
+  auto dereferenceCut = [&](Cut *cut) -> double {
+    if (!cut)
+      return 0.0;
+    double area = cut->getMatchedPattern()->getArea();
+    for (uint32_t inputIndex : cut->inputs)
+      area += dereferenceNode(dereferenceNode, inputIndex);
+    return area;
+  };
+
+  // Seed counts and arrival times from the current mapping.
+  for (auto index : processingOrder) {
+    auto it = cutSets.find(index);
+    if (it == cutSets.end())
+      continue;
+
+    auto *bestCut = it->second->getBestMatchedCut();
+    if (!bestCut)
+      continue;
+
+    it->second->bestArrivalTime =
+        bestCut->getMatchedPattern()->getWorstOutputArrivalTime();
+    selectedRefCounts[index] = logicNetwork.getExternalUseCount(index);
+  }
+  for (auto index : processingOrder) {
+    if (selectedRefCounts[index] == 0)
+      continue;
+
+    auto cutSetIt = cutSets.find(index);
+    if (cutSetIt == cutSets.end())
+      continue;
+
+    auto *bestCut = cutSetIt->second->getBestMatchedCut();
+    if (!bestCut)
+      continue;
+
+    (void)referenceCut(bestCut);
+  }
+
+  for (auto index : processingOrder) {
+    auto cutSetIt = cutSets.find(index);
+    if (cutSetIt == cutSets.end())
+      continue;
+
+    auto *cutSet = cutSetIt->second;
+    Cut *currentBestCut = cutSet->getBestMatchedCut();
+    if (!currentBestCut)
+      continue;
+
+    bool isActive = selectedRefCounts[index] != 0;
+    if (isActive)
+      (void)dereferenceCut(currentBestCut);
+
+    Cut *bestExactCut = nullptr;
+    std::optional<MatchedPattern> bestExactMatch;
+    double bestExactArea = std::numeric_limits<double>::max();
+    DelayType bestExactArrival = std::numeric_limits<DelayType>::max();
+    double bestLocalArea = std::numeric_limits<double>::max();
+
+    for (Cut *cut : cutSet->getCuts()) {
+      const auto &candidateMatch = cut->getMatchedPattern();
+      if (!candidateMatch)
+        continue;
+
+      SmallVector<DelayType, 4> inputArrivalTimes;
+      inputArrivalTimes.reserve(cut->getInputSize());
+      for (uint32_t inputIndex : cut->inputs) {
+        DelayType inputArrival = 0;
+        if (auto *inputCutSet =
+                getNonLeafCutSet(cutSets, logicNetwork, inputIndex))
+          inputArrival = inputCutSet->bestArrivalTime;
+        inputArrivalTimes.push_back(inputArrival);
+      }
+
+      auto outputArrivalTimes = computeOutputArrivalTimes(
+          cut->getOutputSize(logicNetwork), cut->getInputSize(),
+          candidateMatch->getDelays(), inputArrivalTimes,
+          candidateMatch->getInputPermutation());
+      DelayType arrivalTime = *std::max_element(outputArrivalTimes.begin(),
+                                                outputArrivalTimes.end());
+      if (arrivalTime > cutSet->requiredTime)
+        continue;
+
+      double exactArea = referenceCut(cut);
+      (void)dereferenceCut(cut);
+
+      if (exactArea < bestExactArea ||
+          (areEquivalent(exactArea, bestExactArea) &&
+           arrivalTime < bestExactArrival) ||
+          (areEquivalent(exactArea, bestExactArea) &&
+           arrivalTime == bestExactArrival &&
+           candidateMatch->getArea() < bestLocalArea)) {
+        bestExactArea = exactArea;
+        bestExactArrival = arrivalTime;
+        bestLocalArea = candidateMatch->getArea();
+        bestExactCut = cut;
+        bestExactMatch = MatchedPattern(candidateMatch->getPattern(),
+                                        std::move(outputArrivalTimes),
+                                        candidateMatch->getMatchResult(),
+                                        candidateMatch->getInputPermutation());
+      }
+    }
+
+    if (!bestExactCut || !bestExactMatch) {
+      if (isActive)
+        (void)referenceCut(currentBestCut);
+      continue;
+    }
+
+    bestExactCut->setMatchedPattern(std::move(*bestExactMatch));
+    cutSet->setBestCut(bestExactCut);
+    cutSet->bestArrivalTime =
+        bestExactCut->getMatchedPattern()->getWorstOutputArrivalTime();
+
+    if (isActive)
+      (void)referenceCut(bestExactCut);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // CutRewriter
 //===----------------------------------------------------------------------===//
@@ -1532,6 +1704,7 @@ LogicalResult CutRewriter::run(Operation *topOp) {
   // regardless of the strategy.
   cutEnumerator.computeRequiredTimes();
   cutEnumerator.reselectCutsForAreaFlow();
+  cutEnumerator.reselectCutsForExactArea();
 
   // Select best cuts and perform mapping
   if (failed(runBottomUpRewrite(topOp)))
