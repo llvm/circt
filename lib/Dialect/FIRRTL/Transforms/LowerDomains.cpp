@@ -635,70 +635,39 @@ LogicalResult LowerModule::lowerModule() {
         return WalkResult::advance();
       }
 
-      // If we see a WireOp of a domain type, then we want to erase it.  To do
-      // this, find what is driving it and what it is driving and then replace
-      // that triplet of operations with a single domain define inserted before
-      // the latest define.  If the wire is undriven or if the wire drives
-      // nothing, then everything will be deleted.
+      // Handle WireOp.
       //
-      // Before:
+      // For domain-typed wires, create a placeholder ObjectOp and replace all
+      // uses of the wire with a conversion cast wrapping the new object.  A
+      // placeholder is always used (even when the wire is driven) because the
+      // source of the define may not have been lowered to a conversion cast yet
+      // (it may appear later in the IR).  Any DomainDefineOps that drive the
+      // wire are handled when they are visited: per-field PropAssignOps connect
+      // the source object's output ports to the placeholder's input ports.  For
+      // cleaner output, this should rely on optimizations to remove these
+      // wires.
       //
-      //     %a = firrtl.wire : !firrtl.domain // <- operation being visited
-      //     firrtl.domain.define %a, %src
-      //     firrtl.domain.define %dst, %a
-      //
-      // After:
-      //     %a = firrtl.wire : !firrtl.domain // <- to-be-deleted after walk
-      //     firrtl.domain.define %a, %src     // <- to-be-deleted when visited
-      //     firrtl.domain.define %dst, %src   // <- added
-      //     firrtl.domain.define %dst, %a     // <- to-be-deleted when visited
-      //
-      // If the wire is not of domain type, then we just erase its associations.
+      // For non-domain-typed wires, erase any domain associations.
       if (auto wireOp = dyn_cast<WireOp>(walkOp)) {
-        if (type_isa<DomainType>(wireOp.getResult().getType())) {
-          Value src;
-          SmallVector<Value> dsts;
-          DomainDefineOp lastDefineOp;
-          for (auto *user : llvm::make_early_inc_range(wireOp->getUsers())) {
-            // This domain is associated with another wire.  Nothing to do.
-            if (isa<WireOp>(user))
-              continue;
-
-            auto domainDefineOp = dyn_cast<DomainDefineOp>(user);
-            if (operationsToErase.contains(domainDefineOp))
-              continue;
-            if (!domainDefineOp) {
-              auto diag =
-                  wireOp.emitOpError()
-                  << "cannot be lowered by `LowerDomains` because it "
-                     "has a user that is not a domain define op or wire";
-              diag.attachNote(user->getLoc()) << "is one such user";
-              return WalkResult::interrupt();
-            }
-            if (!lastDefineOp || lastDefineOp->isBeforeInBlock(domainDefineOp))
-              lastDefineOp = domainDefineOp;
-            if (wireOp == domainDefineOp.getSrc().getDefiningOp())
-              dsts.push_back(domainDefineOp.getDest());
-            else
-              src = domainDefineOp.getSrc();
-            operationsToErase.insert(domainDefineOp);
-          }
+        // Handle domain-typed wires.
+        if (auto domainType =
+                type_dyn_cast<DomainType>(wireOp.getResult().getType())) {
+          OpBuilder builder(wireOp);
+          auto classIn =
+              domainToClasses.at(domainType.getName().getAttr()).input;
+          auto object = ObjectOp::create(builder, wireOp.getLoc(), classIn,
+                                         wireOp.getNameAttr());
+          instanceGraph.lookup(op)->addInstance(object,
+                                                instanceGraph.lookup(classIn));
+          auto cast = UnrealizedConversionCastOp::create(
+              builder, wireOp.getLoc(), {wireOp.getResult().getType()},
+              {object.getResult()});
+          wireOp.getResult().replaceAllUsesWith(cast.getResult(0));
+          conversionsToErase.insert(cast);
           conversionsToErase.insert(wireOp);
-
-          // If this wire is dead or undriven, then there's nothing to do.
-          if (!src || dsts.empty())
-            return WalkResult::advance();
-          // Insert a domain define that removes the need for the wire.  This is
-          // inserted just before the latest domain define involving the wire.
-          // This is done to prevent unnecessary permutations of the IR.
-          OpBuilder builder(lastDefineOp);
-          for (auto dst : llvm::reverse(dsts))
-            DomainDefineOp::create(builder, builder.getUnknownLoc(), dst, src);
         }
 
-        // Erase the domain association from non-domain type wires.  Track the
-        // defining ops of domain operands so that any conversion casts that
-        // were only serving as domain associations are also cleaned up.
+        // Handle non-domain-typed wires.
         if (!wireOp.getDomains().empty()) {
           for (auto domain : wireOp.getDomains())
             if (auto *defOp = domain.getDefiningOp())
@@ -714,12 +683,14 @@ LogicalResult LowerModule::lowerModule() {
       if (!defineOp)
         return WalkResult::advance();
 
-      // There are only two possibilities for kinds of `DomainDefineOp`s that we
-      // can see a this point: the destination is always a conversion cast and
-      // the source is _either_ (1) a conversion cast if the source is a module
-      // or instance port or (2) an anonymous domain op or a domain create op.
-      // This relies on the earlier "canonicalization" that erased `WireOp`s to
-      // leave only `DomainDefineOp`s.
+      // The destination of a DomainDefineOp is always a conversion cast.  The
+      // source is _either_ (1) a conversion cast if the source is a module or
+      // instance port or (2) an anonymous domain op or a domain create op.
+      //
+      // When the destination wraps an ObjectOp (a wire placeholder), per-field
+      // connections are created from the source object's output ports to the
+      // destination object's input ports.  Otherwise, a single prop.assign
+      // connects the source to the destination.
       auto *src = defineOp.getSrc().getDefiningOp();
       auto dest = dyn_cast<UnrealizedConversionCastOp>(
           defineOp.getDest().getDefiningOp());
@@ -732,8 +703,24 @@ LogicalResult LowerModule::lowerModule() {
       if (auto srcCast = dyn_cast<UnrealizedConversionCastOp>(src)) {
         assert(srcCast.getNumOperands() == 1 && srcCast.getNumResults() == 1);
         OpBuilder builder(defineOp);
-        PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
-                             srcCast.getOperand(0));
+        // If the destination wraps an ObjectOp (wire placeholder), create
+        // per-field connections.  A single prop.assign would fail because
+        // ObjectOp results have source flow, not sink flow.
+        if (dest.getOperand(0).getDefiningOp<ObjectOp>()) {
+          auto domainType =
+              firrtl::type_cast<DomainType>(defineOp.getDest().getType());
+          auto numFields = domainType.getNumFields();
+          for (size_t i = 0; i < numFields; ++i) {
+            auto destIn = ObjectSubfieldOp::create(builder, defineOp.getLoc(),
+                                                   dest.getOperand(0), i * 2);
+            auto srcOut = ObjectSubfieldOp::create(
+                builder, defineOp.getLoc(), srcCast.getOperand(0), i * 2 + 1);
+            PropAssignOp::create(builder, defineOp.getLoc(), destIn, srcOut);
+          }
+        } else {
+          PropAssignOp::create(builder, defineOp.getLoc(), dest.getOperand(0),
+                               srcCast.getOperand(0));
+        }
       } else if (!isa<DomainCreateAnonOp, DomainCreateOp>(src)) {
         auto diag = defineOp.emitOpError()
                     << "has a source which cannot be lowered by 'LowerDomains'";
