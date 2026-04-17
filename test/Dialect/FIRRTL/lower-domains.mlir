@@ -222,7 +222,12 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: firrtl.propassign %[[associations_in]], %[[list]]
     // CHECK-NEXT: firrtl.propassign %B_out, %B_object :
     //
-    // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %A :
+    // CHECK-NEXT: %w0 = firrtl.object @ClockDomain()
+    // CHECK-NEXT: %w1 = firrtl.object @ClockDomain()
+    // CHECK-NEXT: %w2 = firrtl.object @ClockDomain()
+    // CHECK-NEXT: firrtl.propassign %[[domainInfo_in]], %w2
+    // CHECK-NEXT: firrtl.matchingconnect %b, %a
+    // CHECK-NOT:  firrtl.wire
     %w0 = firrtl.wire : !firrtl.domain<@ClockDomain()>
     %w1 = firrtl.wire : !firrtl.domain<@ClockDomain()>
     %w2 = firrtl.wire : !firrtl.domain<@ClockDomain()>
@@ -230,10 +235,8 @@ firrtl.circuit "Foo" {
     firrtl.domain.define %w1, %w0 : !firrtl.domain<@ClockDomain()>
     firrtl.domain.define %w2, %w1 : !firrtl.domain<@ClockDomain()>
     firrtl.domain.define %B, %w2 : !firrtl.domain<@ClockDomain()>
-    // CHECK-NEXT: firrtl.matchingconnect %b, %a
     %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
-    // CHECK-NOT: firrtl.wire
   }
 }
 
@@ -248,6 +251,7 @@ firrtl.circuit "Foo" {
     in b: !firrtl.domain<@ClockDomain()>
   )
   // CHECK-LABEL: firrtl.module @Foo
+  // CHECK:         %wire = firrtl.object @ClockDomain()
   firrtl.module @Foo(
     in %a: !firrtl.domain<@ClockDomain()>
   ) {
@@ -257,8 +261,6 @@ firrtl.circuit "Foo" {
     )
     %wire = firrtl.wire : !firrtl.domain<@ClockDomain()>
     firrtl.domain.define %wire, %a : !firrtl.domain<@ClockDomain()>
-    // CHECK:      firrtl.propassign %bar_a, %a
-    // CHECK-NEXT: firrtl.propassign %bar_b, %a
     firrtl.domain.define %bar_a, %wire : !firrtl.domain<@ClockDomain()>
     firrtl.domain.define %bar_b, %wire : !firrtl.domain<@ClockDomain()>
   }
@@ -508,7 +510,6 @@ firrtl.circuit "DeadDomainOps" {
   // CHECK-NOT: firrtl.wire
   // CHECK-NOT: firrtl.domain.define
   // CHECK-NOT: firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
-  // CHECK-NOT: firrtl.unknown
   firrtl.module @DeadDomainOps(
   ) {
     // A lone, undriven wire.
@@ -694,12 +695,57 @@ firrtl.circuit "WireWithCreateDomain" {
 firrtl.circuit "DomainWireUsedByWire" {
   firrtl.domain @ClockDomain
   // CHECK-LABEL: firrtl.module @DomainWireUsedByWire()
+  // CHECK-NEXT:    %domain_wire = firrtl.object @ClockDomain()
   // CHECK-NEXT:    %w = firrtl.wire : !firrtl.uint<1>
+  // CHECK-NEXT:    %actual_domain = firrtl.object @ClockDomain()
   // CHECK-NEXT:  }
   firrtl.module @DomainWireUsedByWire() {
     %domain_wire = firrtl.wire : !firrtl.domain<@ClockDomain()>
     %w = firrtl.wire domains[%domain_wire] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
     %actual_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
     firrtl.domain.define %domain_wire, %actual_domain : !firrtl.domain<@ClockDomain()>
+  }
+}
+
+// -----
+
+// Test that domain.subfield on a driven domain wire is properly lowered.
+// The subfield should read from the source that drives the wire.
+firrtl.circuit "DrivenWireSubfield" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"source", !firrtl.string>]
+  // CHECK-LABEL: firrtl.module @DrivenWireSubfield(
+  // CHECK-NEXT:    %[[name:.+]] = firrtl.string "clk"
+  // CHECK-NEXT:    %src = firrtl.object @ClockDomain(
+  // CHECK-NEXT:    %[[src_in:.+]] = firrtl.object.subfield %src[source_in]
+  // CHECK-NEXT:    firrtl.propassign %[[src_in]], %[[name]]
+  // CHECK-NEXT:    %wire = firrtl.object @ClockDomain(
+  // CHECK-NEXT:    %[[wire_in:.+]] = firrtl.object.subfield %wire[source_in]
+  // CHECK-NEXT:    %[[src_out2:.+]] = firrtl.object.subfield %src[source_out]
+  // CHECK-NEXT:    firrtl.propassign %[[wire_in]], %[[src_out2]]
+  // CHECK-NEXT:    %[[wire_out:.+]] = firrtl.object.subfield %wire[source_out]
+  // CHECK-NEXT:    firrtl.propassign %out, %[[wire_out]]
+  firrtl.module @DrivenWireSubfield(out %out : !firrtl.string) {
+    %name = firrtl.string "clk"
+    %src = firrtl.domain.create(%name) : !firrtl.domain<@ClockDomain(source: !firrtl.string)>
+    %wire = firrtl.wire : !firrtl.domain<@ClockDomain(source: !firrtl.string)>
+    firrtl.domain.define %wire, %src : !firrtl.domain<@ClockDomain(source: !firrtl.string)>
+    %1 = firrtl.domain.subfield %wire[source] : !firrtl.domain<@ClockDomain(source: !firrtl.string)>
+    firrtl.propassign %out, %1 : !firrtl.string
+  }
+}
+
+// -----
+
+// Test that an unsafe_domain_cast using a domain wire as an association is
+// properly lowered.  The wire should be replaced with a conversion cast and the
+// unsafe_domain_cast should be removed.
+firrtl.circuit "UnsafeDomainCastWithWire" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"source", !firrtl.string>]
+  // CHECK-LABEL: firrtl.module @UnsafeDomainCastWithWire(in %a: !firrtl.uint<1>)
+  // CHECK-NEXT:    %wire = firrtl.object @ClockDomain(
+  // CHECK-NEXT:  }
+  firrtl.module @UnsafeDomainCastWithWire(in %a: !firrtl.uint<1>) {
+    %wire = firrtl.wire : !firrtl.domain<@ClockDomain(source: !firrtl.string)>
+    %0 = firrtl.unsafe_domain_cast %a domains[%wire] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain(source: !firrtl.string)>]
   }
 }
