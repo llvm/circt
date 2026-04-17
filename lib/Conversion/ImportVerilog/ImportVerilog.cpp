@@ -260,6 +260,8 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
       return failure();
 
   // Populate the driver options.
+  driver.addStandardArgs();
+
   driver.options.excludeExts.insert(options.excludeExts.begin(),
                                     options.excludeExts.end());
   driver.options.ignoreDirectives = options.ignoreDirectives;
@@ -270,17 +272,17 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   driver.options.librariesInheritMacros = options.librariesInheritMacros;
 
   driver.options.timeScale = options.timeScale;
-  driver.options.compilationFlags.emplace(
-      slang::ast::CompilationFlags::AllowUseBeforeDeclare,
-      options.allowUseBeforeDeclare);
-  driver.options.compilationFlags.emplace(
-      slang::ast::CompilationFlags::IgnoreUnknownModules,
-      options.ignoreUnknownModules);
-  driver.options.compilationFlags.emplace(
-      slang::ast::CompilationFlags::LintMode,
-      options.mode == ImportVerilogOptions::Mode::OnlyLint);
-  driver.options.compilationFlags.emplace(
-      slang::ast::CompilationFlags::DisableInstanceCaching, false);
+  driver.options
+      .compilationFlags[slang::ast::CompilationFlags::AllowUseBeforeDeclare] =
+      options.allowUseBeforeDeclare;
+  driver.options
+      .compilationFlags[slang::ast::CompilationFlags::IgnoreUnknownModules] =
+      options.ignoreUnknownModules;
+  driver.options.compilationFlags[slang::ast::CompilationFlags::LintMode] =
+      options.mode == ImportVerilogOptions::Mode::OnlyLint;
+  driver.options
+      .compilationFlags[slang::ast::CompilationFlags::DisableInstanceCaching] =
+      false;
   driver.options.topModules = options.topModules;
   driver.options.paramOverrides = options.paramOverrides;
 
@@ -290,7 +292,6 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   driver.options.singleUnit = options.singleUnit;
 
   // Parse pass through options.
-  driver.addStandardArgs();
   if (!options.slangArgs.empty()) {
     SmallVector<const char *> slangArgs;
     slangArgs.push_back("slang"); // dummy program name
