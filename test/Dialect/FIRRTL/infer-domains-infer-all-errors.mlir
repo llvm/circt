@@ -18,11 +18,13 @@ firrtl.circuit "DomainCrossOnPort" {
 firrtl.circuit "IllegalDomainCrossing" {
   firrtl.domain @ClockDomain
   firrtl.module @IllegalDomainCrossing(
+    // expected-note @below {{input module port A declared here}}
     in %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{input module port B declared here}}
     in %B: !firrtl.domain<@ClockDomain()>,
-    // expected-note @below {{2nd operand has domains: [A : ClockDomain]}}
+    // expected-note @below {{a has domains [A : ClockDomain]}}
     in %a: !firrtl.uint<1> domains [%A],
-    // expected-note @below {{1st operand has domains: [B : ClockDomain]}}
+    // expected-note @below {{b has domains [B : ClockDomain]}}
     out %b: !firrtl.uint<1> domains [%B]
   ) {
     // expected-error @below {{illegal domain crossing in operation}}
@@ -34,11 +36,13 @@ firrtl.circuit "IllegalDomainCrossing" {
 firrtl.circuit "IllegalDomainCrossing" {
   firrtl.domain @ClockDomain
   firrtl.module @IllegalDomainCrossing(
+    // expected-note @below {{input module port A declared here}}
     in %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{input module port B declared here}}
     in %B: !firrtl.domain<@ClockDomain()>,
-    // expected-note @below {{2nd operand has domains: [A : ClockDomain]}}
+    // expected-note @below {{a has domains [A : ClockDomain]}}
     in %a: !firrtl.uint<1> domains [%A],
-    // expected-note @below {{1st operand has domains: [B : ClockDomain]}}
+    // expected-note @below {{b has domains [B : ClockDomain]}}
     out %b: !firrtl.uint<1> domains [%B]
   ) {
     // expected-error @below {{illegal domain crossing in operation}}
@@ -153,11 +157,13 @@ firrtl.circuit "MultipleErrors" {
 
   // We report the first error encountered in M1.
   firrtl.module @M1(
-    // expected-note @below {{2nd operand has domains: [A : ClockDomain]}}
+    // expected-note @below {{a has domains [A : ClockDomain]}}
     in  %a: !firrtl.uint<1> domains [%A],
-    // expected-note @below {{1st operand has domains: [B : ClockDomain]}}
+    // expected-note @below {{b has domains [B : ClockDomain]}}
     out %b: !firrtl.uint<1> domains [%B],
+    // expected-note @below {{input module port A declared here}}
     in  %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{input module port B declared here}}
     in  %B: !firrtl.domain<@ClockDomain()>
   ) {
     // expected-error @below {{illegal domain crossing in operation}}
@@ -166,11 +172,13 @@ firrtl.circuit "MultipleErrors" {
 
   // We report the first error encountered in M2.
   firrtl.module @M2(
-    // expected-note @below {{2nd operand has domains: [A : ClockDomain]}}
+    // expected-note @below {{a has domains [A : ClockDomain]}}
     in  %a: !firrtl.uint<1> domains [%A],
-    // expected-note @below {{1st operand has domains: [B : ClockDomain]}}
+    // expected-note @below {{b has domains [B : ClockDomain]}}
     out %b: !firrtl.uint<1> domains [%B],
+    // expected-note @below {{input module port A declared here}}
     in  %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{input module port B declared here}}
     in  %B: !firrtl.domain<@ClockDomain()>
   ) {
     // expected-error @below {{illegal domain crossing in operation}}
@@ -207,14 +215,49 @@ firrtl.circuit "MultipleErrors" {
 firrtl.circuit "WireDomainConflict" {
   firrtl.domain @ClockDomain
   firrtl.module @WireDomainConflict(
+    // expected-note @below {{input module port A declared here}}
     in %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{input module port B declared here}}
     in %B: !firrtl.domain<@ClockDomain()>,
-    // expected-note @below {{2nd operand has domains: [A : ClockDomain]}}
+    // expected-note @below {{a has domains [A : ClockDomain]}}
     in %a: !firrtl.uint<1> domains [%A]
   ) {
-    // expected-note @below {{1st operand has domains: [B : ClockDomain]}}
+    // expected-note @below {{w has domains [B : ClockDomain]}}
     %w = firrtl.wire domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
     // expected-error @below {{illegal domain crossing in operation}}
     firrtl.connect %w, %a : !firrtl.uint<1>
+  }
+}
+
+
+// Trace domain sources through output ports.
+firrtl.circuit "TraceThroughOutputPort" {
+  firrtl.domain @ClockDomain
+
+  firrtl.module @ClockGate(
+    out %a: !firrtl.uint<1> domains [%A],
+    // expected-note @below {{output module port A declared here}}
+    out %A: !firrtl.domain<@ClockDomain()>
+  ) {
+    // expected-note @below {{%0 declared here}}
+    %0 = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    // expected-note @below {{output module port A aliases %0}}
+    firrtl.domain.define %A, %0 : !firrtl.domain<@ClockDomain()>
+  }
+
+  firrtl.module @TraceThroughOutputPort(
+    // expected-note @below {{a has domains [A : ClockDomain]}}
+    out %a: !firrtl.uint<1> domains [%A],
+    // expected-note @below {{input module port A declared here}}
+    in  %A: !firrtl.domain<@ClockDomain()>
+  ) {
+    // expected-note @below {{cg.a has domains [cg.A : ClockDomain]}}
+    // expected-note @below {{output instance port cg.A declared here}}
+    %cg_a, %cg_A = firrtl.instance cg @ClockGate(
+      out a: !firrtl.uint<1> domains [A],
+      out A: !firrtl.domain<@ClockDomain()>
+    )
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.matchingconnect %a, %cg_a : !firrtl.uint<1>
   }
 }

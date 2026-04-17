@@ -47,6 +47,7 @@ using hw::InnerRefNamespace;
 using hw::InnerSymbolTableCollection;
 using llvm::concat;
 using mlir::AsmState;
+using mlir::InFlightDiagnostic;
 using mlir::ReverseIterator;
 
 namespace {
@@ -169,8 +170,10 @@ struct CircuitState {
 
   InnerRefNamespace &getInnerRefNamespace() { return innerRefNamespace; }
 
+  DenseSet<Value> inserted;
+
 private:
-  LogicalResult runOnModule(Operation *module);
+  LogicalResult runOnModule(Operation *moduleOp);
 
   void processDomain(DomainOp op) {
     auto index = domainTable.size();
@@ -308,11 +311,15 @@ public:
   template <typename T>
   void render(Value value, T &out);
   template <typename T>
+  void renderLong(Value value, T &out);
+  template <typename T>
   void render(Term *term, T &out);
   template <typename T>
   struct Render;
   template <typename T>
   Render<T> render(T &&subject);
+  struct RenderLong;
+  RenderLong renderLong(Value value);
 
   Term *find(Term *x);
   LogicalResult unify(Term *lhs, Term *rhs);
@@ -341,7 +348,12 @@ public:
   void processDomainDefinition(DomainValue domain);
   RowTerm *getDomainAssociationAsRow(Value value);
 
-  void noteLocation(mlir::InFlightDiagnostic &diag, Operation *op);
+  void noteLocation(InFlightDiagnostic &diag, Operation *op);
+  void noteDomain(InFlightDiagnostic &diag, DomainValue domain);
+  void noteDomainSource(InFlightDiagnostic &diag, DomainValue domain);
+  void noteDomainSource(InFlightDiagnostic &diag, Term *term);
+  void emitDomainCrossingError(Operation *op, Value lhs, Term *lhsTerm,
+                               Value rhs, Term *rhsTerm);
   template <typename T>
   void emitDuplicatePortDomainError(T op, size_t i, DomainTypeID domainTypeID,
                                     IntegerAttr domainPortIndexAttr1,
@@ -457,9 +469,27 @@ void ModuleState::render(Value value, T &out) {
     value.printAsOperand(os, globals.getAsmState());
   }
   out << name;
+}
 
-  if (auto type = dyn_cast<DomainType>(value.getType()))
-    out << " : " << type.getName().getValue();
+template <typename T>
+void ModuleState::renderLong(Value value, T &out) {
+  if (auto arg = dyn_cast<BlockArgument>(value)) {
+    if (auto moduleOp = llvm::dyn_cast_if_present<FModuleLike>(
+            arg.getOwner()->getParentOp())) {
+      out << direction::toLongString(
+          moduleOp.getPortDirection(arg.getArgNumber()));
+      out << " module port ";
+    }
+  } else if (auto result = dyn_cast<OpResult>(value)) {
+    auto *op = result.getOwner();
+    if (auto inst = dyn_cast<FInstanceLike>(op)) {
+      out << direction::toLongString(
+          inst.getPortDirection(result.getResultNumber()));
+      out << " instance port ";
+    }
+  }
+
+  render(value, out);
 }
 
 template <typename T>
@@ -481,8 +511,11 @@ void ModuleState::render(Term *term, T &out) {
   }
   if (auto *row = dyn_cast<RowTerm>(term)) {
     out << "[";
-    llvm::interleaveComma(llvm::seq(size_t(0), getNumDomains()), out,
-                          [&](auto i) { render(row->elements[i], out); });
+    llvm::interleaveComma(
+        llvm::seq(size_t(0), getNumDomains()), out, [&](auto i) {
+          render(row->elements[i], out);
+          out << " : " << getDomain(DomainTypeID{i}).getSymName();
+        });
     out << "]";
     return;
   }
@@ -505,6 +538,20 @@ static llvm::raw_ostream &operator<<(llvm::raw_ostream &out,
                                      ModuleState::Render<T> r) {
   r.state->render(r.subject, out);
   return out;
+}
+
+struct ModuleState::RenderLong {
+  ModuleState *state;
+  Value value;
+};
+
+ModuleState::RenderLong ModuleState::renderLong(Value value) {
+  return RenderLong{this, value};
+}
+
+static Diagnostic &operator<<(Diagnostic &diag, ModuleState::RenderLong r) {
+  r.state->renderLong(r.value, diag);
+  return diag;
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -717,7 +764,7 @@ RowTerm *ModuleState::getDomainAssociationAsRow(Value value) {
   return nullptr;
 }
 
-void ModuleState::noteLocation(mlir::InFlightDiagnostic &diag, Operation *op) {
+void ModuleState::noteLocation(InFlightDiagnostic &diag, Operation *op) {
   auto &note = diag.attachNote(op->getLoc());
   if (auto mod = dyn_cast<FModuleOp>(op)) {
     note << "in module " << mod.getModuleNameAttr();
@@ -737,6 +784,152 @@ void ModuleState::noteLocation(mlir::InFlightDiagnostic &diag, Operation *op) {
   }
 
   note << "here";
+}
+
+void ModuleState::noteDomain(InFlightDiagnostic &diag, DomainValue domain) {
+  auto &note = diag.attachNote(domain.getLoc());
+  note << renderLong(domain);
+
+  if (globals.inserted.contains(domain)) {
+    note << " automatically inserted here";
+    return;
+  }
+
+  note << " declared here";
+}
+
+void ModuleState::noteDomainSource(InFlightDiagnostic &diag,
+                                   DomainValue domain) {
+  auto &irns = globals.getInnerRefNamespace();
+  SmallVector<FInstanceLike> stack;
+  llvm::SmallDenseSet<DomainValue> seen;
+
+  // This is reusing "domain" across iterations of the while loop.
+
+  auto chaseConnect = [&]() {
+    for (auto *user : domain.getUsers()) {
+      if (auto defineOp = dyn_cast<DomainDefineOp>(user)) {
+        if (defineOp.getDest() != domain)
+          continue;
+        auto src = defineOp.getSrc();
+        diag.attachNote(defineOp.getLoc())
+            << renderLong(domain) << " aliases " << renderLong(src);
+        domain = defineOp.getSrc();
+        return true;
+      }
+    }
+    return false;
+  };
+
+  auto chaseModulePort = [&]() {
+    auto arg = dyn_cast<BlockArgument>(domain);
+    if (!arg)
+      return false;
+
+    auto module =
+        llvm::dyn_cast_if_present<FModuleOp>(arg.getOwner()->getParentOp());
+    if (!module)
+      return false;
+
+    auto name = module.getModuleNameAttr();
+    while (!stack.empty()) {
+      auto instance = stack.back();
+      stack.pop_back();
+      auto referenced = instance.getReferencedModuleNamesAttr().getValue();
+      if (llvm::is_contained(referenced, name)) {
+        domain = cast<DomainValue>(instance->getResult(arg.getArgNumber()));
+        return true;
+      }
+    }
+    return false;
+  };
+
+  auto chaseInstancePort = [&]() {
+    auto result = dyn_cast<OpResult>(domain);
+    if (!result)
+      return false;
+
+    auto inst = dyn_cast<FInstanceLike>(result.getOwner());
+    if (!inst)
+      return false;
+
+    auto index = result.getResultNumber();
+    if (inst.getPortDirection(index) == Direction::In)
+      return false;
+
+    auto names = inst.getReferencedModuleNamesAttr().getAsRange<StringAttr>();
+    for (auto name : names) {
+      auto moduleLike = cast<FModuleLike>(irns.symTable.lookup(name));
+      if (auto moduleOp = dyn_cast<FModuleOp>(moduleLike.getOperation())) {
+        stack.push_back(inst);
+        domain = cast<DomainValue>(moduleOp.getArgument(index));
+        return true;
+      }
+    }
+    return false;
+  };
+
+  auto chaseUnderlying = [&]() {
+    if (auto *term = getOptTermForDomain(domain)) {
+      if (auto *val = dyn_cast<ValueTerm>(term)) {
+        if (domain != val->value) {
+          diag.attachNote(domain.getLoc())
+              << renderLong(domain) << " aliases " << renderLong(val->value);
+          domain = val->value;
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  while (true) {
+    auto [it, inserted] = seen.insert(domain);
+    if (!inserted)
+      return;
+
+    noteDomain(diag, domain);
+    chaseConnect() || chaseModulePort() || chaseInstancePort() ||
+        chaseUnderlying();
+  }
+}
+
+void ModuleState::noteDomainSource(InFlightDiagnostic &diag, Term *term) {
+  auto *val = dyn_cast<ValueTerm>(find(term));
+  if (!val)
+    return;
+
+  noteDomainSource(diag, val->value);
+}
+
+void ModuleState::emitDomainCrossingError(Operation *op, Value lhs,
+                                          Term *lhsTerm, Value rhs,
+                                          Term *rhsTerm) {
+  auto *lhsRow = cast<RowTerm>(lhsTerm);
+  auto *rhsRow = cast<RowTerm>(rhsTerm);
+  auto diag =
+      op->emitError("illegal domain crossing in operation between operands ");
+  render(lhs, diag);
+  diag << " and ";
+  render(rhs, diag);
+  auto &note1 = diag.attachNote(lhs.getLoc());
+  render(lhs, note1);
+  note1 << " has domains ";
+  render(lhsRow, note1);
+  auto &note2 = diag.attachNote(rhs.getLoc());
+  render(rhs, note2);
+  note2 << " has domains ";
+  render(rhsRow, note2);
+
+  for (size_t i = 0, e = getNumDomains(); i < e; ++i) {
+    auto *lhsDomain = find(lhsRow->elements[i]);
+    auto *rhsDomain = find(rhsRow->elements[i]);
+    if (lhsDomain == rhsDomain)
+      continue;
+
+    noteDomainSource(diag, lhsDomain);
+    noteDomainSource(diag, rhsDomain);
+  }
 }
 
 template <typename T>
@@ -835,13 +1028,7 @@ LogicalResult ModuleState::unifyAssociations(Operation *op, Value lhs,
   if (lhsTerm) {
     if (rhsTerm) {
       if (failed(unify(lhsTerm, rhsTerm))) {
-        auto diag = op->emitOpError("illegal domain crossing in operation");
-        auto &note1 = diag.attachNote(lhs.getLoc());
-        note1 << "1st operand has domains: ";
-        render(lhsTerm, note1);
-        auto &note2 = diag.attachNote(rhs.getLoc());
-        note2 << "2nd operand has domains: ";
-        render(rhsTerm, note2);
+        emitDomainCrossingError(op, lhs, lhsTerm, rhs, rhsTerm);
         return failure();
       }
       return success();
@@ -1197,12 +1384,11 @@ void ModuleState::ensureExported(Namespace &ns, const ExportTable &exports,
   auto portType = DomainType::getFromDomainOp(domainDecl);
   auto portDirection = Direction::Out;
   auto portSym = StringAttr();
-  auto portLoc = value.getLoc();
   auto portAnnos = std::nullopt;
   // Domain type ports have no associations (domain info is in the type).
   auto portDomainInfo = ArrayAttr::get(context, {});
-  PortInfo portInfo(portName, portType, portDirection, portSym, portLoc,
-                    portAnnos, portDomainInfo);
+  PortInfo portInfo(portName, portType, portDirection, portSym, loc, portAnnos,
+                    portDomainInfo);
   pending.exports[value] = pending.insertions.size() + ip;
   pending.insertions.push_back({ip, portInfo});
 }
@@ -1269,6 +1455,7 @@ void ModuleState::applyUpdatesToModule(FModuleOp moduleOp, ExportTable &exports,
                << "new-input " << render(portValue) << "\n");
     solve(var, solution);
     exports[portValue].push_back(portValue);
+    globals.inserted.insert(portValue);
   }
 
   // Drive the output ports, and record the export.
@@ -1280,6 +1467,7 @@ void ModuleState::applyUpdatesToModule(FModuleOp moduleOp, ExportTable &exports,
     LLVM_DEBUG(llvm::dbgs().indent(4) << "new-output " << render(portValue)
                                       << " := " << render(domainValue) << "\n");
     exports[domainValue].push_back(portValue);
+    globals.inserted.insert(portValue);
     setTermForDomain(portValue, allocVal(domainValue));
   }
 }
@@ -1400,6 +1588,7 @@ DomainValue ModuleState::solveVarWithAnonDomain(
   LLVM_DEBUG(llvm::dbgs().indent(6) << "create anon " << render(anon) << "\n");
   solve(var, allocVal(anon));
   domainsInScope[anon] = anon;
+  globals.inserted.insert(anon);
   return anon;
 }
 

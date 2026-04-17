@@ -45,6 +45,10 @@ static inline StringRef toString(Direction direction) {
   return direction == Direction::In ? "in" : "out";
 }
 
+static inline StringRef toLongString(Direction direction) {
+  return direction == Direction::In ? "input" : "output";
+}
+
 static inline StringRef toString(bool direction) {
   return toString(get(direction));
 }
