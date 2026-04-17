@@ -17,12 +17,18 @@ struct InstBodyVisitor
     : public slang::ast::ASTVisitor<InstBodyVisitor,
                                     /*VisitStatements=*/true,
                                     /*VisitExpressions=*/true> {
-
-  InstBodyVisitor(Context &context, const slang::ast::Symbol &outermostModule)
-      : context(context), outermostModule(outermostModule) {}
+  InstBodyVisitor(Context& context, const slang::ast::Symbol& outermostModule,
+                  DenseSet<StringAttr>& sameHierPaths)
+      : context(context),
+        outermostModule(outermostModule),
+        sameHierPaths(sameHierPaths) {}
 
   void handle(const slang::ast::InstanceSymbol &instNode) {
-    context.traverseInstanceBody(instNode.body);
+    context.traverseInstanceBody(instNode.body, sameHierPaths);
+    // Also visit port connection expressions to find hier refs used as
+    // port arguments (e.g., .in_val(b_inst.local_val)).
+    for (auto* conn : instNode.getPortConnections())
+      if (auto* connExpr = conn->getExpression()) connExpr->visit(*this);
   }
 
   void handle(const slang::ast::HierarchicalValueExpression &expr) {
@@ -45,15 +51,26 @@ struct InstBodyVisitor
         collectHierarchicalPaths = [&](auto sym, bool isUpward) {
           // Here we use "sameHierPaths" to avoid collecting the repeat
           // hierarchical names on the same path.
-          if (!context.sameHierPaths.contains(hierName) ||
+          if (!sameHierPaths.contains(hierName) ||
               !context.hierPaths.contains(sym)) {
             context.hierPaths[sym].push_back(
                 HierPathInfo{hierName,
                              {},
                              isUpward ? slang::ast::ArgumentDirection::Out
                                       : slang::ast::ArgumentDirection::In,
-                             &expr.symbol});
-            context.sameHierPaths.insert(hierName);
+                             {&expr.symbol}});
+            sameHierPaths.insert(hierName);
+          } else {
+            // The path already exists (dedup hit), but this may be a
+            // different instance resolving to a different symbol object
+            // for the same logical variable. Add it as an alias.
+            for (auto& existing : context.hierPaths[sym]) {
+              if (existing.hierName == hierName) {
+                if (!llvm::is_contained(existing.valueSyms, &expr.symbol))
+                  existing.valueSyms.push_back(&expr.symbol);
+                break;
+              }
+            }
           }
 
           // Iterate up from the current instance body symbol until meeting the
@@ -95,15 +112,28 @@ struct InstBodyVisitor
 
   Context &context;
   const slang::ast::Symbol &outermostModule;
+
+  // Deduplication set shared across the entire traversal tree rooted at
+  // the top-level traverseInstanceBody call.
+  DenseSet<StringAttr>& sameHierPaths;
 };
 
 } // namespace
 
 void Context::traverseInstanceBody(const slang::ast::Symbol &symbol) {
+  // Top-level entry point: create a fresh deduplication set that is shared
+  // across all recursive traversals of this instance tree. This prevents
+  // cross-hierarchy contamination between independent top-level instances.
+  DenseSet<StringAttr> sameHierPaths;
+  traverseInstanceBody(symbol, sameHierPaths);
+}
+
+void Context::traverseInstanceBody(const slang::ast::Symbol& symbol,
+                                   DenseSet<StringAttr>& sameHierPaths) {
   if (auto *instBodySymbol = symbol.as_if<slang::ast::InstanceBodySymbol>())
     for (auto &member : instBodySymbol->members()) {
       auto &outermostModule = member.getParentScope()->asSymbol();
-      InstBodyVisitor visitor(*this, outermostModule);
+      InstBodyVisitor visitor(*this, outermostModule, sameHierPaths);
       member.visit(visitor);
     }
 }

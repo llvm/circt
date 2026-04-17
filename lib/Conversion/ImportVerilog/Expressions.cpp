@@ -9,14 +9,15 @@
 #include "ImportVerilogInternals.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
+#include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/SaveAndRestore.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "slang/ast/types/AllTypes.h"
 #include "slang/syntax/AllSyntax.h"
-#include "llvm/ADT/ScopeExit.h"
-#include "llvm/Support/SaveAndRestore.h"
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -919,6 +920,27 @@ struct RvalueExprVisitor : public ExprVisitor {
   // Handle hierarchical values, such as `x = Top.sub.var`.
   Value visit(const slang::ast::HierarchicalValueExpression &expr) {
     auto hierLoc = context.convertLocation(expr.symbol.location);
+
+    // For cross-instance hierarchical references, use the instance-aware
+    // hierValueSymbols lookup first. This is required for multi-instance
+    // deduplication where Slang shares the same ValueSymbol* across instances
+    // (e.g., p1.child.child_val and p2.child.child_val may point to the same
+    // ValueSymbol). The scoped valueSymbols lookup would return the wrong
+    // (first-inserted) value in that case.
+    if (auto key = context.buildHierValueKey(expr)) {
+      if (auto it = context.hierValueSymbols.find(*key);
+          it != context.hierValueSymbols.end()) {
+        auto value = it->second;
+        if (isa<moore::RefType>(value.getType())) {
+          auto readOp = moore::ReadOp::create(builder, hierLoc, value);
+          if (context.rvalueReadCallback) context.rvalueReadCallback(readOp);
+          value = readOp.getResult();
+        }
+        return value;
+      }
+    }
+
+    // Fall back to scoped symbol table (same-scope lookups, self-refs).
     if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
       if (isa<moore::RefType>(value.getType())) {
         auto readOp = moore::ReadOp::create(builder, hierLoc, value);
@@ -938,6 +960,11 @@ struct RvalueExprVisitor : public ExprVisitor {
       }
       return value;
     }
+
+    // Try to materialize constant values directly.
+    auto constant = context.evaluateConstant(expr);
+    if (auto value = context.materializeConstant(constant, *expr.type, loc))
+      return value;
 
     // Emit an error for those hierarchical values not recorded in the
     // `valueSymbols`.
@@ -2401,7 +2428,16 @@ struct LvalueExprVisitor : public ExprVisitor {
 
   // Handle hierarchical values, such as `Top.sub.var = x`.
   Value visit(const slang::ast::HierarchicalValueExpression &expr) {
-    // Handle local variables.
+    // For cross-instance hierarchical references, use the instance-aware
+    // hierValueSymbols lookup first (same priority and rationale as rvalue
+    // visitor).
+    if (auto key = context.buildHierValueKey(expr)) {
+      if (auto it = context.hierValueSymbols.find(*key);
+          it != context.hierValueSymbols.end())
+        return it->second;
+    }
+
+    // Fall back to scoped symbol table (same-scope lookups, self-refs).
     if (auto value = context.valueSymbols.lookup(&expr.symbol))
       return value;
 
@@ -2503,6 +2539,33 @@ struct LvalueExprVisitor : public ExprVisitor {
   }
 };
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// Hierarchical Name Helpers
+//===----------------------------------------------------------------------===//
+
+std::optional<std::pair<const slang::ast::InstanceSymbol*, mlir::StringAttr>>
+Context::buildHierValueKey(
+    const slang::ast::HierarchicalValueExpression& expr) {
+  if (expr.ref.path.empty()) return std::nullopt;
+
+  const slang::ast::InstanceSymbol* firstInst = nullptr;
+  SmallVector<StringRef, 4> names;
+  for (auto& elem : expr.ref.path) {
+    if (auto* inst = elem.symbol->as_if<slang::ast::InstanceSymbol>()) {
+      if (!firstInst) {
+        firstInst = inst;
+      } else {
+        names.push_back(inst->name);
+      }
+    }
+  }
+  names.push_back(expr.symbol.name);
+  std::string hierName = llvm::join(names, ".");
+
+  if (!firstInst) return std::nullopt;
+  return std::make_pair(firstInst, builder.getStringAttr(hierName));
+}
 
 //===----------------------------------------------------------------------===//
 // Entry Points
