@@ -1,76 +1,92 @@
 # ESI Runtime development guide
 
-## Standalone builds (no LLVM/CIRCT build required)
+## Use an existing CIRCT build for local debugging
 
-The ESI runtime can be built independently using `lib/Dialect/ESI/runtime/CMakeLists.txt` as the project root. This is **much** faster than a full CIRCT build and is the preferred workflow for runtime-only changes.
+The ESI runtime can be built independently, but for local agent work and for debugging changes that span both the runtime and PyCDE, prefer an existing CIRCT CMake build under `build/` or some subdirectory. If they exist, prefer 'build/debug' or 'build/default'.
 
 ### Setup
 
 ```bash
-# Create a venv with matching Python version and install build deps.
+# Create a venv with matching Python version and install test deps.
 python3 -m venv .venv
 source .venv/bin/activate
-pip install --upgrade pip setuptools nanobind pytest
+pip install --upgrade pip setuptools nanobind pytest numpy psutil executing
+```
 
-# Install PyCDE from PyPI (prereleases needed to match HEAD).
-pip install --pre pycde
+If an existing CIRCT build is not available, use something like the following to create one. The important part is to have the Python bindings and the runtime targets built, which are required for the integration tests. If clang is available, prefer that as the host compiler for faster builds and better diagnostics; otherwise, the default system compiler will work. LLD is _highly_ recommended for faster linking.
+
+```
+cmake -G Ninja llvm/llvm -B build \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DLLVM_ENABLE_ASSERTIONS=ON \
+  -DLLVM_TARGETS_TO_BUILD=host \
+  -DLLVM_ENABLE_PROJECTS=mlir \
+  -DLLVM_EXTERNAL_PROJECTS=circt \
+  -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=$PWD \
+  -DLLVM_ENABLE_LLD=ON \
+  -DLLVM_CCACHE_BUILD=ON \
+  -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
+  -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
+  -DCIRCT_ENABLE_FRONTENDS=PyCDE \
+  -DESI_RUNTIME=ON \
+  -DESI_RUNTIME_TRACE=ON \
+  -DESI_COSIM=ON
+```
+
+Now that a valid build directory exists, continue as below.
+
+```
+# Reuse a configured CIRCT build directory under build/.
+# In many local setups this is build/default.
+export CIRCT_BUILD=<absolute-path-to-build-tree>
+test -f "$CIRCT_BUILD/CMakeCache.txt"
 
 # System prerequisites for cosim: gRPC and protobuf C++ libraries must be
 # installed (e.g., apt install libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc
 # on Debian/Ubuntu, or via vcpkg/brew). These are required by CMake's
 # find_package(gRPC) and find_package(Protobuf) when ESI_COSIM=ON.
 
-# Configure and build the ESI runtime (with cosim).
-cd lib/Dialect/ESI/runtime
-cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DESI_COSIM=ON
-ninja -C build ESIRuntime
+# Refresh the PyCDE and ESI runtime pieces inside the CIRCT build.
+ninja -C "$CIRCT_BUILD" PyCDE ESIRuntime ESIRuntimeCppTests
 ```
 
-This builds: `ESICppRuntime` (shared lib), `CosimBackend`, `CosimRpc`, `EsiCosimDpiServer`, `esiquery`, the Python native extension (`esiCppAccel`), and the Python package under `build/python/esiaccel/`. The `esitester` tool is not part of the `ESIRuntime` target; build it separately with `ninja -C build esitester` if you need it.
+This reuses the CIRCT build's `pycde` package under `tools/circt/python_packages/pycde/`, the ESI runtime Python package under `tools/circt/lib/Dialect/ESI/runtime/python/`, and the runtime shared libraries under `lib/`. The `ESIRuntime` target still builds `ESICppRuntime`, `CosimBackend`, `CosimRpc`, `EsiCosimDpiServer`, `esiquery`, and the Python runtime pieces.
+
+When running as a local agent, DO NOT use docker. Check for a working virtual environment first, which is usually at the repo root. Then look for a working CMake build directory under `build/`; `build/default` is the common case.
 
 ### Running the integration pytests
 
-The cosim pytests need several environment variables:
+The cosim pytests should use the CIRCT build tree for both PyCDE and the ESI runtime:
 
 ```bash
 cd <repo-root>
 source .venv/bin/activate
-export LD_LIBRARY_PATH=$PWD/lib/Dialect/ESI/runtime/build:$PWD/lib/Dialect/ESI/runtime/build/lib
-export LIBRARY_PATH=$LD_LIBRARY_PATH   # for verilator linking
-export PATH=$PWD/lib/Dialect/ESI/runtime/build:$PATH  # for esiquery
+
+# Reuse a configured CIRCT build under build/.
+# In many local setups this is build/default.
+export CIRCT_BUILD=$PWD/build/default
+
+export LD_LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LD_LIBRARY_PATH
+export LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LIBRARY_PATH
+export PYTHONPATH=$PYTHONPATH:$CIRCT_BUILD/tools/circt/python_packages/pycde:$CIRCT_BUILD/tools/circt/lib/Dialect/ESI/runtime/python
+export PATH=$CIRCT_BUILD/bin:$PWD/ext/bin:$PATH
 
 python3 -m pytest lib/Dialect/ESI/runtime/tests/ -v
 ```
 
-**Important:** The `esiaccel` package must be importable by subprocess children (forked by the cosim pytest framework). Two options:
-1. Install editable: `pip install -e lib/Dialect/ESI/runtime --no-build-isolation` — but note this uses the *source* tree's Python files, which lack the cosim `.sv` files that only exist in the build tree.
-2. Use a `.pth` file pointing to the build output:
-   ```bash
-   SITE=$(python3 -c "import site; print(site.getsitepackages()[0])")
-   echo "$PWD/lib/Dialect/ESI/runtime/build/python" > "$SITE/esiaccel-build.pth"
-   ```
+If `build/default` does not exist, use whichever `build/<name>` contains `CMakeCache.txt` and the `tools/circt` tree. This keeps `pycde` and `esiaccel` coming from the same CIRCT build, which is the preferred setup when co-developing across both projects.
 
-Option 2 is recommended because the build tree's `esiaccel/` has the correct cosim SystemVerilog files, driver, and native extension.
-
-If the venv already has an editable `esiaccel` install (for example, an
-existing `__editable__.esiaccel-*.pth` in site-packages), `esiaccel-build.pth`
-may not take precedence by itself. In that case, set:
-
+Additionally, the verilator linker needs `libEsiCosimDpiServer.so`. The cosim pytest framework looks for it at `<esiaccel-package>/lib/`. If the build tree does not already provide that directory, create symlinks:
 ```bash
-export PYTHONPATH=$PWD/lib/Dialect/ESI/runtime/build/python${PYTHONPATH:+:$PYTHONPATH}
-```
-
-for the shell running pytest, or remove the editable install before relying on
-the `.pth` file.
-
-Additionally, the verilator linker needs `libEsiCosimDpiServer.so`. The cosim pytest framework looks for it at `<esiaccel-package>/lib/`. If using the build tree via `.pth`, create symlinks:
-```bash
-mkdir -p lib/Dialect/ESI/runtime/build/python/esiaccel/lib
-cd lib/Dialect/ESI/runtime/build/python/esiaccel/lib
-ln -sf ../../lib/libEsiCosimDpiServer.so .
-ln -sf ../../libESICppRuntime.so .
-ln -sf ../../libCosimBackend.so .
-ln -sf ../../libCosimRpc.so .
+mkdir -p "$CIRCT_BUILD/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/lib"
+ln -sf "$CIRCT_BUILD/lib/libEsiCosimDpiServer.so" \
+  "$CIRCT_BUILD/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/lib/libEsiCosimDpiServer.so"
+ln -sf "$CIRCT_BUILD/lib/libESICppRuntime.so" \
+  "$CIRCT_BUILD/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/lib/libESICppRuntime.so"
+ln -sf "$CIRCT_BUILD/lib/libCosimBackend.so" \
+  "$CIRCT_BUILD/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/lib/libCosimBackend.so"
+ln -sf "$CIRCT_BUILD/lib/libCosimRpc.so" \
+  "$CIRCT_BUILD/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel/lib/libCosimRpc.so"
 ```
 
 ### Debugging the test environment
@@ -83,13 +99,19 @@ Before changing any infrastructure, first verify what Python and pytest are actu
 cd <repo-root>
 source .venv/bin/activate
 
-python3 -c 'import sys, esiaccel, esiaccel.codegen; print(sys.executable); print(esiaccel.__file__); print(esiaccel.codegen.__file__)'
+export CIRCT_BUILD=$PWD/build/default
+export LD_LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LD_LIBRARY_PATH
+export LIBRARY_PATH=$CIRCT_BUILD/lib:$CIRCT_BUILD/tools/circt/lib:$LIBRARY_PATH
+export PYTHONPATH=$PYTHONPATH:$CIRCT_BUILD/tools/circt/python_packages/pycde:$CIRCT_BUILD/tools/circt/lib/Dialect/ESI/runtime/python
+export PATH=$CIRCT_BUILD/bin:$PWD/ext/bin:$PATH
+
+python3 -c 'import sys, pycde, esiaccel, esiaccel.codegen; print(sys.executable); print(pycde.__file__); print(esiaccel.__file__); print(esiaccel.codegen.__file__)'
 python3 -m pytest --version
 python3 -m pytest lib/Dialect/ESI/runtime/tests/unit/test_types.py -q
 ```
 
-If the wrong `esiaccel` package is being imported, fix the environment outside the repo first:
-- prefer the `.pth`-file approach above for build-tree `esiaccel`
+If the wrong `pycde` or `esiaccel` package is being imported, fix the environment outside the repo first:
+- point `CIRCT_BUILD` at the correct `build/<name>` directory
 - or set `PYTHONPATH`/`LD_LIBRARY_PATH`/`PATH` correctly in the shell running pytest
 - confirm the imported module paths again before rerunning tests
 
