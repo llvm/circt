@@ -226,6 +226,11 @@ void circtFirtoolOptionsSetEnableAnnotationWarning(
   unwrap(options)->setEnableAnnotationWarning(value);
 }
 
+void circtFirtoolOptionsSetLowerToCore(CirctFirtoolFirtoolOptions options,
+                                       bool value) {
+  unwrap(options)->setLowerToCore(value);
+}
+
 void circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
                                          bool value) {
   unwrap(options)->setAddMuxPragmas(value);

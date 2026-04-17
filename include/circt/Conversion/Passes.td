@@ -438,6 +438,9 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
+    Option<"lowerToCore", "lower-to-core", "bool", "false",
+           "Prefer core dialects over direct SV lowering for FIRRTL "
+           "verification and printf operations">,
     Option<"verificationFlavor", "verification-flavor",
            "circt::firrtl::VerificationFlavor",
            "circt::firrtl::VerificationFlavor::None",

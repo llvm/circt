@@ -140,6 +140,7 @@ public:
     return disableAggressiveMergeConnections;
   }
   bool shouldEnableAnnotationWarning() const { return enableAnnotationWarning; }
+  bool shouldLowerToCore() const { return lowerToCore; }
   auto getVerificationFlavor() const { return verificationFlavor; }
   bool shouldEmitSeparateAlwaysBlocks() const {
     return emitSeparateAlwaysBlocks;
@@ -297,6 +298,11 @@ public:
     return *this;
   }
 
+  FirtoolOptions &setLowerToCore(bool value) {
+    lowerToCore = value;
+    return *this;
+  }
+
   FirtoolOptions &setAddMuxPragmas(bool value) {
     addMuxPragmas = value;
     return *this;
@@ -437,6 +443,7 @@ private:
   RandomKind disableRandom;
   std::string outputAnnotationFilename;
   bool enableAnnotationWarning;
+  bool lowerToCore;
   bool addMuxPragmas;
   firrtl::VerificationFlavor verificationFlavor;
   bool emitSeparateAlwaysBlocks;
