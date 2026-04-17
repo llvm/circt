@@ -720,8 +720,8 @@ firrtl.circuit "DrivenWireSubfield" {
   // CHECK-NEXT:    firrtl.propassign %[[src_in]], %[[name]]
   // CHECK-NEXT:    %wire = firrtl.object @ClockDomain(
   // CHECK-NEXT:    %[[wire_in:.+]] = firrtl.object.subfield %wire[source_in]
-  // CHECK-NEXT:    %[[src_out2:.+]] = firrtl.object.subfield %src[source_out]
-  // CHECK-NEXT:    firrtl.propassign %[[wire_in]], %[[src_out2]]
+  // CHECK-NEXT:    %[[src_out:.+]] = firrtl.object.subfield %src[source_out]
+  // CHECK-NEXT:    firrtl.propassign %[[wire_in]], %[[src_out]]
   // CHECK-NEXT:    %[[wire_out:.+]] = firrtl.object.subfield %wire[source_out]
   // CHECK-NEXT:    firrtl.propassign %out, %[[wire_out]]
   firrtl.module @DrivenWireSubfield(out %out : !firrtl.string) {
