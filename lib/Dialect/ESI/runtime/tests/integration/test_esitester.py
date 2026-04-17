@@ -145,10 +145,8 @@ class TestCosimEsitesterDma:
 
   def test_serial_coords(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
-    stdout = run_cmd([
-        "esitester", "--trace", "cosim", conn, "serial_coords", "-n", "40",
-        "-b", "33"
-    ])
+    stdout = run_cmd(
+        ["esitester", "cosim", conn, "serial_coords", "-n", "40", "-b", "33"])
     check_lines(stdout, [
         "Serial coord translate test results:",
         "coord[0]=",
