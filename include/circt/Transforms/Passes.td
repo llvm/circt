@@ -218,4 +218,44 @@ def HierarchicalRunner : Pass<"hierarchical-runner", "::mlir::ModuleOp"> {
   ];
 }
 
+def CellIFTInstrument : Pass<"cellift-instrument", "::mlir::ModuleOp"> {
+  let summary = "CellIFT: cell-level information flow tracking instrumentation";
+  let description = [{
+    This pass instruments HW/Comb/Seq IR with parallel taint-tracking logic
+    using the CellIFT methodology (cell-level dynamic information flow
+    tracking). For every data value `v : iN`, the pass creates a parallel
+    taint value `v_t : iN`. Module signatures are extended with taint ports,
+    instances are updated accordingly, and combinational/sequential operations
+    are instrumented with taint propagation rules.
+
+    CellIFT operates at the macrocell level (add, mux, shift, compare, etc.)
+    rather than at the gate level, which provides better scalability than
+    gate-level IFT (GLIFT).
+
+    The pass supports:
+      - Combinational operations: and, or, xor, add, sub, mul, shl, shru,
+        shrs, icmp, mux, concat, extract, replicate, parity
+      - Sequential operations: compreg, firreg
+      - Hierarchy: module signature rewriting and instance updating
+
+    Options:
+      --taint-constants: If set, constants are assigned all-ones taint instead
+                         of zero taint.
+      --taint-suffix: The suffix appended to taint port/value names
+                      (default: "_t").
+  }];
+  let options = [
+    Option<"taintConstants", "taint-constants", "bool", /*default=*/"false",
+           "Assign all-ones taint to constants instead of zero">,
+    Option<"taintSuffix", "taint-suffix", "std::string",
+           /*default=*/"\"_t\"",
+           "Suffix appended to port names for taint signals">
+  ];
+  let dependentDialects = [
+    "circt::hw::HWDialect",
+    "circt::comb::CombDialect",
+    "circt::seq::SeqDialect"
+  ];
+}
+
 #endif // CIRCT_TRANSFORMS_PASSES
