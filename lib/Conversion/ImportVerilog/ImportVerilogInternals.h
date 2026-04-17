@@ -95,7 +95,7 @@ struct ModuleLowering {
   /// The canonical InstanceBodySymbol used as the key in `hierPaths` after
   /// module deduplication. When multiple instance bodies share the same
   /// definition and parameters, they are deduplicated to a single module.
-  const slang::ast::InstanceBodySymbol* canonicalBody = nullptr;
+  const slang::ast::InstanceBodySymbol *canonicalBody = nullptr;
 };
 
 /// Function lowering information. The `op` field holds either a `func::FuncOp`
@@ -143,7 +143,7 @@ struct HierPathInfo {
   /// symbols may be present when different instances resolve the same
   /// logical variable to different elaborated symbol objects (e.g., due to
   /// Slang's per-instance elaboration of shared module bodies).
-  llvm::SmallVector<const slang::ast::ValueSymbol*, 2> valueSyms;
+  llvm::SmallVector<const slang::ast::ValueSymbol *, 2> valueSyms;
 };
 
 /// ImportVerilog Elaboration Phases for Hierarchical Names
@@ -288,14 +288,14 @@ struct Context {
 
   // Traverse the whole AST to collect hierarchical names.
   void traverseInstanceBody(const slang::ast::Symbol &symbol);
-  void traverseInstanceBody(const slang::ast::Symbol& symbol,
-                            DenseSet<StringAttr>& sameHierPaths);
+  void traverseInstanceBody(const slang::ast::Symbol &symbol,
+                            DenseSet<StringAttr> &sameHierPaths);
 
   /// Build a composite key for hierValueSymbols from a hierarchical value
   /// expression. Returns {firstInstanceSymbol, dottedHierName} or std::nullopt
   /// if the expression has no instance path.
-  std::optional<std::pair<const slang::ast::InstanceSymbol*, mlir::StringAttr>>
-  buildHierValueKey(const slang::ast::HierarchicalValueExpression& expr);
+  std::optional<std::pair<const slang::ast::InstanceSymbol *, mlir::StringAttr>>
+  buildHierValueKey(const slang::ast::HierarchicalValueExpression &expr);
 
   // Convert timing controls into a corresponding set of ops that delay
   // execution of the current block. Produces an error if the implicit event
@@ -479,7 +479,7 @@ struct Context {
   /// p2) and the hierarchical path name (e.g., "child.child_val"). This
   /// ensures instance-specific resolution even when Slang shares or doesn't
   /// share instance bodies across multiple instances of the same module.
-  DenseMap<std::pair<const slang::ast::InstanceSymbol*, mlir::StringAttr>,
+  DenseMap<std::pair<const slang::ast::InstanceSymbol *, mlir::StringAttr>,
            Value>
       hierValueSymbols;
 

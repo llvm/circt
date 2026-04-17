@@ -646,8 +646,8 @@ struct ModuleVisitor : public BaseVisitor {
     // Use the canonical body from moduleLowering, not &instNode.body, because
     // module deduplication may have remapped the body pointer and only the
     // canonical body's hierPaths entries have valid port indices.
-    const auto* canonBody = moduleLowering->canonicalBody;
-    for (const auto& hierPath : context.hierPaths[canonBody]) {
+    const auto *canonBody = moduleLowering->canonicalBody;
+    for (const auto &hierPath : context.hierPaths[canonBody]) {
       assert(!hierPath.valueSyms.empty() && "hierPath must have valueSyms");
       if (auto hierValue =
               context.valueSymbols.lookup(hierPath.valueSyms.front());
@@ -674,12 +674,12 @@ struct ModuleVisitor : public BaseVisitor {
     // hierValueSymbols map (for cross-scope lookups from other modules).
     // The hierValueSymbols key is {&instNode, hierName} to ensure
     // instance-specific resolution (e.g., p1 vs p2 get separate entries).
-    for (const auto& hierPath : context.hierPaths[canonBody])
+    for (const auto &hierPath : context.hierPaths[canonBody])
       if (hierPath.idx && hierPath.direction == ArgumentDirection::Out) {
         auto result = inst->getResult(*hierPath.idx);
         // Register the result for ALL aliased symbol pointers so that
         // each instance's hierarchical references resolve correctly.
-        for (auto* sym : hierPath.valueSyms)
+        for (auto *sym : hierPath.valueSyms)
           context.valueSymbols.insert(sym, result);
         context.hierValueSymbols[{&instNode, hierPath.hierName}] = result;
       }
@@ -1294,7 +1294,8 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     if (hierPath.direction == slang::ast::ArgumentDirection::In &&
         hierPath.idx) {
       auto arg = lowering.op.getBody()->getArgument(*hierPath.idx);
-      for (auto* sym : hierPath.valueSyms) valueSymbols.insert(sym, arg);
+      for (auto *sym : hierPath.valueSyms)
+        valueSymbols.insert(sym, arg);
     }
 
   // Register flattened interface port members before lowering the module body
@@ -1417,7 +1418,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
 
   // Ensure the number of operands of this module's terminator and the number of
   // its(the current module) output ports remain consistent.
-  for (auto& hierPath : hierPaths[module]) {
+  for (auto &hierPath : hierPaths[module]) {
     assert(!hierPath.valueSyms.empty() && "hierPath must have valueSyms");
     if (auto hierValue = valueSymbols.lookup(hierPath.valueSyms.front()))
       if (hierPath.direction == slang::ast::ArgumentDirection::Out)

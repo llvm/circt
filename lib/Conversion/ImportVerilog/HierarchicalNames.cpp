@@ -17,18 +17,18 @@ struct InstBodyVisitor
     : public slang::ast::ASTVisitor<InstBodyVisitor,
                                     /*VisitStatements=*/true,
                                     /*VisitExpressions=*/true> {
-  InstBodyVisitor(Context& context, const slang::ast::Symbol& outermostModule,
-                  DenseSet<StringAttr>& sameHierPaths)
-      : context(context),
-        outermostModule(outermostModule),
+  InstBodyVisitor(Context &context, const slang::ast::Symbol &outermostModule,
+                  DenseSet<StringAttr> &sameHierPaths)
+      : context(context), outermostModule(outermostModule),
         sameHierPaths(sameHierPaths) {}
 
   void handle(const slang::ast::InstanceSymbol &instNode) {
     context.traverseInstanceBody(instNode.body, sameHierPaths);
     // Also visit port connection expressions to find hier refs used as
     // port arguments (e.g., .in_val(b_inst.local_val)).
-    for (auto* conn : instNode.getPortConnections())
-      if (auto* connExpr = conn->getExpression()) connExpr->visit(*this);
+    for (auto *conn : instNode.getPortConnections())
+      if (auto *connExpr = conn->getExpression())
+        connExpr->visit(*this);
   }
 
   void handle(const slang::ast::HierarchicalValueExpression &expr) {
@@ -64,7 +64,7 @@ struct InstBodyVisitor
             // The path already exists (dedup hit), but this may be a
             // different instance resolving to a different symbol object
             // for the same logical variable. Add it as an alias.
-            for (auto& existing : context.hierPaths[sym]) {
+            for (auto &existing : context.hierPaths[sym]) {
               if (existing.hierName == hierName) {
                 if (!llvm::is_contained(existing.valueSyms, &expr.symbol))
                   existing.valueSyms.push_back(&expr.symbol);
@@ -115,7 +115,7 @@ struct InstBodyVisitor
 
   // Deduplication set shared across the entire traversal tree rooted at
   // the top-level traverseInstanceBody call.
-  DenseSet<StringAttr>& sameHierPaths;
+  DenseSet<StringAttr> &sameHierPaths;
 };
 
 } // namespace
@@ -128,8 +128,8 @@ void Context::traverseInstanceBody(const slang::ast::Symbol &symbol) {
   traverseInstanceBody(symbol, sameHierPaths);
 }
 
-void Context::traverseInstanceBody(const slang::ast::Symbol& symbol,
-                                   DenseSet<StringAttr>& sameHierPaths) {
+void Context::traverseInstanceBody(const slang::ast::Symbol &symbol,
+                                   DenseSet<StringAttr> &sameHierPaths) {
   if (auto *instBodySymbol = symbol.as_if<slang::ast::InstanceBodySymbol>())
     for (auto &member : instBodySymbol->members()) {
       auto &outermostModule = member.getParentScope()->asSymbol();

@@ -9,15 +9,15 @@
 #include "ImportVerilogInternals.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
-#include "llvm/ADT/ScopeExit.h"
-#include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/SaveAndRestore.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "slang/ast/EvalContext.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "slang/ast/types/AllTypes.h"
 #include "slang/syntax/AllSyntax.h"
+#include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 using namespace circt;
 using namespace ImportVerilog;
@@ -933,7 +933,8 @@ struct RvalueExprVisitor : public ExprVisitor {
         auto value = it->second;
         if (isa<moore::RefType>(value.getType())) {
           auto readOp = moore::ReadOp::create(builder, hierLoc, value);
-          if (context.rvalueReadCallback) context.rvalueReadCallback(readOp);
+          if (context.rvalueReadCallback)
+            context.rvalueReadCallback(readOp);
           value = readOp.getResult();
         }
         return value;
@@ -2544,15 +2545,16 @@ struct LvalueExprVisitor : public ExprVisitor {
 // Hierarchical Name Helpers
 //===----------------------------------------------------------------------===//
 
-std::optional<std::pair<const slang::ast::InstanceSymbol*, mlir::StringAttr>>
+std::optional<std::pair<const slang::ast::InstanceSymbol *, mlir::StringAttr>>
 Context::buildHierValueKey(
-    const slang::ast::HierarchicalValueExpression& expr) {
-  if (expr.ref.path.empty()) return std::nullopt;
+    const slang::ast::HierarchicalValueExpression &expr) {
+  if (expr.ref.path.empty())
+    return std::nullopt;
 
-  const slang::ast::InstanceSymbol* firstInst = nullptr;
+  const slang::ast::InstanceSymbol *firstInst = nullptr;
   SmallVector<StringRef, 4> names;
-  for (auto& elem : expr.ref.path) {
-    if (auto* inst = elem.symbol->as_if<slang::ast::InstanceSymbol>()) {
+  for (auto &elem : expr.ref.path) {
+    if (auto *inst = elem.symbol->as_if<slang::ast::InstanceSymbol>()) {
       if (!firstInst) {
         firstInst = inst;
       } else {
@@ -2563,7 +2565,8 @@ Context::buildHierValueKey(
   names.push_back(expr.symbol.name);
   std::string hierName = llvm::join(names, ".");
 
-  if (!firstInst) return std::nullopt;
+  if (!firstInst)
+    return std::nullopt;
   return std::make_pair(firstInst, builder.getStringAttr(hierName));
 }
 
