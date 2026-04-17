@@ -50,7 +50,7 @@ def test_instruction(config):
   # CHECK: rtgtest.addi %
   rd = IntegerRegister.virtual()
   result = ADD1(rd, rs1, imm)
-  assert result is None
+  assert result is rd
 
   # CHECK: rtgtest.add %
   results = ADD3(rs1)
@@ -69,7 +69,7 @@ def test_instruction_read_write_operand(config):
   rs2 = IntegerRegister.t1()
 
   result = ADD2(rd_rs1, rs2)
-  assert result is None
+  assert result is rd_rs1
 
   try:
     ADD2(rs2)

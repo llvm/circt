@@ -22,4 +22,4 @@ def test_generated_add_instructions(config):
   rd = IntegerRegister.t2()
   # CHECK: and t2, t0, t1
   result = and_(rd, rs1, rs2)
-  assert result is None
+  assert result is rd
