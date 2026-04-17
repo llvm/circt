@@ -166,6 +166,9 @@ def OneItemBuffersFromHost(client_type: Type):
                          mmio_offset_words.as_bits()[:clog2(num_sinks)])
       mmio_data_only_chan = mmio_cmd_chan.transform(lambda m: m.data)
       demuxed = esi.ChannelDemux(mmio_data_only_chan, cmd_sink_sel, num_sinks)
+      # Mailbox is intentionally always-ready and overwrite-on-write: if
+      # software updates either address too early, the new value replaces the
+      # stale one instead of backpressuring MMIO.
       mailbox_mod = esi.Mailbox(Bits(64))
       mailboxes = [
           mailbox_mod(clk=clk,
@@ -194,7 +197,9 @@ def OneItemBuffersFromHost(client_type: Type):
               "address": buffer_loc_data.as_uint(),
               "tag": 0,
           }), read_req_valid)
-      read_req_accept.assign(read_req_ready)
+      read_req_xact = NamedWire(read_req_valid & read_req_ready,
+                                "read_req_xact")
+      read_req_accept.assign(read_req_xact)
 
       # Buffer the read response locally so forwarding the data and issuing the
       # completion write do not both need the shared HostMem write path in the
@@ -238,8 +243,9 @@ def OneItemBuffersFromHost(client_type: Type):
 
       write_ch_type = esi.HostMem.write_req_channel_type(
           OneItemBuffersFromHost.xfer_data_type)
+      completion_loc_ready = Wire(Bits(1), name="completion_loc_ready")
       completion_loc_data, completion_loc_valid = completion_loc.output.unwrap(
-          completion_pending)
+          completion_loc_ready)
       completion_write_valid = NamedWire(
           completion_loc_valid & completion_pending, "completion_write_valid")
       write_done_chan, completion_write_ready = Channel(write_ch_type).wrap(
@@ -251,6 +257,7 @@ def OneItemBuffersFromHost(client_type: Type):
       completion_write_xact = NamedWire(
           completion_write_valid & completion_write_ready,
           "completion_write_xact")
+      completion_loc_ready.assign(completion_write_xact)
       completion_pending_reset.assign(completion_write_xact)
 
       # Unpack the write port, but ignore the write confirmation.
