@@ -33,13 +33,10 @@
 
 namespace circt {
 namespace synth {
-struct AndInverterVariadicOpConversion
-    : mlir::OpRewritePattern<aig::AndInverterOp> {
-  using OpRewritePattern<aig::AndInverterOp>::OpRewritePattern;
-  mlir::LogicalResult
-  matchAndRewrite(aig::AndInverterOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
+void populateVariadicAndInverterLoweringPatterns(
+    mlir::RewritePatternSet &patterns);
+void populateVariadicXorInverterLoweringPatterns(
+    mlir::RewritePatternSet &patterns);
 
 /// This function performs a topological sort on the operations within each
 /// block of graph regions in the given operation. It uses MLIR's topological

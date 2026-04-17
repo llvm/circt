@@ -68,3 +68,14 @@ hw.module @test_no_ssa_cycle(in %a: i1, in %b: i1,
   %2 = synth.aig.and_inv %b, %a {synth.test.fc_equiv_class = 7} : i1
   hw.output %0, %1, %2 : i1, i1, i1
 }
+
+// CHECK-LABEL: hw.module @test_xor_inv_equiv
+hw.module @test_xor_inv_equiv(in %a: i1, in %b: i1, out out0: i1, out out1: i1) {
+  // CHECK: %[[XOR_INV:.+]] = synth.xor_inv %a, %b
+  // CHECK: %[[XOR:.+]] = comb.xor %b, %a
+  // CHECK: %[[CHOICE:.+]] = synth.choice %[[XOR_INV]], %[[XOR]] : i1
+  // CHECK: hw.output %[[CHOICE]], %[[CHOICE]] : i1, i1
+  %0 = synth.xor_inv %a, %b {synth.test.fc_equiv_class = 11} : i1
+  %1 = comb.xor %b, %a {synth.test.fc_equiv_class = 11} : i1
+  hw.output %0, %1 : i1, i1
+}

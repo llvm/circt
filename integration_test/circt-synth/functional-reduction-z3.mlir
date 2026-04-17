@@ -62,3 +62,16 @@ hw.module @functional_reduction_inversion_equiv_sat(in %a: i1, in %b: i1,
   %1 = comb.or %a, %b : i1
   hw.output %0, %1 : i1, i1
 }
+
+// SAT should also prove equivalence between synth.xor_inv and an AND/OR
+// implementation of XOR.
+// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 functional_reduction_xor_inv_sat --c2 functional_reduction_xor_inv_sat | FileCheck %s --check-prefix=XOR-INV
+// XOR-INV: c1 == c2
+// CHECK-LABEL: hw.module @functional_reduction_xor_inv_sat
+hw.module @functional_reduction_xor_inv_sat(in %a: i1, in %b: i1, in %c: i1,
+                                            out out0: i1, out out1: i1) {
+  // CHECK: hw.output %[[CHOICE:.+]], %[[CHOICE]] : i1, i1
+  %0 = synth.xor_inv not %a, %b, %b, not %b, not %c, %c : i1
+  %1 = synth.xor_inv not %a, %b : i1
+  hw.output %0, %1 : i1, i1
+}

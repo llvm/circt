@@ -864,6 +864,9 @@ def ConvertCombToSynth : Pass<"convert-comb-to-synth"> {
   let options =
       [ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
                   "Specify additional legal ops to partially legalize Comb">,
+       Option<"forceAIG", "force-aig", "bool", "true",
+              "Force lowering to AIG-only synth ops instead of preserving "
+              "higher-level synth ops such as synth.xor_inv">,
        Option<"maxEmulationUnknownBits", "max-emulation-unknown-bits",
               "uint32_t", "10",
               "Maximum number of unknown bits to emulate in a table lookup">];

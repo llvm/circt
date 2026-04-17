@@ -90,6 +90,36 @@ def AndInverterOp : InvertibleOperandsOp<"aig.and_inv"> {
   let cppNamespace = "::circt::synth::aig";
 }
 
+def XorInverterOp : InvertibleOperandsOp<"xor_inv"> {
+  let summary = "XOR gate with invertible variadic inputs";
+  let description = [{
+    The `synth.xor_inv` operation represents a parity node whose operands may be
+    individually inverted before the XOR is evaluated.
+
+    Example:
+    ```mlir
+      %r0 = synth.xor_inv %a, %b : i1
+      %r1 = synth.xor_inv not %a, %b, %c : i8
+      %r2 = synth.xor_inv not %a : i1
+    ```
+  }];
+
+  let builders = [
+    OpBuilder<(ins "Value":$input, CArg<"bool", "false">:$invert),
+                            [{
+      SmallVector<bool> inverted {invert};
+      return build($_builder, $_state, {input}, inverted);
+    }]>,
+    OpBuilder<(ins "Value":$lhs, "Value":$rhs,
+                                CArg<"bool", "false">:$invertLhs,
+                                CArg<"bool", "false">:$invertRhs),
+                            [{
+      SmallVector<bool> inverted {invertLhs, invertRhs};
+      return build($_builder, $_state, {lhs, rhs}, inverted);
+    }]>];
+
+}
+
 def ChoiceOp : SynthOp<"choice", [SameOperandsAndResultType, Pure]> {
   let summary = "Synth choice operation";
   let description = [{

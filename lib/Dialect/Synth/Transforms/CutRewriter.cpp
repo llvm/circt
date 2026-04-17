@@ -180,6 +180,9 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
             .Case<aig::AndInverterOp>([&](aig::AndInverterOp andOp) {
               return handleInvertibleBinaryGate(andOp, LogicNetworkGate::And2);
             })
+            .Case<synth::XorInverterOp>([&](synth::XorInverterOp xorOp) {
+              return handleInvertibleBinaryGate(xorOp, LogicNetworkGate::Xor2);
+            })
             .Case<comb::XorOp>([&](comb::XorOp xorOp) {
               if (xorOp->getNumOperands() != 2) {
                 handleOtherResults(xorOp);
@@ -262,10 +265,9 @@ LogicalResult circt::synth::topologicallySortLogicNetwork(Operation *topOp) {
   const auto isOperationReady = [](Value value, Operation *op) -> bool {
     // Topologically sort AIG ops and dataflow ops. Other operations
     // can be scheduled.
-    return !(
-        isa<aig::AndInverterOp, synth::ChoiceOp, comb::XorOp, comb::AndOp,
-            comb::OrOp, comb::ExtractOp, comb::ReplicateOp, comb::ConcatOp>(
-            op));
+    return !(isa<aig::AndInverterOp, synth::XorInverterOp, synth::ChoiceOp,
+                 comb::XorOp, comb::AndOp, comb::OrOp, comb::ExtractOp,
+                 comb::ReplicateOp, comb::ConcatOp>(op));
   };
 
   if (failed(topologicallySortGraphRegionBlocks(topOp, isOperationReady)))

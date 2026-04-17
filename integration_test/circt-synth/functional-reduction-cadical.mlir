@@ -20,3 +20,12 @@ hw.module @functional_reduction_sat(in %a: i1, in %b: i1, in %c: i1, in %d: i1,
   %4 = synth.aig.and_inv %a, not %b, not %c, not %d : i1
   hw.output %2, %3, %4 : i1, i1, i1
 }
+
+// CHECK-LABEL: hw.module @functional_reduction_xor_inv_sat
+hw.module @functional_reduction_xor_inv_sat(in %a: i1, in %b: i1,
+                                            out out0: i1, out out1: i1) {
+  // CHECK: hw.output %[[CHOICE:.+]], %[[CHOICE]] : i1, i1
+  %0 = synth.xor_inv %a, %b : i1
+  %1 = comb.xor %b, %a : i1
+  hw.output %0, %1 : i1, i1
+}

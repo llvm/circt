@@ -89,6 +89,16 @@ struct SynthAndInverterOpConversion
   }
 };
 
+struct SynthXorInverterOpConversion
+    : SynthInverterOpConversion<synth::XorInverterOp> {
+  using SynthInverterOpConversion<
+      synth::XorInverterOp>::SynthInverterOpConversion;
+  Value createOp(Location loc, ArrayRef<Value> inputs,
+                 ConversionPatternRewriter &rewriter) const override {
+    return rewriter.createOrFold<comb::XorOp>(loc, inputs, true);
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -105,8 +115,8 @@ struct ConvertSynthToCombPass
 } // namespace
 
 static void populateSynthToCombConversionPatterns(RewritePatternSet &patterns) {
-  patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion>(
-      patterns.getContext());
+  patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion,
+               SynthXorInverterOpConversion>(patterns.getContext());
 }
 
 void ConvertSynthToCombPass::runOnOperation() {
