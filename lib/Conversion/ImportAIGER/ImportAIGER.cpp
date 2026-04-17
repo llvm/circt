@@ -14,6 +14,8 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -43,6 +45,7 @@ using namespace circt::hw;
 using namespace circt::synth;
 using namespace circt::seq;
 using namespace circt::aiger;
+using namespace circt::verif;
 
 #define DEBUG_TYPE "import-aiger"
 
@@ -189,11 +192,25 @@ private:
   unsigned numLatches = 0;
   unsigned numOutputs = 0;
   unsigned numAnds = 0;
+
+  unsigned numBad = 0;
+  unsigned numConstraints = 0;
+  unsigned numJustice = 0;
+  unsigned numFairness = 0;
+
   bool isBinaryFormat = false;
 
   // A mapping from {kind, index} -> symbol where kind is 0 for inputs, 1 for
   // latches, and 2 for outputs.
-  enum SymbolKind : unsigned { Input, Latch, Output };
+  enum SymbolKind : unsigned {
+    Input,
+    Latch,
+    Output,
+    Bad,
+    Constraint,
+    Justice,
+    Fairness
+  };
   DenseMap<std::pair<SymbolKind, unsigned>, StringAttr> symbolTable;
 
   // Parsed data storage
@@ -202,7 +219,12 @@ private:
       latchDefs;                                          // current, next, loc
   SmallVector<std::pair<unsigned, SMLoc>> outputLiterals; // literal, loc
   SmallVector<std::tuple<unsigned, unsigned, unsigned, SMLoc>>
-      andGateDefs; // lhs, rhs0, rhs1
+      andGateDefs;                                            // lhs, rhs0, rhs1
+  SmallVector<std::pair<unsigned, SMLoc>> badStateLiterals;   // literal, loc
+  SmallVector<std::pair<unsigned, SMLoc>> constraintLiterals; // literal, loc
+  SmallVector<std::pair<unsigned, SMLoc>> fairnessLiterals;   // literal, loc
+  SmallVector<SmallVector<std::pair<unsigned, SMLoc>>>
+      justiceLiterals; // [property][literal, loc]
 
   /// Parse the header line (format and counts)
   ParseResult parseHeader();
@@ -231,6 +253,18 @@ private:
   /// Parse comments (optional)
   ParseResult parseComments();
 
+  // Parse bad states properties (optional)
+  ParseResult parseBadStates();
+
+  // Parse invariant constraints (optional)
+  ParseResult parseConstraints();
+
+  // Parse justice properties (optional)
+  ParseResult parseJustice();
+
+  // Parse fairness constraints (optional)
+  ParseResult parseFairness();
+
   /// Convert AIGER literal to MLIR value using backedges
   ///
   /// \param literal The AIGER literal (variable * 2 + inversion)
@@ -252,8 +286,27 @@ private:
     return emitError(lexer.getCurrentLoc(), message);
   }
 
+  InFlightDiagnostic emitWarning(llvm::SMLoc loc, const Twine &message) {
+    return mlir::emitWarning(lexer.translateLocation(loc), message);
+  }
+
+  /// Emit warning at current location
+  InFlightDiagnostic emitWarning(const Twine &message) {
+    return emitWarning(lexer.getCurrentLoc(), message);
+  }
+
   /// Parse a number token into result
   ParseResult parseNumber(unsigned &result, SMLoc *loc = nullptr);
+
+  /// Parse a decimal number (optional)
+  ParseResult parseOptionalNumber(unsigned &result, SMLoc *loc = nullptr);
+
+  // Parse a section of AIGER literals, one per line
+  // Used for bad state, invariant constraint, and fairness constraint
+  ParseResult
+  parseLiteralSection(unsigned count,
+                      SmallVectorImpl<std::pair<unsigned, SMLoc>> &out,
+                      StringRef sectionName);
 
   /// Parse a binary encoded number (variable-length encoding)
   ParseResult parseBinaryNumber(unsigned &result);
@@ -382,7 +435,9 @@ ParseResult AIGERLexer::readLEB128(unsigned &result) {
 
 ParseResult AIGERParser::parse() {
   if (parseHeader() || parseInputs() || parseLatches() || parseOutputs() ||
-      parseAndGates() || parseSymbolTable() || parseComments())
+      parseBadStates() || parseConstraints() || parseJustice() ||
+      parseFairness() || parseAndGates() || parseSymbolTable() ||
+      parseComments())
     return failure();
   // Create the final module
   return createModule();
@@ -399,6 +454,35 @@ ParseResult AIGERParser::parseNumber(unsigned &result, SMLoc *loc) {
   if (token.spelling.getAsInteger(10, result))
     return emitError(token.location, "invalid number format");
 
+  return success();
+}
+
+ParseResult AIGERParser::parseOptionalNumber(unsigned &result, SMLoc *loc) {
+  auto token = lexer.peekToken();
+  if (token.kind == AIGERTokenKind::Newline ||
+      token.kind == AIGERTokenKind::EndOfFile)
+    return success();
+
+  if (token.kind != AIGERTokenKind::Number)
+    return emitError(token.location, "expected number");
+  return parseNumber(result, loc);
+}
+
+ParseResult AIGERParser::parseLiteralSection(
+    unsigned count, SmallVectorImpl<std::pair<unsigned, SMLoc>> &out,
+    StringRef sectionName) {
+  LLVM_DEBUG(llvm::dbgs() << "Parsing " << count << " " << sectionName
+                          << "s\n");
+  for (unsigned i = 0; i < count; ++i) {
+    unsigned literal;
+    SMLoc loc;
+    if (parseNumber(literal, &loc) || parseNewLine())
+      return emitError(loc, "failed to parse " + sectionName + " literal");
+
+    LLVM_DEBUG(llvm::dbgs()
+               << sectionName << " " << i << ": " << literal << "\n");
+    out.push_back({literal, loc});
+  }
   return success();
 }
 
@@ -442,9 +526,26 @@ ParseResult AIGERParser::parseHeader() {
   if (parseNumber(numAnds, &loc))
     return emitError(loc, "failed to parse A (number of AND gates)");
 
+  // Parse an optional header number field (B C J F)
+  // These fields may be ommitted only as a trailing suffix
+
+  if (parseOptionalNumber(numBad, &loc))
+    return emitError(loc, "failed to parse B (number of bad states)");
+
+  if (parseOptionalNumber(numConstraints, &loc))
+    return emitError(loc, "failed to parse C (number of constraints)");
+
+  if (parseOptionalNumber(numJustice, &loc))
+    return emitError(loc, "failed to parse J (number of justice properties)");
+
+  if (parseOptionalNumber(numFairness, &loc))
+    return emitError(loc, "failed to parse F (number of fairness constraints)");
+
   LLVM_DEBUG(llvm::dbgs() << "Header: M=" << maxVarIndex << " I=" << numInputs
                           << " L=" << numLatches << " O=" << numOutputs
-                          << " A=" << numAnds << "\n");
+                          << " A=" << numAnds << " B=" << numBad
+                          << " C=" << numConstraints << " J=" << numJustice
+                          << " F=" << numFairness << "\n");
 
   // Expect newline after header
   return parseNewLine();
@@ -488,6 +589,11 @@ ParseResult AIGERParser::parseLatches() {
       if (parseNumber(literal, &loc))
         return emitError(loc, "failed to parse latch next state literal");
 
+      // Consume optional init value (AIGER 1.9)
+      unsigned init = 0;
+      if (parseOptionalNumber(init))
+        return emitError("failed to parse latch initial value");
+
       latchDefs.push_back({2 * (i + 1 + numInputs), literal, loc});
 
       // Expect newline after each latch next state
@@ -501,9 +607,17 @@ ParseResult AIGERParser::parseLatches() {
   for (unsigned i = 0; i < numLatches; ++i) {
     unsigned currentState, nextState;
     SMLoc loc;
-    if (parseNumber(currentState, &loc) || parseNumber(nextState) ||
-        parseNewLine())
+    if (parseNumber(currentState, &loc) || parseNumber(nextState))
       return emitError(loc, "failed to parse latch definition");
+
+    // Consume optional init value (AIGER 1.9)
+    unsigned init = 0;
+    if (parseOptionalNumber(init))
+      return emitError("failed to parse latch initial value");
+
+    if (parseNewLine()) {
+      return emitError(loc, "failed to parse latch definition");
+    }
 
     LLVM_DEBUG(llvm::dbgs() << "Latch " << i << ": " << currentState << " -> "
                             << nextState << "\n");
@@ -630,7 +744,61 @@ ParseResult AIGERParser::parseAndGatesBinary() {
   return success();
 }
 
+ParseResult AIGERParser::parseBadStates() {
+  // Parse bad state literals
+  return parseLiteralSection(numBad, badStateLiterals, "bad state");
+}
+
+ParseResult AIGERParser::parseConstraints() {
+  // Parse invariant constraint literals
+  return parseLiteralSection(numConstraints, constraintLiterals,
+                             "invariant constraint");
+}
+
+ParseResult AIGERParser::parseJustice() {
+  if (numJustice > 0)
+    emitWarning("AIGER justice properties are not yet supported");
+
+  LLVM_DEBUG(llvm::dbgs() << "Parsing " << numJustice
+                          << " number of justice properties \n");
+  SmallVector<unsigned> sizes;
+  // Parse justice property sizes
+  for (unsigned i = 0; i < numJustice; ++i) {
+    unsigned size;
+    SMLoc loc;
+    if (parseNumber(size, &loc) || parseNewLine())
+      return emitError(loc, "failed to parse justice property size");
+    sizes.push_back(size);
+    LLVM_DEBUG(llvm::dbgs()
+               << "Justice property " << i << ": " << size << '\n');
+  }
+  justiceLiterals.resize(numJustice);
+  // Parse Justice property literals (grouped by each property size)
+  for (unsigned i = 0; i < numJustice; ++i) {
+    for (unsigned j = 0; j < sizes[i]; ++j) {
+      unsigned literal;
+      SMLoc loc;
+      if (parseNumber(literal, &loc) || parseNewLine())
+        return emitError(loc, "failed to parse justice literal");
+
+      justiceLiterals[i].push_back({literal, loc});
+      LLVM_DEBUG(llvm::dbgs()
+                 << "Justice " << i << "[" << j << "]: " << literal << '\n');
+    }
+  }
+  return success();
+}
+
+ParseResult AIGERParser::parseFairness() {
+  if (numFairness > 0)
+    emitWarning("AIGER fairness constraints are not yet supported");
+  // Parse fairness constraint literals
+  return parseLiteralSection(numFairness, fairnessLiterals,
+                             "fairness constraint");
+}
+
 ParseResult AIGERParser::parseSymbolTable() {
+
   // Symbol table is optional and starts with 'i', 'l', or 'o' followed by
   // position
   while (!lexer.isAtEOF()) {
@@ -640,7 +808,15 @@ ParseResult AIGERParser::parseSymbolTable() {
     (void)lexer.nextToken();
 
     char symbolType = token.spelling.front();
-    if (symbolType != 'i' && symbolType != 'l' && symbolType != 'o')
+
+    // Break on standalone 'c' to avoid consuming the comment section marker
+    // as a constraint symbol (e.g. 'c0', 'c1').
+    if (token.spelling == "c")
+      break;
+
+    if (symbolType != 'i' && symbolType != 'l' && symbolType != 'o' &&
+        symbolType != 'b' && symbolType != 'c' && symbolType != 'j' &&
+        symbolType != 'f')
       break;
 
     unsigned literal;
@@ -657,6 +833,18 @@ ParseResult AIGERParser::parseSymbolTable() {
       break;
     case 'o':
       kind = SymbolKind::Output;
+      break;
+    case 'b':
+      kind = SymbolKind::Bad;
+      break;
+    case 'c':
+      kind = SymbolKind::Constraint;
+      break;
+    case 'j':
+      kind = SymbolKind::Justice;
+      break;
+    case 'f':
+      kind = SymbolKind::Fairness;
       break;
     }
 
@@ -749,7 +937,6 @@ Value AIGERParser::getLiteralValue(unsigned literal,
 }
 
 ParseResult AIGERParser::createModule() {
-
   // Create the top-level module
   std::string moduleName = options.topLevelModule;
   if (moduleName.empty())
@@ -900,6 +1087,30 @@ ParseResult AIGERParser::createModule() {
   auto *outputOp = hwModule.getBodyBlock()->getTerminator();
   outputOp->setOperands(outputValues);
 
+  for (auto [i, badState] : llvm::enumerate(badStateLiterals)) {
+    auto [literal, sourceLoc] = badState;
+    auto loc = lexer.translateLocation(sourceLoc);
+    auto value = getLiteralValue(literal, backedges, loc);
+    if (!value)
+      return emitError(sourceLoc, "undefined literal in bad state");
+    // Negate it (assert literal does not hold)
+    auto negated = aig::AndInverterOp::create(builder, loc, builder.getI1Type(),
+                                              value, true);
+    auto label = symbolTable.lookup({SymbolKind::Bad, i});
+    verif::AssertOp::create(builder, loc, negated.getResult(), Value{}, label);
+  }
+
+  for (auto [i, constraint] : llvm::enumerate(constraintLiterals)) {
+    auto [literal, sourceLoc] = constraint;
+    auto loc = lexer.translateLocation(sourceLoc);
+    auto value = getLiteralValue(literal, backedges, loc);
+    if (!value)
+      return emitError(sourceLoc, "undefined literal in invariant constraint");
+    // No negation (assume literal holds)
+    auto label = symbolTable.lookup({SymbolKind::Constraint, i});
+    verif::AssumeOp::create(builder, loc, value, Value{}, label);
+  }
+
   return success();
 }
 
@@ -915,6 +1126,7 @@ LogicalResult circt::aiger::importAIGER(llvm::SourceMgr &sourceMgr,
   context->loadDialect<hw::HWDialect>();
   context->loadDialect<synth::SynthDialect>();
   context->loadDialect<seq::SeqDialect>();
+  context->loadDialect<verif::VerifDialect>();
 
   // Use default options if none provided
   ImportAIGEROptions defaultOptions;

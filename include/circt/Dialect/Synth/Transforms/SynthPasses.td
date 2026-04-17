@@ -219,7 +219,7 @@ class ExternalSolverPass<string name> : Pass<name, "hw::HWModuleOp"> {
   ];
 
   let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect",
-                           "circt::seq::SeqDialect"];
+                           "circt::seq::SeqDialect", "circt::verif::VerifDialect"];
 }
 
 def AIGERRunner : ExternalSolverPass<"synth-aiger-runner"> {
