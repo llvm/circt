@@ -263,6 +263,17 @@ hw.module @test_parity(in %a : i8, out y : i1) {
 }
 
 // -----
+// Test: comb.reverse taint rule: y_t = reverse(input_t)
+// CHECK-LABEL: hw.module @test_reverse
+// CHECK-SAME: (in %a : i8, in %a_t : i8, out y : i8, out y_t : i8)
+hw.module @test_reverse(in %a : i8, out y : i8) {
+  // CHECK: %0 = comb.reverse %a : i8
+  // CHECK: [[Y_T:%.+]] = comb.reverse %a_t : i8
+  %0 = comb.reverse %a : i8
+  hw.output %0 : i8
+}
+
+// -----
 // Test: seq.compreg taint rule.
 // CHECK-LABEL: hw.module @test_compreg
 // CHECK-SAME: (in %d : i8, in %d_t : i8, in %clk : !seq.clock, out q : i8, out q_t : i8)

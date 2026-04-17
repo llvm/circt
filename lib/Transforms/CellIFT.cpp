@@ -31,6 +31,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -55,6 +56,78 @@ using namespace circt::seq;
 
 namespace {
 
+using TaintMap = DenseMap<Value, Value>;
+
+Value getZero(ImplicitLocOpBuilder &b, Type ty);
+Value getAllOnes(ImplicitLocOpBuilder &b, Type ty);
+Value orReduce(ImplicitLocOpBuilder &b, Value v);
+Value broadcast(ImplicitLocOpBuilder &b, Value bit, Type ty);
+Value getTaint(const TaintMap &taintOf, Value v);
+Value conservativeTaint(ImplicitLocOpBuilder &b, ValueRange taintInputs,
+                        Type resTy);
+Value conservativeTaint(ImplicitLocOpBuilder &b, const TaintMap &taintOf,
+                        ValueRange inputs, Type resTy);
+Value shiftTaintPrecise(ImplicitLocOpBuilder &b, Value data, Value dataT,
+                        Value amt, Value amtT, Type resTy, bool left,
+                        bool arith);
+
+Value instrumentOperation(ImplicitLocOpBuilder &b, hw::ConstantOp op,
+                          bool taintConstants);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::AndOp op,
+                          comb::AndOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::OrOp op,
+                          comb::OrOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::XorOp op,
+                          comb::XorOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::AddOp op,
+                          comb::AddOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::SubOp op,
+                          comb::SubOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::MulOp op,
+                          comb::MulOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::DivUOp op,
+                          comb::DivUOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::DivSOp op,
+                          comb::DivSOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ModUOp op,
+                          comb::ModUOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ModSOp op,
+                          comb::ModSOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::MuxOp op,
+                          comb::MuxOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ConcatOp op,
+                          comb::ConcatOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ExtractOp op,
+                          comb::ExtractOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ReplicateOp op,
+                          comb::ReplicateOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ICmpOp op,
+                          comb::ICmpOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShlOp op,
+                          comb::ShlOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrUOp op,
+                          comb::ShrUOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrSOp op,
+                          comb::ShrSOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ParityOp op,
+                          comb::ParityOp::Adaptor taintAdaptor);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ReverseOp op,
+                          comb::ReverseOp::Adaptor taintAdaptor);
+
+template <typename OpT>
+void instrumentSingleResultOperation(TaintMap &taintOf, ImplicitLocOpBuilder &b,
+                                     OpT op) {
+  SmallVector<Value> taintOperands;
+  taintOperands.reserve(op->getNumOperands());
+  for (auto operand : op->getOperands())
+    taintOperands.push_back(getTaint(taintOf, operand));
+  typename OpT::Adaptor taintAdaptor(taintOperands, op->getAttrDictionary());
+  taintOf[op.getResult()] = instrumentOperation(b, op, taintAdaptor);
+}
+
+void instrumentInstance(TaintMap &taintOf, StringRef taintSuffix,
+                        hw::InstanceOp op, ImplicitLocOpBuilder &b);
+
 class CellIFTInstrumentPass
     : public circt::impl::CellIFTInstrumentBase<CellIFTInstrumentPass> {
 public:
@@ -62,80 +135,12 @@ public:
   void runOnOperation() override;
 
 private:
-  // ---- Taint map --------------------------------------------------------
-  DenseMap<Value, Value> taintOf;
-
-  // ---- Helpers ----------------------------------------------------------
-  Value getZero(ImplicitLocOpBuilder &b, Type ty) {
-    return hw::ConstantOp::create(b,
-                                  APInt(cast<IntegerType>(ty).getWidth(), 0));
-  }
-  Value getAllOnes(ImplicitLocOpBuilder &b, Type ty) {
-    return hw::ConstantOp::create(
-        b, APInt::getAllOnes(cast<IntegerType>(ty).getWidth()));
-  }
-  Value orReduce(ImplicitLocOpBuilder &b, Value v) {
-    auto w = cast<IntegerType>(v.getType()).getWidth();
-    if (w == 1)
-      return v;
-    return comb::ICmpOp::create(b, comb::ICmpPredicate::ne, v,
-                                getZero(b, v.getType()));
-  }
-  Value broadcast(ImplicitLocOpBuilder &b, Value bit, Type ty) {
-    return b.createOrFold<comb::ReplicateOp>(ty, bit);
-  }
-  /// Conservative: OR-reduce all input taints, broadcast to result width.
-  Value conservativeTaint(ImplicitLocOpBuilder &b, ValueRange ins, Type resTy) {
-    SmallVector<Value> bits;
-    for (auto v : ins) {
-      if (auto it = taintOf.find(v); it != taintOf.end())
-        bits.push_back(orReduce(b, it->second));
-    }
-    Value any;
-    if (bits.empty())
-      return getZero(b, resTy);
-    if (bits.size() == 1)
-      any = bits[0];
-    else
-      any = comb::OrOp::create(b, bits, /*twoState=*/false);
-    return broadcast(b, any, resTy);
-  }
-
-  Value getTaint(Value v) {
-    auto it = taintOf.find(v);
-    assert(it != taintOf.end() && "missing taint");
-    return it->second;
-  }
-
-  // ---- Taint rules per op -----------------------------------------------
-  void instrConst(hw::ConstantOp, ImplicitLocOpBuilder &);
-  void instrAnd(comb::AndOp, ImplicitLocOpBuilder &);
-  void instrOr(comb::OrOp, ImplicitLocOpBuilder &);
-  void instrXor(comb::XorOp, ImplicitLocOpBuilder &);
-  void instrAdd(comb::AddOp, ImplicitLocOpBuilder &);
-  void instrSub(comb::SubOp, ImplicitLocOpBuilder &);
-  void instrMul(comb::MulOp, ImplicitLocOpBuilder &);
-  void instrMux(comb::MuxOp, ImplicitLocOpBuilder &);
-  void instrConcat(comb::ConcatOp, ImplicitLocOpBuilder &);
-  void instrExtract(comb::ExtractOp, ImplicitLocOpBuilder &);
-  void instrReplicate(comb::ReplicateOp, ImplicitLocOpBuilder &);
-  void instrICmp(comb::ICmpOp, ImplicitLocOpBuilder &);
-  void instrShl(comb::ShlOp, ImplicitLocOpBuilder &);
-  void instrShrU(comb::ShrUOp, ImplicitLocOpBuilder &);
-  void instrShrS(comb::ShrSOp, ImplicitLocOpBuilder &);
-  void instrParity(comb::ParityOp, ImplicitLocOpBuilder &);
-  void instrDiv(Operation *, ImplicitLocOpBuilder &);
-  void instrMod(Operation *, ImplicitLocOpBuilder &);
-  void instrInstance(hw::InstanceOp, ImplicitLocOpBuilder &);
-
-  Value shiftTaintPrecise(ImplicitLocOpBuilder &b, Value data, Value dataT,
-                          Value amt, Value amtT, Type resTy, bool left,
-                          bool arith);
-
   // ---- Module-level passes ----------------------------------------------
-  void rewriteModuleSignature(HWModuleOp mod);
-  void instrumentModuleBody(HWModuleOp mod);
-  void rewriteOutputOp(HWModuleOp mod);
+  void rewriteModuleSignature(HWModuleOp mod, StringRef taintSuffix);
+  void instrumentModuleBody(HWModuleOp mod, TaintMap &taintOf,
+                            bool taintConstants, StringRef taintSuffix);
+  void rewriteOutputOp(HWModuleOp mod, TaintMap &taintOf,
+                       StringRef taintSuffix);
 };
 
 } // namespace
@@ -144,87 +149,151 @@ private:
 // Taint Rules
 //===----------------------------------------------------------------------===//
 
-void CellIFTInstrumentPass::instrConst(hw::ConstantOp op,
-                                       ImplicitLocOpBuilder &b) {
-  taintOf[op.getResult()] =
-      taintConstants ? getAllOnes(b, op.getType()) : getZero(b, op.getType());
+namespace {
+
+Value getZero(ImplicitLocOpBuilder &b, Type ty) {
+  return hw::ConstantOp::create(b, APInt(cast<IntegerType>(ty).getWidth(), 0));
+}
+
+Value getAllOnes(ImplicitLocOpBuilder &b, Type ty) {
+  return hw::ConstantOp::create(
+      b, APInt::getAllOnes(cast<IntegerType>(ty).getWidth()));
+}
+
+Value orReduce(ImplicitLocOpBuilder &b, Value v) {
+  auto width = cast<IntegerType>(v.getType()).getWidth();
+  if (width == 1)
+    return v;
+  return comb::ICmpOp::create(b, comb::ICmpPredicate::ne, v,
+                              getZero(b, v.getType()));
+}
+
+Value broadcast(ImplicitLocOpBuilder &b, Value bit, Type ty) {
+  return b.createOrFold<comb::ReplicateOp>(ty, bit);
+}
+
+Value getTaint(const TaintMap &taintOf, Value v) {
+  auto it = taintOf.find(v);
+  assert(it != taintOf.end() && "missing taint");
+  return it->second;
+}
+
+Value conservativeTaint(ImplicitLocOpBuilder &b, ValueRange taintInputs,
+                        Type resTy) {
+  SmallVector<Value> bits;
+  bits.reserve(taintInputs.size());
+  for (auto taint : taintInputs)
+    bits.push_back(orReduce(b, taint));
+
+  if (bits.empty())
+    return getZero(b, resTy);
+
+  Value any = bits.size() == 1
+                  ? bits.front()
+                  : comb::OrOp::create(b, bits, /*twoState=*/false);
+  return broadcast(b, any, resTy);
+}
+
+Value conservativeTaint(ImplicitLocOpBuilder &b, const TaintMap &taintOf,
+                        ValueRange inputs, Type resTy) {
+  SmallVector<Value> taintInputs;
+  taintInputs.reserve(inputs.size());
+  for (auto input : inputs)
+    if (auto it = taintOf.find(input); it != taintOf.end())
+      taintInputs.push_back(it->second);
+  return conservativeTaint(b, taintInputs, resTy);
+}
+
+Value instrumentOperation(ImplicitLocOpBuilder &b, hw::ConstantOp op,
+                          bool taintConstants) {
+  return taintConstants ? getAllOnes(b, op.getType())
+                        : getZero(b, op.getType());
 }
 
 // AND: y_t = (a & b_t) | (b & a_t) | (a_t & b_t)
-void CellIFTInstrumentPass::instrAnd(comb::AndOp op, ImplicitLocOpBuilder &b) {
-  auto ins = op.getInputs();
-  // Fold pairwise from left.
-  Value val = ins[0], vt = getTaint(ins[0]);
-  for (size_t i = 1; i < ins.size(); ++i) {
-    Value c = ins[i], ct = getTaint(ins[i]);
-    Value t1 = comb::AndOp::create(b, val, ct);
-    Value t2 = comb::AndOp::create(b, c, vt);
-    Value t3 = comb::AndOp::create(b, vt, ct);
-    vt = comb::OrOp::create(b, ValueRange{t1, t2, t3}, /*twoState=*/false);
-    // Update running value (the non-taint AND so far).
-    val = comb::AndOp::create(b, val, c);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::AndOp op,
+                          comb::AndOp::Adaptor taintAdaptor) {
+  auto inputs = op.getInputs();
+  auto taintInputs = taintAdaptor.getInputs();
+  Value value = inputs.front();
+  Value taint = taintInputs.front();
+  for (auto [input, inputTaint] :
+       llvm::zip_equal(inputs.drop_front(), taintInputs.drop_front())) {
+    Value t1 = comb::AndOp::create(b, value, inputTaint);
+    Value t2 = comb::AndOp::create(b, input, taint);
+    Value t3 = comb::AndOp::create(b, taint, inputTaint);
+    taint = comb::OrOp::create(b, ValueRange{t1, t2, t3}, /*twoState=*/false);
+    value = comb::AndOp::create(b, value, input);
   }
-  taintOf[op.getResult()] = vt;
+  return taint;
 }
 
 // OR: y_t = (~a & b_t) | (~b & a_t) | (a_t & b_t)
-void CellIFTInstrumentPass::instrOr(comb::OrOp op, ImplicitLocOpBuilder &b) {
-  auto ins = op.getInputs();
-  Value val = ins[0], vt = getTaint(ins[0]);
-  auto ones = getAllOnes(b, val.getType());
-  for (size_t i = 1; i < ins.size(); ++i) {
-    Value c = ins[i], ct = getTaint(ins[i]);
-    Value notVal = comb::XorOp::create(b, val, ones);
-    Value notC = comb::XorOp::create(b, c, ones);
-    Value t1 = comb::AndOp::create(b, notVal, ct);
-    Value t2 = comb::AndOp::create(b, notC, vt);
-    Value t3 = comb::AndOp::create(b, vt, ct);
-    vt = comb::OrOp::create(b, ValueRange{t1, t2, t3}, /*twoState=*/false);
-    val = comb::OrOp::create(b, ValueRange{val, c}, /*twoState=*/false);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::OrOp op,
+                          comb::OrOp::Adaptor taintAdaptor) {
+  auto inputs = op.getInputs();
+  auto taintInputs = taintAdaptor.getInputs();
+  Value value = inputs.front();
+  Value taint = taintInputs.front();
+  auto ones = getAllOnes(b, value.getType());
+  for (auto [input, inputTaint] :
+       llvm::zip_equal(inputs.drop_front(), taintInputs.drop_front())) {
+    Value notValue = comb::XorOp::create(b, value, ones);
+    Value notInput = comb::XorOp::create(b, input, ones);
+    Value t1 = comb::AndOp::create(b, notValue, inputTaint);
+    Value t2 = comb::AndOp::create(b, notInput, taint);
+    Value t3 = comb::AndOp::create(b, taint, inputTaint);
+    taint = comb::OrOp::create(b, ValueRange{t1, t2, t3}, /*twoState=*/false);
+    value = comb::OrOp::create(b, ValueRange{value, input},
+                               /*twoState=*/false);
   }
-  taintOf[op.getResult()] = vt;
+  return taint;
 }
 
 // XOR: y_t = OR of all input taints.
-void CellIFTInstrumentPass::instrXor(comb::XorOp op, ImplicitLocOpBuilder &b) {
-  SmallVector<Value> ts;
-  for (auto v : op.getInputs())
-    ts.push_back(getTaint(v));
-  taintOf[op.getResult()] =
-      ts.size() == 1 ? ts[0] : comb::OrOp::create(b, ts, /*twoState=*/false);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::XorOp,
+                          comb::XorOp::Adaptor taintAdaptor) {
+  auto taintInputs = taintAdaptor.getInputs();
+  return taintInputs.size() == 1
+             ? taintInputs.front()
+             : comb::OrOp::create(b, taintInputs, /*twoState=*/false);
 }
 
 // ADD (precise): y_t = ((a&~a_t)+(b&~b_t)) XOR ((a|a_t)+(b|b_t)) | a_t | b_t
-void CellIFTInstrumentPass::instrAdd(comb::AddOp op, ImplicitLocOpBuilder &b) {
-  auto ins = op.getInputs();
-  Value val = ins[0], vt = getTaint(ins[0]);
-  auto ty = val.getType();
-  auto ones = getAllOnes(b, ty);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::AddOp op,
+                          comb::AddOp::Adaptor taintAdaptor) {
+  auto inputs = op.getInputs();
+  auto taintInputs = taintAdaptor.getInputs();
+  Value value = inputs.front();
+  Value taint = taintInputs.front();
+  auto ones = getAllOnes(b, value.getType());
 
-  for (size_t i = 1; i < ins.size(); ++i) {
-    Value c = ins[i], ct = getTaint(ins[i]);
-    Value notVt = comb::XorOp::create(b, vt, ones);
-    Value notCt = comb::XorOp::create(b, ct, ones);
-    Value aZero = comb::AndOp::create(b, val, notVt);
-    Value bZero = comb::AndOp::create(b, c, notCt);
-    Value aOne = comb::OrOp::create(b, val, vt);
-    Value bOne = comb::OrOp::create(b, c, ct);
-    Value sumMin = comb::AddOp::create(b, aZero, bZero);
-    Value sumMax = comb::AddOp::create(b, aOne, bOne);
+  for (auto [input, inputTaint] :
+       llvm::zip_equal(inputs.drop_front(), taintInputs.drop_front())) {
+    Value notTaint = comb::XorOp::create(b, taint, ones);
+    Value notInputTaint = comb::XorOp::create(b, inputTaint, ones);
+    Value valueZero = comb::AndOp::create(b, value, notTaint);
+    Value inputZero = comb::AndOp::create(b, input, notInputTaint);
+    Value valueOne = comb::OrOp::create(b, value, taint);
+    Value inputOne = comb::OrOp::create(b, input, inputTaint);
+    Value sumMin = comb::AddOp::create(b, valueZero, inputZero);
+    Value sumMax = comb::AddOp::create(b, valueOne, inputOne);
     Value xorResult = comb::XorOp::create(b, sumMin, sumMax);
-    vt = comb::OrOp::create(b, ValueRange{xorResult, vt, ct},
-                            /*twoState=*/false);
-    val = comb::AddOp::create(b, val, c);
+    taint = comb::OrOp::create(b, ValueRange{xorResult, taint, inputTaint},
+                               /*twoState=*/false);
+    value = comb::AddOp::create(b, value, input);
   }
-  taintOf[op.getResult()] = vt;
+  return taint;
 }
 
 // SUB (precise): y_t = ((a|a_t)-(b&~b_t)) XOR ((a&~a_t)-(b|b_t)) | a_t | b_t
-void CellIFTInstrumentPass::instrSub(comb::SubOp op, ImplicitLocOpBuilder &b) {
-  Value a = op.getLhs(), aT = getTaint(a);
-  Value bv = op.getRhs(), bT = getTaint(bv);
-  auto ty = a.getType();
-  auto ones = getAllOnes(b, ty);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::SubOp op,
+                          comb::SubOp::Adaptor taintAdaptor) {
+  Value a = op.getLhs();
+  Value aT = taintAdaptor.getLhs();
+  Value bv = op.getRhs();
+  Value bT = taintAdaptor.getRhs();
+  auto ones = getAllOnes(b, a.getType());
 
   Value notAT = comb::XorOp::create(b, aT, ones);
   Value notBT = comb::XorOp::create(b, bT, ones);
@@ -236,89 +305,94 @@ void CellIFTInstrumentPass::instrSub(comb::SubOp op, ImplicitLocOpBuilder &b) {
   Value sub1 = comb::SubOp::create(b, aOne, bZero);
   Value sub2 = comb::SubOp::create(b, aZero, bOne);
   Value xorResult = comb::XorOp::create(b, sub1, sub2);
-  taintOf[op.getResult()] =
-      comb::OrOp::create(b, ValueRange{xorResult, aT, bT}, /*twoState=*/false);
+  return comb::OrOp::create(b, ValueRange{xorResult, aT, bT},
+                            /*twoState=*/false);
 }
 
-void CellIFTInstrumentPass::instrMul(comb::MulOp op, ImplicitLocOpBuilder &b) {
-  taintOf[op.getResult()] = conservativeTaint(b, op.getInputs(), op.getType());
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::MulOp op,
+                          comb::MulOp::Adaptor taintAdaptor) {
+  return conservativeTaint(b, taintAdaptor.getInputs(), op.getType());
 }
 
 // DIV (conservative): any tainted input taints the full result.
-void CellIFTInstrumentPass::instrDiv(Operation *op, ImplicitLocOpBuilder &b) {
-  taintOf[op->getResult(0)] =
-      conservativeTaint(b, op->getOperands(), op->getResult(0).getType());
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::DivUOp op,
+                          comb::DivUOp::Adaptor taintAdaptor) {
+  SmallVector<Value> taintInputs{taintAdaptor.getLhs(), taintAdaptor.getRhs()};
+  return conservativeTaint(b, taintInputs, op.getType());
+}
+
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::DivSOp op,
+                          comb::DivSOp::Adaptor taintAdaptor) {
+  SmallVector<Value> taintInputs{taintAdaptor.getLhs(), taintAdaptor.getRhs()};
+  return conservativeTaint(b, taintInputs, op.getType());
 }
 
 // MOD (precise per Yosys): y_t = mod(a_t, b) | broadcast(reduce_or(b_t))
-void CellIFTInstrumentPass::instrMod(Operation *op, ImplicitLocOpBuilder &b) {
-  Value a = op->getOperand(0), bv = op->getOperand(1);
-  Value aT = getTaint(a), bT = getTaint(bv);
-  auto resTy = op->getResult(0).getType();
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ModUOp op,
+                          comb::ModUOp::Adaptor taintAdaptor) {
+  Value modTaint = comb::ModUOp::create(b, taintAdaptor.getLhs(), op.getRhs());
+  Value bTaintBit = orReduce(b, taintAdaptor.getRhs());
+  Value bTaintBroad = broadcast(b, bTaintBit, op.getType());
+  return comb::OrOp::create(b, modTaint, bTaintBroad);
+}
 
-  // mod(a_t, b): taint of A propagated through modulo.
-  Value modTaint;
-  if (isa<comb::ModSOp>(op))
-    modTaint = comb::ModSOp::create(b, aT, bv);
-  else
-    modTaint = comb::ModUOp::create(b, aT, bv);
-
-  // If B is tainted at all, entire result is tainted.
-  Value bTaintBit = orReduce(b, bT);
-  Value bTaintBroad = broadcast(b, bTaintBit, resTy);
-  taintOf[op->getResult(0)] = comb::OrOp::create(b, modTaint, bTaintBroad);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ModSOp op,
+                          comb::ModSOp::Adaptor taintAdaptor) {
+  Value modTaint = comb::ModSOp::create(b, taintAdaptor.getLhs(), op.getRhs());
+  Value bTaintBit = orReduce(b, taintAdaptor.getRhs());
+  Value bTaintBroad = broadcast(b, bTaintBit, op.getType());
+  return comb::OrOp::create(b, modTaint, bTaintBroad);
 }
 
 // MUX: y_t = mux(sel, t_t, f_t) | replicate(sel_t) & (t^f | t_t | f_t)
-void CellIFTInstrumentPass::instrMux(comb::MuxOp op, ImplicitLocOpBuilder &b) {
-  Value sel = op.getCond(), t = op.getTrueValue(), f = op.getFalseValue();
-  Value sT = getTaint(sel), tT = getTaint(t), fT = getTaint(f);
-  auto resTy = op.getResult().getType();
-
-  Value dataTaint = comb::MuxOp::create(b, sel, tT, fT);
-  Value selBroad = broadcast(b, sT, resTy);
-  Value diff = comb::XorOp::create(b, t, f);
-  Value inner =
-      comb::OrOp::create(b, ValueRange{diff, tT, fT}, /*twoState=*/false);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::MuxOp op,
+                          comb::MuxOp::Adaptor taintAdaptor) {
+  Value dataTaint =
+      comb::MuxOp::create(b, op.getCond(), taintAdaptor.getTrueValue(),
+                          taintAdaptor.getFalseValue());
+  Value selBroad = broadcast(b, taintAdaptor.getCond(), op.getType());
+  Value diff = comb::XorOp::create(b, op.getTrueValue(), op.getFalseValue());
+  Value inner = comb::OrOp::create(b,
+                                   ValueRange{diff, taintAdaptor.getTrueValue(),
+                                              taintAdaptor.getFalseValue()},
+                                   /*twoState=*/false);
   Value ctrlTaint = comb::AndOp::create(b, selBroad, inner);
-  taintOf[op.getResult()] = comb::OrOp::create(b, dataTaint, ctrlTaint);
+  return comb::OrOp::create(b, dataTaint, ctrlTaint);
 }
 
 // CONCAT: y_t = concat(each input_t)
-void CellIFTInstrumentPass::instrConcat(comb::ConcatOp op,
-                                        ImplicitLocOpBuilder &b) {
-  SmallVector<Value> ts;
-  for (auto v : op.getInputs())
-    ts.push_back(getTaint(v));
-  taintOf[op.getResult()] = comb::ConcatOp::create(b, ts);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ConcatOp,
+                          comb::ConcatOp::Adaptor taintAdaptor) {
+  return comb::ConcatOp::create(b, taintAdaptor.getInputs());
 }
 
 // EXTRACT: y_t = extract(input_t, lowBit)
-void CellIFTInstrumentPass::instrExtract(comb::ExtractOp op,
-                                         ImplicitLocOpBuilder &b) {
-  taintOf[op.getResult()] = comb::ExtractOp::create(
-      b, op.getResult().getType(), getTaint(op.getInput()), op.getLowBit());
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ExtractOp op,
+                          comb::ExtractOp::Adaptor taintAdaptor) {
+  return comb::ExtractOp::create(b, op.getResult().getType(),
+                                 taintAdaptor.getInput(), op.getLowBit());
 }
 
 // REPLICATE: y_t = replicate(input_t)
-void CellIFTInstrumentPass::instrReplicate(comb::ReplicateOp op,
-                                           ImplicitLocOpBuilder &b) {
-  taintOf[op.getResult()] = comb::ReplicateOp::create(
-      b, op.getResult().getType(), getTaint(op.getInput()));
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ReplicateOp op,
+                          comb::ReplicateOp::Adaptor taintAdaptor) {
+  return comb::ReplicateOp::create(b, op.getResult().getType(),
+                                   taintAdaptor.getInput());
 }
 
 // ICMP (precise): different rules per predicate.
-void CellIFTInstrumentPass::instrICmp(comb::ICmpOp op,
-                                      ImplicitLocOpBuilder &b) {
-  Value a = op.getLhs(), aT = getTaint(a);
-  Value bv = op.getRhs(), bT = getTaint(bv);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ICmpOp op,
+                          comb::ICmpOp::Adaptor taintAdaptor) {
+  Value a = op.getLhs();
+  Value aT = taintAdaptor.getLhs();
+  Value bv = op.getRhs();
+  Value bT = taintAdaptor.getRhs();
   auto pred = op.getPredicate();
   auto ty = a.getType();
-  unsigned w = cast<IntegerType>(ty).getWidth();
+  unsigned width = cast<IntegerType>(ty).getWidth();
   auto ones = getAllOnes(b, ty);
 
   if (pred == ICmpPredicate::eq || pred == ICmpPredicate::ne) {
-    // Precise eq/ne: taint iff non-tainted bits match and any bit is tainted.
     Value combined = comb::OrOp::create(b, aT, bT);
     Value hasTaint = orReduce(b, combined);
     Value mask = comb::XorOp::create(b, combined, ones); // ~(a_t | b_t)
@@ -326,82 +400,76 @@ void CellIFTInstrumentPass::instrICmp(comb::ICmpOp op,
     Value maskedB = comb::AndOp::create(b, bv, mask);
     Value eqUntainted =
         comb::ICmpOp::create(b, ICmpPredicate::eq, maskedA, maskedB);
-    taintOf[op.getResult()] = comb::AndOp::create(b, hasTaint, eqUntainted);
-  } else {
-    // ge/gt/le/lt: compute min/max values, compare extremes, XOR.
-    bool isSigned = (pred == ICmpPredicate::slt || pred == ICmpPredicate::sle ||
-                     pred == ICmpPredicate::sgt || pred == ICmpPredicate::sge);
-
-    Value notAT = comb::XorOp::create(b, aT, ones);
-    Value notBT = comb::XorOp::create(b, bT, ones);
-
-    Value minA, maxA, minB, maxB;
-    if (w == 1 || !isSigned) {
-      // Unsigned: min = clear tainted bits, max = set tainted bits.
-      minA = comb::AndOp::create(b, a, notAT);
-      maxA = comb::OrOp::create(b, a, aT);
-      minB = comb::AndOp::create(b, bv, notBT);
-      maxB = comb::OrOp::create(b, bv, bT);
-    } else {
-      // Signed: MSB minimizes to 1 (negative), maximizes to 0 (positive).
-      auto lsbTy = IntegerType::get(b.getContext(), w - 1);
-      auto bitTy = IntegerType::get(b.getContext(), 1);
-
-      Value aLsbs = comb::ExtractOp::create(b, lsbTy, a, 0);
-      Value aMsb = comb::ExtractOp::create(b, bitTy, a, w - 1);
-      Value aTLsbs = comb::ExtractOp::create(b, lsbTy, aT, 0);
-      Value aTMsb = comb::ExtractOp::create(b, bitTy, aT, w - 1);
-
-      Value bLsbs = comb::ExtractOp::create(b, lsbTy, bv, 0);
-      Value bMsb = comb::ExtractOp::create(b, bitTy, bv, w - 1);
-      Value bTLsbs = comb::ExtractOp::create(b, lsbTy, bT, 0);
-      Value bTMsb = comb::ExtractOp::create(b, bitTy, bT, w - 1);
-
-      auto lsbOnes = getAllOnes(b, lsbTy);
-      Value notATLsbs = comb::XorOp::create(b, aTLsbs, lsbOnes);
-      Value notBTLsbs = comb::XorOp::create(b, bTLsbs, lsbOnes);
-
-      auto bitOnes = getAllOnes(b, bitTy);
-      Value notATMsb = comb::XorOp::create(b, aTMsb, bitOnes);
-      Value notBTMsb = comb::XorOp::create(b, bTMsb, bitOnes);
-
-      // LSBs: unsigned convention.
-      Value minALsbs = comb::AndOp::create(b, aLsbs, notATLsbs);
-      Value maxALsbs = comb::OrOp::create(b, aLsbs, aTLsbs);
-      Value minBLsbs = comb::AndOp::create(b, bLsbs, notBTLsbs);
-      Value maxBLsbs = comb::OrOp::create(b, bLsbs, bTLsbs);
-
-      // MSB: signed convention (min->1, max->0).
-      Value minAMsb = comb::OrOp::create(b, aMsb, aTMsb);
-      Value maxAMsb = comb::AndOp::create(b, aMsb, notATMsb);
-      Value minBMsb = comb::OrOp::create(b, bMsb, bTMsb);
-      Value maxBMsb = comb::AndOp::create(b, bMsb, notBTMsb);
-
-      minA = comb::ConcatOp::create(b, minAMsb, minALsbs);
-      maxA = comb::ConcatOp::create(b, maxAMsb, maxALsbs);
-      minB = comb::ConcatOp::create(b, minBMsb, minBLsbs);
-      maxB = comb::ConcatOp::create(b, maxBMsb, maxBLsbs);
-    }
-
-    // Compare extremes with the same predicate.
-    Value cmp1 = comb::ICmpOp::create(b, pred, minA, maxB);
-    Value cmp2 = comb::ICmpOp::create(b, pred, maxA, minB);
-    taintOf[op.getResult()] = comb::XorOp::create(b, cmp1, cmp2);
+    return comb::AndOp::create(b, hasTaint, eqUntainted);
   }
+
+  bool isSigned = pred == ICmpPredicate::slt || pred == ICmpPredicate::sle ||
+                  pred == ICmpPredicate::sgt || pred == ICmpPredicate::sge;
+
+  Value notAT = comb::XorOp::create(b, aT, ones);
+  Value notBT = comb::XorOp::create(b, bT, ones);
+
+  Value minA, maxA, minB, maxB;
+  if (width == 1 || !isSigned) {
+    minA = comb::AndOp::create(b, a, notAT);
+    maxA = comb::OrOp::create(b, a, aT);
+    minB = comb::AndOp::create(b, bv, notBT);
+    maxB = comb::OrOp::create(b, bv, bT);
+  } else {
+    auto lsbTy = IntegerType::get(b.getContext(), width - 1);
+    auto bitTy = IntegerType::get(b.getContext(), 1);
+
+    Value aLsbs = comb::ExtractOp::create(b, lsbTy, a, 0);
+    Value aMsb = comb::ExtractOp::create(b, bitTy, a, width - 1);
+    Value aTLsbs = comb::ExtractOp::create(b, lsbTy, aT, 0);
+    Value aTMsb = comb::ExtractOp::create(b, bitTy, aT, width - 1);
+
+    Value bLsbs = comb::ExtractOp::create(b, lsbTy, bv, 0);
+    Value bMsb = comb::ExtractOp::create(b, bitTy, bv, width - 1);
+    Value bTLsbs = comb::ExtractOp::create(b, lsbTy, bT, 0);
+    Value bTMsb = comb::ExtractOp::create(b, bitTy, bT, width - 1);
+
+    auto lsbOnes = getAllOnes(b, lsbTy);
+    Value notATLsbs = comb::XorOp::create(b, aTLsbs, lsbOnes);
+    Value notBTLsbs = comb::XorOp::create(b, bTLsbs, lsbOnes);
+
+    auto bitOnes = getAllOnes(b, bitTy);
+    Value notATMsb = comb::XorOp::create(b, aTMsb, bitOnes);
+    Value notBTMsb = comb::XorOp::create(b, bTMsb, bitOnes);
+
+    Value minALsbs = comb::AndOp::create(b, aLsbs, notATLsbs);
+    Value maxALsbs = comb::OrOp::create(b, aLsbs, aTLsbs);
+    Value minBLsbs = comb::AndOp::create(b, bLsbs, notBTLsbs);
+    Value maxBLsbs = comb::OrOp::create(b, bLsbs, bTLsbs);
+
+    Value minAMsb = comb::OrOp::create(b, aMsb, aTMsb);
+    Value maxAMsb = comb::AndOp::create(b, aMsb, notATMsb);
+    Value minBMsb = comb::OrOp::create(b, bMsb, bTMsb);
+    Value maxBMsb = comb::AndOp::create(b, bMsb, notBTMsb);
+
+    minA = comb::ConcatOp::create(b, minAMsb, minALsbs);
+    maxA = comb::ConcatOp::create(b, maxAMsb, maxALsbs);
+    minB = comb::ConcatOp::create(b, minBMsb, minBLsbs);
+    maxB = comb::ConcatOp::create(b, maxBMsb, maxBLsbs);
+  }
+
+  Value cmp1 = comb::ICmpOp::create(b, pred, minA, maxB);
+  Value cmp2 = comb::ICmpOp::create(b, pred, maxA, minB);
+  return comb::XorOp::create(b, cmp1, cmp2);
 }
 
 // Precise shift taint: two-phase approach matching Yosys CellIFT.
 // Phase 1: shift by untainted portion of the shift amount.
 // Phase 2: for each possible delta from tainted shift bits, check if the
 //          output bit values would differ.
-Value CellIFTInstrumentPass::shiftTaintPrecise(ImplicitLocOpBuilder &b,
-                                               Value data, Value dataT,
-                                               Value amt, Value amtT,
-                                               Type resTy, bool left,
-                                               bool arith) {
+Value shiftTaintPrecise(ImplicitLocOpBuilder &b, Value data, Value dataT,
+                        Value amt, Value amtT, Type resTy, bool left,
+                        bool arith) {
   unsigned W = cast<IntegerType>(resTy).getWidth();
-  if (W <= 1)
-    return conservativeTaint(b, ValueRange{data, amt}, resTy);
+  if (W <= 1) {
+    SmallVector<Value> taintInputs{dataT, amtT};
+    return conservativeTaint(b, taintInputs, resTy);
+  }
 
   // Phase 1: Shift by untainted amount.
   auto onesAmt = getAllOnes(b, amt.getType());
@@ -490,36 +558,43 @@ Value CellIFTInstrumentPass::shiftTaintPrecise(ImplicitLocOpBuilder &b,
   return comb::OrOp::create(b, contributions, /*twoState=*/false);
 }
 
-void CellIFTInstrumentPass::instrShl(comb::ShlOp op, ImplicitLocOpBuilder &b) {
-  taintOf[op.getResult()] =
-      shiftTaintPrecise(b, op.getLhs(), getTaint(op.getLhs()), op.getRhs(),
-                        getTaint(op.getRhs()), op.getType(), true, false);
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShlOp op,
+                          comb::ShlOp::Adaptor taintAdaptor) {
+  return shiftTaintPrecise(b, op.getLhs(), taintAdaptor.getLhs(), op.getRhs(),
+                           taintAdaptor.getRhs(), op.getType(), true, false);
 }
-void CellIFTInstrumentPass::instrShrU(comb::ShrUOp op,
-                                      ImplicitLocOpBuilder &b) {
-  taintOf[op.getResult()] =
-      shiftTaintPrecise(b, op.getLhs(), getTaint(op.getLhs()), op.getRhs(),
-                        getTaint(op.getRhs()), op.getType(), false, false);
+
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrUOp op,
+                          comb::ShrUOp::Adaptor taintAdaptor) {
+  return shiftTaintPrecise(b, op.getLhs(), taintAdaptor.getLhs(), op.getRhs(),
+                           taintAdaptor.getRhs(), op.getType(), false, false);
 }
-void CellIFTInstrumentPass::instrShrS(comb::ShrSOp op,
-                                      ImplicitLocOpBuilder &b) {
-  taintOf[op.getResult()] =
-      shiftTaintPrecise(b, op.getLhs(), getTaint(op.getLhs()), op.getRhs(),
-                        getTaint(op.getRhs()), op.getType(), false, true);
+
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrSOp op,
+                          comb::ShrSOp::Adaptor taintAdaptor) {
+  return shiftTaintPrecise(b, op.getLhs(), taintAdaptor.getLhs(), op.getRhs(),
+                           taintAdaptor.getRhs(), op.getType(), false, true);
 }
 
 // PARITY: y_t = OR-reduce(input_t)
-void CellIFTInstrumentPass::instrParity(comb::ParityOp op,
-                                        ImplicitLocOpBuilder &b) {
-  taintOf[op.getResult()] = orReduce(b, getTaint(op.getInput()));
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ParityOp,
+                          comb::ParityOp::Adaptor taintAdaptor) {
+  return orReduce(b, taintAdaptor.getInput());
+}
+
+// REVERSE: y_t = reverse(input_t)
+Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ReverseOp op,
+                          comb::ReverseOp::Adaptor taintAdaptor) {
+  return comb::ReverseOp::create(b, b.getLoc(), op.getType(),
+                                 taintAdaptor.getInput());
 }
 
 //===----------------------------------------------------------------------===//
 // Instance Instrumentation
 //===----------------------------------------------------------------------===//
 
-void CellIFTInstrumentPass::instrInstance(hw::InstanceOp op,
-                                          ImplicitLocOpBuilder &b) {
+void instrumentInstance(TaintMap &taintOf, StringRef taintSuffix,
+                        hw::InstanceOp op, ImplicitLocOpBuilder &b) {
   SmallVector<Value> newInputs;
   SmallVector<Attribute> newArgNames, newResNames;
   SmallVector<Type> newResTys;
@@ -569,11 +644,14 @@ void CellIFTInstrumentPass::instrInstance(hw::InstanceOp op,
   op.erase();
 }
 
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Module Signature Rewriting
 //===----------------------------------------------------------------------===//
 
-void CellIFTInstrumentPass::rewriteModuleSignature(HWModuleOp mod) {
+void CellIFTInstrumentPass::rewriteModuleSignature(HWModuleOp mod,
+                                                   StringRef taintSuffix) {
   auto *ctx = mod.getContext();
   auto portList = mod.getPortList();
   Block *body = mod.getBodyBlock();
@@ -619,7 +697,10 @@ void CellIFTInstrumentPass::rewriteModuleSignature(HWModuleOp mod) {
 // Body Instrumentation
 //===----------------------------------------------------------------------===//
 
-void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod) {
+void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod,
+                                                 TaintMap &taintOf,
+                                                 bool taintConstants,
+                                                 StringRef taintSuffix) {
   taintOf.clear();
   Block *body = mod.getBodyBlock();
 
@@ -710,37 +791,29 @@ void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod) {
     b.setInsertionPointAfter(op);
 
     llvm::TypeSwitch<Operation *>(op)
-        .Case<hw::ConstantOp>([&](auto o) { instrConst(o, b); })
-        .Case<comb::AndOp>([&](auto o) { instrAnd(o, b); })
-        .Case<comb::OrOp>([&](auto o) { instrOr(o, b); })
-        .Case<comb::XorOp>([&](auto o) { instrXor(o, b); })
-        .Case<comb::AddOp>([&](auto o) { instrAdd(o, b); })
-        .Case<comb::SubOp>([&](auto o) { instrSub(o, b); })
-        .Case<comb::MulOp>([&](auto o) { instrMul(o, b); })
-        .Case<comb::DivUOp, comb::DivSOp>([&](auto o) { instrDiv(o, b); })
-        .Case<comb::ModUOp, comb::ModSOp>([&](auto o) { instrMod(o, b); })
-        .Case<comb::MuxOp>([&](auto o) { instrMux(o, b); })
-        .Case<comb::ConcatOp>([&](auto o) { instrConcat(o, b); })
-        .Case<comb::ExtractOp>([&](auto o) { instrExtract(o, b); })
-        .Case<comb::ReplicateOp>([&](auto o) { instrReplicate(o, b); })
-        .Case<comb::ICmpOp>([&](auto o) { instrICmp(o, b); })
-        .Case<comb::ShlOp>([&](auto o) { instrShl(o, b); })
-        .Case<comb::ShrUOp>([&](auto o) { instrShrU(o, b); })
-        .Case<comb::ShrSOp>([&](auto o) { instrShrS(o, b); })
-        .Case<comb::ParityOp>([&](auto o) { instrParity(o, b); })
-        .Case<hw::InstanceOp>([&](auto o) { instrInstance(o, b); })
+        .Case<hw::ConstantOp>([&](auto o) {
+          taintOf[o.getResult()] = instrumentOperation(b, o, taintConstants);
+        })
+        .Case<comb::AndOp, comb::OrOp, comb::XorOp, comb::AddOp, comb::SubOp,
+              comb::MulOp, comb::DivUOp, comb::DivSOp, comb::ModUOp,
+              comb::ModSOp, comb::MuxOp, comb::ConcatOp, comb::ExtractOp,
+              comb::ReplicateOp, comb::ICmpOp, comb::ShlOp, comb::ShrUOp,
+              comb::ShrSOp, comb::ParityOp, comb::ReverseOp>(
+            [&](auto o) { instrumentSingleResultOperation(taintOf, b, o); })
+        .Case<hw::InstanceOp>(
+            [&](auto o) { instrumentInstance(taintOf, taintSuffix, o, b); })
         .Default([&](Operation *o) {
           // Conservative fallback for unknown ops with integer results.
           for (auto res : o->getResults())
             if (isa<IntegerType>(res.getType()))
-              taintOf[res] =
-                  conservativeTaint(b, o->getOperands(), res.getType());
+              taintOf[res] = conservativeTaint(b, taintOf, o->getOperands(),
+                                               res.getType());
         });
   }
 
   // Phase 3: Fix up taint register inputs now that all taints are computed.
   for (auto &pr : pendingRegs) {
-    Value inputT = getTaint(pr.origInput);
+    Value inputT = getTaint(taintOf, pr.origInput);
     if (auto compreg = dyn_cast<seq::CompRegOp>(pr.taintReg))
       compreg.getInputMutable().assign(inputT);
     else if (auto firreg = dyn_cast<seq::FirRegOp>(pr.taintReg))
@@ -748,7 +821,8 @@ void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod) {
   }
 }
 
-void CellIFTInstrumentPass::rewriteOutputOp(HWModuleOp mod) {
+void CellIFTInstrumentPass::rewriteOutputOp(HWModuleOp mod, TaintMap &taintOf,
+                                            StringRef taintSuffix) {
   Block *body = mod.getBodyBlock();
   auto outputOp = cast<hw::OutputOp>(body->getTerminator());
 
@@ -793,14 +867,17 @@ void CellIFTInstrumentPass::runOnOperation() {
       modules.push_back(mod);
   });
 
-  for (auto mod : modules) {
-    // Step 1: Rewrite module signature (add taint ports).
-    rewriteModuleSignature(mod);
-    // Step 2: Instrument all ops in the body (including instances).
-    instrumentModuleBody(mod);
-    // Step 3: Rewrite the output op.
-    rewriteOutputOp(mod);
-  }
+  std::string taintSuffix = this->taintSuffix;
+  bool taintConstants = this->taintConstants;
+
+  for (auto mod : modules)
+    rewriteModuleSignature(mod, taintSuffix);
+
+  parallelForEach(&getContext(), modules, [&](HWModuleOp mod) {
+    TaintMap taintOf;
+    instrumentModuleBody(mod, taintOf, taintConstants, taintSuffix);
+    rewriteOutputOp(mod, taintOf, taintSuffix);
+  });
 }
 
 //===----------------------------------------------------------------------===//
