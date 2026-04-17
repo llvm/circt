@@ -307,12 +307,26 @@ struct CombOrToAIGConversion : OpConversionPattern<OrOp> {
   }
 };
 
-/// Lower a comb::XorOp operation to AIG operations
-struct CombXorOpConversion : OpConversionPattern<XorOp> {
+struct CombXorOpToSynthConversion : OpConversionPattern<XorOp> {
   using OpConversionPattern<XorOp>::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(XorOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<bool> inverted(adaptor.getInputs().size(), false);
+    replaceOpWithNewOpAndCopyNamehint<synth::XorInverterOp>(
+        rewriter, op, adaptor.getInputs(), inverted);
+    return success();
+  }
+};
+
+/// Lower a synth::XorOp operation to AIG operations
+struct SynthXorInverterOpConversion
+    : OpConversionPattern<synth::XorInverterOp> {
+  using OpConversionPattern<synth::XorInverterOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(synth::XorInverterOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     if (op.getNumOperands() != 2)
       return failure();
@@ -321,8 +335,8 @@ struct CombXorOpConversion : OpConversionPattern<XorOp> {
     // (a | b) = ~(~a & ~b)
     // (~a | ~b) = ~(a & b)
     auto inputs = adaptor.getInputs();
-    SmallVector<bool> allInverts(inputs.size(), true);
-    SmallVector<bool> allNotInverts(inputs.size(), false);
+    auto allNotInverts = op.getInverted();
+    std::array<bool, 2> allInverts = {!allNotInverts[0], !allNotInverts[1]};
 
     auto notAAndNotB = synth::aig::AndInverterOp::create(rewriter, op.getLoc(),
                                                          inputs, allInverts);
@@ -1343,24 +1357,31 @@ struct ConvertCombToSynthPass
 
 static void
 populateCombToAIGConversionPatterns(RewritePatternSet &patterns,
-                                    uint32_t maxEmulationUnknownBits) {
+                                    uint32_t maxEmulationUnknownBits,
+                                    bool forceAIG) {
   patterns.add<
       // Bitwise Logical Ops
-      CombAndOpConversion, CombXorOpConversion, CombMuxOpConversion,
-      CombParityOpConversion,
+      CombAndOpConversion, CombMuxOpConversion, CombParityOpConversion,
+      CombXorOpToSynthConversion,
       // Arithmetic Ops
       CombMulOpConversion, CombICmpOpConversion,
       // Shift Ops
       CombShlOpConversion, CombShrUOpConversion, CombShrSOpConversion,
       // Variadic ops that must be lowered to binary operations
-      CombLowerVariadicOp<XorOp>, CombLowerVariadicOp<AddOp>,
-      CombLowerVariadicOp<MulOp>>(patterns.getContext());
+      CombLowerVariadicOp<AddOp>, CombLowerVariadicOp<MulOp>>(
+      patterns.getContext());
+
+  if (forceAIG)
+    patterns.add<SynthXorInverterOpConversion>(patterns.getContext());
 
   patterns.add(comb::convertSubToAdd);
 
-  patterns
-      .add<CombOrToAIGConversion, circt::synth::AndInverterVariadicOpConversion,
-           CombAddOpConversion>(patterns.getContext());
+  patterns.add<CombOrToAIGConversion, CombAddOpConversion>(
+      patterns.getContext());
+  synth::populateVariadicAndInverterLoweringPatterns(patterns);
+
+  if (forceAIG)
+    synth::populateVariadicXorInverterLoweringPatterns(patterns);
 
   // Add div/mod patterns with a threshold given by the pass option.
   patterns.add<CombDivUOpConversion, CombModUOpConversion, CombDivSOpConversion,
@@ -1385,6 +1406,8 @@ void ConvertCombToSynthPass::runOnOperation() {
                       hw::AggregateConstantOp>();
 
   target.addLegalDialect<synth::SynthDialect>();
+  if (forceAIG)
+    target.addIllegalOp<synth::XorInverterOp>();
 
   // If additional legal ops are specified, add them to the target.
   if (!additionalLegalOps.empty())
@@ -1392,7 +1415,8 @@ void ConvertCombToSynthPass::runOnOperation() {
       target.addLegalOp(OperationName(opName, &getContext()));
 
   RewritePatternSet patterns(&getContext());
-  populateCombToAIGConversionPatterns(patterns, maxEmulationUnknownBits);
+  populateCombToAIGConversionPatterns(patterns, maxEmulationUnknownBits,
+                                      forceAIG);
 
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))

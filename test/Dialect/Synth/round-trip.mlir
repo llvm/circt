@@ -16,3 +16,11 @@ hw.module @choice(in %a: i4, in %b: i4) {
   %0 = synth.choice %a : i4
   %1 = synth.choice %a, %b, %a : i4
 }
+
+// CHECK-LABEL: @xor_inv
+// CHECK-NEXT: %[[R0:.+]] = synth.xor_inv %a, not %b, %c : i4
+// CHECK-NEXT: %[[R1:.+]] = synth.xor_inv not %d : i1
+hw.module @xor_inv(in %a: i4, in %b: i4, in %c: i4, in %d: i1) {
+  %0 = synth.xor_inv %a, not %b, %c : i4
+  %1 = synth.xor_inv not %d : i1
+}

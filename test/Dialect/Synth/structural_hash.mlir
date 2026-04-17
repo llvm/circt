@@ -52,3 +52,12 @@ func.func @test_func(%a: i2, %b: i2) -> (i2, i2) {
   %1 = synth.aig.and_inv %b, %a : i2
   return %0, %1 : i2, i2
 }
+
+// CHECK-LABEL: hw.module @xor_inv_hash
+hw.module @xor_inv_hash(in %a: i1, in %b: i1, in %c: i1, out o0: i1, out o1: i1) {
+  // CHECK: %[[X:.+]] = synth.xor_inv %a, not %b, %c : i1
+  // CHECK-NEXT: hw.output %[[X]], %[[X]] : i1, i1
+  %0 = synth.xor_inv %a, not %b, %c : i1
+  %1 = synth.xor_inv %c, %a, not %b : i1
+  hw.output %0, %1 : i1, i1
+}

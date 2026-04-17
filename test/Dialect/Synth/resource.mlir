@@ -58,6 +58,7 @@ hw.module private @unrelated(in %a : i1, in %b : i1, out x : i1) {
 // CHECK-NEXT:   comb.or: 16
 // CHECK-NEXT:   comb.xor: 8
 // CHECK-NEXT:   synth.aig.and_inv: 8
+// CHECK-NEXT:   synth.xor_inv: 16
 
 hw.module private @multibit(in %a : i8, in %b : i8, in %c : i8, out x : i8) {
   // 3-input AND on 8-bit: (3-1) * 8 = 16 gates
@@ -70,8 +71,11 @@ hw.module private @multibit(in %a : i8, in %b : i8, in %c : i8, out x : i8) {
   %xor2 = comb.xor %a, %b : i8
   // AIG on 8-bit: (2-1) * 8 = 8 gates
   %aig = synth.aig.and_inv not %a, %b : i8
-  hw.output %aig : i8
+  // XOR inverter on 8-bit: (3-1) * 8 = 16 gates
+  %xor = synth.xor_inv %aig, not %b, %c : i8
+  hw.output %xor : i8
 }
+
 
 // Test sequential elements (registers)
 // CHECK:      Resource Usage Analysis for module: sequential

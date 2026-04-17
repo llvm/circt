@@ -1,14 +1,15 @@
 // RUN: circt-opt %s --split-input-file --pass-pipeline='builtin.module(synth-print-longest-path-analysis{test=true})' --verify-diagnostics
 
-// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.a[0], delay=4, history=[{{.+}}])}}
-// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.b[0], delay=4, history=[{{.+}}])}}
+// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.a[0], delay=6, history=[{{.+}}])}}
+// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.b[0], delay=6, history=[{{.+}}])}}
 hw.module private @basic(in %a : i1, in %b : i1, out x : i1) {
   // These operations are considered to have a delay of 1.
   %p = synth.aig.and_inv not %a, %b : i1 // p[0] := max(a[0], b[0]) + 1 = 1
   %q = comb.and %p, %a : i1  // q[0] := max(p[0], a[0]) + 1 = 2
   %r = comb.or %q, %a : i1  // r[0] := max(q[0], a[0]) + 1 = 3
   %s = comb.xor %r, %a : i1 // s[0] := max(r[0], a[0]) + 1 = 4
-  hw.output %s : i1
+  %t = synth.xor_inv %s, not %b, %a : i1 // t[0] := max(s[0], b[0], a[0]) + 2 = 6
+  hw.output %t : i1
 }
 
 // expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.a[0], delay=1, history=[{{.+}}])}}

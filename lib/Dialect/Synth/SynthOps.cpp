@@ -283,51 +283,113 @@ void AndInverterOp::emitCNF(
 
   SmallVector<int> inputLits;
   inputLits.reserve(inputVars.size());
-  for (auto [inputVar, inverted] : llvm::zip(inputVars, getInverted())) {
-    assert(inputVar > 0 && "input SAT variables must be positive");
+  for (auto [inputVar, inverted] : llvm::zip(inputVars, getInverted()))
     inputLits.push_back(applyInversion(inputVar, inverted));
-  }
   circt::addAndClauses(outVar, inputLits, addClause);
 }
 
-static Value lowerVariadicAndInverterOp(AndInverterOp op, OperandRange operands,
-                                        ArrayRef<bool> inverts,
-                                        PatternRewriter &rewriter) {
+//===----------------------------------------------------------------------===//
+// XorInverterOp
+//===----------------------------------------------------------------------===//
+
+bool XorInverterOp::areInputsPermutationInvariant() { return true; }
+
+APInt XorInverterOp::evaluateBooleanLogic(
+    llvm::function_ref<const APInt &(unsigned)> getInputValue) {
+  assert(getNumOperands() > 0 && "Expected non-empty input list");
+  APInt result = APInt::getZero(getInputValue(0).getBitWidth());
+  for (auto [idx, inverted] : llvm::enumerate(getInverted()))
+    result ^= applyInversion(getInputValue(idx), inverted);
+  return result;
+}
+
+llvm::KnownBits XorInverterOp::computeKnownBits(
+    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
+  assert(getNumOperands() > 0 && "Expected non-empty input list");
+
+  llvm::KnownBits result(getInputKnownBits(0).getBitWidth());
+  for (auto [i, inverted] : llvm::enumerate(getInverted()))
+    result ^= applyInversion(getInputKnownBits(i), inverted);
+  return result;
+}
+
+int64_t XorInverterOp::getLogicDepthCost() {
+  return llvm::Log2_64_Ceil(getNumOperands());
+}
+
+std::optional<uint64_t> XorInverterOp::getLogicAreaCost() {
+  int64_t bitWidth = hw::getBitWidth(getType());
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<uint64_t>(getNumOperands() - 1) * bitWidth;
+}
+
+void XorInverterOp::emitCNF(
+    int outVar, llvm::ArrayRef<int> inputVars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  assert(inputVars.size() == getInputs().size() &&
+         "expected one SAT variable per operand");
+
+  SmallVector<int> inputLits;
+  inputLits.reserve(inputVars.size());
+  for (auto [inputVar, inverted] : llvm::zip(inputVars, getInverted()))
+    inputLits.push_back(applyInversion(inputVar, inverted));
+  circt::addParityClauses(outVar, inputLits, addClause, newVar);
+}
+
+static Value lowerVariadicInvertibleOp(
+    Location loc, ValueRange operands, ArrayRef<bool> inverts,
+    PatternRewriter &rewriter,
+    llvm::function_ref<Value(Value, bool)> createUnary,
+    llvm::function_ref<Value(Value, Value, bool, bool)> createBinary) {
   switch (operands.size()) {
   case 0:
     assert(0 && "cannot be called with empty operand range");
     break;
   case 1:
-    if (inverts[0])
-      return AndInverterOp::create(rewriter, op.getLoc(), operands[0], true);
-    else
-      return operands[0];
+    return inverts[0] ? createUnary(operands[0], true) : operands[0];
   case 2:
-    return AndInverterOp::create(rewriter, op.getLoc(), operands[0],
-                                 operands[1], inverts[0], inverts[1]);
+    return createBinary(operands[0], operands[1], inverts[0], inverts[1]);
   default:
     auto firstHalf = operands.size() / 2;
-    auto lhs =
-        lowerVariadicAndInverterOp(op, operands.take_front(firstHalf),
-                                   inverts.take_front(firstHalf), rewriter);
-    auto rhs =
-        lowerVariadicAndInverterOp(op, operands.drop_front(firstHalf),
-                                   inverts.drop_front(firstHalf), rewriter);
-    return AndInverterOp::create(rewriter, op.getLoc(), lhs, rhs);
+    auto lhs = lowerVariadicInvertibleOp(loc, operands.take_front(firstHalf),
+                                         inverts.take_front(firstHalf),
+                                         rewriter, createUnary, createBinary);
+    auto rhs = lowerVariadicInvertibleOp(loc, operands.drop_front(firstHalf),
+                                         inverts.drop_front(firstHalf),
+                                         rewriter, createUnary, createBinary);
+    return createBinary(lhs, rhs, false, false);
   }
   return Value();
 }
 
-LogicalResult circt::synth::AndInverterVariadicOpConversion::matchAndRewrite(
-    AndInverterOp op, PatternRewriter &rewriter) const {
+template <typename OpTy>
+LogicalResult lowerVariadicAndInverterOpConversion(OpTy op,
+                                                   PatternRewriter &rewriter) {
   if (op.getInputs().size() <= 2)
     return failure();
-  // TODO: This is a naive implementation that creates a balanced binary tree.
-  //       We can improve by analyzing the dataflow and creating a tree that
-  //       improves the critical path or area.
-  rewriter.replaceOp(op, lowerVariadicAndInverterOp(
-                             op, op.getOperands(), op.getInverted(), rewriter));
+  auto result = lowerVariadicInvertibleOp(
+      op.getLoc(), op.getOperands(), op.getInverted(), rewriter,
+      [&](Value input, bool invert) {
+        return OpTy::create(rewriter, op.getLoc(), input, invert);
+      },
+      [&](Value lhs, Value rhs, bool invertLhs, bool invertRhs) {
+        return OpTy::create(rewriter, op.getLoc(), lhs, rhs, invertLhs,
+                            invertRhs);
+      });
+  replaceOpAndCopyNamehint(rewriter, op, result);
   return success();
+}
+
+void circt::synth::populateVariadicAndInverterLoweringPatterns(
+    RewritePatternSet &patterns) {
+  patterns.add(lowerVariadicAndInverterOpConversion<aig::AndInverterOp>);
+}
+
+void circt::synth::populateVariadicXorInverterLoweringPatterns(
+    RewritePatternSet &patterns) {
+  patterns.add(lowerVariadicAndInverterOpConversion<XorInverterOp>);
 }
 
 LogicalResult circt::synth::topologicallySortGraphRegionBlocks(
