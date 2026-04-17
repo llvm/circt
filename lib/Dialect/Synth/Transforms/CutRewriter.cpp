@@ -238,11 +238,9 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
     if (index == kConstant0 || index == kConstant1)
       continue;
 
-    // Record both internal fanout and external observation for area-flow.
+    // Record observations that remain visible after cut covering.
     for (OpOperand &use : value.getUses()) {
-      if (isInternalLogicUser(use.getOwner()))
-        recordLogicUse(index);
-      else
+      if (!isInternalLogicUser(use.getOwner()))
         recordExternalUse(index);
     }
   }
@@ -1365,6 +1363,27 @@ void CutEnumerator::computeRequiredTimes() {
 // Pick cuts again using area-flow, while staying within the timing bound set
 // by the current mapping.
 void CutEnumerator::reselectCutsForAreaFlow() {
+  SmallVector<unsigned, 0> selectedRefCounts(logicNetwork.size(), 0);
+  for (auto [index, gate] : llvm::enumerate(logicNetwork.getGates()))
+    selectedRefCounts[index] = gate.getExternalUseCount();
+
+  auto addSelectedCutRefs = [&](const Cut *cut) {
+    if (!cut)
+      return;
+    for (uint32_t inputIndex : cut->inputs)
+      ++selectedRefCounts[inputIndex];
+  };
+
+  auto dropSelectedCutRefs = [&](const Cut *cut) {
+    if (!cut)
+      return;
+    for (uint32_t inputIndex : cut->inputs) {
+      assert(selectedRefCounts[inputIndex] != 0 &&
+             "selected reference count underflow");
+      --selectedRefCounts[inputIndex];
+    }
+  };
+
   // Start from the arrival times of the cuts we already selected.
   for (auto index : processingOrder) {
     auto it = cutSets.find(index);
@@ -1377,6 +1396,7 @@ void CutEnumerator::reselectCutsForAreaFlow() {
 
     it->second->bestArrivalTime =
         bestCut->getMatchedPattern()->getWorstOutputArrivalTime();
+    addSelectedCutRefs(bestCut);
   }
 
   for (auto index : processingOrder) {
@@ -1385,6 +1405,7 @@ void CutEnumerator::reselectCutsForAreaFlow() {
       continue;
 
     auto *cutSet = cutSetIt->second;
+    Cut *currentBestCut = cutSet->getBestMatchedCut();
     Cut *bestAreaFlowCut = nullptr;
     std::optional<MatchedPattern> bestAreaFlowMatch;
     double bestFlow = std::numeric_limits<double>::max();
@@ -1425,8 +1446,12 @@ void CutEnumerator::reselectCutsForAreaFlow() {
         if (!inputCutSet)
           continue;
 
-        flow +=
-            inputCutSet->areaFlow / logicNetwork.getTotalRefCount(inputIndex);
+        unsigned effectiveRefCount = selectedRefCounts[inputIndex];
+        if (!currentBestCut ||
+            !llvm::is_contained(currentBestCut->inputs, inputIndex))
+          ++effectiveRefCount;
+        assert(effectiveRefCount != 0 && "cut inputs must be referenced");
+        flow += inputCutSet->areaFlow / effectiveRefCount;
       }
 
       // Break ties in a stable way: lower flow, then earlier timing, then
@@ -1450,6 +1475,8 @@ void CutEnumerator::reselectCutsForAreaFlow() {
       continue;
 
     // Later nodes should see the timing and flow of the cut we picked here.
+    dropSelectedCutRefs(currentBestCut);
+    addSelectedCutRefs(bestAreaFlowCut);
     bestAreaFlowCut->setMatchedPattern(std::move(*bestAreaFlowMatch));
     cutSet->setBestCut(bestAreaFlowCut);
     cutSet->areaFlow = bestFlow;

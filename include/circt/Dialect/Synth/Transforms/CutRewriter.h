@@ -132,9 +132,6 @@ struct LogicNetworkGate {
   /// inversion bit is encoded in each edge.
   Signal edges[3];
 
-  /// Number of uses by logic gates in this network.
-  unsigned logicFanoutCount = 0;
-
   /// Number of uses outside the logic network.
   unsigned externalUseCount = 0;
 
@@ -184,12 +181,9 @@ struct LogicNetworkGate {
     return k == PrimaryInput || k == Constant;
   }
 
-  unsigned getTotalRefCount() const {
-    unsigned refCount = logicFanoutCount + externalUseCount;
-    return refCount == 0 ? 1 : refCount;
-  }
-
   bool isPrimaryOutput() const { return externalUseCount != 0; }
+
+  unsigned getExternalUseCount() const { return externalUseCount; }
 };
 
 /// Flat logic network representation for efficient cut enumeration.
@@ -272,14 +266,14 @@ public:
   /// Get the total number of nodes in the network.
   size_t size() const { return gates.size(); }
 
-  /// Get the total reference count used by area-flow estimation.
-  unsigned getTotalRefCount(uint32_t index) const {
-    return gates[index].getTotalRefCount();
-  }
-
   /// Check if a node is observed outside the logic network.
   bool isPrimaryOutput(uint32_t index) const {
     return gates[index].isPrimaryOutput();
+  }
+
+  /// Get the number of uses outside the logic network.
+  unsigned getExternalUseCount(uint32_t index) const {
+    return gates[index].getExternalUseCount();
   }
 
   /// Add a primary input to the network.
@@ -303,7 +297,6 @@ public:
   void clear();
 
 private:
-  void recordLogicUse(uint32_t index) { ++gates[index].logicFanoutCount; }
   void recordExternalUse(uint32_t index) { ++gates[index].externalUseCount; }
 
   /// Map from MLIR Value to network index.
