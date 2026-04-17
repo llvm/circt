@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from ..common import Clock, Input, InputChannel, OutputChannel, Reset
-from ..constructs import Mux, NamedWire, Wire
+from ..constructs import ControlReg, Mux, NamedWire, Wire
 from ..module import modparams, generator
 from ..types import Bits, Channel, StructType, Type, UInt
 from ..support import clog2
@@ -108,10 +108,9 @@ def OneItemBuffersFromHost(client_type: Type):
 
   1) Host sends address of buffer address via MMIO write to register 0x08.
   2) Host sends address of completion address via MMIO write to register 0x10.
-  3) Device reads data from said buffer and sends down the channel. Only
-     initiates the transfer if the output channel is ready so as to not cause
-     contention / deadlock in the HostMem service. This feature should probably
-     be implemented by HostMem.
+  3) Device reads data from said buffer and sends down the channel. Only keeps
+      one transfer outstanding by buffering the read response locally before
+      forwarding it.
   4) Device writes '1' to the first byte of the completion buffer to signal that
      the transfer is done.
   """
@@ -167,6 +166,9 @@ def OneItemBuffersFromHost(client_type: Type):
                          mmio_offset_words.as_bits()[:clog2(num_sinks)])
       mmio_data_only_chan = mmio_cmd_chan.transform(lambda m: m.data)
       demuxed = esi.ChannelDemux(mmio_data_only_chan, cmd_sink_sel, num_sinks)
+      # Mailbox is intentionally always-ready and overwrite-on-write: if
+      # software updates either address too early, the new value replaces the
+      # stale one instead of backpressuring MMIO.
       mailbox_mod = esi.Mailbox(Bits(64))
       mailboxes = [
           mailbox_mod(clk=clk,
@@ -180,30 +182,83 @@ def OneItemBuffersFromHost(client_type: Type):
 
       output_chan = Wire(Channel(client_type))
       ports.output_channel = output_chan
+      output_buf_ready = Wire(Bits(1), name="output_buf_ready")
 
-      # Only issue a read request if the output channel is ready. (And the
-      # buffer location has been written.)
-      read_req = buffer_loc_for_read.wait_for_ready(output_chan).transform(
-          lambda m: esi.HostMem.ReadReqType({
-              "address": m.as_uint(),
+      # Only keep one outstanding transfer. Once we can buffer a response
+      # locally, issue the host read even if the downstream consumer has not
+      # raised ready yet.
+      read_req_accept = Wire(Bits(1), name="read_req_accept")
+      buffer_loc_data, buffer_loc_valid = buffer_loc_for_read.unwrap(
+          read_req_accept)
+      read_req_valid = NamedWire(buffer_loc_valid & output_buf_ready,
+                                 "read_req_valid")
+      read_req, read_req_ready = Channel(esi.HostMem.ReadReqType).wrap(
+          esi.HostMem.ReadReqType({
+              "address": buffer_loc_data.as_uint(),
               "tag": 0,
-          }))
-      # Issue the read data while getting the trigger signal for the completion
-      # write.
-      read_resp = ports.hostmem_read.unpack(req=read_req)['resp']
-      read_resp_for_out, read_resp_write_trigger = read_resp.fork(clk, rst)
-      output_chan.assign(read_resp_for_out.transform(lambda d: d.data))
+          }), read_req_valid)
+      read_req_xact = NamedWire(read_req_valid & read_req_ready,
+                                "read_req_xact")
+      read_req_accept.assign(read_req_xact)
 
-      # Issue the completion write request once the data has been read.
+      # Buffer the read response locally so forwarding the data and issuing the
+      # completion write do not both need the shared HostMem write path in the
+      # same cycle.
+      read_resp = ports.hostmem_read.unpack(req=read_req)['resp']
+      output_ready = Wire(Bits(1), name="output_ready")
+      output_valid_reset = Wire(Bits(1), name="output_valid_reset")
+      read_resp_ready = Wire(Bits(1), name="read_resp_ready")
+      read_resp_msg, read_resp_valid = read_resp.unwrap(read_resp_ready)
+      read_resp_xact = NamedWire(read_resp_valid & read_resp_ready,
+                                 "read_resp_xact")
+      output_valid = ControlReg(
+          clk=clk,
+          rst=rst,
+          asserts=[read_resp_xact],
+          resets=[output_valid_reset],
+          name="output_valid",
+      )
+      output_data = read_resp_msg.data.reg(clk=clk,
+                                           rst=rst,
+                                           ce=read_resp_xact,
+                                           name="output_data")
+      output_buf_ready.assign((~output_valid | output_ready).as_bits())
+      read_resp_ready.assign(output_buf_ready)
+      output_valid_reset.assign(output_valid & output_ready)
+      output_buf_chan, output_chan_ready = Channel(client_type).wrap(
+          output_data, output_valid)
+      output_chan.assign(output_buf_chan)
+      output_ready.assign(output_chan_ready)
+
+      # Once the data has been read into the local buffer, issue the completion
+      # write independently of when the downstream consumer accepts that data.
+      completion_pending_reset = Wire(Bits(1), name="completion_pending_reset")
+      completion_pending = ControlReg(
+          clk=clk,
+          rst=rst,
+          asserts=[read_resp_xact],
+          resets=[completion_pending_reset],
+          name="completion_pending",
+      )
+
       write_ch_type = esi.HostMem.write_req_channel_type(
           OneItemBuffersFromHost.xfer_data_type)
-      completion_write = Channel.join(completion_loc.output,
-                                      read_resp_write_trigger)
-      write_done_chan = completion_write.transform(lambda m: write_ch_type({
-          "address": m.a.as_uint(),
-          "tag": 0,
-          "data": Bits(8)(1)
-      }))
+      completion_loc_ready = Wire(Bits(1), name="completion_loc_ready")
+      completion_loc_data, completion_loc_valid = completion_loc.output.unwrap(
+          completion_loc_ready)
+      completion_write_valid = NamedWire(
+          completion_loc_valid & completion_pending, "completion_write_valid")
+      write_done_chan, completion_write_ready = Channel(write_ch_type).wrap(
+          write_ch_type({
+              "address": completion_loc_data.as_uint(),
+              "tag": 0,
+              "data": Bits(8)(1)
+          }), completion_write_valid)
+      completion_write_xact = NamedWire(
+          completion_write_valid & completion_write_ready,
+          "completion_write_xact")
+      completion_loc_ready.assign(completion_write_xact)
+      completion_pending_reset.assign(completion_write_xact)
 
       # Unpack the write port, but ignore the write confirmation.
       ports.hostmem_write.unpack(req=write_done_chan)

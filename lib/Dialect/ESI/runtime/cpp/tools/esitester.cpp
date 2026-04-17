@@ -1893,6 +1893,10 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
 
   argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
   resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+  // The serial window reply is emitted as many raw frames. This test writes
+  // all request batches before draining the result stream, so the default
+  // polling queue depth can fill up and backpressure the DMA engine.
+  resultPort.setMaxDataQueueMsgs(0);
 
   size_t sent = 0;
   while (sent < numCoords) {
