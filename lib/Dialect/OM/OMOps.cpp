@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/OM/OMOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/OM/OMOpInterfaces.h"
 #include "circt/Dialect/OM/OMUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -640,6 +641,39 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// IntegerBinaryArithmeticOp
+//===----------------------------------------------------------------------===//
+
+static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryArithmeticOp op,
+                                                Attribute lhsAttr,
+                                                Attribute rhsAttr) {
+  auto lhs = dyn_cast_or_null<circt::om::IntegerAttr>(lhsAttr);
+  auto rhs = dyn_cast_or_null<circt::om::IntegerAttr>(rhsAttr);
+  if (!lhs || !rhs)
+    return {};
+  // Extend values if necessary to match bitwidth. Most interesting arithmetic
+  // on APSInt asserts that both operands are the same bitwidth, but the
+  // IntegerAttrs we are working with may have used the smallest necessary
+  // bitwidth to represent the number they hold, and won't necessarily match.
+  APSInt lhsVal = lhs.getValue().getAPSInt();
+  APSInt rhsVal = rhs.getValue().getAPSInt();
+  if (lhsVal.getBitWidth() > rhsVal.getBitWidth())
+    rhsVal = rhsVal.extend(lhsVal.getBitWidth());
+  else if (rhsVal.getBitWidth() > lhsVal.getBitWidth())
+    lhsVal = lhsVal.extend(rhsVal.getBitWidth());
+
+  // Perform arbitrary precision signed integer binary arithmetic.
+  auto result = op.evaluateIntegerOperation(lhsVal, rhsVal);
+  if (failed(result))
+    return {};
+
+  auto *ctx = op.getContext();
+  // Return the result as a new om::IntegerAttr.
+  return circt::om::IntegerAttr::get(
+      ctx, mlir::IntegerAttr::get(ctx, result.value()));
+}
+
+//===----------------------------------------------------------------------===//
 // IntegerAddOp
 //===----------------------------------------------------------------------===//
 
@@ -647,6 +681,10 @@ FailureOr<llvm::APSInt>
 IntegerAddOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
                                        const llvm::APSInt &rhs) {
   return success(lhs + rhs);
+}
+
+OpFoldResult IntegerAddOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(*this, adaptor.getLhs(), adaptor.getRhs());
 }
 
 //===----------------------------------------------------------------------===//
@@ -657,6 +695,10 @@ FailureOr<llvm::APSInt>
 IntegerMulOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
                                        const llvm::APSInt &rhs) {
   return success(lhs * rhs);
+}
+
+OpFoldResult IntegerMulOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(*this, adaptor.getLhs(), adaptor.getRhs());
 }
 
 //===----------------------------------------------------------------------===//
@@ -675,6 +717,10 @@ IntegerShrOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
   return success(lhs >> rhs.getExtValue());
 }
 
+OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(*this, adaptor.getLhs(), adaptor.getRhs());
+}
+
 //===----------------------------------------------------------------------===//
 // IntegerShlOp
 //===----------------------------------------------------------------------===//
@@ -691,14 +737,22 @@ IntegerShlOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
   return success(lhs << rhs.getExtValue());
 }
 
+OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(*this, adaptor.getLhs(), adaptor.getRhs());
+}
+
 //===----------------------------------------------------------------------===//
 // StringConcatOp
 //===----------------------------------------------------------------------===//
 
 OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
   // Fold single-operand concat to just the operand.
-  if (getStrings().size() == 1)
+  if (getStrings().size() == 1) {
+    if (auto strAttr = adaptor.getStrings()[0])
+      return strAttr;
+
     return getStrings()[0];
+  }
 
   // Check if all operands are constant strings before accumulating.
   if (!llvm::all_of(adaptor.getStrings(), [](Attribute operand) {

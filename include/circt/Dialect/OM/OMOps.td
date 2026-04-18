@@ -460,6 +460,7 @@ class IntegerBinaryArithmeticOp<string mnemonic, list<Trait> traits = []> :
   let results = (outs OMIntegerType:$result);
 
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
+  let hasFolder = 1;
 }
 
 def IntegerAddOp : IntegerBinaryArithmeticOp<"integer.add", [Commutative]> {

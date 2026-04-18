@@ -23,7 +23,7 @@ func.func @ObjectsMustDCE() {
   return
 }
 
-om.class @StringConcatCanonicalization(%str1: !om.string, %str2: !om.string) -> (out1: !om.string, out2: !om.string, out3: !om.string, out4: !om.string, out5: !om.string, out6: !om.string, out7: !om.string) {
+om.class @StringConcatCanonicalization(%str1: !om.string, %str2: !om.string) -> (out1: !om.string, out2: !om.string, out3: !om.string, out4: !om.string, out5: !om.string, out6: !om.string, out7: !om.string, out8: !om.string) {
   %s1 = om.constant "Hello" : !om.string
   %s2 = om.constant "World" : !om.string
   %s3 = om.constant "!" : !om.string
@@ -43,6 +43,9 @@ om.class @StringConcatCanonicalization(%str1: !om.string, %str2: !om.string) -> 
   // Single operand replaced with operand
   %2 = om.string.concat %s1 : !om.string
 
+  // Single constant operand folds to the attribute.
+  %singleConst = om.string.concat %s3 : !om.string
+
   // Empty concat
   %3 = om.string.concat %empty, %empty : !om.string
 
@@ -57,8 +60,40 @@ om.class @StringConcatCanonicalization(%str1: !om.string, %str2: !om.string) -> 
   %nested = om.string.concat %str1, %str2 : !om.string
   %concat1 = om.string.concat %nested, %s3 : !om.string
 
-  // CHECK: om.class.fields [[HELLOWORLD]], [[HELLO]], [[HELLO]], [[EMPTY]], [[HELLOWORLD]], [[CONCAT1]], [[NESTED]]
-  om.class.fields %0, %1, %2, %3, %5, %concat1, %nested : !om.string, !om.string, !om.string, !om.string, !om.string, !om.string, !om.string
+  // CHECK: om.class.fields [[HELLOWORLD]], [[HELLO]], [[HELLO]], [[CONST]], [[EMPTY]], [[HELLOWORLD]], [[CONCAT1]], [[NESTED]]
+  om.class.fields %0, %1, %2, %singleConst, %3, %5, %concat1, %nested : !om.string, !om.string, !om.string, !om.string, !om.string, !om.string, !om.string, !om.string
+}
+
+// CHECK-LABEL: @IntegerBinaryArithmeticFold
+om.class @IntegerBinaryArithmeticFold(%x: !om.integer) -> (out1: !om.integer, out2: !om.integer,
+                                                           out3: !om.integer, out4: !om.integer,
+                                                           out5: !om.integer, out6: !om.integer) {
+  %i3 = om.constant #om.integer<3 : si4> : !om.integer
+  %i4 = om.constant #om.integer<4 : si4> : !om.integer
+  %i2 = om.constant #om.integer<2 : si4> : !om.integer
+  %neg1 = om.constant #om.integer<-1 : si4> : !om.integer
+  %i1 = om.constant #om.integer<1 : si4> : !om.integer
+  %wide = om.constant #om.integer<7 : si6> : !om.integer
+
+  // CHECK-DAG: [[ADD:%.+]] = om.constant #om.integer<7 : si4> : !om.integer
+  // CHECK-DAG: [[MUL:%.+]] = om.constant #om.integer<-4 : si4> : !om.integer
+  // CHECK-DAG: [[SHR:%.+]] = om.constant #om.integer<1 : si4> : !om.integer
+  // CHECK-DAG: [[SHL:%.+]] = om.constant #om.integer<-2 : si4> : !om.integer
+  // CHECK-DAG: [[WIDEADD:%.+]] = om.constant #om.integer<9 : si6> : !om.integer
+  // CHECK: [[DYN:%.+]] = om.integer.add %x, %{{.+}} : !om.integer
+  %0 = om.integer.add %i3, %i4 : !om.integer
+  %1 = om.integer.mul %i3, %i4 : !om.integer
+  %2 = om.integer.shr %i4, %i2 : !om.integer
+  %3 = om.integer.shl %neg1, %i1 : !om.integer
+
+  // Mixed bit widths should still fold after extending operands.
+  %4 = om.integer.add %i2, %wide : !om.integer
+
+  // Non-constant operands should remain.
+  %5 = om.integer.add %x, %i1 : !om.integer
+
+  // CHECK: om.class.fields [[ADD]], [[MUL]], [[SHR]], [[SHL]], [[WIDEADD]], [[DYN]]
+  om.class.fields %0, %1, %2, %3, %4, %5 : !om.integer, !om.integer, !om.integer, !om.integer, !om.integer, !om.integer
 }
 
 // CHECK-LABEL: @PropEqFold
