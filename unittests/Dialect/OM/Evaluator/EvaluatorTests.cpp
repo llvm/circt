@@ -798,7 +798,7 @@ om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
       ASSERT_EQ(diag.str(),
                 "'om.integer.shr' op shift amount must be non-negative");
     if (StringRef(diag.str()).starts_with("failed"))
-      ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
+      ASSERT_EQ(diag.str(), "failed to evaluate operation");
   });
 
   OwningOpRef<ModuleOp> owning =
@@ -834,7 +834,7 @@ om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
           diag.str(),
           "'om.integer.shr' op shift amount must be representable in 64 bits");
     if (StringRef(diag.str()).starts_with("failed"))
-      ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
+      ASSERT_EQ(diag.str(), "failed to evaluate operation");
   });
 
   OwningOpRef<ModuleOp> owning =
@@ -905,7 +905,7 @@ om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
       ASSERT_EQ(diag.str(),
                 "'om.integer.shl' op shift amount must be non-negative");
     if (StringRef(diag.str()).starts_with("failed"))
-      ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
+      ASSERT_EQ(diag.str(), "failed to evaluate operation");
   });
 
   OwningOpRef<ModuleOp> owning =
@@ -941,7 +941,7 @@ om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
           diag.str(),
           "'om.integer.shl' op shift amount must be representable in 64 bits");
     if (StringRef(diag.str()).starts_with("failed"))
-      ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
+      ASSERT_EQ(diag.str(), "failed to evaluate operation");
   });
 
   OwningOpRef<ModuleOp> owning =
@@ -1759,6 +1759,41 @@ module {
             llvm::cast<evaluator::AttributeValue>(fieldValue.get())
                 ->getAs<StringAttr>()
                 .getValue());
+}
+
+TEST(EvaluatorTests, StringConcatSingleOperand) {
+  const char *mod = R"MLIR(
+module {
+  om.class @Test() -> (result: !om.string) {
+    %0 = om.constant "Hello" : !om.string
+    %1 = om.string.concat %0 : !om.string
+    om.class.fields %1 : !om.string
+  }
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Test"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  ASSERT_EQ("Hello", llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                         ->getAs<StringAttr>()
+                         .getValue());
 }
 
 TEST(EvaluatorTests, UnknownObjectFieldTest) {

@@ -1,5 +1,6 @@
 add_circt_library(CIRCTOMEvaluator
   Evaluator.cpp
+  EvaluatorPatterns.cpp
 
   DEPENDS
   MLIROMIncGen

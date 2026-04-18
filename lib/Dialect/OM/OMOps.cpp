@@ -643,10 +643,38 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 // IntegerAddOp
 //===----------------------------------------------------------------------===//
 
+template <typename OpT>
+static OpFoldResult
+foldIntegerBinaryArithmetic(OpT op, typename OpT::FoldAdaptor adaptor) {
+  auto lhs = dyn_cast_or_null<circt::om::IntegerAttr>(adaptor.getLhs());
+  auto rhs = dyn_cast_or_null<circt::om::IntegerAttr>(adaptor.getRhs());
+  if (!lhs || !rhs)
+    return {};
+
+  APSInt lhsVal = lhs.getValue().getAPSInt();
+  APSInt rhsVal = rhs.getValue().getAPSInt();
+  if (lhsVal.getBitWidth() > rhsVal.getBitWidth())
+    rhsVal = rhsVal.extend(lhsVal.getBitWidth());
+  else if (rhsVal.getBitWidth() > lhsVal.getBitWidth())
+    lhsVal = lhsVal.extend(rhsVal.getBitWidth());
+
+  auto result = op.evaluateIntegerOperation(lhsVal, rhsVal);
+  if (failed(result))
+    return {};
+
+  auto *ctx = op.getContext();
+  return circt::om::IntegerAttr::get(
+      ctx, mlir::IntegerAttr::get(ctx, result.value()));
+}
+
 FailureOr<llvm::APSInt>
 IntegerAddOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
                                        const llvm::APSInt &rhs) {
   return success(lhs + rhs);
+}
+
+OpFoldResult IntegerAddOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(*this, adaptor);
 }
 
 //===----------------------------------------------------------------------===//
@@ -657,6 +685,10 @@ FailureOr<llvm::APSInt>
 IntegerMulOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
                                        const llvm::APSInt &rhs) {
   return success(lhs * rhs);
+}
+
+OpFoldResult IntegerMulOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(*this, adaptor);
 }
 
 //===----------------------------------------------------------------------===//
@@ -675,6 +707,10 @@ IntegerShrOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
   return success(lhs >> rhs.getExtValue());
 }
 
+OpFoldResult IntegerShrOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(*this, adaptor);
+}
+
 //===----------------------------------------------------------------------===//
 // IntegerShlOp
 //===----------------------------------------------------------------------===//
@@ -691,14 +727,22 @@ IntegerShlOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
   return success(lhs << rhs.getExtValue());
 }
 
+OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
+  return foldIntegerBinaryArithmetic(*this, adaptor);
+}
+
 //===----------------------------------------------------------------------===//
 // StringConcatOp
 //===----------------------------------------------------------------------===//
 
 OpFoldResult StringConcatOp::fold(FoldAdaptor adaptor) {
   // Fold single-operand concat to just the operand.
-  if (getStrings().size() == 1)
+  if (getStrings().size() == 1) {
+    if (auto strAttr = adaptor.getStrings()[0])
+      return strAttr;
+
     return getStrings()[0];
+  }
 
   // Check if all operands are constant strings before accumulating.
   if (!llvm::all_of(adaptor.getStrings(), [](Attribute operand) {
