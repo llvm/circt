@@ -37,6 +37,36 @@ class EvaluatorValue;
 /// primitive Attribute. Further refinement is expected.
 using EvaluatorValuePtr = std::shared_ptr<EvaluatorValue>;
 
+/// The evaluation state of a value handle.
+enum class ResolutionState {
+  /// The handle can be used now. For references, this means the whole
+  /// reference chain leads to a fully evaluated value.
+  Ready,
+  /// Evaluation is not done yet. The handle itself may still be partial, or a
+  /// reference in the chain may still be missing.
+  Pending,
+  /// Evaluation hit a hard error, such as a reference cycle.
+  Failure
+};
+
+struct ResolvedValue {
+  /// `state` says whether `value` can be used. `value` keeps the original
+  /// handle so callers can keep passing it around even when it is still pending
+  /// or has already failed.
+  ResolutionState state;
+  EvaluatorValuePtr value;
+
+  static ResolvedValue ready(EvaluatorValuePtr value) {
+    return {ResolutionState::Ready, std::move(value)};
+  }
+  static ResolvedValue pending(EvaluatorValuePtr value = nullptr) {
+    return {ResolutionState::Pending, std::move(value)};
+  }
+  static ResolvedValue failure(EvaluatorValuePtr value = nullptr) {
+    return {ResolutionState::Failure, std::move(value)};
+  }
+};
+
 /// The fields of a composite Object, currently represented as a map. Further
 /// refinement is expected.
 using ObjectFields = SmallDenseMap<StringAttr, EvaluatorValuePtr>;
@@ -54,7 +84,9 @@ public:
   Kind getKind() const { return kind; }
   MLIRContext *getContext() const { return ctx; }
 
-  // Return true the value is fully evaluated.
+  // Return true if this value object has finished its own local work.
+  // This is not the same as semantic Ready/Pending state: for example, a
+  // ReferenceValue can be fully evaluated but still point to a pending value.
   // Unknown values are considered fully evaluated.
   bool isFullyEvaluated() const { return fullyEvaluated; }
   void markFullyEvaluated() {
@@ -130,17 +162,7 @@ public:
   LogicalResult finalizeImpl();
 
   // Return the first non-reference value that is reachable from the reference.
-  FailureOr<EvaluatorValuePtr> getStrippedValue() const {
-    llvm::SmallPtrSet<ReferenceValue *, 4> visited;
-    auto currentValue = value;
-    while (auto *v = dyn_cast<ReferenceValue>(currentValue.get())) {
-      // Detect a cycle.
-      if (!visited.insert(v).second)
-        return failure();
-      currentValue = v->getValue();
-    }
-    return success(currentValue);
-  }
+  FailureOr<EvaluatorValuePtr> getStrippedValue() const;
 
 private:
   EvaluatorValuePtr value;
@@ -410,53 +432,25 @@ private:
   /// Evaluate a Value in a Class body according to the small expression grammar
   /// described in the rationale document. The actual parameters are the values
   /// supplied at the current instantiation of the Class being evaluated.
-  FailureOr<EvaluatorValuePtr>
+  evaluator::ResolvedValue
   evaluateValue(Value value, ActualParameters actualParams, Location loc);
 
   /// Evaluator dispatch functions for the small expression grammar.
-  FailureOr<EvaluatorValuePtr> evaluateParameter(BlockArgument formalParam,
-                                                 ActualParameters actualParams,
-                                                 Location loc);
-
-  FailureOr<EvaluatorValuePtr>
-  evaluateConstant(ConstantOp op, ActualParameters actualParams, Location loc);
-
-  FailureOr<EvaluatorValuePtr>
-  evaluateIntegerBinaryArithmetic(IntegerBinaryArithmeticOp op,
-                                  ActualParameters actualParams, Location loc);
+  evaluator::ResolvedValue evaluateParameter(BlockArgument formalParam,
+                                             ActualParameters actualParams,
+                                             Location loc);
 
   /// Instantiate an Object with its class name and actual parameters.
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
                          Location loc, ObjectKey instanceKey = {});
-  FailureOr<EvaluatorValuePtr>
+  evaluator::ResolvedValue
   evaluateObjectInstance(ObjectOp op, ActualParameters actualParams);
-  FailureOr<EvaluatorValuePtr>
-  evaluateObjectField(ObjectFieldOp op, ActualParameters actualParams,
-                      Location loc);
-  FailureOr<EvaluatorValuePtr> evaluateListCreate(ListCreateOp op,
-                                                  ActualParameters actualParams,
-                                                  Location loc);
-  FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
-                                                  ActualParameters actualParams,
-                                                  Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateStringConcat(StringConcatOp op, ActualParameters actualParams,
-                       Location loc);
-  FailureOr<EvaluatorValuePtr>
-  evaluateBinaryEquality(BinaryEqualityOp op, ActualParameters actualParams,
-                         Location loc);
-  FailureOr<evaluator::EvaluatorValuePtr>
-  evaluateBasePathCreate(FrozenBasePathCreateOp op,
-                         ActualParameters actualParams, Location loc);
-  FailureOr<evaluator::EvaluatorValuePtr>
-  evaluatePathCreate(FrozenPathCreateOp op, ActualParameters actualParams,
-                     Location loc);
-  FailureOr<evaluator::EvaluatorValuePtr>
-  evaluateEmptyPath(FrozenEmptyPathOp op, ActualParameters actualParams,
-                    Location loc);
-  FailureOr<evaluator::EvaluatorValuePtr>
-  evaluateUnknownValue(UnknownValueOp op, Location loc);
+  evaluator::ResolvedValue evaluateObjectField(ObjectFieldOp op,
+                                               ActualParameters actualParams,
+                                               Location loc);
+  evaluator::ResolvedValue evaluateUnknownValue(UnknownValueOp op,
+                                                Location loc);
 
   LogicalResult evaluatePropertyAssert(PropertyAssertOp op,
                                        ActualParameters actualParams);
@@ -483,6 +477,10 @@ private:
   /// Evaluator value storage. Return an evaluator value for the given
   /// instantiation context (a pair of Value and parameters).
   DenseMap<ObjectKey, std::shared_ptr<evaluator::EvaluatorValue>> objects;
+
+  /// Tracks object instantiations currently being evaluated so recursive
+  /// object graphs reuse the existing placeholder instead of recursing.
+  llvm::SmallDenseSet<ObjectKey, 8> activeObjectInstances;
 };
 
 /// Helper to enable printing objects in Diagnostics.
