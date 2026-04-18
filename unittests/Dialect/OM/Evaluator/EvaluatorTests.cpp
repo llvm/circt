@@ -1836,6 +1836,25 @@ om.class @SubfieldFalse() -> () {
   om.property_assert %false, "input must be true true" : i1
   om.class.fields
 }
+
+// Test 11: Test that asserts that need values to flow through objects work.
+// This was originally a bug where asserts were evaluated too early.
+//
+// See: https://github.com/llvm/circt/issues/10264
+om.class @Domain(%in: !om.string) -> (out: !om.string) {
+  om.class.fields %in : !om.string
+}
+om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
+  %0 = om.constant "A" : !om.string
+  %1 = om.object @Domain(%0) : (!om.string) -> !om.class.type<@Domain>
+  %2 = om.object.field %1, [@out] : (!om.class.type<@Domain>) -> !om.string
+  %3 = om.object @Domain(%2) : (!om.string) -> !om.class.type<@Domain>
+  %4 = om.object.field %3, [@out] : (!om.class.type<@Domain>) -> !om.string
+  %5 = om.constant "B" : !om.string
+  %6 = om.prop.eq %4, %5 : !om.string
+  om.property_assert %6, "hello" : i1
+  om.class.fields
+}
 )MLIR";
 
   DialectRegistry registry;
@@ -1878,6 +1897,13 @@ om.class @SubfieldFalse() -> () {
 
   ASSERT_TRUE(failed(
       evaluator.instantiate(StringAttr::get(&context, "SubfieldFalse"), {})));
+
+  // Test 11: Two asserts on a value flowing through chained object instances.
+  // Both assertions fail; the evaluator must drain the worklist before
+  // evaluating either assert (i.e. the fix for the null-ReferenceValue crash).
+  auto basepath = std::make_shared<evaluator::BasePathValue>(&context);
+  ASSERT_TRUE(failed(evaluator.instantiate(
+      StringAttr::get(&context, "ChainedDomainAssert"), {basepath})));
 }
 
 TEST(EvaluatorTests, PropEqTests) {

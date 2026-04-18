@@ -481,6 +481,13 @@ private:
   /// A worklist that tracks values which needs to be fully evaluated.
   std::queue<ObjectKey> worklist;
 
+  /// A queue of pending property assertions to be evaluated after the worklist
+  /// is fully drained. Each entry is a (PropertyAssertOp, ActualParameters)
+  /// pair. Property assertions are deferred because their operands may be
+  /// ReferenceValues that are not yet resolved when the class body is first
+  /// processed.
+  std::queue<std::pair<PropertyAssertOp, ActualParameters>> pendingAsserts;
+
   /// Evaluator value storage. Return an evaluator value for the given
   /// instantiation context (a pair of Value and parameters).
   DenseMap<ObjectKey, std::shared_ptr<evaluator::EvaluatorValue>> objects;

@@ -308,11 +308,13 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     fields[cast<StringAttr>(name)] = result.value();
   }
 
-  // Evaluate property assertions.
-  LLVM_DEBUG(dbgs() << "asserts:\n");
-  for (auto assertOp : cls.getOps<PropertyAssertOp>())
-    if (failed(evaluatePropertyAssert(assertOp, actualParams)))
-      return failure();
+  // Defer property assertions until after the worklist is drained, so that
+  // all ReferenceValues are fully resolved before we try to inspect them.
+  LLVM_DEBUG(dbgs() << "queuing asserts:\n");
+  for (auto assertOp : cls.getOps<PropertyAssertOp>()) {
+    LLVM_DEBUG(dbgs(1) << "- " << assertOp << "\n");
+    pendingAsserts.push({assertOp, actualParams});
+  }
 
   // If the there is an instance, we must update the object value.
   LLVM_DEBUG(dbgs() << "object value:\n");
@@ -391,6 +393,18 @@ circt::om::Evaluator::instantiate(
     if (!result.value()->isFullyEvaluated())
       worklist.push({value, args});
   }
+
+  // Now that all values are fully resolved, evaluate the deferred property
+  // assertions.
+  LLVM_DEBUG(dbgs() << "asserts:\n");
+  bool assertFailed = false;
+  while (!pendingAsserts.empty()) {
+    auto [assertOp, assertParams] = pendingAsserts.front();
+    pendingAsserts.pop();
+    assertFailed |= failed(evaluatePropertyAssert(assertOp, assertParams));
+  }
+  if (assertFailed)
+    return failure();
 
   auto &object = result.value();
   // Finalize the value. This will eliminate intermidiate ReferenceValue used as
