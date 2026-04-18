@@ -100,6 +100,8 @@ circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
 
 FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
     Value value, ActualParameters actualParams, Location loc) {
+  LLVM_DEBUG(dbgs() << "- get: " << value << "\n");
+
   auto it = objects.find({value, actualParams});
   if (it != objects.end()) {
     auto evalVal = it->second;
@@ -193,6 +195,15 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
                                              ActualParameters actualParams,
                                              Location loc,
                                              ObjectKey instanceKey) {
+#ifndef NDEBUG
+  DebugNesting nestOne(debugNesting);
+#endif
+  LLVM_DEBUG(dbgs() << "object:\n");
+#ifndef NDEBUG
+  DebugNesting nestTwo(debugNesting);
+#endif
+  LLVM_DEBUG(dbgs() << "name: " << className << "\n");
+
   auto classDef = symbolTable.lookup<ClassLike>(className);
   if (!classDef)
     return symbolTable.getOp()->emitError("unknown class name ") << className;
@@ -202,6 +213,7 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     evaluator::EvaluatorValuePtr result =
         std::make_shared<evaluator::ObjectValue>(classDef, loc);
     result->markUnknown();
+    LLVM_DEBUG(dbgs(1) << "extern: <unknown-value>\n");
     return result;
   }
 
@@ -258,37 +270,52 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
   evaluator::ObjectFields fields;
 
   auto *context = cls.getContext();
-  for (auto &op : cls.getOps())
-    for (auto result : op.getResults()) {
-      // Allocate the value, with unknown loc. It will be later set when
-      // evaluating the fields.
-      if (failed(
-              getOrCreateValue(result, actualParams, UnknownLoc::get(context))))
-        return failure();
-      // Add to the worklist.
-      worklist.push({result, actualParams});
-    }
+  {
+    LLVM_DEBUG(dbgs() << "ops:\n");
+#ifndef NDEBUG
+    DebugNesting nestOne(debugNesting);
+#endif
+    for (auto &op : cls.getOps())
+      for (auto result : op.getResults()) {
+        // Allocate the value, with unknown loc. It will be later set when
+        // evaluating the fields.
+        if (failed(getOrCreateValue(result, actualParams,
+                                    UnknownLoc::get(context))))
+          return failure();
+        // Add to the worklist.
+        worklist.push({result, actualParams});
+      }
+  }
 
+  LLVM_DEBUG(dbgs() << "fields:\n");
   auto fieldNames = cls.getFieldNames();
   auto operands = cls.getFieldsOp()->getOperands();
   for (size_t i = 0; i < fieldNames.size(); ++i) {
     auto name = fieldNames[i];
     auto value = operands[i];
     auto fieldLoc = cls.getFieldLocByIndex(i);
+    LLVM_DEBUG(dbgs() << "- name: " << name << "\n"
+                      << indent(1) << "evaluate:\n");
+#ifndef NDEBUG
+    DebugNesting nestOne(debugNesting);
+#endif
     FailureOr<evaluator::EvaluatorValuePtr> result =
         evaluateValue(value, actualParams, fieldLoc);
     if (failed(result))
       return result;
 
+    LLVM_DEBUG(dbgs() << "value: " << result.value() << "\n");
     fields[cast<StringAttr>(name)] = result.value();
   }
 
   // Evaluate property assertions.
+  LLVM_DEBUG(dbgs() << "asserts:\n");
   for (auto assertOp : cls.getOps<PropertyAssertOp>())
     if (failed(evaluatePropertyAssert(assertOp, actualParams)))
       return failure();
 
   // If the there is an instance, we must update the object value.
+  LLVM_DEBUG(dbgs() << "object value:\n");
   if (instanceKey.first) {
     auto result =
         getOrCreateValue(instanceKey.first, instanceKey.second, loc).value();
@@ -307,6 +334,16 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
 FailureOr<std::shared_ptr<evaluator::EvaluatorValue>>
 circt::om::Evaluator::instantiate(
     StringAttr className, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
+  LLVM_DEBUG(dbgs() << "instantiate:\n");
+#ifndef NDEBUG
+  DebugNesting nest(debugNesting);
+#endif
+  LLVM_DEBUG({
+    dbgs() << "class: " << className << "\n" << indent() << "params:\n";
+    for (auto &param : actualParams)
+      dbgs() << "- " << param << "\n";
+  });
+
   auto classDef = symbolTable.lookup<ClassLike>(className);
   if (!classDef)
     return symbolTable.getOp()->emitError("unknown class name ") << className;
@@ -317,6 +354,7 @@ circt::om::Evaluator::instantiate(
         std::make_shared<evaluator::ObjectValue>(
             classDef, UnknownLoc::get(classDef.getContext()));
     result->markUnknown();
+    LLVM_DEBUG(dbgs(1) << "result: <unknown extern>\n");
     return result;
   }
 
@@ -330,6 +368,7 @@ circt::om::Evaluator::instantiate(
   actualParametersBuffers.push_back(std::move(parameters));
 
   auto loc = cls.getLoc();
+  LLVM_DEBUG(dbgs() << "evaluate object:\n");
   auto result = evaluateObjectInstance(
       className, actualParametersBuffers.back().get(), loc);
 
@@ -338,6 +377,7 @@ circt::om::Evaluator::instantiate(
 
   // `evaluateObjectInstance` has populated the worklist. Continue evaluations
   // unless there is a partially evaluated value.
+  LLVM_DEBUG(dbgs() << "worklist:\n");
   while (!worklist.empty()) {
     auto [value, args] = worklist.front();
     worklist.pop();
@@ -355,9 +395,11 @@ circt::om::Evaluator::instantiate(
   auto &object = result.value();
   // Finalize the value. This will eliminate intermidiate ReferenceValue used as
   // a placeholder in the initialization.
+  LLVM_DEBUG(dbgs() << "finalizing\n");
   if (failed(object->finalize()))
     return cls.emitError() << "failed to finalize evaluation. Probably the "
                               "class contains a dataflow cycle";
+  LLVM_DEBUG(dbgs() << "result: " << object << "\n");
   return object;
 }
 
@@ -366,9 +408,13 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
                                     Location loc) {
   auto evaluatorValue = getOrCreateValue(value, actualParams, loc).value();
 
+  LLVM_DEBUG(dbgs() << "- eval: " << value << "\n");
+
   // Return if the value is already evaluated.
-  if (evaluatorValue->isFullyEvaluated())
+  if (evaluatorValue->isFullyEvaluated()) {
+    LLVM_DEBUG(dbgs(1) << "fully evaluated: " << evaluatorValue << "\n");
     return evaluatorValue;
+  }
 
   return llvm::TypeSwitch<Value, FailureOr<evaluator::EvaluatorValuePtr>>(value)
       .Case([&](BlockArgument arg) {
@@ -530,18 +576,28 @@ circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
 LogicalResult
 circt::om::Evaluator::evaluatePropertyAssert(PropertyAssertOp op,
                                              ActualParameters actualParams) {
+#ifndef NDEBUG
+  DebugNesting nest(debugNesting);
+#endif
+
   auto loc = op.getLoc();
 
   // Evaluate the condition, returning early if it isn't ready yet.
+  LLVM_DEBUG(dbgs() << "op: " << op << "\n"
+                    << indent() << "evaluate condition: \n");
   auto condResult = evaluateValue(op.getCondition(), actualParams, loc);
   if (failed(condResult))
     return failure();
-  if (!condResult.value()->isFullyEvaluated())
+  if (!condResult.value()->isFullyEvaluated()) {
+    LLVM_DEBUG(dbgs() << "evaluate condition: <not fully evaluated>\n");
     return success();
+  }
 
   // If the condition is unknown, skip silently (best-effort).
   if (condResult.value()->isUnknown())
     return success();
+
+  LLVM_DEBUG(dbgs() << "condition: " << condResult.value() << "\n");
 
   // Extract the attribute from the condition value, handling the case where
   // the condition resolves through a ReferenceValue (e.g. an ObjectFieldOp or

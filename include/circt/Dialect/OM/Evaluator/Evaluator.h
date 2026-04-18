@@ -23,6 +23,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/Support/Debug.h"
 
 #include <queue>
 #include <utility>
@@ -483,6 +484,26 @@ private:
   /// Evaluator value storage. Return an evaluator value for the given
   /// instantiation context (a pair of Value and parameters).
   DenseMap<ObjectKey, std::shared_ptr<evaluator::EvaluatorValue>> objects;
+
+#ifndef NDEBUG
+  /// Current nesting depth for debug output indentation.
+  unsigned debugNesting = 0;
+
+  /// RAII helper to increment/decrement debugNesting.
+  struct DebugNesting {
+    unsigned &depth;
+    DebugNesting(unsigned &depth) : depth(depth) { ++depth; }
+    ~DebugNesting() { --depth; }
+  };
+
+  raw_ostream &dbgs(unsigned extra = 0) {
+    return llvm::dbgs().indent(debugNesting * 2 + extra * 2);
+  }
+
+  llvm::indent indent(unsigned extra = 0) {
+    return llvm::indent(debugNesting, 2) + extra;
+  }
+#endif
 };
 
 /// Helper to enable printing objects in Diagnostics.
@@ -496,6 +517,9 @@ operator<<(mlir::Diagnostic &diag,
     diag << "Object(" << object->getType() << ")";
   else if (auto *list = llvm::dyn_cast<evaluator::ListValue>(&evaluatorValue))
     diag << "List(" << list->getType() << ")";
+  else if (auto *ref =
+               llvm::dyn_cast<evaluator::ReferenceValue>(&evaluatorValue))
+    diag << "Reference(" << ref->getValueType() << ")";
   else if (llvm::isa<evaluator::BasePathValue>(&evaluatorValue))
     diag << "BasePath()";
   else if (llvm::isa<evaluator::PathValue>(&evaluatorValue))
@@ -514,6 +538,29 @@ static inline mlir::Diagnostic &
 operator<<(mlir::Diagnostic &diag, const EvaluatorValuePtr &evaluatorValue) {
   return diag << *evaluatorValue.get();
 }
+
+#ifndef NDEBUG
+/// Helper to enable printing objects to raw_ostream (e.g., llvm::dbgs()).
+/// Delegates to the Diagnostic overload via an intermediate string.
+static inline llvm::raw_ostream &
+operator<<(llvm::raw_ostream &os,
+           const evaluator::EvaluatorValue &evaluatorValue) {
+  std::string buf;
+  llvm::raw_string_ostream ss(buf);
+  mlir::Diagnostic diag(UnknownLoc::get(evaluatorValue.getContext()),
+                        mlir::DiagnosticSeverity::Note);
+  diag << evaluatorValue;
+  ss << diag;
+  return os << ss.str();
+}
+
+static inline llvm::raw_ostream &
+operator<<(llvm::raw_ostream &os, const EvaluatorValuePtr &evaluatorValue) {
+  if (evaluatorValue)
+    return os << *evaluatorValue.get();
+  return os << "<null>";
+}
+#endif // NDEBUG
 
 } // namespace om
 } // namespace circt
