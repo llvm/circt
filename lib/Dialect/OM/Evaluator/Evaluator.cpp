@@ -62,13 +62,13 @@ resolveReferenceValue(evaluator::EvaluatorValuePtr currentValue) {
 /// Keep the original handle in the result either way.
 static ResolvedValue
 resolveValueState(evaluator::EvaluatorValuePtr currentValue) {
-  if (!currentValue || !currentValue->isFullyEvaluated())
+  if (!currentValue || !currentValue->isSettled())
     return ResolvedValue::pending(std::move(currentValue));
 
   auto resolved = resolveReferenceValue(currentValue);
   if (resolved.state != ResolutionState::Ready)
     return {resolved.state, std::move(currentValue)};
-  if (!resolved.value->isFullyEvaluated())
+  if (!resolved.value->isSettled())
     return ResolvedValue::pending(std::move(currentValue));
 
   return ResolvedValue::ready(std::move(currentValue));
@@ -83,7 +83,7 @@ resolveReadyValue(evaluator::EvaluatorValuePtr value) {
   assert(value);
   auto resolved = resolveReferenceValue(value);
   assert(resolved.state == ResolutionState::Ready);
-  assert(resolved.value && resolved.value->isFullyEvaluated());
+  assert(resolved.value && resolved.value->isSettled());
   return resolved.value.get();
 }
 
@@ -258,7 +258,7 @@ private:
                          evaluator::EvaluatorValuePtr resultValue,
                          llvm::function_ref<ResolvedValue(Value)> evaluateValue,
                          Location loc) const final {
-    if (resultValue && resultValue->isFullyEvaluated())
+    if (resultValue && resultValue->isSettled())
       return resolveValueState(std::move(resultValue));
 
     SmallVector<evaluator::EvaluatorValuePtr, 4> readyOperands;
@@ -516,7 +516,7 @@ protected:
   evaluateTyped(AnyCastOp op, evaluator::EvaluatorValuePtr resultValue,
                 llvm::function_ref<ResolvedValue(Value)> evaluateValue,
                 Location loc) const override {
-    if (resultValue && resultValue->isFullyEvaluated())
+    if (resultValue && resultValue->isSettled())
       return resolveValueState(std::move(resultValue));
     return evaluateValue(op.getInput());
   }
@@ -609,7 +609,7 @@ LogicalResult circt::om::evaluator::EvaluatorValue::finalize() {
     return success();
   // Enable the flag to avoid infinite recursions.
   finalized = true;
-  assert(isFullyEvaluated());
+  assert(isSettled());
   return llvm::TypeSwitch<EvaluatorValue *, LogicalResult>(this)
       .Case<AttributeValue, ObjectValue, ListValue, ReferenceValue,
             BasePathValue, PathValue>([](auto v) { return v->finalizeImpl(); });
@@ -889,7 +889,7 @@ circt::om::Evaluator::instantiate(
     if (result.state == ResolutionState::Failure)
       return failure();
 
-    // It's possible that the value is not fully evaluated.
+    // The value may still be unsettled, so keep it on the worklist.
     if (result.state == ResolutionState::Pending)
       worklist.push({value, args});
   }
@@ -924,7 +924,7 @@ ResolvedValue circt::om::Evaluator::evaluateValue(Value value,
               },
               loc);
 
-        if (evaluatorValue.value()->isFullyEvaluated())
+        if (evaluatorValue.value()->isSettled())
           return resolveValueState(evaluatorValue.value());
 
         return TypeSwitch<Operation *, ResolvedValue>(result.getDefiningOp())
@@ -1013,11 +1013,11 @@ circt::om::Evaluator::evaluateObjectInstance(ObjectOp op,
                                              ActualParameters actualParams) {
   auto loc = op.getLoc();
   auto key = ObjectKey{op, actualParams};
-  // Check if the instance is already fully evaluated or being evaluated. This
+  // Check if the instance is already settled or being evaluated. This
   // can happen when there is a cycle in the object graph. In this case we
   // should not attempt to evaluate the instance again, but just return the
   // current state of the value, which might be pending or unknown.
-  if (isFullyEvaluated(key) || !activeObjectInstances.insert(key).second)
+  if (isSettled(key) || !activeObjectInstances.insert(key).second)
     return resolveValueState(getOrCreateValue(op, actualParams, loc).value());
   auto clearActiveObject =
       llvm::scope_exit([&] { activeObjectInstances.erase(key); });
@@ -1069,7 +1069,7 @@ ResolvedValue circt::om::Evaluator::evaluateObjectField(
   auto fieldPath = op.getFieldPath().getAsRange<FlatSymbolRefAttr>();
   for (auto it = fieldPath.begin(), end = fieldPath.end(); it != end; ++it) {
     auto field = *it;
-    // `currentObject` might no be fully evaluated.
+    // `currentObject` might not be settled yet.
     if (!currentObject->getFields().contains(field.getAttr()))
       return ResolvedValue::pending(objectFieldValue);
 
@@ -1241,24 +1241,24 @@ LogicalResult circt::om::evaluator::ListValue::finalizeImpl() {
 evaluator::BasePathValue::BasePathValue(MLIRContext *context)
     : EvaluatorValue(context, Kind::BasePath, UnknownLoc::get(context)),
       path(PathAttr::get(context, {})) {
-  markFullyEvaluated();
+  markSettled();
 }
 
 evaluator::BasePathValue::BasePathValue(PathAttr path, Location loc)
     : EvaluatorValue(path.getContext(), Kind::BasePath, loc), path(path) {}
 
 PathAttr evaluator::BasePathValue::getPath() const {
-  assert(isFullyEvaluated());
+  assert(isSettled());
   return path;
 }
 
 void evaluator::BasePathValue::setBasepath(const BasePathValue &basepath) {
-  assert(!isFullyEvaluated());
+  assert(!isSettled());
   auto newPath = llvm::to_vector(basepath.path.getPath());
   auto oldPath = path.getPath();
   newPath.append(oldPath.begin(), oldPath.end());
   path = PathAttr::get(path.getContext(), newPath);
-  markFullyEvaluated();
+  markSettled();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1273,7 +1273,7 @@ evaluator::PathValue::PathValue(TargetKindAttr targetKind, PathAttr path,
 
 evaluator::PathValue evaluator::PathValue::getEmptyPath(Location loc) {
   PathValue path(nullptr, nullptr, nullptr, nullptr, nullptr, loc);
-  path.markFullyEvaluated();
+  path.markSettled();
   return path;
 }
 
@@ -1323,12 +1323,12 @@ StringAttr evaluator::PathValue::getAsString() const {
 }
 
 void evaluator::PathValue::setBasepath(const BasePathValue &basepath) {
-  assert(!isFullyEvaluated());
+  assert(!isSettled());
   auto newPath = llvm::to_vector(basepath.getPath().getPath());
   auto oldPath = path.getPath();
   newPath.append(oldPath.begin(), oldPath.end());
   path = PathAttr::get(path.getContext(), newPath);
-  markFullyEvaluated();
+  markSettled();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1339,19 +1339,18 @@ LogicalResult circt::om::evaluator::AttributeValue::setAttr(Attribute attr) {
   if (cast<TypedAttr>(attr).getType() != this->type)
     return mlir::emitError(getLoc(), "cannot set AttributeValue of type ")
            << this->type << " to Attribute " << attr;
-  if (isFullyEvaluated())
-    return mlir::emitError(
-        getLoc(),
-        "cannot set AttributeValue that has already been fully evaluated");
+  if (isSettled())
+    return mlir::emitError(getLoc(),
+                           "cannot set AttributeValue that is already settled");
   this->attr = attr;
-  markFullyEvaluated();
+  markSettled();
   return success();
 }
 
 LogicalResult circt::om::evaluator::AttributeValue::finalizeImpl() {
-  if (!isFullyEvaluated())
+  if (!isSettled())
     return mlir::emitError(
-        getLoc(), "cannot finalize AttributeValue that is not fully evaluated");
+        getLoc(), "cannot finalize AttributeValue that is not settled");
   return success();
 }
 

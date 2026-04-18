@@ -37,10 +37,34 @@ class EvaluatorValue;
 /// primitive Attribute. Further refinement is expected.
 using EvaluatorValuePtr = std::shared_ptr<EvaluatorValue>;
 
+/// The evaluator tracks two different things:
+///
+///   1. Local state of one value object: `isSettled()`
+///
+///      false -> this value object may still change
+///      true  -> this value object has finished its own local work
+///
+///   2. State of using a value handle: `ResolutionState`
+///
+///      Pending -> the handle still cannot be used
+///      Ready   -> the handle can be used now
+///      Failure -> evaluation hit a hard error
+///
+/// These are not the same thing. A reference may itself be settled, but using
+/// the handle may still be pending:
+///
+///   ReferenceValue (settled = true)
+///          |
+///          v
+///      pending target
+///
+/// So `isSettled()` is about one value object, while `ResolvedValue` is about
+/// whether the whole handle is usable.
+///
 /// The evaluation state of a value handle.
 enum class ResolutionState {
   /// The handle can be used now. For references, this means the whole
-  /// reference chain leads to a fully evaluated value.
+  /// reference chain leads to a settled value.
   Ready,
   /// Evaluation is not done yet. The handle itself may still be partial, or a
   /// reference in the chain may still be missing.
@@ -86,12 +110,12 @@ public:
 
   // Return true if this value object has finished its own local work.
   // This is not the same as semantic Ready/Pending state: for example, a
-  // ReferenceValue can be fully evaluated but still point to a pending value.
-  // Unknown values are considered fully evaluated.
-  bool isFullyEvaluated() const { return fullyEvaluated; }
-  void markFullyEvaluated() {
-    assert(!fullyEvaluated && "should not mark twice");
-    fullyEvaluated = true;
+  // ReferenceValue can be settled but still point to a pending value.
+  // Unknown values are considered settled.
+  bool isSettled() const { return settled; }
+  void markSettled() {
+    assert(!settled && "should not mark twice");
+    settled = true;
   }
 
   /// Return true if the value is unknown (has unknown in its fan-in).
@@ -100,13 +124,13 @@ public:
   bool isUnknown() const { return unknown; }
 
   /// Mark this value as unknown.
-  /// This also marks the value as fully evaluated if it isn't already, since
-  /// unknown values are considered fully evaluated. This maintains the
-  /// invariant that unknown implies fullyEvaluated.
+  /// This also marks the value as settled if it isn't already, since unknown
+  /// values are considered settled. This maintains the invariant that unknown
+  /// implies settled.
   void markUnknown() {
     unknown = true;
-    if (!fullyEvaluated)
-      markFullyEvaluated();
+    if (!settled)
+      markSettled();
   }
 
   /// Return the associated MLIR context.
@@ -132,7 +156,7 @@ private:
   const Kind kind;
   MLIRContext *ctx;
   Location loc;
-  bool fullyEvaluated = false;
+  bool settled = false;
   bool finalized = false;
   bool unknown = false;
 };
@@ -155,7 +179,7 @@ public:
   EvaluatorValuePtr getValue() const { return value; }
   void setValue(EvaluatorValuePtr newValue) {
     value = std::move(newValue);
-    markFullyEvaluated();
+    markSettled();
   }
 
   // Finalize the value.
@@ -202,7 +226,7 @@ private:
   AttributeValue(PrivateTag, Attribute attr, Location loc)
       : EvaluatorValue(attr.getContext(), Kind::Attr, loc), attr(attr),
         type(cast<TypedAttr>(attr).getType()) {
-    markFullyEvaluated();
+    markSettled();
   }
 
   // Constructor for partially evaluated AttributeValue
@@ -237,12 +261,12 @@ public:
             Location loc)
       : EvaluatorValue(type.getContext(), Kind::List, loc), type(type),
         elements(std::move(elements)) {
-    markFullyEvaluated();
+    markSettled();
   }
 
   void setElements(SmallVector<EvaluatorValuePtr> newElements) {
     elements = std::move(newElements);
-    markFullyEvaluated();
+    markSettled();
   }
 
   // Finalize the value.
@@ -273,7 +297,7 @@ public:
   ObjectValue(om::ClassLike cls, ObjectFields fields, Location loc)
       : EvaluatorValue(cls.getContext(), Kind::Object, loc), cls(cls),
         fields(std::move(fields)) {
-    markFullyEvaluated();
+    markSettled();
   }
 
   // Partially evaluated value.
@@ -285,7 +309,7 @@ public:
 
   void setFields(llvm::SmallDenseMap<StringAttr, EvaluatorValuePtr> newFields) {
     fields = std::move(newFields);
-    markFullyEvaluated();
+    markSettled();
   }
 
   /// Return the type of the value, which is a ClassType.
@@ -415,13 +439,13 @@ public:
   using ObjectKey = std::pair<Value, ActualParameters>;
 
 private:
-  bool isFullyEvaluated(Value value, ActualParameters key) {
-    return isFullyEvaluated({value, key});
+  bool isSettled(Value value, ActualParameters key) {
+    return isSettled({value, key});
   }
 
-  bool isFullyEvaluated(ObjectKey key) {
+  bool isSettled(ObjectKey key) {
     auto val = objects.lookup(key);
-    return val && val->isFullyEvaluated();
+    return val && val->isSettled();
   }
 
   FailureOr<EvaluatorValuePtr>
@@ -471,7 +495,7 @@ private:
       std::unique_ptr<SmallVector<std::shared_ptr<evaluator::EvaluatorValue>>>>
       actualParametersBuffers;
 
-  /// A worklist that tracks values which needs to be fully evaluated.
+  /// A worklist that tracks values that still need more evaluation work.
   std::queue<ObjectKey> worklist;
 
   /// Evaluator value storage. Return an evaluator value for the given
