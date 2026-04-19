@@ -4,6 +4,8 @@
 // Test that module-name-sanitizer correctly renames modules, updates all
 // SymbolRefAttr users (including sv.verbatim $symbols), and updates
 // hw.hierpath namepath entries (which use InnerRefAttr, not SymbolRefAttr).
+// Also tests that modules already carrying a metasyntactic name prefix are
+// left unchanged (idempotency).
 
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "A" {
@@ -81,4 +83,35 @@ firrtl.circuit "A" {
   // CHECK: firrtl.class @Baz() {
   firrtl.class @MyClass() {
   }
+}
+
+// Test reduction idempotency.  Modules that have already been renamed, should
+// not be renamed again.  The reduction is one-shot, so it should not run more
+// than once.  However, if a user runs it manually more than once, this should
+// do something sane.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+// CHECK:       firrtl.module @Foo()
+// CHECK:       firrtl.module private @Bar()
+// CHECK:       firrtl.module private @Baz()
+firrtl.circuit "Foo" {
+  firrtl.module @Foo() {
+    firrtl.instance bar @Bar()
+    firrtl.instance baz @Baz()
+  }
+  firrtl.module private @Bar() {}
+  firrtl.module private @Baz() {}
+}
+
+
+// Test that symbol collisions are properly handled as opposed to causing a
+// crash.
+//
+// CHECK-LABEL: firrtl.circuit "Foo"
+firrtl.circuit "Foo" {
+  // CHECK-NEXT: firrtl.module @Qux_0
+  firrtl.module @A() {
+  }
+  firrtl.extmodule @Qux()
+  firrtl.extmodule @Foo()
 }

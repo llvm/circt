@@ -1843,14 +1843,25 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
       return success();
     };
 
-    // Set the circuit name.  This is the top-level module and the name on the
-    // circuit.  The circuit name is a string so it requires an extra step.
+    // Build a namespace seeded with every symbol currently in the circuit so
+    // that generated names are guaranteed to be collision-free.
     auto *ctx = circuitOp.getContext();
-    auto *circuitName = nameGenerator.getNextName();
-    auto newTopName = StringAttr::get(ctx, circuitName);
-    if (failed(renameModule(iGraph.getTopLevelModule(), newTopName)))
-      return failure();
-    circuitOp.setName(circuitName);
+    circt::Namespace ns;
+    for (auto &op : *circuitOp.getBodyBlock())
+      if (auto sym =
+              op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
+        ns.add(sym.getValue());
+
+    // Set the top-modulefirst so that the circuit gets the first metasyntactic
+    // name, i.e., "Foo".
+    auto topModule = iGraph.getTopLevelModule();
+    if (!reduce::MetasyntacticNameGenerator::isMetasyntacticName(
+            topModule.getModuleName())) {
+      auto newTopName = StringAttr::get(ctx, nameGenerator.getNextName(ns));
+      if (failed(renameModule(topModule, newTopName)))
+        return failure();
+      circuitOp.setName(newTopName.getValue());
+    }
 
     for (auto *node : iGraph) {
       auto module = node->getModule<firrtl::FModuleLike>();
@@ -1884,7 +1895,11 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
 
       if (module == iGraph.getTopLevelModule())
         continue;
-      auto newName = StringAttr::get(ctx, nameGenerator.getNextName());
+      // Skip renaming if the module already has a metasyntactic name.
+      if (reduce::MetasyntacticNameGenerator::isMetasyntacticName(
+              module.getModuleName()))
+        continue;
+      auto newName = StringAttr::get(ctx, nameGenerator.getNextName(ns));
       if (failed(renameModule(module, newName)))
         return failure();
       for (auto *use : node->uses()) {

@@ -11,6 +11,7 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/Namespace.h"
 
 namespace circt {
 // Forward declarations.
@@ -38,6 +39,21 @@ public:
 
   /// Get the next metasyntactic name in the sequence.
   const char *getNextName();
+
+  /// Get the next metasyntactic name that is not already reserved in \p ns,
+  /// and reserve it.  If the candidate name is already taken, \p ns appends a
+  /// numeric suffix (e.g. "Foo_0") to make it unique.
+  StringRef getNextName(Namespace &ns);
+
+  /// Return true if \p name already has a metasyntactic prefix, i.e. the
+  /// substring before the first '_' (or the whole string if there is no '_')
+  /// is one of the names in the generator sequence.  Examples:
+  ///   isMetasyntacticName("Foo")       → true
+  ///   isMetasyntacticName("Foo_0")     → true
+  ///   isMetasyntacticName("Foo_0_0_0") → true
+  ///   isMetasyntacticName("FooBar")    → false
+  ///   isMetasyntacticName("MyModule")  → false
+  static bool isMetasyntacticName(StringRef name);
 
   /// Reset the generator to start from the beginning of the sequence.
   void reset() { index = 0; }
