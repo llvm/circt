@@ -122,16 +122,40 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
       }],
       "std::optional<uint64_t>", "getLogicAreaCost", (ins)
     >,
-    InterfaceMethod<[{
-        Emit CNF clauses encoding `outVar <=> op(inputVars...)`.
-        The provided `inputVars` correspond to this operation's operands in
-        operand order. Implementations are responsible for applying any
-        per-input inversion described by the operation itself.
+    StaticInterfaceMethod<[{
+        Emit CNF clauses encoding `outVar <=> op(inputVars...)` for the
+        non-inverted form of the operation. The provided `inputVars` are SAT
+        literals corresponding to the logical operands in operand order, after
+        any per-input inversion has already been materialized by the caller.
       }],
-      "void", "emitCNF",
+      "void", "emitCNFWithoutInversion",
       (ins "int":$outVar, "::llvm::ArrayRef<int>":$inputVars,
            "::llvm::function_ref<void(::llvm::ArrayRef<int>)>":$addClause,
            "::llvm::function_ref<int()>":$newVar)
+    >,
+    InterfaceMethod<[{
+        Emit CNF clauses encoding `outVar <=> op(inputVars...)`.
+        The provided `inputVars` correspond to this operation's operands in
+        operand order. The default implementation materializes the per-input
+        inversion flags into the SAT literals and then delegates to
+        `emitCNFWithoutInversion`.
+      }],
+      "void", "emitCNF",
+      (ins "int":$outVar, "::llvm::ArrayRef<int>":$inputVars,
+            "::llvm::function_ref<void(::llvm::ArrayRef<int>)>":$addClause,
+            "::llvm::function_ref<int()>":$newVar),
+      "",
+      [{
+        ::llvm::SmallVector<int> inputLits;
+        inputLits.reserve(inputVars.size());
+        auto inverted = $_op.getInverted();
+        assert(inverted.size() == inputVars.size() &&
+              "inputVars should have the same size as the number of inputs");
+        for (auto [inverted, inputVar] : llvm::zip(inverted, inputVars))
+          inputLits.push_back(inverted ? -inputVar : inputVar);
+        return ConcreteOp::emitCNFWithoutInversion(outVar, inputLits, addClause,
+                                                   newVar);
+      }]
     >,
     InterfaceMethod<[{
         Clone or fold this operation with the provided inputs while preserving

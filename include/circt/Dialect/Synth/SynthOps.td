@@ -30,7 +30,7 @@ class InvertibleOperandsOp<string mnemonic, list<Trait> traits = []>
       SameOperandsAndResultType, Pure,
       DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
         "areInputsPermutationInvariant", "getLogicDepthCost",
-        "getLogicAreaCost", "emitCNF"
+        "getLogicAreaCost"
       ]> ] # traits> {
   // TODO: Restrict to HWIntegerType.
   let arguments = (ins Variadic<AnyType>:$inputs,
