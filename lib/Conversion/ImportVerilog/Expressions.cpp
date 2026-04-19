@@ -921,6 +921,31 @@ struct RvalueExprVisitor : public ExprVisitor {
   Value visit(const slang::ast::HierarchicalValueExpression &expr) {
     auto hierLoc = context.convertLocation(expr.symbol.location);
 
+    // Canonicalize self-references (e.g., SubD.z inside SubD) to local
+    // variable lookups. When the hierarchical path's first instance body
+    // is the same module that declares the target symbol, the reference
+    // is intra-module and should resolve to the local variable directly.
+    if (!expr.ref.path.empty()) {
+      if (auto *inst = expr.ref.path.front()
+                           .symbol->as_if<slang::ast::InstanceSymbol>()) {
+        auto *symbolBody =
+            expr.symbol.getParentScope()->getContainingInstance();
+        if (&inst->body == symbolBody ||
+            (symbolBody && inst->body.getDeclaringDefinition() ==
+                               symbolBody->getDeclaringDefinition())) {
+          if (auto value = context.valueSymbols.lookup(&expr.symbol)) {
+            if (isa<moore::RefType>(value.getType())) {
+              auto readOp = moore::ReadOp::create(builder, hierLoc, value);
+              if (context.rvalueReadCallback)
+                context.rvalueReadCallback(readOp);
+              value = readOp.getResult();
+            }
+            return value;
+          }
+        }
+      }
+    }
+
     // For cross-instance hierarchical references, use the instance-aware
     // hierValueSymbols lookup first. This is required for multi-instance
     // deduplication where Slang shares the same ValueSymbol* across instances
@@ -2429,6 +2454,22 @@ struct LvalueExprVisitor : public ExprVisitor {
 
   // Handle hierarchical values, such as `Top.sub.var = x`.
   Value visit(const slang::ast::HierarchicalValueExpression &expr) {
+    // Canonicalize self-references (e.g., SubD.w inside SubD) to local
+    // variable lookups (same rationale as rvalue visitor).
+    if (!expr.ref.path.empty()) {
+      if (auto *inst = expr.ref.path.front()
+                           .symbol->as_if<slang::ast::InstanceSymbol>()) {
+        auto *symbolBody =
+            expr.symbol.getParentScope()->getContainingInstance();
+        if (&inst->body == symbolBody ||
+            (symbolBody && inst->body.getDeclaringDefinition() ==
+                               symbolBody->getDeclaringDefinition())) {
+          if (auto value = context.valueSymbols.lookup(&expr.symbol))
+            return value;
+        }
+      }
+    }
+
     // For cross-instance hierarchical references, use the instance-aware
     // hierValueSymbols lookup first (same priority and rationale as rvalue
     // visitor).
