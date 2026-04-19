@@ -1,12 +1,20 @@
 // UNSUPPORTED: system-windows
 // RUN: circt-reduce %s --include=module-internal-name-sanitizer --include=module-name-sanitizer --test /usr/bin/env --test-arg true --keep-best=0 | FileCheck %s
 
-// Test that module-name-sanitizer reduction works with both InstanceOp and ObjectOp.
-// This should not crash when the ModuleNameSanitizer tries to rename modules
-// that are instantiated via firrtl.object operations.
+// Test that module-name-sanitizer correctly renames modules, updates all
+// SymbolRefAttr users (including sv.verbatim $symbols), and updates
+// hw.hierpath namepath entries (which use InnerRefAttr, not SymbolRefAttr).
 
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "A" {
+  // hw.hierpath namepath entries use InnerRefAttr, not SymbolRefAttr, so they
+  // require the NLATable rename step rather than SymbolTable::rename.
+  // CHECK: hw.hierpath private @nla [@Foo::@sym_b, @Bar]
+  hw.hierpath private @nla [@A::@sym_b, @B]
+  // sv.verbatim $symbols entries use FlatSymbolRefAttr, so they are updated
+  // by SymbolTable::rename.
+  // CHECK: sv.verbatim "// ref: {{[{][{]0[}][}]}}" {symbols = [@Bar]}
+  sv.verbatim "// ref: {{0}}" {symbols = [@B]}
   // CHECK-NEXT: firrtl.module private @Bar
   // CHECK-SAME:   in %clk: !firrtl.clock
   // CHECK-SAME:   in %clk_0: !firrtl.clock
@@ -57,7 +65,7 @@ firrtl.circuit "A" {
     %baz = firrtl.node %bar : !firrtl.uint<1>
     %qux = firrtl.node %baz : !firrtl.uint<1>
     %b_clock, %b_clock2, %b_reset, %b_reset2,  %b_someProbe, %b_someOtherProbe,
-      %b_x, %b_y = firrtl.instance b @B(
+      %b_x, %b_y = firrtl.instance b sym @sym_b @B(
         in clock: !firrtl.clock,
         in clock2: !firrtl.clock,
         in reset: !firrtl.reset,
