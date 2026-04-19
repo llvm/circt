@@ -1,5 +1,7 @@
 // RUN: circt-verilog %s | FileCheck %s
 // REQUIRES: slang
+// Internal issue in Slang about jump depending on uninitialised value.
+// UNSUPPORTED: valgrind
 
 module SubB();
   logic local_val;
