@@ -47,11 +47,6 @@ inline llvm::KnownBits applyInversion(llvm::KnownBits value, bool inverted) {
   return value;
 }
 
-inline int applyInversion(int lit, bool inverted) {
-  assert(lit != 0 && "expected non-zero SAT literal");
-  return inverted ? -lit : lit;
-}
-
 } // namespace
 
 LogicalResult ChoiceOp::verify() {
@@ -273,19 +268,12 @@ std::optional<uint64_t> AndInverterOp::getLogicAreaCost() {
   return static_cast<uint64_t>(getNumOperands() - 1) * bitWidth;
 }
 
-void AndInverterOp::emitCNF(
+void AndInverterOp::emitCNFWithoutInversion(
     int outVar, llvm::ArrayRef<int> inputVars,
     llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
     llvm::function_ref<int()> newVar) {
   (void)newVar;
-  assert(inputVars.size() == getInputs().size() &&
-         "expected one SAT variable per operand");
-
-  SmallVector<int> inputLits;
-  inputLits.reserve(inputVars.size());
-  for (auto [inputVar, inverted] : llvm::zip(inputVars, getInverted()))
-    inputLits.push_back(applyInversion(inputVar, inverted));
-  circt::addAndClauses(outVar, inputLits, addClause);
+  circt::addAndClauses(outVar, inputVars, addClause);
 }
 
 //===----------------------------------------------------------------------===//
@@ -324,18 +312,11 @@ std::optional<uint64_t> XorInverterOp::getLogicAreaCost() {
   return static_cast<uint64_t>(getNumOperands() - 1) * bitWidth;
 }
 
-void XorInverterOp::emitCNF(
+void XorInverterOp::emitCNFWithoutInversion(
     int outVar, llvm::ArrayRef<int> inputVars,
     llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
     llvm::function_ref<int()> newVar) {
-  assert(inputVars.size() == getInputs().size() &&
-         "expected one SAT variable per operand");
-
-  SmallVector<int> inputLits;
-  inputLits.reserve(inputVars.size());
-  for (auto [inputVar, inverted] : llvm::zip(inputVars, getInverted()))
-    inputLits.push_back(applyInversion(inputVar, inverted));
-  circt::addParityClauses(outVar, inputLits, addClause, newVar);
+  circt::addParityClauses(outVar, inputVars, addClause, newVar);
 }
 
 static Value lowerVariadicInvertibleOp(
