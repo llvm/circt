@@ -1828,17 +1828,35 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
 
   LogicalResult rewrite(firrtl::CircuitOp circuitOp) override {
 
+    // Analyses used to aid the rewrite.
     firrtl::InstanceGraph iGraph(circuitOp);
+    NLATable nlaTable(circuitOp);
+    SymbolTable symTable(circuitOp);
 
+    // Rename symbols and NLAs.
+    auto renameModule = [&](firrtl::FModuleLike mod,
+                            StringAttr newName) -> LogicalResult {
+      StringAttr oldName = mod.getModuleNameAttr();
+      if (failed(symTable.rename(mod, newName)))
+        return failure();
+      nlaTable.renameModule(oldName, newName);
+      return success();
+    };
+
+    // Set the circuit name.  This is the top-level module and the name on the
+    // circuit.  The circuit name is a string so it requires an extra step.
+    auto *ctx = circuitOp.getContext();
     auto *circuitName = nameGenerator.getNextName();
-    iGraph.getTopLevelModule().setName(circuitName);
+    auto newTopName = StringAttr::get(ctx, circuitName);
+    if (failed(renameModule(iGraph.getTopLevelModule(), newTopName)))
+      return failure();
     circuitOp.setName(circuitName);
 
     for (auto *node : iGraph) {
       auto module = node->getModule<firrtl::FModuleLike>();
 
       bool shouldReplacePorts = false;
-      SmallVector<Attribute> newNames;
+      SmallVector<Attribute> newPortNames;
       if (auto fmodule = dyn_cast<firrtl::FModuleOp>(*module)) {
         portNameIndex = 0;
         // TODO: The namespace should be unnecessary. However, some FIRRTL
@@ -1858,32 +1876,33 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
                              .Default([&](auto a) {
                                return ns.newName(Twine(getPortName()));
                              });
-          newNames.push_back(StringAttr::get(circuitOp.getContext(), newName));
+          newPortNames.push_back(StringAttr::get(ctx, newName));
         }
         fmodule->setAttr("portNames",
-                         ArrayAttr::get(fmodule.getContext(), newNames));
+                         ArrayAttr::get(fmodule.getContext(), newPortNames));
       }
 
       if (module == iGraph.getTopLevelModule())
         continue;
-      auto newName =
-          StringAttr::get(circuitOp.getContext(), nameGenerator.getNextName());
-      module.setName(newName);
+      auto newName = StringAttr::get(ctx, nameGenerator.getNextName());
+      if (failed(renameModule(module, newName)))
+        return failure();
       for (auto *use : node->uses()) {
         auto useOp = use->getInstance();
         if (auto instanceOp = dyn_cast<firrtl::InstanceOp>(*useOp)) {
-          instanceOp.setModuleName(newName);
+          // SymbolTable::rename already updated the moduleName
+          // FlatSymbolRefAttr on all InstanceOps.  Only the debug instance name
+          // and port names need manual fixup here.
           instanceOp.setName(newName);
           if (shouldReplacePorts)
-            instanceOp.setPortNamesAttr(
-                ArrayAttr::get(circuitOp.getContext(), newNames));
+            instanceOp.setPortNamesAttr(ArrayAttr::get(ctx, newPortNames));
         } else if (auto objectOp = dyn_cast<firrtl::ObjectOp>(*useOp)) {
-          // ObjectOp stores the class name in its result type, so we need to
-          // create a new ClassType with the new name and set it on the result.
+          // ObjectOp stores the class name in its result type.  Result types
+          // are not updated by SymbolTable::rename (AttrTypeReplacer is called
+          // with replaceTypes=false), so we must patch the ClassType manually.
           auto oldClassType = objectOp.getType();
           auto newClassType = firrtl::ClassType::get(
-              circuitOp.getContext(), FlatSymbolRefAttr::get(newName),
-              oldClassType.getElements());
+              ctx, FlatSymbolRefAttr::get(newName), oldClassType.getElements());
           objectOp.getResult().setType(newClassType);
           objectOp.setName(newName);
         }
