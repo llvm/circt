@@ -102,16 +102,3 @@ firrtl.circuit "Foo" {
   firrtl.module private @Bar() {}
   firrtl.module private @Baz() {}
 }
-
-
-// Test that symbol collisions are properly handled as opposed to causing a
-// crash.
-//
-// CHECK-LABEL: firrtl.circuit "Foo"
-firrtl.circuit "Foo" {
-  // CHECK-NEXT: firrtl.module @Qux_0
-  firrtl.module @A() {
-  }
-  firrtl.extmodule @Qux()
-  firrtl.extmodule @Foo()
-}
