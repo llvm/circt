@@ -1812,10 +1812,6 @@ LogicalResult Context::convertPrimitiveInstance(
            << "primitive instances with explicit drive strengths are not "
               "supported.";
 
-  if (prim.getDelay())
-    return mlir::emitError(convertLocation(prim.location))
-           << "primitive instances with delays are not yet supported.";
-
   switch (prim.primitiveType.primitiveKind) {
   case slang::ast::PrimitiveSymbol::PrimitiveKind::NInput:
     return this->convertNInputPrimitive(prim);
@@ -1914,7 +1910,21 @@ LogicalResult Context::convertNInputPrimitive(
   if (!result)
     return failure();
 
-  moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
+  if (prim.getDelay()) {
+    auto &delay3 = prim.getDelay()->as<slang::ast::Delay3Control>();
+    if (delay3.expr2 || delay3.expr3)
+      return mlir::emitError(loc) << "only n-input primitives that specify a "
+                                     "single delay are currently supported.";
+    auto delayVal = this->convertRvalueExpression(
+        delay3.expr1, moore::TimeType::get(getContext()));
+    if (!delayVal)
+      return failure();
+    moore::DelayedContinuousAssignOp::create(builder, loc, outputVal, result,
+                                             delayVal);
+  } else {
+    moore::ContinuousAssignOp::create(builder, loc, outputVal, result);
+  }
+
   return success();
 }
 
@@ -1922,6 +1932,11 @@ LogicalResult Context::convertNOutputPrimitive(
     const slang::ast::PrimitiveInstanceSymbol &prim) {
   auto loc = convertLocation(prim.location);
   auto primName = prim.primitiveType.name;
+
+  if (prim.getDelay())
+    return mlir::emitError(convertLocation(prim.location))
+           << "n-output primitive instances with explicit delays are not "
+              "supported.";
 
   auto portConns = prim.getPortConnections();
   assert(portConns.size() >= 2 &&
@@ -1988,6 +2003,7 @@ LogicalResult Context::convertPullGatePrimitive(
   assert((prim.primitiveType.name == "pullup" ||
           prim.primitiveType.name == "pulldown") &&
          "expected pullup or pulldown primitive");
+  // Slang ensures no delays on pull gates so no need to check here
   auto loc = convertLocation(prim.location);
   auto primName = prim.primitiveType.name;
 
