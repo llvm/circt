@@ -932,10 +932,10 @@ hw.module @TestProbeSub(out field_a: i8, out field_b: i16) {
   %struct_probe = hw.instance "inst" sym @inst @StructSource() -> (ref: !hw.probe<!hw.struct<a: i8, b: i16>>)
 
   // Access field 'a' (index 0)
-  %probe_a = hw.probe.sub %struct_probe[0] : !hw.probe<!hw.struct<a: i8, b: i16>>
+  %probe_a = hw.probe.sub %struct_probe[0 : i32] : !hw.probe<!hw.struct<a: i8, b: i16>>
 
   // Access field 'b' (index 1)
-  %probe_b = hw.probe.sub %struct_probe[1] : !hw.probe<!hw.struct<a: i8, b: i16>>
+  %probe_b = hw.probe.sub %struct_probe[1 : i32] : !hw.probe<!hw.struct<a: i8, b: i16>>
 
   // CHECK: sv.xmr.ref{{.*}}".a"
   // CHECK: sv.read_inout
@@ -966,10 +966,10 @@ hw.module @TestProbeSubArray(out elem0: i32, out elem2: i32) {
   %array_probe = hw.instance "arr_inst" sym @arr_inst @ArraySource() -> (ref: !hw.probe<!hw.array<4xi32>>)
 
   // Access element 0
-  %probe_0 = hw.probe.sub %array_probe[0] : !hw.probe<!hw.array<4xi32>>
+  %probe_0 = hw.probe.sub %array_probe[0 : i32] : !hw.probe<!hw.array<4xi32>>
 
   // Access element 2
-  %probe_2 = hw.probe.sub %array_probe[2] : !hw.probe<!hw.array<4xi32>>
+  %probe_2 = hw.probe.sub %array_probe[2 : i32] : !hw.probe<!hw.array<4xi32>>
 
   // CHECK: sv.xmr.ref{{.*}}"[0]"
   // CHECK: sv.read_inout
@@ -1110,10 +1110,10 @@ hw.module @TestProbeSubNested(out result: i8) {
   %nested_probe = hw.instance "nested_inst" sym @nested_inst @NestedSource() -> (ref: !hw.probe<!hw.array<2x!hw.struct<x: i8, y: i8>>>)
 
   // Access array[1]
-  %probe_elem1 = hw.probe.sub %nested_probe[1] : !hw.probe<!hw.array<2x!hw.struct<x: i8, y: i8>>>
+  %probe_elem1 = hw.probe.sub %nested_probe[1 : i32] : !hw.probe<!hw.array<2x!hw.struct<x: i8, y: i8>>>
 
   // Access .y field of the struct (index 1)
-  %probe_y = hw.probe.sub %probe_elem1[1] : !hw.probe<!hw.struct<x: i8, y: i8>>
+  %probe_y = hw.probe.sub %probe_elem1[1 : i32] : !hw.probe<!hw.struct<x: i8, y: i8>>
 
   // CHECK: sv.xmr.ref{{.*}}"[1].y"
   // CHECK: sv.read_inout
