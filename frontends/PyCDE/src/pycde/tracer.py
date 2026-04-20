@@ -12,11 +12,6 @@ import executing
 # be skipped when skip_pycde is True.
 _PYCDE_AUTONAME_MODULES = frozenset((
     "pycde.constructs",
-    "pycde.bsp",
-    "pycde.bsp.common",
-    "pycde.bsp.cosim",
-    "pycde.bsp.dma",
-    "pycde.bsp.xrt",
 ))
 
 
@@ -56,8 +51,7 @@ def get_var_name(depth=1, skip_pycde=False):
   node and inspects the enclosing statement for an assignment target.
 
   If skip_pycde is True, returns None when the target frame belongs to pycde
-  internal code (but NOT for modules on the allowlist like pycde.constructs
-  and pycde.bsp.*).
+  internal code (but NOT for modules on the allowlist like pycde.constructs).
 
   Silently returns None on any failure."""
   try:

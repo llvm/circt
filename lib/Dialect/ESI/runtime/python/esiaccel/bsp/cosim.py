@@ -4,21 +4,21 @@
 
 from typing import Dict, Tuple, Type
 
-from ..signals import BundleSignal
-from ..common import AppID, Clock, Input, Output
-from ..module import Module, generator
-from ..support import get_user_loc
-from ..system import System
-from ..types import (Bits, Bundle, BundledChannel, Channel, ChannelDirection,
-                     StructType, UInt)
-from ..constructs import ControlReg, NamedWire, Reg, Wire
-from .. import esi
+from pycde.signals import BundleSignal
+from pycde.common import AppID, Clock, Input, Output
+from pycde.module import Module, generator
+from pycde.support import get_user_loc
+from pycde.system import System
+from pycde.types import (Bits, Bundle, BundledChannel, Channel,
+                         ChannelDirection, StructType, UInt)
+from pycde.constructs import ControlReg, NamedWire, Reg, Wire
+from pycde import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO)
 from .dma import OneItemBuffersFromHost, OneItemBuffersToHost
 
-from ..circt import ir
-from ..circt.dialects import esi as raw_esi
+from pycde.circt import ir
+from pycde.circt.dialects import esi as raw_esi
 
 from pathlib import Path
 

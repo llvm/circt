@@ -21,7 +21,7 @@ from typing import Type
 
 import pycde.esi as esi
 from pycde import Clock, Module, Reset, System, generator, modparams
-from pycde.bsp import get_bsp
+from esiaccel.bsp import get_bsp
 from pycde.common import AppID, Constant, InputChannel, Output, OutputChannel
 from pycde.constructs import ControlReg, Counter, Mux, NamedWire, Reg, Wire
 from pycde.module import Metadata

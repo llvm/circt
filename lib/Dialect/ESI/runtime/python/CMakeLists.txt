@@ -13,6 +13,17 @@ set(ESIPythonRuntimeSources
   esiaccel/cosim/pytest.py
   esiaccel/cosim/simulator.py
   esiaccel/cosim/verilator.py
+
+  esiaccel/bsp/__init__.py
+  esiaccel/bsp/common.py
+  esiaccel/bsp/cosim.py
+  esiaccel/bsp/dma.py
+  esiaccel/bsp/xrt.py
+  esiaccel/bsp/Makefile.xrt.mk
+  esiaccel/bsp/xrt_package.tcl
+  esiaccel/bsp/xrt.ini
+  esiaccel/bsp/xrt_vitis.cfg
+  esiaccel/bsp/xsim.tcl
 )
 
 # Nanobind is used to wrap the ESICppRuntime APIs.

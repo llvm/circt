@@ -5,16 +5,16 @@
 from __future__ import annotations
 from math import ceil
 
-from ..common import Clock, Input, InputChannel, Output, OutputChannel, Reset
-from ..constructs import (AssignableSignal, ControlReg, Counter, Mux, NamedWire,
-                          Wire)
-from .. import esi
-from ..module import Module, generator, modparams
-from ..signals import BitsSignal, ChannelSignal, StructSignal
-from ..support import clog2
-from ..system import System
-from ..types import (Array, Bits, Bundle, BundledChannel, Channel,
-                     ChannelDirection, StructType, Type, UInt, Window)
+from pycde.common import Clock, Input, InputChannel, Output, OutputChannel, Reset
+from pycde.constructs import (AssignableSignal, ControlReg, Counter, Mux,
+                              NamedWire, Wire)
+from pycde import esi
+from pycde.module import Module, generator, modparams
+from pycde.signals import BitsSignal, ChannelSignal, StructSignal
+from pycde.support import clog2
+from pycde.system import System
+from pycde.types import (Array, Bits, Bundle, BundledChannel, Channel,
+                         ChannelDirection, StructType, Type, UInt, Window)
 
 from typing import Callable, Dict, List, Tuple
 import typing

@@ -30,7 +30,7 @@
 import sys
 
 from pycde import (AppID, Clock, Module, Reset, Signal, System, generator)
-from pycde.bsp import get_bsp
+from esiaccel.bsp import get_bsp
 from pycde.common import Constant
 from pycde.constructs import Wire
 from pycde.module import Metadata

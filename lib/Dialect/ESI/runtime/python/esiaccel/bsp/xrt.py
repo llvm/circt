@@ -2,14 +2,14 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from ..common import Clock, Input, InputChannel, Output, OutputChannel
-from ..constructs import Mux, Wire
-from ..module import Module, generator
-from ..signals import BitsSignal, Struct
-from ..system import System
-from ..support import clog2
-from ..types import Array, Bits, Channel, UInt
-from .. import esi
+from pycde.common import Clock, Input, InputChannel, Output, OutputChannel
+from pycde.constructs import Mux, Wire
+from pycde.module import Module, generator
+from pycde.signals import BitsSignal, Struct
+from pycde.system import System
+from pycde.support import clog2
+from pycde.types import Array, Bits, Channel, UInt
+from pycde import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO,
                      MMIOIndirection, Reset)

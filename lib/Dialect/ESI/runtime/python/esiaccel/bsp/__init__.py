@@ -7,7 +7,7 @@ from typing import Callable, Optional, Type
 from .cosim import CosimBSP, CosimBSP_DMA
 from .xrt import XrtBSP
 
-from ..module import Module
+from pycde.module import Module
 
 
 def get_bsp(name: Optional[str] = None) -> Callable[[Module], Module]:

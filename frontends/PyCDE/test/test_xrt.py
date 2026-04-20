@@ -15,7 +15,7 @@
 import pycde
 from pycde import Clock, Input, Module, generator
 from pycde.types import Bits
-from pycde.bsp import XrtBSP
+from esiaccel.bsp import XrtBSP
 
 import sys
 
