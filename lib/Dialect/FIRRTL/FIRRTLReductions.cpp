@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/LayerSet.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
@@ -1832,6 +1833,7 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
     firrtl::InstanceGraph iGraph(circuitOp);
     NLATable nlaTable(circuitOp);
     SymbolTable symTable(circuitOp);
+    CircuitNamespace ns(circuitOp);
 
     // Rename symbols and NLAs.
     auto renameModule = [&](firrtl::FModuleLike mod,
@@ -1843,18 +1845,10 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
       return success();
     };
 
-    // Build a namespace seeded with every symbol currently in the circuit so
-    // that generated names are guaranteed to be collision-free.
-    auto *ctx = circuitOp.getContext();
-    circt::Namespace ns;
-    for (auto &op : *circuitOp.getBodyBlock())
-      if (auto sym =
-              op.getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName()))
-        ns.add(sym.getValue());
-
     // Set the top-modulefirst so that the circuit gets the first metasyntactic
     // name, i.e., "Foo".
     auto topModule = iGraph.getTopLevelModule();
+    auto *ctx = circuitOp.getContext();
     if (!reduce::MetasyntacticNameGenerator::isMetasyntacticName(
             topModule.getModuleName())) {
       auto newTopName = StringAttr::get(ctx, nameGenerator.getNextName(ns));
