@@ -12,7 +12,6 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
-#include "circt/Dialect/Seq/SeqTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -42,21 +41,10 @@ ParseResult ProbeSendOp::parse(OpAsmParser &parser, OperationState &result) {
   if (parser.resolveOperand(input, inputType, result.operands))
     return failure();
 
-  // Infer the probe inner type based on the input type
-  Type innerType = inputType;
-
-  // Special handling for seq.firmem - extract the array type
-  if (auto firmemType = dyn_cast<seq::FirMemType>(inputType)) {
-    // Memory probes expose the underlying array type
-    auto depth = firmemType.getDepth();
-    auto width = firmemType.getWidth();
-    innerType =
-        hw::ArrayType::get(IntegerType::get(parser.getContext(), width), depth);
-  }
-
   // The result type depends on whether forceable is present
-  Type resultType = forceable ? (Type)RWProbeType::get(innerType)
-                              : (Type)ProbeType::get(innerType);
+  // The inner type is the same as the input type (no special conversion here)
+  Type resultType = forceable ? (Type)RWProbeType::get(inputType)
+                              : (Type)ProbeType::get(inputType);
   result.addTypes(resultType);
 
   return success();
@@ -86,16 +74,13 @@ OpFoldResult ProbeSendOp::fold(FoldAdaptor adaptor) {
 LogicalResult ProbeSendOp::verify() {
   Type inputType = getInput().getType();
 
-  // Allow HW value types or seq.firmem types
+  // Allow HW value types
+  // Note: seq.firmem types are allowed but handled by the FIRRTL lowering pass
+  // which converts them to hw.array types before creating probe.send
   if (isHWValueType(inputType))
     return success();
 
-  if (isa<seq::FirMemType>(inputType))
-    return success();
-
-  return emitOpError(
-             "input must be a valid HW value type or seq.firmem type, got ")
-         << inputType;
+  return emitOpError("input must be a valid HW value type, got ") << inputType;
 }
 
 //===----------------------------------------------------------------------===//
@@ -193,7 +178,9 @@ ParseResult ProbeSubOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void ProbeSubOp::print(OpAsmPrinter &p) {
-  p << " " << getInput() << "[" << getIndex() << "]";
+  p << " " << getInput() << "[";
+  p.printAttribute(getIndexAttr());
+  p << "]";
   p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"index"});
   p << " : " << getInput().getType();
 }
@@ -298,6 +285,28 @@ LogicalResult ProbeRWProbeOp::verifyInnerRefs(InnerRefNamespace &ns) {
     return emitOpError("requires a target inner reference");
 
   // The actual verification of the inner ref is done by the namespace
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ProbeDefineOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ProbeDefineOp::verify() {
+  // Check that destination is not a result of certain operations
+  // that shouldn't be on the left-hand side of a define
+  if (auto *op = getDest().getDefiningOp()) {
+    // Cannot define to a sub-element of a probe
+    if (isa<ProbeSubOp>(op))
+      return emitError(
+          "destination reference cannot be a sub-element of a reference");
+
+    // Cannot define to a cast
+    if (isa<ProbeCastOp>(op))
+      return emitError(
+          "destination reference cannot be a cast of another reference");
+  }
+
   return success();
 }
 
