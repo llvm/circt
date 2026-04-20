@@ -493,11 +493,15 @@ circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
 
   std::array<Attribute, 2> operandAttrs = {lhs, rhs};
   SmallVector<mlir::OpFoldResult, 1> results;
-  om::IntegerAttr resultAttr;
-  auto foldResult = op->fold(operandAttrs, results);
-  if (failed(foldResult) || results.size() != 1 ||
-      !(resultAttr = llvm::dyn_cast_or_null<om::IntegerAttr>(
-            results[0].dyn_cast<Attribute>())))
+  if (failed(op->fold(operandAttrs, results)) || results.size() != 1)
+    return op->emitError("failed to fold integer operation");
+
+  // Even with fully constant operands, folders may decline to fold or may
+  // produce a non-attribute result. Keep the evaluator-side type check so this
+  // fails cleanly instead of tripping an assertion below.
+  auto resultAttr =
+      llvm::dyn_cast_or_null<om::IntegerAttr>(results[0].dyn_cast<Attribute>());
+  if (!resultAttr)
     return op->emitError("failed to evaluate integer operation");
 
   // Finalize the op result value.

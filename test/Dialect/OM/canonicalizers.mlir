@@ -23,7 +23,10 @@ func.func @ObjectsMustDCE() {
   return
 }
 
-om.class @StringConcatCanonicalization(%str1: !om.string, %str2: !om.string) -> (out1: !om.string, out2: !om.string, out3: !om.string, out4: !om.string, out5: !om.string, out6: !om.string, out7: !om.string, out8: !om.string) {
+om.class @StringConcatCanonicalization(%str1: !om.string, %str2: !om.string) -> (out1: !om.string, out2: !om.string,
+                                                                                  out3: !om.string, out4: !om.string,
+                                                                                  out5: !om.string, out6: !om.string,
+                                                                                  out7: !om.string, out8: !om.string) {
   %s1 = om.constant "Hello" : !om.string
   %s2 = om.constant "World" : !om.string
   %s3 = om.constant "!" : !om.string
@@ -76,6 +79,8 @@ om.class @IntegerBinaryArithmeticFold(%x: !om.integer) -> (out1: !om.integer, ou
   %wide = om.constant #om.integer<7 : si6> : !om.integer
 
   // CHECK-DAG: [[ADD:%.+]] = om.constant #om.integer<7 : si4> : !om.integer
+  // Arithmetic uses APSInt semantics at the operands' folded bit width, so
+  // 3 * 4 folds to si4 -4 here.
   // CHECK-DAG: [[MUL:%.+]] = om.constant #om.integer<-4 : si4> : !om.integer
   // CHECK-DAG: [[SHR:%.+]] = om.constant #om.integer<1 : si4> : !om.integer
   // CHECK-DAG: [[SHL:%.+]] = om.constant #om.integer<-2 : si4> : !om.integer
