@@ -76,8 +76,8 @@ hw.module @ProbeArrays() {
   // CHECK: %[[ARR_REF:.+]] = hw.probe.send %{{.+}} : !hw.array<4xi32>
   %arr_ref = hw.probe.send %arr : !hw.array<4xi32>
   
-  // CHECK: %[[ELEM_REF:.+]] = hw.probe.sub %[[ARR_REF]][2] : !hw.probe<!hw.array<4xi32>>
-  %elem_ref = hw.probe.sub %arr_ref[2] : !hw.probe<!hw.array<4xi32>>
+  // CHECK: %[[ELEM_REF:.+]] = hw.probe.sub %[[ARR_REF]][2 : i32] : !hw.probe<!hw.array<4xi32>>
+  %elem_ref = hw.probe.sub %arr_ref[2 : i32] : !hw.probe<!hw.array<4xi32>>
   
   // CHECK: %{{.+}} = hw.probe.resolve %[[ELEM_REF]] : !hw.probe<i32>
   %elem_val = hw.probe.resolve %elem_ref : !hw.probe<i32>
@@ -92,8 +92,8 @@ hw.module @ProbeStructs() {
   // CHECK: %[[STRUCT_REF:.+]] = hw.probe.send %{{.+}} : !hw.struct<a: i8, b: i16>
   %struct_ref = hw.probe.send %struct : !hw.struct<a: i8, b: i16>
   
-  // CHECK: %[[FIELD_REF:.+]] = hw.probe.sub %[[STRUCT_REF]][1] : !hw.probe<!hw.struct<a: i8, b: i16>>
-  %field_ref = hw.probe.sub %struct_ref[1] : !hw.probe<!hw.struct<a: i8, b: i16>>
+  // CHECK: %[[FIELD_REF:.+]] = hw.probe.sub %[[STRUCT_REF]][1 : i32] : !hw.probe<!hw.struct<a: i8, b: i16>>
+  %field_ref = hw.probe.sub %struct_ref[1 : i32] : !hw.probe<!hw.struct<a: i8, b: i16>>
   
   // CHECK: %{{.+}} = hw.probe.resolve %[[FIELD_REF]] : !hw.probe<i16>
   %field_val = hw.probe.resolve %field_ref : !hw.probe<i16>
@@ -205,12 +205,12 @@ hw.module @NestedProbes() {
   %arr_ref = hw.probe.send %arr : !hw.array<2xstruct<x: i8, y: i16>>
 
   // Index into array
-  // CHECK: %[[ELEM_REF:.+]] = hw.probe.sub %[[ARR_REF]][0] : !hw.probe<!hw.array<2xstruct<x: i8, y: i16>>>
-  %elem_ref = hw.probe.sub %arr_ref[0] : !hw.probe<!hw.array<2xstruct<x: i8, y: i16>>>
+  // CHECK: %[[ELEM_REF:.+]] = hw.probe.sub %[[ARR_REF]][0 : i32] : !hw.probe<!hw.array<2xstruct<x: i8, y: i16>>>
+  %elem_ref = hw.probe.sub %arr_ref[0 : i32] : !hw.probe<!hw.array<2xstruct<x: i8, y: i16>>>
 
   // Index into struct field
-  // CHECK: %[[FIELD_REF:.+]] = hw.probe.sub %[[ELEM_REF]][1] : !hw.probe<!hw.struct<x: i8, y: i16>>
-  %field_ref = hw.probe.sub %elem_ref[1] : !hw.probe<!hw.struct<x: i8, y: i16>>
+  // CHECK: %[[FIELD_REF:.+]] = hw.probe.sub %[[ELEM_REF]][1 : i32] : !hw.probe<!hw.struct<x: i8, y: i16>>
+  %field_ref = hw.probe.sub %elem_ref[1 : i32] : !hw.probe<!hw.struct<x: i8, y: i16>>
 
   // Resolve final value
   // CHECK: %{{.+}} = hw.probe.resolve %[[FIELD_REF]] : !hw.probe<i16>
