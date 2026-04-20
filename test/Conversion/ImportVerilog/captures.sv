@@ -21,7 +21,7 @@ module RecursiveCaptureFunction;
 
   // CHECK: func.func private @fact(%arg0: !moore.i32, %arg1: !moore.ref<i32>) -> !moore.i32 {
   function int fact(input int n);
-    // CHECK: moore.read %arg1 : <i32>
+    // CHECK: moore.read %arg1 : !moore.ref<i32> -> i32
     if (n <= 1) return captureMe;
     // CHECK: call @fact({{.*}}, %arg1) : (!moore.i32, !moore.ref<i32>) -> !moore.i32
     return n * fact(n - 1);
@@ -48,7 +48,7 @@ module CaptureInEventControl;
 
   // CHECK: moore.coroutine private @waitForClk(%arg0: !moore.ref<l1>)
   task automatic waitForClk;
-    // CHECK: moore.read %arg0 : <l1>
+    // CHECK: moore.read %arg0 : !moore.ref<l1> -> l1
     // CHECK: moore.detect_event posedge
     @(posedge clk);
   endtask

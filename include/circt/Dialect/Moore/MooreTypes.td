@@ -440,6 +440,33 @@ def RefType : MooreTypeDef<"Ref", [
   }];
 }
 
+def PtrType : MooreTypeDef<"Ptr", [], "moore::UnpackedType"> {
+  let mnemonic = "ptr";
+  let description = [{
+    A wrapper used to model raw addresses into object-backed memory. It is
+    intended for address-producing ops such as `moore.class.property_ref`,
+    whose result is read or written using `moore.read` and assignment ops with
+    LLVM-like load/store semantics.
+  }];
+  let parameters = (ins "UnpackedType":$nestedType);
+  let assemblyFormat = [{
+    `<` $nestedType `>`
+  }];
+
+  let builders = [
+    AttrBuilderWithInferredContext<(ins "UnpackedType":$nestedType), [{
+      return $_get(nestedType.getContext(), nestedType);
+    }]>
+  ];
+
+  let extraClassDeclaration = [{
+    Domain getDomain() { return getNestedType().getDomain(); }
+    std::optional<unsigned> getBitSize() {
+      return getNestedType().getBitSize();
+    };
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Format String
 //===----------------------------------------------------------------------===//

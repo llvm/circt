@@ -8,8 +8,8 @@ func.func @Basic() -> !moore.i42 {
   // CHECK-NOT: = moore.read
   %0 = moore.constant 9001 : i42
   %1 = moore.variable : <i42>
-  moore.blocking_assign %1, %0 : i42
-  %2 = moore.read %1 : <i42>
+  moore.blocking_assign %1, %0 : !moore.ref<i42>, i42
+  %2 = moore.read %1 : !moore.ref<i42> -> i42
   // CHECK: return [[TMP]] : !moore.i42
   return %2 : !moore.i42
 }
@@ -24,13 +24,13 @@ func.func @ControlFlow(%arg0: i1, %arg1: !moore.l8) -> !moore.l8 {
 ^bb1:
   // CHECK-NOT: moore.blocking_assign
   // CHECK: cf.br ^[[BB2]](%arg1 : !moore.l8)
-  moore.blocking_assign %0, %arg1 : l8
+  moore.blocking_assign %0, %arg1 : !moore.ref<l8>, l8
   cf.br ^bb2
 ^bb2:
   // CHECK: ^[[BB2]]([[TMP:%.+]]: !moore.l8):
   // CHECK-NOT: moore.read
   // CHECK: return [[TMP]]
-  %1 = moore.read %0 : <l8>
+  %1 = moore.read %0 : !moore.ref<l8> -> l8
   return %1 : !moore.l8
 }
 
@@ -42,7 +42,7 @@ func.func @InitialValueDoesNotDominateDefault() {
   %1 = moore.variable %0 : <i32>
   cf.br ^bb2
 ^bb2:
-  %2 = moore.read %1 : <i32>
-  moore.blocking_assign %1, %2 : i32
+  %2 = moore.read %1 : !moore.ref<i32> -> i32
+  moore.blocking_assign %1, %2 : !moore.ref<i32>, i32
   cf.br ^bb1
 }

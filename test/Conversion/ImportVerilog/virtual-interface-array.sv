@@ -36,7 +36,8 @@ module top;
     // CHECK: moore.blocking_assign [[VIFS1_REF]], [[OUT1]]
     vifs[1] = out1;
 
-    // CHECK: [[VIFS_VAL:%.*]] = moore.read [[VIFS]] : <uarray<2 x ustruct<
+    // CHECK: [[VIFS_VAL:%.*]] = moore.read [[VIFS]] : !moore.ref<uarray<2 x ustruct<
+    // CHECK-SAME: >>> -> uarray<2 x ustruct<
     // CHECK: [[VIF1:%.*]] = moore.extract [[VIFS_VAL]] from 0
     // CHECK: moore.blocking_assign [[TMP]], [[VIF1]]
     tmp = vifs[1];

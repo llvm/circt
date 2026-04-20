@@ -22,10 +22,10 @@ module use_unit;
   initial begin
     // CHECK: [[B:%.*]] = moore.variable : <i32>
     // CHECK: [[GA:%.*]] = moore.get_global_variable @a
-    // CHECK: [[AV:%.*]] = moore.read [[GA]] : <i32>
+    // CHECK: [[AV:%.*]] = moore.read [[GA]] : !moore.ref<i32> -> i32
     // CHECK: moore.blocking_assign [[B]], [[AV]]
     b = a;
-    // CHECK: [[BV:%.*]] = moore.read [[B]] : <i32>
+    // CHECK: [[BV:%.*]] = moore.read [[B]] : !moore.ref<i32> -> i32
     // CHECK: [[SUM:%.*]] = func.call @add1([[BV]])
     // CHECK: moore.blocking_assign [[B]], [[SUM]]
     b = add1(b);

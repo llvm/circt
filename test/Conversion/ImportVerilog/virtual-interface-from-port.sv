@@ -36,12 +36,12 @@ module top
     c = new;
 
     // CHECK: [[VIF:%.*]] = moore.struct_create %out_clk, %out_data
-    // CHECK: [[CVAL:%.*]] = moore.read [[C]] : <class<@consumer>>
+    // CHECK: [[CVAL:%.*]] = moore.read [[C]] : !moore.ref<class<@consumer>> -> class<@consumer>
     // CHECK: func.call @"consumer::set_vif"([[CVAL]], [[VIF]])
     c.set_vif(out);
 
     // CHECK: [[B:%.*]] = moore.constant 17 : l8
-    // CHECK: [[CVAL2:%.*]] = moore.read [[C]] : <class<@consumer>>
+    // CHECK: [[CVAL2:%.*]] = moore.read [[C]] : !moore.ref<class<@consumer>> -> class<@consumer>
     // CHECK: func.call @"consumer::drive"([[CVAL2]], [[B]])
     c.drive(8'h11);
   end

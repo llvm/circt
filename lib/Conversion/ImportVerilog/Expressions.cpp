@@ -133,7 +133,7 @@ static Value visitClassProperty(Context &context,
   auto builder = context.builder;
   auto type = context.convertType(expr.getType());
   auto fieldTy = cast<moore::UnpackedType>(type);
-  auto fieldRefTy = moore::RefType::get(fieldTy);
+  auto fieldRefTy = moore::PtrType::get(fieldTy);
 
   if (expr.lifetime == slang::ast::VariableLifetime::Static) {
 
@@ -178,6 +178,12 @@ static Value visitClassProperty(Context &context,
   Value fieldRef = moore::ClassPropertyRefOp::create(builder, loc, fieldRefTy,
                                                      upcastRef, fieldSym);
   return fieldRef;
+}
+
+static moore::UnpackedType getLocationElementType(Type type) {
+  if (auto refType = dyn_cast<moore::RefType>(type))
+    return refType.getNestedType();
+  return cast<moore::PtrType>(type).getNestedType();
 }
 
 namespace {
@@ -263,7 +269,7 @@ struct ExprVisitor {
     // We only support indexing into a few select types for now.
     auto derefType = value.getType();
     if (isLvalue)
-      derefType = cast<moore::RefType>(derefType).getNestedType();
+      derefType = getLocationElementType(derefType);
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
              moore::QueueType, moore::AssocArrayType, moore::StringType,
@@ -410,7 +416,7 @@ struct ExprVisitor {
 
     auto derefType = value.getType();
     if (isLvalue)
-      derefType = cast<moore::RefType>(derefType).getNestedType();
+      derefType = getLocationElementType(derefType);
 
     if (isa<moore::QueueType>(derefType)) {
       return handleQueueRangeSelectExpressions(expr, type, value);
@@ -788,12 +794,12 @@ struct ExprVisitor {
         if (!baseVal)
           return {};
 
-        // @field and result type !moore.ref<T>.
+        // @field and result type !moore.ptr<T>.
         auto fieldSym = mlir::FlatSymbolRefAttr::get(builder.getContext(),
                                                      expr.member.name);
-        auto fieldRefTy = moore::RefType::get(cast<moore::UnpackedType>(type));
+        auto fieldRefTy = moore::PtrType::get(cast<moore::UnpackedType>(type));
 
-        // Produce a ref to the class property from the (possibly upcast)
+        // Produce an address to the class property from the (possibly upcast)
         // handle.
         Value fieldRef = moore::ClassPropertyRefOp::create(
             builder, loc, fieldRefTy, baseVal, fieldSym);
@@ -981,7 +987,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     // Determine the right-hand side value of the assignment.
     context.lvalueStack.push_back(lhs);
     auto rhs = context.convertRvalueExpression(
-        expr.right(), cast<moore::RefType>(lhs.getType()).getNestedType());
+        expr.right(), getLocationElementType(lhs.getType()));
     context.lvalueStack.pop_back();
     if (!rhs)
       return {};
@@ -2434,8 +2440,8 @@ struct LvalueExprVisitor : public ExprVisitor {
       Value value;
       if (stream.constantWithWidth.has_value()) {
         value = context.convertLvalueExpression(*stream.withExpr);
-        auto type = cast<moore::UnpackedType>(
-            cast<moore::RefType>(value.getType()).getNestedType());
+        auto type =
+            cast<moore::UnpackedType>(getLocationElementType(value.getType()));
         auto intType = moore::RefType::get(moore::IntType::get(
             context.getContext(), type.getBitSize().value(), type.getDomain()));
         // Do not care if it's signed, because we will not do expansion.
@@ -2461,8 +2467,7 @@ struct LvalueExprVisitor : public ExprVisitor {
       return value;
     }
 
-    auto type = cast<moore::IntType>(
-        cast<moore::RefType>(value.getType()).getNestedType());
+    auto type = cast<moore::IntType>(getLocationElementType(value.getType()));
     SmallVector<Value> slicedOperands;
     auto widthSum = type.getWidth();
     auto domain = type.getDomain();

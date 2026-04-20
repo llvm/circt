@@ -1400,6 +1400,50 @@ ReadOp::removeBlockingUses(const MemorySlot &slot,
   return DeletionKind::Delete;
 }
 
+static Type getLocationElementType(Type type) {
+  if (auto refType = dyn_cast<RefType>(type))
+    return refType.getNestedType();
+  if (auto ptrType = dyn_cast<PtrType>(type))
+    return ptrType.getNestedType();
+  return {};
+}
+
+template <typename OpTy>
+static LogicalResult verifyAssignLikeOp(OpTy op) {
+  Type dstElemType = getLocationElementType(op.getDst().getType());
+  if (!dstElemType)
+    return op.emitOpError(
+        "destination must be a !moore.ref<T> or !moore.ptr<T>");
+  if (dstElemType != op.getSrc().getType())
+    return op.emitOpError("source type (")
+           << op.getSrc().getType() << ") does not match destination element "
+           << "type (" << dstElemType << ")";
+  return success();
+}
+
+LogicalResult ReadOp::verify() {
+  Type inputElemType = getLocationElementType(getInput().getType());
+  if (!inputElemType)
+    return emitOpError("input must be a !moore.ref<T> or !moore.ptr<T>");
+  if (inputElemType != getResult().getType())
+    return emitOpError("result type (")
+           << getResult().getType() << ") does not match input element type ("
+           << inputElemType << ")";
+  return success();
+}
+
+LogicalResult BlockingAssignOp::verify() { return verifyAssignLikeOp(*this); }
+LogicalResult NonBlockingAssignOp::verify() {
+  return verifyAssignLikeOp(*this);
+}
+LogicalResult DelayedNonBlockingAssignOp::verify() {
+  return verifyAssignLikeOp(*this);
+}
+LogicalResult ContinuousAssignOp::verify() { return verifyAssignLikeOp(*this); }
+LogicalResult DelayedContinuousAssignOp::verify() {
+  return verifyAssignLikeOp(*this);
+}
+
 //===----------------------------------------------------------------------===//
 // PowSOp
 //===----------------------------------------------------------------------===//
@@ -1661,15 +1705,15 @@ ClassPropertyRefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("symbol `")
            << fieldSym << "` is not a `moore.class.propertydecl`";
 
-  // Result must be !moore.ref<T> where T matches the field's declared type.
-  auto resRefTy = cast<RefType>(getPropertyRef().getType());
-  if (!resRefTy)
-    return emitOpError("result must be a !moore.ref<T>");
+  // Result must be !moore.ptr<T> where T matches the field's declared type.
+  auto resPtrTy = dyn_cast<PtrType>(getPropertyRef().getType());
+  if (!resPtrTy)
+    return emitOpError("result must be a !moore.ptr<T>");
 
   Type expectedElemTy = fieldDecl.getPropertyType();
-  if (resRefTy.getNestedType() != expectedElemTy)
+  if (resPtrTy.getNestedType() != expectedElemTy)
     return emitOpError("result element type (")
-           << resRefTy.getNestedType() << ") does not match field type ("
+           << resPtrTy.getNestedType() << ") does not match field type ("
            << expectedElemTy << ")";
 
   return success();
