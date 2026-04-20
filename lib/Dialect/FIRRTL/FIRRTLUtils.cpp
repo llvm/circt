@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/Naming.h"
@@ -1082,6 +1083,17 @@ Type circt::firrtl::lowerType(
         {StringAttr::get(type.getContext(), "body"), bodyTy}};
     return hw::StructType::get(type.getContext(), fields);
   }
+
+  // Lower RefType to hw::ProbeType or hw::RWProbeType
+  if (auto refType = type_dyn_cast<RefType>(firType)) {
+    auto innerType = lowerType(refType.getType(), loc, getTypeDeclFn);
+    if (!innerType)
+      return {};
+    if (refType.getForceable())
+      return hw::RWProbeType::get(innerType);
+    return hw::ProbeType::get(innerType);
+  }
+
   if (type_isa<ClockType>(firType))
     return seq::ClockType::get(firType.getContext());
 
