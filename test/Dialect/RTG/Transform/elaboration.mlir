@@ -18,6 +18,7 @@ func.func @dummy15(%arg0: !rtg.isa.immediate<32>) -> () {return}
 func.func @dummy16(%arg0: !rtg.isa.immediate<12>) -> () {return}
 func.func @dummy17(%arg0: !rtg.isa.immediate<3>) -> () {return}
 func.func @dummy18(%arg0: !rtg.string) -> () {return}
+func.func @dummy_reg(%arg0: !rtgtest.ireg) -> () {return}
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   %0 = index.constant 0
@@ -1106,6 +1107,20 @@ rtg.test @attributeToElabValueConversion(singleton = %none: index) {
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant 2 : index
   // CHECK-NEXT: func.call @dummy2([[V0]])
   func.call @dummy2(%selected) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @registerIndexConversions
+rtg.test @registerIndexConversions(singleton = %none: index) {
+  %t0 = rtg.constant #rtgtest.t0 : !rtgtest.ireg
+  %one = rtg.constant 1 : index
+
+  %idx = rtg.isa.register_to_index %t0 : !rtgtest.ireg
+  %idx_plus_one = index.add %idx, %one
+
+  // CHECK: [[REG:%.+]] = rtg.constant #rtgtest.t1 : !rtgtest.ireg
+  // CHECK-NEXT: func.call @dummy_reg([[REG]])
+  %reg = rtg.isa.index_to_register %idx_plus_one : !rtgtest.ireg
+  func.call @dummy_reg(%reg) : (!rtgtest.ireg) -> ()
 }
 
 // -----
