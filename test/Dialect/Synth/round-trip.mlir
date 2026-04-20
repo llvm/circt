@@ -24,3 +24,9 @@ hw.module @xor_inv(in %a: i4, in %b: i4, in %c: i4, in %d: i1) {
   %0 = synth.xor_inv %a, not %b, %c : i4
   %1 = synth.xor_inv not %d : i1
 }
+
+// CHECK-LABEL: @dot
+// CHECK-NEXT: %[[R0:.+]] = synth.dot %x, not %y, %z : i1
+hw.module @dot(in %x: i1, in %y: i1, in %z: i1) {
+  %0 = synth.dot %x, not %y, %z : i1
+}
