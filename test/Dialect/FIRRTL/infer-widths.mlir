@@ -1,4 +1,5 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-widths))' --verify-diagnostics %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-infer-widths-new))' --verify-diagnostics %s | FileCheck %s 
 
 firrtl.circuit "Foo" {
   // CHECK-LABEL: @InferConstant

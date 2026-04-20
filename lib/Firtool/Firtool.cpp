@@ -89,7 +89,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       firrtl::createLowerMatches());
 
   // Width inference creates canonicalization opportunities.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
+  if (opt.shouldUseNewInferWidths()) {
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths_new());
+  } else {
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
+  }
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createMemToRegOfVec(
       {/*replSeqMem=*/opt.shouldReplaceSequentialMemories(),
@@ -573,6 +577,11 @@ struct FirtoolCmdOptions {
       llvm::cl::desc("Disable deduplication of structurally identical modules"),
       llvm::cl::init(false)};
 
+  llvm::cl::opt<bool> useNewInferWidths{
+      "use-new-infer-widths",
+      llvm::cl::desc("Use experimental new InferWidths pass"),
+      llvm::cl::init(false)};
+
   llvm::cl::opt<bool> dedupClasses{
       "dedup-classes",
       llvm::cl::desc(
@@ -857,6 +866,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   disableOptimization = clOptions->disableOptimization;
   vbToBV = clOptions->vbToBV;
   noDedup = clOptions->noDedup;
+  useNewInferWidths = clOptions->useNewInferWidths;
   dedupClasses = clOptions->dedupClasses;
   companionMode = clOptions->companionMode;
   noViews = clOptions->noViews;
