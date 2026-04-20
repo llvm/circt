@@ -3,6 +3,7 @@ add_circt_dialect_library(CIRCTHWTransforms
   HWConvertBitcasts.cpp
   HWBypassInnerSymbols.cpp
   HWIMDeadCodeElim.cpp
+  HWLowerXMR.cpp
   HWParameterizeConstantPorts.cpp
   HWPrintInstanceGraph.cpp
   HWSpecialize.cpp
