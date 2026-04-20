@@ -10,9 +10,7 @@ import executing
 # PyCDE-internal modules where auto-naming from variable names IS desired.
 # Code in any other pycde.* module is considered "internal plumbing" and will
 # be skipped when skip_pycde is True.
-_PYCDE_AUTONAME_MODULES = frozenset((
-    "pycde.constructs",
-))
+_PYCDE_AUTONAME_MODULES = frozenset(("pycde.constructs",))
 
 
 def _is_pycde_internal(module_name: str) -> bool:
