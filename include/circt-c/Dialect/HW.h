@@ -73,26 +73,32 @@ MLIR_CAPI_EXPORTED int64_t hwGetBitWidth(MlirType);
 /// dialects.
 MLIR_CAPI_EXPORTED bool hwTypeIsAValueType(MlirType);
 
+MLIR_CAPI_EXPORTED bool hwTypeIsAIntType(MlirType);
+MLIR_CAPI_EXPORTED MlirTypeID hwIntTypeGetTypeID(void);
+
 /// If the type is an HW array
 MLIR_CAPI_EXPORTED bool hwTypeIsAArrayType(MlirType);
+MLIR_CAPI_EXPORTED MlirTypeID hwArrayTypeGetTypeID(void);
 
 /// If the type is an HW inout.
 MLIR_CAPI_EXPORTED bool hwTypeIsAInOut(MlirType type);
+MLIR_CAPI_EXPORTED MlirTypeID hwInOutTypeGetTypeID(void);
 
 /// If the type is an HW module type.
 MLIR_CAPI_EXPORTED bool hwTypeIsAModuleType(MlirType type);
+MLIR_CAPI_EXPORTED MlirTypeID hwModuleTypeGetTypeID(void);
 
 /// If the type is an HW struct.
 MLIR_CAPI_EXPORTED bool hwTypeIsAStructType(MlirType);
+MLIR_CAPI_EXPORTED MlirTypeID hwStructTypeGetTypeID(void);
 
 /// If the type is an HW union.
 MLIR_CAPI_EXPORTED bool hwTypeIsAUnionType(MlirType);
+MLIR_CAPI_EXPORTED MlirTypeID hwUnionTypeGetTypeID(void);
 
 /// If the type is an HW type alias.
 MLIR_CAPI_EXPORTED bool hwTypeIsATypeAliasType(MlirType);
-
-/// If the type is an HW int.
-MLIR_CAPI_EXPORTED bool hwTypeIsAIntType(MlirType);
+MLIR_CAPI_EXPORTED MlirTypeID hwTypeAliasTypeGetTypeID(void);
 
 /// Creates a fixed-size HW array type in the context associated with element
 MLIR_CAPI_EXPORTED MlirType hwArrayTypeGet(MlirType element, size_t size);
@@ -192,17 +198,20 @@ MLIR_CAPI_EXPORTED MlirStringRef hwTypeAliasTypeGetScope(MlirType typeAlias);
 //===----------------------------------------------------------------------===//
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAInnerSymAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirTypeID hwInnerSymAttrGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerSymAttrGet(MlirAttribute symName);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerSymAttrGetEmpty(MlirContext ctx);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerSymAttrGetSymName(MlirAttribute);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAInnerRefAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirTypeID hwInnerRefAttrGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerRefAttrGet(MlirAttribute moduleName,
                                                    MlirAttribute innerSym);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerRefAttrGetName(MlirAttribute);
 MLIR_CAPI_EXPORTED MlirAttribute hwInnerRefAttrGetModule(MlirAttribute);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirTypeID hwParamDeclAttrGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGet(MlirStringRef name,
                                                     MlirType type,
                                                     MlirAttribute value);
@@ -211,15 +220,18 @@ MLIR_CAPI_EXPORTED MlirType hwParamDeclAttrGetType(MlirAttribute decl);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclAttrGetValue(MlirAttribute decl);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamDeclRefAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirTypeID hwParamDeclRefAttrGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamDeclRefAttrGet(MlirContext ctx,
                                                        MlirStringRef cName);
 MLIR_CAPI_EXPORTED MlirStringRef hwParamDeclRefAttrGetName(MlirAttribute decl);
 MLIR_CAPI_EXPORTED MlirType hwParamDeclRefAttrGetType(MlirAttribute decl);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAParamVerbatimAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirTypeID hwParamVerbatimAttrGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirAttribute hwParamVerbatimAttrGet(MlirAttribute text);
 
 MLIR_CAPI_EXPORTED bool hwAttrIsAOutputFileAttr(MlirAttribute);
+MLIR_CAPI_EXPORTED MlirTypeID hwOutputFileAttrGetTypeID(void);
 MLIR_CAPI_EXPORTED MlirAttribute hwOutputFileGetFromFileName(
     MlirAttribute text, bool excludeFromFileList, bool includeReplicatedOp);
 MLIR_CAPI_EXPORTED MlirStringRef
