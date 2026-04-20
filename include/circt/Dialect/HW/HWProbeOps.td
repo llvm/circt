@@ -120,6 +120,37 @@ def ProbeRWProbeOp : HWOp<"probe.rwprobe", [
   let hasCustomAssemblyFormat = 1;
 }
 
+def ProbeDefineOp : HWOp<"probe.define", [SameTypeOperands]> {
+  let summary = "Define a probe reference to another probe";
+  let description = [{
+    Defines a target probe reference to be the same as the source probe reference.
+    This is used to statically route probe references from source to destination
+    through the design hierarchy, one module at a time.
+
+    Similar to a "connect" operation but with stricter semantics:
+    - Cannot have multiple defines to the same destination
+    - The define is never conditional, even if under a conditional block
+    - Both source and destination must be statically resolvable references
+
+    This operation is particularly useful for propagating probe references through
+    module boundaries, allowing hierarchical probe routing.
+
+    Example:
+    ```mlir
+    hw.probe.define %dest, %src : !hw.probe<i32>
+    ```
+  }];
+
+  let arguments = (ins AnyProbeType:$dest, AnyProbeType:$src);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $dest `,` $src attr-dict `:` qualified(type($dest))
+  }];
+
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Probe Manipulation Operations
 //===----------------------------------------------------------------------===//
