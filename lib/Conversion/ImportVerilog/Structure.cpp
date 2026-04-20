@@ -1907,8 +1907,6 @@ LogicalResult Context::convertNInputPrimitive(
   if (!result)
     return failure();
 
-  // TODO: annotate with debug ops to preserve primitive name
-
   auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
   result = materializeConversion(dstType, result, false, loc);
   if (!result)
