@@ -50,5 +50,18 @@ def ExternalizeRegisters : Pass<"externalize-registers", "::mlir::ModuleOp"> {
   ];
 }
 
-#endif // CIRCT_TOOLS_CIRCT_BMC_PASSES_TD
+def MaterializeDebugVariables : Pass<"materialize-debug-variables", "::mlir::ModuleOp"> {
+  let summary = "Materializes debug anchors for module inputs";
+  let description = [{
+    Creates `dbg.variable` anchors for module input arguments that do not yet have
+    one. When an input `<name>_state` has a matching output `<name>_next`, the
+    anchor name is normalized to `<name>`.
+  }];
 
+  let dependentDialects = [
+    "circt::debug::DebugDialect", "circt::seq::SeqDialect",
+    "circt::hw::HWDialect"
+  ];
+}
+
+#endif // CIRCT_TOOLS_CIRCT_BMC_PASSES_TD
