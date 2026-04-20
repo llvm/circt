@@ -2067,6 +2067,13 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(XMRRefOp op);
   LogicalResult visitExpr(XMRDerefOp op);
 
+  // Probe operations.
+  LogicalResult visitExpr(RefSendOp op);
+  LogicalResult visitExpr(RefResolveOp op);
+  LogicalResult visitExpr(RefSubOp op);
+  LogicalResult visitExpr(RefCastOp op);
+  LogicalResult visitStmt(RefDefineOp op);
+
   // Format String Operations
   LogicalResult visitExpr(TimeOp op);
   LogicalResult visitExpr(HierarchicalModuleNameOp op);
@@ -5175,6 +5182,86 @@ LogicalResult FIRRTLLowering::visitExpr(XMRDerefOp op) {
   if (!isa<ClockType>(op.getType()))
     return setLowering(op, readXmr);
   return setLoweringTo<seq::ToClockOp>(op, readXmr);
+}
+
+//===----------------------------------------------------------------------===//
+// Probe Operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult FIRRTLLowering::visitExpr(RefSendOp op) {
+  // ref.send creates a probe reference
+  auto operand = getLoweredValue(op.getBase());
+  if (!operand)
+    return failure();
+
+  // Determine if this should be forceable (rwprobe vs probe)
+  // Check if the FIRRTL RefType has the forceable attribute
+  bool forceable = false;
+  if (auto refType = type_dyn_cast<firrtl::RefType>(op.getType()))
+    forceable = refType.getForceable();
+
+  // Create hw.probe.send with forceable attribute if needed
+  auto probeSend = builder.create<hw::ProbeSendOp>(operand, forceable);
+  return setLowering(op, probeSend.getResult());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RefResolveOp op) {
+  // ref.resolve reads through a probe
+  auto probe = getLoweredValue(op.getRef());
+  if (!probe)
+    return failure();
+
+  // Get the lowered result type
+  auto resultType = lowerType(op.getType());
+  if (!resultType)
+    return failure();
+
+  auto probeResolve = builder.create<hw::ProbeResolveOp>(resultType, probe);
+  return setLowering(op, probeResolve.getResult());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RefSubOp op) {
+  // ref.sub accesses a sub-element of a probe
+  auto probe = getLoweredValue(op.getInput());
+  if (!probe)
+    return failure();
+
+  // Get the lowered result type
+  auto resultType = lowerType(op.getType());
+  if (!resultType)
+    return failure();
+
+  // Convert index to I32Attr
+  auto indexAttr = builder.getI32IntegerAttr(op.getIndex());
+
+  auto probeSub = builder.create<hw::ProbeSubOp>(resultType, probe, indexAttr);
+  return setLowering(op, probeSub.getResult());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RefCastOp op) {
+  // ref.cast converts between probe types
+  auto probe = getLoweredValue(op.getInput());
+  if (!probe)
+    return failure();
+
+  // Get the lowered result type
+  auto resultType = lowerType(op.getType());
+  if (!resultType)
+    return failure();
+
+  auto probeCast = builder.create<hw::ProbeCastOp>(resultType, probe);
+  return setLowering(op, probeCast.getResult());
+}
+
+LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) {
+  // ref.define forwards a probe
+  auto dest = getLoweredValue(op.getDest());
+  auto src = getLoweredValue(op.getSrc());
+  if (!dest || !src)
+    return failure();
+
+  builder.create<hw::ProbeDefineOp>(dest, src);
+  return success();
 }
 
 // Do nothing when lowering fstring operations.  These need to be handled at
