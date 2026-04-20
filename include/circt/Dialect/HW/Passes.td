@@ -194,5 +194,23 @@ def HWConvertBitcasts : Pass<"hw-convert-bitcasts", "mlir::ModuleOp"> {
   let dependentDialects = ["comb::CombDialect"];
 }
 
+def HWLowerXMR : Pass<"hw-lower-xmr", "mlir::ModuleOp"> {
+  let summary = "Lower HW probe operations to XMRs";
+  let description = [{
+    This pass lowers HW dialect probe operations (hw.probe.send, hw.probe.resolve)
+    to cross-module references (sv.xmr.ref). It performs dataflow analysis to
+    trace probe references from their resolve points back to their send points,
+    then creates hierarchical paths and replaces the probe operations with XMRs.
+
+    The pass:
+    1. Analyzes dataflow of probe references across module boundaries
+    2. Creates hw.hierpath operations for each unique reference path
+    3. Replaces hw.probe.resolve with sv.xmr.ref + sv.read_inout
+    4. Removes probe ports from module interfaces
+    5. Handles RWProbe force/release operations
+  }];
+  let dependentDialects = ["circt::sv::SVDialect"];
+}
+
 
 #endif // CIRCT_DIALECT_HW_PASSES_TD

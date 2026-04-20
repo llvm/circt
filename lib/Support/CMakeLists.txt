@@ -8,6 +8,7 @@ add_circt_library(CIRCTSupport
   Debug.cpp
   FVInt.cpp
   FieldRef.cpp
+  HWUtils.cpp
   InstanceGraph.cpp
   JSON.cpp
   LoweringOptions.cpp
