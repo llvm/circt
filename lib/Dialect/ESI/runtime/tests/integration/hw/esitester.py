@@ -12,7 +12,7 @@
 import sys
 
 from pycde import System
-from pycde.bsp import get_bsp
+from esiaccel.bsp import get_bsp
 
 from esiaccel.esitester import EsiTester
 

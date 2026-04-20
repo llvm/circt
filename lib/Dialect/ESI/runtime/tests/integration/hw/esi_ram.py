@@ -7,7 +7,7 @@
 import pycde
 from pycde import (AppID, Clock, Input, Module, generator)
 from pycde.esi import DeclareRandomAccessMemory, ServiceDecl
-from pycde.bsp import get_bsp
+from esiaccel.bsp import get_bsp
 from pycde.module import Metadata
 from pycde.types import Bits
 

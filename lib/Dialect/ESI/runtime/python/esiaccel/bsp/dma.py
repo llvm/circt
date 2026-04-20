@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
-from ..common import Clock, Input, InputChannel, OutputChannel, Reset
-from ..constructs import ControlReg, Mux, NamedWire, Wire
-from ..module import modparams, generator
-from ..types import Bits, Channel, StructType, Type, UInt
-from ..support import clog2
-from .. import esi
+from pycde.common import Clock, Input, InputChannel, OutputChannel, Reset
+from pycde.constructs import ControlReg, Mux, NamedWire, Wire
+from pycde.module import modparams, generator
+from pycde.types import Bits, Channel, StructType, Type, UInt
+from pycde.support import clog2
+from pycde import esi
 
 
 @modparams

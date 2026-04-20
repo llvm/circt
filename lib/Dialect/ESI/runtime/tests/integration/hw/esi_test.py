@@ -7,7 +7,7 @@
 
 import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)
-from pycde.bsp import get_bsp
+from esiaccel.bsp import get_bsp
 from pycde.common import Constant, Input, Output
 from pycde.constructs import ControlReg, Mux, Reg, Wire
 from pycde.esi import (ChannelService, CallService, FuncService, MMIO,
