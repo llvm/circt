@@ -5194,11 +5194,13 @@ LogicalResult FIRRTLLowering::visitExpr(RefSendOp op) {
   if (!operand)
     return failure();
 
+  // Get the lowered result type (probe or rwprobe)
+  auto resultType = lowerType(op.getType());
+  if (!resultType)
+    return failure();
+
   // Determine if this should be forceable (rwprobe vs probe)
-  // Check if the FIRRTL RefType has the forceable attribute
-  bool forceable = false;
-  if (auto refType = type_dyn_cast<firrtl::RefType>(op.getType()))
-    forceable = refType.getForceable();
+  bool forceable = type_isa<hw::RWProbeType>(resultType);
 
   // Create hw.probe.send with forceable attribute if needed
   auto probeSend = builder.create<hw::ProbeSendOp>(operand, forceable);
@@ -5260,6 +5262,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) {
   if (!dest || !src)
     return failure();
 
+  // Create hw.probe.define to forward the probe
   builder.create<hw::ProbeDefineOp>(dest, src);
   return success();
 }
