@@ -15,7 +15,7 @@
 // with taint propagation rules that operate at the macrocell level.
 //
 // References:
-//   F. Music, F. K. Gürkaynak, et al., "CellIFT: Leveraging Cells for
+//   F. Solt, B. Gras., and K. Razavi., "CellIFT: Leveraging Cells for
 //   Scalable and Precise Dynamic Information Flow Tracking in RTL,"
 //   USENIX Security 2022.
 //
@@ -34,6 +34,7 @@
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -327,21 +328,17 @@ Value instrumentOperation(ImplicitLocOpBuilder &b, comb::DivSOp op,
   return conservativeTaint(b, taintInputs, op.getType());
 }
 
-// MOD (precise per Yosys): y_t = mod(a_t, b) | broadcast(reduce_or(b_t))
+// MOD (conservative): any tainted input taints the full result.
 Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ModUOp op,
                           comb::ModUOp::Adaptor taintAdaptor) {
-  Value modTaint = comb::ModUOp::create(b, taintAdaptor.getLhs(), op.getRhs());
-  Value bTaintBit = orReduce(b, taintAdaptor.getRhs());
-  Value bTaintBroad = broadcast(b, bTaintBit, op.getType());
-  return comb::OrOp::create(b, modTaint, bTaintBroad);
+  SmallVector<Value> taintInputs{taintAdaptor.getLhs(), taintAdaptor.getRhs()};
+  return conservativeTaint(b, taintInputs, op.getType());
 }
 
 Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ModSOp op,
                           comb::ModSOp::Adaptor taintAdaptor) {
-  Value modTaint = comb::ModSOp::create(b, taintAdaptor.getLhs(), op.getRhs());
-  Value bTaintBit = orReduce(b, taintAdaptor.getRhs());
-  Value bTaintBroad = broadcast(b, bTaintBit, op.getType());
-  return comb::OrOp::create(b, modTaint, bTaintBroad);
+  SmallVector<Value> taintInputs{taintAdaptor.getLhs(), taintAdaptor.getRhs()};
+  return conservativeTaint(b, taintInputs, op.getType());
 }
 
 // MUX: y_t = mux(sel, t_t, f_t) | replicate(sel_t) & (t^f | t_t | f_t)
@@ -725,12 +722,6 @@ void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod,
     return false;
   });
 
-  // Collect ops to instrument (avoid iterator invalidation).
-  SmallVector<Operation *> ops;
-  for (auto &op : *body)
-    if (!isa<hw::OutputOp>(op))
-      ops.push_back(&op);
-
   ImplicitLocOpBuilder b(mod.getLoc(), mod.getContext());
 
   // Phase 1: Pre-create taint registers for all seq registers.
@@ -741,12 +732,16 @@ void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod,
     Value origInput; // the data input whose taint we need
   };
   SmallVector<PendingReg> pendingRegs;
+  SmallVector<Operation *> opsToInstrument;
 
-  for (auto *op : ops) {
-    b.setLoc(op->getLoc());
-    b.setInsertionPointAfter(op);
+  for (Operation &op : llvm::make_early_inc_range(*body)) {
+    if (isa<hw::OutputOp>(op))
+      continue;
 
-    if (auto compreg = dyn_cast<seq::CompRegOp>(op)) {
+    b.setLoc(op.getLoc());
+    b.setInsertionPointAfter(&op);
+
+    if (auto compreg = dyn_cast<seq::CompRegOp>(&op)) {
       StringAttr name;
       if (auto n = compreg.getNameAttr())
         name = b.getStringAttr(n.getValue().str() + taintSuffix);
@@ -765,7 +760,7 @@ void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod,
       }
       taintOf[compreg.getData()] = tReg;
       pendingRegs.push_back({tReg.getDefiningOp(), compreg.getInput()});
-    } else if (auto firreg = dyn_cast<seq::FirRegOp>(op)) {
+    } else if (auto firreg = dyn_cast<seq::FirRegOp>(&op)) {
       StringAttr name = b.getStringAttr(firreg.getName().str() + taintSuffix);
 
       Value zero = getZero(b, firreg.getType());
@@ -780,13 +775,15 @@ void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod,
       }
       taintOf[firreg.getData()] = tReg;
       pendingRegs.push_back({tReg.getDefiningOp(), firreg.getNext()});
+    } else {
+      // Phase 2 only instruments original non-register ops, not the
+      // placeholder ops created while pre-creating taint registers.
+      opsToInstrument.push_back(&op);
     }
   }
 
   // Phase 2: Instrument all other ops (register taints are now available).
-  for (auto *op : ops) {
-    if (isa<seq::CompRegOp, seq::FirRegOp>(op))
-      continue; // already handled in phase 1
+  for (auto *op : opsToInstrument) {
     b.setLoc(op->getLoc());
     b.setInsertionPointAfter(op);
 
@@ -826,16 +823,12 @@ void CellIFTInstrumentPass::rewriteOutputOp(HWModuleOp mod, TaintMap &taintOf,
   Block *body = mod.getBodyBlock();
   auto outputOp = cast<hw::OutputOp>(body->getTerminator());
 
-  SmallVector<PortInfo> outPorts;
-  for (auto p : mod.getPortList())
-    if (p.isOutput())
-      outPorts.push_back(p);
-
   SmallVector<Value> newOuts;
+  ModulePortInfo ports(mod.getPortList());
   unsigned origIdx = 0;
   ImplicitLocOpBuilder b(outputOp.getLoc(), outputOp);
 
-  for (auto &port : outPorts) {
+  for (auto &port : ports.getOutputs()) {
     StringRef pn = port.getName();
     if (pn.ends_with(taintSuffix) && pn.size() > taintSuffix.size()) {
       // Taint output: provide taint of the previous output value.

@@ -58,8 +58,6 @@ std::unique_ptr<mlir::Pass> createHierarchicalRunner(
     llvm::function_ref<void(mlir::OpPassManager &)> pipeline,
     bool includeBoundInstances = false);
 
-std::unique_ptr<mlir::Pass> createCellIFTInstrumentPass();
-
 //===----------------------------------------------------------------------===//
 // Utility functions.
 //===----------------------------------------------------------------------===//
