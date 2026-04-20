@@ -25,6 +25,22 @@ const char *MetasyntacticNameGenerator::getNextName() {
   return names[index++];
 }
 
+StringRef MetasyntacticNameGenerator::getNextName(Namespace &ns) {
+  return ns.newName(getNextName());
+}
+
+bool MetasyntacticNameGenerator::isMetasyntacticName(StringRef name) {
+  // Build a set of all metasyntactic names on first use.
+  static const llvm::StringSet<> nameSet = [] {
+    llvm::StringSet<> s;
+    for (auto *n : names)
+      s.insert(n);
+    return s;
+  }();
+  // The prefix is everything before the first '_', or the whole name.
+  return nameSet.contains(name.split('_').first);
+}
+
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//

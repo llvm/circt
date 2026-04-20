@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/LayerSet.h"
 #include "circt/Dialect/FIRRTL/NLATable.h"
+#include "circt/Dialect/FIRRTL/Namespace.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
@@ -1832,6 +1833,7 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
     firrtl::InstanceGraph iGraph(circuitOp);
     NLATable nlaTable(circuitOp);
     SymbolTable symTable(circuitOp);
+    CircuitNamespace ns(circuitOp);
 
     // Rename symbols and NLAs.
     auto renameModule = [&](firrtl::FModuleLike mod,
@@ -1843,14 +1845,17 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
       return success();
     };
 
-    // Set the circuit name.  This is the top-level module and the name on the
-    // circuit.  The circuit name is a string so it requires an extra step.
+    // Set the top-modulefirst so that the circuit gets the first metasyntactic
+    // name, i.e., "Foo".
+    auto topModule = iGraph.getTopLevelModule();
     auto *ctx = circuitOp.getContext();
-    auto *circuitName = nameGenerator.getNextName();
-    auto newTopName = StringAttr::get(ctx, circuitName);
-    if (failed(renameModule(iGraph.getTopLevelModule(), newTopName)))
-      return failure();
-    circuitOp.setName(circuitName);
+    if (!reduce::MetasyntacticNameGenerator::isMetasyntacticName(
+            topModule.getModuleName())) {
+      auto newTopName = StringAttr::get(ctx, nameGenerator.getNextName(ns));
+      if (failed(renameModule(topModule, newTopName)))
+        return failure();
+      circuitOp.setName(newTopName.getValue());
+    }
 
     for (auto *node : iGraph) {
       auto module = node->getModule<firrtl::FModuleLike>();
@@ -1884,7 +1889,11 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
 
       if (module == iGraph.getTopLevelModule())
         continue;
-      auto newName = StringAttr::get(ctx, nameGenerator.getNextName());
+      // Skip renaming if the module already has a metasyntactic name.
+      if (reduce::MetasyntacticNameGenerator::isMetasyntacticName(
+              module.getModuleName()))
+        continue;
+      auto newName = StringAttr::get(ctx, nameGenerator.getNextName(ns));
       if (failed(renameModule(module, newName)))
         return failure();
       for (auto *use : node->uses()) {
