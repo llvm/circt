@@ -63,16 +63,9 @@ struct MemToRegOfVecPass
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
 
       auto firMem = memOp.getSummary();
-      // Ignore if the memory is candidate for macro replacement.
-      // The requirements for macro replacement:
-      // 1. read latency and write latency of one.
-      // 2. only one readwrite port or write port.
-      // 3. zero or one read port.
-      // 4. undefined read-under-write behavior.
-      if (replSeqMem &&
-          ((firMem.readLatency == 1 && firMem.writeLatency == 1) &&
-           (firMem.numWritePorts + firMem.numReadWritePorts == 1) &&
-           (firMem.numReadPorts <= 1) && firMem.dataWidth > 0))
+      // Ignore if we are running with macro replacement on and the memory is a
+      // candidate for macro replacement.
+      if (replSeqMem && firMem.isSeqMem())
         return;
 
       generateMemory(memOp, firMem);

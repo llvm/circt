@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-mem-to-reg-of-vec))' %s | FileCheck  %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-mem-to-reg-of-vec{repl-seq-mem=true}))' %s | FileCheck  %s
 
 firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
   firrtl.module public @Mem(out %d : !firrtl.probe<vector<uint<8>, 8>>, out %d2 : !firrtl.probe<vector<uint<8>, 8>>) attributes {annotations = [
@@ -238,4 +238,49 @@ firrtl.circuit "NLA" attributes {annotations = [
   ]} {
     firrtl.instance foo sym @foo @Foo()
 	}
+}
+
+// Test that certain memories which are intended to be implemented with SRAMs
+// are not lowered.
+//
+// CHECK-LABEL: "SkipMemoryMacros"
+firrtl.circuit "SkipMemoryMacros" attributes {
+  annotations = [
+    {
+      class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
+    }
+  ]
+} {
+  firrtl.module @SkipMemoryMacros() {
+    // None of the following memories should be replaced.
+    // CHECK-COUNT-4: firrtl.mem
+    %latency_1r1w = firrtl.mem Undefined {
+      depth = 2 : i64,
+      name = "m",
+      portNames = ["rw"],
+      readLatency = 1 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<1>, wmode: uint<1>, wdata: uint<1>, wmask: uint<1>>
+    %latency_1r2w = firrtl.mem Undefined {
+      depth = 2 : i64,
+      name = "m",
+      portNames = ["rw"],
+      readLatency = 1 : i32,
+      writeLatency = 2 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<1>, wmode: uint<1>, wdata: uint<1>, wmask: uint<1>>
+    %latency_2r1w = firrtl.mem Undefined {
+      depth = 2 : i64,
+      name = "m",
+      portNames = ["rw"],
+      readLatency = 2 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<1>, wmode: uint<1>, wdata: uint<1>, wmask: uint<1>>
+    %latency_4r4w = firrtl.mem Undefined {
+      depth = 2 : i64,
+      name = "m",
+      portNames = ["rw"],
+      readLatency = 4 : i32,
+      writeLatency = 4 : i32
+    } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<1>, wmode: uint<1>, wdata: uint<1>, wmask: uint<1>>
+  }
 }
