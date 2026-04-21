@@ -108,7 +108,7 @@ void ReadChannelPort::connect(FlatReadCallback callback,
 }
 
 void ReadChannelPort::connect(const ConnectOptions &options) {
-  maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
+  pollingState.setMaxQueued(DefaultMaxDataQueueMsgs);
 
   resetTranslationState();
 
@@ -131,21 +131,8 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
       data = msg->toMessageData();
     }
 
-    std::scoped_lock<std::mutex> lock(pollingM);
-    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
-           "Both queues are in use.");
-
-    if (!promiseQueue.empty()) {
-      // If there are promises waiting, fulfill the first one.
-      std::promise<MessageData> p = std::move(promiseQueue.front());
-      promiseQueue.pop();
-      p.set_value(std::move(data));
-    } else {
-      // If not, add it to the data queue, unless the queue is full.
-      if (dataQueue.size() >= maxDataQueueMsgs && maxDataQueueMsgs != 0)
-        return false;
-      dataQueue.push(std::move(data));
-    }
+    if (!pollingState.enqueue(data))
+      return false;
 
     translatedMessage.reset();
     return true;
@@ -160,22 +147,7 @@ std::future<MessageData> ReadChannelPort::readAsync() {
         "Cannot read from a callback channel. `connect()` without a callback "
         "specified to use polling mode.");
 
-  std::scoped_lock<std::mutex> lock(pollingM);
-  assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
-         "Both queues are in use.");
-
-  if (!dataQueue.empty()) {
-    // If there's data available, fulfill the promise immediately.
-    std::promise<MessageData> p;
-    std::future<MessageData> f = p.get_future();
-    p.set_value(std::move(dataQueue.front()));
-    dataQueue.pop();
-    return f;
-  } else {
-    // Otherwise, add a promise to the queue and return the future.
-    promiseQueue.emplace();
-    return promiseQueue.back().get_future();
-  }
+  return pollingState.readAsync();
 }
 
 //===----------------------------------------------------------------------===//

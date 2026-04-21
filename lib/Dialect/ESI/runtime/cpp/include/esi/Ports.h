@@ -22,11 +22,90 @@
 
 #include <cassert>
 #include <future>
+#include <mutex>
+#include <queue>
 
 namespace esi {
 
 class ChannelPort;
 using PortMap = std::map<std::string, ChannelPort &>;
+
+namespace detail {
+
+template <typename BufferedT>
+class PollingBuffer {
+public:
+  explicit PollingBuffer(uint64_t maxQueued) : maxQueued(maxQueued) {}
+
+  uint64_t getMaxQueued() {
+    std::scoped_lock<std::mutex> lock(mutex);
+    return maxQueued;
+  }
+
+  void setMaxQueued(uint64_t maxMsgs) {
+    std::scoped_lock<std::mutex> lock(mutex);
+    maxQueued = maxMsgs;
+  }
+
+  bool enqueue(BufferedT &value) {
+    std::scoped_lock<std::mutex> lock(mutex);
+    if (!active)
+      return true;
+
+    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
+           "Both queues are in use.");
+
+    if (!promiseQueue.empty()) {
+      std::promise<BufferedT> promise = std::move(promiseQueue.front());
+      promiseQueue.pop();
+      promise.set_value(std::move(value));
+    } else {
+      if (dataQueue.size() >= maxQueued && maxQueued != 0)
+        return false;
+      dataQueue.push(std::move(value));
+    }
+    return true;
+  }
+
+  std::future<BufferedT> readAsync() {
+    std::scoped_lock<std::mutex> lock(mutex);
+    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
+           "Both queues are in use.");
+
+    if (!dataQueue.empty()) {
+      std::promise<BufferedT> promise;
+      std::future<BufferedT> future = promise.get_future();
+      promise.set_value(std::move(dataQueue.front()));
+      dataQueue.pop();
+      return future;
+    }
+
+    promiseQueue.emplace();
+    return promiseQueue.back().get_future();
+  }
+
+  void deactivate() {
+    std::scoped_lock<std::mutex> lock(mutex);
+    active = false;
+    clearLocked();
+  }
+
+private:
+  void clearLocked() {
+    while (!dataQueue.empty())
+      dataQueue.pop();
+    while (!promiseQueue.empty())
+      promiseQueue.pop();
+  }
+
+  std::mutex mutex;
+  std::queue<BufferedT> dataQueue;
+  uint64_t maxQueued;
+  std::queue<std::promise<BufferedT>> promiseQueue;
+  bool active = true;
+};
+
+} // namespace detail
 
 /// Unidirectional channels are the basic communication primitive between the
 /// host and accelerator. A 'ChannelPort' is the host side of a channel. It can
@@ -346,7 +425,8 @@ public:
   using FlatReadCallback = std::function<bool(MessageData)>;
 
   ReadChannelPort(const Type *type)
-      : ChannelPort(type), mode(Mode::Disconnected) {}
+      : ChannelPort(type), mode(Mode::Disconnected),
+        pollingState(DefaultMaxDataQueueMsgs) {}
   virtual void disconnect() override { mode = Mode::Disconnected; }
   virtual bool isConnected() const override {
     return mode != Mode::Disconnected;
@@ -397,7 +477,9 @@ public:
   /// may be (and are) backends which have a very small amount of memory which
   /// are accelerator accessible and want to move messages out as quickly as
   /// possible.
-  void setMaxDataQueueMsgs(uint64_t maxMsgs) { maxDataQueueMsgs = maxMsgs; }
+  void setMaxDataQueueMsgs(uint64_t maxMsgs) {
+    pollingState.setMaxQueued(maxMsgs);
+  }
 
 protected:
   /// Indicates the current mode of the channel.
@@ -429,15 +511,7 @@ protected:
   // Polling mode members.
   //===--------------------------------------------------------------------===//
 
-  /// Mutex to protect the two queues used for polling.
-  std::mutex pollingM;
-  /// Store incoming data here if there are no outstanding promises to be
-  /// fulfilled.
-  std::queue<MessageData> dataQueue;
-  /// Maximum number of messages to store in dataQueue. 0 means no limit.
-  uint64_t maxDataQueueMsgs;
-  /// Promises to be fulfilled when data is available.
-  std::queue<std::promise<MessageData>> promiseQueue;
+  detail::PollingBuffer<MessageData> pollingState;
 };
 
 /// Instantiated when a backend does not know how to create a read channel.

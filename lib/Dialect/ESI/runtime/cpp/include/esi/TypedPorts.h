@@ -30,6 +30,9 @@
 #include <cstring>
 #include <functional>
 #include <future>
+#include <memory>
+#include <mutex>
+#include <queue>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -89,6 +92,11 @@ MessageData toMessageData(const T &data, WireInfo wi) {
   return MessageData(reinterpret_cast<const uint8_t *>(&data), sizeof(T));
 }
 
+template <typename T>
+MessageData toMessageData(const T &data, const Type *portType) {
+  return toMessageData(data, getWireInfo(portType));
+}
+
 /// Unpack a MessageData into a C++ integral value with the given wire info.
 /// If the wire size differs from sizeof(T), copies available bytes into
 /// a zero-initialized value and sign-extends for signed types using the
@@ -117,6 +125,154 @@ T fromMessageData(const MessageData &msg, WireInfo wi) {
   }
   return *msg.as<T>();
 }
+
+template <typename T>
+T fromMessageData(const MessageData &msg, const Type *portType) {
+  return fromMessageData<T>(msg, getWireInfo(portType));
+}
+
+namespace detail {
+
+template <typename T>
+using TypedReadOwnedCallback = std::function<bool(std::unique_ptr<T> &)>;
+
+template <typename T, typename = void>
+struct has_type_deserializer : std::false_type {};
+
+template <typename T>
+struct has_type_deserializer<T, std::void_t<typename T::TypeDeserializer>>
+    : std::true_type {};
+
+template <typename T>
+inline constexpr bool has_type_deserializer_v = has_type_deserializer<T>::value;
+
+template <typename T>
+const MessageData &getMessageDataRef(const SegmentedMessageData &msg,
+                                     MessageData &scratch) {
+  if (auto *flat = dynamic_cast<const MessageData *>(&msg))
+    return *flat;
+  scratch = msg.toMessageData();
+  return scratch;
+}
+
+template <typename T>
+class PODTypeDeserializer {
+public:
+  using OutputCallback = TypedReadOwnedCallback<T>;
+
+  PODTypeDeserializer(OutputCallback output, WireInfo wireInfo)
+      : output(std::move(output)), wireInfo(wireInfo) {}
+
+  bool push(std::unique_ptr<SegmentedMessageData> &msg) {
+    std::scoped_lock<std::mutex> lock(mutex);
+    if (!msg)
+      throw std::runtime_error("PODTypeDeserializer::push: null message");
+
+    MessageData scratch;
+    const MessageData &flat = getMessageDataRef<T>(*msg, scratch);
+    auto typed = std::make_unique<T>(fromMessageData<T>(flat, wireInfo));
+    if (!output(typed))
+      return false;
+
+    msg.reset();
+    return true;
+  }
+
+  bool poke() { return true; }
+
+private:
+  OutputCallback output;
+  WireInfo wireInfo;
+  std::mutex mutex;
+};
+
+template <typename T, typename = void>
+struct DeserializerSelector {
+  using type = PODTypeDeserializer<T>;
+};
+
+template <typename T>
+struct DeserializerSelector<T, std::void_t<typename T::TypeDeserializer>> {
+  using type = typename T::TypeDeserializer;
+};
+
+template <typename T>
+using DeserializerFor = typename DeserializerSelector<T>::type;
+
+template <typename T>
+using DeserializerOutputCallback = typename DeserializerFor<T>::OutputCallback;
+
+} // namespace detail
+
+template <typename T>
+class QueuedDecodeTypeDeserializer {
+public:
+  using OutputCallback = detail::TypedReadOwnedCallback<T>;
+  using DecodedOutputs = std::vector<std::unique_ptr<T>>;
+
+  explicit QueuedDecodeTypeDeserializer(OutputCallback output)
+      : output(std::move(output)) {}
+
+  virtual ~QueuedDecodeTypeDeserializer() = default;
+
+  bool push(std::unique_ptr<SegmentedMessageData> &msg) {
+    std::scoped_lock<std::mutex> lock(mutex);
+    if (!msg)
+      throw std::runtime_error(
+          "QueuedDecodeTypeDeserializer::push: null message");
+
+    if (!pokeLocked())
+      return false;
+
+    DecodedOutputs decoded = decode(msg);
+    if (msg)
+      throw std::runtime_error(
+          "QueuedDecodeTypeDeserializer::push: decode must consume the "
+          "message");
+
+    enqueueDecodedOutputsLocked(decoded);
+    // Once decode() has consumed the raw message, keep any blocked typed
+    // outputs in the pending queue and report success. pokeLocked() still
+    // opportunistically drains what it can before returning.
+    pokeLocked();
+    return true;
+  }
+
+  bool poke() {
+    std::scoped_lock<std::mutex> lock(mutex);
+    return pokeLocked();
+  }
+
+protected:
+  virtual DecodedOutputs decode(std::unique_ptr<SegmentedMessageData> &msg) = 0;
+
+private:
+  bool pokeLocked() {
+    while (!pendingOutputs.empty()) {
+      std::unique_ptr<T> &value = pendingOutputs.front();
+      if (!value)
+        throw std::runtime_error(
+            "QueuedDecodeTypeDeserializer::poke: null pending output");
+      if (!output(value))
+        return false;
+      pendingOutputs.pop();
+    }
+    return true;
+  }
+
+  void enqueueDecodedOutputsLocked(DecodedOutputs &decoded) {
+    for (std::unique_ptr<T> &value : decoded) {
+      if (!value)
+        throw std::runtime_error(
+            "QueuedDecodeTypeDeserializer::push: null decoded output");
+      pendingOutputs.push(std::move(value));
+    }
+  }
+
+  OutputCallback output;
+  std::queue<std::unique_ptr<T>> pendingOutputs;
+  std::mutex mutex;
+};
 
 //===----------------------------------------------------------------------===//
 // Type-trait: detect T::_ESI_ID (a static constexpr std::string_view).
@@ -320,50 +476,124 @@ public:
   void connect(const ChannelPort::ConnectOptions &opts = {}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
-    verifyTypeCompatibility<T>(inner->getType());
-    wireInfo_ = getWireInfo(inner->getType());
-    inner->connect(opts);
+    prepareConnect();
+    auto pollState = pollingState;
+    auto nextDeserializer =
+        makeDeserializer([pollState](std::unique_ptr<T> &value) -> bool {
+          return pollState->enqueue(value);
+        });
+    inner->connect(
+        [nextDeserializer](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
+          return nextDeserializer->push(msg);
+        },
+        opts);
+    pollingState = std::move(pollState);
+    deserializer = nextDeserializer;
+    mode = Mode::Polling;
   }
 
   void connect(std::function<bool(const T &)> callback,
                const ChannelPort::ConnectOptions &opts = {}) {
+    connect([cb = std::move(callback)](
+                std::unique_ptr<T> &value) -> bool { return cb(*value); },
+            opts);
+  }
+
+  void connect(detail::TypedReadOwnedCallback<T> callback,
+               const ChannelPort::ConnectOptions &opts = {}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
-    verifyTypeCompatibility<T>(inner->getType());
-    wireInfo_ = getWireInfo(inner->getType());
-    WireInfo wb = wireInfo_;
+    prepareConnect();
+    auto nextDeserializer = makeDeserializer(std::move(callback));
+    deserializer = nextDeserializer;
     inner->connect(
-        [cb = std::move(callback), wb](MessageData data) -> bool {
-          return cb(fromMessageData<T>(data, wb));
+        [nextDeserializer](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
+          return nextDeserializer->push(msg);
         },
         opts);
+    // TODO: Hook callback-mode custom-deserializer poke() retries into the
+    // existing periodic poll/background-worker path.
+    mode = Mode::Callback;
   }
 
-  T read() {
-    MessageData outData;
-    inner->read(outData);
-    return fromMessageData<T>(outData, wireInfo_);
+  std::unique_ptr<T> read() {
+    std::future<std::unique_ptr<T>> f = readAsync();
+    f.wait();
+    return f.get();
   }
 
-  std::future<T> readAsync() {
-    WireInfo wb = wireInfo_;
-    auto innerFuture = inner->readAsync();
-    return std::async(std::launch::deferred,
-                      [f = std::move(innerFuture), wb]() mutable -> T {
-                        MessageData data = f.get();
-                        return fromMessageData<T>(data, wb);
-                      });
+  std::future<std::unique_ptr<T>> readAsync() {
+    if (mode == Mode::Callback)
+      throw std::runtime_error(
+          "Cannot read from a callback channel. `connect()` without a "
+          "callback specified to use polling mode.");
+    if (mode == Mode::Disconnected)
+      throw std::runtime_error(
+          "Cannot read from a disconnected channel. `connect()` first.");
+
+    auto pollState = pollingState;
+    if (!pollState)
+      throw std::runtime_error(
+          "Cannot read from a disconnected channel. `connect()` first.");
+
+    std::future<std::unique_ptr<T>> future = pollState->readAsync();
+
+    auto activeDeserializer = deserializer;
+    if (activeDeserializer)
+      activeDeserializer->poke();
+    return future;
   }
 
-  void disconnect() { inner->disconnect(); }
+  void setMaxDataQueueMsgs(uint64_t maxMsgs) {
+    pollingState->setMaxQueued(maxMsgs);
+  }
+
+  void disconnect() {
+    if (auto oldPollingState = pollingState) {
+      pollingState =
+          std::make_shared<PollingState>(oldPollingState->getMaxQueued());
+      oldPollingState->deactivate();
+    }
+    inner->disconnect();
+    mode = Mode::Disconnected;
+    deserializer.reset();
+  }
   bool isConnected() const { return inner && inner->isConnected(); }
 
   ReadChannelPort &raw() { return *inner; }
   const ReadChannelPort &raw() const { return *inner; }
 
 private:
+  using Deserializer = detail::DeserializerFor<T>;
+  enum Mode { Disconnected, Callback, Polling };
+  using PollingState = detail::PollingBuffer<std::unique_ptr<T>>;
+
+  void prepareConnect() {
+    if (mode != Mode::Disconnected)
+      throw std::runtime_error("Channel already connected");
+    if constexpr (has_esi_id_v<T>) {
+      verifyTypeCompatibility<T>(inner->getType());
+    } else if constexpr (!detail::has_type_deserializer_v<T>) {
+      verifyTypeCompatibility<T>(inner->getType());
+      wireInfo_ = getWireInfo(inner->getType());
+    }
+  }
+
+  std::shared_ptr<Deserializer>
+  makeDeserializer(detail::DeserializerOutputCallback<T> callback) {
+    if constexpr (detail::has_type_deserializer_v<T>) {
+      return std::make_shared<Deserializer>(std::move(callback));
+    } else {
+      return std::make_shared<Deserializer>(std::move(callback), wireInfo_);
+    }
+  }
+
   ReadChannelPort *inner;
   WireInfo wireInfo_;
+  Mode mode = Mode::Disconnected;
+  std::shared_ptr<Deserializer> deserializer;
+  std::shared_ptr<PollingState> pollingState =
+      std::make_shared<PollingState>(ReadChannelPort::DefaultMaxDataQueueMsgs);
 };
 
 /// Specialization for void — read discards data and returns nothing.
