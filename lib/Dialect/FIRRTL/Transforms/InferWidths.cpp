@@ -2097,7 +2097,8 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
     auto lhsWidth = lhsType.getBitWidthOrSentinel();
     auto rhsWidth = rhsType.getBitWidthOrSentinel();
     if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
-      con.emitOpError("destination ") << lhsType << " is not as wide as the source " << rhsType;
+      con.emitOpError("destination ")
+          << lhsType << " is not as wide as the source " << rhsType;
       return failure();
     }
     return anyChanged;

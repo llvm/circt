@@ -407,8 +407,9 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
 
     // If both widths are known and index is wider, insert explicit truncation
     if (addrWidth >= 0 && indexWidth >= 0 && indexWidth > addrWidth) {
-      indexValue = TailPrimOp::create(portBuilder, indexValue,
-                                       indexWidth - addrWidth).getResult();
+      indexValue =
+          TailPrimOp::create(portBuilder, indexValue, indexWidth - addrWidth)
+              .getResult();
     }
     emitConnect(portBuilder, address, indexValue);
     // Sequential+Read ports have a more complicated "enable inference".
