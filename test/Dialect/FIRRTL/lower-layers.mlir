@@ -1142,4 +1142,5 @@ firrtl.circuit "DoNotIncludeDummyBindfiles" {
 
   // CHECK-NOT: sv.include local "layers-Child1-A.sv"
   // CHECK: sv.include local "layers-Child2-A.sv"
+  // CHECK-NOT: sv.include local "layers-Child1-A.sv"  
 }
