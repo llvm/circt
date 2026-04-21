@@ -26,8 +26,8 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Transforms/Passes.h"
-#include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -35,8 +35,11 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
+
+#include <atomic>
 
 #define DEBUG_TYPE "cellift-instrument"
 
@@ -58,19 +61,34 @@ using namespace circt::seq;
 namespace {
 
 using TaintMap = DenseMap<Value, Value>;
+using PendingTaintMap = DenseMap<Value, Backedge>;
+
+struct ModulePortTaintInfo {
+  SmallVector<int> taintInputSources;
+  SmallVector<int> taintOutputSources;
+};
+
+struct ModuleInstrumentationInfo {
+  HWModuleOp mod;
+  ModulePortTaintInfo portInfo;
+};
 
 Value getZero(ImplicitLocOpBuilder &b, Type ty);
 Value getAllOnes(ImplicitLocOpBuilder &b, Type ty);
 Value orReduce(ImplicitLocOpBuilder &b, Value v);
 Value broadcast(ImplicitLocOpBuilder &b, Value bit, Type ty);
-Value getTaint(const TaintMap &taintOf, Value v);
+Value getTaint(TaintMap &taintOf, PendingTaintMap &pendingTaints,
+               BackedgeBuilder &backedgeBuilder, Value v);
+void setTaint(TaintMap &taintOf, PendingTaintMap &pendingTaints, Value v,
+              Value taint);
 Value conservativeTaint(ImplicitLocOpBuilder &b, ValueRange taintInputs,
                         Type resTy);
-Value conservativeTaint(ImplicitLocOpBuilder &b, const TaintMap &taintOf,
-                        ValueRange inputs, Type resTy);
-Value shiftTaintPrecise(ImplicitLocOpBuilder &b, Value data, Value dataT,
-                        Value amt, Value amtT, Type resTy, bool left,
-                        bool arith);
+Value conservativeTaint(ImplicitLocOpBuilder &b, TaintMap &taintOf,
+                        PendingTaintMap &pendingTaints,
+                        BackedgeBuilder &backedgeBuilder, ValueRange inputs,
+                        Type resTy);
+Value shiftTaintImprecise(ImplicitLocOpBuilder &b, Value dataT, Value amt,
+                          Value amtT, Type resTy, bool left, bool arith);
 
 Value instrumentOperation(ImplicitLocOpBuilder &b, hw::ConstantOp op,
                           bool taintConstants);
@@ -116,17 +134,22 @@ Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ReverseOp op,
                           comb::ReverseOp::Adaptor taintAdaptor);
 
 template <typename OpT>
-void instrumentSingleResultOperation(TaintMap &taintOf, ImplicitLocOpBuilder &b,
-                                     OpT op) {
+void instrumentSingleResultOperation(TaintMap &taintOf,
+                                     PendingTaintMap &pendingTaints,
+                                     BackedgeBuilder &backedgeBuilder,
+                                     ImplicitLocOpBuilder &b, OpT op) {
   SmallVector<Value> taintOperands;
   taintOperands.reserve(op->getNumOperands());
   for (auto operand : op->getOperands())
-    taintOperands.push_back(getTaint(taintOf, operand));
+    taintOperands.push_back(
+        getTaint(taintOf, pendingTaints, backedgeBuilder, operand));
   typename OpT::Adaptor taintAdaptor(taintOperands, op->getAttrDictionary());
-  taintOf[op.getResult()] = instrumentOperation(b, op, taintAdaptor);
+  setTaint(taintOf, pendingTaints, op.getResult(),
+           instrumentOperation(b, op, taintAdaptor));
 }
 
-void instrumentInstance(TaintMap &taintOf, StringRef taintSuffix,
+void instrumentInstance(TaintMap &taintOf, PendingTaintMap &pendingTaints,
+                        BackedgeBuilder &backedgeBuilder, StringRef taintSuffix,
                         hw::InstanceOp op, ImplicitLocOpBuilder &b);
 
 class CellIFTInstrumentPass
@@ -137,11 +160,14 @@ public:
 
 private:
   // ---- Module-level passes ----------------------------------------------
-  void rewriteModuleSignature(HWModuleOp mod, StringRef taintSuffix);
-  void instrumentModuleBody(HWModuleOp mod, TaintMap &taintOf,
-                            bool taintConstants, StringRef taintSuffix);
-  void rewriteOutputOp(HWModuleOp mod, TaintMap &taintOf,
-                       StringRef taintSuffix);
+  LogicalResult rewriteModuleSignature(HWModuleOp mod, StringRef taintSuffix,
+                                       ModulePortTaintInfo &portInfo);
+  LogicalResult instrumentModuleBody(HWModuleOp mod,
+                                     const ModulePortTaintInfo &portInfo,
+                                     TaintMap &taintOf, bool taintConstants,
+                                     StringRef taintSuffix);
+  void rewriteOutputOp(HWModuleOp mod, const ModulePortTaintInfo &portInfo,
+                       TaintMap &taintOf);
 };
 
 } // namespace
@@ -173,10 +199,27 @@ Value broadcast(ImplicitLocOpBuilder &b, Value bit, Type ty) {
   return b.createOrFold<comb::ReplicateOp>(ty, bit);
 }
 
-Value getTaint(const TaintMap &taintOf, Value v) {
+Value getTaint(TaintMap &taintOf, PendingTaintMap &pendingTaints,
+               BackedgeBuilder &backedgeBuilder, Value v) {
+  assert(isa<IntegerType>(v.getType()) && "can only taint integer values");
   auto it = taintOf.find(v);
-  assert(it != taintOf.end() && "missing taint");
-  return it->second;
+  if (it != taintOf.end())
+    return it->second;
+
+  auto backedgeIt =
+      pendingTaints.try_emplace(v, backedgeBuilder.get(v.getType())).first;
+  Value placeholder = backedgeIt->second;
+  taintOf[v] = placeholder;
+  return placeholder;
+}
+
+void setTaint(TaintMap &taintOf, PendingTaintMap &pendingTaints, Value v,
+              Value taint) {
+  if (auto it = pendingTaints.find(v); it != pendingTaints.end()) {
+    it->second.setValue(taint);
+    pendingTaints.erase(it);
+  }
+  taintOf[v] = taint;
 }
 
 Value conservativeTaint(ImplicitLocOpBuilder &b, ValueRange taintInputs,
@@ -195,13 +238,16 @@ Value conservativeTaint(ImplicitLocOpBuilder &b, ValueRange taintInputs,
   return broadcast(b, any, resTy);
 }
 
-Value conservativeTaint(ImplicitLocOpBuilder &b, const TaintMap &taintOf,
-                        ValueRange inputs, Type resTy) {
+Value conservativeTaint(ImplicitLocOpBuilder &b, TaintMap &taintOf,
+                        PendingTaintMap &pendingTaints,
+                        BackedgeBuilder &backedgeBuilder, ValueRange inputs,
+                        Type resTy) {
   SmallVector<Value> taintInputs;
   taintInputs.reserve(inputs.size());
   for (auto input : inputs)
-    if (auto it = taintOf.find(input); it != taintOf.end())
-      taintInputs.push_back(it->second);
+    if (isa<IntegerType>(input.getType()))
+      taintInputs.push_back(
+          getTaint(taintOf, pendingTaints, backedgeBuilder, input));
   return conservativeTaint(b, taintInputs, resTy);
 }
 
@@ -455,122 +501,37 @@ Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ICmpOp op,
   return comb::XorOp::create(b, cmp1, cmp2);
 }
 
-// Precise shift taint: two-phase approach matching Yosys CellIFT.
-// Phase 1: shift by untainted portion of the shift amount.
-// Phase 2: for each possible delta from tainted shift bits, check if the
-//          output bit values would differ.
-Value shiftTaintPrecise(ImplicitLocOpBuilder &b, Value data, Value dataT,
-                        Value amt, Value amtT, Type resTy, bool left,
-                        bool arith) {
-  unsigned W = cast<IntegerType>(resTy).getWidth();
-  if (W <= 1) {
-    SmallVector<Value> taintInputs{dataT, amtT};
-    return conservativeTaint(b, taintInputs, resTy);
-  }
+Value shiftTaintImprecise(ImplicitLocOpBuilder &b, Value dataT, Value amt,
+                          Value amtT, Type resTy, bool left, bool arith) {
+  Value shiftAmtTaint = broadcast(b, orReduce(b, amtT), resTy);
 
-  // Phase 1: Shift by untainted amount.
-  auto onesAmt = getAllOnes(b, amt.getType());
-  Value notAmtT = comb::XorOp::create(b, amtT, onesAmt);
-  Value untaintedAmt = comb::AndOp::create(b, amt, notAmtT);
+  Value shiftedDataT;
+  if (left)
+    shiftedDataT = comb::ShlOp::create(b, dataT, amt);
+  else if (arith)
+    shiftedDataT = comb::ShrSOp::create(b, dataT, amt);
+  else
+    shiftedDataT = comb::ShrUOp::create(b, dataT, amt);
 
-  Value intermA, intermAT;
-  if (left) {
-    intermA = comb::ShlOp::create(b, data, untaintedAmt);
-    intermAT = comb::ShlOp::create(b, dataT, untaintedAmt);
-  } else if (arith) {
-    intermA = comb::ShrSOp::create(b, data, untaintedAmt);
-    intermAT = comb::ShrSOp::create(b, dataT, untaintedAmt);
-  } else {
-    intermA = comb::ShrUOp::create(b, data, untaintedAmt);
-    intermAT = comb::ShrUOp::create(b, dataT, untaintedAmt);
-  }
-
-  Value intermAOrT = comb::OrOp::create(b, intermA, intermAT);
-
-  // Phase 2: For each possible delta k from 1 to W-1, check if tainted
-  // shift amount can reach delta k and whether it changes the output.
-  SmallVector<Value> contributions;
-  contributions.push_back(intermAT);
-
-  unsigned amtW = cast<IntegerType>(amt.getType()).getWidth();
-  for (unsigned k = 1; k < W; k++) {
-    if (k >= (1u << amtW))
-      break;
-
-    // Can tainted shift bits produce delta k? Check (amtT & k) == k.
-    Value constKAmt = hw::ConstantOp::create(b, APInt(amtW, k));
-    Value kAndAmtT = comb::AndOp::create(b, amtT, constKAmt);
-    Value canReach =
-        comb::ICmpOp::create(b, ICmpPredicate::eq, kAndAmtT, constKAmt);
-
-    // Shift intermediate result by constant k in the same direction.
-    Value constKW = hw::ConstantOp::create(b, APInt(W, k));
-    Value shifted, shiftedT;
-    if (left) {
-      shifted = comb::ShlOp::create(b, intermA, constKW);
-      shiftedT = comb::ShlOp::create(b, intermAT, constKW);
-    } else if (arith) {
-      shifted = comb::ShrSOp::create(b, intermA, constKW);
-      shiftedT = comb::ShrSOp::create(b, intermAT, constKW);
-    } else {
-      shifted = comb::ShrUOp::create(b, intermA, constKW);
-      shiftedT = comb::ShrUOp::create(b, intermAT, constKW);
-    }
-
-    // Bits where values differ or either is tainted.
-    Value differ = comb::XorOp::create(b, intermA, shifted);
-    Value taintEither = comb::OrOp::create(b, intermAT, shiftedT);
-    Value tod = comb::OrOp::create(b, differ, taintEither);
-
-    Value canReachBroad = broadcast(b, canReach, resTy);
-    contributions.push_back(comb::AndOp::create(b, canReachBroad, tod));
-  }
-
-  // Large shift: amtT >= W means shift could exceed data width.
-  if (W < (1u << amtW)) {
-    Value constW = hw::ConstantOp::create(b, APInt(amtW, W));
-    Value isLargeShift =
-        comb::ICmpOp::create(b, ICmpPredicate::uge, amtT, constW);
-    Value largeBroad = broadcast(b, isLargeShift, resTy);
-
-    if (left || !arith) {
-      // SHL or logical SHR: zeros fill, taint if intermAOrT is nonzero.
-      contributions.push_back(comb::AndOp::create(b, largeBroad, intermAOrT));
-    } else {
-      // Arithmetic SHR: sign bit fills. Compare each position with sign bit.
-      auto bitTy = IntegerType::get(b.getContext(), 1);
-      Value signBit = comb::ExtractOp::create(b, bitTy, intermA, W - 1);
-      Value signTaint = comb::ExtractOp::create(b, bitTy, intermAT, W - 1);
-      Value signBroad = broadcast(b, signBit, resTy);
-      Value signTBroad = broadcast(b, signTaint, resTy);
-      Value diffSign = comb::XorOp::create(b, intermA, signBroad);
-      Value taintSign = comb::OrOp::create(b, intermAT, signTBroad);
-      Value todSign = comb::OrOp::create(b, diffSign, taintSign);
-      contributions.push_back(comb::AndOp::create(b, largeBroad, todSign));
-    }
-  }
-
-  if (contributions.size() == 1)
-    return contributions[0];
-  return comb::OrOp::create(b, contributions, /*twoState=*/false);
+  return comb::OrOp::create(b, shiftAmtTaint, shiftedDataT);
 }
 
 Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShlOp op,
                           comb::ShlOp::Adaptor taintAdaptor) {
-  return shiftTaintPrecise(b, op.getLhs(), taintAdaptor.getLhs(), op.getRhs(),
-                           taintAdaptor.getRhs(), op.getType(), true, false);
+  return shiftTaintImprecise(b, taintAdaptor.getLhs(), op.getRhs(),
+                             taintAdaptor.getRhs(), op.getType(), true, false);
 }
 
 Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrUOp op,
                           comb::ShrUOp::Adaptor taintAdaptor) {
-  return shiftTaintPrecise(b, op.getLhs(), taintAdaptor.getLhs(), op.getRhs(),
-                           taintAdaptor.getRhs(), op.getType(), false, false);
+  return shiftTaintImprecise(b, taintAdaptor.getLhs(), op.getRhs(),
+                             taintAdaptor.getRhs(), op.getType(), false, false);
 }
 
 Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrSOp op,
                           comb::ShrSOp::Adaptor taintAdaptor) {
-  return shiftTaintPrecise(b, op.getLhs(), taintAdaptor.getLhs(), op.getRhs(),
-                           taintAdaptor.getRhs(), op.getType(), false, true);
+  return shiftTaintImprecise(b, taintAdaptor.getLhs(), op.getRhs(),
+                             taintAdaptor.getRhs(), op.getType(), false, true);
 }
 
 // PARITY: y_t = OR-reduce(input_t)
@@ -590,7 +551,8 @@ Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ReverseOp op,
 // Instance Instrumentation
 //===----------------------------------------------------------------------===//
 
-void instrumentInstance(TaintMap &taintOf, StringRef taintSuffix,
+void instrumentInstance(TaintMap &taintOf, PendingTaintMap &pendingTaints,
+                        BackedgeBuilder &backedgeBuilder, StringRef taintSuffix,
                         hw::InstanceOp op, ImplicitLocOpBuilder &b) {
   SmallVector<Value> newInputs;
   SmallVector<Attribute> newArgNames, newResNames;
@@ -605,10 +567,10 @@ void instrumentInstance(TaintMap &taintOf, StringRef taintSuffix,
     if (!isa<IntegerType>(input.getType()))
       continue;
 
-    auto it = taintOf.find(input);
-    newInputs.push_back(it != taintOf.end() ? it->second
-                                            : getZero(b, input.getType()));
-    newArgNames.push_back(b.getStringAttr(name.getValue().str() + taintSuffix));
+    newInputs.push_back(
+        getTaint(taintOf, pendingTaints, backedgeBuilder, input));
+    newArgNames.push_back(
+        b.getStringAttr(name.getValue().str() + taintSuffix.str()));
   }
 
   for (auto [result, nameAttr] :
@@ -621,7 +583,8 @@ void instrumentInstance(TaintMap &taintOf, StringRef taintSuffix,
       continue;
 
     newResTys.push_back(result.getType());
-    newResNames.push_back(b.getStringAttr(name.getValue().str() + taintSuffix));
+    newResNames.push_back(
+        b.getStringAttr(name.getValue().str() + taintSuffix.str()));
   }
 
   auto newInst = hw::InstanceOp::create(
@@ -633,9 +596,12 @@ void instrumentInstance(TaintMap &taintOf, StringRef taintSuffix,
   unsigned newResIdx = 0;
   for (auto result : op.getResults()) {
     Value newResult = newInst.getResult(newResIdx++);
+    if (isa<IntegerType>(result.getType())) {
+      Value newTaint = newInst.getResult(newResIdx++);
+      setTaint(taintOf, pendingTaints, result, newTaint);
+      taintOf[newResult] = newTaint;
+    }
     result.replaceAllUsesWith(newResult);
-    if (isa<IntegerType>(result.getType()))
-      taintOf[newResult] = newInst.getResult(newResIdx++);
   }
 
   op.erase();
@@ -647,13 +613,25 @@ void instrumentInstance(TaintMap &taintOf, StringRef taintSuffix,
 // Module Signature Rewriting
 //===----------------------------------------------------------------------===//
 
-void CellIFTInstrumentPass::rewriteModuleSignature(HWModuleOp mod,
-                                                   StringRef taintSuffix) {
+LogicalResult CellIFTInstrumentPass::rewriteModuleSignature(
+    HWModuleOp mod, StringRef taintSuffix, ModulePortTaintInfo &portInfo) {
   auto *ctx = mod.getContext();
   auto portList = mod.getPortList();
   Block *body = mod.getBodyBlock();
 
   SmallVector<std::pair<unsigned, PortInfo>> insIns, insOuts;
+  struct BlockArgInsertion {
+    unsigned index;
+    Type type;
+    Location loc;
+  };
+  SmallVector<BlockArgInsertion> blockArgInsertions;
+  llvm::StringSet<> portNames;
+  for (auto port : portList)
+    portNames.insert(port.getName());
+
+  portInfo.taintInputSources.clear();
+  portInfo.taintOutputSources.clear();
 
   // Insert a taint port after every integer-typed input/output.
   // Also insert block arguments for the new input ports.
@@ -661,78 +639,77 @@ void CellIFTInstrumentPass::rewriteModuleSignature(HWModuleOp mod,
   unsigned blockArgInsertionOffset = 0;
   for (auto port : portList) {
     if (port.isInput()) {
+      portInfo.taintInputSources.push_back(-1);
       if (isa<IntegerType>(port.type)) {
+        std::string taintName = port.getName().str() + taintSuffix.str();
+        if (!portNames.insert(taintName).second) {
+          mod.emitOpError() << "cannot add taint port '" << taintName
+                            << "' because the name already exists; pick a "
+                               "different taint suffix";
+          return failure();
+        }
+
         PortInfo tp;
-        tp.name = StringAttr::get(ctx, port.getName().str() + taintSuffix);
+        tp.name = StringAttr::get(ctx, taintName);
         tp.type = port.type;
         tp.dir = ModulePort::Direction::Input;
         tp.loc = port.loc ? port.loc : UnknownLoc::get(ctx);
         insIns.push_back({inIdx + 1, tp});
-        // Insert the block argument right after the current input's arg.
-        body->insertArgument(inIdx + 1 + blockArgInsertionOffset, tp.type,
-                             cast<Location>(tp.loc));
+        blockArgInsertions.push_back({inIdx + 1 + blockArgInsertionOffset,
+                                      tp.type, cast<Location>(tp.loc)});
+        portInfo.taintInputSources.push_back(inIdx);
         blockArgInsertionOffset++;
       }
       inIdx++;
     } else if (port.isOutput()) {
+      portInfo.taintOutputSources.push_back(-1);
       if (isa<IntegerType>(port.type)) {
+        std::string taintName = port.getName().str() + taintSuffix.str();
+        if (!portNames.insert(taintName).second) {
+          mod.emitOpError() << "cannot add taint port '" << taintName
+                            << "' because the name already exists; pick a "
+                               "different taint suffix";
+          return failure();
+        }
+
         PortInfo tp;
-        tp.name = StringAttr::get(ctx, port.getName().str() + taintSuffix);
+        tp.name = StringAttr::get(ctx, taintName);
         tp.type = port.type;
         tp.dir = ModulePort::Direction::Output;
         tp.loc = port.loc ? port.loc : UnknownLoc::get(ctx);
         insOuts.push_back({outIdx + 1, tp});
+        portInfo.taintOutputSources.push_back(outIdx);
       }
       outIdx++;
     }
   }
 
+  for (auto &insertion : blockArgInsertions)
+    body->insertArgument(insertion.index, insertion.type, insertion.loc);
+
   mod.modifyPorts(insIns, insOuts, {}, {});
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
 // Body Instrumentation
 //===----------------------------------------------------------------------===//
 
-void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod,
-                                                 TaintMap &taintOf,
-                                                 bool taintConstants,
-                                                 StringRef taintSuffix) {
+LogicalResult CellIFTInstrumentPass::instrumentModuleBody(
+    HWModuleOp mod, const ModulePortTaintInfo &portInfo, TaintMap &taintOf,
+    bool taintConstants, StringRef taintSuffix) {
   taintOf.clear();
   Block *body = mod.getBodyBlock();
+  PendingTaintMap pendingTaints;
 
   // Map input block args -> their taint block args.
-  unsigned n = mod.getNumInputPorts();
-  for (unsigned i = 0; i < n; ++i) {
-    StringRef nm = mod.getInputName(i);
-    if (nm.ends_with(taintSuffix) && nm.size() > taintSuffix.size() && i > 0) {
-      taintOf[body->getArgument(i - 1)] = body->getArgument(i);
-    }
-  }
-
-  // Sort the block topologically to handle graph regions where ops may not
-  // be in def-use order. Register outputs are considered "ready" since we
-  // pre-create their taint registers in phase 1.
-  mlir::sortTopologically(body, [](Value v, Operation *) {
-    if (isa<BlockArgument>(v))
-      return true;
-    if (auto defOp = v.getDefiningOp())
-      if (isa<seq::CompRegOp, seq::FirRegOp>(defOp))
-        return true;
-    return false;
-  });
+  for (auto [inputIdx, sourceIdx] : llvm::enumerate(portInfo.taintInputSources))
+    if (sourceIdx >= 0)
+      setTaint(taintOf, pendingTaints, body->getArgument(sourceIdx),
+               body->getArgument(inputIdx));
 
   ImplicitLocOpBuilder b(mod.getLoc(), mod.getContext());
-
-  // Phase 1: Pre-create taint registers for all seq registers.
-  // This breaks cycles: register output taints are available before we
-  // process combinational ops that form feedback loops.
-  struct PendingReg {
-    Operation *taintReg;
-    Value origInput; // the data input whose taint we need
-  };
-  SmallVector<PendingReg> pendingRegs;
-  SmallVector<Operation *> opsToInstrument;
+  BackedgeBuilder backedgeBuilder(b, mod.getLoc());
 
   for (Operation &op : llvm::make_early_inc_range(*body)) {
     if (isa<hw::OutputOp>(op))
@@ -744,103 +721,94 @@ void CellIFTInstrumentPass::instrumentModuleBody(HWModuleOp mod,
     if (auto compreg = dyn_cast<seq::CompRegOp>(&op)) {
       StringAttr name;
       if (auto n = compreg.getNameAttr())
-        name = b.getStringAttr(n.getValue().str() + taintSuffix);
+        name = b.getStringAttr(n.getValue().str() + taintSuffix.str());
 
-      // Create with zero placeholder input; we'll fix it in phase 3.
-      Value zero = getZero(b, compreg.getType());
+      Value inputT =
+          getTaint(taintOf, pendingTaints, backedgeBuilder, compreg.getInput());
       Value tReg;
       if (compreg.getReset()) {
         Value rstVal = getZero(b, compreg.getType());
-        tReg =
-            seq::CompRegOp::create(b, compreg.getLoc(), zero, compreg.getClk(),
-                                   compreg.getReset(), rstVal, name);
+        tReg = seq::CompRegOp::create(b, compreg.getLoc(), inputT,
+                                      compreg.getClk(), compreg.getReset(),
+                                      rstVal, name);
       } else {
-        tReg = seq::CompRegOp::create(b, compreg.getLoc(), zero,
+        tReg = seq::CompRegOp::create(b, compreg.getLoc(), inputT,
                                       compreg.getClk(), name);
       }
-      taintOf[compreg.getData()] = tReg;
-      pendingRegs.push_back({tReg.getDefiningOp(), compreg.getInput()});
+      setTaint(taintOf, pendingTaints, compreg.getData(), tReg);
     } else if (auto firreg = dyn_cast<seq::FirRegOp>(&op)) {
-      StringAttr name = b.getStringAttr(firreg.getName().str() + taintSuffix);
+      StringAttr name =
+          b.getStringAttr(firreg.getName().str() + taintSuffix.str());
 
-      Value zero = getZero(b, firreg.getType());
+      Value nextT =
+          getTaint(taintOf, pendingTaints, backedgeBuilder, firreg.getNext());
       Value tReg;
       if (firreg.hasReset()) {
         Value rstVal = getZero(b, firreg.getType());
         tReg = seq::FirRegOp::create(
-            b, zero, firreg.getClk(), name, firreg.getReset(), rstVal,
+            b, nextT, firreg.getClk(), name, firreg.getReset(), rstVal,
             firreg.getInnerSymAttr(), firreg.getIsAsync());
       } else {
-        tReg = seq::FirRegOp::create(b, zero, firreg.getClk(), name);
+        tReg = seq::FirRegOp::create(b, nextT, firreg.getClk(), name);
       }
-      taintOf[firreg.getData()] = tReg;
-      pendingRegs.push_back({tReg.getDefiningOp(), firreg.getNext()});
+      setTaint(taintOf, pendingTaints, firreg.getData(), tReg);
     } else {
-      // Phase 2 only instruments original non-register ops, not the
-      // placeholder ops created while pre-creating taint registers.
-      opsToInstrument.push_back(&op);
+      llvm::TypeSwitch<Operation *>(&op)
+          .Case<hw::ConstantOp>([&](auto o) {
+            setTaint(taintOf, pendingTaints, o.getResult(),
+                     instrumentOperation(b, o, taintConstants));
+          })
+          .Case<comb::AndOp, comb::OrOp, comb::XorOp, comb::AddOp, comb::SubOp,
+                comb::MulOp, comb::DivUOp, comb::DivSOp, comb::ModUOp,
+                comb::ModSOp, comb::MuxOp, comb::ConcatOp, comb::ExtractOp,
+                comb::ReplicateOp, comb::ICmpOp, comb::ShlOp, comb::ShrUOp,
+                comb::ShrSOp, comb::ParityOp, comb::ReverseOp>([&](auto o) {
+            instrumentSingleResultOperation(taintOf, pendingTaints,
+                                            backedgeBuilder, b, o);
+          })
+          .Case<hw::InstanceOp>([&](auto o) {
+            instrumentInstance(taintOf, pendingTaints, backedgeBuilder,
+                               taintSuffix, o, b);
+          })
+          .Default([&](Operation *o) {
+            // Conservative fallback for unknown ops with integer results.
+            for (auto res : o->getResults())
+              if (isa<IntegerType>(res.getType()))
+                setTaint(taintOf, pendingTaints, res,
+                         conservativeTaint(b, taintOf, pendingTaints,
+                                           backedgeBuilder, o->getOperands(),
+                                           res.getType()));
+          });
     }
   }
 
-  // Phase 2: Instrument all other ops (register taints are now available).
-  for (auto *op : opsToInstrument) {
-    b.setLoc(op->getLoc());
-    b.setInsertionPointAfter(op);
-
-    llvm::TypeSwitch<Operation *>(op)
-        .Case<hw::ConstantOp>([&](auto o) {
-          taintOf[o.getResult()] = instrumentOperation(b, o, taintConstants);
-        })
-        .Case<comb::AndOp, comb::OrOp, comb::XorOp, comb::AddOp, comb::SubOp,
-              comb::MulOp, comb::DivUOp, comb::DivSOp, comb::ModUOp,
-              comb::ModSOp, comb::MuxOp, comb::ConcatOp, comb::ExtractOp,
-              comb::ReplicateOp, comb::ICmpOp, comb::ShlOp, comb::ShrUOp,
-              comb::ShrSOp, comb::ParityOp, comb::ReverseOp>(
-            [&](auto o) { instrumentSingleResultOperation(taintOf, b, o); })
-        .Case<hw::InstanceOp>(
-            [&](auto o) { instrumentInstance(taintOf, taintSuffix, o, b); })
-        .Default([&](Operation *o) {
-          // Conservative fallback for unknown ops with integer results.
-          for (auto res : o->getResults())
-            if (isa<IntegerType>(res.getType()))
-              taintOf[res] = conservativeTaint(b, taintOf, o->getOperands(),
-                                               res.getType());
-        });
-  }
-
-  // Phase 3: Fix up taint register inputs now that all taints are computed.
-  for (auto &pr : pendingRegs) {
-    Value inputT = getTaint(taintOf, pr.origInput);
-    if (auto compreg = dyn_cast<seq::CompRegOp>(pr.taintReg))
-      compreg.getInputMutable().assign(inputT);
-    else if (auto firreg = dyn_cast<seq::FirRegOp>(pr.taintReg))
-      firreg.getNextMutable().assign(inputT);
-  }
+  return backedgeBuilder.clearOrEmitError();
 }
 
-void CellIFTInstrumentPass::rewriteOutputOp(HWModuleOp mod, TaintMap &taintOf,
-                                            StringRef taintSuffix) {
+void CellIFTInstrumentPass::rewriteOutputOp(HWModuleOp mod,
+                                            const ModulePortTaintInfo &portInfo,
+                                            TaintMap &taintOf) {
   Block *body = mod.getBodyBlock();
   auto outputOp = cast<hw::OutputOp>(body->getTerminator());
 
   SmallVector<Value> newOuts;
-  ModulePortInfo ports(mod.getPortList());
-  unsigned origIdx = 0;
   ImplicitLocOpBuilder b(outputOp.getLoc(), outputOp);
 
-  for (auto &port : ports.getOutputs()) {
-    StringRef pn = port.getName();
-    if (pn.ends_with(taintSuffix) && pn.size() > taintSuffix.size()) {
-      // Taint output: provide taint of the previous output value.
-      Value prev = newOuts.back();
-      auto it = taintOf.find(prev);
+  unsigned nextOrigOutput = 0;
+  for (auto [outputIdx, sourceIdx] :
+       llvm::enumerate(portInfo.taintOutputSources)) {
+    if (sourceIdx >= 0) {
+      Value origOutput = outputOp.getOperand(sourceIdx);
+      auto it = taintOf.find(origOutput);
       if (it != taintOf.end())
         newOuts.push_back(it->second);
       else
-        newOuts.push_back(getZero(b, port.type));
-    } else {
-      newOuts.push_back(outputOp.getOperand(origIdx++));
+        newOuts.push_back(getZero(b, origOutput.getType()));
+      continue;
     }
+
+    (void)outputIdx;
+    newOuts.push_back(outputOp.getOperand(nextOrigOutput++));
   }
 
   hw::OutputOp::create(b, outputOp.getLoc(), newOuts);
@@ -863,14 +831,35 @@ void CellIFTInstrumentPass::runOnOperation() {
   std::string taintSuffix = this->taintSuffix;
   bool taintConstants = this->taintConstants;
 
-  for (auto mod : modules)
-    rewriteModuleSignature(mod, taintSuffix);
+  SmallVector<ModuleInstrumentationInfo> moduleInfos;
+  moduleInfos.reserve(modules.size());
 
-  parallelForEach(&getContext(), modules, [&](HWModuleOp mod) {
-    TaintMap taintOf;
-    instrumentModuleBody(mod, taintOf, taintConstants, taintSuffix);
-    rewriteOutputOp(mod, taintOf, taintSuffix);
-  });
+  for (auto mod : modules) {
+    ModuleInstrumentationInfo info{mod, {}};
+    if (failed(rewriteModuleSignature(mod, taintSuffix, info.portInfo))) {
+      signalPassFailure();
+      return;
+    }
+    moduleInfos.push_back(std::move(info));
+  }
+
+  std::atomic<bool> hadFailure = false;
+  parallelForEach(
+      &getContext(), moduleInfos, [&](ModuleInstrumentationInfo &info) {
+        if (hadFailure.load(std::memory_order_relaxed))
+          return;
+
+        TaintMap taintOf;
+        if (failed(instrumentModuleBody(info.mod, info.portInfo, taintOf,
+                                        taintConstants, taintSuffix))) {
+          hadFailure.store(true, std::memory_order_relaxed);
+          return;
+        }
+        rewriteOutputOp(info.mod, info.portInfo, taintOf);
+      });
+
+  if (hadFailure.load(std::memory_order_relaxed))
+    signalPassFailure();
 }
 
 //===----------------------------------------------------------------------===//
