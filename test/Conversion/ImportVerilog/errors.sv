@@ -352,10 +352,10 @@ endmodule
 
 // -----
 
-module noutput_delay_prim;
+module multi_delay_noutput_prim;
     wire A, Q;
-    // expected-error @below {{n-output primitive instances with explicit delays are not supported.}}
-    not #(5) n (Q, A);
+    // expected-error @below {{only n-output primitives that specify a single delay are currently supported.}}
+    not #(5, 5) n (Q, A);
 endmodule
 
 // -----

@@ -204,6 +204,34 @@ module buf_prim;
     buf n (Q, A);
 endmodule
 
+// CHECK-LABEL: moore.module @delayed_buf_prim()
+// CHECK: [[A:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
+// CHECK: [[NOT:%.+]] = moore.bool_cast [[RD_A]] : l1
+// CHECK: [[DELAYCONST:%.+]] = moore.constant_time 5000000 fs
+// CHECK: moore.delayed_assign [[Q]], [[NOT]], [[DELAYCONST]] : l1
+
+
+module delayed_buf_prim;
+    wire A, Q;
+    buf #5 n (Q, A);
+endmodule
+
+// CHECK-LABEL: moore.module @delayed3_buf_prim()
+// CHECK: [[A:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
+// CHECK: [[NOT:%.+]] = moore.bool_cast [[RD_A]] : l1
+// CHECK: [[DELAYCONST:%.+]] = moore.constant_time 5000000 fs
+// CHECK: moore.delayed_assign [[Q]], [[NOT]], [[DELAYCONST]] : l1
+
+module delayed3_buf_prim;
+    wire A, Q;
+    buf #(5) n (Q, A);
+endmodule
+
+
 // CHECK-LABEL: moore.module @pullup_prim()
 // CHECK: [[A:%.+]] = moore.net wire : <l1>
 // CHECK: [[ONE:%.+]] = moore.constant 1 : l1

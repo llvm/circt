@@ -1940,11 +1940,6 @@ LogicalResult Context::convertNOutputPrimitive(
   auto loc = convertLocation(prim.location);
   auto primName = prim.primitiveType.name;
 
-  if (prim.getDelay())
-    return mlir::emitError(convertLocation(prim.location))
-           << "n-output primitive instances with explicit delays are not "
-              "supported.";
-
   auto portConns = prim.getPortConnections();
   assert(portConns.size() >= 2 &&
          "n-output primitives should have at least 2 ports");
@@ -1980,12 +1975,39 @@ LogicalResult Context::convertNOutputPrimitive(
   if (!result)
     return failure();
 
+  Value delayVal;
+  if (prim.getDelay()) {
+    const slang::ast::Expression *delayExpr;
+    if (const auto *delay3 =
+            prim.getDelay()->as_if<slang::ast::Delay3Control>()) {
+      if (delay3->expr2 || delay3->expr3)
+        return mlir::emitError(loc)
+               << "only n-output primitives that specify a "
+                  "single delay are currently supported.";
+      delayExpr = &delay3->expr1;
+    } else if (const auto *delay =
+                   prim.getDelay()->as_if<slang::ast::DelayControl>()) {
+      delayExpr = &delay->expr;
+    } else {
+      llvm_unreachable("unexpected delay control type in primitive instance");
+    }
+    delayVal = this->convertRvalueExpression(
+        *delayExpr, moore::TimeType::get(getContext()));
+    if (!delayVal)
+      return failure();
+  }
+
   for (auto outputVal : outputVals) {
     auto dstType = cast<moore::RefType>(outputVal.getType()).getNestedType();
     Value converted = materializeConversion(dstType, result, false, loc);
     if (!converted)
       return failure();
-    moore::ContinuousAssignOp::create(builder, loc, outputVal, converted);
+    if (delayVal) {
+      moore::DelayedContinuousAssignOp::create(builder, loc, outputVal,
+                                               converted, delayVal);
+    } else {
+      moore::ContinuousAssignOp::create(builder, loc, outputVal, converted);
+    }
   }
   return success();
 }
