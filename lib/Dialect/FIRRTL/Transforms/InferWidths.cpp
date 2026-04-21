@@ -2081,9 +2081,9 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
     anyChanged |= *result;
   }
 
-  // If this is a connect operation, width inference might have inferred a RHS
-  // that is wider than the LHS, in which case an additional BitsPrimOp is
-  // necessary to truncate the value.
+  // If this is a connect operation, check that width inference did not infer a
+  // RHS that is wider than the LHS. Such a situation would require an
+  // implicit truncation, which is not allowed.
   if (auto con = dyn_cast<ConnectOp>(op)) {
     auto lhs = con.getDest();
     auto rhs = con.getSrc();
@@ -2097,17 +2097,12 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
     auto lhsWidth = lhsType.getBitWidthOrSentinel();
     auto rhsWidth = rhsType.getBitWidthOrSentinel();
     if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
-      OpBuilder builder(op);
-      auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.getSrc(),
-                                                    rhsWidth - lhsWidth);
-      if (type_isa<SIntType>(rhsType))
-        trunc =
-            builder.createOrFold<AsSIntPrimOp>(con.getLoc(), lhsType, trunc);
-
-      LLVM_DEBUG(llvm::dbgs()
-                 << "Truncating RHS to " << lhsType << " in " << con << "\n");
-      con->replaceUsesOfWith(con.getSrc(), trunc);
+      con.emitError("connect would require truncation after width inference: "
+                    "destination ")
+          << lhsType << " is not as wide as the source " << rhsType;
+      return failure();
     }
+
     return anyChanged;
   }
 

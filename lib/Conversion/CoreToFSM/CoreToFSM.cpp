@@ -1079,6 +1079,7 @@ public:
         config.setScope(&stateOp.getOutput());
         LogicalResult converged = applyOpPatternsGreedily(
             outputOps, frozenPatterns, config, &changed);
+        (void)converged;
         assert(succeeded(converged) && "canonicalization failed to converge");
         SmallVector<Operation *> transitionOps;
         stateOp.getTransitions().walk(
