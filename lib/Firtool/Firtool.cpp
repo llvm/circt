@@ -92,8 +92,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createMemToRegOfVec(
-      {/*replSeqMem=*/opt.shouldReplaceSequentialMemories(),
-       /*replSeqMemFile=*/opt.shouldIgnoreReadEnableMemories()}));
+      {/*replSeqMemFile=*/opt.shouldIgnoreReadEnableMemories()}));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
 

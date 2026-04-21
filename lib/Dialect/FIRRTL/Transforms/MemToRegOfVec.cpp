@@ -63,9 +63,13 @@ struct MemToRegOfVecPass
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
 
       auto firMem = memOp.getSummary();
-      // Ignore if we are running with macro replacement on and the memory is a
-      // candidate for macro replacement.
-      if (replSeqMem && firMem.isSeqMem())
+      // Ignore if the memory is a sequential memory, i.e., something that is
+      // supposed to be an SRAM.  In either possible eventual lowering by later
+      // passes (blackboxing or lowering to a behavioral model) we don't want to
+      // blow this out here as it both breaks expectations about later passes
+      // that may add asynchronous resets (InferResets) or that expect metadata
+      // on SRAMs to not be split up (LowerClasses).
+      if (firMem.isSeqMem())
         return;
 
       generateMemory(memOp, firMem);
