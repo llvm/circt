@@ -669,9 +669,29 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module) {
       // no stream is specified, emit sv.write.
       sv::WriteOp::create(builder, printOp.getLoc(), formatString, args);
     } else {
-      // Stream-based printing is not supported yet.
-      return printOp->emitError(
-          "lowering 'sim.proc.print' with a stream is not supported yet");
+      // If a stream is specified as stdout or stderr, emit sv.fwrite to the
+      // corresponding stream.
+      auto *streamOp = stream.getDefiningOp();
+      if (!streamOp)
+        return printOp->emitError(
+            "lowering stream as block argument is not supported.");
+      if (auto stdoutOp = dyn_cast<sim::StdoutStreamOp>(streamOp)) {
+        // stdout will be lower to constant 0x80000001
+        auto stdoutValue = hw::ConstantOp::create(builder, stdoutOp.getLoc(),
+                                                  APInt(32, 0x80000001));
+        sv::FWriteOp::create(builder, printOp.getLoc(), stdoutValue,
+                             formatString, args);
+      } else if (auto stderrOp = dyn_cast<sim::StderrStreamOp>(streamOp)) {
+        // stderr will be lower to constant 0x80000002
+        auto stderrValue = hw::ConstantOp::create(builder, stderrOp.getLoc(),
+                                                  APInt(32, 0x80000002));
+        sv::FWriteOp::create(builder, printOp.getLoc(), stderrValue,
+                             formatString, args);
+      } else {
+        // Other streams are not supported yet.
+        return printOp->emitError("lowering 'sim.proc.print' with a file "
+                                  "stream is not supported yet");
+      }
     }
     auto *procRoot =
         printOp->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();

@@ -28,7 +28,20 @@ hw.module @unsupported_stream_block_argument(
   hw.triggered posedge %clk (%stream) : !sim.output_stream {
     ^bb0(%stream_in : !sim.output_stream):
     %fmt = sim.fmt.literal "x"
-    // expected-error @below {{lowering 'sim.proc.print' with a stream is not supported yet}}
+    // expected-error @below {{lowering stream as block argument is not supported.}}
+    sim.proc.print %fmt to %stream_in
+  }
+}
+
+// -----
+
+hw.module @unsupported_file_stream(
+    in %clk : i1) {
+  hw.triggered posedge %clk {
+    %fmt = sim.fmt.literal "x"
+    %file = sim.fmt.literal "file.txt"
+    %stream_in = sim.get_file %file
+    // expected-error @below {{lowering 'sim.proc.print' with a file stream is not supported yet}}
     sim.proc.print %fmt to %stream_in
   }
 }
