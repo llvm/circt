@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/FIRRTLToHW.h"
+#include "circt/Conversion/SVLoweringUtils.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
@@ -449,9 +450,13 @@ private:
   llvm::sys::SmartMutex<true> fragmentsMutex;
 
   void addFragment(hw::HWModuleOp module, StringRef fragment) {
+    addFragment(module,
+                FlatSymbolRefAttr::get(circuitOp.getContext(), fragment));
+  }
+
+  void addFragment(hw::HWModuleOp module, FlatSymbolRefAttr fragment) {
     llvm::sys::SmartScopedLock<true> lock(fragmentsMutex);
-    fragments[module].insert(
-        FlatSymbolRefAttr::get(circuitOp.getContext(), fragment));
+    fragments[module].insert(fragment);
   }
 
   /// Cached nla table analysis.
@@ -880,76 +885,8 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
         b, guard, [] {}, body);
   };
 
-  if (state.usedFileDescriptorLib) {
-    // Define a type for the file descriptor getter.
-    SmallVector<hw::ModulePort> ports;
-
-    // Input port for filename
-    hw::ModulePort namePort;
-    namePort.name = b.getStringAttr("name");
-    namePort.type = hw::StringType::get(b.getContext());
-    namePort.dir = hw::ModulePort::Direction::Input;
-    ports.push_back(namePort);
-
-    // Output port for file descriptor
-    hw::ModulePort fdPort;
-    fdPort.name = b.getStringAttr("fd");
-    fdPort.type = b.getIntegerType(32);
-    fdPort.dir = hw::ModulePort::Direction::Output;
-    ports.push_back(fdPort);
-
-    // Create module type with the ports
-    auto moduleType = hw::ModuleType::get(b.getContext(), ports);
-
-    SmallVector<NamedAttribute> perArgumentsAttr;
-    perArgumentsAttr.push_back(
-        {sv::FuncOp::getExplicitlyReturnedAttrName(), b.getUnitAttr()});
-
-    SmallVector<Attribute> argumentAttr = {
-        DictionaryAttr::get(b.getContext(), {}),
-        DictionaryAttr::get(b.getContext(), perArgumentsAttr)};
-
-    // Create the function declaration
-    auto func = sv::FuncOp::create(
-        b, /*sym_name=*/
-        "__circt_lib_logging::FileDescriptor::get", moduleType,
-        /*perArgumentAttrs=*/
-        b.getArrayAttr(
-            {b.getDictionaryAttr({}), b.getDictionaryAttr(perArgumentsAttr)}),
-        /*inputLocs=*/
-        ArrayAttr(),
-        /*resultLocs=*/
-        ArrayAttr(),
-        /*verilogName=*/
-        b.getStringAttr("__circt_lib_logging::FileDescriptor::get"));
-    func.setPrivate();
-
-    sv::MacroDeclOp::create(b, "__CIRCT_LIB_LOGGING");
-    // Create the fragment containing the FileDescriptor class.
-    emit::FragmentOp::create(b, "CIRCT_LIB_LOGGING_FRAGMENT", [&] {
-      emitGuard("SYNTHESIS", [&]() {
-        emitGuard("__CIRCT_LIB_LOGGING", [&]() {
-          sv::VerbatimOp::create(b, R"(// CIRCT Logging Library
-package __circt_lib_logging;
-  class FileDescriptor;
-    static int global_id [string];
-    static function int get(string name);
-      if (global_id.exists(name) == 32'h0) begin
-        global_id[name] = $fopen(name, "w");
-        if (global_id[name] == 32'h0)
-          $error("Failed to open file %s", name);
-      end
-      return global_id[name];
-    endfunction
-  endclass
-endpackage
-)");
-
-          sv::MacroDefOp::create(b, "__CIRCT_LIB_LOGGING", "");
-        });
-      });
-    });
-  }
+  if (state.usedFileDescriptorLib)
+    sv::emitFileDescriptorRuntime(op->getParentOp(), b);
 
   if (state.usedPrintf) {
     sv::MacroDeclOp::create(b, "PRINTF_COND");
@@ -2164,9 +2101,6 @@ private:
   /// `getReadValue(v)`.
   DenseMap<Value, Value> readInOutCreated;
 
-  /// This keeps track of the file descriptors for each file name.
-  DenseMap<StringAttr, sv::RegOp> fileNameToFileDescriptor;
-
   // We auto-unique graph-level blocks to reduce the amount of generated
   // code and ensure that side effects are properly ordered in FIRRTL.
   using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
@@ -3071,7 +3005,8 @@ LogicalResult FIRRTLLowering::lowerStatementWithFd(
 FailureOr<Value>
 FIRRTLLowering::callFileDescriptorLib(const FileDescriptorInfo &info) {
   circuitState.usedFileDescriptorLib = true;
-  circuitState.addFragment(theModule, "CIRCT_LIB_LOGGING_FRAGMENT");
+  circuitState.addFragment(
+      theModule, sv::getFileDescriptorFragmentRef(builder.getContext()));
 
   Value fileName;
   if (info.isSubstitutionRequired()) {
@@ -3088,11 +3023,8 @@ FIRRTLLowering::callFileDescriptorLib(const FileDescriptorInfo &info) {
                    .getResult();
   }
 
-  return sv::FuncCallProceduralOp::create(
-             builder, mlir::TypeRange{builder.getIntegerType(32)},
-             builder.getStringAttr("__circt_lib_logging::FileDescriptor::get"),
-             ValueRange{fileName})
-      ->getResult(0);
+  return sv::createProceduralFileDescriptorGetterCall(builder, builder.getLoc(),
+                                                      fileName);
 }
 
 /// Set the lowered value of 'orig' to 'result', remembering this in a map.
