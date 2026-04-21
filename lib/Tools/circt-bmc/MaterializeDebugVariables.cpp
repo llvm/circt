@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Tools/circt-bmc/Passes.h"
@@ -38,17 +39,10 @@ private:
   static void materializeDebugVariables(HWModuleOp module) {
     auto *body = module.getBodyBlock();
     DenseSet<Value> trackedValues;
-    for (auto varOp :
-         llvm::make_early_inc_range(body->getOps<debug::VariableOp>()))
+    for (auto varOp : body->getOps<debug::VariableOp>())
       trackedValues.insert(varOp.getValue());
 
-    DenseSet<StringAttr> outputPortNames;
-    for (auto &port : module.getPortList())
-      if (port.isOutput())
-        outputPortNames.insert(port.name);
-
     OpBuilder builder = OpBuilder::atBlockBegin(body);
-    StringRef stateSuffix = "_state";
     for (auto &port : module.getPortList()) {
       if (port.isOutput())
         continue;
@@ -60,19 +54,38 @@ private:
       auto value = body->getArgument(port.argNum);
       if (!trackedValues.insert(value).second)
         continue;
-
-      StringAttr debugName = port.name;
-      auto portName = port.name.getValue();
-      if (portName.ends_with(stateSuffix)) {
-        auto baseName = portName.drop_back(stateSuffix.size());
-        auto nextNameAttr =
-            builder.getStringAttr((Twine(baseName) + "_next").str());
-        if (outputPortNames.contains(nextNameAttr))
-          debugName = builder.getStringAttr(baseName);
-      }
-
-      debug::VariableOp::create(builder, value.getLoc(), debugName, value,
+      debug::VariableOp::create(builder, value.getLoc(), port.name, value,
                                 /*scope=*/Value{});
+    }
+
+    auto materializeReg = [&](auto regOp, StringRef regName) {
+      auto regResult = regOp.getResult();
+      if (!trackedValues.insert(regResult).second)
+        return;
+      auto regNameAttr = builder.getStringAttr(regName);
+      OpBuilder regBuilder(regOp);
+      regBuilder.setInsertionPointAfter(regOp);
+      debug::VariableOp::create(regBuilder, regResult.getLoc(), regNameAttr,
+                                regResult, /*scope=*/Value{});
+    };
+
+    unsigned regIndex = 0;
+    for (auto regOp :
+         llvm::make_early_inc_range(body->getOps<seq::CompRegOp>())) {
+      if (regOp.getName() && !regOp.getName()->empty())
+        materializeReg(regOp, regOp.getName().value());
+      else
+        materializeReg(regOp, ("reg_" + Twine(regIndex)).str());
+      ++regIndex;
+    }
+
+    for (auto regOp :
+         llvm::make_early_inc_range(body->getOps<seq::FirRegOp>())) {
+      if (!regOp.getName().empty())
+        materializeReg(regOp, regOp.getName());
+      else
+        materializeReg(regOp, ("reg_" + Twine(regIndex)).str());
+      ++regIndex;
     }
   }
 };

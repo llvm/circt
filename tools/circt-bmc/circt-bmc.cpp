@@ -213,8 +213,8 @@ static LogicalResult executeBMC(MLIRContext &context) {
   }
   pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
   pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
-  pm.addPass(createExternalizeRegisters());
   pm.addPass(createMaterializeDebugVariables());
+  pm.addPass(createExternalizeRegisters());
   LowerToBMCOptions lowerToBMCOptions;
   lowerToBMCOptions.bound = clockBound;
   lowerToBMCOptions.ignoreAssertionsUntil = ignoreAssertionsUntil;

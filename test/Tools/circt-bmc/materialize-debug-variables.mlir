@@ -1,4 +1,4 @@
-// RUN: circt-opt --externalize-registers --materialize-debug-variables %s | FileCheck %s
+// RUN: circt-opt --materialize-debug-variables --externalize-registers %s | FileCheck %s
 
 // CHECK-LABEL: hw.module @named_regs(
 // CHECK:         dbg.variable "in0", [[IN0:%.+]] : i32
@@ -24,4 +24,13 @@ hw.module @preserve_existing_and_non_normalized(in %clk: !seq.clock, in %x: i8, 
   dbg.variable "x_alias", %x : i8
   %0 = comb.add %x, %y : i8
   hw.output %0 : i8
+}
+
+// -----
+
+// CHECK-LABEL: hw.module @do_not_guess_from_suffix(
+// CHECK:         dbg.variable "foo_state", [[STATE:%.+]] : i1
+// CHECK-NOT:     dbg.variable "foo", [[STATE]]
+hw.module @do_not_guess_from_suffix(in %foo_state: i1, out foo_next: i1) {
+  hw.output %foo_state : i1
 }
