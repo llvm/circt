@@ -26,6 +26,7 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -61,7 +62,7 @@ private:
   bool anythingChanged;
   LoweringOptions options;
 
-  DenseSet<Operation *> toDelete;
+  llvm::SetVector<Operation *> toDelete;
 };
 } // end anonymous namespace
 
@@ -560,10 +561,7 @@ void PrettifyVerilogPass::runOnOperation() {
 
   // Erase any dangling operands of simplified operations.
   while (!toDelete.empty()) {
-    auto it = toDelete.begin();
-    Operation *op = *it;
-    toDelete.erase(it);
-
+    auto *op = toDelete.pop_back_val();
     if (!op || !isOpTriviallyDead(op))
       continue;
 
