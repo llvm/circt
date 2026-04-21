@@ -654,8 +654,9 @@ om.class @ReferenceEachOther() -> (field: !ty){
   context.getOrLoadDialect<OMDialect>();
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
-    ASSERT_EQ(diag.str(), "failed to finalize evaluation. Probably the class "
-                          "contains a dataflow cycle");
+    ASSERT_EQ(diag.str(),
+              "cycle detected: 1 values remain partially evaluated after full "
+              "pass with no progress (total fully evaluated: 1)");
   });
 
   OwningOpRef<ModuleOp> owning =
@@ -667,6 +668,51 @@ om.class @ReferenceEachOther() -> (field: !ty){
       StringAttr::get(&context, "ReferenceEachOther"), {});
 
   ASSERT_TRUE(failed(result));
+}
+
+// Test for issue #10264 - nested object field references that previously
+// caused an assertion failure. This test verifies that the evaluator can
+// properly handle nested field accesses without hitting null pointers.
+TEST(EvaluatorTests, Issue10264NestedFieldReferences) {
+  StringRef mod = R"MLIR(
+om.class @Domain(%in: !om.string) -> (out: !om.string) {
+  om.class.fields %in : !om.string
+}
+
+om.class @Top() -> (test: i1) {
+  %0 = om.constant "A" : !om.string
+  %1 = om.object @Domain(%0) : (!om.string) -> !om.class.type<@Domain>
+  %2 = om.object.field %1, [@out] : (!om.class.type<@Domain>) -> !om.string
+  %3 = om.object @Domain(%2) : (!om.string) -> !om.class.type<@Domain>
+  %4 = om.object.field %3, [@out] : (!om.class.type<@Domain>) -> !om.string
+  %5 = om.constant "B" : !om.string
+  %6 = om.prop.eq %4, %5 : !om.string
+  om.class.fields %6 : i1
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  // Verify the result is correct (false since "A" != "B")
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("test")
+                        .value();
+  auto boolValue = llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                       ->getAs<BoolAttr>();
+  ASSERT_FALSE(boolValue.getValue());
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
