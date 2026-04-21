@@ -91,3 +91,44 @@ func.func @test_transitive_merge(%x: i32, %y: i32, %z: i32, %u: i32, %v: i32) ->
   return %1, %2 : i32, i32
 }
 
+// CHECK-LABEL: @Xor
+hw.module @Xor(in %a: i4, in %b: i4, out o1: i4, out o2: i4, out o3: i4, out o4: i4, out o5: i4, out o6: i4, out o7: i4) {
+  // CHECK:      %c-8_i4 = hw.constant -8 : i4
+  // CHECK-NEXT: %c2_i4 = hw.constant 2 : i4
+  // CHECK-NEXT: %[[TMP1:.+]] = synth.xor_inv not %a : i4
+  // CHECK-NEXT: %[[TMP2:.+]] = synth.xor_inv %a, %c2_i4 : i4
+  // CHECK-NEXT: %[[TMP3:.+]] = synth.xor_inv %a, %c-8_i4 : i4
+  // CHECK-NEXT: %[[TMP4:.+]] = synth.xor_inv not %b : i4
+  // CHECK-NEXT: %[[TMP5:.+]] = synth.xor_inv %a, %b : i4
+  // CHECK-NEXT: %[[TMP6:.+]] = synth.xor_inv %a, %b : i4
+  // CHECK-NEXT: hw.output %a, %[[TMP1]], %[[TMP2]], %[[TMP3]], %[[TMP4]], %[[TMP5]], %[[TMP6]] : i4, i4, i4, i4, i4, i4, i4
+  %c0 = hw.constant 0 : i4
+  %c7 = hw.constant 7 : i4
+  %c15 = hw.constant 15 : i4
+  %c5 = hw.constant 5 : i4
+
+  // xor_inv(a, 0000000) -> a
+  %0 = synth.xor_inv %a, %c0 : i4
+
+  // xor_inv(a, 1111111) -> xor_inv(not a)
+  %1 = synth.xor_inv %a, %c15 : i4
+
+  // xor_inv(a, c0, c1) -> xor_inv(a, c0^c1)
+  %2 = synth.xor_inv %a, %c7, %c5 : i4
+
+  // xor_inv(a, not c0) -> xor_inv(a, ~c0)
+  %3 = synth.xor_inv %a, not %c7 : i4
+
+  // xor_inv(a, not a, b) -> ~b
+  %4 = synth.xor_inv %a, not %a, %b : i4
+
+  // xor_inv(a, not (aig_inv not b)) -> xor_inv(a, b)
+  %inv = synth.aig.and_inv not %b : i4
+  %5 = synth.xor_inv %a, not %inv : i4
+
+  // xor_inv(a, not (xor_inv not b)) -> xor_inv(a, b)
+  %inv2 = synth.xor_inv not %b : i4
+  %6 = synth.xor_inv %a, not %inv2 : i4
+
+  hw.output %0, %1, %2, %3, %4, %5, %6 : i4, i4, i4, i4, i4, i4, i4
+}

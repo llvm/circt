@@ -116,7 +116,21 @@ def XorInverterOp : InvertibleOperandsOp<"xor_inv"> {
                             [{
       SmallVector<bool> inverted {invertLhs, invertRhs};
       return build($_builder, $_state, {lhs, rhs}, inverted);
-    }]>];
+    }]>,
+    OpBuilder<(ins "ArrayRef<std::pair<Value, bool>>":$operands),
+                            [{
+      SmallVector<Value> values;
+      SmallVector<bool> inverts;
+      for (auto &[val, inv] : operands) {
+        values.push_back(val);
+        inverts.push_back(inv);
+      }
+      return build($_builder, $_state, values, inverts);
+    }]>
+    ];
+    
+    let hasFolder = 1;
+    let hasCanonicalizeMethod = 1;
 
 }
 

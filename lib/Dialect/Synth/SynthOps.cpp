@@ -27,6 +27,7 @@ using namespace mlir;
 using namespace circt;
 using namespace circt::synth;
 using namespace circt::synth::aig;
+using namespace matchers;
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.cpp.inc"
@@ -45,6 +46,22 @@ inline llvm::KnownBits applyInversion(llvm::KnownBits value, bool inverted) {
   if (inverted)
     std::swap(value.Zero, value.One);
   return value;
+}
+
+template <typename SubType>
+struct ComplementMatcher {
+  SubType lhs;
+  ComplementMatcher(SubType lhs) : lhs(std::move(lhs)) {}
+  bool match(Operation *op) {
+    auto boolOp = dyn_cast<BooleanLogicOpInterface>(op);
+    return boolOp && boolOp.getInputs().size() == 1 && boolOp.isInverted(0) &&
+           lhs.match(op->getOperand(0));
+  }
+};
+
+template <typename SubType>
+static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
+  return ComplementMatcher<SubType>(subExpr);
 }
 
 } // namespace
@@ -281,6 +298,107 @@ void AndInverterOp::emitCNFWithoutInversion(
 //===----------------------------------------------------------------------===//
 
 bool XorInverterOp::areInputsPermutationInvariant() { return true; }
+
+OpFoldResult XorInverterOp::fold(FoldAdaptor adaptor) {
+  // xor_inv(a) -> a
+  if (getNumOperands() == 1 && !isInverted(0))
+    return getOperand(0);
+
+  auto inputs = adaptor.getInputs();
+  if (inputs.size() == 2)
+    if (auto intAttr = dyn_cast_or_null<IntegerAttr>(inputs[1])) {
+      auto value = intAttr.getValue();
+      if (isInverted(1))
+        value = ~value;
+      // xor_inv(a, 0000000) -> a
+      if (value.isZero())
+        return getOperand(0);
+    }
+  return {};
+}
+
+LogicalResult XorInverterOp::canonicalize(XorInverterOp op,
+                                          PatternRewriter &rewriter) {
+
+  // Map to store active (non-canceled) operands and their inversion state
+  SmallMapVector<Value, bool, 4> activeOperands;
+
+  // XOR identity is zero; accumulate all constant operands here.
+  APInt constValue =
+      APInt::getZero(op.getResult().getType().getIntOrFloatBitWidth());
+
+  bool constFound = false;
+  bool changed = false;
+
+  for (auto [value, inverted] : llvm::zip(op.getInputs(), op.getInverted())) {
+    Value currentValue = value;
+    bool newInverted = inverted;
+
+    // xor_inv(a, c0, c1) -> xor_inv(a, c0 ^ c1)
+    // xor_inv(a, not c0) -> xor_inv(a, ~c0)
+    if (auto constOp = currentValue.getDefiningOp<hw::ConstantOp>()) {
+      APInt val = constOp.getValue();
+      if (newInverted)
+        val = ~val;
+      constValue ^= val;
+      constFound = true;
+      continue;
+    }
+
+    // xor_inv(a, not (xor_inv/aig_inv not b)) -> xor_inv(a, b)
+    Value matchedVal;
+    if (newInverted &&
+        matchPattern(currentValue, m_Complement(m_Any(&matchedVal)))) {
+      currentValue = matchedVal;
+      newInverted = false; // double inversion cancels out
+      changed = true;
+    }
+
+    // xor_inv (a, a, b) -> b
+    // xor_inv (a, not a, b) -> ~b
+    if (activeOperands.count(currentValue)) {
+      // If we see the value again, they cancel out.
+      // If one was inverted and the other wasn't (x ^ ~x), it results in a '1'.
+      if (activeOperands[currentValue] != newInverted)
+        constValue.flipAllBits();
+      activeOperands.erase(currentValue);
+      changed = true;
+    } else {
+      activeOperands[currentValue] = newInverted;
+    }
+  }
+
+  // No constants were folded and no operands cancelled out. There is nothing to
+  // do.
+  if (!changed && !constFound && activeOperands.size() == op.getInputs().size())
+    return failure();
+
+  // xor_inv(a, 1111111) -> xor_inv(not a)
+  // xor_inv(a, c0, c1) -> xor_inv(a, c0^c1)
+  if (!constValue.isZero()) {
+    if (constValue.isAllOnes() && !activeOperands.empty()) {
+      // Propagate ones as an inversion on the last operand.
+      activeOperands.back().second = !activeOperands.back().second;
+    } else {
+      if (op.getInputs().size() == 2 && !op.getInverted()[1] &&
+          activeOperands.size() == 1)
+        return failure();
+      auto constOp = hw::ConstantOp::create(rewriter, op.getLoc(), constValue);
+      activeOperands.insert({constOp, false});
+    }
+  }
+
+  if (activeOperands.empty()) {
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, APInt::getZero(op.getResult().getType().getIntOrFloatBitWidth()));
+    return success();
+  }
+
+  replaceOpAndCopyNamehint(rewriter, op,
+                           XorInverterOp::create(rewriter, op.getLoc(),
+                                                 activeOperands.getArrayRef()));
+  return success();
+}
 
 APInt XorInverterOp::evaluateBooleanLogic(
     llvm::function_ref<const APInt &(unsigned)> getInputValue) {
