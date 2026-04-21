@@ -641,10 +641,10 @@ public:
   firtool::FirtoolOptions::RandomKind disableRandomValue =
       firtool::FirtoolOptions::RandomKind::None;
 
-// Make these options (and their grouping category) inaccessible as their values
-// are not intended to be used directly.  These change a lattice of
-// randomization disable settings and directly accessing the command line option
-// the user provided is not useful.
+  // Make these options (and their grouping category) inaccessible as their
+  // values are not intended to be used directly.  These change a lattice of
+  // randomization disable settings and directly accessing the command line
+  // option the user provided is not useful.
 private:
   llvm::cl::OptionCategory randomizationCategory{
       "Disable random initialization code (may break semantics!)"};
@@ -652,8 +652,7 @@ private:
   llvm::cl::opt<bool> disableMemRandom{
       "disable-mem-randomization",
       llvm::cl::desc("Disable emission of memory randomization code"),
-      llvm::cl::cat(randomizationCategory),
-      llvm::cl::ValueDisallowed,
+      llvm::cl::cat(randomizationCategory), llvm::cl::ValueDisallowed,
       llvm::cl::callback([&](const bool &) {
         disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
             disableRandomValue, firtool::FirtoolOptions::RandomKind::Mem);
@@ -662,8 +661,7 @@ private:
   llvm::cl::opt<bool> disableRegRandom{
       "disable-reg-randomization",
       llvm::cl::desc("Disable emission of register randomization code"),
-      llvm::cl::cat(randomizationCategory),
-      llvm::cl::ValueDisallowed,
+      llvm::cl::cat(randomizationCategory), llvm::cl::ValueDisallowed,
       llvm::cl::callback([&](const bool &) {
         disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
             disableRandomValue, firtool::FirtoolOptions::RandomKind::Reg);
@@ -672,8 +670,7 @@ private:
   llvm::cl::opt<bool> disableAllRandom{
       "disable-all-randomization",
       llvm::cl::desc("Disable emission of all randomization code"),
-      llvm::cl::cat(randomizationCategory),
-      llvm::cl::ValueDisallowed,
+      llvm::cl::cat(randomizationCategory), llvm::cl::ValueDisallowed,
       llvm::cl::callback([&](const bool &) {
         disableRandomValue = firtool::FirtoolOptions::RandomKind::All;
       })};
