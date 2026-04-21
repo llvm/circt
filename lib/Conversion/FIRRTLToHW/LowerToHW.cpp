@@ -2376,16 +2376,19 @@ LogicalResult FIRRTLLowering::run() {
     op->erase();
   }
 
-  // Prune operations that may have become unused throughout the lowering.
-  while (!maybeUnusedValues.empty()) {
-    auto it = maybeUnusedValues.begin();
-    auto *op = *it;
-    maybeUnusedValues.erase(it);
+  // Prune operations that may have become unused throughout the lowering. The
+  // order of operation does not matter here.
+  SmallVector<Operation *> worklist(maybeUnusedValues.begin(),
+                                    maybeUnusedValues.end());
+  while (!worklist.empty()) {
+    auto *op = worklist.pop_back_val();
+    maybeUnusedValues.erase(op);
     if (!isOpTriviallyDead(op))
       continue;
     for (auto operand : op->getOperands())
       if (auto *defOp = operand.getDefiningOp())
-        maybeUnusedValues.insert(defOp);
+        if (maybeUnusedValues.insert(defOp).second)
+          worklist.push_back(defOp);
     op->erase();
   }
 
