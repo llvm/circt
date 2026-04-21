@@ -64,8 +64,8 @@ using TaintMap = DenseMap<Value, Value>;
 using PendingTaintMap = DenseMap<Value, Backedge>;
 
 struct ModulePortTaintInfo {
-  SmallVector<int> taintInputSources;
-  SmallVector<int> taintOutputSources;
+  SmallVector<unsigned> taintInputSources;
+  SmallVector<unsigned> taintOutputSources;
 };
 
 struct ModuleInstrumentationInfo {
@@ -639,7 +639,6 @@ LogicalResult CellIFTInstrumentPass::rewriteModuleSignature(
   unsigned blockArgInsertionOffset = 0;
   for (auto port : portList) {
     if (port.isInput()) {
-      portInfo.taintInputSources.push_back(-1);
       if (isa<IntegerType>(port.type)) {
         std::string taintName = port.getName().str() + taintSuffix.str();
         if (!portNames.insert(taintName).second) {
@@ -662,7 +661,6 @@ LogicalResult CellIFTInstrumentPass::rewriteModuleSignature(
       }
       inIdx++;
     } else if (port.isOutput()) {
-      portInfo.taintOutputSources.push_back(-1);
       if (isa<IntegerType>(port.type)) {
         std::string taintName = port.getName().str() + taintSuffix.str();
         if (!portNames.insert(taintName).second) {
@@ -703,10 +701,13 @@ LogicalResult CellIFTInstrumentPass::instrumentModuleBody(
   PendingTaintMap pendingTaints;
 
   // Map input block args -> their taint block args.
-  for (auto [inputIdx, sourceIdx] : llvm::enumerate(portInfo.taintInputSources))
-    if (sourceIdx >= 0)
-      setTaint(taintOf, pendingTaints, body->getArgument(sourceIdx),
-               body->getArgument(inputIdx));
+  for (auto [taintOrdinal, sourceIdx] :
+       llvm::enumerate(portInfo.taintInputSources)) {
+    unsigned origArgIdx = sourceIdx + taintOrdinal;
+    unsigned taintArgIdx = origArgIdx + 1;
+    setTaint(taintOf, pendingTaints, body->getArgument(origArgIdx),
+             body->getArgument(taintArgIdx));
+  }
 
   ImplicitLocOpBuilder b(mod.getLoc(), mod.getContext());
   BackedgeBuilder backedgeBuilder(b, mod.getLoc());
@@ -794,21 +795,21 @@ void CellIFTInstrumentPass::rewriteOutputOp(HWModuleOp mod,
   SmallVector<Value> newOuts;
   ImplicitLocOpBuilder b(outputOp.getLoc(), outputOp);
 
-  unsigned nextOrigOutput = 0;
-  for (auto [outputIdx, sourceIdx] :
-       llvm::enumerate(portInfo.taintOutputSources)) {
-    if (sourceIdx >= 0) {
-      Value origOutput = outputOp.getOperand(sourceIdx);
+  unsigned nextTaintOutput = 0;
+  for (unsigned origOutputIdx = 0, e = outputOp.getNumOperands();
+       origOutputIdx < e; ++origOutputIdx) {
+    Value origOutput = outputOp.getOperand(origOutputIdx);
+    newOuts.push_back(origOutput);
+
+    if (nextTaintOutput < portInfo.taintOutputSources.size() &&
+        portInfo.taintOutputSources[nextTaintOutput] == origOutputIdx) {
       auto it = taintOf.find(origOutput);
       if (it != taintOf.end())
         newOuts.push_back(it->second);
       else
         newOuts.push_back(getZero(b, origOutput.getType()));
-      continue;
+      ++nextTaintOutput;
     }
-
-    (void)outputIdx;
-    newOuts.push_back(outputOp.getOperand(nextOrigOutput++));
   }
 
   hw::OutputOp::create(b, outputOp.getLoc(), newOuts);
