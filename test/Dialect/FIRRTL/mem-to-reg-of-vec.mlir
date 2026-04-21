@@ -1,4 +1,4 @@
-// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-mem-to-reg-of-vec{repl-seq-mem=true}))' %s | FileCheck  %s
+// RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-mem-to-reg-of-vec))' %s | FileCheck  %s
 
 firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
   firrtl.module public @Mem(out %d : !firrtl.probe<vector<uint<8>, 8>>, out %d2 : !firrtl.probe<vector<uint<8>, 8>>) attributes {annotations = [

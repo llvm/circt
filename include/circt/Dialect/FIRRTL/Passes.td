@@ -545,8 +545,6 @@ def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
     This pass generates the logic to implement a memory using Registers.
   }];
   let options = [
-    Option<"replSeqMem", "repl-seq-mem", "bool",
-                "false", "Prepare seq mems for macro replacement">,
     Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool",
                 "false",
     "ignore the read enable signal, instead of assigning X on read disable">
