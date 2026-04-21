@@ -1849,7 +1849,7 @@ LogicalResult Context::convertNInputPrimitive(
   SmallVector<Value> inputVals;
   inputVals.reserve(portConns.size() - 1);
   for (const auto *inputConn : portConns.subspan(1, portConns.size() - 1)) {
-    auto inputVal = this->convertRvalueExpression(*inputConn);
+    auto inputVal = convertRvalueExpression(*inputConn);
     if (!inputVal)
       return failure();
     inputVals.push_back(inputVal);
@@ -2012,7 +2012,9 @@ LogicalResult Context::convertPullGatePrimitive(
   assert((prim.primitiveType.name == "pullup" ||
           prim.primitiveType.name == "pulldown") &&
          "expected pullup or pulldown primitive");
-  // Slang ensures no delays on pull gates so no need to check here
+  // Slang should catch this
+  assert(!prim.getDelay() &&
+         "SystemVerilog does not allow pull gate primitives with delays");
   auto loc = convertLocation(prim.location);
   auto primName = prim.primitiveType.name;
 
