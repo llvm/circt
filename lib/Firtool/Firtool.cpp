@@ -477,10 +477,11 @@ LogicalResult firtool::populateHWToBTOR2(mlir::PassManager &pm,
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// This struct contains command line options that can be used to initialize
-/// various bits of a Firtool pipeline. This uses a struct wrapper to avoid the
+/// This class contains command line options that can be used to initialize
+/// various bits of a Firtool pipeline. This uses a class wrapper to avoid the
 /// need for global command line options.
-struct FirtoolCmdOptions {
+class FirtoolCmdOptions {
+public:
   llvm::cl::opt<std::string> outputFilename{
       "o",
       llvm::cl::desc("Output filename, or directory for split output"),
@@ -640,13 +641,19 @@ struct FirtoolCmdOptions {
   firtool::FirtoolOptions::RandomKind disableRandomValue =
       firtool::FirtoolOptions::RandomKind::None;
 
+// Make these options (and their grouping category) inaccessible as their values
+// are not intended to be used directly.  These change a lattice of
+// randomization disable settings and directly accessing the command line option
+// the user provided is not useful.
+private:
   llvm::cl::OptionCategory randomizationCategory{
       "Disable random initialization code (may break semantics!)"};
 
   llvm::cl::opt<bool> disableMemRandom{
       "disable-mem-randomization",
       llvm::cl::desc("Disable emission of memory randomization code"),
-      llvm::cl::cat(randomizationCategory), llvm::cl::init(false),
+      llvm::cl::cat(randomizationCategory),
+      llvm::cl::ValueDisallowed,
       llvm::cl::callback([&](const bool &) {
         disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
             disableRandomValue, firtool::FirtoolOptions::RandomKind::Mem);
@@ -655,7 +662,8 @@ struct FirtoolCmdOptions {
   llvm::cl::opt<bool> disableRegRandom{
       "disable-reg-randomization",
       llvm::cl::desc("Disable emission of register randomization code"),
-      llvm::cl::cat(randomizationCategory), llvm::cl::init(false),
+      llvm::cl::cat(randomizationCategory),
+      llvm::cl::ValueDisallowed,
       llvm::cl::callback([&](const bool &) {
         disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
             disableRandomValue, firtool::FirtoolOptions::RandomKind::Reg);
@@ -664,11 +672,13 @@ struct FirtoolCmdOptions {
   llvm::cl::opt<bool> disableAllRandom{
       "disable-all-randomization",
       llvm::cl::desc("Disable emission of all randomization code"),
-      llvm::cl::cat(randomizationCategory), llvm::cl::init(false),
+      llvm::cl::cat(randomizationCategory),
+      llvm::cl::ValueDisallowed,
       llvm::cl::callback([&](const bool &) {
         disableRandomValue = firtool::FirtoolOptions::RandomKind::All;
       })};
 
+public:
   llvm::cl::opt<std::string> outputAnnotationFilename{
       "output-annotation-file",
       llvm::cl::desc("Optional output annotation file"),
