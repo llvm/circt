@@ -201,13 +201,13 @@ void circtFirtoolOptionsSetDisableRandom(CirctFirtoolFirtoolOptions options,
   case CIRCT_FIRTOOL_RANDOM_KIND_NONE:
     break;
   case CIRCT_FIRTOOL_RANDOM_KIND_MEM:
-    opts->setDisableRandom(firtool::FirtoolOptions::RandomKind::Mem);
+    opts->mergeDisableRandom(firtool::FirtoolOptions::RandomKind::Mem);
     break;
   case CIRCT_FIRTOOL_RANDOM_KIND_REG:
-    opts->setDisableRandom(firtool::FirtoolOptions::RandomKind::Reg);
+    opts->mergeDisableRandom(firtool::FirtoolOptions::RandomKind::Reg);
     break;
   case CIRCT_FIRTOOL_RANDOM_KIND_ALL:
-    opts->setDisableRandom(firtool::FirtoolOptions::RandomKind::All);
+    opts->mergeDisableRandom(firtool::FirtoolOptions::RandomKind::All);
     break;
   }
 }

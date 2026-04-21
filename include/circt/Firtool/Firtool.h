@@ -82,7 +82,7 @@ public:
     return RandomKind::All;
   }
 
-  FirtoolOptions &setDisableRandom(RandomKind kind) {
+  FirtoolOptions &mergeDisableRandom(RandomKind kind) {
     disableRandom = mergeRandomKind(disableRandom, kind);
     return *this;
   }
