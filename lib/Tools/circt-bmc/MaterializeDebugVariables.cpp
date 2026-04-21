@@ -38,7 +38,8 @@ private:
   static void materializeDebugVariables(HWModuleOp module) {
     auto *body = module.getBodyBlock();
     DenseSet<Value> trackedValues;
-    for (auto varOp : body->getOps<debug::VariableOp>())
+    for (auto varOp :
+         llvm::make_early_inc_range(body->getOps<debug::VariableOp>()))
       trackedValues.insert(varOp.getValue());
 
     DenseSet<StringAttr> outputPortNames;
