@@ -1,14 +1,15 @@
 // RUN: circt-opt %s --split-input-file --pass-pipeline='builtin.module(synth-print-longest-path-analysis{test=true})' --verify-diagnostics
 
-// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.a[0], delay=4, history=[{{.+}}])}}
-// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.b[0], delay=4, history=[{{.+}}])}}
+// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.a[0], delay=6, history=[{{.+}}])}}
+// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.b[0], delay=6, history=[{{.+}}])}}
 hw.module private @basic(in %a : i1, in %b : i1, out x : i1) {
   // These operations are considered to have a delay of 1.
   %p = synth.aig.and_inv not %a, %b : i1 // p[0] := max(a[0], b[0]) + 1 = 1
   %q = comb.and %p, %a : i1  // q[0] := max(p[0], a[0]) + 1 = 2
   %r = comb.or %q, %a : i1  // r[0] := max(q[0], a[0]) + 1 = 3
   %s = comb.xor %r, %a : i1 // s[0] := max(r[0], a[0]) + 1 = 4
-  hw.output %s : i1
+  %t = synth.xor_inv %s, not %b, %a : i1 // t[0] := max(s[0], b[0], a[0]) + 2 = 6
+  hw.output %t : i1
 }
 
 // expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.a[0], delay=1, history=[{{.+}}])}}
@@ -124,21 +125,12 @@ hw.module private @comb_others(in %a : i2, in %b : i2, out x : i1) {
   hw.output %0 : i1
 }
 
-// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.a[0], delay=1, history=[{{.+}}])}}
-// expected-remark-re @below {{endPoint=Object($root.y[0]), startPoint=Object($root.a[0], delay=2, history=[{{.+}}])}}
-hw.module private @mig(in %a : i1, out x : i1, out y : i1) {
-  %p = synth.mig.maj_inv %a, %a, %a : i1
-  %q = synth.mig.maj_inv %a, %a, %a, %a, %a : i1
-  hw.output %p, %q : i1, i1
-}
-
-
 // Make sure that the parameter doesn't cause crash
-// expected-remark-re @below {{endPoint=Object($root.o1[0]), startPoint=Object($root.a[0], delay=2, history=[{{.+}}])}}
+// expected-remark-re @below {{endPoint=Object($root.o1[0]), startPoint=Object($root.a[0], delay=3, history=[{{.+}}])}}
 hw.module @parameter<in: i1> (in %a: i1, out o1: i1) {
   %param = hw.param.value i1 = #hw.param.decl.ref<"in">
   %0 = synth.aig.and_inv %a, %param : i1
-  %1 = synth.mig.maj_inv %0, %a, %param : i1
+  %1 = comb.or %0, %a, %param : i1
   hw.output %1 : i1
 }
 

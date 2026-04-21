@@ -107,7 +107,7 @@ circuit subfield_of_ground_type :
   public module subfield_of_ground_type :
     input a: UInt<1>
     output b: UInt<1>
-    ; expected-error @+1 {{subfield requires bundle or object operand}}
+    ; expected-error @+1 {{subfield requires bundle, object, or domain operand}}
     connect b, a.a
 
 ;// -----
@@ -1936,7 +1936,7 @@ circuit Foo:
   public module Foo:
     output a: Integer
     ; expected-error @below {{unknown property expressions are a FIRRTL 5.1.0+ feature}}
-    propassign a, Unknown: Integer
+    propassign a, Unknown(Integer)
 
 ;// -----
 
@@ -1945,7 +1945,7 @@ circuit Foo:
   public module Foo:
     output a: Integer
     ; expected-error @below {{expected property type}}
-    propassign a, Unknown: UInt<1>
+    propassign a, Unknown(UInt<1>)
 
 ;// -----
 
@@ -1955,3 +1955,12 @@ circuit AsResetVersion:
     input in: UInt<1>
     ; expected-error @below {{reset casts are a FIRRTL 5.1.0+ feature}}
     node x = asReset(in)
+
+;// -----
+
+FIRRTL version 5.1.0
+circuit OOBFormatString:
+  public module Oops:
+    input clk : Clock
+    ; expected-error @below {{not enough operands for format string}}
+    printf(clk, UInt<1>(0h1), "oops: %d")

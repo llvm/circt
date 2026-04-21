@@ -246,6 +246,41 @@ TEST(NPNClassTest, Commutativity) {
   EXPECT_TRUE(canonical1.equivalentOtherThanPermutation(canonical2));
 }
 
+TEST(NPNTableTest, LookupMatchesGenericCanonicalization) {
+  NPNTable table;
+  for (uint16_t truthTableValue :
+       {uint16_t(0x0000), uint16_t(0x0001), uint16_t(0x0008), uint16_t(0x0069),
+        uint16_t(0x0096), uint16_t(0x00E8), uint16_t(0x6996), uint16_t(0x8000),
+        uint16_t(0x9669), uint16_t(0xFEE8), uint16_t(0xFFFE),
+        uint16_t(0xFFFF)}) {
+    BinaryTruthTable tt(4, 1, APInt(16, truthTableValue));
+    NPNClass expected = NPNClass::computeNPNCanonicalForm(tt);
+    NPNClass actual;
+    ASSERT_TRUE(table.lookup(tt, actual));
+    EXPECT_EQ(actual.truthTable, expected.truthTable);
+    EXPECT_EQ(actual.inputNegation, expected.inputNegation);
+    EXPECT_EQ(actual.outputNegation, expected.outputNegation);
+    EXPECT_EQ(actual.inputPermutation, expected.inputPermutation);
+  }
+}
+
+TEST(NPNTableTest, LookupRejectsUnsupportedShapes) {
+  NPNTable table;
+  NPNClass result;
+
+  EXPECT_FALSE(table.lookup(BinaryTruthTable(3, 1, APInt(8, 0x96)), result));
+  EXPECT_FALSE(
+      table.lookup(BinaryTruthTable(5, 1, APInt(32, 0x69969669)), result));
+  EXPECT_FALSE(
+      table.lookup(BinaryTruthTable(4, 2, APInt(32, 0x12345678)), result));
+}
+
+TEST(NPNTableTest, Has222DistinctRepresentatives) {
+  SmallVector<uint16_t, 222> representatives;
+  collectCanonicalNPN4Representatives(representatives);
+  EXPECT_EQ(representatives.size(), 222u);
+}
+
 TEST(BinaryTruthTableTest, MultiBitOutput) {
   // Test 2-input, 2-output function: f(a,b) = (a&b, a|b)
   BinaryTruthTable tt(2, 2);
@@ -268,6 +303,45 @@ TEST(BinaryTruthTableTest, MultiBitOutput) {
 
   // Test table bit width
   EXPECT_EQ(tt.table.getBitWidth(), 8u); // 2^2 * 2 = 8 bits
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceIdentity) {
+  APInt tt(8, 0b11101000);
+  SmallVector<unsigned> mapping = {0, 1, 2};
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 3), tt);
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceSparse) {
+  // 2-input AND embedded into inputs [x0, x2].
+  APInt tt(4, 0b1000);
+  SmallVector<unsigned> mapping = {0, 2};
+  APInt expanded = circt::detail::expandTruthTableToInputSpace(tt, mapping, 3);
+  EXPECT_EQ(expanded, APInt(8, 0b10100000));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceDense) {
+  // 2-input OR embedded into inputs [x1, x2].
+  APInt tt(4, 0b1110);
+  SmallVector<unsigned> mapping = {1, 2};
+  APInt expanded = circt::detail::expandTruthTableToInputSpace(tt, mapping, 3);
+  EXPECT_EQ(expanded, APInt(8, 0b11111100));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPath) {
+  // 3-input parity embedded into inputs [x0, x3, x6].
+  APInt tt(8, 0b10010110);
+  SmallVector<unsigned> mapping = {0, 3, 6};
+  APInt expanded = circt::detail::expandTruthTableToInputSpace(tt, mapping, 7);
+
+  APInt expected(128, 0);
+  for (unsigned expandedIdx = 0; expandedIdx < 128; ++expandedIdx) {
+    unsigned origIdx = ((expandedIdx >> 0) & 1U) |
+                       (((expandedIdx >> 3) & 1U) << 1) |
+                       (((expandedIdx >> 6) & 1U) << 2);
+    if (tt[origIdx])
+      expected.setBit(expandedIdx);
+  }
+  EXPECT_EQ(expanded, expected);
 }
 
 TEST(BinaryTruthTableTest, MultiBitOutputPermutation) {

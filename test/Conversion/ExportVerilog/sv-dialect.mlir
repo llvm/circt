@@ -2015,6 +2015,42 @@ hw.module @MacroExample() {
 // CHECK-LABEL: module MacroExample
 // CHECK: `_ERROR_inside_macro_example
 
+// CHECK-LABEL: module write_task_test(
+// CHECK:      always_ff @(posedge clock) begin
+// CHECK-NEXT:   $write("stdout");
+// CHECK-NEXT:   $write("%d", 32'h2A);
+// CHECK-NEXT:   $write("%d %d", 32'h80000001, 32'h80000002);
+// CHECK-NEXT: end
+hw.module @write_task_test(in %clock : i1) {
+  sv.alwaysff(posedge %clock) {
+    %c0 = hw.constant 42 : i32
+    %c1 = hw.constant 0x80000001 : i32
+    %c2 = hw.constant 0x80000002 : i32
+    sv.write "stdout"
+    sv.write "%d"(%c0) : i32
+    sv.write "%d %d"(%c1, %c2) : i32, i32
+  }
+}
+
+// CHECK-LABEL: module fwrite_task_test(
+// CHECK:      always_ff @(posedge clock) begin
+// CHECK-NEXT:   $fwrite(32'h80000001, "stdout");
+// CHECK-NEXT:   $fwrite(32'h80000002, "stderr once");
+// CHECK-NEXT:   $fwrite(32'h80000002, "stderr twice");
+// CHECK-NEXT:   $fwrite(32'h80000002, "direct fd");
+// CHECK-NEXT: end
+hw.module @fwrite_task_test(in %clock : i1) {
+  sv.alwaysff(posedge %clock) {
+    %fd_stdout = hw.constant 0x80000001 : i32
+    %fd_stderr = hw.constant 0x80000002 : i32
+    sv.fwrite %fd_stdout, "stdout"
+    sv.fwrite %fd_stderr, "stderr once"
+    sv.fwrite %fd_stderr, "stderr twice"
+    %fd_direct = hw.constant 0x80000002 : i32
+    sv.fwrite %fd_direct, "direct fd"
+  }
+}
+
 sv.bind <@wait_order::@baz>
 
 // CHECK-LABEL: bind wait_order_0 XMRRef_Baz baz (

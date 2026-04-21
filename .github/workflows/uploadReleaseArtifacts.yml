@@ -20,6 +20,11 @@ on:
         default: false
         type: boolean
 
+      run_integration_tests:
+        description: Run CIRCT integration tests
+        default: false
+        type: boolean
+
       llvm_enable_assertions:
         description: Build with assertions.
         default: false
@@ -97,13 +102,18 @@ jobs:
               config=$(.github/bin/uploadReleaseArtifacts.sh -e ${{ github.event_name }})
               ;;
             "workflow_dispatch")
-              config=$(.github/bin/uploadReleaseArtifacts.sh \
-                -b ${{ inputs.cmake_build_type }} \
-                -e ${{ github.event_name }} \
-                -o ${{ inputs.os }} \
-                ${{ inputs.llvm_enable_assertions && '-a' || ' ' }} \
-                ${{ inputs.run_tests && '-t' || ' ' }})
-              ;;
+                if [[ "${{ inputs.manual_release }}" == "true" ]]; then
+                  config=$(.github/bin/uploadReleaseArtifacts.sh -e release)
+                else
+                  config=$(.github/bin/uploadReleaseArtifacts.sh \
+                    -b ${{ inputs.cmake_build_type }} \
+                    -e ${{ github.event_name }} \
+                    -o ${{ inputs.os }} \
+                    ${{ inputs.llvm_enable_assertions && '-a' || ' ' }} \
+                    ${{ inputs.run_tests && '-t' || ' ' }} \
+                    ${{ inputs.run_integration_tests && '-u' || ' ' }})
+                fi
+                ;;
           esac
 
           echo "Build Matrix:" >> $GITHUB_STEP_SUMMARY
@@ -121,6 +131,7 @@ jobs:
       native: ${{ steps.get-config.outputs.native }}
 
   publish-static:
+    name: ${{ matrix.generated.name }}
     needs:
       - choose-matrix
     if: ${{ needs.choose-matrix.outputs.static != '[]' }}
@@ -134,12 +145,13 @@ jobs:
     with:
       cmake_build_type: ${{ matrix.generated.cmake_build_type }}
       llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
-      llvm_force_enable_stats: ${{ matrix.generated.llvm_force_enable_stats }}
       run_tests: ${{ matrix.generated.run_tests }}
+      run_integration_tests: ${{ matrix.generated.run_integration_tests }}
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
 
   publish-native:
+    name: ${{ matrix.generated.name }}
     needs:
       - choose-matrix
     if: ${{ needs.choose-matrix.outputs.native != '[]' }}
@@ -155,9 +167,8 @@ jobs:
       cmake_build_type: ${{ matrix.generated.cmake_build_type }}
       build_shared_libs: ${{ matrix.generated.build_shared_libs }}
       llvm_enable_assertions: ${{ matrix.generated.llvm_enable_assertions }}
-      llvm_force_enable_stats: ${{ matrix.generated.llvm_force_enable_stats }}
       run_tests: ${{ matrix.generated.run_tests }}
+      run_integration_tests: ${{ matrix.generated.run_integration_tests }}
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
-      cmake_cxx_compiler: ${{ matrix.generated.cmake_cxx_compiler }}

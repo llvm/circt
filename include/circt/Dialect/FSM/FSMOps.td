@@ -50,11 +50,8 @@ def MachineOp : FSMOp<"machine", [
     /// Get the port information of the machine.
     void getHWPortInfo(SmallVectorImpl<hw::PortInfo> &);
 
-    /// Returns the number of states in this machhine.
-    size_t getNumStates() {
-      auto stateOps = getBody().getOps<fsm::StateOp>();
-      return std::distance(stateOps.begin(), stateOps.end());
-    }
+    /// Returns the number of states in this machine.
+    size_t getNumStates();
 
     /// Returns the argument types of this function.
     ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }

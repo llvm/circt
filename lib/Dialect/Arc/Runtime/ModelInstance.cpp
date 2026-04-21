@@ -14,6 +14,9 @@
 
 #include "circt/Dialect/Arc/Runtime/TraceTaps.h"
 #include "circt/Dialect/Arc/Runtime/VCDTraceEncoder.h"
+#ifdef CIRCT_LIBFST_ENABLED
+#include "circt/Dialect/Arc/Runtime/FSTTraceEncoder.h"
+#endif
 
 #include <cassert>
 #include <iostream>
@@ -65,6 +68,18 @@ ModelInstance::ModelInstance(const ArcRuntimeModelInfo *modelInfo,
     case TraceMode::VCD:
       traceEncoder = std::make_unique<VCDTraceEncoder>(
           modelInfo, mutableState, getTraceFilePath(".vcd"), verbose);
+      break;
+    case TraceMode::FST:
+#ifdef CIRCT_LIBFST_ENABLED
+      traceEncoder = std::make_unique<FSTTraceEncoder>(
+          modelInfo, mutableState, getTraceFilePath(".fst"), verbose);
+#else
+      std::cerr << "[ArcRuntime] ERROR: FST tracing was requested but CIRCT "
+                   "was not built with FST support (CIRCT_LIBFST_ENABLED=OFF)."
+                << std::endl;
+      traceEncoder =
+          std::make_unique<DummyTraceEncoder>(modelInfo, mutableState);
+#endif
       break;
     }
   } else {
@@ -175,6 +190,8 @@ void ModelInstance::parseArgs(const char *args) {
       verbose = true;
     } else if (option == "vcd") {
       traceMode = TraceMode::VCD;
+    } else if (option == "fst") {
+      traceMode = TraceMode::FST;
     } else if (parseKeyValueArg(option, key, value) && !value.empty()) {
       if (key == "traceFile")
         traceFileArg = value;

@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/HWPasses.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/Passes.h"
+#include "circt/Support/SATSolver.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
@@ -40,10 +41,12 @@ static void addOpName(SmallVectorImpl<std::string> &ops) {
   (ops.push_back(AllowedOpTy::getOperationName().str()), ...);
 }
 template <typename... OpToLowerTy>
-static std::unique_ptr<Pass> createLowerVariadicPass(bool timingAware) {
+static std::unique_ptr<Pass>
+createLowerVariadicPass(bool timingAware, bool reuseSubsets = false) {
   LowerVariadicOptions options;
   addOpName<OpToLowerTy...>(options.opNames);
   options.timingAware = timingAware;
+  options.reuseSubsets = reuseSubsets;
   return createLowerVariadic(options);
 }
 void circt::synth::buildCombLoweringPipeline(
@@ -78,23 +81,14 @@ void circt::synth::buildCombLoweringPipeline(
   pm.addPass(comb::createBalanceMux(balanceOptions));
 
   // Lower variadic ops before running full lowering to target IR.
-  if (options.targetIR.getValue() == TargetIR::AIG) {
-    // For AIG, lower variadic XoR since AIG cannot keep variadic
-    // representation.
-    pm.addPass(createLowerVariadicPass<comb::XorOp>(options.timingAware));
-  } else if (options.targetIR.getValue() == TargetIR::MIG) {
-    // For MIG, lower variadic And, Or, and Xor since MIG cannot keep variadic
-    // representation.
-    pm.addPass(createLowerVariadicPass<comb::AndOp, comb::OrOp, comb::XorOp>(
-        options.timingAware));
-  }
+  // For AIG, lower variadic XoR since AIG cannot keep variadic
+  // representation.
+  pm.addPass(createLowerVariadicPass<comb::XorOp>(
+      options.timingAware,
+      options.synthesisStrategy == OptimizationStrategyArea));
 
   pm.addPass(circt::hw::createHWAggregateToComb());
-  circt::ConvertCombToSynthOptions convOptions;
-  convOptions.targetIR = options.targetIR.getValue() == TargetIR::AIG
-                             ? CombToSynthTargetIR::AIG
-                             : CombToSynthTargetIR::MIG;
-  pm.addPass(circt::createConvertCombToSynth(convOptions));
+  pm.addPass(circt::createConvertCombToSynth());
   pm.addPass(createCSEPass());
   pm.addPass(createSimpleCanonicalizerPass());
   pm.addPass(createCSEPass());
@@ -128,6 +122,13 @@ void circt::synth::buildSynthOptimizationPipeline(
     pm.addPass(createStructuralHash());
   }
 
+  if (!options.disableFunctionalReduction && hasIncrementalSATSolverBackend()) {
+    FunctionalReductionOptions functionalReductionOptions;
+    functionalReductionOptions.conflictLimit =
+        options.functionalReductionConflictLimit;
+    pm.addPass(createFunctionalReduction(functionalReductionOptions));
+  }
+
   if (!options.abcCommands.empty()) {
     synth::ABCRunnerOptions abcOptions;
     abcOptions.abcPath = options.abcPath;
@@ -136,7 +137,7 @@ void circt::synth::buildSynthOptimizationPipeline(
     abcOptions.continueOnFailure = options.ignoreAbcFailures;
     pm.addPass(synth::createABCRunner(abcOptions));
   }
-  // TODO: Add balancing, rewriting, FRAIG conversion, etc.
+  // TODO: Add more balancing and rewriting passes.
 }
 
 //===----------------------------------------------------------------------===//

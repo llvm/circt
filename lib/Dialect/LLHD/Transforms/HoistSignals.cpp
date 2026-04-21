@@ -9,6 +9,7 @@
 #include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "mlir/Analysis/Liveness.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Matchers.h"
@@ -329,6 +330,13 @@ void DriveHoister::findHoistableSlots() {
         }))
       return;
 
+    // Skip slots with types for which we cannot materialize a default
+    // constant (needed when yielding values across wait boundaries).
+    auto sigType = cast<RefType>(slot.getType()).getNestedType();
+    if (!isa<TimeType>(sigType) && !isa<FloatType>(sigType) &&
+        hw::getBitWidth(sigType) < 0)
+      return;
+
     slots.insert(slot);
   });
   LLVM_DEBUG(llvm::dbgs() << "Found " << slots.size()
@@ -513,6 +521,13 @@ void DriveHoister::finalizeDriveSets() {
 void DriveHoister::hoistDrives() {
   if (driveSets.empty())
     return;
+
+  // Remove slots that have no collected drive set. This can happen when a
+  // signal is driven only in blocks that don't end with a wait/halt terminator.
+  slots.remove_if([&](auto slot) { return !driveSets.count(slot); });
+  if (slots.empty())
+    return;
+
   LLVM_DEBUG(llvm::dbgs() << "Hoisting drives of " << driveSets.size()
                           << " slots\n");
 
@@ -536,13 +551,21 @@ void DriveHoister::hoistDrives() {
             slot = ConstantTimeOp::create(builder, processOp.getLoc(), attr);
           return slot;
         })
-        .Case<Type>([&](auto type) {
+        .Case<Type>([&](auto type) -> Value {
           // TODO: This should probably create something like a `llhd.dontcare`.
           if (isa<TimeType>(type)) {
             auto attr = TimeAttr::get(builder.getContext(), 0, "ns", 0, 0);
             auto &slot = materializedConstants[attr];
             if (!slot)
               slot = ConstantTimeOp::create(builder, processOp.getLoc(), attr);
+            return slot;
+          }
+          if (auto floatTy = dyn_cast<FloatType>(type)) {
+            auto attr = FloatAttr::get(floatTy, 0.0);
+            auto &slot = materializedConstants[attr];
+            if (!slot)
+              slot =
+                  arith::ConstantOp::create(builder, processOp.getLoc(), attr);
             return slot;
           }
           auto numBits = hw::getBitWidth(type);

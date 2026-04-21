@@ -28,6 +28,7 @@
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifVisitors.h"
+#include "circt/Support/Namespace.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -63,7 +64,7 @@ private:
 
   // Create a counter that attributes a unique id to each generated btor2 line
   size_t lid = 1; // btor2 line identifiers usually start at 1
-  size_t nclocks = 0;
+  Value foundClock;
 
   // Create maps to keep track of lid associations
   // We need these in order to reference results as operands in btor2
@@ -103,6 +104,9 @@ private:
   // Constants used during the conversion
   static constexpr size_t noLID = -1UL;
   [[maybe_unused]] static constexpr int64_t noWidth = -1L;
+
+  // Tracks symbols in use to avoid naming conflicts
+  Namespace symbolNamespace;
 
   /// Field helper functions
 public:
@@ -533,7 +537,7 @@ private:
     // Build and return the state instruction
     os << opLID << " "
        << "state"
-       << " " << sid << " " << name << "\n";
+       << " " << sid << " " << symbolNamespace.newName(name) << "\n";
   }
 
   // Generates a next instruction, given a width, a state LID, and a next
@@ -553,6 +557,16 @@ private:
        << " " << sid << " " << regLID << " " << nextLID << "\n";
   }
 
+  // Generates a delimiter comment to mark the start or end of a module given a
+  // module symbol
+  void genModuleComment(StringRef name, bool end = false) {
+    os << "; **************************************"
+       << "\n"
+       << "; " << (end ? "END" : "START") << " OF MODULE: " << name << "\n"
+       << "; **************************************"
+       << "\n";
+  }
+
   // Verifies that the sort required for the given operation's btor2 emission
   // has been generated
   int64_t requireSort(mlir::Type type) {
@@ -570,26 +584,52 @@ private:
     return width;
   }
 
+  // Calls the right function to fetch `next` operand
+  Value extractRegNext(seq::CompRegOp reg) const { return reg.getInput(); }
+  Value extractRegNext(seq::FirRegOp reg) const { return reg.getNext(); }
+
+  // Extracts the arguments from a given register op
+  template <typename RegT>
+  void extractRegArgs(RegT reg, int64_t &width, Value &next, Value &reset,
+                      Value &resetVal, Value &clk) const {
+    width = hw::getBitWidth(reg.getType());
+    reset = reg.getReset();
+    resetVal = reg.getResetValue();
+    clk = reg.getClk();
+
+    // Next is weird: same input, different function
+    next = extractRegNext(reg);
+  }
+
   // Generates the transitions required to finalize the register to state
   // transition system conversion
   void finalizeRegVisit(Operation *op) {
     int64_t width;
-    Value next, reset, resetVal;
+    Value next, reset, resetVal, clk;
 
     // Extract the operands depending on the register type
-    if (auto reg = dyn_cast<seq::CompRegOp>(op)) {
-      width = hw::getBitWidth(reg.getType());
-      next = reg.getInput();
-      reset = reg.getReset();
-      resetVal = reg.getResetValue();
-    } else if (auto reg = dyn_cast<seq::FirRegOp>(op)) {
-      width = hw::getBitWidth(reg.getType());
-      next = reg.getNext();
-      reset = reg.getReset();
-      resetVal = reg.getResetValue();
-    } else {
-      op->emitError("Invalid register operation !");
+    auto extract = TypeSwitch<Operation *, LogicalResult>(op)
+                       .Case<seq::CompRegOp, seq::FirRegOp>([&](auto reg) {
+                         extractRegArgs(reg, width, next, reset, resetVal, clk);
+                         return success();
+                       })
+                       .Default([&](auto) {
+                         op->emitError("Invalid register operation !");
+                         return failure();
+                       });
+
+    // Exit if an invalid register op was detected
+    if (failed(extract))
       return;
+
+    // Check for multiple clocks
+    if (foundClock) {
+      if (clk != foundClock) {
+        op->emitError("Multi-clock designs are not currently supported.");
+        return;
+      }
+    } else {
+      foundClock = clk;
     }
 
     genSort("bitvec", width);
@@ -674,7 +714,7 @@ public:
   // the final assertions
   void visit(hw::PortInfo &port) {
     // Separate the inputs from outputs and generate the first btor2 lines for
-    // input declaration We only consider ports with an explicit bit-width (so
+    // input declaration. We only consider ports with an explicit bit-width (so
     // ignore clocks and immutables)
     if (port.isInput() && !isa<seq::ClockType, seq::ImmutableType>(port.type)) {
       // Generate the associated btor declaration for the inputs
@@ -877,6 +917,41 @@ public:
     genConstraint(expr);
   }
 
+  // Our only concern with an AlwaysOp is that it follows clocking constraints
+  void visitSV(sv::AlwaysOp op) {
+    if (op.getEvents().size() > 1) {
+      op->emitError("Multiple events in sv.always are not supported.");
+      return signalPassFailure();
+    }
+
+    auto cond = op.getCondition(0);
+
+    if (cond.event != sv::EventControl::AtPosEdge) {
+      op->emitError("Only posedge clocking is supported in sv.always.");
+      return signalPassFailure();
+    }
+
+    if (isa<BlockArgument>(cond.value) ||
+        !isa<seq::FromClockOp>(cond.value.getDefiningOp())) {
+      op->emitError("This pass only currently supports sv.always ops that use "
+                    "a top-level seq.clock input (converted using "
+                    "seq.from_clock) as their clock.");
+      return signalPassFailure();
+    }
+
+    // By now we know that the condition is a clock signal coming from a
+    // seq.from_clock op
+    auto clk = cond.value.getDefiningOp()->getOperand(0);
+    if (foundClock) {
+      if (clk != foundClock) {
+        op->emitError("Multi-clock designs are not currently supported.");
+        return signalPassFailure();
+      }
+    } else {
+      foundClock = clk;
+    }
+  }
+
   void visitSV(Operation *op) { visitInvalidSV(op); }
 
   // Once SV Ops are visited, we need to check for seq ops
@@ -937,6 +1012,25 @@ public:
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
   void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
+  // Symbolic values get handled the same way as block arguments.
+  // The one difference if that we treat them as regular opertions rather than
+  // block arguments, i.e. we don't need to special case store these inputLIDs
+  // and can simply store them in opLIDs like the other operations.
+  void visitVerif(verif::SymbolicValueOp op) {
+    // Retrieve name, make sure it's unique
+    auto name = symbolNamespace.newName(op.getName().value_or(""));
+
+    // Guarantees that a sort will exist for the generation of this symbolic
+    // value's translation into btor2
+    int64_t w = requireSort(op.getType());
+
+    // Store and generate a new lid
+    size_t inlid = setOpLID(op.getOperation());
+
+    // Generate the input in btor2
+    genInput(inlid, w, name);
+  }
+
   // Error out on most unhandled verif ops
   void visitUnhandledVerif(Operation *op) {
     op->emitError("not supported in btor2!");
@@ -952,7 +1046,8 @@ public:
     // Typeswitch is used here because other seq types will be supported
     // like all operations relating to memories and CompRegs
     TypeSwitch<Operation *, void>(op)
-        .Case<seq::FirRegOp, seq::CompRegOp>([&](auto expr) { visit(expr); })
+        .Case<seq::FirRegOp, seq::CompRegOp, seq::FromClockOp, seq::ToClockOp>(
+            [&](auto expr) { visit(expr); })
         .Default([&](auto expr) { visitUnsupportedOp(op); });
   }
 
@@ -962,7 +1057,12 @@ public:
   void visit(seq::FirRegOp reg) {
     // Start by retrieving the register's name and width
     StringRef regName = reg.getName();
-    int64_t w = requireSort(reg.getType());
+    auto type = reg.getType();
+    if (!isa<mlir::IntegerType>(type)) {
+      reg.emitError("Only integer typed seq.firregs are supported in BTOR2.");
+      return signalPassFailure();
+    }
+    int64_t w = requireSort(type);
 
     // Generate state instruction (represents the register declaration)
     genState(reg, w, regName);
@@ -977,26 +1077,48 @@ public:
   void visit(seq::CompRegOp reg) {
     // Start by retrieving the register's name and width
     StringRef regName = reg.getName().value();
-    int64_t w = requireSort(reg.getType());
+    auto type = reg.getType();
+    if (!isa<mlir::IntegerType>(type)) {
+      reg.emitError("Only integer typed seq.compregs are supported in BTOR2.");
+      return signalPassFailure();
+    }
+    int64_t w = requireSort(type);
 
     // Check for initial values which must be emitted before the state in
     // btor2
     auto init = reg.getInitialValue();
+    auto resetVal = reg.getResetValue();
 
     // If there's an initial value, we need to generate a constant for the
     // initial value, then declare the state, then generate the init statement
     // (BTOR2 parsers are picky about it being in this order)
-    if (init) {
-      if (!init.getDefiningOp<seq::InitialOp>()) {
-        reg->emitError(
-            "Initial value must be emitted directly by a seq.initial op");
-        return;
+    auto shouldInitReset = assumeInitReset && resetVal;
+    // We should create an init statement either if we have an initial value or
+    // if we assume an initial reset
+    if (init || shouldInitReset) {
+      hw::ConstantOp initialConstant;
+      // Assuming an initial reset takes priority over an initial value if
+      // both are present
+      if (shouldInitReset) {
+        initialConstant = resetVal.getDefiningOp<hw::ConstantOp>();
+        if (!initialConstant) {
+          reg->emitError(
+              "Reset value must be emitted directly by a hw.constant "
+              "op when --assume-init-reset is in use.");
+          return;
+        }
+      } else {
+        if (!init.getDefiningOp<seq::InitialOp>()) {
+          reg->emitError(
+              "Initial value must be emitted directly by a seq.initial op");
+          return;
+        }
+        // Check that the initial value is a non-null constant
+        initialConstant = circt::seq::unwrapImmutableValue(init)
+                              .getDefiningOp<hw::ConstantOp>();
+        if (!initialConstant)
+          reg->emitError("initial value must be constant");
       }
-      // Check that the initial value is a non-null constant
-      auto initialConstant = circt::seq::unwrapImmutableValue(init)
-                                 .getDefiningOp<hw::ConstantOp>();
-      if (!initialConstant)
-        reg->emitError("initial value must be constant");
 
       // Visit the initial Value to generate the constant
       dispatchTypeOpVisitor(initialConstant);
@@ -1020,6 +1142,32 @@ public:
     regOps.push_back(reg);
   }
 
+  void visit(seq::FromClockOp op) {
+    for (auto *user : op->getResult(0).getUsers()) {
+      if (!isa<sv::AlwaysOp, verif::ClockedAssertOp>(user)) {
+        op->emitError("This pass only supports seq.from_clock results being "
+                      "used by sv.always and verif.clocked_assert operations.");
+        signalPassFailure();
+      }
+    }
+  }
+
+  void visit(seq::ToClockOp op) {
+    // Make sure this value is top-level
+    if (!isa<BlockArgument>(op.getInput())) {
+      op->emitError("This pass only supports seq.to_clock operations that take "
+                    "a top-level input as their argument.");
+    }
+    // Make sure this clock is never used by anything other than a register so
+    // we can safely make it implicit
+    for (auto *user : op->getResult(0).getUsers())
+      if (!isa<seq::FirRegOp, seq::CompRegOp>(user)) {
+        op->emitError("This pass only supports seq.to_clock results being "
+                      "used by seq.firreg and seq.compreg operations.");
+        signalPassFailure();
+      }
+  }
+
   // Tail method that handles all operations that weren't handled by previous
   // visitors. Here we simply make the pass fail or ignore the op
   void visitUnsupportedOp(Operation *op) {
@@ -1029,21 +1177,13 @@ public:
         // All explicitly ignored operations are defined here
         .Case<sv::MacroDefOp, sv::MacroDeclOp, sv::VerbatimOp,
               sv::VerbatimExprOp, sv::VerbatimExprSEOp, sv::IfOp, sv::IfDefOp,
-              sv::IfDefProceduralOp, sv::AlwaysOp, sv::AlwaysCombOp,
-              seq::InitialOp, sv::AlwaysFFOp, seq::InitialOp, seq::YieldOp,
-              hw::OutputOp, hw::HWModuleOp,
+              sv::IfDefProceduralOp, sv::AlwaysCombOp, seq::InitialOp,
+              sv::AlwaysFFOp, seq::InitialOp, seq::YieldOp, hw::OutputOp,
+              hw::HWModuleOp, verif::FormalOp,
               // Specifically ignore printfs, as we can't do anything with them
               // in btor2
               verif::FormatVerilogStringOp, verif::PrintOp>(
             [&](auto expr) { ignore(op); })
-
-        // Make sure that the design only contains one clock
-        .Case<seq::FromClockOp>([&](auto expr) {
-          if (++nclocks > 1UL) {
-            op->emitOpError("Mutli-clock designs are not supported!");
-            return signalPassFailure();
-          }
-        })
 
         // Anything else is considered unsupported and might cause a wrong
         // behavior if ignored, so an error is thrown
@@ -1052,21 +1192,52 @@ public:
           return signalPassFailure();
         });
   }
-};
-} // end anonymous namespace
 
-void ConvertHWToBTOR2Pass::runOnOperation() {
-  // Btor2 does not have the concept of modules or module
-  // hierarchies, so we assume that no nested modules exist at this point.
-  // This greatly simplifies translation.
-  getOperation().walk([&](hw::HWModuleOp module) {
+  /// Prepares and visits all of the ports in a module
+  LogicalResult visitPorts(hw::HWModuleOp module) {
     // Start by extracting the inputs and generating appropriate instructions
     for (auto &port : module.getPortList()) {
+      // Check whether the port is used as a clock
+      if (port.isInput()) {
+        auto portVal = module.getArgumentForInput(port.argNum);
+        auto usedAsClock =
+            llvm::any_of(portVal.getUsers(), [](Operation *user) {
+              return isa<seq::ToClockOp>(user);
+            });
+        if (usedAsClock) {
+          // If it's used as a clock, it can't be used anywhere else (as clocks
+          // are implicit in BTOR2)
+          if (portVal.getNumUses() > 1) {
+            module.emitError(
+                "Inputs converted to clocks may only have one user.");
+            return failure();
+          }
+          // Ports used as clocks should be implicit so don't visit them
+          continue;
+        }
+      }
+      // Once ready, run actual port visitor
       visit(port);
     }
+    return success();
+  }
 
-    // Previsit all registers in the module in order to avoid dependency cycles
-    module.walk([&](Operation *op) {
+  /// Checks if a given operation is a supported modulelike
+  bool isSuportedModule(Operation *module) {
+    bool supported = isa<hw::HWModuleOp, verif::FormalOp>(module);
+    if (!supported)
+      module->emitError("Unsupported module type!");
+    return supported;
+  }
+
+  /// Previsits all registers in a given module (avoids dependency cycles)
+  LogicalResult preVisitRegs(Operation *module) {
+    // Sanity check
+    if (!isSuportedModule(module))
+      return failure();
+
+    // Find all supported registers and visit them
+    module->walk([&](Operation *op) {
       TypeSwitch<Operation *, void>(op)
           .Case<seq::FirRegOp, seq::CompRegOp>([&](auto reg) {
             visit(reg);
@@ -1075,12 +1246,21 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
           .Default([&](auto expr) {});
     });
 
+    return success();
+  }
+
+  /// Visits all of the regular operations in our module
+  LogicalResult visitBodyOps(Operation *module) {
+    // Sanity check
+    if (!isSuportedModule(module))
+      return failure();
+
     // Visit all of the operations in our module
-    module.walk([&](Operation *op) {
+    module->walk([&](Operation *op) {
       // Check: instances are not (yet) supported
       if (isa<hw::InstanceOp>(op)) {
         op->emitOpError("not supported in BTOR2 conversion");
-        return;
+        return signalPassFailure();
       }
 
       // Don't process ops that have already been emitted
@@ -1094,7 +1274,8 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
       while (!worklist.empty()) {
         auto &[op, operandIt] = worklist.back();
         if (operandIt == op->operand_end()) {
-          // All of the operands have been emitted, it is safe to emit our op
+          // All of the operands have been emitted, it is safe to emit our
+          // op
           dispatchTypeOpVisitor(op);
 
           // Record that our op has been emitted
@@ -1103,8 +1284,8 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
           continue;
         }
 
-        // Send the operands of our op to the worklist in case they are still
-        // un-emitted
+        // Send the operands of our op to the worklist in case they are
+        // still un-emitted
         Value operand = *(operandIt++);
         auto *defOp = operand.getDefiningOp();
 
@@ -1116,24 +1297,79 @@ void ConvertHWToBTOR2Pass::runOnOperation() {
         // wasn't handled
         if (!worklist.insert({defOp, defOp->operand_begin()}).second) {
           defOp->emitError("dependency cycle");
-          return;
+          return signalPassFailure();
         }
       }
     });
 
+    return success();
+  }
+
+  /// Clear all data structures to allow for pass reuse
+  void clearData() {
+    sortToLIDMap.clear();
+    constToLIDMap.clear();
+    opLIDMap.clear();
+    inputLIDs.clear();
+    regOps.clear();
+    handledOps.clear();
+    worklist.clear();
+  }
+
+  /// Handles the core logic of the pass, in a generic manner
+  LogicalResult handleTopLevel(Operation *module) {
+    // Previsit all registers in the module in order to avoid dependency
+    // cycles
+    if (failed(preVisitRegs(module)))
+      return failure();
+
+    // Visit all of the operations in our module
+    if (failed(visitBodyOps(module)))
+      return failure();
+
     // Iterate through the registers and generate the `next` instructions
-    for (size_t i = 0; i < regOps.size(); ++i) {
+    for (size_t i = 0; i < regOps.size(); ++i)
       finalizeRegVisit(regOps[i]);
-    }
+
+    // Clear data structures to allow for pass reuse
+    clearData();
+
+    return success();
+  }
+};
+} // end anonymous namespace
+
+void ConvertHWToBTOR2Pass::runOnOperation() {
+  // Btor2 does not have the concept of modules or module
+  // hierarchies, so we assume that no nested modules exist at this point.
+  // This greatly simplifies translation.
+  // We also consider hw::HWModuleOp and verif::FormalOp as the same
+  auto top = getOperation();
+  top.walk([&](Operation *op) {
+    // Skip all non-module or formal ops
+    if (!isa<hw::HWModuleOp, verif::FormalOp>(op))
+      return;
+
+    // Generate the start comment for the module
+    auto moduleName = SymbolTable::getSymbolName(op);
+    genModuleComment(moduleName);
+
+    // Start by extracting the inputs and generating appropriate
+    // instructions when block arguments exist
+    if (auto module = dyn_cast<hw::HWModuleOp>(op))
+      if (failed(visitPorts(module)))
+        return signalPassFailure();
+
+    // Handle the rest
+    if (failed(handleTopLevel(op)))
+      return signalPassFailure();
+
+    // Generate ending comment
+    genModuleComment(moduleName, true);
   });
+
   // Clear data structures to allow for pass reuse
-  sortToLIDMap.clear();
-  constToLIDMap.clear();
-  opLIDMap.clear();
-  inputLIDs.clear();
-  regOps.clear();
-  handledOps.clear();
-  worklist.clear();
+  clearData();
 }
 
 // Constructor with a custom ostream

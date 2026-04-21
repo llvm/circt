@@ -52,12 +52,19 @@ set(cosim_collateral
   driver.sv
   driver.cpp
 )
-
-install(FILES
-  ${cosim_collateral}
-  DESTINATION cosim
-  COMPONENT ESIRuntime
-)
+if (WHEEL_BUILD)
+  install(FILES
+    ${cosim_collateral}
+    DESTINATION cosim
+    COMPONENT ESIRuntime
+  )
+else()
+  install(FILES
+    ${cosim_collateral}
+    DESTINATION esiaccel/cosim
+    COMPONENT ESIRuntime
+  )
+endif()
 
 add_custom_target(esi-cosim
   COMMAND ${CMAKE_COMMAND} -E copy_if_different

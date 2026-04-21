@@ -31,6 +31,44 @@ class String(Value):
 
     return rtg.StringConcatOp([self, other])
 
+  @staticmethod
+  def format(*args, delimiter: str = ' ') -> String:
+    """
+    Format and concatenate values into a string.
+    
+    Converts each argument to a String and concatenates them together using the
+    provided delimiter (single space by default).
+    Values are converted using their `to_string()` method if available or raise
+    an exception.
+    Python values are formatted using Python's built-in format function.
+    
+    :param args: Values to format and concatenate
+    :param delimiter: Delimiter to use between argument values
+    :return: Concatenated string result
+    """
+
+    def convert_to_string(val):
+      if isinstance(val, String):
+        return val
+      if isinstance(val, Value):
+        if not hasattr(val, "to_string"):
+          raise TypeError(
+              f"Value of type {type(val)} cannot be converted to a String")
+        return val.to_string()
+      return String(format(val))
+
+    if not args:
+      raise ValueError("at least one argument must be provided")
+
+    delimiter_str = String(delimiter)
+    result = []
+    for i, arg in enumerate(args):
+      if i > 0:
+        result.append(delimiter_str)
+      result.append(convert_to_string(arg))
+
+    return rtg.StringConcatOp(result)
+
   def get_type(self) -> Type:
     return StringType()
 

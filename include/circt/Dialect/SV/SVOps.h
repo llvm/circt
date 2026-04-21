@@ -20,6 +20,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVTypes.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
@@ -165,41 +166,6 @@ struct CaseInfo {
 // Other Supporting Logic
 //===----------------------------------------------------------------------===//
 
-/// Return true if the specified operation is in a procedural region.
-LogicalResult verifyInProceduralRegion(Operation *op);
-/// Return true if the specified operation is not in a procedural region.
-LogicalResult verifyInNonProceduralRegion(Operation *op);
-
-/// Signals that an operations regions are procedural.
-template <typename ConcreteType>
-class ProceduralRegion
-    : public mlir::OpTrait::TraitBase<ConcreteType, ProceduralRegion> {
-  static LogicalResult verifyTrait(Operation *op) {
-    return mlir::OpTrait::impl::verifyAtLeastNRegions(op, 1);
-  }
-};
-
-/// This class verifies that the specified op is located in a procedural region.
-template <typename ConcreteType>
-class ProceduralOp
-    : public mlir::OpTrait::TraitBase<ConcreteType, ProceduralOp> {
-public:
-  static LogicalResult verifyTrait(Operation *op) {
-    return verifyInProceduralRegion(op);
-  }
-};
-
-/// This class verifies that the specified op is not located in a procedural
-/// region.
-template <typename ConcreteType>
-class NonProceduralOp
-    : public mlir::OpTrait::TraitBase<ConcreteType, NonProceduralOp> {
-public:
-  static LogicalResult verifyTrait(Operation *op) {
-    return verifyInNonProceduralRegion(op);
-  }
-};
-
 /// This class provides a verifier for ops that are expecting their parent
 /// to be one of the given parent ops
 template <typename ConcreteType>
@@ -208,6 +174,32 @@ class VendorExtension
 public:
   static LogicalResult verifyTrait(Operation *op) { return success(); }
 };
+
+/// Create nested ifdef operations for a list of macro symbols.
+/// For each macro, creates an ifdef with a then branch and an else branch.
+/// The then branch is provided by the thenCtor callback, which receives the
+/// index of the current macro (0-based).
+///
+/// Example:
+///   createNestedIfDefs({macro1Attr, macro2Attr}, ...});
+///
+/// Generates:
+///   `ifdef MACRO1
+///     // thenCtor(0)
+///   `else
+///     `ifdef MACRO2
+///       // thenCtor(1)
+///     `else
+///       // defaultCtor()
+///     `endif
+///   `endif
+void createNestedIfDefs(
+    ArrayRef<StringAttr> macroSymbols,
+    llvm::function_ref<void(StringAttr, std::function<void()>,
+                            std::function<void()>)>
+        ifdefCtor,
+    llvm::function_ref<void(size_t)> thenCtor,
+    llvm::function_ref<void()> defaultCtor);
 
 } // namespace sv
 } // namespace circt

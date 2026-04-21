@@ -41,6 +41,14 @@ class CutRewriterPassBase<string name, string op> : Pass<name, op> {
            )}]>,
     Option<"test", "test", "bool", "false", "Attach timing to IR for testing">
   ];
+  let statistics = [
+    Statistic<"numCutsCreated", "cuts-created",
+              "Number of cuts created during cut enumeration">,
+    Statistic<"numCutSetsCreated", "cut-sets-created",
+              "Number of cut sets created during cut enumeration">,
+    Statistic<"numCutsRewritten", "cuts-rewritten",
+              "Number of cuts rewritten">,
+  ];
 }
 
 def TechMapper : CutRewriterPassBase<"synth-tech-mapper", "mlir::ModuleOp"> {
@@ -89,7 +97,9 @@ def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
     ListOption<"opNames", "op-names", "std::string",
                "Specify operation names to lower (empty means all)">,
     Option<"timingAware", "timing-aware", "bool", "true",
-           "Lower operators with timing information">
+           "Lower operators with timing information">,
+    Option<"reuseSubsets", "reuse-subsets", "bool", /*default=*/"false",
+           "Reuse existing logic subsets to minimize area">
   ];
   let dependentDialects = [
     "circt::comb::CombDialect", "circt::hw::HWDialect",
@@ -97,7 +107,7 @@ def LowerVariadic : Pass<"synth-lower-variadic", "hw::HWModuleOp"> {
   ];
 }
 
-def LowerWordToBits : Pass<"synth-lower-word-to-bits", "hw::HWModuleOp"> {
+def LowerWordToBits : Pass<"synth-lower-word-to-bits"> {
   let summary = "Lower multi-bit AndInverter to single-bit ones";
   let dependentDialects = ["comb::CombDialect"];
   let statistics = [
@@ -209,7 +219,7 @@ class ExternalSolverPass<string name> : Pass<name, "hw::HWModuleOp"> {
   ];
 
   let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect",
-                           "circt::seq::SeqDialect"];
+                           "circt::seq::SeqDialect", "circt::verif::VerifDialect"];
 }
 
 def AIGERRunner : ExternalSolverPass<"synth-aiger-runner"> {
@@ -244,17 +254,17 @@ def ABCRunner : ExternalSolverPass<"synth-abc-runner"> {
   ];
 }
 
-def StructuralHash : Pass<"synth-structural-hash", "hw::HWModuleOp"> {
+def StructuralHash : Pass<"synth-structural-hash"> {
   let summary = "Structural hashing (CSE) for Synth operations";
   let description = [{
     This pass performs aggressive structural hashing-based CSE for Synth dialect
-    operations (AIG/MIG), domain-specific to AIG/MIG operations to enable operand
+    operations, domain-specific to AIG operations to enable operand
     reordering based on structural properties and inversion flag consideration
     for canonicalization.
   }];
 }
 
-def MaximumAndCover : Pass<"synth-maximum-and-cover", "hw::HWModuleOp"> {
+def MaximumAndCover : Pass<"synth-maximum-and-cover"> {
   let summary = "Maximum And Cover for And-Inverter";
   let description = [{
     This pass performs maximum AND-cover optimization by collapsing single-fanout
@@ -276,6 +286,50 @@ def SOPBalancing : CutRewriterPassBase<"synth-sop-balancing", "hw::HWModuleOp"> 
       baseOptions#[Option<"maxCutInputSize", "max-cut-input-size", "unsigned",
                           /*default=*/"6", "Maximum number of inputs per cut">];
   let dependentDialects = ["synth::SynthDialect", "comb::CombDialect"];
+}
+
+def FunctionalReduction : Pass<"synth-functional-reduction", "hw::HWModuleOp"> {
+  let summary = "Functional reduction by simulation-guided candidate merging";
+  let description = [{
+    This pass performs functional reduction for single-bit `synth` logic. It
+    runs random-pattern simulation to build candidate equivalence classes for
+    `i1` values with matching signatures, then uses a SAT solver to verify
+    each candidate pair before materializing the proven equivalences with
+    `synth.choice` operations.
+
+    See "FRAIGs: A Unifying Representation for Logic Synthesis and Verification,
+    Tech. Rep., 2005" by Mishchenko et al. for details on the underlying
+    algorithm.
+  }];
+
+  let options = [
+    Option<"testTransformation", "test-transformation", "bool", "false",
+           "Enable test transformation mode. In this mode, candidates are "
+           "verified only when both values in a pair carry matching "
+           "`synth.test.functional_reduction_equivalence_class` attributes.">,
+    Option<"numRandomPatterns", "num-random-patterns", "unsigned", "1024",
+           "Number of random simulation patterns (must be a positive multiple of 64; "
+           "each pattern is one bit in a 64-bit word)">,
+    Option<"seed", "seed", "unsigned", "0",
+           "Seed for random pattern generation">,
+    Option<"satSolver", "sat-solver", "std::string", "\"auto\"",
+           "SAT solver backend to use: auto, z3, or cadical">,
+    Option<"conflictLimit", "conflict-limit", "int64_t", "100",
+           "Per-SAT-call conflict budget. -1 disables the limit.">
+  ];
+  let statistics = [
+    Statistic<"numEquivClasses", "num-equiv-classes",
+              "Number of non-trivial equivalence classes after simulation">,
+    Statistic<"numProvedEquiv", "num-proved-equiv",
+              "Number of equivalences proven by SAT">,
+    Statistic<"numDisprovedEquiv", "num-disproved-equiv",
+              "Number of equivalences disproved by SAT (CEX found)">,
+    Statistic<"numUnknown", "num-unknown",
+              "Number of SAT calls hitting resource limit (UNKNOWN)">,
+    Statistic<"numMergedNodes", "num-merged-nodes",
+              "Number of nodes merged due to functional equivalence">
+  ];
+  let dependentDialects = ["synth::SynthDialect"];
 }
 
 #endif // CIRCT_DIALECT_SYNTH_TRANSFORMS_PASSES_TD

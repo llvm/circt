@@ -17,6 +17,7 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/Pass/Pass.h"
 
 namespace circt {
@@ -101,6 +102,7 @@ static void mergeRegions(Region *region1, Region *region2) {
 
 namespace {
 struct HWCleanupPass : public circt::sv::impl::HWCleanupBase<HWCleanupPass> {
+  using Base::Base;
   using sv::impl::HWCleanupBase<HWCleanupPass>::mergeAlwaysBlocks;
 
   void runOnOperation() override;
@@ -143,7 +145,7 @@ void HWCleanupPass::runOnOperation() {
 /// Recursively process all of the regions in the specified op, dispatching to
 /// graph or procedural processing as appropriate.
 void HWCleanupPass::runOnRegionsInOp(Operation &op) {
-  if (op.hasTrait<sv::ProceduralRegion>()) {
+  if (op.hasTrait<ProceduralRegion>()) {
     for (auto &region : op.getRegions())
       runOnProceduralRegion(region);
   } else {
@@ -247,10 +249,4 @@ void HWCleanupPass::runOnProceduralRegion(Region &region) {
     if (op.getNumRegions() != 0)
       runOnRegionsInOp(op);
   }
-}
-
-std::unique_ptr<Pass> circt::sv::createHWCleanupPass(bool mergeAlwaysBlocks) {
-  auto pass = std::make_unique<HWCleanupPass>();
-  pass->mergeAlwaysBlocks = mergeAlwaysBlocks;
-  return pass;
 }

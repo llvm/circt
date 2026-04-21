@@ -531,7 +531,7 @@ def TwoValuedI32 : MooreType<CPred<[{
   let builderCall = "IntType::getInt($_builder.getContext(), 32)";
 }
 
-// A 32-bit two-valued integer.
+// A 8-bit two-valued integer.
 def TwoValuedI8 : MooreType<CPred<[{
     moore::isIntType($_self, 8, moore::Domain::TwoValued)
   }]>, "8-bit two-valued integer type", "moore::IntType"> {
@@ -600,5 +600,14 @@ def ClassHandleRefType : SpecificRefType<ClassHandleType>;
 
 /// Queue references
 def QueueRefType : SpecificRefType<QueueType>;
+
+/// Assoc Array references
+def AssocArrayRefType : SpecificRefType<AssocArrayType>;
+
+/// Integer references
+def TwoValuedI32RefType : SpecificRefType<TwoValuedI32> {
+  let builderCall =
+    "RefType::get(IntType::getInt($_builder.getContext(), 32))";
+}
 
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

@@ -53,23 +53,27 @@ public:
 
 protected:
   void writeImpl(const MessageData &data) override {
-    // Add trace logging before sending the message.
-    conn.getLogger().trace(
-        [this,
-         &data](std::string &subsystem, std::string &msg,
-                std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "cosim_write";
-          msg = "Writing message to channel '" + name + "'";
-          details = std::make_unique<std::map<std::string, std::any>>();
-          (*details)["channel"] = name;
-          (*details)["data_size"] = data.getSize();
-          (*details)["message_data"] = data.toHex();
-        });
+    auto frames = getMessageFrames(data);
+    for (const auto &frame : frames) {
+      conn.getLogger().trace(
+          [this,
+           &data](std::string &subsystem, std::string &msg,
+                  std::unique_ptr<std::map<std::string, std::any>> &details) {
+            subsystem = "cosim_write";
+            msg = "Writing message to channel '" + name + "'";
+            details = std::make_unique<std::map<std::string, std::any>>();
+            (*details)["channel"] = name;
+            (*details)["data_size"] = data.getSize();
+            (*details)["message_data"] = data.toHex();
+          });
 
-    client.writeToServer(name, data);
+      client.writeToServer(name, frame);
+    }
   }
-
   bool tryWriteImpl(const MessageData &data) override {
+    // For simplicity, this implementation does not support backpressure and
+    // always returns true. A more complex implementation could track pending
+    // messages and return false if there are too many.
     writeImpl(data);
     return true;
   }

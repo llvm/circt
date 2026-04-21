@@ -454,7 +454,7 @@ def LayerOp : FIRRTLOp<
   let results = (outs);
   let regions = (region SizedRegion<1>:$body);
   let assemblyFormat = [{
-    $sym_name `` $convention attr-dict-with-keyword $body
+    $sym_name $convention attr-dict-with-keyword $body
   }];
 }
 
@@ -495,19 +495,30 @@ def OptionOp : FIRRTLOp<"option", [
 }
 
 def OptionCaseOp : FIRRTLOp<
-  "option_case", [Symbol, HasParent<"firrtl::OptionOp">]
+  "option_case", [Symbol, HasParent<"firrtl::OptionOp">,
+                  DeclareOpInterfaceMethods<SymbolUserOpInterface>]
 > {
   let summary = "A configuration option value definition";
   let description = [{
     `firrtl.option_case` defines an acceptable value to be provided for an
     option. Ops reference it to define their behavior when this case is active.
+
+    The `case_macro` attribute stores the macro symbol used in generated Verilog
+    to guard code for this option case (e.g., `__option__Platform_FPGA`).
   }];
 
-  let arguments = (ins SymbolNameAttr:$sym_name);
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       OptionalAttr<FlatSymbolRefAttr>:$case_macro);
   let results = (outs);
   let assemblyFormat = [{
     $sym_name attr-dict
   }];
+
+  let builders = [
+    OpBuilder<(ins "StringRef":$sym_name), [{
+      build($_builder, $_state, $_builder.getStringAttr(sym_name), nullptr);
+    }]>
+  ];
 }
 
 def FormalOp : FIRRTLOp<"formal", [

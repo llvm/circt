@@ -626,6 +626,27 @@ def CurrentTimeOp : ArcOp<"current_time", [
   }];
 }
 
+def TerminateOp : ArcOp<"terminate", [
+  MemoryEffects<[MemWrite]>
+]> {
+  let summary = "Request simulation termination";
+  let description = [{
+    Sets a termination flag in the model's storage.
+    It unconditionally writes 1 for success or 2 for failure.
+    This allows the simulation to exit gracefully after the current 
+    evaluation cycle.
+  }];
+
+  let arguments = (ins 
+    StorageType:$storage, 
+    BoolAttr:$success
+  );
+
+  let assemblyFormat = [{
+    $storage `,` $success attr-dict `:` qualified(type($storage))
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Procedural Ops
 //===----------------------------------------------------------------------===//
@@ -718,10 +739,33 @@ def SimStepOp : ArcOp<"sim.step",
   let description = [{
     Evaluates one step of the simulation for the provided model instance,
     updating ports accordingly.
+
+    If `timePostIncrement` is provided, the instance's simulation time will be
+    incremented by the given number in femtoseconds _after_ the step has been
+    evaluated.
+
+    Example:
+
+    ```mlir
+    %cst5  = arith.constant 5  : i64
+    %cst10 = arith.constant 10 : i64
+    arc.sim.set_time %instance, %cst10 [...]
+    arc.sim.step %instance by %cst5 [...]       // Step at t = 10 fs
+    arc.sim.step %instance [...]                // Step at t = 15 fs
+    arc.sim.step %instance by %cst5 [...]       // Step at t = 15 fs
+    arc.sim.step %instance by %cst5 [...]       // Step at t = 20 fs
+    ```
   }];
-  let arguments = (ins SimModelInstance:$instance);
+  let arguments = (ins SimModelInstance:$instance,
+                       Optional<I64>:$timePostIncrement);
   let assemblyFormat =
-    [{ $instance attr-dict `:` qualified(type($instance)) }];
+    [{ $instance (`by` $timePostIncrement^)? attr-dict
+        `:` qualified(type($instance)) }];
+   let builders = [
+    OpBuilder<(ins "mlir::Value":$instance), [{
+      build($_builder, $_state, instance, /*timePostIncrement=*/ Value{});
+    }]>
+  ];
 }
 
 def SimEmitValueOp : ArcOp<"sim.emit"> {

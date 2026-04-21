@@ -55,6 +55,11 @@ def __main__(args):
   argparser.add_argument("--debug",
                          action="store_true",
                          help="Enable debug output.")
+  argparser.add_argument(
+      "--save-waveform",
+      action="store_true",
+      help="Save waveform dumps (format depends on simulator). Requires --debug."
+  )
   argparser.add_argument("--gui",
                          action="store_true",
                          help="Run the simulator in GUI mode (if supported).")
@@ -76,10 +81,17 @@ def __main__(args):
     return
   args = argparser.parse_args(args[1:])
 
+  # Validate that save_waveform requires debug
+  if args.save_waveform and not args.debug:
+    print("ERROR: --save-waveform requires --debug to be enabled",
+          file=sys.stderr)
+    return 1
+
   sources = SourceFiles(args.top)
   sources.add_dir(Path(args.source))
 
-  sim = get_simulator(args.sim, sources, Path(args.rundir), args.debug)
+  sim = get_simulator(args.sim, sources, Path(args.rundir), args.debug,
+                      args.save_waveform)
   if not args.no_compile:
     rc = sim.compile()
     if rc != 0:

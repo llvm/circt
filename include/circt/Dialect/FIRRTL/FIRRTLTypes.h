@@ -37,6 +37,7 @@ struct BaseTypeAliasStorage;
 struct OpenBundleTypeStorage;
 struct OpenVectorTypeStorage;
 struct ClassTypeStorage;
+struct DomainTypeStorage;
 } // namespace detail.
 
 class AnyRefType;
@@ -57,6 +58,7 @@ class LHSType;
 class PropertyType;
 class StringType;
 class FIntegerType;
+class DomainFieldAttr;
 class ListType;
 class PathType;
 class BoolType;
@@ -64,6 +66,7 @@ class DoubleType;
 class BaseTypeAliasType;
 class FStringType;
 class DomainType;
+class DomainOp;
 
 /// A collection of bits indicating the recursive properties of a type.
 struct RecursiveTypeProperties {

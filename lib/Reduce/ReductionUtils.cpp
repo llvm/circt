@@ -25,25 +25,46 @@ const char *MetasyntacticNameGenerator::getNextName() {
   return names[index++];
 }
 
+StringRef MetasyntacticNameGenerator::getNextName(Namespace &ns) {
+  return ns.newName(getNextName());
+}
+
+bool MetasyntacticNameGenerator::isMetasyntacticName(StringRef name) {
+  // Build a set of all metasyntactic names on first use.
+  static const llvm::StringSet<> nameSet = [] {
+    llvm::StringSet<> s;
+    for (auto *n : names)
+      s.insert(n);
+    return s;
+  }();
+  // The prefix is everything before the first '_', or the whole name.
+  return nameSet.contains(name.split('_').first);
+}
+
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
 
-void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
-  SmallVector<Operation *> worklist;
+void reduce::pruneUnusedOps(SmallVectorImpl<Operation *> &worklist,
+                            Reduction &reduction) {
   SmallSet<Operation *, 4> handled;
-  worklist.push_back(initialOp);
   while (!worklist.empty()) {
     auto *op = worklist.pop_back_val();
-    if (!op->use_empty() || op->hasAttr("inner_sym"))
+    if (!op || handled.contains(op) || !op->use_empty() ||
+        op->hasAttr("inner_sym"))
       continue;
+    handled.insert(op);
     for (auto arg : op->getOperands())
       if (auto *argOp = arg.getDefiningOp())
-        if (handled.insert(argOp).second)
-          worklist.push_back(argOp);
+        worklist.push_back(argOp);
     reduction.notifyOpErased(op);
     op->erase();
   }
+}
+
+void reduce::pruneUnusedOps(Operation *initialOp, Reduction &reduction) {
+  SmallVector<Operation *> worklist({initialOp});
+  pruneUnusedOps(worklist, reduction);
 }
 
 //===----------------------------------------------------------------------===//

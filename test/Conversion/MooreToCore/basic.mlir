@@ -426,6 +426,13 @@ func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64
   moore.fmt.real general %arg2, align right : f64
   // CHECK: sim.fmt.flt %arg1 fieldWidth 15 : f32
   moore.fmt.real float %arg1, align right fieldWidth 15 : f32
+
+  // CHECK: sim.fmt.hier_path
+  // CHECK-NOT: escaped
+  moore.fmt.hier_path
+  // CHECK: sim.fmt.hier_path escaped
+  moore.fmt.hier_path escaped
+
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
   return
@@ -1500,6 +1507,17 @@ func.func @IntToStringConversion(%arg0: !moore.i45) {
   return
 }
 
+// CHECK-LABEL: func.func @ConvertRealOperations
+func.func @ConvertRealOperations(%arg0: !moore.f32, %arg1: !moore.f64) {
+  // CHECK: arith.extf %arg0 : f32 to f64
+  moore.convert_real %arg0 : f32 -> f64
+
+  // CHECK: arith.truncf %arg1 : f64 to f32
+  moore.convert_real %arg1 : f64 -> f32
+  
+  return
+}
+
 // CHECK-LABEL: func.func @StringOperations
 // CHECK-SAME: %arg0: i32
 // CHECK-SAME: %arg1: !sim.dstring
@@ -1515,6 +1533,15 @@ func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moo
   moore.string.concat (%arg1, %arg2)
   // CHECK: sim.string.length %arg1
   moore.string.len %arg1
+  return
+}
+
+// CHECK-LABEL: func.func @StringIndexing
+// CHECK-SAME: %arg0: !sim.dstring
+// CHECK-SAME: %arg1: i32
+func.func @StringIndexing(%arg0: !moore.string, %arg1: !moore.i32) {
+  // CHECK: sim.string.get %arg0[%arg1]
+  %0 = moore.string.get %arg0[%arg1]
   return
 }
 
@@ -1552,6 +1579,11 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[NEWQ:%.+]] = sim.queue.insert %arg0 into [[QR]] at %arg1 : <i32, 10>
   // CHECK: llhd.drv [[Q]], [[NEWQ]]
   moore.queue.insert %arg0 into %q at %arg1 : <!moore.queue<i32, 10>>
+  
+  // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
+  // CHECK: [[NEWQ:%.+]] = sim.queue.set [[QR]][%arg1] = %arg0 : <i32, 10>
+  // CHECK: llhd.drv [[Q]], [[NEWQ]]
+  moore.queue.set %q[%arg1] = %arg0 : <!moore.queue<i32, 10>>
 
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   %qr = moore.read %q : <!moore.queue<i32, 10>>
@@ -1568,6 +1600,36 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
 
   // CHECK: [[NEWQ:%.+]] = sim.queue.slice [[QR]] from %arg0 to %arg1 : <i32, 10>
   %newq = moore.dyn_queue_extract %qr from %arg0 to %arg1 : <i32, 10>, i32 -> queue<i32, 10>
+
+  // CHECK: [[DIFFB:%.+]] = sim.queue.resize [[QR]] : <i32, 10> -> <i32, 0>
+  %diffbounds = moore.queue.resize %qr : <i32, 10> -> <i32, 0>
+
+  // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i32, 10>
+  // CHECK: [[Q:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i32, 10>
+  %q2 = moore.variable : <!moore.queue<i32, 10>>
+
+  // CHECK: [[QR2:%.+]] = llhd.prb [[Q]]
+  %qr2 = moore.read %q2 : <!moore.queue<i32, 10>>
+
+  // CHECK: [[CMPR:%.+]] = sim.queue.cmp eq [[QR]], [[QR2]] : <i32, 10>
+  moore.queue.cmp eq %qr, %qr2 : <i32, 10>
+
+  // CHECK: [[CMPR:%.+]] = sim.queue.cmp ne [[QR]], [[QR2]] : <i32, 10>
+  moore.queue.cmp ne %qr, %qr2 : <i32, 10>
+
+  // CHECK: [[ZERO:%.+]] = hw.constant 0 : i128
+  // CHECK: [[UPARR:%.+]] = hw.bitcast [[ZERO]] : (i128) -> !hw.array<4xi32>
+  // CHECK: [[UPVAR:%.+]] = llhd.sig [[UPARR]] : !hw.array<4xi32>
+  %uparray = moore.variable : <!moore.uarray<4 x i32>>
+  // CHECK: [[UPR:%.+]] = llhd.prb [[UPVAR]]
+  %upr = moore.read %uparray : <!moore.uarray<4 x i32>>
+
+  // CHECK: [[QFROMUP:%.+]] = sim.queue.from_array [[UPR]] : !hw.array<4xi32> -> <i32, 0>
+  %2 = moore.queue.from_unpacked_array %upr : !moore.uarray<4 x i32> -> <i32, 0>
+
+  // CHECK: [[CONCAT:%.+]] = sim.queue.concat ([[QR]], [[DIFFB]]) : (!sim.queue<i32, 10>, !sim.queue<i32, 0>) <i32, 5>
+  %concatres = moore.queue.concat (%qr, %diffbounds) : (!moore.queue<i32, 10>, !moore.queue<i32, 0>) <i32, 5>
+
   return
 }
 
@@ -1707,4 +1769,42 @@ moore.module @Nets(out o1 : !moore.l1, out o2 : !moore.l2, out o3 : !moore.l1, o
   %23 = moore.read %n24 : <l2>
 
   moore.output %0, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23 : !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2, !moore.l1, !moore.l2
+}
+
+// CHECK-LABEL: func.func @QueuePopBack
+func.func @QueuePopBack() -> !moore.i16 {
+  %q = moore.variable : <queue<i16, 0>>
+  // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_back from
+  // CHECK: llhd.drv %q, [[QUEUE]] after
+  %v = moore.pop_back from %q : <queue<i16, 0>>
+  // CHECK: return [[POPPED]] : i16
+  return %v : !moore.i16
+}
+
+// CHECK-LABEL: func.func @QueuePopFront
+func.func @QueuePopFront() -> !moore.i16 {
+  %q = moore.variable : <queue<i16, 0>>
+  // CHECK: [[QUEUE:%.+]], [[POPPED:%.+]] = sim.queue.pop_front from
+  // CHECK: llhd.drv %q, [[QUEUE]] after
+  %v = moore.pop_front from %q : <queue<i16, 0>>
+  // CHECK: return [[POPPED]] : i16
+  return %v : !moore.i16
+}
+
+// CHECK-LABEL: llhd.coroutine private @myTask
+// CHECK-SAME: (%arg0: !llhd.ref<i1>)
+moore.coroutine private @myTask(%arg0: !moore.ref<l1>) {
+  // CHECK: llhd.return
+  moore.return
+}
+
+// CHECK-LABEL: hw.module @CoroutineLowering
+moore.module @CoroutineLowering() {
+  %clk = moore.variable : <l1>
+  moore.procedure initial {
+    // CHECK: llhd.call_coroutine @myTask(%clk) : (!llhd.ref<i1>) -> ()
+    moore.call_coroutine @myTask(%clk) : (!moore.ref<l1>) -> ()
+    moore.return
+  }
+  moore.output
 }

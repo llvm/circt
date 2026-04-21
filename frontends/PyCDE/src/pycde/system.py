@@ -42,7 +42,7 @@ class System:
       "mod", "top_modules", "name", "passed", "_old_system_token", "_op_cache",
       "_generate_queue", "output_directory", "files", "mod_files",
       "packaging_funcs", "sw_api_langs", "_instance_roots", "_placedb",
-      "_appid_index", "platform", "core_freq", "plugin_added_passes"
+      "_appid_index", "platform", "core_freq", "plugin_added_passes", "_debug"
   ]
 
   def __init__(self,
@@ -50,9 +50,11 @@ class System:
                name: str = None,
                output_directory: str = None,
                sw_api_langs: List[str] = None,
-               core_clock_frequency_hz: Optional[int] = None):
+               core_clock_frequency_hz: Optional[int] = None,
+               debug: bool = False):
     from .module import Module
     self.passed = False
+    self._debug = debug
     self.mod = ir.Module.create()
     if isinstance(top_modules, Iterable):
       self.top_modules = list(top_modules)
@@ -118,6 +120,13 @@ class System:
   @staticmethod
   def set_debug():
     ir._GlobalDebug.flag = True
+
+  @property
+  def debug(self) -> bool:
+    """True when debug mode is enabled — auto-naming uses hw.wire instead of
+    sv.namehint for better Verilog readability at the cost of some
+    optimizations."""
+    return self._debug
 
   # TODO: Ideally, we'd be able to run the cf-to-handshake lowering passes in
   # pycde.  As of now, however, the cf/memref/arith dialects are not registered

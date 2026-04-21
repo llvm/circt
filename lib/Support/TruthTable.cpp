@@ -13,9 +13,11 @@
 #include "circt/Support/TruthTable.h"
 
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/MathExtras.h"
 #include <algorithm>
+#include <array>
 #include <cassert>
 
 using namespace circt;
@@ -24,6 +26,92 @@ using llvm::APInt;
 //===----------------------------------------------------------------------===//
 // BinaryTruthTable
 //===----------------------------------------------------------------------===//
+
+namespace {
+
+static llvm::APInt
+expandTruthTableToInputSpaceSmall(const llvm::APInt &tt,
+                                  ArrayRef<unsigned> mapping,
+                                  unsigned numExpandedInputs) {
+  assert(numExpandedInputs <= 6 && "small fast path requires <= 6 inputs");
+
+  unsigned numOrigInputs = mapping.size();
+  unsigned expandedSize = 1U << numExpandedInputs;
+  // `kVarMasks[i]` marks rows where expanded input `i` is 1. For example,
+  // `kVarMasks[0] = 0b1010...` and `kVarMasks[1] = 0b1100...`, matching the
+  // standard packed truth-table row order where input 0 is the LSB.
+  static constexpr uint64_t kVarMasks[6] = {
+      0xAAAAAAAAAAAAAAAAULL, // input 0: 1010...
+      0xCCCCCCCCCCCCCCCCULL, // input 1: 1100...
+      0xF0F0F0F0F0F0F0F0ULL, // input 2: 11110000...
+      0xFF00FF00FF00FF00ULL, // input 3: 8 zeros, 8 ones
+      0xFFFF0000FFFF0000ULL, // input 4: 16 zeros, 16 ones
+      0xFFFFFFFF00000000ULL  // input 5: 32 zeros, 32 ones
+  };
+
+  uint64_t sizeMask = llvm::maskTrailingOnes<uint64_t>(expandedSize);
+  unsigned origSize = 1U << numOrigInputs;
+  uint64_t origMask = llvm::maskTrailingOnes<uint64_t>(origSize);
+  uint64_t origTT = tt.getZExtValue() & origMask;
+
+  // `constrainMasks[i][b]` is the set of expanded rows where original input
+  // `i`, after remapping into the expanded space, observes bit value `b`.
+  std::array<std::array<uint64_t, 2>, 6> constrainMasks{};
+  for (unsigned i = 0; i < numOrigInputs; ++i) {
+    uint64_t posMask = kVarMasks[mapping[i]] & sizeMask;
+    constrainMasks[i][0] = (~posMask) & sizeMask;
+    constrainMasks[i][1] = posMask;
+  }
+
+  uint64_t activePatterns = origTT;
+  bool useComplementResult = false;
+  uint64_t result = 0;
+  // If the original truth table has more 1s than 0s, it's more efficient to
+  // iterate over the 0 patterns.
+  if (static_cast<unsigned>(llvm::popcount(origTT)) > (origSize / 2)) {
+    activePatterns = (~origTT) & origMask;
+    useComplementResult = true;
+    result = sizeMask;
+  }
+
+  while (activePatterns) {
+    unsigned origIdx = llvm::countr_zero(activePatterns);
+    activePatterns &= activePatterns - 1;
+
+    uint64_t pattern = sizeMask;
+    for (unsigned i = 0; i < numOrigInputs; ++i)
+      pattern &= constrainMasks[i][(origIdx >> i) & 1U];
+
+    if (useComplementResult)
+      result &= ~pattern;
+    else
+      result |= pattern;
+  }
+
+  return llvm::APInt(expandedSize, result);
+}
+
+static llvm::APInt
+expandTruthTableToInputSpaceGeneric(const llvm::APInt &tt,
+                                    ArrayRef<unsigned> mapping,
+                                    unsigned numExpandedInputs) {
+  unsigned numOrigInputs = mapping.size();
+  unsigned expandedSize = 1U << numExpandedInputs;
+
+  llvm::APInt result = llvm::APInt::getZero(expandedSize);
+  for (unsigned expandedIdx = 0; expandedIdx < expandedSize; ++expandedIdx) {
+    unsigned origIdx = 0;
+    for (unsigned i = 0; i < numOrigInputs; ++i)
+      if ((expandedIdx >> mapping[i]) & 1U)
+        origIdx |= 1U << i;
+    if (tt[origIdx])
+      result.setBit(expandedIdx);
+  }
+
+  return result;
+}
+
+} // namespace
 
 llvm::APInt BinaryTruthTable::getOutput(const llvm::APInt &input) const {
   assert(input.getBitWidth() == numInputs && "Input width mismatch");
@@ -142,6 +230,31 @@ void BinaryTruthTable::dump(llvm::raw_ostream &os) const {
   }
 }
 
+llvm::APInt
+circt::detail::expandTruthTableToInputSpace(const llvm::APInt &tt,
+                                            ArrayRef<unsigned> mapping,
+                                            unsigned numExpandedInputs) {
+  unsigned numOrigInputs = mapping.size();
+  unsigned expandedSize = 1U << numExpandedInputs;
+
+  if (numOrigInputs == numExpandedInputs) {
+    bool isIdentity = true;
+    for (unsigned i = 0; i < numOrigInputs && isIdentity; ++i)
+      isIdentity = mapping[i] == i;
+    if (isIdentity)
+      return tt.zext(expandedSize);
+  }
+
+  if (tt.isZero())
+    return llvm::APInt::getZero(expandedSize);
+  if (tt.isAllOnes())
+    return llvm::APInt::getAllOnes(expandedSize);
+
+  if (numExpandedInputs <= 6)
+    return expandTruthTableToInputSpaceSmall(tt, mapping, numExpandedInputs);
+  return expandTruthTableToInputSpaceGeneric(tt, mapping, numExpandedInputs);
+}
+
 //===----------------------------------------------------------------------===//
 // NPNClass
 //===----------------------------------------------------------------------===//
@@ -165,11 +278,9 @@ llvm::SmallVector<unsigned> identityPermutation(unsigned size) {
 unsigned permuteNegationMask(unsigned negationMask,
                              ArrayRef<unsigned> permutation) {
   unsigned result = 0;
-  for (unsigned i = 0; i < permutation.size(); ++i) {
-    if (negationMask & (1u << i)) {
-      result |= (1u << permutation[i]);
-    }
-  }
+  for (unsigned i = 0; i < permutation.size(); ++i)
+    if (negationMask & (1u << permutation[i]))
+      result |= (1u << i);
   return result;
 }
 
@@ -183,7 +294,162 @@ llvm::SmallVector<unsigned> invertPermutation(ArrayRef<unsigned> permutation) {
   return inverse;
 }
 
+llvm::SmallVector<unsigned>
+expandInputPermutation(const std::array<uint8_t, 4> &permutation) {
+  llvm::SmallVector<unsigned> result;
+  result.reserve(permutation.size());
+  for (uint8_t index : permutation)
+    result.push_back(index);
+  return result;
+}
+
+struct NPNTransform4 {
+  // Maps each output minterm in the transformed table back to the minterm to
+  // read from the source table.
+  std::array<uint8_t, 16> outputToSource = {};
+  // Inverse mapping used when reconstructing an original table from a chosen
+  // canonical representative.
+  std::array<uint8_t, 16> inverseOutputToSource = {};
+  std::array<uint8_t, 4> inputPermutation = {};
+  uint8_t inputNegation = 0;
+  bool outputNegation = false;
+};
+
+uint16_t applyNPNTransform4(uint16_t truthTable,
+                            const std::array<uint8_t, 16> &outputToSource,
+                            bool outputNegation) {
+  uint16_t result = 0;
+  for (unsigned output = 0; output != 16; ++output) {
+    unsigned bit = (truthTable >> outputToSource[output]) & 1u;
+    if (outputNegation)
+      bit ^= 1u;
+    result |= static_cast<uint16_t>(bit << output);
+  }
+  return result;
+}
+
+void buildCanonicalOrderNPNTransforms4(
+    llvm::SmallVectorImpl<NPNTransform4> &transforms) {
+  transforms.clear();
+  transforms.reserve(24 * 16 * 2);
+
+  // Enumerate the full 4-input NPN group in a deterministic order so table
+  // construction picks stable representatives and encodings.
+  for (unsigned negMask = 0; negMask != 16; ++negMask) {
+    std::array<unsigned, 4> permutation = {0, 1, 2, 3};
+    do {
+      std::array<unsigned, 4> inversePermutation = {};
+      for (unsigned i = 0; i != 4; ++i)
+        inversePermutation[permutation[i]] = i;
+
+      uint8_t currentNegMask = permuteNegationMask(negMask, permutation);
+      for (unsigned outputNegation = 0; outputNegation != 2; ++outputNegation) {
+        NPNTransform4 transform;
+        transform.inputNegation = currentNegMask;
+        transform.outputNegation = outputNegation;
+        for (unsigned i = 0; i != 4; ++i)
+          transform.inputPermutation[i] = permutation[i];
+
+        for (unsigned output = 0; output != 16; ++output) {
+          unsigned source = 0;
+          for (unsigned input = 0; input != 4; ++input) {
+            unsigned bit = (output >> inversePermutation[input]) & 1u;
+            bit ^= (negMask >> input) & 1u;
+            source |= bit << input;
+          }
+          transform.outputToSource[output] = source;
+          transform.inverseOutputToSource[source] = output;
+        }
+        transforms.push_back(transform);
+      }
+    } while (std::next_permutation(permutation.begin(), permutation.end()));
+  }
+}
+
+void collectNPN4Representatives(ArrayRef<NPNTransform4> transforms,
+                                llvm::SmallVectorImpl<uint16_t> &reps) {
+  llvm::BitVector seen(1u << 16, false);
+  reps.clear();
+
+  for (unsigned seed = 0; seed != (1u << 16); ++seed) {
+    if (seen.test(seed))
+      continue;
+
+    // Walk the full NPN orbit of this truth table and pick the numerically
+    // smallest member as the canonical representative.
+    uint16_t representative = seed;
+    for (const auto &transform : transforms) {
+      uint16_t member = applyNPNTransform4(seed, transform.outputToSource,
+                                           transform.outputNegation);
+      seen.set(member);
+      representative = std::min(representative, member);
+    }
+    reps.push_back(representative);
+  }
+}
+
 } // anonymous namespace
+
+void circt::collectCanonicalNPN4Representatives(
+    llvm::SmallVectorImpl<uint16_t> &representatives) {
+  llvm::SmallVector<NPNTransform4, 24 * 16 * 2> transforms;
+  buildCanonicalOrderNPNTransforms4(transforms);
+  collectNPN4Representatives(transforms, representatives);
+}
+
+NPNTable::NPNTable() {
+  llvm::SmallVector<uint16_t, 222> representatives;
+  collectCanonicalNPN4Representatives(representatives);
+
+  llvm::SmallVector<NPNTransform4, 24 * 16 * 2> transforms;
+  buildCanonicalOrderNPNTransforms4(transforms);
+
+  llvm::BitVector initialized(entries4.size(), false);
+  auto isBetterEntry = [&](const Entry4 &candidate, const Entry4 &current) {
+    // Multiple transforms can map the same function to the same
+    // representative. Pick a deterministic encoding for the stored witness.
+    if (candidate.representative != current.representative)
+      return candidate.representative < current.representative;
+    if (candidate.inputNegation != current.inputNegation)
+      return candidate.inputNegation < current.inputNegation;
+    return candidate.outputNegation < current.outputNegation;
+  };
+
+  for (uint16_t representative : representatives) {
+    for (const auto &transform : transforms) {
+      // Starting from the canonical representative, populate every equivalent
+      // member with the transform needed to recover the representative.
+      uint16_t member =
+          applyNPNTransform4(representative, transform.inverseOutputToSource,
+                             transform.outputNegation);
+
+      Entry4 candidate;
+      candidate.representative = representative;
+      candidate.inputPermutation = transform.inputPermutation;
+      candidate.inputNegation = transform.inputNegation;
+      candidate.outputNegation = transform.outputNegation;
+
+      if (!initialized.test(member) ||
+          isBetterEntry(candidate, entries4[member])) {
+        entries4[member] = candidate;
+        initialized.set(member);
+      }
+    }
+  }
+
+  assert(initialized.all() && "expected to populate all 4-input NPN entries");
+}
+
+bool NPNTable::lookup(const BinaryTruthTable &tt, NPNClass &result) const {
+  if (tt.numInputs != 4 || tt.numOutputs != 1)
+    return false;
+
+  const auto &entry = entries4[tt.table.getZExtValue()];
+  result = NPNClass(BinaryTruthTable(4, 1, APInt(16, entry.representative)),
+                    expandInputPermutation(entry.inputPermutation),
+                    entry.inputNegation, entry.outputNegation);
+  return true;
+}
 
 void NPNClass::getInputPermutation(
     const NPNClass &targetNPN,

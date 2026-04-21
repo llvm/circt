@@ -418,7 +418,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       } else if (auto opName = definingOp->getAttrOfType<StringAttr>("name")) {
         nameHint.append(opName);
       }
-      nameHint.append("_layer_probe");
+      nameHint.append("_layerCapture");
     }
 
     return NodeOp::create(builder, operand.getLoc(), operand,
@@ -719,6 +719,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
       else
         name = StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
+      // Domain type ports have no associations (domain info is in the type).
+      auto domainInfo = ArrayAttr::get(src.getContext(), {});
       PortInfo port(
           /*name=*/name,
           /*type=*/src.getType(),
@@ -726,7 +728,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
           /*symName=*/{},
           /*location=*/loc,
           /*annos=*/{},
-          /*domains=*/domain);
+          /*domains=*/domainInfo);
       ports.push_back(port);
       connectValues.push_back(src);
       BlockArgument replacement =
@@ -778,6 +780,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
       else
         name = StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
+      // Domain type ports have no associations (domain info is in the type).
+      auto domainInfo = ArrayAttr::get(src.getContext(), {});
       PortInfo port(
           /*name=*/name,
           /*type=*/src.getType(),
@@ -785,7 +789,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
           /*symName=*/{},
           /*location=*/getPortLoc(dest),
           /*annos=*/{},
-          /*domains=*/domain);
+          /*domains=*/domainInfo);
       ports.push_back(port);
       connectValues.push_back(dest);
       BlockArgument replacement =

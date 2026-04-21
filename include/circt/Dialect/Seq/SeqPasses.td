@@ -15,9 +15,17 @@
 
 include "mlir/Pass/PassBase.td"
 
+def LowerSeqCompRegCE : Pass<"lower-seq-compreg-ce", "hw::HWModuleOp"> {
+  let summary = "Lower seq.compreg.ce to seq.compreg";
+  let description = [{
+    Lowers seq.compreg.ce to a seq.compreg with the clock enable signal
+    built into the next logic, i.e. `next := mux(clock_enable, next, current)`
+  }];
+  let dependentDialects = ["circt::comb::CombDialect, circt::hw::HWDialect"];
+}
+
 def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
   let summary = "Lower seq.fifo ops";
-  let constructor = "circt::seq::createLowerSeqFIFOPass()";
   let dependentDialects = [
     "circt::hw::HWDialect",
     "circt::comb::CombDialect",
@@ -27,13 +35,11 @@ def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
 
 def LowerSeqHLMem: Pass<"lower-seq-hlmem", "hw::HWModuleOp"> {
   let summary = "Lowers seq.hlmem operations.";
-  let constructor = "circt::seq::createLowerSeqHLMemPass()";
   let dependentDialects = ["circt::sv::SVDialect"];
 }
 
 def ExternalizeClockGate: Pass<"externalize-clock-gate", "mlir::ModuleOp"> {
   let summary = "Convert seq.clock_gate ops into hw.module.extern instances";
-  let constructor = "circt::seq::createExternalizeClockGatePass()";
   let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect"];
   let options = [
     Option<"moduleName", "name", "std::string", "\"CKG\"",
@@ -62,7 +68,6 @@ def HWMemSimImpl : Pass<"hw-memory-sim", "ModuleOp"> {
     suitable for simulation.
   }];
 
-  let constructor = "circt::seq::createHWMemSimImplPass()";
   let dependentDialects = [
     "circt::emit::EmitDialect",
     "circt::hw::HWDialect",
@@ -107,7 +112,6 @@ def LowerSeqShiftReg : Pass<"lower-seq-shiftreg", "hw::HWModuleOp"> {
     Users are expected to provide a custom lowering pass to maps `seq.shiftreg`
     operations to target-specific primitives.
   }];
-  let constructor = "circt::seq::createLowerSeqShiftRegPass()";
   let dependentDialects = ["circt::hw::HWDialect"];
 }
 

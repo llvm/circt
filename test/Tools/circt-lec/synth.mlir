@@ -9,6 +9,6 @@ hw.module @foo1(in %a : i8, in %b : i8, in %c: i8, out d : i8) {
 }
 
 hw.module @foo2(in %a : i8, in %b : i8, in %c: i8, out d : i8) {
-  %0 = synth.mig.maj_inv %a, %b, %c: i8
+  %0 = comb.or %a, %b, %c : i8
   hw.output %0 : i8
 }

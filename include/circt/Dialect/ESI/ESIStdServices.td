@@ -41,6 +41,30 @@ def RandomAccessMemoryDeclOp: ESI_Op<"mem.ram",
   }];
 }
 
+def ChannelServiceDeclOp : ESI_Op<"service.std.channel",
+          [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
+           Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {
+  let summary = "Channel service";
+  let description = [{
+    Declares a service which provides a single channel connection between the
+    host and client in either direction.
+
+    ports:
+      from_host -> channel<any>
+      to_host <- channel<any>
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name);
+
+  let assemblyFormat = [{
+    $sym_name attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    std::optional<StringRef> getTypeName() { return "esi.service.std.channel"; }
+  }];
+}
+
 def FuncServiceDeclOp : ESI_Op<"service.std.func",
           [SingleBlock, NoTerminator, HasParent<"::mlir::ModuleOp">,
            Symbol, DeclareOpInterfaceMethods<ServiceDeclOpInterface>]> {

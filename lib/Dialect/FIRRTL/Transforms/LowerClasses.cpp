@@ -65,6 +65,12 @@ static bool shouldCreateClassImpl(igraph::InstanceGraphNode *node) {
   // Create a class for modules that instantiate classes or modules with
   // property ports.
   for (auto *instance : *node) {
+    // ObjectOp instantiates a class directly and always requires a class.
+    // Note: if combined with the check below, this has the same result (as
+    // objects always have one result, even if they have no ports).
+    if (instance->getInstance<firrtl::ObjectOp>())
+      return true;
+    // There is an instance with property ports.
     if (auto op = instance->getInstance<FInstanceLike>())
       for (auto result : op->getResults())
         if (type_isa<PropertyType>(result.getType()))
@@ -1488,7 +1494,7 @@ updateInstanceInModule(InstanceOp firrtlInstance, InstanceGraph &instanceGraph,
     return success();
 
   // Create a new instance with the property ports removed.
-  InstanceOp newInstance =
+  auto newInstance =
       firrtlInstance.cloneWithErasedPortsAndReplaceUses(portsToErase);
 
   // Replace the instance in the instance graph. This is called from multiple
@@ -1633,6 +1639,19 @@ struct BoolConstantOpConversion : public OpConversionPattern<BoolConstantOp> {
   }
 };
 
+struct PropertyAssertOpConversion
+    : public OpConversionPattern<firrtl::PropertyAssertOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::PropertyAssertOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::PropertyAssertOp>(
+        op, adaptor.getCondition(), op.getMessageAttr());
+    return success();
+  }
+};
+
 struct DoubleConstantOpConversion
     : public OpConversionPattern<DoubleConstantOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1739,6 +1758,30 @@ struct IntegerShlOpConversion
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<om::IntegerShlOp>(op, adaptor.getLhs(),
                                                   adaptor.getRhs());
+    return success();
+  }
+};
+
+struct StringConcatOpConversion
+    : public OpConversionPattern<firrtl::StringConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::StringConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::StringConcatOp>(op, adaptor.getOperands());
+    return success();
+  }
+};
+
+struct PropEqOpConversion : public OpConversionPattern<firrtl::PropEqOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(firrtl::PropEqOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<om::PropEqOp>(op, adaptor.getLhs(),
+                                              adaptor.getRhs());
     return success();
   }
 };
@@ -2215,11 +2258,14 @@ static void populateRewritePatterns(
   patterns.add<ListCreateOpConversion>(converter, patterns.getContext());
   patterns.add<ListConcatOpConversion>(converter, patterns.getContext());
   patterns.add<BoolConstantOpConversion>(converter, patterns.getContext());
+  patterns.add<PropertyAssertOpConversion>(converter, patterns.getContext());
   patterns.add<DoubleConstantOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerAddOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerMulOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShrOpConversion>(converter, patterns.getContext());
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
+  patterns.add<StringConcatOpConversion>(converter, patterns.getContext());
+  patterns.add<PropEqOpConversion>(converter, patterns.getContext());
   patterns.add<UnrealizedConversionCastOpConversion>(converter,
                                                      patterns.getContext());
   patterns.add<UnknownValueOpConversion>(converter, patterns.getContext());

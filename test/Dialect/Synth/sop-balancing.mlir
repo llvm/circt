@@ -32,8 +32,8 @@ hw.module @balance(in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1, in %f:
     %5 = synth.aig.and_inv not %4 : i1
     // CHECK-DAG: %[[AB:.*]] = synth.aig.and_inv %a, %b
     // CHECK-DAG: %[[EF:.*]] = synth.aig.and_inv %e, %f
-    // CHECK-DAG: %[[CEF:.*]] = synth.aig.and_inv %[[EF]], %c
-    // CHECK-DAG: %[[CD:.*]] = synth.aig.and_inv %d, %c
+    // CHECK-DAG: %[[CEF:.*]] = synth.aig.and_inv  %c, %[[EF]]
+    // CHECK-DAG: %[[CD:.*]] = synth.aig.and_inv %c, %d
     // CHECK-DAG: %[[RESULT1:.*]] = synth.aig.and_inv not %[[AB]], not %[[CD]]
     // CHECK-DAG: %[[RESULT2:.*]] = synth.aig.and_inv not %[[CEF]], %[[RESULT1]]
     // CHECK-DAG: %[[FINAL:.*]] = synth.aig.and_inv not %[[RESULT2]]

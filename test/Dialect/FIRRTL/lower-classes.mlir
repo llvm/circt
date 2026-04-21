@@ -374,6 +374,21 @@ firrtl.circuit "ModuleWithPropertySubmodule" {
   }
 }
 
+// CHECK-LABEL: firrtl.circuit "ModuleWithObjectNoPorts"
+firrtl.circuit "ModuleWithObjectNoPorts" {
+  firrtl.class private @Metadata() {
+  }
+  // Ensure that a module with no property ports, but contains an object results
+  // in a class.
+  //
+  // CHECK: om.class @Baz_Class
+  firrtl.module private @Baz() {
+    // CHECK: om.object @Metadata
+    %meta = firrtl.object @Metadata()
+  }
+  firrtl.extmodule @ModuleWithObjectNoPorts()
+}
+
 // CHECK-LABEL: firrtl.circuit "DownwardReferences"
 firrtl.circuit "DownwardReferences" {
   firrtl.class @MyClass() {
@@ -406,6 +421,43 @@ firrtl.circuit "IntegerArithmetic" {
 
     // CHECK: om.integer.shl %in0, %in1 : !om.integer
     %3 = firrtl.integer.shl %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "StringCat"
+firrtl.circuit "StringCat" {
+  firrtl.module @StringCat() {}
+
+  // CHECK-LABEL: om.class @StringConcatClass
+  firrtl.class @StringConcatClass(in %a: !firrtl.string, in %b: !firrtl.string, out %c: !firrtl.string) {
+    // CHECK: %[[CONCAT:.+]] = om.string.concat %a, %b : !om.string
+    %0 = firrtl.string.concat %a, %b : !firrtl.string
+    // CHECK: om.class.fields %[[CONCAT]]
+    firrtl.propassign %c, %0 : !firrtl.string
+  }
+
+  // CHECK-LABEL: om.class @PropEqStringClass
+  firrtl.class @PropEqStringClass(in %a: !firrtl.string, in %b: !firrtl.string, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.string
+    %0 = firrtl.prop.eq %a, %b : !firrtl.string
+    // CHECK: om.class.fields %[[EQ]]
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @PropEqBoolClass
+  firrtl.class @PropEqBoolClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : i1
+    %0 = firrtl.prop.eq %a, %b : !firrtl.bool
+    // CHECK: om.class.fields %[[EQ]]
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @PropEqIntegerClass
+  firrtl.class @PropEqIntegerClass(in %a: !firrtl.integer, in %b: !firrtl.integer, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.integer
+    %0 = firrtl.prop.eq %a, %b : !firrtl.integer
+    // CHECK: om.class.fields %[[EQ]]
+    firrtl.propassign %eq, %0 : !firrtl.bool
   }
 }
 
@@ -673,5 +725,19 @@ firrtl.circuit "UnknownValue" {
     %2 = firrtl.unknown : !firrtl.class<@SimpleClass(out value: !firrtl.integer)>
     firrtl.propassign %c, %2 : !firrtl.class<@SimpleClass(out value: !firrtl.integer)>
     // CHECK: om.class.fields %[[UNKNOWN_INT]], %[[UNKNOWN_STR]], %[[UNKNOWN_OBJ]] : !om.integer, !om.string, !om.class.type<@SimpleClass>
+  }
+
+  // property_assert in a class body lowers to om.property_assert.
+  // CHECK-LABEL: om.class @PropAssertClass
+  firrtl.class private @PropAssertClass(in %cond: !firrtl.bool) {
+    // CHECK: om.property_assert %cond, "must hold" : i1
+    firrtl.property_assert %cond, "must hold" : !firrtl.bool
+  }
+
+  // property_assert in a module body: the op is moved into the generated class.
+  // CHECK-LABEL: om.class @PropAssertModule_Class
+  firrtl.module @PropAssertModule(in %cond: !firrtl.bool) {
+    // CHECK: om.property_assert %cond, "module invariant" : i1
+    firrtl.property_assert %cond, "module invariant" : !firrtl.bool
   }
 }

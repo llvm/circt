@@ -23,6 +23,7 @@
 #include "esi/CLI.h"
 #include "esi/Manifest.h"
 #include "esi/Services.h"
+#include "esi/TypedPorts.h"
 
 #include <atomic>
 #include <chrono>
@@ -70,6 +71,8 @@ static void coordTranslateTest(AcceleratorConnection *, Accelerator *,
 static void serialCoordTranslateTest(AcceleratorConnection *, Accelerator *,
                                      uint32_t xTrans, uint32_t yTrans,
                                      uint32_t numCoords, size_t batchSizeLimit);
+static void channelTest(AcceleratorConnection *, Accelerator *,
+                        uint32_t iterations);
 
 // Default widths and default widths string for CLI help text.
 constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
@@ -294,6 +297,12 @@ int main(int argc, const char *argv[]) {
                    "Coordinates per header (default 240, max 65535)")
       ->check(CLI::Range(1u, 0xFFFFu));
 
+  CLI::App *channelTestSub = cli.add_subcommand(
+      "channel", "Test ChannelService to_host and from_host");
+  uint32_t channelIters = 10;
+  channelTestSub->add_option("-i,--iters", channelIters,
+                             "Number of loopback iterations (default 10)");
+
   if (int rc = cli.esiParse(argc, argv))
     return rc;
   if (!cli.get_help_ptr()->empty())
@@ -337,6 +346,8 @@ int main(int argc, const char *argv[]) {
     } else if (*serialCoordTranslateSub) {
       serialCoordTranslateTest(acc, accel, coordXTrans, coordYTrans,
                                coordNumItems, serialBatchSize);
+    } else if (*channelTestSub) {
+      channelTest(acc, accel, channelIters);
     }
 
     acc->disconnect();
@@ -1787,17 +1798,52 @@ struct SerialCoordHeader {
   uint32_t yTranslation;
   uint32_t xTranslation;
 };
+static_assert(sizeof(SerialCoordHeader) == 10, "Size mismatch");
 struct SerialCoordData {
+  SerialCoordData(uint32_t x, uint32_t y) : _pad_head(0), y(y), x(x) {}
   uint16_t _pad_head;
   uint32_t y;
   uint32_t x;
 };
-union SerialCoordInputFrame {
-  SerialCoordHeader header;
-  SerialCoordData data;
-};
+static_assert(sizeof(SerialCoordData) == sizeof(SerialCoordHeader),
+              "Size mismatch");
 #pragma pack(pop)
-static_assert(sizeof(SerialCoordInputFrame) == 10, "Size mismatch");
+
+// Note: this application is intended to test hardware. As such, we need
+// to be able to send batches. So this is not the typical way one would define a
+// message struct. It's closer to a streaming style.
+struct SerialCoordInput : SegmentedMessageData {
+private:
+  SerialCoordHeader header;
+  std::vector<SerialCoordData> coords;
+
+public:
+  SerialCoordInput() {
+    header.coordsCount = 0;
+    header.xTranslation = 0;
+    header.yTranslation = 0;
+  }
+  void yTranslation(uint32_t yTrans) { header.yTranslation = yTrans; }
+  uint32_t yTranslation() const { return header.yTranslation; }
+  void xTranslation(uint32_t xTrans) { header.xTranslation = xTrans; }
+  uint32_t xTranslation() const { return header.xTranslation; }
+  void appendCoord(uint32_t x, uint32_t y) {
+    coords.emplace_back(x, y);
+    header.coordsCount = (uint16_t)coords.size();
+  }
+  const std::vector<SerialCoordData> &getCoords() const { return coords; }
+
+  size_t numSegments() const override { return 2; }
+  Segment segment(size_t idx) const override {
+    if (idx == 0)
+      return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};
+    else if (idx == 1)
+      return {reinterpret_cast<const uint8_t *>(coords.data()),
+              coords.size() * sizeof(SerialCoordData)};
+    else
+      throw std::out_of_range("SerialCoordInput: invalid segment index");
+  }
+};
 
 #pragma pack(push, 1)
 struct SerialCoordOutputHeader {
@@ -1827,9 +1873,8 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
   std::uniform_int_distribution<uint32_t> dist(0, 1000000);
   std::vector<Coord> inputCoords;
   inputCoords.reserve(numCoords);
-  for (uint32_t i = 0; i < numCoords; ++i) {
+  for (uint32_t i = 0; i < numCoords; ++i)
     inputCoords.push_back({dist(rng), dist(rng)});
-  }
 
   auto child = accel->getChildren().find(AppID("coord_translator_serial"));
   if (child == accel->getChildren().end())
@@ -1842,11 +1887,16 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     throw std::runtime_error(
         "Serial coord translate test: no 'translate_coords_serial' port found");
 
-  WriteChannelPort &argPort = portIter->second.getRawWrite("arg");
+  TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
+      portIter->second.getRawWrite("arg"));
   ReadChannelPort &resultPort = portIter->second.getRawRead("result");
 
   argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
   resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+  // The serial window reply is emitted as many raw frames. This test writes
+  // all request batches before draining the result stream, so the default
+  // polling queue depth can fill up and backpressure the DMA engine.
+  resultPort.setMaxDataQueueMsgs(0);
 
   size_t sent = 0;
   while (sent < numCoords) {
@@ -1855,28 +1905,19 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     // Send Header. Only the first header needs the translation values, test the
     // subsequent ones with zero translation to verify that the hardware
     // correctly applies the first header's translation to the whole list.
-    SerialCoordInputFrame headerFrame;
-    headerFrame.header.coordsCount = (uint16_t)batchSize;
-    headerFrame.header.xTranslation = sent == 0 ? xTrans : 0;
-    headerFrame.header.yTranslation = sent == 0 ? yTrans : 0;
-    argPort.write(MessageData(reinterpret_cast<const uint8_t *>(&headerFrame),
-                              sizeof(headerFrame)));
-
+    auto batch = std::make_unique<SerialCoordInput>();
+    batch->xTranslation(sent == 0 ? xTrans : 0);
+    batch->yTranslation(sent == 0 ? yTrans : 0);
     // Send Data
     for (size_t i = 0; i < batchSize; ++i) {
-      SerialCoordInputFrame dataFrame;
-      dataFrame.data._pad_head = 0;
-      dataFrame.data.x = inputCoords[sent + i].x;
-      dataFrame.data.y = inputCoords[sent + i].y;
-      argPort.write(MessageData(reinterpret_cast<const uint8_t *>(&dataFrame),
-                                sizeof(dataFrame)));
+      batch->appendCoord(inputCoords[sent + i].x, inputCoords[sent + i].y);
     }
+    argPort.write(batch);
     sent += batchSize;
   }
   // Send final header with count=0 to signal end of input
-  SerialCoordHeader footerData{0, 0, 0};
-  auto footer = MessageData::from(footerData);
-  argPort.write(footer);
+  auto footerData = std::make_unique<SerialCoordInput>();
+  argPort.write(footerData);
 
   // Read results. The hardware echoes headers (with count) followed by
   // translated data frames, then autonomously sends a footer header with
@@ -1936,4 +1977,91 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
 
   logger.info("esitester", "Serial coord translate test passed");
   std::cout << "Serial coord translate test passed" << std::endl;
+}
+
+static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
+                        uint32_t iterations) {
+  Logger &logger = conn->getLogger();
+
+  auto channelChild = accel->getChildren().find(AppID("channel_test"));
+  if (channelChild == accel->getChildren().end())
+    throw std::runtime_error("Channel test: no 'channel_test' child");
+  auto &ports = channelChild->second->getPorts();
+
+  // --- Get the MMIO port to trigger the producer ---
+  auto cmdIter = ports.find(AppID("cmd"));
+  if (cmdIter == ports.end())
+    throw std::runtime_error("Channel test: no 'cmd' port");
+  auto *cmdMMIO = cmdIter->second.getAs<services::MMIO::MMIORegion>();
+  if (!cmdMMIO)
+    throw std::runtime_error("Channel test: 'cmd' is not MMIO");
+
+  // --- Get the producer to_host port ---
+  auto producerIter = ports.find(AppID("producer"));
+  if (producerIter == ports.end())
+    throw std::runtime_error("Channel test: no 'producer' port");
+  auto *producerPort =
+      producerIter->second.getAs<services::ChannelService::ToHost>();
+  if (!producerPort)
+    throw std::runtime_error(
+        "Channel test: 'producer' is not a ChannelService::ToHost");
+  producerPort->connect();
+
+  // --- Test to_host: MMIO-triggered incrementing values ---
+  // Write the number of values to send at offset 0x0.
+  cmdMMIO->write(0x0, iterations);
+
+  for (uint32_t i = 0; i < iterations; ++i) {
+    MessageData recvData = producerPort->read().get();
+    uint32_t got = *recvData.as<uint32_t>();
+    std::cout << "[channel] producer i=" << i << " got=" << got << std::endl;
+    if (got != i)
+      throw std::runtime_error("Channel producer: expected " +
+                               std::to_string(i) + ", got " +
+                               std::to_string(got));
+  }
+  logger.info("esitester", "Channel test: producer passed (" +
+                               std::to_string(iterations) +
+                               " incrementing values)");
+
+  // --- Test from_host -> to_host loopback ---
+  auto loopbackInIter = ports.find(AppID("loopback_in"));
+  if (loopbackInIter == ports.end())
+    throw std::runtime_error("Channel test: no 'loopback_in' port");
+  auto *fromHostPort =
+      loopbackInIter->second.getAs<services::ChannelService::FromHost>();
+  if (!fromHostPort)
+    throw std::runtime_error(
+        "Channel test: 'loopback_in' is not a ChannelService::FromHost");
+  fromHostPort->connect();
+
+  auto loopbackOutIter = ports.find(AppID("loopback_out"));
+  if (loopbackOutIter == ports.end())
+    throw std::runtime_error("Channel test: no 'loopback_out' port");
+  auto *loopbackOutPort =
+      loopbackOutIter->second.getAs<services::ChannelService::ToHost>();
+  if (!loopbackOutPort)
+    throw std::runtime_error(
+        "Channel test: 'loopback_out' is not a ChannelService::ToHost");
+  loopbackOutPort->connect();
+
+  std::mt19937_64 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, UINT32_MAX);
+
+  for (uint32_t i = 0; i < iterations; ++i) {
+    uint32_t sendVal = dist(rng);
+    fromHostPort->write(MessageData::from(sendVal));
+    MessageData recvData = loopbackOutPort->read().get();
+    uint32_t recvVal = *recvData.as<uint32_t>();
+    std::cout << "[channel] loopback i=" << i << " sent=0x"
+              << esi::toHex(sendVal) << " recv=0x" << esi::toHex(recvVal)
+              << std::endl;
+    if (recvVal != sendVal)
+      throw std::runtime_error("Channel loopback mismatch at i=" +
+                               std::to_string(i));
+  }
+
+  logger.info("esitester", "Channel test: loopback passed (" +
+                               std::to_string(iterations) + " iterations)");
+  std::cout << "Channel test passed" << std::endl;
 }

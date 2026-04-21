@@ -347,7 +347,7 @@ LogicalResult UnpackOp::fold(FoldAdaptor adaptor,
 
 LogicalResult UnpackOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inputType = cast<ValueType>(operands.front().getType());
   results.push_back(TokenType::get(context));
@@ -372,7 +372,7 @@ OpFoldResult PackOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult PackOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   llvm::SmallVector<Type> inputTypes;
   Type inputType = operands.back().getType();
@@ -465,7 +465,7 @@ LogicalResult BufferOp::verify() {
 
 LogicalResult ToESIOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Type channelEltType;
   if (auto valueType = dyn_cast<ValueType>(operands.front().getType()))
@@ -485,7 +485,7 @@ LogicalResult ToESIOp::inferReturnTypes(
 
 LogicalResult FromESIOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto innerType =
       cast<esi::ChannelType>(operands.front().getType()).getInner();

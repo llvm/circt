@@ -10,6 +10,7 @@
 #ifndef CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H
 #define CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H
 
+#include "CaptureAnalysis.h"
 #include "circt/Conversion/ImportVerilog.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -19,6 +20,7 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "slang/ast/ASTVisitor.h"
+#include "slang/text/SourceManager.h"
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/Support/Debug.h"
 #include <map>
@@ -38,21 +40,72 @@ struct PortLowering {
   BlockArgument arg;
 };
 
+/// Lowering information for a single signal flattened from an interface port.
+struct FlattenedIfacePort {
+  StringAttr name;
+  hw::ModulePort::Direction direction;
+  mlir::Type type;
+  Location loc;
+  BlockArgument arg;
+  /// the origin interface port symbol this was flattened from.
+  const slang::ast::InterfacePortSymbol *origin;
+  /// the interface body member (VariableSymbol , NetSymbol)
+  const slang::ast::Symbol *bodySym;
+  /// The connected interface instance backing this port (if any). This enables
+  /// materializing virtual interface handles from interface ports.
+  const slang::ast::InstanceSymbol *ifaceInstance = nullptr;
+};
+
+/// Lowering information for an expanded interface instance. Maps each interface
+/// body member to its expanded SSA value (moore.variable or moore.net).
+struct InterfaceLowering {
+  DenseMap<const slang::ast::Symbol *, Value> expandedMembers;
+  DenseMap<StringAttr, Value> expandedMembersByName;
+};
+
+/// Cached lowering information for representing SystemVerilog `virtual
+/// interface` handles as Moore types (a struct of references to interface
+/// members).
+struct VirtualInterfaceLowering {
+  moore::UnpackedStructType type;
+  SmallVector<StringAttr, 8> fieldNames;
+};
+
+/// A mapping entry for resolving Slang virtual interface member accesses.
+///
+/// Slang may resolve `vif.member` expressions (where `vif` has a
+/// `VirtualInterfaceType`) directly to a `NamedValueExpression` for `member`.
+/// This table records which virtual interface base symbol that member access is
+/// rooted in, so ImportVerilog can materialize the appropriate Moore IR.
+struct VirtualInterfaceMemberAccess {
+  const slang::ast::ValueSymbol *base = nullptr;
+  /// The name of the field in the lowered virtual interface handle struct that
+  /// should be accessed for this member.
+  StringAttr fieldName;
+};
+
 /// Module lowering information.
 struct ModuleLowering {
   moore::SVModuleOp op;
   SmallVector<PortLowering> ports;
+  SmallVector<FlattenedIfacePort> ifacePorts;
   DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
       portsBySyntaxNode;
 };
 
-/// Function lowering information.
+/// Function lowering information. The `op` field holds either a `func::FuncOp`
+/// (for SystemVerilog functions), a `moore::CoroutineOp` (for tasks), or a
+/// `moore::DPIFuncOp` (for DPI-imported functions), all accessed through the
+/// `FunctionOpInterface`.
 struct FunctionLowering {
-  mlir::func::FuncOp op;
-  llvm::SmallVector<Value, 4> captures;
-  llvm::DenseMap<Value, unsigned> captureIndex;
-  bool capturesFinalized = false;
-  bool isConverting = false;
+  mlir::FunctionOpInterface op;
+
+  /// The AST symbols captured by this function, determined by the capture
+  /// analysis pre-pass. These are added as extra parameters to the function
+  /// during declaration.
+  SmallVector<const slang::ast::ValueSymbol *, 4> capturedSymbols;
+
+  explicit FunctionLowering(mlir::FunctionOpInterface op) : op(op) {}
 };
 
 // Class lowering information.
@@ -81,6 +134,24 @@ struct HierPathInfo {
   std::optional<unsigned int> idx;
   slang::ast::ArgumentDirection direction;
   const slang::ast::ValueSymbol *valueSym;
+};
+
+// A slang::SourceLocation for deterministic comparisons. Comparisons use the
+// buffer's sortKey rather than bufferId.
+struct LocationKey {
+  uint64_t sortKey;
+  size_t offset;
+
+  static LocationKey get(const slang::SourceLocation &loc,
+                         const slang::SourceManager &mgr) {
+    return {
+        mgr.getSortKey(loc.buffer()),
+        loc.offset(),
+    };
+  }
+
+  std::strong_ordering operator<=>(const LocationKey &) const = default;
+  bool operator==(const LocationKey &) const = default;
 };
 
 /// A helper class to facilitate the conversion from a Slang AST to MLIR
@@ -119,12 +190,35 @@ struct Context {
   LogicalResult convertPackage(const slang::ast::PackageSymbol &package);
   FunctionLowering *
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
-  LogicalResult convertFunction(const slang::ast::SubroutineSymbol &subroutine);
-  LogicalResult finalizeFunctionBodyCaptures(FunctionLowering &lowering);
+  LogicalResult defineFunction(const slang::ast::SubroutineSymbol &subroutine);
+  LogicalResult
+  convertPrimitiveInstance(const slang::ast::PrimitiveInstanceSymbol &prim);
   ClassLowering *declareClass(const slang::ast::ClassType &cls);
   LogicalResult buildClassProperties(const slang::ast::ClassType &classdecl);
   LogicalResult materializeClassMethods(const slang::ast::ClassType &classdecl);
   LogicalResult convertGlobalVariable(const slang::ast::VariableSymbol &var);
+
+  /// Convert a Slang virtual interface type into the Moore type used to
+  /// represent virtual interface handles. Populates internal caches so that
+  /// interface instance references can be materialized consistently.
+  FailureOr<moore::UnpackedStructType>
+  convertVirtualInterfaceType(const slang::ast::VirtualInterfaceType &type,
+                              Location loc);
+
+  /// Materialize a Moore value representing a concrete interface instance as a
+  /// virtual interface handle. This only succeeds for the Slang
+  /// `VirtualInterfaceType` wrappers that refer to a real interface instance
+  /// (`isRealIface`).
+  FailureOr<Value>
+  materializeVirtualInterfaceValue(const slang::ast::VirtualInterfaceType &type,
+                                   Location loc);
+
+  /// Register the interface members of a virtual interface base symbol for use
+  /// in later expression conversion.
+  LogicalResult
+  registerVirtualInterfaceMembers(const slang::ast::ValueSymbol &base,
+                                  const slang::ast::VirtualInterfaceType &type,
+                                  Location loc);
 
   /// Checks whether one class (actualTy) is derived from another class
   /// (baseTy). True if it's a subclass, false otherwise.
@@ -161,10 +255,7 @@ struct Context {
       const slang::ast::CallExpression::SystemCallInfo &info, Location loc);
 
   // Traverse the whole AST to collect hierarchical names.
-  LogicalResult
-  collectHierarchicalValues(const slang::ast::Expression &expr,
-                            const slang::ast::Symbol &outermostModule);
-  LogicalResult traverseInstanceBody(const slang::ast::Symbol &symbol);
+  void traverseInstanceBody(const slang::ast::Symbol &symbol);
 
   // Convert timing controls into a corresponding set of ops that delay
   // execution of the current block. Produces an error if the implicit event
@@ -183,6 +274,18 @@ struct Context {
   // Convert a slang timing control for LTL
   Value convertLTLTimingControl(const slang::ast::TimingControl &ctrl,
                                 const Value &seqOrPro);
+
+  LogicalResult
+  convertNInputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
+
+  LogicalResult
+  convertNOutputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
+
+  LogicalResult
+  convertFixedPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
+
+  LogicalResult
+  convertPullGatePrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
 
   /// Helper function to convert a value to its "truthy" boolean value.
   Value convertToBool(Value value);
@@ -233,20 +336,11 @@ struct Context {
       moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
       bool appendNewline = false);
 
-  /// Convert system function calls only have arity-0.
-  FailureOr<Value>
-  convertSystemCallArity0(const slang::ast::SystemSubroutine &subroutine,
-                          Location loc);
-
-  /// Convert system function calls only have arity-1.
-  FailureOr<Value>
-  convertSystemCallArity1(const slang::ast::SystemSubroutine &subroutine,
-                          Location loc, Value value);
-
-  /// Convert system function calls with arity-2.
-  FailureOr<Value>
-  convertSystemCallArity2(const slang::ast::SystemSubroutine &subroutine,
-                          Location loc, Value value1, Value value2);
+  /// Convert system function calls. Returns a null `Value` on failure after
+  /// emitting an error.
+  Value convertSystemCall(const slang::ast::SystemSubroutine &subroutine,
+                          Location loc,
+                          std::span<const slang::ast::Expression *const> args);
 
   /// Convert system function calls within properties and assertion with a
   /// single argument.
@@ -256,6 +350,10 @@ struct Context {
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
+
+  /// Convert the inside/set-membership expression.
+  Value convertInsideCheck(Value insideLhs, Location loc,
+                           const slang::ast::Expression &expr);
 
   const ImportVerilogOptions &options;
   slang::ast::Compilation &compilation;
@@ -269,15 +367,37 @@ struct Context {
 
   /// The top-level operations ordered by their Slang source location. This is
   /// used to produce IR that follows the source file order.
-  std::map<slang::SourceLocation, Operation *> orderedRootOps;
+  std::map<LocationKey, Operation *> orderedRootOps;
 
   /// How we have lowered modules to MLIR.
   DenseMap<const slang::ast::InstanceBodySymbol *,
            std::unique_ptr<ModuleLowering>>
       modules;
+
+  /// Expanded interface instances, keyed by the InstanceSymbol pointer.
+  /// Each entry maps body members to their expanded SSA values. Scoped
+  /// per-module so entries are cleaned up when a module's conversion ends.
+  using InterfaceInstances =
+      llvm::ScopedHashTable<const slang::ast::InstanceSymbol *,
+                            InterfaceLowering *>;
+  using InterfaceInstanceScope = InterfaceInstances::ScopeTy;
+  InterfaceInstances interfaceInstances;
+  /// Owning storage for InterfaceLowering objects
+  /// because ScopedHashTable stores values by copy.
+  SmallVector<std::unique_ptr<InterfaceLowering>> interfaceInstanceStorage;
+
+  /// Cached virtual interface layouts (type + field order).
+  DenseMap<const slang::ast::InstanceBodySymbol *, VirtualInterfaceLowering>
+      virtualIfaceLowerings;
+  DenseMap<const slang::ast::ModportSymbol *, VirtualInterfaceLowering>
+      virtualIfaceModportLowerings;
   /// A list of modules for which the header has been created, but the body has
   /// not been converted yet.
   std::queue<const slang::ast::InstanceBodySymbol *> moduleWorklist;
+
+  /// A list of functions for which the declaration has been created, but the
+  /// body has not been defined yet.
+  std::queue<const slang::ast::SubroutineSymbol *> functionWorklist;
 
   /// Functions that have already been converted.
   DenseMap<const slang::ast::SubroutineSymbol *,
@@ -296,6 +416,14 @@ struct Context {
   using ValueSymbolScope = ValueSymbols::ScopeTy;
   ValueSymbols valueSymbols;
 
+  /// A table mapping symbols for interface members accessed through a virtual
+  /// interface to the virtual interface base value symbol.
+  using VirtualInterfaceMembers =
+      llvm::ScopedHashTable<const slang::ast::ValueSymbol *,
+                            VirtualInterfaceMemberAccess>;
+  using VirtualInterfaceMemberScope = VirtualInterfaceMembers::ScopeTy;
+  VirtualInterfaceMembers virtualIfaceMembers;
+
   /// A table of defined global variables that may be referred to by name in
   /// expressions.
   DenseMap<const slang::ast::ValueSymbol *, moore::GlobalVariableOp>
@@ -303,6 +431,10 @@ struct Context {
   /// A list of global variables that still need their initializers to be
   /// converted.
   SmallVector<const slang::ast::ValueSymbol *> globalVariableWorklist;
+
+  /// Pre-computed capture analysis: maps each function to the set of non-local,
+  /// non-global variables it captures (directly or transitively).
+  CaptureMap functionCaptures;
 
   /// Collect all hierarchical names used for the per module/instance.
   DenseMap<const slang::ast::InstanceBodySymbol *, SmallVector<HierPathInfo>>
@@ -336,6 +468,12 @@ struct Context {
   /// used to collect all variables assigned in a task scope.
   std::function<void(mlir::Operation *)> variableAssignCallback;
 
+  /// Whether we are currently converting expressions inside a timing control,
+  /// such as `@(posedge clk)`. This is used by the implicit event control
+  /// callback to avoid adding reads from explicit event controls to the
+  /// implicit sensitivity list.
+  bool isInsideTimingControl = false;
+
   /// The time scale currently in effect.
   slang::TimeScale timeScale;
 
@@ -347,6 +485,33 @@ struct Context {
   /// expression for. This is necessary to implement the `$` operator, which
   /// returns the index of the last element of the queue.
   Value currentQueue = {};
+
+  /// Ensure that the global variables for `$monitor` state exist. This creates
+  /// the `__monitor_active_id` and `__monitor_enabled` globals on first call.
+  void ensureMonitorGlobals();
+
+  /// Process any pending `$monitor` calls and generate the monitoring
+  /// procedures at module level.
+  LogicalResult flushPendingMonitors();
+
+  /// Global variable ops for `$monitor` state management. These are created on
+  /// demand by `ensureMonitorGlobals()`.
+  moore::GlobalVariableOp monitorActiveIdGlobal = nullptr;
+  moore::GlobalVariableOp monitorEnabledGlobal = nullptr;
+
+  /// The next monitor ID to allocate. ID 0 is reserved for "no monitor active".
+  unsigned nextMonitorId = 1;
+
+  /// Information about a pending `$monitor` call that needs to be converted
+  /// after the current module's body has been processed.
+  struct PendingMonitor {
+    unsigned id;
+    Location loc;
+    const slang::ast::CallExpression *call;
+  };
+
+  /// Pending `$monitor` calls that need to be converted at module level.
+  SmallVector<PendingMonitor> pendingMonitors;
 
 private:
   /// Helper function to extract the commonalities in lowering of functions and

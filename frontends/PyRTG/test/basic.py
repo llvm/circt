@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, report_failure, embed_comment
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, FloatRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, report_failure, embed_comment
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -198,26 +198,20 @@ def test1_args(config):
 # ELABORATED-NEXT: rtg.label external [[L1]]
 # ELABORATED-NEXT: [[L2:%.+]] = rtg.label_unique_decl [[L1STR]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
-
 # ELABORATED-NEXT: rtg.label local [[L0]]
 # ELABORATED-NEXT: rtg.label local [[L2]]
-
 # ELABORATED-NEXT: [[LBL5:%.+]] = rtg.constant #rtg.isa.label<"L_5">
 # ELABORATED-NEXT: rtg.label local [[LBL5]]
 # ELABORATED-NEXT: [[LBL3:%.+]] = rtg.constant #rtg.isa.label<"L_3">
 # ELABORATED-NEXT: rtg.label local [[LBL3]]
-
 # ELABORATED-NEXT: rtg.label local [[L2]]
 # ELABORATED-NEXT: rtg.label local [[L0]]
-
-# ELABORATED-NEXT: rtg.label local [[L1]]
-# ELABORATED-NEXT: rtg.label local [[L1]]
 # ELABORATED-NEXT: [[L0_2:%.+]] = rtg.constant #rtg.isa.label<"l0">
 # ELABORATED-NEXT: rtg.label local [[L0_2]]
-
+# ELABORATED-NEXT: rtg.label local [[L1]]
+# ELABORATED-NEXT: rtg.label local [[L1]]
 # ELABORATED-NEXT: [[L5:%.+]] = rtg.constant #rtg.isa.label<"s1">
 # ELABORATED-NEXT: rtg.label local [[L5]]
-
 # ELABORATED-NEXT: }
 
 # ASM-LABEL: Begin of test 'test2_labels
@@ -225,22 +219,16 @@ def test1_args(config):
 # ASM-NEXT: l0:
 # ASM-NEXT: .extern l1_0
 # ASM-NEXT: l1_1:
-
 # ASM-NEXT: l0:
 # ASM-NEXT: l1_1:
-
 # ASM-NEXT: L_5:
 # ASM-NEXT: L_3:
-
 # ASM-NEXT: l1_1:
 # ASM-NEXT: l0:
-
-# ASM-NEXT: l1_0:
-# ASM-NEXT: l1_0:
 # ASM-NEXT: l0:
-
+# ASM-NEXT: l1_0:
+# ASM-NEXT: l1_0:
 # ASM-NEXT: s1:
-
 # ASM: End of test 'test2_labels
 
 
@@ -305,17 +293,17 @@ def test2_labels(config):
 # MLIR-NEXT: [[IMM12:%.+]] = rtg.constant #rtg.isa.immediate<12, 8>
 # MLIR-NEXT: [[T0:%.+]] = rtg.constant #rtgtest.t0 : !rtgtest.ireg
 # MLIR-NEXT: [[VREG:%.+]] = rtg.virtual_reg [#rtgtest.t0 : !rtgtest.ireg, #rtgtest.t1 : !rtgtest.ireg, #rtgtest.t2 : !rtgtest.ireg, #rtgtest.t3 : !rtgtest.ireg, #rtgtest.t4 : !rtgtest.ireg, #rtgtest.t5 : !rtgtest.ireg, #rtgtest.t6 : !rtgtest.ireg, #rtgtest.a7 : !rtgtest.ireg, #rtgtest.a6 : !rtgtest.ireg, #rtgtest.a5 : !rtgtest.ireg, #rtgtest.a4 : !rtgtest.ireg, #rtgtest.a3 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg, #rtgtest.s2 : !rtgtest.ireg, #rtgtest.s3 : !rtgtest.ireg, #rtgtest.s4 : !rtgtest.ireg, #rtgtest.s5 : !rtgtest.ireg, #rtgtest.s6 : !rtgtest.ireg, #rtgtest.s7 : !rtgtest.ireg, #rtgtest.s8 : !rtgtest.ireg, #rtgtest.s9 : !rtgtest.ireg, #rtgtest.s10 : !rtgtest.ireg, #rtgtest.s11 : !rtgtest.ireg, #rtgtest.s0 : !rtgtest.ireg, #rtgtest.ra : !rtgtest.ireg, #rtgtest.sp : !rtgtest.ireg]
-# MLIR-NEXT: rtgtest.rv32i.addi [[VREG]], [[T0]], [[IMM12]]
-# MLIR-NEXT: rtgtest.rv32i.slli [[VREG]], [[T1]], [[IMM5]]
-# MLIR-NEXT: rtgtest.rv32i.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
-# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.addi [[VREG]], [[T0]], [[IMM12]]
+# MLIR-NEXT: rtgtest.slli [[VREG]], [[T1]], [[IMM5]]
+# MLIR-NEXT: rtgtest.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
+# MLIR-NEXT: rtgtest.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
 # MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097151]
 # MLIR-NEXT: [[RND_IMM:%.+]] = rtg.isa.int_to_immediate [[RND]]
-# MLIR-NEXT: rtgtest.rv32i.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[V0]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[V2]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[VREG]], [[V1]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V0]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V2]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V1]] : !rtg.isa.immediate<32>
 # MLIR-NEXT: }
 
 
@@ -339,7 +327,7 @@ def test3_registers_and_immediates(config):
 # MLIR-NEXT: [[V0:%.+]] = rtg.constant
 # MLIR-NEXT: [[V1:%.+]] = index.constant 2
 # MLIR-NEXT: [[V2:%.+]] = rtg.isa.int_to_immediate [[V1]] : !rtg.isa.immediate<12>
-# MLIR-NEXT: rtgtest.rv32i.addi [[V0]], [[V0]], [[V2]]
+# MLIR-NEXT: rtgtest.addi [[V0]], [[V0]], [[V2]]
 
 
 @test(Singleton)
@@ -355,7 +343,7 @@ def test4_integer_to_immediate(config):
 # MLIR-NEXT: [[MEM:%.+]] = rtg.isa.memory_alloc %mem_blk, [[IDX8]], [[IDX4]] : !rtg.isa.memory_block<32>
 # MLIR-NEXT: [[SIZE:%.+]] = rtg.isa.memory_size [[MEM]] : !rtg.isa.memory<32>
 # MLIR-NEXT: [[IMM:%.+]] = rtg.isa.int_to_immediate [[SIZE]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.rv32i.auipc [[REG]], [[IMM]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.auipc [[REG]], [[IMM]] : !rtg.isa.immediate<32>
 
 
 @test(Tgt2)
@@ -555,3 +543,33 @@ def test94_to_string(config):
   reg = IntegerRegister.t0()
   reg_str = reg.to_string()
   embed_comment(String("reg=") + reg_str)
+
+
+# ASM-LABEL: Begin of test 'test95_string_format
+# ASM-NEXT: # hello 42 t2 0xAB 4{{$}}
+# ASM-NEXT: # hello-world-test{{$}}
+# ASM: End of test 'test95_string_format
+
+
+@test(Singleton)
+def test95_string_format(config):
+  embed_comment(
+      String.format(String("hello"), Integer(42), IntegerRegister.t2(),
+                    Immediate(8, 171), 4))
+  embed_comment(
+      String.format(String("hello"), "world", String("test"), delimiter="-"))
+
+
+# ASM-LABEL: Begin of test 'test96_float_registers
+# ASM-NEXT: # f0=f0{{$}}
+# ASM: End of test 'test96_float_registers
+
+
+@test(Singleton)
+def test96_float_registers(config):
+  f0 = FloatRegister.f0()
+  f0_str = f0.to_string()
+  embed_comment(String("f0=") + f0_str)
+
+  vreg = FloatRegister.virtual()
+  vreg.to_string()

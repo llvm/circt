@@ -127,8 +127,3 @@ void ExternalizeClockGatePass::runOnOperation() {
     }
   }
 }
-
-std::unique_ptr<Pass> circt::seq::createExternalizeClockGatePass(
-    const ExternalizeClockGateOptions &options) {
-  return std::make_unique<ExternalizeClockGatePass>(options);
-}

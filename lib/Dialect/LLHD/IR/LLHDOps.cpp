@@ -19,6 +19,7 @@
 #include "mlir/IR/Region.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -471,7 +472,7 @@ LogicalResult SigArrayGetOp::ensureOnlySafeAccesses(
 
 LogicalResult llhd::SigStructExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   typename SigStructExtractOp::Adaptor adaptor(operands, attrs, properties,
                                                regions);
@@ -534,9 +535,12 @@ DeletionKind
 SigStructExtractOp::rewire(const DestructurableMemorySlot &slot,
                            DenseMap<Attribute, MemorySlot> &subslots,
                            OpBuilder &builder, const DataLayout &dataLayout) {
-  auto index =
-      cast<hw::StructType>(cast<RefType>(getInput().getType()).getNestedType())
-          .getFieldIndex(getFieldAttr());
+  auto nestedType = cast<RefType>(getInput().getType()).getNestedType();
+  std::optional<unsigned> index;
+  if (auto structTy = dyn_cast<hw::StructType>(nestedType))
+    index = structTy.getFieldIndex(getFieldAttr());
+  else if (auto unionTy = dyn_cast<hw::UnionType>(nestedType))
+    index = unionTy.getFieldIndex(getFieldAttr());
   assert(index.has_value());
   auto indexAttr = IntegerAttr::get(IndexType::get(getContext()), *index);
   auto it = subslots.find(indexAttr);
@@ -912,6 +916,67 @@ GetGlobalSignalOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (expType != actType)
     return emitOpError() << "returns a " << actType << " reference, but "
                          << getGlobalNameAttr() << " is of type " << expType;
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// CoroutineOp
+//===----------------------------------------------------------------------===//
+
+ParseResult CoroutineOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto buildFuncType =
+      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+         function_interface_impl::VariadicFlag,
+         std::string &) { return builder.getFunctionType(argTypes, results); };
+
+  return function_interface_impl::parseFunctionOp(
+      parser, result, /*allowVariadic=*/false,
+      getFunctionTypeAttrName(result.name), buildFuncType,
+      getArgAttrsAttrName(result.name), getResAttrsAttrName(result.name));
+}
+
+void CoroutineOp::print(OpAsmPrinter &p) {
+  function_interface_impl::printFunctionOp(
+      p, *this, /*isVariadic=*/false, getFunctionTypeAttrName(),
+      getArgAttrsAttrName(), getResAttrsAttrName());
+}
+
+//===----------------------------------------------------------------------===//
+// CallCoroutineOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+CallCoroutineOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto calleeName = getCalleeAttr();
+  auto coroutine =
+      symbolTable.lookupNearestSymbolFrom<CoroutineOp>(*this, calleeName);
+  if (!coroutine)
+    return emitOpError() << "'" << calleeName.getValue()
+                         << "' does not reference a valid 'llhd.coroutine'";
+
+  auto type = coroutine.getFunctionType();
+  if (type.getNumInputs() != getNumOperands())
+    return emitOpError() << "has " << getNumOperands()
+                         << " operands, but callee expects "
+                         << type.getNumInputs();
+
+  for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
+    if (getOperand(i).getType() != type.getInput(i))
+      return emitOpError() << "operand " << i << " type mismatch: expected "
+                           << type.getInput(i) << ", got "
+                           << getOperand(i).getType();
+
+  if (type.getNumResults() != getNumResults())
+    return emitOpError() << "has " << getNumResults()
+                         << " results, but callee returns "
+                         << type.getNumResults();
+
+  for (unsigned i = 0, e = type.getNumResults(); i != e; ++i)
+    if (getResult(i).getType() != type.getResult(i))
+      return emitOpError() << "result " << i << " type mismatch: expected "
+                           << type.getResult(i) << ", got "
+                           << getResult(i).getType();
 
   return success();
 }

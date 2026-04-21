@@ -16,6 +16,7 @@
 #include "circt/Dialect/Moore/MooreAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -250,6 +251,67 @@ void InstanceOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     name += portName.getValue();
     setNameFn(result, name);
   }
+}
+
+//===----------------------------------------------------------------------===//
+// CoroutineOp
+//===----------------------------------------------------------------------===//
+
+ParseResult CoroutineOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto buildFuncType =
+      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+         function_interface_impl::VariadicFlag,
+         std::string &) { return builder.getFunctionType(argTypes, results); };
+
+  return function_interface_impl::parseFunctionOp(
+      parser, result, /*allowVariadic=*/false,
+      getFunctionTypeAttrName(result.name), buildFuncType,
+      getArgAttrsAttrName(result.name), getResAttrsAttrName(result.name));
+}
+
+void CoroutineOp::print(OpAsmPrinter &p) {
+  function_interface_impl::printFunctionOp(
+      p, *this, /*isVariadic=*/false, getFunctionTypeAttrName(),
+      getArgAttrsAttrName(), getResAttrsAttrName());
+}
+
+//===----------------------------------------------------------------------===//
+// CallCoroutineOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+CallCoroutineOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto calleeName = getCalleeAttr();
+  auto coroutine =
+      symbolTable.lookupNearestSymbolFrom<CoroutineOp>(*this, calleeName);
+  if (!coroutine)
+    return emitOpError() << "'" << calleeName.getValue()
+                         << "' does not reference a valid 'moore.coroutine'";
+
+  auto type = coroutine.getFunctionType();
+  if (type.getNumInputs() != getNumOperands())
+    return emitOpError() << "has " << getNumOperands()
+                         << " operands, but callee expects "
+                         << type.getNumInputs();
+
+  for (unsigned i = 0, e = type.getNumInputs(); i != e; ++i)
+    if (getOperand(i).getType() != type.getInput(i))
+      return emitOpError() << "operand " << i << " type mismatch: expected "
+                           << type.getInput(i) << ", got "
+                           << getOperand(i).getType();
+
+  if (type.getNumResults() != getNumResults())
+    return emitOpError() << "has " << getNumResults()
+                         << " results, but callee returns "
+                         << type.getNumResults();
+
+  for (unsigned i = 0, e = type.getNumResults(); i != e; ++i)
+    if (getResult(i).getType() != type.getResult(i))
+      return emitOpError() << "result " << i << " type mismatch: expected "
+                           << type.getResult(i) << ", got "
+                           << getResult(i).getType();
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -500,7 +562,7 @@ LogicalResult AssignedVariableOp::canonicalize(AssignedVariableOp op,
   // Eliminate chained variables with the same name.
   // var(name, var(name, x)) -> var(name, x)
   if (auto otherOp = op.getInput().getDefiningOp<AssignedVariableOp>()) {
-    if (otherOp.getNameAttr() == op.getNameAttr()) {
+    if (otherOp != op && otherOp.getNameAttr() == op.getNameAttr()) {
       rewriter.replaceOp(op, otherOp);
       return success();
     }
@@ -679,6 +741,13 @@ void ConstantOp::build(OpBuilder &builder, OperationState &result, IntType type,
         APInt(type.getWidth(), (uint64_t)value, isSigned));
 }
 
+/// This builder constructs a 1-bit boolean constant in the specified domain.
+void ConstantOp::build(OpBuilder &builder, OperationState &result,
+                       Domain domain, bool value) {
+  auto type = IntType::get(builder.getContext(), 1, domain);
+  build(builder, result, type, value ? 1 : 0, /*isSigned=*/false);
+}
+
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   assert(adaptor.getOperands().empty() && "constant has no operands");
   return getValueAttr();
@@ -698,7 +767,7 @@ OpFoldResult ConstantTimeOp::fold(FoldAdaptor adaptor) {
 
 LogicalResult ConstantRealOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   ConstantRealOp::Adaptor adaptor(operands, attrs, properties);
   results.push_back(RealType::get(
@@ -713,7 +782,7 @@ LogicalResult ConstantRealOp::inferReturnTypes(
 
 LogicalResult ConcatOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Domain domain = Domain::TwoValued;
   unsigned width = 0;
@@ -733,7 +802,7 @@ LogicalResult ConcatOp::inferReturnTypes(
 
 LogicalResult ConcatRefOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Domain domain = Domain::TwoValued;
   unsigned width = 0;
@@ -1766,6 +1835,340 @@ LogicalResult DynQueueExtractOp::verify() {
   }
 
   return success();
+}
+
+LogicalResult QueueResizeOp::verify() {
+  if (cast<QueueType>(getInput().getType()).getElementType() !=
+      cast<QueueType>(getResult().getType()).getElementType())
+    return failure();
+
+  return success();
+}
+
+LogicalResult QueueFromUnpackedArrayOp::verify() {
+  // Verify the source and result have the same element type
+  auto queueElementType =
+      cast<QueueType>(getResult().getType()).getElementType();
+
+  auto arrayElementType =
+      cast<UnpackedArrayType>(getInput().getType()).getElementType();
+
+  if (queueElementType != arrayElementType) {
+    return emitOpError()
+           << "Queue element type doesn't match unpacked array element type";
+  }
+
+  return success();
+}
+
+LogicalResult QueueConcatOp::verify() {
+  // Verify the element types of all concatenated queues equal that of the
+  // result queue.
+  // We do not require the queue bounds to match.
+  auto resultElType = cast<QueueType>(getResult().getType()).getElementType();
+
+  for (Value input : getInputs()) {
+    auto inpElType = cast<QueueType>(input.getType()).getElementType();
+    if (inpElType != resultElType) {
+      return emitOpError() << "Queue element type " << inpElType
+                           << " doesn't match result element type "
+                           << resultElType;
+    }
+  }
+
+  return success();
+}
+
+void DPIFuncOp::build(OpBuilder &odsBuilder, OperationState &odsState,
+                      StringAttr symName, ArrayRef<DPIArgInfo> dpiArgs,
+                      ArrayAttr argumentLocs, StringAttr verilogName) {
+  auto *ctx = odsBuilder.getContext();
+  odsState.addAttribute(getSymNameAttrName(odsState.name), symName);
+
+  // Derive FunctionType, direction array, and name array from dpiArgs.
+  SmallVector<Type> inputTypes, resultTypes;
+  SmallVector<Attribute> dirAttrs, nameAttrs;
+  for (auto &arg : dpiArgs) {
+    dirAttrs.push_back(DPIArgDirectionAttr::get(ctx, arg.dir));
+    nameAttrs.push_back(arg.name);
+    if (isCallOperandDir(arg.dir))
+      inputTypes.push_back(arg.type);
+    if (arg.dir == DPIArgDirection::Out || arg.dir == DPIArgDirection::InOut ||
+        arg.dir == DPIArgDirection::Return)
+      resultTypes.push_back(arg.type);
+  }
+
+  odsState.addAttribute(
+      getFunctionTypeAttrName(odsState.name),
+      TypeAttr::get(FunctionType::get(ctx, inputTypes, resultTypes)));
+  odsState.addAttribute(getDpiArgDirsAttrName(odsState.name),
+                        odsBuilder.getArrayAttr(dirAttrs));
+  odsState.addAttribute(getDpiArgNamesAttrName(odsState.name),
+                        odsBuilder.getArrayAttr(nameAttrs));
+
+  if (argumentLocs)
+    odsState.addAttribute(getArgumentLocsAttrName(odsState.name), argumentLocs);
+  if (verilogName)
+    odsState.addAttribute(getVerilogNameAttrName(odsState.name), verilogName);
+  odsState.addRegion();
+}
+
+/// Helper: parse a DPI direction keyword.
+static std::optional<DPIArgDirection> parseDPIArgDirKeyword(StringRef keyword) {
+  return llvm::StringSwitch<std::optional<DPIArgDirection>>(keyword)
+      .Case("in", DPIArgDirection::In)
+      .Case("out", DPIArgDirection::Out)
+      .Case("inout", DPIArgDirection::InOut)
+      .Case("return", DPIArgDirection::Return)
+      .Default(std::nullopt);
+}
+
+/// Helper: stringify a DPI direction.
+static StringRef stringifyDPIArgDir(DPIArgDirection dir) {
+  switch (dir) {
+  case DPIArgDirection::In:
+    return "in";
+  case DPIArgDirection::Out:
+    return "out";
+  case DPIArgDirection::InOut:
+    return "inout";
+  case DPIArgDirection::Return:
+    return "return";
+  }
+  llvm_unreachable("unknown DPIArgDirection");
+}
+
+ParseResult DPIFuncOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto builder = parser.getBuilder();
+  auto ctx = builder.getContext();
+
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, result.attributes);
+
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  SmallVector<DPIArgDirection> argDirs;
+  SmallVector<StringAttr> argNames;
+  SmallVector<Type> argTypes;
+  SmallVector<Attribute> argLocs;
+  auto unknownLoc = builder.getUnknownLoc();
+  bool hasLocs = false;
+
+  auto parseOneArg = [&]() -> ParseResult {
+    StringRef dirKeyword;
+    auto keyLoc = parser.getCurrentLocation();
+    if (parser.parseKeyword(&dirKeyword))
+      return failure();
+    auto dir = parseDPIArgDirKeyword(dirKeyword);
+    if (!dir)
+      return parser.emitError(keyLoc,
+                              "expected DPI argument direction keyword");
+
+    // For input/inout args, parse SSA name; for output/return, bare name.
+    bool hasSSA = DPIFuncOp::isCallOperandDir(*dir);
+    std::string argName;
+    if (hasSSA) {
+      OpAsmParser::UnresolvedOperand ssaName;
+      if (parser.parseOperand(ssaName, /*allowResultNumber=*/false))
+        return failure();
+      argName = ssaName.name.substr(1).str();
+    } else {
+      if (parser.parseKeywordOrString(&argName))
+        return failure();
+    }
+
+    Type argType;
+    if (parser.parseColonType(argType))
+      return failure();
+
+    argDirs.push_back(*dir);
+    argNames.push_back(StringAttr::get(ctx, argName));
+    argTypes.push_back(argType);
+
+    std::optional<Location> maybeLoc;
+    if (failed(parser.parseOptionalLocationSpecifier(maybeLoc)))
+      return failure();
+    if (maybeLoc) {
+      argLocs.push_back(*maybeLoc);
+      hasLocs = true;
+    } else {
+      argLocs.push_back(unknownLoc);
+    }
+    return success();
+  };
+
+  if (parser.parseCommaSeparatedList(OpAsmParser::Delimiter::Paren, parseOneArg,
+                                     " in DPI argument list"))
+    return failure();
+
+  // Derive FunctionType from directions + types.
+  SmallVector<Type> inputTypes, resultTypes;
+  for (auto [dir, type] : llvm::zip(argDirs, argTypes)) {
+    if (DPIFuncOp::isCallOperandDir(dir))
+      inputTypes.push_back(type);
+    if (dir == DPIArgDirection::Out || dir == DPIArgDirection::InOut ||
+        dir == DPIArgDirection::Return)
+      resultTypes.push_back(type);
+  }
+  auto funcType = FunctionType::get(ctx, inputTypes, resultTypes);
+  result.addAttribute(DPIFuncOp::getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(funcType));
+
+  // Store directions.
+  SmallVector<Attribute> dirAttrs;
+  for (auto d : argDirs)
+    dirAttrs.push_back(DPIArgDirectionAttr::get(ctx, d));
+  result.addAttribute(DPIFuncOp::getDpiArgDirsAttrName(result.name),
+                      builder.getArrayAttr(dirAttrs));
+
+  // Store argument names.
+  SmallVector<Attribute> nameAttrs(argNames.begin(), argNames.end());
+  result.addAttribute(DPIFuncOp::getDpiArgNamesAttrName(result.name),
+                      builder.getArrayAttr(nameAttrs));
+
+  if (hasLocs)
+    result.addAttribute(DPIFuncOp::getArgumentLocsAttrName(result.name),
+                        builder.getArrayAttr(argLocs));
+  result.addRegion();
+
+  if (failed(parser.parseOptionalAttrDictWithKeyword(result.attributes)))
+    return failure();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DPIFuncOp FunctionOpInterface
+//===----------------------------------------------------------------------===//
+
+::mlir::Type DPIFuncOp::cloneTypeWith(::mlir::TypeRange inputs,
+                                      ::mlir::TypeRange results) {
+  return FunctionType::get(getContext(), inputs, results);
+}
+
+void DPIFuncOp::getDPIArgTypes(SmallVectorImpl<Type> &argTypes) {
+  auto funcType = getFunctionType();
+  auto inputs = funcType.getInputs();
+  auto results = funcType.getResults();
+  auto dirs = getDpiArgDirsAttr();
+  unsigned inputIdx = 0, resultIdx = 0;
+  for (auto dirAttr : dirs) {
+    auto dir = cast<DPIArgDirectionAttr>(dirAttr).getValue();
+    switch (dir) {
+    case DPIArgDirection::In:
+      argTypes.push_back(inputs[inputIdx++]);
+      break;
+    case DPIArgDirection::Out:
+      argTypes.push_back(results[resultIdx++]);
+      break;
+    case DPIArgDirection::InOut:
+      argTypes.push_back(inputs[inputIdx++]);
+      resultIdx++;
+      break;
+    case DPIArgDirection::Return:
+      argTypes.push_back(results[resultIdx++]);
+      break;
+    }
+  }
+}
+
+LogicalResult DPIFuncOp::verify() {
+  auto dirs = getDpiArgDirs();
+  auto names = getDpiArgNames();
+  if (dirs.size() != names.size())
+    return emitOpError("argument directions and names must have the same size");
+
+  // Check return constraints: at most one, must be last.
+  bool seenReturn = false;
+  for (auto [i, dirAttr] : llvm::enumerate(dirs)) {
+    auto dir = cast<DPIArgDirectionAttr>(dirAttr).getValue();
+    if (dir == DPIArgDirection::Return) {
+      if (seenReturn)
+        return emitOpError("'return' argument must be the last argument");
+      if (i != dirs.size() - 1)
+        return emitOpError("'return' argument must be the last argument");
+      seenReturn = true;
+    }
+  }
+  return success();
+}
+
+void DPIFuncOp::print(OpAsmPrinter &p) {
+  p << ' ';
+
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility = (*this)->getAttrOfType<StringAttr>(visibilityAttrName))
+    p << visibility.getValue() << ' ';
+  p.printSymbolName(getSymName());
+
+  auto dirs = getDpiArgDirs();
+  auto names = getDpiArgNames();
+  SmallVector<Type> argTypes;
+  getDPIArgTypes(argTypes);
+
+  p << '(';
+  llvm::interleaveComma(llvm::enumerate(dirs), p, [&](auto it) {
+    auto dir = cast<DPIArgDirectionAttr>(it.value()).getValue();
+    auto i = it.index();
+    auto name = cast<StringAttr>(names[i]).getValue();
+    auto type = argTypes[i];
+
+    p << stringifyDPIArgDir(dir) << ' ';
+
+    if (isCallOperandDir(dir))
+      p << '%';
+    p.printKeywordOrString(name);
+    p << " : ";
+    p.printType(type);
+
+    if (getArgumentLocs()) {
+      auto loc = cast<Location>(getArgumentLocsAttr()[i]);
+      if (loc != UnknownLoc::get(getContext()))
+        p.printOptionalLocationSpecifier(loc);
+    }
+  });
+  p << ')';
+
+  mlir::function_interface_impl::printFunctionAttributes(
+      p, *this,
+      {visibilityAttrName, getFunctionTypeAttrName(), getDpiArgDirsAttrName(),
+       getDpiArgNamesAttrName(), getArgumentLocsAttrName()});
+}
+
+LogicalResult
+FuncDPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp =
+      symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
+  if (!referencedOp)
+    return emitError("cannot find function declaration '")
+           << getCallee() << "'";
+  if (auto dpiFunc = dyn_cast<DPIFuncOp>(referencedOp)) {
+    auto funcType = cast<FunctionType>(dpiFunc.getFunctionType());
+    auto expectedInputs = funcType.getInputs();
+    auto expectedResults = funcType.getResults();
+    if (getInputs().size() != expectedInputs.size())
+      return emitError("expects ")
+             << expectedInputs.size() << " DPI operands, but got "
+             << getInputs().size();
+    if (getResults().size() != expectedResults.size())
+      return emitError("expects ")
+             << expectedResults.size() << " DPI results, but got "
+             << getResults().size();
+    for (auto [operand, expectedType] : llvm::zip(getInputs(), expectedInputs))
+      if (operand.getType() != expectedType)
+        return emitError("operand type mismatch: expected ")
+               << expectedType << ", but got " << operand.getType();
+    for (auto [result, expectedType] : llvm::zip(getResults(), expectedResults))
+      if (result.getType() != expectedType)
+        return emitError("result type mismatch: expected ")
+               << expectedType << ", but got " << result.getType();
+    return success();
+  }
+  if (isa<func::FuncOp>(referencedOp))
+    return success();
+  return emitError("callee must be 'moore.func.dpi' or 'func.func' but got '")
+         << referencedOp->getName() << "'";
 }
 
 //===----------------------------------------------------------------------===//

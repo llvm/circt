@@ -74,7 +74,7 @@ struct ObjectType {
 
   static StringRef getJSONTypeName() { return "object"; }
   StringRef getDescription() const { return description; }
-  ArrayRef<Parameter> getFields() const { return fields; }
+  ArrayRef<Parameter> getFields() const;
 };
 
 /// Annotation type - references another annotation definition as a member type.
@@ -124,6 +124,8 @@ struct Parameter {
         type);
   }
 };
+
+inline ArrayRef<Parameter> ObjectType::getFields() const { return fields; }
 
 //===----------------------------------------------------------------------===//
 // TargetTypeDef

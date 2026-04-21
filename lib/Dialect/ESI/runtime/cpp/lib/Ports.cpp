@@ -359,6 +359,18 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
 
     frames.push_back(std::move(frameInfo));
   }
+
+  // Set frameBytes from the lowered type's bit width. Fall back to the
+  // maximum computed frame expectedSize if the type system can't report width
+  // (e.g. opaque union types).
+  std::ptrdiff_t loweredBits = windowType->getLoweredType()->getBitWidth();
+  if (loweredBits > 0) {
+    frameBytes = (loweredBits + 7) / 8;
+  } else {
+    frameBytes = 0;
+    for (const auto &f : frames)
+      frameBytes = std::max(frameBytes, f.expectedSize);
+  }
 }
 
 bool ReadChannelPort::translateIncoming(MessageData &data) {
@@ -549,4 +561,23 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
       }
     }
   }
+}
+
+std::vector<MessageData>
+WriteChannelPort::getMessageFrames(const MessageData &data) {
+  size_t frameBytes = getFrameSizeBytes();
+  assert(frameBytes > 0 && "Frame size must be greater than 0");
+  if (data.getSize() % frameBytes != 0)
+    throw std::runtime_error(
+        "write message size (" + std::to_string(data.getSize()) +
+        ") is not a multiple of frame size (" + std::to_string(frameBytes) +
+        ") on type " + type->toString());
+  std::vector<MessageData> frames;
+  size_t numFrames = data.getSize() / frameBytes;
+  const uint8_t *ptr = data.getBytes();
+  for (size_t i = 0; i < numFrames; ++i) {
+    frames.emplace_back(ptr, frameBytes);
+    ptr += frameBytes;
+  }
+  return frames;
 }

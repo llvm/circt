@@ -102,3 +102,41 @@ hw.module @cyclic_muxes(in %clk : !seq.clock, in %rst : i1, out output : i1) {
     %mux2 = comb.mux %state, %mux1, %rst : i1
     hw.output %c0_i1 : i1
 }
+
+// -----
+
+hw.module @regs_without_reset(in %clk : !seq.clock) {
+    // expected-warning @below {{Assuming register with no reset starts with value 0}}
+    %state = seq.compreg name "state" %state, %clk : i1
+    // expected-warning @below {{Assuming register with no reset starts with value 0}}
+    %var = seq.compreg name "var" %state, %clk : i1
+}
+
+// -----
+
+// expected-warning @+2 {{reset signals detected and removed from FSM}}
+// expected-error @+1 {{Clock uses outside register clocking are not currently supported.}}
+hw.module @clock_use(in %clk : !seq.clock, in %rst : i1) {
+    %c0_i1 = hw.constant 0 : i1
+    %state = seq.compreg name "state" %state, %clk reset %rst, %c0_i1 : i1
+    %clk_as_i1 = seq.from_clock %clk
+    verif.assert %clk_as_i1 : i1
+}
+
+// -----
+
+hw.module @multiclock(in %clk : !seq.clock, in %clk2 : !seq.clock, in %rst : i1) {
+    %c0_i1 = hw.constant false
+    %state = seq.compreg name "state" %state, %clk reset %rst, %c0_i1 : i1
+    // expected-error @below {{All registers must have the same clock signal.}}
+    %var = seq.compreg name "var" %state, %clk2 reset %rst, %c0_i1 : i1
+}
+
+// -----
+
+hw.module @multireset(in %clk : !seq.clock, in %rst : i1, in %rst2 : i1) {
+    %c0_i1 = hw.constant false
+    %state = seq.compreg name "state" %state, %clk reset %rst, %c0_i1 : i1
+    // expected-error @below {{All registers must have the same reset signal.}}
+    %var = seq.compreg name "var" %state, %clk reset %rst2, %c0_i1 : i1
+}

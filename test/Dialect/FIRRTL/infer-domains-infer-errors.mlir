@@ -26,7 +26,7 @@ firrtl.circuit "MissingSecondDomain" {
 
   // expected-note @below {{in module "MissingSecondDomain"}}
   firrtl.module @MissingSecondDomain(
-    in %c : !firrtl.domain of @ClockDomain,
+    in %c : !firrtl.domain<@ClockDomain()>,
     // expected-error @below {{missing "PowerDomain" association for port "x"}}
     in %x : !firrtl.uint<1> domains [%c]
   ) {}
@@ -39,11 +39,11 @@ firrtl.circuit "MissingSecondDomain" {
 firrtl.circuit "IllegalDomainCrossing" {
   firrtl.domain @ClockDomain
   firrtl.module @IllegalDomainCrossing(
-    in %A: !firrtl.domain of @ClockDomain,
-    in %B: !firrtl.domain of @ClockDomain,
-    // expected-note @below {{2nd operand has domains: [ClockDomain: A]}}
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %B: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{2nd operand has domains: [A : ClockDomain]}}
     in %a: !firrtl.uint<1> domains [%A],
-    // expected-note @below {{1st operand has domains: [ClockDomain: B]}}
+    // expected-note @below {{1st operand has domains: [B : ClockDomain]}}
     out %b: !firrtl.uint<1> domains [%B]
   ) {
     // expected-error @below {{illegal domain crossing in operation}}

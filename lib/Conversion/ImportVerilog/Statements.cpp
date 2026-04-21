@@ -7,7 +7,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Moore/MooreOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/Diagnostics.h"
 #include "slang/ast/Compilation.h"
+#include "slang/ast/SemanticFacts.h"
+#include "slang/ast/Statement.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "llvm/ADT/ScopeExit.h"
 
@@ -148,9 +154,59 @@ struct StmtVisitor {
     return success();
   }
 
-  // Inline `begin ... end` blocks into the parent.
+  // Process slang BlockStatements. These comprise all standard `begin ... end`
+  // blocks as well as `fork ... join` constructs. Standard blocks can have
+  // their contents extracted directly, however fork-join blocks require special
+  // handling.
   LogicalResult visit(const slang::ast::BlockStatement &stmt) {
-    return context.convertStatement(stmt.body);
+    moore::JoinKind kind;
+    switch (stmt.blockKind) {
+    case slang::ast::StatementBlockKind::Sequential:
+      // Inline standard `begin ... end` blocks into the parent.
+      return context.convertStatement(stmt.body);
+    case slang::ast::StatementBlockKind::JoinAll:
+      kind = moore::JoinKind::Join;
+      break;
+    case slang::ast::StatementBlockKind::JoinAny:
+      kind = moore::JoinKind::JoinAny;
+      break;
+    case slang::ast::StatementBlockKind::JoinNone:
+      kind = moore::JoinKind::JoinNone;
+      break;
+    }
+
+    // Slang stores all threads of a fork-join block inside a `StatementList`.
+    // This cannot be visited normally due to the need to make each statement a
+    // separate thread so must be converted here.
+    auto *threadList = stmt.body.as_if<slang::ast::StatementList>();
+    unsigned int threadCount = threadList ? threadList->list.size() : 1;
+
+    auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threadCount);
+    OpBuilder::InsertionGuard guard(builder);
+
+    // When only a single statement is present, Slang does not create a
+    // `StatementList`.
+    if (!threadList) {
+      auto &tBlock = forkOp->getRegion(0).emplaceBlock();
+      builder.setInsertionPointToStart(&tBlock);
+      if (failed(context.convertStatement(stmt.body)))
+        return failure();
+      moore::CompleteOp::create(builder, loc);
+      return success();
+    }
+
+    int i = 0;
+    for (auto *thread : threadList->list) {
+      auto &tBlock = forkOp->getRegion(i).emplaceBlock();
+      builder.setInsertionPointToStart(&tBlock);
+      // Populate thread operator with thread body and finish with a thread
+      // terminator.
+      if (failed(context.convertStatement(*thread)))
+        return failure();
+      moore::CompleteOp::create(builder, loc);
+      i++;
+    }
+    return success();
   }
 
   // Handle expression statements.
@@ -168,13 +224,14 @@ struct StmtVisitor {
       }
 
       // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
-      // string" the first argument of $sformat is its output; the other
-      // arguments work like a FormatString.
+      // string" the first argument of $sformat/$swrite is its output; the
+      // other arguments work like a FormatString.
       // In Moore we only support writing to a location if it is a reference;
-      // However, Section 21.3.3 explains that the output of $sformat is
-      // assigned as if it were cast from a string literal (Section 5.9),
+      // However, Section 21.3.3 explains that the output of $sformat/$swrite
+      // is assigned as if it were cast from a string literal (Section 5.9),
       // so this implementation casts the string to the target value.
-      if (!call->getSubroutineName().compare("$sformat")) {
+      if (!call->getSubroutineName().compare("$sformat") ||
+          !call->getSubroutineName().compare("$swrite")) {
 
         // Use the first argument as the output location
         auto *lhsExpr = call->arguments().front();
@@ -241,6 +298,10 @@ struct StmtVisitor {
         builder.getStringAttr(var.name), initial);
     context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
                                          &var, varOp);
+    const auto &canonTy = var.getType().getCanonicalType();
+    if (const auto *vi = canonTy.as_if<slang::ast::VirtualInterfaceType>())
+      if (failed(context.registerVirtualInterfaceMembers(var, *vi, loc)))
+        return failure();
     return success();
   }
 
@@ -328,35 +389,47 @@ struct StmtVisitor {
       // specified by the user, and for the evaluation to stop as soon as the
       // first matching expression is encountered.
       for (const auto *expr : item.expressions) {
-        auto value = context.convertRvalueExpression(*expr);
-        if (!value)
-          return failure();
-        auto itemLoc = value.getLoc();
-
-        // Take note if the expression is a constant.
-        auto maybeConst = value;
-        while (isa_and_nonnull<moore::ConversionOp, moore::IntToLogicOp,
-                               moore::LogicToIntOp>(maybeConst.getDefiningOp()))
-          maybeConst = maybeConst.getDefiningOp()->getOperand(0);
-        if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
-          itemConsts.push_back(defOp.getValueAttr());
-
-        // Generate the appropriate equality operator.
         Value cond;
-        switch (caseStmt.condition) {
-        case CaseStatementCondition::Normal:
-          cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
-          break;
-        case CaseStatementCondition::WildcardXOrZ:
-          cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
-          break;
-        case CaseStatementCondition::WildcardJustZ:
-          cond = moore::CaseZEqOp::create(builder, itemLoc, caseExpr, value);
-          break;
-        case CaseStatementCondition::Inside:
-          mlir::emitError(loc, "unsupported set membership case statement");
-          return failure();
+        auto itemLoc = loc;
+
+        if (caseStmt.condition == CaseStatementCondition::Inside) {
+          // ConvertInsideCheck will check insideLhs whether it is empty or not.
+          cond = context.convertInsideCheck(
+              context.convertToSimpleBitVector(caseExpr), itemLoc, *expr);
+          if (!cond)
+            return failure();
+        } else {
+          auto value = context.convertRvalueExpression(*expr);
+          if (!value)
+            return failure();
+          itemLoc = value.getLoc();
+
+          // Take note if the expression is a constant.
+          auto maybeConst = value;
+          while (
+              isa_and_nonnull<moore::ConversionOp, moore::IntToLogicOp,
+                              moore::LogicToIntOp>(maybeConst.getDefiningOp()))
+            maybeConst = maybeConst.getDefiningOp()->getOperand(0);
+          if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
+            itemConsts.push_back(defOp.getValueAttr());
+
+          // Generate the appropriate equality operator.
+          switch (caseStmt.condition) {
+          case CaseStatementCondition::Normal:
+            cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
+            break;
+          case CaseStatementCondition::WildcardXOrZ:
+            cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
+            break;
+          case CaseStatementCondition::WildcardJustZ:
+            cond = moore::CaseZEqOp::create(builder, itemLoc, caseExpr, value);
+            break;
+          case CaseStatementCondition::Inside:
+            llvm_unreachable("Inside condition has been handled already");
+            break;
+          }
         }
+
         if (auto ty = dyn_cast<moore::IntType>(cond.getType());
             ty && ty.getDomain() == Domain::FourValued) {
           cond = moore::LogicToIntOp::create(builder, loc, cond);
@@ -523,7 +596,8 @@ struct StmtVisitor {
 
   // Handle `repeat` loops.
   LogicalResult visit(const slang::ast::RepeatLoopStatement &stmt) {
-    auto count = context.convertRvalueExpression(stmt.count);
+    auto intType = moore::IntType::getInt(context.getContext(), 32);
+    auto count = context.convertRvalueExpression(stmt.count, intType);
     if (!count)
       return failure();
 
@@ -666,6 +740,24 @@ struct StmtVisitor {
 
   // Handle return statements.
   LogicalResult visit(const slang::ast::ReturnStatement &stmt) {
+    Operation *parentOp = builder.getInsertionBlock()
+                              ? builder.getInsertionBlock()->getParentOp()
+                              : nullptr;
+    if (!parentOp)
+      return mlir::emitError(loc) << "return statement is not within an op";
+
+    if (isa<moore::CoroutineOp, moore::ProcedureOp>(parentOp)) {
+      if (stmt.expr)
+        return mlir::emitError(loc)
+               << "unsupported `return <expr>` in a procedure or task";
+      moore::ReturnOp::create(builder, loc);
+      setTerminated();
+      return success();
+    }
+
+    if (!isa<mlir::func::FuncOp>(parentOp))
+      return mlir::emitError(loc) << "unsupported return statement context";
+
     if (stmt.expr) {
       auto expr = context.convertRvalueExpression(*stmt.expr);
       if (!expr)
@@ -776,20 +868,39 @@ struct StmtVisitor {
     auto loc = context.convertLocation(stmt.sourceRange);
 
     // Check for a `disable iff` expression:
-    // The DisableIff construct can only occcur at the top level of an assertion
-    // and cannot be nested within properties.
-    // Hence we only need to detect if the top level assertion expression
-    // has type DisableIff, negate the `disable` expression, then pass it to
-    // the `enable` parameter of AssertOp/AssumeOp.
+    // `disable iff` can only appear at the outermost property that is asserted,
+    // and can never be nested.
+    // Hence we only need to detect if the top level assertion expression has
+    // type DisableIff. (or, if the top level expression is
+    // ClockingAssertionExpr, check for DisableIff inside that).
     Value enable;
     Value property;
+    // Find the outermost propertySpec that isn't ClockingAssertionExpr
+    const slang::ast::AssertionExpr *propertySpec;
+    const slang::ast::ClockingAssertionExpr *clocking =
+        stmt.propertySpec.as_if<slang::ast::ClockingAssertionExpr>();
+    if (clocking)
+      propertySpec = &(clocking->expr);
+    else
+      propertySpec = &(stmt.propertySpec);
+
     if (auto *disableIff =
-            stmt.propertySpec.as_if<slang::ast::DisableIffAssertionExpr>()) {
+            propertySpec->as_if<slang::ast::DisableIffAssertionExpr>()) {
+      // Lower disableIff by negating it and passing as the "enable" operand
+      // to the verif.assert/verif.assume instructions.
       auto disableCond = context.convertRvalueExpression(disableIff->condition);
       auto enableCond = moore::NotOp::create(builder, loc, disableCond);
 
       enable = context.convertToI1(enableCond);
-      property = context.convertAssertionExpression(disableIff->expr, loc);
+
+      // Add back the outer `ClockingAssertionExpr` if there is one.
+      if (clocking) {
+        auto clockingExpr = slang::ast::ClockingAssertionExpr(
+            clocking->clocking, disableIff->expr);
+        property = context.convertAssertionExpression(clockingExpr, loc);
+      } else {
+        property = context.convertAssertionExpression(disableIff->expr, loc);
+      }
     } else {
       property = context.convertAssertionExpression(stmt.propertySpec, loc);
     }
@@ -859,18 +970,20 @@ struct StmtVisitor {
   visitSystemCall(const slang::ast::ExpressionStatement &stmt,
                   const slang::ast::CallExpression &expr,
                   const slang::ast::CallExpression::SystemCallInfo &info) {
+    using ksn = slang::parsing::KnownSystemName;
     const auto &subroutine = *info.subroutine;
+    auto nameId = subroutine.knownNameId;
     auto args = expr.arguments();
 
     // Simulation Control Tasks
 
-    if (subroutine.name == "$stop") {
+    if (nameId == ksn::Stop) {
       createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
       moore::StopBIOp::create(builder, loc);
       return true;
     }
 
-    if (subroutine.name == "$finish") {
+    if (nameId == ksn::Finish) {
       createFinishMessage(args.size() >= 1 ? args[0] : nullptr);
       moore::FinishBIOp::create(builder, loc, 0);
       moore::UnreachableOp::create(builder, loc);
@@ -878,7 +991,7 @@ struct StmtVisitor {
       return true;
     }
 
-    if (subroutine.name == "$exit") {
+    if (nameId == ksn::Exit) {
       // Calls to `$exit` from outside a `program` are ignored. Since we don't
       // yet support programs, there is nothing to do here.
       // TODO: Fix this once we support programs.
@@ -887,29 +1000,47 @@ struct StmtVisitor {
 
     // Display and Write Tasks (`$display[boh]?` or `$write[boh]?`)
 
-    // Check for a `$display` or `$write` prefix.
-    bool isDisplay = false;     // display or write
-    bool appendNewline = false; // display
-    StringRef remainingName = subroutine.name;
-    if (remainingName.consume_front("$display")) {
+    using moore::IntFormat;
+    bool isDisplay = false;
+    bool appendNewline = false;
+    IntFormat defaultFormat = IntFormat::Decimal;
+    switch (nameId) {
+    case ksn::Display:
       isDisplay = true;
       appendNewline = true;
-    } else if (remainingName.consume_front("$write")) {
+      break;
+    case ksn::DisplayB:
       isDisplay = true;
-    }
-
-    // Check for optional `b`, `o`, or `h` suffix indicating default format.
-    using moore::IntFormat;
-    IntFormat defaultFormat = IntFormat::Decimal;
-    if (isDisplay && !remainingName.empty()) {
-      if (remainingName == "b")
-        defaultFormat = IntFormat::Binary;
-      else if (remainingName == "o")
-        defaultFormat = IntFormat::Octal;
-      else if (remainingName == "h")
-        defaultFormat = IntFormat::HexLower;
-      else
-        isDisplay = false;
+      appendNewline = true;
+      defaultFormat = IntFormat::Binary;
+      break;
+    case ksn::DisplayO:
+      isDisplay = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::Octal;
+      break;
+    case ksn::DisplayH:
+      isDisplay = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::HexLower;
+      break;
+    case ksn::Write:
+      isDisplay = true;
+      break;
+    case ksn::WriteB:
+      isDisplay = true;
+      defaultFormat = IntFormat::Binary;
+      break;
+    case ksn::WriteO:
+      isDisplay = true;
+      defaultFormat = IntFormat::Octal;
+      break;
+    case ksn::WriteH:
+      isDisplay = true;
+      defaultFormat = IntFormat::HexLower;
+      break;
+    default:
+      break;
     }
 
     if (isDisplay) {
@@ -926,13 +1057,13 @@ struct StmtVisitor {
     // Severity Tasks
     using moore::Severity;
     std::optional<Severity> severity;
-    if (subroutine.name == "$info")
+    if (nameId == ksn::Info)
       severity = Severity::Info;
-    else if (subroutine.name == "$warning")
+    else if (nameId == ksn::Warning)
       severity = Severity::Warning;
-    else if (subroutine.name == "$error")
+    else if (nameId == ksn::Error)
       severity = Severity::Error;
-    else if (subroutine.name == "$fatal")
+    else if (nameId == ksn::Fatal)
       severity = Severity::Fatal;
 
     if (severity) {
@@ -969,7 +1100,7 @@ struct StmtVisitor {
 
       // `delete` has two functions: If there is an index passed, then it
       // deletes that specific element, otherwise, it clears the entire queue.
-      if (subroutine.name == "delete") {
+      if (nameId == ksn::Delete) {
         if (args.size() == 1) {
           moore::QueueClearOp::create(builder, loc, queue);
           return true;
@@ -979,23 +1110,77 @@ struct StmtVisitor {
           moore::QueueDeleteOp::create(builder, loc, queue, index);
           return true;
         }
-      } else if (subroutine.name == "insert" && args.size() == 3) {
+      } else if (nameId == ksn::Insert && args.size() == 3) {
         auto index = context.convertRvalueExpression(*args[1]);
         auto item = context.convertRvalueExpression(*args[2]);
 
         moore::QueueInsertOp::create(builder, loc, queue, index, item);
         return true;
-      } else if (subroutine.name == "push_back" && args.size() == 2) {
+      } else if (nameId == ksn::PushBack && args.size() == 2) {
         auto item = context.convertRvalueExpression(*args[1]);
         moore::QueuePushBackOp::create(builder, loc, queue, item);
         return true;
-      } else if (subroutine.name == "push_front" && args.size() == 2) {
+      } else if (nameId == ksn::PushFront && args.size() == 2) {
         auto item = context.convertRvalueExpression(*args[1]);
         moore::QueuePushFrontOp::create(builder, loc, queue, item);
         return true;
       }
 
       return false;
+    }
+
+    // Associative array tasks
+    if (args.size() >= 1 && args[0]->type->isAssociativeArray()) {
+      auto assocArray = context.convertLvalueExpression(*args[0]);
+
+      // `delete` has two functions: If there is an index passed, then it
+      // deletes that specific element, otherwise, it clears the entire
+      // associative array.
+      if (nameId == ksn::Delete) {
+        if (args.size() == 1) {
+          moore::AssocArrayClearOp::create(builder, loc, assocArray);
+          return true;
+        }
+        if (args.size() == 2) {
+          auto index = context.convertRvalueExpression(*args[1]);
+          moore::AssocArrayDeleteOp::create(builder, loc, assocArray, index);
+          return true;
+        }
+      }
+    }
+
+    // Monitor enable/disable tasks (`$monitoron`, `$monitoroff`)
+    if (nameId == ksn::MonitorOn || nameId == ksn::MonitorOff) {
+      context.ensureMonitorGlobals();
+      bool enable = (nameId == ksn::MonitorOn);
+      auto enabledRef = moore::GetGlobalVariableOp::create(
+          context.builder, loc, context.monitorEnabledGlobal);
+      auto value = moore::ConstantOp::create(context.builder, loc,
+                                             moore::Domain::TwoValued, enable);
+      moore::BlockingAssignOp::create(context.builder, loc, enabledRef, value);
+      return true;
+    }
+
+    // Monitor tasks (`$monitor[boh]?`)
+    if (nameId == ksn::Monitor || nameId == ksn::MonitorB ||
+        nameId == ksn::MonitorO || nameId == ksn::MonitorH) {
+      context.ensureMonitorGlobals();
+
+      // Allocate a unique ID for this monitor.
+      unsigned myId = context.nextMonitorId++;
+
+      // Emit code to activate this monitor by setting the active_id global.
+      auto i32Type = moore::IntType::getInt(context.getContext(), 32);
+      auto idConst =
+          moore::ConstantOp::create(context.builder, loc, i32Type, myId);
+      auto activeRef = moore::GetGlobalVariableOp::create(
+          context.builder, loc, context.monitorActiveIdGlobal);
+      moore::BlockingAssignOp::create(context.builder, loc, activeRef, idConst);
+
+      // Queue this monitor for processing at module level.
+      context.pendingMonitors.push_back({myId, loc, &expr});
+
+      return true;
     }
 
     // Give up on any other system tasks. These will be tried again as an
@@ -1042,6 +1227,30 @@ struct StmtVisitor {
     return success();
   }
 
+  // Handle `wait` statements
+  LogicalResult visit(const slang::ast::WaitStatement &stmt) {
+    auto waitOp = moore::WaitLevelOp::create(builder, loc);
+    {
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(&waitOp.getBody().emplaceBlock());
+      auto cond = context.convertRvalueExpression(stmt.cond);
+      if (!cond)
+        return failure();
+      cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
+      moore::DetectLevelOp::create(builder, loc, cond);
+    }
+    // Handle optional post-wait operation as if it were a separate statement
+    if (failed(context.convertStatement(stmt.stmt)))
+      return failure();
+
+    return success();
+  }
+
+  LogicalResult visit(const slang::ast::WaitForkStatement &stmt) {
+    moore::WaitForkOp::create(builder, loc);
+    return success();
+  }
+
   /// Emit an error for all other statements.
   template <typename T>
   LogicalResult visit(T &&stmt) {
@@ -1064,3 +1273,124 @@ LogicalResult Context::convertStatement(const slang::ast::Statement &stmt) {
   return stmt.visit(StmtVisitor(*this, loc));
 }
 // NOLINTEND(misc-no-recursion)
+
+//===----------------------------------------------------------------------===//
+// Monitor support
+//===----------------------------------------------------------------------===//
+
+void Context::ensureMonitorGlobals() {
+  // If globals already exist, nothing to do.
+  if (monitorActiveIdGlobal && monitorEnabledGlobal)
+    return;
+
+  // Save current builder position and insert at the start of the module.
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(intoModuleOp.getBody());
+
+  auto loc = intoModuleOp.getLoc();
+  auto i32Type = moore::IntType::getInt(getContext(), 32);
+  auto i1Type = moore::IntType::getInt(getContext(), 1);
+
+  // Create "active_id" global variable. Index 0 indicates no monitor
+  // is active.
+  monitorActiveIdGlobal = moore::GlobalVariableOp::create(
+      builder, loc, "__monitor_active_id", i32Type);
+  {
+    OpBuilder::InsertionGuard initGuard(builder);
+    builder.setInsertionPointToStart(
+        &monitorActiveIdGlobal.getInitRegion().emplaceBlock());
+    auto zero = moore::ConstantOp::create(builder, loc, i32Type, 0);
+    moore::YieldOp::create(builder, loc, zero);
+  }
+  symbolTable.insert(monitorActiveIdGlobal);
+
+  // Create "enabled" global variable.
+  monitorEnabledGlobal = moore::GlobalVariableOp::create(
+      builder, loc, "__monitor_enabled", i1Type);
+  {
+    OpBuilder::InsertionGuard initGuard(builder);
+    builder.setInsertionPointToStart(
+        &monitorEnabledGlobal.getInitRegion().emplaceBlock());
+    auto trueVal =
+        moore::ConstantOp::create(builder, loc, moore::Domain::TwoValued, true);
+    moore::YieldOp::create(builder, loc, trueVal);
+  }
+  symbolTable.insert(monitorEnabledGlobal);
+}
+
+LogicalResult Context::flushPendingMonitors() {
+  using ksn = slang::parsing::KnownSystemName;
+  for (auto &pending : pendingMonitors) {
+    auto &call = *pending.call;
+    auto loc = pending.loc;
+
+    // Extract the SystemCallInfo from the call's subroutine variant.
+    auto &info =
+        std::get<slang::ast::CallExpression::SystemCallInfo>(call.subroutine);
+    auto nameId = info.subroutine->knownNameId;
+
+    // Determine the default format based on the system call name.
+    auto defaultFormat = moore::IntFormat::Decimal;
+    switch (nameId) {
+    case ksn::MonitorB:
+      defaultFormat = moore::IntFormat::Binary;
+      break;
+    case ksn::MonitorO:
+      defaultFormat = moore::IntFormat::Octal;
+      break;
+    case ksn::MonitorH:
+      defaultFormat = moore::IntFormat::HexLower;
+      break;
+    default:
+      break;
+    }
+
+    // Create an always_comb procedure for this monitor. This will implement the
+    // semantics of printing an updated message whenever one of the input
+    // signals changes.
+    auto alwaysProc = moore::ProcedureOp::create(
+        builder, loc, moore::ProcedureKind::AlwaysComb);
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(&alwaysProc.getBody().emplaceBlock());
+
+    // Convert the format string and arguments.
+    auto message = convertFormatString(call.arguments(), loc, defaultFormat,
+                                       /*appendNewline=*/true);
+    if (failed(message))
+      return failure();
+
+    // Check if this monitor is active and enabled.
+    auto i32Type = moore::IntType::getInt(getContext(), 32);
+    auto myId = moore::ConstantOp::create(builder, loc, i32Type, pending.id);
+    Value isActive =
+        moore::GetGlobalVariableOp::create(builder, loc, monitorActiveIdGlobal);
+    isActive = moore::ReadOp::create(builder, loc, isActive);
+    isActive = moore::EqOp::create(builder, loc, isActive, myId);
+
+    Value enabled =
+        moore::GetGlobalVariableOp::create(builder, loc, monitorEnabledGlobal);
+    enabled = moore::ReadOp::create(builder, loc, enabled);
+    enabled = moore::AndOp::create(builder, loc, isActive, enabled);
+    enabled = moore::ToBuiltinIntOp::create(builder, loc, enabled);
+
+    // Branch to a print or skip block based on whether the monitor is enabled
+    // or not.
+    auto &printBlock = alwaysProc.getBody().emplaceBlock();
+    auto &skipBlock = alwaysProc.getBody().emplaceBlock();
+    cf::CondBranchOp::create(builder, loc, enabled, &printBlock, &skipBlock);
+
+    // Display the formatted message if one was created, and the monitor is
+    // enabled.
+    builder.setInsertionPointToStart(&printBlock);
+    if (*message)
+      moore::DisplayBIOp::create(builder, loc, *message);
+    moore::ReturnOp::create(builder, loc);
+
+    // Otherwise just return.
+    builder.setInsertionPointToStart(&skipBlock);
+    moore::ReturnOp::create(builder, loc);
+  }
+
+  pendingMonitors.clear();
+  return success();
+}

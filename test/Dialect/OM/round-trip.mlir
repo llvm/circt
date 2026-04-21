@@ -184,6 +184,41 @@ om.class @StringConstant() -> (string: !om.string) {
   om.class.fields %0 : !om.string
 }
 
+// CHECK-LABEL: @StringConcat
+om.class @StringConcat() {
+  %0 = om.constant "Hello, " : !om.string
+  %1 = om.constant "World" : !om.string
+  %2 = om.constant "!" : !om.string
+
+  // CHECK: om.string.concat %0, %1, %2 : !om.string
+  %3 = om.string.concat %0, %1, %2 : !om.string
+
+  om.class.fields
+}
+
+// CHECK-LABEL: @PropEq
+om.class @PropEq() {
+  %0 = om.constant "hello" : !om.string
+  %1 = om.constant "world" : !om.string
+
+  // CHECK: om.prop.eq %0, %1 : !om.string
+  %2 = om.prop.eq %0, %1 : !om.string
+
+  %3 = om.constant #om.integer<1 : i8> : !om.integer
+  %4 = om.constant #om.integer<2 : i8> : !om.integer
+
+  // CHECK: om.prop.eq %3, %4 : !om.integer
+  %5 = om.prop.eq %3, %4 : !om.integer
+
+  %6 = om.constant true
+  %7 = om.constant false
+
+  // CHECK: om.prop.eq %6, %7 : i1
+  %8 = om.prop.eq %6, %7 : i1
+
+  om.class.fields
+}
+
 // CHECK-LABEL: @LinkedList
 // CHECK-SAME: -> (prev: !om.class.type<@LinkedList>)
 om.class @LinkedList(%prev: !om.class.type<@LinkedList>) -> (prev: !om.class.type<@LinkedList>) {
@@ -294,5 +329,12 @@ om.class @UnknownValue() {
   // CHECK-NEXT: %1 = om.object @UnknownValueObject(%0) : (i8) -> !om.class.type<@UnknownValueObject>
   %1 = om.object @UnknownValueObject(%0) : (i8) -> !om.class.type<@UnknownValueObject>
 
+  om.class.fields
+}
+
+// CHECK-LABEL: @PropertyAssert(
+om.class @PropertyAssert(%basepath: !om.basepath, %cond: i1) {
+  // CHECK: om.property_assert %cond, "invariant must hold" : i1
+  om.property_assert %cond, "invariant must hold" : i1
   om.class.fields
 }

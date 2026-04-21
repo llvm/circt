@@ -163,13 +163,6 @@ endmodule
 
 // -----
 function void foo;
-  int a[string];
-  // expected-error @below {{unsupported expression: element select into}}
-  a["foo"] = 1;
-endfunction
-
-// -----
-function void foo;
   struct packed { time t; } a;
   int b;
   // expected-error @below {{contains a time type}}
@@ -186,9 +179,77 @@ endfunction
 
 // -----
 module Foo;
+  logic a;
   string b;
-  // expected-error @below {{expected integer argument for system call `$past`}}
-  assert property ($past(b));
+  // expected-error @below {{expected integer argument for `$past`}}
+  assert property (@(posedge a) $past(b));
+endmodule
+
+// -----
+module Foo;
+  int a;
+  // expected-error @below {{sequence has no explicit clocking event and one cannot be inferred from context}}
+  assert property (a);
+endmodule
+
+// -----
+module Foo;
+  typedef enum { A, B, C } e;
+  e val;
+  initial begin
+    // expected-error @below {{unsupported system call `next`}}
+    val = val.next();
+  end
+endmodule
+
+// -----
+module Foo;
+  typedef enum { A, B, C } e;
+  e val;
+  initial begin
+    // expected-error @below {{unsupported system call `prev`}}
+    val = val.prev();
+  end
+endmodule
+
+// -----
+module Foo;
+  int inp[];
+  int tmp[];
+  initial begin
+    // expected-error @below {{unsupported system call `$size`}}
+    tmp = new[$size(inp)];
+  end
+endmodule
+
+// -----
+// Cross-module hierarchical references can produce null port values that must
+// not crash during instance creation. This is an error in the hierarchical
+// reference resolution code that actually needs fixing. This test guards
+// against a regression to this being a crash.
+module HierRefTop(input i, output o);
+  // expected-error @below {{unsupported port}}
+  HierRefA A();
+  HierRefB B();
+  assign A.i = i;
+  assign o = B.o;
+endmodule
+module HierRefA;
+  wire i, y;
+  assign B.x = !i;
+  assign y = !B.y;
+endmodule
+module HierRefB;
+  wire x, y, o;
+  assign y = x, o = A.y;
+endmodule
+
+// -----
+module Foo;
+  reg i;
+  wire o;
+  // expected-error @below {{unsupported delay with rise/fall/turn-off}}
+  assign #(1, 2) o = i;
 endmodule
 
 // -----
@@ -197,3 +258,100 @@ function Foo;
   // expected-error @below {{unsupported system call `$fwrite`}}
   $fwrite(32'h0, "%x", a);
 endfunction
+
+// -----
+module Foo;
+  string s;
+  byte b;
+  initial begin
+    // expected-error @below {{string index assignment not supported}}
+    s[0] = b;
+  end
+endmodule
+
+// -----
+interface Inner;
+  logic x;
+endinterface
+
+interface Outer;
+  Inner nested();
+  logic y;
+endinterface
+
+module UsesOuter;
+  // expected-error @below {{nested interface instances are not supported: `nested` inside `o`}}
+  Outer o();
+endmodule
+
+// -----
+module Foo;
+	int v = 1;
+
+  // expected-error @+2 {{cannot mix continuous and procedural assignments to variable 'v'}}
+  // expected-remark @-3 {{also assigned here}}
+	assign v = 12;
+endmodule
+
+// -----
+module Foo;
+	int v;
+
+  // expected-error @+3 {{cannot have multiple continuous assignments to variable 'v'}}
+  // expected-remark @below {{also assigned here}}
+	assign v = 12;
+	assign v = 13;
+endmodule
+
+// -----
+module Foo;
+	wire clk = 0;
+	int v;
+
+  // expected-error @+3 {{cannot mix continuous and procedural assignments to variable 'v'}}
+  // expected-remark @below {{also assigned here}}
+	assign v = 12;
+	always @(posedge clk) v <= ~v;
+endmodule
+
+// -----
+module Foo;
+	wire clk = 0;
+	int v;
+
+  // expected-error @+3 {{cannot mix continuous and procedural assignments to variable 'v'}}
+  // expected-remark @below {{also assigned here}}
+	always @(posedge clk) v <= ~v;
+	assign v = 12;
+endmodule
+
+// -----
+module Foo;
+  logic a;
+
+  // expected-error @below {{'always' procedure does not advance time and so will create a simulation deadlock}}
+  always a = ~a;
+endmodule
+
+// -----
+
+module drive_strength_prim;
+    logic A, B, Q;
+    // expected-error @below {{primitive instances with explicit drive strengths are not supported.}}
+    and (pull0, strong1) a (Q, A, B);
+endmodule
+
+// -----
+
+module delay_prim;
+    logic A, B, Q;
+    // expected-error @below {{primitive instances with delays are not yet supported.}}
+    and #(5) a (Q, A, B);
+endmodule
+
+// -----
+
+module unsupported_prim(inout A, inout B);
+    // expected-error @below {{unsupported instance of primitive `tran`}}
+    tran u1 (A, B);
+endmodule

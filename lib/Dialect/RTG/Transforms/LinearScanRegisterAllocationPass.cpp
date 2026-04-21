@@ -15,6 +15,7 @@
 #include "circt/Dialect/RTG/IR/RTGOps.h"
 #include "circt/Dialect/RTG/Transforms/RTGPasses.h"
 #include "circt/Support/UnusedOpPruner.h"
+#include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Debug.h"
 
 #include <variant>
@@ -442,6 +443,23 @@ static RegisterAllocationResult isRegisterAvailable(
   return RegisterAllocationResult::available();
 }
 
+namespace {
+/// Helper struct to accumulate diagnostic messages for register allocation
+/// failures. Uses composition with a temporary stream to avoid issues with
+/// non-copyable base classes.
+struct DiagnosticNote {
+  DiagnosticNote(Location loc) : loc(loc) {}
+
+  DiagnosticNote &operator<<(StringRef str) {
+    message += str.str();
+    return *this;
+  }
+
+  Location loc;
+  SmallString<128> message;
+};
+} // namespace
+
 /// Finds an available register for the given virtual register from its
 /// allowed register set. Returns an empty RegisterAttrInterface on failure.
 static rtg::RegisterAttrInterface findAvailableRegister(
@@ -454,14 +472,8 @@ static rtg::RegisterAttrInterface findAvailableRegister(
   LLVM_DEBUG(llvm::dbgs() << "  Allowed registers: "
                           << configAttr.getAllowedRegs().size() << "\n");
 
-  // Start a diagnostic, if we find a register, this diagnostic will be
-  // discarded.
-  auto diag = virtualReg.emitError(
-      "no register available for allocation within constraints");
-  if (auto *startOp = cache.indexToOp.lookup(liveRange.start))
-    diag.attachNote(startOp->getLoc()) << "live range starts here";
-  if (auto *endOp = cache.indexToOp.lookup(liveRange.end))
-    diag.attachNote(endOp->getLoc()) << "live range ends here";
+  // Track diagnostic notes to emit only if we fail to find a register.
+  SmallVector<DiagnosticNote> diagnosticNotes;
 
   // Try all registers allowed by the virtual register configuration in
   // decreasing order of preference.
@@ -472,24 +484,32 @@ static rtg::RegisterAttrInterface findAvailableRegister(
     switch (res.getKind()) {
     case RegisterAllocationResult::Kind::Available:
       // If we found a valid register, use it without trying any other.
-      diag.abandon();
       return reg;
     case RegisterAllocationResult::Kind::InUse:
-      diag.attachNote(res.getUser().loc)
+      diagnosticNotes.emplace_back(res.getUser().loc)
           << "cannot choose '" << reg.getRegisterAssembly()
           << "' because of overlapping live-range with this register";
       continue;
     case RegisterAllocationResult::Kind::ConstraintViolation:
-      diag.attachNote(res.getConstraint().getLoc())
+      diagnosticNotes.emplace_back(res.getConstraint().getLoc())
           << "constraint would be violated when choosing '"
           << reg.getRegisterAssembly() << "'";
       continue;
     case RegisterAllocationResult::Kind::FatalError:
-      // Abandon since fatal errors are already reported when the error happend.
-      diag.abandon();
+      // Fatal errors are already reported when the error happened.
       return {};
     }
   }
+
+  // No register was found, emit all accumulated diagnostics.
+  auto diag = virtualReg.emitError(
+      "no register available for allocation within constraints");
+  if (auto *startOp = cache.indexToOp.lookup(liveRange.start))
+    diag.attachNote(startOp->getLoc()) << "live range starts here";
+  if (auto *endOp = cache.indexToOp.lookup(liveRange.end))
+    diag.attachNote(endOp->getLoc()) << "live range ends here";
+  for (const auto &note : diagnosticNotes)
+    diag.attachNote(note.loc) << note.message;
 
   return {};
 }

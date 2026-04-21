@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 #define CIRCT_DIALECT_FIRRTL_FIRRTLUTILS_H
 
+#include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "mlir/IR/BuiltinOps.h"
 
@@ -72,6 +73,22 @@ public:
 private:
   ImplicitLocOpBuilder &builder;
   SmallDenseMap<Type, Value, 8> cache;
+};
+
+// Instance choice option case macro name utilities.
+class InstanceChoiceMacroTable {
+public:
+  InstanceChoiceMacroTable(Operation *op);
+
+  // Get the macro for an option case. Return null if it doesn't exist.
+  FlatSymbolRefAttr getMacro(StringAttr optionName, StringAttr caseName) const;
+
+  // Get all option/case pairs in the IR occurrence order.
+  auto getKeys() const { return cache.keys(); }
+
+private:
+  // Option/Case -> Macro Symbol
+  llvm::MapVector<std::pair<StringAttr, StringAttr>, FlatSymbolRefAttr> cache;
 };
 
 //===----------------------------------------------------------------------===//

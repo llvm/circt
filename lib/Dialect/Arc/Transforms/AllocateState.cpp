@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Arc/ArcConstants.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -13,10 +14,6 @@
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "arc-allocate-state"
-
-// Offset for model state allocations. The first bytes of model storage are
-// reserved for the model header (currently just the i64 simulation time).
-static constexpr unsigned kStateOffset = 8;
 
 namespace circt {
 namespace arc {

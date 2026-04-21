@@ -345,3 +345,81 @@ hw.module @SnoopFIFOWithInstanceConsumer(in %in_data: i32, in %in_empty: i1, out
 // HW:         [[XACT:%.+]] = comb.and [[NOT_EMPTY]], %fifo_passthrough.chan_in_rden : i1
 // HW:         %fifo_passthrough.chan_in_rden, %fifo_passthrough.chan_out, %fifo_passthrough.chan_out_empty, %fifo_passthrough.snoop_xact, %fifo_passthrough.snoop_data = hw.instance "fifo_passthrough" @SnoopFIFOPassthrough(chan_in: %in_data: i32, chan_in_empty: %in_empty: i1, chan_out_rden: %out_rden: i1) -> (chan_in_rden: i1, chan_out: i32, chan_out_empty: i1, snoop_xact: i1, snoop_data: i32)
 // HW:         hw.output %fifo_passthrough.chan_out, %fifo_passthrough.chan_out_empty, [[XACT]], %in_data : i32, i1, i1, i32
+
+//===----------------------------------------------------------------------===//
+// ValidOnly signaling tests
+//===----------------------------------------------------------------------===//
+
+// --- lower-esi-ports: ValidOnly loopback gets data+valid ports (no ready) ---
+// IFACE-LABEL:  hw.module @voLoopback(in %in : i3, in %in_valid : i1, out out : i3, out out_valid : i1)
+// IFACE-NEXT:     %0 = esi.wrap.vo %in, %in_valid : i3
+// IFACE-NEXT:     %rawOutput, %valid = esi.unwrap.vo %0 : !esi.channel<i3, ValidOnly>
+// IFACE-NEXT:     hw.output %rawOutput, %valid : i3, i1
+// HW-LABEL:     hw.module @voLoopback(in %in : i3, in %in_valid : i1, out out : i3, out out_valid : i1)
+// HW-NEXT:        hw.output %in, %in_valid : i3, i1
+hw.module @voLoopback(in %in: !esi.channel<i3, ValidOnly>, out out: !esi.channel<i3, ValidOnly>) {
+  hw.output %in : !esi.channel<i3, ValidOnly>
+}
+
+// IFACE-LABEL:  hw.module @voLoopbackTop()
+// IFACE-NEXT:     %rawOutput, %valid = esi.unwrap.vo %0 : !esi.channel<i3, ValidOnly>
+// IFACE-NEXT:     %0 = esi.wrap.vo %foo.out, %foo.out_valid : i3
+// IFACE-NEXT:     %foo.out, %foo.out_valid = hw.instance "foo" @voLoopback(in: %rawOutput: i3, in_valid: %valid: i1) -> (out: i3, out_valid: i1)
+// HW-LABEL:     hw.module @voLoopbackTop()
+// HW-NEXT:        %foo.out, %foo.out_valid = hw.instance "foo" @voLoopback(in: %foo.out: i3, in_valid: %foo.out_valid: i1) -> (out: i3, out_valid: i1)
+hw.module @voLoopbackTop() {
+  %chan = hw.instance "foo" @voLoopback(in: %chan: !esi.channel<i3, ValidOnly>) -> (out: !esi.channel<i3, ValidOnly>)
+}
+
+// --- lower-esi-to-physical: ValidOnly buffer conversion ---
+// The physical pass converts ValidOnly channels to/from ValidReady at buffer
+// boundaries since pipeline stages use ValidReady internally.
+// CHECK-LABEL:  hw.module @voBufferConversion(in %clk : !seq.clock, in %rst : i1) {
+// CHECK:          %rawOutput, %valid = esi.unwrap.vr %{{.+}}, %true : i4
+// CHECK:          %{{.+}} = esi.wrap.vo %rawOutput, %valid : i4
+// CHECK:          %rawOutput_{{.+}}, %valid_{{.+}} = esi.unwrap.vo %{{.+}} : !esi.channel<i4, ValidOnly>
+// CHECK:          %chanOutput{{.*}}, %ready{{.*}} = esi.wrap.vr %rawOutput_{{.+}}, %valid_{{.+}} : i4
+hw.module @voBufferConversion(in %clk: !seq.clock, in %rst:i1) {
+  %intsVO = esi.buffer %clk, %rst, %intsVR : !esi.channel<i4> -> !esi.channel<i4, ValidOnly>
+  %intsVR = esi.buffer %clk, %rst, %intsVO : !esi.channel<i4, ValidOnly> -> !esi.channel<i4>
+}
+
+// --- Full HW lowering: ValidOnly add11 (wrap/unwrap elimination) ---
+// HW-LABEL: hw.module @voAdd11(in %clk : !seq.clock, in %ints : i32, in %ints_valid : i1, out mutatedInts : i32, out mutatedInts_valid : i1) {
+// HW:   %c11_i32 = hw.constant 11
+// HW:   [[RES0:%.+]] = comb.add %ints, %c11_i32
+// HW:   hw.output [[RES0]], %ints_valid : i32, i1
+hw.module @voAdd11(in %clk: !seq.clock, in %ints: !esi.channel<i32, ValidOnly>, out mutatedInts: !esi.channel<i32, ValidOnly>) {
+  %i, %i_valid = esi.unwrap.vo %ints : !esi.channel<i32, ValidOnly>
+  %c11 = hw.constant 11 : i32
+  %m = comb.add %c11, %i : i32
+  %mutInts = esi.wrap.vo %m, %i_valid : i32
+  hw.output %mutInts : !esi.channel<i32, ValidOnly>
+}
+
+// --- Full HW lowering: ValidOnly null source ---
+hw.module @voNullRcvr(in %in: !esi.channel<i4, ValidOnly>) {}
+// HW-LABEL:   hw.module @voNullTest
+// HW:           %false = hw.constant false
+// HW:           [[ZERO:%.+]] = hw.bitcast %c0_i4 : (i4) -> i4
+// HW:           hw.instance "nullRcvr" @voNullRcvr(in: [[ZERO]]: i4, in_valid: %false: i1)
+hw.module @voNullTest(in %clk: !seq.clock, in %rst:i1) {
+  %nullBit = esi.null : !esi.channel<i4, ValidOnly>
+  hw.instance "nullRcvr" @voNullRcvr(in: %nullBit: !esi.channel<i4, ValidOnly>) -> ()
+}
+
+// --- Full HW lowering: ValidOnly snoop.xact (transaction = valid) ---
+// HW-LABEL: hw.module @voSnoopXact(in %input : i32, in %input_valid : i1, out output : i32, out output_valid : i1, out xact : i1) {
+// HW-NEXT:    hw.output %input, %input_valid, %input_valid : i32, i1, i1
+hw.module @voSnoopXact(in %input: !esi.channel<i32, ValidOnly>, out output: !esi.channel<i32, ValidOnly>, out xact: i1) {
+  %tx_xact, %tx_data = esi.snoop.xact %input : !esi.channel<i32, ValidOnly>
+  hw.output %input, %tx_xact : !esi.channel<i32, ValidOnly>, i1
+}
+
+// --- Full HW lowering: ValidOnly snoop.xact at module boundary ---
+hw.module @voSnoopXactPassthrough(in %chan_in: !esi.channel<i32, ValidOnly>, out chan_out: !esi.channel<i32, ValidOnly>, out snoop_xact: i1, out snoop_data: i32) {
+  %transaction, %data = esi.snoop.xact %chan_in : !esi.channel<i32, ValidOnly>
+  hw.output %chan_in, %transaction, %data : !esi.channel<i32, ValidOnly>, i1, i32
+}
+// HW-LABEL: hw.module @voSnoopXactPassthrough(in %chan_in : i32, in %chan_in_valid : i1, out chan_out : i32, out chan_out_valid : i1, out snoop_xact : i1, out snoop_data : i32) {
+// HW-NEXT:    hw.output %chan_in, %chan_in_valid, %chan_in_valid, %chan_in : i32, i1, i1, i32

@@ -644,7 +644,9 @@ firrtl.circuit "Foo" {
                             out %double : !firrtl.double,
                             out %path : !firrtl.path,
                             out %list : !firrtl.list<list<string>>,
-                            out %unknownString : !firrtl.string) {
+                            out %unknownString : !firrtl.string,
+                            out %stringcat : !firrtl.string,
+                            out %stringeq : !firrtl.bool) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
@@ -673,9 +675,19 @@ firrtl.circuit "Foo" {
     %strings_and_empty = firrtl.list.create %strings, %empty : !firrtl.list<list<string>>
     firrtl.propassign %list, %strings_and_empty : !firrtl.list<list<string>>
 
-    // CHECK: propassign unknownString, Unknown : String
+    // CHECK: propassign unknownString, Unknown(String)
     %2 = firrtl.unknown : !firrtl.string
     firrtl.propassign %unknownString, %2 : !firrtl.string
+
+    // CHECK: propassign stringcat, string_concat(String("hello"), String("world"))
+    %str0 = firrtl.string "hello"
+    %str1 = firrtl.string "world"
+    %strcat = firrtl.string.concat %str0, %str1 : !firrtl.string
+    firrtl.propassign %stringcat, %strcat : !firrtl.string
+
+    // CHECK: propassign stringeq, prop_eq(String("hello"), String("world"))
+    %streq = firrtl.prop.eq %str0, %str1 : !firrtl.string
+    firrtl.propassign %stringeq, %streq : !firrtl.bool
   }
 
   // Test optional group declaration and definition emission.
@@ -994,8 +1006,8 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:     input I : Domain of PowerDomain
   // CHECK-NEXT:     output O : Domain of PowerDomain
   firrtl.extmodule @ExtModuleWithDomains(
-    in  I: !firrtl.domain of @PowerDomain,
-    out O: !firrtl.domain of @PowerDomain
+    in  I: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>,
+    out O: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
   )
 
   // CHECK-LABEL: module Domains :
@@ -1008,47 +1020,85 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: input ab : UInt<1> domains [A, B]
     // CHECK-NEXT: input c : UInt<1> domains [C]
     // CHECK-NEXT: input C : Domain of ClockDomain
-    in %A: !firrtl.domain of @ClockDomain,
-    in %B: !firrtl.domain of @ClockDomain,
-    in %I: !firrtl.domain of @PowerDomain,
-    out %O: !firrtl.domain of @PowerDomain,
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %B: !firrtl.domain<@ClockDomain()>,
+    in %I: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>,
+    out %O: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>,
     in %a: !firrtl.uint<1> domains [%A],
     in %ab: !firrtl.uint<1> domains [%A, %B],
     in %c: !firrtl.uint<1> domains [%C],
-    in %C: !firrtl.domain of @ClockDomain
+    in %C: !firrtl.domain<@ClockDomain()>
   ) {
     // CHECK: node noDomains = unsafe_domain_cast(a)
     %0 = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
     %noDomains = firrtl.node %0 : !firrtl.uint<1>
     // CHECK-NEXT: node oneDomain = unsafe_domain_cast(a, A)
-    %1 = firrtl.unsafe_domain_cast %a domains %A : !firrtl.uint<1>
+    %1 = firrtl.unsafe_domain_cast %a domains[%A] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
     %oneDomain = firrtl.node %1 : !firrtl.uint<1>
     // CHECK-NEXT: node twoDomains = unsafe_domain_cast(a, A, B)
-    %2 = firrtl.unsafe_domain_cast %a domains %A, %B : !firrtl.uint<1>
+    %2 = firrtl.unsafe_domain_cast %a domains[%A, %B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@ClockDomain()>]
     %twoDomains = firrtl.node %2 : !firrtl.uint<1>
 
     // CHECK-NEXT: inst ext of ExtModuleWithDomains
-    %ext_I, %ext_O = firrtl.instance ext @ExtModuleWithDomains(in I: !firrtl.domain of @PowerDomain, out O: !firrtl.domain of @PowerDomain)
+    %ext_I, %ext_O = firrtl.instance ext @ExtModuleWithDomains(in I: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>, out O: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>)
     // CHECK-NEXT: domain_define ext.I = I
-    firrtl.domain.define %ext_I, %I
+    firrtl.domain.define %ext_I, %I : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
     // CHECK-NEXT: domain_define O = ext.O
-    firrtl.domain.define %O, %ext_O
+    firrtl.domain.define %O, %ext_O : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
   }
 
   // Test that anonymous domain create ops and their defines are elided.
   firrtl.extmodule @AnonymousDomains_Foo(
-    in A: !firrtl.domain of @ClockDomain
+    in A: !firrtl.domain<@ClockDomain()>
   )
   // CHECK-LABEL: module AnonymousDomains :
   firrtl.module @AnonymousDomains() {
     // CHECK-NEXT: inst foo of AnonymousDomains_Foo
-    %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+    %0 = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
     %foo_A = firrtl.instance foo @AnonymousDomains_Foo(
-      in A: !firrtl.domain of @ClockDomain
+      in A: !firrtl.domain<@ClockDomain()>
     )
-    firrtl.domain.define %foo_A, %0
+    firrtl.domain.define %foo_A, %0 : !firrtl.domain<@ClockDomain()>
     // CHECK-NEXT: wire end : UInt<1>
     %end = firrtl.wire : !firrtl.uint<1>
+  }
+
+  // Test that named domain create ops and domain subfield are emitted.
+  firrtl.extmodule @NamedDomains_Foo(
+    in A: !firrtl.domain<@ClockDomain()>
+  )
+  // CHECK-LABEL: module NamedDomains :
+  firrtl.module @NamedDomains(
+    // CHECK-NEXT: output n : String
+    // CHECK-NEXT: output v : Integer
+    // CHECK-NEXT: output a : Bool
+    out %n: !firrtl.string,
+    out %v: !firrtl.integer,
+    out %a: !firrtl.bool
+  ) {
+    // CHECK-NEXT: {{^$}}
+    // CHECK-NEXT: domain my_clock of ClockDomain
+    %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    %0 = firrtl.string "a"
+    %1 = firrtl.integer 1
+    %2 = firrtl.bool true
+    // CHECK-NEXT: domain p of PowerDomain(String("a"), Integer(1), Bool(true))
+    %p = firrtl.domain.create(%0, %1, %2) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    // CHECK-NEXT: propassign n, p.name
+    %p_name = firrtl.domain.subfield %p[name] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    firrtl.propassign %n, %p_name : !firrtl.string
+    // CHECK-NEXT: propassign v, p.voltage
+    %p_voltage = firrtl.domain.subfield %p[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    firrtl.propassign %v, %p_voltage : !firrtl.integer
+    // CHECK-NEXT: propassign a, p.alwaysOn
+    %p_alwaysOn = firrtl.domain.subfield %p[alwaysOn] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    firrtl.propassign %a, %p_alwaysOn : !firrtl.bool
+    // CHECK-NEXT: inst foo of NamedDomains_Foo
+    %foo_A = firrtl.instance foo @NamedDomains_Foo(
+      in A: !firrtl.domain<@ClockDomain()>
+    )
+    // CHECK-NEXT: domain_define foo.A = my_clock
+    firrtl.domain.define %foo_A, %my_clock : !firrtl.domain<@ClockDomain()>
   }
 
 }

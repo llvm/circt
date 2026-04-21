@@ -274,7 +274,7 @@ struct SextCompress : public OpRewritePattern<CompressOp> {
       auto signBit = comb::ExtractOp::create(rewriter, op.getLoc(), sextInput,
                                              baseWidth - 1, 1);
       auto invSign =
-          comb::createOrFoldNot(op.getLoc(), signBit, rewriter, true);
+          comb::createOrFoldNot(rewriter, op.getLoc(), signBit, true);
       // {~x[p-1], x[p-2:0]}
       auto newOp = comb::ConcatOp::create(rewriter, op.getLoc(),
                                           ValueRange{invSign, base});
@@ -522,7 +522,7 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     auto lhsSignAndRhs =
         comb::AndOp::create(rewriter, op.getLoc(), lhsSignReplicate, rhsBase);
     auto lhsSignCorrection =
-        comb::createOrFoldNot(op.getLoc(), lhsSignAndRhs, rewriter, true);
+        comb::createOrFoldNot(rewriter, op.getLoc(), lhsSignAndRhs, true);
 
     // zext({lhsSignCorrection, lhsBaseWidth{1'b0}})
     auto alignLhsSignCorrection = zeroPad(
@@ -534,7 +534,7 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     auto rhsSignAndLhs =
         comb::AndOp::create(rewriter, op.getLoc(), rhsSignReplicate, lhsBase);
     auto rhsSignCorrection =
-        comb::createOrFoldNot(op.getLoc(), rhsSignAndLhs, rewriter, true);
+        comb::createOrFoldNot(rewriter, op.getLoc(), rhsSignAndLhs, true);
 
     // zext({rhsSignCorrection, rhsBaseWidth{1'b0}})
     auto alignRhsSignCorrection = zeroPad(

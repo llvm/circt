@@ -7,7 +7,7 @@
 import sys
 
 from pycde import generator, Clock, Module, Reset, System
-from pycde.bsp import get_bsp
+from esiaccel.bsp import get_bsp
 from pycde.common import InputChannel, OutputChannel, Output
 from pycde.types import Bits, UInt
 from pycde import esi

@@ -162,33 +162,6 @@ static Value castFromFIRRTLType(Value val, Type type,
   return val;
 }
 
-/// Move a ExtractTestCode related annotation from annotations to an attribute.
-static void moveVerifAnno(ModuleOp top, AnnotationSet &annos,
-                          StringRef annoClass, StringRef attrBase) {
-  auto anno = annos.getAnnotation(annoClass);
-  auto *ctx = top.getContext();
-  if (!anno)
-    return;
-  if (auto dir = anno.getMember<StringAttr>("directory")) {
-    SmallVector<NamedAttribute> old;
-    for (auto i : top->getAttrs())
-      old.push_back(i);
-    old.emplace_back(
-        StringAttr::get(ctx, attrBase),
-        hw::OutputFileAttr::getAsDirectory(ctx, dir.getValue(), true, true));
-    top->setAttrs(old);
-  }
-  if (auto file = anno.getMember<StringAttr>("filename")) {
-    SmallVector<NamedAttribute> old;
-    for (auto i : top->getAttrs())
-      old.push_back(i);
-    old.emplace_back(StringAttr::get(ctx, attrBase + ".bindfile"),
-                     hw::OutputFileAttr::getFromFilename(
-                         ctx, file.getValue(), /*excludeFromFileList=*/true));
-    top->setAttrs(old);
-  }
-}
-
 static unsigned getBitWidthFromVectorSize(unsigned size) {
   return size == 1 ? 1 : llvm::Log2_64_Ceil(size);
 }
@@ -250,11 +223,14 @@ struct CircuitLoweringState {
   std::atomic<bool> usedFileDescriptorLib{false};
 
   CircuitLoweringState(CircuitOp circuitOp, bool enableAnnotationWarning,
+                       bool lowerToCore,
                        firrtl::VerificationFlavor verificationFlavor,
-                       InstanceGraph &instanceGraph, NLATable *nlaTable)
+                       InstanceGraph &instanceGraph, NLATable *nlaTable,
+                       const InstanceChoiceMacroTable &macroTable)
       : circuitOp(circuitOp), instanceGraph(instanceGraph),
         enableAnnotationWarning(enableAnnotationWarning),
-        verificationFlavor(verificationFlavor), nlaTable(nlaTable) {
+        lowerToCore(lowerToCore), verificationFlavor(verificationFlavor),
+        nlaTable(nlaTable), macroTable(macroTable) {
     auto *context = circuitOp.getContext();
 
     // Get the testbench output directory.
@@ -266,9 +242,10 @@ struct CircuitLoweringState {
     }
 
     for (auto &op : *circuitOp.getBodyBlock()) {
-      if (auto module = dyn_cast<FModuleLike>(op))
+      if (auto module = dyn_cast<FModuleLike>(op)) {
         if (AnnotationSet::removeAnnotations(module, markDUTAnnoClass))
           dut = module;
+      }
     }
 
     // Figure out which module is the DUT and TestHarness.  If there is no
@@ -432,6 +409,7 @@ private:
   const bool enableAnnotationWarning;
   std::mutex annotationPrintingMtx;
 
+  const bool lowerToCore;
   const firrtl::VerificationFlavor verificationFlavor;
 
   // Records any sv::BindOps that are found during the course of execution.
@@ -559,6 +537,9 @@ private:
   // emit.files for additional sources for verbatim extmodules
   llvm::StringMap<emit::FileOp> emitFilesByFileName;
   llvm::sys::SmartMutex<true> emitFilesMutex;
+
+  // Instance choice macro table for looking up option case macros
+  const InstanceChoiceMacroTable &macroTable;
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -619,11 +600,13 @@ struct FIRRTLModuleLowering
 
   void runOnOperation() override;
   void setEnableAnnotationWarning() { enableAnnotationWarning = true; }
+  void setLowerToCore() { lowerToCore = true; }
 
   using LowerFIRRTLToHWBase<FIRRTLModuleLowering>::verificationFlavor;
 
 private:
   void lowerFileHeader(CircuitOp op, CircuitLoweringState &loweringState);
+
   LogicalResult lowerPorts(ArrayRef<PortInfo> firrtlPorts,
                            SmallVectorImpl<hw::PortInfo> &ports,
                            Operation *moduleOp, StringRef moduleName,
@@ -660,12 +643,15 @@ private:
 } // end anonymous namespace
 
 /// This is the pass constructor.
-std::unique_ptr<mlir::Pass> circt::createLowerFIRRTLToHWPass(
-    bool enableAnnotationWarning,
-    firrtl::VerificationFlavor verificationFlavor) {
+std::unique_ptr<mlir::Pass>
+circt::createLowerFIRRTLToHWPass(bool enableAnnotationWarning,
+                                 firrtl::VerificationFlavor verificationFlavor,
+                                 bool lowerToCore) {
   auto pass = std::make_unique<FIRRTLModuleLowering>();
   if (enableAnnotationWarning)
     pass->setEnableAnnotationWarning();
+  if (lowerToCore)
+    pass->setLowerToCore();
   pass->verificationFlavor = verificationFlavor;
   return pass;
 }
@@ -692,23 +678,14 @@ void FIRRTLModuleLowering::runOnOperation() {
 
   // Keep track of the mapping from old to new modules.  The result may be null
   // if lowering failed.
-  CircuitLoweringState state(circuit, enableAnnotationWarning,
+  CircuitLoweringState state(circuit, enableAnnotationWarning, lowerToCore,
                              verificationFlavor, getAnalysis<InstanceGraph>(),
-                             &getAnalysis<NLATable>());
+                             &getAnalysis<NLATable>(),
+                             getAnalysis<InstanceChoiceMacroTable>());
 
   SmallVector<Operation *, 32> opsToProcess;
 
   AnnotationSet circuitAnno(circuit);
-  moveVerifAnno(getOperation(), circuitAnno, extractAssertionsAnnoClass,
-                "firrtl.extract.assert");
-  moveVerifAnno(getOperation(), circuitAnno, extractAssumptionsAnnoClass,
-                "firrtl.extract.assume");
-  moveVerifAnno(getOperation(), circuitAnno, extractCoverageAnnoClass,
-                "firrtl.extract.cover");
-  circuitAnno.removeAnnotationsWithClass(extractAssertionsAnnoClass,
-                                         extractAssumptionsAnnoClass,
-                                         extractCoverageAnnoClass);
-
   state.processRemainingAnnotations(circuit, circuitAnno);
   // Iterate through each operation in the circuit body, transforming any
   // FModule's we come across. If any module fails to lower, return early.
@@ -1767,8 +1744,9 @@ FIRRTLModuleLowering::lowerFormalBody(verif::FormalOp newOp,
   // Create a symbolic input for every input of the lowered module.
   SmallVector<Value> symbolicInputs;
   for (auto arg : newModule.getBody().getArguments())
-    symbolicInputs.push_back(
-        verif::SymbolicValueOp::create(builder, arg.getLoc(), arg.getType()));
+    symbolicInputs.push_back(verif::SymbolicValueOp::create(
+        builder, arg.getLoc(), arg.getType(),
+        newModule.getArgName(arg.getArgNumber())));
 
   // Instantiate the module with the given symbolic inputs.
   hw::InstanceOp::create(builder, newOp.getLoc(), newModule,
@@ -2052,6 +2030,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLImplicationIntrinsicOp op);
   LogicalResult visitExpr(LTLUntilIntrinsicOp op);
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
+  LogicalResult visitExpr(LTLPastIntrinsicOp op);
   LogicalResult visitExpr(LTLClockIntrinsicOp op);
 
   template <typename TargetOp, typename IntrinsicOp>
@@ -2097,6 +2076,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
       Operation *op, StringRef labelPrefix, Value clock, Value predicate,
       Value enable, StringAttr messageAttr, ValueRange operands,
       StringAttr nameAttr, bool isConcurrent, EventControl eventControl);
+  LogicalResult lowerVerificationStatementToCore(
+      Operation *op, StringRef labelPrefix, Value clock, Value predicate,
+      Value enable, StringAttr nameAttr, EventControl eventControl);
 
   LogicalResult visitStmt(SkipOp op);
 
@@ -2108,6 +2090,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   std::optional<Value> getLoweredFmtOperand(Value operand);
   LogicalResult loweredFmtOperands(ValueRange operands,
                                    SmallVectorImpl<Value> &loweredOperands);
+  FailureOr<Value> lowerSimFormatString(StringRef originalFormatString,
+                                        ValueRange operands);
   FailureOr<Value> callFileDescriptorLib(const FileDescriptorInfo &info);
   // Lower statemens that use file descriptors such as printf, fprintf and
   // fflush. `fn` is a function that takes a file descriptor and build an always
@@ -2121,7 +2105,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitPrintfLike(T op,
                                 const FileDescriptorInfo &fileDescriptorInfo,
                                 bool usePrintfCond);
-  LogicalResult visitStmt(PrintFOp op) { return visitPrintfLike(op, {}, true); }
+  LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(FPrintFOp op);
   LogicalResult visitStmt(FFlushOp op);
   LogicalResult visitStmt(StopOp op);
@@ -2584,7 +2568,7 @@ Value FIRRTLLowering::getExtOrTruncAggregateValue(Value array,
     }
 
     if (firrtl::type_cast<IntType>(sourceType).isSigned())
-      return comb::createOrFoldSExt(value, resultType, builder);
+      return comb::createOrFoldSExt(builder, value, resultType);
     auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
     return builder.createOrFold<comb::ConcatOp>(zero, value);
   };
@@ -2733,7 +2717,7 @@ Value FIRRTLLowering::getLoweredAndExtendedValue(Value src, Type target) {
   // Extension follows the sign of the src value, not the destination.
   auto valueFIRType = type_cast<FIRRTLBaseType>(src.getType()).getPassiveType();
   if (type_cast<IntType>(valueFIRType).isSigned())
-    return comb::createOrFoldSExt(loweredSrc, loweredDstType, builder);
+    return comb::createOrFoldSExt(builder, loweredSrc, loweredDstType);
 
   auto zero = getOrCreateIntConstant(dstWidth - loweredSrcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, loweredSrc);
@@ -2799,7 +2783,7 @@ Value FIRRTLLowering::getLoweredAndExtOrTruncValue(Value value, Type destType) {
   auto valueFIRType =
       type_cast<FIRRTLBaseType>(value.getType()).getPassiveType();
   if (type_cast<IntType>(valueFIRType).isSigned())
-    return comb::createOrFoldSExt(result, resultType, builder);
+    return comb::createOrFoldSExt(builder, result, resultType);
 
   auto zero = getOrCreateIntConstant(destWidth - srcWidth, 0);
   return builder.createOrFold<comb::ConcatOp>(zero, result);
@@ -2854,6 +2838,189 @@ FIRRTLLowering::loweredFmtOperands(mlir::ValueRange operands,
       loweredOperands.push_back(*loweredValue);
   }
   return success();
+}
+
+FailureOr<Value>
+FIRRTLLowering::lowerSimFormatString(StringRef originalFormatString,
+                                     ValueRange operands) {
+  SmallVector<Value> fragments;
+
+  auto emitLiteral = [&](StringRef text) {
+    if (!text.empty())
+      fragments.push_back(sim::FormatLiteralOp::create(builder, text));
+  };
+
+  auto emitIntFormat = [&](Value operand, char specifier,
+                           IntegerAttr widthAttr) -> FailureOr<Value> {
+    Value loweredValue;
+    if (type_isa<ClockType>(operand.getType()))
+      loweredValue = getLoweredNonClockValue(operand);
+    else
+      loweredValue = getLoweredValue(operand);
+    if (!loweredValue) {
+      if (!isZeroBitFIRRTLType(operand.getType()))
+        return failure();
+      loweredValue = getOrCreateIntConstant(1, 0);
+    }
+
+    if (!mlir::isa<IntegerType>(loweredValue.getType())) {
+      emitError(builder.getLoc(), "lower-to-core requires integer printf "
+                                  "operands for '%")
+          << specifier << "'";
+      return failure();
+    }
+
+    switch (specifier) {
+    case 'b':
+      return sim::FormatBinOp::create(builder, loweredValue,
+                                      builder.getBoolAttr(false),
+                                      builder.getI8IntegerAttr('0'), widthAttr)
+          .getResult();
+    case 'd': {
+      UnitAttr signedAttr;
+      if (auto intTy = dyn_cast<IntType>(operand.getType());
+          intTy && intTy.isSigned())
+        signedAttr = builder.getUnitAttr();
+      return sim::FormatDecOp::create(
+                 builder, loweredValue, builder.getBoolAttr(false),
+                 builder.getI8IntegerAttr(' '), widthAttr, signedAttr)
+          .getResult();
+    }
+    case 'x':
+      return sim::FormatHexOp::create(builder, loweredValue,
+                                      builder.getBoolAttr(false),
+                                      builder.getBoolAttr(false),
+                                      builder.getI8IntegerAttr('0'), widthAttr)
+          .getResult();
+    case 'c':
+      return sim::FormatCharOp::create(builder, loweredValue).getResult();
+    default:
+      llvm_unreachable("unsupported FIRRTL format specifier");
+    }
+  };
+
+  SmallString<32> literal;
+  for (size_t i = 0, e = originalFormatString.size(), subIdx = 0; i != e; ++i) {
+    char c = originalFormatString[i];
+    switch (c) {
+    case '%': {
+      emitLiteral(literal);
+      literal.clear();
+
+      SmallString<6> width;
+      c = originalFormatString[++i];
+      while (isdigit(c)) {
+        width.push_back(c);
+        c = originalFormatString[++i];
+      }
+
+      IntegerAttr widthAttr;
+      if (!width.empty()) {
+        unsigned widthValue;
+        if (StringRef(width).getAsInteger(10, widthValue)) {
+          emitError(builder.getLoc(), "invalid FIRRTL printf width");
+          return failure();
+        }
+        widthAttr = builder.getI32IntegerAttr(widthValue);
+      }
+
+      if (c == '%') {
+        if (!width.empty()) {
+          emitError(builder.getLoc(),
+                    "literal percents ('%%') may not specify a width");
+          return failure();
+        }
+        literal.push_back('%');
+        break;
+      }
+
+      if (operands.size() <= subIdx) {
+        emitError(builder.getLoc(), "not enough operands for printf format");
+        return failure();
+      }
+
+      if (c == 'c' && widthAttr) {
+        emitError(builder.getLoc(), "ASCII character format specifiers ('%c') "
+                                    "may not specify a width");
+        return failure();
+      }
+
+      switch (c) {
+      case 'b':
+      case 'd':
+      case 'x':
+      case 'c': {
+        auto fragment = emitIntFormat(operands[subIdx++], c, widthAttr);
+        if (failed(fragment))
+          return failure();
+        fragments.push_back(*fragment);
+        break;
+      }
+      default:
+        emitError(builder.getLoc(), "unknown printf substitution '%")
+            << width << c << "'";
+        return failure();
+      }
+      break;
+    }
+    case '{': {
+      if (originalFormatString.slice(i, i + 4) != "{{}}") {
+        literal.push_back(c);
+        break;
+      }
+
+      emitLiteral(literal);
+      literal.clear();
+
+      if (operands.size() <= subIdx) {
+        emitError(builder.getLoc(), "not enough operands for printf format");
+        return failure();
+      }
+
+      auto substitution = operands[subIdx++];
+      if (!type_isa<FStringType>(substitution.getType())) {
+        emitError(builder.getLoc(), "expected fstring operand for '{{}}' "
+                                    "substitution");
+        return failure();
+      }
+
+      auto result =
+          TypeSwitch<Operation *, LogicalResult>(substitution.getDefiningOp())
+              .template Case<HierarchicalModuleNameOp>([&](auto) {
+                fragments.push_back(sim::FormatHierPathOp::create(
+                    builder, /*useEscapes=*/false));
+                return success();
+              })
+              .template Case<TimeOp>([&](auto) {
+                emitError(builder.getLoc(), "lower-to-core does not support "
+                                            "{{SimulationTime}} in printf");
+                return failure();
+              })
+              .Default([&](auto) {
+                emitError(builder.getLoc(), "has a substitution with "
+                                            "an unimplemented "
+                                            "lowering")
+                        .attachNote(substitution.getLoc())
+                    << "op with an unimplemented lowering is here";
+                return failure();
+              });
+      if (failed(result))
+        return failure();
+      i += 3;
+      break;
+    }
+    default:
+      literal.push_back(c);
+      break;
+    }
+  }
+
+  emitLiteral(literal);
+  if (fragments.empty())
+    return sim::FormatLiteralOp::create(builder, "").getResult();
+  if (fragments.size() == 1)
+    return fragments.front();
+  return sim::FormatStringConcatOp::create(builder, fragments).getResult();
 }
 
 LogicalResult FIRRTLLowering::lowerStatementWithFd(
@@ -3982,6 +4149,14 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
         "instance choice with inner sym cannot be lowered");
     return failure();
   }
+
+  // Require instance_macro to be set before lowering
+  FlatSymbolRefAttr instanceMacro = oldInstanceChoice.getInstanceMacroAttr();
+  if (!instanceMacro)
+    return oldInstanceChoice->emitOpError(
+        "must have instance_macro attribute set before "
+        "lowering");
+
   // Get all the target modules
   auto moduleNames = oldInstanceChoice.getModuleNamesAttr();
   auto caseNames = oldInstanceChoice.getCaseNamesAttr();
@@ -4021,12 +4196,12 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
       return failure();
   }
 
+  auto optionName = oldInstanceChoice.getOptionNameAttr();
+
   // Lambda to create an instance for a given module and assign outputs to wires
   auto createInstanceAndAssign = [&](Operation *oldMod,
-                                     StringRef suffix) -> LogicalResult {
+                                     StringRef suffix) -> hw::InstanceOp {
     auto *newMod = circuitState.getNewModule(oldMod);
-    if (!newMod)
-      return oldInstanceChoice->emitOpError("could not find lowered module");
 
     ArrayAttr parameters;
     if (auto oldExtModule = dyn_cast<FExtModuleOp>(oldMod))
@@ -4039,41 +4214,88 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
       instName += "_";
       instName += suffix;
     }
-    auto instNameAttr = builder.getStringAttr(instName);
 
-    // Create the instance
-    auto inst = hw::InstanceOp::create(builder, newMod, instNameAttr,
-                                       inputOperands, parameters,
-                                       /*innerSym=*/nullptr);
+    auto inst =
+        hw::InstanceOp::create(builder, newMod, builder.getStringAttr(instName),
+                               inputOperands, parameters, nullptr);
+    (void)getOrAddInnerSym(
+        hw::InnerSymTarget(inst.getOperation()),
+        [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
 
     // Assign instance outputs to the wires
     for (unsigned i = 0; i < inst.getNumResults(); ++i)
       sv::AssignOp::create(builder, outputWires[i], inst.getResult(i));
-    return success();
+
+    return inst;
   };
 
-  // Create instance for the default module
-  if (failed(createInstanceAndAssign(defaultModule, "default")))
-    return failure();
+  // Build macro names and module list for nested ifdefs.
+  SmallVector<StringAttr> macroNames;
+  SmallVector<Operation *> altModules;
+  for (size_t i = 0, e = caseNames.size(); i < e; ++i) {
+    altModules.push_back(
+        circuitState.getInstanceGraph()
+            .lookup(cast<FlatSymbolRefAttr>(moduleNames[i + 1]).getAttr())
+            ->getModule());
 
-  // Create instances for all alternative modules
-  for (size_t i = 0; i < caseNames.size(); ++i) {
-    auto caseSymRef = cast<SymbolRefAttr>(caseNames[i]);
-    auto caseName = caseSymRef.getLeafReference();
-    auto targetModuleRef = cast<FlatSymbolRefAttr>(moduleNames[i + 1]);
-
-    Operation *altModule = circuitState.getInstanceGraph()
-                               .lookup(targetModuleRef.getAttr())
-                               ->getModule();
-    if (!altModule)
+    // Get the macro name for this option case using InstanceChoiceMacroTable.
+    auto optionCaseMacroRef = circuitState.macroTable.getMacro(
+        optionName, cast<SymbolRefAttr>(caseNames[i]).getLeafReference());
+    if (!optionCaseMacroRef)
       return oldInstanceChoice->emitOpError(
-                 "could not find alternative module [")
-             << targetModuleRef << "] referenced by instance choice";
-
-    // Create instance with case name as suffix
-    if (failed(createInstanceAndAssign(altModule, caseName.getValue())))
-      return failure();
+          "failed to get macro for option case");
+    macroNames.push_back(optionCaseMacroRef.getAttr());
   }
+
+  // Use the helper function to create nested ifdefs.
+  sv::createNestedIfDefs(
+      macroNames,
+      /*ifdefCtor=*/
+      [&](StringRef macro, std::function<void()> thenCtor,
+          std::function<void()> elseCtor) {
+        addToIfDefBlock(macro, std::move(thenCtor), std::move(elseCtor));
+      },
+      [&](size_t index) {
+        // Add mutual exclusion checks for all other options
+        for (size_t i = index + 1; i < macroNames.size(); ++i) {
+          sv::IfDefOp::create(
+              builder, oldInstanceChoice.getLoc(), macroNames[i],
+              [&]() {
+                SmallString<256> errorMessage;
+                llvm::raw_svector_ostream os(errorMessage);
+                os << "Multiple instance choice options defined for option '"
+                   << optionName.getValue() << "': '"
+                   << macroNames[index].getValue() << "' and '"
+                   << macroNames[i].getValue() << "'";
+                sv::ErrorOp::create(builder, oldInstanceChoice.getLoc(),
+                                    builder.getStringAttr(errorMessage));
+              },
+              [&]() {});
+        }
+
+        auto caseSymRef =
+            cast<SymbolRefAttr>(caseNames[index]).getLeafReference();
+        auto inst =
+            createInstanceAndAssign(altModules[index], caseSymRef.getValue());
+        // Define the instance macro for this case.
+        sv::MacroDefOp::create(builder, inst.getLoc(), instanceMacro,
+                               builder.getStringAttr("{{0}}"),
+                               builder.getArrayAttr({hw::InnerRefAttr::get(
+                                   theModule.getNameAttr(),
+                                   inst.getInnerSymAttr().getSymName())}));
+      },
+      [&]() {
+        // Generate an error when no instance choice option is selected.
+        SmallString<256> errorMessage;
+        llvm::raw_svector_ostream os(errorMessage);
+        os << "Required instance choice option '" << optionName.getValue()
+           << "' not selected, must define one of: ";
+        llvm::interleaveComma(macroNames, os, [&](StringAttr macro) {
+          os << "'" << macro.getValue() << "'";
+        });
+        sv::ErrorOp::create(builder, oldInstanceChoice.getLoc(),
+                            builder.getStringAttr(errorMessage));
+      });
 
   return success();
 }
@@ -4587,6 +4809,14 @@ LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
                                              getLoweredValue(op.getInput()));
 }
 
+LogicalResult FIRRTLLowering::visitExpr(LTLPastIntrinsicOp op) {
+  Value clk;
+  if (op.getClock())
+    clk = getLoweredNonClockValue(op.getClock());
+  return setLoweringToLTL<ltl::PastOp>(op, getLoweredValue(op.getInput()),
+                                       op.getDelayAttr(), clk);
+}
+
 LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
   return setLoweringToLTL<ltl::ClockOp>(op, getLoweredValue(op.getInput()),
                                         ltl::ClockEdge::Pos,
@@ -5053,6 +5283,9 @@ LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError("lower-to-core does not support firrtl.force");
+
   auto srcVal = getLoweredValue(op.getSrc());
   if (!srcVal)
     return failure();
@@ -5073,6 +5306,9 @@ LogicalResult FIRRTLLowering::visitStmt(ForceOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError("lower-to-core does not support firrtl.ref.force");
+
   auto src = getLoweredNonClockValue(op.getSrc());
   auto clock = getLoweredNonClockValue(op.getClock());
   auto pred = getLoweredValue(op.getPredicate());
@@ -5094,6 +5330,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   return success();
 }
 LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError(
+        "lower-to-core does not support firrtl.ref.force_initial");
+
   auto src = getLoweredNonClockValue(op.getSrc());
   auto pred = getLoweredValue(op.getPredicate());
   if (!src || !pred)
@@ -5114,6 +5354,9 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
   return success();
 }
 LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError("lower-to-core does not support firrtl.ref.release");
+
   auto clock = getLoweredNonClockValue(op.getClock());
   auto pred = getLoweredValue(op.getPredicate());
   if (!clock || !pred)
@@ -5134,6 +5377,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
   return success();
 }
 LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError(
+        "lower-to-core does not support firrtl.ref.release_initial");
+
   auto destVal = getPossiblyInoutLoweredValue(op.getDest());
   auto pred = getLoweredValue(op.getPredicate());
   if (!destVal || !pred)
@@ -5261,7 +5508,28 @@ LogicalResult FIRRTLLowering::visitPrintfLike(
                               usePrintfCond);
 }
 
+LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
+  if (!circuitState.lowerToCore)
+    return visitPrintfLike(op, {}, true);
+
+  auto clock = getLoweredValue(op.getClock());
+  auto cond = getLoweredValue(op.getCond());
+  if (!clock || !cond)
+    return failure();
+
+  auto formatString =
+      lowerSimFormatString(op.getFormatString(), op.getSubstitutions());
+  if (failed(formatString))
+    return failure();
+
+  sim::PrintFormattedOp::create(builder, *formatString, clock, cond);
+  return success();
+}
+
 LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError("lower-to-core does not support firrtl.fprintf yet");
+
   StringAttr outputFileAttr;
   if (failed(resolveFormatString(op.getLoc(), op.getOutputFileAttr(),
                                  op.getOutputFileSubstitutions(),
@@ -5275,6 +5543,9 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
 
 // FFlush lowers into $fflush statement.
 LogicalResult FIRRTLLowering::visitStmt(FFlushOp op) {
+  if (circuitState.lowerToCore)
+    return op.emitOpError("lower-to-core does not support firrtl.fflush yet");
+
   auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
   if (!clock || !cond)
@@ -5353,6 +5624,57 @@ static Operation *buildConcurrentVerifOp(ImplicitLocOpBuilder &builder,
   llvm_unreachable("unknown verification op");
 }
 
+static verif::ClockEdge firrtlToVerifClockEdge(EventControl eventControl) {
+  switch (eventControl) {
+  case EventControl::AtPosEdge:
+    return verif::ClockEdge::Pos;
+  case EventControl::AtEdge:
+    return verif::ClockEdge::Both;
+  case EventControl::AtNegEdge:
+    return verif::ClockEdge::Neg;
+  }
+  llvm_unreachable("unknown FIRRTL event control");
+}
+
+LogicalResult FIRRTLLowering::lowerVerificationStatementToCore(
+    Operation *op, StringRef labelPrefix, Value opClock, Value opPredicate,
+    Value opEnable, StringAttr opNameAttr, EventControl opEventControl) {
+  auto guardsAttr = op->getAttrOfType<ArrayAttr>("guards");
+  if (guardsAttr && !guardsAttr.empty())
+    return op->emitOpError(
+        "lower-to-core does not support guarded verification statements");
+
+  auto clock = getLoweredNonClockValue(opClock);
+  auto enable = getLoweredValue(opEnable);
+  auto predicate = getLoweredValue(opPredicate);
+  if (!clock || !enable || !predicate)
+    return failure();
+
+  StringAttr label;
+  if (opNameAttr && !opNameAttr.getValue().empty())
+    label = StringAttr::get(builder.getContext(),
+                            labelPrefix + opNameAttr.getValue());
+
+  auto edge = firrtlToVerifClockEdge(opEventControl);
+  auto opName = op->getName().stripDialect();
+  if (opName == "assert") {
+    verif::ClockedAssertOp::create(builder, predicate, edge, clock, enable,
+                                   label);
+    return success();
+  }
+  if (opName == "assume") {
+    verif::ClockedAssumeOp::create(builder, predicate, edge, clock, enable,
+                                   label);
+    return success();
+  }
+  if (opName == "cover") {
+    verif::ClockedCoverOp::create(builder, predicate, edge, clock, enable,
+                                  label);
+    return success();
+  }
+  llvm_unreachable("unknown verification op");
+}
+
 /// Template for lowering verification statements from type A to
 /// type B.
 ///
@@ -5375,6 +5697,11 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
     Operation *op, StringRef labelPrefix, Value opClock, Value opPredicate,
     Value opEnable, StringAttr opMessageAttr, ValueRange opOperands,
     StringAttr opNameAttr, bool isConcurrent, EventControl opEventControl) {
+  if (circuitState.lowerToCore)
+    return lowerVerificationStatementToCore(op, labelPrefix, opClock,
+                                            opPredicate, opEnable, opNameAttr,
+                                            opEventControl);
+
   StringRef opName = op->getName().stripDialect();
 
   // The attribute holding the compile guards
@@ -5461,7 +5788,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       // Handle the `ifElseFatal` format, which does not emit an SVA but
       // rather a process that uses $error and $fatal to perform the checks.
       auto boolType = IntegerType::get(builder.getContext(), 1);
-      predicate = comb::createOrFoldNot(predicate, builder, /*twoState=*/true);
+      predicate = comb::createOrFoldNot(builder, predicate, /*twoState=*/true);
       predicate = builder.createOrFold<comb::AndOp>(enable, predicate, true);
 
       circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
@@ -5493,7 +5820,7 @@ LogicalResult FIRRTLLowering::lowerVerificationStatement(
       // Except for covers, combine them: enable & predicate
       if (!isCover) {
         auto notEnable =
-            comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+            comb::createOrFoldNot(builder, enable, /*twoState=*/true);
         predicate =
             builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
       } else {
@@ -5558,6 +5885,26 @@ LogicalResult FIRRTLLowering::visitStmt(CoverOp op) {
 
 // Lower an UNR only assume to a specific style of SV assume.
 LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
+  if (circuitState.lowerToCore) {
+    auto guardsAttr = op->getAttrOfType<mlir::ArrayAttr>("guards");
+    if (guardsAttr && !guardsAttr.empty())
+      return op.emitOpError(
+          "lower-to-core does not support guarded verification statements");
+
+    auto predicate = getLoweredValue(op.getPredicate());
+    auto enable = getLoweredValue(op.getEnable());
+    if (!predicate || !enable)
+      return failure();
+
+    auto label = op.getNameAttr();
+    StringAttr assumeLabel;
+    if (label && !label.empty())
+      assumeLabel =
+          StringAttr::get(builder.getContext(), "assume__" + label.getValue());
+    verif::AssumeOp::create(builder, predicate, enable, assumeLabel);
+    return success();
+  }
+
   // TODO : Need to figure out if there is a cleaner way to get the string which
   // indicates the assert is UNR only. Or better - not rely on this at all -
   // ideally there should have been some other attribute which indicated that
@@ -5573,7 +5920,7 @@ LogicalResult FIRRTLLowering::visitStmt(UnclockedAssumeIntrinsicOp op) {
         StringAttr::get(builder.getContext(), "assume__" + label.getValue());
   auto predicate = getLoweredValue(op.getPredicate());
   auto enable = getLoweredValue(op.getEnable());
-  auto notEnable = comb::createOrFoldNot(enable, builder, /*twoState=*/true);
+  auto notEnable = comb::createOrFoldNot(builder, enable, /*twoState=*/true);
   predicate = builder.createOrFold<comb::OrOp>(notEnable, predicate, true);
 
   SmallVector<Value> messageOps;
@@ -5634,6 +5981,11 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
   // of other values. Therefore we can delete the attach op here.
   if (getSingleNonInstanceOperand(op))
     return success();
+
+  if (circuitState.lowerToCore)
+    return op.emitOpError(
+        "lower-to-core does not support firrtl.attach that requires SV "
+        "lowering");
 
   // If all operands of the attach are internal to this module (none of them
   // are ports), then they can all be replaced with a single wire, and we can

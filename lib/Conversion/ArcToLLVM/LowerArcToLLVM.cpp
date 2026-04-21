@@ -10,6 +10,7 @@
 #include "circt/Conversion/CombToArith.h"
 #include "circt/Conversion/CombToLLVM.h"
 #include "circt/Conversion/HWToLLVM.h"
+#include "circt/Dialect/Arc/ArcConstants.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/Runtime/Common.h"
@@ -17,6 +18,8 @@
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
 #include "circt/Dialect/Arc/Runtime/TraceTaps.h"
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/ConversionPatternSet.h"
@@ -35,6 +38,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -156,6 +160,48 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
     return success();
   }
 };
+
+//===----------------------------------------------------------------------===//
+// Time Operations Lowering
+//===----------------------------------------------------------------------===//
+
+struct CurrentTimeOpLowering : public OpConversionPattern<arc::CurrentTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(arc::CurrentTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in storage (no offset needed).
+    Value ptr = adaptor.getStorage();
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(), ptr);
+    return success();
+  }
+};
+
+// `llhd.int_to_time` is a no-op
+struct IntToTimeOpLowering : public OpConversionPattern<llhd::IntToTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::IntToTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
+// `llhd.time_to_int` is a no-op
+struct TimeToIntOpLowering : public OpConversionPattern<llhd::TimeToIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::TimeToIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Memory and Storage Lowering
+//===----------------------------------------------------------------------===//
 
 struct AllocMemoryOpLowering : public OpConversionPattern<arc::AllocMemoryOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -573,11 +619,53 @@ struct SimStepOpLowering : public ModelAwarePattern<arc::SimStepOp> {
                               .getModel()
                               .getValue();
 
+    if (adaptor.getTimePostIncrement()) {
+      // Increment time after step
+      OpBuilder::InsertionGuard g(rewriter);
+      rewriter.setInsertionPointAfter(op);
+      auto oldTime =
+          arc::SimGetTimeOp::create(rewriter, op.getLoc(), op.getInstance());
+      auto newTime = LLVM::AddOp::create(rewriter, op.getLoc(), oldTime,
+                                         adaptor.getTimePostIncrement());
+      arc::SimSetTimeOp::create(rewriter, op.getLoc(), op.getInstance(),
+                                newTime);
+    }
+
     StringAttr evalFunc =
         rewriter.getStringAttr(evalSymbolFromModelName(modelName));
     rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, mlir::TypeRange(), evalFunc,
                                               adaptor.getInstance());
 
+    return success();
+  }
+};
+
+// Loads the simulation time (i64 femtoseconds) from byte offset 0 in the
+// model instance's state storage.
+struct SimGetTimeOpLowering : public OpConversionPattern<arc::SimGetTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SimGetTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in the instance storage.
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(),
+                                              adaptor.getInstance());
+    return success();
+  }
+};
+
+// Stores the simulation time (i64 femtoseconds) to byte offset 0 in the
+// model instance's state storage.
+struct SimSetTimeOpLowering : public OpConversionPattern<arc::SimSetTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SimSetTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    // Time is stored at offset 0 in the instance storage.
+    rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getTime(),
+                                               adaptor.getInstance());
     return success();
   }
 };
@@ -899,6 +987,32 @@ struct SimPrintFormattedProcOpLowering
   }
 
   StringCache &stringCache;
+};
+
+struct TerminateOpLowering : public OpConversionPattern<arc::TerminateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::TerminateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+
+    auto i8Type = rewriter.getI8Type();
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+
+    Value flagPtr = LLVM::GEPOp::create(
+        rewriter, loc, ptrType, i8Type, adaptor.getStorage(),
+        ArrayRef<LLVM::GEPArg>{arc::kTerminateFlagOffset});
+
+    uint8_t statusCode = op.getSuccess() ? 1 : 2;
+    Value codeVal = LLVM::ConstantOp::create(
+        rewriter, loc, i8Type, rewriter.getI8IntegerAttr(statusCode));
+
+    LLVM::StoreOp::create(rewriter, loc, codeVal, flagPtr);
+
+    rewriter.eraseOp(op);
+    return success();
+  }
 };
 
 } // namespace
@@ -1262,6 +1376,10 @@ void LowerArcToLLVMPass::runOnOperation() {
   converter.addConversion([&](sim::FormatStringType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
+  converter.addConversion([&](llhd::TimeType type) {
+    // LLHD time is represented as i64 femtoseconds.
+    return IntegerType::get(type.getContext(), 64);
+  });
 
   // Setup the conversion patterns.
   ConversionPatternSet patterns(&getContext(), converter);
@@ -1299,6 +1417,8 @@ void LowerArcToLLVMPass::runOnOperation() {
     AllocStorageOpLowering,
     ClockGateOpLowering,
     ClockInvOpLowering,
+    CurrentTimeOpLowering,
+    IntToTimeOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
     ModelOpLowering,
@@ -1306,9 +1426,13 @@ void LowerArcToLLVMPass::runOnOperation() {
     ReplaceOpWithInputPattern<seq::FromClockOp>,
     RuntimeModelOpLowering,
     SeqConstClockLowering,
+    SimGetTimeOpLowering,
+    SimSetTimeOpLowering,
     StateReadOpLowering,
     StateWriteOpLowering,
     StorageGetOpLowering,
+    TerminateOpLowering,
+    TimeToIntOpLowering,
     ZeroCountOpLowering
   >(converter, &getContext());
   // clang-format on

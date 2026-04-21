@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
@@ -45,20 +46,19 @@ namespace handlers {
 enum class RelationshipKind { Sync, Async, Inferred };
 
 struct Relationship {
-  StringRef namePattern;
+  StringAttr namePattern;
   RelationshipKind relationship;
 };
 
 struct Clock {
-  StringRef namePattern;
-  uint64_t definePeriod;
+  StringAttr namePattern;
   SmallVector<Relationship> relationships;
 };
 
 struct SynchronousData {
-  StringRef namePattern;
-  SmallVector<StringRef> portPatterns;
-  std::optional<StringRef> comment;
+  StringAttr namePattern;
+  SmallVector<StringAttr> portPatterns;
+  std::optional<StringAttr> comment;
 };
 
 /// A handler that generates Clock Spec JSON output from Clock Domain
@@ -82,12 +82,26 @@ public:
     for (auto &[objectValue, associations] : objectMap) {
       auto name = cast<StringAttr>(cast<om::evaluator::AttributeValue>(
                                        objectValue->getField("name_out")->get())
-                                       ->getAttr())
-                      .getValue();
+                                       ->getAttr());
+
+      // Insert this domain into its own equivalence class.  Then, if this has a
+      // specified "synchronousTo" relationship to a different domain, merge
+      // this domain into that different domain.
+      syncEquivalenceClasses.insert(name);
+      auto synchronousTo = cast<StringAttr>(
+          cast<om::evaluator::AttributeValue>(
+              objectValue->getField("synchronousTo_out")->get())
+              ->getAttr());
+      if (!synchronousTo.getValue().empty()) {
+        syncEquivalenceClasses.insert(synchronousTo);
+        syncEquivalenceClasses.unionSets(synchronousTo, name);
+      }
+
       // Add to async ports if the name matches a provided option.
       bool isAsync =
-          llvm::any_of(options::sifiveClockDomainAsync,
-                       [&](auto asyncName) { return asyncName == name; });
+          llvm::any_of(options::sifiveClockDomainAsync, [&](auto asyncName) {
+            return asyncName == name.getValue();
+          });
       if (isAsync) {
         for (auto &association : associations) {
           if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
@@ -105,8 +119,9 @@ public:
 
       // Add to static ports if the name matches a provided option.
       bool isStatic =
-          llvm::any_of(options::sifiveClockDomainStatic,
-                       [&](auto staticName) { return staticName == name; });
+          llvm::any_of(options::sifiveClockDomainStatic, [&](auto staticName) {
+            return staticName == name.getValue();
+          });
       if (isStatic) {
         for (auto &association : associations) {
           if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
@@ -124,16 +139,8 @@ public:
 
       // Otherwise, this is a normal clock association.  Add the clock and
       // populate the associations.
-      clocks.push_back(
-          {/*namePattern=*/name,
-           /*define_period=*/
-           cast<om::IntegerAttr>(cast<om::evaluator::AttributeValue>(
-                                     objectValue->getField("period_out")->get())
-                                     ->getAttr())
-               .getValue()
-               .getValue()
-               .getZExtValue(),
-           /*relationships=*/{}});
+      clocks.push_back({/*namePattern=*/name,
+                        /*relationships=*/{}});
 
       for (auto &association : associations) {
         if (auto *p = dyn_cast<om::evaluator::PathValue>(association.get())) {
@@ -152,6 +159,9 @@ public:
     if (failed)
       return failure();
 
+    // Populate clock relationships based on equivalence class leaders
+    populateClockRelationships();
+
     return success();
   }
 
@@ -159,34 +169,41 @@ public:
     json::OStream json(os, /*indentSize=*/2);
     json.object([&] {
       json.attributeArray("clocks", [&] {
-        for (auto clock : clocks) {
+        for (auto &clock : clocks) {
           json.object([&] {
-            json.attribute("name_pattern", clock.namePattern);
-            json.attribute("define_period", clock.definePeriod);
+            auto name = clock.namePattern.getValue();
+            json.attribute("name_pattern", name);
+            json.attribute("define_period",
+                           (Twine(name.upper()) + "_PERIOD").str());
             json.attributeArray("clock_relationships", [&] {
-              // TODO: Implement this.
+              for (auto &rel : clock.relationships) {
+                json.object([&] {
+                  json.attribute("name_pattern", rel.namePattern.getValue());
+                  json.attribute("relationship", "sync");
+                });
+              }
             });
           });
         }
       });
       json.attributeArray("static_ports", [&] {
         for (auto port : staticPorts)
-          json.value(port);
+          json.value(port.getValue());
       });
       json.attributeArray("asynchronous_ports", [&] {
         for (auto port : asyncPorts)
-          json.value(port);
+          json.value(port.getValue());
       });
       json.attributeArray("synchronous_ports", [&] {
         for (auto &[_, syncPort] : syncPorts) {
-          auto &name = syncPort.namePattern;
+          auto name = syncPort.namePattern.getValue();
           auto &ports = syncPort.portPatterns;
           auto &comment = syncPort.comment;
           json.object([&] {
             json.attribute("name_pattern", name);
             json.attributeArray("port_patterns", [&] {
               for (auto port : ports)
-                json.value(port);
+                json.value(port.getValue());
             });
             json.attribute("comment", comment);
           });
@@ -202,13 +219,38 @@ public:
     asyncPorts.clear();
     staticPorts.clear();
     syncPorts.clear();
+    syncEquivalenceClasses = EquivalenceClasses<StringAttr>();
   };
 
 private:
+  /// Populate clock relationships based on equivalence class leaders.  If a
+  /// domain's leader is not itself, it has a sync relationship to the leader.
+  void populateClockRelationships() {
+    for (auto &clock : clocks) {
+      auto &name = clock.namePattern;
+
+      // Find the leader of this domain's equivalence class
+      auto leaderIter = syncEquivalenceClasses.findLeader(name);
+      if (leaderIter == syncEquivalenceClasses.member_end())
+        continue;
+
+      StringAttr leader = *leaderIter;
+
+      // If this domain is not the leader, add a sync relationship to the leader
+      if (name != leader)
+        clock.relationships.push_back({leader, RelationshipKind::Sync});
+    }
+  }
+
   SmallVector<Clock> clocks;
-  SmallVector<StringRef> asyncPorts;
-  SmallVector<StringRef> staticPorts;
-  MapVector<StringRef, SynchronousData> syncPorts;
+  SmallVector<StringAttr> asyncPorts;
+  SmallVector<StringAttr> staticPorts;
+  MapVector<StringAttr, SynchronousData> syncPorts;
+
+  // Equivalence classes tracking all domains that are synchronous to each other
+  // through the transitive closure of synchronousTo relationships.  The leader
+  // of each equivalence class represents the root synchronous domain.
+  EquivalenceClasses<StringAttr> syncEquivalenceClasses;
 };
 
 static bool registeredClockSpecJSONHandler = [] {

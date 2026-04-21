@@ -1,5 +1,15 @@
 // RUN: circt-opt %s --convert-moore-to-core --verify-diagnostics | FileCheck %s
 
+// CHECK-DAG: llvm.mlir.global internal constant @"C::typeinfo"() {addr_space = 0 : i32} : !llvm.struct<(ptr)> {
+// CHECK-DAG: llvm.mlir.zero : !llvm.ptr
+// CHECK-DAG: llvm.insertvalue
+// CHECK-DAG: llvm.mlir.global internal constant @"D::typeinfo"() {addr_space = 0 : i32} : !llvm.struct<(ptr)> {
+// CHECK-DAG: llvm.mlir.addressof @"C::typeinfo" : !llvm.ptr
+// CHECK-DAG: llvm.insertvalue
+// CHECK-DAG: llvm.mlir.global internal constant @"VirtualC::typeinfo"() {addr_space = 0 : i32} : !llvm.struct<(ptr)> {
+// CHECK-DAG: llvm.mlir.zero : !llvm.ptr
+// CHECK-DAG: llvm.insertvalue
+
 /// Check that a classdecl gets noop'd and handles are lowered to !llvm.ptr
 
 // CHECK-LABEL:   func.func @ClassType(%arg0: !llvm.ptr) {
@@ -20,16 +30,19 @@ func.func @ClassType(%arg0: !moore.class<@PropertyCombo>) {
 
 /// Check that new lowers to malloc
 
-// malloc should be declared in the LLVM dialect.
 // CHECK-LABEL: func.func private @test_new2
-// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(12 : i64) : i64
-// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(32 : i64) : i64
+// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"C::typeinfo" : !llvm.ptr
+// CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
+// CHECK:   [[GEP:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>
+// CHECK:   llvm.store [[TYPEINFO]], [[GEP]] : !llvm.ptr, !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
 // CHECK-NOT: moore.class.classdecl
 
-// Allocate a new instance; should lower to llvm.call @malloc(i64).
+// Allocate a new instance; should lower to call @malloc(i64).
 func.func private @test_new2() {
   %h = moore.class.new : <@C>
   return
@@ -44,8 +57,12 @@ moore.class.classdecl @C {
 /// Check that new lowers to malloc with inheritance without shadowing
 
 // CHECK-LABEL: func.func private @test_new3
-// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(28 : i64) : i64
-// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(64 : i64) : i64
+// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"D::typeinfo" : !llvm.ptr
+// CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
+// CHECK:   [[GEP:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"D", (struct<(ptr, ptr)>, struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>, i32, i64, i16)>
+// CHECK:   llvm.store [[TYPEINFO]], [[GEP]] : !llvm.ptr, !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
@@ -64,8 +81,8 @@ moore.class.classdecl @D extends @C {
 /// Check that new lowers to malloc with inheritance & shadowing
 
 // CHECK-LABEL: func.func private @test_new4
-// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(24 : i64) : i64
-// CHECK:   [[PTR:%.*]] = llvm.call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(64 : i64) : i64
+// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
 // CHECK:   return
 
 // CHECK-NOT: moore.class.new
@@ -105,8 +122,8 @@ moore.class.classdecl @F extends @C {
 
 // CHECK-LABEL: func.func private @test_new6
 // CHECK-SAME: (%arg0: !llvm.ptr) -> !llhd.ref<i32> {
-// CHECK:   [[CONSTIDX:%.+]] = llvm.mlir.constant(1 : i32) : i32
-// CHECK:   [[GEP:%.+]] = llvm.getelementptr %arg0[[[CONSTIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"G", (struct<"C", (i32, i32, i32)>, i32, i32, i32)>
+// CHECK:   [[CONSTIDX:%.+]] = llvm.mlir.constant(2 : i32) : i32
+// CHECK:   [[GEP:%.+]] = llvm.getelementptr %arg0[[[CONSTIDX]]] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"G", (struct<(ptr, ptr)>, struct<"C", (struct<(ptr, ptr)>, i32, i32, i32)>, i32, i32, i32)>
 // CHECK:   [[CONV:%.+]] = builtin.unrealized_conversion_cast [[GEP]] : !llvm.ptr to !llhd.ref<i32>
 // CHECK:   return [[CONV]] : !llhd.ref<i32>
 
@@ -121,4 +138,24 @@ moore.class.classdecl @G extends @C {
   moore.class.propertydecl @d : !moore.i32
   moore.class.propertydecl @e : !moore.l32
   moore.class.propertydecl @f : !moore.l32
+}
+
+/// Check that virtual classes use the same object header layout.
+
+// CHECK-LABEL: func.func private @test_new7
+// CHECK:   [[SIZE:%.*]] = llvm.mlir.constant(24 : i64) : i64
+// CHECK:   [[PTR:%.*]] = call @malloc([[SIZE]]) : (i64) -> !llvm.ptr
+// CHECK:   [[TYPEINFO:%.*]] = llvm.mlir.addressof @"VirtualC::typeinfo" : !llvm.ptr
+// CHECK:   [[HEADERIDX:%.*]] = llvm.mlir.constant(0 : i32) : i32
+// CHECK:   [[GEP:%.*]] = llvm.getelementptr [[PTR]][[[HEADERIDX]], 0] : (!llvm.ptr, i32) -> !llvm.ptr, !llvm.struct<"VirtualC", (struct<(ptr, ptr)>, i32)>
+// CHECK:   llvm.store [[TYPEINFO]], [[GEP]] : !llvm.ptr, !llvm.ptr
+// CHECK:   return
+
+func.func private @test_new7() {
+  %h = moore.class.new : <@VirtualC>
+  return
+}
+moore.class.classdecl @VirtualC {
+  moore.class.propertydecl @a : !moore.i32
+  moore.class.methoddecl @f : (!moore.class<@VirtualC>) -> ()
 }

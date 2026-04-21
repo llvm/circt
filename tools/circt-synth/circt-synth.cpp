@@ -114,7 +114,7 @@ static cl::opt<bool>
 enum Until { UntilCombLowering, UntilMapping, UntilEnd };
 
 static auto runUntilValues = llvm::cl::values(
-    clEnumValN(UntilCombLowering, "comb-lowering", "Lowering Comb to AIG/MIG"),
+    clEnumValN(UntilCombLowering, "comb-lowering", "Lowering Comb to AIG"),
     clEnumValN(UntilMapping, "mapping", "Run technology/lut mapping"),
     clEnumValN(UntilEnd, "all", "Run entire pipeline (default)"));
 
@@ -189,6 +189,15 @@ static cl::opt<bool>
 static cl::opt<bool> enableSOPBalancing("enable-sop-balancing",
                                         cl::desc("Enable SOP balancing"),
                                         cl::init(false), cl::cat(mainCategory));
+static cl::opt<bool> enableFunctionalReduction(
+    "enable-functional-reduction",
+    cl::desc("Enable FunctionalReduction during synth optimization"),
+    cl::init(false), cl::cat(mainCategory));
+static cl::opt<int64_t> functionalReductionConflictLimit(
+    "functional-reduction-conflict-limit",
+    cl::desc("Per-SAT-call conflict budget for FunctionalReduction. "
+             "-1 disables the limit."),
+    cl::init(100), cl::cat(mainCategory));
 
 static cl::opt<int> maxCutSizePerRoot("max-cut-size-per-root",
                                       cl::desc("Maximum cut size per root"),
@@ -206,12 +215,6 @@ static cl::opt<int>
     lowerToKLUTs("lower-to-k-lut",
                  cl::desc("Lower to generic a truth table op with K inputs"),
                  cl::init(0), cl::cat(mainCategory));
-
-static cl::opt<TargetIR>
-    targetIR("target-ir", cl::desc("Target IR to lower to"),
-             cl::values(clEnumValN(TargetIR::AIG, "aig", "AIG operation"),
-                        clEnumValN(TargetIR::MIG, "mig", "MIG operation")),
-             cl::init(TargetIR::AIG), cl::cat(mainCategory));
 
 // Opt-in to enable the parameterize constant ports pass.
 // NOTE: This is always beneficial for middle-end optimizations but currently
@@ -261,7 +264,6 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     circt::synth::CombLoweringPipelineOptions loweringOptions;
     loweringOptions.disableDatapath = disableDatapath;
     loweringOptions.timingAware = !disableTimingAware;
-    loweringOptions.targetIR = targetIR;
     loweringOptions.synthesisStrategy = synthesisStrategy;
     circt::synth::buildCombLoweringPipeline(pm, loweringOptions);
     if (untilReached(UntilCombLowering))
@@ -274,6 +276,10 @@ static void populateCIRCTSynthPipeline(PassManager &pm) {
     optimizationOptions.disableWordToBits.setValue(disableWordToBits);
     optimizationOptions.timingAware.setValue(!disableTimingAware);
     optimizationOptions.disableSOPBalancing.setValue(!enableSOPBalancing);
+    optimizationOptions.disableFunctionalReduction.setValue(
+        !enableFunctionalReduction);
+    optimizationOptions.functionalReductionConflictLimit.setValue(
+        functionalReductionConflictLimit);
 
     circt::synth::buildSynthOptimizationPipeline(pm, optimizationOptions);
     if (untilReached(UntilMapping))

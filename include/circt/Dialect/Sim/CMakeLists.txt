@@ -1,5 +1,5 @@
 add_circt_dialect(Sim sim)
-add_circt_doc(SimOps Dialects/SimOps -gen-op-doc)
+add_circt_doc(SimOps Dialects/SimOps -gen-op-doc -dialect sim)
 add_circt_doc(SimTypes Dialects/SimTypes -gen-typedef-doc -dialect sim)
 
 set(LLVM_TARGET_DEFINITIONS SimOpInterfaces.td)
@@ -7,6 +7,12 @@ mlir_tablegen(SimOpInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(SimOpInterfaces.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(CIRCTSimOpInterfacesIncGen)
 add_dependencies(circt-headers CIRCTSimOpInterfacesIncGen)
+
+set(LLVM_TARGET_DEFINITIONS Sim.td)
+mlir_tablegen(SimEnums.h.inc -gen-enum-decls)
+mlir_tablegen(SimEnums.cpp.inc -gen-enum-defs)
+add_public_tablegen_target(CIRCTSimEnumsIncGen)
+add_dependencies(circt-headers CIRCTSimEnumsIncGen)
 
 set(LLVM_TARGET_DEFINITIONS SimPasses.td)
 mlir_tablegen(SimPasses.h.inc -gen-pass-decls)

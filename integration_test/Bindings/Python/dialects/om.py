@@ -251,3 +251,107 @@ with Context() as ctx:
   list_type = Type.parse("!om.list<!om.any>")
   assert isinstance(list_type, om.ListType)
   assert isinstance(list_type.element_type, om.AnyType)
+
+  # Test partial evaluation with multiple inputs and outputs
+  module = Module.parse("""
+  module {
+    om.class @PartialEval(
+      %in0: !om.integer,
+      %in1: !om.integer,
+      %in2: !om.integer,
+      %in3: i1
+    ) -> (
+      out0: !om.integer,
+      out1: !om.integer,
+      out2: !om.integer,
+      out3: !om.integer,
+      out4: i1,
+      out5: i1
+    ) {
+      // out0: known constant
+      %c42 = om.constant #om.integer<42 : i32> : !om.integer
+
+      // out1: known input (in0)
+
+      // out2: unknown input (in1) propagated through arithmetic
+      %sum = om.integer.add %in1, %c42 : !om.integer
+
+      // out3: depends on unknown input (in2) and known input (in0)
+      %prod = om.integer.mul %in0, %in2 : !om.integer
+
+      // out4: known boolean constant
+      %true = om.constant true
+
+      // out5: unknown boolean input (in3)
+
+      om.class.fields %c42, %in0, %sum, %prod, %true, %in3 :
+        !om.integer, !om.integer, !om.integer, !om.integer, i1, i1
+    }
+  }
+  """)
+
+  evaluator = om.Evaluator(module)
+  om_integer_type = Type.parse("!om.integer")
+  i1_type = Type.parse("i1")
+
+  # Instantiate with mix of known and unknown inputs
+  obj = evaluator.instantiate("PartialEval", 100, om.Unknown(om_integer_type),
+                              om.Unknown(om_integer_type), om.Unknown(i1_type))
+
+  # CHECK: out0 (constant): 42
+  print(f"out0 (constant): {obj.out0}")
+  # CHECK: out1 (known input): 100
+  print(f"out1 (known input): {obj.out1}")
+  # CHECK: out2 (unknown input): Unknown(!om.integer)
+  print(f"out2 (unknown input): {obj.out2}")
+  # CHECK: out3 (depends on unknown): Unknown(!om.integer)
+  print(f"out3 (depends on unknown): {obj.out3}")
+  # CHECK: out4 (constant bool): True
+  print(f"out4 (constant bool): {obj.out4}")
+  # CHECK: out5 (unknown bool): Unknown(i1)
+  print(f"out5 (unknown bool): {obj.out5}")
+
+# Test om.property_assert evaluation.
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+
+  module = Module.parse("""
+  module {
+    om.class @AssertTrue() -> () {
+      %true = om.constant true
+      om.property_assert %true, "should not fail" : i1
+      om.class.fields
+    }
+    om.class @AssertFalse() -> () {
+      %false = om.constant false
+      om.property_assert %false, "condition is false" : i1
+      om.class.fields
+    }
+    om.class @AssertUnknown(%cond: i1) -> () {
+      om.property_assert %cond, "unknown condition" : i1
+      om.class.fields
+    }
+  }
+  """)
+
+  evaluator = om.Evaluator(module)
+  i1_type = Type.parse("i1")
+
+  # Passing assertion should succeed silently.
+  obj = evaluator.instantiate("AssertTrue")
+  # CHECK: AssertTrue: passed
+  print("AssertTrue: passed")
+
+  # Failing assertion should raise ValueError.
+  try:
+    obj = evaluator.instantiate("AssertFalse")
+  except ValueError as e:
+    # CHECK: OM property assertion failed: condition is false
+    # CHECK: unable to instantiate object, see previous error(s)
+    print(e)
+
+  # Unknown condition should not raise an error (best-effort).
+  obj = evaluator.instantiate("AssertUnknown", om.Unknown(i1_type))
+  # CHECK: AssertUnknown(unknown): passed
+  print("AssertUnknown(unknown): passed")

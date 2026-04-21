@@ -177,7 +177,3 @@ void LowerSeqHLMemPass::runOnOperation() {
   if (failed(applyPartialConversion(top, target, std::move(patterns))))
     signalPassFailure();
 }
-
-std::unique_ptr<Pass> circt::seq::createLowerSeqHLMemPass() {
-  return std::make_unique<LowerSeqHLMemPass>();
-}

@@ -350,6 +350,36 @@ struct OMAnyCastOfUnknownSimplifier : public OpReduction<om::AnyCastOp> {
   }
 };
 
+/// Generic Operation-based reduction that replaces any OM operation with
+/// om.unknown of the same result type. This operates at the lowest level by
+/// working directly on Operation* without needing to know concrete op types.
+struct OMOpToUnknown : public Reduction {
+  uint64_t match(Operation *op) override {
+    // Only handle operations from the OM dialect
+    if (!isa<OMDialect>(op->getDialect()))
+      return 0;
+
+    // Must have exactly one result (what we'll replace with unknown)
+    if (op->getNumResults() != 1)
+      return 0;
+
+    // Constant benefit: just eliminate this single operation
+    return 1;
+  }
+
+  LogicalResult rewrite(Operation *op) override {
+    OpBuilder builder(op);
+    Type resultType = op->getResult(0).getType();
+    auto unknownOp =
+        om::UnknownValueOp::create(builder, op->getLoc(), resultType);
+    op->getResult(0).replaceAllUsesWith(unknownOp.getResult());
+    op->erase();
+    return success();
+  }
+
+  std::string getName() const override { return "om-op-to-unknown"; };
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -366,6 +396,7 @@ void om::OMReducePatternDialectInterface::populateReducePatterns(
 
   // Medium priority reductions
   patterns.add<OMUnusedClassRemover, 40>();
+  patterns.add<OMOpToUnknown, 35>();
   patterns.add<OMAnyCastOfUnknownSimplifier, 35>();
 }
 

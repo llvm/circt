@@ -321,6 +321,26 @@ omEvaluatorValueGetReferenceValue(OMEvaluatorValue evaluatorValue) {
   return wrap(result.value());
 }
 
+/// Query if the EvaluatorValue is an Unknown value.
+bool omEvaluatorValueIsUnknown(OMEvaluatorValue evaluatorValue) {
+  return unwrap(evaluatorValue)->isUnknown();
+}
+
+/// Create an Unknown EvaluatorValue.
+OMEvaluatorValue omEvaluatorUnknownGet(MlirContext context, MlirType type) {
+  auto *ctx = unwrap(context);
+  auto loc = UnknownLoc::get(ctx);
+  auto unknownValue =
+      evaluator::AttributeValue::get(unwrap(type), LocationAttr(loc));
+  unknownValue->markUnknown();
+  return wrap(unknownValue);
+}
+
+/// Get the type of an EvaluatorValue.
+MlirType omEvaluatorValueGetType(OMEvaluatorValue evaluatorValue) {
+  return wrap(unwrap(evaluatorValue)->getType());
+}
+
 //===----------------------------------------------------------------------===//
 // ReferenceAttr API.
 //===----------------------------------------------------------------------===//

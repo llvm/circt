@@ -41,7 +41,9 @@ def InstanceGraphInstanceOpInterface : OpInterface<"InstanceOpInterface"> {
       return targetNames;
     }]>,
 
-    InterfaceMethod<"Get the names of the instantiated modules",
+    InterfaceMethod<"Get the names of the instantiated modules as an ArrayAttr. "
+    "Returns an ArrayAttr containing StringAttr elements, where each StringAttr "
+    "represents the name of a potentially instantiated module.",
     "::mlir::ArrayAttr", "getReferencedModuleNamesAttr", (ins),
     /*methodBody=*/[{}],
     /*defaultImplementation=*/[{

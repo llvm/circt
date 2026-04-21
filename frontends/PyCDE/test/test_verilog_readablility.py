@@ -17,7 +17,6 @@ class WireNames(Module):
   @generator
   def build(self):
     foo = self.data_in[0]
-    foo.name = "foo"
     arr_data = dim(32, 4)([1, 2, 3, 4], "arr_data")
     self.a = foo.reg(self.clk).reg(self.clk)
     self.b = arr_data[self.sel]

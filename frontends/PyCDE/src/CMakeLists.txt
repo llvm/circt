@@ -34,21 +34,11 @@ declare_mlir_python_sources(PyCDESources
   pycde/instance.py
   pycde/seq.py
   pycde/signals.py
+  pycde/tracer.py
   pycde/ndarray.py
   pycde/esi.py
   pycde/fsm.py
   pycde/testing.py
-
-  pycde/bsp/__init__.py
-  pycde/bsp/common.py
-  pycde/bsp/cosim.py
-  pycde/bsp/dma.py
-  pycde/bsp/xrt.py
-  pycde/bsp/Makefile.xrt.mk
-  pycde/bsp/xrt_package.tcl
-  pycde/bsp/xrt.ini
-  pycde/bsp/xrt_vitis.cfg
-  pycde/bsp/xsim.tcl
 )
 
 ################################################################################

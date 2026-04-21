@@ -7,108 +7,52 @@ on:
     - cron: 0 12 * * *
 
 jobs:
-  # Build CIRCT and run its tests using a Docker container with all the
-  # integration testing prerequisite installed.
   build-circt:
-    name: Build and Test
-    # Run on an internal MSFT subscription. Please DO NOT use this for any other
-    # workflows without talking to John Demme (john.demme@microsoft.com, GH
-    # teqdruid) first. We may lose funding for this if it ends up costing too
-    # much.
-    # If individual jobs fail due to timeouts or disconnects, please report to
-    # John and re-run the job.
-    runs-on: ["self-hosted", "1ES.Pool=1ES-CIRCT-builds", "linux"]
-    container:
-      image: ghcr.io/circt/images/circt-integration-test:v20
-      volumes:
-        - /mnt:/__w/circt
+    name: "${{ matrix.compiler }}/${{ matrix.build-type }}/${{ matrix.build-shared == 'ON' && 'shared' || 'static' }}-libs/asserts-${{ matrix.build-assert == 'ON' && 'on' || 'off' }}${{ matrix.valgrind && '/valgrind' || '' }}"
     strategy:
       fail-fast: false
       matrix:
-        # Please clear all new builds with John first. Any changes to this
-        # matrix could result in a drastically increased number of builds, which
-        # in turn costs more. Changes which don't result in new builds are OK.
         build-assert: [ON, OFF]
         build-shared: [ON, OFF]
         build-type: [Debug, Release]
         compiler:
-          - cc: clang
-            cxx: clang++
-          - cc: gcc
-            cxx: g++
-        lit-flags: ['', '--vg']
+          - clang
+          - gcc
+          - clang-19
+        valgrind: [false, true]
         exclude:
           - build-type: Debug
-            lit-flags: --vg
+            valgrind: true
           - build-type: Release
-            lit-flags: --vg
+            valgrind: true
             build-assert: OFF
           - build-type: Release
-            lit-flags: --vg
+            valgrind: true
             build-shared: ON
           # TODO: This corner is failing and has been for some time. #5253.
           - build-type: Release
-            compiler: {cc: gcc, cxx: g++}
-            lit-flags: --vg
-
-    steps:
-      # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
-      # time.
-      - name: Get CIRCT
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 1
-          submodules: true
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        # Cache only when build type is release
-        if: matrix.build-type == 'Release'
-        with:
-          max-size: 300M
-          key: nightly-${{ matrix.compiler.cc }}-${{ matrix.build-type }}-${{ matrix.build-shared }}-${{ matrix.build-assert }}
-
-      # --------
-      # Build and test CIRCT
-      # --------
-
-      - name: Configure CIRCT
-        env:
-          CC: ${{ matrix.compiler.cc }}
-          CXX: ${{ matrix.compiler.cxx }}
-          BUILD_ASSERT: ${{ matrix.build-assert }}
-          BUILD_SHARED: ${{ matrix.build-shared }}
-          BUILD_TYPE: ${{ matrix.build-type }}
-        run: |
-          export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
-          mkdir build && cd build
-          cmake -GNinja ../llvm/llvm \
-            -DBUILD_SHARED_LIBS=$BUILD_SHARED \
-            -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
-            -DCMAKE_C_COMPILER=$CC \
-            -DCMAKE_CXX_COMPILER=$CXX \
-            -DLLVM_CCACHE_BUILD=ON \
-            -DLLVM_ENABLE_ASSERTIONS=$BUILD_ASSERT \
-            -DLLVM_ENABLE_PROJECTS=mlir \
-            -DLLVM_EXTERNAL_PROJECTS=circt \
-            -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=.. \
-            -DLLVM_TARGETS_TO_BUILD="host" \
-            -DLLVM_USE_LINKER=lld \
-            -DLLVM_USE_SPLIT_DWARF=ON \
-            -DMLIR_ENABLE_BINDINGS_PYTHON=ON \
-            -DCIRCT_BINDINGS_PYTHON_ENABLED=ON \
-            -DLLVM_LIT_ARGS="-v --show-unsupported ${{ matrix.lit-flags }}" \
-            -DCIRCT_SLANG_FRONTEND_ENABLED=ON
-
-            # Temporarily disable ESI runtime builds until we work out the Abseil conflict (#7236).
-            # -DESI_RUNTIME=ON
-      - name: Test CIRCT
-        run: |
-          ninja -C build check-circt -j$(nproc)
-      - name: Unit Test CIRCT
-        run: |
-          ninja -C build check-circt-unit -j$(nproc)
-      - name: Integration Test CIRCT
-        if: ${{ matrix.lit-flags == '' }}
-        run: |
-          ninja -C build check-circt-integration -j$(nproc)
+            compiler: gcc
+            valgrind: true
+          # clang-19 is used for valgrind builds instead of clang.
+          - compiler: clang-19
+            valgrind: false
+          - compiler: clang
+            valgrind: true
+    permissions:
+      contents: write
+      actions: write
+    uses: ./.github/workflows/unifiedBuildTestAndInstall.yml
+    with:
+      runner: ubuntu-24.04
+      cmake_build_type: ${{ matrix.build-type }}
+      build_shared_libs: ${{ matrix.build-shared }}
+      llvm_enable_assertions: ${{ matrix.build-assert }}
+      run_tests: true
+      # We don't want to run valgrind on integration tests as these do things
+      # like run Verilator to generate C++ and then compile it.  We _don't_ want
+      # to be running valgrind on GCC or Clang themselves.
+      run_integration_tests: ${{ !matrix.valgrind }}
+      install_target: ""
+      package_name_prefix: ""
+      cmake_c_compiler: ${{ matrix.compiler }}
+      valgrind: ${{ matrix.valgrind }}

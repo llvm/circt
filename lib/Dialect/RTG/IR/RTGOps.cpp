@@ -30,7 +30,7 @@ using namespace rtg;
 LogicalResult
 ConstantOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
                              ValueRange operands, DictionaryAttr attributes,
-                             OpaqueProperties properties, RegionRange regions,
+                             PropertyRef properties, RegionRange regions,
                              SmallVectorImpl<Type> &inferredReturnTypes) {
   inferredReturnTypes.push_back(
       properties.as<Properties *>()->getValue().getType());
@@ -169,7 +169,7 @@ LogicalResult SubstituteSequenceOp::verify() {
 
 LogicalResult SubstituteSequenceOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   ArrayRef<Type> argTypes =
       cast<SequenceType>(operands[0].getType()).getElementTypes();
@@ -292,7 +292,7 @@ LogicalResult SetCreateOp::verify() {
 
 LogicalResult SetCartesianProductOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   if (operands.empty()) {
     if (loc)
@@ -386,7 +386,7 @@ LogicalResult BagCreateOp::verify() {
 
 LogicalResult TupleCreateOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   SmallVector<Type> elementTypes;
   for (auto operand : operands)
@@ -401,7 +401,7 @@ LogicalResult TupleCreateOp::inferReturnTypes(
 
 LogicalResult TupleExtractOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   assert(operands.size() == 1 && "must have exactly one operand");
 
@@ -446,7 +446,7 @@ LogicalResult ConstraintOp::canonicalize(ConstraintOp op,
 
 LogicalResult VirtualRegisterOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   auto allowedRegs = properties.as<Properties *>()->getAllowedRegs();
   inferredReturnTypes.push_back(allowedRegs.getType());
@@ -723,6 +723,14 @@ LogicalResult ValidateOp::verify() {
   return success();
 }
 
+bool ValidateOp::isSourceRegister(unsigned index) {
+  if (index == 0)
+    return isa<RegisterTypeInterface>(getRef().getType());
+  return false;
+}
+
+bool ValidateOp::isDestinationRegister(unsigned index) { return false; }
+
 //===----------------------------------------------------------------------===//
 // ArrayCreateOp
 //===----------------------------------------------------------------------===//
@@ -870,7 +878,7 @@ void MemoryBlockDeclareOp::print(OpAsmPrinter &p) {
 
 LogicalResult MemoryBaseAddressOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
@@ -888,7 +896,7 @@ LogicalResult MemoryBaseAddressOp::inferReturnTypes(
 
 LogicalResult ConcatImmediateOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
     SmallVectorImpl<Type> &inferredReturnTypes) {
   if (operands.empty()) {
     if (loc)

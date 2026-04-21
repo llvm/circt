@@ -33,6 +33,7 @@ using namespace arc;
 
 void circt::populateArcPreprocessingPipeline(
     OpPassManager &pm, const ArcPreprocessingOptions &options) {
+  pm.addPass(arc::createResolveXMRRef());
   pm.addPass(om::createStripOMPass());
   pm.addPass(emit::createStripEmitPass());
   pm.addPass(createLowerFirMemPass());
@@ -42,18 +43,18 @@ void circt::populateArcPreprocessingPipeline(
     opts.tapPorts = options.observePorts;
     opts.tapWires = options.observeWires;
     opts.tapNamedValues = options.observeNamedValues;
-    pm.addPass(arc::createAddTapsPass(opts));
+    pm.addPass(arc::createAddTaps(opts));
   }
-  pm.addPass(arc::createStripSVPass(options.asyncResetsAsSync));
+  pm.addPass(arc::createStripSV({options.asyncResetsAsSync}));
   {
     arc::InferMemoriesOptions opts;
     opts.tapPorts = options.observePorts;
     opts.tapMemories = options.observeMemories;
-    pm.addPass(arc::createInferMemoriesPass(opts));
+    pm.addPass(arc::createInferMemories(opts));
   }
   pm.addPass(sim::createLowerDPIFunc());
   pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizer());
 }
 
 void circt::populateArcConversionPipeline(OpPassManager &pm,
@@ -64,19 +65,19 @@ void circt::populateArcConversionPipeline(OpPassManager &pm,
     pm.addPass(createConvertToArcsPass(opts));
   }
   if (options.shouldDedup)
-    pm.addPass(arc::createDedupPass());
+    pm.addPass(arc::createDedup());
   pm.addPass(hw::createFlattenModules());
   pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizer());
 }
 
 void circt::populateArcOptimizationPipeline(
     OpPassManager &pm, const ArcOptimizationOptions &options) {
   // Perform arc-level optimizations that are not specific to software
   // simulation.
-  pm.addPass(arc::createSplitLoopsPass());
+  pm.addPass(arc::createSplitLoops());
   if (options.shouldDedup)
-    pm.addPass(arc::createDedupPass());
+    pm.addPass(arc::createDedup());
   {
     arc::InferStatePropertiesOptions opts;
     opts.detectEnables = options.shouldDetectEnables;
@@ -84,24 +85,24 @@ void circt::populateArcOptimizationPipeline(
     pm.addPass(arc::createInferStateProperties(opts));
   }
   pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizer());
   pm.addNestedPass<hw::HWModuleOp>(arc::createMergeTaps());
   if (options.shouldMakeLUTs)
-    pm.addPass(arc::createMakeTablesPass());
+    pm.addPass(arc::createMakeTables());
   pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizer());
 
   // Now some arguments may be unused because reset conditions are not passed as
-  // inputs anymore pm.addPass(arc::createRemoveUnusedArcArgumentsPass());
+  // inputs anymore pm.addPass(arc::createRemoveUnusedArcArguments());
   // Because we replace a lot of StateOp inputs with constants in the enable
   // patterns we may be able to sink a lot of them
   // TODO: maybe merge RemoveUnusedArcArguments with SinkInputs?
-  // pm.addPass(arc::createSinkInputsPass());
+  // pm.addPass(arc::createSinkInputs());
   // pm.addPass(createCSEPass());
   // pm.addPass(createSimpleCanonicalizerPass());
   // Removing some muxes etc. may lead to additional dedup opportunities
   // if (options.shouldDedup)
-  // pm.addPass(arc::createDedupPass());
+  // pm.addPass(arc::createDedup());
 }
 
 void circt::populateArcStateLoweringPipeline(
@@ -113,31 +114,31 @@ void circt::populateArcStateLoweringPipeline(
   // converted in the hw.module or arc.model
   // TODO: InlineArcs seems to not properly handle scf.if operations, thus the
   // following is commented out
-  // pm.addPass(arc::createMuxToControlFlowPass());
+  // pm.addPass(arc::createMuxToControlFlow());
   if (options.shouldInline)
-    pm.addPass(arc::createInlineArcsPass());
+    pm.addPass(arc::createInlineArcs());
 
   pm.addPass(arc::createMergeIfsPass());
   pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizer());
 }
 
 void circt::populateArcStateAllocationPipeline(
     OpPassManager &pm, const ArcStateAllocationOptions &options) {
-  pm.addPass(arc::createLowerArcsToFuncsPass());
+  pm.addPass(arc::createLowerArcsToFuncs());
   {
     AllocateStateOptions allocStateOpts;
     allocStateOpts.insertTraceTaps = options.insertTraceTaps;
     pm.nest<arc::ModelOp>().addPass(arc::createAllocateState(allocStateOpts));
   }
   pm.nest<arc::ModelOp>().addPass(arc::createAllocateState());
-  pm.addPass(arc::createLowerClocksToFuncsPass()); // no CSE between state alloc
-                                                   // and clock func lowering
+  pm.addPass(arc::createLowerClocksToFuncs()); // no CSE between state alloc
+                                               // and clock func lowering
   if (options.splitFuncsThreshold.getNumOccurrences()) {
     pm.addPass(arc::createSplitFuncs({options.splitFuncsThreshold}));
   }
   pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizer());
 }
 
 void circt::populateArcToLLVMPipeline(OpPassManager &pm,
@@ -155,5 +156,5 @@ void circt::populateArcToLLVMPipeline(OpPassManager &pm,
   }
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
-  pm.addPass(arc::createArcCanonicalizerPass());
+  pm.addPass(arc::createArcCanonicalizer());
 }

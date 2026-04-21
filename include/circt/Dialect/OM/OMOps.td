@@ -516,4 +516,79 @@ def IntegerShlOp : IntegerBinaryArithmeticOp<"integer.shl"> {
   }];
 }
 
+def StringConcatOp : OMOp<"string.concat", [Pure, SameOperandsAndResultType]> {
+  let summary = "Concatenate multiple string values";
+  let description = [{
+    Perform string concatenation of multiple OM string values.
+
+    Example:
+    ```mlir
+    %3 = om.string.concat %0, %1, %2 : !om.string
+    ```
+  }];
+
+  let arguments = (ins Variadic<StringType>:$strings);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$strings attr-dict `:` type($result)";
+
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+}
+
+class BinaryEqualityOpBase<string mnemonic, list<Trait> traits = []> :
+    OMOp<mnemonic, [
+      Pure,
+      AllTypesMatch<["lhs", "rhs"]>,
+      DeclareOpInterfaceMethods<BinaryEqualityInterface>
+    ] # traits> {
+  let arguments = (ins AnyTypeOf<[StringType, OMIntegerType, I1]>:$lhs,
+                       AnyTypeOf<[StringType, OMIntegerType, I1]>:$rhs);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
+}
+
+def PropEqOp : BinaryEqualityOpBase<"prop.eq"> {
+  let summary = "Compare two OM property values for equality";
+  let description = [{
+    Compare two OM property values (String, Integer, or Bool) for equality,
+    returning a 1-bit integer (i1) result. Returns 1 if the values are equal,
+    0 otherwise. Both operands must have the same type.
+
+    Example:
+    ```mlir
+    %2 = om.prop.eq %0, %1 : !om.string
+    %3 = om.prop.eq %4, %5 : !om.integer
+    %6 = om.prop.eq %7, %8 : i1
+    ```
+  }];
+
+  let results = (outs I1:$result);
+
+  let hasFolder = 1;
+}
+
+def PropertyAssertOp : OMOp<"property_assert"> {
+  let summary = "Assert that a boolean property holds at evaluation time";
+  let description = [{
+    Asserts that `$condition` (a 1-bit integer) is non-zero when evaluated by
+    the OM evaluator. If the evaluator resolves the condition to zero,
+    evaluation fails with `$message`.
+
+    Example:
+    ```mlir
+    om.property_assert %cond, "invariant must hold" : i1
+    ```
+  }];
+
+  let arguments = (ins
+    I1:$condition,
+    StrAttr:$message
+  );
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $condition `,` $message attr-dict `:` type($condition)
+  }];
+}
+
 #endif // CIRCT_DIALECT_OM_OMOPS_TD

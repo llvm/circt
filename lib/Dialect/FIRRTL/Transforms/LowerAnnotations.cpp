@@ -1098,7 +1098,7 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
       // this is a U-turn.
       for (auto [newPortIdx, problemIdx] : llvm::enumerate(problemIndices)) {
         auto &modifications = moduleModifications[enclosingModule];
-        auto newPort = clonedInst.getResult(newPortIdx + originalNumPorts);
+        auto newPort = clonedInst->getResult(newPortIdx + originalNumPorts);
         if (modifications.connectionMap.count(problemIdx)) {
           modifications.uturns.push_back({problemIdx, newPort});
           continue;

@@ -84,4 +84,16 @@ library(test) {
       function: "A";
     }
   }
+
+  // CHECK-LABEL: hw.module.extern @External(
+  // CHECK-SAME: in %A : i1 {synth.liberty.pin = {}}
+  // CHECK-SAME: out Z : i1 {synth.liberty.pin = {}}
+  cell(External) {
+    pin(A) {
+      direction: input;
+    }
+    pin(Z) {
+      direction: output;
+    }
+  }
 }

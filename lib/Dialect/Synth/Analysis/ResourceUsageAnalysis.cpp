@@ -16,6 +16,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/InstanceGraph.h"
@@ -41,53 +42,47 @@ using namespace synth;
 // ResourceUsageAnalysis Implementation
 //===----------------------------------------------------------------------===//
 
-/// Get resource count for an operation if it's a tracked resource type.
-/// Returns (operation name, count) pair, or std::nullopt if not tracked.
-/// The operation name may include additional information (e.g., LUT input
-/// count).
-static std::optional<std::pair<std::string, uint64_t>>
-getResourceCount(Operation *op) {
+/// Accumulate resource counts for an operation if it's a tracked resource type.
+/// Returns true if the operation was tracked, false otherwise.
+static bool accumulateResourceCounts(Operation *op,
+                                     llvm::StringMap<uint64_t> &counts) {
   if (op->getNumResults() != 1 || !op->getResult(0).getType().isInteger())
-    return std::nullopt;
-  return TypeSwitch<Operation *,
-                    std::optional<std::pair<std::string, uint64_t>>>(op)
-      // Variadic logic operations (AND, OR, XOR, AIG).
-      // Gate count = (num_inputs - 1) * bitwidth
-      .Case<synth::aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp>(
-          [](auto logicOp) {
-            return std::make_pair(
-                logicOp->getName().getStringRef(),
-                (logicOp.getNumOperands() - 1) *
-                    logicOp.getType().getIntOrFloatBitWidth());
-          })
-      // Majority-inverter graph (MIG) - include input count in the name.
-      // Gate count = (num_inputs / 2) * bitwidth
-      // Each MIG gate consumes 3 inputs and produces 1 output, so a variadic
-      // MIG operation with N inputs requires N/2 gates (rounded down).
-      .Case<synth::mig::MajorityInverterOp>([](auto logicOp) {
-        uint64_t count = logicOp.getType().getIntOrFloatBitWidth();
-        // Concatenate input count to the operation name.
-        std::string name = (Twine(logicOp->getName().getStringRef()) + "_" +
-                            Twine(logicOp.getNumOperands()))
-                               .str();
-        return std::make_pair(std::move(name), count);
+    return false;
+  return TypeSwitch<Operation *, bool>(op)
+      .Case<BooleanLogicOpInterface>([&](auto logicOp) {
+        if (auto areaCost = logicOp.getLogicAreaCost()) {
+          counts[op->getName().getStringRef()] += *areaCost;
+          return true;
+        }
+        return false;
       })
-      // Truth tables (LUTs) - include input count in the name.
-      .Case<comb::TruthTableOp>([](auto op) {
+      // Variadic comb logic operations.
+      // Gate count = (num_inputs - 1) * bitwidth
+      .Case<comb::AndOp, comb::OrOp, comb::XorOp>([&](auto logicOp) {
+        counts[logicOp->getName().getStringRef()] +=
+            static_cast<uint64_t>(logicOp.getNumOperands() - 1) *
+            logicOp.getType().getIntOrFloatBitWidth();
+        return true;
+      })
+      // Truth tables (LUTs) - count both the total number of truth tables and
+      // the per-input breakdown.
+      .Case<comb::TruthTableOp>([&](auto op) {
         uint64_t count = op.getType().getIntOrFloatBitWidth();
-        // Concatenate LUT input number to the operation name.
-        std::string name = (Twine(op->getName().getStringRef()) + "_" +
-                            Twine(op.getNumOperands()))
-                               .str();
-        return std::make_pair(std::move(name), count);
+        counts[op->getName().getStringRef()] += count;
+        std::string bucket = (Twine(op->getName().getStringRef()) + "_" +
+                              Twine(op.getNumOperands()))
+                                 .str();
+        counts[bucket] += count;
+        return true;
       })
       // Sequential elements.
       // Count = bitwidth
-      .Case<seq::CompRegOp, seq::FirRegOp>([](auto op) {
+      .Case<seq::CompRegOp, seq::FirRegOp>([&](auto op) {
         uint64_t count = op.getType().getIntOrFloatBitWidth();
-        return std::make_pair(op->getName().getStringRef().str(), count);
+        counts[op->getName().getStringRef()] += count;
+        return true;
       })
-      .Default([](Operation *) { return std::nullopt; });
+      .Default([](Operation *) { return false; });
 }
 
 ResourceUsageAnalysis::ResourceUsageAnalysis(Operation *moduleOp,
@@ -106,11 +101,7 @@ ResourceUsageAnalysis::getResourceUsage(StringAttr moduleName) {
   if (!node)
     return nullptr;
 
-  auto module = dyn_cast_or_null<igraph::ModuleOpInterface>(node->getModule());
-  if (!module)
-    return nullptr;
-
-  return getResourceUsage(module);
+  return getResourceUsage(node->getModule());
 }
 
 ResourceUsageAnalysis::ModuleResourceUsage *
@@ -126,10 +117,10 @@ ResourceUsageAnalysis::getResourceUsage(igraph::ModuleOpInterface module) {
   llvm::StringMap<uint64_t> counts;
   uint64_t unknownOpCount = 0;
   module->walk([&](Operation *op) {
-    if (auto resource = getResourceCount(op))
-      counts[resource->first] += resource->second;
-    else if (op->getNumResults() > 0 && !isa<hw::HWInstanceLike>(op) &&
-             !op->hasTrait<mlir::OpTrait::ConstantLike>()) {
+    if (accumulateResourceCounts(op, counts))
+      return;
+    if (op->getNumResults() > 0 && !isa<hw::HWInstanceLike>(op) &&
+        !op->hasTrait<mlir::OpTrait::ConstantLike>()) {
       // Track operations that has one result and is not a constant.
       unknownOpCount++;
     }
@@ -148,10 +139,8 @@ ResourceUsageAnalysis::getResourceUsage(igraph::ModuleOpInterface module) {
   // Recursively process child module instances.
   for (auto *child : *node) {
     auto *targetNode = child->getTarget();
-    auto childModule =
-        dyn_cast_or_null<igraph::ModuleOpInterface>(targetNode->getModule());
-    if (!childModule)
-      continue;
+
+    auto childModule = targetNode->getModule();
 
     auto *instanceOp = child->getInstance().getOperation();
     // Skip instances with no results or marked as "doNotPrint".
@@ -250,7 +239,7 @@ LogicalResult PrintResourceUsageAnalysisPass::getTopModules(
 
     // Collect all ModuleOpInterface instances from top-level nodes.
     for (auto *node : *topLevelNodes) {
-      if (auto module = dyn_cast<igraph::ModuleOpInterface>(node->getModule()))
+      if (auto module = node->getModule())
         tops.push_back(module);
     }
 
@@ -264,11 +253,7 @@ LogicalResult PrintResourceUsageAnalysisPass::getTopModules(
       return mod.emitError()
              << "top module '" << topModuleName.getValue() << "' not found";
 
-    auto top = dyn_cast_or_null<igraph::ModuleOpInterface>(node->getModule());
-    if (!top)
-      return mod.emitError() << "module '" << topModuleName.getValue()
-                             << "' is not a ModuleOpInterface";
-    tops.push_back(top);
+    tops.push_back(node->getModule());
   }
 
   return success();

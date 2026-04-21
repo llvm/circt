@@ -35,8 +35,14 @@ public:
                "Connection string to use for accelerator communication")
         ->required();
     add_flag("--debug", debug, "Enable debug logging");
+    // Always accept --trace so tests and scripts don't depend on whether
+    // trace-level logging was compiled into this particular runtime build.
 #ifdef ESI_RUNTIME_TRACE
     add_flag("--trace", trace, "Enable trace logging");
+#else
+    add_flag("--trace", trace,
+             "Enabled ONLY in debug builds with ESI_RUNTIME_TRACE defined, "
+             "which this is not. Ignored but included for compatibility.");
 #endif
     add_flag("-v,--verbose", verbose, "Enable verbose (info) logging");
     require_subcommand(0, 1);

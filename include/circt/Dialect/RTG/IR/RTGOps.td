@@ -758,6 +758,32 @@ def ConstraintOp : RTGOp<"constraint", []> {
   let hasCanonicalizeMethod = 1;
 }
 
+def RandomScopeOp : RTGOp<"random_scope", [
+  NoRegionArguments,
+  SingleBlockImplicitTerminator<"rtg::YieldOp">,
+]> {
+  let summary = "introduce a new scope for randomization";
+  let description = [{
+    This operation introduces a new scope for randomization. This is useful to
+    isolate randomization such that the same sequence of operations in the
+    parent scope yields the same RNG results despite operations being added in
+    this scope.
+
+    The optional seed attribute can be used to fix the RNG seed of this scope
+    such that changes in the parent region do not affect the RNG results in this
+    scope. This attribute is intended for internal uses (e.g., regression
+    tests) and not exposed to the frontend user.
+  }];
+
+  let arguments = (ins OptionalAttr<IndexAttr>:$seed);
+  let results = (outs Variadic<AnyType>:$results);
+  let regions = (region SizedRegion<1>:$bodyRegion);
+
+  let assemblyFormat = [{
+    (`seed` $seed^)? attr-dict-with-keyword (`:` type($results)^)? $bodyRegion
+  }];
+}
+
 //===- Test Specification Operations --------------------------------------===//
 
 def TestOp : RTGOp<"test", [

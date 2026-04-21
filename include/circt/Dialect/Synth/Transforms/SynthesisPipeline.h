@@ -25,13 +25,6 @@
 namespace circt {
 namespace synth {
 
-enum TargetIR {
-  // Lower to And-Inverter Graph
-  AIG,
-  // Lower to Majority-Inverter Graph
-  MIG
-};
-
 /// Options for the aig lowering pipeline.
 struct CombLoweringPipelineOptions
     : public mlir::PassPipelineOptions<CombLoweringPipelineOptions> {
@@ -43,9 +36,6 @@ struct CombLoweringPipelineOptions
       *this, "timing-aware",
       llvm::cl::desc("Lower operators in a timing-aware fashion"),
       llvm::cl::init(false)};
-  PassOptions::Option<TargetIR> targetIR{
-      *this, "lowering-target", llvm::cl::desc("Target IR to lower to"),
-      llvm::cl::init(TargetIR::AIG)};
   PassOptions::Option<OptimizationStrategy> synthesisStrategy{
       *this, "synthesis-strategy", llvm::cl::desc("Synthesis strategy to use"),
       llvm::cl::values(
@@ -76,6 +66,17 @@ struct SynthOptimizationPipelineOptions
   PassOptions::Option<bool> disableSOPBalancing{
       *this, "disable-sop-balancing",
       llvm::cl::desc("Disable SOPBalancing pass"), llvm::cl::init(true)};
+
+  PassOptions::Option<bool> disableFunctionalReduction{
+      *this, "disable-functional-reduction",
+      llvm::cl::desc("Disable FunctionalReduction pass"),
+      llvm::cl::init(false)};
+
+  PassOptions::Option<int64_t> functionalReductionConflictLimit{
+      *this, "functional-reduction-conflict-limit",
+      llvm::cl::desc("Per-SAT-call conflict budget for FunctionalReduction. "
+                     "-1 disables the limit."),
+      llvm::cl::init(100)};
 
   PassOptions::Option<bool> timingAware{
       *this, "timing-aware",

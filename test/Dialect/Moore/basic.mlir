@@ -442,6 +442,11 @@ func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42, %arg2: 
   moore.fmt.real float %arg2, align right fieldWidth 12 : f32
   // CHECK: moore.fmt.real exponential %arg3, align right fracDigits 5 : f64
   moore.fmt.real exponential %arg3, align right fracDigits 5 : f64
+
+  // CHECK: moore.fmt.hier_path
+  moore.fmt.hier_path
+  // CHECK: moore.fmt.hier_path escaped
+  moore.fmt.hier_path escaped
   return
 }
 
@@ -556,4 +561,30 @@ func.func @StringOperations(%arg0 : !moore.string, %arg1 : !moore.string) {
   moore.string.len %arg0
 
   return
+}
+
+// CHECK-LABEL: moore.coroutine @myTask(%arg0: !moore.ref<l1>)
+moore.coroutine @myTask(%arg0: !moore.ref<l1>) {
+  // CHECK: moore.wait_event
+  moore.wait_event {
+    %0 = moore.read %arg0 : <l1>
+    moore.detect_event posedge %0 : l1
+  }
+  // CHECK: moore.return
+  moore.return
+}
+
+// CHECK-LABEL: moore.coroutine private @privateTask()
+moore.coroutine private @privateTask() {
+  moore.return
+}
+
+moore.module @CoroutineCallTest() {
+  %clk = moore.variable : <l1>
+  moore.procedure initial {
+    // CHECK: moore.call_coroutine @myTask(%clk) : (!moore.ref<l1>) -> ()
+    moore.call_coroutine @myTask(%clk) : (!moore.ref<l1>) -> ()
+    moore.return
+  }
+  moore.output
 }

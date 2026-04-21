@@ -36,7 +36,8 @@ def SystemFunctionOp : SVOp<"system"> {
 
 
 def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName,
-    DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -68,7 +69,8 @@ def VerbatimExprOp : SVOp<"verbatim.expr", [Pure, HasCustomSSAName,
 }
 
 def VerbatimExprSEOp : SVOp<"verbatim.expr.se", [HasCustomSSAName,
-    DeclareOpInterfaceMethods<InnerRefUserOpInterface>]> {
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Expression that expands to a value given SystemVerilog text";
   let description = [{
     This operation produces a typed value expressed by a string of
@@ -254,7 +256,7 @@ def IndexedPartSelectOp
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::OpaqueProperties properties,
+                                          mlir::PropertyRef properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];

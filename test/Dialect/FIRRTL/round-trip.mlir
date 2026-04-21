@@ -142,6 +142,37 @@ firrtl.module @PropertyArithmetic() {
   %5 = firrtl.integer.shl %0, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 }
 
+// CHECK-LABEL: firrtl.module @PropertyStringOps
+firrtl.module @PropertyStringOps() {
+  %0 = firrtl.string "Hello, "
+  %1 = firrtl.string "World"
+  %2 = firrtl.string "!"
+
+  // CHECK: firrtl.string.concat %0, %1, %2 : !firrtl.string
+  %3 = firrtl.string.concat %0, %1, %2 : !firrtl.string
+}
+
+// CHECK-LABEL: firrtl.module @PropertyPropEq
+firrtl.module @PropertyPropEq() {
+  %0 = firrtl.string "hello"
+  %1 = firrtl.string "world"
+
+  // CHECK: firrtl.prop.eq %0, %1 : !firrtl.string
+  %2 = firrtl.prop.eq %0, %1 : !firrtl.string
+
+  %3 = firrtl.bool true
+  %4 = firrtl.bool false
+
+  // CHECK: firrtl.prop.eq %3, %4 : !firrtl.bool
+  %5 = firrtl.prop.eq %3, %4 : !firrtl.bool
+
+  %6 = firrtl.integer 42
+  %7 = firrtl.integer 0
+
+  // CHECK: firrtl.prop.eq %6, %7 : !firrtl.integer
+  %8 = firrtl.prop.eq %6, %7 : !firrtl.integer
+}
+
 // CHECK-LABEL: firrtl.module @PropertyListOps
 firrtl.module @PropertyListOps() {
   %0 = firrtl.integer 0
@@ -237,85 +268,168 @@ firrtl.domain @PowerDomain [
 ]
 
 firrtl.module @DomainsSubmodule(
-  in %A: !firrtl.domain of @ClockDomain,
+  in %A: !firrtl.domain<@ClockDomain()>,
   in %a: !firrtl.uint<1> domains [%A]
 ) {}
 
 // CHECK-LABEL: firrtl.module @Domains(
-// CHECK-SAME:    in %A: !firrtl.domain
-// CHECK-SAME:    in %B: !firrtl.domain
+// CHECK-SAME:    in %A: !firrtl.domain<@ClockDomain()>
+// CHECK-SAME:    in %B: !firrtl.domain<@ClockDomain()>
 // CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
 // CHECK-SAME:    out %b: !firrtl.uint<1> domains [%B]
 // CHECK-SAME:    in %c: !firrtl.uint<1> domains [%C]
-// CHECK-SAME:    in %C: !firrtl.domain
+// CHECK-SAME:    in %C: !firrtl.domain<@ClockDomain()>
 firrtl.module @Domains(
-  in %A: !firrtl.domain of @ClockDomain,
-  in %B: !firrtl.domain of @ClockDomain,
+  in %A: !firrtl.domain<@ClockDomain()>,
+  in %B: !firrtl.domain<@ClockDomain()>,
   in %a: !firrtl.uint<1> domains [%A],
   out %b: !firrtl.uint<1> domains [%B],
   in %c: !firrtl.uint<1> domains [%C],
-  in %C: !firrtl.domain of @ClockDomain
+  in %C: !firrtl.domain<@ClockDomain()>
 ) {
-  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
-  %0 = firrtl.unsafe_domain_cast %a domains %B : !firrtl.uint<1>
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+  %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
   firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
 
   // CHECK:      %foo_A, %foo_a = firrtl.instance foo @DomainsSubmodule(
-  // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain()>
   // CHECK-SAME:   in a: !firrtl.uint<1> domains [A]
   %foo_A, %foo_a = firrtl.instance foo @DomainsSubmodule(
-    in A: !firrtl.domain of @ClockDomain,
+    in A: !firrtl.domain<@ClockDomain()>,
     in a: !firrtl.uint<1> domains [A]
   )
 }
 
 // CHECK-LABEL: firrtl.module @AnonymousDomains
-// CHECK-SAME:    in %arg0: !firrtl.domain
+// CHECK-SAME:    in %arg0: !firrtl.domain<@ClockDomain()>
 // CHECK-SAME:    in %a: !firrtl.uint<1> domains [%arg0]
 // CHECK-SAME:    portNames = ["", "a"]
 firrtl.module @AnonymousDomains(
-  in %arg0: !firrtl.domain of @ClockDomain,
+  in %arg0: !firrtl.domain<@ClockDomain()>,
   in %a: !firrtl.uint<1> domains [%arg0]
 ) attributes {
   portNames = ["", "a"]
 } {
-  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains %arg0 : !firrtl.uint<1>
-  %0 = firrtl.unsafe_domain_cast %a domains %arg0 : !firrtl.uint<1>
+  // CHECK: %0 = firrtl.unsafe_domain_cast %a domains[%arg0] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+  %0 = firrtl.unsafe_domain_cast %a domains[%arg0] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+}
+
+// Test domain types with fields
+// CHECK-LABEL: firrtl.module @DomainTypesWithFields(
+// CHECK-SAME:    in %simple: !firrtl.domain<@ClockDomain()>
+// CHECK-SAME:    in %fielded: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+// CHECK-SAME:    out %fielded_out: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+firrtl.module @DomainTypesWithFields(
+  in %simple: !firrtl.domain<@ClockDomain()>,
+  in %fielded: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>,
+  out %fielded_out: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+) {
+  // CHECK: %[[name:.+]] = firrtl.string "VDD"
+  // CHECK: %[[voltage:.+]] = firrtl.integer 1800
+  // CHECK: %[[alwaysOn:.+]] = firrtl.bool true
+  // CHECK: %my_domain = firrtl.domain.create(%[[name]], %[[voltage]], %[[alwaysOn]]) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  %name = firrtl.string "VDD"
+  %voltage = firrtl.integer 1800
+  %alwaysOn = firrtl.bool true
+  %my_domain = firrtl.domain.create(%name, %voltage, %alwaysOn) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+
+  // CHECK: firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  firrtl.domain.define %fielded_out, %fielded : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
 }
 
 // CHECK-LABEL: firrtl.module @DomainDefine
 firrtl.module @DomainDefine(
-  in  %x : !firrtl.domain of @ClockDomain,
-  out %y : !firrtl.domain of @ClockDomain
+  in  %x : !firrtl.domain<@ClockDomain()>,
+  out %y : !firrtl.domain<@ClockDomain()>
 ) {
-  // CHECK: firrtl.domain.define %y, %x
-  firrtl.domain.define %y, %x
+  // CHECK: firrtl.domain.define %y, %x : !firrtl.domain<@ClockDomain()>
+  firrtl.domain.define %y, %x : !firrtl.domain<@ClockDomain()>
 }
 
-firrtl.module private @DefaultTargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
-firrtl.module private @FPGATargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
-firrtl.module private @ASICTargetWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {}
+firrtl.module private @DefaultTargetWithDomain(in %A: !firrtl.domain<@ClockDomain()>, in %clock: !firrtl.clock domains [%A]) {}
+firrtl.module private @FPGATargetWithDomain(in %A: !firrtl.domain<@ClockDomain()>, in %clock: !firrtl.clock domains [%A]) {}
+firrtl.module private @ASICTargetWithDomain(in %A: !firrtl.domain<@ClockDomain()>, in %clock: !firrtl.clock domains [%A]) {}
 
 // CHECK-LABEL: firrtl.module @InstanceChoiceWithDomain
-firrtl.module @InstanceChoiceWithDomain(in %A: !firrtl.domain of @ClockDomain, in %clock: !firrtl.clock domains [%A]) {
+firrtl.module @InstanceChoiceWithDomain(in %A: !firrtl.domain<@ClockDomain()>, in %clock: !firrtl.clock domains [%A]) {
   // CHECK:      %inst_A, %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTargetWithDomain alternatives @Platform
-  // CHECK-SAME:   { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain of @ClockDomain, in clock: !firrtl.clock domains [A])
+  // CHECK-SAME:   { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain<@ClockDomain()>, in clock: !firrtl.clock domains [A])
   %inst_A, %inst_clock = firrtl.instance_choice inst interesting_name @DefaultTargetWithDomain alternatives @Platform
-    { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain of @ClockDomain, in clock: !firrtl.clock domains [A])
+    { @FPGA -> @FPGATargetWithDomain, @ASIC -> @ASICTargetWithDomain } (in A: !firrtl.domain<@ClockDomain()>, in clock: !firrtl.clock domains [A])
   firrtl.matchingconnect %inst_clock, %clock : !firrtl.clock
-  firrtl.domain.define %inst_A, %A
+  firrtl.domain.define %inst_A, %A : !firrtl.domain<@ClockDomain()>
 }
 
 // CHECK-LABEL: firrtl.module @CreateAnonDomain
-firrtl.extmodule @CreateAnonDomainChild(in A: !firrtl.domain of @ClockDomain)
+firrtl.extmodule @CreateAnonDomainChild(in A: !firrtl.domain<@ClockDomain()>)
 firrtl.module @CreateAnonDomain() {
-  // CHECK-NEXT: %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
-  %0 = firrtl.domain.anon : !firrtl.domain of @ClockDomain
+  // CHECK-NEXT: %0 = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
+  %0 = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
   %child_A = firrtl.instance child @CreateAnonDomainChild(
-    in A: !firrtl.domain of @ClockDomain
+    in A: !firrtl.domain<@ClockDomain()>
   )
-  // CHECK: firrtl.domain.define %child_A, %0
-  firrtl.domain.define %child_A, %0
+  // CHECK: firrtl.domain.define %child_A, %0 : !firrtl.domain<@ClockDomain()>
+  firrtl.domain.define %child_A, %0 : !firrtl.domain<@ClockDomain()>
+}
+
+// CHECK-LABEL: firrtl.module @CreateDomain
+firrtl.extmodule @CreateDomainChild(in A: !firrtl.domain<@ClockDomain()>)
+firrtl.module @CreateDomain() {
+  // CHECK-NEXT: %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+  %my_domain = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+  %child_A = firrtl.instance child @CreateDomainChild(
+    in A: !firrtl.domain<@ClockDomain()>
+  )
+  // CHECK: firrtl.domain.define %child_A, %my_domain : !firrtl.domain<@ClockDomain()>
+  firrtl.domain.define %child_A, %my_domain : !firrtl.domain<@ClockDomain()>
+}
+
+// CHECK-LABEL: firrtl.module @DomainSubfield
+firrtl.module @DomainSubfield() {
+  // CHECK-NEXT: firrtl.string "FastClock"
+  %name = firrtl.string "FastClock"
+  // CHECK-NEXT: firrtl.integer 1800
+  %voltage = firrtl.integer 1800
+  // CHECK-NEXT: firrtl.bool true
+  %alwaysOn = firrtl.bool true
+
+  // CHECK-NEXT: firrtl.domain.create{{.*}}: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  %domain = firrtl.domain.create (%name, %voltage, %alwaysOn) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+
+  // CHECK-NEXT: firrtl.domain.subfield{{.*}}[name] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  %extracted_name = firrtl.domain.subfield %domain[name] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+
+  // CHECK-NEXT: firrtl.domain.subfield{{.*}}[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  %extracted_voltage = firrtl.domain.subfield %domain[voltage] : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+}
+
+// CHECK-LABEL: firrtl.module @WireDomainOperands
+firrtl.module @WireDomainOperands(
+  in %A: !firrtl.domain<@ClockDomain()>,
+  in %B: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+) {
+  // CHECK: %w_no_domain = firrtl.wire : !firrtl.uint<1>
+  %w_no_domain = firrtl.wire : !firrtl.uint<1>
+
+  // CHECK: %w_single = firrtl.wire domains[%A] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
+  %w_single = firrtl.wire domains[%A] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
+
+  // CHECK: %w_multi = firrtl.wire domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>]
+  %w_multi = firrtl.wire domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>]
+}
+
+// In a class body.
+// CHECK-LABEL: firrtl.class @AssertInClass
+firrtl.class @AssertInClass(in %cond : !firrtl.bool) {
+  // CHECK: firrtl.property_assert %cond, "must be true" : !firrtl.bool
+  firrtl.property_assert %cond, "must be true" : !firrtl.bool
+}
+
+// In a module body.
+// CHECK-LABEL: firrtl.module @AssertInModule
+firrtl.module @AssertInModule(in %cond : !firrtl.bool) {
+  // CHECK: firrtl.property_assert %cond, "module invariant" : !firrtl.bool
+  firrtl.property_assert %cond, "module invariant" : !firrtl.bool
 }
 
 }

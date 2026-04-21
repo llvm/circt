@@ -345,35 +345,6 @@ std::optional<AnnoPathValue> firrtl::resolvePath(StringRef rawPath,
   return resolveEntities(*tokens, circuit, symTbl, cache);
 }
 
-InstanceOp firrtl::addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
-                                    FIRRTLType portType, Direction dir,
-                                    StringRef newName,
-                                    InstancePathCache &instancePathcache,
-                                    CircuitTargetCache *targetCaches) {
-  // To store the cloned version of `instOnPath`.
-  InstanceOp clonedInstOnPath;
-  // Get a new port name from the Namespace.
-  auto portName = StringAttr::get(mod.getContext(), newName);
-  // The port number for the new port.
-  unsigned portNo = getNumPorts(mod);
-  PortInfo portInfo = {portName, portType, dir, {}, mod.getLoc()};
-  mod.insertPorts({{portNo, portInfo}});
-  // Now update all the instances of `mod`.
-  for (auto *use : instancePathcache.instanceGraph.lookup(mod)->uses()) {
-    InstanceOp useInst = cast<InstanceOp>(use->getInstance());
-    auto clonedInst =
-        useInst.cloneWithInsertedPortsAndReplaceUses({{portNo, portInfo}});
-    if (useInst == instOnPath)
-      clonedInstOnPath = clonedInst;
-    // Update all occurences of old instance.
-    instancePathcache.replaceInstance(useInst, clonedInst);
-    if (targetCaches)
-      targetCaches->replaceOp(useInst, clonedInst);
-    useInst->erase();
-  }
-  return clonedInstOnPath;
-}
-
 //===----------------------------------------------------------------------===//
 // AnnoTargetCache
 //===----------------------------------------------------------------------===//

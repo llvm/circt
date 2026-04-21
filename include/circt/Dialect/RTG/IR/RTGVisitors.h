@@ -42,7 +42,7 @@ public:
             // Labels
             StringToLabelOp, LabelUniqueDeclOp, LabelOp,
             // Registers
-            VirtualRegisterOp,
+            VirtualRegisterOp, RegisterToIndexOp, IndexToRegisterOp,
             // RTG tests
             TestOp, TargetOp, YieldOp, ValidateOp, TestSuccessOp, TestFailureOp,
             // Integers
@@ -69,9 +69,10 @@ public:
             // String ops
             StringConcatOp, IntFormatOp, ImmediateFormatOp, RegisterFormatOp,
             // Misc ops
-            CommentOp, ConstraintOp>([&](auto expr) -> ResultType {
-          return thisCast->visitOp(expr, args...);
-        })
+            CommentOp, ConstraintOp, RandomScopeOp>(
+            [&](auto expr) -> ResultType {
+              return thisCast->visitOp(expr, args...);
+            })
         .Default([&](auto expr) -> ResultType {
           if (op->getDialect() ==
               op->getContext()->getLoadedDialect<RTGDialect>())
@@ -142,6 +143,8 @@ public:
   HANDLE(TestSuccessOp, Unhandled);
   HANDLE(TestFailureOp, Unhandled);
   HANDLE(VirtualRegisterOp, Unhandled);
+  HANDLE(RegisterToIndexOp, Unhandled);
+  HANDLE(IndexToRegisterOp, Unhandled);
   HANDLE(IntToImmediateOp, Unhandled);
   HANDLE(ConcatImmediateOp, Unhandled);
   HANDLE(SliceImmediateOp, Unhandled);
@@ -157,6 +160,7 @@ public:
   HANDLE(ImmediateFormatOp, Unhandled);
   HANDLE(RegisterFormatOp, Unhandled);
   HANDLE(StringToLabelOp, Unhandled);
+  HANDLE(RandomScopeOp, Unhandled);
 #undef HANDLE
 };
 

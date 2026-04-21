@@ -189,11 +189,6 @@ void circtFirtoolOptionsSetReplSeqMemFile(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setReplSeqMemFile(unwrap(value));
 }
 
-void circtFirtoolOptionsSetExtractTestCode(CirctFirtoolFirtoolOptions options,
-                                           bool value) {
-  unwrap(options)->setExtractTestCode(value);
-}
-
 void circtFirtoolOptionsSetIgnoreReadEnableMem(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setIgnoreReadEnableMem(value);
@@ -231,6 +226,11 @@ void circtFirtoolOptionsSetEnableAnnotationWarning(
   unwrap(options)->setEnableAnnotationWarning(value);
 }
 
+void circtFirtoolOptionsSetLowerToCore(CirctFirtoolFirtoolOptions options,
+                                       bool value) {
+  unwrap(options)->setLowerToCore(value);
+}
+
 void circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
                                          bool value) {
   unwrap(options)->setAddMuxPragmas(value);
@@ -244,21 +244,6 @@ void circtFirtoolOptionsSetVerificationFlavor(
 void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setEmitSeparateAlwaysBlocks(value);
-}
-
-void circtFirtoolOptionsSetEtcDisableInstanceExtraction(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEtcDisableInstanceExtraction(value);
-}
-
-void circtFirtoolOptionsSetEtcDisableRegisterExtraction(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEtcDisableRegisterExtraction(value);
-}
-
-void circtFirtoolOptionsSetEtcDisableModuleInlining(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEtcDisableModuleInlining(value);
 }
 
 void circtFirtoolOptionsSetAddVivadoRAMAddressConflictSynthesisBugWorkaround(

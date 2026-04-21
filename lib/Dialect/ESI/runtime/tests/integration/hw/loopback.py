@@ -30,7 +30,7 @@
 import sys
 
 from pycde import (AppID, Clock, Module, Reset, Signal, System, generator)
-from pycde.bsp import get_bsp
+from esiaccel.bsp import get_bsp
 from pycde.common import Constant
 from pycde.constructs import Wire
 from pycde.module import Metadata
@@ -38,6 +38,8 @@ from pycde.signals import Struct
 from pycde.types import (Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, SInt, TypeAlias, UInt)
 from pycde import esi
+
+from esiaccel.esitester import SerialCoordTranslator
 
 SendI8 = Bundle([BundledChannel("send", ChannelDirection.FROM, Bits(8))])
 RecvI8 = Bundle([BundledChannel("recv", ChannelDirection.TO, Bits(8))])
@@ -215,6 +217,23 @@ class CallableFunc1(Module):
     result_wire.assign(result_chan)
 
 
+class LoopbackSInt4(Module):
+  """Loopback a si4 value: returns the input unchanged."""
+
+  @generator
+  def construct(ports):
+    result_wire = Wire(Channel(SInt(4)))
+    args = esi.FuncService.get_call_chans(AppID("sint4Func"),
+                                          arg_type=SInt(4),
+                                          result=result_wire)
+
+    ready = Wire(Bits(1))
+    arg_data, valid = args.unwrap(ready)
+    result_chan, result_ready = Channel(SInt(4)).wrap(arg_data, valid)
+    ready.assign(result_ready)
+    result_wire.assign(result_chan)
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
@@ -225,9 +244,16 @@ class Top(Module):
     Loopback(clk=ports.clk, appid=AppID("loopback_inst", 1))
     MemoryAccess1(clk=ports.clk, rst=ports.rst)
     CallableFunc1()
+    LoopbackSInt4()
     LoopbackStruct()
     LoopbackOddStruct()
     LoopbackArray()
+    SerialCoordTranslator(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="coord_translator_serial",
+        appid=AppID("coord_translator_serial"),
+    )
 
 
 if __name__ == "__main__":

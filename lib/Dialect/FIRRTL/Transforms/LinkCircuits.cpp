@@ -21,7 +21,6 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
-#include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -89,7 +88,9 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
     if (!symbolOp)
       continue;
 
-    if (symbolOp.isPrivate())
+    // Skip mangling for extmodules: they are declarations of external entities
+    // whose names must be preserved for cross-circuit linking resolution.
+    if (symbolOp.isPrivate() && !isa<FExtModuleOp>(symbolOp))
       if (failed(manglePrivateSymbol(symbolOp)))
         return failure();
   }
@@ -155,24 +156,74 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
   return success();
 }
 
-/// Handles colliding symbols when merging circuits.
+static void collectLayerSymbols(LayerOp layer,
+                                SmallVectorImpl<FlatSymbolRefAttr> &stack,
+                                llvm::DenseSet<Attribute> &layers) {
+  stack.push_back(FlatSymbolRefAttr::get(layer.getSymNameAttr()));
+  layers.insert(SymbolRefAttr::get(stack.front().getAttr(),
+                                   ArrayRef(stack).drop_front()));
+  for (auto child : layer.getOps<LayerOp>())
+    collectLayerSymbols(child, stack, layers);
+  stack.pop_back();
+}
+
+static void collectLayerSymbols(CircuitOp circuit,
+                                llvm::DenseSet<Attribute> &layers) {
+  SmallVector<FlatSymbolRefAttr> stack;
+  for (auto layer : circuit.getOps<LayerOp>())
+    collectLayerSymbols(layer, stack, layers);
+}
+
+static LogicalResult
+verifyKnownLayers(FExtModuleOp extModule,
+                  const llvm::DenseSet<Attribute> &availableLayers) {
+  auto knownLayersAttr = extModule.getKnownLayersAttr();
+  if (!knownLayersAttr)
+    return success();
+
+  SmallVector<Attribute> missingLayers;
+  for (auto attr : knownLayersAttr)
+    if (!availableLayers.contains(attr))
+      missingLayers.push_back(attr);
+
+  if (missingLayers.empty())
+    return success();
+
+  auto diag = extModule.emitOpError()
+              << "declares known layers that are not defined in the linked "
+                 "circuit: ";
+  llvm::interleaveComma(missingLayers, diag,
+                        [&](Attribute attr) { diag << attr; });
+  return failure();
+}
+
+static LogicalResult mergeLayer(LayerOp dst, LayerOp src) {
+  if (dst.getConvention() != src.getConvention())
+    return src.emitOpError("layer convention mismatch with existing layer");
+
+  SymbolTable dstSymbolTable(dst);
+
+  for (auto &op : llvm::make_early_inc_range(src.getBody().front())) {
+    if (auto srcChildLayer = dyn_cast<LayerOp>(op))
+      if (auto dstChildLayer = cast_if_present<LayerOp>(
+              dstSymbolTable.lookup(srcChildLayer.getNameAttr()))) {
+        if (failed(mergeLayer(dstChildLayer, srcChildLayer)))
+          return failure();
+        continue;
+      }
+    op.moveBefore(&dst.getBody().front(), dst.getBody().front().end());
+  }
+  return success();
+}
+
+/// Resolves symbol collisions during circuit merging. Handles:
 ///
-/// This function resolves symbol collisions between operations in different
-/// circuits during the linking process. It handles three specific cases:
-///
-/// 1. Identical extmodules: When two extmodules have identical attributes, the
-///    incoming one is removed as they are duplicates.
-///
-/// 2. Extmodule declaration + module definition: When an extmodule
-///    (declaration) collides with a module (definition), the declaration is
-///    removed in favor of the definition if their attributes match.
-///
-/// 3. Extmodule with empty parameters (Zaozi workaround): When two extmodules
-///    collide and one has empty parameters, the one without parameters
-///    (placeholder declaration) is removed. This handles a limitation in
-///    Zaozi's module generation where placeholder extmodule declarations are
-///    created from instance ops without knowing the actual parameters or
-///    defname.
+/// 1. Extmodule + module: declaration is removed in favor of the definition
+///    if their port attributes match. The definition must be public.
+/// 2. Identical extmodules: duplicates are removed.
+/// 3. Extmodule with empty parameters: the placeholder (without parameters)
+///    is removed in favor of the fully-parameterized one.
+/// 4. Layers: recursively merged.
 ///
 /// \param collidingOp The operation already present in the merged circuit
 /// \param incomingOp The operation being added from another circuit
@@ -180,16 +231,12 @@ static LogicalResult mangleCircuitSymbols(CircuitOp circuit) {
 ///         success with false if collidingOp was erased, or failure if the
 ///         collision cannot be resolved
 ///
-/// \note This workaround for empty parameters should ultimately be
-///       removed once ODS is updated to properly support placeholder
-///       declarations.
-static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
-                                          SymbolOpInterface incomingOp) {
-  if (!collidingOp.isPublic())
-    return collidingOp->emitOpError("should be a public symbol");
-  if (!incomingOp.isPublic())
-    return incomingOp->emitOpError("should be a public symbol");
-
+/// \note The empty parameters workaround (case 3) should be removed once ODS
+///       is updated to properly support placeholder declarations.
+static FailureOr<bool>
+handleCollidingOps(SymbolOpInterface collidingOp, SymbolOpInterface incomingOp,
+                   const llvm::DenseSet<Attribute> &mergedLayers,
+                   const llvm::DenseSet<Attribute> &incomingLayers) {
   if ((isa<FExtModuleOp>(collidingOp) && isa<FModuleOp>(incomingOp)) ||
       (isa<FExtModuleOp>(incomingOp) && isa<FModuleOp>(collidingOp))) {
     auto definition = collidingOp;
@@ -198,6 +245,15 @@ static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
       definition = incomingOp;
       declaration = collidingOp;
     }
+
+    if (!definition.isPublic())
+      return definition->emitOpError("should be a public symbol");
+
+    auto extModule = cast<FExtModuleOp>(declaration);
+    const auto &layersToCheck =
+        (definition == incomingOp) ? incomingLayers : mergedLayers;
+    if (failed(verifyKnownLayers(extModule, layersToCheck)))
+      return failure();
 
     constexpr const StringRef attrsToCompare[] = {
         "portDirections", "portSymbols", "portNames", "portTypes", "layers"};
@@ -238,6 +294,14 @@ static FailureOr<bool> handleCollidingOps(SymbolOpInterface collidingOp,
     }
   }
 
+  if (isa<LayerOp>(collidingOp) && isa<LayerOp>(incomingOp)) {
+    if (failed(
+            mergeLayer(cast<LayerOp>(collidingOp), cast<LayerOp>(incomingOp))))
+      return failure();
+    incomingOp->erase();
+    return true;
+  }
+
   return failure();
 }
 
@@ -255,10 +319,15 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
                         StringAttr::get(&getContext(), baseCircuitName));
   SmallVector<Attribute> mergedAnnotations;
 
+  llvm::DenseSet<Attribute> mergedLayers;
+
   for (auto circuit : circuits) {
     if (!noMangle)
       if (failed(mangleCircuitSymbols(circuit)))
         return circuit->emitError("failed to mangle private symbol");
+
+    llvm::DenseSet<Attribute> incomingLayers;
+    collectLayerSymbols(circuit, incomingLayers);
 
     // TODO: other circuit attributes (such as enable_layers...)
     llvm::transform(circuit.getAnnotations().getValue(),
@@ -281,7 +350,8 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
       if (auto symbolOp = dyn_cast<SymbolOpInterface>(op))
         if (auto collidingOp = cast_if_present<SymbolOpInterface>(
                 mergedSymbolTable.lookup(symbolOp.getNameAttr()))) {
-          auto opErased = handleCollidingOps(collidingOp, symbolOp);
+          auto opErased = handleCollidingOps(collidingOp, symbolOp,
+                                             mergedLayers, incomingLayers);
           if (failed(opErased))
             return mergedCircuit->emitError("has colliding symbol " +
                                             symbolOp.getName() +
@@ -294,6 +364,7 @@ LogicalResult LinkCircuitsPass::mergeCircuits() {
                      mergedCircuit.getBodyBlock()->end());
     }
 
+    mergedLayers.insert(incomingLayers.begin(), incomingLayers.end());
     circuit->erase();
   }
 

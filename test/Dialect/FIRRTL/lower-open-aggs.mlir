@@ -333,10 +333,10 @@ firrtl.circuit "DomainInfo" {
   // CHECK:      firrtl.module @DomainInfo
   // CHECK-SAME:   out %a: !firrtl.bundle<b: uint<1>> domains [%A]
   // CHECK-SAME:   out %a_c: !firrtl.probe<uint<1>> domains [%A]
-  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in %A: !firrtl.domain<@ClockDomain()>
   firrtl.module @DomainInfo(
     out %a: !firrtl.openbundle<b: uint<1>, c: probe<uint<1>>> domains [%A],
-    in %A: !firrtl.domain of @ClockDomain
+    in %A: !firrtl.domain<@ClockDomain()>
   ) {
   }
 }
@@ -352,11 +352,11 @@ firrtl.circuit "DomainInfoIndexUpdate" {
   // CHECK-SAME:   out bundle_a: !firrtl.probe<uint<1>>,
   // CHECK-SAME:   out bundle_b: !firrtl.probe<uint<1>>,
   // CHECK-SAME:   in reset: !firrtl.asyncreset domains [domain],
-  // CHECK-SAME:   in domain: !firrtl.domain of @D)
+  // CHECK-SAME:   in domain: !firrtl.domain<@D()>)
   firrtl.extmodule @Ext(
     out bundle: !firrtl.openbundle<a: probe<uint<1>>, b: probe<uint<1>>>,
     in reset: !firrtl.asyncreset domains [domain],
-    in domain: !firrtl.domain of @D
+    in domain: !firrtl.domain<@D()>
   )
 
   // CHECK:      firrtl.module @DomainInfoIndexUpdate
@@ -365,11 +365,22 @@ firrtl.circuit "DomainInfoIndexUpdate" {
     // CHECK-SAME: out bundle_a: !firrtl.probe<uint<1>>,
     // CHECK-SAME: out bundle_b: !firrtl.probe<uint<1>>,
     // CHECK-SAME: in reset: !firrtl.asyncreset domains [domain],
-    // CHECK-SAME: in domain: !firrtl.domain of @D)
+    // CHECK-SAME: in domain: !firrtl.domain<@D()>)
     %bundle, %reset, %domain = firrtl.instance ext @Ext(
       out bundle: !firrtl.openbundle<a: probe<uint<1>>, b: probe<uint<1>>>,
       in reset: !firrtl.asyncreset domains [domain],
-      in domain: !firrtl.domain of @D
+      in domain: !firrtl.domain<@D()>
     )
+  }
+}
+
+// -----
+
+// Test that inner symbols within nested base aggregates are propagated.
+// CHECK-LABEL: circuit "NestedBaseInnerSym"
+firrtl.circuit "NestedBaseInnerSym" {
+  firrtl.module @NestedBaseInnerSym() {
+    // CHECK: [<@sym,0,public>, <@sym_b,1,public>, <@sym_c,2,public>]
+    %w = firrtl.wire sym [<@sym, 0, public>, <@sym_b, 2, public>, <@sym_c, 3, public>] : !firrtl.openbundle<a: probe<uint<1>>, b: bundle<c: uint<1>>, d: probe<uint<1>>>
   }
 }

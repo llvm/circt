@@ -28,6 +28,9 @@ print(Channel(UInt(4), ChannelSignaling.FIFO))
 # CHECK: Channel<UInt<4>, ValidReady(1)>
 print(Channel(UInt(4), ChannelSignaling.ValidReady, 1))
 
+# CHECK: Channel<UInt<4>, ValidOnly>
+print(Channel(UInt(4), ChannelSignaling.ValidOnly))
+
 TestBundle = Bundle([
     BundledChannel("resp", ChannelDirection.FROM, Bits(16)),
     BundledChannel("req", ChannelDirection.TO, Bits(24))
@@ -63,7 +66,7 @@ class HostComms:
 # CHECK:         %req = esi.bundle.unpack %chanOutput from [[B0]] : !esi.bundle<[!esi.channel<i16> from "resp", !esi.channel<i24> to "req"]>
 # CHECK:         %rawOutput, %valid = esi.unwrap.vr %req, %ready : i24
 # CHECK:         [[R0:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
-# CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i16
+# CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid {sv.namehint = "loopback"} : i16
 @unittestmodule(print=True)
 class LoopbackInOutTop(Module):
   clk = Clock()
@@ -126,7 +129,7 @@ class LoopbackCoercedCall(Module):
 # CHECK-NEXT:     %arg = esi.bundle.unpack [[R2]] from [[R0]] : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16, FIFO> from "result"]>
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %arg, %ready : i24
 # CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
-# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid : i16
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid {sv.namehint = "loopback_src"} : i16
 # CHECK-NEXT:     hw.output
 # CHECK-NEXT:   }
 # CHECK-NEXT:   esi.service.std.func @_FuncService
@@ -270,6 +273,22 @@ class ChannelTransform(Module):
     valid, ready, data = self.s1_in.snoop()
     xact, snooped_data = self.s1_in.snoop_xact()
     xact.when_true(lambda: print_info("Pre-transform: %p", snooped_data))
+    self.s2_out = self.s1_in.transform(lambda x: x[0:8])
+
+
+# CHECK-LABEL: hw.module @ValidOnlyTransform(in %s1_in : !esi.channel<i32, ValidOnly>, out s2_out : !esi.channel<i8, ValidOnly>)
+# CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vo %s1_in : !esi.channel<i32, ValidOnly>
+# CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
+# CHECK-NEXT:     [[R1:%.+]] = esi.wrap.vo [[R0]], %valid : i8
+# CHECK-NEXT:     %true = hw.constant true
+# CHECK-NEXT:     hw.output [[R1]] : !esi.channel<i8, ValidOnly>
+@unittestmodule()
+class ValidOnlyTransform(Module):
+  s1_in = Input(Channel(Bits(32), ChannelSignaling.ValidOnly))
+  s2_out = Output(Channel(Bits(8), ChannelSignaling.ValidOnly))
+
+  @generator
+  def build(self):
     self.s2_out = self.s1_in.transform(lambda x: x[0:8])
 
 

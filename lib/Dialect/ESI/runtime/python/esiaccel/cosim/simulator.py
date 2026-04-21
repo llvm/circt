@@ -9,7 +9,7 @@ import socket
 import subprocess
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Callable, IO
+from typing import Dict, List, Optional, Callable, IO, Union
 import threading
 
 _thisdir = Path(__file__).parent
@@ -60,14 +60,31 @@ class SourceFiles:
     """Return a list of all the DPI shared object files."""
 
     def find_so(name: str) -> Path:
-      for path in Simulator.get_env().get("LD_LIBRARY_PATH", "").split(":"):
+
+      def check_path(p: Path) -> Optional[Path]:
         if os.name == "nt":
-          so = Path(path) / f"{name}.dll"
+          so = p / f"{name}.dll"
         else:
-          so = Path(path) / f"lib{name}.so"
-        if so.exists():
-          return so
-      raise FileNotFoundError(f"Could not find {name}.so in LD_LIBRARY_PATH")
+          so = p / f"lib{name}.so"
+        return so if so.exists() else None
+
+      for path in Simulator.get_env().get("LD_LIBRARY_PATH", "").split(":"):
+        p = check_path(Path(path))
+        if p is not None:
+          return p
+
+      # If it's not in LD_LIBRARY_PATH, check a couple of parent directories
+      # relative to this file.
+      search_parent = _thisdir.parent
+      p = check_path(search_parent / "lib")
+      if p is not None:
+        return p
+      search_parent = search_parent.parent
+      p = check_path(search_parent / "lib")
+      if p is not None:
+        return p
+
+      raise FileNotFoundError(f"Could not find {name}.so")
 
     return [find_so(name) for name in self.dpi_so]
 
@@ -107,6 +124,10 @@ class SimProcess:
 
 class Simulator:
 
+  CompileCommand = List[str]
+  CompileFunction = Callable[[], Optional[int]]
+  CompileStep = Union[CompileCommand, CompileFunction]
+
   # Some RTL simulators don't use stderr for error messages. Everything goes to
   # stdout. Boo! They should feel bad about this. Also, they can specify that
   # broken behavior by overriding this.
@@ -116,6 +137,7 @@ class Simulator:
                sources: SourceFiles,
                run_dir: Path,
                debug: bool,
+               save_waveform: bool = False,
                run_stdout_callback: Optional[Callable[[str], None]] = None,
                run_stderr_callback: Optional[Callable[[str], None]] = None,
                compile_stdout_callback: Optional[Callable[[str], None]] = None,
@@ -131,6 +153,9 @@ class Simulator:
       sources: SourceFiles describing RTL/DPI inputs.
       run_dir: Directory where build/run artifacts are placed.
       debug: Enable cosim debug mode.
+      save_waveform: When True and debug=True, dump simulator waveforms to a
+        waveform file. The exact format depends on the backend (e.g. FST for
+        Verilator, VCD for Questa). Requires debug to be enabled.
       run_stdout_callback: Line-based callback for runtime stdout.
       run_stderr_callback: Line-based callback for runtime stderr.
       compile_stdout_callback: Line-based callback for compile stdout.
@@ -143,6 +168,7 @@ class Simulator:
     self.sources = sources
     self.run_dir = run_dir
     self.debug = debug
+    self.save_waveform = save_waveform
     self.macro_definitions = macro_definitions
 
     # Unified list of any log file handles we opened.
@@ -188,46 +214,77 @@ class Simulator:
 
     env = os.environ.copy()
     env["LIBRARY_PATH"] = env.get("LIBRARY_PATH", "") + ":" + str(
-        _thisdir.parent / "lib")
+        _thisdir.parent / "lib") + ":" + str(_thisdir.parent.parent / "lib")
     env["LD_LIBRARY_PATH"] = env.get("LD_LIBRARY_PATH", "") + ":" + str(
-        _thisdir.parent / "lib")
+        _thisdir.parent / "lib") + ":" + str(_thisdir.parent.parent / "lib")
     return env
 
-  def compile_commands(self) -> List[List[str]]:
-    """Compile the sources. Returns the exit code of the simulation compiler."""
+  def compile_commands(self) -> List[CompileStep]:
+    """Return the compile steps for the simulator.
+
+    Each step may be either a shell command (`List[str]`) or a Python callback
+    (`Callable[[], Optional[int]]`). Python callbacks should return `0` or
+    `None` on success and a non-zero integer on failure.
+    """
     assert False, "Must be implemented by subclass"
+
+  def _run_compile_command(self, cmd: CompileCommand) -> int:
+    ret = self._start_process_with_callbacks(cmd,
+                                             env=Simulator.get_env(),
+                                             cwd=None,
+                                             stdout_cb=self._compile_stdout_cb,
+                                             stderr_cb=self._compile_stderr_cb,
+                                             wait=True)
+    if isinstance(ret, int) and ret != 0:
+      print("====== Compilation failure")
+
+      # Always print both stdout and stderr so that linker errors (which go
+      # to stdout for cmake/ninja) are not silently hidden.
+      if self._compile_stdout_log is not None:
+        self._compile_stdout_log.seek(0)
+        stdout_content = self._compile_stdout_log.read()
+        if stdout_content:
+          print(stdout_content)
+      if self._compile_stderr_log is not None:
+        self._compile_stderr_log.seek(0)
+        stderr_content = self._compile_stderr_log.read()
+        if stderr_content:
+          print(stderr_content)
+
+    return ret if isinstance(ret, int) else 1
+
+  def _run_compile_step(self, step: CompileStep) -> int:
+    if callable(step):
+      ret = step()
+      if ret is None:
+        return 0
+      if not isinstance(ret, int):
+        raise TypeError("compile step callback must return int or None")
+      return ret
+    return self._run_compile_command(step)
 
   def compile(self) -> int:
     cmds = self.compile_commands()
     self.run_dir.mkdir(parents=True, exist_ok=True)
-    for cmd in cmds:
-      ret = self._start_process_with_callbacks(
-          cmd,
-          env=Simulator.get_env(),
-          cwd=None,
-          stdout_cb=self._compile_stdout_cb,
-          stderr_cb=self._compile_stderr_cb,
-          wait=True)
-      if isinstance(ret, int) and ret != 0:
-        print("====== Compilation failure")
-
-        # If we have the default file loggers, print the compilation logs to
-        # console. Else, assume that the user has already captured them.
-        if self.UsesStderr:
-          if self._compile_stderr_log is not None:
-            self._compile_stderr_log.seek(0)
-            print(self._compile_stderr_log.read())
-        else:
-          if self._compile_stdout_log is not None:
-            self._compile_stdout_log.seek(0)
-            print(self._compile_stdout_log.read())
-
+    for step in cmds:
+      ret = self._run_compile_step(step)
+      if ret != 0:
         return ret
     return 0
 
   def run_command(self, gui: bool) -> List[str]:
     """Return the command to run the simulation."""
     assert False, "Must be implemented by subclass"
+
+  @property
+  def waveform_extension(self) -> str:
+    """File extension for waveform dumps.
+
+    Subclasses should override if their format differs.  The Verilator C++
+    driver writes FST (via ``VerilatedFstC``); the generic SV driver uses
+    ``$dumpfile/$dumpvars`` which produces VCD.
+    """
+    return ".vcd"
 
   def run_proc(self, gui: bool = False) -> SimProcess:
     """Run the simulation process. Returns the Popen object and the port which
@@ -251,10 +308,15 @@ class Simulator:
     # Run the simulation.
     simEnv = Simulator.get_env()
     if self.debug:
-      simEnv["COSIM_DEBUG_FILE"] = "cosim_debug.log"
+      debug_file = (self.run_dir / "cosim_debug.log").resolve()
+      simEnv["COSIM_DEBUG_FILE"] = str(debug_file)
       if "DEBUG_PERIOD" not in simEnv:
         # Slow the simulation down to one tick per millisecond.
         simEnv["DEBUG_PERIOD"] = "1"
+      if self.save_waveform:
+        waveform_file = (self.run_dir /
+                         f"cosim_waveform{self.waveform_extension}").resolve()
+        simEnv["SAVE_WAVE"] = str(waveform_file)
     rcmd = self.run_command(gui)
     # Start process with asynchronous output capture.
     proc, threads = self._start_process_with_callbacks(
@@ -383,14 +445,17 @@ class Simulator:
         simProc.force_stop()
 
 
-def get_simulator(name: str, sources: SourceFiles, rundir: Path,
-                  debug: bool) -> Simulator:
+def get_simulator(name: str,
+                  sources: SourceFiles,
+                  rundir: Path,
+                  debug: bool,
+                  save_waveform: bool = False) -> Simulator:
   name = name.lower()
   if name == "verilator":
     from .verilator import Verilator
-    return Verilator(sources, rundir, debug)
+    return Verilator(sources, rundir, debug, save_waveform=save_waveform)
   elif name == "questa":
     from .questa import Questa
-    return Questa(sources, rundir, debug)
+    return Questa(sources, rundir, debug, save_waveform=save_waveform)
   else:
     raise ValueError(f"Unknown simulator: {name}")

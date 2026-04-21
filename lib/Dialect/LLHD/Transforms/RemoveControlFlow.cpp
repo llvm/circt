@@ -94,7 +94,7 @@ struct Condition {
       return false;
     if (isFalse())
       return true;
-    return comb::createOrFoldNot(getValue().getLoc(), getValue(), builder);
+    return comb::createOrFoldNot(builder, getValue().getLoc(), getValue());
   }
 
 private:

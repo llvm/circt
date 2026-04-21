@@ -22,6 +22,7 @@
 #include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-lower-signatures"
@@ -508,6 +509,7 @@ struct LowerSignaturesPass
 // This is the main entrypoint for the lowering pass.
 void LowerSignaturesPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+  auto &instanceGraph = getAnalysis<InstanceGraph>();
 
   // Cached attr
   AttrCache cache(&getContext());
@@ -516,8 +518,15 @@ void LowerSignaturesPass::runOnOperation() {
   auto circuit = getOperation();
 
   for (auto mod : circuit.getOps<FModuleLike>()) {
-    if (lowerModuleSignature(mod, mod.getConvention(), cache,
-                             portMap[mod.getNameAttr()])
+    auto convention = mod.getConvention();
+    // Instance choices select between modules with a shared port shape, so
+    // any module instantiated by one must use the scalarized convention.
+    if (llvm::any_of(instanceGraph.lookup(mod)->uses(),
+                     [](InstanceRecord *use) {
+                       return use->getInstance<InstanceChoiceOp>();
+                     }))
+      convention = Convention::Scalarized;
+    if (lowerModuleSignature(mod, convention, cache, portMap[mod.getNameAttr()])
             .failed())
       return signalPassFailure();
   }

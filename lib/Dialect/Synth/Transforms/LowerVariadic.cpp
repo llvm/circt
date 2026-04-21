@@ -19,7 +19,17 @@
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
+#include "mlir/IR/Block.h"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/Value.h"
+#include "mlir/Support/LLVM.h"
+#include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/raw_ostream.h"
+#include <iterator>
+#include <vector>
 
 #define DEBUG_TYPE "synth-lower-variadic"
 
@@ -93,6 +103,109 @@ static LogicalResult replaceWithBalancedTree(
   return success();
 }
 
+using OperandKey = llvm::SmallVector<std::pair<mlir::Value, bool>>;
+
+namespace llvm {
+template <>
+struct DenseMapInfo<OperandKey> {
+  static OperandKey getEmptyKey() {
+    // Return a vector containing the mlir::Value empty key
+    return {{DenseMapInfo<mlir::Value>::getEmptyKey(), false}};
+  }
+
+  static OperandKey getTombstoneKey() {
+    // Return a vector containing the mlir::Value tombstone key
+    return {{DenseMapInfo<mlir::Value>::getTombstoneKey(), false}};
+  }
+
+  static unsigned getHashValue(const OperandKey &val) {
+    llvm::hash_code hash = 0;
+    // Iteratively combine the hash of each pair in the vector
+    for (const auto &pair : val) {
+      hash = llvm::hash_combine(
+          hash, DenseMapInfo<mlir::Value>::getHashValue(pair.first),
+          pair.second);
+    }
+    return static_cast<unsigned>(hash);
+  }
+
+  static bool isEqual(const OperandKey &lhs, const OperandKey &rhs) {
+    // std::vector and std::pair already implement operator==,
+    // which does a deep equality check of the elements.
+    return lhs == rhs;
+  }
+};
+} // namespace llvm
+
+// Struct for ordering the andInverterOp operations we have already seen
+struct OperandPairLess {
+  bool operator()(const std::pair<mlir::Value, bool> &lhs,
+                  const std::pair<mlir::Value, bool> &rhs) const {
+    if (lhs.first != rhs.first) {
+      auto lhsArg = llvm::dyn_cast<mlir::BlockArgument>(lhs.first);
+      auto rhsArg = llvm::dyn_cast<mlir::BlockArgument>(rhs.first);
+      if (lhsArg && rhsArg)
+        return lhsArg.getArgNumber() < rhsArg.getArgNumber();
+      if (lhsArg)
+        return true;
+      if (rhsArg)
+        return false;
+
+      auto *lhsOp = lhs.first.getDefiningOp();
+      auto *rhsOp = rhs.first.getDefiningOp();
+      return lhsOp->isBeforeInBlock(rhsOp);
+    }
+    return lhs.second < rhs.second;
+  }
+};
+
+static OperandKey getSortedOperandKey(aig::AndInverterOp op) {
+  OperandKey key;
+  for (size_t i = 0, e = op.getNumOperands(); i < e; ++i)
+    key.emplace_back(op.getOperand(i), op.isInverted(i));
+
+  std::sort(key.begin(), key.end(), OperandPairLess());
+  return key;
+}
+
+static void simplifyWithExistingOperations(
+    aig::AndInverterOp op, mlir::IRRewriter &rewriter,
+    llvm::DenseMap<OperandKey, mlir::Value> &seenExpressions) {
+
+  if (op.getNumOperands() <= 2)
+    return;
+
+  OperandKey allOperands = getSortedOperandKey(op);
+  mlir::SmallVector<Value> newValues;
+  mlir::SmallVector<bool> newInversions;
+
+  for (auto it = allOperands.begin(); it != allOperands.end(); ++it) {
+    // Look at the remaining operands from 'it' to the end
+    OperandKey remaining(it, allOperands.end());
+
+    auto match = seenExpressions.find(remaining);
+    if (match != seenExpressions.end() && match->second != op.getResult()) {
+      newValues.push_back(match->second);
+      newInversions.push_back(false);
+
+      // We found a match that covers everything from 'it' to the end,
+      // so we can stop searching.
+      break;
+    }
+
+    // No match, add it to the new list of values and inversions.
+    newValues.push_back(it->first);
+    newInversions.push_back(it->second);
+  }
+
+  if (newValues.size() < allOperands.size()) {
+    rewriter.modifyOpInPlace(op, [&]() {
+      op.getOperation()->setOperands(newValues);
+      op.setInverted(newInversions);
+    });
+  }
+}
+
 void LowerVariadicPass::runOnOperation() {
   // Topologically sort operations in graph regions to ensure operands are
   // defined before uses.
@@ -131,6 +244,25 @@ void LowerVariadicPass::runOnOperation() {
   mlir::IRRewriter rewriter(&getContext());
   rewriter.setListener(analysis);
 
+  // Simplify exising andInverterOps by reusing operations.
+  if (reuseSubsets) {
+    llvm::DenseMap<OperandKey, mlir::Value> seenExpressions;
+    // First collect all the andInverterOp operations in the block.
+    for (auto &op : moduleOp.getBodyBlock()->getOperations()) {
+      if (auto andInverterOp = llvm::dyn_cast<aig::AndInverterOp>(op)) {
+        OperandKey key = getSortedOperandKey(andInverterOp);
+        seenExpressions[key] = andInverterOp.getResult();
+      }
+    }
+    // Now try to replace operations with subsets.
+    for (auto &op : moduleOp.getBodyBlock()->getOperations()) {
+      if (auto andInverterOp = llvm::dyn_cast<aig::AndInverterOp>(op)) {
+        simplifyWithExistingOperations(andInverterOp, rewriter,
+                                       seenExpressions);
+      }
+    }
+  }
+
   // FIXME: Currently only top-level operations are lowered due to the lack of
   //        topological sorting in across nested regions.
   for (auto &opRef :
@@ -142,44 +274,45 @@ void LowerVariadicPass::runOnOperation() {
 
     rewriter.setInsertionPoint(op);
 
-    // Handle AndInverterOp specially to preserve inversion flags.
-    if (auto andInverterOp = dyn_cast<aig::AndInverterOp>(op)) {
-      auto result = replaceWithBalancedTree(
-          analysis, rewriter, op,
-          // Check if each operand is inverted.
-          [&](OpOperand &operand) {
-            return andInverterOp.isInverted(operand.getOperandNumber());
-          },
-          // Create binary AndInverterOp with inversion flags.
-          [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
-            return aig::AndInverterOp::create(
-                rewriter, op->getLoc(), lhs.getValue(), rhs.getValue(),
-                lhs.isInverted(), rhs.isInverted());
-          });
-      if (failed(result))
-        return signalPassFailure();
-      continue;
-    }
-
-    // Handle commutative operations (and, or, xor, mul, add, etc.) using
-    // delay-aware lowering to minimize critical path.
-    if (isa_and_nonnull<comb::CombDialect>(op->getDialect()) &&
-        op->hasTrait<OpTrait::IsCommutative>()) {
-      auto result = replaceWithBalancedTree(
-          analysis, rewriter, op,
-          // No inversion flags for standard commutative operations.
-          [](OpOperand &) { return false; },
-          // Create binary operation with the same operation type.
-          [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
-            OperationState state(op->getLoc(), op->getName());
-            state.addOperands(ValueRange{lhs.getValue(), rhs.getValue()});
-            state.addTypes(op->getResult(0).getType());
-            auto *newOp = Operation::create(state);
-            rewriter.insert(newOp);
-            return newOp->getResult(0);
-          });
-      if (failed(result))
-        return signalPassFailure();
-    }
+    // Handle invertible Synth ops specially to preserve inversion flags.
+    auto result =
+        mlir::TypeSwitch<Operation *, LogicalResult>(op)
+            .Case<aig::AndInverterOp, XorInverterOp>([&](auto op) {
+              return replaceWithBalancedTree(
+                  analysis, rewriter, op,
+                  // Check if each operand is inverted.
+                  [&](OpOperand &operand) {
+                    return op.isInverted(operand.getOperandNumber());
+                  },
+                  // Create binary AndInverterOp with inversion flags.
+                  [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
+                    return decltype(op)::create(
+                        rewriter, op->getLoc(), lhs.getValue(), rhs.getValue(),
+                        lhs.isInverted(), rhs.isInverted());
+                  });
+            })
+            .Default([&](Operation *op) {
+              // Handle commutative operations (and, or, xor, mul, add, etc.)
+              // using delay-aware lowering to minimize critical path.
+              if (isa_and_nonnull<comb::CombDialect>(op->getDialect()) &&
+                  op->hasTrait<OpTrait::IsCommutative>())
+                return replaceWithBalancedTree(
+                    analysis, rewriter, op,
+                    // No inversion flags for standard commutative operations.
+                    [](OpOperand &) { return false; },
+                    // Create binary operation with the same operation type.
+                    [&](ValueWithArrivalTime lhs, ValueWithArrivalTime rhs) {
+                      OperationState state(op->getLoc(), op->getName());
+                      state.addOperands(
+                          ValueRange{lhs.getValue(), rhs.getValue()});
+                      state.addTypes(op->getResult(0).getType());
+                      auto *newOp = Operation::create(state);
+                      rewriter.insert(newOp);
+                      return newOp->getResult(0);
+                    });
+              return success();
+            });
+    if (failed(result))
+      return signalPassFailure();
   }
 }

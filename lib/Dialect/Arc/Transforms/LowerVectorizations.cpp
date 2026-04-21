@@ -252,11 +252,7 @@ namespace {
 /// A pass to vectorize (parts of) an `arc.vectorize` operation.
 struct LowerVectorizationsPass
     : public arc::impl::LowerVectorizationsBase<LowerVectorizationsPass> {
-  LowerVectorizationsPass() = default;
-  explicit LowerVectorizationsPass(LowerVectorizationsModeEnum mode)
-      : LowerVectorizationsPass() {
-    this->mode.setValue(mode);
-  }
+  using Base::Base;
 
   void runOnOperation() override {
     WalkResult result = getOperation().walk([&](VectorizeOp op) -> WalkResult {
@@ -280,8 +276,3 @@ struct LowerVectorizationsPass
   }
 };
 } // namespace
-
-std::unique_ptr<Pass>
-arc::createLowerVectorizationsPass(LowerVectorizationsModeEnum mode) {
-  return std::make_unique<LowerVectorizationsPass>(mode);
-}

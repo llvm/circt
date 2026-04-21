@@ -108,6 +108,10 @@ class CppTypePlanner:
     for t in type_table:
       self._collect_structs(t, visited)
 
+    visited = set()
+    for t in type_table:
+      self._collect_windows(t, visited)
+
     self.ordered_types, self.has_cycle = self._ordered_emit_types()
 
   def _sanitize_name(self, name: str) -> str:
@@ -151,6 +155,62 @@ class CppTypePlanner:
       parts.append(self._sanitize_name(field_type.id))
     return self._reserve_name("_".join(parts), is_alias=False)
 
+  def _auto_union_name(self, union_type: types.UnionType) -> str:
+    """Derive a deterministic name for anonymous unions from their fields."""
+    parts = ["_union"]
+    for field_name, field_type in union_type.fields:
+      parts.append(field_name)
+      parts.append(self._sanitize_name(field_type.id))
+    return self._reserve_name("_".join(parts), is_alias=False)
+
+  def _auto_window_name(self, window_type: types.WindowType) -> str:
+    """Derive a deterministic name for generated window helpers."""
+    if window_type.name:
+      return self._reserve_name(window_type.name, is_alias=False)
+    return self._reserve_name(f"_window_{self._sanitize_name(window_type.id)}",
+                              is_alias=False)
+
+  def _unwrap_aliases(self, wrapped: types.ESIType) -> types.ESIType:
+    while isinstance(wrapped, types.TypeAlias):
+      wrapped = wrapped.inner_type
+    return wrapped
+
+  def _is_supported_window(self, current_type: types.ESIType) -> bool:
+    if not isinstance(current_type, types.WindowType):
+      return False
+    into_type = self._unwrap_aliases(current_type.into_type)
+    if not isinstance(into_type, types.StructType):
+      return False
+
+    # The generated window helper only supports struct-shaped payloads with a
+    # single logical list field to stream across multiple frames.
+    list_fields = []
+    for field_name, field_type in into_type.fields:
+      if isinstance(self._unwrap_aliases(field_type), types.ListType):
+        list_fields.append(field_name)
+    if len(list_fields) != 1:
+      return False
+
+    list_field_name = list_fields[0]
+    header_field = None
+    data_field = None
+    # That list must appear exactly once as a bulk-count field and exactly once
+    # as a single-item data field so the helper can synthesize header/data/footer.
+    for frame in current_type.frames:
+      for field in frame.fields:
+        if field.name != list_field_name:
+          continue
+        if field.bulk_count_width > 0:
+          if header_field is not None:
+            return False
+          header_field = field
+        elif field.num_items > 0:
+          if data_field is not None:
+            return False
+          data_field = field
+    return (header_field is not None and data_field is not None and
+            data_field.num_items == 1)
+
   def _iter_type_children(self, t: types.ESIType) -> List[types.ESIType]:
     """Return child types in a stable order for traversal."""
     if isinstance(t, types.TypeAlias):
@@ -161,6 +221,12 @@ class CppTypePlanner:
       return [t.inner]
     if isinstance(t, types.StructType):
       return [field_type for _, field_type in t.fields]
+    if isinstance(t, types.UnionType):
+      return [field_type for _, field_type in t.fields]
+    if isinstance(t, types.ListType):
+      return [t.element_type]
+    if isinstance(t, types.WindowType):
+      return [t.into_type]
     if isinstance(t, types.ArrayType):
       return [t.element_type]
     return []
@@ -192,16 +258,29 @@ class CppTypePlanner:
     self._visit_types(t, visited, visit)
 
   def _collect_structs(self, t: types.ESIType, visited: Set[str]) -> None:
-    """Scan for structs needing auto-names and reserve them (recursive)."""
+    """Scan for structs/unions needing auto-names and reserve them."""
 
-    # Visit callback: assign auto-names to unnamed structs.
-    def visit(struct_type: types.ESIType) -> None:
-      if not isinstance(struct_type, types.StructType):
+    # Visit callback: assign auto-names to unnamed structs and unions.
+    def visit(current_type: types.ESIType) -> None:
+      if current_type in self.type_id_map:
         return
-      if struct_type in self.type_id_map:
+      if isinstance(current_type, types.StructType):
+        self.type_id_map[current_type] = self._auto_struct_name(current_type)
+      elif isinstance(current_type, types.UnionType):
+        self.type_id_map[current_type] = self._auto_union_name(current_type)
+
+    self._visit_types(t, visited, visit)
+
+  def _collect_windows(self, t: types.ESIType, visited: Set[str]) -> None:
+    """Scan for supported window types and reserve helper names."""
+
+    def visit(current_type: types.ESIType) -> None:
+      if not self._is_supported_window(current_type):
         return
-      struct_name = self._auto_struct_name(struct_type)
-      self.type_id_map[struct_type] = struct_name
+      assert isinstance(current_type, types.WindowType)
+      if current_type in self.type_id_map:
+        return
+      self.type_id_map[current_type] = self._auto_window_name(current_type)
 
     self._visit_types(t, visited, visit)
 
@@ -210,25 +289,62 @@ class CppTypePlanner:
     """Collect types that require top-level declarations for a given type."""
     deps: Set[types.ESIType] = set()
 
-    # Visit callback: collect structs and non-struct aliases used by a type.
+    # Visit callback: collect structs, unions, and non-struct aliases used by a
+    # type.
     def visit(current: types.ESIType) -> None:
       if isinstance(current, types.TypeAlias):
         inner = current.inner_type
-        if inner is not None and isinstance(inner, types.StructType):
+        if inner is not None and (isinstance(
+            inner, (types.StructType, types.UnionType)) or
+                                  self._is_supported_window(inner)):
           deps.add(inner)
         else:
           deps.add(current)
-      elif isinstance(current, types.StructType):
+      elif isinstance(current, (types.StructType, types.UnionType)):
+        deps.add(current)
+      elif self._is_supported_window(current):
         deps.add(current)
 
     self._visit_types(wrapped, set(), visit)
     return deps
 
+  def _collect_decls_from_window(
+      self, window_type: types.WindowType) -> Set[types.ESIType]:
+    """Collect only the declarations referenced by a generated window helper."""
+    deps: Set[types.ESIType] = set()
+    into_type = self._unwrap_aliases(window_type.into_type)
+    if not isinstance(into_type, types.StructType):
+      return deps
+
+    for _, field_type in into_type.fields:
+      unwrapped = self._unwrap_aliases(field_type)
+      if isinstance(unwrapped, types.ListType):
+        deps.update(self._collect_decls_from_type(unwrapped.element_type))
+      else:
+        deps.update(self._collect_decls_from_type(field_type))
+    return deps
+
   def _ordered_emit_types(self) -> Tuple[List[types.ESIType], bool]:
     """Collect and order types for deterministic emission."""
+    window_into_types: Set[types.ESIType] = set()
+    for esi_type in self.type_id_map.keys():
+      if not self._is_supported_window(esi_type):
+        continue
+      assert isinstance(esi_type, types.WindowType)
+      window_into_types.add(self._unwrap_aliases(esi_type.into_type))
     emit_types: List[types.ESIType] = []
     for esi_type in self.type_id_map.keys():
-      if isinstance(esi_type, (types.StructType, types.TypeAlias)):
+      if isinstance(esi_type,
+                    types.StructType) and esi_type in window_into_types:
+        continue
+      if isinstance(esi_type, types.TypeAlias):
+        inner = esi_type.inner_type
+        if inner is not None and self._unwrap_aliases(
+            inner) in window_into_types:
+          continue
+      if (isinstance(esi_type,
+                     (types.StructType, types.UnionType, types.TypeAlias)) or
+          self._is_supported_window(esi_type)):
         emit_types.append(esi_type)
 
     # Prefer alias-reserved names first, then lexicographic for determinism.
@@ -257,9 +373,12 @@ class CppTypePlanner:
         inner = current.inner_type
         if inner is not None:
           deps.update(self._collect_decls_from_type(inner))
-      elif isinstance(current, types.StructType):
+      elif isinstance(current, (types.StructType, types.UnionType)):
         for _, field_type in current.fields:
           deps.update(self._collect_decls_from_type(field_type))
+      elif self._is_supported_window(current):
+        assert isinstance(current, types.WindowType)
+        deps.update(self._collect_decls_from_window(current))
       for dep in sorted(deps, key=lambda dep: self.type_id_map[dep]):
         visit(dep)
 
@@ -285,26 +404,43 @@ class CppTypeEmitter:
     """Get the C++ type string for an ESI type."""
     return self._cpp_type(type)
 
+  def _cpp_string_literal(self, value: str) -> str:
+    """Escape a Python string for use as a C++ string literal."""
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
   def _get_bitvector_str(self, type: types.ESIType) -> str:
     """Get the textual code for the storage class of an integer type."""
     assert isinstance(type, (types.BitsType, types.IntType))
 
-    if type.bit_width == 1:
+    return self._storage_type(
+        type.bit_width, not isinstance(type, (types.BitsType, types.UIntType)))
+
+  def _storage_type(self, bit_width: int, signed: bool) -> str:
+    """Get the textual code for a byte-addressable integer storage type."""
+
+    if bit_width == 1:
       return "bool"
-    elif type.bit_width <= 8:
+    elif bit_width <= 8:
       storage_width = 8
-    elif type.bit_width <= 16:
+    elif bit_width <= 16:
       storage_width = 16
-    elif type.bit_width <= 32:
+    elif bit_width <= 32:
       storage_width = 32
-    elif type.bit_width <= 64:
+    elif bit_width <= 64:
       storage_width = 64
     else:
-      raise ValueError(f"Unsupported integer width: {type.bit_width}")
+      raise ValueError(f"Unsupported integer width: {bit_width}")
 
-    if isinstance(type, (types.BitsType, types.UIntType)):
+    if not signed:
       return f"uint{storage_width}_t"
     return f"int{storage_width}_t"
+
+  def _type_byte_width(self, wrapped: types.ESIType) -> int:
+    """Return the size of a fixed-width type in bytes."""
+    if wrapped.bit_width < 0:
+      raise ValueError(f"Unsupported unbounded type width for '{wrapped}'")
+    return (wrapped.bit_width + 7) // 8
 
   def _array_base_and_suffix(self,
                              array_type: types.ArrayType) -> Tuple[str, str]:
@@ -325,12 +461,17 @@ class CppTypeEmitter:
 
   def _cpp_type(self, wrapped: types.ESIType) -> str:
     """Resolve an ESI type to its C++ identifier."""
-    if isinstance(wrapped, (types.TypeAlias, types.StructType)):
+    if isinstance(wrapped, types.WindowType) and wrapped in self.type_id_map:
+      return self.type_id_map[wrapped]
+    if isinstance(wrapped,
+                  (types.TypeAlias, types.StructType, types.UnionType)):
       return self.type_id_map[wrapped]
     if isinstance(wrapped, types.BundleType):
       return "void"
     if isinstance(wrapped, types.ChannelType):
       return self._cpp_type(wrapped.inner)
+    if isinstance(wrapped, types.ListType):
+      raise ValueError("List types require a generated window wrapper")
     if isinstance(wrapped, types.VoidType):
       return "void"
     if isinstance(wrapped, types.AnyType):
@@ -357,6 +498,133 @@ class CppTypeEmitter:
     """
     base_cpp, suffix = self._array_base_and_suffix(array_type)
     return f"{base_cpp} {name}{suffix};"
+
+  def _format_window_field_decl(self, field_name: str,
+                                field_type: types.ESIType) -> str:
+    """Emit a packed field declaration for generated window helpers."""
+    if isinstance(field_type, types.ArrayType):
+      return self._format_array_decl(field_type, field_name)
+    field_cpp = self._cpp_type(field_type)
+    wrapped = self._unwrap_aliases(field_type)
+    if isinstance(wrapped, (types.BitsType, types.IntType)) and \
+       wrapped.bit_width % 8 != 0:
+      return f"{field_cpp} {field_name} : {wrapped.bit_width};"
+    return f"{field_cpp} {field_name};"
+
+  def _format_window_ctor_param(self, field_name: str,
+                                field_type: types.ESIType) -> str:
+    """Emit a constructor parameter for generated window helpers.
+
+    Small scalar header fields are cheaper to pass by value than by reference.
+    Larger aggregates stay as const references.
+    """
+    if isinstance(field_type, types.ArrayType):
+      base_cpp, suffix = self._array_base_and_suffix(field_type)
+      return f"const {base_cpp} (&{field_name}){suffix}"
+    field_cpp = self._cpp_type(field_type)
+    wrapped = self._unwrap_aliases(field_type)
+    if isinstance(wrapped, (types.BitsType, types.IntType)):
+      return f"{field_cpp} {field_name}"
+    return f"const {field_cpp} &{field_name}"
+
+  def _emit_window_field_copy(self, hdr: TextIO, dest_expr: str, src_expr: str,
+                              field_type: types.ESIType) -> None:
+    """Copy a generated window field, preserving array semantics."""
+    if isinstance(field_type, types.ArrayType):
+      hdr.write(
+          f"    std::memcpy(&{dest_expr}, &{src_expr}, sizeof({dest_expr}));\n")
+      return
+    hdr.write(f"    {dest_expr} = {src_expr};\n")
+
+  def _field_byte_width(self, field_type: types.ESIType) -> int:
+    """Compute the byte width of a field type, rounding up to full bytes."""
+    return (field_type.bit_width + 7) // 8
+
+  def _analyze_window(self, window_type: types.WindowType):
+    """Extract the metadata needed to emit a bulk list window wrapper."""
+    into_type = self._unwrap_aliases(window_type.into_type)
+    if not isinstance(into_type, types.StructType):
+      raise ValueError("window codegen currently requires a struct into-type")
+
+    field_map = {name: field_type for name, field_type in into_type.fields}
+    list_fields = [
+        (name, self._unwrap_aliases(field_type))
+        for name, field_type in into_type.fields
+        if isinstance(self._unwrap_aliases(field_type), types.ListType)
+    ]
+    if len(list_fields) != 1:
+      raise ValueError("window codegen currently supports exactly one list")
+
+    list_field_name, list_type = list_fields[0]
+    assert isinstance(list_type, types.ListType)
+
+    header_frame = None
+    header_field = None
+    data_frame = None
+    data_field = None
+    for frame in window_type.frames:
+      for field in frame.fields:
+        if field.name != list_field_name:
+          continue
+        if field.bulk_count_width > 0:
+          header_frame = frame
+          header_field = field
+        elif field.num_items > 0:
+          data_frame = frame
+          data_field = field
+
+    if header_frame is None or header_field is None:
+      raise ValueError("window codegen requires a bulk-count header frame")
+    if data_frame is None or data_field is None:
+      raise ValueError("window codegen requires a data frame for the list")
+    if data_field.num_items != 1:
+      raise ValueError("window codegen currently supports numItems == 1")
+
+    ctor_params = [(name, field_type)
+                   for name, field_type in into_type.fields
+                   if name != list_field_name]
+
+    header_fields = []
+    header_bytes = 0
+    count_field_name = f"{list_field_name}_count"
+    count_width = header_field.bulk_count_width
+    count_cpp = self._storage_type(count_width, signed=False)
+    count_bytes = (count_width + 7) // 8
+    for field in reversed(header_frame.fields):
+      if field.name == list_field_name:
+        header_fields.append((count_field_name, None))
+        header_bytes += count_bytes
+      else:
+        field_type = field_map[field.name]
+        header_fields.append((field.name, field_type))
+        header_bytes += self._type_byte_width(field_type)
+
+    data_fields = []
+    data_bytes = 0
+    for field in reversed(data_frame.fields):
+      if field.name == list_field_name:
+        data_fields.append((list_field_name, list_type.element_type))
+        data_bytes += self._type_byte_width(list_type.element_type)
+      else:
+        field_type = field_map[field.name]
+        data_fields.append((field.name, field_type))
+        data_bytes += self._type_byte_width(field_type)
+
+    frame_bytes = max(header_bytes, data_bytes)
+
+    return {
+        "ctor_params": ctor_params,
+        "count_cpp": count_cpp,
+        "count_field_name": count_field_name,
+        "count_width": count_width,
+        "data_fields": data_fields,
+        "data_pad_bytes": frame_bytes - data_bytes,
+        "element_cpp": self._cpp_type(list_type.element_type),
+        "header_fields": header_fields,
+        "header_pad_bytes": frame_bytes - header_bytes,
+        "list_field_name": list_field_name,
+        "window_name": self.type_id_map[window_type],
+    }
 
   def _emit_struct(self, hdr: TextIO, struct_type: types.StructType) -> None:
     """Emit a packed struct declaration plus its type id string."""
@@ -385,7 +653,161 @@ class CppTypeEmitter:
       hdr.write(f"  {decl}\n")
     hdr.write("\n")
     hdr.write(
-        f"  static constexpr std::string_view _ESI_ID = \"{struct_type.id}\";\n"
+        f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(struct_type.id)};\n"
+    )
+    hdr.write("};\n\n")
+
+  def _emit_union(self, hdr: TextIO, union_type: types.UnionType) -> None:
+    """Emit a packed union declaration plus its type id string.
+
+    Fields narrower than the union width get wrapper structs with a `_pad`
+    byte array so the data sits at the MSB end, matching SV packed union
+    layout where padding occupies the LSBs / lower addresses.
+    """
+    union_name = self.type_id_map[union_type]
+    union_bytes = self._field_byte_width(union_type)
+    fields = list(union_type.fields)
+
+    # First pass: emit wrapper structs for fields that need padding.
+    wrapper_names: Dict[str, str] = {}
+    for field_name, field_type in fields:
+      field_bytes = self._field_byte_width(field_type)
+      pad_bytes = union_bytes - field_bytes
+      if pad_bytes > 0:
+        wrapper = f"{union_name}_{field_name}"
+        wrapper_names[field_name] = wrapper
+        hdr.write(f"struct {wrapper} {{\n")
+        hdr.write(f"  uint8_t _pad[{pad_bytes}];\n")
+        field_cpp = self._cpp_type(field_type)
+        hdr.write(f"  {field_cpp} {field_name};\n")
+        hdr.write("};\n")
+
+    # Second pass: emit the union itself.
+    union_field_decls: List[str] = []
+    for field_name, field_type in fields:
+      if field_name in wrapper_names:
+        union_field_decls.append(f"{wrapper_names[field_name]} {field_name};")
+      else:
+        field_cpp = self._cpp_type(field_type)
+        union_field_decls.append(f"{field_cpp} {field_name};")
+    hdr.write(f"union {union_name} {{\n")
+    for decl in union_field_decls:
+      hdr.write(f"  {decl}\n")
+    hdr.write("\n")
+    hdr.write(
+        f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(union_type.id)};\n"
+    )
+    hdr.write("};\n\n")
+
+  def _emit_window(self, hdr: TextIO, window_type: types.WindowType) -> None:
+    """Emit a SegmentedMessageData helper for a serial list window."""
+    info = self._analyze_window(window_type)
+    ctor_params = [
+        self._format_window_ctor_param(name, field_type)
+        for name, field_type in info["ctor_params"]
+    ]
+    value_ctor_params = list(ctor_params)
+    value_ctor_params.append(
+        f"const std::vector<value_type> &{info['list_field_name']}")
+    value_ctor_signature = ", ".join(value_ctor_params)
+    frame_ctor_params = list(ctor_params)
+    frame_ctor_params.append("std::vector<data_frame> frames")
+    frame_ctor_signature = ", ".join(frame_ctor_params)
+    helper_args = ", ".join(name for name, _ in info["ctor_params"])
+    helper_call = f"{helper_args}, std::move(frames)" if helper_args else "std::move(frames)"
+
+    hdr.write(
+        f"struct {info['window_name']} : public esi::SegmentedMessageData {{\n")
+    hdr.write("public:\n")
+    hdr.write(f"  using value_type = {info['element_cpp']};\n")
+    hdr.write(f"  using count_type = {info['count_cpp']};\n\n")
+    hdr.write("  struct data_frame {\n")
+    if info["data_pad_bytes"] > 0:
+      hdr.write(f"    uint8_t _pad[{info['data_pad_bytes']}];\n")
+    for field_name, field_type in info["data_fields"]:
+      decl = self._format_window_field_decl(field_name, field_type)
+      hdr.write(f"    {decl}\n")
+    hdr.write("  };\n\n")
+    hdr.write("private:\n")
+    hdr.write("  struct header_frame {\n")
+    if info["header_pad_bytes"] > 0:
+      hdr.write(f"    uint8_t _pad[{info['header_pad_bytes']}];\n")
+    for field_name, field_type in info["header_fields"]:
+      if field_type is None:
+        if info["count_width"] % 8 == 0:
+          decl = f"count_type {field_name};"
+        else:
+          decl = f"count_type {field_name} : {info['count_width']};"
+      else:
+        decl = self._format_window_field_decl(field_name, field_type)
+      hdr.write(f"    {decl}\n")
+    hdr.write("  };\n\n")
+    hdr.write("  header_frame header{};\n")
+    hdr.write("  std::vector<data_frame> data_frames;\n")
+    hdr.write("  header_frame footer{};\n\n")
+    hdr.write(f"  void construct({frame_ctor_signature}) {{\n")
+    hdr.write("    if (frames.empty())\n")
+    hdr.write(
+        f"      throw std::invalid_argument(\"{info['window_name']}: bulk windowed lists cannot be empty\");\n"
+    )
+    hdr.write(
+        "    if (frames.size() > std::numeric_limits<count_type>::max())\n")
+    hdr.write(
+        f"      throw std::invalid_argument(\"{info['window_name']}: list too large for encoded count\");\n"
+    )
+    hdr.write(
+        f"    header.{info['count_field_name']} = static_cast<count_type>(frames.size());\n"
+    )
+    for name, _ in info["ctor_params"]:
+      field_type = next(
+          field_type for field_name, field_type in info["ctor_params"]
+          if field_name == name)
+      self._emit_window_field_copy(hdr, f"header.{name}", name, field_type)
+    hdr.write(f"    footer.{info['count_field_name']} = 0;\n")
+    hdr.write("    data_frames = std::move(frames);\n")
+    hdr.write("  }\n\n")
+    hdr.write("public:\n")
+    hdr.write(f"  {info['window_name']}({frame_ctor_signature}) {{\n")
+    hdr.write(f"    construct({helper_call});\n")
+    hdr.write("  }\n\n")
+    hdr.write(f"  {info['window_name']}({value_ctor_signature}) {{\n")
+    hdr.write("    std::vector<data_frame> frames;\n")
+    hdr.write(f"    frames.reserve({info['list_field_name']}.size());\n")
+    hdr.write(f"    for (const auto &element : {info['list_field_name']}) {{\n")
+    hdr.write("      auto &frame = frames.emplace_back();\n")
+    list_field_type = next(
+        field_type for field_name, field_type in info["data_fields"]
+        if field_name == info["list_field_name"])
+    if isinstance(list_field_type, types.ArrayType):
+      hdr.write(
+          f"      std::memcpy(&frame.{info['list_field_name']}, &element, sizeof(frame.{info['list_field_name']}));\n"
+      )
+    else:
+      hdr.write(f"      frame.{info['list_field_name']} = element;\n")
+    hdr.write("    }\n")
+    hdr.write(f"    construct({helper_call});\n")
+    hdr.write("  }\n\n")
+    hdr.write("  size_t numSegments() const override { return 3; }\n")
+    hdr.write("  esi::Segment segment(size_t idx) const override {\n")
+    hdr.write("    if (idx == 0)\n")
+    hdr.write(
+        "      return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};\n"
+    )
+    hdr.write("    if (idx == 1)\n")
+    hdr.write(
+        "      return {reinterpret_cast<const uint8_t *>(data_frames.data()),\n"
+    )
+    hdr.write("              data_frames.size() * sizeof(data_frame)};\n")
+    hdr.write("    if (idx == 2)\n")
+    hdr.write(
+        "      return {reinterpret_cast<const uint8_t *>(&footer), sizeof(footer)};\n"
+    )
+    hdr.write(
+        f"    throw std::out_of_range(\"{info['window_name']}: invalid segment index\");\n"
+    )
+    hdr.write("  }\n\n")
+    hdr.write(
+        f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(window_type.id)};\n"
     )
     hdr.write("};\n\n")
 
@@ -411,8 +833,16 @@ class CppTypeEmitter:
         #pragma once
 
         #include <cstdint>
+        #include <cstddef>
         #include <any>
+        #include <cstring>
+        #include <limits>
+        #include <stdexcept>
         #include <string_view>
+        #include <utility>
+        #include <vector>
+
+        #include "esi/Common.h"
 
         namespace {system_name} {{
         #pragma pack(push, 1)
@@ -425,10 +855,18 @@ class CppTypeEmitter:
             "  Emitted code may fail to compile due to ordering issues.\n")
 
       for emit_type in self.ordered_types:
-        if isinstance(emit_type, types.StructType):
-          self._emit_struct(hdr, emit_type)
-        elif isinstance(emit_type, types.TypeAlias):
-          self._emit_alias(hdr, emit_type)
+        try:
+          if isinstance(emit_type, types.StructType):
+            self._emit_struct(hdr, emit_type)
+          elif isinstance(emit_type, types.UnionType):
+            self._emit_union(hdr, emit_type)
+          elif isinstance(emit_type, types.WindowType):
+            self._emit_window(hdr, emit_type)
+          elif isinstance(emit_type, types.TypeAlias):
+            self._emit_alias(hdr, emit_type)
+        except ValueError as e:
+          sys.stderr.write(f"Error emitting type '{emit_type}': {e}\n")
+          hdr.write(f"// Unsupported type '{emit_type}': {e}\n\n")
 
       hdr.write(
           textwrap.dedent(f"""

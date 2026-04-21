@@ -90,11 +90,18 @@ circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
 
         return success(result);
       })
+      .Case([&](circt::om::StringType type) {
+        evaluator::EvaluatorValuePtr result =
+            evaluator::AttributeValue::get(type, loc);
+        return success(result);
+      })
       .Default([&](auto type) { return failure(); });
 }
 
 FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
     Value value, ActualParameters actualParams, Location loc) {
+  LLVM_DEBUG(dbgs() << "- get: " << value << "\n");
+
   auto it = objects.find({value, actualParams});
   if (it != objects.end()) {
     auto evalVal = it->second;
@@ -155,7 +162,14 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                           evaluator::PathValue::getEmptyPath(loc));
                   return success(result);
                 })
-                .Case<ListCreateOp, ListConcatOp, ObjectFieldOp>([&](auto op) {
+                .Case([&](BinaryEqualityOp op) {
+                  evaluator::EvaluatorValuePtr result =
+                      evaluator::AttributeValue::get(op.getResult().getType(),
+                                                     loc);
+                  return success(result);
+                })
+                .Case<ListCreateOp, ListConcatOp, StringConcatOp,
+                      ObjectFieldOp>([&](auto op) {
                   return getPartiallyEvaluatedValue(op.getType(), loc);
                 })
                 .Case<ObjectOp>([&](auto op) {
@@ -181,6 +195,15 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
                                              ActualParameters actualParams,
                                              Location loc,
                                              ObjectKey instanceKey) {
+#ifndef NDEBUG
+  DebugNesting nestOne(debugNesting);
+#endif
+  LLVM_DEBUG(dbgs() << "object:\n");
+#ifndef NDEBUG
+  DebugNesting nestTwo(debugNesting);
+#endif
+  LLVM_DEBUG(dbgs() << "name: " << className << "\n");
+
   auto classDef = symbolTable.lookup<ClassLike>(className);
   if (!classDef)
     return symbolTable.getOp()->emitError("unknown class name ") << className;
@@ -190,6 +213,7 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
     evaluator::EvaluatorValuePtr result =
         std::make_shared<evaluator::ObjectValue>(classDef, loc);
     result->markUnknown();
+    LLVM_DEBUG(dbgs(1) << "extern: <unknown-value>\n");
     return result;
   }
 
@@ -246,32 +270,54 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
   evaluator::ObjectFields fields;
 
   auto *context = cls.getContext();
-  for (auto &op : cls.getOps())
-    for (auto result : op.getResults()) {
-      // Allocate the value, with unknown loc. It will be later set when
-      // evaluating the fields.
-      if (failed(
-              getOrCreateValue(result, actualParams, UnknownLoc::get(context))))
-        return failure();
-      // Add to the worklist.
-      worklist.push({result, actualParams});
-    }
+  {
+    LLVM_DEBUG(dbgs() << "ops:\n");
+#ifndef NDEBUG
+    DebugNesting nestOne(debugNesting);
+#endif
+    for (auto &op : cls.getOps())
+      for (auto result : op.getResults()) {
+        // Allocate the value, with unknown loc. It will be later set when
+        // evaluating the fields.
+        if (failed(getOrCreateValue(result, actualParams,
+                                    UnknownLoc::get(context))))
+          return failure();
+        // Add to the worklist.
+        worklist.push({result, actualParams});
+      }
+  }
 
+  LLVM_DEBUG(dbgs() << "fields:\n");
   auto fieldNames = cls.getFieldNames();
   auto operands = cls.getFieldsOp()->getOperands();
   for (size_t i = 0; i < fieldNames.size(); ++i) {
     auto name = fieldNames[i];
     auto value = operands[i];
     auto fieldLoc = cls.getFieldLocByIndex(i);
+    LLVM_DEBUG(dbgs() << "- name: " << name << "\n"
+                      << indent(1) << "evaluate:\n");
+#ifndef NDEBUG
+    DebugNesting nestOne(debugNesting);
+#endif
     FailureOr<evaluator::EvaluatorValuePtr> result =
         evaluateValue(value, actualParams, fieldLoc);
     if (failed(result))
       return result;
 
+    LLVM_DEBUG(dbgs() << "value: " << result.value() << "\n");
     fields[cast<StringAttr>(name)] = result.value();
   }
 
+  // Defer property assertions until after the worklist is drained, so that
+  // all ReferenceValues are fully resolved before we try to inspect them.
+  LLVM_DEBUG(dbgs() << "queuing asserts:\n");
+  for (auto assertOp : cls.getOps<PropertyAssertOp>()) {
+    LLVM_DEBUG(dbgs(1) << "- " << assertOp << "\n");
+    pendingAsserts.push({assertOp, actualParams});
+  }
+
   // If the there is an instance, we must update the object value.
+  LLVM_DEBUG(dbgs() << "object value:\n");
   if (instanceKey.first) {
     auto result =
         getOrCreateValue(instanceKey.first, instanceKey.second, loc).value();
@@ -290,6 +336,16 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
 FailureOr<std::shared_ptr<evaluator::EvaluatorValue>>
 circt::om::Evaluator::instantiate(
     StringAttr className, ArrayRef<evaluator::EvaluatorValuePtr> actualParams) {
+  LLVM_DEBUG(dbgs() << "instantiate:\n");
+#ifndef NDEBUG
+  DebugNesting nest(debugNesting);
+#endif
+  LLVM_DEBUG({
+    dbgs() << "class: " << className << "\n" << indent() << "params:\n";
+    for (auto &param : actualParams)
+      dbgs() << "- " << param << "\n";
+  });
+
   auto classDef = symbolTable.lookup<ClassLike>(className);
   if (!classDef)
     return symbolTable.getOp()->emitError("unknown class name ") << className;
@@ -300,6 +356,7 @@ circt::om::Evaluator::instantiate(
         std::make_shared<evaluator::ObjectValue>(
             classDef, UnknownLoc::get(classDef.getContext()));
     result->markUnknown();
+    LLVM_DEBUG(dbgs(1) << "result: <unknown extern>\n");
     return result;
   }
 
@@ -313,6 +370,7 @@ circt::om::Evaluator::instantiate(
   actualParametersBuffers.push_back(std::move(parameters));
 
   auto loc = cls.getLoc();
+  LLVM_DEBUG(dbgs() << "evaluate object:\n");
   auto result = evaluateObjectInstance(
       className, actualParametersBuffers.back().get(), loc);
 
@@ -321,6 +379,7 @@ circt::om::Evaluator::instantiate(
 
   // `evaluateObjectInstance` has populated the worklist. Continue evaluations
   // unless there is a partially evaluated value.
+  LLVM_DEBUG(dbgs() << "worklist:\n");
   while (!worklist.empty()) {
     auto [value, args] = worklist.front();
     worklist.pop();
@@ -335,12 +394,26 @@ circt::om::Evaluator::instantiate(
       worklist.push({value, args});
   }
 
+  // Now that all values are fully resolved, evaluate the deferred property
+  // assertions.
+  LLVM_DEBUG(dbgs() << "asserts:\n");
+  bool assertFailed = false;
+  while (!pendingAsserts.empty()) {
+    auto [assertOp, assertParams] = pendingAsserts.front();
+    pendingAsserts.pop();
+    assertFailed |= failed(evaluatePropertyAssert(assertOp, assertParams));
+  }
+  if (assertFailed)
+    return failure();
+
   auto &object = result.value();
   // Finalize the value. This will eliminate intermidiate ReferenceValue used as
   // a placeholder in the initialization.
+  LLVM_DEBUG(dbgs() << "finalizing\n");
   if (failed(object->finalize()))
     return cls.emitError() << "failed to finalize evaluation. Probably the "
                               "class contains a dataflow cycle";
+  LLVM_DEBUG(dbgs() << "result: " << object << "\n");
   return object;
 }
 
@@ -349,9 +422,13 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
                                     Location loc) {
   auto evaluatorValue = getOrCreateValue(value, actualParams, loc).value();
 
+  LLVM_DEBUG(dbgs() << "- eval: " << value << "\n");
+
   // Return if the value is already evaluated.
-  if (evaluatorValue->isFullyEvaluated())
+  if (evaluatorValue->isFullyEvaluated()) {
+    LLVM_DEBUG(dbgs(1) << "fully evaluated: " << evaluatorValue << "\n");
     return evaluatorValue;
+  }
 
   return llvm::TypeSwitch<Value, FailureOr<evaluator::EvaluatorValuePtr>>(value)
       .Case([&](BlockArgument arg) {
@@ -377,6 +454,12 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             })
             .Case([&](ListConcatOp op) {
               return evaluateListConcat(op, actualParams, loc);
+            })
+            .Case([&](StringConcatOp op) {
+              return evaluateStringConcat(op, actualParams, loc);
+            })
+            .Case([&](BinaryEqualityOp op) {
+              return evaluateBinaryEquality(op, actualParams, loc);
             })
             .Case([&](AnyCastOp op) {
               return evaluateValue(op.getInput(), actualParams, loc);
@@ -503,6 +586,69 @@ circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
   return handle;
 }
 
+/// Evaluator dispatch function for property assertions.
+LogicalResult
+circt::om::Evaluator::evaluatePropertyAssert(PropertyAssertOp op,
+                                             ActualParameters actualParams) {
+#ifndef NDEBUG
+  DebugNesting nest(debugNesting);
+#endif
+
+  auto loc = op.getLoc();
+
+  // Evaluate the condition, returning early if it isn't ready yet.
+  LLVM_DEBUG(dbgs() << "op: " << op << "\n"
+                    << indent() << "evaluate condition: \n");
+  auto condResult = evaluateValue(op.getCondition(), actualParams, loc);
+  if (failed(condResult))
+    return failure();
+  if (!condResult.value()->isFullyEvaluated()) {
+    LLVM_DEBUG(dbgs() << "evaluate condition: <not fully evaluated>\n");
+    return success();
+  }
+
+  // If the condition is unknown, skip silently (best-effort).
+  if (condResult.value()->isUnknown())
+    return success();
+
+  LLVM_DEBUG(dbgs() << "condition: " << condResult.value() << "\n");
+
+  // Extract the attribute from the condition value, handling the case where
+  // the condition resolves through a ReferenceValue (e.g. an ObjectFieldOp or
+  // a parameter that participates in cycle resolution).
+  auto extractAttr = [](evaluator::EvaluatorValue *value) -> mlir::Attribute {
+    return llvm::TypeSwitch<evaluator::EvaluatorValue *, mlir::Attribute>(value)
+        .Case([](evaluator::AttributeValue *val) { return val->getAttr(); })
+        .Case([](evaluator::ReferenceValue *val) -> mlir::Attribute {
+          auto stripped = val->getStrippedValue();
+          if (failed(stripped))
+            return {};
+          if (auto *attr =
+                  dyn_cast<evaluator::AttributeValue>(stripped.value().get()))
+            return attr->getAttr();
+          return {};
+        })
+        .Default([](auto *) -> mlir::Attribute { return {}; });
+  };
+
+  auto condAttr = extractAttr(condResult.value().get());
+  if (!condAttr)
+    return success();
+
+  bool isFalse = false;
+  if (auto boolAttr = dyn_cast<BoolAttr>(condAttr))
+    isFalse = !boolAttr.getValue();
+  else if (auto intAttr = dyn_cast<mlir::IntegerAttr>(condAttr))
+    isFalse = intAttr.getValue().isZero();
+  else
+    return op.emitError("expected BoolAttr or mlir::IntegerAttr");
+
+  if (isFalse)
+    return op.emitError("OM property assertion failed: ") << op.getMessage();
+
+  return success();
+}
+
 /// Evaluator dispatch function for Object instances.
 FailureOr<circt::om::Evaluator::ActualParameters>
 circt::om::Evaluator::createParametersFromOperands(
@@ -554,13 +700,15 @@ circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
 
   auto objectFieldValue = getOrCreateValue(op, actualParams, loc).value();
 
-  // If the object is unknown, mark the field as unknown.
   if (result->isUnknown()) {
-    // If objectFieldValue is a ReferenceValue, set its value to the unknown
-    // object
+    // If objectFieldValue is a ReferenceValue, set its value to a unknown value
+    // of the proper type
     if (auto *ref =
             llvm::dyn_cast<evaluator::ReferenceValue>(objectFieldValue.get())) {
-      ref->setValue(result);
+      auto unknownField = createUnknownValue(op.getResult().getType(), loc);
+      if (failed(unknownField))
+        return unknownField;
+      ref->setValue(unknownField.value());
     }
     // markUnknown() also marks the value as fully evaluated
     objectFieldValue->markUnknown();
@@ -680,6 +828,130 @@ circt::om::Evaluator::evaluateListConcat(ListConcatOp op,
   return list;
 }
 
+/// Evaluator dispatch function for String concatenation.
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateStringConcat(StringConcatOp op,
+                                           ActualParameters actualParams,
+                                           Location loc) {
+  // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
+  auto handle = getOrCreateValue(op.getResult(), actualParams, loc);
+  if (failed(handle))
+    return handle;
+
+  // If it's fully evaluated, we can return it.
+  if (handle.value()->isFullyEvaluated())
+    return handle;
+
+  // Extract the string attributes, handling both AttributeValue and
+  // ReferenceValue cases.
+  auto extractAttr = [](evaluator::EvaluatorValue *value) -> StringAttr {
+    return llvm::TypeSwitch<evaluator::EvaluatorValue *, StringAttr>(value)
+        .Case([](evaluator::AttributeValue *val) {
+          return val->getAs<StringAttr>();
+        })
+        .Case([](evaluator::ReferenceValue *val) {
+          return cast<evaluator::AttributeValue>(val->getStrippedValue()->get())
+              ->getAs<StringAttr>();
+        });
+  };
+
+  // Evaluate all operands and concatenate them.
+  std::string result;
+  for (auto operand : op.getOperands()) {
+    auto operandResult = evaluateValue(operand, actualParams, loc);
+    if (failed(operandResult))
+      return operandResult;
+    if (!operandResult.value()->isFullyEvaluated())
+      return handle;
+
+    StringAttr str = extractAttr(operandResult.value().get());
+    assert(str && "expected StringAttr for StringConcatOp operand");
+    result += str.getValue().str();
+  }
+
+  // Create the concatenated string attribute.
+  auto resultStr = StringAttr::get(result, op.getResult().getType());
+
+  // Finalize the op result value.
+  auto *handleValue = cast<evaluator::AttributeValue>(handle.value().get());
+  auto resultStatus = handleValue->setAttr(resultStr);
+  if (failed(resultStatus))
+    return resultStatus;
+
+  auto finalizeStatus = handleValue->finalize();
+  if (failed(finalizeStatus))
+    return finalizeStatus;
+
+  return handle;
+}
+
+// Evaluator dispatch function for binary property equality operations.
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateBinaryEquality(BinaryEqualityOp op,
+                                             ActualParameters actualParams,
+                                             Location loc) {
+  // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
+  auto handle = getOrCreateValue(op.getResult(), actualParams, loc);
+  if (failed(handle))
+    return handle;
+
+  // If it's fully evaluated, we can return it.
+  if (handle.value()->isFullyEvaluated())
+    return handle;
+
+  // Evaluate both operands, returning the partially evaluated handle if either
+  // isn't ready yet.
+  auto lhsResult = evaluateValue(op.getLhs(), actualParams, loc);
+  if (failed(lhsResult))
+    return lhsResult;
+  if (!lhsResult.value()->isFullyEvaluated())
+    return handle;
+
+  auto rhsResult = evaluateValue(op.getRhs(), actualParams, loc);
+  if (failed(rhsResult))
+    return rhsResult;
+  if (!rhsResult.value()->isFullyEvaluated())
+    return handle;
+
+  // Check if any operand is unknown and propagate the unknown flag.
+  if (lhsResult.value()->isUnknown() || rhsResult.value()->isUnknown()) {
+    handle.value()->markUnknown();
+    return handle;
+  }
+
+  // Extract the underlying attribute, handling both AttributeValue and
+  // ReferenceValue cases.
+  auto extractAttr = [](evaluator::EvaluatorValue *value) -> mlir::Attribute {
+    return llvm::TypeSwitch<evaluator::EvaluatorValue *, mlir::Attribute>(value)
+        .Case([](evaluator::AttributeValue *val) { return val->getAttr(); })
+        .Case([](evaluator::ReferenceValue *val) -> mlir::Attribute {
+          return cast<evaluator::AttributeValue>(val->getStrippedValue()->get())
+              ->getAttr();
+        });
+  };
+
+  mlir::Attribute lhs = extractAttr(lhsResult.value().get());
+  mlir::Attribute rhs = extractAttr(rhsResult.value().get());
+  assert(lhs && rhs && "expected attribute for BinaryEqualityOp operands");
+
+  // Perform the binary equality operation.
+  FailureOr<mlir::Attribute> result = op.evaluateBinaryEquality(lhs, rhs);
+  if (failed(result))
+    return op->emitError("failed to evaluate binary equality operation");
+
+  // Finalize the op result value.
+  auto *handleValue = cast<evaluator::AttributeValue>(handle.value().get());
+  auto resultStatus = handleValue->setAttr(*result);
+  if (failed(resultStatus))
+    return resultStatus;
+
+  auto finalizeStatus = handleValue->finalize();
+  if (failed(finalizeStatus))
+    return finalizeStatus;
+
+  return handle;
+}
+
 FailureOr<evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::evaluateBasePathCreate(FrozenBasePathCreateOp op,
                                              ActualParameters actualParams,
@@ -734,13 +1006,14 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::evaluateEmptyPath(
   return valueResult;
 }
 
+/// Create an unknown value of the specified type
 FailureOr<evaluator::EvaluatorValuePtr>
-circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
+circt::om::Evaluator::createUnknownValue(Type type, Location loc) {
   using namespace circt::om::evaluator;
 
   // Create an unknown value of the appropriate type by switching on the type
   auto result =
-      TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(op.getType())
+      TypeSwitch<Type, FailureOr<EvaluatorValuePtr>>(type)
           .Case([&](ListType type) -> FailureOr<EvaluatorValuePtr> {
             // Create an empty list
             return success(std::make_shared<ListValue>(type, loc));
@@ -776,6 +1049,12 @@ circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
     result->get()->markUnknown();
 
   return result;
+}
+
+/// Evaluate an unknown value
+FailureOr<evaluator::EvaluatorValuePtr>
+circt::om::Evaluator::evaluateUnknownValue(UnknownValueOp op, Location loc) {
+  return createUnknownValue(op.getType(), loc);
 }
 
 //===----------------------------------------------------------------------===//

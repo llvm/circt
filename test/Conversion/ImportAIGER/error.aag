@@ -39,3 +39,15 @@ aag 1 1 0 1 0
 2
 // expected-error @below {{failed to parse symbol position}}
 i0x invalid_symbol
+
+// -----
+// Test justice properties warning
+// expected-warning @+2 {{AIGER justice properties are not yet supported}}
+aag 0 0 0 0 0 0 0 1 0
+1
+0
+// -----
+// Test fairness constraints warning
+// expected-warning @+2 {{AIGER fairness constraints are not yet supported}}
+aag 0 0 0 0 0 0 0 0 1
+0

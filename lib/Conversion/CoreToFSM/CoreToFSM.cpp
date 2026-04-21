@@ -150,6 +150,198 @@ static void addPossibleValues(llvm::SetVector<size_t> &possibleValues,
   addPossibleValuesImpl(possibleValues, v, visited);
 }
 
+/// Checks if two values compute the same function structurally.
+/// Values defined outside their respective regions (e.g., machine block
+/// arguments or fsm.variable results) are compared by SSA identity.
+/// Values defined by operations within their regions are compared using
+/// MLIR's OperationEquivalence with a custom equivalence callback.
+static bool areStructurallyEquivalent(Value a, Value b, Region &regionA,
+                                      Region &regionB) {
+  if (a == b)
+    return true;
+
+  Operation *opA = a.getDefiningOp();
+  Operation *opB = b.getDefiningOp();
+  if (!opA || !opB)
+    return false;
+
+  bool aIsLocal = regionA.isAncestor(opA->getParentRegion());
+  bool bIsLocal = regionB.isAncestor(opB->getParentRegion());
+  if (aIsLocal != bIsLocal)
+    return false;
+  if (!aIsLocal)
+    return false;
+
+  // Both local: compare result index and delegate structural comparison
+  // to MLIR's OperationEquivalence.
+  if (cast<OpResult>(a).getResultNumber() !=
+      cast<OpResult>(b).getResultNumber())
+    return false;
+
+  return OperationEquivalence::isEquivalentTo(
+      opA, opB,
+      [&](Value lhs, Value rhs) -> LogicalResult {
+        return success(areStructurallyEquivalent(lhs, rhs, regionA, regionB));
+      },
+      /*markEquivalent=*/nullptr, OperationEquivalence::Flags::IgnoreLocations);
+}
+
+/// RewritePattern that folds expressions in an action region that are
+/// structurally equivalent to guard conditions into boolean constants.
+
+class GuardConditionFoldPattern : public RewritePattern {
+public:
+  GuardConditionFoldPattern(MLIRContext *ctx,
+                            ArrayRef<std::pair<Value, bool>> guardFacts,
+                            Region &guardRegion, Region &actionRegion)
+      : RewritePattern(MatchAnyOpTypeTag(), /*benefit=*/10, ctx),
+        guardFacts(guardFacts.begin(), guardFacts.end()),
+        guardRegion(guardRegion), actionRegion(actionRegion) {}
+
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const override {
+    if (!actionRegion.isAncestor(op->getParentRegion()))
+      return failure();
+
+    // Skip constants because replacing a constant with an identical constant
+    // creates an infinite loop in the greedy rewriter.
+    if (isa<hw::ConstantOp>(op))
+      return failure();
+
+    for (Value result : op->getResults()) {
+      if (!result.getType().isInteger(1) || result.use_empty())
+        continue;
+
+      for (auto [guardExpr, isTrue] : guardFacts) {
+        // Direct structural match.
+        if (areStructurallyEquivalent(guardExpr, result, guardRegion,
+                                      actionRegion))
+          return replaceWithConstant(result, isTrue, op, rewriter);
+
+        // ICmp predicate inversion: if the guard contains icmp P(X, Y),
+        // find icmp !P(X, Y) in the action and replace with !isTrue.
+        if (auto guardIcmp = guardExpr.getDefiningOp<ICmpOp>()) {
+          if (auto actionIcmp = dyn_cast<ICmpOp>(op)) {
+            if (actionIcmp.getPredicate() ==
+                    ICmpOp::getNegatedPredicate(guardIcmp.getPredicate()) &&
+                areStructurallyEquivalent(guardIcmp.getLhs(),
+                                          actionIcmp.getLhs(), guardRegion,
+                                          actionRegion) &&
+                areStructurallyEquivalent(guardIcmp.getRhs(),
+                                          actionIcmp.getRhs(), guardRegion,
+                                          actionRegion))
+              return replaceWithConstant(result, !isTrue, op, rewriter);
+          }
+        }
+      }
+    }
+    return failure();
+  }
+
+private:
+  LogicalResult replaceWithConstant(Value result, bool constVal, Operation *op,
+                                    PatternRewriter &rewriter) const {
+    rewriter.setInsertionPointToStart(&actionRegion.front());
+    Value c = hw::ConstantOp::create(rewriter, op->getLoc(),
+                                     rewriter.getI1Type(), constVal ? 1 : 0);
+    rewriter.replaceAllUsesWith(result, c);
+    if (op->use_empty())
+      rewriter.eraseOp(op);
+    return success();
+  }
+
+  SmallVector<std::pair<Value, bool>> guardFacts;
+  Region &guardRegion;
+  Region &actionRegion;
+};
+
+/// Simplify action blocks by propagating guard conditions.
+/// When a transition is taken, its guard condition is known to be true.
+/// This function finds expressions in the action region that are structurally
+/// identical to the guard condition and replaces them with constant true.
+/// It also handles NOT (xor with true) and AND decomposition to propagate
+/// additional known values.
+static void simplifyActionWithGuard(TransitionOp transition,
+                                    OpBuilder &builder) {
+  Region &guardRegion = transition.getGuard();
+  Region &actionRegion = transition.getAction();
+
+  if (guardRegion.empty() || actionRegion.empty())
+    return;
+
+  auto guardReturn =
+      dyn_cast<fsm::ReturnOp>(guardRegion.front().getTerminator());
+  if (!guardReturn)
+    return;
+
+  Location loc = guardReturn.getLoc();
+  Value guardCondition = guardReturn.getOperand();
+
+  // Collect (expression, isTrue) pairs to propagate into the action.
+  SmallVector<std::pair<Value, bool>> guardFacts;
+
+  // Use a worklist to decompose AND expressions.
+  SmallVector<std::pair<Value, bool>> worklist;
+  worklist.push_back({guardCondition, true});
+
+  while (!worklist.empty()) {
+    auto [cond, isTrue] = worklist.pop_back_val();
+    guardFacts.push_back({cond, isTrue});
+
+    // Decompose NOT: xor(E, true) means E has the opposite truth value.
+    if (auto xorOp = cond.getDefiningOp<XorOp>()) {
+      if (xorOp.isBinaryNot() &&
+          guardRegion.isAncestor(xorOp->getParentRegion()))
+        guardFacts.push_back({xorOp.getOperand(0), !isTrue});
+    }
+
+    // Decompose AND: if the AND is true, each operand is true.
+    if (isTrue) {
+      if (auto andOp = cond.getDefiningOp<AndOp>()) {
+        if (guardRegion.isAncestor(andOp->getParentRegion())) {
+          for (Value operand : andOp.getOperands())
+            worklist.push_back({operand, true});
+        }
+      }
+    }
+  }
+
+  // Replace external guard values (block args or ops outside guard region)
+  // directly via replaceUsesWithIf.
+  for (auto [guardExpr, isTrue] : guardFacts) {
+    bool guardIsExternal =
+        !guardExpr.getDefiningOp() ||
+        !guardRegion.isAncestor(guardExpr.getDefiningOp()->getParentRegion());
+    if (guardIsExternal) {
+      builder.setInsertionPointToStart(&actionRegion.front());
+      auto constOp = hw::ConstantOp::create(builder, loc, guardExpr.getType(),
+                                            isTrue ? 1 : 0);
+      guardExpr.replaceUsesWithIf(constOp.getResult(), [&](OpOperand &use) {
+        if (!actionRegion.isAncestor(use.getOwner()->getParentRegion()))
+          return false;
+        // Never replace the variable operand of fsm.update because that is the
+        // assignment target, not a value to be folded.
+        if (auto updateOp = dyn_cast<UpdateOp>(use.getOwner()))
+          if (use.getOperandNumber() == 0)
+            return false;
+        return true;
+      });
+    }
+  }
+
+  // Use pattern rewriter for internal guard expression folding.
+  MLIRContext *ctx = transition.getContext();
+  RewritePatternSet patterns(ctx);
+  patterns.add<GuardConditionFoldPattern>(ctx, guardFacts, guardRegion,
+                                          actionRegion);
+  SmallVector<Operation *> actionOps;
+  actionRegion.walk([&](Operation *op) { actionOps.push_back(op); });
+  GreedyRewriteConfig config;
+  config.setScope(&actionRegion);
+  (void)applyOpPatternsGreedily(
+      actionOps, FrozenRewritePatternSet(std::move(patterns)), config);
+}
+
 /// Checks if a value is a constant or a tree of muxes with constant leaves.
 /// Uses an iterative approach with a visited set to handle cycles.
 static bool isConstantOrConstantTree(Value value) {
@@ -256,7 +448,8 @@ static void generateConcatenatedValues(
     currentResults = std::move(nextResults);
   }
 
-  finalPossibleValues = std::move(currentResults);
+  for (size_t val : currentResults)
+    finalPossibleValues.insert(val);
 }
 
 static llvm::MapVector<Value, int> intToRegMap(SmallVector<seq::CompRegOp> v,
@@ -433,7 +626,30 @@ public:
   LogicalResult run() {
     SmallVector<seq::CompRegOp> stateRegs;
     SmallVector<seq::CompRegOp> variableRegs;
+    Value foundClock, foundReset = nullptr;
     WalkResult walkResult = moduleOp.walk([&](seq::CompRegOp reg) {
+      auto clk = reg.getClk();
+      auto reset = reg.getReset();
+      if (foundClock) {
+        if (clk != foundClock) {
+          reg.emitError("All registers must have the same clock signal.");
+          return WalkResult::interrupt();
+        }
+      } else {
+        foundClock = clk;
+      }
+
+      if (reset) {
+        if (foundReset) {
+          if (reset != foundReset) {
+            reg.emitError("All registers must have the same reset signal.");
+            return WalkResult::interrupt();
+          }
+        } else {
+          foundReset = reset;
+        }
+      }
+
       // Check that the register type is an integer.
       if (!isa<IntegerType>(reg.getType())) {
         reg.emitError("FSM extraction only supports integer-typed registers");
@@ -478,7 +694,15 @@ public:
     llvm::DenseMap<Value, int> initialStateMap;
     for (seq::CompRegOp reg : moduleOp.getOps<seq::CompRegOp>()) {
       Value resetValue = reg.getResetValue();
-      auto definingConstant = resetValue.getDefiningOp<hw::ConstantOp>();
+      hw::ConstantOp definingConstant;
+      if (resetValue) {
+        definingConstant = resetValue.getDefiningOp<hw::ConstantOp>();
+      } else {
+        // Assume that registers without a reset start at 0
+        reg.emitWarning("Assuming register with no reset starts with value 0");
+        definingConstant =
+            hw::ConstantOp::create(opBuilder, reg.getLoc(), reg.getType(), 0);
+      }
       if (!definingConstant) {
         reg->emitError(
             "cannot find defining constant for reset value of register");
@@ -511,7 +735,16 @@ public:
     llvm::MapVector<seq::CompRegOp, VariableOp> variableMap;
     for (seq::CompRegOp varReg : variableRegs) {
       TypedValue<Type> initialValue = varReg.getResetValue();
-      auto definingConstant = initialValue.getDefiningOp<hw::ConstantOp>();
+      hw::ConstantOp definingConstant;
+      if (initialValue) {
+        definingConstant = initialValue.getDefiningOp<hw::ConstantOp>();
+      } else {
+        // Assume that registers without a reset start at 0
+        varReg.emitWarning(
+            "Assuming register with no reset starts with value 0");
+        definingConstant = hw::ConstantOp::create(opBuilder, varReg.getLoc(),
+                                                  varReg.getType(), 0);
+      }
       if (!definingConstant) {
         varReg->emitError("cannot find defining constant for reset value of "
                           "variable register");
@@ -807,15 +1040,14 @@ public:
             clonedRegOp->erase();
           }
 
-          FrozenRewritePatternSet patterns(opBuilder.getContext());
           GreedyRewriteConfig config;
           SmallVector<Operation *> opsToProcess;
           actionRegion.walk([&](Operation *op) { opsToProcess.push_back(op); });
           config.setScope(&actionRegion);
 
           bool changed = false;
-          if (failed(applyOpPatternsGreedily(opsToProcess, patterns, config,
-                                             &changed)))
+          if (failed(applyOpPatternsGreedily(opsToProcess, frozenPatterns,
+                                             config, &changed)))
             return failure();
 
           // hw.module uses graph regions that allow cycles. By this point
@@ -857,6 +1089,25 @@ public:
         if (failed(applyOpPatternsGreedily(transitionOps, frozenPatterns,
                                            config2, &changed))) {
           return failure();
+        }
+
+        // Propagate guard conditions into action blocks to eliminate
+        // redundant muxes. The guard already checks the transition
+        // condition, so the action block can assume it holds.
+        for (TransitionOp transition :
+             stateOp.getTransitions().getOps<TransitionOp>())
+          simplifyActionWithGuard(transition, opBuilder);
+
+        // Re-canonicalize after guard propagation to clean up dead ops.
+        {
+          SmallVector<Operation *> postOps;
+          stateOp.getTransitions().walk(
+              [&](Operation *op) { postOps.push_back(op); });
+          GreedyRewriteConfig postConfig;
+          postConfig.setScope(&stateOp.getTransitions());
+          if (failed(applyOpPatternsGreedily(postOps, frozenPatterns,
+                                             postConfig, &changed)))
+            return failure();
         }
 
         for (TransitionOp transition :
@@ -925,6 +1176,15 @@ public:
     front.eraseArguments([&](BlockArgument arg) {
       return asyncResetBlockArguments.contains(arg);
     });
+
+    if (llvm::any_of(front.getArguments(), [](BlockArgument arg) {
+          return arg.getType() == seq::ClockType::get(arg.getContext()) &&
+                 arg.hasNUsesOrMore(1);
+        })) {
+      moduleOp.emitError("Clock uses outside register clocking are not "
+                         "currently supported.");
+      return failure();
+    }
     machine.getBody().front().eraseArguments([&](BlockArgument arg) {
       return arg.getType() == seq::ClockType::get(arg.getContext());
     });

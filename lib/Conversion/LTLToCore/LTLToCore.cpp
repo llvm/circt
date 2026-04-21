@@ -105,7 +105,7 @@ struct LTLImplicationConversion
       return failure();
     /// A -> B = !A || B
     auto loc = op.getLoc();
-    auto notA = comb::createOrFoldNot(loc, adaptor.getAntecedent(), rewriter);
+    auto notA = comb::createOrFoldNot(rewriter, loc, adaptor.getAntecedent());
     auto orOp =
         comb::OrOp::create(rewriter, loc, notA, adaptor.getConsequent());
     rewriter.replaceOp(op, orOp);
@@ -123,7 +123,7 @@ struct LTLNotConversion : public OpConversionPattern<ltl::NotOp> {
     if (!isa<IntegerType>(op.getInput().getType()))
       return failure();
     auto loc = op.getLoc();
-    auto inverted = comb::createOrFoldNot(loc, adaptor.getInput(), rewriter);
+    auto inverted = comb::createOrFoldNot(rewriter, loc, adaptor.getInput());
     rewriter.replaceOp(op, inverted);
     return success();
   }
@@ -166,6 +166,53 @@ struct LTLOrOpConversion : public OpConversionPattern<ltl::OrOp> {
   }
 };
 
+struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
+  LTLPastOpConversion(MLIRContext *context, bool assumeFirstClock)
+      : OpConversionPattern<ltl::PastOp>(context),
+        assumeFirstClock(assumeFirstClock) {}
+
+  LogicalResult
+  matchAndRewrite(ltl::PastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value clock;
+    if (!adaptor.getClk()) {
+      if (!assumeFirstClock)
+        return failure();
+      // Find the first clock, looking at inputs then at to_clock operations
+      auto module = op->getParentOfType<HWModuleOp>();
+      std::optional<size_t> clockArgNum;
+      for (auto &port : module.getPortList()) {
+        if (port.isInput() && isa<seq::ClockType>(port.type)) {
+          clockArgNum = port.argNum;
+          break;
+        }
+      }
+      if (clockArgNum) {
+        clock = module.getArgumentForInput(*clockArgNum);
+      } else {
+        // If there are no clock ports, we try to_clock operations
+        auto toClockOps = module.getOps<seq::ToClockOp>();
+        if (toClockOps.empty())
+          return failure();
+        clock = (*toClockOps.begin()).getResult();
+      }
+    } else {
+      clock = seq::ToClockOp::create(rewriter, op.getLoc(), adaptor.getClk());
+    }
+
+    Value cur = adaptor.getInput();
+    Value ce =
+        hw::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI1Type(), 1);
+    auto shiftreg =
+        seq::ShiftRegOp::create(rewriter, op.getLoc(), op.getDelayAttr(), cur,
+                                clock, ce, {}, {}, {}, {}, {});
+    rewriter.replaceOp(op, shiftreg);
+    return success();
+  }
+
+  bool assumeFirstClock;
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -182,6 +229,20 @@ struct LowerLTLToCorePass
 
 // Simply applies the conversion patterns defined above
 void LowerLTLToCorePass::runOnOperation() {
+  // Emit an explicit error for unsupported past ops, rather than a confusing
+  // 'failed to legalize' error
+  if (!assumeFirstClock) {
+    auto res = getOperation().walk([&](ltl::PastOp op) {
+      if (!op.getClk()) {
+        op.emitError(
+            "ltl.past operations without a clock operand are not supported.");
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    if (res.wasInterrupted())
+      return signalPassFailure();
+  }
 
   // Set target dialects: We don't want to see any ltl or verif that might
   // come from an AssertProperty left in the result
@@ -193,6 +254,7 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addLegalDialect<ltl::LTLDialect>();
   target.addLegalDialect<verif::VerifDialect>();
   target.addIllegalOp<verif::HasBeenResetOp>();
+  target.addIllegalOp<ltl::PastOp>();
 
   auto isLegal = [](Operation *op) {
     auto hasNonAssertUsers = std::any_of(
@@ -255,6 +317,7 @@ void LowerLTLToCorePass::runOnOperation() {
   patterns.add<HasBeenResetOpConversion, LTLImplicationConversion,
                LTLNotConversion, LTLAndOpConversion, LTLOrOpConversion>(
       converter, patterns.getContext());
+  patterns.add<LTLPastOpConversion>(patterns.getContext(), assumeFirstClock);
   // Apply the conversions
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
@@ -266,8 +329,8 @@ void LowerLTLToCorePass::runOnOperation() {
       return;
     Value prop = op->getOperand(0);
     if (auto cast = prop.getDefiningOp<UnrealizedConversionCastOp>()) {
-      // Make sure that the cast is from an i1, not something random that was in
-      // the input
+      // Make sure that the cast is from an i1, not something random that was
+      // in the input
       if (auto intType = dyn_cast<IntegerType>(cast.getOperandTypes()[0]);
           intType && intType.getWidth() == 1)
         op->setOperand(0, cast.getInputs()[0]);

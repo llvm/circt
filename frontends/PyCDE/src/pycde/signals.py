@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from .support import get_user_loc, _obj_to_value_infer_type
+from .tracer import get_var_name
 from .types import (Array, Bit, Bits, Bundle, BundledChannel, Channel,
                     ChannelDirection, ChannelSignaling, Type)
 
@@ -25,6 +26,29 @@ def _FromCirctValue(value: ir.Value, type: Type | None = None) -> Signal:
   if type is None:
     type = _FromCirctType(value.type)
   return type._get_value_class()(value, type)
+
+
+def _apply_auto_name(signal: Signal, name: str) -> Signal:
+  """Apply an auto-derived name to a signal. In normal mode, sets sv.namehint.
+  In debug mode, wraps the signal with hw.wire with a symbol to create an
+  optimization barrier that preserves the name in the output Verilog."""
+  from .system import System
+  try:
+    system = System.current()
+    is_debug = system.debug
+  except RuntimeError:
+    is_debug = False
+
+  if is_debug:
+    from .module import _BlockContext
+    from .circt.dialects import hw as raw_hw
+    sym_name = _BlockContext.current().uniquify_symbol(name)
+    inner_sym = raw_hw.InnerSymAttr.get(ir.StringAttr.get(sym_name))
+    wire_op = raw_hw.WireOp(signal.value, name=name, inner_sym=inner_sym)
+    signal.value = wire_op.result
+  else:
+    signal.name = name
+  return signal
 
 
 class Signal:
@@ -589,6 +613,9 @@ class ArraySignal(Signal):
       v = hw.ArrayGetOp(self.value, idx)
       if self.name and isinstance(idx, int):
         v.name = self.name + f"__{idx}"
+      var_name = get_var_name(depth=2)
+      if var_name is not None:
+        _apply_auto_name(v, var_name)
       return v
 
   @__getitem__.register(slice)
@@ -606,6 +633,9 @@ class ArraySignal(Signal):
       ret = hw.ArraySliceOp(self.value, idxs[0], ret_type)
       if self.name is not None:
         ret.name = f"{self.name}_{idxs[0]}upto{idxs[1]}"
+      var_name = get_var_name(depth=2)
+      if var_name is not None:
+        _apply_auto_name(ret, var_name)
       return ret
 
   def slice(self, low_idx: Union[int, BitVectorSignal],
@@ -701,6 +731,9 @@ class StructSignal(Signal):
         v = hw.StructExtractOp(self.value, attr)
         if self.name:
           v.name = f"{self.name}__{attr}"
+        var_name = get_var_name(depth=1)
+        if var_name is not None:
+          _apply_auto_name(v, var_name)
         return v
     raise AttributeError(f"{type(self)} object has no attribute '{attr}'")
 
@@ -714,12 +747,38 @@ class StructMetaType(type):
 
     cls = super().__new__(self, name, bases, dct)
     from .types import RegisteredStruct, Type
-    if "__annotations__" not in dct:
+
+    # Get class annotations, handling Python 3.14+ (PEP 649/749) where
+    # annotations are lazily evaluated via __annotate__ instead of being
+    # stored directly in __annotations__ during class body execution.
+    annotations = dct.get("__annotations__")
+    if annotations is None:
+      # Python 3.14+: use annotationlib (new in 3.14) for proper retrieval.
+      try:
+        import annotationlib
+        annotations = annotationlib.get_annotations(
+            cls, format=annotationlib.Format.VALUE)
+      except ImportError:
+        pass
+      # If annotationlib didn't find them (e.g. __annotate__ not yet on cls),
+      # try calling __annotate__ from the class namespace dict directly.
+      if not annotations:
+        annotate_fn = dct.get("__annotate__")
+        if annotate_fn is not None:
+          try:
+            annotations = annotate_fn(1)  # 1 = FORMAT_VALUE
+          except Exception:
+            pass
+
+    if not annotations:
       return cls
+
     fields: List[Tuple[str, Type]] = []
-    for attr_name, attr in dct["__annotations__"].items():
+    for attr_name, attr in annotations.items():
       if isinstance(attr, Type):
         fields.append((attr_name, attr))
+    if not fields:
+      return cls
 
     return RegisteredStruct(fields, name, cls)
 
@@ -773,18 +832,37 @@ class ChannelSignal(Signal):
   def reg(self, clk, rst=None, name=None):
     raise TypeError("Cannot register a channel")
 
-  def unwrap(self, readyOrRden):
+  def unwrap(
+      self,
+      readyOrRden: Optional[BitVectorSignal] = None) -> Tuple[Signal, Signal]:
+    """Unwrap a channel into its data and control signals.
+
+    For ValidReady channels, `readyOrRden` is the ready signal and must be
+    provided. Returns (data, valid).
+    For FIFO channels, `readyOrRden` is the read-enable signal and must be
+    provided. Returns (data, empty).
+    For ValidOnly channels, `readyOrRden` is ignored (no backpressure).
+    Returns (data, valid).
+    """
     from .dialects import esi
     signaling = self.type.signaling
     if signaling == ChannelSignaling.ValidReady:
+      if readyOrRden is None:
+        raise ValueError(
+            "ValidReady channels require a 'ready' signal to unwrap.")
       ready = Bit(readyOrRden)
       unwrap_op = esi.UnwrapValidReadyOp(self.type.inner_type, Bit, self.value,
                                          ready.value)
       return unwrap_op[0], unwrap_op[1]
     elif signaling == ChannelSignaling.FIFO:
+      if readyOrRden is None:
+        raise ValueError("FIFO channels require an 'rden' signal to unwrap.")
       rden = Bit(readyOrRden)
       wrap_op = esi.UnwrapFIFOOp(self.value, rden.value)
       return wrap_op[0], wrap_op[1]
+    elif signaling == ChannelSignaling.ValidOnly:
+      unwrap_op = esi.UnwrapValidOnlyOp(self.value)
+      return unwrap_op[0], unwrap_op[1]
     else:
       raise TypeError("Unknown signaling standard")
 
@@ -816,9 +894,18 @@ class ChannelSignal(Signal):
         ), res_type)
 
   def snoop(self) -> Tuple[Bits(1), Bits(1), Type]:
-    """Combinationally snoop on the internal signals of a channel."""
+    """Combinationally snoop on the internal signals of a channel.
+    For ValidReady, returns (valid, ready, data).
+    For ValidOnly, returns (valid, True, data) since there is no backpressure.
+    """
     from .dialects import esi
-    assert self.type.signaling == ChannelSignaling.ValidReady, "Only valid-ready channels can be snooped currently"
+    if self.type.signaling == ChannelSignaling.ValidOnly:
+      # Use SnoopTransactionOp which is protocol-agnostic and doesn't consume.
+      # For ValidOnly, transaction == valid (always ready).
+      snoop = esi.SnoopTransactionOp(self.value)
+      return snoop[0], Bits(1)(1), snoop[1]
+    assert self.type.signaling == ChannelSignaling.ValidReady, \
+        "Only valid-ready and valid-only channels can be snooped"
     snoop = esi.SnoopValidReadyOp(self.value)
     return snoop[0], snoop[1], snoop[2]
 
@@ -835,28 +922,43 @@ class ChannelSignal(Signal):
 
     from .constructs import Wire
     from .types import Bits, Channel
-    ready_wire = Wire(Bits(1))
-    data, valid = self.unwrap(ready_wire)
-    data = transform(data)
-    ret_chan, ready = Channel(data.type,
-                              signaling=self.type.signaling).wrap(data, valid)
-    ready_wire.assign(ready)
-    return ret_chan
+    signaling = self.type.signaling
+    if signaling == ChannelSignaling.ValidOnly:
+      data, valid = self.unwrap()
+      data = transform(data)
+      ret_chan, _ = Channel(data.type, signaling=signaling).wrap(data, valid)
+      return ret_chan
+    else:
+      ready_wire = Wire(Bits(1))
+      data, valid = self.unwrap(ready_wire)
+      data = transform(data)
+      ret_chan, ready = Channel(data.type,
+                                signaling=signaling).wrap(data, valid)
+      ready_wire.assign(ready)
+      return ret_chan
 
   def fork(self, clk, rst) -> Tuple[ChannelSignal, ChannelSignal]:
     """Fork the channel into two channels, returning the two new channels."""
     from .constructs import Wire
     from .types import Bits
-    both_ready = Wire(Bits(1))
-    both_ready.name = self.get_name() + "_fork_both_ready"
-    data, valid = self.unwrap(both_ready)
-    valid_gate = both_ready & valid
-    a, a_rdy = self.type.wrap(data, valid_gate)
-    b, b_rdy = self.type.wrap(data, valid_gate)
-    abuf = a.buffer(clk, rst, 1)
-    bbuf = b.buffer(clk, rst, 1)
-    both_ready.assign(a_rdy & b_rdy)
-    return abuf, bbuf
+    signaling = self.type.signaling
+    if signaling == ChannelSignaling.ValidOnly:
+      # ValidOnly: no backpressure, just duplicate data and valid.
+      data, valid = self.unwrap()
+      a, _ = self.type.wrap(data, valid)
+      b, _ = self.type.wrap(data, valid)
+      return a, b
+    else:
+      both_ready = Wire(Bits(1))
+      both_ready.name = self.get_name() + "_fork_both_ready"
+      data, valid = self.unwrap(both_ready)
+      valid_gate = both_ready & valid
+      a, a_rdy = self.type.wrap(data, valid_gate)
+      b, b_rdy = self.type.wrap(data, valid_gate)
+      abuf = a.buffer(clk, rst, 1)
+      bbuf = b.buffer(clk, rst, 1)
+      both_ready.assign(a_rdy & b_rdy)
+      return abuf, bbuf
 
   def wait_for_ready(self, other: ChannelSignal) -> ChannelSignal:
     """Return a channel which doesn't issue valid unless some other channel is
@@ -1153,8 +1255,14 @@ def wrap_opviews_with_values(dialect, module_name, excluded=[]):
           # Return the wrapped values, if any.
           converted_results = tuple(
               _FromCirctValue(res) for res in created.results)
-          return converted_results[0] if len(
-              converted_results) == 1 else converted_results
+          if len(converted_results) == 1:
+            signal = converted_results[0]
+            if signal.name is None:
+              var_name = get_var_name(depth=1, skip_pycde=True)
+              if var_name is not None:
+                _apply_auto_name(signal, var_name)
+            return signal
+          return converted_results
 
         return create
 

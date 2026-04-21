@@ -10,11 +10,11 @@ if (NOT LOOPBACK_GENERATED_DIR)
   message(FATAL_ERROR "LOOPBACK_GENERATED_DIR must be set")
 endif()
 
-# Optional hint roots to help locate the ESI runtime headers and libraries.
-set(ESI_RUNTIME_ROOT "$ENV{ESI_RUNTIME_ROOT}" CACHE PATH
-  "ESI runtime build/install root")
+option(ESI_RUNTIME_ROOT "Path to ESI runtime installation or build directory" "")
 if (NOT ESI_RUNTIME_ROOT)
   message(FATAL_ERROR "ESI_RUNTIME_ROOT must be set or available in the environment")
+else()
+  message(STATUS "Using ESI runtime root: ${ESI_RUNTIME_ROOT}")
 endif()
 
 set(ESIACCEL_CONFIG "${ESI_RUNTIME_ROOT}/cmake/esiaccelConfig.cmake")
@@ -84,7 +84,9 @@ endif()
 
 find_path(CLI11_INCLUDE_DIR
   NAMES CLI/CLI.hpp
-  PATHS "${ESI_RUNTIME_ROOT}"
+  PATHS
+    "${ESI_RUNTIME_ROOT}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/"
   PATH_SUFFIXES _deps/cli11_proj-src/include)
 
 if (NOT CLI11_INCLUDE_DIR)
@@ -147,5 +149,31 @@ endif()
 
 if (UNIX AND _esi_runtime_lib_dir)
   set_target_properties(loopback_test PROPERTIES
+    BUILD_RPATH "${_esi_runtime_lib_dir}")
+endif()
+
+# Typed-port variant of the loopback test, using TypedWritePort/TypedReadPort
+# and TypedFunction from TypedPorts.h.
+add_executable(loopback_typed_test
+  "${CMAKE_CURRENT_SOURCE_DIR}/loopback_typed.cpp")
+set_target_properties(loopback_typed_test PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+target_include_directories(loopback_typed_test PRIVATE
+  "${LOOPBACK_GENERATED_DIR}"
+  "${CLI11_INCLUDE_DIR}")
+
+if (ESI_RUNTIME_TARGET)
+  target_link_libraries(loopback_typed_test PRIVATE
+    "${ESI_RUNTIME_TARGET}")
+else()
+  target_include_directories(loopback_typed_test PRIVATE
+    "${ESI_RUNTIME_INCLUDE_DIR}")
+  target_link_libraries(loopback_typed_test PRIVATE
+    "${ESI_RUNTIME_LIB}")
+endif()
+
+if (UNIX AND _esi_runtime_lib_dir)
+  set_target_properties(loopback_typed_test PROPERTIES
     BUILD_RPATH "${_esi_runtime_lib_dir}")
 endif()

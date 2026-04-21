@@ -221,7 +221,3 @@ LogicalResult IsolateClocksPass::runOnModule(hw::HWModuleOp module) {
 
   return success();
 }
-
-std::unique_ptr<Pass> arc::createIsolateClocksPass() {
-  return std::make_unique<IsolateClocksPass>();
-}

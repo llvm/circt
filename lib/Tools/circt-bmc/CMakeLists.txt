@@ -10,6 +10,7 @@ add_circt_library(CIRCTBMCTransforms
   CIRCTSeq
   CIRCTComb
   CIRCTVerif
+  CIRCTDebug
 
   MLIRFuncDialect
   MLIRIR

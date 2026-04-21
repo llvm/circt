@@ -238,6 +238,28 @@ hw.module @decomposedParity(in %in: i8, out out: i1) {
   hw.output %res : i1
 }
 
+// comb.reverse
+//  RUN: circt-lec %s -c1=reverse -c2=decomposedReverse --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_REVERSE
+//  COMB_REVERSE: c1 == c2
+
+hw.module @reverse(in %a : i8, out out : i8) {
+  %0 = comb.reverse %a : i8
+  hw.output %0 : i8
+}
+
+hw.module @decomposedReverse(in %a : i8, out out : i8) {
+  %b0 = comb.extract %a from 0 : (i8) -> i1
+  %b1 = comb.extract %a from 1 : (i8) -> i1
+  %b2 = comb.extract %a from 2 : (i8) -> i1
+  %b3 = comb.extract %a from 3 : (i8) -> i1
+  %b4 = comb.extract %a from 4 : (i8) -> i1
+  %b5 = comb.extract %a from 5 : (i8) -> i1
+  %b6 = comb.extract %a from 6 : (i8) -> i1
+  %b7 = comb.extract %a from 7 : (i8) -> i1
+  %0 = comb.concat %b0, %b1, %b2, %b3, %b4, %b5, %b6, %b7 : i1, i1, i1, i1, i1, i1, i1, i1
+  hw.output %0 : i8
+}
+
 // comb.replicate
 //  RUN: circt-lec %s -c1=replicate -c2=decomposedReplicate --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_REPLICATE
 //  COMB_REPLICATE: c1 == c2

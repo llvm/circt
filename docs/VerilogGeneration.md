@@ -112,10 +112,8 @@ The current set of "style" Lowering Options is:
    (e.g. inner symbols) into comments.
  * `disallowMuxInlining` (default=`false`). If true, every mux expression is spilled to a wire.
    This is used to avoid emitting deeply nested mux expressions to improve readability.
- * `wireSpillingHeuristic` (default=`spillNone`). This controls extra wire spilling performed
-   in PrepareForEmission to improve readability and debuggability. It is possible to combine
-   several heuristics by specifying `wireSpillingHeuristic` multiple times.
-   (e.g. `wireSpillingHeuristic=spillLargeTermsWithNamehints,wireSpillingHeuristic=spillAllMux`).
+ * `wireSpillingHeuristic` (default=`null`). This controls extra wire spilling performed
+   in PrepareForEmission to improve readability and debuggability.
    * `spillLargeTermsWithNamehints`: If spillLargeTermsWithNamehints is specified, expressions
      with meaningful namehints (i.e. names which start with "\_") are spilled to wires.
      For a namehint with "\_" prefix, if the term size is greater than `wireSpillingNamehintTermLimit`

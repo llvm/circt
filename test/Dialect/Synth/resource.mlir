@@ -58,6 +58,7 @@ hw.module private @unrelated(in %a : i1, in %b : i1, out x : i1) {
 // CHECK-NEXT:   comb.or: 16
 // CHECK-NEXT:   comb.xor: 8
 // CHECK-NEXT:   synth.aig.and_inv: 8
+// CHECK-NEXT:   synth.xor_inv: 16
 
 hw.module private @multibit(in %a : i8, in %b : i8, in %c : i8, out x : i8) {
   // 3-input AND on 8-bit: (3-1) * 8 = 16 gates
@@ -70,8 +71,11 @@ hw.module private @multibit(in %a : i8, in %b : i8, in %c : i8, out x : i8) {
   %xor2 = comb.xor %a, %b : i8
   // AIG on 8-bit: (2-1) * 8 = 8 gates
   %aig = synth.aig.and_inv not %a, %b : i8
-  hw.output %aig : i8
+  // XOR inverter on 8-bit: (3-1) * 8 = 16 gates
+  %xor = synth.xor_inv %aig, not %b, %c : i8
+  hw.output %xor : i8
 }
+
 
 // Test sequential elements (registers)
 // CHECK:      Resource Usage Analysis for module: sequential
@@ -126,23 +130,11 @@ hw.module private @nested(in %a : i1, in %b : i1, in %c : i1, out x : i1) {
   hw.output %or : i1
 }
 
-// Test MIG (Majority-Inverter Graph) operations
-// CHECK:      Resource Usage Analysis for module: mig_test
-// CHECK-NEXT: ========================================
-// CHECK-NEXT: Total:
-// CHECK-NEXT:   synth.mig.maj_inv_3: 4
-// CHECK-NEXT:   synth.mig.maj_inv_5: 4
-
-hw.module private @mig_test(in %a : i4, in %b : i4, in %c : i4, out x : i4) {
-  %maj1 = synth.mig.maj_inv %a, %b, %c : i4
-  %maj2 = synth.mig.maj_inv %a, %b, %c, %a, %b : i4
-  hw.output %maj2 : i4
-}
-
 // Test truth table operations
 // CHECK:      Resource Usage Analysis for module: lut_test
 // CHECK-NEXT: ========================================
 // CHECK-NEXT: Total:
+// CHECK-NEXT:   comb.truth_table:   2
 // CHECK-NEXT:   comb.truth_table_2: 1
 // CHECK-NEXT:   comb.truth_table_3: 1
 

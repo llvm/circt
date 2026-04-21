@@ -801,6 +801,25 @@ hw.module @reg_of_clock_type(in %clk: !seq.clock, in %rst: i1, in %i: !seq.clock
   hw.output %r2 : !seq.clock
 }
 
+// Registers of clock type need special handling as the clock type is converted
+// to an i1.  However, downstream users, like `seq.from_clock` have hard
+// requirements that types are clocks (not i1).  Keep the IR valid as the
+// folders on `from_clock` may be called.
+//
+// See: https://github.com/llvm/circt/issues/10254
+//
+// CHECK-LABEL: @FirregClockType
+hw.module @FirregClockType(in %a : !seq.clock) {
+  // CHECK: sv.reg : !hw.inout<i1>
+  // CHECK: sv.read_inout
+  // CHECK-NOT: seq.from_clock
+  %false = hw.constant false
+  %next = seq.to_clock %false
+  %reg = seq.firreg %next clock %a : !seq.clock
+  %q = seq.from_clock %reg
+  hw.output
+}
+
 // Check if/else structure for register enable inference is maintained, without
 // pulling unnecessary muxes into if/else structures.
 
@@ -918,9 +937,9 @@ hw.module @RegMuxInlining3(in %clock: !seq.clock, in %c: i1, out out: i8) {
     %r1 = seq.firreg %mux clock %clock : i2
     %r2 = seq.firreg %mux clock %clock : i2
     hw.output %r2: i2
-    //CHECK: %r1 = sv.reg : !hw.inout<i2> 
+    //CHECK: %r1 = sv.reg : !hw.inout<i2>
     //CHECK: %[[V1:.+]] = sv.read_inout %r1 : !hw.inout<i2>
-    //CHECK: %r2 = sv.reg : !hw.inout<i2> 
+    //CHECK: %r2 = sv.reg : !hw.inout<i2>
     //CHECK: %[[V2:.+]] = sv.read_inout %r2 : !hw.inout<i2>
     //CHECK: sv.always posedge %clock {
     //CHECK:   sv.if %cond {

@@ -11,7 +11,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRParser.h"
-#include "FIRAnnotations.h"
 #include "FIRLexer.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
@@ -87,6 +86,9 @@ struct SharedParserConstants {
 
   /// A map from identifiers to class ops.
   llvm::DenseMap<StringRef, ClassLike> classMap;
+
+  /// A map from identifiers to domain ops.
+  llvm::DenseMap<StringRef, DomainOp> domainMap;
 
   /// An empty array attribute.
   const ArrayAttr emptyArrayAttr;
@@ -271,9 +273,8 @@ struct FIRParser {
   // Parse 'verLit' into specified value
   ParseResult parseVersionLit(const Twine &message);
 
-  // Parse ('<' intLit '>')? setting result to -1 if not present.
-  template <typename T>
-  ParseResult parseOptionalWidth(T &result);
+  // Parse 'intLit' '>' assuming '<' was already consumed.
+  ParseResult parseWidth(int32_t &result);
 
   // Parse the 'id' grammar, which is an identifier or an allowed keyword.
   ParseResult parseId(StringRef &result, const Twine &message);
@@ -663,18 +664,10 @@ ParseResult FIRParser::parseVersionLit(const Twine &message) {
   auto spelling = getTokenSpelling();
   if (getToken().getKind() != FIRToken::version)
     return emitError(message), failure();
-  // form a.b.c
-  auto [a, d] = spelling.split(".");
-  auto [b, c] = d.split(".");
-  APInt aInt, bInt, cInt;
-  if (a.getAsInteger(10, aInt) || b.getAsInteger(10, bInt) ||
-      c.getAsInteger(10, cInt))
+  auto ver = FIRVersion::fromString(spelling);
+  if (!ver)
     return emitError("failed to parse version string"), failure();
-  version.major = aInt.getLimitedValue(UINT32_MAX);
-  version.minor = bInt.getLimitedValue(UINT32_MAX);
-  version.patch = cInt.getLimitedValue(UINT32_MAX);
-  if (version.major != aInt || version.minor != bInt || version.patch != cInt)
-    return emitError("integers out of range"), failure();
+  version = *ver;
   if (version < minimumFIRVersion)
     return emitError() << "FIRRTL version must be >=" << minimumFIRVersion,
            failure();
@@ -682,23 +675,15 @@ ParseResult FIRParser::parseVersionLit(const Twine &message) {
   return success();
 }
 
-// optional-width ::= ('<' intLit '>')?
-//
-// This returns with result equal to -1 if not present.
-template <typename T>
-ParseResult FIRParser::parseOptionalWidth(T &result) {
-  if (!consumeIf(FIRToken::less))
-    return result = -1, success();
-
-  // Parse a width specifier if present.
+/// Parse a width specifier: intLit '>'
+/// This is used when the '<' has already been consumed.
+ParseResult FIRParser::parseWidth(int32_t &result) {
   auto widthLoc = getToken().getLoc();
   if (parseIntLit(result, "expected width") ||
-      parseToken(FIRToken::greater, "expected >"))
+      parseToken(FIRToken::greater, "expected '>'"))
     return failure();
-
   if (result < 0)
     return emitError(widthLoc, "invalid width specifier"), failure();
-
   return success();
 }
 
@@ -1016,22 +1001,41 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
 
   case FIRToken::kw_UInt:
+    consumeToken(FIRToken::kw_UInt);
+    // Width is not present since langle_UInt would have been lexed instead.
+    result = UIntType::get(getContext(), -1);
+    break;
+
   case FIRToken::kw_SInt:
-  case FIRToken::kw_Analog: {
+    consumeToken(FIRToken::kw_SInt);
+    // Width is not present since langle_SInt would have been lexed instead.
+    result = SIntType::get(getContext(), -1);
+    break;
+
+  case FIRToken::kw_Analog:
+    consumeToken(FIRToken::kw_Analog);
+    // Width is not present since langle_Analog would have been lexed instead.
+    result = AnalogType::get(getContext(), -1);
+    break;
+
+  case FIRToken::langle_UInt:
+  case FIRToken::langle_SInt:
+  case FIRToken::langle_Analog: {
+    // The '<' has already been consumed by the lexer, so we need to parse
+    // the mandatory width and the trailing '>'.
     auto kind = getToken().getKind();
     consumeToken();
 
-    // Parse a width specifier if present.
     int32_t width;
-    if (parseOptionalWidth(width))
+    if (parseWidth(width))
       return failure();
 
-    if (kind == FIRToken::kw_SInt)
+    if (kind == FIRToken::langle_SInt)
       result = SIntType::get(getContext(), width);
-    else if (kind == FIRToken::kw_UInt)
+    else if (kind == FIRToken::langle_UInt)
       result = UIntType::get(getContext(), width);
     else {
-      assert(kind == FIRToken::kw_Analog);
+      assert(kind == FIRToken::langle_Analog);
       result = AnalogType::get(getContext(), width);
     }
     break;
@@ -1041,7 +1045,21 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (requireFeature(missingSpecFIRVersion, "domains"))
       return failure();
     consumeToken();
-    result = DomainType::get(getContext());
+
+    // Parse: Domain of SymbolName
+    auto loc = getToken().getLoc();
+    StringRef domainKindStr;
+    if (parseToken(FIRToken::kw_of, "expected 'of' after Domain type") ||
+        parseId(domainKindStr, "expected domain kind"))
+      return failure();
+
+    // Look up the domain to get its fields
+    const auto &domainMap = getConstants().domainMap;
+    auto lookup = domainMap.find(domainKindStr);
+    if (lookup == domainMap.end())
+      return emitError(loc) << "unknown domain '" << domainKindStr << "'";
+
+    result = DomainType::getFromDomainOp(lookup->second);
     break;
   }
 
@@ -1219,6 +1237,22 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     if (requireFeature({4, 0, 0}, "Lists") || parseListType(result))
       return failure();
     break;
+
+  case FIRToken::langle_List: {
+    // The '<' has already been consumed by the lexer, so we need to parse
+    // the element type and the trailing '>'.
+    if (requireFeature({4, 0, 0}, "Lists"))
+      return failure();
+    consumeToken();
+
+    PropertyType elementType;
+    if (parsePropertyType(elementType, "expected List element type") ||
+        parseToken(FIRToken::greater, "expected '>' in List type"))
+      return failure();
+
+    result = ListType::get(getContext(), elementType);
+    break;
+  }
   }
 
   // Handle postfix vector sizes.
@@ -1959,10 +1993,14 @@ private:
   ParseResult parsePostFixFieldId(Value &result);
   ParseResult parsePostFixIntSubscript(Value &result);
   ParseResult parsePostFixDynamicSubscript(Value &result);
-  ParseResult parseIntegerLiteralExp(Value &result);
+  ParseResult
+  parseIntegerLiteralExp(Value &result, bool isSigned,
+                         std::optional<int32_t> allocatedWidth = {});
   ParseResult parseListExp(Value &result);
   ParseResult parseListConcatExp(Value &result);
   ParseResult parseCatExp(Value &result);
+  ParseResult parseStringConcatExp(Value &result);
+  ParseResult parsePropEqExp(Value &result);
   ParseResult parseUnsafeDomainCast(Value &result);
   ParseResult parseUnknownProperty(Value &result);
 
@@ -2048,6 +2086,7 @@ private:
   ParseResult parseCover();
   ParseResult parseWhen(unsigned whenIndent);
   ParseResult parseMatch(unsigned matchIndent);
+  ParseResult parseDomainInstantiation();
   ParseResult parseDomainDefine();
   ParseResult parseRefDefine();
   ParseResult parseRefForce();
@@ -2056,6 +2095,7 @@ private:
   ParseResult parseRefReleaseInitial();
   ParseResult parseRefRead(Value &result);
   ParseResult parseProbe(Value &result);
+  ParseResult parsePropAssert();
   ParseResult parsePropAssign();
   ParseResult parseRWProbe(Value &result);
   ParseResult parseLeadingExpStmt(Value lhs);
@@ -2226,19 +2266,37 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
 
-  case FIRToken::kw_UInt:
-  case FIRToken::kw_SInt:
-    if (parseIntegerLiteralExp(result))
+  case FIRToken::langle_UInt:
+  case FIRToken::langle_SInt: {
+    // The '<' has already been consumed by the lexer, so we need to parse
+    // the mandatory width and '>'.
+    bool isSigned = getToken().is(FIRToken::langle_SInt);
+    consumeToken();
+    int32_t width;
+    if (parseWidth(width))
+      return failure();
+
+    // Now parse the '(' intLit ')' part.
+    if (parseIntegerLiteralExp(result, isSigned, width))
       return failure();
     break;
-  case FIRToken::kw_String: {
+  }
+
+  case FIRToken::lp_UInt:
+    if (parseIntegerLiteralExp(result, /*isSigned=*/false))
+      return failure();
+    break;
+  case FIRToken::lp_SInt:
+    if (parseIntegerLiteralExp(result, /*isSigned=*/true))
+      return failure();
+    break;
+  case FIRToken::lp_String: {
     if (requireFeature({3, 1, 0}, "Strings"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_String);
+    consumeToken(FIRToken::lp_String);
     StringRef spelling;
-    if (parseToken(FIRToken::l_paren, "expected '(' in String expression") ||
-        parseGetSpelling(spelling) ||
+    if (parseGetSpelling(spelling) ||
         parseToken(FIRToken::string,
                    "expected string literal in String expression") ||
         parseToken(FIRToken::r_paren, "expected ')' in String expression"))
@@ -2248,14 +2306,13 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder, attr, builder.getType<StringType>(), attr);
     break;
   }
-  case FIRToken::kw_Integer: {
+  case FIRToken::lp_Integer: {
     if (requireFeature({3, 1, 0}, "Integers"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_Integer);
+    consumeToken(FIRToken::lp_Integer);
     APInt value;
-    if (parseToken(FIRToken::l_paren, "expected '(' in Integer expression") ||
-        parseIntLit(value, "expected integer literal in Integer expression") ||
+    if (parseIntLit(value, "expected integer literal in Integer expression") ||
         parseToken(FIRToken::r_paren, "expected ')' in Integer expression"))
       return failure();
     APSInt apint(value, /*isUnsigned=*/false);
@@ -2264,13 +2321,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder.getType<FIntegerType>(), apint);
     break;
   }
-  case FIRToken::kw_Bool: {
+  case FIRToken::lp_Bool: {
     if (requireFeature(missingSpecFIRVersion, "Bools"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_Bool);
-    if (parseToken(FIRToken::l_paren, "expected '(' in Bool expression"))
-      return failure();
+    consumeToken(FIRToken::lp_Bool);
     bool value;
     if (consumeIf(FIRToken::kw_true))
       value = true;
@@ -2285,13 +2340,11 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder, attr, builder.getType<BoolType>(), value);
     break;
   }
-  case FIRToken::kw_Double: {
+  case FIRToken::lp_Double: {
     if (requireFeature(missingSpecFIRVersion, "Doubles"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
-    consumeToken(FIRToken::kw_Double);
-    if (parseToken(FIRToken::l_paren, "expected '(' in Double expression"))
-      return failure();
+    consumeToken(FIRToken::lp_Double);
     auto spelling = getTokenSpelling();
     if (parseToken(FIRToken::floatingpoint,
                    "expected floating point in Double expression") ||
@@ -2307,7 +2360,8 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
         builder, attr, builder.getType<DoubleType>(), attr);
     break;
   }
-  case FIRToken::kw_List: {
+  case FIRToken::lp_List:
+  case FIRToken::langle_List: {
     if (requireFeature({4, 0, 0}, "Lists"))
       return failure();
     if (isLeadingStmt)
@@ -2343,12 +2397,23 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
       return failure();
     break;
 
+  case FIRToken::lp_string_concat:
+    if (parseStringConcatExp(result))
+      return failure();
+    break;
+
+  case FIRToken::lp_prop_eq:
+    if (requireFeature(missingSpecFIRVersion, "property equality") ||
+        parsePropEqExp(result))
+      return failure();
+    break;
+
   case FIRToken::lp_unsafe_domain_cast:
     if (requireFeature(nextFIRVersion, "unsafe_domain_cast") ||
         parseUnsafeDomainCast(result))
       return failure();
     break;
-  case FIRToken::kw_Unknown:
+  case FIRToken::lp_Unknown:
     if (requireFeature(nextFIRVersion, "unknown property expressions") ||
         parseUnknownProperty(result))
       return failure();
@@ -2358,6 +2423,13 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     // try them.
   case FIRToken::identifier: // exp ::= id
   case FIRToken::literal_identifier:
+  case FIRToken::kw_UInt:
+  case FIRToken::kw_SInt:
+  case FIRToken::kw_String:
+  case FIRToken::kw_Integer:
+  case FIRToken::kw_Bool:
+  case FIRToken::kw_Double:
+  case FIRToken::kw_List:
   default: {
     StringRef name;
     auto loc = getToken().getLoc();
@@ -2506,8 +2578,11 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
       indexV = bundle.getElementIndex(fieldName);
     else if (auto klass = type_dyn_cast<ClassType>(type))
       indexV = klass.getElementIndex(fieldName);
+    else if (auto domain = type_dyn_cast<DomainType>(type))
+      indexV = domain.getFieldIndex(fieldName);
     else
-      return emitError(loc, "subfield requires bundle or object operand ");
+      return emitError(loc,
+                       "subfield requires bundle, object, or domain operand ");
     if (!indexV)
       return emitError(loc, "unknown field '" + fieldName + "' in type ")
              << result.getType();
@@ -2518,6 +2593,8 @@ ParseResult FIRStmtParser::parsePostFixFieldId(Value &result) {
       subResult = emitCachedSubAccess<RefSubOp>(result, indexNo, loc);
     else if (type_isa<ClassType>(type))
       subResult = emitCachedSubAccess<ObjectSubfieldOp>(result, indexNo, loc);
+    else if (type_isa<DomainType>(type))
+      subResult = emitCachedSubAccess<DomainSubfieldOp>(result, indexNo, loc);
     else if (type_isa<BundleType>(type))
       subResult = emitCachedSubAccess<SubfieldOp>(result, indexNo, loc);
     else
@@ -2595,17 +2672,31 @@ ParseResult FIRStmtParser::parsePostFixDynamicSubscript(Value &result) {
 
 /// integer-literal-exp ::= 'UInt' optional-width '(' intLit ')'
 ///                     ::= 'SInt' optional-width '(' intLit ')'
-ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
-  bool isSigned = getToken().is(FIRToken::kw_SInt);
+///
+/// If allocatedWidth is provided, it means the width was already parsed
+/// (e.g., from a langle_UInt token) and should be used instead of parsing
+/// it from the token stream.
+ParseResult
+FIRStmtParser::parseIntegerLiteralExp(Value &result, bool isSigned,
+                                      std::optional<int32_t> allocatedWidth) {
   auto loc = getToken().getLoc();
-  consumeToken();
 
-  // Parse a width specifier if present.
-  int32_t width;
+  // Determine if '(' was already consumed by the lexer.
+  bool hasLParen = getToken().isAny(FIRToken::lp_UInt, FIRToken::lp_SInt);
+  if (hasLParen)
+    consumeToken();
+
+  // Parse a width specifier if not already provided.
+  int32_t width = allocatedWidth.value_or(-1);
   APInt value;
-  if (parseOptionalWidth(width) ||
-      parseToken(FIRToken::l_paren, "expected '(' in integer expression") ||
-      parseIntLit(value, "expected integer value") ||
+
+  // If we consumed an lp_ token, the '(' was already consumed by the lexer.
+  // Otherwise, we need to parse it.
+  if (!hasLParen &&
+      parseToken(FIRToken::l_paren, "expected '(' in integer expression"))
+    return failure();
+
+  if (parseIntLit(value, "expected integer value") ||
       parseToken(FIRToken::r_paren, "expected ')' in integer expression"))
     return failure();
 
@@ -2639,13 +2730,24 @@ ParseResult FIRStmtParser::parseIntegerLiteralExp(Value &result) {
 /// list-exp ::= list-type '(' exp* ')'
 ParseResult FIRStmtParser::parseListExp(Value &result) {
   auto loc = getToken().getLoc();
-  FIRRTLType type;
-  if (parseListType(type))
-    return failure();
-  auto listType = type_cast<ListType>(type);
-  auto elementType = listType.getElementType();
+  bool hasLAngle = getToken().is(FIRToken::langle_List);
+  bool hasLParen = getToken().is(FIRToken::lp_List);
+  consumeToken();
 
-  if (parseToken(FIRToken::l_paren, "expected '(' in List expression"))
+  PropertyType elementType;
+  // If we consumed a langle_ token, the '<' was already consumed by the lexer.
+  if (!hasLAngle && parseToken(FIRToken::less, "expected '<' in List type"))
+    return failure();
+
+  if (parsePropertyType(elementType, "expected List element type") ||
+      parseToken(FIRToken::greater, "expected '>' in List type"))
+    return failure();
+
+  auto listType = ListType::get(getContext(), elementType);
+
+  // If we consumed an lp_ token, the '(' was already consumed by the lexer.
+  if (!hasLParen &&
+      parseToken(FIRToken::l_paren, "expected '(' in List expression"))
     return failure();
 
   SmallVector<Value, 3> operands;
@@ -2755,6 +2857,65 @@ ParseResult FIRStmtParser::parseCatExp(Value &result) {
   return success();
 }
 
+/// string_concat-exp ::= 'string_concat(' exp* ')'
+ParseResult FIRStmtParser::parseStringConcatExp(Value &result) {
+  consumeToken(FIRToken::lp_string_concat);
+
+  auto loc = getToken().getLoc();
+  SmallVector<Value, 3> operands;
+  if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+        Value operand;
+        locationProcessor.setLoc(loc);
+        if (parseExp(operand,
+                     "expected expression in string_concat expression"))
+          return failure();
+        if (!type_isa<StringType>(operand.getType()))
+          return emitError(loc, "all operands must be String type");
+        operands.push_back(operand);
+        return success();
+      }))
+    return failure();
+
+  if (operands.empty())
+    return emitError(loc, "need at least one String to concatenate");
+
+  locationProcessor.setLoc(loc);
+  auto type = StringType::get(builder.getContext());
+  result = builder.create<StringConcatOp>(type, operands);
+  return success();
+}
+
+/// prop_eq-exp ::= 'prop_eq(' expr ',' expr ')'
+ParseResult FIRStmtParser::parsePropEqExp(Value &result) {
+  consumeToken(FIRToken::lp_prop_eq);
+
+  auto loc = getToken().getLoc();
+  Value lhs, rhs;
+  locationProcessor.setLoc(loc);
+  if (parseExp(lhs, "expected lhs expression in prop_eq expression") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseExp(rhs, "expected rhs expression in prop_eq expression") ||
+      parseToken(FIRToken::r_paren, "expected ')'"))
+    return failure();
+
+  auto isValidType = [](Type t) {
+    return type_isa<StringType>(t) || type_isa<BoolType>(t) ||
+           type_isa<FIntegerType>(t);
+  };
+  if (!isValidType(lhs.getType()))
+    return emitError(loc,
+                     "lhs of prop_eq must be String, Bool, or Integer type");
+  if (!isValidType(rhs.getType()))
+    return emitError(loc,
+                     "rhs of prop_eq must be String, Bool, or Integer type");
+  if (lhs.getType() != rhs.getType())
+    return emitError(loc, "prop_eq operands must have the same type");
+
+  locationProcessor.setLoc(loc);
+  result = PropEqOp::create(builder, lhs, rhs);
+  return success();
+}
+
 ParseResult FIRStmtParser::parseUnsafeDomainCast(Value &result) {
   consumeToken(FIRToken::lp_unsafe_domain_cast);
 
@@ -2783,12 +2944,13 @@ ParseResult FIRStmtParser::parseUnsafeDomainCast(Value &result) {
 }
 
 ParseResult FIRStmtParser::parseUnknownProperty(Value &result) {
-  consumeToken(FIRToken::kw_Unknown);
-
   auto loc = getToken().getLoc();
+  consumeToken(FIRToken::lp_Unknown);
+  // The '(' has already been consumed by the lexer.
+
   PropertyType type;
-  if (parseToken(FIRToken::colon, "expected ':' in unknown property") ||
-      parsePropertyType(type, "expected property type"))
+  if (parsePropertyType(type, "expected property type") ||
+      parseToken(FIRToken::r_paren, "expected ')' in unknown property"))
     return failure();
 
   locationProcessor.setLoc(loc);
@@ -2896,6 +3058,7 @@ ParseResult FIRStmtParser::parseSimpleStmt(unsigned stmtIndent) {
 ///      ::= when
 ///      ::= leading-exp-stmt
 ///      ::= define
+///      ::= propassert
 ///      ::= propassign
 ///
 /// stmt ::= instance
@@ -2933,6 +3096,10 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseMemPort(MemDirAttr::ReadWrite);
   case FIRToken::kw_connect:
     return parseConnect();
+  case FIRToken::kw_propassert:
+    if (requireFeature(missingSpecFIRVersion, "property assertions"))
+      return failure();
+    return parsePropAssert();
   case FIRToken::kw_propassign:
     if (requireFeature({3, 1, 0}, "properties"))
       return failure();
@@ -2959,6 +3126,9 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
     return parseWhen(stmtIndent);
   case FIRToken::kw_match:
     return parseMatch(stmtIndent);
+  case FIRToken::kw_domain:
+    // In module context, 'domain' is only valid for domain instantiation
+    return parseDomainInstantiation();
   case FIRToken::kw_domain_define:
     return parseDomainDefine();
   case FIRToken::kw_define:
@@ -3785,15 +3955,8 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         // Otherwise, replace with bounce wire.
         auto type = instResult.getType();
 
-        // Either entire instance result is forceable + bounce wire, or reject.
-        // (even if rwprobe is of a portion of the port)
-        bool forceable = static_cast<bool>(
-            firrtl::detail::getForceableResultType(true, type));
-        if (!forceable)
-          return emitError(loc, "unable to force instance result of type ")
-                 << type;
-
         // Create bounce wire for the instance result.
+        // This may be an open aggregate, or other non-base type.
         auto annotations = getConstants().emptyArrayAttr;
         StringAttr sym = {};
         SmallString<64> name;
@@ -3804,7 +3967,7 @@ ParseResult FIRStmtParser::parseRWProbeStaticRefExp(FieldRef &refResult,
         auto bounce =
             WireOp::create(builder, type, name, NameKindEnum::InterestingName,
                            annotations, sym);
-        auto bounceVal = bounce.getData();
+        auto bounceVal = bounce.getDataRaw();
 
         // Replace instance result with reads from bounce wire.
         instResult.replaceAllUsesWith(bounceVal);
@@ -3993,6 +4156,62 @@ ParseResult FIRStmtParser::parsePathExp(Value &result) {
   result = UnresolvedPathOp::create(
       builder, StringAttr::get(getContext(), FIRToken::getStringValue(target)));
   return success();
+}
+
+/// domain_instantiation ::= 'domain' id 'of' id ('(' exp (',' exp)* ')')? info?
+ParseResult FIRStmtParser::parseDomainInstantiation() {
+  auto startTok = consumeToken(FIRToken::kw_domain);
+  auto startLoc = startTok.getLoc();
+
+  // If this was actually the start of a connect or something else handle that.
+  if (auto isExpr = parseExpWithLeadingKeyword(startTok))
+    return *isExpr;
+
+  locationProcessor.setLoc(startTok.getLoc());
+
+  StringAttr instanceName;
+  StringAttr domainKind;
+
+  if (requireFeature(missingSpecFIRVersion, "domains", startLoc) ||
+      parseId(instanceName, "expected domain instance name") ||
+      parseToken(FIRToken::kw_of, "expected 'of' after domain instance name") ||
+      parseId(domainKind, "expected domain type name"))
+    return failure();
+
+  // Create the domain instance
+  // Look up the domain to get its fields
+  const auto &domainMap = getConstants().domainMap;
+  auto lookup = domainMap.find(domainKind.getValue());
+  if (lookup == domainMap.end())
+    return emitError(startTok.getLoc())
+           << "unknown domain '" << domainKind.getValue() << "'";
+
+  auto domainType = DomainType::getFromDomainOp(lookup->second);
+
+  // Parse optional field values
+  SmallVector<Value> fieldValues;
+  if (consumeIf(FIRToken::l_paren)) {
+    // Parse comma-separated list of expressions
+    if (parseListUntil(FIRToken::r_paren, [&]() -> ParseResult {
+          Value value;
+          if (parseExp(value, "expected field value expression"))
+            return failure();
+          fieldValues.push_back(value);
+          return success();
+        }))
+      return failure();
+  }
+
+  if (parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(startLoc);
+  auto result =
+      DomainCreateOp::create(builder, domainType, instanceName, fieldValues);
+
+  // Add to symbol table
+  return moduleContext.addSymbolEntry(instanceName.getValue(), result,
+                                      startTok.getLoc());
 }
 
 /// domain_define ::= 'domain_define' domain_exp '=' domain_exp info?
@@ -4348,6 +4567,32 @@ ParseResult FIRStmtParser::parseConnect() {
 
   locationProcessor.setLoc(loc);
   emitConnect(builder, lhs, rhs);
+  return success();
+}
+
+/// propassert ::= 'propassert' expr ',' string_literal
+ParseResult FIRStmtParser::parsePropAssert() {
+  auto startTok = consumeToken(FIRToken::kw_propassert);
+  auto loc = startTok.getLoc();
+
+  Value condition;
+  StringRef message;
+  if (parseExp(condition, "expected condition in 'propassert'") ||
+      parseToken(FIRToken::comma, "expected ','") ||
+      parseGetSpelling(message) ||
+      parseToken(FIRToken::string, "expected message string in 'propassert'"))
+    return failure();
+
+  if (!isa<BoolType>(condition.getType()))
+    return emitError(loc, "propassert condition must be of boolean type");
+
+  if (parseOptionalInfo())
+    return failure();
+
+  locationProcessor.setLoc(loc);
+  auto messageUnescaped = FIRToken::getStringValue(message);
+  PropertyAssertOp::create(builder, condition,
+                           builder.getStringAttr(messageUnescaped));
   return success();
 }
 
@@ -4982,7 +5227,7 @@ ParseResult FIRStmtParser::parseNode() {
                                       startTok.getLoc());
 }
 
-/// wire ::= 'wire' id ':' type info?
+/// wire ::= 'wire' id ':' type ('domains' '[' domain_list ']')? info?
 ParseResult FIRStmtParser::parseWire() {
   auto startTok = consumeToken(FIRToken::kw_wire);
 
@@ -4995,7 +5240,45 @@ ParseResult FIRStmtParser::parseWire() {
   FIRRTLType type;
   if (parseId(id, "expected wire name") ||
       parseToken(FIRToken::colon, "expected ':' in wire") ||
-      parseType(type, "expected wire type") || parseOptionalInfo())
+      parseType(type, "expected wire type"))
+    return failure();
+
+  // Parse optional domain associations
+  SmallVector<Value> domains;
+  if (consumeIf(FIRToken::kw_domains)) {
+    if (requireFeature(missingSpecFIRVersion, "domains", startTok.getLoc()))
+      return failure();
+
+    if (parseToken(FIRToken::l_square, "expected '[' after 'domains'"))
+      return failure();
+
+    if (parseListUntil(FIRToken::r_square, [&]() -> ParseResult {
+          StringRef domainName;
+          auto domainLoc = getToken().getLoc();
+          if (parseId(domainName, "expected domain name"))
+            return failure();
+
+          // Look up the domain value in the module context
+          SymbolValueEntry lookup;
+          if (moduleContext.lookupSymbolEntry(lookup, domainName, domainLoc))
+            return failure();
+
+          // Resolve the symbol table entry to a Value
+          Value domainValue;
+          if (moduleContext.resolveSymbolEntry(domainValue, lookup, domainLoc))
+            return failure();
+
+          if (!isa<DomainType>(domainValue.getType()))
+            return emitError(domainLoc)
+                   << "'" << domainName << "' is not a domain";
+
+          domains.push_back(domainValue);
+          return success();
+        }))
+      return failure();
+  }
+
+  if (parseOptionalInfo())
     return failure();
 
   locationProcessor.setLoc(startTok.getLoc());
@@ -5008,7 +5291,8 @@ ParseResult FIRStmtParser::parseWire() {
                       ? NameKindEnum::DroppableName
                       : NameKindEnum::InterestingName;
 
-  auto result = WireOp::create(builder, type, id, namekind, annotations, sym);
+  auto result = WireOp::create(builder, type, id, namekind, annotations, sym,
+                               /*forceable=*/false, domains);
   return moduleContext.addSymbolEntry(id, result.getResult(),
                                       startTok.getLoc());
 }
@@ -5516,12 +5800,10 @@ FIRCircuitParser::parsePortList(SmallVectorImpl<PortInfo> &resultPorts,
       return failure();
     Attribute domainInfoElement = {};
     size_t portIdx = resultPorts.size();
-    if (isa<DomainType>(type)) {
-      StringAttr domainKind;
-      if (parseToken(FIRToken::kw_of, "expected 'of' after Domain type port") ||
-          parseId(domainKind, "expected domain kind"))
-        return failure();
-      domainInfoElement = FlatSymbolRefAttr::get(domainKind);
+    if (auto domainType = dyn_cast<DomainType>(type)) {
+      // Domain information is now stored in the type itself.
+      // Domain type ports have no associations.
+      domainInfoElement = ArrayAttr::get(getContext(), {});
     } else {
       if (getToken().is(FIRToken::kw_domains))
         if (parseDomains(domainNames[portIdx], nameToIndex))
@@ -5704,7 +5986,12 @@ ParseResult FIRCircuitParser::parseDomain(CircuitOp circuit, unsigned indent) {
   }
 
   auto builder = circuit.getBodyBuilder();
-  DomainOp::create(builder, info.getLoc(), name, builder.getArrayAttr(fields));
+  auto domainOp = DomainOp::create(builder, info.getLoc(), name,
+                                   builder.getArrayAttr(fields));
+
+  // Stash the domain name -> op in the constants, so we can resolve Domain
+  // types.
+  getConstants().domainMap[name.getValue()] = domainOp;
 
   return success();
 }
@@ -6250,33 +6537,6 @@ FIRCircuitParser::parseModuleBody(const SymbolTable &circuitSymTbl,
   auto result = stmtParser.parseSimpleStmtBlock(deferredModule.indent);
   if (failed(result))
     return result;
-
-  // Scan for printf-encoded verif's to error on their use, no longer supported.
-  {
-    size_t numVerifPrintfs = 0;
-    std::optional<Location> printfLoc;
-
-    deferredModule.moduleOp.walk([&](PrintFOp printFOp) {
-      if (!circt::firrtl::isRecognizedPrintfEncodedVerif(printFOp))
-        return;
-      ++numVerifPrintfs;
-      if (!printfLoc)
-        printfLoc = printFOp.getLoc();
-    });
-
-    if (numVerifPrintfs > 0) {
-      auto diag =
-          mlir::emitError(deferredModule.moduleOp.getLoc(), "module contains ")
-          << numVerifPrintfs
-          << " printf-encoded verification operation(s), which are no longer "
-             "supported.";
-      diag.attachNote(*printfLoc)
-          << "example printf here, this is now just a printf and nothing more";
-      diag.attachNote() << "For more information, see "
-                           "https://github.com/llvm/circt/issues/6970";
-      return diag;
-    }
-  }
 
   return success();
 }

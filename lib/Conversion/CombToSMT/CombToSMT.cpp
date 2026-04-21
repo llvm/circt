@@ -182,6 +182,34 @@ struct ParityOpConversion : OpConversionPattern<ParityOp> {
   }
 };
 
+/// Lower a comb::ReverseOp operation to a chain of smt::Extract + Concat ops
+struct ReverseOpConversion : OpConversionPattern<ReverseOp> {
+  using OpConversionPattern<ReverseOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ReverseOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    unsigned bitwidth =
+        cast<smt::BitVectorType>(adaptor.getInput().getType()).getWidth();
+
+    Type oneBitTy = smt::BitVectorType::get(getContext(), 1);
+    // Extract bit 0 (LSB), which becomes the MSB of the reversed result.
+    Value result =
+        smt::ExtractOp::create(rewriter, loc, oneBitTy, 0, adaptor.getInput());
+    // Concatenate remaining bits in ascending order (LSB-to-MSB of input
+    // becomes MSB-to-LSB of output).
+    for (unsigned i = 1; i < bitwidth; ++i) {
+      Value ext = smt::ExtractOp::create(rewriter, loc, oneBitTy, i,
+                                         adaptor.getInput());
+      result = smt::ConcatOp::create(rewriter, loc, result, ext);
+    }
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 /// Lower the SourceOp to the TargetOp one-to-one.
 template <typename SourceOp, typename TargetOp>
 struct OneToOneOpConversion : OpConversionPattern<SourceOp> {
@@ -270,7 +298,7 @@ void circt::populateCombToSMTConversionPatterns(TypeConverter &converter,
                                                 RewritePatternSet &patterns) {
   patterns.add<CombReplicateOpConversion, IcmpOpConversion, ExtractOpConversion,
                SubOpConversion, MuxOpConversion, ParityOpConversion,
-               OneToOneOpConversion<ShlOp, smt::BVShlOp>,
+               ReverseOpConversion, OneToOneOpConversion<ShlOp, smt::BVShlOp>,
                OneToOneOpConversion<ShrUOp, smt::BVLShrOp>,
                OneToOneOpConversion<ShrSOp, smt::BVAShrOp>,
                DivisionOpConversion<DivSOp, smt::BVSDivOp>,
@@ -285,8 +313,8 @@ void circt::populateCombToSMTConversionPatterns(TypeConverter &converter,
                VariadicToBinaryOpConversion<XorOp, smt::BVXOrOp>>(
       converter, patterns.getContext());
 
-  // TODO: there are two unsupported operations in the comb dialect: 'parity'
-  // and 'truth_table'.
+  // TODO: there is one unsupported operation in the comb dialect:
+  // 'truth_table'.
 }
 
 void ConvertCombToSMTPass::runOnOperation() {

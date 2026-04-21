@@ -120,7 +120,7 @@ void MemoryPortOp::build(OpBuilder &builder, OperationState &result,
 
 LogicalResult MemoryPortOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
   auto memType = type_dyn_cast<CMemoryType>(inType);
@@ -192,7 +192,7 @@ void MemoryDebugPortOp::build(OpBuilder &builder, OperationState &result,
 
 LogicalResult MemoryDebugPortOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inType = operands[0].getType();
   auto memType = type_dyn_cast<CMemoryType>(inType);

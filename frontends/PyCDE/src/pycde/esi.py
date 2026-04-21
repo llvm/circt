@@ -752,29 +752,43 @@ class _HostMem(ServiceDecl):
 HostMem = _HostMem()
 
 
-@ServiceDecl
-class _ChannelServiceDecl:
+class _ChannelService(ServiceDecl):
   """Get a single channel connection."""
 
-  from_host = Bundle([BundledChannel("data", ChannelDirection.TO, Any())])
-  to_host = Bundle([BundledChannel("data", ChannelDirection.FROM, Any())])
-
-
-class _ChannelService:
+  def __init__(self):
+    super().__init__(self.__class__)
 
   def from_host(self, name: AppID, type: Type) -> ChannelSignal:
     bundle_type = Bundle(
         [BundledChannel("data", ChannelDirection.TO, Channel(type))])
-    from_host_bundle = _ChannelServiceDecl.from_host(name, bundle_type)
-    assert isinstance(from_host_bundle, BundleSignal)
-    return from_host_bundle.unpack()["data"]
+    self._materialize_service_decl()
+    from_host = raw_esi.RequestConnectionOp(bundle_type._type,
+                                            hw.InnerRefAttr.get(
+                                                self.symbol,
+                                                ir.StringAttr.get("from_host")),
+                                            name._appid,
+                                            loc=get_user_loc())
+    from_host = _FromCirctValue(from_host.toClient)
+    assert isinstance(from_host, BundleSignal)
+    return from_host.unpack()["data"]
 
   def to_host(self, name: AppID, chan: ChannelSignal) -> None:
     bundle_type = Bundle(
         [BundledChannel("data", ChannelDirection.FROM, chan.type)])
-    to_host_bundle = _ChannelServiceDecl.to_host(name, bundle_type)
-    assert isinstance(to_host_bundle, BundleSignal)
-    return to_host_bundle.unpack(data=chan)
+    self._materialize_service_decl()
+    to_host = raw_esi.RequestConnectionOp(bundle_type._type,
+                                          hw.InnerRefAttr.get(
+                                              self.symbol,
+                                              ir.StringAttr.get("to_host")),
+                                          name._appid,
+                                          loc=get_user_loc())
+    to_host = _FromCirctValue(to_host.toClient)
+    assert isinstance(to_host, BundleSignal)
+    to_host.unpack(data=chan)
+
+  @staticmethod
+  def _op(sym_name: ir.StringAttr):
+    return raw_esi.ChannelServiceDeclOp(sym_name, loc=get_user_loc())
 
 
 ChannelService = _ChannelService()

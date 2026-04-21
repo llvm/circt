@@ -55,6 +55,15 @@ hw.module @string_concat_multiple_literals(out res: !sim.dstring) {
   hw.output %concat : !sim.dstring
 }
 
+// Concat with a non-constant operand should not crash during folding.
+// CHECK-LABEL: hw.module @string_concat_non_constant
+// CHECK: sim.string.concat
+hw.module @string_concat_non_constant(in %s: !sim.dstring, out res: !sim.dstring) {
+  %str = sim.string.literal "Hello"
+  %concat = sim.string.concat (%str, %s)
+  hw.output %concat : !sim.dstring
+}
+
 // CHECK-LABEL: hw.module @convert_int_to_string_0
 // CHECK: sim.string.literal "Test"
 hw.module @convert_int_to_string_0(out res: !sim.dstring) {

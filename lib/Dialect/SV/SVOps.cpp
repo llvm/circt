@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
@@ -53,20 +54,6 @@ bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
              ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, ConstantStrOp,
              MacroRefExprOp, MacroRefExprSEOp>(op);
-}
-
-LogicalResult sv::verifyInProceduralRegion(Operation *op) {
-  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
-    return success();
-  op->emitError() << op->getName() << " should be in a procedural region";
-  return failure();
-}
-
-LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
-  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>())
-    return success();
-  op->emitError() << op->getName() << " should be in a non-procedural region";
-  return failure();
 }
 
 /// Returns the operation registered with the given symbol name with the regions
@@ -125,8 +112,29 @@ static LogicalResult verifyVerbatimSymbols(Operation *op, ArrayAttr symbols,
   return success();
 }
 
+/// Helper function to verify flat symbol refs in symbols array for verbatim
+/// ops.
+static LogicalResult
+verifyVerbatimFlatSymbolRefs(Operation *op, ArrayAttr symbols,
+                             SymbolTableCollection &symbolTable) {
+  for (auto symbol : symbols) {
+    if (auto flatRef = dyn_cast<FlatSymbolRefAttr>(symbol)) {
+      auto *referencedOp = symbolTable.lookupNearestSymbolFrom(op, flatRef);
+      if (!referencedOp)
+        return op->emitOpError("references nonexistent symbol '")
+               << flatRef.getValue() << "'";
+    }
+  }
+  return success();
+}
+
 LogicalResult VerbatimOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
+LogicalResult VerbatimOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyVerbatimFlatSymbolRefs(getOperation(), getSymbols(),
+                                      symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -159,6 +167,12 @@ LogicalResult VerbatimExprOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
 }
 
+LogicalResult
+VerbatimExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyVerbatimFlatSymbolRefs(getOperation(), getSymbols(),
+                                      symbolTable);
+}
+
 void VerbatimExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
@@ -166,6 +180,12 @@ void VerbatimExprSEOp::getAsmResultNames(
 
 LogicalResult VerbatimExprSEOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
   return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
+LogicalResult
+VerbatimExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyVerbatimFlatSymbolRefs(getOperation(), getSymbols(),
+                                      symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -487,6 +507,42 @@ LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// Helper functions
+//===----------------------------------------------------------------------===//
+
+void circt::sv::createNestedIfDefs(
+    ArrayRef<StringAttr> macroSymbols,
+    llvm::function_ref<void(StringAttr, std::function<void()>,
+                            std::function<void()>)>
+        ifdefCtor,
+    llvm::function_ref<void(size_t)> thenCtor,
+    llvm::function_ref<void()> defaultCtor) {
+
+  // Helper function to recursively build nested ifdefs
+  std::function<void(size_t)> buildNested = [&](size_t index) {
+    if (index >= macroSymbols.size()) {
+      // Base case: we've processed all macros, call the default
+      if (defaultCtor)
+        defaultCtor();
+      return;
+    }
+
+    // Create an ifdef for the current macro
+    ifdefCtor(
+        macroSymbols[index],
+        /*thenCtor=*/
+        [&, index]() {
+          if (thenCtor)
+            thenCtor(index);
+        },
+        /*elseCtor=*/
+        [&, index]() { buildNested(index + 1); });
+  };
+
+  buildNested(0);
+}
+
+//===----------------------------------------------------------------------===//
 // IfDefProceduralOp
 //===----------------------------------------------------------------------===//
 
@@ -615,7 +671,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   // region if the condition is a 2-state operation.  This changes x prop
   // behavior so it needs to be guarded.
   if (is2StateExpression(op.getCond())) {
-    auto cond = comb::createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
+    auto cond = comb::createOrFoldNot(rewriter, op.getLoc(), op.getCond());
     op.setOperand(cond);
 
     auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
@@ -1790,7 +1846,7 @@ static Type getElementTypeOfWidth(Type type, int32_t width) {
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto width = adaptor.getWidthAttr();
@@ -1843,7 +1899,7 @@ OpFoldResult IndexedPartSelectInOutOp::fold(FoldAdaptor) {
 
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto width = adaptor.getWidthAttr();
@@ -1873,7 +1929,7 @@ LogicalResult IndexedPartSelectOp::verify() {
 
 LogicalResult StructFieldInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto field = adaptor.getFieldAttr();

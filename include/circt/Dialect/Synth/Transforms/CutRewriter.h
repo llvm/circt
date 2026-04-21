@@ -21,12 +21,16 @@
 #include "circt/Support/TruthTable.h"
 #include "mlir/IR/Operation.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/Support/Allocator.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/raw_ostream.h"
 #include <memory>
 #include <optional>
+#include <utility>
 
 namespace circt {
 namespace synth {
@@ -59,6 +63,231 @@ class CutRewriter;
 class CutEnumerator;
 struct CutRewritePattern;
 struct CutRewriterOptions;
+class LogicNetwork;
+
+//===----------------------------------------------------------------------===//
+// Logic Network Data Structures (Flat IR for efficient cut enumeration)
+//===----------------------------------------------------------------------===//
+
+/// Edge representation in the logic network.
+/// Similar to mockturtle's signal, this encodes both a node index and inversion
+/// in a single 32-bit value. The LSB indicates whether the signal is inverted.
+struct Signal {
+  uint32_t data = 0;
+
+  Signal() = default;
+  Signal(uint32_t index, bool inverted)
+      : data((index << 1) | (inverted ? 1 : 0)) {}
+  explicit Signal(uint32_t raw) : data(raw) {}
+
+  /// Get the node index (without the inversion bit).
+  uint32_t getIndex() const { return data >> 1; }
+
+  /// Check if this edge is inverted.
+  bool isInverted() const { return data & 1; }
+
+  /// Get the raw data (index << 1 | inverted).
+  uint32_t getRaw() const { return data; }
+
+  Signal flipInversion() const { return Signal(getIndex(), !isInverted()); }
+
+  /// Create an inverted version of this edge.
+  Signal operator!() const { return Signal(data ^ 1); }
+
+  bool operator==(const Signal &other) const { return data == other.data; }
+  bool operator!=(const Signal &other) const { return data != other.data; }
+  bool operator<(const Signal &other) const { return data < other.data; }
+};
+
+/// Represents a single gate/node in the flat logic network.
+/// This structure is designed to be cache-friendly and supports up to 3 inputs
+/// (sufficient for AND, XOR, MAJ gates). For nodes with fewer inputs, unused
+/// edges have index 0 (constant 0 node).
+///
+/// Special indices:
+///   - Index 0: Constant 0
+///   - Index 1: Constant 1
+///
+/// It uses 8 bytes for operation pointer + enum, 12 bytes for edges = 20
+/// bytes per gate.
+struct LogicNetworkGate {
+  /// Kind of logic gate.
+  enum Kind : uint8_t {
+    Constant = 0, ///< Constant 0/1 node (index 0 = const0, index 1 = const1)
+    PrimaryInput = 1, ///< Primary input to the network
+    And2 = 2,         ///< AND gate (2-input, aig::AndInverterOp)
+    Xor2 = 3,         ///< XOR gate (2-input)
+    Maj3 = 4,         ///< Reserved 3-input gate kind
+    Identity = 5,     ///< Identity gate (used for 1-input inverter)
+    Choice = 6        ///< Choice node (synth.choice)
+  };
+
+  /// Operation pointer and kind packed together.
+  /// The kind is stored in the low bits of the pointer.
+  llvm::PointerIntPair<Operation *, 3, Kind> opAndKind;
+
+  /// Fanin edges (up to 3 inputs). For AND gates, only edges[0] and edges[1]
+  /// are used. For PrimaryInput/Constant and Choice, none are used. The
+  /// inversion bit is encoded in each edge.
+  Signal edges[3];
+
+  LogicNetworkGate() : opAndKind(nullptr, Constant), edges{} {}
+  LogicNetworkGate(Operation *op, Kind kind,
+                   llvm::ArrayRef<Signal> operands = {})
+      : opAndKind(op, kind), edges{} {
+    assert(operands.size() <= 3 && "Too many operands for LogicNetworkGate");
+    for (size_t i = 0; i < operands.size(); ++i)
+      edges[i] = operands[i];
+  }
+
+  /// Get the kind of this gate.
+  Kind getKind() const { return opAndKind.getInt(); }
+
+  /// Get the operation pointer (nullptr for constants).
+  Operation *getOperation() const { return opAndKind.getPointer(); }
+
+  /// Get the number of fanin edges based on kind.
+  unsigned getNumFanins() const {
+    switch (getKind()) {
+    case Constant:
+    case PrimaryInput:
+      return 0;
+    case And2:
+    case Xor2:
+      return 2;
+    case Maj3:
+      return 3;
+    case Identity:
+      return 1;
+    case Choice:
+      return 0;
+    }
+    llvm_unreachable("Unknown gate kind");
+  }
+
+  /// Check if this is a logic gate that can be part of a cut.
+  bool isLogicGate() const {
+    Kind k = getKind();
+    return k == And2 || k == Xor2 || k == Maj3 || k == Identity || k == Choice;
+  }
+
+  /// Check if this should always be a cut input (PI or constant).
+  bool isAlwaysCutInput() const {
+    Kind k = getKind();
+    return k == PrimaryInput || k == Constant;
+  }
+};
+
+/// Flat logic network representation for efficient cut enumeration.
+///
+/// This class provides a mockturtle-style flat representation of the
+/// combinational logic network. Each value in the MLIR IR is assigned a unique
+/// index, and gates are stored in a contiguous vector for cache efficiency.
+///
+/// The network supports:
+/// - O(1) lookup of gate information by index
+/// - Compact representation with inversion encoded in edges
+/// - Efficient simulation and truth table computation
+///
+/// Special reserved indices:
+///   - Index 0: Constant 0
+///   - Index 1: Constant 1
+class LogicNetwork {
+public:
+  /// Special constant indices.
+  static constexpr uint32_t kConstant0 = 0;
+  static constexpr uint32_t kConstant1 = 1;
+
+  ArrayRef<LogicNetworkGate> getGates() const { return gates; }
+
+  LogicNetwork() {
+    // Reserve index 0 for constant 0 and index 1 for constant 1
+    gates.emplace_back(nullptr, LogicNetworkGate::Constant);
+    gates.emplace_back(nullptr, LogicNetworkGate::Constant);
+    // indexToValue needs placeholders for constants
+    indexToValue.push_back(Value()); // const0
+    indexToValue.push_back(Value()); // const1
+  }
+
+  /// Get a LogicEdge representing constant 0.
+  static Signal getConstant0() { return Signal(kConstant0, false); }
+
+  /// Get a LogicEdge representing constant 1 (constant 0 inverted).
+  static Signal getConstant1() { return Signal(kConstant0, true); }
+
+  /// Get or create an index for a value.
+  /// If the value doesn't have an index yet, assigns one and returns the index.
+  uint32_t getOrCreateIndex(Value value);
+
+  /// Get the raw index for a value. Asserts if value is not found.
+  /// Note: This returns only the index, not a Signal with inversion info.
+  /// Use hasIndex() to check existence first, or use getOrCreateIndex().
+  uint32_t getIndex(Value value) const;
+
+  /// Check if a value has been indexed.
+  bool hasIndex(Value value) const;
+
+  /// Get the value for a given raw index. Asserts if index is out of bounds.
+  /// Returns null Value for constant indices (0 and 1).
+  Value getValue(uint32_t index) const;
+
+  /// Fill values for the given raw indices.
+  void getValues(ArrayRef<uint32_t> indices,
+                 SmallVectorImpl<Value> &values) const;
+
+  /// Get a Signal for a value.
+  /// Asserts if value not found - use hasIndex() first if unsure.
+  Signal getSignal(Value value, bool inverted) const {
+    return Signal(getIndex(value), inverted);
+  }
+
+  /// Get or create a Signal for a value.
+  Signal getOrCreateSignal(Value value, bool inverted) {
+    return Signal(getOrCreateIndex(value), inverted);
+  }
+
+  /// Get the value for a given Signal (extracts index from Signal).
+  Value getValue(Signal signal) const { return getValue(signal.getIndex()); }
+
+  /// Get the gate at a given index.
+  const LogicNetworkGate &getGate(uint32_t index) const { return gates[index]; }
+
+  /// Get mutable reference to gate at index.
+  LogicNetworkGate &getGate(uint32_t index) { return gates[index]; }
+
+  /// Get the total number of nodes in the network.
+  size_t size() const { return gates.size(); }
+
+  /// Add a primary input to the network.
+  uint32_t addPrimaryInput(Value value);
+
+  /// Add a gate with explicit result value and operand signals.
+  uint32_t addGate(Operation *op, LogicNetworkGate::Kind kind, Value result,
+                   llvm::ArrayRef<Signal> operands = {});
+
+  /// Add a gate using op->getResult(0) as the result value.
+  uint32_t addGate(Operation *op, LogicNetworkGate::Kind kind,
+                   llvm::ArrayRef<Signal> operands = {}) {
+    return addGate(op, kind, op->getResult(0), operands);
+  }
+
+  /// Build the logic network from a region/block in topological order.
+  /// Returns failure if the IR is not in a valid form.
+  LogicalResult buildFromBlock(Block *block);
+
+  /// Clear the network and reset to initial state.
+  void clear();
+
+private:
+  /// Map from MLIR Value to network index.
+  llvm::DenseMap<Value, uint32_t> valueToIndex;
+
+  /// Map from network index to MLIR Value.
+  llvm::SmallVector<Value> indexToValue;
+
+  /// Vector of all gates in the network.
+  llvm::SmallVector<LogicNetworkGate> gates;
+};
 
 /// Result of matching a cut against a pattern.
 ///
@@ -135,7 +364,6 @@ public:
   /// Get the arrival time of signals through this pattern.
   DelayType getArrivalTime(unsigned outputIndex) const;
   ArrayRef<DelayType> getArrivalTimes() const;
-  DelayType getWorstOutputArrivalTime() const;
 
   /// Get the library pattern that was matched.
   const CutRewritePattern *getPattern() const;
@@ -168,50 +396,104 @@ class Cut {
 
   std::optional<MatchedPattern> matchedPattern;
 
-public:
-  /// External inputs to this cut (cut boundary).
-  /// These are the values that flow into the cut from outside.
-  llvm::SmallSetVector<mlir::Value, 4> inputs;
+  /// Root index in LogicNetwork (0 indicates no root for a trivial cut).
+  /// The root node produces the output of the cut.
+  uint32_t rootIndex = 0;
 
-  /// Operations contained within this cut.
-  /// Stored in topological order with the root operation at the end.
-  llvm::SmallSetVector<mlir::Operation *, 4> operations;
+  /// Signature bitset for fast cut size estimation.
+  /// Bit i is set if value with index i is in the cut's inputs.
+  /// This enables O(1) estimation of merged cut size using popcount.
+  uint64_t signature = 0;
+
+  /// Operand cuts used to create this cut (for lazy TT computation).
+  /// Stored to enable fast incremental truth table computation after
+  /// duplicate removal. Using raw pointers is safe since cuts are allocated
+  /// via bump allocator and live for the duration of enumeration.
+  llvm::SmallVector<const Cut *, 3> operandCuts;
+
+public:
+  Cut() = default;
+  Cut(uint32_t rootIndex, ArrayRef<uint32_t> inputs, uint64_t signature,
+      ArrayRef<const Cut *> operandCuts = {},
+      std::optional<BinaryTruthTable> truthTable = std::nullopt)
+      : truthTable(std::move(truthTable)), rootIndex(rootIndex),
+        signature(signature),
+        operandCuts(operandCuts.begin(), operandCuts.end()),
+        inputs(inputs.begin(), inputs.end()) {}
+
+  /// Create a trivial cut for a value.
+  static Cut getTrivialCut(uint32_t index);
+
+  /// External inputs to this cut (cut boundary).
+  /// Stored as LogicNetwork indices for efficient operations.
+  llvm::SmallVector<uint32_t, 6> inputs;
 
   /// Check if this cut represents a trivial cut.
-  /// A trivial cut has no internal operations and exactly one input.
+  /// A trivial cut has no root operation and exactly one input.
   bool isTrivialCut() const;
 
-  /// Get the root operation of this cut.
-  /// The root operation produces the output of the cut.
-  mlir::Operation *getRoot() const;
+  /// Get the root index in the LogicNetwork.
+  uint32_t getRootIndex() const { return rootIndex; }
 
-  void dump(llvm::raw_ostream &os) const;
+  /// Set the root index of this cut.
+  void setRootIndex(uint32_t idx) { rootIndex = idx; }
 
-  /// Merge this cut with another cut to form a new cut.
-  /// The new cut combines the operations from both cuts with the given root.
-  Cut mergeWith(const Cut &other, Operation *root) const;
-  Cut reRoot(Operation *root) const;
+  /// Get the signature of this cut.
+  uint64_t getSignature() const { return signature; }
+
+  /// Set the signature of this cut.
+  void setSignature(uint64_t sig) { signature = sig; }
+
+  /// Check if this cut dominates another (i.e., this cut's inputs are a subset
+  /// of the other's inputs). Uses signature pre-filtering for speed.
+  /// Both cuts must have sorted inputs.
+  bool dominates(const Cut &other) const;
+
+  /// Check if this cut dominates a set of sorted inputs with the given
+  /// signature.
+  bool dominates(ArrayRef<uint32_t> otherInputs, uint64_t otherSig) const;
+
+  void dump(llvm::raw_ostream &os, const LogicNetwork &network) const;
 
   /// Get the number of inputs to this cut.
   unsigned getInputSize() const;
 
-  /// Get the number of operations in this cut.
-  unsigned getCutSize() const;
-
   /// Get the number of outputs from root operation.
-  unsigned getOutputSize() const;
+  unsigned getOutputSize(const LogicNetwork &network) const;
 
   /// Get the truth table for this cut.
   /// The truth table represents the boolean function computed by this cut.
-  const BinaryTruthTable &getTruthTable() const;
+  const std::optional<BinaryTruthTable> &getTruthTable() const {
+    return truthTable;
+  }
+
+  /// Compute truth table using fast incremental method from operand cuts.
+  /// Trivial cuts are handled directly; non-trivial cuts require that
+  /// operand cuts have already been set via setOperandCuts.
+  void computeTruthTableFromOperands(const LogicNetwork &network);
+
+  /// Set the truth table directly (used for incremental computation).
+  void setTruthTable(BinaryTruthTable tt) { truthTable.emplace(std::move(tt)); }
+
+  /// Set operand cuts for lazy truth table computation.
+  void setOperandCuts(ArrayRef<const Cut *> cuts) {
+    operandCuts.assign(cuts.begin(), cuts.end());
+  }
+
+  /// Get operand cuts (for fast TT computation).
+  ArrayRef<const Cut *> getOperandCuts() const { return operandCuts; }
 
   /// Get the NPN canonical form for this cut.
   /// This is used for efficient pattern matching against library components.
   const NPNClass &getNPNClass() const;
+  const NPNClass &getNPNClass(const NPNTable *npnTable) const;
 
   /// Get the permutated inputs for this cut based on the given pattern NPN.
-  void getPermutatedInputs(const NPNClass &patternNPN,
-                           SmallVectorImpl<Value> &permutedInputs) const;
+  /// Returns indices into the inputs vector.
+  void
+  getPermutatedInputIndices(const NPNTable *npnTable,
+                            const NPNClass &patternNPN,
+                            SmallVectorImpl<unsigned> &permutedIndices) const;
 
   /// Get arrival times for each input of this cut.
   /// Returns failure if any input doesn't have a valid matched pattern.
@@ -242,7 +524,7 @@ public:
 /// results.
 class CutSet {
 private:
-  llvm::SmallVector<Cut, 4> cuts; ///< Collection of cuts for this node
+  llvm::SmallVector<Cut *, 12> cuts; ///< Collection of cuts for this node
   Cut *bestCut = nullptr;
   bool isFrozen = false; ///< Whether cut set is finalized
 
@@ -255,25 +537,20 @@ public:
 
   /// Finalize the cut set by removing duplicates and selecting the best
   /// pattern.
-  ///
-  /// This method:
-  /// 1. Removes duplicate cuts based on inputs and root operation
-  /// 2. Limits the number of cuts to prevent exponential growth
-  /// 3. Matches each cut against available patterns
-  /// 4. Selects the best pattern based on the optimization strategy
   void finalize(
       const CutRewriterOptions &options,
-      llvm::function_ref<std::optional<MatchedPattern>(const Cut &)> matchCut);
+      llvm::function_ref<std::optional<MatchedPattern>(const Cut &)> matchCut,
+      const LogicNetwork &logicNetwork);
 
   /// Get the number of cuts in this set.
   unsigned size() const;
 
-  /// Add a new cut to this set.
+  /// Add a new cut to this set using bump allocator.
   /// NOTE: The cut set must not be frozen
-  void addCut(Cut cut);
+  void addCut(Cut *cut);
 
   /// Get read-only access to all cuts in this set.
-  ArrayRef<Cut> getCuts() const;
+  ArrayRef<Cut *> getCuts() const;
 };
 
 /// Configuration options for the cut-based rewriting algorithm.
@@ -302,12 +579,39 @@ struct CutRewriterOptions {
 
   /// Run priority cuts enumeration and dump the cut sets.
   bool testPriorityCuts = false;
+
+  /// Optional lookup table used to accelerate 4-input NPN canonicalization.
+  const NPNTable *npnTable = nullptr;
 };
 
 //===----------------------------------------------------------------------===//
 // Cut Enumeration Engine
 //===----------------------------------------------------------------------===//
 
+struct CutEnumeratorStats {
+  uint64_t numCutsCreated = 0;
+  uint64_t numCutSetsCreated = 0;
+  uint64_t numCutsRewritten = 0;
+};
+
+template <typename T>
+class TrackedSpecificBumpPtrAllocator {
+public:
+  explicit TrackedSpecificBumpPtrAllocator(uint64_t &allocationCount)
+      : allocationCount(allocationCount) {}
+
+  template <typename... Args>
+  T *create(Args &&...args) {
+    ++allocationCount;
+    return new (allocator.Allocate()) T(std::forward<Args>(args)...);
+  }
+
+  void DestroyAll() { allocator.DestroyAll(); }
+
+private:
+  llvm::SpecificBumpPtrAllocator<T> allocator;
+  uint64_t &allocationCount;
+};
 /// Cut enumeration engine for combinational logic networks.
 ///
 /// The CutEnumerator is responsible for generating cuts for each node in a
@@ -334,38 +638,50 @@ public:
       llvm::function_ref<std::optional<MatchedPattern>(const Cut &)> matchCut =
           [](const Cut &) { return std::nullopt; });
 
-  /// Create a new cut set for a value.
-  /// The value must not already have a cut set.
-  CutSet *createNewCutSet(Value value);
+  /// Create a new cut set for an index.
+  /// The index must not already have a cut set.
+  CutSet *createNewCutSet(uint32_t index);
 
-  /// Get the cut set for a specific value.
+  /// Get the cut set for a specific index.
   /// If not found, it means no cuts have been generated for this value yet.
   /// In that case return a trivial cut set.
-  const CutSet *getCutSet(Value value);
-
-  /// Move ownership of all cut sets to caller.
-  /// After calling this, the enumerator is left in an empty state.
-  llvm::MapVector<Value, std::unique_ptr<CutSet>> takeVector();
+  const CutSet *getCutSet(uint32_t index);
 
   /// Clear all cut sets and reset the enumerator.
   void clear();
 
+  /// Get the cut rewriter options used for this enumeration.
+  const CutRewriterOptions &getOptions() const { return options; }
+
+  /// Record that one cut was successfully rewritten.
+  void noteCutRewritten() { ++stats.numCutsRewritten; }
+
   void dump() const;
-  const llvm::MapVector<Value, std::unique_ptr<CutSet>> &getCutSets() const {
+
+  /// Get cut sets (indexed by LogicNetwork index).
+  const llvm::DenseMap<uint32_t, CutSet *> &getCutSets() const {
     return cutSets;
   }
 
-private:
-  /// Visit a single operation and generate cuts for it.
-  LogicalResult visit(Operation *op);
+  /// Get the processing order.
+  ArrayRef<uint32_t> getProcessingOrder() const { return processingOrder; }
 
+private:
   /// Visit a combinational logic operation and generate cuts.
   /// This handles the core cut enumeration logic for operations
   /// like AND, OR, XOR, etc.
-  LogicalResult visitLogicOp(Operation *logicOp);
+  LogicalResult visitLogicOp(uint32_t nodeIndex);
 
-  /// Maps values to their associated cut sets.
-  llvm::MapVector<Value, std::unique_ptr<CutSet>> cutSets;
+  /// Maps indices to their associated cut sets.
+  /// CutSets are allocated from the bump allocator.
+  llvm::DenseMap<uint32_t, CutSet *> cutSets;
+
+  /// Typed bump allocators for fast allocation with destructors.
+  TrackedSpecificBumpPtrAllocator<Cut> cutAllocator;
+  TrackedSpecificBumpPtrAllocator<CutSet> cutSetAllocator;
+
+  /// Indices in processing order.
+  llvm::SmallVector<uint32_t> processingOrder;
 
   /// Configuration options for cut enumeration.
   const CutRewriterOptions &options;
@@ -373,6 +689,22 @@ private:
   /// Function to match cuts against available patterns.
   /// Set during enumeration and used when finalizing cut sets.
   llvm::function_ref<std::optional<MatchedPattern>(const Cut &)> matchCut;
+
+  /// Flat logic network representation used during enumeration/rewrite.
+  LogicNetwork logicNetwork;
+
+  /// Statistics for cut enumeration (number of cuts allocated, etc.).
+  CutEnumeratorStats stats;
+
+public:
+  /// Get the logic network (read-only).
+  const LogicNetwork &getLogicNetwork() const { return logicNetwork; }
+
+  /// Get the logic network (mutable).
+  LogicNetwork &getLogicNetwork() { return logicNetwork; }
+
+  /// Get enumeration statistics.
+  const CutEnumeratorStats &getStats() const { return stats; }
 };
 
 /// Base class for cut rewriting patterns used in combinational logic
@@ -520,6 +852,10 @@ public:
   /// 3. Select optimal patterns based on strategy
   /// 4. Rewrite the circuit with selected patterns
   LogicalResult run(Operation *topOp);
+
+  const CutEnumeratorStats &getStats() const {
+    return cutEnumerator.getStats();
+  }
 
 private:
   /// Enumerate cuts for all nodes in the given module.

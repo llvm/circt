@@ -146,6 +146,7 @@ set(ESICppRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Ports.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Services.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/TypedPorts.h
 )
 set(ESICppRuntimeBackendHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/backends/Trace.h
@@ -293,6 +294,11 @@ endif()
 target_link_libraries(esitester PRIVATE
   ESICppRuntime
   CLI11::CLI11
+)
+add_dependencies(ESIRuntime esitester)
+install(TARGETS esitester
+  DESTINATION ${ESIRT_INSTALL_BINDIR}
+  COMPONENT ESIRuntime
 )
 # Install PDB files for Windows Debug builds
 if(WIN32 AND MSVC)
@@ -457,3 +463,9 @@ install(FILES ${ESICppRuntimeBackendHeaders}
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/esi/backends
   COMPONENT ESIRuntime
 )
+
+# C++ unit tests (self-contained, no CIRCT/LLVM dependency).
+option(BUILD_TESTING "Build ESI runtime C++ unit tests" ON)
+if(BUILD_TESTING)
+  add_subdirectory(tests/cpp)
+endif()

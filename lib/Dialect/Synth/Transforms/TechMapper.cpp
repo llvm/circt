@@ -26,6 +26,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
+#include <atomic>
 
 namespace circt {
 namespace synth {
@@ -111,7 +112,8 @@ struct TechLibraryPattern : public CutRewritePattern {
   /// Match the cut set against this library primitive
   std::optional<MatchResult> match(CutEnumerator &enumerator,
                                    const Cut &cut) const override {
-    if (!cut.getNPNClass().equivalentOtherThanPermutation(npnClass))
+    if (!cut.getNPNClass(enumerator.getOptions().npnTable)
+             .equivalentOtherThanPermutation(npnClass))
       return std::nullopt;
 
     return MatchResult(area, delay);
@@ -128,14 +130,25 @@ struct TechLibraryPattern : public CutRewritePattern {
   llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
                                        CutEnumerator &enumerator,
                                        const Cut &cut) const override {
+    const auto &network = enumerator.getLogicNetwork();
     // Create a new instance of the module
+    SmallVector<unsigned> permutedInputIndices;
+    cut.getPermutatedInputIndices(enumerator.getOptions().npnTable, npnClass,
+                                  permutedInputIndices);
+
     SmallVector<Value> inputs;
-    cut.getPermutatedInputs(npnClass, inputs);
+    inputs.reserve(permutedInputIndices.size());
+    for (unsigned idx : permutedInputIndices) {
+      assert(idx < cut.inputs.size() && "input permutation index out of range");
+      inputs.push_back(network.getValue(cut.inputs[idx]));
+    }
+
+    auto *rootOp = network.getGate(cut.getRootIndex()).getOperation();
+    assert(rootOp && "cut root must be a valid operation");
 
     // TODO: Give a better name to the instance
-    auto instanceOp =
-        hw::InstanceOp::create(builder, cut.getRoot()->getLoc(), module,
-                               "mapped", ArrayRef<Value>(inputs));
+    auto instanceOp = hw::InstanceOp::create(builder, rootOp->getLoc(), module,
+                                             "mapped", ArrayRef<Value>(inputs));
     return instanceOp.getOperation();
   }
 
@@ -162,6 +175,12 @@ private:
 namespace {
 struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
   using TechMapperBase<TechMapperPass>::TechMapperBase;
+
+  LogicalResult initialize(MLIRContext *context) override {
+    (void)context;
+    npnTable = std::make_shared<const NPNTable>();
+    return success();
+  }
 
   void runOnOperation() override {
     auto module = getOperation();
@@ -239,16 +258,35 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
     options.maxCutInputSize = maxInputSize;
     options.maxCutSizePerRoot = maxCutsPerRoot;
     options.attachDebugTiming = test;
+    options.npnTable = npnTable.get();
+    std::atomic<uint64_t> numCutsCreatedCount = 0;
+    std::atomic<uint64_t> numCutSetsCreatedCount = 0;
+    std::atomic<uint64_t> numCutsRewrittenCount = 0;
     auto result = mlir::failableParallelForEach(
         module.getContext(), nonLibraryModules, [&](hw::HWModuleOp hwModule) {
           LLVM_DEBUG(llvm::dbgs() << "Processing non-library module: "
                                   << hwModule.getName() << "\n");
           CutRewriter rewriter(options, patternSet);
-          return rewriter.run(hwModule);
+          if (failed(rewriter.run(hwModule)))
+            return failure();
+          const auto &stats = rewriter.getStats();
+          numCutsCreatedCount.fetch_add(stats.numCutsCreated,
+                                        std::memory_order_relaxed);
+          numCutSetsCreatedCount.fetch_add(stats.numCutSetsCreated,
+                                           std::memory_order_relaxed);
+          numCutsRewrittenCount.fetch_add(stats.numCutsRewritten,
+                                          std::memory_order_relaxed);
+          return success();
         });
     if (failed(result))
       signalPassFailure();
+    numCutsCreated += numCutsCreatedCount;
+    numCutSetsCreated += numCutSetsCreatedCount;
+    numCutsRewritten += numCutsRewrittenCount;
   }
+
+private:
+  std::shared_ptr<const NPNTable> npnTable;
 };
 
 } // namespace

@@ -262,3 +262,19 @@ firrtl.circuit "InstanceChoiceInnerSymbol" {
     firrtl.instance_choice inst sym @sym @ModuleDefault alternatives @Opt { @FPGA -> @ModuleFPGA } ()
   }
 }
+
+// -----
+
+firrtl.circuit "InstanceChoiceWithoutInstanceMacro" {
+  firrtl.option @Opt {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module private @Foo() {}
+
+  firrtl.module @InstanceChoiceWithoutInstanceMacro() {
+    // expected-error @below {{'firrtl.instance_choice' op LowerToHW couldn't handle this operation}}
+    // expected-error @below {{'firrtl.instance_choice' op must have instance_macro attribute set before lowering}}
+    firrtl.instance_choice inst @Foo alternatives @Opt { @FPGA -> @Foo } ()
+  }
+}

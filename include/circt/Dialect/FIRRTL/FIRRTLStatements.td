@@ -127,7 +127,7 @@ def DomainDefineOp
   }];
   let arguments = (ins DomainType:$dest, DomainType:$src);
   let hasVerifier = 1;
-  let assemblyFormat = "$dest `,` $src  attr-dict";
+  let assemblyFormat = "$dest `,` $src attr-dict `:` type($dest)";
   let extraClassDeclaration = [{
     static ConnectBehaviorKind getConnectBehaviorKind() {
       return ConnectBehaviorKind::StaticSingleConnect;
@@ -368,6 +368,33 @@ def PropAssignOp : FIRRTLOp<"propassign", [FConnectLike, SameTypeOperands,
       return ConnectBehaviorKind::StaticSingleConnect;
     }
   }];
+}
+
+def PropertyAssertOp : FIRRTLOp<"property_assert",
+    [ParentOneOf<["FModuleOp", "ClassOp"]>]> {
+  let summary = "Assert that a boolean property holds";
+  let description = [{
+    Asserts that the boolean property `$condition` is true. If the condition
+    is statically known to be false, a compile-time error is raised. Otherwise
+    the assertion is lowered to the OM evaluator for runtime checking.
+
+    Example:
+    ```mlir
+    firrtl.property_assert %cond, "invariant must hold" : !firrtl.bool
+    ```
+  }];
+
+  let arguments = (ins
+    BoolType:$condition,
+    StrAttr:$message
+  );
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $condition `,` $message attr-dict `:` type($condition)
+  }];
+
+  let hasVerifier = 1;
 }
 
 def ForceOp : FIRRTLOp<"force", [SameTypeOperands]> {

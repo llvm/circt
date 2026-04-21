@@ -52,12 +52,11 @@ void ArcReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
-  patterns.add<PassReduction, 4>(getContext(), arc::createStripSVPass(), true,
+  patterns.add<PassReduction, 4>(getContext(), arc::createStripSV(), true,
                                  true);
-  patterns.add<PassReduction, 3>(getContext(), arc::createDedupPass());
+  patterns.add<PassReduction, 3>(getContext(), arc::createDedup());
   patterns.add<StateElimination, 2>();
-  patterns.add<PassReduction, 1>(getContext(),
-                                 arc::createArcCanonicalizerPass());
+  patterns.add<PassReduction, 1>(getContext(), arc::createArcCanonicalizer());
 }
 
 void arc::registerReducePatternDialectInterface(

@@ -212,3 +212,14 @@ hw.module @wrap_multi_unwrap(in %a_data: i8, in %a_valid: i1, out a_ready: i1) {
   %ab_data, %ab_valid = esi.unwrap.vr %a_chan, %true : i8
   hw.output %a_ready : i1
 }
+
+// -----
+
+hw.module @wrap_vo_multi_unwrap(in %a_data: i8, in %a_valid: i1) {
+  // expected-error @+1 {{'esi.wrap.vo' op channels must have at most one consumer}}
+  %a_chan = esi.wrap.vo %a_data, %a_valid : i8
+  // expected-note @+1 {{channel used here}}
+  %ap_data, %ap_valid = esi.unwrap.vo %a_chan : !esi.channel<i8, ValidOnly>
+  // expected-note @+1 {{channel used here}}
+  %ab_data, %ab_valid = esi.unwrap.vo %a_chan : !esi.channel<i8, ValidOnly>
+}
