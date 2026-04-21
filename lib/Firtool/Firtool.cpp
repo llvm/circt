@@ -637,20 +637,39 @@ struct FirtoolCmdOptions {
                      "assigning X on read disable"),
       llvm::cl::init(false)};
 
-  llvm::cl::opt<firtool::FirtoolOptions::RandomKind> disableRandom{
-      llvm::cl::desc(
-          "Disable random initialization code (may break semantics!)"),
-      llvm::cl::values(
-          clEnumValN(firtool::FirtoolOptions::RandomKind::Mem,
-                     "disable-mem-randomization",
-                     "Disable emission of memory randomization code"),
-          clEnumValN(firtool::FirtoolOptions::RandomKind::Reg,
-                     "disable-reg-randomization",
-                     "Disable emission of register randomization code"),
-          clEnumValN(firtool::FirtoolOptions::RandomKind::All,
-                     "disable-all-randomization",
-                     "Disable emission of all randomization code")),
-      llvm::cl::init(firtool::FirtoolOptions::RandomKind::None)};
+  firtool::FirtoolOptions::RandomKind disableRandomValue =
+      firtool::FirtoolOptions::RandomKind::None;
+
+  static llvm::cl::OptionCategory randomizationCategory;
+
+  llvm::cl::opt<bool> disableMemRandom{
+      "disable-mem-randomization",
+      llvm::cl::desc("Disable emission of memory randomization code"),
+      llvm::cl::cat(randomizationCategory),
+      llvm::cl::init(false),
+      llvm::cl::callback([&](const bool &) {
+        disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
+            disableRandomValue, firtool::FirtoolOptions::RandomKind::Mem);
+      })};
+
+  llvm::cl::opt<bool> disableRegRandom{
+      "disable-reg-randomization",
+      llvm::cl::desc("Disable emission of register randomization code"),
+      llvm::cl::cat(randomizationCategory),
+      llvm::cl::init(false),
+      llvm::cl::callback([&](const bool &) {
+        disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
+            disableRandomValue, firtool::FirtoolOptions::RandomKind::Reg);
+      })};
+
+  llvm::cl::opt<bool> disableAllRandom{
+      "disable-all-randomization",
+      llvm::cl::desc("Disable emission of all randomization code"),
+      llvm::cl::cat(randomizationCategory),
+      llvm::cl::init(false),
+      llvm::cl::callback([&](const bool &) {
+        disableRandomValue = firtool::FirtoolOptions::RandomKind::All;
+      })};
 
   llvm::cl::opt<std::string> outputAnnotationFilename{
       "output-annotation-file",
@@ -803,6 +822,10 @@ struct FirtoolCmdOptions {
       "lint-xmrs-in-design", llvm::cl::desc("Lint XMRs in the design"),
       llvm::cl::init(false)};
 };
+
+llvm::cl::OptionCategory FirtoolCmdOptions::randomizationCategory{
+    "Disable random initialization code (may break semantics!)"};
+
 } // namespace
 
 static llvm::ManagedStatic<FirtoolCmdOptions> clOptions;
@@ -867,7 +890,7 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   replSeqMem = clOptions->replSeqMem;
   replSeqMemFile = clOptions->replSeqMemFile;
   ignoreReadEnableMem = clOptions->ignoreReadEnableMem;
-  disableRandom = clOptions->disableRandom;
+  disableRandom = clOptions->disableRandomValue;
   outputAnnotationFilename = clOptions->outputAnnotationFilename;
   enableAnnotationWarning = clOptions->enableAnnotationWarning;
   lowerToCore = clOptions->lowerToCore;

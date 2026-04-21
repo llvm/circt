@@ -72,6 +72,21 @@ public:
     return disableRandom != RandomKind::All && disableRandom != kind;
   }
 
+  /// Advance the disabled-randomization lattice.  Calling this twice with
+  /// the two individual kinds is equivalent to calling it once with All.
+  static RandomKind mergeRandomKind(RandomKind current, RandomKind incoming) {
+    if (current == RandomKind::None)
+      return incoming;
+    if (current == incoming)
+      return current;
+    return RandomKind::All;
+  }
+
+  FirtoolOptions &setDisableRandom(RandomKind kind) {
+    disableRandom = mergeRandomKind(disableRandom, kind);
+    return *this;
+  }
+
   firrtl::PreserveValues::PreserveMode getPreserveMode() const {
     switch (buildMode) {
     case BuildModeDebug:
@@ -280,11 +295,6 @@ public:
 
   FirtoolOptions &setIgnoreReadEnableMem(bool value) {
     ignoreReadEnableMem = value;
-    return *this;
-  }
-
-  FirtoolOptions &setDisableRandom(RandomKind value) {
-    disableRandom = value;
     return *this;
   }
 
