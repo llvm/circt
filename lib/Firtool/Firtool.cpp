@@ -645,8 +645,7 @@ struct FirtoolCmdOptions {
   llvm::cl::opt<bool> disableMemRandom{
       "disable-mem-randomization",
       llvm::cl::desc("Disable emission of memory randomization code"),
-      llvm::cl::cat(randomizationCategory),
-      llvm::cl::init(false),
+      llvm::cl::cat(randomizationCategory), llvm::cl::init(false),
       llvm::cl::callback([&](const bool &) {
         disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
             disableRandomValue, firtool::FirtoolOptions::RandomKind::Mem);
@@ -655,8 +654,7 @@ struct FirtoolCmdOptions {
   llvm::cl::opt<bool> disableRegRandom{
       "disable-reg-randomization",
       llvm::cl::desc("Disable emission of register randomization code"),
-      llvm::cl::cat(randomizationCategory),
-      llvm::cl::init(false),
+      llvm::cl::cat(randomizationCategory), llvm::cl::init(false),
       llvm::cl::callback([&](const bool &) {
         disableRandomValue = firtool::FirtoolOptions::mergeRandomKind(
             disableRandomValue, firtool::FirtoolOptions::RandomKind::Reg);
@@ -665,8 +663,7 @@ struct FirtoolCmdOptions {
   llvm::cl::opt<bool> disableAllRandom{
       "disable-all-randomization",
       llvm::cl::desc("Disable emission of all randomization code"),
-      llvm::cl::cat(randomizationCategory),
-      llvm::cl::init(false),
+      llvm::cl::cat(randomizationCategory), llvm::cl::init(false),
       llvm::cl::callback([&](const bool &) {
         disableRandomValue = firtool::FirtoolOptions::RandomKind::All;
       })};
