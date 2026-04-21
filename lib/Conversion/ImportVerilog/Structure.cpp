@@ -1911,12 +1911,21 @@ LogicalResult Context::convertNInputPrimitive(
     return failure();
 
   if (prim.getDelay()) {
-    auto &delay3 = prim.getDelay()->as<slang::ast::Delay3Control>();
-    if (delay3.expr2 || delay3.expr3)
-      return mlir::emitError(loc) << "only n-input primitives that specify a "
-                                     "single delay are currently supported.";
+    const slang::ast::Expression *delayExpr;
+    if (const auto *delay3 =
+            prim.getDelay()->as_if<slang::ast::Delay3Control>()) {
+      if (delay3->expr2 || delay3->expr3)
+        return mlir::emitError(loc) << "only n-input primitives that specify a "
+                                       "single delay are currently supported.";
+      delayExpr = &delay3->expr1;
+    } else if (const auto *delay =
+                   prim.getDelay()->as_if<slang::ast::DelayControl>()) {
+      delayExpr = &delay->expr;
+    } else {
+      llvm_unreachable("unexpected delay control type in primitive instance");
+    }
     auto delayVal = this->convertRvalueExpression(
-        delay3.expr1, moore::TimeType::get(getContext()));
+        *delayExpr, moore::TimeType::get(getContext()));
     if (!delayVal)
       return failure();
     moore::DelayedContinuousAssignOp::create(builder, loc, outputVal, result,

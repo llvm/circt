@@ -146,8 +146,25 @@ endmodule
 
 module delayed_nand_prim;
     wire A, B, Q;
+    nand #5 a (Q, A, B);
+endmodule
+
+// CHECK-LABEL: moore.module @delayed3_nand_prim()
+// CHECK: [[A:%.+]] = moore.net wire : <l1>
+// CHECK: [[B:%.+]] = moore.net wire : <l1>
+// CHECK: [[Q:%.+]] = moore.net wire : <l1>
+// CHECK: [[RD_A:%.+]] = moore.read [[A]] : <l1>
+// CHECK: [[RD_B:%.+]] = moore.read [[B]] : <l1>
+// CHECK: [[AND:%.+]] = moore.and [[RD_A]], [[RD_B]] : l1
+// CHECK: [[NOT_AND:%.+]] = moore.not [[AND]] : l1
+// CHECK: [[DELAYCONST:%.+]] = moore.constant_time 5000000 fs
+// CHECK: moore.delayed_assign [[Q]], [[NOT_AND]], [[DELAYCONST]] : l1
+
+module delayed3_nand_prim;
+    wire A, B, Q;
     nand #(5) a (Q, A, B);
 endmodule
+
 
 // CHECK-LABEL: moore.module @not_prim()
 // CHECK: [[A:%.+]] = moore.net wire : <l1>
