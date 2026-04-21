@@ -640,7 +640,8 @@ struct FirtoolCmdOptions {
   firtool::FirtoolOptions::RandomKind disableRandomValue =
       firtool::FirtoolOptions::RandomKind::None;
 
-  static llvm::cl::OptionCategory randomizationCategory;
+  llvm::cl::OptionCategory randomizationCategory{
+      "Disable random initialization code (may break semantics!)"};
 
   llvm::cl::opt<bool> disableMemRandom{
       "disable-mem-randomization",
@@ -819,10 +820,6 @@ struct FirtoolCmdOptions {
       "lint-xmrs-in-design", llvm::cl::desc("Lint XMRs in the design"),
       llvm::cl::init(false)};
 };
-
-llvm::cl::OptionCategory FirtoolCmdOptions::randomizationCategory{
-    "Disable random initialization code (may break semantics!)"};
-
 } // namespace
 
 static llvm::ManagedStatic<FirtoolCmdOptions> clOptions;
