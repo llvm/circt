@@ -9,7 +9,7 @@ circuit test:
     input rEn: UInt<1>
     output rData: UInt<8>
     input wMask: UInt<1>
-    input wData: UInt<8>
+    input wData: UInt<1>
 
     mem tbMemoryKind1:
       data-type => UInt<1>
@@ -40,7 +40,7 @@ circuit test:
     input rEn: UInt<1>
     output rData: UInt<8>
     input wMask: UInt<1>
-    input wData: UInt<8>
+    input wData: UInt<2>
 
     mem dutMemory:
       data-type => UInt<2>
@@ -70,7 +70,7 @@ circuit test:
     input rEn: UInt<1>
     output rData: UInt<8>
     input wMask: UInt<1>
-    input wData: UInt<8>
+    input wData: UInt<3>
 
     mem tbMemoryKind1:
       data-type => UInt<3>
@@ -101,7 +101,7 @@ circuit test:
     input rEn: UInt<1>
     output rData: UInt<8>
     input wMask: UInt<1>
-    input wData: UInt<8>
+    input wData: UInt<1>
 
 
     inst m of tbMemModule1
@@ -118,7 +118,7 @@ circuit test:
     input rEn: UInt<1>
     output rData: UInt<8>[3]
     input wMask: UInt<1>
-    input wData: UInt<8>
+    input wData: UInt<1>
 
 
     inst h1 of hier1
@@ -156,7 +156,7 @@ circuit test:
     input rEn: UInt<1>
     output rData: UInt<8>
     input wMask: UInt<1>
-    input wData: UInt<8>
+    input wData: UInt<2>
 
 
     inst m of dutModule2
