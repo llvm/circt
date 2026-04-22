@@ -1260,21 +1260,21 @@ static LogicalResult executeWithHandler(MLIRContext *context,
   TestSuite suite(context, opts.listIgnored);
   if (failed(suite.discoverInModule(*module)))
     return failure();
-  if (suite.tests.empty()) {
+  if (suite.tests.empty())
     llvm::errs() << "no tests discovered\n";
-    return success();
-  }
 
-  // Apply filters.
-  applyFilters(suite, includeFilters, excludeFilters);
-  if (suite.tests.empty()) {
-    llvm::errs() << "all tests excluded by filters\n";
-    return success();
+  if (!suite.tests.empty()) {
+    // Apply filters.
+    applyFilters(suite, includeFilters, excludeFilters);
+    if (suite.tests.empty())
+      llvm::errs() << "all tests excluded by filters\n";
   }
 
   // List all tests in the input and exit if requested.
   if (opts.listTests)
     return listTests(suite);
+  if (suite.tests.empty())
+    return success();
   llvm::errs() << "running " << suite.tests.size() << " tests\n";
 
   // Create the output directory where we keep all the run data.
