@@ -217,17 +217,17 @@ The implementation matches the [Yosys CellIFT](https://github.com/comsec-group/c
 
 | Operation | Rule | Precision |
 |-----------|------|-----------|
-| AND       | `(a & b_t) \| (b & a_t) \| (a_t & b_t)` | Precise (GLIFT) |
-| OR        | `(~a & b_t) \| (~b & a_t) \| (a_t & b_t)` | Precise (GLIFT) |
+| AND       | `(a & b_t) \| (b & a_t) \| (a_t & b_t)` | Precise |
+| OR        | `(~a & b_t) \| (~b & a_t) \| (a_t & b_t)` | Precise |
 | XOR       | `a_t \| b_t` | Precise |
-| ADD       | `((a&~a_t)+(b&~b_t)) ^ ((a\|a_t)+(b\|b_t)) \| a_t \| b_t` | Precise (min/max) |
-| SUB       | `((a\|a_t)-(b&~b_t)) ^ ((a&~a_t)-(b\|b_t)) \| a_t \| b_t` | Precise (min/max) |
+| ADD       | `((a&~a_t)+(b&~b_t)) ^ ((a\|a_t)+(b\|b_t)) \| a_t \| b_t` | Precise |
+| SUB       | `((a\|a_t)-(b&~b_t)) ^ ((a&~a_t)-(b\|b_t)) \| a_t \| b_t` | Precise |
 | MUL       | `replicate(reduce_or(a_t) \| reduce_or(b_t))` | Conservative |
 | MUX       | `mux(s, t_t, f_t) \| replicate(s_t) & (t^f \| t_t \| f_t)` | Precise |
 | EQ/NE     | `has_taint & (masked_a == masked_b)` | Precise |
 | GE/GT/LE/LT | `cmp(min_a, max_b) ^ cmp(max_a, min_b)` | Precise |
-| SHL/SHR   | Two-phase: untainted shift + per-delta taint checks | Precise |
-| MOD       | `mod(a_t, b) \| broadcast(reduce_or(b_t))` | Precise for A |
+| SHL/SHR   | Taint broadcase if offset tainted, else shift taints | Conservative |
+| MOD       | Conservative (full taint broadcast) | Conservative |
 | DIV       | Conservative (full taint broadcast) | Conservative |
 
 ## Using Taint in Simulation

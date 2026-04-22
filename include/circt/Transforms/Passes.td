@@ -233,8 +233,7 @@ def CellIFTInstrument : Pass<"cellift-instrument", "::mlir::ModuleOp"> {
     gate-level IFT (GLIFT).
 
     The pass supports:
-      - Combinational operations: and, or, xor, add, sub, mul, shl, shru,
-        shrs, icmp, mux, concat, extract, replicate, parity
+      - Combinational operations: All comb.* operations except comb.truth_table
       - Sequential operations: compreg, firreg
       - Hierarchy: module signature rewriting and instance updating
 
