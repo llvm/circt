@@ -1,6 +1,6 @@
-// RUN: circt-opt %s --synth-lower-variadic --split-input-file | FileCheck %s --check-prefixes=COMMON,TIMING
-// RUN: circt-opt %s --synth-lower-variadic=timing-aware=false --split-input-file | FileCheck %s --check-prefixes=COMMON,NO-TIMING
-// RUN: circt-opt %s --synth-lower-variadic=reuse-subsets=true | FileCheck %s
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.module(synth-lower-variadic))' --split-input-file | FileCheck %s --check-prefixes=COMMON,TIMING
+// RUN: circt-opt %s --pass-pipeline='builtin.module(any(synth-lower-variadic{timing-aware=false}))' --split-input-file | FileCheck %s --check-prefixes=COMMON,NO-TIMING
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.module(synth-lower-variadic{reuse-subsets=true}))' | FileCheck %s
 // COMMON-LABEL: hw.module @Basic
 hw.module @Basic(in %a: i2, in %b: i2, in %c: i2, in %d: i2, in %e: i2, out f: i2) {
   // COMMON-NEXT: %[[RES0:.+]] = synth.aig.and_inv not %a, %b : i2
@@ -98,4 +98,14 @@ hw.module @XorInv(in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1, out o: 
   // COMMON-NEXT: %[[X3:.+]] = synth.xor_inv %[[X1]], %[[X2]] : i1
   %0 = synth.xor_inv not %a, %b, %c, not %d, %e : i1
   hw.output %0 : i1
+}
+
+// NO-TIMING-LABEL: func.func @Basic_no_module
+func.func @Basic_no_module(%a: i2, %b: i2, %c: i2, %d: i2, %e: i2, %f: i2) -> i2 {
+  // NO-TIMING-NEXT: %[[RES0:.+]] = synth.aig.and_inv not %arg0, %arg1 : i2
+  // NO-TIMING-NEXT: %[[RES1:.+]] = synth.aig.and_inv %arg2, not %arg3 : i2
+  // NO-TIMING-NEXT: %[[RES2:.+]] = synth.aig.and_inv %arg4, %[[RES0]] : i2
+  // NO-TIMING-NEXT: %[[RES3:.+]] = synth.aig.and_inv %[[RES1]], %[[RES2]] : i2
+  %0 = synth.aig.and_inv not %a, %b, %c, not %d, %e : i2
+  return %0 : i2
 }

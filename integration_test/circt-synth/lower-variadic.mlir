@@ -1,7 +1,7 @@
 // REQUIRES: libz3
 // REQUIRES: circt-lec-jit
 
-// RUN: circt-opt %s -synth-lower-variadic -o %t.after.mlir
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw.module(synth-lower-variadic))' -o %t.after.mlir
 // RUN: circt-lec %s %t.after.mlir -c1=AndInverter -c2=AndInverter --shared-libs=%libz3 | FileCheck %s --check-prefix=AND_INVERTER_LEC
 // AND_INVERTER_LEC: c1 == c2
 hw.module @AndInverter(in %a: i2, in %b: i2, in %c: i2, in %d: i2, in %e: i2, in %f: i2, in %g: i2, out o1: i2) {
