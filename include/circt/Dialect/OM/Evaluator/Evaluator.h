@@ -61,6 +61,14 @@ public:
   void markFullyEvaluated() {
     assert(!fullyEvaluated && "should not mark twice");
     fullyEvaluated = true;
+    // Increment the counter if one is set.
+    if (fullyEvaluatedCounter)
+      ++(*fullyEvaluatedCounter);
+  }
+
+  /// Set a counter to increment when this value becomes fully evaluated.
+  void setFullyEvaluatedCounter(uint64_t *counter) {
+    fullyEvaluatedCounter = counter;
   }
 
   /// Return true if the value is unknown (has unknown in its fan-in).
@@ -104,6 +112,7 @@ private:
   bool fullyEvaluated = false;
   bool finalized = false;
   bool unknown = false;
+  uint64_t *fullyEvaluatedCounter = nullptr;
 };
 
 /// Values which can be used as pointers to different values.
@@ -393,6 +402,9 @@ public:
 
   using ObjectKey = std::pair<Value, ActualParameters>;
 
+  /// Get the number of fully evaluated nodes tracked by this evaluator.
+  uint64_t getFullyEvaluatedCount() const { return fullyEvaluatedCount; }
+
 private:
   bool isFullyEvaluated(Value value, ActualParameters key) {
     return isFullyEvaluated({value, key});
@@ -401,6 +413,12 @@ private:
   bool isFullyEvaluated(ObjectKey key) {
     auto val = objects.lookup(key);
     return val && val->isFullyEvaluated();
+  }
+
+  /// Attach the evaluation counter to a newly created value.
+  void attachCounter(evaluator::EvaluatorValuePtr &value) {
+    if (value && !value->isFullyEvaluated())
+      value->setFullyEvaluatedCounter(&fullyEvaluatedCount);
   }
 
   FailureOr<EvaluatorValuePtr>
@@ -478,8 +496,11 @@ private:
       std::unique_ptr<SmallVector<std::shared_ptr<evaluator::EvaluatorValue>>>>
       actualParametersBuffers;
 
-  /// A worklist that tracks values which needs to be fully evaluated.
-  std::queue<ObjectKey> worklist;
+  /// Worklists that track values which need to be fully evaluated.
+  /// We use two worklists to detect cycles: process all items from one,
+  /// and if any become fully evaluated, swap and continue.
+  std::vector<ObjectKey> worklist;
+  std::vector<ObjectKey> nextWorklist;
 
   /// A queue of pending property assertions to be evaluated after the worklist
   /// is fully drained. Each entry is a (PropertyAssertOp, ActualParameters)
@@ -491,6 +512,9 @@ private:
   /// Evaluator value storage. Return an evaluator value for the given
   /// instantiation context (a pair of Value and parameters).
   DenseMap<ObjectKey, std::shared_ptr<evaluator::EvaluatorValue>> objects;
+
+  /// Counter for fully evaluated nodes.
+  uint64_t fullyEvaluatedCount = 0;
 
 #ifndef NDEBUG
   /// Current nesting depth for debug output indentation.
