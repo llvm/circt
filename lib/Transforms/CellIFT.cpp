@@ -22,7 +22,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
-#include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -39,7 +38,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
-#include <atomic>
+#include <type_traits>
 
 #define DEBUG_TYPE "cellift-instrument"
 
@@ -87,8 +86,12 @@ Value conservativeTaint(ImplicitLocOpBuilder &b, TaintMap &taintOf,
                         PendingTaintMap &pendingTaints,
                         BackedgeBuilder &backedgeBuilder, ValueRange inputs,
                         Type resTy);
-Value shiftTaintImprecise(ImplicitLocOpBuilder &b, Value dataT, Value amt,
-                          Value amtT, Type resTy, bool left, bool arith);
+
+template <typename ShiftOp>
+using EnableIfCombShiftOp = std::enable_if_t<
+    std::is_same_v<ShiftOp, comb::ShlOp> ||
+    std::is_same_v<ShiftOp, comb::ShrUOp> ||
+    std::is_same_v<ShiftOp, comb::ShrSOp>>;
 
 Value instrumentOperation(ImplicitLocOpBuilder &b, hw::ConstantOp op,
                           bool taintConstants);
@@ -122,12 +125,9 @@ Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ReplicateOp op,
                           comb::ReplicateOp::Adaptor taintAdaptor);
 Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ICmpOp op,
                           comb::ICmpOp::Adaptor taintAdaptor);
-Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShlOp op,
-                          comb::ShlOp::Adaptor taintAdaptor);
-Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrUOp op,
-                          comb::ShrUOp::Adaptor taintAdaptor);
-Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrSOp op,
-                          comb::ShrSOp::Adaptor taintAdaptor);
+template <typename ShiftOp, typename = EnableIfCombShiftOp<ShiftOp>>
+Value instrumentOperation(ImplicitLocOpBuilder &b, ShiftOp op,
+                          typename ShiftOp::Adaptor taintAdaptor);
 Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ParityOp op,
                           comb::ParityOp::Adaptor taintAdaptor);
 Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ReverseOp op,
@@ -423,7 +423,7 @@ Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ReplicateOp op,
                                    taintAdaptor.getInput());
 }
 
-// ICMP (precise): different rules per predicate.
+// ICMP: precise rules per supported predicate with conservative fallback.
 Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ICmpOp op,
                           comb::ICmpOp::Adaptor taintAdaptor) {
   Value a = op.getLhs();
@@ -434,6 +434,14 @@ Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ICmpOp op,
   auto ty = a.getType();
   unsigned width = cast<IntegerType>(ty).getWidth();
   auto ones = getAllOnes(b, ty);
+
+  if (pred == ICmpPredicate::ceq || pred == ICmpPredicate::cne ||
+      pred == ICmpPredicate::weq || pred == ICmpPredicate::wne) {
+    op.emitWarning() << "falling back to conservative taint propagation for "
+                     << stringifyICmpPredicate(pred) << " predicate";
+    SmallVector<Value, 2> taintInputs{aT, bT};
+    return conservativeTaint(b, taintInputs, op.getType());
+  }
 
   if (pred == ICmpPredicate::eq || pred == ICmpPredicate::ne) {
     Value combined = comb::OrOp::create(b, aT, bT);
@@ -501,37 +509,19 @@ Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ICmpOp op,
   return comb::XorOp::create(b, cmp1, cmp2);
 }
 
+template <typename ShiftOp>
 Value shiftTaintImprecise(ImplicitLocOpBuilder &b, Value dataT, Value amt,
-                          Value amtT, Type resTy, bool left, bool arith) {
+                          Value amtT, Type resTy) {
   Value shiftAmtTaint = broadcast(b, orReduce(b, amtT), resTy);
-
-  Value shiftedDataT;
-  if (left)
-    shiftedDataT = comb::ShlOp::create(b, dataT, amt);
-  else if (arith)
-    shiftedDataT = comb::ShrSOp::create(b, dataT, amt);
-  else
-    shiftedDataT = comb::ShrUOp::create(b, dataT, amt);
-
+  Value shiftedDataT = ShiftOp::create(b, dataT, amt);
   return comb::OrOp::create(b, shiftAmtTaint, shiftedDataT);
 }
 
-Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShlOp op,
-                          comb::ShlOp::Adaptor taintAdaptor) {
-  return shiftTaintImprecise(b, taintAdaptor.getLhs(), op.getRhs(),
-                             taintAdaptor.getRhs(), op.getType(), true, false);
-}
-
-Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrUOp op,
-                          comb::ShrUOp::Adaptor taintAdaptor) {
-  return shiftTaintImprecise(b, taintAdaptor.getLhs(), op.getRhs(),
-                             taintAdaptor.getRhs(), op.getType(), false, false);
-}
-
-Value instrumentOperation(ImplicitLocOpBuilder &b, comb::ShrSOp op,
-                          comb::ShrSOp::Adaptor taintAdaptor) {
-  return shiftTaintImprecise(b, taintAdaptor.getLhs(), op.getRhs(),
-                             taintAdaptor.getRhs(), op.getType(), false, true);
+template <typename ShiftOp, typename>
+Value instrumentOperation(ImplicitLocOpBuilder &b, ShiftOp op,
+                          typename ShiftOp::Adaptor taintAdaptor) {
+  return shiftTaintImprecise<ShiftOp>(b, taintAdaptor.getLhs(), op.getRhs(),
+                                      taintAdaptor.getRhs(), op.getType());
 }
 
 // PARITY: y_t = OR-reduce(input_t)
@@ -803,11 +793,7 @@ void CellIFTInstrumentPass::rewriteOutputOp(HWModuleOp mod,
 
     if (nextTaintOutput < portInfo.taintOutputSources.size() &&
         portInfo.taintOutputSources[nextTaintOutput] == origOutputIdx) {
-      auto it = taintOf.find(origOutput);
-      if (it != taintOf.end())
-        newOuts.push_back(it->second);
-      else
-        newOuts.push_back(getZero(b, origOutput.getType()));
+      newOuts.push_back(taintOf.at(origOutput));
       ++nextTaintOutput;
     }
   }
@@ -821,13 +807,8 @@ void CellIFTInstrumentPass::rewriteOutputOp(HWModuleOp mod,
 //===----------------------------------------------------------------------===//
 
 void CellIFTInstrumentPass::runOnOperation() {
-  SmallVector<HWModuleOp> modules;
-  auto &instanceGraph = getAnalysis<hw::InstanceGraph>();
-  instanceGraph.walkPostOrder([&](igraph::InstanceGraphNode &node) {
-    if (auto mod =
-            dyn_cast_or_null<HWModuleOp>(node.getModule().getOperation()))
-      modules.push_back(mod);
-  });
+  auto modules =
+      llvm::to_vector(getOperation().getBody()->getOps<HWModuleOp>());
 
   std::string taintSuffix = this->taintSuffix;
   bool taintConstants = this->taintConstants;
@@ -844,31 +825,15 @@ void CellIFTInstrumentPass::runOnOperation() {
     moduleInfos.push_back(std::move(info));
   }
 
-  std::atomic<bool> hadFailure = false;
-  parallelForEach(
-      &getContext(), moduleInfos, [&](ModuleInstrumentationInfo &info) {
-        if (hadFailure.load(std::memory_order_relaxed))
-          return;
-
-        TaintMap taintOf;
-        if (failed(instrumentModuleBody(info.mod, info.portInfo, taintOf,
-                                        taintConstants, taintSuffix))) {
-          hadFailure.store(true, std::memory_order_relaxed);
-          return;
-        }
-        rewriteOutputOp(info.mod, info.portInfo, taintOf);
-      });
-
-  if (hadFailure.load(std::memory_order_relaxed))
+  if (failed(failableParallelForEach(
+          &getContext(), moduleInfos,
+          [&](ModuleInstrumentationInfo &info) -> LogicalResult {
+            TaintMap taintOf;
+            if (failed(instrumentModuleBody(info.mod, info.portInfo, taintOf,
+                                            taintConstants, taintSuffix)))
+              return failure();
+            rewriteOutputOp(info.mod, info.portInfo, taintOf);
+            return success();
+          })))
     signalPassFailure();
 }
-
-//===----------------------------------------------------------------------===//
-// Registration
-//===----------------------------------------------------------------------===//
-
-namespace circt {
-std::unique_ptr<mlir::Pass> createCellIFTInstrumentPass() {
-  return std::make_unique<CellIFTInstrumentPass>();
-}
-} // namespace circt
