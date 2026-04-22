@@ -173,7 +173,8 @@ jobs:
               "run_tests": true,
               "run_integration_tests": false,
               "runner": "ubuntu-24.04",
-              "cmake_c_compiler": "clang"
+              "cmake_c_compiler": "clang",
+              "extra_cmake_args": "-DLLVM_ENABLE_REVERSE_ITERATION=ON"
             },
             {
               "name": "Windows Test",
@@ -225,6 +226,7 @@ jobs:
       install_target: ${{ matrix.generated.install_target }}
       package_name_prefix: ${{ matrix.generated.package_name_prefix }}
       cmake_c_compiler: ${{ matrix.generated.cmake_c_compiler }}
+      extra_cmake_args: ${{ matrix.generated.extra_cmake_args }}
 
   # --- end of build-circt job.
 
