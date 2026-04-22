@@ -170,11 +170,15 @@ jobs:
           echo "cmake_c_compiler=${INPUT_COMPILER,,}" >> $GITHUB_OUTPUT
           echo "build_shared_libs=$(on_off "${INPUT_SHARED}")" >> $GITHUB_OUTPUT
           echo "llvm_enable_assertions=$(on_off "${INPUT_ASSERTIONS}")" >> $GITHUB_OUTPUT
+          # Hash extra cmake args for cache key (use first 8 chars of sha256)
+          EXTRA_CMAKE_HASH=$(echo -n "${INPUT_EXTRA_CMAKE}" | sha256sum | cut -c1-8)
+          echo "extra_cmake_hash=$EXTRA_CMAKE_HASH" >> $GITHUB_OUTPUT
         env:
           INPUT_BUILD_TYPE: ${{ inputs.cmake_build_type }}
           INPUT_COMPILER: ${{ inputs.cmake_c_compiler }}
           INPUT_SHARED: ${{ inputs.build_shared_libs }}
           INPUT_ASSERTIONS: ${{ inputs.llvm_enable_assertions }}
+          INPUT_EXTRA_CMAKE: ${{ inputs.extra_cmake_args }}
       - name: Clone llvm/circt
         uses: actions/checkout@v3
         with:
@@ -314,7 +318,7 @@ jobs:
         if: steps.canonicalize.outputs.cmake_build_type == 'release'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ inputs.runner }}-${{ steps.canonicalize.outputs.cmake_c_compiler }}-${{ steps.canonicalize.outputs.cmake_build_type }}-${{ steps.canonicalize.outputs.build_shared_libs }}-${{ steps.canonicalize.outputs.llvm_enable_assertions }}
+          key: ${{ inputs.runner }}-${{ steps.canonicalize.outputs.cmake_c_compiler }}-${{ steps.canonicalize.outputs.cmake_build_type }}-${{ steps.canonicalize.outputs.build_shared_libs }}-${{ steps.canonicalize.outputs.llvm_enable_assertions }}-${{ steps.canonicalize.outputs.extra_cmake_hash }}
           max-size: 500M
           variant: sccache
           save: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
