@@ -338,7 +338,9 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
   // If it's external call, just allocate new ObjectValue.
   evaluator::EvaluatorValuePtr result =
       std::make_shared<evaluator::ObjectValue>(cls, fields, loc);
-  // Note: Object is already fully evaluated when created with fields
+  // Object is already fully evaluated when created with fields.
+  assert(result->isFullyEvaluated() &&
+         "object with fields should be fully evaluated");
   return result;
 }
 
@@ -392,16 +394,16 @@ circt::om::Evaluator::instantiate(
   // unless there is a partially evaluated value.
   LLVM_DEBUG(dbgs() << "worklist:\n");
 
-  // Use two-worklist approach: process all items from current worklist,
-  // and if at least one becomes fully evaluated, swap and continue.
-  // If a full pass completes with no progress, we have a cycle.
+  // Use two-worklist approach: process all items from current worklist, and if
+  // at least one becomes fully evaluated, swap and continue. If a full pass
+  // completes with no progress, we have a cycle.
   while (!worklist.empty()) {
     uint64_t countBeforePass = fullyEvaluatedCount;
     LLVM_DEBUG(dbgs() << "- processing " << worklist.size()
                       << " items (fully evaluated count: "
                       << fullyEvaluatedCount << ")\n");
 
-    // Process all items in the current worklist
+    // Process all items in the current worklist.
     while (!worklist.empty()) {
       auto [value, args] = worklist.back();
       worklist.pop_back();
@@ -410,27 +412,25 @@ circt::om::Evaluator::instantiate(
       if (failed(result))
         return failure();
 
-      // If not fully evaluated, add to next worklist for retry
-      if (!result.value()->isFullyEvaluated()) {
+      // If not fully evaluated, add to next worklist for retry.
+      if (!result.value()->isFullyEvaluated())
         nextWorklist.push_back({value, args});
-      }
     }
 
-    // Check if we made progress
+    // Check if we made progress.
     uint64_t evaluatedThisPass = fullyEvaluatedCount - countBeforePass;
     LLVM_DEBUG(dbgs() << "- evaluated " << evaluatedThisPass
                       << " nodes this pass\n");
 
-    // If nothing became fully evaluated in this pass, we have a cycle
-    if (evaluatedThisPass == 0 && !nextWorklist.empty()) {
+    // If nothing became fully evaluated in this pass, we have a cycle.
+    if (evaluatedThisPass == 0 && !nextWorklist.empty())
       return cls.emitError()
              << "cycle detected: " << nextWorklist.size()
              << " values remain partially evaluated after full pass with no "
                 "progress (total fully evaluated: "
              << fullyEvaluatedCount << ")";
-    }
 
-    // Swap worklists for next iteration
+    // Swap worklists for next iteration.
     worklist = std::move(nextWorklist);
     nextWorklist.clear();
   }
@@ -1088,11 +1088,9 @@ circt::om::Evaluator::createUnknownValue(Type type, Location loc) {
             return success(AttributeValue::get(type, LocationAttr(loc)));
           });
 
-  // Mark the result as unknown if successful
-  if (succeeded(result)) {
-    attachCounter(result.value());
+  // Mark the result as unknown if successful.
+  if (succeeded(result))
     result->get()->markUnknown();
-  }
 
   return result;
 }

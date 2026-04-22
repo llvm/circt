@@ -670,9 +670,8 @@ om.class @ReferenceEachOther() -> (field: !ty){
   ASSERT_TRUE(failed(result));
 }
 
-// Test for issue #10264 - nested object field references that previously
-// caused an assertion failure. This test verifies that the evaluator can
-// properly handle nested field accesses without hitting null pointers.
+// Test nested object field references.
+// https://github.com/llvm/circt/issues/10264
 TEST(EvaluatorTests, Issue10264NestedFieldReferences) {
   StringRef mod = R"MLIR(
 om.class @Domain(%in: !om.string) -> (out: !om.string) {

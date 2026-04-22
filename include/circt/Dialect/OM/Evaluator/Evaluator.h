@@ -63,7 +63,7 @@ public:
     fullyEvaluated = true;
     // Increment the counter if one is set.
     if (fullyEvaluatedCounter)
-      (*fullyEvaluatedCounter)++;
+      ++(*fullyEvaluatedCounter);
   }
 
   /// Set a counter to increment when this value becomes fully evaluated.
