@@ -91,6 +91,11 @@ struct ModuleLowering {
   SmallVector<FlattenedIfacePort> ifacePorts;
   DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
       portsBySyntaxNode;
+
+  /// The canonical InstanceBodySymbol used as the key in `hierPaths` after
+  /// module deduplication. When multiple instance bodies share the same
+  /// definition and parameters, they are deduplicated to a single module.
+  const slang::ast::InstanceBodySymbol *canonicalBody = nullptr;
 };
 
 /// Function lowering information. The `op` field holds either a `func::FuncOp`
@@ -133,8 +138,35 @@ struct HierPathInfo {
   mlir::StringAttr hierName;
   std::optional<unsigned int> idx;
   slang::ast::ArgumentDirection direction;
-  const slang::ast::ValueSymbol *valueSym;
+
+  /// The value symbols associated with this hierarchical path. Multiple
+  /// symbols may be present when different instances resolve the same
+  /// logical variable to different elaborated symbol objects (e.g., due to
+  /// Slang's per-instance elaboration of shared module bodies).
+  llvm::SmallVector<const slang::ast::ValueSymbol *, 2> valueSyms;
 };
+
+/// ImportVerilog Elaboration Phases for Hierarchical Names
+///
+/// Hierarchical name resolution is performed in four distinct phases:
+///
+/// 1. Collection: The `traverseInstanceBody` pass walks the Slang AST to
+///    identify all hierarchical references (e.g., `Top.sub.var`). It records
+///    these in `hierPaths` mapped by module body.
+///
+/// 2. Port Generation: In `convertModuleHeader`, we inspect `hierPaths` for
+///    the module and add corresponding input/output ports to the generated
+///    `moore.module` to allow cross-module communication.
+///
+/// 3. Wiring: In `Structure.cpp` during instance creation, we look up the
+///    canonical module body's `hierPaths` to determine which hierarchical
+///    values need to be passed as inputs or captured as outputs from the
+///    instance.
+///
+/// 4. Resolution: In `Expressions.cpp`, visitors for rvalues and lvalues
+///    resolve hierarchical names by first checking the instance-aware
+///    `hierValueSymbols` map (for cross-instance references) and falling back
+///    to standard scoped lookups.
 
 // A slang::SourceLocation for deterministic comparisons. Comparisons use the
 // buffer's sortKey rather than bufferId.
@@ -256,6 +288,14 @@ struct Context {
 
   // Traverse the whole AST to collect hierarchical names.
   void traverseInstanceBody(const slang::ast::Symbol &symbol);
+  void traverseInstanceBody(const slang::ast::Symbol &symbol,
+                            DenseSet<StringAttr> &sameHierPaths);
+
+  /// Build a composite key for hierValueSymbols from a hierarchical value
+  /// expression. Returns {firstInstanceSymbol, dottedHierName} or std::nullopt
+  /// if the expression has no instance path.
+  std::optional<std::pair<const slang::ast::InstanceSymbol *, mlir::StringAttr>>
+  buildHierValueKey(const slang::ast::HierarchicalValueExpression &expr);
 
   // Convert timing controls into a corresponding set of ops that delay
   // execution of the current block. Produces an error if the implicit event
@@ -440,11 +480,14 @@ struct Context {
   DenseMap<const slang::ast::InstanceBodySymbol *, SmallVector<HierPathInfo>>
       hierPaths;
 
-  /// It's used to collect the repeat hierarchical names on the same path.
-  /// Such as `Top.sub.a` and `sub.a`, they are equivalent. The variable "a"
-  /// will be added to the port list. But we only record once. If we don't do
-  /// that. We will view the strange IR, such as `module @Sub(out y, out y)`;
-  DenseSet<StringAttr> sameHierPaths;
+  /// Persistent map for hierarchical value lookups. Keyed by a composite
+  /// of the instance symbol (the specific instance being wired, e.g., p1 or
+  /// p2) and the hierarchical path name (e.g., "child.child_val"). This
+  /// ensures instance-specific resolution even when Slang shares or doesn't
+  /// share instance bodies across multiple instances of the same module.
+  DenseMap<std::pair<const slang::ast::InstanceSymbol *, mlir::StringAttr>,
+           Value>
+      hierValueSymbols;
 
   /// A stack of assignment left-hand side values. Each assignment will push its
   /// lowered left-hand side onto this stack before lowering its right-hand
