@@ -170,8 +170,8 @@ jobs:
           echo "cmake_c_compiler=${INPUT_COMPILER,,}" >> $GITHUB_OUTPUT
           echo "build_shared_libs=$(on_off "${INPUT_SHARED}")" >> $GITHUB_OUTPUT
           echo "llvm_enable_assertions=$(on_off "${INPUT_ASSERTIONS}")" >> $GITHUB_OUTPUT
-          # Hash extra cmake args for cache key (use first 8 chars of sha256)
-          EXTRA_CMAKE_HASH=$(echo -n "${INPUT_EXTRA_CMAKE}" | sha256sum | cut -c1-8)
+          # Hash extra cmake args for cache key (use first 16 chars of sha256)
+          EXTRA_CMAKE_HASH=$(echo -n "${INPUT_EXTRA_CMAKE}" | sha256sum | cut -c1-16)
           echo "extra_cmake_hash=$EXTRA_CMAKE_HASH" >> $GITHUB_OUTPUT
         env:
           INPUT_BUILD_TYPE: ${{ inputs.cmake_build_type }}
