@@ -105,6 +105,18 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   auto argTypes = blocks.back()->getArgumentTypes();
   auto args = blocks.back()->getArguments();
 
+  // We need to sort our liveness sets to avoid nondeterminism
+  auto sortFunc = [](Value a, Value b) {
+    auto *opA = a.getDefiningOp();
+    auto *opB = b.getDefiningOp();
+    if (opA == opB)
+      return cast<OpResult>(a).getResultNumber() <
+             cast<OpResult>(b).getResultNumber();
+    if (opA->getBlock() == opB->getBlock())
+      return opA->isBeforeInBlock(opB);
+    return false;
+  };
+
   // Create return ops
   for (int i = blocks.size() - 2; i >= 0; --i) {
     liveness = Liveness(funcOp);
@@ -115,6 +127,7 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
       if (!isa<BlockArgument>(el))
         outValues.push_back(el);
     });
+    llvm::stable_sort(outValues, sortFunc);
     opBuilder.setInsertionPointToEnd(currentBlock);
     ReturnOp::create(opBuilder, funcOp->getLoc(), outValues);
   }
@@ -122,14 +135,14 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   for (long unsigned i = 0; i < blocks.size() - 1; ++i) {
     Block *currentBlock = blocks[i];
     Liveness::ValueSetT liveOut = liveness.getLiveIn(blocks[i + 1]);
-    SmallVector<Type> outTypes;
     SmallVector<Value> outValues;
-    llvm::for_each(liveOut, [&outTypes, &outValues](auto el) {
-      if (!isa<BlockArgument>(el)) {
+    llvm::for_each(liveOut, [&outValues](auto el) {
+      if (!isa<BlockArgument>(el))
         outValues.push_back(el);
-        outTypes.push_back(el.getType());
-      }
     });
+    llvm::stable_sort(outValues, sortFunc);
+    auto outTypes = llvm::to_vector(
+        llvm::map_range(outValues, [](Value v) { return v.getType(); }));
     opBuilder.setInsertionPoint(funcOp);
     SmallString<64> funcName;
     funcName.append(funcOp.getName());
