@@ -161,7 +161,8 @@ jobs:
               "run_tests": true,
               "run_integration_tests": true,
               "runner": "ubuntu-24.04",
-              "cmake_c_compiler": "gcc"
+              "cmake_c_compiler": "gcc",
+              "extra_cmake_args": "-DLLVM_ENABLE_REVERSE_ITERATION=ON"
             },
             {
               "name": "Linux (Clang) Test",
@@ -173,8 +174,7 @@ jobs:
               "run_tests": true,
               "run_integration_tests": false,
               "runner": "ubuntu-24.04",
-              "cmake_c_compiler": "clang",
-              "extra_cmake_args": "-DLLVM_ENABLE_REVERSE_ITERATION=ON"
+              "cmake_c_compiler": "clang"
             },
             {
               "name": "Windows Test",
