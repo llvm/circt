@@ -1508,7 +1508,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module private @ForceableToSym(in %in: !firrtl.uint<4>, in %clk: !firrtl.clock, out %out: !firrtl.uint<4>) {
     // CHECK-NEXT: %n = hw.wire %in sym @{{.+}} : i4
     // CHECK-NEXT: %w = hw.wire %n sym @{{.+}} : i4
+    // CHECK-NEXT: [[WREF:%.+]] = hw.probe.send forceable %w : i4
     // CHECK-NEXT: %r = seq.firreg %w clock %clk sym @{{.+}} : i4
+    // CHECK-NEXT: [[RREF:%.+]] = hw.probe.send forceable %r : i4
     %n, %n_ref = firrtl.node %in forceable : !firrtl.uint<4>
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
     %r, %r_ref = firrtl.reg %clk forceable : !firrtl.clock, !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
@@ -1518,25 +1520,24 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.matchingconnect %out, %r : !firrtl.uint<4>
   }
 
-  // Check lowering force and release operations.
-  hw.hierpath private @xmrPath [@ForceRelease::@xmr_sym, @RefMe::@xmr_sym]
-  firrtl.module private @RefMe() {
-    %x, %x_ref = firrtl.wire sym @xmr_sym forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+  firrtl.module private @RefMe(out %p: !firrtl.rwprobe<uint<4>>) {
+    %x, %x_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+    firrtl.ref.define %p, %x_ref : !firrtl.rwprobe<uint<4>>
   }
-  // CHECK-LABEL: hw.module @ForceRelease(
-  firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>, in %0: !firrtl.rwprobe<uint<4>>) {
-    firrtl.instance r sym @xmr_sym @RefMe()
-    firrtl.ref.force %clock, %c, %0, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
-    firrtl.ref.force_initial %c, %0, %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
-    firrtl.ref.release %clock, %c, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
-    firrtl.ref.release_initial %c, %0 : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
-  }
+  // CHECK-LABEL: hw.module @ForceRelease
+  firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
+      %r_p = firrtl.instance r @RefMe(out p: !firrtl.rwprobe<uint<4>>)
+      firrtl.ref.force %clock, %c, %r_p, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
+      firrtl.ref.force_initial %c, %r_p, %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
+      firrtl.ref.release %clock, %c, %r_p : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+      firrtl.ref.release_initial %c, %r_p : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    }
   // CHECK-NEXT:  [[CLOCK:%.+]] = seq.from_clock %clock
-  // CHECK-NEXT:  hw.instance "r" sym @xmr_sym @RefMe() -> ()
-  // CHECK-NEXT:  %[[XMR1:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
-  // CHECK-NEXT:  %[[XMR2:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
-  // CHECK-NEXT:  %[[XMR3:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
-  // CHECK-NEXT:  %[[XMR4:.+]] = sv.xmr.ref @xmrPath : !hw.inout<i4>
+  // CHECK-NEXT:  [[R_P:%.+]] = hw.instance "r" @RefMe() -> (p: !hw.rwprobe<i4>)
+  // CHECK-NEXT:  %[[XMR1:.+]] = hw.probe.xmr_ref [[R_P]] : !hw.rwprobe<i4>
+  // CHECK-NEXT:  %[[XMR2:.+]] = hw.probe.xmr_ref [[R_P]] : !hw.rwprobe<i4>
+  // CHECK-NEXT:  %[[XMR3:.+]] = hw.probe.xmr_ref [[R_P]] : !hw.rwprobe<i4>
+  // CHECK-NEXT:  %[[XMR4:.+]] = hw.probe.xmr_ref [[R_P]] : !hw.rwprobe<i4>
   // CHECK-NEXT:  sv.ifdef @SYNTHESIS {
   // CHECK-NEXT:  } else {
   // CHECK-NEXT:    sv.always posedge [[CLOCK]] {

@@ -3750,12 +3750,21 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
     if (op.getInnerSym())
       return op.emitError("zero width wire is referenced by name [")
              << *op.getInnerSym() << "] (e.g. in an XMR) but must be removed";
-    return setLowering(op.getResult(), Value());
+    if (failed(setLowering(op.getResult(), Value())))
+      return failure();
+    // If forceable, also handle the ref result
+    if (op.isForceable()) {
+      if (failed(setLowering(op.getRef(), Value())))
+        return failure();
+    }
+    return success();
   }
 
   // Name attr is required on sv.wire but optional on firrtl.wire.
   auto innerSym = lowerInnerSymbol(op);
   auto name = op.getNameAttr();
+
+  // Create the hw.wire (same for both forceable and non-forceable)
   // This is not a temporary wire created by the compiler, so attach a symbol
   // name.
   auto wire = hw::WireOp::create(
@@ -3764,7 +3773,20 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(wire, svAttrs);
 
-  return setLowering(op.getResult(), wire);
+  // Set lowering for the data result
+  if (failed(setLowering(op.getResult(), wire)))
+    return failure();
+
+  // If forceable, create hw.probe.send forceable for the rwprobe result
+  if (op.isForceable()) {
+    // Create probe.send using the wire result directly
+    auto probeSend = hw::ProbeSendOp::create(builder, wire, /*forceable=*/true);
+
+    // Set lowering for the ref result
+    return setLowering(op.getRef(), probeSend.getResult());
+  }
+
+  return success();
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -3825,8 +3847,16 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType = lowerType(op.getResult().getType());
   if (!resultType)
     return failure();
-  if (resultType.isInteger(0))
-    return setLowering(op.getResult(), Value());
+  if (resultType.isInteger(0)) {
+    if (failed(setLowering(op.getResult(), Value())))
+      return failure();
+    // If forceable, also handle the ref result
+    if (op.isForceable()) {
+      if (failed(setLowering(op.getRef(), Value())))
+        return failure();
+    }
+    return success();
+  }
 
   Value clockVal = getLoweredValue(op.getClockVal());
   if (!clockVal)
@@ -3851,7 +3881,16 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
     sv::setSVAttributes(reg, svAttrs);
 
   inputEdge.setValue(reg);
-  (void)setLowering(op.getResult(), reg);
+  if (failed(setLowering(op.getResult(), reg)))
+    return failure();
+
+  // If forceable, create hw.probe.send forceable for the rwprobe result
+  if (op.isForceable()) {
+    auto probeSend = builder.create<hw::ProbeSendOp>(reg, /*forceable=*/true);
+    if (failed(setLowering(op.getRef(), probeSend.getResult())))
+      return failure();
+  }
+
   return success();
 }
 
@@ -3859,8 +3898,16 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   auto resultType = lowerType(op.getResult().getType());
   if (!resultType)
     return failure();
-  if (resultType.isInteger(0))
-    return setLowering(op.getResult(), Value());
+  if (resultType.isInteger(0)) {
+    if (failed(setLowering(op.getResult(), Value())))
+      return failure();
+    // If forceable, also handle the ref result
+    if (op.isForceable()) {
+      if (failed(setLowering(op.getRef(), Value())))
+        return failure();
+    }
+    return success();
+  }
 
   Value clockVal = getLoweredValue(op.getClockVal());
   Value resetSignal = getLoweredValue(op.getResetSignal());
@@ -3892,7 +3939,15 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
     sv::setSVAttributes(reg, svAttrs);
 
   inputEdge.setValue(reg);
-  (void)setLowering(op.getResult(), reg);
+  if (failed(setLowering(op.getResult(), reg)))
+    return failure();
+
+  // If forceable, create hw.probe.send forceable for the rwprobe result
+  if (op.isForceable()) {
+    auto probeSend = builder.create<hw::ProbeSendOp>(reg, /*forceable=*/true);
+    if (failed(setLowering(op.getRef(), probeSend.getResult())))
+      return failure();
+  }
 
   return success();
 }
@@ -5428,11 +5483,11 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   auto pred = getLoweredValue(op.getPredicate());
   if (!src || !clock || !pred)
     return failure();
-  src = hw::ProbeXMRRefOp::create(builder, src);
   auto destVal = getPossiblyInoutLoweredValue(op.getDest());
   if (!destVal)
     return failure();
 
+  destVal = hw::ProbeXMRRefOp::create(builder, destVal);
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
@@ -5452,12 +5507,12 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
   auto pred = getLoweredValue(op.getPredicate());
   if (!src || !pred)
     return failure();
-  src = hw::ProbeXMRRefOp::create(builder, src);
 
   auto destVal = getPossiblyInoutLoweredValue(op.getDest());
   if (!destVal)
     return failure();
 
+  destVal = hw::ProbeXMRRefOp::create(builder, destVal);
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {

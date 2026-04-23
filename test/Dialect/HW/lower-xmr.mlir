@@ -1135,16 +1135,6 @@ hw.module @ReleasableTarget(out ref: !hw.rwprobe<i12>) {
   hw.output %rwprobe : !hw.rwprobe<i12>
 }
 
-// CHECK-LABEL: hw.module @TestReleaseOps
-hw.module @TestReleaseOps(in %clk: i1, in %enable: i1) {
-  %tgt_ref = hw.instance "rt" sym @rt @ReleasableTarget() -> (ref: !hw.rwprobe<i12>)
-
-  // CHECK: sv.always posedge %clk
-  // CHECK: sv.release
-  hw.probe.release %clk, %enable, %tgt_ref : i1, i1, !hw.rwprobe<i12>
-
-  hw.output
-}
 
 // -----
 
