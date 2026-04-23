@@ -2628,6 +2628,121 @@ struct ExtmoduleConventionRemover : public OpReduction<FExtModuleOp> {
   bool isOneShot() const override { return true; }
 };
 
+/// Reduction that removes fields from domain definitions and updates all uses.
+struct DomainFieldRemover : public OpReduction<CircuitOp> {
+  void matches(CircuitOp circuit,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+    // Collect all domains and their fields
+    SmallVector<DomainOp> domains;
+    for (auto &op : *circuit.getBodyBlock())
+      if (auto domainOp = dyn_cast<DomainOp>(op))
+        domains.push_back(domainOp);
+
+    // Generate one match per field in each domain
+    uint64_t matchId = 0;
+    for (auto domainOp : domains) {
+      auto fields = domainOp.getFields();
+      for (size_t i = 0; i < fields.size(); ++i) {
+        addMatch(1, matchId++);
+      }
+    }
+  }
+
+  LogicalResult rewriteMatches(CircuitOp circuit,
+                               ArrayRef<uint64_t> matches) override {
+    if (matches.empty())
+      return failure();
+
+    // Build a map from domain operations to fields to remove
+    SmallVector<DomainOp> domains;
+    for (auto &op : *circuit.getBodyBlock())
+      if (auto domainOp = dyn_cast<DomainOp>(op))
+        domains.push_back(domainOp);
+
+    // Convert flat match indices to (domain, field) pairs
+    DenseMap<DomainOp, llvm::BitVector> fieldsToRemove;
+    uint64_t matchId = 0;
+    for (auto domainOp : domains) {
+      auto numFields = domainOp.getFields().size();
+      fieldsToRemove[domainOp] = llvm::BitVector(numFields);
+      for (size_t i = 0; i < numFields; ++i) {
+        if (llvm::is_contained(matches, matchId))
+          fieldsToRemove[domainOp].set(i);
+        matchId++;
+      }
+    }
+
+    // For each domain, replace domain.subfield uses with unknown values
+    OpBuilder builder(circuit.getContext());
+    for (auto domainOp : domains) {
+      if (!fieldsToRemove[domainOp].any())
+        continue;
+
+      auto domainName = domainOp.getSymNameAttr();
+
+      // Find all domain.subfield operations that use this domain
+      circuit.walk([&](DomainSubfieldOp subfieldOp) {
+        auto domainType = subfieldOp.getInput().getType();
+        if (domainType.getName().getAttr() != domainName)
+          return;
+
+        auto fieldIndex = subfieldOp.getFieldIndex();
+        if (fieldsToRemove[domainOp].test(fieldIndex)) {
+          // Replace with unknown value
+          builder.setInsertionPoint(subfieldOp);
+          auto unknownOp = builder.create<UnknownValueOp>(
+              subfieldOp.getLoc(), subfieldOp.getResult().getType());
+          subfieldOp.replaceAllUsesWith(unknownOp.getResult());
+          subfieldOp.erase();
+        }
+      });
+    }
+
+    // Update domain definitions to remove fields
+    for (auto domainOp : domains) {
+      if (!fieldsToRemove[domainOp].any())
+        continue;
+
+      auto oldFields = domainOp.getFields();
+      SmallVector<Attribute> newFields;
+      for (size_t i = 0; i < oldFields.size(); ++i) {
+        if (!fieldsToRemove[domainOp].test(i))
+          newFields.push_back(oldFields[i]);
+      }
+
+      domainOp.setFieldsAttr(ArrayAttr::get(circuit.getContext(), newFields));
+    }
+
+    // Update all DomainType references in the circuit
+    AttrTypeReplacer replacer;
+    replacer.addReplacement([&](DomainType type) -> std::optional<Type> {
+      // Find the corresponding domain operation
+      auto domainName = type.getName().getAttr();
+      DomainOp domainOp;
+      for (auto op : domains) {
+        if (op.getSymNameAttr() == domainName) {
+          domainOp = op;
+          break;
+        }
+      }
+
+      if (!domainOp || !fieldsToRemove[domainOp].any())
+        return std::nullopt;
+
+      // Create new DomainType with updated fields
+      return DomainType::get(type.getName(), domainOp.getFieldsAttr());
+    });
+
+    replacer.recursivelyReplaceElementsIn(circuit, /*replaceAttrs=*/true,
+                                          /*replaceLocs=*/false,
+                                          /*replaceTypes=*/true);
+
+    return success();
+  }
+
+  std::string getName() const override { return "domain-field-remover"; }
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -2692,6 +2807,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<ModuleNameSanitizer, 0>();
   patterns.add<ModuleConventionRemover, 0>();
   patterns.add<ExtmoduleConventionRemover, 0>();
+  patterns.add<DomainFieldRemover, 0>();
 }
 
 void firrtl::registerReducePatternDialectInterface(
