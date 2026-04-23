@@ -115,6 +115,9 @@ public:
   InnerSymbolTable(InnerSymbolTable &&) = default;
   InnerSymbolTable &operator=(InnerSymbolTable &&) = default;
 
+  // Add a fresh mapping, or fail if the symbol name already exists.
+  LogicalResult add(StringAttr name, const InnerSymTarget &target);
+
   /// Look up a symbol with the specified name, returning empty InnerSymTarget
   /// if no such name exists. Names never include the @ on them.
   InnerSymTarget lookup(StringRef name) const;
