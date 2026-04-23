@@ -1492,6 +1492,70 @@ def PropEqOp : FIRRTLOp<"prop.eq", [Pure, AllTypesMatch<["lhs", "rhs"]>]> {
   let hasFolder = 1;
 }
 
+class BoolBinaryPrimOp<string mnemonic, list<Trait> traits = []> :
+    BinaryPrimOp<mnemonic, BoolType, BoolType, BoolType,
+                 [Pure, SameOperandsAndResultType] # traits> {
+  // We use the standard inferReturnTypes from SameOperandsAndResultType.
+  let inferReturnTypesDecl = "";
+
+  // We use a static inferType that always returns BoolType.
+  let inferType = "getBoolType";
+
+  // Define getBoolType inline in ODS.
+  let firrtlExtraClassDeclaration = [{
+    static BoolType getBoolType(FIRRTLType lhs,
+                                FIRRTLType rhs,
+                                std::optional<Location> loc) {
+      return BoolType::get(lhs.getContext());
+    }
+  }];
+
+  // Use a simple `lhs, rhs : type` format (matching the FIRRTL property op
+  // convention) rather than the BinaryPrimOp `(lhstype, rhstype) -> restype`.
+  let assemblyFormat = "$lhs `,` $rhs attr-dict";
+
+  let hasFolder = 1;
+}
+
+def BoolAndOp : BoolBinaryPrimOp<"bool.and", [Commutative]> {
+  let summary = "Bitwise AND of two boolean property values";
+  let description = [{
+    Computes the bitwise AND of two boolean property values, returning a boolean
+    result.
+
+    Example:
+    ```mlir
+    %result = firrtl.bool.and %lhs, %rhs
+    ```
+  }];
+}
+
+def BoolOrOp : BoolBinaryPrimOp<"bool.or", [Commutative]> {
+  let summary = "Bitwise OR of two boolean property values";
+  let description = [{
+    Computes the bitwise OR of two boolean property values, returning a boolean
+    result.
+
+    Example:
+    ```mlir
+    %result = firrtl.bool.or %lhs, %rhs
+    ```
+  }];
+}
+
+def BoolXorOp : BoolBinaryPrimOp<"bool.xor", [Commutative]> {
+  let summary = "Bitwise XOR of two boolean property values";
+  let description = [{
+    Computes the bitwise XOR of two boolean property values, returning a boolean
+    result.  NOT can be lowered as `xor(a, true)`.
+
+    Example:
+    ```mlir
+    %result = firrtl.bool.xor %lhs, %rhs
+    ```
+  }];
+}
+
 def UnknownValueOp : FIRRTLOp<"unknown", [
   Pure,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,

@@ -4093,4 +4093,78 @@ firrtl.module @PropEqFold(in %str: !firrtl.string, in %b: !firrtl.bool,
   firrtl.propassign %out9, %8 : !firrtl.bool
 }
 
+// CHECK-LABEL: firrtl.module @BoolBinaryFold
+firrtl.module @BoolBinaryFold(in %b: !firrtl.bool,
+                               out %out1: !firrtl.bool, out %out2: !firrtl.bool,
+                               out %out3: !firrtl.bool, out %out4: !firrtl.bool,
+                               out %out5: !firrtl.bool, out %out6: !firrtl.bool,
+                               out %out7: !firrtl.bool, out %out8: !firrtl.bool,
+                               out %out9: !firrtl.bool, out %out10: !firrtl.bool,
+                               out %out11: !firrtl.bool) {
+  // CHECK-DAG: [[TRUE:%.+]] = firrtl.bool true
+  // CHECK-DAG: [[FALSE:%.+]] = firrtl.bool false
+  %t = firrtl.bool true
+  %f = firrtl.bool false
+
+  // AND: constant folding.
+  // true AND false = false
+  // CHECK: firrtl.propassign %out1, [[FALSE]]
+  %0 = firrtl.bool.and %t, %f
+  firrtl.propassign %out1, %0 : !firrtl.bool
+
+  // AND with false is always false.
+  // CHECK: firrtl.propassign %out2, [[FALSE]]
+  %1 = firrtl.bool.and %b, %f
+  firrtl.propassign %out2, %1 : !firrtl.bool
+
+  // AND with true is identity.
+  // CHECK: firrtl.propassign %out3, %b
+  %2 = firrtl.bool.and %b, %t
+  firrtl.propassign %out3, %2 : !firrtl.bool
+
+  // OR: constant folding.
+  // true OR false = true
+  // CHECK: firrtl.propassign %out4, [[TRUE]]
+  %3 = firrtl.bool.or %t, %f
+  firrtl.propassign %out4, %3 : !firrtl.bool
+
+  // OR with true is always true.
+  // CHECK: firrtl.propassign %out5, [[TRUE]]
+  %4 = firrtl.bool.or %b, %t
+  firrtl.propassign %out5, %4 : !firrtl.bool
+
+  // OR with false is identity.
+  // CHECK: firrtl.propassign %out6, %b
+  %5 = firrtl.bool.or %b, %f
+  firrtl.propassign %out6, %5 : !firrtl.bool
+
+  // XOR: constant folding.
+  // true XOR false = true
+  // CHECK: firrtl.propassign %out7, [[TRUE]]
+  %6 = firrtl.bool.xor %t, %f
+  firrtl.propassign %out7, %6 : !firrtl.bool
+
+  // XOR: constant folding T xor T = F.
+  // CHECK: firrtl.propassign %out8, [[FALSE]]
+  %7 = firrtl.bool.xor %t, %t
+  firrtl.propassign %out8, %7 : !firrtl.bool
+
+  // XOR with false is identity.
+  // CHECK: firrtl.propassign %out9, %b
+  %8 = firrtl.bool.xor %b, %f
+  firrtl.propassign %out9, %8 : !firrtl.bool
+
+  // Non-constant bool.and operands do not fold.
+  // CHECK: [[AND:%.+]] = firrtl.bool.and %b, %b
+  // CHECK: firrtl.propassign %out10, [[AND]]
+  %9 = firrtl.bool.and %b, %b
+  firrtl.propassign %out10, %9 : !firrtl.bool
+
+  // NOT idiom: bool.xor with true = NOT.
+  // false XOR true = true
+  // CHECK: firrtl.propassign %out11, [[TRUE]]
+  %10 = firrtl.bool.xor %f, %t
+  firrtl.propassign %out11, %10 : !firrtl.bool
+}
+
 }

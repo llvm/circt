@@ -208,6 +208,24 @@ struct Emitter {
     emitPrimExpr("prop_eq", op);
   }
 
+  void emitExpression(BoolAndOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "boolean and")))
+      return;
+    emitPrimExpr("bool_and", op);
+  }
+
+  void emitExpression(BoolOrOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "boolean or")))
+      return;
+    emitPrimExpr("bool_or", op);
+  }
+
+  void emitExpression(BoolXorOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "boolean xor")))
+      return;
+    emitPrimExpr("bool_xor", op);
+  }
+
   // Attributes
   void emitAttribute(MemDirAttr attr);
   void emitAttribute(RUWBehaviorAttr attr);
@@ -1550,7 +1568,8 @@ void Emitter::emitExpression(Value value) {
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp, StringConcatOp, PropEqOp,
+          UnknownValueOp, StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp,
+          BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
