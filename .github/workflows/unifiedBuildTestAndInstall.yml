@@ -155,7 +155,13 @@ jobs:
         id: canonicalize
         shell: bash
         run: |
-          on_off() { case "${1,,}" in on|true) echo "ON" ;; *) echo "OFF" ;; esac; }
+          on_off() {
+            val=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+            case "$val" in
+              on|true) echo "ON" ;;
+              *) echo "OFF" ;;
+            esac
+          }
           echo "cmake_build_type=$(echo "${INPUT_BUILD_TYPE}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           echo "cmake_c_compiler=$(echo "${INPUT_COMPILER}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           echo "build_shared_libs=$(on_off "${INPUT_SHARED}")" >> $GITHUB_OUTPUT
