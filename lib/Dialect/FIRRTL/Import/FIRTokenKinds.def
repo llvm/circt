@@ -267,6 +267,9 @@ TOK_LPKEYWORD_PRIM(integer_shl, IntegerShlOp, 2, 0, FIRVersion(3, 1, 0),
                    "Integers")
 TOK_LPKEYWORD(string_concat)
 TOK_LPKEYWORD(prop_eq)
+TOK_LPKEYWORD_PRIM(bool_and, BoolAndOp, 2, 0, missingSpecFIRVersion, "Boolean and")
+TOK_LPKEYWORD_PRIM(bool_or,  BoolOrOp,  2, 0, missingSpecFIRVersion, "Boolean or")
+TOK_LPKEYWORD_PRIM(bool_xor, BoolXorOp, 2, 0, missingSpecFIRVersion, "Boolean xor")
 
 #undef TOK_MARKER
 #undef TOK_IDENTIFIER

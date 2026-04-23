@@ -1712,6 +1712,30 @@ circuit PropEqVersionError :
     propassign c, prop_eq(a, b)
 
 ;// -----
+FIRRTL version 5.1.0
+
+; CHECK-LABEL: firrtl.circuit "BoolBinaryOps"
+circuit BoolBinaryOps :
+  public module BoolBinaryOps :
+    input a : Bool
+    input b : Bool
+    output andOut : Bool
+    output orOut : Bool
+    output xorOut : Bool
+
+    ; CHECK: [[AND:%.+]] = firrtl.bool.and %a, %b
+    ; CHECK: firrtl.propassign %andOut, [[AND]]
+    propassign andOut, bool_and(a, b)
+
+    ; CHECK: [[OR:%.+]] = firrtl.bool.or %a, %b
+    ; CHECK: firrtl.propassign %orOut, [[OR]]
+    propassign orOut, bool_or(a, b)
+
+    ; CHECK: [[XOR:%.+]] = firrtl.bool.xor %a, %b
+    ; CHECK: firrtl.propassign %xorOut, [[XOR]]
+    propassign xorOut, bool_xor(a, b)
+
+;// -----
 FIRRTL version 3.1.0
 
 ; CHECK-LABEL: circuit "BundleOfProps"
