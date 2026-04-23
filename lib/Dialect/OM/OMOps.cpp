@@ -584,7 +584,7 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto classDef = dyn_cast_or_null<ClassLike>(
       symbolTable.lookupNearestSymbolFrom(*this, className));
   if (!classDef)
-    return emitOpError("class \"") << className << "\" was not found";
+    return emitOpError("class \"") << className.getValue() << "\" was not found";
 
   // Verify the field exists in the class.
   auto fieldName = getFieldAttr();
