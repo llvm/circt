@@ -1,17 +1,20 @@
-// RUN: domaintool --module Foo --domain ClockDomain,A,"" --domain ClockDomain,B,"" --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
-// RUN: domaintool --module Foo --domain ClockDomain,A,"" --domain ClockDomain,B,"" --assign 0 --assign 1 --sifive-clock-domain-async=A %s | FileCheck %s --check-prefixes=CHECK,ASYNC
-// RUN: domaintool --module Foo --domain ClockDomain,A,"" --domain ClockDomain,B,"" --assign 0 --assign 1 --sifive-clock-domain-static=A %s | FileCheck %s --check-prefixes=CHECK,STATIC
-// RUN: domaintool --module Foo --domain ClockDomain,A,"" --domain ClockDomain,B,A --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,SYNC
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,B,synchronous --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,DEFAULT
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,B,synchronous --assign 0 --assign 1 --sifive-clock-domain-async=A %s | FileCheck %s --check-prefixes=CHECK,ASYNC
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,B,synchronous --assign 0 --assign 1 --sifive-clock-domain-static=A %s | FileCheck %s --check-prefixes=CHECK,STATIC
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,A,synchronous --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,SYNC
+// RUN: domaintool --module Foo --domain ClockDomain,A,A,synchronous --domain ClockDomain,B,A,rational --assign 0 --assign 1 %s | FileCheck %s --check-prefixes=CHECK,RATIONAL
 
 om.class @ClockDomain(
   %basepath: !om.frozenbasepath,
   %name_in: !om.string,
-  %synchronousTo_in: !om.string
+  %source_in: !om.string,
+  %relationship_in: !om.string
 )  -> (
   name_out: !om.string,
-  synchronousTo_out: !om.string
+  source_out: !om.string,
+  relationship_out: !om.string
 ) {
-  om.class.fields %name_in, %synchronousTo_in : !om.string, !om.string
+  om.class.fields %name_in, %source_in, %relationship_in : !om.string, !om.string, !om.string
 }
 
 om.class @ClockDomain_out(
@@ -99,6 +102,23 @@ om.class @Foo_Class(
 // SYNC-NEXT:          ]
 // SYNC-NEXT:        }
 // SYNC-NEXT:      ],
+// RATIONAL-NEXT:  "clocks": [
+// RATIONAL-NEXT:    {
+// RATIONAL-NEXT:      "name_pattern": "A",
+// RATIONAL-NEXT:      "define_period": "A_PERIOD",
+// RATIONAL-NEXT:      "clock_relationships": []
+// RATIONAL-NEXT:    },
+// RATIONAL-NEXT:    {
+// RATIONAL-NEXT:      "name_pattern": "B",
+// RATIONAL-NEXT:      "define_period": "B_PERIOD",
+// RATIONAL-NEXT:      "clock_relationships": [
+// RATIONAL-NEXT:        {
+// RATIONAL-NEXT:          "name_pattern": "A",
+// RATIONAL-NEXT:          "relationship": "sync"
+// RATIONAL-NEXT:        }
+// RATIONAL-NEXT:      ]
+// RATIONAL-NEXT:    }
+// RATIONAL-NEXT:  ],
 //
 // DEFAULT-NEXT:   "static_ports": [],
 // ASYNC-NEXT:     "static_ports": [],
@@ -107,6 +127,7 @@ om.class @Foo_Class(
 // STATIC-NEXT:      "b"
 // STATIC-NEXT:    ],
 // SYNC-NEXT:      "static_ports": [],
+// RATIONAL-NEXT:  "static_ports": [],
 //
 // DEFAULT-NEXT:   "asynchronous_ports": [],
 // ASYNC-NEXT:     "asynchronous_ports": [
@@ -115,6 +136,7 @@ om.class @Foo_Class(
 // ASYNC-NEXT:     ],
 // STATIC-NEXT:    "asynchronous_ports": [],
 // SYNC-NEXT:      "asynchronous_ports": [],
+// RATIONAL-NEXT:  "asynchronous_ports": [],
 //
 // DEFAULT-NEXT:   "synchronous_ports": [
 // DEFAULT-NEXT:     {
@@ -172,5 +194,23 @@ om.class @Foo_Class(
 // SYNC-NEXT:          "comment": null
 // SYNC-NEXT:        }
 // SYNC-NEXT:      ]
+// RATIONAL-NEXT:  "synchronous_ports": [
+// RATIONAL-NEXT:    {
+// RATIONAL-NEXT:      "name_pattern": "A",
+// RATIONAL-NEXT:      "port_patterns": [
+// RATIONAL-NEXT:        "a",
+// RATIONAL-NEXT:        "b"
+// RATIONAL-NEXT:      ],
+// RATIONAL-NEXT:      "comment": null
+// RATIONAL-NEXT:    },
+// RATIONAL-NEXT:    {
+// RATIONAL-NEXT:      "name_pattern": "B",
+// RATIONAL-NEXT:      "port_patterns": [
+// RATIONAL-NEXT:        "a",
+// RATIONAL-NEXT:        "b"
+// RATIONAL-NEXT:      ],
+// RATIONAL-NEXT:      "comment": null
+// RATIONAL-NEXT:    }
+// RATIONAL-NEXT:  ]
 //
 // CHECK-NEXT:   }
