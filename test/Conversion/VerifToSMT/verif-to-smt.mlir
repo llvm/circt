@@ -457,3 +457,37 @@ func.func @multi_nondet() -> () {
   }
   return
 }
+
+// -----
+
+// CHECK-LABEL: func.func @bmc_debug_anchors_to_names() -> i1 {
+// CHECK:         smt.declare_fun "port_data" : !smt.bv<8>
+// CHECK:         smt.declare_fun "state_data" : !smt.bv<8>
+// CHECK:         smt.declare_fun "port_data" : !smt.bv<8>
+// CHECK-NOT:     dbg.variable
+
+func.func @bmc_debug_anchors_to_names() -> i1 {
+  %bmc = verif.bmc bound 2 num_regs 1 initial_values [unit]
+  init {
+    %c0_i1 = hw.constant 0 : i1
+    %clk = seq.to_clock %c0_i1
+    verif.yield %clk : !seq.clock
+  }
+  loop {
+  ^bb0(%clk: !seq.clock):
+    %fromClock = seq.from_clock %clk
+    %c-1_i1 = hw.constant -1 : i1
+    %nclk = comb.xor %fromClock, %c-1_i1 : i1
+    %toClock = seq.to_clock %nclk
+    verif.yield %toClock : !seq.clock
+  }
+  circuit {
+  ^bb0(%clk: !seq.clock, %data: i8, %state: i8):
+    dbg.variable "port_data", %data : i8
+    dbg.variable "state_data", %state : i8
+    %true = hw.constant true
+    verif.assert %true : i1
+    verif.yield %data, %state : i8, i8
+  }
+  return %bmc : i1
+}

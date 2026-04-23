@@ -8,6 +8,7 @@
 
 #include "circt/Conversion/VerifToSMT.h"
 #include "circt/Conversion/HWToSMT.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/Namespace.h"
@@ -20,6 +21,7 @@
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 
 namespace circt {
@@ -376,6 +378,22 @@ struct VerifBoundedModelCheckingOpConversion
       return success();
     }
 
+    // Collect names anchored to BMC circuit arguments via `dbg.variable` and
+    // erase the debug anchors before continuing SMT lowering.
+    SmallDenseMap<unsigned, StringAttr> debugArgNames;
+    SmallVector<debug::VariableOp> debugOpsToErase;
+    for (auto varOp : op.getCircuit().front().getOps<debug::VariableOp>()) {
+      auto arg = dyn_cast<BlockArgument>(varOp.getValue());
+      if (!arg || arg.getOwner() != &op.getCircuit().front())
+        continue;
+      if (varOp.getName().empty())
+        continue;
+      debugArgNames.try_emplace(arg.getArgNumber(), varOp.getNameAttr());
+      debugOpsToErase.push_back(varOp);
+    }
+    for (auto varOp : debugOpsToErase)
+      rewriter.eraseOp(varOp);
+
     SmallVector<Type> oldLoopInputTy(op.getLoop().getArgumentTypes());
     SmallVector<Type> oldCircuitInputTy(op.getCircuit().getArgumentTypes());
     // TODO: the init and loop regions should be able to be concrete instead of
@@ -482,13 +500,16 @@ struct VerifBoundedModelCheckingOpConversion
         }
       }
       // Give a meaningful name prefix based on the argument's role.
-      std::string name;
-      if (curIndex >= regStartIdx)
-        name = ("reg_" + Twine(curIndex - regStartIdx)).str();
-      else
-        name = ("input_" + Twine(curIndex)).str();
-      inputDecls.push_back(smt::DeclareFunOp::create(
-          rewriter, loc, newTy, rewriter.getStringAttr(name)));
+      auto name = debugArgNames.lookup(curIndex);
+      if (!name) {
+        if (curIndex >= regStartIdx)
+          name = rewriter.getStringAttr(
+              ("reg_" + Twine(curIndex - regStartIdx)).str());
+        else
+          name = rewriter.getStringAttr(("input_" + Twine(curIndex)).str());
+      }
+      inputDecls.push_back(
+          smt::DeclareFunOp::create(rewriter, loc, newTy, name));
     }
 
     auto numStateArgs = initVals.size() - initIndex;
@@ -601,9 +622,12 @@ struct VerifBoundedModelCheckingOpConversion
             if (isa<seq::ClockType>(oldTy)) {
               newDecls.push_back(loopVals[loopIndex++]);
             } else {
-              auto name = ("input_" + Twine(inputIdx)).str();
-              newDecls.push_back(smt::DeclareFunOp::create(
-                  builder, loc, newTy, builder.getStringAttr(name)));
+              auto name = debugArgNames.lookup(inputIdx);
+              if (!name)
+                name =
+                    builder.getStringAttr(("input_" + Twine(inputIdx)).str());
+              newDecls.push_back(
+                  smt::DeclareFunOp::create(builder, loc, newTy, name));
             }
           }
 

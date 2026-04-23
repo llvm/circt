@@ -6,6 +6,7 @@ add_circt_library(CIRCTBMCTransforms
   CIRCTBMCTransformsIncGen
 
   LINK_LIBS PUBLIC
+  CIRCTDebug
   CIRCTHW
   CIRCTSeq
   CIRCTComb
