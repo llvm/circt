@@ -156,8 +156,8 @@ jobs:
         shell: bash
         run: |
           on_off() { case "${1,,}" in on|true) echo "ON" ;; *) echo "OFF" ;; esac; }
-          echo "cmake_build_type=${INPUT_BUILD_TYPE,,}" >> $GITHUB_OUTPUT
-          echo "cmake_c_compiler=${INPUT_COMPILER,,}" >> $GITHUB_OUTPUT
+          echo "cmake_build_type=$(echo "${INPUT_BUILD_TYPE}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "cmake_c_compiler=$(echo "${INPUT_COMPILER}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           echo "build_shared_libs=$(on_off "${INPUT_SHARED}")" >> $GITHUB_OUTPUT
           echo "llvm_enable_assertions=$(on_off "${INPUT_ASSERTIONS}")" >> $GITHUB_OUTPUT
         env:
