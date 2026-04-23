@@ -155,9 +155,15 @@ jobs:
         id: canonicalize
         shell: bash
         run: |
-          on_off() { case "${1,,}" in on|true) echo "ON" ;; *) echo "OFF" ;; esac; }
-          echo "cmake_build_type=${INPUT_BUILD_TYPE,,}" >> $GITHUB_OUTPUT
-          echo "cmake_c_compiler=${INPUT_COMPILER,,}" >> $GITHUB_OUTPUT
+          on_off() {
+            val=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+            case "$val" in
+              on|true) echo "ON" ;;
+              *) echo "OFF" ;;
+            esac
+          }
+          echo "cmake_build_type=$(echo "${INPUT_BUILD_TYPE}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "cmake_c_compiler=$(echo "${INPUT_COMPILER}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           echo "build_shared_libs=$(on_off "${INPUT_SHARED}")" >> $GITHUB_OUTPUT
           echo "llvm_enable_assertions=$(on_off "${INPUT_ASSERTIONS}")" >> $GITHUB_OUTPUT
         env:
@@ -267,7 +273,7 @@ jobs:
         id: setup-macos
         if: runner.os == 'macOS'
         run: |
-          brew install iverilog gnu-tar ninja z3
+          brew install icarus-verilog gnu-tar ninja z3
           echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON" >> "$GITHUB_OUTPUT"
       - name: Integration Test Setup (MacOS)
         if: inputs.run_integration_tests && runner.os == 'macOS'
