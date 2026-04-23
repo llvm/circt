@@ -250,7 +250,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Lower the ref.resolve and ref.send ops and remove the RefType ports.
   // LowerToHW cannot handle RefType so, this pass must be run to remove all
   // RefType ports and ops.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMR());
+//   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerXMR());
 
   // Layer lowering passes.  Move operations into layers when possible and
   // remove layers by converting them to other constructs.  This lowering
@@ -308,6 +308,7 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
                                        opt.getVerificationFlavor(),
                                        opt.shouldLowerToCore()));
 
+  pm.addPass(hw::createHWLowerXMR());
   if (!opt.shouldDisableOptimization()) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();
     modulePM.addPass(mlir::createCSEPass());
