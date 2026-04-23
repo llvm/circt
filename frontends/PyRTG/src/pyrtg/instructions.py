@@ -81,7 +81,7 @@ class Instruction(SequenceDeclaration):
   def __repr__(self):
     return f"Instruction<{self.name}, {self.arg_types}, {self.side_effects}>"
 
-  def __call__(self, *args: Value) -> Union[Value, List[Value]]:
+  def __call__(self, *args: Value) -> Union[Value, Tuple[Value, ...]]:
     """
     Embeds the instruction into the instruction stream with the given arguments.
 
@@ -97,7 +97,7 @@ class Instruction(SequenceDeclaration):
                  match the number of READ and READ_WRITE side effects, unless all
                  operands (including WRITE operands) are being passed explicitly.
     :return: Returns operands with WRITE or READ_WRITE side effects. Returns a single
-             Value if there's one such operand, or a List[Value] if there are zero
+             Value if there's one such operand, or a Tuple[Value, ...] if there are zero
              or multiple such operands.
     """
 
@@ -112,7 +112,7 @@ class Instruction(SequenceDeclaration):
 
       if len(results) == 1:
         return results[0]
-      return results
+      return tuple(results)
 
     num_non_write_operands = sum(
         1 for se in self.side_effects if se != SideEffect.WRITE)
@@ -140,7 +140,7 @@ class Instruction(SequenceDeclaration):
 
     if len(results) == 1:
       return results[0]
-    return results
+    return tuple(results)
 
   def as_seq(self) -> Sequence:
     """
