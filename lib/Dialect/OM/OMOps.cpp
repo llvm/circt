@@ -936,6 +936,96 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// IntegerAndOp / IntegerOrOp / IntegerXorOp
+//===----------------------------------------------------------------------===//
+
+static OpFoldResult foldIntegerBitwise(IntegerBinaryOp op, Attribute lhsAttr,
+                                       Attribute rhsAttr) {
+  auto lhsInt = dyn_cast_or_null<mlir::IntegerAttr>(lhsAttr);
+  auto rhsInt = dyn_cast_or_null<mlir::IntegerAttr>(rhsAttr);
+  if (!lhsInt || !rhsInt)
+    return {};
+  APSInt lhsVal(lhsInt.getValue());
+  APSInt rhsVal(rhsInt.getValue());
+  auto result = op.evaluateIntegerOperation(lhsVal, rhsVal);
+  if (failed(result))
+    return {};
+  return mlir::IntegerAttr::get(
+      lhsInt.getType(), result->extOrTrunc(lhsInt.getValue().getBitWidth()));
+}
+
+// Returns true if attr is an IntegerAttr whose value is all-zeros.
+static bool isZeroInt(Attribute a) {
+  auto i = dyn_cast_or_null<mlir::IntegerAttr>(a);
+  return i && i.getValue().isZero();
+}
+
+// Returns true if attr is an IntegerAttr whose value is all-ones.
+static bool isAllOnesInt(Attribute a) {
+  auto i = dyn_cast_or_null<mlir::IntegerAttr>(a);
+  return i && i.getValue().isAllOnes();
+}
+
+FailureOr<APSInt> IntegerAndOp::evaluateIntegerOperation(const APSInt &lhs,
+                                                         const APSInt &rhs) {
+  return success(APSInt(lhs & rhs, /*isUnsigned=*/false));
+}
+
+OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
+  if (auto result =
+          foldIntegerBitwise(*this, adaptor.getLhs(), adaptor.getRhs()))
+    return result;
+  // AND with all-zeros is always zero.
+  if (isZeroInt(adaptor.getLhs()) || isZeroInt(adaptor.getRhs()))
+    return mlir::IntegerAttr::get(getResult().getType(),
+                                  APInt::getZero(getType().getWidth()));
+  // AND with all-ones is identity.
+  if (isAllOnesInt(adaptor.getLhs()))
+    return getRhs();
+  if (isAllOnesInt(adaptor.getRhs()))
+    return getLhs();
+  return {};
+}
+
+FailureOr<APSInt> IntegerOrOp::evaluateIntegerOperation(const APSInt &lhs,
+                                                        const APSInt &rhs) {
+  return success(APSInt(lhs | rhs, /*isUnsigned=*/false));
+}
+
+OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
+  if (auto result =
+          foldIntegerBitwise(*this, adaptor.getLhs(), adaptor.getRhs()))
+    return result;
+  // OR with all-ones is always all-ones.
+  if (isAllOnesInt(adaptor.getLhs()) || isAllOnesInt(adaptor.getRhs()))
+    return mlir::IntegerAttr::get(getResult().getType(),
+                                  APInt::getAllOnes(getType().getWidth()));
+  // OR with all-zeros is identity.
+  if (isZeroInt(adaptor.getLhs()))
+    return getRhs();
+  if (isZeroInt(adaptor.getRhs()))
+    return getLhs();
+  return {};
+}
+
+FailureOr<APSInt> IntegerXorOp::evaluateIntegerOperation(const APSInt &lhs,
+                                                         const APSInt &rhs) {
+  return success(APSInt(lhs ^ rhs, /*isUnsigned=*/false));
+}
+
+OpFoldResult IntegerXorOp::fold(FoldAdaptor adaptor) {
+  if (auto result =
+          foldIntegerBitwise(*this, adaptor.getLhs(), adaptor.getRhs()))
+    return result;
+  // XOR with all-zeros is identity.
+  if (isZeroInt(adaptor.getLhs()))
+    return getRhs();
+  if (isZeroInt(adaptor.getRhs()))
+    return getLhs();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // UnknownValueOp
 //===----------------------------------------------------------------------===//
 

@@ -568,6 +568,61 @@ def PropEqOp : BinaryEqualityOpBase<"prop.eq"> {
   let hasFolder = 1;
 }
 
+class IntegerBitwiseOpBase<string mnemonic, list<Trait> traits = []> :
+    OMOp<mnemonic, [
+      Pure,
+      SameOperandsAndResultType,
+      DeclareOpInterfaceMethods<IntegerBinaryInterface>
+    ] # traits> {
+  let arguments = (ins AnyInteger:$lhs, AnyInteger:$rhs);
+  let results = (outs AnyInteger:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($result)";
+  let hasFolder = 1;
+}
+
+def IntegerAndOp : IntegerBitwiseOpBase<"integer.and", [Commutative]> {
+  let summary = "Bitwise AND of two integer OM values";
+  let description = [{
+    Compute the bitwise AND of two integer OM values of the same width,
+    returning an integer result of the same width.
+
+    Example:
+    ```mlir
+    %2 = om.integer.and %0, %1 : i1
+    %3 = om.integer.and %4, %5 : i8
+    ```
+  }];
+}
+
+def IntegerOrOp : IntegerBitwiseOpBase<"integer.or", [Commutative]> {
+  let summary = "Bitwise OR of two integer OM values";
+  let description = [{
+    Compute the bitwise OR of two integer OM values of the same width,
+    returning an integer result of the same width.
+
+    Example:
+    ```mlir
+    %2 = om.integer.or %0, %1 : i1
+    %3 = om.integer.or %4, %5 : i8
+    ```
+  }];
+}
+
+def IntegerXorOp : IntegerBitwiseOpBase<"integer.xor", [Commutative]> {
+  let summary = "Bitwise XOR of two integer OM values";
+  let description = [{
+    Compute the bitwise XOR of two integer OM values of the same width,
+    returning an integer result of the same width.  NOT can be expressed
+    as \`xor(a, all-ones)\`.
+
+    Example:
+    ```mlir
+    %2 = om.integer.xor %0, %1 : i1
+    %3 = om.integer.xor %4, %5 : i8
+    ```
+  }];
+}
+
 def PropertyAssertOp : OMOp<"property_assert"> {
   let summary = "Assert that a boolean property holds at evaluation time";
   let description = [{
