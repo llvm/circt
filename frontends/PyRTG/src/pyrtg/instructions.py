@@ -62,6 +62,34 @@ class Instruction(SequenceDeclaration):
     return self.side_effects.count(SideEffect.READ) + self.side_effects.count(
         SideEffect.READ_WRITE)
 
+  def num_write_effects(self) -> int:
+    """
+    Returns the number of operands of this instruction.
+    """
+
+    return self.side_effects.count(SideEffect.WRITE) + self.side_effects.count(
+        SideEffect.READ_WRITE)
+
+  def get_read_arg_types(self) -> List[Type]:
+    """
+    Returns the types of the operands with READ or READ_WRITE side effects.
+    """
+
+    return [
+        t for t, se in zip(self.arg_types, self.side_effects)
+        if se in [SideEffect.READ, SideEffect.READ_WRITE]
+    ]
+
+  def get_write_arg_types(self) -> List[Type]:
+    """
+    Returns the types of the operands with WRITE or READ_WRITE side effects.
+    """
+
+    return [
+        t for t, se in zip(self.arg_types, self.side_effects)
+        if se in [SideEffect.WRITE, SideEffect.READ_WRITE]
+    ]
+
   def get_mnemonic(self) -> Optional[str]:
     """
     Returns the ISA mnemonic for this instruction, if available.
