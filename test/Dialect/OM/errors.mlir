@@ -1,4 +1,4 @@
-// RUN: circt-opt -om-verify-object-fields %s -verify-diagnostics -split-input-file
+// RUN: circt-opt %s -verify-diagnostics -split-input-file
 
 om.class @Class() {
   // expected-error @+1 {{'om.object' op result type ("Bar") does not match referred to class ("Foo")}}
@@ -49,22 +49,8 @@ om.class @Class1() {
 
 om.class @Class2() {
   %0 = om.object @Class1() : () -> !om.class.type<@Class1>
-  // expected-error @+1 {{'om.object.field' op referenced non-existent field @foo}}
-  om.object.field %0, [@foo] : (!om.class.type<@Class1>) -> i1
-  om.class.fields
-}
-
-// -----
-
-om.class @Class1() -> (foo: i1) {
-  %0 = om.constant 1 : i1
-  om.class.fields %0 : i1
-}
-
-om.class @Class2() {
-  %0 = om.object @Class1() : () -> !om.class.type<@Class1>
-  // expected-error @+1 {{'om.object.field' op nested field access into @foo requires a ClassType, but found 'i1'}}
-  om.object.field %0, [@foo, @bar] : (!om.class.type<@Class1>) -> i1
+  // expected-error @+1 {{'om.object.field' op referenced non-existent field "foo"}}
+  om.object.field %0["foo"] : (!om.class.type<@Class1>) -> i1
   om.class.fields
 }
 
@@ -78,7 +64,7 @@ om.class @Class1() -> (foo: i1) {
 om.class @Class2(%arg0: i1) {
   %0 = om.object @Class1() : () -> !om.class.type<@Class1>
   // expected-error @+1 {{'om.object.field' op expected type 'i2', but accessed field has type 'i1'}}
-  om.object.field %0, [@foo] : (!om.class.type<@Class1>) -> i2
+  om.object.field %0["foo"] : (!om.class.type<@Class1>) -> i2
   om.class.fields
 }
 
@@ -134,8 +120,8 @@ om.class @DupField(%0: i1) -> (foo: i1, foo: i1){
 // -----
 
 om.class @UnknownClass(%arg: !om.class.type<@Unknwon>) {
-  // expected-error @+1 {{class @Unknwon was not found}}
-  om.object.field %arg, [@unknown]: (!om.class.type<@Unknwon>) -> i1
+  // expected-error @+1 {{class "Unknwon" was not found}}
+  om.object.field %arg["unknown"]: (!om.class.type<@Unknwon>) -> i1
   om.class.fields
 }
 

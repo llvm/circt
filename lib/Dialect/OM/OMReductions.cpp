@@ -156,12 +156,8 @@ struct OMClassFieldPruner : public OpReduction<ClassOp> {
         if (!fieldOp)
           continue;
 
-        auto fieldPath = fieldOp.getFieldPath();
-        if (fieldPath.empty())
-          continue;
-
         // Mark the accessed field as used.
-        usedFields.insert(cast<FlatSymbolRefAttr>(fieldPath[0]).getAttr());
+        usedFields.insert(fieldOp.getFieldAttr());
       }
     });
 

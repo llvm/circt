@@ -41,7 +41,7 @@ firrtl.circuit "Component" {
     %obj0_someReference_in = firrtl.object.subfield %obj0[someReference_in] : !firrtl.class<@Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
     firrtl.propassign %obj0_someReference_in, %obj1 : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
 
-    // CHECK: %[[REF:.+]] = om.object.field %[[OBJ0]], [@someReference] : (!om.class.type<@Class_0>) -> !om.class.type<@Class_1>
+    // CHECK: %[[REF:.+]] = om.object.field %[[OBJ0]]["someReference"] : (!om.class.type<@Class_0>) -> !om.class.type<@Class_1>
     // CHECK: om.class.fields %[[REF]] : !om.class.type<@Class_1>
     %obj0_someReference = firrtl.object.subfield %obj0[someReference] : !firrtl.class<@Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
     firrtl.propassign %obj_0_out, %obj0_someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
@@ -51,7 +51,7 @@ firrtl.circuit "Component" {
   // CHECK-SAME: -> (output: !om.integer)
   firrtl.class @ReadOutputPort(out %output : !firrtl.integer) {
     // CHECK: %[[OBJ:.+]] = om.object @Class_1(%basepath) : (!om.basepath) -> !om.class.type<@Class_1>
-    // CHECK: %[[FIELD:.+]] = om.object.field %[[OBJ]], [@someInt] : (!om.class.type<@Class_1>) -> !om.integer
+    // CHECK: %[[FIELD:.+]] = om.object.field %[[OBJ]]["someInt"] : (!om.class.type<@Class_1>) -> !om.integer
     // CHECK: om.class.fields %[[FIELD]] : !om.integer
     %obj = firrtl.object @Class_1(out someInt: !firrtl.integer)
     %0 = firrtl.object.subfield %obj[someInt] : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
@@ -336,12 +336,12 @@ firrtl.circuit "ModuleInstances" {
   // CHECK: om.class @ModuleInstances_Class(%basepath: !om.basepath, %[[IN_PROP1:.+]]: !om.string) -> (outputProp: !om.string)
   // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[EXT_NLA]]
   // CHECK:   %[[O0:.+]] = om.object @ExtModule_Class(%[[BASEPATH]], %[[IN_PROP1]])
-  // CHECK:   %[[F0:.+]] = om.object.field %[[O0]], [@outputProp]
+  // CHECK:   %[[F0:.+]] = om.object.field %[[O0]]["outputProp"]
   // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[EXTDEFNAME_NLA]]
   // CHECK:   om.object @TheRealName_Class
   // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[MOD_NLA]]
   // CHECK:   %[[O1:.+]] = om.object @Module_Class(%[[BASEPATH]], %[[F0]])
-  // CHECK:   %[[F1:.+]] = om.object.field %[[O1]], [@outputProp]
+  // CHECK:   %[[F1:.+]] = om.object.field %[[O1]]["outputProp"]
   // CHECK:   om.class.fields %[[F1]] : !om.string
 }
 
@@ -549,6 +549,8 @@ firrtl.circuit "PathTargetReplaced" {
     %path = firrtl.path instance distinct[0]<>
   }
   firrtl.module private @WillBeReplaced(out %output: !firrtl.integer) {
+    %c = firrtl.integer 42
+    firrtl.propassign %output, %c : !firrtl.integer
   }
 }
 

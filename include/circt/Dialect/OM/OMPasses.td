@@ -25,13 +25,6 @@ def LinkModules: Pass<"om-link-modules", "mlir::ModuleOp"> {
   }];
 }
 
-def VerifyObjectFields: Pass<"om-verify-object-fields"> {
-  let summary = "Verify fields of ObjectOp are valid";
-  let description = [{
-    Verify object fields are valid.
-  }];
-}
-
 def StripOMPass : Pass<"strip-om", "mlir::ModuleOp"> {
   let summary = "Remove OM information";
   let description = [{
