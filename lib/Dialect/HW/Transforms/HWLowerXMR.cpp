@@ -52,6 +52,7 @@ private:
   LogicalResult lowerProbesInModule(HWModuleOp module);
   LogicalResult handleProbeSend(ProbeSendOp send);
   LogicalResult handleProbeResolve(ProbeResolveOp resolve);
+  LogicalResult handleProbeXMRRef(ProbeXMRRefOp xmrRef);
   LogicalResult handleInstance(InstanceOp inst);
   LogicalResult handleProbeRWProbe(ProbeRWProbeOp rwprobe);
   LogicalResult handleProbeSub(ProbeSubOp sub);
@@ -103,6 +104,7 @@ private:
   // Operations to remove
   SmallVector<ProbeSendOp> sendsToRemove;
   SmallVector<ProbeResolveOp> resolvesToRemove;
+  SmallVector<ProbeXMRRefOp> xmrRefsToRemove;
   SmallVector<ProbeDefineOp> definesToRemove;
   SmallVector<WireOp> wiresToRemove;
   SmallVector<ProbeSubOp> subsToRemove;
@@ -169,17 +171,20 @@ void HWLowerXMRPass::runOnOperation() {
   // Remove probe operations after port removal
   // Removal order is critical to avoid use-after-free:
   // 1. Defines first (they use rwprobes and other probe values)
-  // 2. Resolves next (they use subs, wires, sends, and other probe values)
-  // 3. Subs (they are used by resolves, can be chained)
+  // 2. Resolves and XMRRefs next (they use subs, wires, sends, and other probe
+  // values)
+  // 3. Subs (they are used by resolves/xmrRefs, can be chained)
   //    Note: Subs are removed in reverse order they were added, so leaf subs
   //    (those used by other subs) are removed before parent subs
-  // 4. Wires (they are used by resolves, produce probe values)
+  // 4. Wires (they are used by resolves/xmrRefs, produce probe values)
   // 5. Sends (they produce probe values)
   // 6. Other ops last
   for (auto define : definesToRemove)
     define->erase();
   for (auto resolve : resolvesToRemove)
     resolve->erase();
+  for (auto xmrRef : xmrRefsToRemove)
+    xmrRef->erase();
   // Remove subs in reverse order to handle chained subs correctly
   for (auto sub : llvm::reverse(subsToRemove))
     sub->erase();
@@ -194,6 +199,7 @@ void HWLowerXMRPass::runOnOperation() {
 LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
   SmallVector<ProbeSendOp> sends;
   SmallVector<ProbeResolveOp> resolves;
+  SmallVector<ProbeXMRRefOp> xmrRefs;
   SmallVector<InstanceOp> instances;
   SmallVector<ProbeRWProbeOp> rwprobes;
   SmallVector<ProbeSubOp> subs;
@@ -207,6 +213,8 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
       sends.push_back(send);
     else if (auto resolve = dyn_cast<ProbeResolveOp>(op))
       resolves.push_back(resolve);
+    else if (auto xmrRef = dyn_cast<ProbeXMRRefOp>(op))
+      xmrRefs.push_back(xmrRef);
     else if (auto inst = dyn_cast<InstanceOp>(op))
       instances.push_back(inst);
     else if (auto rwprobe = dyn_cast<ProbeRWProbeOp>(op))
@@ -277,6 +285,11 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
   // Handle resolve operations
   for (auto resolve : resolves)
     if (failed(handleProbeResolve(resolve)))
+      return failure();
+
+  // Handle xmr_ref operations
+  for (auto xmrRef : xmrRefs)
+    if (failed(handleProbeXMRRef(xmrRef)))
       return failure();
 
   return success();
@@ -381,8 +394,16 @@ LogicalResult HWLowerXMRPass::handleProbeSend(ProbeSendOp send) {
   Value xmrDef = send.getInput();
 
   // Check for zero-width probes and skip them
-  auto probeType = cast<ProbeType>(send.getResult().getType());
-  if (isZeroWidth(probeType.getInnerType())) {
+  // ProbeSendOp can produce either ProbeType or RWProbeType (when forceable)
+  Type innerType;
+  if (auto probeType = dyn_cast<ProbeType>(send.getResult().getType()))
+    innerType = probeType.getInnerType();
+  else if (auto rwProbeType = dyn_cast<RWProbeType>(send.getResult().getType()))
+    innerType = rwProbeType.getInnerType();
+  else
+    return send.emitError("probe.send must produce a probe or rwprobe type");
+
+  if (isZeroWidth(innerType)) {
     sendsToRemove.push_back(send);
     return success();
   }
@@ -719,6 +740,45 @@ LogicalResult HWLowerXMRPass::handleProbeResolve(ProbeResolveOp resolve) {
 
   resolve.getResult().replaceAllUsesWith(readValue);
   resolvesToRemove.push_back(resolve);
+  return success();
+}
+
+LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeXMRRefOp xmrRef) {
+  Value ref = xmrRef.getRef();
+
+  // Get the inner type from the probe/rwprobe
+  Type innerType;
+  if (auto probeType = dyn_cast<ProbeType>(ref.getType()))
+    innerType = probeType.getInnerType();
+  else if (auto rwProbeType = dyn_cast<RWProbeType>(ref.getType()))
+    innerType = rwProbeType.getInnerType();
+  else
+    return xmrRef.emitError("xmr_ref operand must be a probe or rwprobe type");
+
+  // Check for zero-width type
+  if (isZeroWidth(innerType)) {
+    // For zero-width types, we can't create a proper inout, but this should
+    // be caught earlier. For now, return an error.
+    return xmrRef.emitError("cannot create XMR reference to zero-width type");
+  }
+
+  auto pathIdx = getRemoteRefSend(ref);
+
+  if (!pathIdx.has_value())
+    return xmrRef.emitError("could not trace probe to send");
+
+  ImplicitLocOpBuilder builder(xmrRef.getLoc(), xmrRef);
+  FlatSymbolRefAttr pathSym;
+  StringAttr suffixSym;
+
+  if (failed(buildHierPath(pathIdx.value(), builder, pathSym, suffixSym)))
+    return failure();
+
+  auto xmrType = sv::InOutType::get(innerType);
+  Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
+
+  xmrRef.getResult().replaceAllUsesWith(xmr);
+  xmrRefsToRemove.push_back(xmrRef);
   return success();
 }
 
