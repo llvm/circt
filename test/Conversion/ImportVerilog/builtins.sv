@@ -542,6 +542,15 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
   past_data: assert property (@(posedge clk_i) data_i == $past(data_i));
 
+  // CHECK: moore.procedure always {
+  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK: [[RED:%.+]] = moore.reduce_xor [[D]] : l8 -> l1
+  // CHECK: [[X:%.+]] = moore.constant bX : l1
+  // CHECK: [[CEQ:%.+]] = moore.case_eq [[RED]], [[X]] : l1
+  // CHECK: [[CEQ_I1:%.+]] = moore.to_builtin_int [[CEQ]] : i1
+  // CHECK: ltl.clock [[CEQ_I1]]
+  isunknown_data: assert property (@(posedge clk_i) $isunknown(data_i));
+
 endmodule
 
 // CHECK-LABEL: func.func private @StringBuiltins(

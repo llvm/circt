@@ -7,15 +7,18 @@
 //===----------------------------------------------------------------------===//
 
 #include "slang/ast/expressions/AssertionExpr.h"
+
 #include "ImportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Support/FVInt.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LLVM.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/parsing/KnownSystemName.h"
 
 #include <optional>
 #include <utility>
@@ -378,6 +381,25 @@ Value Context::convertAssertionCallExpression(
       mlir::emitError(loc) << "expected integer argument for `"
                            << subroutine.name << "`";
       return {};
+    }
+
+    // IsUnknown is handled here rather than below with the others as below it
+    // would have already been converted to an integer type rather than bool
+    // type as here.
+    if (subroutine.knownNameId == slang::parsing::KnownSystemName::IsUnknown) {
+      Value bitVal = value;
+      if (valTy.getWidth() > 1) {
+        auto mooreI1Type =
+            moore::IntType::get(getContext(), 1, valTy.getDomain());
+        bitVal = moore::ReduceXorOp::create(builder, loc, mooreI1Type, value);
+      }
+
+      auto xType =
+          moore::IntType::get(getContext(), 1, moore::Domain::FourValued);
+      auto xValue = FVInt::getAllX(1);
+      auto xConst = moore::ConstantOp::create(builder, loc, xType, xValue);
+
+      return moore::CaseEqOp::create(builder, loc, bitVal, xConst).getResult();
     }
 
     // If the value is four-valued, we need to map it to two-valued before we
