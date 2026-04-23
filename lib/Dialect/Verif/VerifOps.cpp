@@ -14,6 +14,7 @@
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/FoldUtils.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/SymbolTable.h"
@@ -76,12 +77,13 @@ struct RemoveEnableTrue : public OpRewritePattern<Op> {
     if (!enableConst || !enableConst.getValue().isOne())
       return failure();
 
-    rewriter.modifyOpInPlace(op, [&]() { op.getEnableMutable().clear(); });
+    rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().clear(); });
     return success();
   }
 };
 
-/// Delete operation if enable is `false`.
+/// Delete operation if enable is `false`. If the operation has a label,
+/// preserve it as a trivially-true assertion instead of erasing it.
 template <typename Op>
 struct EraseIfEnableFalse : public OpRewritePattern<Op> {
   using OpRewritePattern<Op>::OpRewritePattern;
@@ -91,43 +93,95 @@ struct EraseIfEnableFalse : public OpRewritePattern<Op> {
     Value enable = op.getEnable();
     if (!enable)
       return failure();
-    auto enableConst = enable.getDefiningOp<hw::ConstantOp>();
-    if (!enableConst || !enableConst.getValue().isZero())
+    APInt enableValue;
+    if (!matchPattern(enable, m_ConstantInt(&enableValue)) ||
+        !enableValue.isZero())
       return failure();
 
-    rewriter.eraseOp(op);
-    return success();
+    // If the op has no label, erase it. Otherwise preserve it as a
+    // trivially-satisfied assertion instead of erasing it.
+    if (!op.getLabel()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    // Replace the property with a constant true if it isn't already.
+    bool changed = false;
+    IntegerAttr propAttr;
+    if (!matchPattern(op.getProperty(), m_Constant(&propAttr)) ||
+        !propAttr.getValue().isOne()) {
+      auto trueVal = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, 1));
+      rewriter.modifyOpInPlace(
+          op, [&] { op.getPropertyMutable().assign(trueVal); });
+      changed = true;
+    }
+
+    // Clear the enable.
+    if (op.getEnable()) {
+      rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().clear(); });
+      changed = true;
+    }
+
+    // For clocked ops, replace the clock with a constant if it isn't one.
+    if constexpr (std::is_same_v<Op, ClockedAssertOp> ||
+                  std::is_same_v<Op, ClockedAssumeOp>) {
+      Attribute attr;
+      if (!matchPattern(op.getClock(), m_Constant(&attr))) {
+        auto falseVal =
+            hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, 0));
+        rewriter.modifyOpInPlace(
+            op, [&] { op.getClockMutable().assign(falseVal); });
+        changed = true;
+      }
+    }
+
+    return success(changed);
   }
 };
 
-/// Delete operation if property is `ltl.boolean_constant true` or
-/// `hw.constant true`.
+/// Delete operation if property is a constant true. If the operation has a
+/// label, preserve it instead of erasing it, since the label is expected to be
+/// visible in the output.
 template <typename Op>
 struct EraseIfPropertyTrue : public OpRewritePattern<Op> {
   using OpRewritePattern<Op>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(Op op,
                                 PatternRewriter &rewriter) const override {
-    Value property = op.getProperty();
+    // Check if the property is a constant true.
+    IntegerAttr propAttr;
+    if (!matchPattern(op.getProperty(), m_Constant(&propAttr)) ||
+        !propAttr.getValue().isOne())
+      return failure();
 
-    // Check for ltl.boolean_constant true
-    if (auto boolConst =
-            property.template getDefiningOp<ltl::BooleanConstantOp>()) {
-      if (boolConst.getValueAttr().getValue()) {
-        rewriter.eraseOp(op);
-        return success();
+    // If the op has no label, erase it. Otherwise preserve it instead of
+    // erasing it. The property is already trivially true.
+    if (!op.getLabel()) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    // Clear the enable if present.
+    bool changed = false;
+    if (op.getEnable()) {
+      rewriter.modifyOpInPlace(op, [&] { op.getEnableMutable().clear(); });
+      changed = true;
+    }
+
+    // For clocked ops, replace the clock with a constant if it isn't one.
+    if constexpr (std::is_same_v<Op, ClockedAssertOp> ||
+                  std::is_same_v<Op, ClockedAssumeOp>) {
+      Attribute attr;
+      if (!matchPattern(op.getClock(), m_Constant(&attr))) {
+        auto falseVal =
+            hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, 0));
+        rewriter.modifyOpInPlace(
+            op, [&] { op.getClockMutable().assign(falseVal); });
+        changed = true;
       }
     }
 
-    // Check for hw.constant true (for i1 properties)
-    if (auto hwConst = property.template getDefiningOp<hw::ConstantOp>()) {
-      if (hwConst.getValue().isOne()) {
-        rewriter.eraseOp(op);
-        return success();
-      }
-    }
-
-    return failure();
+    return success(changed);
   }
 };
 
