@@ -8,9 +8,6 @@
 
 #include "slang/ast/expressions/AssertionExpr.h"
 
-#include <optional>
-#include <utility>
-
 #include "ImportVerilogInternals.h"
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
@@ -22,6 +19,9 @@
 #include "mlir/Support/LLVM.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "slang/parsing/KnownSystemName.h"
+
+#include <optional>
+#include <utility>
 
 using namespace circt;
 using namespace ImportVerilog;
