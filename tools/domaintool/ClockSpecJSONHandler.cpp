@@ -43,7 +43,18 @@ cl::list<std::string> sifiveClockDomainStatic{
 namespace circt {
 namespace handlers {
 
-enum class RelationshipKind { Sync, Async, Inferred };
+/// The kind of relationship between two clock domains.
+enum class RelationshipKind {
+  /// A synchronous relationship (integer frequency ratio, same source).
+  Synchronous,
+  /// A rational relationship (non-integer rational frequency ratio, same
+  /// source).
+  Rational,
+  /// An asynchronous relationship (no deterministic phase relationship).
+  Async,
+  /// Relationship is not yet determined.
+  Inferred
+};
 
 struct Relationship {
   StringAttr namePattern;
@@ -84,17 +95,33 @@ public:
                                        objectValue->getField("name_out")->get())
                                        ->getAttr());
 
-      // Insert this domain into its own equivalence class.  Then, if this has a
-      // specified "synchronousTo" relationship to a different domain, merge
-      // this domain into that different domain.
+      // Insert this domain into its own equivalence class.  Then, if this
+      // domain specifies a "source" relationship (either synchronous or
+      // rational), merge it into the same equivalence class as its source.
       syncEquivalenceClasses.insert(name);
-      auto synchronousTo = cast<StringAttr>(
-          cast<om::evaluator::AttributeValue>(
-              objectValue->getField("synchronousTo_out")->get())
-              ->getAttr());
-      if (!synchronousTo.getValue().empty()) {
-        syncEquivalenceClasses.insert(synchronousTo);
-        syncEquivalenceClasses.unionSets(synchronousTo, name);
+
+      auto source =
+          cast<StringAttr>(cast<om::evaluator::AttributeValue>(
+                               objectValue->getField("source_out")->get())
+                               ->getAttr());
+      auto relationship =
+          cast<StringAttr>(cast<om::evaluator::AttributeValue>(
+                               objectValue->getField("relationship_out")->get())
+                               ->getAttr());
+
+      // Track the relationship kind for this domain.
+      RelationshipKind kind = RelationshipKind::Inferred;
+      if (relationship.getValue() == "synchronous")
+        kind = RelationshipKind::Synchronous;
+      else if (relationship.getValue() == "rational")
+        kind = RelationshipKind::Rational;
+
+      // If this domain specifies a source, merge it into that source's
+      // equivalence class and record the relationship.
+      if (!source.getValue().empty()) {
+        syncEquivalenceClasses.insert(source);
+        syncEquivalenceClasses.unionSets(source, name);
+        domainRelationships[name] = {source, kind};
       }
 
       // Add to async ports if the name matches a provided option.
@@ -179,6 +206,9 @@ public:
               for (auto &rel : clock.relationships) {
                 json.object([&] {
                   json.attribute("name_pattern", rel.namePattern.getValue());
+                  // Both synchronous and rational are treated as "sync" in the
+                  // output JSON.  They both imply a deterministic, bounded
+                  // frequency relationship derived from a common source.
                   json.attribute("relationship", "sync");
                 });
               }
@@ -219,12 +249,14 @@ public:
     asyncPorts.clear();
     staticPorts.clear();
     syncPorts.clear();
+    domainRelationships.clear();
     syncEquivalenceClasses = EquivalenceClasses<StringAttr>();
   };
 
 private:
   /// Populate clock relationships based on equivalence class leaders.  If a
-  /// domain's leader is not itself, it has a sync relationship to the leader.
+  /// domain's leader is not itself, it has a sync (or rational, treated the
+  /// same in output) relationship to the leader.
   void populateClockRelationships() {
     for (auto &clock : clocks) {
       auto &name = clock.namePattern;
@@ -236,9 +268,16 @@ private:
 
       StringAttr leader = *leaderIter;
 
-      // If this domain is not the leader, add a sync relationship to the leader
-      if (name != leader)
-        clock.relationships.push_back({leader, RelationshipKind::Sync});
+      // If this domain is not the leader, add a relationship to the leader.
+      // Look up the recorded relationship kind for this domain and fall back to
+      // Synchronous if no explicit entry exists.
+      if (name != leader) {
+        RelationshipKind kind = RelationshipKind::Synchronous;
+        auto it = domainRelationships.find(name);
+        if (it != domainRelationships.end())
+          kind = it->second.relationship;
+        clock.relationships.push_back({leader, kind});
+      }
     }
   }
 
@@ -247,9 +286,15 @@ private:
   SmallVector<StringAttr> staticPorts;
   MapVector<StringAttr, SynchronousData> syncPorts;
 
-  // Equivalence classes tracking all domains that are synchronous to each other
-  // through the transitive closure of synchronousTo relationships.  The leader
-  // of each equivalence class represents the root synchronous domain.
+  /// Map from a domain name to its recorded source relationship (source name +
+  /// kind).  Populated during handle() when a domain declares a non-empty
+  /// source.
+  DenseMap<StringAttr, Relationship> domainRelationships;
+
+  // Equivalence classes tracking all domains that are related to each other
+  // (synchronous or rational) through the transitive closure of source
+  // relationships.  The leader of each equivalence class represents the root
+  // domain.
   EquivalenceClasses<StringAttr> syncEquivalenceClasses;
 };
 
