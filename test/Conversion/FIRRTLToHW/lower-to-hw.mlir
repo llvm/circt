@@ -1524,16 +1524,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %x, %x_ref = firrtl.wire sym @xmr_sym forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
   }
   // CHECK-LABEL: hw.module @ForceRelease(
-  firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>) {
+  firrtl.module @ForceRelease(in %c: !firrtl.uint<1>, in %clock: !firrtl.clock, in %x: !firrtl.uint<4>, in %0: !firrtl.rwprobe<uint<4>>) {
     firrtl.instance r sym @xmr_sym @RefMe()
-    %0 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
     firrtl.ref.force %clock, %c, %0, %x : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
-    %1 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
-    firrtl.ref.force_initial %c, %1, %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
-    %2 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
-    firrtl.ref.release %clock, %c, %2 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
-    %3 = firrtl.xmr.ref @xmrPath : !firrtl.rwprobe<uint<4>>
-    firrtl.ref.release_initial %c, %3 : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    firrtl.ref.force_initial %c, %0, %x : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>, !firrtl.uint<4>
+    firrtl.ref.release %clock, %c, %0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
+    firrtl.ref.release_initial %c, %0 : !firrtl.uint<1>, !firrtl.rwprobe<uint<4>>
   }
   // CHECK-NEXT:  [[CLOCK:%.+]] = seq.from_clock %clock
   // CHECK-NEXT:  hw.instance "r" sym @xmr_sym @RefMe() -> ()
@@ -2014,6 +2010,156 @@ firrtl.circuit "InstanceChoiceTest" {
   }
 }
 
-// TODO: Add FIRRTL probe operation lowering tests
-// These tests are temporarily disabled due to unresolved issues with
-// probe output port handling in the LowerToHW pass.
+// -----
+
+firrtl.circuit "SimpleMemDebug" {
+  // CHECK-LABEL: hw.module @SimpleMemDebug
+  firrtl.module @SimpleMemDebug(in %clock: !firrtl.clock, in %addr: !firrtl.uint<2>) {
+    // Memory with debug port and read port
+    %mem_debug, %mem_read = firrtl.mem Undefined {
+      depth = 4 : i64,
+      name = "mem",
+      portNames = ["debug", "read"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.probe<vector<uint<8>, 4>>,
+        !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>
+
+    // Connect read port
+    %mem_read_addr = firrtl.subfield %mem_read[addr] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.matchingconnect %mem_read_addr, %addr : !firrtl.uint<2>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %mem_read_en = firrtl.subfield %mem_read[en] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.matchingconnect %mem_read_en, %c1_ui1 : !firrtl.uint<1>
+    %mem_read_clk = firrtl.subfield %mem_read[clk] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.matchingconnect %mem_read_clk, %clock : !firrtl.clock
+
+    // CHECK: %mem = seq.firmem
+    // CHECK: seq.firmem.debug_port %mem
+  }
+}
+
+// -----
+
+firrtl.circuit "MemoryDebugPort" {
+  // CHECK-LABEL: hw.module @MemoryDebugPort
+  firrtl.module @MemoryDebugPort(
+    in %clock: !firrtl.clock,
+    in %addr: !firrtl.uint<3>,
+    in %wdata: !firrtl.uint<8>,
+    in %wen: !firrtl.uint<1>,
+    out %mem_probe: !firrtl.probe<vector<uint<8>, 8>>
+  ) {
+    // Memory with debug port, read port, and write port
+    // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <8 x 8>
+    %mem_debug, %mem_read, %mem_write = firrtl.mem Undefined {
+      depth = 8 : i64,
+      name = "mem",
+      portNames = ["debug", "read", "write"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.probe<vector<uint<8>, 8>>,
+        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
+        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    
+    // Connect read port
+    %mem_read_addr = firrtl.subfield %mem_read[addr] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.matchingconnect %mem_read_addr, %addr : !firrtl.uint<3>
+    %mem_read_en = firrtl.subfield %mem_read[en] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.matchingconnect %mem_read_en, %wen : !firrtl.uint<1>
+    %mem_read_clk = firrtl.subfield %mem_read[clk] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.matchingconnect %mem_read_clk, %clock : !firrtl.clock
+    
+    // Connect write port
+    %mem_write_addr = firrtl.subfield %mem_write[addr] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    firrtl.matchingconnect %mem_write_addr, %addr : !firrtl.uint<3>
+    %mem_write_en = firrtl.subfield %mem_write[en] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    firrtl.matchingconnect %mem_write_en, %wen : !firrtl.uint<1>
+    %mem_write_clk = firrtl.subfield %mem_write[clk] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    firrtl.matchingconnect %mem_write_clk, %clock : !firrtl.clock
+    %mem_write_data = firrtl.subfield %mem_write[data] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    firrtl.matchingconnect %mem_write_data, %wdata : !firrtl.uint<8>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %mem_write_mask = firrtl.subfield %mem_write[mask] : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
+    firrtl.matchingconnect %mem_write_mask, %c1_ui1 : !firrtl.uint<1>
+    
+    // Export the debug probe
+    // CHECK: %[[DEBUG_PORT:.+]] = seq.firmem.debug_port %mem : <8 x 8>
+    // CHECK: hw.output %[[DEBUG_PORT]]
+    firrtl.ref.define %mem_probe, %mem_debug : !firrtl.probe<vector<uint<8>, 8>>
+  }
+}
+
+// -----
+
+// Test memory with only debug port (alongside other port types)
+firrtl.circuit "MemoryWithMultiplePorts" {
+  // CHECK-LABEL: hw.module @MemoryWithMultiplePorts
+  firrtl.module @MemoryWithMultiplePorts(
+    in %clock: !firrtl.clock,
+    in %addr: !firrtl.uint<2>,
+    out %dbg1: !firrtl.probe<vector<uint<16>, 4>>,
+    out %dbg2: !firrtl.probe<vector<uint<16>, 4>>
+  ) {
+    // Memory with two debug ports and a read port
+    // CHECK: %mem = seq.firmem 0, 1, undefined, port_order : <4 x 16>
+    %mem_debug1, %mem_debug2, %mem_read = firrtl.mem Undefined {
+      depth = 4 : i64,
+      name = "mem",
+      portNames = ["debug1", "debug2", "read"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.probe<vector<uint<16>, 4>>,
+        !firrtl.probe<vector<uint<16>, 4>>,
+        !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<16>>
+    
+    // Connect read port
+    %mem_read_addr = firrtl.subfield %mem_read[addr] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<16>>
+    firrtl.matchingconnect %mem_read_addr, %addr : !firrtl.uint<2>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %mem_read_en = firrtl.subfield %mem_read[en] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<16>>
+    firrtl.matchingconnect %mem_read_en, %c1_ui1 : !firrtl.uint<1>
+    %mem_read_clk = firrtl.subfield %mem_read[clk] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<16>>
+    firrtl.matchingconnect %mem_read_clk, %clock : !firrtl.clock
+    
+    // Export both debug probes
+    // CHECK: %[[DEBUG_PORT1:.+]] = seq.firmem.debug_port %mem : <4 x 16>
+    // CHECK: %[[DEBUG_PORT2:.+]] = seq.firmem.debug_port %mem : <4 x 16>
+    // CHECK: hw.output %[[DEBUG_PORT1]], %[[DEBUG_PORT2]]
+    firrtl.ref.define %dbg1, %mem_debug1 : !firrtl.probe<vector<uint<16>, 4>>
+    firrtl.ref.define %dbg2, %mem_debug2 : !firrtl.probe<vector<uint<16>, 4>>
+  }
+}
+
+// -----
+
+firrtl.circuit "MemDebugOut" {
+  // CHECK-LABEL: hw.module @MemDebugOut
+  firrtl.module @MemDebugOut(
+    in %clock: !firrtl.clock,
+    in %addr: !firrtl.uint<2>,
+    out %probe_out: !firrtl.probe<vector<uint<8>, 4>>
+  ) {
+    %mem_debug, %mem_read = firrtl.mem Undefined {
+      depth = 4 : i64,
+      name = "mem",
+      portNames = ["debug", "read"],
+      readLatency = 0 : i32,
+      writeLatency = 1 : i32
+    } : !firrtl.probe<vector<uint<8>, 4>>,
+        !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>
+    
+    // Connect read port
+    %mem_read_addr = firrtl.subfield %mem_read[addr] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.matchingconnect %mem_read_addr, %addr : !firrtl.uint<2>
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %mem_read_en = firrtl.subfield %mem_read[en] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.matchingconnect %mem_read_en, %c1_ui1 : !firrtl.uint<1>
+    %mem_read_clk = firrtl.subfield %mem_read[clk] : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data flip: uint<8>>
+    firrtl.matchingconnect %mem_read_clk, %clock : !firrtl.clock
+    
+    // Export the debug probe
+    // CHECK: seq.firmem.debug_port
+    firrtl.ref.define %probe_out, %mem_debug : !firrtl.probe<vector<uint<8>, 4>>
+  }
+}

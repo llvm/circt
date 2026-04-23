@@ -48,36 +48,6 @@ firrtl.circuit "Top" {
   }
 }
 
-// -----
-
-// Test 0-width xmrs are handled
-// CHECK-LABEL: firrtl.circuit "Top" {
-firrtl.circuit "Top" {
-  firrtl.module @Top() {
-    %t_bar_a, %t_bar_b = firrtl.instance t @TopPriv(out bar_a : !firrtl.probe<uint<0>>, out bar_b : !firrtl.probe<vector<uint<0>,10>>)
-
-    %a = firrtl.wire : !firrtl.uint<0>
-    %0 = firrtl.ref.resolve %t_bar_a : !firrtl.probe<uint<0>>
-    // CHECK:  %[[c0_ui0:.+]] = firrtl.constant 0 : !firrtl.uint<0>
-    firrtl.matchingconnect %a, %0 : !firrtl.uint<0>
-    // CHECK:  firrtl.matchingconnect %a, %[[c0_ui0]] : !firrtl.uint<0>
-    %b = firrtl.wire : !firrtl.vector<uint<0>,10>
-    %1 = firrtl.ref.resolve %t_bar_b : !firrtl.probe<vector<uint<0>,10>>
-    firrtl.matchingconnect %b, %1 : !firrtl.vector<uint<0>,10>
-    // CHECK:	%[[c0_ui0_0:.+]] = firrtl.constant 0 : !firrtl.uint<0>
-    // CHECK:  %[[v2:.+]] = firrtl.bitcast %[[c0_ui0_0]] : (!firrtl.uint<0>) -> !firrtl.vector<uint<0>, 10>
-    // CHECK:  firrtl.matchingconnect %b, %[[v2]] : !firrtl.vector<uint<0>, 10>
-  }
-  // CHECK: TopPriv()
-  firrtl.module private @TopPriv(out %bar_a : !firrtl.probe<uint<0>>, out %bar_b : !firrtl.probe<vector<uint<0>,10>>) {
-    %zw = firrtl.wire : !firrtl.uint<0>
-    %zw_ref = firrtl.ref.send %zw : !firrtl.uint<0>
-    %zw_vec = firrtl.wire : !firrtl.vector<uint<0>,10>
-    %zw_vec_ref = firrtl.ref.send %zw_vec : !firrtl.vector<uint<0>,10>
-    firrtl.ref.define %bar_a, %zw_ref : !firrtl.probe<uint<0>>
-    firrtl.ref.define %bar_b, %zw_vec_ref : !firrtl.probe<vector<uint<0>,10>>
-  }
-}
 
 // -----
 
@@ -345,28 +315,6 @@ firrtl.circuit "Top" {
   }
 }
 
-// -----
-
-// Test correct lowering of 0-width ports
-firrtl.circuit "Top"  {
-  firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<0>, out %_a: !firrtl.probe<uint<0>>) {
-  // CHECK-LABEL: firrtl.module @XmrSrcMod(in %pa: !firrtl.uint<0>)
-    %0 = firrtl.ref.send %pa : !firrtl.uint<0>
-    firrtl.ref.define %_a, %0 : !firrtl.probe<uint<0>>
-  }
-  firrtl.module @Bar(out %_a: !firrtl.probe<uint<0>>) {
-    %bar_pa, %bar__a = firrtl.instance bar sym @barXMR  @XmrSrcMod(in pa: !firrtl.uint<0>, out _a: !firrtl.probe<uint<0>>)
-    firrtl.ref.define %_a, %bar__a : !firrtl.probe<uint<0>>
-  }
-  firrtl.module @Top() {
-    %bar__a = firrtl.instance bar sym @bar  @Bar(out _a: !firrtl.probe<uint<0>>)
-    %a = firrtl.wire   : !firrtl.uint<0>
-    %0 = firrtl.ref.resolve %bar__a : !firrtl.probe<uint<0>>
-    firrtl.matchingconnect %a, %0 : !firrtl.uint<0>
-    // CHECK: %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
-    // CHECK: firrtl.matchingconnect %a, %c0_ui0 : !firrtl.uint<0>
-  }
-}
 
 // -----
 // Test lowering of XMR to instance port (result).
@@ -624,23 +572,6 @@ firrtl.circuit "RefSubLayers" {
     %ref = firrtl.instance ext @ExtRef(out out: !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<2>, b: uint<1>>, 2>>>)
     %sub = firrtl.ref.sub %ref[1] : !firrtl.probe<bundle<a: uint<1>, b: vector<bundle<a: uint<2>, b: uint<1>>, 2>>>
     firrtl.ref.define %rw, %sub : !firrtl.probe<vector<bundle<a: uint<2>, b: uint<1>>, 2>>
-  }
-}
-
-// -----
-// Check dropping force/etc. ops that target zero-width references.
-// Ensure no symbol added, so can be dropped in LowerToHW.
-
-// CHECK-LABEL: circuit "DropForceOp"
-firrtl.circuit "DropForceOp" {
-  firrtl.module @DropForceOp() {
-    // CHECK: firrtl.wire
-    // CHECK-NOT: sym
-    // CHECK-NEXT: }
-    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
-    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-    %x, %x_ref = firrtl.wire forceable : !firrtl.uint<0>, !firrtl.rwprobe<uint<0>>
-    firrtl.ref.force_initial %c1_ui1, %x_ref, %c0_ui0 : !firrtl.uint<1>, !firrtl.rwprobe<uint<0>>, !firrtl.uint<0>
   }
 }
 

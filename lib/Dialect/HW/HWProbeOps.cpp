@@ -311,6 +311,67 @@ LogicalResult ProbeDefineOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// ProbeXMRRefOp
+//===----------------------------------------------------------------------===//
+
+ParseResult ProbeXMRRefOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand ref;
+  Type refType;
+
+  if (parser.parseOperand(ref) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(refType))
+    return failure();
+
+  // Resolve the operand
+  if (parser.resolveOperand(ref, refType, result.operands))
+    return failure();
+
+  // Extract the inner type from the probe type and create InOutType
+  auto probeType = dyn_cast<ProbeType>(refType);
+  if (!probeType) {
+    auto rwProbeType = dyn_cast<RWProbeType>(refType);
+    if (!rwProbeType)
+      return parser.emitError(parser.getNameLoc(),
+                              "expected probe or rwprobe type");
+    result.addTypes(InOutType::get(rwProbeType.getInnerType()));
+  } else {
+    result.addTypes(InOutType::get(probeType.getInnerType()));
+  }
+
+  return success();
+}
+
+void ProbeXMRRefOp::print(OpAsmPrinter &p) {
+  p << " " << getRef();
+  p.printOptionalAttrDict((*this)->getAttrs());
+  p << " : " << getRef().getType();
+}
+
+LogicalResult ProbeXMRRefOp::verify() {
+  // Get the probe type from the input
+  auto probeType = dyn_cast<ProbeType>(getRef().getType());
+  auto rwProbeType = dyn_cast<RWProbeType>(getRef().getType());
+
+  if (!probeType && !rwProbeType)
+    return emitOpError("input must be a probe or rwprobe type");
+
+  // Extract inner type from the probe
+  Type innerType =
+      probeType ? probeType.getInnerType() : rwProbeType.getInnerType();
+
+  // Verify that the result type is an inout of the inner type
+  auto inoutType = dyn_cast<InOutType>(getResult().getType());
+  if (!inoutType)
+    return emitOpError("result must be an inout type");
+
+  if (inoutType.getElementType() != innerType)
+    return emitOpError("result inout element type must match probe inner type");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Verifiers
 //===----------------------------------------------------------------------===//
 

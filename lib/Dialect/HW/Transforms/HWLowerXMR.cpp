@@ -13,6 +13,7 @@
 #include "circt/Dialect/HW/HierPathCache.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Support/HWUtils.h"
 #include "circt/Support/InstanceGraph.h"
 #include "circt/Support/Namespace.h"
@@ -55,8 +56,8 @@ private:
   LogicalResult handleProbeRWProbe(ProbeRWProbeOp rwprobe);
   LogicalResult handleProbeSub(ProbeSubOp sub);
   LogicalResult handleProbeCast(ProbeCastOp cast);
-  LogicalResult handleForceReleaseOp(Operation *op);
   LogicalResult handleProbeDefine(ProbeDefineOp define);
+  LogicalResult handleFirMemDebugPort(seq::FirMemDebugPortOp debugPort);
 
   InnerRefAttr getOrAddInnerSym(Value target);
   InnerRefAttr getInnerRefTo(Operation *op);
@@ -199,6 +200,7 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
   SmallVector<ProbeCastOp> casts;
   SmallVector<ProbeDefineOp> defines;
   SmallVector<Operation *> forceAndReleaseOps;
+  SmallVector<seq::FirMemDebugPortOp> firMemDebugPorts;
 
   module.walk([&](Operation *op) {
     if (auto send = dyn_cast<ProbeSendOp>(op))
@@ -215,9 +217,8 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
       casts.push_back(cast);
     else if (auto define = dyn_cast<ProbeDefineOp>(op))
       defines.push_back(define);
-    else if (isa<ProbeForceOp, ProbeForceInitialOp, ProbeReleaseOp,
-                 ProbeReleaseInitialOp>(op))
-      forceAndReleaseOps.push_back(op);
+    else if (auto debugPort = dyn_cast<seq::FirMemDebugPortOp>(op))
+      firMemDebugPorts.push_back(debugPort);
     else if (auto wire = dyn_cast<WireOp>(op)) {
       // Handle hw.wire with probe-typed operands
       // Wire forwards the probe reference from operand to result
@@ -242,6 +243,11 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
   // Handle sends first
   for (auto send : sends)
     if (failed(handleProbeSend(send)))
+      return failure();
+
+  // Handle FirMem debug ports (similar to sends, they create XMR targets)
+  for (auto debugPort : firMemDebugPorts)
+    if (failed(handleFirMemDebugPort(debugPort)))
       return failure();
 
   // Handle rwprobes
@@ -271,11 +277,6 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
   // Handle resolve operations
   for (auto resolve : resolves)
     if (failed(handleProbeResolve(resolve)))
-      return failure();
-
-  // Handle force/release operations
-  for (auto *op : forceAndReleaseOps)
-    if (failed(handleForceReleaseOp(op)))
       return failure();
 
   return success();
@@ -766,106 +767,6 @@ LogicalResult HWLowerXMRPass::handleProbeCast(ProbeCastOp cast) {
   return success();
 }
 
-LogicalResult HWLowerXMRPass::handleForceReleaseOp(Operation *op) {
-  // Unified handler for ProbeForceOp, ProbeForceInitialOp, ProbeReleaseOp, and
-  // ProbeReleaseInitialOp following FIRRTL LowerXMR pattern
-
-  bool isInitial = isa<ProbeForceInitialOp, ProbeReleaseInitialOp>(op);
-  bool isForce = isa<ProbeForceOp, ProbeForceInitialOp>(op);
-
-  // Get the destination rwprobe operand (common to all four ops)
-  Value dest;
-  if (auto force = dyn_cast<ProbeForceOp>(op))
-    dest = force.getDest();
-  else if (auto force = dyn_cast<ProbeForceInitialOp>(op))
-    dest = force.getDest();
-  else if (auto release = dyn_cast<ProbeReleaseOp>(op))
-    dest = release.getDest();
-  else if (auto release = dyn_cast<ProbeReleaseInitialOp>(op))
-    dest = release.getDest();
-  else
-    return op->emitError("unexpected operation type");
-
-  // Get the type for zero-width check (force ops have src, release ops don't)
-  Type checkType = dest.getType();
-  if (isForce) {
-    if (auto force = dyn_cast<ProbeForceOp>(op))
-      checkType = force.getSrc().getType();
-    else if (auto force = dyn_cast<ProbeForceInitialOp>(op))
-      checkType = force.getSrc().getType();
-  }
-
-  // Skip zero-width operations
-  if (isZeroWidth(checkType)) {
-    opsToRemove.push_back(op);
-    return success();
-  }
-
-  // Get the reaching send for the destination
-  auto pathIdx = getRemoteRefSend(dest);
-  if (!pathIdx.has_value())
-    return op->emitError("could not trace rwprobe to target");
-
-  ImplicitLocOpBuilder builder(op->getLoc(), op);
-  FlatSymbolRefAttr pathSym;
-  StringAttr suffixSym;
-
-  if (failed(buildHierPath(pathIdx.value(), builder, pathSym, suffixSym)))
-    return failure();
-
-  auto rwProbeType = dyn_cast<RWProbeType>(dest.getType());
-  if (!rwProbeType)
-    return op->emitError("destination must be rwprobe type");
-
-  auto xmrType = sv::InOutType::get(rwProbeType.getInnerType());
-  Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
-
-  // Create the appropriate SV operation
-  if (isInitial) {
-    // Initial operations (force.initial or release.initial)
-    Value predicate;
-    if (auto force = dyn_cast<ProbeForceInitialOp>(op))
-      predicate = force.getPredicate();
-    else if (auto release = dyn_cast<ProbeReleaseInitialOp>(op))
-      predicate = release.getPredicate();
-
-    builder.create<sv::InitialOp>([&]() {
-      builder.create<sv::IfOp>(predicate, [&]() {
-        if (isForce) {
-          Value src = cast<ProbeForceInitialOp>(op).getSrc();
-          builder.create<sv::ForceOp>(xmr, src);
-        } else {
-          builder.create<sv::ReleaseOp>(xmr);
-        }
-      });
-    });
-  } else {
-    // Clocked operations (force or release)
-    Value clock, predicate;
-    if (auto force = dyn_cast<ProbeForceOp>(op)) {
-      clock = force.getClock();
-      predicate = force.getPredicate();
-    } else if (auto release = dyn_cast<ProbeReleaseOp>(op)) {
-      clock = release.getClock();
-      predicate = release.getPredicate();
-    }
-
-    builder.create<sv::AlwaysOp>(sv::EventControl::AtPosEdge, clock, [&]() {
-      builder.create<sv::IfOp>(predicate, [&]() {
-        if (isForce) {
-          Value src = cast<ProbeForceOp>(op).getSrc();
-          builder.create<sv::ForceOp>(xmr, src);
-        } else {
-          builder.create<sv::ReleaseOp>(xmr);
-        }
-      });
-    });
-  }
-
-  opsToRemove.push_back(op);
-  return success();
-}
-
 LogicalResult HWLowerXMRPass::handleProbeDefine(ProbeDefineOp define) {
   // ProbeDefine connects the destination probe to the source probe.
   // This is done by unifying their dataflow classes so they resolve to the
@@ -889,6 +790,36 @@ LogicalResult HWLowerXMRPass::handleProbeDefine(ProbeDefineOp define) {
   // Mark the define operation for removal (in separate list to ensure correct
   // order)
   definesToRemove.push_back(define);
+
+  return success();
+}
+
+LogicalResult
+HWLowerXMRPass::handleFirMemDebugPort(seq::FirMemDebugPortOp debugPort) {
+  // FirMemDebugPortOp creates a probe to a memory's internal storage array.
+  // Similar to FIRRTL MemOp handling: create an inner ref to the memory and
+  // add a path suffix of "Memory" to represent the internal storage.
+
+  // Get the memory operand
+  Value memoryOp = debugPort.getMemory();
+  auto *memDefOp = memoryOp.getDefiningOp();
+
+  if (!memDefOp)
+    return debugPort.emitError("memory operand has no defining operation");
+
+  // Get or add an inner symbol to the memory operation
+  auto inRef = getInnerRefTo(memDefOp);
+  if (!inRef)
+    return debugPort.emitError("could not get inner ref for memory");
+
+  // Add an XMR path entry for this debug port
+  auto ind = addReachingSendsEntry(debugPort.getDebugPort(), inRef);
+
+  // Set the path suffix to "Memory" to reference the internal storage array
+  xmrPathSuffix[ind] = "Memory";
+
+  // Mark the debug port operation for removal
+  opsToRemove.push_back(debugPort);
 
   return success();
 }

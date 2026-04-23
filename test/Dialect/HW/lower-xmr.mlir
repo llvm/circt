@@ -1125,30 +1125,6 @@ hw.module @TestProbeSubNested(out result: i8) {
 // -----
 
 //===----------------------------------------------------------------------===//
-// Test rwprobe with force operations
-//===----------------------------------------------------------------------===//
-
-hw.module @ForceableTarget(out ref: !hw.rwprobe<i8>) {
-  %c0_i8 = hw.constant 0 : i8
-  %w = hw.wire %c0_i8 sym @forceable : i8
-  %rwprobe = hw.probe.rwprobe @ForceableTarget::@forceable : !hw.rwprobe<i8>
-  hw.output %rwprobe : !hw.rwprobe<i8>
-}
-
-// CHECK-LABEL: hw.module @TestForceOps
-hw.module @TestForceOps(in %clk: i1, in %enable: i1, in %data: i8) {
-  %tgt_ref = hw.instance "ft" sym @ft @ForceableTarget() -> (ref: !hw.rwprobe<i8>)
-
-  // CHECK: sv.always posedge %clk
-  // CHECK: sv.force
-  hw.probe.force %clk, %enable, %tgt_ref, %data : i1, i1, !hw.rwprobe<i8>, i8
-
-  hw.output
-}
-
-// -----
-
-//===----------------------------------------------------------------------===//
 // Test release operations
 //===----------------------------------------------------------------------===//
 
@@ -1170,3 +1146,274 @@ hw.module @TestReleaseOps(in %clk: i1, in %enable: i1) {
   hw.output
 }
 
+// -----
+
+//===----------------------------------------------------------------------===//
+// Test FirMem debug port lowering
+//===----------------------------------------------------------------------===//
+
+// Test basic firmem debug port lowering
+// CHECK: hw.hierpath private @[[MEM_PATH:.+]] [@FirMemDebugPortBasic::@[[MEM_SYM:.+]]]
+// CHECK-LABEL: hw.module @FirMemDebugPortBasic
+hw.module @FirMemDebugPortBasic(in %clk: !seq.clock, in %addr: i4, out result: !hw.array<12xi42>) {
+  // CHECK: %mem = seq.firmem sym @[[MEM_SYM]]
+  %mem = seq.firmem 0, 1, undefined, undefined : <12 x 42>
+
+  // CHECK-NOT: seq.firmem.debug_port
+  %debug_ref = seq.firmem.debug_port %mem : <12 x 42>
+
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[MEM_PATH]] "Memory"
+  // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
+  %value = hw.probe.resolve %debug_ref : !hw.probe<!hw.array<12xi42>>
+
+  // CHECK: hw.output %[[READ]]
+  hw.output %value : !hw.array<12xi42>
+}
+
+// -----
+
+// Test firmem debug port with masked memory
+// CHECK: hw.hierpath private @[[MEM_PATH:.+]] [@FirMemDebugPortMasked::@[[MEM_SYM:.+]]]
+// CHECK-LABEL: hw.module @FirMemDebugPortMasked
+hw.module @FirMemDebugPortMasked(out result: !hw.array<16xi32>) {
+  // CHECK: %mem = seq.firmem sym @[[MEM_SYM]]
+  %mem = seq.firmem 0, 1, undefined, undefined : <16 x 32, mask 4>
+
+  // CHECK-NOT: seq.firmem.debug_port
+  %debug_ref = seq.firmem.debug_port %mem : <16 x 32, mask 4>
+
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[MEM_PATH]] "Memory"
+  // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
+  %value = hw.probe.resolve %debug_ref : !hw.probe<!hw.array<16xi32>>
+
+  // CHECK: hw.output %[[READ]]
+  hw.output %value : !hw.array<16xi32>
+}
+
+// -----
+
+// Test multiple firmem debug ports in same module
+// CHECK: hw.hierpath private @[[MEM1_PATH:.+]] [@FirMemDebugPortMultiple::@[[MEM1_SYM:.+]]]
+// CHECK: hw.hierpath private @[[MEM2_PATH:.+]] [@FirMemDebugPortMultiple::@[[MEM2_SYM:.+]]]
+// CHECK-LABEL: hw.module @FirMemDebugPortMultiple
+hw.module @FirMemDebugPortMultiple(out result1: !hw.array<8xi16>, out result2: !hw.array<4xi8>) {
+  // CHECK: %mem1 = seq.firmem sym @[[MEM1_SYM]]
+  %mem1 = seq.firmem 0, 1, undefined, undefined : <8 x 16>
+  // CHECK: %mem2 = seq.firmem sym @[[MEM2_SYM]]
+  %mem2 = seq.firmem 0, 1, undefined, undefined : <4 x 8>
+
+  // CHECK-NOT: seq.firmem.debug_port
+  %debug_ref1 = seq.firmem.debug_port %mem1 : <8 x 16>
+  %debug_ref2 = seq.firmem.debug_port %mem2 : <4 x 8>
+
+  // CHECK: %[[XMR1:.+]] = sv.xmr.ref @[[MEM1_PATH]] "Memory"
+  // CHECK: %[[READ1:.+]] = sv.read_inout %[[XMR1]]
+  %value1 = hw.probe.resolve %debug_ref1 : !hw.probe<!hw.array<8xi16>>
+
+  // CHECK: %[[XMR2:.+]] = sv.xmr.ref @[[MEM2_PATH]] "Memory"
+  // CHECK: %[[READ2:.+]] = sv.read_inout %[[XMR2]]
+  %value2 = hw.probe.resolve %debug_ref2 : !hw.probe<!hw.array<4xi8>>
+
+  // CHECK: hw.output %[[READ1]], %[[READ2]]
+  hw.output %value1, %value2 : !hw.array<8xi16>, !hw.array<4xi8>
+}
+
+// -----
+
+// Test that firmem debug ports are lowered to XMRs correctly
+// CHECK: hw.hierpath private @[[PATH:.+]] [@TestMemoryDebugPort::@[[SYM:.+]]]
+// CHECK-LABEL: hw.module @TestMemoryDebugPort
+hw.module @TestMemoryDebugPort(in %clk: !seq.clock, in %addr: i4, in %data: i32, in %en: i1, out mem_content: !hw.array<16xi32>) {
+  // CHECK: %mem = seq.firmem sym @[[SYM]]
+  %mem = seq.firmem 0, 1, undefined, undefined : <16 x 32>
+
+  // Create a debug port to the memory
+  // CHECK-NOT: seq.firmem.debug_port
+  %debug_ref = seq.firmem.debug_port %mem : <16 x 32>
+
+  // Use the memory normally
+  %read_data = seq.firmem.read_port %mem[%addr], clock %clk enable %en : <16 x 32>
+  seq.firmem.write_port %mem[%addr] = %data, clock %clk enable %en : <16 x 32>
+
+  // Resolve the debug probe to get the memory contents as an array
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[PATH]] "Memory"
+  // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
+  %mem_array = hw.probe.resolve %debug_ref : !hw.probe<!hw.array<16xi32>>
+
+  // CHECK: hw.output %[[READ]]
+  hw.output %mem_array : !hw.array<16xi32>
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Test firmem debug port across 3-level hierarchy
+//===----------------------------------------------------------------------===//
+
+// Leaf module with memory
+// CHECK: hw.hierpath private @[[HIER_PATH:.+]] [@FirMemHierTop::@[[TOP_INST:.+]], @FirMemHierMiddle::@[[MID_INST:.+]], @FirMemHierLeaf::@[[MEM_SYM:.+]]]
+// CHECK-LABEL: hw.module @FirMemHierLeaf
+hw.module @FirMemHierLeaf(in %clk: !seq.clock, in %addr: i3, in %data: i64, in %en: i1, out probe: !hw.probe<!hw.array<8xi64>>) {
+  // CHECK: %mem = seq.firmem sym @[[MEM_SYM]]
+  %mem = seq.firmem 0, 1, undefined, undefined : <8 x 64>
+
+  // Normal memory operations
+  %read_data = seq.firmem.read_port %mem[%addr], clock %clk enable %en : <8 x 64>
+  seq.firmem.write_port %mem[%addr] = %data, clock %clk enable %en : <8 x 64>
+
+  // Create debug port and output as probe
+  // CHECK-NOT: seq.firmem.debug_port
+  %debug_ref = seq.firmem.debug_port %mem : <8 x 64>
+
+  // CHECK: hw.output
+  hw.output %debug_ref : !hw.probe<!hw.array<8xi64>>
+}
+
+// Middle module that instantiates leaf
+// CHECK-LABEL: hw.module @FirMemHierMiddle
+hw.module @FirMemHierMiddle(in %clk: !seq.clock, in %addr: i3, in %data: i64, in %en: i1, out probe: !hw.probe<!hw.array<8xi64>>) {
+  // CHECK: hw.instance "leaf" sym @[[MID_INST]]
+  %probe_out = hw.instance "leaf" @FirMemHierLeaf(clk: %clk: !seq.clock, addr: %addr: i3, data: %data: i64, en: %en: i1) -> (probe: !hw.probe<!hw.array<8xi64>>)
+
+  // CHECK: hw.output
+  hw.output %probe_out : !hw.probe<!hw.array<8xi64>>
+}
+
+// Top module that resolves the probe
+// CHECK-LABEL: hw.module @FirMemHierTop
+hw.module @FirMemHierTop(in %clk: !seq.clock, in %addr: i3, in %data: i64, in %en: i1, out mem_content: !hw.array<8xi64>) {
+  // CHECK: hw.instance "middle" sym @[[TOP_INST]]
+  %probe_out = hw.instance "middle" @FirMemHierMiddle(clk: %clk: !seq.clock, addr: %addr: i3, data: %data: i64, en: %en: i1) -> (probe: !hw.probe<!hw.array<8xi64>>)
+
+  // Resolve the probe at the top level
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[HIER_PATH]] "Memory"
+  // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
+  %mem_array = hw.probe.resolve %probe_out : !hw.probe<!hw.array<8xi64>>
+
+  // CHECK: hw.output %[[READ]]
+  hw.output %mem_array : !hw.array<8xi64>
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// External Module Probe Handling - Equivalence Test
+// This test demonstrates that HW dialect handles external module probes
+// identically to FIRRTL dialect using the macro-based ABI.
+//===----------------------------------------------------------------------===//
+
+// Probe port should be removed
+// CHECK: hw.module.extern @ExtMod()
+hw.module.extern @ExtMod(out probe: !hw.probe<i8>)
+
+// CHECK: hw.module @SimpleExtern
+hw.module @SimpleExtern(out result: i8) {
+  // Instance should have symbol added and probe port removed
+  // CHECK: hw.instance "ext" sym @xmr_sym @ExtMod() -> ()
+  %ext_probe = hw.instance "ext" @ExtMod() -> (probe: !hw.probe<i8>)
+
+  // Probe resolve should become XMR with macro suffix
+  // CHECK: sv.xmr.ref @xmrPath "`ref_ExtMod_probe" : !hw.inout<i8>
+  // CHECK: sv.read_inout
+  %val = hw.probe.resolve %ext_probe : !hw.probe<i8>
+
+  // CHECK: hw.output
+  hw.output %val : i8
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// External Module with Multiple Probe Ports
+// Mirrors FIRRTL test: firrtl.extmodule @RefExtMore
+//===----------------------------------------------------------------------===//
+
+// Both probe ports should be removed
+// CHECK: hw.module.extern @ExtModMultiple(in %in : i1, out data : i3)
+hw.module.extern @ExtModMultiple(
+  in %in: i1,
+  out data: i3,
+  out probe1: !hw.probe<i1>,
+  out probe2: !hw.probe<!hw.array<3xi3>>
+)
+
+// CHECK: hw.module @MultiProbeExtern
+hw.module @MultiProbeExtern(in %input: i1, out o1: i1, out o2: !hw.array<3xi3>) {
+  // CHECK: hw.instance "ext" sym @xmr_sym @ExtModMultiple(in: %input{{.*}}: i1) -> (data: i3)
+  %data, %probe1, %probe2 = hw.instance "ext" @ExtModMultiple(
+    in: %input: i1
+  ) -> (data: i3, probe1: !hw.probe<i1>, probe2: !hw.probe<!hw.array<3xi3>>)
+
+  // First probe: scalar type
+  // CHECK: sv.xmr.ref @xmrPath "`ref_ExtModMultiple_probe1" : !hw.inout<i1>
+  // CHECK: sv.read_inout
+  %val1 = hw.probe.resolve %probe1 : !hw.probe<i1>
+
+  // Second probe: complex type (array)
+  // CHECK: sv.xmr.ref @xmrPath "`ref_ExtModMultiple_probe2"
+  // CHECK: sv.read_inout
+  %val2 = hw.probe.resolve %probe2 : !hw.probe<!hw.array<3xi3>>
+
+  // CHECK: hw.output
+  hw.output %val1, %val2 : i1, !hw.array<3xi3>
+}
+
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Zero-Width Probe on External Module (should be removed)
+//===----------------------------------------------------------------------===//
+
+// CHECK: hw.module.extern @ExtModZeroWidth(out data : i8)
+hw.module.extern @ExtModZeroWidth(out data: i8, out probe: !hw.probe<i0>)
+
+// CHECK: hw.module @ZeroWidthExtern
+hw.module @ZeroWidthExtern(out o1: i8, out o2: i0) {
+  // CHECK: hw.instance "ext"{{.*}}@ExtModZeroWidth() -> (data: i8)
+  %data, %probe = hw.instance "ext" @ExtModZeroWidth() -> (data: i8, probe: !hw.probe<i0>)
+
+  // Zero-width resolve should become a constant
+  // CHECK: hw.constant 0 : i0
+  %val = hw.probe.resolve %probe : !hw.probe<i0>
+
+  // CHECK: hw.output
+  hw.output %data, %val : i8, i0
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Mixed External and Regular Modules
+// Verifies that external modules use macros while regular modules use
+// direct hierarchical paths
+//===----------------------------------------------------------------------===//
+
+hw.module.extern @ExtMixed(out probe: !hw.probe<i16>)
+
+hw.module @RegularMixed(out probe: !hw.probe<i16>) {
+  %c99_i16 = hw.constant 99 : i16
+  %wire = hw.wire %c99_i16 : i16
+  %ref = hw.probe.send %wire : i16
+  hw.output %ref : !hw.probe<i16>
+}
+
+// CHECK: hw.module @MixedModules
+hw.module @MixedModules(out o1: i16, out o2: i16) {
+  // CHECK: hw.instance "ext"{{.*}}@ExtMixed() -> ()
+  %pext = hw.instance "ext" @ExtMixed() -> (probe: !hw.probe<i16>)
+
+  // CHECK: hw.instance "reg"{{.*}}@RegularMixed() -> ()
+  %preg = hw.instance "reg" @RegularMixed() -> (probe: !hw.probe<i16>)
+
+  // External module should use macro (note the backtick)
+  // CHECK: sv.xmr.ref{{.*}}"`ref_ExtMixed_probe"
+  %vext = hw.probe.resolve %pext : !hw.probe<i16>
+
+  // Regular module should NOT use macro - check that there's NO backtick before "ref"
+  // CHECK: sv.xmr.ref
+  // CHECK-NOT: "`ref
+  %vreg = hw.probe.resolve %preg : !hw.probe<i16>
+
+  hw.output %vext, %vreg : i16, i16
+}

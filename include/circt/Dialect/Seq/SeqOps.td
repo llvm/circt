@@ -672,6 +672,39 @@ def FirMemReadWriteOp : SeqOp<"firmem.read_write_port", [
   let hasCanonicalizeMethod = 1;
 }
 
+def FirMemDebugPortOp : SeqOp<"firmem.debug_port", [
+  Pure,
+  DeclareOpInterfaceMethods<InferTypeOpInterface>
+]> {
+  let summary = "A memory debug port that produces a probe reference";
+  let description = [{
+    The `seq.firmem.debug_port` op represents a debug port on a `seq.firmem`
+    memory. It takes the memory as an operand and produces a probe reference
+    that wraps an array representing the memory's contents. The probe can be
+    used to observe the memory remotely for debugging purposes.
+
+    This operation does not require a clock and has no runtime behavior - it
+    only creates a reference that can be lowered to appropriate debug constructs
+    (such as XMRs) during later compilation stages.
+
+    The result type is a probe wrapping a packed array type with dimensions
+    matching the memory's depth and element type matching the memory's width.
+
+    Example:
+    ```mlir
+    %mem = seq.firmem 0, 1, undefined, undefined : <12 x 42>
+    %debug_ref = seq.firmem.debug_port %mem : <12 x 42>
+    // Returns: !hw.probe<!hw.array<12xi42>>
+    ```
+  }];
+
+  let arguments = (ins FirMemType:$memory);
+  let results = (outs ProbeType:$debugPort);
+  let assemblyFormat = [{
+    $memory attr-dict `:` type($memory)
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Tied-off clock
 //===----------------------------------------------------------------------===//

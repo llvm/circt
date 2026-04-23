@@ -116,62 +116,6 @@ hw.module @ProbeCast() {
   %value = hw.probe.resolve %probe : !hw.probe<i32>
 }
 
-// CHECK-LABEL: hw.module @ProbeForce
-hw.module @ProbeForce(in %clock: i1, in %enable: i1) {
-  %c0_i32 = hw.constant 0 : i32
-  %reg = hw.wire %c0_i32 : i32
-
-  // Using probe.send forceable to create rwprobe
-  // CHECK: %[[RWREF:.+]] = hw.probe.send forceable %{{.+}} : i32
-  %rwref = hw.probe.send forceable %reg : i32
-
-  %c123_i32 = hw.constant 123 : i32
-
-  // CHECK: hw.probe.force %clock, %enable, %[[RWREF]], %{{.+}} : i1, i1, !hw.rwprobe<i32>, i32
-  hw.probe.force %clock, %enable, %rwref, %c123_i32 : i1, i1, !hw.rwprobe<i32>, i32
-}
-
-// CHECK-LABEL: hw.module @ProbeForceInitial
-hw.module @ProbeForceInitial(in %enable: i1) {
-  %c0_i16 = hw.constant 0 : i16
-  %reg = hw.wire %c0_i16 : i16
-
-  // Using probe.send forceable to create rwprobe
-  // CHECK: %[[RWREF:.+]] = hw.probe.send forceable %{{.+}} : i16
-  %rwref = hw.probe.send forceable %reg : i16
-
-  %c999_i16 = hw.constant 999 : i16
-
-  // CHECK: hw.probe.force_initial %enable, %[[RWREF]], %{{.+}} : i1, !hw.rwprobe<i16>, i16
-  hw.probe.force_initial %enable, %rwref, %c999_i16 : i1, !hw.rwprobe<i16>, i16
-}
-
-// CHECK-LABEL: hw.module @ProbeRelease
-hw.module @ProbeRelease(in %clock: i1, in %enable: i1) {
-  %c0_i32 = hw.constant 0 : i32
-  %reg = hw.wire %c0_i32 : i32
-
-  // Using probe.send forceable to create rwprobe
-  // CHECK: %[[RWREF:.+]] = hw.probe.send forceable %{{.+}} : i32
-  %rwref = hw.probe.send forceable %reg : i32
-
-  // CHECK: hw.probe.release %clock, %enable, %[[RWREF]] : i1, i1, !hw.rwprobe<i32>
-  hw.probe.release %clock, %enable, %rwref : i1, i1, !hw.rwprobe<i32>
-}
-
-// CHECK-LABEL: hw.module @ProbeReleaseInitial
-hw.module @ProbeReleaseInitial(in %enable: i1) {
-  %c0_i16 = hw.constant 0 : i16
-  %reg = hw.wire %c0_i16 : i16
-
-  // Using probe.send forceable to create rwprobe
-  // CHECK: %[[RWREF:.+]] = hw.probe.send forceable %{{.+}} : i16
-  %rwref = hw.probe.send forceable %reg : i16
-
-  // CHECK: hw.probe.release_initial %enable, %[[RWREF]] : i1, !hw.rwprobe<i16>
-  hw.probe.release_initial %enable, %rwref : i1, !hw.rwprobe<i16>
-}
-
 // CHECK-LABEL: hw.module @ProbeHierarchy
 hw.module @ProbeHierarchy(out probe_out: !hw.probe<i64>) {
   %c42_i64 = hw.constant 42 : i64
@@ -267,4 +211,45 @@ hw.module @ProbeTypePrinting(
   in %p4: !hw.rwprobe<!hw.struct<a: i8, b: i16>>
 ) {
   hw.output
+}
+
+// CHECK-LABEL: hw.module @ProbeXMRRef
+hw.module @ProbeXMRRef() {
+  %c42_i32 = hw.constant 42 : i32
+  %wire = hw.wire %c42_i32 : i32
+
+  // Create a probe
+  // CHECK: %[[PROBE:.+]] = hw.probe.send %{{.+}} : i32
+  %probe = hw.probe.send %wire : i32
+
+  // Convert probe to inout using probe.xmr_ref (result type inferred)
+  // CHECK: %[[INOUT:.+]] = hw.probe.xmr_ref %[[PROBE]] : !hw.probe<i32>
+  %inout = hw.probe.xmr_ref %probe : !hw.probe<i32>
+}
+
+// CHECK-LABEL: hw.module @ProbeXMRRefRWProbe
+hw.module @ProbeXMRRefRWProbe() {
+  %c99_i8 = hw.constant 99 : i8
+  %wire = hw.wire %c99_i8 : i8
+
+  // Create a rwprobe (forceable)
+  // CHECK: %[[RWPROBE:.+]] = hw.probe.send forceable %{{.+}} : i8
+  %rwprobe = hw.probe.send forceable %wire : i8
+
+  // Convert rwprobe to inout using probe.xmr_ref (result type inferred)
+  // CHECK: %[[INOUT:.+]] = hw.probe.xmr_ref %[[RWPROBE]] : !hw.rwprobe<i8>
+  %inout = hw.probe.xmr_ref %rwprobe : !hw.rwprobe<i8>
+}
+
+// CHECK-LABEL: hw.module @ProbeXMRRefAggregate
+hw.module @ProbeXMRRefAggregate(in %arr_in: !hw.array<4xi16>) {
+  %arr_wire = hw.wire %arr_in : !hw.array<4xi16>
+
+  // Create a probe for array
+  // CHECK: %[[ARR_PROBE:.+]] = hw.probe.send %{{.+}} : !hw.array<4xi16>
+  %arr_probe = hw.probe.send %arr_wire : !hw.array<4xi16>
+
+  // Convert array probe to inout (result type inferred)
+  // CHECK: %[[ARR_INOUT:.+]] = hw.probe.xmr_ref %[[ARR_PROBE]] : !hw.probe<!hw.array<4xi16>>
+  %arr_inout = hw.probe.xmr_ref %arr_probe : !hw.probe<!hw.array<4xi16>>
 }

@@ -1050,6 +1050,29 @@ LogicalResult FirMemReadWriteOp::canonicalize(FirMemReadWriteOp op,
 }
 
 //===----------------------------------------------------------------------===//
+// FirMemDebugPortOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult FirMemDebugPortOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, PropertyRef properties, RegionRange regions,
+    SmallVectorImpl<Type> &results) {
+  // Get the memory operand type
+  auto memType = cast<seq::FirMemType>(operands[0].getType());
+
+  // Create a packed array type representing the memory contents:
+  // depth x width
+  auto elementType = IntegerType::get(context, memType.getWidth());
+  auto arrayType = hw::ArrayType::get(elementType, memType.getDepth());
+
+  // Wrap it in a probe type
+  auto probeType = hw::ProbeType::get(arrayType);
+  results.push_back(probeType);
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConstClockOp
 //===----------------------------------------------------------------------===//
 
