@@ -43,3 +43,25 @@ hw.module @preserve_existing_and_non_normalized(in %clk: !seq.clock, in %x: i8, 
 hw.module @do_not_guess_from_suffix(in %foo_state: i1, out foo_next: i1) {
   hw.output %foo_state : i1
 }
+
+// -----
+
+// CHECK-LABEL: hw.module @mixed_named_and_unnamed_regs(
+// CHECK-SAME:   in [[CLK_MIXED:%[^:]+]] : !seq.clock
+// CHECK-SAME:   in [[IN_MIXED:%[^:]+]] : i32
+// CHECK:         dbg.variable "in", [[IN_MIXED]] : i32
+// CHECK:         [[NAMED_COMP:%.+]] = seq.compreg
+// CHECK-NEXT:    dbg.variable "named_comp", [[NAMED_COMP]] : i32
+// CHECK:         [[UNNAMED_COMP:%.+]] = seq.compreg
+// CHECK-NEXT:    dbg.variable "reg_1", [[UNNAMED_COMP]] : i32
+// CHECK:         [[NAMED_FIR:%.+]] = seq.firreg
+// CHECK-NEXT:    dbg.variable "named_fir", [[NAMED_FIR]] : i32
+// CHECK:         [[UNNAMED_FIR:%.+]] = seq.firreg
+// CHECK-NEXT:    dbg.variable "reg_3", [[UNNAMED_FIR]] : i32
+hw.module @mixed_named_and_unnamed_regs(in %clk: !seq.clock, in %in: i32, out out: i32) {
+  %named_comp = seq.compreg %in, %clk : i32
+  %0 = seq.compreg %named_comp, %clk : i32
+  %named_fir = seq.firreg %0 clock %clk : i32
+  %1 = seq.firreg %named_fir clock %clk : i32
+  hw.output %1 : i32
+}
