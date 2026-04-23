@@ -196,92 +196,58 @@ def ProbeCastOp : HWOp<"probe.cast", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
-// Force/Release Operations
+// XMR Operations
 //===----------------------------------------------------------------------===//
 
-def ProbeForceOp : HWOp<"probe.force"> {
-  let summary = "Force an RWProbe target to a value";
+def ProbeXMRRefOp : HWOp<"probe.xmr_ref", [Pure]> {
+  let summary = "Convert a probe reference to an inout reference";
   let description = [{
-    Forces an RWProbe target to the specified value using the specified clock
-    and predicate. This generates procedural code (e.g., SystemVerilog force
-    statement) during lowering.
+    Converts a probe or rwprobe reference to an inout reference. This operation
+    takes a probe reference as input and returns the corresponding inout type,
+    allowing the probe to be used with operations that work on inout types.
+
+    This is typically used after probe resolution has occurred, where the probe
+    reference needs to be converted to an inout for use with force/release or
+    other procedural operations.
+
+    The result type is automatically inferred from the input probe's inner type.
 
     Example:
     ```mlir
-    hw.probe.force %clock, %predicate, %rwref, %value :
-      i1, i1, !hw.rwprobe<i32>, i32
+    %probe = hw.probe.send %wire : i32
+    %inout = hw.probe.xmr_ref %probe : !hw.probe<i32>
+    %value = sv.read_inout %inout : !hw.inout<i32>
     ```
-  }];
 
-  let arguments = (ins I1:$clock, I1:$predicate,
-                       RWProbeType:$dest, HWValueType:$src);
-
-  let assemblyFormat = [{
-    $clock `,` $predicate `,` $dest `,` $src attr-dict
-    `:` type($clock) `,` type($predicate) `,` qualified(type($dest)) `,` type($src)
-  }];
-}
-
-def ProbeForceInitialOp : HWOp<"probe.force_initial"> {
-  let summary = "Continuously force an RWProbe target";
-  let description = [{
-    Forces an RWProbe target continuously (initial block style). The force
-    is active from the beginning of simulation.
-
-    Example:
+    Example with rwprobe for force operations:
     ```mlir
-    hw.probe.force_initial %predicate, %rwref, %value :
-      i1, !hw.rwprobe<i32>, i32
+    %rwprobe = hw.probe.send forceable %wire : i32
+    %inout = hw.probe.xmr_ref %rwprobe : !hw.rwprobe<i32>
+    sv.force %inout, %newval : i32
     ```
   }];
 
-  let arguments = (ins I1:$predicate, RWProbeType:$dest, HWValueType:$src);
+  let arguments = (ins AnyProbeType:$ref);
+  let results = (outs InOutType:$result);
 
-  let assemblyFormat = [{
-    $predicate `,` $dest `,` $src attr-dict
-    `:` type($predicate) `,` qualified(type($dest)) `,` type($src)
-  }];
-}
+  let hasCustomAssemblyFormat = 1;
 
-def ProbeReleaseOp : HWOp<"probe.release"> {
-  let summary = "Release a forced RWProbe target";
-  let description = [{
-    Releases a previously forced RWProbe target using the specified clock
-    and predicate.
+  let builders = [
+    OpBuilder<(ins "Value":$ref), [{
+      Type innerType;
+      if (auto probeType = dyn_cast<ProbeType>(ref.getType()))
+        innerType = probeType.getInnerType();
+      else if (auto rwProbeType = dyn_cast<RWProbeType>(ref.getType()))
+        innerType = rwProbeType.getInnerType();
+      else
+        llvm_unreachable("ref must be a probe or rwprobe type");
 
-    Example:
-    ```mlir
-    hw.probe.release %clock, %predicate, %rwref :
-      i1, i1, !hw.rwprobe<i32>
-    ```
-  }];
+      Type resultType = InOutType::get(innerType);
+      build($_builder, $_state, resultType, ref);
+    }]>
+  ];
 
-  let arguments = (ins I1:$clock, I1:$predicate, RWProbeType:$dest);
-
-  let assemblyFormat = [{
-    $clock `,` $predicate `,` $dest attr-dict
-    `:` type($clock) `,` type($predicate) `,` qualified(type($dest))
-  }];
-}
-
-def ProbeReleaseInitialOp : HWOp<"probe.release_initial"> {
-  let summary = "Release an initial force on RWProbe target";
-  let description = [{
-    Releases a continuously forced RWProbe target (initial block style).
-
-    Example:
-    ```mlir
-    hw.probe.release_initial %predicate, %rwref :
-      i1, !hw.rwprobe<i32>
-    ```
-  }];
-
-  let arguments = (ins I1:$predicate, RWProbeType:$dest);
-
-  let assemblyFormat = [{
-    $predicate `,` $dest attr-dict
-    `:` type($predicate) `,` qualified(type($dest))
-  }];
+  let hasVerifier = 1;
 }
 
 #endif // CIRCT_DIALECT_HW_HWPROBEOPS_TD

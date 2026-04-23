@@ -1530,7 +1530,7 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
     // destination.
     if (use.getOperandNumber() != 0)
       return {};
-    if (!isa<ConnectOp, MatchingConnectOp>(use.getOwner()))
+    if (!isa<ConnectOp, MatchingConnectOp, RefDefineOp>(use.getOwner()))
       return {};
 
     // We only support things with a single connect.
@@ -1560,6 +1560,18 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
   if (!isa<FIRRTLType>(connectSrc.getType())) {
     connectOp->erase();
     return connectSrc;
+  }
+
+  // For RefTypes (probe types), we need to lower them properly but don't need
+  // passive/flipped conversions.
+  if (isa<RefType>(connectSrc.getType())) {
+    auto loweredType =
+        loweringState.lowerType(connectSrc.getType(), connectSrc.getLoc());
+    if (!loweredType)
+      return {};
+    auto loweredValue = castFromFIRRTLType(connectSrc, loweredType, builder);
+    connectOp->erase();
+    return loweredValue;
   }
 
   // Convert fliped sources to passive sources.
@@ -3121,7 +3133,8 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
     auto srcWidth = baseType.getPassiveType().getBitWidthOrSentinel();
 
     // Caller should pass null value iff this was a zero bit value.
-    if (srcWidth != -1) {
+    // Skip check for aggregate types (srcWidth == -2) and unknown widths (-1).
+    if (srcWidth >= 0) {
       if (result)
         assert((srcWidth != 0) &&
                "Lowering produced value for zero width source");
@@ -3994,6 +4007,14 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
       auto rdata = seq::FirMemReadWriteOp::create(builder, memDecl, addr, clk,
                                                   en, wdata, mode, mask);
       addOutput("rdata", memSummary.dataWidth, rdata);
+    } else if (memportKind == MemOp::PortKind::Debug) {
+      // Debug ports provide a probe reference to the entire memory array.
+      // Create a seq.firmem.debug_port operation that returns a probe to the
+      // memory's internal storage.
+      auto debugPort = builder.create<seq::FirMemDebugPortOp>(memDecl);
+
+      // Map the FIRRTL RefType result to the HW probe from debug port
+      (void)setLowering(op.getResult(i), debugPort.getDebugPort());
     } else {
       auto addr = addInputPort("addr", op.getAddrBits());
       // If maskBits =1, then And the mask field with enable, and update the
@@ -5407,7 +5428,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   auto pred = getLoweredValue(op.getPredicate());
   if (!src || !clock || !pred)
     return failure();
-
+  src = hw::ProbeXMRRefOp::create(builder, src);
   auto destVal = getPossiblyInoutLoweredValue(op.getDest());
   if (!destVal)
     return failure();
@@ -5431,6 +5452,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
   auto pred = getLoweredValue(op.getPredicate());
   if (!src || !pred)
     return failure();
+  src = hw::ProbeXMRRefOp::create(builder, src);
 
   auto destVal = getPossiblyInoutLoweredValue(op.getDest());
   if (!destVal)
@@ -5459,6 +5481,8 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
   if (!destVal)
     return failure();
 
+  destVal = hw::ProbeXMRRefOp::create(builder, destVal);
+
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
@@ -5478,6 +5502,7 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
   auto pred = getLoweredValue(op.getPredicate());
   if (!destVal || !pred)
     return failure();
+  destVal = hw::ProbeXMRRefOp::create(builder, destVal);
 
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
