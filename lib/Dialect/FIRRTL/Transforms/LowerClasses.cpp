@@ -1462,13 +1462,10 @@ updateInstanceInClass(InstanceOp firrtlInstance, hw::HierPathOp hierPath,
     if (!isa<PropertyType>(result.getType()))
       continue;
 
-    // The path to the field is just this output's name.
-    auto objectFieldPath = builder.getArrayAttr({FlatSymbolRefAttr::get(
-        firrtlInstance.getPortNameAttr(result.getResultNumber()))});
-
     // Create the field access.
     auto objectField = om::ObjectFieldOp::create(
-        builder, object.getLoc(), result.getType(), object, objectFieldPath);
+        builder, object.getLoc(), result.getType(), object,
+        firrtlInstance.getPortNameAttr(result.getResultNumber()));
 
     result.replaceAllUsesWith(objectField);
   }
@@ -1958,11 +1955,9 @@ struct ObjectSubfieldOpConversion
     if (element.direction == Direction::In)
       return failure();
 
-    auto field = FlatSymbolRefAttr::get(element.name);
-    auto path = rewriter.getArrayAttr({field});
     auto type = typeConverter->convertType(element.type);
     rewriter.replaceOpWithNewOp<om::ObjectFieldOp>(op, type, adaptor.getInput(),
-                                                   path);
+                                                   element.name);
     return success();
   }
 
@@ -2058,7 +2053,7 @@ struct ObjectFieldOpConversion : public OpConversionPattern<om::ObjectFieldOp> {
       return failure();
 
     rewriter.replaceOpWithNewOp<om::ObjectFieldOp>(
-        op, type, adaptor.getObject(), adaptor.getFieldPathAttr());
+        op, type, adaptor.getObject(), adaptor.getFieldAttr());
 
     return success();
   }

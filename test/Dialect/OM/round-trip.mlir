@@ -17,8 +17,8 @@ om.class @Thingy(%blue_1: i8, %blue_2: i32) -> (widget: !om.class.type<@Widget>,
   // CHECK: %[[gadget:.+]] = om.object @Gadget(%[[c7]], %[[c8]]) : (i8, i32) -> !om.class.type<@Gadget>
   %5 = om.object @Gadget(%3, %4) : (i8, i32) -> !om.class.type<@Gadget>
 
-  // CHECK: %[[widget_field:.+]] = om.object.field %[[widget]], [@blue_1] : (!om.class.type<@Widget>) -> i8
-  %6 = om.object.field %2, [@blue_1] : (!om.class.type<@Widget>) -> i8
+  // CHECK: %[[widget_field:.+]] = om.object.field %[[widget]]["blue_1"] : (!om.class.type<@Widget>) -> i8
+  %6 = om.object.field %2["blue_1"] : (!om.class.type<@Widget>) -> i8
 
   // CHECK: om.class.fields {test = "fieldsAttr"} %2, %5, %blue_1, %6 : !om.class.type<@Widget>, !om.class.type<@Gadget>, i8, i8 field_locs([loc("loc0"), loc("loc1"), loc("loc2"), loc("loc3")]) loc("test")
   om.class.fields {test = "fieldsAttr"} %2, %5, %blue_1, %6 : !om.class.type<@Widget>, !om.class.type<@Gadget>, i8, i8 field_locs([loc("loc0"), loc("loc1"), loc("loc2"), loc("loc3")]) loc("test")
@@ -59,8 +59,8 @@ om.class @ExternObject(%param1: i1, %param2: i2) {
   // CHECK: %[[O0:.+]] = om.object @Extern(%[[P0]], %[[P1]])
   %0 = om.object @Extern(%param1, %param2) : (i1, i2) -> !om.class.type<@Extern>
 
-  // CHECK: om.object.field %[[O0]], [@field1]
-  %1 = om.object.field %0, [@field1] : (!om.class.type<@Extern>) -> i3
+  // CHECK: om.object.field %[[O0]]["field1"]
+  %1 = om.object.field %0["field1"] : (!om.class.type<@Extern>) -> i3
   om.class.fields
 }
 
@@ -83,8 +83,8 @@ om.class @NestedField3() -> (foo: !om.class.type<@NestedField2>) {
 om.class @NestedField4() {
   // CHECK: %[[nested:.+]] = om.object @NestedField3
   %0 = om.object @NestedField3() : () -> !om.class.type<@NestedField3>
-  // CHECK: %{{.+}} = om.object.field %[[nested]], [@foo, @bar, @baz] : (!om.class.type<@NestedField3>) -> i1
-  %1 = om.object.field %0, [@foo, @bar, @baz] : (!om.class.type<@NestedField3>) -> i1
+  // CHECK: %{{.+}} = om.object.field %[[nested]]["foo"] : (!om.class.type<@NestedField3>) -> !om.class.type<@NestedField2>
+  %1 = om.object.field %0["foo"] : (!om.class.type<@NestedField3>) -> !om.class.type<@NestedField2>
   om.class.fields
 }
 
@@ -238,13 +238,13 @@ om.class @ReferenceEachOther() {
 om.class @RefecenceEachOthersField(%blue_1: i8, %green_1: i32) {
   // CHECK-NEXT: %[[obj1:.+]] = om.object @Widget(%blue_1, %[[field2:.+]]) : (i8, i32) -> !om.class.type<@Widget>
   %0 = om.object @Widget(%blue_1, %3) : (i8, i32) -> !om.class.type<@Widget>
-  // CHECK-NEXT: %[[field1:.+]] = om.object.field %[[obj1]], [@blue_1] : (!om.class.type<@Widget>) -> i8
-  %1 = om.object.field %0, [@blue_1] : (!om.class.type<@Widget>) -> i8
+  // CHECK-NEXT: %[[field1:.+]] = om.object.field %[[obj1]]["blue_1"] : (!om.class.type<@Widget>) -> i8
+  %1 = om.object.field %0["blue_1"] : (!om.class.type<@Widget>) -> i8
 
   // CHECK-NEXT: %[[obj2:.+]] = om.object @Widget(%[[field1]], %green_1) : (i8, i32) -> !om.class.type<@Widget>
   %2 = om.object @Widget(%1, %green_1) : (i8, i32) -> !om.class.type<@Widget>
-  // CHECK-NEXT: %[[field2]] = om.object.field %[[obj2]], [@green_1] : (!om.class.type<@Widget>) -> i32
-  %3 = om.object.field %2, [@green_1] : (!om.class.type<@Widget>) -> i32
+  // CHECK-NEXT: %[[field2]] = om.object.field %[[obj2]]["green_1"] : (!om.class.type<@Widget>) -> i32
+  %3 = om.object.field %2["green_1"] : (!om.class.type<@Widget>) -> i32
   om.class.fields
 }
 

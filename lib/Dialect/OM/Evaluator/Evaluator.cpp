@@ -756,22 +756,25 @@ circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
     return objectFieldValue;
   }
 
+  // If the result is a ReferenceValue, dereference it to get the actual object
+  if (auto *ref = llvm::dyn_cast<evaluator::ReferenceValue>(result.get())) {
+    auto stripped = ref->getStrippedValue();
+    if (failed(stripped))
+      return failure();
+    result = stripped.value();
+  }
+
   auto *currentObject = llvm::cast<evaluator::ObjectValue>(result.get());
 
-  // Iteratively access nested fields through the path until we reach the final
-  // field in the path.
-  evaluator::EvaluatorValuePtr finalField;
-  for (auto field : op.getFieldPath().getAsRange<FlatSymbolRefAttr>()) {
-    // `currentObject` might no be fully evaluated.
-    if (!currentObject->getFields().contains(field.getAttr()))
-      return objectFieldValue;
+  // Access the field.
+  auto field = op.getFieldAttr();
 
-    auto currentField = currentObject->getField(field.getAttr());
-    finalField = currentField.value();
-    if (auto *nextObject =
-            llvm::dyn_cast<evaluator::ObjectValue>(finalField.get()))
-      currentObject = nextObject;
-  }
+  // `currentObject` might not be fully evaluated.
+  if (!currentObject->getFields().contains(field))
+    return objectFieldValue;
+
+  auto currentField = currentObject->getField(field);
+  auto finalField = currentField.value();
 
   if (!finalField->isFullyEvaluated())
     return objectFieldValue;

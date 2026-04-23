@@ -117,8 +117,8 @@ om.class @ObjectFieldTest(%basepath : !om.basepath, %path : !om.path) -> (subfie
   // CHECK: [[OBJ:%.+]] = om.object @PathTest
   %0 = om.object @PathTest(%basepath, %path) : (!om.basepath, !om.path) -> !om.class.type<@PathTest>
 
-  // CHECK: [[SUBFIELD:%.+]] = om.object.field [[OBJ]], [@nestedpath] : (!om.class.type<@PathTest>) -> !om.list<!om.list<!om.frozenpath>>
-  %1 = om.object.field %0, [@nestedpath] : (!om.class.type<@PathTest>) -> !om.list<!om.list<!om.path>>
+  // CHECK: [[SUBFIELD:%.+]] = om.object.field [[OBJ]]["nestedpath"] : (!om.class.type<@PathTest>) -> !om.list<!om.list<!om.frozenpath>>
+  %1 = om.object.field %0["nestedpath"] : (!om.class.type<@PathTest>) -> !om.list<!om.list<!om.path>>
 
   // CHECK: om.class.fields [[SUBFIELD]] : !om.list<!om.list<!om.frozenpath>>
   om.class.fields %1 : !om.list<!om.list<!om.path>>

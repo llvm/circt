@@ -66,63 +66,21 @@ void VerifyObjectFieldsPass::runOnOperation() {
                 return WalkResult::interrupt();
               }
 
-              // Traverse the field path, verifying each field exists.
-              Type finalFieldType;
-              auto fields = SmallVector<FlatSymbolRefAttr>(
-                  objectField.getFieldPath().getAsRange<FlatSymbolRefAttr>());
-              for (size_t i = 0, e = fields.size(); i < e; ++i) {
-                // Verify the field exists on the ClassOp.
-                auto field = fields[i];
-                std::optional<Type> fieldTypeOpt =
-                    classDef.getFieldType(field.getAttr());
-
-                if (!fieldTypeOpt.has_value()) {
-                  auto error =
-                      objectField.emitOpError("referenced non-existent field ")
-                      << field;
-                  error.attachNote(classDef.getLoc()) << "class defined here";
-                  return WalkResult::interrupt();
-                }
-                Type fieldType = fieldTypeOpt.value();
-
-                // If there are more fields, verify the current field is of
-                // ClassType, and look up the ClassOp for that field.
-                if (i < e - 1) {
-                  auto classType = dyn_cast<ClassType>(fieldType);
-                  if (!classType) {
-                    objectField.emitOpError("nested field access into ")
-                        << field << " requires a ClassType, but found "
-                        << fieldType;
-                    return WalkResult::interrupt();
-                  }
-
-                  // Check if the nested ClassOp exists. ObjectInstOp verifier
-                  // already checked the class exits but it's not verified yet
-                  // if the object is an input argument.
-                  classDef = symbolTable.lookup<ClassOp>(
-                      classType.getClassName().getAttr());
-
-                  if (!classDef) {
-                    objectField.emitError()
-                        << "class " << classType.getClassName()
-                        << " was not found";
-                    return WalkResult::interrupt();
-                  }
-
-                  // Proceed to the next field in the path.
-                  continue;
-                }
-
-                // On the last iteration down the path, save the final field
-                // being accessed.
-                finalFieldType = fieldType;
+              auto field = objectField.getFieldAttr();
+              std::optional<Type> fieldTypeOpt = classDef.getFieldType(field);
+              if (!fieldTypeOpt.has_value()) {
+                auto error =
+                    objectField.emitOpError("referenced non-existent field ")
+                    << field;
+                error.attachNote(classDef.getLoc()) << "class defined here";
+                return WalkResult::interrupt();
               }
 
               // Verify the accessed field type matches the result type.
-              if (finalFieldType != objectField.getResult().getType()) {
+              if (*fieldTypeOpt != objectField.getResult().getType()) {
                 objectField.emitOpError("expected type ")
                     << objectField.getResult().getType()
-                    << ", but accessed field has type " << finalFieldType;
+                    << ", but accessed field has type " << *fieldTypeOpt;
 
                 return WalkResult::interrupt();
               }

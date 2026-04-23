@@ -367,11 +367,9 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
   auto object = ObjectOp::create(builder, innerCls, body.getArguments());
-  auto field =
-      ObjectFieldOp::create(builder, builder.getI32Type(), object,
-                            builder.getArrayAttr(FlatSymbolRefAttr::get(
-                                builder.getStringAttr("field"))));
-  ClassFieldsOp::create(builder, loc, SmallVector<Value>({field}), ArrayAttr{});
+  auto field = ObjectFieldOp::create(builder, builder.getI32Type(), object,
+                                     builder.getStringAttr("field"));
+  ClassFieldsOp::create(builder, loc, ValueRange{field}, ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -586,7 +584,9 @@ om.class @LinkedList(%n: !ty, %val: !om.string) -> (n: !ty, val:
 }
 om.class @ReferenceEachOther() -> (field1: !ty, field2: !ty) {
   %str = om.constant "foo" : !om.string
-  %val = om.object.field %1, [@n, @n, @val] : (!ty) -> !om.string
+  %temp1 = om.object.field %1["n"] : (!ty) -> !ty
+  %temp2 = om.object.field %temp1["n"] : (!ty) -> !ty
+  %val = om.object.field %temp2["val"] : (!ty) -> !om.string
   %0 = om.object @LinkedList(%1, %val) : (!ty, !om.string) -> !ty
   %1 = om.object @LinkedList(%0, %str) : (!ty, !om.string) -> !ty
   om.class.fields %0, %1 : !ty, !ty
@@ -641,7 +641,7 @@ om.class @LinkedList(%n: !ty) -> (n: !ty){
   om.class.fields %n : !ty
 }
 om.class @ReferenceEachOther() -> (field: !ty){
-  %val = om.object.field %0, [@n] : (!ty) -> !ty
+  %val = om.object.field %0["n"] : (!ty) -> !ty
   %0 = om.object @LinkedList(%val) : (!ty) -> !ty
   om.class.fields %0 : !ty
 }
@@ -681,9 +681,9 @@ om.class @Domain(%in: !om.string) -> (out: !om.string) {
 om.class @Top() -> (test: i1) {
   %0 = om.constant "A" : !om.string
   %1 = om.object @Domain(%0) : (!om.string) -> !om.class.type<@Domain>
-  %2 = om.object.field %1, [@out] : (!om.class.type<@Domain>) -> !om.string
+  %2 = om.object.field %1["out"] : (!om.class.type<@Domain>) -> !om.string
   %3 = om.object @Domain(%2) : (!om.string) -> !om.class.type<@Domain>
-  %4 = om.object.field %3, [@out] : (!om.class.type<@Domain>) -> !om.string
+  %4 = om.object.field %3["out"] : (!om.class.type<@Domain>) -> !om.string
   %5 = om.constant "B" : !om.string
   %6 = om.prop.eq %4, %5 : !om.string
   om.class.fields %6 : i1
@@ -1014,10 +1014,10 @@ om.class @Class2() -> (value: !om.integer){
 
 om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {
   %0 = om.object @Class1() : () -> !om.class.type<@Class1>
-  %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
+  %1 = om.object.field %0["value"] : (!om.class.type<@Class1>) -> !om.integer
 
   %2 = om.object @Class2() : () -> !om.class.type<@Class2>
-  %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
+  %3 = om.object.field %2["value"] : (!om.class.type<@Class2>) -> !om.integer
 
   %5 = om.integer.add %1, %3 : !om.integer
   om.class.fields %5 : !om.integer
@@ -1064,10 +1064,10 @@ om.class @Class2() -> (value: !om.integer){
 
 om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer){
   %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>
-  %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
+  %1 = om.object.field %0["value"] : (!om.class.type<@Class1>) -> !om.integer
 
   %2 = om.object @Class2() : () -> !om.class.type<@Class2>
-  %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
+  %3 = om.object.field %2["value"] : (!om.class.type<@Class2>) -> !om.integer
 
   %5 = om.integer.add %1, %3 : !om.integer
   om.class.fields %5 : !om.integer
@@ -1202,7 +1202,7 @@ om.class @ListConcatField() -> (result: !om.list<!om.integer>){
   %0 = om.constant #om.integer<0 : i8> : !om.integer
   %1 = om.constant #om.integer<1 : i8> : !om.integer
   %l0 = om.list_create %0, %1 : !om.integer
-  %l1 = om.object.field %listField, [@value] : (!om.class.type<@ListField>) -> !om.list<!om.integer>
+  %l1 = om.object.field %listField["value"] : (!om.class.type<@ListField>) -> !om.list<!om.integer>
   %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>
   om.class.fields %concat : !om.list<!om.integer>
 }
@@ -1328,9 +1328,9 @@ om.class @Leaf(%id_in: !om.integer) -> (id: !om.integer) {
 }
 om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){
   %0 = om.object @Child(%7) : (!om.any) -> !om.class.type<@Child>
-  %1 = om.object.field %0, [@field] : (!om.class.type<@Child>) -> !om.list<!om.any>
+  %1 = om.object.field %0["field"] : (!om.class.type<@Child>) -> !om.list<!om.any>
   %2 = om.object @Child(%10) : (!om.any) -> !om.class.type<@Child>
-  %3 = om.object.field %2, [@field] : (!om.class.type<@Child>) -> !om.list<!om.any>
+  %3 = om.object.field %2["field"] : (!om.class.type<@Child>) -> !om.list<!om.any>
   %4 = om.list_concat %1, %3 : <!om.any>
   %5 = om.constant #om.integer<1 : i64>
   %6 = om.object @Leaf(%5) : (!om.integer) -> !om.class.type<@Leaf>
@@ -1399,9 +1399,9 @@ om.class @InnerClass2(%anyListIn: !om.list<!om.any>)  -> (any_list2: !om.list<!o
 om.class @OuterClass2()  -> (om: !om.class.type<@InnerClass2>) {
   %0 = om.object @InnerClass2(%5) : (!om.list<!om.any>) -> !om.class.type<@InnerClass2>
   %1 = om.object @Any() : () -> !om.class.type<@Any>
-  %2 = om.object.field %1, [@object] : (!om.class.type<@Any>) -> !om.any
+  %2 = om.object.field %1["object"] : (!om.class.type<@Any>) -> !om.any
   %3 = om.object @Any() : () -> !om.class.type<@Any>
-  %4 = om.object.field %3, [@object] : (!om.class.type<@Any>) -> !om.any
+  %4 = om.object.field %3["object"] : (!om.class.type<@Any>) -> !om.any
   %5 = om.list_create %2, %4 : !om.any
   om.class.fields %0 : !om.class.type<@InnerClass2>
 }
@@ -1409,10 +1409,10 @@ om.class @OuterClass1()  -> (om: !om.any) {
   %0 = om.object @InnerClass1(%8) : (!om.list<!om.any>) -> !om.class.type<@InnerClass1>
   %1 = om.any_cast %0 : (!om.class.type<@InnerClass1>) -> !om.any
   %2 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>
-  %3 = om.object.field %2, [@om] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
+  %3 = om.object.field %2["om"] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
   %4 = om.any_cast %3 : (!om.class.type<@InnerClass2>) -> !om.any
   %5 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>
-  %6 = om.object.field %5, [@om] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
+  %6 = om.object.field %5["om"] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
   %7 = om.any_cast %6 : (!om.class.type<@InnerClass2>) -> !om.any
   %8 = om.list_create %4, %7 : !om.any
   om.class.fields %1 : !om.any
@@ -1539,10 +1539,10 @@ om.class @Foo(
   %3 = om.list_concat %2, %2 : !om.list<!om.integer>
   %4 = om.frozenbasepath_create %unknown_frozenbasepath "Foo/bar"
   %5 = om.frozenpath_create reference %unknown_frozenbasepath "Foo/bar:Bar>w.a"
-  %6 = om.object.field %unknown_class, [@b] : (!om.class.type<@Bar>) -> !om.integer
+  %6 = om.object.field %unknown_class["b"] : (!om.class.type<@Bar>) -> !om.integer
   %7 = om.unknown : !om.integer
   %8 = om.object @Baz() : () -> !om.class.type<@Baz>
-  %9 = om.object.field %8, [@a] : (!om.class.type<@Baz>) -> !om.integer
+  %9 = om.object.field %8["a"] : (!om.class.type<@Baz>) -> !om.integer
   %10 = om.unknown : !om.integer
   %11 = om.unknown : !om.string
   %12 = om.unknown : !om.list<!om.string>
@@ -1661,8 +1661,8 @@ om.class @Foo(
   %0 = om.constant #om.integer<1 : i4> : !om.integer
 
   %bar = om.object @Bar(%0, %unknown_in) : (!om.integer, !om.integer) -> !om.class.type<@Bar>
-  %1 = om.object.field %bar, [@known_out] : (!om.class.type<@Bar>) -> !om.integer
-  %2 = om.object.field %bar, [@unknown_out] : (!om.class.type<@Bar>) -> !om.integer
+  %1 = om.object.field %bar["known_out"] : (!om.class.type<@Bar>) -> !om.integer
+  %2 = om.object.field %bar["unknown_out"] : (!om.class.type<@Bar>) -> !om.integer
 
   om.class.fields %0, %2 : !om.integer, !om.integer
 }
@@ -1755,7 +1755,7 @@ om.class.extern @Dut_Class(%basepath: !om.frozenbasepath) -> (omirOut: !om.list<
 om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<!om.any>) {
   %0 = om.frozenbasepath_create %basepath "TestHarness/dut"
   %1 = om.object @Dut_Class(%0) : (!om.frozenbasepath) -> !om.class.type<@Dut_Class>
-  %2 = om.object.field %1, [@omirOut] : (!om.class.type<@Dut_Class>) -> !om.list<!om.any>
+  %2 = om.object.field %1["omirOut"] : (!om.class.type<@Dut_Class>) -> !om.list<!om.any>
   %3 = om.list_create : !om.any
   %4 = om.list_concat %3, %2 : !om.list<!om.any>
   om.class.fields %4 : !om.list<!om.any>
@@ -1842,7 +1842,7 @@ om.class @Parameter_True_Cycle(%in: i1) -> (out: i1) {
 }
 om.class @Parameter_True_Cycle_Top() -> () {
   %obj = om.object @Parameter_True_Cycle(%in) : (i1) -> !om.class.type<@Parameter_True_Cycle>
-  %in = om.object.field %obj, [@out] : (!om.class.type<@Parameter_True_Cycle>) -> i1
+  %in = om.object.field %obj["out"] : (!om.class.type<@Parameter_True_Cycle>) -> i1
   om.class.fields
 }
 
@@ -1854,7 +1854,7 @@ om.class @Parameter_False_Cycle(%in: i1) -> (out: i1) {
 }
 om.class @Parameter_False_Cycle_Top() -> () {
   %obj = om.object @Parameter_False_Cycle(%in) : (i1) -> !om.class.type<@Parameter_False_Cycle>
-  %in = om.object.field %obj, [@out] : (!om.class.type<@Parameter_False_Cycle>) -> i1
+  %in = om.object.field %obj["out"] : (!om.class.type<@Parameter_False_Cycle>) -> i1
   om.class.fields
 }
 
@@ -1865,7 +1865,7 @@ om.class @ReturnTrue() -> (out: i1) {
 }
 om.class @SubfieldTrue() -> () {
   %obj = om.object @ReturnTrue() : () -> !om.class.type<@ReturnTrue>
-  %true = om.object.field %obj, [@out] : (!om.class.type<@ReturnTrue>) -> i1
+  %true = om.object.field %obj["out"] : (!om.class.type<@ReturnTrue>) -> i1
   om.property_assert %true, "input must be true true" : i1
   om.class.fields
 }
@@ -1877,7 +1877,7 @@ om.class @ReturnFalse() -> (out: i1) {
 }
 om.class @SubfieldFalse() -> () {
   %obj = om.object @ReturnFalse() : () -> !om.class.type<@ReturnFalse>
-  %false = om.object.field %obj, [@out] : (!om.class.type<@ReturnFalse>) -> i1
+  %false = om.object.field %obj["out"] : (!om.class.type<@ReturnFalse>) -> i1
   om.property_assert %false, "input must be true true" : i1
   om.class.fields
 }
@@ -1892,9 +1892,9 @@ om.class @Domain(%in: !om.string) -> (out: !om.string) {
 om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
   %0 = om.constant "A" : !om.string
   %1 = om.object @Domain(%0) : (!om.string) -> !om.class.type<@Domain>
-  %2 = om.object.field %1, [@out] : (!om.class.type<@Domain>) -> !om.string
+  %2 = om.object.field %1["out"] : (!om.class.type<@Domain>) -> !om.string
   %3 = om.object @Domain(%2) : (!om.string) -> !om.class.type<@Domain>
-  %4 = om.object.field %3, [@out] : (!om.class.type<@Domain>) -> !om.string
+  %4 = om.object.field %3["out"] : (!om.class.type<@Domain>) -> !om.string
   %5 = om.constant "B" : !om.string
   %6 = om.prop.eq %4, %5 : !om.string
   om.property_assert %6, "hello" : i1

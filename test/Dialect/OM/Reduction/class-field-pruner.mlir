@@ -21,8 +21,8 @@ module {
     %1 = om.object @Foo(%0) : (!om.integer) -> !om.class.type<@Foo>
 
     // Only access the usedField - the other fields should be removed
-    // CHECK: om.object.field %{{.+}}, [@usedField]
-    %2 = om.object.field %1, [@usedField] : (!om.class.type<@Foo>) -> !om.integer
+    // CHECK: om.object.field %{{.+}}["usedField"]
+    %2 = om.object.field %1["usedField"] : (!om.class.type<@Foo>) -> !om.integer
 
     om.class.fields
   }
