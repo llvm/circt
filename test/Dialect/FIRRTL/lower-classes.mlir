@@ -549,6 +549,8 @@ firrtl.circuit "PathTargetReplaced" {
     %path = firrtl.path instance distinct[0]<>
   }
   firrtl.module private @WillBeReplaced(out %output: !firrtl.integer) {
+    %c = firrtl.integer 42
+    firrtl.propassign %output, %c : !firrtl.integer
   }
 }
 

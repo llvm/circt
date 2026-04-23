@@ -1,4 +1,4 @@
-// RUN: circt-opt -om-verify-object-fields %s -verify-diagnostics -split-input-file
+// RUN: circt-opt %s -verify-diagnostics -split-input-file
 
 om.class @Class() {
   // expected-error @+1 {{'om.object' op result type ("Bar") does not match referred to class ("Foo")}}
@@ -42,7 +42,6 @@ om.class @Class2(%param : i2) {
 
 // -----
 
-// expected-note @+1 {{class defined here}}
 om.class @Class1() {
   om.class.fields
 }
@@ -120,7 +119,7 @@ om.class @DupField(%0: i1) -> (foo: i1, foo: i1){
 // -----
 
 om.class @UnknownClass(%arg: !om.class.type<@Unknwon>) {
-  // expected-error @+1 {{class @Unknwon was not found}}
+  // expected-error @+1 {{class "Unknwon" was not found}}
   om.object.field %arg["unknown"]: (!om.class.type<@Unknwon>) -> i1
   om.class.fields
 }

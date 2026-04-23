@@ -571,6 +571,38 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// ObjectFieldOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // Get the class type from the object operand.
+  auto classType = getObject().getType();
+  auto className = classType.getClassName().getAttr();
+
+  // Verify the referred-to class exists.
+  auto classDef = dyn_cast_or_null<ClassLike>(
+      symbolTable.lookupNearestSymbolFrom(*this, className));
+  if (!classDef)
+    return emitOpError("class \"") << className << "\" was not found";
+
+  // Verify the field exists in the class.
+  auto fieldName = getFieldAttr();
+  std::optional<Type> fieldType = classDef.getFieldType(fieldName);
+  if (!fieldType.has_value())
+    return emitOpError("referenced non-existent field \"")
+           << fieldName.getValue() << "\"";
+
+  // Verify the result type matches the field type.
+  if (getResult().getType() != fieldType.value())
+    return emitOpError("expected type ")
+           << getResult().getType() << ", but accessed field has type "
+           << fieldType.value();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ConstantOp
 //===----------------------------------------------------------------------===//
 
