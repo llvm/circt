@@ -273,7 +273,7 @@ jobs:
         id: setup-macos
         if: runner.os == 'macOS'
         run: |
-          brew install iverilog gnu-tar ninja z3
+          brew install icarus-verilog gnu-tar ninja z3
           echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON" >> "$GITHUB_OUTPUT"
       - name: Integration Test Setup (MacOS)
         if: inputs.run_integration_tests && runner.os == 'macOS'
