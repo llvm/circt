@@ -909,7 +909,7 @@ struct StmtVisitor {
       return failure();
 
     // Handle assertion statements that don't have an action block.
-    if (stmt.ifTrue && stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
+    if (!stmt.ifTrue || stmt.ifTrue->as_if<slang::ast::EmptyStatement>()) {
       switch (stmt.assertionKind) {
       case slang::ast::AssertionKind::Assert:
         verif::AssertOp::create(builder, loc, property, enable, StringAttr{});
