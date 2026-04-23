@@ -1417,3 +1417,86 @@ hw.module @MixedModules(out o1: i16, out o2: i16) {
 
   hw.output %vext, %vreg : i16, i16
 }
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Test hw.probe.xmr_ref lowering (similar to probe.resolve, but returns inout)
+//===----------------------------------------------------------------------===//
+
+// Test basic hw.probe.xmr_ref lowering
+// Since we can't output inout types from modules, we'll read from it
+// CHECK: hw.hierpath private @[[PATH:.+]] [@BasicXMRRef::@[[SYM:.+]]]
+// CHECK-LABEL: hw.module @BasicXMRRef
+hw.module @BasicXMRRef(out result: i8) {
+  // CHECK: %[[C42:.+]] = hw.constant 42
+  // CHECK: %[[WIRE:.+]] = hw.wire %[[C42]] sym @[[SYM]]
+  // CHECK-NOT: hw.probe.send
+  // CHECK-NOT: hw.probe.xmr_ref
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[PATH]]
+  // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
+  // CHECK: hw.output %[[READ]]
+
+  %c42_i8 = hw.constant 42 : i8
+  %wire = hw.wire %c42_i8 : i8
+
+  %probe = hw.probe.send %wire : i8
+  %inout = hw.probe.xmr_ref %probe : !hw.probe<i8>
+  %value = sv.read_inout %inout : !hw.inout<i8>
+
+  hw.output %value : i8
+}
+
+// -----
+
+// Test hw.probe.xmr_ref with rwprobe
+// Since we can't output inout types, we'll use it for force/release (simulated with read)
+// CHECK: hw.hierpath private @[[PATH:.+]] [@XMRRefRWProbe::@[[SYM:.+]]]
+// CHECK-LABEL: hw.module @XMRRefRWProbe
+hw.module @XMRRefRWProbe(out result: i32) {
+  // CHECK: %[[WIRE:.+]] = hw.wire %{{.+}} sym @[[SYM]]
+  // CHECK-NOT: hw.probe.send
+  // CHECK-NOT: hw.probe.xmr_ref
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[PATH]]
+  // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
+  // CHECK: hw.output %[[READ]]
+
+  %c99_i32 = hw.constant 99 : i32
+  %wire = hw.wire %c99_i32 : i32
+
+  %rwprobe = hw.probe.send forceable %wire : i32
+  %inout = hw.probe.xmr_ref %rwprobe : !hw.rwprobe<i32>
+  // Use the inout (e.g., for force/release or read)
+  %value = sv.read_inout %inout : !hw.inout<i32>
+
+  hw.output %value : i32
+}
+
+// -----
+
+// Test hw.probe.xmr_ref vs probe.resolve - both should create sv.xmr.ref
+// CHECK: hw.hierpath private @[[PATH:.+]] [@XMRRefAndResolve::@[[SYM:.+]]]
+// CHECK-LABEL: hw.module @XMRRefAndResolve
+hw.module @XMRRefAndResolve(out value1: i16, out value2: i16) {
+  // CHECK: %[[WIRE:.+]] = hw.wire %{{.+}} sym @[[SYM]]
+  // CHECK-NOT: hw.probe
+  // CHECK: %[[XMR1:.+]] = sv.xmr.ref @[[PATH]]
+  // CHECK: %[[READ1:.+]] = sv.read_inout %[[XMR1]]
+  // CHECK: %[[XMR2:.+]] = sv.xmr.ref @[[PATH]]
+  // CHECK: %[[READ2:.+]] = sv.read_inout %[[XMR2]]
+  // CHECK: hw.output %[[READ1]], %[[READ2]]
+
+  %c123_i16 = hw.constant 123 : i16
+  %wire = hw.wire %c123_i16 : i16
+
+  %probe = hw.probe.send %wire : i16
+
+  // Get inout via xmr_ref, then read from it
+  %inout = hw.probe.xmr_ref %probe : !hw.probe<i16>
+  %val1 = sv.read_inout %inout : !hw.inout<i16>
+
+  // Get value directly via resolve
+  %val2 = hw.probe.resolve %probe : !hw.probe<i16>
+
+  hw.output %val1, %val2 : i16, i16
+}
