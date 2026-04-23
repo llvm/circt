@@ -58,7 +58,7 @@ private:
                                 /*scope=*/Value{});
     }
 
-    auto materializeReg = [&](auto regOp, StringRef regName) {
+    auto materializeRegAnchor = [&](auto regOp, StringRef regName) {
       auto regResult = regOp.getResult();
       if (!trackedValues.insert(regResult).second)
         return;
@@ -70,21 +70,19 @@ private:
     };
 
     unsigned regIndex = 0;
-    for (auto regOp :
-         llvm::make_early_inc_range(body->getOps<seq::CompRegOp>())) {
+    for (auto regOp : body->getOps<seq::CompRegOp>()) {
       if (regOp.getName() && !regOp.getName()->empty())
-        materializeReg(regOp, regOp.getName().value());
+        materializeRegAnchor(regOp, regOp.getName().value());
       else
-        materializeReg(regOp, ("reg_" + Twine(regIndex)).str());
+        materializeRegAnchor(regOp, ("reg_" + Twine(regIndex)).str());
       ++regIndex;
     }
 
-    for (auto regOp :
-         llvm::make_early_inc_range(body->getOps<seq::FirRegOp>())) {
+    for (auto regOp : body->getOps<seq::FirRegOp>()) {
       if (!regOp.getName().empty())
-        materializeReg(regOp, regOp.getName());
+        materializeRegAnchor(regOp, regOp.getName());
       else
-        materializeReg(regOp, ("reg_" + Twine(regIndex)).str());
+        materializeRegAnchor(regOp, ("reg_" + Twine(regIndex)).str());
       ++regIndex;
     }
   }

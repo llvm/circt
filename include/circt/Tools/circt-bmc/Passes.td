@@ -53,7 +53,7 @@ def ExternalizeRegisters : Pass<"externalize-registers", "::mlir::ModuleOp"> {
 def MaterializeDebugVariables : Pass<"materialize-debug-variables", "::mlir::ModuleOp"> {
   let summary = "Materializes debug anchors for module inputs and registers";
   let description = [{
-    Creates `dbg.variable` anchors for module input arguments and register
+    Creates `dbg.variable` anchors for module inputs and register
     results that do not yet have one.
   }];
 
