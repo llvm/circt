@@ -757,6 +757,9 @@ circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
   }
 
   // If the result is a ReferenceValue, dereference it to get the actual object
+  if (!result->isFullyEvaluated())
+    return objectFieldValue;
+
   if (auto *ref = llvm::dyn_cast<evaluator::ReferenceValue>(result.get())) {
     auto stripped = ref->getStrippedValue();
     if (failed(stripped))
