@@ -225,10 +225,21 @@ where the `logic_to_int` conversion is only necessary if `%cond` is 4-valued.
 %1 = seq.shiftreg n, %a, %clk, %true, powerOn %zero : i1
 ``` 
 
+- **`$isunknown(a)`**:
+```mlir
+// For 1-bit 'a'
+%x = moore.constant 1'bx : <l1>
+%isunknown = moore.case_eq %a, %x : i1
+
+// For multi-bit 'a'
+%reduced = moore.reduce_xor %a : <l1>
+%x = moore.constant 1'bx : <l1>
+%isunknown = moore.case_eq %reduced, %x : i1
+```
+
 > The following functions are not yet supported by CIRCT:  
 > - **`$onehot(a)`**  
 > - **`$onehot0(a)`**  
-> - **`$isunknown(a)`**  
 > - **`$countones(a)`**     
   
   
