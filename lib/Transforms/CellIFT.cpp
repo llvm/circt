@@ -88,10 +88,10 @@ Value conservativeTaint(ImplicitLocOpBuilder &b, TaintMap &taintOf,
                         Type resTy);
 
 template <typename ShiftOp>
-using EnableIfCombShiftOp = std::enable_if_t<
-    std::is_same_v<ShiftOp, comb::ShlOp> ||
-    std::is_same_v<ShiftOp, comb::ShrUOp> ||
-    std::is_same_v<ShiftOp, comb::ShrSOp>>;
+using EnableIfCombShiftOp =
+    std::enable_if_t<std::is_same_v<ShiftOp, comb::ShlOp> ||
+                     std::is_same_v<ShiftOp, comb::ShrUOp> ||
+                     std::is_same_v<ShiftOp, comb::ShrSOp>>;
 
 Value instrumentOperation(ImplicitLocOpBuilder &b, hw::ConstantOp op,
                           bool taintConstants);
@@ -733,45 +733,45 @@ LogicalResult CellIFTInstrumentPass::instrumentModuleBody(
           StringAttr name =
               b.getStringAttr(firreg.getName().str() + taintSuffix.str());
 
-      Value nextT =
-          getTaint(taintOf, pendingTaints, backedgeBuilder, firreg.getNext());
-      Value tReg;
-      if (firreg.hasReset()) {
-        Value rstVal = getZero(b, firreg.getType());
-        tReg = seq::FirRegOp::create(
-            b, nextT, firreg.getClk(), name, firreg.getReset(), rstVal,
-            firreg.getInnerSymAttr(), firreg.getIsAsync());
-      } else {
-        tReg = seq::FirRegOp::create(b, nextT, firreg.getClk(), name);
-      }
-      setTaint(taintOf, pendingTaints, firreg.getData(), tReg);
-    })
-    .Case<hw::ConstantOp>([&](auto o) {
-      setTaint(taintOf, pendingTaints, o.getResult(),
-              instrumentOperation(b, o, taintConstants));
-    })
-    .Case<comb::AndOp, comb::OrOp, comb::XorOp, comb::AddOp, comb::SubOp,
-          comb::MulOp, comb::DivUOp, comb::DivSOp, comb::ModUOp,
-          comb::ModSOp, comb::MuxOp, comb::ConcatOp, comb::ExtractOp,
-          comb::ReplicateOp, comb::ICmpOp, comb::ShlOp, comb::ShrUOp,
-          comb::ShrSOp, comb::ParityOp, comb::ReverseOp>([&](auto o) {
-      instrumentSingleResultOperation(taintOf, pendingTaints,
-                                      backedgeBuilder, b, o);
-    })
-    .Case<hw::InstanceOp>([&](auto o) {
-      instrumentInstance(taintOf, pendingTaints, backedgeBuilder,
-                        taintSuffix, o, b);
-    })
-    .Default([&](Operation *o) {
-      // Conservative fallback for unknown ops with integer results.
-      for (auto res : o->getResults())
-        if (isa<IntegerType>(res.getType()))
-          setTaint(taintOf, pendingTaints, res,
-                  conservativeTaint(b, taintOf, pendingTaints,
-                                    backedgeBuilder, o->getOperands(),
-                                    res.getType()));
-    });
-}
+          Value nextT = getTaint(taintOf, pendingTaints, backedgeBuilder,
+                                 firreg.getNext());
+          Value tReg;
+          if (firreg.hasReset()) {
+            Value rstVal = getZero(b, firreg.getType());
+            tReg = seq::FirRegOp::create(
+                b, nextT, firreg.getClk(), name, firreg.getReset(), rstVal,
+                firreg.getInnerSymAttr(), firreg.getIsAsync());
+          } else {
+            tReg = seq::FirRegOp::create(b, nextT, firreg.getClk(), name);
+          }
+          setTaint(taintOf, pendingTaints, firreg.getData(), tReg);
+        })
+        .Case<hw::ConstantOp>([&](auto o) {
+          setTaint(taintOf, pendingTaints, o.getResult(),
+                   instrumentOperation(b, o, taintConstants));
+        })
+        .Case<comb::AndOp, comb::OrOp, comb::XorOp, comb::AddOp, comb::SubOp,
+              comb::MulOp, comb::DivUOp, comb::DivSOp, comb::ModUOp,
+              comb::ModSOp, comb::MuxOp, comb::ConcatOp, comb::ExtractOp,
+              comb::ReplicateOp, comb::ICmpOp, comb::ShlOp, comb::ShrUOp,
+              comb::ShrSOp, comb::ParityOp, comb::ReverseOp>([&](auto o) {
+          instrumentSingleResultOperation(taintOf, pendingTaints,
+                                          backedgeBuilder, b, o);
+        })
+        .Case<hw::InstanceOp>([&](auto o) {
+          instrumentInstance(taintOf, pendingTaints, backedgeBuilder,
+                             taintSuffix, o, b);
+        })
+        .Default([&](Operation *o) {
+          // Conservative fallback for unknown ops with integer results.
+          for (auto res : o->getResults())
+            if (isa<IntegerType>(res.getType()))
+              setTaint(taintOf, pendingTaints, res,
+                       conservativeTaint(b, taintOf, pendingTaints,
+                                         backedgeBuilder, o->getOperands(),
+                                         res.getType()));
+        });
+  }
 
   return backedgeBuilder.clearOrEmitError();
 }
