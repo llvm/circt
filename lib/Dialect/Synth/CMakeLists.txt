@@ -22,6 +22,7 @@ add_circt_dialect_library(CIRCTSynth
   LINK_LIBS PUBLIC
   MLIRIR
   CIRCTHW
+  CIRCTComb
   CIRCTSupport
 )
 

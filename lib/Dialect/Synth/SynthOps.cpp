@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
@@ -27,6 +28,7 @@ using namespace mlir;
 using namespace circt;
 using namespace circt::synth;
 using namespace circt::synth::aig;
+using namespace circt::comb;
 using namespace matchers;
 
 #define GET_OP_CLASSES
@@ -489,6 +491,11 @@ void circt::synth::populateVariadicAndInverterLoweringPatterns(
 void circt::synth::populateVariadicXorInverterLoweringPatterns(
     RewritePatternSet &patterns) {
   patterns.add(lowerVariadicAndInverterOpConversion<XorInverterOp>);
+}
+
+bool circt::synth::isLogicNetworkOp(Operation *op) {
+  return isa<synth::BooleanLogicOpInterface, synth::ChoiceOp, comb::ExtractOp,
+             comb::ReplicateOp, comb::ConcatOp>(op);
 }
 
 LogicalResult circt::synth::topologicallySortGraphRegionBlocks(

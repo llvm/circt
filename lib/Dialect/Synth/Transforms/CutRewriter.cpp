@@ -265,9 +265,7 @@ LogicalResult circt::synth::topologicallySortLogicNetwork(Operation *topOp) {
   const auto isOperationReady = [](Value value, Operation *op) -> bool {
     // Topologically sort AIG ops and dataflow ops. Other operations
     // can be scheduled.
-    return !(isa<aig::AndInverterOp, synth::XorInverterOp, synth::ChoiceOp,
-                 comb::XorOp, comb::AndOp, comb::OrOp, comb::ExtractOp,
-                 comb::ReplicateOp, comb::ConcatOp>(op));
+    return !circt::synth::isLogicNetworkOp(op);
   };
 
   if (failed(topologicallySortGraphRegionBlocks(topOp, isOperationReady)))
