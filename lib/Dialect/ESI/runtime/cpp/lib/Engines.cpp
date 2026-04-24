@@ -207,7 +207,7 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
         [&](std::string &subsystem, std::string &msg,
             std::unique_ptr<std::map<std::string, std::any>> &details) {
           subsystem = "OneItemBuffersToHost";
-          msg = "recieved message";
+          msg = "received message";
           details = std::make_unique<std::map<std::string, std::any>>();
           MessageData flat = pendingMessage->toMessageData();
           (*details)["channel"] = identifier();
