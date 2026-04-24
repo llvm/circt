@@ -190,6 +190,8 @@ public:
       add(lit);
     add(0);
   }
+  /// Add a fresh variable for safe incremental SAT solving.
+  virtual int newVar() = 0;
 };
 
 /// Emit clauses encoding `outVar <=> and(inputLits)`.

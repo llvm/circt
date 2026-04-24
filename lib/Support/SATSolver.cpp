@@ -95,6 +95,12 @@ public:
     }
     solver.clause(lits.data(), lits.size());
   }
+  int newVar() override {
+    int var = solver.declare_one_more_variable();
+    if (var > maxVariable)
+      maxVariable = var;
+    return var;
+  }
 
 private:
   mutable CaDiCaL::Solver solver;
@@ -121,6 +127,7 @@ public:
   Result solve(llvm::ArrayRef<int> assumptions) override;
   int val(int v) const override;
   void reserveVars(int maxVar) override;
+  int newVar() override;
 
 private:
   void clearSolveScope();
@@ -199,6 +206,13 @@ void Z3SATSolver::reserveVars(int maxVar) {
   while (static_cast<int>(variables.size()) < maxVar)
     newVariable();
   maxVariable = maxVar;
+}
+
+int Z3SATSolver::newVar() {
+  int var = newVariable();
+  if (var > maxVariable)
+    maxVariable = var;
+  return var;
 }
 
 void Z3SATSolver::clearSolveScope() {
