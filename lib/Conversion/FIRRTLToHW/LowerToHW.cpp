@@ -876,8 +876,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib) {
@@ -2084,6 +2083,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(RefResolveOp op);
   LogicalResult visitExpr(RefSubOp op);
   LogicalResult visitExpr(RefCastOp op);
+  LogicalResult visitExpr(RWProbeOp op);
   LogicalResult visitStmt(RefDefineOp op);
 
   // Format String Operations
@@ -3321,8 +3321,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -5329,6 +5328,57 @@ LogicalResult FIRRTLLowering::visitExpr(RefCastOp op) {
 
   auto probeCast = builder.create<hw::ProbeCastOp>(resultType, probe);
   return setLowering(op, probeCast.getResult());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RWProbeOp op) {
+  // ref.rwprobe creates a local RWProbe reference via inner symbol
+  // Get the lowered result type
+  auto resultType = lowerType(op.getType());
+  if (!resultType)
+    return failure();
+
+  // Resolve the inner symbol to get the target FIRRTL operation/value
+  auto targetRef = op.getTargetAttr();
+
+  // Walk the module body to find the operation with this inner symbol
+  // During lowering, both FIRRTL and HW operations exist in theModule
+  Value targetValue;
+
+  // Walk all operations in the module to find one with the matching inner
+  // symbol
+  theModule.walk([&](Operation *walkOp) {
+    if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(walkOp)) {
+      if (auto innerSymAttr = innerSymOp.getInnerSymAttr()) {
+        if (innerSymAttr.getSymName() == targetRef.getName()) {
+          // Found the target operation
+          // Check if it's an HW operation (already lowered) or FIRRTL (not yet
+          // lowered)
+          if (isa<FIRRTLDialect>(walkOp->getDialect())) {
+            // FIRRTL operation - get its lowered value from the mapping
+            if (walkOp->getNumResults() > 0) {
+              Value firrtlValue = walkOp->getResult(0);
+              targetValue = getPossiblyInoutLoweredValue(firrtlValue);
+            }
+          } else {
+            // HW operation (already lowered) - use its result directly
+            if (walkOp->getNumResults() > 0)
+              targetValue = walkOp->getResult(0);
+          }
+          return WalkResult::interrupt();
+        }
+      }
+    }
+    return WalkResult::advance();
+  });
+
+  if (!targetValue)
+    return op.emitError("failed to find or lower target with inner symbol: ")
+           << targetRef;
+
+  // Create hw.probe.send with forceable flag set to true for RWProbe
+  auto probeSend =
+      builder.create<hw::ProbeSendOp>(targetValue, /*forceable=*/true);
+  return setLowering(op, probeSend.getResult());
 }
 
 LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) {

@@ -55,7 +55,6 @@ def ProbeSendOp : HWOp<"probe.send", [Pure]> {
 
   let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
-  let hasVerifier = 1;
 
   let builders = [
     // Default builder without forceable attribute
@@ -89,7 +88,7 @@ def ProbeResolveOp : HWOp<"probe.resolve", [Pure]> {
   }];
   
   let arguments = (ins AnyProbeType:$ref);
-  let results = (outs HWValueType:$result);
+  let results = (outs AnyType:$result);
 
   let hasCustomAssemblyFormat = 1;
 }

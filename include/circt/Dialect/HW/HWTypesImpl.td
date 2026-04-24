@@ -328,7 +328,6 @@ def ProbeTypeImpl : HWType<"Probe"> {
 
   let mnemonic = "probe";
   let parameters = (ins "::mlir::Type":$innerType);
-  let genVerifyDecl = 1;
 
   let builders = [
     TypeBuilderWithInferredContext<(ins "Type":$innerType), [{
@@ -352,7 +351,6 @@ def RWProbeTypeImpl : HWType<"RWProbe"> {
 
   let mnemonic = "rwprobe";
   let parameters = (ins "::mlir::Type":$innerType);
-  let genVerifyDecl = 1;
 
   let builders = [
     TypeBuilderWithInferredContext<(ins "Type":$innerType), [{

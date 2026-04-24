@@ -253,3 +253,30 @@ hw.module @ProbeXMRRefAggregate(in %arr_in: !hw.array<4xi16>) {
   // CHECK: %[[ARR_INOUT:.+]] = hw.probe.xmr_ref %[[ARR_PROBE]] : !hw.probe<!hw.array<4xi16>>
   %arr_inout = hw.probe.xmr_ref %arr_probe : !hw.probe<!hw.array<4xi16>>
 }
+
+// CHECK-LABEL: hw.module @ProbeClockTypes
+hw.module @ProbeClockTypes(in %clock: !seq.clock) {
+  %clock_wire = hw.wire %clock : !seq.clock
+
+  // Create a probe for clock type
+  // CHECK: %[[CLOCK_PROBE:.+]] = hw.probe.send %{{.+}} : !seq.clock
+  %clock_probe = hw.probe.send %clock_wire : !seq.clock
+
+  // Resolve the clock probe
+  // CHECK: %{{.+}} = hw.probe.resolve %[[CLOCK_PROBE]] : !hw.probe<!seq.clock>
+  %clock_value = hw.probe.resolve %clock_probe : !hw.probe<!seq.clock>
+}
+
+// CHECK-LABEL: hw.module @ProbeClockInStruct
+hw.module @ProbeClockInStruct(in %clk: !seq.clock, in %data: i8) {
+  // Create a struct with clock and data
+  %struct = hw.struct_create (%clk, %data) : !hw.struct<clk: !seq.clock, data: i8>
+
+  // Create a probe for the struct containing a clock
+  // CHECK: %[[STRUCT_PROBE:.+]] = hw.probe.send %{{.+}} : !hw.struct<clk: !seq.clock, data: i8>
+  %struct_probe = hw.probe.send %struct : !hw.struct<clk: !seq.clock, data: i8>
+
+  // Resolve the struct probe
+  // CHECK: %{{.+}} = hw.probe.resolve %[[STRUCT_PROBE]] : !hw.probe<!hw.struct<clk: !seq.clock, data: i8>>
+  %struct_value = hw.probe.resolve %struct_probe : !hw.probe<!hw.struct<clk: !seq.clock, data: i8>>
+}
