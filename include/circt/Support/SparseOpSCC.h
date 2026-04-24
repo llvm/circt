@@ -13,8 +13,8 @@
 // -----------
 // Each operation is a node.  A directed edge runs from op A to op B if B uses
 // one of A's results.  The traversal direction is configurable:
-//   - OpSCCDirection::Reachable -- follow edges forward (defining op -> users).
-//   - OpSCCDirection::Reaching  -- follow edges backward (user -> defining op).
+//   - OpSCCDirection::Forward   -- follow edges from defining ops to uses.
+//   - OpSCCDirection::Backward  -- follow edges from uses to defining op.
 //
 // SCC classification
 // ------------------
@@ -29,10 +29,10 @@
 // An optional OpSCCFilter predicate can be supplied to the constructor to
 // prevent the traversal over certain edges of the graph. The first argument
 // contains the operation into which the traversal would lead. The second
-// argument contains the edge's destination operand.
-// For "reachable" (forward) traversal the operand's owner is identical to the
-// first argument. For "reaching" (reverse) traversal the first argument is
-// identical to the operand's defining operation.
+// argument contains the edge's destination operand. For forward traversal
+// the operand's owner is identical to the first argument. For reverse
+// traversal the first argument is identical to the operand's defining
+// operation.
 //
 // Output ordering
 // ---------------
@@ -54,9 +54,11 @@
 // Collect all ops reachable from seedOp, excluding register ops, and process
 // them in topological order:
 //
-//   auto regFilter = [](Operation *op, OpOperand&) { return
-//   !isa<seq::FirRegOp>(op); }; SparseOpSCC<OpSCCDirection::Reachable>
-//   sccs(regFilter); sccs.visit(seedOp);
+//   auto regFilter = [](Operation *op, OpOperand&) {
+//     return !isa<seq::FirRegOp>(op);
+//   };
+//   SparseOpSCC<OpSCCDirection::Forward> sccs(regFilter);
+//   sccs.visit(seedOp);
 //
 //   for (OpSCC entry : sccs.topological()) {
 //     if (Operation *op = llvm::dyn_cast<mlir::Operation *>(entry)) {
@@ -160,9 +162,9 @@ namespace circt {
 using OpSCC = llvm::PointerUnion<mlir::Operation *, CyclicOpSCC>;
 
 /// Traversal direction for SparseOpSCC.
-///   - Reachable: follow def-use edges forward (defining op -> users).
-///   - Reaching:  follow def-use edges backward (user -> defining op).
-enum class OpSCCDirection { Reachable, Reaching };
+///   - Forward: follow def-use edges forward (defining op -> users).
+///   - Backward:  follow def-use edges backward (user -> defining op).
+enum class OpSCCDirection { Forward, Backward };
 
 template <OpSCCDirection, unsigned>
 class SparseOpSCC;
@@ -262,7 +264,7 @@ public:
 
   // NOLINTNEXTLINE(readability-identifier-naming)
   auto topological_begin() const {
-    if constexpr (Direction == OpSCCDirection::Reaching)
+    if constexpr (Direction == OpSCCDirection::Backward)
       return detail::OpSCCIterator<typename decltype(sccs)::const_iterator>(
           sccs.begin(), cyclicSccs);
     else
@@ -273,7 +275,7 @@ public:
 
   // NOLINTNEXTLINE(readability-identifier-naming)
   auto topological_end() const {
-    if constexpr (Direction == OpSCCDirection::Reaching)
+    if constexpr (Direction == OpSCCDirection::Backward)
       return detail::OpSCCIterator<typename decltype(sccs)::const_iterator>(
           sccs.end(), cyclicSccs);
     else
@@ -290,7 +292,7 @@ public:
 
   // NOLINTNEXTLINE(readability-identifier-naming)
   auto reverseTopological_begin() const {
-    if constexpr (Direction == OpSCCDirection::Reachable)
+    if constexpr (Direction == OpSCCDirection::Forward)
       return detail::OpSCCIterator<typename decltype(sccs)::const_iterator>(
           sccs.begin(), cyclicSccs);
     else
@@ -301,7 +303,7 @@ public:
 
   // NOLINTNEXTLINE(readability-identifier-naming)
   auto reverseTopological_end() const {
-    if constexpr (Direction == OpSCCDirection::Reachable)
+    if constexpr (Direction == OpSCCDirection::Forward)
       return detail::OpSCCIterator<typename decltype(sccs)::const_iterator>(
           sccs.end(), cyclicSccs);
     else
@@ -357,7 +359,7 @@ private:
     }
   };
 
-  using FrameT = std::conditional_t<Direction == OpSCCDirection::Reachable,
+  using FrameT = std::conditional_t<Direction == OpSCCDirection::Forward,
                                     ForwardFrame, InverseFrame>;
 
   static bool hasSelfLoop(mlir::Operation *op) {
