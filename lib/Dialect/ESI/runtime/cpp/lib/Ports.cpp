@@ -64,9 +64,10 @@ void ReadChannelPort::resetTranslationState() {
   accumulatingListData = false;
   translationBuffer.clear();
   listDataBuffer.clear();
+  translatedMessage.reset();
 }
 
-void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
+void ReadChannelPort::connect(ReadCallback callback,
                               const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
@@ -75,9 +76,20 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
 
   if (options.translateMessage && translationInfo) {
     translationInfo->precomputeFrameInfo();
-    this->callback = [this, cb = std::move(callback)](MessageData data) {
-      if (translateIncoming(data))
-        return cb(MessageData(std::move(translationBuffer)));
+    this->callback = [this, cb = std::move(callback)](
+                         std::unique_ptr<SegmentedMessageData> &data) {
+      if (!translatedMessage) {
+        MessageData flat = data->toMessageData();
+        if (!translateIncoming(flat))
+          return true;
+        translatedMessage =
+            std::make_unique<MessageData>(std::move(translationBuffer));
+      }
+
+      if (!cb(translatedMessage))
+        return false;
+
+      translatedMessage.reset();
       return true;
     };
   } else {
@@ -85,6 +97,14 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
   }
   connectImpl(options);
   mode = Mode::Callback;
+}
+
+void ReadChannelPort::connect(FlatReadCallback callback,
+                              const ConnectOptions &options) {
+  connect(
+      [cb = std::move(callback)](std::unique_ptr<SegmentedMessageData> &data)
+          -> bool { return cb(data->toMessageData()); },
+      options);
 }
 
 void ReadChannelPort::connect(const ConnectOptions &options) {
@@ -95,11 +115,20 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
   bool translate = options.translateMessage && translationInfo;
   if (translate)
     translationInfo->precomputeFrameInfo();
-  this->callback = [this, translate](MessageData data) {
+  this->callback = [this,
+                    translate](std::unique_ptr<SegmentedMessageData> &msg) {
+    MessageData data;
     if (translate) {
-      if (!translateIncoming(data))
-        return true;
-      data = MessageData(std::move(translationBuffer));
+      if (!translatedMessage) {
+        MessageData flat = msg->toMessageData();
+        if (!translateIncoming(flat))
+          return true;
+        translatedMessage =
+            std::make_unique<MessageData>(std::move(translationBuffer));
+      }
+      data = translatedMessage->toMessageData();
+    } else {
+      data = msg->toMessageData();
     }
 
     std::scoped_lock<std::mutex> lock(pollingM);
@@ -117,6 +146,8 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
         return false;
       dataQueue.push(std::move(data));
     }
+
+    translatedMessage.reset();
     return true;
   };
   connectImpl(options);
