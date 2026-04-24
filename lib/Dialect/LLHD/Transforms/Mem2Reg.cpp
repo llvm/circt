@@ -249,8 +249,6 @@ struct LatticeValue {
 struct LatticeNode {
   enum class Kind { BlockEntry, BlockExit, Probe, Drive, Signal };
   const Kind kind;
-  /// Dirty flag to prevent duplicate pushes to worklist.
-  bool dirty = false;
   LatticeNode(Kind kind) : kind(kind) {}
 };
 
@@ -759,7 +757,7 @@ struct Promoter {
   /// the bump allocators that own the nodes/values/defs.
   std::optional<Lattice> lattice;
   /// A worklist of lattice nodes used within calls to `propagate*`.
-  SmallVector<LatticeNode *> dirtyNodes;
+  SmallPtrSet<LatticeNode *, 4> dirtyNodes;
 
   /// Helper to clean up unused ops.
   UnusedOpPruner pruner;
@@ -1169,14 +1167,10 @@ void Promoter::constructLattice() {
 void Promoter::propagateBackward() {
   for (auto *node : lattice->nodes)
     propagateBackward(node);
-  SmallVector<LatticeNode *> nodes;
   while (!dirtyNodes.empty()) {
-    std::swap(dirtyNodes, nodes);
-    for (auto *node : nodes) {
-      node->dirty = false;
-      propagateBackward(node);
-    }
-    nodes.clear();
+    auto *node = *dirtyNodes.begin();
+    dirtyNodes.erase(node);
+    propagateBackward(node);
   }
 }
 
@@ -1260,14 +1254,10 @@ void Promoter::propagateForward(bool optimisticMerges,
                                 DominanceInfo &dominance) {
   for (auto *node : lattice->nodes)
     propagateForward(node, optimisticMerges, dominance);
-  SmallVector<LatticeNode *> nodes;
   while (!dirtyNodes.empty()) {
-    std::swap(dirtyNodes, nodes);
-    for (auto *node : nodes) {
-      node->dirty = false;
-      propagateForward(node, optimisticMerges, dominance);
-    }
-    nodes.clear();
+    auto *node = *dirtyNodes.begin();
+    dirtyNodes.erase(node);
+    propagateForward(node, optimisticMerges, dominance);
   }
 }
 
@@ -1430,10 +1420,7 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
 /// Mark a lattice node to be updated during propagation.
 void Promoter::markDirty(LatticeNode *node) {
   assert(node);
-  if (node->dirty)
-    return;
-  node->dirty = true;
-  dirtyNodes.push_back(node);
+  dirtyNodes.insert(node);
 }
 
 //===----------------------------------------------------------------------===//
