@@ -50,7 +50,7 @@ TEST(SparseOpSCCsTest, SimpleChain) {
   // Forward reachability from andOp.
   // Reverse topological order: leaves-first -> [outputOp, orOp, andOp].
   {
-    SparseOpSCC<OpSCCDirection::Reachable> opScc;
+    SparseOpSCC<OpSCCDirection::Forward> opScc;
     opScc.visit(andOp);
 
     EXPECT_EQ(opScc.getNumVisited(), 3u);
@@ -73,7 +73,7 @@ TEST(SparseOpSCCsTest, SimpleChain) {
   // Follows operands backward; reverse topo of inverse = forward topo:
   // [andOp, orOp, outputOp].
   {
-    SparseOpSCC<OpSCCDirection::Reaching> opScc;
+    SparseOpSCC<OpSCCDirection::Backward> opScc;
     opScc.visit(outputOp);
 
     EXPECT_EQ(opScc.getNumVisited(), 3u);
@@ -95,13 +95,13 @@ TEST(SparseOpSCCsTest, SimpleChain) {
 
 // Passing an empty seed list leaves all counts at zero.
 TEST(SparseOpSCCsTest, EmptySeeds) {
-  SparseOpSCC<OpSCCDirection::Reachable> fwd;
+  SparseOpSCC<OpSCCDirection::Forward> fwd;
   fwd.visit(ArrayRef<Operation *>{});
   EXPECT_EQ(fwd.getNumVisited(), 0u);
   EXPECT_EQ(fwd.getNumSCCs(), 0u);
   EXPECT_EQ(fwd.getNumCyclicSCCs(), 0u);
 
-  SparseOpSCC<OpSCCDirection::Reaching> inv;
+  SparseOpSCC<OpSCCDirection::Backward> inv;
   inv.visit(ArrayRef<Operation *>{});
   EXPECT_EQ(inv.getNumVisited(), 0u);
   EXPECT_EQ(inv.getNumSCCs(), 0u);
@@ -131,7 +131,7 @@ TEST(SparseOpSCCsTest, BoundarySeed) {
   Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
 
   {
-    SparseOpSCC<OpSCCDirection::Reachable> opScc;
+    SparseOpSCC<OpSCCDirection::Forward> opScc;
     opScc.visit(outputOp);
 
     EXPECT_EQ(opScc.getNumVisited(), 1u);
@@ -144,7 +144,7 @@ TEST(SparseOpSCCsTest, BoundarySeed) {
   }
 
   {
-    SparseOpSCC<OpSCCDirection::Reaching> opScc;
+    SparseOpSCC<OpSCCDirection::Backward> opScc;
     opScc.visit(andOp);
 
     EXPECT_EQ(opScc.getNumVisited(), 1u);
@@ -177,7 +177,7 @@ TEST(SparseOpSCCsTest, OverlappingSeeds) {
   Operation *orOp = &*it++;
   Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
 
-  SparseOpSCC<OpSCCDirection::Reachable> opScc;
+  SparseOpSCC<OpSCCDirection::Forward> opScc;
   opScc.visit(andOp);
   opScc.visit(orOp); // already visited via andOp — skipped
 
@@ -234,7 +234,7 @@ TEST(SparseOpSCCsTest, DiamondNoCycle) {
 
   // Without filter: all five ops, orOp/xorOp order is DFS-dependent.
   {
-    SparseOpSCC<OpSCCDirection::Reachable> opScc;
+    SparseOpSCC<OpSCCDirection::Forward> opScc;
     opScc.visit(andOp);
 
     EXPECT_EQ(opScc.getNumSCCs(), 5u);
@@ -251,13 +251,13 @@ TEST(SparseOpSCCsTest, DiamondNoCycle) {
     EXPECT_EQ(revIt, opScc.reverseTopological_end());
   }
 
-  // Reachable direction with edge filter blocking xorOp as destination: only
+  // Forward direction with edge filter blocking xorOp as destination: only
   // the left branch (andOp->orOp->mergeOp->outputOp) is visited. xorOp is
   // never reachable, so 4 trivial SCCs in deterministic reverseTopological
   // order: outputOp, mergeOp, orOp, andOp.
   {
     auto filter = [&](Operation *op, OpOperand &) { return op != xorOp; };
-    SparseOpSCC<OpSCCDirection::Reachable> opScc(filter);
+    SparseOpSCC<OpSCCDirection::Forward> opScc(filter);
     opScc.visit(andOp);
 
     EXPECT_EQ(opScc.getNumSCCs(), 4u);
@@ -271,13 +271,13 @@ TEST(SparseOpSCCsTest, DiamondNoCycle) {
     EXPECT_EQ(revIt, opScc.reverseTopological_end());
   }
 
-  // Reaching direction from outputOp with edge filter blocking xorOp as
+  // Backward direction from outputOp with edge filter blocking xorOp as
   // source: the backward path through xorOp is cut, so only the left branch
   // (orOp) is visited (outputOp<-mergeOp<-orOp<-andOp). 4 trivial SCCs in
   // reverseTopological order (sinks-first): outputOp, mergeOp, orOp, andOp.
   {
     auto filter = [&](Operation *src, OpOperand &) { return src != xorOp; };
-    SparseOpSCC<OpSCCDirection::Reaching> opScc(filter);
+    SparseOpSCC<OpSCCDirection::Backward> opScc(filter);
     opScc.visit(outputOp);
 
     EXPECT_EQ(opScc.getNumSCCs(), 4u);
@@ -329,7 +329,7 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
 
   // Without filter: reg and and form a cycle -> one CyclicOpSCC.
   {
-    SparseOpSCC<OpSCCDirection::Reachable> opScc;
+    SparseOpSCC<OpSCCDirection::Forward> opScc;
     opScc.visit(andOp);
 
     EXPECT_EQ(opScc.getNumSCCs(), 2u);
@@ -348,7 +348,7 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
   // With filter that excludes regOp: no cycle, both ops are trivial.
   {
     auto filter = [&](Operation *op, OpOperand &) { return op != regOp; };
-    SparseOpSCC<OpSCCDirection::Reachable> opScc(filter);
+    SparseOpSCC<OpSCCDirection::Forward> opScc(filter);
     opScc.visit(andOp);
 
     EXPECT_EQ(opScc.getNumSCCs(), 2u);
@@ -368,7 +368,7 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
         return operand != firReg.getNextMutable();
       return true;
     };
-    SparseOpSCC<OpSCCDirection::Reachable> opScc(regEdgeFilter);
+    SparseOpSCC<OpSCCDirection::Forward> opScc(regEdgeFilter);
     opScc.visit(andOp);
 
     EXPECT_EQ(opScc.getNumSCCs(), 2u);
@@ -384,7 +384,7 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
     EXPECT_EQ(revIt, opScc.reverseTopological_end());
   }
 
-  // Reaching direction from outputOp with regEdgeFilter: the backward path
+  // Backward direction from outputOp with regEdgeFilter: the backward path
   // through reg.resetValue keeps the cycle alive even though reg.next is
   // blocked. reverseTopological order (sinks-first): outputOp, then
   // CyclicOpSCC{regOp,andOp}.
@@ -394,7 +394,7 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
         return operand != firReg.getNextMutable();
       return true;
     };
-    SparseOpSCC<OpSCCDirection::Reaching> opScc(regEdgeFilter);
+    SparseOpSCC<OpSCCDirection::Backward> opScc(regEdgeFilter);
     opScc.visit(outputOp);
 
     EXPECT_EQ(opScc.getNumSCCs(), 2u);
@@ -454,7 +454,7 @@ TEST(SparseOpSCCsTest, TwoCycles) {
   Operation *xorOp = &*it++;
   Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
 
-  SparseOpSCC<OpSCCDirection::Reachable> opScc;
+  SparseOpSCC<OpSCCDirection::Forward> opScc;
   opScc.visit(and1Op);
   opScc.visit(or1Op);
 
@@ -534,7 +534,7 @@ TEST(SparseOpSCCsTest, TwoInternalCycles) {
   // Forward direction from and1Op: outputOp is the only leaf; the five-op SCC
   // follows.
   {
-    SparseOpSCC<OpSCCDirection::Reachable> opScc;
+    SparseOpSCC<OpSCCDirection::Forward> opScc;
     opScc.visit(and1Op);
 
     EXPECT_EQ(opScc.getNumSCCs(), 2u);
@@ -549,7 +549,7 @@ TEST(SparseOpSCCsTest, TwoInternalCycles) {
   // Inverse direction from outputOp: the five-op SCC precedes outputOp
   // (topological order: predecessors before successors).
   {
-    SparseOpSCC<OpSCCDirection::Reaching> opScc;
+    SparseOpSCC<OpSCCDirection::Backward> opScc;
     opScc.visit(outputOp);
 
     EXPECT_EQ(opScc.getNumSCCs(), 2u);
@@ -587,7 +587,7 @@ TEST(SparseOpSCCsTest, SelfLoop) {
   Operation *andOp = &*it++;
   Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
 
-  SparseOpSCC<OpSCCDirection::Reachable> opScc;
+  SparseOpSCC<OpSCCDirection::Forward> opScc;
   opScc.visit(andOp);
 
   // outputOp is a trivial leaf; andOp is a size-1 CyclicOpSCC due to self-loop.
