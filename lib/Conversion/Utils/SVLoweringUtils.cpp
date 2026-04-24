@@ -33,7 +33,7 @@ StringAttr getFileDescriptorFragmentSymName(MLIRContext *context) {
 Value createProceduralFileDescriptorGetterCallImpl(OpBuilder &builder,
                                                    Location loc,
                                                    Value fileName) {
-  assert(fileName.getType() == hw::StringType::get(builder.getContext()) &&
+  assert(isa<hw::StringType>(fileName.getType()) &&
          "expected !hw.string file name");
   return sv::FuncCallProceduralOp::create(
              builder, loc, TypeRange{builder.getIntegerType(32)},
