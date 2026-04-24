@@ -40,6 +40,15 @@
 // sources first, leaves last) via topological(), and in the reverse via
 // reverseTopological().
 //
+// Operation Graph Mutation
+// ------------------------
+// The SparseOpSCC class internally stores the result of the SCC analysis
+// and is only updated when visit(...) is called. It is not recommended
+// to mutate the IR between visit calls. Calling visit invalidates all
+// iterators. It is safe to mutate the IR while iterating. To reflect the
+// changes in the analysis, reset() must be called and the graph must be
+// re-visited.
+//
 // Usage example
 // -------------
 // Collect all ops reachable from seedOp, excluding register ops, and process
@@ -204,7 +213,8 @@ private:
 /// treated as if it did not exist in the graph.
 ///
 /// Iterators obtained from topological() and reverseTopological() hold a
-/// reference into this object and invalidated by calling visit() or reset().
+/// reference into this object and are invalidated by calling visit() or
+//  reset().
 template <OpSCCDirection Direction, unsigned NumInlineElts = 32>
 class SparseOpSCC {
 public:
