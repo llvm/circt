@@ -293,9 +293,9 @@ hw.module @TrackDriveCondition(in %u: i42, in %v: i42) {
   %c = llhd.sig %c0_i42 : i42
   // CHECK: llhd.process
   llhd.process {
-    // CHECK-NEXT: [[C:%.+]] = llhd.prb %c
     // CHECK-NEXT: %false = hw.constant false
     // CHECK-NEXT: [[B:%.+]] = llhd.prb %b
+    // CHECK-NEXT: [[C:%.+]] = llhd.prb %c
     // CHECK-NOT: llhd.drv
     llhd.drv %a, %u after %0 : i42
     // CHECK-NEXT: cf.br ^bb2(%u, [[B]], %false, [[C]] : i42, i42, i1, i42)
@@ -1286,4 +1286,44 @@ hw.module @MultiDelayProjectionDrive() {
     llhd.drv %e, %c0 after %t_delta : i8
     llhd.halt
   }
+}
+
+// Test that the following doesn't hang.
+//
+// See: https://github.com/llvm/circt/issues/10314
+//
+// CHECK-LABEL: @Timeout_10314
+hw.module private @Timeout_10314() {
+  %c0_i5 = hw.constant 0 : i5
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i32 = hw.constant 0 : i32
+  %c0_i4 = hw.constant 0 : i4
+  %c0_i8 = hw.constant 0 : i8
+  %false = hw.constant false
+  %c0_i3 = hw.constant 0 : i3
+  %rdptr0 = llhd.sig %c0_i3 : i3
+  %rdptr0_dec = llhd.sig %c0_i8 : i8
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:  // 2 preds: ^bb0, ^bb7
+    %1 = llhd.prb %rdptr0 : i3
+    %2 = comb.concat %c0_i5, %1 : i5, i3
+    llhd.drv %rdptr0_dec, %2 after %0 : i8
+    cf.br ^bb2
+  ^bb2:  // 2 preds: ^bb1, ^bb6
+    cf.cond_br %false, ^bb3, ^bb7
+  ^bb3:  // pred: ^bb2
+    %3 = llhd.prb %rdptr0 : i3
+    %4 = comb.icmp eq %3, %c0_i3 : i3
+    cf.cond_br %4, ^bb4, ^bb5
+  ^bb4:  // pred: ^bb3
+    cf.br ^bb6
+  ^bb5:  // pred: ^bb3
+    cf.br ^bb6
+  ^bb6:  // 2 preds: ^bb4, ^bb5
+    cf.br ^bb2
+  ^bb7:  // pred: ^bb2
+    llhd.wait (%c0_i3, %c0_i8, %c0_i32, %false, %false, %c0_i3, %c0_i8, %c0_i8, %c0_i4, %c0_i4 : i3, i8, i32, i1, i1, i3, i8, i8, i4, i4), ^bb1
+  }
+  hw.output
 }
