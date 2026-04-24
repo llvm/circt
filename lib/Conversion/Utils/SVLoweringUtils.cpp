@@ -53,20 +53,24 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
   assert(fileScopeOp && "expected file-level symbol table op");
   assert(fileScopeOp->hasTrait<mlir::OpTrait::SymbolTable>() &&
          "expected fileScopeOp to define a symbol table");
-  assert(builder.getInsertionBlock()->getParentOp() == fileScopeOp &&
-         "builder must insert directly into fileScopeOp");
+
+  OpBuilder::InsertionGuard guard(builder);
+  if (builder.getInsertionBlock() == nullptr ||
+      builder.getInsertionBlock()->getParentOp() != fileScopeOp)
+    builder.setInsertionPointToEnd(&fileScopeOp->getRegion(0).front());
 
   auto getterSymName = ::getFileDescriptorGetterSymName(builder.getContext());
   auto fragmentSymName =
       ::getFileDescriptorFragmentSymName(builder.getContext());
   auto macroSymName = builder.getStringAttr(kFileDescriptorMacroName);
+  SymbolTable symbolTable(fileScopeOp);
 
   auto emitGuard = [&](StringRef guard, llvm::function_ref<void(void)> body) {
     sv::IfDefOp::create(
         builder, guard, [] {}, body);
   };
 
-  if (!SymbolTable::lookupSymbolIn(fileScopeOp, getterSymName)) {
+  if (!symbolTable.lookup(getterSymName)) {
     SmallVector<hw::ModulePort> ports;
     ports.push_back({builder.getStringAttr("name"),
                      hw::StringType::get(builder.getContext()),
@@ -88,15 +92,16 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
                            builder.getArrayAttr(perArgumentAttrs), ArrayAttr(),
                            ArrayAttr(), getterSymName);
     func.setPrivate();
+    symbolTable.insert(func);
   }
 
-  if (!SymbolTable::lookupSymbolIn(fileScopeOp, macroSymName))
-    sv::MacroDeclOp::create(builder, macroSymName);
+  if (!symbolTable.lookup(macroSymName))
+    symbolTable.insert(sv::MacroDeclOp::create(builder, macroSymName));
 
-  if (SymbolTable::lookupSymbolIn(fileScopeOp, fragmentSymName))
+  if (symbolTable.lookup(fragmentSymName))
     return;
 
-  emit::FragmentOp::create(builder, fragmentSymName, [&] {
+  auto fragment = emit::FragmentOp::create(builder, fragmentSymName, [&] {
     emitGuard("SYNTHESIS", [&]() {
       emitGuard(kFileDescriptorMacroName, [&]() {
         sv::VerbatimOp::create(builder, R"(// CIRCT Logging Library
@@ -119,6 +124,7 @@ endpackage
       });
     });
   });
+  symbolTable.insert(fragment);
 }
 
 Value sv::createProceduralFileDescriptorGetterCall(OpBuilder &builder,

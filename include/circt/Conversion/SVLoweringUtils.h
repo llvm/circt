@@ -25,9 +25,9 @@ namespace circt::sv {
 FlatSymbolRefAttr getFileDescriptorFragmentRef(MLIRContext *context);
 
 /// Emit the shared file descriptor runtime declarations into a file-level
-/// symbol table operation. The builder insertion point must be directly within
-/// `fileScopeOp`. If these declarations already exist in `fileScopeOp`, this
-/// function is a no-op.
+/// symbol table operation. If the builder insertion point is not directly
+/// within `fileScopeOp`, it is temporarily adjusted. If these declarations
+/// already exist in `fileScopeOp`, this function is a no-op.
 void emitFileDescriptorRuntime(Operation *fileScopeOp,
                                ImplicitLocOpBuilder &builder);
 
