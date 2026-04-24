@@ -3,42 +3,49 @@
 Goals:
 - Support generated types with variable-length lists (header + list data)
   without flattening into a single contiguous buffer before sending.
-- Keep the existing `MessageData` class and all port APIs unchanged.
-- Provide an opt-in conversion path so backends can choose to handle
-  multi-segment messages efficiently (scatter-gather, chunked DMA) or fall
-  back to flattening.
+- Keep existing flat `MessageData` entry points available for compatibility.
+- Unify backend/client internals on an owning `SegmentedMessageData` path so
+  read retries can preserve message ownership and identity.
+- Let backends handle multi-segment messages efficiently (scatter-gather,
+  chunked DMA) or fall back to flattening.
 
 ## Background
 
 The existing `MessageData` is a concrete, value-type class wrapping a
-`std::vector<uint8_t>`. It is used by value throughout the port APIs
-(`write(const MessageData &)`, `read(MessageData &)`, callbacks, futures).
-Changing it to an abstract class would require rewriting every port, backend,
-and user-facing API — far too invasive.
+`std::vector<uint8_t>`. It is used by value throughout the public flat APIs
+(`write(const MessageData &)`, `read(MessageData &)`, flat callbacks,
+futures). Replacing it outright with an abstract segmented type would require
+rewriting every port, backend, and user-facing API.
 
-Instead, we introduce `SegmentedMessageData` as a parallel class. Generated
-types that need multiple segments (e.g. a fixed-size header followed by a
-variable-length list) produce a `SegmentedMessageData` and flatten it into a
-`MessageData` for transport through the existing port APIs. Backends that want
-to avoid that copy can optionally accept `SegmentedMessageData` directly via a
-new overridable method.
+Instead, `SegmentedMessageData` becomes the common abstract base and
+`MessageData` becomes its concrete one-segment implementation. Generated types
+that need multiple segments (e.g. a fixed-size header followed by a
+variable-length list) also subclass `SegmentedMessageData`. This keeps the
+public flat APIs available while letting the backend/client internals move a
+single owning message type through retry-capable paths.
 
 ## Design
 
 `SegmentedMessageData` is a pure abstract class representing an ordered
-sequence of contiguous byte spans ("segments"). Generated types subclass it to
-expose their header and list-body segments without copying them into a single
-buffer.
+sequence of contiguous byte spans ("segments"). `MessageData` is the flat,
+single-segment implementation. Generated types subclass it to expose their
+header and list-body segments without copying them into a single buffer.
 
-A non-virtual `toMessageData()` method flattens all segments into a standard
-`MessageData` for use with the existing port APIs. This is the default path
-and requires no backend changes.
+A virtual `toMessageData()` method flattens segmented subclasses into a
+standard flat `MessageData`. `MessageData` overrides it trivially by returning
+itself.
 
 For backends that support scatter-gather, chunked DMA, or avoid a memcpy to
 write directly into its buffer, `WriteChannelPort` gains an optional virtual
 `write()` method overload that accepts a `SegmentedMessageData` directly. The
 default implementation calls `toMessageData()` and forwards to the existing
 `writeImpl()`, so all existing backends keep working without modification.
+
+`ReadChannelPort` likewise unifies its callback-mode internals around an owning
+`std::unique_ptr<SegmentedMessageData> &` callback. This lets a backend keep
+the exact same message object alive across `false` retries. Legacy flat
+callbacks and polling reads remain available as adapters layered on top of that
+segmented callback path.
 
 A separate `Cursor` class tracks consumption position across segments. Backends
 that need to resume partial writes store both a `unique_ptr<SegmentedMessageData>`
@@ -61,8 +68,6 @@ layout matches the hardware wire format exactly.
   /// Abstract multi-segment message. Generated types subclass this to
   /// expose header + list segments without flattening.
   ///
-  /// This class does NOT replace MessageData. It lives alongside it.
-  ///
   /// Subclasses MUST own all data that their segments point to. This is
   /// required because the write API takes ownership
   /// (unique_ptr<SegmentedMessageData>) and a backend may hold the
@@ -80,10 +85,17 @@ layout matches the hardware wire format exactly.
     bool empty() const;
 
     /// Flatten all segments into a standard MessageData.
-    /// This is the primary integration point: generated types produce a
-    /// SegmentedMessageData, then call toMessageData() to go through the
-    /// existing port APIs.
-    MessageData toMessageData() const;
+    virtual MessageData toMessageData() const;
+  };
+
+  /// A concrete flat message backed by a single vector of bytes.
+  class MessageData : public SegmentedMessageData {
+  public:
+    // Existing vector-backed API unchanged.
+
+    size_t numSegments() const override { return 1; }
+    Segment segment(size_t idx) const override;
+    MessageData toMessageData() const override { return *this; }
   };
 
   /// Cursor for incremental consumption of a SegmentedMessageData.
@@ -117,7 +129,7 @@ layout matches the hardware wire format exactly.
   };
 ```
 
-## Port API additions (optional, backward-compatible)
+## Port API additions
 
 ```c++
   class WriteChannelPort : public ChannelPort {
@@ -131,16 +143,31 @@ layout matches the hardware wire format exactly.
       write(msg->toMessageData());
     }
   };
+
+  class ReadChannelPort : public ChannelPort {
+  public:
+    using ReadCallback =
+        std::function<bool(std::unique_ptr<SegmentedMessageData> &)>;
+    using FlatReadCallback = std::function<bool(MessageData)>;
+
+    virtual void connect(ReadCallback callback,
+                         const ConnectOptions &options = {});
+    virtual void connect(FlatReadCallback callback,
+                         const ConnectOptions &options = {});
+
+    // Polling `connect()`, `readAsync()`, and `read(MessageData &)` remain.
+  };
 ```
 
-Backends that do not override this method get correct behavior automatically.
-Backends that *do* override it receive sole ownership of the message and
-can store the `unique_ptr` to resume partial writes later, alongside a
-`SegmentedMessageDataCursor` to track progress.
+Backends that do not override segmented write handling get correct behavior
+automatically via flattening. Backends that *do* override it receive sole
+ownership of the message and can store the `unique_ptr` to resume partial
+writes later, alongside a `SegmentedMessageDataCursor` to track progress.
 
-No changes to ReadChannelPort. On the read side, generated types deserialize
-from a flat `MessageData` as they do today (the data coming back from the
-accelerator is already in a contiguous buffer from the backend's DMA read).
+On the read side, the owning segmented callback is now the canonical internal
+path. A backend can retain and retry the same `SegmentedMessageData` object
+until the callback accepts it. Existing flat callbacks and polling reads still
+work, but they are adapters layered on top of the segmented ownership path.
 
 ## Type serialization (write side)
 
@@ -311,11 +338,11 @@ The generated specialization casts the owned `Packet` up to
 
 ## What does NOT change
 
-- `MessageData` class: unchanged, remains a concrete value type wrapping
-  `std::vector<uint8_t>`.
-- `ReadChannelPort` / `WriteChannelPort::writeImpl()`: unchanged.
-- All existing backends: unchanged (the default
-  `write(unique_ptr<SegmentedMessageData>)` flattens automatically).
+- `MessageData` remains a concrete value type wrapping `std::vector<uint8_t>`.
+- The public flat APIs remain: `write(const MessageData &)`,
+  `connect(std::function<bool(MessageData)>)`, `readAsync()`, and
+  `read(MessageData &)`. They now sit on top of the segmented path.
+- `WriteChannelPort::writeImpl()` remains flat.
 - All existing user code that constructs `MessageData` directly: unchanged.
 - `TypedWritePort` / `TypedReadPort`: unchanged for scalar types.
   Generated specializations for list-containing types opt in.

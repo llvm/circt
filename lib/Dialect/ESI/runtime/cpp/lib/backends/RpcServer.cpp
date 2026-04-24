@@ -117,7 +117,9 @@ public:
 
   /// Internal call. Push a message FROM the RPC client to the read port.
   void push(MessageData &data) {
-    while (!callback(data))
+    std::unique_ptr<SegmentedMessageData> msg =
+        std::make_unique<MessageData>(data);
+    while (!callback(msg))
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 };

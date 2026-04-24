@@ -341,6 +341,10 @@ protected:
 class ReadChannelPort : public ChannelPort {
 
 public:
+  using ReadCallback =
+      std::function<bool(std::unique_ptr<SegmentedMessageData> &)>;
+  using FlatReadCallback = std::function<bool(MessageData)>;
+
   ReadChannelPort(const Type *type)
       : ChannelPort(type), mode(Mode::Disconnected) {}
   virtual void disconnect() override { mode = Mode::Disconnected; }
@@ -359,7 +363,10 @@ public:
   // wait, and be notified.
   //===--------------------------------------------------------------------===//
 
-  virtual void connect(std::function<bool(MessageData)> callback,
+  virtual void connect(ReadCallback callback,
+                       const ConnectOptions &options = {});
+
+  virtual void connect(FlatReadCallback callback,
                        const ConnectOptions &options = {});
 
   //===--------------------------------------------------------------------===//
@@ -398,7 +405,11 @@ protected:
   volatile Mode mode;
 
   /// Backends call this callback when new data is available.
-  std::function<bool(MessageData)> callback;
+  ReadCallback callback;
+
+  /// If a translated message has been assembled but not yet consumed, retain
+  /// ownership here so retries present the same message object.
+  std::unique_ptr<SegmentedMessageData> translatedMessage;
 
   /// Window translation support.
   std::vector<uint8_t> translationBuffer;
@@ -435,7 +446,11 @@ public:
   UnknownReadChannelPort(const Type *type, std::string errmsg)
       : ReadChannelPort(type), errmsg(errmsg) {}
 
-  void connect(std::function<bool(MessageData)> callback,
+  void connect(ReadCallback callback,
+               const ConnectOptions &options = ConnectOptions()) override {
+    throw std::runtime_error(errmsg);
+  }
+  void connect(FlatReadCallback callback,
                const ConnectOptions &options = ConnectOptions()) override {
     throw std::runtime_error(errmsg);
   }

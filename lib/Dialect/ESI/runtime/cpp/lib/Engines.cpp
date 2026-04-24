@@ -96,6 +96,8 @@ protected:
   OneItemBuffersToHost *engine;
   // Single buffer.
   std::unique_ptr<services::HostMem::HostMemRegion> buffer;
+  // Retain the current message across callback retries.
+  std::unique_ptr<SegmentedMessageData> pendingMessage;
   // Number of times the poll function has been called.
   uint64_t pollCount = 0;
 
@@ -198,27 +200,34 @@ void OneItemBuffersToHostReadPort::connectImpl(
 }
 
 bool OneItemBuffersToHostReadPort::pollImpl() {
-  // Check to see if the buffer has been filled.
-  uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
-  if (bufferData[bufferSize - 1] == 0)
-    return false;
-
   Logger &logger = engine->conn.getLogger();
 
-  // If it has, copy the data out. If the consumer (callback) reports that it
-  // has accepted the data, re-use the buffer.
-  MessageData data(bufferData, bufferSize - 1);
-  logger.trace(
-      [this, data](std::string &subsystem, std::string &msg,
-                   std::unique_ptr<std::map<std::string, std::any>> &details) {
-        subsystem = "OneItemBuffersToHost";
-        msg = "recieved message";
-        details = std::make_unique<std::map<std::string, std::any>>();
-        (*details)["channel"] = identifier();
-        (*details)["data_size"] = data.getSize();
-        (*details)["message_data"] = data.toHex();
-      });
-  if (callback(std::move(data))) {
+  auto tryDeliverPending = [&]() {
+    logger.trace(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "OneItemBuffersToHost";
+          msg = "recieved message";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          MessageData flat = pendingMessage->toMessageData();
+          (*details)["channel"] = identifier();
+          (*details)["data_size"] = flat.getSize();
+          (*details)["message_data"] = flat.toHex();
+        });
+
+    if (!callback(pendingMessage)) {
+      logger.trace(
+          [&](std::string &subsystem, std::string &msg,
+              std::unique_ptr<std::map<std::string, std::any>> &details) {
+            subsystem = "OneItemBuffersToHost";
+            msg = "callback rejected data";
+            details = std::make_unique<std::map<std::string, std::any>>();
+            (*details)["channel"] = identifier();
+          });
+      return false;
+    }
+
+    pendingMessage.reset();
     writeBufferPtr();
     logger.trace(
         [this](std::string &subsystem, std::string &msg,
@@ -229,16 +238,19 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
           (*details)["channel"] = identifier();
         });
     return true;
-  }
-  logger.trace(
-      [this](std::string &subsystem, std::string &msg,
-             std::unique_ptr<std::map<std::string, std::any>> &details) {
-        subsystem = "OneItemBuffersToHost";
-        msg = "callback rejected data";
-        details = std::make_unique<std::map<std::string, std::any>>();
-        (*details)["channel"] = identifier();
-      });
-  return false;
+  };
+
+  if (pendingMessage)
+    return tryDeliverPending();
+
+  // Check to see if the buffer has been filled.
+  uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
+  if (bufferData[bufferSize - 1] == 0)
+    return false;
+
+  // If it has, copy the data out and retain it until the consumer accepts it.
+  pendingMessage = std::make_unique<MessageData>(bufferData, bufferSize - 1);
+  return tryDeliverPending();
 }
 
 REGISTER_ENGINE("OneItemBuffersToHost", OneItemBuffersToHost);

@@ -247,7 +247,16 @@ private:
     return MessageData(bytes);
   }
 
-  bool pollImpl() override { return callback(genMessage()); }
+  bool pollImpl() override {
+    if (!pendingMessage)
+      pendingMessage = std::make_unique<MessageData>(genMessage());
+    if (!callback(pendingMessage))
+      return false;
+    pendingMessage.reset();
+    return true;
+  }
+
+  std::unique_ptr<SegmentedMessageData> pendingMessage;
 };
 } // namespace
 
