@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/Seq/SeqTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
@@ -71,17 +72,17 @@ OpFoldResult ProbeSendOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
-LogicalResult ProbeSendOp::verify() {
-  Type inputType = getInput().getType();
+// LogicalResult ProbeSendOp::verify() {
+//   Type inputType = getInput().getType();
+//     return success();
 
-  // Allow HW value types
-  // Note: seq.firmem types are allowed but handled by the FIRRTL lowering pass
-  // which converts them to hw.array types before creating probe.send
-  if (isHWValueType(inputType))
-    return success();
+//   // Allow HW value types
+//   if (isHWValueType(inputType) || isa<seq::ClockType>(inputType))
+//     return success();
 
-  return emitOpError("input must be a valid HW value type, got ") << inputType;
-}
+//   return emitOpError("input must be a valid HW value type, got ") <<
+//   inputType;
+// }
 
 //===----------------------------------------------------------------------===//
 // ProbeResolveOp
@@ -371,20 +372,3 @@ LogicalResult ProbeXMRRefOp::verify() {
   return success();
 }
 
-//===----------------------------------------------------------------------===//
-// Verifiers
-//===----------------------------------------------------------------------===//
-
-LogicalResult ProbeType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                Type innerType) {
-  if (!isHWValueType(innerType))
-    return emitError() << "probe inner type must be a valid HW value type";
-  return success();
-}
-
-LogicalResult RWProbeType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                  Type innerType) {
-  if (!isHWValueType(innerType))
-    return emitError() << "rwprobe inner type must be a valid HW value type";
-  return success();
-}

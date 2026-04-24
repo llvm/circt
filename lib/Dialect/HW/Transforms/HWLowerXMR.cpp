@@ -131,32 +131,45 @@ void HWLowerXMRPass::runOnOperation() {
                                                 topModule.getBody()->begin()));
   hierPathCache = &hpc;
 
-  for (auto &op : *topModule.getBody()) {
-    if (auto hwModule = dyn_cast<HWModuleOp>(op)) {
-      moduleNamespace = InnerSymbolNamespace(hwModule);
-      if (failed(lowerProbesInModule(hwModule)))
-        return signalPassFailure();
+  // Build the instance graph
+  InstanceGraph instanceGraph(topModule);
 
-      // Mark probe ports for removal
-      size_t numPorts = hwModule.getNumPorts();
-      auto *body = hwModule.getBodyBlock();
+  // Process modules in post-order (bottom-up) to ensure that when we process
+  // an instance, the referenced module has already been processed and its
+  // dataflow information is available
+  for (auto *igNode : llvm::post_order(&instanceGraph)) {
+    // Skip the entry node (it has no module)
+    auto moduleOp = igNode->getModule();
+    if (!moduleOp)
+      continue;
 
-      if (body) {
-        // Check input ports (block arguments)
-        for (size_t i = 0, e = hwModule.getNumInputPorts(); i < e; ++i) {
-          if (isProbeType(body->getArgument(i).getType())) {
-            setPortToRemove(hwModule, i, numPorts);
-          }
+    auto hwModule = dyn_cast<HWModuleOp>(moduleOp.getOperation());
+    if (!hwModule)
+      continue;
+
+    moduleNamespace = InnerSymbolNamespace(hwModule);
+    if (failed(lowerProbesInModule(hwModule)))
+      return signalPassFailure();
+
+    // Mark probe ports for removal
+    size_t numPorts = hwModule.getNumPorts();
+    auto *body = hwModule.getBodyBlock();
+
+    if (body) {
+      // Check input ports (block arguments)
+      for (size_t i = 0, e = hwModule.getNumInputPorts(); i < e; ++i) {
+        if (isProbeType(body->getArgument(i).getType())) {
+          setPortToRemove(hwModule, i, numPorts);
         }
+      }
 
-        // Check output ports (hw.output operands)
-        if (auto *terminator = body->getTerminator()) {
-          if (auto outputOp = dyn_cast<hw::OutputOp>(terminator)) {
-            size_t numInputs = hwModule.getNumInputPorts();
-            for (size_t i = 0, e = outputOp.getNumOperands(); i < e; ++i) {
-              if (isProbeType(outputOp.getOperand(i).getType())) {
-                setPortToRemove(hwModule, numInputs + i, numPorts);
-              }
+      // Check output ports (hw.output operands)
+      if (auto *terminator = body->getTerminator()) {
+        if (auto outputOp = dyn_cast<hw::OutputOp>(terminator)) {
+          size_t numInputs = hwModule.getNumInputPorts();
+          for (size_t i = 0, e = outputOp.getNumOperands(); i < e; ++i) {
+            if (isProbeType(outputOp.getOperand(i).getType())) {
+              setPortToRemove(hwModule, numInputs + i, numPorts);
             }
           }
         }
