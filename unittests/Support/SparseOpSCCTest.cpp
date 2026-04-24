@@ -9,7 +9,7 @@
 #include "circt/Support/SparseOpSCC.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/Seq/SeqDialect.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser/Parser.h"
 #include "llvm/ADT/SmallVector.h"
@@ -191,30 +191,6 @@ TEST(SparseOpSCCsTest, OverlappingSeeds) {
   EXPECT_EQ(topoIt, opScc.topological_end());
 }
 
-// A filter that excludes the seed op prevents it from being visited at all.
-TEST(SparseOpSCCsTest, FilterExcludesSeed) {
-  MLIRContext context;
-  context.loadDialect<hw::HWDialect>();
-  context.loadDialect<comb::CombDialect>();
-
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &context);
-  ASSERT_TRUE(module);
-
-  SymbolTable symbolTable(module.get());
-  auto hwModule = symbolTable.lookup<hw::HWModuleOp>("test");
-  ASSERT_TRUE(hwModule);
-
-  Operation *andOp = &*hwModule.getBodyBlock()->begin();
-
-  auto filter = [&](Operation *op) { return op != andOp; };
-  SparseOpSCC<OpSCCDirection::Reachable> opScc(filter);
-  opScc.visit(andOp);
-
-  EXPECT_EQ(opScc.getNumVisited(), 0u);
-  EXPECT_EQ(opScc.getNumSCCs(), 0u);
-  EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
-}
-
 // Diamond: %and splits into two branches that join at %merge; no cycle.
 //
 //   %and   = comb.and %a, %b : i1     split node
@@ -256,36 +232,78 @@ TEST(SparseOpSCCsTest, DiamondNoCycle) {
   Operation *mergeOp = &*it++;
   Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
 
-  SparseOpSCC<OpSCCDirection::Reachable> opScc;
-  opScc.visit(andOp);
+  // Without filter: all five ops, orOp/xorOp order is DFS-dependent.
+  {
+    SparseOpSCC<OpSCCDirection::Reachable> opScc;
+    opScc.visit(andOp);
 
-  EXPECT_EQ(opScc.getNumSCCs(), 5u);
-  EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
+    EXPECT_EQ(opScc.getNumSCCs(), 5u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
 
-  // outputOp first, mergeOp second, andOp last; orOp/xorOp order is
-  // DFS-dependent.
-  auto revIt = opScc.reverseTopological_begin();
-  EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
-  EXPECT_EQ(cast<Operation *>(*(revIt++)), mergeOp);
-  std::array<Operation *, 2> middle = {cast<Operation *>(*(revIt++)),
-                                       cast<Operation *>(*(revIt++))};
-  EXPECT_TRUE(llvm::is_contained(middle, orOp));
-  EXPECT_TRUE(llvm::is_contained(middle, xorOp));
-  EXPECT_EQ(cast<Operation *>(*(revIt++)), andOp);
-  EXPECT_EQ(revIt, opScc.reverseTopological_end());
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), mergeOp);
+    std::array<Operation *, 2> middle = {cast<Operation *>(*(revIt++)),
+                                         cast<Operation *>(*(revIt++))};
+    EXPECT_TRUE(llvm::is_contained(middle, orOp));
+    EXPECT_TRUE(llvm::is_contained(middle, xorOp));
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), andOp);
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
+  }
+
+  // Reachable direction with edge filter blocking xorOp as destination: only
+  // the left branch (andOp->orOp->mergeOp->outputOp) is visited. xorOp is
+  // never reachable, so 4 trivial SCCs in deterministic reverseTopological
+  // order: outputOp, mergeOp, orOp, andOp.
+  {
+    auto filter = [&](Operation *op, OpOperand &) { return op != xorOp; };
+    SparseOpSCC<OpSCCDirection::Reachable> opScc(filter);
+    opScc.visit(andOp);
+
+    EXPECT_EQ(opScc.getNumSCCs(), 4u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
+
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), mergeOp);
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), orOp);
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), andOp);
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
+  }
+
+  // Reaching direction from outputOp with edge filter blocking xorOp as
+  // source: the backward path through xorOp is cut, so only the left branch
+  // (orOp) is visited (outputOp<-mergeOp<-orOp<-andOp). 4 trivial SCCs in
+  // reverseTopological order (sinks-first): outputOp, mergeOp, orOp, andOp.
+  {
+    auto filter = [&](Operation *src, OpOperand &) { return src != xorOp; };
+    SparseOpSCC<OpSCCDirection::Reaching> opScc(filter);
+    opScc.visit(outputOp);
+
+    EXPECT_EQ(opScc.getNumSCCs(), 4u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
+
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), mergeOp);
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), orOp);
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), andOp);
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
+  }
 }
 
 // Graph with a cycle: and uses reg's result, reg uses and's result.
 //
-//   %reg = seq.firreg %and clock %clock : i1
+//   %reg = seq.firreg %and clock %clock reset sync %reset, %and : i1
 //   %and = comb.and %reg, %a : i1
 //   hw.output %and : i1
 //
+// %and feeds reg.next (the cycle edge) and reg.resetValue.
 // Block order: regOp, andOp, outputOp (terminator).
-// Forward edges: reg->and, and->{reg, output}.
+// Forward edges: reg->and, and->{reg(next), reg(resetValue), output}.
 const char *cycleIr = R"MLIR(
-  hw.module private @cycle(in %clock: !seq.clock, in %a: i1, out x: i1) {
-    %reg = seq.firreg %and clock %clock : i1
+  hw.module private @cycle(in %clock: !seq.clock, in %reset: i1, in %a: i1, out x: i1) {
+    %reg = seq.firreg %and clock %clock reset sync %reset, %and : i1
     %and = comb.and %reg, %a : i1
     hw.output %and : i1
   }
@@ -329,7 +347,7 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
 
   // With filter that excludes regOp: no cycle, both ops are trivial.
   {
-    auto filter = [&](Operation *op) { return op != regOp; };
+    auto filter = [&](Operation *op, OpOperand &) { return op != regOp; };
     SparseOpSCC<OpSCCDirection::Reachable> opScc(filter);
     opScc.visit(andOp);
 
@@ -340,6 +358,55 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
     EXPECT_EQ(cast<Operation *>(*(topoIt++)), andOp);
     EXPECT_EQ(cast<Operation *>(*(topoIt++)), outputOp);
     EXPECT_EQ(topoIt, opScc.topological_end());
+  }
+
+  // With edge filter blocking only reg's 'next' operand: %and also drives
+  // reg.resetValue, so the cycle persists through the reset edge.
+  {
+    auto regEdgeFilter = [](Operation *, OpOperand &operand) -> bool {
+      if (auto firReg = dyn_cast<seq::FirRegOp>(operand.getOwner()))
+        return operand != firReg.getNextMutable();
+      return true;
+    };
+    SparseOpSCC<OpSCCDirection::Reachable> opScc(regEdgeFilter);
+    opScc.visit(andOp);
+
+    EXPECT_EQ(opScc.getNumSCCs(), 2u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 1u);
+
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+
+    CyclicOpSCC scc = cast<CyclicOpSCC>(*revIt++);
+    ASSERT_EQ(scc.size(), 2u);
+    EXPECT_TRUE(llvm::is_contained(scc, regOp));
+    EXPECT_TRUE(llvm::is_contained(scc, andOp));
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
+  }
+
+  // Reaching direction from outputOp with regEdgeFilter: the backward path
+  // through reg.resetValue keeps the cycle alive even though reg.next is
+  // blocked. reverseTopological order (sinks-first): outputOp, then
+  // CyclicOpSCC{regOp,andOp}.
+  {
+    auto regEdgeFilter = [](Operation *, OpOperand &operand) -> bool {
+      if (auto firReg = dyn_cast<seq::FirRegOp>(operand.getOwner()))
+        return operand != firReg.getNextMutable();
+      return true;
+    };
+    SparseOpSCC<OpSCCDirection::Reaching> opScc(regEdgeFilter);
+    opScc.visit(outputOp);
+
+    EXPECT_EQ(opScc.getNumSCCs(), 2u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 1u);
+
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+    CyclicOpSCC scc = cast<CyclicOpSCC>(*revIt++);
+    ASSERT_EQ(scc.size(), 2u);
+    EXPECT_TRUE(llvm::is_contained(scc, regOp));
+    EXPECT_TRUE(llvm::is_contained(scc, andOp));
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
   }
 }
 

@@ -26,9 +26,13 @@
 //
 // Filtering
 // ---------
-// An optional OpSCCFilter predicate can be supplied to the constructor.  Any
-// operation for which the predicate returns false is excluded from the graph:
-// It is neither visited nor followed as a neighbour.
+// An optional OpSCCFilter predicate can be supplied to the constructor to
+// prevent the traversal over certain edges of the graph. The first argument
+// contains the operation into which the traversal would lead. The second
+// argument contains the edge's destination operand.
+// For "reachable" (forward) traversal the operand's owner is identical to the
+// first argument. For "reaching" (reverse) traversal the first argument is
+// identical to the operand's defining operation.
 //
 // Output ordering
 // ---------------
@@ -41,9 +45,9 @@
 // Collect all ops reachable from seedOp, excluding register ops, and process
 // them in topological order:
 //
-//   auto filter = [](Operation *op) { return !isa<seq::FirRegOp>(op); };
-//   SparseOpSCC<OpSCCDirection::Reachable> sccs(filter);
-//   sccs.visit(seedOp);
+//   auto regFilter = [](Operation *op, OpOperand&) { return
+//   !isa<seq::FirRegOp>(op); }; SparseOpSCC<OpSCCDirection::Reachable>
+//   sccs(regFilter); sccs.visit(seedOp);
 //
 //   for (OpSCC entry : sccs.topological()) {
 //     if (Operation *op = llvm::dyn_cast<mlir::Operation *>(entry)) {
@@ -55,6 +59,15 @@
 //         processInCycle(op);
 //     }
 //   }
+//
+// Alternative filter that traverses registers through their clock and reset
+// values but not the "next" data values:
+//
+//   auto regEdgeFilter = [](Operation*, OpOperand& operand) {
+//     if (auto regOp = dyn_cast<seq::FirRegOp>(operand.getOwner()))
+//       return operand != regOp.getNextMutable();
+//     return true;
+//   };
 //
 //===----------------------------------------------------------------------===//
 
@@ -74,8 +87,9 @@
 namespace circt {
 
 /// Filter predicate passed to the SCC collection functions.  Return `true` to
-/// include an operation in the traversal, `false` to skip it.
-using OpSCCFilter = llvm::function_ref<bool(mlir::Operation *)>;
+/// include an edge in the traversal, `false` to skip it.
+using OpSCCFilter =
+    llvm::function_ref<bool(mlir::Operation *, mlir::OpOperand &)>;
 
 namespace detail {
 /// Backing storage for a cyclic SCC (implementation detail).
@@ -194,7 +208,8 @@ private:
 template <OpSCCDirection Direction, unsigned NumInlineElts = 32>
 class SparseOpSCC {
 public:
-  explicit SparseOpSCC(OpSCCFilter filter = {}) : filter(filter) {}
+  explicit SparseOpSCC(OpSCCFilter shouldTraverseFn = {})
+      : shouldTraverseFn(shouldTraverseFn) {}
 
   /// Clear all accumulated state.
   void reset() {
@@ -206,11 +221,10 @@ public:
     nextIdx = 0;
   }
 
-  /// Visit `op` if it passes the filter and has not been visited yet.
+  /// Visit `op` if it passes the shouldTraverseFn and has not been visited yet.
   void visit(mlir::Operation *op) {
-    if (shouldVisit(op))
-      if (!indexAndLowLinkMap.contains(op))
-        tarjanImpl(op);
+    if (!indexAndLowLinkMap.contains(op))
+      tarjanImpl(op);
   }
 
   /// Visit each operation in `ops`, skipping already-visited or filtered ones.
@@ -291,21 +305,25 @@ private:
   struct ForwardFrame {
     mlir::Operation *op;
     unsigned resultIdx;
-    std::optional<mlir::Value::user_iterator> userIt;
+    std::optional<mlir::Value::use_iterator> useIt;
 
     explicit ForwardFrame(mlir::Operation *op) : op(op), resultIdx(0) {
       if (op->getNumResults() > 0)
-        userIt = op->getResult(0).user_begin();
+        useIt = op->getResult(0).use_begin();
     }
 
-    mlir::Operation *nextChild() {
+    mlir::Operation *nextChild(OpSCCFilter shouldTraverseFn) {
       while (resultIdx < op->getNumResults()) {
-        auto result = op->getResult(resultIdx);
-        if (*userIt != result.user_end())
-          return *(*userIt)++;
+        auto useEnd = op->getResult(resultIdx).use_end();
+        while (*useIt != useEnd) {
+          mlir::OpOperand &use = **useIt;
+          ++(*useIt);
+          if (!shouldTraverseFn || shouldTraverseFn(use.getOwner(), use))
+            return use.getOwner();
+        }
         ++resultIdx;
         if (resultIdx < op->getNumResults())
-          userIt = op->getResult(resultIdx).user_begin();
+          useIt = op->getResult(resultIdx).use_begin();
       }
       return nullptr;
     }
@@ -318,11 +336,11 @@ private:
 
     explicit InverseFrame(mlir::Operation *op) : op(op), operandIdx(0) {}
 
-    mlir::Operation *nextChild() {
+    mlir::Operation *nextChild(OpSCCFilter shouldTraverseFn) {
       while (operandIdx < op->getNumOperands()) {
-        auto *defOp = op->getOperand(operandIdx).getDefiningOp();
-        ++operandIdx;
-        if (defOp)
+        mlir::OpOperand &operand = op->getOpOperand(operandIdx++);
+        auto *defOp = operand.get().getDefiningOp();
+        if (defOp && (!shouldTraverseFn || shouldTraverseFn(defOp, operand)))
           return defOp;
       }
       return nullptr;
@@ -331,8 +349,6 @@ private:
 
   using FrameT = std::conditional_t<Direction == OpSCCDirection::Reachable,
                                     ForwardFrame, InverseFrame>;
-
-  bool shouldVisit(mlir::Operation *op) const { return !filter || filter(op); }
 
   static bool hasSelfLoop(mlir::Operation *op) {
     for (const auto &operand : op->getOperands())
@@ -351,9 +367,7 @@ private:
       FrameT &frame = dfsStack.back();
       mlir::Operation *op = frame.op;
 
-      if (auto *child = frame.nextChild()) {
-        if (!shouldVisit(child))
-          continue;
+      if (auto *child = frame.nextChild(shouldTraverseFn)) {
         // Visit successor node
         auto it = indexAndLowLinkMap.find(child);
         if (it == indexAndLowLinkMap.end()) {
@@ -404,7 +418,7 @@ private:
     }
   }
 
-  OpSCCFilter filter;
+  OpSCCFilter shouldTraverseFn;
 
   llvm::SmallSetVector<mlir::Operation *, NumInlineElts> sccStack;
   llvm::SmallVector<FrameT, NumInlineElts> dfsStack;
