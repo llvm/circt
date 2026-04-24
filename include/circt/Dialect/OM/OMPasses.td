@@ -23,7 +23,6 @@ def LinkModules: Pass<"om-link-modules", "mlir::ModuleOp"> {
   let description = [{
     Flatten nested modules and resolve external classes.
   }];
-  let constructor = "circt::om::createOMLinkModulesPass()";
 }
 
 def VerifyObjectFields: Pass<"om-verify-object-fields"> {
@@ -31,7 +30,6 @@ def VerifyObjectFields: Pass<"om-verify-object-fields"> {
   let description = [{
     Verify object fields are valid.
   }];
-  let constructor = "circt::om::createVerifyObjectFieldsPass()";
 }
 
 def StripOMPass : Pass<"strip-om", "mlir::ModuleOp"> {

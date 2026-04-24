@@ -70,32 +70,38 @@ FailureOr<evaluator::EvaluatorValuePtr>
 circt::om::Evaluator::getPartiallyEvaluatedValue(Type type, Location loc) {
   using namespace circt::om::evaluator;
 
-  return TypeSwitch<mlir::Type, FailureOr<evaluator::EvaluatorValuePtr>>(type)
-      .Case([&](circt::om::ListType type) {
-        evaluator::EvaluatorValuePtr result =
-            std::make_shared<evaluator::ListValue>(type, loc);
-        return success(result);
-      })
-      .Case([&](circt::om::ClassType type)
-                -> FailureOr<evaluator::EvaluatorValuePtr> {
-        auto classDef =
-            symbolTable.lookup<ClassLike>(type.getClassName().getValue());
-        if (!classDef)
-          return symbolTable.getOp()->emitError("unknown class name ")
-                 << type.getClassName();
+  auto result =
+      TypeSwitch<mlir::Type, FailureOr<evaluator::EvaluatorValuePtr>>(type)
+          .Case([&](circt::om::ListType type) {
+            evaluator::EvaluatorValuePtr result =
+                std::make_shared<evaluator::ListValue>(type, loc);
+            return success(result);
+          })
+          .Case([&](circt::om::ClassType type)
+                    -> FailureOr<evaluator::EvaluatorValuePtr> {
+            auto classDef =
+                symbolTable.lookup<ClassLike>(type.getClassName().getValue());
+            if (!classDef)
+              return symbolTable.getOp()->emitError("unknown class name ")
+                     << type.getClassName();
 
-        // Create an ObjectValue for both ClassOp and ClassExternOp
-        evaluator::EvaluatorValuePtr result =
-            std::make_shared<evaluator::ObjectValue>(classDef, loc);
+            // Create an ObjectValue for both ClassOp and ClassExternOp
+            evaluator::EvaluatorValuePtr result =
+                std::make_shared<evaluator::ObjectValue>(classDef, loc);
 
-        return success(result);
-      })
-      .Case([&](circt::om::StringType type) {
-        evaluator::EvaluatorValuePtr result =
-            evaluator::AttributeValue::get(type, loc);
-        return success(result);
-      })
-      .Default([&](auto type) { return failure(); });
+            return success(result);
+          })
+          .Case([&](circt::om::StringType type) {
+            evaluator::EvaluatorValuePtr result =
+                evaluator::AttributeValue::get(type, loc);
+            return success(result);
+          })
+          .Default([&](auto type) { return failure(); });
+
+  if (succeeded(result))
+    attachCounter(result.value());
+
+  return result;
 }
 
 FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
@@ -186,6 +192,8 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
   if (failed(result))
     return result;
 
+  // Attach listener to newly created values
+  attachCounter(result.value());
   objects[{value, actualParams}] = result.value();
   return result;
 }
@@ -212,6 +220,7 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
   if (isa<ClassExternOp>(classDef)) {
     evaluator::EvaluatorValuePtr result =
         std::make_shared<evaluator::ObjectValue>(classDef, loc);
+    attachCounter(result);
     result->markUnknown();
     LLVM_DEBUG(dbgs(1) << "extern: <unknown-value>\n");
     return result;
@@ -283,7 +292,7 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
                                     UnknownLoc::get(context))))
           return failure();
         // Add to the worklist.
-        worklist.push({result, actualParams});
+        worklist.push_back({result, actualParams});
       }
   }
 
@@ -329,6 +338,9 @@ circt::om::Evaluator::evaluateObjectInstance(StringAttr className,
   // If it's external call, just allocate new ObjectValue.
   evaluator::EvaluatorValuePtr result =
       std::make_shared<evaluator::ObjectValue>(cls, fields, loc);
+  // Object is already fully evaluated when created with fields.
+  assert(result->isFullyEvaluated() &&
+         "object with fields should be fully evaluated");
   return result;
 }
 
@@ -355,6 +367,7 @@ circt::om::Evaluator::instantiate(
     evaluator::EvaluatorValuePtr result =
         std::make_shared<evaluator::ObjectValue>(
             classDef, UnknownLoc::get(classDef.getContext()));
+    attachCounter(result);
     result->markUnknown();
     LLVM_DEBUG(dbgs(1) << "result: <unknown extern>\n");
     return result;
@@ -380,18 +393,46 @@ circt::om::Evaluator::instantiate(
   // `evaluateObjectInstance` has populated the worklist. Continue evaluations
   // unless there is a partially evaluated value.
   LLVM_DEBUG(dbgs() << "worklist:\n");
+
+  // Use two-worklist approach: process all items from current worklist, and if
+  // at least one becomes fully evaluated, swap and continue. If a full pass
+  // completes with no progress, we have a cycle.
   while (!worklist.empty()) {
-    auto [value, args] = worklist.front();
-    worklist.pop();
+    uint64_t countBeforePass = fullyEvaluatedCount;
+    LLVM_DEBUG(dbgs() << "- processing " << worklist.size()
+                      << " items (fully evaluated count: "
+                      << fullyEvaluatedCount << ")\n");
 
-    auto result = evaluateValue(value, args, loc);
+    // Process all items in the current worklist.
+    while (!worklist.empty()) {
+      auto [value, args] = worklist.back();
+      worklist.pop_back();
+      auto result = evaluateValue(value, args, loc);
 
-    if (failed(result))
-      return failure();
+      if (failed(result))
+        return failure();
 
-    // It's possible that the value is not fully evaluated.
-    if (!result.value()->isFullyEvaluated())
-      worklist.push({value, args});
+      // If not fully evaluated, add to next worklist for retry.
+      if (!result.value()->isFullyEvaluated())
+        nextWorklist.push_back({value, args});
+    }
+
+    // Check if we made progress.
+    uint64_t evaluatedThisPass = fullyEvaluatedCount - countBeforePass;
+    LLVM_DEBUG(dbgs() << "- evaluated " << evaluatedThisPass
+                      << " nodes this pass\n");
+
+    // If nothing became fully evaluated in this pass, we have a cycle.
+    if (evaluatedThisPass == 0 && !nextWorklist.empty())
+      return cls.emitError()
+             << "cycle detected: " << nextWorklist.size()
+             << " values remain partially evaluated after full pass with no "
+                "progress (total fully evaluated: "
+             << fullyEvaluatedCount << ")";
+
+    // Swap worklists for next iteration.
+    worklist = std::move(nextWorklist);
+    nextWorklist.clear();
   }
 
   // Now that all values are fully resolved, evaluate the deferred property
@@ -551,27 +592,15 @@ circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
   assert(lhs && rhs &&
          "expected om::IntegerAttr for IntegerBinaryArithmeticOp operands");
 
-  // Extend values if necessary to match bitwidth. Most interesting arithmetic
-  // on APSInt asserts that both operands are the same bitwidth, but the
-  // IntegerAttrs we are working with may have used the smallest necessary
-  // bitwidth to represent the number they hold, and won't necessarily match.
-  APSInt lhsVal = lhs.getValue().getAPSInt();
-  APSInt rhsVal = rhs.getValue().getAPSInt();
-  if (lhsVal.getBitWidth() > rhsVal.getBitWidth())
-    rhsVal = rhsVal.extend(lhsVal.getBitWidth());
-  else if (rhsVal.getBitWidth() > lhsVal.getBitWidth())
-    lhsVal = lhsVal.extend(rhsVal.getBitWidth());
-
-  // Perform arbitrary precision signed integer binary arithmetic.
-  FailureOr<APSInt> result = op.evaluateIntegerOperation(lhsVal, rhsVal);
-
-  if (failed(result))
+  std::array<Attribute, 2> operandAttrs = {lhs, rhs};
+  SmallVector<mlir::OpFoldResult, 1> results;
+  IntegerAttr resultAttr;
+  // Even with fully constant operands, folders may decline to fold or may
+  // produce a non-attribute result.
+  if (failed(op->fold(operandAttrs, results)) || results.size() != 1 ||
+      !(resultAttr = llvm::dyn_cast_or_null<om::IntegerAttr>(
+            results[0].dyn_cast<Attribute>())))
     return op->emitError("failed to evaluate integer operation");
-
-  // Package the result as a new om::IntegerAttr.
-  MLIRContext *ctx = op->getContext();
-  auto resultAttr =
-      om::IntegerAttr::get(ctx, mlir::IntegerAttr::get(ctx, result.value()));
 
   // Finalize the op result value.
   auto *handleValue = cast<evaluator::AttributeValue>(handle.value().get());
@@ -731,6 +760,9 @@ circt::om::Evaluator::evaluateObjectField(ObjectFieldOp op,
             llvm::dyn_cast<evaluator::ObjectValue>(finalField.get()))
       currentObject = nextObject;
   }
+
+  if (!finalField->isFullyEvaluated())
+    return objectFieldValue;
 
   // Update the reference.
   llvm::cast<evaluator::ReferenceValue>(objectFieldValue.get())
@@ -1044,7 +1076,7 @@ circt::om::Evaluator::createUnknownValue(Type type, Location loc) {
             return success(AttributeValue::get(type, LocationAttr(loc)));
           });
 
-  // Mark the result as unknown if successful
+  // Mark the result as unknown if successful.
   if (succeeded(result))
     result->get()->markUnknown();
 

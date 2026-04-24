@@ -721,3 +721,26 @@ firrtl.circuit "ResolveRWProbeOfInnerSym" {
     firrtl.matchingconnect %o, %data : !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: "DriveWireWithAnonDomain"
+firrtl.circuit "DriveWireWithAnonDomain" {
+  firrtl.domain @ClockDomain
+  firrtl.module @DriveWireWithAnonDomain() {
+    %w = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    // CHECK: %ClockDomain = firrtl.domain.anon  : !firrtl.domain<@ClockDomain()>
+    // CHECK: firrtl.domain.define %w, %ClockDomain : !firrtl.domain<@ClockDomain()
+  }
+}
+
+// CHECK-LABEL: "DriveWireWithInputDomain"
+firrtl.circuit "DriveWireWithInputDomain" {
+  firrtl.domain @ClockDomain
+
+  // CHECK-LABEL: firrtl.module @DriveWireWithInputDomain(in %ClockDomain: !firrtl.domain<@ClockDomain()>, in %i: !firrtl.uint<1> domains [%ClockDomain])
+  firrtl.module @DriveWireWithInputDomain(in %i: !firrtl.uint<1>) {
+    %w = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    // CHECK: firrtl.domain.define %w, %ClockDomain : !firrtl.domain<@ClockDomain()>
+    %w2 = firrtl.wire domains[%w] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    firrtl.matchingconnect %w2, %i : !firrtl.uint<1>
+  }
+}

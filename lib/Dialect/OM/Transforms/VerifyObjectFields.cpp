@@ -34,6 +34,7 @@ using namespace om;
 namespace {
 struct VerifyObjectFieldsPass
     : public circt::om::impl::VerifyObjectFieldsBase<VerifyObjectFieldsPass> {
+  using Base::Base;
   void runOnOperation() override;
   bool canScheduleOn(RegisteredOperationName opName) const override {
     return opName.getStringRef() == "firrtl.circuit" ||
@@ -133,8 +134,4 @@ void VerifyObjectFieldsPass::runOnOperation() {
   if (failed(result))
     return signalPassFailure();
   return markAllAnalysesPreserved();
-}
-
-std::unique_ptr<mlir::Pass> circt::om::createVerifyObjectFieldsPass() {
-  return std::make_unique<VerifyObjectFieldsPass>();
 }

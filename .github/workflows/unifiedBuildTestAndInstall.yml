@@ -165,9 +165,15 @@ jobs:
         id: canonicalize
         shell: bash
         run: |
-          on_off() { case "${1,,}" in on|true) echo "ON" ;; *) echo "OFF" ;; esac; }
-          echo "cmake_build_type=${INPUT_BUILD_TYPE,,}" >> $GITHUB_OUTPUT
-          echo "cmake_c_compiler=${INPUT_COMPILER,,}" >> $GITHUB_OUTPUT
+          on_off() {
+            val=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+            case "$val" in
+              on|true) echo "ON" ;;
+              *) echo "OFF" ;;
+            esac
+          }
+          echo "cmake_build_type=$(echo "${INPUT_BUILD_TYPE}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+          echo "cmake_c_compiler=$(echo "${INPUT_COMPILER}" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
           echo "build_shared_libs=$(on_off "${INPUT_SHARED}")" >> $GITHUB_OUTPUT
           echo "llvm_enable_assertions=$(on_off "${INPUT_ASSERTIONS}")" >> $GITHUB_OUTPUT
           # Hash extra cmake args for cache key (use first 8 chars of sha256)
@@ -281,13 +287,14 @@ jobs:
         id: setup-macos
         if: runner.os == 'macOS'
         run: |
-          brew install iverilog gnu-tar ninja z3
-          echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON" >> "$GITHUB_OUTPUT"
+          brew install icarus-verilog gnu-tar ninja
       - name: Integration Test Setup (MacOS)
+        id: setup-macos-integration
         if: inputs.run_integration_tests && runner.os == 'macOS'
         run: |
-          brew install verilator
+          brew install verilator z3
           verilator --version
+          echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON" >> "$GITHUB_OUTPUT"
       - name: Setup (windows)
         id: setup-windows
         if: runner.os == 'Windows'
@@ -364,7 +371,7 @@ jobs:
 
           # Run cmake.  Use one long line for `cmake` so that this works on
           # Linux/macOS AND Windows.
-          cmake -G Ninja -S "$(pwd)/../llvm/llvm" -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DBUILD_SHARED_LIBS=${{ inputs.build_shared_libs }} -DLLVM_BUILD_TOOLS=ON -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_ENABLE_ASSERTIONS=${{ inputs.llvm_enable_assertions }} -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_FORCE_ENABLE_STATS=ON -DLLVM_ENABLE_ZSTD=OFF -DCIRCT_RELEASE_TAG_ENABLED=ON -DCIRCT_RELEASE_TAG=firtool -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DCMAKE_C_COMPILER=${{ steps.set-cmake-options.outputs.cmake_c_compiler }} -DCMAKE_CXX_COMPILER=${{ steps.set-cmake-options.outputs.cmake_cxx_compiler }} ${{ steps.configure-sccache.outputs.enable_sccache }} -DCMAKE_INSTALL_PREFIX="$(pwd)/../install" -DLLVM_INSTALL_UTILS=ON -DCIRCT_SLANG_FRONTEND_ENABLED=ON -DLLVM_LIT_ARGS="${{ steps.set-cmake-options.outputs.llvm_lit_args }}" ${{ steps.setup-linux.outputs.cmake }} ${{ steps.setup-macos.outputs.cmake }} ${{ steps.setup-windows.outputs.cmake }} ${{ steps.integration-test-setup-generic.outputs.cmake }} ${{ inputs.extra_cmake_args }}
+          cmake -G Ninja -S "$(pwd)/../llvm/llvm" -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DBUILD_SHARED_LIBS=${{ inputs.build_shared_libs }} -DLLVM_BUILD_TOOLS=ON -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_ENABLE_ASSERTIONS=${{ inputs.llvm_enable_assertions }} -DLLVM_ENABLE_PROJECTS=mlir -DLLVM_EXTERNAL_PROJECTS=circt -DLLVM_EXTERNAL_CIRCT_SOURCE_DIR=".." -DLLVM_STATIC_LINK_CXX_STDLIB=ON -DLLVM_PARALLEL_LINK_JOBS=1 -DLLVM_TARGETS_TO_BUILD="host" -DLLVM_FORCE_ENABLE_STATS=ON -DLLVM_ENABLE_ZSTD=OFF -DCIRCT_RELEASE_TAG_ENABLED=ON -DCIRCT_RELEASE_TAG=firtool -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF -DCMAKE_C_COMPILER=${{ steps.set-cmake-options.outputs.cmake_c_compiler }} -DCMAKE_CXX_COMPILER=${{ steps.set-cmake-options.outputs.cmake_cxx_compiler }} ${{ steps.configure-sccache.outputs.enable_sccache }} -DCMAKE_INSTALL_PREFIX="$(pwd)/../install" -DLLVM_INSTALL_UTILS=ON -DCIRCT_SLANG_FRONTEND_ENABLED=ON -DLLVM_LIT_ARGS="${{ steps.set-cmake-options.outputs.llvm_lit_args }}" ${{ steps.setup-linux.outputs.cmake }} ${{ steps.setup-macos.outputs.cmake }} ${{ steps.setup-macos-integration.outputs.cmake }} ${{ steps.setup-windows.outputs.cmake }} ${{ steps.integration-test-setup-generic.outputs.cmake }} ${{ inputs.extra_cmake_args }}
 # Optionally test
       - name: Test CIRCT
         if: inputs.run_tests

@@ -62,6 +62,34 @@ class Instruction(SequenceDeclaration):
     return self.side_effects.count(SideEffect.READ) + self.side_effects.count(
         SideEffect.READ_WRITE)
 
+  def num_write_effects(self) -> int:
+    """
+    Returns the number of operands of this instruction.
+    """
+
+    return self.side_effects.count(SideEffect.WRITE) + self.side_effects.count(
+        SideEffect.READ_WRITE)
+
+  def get_read_arg_types(self) -> List[Type]:
+    """
+    Returns the types of the operands with READ or READ_WRITE side effects.
+    """
+
+    return [
+        t for t, se in zip(self.arg_types, self.side_effects)
+        if se in [SideEffect.READ, SideEffect.READ_WRITE]
+    ]
+
+  def get_write_arg_types(self) -> List[Type]:
+    """
+    Returns the types of the operands with WRITE or READ_WRITE side effects.
+    """
+
+    return [
+        t for t, se in zip(self.arg_types, self.side_effects)
+        if se in [SideEffect.WRITE, SideEffect.READ_WRITE]
+    ]
+
   def get_mnemonic(self) -> Optional[str]:
     """
     Returns the ISA mnemonic for this instruction, if available.
@@ -81,7 +109,7 @@ class Instruction(SequenceDeclaration):
   def __repr__(self):
     return f"Instruction<{self.name}, {self.arg_types}, {self.side_effects}>"
 
-  def __call__(self, *args: Value) -> Optional[Union[Value, List[Value]]]:
+  def __call__(self, *args: Value) -> Union[Value, Tuple[Value, ...]]:
     """
     Embeds the instruction into the instruction stream with the given arguments.
 
@@ -89,22 +117,30 @@ class Instruction(SequenceDeclaration):
 
     1. If the number of arguments matches the total number of operands (including
        destination registers), all operands are passed directly to the sequence
-       function and no value is returned.
+       function and the operands with WRITE or READ_WRITE side effects are returned.
     2. If fewer arguments are provided (only source operands), destination registers
        are automatically allocated, and the allocated registers are returned.
 
     :param args: Operands for the instruction. The number of arguments should
                  match the number of READ and READ_WRITE side effects, unless all
                  operands (including WRITE operands) are being passed explicitly.
-    :return: None if all operands were passed explicitly, otherwise returns the allocated
-             destination register(s). Returns a single Value if there's one destination,
-             or a List[Value] if there are multiple destinations.
+    :return: Returns operands with WRITE or READ_WRITE side effects. Returns a single
+             Value if there's one such operand, or a Tuple[Value, ...] if there are zero
+             or multiple such operands.
     """
 
     # Destination registers are passed.
     if len(args) == len(self.arg_types):
       self.sequence_func(*args)
-      return
+      # Collect operands with WRITE or READ_WRITE side effects
+      results = []
+      for arg, se in zip(args, self.side_effects):
+        if se in [SideEffect.WRITE, SideEffect.READ_WRITE]:
+          results.append(arg)
+
+      if len(results) == 1:
+        return results[0]
+      return tuple(results)
 
     num_non_write_operands = sum(
         1 for se in self.side_effects if se != SideEffect.WRITE)
@@ -121,6 +157,10 @@ class Instruction(SequenceDeclaration):
         reg = self.return_val_func(arg_type)
         new_args.append(reg)
         results.append(reg)
+      elif se == SideEffect.READ_WRITE:
+        arg = next(args_iter)
+        new_args.append(arg)
+        results.append(arg)
       else:
         new_args.append(next(args_iter))
 
@@ -128,7 +168,7 @@ class Instruction(SequenceDeclaration):
 
     if len(results) == 1:
       return results[0]
-    return results
+    return tuple(results)
 
   def as_seq(self) -> Sequence:
     """

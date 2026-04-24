@@ -1472,6 +1472,33 @@ LogicalResult
 ModuleState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
                         WireOp wireOp) {
   auto result = wireOp.getResult();
+
+  if (auto tgt = dyn_cast<DomainValue>(result)) {
+    if (isDriven(tgt))
+      return success();
+
+    LLVM_DEBUG(llvm::dbgs().indent(4) << "update " << render(wireOp) << "\n");
+    OpBuilder builder(wireOp);
+    builder.setInsertionPointAfter(wireOp);
+    auto *term = getTermForDomain(tgt);
+    if (auto *var = dyn_cast<VariableTerm>(term)) {
+      auto src = solveVarWithAnonDomain(builder, domainsInScope, wireOp,
+                                        tgt.getType(), var);
+      LLVM_DEBUG(llvm::dbgs().indent(6)
+                 << "connect " << render(tgt) << " := " << render(src) << "\n");
+      DomainDefineOp::create(builder, wireOp.getLoc(), tgt, src);
+      return success();
+    }
+    if (auto *val = dyn_cast<ValueTerm>(term)) {
+      auto src = getDomainInScope(builder, domainsInScope, val->value);
+      LLVM_DEBUG(llvm::dbgs().indent(6)
+                 << "connect " << render(tgt) << " := " << render(src) << "\n");
+      DomainDefineOp::create(builder, wireOp.getLoc(), tgt, src);
+      return success();
+    }
+    llvm_unreachable("unhandled domain term type");
+  }
+
   if (!isHardware(result))
     return success();
 

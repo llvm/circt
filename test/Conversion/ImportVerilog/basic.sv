@@ -2552,6 +2552,22 @@ module ImmediateAssertiWithActionBlock;
   assert (x) a = 1; else a = 0;
 endmodule
 
+// CHECK-LABEL: moore.module @AssertNoActionBlock
+module AssertNoActionBlock(input clk_i, input rst_ni, input eret_o);
+  typedef struct packed {
+    logic valid;
+  } ex_t;
+  ex_t ex_i;
+
+  // CHECK: %[[ENABLE:[0-9]+]] = moore.to_builtin_int %{{[0-9]+}} : i1
+  // CHECK: %[[PROP:[0-9]+]] = moore.to_builtin_int %{{[0-9]+}} : i1
+  // CHECK: %[[CLK_READ:[0-9]+]] = moore.read %clk_i_0 : <l1>
+  // CHECK: %[[CLK_I1:[0-9]+]] = moore.to_builtin_int %{{[0-9]+}} : i1
+  // CHECK: %[[CLOCK_OP:[0-9]+]] = ltl.clock %[[PROP]], posedge %[[CLK_I1]] : i1
+  // CHECK: verif.assert %[[CLOCK_OP]] if %[[ENABLE]] : !ltl.sequence
+  assert property (@(posedge clk_i) disable iff (!rst_ni !== '0) !(eret_o && ex_i.valid));
+endmodule
+
 // CHECK-LABEL: moore.module @ConcurrentAssert(in %clk : !moore.l1)
 module ConcurrentAssert(input clk);
   // CHECK: [[CLK:%.+]] = moore.net name "clk" wire : <l1>

@@ -50,16 +50,47 @@ def test_instruction(config):
   # CHECK: rtgtest.addi %
   rd = IntegerRegister.virtual()
   result = ADD1(rd, rs1, imm)
-  assert result is None
+  assert result is rd
 
   # CHECK: rtgtest.add %
   results = ADD3(rs1)
-  assert isinstance(results, list)
+  assert isinstance(results, tuple)
   assert len(results) == 2
 
+
+# CHECK-LABEL: rtg.test @test_side_effect_methods
+@test(InstructionTestConfig)
+def test_side_effect_methods(config):
+  # Test num_read_effects
   assert ADD1.num_read_effects() == 2
   assert ADD2.num_read_effects() == 2
   assert ADD3.num_read_effects() == 1
+
+  # Test num_write_effects
+  assert ADD1.num_write_effects() == 1
+  assert ADD2.num_write_effects() == 1
+  assert ADD3.num_write_effects() == 2
+
+  # Test get_read_arg_types
+  read_types_add1 = ADD1.get_read_arg_types()
+  assert len(read_types_add1) == 2
+  assert read_types_add1[0] == IntegerRegisterType()
+  assert read_types_add1[1] == ImmediateType(12)
+
+  read_types_add2 = ADD2.get_read_arg_types()
+  assert len(read_types_add2) == 2
+  assert read_types_add2[0] == IntegerRegisterType()
+  assert read_types_add2[1] == IntegerRegisterType()
+
+  # Test get_write_arg_types
+  write_types_add2 = ADD2.get_write_arg_types()
+  assert len(write_types_add2) == 1
+  assert write_types_add2[0] == IntegerRegisterType()
+
+  write_types_add3 = ADD3.get_write_arg_types()
+  assert len(write_types_add3) == 2
+  assert write_types_add3[0] == IntegerRegisterType()
+  assert write_types_add3[1] == IntegerRegisterType()
 
 
 # CHECK-LABEL: rtg.test @test_instruction_read_write_operand
@@ -69,7 +100,7 @@ def test_instruction_read_write_operand(config):
   rs2 = IntegerRegister.t1()
 
   result = ADD2(rd_rs1, rs2)
-  assert result is None
+  assert result is rd_rs1
 
   try:
     ADD2(rs2)

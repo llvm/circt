@@ -87,8 +87,9 @@ public:
 
     // Read the delivered message and push it onto the queue.
     const std::string &messageString = incomingMessage.data();
-    MessageData data(reinterpret_cast<const uint8_t *>(messageString.data()),
-                     messageString.size());
+    std::unique_ptr<SegmentedMessageData> data = std::make_unique<MessageData>(
+        reinterpret_cast<const uint8_t *>(messageString.data()),
+        messageString.size());
 
     // Process the callback. Check disconnecting to avoid blocking forever.
     while (!callback(data)) {

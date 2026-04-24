@@ -15,6 +15,7 @@ target_link_libraries(circt-bmc
   CIRCTBMCTransforms
   CIRCTComb
   CIRCTCombToSMT
+  CIRCTDebug
   CIRCTEmitTransforms
   CIRCTHW
   CIRCTHWToSMT
