@@ -56,3 +56,4 @@ jobs:
       package_name_prefix: ""
       cmake_c_compiler: ${{ matrix.compiler }}
       valgrind: ${{ matrix.valgrind }}
+      extra_cmake_args: ""
