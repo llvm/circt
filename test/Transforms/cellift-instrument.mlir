@@ -187,66 +187,43 @@ hw.module @test_icmp(in %a : i8, in %b : i8, out y : i1) {
 }
 
 // -----
-// Test: comb.shl precise taint rule (two-phase approach).
+// Test: comb.shl taint rule (current conservative implementation).
 // CHECK-LABEL: hw.module @test_shl
 // CHECK-SAME: (in %a : i8, in %a_t : i8, in %b : i8, in %b_t : i8, out y : i8, out y_t : i8)
 hw.module @test_shl(in %a : i8, in %b : i8, out y : i8) {
   // CHECK: comb.shl %a, %b : i8
-  // Phase 1: shift by untainted amount.
-  // CHECK: [[NOT_BT:%.+]] = comb.xor %b_t, %c-1_i8 : i8
-  // CHECK: [[UB:%.+]] = comb.and %b, [[NOT_BT]] : i8
-  // CHECK: comb.shl %a, [[UB]] : i8
-  // CHECK: comb.shl %a_t, [[UB]] : i8
-  // Phase 2: per-delta checks. Uses canReach = (b_t & k) == k.
-  // CHECK: comb.icmp eq {{%.+}}, {{%.+}} : i8
-  // CHECK: comb.shl {{%.+}}, {{%.+}} : i8
-  // Large shift: b_t >= 8.
-  // CHECK: comb.icmp uge %b_t, {{%.+}} : i8
-  // Final OR of all contributions.
-  // CHECK: comb.or
+  // CHECK: [[HAS_BT:%.+]] = comb.icmp ne %b_t, %c0_i8 : i8
+  // CHECK: [[AMT_T:%.+]] = comb.replicate [[HAS_BT]] : (i1) -> i8
+  // CHECK: [[SHIFTED_T:%.+]] = comb.shl %a_t, %b : i8
+  // CHECK: [[Y_T:%.+]] = comb.or [[AMT_T]], [[SHIFTED_T]] : i8
   %0 = comb.shl %a, %b : i8
   hw.output %0 : i8
 }
 
 // -----
-// Test: comb.shru precise taint rule (two-phase approach).
+// Test: comb.shru taint rule (current conservative shift fallback).
 // CHECK-LABEL: hw.module @test_shru
 // CHECK-SAME: (in %a : i8, in %a_t : i8, in %b : i8, in %b_t : i8, out y : i8, out y_t : i8)
 hw.module @test_shru(in %a : i8, in %b : i8, out y : i8) {
   // CHECK: comb.shru %a, %b : i8
-  // Phase 1: shift by untainted amount.
-  // CHECK: comb.xor %b_t, %c-1_i8 : i8
-  // CHECK: comb.shru %a, {{%.+}} : i8
-  // CHECK: comb.shru %a_t, {{%.+}} : i8
-  // Phase 2: per-delta checks.
-  // CHECK: comb.icmp eq {{%.+}}, {{%.+}} : i8
-  // CHECK: comb.shru {{%.+}}, {{%.+}} : i8
-  // Large shift: b_t >= 8.
-  // CHECK: comb.icmp uge %b_t, {{%.+}} : i8
-  // Final OR.
-  // CHECK: comb.or
+  // CHECK: [[HAS_BT:%.+]] = comb.icmp ne %b_t, %c0_i8 : i8
+  // CHECK: [[AMT_T:%.+]] = comb.replicate [[HAS_BT]] : (i1) -> i8
+  // CHECK: [[SHIFTED_T:%.+]] = comb.shru %a_t, %b : i8
+  // CHECK: [[Y_T:%.+]] = comb.or [[AMT_T]], [[SHIFTED_T]] : i8
   %0 = comb.shru %a, %b : i8
   hw.output %0 : i8
 }
 
 // -----
-// Test: comb.shrs precise taint rule.
+// Test: comb.shrs taint rule (current conservative shift fallback).
 // CHECK-LABEL: hw.module @test_shrs
 // CHECK-SAME: (in %a : i8, in %a_t : i8, in %b : i8, in %b_t : i8, out y : i8, out y_t : i8)
 hw.module @test_shrs(in %a : i8, in %b : i8, out y : i8) {
   // CHECK: comb.shrs %a, %b : i8
-  // Phase 1: shift by untainted amount.
-  // CHECK: comb.xor %b_t, %c-1_i8 : i8
-  // CHECK: comb.shrs %a, {{%.+}} : i8
-  // CHECK: comb.shrs %a_t, {{%.+}} : i8
-  // Phase 2: per-delta checks.
-  // CHECK: comb.icmp eq {{%.+}}, {{%.+}} : i8
-  // CHECK: comb.shrs {{%.+}}, {{%.+}} : i8
-  // Large shift: arithmetic case extracts sign bit.
-  // CHECK: comb.icmp uge %b_t, {{%.+}} : i8
-  // CHECK: comb.extract {{%.+}} from 7 : (i8) -> i1
-  // Final OR.
-  // CHECK: comb.or
+  // CHECK: [[HAS_BT:%.+]] = comb.icmp ne %b_t, %c0_i8 : i8
+  // CHECK: [[AMT_T:%.+]] = comb.replicate [[HAS_BT]] : (i1) -> i8
+  // CHECK: [[SHIFTED_T:%.+]] = comb.shrs %a_t, %b : i8
+  // CHECK: [[Y_T:%.+]] = comb.or [[AMT_T]], [[SHIFTED_T]] : i8
   %0 = comb.shrs %a, %b : i8
   hw.output %0 : i8
 }

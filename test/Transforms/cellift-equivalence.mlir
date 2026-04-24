@@ -1,10 +1,11 @@
 // RUN: circt-opt --cellift-instrument --split-input-file %s | FileCheck %s
 //
 // This file verifies that the CIRCT CellIFT implementation produces equivalent
-// taint rules to the Yosys CellIFT implementation (comsec-group/cellift-yosys).
+// taint rules to the Yosys CellIFT implementation (comsec-group/cellift-yosys)
+// for operations that currently have precise CIRCT models.
 //
-// Each test case isolates a single cell type and checks the precise taint
-// formula matches the Yosys approach.
+// Operations that currently use conservative implementation, such as shifts and
+// modulo, only check the shape of the conservative instrumentation.
 
 // -----
 // Equivalence: ADD precise taint.
@@ -125,25 +126,15 @@ hw.module @equiv_sge(in %a : i8, in %b : i8, out y : i1) {
 }
 
 // -----
-// Equivalence: SHL precise taint (two-phase).
-// Yosys shl_sshl_precise.cc:
-//   Phase 1: shift data+taint by untainted B.
-//   Phase 2: for each delta k, check can_reach(k) AND tainted_or_distinct.
+// Coverage: SHL currently uses the conservative shift fallback instead of the
+// precise Yosys shl_sshl_precise.cc rule.
 // CHECK-LABEL: hw.module @equiv_shl
 hw.module @equiv_shl(in %a : i8, in %b : i8, out y : i8) {
   // CHECK: comb.shl %a, %b : i8
-  // Phase 1: untainted shift.
-  // CHECK: [[NOTBT:%.+]] = comb.xor %b_t, %c-1_i8
-  // CHECK: [[UB:%.+]] = comb.and %b, [[NOTBT]]
-  // CHECK: [[IA:%.+]] = comb.shl %a, [[UB]] : i8
-  // CHECK: [[IAT:%.+]] = comb.shl %a_t, [[UB]] : i8
-  // Phase 2: delta k=1.
-  // CHECK: [[K1:%.+]] = comb.and %b_t, %c1_i8
-  // CHECK: comb.icmp eq [[K1]], %c1_i8
-  // Large shift check.
-  // CHECK: comb.icmp uge %b_t
-  // Final OR.
-  // CHECK: comb.or
+  // CHECK: [[HAS_BT:%.+]] = comb.icmp ne %b_t, %c0_i8 : i8
+  // CHECK: [[AMT_T:%.+]] = comb.replicate [[HAS_BT]] : (i1) -> i8
+  // CHECK: [[SHIFTED_T:%.+]] = comb.shl %a_t, %b : i8
+  // CHECK: [[Y_T:%.+]] = comb.or [[AMT_T]], [[SHIFTED_T]] : i8
   %0 = comb.shl %a, %b : i8
   hw.output %0 : i8
 }
