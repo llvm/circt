@@ -362,9 +362,10 @@ private:
   using FrameT = std::conditional_t<Direction == OpSCCDirection::Forward,
                                     ForwardFrame, InverseFrame>;
 
-  static bool hasSelfLoop(mlir::Operation *op) {
-    for (const auto &operand : op->getOperands())
-      if (operand.getDefiningOp() == op)
+  bool hasSelfLoop(mlir::Operation *op) const {
+    for (mlir::OpOperand &operand : op->getOpOperands())
+      if (operand.get().getDefiningOp() == op &&
+          (!shouldTraverseFn || shouldTraverseFn(op, operand)))
         return true;
     return false;
   }

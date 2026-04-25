@@ -587,21 +587,115 @@ TEST(SparseOpSCCsTest, SelfLoop) {
   Operation *andOp = &*it++;
   Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
 
-  SparseOpSCC<OpSCCDirection::Forward> opScc;
-  opScc.visit(andOp);
+  // Without filter: andOp is a size-1 CyclicOpSCC due to self-loop.
+  {
+    SparseOpSCC<OpSCCDirection::Forward> opScc;
+    opScc.visit(andOp);
 
-  // outputOp is a trivial leaf; andOp is a size-1 CyclicOpSCC due to self-loop.
-  EXPECT_EQ(opScc.getNumSCCs(), 2u);
-  EXPECT_EQ(opScc.getNumCyclicSCCs(), 1u);
+    EXPECT_EQ(opScc.getNumSCCs(), 2u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 1u);
 
-  auto revIt = opScc.reverseTopological_begin();
-  EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
-  // Second entry is a CyclicOpSCC, not a plain Operation *.
-  EXPECT_EQ(dyn_cast<Operation *>(*revIt), nullptr);
-  CyclicOpSCC scc = cast<CyclicOpSCC>(*revIt++);
-  EXPECT_EQ(scc.size(), 1u);
-  EXPECT_EQ(scc[0], andOp);
-  EXPECT_EQ(revIt, opScc.reverseTopological_end());
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+    EXPECT_EQ(dyn_cast<Operation *>(*revIt), nullptr);
+    CyclicOpSCC scc = cast<CyclicOpSCC>(*revIt++);
+    EXPECT_EQ(scc.size(), 1u);
+    EXPECT_EQ(scc[0], andOp);
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
+  }
+
+  // With edge filter blocking the self-loop edge: andOp becomes trivial.
+  {
+    auto filter = [&](Operation *dest, OpOperand &) { return dest != andOp; };
+    SparseOpSCC<OpSCCDirection::Forward> opScc(filter);
+    opScc.visit(andOp);
+
+    EXPECT_EQ(opScc.getNumSCCs(), 2u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
+
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), andOp);
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
+  }
+}
+
+// Self-loop via register: both 'next' and 'resetValue' feed back into the
+// register itself, creating two independent self-loop edges.
+//
+//   %reg = seq.firreg %reg clock %clock reset sync %reset, %reg : i1
+//
+// Operand 0 (next) and operand 3 (resetValue) are both self-loop edges.
+const char *selfLoopRegIr = R"MLIR(
+  hw.module private @selfloopReg(in %clock: !seq.clock, in %reset: i1, out x: i1) {
+    %reg = seq.firreg %reg clock %clock reset sync %reset, %reg : i1
+    hw.output %reg : i1
+  }
+)MLIR";
+
+TEST(SparseOpSCCsTest, SelfLoopRegWithEdgeFilter) {
+  MLIRContext context;
+  context.loadDialect<hw::HWDialect>();
+  context.loadDialect<seq::SeqDialect>();
+
+  OwningOpRef<ModuleOp> module =
+      parseSourceString<ModuleOp>(selfLoopRegIr, &context);
+  ASSERT_TRUE(module);
+
+  SymbolTable symbolTable(module.get());
+  auto hwModule = symbolTable.lookup<hw::HWModuleOp>("selfloopReg");
+  ASSERT_TRUE(hwModule);
+
+  auto it = hwModule.getBodyBlock()->begin();
+  Operation *regOp = &*it++;
+  Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
+
+  // Without filter: both self-loop edges are visible -> CyclicOpSCC of size 1.
+  {
+    SparseOpSCC<OpSCCDirection::Forward> opScc;
+    opScc.visit(regOp);
+
+    EXPECT_EQ(opScc.getNumSCCs(), 2u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 1u);
+
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+    CyclicOpSCC scc = cast<CyclicOpSCC>(*revIt++);
+    ASSERT_EQ(scc.size(), 1u);
+    EXPECT_EQ(scc[0], regOp);
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
+  }
+
+  // Filter blocking only 'next': resetValue self-loop edge is still
+  // traversable -> still classified as CyclicOpSCC.
+  {
+    auto regEdgeFilter = [](Operation *, OpOperand &operand) -> bool {
+      if (auto firReg = dyn_cast<seq::FirRegOp>(operand.getOwner()))
+        return operand != firReg.getNextMutable();
+      return true;
+    };
+    SparseOpSCC<OpSCCDirection::Forward> opScc(regEdgeFilter);
+    opScc.visit(regOp);
+
+    EXPECT_EQ(opScc.getNumSCCs(), 2u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 1u);
+  }
+
+  // Filter blocking all edges into regOp: both self-loop edges blocked ->
+  // regOp becomes trivial.
+  {
+    auto filter = [&](Operation *dest, OpOperand &) { return dest != regOp; };
+    SparseOpSCC<OpSCCDirection::Forward> opScc(filter);
+    opScc.visit(regOp);
+
+    EXPECT_EQ(opScc.getNumSCCs(), 2u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
+
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), regOp);
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
+  }
 }
 
 } // namespace
