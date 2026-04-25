@@ -66,8 +66,8 @@ static std::string getFlattenedMemRefName(StringAttr baseName,
                        type.getElementType(), uniqueID);
 }
 
-// Flatten indices by generating the product of the i'th index and the [0:i-1]
-// shapes, for each index, and then summing these.
+// For a arr[i, j, k] : memref<3x10x10>
+// calculates: (i * 10 + j) * 10 + k
 static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
                             ValueRange indices, MemRefType memrefType) {
   assert(memrefType.hasStaticShape() && "expected statically shaped memref");
@@ -80,36 +80,28 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
   }
 
   Value finalIdx = indices.front();
-  for (auto memIdx : llvm::enumerate(indices.drop_front())) {
-    Value partialIdx = memIdx.value();
-    int64_t indexMulFactor = 1;
 
-    // Calculate the product of the i'th index and the [0:i-1] shape dims.
-    for (unsigned i = memIdx.index() + 1; i < memrefType.getShape().size();
-         ++i) {
-      int64_t dimSize = memrefType.getShape()[i];
-      indexMulFactor *= dimSize;
-    }
+  for (size_t i = 1; i < indices.size(); ++i) {
+    Value partialIdx = indices[i];
+    int64_t dimSize = memrefType.getShape()[i];
 
-    // Multiply product by the current index operand.
-    if (llvm::isPowerOf2_64(indexMulFactor)) {
-      auto constant = arith::ConstantOp::create(
-                          rewriter, loc,
-                          rewriter.getIndexAttr(llvm::Log2_64(indexMulFactor)))
-                          .getResult();
+    if (llvm::isPowerOf2_64(dimSize)) {
+      auto constant =
+          arith::ConstantOp::create(
+              rewriter, loc, rewriter.getIndexAttr(llvm::Log2_64(dimSize)))
+              .getResult();
       finalIdx =
           arith::ShLIOp::create(rewriter, loc, finalIdx, constant).getResult();
     } else {
-      auto constant = arith::ConstantOp::create(
-                          rewriter, loc, rewriter.getIndexAttr(indexMulFactor))
+      auto constant = arith::ConstantOp::create(rewriter, loc,
+                                                rewriter.getIndexAttr(dimSize))
                           .getResult();
       finalIdx =
           arith::MulIOp::create(rewriter, loc, finalIdx, constant).getResult();
     }
 
-    // Sum up with the prior lower dimension accessors.
-    auto sumOp = arith::AddIOp::create(rewriter, loc, finalIdx, partialIdx);
-    finalIdx = sumOp.getResult();
+    finalIdx =
+        arith::AddIOp::create(rewriter, loc, finalIdx, partialIdx).getResult();
   }
   return finalIdx;
 }
