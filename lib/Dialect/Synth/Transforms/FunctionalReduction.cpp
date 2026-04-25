@@ -563,10 +563,24 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
           // in the same block so merging cannot introduce use-before-def edges
           // or SSA cycles.
           return shouldReplaceOwner(user) &&
-                 user->getBlock() == defOp->getBlock() &&
-                 defOp->isBeforeInBlock(user);
+                 user->getBlock() == defOp->getBlock();
         });
       };
+
+  DenseSet<Value> reachable;
+  auto visitFrom = [&](Value start) {
+    SmallVector<Value> stack;
+    stack.push_back(start);
+    while (!stack.empty()) {
+      Value current = stack.pop_back_val();
+      if (!reachable.insert(current).second)
+        continue;
+      for (Operation *user : current.getUsers())
+        if (isLogicNetworkOp(user))
+          for (Value result : user->getResults())
+            stack.push_back(result);
+    }
+  };
 
   SmallVector<MergeRewritePlan> rewritePlans;
   rewritePlans.reserve(provenEquivalences.size());
@@ -574,17 +588,31 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
     auto &[representative, members] = provenEquivSet;
     if (members.empty())
       continue;
+    // Mark all values reachable from representative before checking members.
+    visitFrom(representative);
 
-    builder.setInsertionPointAfterValue(members.back().first);
+    // Greedily filter for members that can create a cycle with representative
+    SmallVector<std::pair<Value, bool>> safeMembers;
+    for (auto [member, inverted] : members) {
+      if (reachable.count(member))
+        continue;
+      visitFrom(member); // Visit users
+      safeMembers.push_back({member, inverted});
+    }
+
+    if (safeMembers.empty())
+      continue;
+
+    builder.setInsertionPointAfterValue(safeMembers.back().first);
 
     SmallVector<Value> operands;
-    operands.reserve(members.size() + 1);
+    operands.reserve(safeMembers.size() + 1);
     operands.push_back(representative);
 
     SmallVector<PlannedMember> plannedMembers;
-    plannedMembers.reserve(members.size());
+    plannedMembers.reserve(safeMembers.size());
     bool hasInvertedMember = false;
-    for (auto [member, inverted] : members) {
+    for (auto [member, inverted] : safeMembers) {
       auto &planned =
           plannedMembers.emplace_back(PlannedMember{member, inverted, {}});
       if (!inverted) {
@@ -609,7 +637,7 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
                          : aig::AndInverterOp::create(builder, choice.getLoc(),
                                                       choice, true);
 
-    stats.numMergedNodes += members.size() + 1;
+    stats.numMergedNodes += safeMembers.size() + 1;
     rewritePlans.push_back(
         {representative, std::move(plannedMembers), choice, choiceNot});
   }
@@ -694,6 +722,13 @@ FunctionalReductionSolver::run() {
 
   // Phase 4: Merge equivalent nodes
   mergeEquivalentNodes();
+
+  // Re-sort after merging to restore topological order after choice insertion.
+  if (failed(circt::synth::topologicallySortLogicNetwork(module))) {
+    module->emitError()
+        << "FunctionalReduction: Failed to topologically sort logic network";
+    return failure();
+  }
 
   LLVM_DEBUG(llvm::dbgs() << "FunctionalReduction: Complete. Stats:\n"
                           << "  Equivalence classes: " << stats.numEquivClasses

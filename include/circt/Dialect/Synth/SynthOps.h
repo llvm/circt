@@ -37,6 +37,7 @@ void populateVariadicAndInverterLoweringPatterns(
     mlir::RewritePatternSet &patterns);
 void populateVariadicXorInverterLoweringPatterns(
     mlir::RewritePatternSet &patterns);
+bool isLogicNetworkOp(mlir::Operation *op);
 
 /// This function performs a topological sort on the operations within each
 /// block of graph regions in the given operation. It uses MLIR's topological

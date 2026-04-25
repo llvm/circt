@@ -70,7 +70,10 @@ hw.module @functional_reduction_inversion_equiv_sat(in %a: i1, in %b: i1,
 // CHECK-LABEL: hw.module @functional_reduction_xor_inv_sat
 hw.module @functional_reduction_xor_inv_sat(in %a: i1, in %b: i1,
                                             out out0: i1, out out1: i1) {
-  // CHECK: hw.output %[[CHOICE:.+]], %[[CHOICE]] : i1, i1
+  // CHECK: %[[CHOICE:.+]] = synth.choice
+  // CHECK-NEXT: %[[CHOICE_NOT:.+]] = synth.aig.and_inv not %[[CHOICE]]
+  // CHECK-NEXT: %[[RESULT:.+]] = synth.aig.and_inv not %[[CHOICE_NOT]]
+  // CHECK-NEXT: hw.output %[[CHOICE]], %[[RESULT]] : i1, i1
   %0 = synth.xor_inv %a, %b : i1
   %1 = synth.aig.and_inv not %a, %b : i1
   %2 = synth.aig.and_inv %a, not %b : i1

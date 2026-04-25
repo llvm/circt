@@ -57,16 +57,18 @@ hw.module @test_inversion_equiv(in %a: i1, in %b: i1, out out0: i1, out out1: i1
 
 // CHECK-LABEL: hw.module @test_no_ssa_cycle
 hw.module @test_no_ssa_cycle(in %a: i1, in %b: i1,
-                             out out0: i1, out out1: i1, out out2: i1) {
-  // CHECK: %[[AND0:.+]] = synth.aig.and_inv %a, %b
-  // CHECK: %[[AND1:.+]] = synth.aig.and_inv %[[AND0]], %a
-  // CHECK: %[[AND2:.+]] = synth.aig.and_inv %b, %a
-  // CHECK: %[[CHOICE:.+]] = synth.choice %[[AND0]], %[[AND1]], %[[AND2]]
-  // CHECK: hw.output %[[CHOICE]], %[[CHOICE]], %[[CHOICE]]
-  %0 = synth.aig.and_inv %a, %b {synth.test.fc_equiv_class = 7} : i1
-  %1 = synth.aig.and_inv %0, %a {synth.test.fc_equiv_class = 7} : i1
-  %2 = synth.aig.and_inv %b, %a {synth.test.fc_equiv_class = 7} : i1
-  hw.output %0, %1, %2 : i1, i1, i1
+                             out out0: i1, out out1: i1, out out2: i1, out out3: i1) {
+// CHECK: %[[AB:.+]] = synth.aig.and_inv %a, %b
+// CHECK: %[[BA:.+]] = synth.aig.and_inv %b, %a
+// CHECK: %[[CHOICE:.+]] = synth.choice %[[AB]], %[[BA]]
+// CHECK: %[[ABA:.+]] = synth.aig.and_inv %[[CHOICE]], %a
+// CHECK: %[[TEST:.+]] = synth.aig.and_inv not %[[CHOICE]], not %[[ABA]]
+// CHECK: hw.output %[[CHOICE]], %[[ABA]], %[[TEST]], %[[CHOICE]]
+  %ab = synth.aig.and_inv %a, %b {synth.test.fc_equiv_class = 7} : i1
+  %aba = synth.aig.and_inv %ab, %a {synth.test.fc_equiv_class = 7} : i1
+  %test = synth.aig.and_inv not %ab, not %aba {synth.test.fc_equiv_class = 8} : i1
+  %ba = synth.aig.and_inv %b, %a {synth.test.fc_equiv_class = 7} : i1
+  hw.output %ab, %aba, %test, %ba : i1, i1, i1, i1
 }
 
 // CHECK-LABEL: hw.module @test_xor_inv_equiv
@@ -79,3 +81,4 @@ hw.module @test_xor_inv_equiv(in %a: i1, in %b: i1, out out0: i1, out out1: i1) 
   %1 = comb.xor %b, %a {synth.test.fc_equiv_class = 11} : i1
   hw.output %0, %1 : i1, i1
 }
+
