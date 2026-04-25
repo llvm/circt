@@ -574,20 +574,13 @@ FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateIntegerBinary(
 
   // Extract the attribute from an EvaluatorValue (handles both om::IntegerAttr
   // and mlir::IntegerAttr).
-  auto extractAttr = [](evaluator::EvaluatorValue *value) -> mlir::Attribute {
-    auto *attrVal =
-        llvm::TypeSwitch<evaluator::EvaluatorValue *,
-                         evaluator::AttributeValue *>(value)
-            .Case([](evaluator::AttributeValue *val) { return val; })
-            .Case([](evaluator::ReferenceValue *val) {
-              return cast<evaluator::AttributeValue>(
-                  val->getStrippedValue()->get());
-            })
-            .Default(
-                [](auto) -> evaluator::AttributeValue * { return nullptr; });
-    if (!attrVal)
-      return {};
-    return attrVal->getAttr();
+  auto extractAttr = [](evaluator::EvaluatorValue *value) -> Attribute {
+    return llvm::TypeSwitch<evaluator::EvaluatorValue *, Attribute>(value)
+        .Case([](evaluator::AttributeValue *val) { return val->getAttr(); })
+        .Case([](evaluator::ReferenceValue *val) {
+          return cast<evaluator::AttributeValue>(val->getStrippedValue()->get())
+              ->getAttr();
+        });
   };
 
   mlir::Attribute lhsAttr = extractAttr(lhsResult.value().get());
