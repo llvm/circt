@@ -641,10 +641,10 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// IntegerBinaryArithmeticOp
+// IntegerBinaryOp (arithmetic)
 //===----------------------------------------------------------------------===//
 
-static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryArithmeticOp op,
+static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryOp op,
                                                 Attribute lhsAttr,
                                                 Attribute rhsAttr) {
   auto lhs = dyn_cast_or_null<circt::om::IntegerAttr>(lhsAttr);

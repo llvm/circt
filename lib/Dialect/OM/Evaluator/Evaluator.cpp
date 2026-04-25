@@ -129,9 +129,9 @@ FailureOr<evaluator::EvaluatorValuePtr> circt::om::Evaluator::getOrCreateValue(
                 .Case([&](ConstantOp op) {
                   return evaluateConstant(op, actualParams, loc);
                 })
-                .Case([&](IntegerBinaryArithmeticOp op) {
-                  // Create a partially evaluated AttributeValue of
-                  // om::IntegerType in case we need to delay evaluation.
+                .Case([&](IntegerBinaryOp op) {
+                  // Create a partially evaluated AttributeValue in case we need
+                  // to delay evaluation.
                   evaluator::EvaluatorValuePtr result =
                       evaluator::AttributeValue::get(op.getResult().getType(),
                                                      loc);
@@ -481,8 +481,8 @@ circt::om::Evaluator::evaluateValue(Value value, ActualParameters actualParams,
             .Case([&](ConstantOp op) {
               return evaluateConstant(op, actualParams, loc);
             })
-            .Case([&](IntegerBinaryArithmeticOp op) {
-              return evaluateIntegerBinaryArithmetic(op, actualParams, loc);
+            .Case([&](IntegerBinaryOp op) {
+              return evaluateIntegerBinary(op, actualParams, loc);
             })
             .Case([&](ObjectOp op) {
               return evaluateObjectInstance(op, actualParams);
@@ -542,10 +542,9 @@ circt::om::Evaluator::evaluateConstant(ConstantOp op,
   return success(om::evaluator::AttributeValue::get(op.getValue(), loc));
 }
 
-// Evaluator dispatch function for integer binary arithmetic.
-FailureOr<EvaluatorValuePtr>
-circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
-    IntegerBinaryArithmeticOp op, ActualParameters actualParams, Location loc) {
+// Evaluator dispatch function for integer binary operations.
+FailureOr<EvaluatorValuePtr> circt::om::Evaluator::evaluateIntegerBinary(
+    IntegerBinaryOp op, ActualParameters actualParams, Location loc) {
   // Get the op's EvaluatorValue handle, in case it hasn't been evaluated yet.
   auto handle = getOrCreateValue(op.getResult(), actualParams, loc);
 
@@ -573,33 +572,36 @@ circt::om::Evaluator::evaluateIntegerBinaryArithmetic(
     return handle;
   }
 
-  // Extract the integer attributes.
-  auto extractAttr = [](evaluator::EvaluatorValue *value) {
-    return std::move(
-        llvm::TypeSwitch<evaluator::EvaluatorValue *, om::IntegerAttr>(value)
-            .Case([](evaluator::AttributeValue *val) {
-              return val->getAs<om::IntegerAttr>();
-            })
+  // Extract the attribute from an EvaluatorValue (handles both om::IntegerAttr
+  // and mlir::IntegerAttr).
+  auto extractAttr = [](evaluator::EvaluatorValue *value) -> mlir::Attribute {
+    auto *attrVal =
+        llvm::TypeSwitch<evaluator::EvaluatorValue *,
+                         evaluator::AttributeValue *>(value)
+            .Case([](evaluator::AttributeValue *val) { return val; })
             .Case([](evaluator::ReferenceValue *val) {
               return cast<evaluator::AttributeValue>(
-                         val->getStrippedValue()->get())
-                  ->getAs<om::IntegerAttr>();
-            }));
+                  val->getStrippedValue()->get());
+            })
+            .Default(
+                [](auto) -> evaluator::AttributeValue * { return nullptr; });
+    if (!attrVal)
+      return {};
+    return attrVal->getAttr();
   };
 
-  om::IntegerAttr lhs = extractAttr(lhsResult.value().get());
-  om::IntegerAttr rhs = extractAttr(rhsResult.value().get());
-  assert(lhs && rhs &&
-         "expected om::IntegerAttr for IntegerBinaryArithmeticOp operands");
+  mlir::Attribute lhsAttr = extractAttr(lhsResult.value().get());
+  mlir::Attribute rhsAttr = extractAttr(rhsResult.value().get());
+  assert(lhsAttr && rhsAttr &&
+         "expected attribute for IntegerBinaryOp operands");
 
-  std::array<Attribute, 2> operandAttrs = {lhs, rhs};
+  std::array<Attribute, 2> operandAttrs = {lhsAttr, rhsAttr};
   SmallVector<mlir::OpFoldResult, 1> results;
-  IntegerAttr resultAttr;
+  mlir::Attribute resultAttr;
   // Even with fully constant operands, folders may decline to fold or may
   // produce a non-attribute result.
   if (failed(op->fold(operandAttrs, results)) || results.size() != 1 ||
-      !(resultAttr = llvm::dyn_cast_or_null<om::IntegerAttr>(
-            results[0].dyn_cast<Attribute>())))
+      !(resultAttr = results[0].dyn_cast<Attribute>()))
     return op->emitError("failed to evaluate integer operation");
 
   // Finalize the op result value.

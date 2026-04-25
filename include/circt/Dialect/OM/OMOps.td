@@ -450,10 +450,10 @@ def AnyCastOp : OMOp<"any_cast", [Pure]> {
      "$input attr-dict `:` functional-type($input, $result)";
 }
 
-class IntegerBinaryArithmeticOp<string mnemonic, list<Trait> traits = []> :
+class IntegerBinaryOp<string mnemonic, list<Trait> traits = []> :
     OMOp<mnemonic, [
       Pure,
-      DeclareOpInterfaceMethods<IntegerBinaryArithmeticInterface>
+      DeclareOpInterfaceMethods<IntegerBinaryInterface>
     ] # traits> {
   let arguments = (ins OMIntegerType:$lhs, OMIntegerType:$rhs);
 
@@ -463,7 +463,7 @@ class IntegerBinaryArithmeticOp<string mnemonic, list<Trait> traits = []> :
   let hasFolder = 1;
 }
 
-def IntegerAddOp : IntegerBinaryArithmeticOp<"integer.add", [Commutative]> {
+def IntegerAddOp : IntegerBinaryOp<"integer.add", [Commutative]> {
   let summary = "Add two OMIntegerType values";
   let description = [{
     Perform arbitrary precision signed integer addition of two OMIntegerType
@@ -476,7 +476,7 @@ def IntegerAddOp : IntegerBinaryArithmeticOp<"integer.add", [Commutative]> {
   }];
 }
 
-def IntegerMulOp : IntegerBinaryArithmeticOp<"integer.mul", [Commutative]> {
+def IntegerMulOp : IntegerBinaryOp<"integer.mul", [Commutative]> {
   let summary = "Multiply two OMIntegerType values";
   let description = [{
     Perform arbitrary prevision signed integer multiplication of two
@@ -489,7 +489,7 @@ def IntegerMulOp : IntegerBinaryArithmeticOp<"integer.mul", [Commutative]> {
   }];
 }
 
-def IntegerShrOp : IntegerBinaryArithmeticOp<"integer.shr"> {
+def IntegerShrOp : IntegerBinaryOp<"integer.shr"> {
   let summary = "Shift an OMIntegerType value right by an OMIntegerType value";
   let description = [{
     Perform arbitrary precision signed integer arithmetic shift right of the lhs
@@ -503,7 +503,7 @@ def IntegerShrOp : IntegerBinaryArithmeticOp<"integer.shr"> {
   }];
 }
 
-def IntegerShlOp : IntegerBinaryArithmeticOp<"integer.shl"> {
+def IntegerShlOp : IntegerBinaryOp<"integer.shl"> {
   let summary = "Shift an OMIntegerType value left by an OMIntegerType value";
   let description = [{
     Perform arbitrary precision signed integer arithmetic shift left of the lhs
