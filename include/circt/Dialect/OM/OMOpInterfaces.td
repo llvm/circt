@@ -51,7 +51,7 @@ def ClassLike : OpInterface<"ClassLike"> {
 
 def IntegerBinaryInterface : OpInterface<"IntegerBinaryOp"> {
   let cppNamespace = "circt::om";
-  let description = "Common interface for integer binary ops (arithmetic and bitwise).";
+  let description = "Common interface for integer binary ops.";
   let methods = [
     InterfaceMethod<"Get the lhs Value",
       "mlir::Value", "getLhs", (ins)>,
