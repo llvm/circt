@@ -229,33 +229,24 @@ public:
   }
 };
 
-class StdoutStreamLowering : public OpConversionPattern<StdoutStreamOp> {
+template <typename OpTy, unsigned StreamValue>
+class StreamLowering : public OpConversionPattern<OpTy> {
 public:
-  using OpConversionPattern<StdoutStreamOp>::OpConversionPattern;
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
 
   LogicalResult
-  matchAndRewrite(StdoutStreamOp op, OpAdaptor adaptor,
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     auto streamValue =
-        hw::ConstantOp::create(rewriter, op.getLoc(), APInt(32, 0x80000001));
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt(32, StreamValue));
     rewriter.replaceOp(op, streamValue);
     return success();
   }
 };
 
-class StderrStreamLowering : public OpConversionPattern<StderrStreamOp> {
-public:
-  using OpConversionPattern<StderrStreamOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(StderrStreamOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    auto streamValue =
-        hw::ConstantOp::create(rewriter, op.getLoc(), APInt(32, 0x80000002));
-    rewriter.replaceOp(op, streamValue);
-    return success();
-  }
-};
+using StdoutStreamLowering = StreamLowering<StdoutStreamOp, 0x80000001>;
+using StderrStreamLowering = StreamLowering<StderrStreamOp, 0x80000002>;
 
 static LogicalResult convert(ClockedTerminateOp op, PatternRewriter &rewriter) {
   if (op.getSuccess())
