@@ -437,6 +437,82 @@ void XorInverterOp::emitCNFWithoutInversion(
   circt::addParityClauses(outVar, inputVars, addClause, newVar);
 }
 
+//===----------------------------------------------------------------------===//
+// DotOp
+//===----------------------------------------------------------------------===//
+
+ParseResult DotOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand> operands;
+  Type resultType;
+  DenseBoolArrayAttr inverted;
+  NamedAttrList attrs;
+
+  if (parseVariadicInvertibleOperands(parser, operands, resultType, inverted,
+                                      attrs))
+    return failure();
+  if (operands.size() != 3)
+    return parser.emitError(parser.getCurrentLocation())
+           << "expected exactly three operands";
+  if (parser.resolveOperands(operands, resultType, result.operands))
+    return failure();
+
+  result.addTypes(resultType);
+  result.addAttributes(attrs);
+  result.addAttribute("inverted", inverted);
+  return success();
+}
+
+void DotOp::print(OpAsmPrinter &printer) {
+  printer << ' ';
+  printVariadicInvertibleOperands(printer, getOperation(), getOperands(),
+                                  getType(), getInvertedAttr(),
+                                  (*this)->getAttrDictionary());
+}
+
+LogicalResult DotOp::verify() {
+  if (getInverted().size() != 3)
+    return emitOpError("requires exactly three inversion flags");
+  return success();
+}
+
+APInt DotOp::evaluateBooleanLogic(
+    llvm::function_ref<const APInt &(unsigned)> getInputValue) {
+  APInt x = applyInversion(getInputValue(0), isInverted(0));
+  APInt y = applyInversion(getInputValue(1), isInverted(1));
+  APInt z = applyInversion(getInputValue(2), isInverted(2));
+  return evaluateDotLogic(x, y, z);
+}
+
+llvm::KnownBits DotOp::computeKnownBits(
+    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
+  auto x = applyInversion(getInputKnownBits(0), isInverted(0));
+  auto y = applyInversion(getInputKnownBits(1), isInverted(1));
+  auto z = applyInversion(getInputKnownBits(2), isInverted(2));
+  return evaluateDotLogic(x, y, z);
+}
+
+std::optional<uint64_t> DotOp::getLogicAreaCost() {
+  int64_t bitWidth = hw::getBitWidth(getType());
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<uint64_t>(bitWidth);
+}
+
+void DotOp::emitCNFWithoutInversion(
+    int outVar, llvm::ArrayRef<int> inputVars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  assert(inputVars.size() == 3 && "expected one SAT variable per operand");
+  int andVar = newVar();
+  int orVar = newVar();
+  // andVar = x and y
+  circt::addAndClauses(andVar, {inputVars[0], inputVars[1]}, addClause);
+  // orVar = z or andVar
+  circt::addOrClauses(orVar, {inputVars[2], andVar}, addClause);
+  // outVar = x xor orVar
+  circt::addXorClauses(outVar, inputVars[0], orVar, addClause);
+}
+
 static Value lowerVariadicInvertibleOp(
     Location loc, ValueRange operands, ArrayRef<bool> inverts,
     PatternRewriter &rewriter,

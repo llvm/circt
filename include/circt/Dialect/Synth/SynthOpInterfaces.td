@@ -32,7 +32,7 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
       }],
       "::mlir::ValueRange", "getInputs", (ins), "",
       [{
-        return $_op.getInputs();
+        return $_op.getOperands();
       }]
     >,
     InterfaceMethod<[{

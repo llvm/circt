@@ -128,6 +128,12 @@ T buildBalancedTreeWithArrivalTimes(llvm::ArrayRef<T> elements,
   return pq.top();
 }
 
+/// Evaluate the Boolean function `x ^ (z | (x & y))`.
+template <typename T>
+T evaluateDotLogic(const T &x, const T &y, const T &z) {
+  return x ^ (z | (x & y));
+}
+
 } // namespace synth
 } // namespace circt
 

@@ -61,3 +61,16 @@ hw.module @xor_inv_hash(in %a: i1, in %b: i1, in %c: i1, out o0: i1, out o1: i1)
   %1 = synth.xor_inv %c, %a, not %b : i1
   hw.output %0, %1 : i1, i1
 }
+
+// CHECK-LABEL: hw.module @dot_ordered
+hw.module @dot_ordered(in %x: i1, in %y: i1, in %z: i1, out o0: i1, out o1: i1, out o2: i1) {
+  // Make sure that the two dot operations are not CSE'd since they have different operand orders.
+  // CHECK: %[[D0:.+]] = synth.dot not %x, %y, %z : i1
+  // CHECK-NEXT: %[[D1:.+]] = synth.dot %y, not %x, %z : i1
+  // CHECK-NEXT: hw.output %[[D0]], %[[D1]], %[[D0]] : i1, i1, i1
+  %0 = synth.dot not %x, %y, %z : i1
+  %1 = synth.dot %y, not %x, %z : i1
+  %notX = synth.aig.and_inv not %x : i1
+  %2 = synth.dot %notX, %y, %z : i1
+  hw.output %0, %1, %2 : i1, i1, i1
+}
