@@ -440,10 +440,6 @@ private:
   FailureOr<EvaluatorValuePtr>
   evaluateConstant(ConstantOp op, ActualParameters actualParams, Location loc);
 
-  FailureOr<EvaluatorValuePtr>
-  evaluateIntegerBinaryArithmetic(IntegerBinaryArithmeticOp op,
-                                  ActualParameters actualParams, Location loc);
-
   /// Instantiate an Object with its class name and actual parameters.
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(StringAttr className, ActualParameters actualParams,
@@ -459,6 +455,9 @@ private:
   FailureOr<EvaluatorValuePtr> evaluateListConcat(ListConcatOp op,
                                                   ActualParameters actualParams,
                                                   Location loc);
+  FailureOr<EvaluatorValuePtr>
+  evaluateIntegerBinary(IntegerBinaryOp op, ActualParameters actualParams,
+                        Location loc);
   FailureOr<EvaluatorValuePtr>
   evaluateStringConcat(StringConcatOp op, ActualParameters actualParams,
                        Location loc);
