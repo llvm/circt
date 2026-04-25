@@ -101,3 +101,18 @@ hw.module @triggered_print(in %clk : i1) {
     sim.proc.print %lit
   }
 }
+
+hw.module @print_to_stdout_and_stderr(in %clk : i1) {
+  // CHECK-LABEL: hw.module @print_to_stdout_and_stderr
+  hw.triggered posedge %clk {
+    %stdout = sim.stdout_stream
+    %stderr = sim.stderr_stream
+    %lit = sim.fmt.literal "literal"
+    // CHECK-DAG: %[[STDOUT:.+]] = hw.constant -2147483647 : i32
+    // CHECK-DAG: %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK: sv.fwrite %[[STDOUT]], "literal"
+    sim.proc.print %lit to %stdout
+    // CHECK-NEXT: sv.fwrite %[[STDERR]], "literal"
+    sim.proc.print %lit to %stderr
+  }
+}

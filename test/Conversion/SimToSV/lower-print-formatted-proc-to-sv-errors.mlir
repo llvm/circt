@@ -20,15 +20,3 @@ hw.module @unsupported_input_block_argument(in %clk : i1, in %arg : !sim.fstring
     sim.proc.print %arg_in
   }
 }
-
-// -----
-
-hw.module @unsupported_stream_block_argument(
-    in %clk : i1, in %stream : !sim.output_stream) {
-  hw.triggered posedge %clk (%stream) : !sim.output_stream {
-    ^bb0(%stream_in : !sim.output_stream):
-    %fmt = sim.fmt.literal "x"
-    // expected-error @below {{lowering 'sim.proc.print' with a stream is not supported yet}}
-    sim.proc.print %fmt to %stream_in
-  }
-}
