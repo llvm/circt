@@ -20,29 +20,3 @@ hw.module @unsupported_input_block_argument(in %clk : i1, in %arg : !sim.fstring
     sim.proc.print %arg_in
   }
 }
-
-// -----
-
-hw.module @unsupported_stream_block_argument(
-    in %clk : i1, in %stream : !sim.output_stream) {
-  hw.triggered posedge %clk (%stream) : !sim.output_stream {
-    ^bb0(%stream_in : !sim.output_stream):
-    %fmt = sim.fmt.literal "x"
-    // expected-error @below {{failed to legalize unresolved materialization from ('!sim.output_stream') to ('i32') that remained live after conversion}}
-    // expected-note @below {{see existing live user here: sv.fwrite %0, "x"}}
-    sim.proc.print %fmt to %stream_in
-  }
-}
-
-// -----
-
-hw.module @unsupported_file_stream(
-    in %clk : i1) {
-  hw.triggered posedge %clk {
-    %fmt = sim.fmt.literal "x"
-    // expected-error @below {{failed to legalize operation 'sim.fmt.literal' that was explicitly marked illegal: %0 = "sim.fmt.literal"() <{literal = "file.txt"}> : () -> !sim.fstring}}
-    %file = sim.fmt.literal "file.txt"
-    %stream_in = sim.get_file %file
-    sim.proc.print %fmt to %stream_in
-  }
-}
