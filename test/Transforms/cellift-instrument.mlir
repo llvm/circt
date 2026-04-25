@@ -296,11 +296,18 @@ hw.module @demo(in %a : i8, in %b : i8, in %s : i1, out y : i8) {
   %add = comb.add %a, %b : i8
   %xor = comb.xor %a, %b : i8
   %y = comb.mux %s, %add, %xor : i8
-  // CHECK: comb.add %a, %b : i8
-  // CHECK: comb.xor %a, %b : i8
-  // CHECK: comb.mux %s, {{%.+}}, {{%.+}} : i8
-  // The output should include both y and y_t.
-  // CHECK: hw.output {{%.+}}, {{%.+}} : i8, i8
+  // CHECK: [[ADD:%.+]] = comb.add %a, %b : i8
+  // CHECK: [[ADD_T:%.+]] = comb.or {{%.+}}, %a_t, %b_t : i8
+  // CHECK: [[XOR:%.+]] = comb.xor %a, %b : i8
+  // CHECK: [[XOR_T:%.+]] = comb.or %a_t, %b_t : i8
+  // CHECK: [[Y:%.+]] = comb.mux %s, [[ADD]], [[XOR]] : i8
+  // CHECK: [[DATA_T:%.+]] = comb.mux %s, [[ADD_T]], [[XOR_T]] : i8
+  // CHECK: [[SEL_B:%.+]] = comb.replicate %s_t : (i1) -> i8
+  // CHECK: [[DIFF:%.+]] = comb.xor [[ADD]], [[XOR]] : i8
+  // CHECK: [[INNER:%.+]] = comb.or [[DIFF]], [[ADD_T]], [[XOR_T]] : i8
+  // CHECK: [[CTRL:%.+]] = comb.and [[SEL_B]], [[INNER]] : i8
+  // CHECK: [[Y_T:%.+]] = comb.or [[DATA_T]], [[CTRL]] : i8
+  // CHECK: hw.output [[Y]], [[Y_T]] : i8, i8
   hw.output %y : i8
 }
 
@@ -372,6 +379,15 @@ hw.module @test_mux_i1(in %sel : i1, in %a : i1, in %b : i1, out y : i1) {
 hw.module @test_clock_no_taint(in %clk : !seq.clock, in %d : i8, out q : i8) {
   %reg = seq.compreg %d, %clk {name = "r"} : i8
   hw.output %reg : i8
+}
+
+// -----
+// Test: Mixed integer and non-integer outputs keep their relative order.
+// CHECK-LABEL: hw.module @test_mixed_output_types
+// CHECK-SAME: (in %clk : !seq.clock, in %a : i8, in %a_t : i8, in %b : i8, in %b_t : i8, out x : i8, out x_t : i8, out passthrough_clk : !seq.clock, out y : i8, out y_t : i8)
+hw.module @test_mixed_output_types(in %clk : !seq.clock, in %a : i8, in %b : i8, out x : i8, out passthrough_clk : !seq.clock, out y : i8) {
+  // CHECK: hw.output %a, %a_t, %clk, %b, %b_t : i8, i8, !seq.clock, i8, i8
+  hw.output %a, %clk, %b : i8, !seq.clock, i8
 }
 
 // -----
