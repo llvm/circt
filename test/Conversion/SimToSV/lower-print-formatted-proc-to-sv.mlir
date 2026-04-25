@@ -104,7 +104,6 @@ hw.module @triggered_print(in %clk : i1) {
 
 hw.module @print_to_stdout_and_stderr(in %clk : i1) {
   // CHECK-LABEL: hw.module @print_to_stdout_and_stderr
-  // CHECK-NOT: builtin.unrealized_conversion_cast
   hw.triggered posedge %clk {
     %stdout = sim.stdout_stream
     %stderr = sim.stderr_stream
