@@ -211,6 +211,18 @@ void addParityClauses(int outVar, llvm::ArrayRef<int> inputLits,
                       llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
                       llvm::function_ref<int()> newVar);
 
+/// Emit clauses encoding that at most one literal in `vars` can be true.
+void addAtMostOneClauses(
+    llvm::ArrayRef<int> vars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar);
+
+/// Emit clauses encoding that exactly one literal in `vars` is true.
+void addExactlyOneClauses(
+    llvm::ArrayRef<int> vars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar);
+
 /// Construct a Z3-backed incremental IPASIR-style SAT solver.
 std::unique_ptr<IncrementalSATSolver> createZ3SATSolver();
 struct CadicalSATSolverOptions {

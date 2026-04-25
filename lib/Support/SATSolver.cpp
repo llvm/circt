@@ -315,6 +315,51 @@ void addParityClauses(int outVar, llvm::ArrayRef<int> inputLits,
   }
 }
 
+void addAtMostOneClauses(
+    llvm::ArrayRef<int> vars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  if (vars.size() < 2)
+    return;
+
+  // Emit the clause encoding `lhs => rhs`.
+  auto imply = [&](int lhs, int rhs) { addClause({-lhs, rhs}); };
+
+  // Use a sequential-ladder encoding for the at-most-one constraint; see
+  // Carsten Sinz, "Towards an Optimal CNF Encoding of Boolean Cardinality
+  // Constraints", CP 2005.
+  //
+  // `ladder[i]` means "at least one of `vars[0]` through `vars[i]` is true".
+  // We use these helper variables to remember when an earlier choice was made.
+  llvm::SmallVector<int, 8> ladder(vars.size() - 1);
+  for (int &var : ladder)
+    var = newVar();
+
+  imply(vars.front(), ladder.front());
+  for (unsigned i = 1, e = vars.size() - 1; i < e; ++i) {
+    // If `vars[i]` is true, remember that one of `vars[0..i]` is true.
+    imply(vars[i], ladder[i]);
+    // If an earlier variable was already true, keep that fact true for the
+    // larger range `vars[0..i]`.
+    imply(ladder[i - 1], ladder[i]);
+    // If `ladder[i - 1]` is true, then some earlier variable was true, so
+    // `vars[i]` must be false since at most one variable can be true.
+    imply(ladder[i - 1], -vars[i]);
+  }
+
+  // If `ladder.back()` is true, then some earlier variable was true, so the
+  // last variable must be false.
+  imply(ladder.back(), -vars.back());
+}
+
+void addExactlyOneClauses(
+    llvm::ArrayRef<int> vars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  addClause(vars);
+  addAtMostOneClauses(vars, addClause, newVar);
+}
+
 std::unique_ptr<IncrementalSATSolver> createZ3SATSolver() {
 #if LLVM_WITH_Z3
   return std::make_unique<Z3SATSolver>();
