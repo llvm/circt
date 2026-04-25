@@ -183,6 +183,18 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
             .Case<synth::XorInverterOp>([&](synth::XorInverterOp xorOp) {
               return handleInvertibleBinaryGate(xorOp, LogicNetworkGate::Xor2);
             })
+            .Case<synth::DotOp>([&](synth::DotOp dotOp) {
+              if (!dotOp.getType().isInteger(1)) {
+                handleOtherResults(dotOp);
+                return success();
+              }
+              const Signal xSignal = getInvertibleSignal(dotOp, 0);
+              const Signal ySignal = getInvertibleSignal(dotOp, 1);
+              const Signal zSignal = getInvertibleSignal(dotOp, 2);
+              addGate(dotOp, LogicNetworkGate::Dot3,
+                      {xSignal, ySignal, zSignal});
+              return success();
+            })
             .Case<comb::XorOp>([&](comb::XorOp xorOp) {
               if (xorOp->getNumOperands() != 2) {
                 handleOtherResults(xorOp);
@@ -485,6 +497,8 @@ static inline llvm::APInt applyGateSemantics(LogicNetworkGate::Kind kind,
   switch (kind) {
   case LogicNetworkGate::Maj3:
     return (a & b) | (a & c) | (b & c);
+  case LogicNetworkGate::Dot3:
+    return evaluateDotLogic(a, b, c);
   default:
     llvm_unreachable(
         "Unsupported ternary operation for truth table computation");
@@ -583,6 +597,7 @@ struct MergedTruthTableBuilder {
           numMergedInputs, 1,
           applyGateSemantics(rootGate.getKind(), getEdgeTT(0), getEdgeTT(1)));
     case LogicNetworkGate::Maj3:
+    case LogicNetworkGate::Dot3:
       return BinaryTruthTable(numMergedInputs, 1,
                               applyGateSemantics(rootGate.getKind(),
                                                  getEdgeTT(0), getEdgeTT(1),

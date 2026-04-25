@@ -74,8 +74,7 @@ class FunctionalReductionSATBuilder {
 public:
   FunctionalReductionSATBuilder(IncrementalSATSolver &solver,
                                 llvm::DenseMap<Value, int> &satVars,
-                                llvm::DenseSet<Value> &encodedValues,
-                                int &nextFreshVar);
+                                llvm::DenseSet<Value> &encodedValues);
 
   // If inverted, negates rhs in the SAT encoding to check lhs == NOT(rhs).
   EquivResult verify(Value lhs, Value rhs, bool inverted);
@@ -91,7 +90,6 @@ private:
   IncrementalSATSolver &solver;
   llvm::DenseMap<Value, int> &satVars;
   llvm::DenseSet<Value> &encodedValues;
-  int &nextFreshVar;
 };
 
 static bool isFunctionalReductionSimulatableOp(Operation *op) {
@@ -135,11 +133,7 @@ int FunctionalReductionSATBuilder::getOrCreateVar(Value value) {
   return it->second;
 }
 
-int FunctionalReductionSATBuilder::createAuxVar() {
-  int freshVar = ++nextFreshVar;
-  solver.reserveVars(freshVar);
-  return freshVar;
-}
+int FunctionalReductionSATBuilder::createAuxVar() { return solver.newVar(); }
 
 SmallVector<int>
 FunctionalReductionSATBuilder::getOperandVars(ValueRange operands) {
@@ -300,17 +294,13 @@ private:
   std::unique_ptr<FunctionalReductionSATBuilder> satBuilder;
   llvm::DenseMap<Value, int> satVars;
   llvm::DenseSet<Value> encodedValues;
-  // Monotonic counter for auxiliary SAT variables introduced by definitional
-  // CNF encodings, currently used for variadic XOR.
-  int nextFreshVar = 0;
   Stats stats;
 };
 
 FunctionalReductionSATBuilder::FunctionalReductionSATBuilder(
     IncrementalSATSolver &solver, llvm::DenseMap<Value, int> &satVars,
-    llvm::DenseSet<Value> &encodedValues, int &nextFreshVar)
-    : solver(solver), satVars(satVars), encodedValues(encodedValues),
-      nextFreshVar(nextFreshVar) {}
+    llvm::DenseSet<Value> &encodedValues)
+    : solver(solver), satVars(satVars), encodedValues(encodedValues) {}
 
 Attribute FunctionalReductionSolver::getTestEquivClass(Value value) {
   Operation *op = value.getDefiningOp();
@@ -347,11 +337,10 @@ void FunctionalReductionSolver::initializeSATState() {
   satVars.reserve(allValues.size());
   for (auto [index, value] : llvm::enumerate(allValues))
     satVars[value] = index + 1;
-  nextFreshVar = allValues.size();
   satSolver->reserveVars(allValues.size());
 
   satBuilder = std::make_unique<FunctionalReductionSATBuilder>(
-      *satSolver, satVars, encodedValues, nextFreshVar);
+      *satSolver, satVars, encodedValues);
 }
 
 //===----------------------------------------------------------------------===//
