@@ -547,6 +547,8 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
   struct MergeRewritePlan {
     Value representative;
     SmallVector<PlannedMember> members;
+    // Members which are at risk of reaching their representative
+    SmallVector<PlannedMember> reachableMembers;
     synth::ChoiceOp choice;
     aig::AndInverterOp choiceNot;
   };
@@ -593,9 +595,12 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
 
     // Greedily filter for members that can create a cycle with representative
     SmallVector<std::pair<Value, bool>> safeMembers;
+    SmallVector<PlannedMember> plannedReachable;
     for (auto [member, inverted] : members) {
-      if (reachable.count(member))
+      if (reachable.count(member)) {
+        plannedReachable.push_back({member, inverted, {}});
         continue;
+      }
       visitFrom(member); // Visit users
       safeMembers.push_back({member, inverted});
     }
@@ -638,8 +643,8 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
                                                       choice, true);
 
     stats.numMergedNodes += safeMembers.size() + 1;
-    rewritePlans.push_back(
-        {representative, std::move(plannedMembers), choice, choiceNot});
+    rewritePlans.push_back({representative, std::move(plannedMembers),
+                            std::move(plannedReachable), choice, choiceNot});
   }
 
   for (auto &plan : rewritePlans) {
@@ -667,6 +672,17 @@ void FunctionalReductionSolver::mergeEquivalentNodes() {
         [&](Operation *user) { return user != plan.choice.getOperation(); });
     for (const auto &member : plan.members)
       replaceValue(member);
+
+    // Reachable members are redundant here so either replace their uses with
+    // choice or erase if they have no uses left.
+    for (auto &member : plan.reachableMembers) {
+      member.original.replaceUsesWithIf(plan.choice, [&](OpOperand &use) {
+        auto *user = use.getOwner();
+        return user->getBlock() == plan.choice->getBlock();
+      });
+      if (member.original.use_empty())
+        member.original.getDefiningOp()->erase();
+    }
   }
 
   LLVM_DEBUG(llvm::dbgs() << "FunctionalReduction: Merged "
