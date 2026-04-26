@@ -211,15 +211,17 @@ void addParityClauses(int outVar, llvm::ArrayRef<int> inputLits,
                       llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
                       llvm::function_ref<int()> newVar);
 
-/// Emit clauses encoding that at most one literal in `vars` can be true.
+/// Emit clauses encoding that at most one literal in `inputLits` can be true.
+/// Unlike the Tseitin-style gate helpers above, this helper does not
+/// take an `outVar`; it only emits the cardinality constraint itself.
 void addAtMostOneClauses(
-    llvm::ArrayRef<int> vars,
+    llvm::ArrayRef<int> inputLits,
     llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
     llvm::function_ref<int()> newVar);
 
-/// Emit clauses encoding that exactly one literal in `vars` is true.
+/// Emit clauses encoding that exactly one literal in `inputLits` is true.
 void addExactlyOneClauses(
-    llvm::ArrayRef<int> vars,
+    llvm::ArrayRef<int> inputLits,
     llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
     llvm::function_ref<int()> newVar);
 
