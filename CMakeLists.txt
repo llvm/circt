@@ -125,8 +125,10 @@ else()
   set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include ) # --includedir
   set(MLIR_TABLEGEN_OUTPUT_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
   set(MLIR_TABLEGEN_EXE $<TARGET_FILE:mlir-tblgen>)
-  include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
-  include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
+  # Keep the in-tree MLIR headers ahead of dependency prefixes that might also
+  # contain an installed MLIR checkout.
+  include_directories(BEFORE ${MLIR_INCLUDE_DIR})
+  include_directories(BEFORE ${MLIR_TABLEGEN_OUTPUT_DIR})
 
   # If building as part of a unified build, whether or not MLIR's execution engine
   # is enabled must be fetched from its subdirectory scope.
