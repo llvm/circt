@@ -126,6 +126,44 @@ TEST(SatSolverTest, AssumptionsAreScopedToSolve) {
   EXPECT_EQ(2, solver->val(2));
 }
 
+TEST(SatSolverTest, AddAtMostOneClausesRejectsTwoTrueInputs) {
+  auto solver = createZ3SATSolver();
+  if (!solver)
+    GTEST_SKIP() << "Z3 is not available in this build.";
+  solver->reserveVars(3);
+  addAtMostOneClauses(
+      {1, 2, 3}, [&](llvm::ArrayRef<int> clause) { solver->addClause(clause); },
+      [&] { return solver->newVar(); });
+
+  // Any single selected literal should remain satisfiable.
+  EXPECT_EQ(IncrementalSATSolver::kSAT, solver->solve({1}));
+  EXPECT_EQ(IncrementalSATSolver::kSAT, solver->solve({2}));
+  EXPECT_EQ(IncrementalSATSolver::kSAT, solver->solve({3}));
+  // Any pair of selected literals must violate the at-most-one constraint.
+  EXPECT_EQ(IncrementalSATSolver::kUNSAT, solver->solve({1, 2}));
+  EXPECT_EQ(IncrementalSATSolver::kUNSAT, solver->solve({1, 3}));
+  EXPECT_EQ(IncrementalSATSolver::kUNSAT, solver->solve({2, 3}));
+}
+
+TEST(SatSolverTest, AddExactlyOneClausesRequiresOneSelection) {
+  auto solver = createZ3SATSolver();
+  if (!solver)
+    GTEST_SKIP() << "Z3 is not available in this build.";
+
+  solver->reserveVars(3);
+  addExactlyOneClauses(
+      {1, 2, 3}, [&](llvm::ArrayRef<int> clause) { solver->addClause(clause); },
+      [&] { return solver->newVar(); });
+
+  // Exactly one literal set true is a valid model.
+  EXPECT_EQ(IncrementalSATSolver::kSAT, solver->solve({1, -2, -3}));
+  EXPECT_EQ(IncrementalSATSolver::kSAT, solver->solve({-1, 2, -3}));
+  EXPECT_EQ(IncrementalSATSolver::kSAT, solver->solve({-1, -2, 3}));
+  // Zero or multiple selected literals must be rejected.
+  EXPECT_EQ(IncrementalSATSolver::kUNSAT, solver->solve({-1, -2, -3}));
+  EXPECT_EQ(IncrementalSATSolver::kUNSAT, solver->solve({1, 2}));
+}
+
 TEST(SatSolverTest, CadicalConflictLimitCanBeConfigured) {
   CadicalSATSolverOptions options;
   options.config = CadicalSATSolverOptions::CadicalSolverConfig::Plain;
