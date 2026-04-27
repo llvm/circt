@@ -26,7 +26,7 @@ include "mlir/IR/BuiltinTypes.td"
 // Probe Send/Resolve Operations
 //===----------------------------------------------------------------------===//
 
-def ProbeSendOp : HWOp<"probe.send", [Pure]> {
+def ProbeSendOp : HWOp<"probe.send", []> {
   let summary = "Create a probe reference";
   let description = [{
     Creates a probe reference to a value. This marks the source of a dataflow
@@ -74,7 +74,7 @@ def ProbeSendOp : HWOp<"probe.send", [Pure]> {
   ];
 }
 
-def ProbeResolveOp : HWOp<"probe.resolve", [Pure]> {
+def ProbeResolveOp : HWOp<"probe.resolve", []> {
   let summary = "Read the value from a probe reference";
   let description = [{
     Resolves a probe reference to read its value. This is where an XMR will be
@@ -98,8 +98,7 @@ def ProbeResolveOp : HWOp<"probe.resolve", [Pure]> {
 //===----------------------------------------------------------------------===//
 
 def ProbeRWProbeOp : HWOp<"probe.rwprobe", [
-    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
-    Pure
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>
   ]> {
   let summary = "Create a read-write probe reference via inner symbol";
   let description = [{
@@ -154,7 +153,7 @@ def ProbeDefineOp : HWOp<"probe.define", [SameTypeOperands]> {
 // Probe Manipulation Operations
 //===----------------------------------------------------------------------===//
 
-def ProbeSubOp : HWOp<"probe.sub", [Pure]> {
+def ProbeSubOp : HWOp<"probe.sub", []> {
   let summary = "Extract subelement from aggregate probe";
   let description = [{
     Statically indexes into an aggregate probe type (array or struct) to
@@ -174,7 +173,7 @@ def ProbeSubOp : HWOp<"probe.sub", [Pure]> {
   let hasCustomAssemblyFormat = 1;
 }
 
-def ProbeCastOp : HWOp<"probe.cast", [Pure]> {
+def ProbeCastOp : HWOp<"probe.cast", []> {
   let summary = "Cast between compatible probe types";
   let description = [{
     Losslessly cast between compatible probe types. The most common use is
@@ -198,7 +197,47 @@ def ProbeCastOp : HWOp<"probe.cast", [Pure]> {
 // XMR Operations
 //===----------------------------------------------------------------------===//
 
-def ProbeXMRRefOp : HWOp<"probe.xmr_ref", [Pure]> {
+def XMRRemoteOp : HWOp<"xmr.remote",
+                  [DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+                   Pure
+                  ]> {
+  let summary = "HW XMR remote operation creating RWProbe from InnerRef";
+  let description = [{
+    Creates an RWProbe reference to a remote target specified by an InnerRef.
+    This is the HW dialect equivalent of firrtl.xmr.remote, used to create
+    read-write probe references via cross-module references (XMR).
+
+    This operation is used when lowering FIRRTL probe operations to HW,
+    specifically for scenarios where probe types cannot be passed through
+    module ports. It uses InnerRef to directly reference remote targets
+    that can be forced and released.
+
+    The InnerRef can target either:
+    - A module port with an inner symbol
+    - An operation with an inner symbol (e.g., wires, registers)
+
+    The result can be used with hw.probe.xmr_ref to get an inout reference
+    for force and release operations.
+
+    Example:
+    ```mlir
+    %rwProbe = hw.xmr.remote @ChildModule::@myReg : !hw.rwprobe<i32>
+    %inout = hw.probe.xmr_ref %rwProbe : !hw.rwprobe<i32>
+    sv.force %inout, %value : i32
+    ```
+  }];
+
+  let arguments = (ins InnerRefAttr:$target);
+  let results = (outs RWProbeType:$result);
+  let hasCustomAssemblyFormat = 1;
+
+  let extraClassDeclaration = [{
+    /// Implement getAsmResultNames to provide auto-generated SSA names
+    void getAsmResultNames(OpAsmSetValueNameFn setNameFn);
+  }];
+}
+
+def ProbeXMRRefOp : HWOp<"probe.xmr_ref", []> {
   let summary = "Convert a probe reference to an inout reference";
   let description = [{
     Converts a probe or rwprobe reference to an inout reference. This operation

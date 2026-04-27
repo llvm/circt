@@ -244,6 +244,74 @@ void ProbeCastOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 //===----------------------------------------------------------------------===//
+// XMRRemoteOp
+//===----------------------------------------------------------------------===//
+
+void XMRRemoteOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  // Auto-generate SSA name from the target symbol
+  setNameFn(getResult(), "xmr");
+}
+
+ParseResult XMRRemoteOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the symbol reference (@Module::@symbol)
+  mlir::SymbolRefAttr symRef;
+  Type resultType;
+
+  if (parser.parseAttribute(symRef) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(resultType))
+    return failure();
+
+  // Convert SymbolRefAttr to InnerRefAttr
+  if (symRef.getNestedReferences().size() != 1)
+    return parser.emitError(parser.getNameLoc(),
+                            "expected @module::@symbol format");
+
+  auto innerRef =
+      InnerRefAttr::get(symRef.getRootReference(), symRef.getLeafReference());
+  result.addAttribute("target", innerRef);
+  result.addTypes(resultType);
+
+  return success();
+}
+
+void XMRRemoteOp::print(OpAsmPrinter &p) {
+  // Print as @Module::@symbol : !hw.rwprobe<type>
+  auto target = getTargetAttr();
+  p << " @" << target.getModule().getValue() << "::@"
+    << target.getName().getValue();
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"target"});
+  p << " : " << getResult().getType();
+}
+
+LogicalResult XMRRemoteOp::verifyInnerRefs(InnerRefNamespace &ns) {
+  auto targetRef = getTarget();
+
+  auto target = ns.lookup(targetRef);
+  if (!target)
+    return emitOpError() << "has target that cannot be resolved: " << targetRef;
+
+  // Target can be either an operation with inner symbols or a module port
+  if (target.isPort()) {
+    // Verify it's a port of a module
+    if (!isa<HWModuleLike>(target.getOp()))
+      return emitOpError("target port must be on a HW module")
+          .attachNote(target.getOp()->getLoc())
+          .append("target resolves here");
+  } else if (target.isOpOnly()) {
+    // Verify the operation has inner symbol support
+    if (!isa<InnerSymbolOpInterface>(target.getOp()))
+      return emitOpError("target operation does not support inner symbols")
+          .attachNote(target.getOp()->getLoc())
+          .append("target resolves here");
+  } else {
+    return emitOpError("target must be an operation or a port");
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ProbeRWProbeOp
 //===----------------------------------------------------------------------===//
 

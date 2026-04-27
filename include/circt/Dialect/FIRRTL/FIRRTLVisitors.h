@@ -62,7 +62,7 @@ public:
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
             RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
-            UnsafeDomainCastOp,
+            XMRRemoteOp, UnsafeDomainCastOp,
             // Casts to deal with weird stuff
             UninferredResetCastOp, ConstCastOp, RefCastOp,
             // Property expressions.
@@ -212,6 +212,7 @@ public:
   HANDLE(RWProbeOp, Unhandled);
   HANDLE(XMRRefOp, Unhandled);
   HANDLE(XMRDerefOp, Unhandled);
+  HANDLE(XMRRemoteOp, Unhandled);
   HANDLE(UnsafeDomainCastOp, Unhandled);
 
   // Conversions.

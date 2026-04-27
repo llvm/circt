@@ -2021,6 +2021,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(RefSubOp op);
   LogicalResult visitExpr(RefCastOp op);
   LogicalResult visitExpr(RWProbeOp op);
+  LogicalResult visitExpr(XMRRemoteOp op);
   LogicalResult visitStmt(RefDefineOp op);
 
   // Format String Operations
@@ -5311,6 +5312,24 @@ LogicalResult FIRRTLLowering::visitExpr(RWProbeOp op) {
   auto probeSend =
       builder.create<hw::ProbeSendOp>(targetValue, /*forceable=*/true);
   return setLowering(op, probeSend.getResult());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(XMRRemoteOp op) {
+  // firrtl.xmr.remote creates an RWProbe reference via InnerRef
+  // Lower directly to hw.xmr.remote with the same InnerRef
+
+  // Get the lowered result type
+  auto resultType = lowerType(op.getType());
+  if (!resultType)
+    return failure();
+
+  // Get the target InnerRef
+  auto targetRef = op.getTargetAttr();
+
+  // Create hw.xmr.remote with the same InnerRef and result type
+  auto xmrRemote =
+      builder.create<hw::XMRRemoteOp>(op.getLoc(), resultType, targetRef);
+  return setLowering(op, xmrRemote.getResult());
 }
 
 LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) {
