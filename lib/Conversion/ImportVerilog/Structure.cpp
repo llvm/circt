@@ -2305,6 +2305,7 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
         (fn.flags & slang::ast::MethodFlags::Virtual)
             ? UnitAttr::get(context.getContext())
             : nullptr;
+    const bool isOverride = fn.getOverride() != nullptr;
 
     auto loc = convertLocation(fn.location);
     // Pure virtual functions regulate inheritance rules during parsing.
@@ -2329,6 +2330,8 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
           builder, loc, fn.name, funcTy, nullptr);
       if (isVirtual)
         pureMethodOp.setIsVirtualAttr(isVirtual);
+      if (isOverride)
+        pureMethodOp.setIsOverrideAttr(builder.getUnitAttr());
       return success();
     }
 
@@ -2336,8 +2339,8 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
     if (!lowering)
       return failure();
 
-    // We only emit methoddecls for virtual methods.
-    if (!isVirtual)
+    // We only emit methoddecls for virtual methods or overrides.
+    if (!isVirtual && !isOverride)
       return success();
 
     // Grab the function type from the declaration.
@@ -2346,7 +2349,10 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
     auto methodDeclOp = moore::ClassMethodDeclOp::create(
         builder, loc, fn.name, fnTy,
         SymbolRefAttr::get(lowering->op.getNameAttr()));
-    methodDeclOp.setIsVirtualAttr(isVirtual);
+    if (isVirtual)
+      methodDeclOp.setIsVirtualAttr(isVirtual);
+    if (isOverride)
+      methodDeclOp.setIsOverrideAttr(builder.getUnitAttr());
 
     return success();
   }
@@ -2419,6 +2425,8 @@ ClassLowering *Context::declareClass(const slang::ast::ClassType &cls) {
   auto [base, impls] = buildBaseAndImplementsAttrs(*this, cls);
   auto classDeclOp =
       moore::ClassDeclOp::create(builder, loc, symName, base, impls);
+  if (cls.isAbstract)
+    classDeclOp.setIsVirtualAttr(builder.getUnitAttr());
 
   SymbolTable::setSymbolVisibility(classDeclOp,
                                    SymbolTable::Visibility::Public);
