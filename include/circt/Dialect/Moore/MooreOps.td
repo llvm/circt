@@ -3225,7 +3225,8 @@ def ClassMethodDeclOp
   let arguments = (ins SymbolNameAttr:$sym_name,
       TypeAttrOf<FunctionType>:$function_type,
       OptionalAttr<SymbolRefAttr>:$impl,
-      OptionalAttr<UnitAttr>:$is_virtual);
+      OptionalAttr<UnitAttr>:$is_virtual,
+      OptionalAttr<UnitAttr>:$is_override);
   let results = (outs);
   let assemblyFormat = [{
       $sym_name (`->` $impl^)? `:` $function_type attr-dict
@@ -3240,7 +3241,8 @@ def ClassMethodDeclOp
             $_builder.getStringAttr(sym_name),
             ::mlir::TypeAttr::get(function_type),
             impl,
-            /*is_virtual=*/::mlir::UnitAttr());
+            /*is_virtual=*/::mlir::UnitAttr(),
+            /*is_override=*/::mlir::UnitAttr());
     }]>
   ];
 }
@@ -3251,7 +3253,8 @@ def ClassDeclOp
   let summary = "Class declaration";
   let arguments = (ins SymbolNameAttr:$sym_name,
       OptionalAttr<SymbolRefAttr>:$base,
-      OptionalAttr<SymbolRefArrayAttr>:$implementedInterfaces);
+      OptionalAttr<SymbolRefArrayAttr>:$implementedInterfaces,
+      OptionalAttr<UnitAttr>:$is_virtual);
   let results = (outs);
   let regions = (region AnyRegion:$body);
   let assemblyFormat = [{
@@ -3261,6 +3264,15 @@ def ClassDeclOp
     attr-dict-with-keyword $body
   }];
   let hasVerifier = 1;
+  // Legacy builder: (builder, loc, sym_name, base, implementedInterfaces).
+  let builders = [
+    OpBuilder<(ins "::mlir::StringAttr":$sym_name,
+                   "::mlir::SymbolRefAttr":$base,
+                   "::mlir::ArrayAttr":$implementedInterfaces), [{
+      build($_builder, $_state, sym_name, base, implementedInterfaces,
+            /*is_virtual=*/::mlir::UnitAttr());
+    }]>
+  ];
 }
 
 def ClassNewOp
