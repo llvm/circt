@@ -2325,7 +2325,10 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
         return failure();
       }
 
-      moore::ClassMethodDeclOp::create(builder, loc, fn.name, funcTy, nullptr);
+      auto pureMethodOp = moore::ClassMethodDeclOp::create(
+          builder, loc, fn.name, funcTy, nullptr);
+      if (isVirtual)
+        pureMethodOp.setIsVirtualAttr(isVirtual);
       return success();
     }
 
@@ -2340,9 +2343,10 @@ struct ClassMethodVisitor : ClassDeclVisitorBase {
     // Grab the function type from the declaration.
     FunctionType fnTy = cast<FunctionType>(lowering->op.getFunctionType());
     // Emit the method decl into the class body, preserving source order.
-    moore::ClassMethodDeclOp::create(
+    auto methodDeclOp = moore::ClassMethodDeclOp::create(
         builder, loc, fn.name, fnTy,
         SymbolRefAttr::get(lowering->op.getNameAttr()));
+    methodDeclOp.setIsVirtualAttr(isVirtual);
 
     return success();
   }
