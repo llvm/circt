@@ -3224,11 +3224,25 @@ def ClassMethodDeclOp
   let summary = "Declare a class method";
   let arguments = (ins SymbolNameAttr:$sym_name,
       TypeAttrOf<FunctionType>:$function_type,
-      OptionalAttr<SymbolRefAttr>:$impl);
+      OptionalAttr<SymbolRefAttr>:$impl,
+      OptionalAttr<UnitAttr>:$is_virtual);
   let results = (outs);
   let assemblyFormat = [{
       $sym_name (`->` $impl^)? `:` $function_type attr-dict
   }];
+  // Legacy builder: (sym_name, function_type, impl).
+  // ImportVerilog call sites use this 3-arg form.
+  let builders = [
+    OpBuilder<(ins "::llvm::StringRef":$sym_name,
+                   "::mlir::FunctionType":$function_type,
+                   "::mlir::SymbolRefAttr":$impl), [{
+      build($_builder, $_state,
+            $_builder.getStringAttr(sym_name),
+            ::mlir::TypeAttr::get(function_type),
+            impl,
+            /*is_virtual=*/::mlir::UnitAttr());
+    }]>
+  ];
 }
 
 def ClassDeclOp
