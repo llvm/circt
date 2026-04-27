@@ -40,6 +40,13 @@
 // sources first, leaves last) via topological(), and in the reverse via
 // reverseTopological().
 //
+// Blocks and Regions
+// ------------------
+// The traversal does not follow through block arguments. It does not consider
+// control flow. It will descend into / ascend from regions without considering
+// the parent operation. The filter predicate can be used to restrict the
+// traversal to certain blocks or regions.
+//
 // Operation Graph Mutation
 // ------------------------
 // The SparseOpSCC class internally stores the result of the SCC analysis
