@@ -98,10 +98,13 @@
 
 namespace circt {
 
-/// Filter predicate passed to the SCC collection functions.  Return `true` to
-/// include an edge in the traversal, `false` to skip it.
-using OpSCCFilter =
-    llvm::function_ref<bool(mlir::Operation *, mlir::OpOperand &)>;
+/// Filter predicate passed to the SparseOpSCC constructor.  Return `true` to
+/// include an edge in the traversal, `false` to skip it. The first argument is
+/// the operation the traversal would enter. The second argument is the
+/// `OpOperand` being followed: for forward traversal its owner equals the
+/// first argument; for backward traversal its defining op equals the first
+/// argument.
+using OpSCCFilter = std::function<bool(mlir::Operation *, mlir::OpOperand &)>;
 
 namespace detail {
 /// Backing storage for a cyclic SCC (implementation detail).
