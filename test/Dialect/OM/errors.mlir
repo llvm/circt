@@ -9,6 +9,49 @@ om.class @Class() {
 // -----
 
 om.class @Class() {
+  // expected-error @+1 {{'om.elaborated_object' op result type ("Bar") does not match referred to class ("Foo")}}
+  %0 = om.elaborated_object @Foo() : () -> !om.class.type<@Bar>
+  om.class.fields
+}
+
+// -----
+
+om.class @Class() {
+  // expected-error @+1 {{'om.elaborated_object' op refers to non-existant class ("NonExistant")}}
+  %0 = om.elaborated_object @NonExistant() : () -> !om.class.type<@NonExistant>
+  om.class.fields
+}
+
+// -----
+
+om.class @Foo() -> (bar: i1) {
+  %0 = om.constant true
+  om.class.fields %0 : i1
+}
+
+om.class @Class() {
+  // expected-error @+1 {{'om.elaborated_object' op field value list doesn't match class field list}}
+  %0 = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
+  om.class.fields
+}
+
+// -----
+
+om.class @Foo() -> (bar: i1) {
+  %0 = om.constant true
+  om.class.fields %0 : i1
+}
+
+om.class @Class() {
+  %0 = om.constant 0 : i2
+  // expected-error @+1 {{'om.elaborated_object' op field value type for "bar" ('i2') doesn't match class field type ('i1')}}
+  %1 = om.elaborated_object @Foo(%0) : (i2) -> !om.class.type<@Foo>
+  om.class.fields
+}
+
+// -----
+
+om.class @Class() {
   // expected-error @+1 {{'om.object' op refers to non-existant class ("NonExistant")}}
   %0 = om.object @NonExistant() : () -> !om.class.type<@NonExistant>
   om.class.fields
