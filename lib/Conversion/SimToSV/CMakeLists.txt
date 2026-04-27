@@ -11,4 +11,5 @@ add_circt_conversion_library(CIRCTSimToSV
   CIRCTEmit
   CIRCTSim
   CIRCTSeq
+  CIRCTSVLoweringUtils
 )

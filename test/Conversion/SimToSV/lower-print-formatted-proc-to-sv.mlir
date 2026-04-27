@@ -1,5 +1,9 @@
 // RUN: circt-opt --lower-sim-to-sv %s | FileCheck %s
 
+// CHECK: sv.func private @"__circt_lib_logging::FileDescriptor::get"
+// CHECK: sv.macro.decl @__CIRCT_LIB_LOGGING
+// CHECK: emit.fragment @CIRCT_LIB_LOGGING_FRAGMENT
+
 // This pass assumes sim.proc.print is already in some procedural region.
 // It lowers both SV and non-SV procedural containers (e.g. hw.triggered).
 
@@ -114,5 +118,50 @@ hw.module @print_to_stdout_and_stderr(in %clk : i1) {
     sim.proc.print %lit to %stdout
     // CHECK-NEXT: sv.fwrite %[[STDERR]], "literal"
     sim.proc.print %lit to %stderr
+  }
+}
+
+hw.module @print_to_file(in %clk : i1, in %idx : i8) {
+  // CHECK-LABEL: hw.module @print_to_file
+  // CHECK-SAME: emit.fragments = [@CIRCT_LIB_LOGGING_FRAGMENT]
+  hw.triggered posedge %clk (%idx) : i8 {
+    ^bb0(%idx_in : i8):
+    %filePrefix = sim.fmt.literal "trace_"
+    %fileIndex = sim.fmt.dec %idx_in paddingChar 48 specifierWidth 2 : i8
+    %fileSuffix = sim.fmt.literal ".log"
+    %fileName = sim.fmt.concat (%filePrefix, %fileIndex, %fileSuffix)
+    %file = sim.get_file %fileName
+    %msgPrefix = sim.fmt.literal "value="
+    %msgValue = sim.fmt.hex %idx_in, isUpper false specifierWidth 2 : i8
+    %msg = sim.fmt.concat (%msgPrefix, %msgValue)
+    // CHECK: ^bb0(%[[IDX:.+]]: i8):
+    // CHECK-NEXT: %[[UNSIGNED:.+]] = sv.system "unsigned"(%[[IDX]]) : (i8) -> i8
+    // CHECK-NEXT: %[[FILENAME:.+]] = sv.sformatf "trace_%02d.log"(%[[UNSIGNED]]) : i8
+    // CHECK-NEXT: %[[FD:.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[FILENAME]]) : (!hw.string) -> i32
+    // CHECK-NEXT: sv.fwrite %[[FD]], "value=%02x"(%[[IDX]]) : i8
+    sim.proc.print %msg to %file
+  }
+}
+
+hw.module @print_to_file_under_condition(in %clk : i1, in %idx : i8, in %en : i1) {
+  // CHECK-LABEL: hw.module @print_to_file_under_condition
+  // CHECK-SAME: emit.fragments = [@CIRCT_LIB_LOGGING_FRAGMENT]
+  hw.triggered posedge %clk (%idx, %en) : i8, i1 {
+    ^bb0(%idx_in : i8, %en_in : i1):
+    %filePrefix = sim.fmt.literal "trace_"
+    %fileIndex = sim.fmt.dec %idx_in paddingChar 48 specifierWidth 2 : i8
+    %fileSuffix = sim.fmt.literal ".log"
+    %fileName = sim.fmt.concat (%filePrefix, %fileIndex, %fileSuffix)
+    %file = sim.get_file %fileName
+    scf.if %en_in {
+      %msg = sim.fmt.literal "enabled"
+      // CHECK: ^bb0(%[[IDX:.+]]: i8, %[[EN:.+]]: i1):
+      // CHECK-NEXT: scf.if %[[EN]] {
+      // CHECK-NEXT:   %[[UNSIGNED:.+]] = sv.system "unsigned"(%[[IDX]]) : (i8) -> i8
+      // CHECK-NEXT:   %[[FILENAME:.+]] = sv.sformatf "trace_%02d.log"(%[[UNSIGNED]]) : i8
+      // CHECK-NEXT:   %[[FD:.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[FILENAME]]) : (!hw.string) -> i32
+      // CHECK-NEXT:   sv.fwrite %[[FD]], "enabled"
+      sim.proc.print %msg to %file
+    }
   }
 }

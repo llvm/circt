@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Conversion/SimToSV.h"
+#include "circt/Conversion/SVLoweringUtils.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWOps.h"
@@ -62,6 +63,7 @@ namespace {
 struct SimConversionState {
   hw::HWModuleOp module;
   bool usedSynthesisMacro = false;
+  bool usedFileDescriptorRuntime = false;
   SetVector<StringAttr> dpiCallees;
 };
 
@@ -341,8 +343,6 @@ struct LowerDPIFunc {
   circt::Namespace nameSpace;
   LowerDPIFunc(mlir::ModuleOp module) { nameSpace.add(module); }
   void lower(sim::DPIFuncOp func);
-  void addFragments(hw::HWModuleOp module,
-                    ArrayRef<StringAttr> dpiCallees) const;
 };
 
 static ArrayAttr buildSVPerArgumentAttrs(MLIRContext *context,
@@ -409,18 +409,22 @@ void LowerDPIFunc::lower(sim::DPIFuncOp func) {
   func.erase();
 }
 
-void LowerDPIFunc::addFragments(hw::HWModuleOp module,
-                                ArrayRef<StringAttr> dpiCallees) const {
+static void
+addFragments(hw::HWModuleOp module,
+             const llvm::DenseMap<StringAttr, StringAttr> &symbolToFragment,
+             const SimConversionState &state) {
   llvm::SetVector<Attribute> fragments;
   // Add existing emit fragments.
   if (auto exstingFragments =
           module->getAttrOfType<ArrayAttr>(emit::getFragmentsAttrName()))
     for (auto fragment : exstingFragments.getAsRange<FlatSymbolRefAttr>())
       fragments.insert(fragment);
-  for (auto callee : dpiCallees) {
+  for (auto callee : state.dpiCallees) {
     auto attr = symbolToFragment.at(callee);
     fragments.insert(FlatSymbolRefAttr::get(attr));
   }
+  if (state.usedFileDescriptorRuntime)
+    fragments.insert(sv::getFileDescriptorFragmentRef(module.getContext()));
   if (!fragments.empty())
     module->setAttr(
         emit::getFragmentsAttrName(),
@@ -519,13 +523,14 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
 
 namespace {
 
-LogicalResult emitLoweringError(Location loc, const Twine &reason) {
+LogicalResult emitFormatLoweringError(Location loc, StringRef context,
+                                      const Twine &reason) {
   return mlir::emitError(loc)
-         << "cannot lower 'sim.proc.print' to sv.write: " << reason;
+         << "cannot lower " << context << " to SystemVerilog: " << reason;
 }
 
-void appendLiteralToFWriteFormat(SmallString<128> &formatString,
-                                 StringRef literal) {
+void appendLiteralToSVFormat(SmallString<128> &formatString,
+                             StringRef literal) {
   for (char ch : literal) {
     if (ch == '%')
       formatString += "%%";
@@ -568,12 +573,12 @@ void appendFloatSpecifier(SmallString<128> &formatString, bool isLeftAligned,
   formatString.push_back(spec);
 }
 
-LogicalResult getFlattenedFormatFragments(Value input,
+LogicalResult getFlattenedFormatFragments(Value input, StringRef context,
                                           SmallVectorImpl<Value> &fragments) {
   if (auto concat = input.getDefiningOp<FormatStringConcatOp>()) {
     if (failed(concat.getFlattenedInputs(fragments)))
-      return emitLoweringError(input.getLoc(),
-                               "cyclic sim.fmt.concat is unsupported");
+      return emitFormatLoweringError(input.getLoc(), context,
+                                     "cyclic sim.fmt.concat is unsupported");
     return success();
   }
 
@@ -581,19 +586,19 @@ LogicalResult getFlattenedFormatFragments(Value input,
   return success();
 }
 
-LogicalResult appendFormatFragmentToFWrite(Value fragment,
-                                           SmallString<128> &formatString,
-                                           SmallVectorImpl<Value> &args,
-                                           OpBuilder &builder) {
+LogicalResult appendFormatFragmentToSVFormat(Value fragment, StringRef context,
+                                             SmallString<128> &formatString,
+                                             SmallVectorImpl<Value> &args,
+                                             OpBuilder &builder) {
   Operation *fragmentOp = fragment.getDefiningOp();
   if (!fragmentOp)
-    return emitLoweringError(fragment.getLoc(),
-                             "block argument format strings are unsupported as "
-                             "sim.proc.print input");
+    return emitFormatLoweringError(
+        fragment.getLoc(), context,
+        "block argument format strings are unsupported");
 
   return TypeSwitch<Operation *, LogicalResult>(fragmentOp)
       .Case<FormatLiteralOp>([&](auto literal) -> LogicalResult {
-        appendLiteralToFWriteFormat(formatString, literal.getLiteral());
+        appendLiteralToSVFormat(formatString, literal.getLiteral());
         return success();
       })
       .Case<FormatHierPathOp>([&](auto hierPath) -> LogicalResult {
@@ -609,9 +614,9 @@ LogicalResult appendFormatFragmentToFWrite(Value fragment,
         if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 'd'))) {
-          return emitLoweringError(
-              fmt.getLoc(), "sim.fmt.dec only supports paddingChar 32 (' ') "
-                            "or 48 ('0') for SystemVerilog lowering");
+          return emitFormatLoweringError(
+              fmt.getLoc(), context,
+              "sim.fmt.dec only supports paddingChar 32 (' ') or 48 ('0')");
         }
         // Match sim.fmt.dec signedness semantics explicitly in SV.
         if (fmt.getIsSigned()) {
@@ -632,9 +637,9 @@ LogicalResult appendFormatFragmentToFWrite(Value fragment,
                 formatString, fmt.getIsLeftAligned(), fmt.getPaddingChar(),
                 fmt.getSpecifierWidth(),
                 fmt.getIsHexUppercase() ? 'X' : 'x'))) {
-          return emitLoweringError(
-              fmt.getLoc(), "sim.fmt.hex only supports paddingChar 32 (' ') "
-                            "or 48 ('0') for SystemVerilog lowering");
+          return emitFormatLoweringError(
+              fmt.getLoc(), context,
+              "sim.fmt.hex only supports paddingChar 32 (' ') or 48 ('0')");
         }
         args.push_back(fmt.getValue());
         return success();
@@ -643,9 +648,9 @@ LogicalResult appendFormatFragmentToFWrite(Value fragment,
         if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 'o'))) {
-          return emitLoweringError(
-              fmt.getLoc(), "sim.fmt.oct only supports paddingChar 32 (' ') "
-                            "or 48 ('0') for SystemVerilog lowering");
+          return emitFormatLoweringError(
+              fmt.getLoc(), context,
+              "sim.fmt.oct only supports paddingChar 32 (' ') or 48 ('0')");
         }
         args.push_back(fmt.getValue());
         return success();
@@ -654,9 +659,9 @@ LogicalResult appendFormatFragmentToFWrite(Value fragment,
         if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 'b'))) {
-          return emitLoweringError(
-              fmt.getLoc(), "sim.fmt.bin only supports paddingChar 32 (' ') "
-                            "or 48 ('0') for SystemVerilog lowering");
+          return emitFormatLoweringError(
+              fmt.getLoc(), context,
+              "sim.fmt.bin only supports paddingChar 32 (' ') or 48 ('0')");
         }
         args.push_back(fmt.getValue());
         return success();
@@ -680,29 +685,52 @@ LogicalResult appendFormatFragmentToFWrite(Value fragment,
         return success();
       })
       .Default([&](auto unsupportedOp) {
-        return emitLoweringError(unsupportedOp->getLoc(),
-                                 Twine("unsupported format fragment '") +
-                                     unsupportedOp->getName().getStringRef() +
-                                     "'");
+        return emitFormatLoweringError(
+            unsupportedOp->getLoc(), context,
+            Twine("unsupported format fragment '") +
+                unsupportedOp->getName().getStringRef() + "'");
       });
 }
 
-LogicalResult foldFormatStringToFWrite(Value input,
-                                       SmallString<128> &formatString,
-                                       SmallVectorImpl<Value> &args,
-                                       OpBuilder &builder) {
+LogicalResult lowerFormatStringToSVFormat(Value input, StringRef context,
+                                          SmallString<128> &formatString,
+                                          SmallVectorImpl<Value> &args,
+                                          OpBuilder &builder) {
   SmallVector<Value, 8> fragments;
-  if (failed(getFlattenedFormatFragments(input, fragments)))
+  if (failed(getFlattenedFormatFragments(input, context, fragments)))
     return failure();
   for (auto fragment : fragments)
-    if (failed(appendFormatFragmentToFWrite(fragment, formatString, args,
-                                            builder)))
+    if (failed(appendFormatFragmentToSVFormat(fragment, context, formatString,
+                                              args, builder)))
       return failure();
   return success();
 }
 
+FailureOr<Value> lowerGetFileToSVAtUse(GetFileOp getFileOp,
+                                       OpBuilder &builder) {
+  SmallString<128> formatString;
+  SmallVector<Value> args;
+  if (failed(lowerFormatStringToSVFormat(getFileOp.getFileName(),
+                                         "file name for 'sim.get_file'",
+                                         formatString, args, builder)))
+    return failure();
+
+  Value fileName =
+      args.empty()
+          ? sv::ConstantStrOp::create(builder, getFileOp.getLoc(),
+                                      builder.getStringAttr(formatString))
+                .getResult()
+          : sv::SFormatFOp::create(builder, getFileOp.getLoc(),
+                                   builder.getStringAttr(formatString), args)
+                .getResult();
+
+  return sv::createProceduralFileDescriptorGetterCall(
+      builder, getFileOp.getLoc(), fileName);
+}
+
 LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
-                                          const TypeConverter &typeConverter) {
+                                          const TypeConverter &typeConverter,
+                                          SimConversionState &state) {
   SmallVector<PrintFormattedProcOp> printOps;
   module.walk([&](PrintFormattedProcOp op) { printOps.push_back(op); });
 
@@ -712,8 +740,9 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     OpBuilder builder(printOp);
     SmallString<128> formatString;
     SmallVector<Value> args;
-    if (failed(foldFormatStringToFWrite(printOp.getInput(), formatString, args,
-                                        builder))) {
+    if (failed(lowerFormatStringToSVFormat(printOp.getInput(),
+                                           "format string for 'sim.proc.print'",
+                                           formatString, args, builder))) {
       return failure();
     }
     auto stream = printOp.getStream();
@@ -721,11 +750,20 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
       // no stream is specified, emit sv.write.
       sv::WriteOp::create(builder, printOp.getLoc(), formatString, args);
     } else {
-      auto fdType = typeConverter.convertType(stream.getType());
-      assert(fdType && "expected output stream type conversion");
-      auto fd = mlir::UnrealizedConversionCastOp::create(
-                    builder, printOp.getLoc(), fdType, stream)
-                    ->getResult(0);
+      Value fd;
+      if (auto getFileOp = stream.getDefiningOp<GetFileOp>()) {
+        auto fdOrFailure = lowerGetFileToSVAtUse(getFileOp, builder);
+        if (failed(fdOrFailure))
+          return failure();
+        fd = *fdOrFailure;
+        state.usedFileDescriptorRuntime = true;
+      } else {
+        auto fdType = typeConverter.convertType(stream.getType());
+        assert(fdType && "expected output stream type conversion");
+        fd = mlir::UnrealizedConversionCastOp::create(builder, printOp.getLoc(),
+                                                      fdType, stream)
+                 ->getResult(0);
+      }
       sv::FWriteOp::create(builder, printOp.getLoc(), fd, formatString, args);
     }
     auto *procRoot =
@@ -754,16 +792,17 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       lowerDPIFunc.lower(func);
 
     std::atomic<bool> usedSynthesisMacro = false;
+    std::atomic<bool> usedFileDescriptorRuntime = false;
     auto lowerModule = [&](hw::HWModuleOp module) {
       SimTypeConverter typeConverter(context);
+      SimConversionState state;
 
-      if (failed(lowerPrintFormattedProcToSV(module, typeConverter)))
+      if (failed(lowerPrintFormattedProcToSV(module, typeConverter, state)))
         return failure();
 
       if (moveOpsIntoIfdefGuardsAndProcesses(module))
         usedSynthesisMacro = true;
 
-      SimConversionState state;
       ConversionTarget target(*context);
       target.addIllegalDialect<SimDialect>();
       target.addLegalDialect<sv::SVDialect>();
@@ -791,11 +830,13 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       if (failed(result))
         return result;
 
-      // Set the emit fragment.
-      lowerDPIFunc.addFragments(module, state.dpiCallees.takeVector());
+      // Set the emit fragments required by this module.
+      addFragments(module, lowerDPIFunc.symbolToFragment, state);
 
       if (state.usedSynthesisMacro)
         usedSynthesisMacro = true;
+      if (state.usedFileDescriptorRuntime)
+        usedFileDescriptorRuntime = true;
       return result;
     };
 
@@ -803,7 +844,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
             context, circuit.getOps<hw::HWModuleOp>(), lowerModule)))
       return signalPassFailure();
 
-    if (usedSynthesisMacro) {
+    if (usedSynthesisMacro || usedFileDescriptorRuntime) {
       Operation *op = circuit.lookupSymbol("SYNTHESIS");
       if (op) {
         if (!isa<sv::MacroDeclOp>(op)) {
@@ -815,6 +856,12 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
             UnknownLoc::get(context), circuit.getBody());
         sv::MacroDeclOp::create(builder, "SYNTHESIS");
       }
+    }
+
+    if (usedFileDescriptorRuntime) {
+      auto builder = ImplicitLocOpBuilder::atBlockBegin(
+          UnknownLoc::get(context), circuit.getBody());
+      sv::emitFileDescriptorRuntime(circuit, builder);
     }
   }
 };
