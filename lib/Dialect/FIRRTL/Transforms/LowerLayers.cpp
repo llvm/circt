@@ -1129,9 +1129,89 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
             continue;
           }
 
-          // For non-XMR probe operands, create input ports with the base type
-          // and use ref.send inside the layer module (same approach as
-          // f1386fc).
+          // Special case for RWProbe: create xmr.remote instead of port
+          if (refType.getForceable()) {
+            // Get or create an inner ref to the RWProbe source
+            hw::InnerRefAttr innerRef;
+
+            // Try to get inner ref from the defining operation
+            if (auto *definingOp = operand.getDefiningOp()) {
+              // Check if it's an instance output port (RWProbe result)
+              if (auto instanceOp = dyn_cast<InstanceOp>(definingOp)) {
+                auto resultNum = cast<OpResult>(operand).getResultNumber();
+
+                // Look up the referenced module to get the port's inner symbol
+                auto *symbolTable =
+                    SymbolTable::getNearestSymbolTable(instanceOp);
+                if (auto referencedMod = dyn_cast_or_null<FModuleLike>(
+                        SymbolTable::lookupSymbolIn(
+                            symbolTable, instanceOp.getModuleName()))) {
+                  // Get the port's inner symbol from the referenced module
+                  auto portSym = referencedMod.getPortSymbolAttr(resultNum);
+                  if (portSym) {
+                    // Create InnerRef directly to the module's port
+                    innerRef = hw::InnerRefAttr::get(
+                        SymbolTable::getSymbolName(referencedMod),
+                        portSym.getSymName());
+                  } else {
+                    // Port doesn't have a symbol, add one
+                    innerRef = getInnerRefTo(
+                        referencedMod, resultNum,
+                        [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+                  }
+                }
+              } else if (auto symOp =
+                             dyn_cast<hw::InnerSymbolOpInterface>(definingOp)) {
+                // For operations that can directly support inner symbols
+                innerRef = getInnerRefTo(
+                    symOp,
+                    [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+              }
+            }
+
+            // If we couldn't get an inner ref, fall back to creating a wire
+            // with an inner symbol in the parent module
+            if (!innerRef) {
+              OpBuilder::InsertionGuard guard(builder);
+              builder.setInsertionPointAfterValue(operand);
+
+              // Create a wire with an inner symbol
+              auto wireName = ns.newName("rwprobe_capture");
+              auto wireOp = builder.create<WireOp>(
+                  operand.getLoc(), refType, wireName,
+                  NameKindEnum::DroppableName,
+                  /*annotations=*/builder.getArrayAttr({}),
+                  hw::InnerSymAttr::get(builder.getStringAttr(wireName)),
+                  /*forceable=*/false);
+
+              // Define the wire with the operand
+              builder.create<RefDefineOp>(operand.getLoc(), wireOp.getResult(),
+                                          operand);
+
+              // Get inner ref to the wire
+              innerRef = getInnerRefTo(
+                  wireOp,
+                  [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+            }
+
+            // Create xmr.remote operation inside the layer block
+            OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(body);
+            auto xmrRemote = builder.create<XMRRemoteOp>(
+                op->getLoc(), refType.removeLayer(), innerRef);
+
+            // Replace uses of the RWProbe inside the layer block
+            operand.replaceUsesWithIf(
+                xmrRemote.getResult(), [&](OpOperand &use) {
+                  return layerBlock->isAncestor(use.getOwner());
+                });
+
+            continue;
+          }
+
+          // For non-XMR, non-RWProbe probe operands, create input ports with
+          // the base type and use ref.send inside the layer module (same
+          // approach as f1386fc).
           const auto &[portName, _] = getFieldName(FieldRef(operand, 0), true);
           auto name = builder.getStringAttr(portNs.newName(portName));
           auto domainInfo = ArrayAttr::get(operand.getContext(), {});

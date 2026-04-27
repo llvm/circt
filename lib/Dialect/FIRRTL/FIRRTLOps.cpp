@@ -7029,6 +7029,71 @@ LogicalResult XMRDerefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+void XMRRemoteOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
+  genericAsmResultNames(*this, setNameFn);
+}
+
+ParseResult XMRRemoteOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse as @Module::@symbol : !firrtl.rwprobe<type>
+  mlir::SymbolRefAttr symRef;
+  Type resultType;
+
+  if (parser.parseAttribute(symRef) || parser.parseColon() ||
+      parser.parseType(resultType))
+    return failure();
+
+  // Convert SymbolRefAttr to InnerRefAttr
+  if (symRef.getNestedReferences().size() != 1)
+    return parser.emitError(parser.getNameLoc(),
+                            "expected @module::@symbol format");
+
+  auto innerRef = hw::InnerRefAttr::get(symRef.getRootReference(),
+                                        symRef.getLeafReference());
+  result.addAttribute("target", innerRef);
+  result.addTypes(resultType);
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  return success();
+}
+
+void XMRRemoteOp::print(OpAsmPrinter &p) {
+  // Print as @Module::@symbol : !firrtl.rwprobe<type>
+  auto target = getTargetAttr();
+  p << " @" << target.getModule().getValue() << "::@"
+    << target.getName().getValue();
+  p << " : " << getResult().getType();
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"target"});
+}
+
+LogicalResult XMRRemoteOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  auto targetRef = getTarget();
+
+  auto target = ns.lookup(targetRef);
+  if (!target)
+    return emitOpError() << "has target that cannot be resolved: " << targetRef;
+
+  // Target can be either an operation with inner symbols or a module port
+  if (target.isPort()) {
+    // Verify it's a port of a FModuleLike
+    if (!isa<FModuleLike>(target.getOp()))
+      return emitOpError("target port must be on a FIRRTL module")
+          .attachNote(target.getOp()->getLoc())
+          .append("target resolves here");
+  } else if (target.isOpOnly()) {
+    // Verify the operation has inner symbol support
+    if (!isa<hw::InnerSymbolOpInterface>(target.getOp()))
+      return emitOpError("target operation does not support inner symbols")
+          .attachNote(target.getOp()->getLoc())
+          .append("target resolves here");
+  } else {
+    return emitOpError("target must be an operation or a port");
+  }
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // Layer Block Operations
 //===----------------------------------------------------------------------===//

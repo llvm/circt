@@ -1742,6 +1742,41 @@ def XMRDerefOp : FIRRTLOp<"xmr.deref", [
   let assemblyFormat = "$ref (`,` $verbatimSuffix^)? attr-dict `:` qualified(type($dest))";
 }
 
+def XMRRemoteOp : FIRRTLOp<"xmr.remote",
+                  [DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+                   HasCustomSSAName,
+                   Pure
+                  ]> {
+  let summary = "FIRRTL XMR remote operation creating RWProbe from InnerRef";
+  let description = [{
+    Creates an RWProbe reference to a remote target specified by an InnerRef.
+    This operation is primarily used by the LowerLayers pass to work around the
+    limitation that probe types cannot be passed through module input ports.
+
+    When lowering layer blocks into separate modules, captured RWProbe values
+    need to be accessible inside the extracted layer module. Since probe types
+    cannot be passed as input ports, this operation uses cross-module references
+    (XMR) to directly reference the remote RWProbe target via its InnerRef.
+
+    The InnerRef can target either:
+    - A module port with an inner symbol (e.g., extmodule output ports)
+    - An operation with an inner symbol (e.g., wires, registers)
+
+    The result can be used with force and release operations for simulation
+    control.
+
+    Example:
+    ```
+      %rwProbe = firrtl.xmr.remote @ChildModule::@myReg : !firrtl.rwprobe<uint<8>>
+      firrtl.ref.force %clk, %cond, %rwProbe, %value
+    ```
+  }];
+
+  let arguments = (ins InnerRefAttr:$target);
+  let results = (outs RWProbe:$result);
+  let hasCustomAssemblyFormat = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // LTL Dialect Sequence and Property Intrinsics
 //===----------------------------------------------------------------------===//
