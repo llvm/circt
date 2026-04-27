@@ -1142,5 +1142,72 @@ firrtl.circuit "DoNotIncludeDummyBindfiles" {
 
   // CHECK-NOT: sv.include local "layers-Child1-A.sv"
   // CHECK: sv.include local "layers-Child2-A.sv"
-  // CHECK-NOT: sv.include local "layers-Child1-A.sv"  
+  // CHECK-NOT: sv.include local "layers-Child1-A.sv"
+}
+
+// -----
+
+firrtl.circuit "EnabledLayers" {
+  firrtl.layer @Bind bind {
+    firrtl.layer @Child bind {
+      firrtl.layer @Child bind {}
+    }
+  }
+
+  firrtl.layer @Inline inline {
+    firrtl.layer @Child inline {
+      firrtl.layer @Child inline {}
+    }
+  }
+
+  firrtl.module @EnabledLayers() {}
+
+  // CHECK-LABEL: firrtl.module @ModuleWithEnabledBind
+  firrtl.module @ModuleWithEnabledBind() attributes {layers = [@Bind::@Child]} {
+    // CHECK: %c2_ui8 = firrtl.constant 2
+    // CHECK: %w1 = firrtl.wire
+    // CHECK: firrtl.connect %w1, %c2_ui8
+    // CHECK: %w2 = firrtl.wire sym @sym
+    // CHECK: firrtl.connect %w2, %w1
+    // CHECK: firrtl.instance bind_child_child {{.*}} @ModuleWithEnabledBind_Bind_Child_Child()
+    %c2_ui8 = firrtl.constant 2 : !firrtl.uint<8>
+    firrtl.layerblock @Bind {
+      %w1 = firrtl.wire : !firrtl.uint<8>
+      firrtl.connect %w1, %c2_ui8 : !firrtl.uint<8>
+      firrtl.layerblock @Bind::@Child {
+        %w2 = firrtl.wire : !firrtl.uint<8>
+        firrtl.connect %w2, %w1 : !firrtl.uint<8>
+        firrtl.layerblock @Bind::@Child::@Child {
+          %w3 = firrtl.wire : !firrtl.uint<8>
+          firrtl.connect %w3, %w2 : !firrtl.uint<8>
+        }
+      }
+    }
+  }
+
+  // CHECK-LABEL: firrtl.module @ModuleWithEnabledInline
+  firrtl.module @ModuleWithEnabledInline() attributes {layers = [@Inline::@Child]} {
+    // CHECK: %c2_ui8 = firrtl.constant 2
+    // CHECK: %w1 = firrtl.wire
+    // CHECK: firrtl.connect %w1, %c2_ui8
+    // CHECK: %w2 = firrtl.wire
+    // CHECK: firrtl.connect %w2, %w1
+    // CHECK: sv.ifdef @layer$Inline$Child$Child {
+    // CHECK:   %w3 = firrtl.wire
+    // CHECK:   firrtl.connect %w3, %w2
+    // CHECK: }
+    %c2_ui8 = firrtl.constant 2 : !firrtl.uint<8>
+    firrtl.layerblock @Inline {
+      %w1 = firrtl.wire : !firrtl.uint<8>
+      firrtl.connect %w1, %c2_ui8 : !firrtl.uint<8>
+      firrtl.layerblock @Inline::@Child {
+        %w2 = firrtl.wire : !firrtl.uint<8>
+        firrtl.connect %w2, %w1 : !firrtl.uint<8>
+        firrtl.layerblock @Inline::@Child::@Child {
+          %w3 = firrtl.wire : !firrtl.uint<8>
+          firrtl.connect %w3, %w2 : !firrtl.uint<8>
+        }
+      }
+    }
+  }
 }
