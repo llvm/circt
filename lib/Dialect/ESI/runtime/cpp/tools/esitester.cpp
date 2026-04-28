@@ -25,9 +25,11 @@
 #include "esi/Services.h"
 #include "esi/TypedPorts.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <future>
 #include <iostream>
 #include <map>
@@ -1861,6 +1863,78 @@ union SerialCoordOutputFrame {
 #pragma pack(pop)
 static_assert(sizeof(SerialCoordOutputFrame) == 8, "Size mismatch");
 
+/// Deserialized result batch from the serial coord translator. The
+/// TypeDeserializer accumulates header+data frame sequences until the
+/// zero-count footer header, then emits the complete coordinate list.
+struct SerialCoordOutputBatch {
+  std::vector<Coord> coords;
+
+  class TypeDeserializer
+      : public QueuedDecodeTypeDeserializer<SerialCoordOutputBatch> {
+  public:
+    using Base = QueuedDecodeTypeDeserializer<SerialCoordOutputBatch>;
+    using OutputCallback = Base::OutputCallback;
+    using DecodedOutputs = Base::DecodedOutputs;
+
+    explicit TypeDeserializer(OutputCallback output)
+        : Base(std::move(output)) {}
+
+  private:
+    DecodedOutputs decode(std::unique_ptr<SegmentedMessageData> &msg) override {
+      DecodedOutputs decoded;
+
+      MessageData scratch;
+      const MessageData &flat =
+          detail::getMessageDataRef<SerialCoordOutputBatch>(*msg, scratch);
+      const uint8_t *bytes = flat.getBytes();
+      size_t size = flat.getSize();
+      constexpr size_t frameSize = sizeof(SerialCoordOutputFrame);
+
+      size_t offset = 0;
+      while (offset < size) {
+        size_t needed = frameSize - partialFrameBytes.size();
+        size_t chunkSize = std::min(needed, size - offset);
+        partialFrameBytes.insert(partialFrameBytes.end(), bytes + offset,
+                                 bytes + offset + chunkSize);
+        offset += chunkSize;
+
+        if (partialFrameBytes.size() != frameSize)
+          break;
+
+        SerialCoordOutputFrame frame;
+        std::memcpy(&frame, partialFrameBytes.data(), frameSize);
+        partialFrameBytes.clear();
+
+        if (remainingCoords == 0) {
+          // Header frame.
+          uint16_t batchCount = frame.header.coordsCount;
+          if (batchCount == 0) {
+            // Footer: end of list. Emit accumulated coordinates.
+            auto batch = std::make_unique<SerialCoordOutputBatch>();
+            batch->coords = std::move(accumulated);
+            accumulated.clear();
+            decoded.push_back(std::move(batch));
+            msg.reset();
+            return decoded;
+          }
+          remainingCoords = batchCount;
+          continue;
+        }
+        // Data frame.
+        accumulated.push_back({frame.data.y, frame.data.x});
+        --remainingCoords;
+      }
+
+      msg.reset();
+      return decoded;
+    }
+
+    std::vector<Coord> accumulated;
+    std::vector<uint8_t> partialFrameBytes;
+    size_t remainingCoords = 0;
+  };
+};
+
 static void serialCoordTranslateTest(AcceleratorConnection *conn,
                                      Accelerator *accel, uint32_t xTrans,
                                      uint32_t yTrans, uint32_t numCoords,
@@ -1889,14 +1963,11 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
 
   TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
       portIter->second.getRawWrite("arg"));
-  ReadChannelPort &resultPort = portIter->second.getRawRead("result");
+  TypedReadPort<SerialCoordOutputBatch> resultPort(
+      portIter->second.getRawRead("result"));
 
   argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
   resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
-  // The serial window reply is emitted as many raw frames. This test writes
-  // all request batches before draining the result stream, so the default
-  // polling queue depth can fill up and backpressure the DMA engine.
-  resultPort.setMaxDataQueueMsgs(0);
 
   size_t sent = 0;
   while (sent < numCoords) {
@@ -1919,33 +1990,14 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
   auto footerData = std::make_unique<SerialCoordInput>();
   argPort.write(footerData);
 
-  // Read results. The hardware echoes headers (with count) followed by
-  // translated data frames, then autonomously sends a footer header with
-  // count=0 to signal end of list.
-  std::vector<Coord> results;
-  while (true) {
-    // Read Header
-    MessageData msg;
-    resultPort.read(msg);
-    if (msg.getSize() != sizeof(SerialCoordOutputFrame))
-      throw std::runtime_error("Unexpected result message size");
-
-    const auto *frame =
-        reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
-    uint16_t batchCount = frame->header.coordsCount;
-    if (batchCount == 0)
-      break;
-
-    // Read Data
-    for (uint16_t i = 0; i < batchCount; ++i) {
-      resultPort.read(msg);
-      if (msg.getSize() != sizeof(SerialCoordOutputFrame))
-        throw std::runtime_error("Unexpected result message size");
-      const auto *dFrame =
-          reinterpret_cast<const SerialCoordOutputFrame *>(msg.getBytes());
-      results.push_back({dFrame->data.y, dFrame->data.x});
-    }
-  }
+  // Read the deserialized result batch. The TypeDeserializer accumulates all
+  // header+data frame sequences until the zero-count footer, producing a
+  // single SerialCoordOutputBatch with the complete coordinate list.
+  std::unique_ptr<SerialCoordOutputBatch> result = resultPort.read();
+  if (!result)
+    throw std::runtime_error(
+        "Serial coord translate test: typed read returned null result");
+  const std::vector<Coord> &results = result->coords;
 
   // Verify
   bool passed = true;

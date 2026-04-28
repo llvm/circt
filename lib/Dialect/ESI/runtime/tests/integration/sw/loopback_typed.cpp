@@ -34,11 +34,12 @@ static void runLoopbackI8(Accelerator *accel) {
   uint8_t sendVal = 0x5a;
   toHw.write(sendVal);
 
-  uint8_t got = fromHw.read();
-  if (got != sendVal)
+  std::unique_ptr<uint8_t> got = fromHw.read();
+  if (!got || *got != sendVal)
     throw std::runtime_error("Loopback byte mismatch");
 
-  std::cout << "loopback i8 ok: 0x" << std::hex << (int)got << std::dec << "\n";
+  std::cout << "loopback i8 ok: 0x" << std::hex << (int)*got << std::dec
+            << "\n";
 }
 
 static void runStructFunc(Accelerator *accel) {
