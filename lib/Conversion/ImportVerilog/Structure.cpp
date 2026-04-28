@@ -407,13 +407,19 @@ struct ModuleVisitor : public BaseVisitor {
     using slang::ast::MultiPortSymbol;
     using slang::ast::PortSymbol;
 
+    // Always operate on the canonical instance body if there is one.
+    // This means any symbols we record will be the symbols from the
+    // canonical body, which will match up with the symbols encountered
+    // by analyses which visit the canonical bodies.
+    const slang::ast::InstanceBodySymbol *body = getCanonicalBody(instNode);
+
     // Interface instances are expanded inline into individual variable/net ops
     // rather than creating a moore.instance op.
-    auto defKind = instNode.body.getDefinition().definitionKind;
+    auto defKind = body->getDefinition().definitionKind;
     if (defKind == slang::ast::DefinitionKind::Interface)
       return expandInterfaceInstance(instNode);
 
-    auto *moduleLowering = context.convertModuleHeader(&instNode.body);
+    auto *moduleLowering = context.convertModuleHeader(body);
     if (!moduleLowering)
       return failure();
     auto module = moduleLowering->op;
@@ -948,11 +954,13 @@ LogicalResult Context::convertCompilation() {
   // Interfaces are not lowered as modules; they are expanded inline at each
   // use site, so skip them here.
   SmallVector<const slang::ast::InstanceSymbol *> topInstances;
-  for (auto *inst : root.topInstances)
-    if (inst->body.getDefinition().definitionKind !=
+  for (auto *inst : root.topInstances) {
+    const slang::ast::InstanceBodySymbol *body = getCanonicalBody(inst);
+    if (body->getDefinition().definitionKind !=
         slang::ast::DefinitionKind::Interface)
-      if (!convertModuleHeader(&inst->body))
+      if (!convertModuleHeader(body))
         return failure();
+  }
 
   // Convert all the root module definitions.
   while (!moduleWorklist.empty()) {
@@ -1002,10 +1010,6 @@ LogicalResult Context::convertCompilation() {
   return success();
 }
 
-/// Convert a module and its ports to an empty module op in the IR. Also adds
-/// the op to the worklist of module bodies to be lowered. This acts like a
-/// module "declaration", allowing instances to already refer to a module even
-/// before its body has been lowered.
 ModuleLowering *
 Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   using slang::ast::ArgumentDirection;
@@ -1020,53 +1024,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   timeScale = module->getTimeScale().value_or(slang::TimeScale());
   llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
-  auto parameters = module->getParameters();
-  bool hasModuleSame = false;
-  // If there is already exist a module that has the same name with this
-  // module ,has the same parent scope and has the same parameters we can
-  // define this module is a duplicate module
-  for (auto const &existingModule : modules) {
-    if (module->getDeclaringDefinition() ==
-        existingModule.getFirst()->getDeclaringDefinition()) {
-      auto moduleParameters = existingModule.getFirst()->getParameters();
-      hasModuleSame = true;
-      for (auto it1 = parameters.begin(), it2 = moduleParameters.begin();
-           it1 != parameters.end() && it2 != moduleParameters.end();
-           it1++, it2++) {
-        // Parameters size different
-        if (it1 == parameters.end() || it2 == moduleParameters.end()) {
-          hasModuleSame = false;
-          break;
-        }
-        const auto *para1 = (*it1)->symbol.as_if<ParameterSymbol>();
-        const auto *para2 = (*it2)->symbol.as_if<ParameterSymbol>();
-        // Parameters kind different
-        if ((para1 == nullptr) ^ (para2 == nullptr)) {
-          hasModuleSame = false;
-          break;
-        }
-        // Compare ParameterSymbol
-        if (para1 != nullptr) {
-          hasModuleSame = para1->getValue() == para2->getValue();
-        }
-        // Compare TypeParameterSymbol
-        if (para1 == nullptr) {
-          auto para1Type = convertType(
-              (*it1)->symbol.as<TypeParameterSymbol>().getTypeAlias());
-          auto para2Type = convertType(
-              (*it2)->symbol.as<TypeParameterSymbol>().getTypeAlias());
-          hasModuleSame = para1Type == para2Type;
-        }
-        if (!hasModuleSame)
-          break;
-      }
-      if (hasModuleSame) {
-        module = existingModule.first;
-        break;
-      }
-    }
-  }
-
+  // `module` is the canonical module body if it exists (i.e. deduplicated by
+  // slang).
   auto &slot = modules[module];
   if (slot)
     return slot.get();
@@ -1269,8 +1228,6 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
   return &lowering;
 }
 
-/// Convert a module's body to the corresponding IR ops. The module op must have
-/// already been created earlier through a `convertModuleHeader` call.
 LogicalResult
 Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   auto &lowering = *modules[module];
