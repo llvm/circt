@@ -2026,4 +2026,109 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
   }
 }
 
+TEST(EvaluatorTests, IntegerBitwiseTests) {
+  StringRef mod = R"MLIR(
+om.class @IntegerBitwiseAnd(%a: i8, %b: i8) -> (result: i8) {
+  %and = om.integer.and %a, %b : i8
+  om.class.fields %and : i8
+}
+
+om.class @IntegerBitwiseOr(%a: i8, %b: i8) -> (result: i8) {
+  %or = om.integer.or %a, %b : i8
+  om.class.fields %or : i8
+}
+
+om.class @IntegerBitwiseXor(%a: i8, %b: i8) -> (result: i8) {
+  %xor = om.integer.xor %a, %b : i8
+  om.class.fields %xor : i8
+}
+
+om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
+  %zero = om.constant 0 : i8
+  %unk  = om.integer.and %zero, %b : i8
+  om.class.fields %unk : i8
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
+  auto i8Type = mlir::IntegerType::get(&context, 8);
+
+  // Helper: make an i8 AttributeValue.
+  auto makeI8 = [&](uint8_t val) -> evaluator::EvaluatorValuePtr {
+    auto attr = mlir::IntegerAttr::get(i8Type, val);
+    auto v = evaluator::AttributeValue::get(i8Type, unknownLoc);
+    (void)cast<evaluator::AttributeValue>(v.get())->setAttr(attr);
+    (void)cast<evaluator::AttributeValue>(v.get())->finalize();
+    return v;
+  };
+
+  // Helper: extract the i8 value from the "result" field.
+  auto getResult = [&](evaluator::EvaluatorValuePtr obj) -> uint64_t {
+    auto *o = llvm::cast<evaluator::ObjectValue>(obj.get());
+    return llvm::cast<evaluator::AttributeValue>(
+               o->getField(StringAttr::get(&context, "result")).value().get())
+        ->getAs<mlir::IntegerAttr>()
+        .getValue()
+        .getZExtValue();
+  };
+
+  // Test AND: 0xF0 & 0x0F = 0x00, 0xFF & 0xF0 = 0xF0.
+  struct {
+    uint8_t a, b, expected;
+  } andCases[] = {{0xF0, 0x0F, 0x00}, {0xFF, 0xF0, 0xF0}, {0x00, 0xFF, 0x00}};
+  for (auto [a, b, expected] : andCases) {
+    auto r = evaluator.instantiate(
+        StringAttr::get(&context, "IntegerBitwiseAnd"), {makeI8(a), makeI8(b)});
+    ASSERT_TRUE(succeeded(r));
+    ASSERT_EQ(getResult(r.value()), static_cast<uint64_t>(expected));
+  }
+
+  // Test OR: 0xF0 | 0x0F = 0xFF, 0x00 | 0x0F = 0x0F.
+  struct {
+    uint8_t a, b, expected;
+  } orCases[] = {{0xF0, 0x0F, 0xFF}, {0x00, 0x0F, 0x0F}, {0xFF, 0x00, 0xFF}};
+  for (auto [a, b, expected] : orCases) {
+    auto r = evaluator.instantiate(
+        StringAttr::get(&context, "IntegerBitwiseOr"), {makeI8(a), makeI8(b)});
+    ASSERT_TRUE(succeeded(r));
+    ASSERT_EQ(getResult(r.value()), static_cast<uint64_t>(expected));
+  }
+
+  // Test XOR: 0xF0 ^ 0xFF = 0x0F (NOT idiom: xor(a, 0xFF) = ~a).
+  struct {
+    uint8_t a, b, expected;
+  } xorCases[] = {{0xF0, 0xFF, 0x0F}, {0xAA, 0x55, 0xFF}, {0x00, 0x00, 0x00}};
+  for (auto [a, b, expected] : xorCases) {
+    auto r = evaluator.instantiate(
+        StringAttr::get(&context, "IntegerBitwiseXor"), {makeI8(a), makeI8(b)});
+    ASSERT_TRUE(succeeded(r));
+    ASSERT_EQ(getResult(r.value()), static_cast<uint64_t>(expected));
+  }
+
+  // Test unknown propagation: AND(0x00, unknown) = unknown.
+  // Unknown is treated as poison rather than short-circuiting to zero.
+  {
+    auto unknown = evaluator::AttributeValue::get(i8Type, unknownLoc);
+    unknown->markUnknown();
+    auto r = evaluator.instantiate(
+        StringAttr::get(&context, "IntegerBitwiseUnknown"), {unknown});
+    ASSERT_TRUE(succeeded(r));
+    auto *obj = llvm::cast<evaluator::ObjectValue>(r.value().get());
+    ASSERT_TRUE(obj->getField(StringAttr::get(&context, "unknown"))
+                    .value()
+                    ->isUnknown());
+  }
+}
+
 } // namespace

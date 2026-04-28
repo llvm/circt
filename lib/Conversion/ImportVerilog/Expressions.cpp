@@ -2010,6 +2010,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     case ksn::Changed:
     case ksn::Past:
     case ksn::Sampled:
+    case ksn::IsUnknown:
       return context.convertAssertionCallExpression(expr, info, loc);
     default:
       break;

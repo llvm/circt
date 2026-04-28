@@ -107,10 +107,52 @@ struct HWClientDetail {
 using HWClientDetails = std::vector<HWClientDetail>;
 using ServiceImplDetails = std::map<std::string, std::any>;
 
-/// A logical chunk of data representing serialized data. Currently, just a
-/// wrapper for a vector of bytes, which is not efficient in terms of memory
-/// copying. This will change in the future as will the API.
-class MessageData {
+class MessageData;
+
+//===----------------------------------------------------------------------===//
+// SegmentedMessageData -- multi-segment message support.
+//===----------------------------------------------------------------------===//
+
+/// A contiguous, non-owning view of bytes within a SegmentedMessageData.
+/// Valid only while the owning SegmentedMessageData is alive.
+struct Segment {
+  const uint8_t *data;
+  size_t size;
+  std::span<const uint8_t> span() const { return {data, size}; }
+  bool empty() const { return size == 0; }
+};
+
+/// Abstract multi-segment message. Generated types subclass this to expose
+/// header + list segments without flattening into a contiguous buffer.
+///
+/// MessageData is the canonical flat, one-segment implementation of this
+/// interface. Other subclasses represent naturally segmented layouts.
+///
+/// Subclasses MUST own all data that their segments point to. Read and write
+/// APIs can hold the message across async boundaries / retries.
+class SegmentedMessageData {
+public:
+  virtual ~SegmentedMessageData() = default;
+
+  /// Number of segments in the message.
+  virtual size_t numSegments() const = 0;
+  /// Get a segment by index.
+  virtual Segment segment(size_t idx) const = 0;
+
+  /// Total size across all segments.
+  size_t totalSize() const;
+  /// True if totalSize() == 0.
+  bool empty() const;
+
+  /// Flatten all segments into a standard MessageData.
+  virtual MessageData toMessageData() const;
+};
+
+/// A concrete flat message backed by a single vector of bytes.
+///
+/// This is also a one-segment SegmentedMessageData so flat and segmented
+/// messages can flow through the same internal APIs.
+class MessageData : public SegmentedMessageData {
 public:
   /// Adopts the data vector buffer.
   MessageData() = default;
@@ -162,47 +204,16 @@ public:
   /// Convert the data to a hex string.
   std::string toHex() const;
 
+  size_t numSegments() const override { return 1; }
+  Segment segment(size_t idx) const override {
+    if (idx != 0)
+      throw std::out_of_range("MessageData only has one segment");
+    return {data.data(), data.size()};
+  }
+  MessageData toMessageData() const override { return *this; }
+
 private:
   std::vector<uint8_t> data;
-};
-
-//===----------------------------------------------------------------------===//
-// SegmentedMessageData — multi-segment message for generated types.
-//===----------------------------------------------------------------------===//
-
-/// A contiguous, non-owning view of bytes within a SegmentedMessageData.
-/// Valid only while the owning SegmentedMessageData is alive.
-struct Segment {
-  const uint8_t *data;
-  size_t size;
-  std::span<const uint8_t> span() const { return {data, size}; }
-  bool empty() const { return size == 0; }
-};
-
-/// Abstract multi-segment message. Generated types subclass this to expose
-/// header + list segments without flattening into a contiguous buffer.
-///
-/// This class does NOT replace MessageData. It lives alongside it.
-///
-/// Subclasses MUST own all data that their segments point to. The write API
-/// takes ownership (unique_ptr<SegmentedMessageData>) and a backend may hold
-/// the message across async boundaries / partial writes.
-class SegmentedMessageData {
-public:
-  virtual ~SegmentedMessageData() = default;
-
-  /// Number of segments in the message.
-  virtual size_t numSegments() const = 0;
-  /// Get a segment by index.
-  virtual Segment segment(size_t idx) const = 0;
-
-  /// Total size across all segments.
-  size_t totalSize() const;
-  /// True if totalSize() == 0.
-  bool empty() const;
-
-  /// Flatten all segments into a standard MessageData.
-  MessageData toMessageData() const;
 };
 
 /// Cursor for incremental consumption of a SegmentedMessageData.

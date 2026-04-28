@@ -335,6 +335,31 @@ public:
   MessageData nextResponse;
 };
 
+class CallbackDrivenMockReadPort : public ReadChannelPort {
+public:
+  CallbackDrivenMockReadPort(const Type *type) : ReadChannelPort(type) {}
+
+  bool deliver(std::unique_ptr<SegmentedMessageData> msg) {
+    pending = std::move(msg);
+    return retryPending();
+  }
+
+  bool retryPending() {
+    if (!pending)
+      throw std::runtime_error(
+          "CallbackDrivenMockReadPort::retryPending with no message");
+    if (!callback(pending))
+      return false;
+    pending.reset();
+    return true;
+  }
+
+  bool hasPending() const { return static_cast<bool>(pending); }
+
+private:
+  std::unique_ptr<SegmentedMessageData> pending;
+};
+
 //===----------------------------------------------------------------------===//
 // TypedFunction tests
 //===----------------------------------------------------------------------===//
@@ -453,6 +478,98 @@ struct TestSegmented : public SegmentedMessageData {
             items.size() * sizeof(uint32_t)};
   }
 };
+
+TEST(TypedPortsTest, ReadChannelPortSegmentedCallbackRetriesSameMessageObject) {
+  UIntType uint32("ui32", 32);
+  CallbackDrivenMockReadPort mock(&uint32);
+
+  uint32_t expected = 0x12345678;
+  const uint8_t *firstBytes = nullptr;
+  size_t callbackCalls = 0;
+
+  mock.connect([&](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
+    ++callbackCalls;
+    EXPECT_EQ(msg->numSegments(), 1u);
+
+    auto *flat = dynamic_cast<MessageData *>(msg.get());
+    EXPECT_NE(flat, nullptr);
+    if (!flat)
+      return false;
+    EXPECT_EQ(*flat->as<uint32_t>(), expected);
+
+    if (callbackCalls == 1)
+      firstBytes = flat->getBytes();
+    else
+      EXPECT_EQ(flat->getBytes(), firstBytes);
+
+    return callbackCalls == 2;
+  });
+
+  EXPECT_FALSE(
+      mock.deliver(std::make_unique<MessageData>(MessageData::from(expected))));
+  EXPECT_TRUE(mock.hasPending());
+  EXPECT_TRUE(mock.retryPending());
+  EXPECT_FALSE(mock.hasPending());
+  EXPECT_EQ(callbackCalls, 2u);
+}
+
+TEST(TypedPortsTest, ReadChannelPortFlatCallbackFlattensSegmentedMessageRetry) {
+  UIntType uint32("ui32", 32);
+  CallbackDrivenMockReadPort mock(&uint32);
+
+  TestSegmented input;
+  input.header.a = 0x12345678;
+  input.header.b = 0xABCD;
+  input.items = {1, 2, 3};
+  MessageData expected = input.toMessageData();
+
+  size_t callbackCalls = 0;
+  mock.connect([&](MessageData data) {
+    ++callbackCalls;
+    EXPECT_EQ(data.getData(), expected.getData());
+    return callbackCalls == 2;
+  });
+
+  EXPECT_FALSE(mock.deliver(std::make_unique<TestSegmented>(input)));
+  EXPECT_TRUE(mock.hasPending());
+  EXPECT_TRUE(mock.retryPending());
+  EXPECT_FALSE(mock.hasPending());
+  EXPECT_EQ(callbackCalls, 2u);
+}
+
+TEST(TypedPortsTest, ReadChannelPortPollingRetriesFlattenedSegmentedMessage) {
+  UIntType uint32("ui32", 32);
+  CallbackDrivenMockReadPort mock(&uint32);
+  mock.connect();
+  mock.setMaxDataQueueMsgs(1);
+
+  TestSegmented firstInput;
+  firstInput.header.a = 0xAAAA5555;
+  firstInput.header.b = 0x1357;
+  firstInput.items = {10};
+  MessageData firstExpected = firstInput.toMessageData();
+
+  TestSegmented secondInput;
+  secondInput.header.a = 0xDEADBEEF;
+  secondInput.header.b = 0x2468;
+  secondInput.items = {20, 30};
+  MessageData secondExpected = secondInput.toMessageData();
+
+  EXPECT_TRUE(mock.deliver(std::make_unique<TestSegmented>(firstInput)));
+  EXPECT_FALSE(mock.deliver(std::make_unique<TestSegmented>(secondInput)));
+  EXPECT_TRUE(mock.hasPending());
+
+  MessageData firstOut;
+  mock.read(firstOut);
+  EXPECT_EQ(firstOut.getData(), firstExpected.getData());
+
+  EXPECT_TRUE(mock.retryPending());
+  EXPECT_FALSE(mock.hasPending());
+
+  MessageData secondOut;
+  mock.read(secondOut);
+  EXPECT_EQ(secondOut.getData(), secondExpected.getData());
+}
 
 TEST(TypedPortsTest, TypedWritePortSegmentedMessageData) {
   // Use any type — SegmentedMessageData skips type checks.

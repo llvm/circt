@@ -21,6 +21,7 @@
 #include "circt/Support/Namespace.h"
 #include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
@@ -62,6 +63,15 @@ struct SimConversionState {
   hw::HWModuleOp module;
   bool usedSynthesisMacro = false;
   SetVector<StringAttr> dpiCallees;
+};
+
+struct SimTypeConverter : public TypeConverter {
+  explicit SimTypeConverter(MLIRContext *context) {
+    addConversion([](Type type) { return type; });
+    addConversion([&](OutputStreamType type) -> Type {
+      return IntegerType::get(type.getContext(), 32);
+    });
+  }
 };
 
 template <typename T>
@@ -184,6 +194,47 @@ public:
     Value readv = sv::ReadInOutOp::create(rewriter, loc, wirev);
 
     rewriter.replaceOp(op, {readf, readv});
+    return success();
+  }
+};
+
+template <typename OpTy, unsigned StreamValue>
+class StreamLowering : public OpConversionPattern<OpTy> {
+public:
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<OpTy>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto streamValue =
+        hw::ConstantOp::create(rewriter, op.getLoc(), APInt(32, StreamValue));
+    rewriter.replaceOp(op, streamValue);
+    return success();
+  }
+};
+
+using StdoutStreamLowering = StreamLowering<StdoutStreamOp, 0x80000001>;
+using StderrStreamLowering = StreamLowering<StderrStreamOp, 0x80000002>;
+
+class UnrealizedConversionCastLowering
+    : public OpConversionPattern<mlir::UnrealizedConversionCastOp> {
+public:
+  using OpConversionPattern<
+      mlir::UnrealizedConversionCastOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(mlir::UnrealizedConversionCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    SmallVector<Type> convertedResultTypes;
+    if (failed(typeConverter->convertTypes(op.getResultTypes(),
+                                           convertedResultTypes)))
+      return failure();
+
+    if (!llvm::equal(convertedResultTypes, adaptor.getOperands().getTypes()))
+      return failure();
+
+    rewriter.replaceOp(op, adaptor.getOperands());
     return success();
   }
 };
@@ -650,7 +701,8 @@ LogicalResult foldFormatStringToFWrite(Value input,
   return success();
 }
 
-LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module) {
+LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
+                                          const TypeConverter &typeConverter) {
   SmallVector<PrintFormattedProcOp> printOps;
   module.walk([&](PrintFormattedProcOp op) { printOps.push_back(op); });
 
@@ -669,9 +721,12 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module) {
       // no stream is specified, emit sv.write.
       sv::WriteOp::create(builder, printOp.getLoc(), formatString, args);
     } else {
-      // Stream-based printing is not supported yet.
-      return printOp->emitError(
-          "lowering 'sim.proc.print' with a stream is not supported yet");
+      auto fdType = typeConverter.convertType(stream.getType());
+      assert(fdType && "expected output stream type conversion");
+      auto fd = mlir::UnrealizedConversionCastOp::create(
+                    builder, printOp.getLoc(), fdType, stream)
+                    ->getResult(0);
+      sv::FWriteOp::create(builder, printOp.getLoc(), fd, formatString, args);
     }
     auto *procRoot =
         printOp->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();
@@ -700,7 +755,9 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
 
     std::atomic<bool> usedSynthesisMacro = false;
     auto lowerModule = [&](hw::HWModuleOp module) {
-      if (failed(lowerPrintFormattedProcToSV(module)))
+      SimTypeConverter typeConverter(context);
+
+      if (failed(lowerPrintFormattedProcToSV(module, typeConverter)))
         return failure();
 
       if (moveOpsIntoIfdefGuardsAndProcesses(module))
@@ -713,10 +770,17 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       target.addLegalDialect<hw::HWDialect>();
       target.addLegalDialect<seq::SeqDialect>();
       target.addLegalDialect<comb::CombDialect>();
+      target.addDynamicallyLegalOp<mlir::UnrealizedConversionCastOp>(
+          [&](mlir::UnrealizedConversionCastOp op) {
+            return typeConverter.isLegal(op);
+          });
 
       RewritePatternSet patterns(context);
       patterns.add<PlusArgsTestLowering>(context, state);
       patterns.add<PlusArgsValueLowering>(context, state);
+      patterns.add<StdoutStreamLowering>(typeConverter, context);
+      patterns.add<StderrStreamLowering>(typeConverter, context);
+      patterns.add<UnrealizedConversionCastLowering>(typeConverter, context);
       patterns.add<ClockedTerminateOp>(convert);
       patterns.add<ClockedPauseOp>(convert);
       patterns.add<TerminateOp>(convert);

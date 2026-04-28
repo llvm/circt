@@ -352,6 +352,8 @@ def UpdateOp : FSMOp<"update", [HasParent<"TransitionOp">, SameTypeOperands]> {
 
   let arguments = (ins AnyType:$variable, AnyType:$value);
 
+  let hasCanonicalizeMethod = true;
+
   let assemblyFormat = [{ attr-dict $variable `,` $value `:` qualified(type($value)) }];
 
   let extraClassDeclaration = [{

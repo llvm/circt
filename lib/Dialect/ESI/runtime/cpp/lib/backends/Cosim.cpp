@@ -107,8 +107,8 @@ public:
                                "' is not a to client channel");
 
     // Connect to the channel and set up callback.
-    connection =
-        client.connectClientReceiver(name, [this](const MessageData &data) {
+    connection = client.connectClientReceiver(
+        name, [this](std::unique_ptr<SegmentedMessageData> &data) {
           // Add trace logging for the received message.
           conn.getLogger().trace(
               [this, &data](
@@ -117,9 +117,10 @@ public:
                 subsystem = "cosim_read";
                 msg = "Received message from channel '" + name + "'";
                 details = std::make_unique<std::map<std::string, std::any>>();
+                MessageData flat = data->toMessageData();
                 (*details)["channel"] = name;
-                (*details)["data_size"] = data.getSize();
-                (*details)["message_data"] = data.toHex();
+                (*details)["data_size"] = flat.getSize();
+                (*details)["message_data"] = flat.toHex();
               });
 
           bool consumed = callback(data);

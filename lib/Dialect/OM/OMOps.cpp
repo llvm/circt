@@ -530,31 +530,39 @@ void circt::om::ObjectOp::build(::mlir::OpBuilder &odsBuilder,
                classOp.getNameAttr(), actualParams);
 }
 
-LogicalResult
-circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Verify the result type is the same as the referred-to class.
-  StringAttr resultClassName = getResult().getType().getClassName().getAttr();
-  StringAttr className = getClassNameAttr();
+static FailureOr<ClassLike>
+verifyClassLikeSymbolUser(Operation *op, SymbolTableCollection &symbolTable,
+                          ClassType resultType, StringAttr className) {
+  StringAttr resultClassName = resultType.getClassName().getAttr();
   if (resultClassName != className)
-    return emitOpError("result type (")
+    return op->emitOpError("result type (")
            << resultClassName << ") does not match referred to class ("
            << className << ')';
 
-  // Verify the referred to ClassOp exists.
   auto classDef = dyn_cast_or_null<ClassLike>(
-      symbolTable.lookupNearestSymbolFrom(*this, className));
+      symbolTable.lookupNearestSymbolFrom(op, className));
   if (!classDef)
-    return emitOpError("refers to non-existant class (") << className << ')';
+    return op->emitOpError("refers to non-existant class (")
+           << className << ')';
+  return classDef;
+}
+
+LogicalResult
+circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto classDef = verifyClassLikeSymbolUser(
+      (*this), symbolTable, getResult().getType(), getClassNameAttr());
+  if (failed(classDef))
+    return failure();
 
   auto actualTypes = getActualParams().getTypes();
-  auto formalTypes = classDef.getBodyBlock()->getArgumentTypes();
+  auto formalTypes = classDef->getBodyBlock()->getArgumentTypes();
 
   // Verify the actual parameter list matches the formal parameter list.
   if (actualTypes.size() != formalTypes.size()) {
     auto error = emitOpError(
         "actual parameter list doesn't match formal parameter list");
-    error.attachNote(classDef.getLoc())
-        << "formal parameters: " << classDef.getBodyBlock()->getArguments();
+    error.attachNote(classDef->getLoc())
+        << "formal parameters: " << classDef->getBodyBlock()->getArguments();
     error.attachNote(getLoc()) << "actual parameters: " << getActualParams();
     return error;
   }
@@ -600,6 +608,46 @@ circt::om::ObjectFieldOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError("expected type ")
            << getResult().getType() << ", but accessed field has type "
            << fieldType.value();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ElaboratedObjectOp
+//===----------------------------------------------------------------------===//
+
+void circt::om::ElaboratedObjectOp::build(OpBuilder &odsBuilder,
+                                          OperationState &odsState,
+                                          om::ClassLike classOp,
+                                          ValueRange fieldValues) {
+  return build(odsBuilder, odsState,
+               om::ClassType::get(
+                   odsBuilder.getContext(),
+                   mlir::FlatSymbolRefAttr::get(classOp.getSymNameAttr())),
+               classOp.getSymNameAttr(), fieldValues);
+}
+
+LogicalResult circt::om::ElaboratedObjectOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  auto classDef = verifyClassLikeSymbolUser(
+      (*this), symbolTable, getResult().getType(), getClassNameAttr());
+  if (failed(classDef))
+    return failure();
+
+  auto fieldNames = classDef->getFieldNames();
+  auto fieldValues = getFieldValues();
+  if (fieldValues.size() != fieldNames.size())
+    return emitOpError("field value list doesn't match class field list, "
+                       "expected ")
+           << fieldNames.size() << " values but got " << fieldValues.size();
+
+  for (auto [fieldName, fieldValue] : llvm::zip(fieldNames, fieldValues)) {
+    Type expectedType =
+        classDef->getFieldType(cast<StringAttr>(fieldName)).value();
+    if (fieldValue.getType() != expectedType)
+      return emitOpError("field value type for ")
+             << cast<StringAttr>(fieldName) << " (" << fieldValue.getType()
+             << ") doesn't match class field type (" << expectedType << ')';
+  }
 
   return success();
 }
@@ -674,10 +722,10 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
-// IntegerBinaryArithmeticOp
+// IntegerBinaryOp (arithmetic)
 //===----------------------------------------------------------------------===//
 
-static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryArithmeticOp op,
+static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryOp op,
                                                 Attribute lhsAttr,
                                                 Attribute rhsAttr) {
   auto lhs = dyn_cast_or_null<circt::om::IntegerAttr>(lhsAttr);
@@ -966,6 +1014,96 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
     return {};
 
   return *result;
+}
+
+//===----------------------------------------------------------------------===//
+// IntegerAndOp / IntegerOrOp / IntegerXorOp
+//===----------------------------------------------------------------------===//
+
+static OpFoldResult foldIntegerBitwise(IntegerBinaryOp op, Attribute lhsAttr,
+                                       Attribute rhsAttr) {
+  auto lhsInt = dyn_cast_or_null<mlir::IntegerAttr>(lhsAttr);
+  auto rhsInt = dyn_cast_or_null<mlir::IntegerAttr>(rhsAttr);
+  if (!lhsInt || !rhsInt)
+    return {};
+  APSInt lhsVal(lhsInt.getValue());
+  APSInt rhsVal(rhsInt.getValue());
+  auto result = op.evaluateIntegerOperation(lhsVal, rhsVal);
+  if (failed(result))
+    return {};
+  return mlir::IntegerAttr::get(
+      lhsInt.getType(), result->extOrTrunc(lhsInt.getValue().getBitWidth()));
+}
+
+// Returns true if attr is an IntegerAttr whose value is all-zeros.
+static bool isZeroInt(Attribute a) {
+  auto i = dyn_cast_or_null<mlir::IntegerAttr>(a);
+  return i && i.getValue().isZero();
+}
+
+// Returns true if attr is an IntegerAttr whose value is all-ones.
+static bool isAllOnesInt(Attribute a) {
+  auto i = dyn_cast_or_null<mlir::IntegerAttr>(a);
+  return i && i.getValue().isAllOnes();
+}
+
+FailureOr<APSInt> IntegerAndOp::evaluateIntegerOperation(const APSInt &lhs,
+                                                         const APSInt &rhs) {
+  return success(APSInt(lhs & rhs, /*isUnsigned=*/false));
+}
+
+OpFoldResult IntegerAndOp::fold(FoldAdaptor adaptor) {
+  if (auto result =
+          foldIntegerBitwise(*this, adaptor.getLhs(), adaptor.getRhs()))
+    return result;
+  // AND with all-zeros is always zero.
+  if (isZeroInt(adaptor.getLhs()) || isZeroInt(adaptor.getRhs()))
+    return mlir::IntegerAttr::get(getResult().getType(),
+                                  APInt::getZero(getType().getWidth()));
+  // AND with all-ones is identity.
+  if (isAllOnesInt(adaptor.getLhs()))
+    return getRhs();
+  if (isAllOnesInt(adaptor.getRhs()))
+    return getLhs();
+  return {};
+}
+
+FailureOr<APSInt> IntegerOrOp::evaluateIntegerOperation(const APSInt &lhs,
+                                                        const APSInt &rhs) {
+  return success(APSInt(lhs | rhs, /*isUnsigned=*/false));
+}
+
+OpFoldResult IntegerOrOp::fold(FoldAdaptor adaptor) {
+  if (auto result =
+          foldIntegerBitwise(*this, adaptor.getLhs(), adaptor.getRhs()))
+    return result;
+  // OR with all-ones is always all-ones.
+  if (isAllOnesInt(adaptor.getLhs()) || isAllOnesInt(adaptor.getRhs()))
+    return mlir::IntegerAttr::get(getResult().getType(),
+                                  APInt::getAllOnes(getType().getWidth()));
+  // OR with all-zeros is identity.
+  if (isZeroInt(adaptor.getLhs()))
+    return getRhs();
+  if (isZeroInt(adaptor.getRhs()))
+    return getLhs();
+  return {};
+}
+
+FailureOr<APSInt> IntegerXorOp::evaluateIntegerOperation(const APSInt &lhs,
+                                                         const APSInt &rhs) {
+  return success(APSInt(lhs ^ rhs, /*isUnsigned=*/false));
+}
+
+OpFoldResult IntegerXorOp::fold(FoldAdaptor adaptor) {
+  if (auto result =
+          foldIntegerBitwise(*this, adaptor.getLhs(), adaptor.getRhs()))
+    return result;
+  // XOR with all-zeros is identity.
+  if (isZeroInt(adaptor.getLhs()))
+    return getRhs();
+  if (isZeroInt(adaptor.getRhs()))
+    return getLhs();
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

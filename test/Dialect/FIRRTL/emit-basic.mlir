@@ -646,7 +646,10 @@ firrtl.circuit "Foo" {
                             out %list : !firrtl.list<list<string>>,
                             out %unknownString : !firrtl.string,
                             out %stringcat : !firrtl.string,
-                            out %stringeq : !firrtl.bool) {
+                            out %stringeq : !firrtl.bool,
+                            out %booland : !firrtl.bool,
+                            out %boolor : !firrtl.bool,
+                            out %boolxor : !firrtl.bool) {
     // CHECK: propassign string, String("hello")
     %0 = firrtl.string "hello"
     firrtl.propassign %string, %0 : !firrtl.string
@@ -688,6 +691,18 @@ firrtl.circuit "Foo" {
     // CHECK: propassign stringeq, prop_eq(String("hello"), String("world"))
     %streq = firrtl.prop.eq %str0, %str1 : !firrtl.string
     firrtl.propassign %stringeq, %streq : !firrtl.bool
+
+    // CHECK: propassign booland, bool_and(Bool(true), Bool(true))
+    %booland_val = firrtl.bool.and %true, %true
+    firrtl.propassign %booland, %booland_val : !firrtl.bool
+
+    // CHECK: propassign boolor, bool_or(Bool(true), Bool(true))
+    %boolor_val = firrtl.bool.or %true, %true
+    firrtl.propassign %boolor, %boolor_val : !firrtl.bool
+
+    // CHECK: propassign boolxor, bool_xor(Bool(true), Bool(true))
+    %boolxor_val = firrtl.bool.xor %true, %true
+    firrtl.propassign %boolxor, %boolxor_val : !firrtl.bool
   }
 
   // Test optional group declaration and definition emission.

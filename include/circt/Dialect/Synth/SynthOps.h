@@ -37,6 +37,7 @@ void populateVariadicAndInverterLoweringPatterns(
     mlir::RewritePatternSet &patterns);
 void populateVariadicXorInverterLoweringPatterns(
     mlir::RewritePatternSet &patterns);
+bool isLogicNetworkOp(mlir::Operation *op);
 
 /// This function performs a topological sort on the operations within each
 /// block of graph regions in the given operation. It uses MLIR's topological
@@ -126,6 +127,12 @@ T buildBalancedTreeWithArrivalTimes(llvm::ArrayRef<T> elements,
   }
 
   return pq.top();
+}
+
+/// Evaluate the Boolean function `x ^ (z | (x & y))`.
+template <typename T>
+T evaluateDotLogic(const T &x, const T &y, const T &z) {
+  return x ^ (z | (x & y));
 }
 
 } // namespace synth

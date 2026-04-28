@@ -459,6 +459,30 @@ firrtl.circuit "StringCat" {
     // CHECK: om.class.fields %[[EQ]]
     firrtl.propassign %eq, %0 : !firrtl.bool
   }
+
+  // CHECK-LABEL: om.class @BoolAndClass
+  firrtl.class @BoolAndClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %out: !firrtl.bool) {
+    // CHECK: %[[AND:.+]] = om.integer.and %a, %b : i1
+    %0 = firrtl.bool.and %a, %b
+    // CHECK: om.class.fields %[[AND]]
+    firrtl.propassign %out, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @BoolOrClass
+  firrtl.class @BoolOrClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %out: !firrtl.bool) {
+    // CHECK: %[[OR:.+]] = om.integer.or %a, %b : i1
+    %0 = firrtl.bool.or %a, %b
+    // CHECK: om.class.fields %[[OR]]
+    firrtl.propassign %out, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @BoolXorClass
+  firrtl.class @BoolXorClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %out: !firrtl.bool) {
+    // CHECK: %[[XOR:.+]] = om.integer.xor %a, %b : i1
+    %0 = firrtl.bool.xor %a, %b
+    // CHECK: om.class.fields %[[XOR]]
+    firrtl.propassign %out, %0 : !firrtl.bool
+  }
 }
 
 // CHECK-LABEL: firrtl.circuit "AltBasePath"

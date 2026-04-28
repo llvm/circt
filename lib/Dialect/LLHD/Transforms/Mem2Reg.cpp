@@ -223,34 +223,16 @@ struct ProbeNode;
 struct DriveNode;
 struct SignalNode;
 
-/// Lattice state between two adjacent lattice nodes for a single slot.
-///
-/// `needed` records whether a definition of the slot has to be available at
-/// this program point, computed by the backward pass. The two reaching-def
-/// pointers carry the slot's definitions for the blocking and delayed
-/// flavors, computed by the forward pass; either may be null when the slot
-/// has no definition reaching this point.
 struct LatticeValue {
   LatticeNode *nodeBefore = nullptr;
   LatticeNode *nodeAfter = nullptr;
-  bool needed = false;
-  Def *blockingReachingDef = nullptr;
-  Def *delayedReachingDef = nullptr;
-
-  /// Return the reaching def for the blocking/delayed flavor of this slot.
-  Def *getReachingDef(bool delayed) const {
-    return delayed ? delayedReachingDef : blockingReachingDef;
-  }
-  void setReachingDef(bool delayed, Def *def) {
-    (delayed ? delayedReachingDef : blockingReachingDef) = def;
-  }
+  SmallDenseSet<Value, 1> neededDefs;
+  SmallDenseMap<DefSlot, Def *, 1> reachingDefs;
 };
 
 struct LatticeNode {
   enum class Kind { BlockEntry, BlockExit, Probe, Drive, Signal };
   const Kind kind;
-  /// Dirty flag to prevent duplicate pushes to worklist.
-  bool dirty = false;
   LatticeNode(Kind kind) : kind(kind) {}
 };
 
@@ -258,26 +240,13 @@ struct BlockEntry : public LatticeNode {
   Block *block;
   LatticeValue *valueAfter;
   SmallVector<BlockExit *, 2> predecessors;
-  /// Probe op inserted at the start of this block for the slot being
-  /// promoted, if a definition is needed here but not provided by all
-  /// predecessors.
-  Def *insertedProbe = nullptr;
-  /// Merge definitions created for this block entry when predecessors
-  /// disagree on the reaching def. One per flavor, mirroring `LatticeValue`.
-  Def *blockingMerged = nullptr;
-  Def *delayedMerged = nullptr;
+  SmallVector<std::pair<Value, Def *>, 0> insertedProbes;
+  SmallDenseMap<DefSlot, Def *, 1> mergedDefs;
 
   BlockEntry(Block *block, LatticeValue *valueAfter)
       : LatticeNode(Kind::BlockEntry), block(block), valueAfter(valueAfter) {
     assert(!valueAfter->nodeBefore);
     valueAfter->nodeBefore = this;
-  }
-
-  Def *getMerged(bool delayed) const {
-    return delayed ? delayedMerged : blockingMerged;
-  }
-  void setMerged(bool delayed, Def *def) {
-    (delayed ? delayedMerged : blockingMerged) = def;
   }
 
   static bool classof(const LatticeNode *n) {
@@ -512,24 +481,26 @@ void Lattice::dump(llvm::raw_ostream &os) {
     // Print all nodes following the block entry, up until the block exit.
     auto *value = entry->valueAfter;
     while (true) {
-      // Print the needed-def flag at this lattice point.
-      if (value->needed)
-        os << "    -> need\n";
-      auto printDef = [&](bool delayed, Def *def) {
-        if (!def)
-          return;
-        os << "    -> def (" << (delayed ? "delayed" : "blocking")
-           << ")=" << defName(def);
-        if (def->condition.isNever())
-          os << "[N]";
-        else if (def->condition.isAlways())
-          os << "[A]";
-        else
-          os << "[C]";
+      // Print the needed defs at this lattice point.
+      if (!value->neededDefs.empty()) {
+        os << "    -> need";
+        for (auto mem : value->neededDefs)
+          os << " " << memName(blockingSlot(mem));
         os << "\n";
-      };
-      printDef(false, value->blockingReachingDef);
-      printDef(true, value->delayedReachingDef);
+      }
+      if (!value->reachingDefs.empty()) {
+        os << "    -> def";
+        for (auto [mem, def] : value->reachingDefs) {
+          os << " " << memName(mem) << "=" << defName(def);
+          if (def->condition.isNever())
+            os << "[N]";
+          else if (def->condition.isAlways())
+            os << "[A]";
+          else
+            os << "[C]";
+        }
+        os << "\n";
+      }
       if (isa<BlockExit>(value->nodeAfter))
         break;
 
@@ -724,12 +695,8 @@ struct Promoter {
   bool insertBlockArgs(BlockEntry *node);
   void replaceValueWith(Value oldValue, Value newValue);
 
-  /// Remove a local `llhd.sig` op if all of its remaining users are drives or
-  /// projections.
-  void removeUnusedLocalSignal(SignalOp signalOp);
-
-  /// Run the lattice analysis and transformation pipeline for `currentSlot`.
-  void promoteSlot();
+  void removeUnusedLocalSignals();
+  void removeUnusedLocalSignal(SignalNode *signal);
 
   /// The region we are promoting in.
   Region &region;
@@ -744,22 +711,11 @@ struct Promoter {
   /// and `projections` of those slots.
   SmallDenseSet<Value> promotable;
 
-  /// The slot currently being analyzed and rewritten. The lattice and all
-  /// per-slot methods operate relative to this value.
-  Value currentSlot;
-
-  /// One `llhd.constant_time` op per block, shared by every drive the pass
-  /// inserts at that block's terminator regardless of which slot triggered
-  /// the insertion.
-  DenseMap<Block *, ConstantTimeOp> blockingTimeCache;
-  DenseMap<Block *, ConstantTimeOp> delayedTimeCache;
-
-  /// Lattice for the slot currently being promoted. Holds the needed-def
-  /// flag and the pair of reaching-def pointers at every program point, plus
-  /// the bump allocators that own the nodes/values/defs.
-  std::optional<Lattice> lattice;
+  /// The lattice used to propagate needed definitions backwards and reaching
+  /// definitions forwards.
+  Lattice lattice;
   /// A worklist of lattice nodes used within calls to `propagate*`.
-  SmallVector<LatticeNode *> dirtyNodes;
+  SmallPtrSet<LatticeNode *, 4> dirtyNodes;
 
   /// Helper to clean up unused ops.
   UnusedOpPruner pruner;
@@ -780,40 +736,17 @@ LogicalResult Promoter::promote() {
   if (slots.empty())
     return success();
 
-  // Run the lattice analysis and rewrite once per slot. Each iteration gets
-  // its own fresh lattice with O(1)-sized state per program point, so the
-  // total cost is linear in the number of slots times the size of the region.
-  for (auto slot : slots) {
-    currentSlot = slot;
-    promoteSlot();
-  }
-  currentSlot = {};
-
-  // Erase operations that have become unused.
-  pruner.eraseNow();
-
-  return success();
-}
-
-/// Run the lattice analysis and transformation pipeline for `currentSlot`.
-void Promoter::promoteSlot() {
-  assert(currentSlot && "currentSlot must be set before promoteSlot()");
-  lattice.emplace();
-  dirtyNodes.clear();
-
-  LLVM_DEBUG(llvm::dbgs() << "Promoting slot " << currentSlot << "\n");
-
   constructLattice();
   LLVM_DEBUG({
     llvm::dbgs() << "Initial lattice:\n";
-    lattice->dump();
+    lattice.dump();
   });
 
-  // Propagate the needed-def flag backward across the lattice.
+  // Propagate the needed definitions backward across the lattice.
   propagateBackward();
   LLVM_DEBUG({
     llvm::dbgs() << "After backward propagation:\n";
-    lattice->dump();
+    lattice.dump();
   });
 
   // Insert probes wherever a def is needed for the first time.
@@ -821,14 +754,14 @@ void Promoter::promoteSlot() {
   insertProbes();
   LLVM_DEBUG({
     llvm::dbgs() << "After probe insertion:\n";
-    lattice->dump();
+    lattice.dump();
   });
 
-  // Propagate the reaching-def pointers forward across the lattice.
+  // Propagate the reaching definitions forward across the lattice.
   propagateForward();
   LLVM_DEBUG({
     llvm::dbgs() << "After forward propagation:\n";
-    lattice->dump();
+    lattice.dump();
   });
 
   // Resolve definitions.
@@ -839,21 +772,19 @@ void Promoter::promoteSlot() {
   insertDrives();
   LLVM_DEBUG({
     llvm::dbgs() << "After def resolution and drive insertion:\n";
-    lattice->dump();
+    lattice.dump();
   });
 
   // Insert the necessary block arguments.
   insertBlockArgs();
 
-  // If this slot is a region-local signal declaration, try to drop it when
-  // no probes remain.
-  if (auto signalOp = currentSlot.getDefiningOp<SignalOp>())
-    if (signalOp->getParentRegion() == &region)
-      removeUnusedLocalSignal(signalOp);
+  // Remove local signals that are never probed.
+  removeUnusedLocalSignals();
 
-  // Release the lattice so the bump allocators free their slabs before the
-  // next slot runs.
-  lattice.reset();
+  // Erase operations that have become unused.
+  pruner.eraseNow();
+
+  return success();
 }
 
 /// Identify any promotable slots probed or driven under the current region.
@@ -1083,21 +1014,16 @@ void Promoter::captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
 //===----------------------------------------------------------------------===//
 
 /// Populate the lattice with nodes and values corresponding to the blocks and
-/// to the operations in the region that touch `currentSlot`. Ops that touch
-/// other slots are skipped entirely — they're transparent to this slot's
-/// analysis.
+/// relevant operations in the region we're promoting.
 void Promoter::constructLattice() {
-  assert(currentSlot && "constructLattice requires currentSlot");
-
   // Create entry nodes for each block.
   SmallDenseMap<Block *, BlockEntry *, 8> blockEntries;
   for (auto &block : region) {
-    auto *entry =
-        lattice->createNode<BlockEntry>(&block, lattice->createValue());
+    auto *entry = lattice.createNode<BlockEntry>(&block, lattice.createValue());
     blockEntries.insert({&block, entry});
   }
 
-  // Create nodes for each operation that touches `currentSlot`.
+  // Create nodes for each operation that is relevant for the pass.
   for (auto &block : region) {
     auto *valueBefore = blockEntries.lookup(&block)->valueAfter;
 
@@ -1107,10 +1033,9 @@ void Promoter::constructLattice() {
       if (auto probeOp = dyn_cast<ProbeOp>(op)) {
         if (!promotable.contains(probeOp.getSignal()))
           continue;
-        if (resolveSlot(probeOp.getSignal()) != currentSlot)
-          continue;
-        auto *node = lattice->createNode<ProbeNode>(
-            probeOp, currentSlot, valueBefore, lattice->createValue());
+        auto *node = lattice.createNode<ProbeNode>(
+            probeOp, resolveSlot(probeOp.getSignal()), valueBefore,
+            lattice.createValue());
         valueBefore = node->valueAfter;
         continue;
       }
@@ -1121,41 +1046,38 @@ void Promoter::constructLattice() {
           continue;
         if (!promotable.contains(driveOp.getSignal()))
           continue;
-        if (resolveSlot(driveOp.getSignal()) != currentSlot)
-          continue;
         auto condition = DriveCondition::always();
         if (auto enable = driveOp.getEnable())
           condition = DriveCondition::conditional(enable);
         // Drives that target a slot directly provide the driven value as a
         // definition for the slot. Drives to projections have their value
         // calculated later on.
-        auto *def =
-            driveOp.getSignal() == currentSlot
-                ? lattice->createDef(driveOp.getValue(), condition)
-                : lattice->createDef(driveOp->getBlock(),
-                                     getStoredType(currentSlot), condition);
-        auto *node = lattice->createNode<DriveNode>(
-            driveOp, currentSlot, def, valueBefore, lattice->createValue());
+        auto slot = resolveSlot(driveOp.getSignal());
+        auto *def = driveOp.getSignal() == slot
+                        ? lattice.createDef(driveOp.getValue(), condition)
+                        : lattice.createDef(driveOp->getBlock(),
+                                            getStoredType(slot), condition);
+        auto *node = lattice.createNode<DriveNode>(
+            driveOp, slot, def, valueBefore, lattice.createValue());
         valueBefore = node->valueAfter;
         continue;
       }
 
-      // Handle local signals. Only the current slot's own SignalOp, if it
-      // lives inside this region, contributes a SignalNode.
+      // Handle local signals.
       if (auto signalOp = dyn_cast<SignalOp>(op)) {
-        if (signalOp.getResult() != currentSlot)
+        if (!promotable.contains(signalOp))
           continue;
         auto *def =
-            lattice->createDef(signalOp.getInit(), DriveCondition::never());
-        auto *node = lattice->createNode<SignalNode>(signalOp, def, valueBefore,
-                                                     lattice->createValue());
+            lattice.createDef(signalOp.getInit(), DriveCondition::never());
+        auto *node = lattice.createNode<SignalNode>(signalOp, def, valueBefore,
+                                                    lattice.createValue());
         valueBefore = node->valueAfter;
         continue;
       }
     }
 
     // Create the exit node for the block.
-    auto *exit = lattice->createNode<BlockExit>(&block, valueBefore);
+    auto *exit = lattice.createNode<BlockExit>(&block, valueBefore);
     for (auto *otherBlock : exit->terminator->getSuccessors()) {
       auto *otherEntry = blockEntries.lookup(otherBlock);
       exit->successors.push_back(otherEntry);
@@ -1167,32 +1089,30 @@ void Promoter::constructLattice() {
 /// Propagate the lattice values backwards against control flow until a fixed
 /// point is reached.
 void Promoter::propagateBackward() {
-  for (auto *node : lattice->nodes)
+  for (auto *node : lattice.nodes)
     propagateBackward(node);
-  SmallVector<LatticeNode *> nodes;
   while (!dirtyNodes.empty()) {
-    std::swap(dirtyNodes, nodes);
-    for (auto *node : nodes) {
-      node->dirty = false;
-      propagateBackward(node);
-    }
-    nodes.clear();
+    auto *node = *dirtyNodes.begin();
+    dirtyNodes.erase(node);
+    propagateBackward(node);
   }
 }
 
 /// Propagate the lattice value after a node backward to the value before a
-/// node, updating the `needed` flag at the incoming value.
+/// node.
 void Promoter::propagateBackward(LatticeNode *node) {
-  auto update = [&](LatticeValue *value, bool needed) {
-    if (value->needed != needed) {
-      value->needed = needed;
+  auto update = [&](LatticeValue *value, auto &neededDefs) {
+    if (value->neededDefs != neededDefs) {
+      value->neededDefs = neededDefs;
       markDirty(value->nodeBefore);
     }
   };
 
   // Probes need a definition for the probed slot to be available.
   if (auto *probe = dyn_cast<ProbeNode>(node)) {
-    update(probe->valueBefore, true);
+    auto needed = probe->valueAfter->neededDefs;
+    needed.insert(probe->slot);
+    update(probe->valueBefore, needed);
     return;
   }
 
@@ -1203,11 +1123,11 @@ void Promoter::propagateBackward(LatticeNode *node) {
   // projections need a definition to be available such that they can partially
   // update it.
   if (auto *drive = dyn_cast<DriveNode>(node)) {
-    bool needed = drive->valueAfter->needed;
+    auto needed = drive->valueAfter->neededDefs;
     if (drive->drivesProjection())
-      needed = true;
+      needed.insert(getSlot(drive->slot));
     else if (!isDelayed(drive->slot) && !drive->getDriveOp().getEnable())
-      needed = false;
+      needed.erase(getSlot(drive->slot));
     update(drive->valueBefore, needed);
     return;
   }
@@ -1215,9 +1135,10 @@ void Promoter::propagateBackward(LatticeNode *node) {
   // Local signal declarations kill the need for a definition to be available,
   // since the op is the first time a signal becomes available and the op
   // provides an initial value as a definition.
-  if (isa<SignalNode>(node)) {
-    auto *signal = cast<SignalNode>(node);
-    update(signal->valueBefore, false);
+  if (auto *signal = dyn_cast<SignalNode>(node)) {
+    auto needed = signal->valueAfter->neededDefs;
+    needed.erase(signal->getSignalOp());
+    update(signal->valueBefore, needed);
     return;
   }
 
@@ -1232,9 +1153,10 @@ void Promoter::propagateBackward(LatticeNode *node) {
   if (auto *exit = dyn_cast<BlockExit>(node)) {
     if (exit->suspends)
       return;
-    bool needed = false;
-    for (auto *successor : exit->successors)
-      needed |= successor->valueAfter->needed;
+    SmallDenseSet<Value, 1> needed;
+    for (auto *successors : exit->successors)
+      needed.insert(successors->valueAfter->neededDefs.begin(),
+                    successors->valueAfter->neededDefs.end());
     update(exit->valueBefore, needed);
     return;
   }
@@ -1258,37 +1180,28 @@ void Promoter::propagateForward() {
 /// in all predecessors.
 void Promoter::propagateForward(bool optimisticMerges,
                                 DominanceInfo &dominance) {
-  for (auto *node : lattice->nodes)
+  for (auto *node : lattice.nodes)
     propagateForward(node, optimisticMerges, dominance);
-  SmallVector<LatticeNode *> nodes;
   while (!dirtyNodes.empty()) {
-    std::swap(dirtyNodes, nodes);
-    for (auto *node : nodes) {
-      node->dirty = false;
-      propagateForward(node, optimisticMerges, dominance);
-    }
-    nodes.clear();
+    auto *node = *dirtyNodes.begin();
+    dirtyNodes.erase(node);
+    propagateForward(node, optimisticMerges, dominance);
   }
 }
 
-/// Propagate the lattice value before a node forward to the value after a
-/// node, updating the blocking and delayed reaching-def pointers at the
-/// outgoing value.
+/// Propagate the lattice value before a node forward to the value after a node.
 void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
                                 DominanceInfo &dominance) {
-  auto update = [&](LatticeValue *value, Def *blocking, Def *delayed) {
-    if (value->blockingReachingDef != blocking ||
-        value->delayedReachingDef != delayed) {
-      value->blockingReachingDef = blocking;
-      value->delayedReachingDef = delayed;
+  auto update = [&](LatticeValue *value, auto &reachingDefs) {
+    if (value->reachingDefs != reachingDefs) {
+      value->reachingDefs = reachingDefs;
       markDirty(value->nodeAfter);
     }
   };
 
   // Probes simply propagate any reaching defs.
   if (auto *probe = dyn_cast<ProbeNode>(node)) {
-    update(probe->valueAfter, probe->valueBefore->blockingReachingDef,
-           probe->valueBefore->delayedReachingDef);
+    update(probe->valueAfter, probe->valueBefore->reachingDefs);
     return;
   }
 
@@ -1303,16 +1216,14 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
   // would see (B) override (A), because it happens earlier, and (C) override
   // (B), because it in turn happens earlier.
   if (auto *drive = dyn_cast<DriveNode>(node)) {
-    Def *blocking = drive->valueBefore->blockingReachingDef;
-    Def *delayed = drive->valueBefore->delayedReachingDef;
-    bool driveDelayed = isDelayed(drive->slot);
+    auto reaching = drive->valueBefore->reachingDefs;
 
     // If the drive is conditional or driving a projection of a slot, merge any
     // incoming reaching def into the reaching def created by the drive. This is
     // necessary since a conditional drive following an unconditional drive may
     // have to insert a multiplexer to forward to subsequent probes.
     if (drive->drivesProjection() || drive->getDriveOp().getEnable()) {
-      Def *inDef = driveDelayed ? delayed : blocking;
+      auto *inDef = reaching.lookup(drive->slot);
       if (inDef) {
         if (drive->def->value != inDef->value)
           drive->def->value = {};
@@ -1323,97 +1234,103 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
       }
     }
 
-    if (driveDelayed) {
-      delayed = drive->def;
-    } else {
-      blocking = drive->def;
-      // A blocking drive kills any pending delta drive at the same slot.
-      delayed = nullptr;
-    }
-    update(drive->valueAfter, blocking, delayed);
+    reaching[drive->slot] = drive->def;
+    if (!isDelayed(drive->slot))
+      reaching.erase(delayedSlot(getSlot(drive->slot)));
+    update(drive->valueAfter, reaching);
     return;
   }
 
-  // Signals propagate their initial value as a reaching def. They also kill
-  // any earlier delayed definition for the same slot.
+  // Signals propagate their initial value as a reaching def. They also kill any
+  // earlier definitions, which should not be able to reach the signal in the
+  // first place.
   if (auto *signal = dyn_cast<SignalNode>(node)) {
-    update(signal->valueAfter, signal->def, nullptr);
+    auto reaching = signal->valueBefore->reachingDefs;
+    reaching[signal->getSlot()] = signal->def;
+    reaching.erase(delayedSlot(signal->getSignalOp()));
+    update(signal->valueAfter, reaching);
     return;
   }
 
-  // Block entry points merge reaching defs from their predecessors, creating
-  // new merge defs where predecessors disagree.
+  // Block entry points propagate any reaching definitions available in all
+  // predecessors, plus any probes inserted locally.
   if (auto *entry = dyn_cast<BlockEntry>(node)) {
-    // Inserted probes supersede anything coming from predecessors, for both
-    // the blocking and delayed flavors.
-    if (entry->insertedProbe) {
-      update(entry->valueAfter, entry->insertedProbe, entry->insertedProbe);
-      return;
+    // Propagate reaching definitions for each inserted probe.
+    SmallDenseMap<DefSlot, Def *, 1> reaching;
+    for (auto [slot, insertedProbe] : entry->insertedProbes) {
+      reaching[blockingSlot(slot)] = insertedProbe;
+      reaching[delayedSlot(slot)] = insertedProbe;
     }
 
-    // Do not propagate reaching defs past a block whose defining op does not
-    // dominate this entry, or whose predecessor set contains any suspending
-    // block.
-    Block *slotBlock = currentSlot.getDefiningOp()->getBlock();
-    bool slotDominates = dominance.dominates(slotBlock, entry->block);
-    bool anyPredSuspends =
-        llvm::any_of(entry->predecessors, [](auto *p) { return p->suspends; });
+    // Propagate reaching definitions from predecessors, creating new
+    // definitions in case of a merge.
+    SmallDenseMap<DefSlot, Def *, 1> reachingDefs;
+    for (auto *predecessor : entry->predecessors) {
+      if (predecessor->suspends)
+        continue;
+      // Propogate signal definitions only to blocks that are dominated by the
+      // signal itself.
+      for (auto &defEntry : predecessor->valueBefore->reachingDefs) {
+        auto slot = getSlot(defEntry.getFirst());
+        auto *slotBlock = slot.getDefiningOp()->getBlock();
+        if (!dominance.dominates(slotBlock, entry->block))
+          continue;
+        reachingDefs.insert(defEntry);
+      }
+    }
 
-    auto mergeFlavor = [&](bool delayed) -> Def * {
-      if (!slotDominates || anyPredSuspends)
-        return nullptr;
+    for (auto pair : reachingDefs) {
+      DefSlot slot = pair.first;
+      Def *reachingDef = pair.second;
+      DriveCondition reachingDefCondition = reachingDef->condition;
 
-      // Bail early if no predecessor provides a def for this flavor.
-      if (llvm::all_of(entry->predecessors, [&](auto *p) {
-            return !p->valueBefore->getReachingDef(delayed);
+      // Do not override inserted probes.
+      if (reaching.contains(slot))
+        continue;
+
+      // Check if all predecessors provide a definition for this slot. If any
+      // multiple definitions for the same slot reach us, simply set the
+      // `reachingDef` to null such that we can insert a new merge definition.
+      // Separately track whether the drive mode of all definitions is
+      // identical. This is often the case, for example when the definitions of
+      // two unconditional drives converge, and we would like to preserve that
+      // both drives were unconditional, even if the driven value differs.
+      if (llvm::any_of(entry->predecessors, [&](auto *predecessor) {
+            return predecessor->suspends;
           }))
-        return nullptr;
+        continue;
 
-      // Walk predecessors to determine whether all agree on the same def and
-      // the same drive condition.
-      Def *common = nullptr;
-      DriveCondition cond = DriveCondition::never();
-      bool first = true;
-      for (auto *pred : entry->predecessors) {
-        Def *predDef = pred->valueBefore->getReachingDef(delayed);
-        if (!predDef && optimisticMerges)
+      for (auto *predecessor : entry->predecessors) {
+        auto otherDef = predecessor->valueBefore->reachingDefs.lookup(slot);
+        if (!otherDef && optimisticMerges)
           continue;
-        DriveCondition predCond =
-            predDef ? predDef->condition : DriveCondition::never();
-        if (first) {
-          common = predDef;
-          cond = predCond;
-          first = false;
-          continue;
-        }
-        if (common != predDef)
-          common = nullptr;
-        if (cond != predCond)
-          cond = DriveCondition::conditional();
+        // If the definitions are not identical, indicate that we will have
+        // to create a new merge def.
+        if (reachingDef != otherDef)
+          reachingDef = nullptr;
+        // If the definitions have different modes, indicate that we will
+        // have to create a conditional drive later.
+        auto condition =
+            otherDef ? otherDef->condition : DriveCondition::never();
+        if (reachingDefCondition != condition)
+          reachingDefCondition = DriveCondition::conditional();
       }
 
-      if (first)
-        return nullptr;
-
-      // If all predecessors agree on the same concrete def, use it as-is.
-      if (common)
-        return common;
-
-      // Otherwise create (or reuse) a merge def and update its condition.
-      Def *&merged = delayed ? entry->delayedMerged : entry->blockingMerged;
-      if (!merged) {
-        auto slot =
-            delayed ? delayedSlot(currentSlot) : blockingSlot(currentSlot);
-        merged = lattice->createDef(entry->block, getStoredType(slot), cond);
+      // Create a merge definition if different definitions reach us from our
+      // predecessors.
+      if (!reachingDef)
+        reachingDef = entry->mergedDefs.lookup(slot);
+      if (!reachingDef) {
+        reachingDef = lattice.createDef(entry->block, getStoredType(slot),
+                                        reachingDefCondition);
+        entry->mergedDefs.insert({slot, reachingDef});
       } else {
-        merged->condition = cond;
+        reachingDef->condition = reachingDefCondition;
       }
-      return merged;
-    };
+      reaching.insert({slot, reachingDef});
+    }
 
-    Def *newBlocking = mergeFlavor(/*delayed=*/false);
-    Def *newDelayed = mergeFlavor(/*delayed=*/true);
-    update(entry->valueAfter, newBlocking, newDelayed);
+    update(entry->valueAfter, reaching);
     return;
   }
 
@@ -1430,10 +1347,7 @@ void Promoter::propagateForward(LatticeNode *node, bool optimisticMerges,
 /// Mark a lattice node to be updated during propagation.
 void Promoter::markDirty(LatticeNode *node) {
   assert(node);
-  if (node->dirty)
-    return;
-  node->dirty = true;
-  dirtyNodes.push_back(node);
+  dirtyNodes.insert(node);
 }
 
 //===----------------------------------------------------------------------===//
@@ -1445,23 +1359,27 @@ void Promoter::markDirty(LatticeNode *node) {
 /// In that case we would like to insert probes in the predecessor blocks, but
 /// cannot do so because of the suspending predecessor.
 void Promoter::insertProbeBlocks() {
-  // Find predecessor/successor edges where the current slot is needed at the
-  // successor but not carried past one of the successor's predecessors. An
-  // extra probe block is inserted on such edges.
+  // Find all blocks that have any needed definition that can't propagate beyond
+  // one of its predecessors. If that's the case, we need an additional probe
+  // block after that predecessor.
   SmallDenseSet<std::pair<BlockExit *, BlockEntry *>, 1> worklist;
-  for (auto *node : lattice->nodes) {
-    auto *entry = dyn_cast<BlockEntry>(node);
-    if (!entry || !entry->valueAfter->needed)
-      continue;
-    unsigned numIncoming = 0;
-    for (auto *predecessor : entry->predecessors)
-      if (predecessor->valueBefore->needed)
-        ++numIncoming;
-    if (numIncoming == 0 || numIncoming == entry->predecessors.size())
-      continue;
-    for (auto *predecessor : entry->predecessors)
-      if (!predecessor->valueBefore->needed)
-        worklist.insert({predecessor, entry});
+  for (auto *node : lattice.nodes) {
+    if (auto *entry = dyn_cast<BlockEntry>(node)) {
+      SmallVector<Value> partialSlots;
+      for (auto slot : entry->valueAfter->neededDefs) {
+        unsigned numIncoming = 0;
+        for (auto *predecessor : entry->predecessors)
+          if (predecessor->valueBefore->neededDefs.contains(slot))
+            ++numIncoming;
+        if (numIncoming != 0 && numIncoming != entry->predecessors.size())
+          partialSlots.push_back(slot);
+      }
+      for (auto *predecessor : entry->predecessors)
+        if (llvm::any_of(partialSlots, [&](auto slot) {
+              return !predecessor->valueBefore->neededDefs.contains(slot);
+            }))
+          worklist.insert({predecessor, entry});
+    }
   }
 
   // Insert probe blocks after all blocks we have identified.
@@ -1479,10 +1397,10 @@ void Promoter::insertProbeBlocks() {
         blockOp.set(newBlock);
 
     // Create new nodes in the lattice for the added block.
-    auto *value = lattice->createValue();
-    value->needed = successor->valueAfter->needed;
-    auto *newEntry = lattice->createNode<BlockEntry>(newBlock, value);
-    auto *newExit = lattice->createNode<BlockExit>(newBlock, value);
+    auto *value = lattice.createValue();
+    value->neededDefs = successor->valueAfter->neededDefs;
+    auto *newEntry = lattice.createNode<BlockEntry>(newBlock, value);
+    auto *newExit = lattice.createNode<BlockExit>(newBlock, value);
     newEntry->predecessors.push_back(predecessor);
     newExit->successors.push_back(successor);
     llvm::replace(successor->predecessors, predecessor, newExit);
@@ -1494,70 +1412,62 @@ void Promoter::insertProbeBlocks() {
 /// the case in the entry block, after any suspensions, and after operations
 /// that have unknown effects on memory slots.
 void Promoter::insertProbes() {
-  for (auto *node : lattice->nodes) {
+  for (auto *node : lattice.nodes) {
     if (auto *entry = dyn_cast<BlockEntry>(node))
       insertProbes(entry);
   }
 }
 
-/// Insert a probe at the beginning of the block for the current slot, if it
-/// is needed here but not already provided by all predecessors.
+/// Insert probes at the beginning of a block for definitions that are needed in
+/// this block but not in its predecessors.
 void Promoter::insertProbes(BlockEntry *node) {
-  if (!node->valueAfter->needed)
-    return;
-  if (!node->predecessors.empty() &&
-      llvm::all_of(node->predecessors, [](auto *predecessor) {
-        return predecessor->valueBefore->needed;
-      }))
-    return;
-  LLVM_DEBUG(llvm::dbgs() << "- Inserting probe for " << currentSlot
-                          << " in block " << node->block << "\n");
   auto builder = OpBuilder::atBlockBegin(node->block);
-  // If the slot is defined in this same block, insert after its defining op.
-  if (Operation *op = currentSlot.getDefiningOp())
-    if (op->getBlock() == node->block)
-      builder.setInsertionPointAfterValue(currentSlot);
-  auto value = ProbeOp::create(builder, currentSlot.getLoc(), currentSlot);
-  auto *def = lattice->createDef(value, DriveCondition::never());
-  node->insertedProbe = def;
+  for (auto neededDef : slots) {
+    if (!node->valueAfter->neededDefs.contains(neededDef))
+      continue;
+    if (!node->predecessors.empty() &&
+        llvm::all_of(node->predecessors, [&](auto *predecessor) {
+          return predecessor->valueBefore->neededDefs.contains(neededDef);
+        }))
+      continue;
+    LLVM_DEBUG(llvm::dbgs() << "- Inserting probe for " << neededDef
+                            << " in block " << node->block << "\n");
+    OpBuilder::InsertionGuard guard(builder);
+    // If the neededDef is in the same block, one can't just insert at top.
+    if (Operation *op = neededDef.getDefiningOp()) {
+      if (op->getBlock() == node->block)
+        builder.setInsertionPointAfterValue(neededDef);
+    }
+    auto value = ProbeOp::create(builder, neededDef.getLoc(), neededDef);
+    auto *def = lattice.createDef(value, DriveCondition::never());
+    node->insertedProbes.push_back({neededDef, def});
+  }
 }
 
 /// Insert additional drive blocks where needed. This can happen if a definition
 /// continues into some of a block's successors, but not all of them.
 void Promoter::insertDriveBlocks() {
-  // Find exit/successor edges where the current slot reaches the exit with a
-  // non-never drive condition but isn't propagated through all successors.
-  // Test the blocking and delayed flavors independently.
-  auto partialAt = [](LatticeValue *before, LatticeValue *after, bool delayed,
-                      unsigned totalSuccessors) {
-    Def *def = before->getReachingDef(delayed);
-    if (!def || def->condition.isNever())
-      return false;
-    (void)totalSuccessors;
-    return !after->getReachingDef(delayed);
-  };
-
+  // Find all blocks that have any reaching definition that can't propagate
+  // beyond one of its successors. If that's the case, we need an additional
+  // drive block before that successor.
   SmallDenseSet<std::pair<BlockExit *, BlockEntry *>, 1> worklist;
-  for (auto *node : lattice->nodes) {
-    auto *exit = dyn_cast<BlockExit>(node);
-    if (!exit)
-      continue;
-    // A slot is "partial" on the (exit, successor) edge if the reaching def
-    // at the exit exists and has a usable condition, but doesn't flow into
-    // that particular successor. Compute per flavor.
-    for (bool delayed : {false, true}) {
-      Def *def = exit->valueBefore->getReachingDef(delayed);
-      if (!def || def->condition.isNever())
-        continue;
-      unsigned numContinues = 0;
+  for (auto *node : lattice.nodes) {
+    if (auto *exit = dyn_cast<BlockExit>(node)) {
+      SmallVector<DefSlot> partialSlots;
+      for (auto [slot, reachingDef] : exit->valueBefore->reachingDefs) {
+        if (reachingDef->condition.isNever())
+          continue;
+        unsigned numContinues = 0;
+        for (auto *successor : exit->successors)
+          if (successor->valueAfter->reachingDefs.contains(slot))
+            ++numContinues;
+        if (numContinues != 0 && numContinues != exit->successors.size())
+          partialSlots.push_back(slot);
+      }
       for (auto *successor : exit->successors)
-        if (successor->valueAfter->getReachingDef(delayed))
-          ++numContinues;
-      if (numContinues == 0 || numContinues == exit->successors.size())
-        continue;
-      for (auto *successor : exit->successors)
-        if (partialAt(exit->valueBefore, successor->valueAfter, delayed,
-                      exit->successors.size()))
+        if (llvm::any_of(partialSlots, [&](auto slot) {
+              return !successor->valueAfter->reachingDefs.contains(slot);
+            }))
           worklist.insert({exit, successor});
     }
   }
@@ -1576,15 +1486,12 @@ void Promoter::insertDriveBlocks() {
       if (blockOp.get() == successor->block)
         blockOp.set(newBlock);
 
-    // Create new nodes in the lattice for the added block. The new block
-    // carries the same needed flag as its successor and the same reaching
-    // defs as its predecessor.
-    auto *value = lattice->createValue();
-    value->needed = successor->valueAfter->needed;
-    value->blockingReachingDef = predecessor->valueBefore->blockingReachingDef;
-    value->delayedReachingDef = predecessor->valueBefore->delayedReachingDef;
-    auto *newEntry = lattice->createNode<BlockEntry>(newBlock, value);
-    auto *newExit = lattice->createNode<BlockExit>(newBlock, value);
+    // Create new nodes in the lattice for the added block.
+    auto *value = lattice.createValue();
+    value->neededDefs = successor->valueAfter->neededDefs;
+    value->reachingDefs = predecessor->valueBefore->reachingDefs;
+    auto *newEntry = lattice.createNode<BlockEntry>(newBlock, value);
+    auto *newExit = lattice.createNode<BlockExit>(newBlock, value);
     newEntry->predecessors.push_back(predecessor);
     newExit->successors.push_back(successor);
     llvm::replace(successor->predecessors, predecessor, newExit);
@@ -1596,7 +1503,7 @@ void Promoter::insertDriveBlocks() {
 /// is the before any suspensions and before operations that have unknown
 /// effects on memory slots.
 void Promoter::insertDrives() {
-  for (auto *node : lattice->nodes) {
+  for (auto *node : lattice.nodes) {
     if (auto *exit = dyn_cast<BlockExit>(node))
       insertDrives(exit);
     else if (auto *drive = dyn_cast<DriveNode>(node))
@@ -1609,45 +1516,52 @@ void Promoter::insertDrives() {
 void Promoter::insertDrives(BlockExit *node) {
   auto builder = OpBuilder::atBlockTerminator(node->block);
 
-  // Reuse the cached `llhd.constant_time` op for this block, or create one
-  // before the terminator on first use. Cached across slots so we end up
-  // with one constant-time op per block exit, not one per promoted slot.
-  auto getTime = [&](bool delta) -> ConstantTimeOp {
-    auto &cached = (delta ? delayedTimeCache : blockingTimeCache)[node->block];
-    if (!cached)
-      cached = ConstantTimeOp::create(builder, node->terminator->getLoc(), 0,
-                                      "ns", delta ? 1 : 0, delta ? 0 : 1);
-    return cached;
+  ConstantTimeOp epsilonTime;
+  ConstantTimeOp deltaTime;
+  auto getTime = [&](bool delta) {
+    if (delta) {
+      if (!deltaTime)
+        deltaTime = ConstantTimeOp::create(builder, node->terminator->getLoc(),
+                                           0, "ns", 1, 0);
+      return deltaTime;
+    }
+    if (!epsilonTime)
+      epsilonTime = ConstantTimeOp::create(builder, node->terminator->getLoc(),
+                                           0, "ns", 0, 1);
+    return epsilonTime;
   };
 
-  auto insertDriveForSlot = [&](bool delayed) {
-    Def *reachingDef = node->valueBefore->getReachingDef(delayed);
+  auto insertDriveForSlot = [&](DefSlot slot) {
+    auto reachingDef = node->valueBefore->reachingDefs.lookup(slot);
     if (!reachingDef || reachingDef->condition.isNever())
       return;
     if (!node->suspends && !node->successors.empty() &&
         llvm::all_of(node->successors, [&](auto *successor) {
-          return successor->valueAfter->getReachingDef(delayed) != nullptr;
+          return successor->valueAfter->reachingDefs.contains(slot);
         }))
       return;
-    LLVM_DEBUG(llvm::dbgs() << "- Inserting drive for " << currentSlot << " "
-                            << (delayed ? "(delayed)" : "(blocking)")
+    LLVM_DEBUG(llvm::dbgs() << "- Inserting drive for " << getSlot(slot) << " "
+                            << (isDelayed(slot) ? "(delayed)" : "(blocking)")
                             << " before " << *node->terminator << "\n");
-    auto time = getTime(delayed);
+    auto time = getTime(isDelayed(slot));
     auto value = reachingDef->getValueOrPlaceholder();
     auto enable = reachingDef->condition.isConditional()
                       ? reachingDef->getConditionOrPlaceholder()
                       : Value{};
-    DriveOp::create(builder, currentSlot.getLoc(), currentSlot, value, time,
-                    enable);
+    DriveOp::create(builder, getLoc(slot), getSlot(slot), value, time, enable);
   };
 
-  insertDriveForSlot(/*delayed=*/false);
-  insertDriveForSlot(/*delayed=*/true);
+  for (auto slot : slots)
+    insertDriveForSlot(blockingSlot(slot));
+  for (auto slot : slots)
+    insertDriveForSlot(delayedSlot(slot));
 }
 
-/// Remove drives to the current slot. These have been replaced with new
-/// drives at block exits.
+/// Remove drives to slots that we are promoting. These have been replaced with
+/// new drives at block exits.
 void Promoter::insertDrives(DriveNode *node) {
+  if (!promotable.contains(getSlot(node->slot)))
+    return;
   LLVM_DEBUG(llvm::dbgs() << "- Removing drive " << *node->op << "\n");
   pruner.eraseNow(node->op);
   node->op = nullptr;
@@ -1659,7 +1573,7 @@ void Promoter::insertDrives(DriveNode *node) {
 
 /// Forward definitions throughout the IR.
 void Promoter::resolveDefinitions() {
-  for (auto *node : lattice->nodes) {
+  for (auto *node : lattice.nodes) {
     if (auto *probe = dyn_cast<ProbeNode>(node))
       resolveDefinitions(probe);
     else if (auto *drive = dyn_cast<DriveNode>(node))
@@ -1669,7 +1583,9 @@ void Promoter::resolveDefinitions() {
 
 /// Replace probes with the corresponding reaching definition.
 void Promoter::resolveDefinitions(ProbeNode *node) {
-  Def *def = node->valueBefore->blockingReachingDef;
+  if (!promotable.contains(node->slot))
+    return;
+  auto *def = node->valueBefore->reachingDefs.lookup(blockingSlot(node->slot));
   assert(def && "no definition reaches probe");
 
   // Gather any projections between the probe and the underlying slot.
@@ -1691,6 +1607,9 @@ void Promoter::resolveDefinitions(ProbeNode *node) {
 /// Mutate reaching definitions for conditional drives or drives that target
 /// projections of a slot.
 void Promoter::resolveDefinitions(DriveNode *node) {
+  if (!promotable.contains(getSlot(node->slot)))
+    return;
+
   // Check whether the drive already has a value and condition set for its
   // reaching def. This is the case for drives to an entire slot. Conditional
   // drives and drives to a projection will have no value set initially, in
@@ -1706,7 +1625,7 @@ void Promoter::resolveDefinitions(DriveNode *node) {
 void Promoter::resolveDefinitionValue(DriveNode *node) {
   // Get the slot definition reaching the drive. This is the value the drive has
   // to update.
-  Def *inDef = node->valueBefore->getReachingDef(isDelayed(node->slot));
+  auto *inDef = node->valueBefore->reachingDefs.lookup(node->slot);
   assert(inDef && "no definition reaches drive");
   auto driveOp = node->getDriveOp();
   LLVM_DEBUG(llvm::dbgs() << "- Injecting value for " << driveOp << "\n");
@@ -1745,7 +1664,7 @@ void Promoter::resolveDefinitionValue(DriveNode *node) {
 void Promoter::resolveDefinitionCondition(DriveNode *node) {
   // Get the slot definition reaching the drive. This contains the condition the
   // drive has to update.
-  Def *inDef = node->valueBefore->getReachingDef(isDelayed(node->slot));
+  auto *inDef = node->valueBefore->reachingDefs.lookup(node->slot);
   assert(inDef && "no definition reaches drive");
   auto driveOp = node->getDriveOp();
   LLVM_DEBUG(llvm::dbgs() << "- Mutating condition for " << driveOp << "\n");
@@ -1782,7 +1701,7 @@ void Promoter::insertBlockArgs() {
   bool anyArgsInserted = true;
   while (anyArgsInserted) {
     anyArgsInserted = false;
-    for (auto *node : lattice->nodes)
+    for (auto *node : lattice.nodes)
       if (auto *entry = dyn_cast<BlockEntry>(node))
         anyArgsInserted |= insertBlockArgs(entry);
   }
@@ -1797,26 +1716,27 @@ void Promoter::insertBlockArgs() {
 /// to be inserted in a previous one. Therefore this function must be called
 /// until no more block arguments are inserted.
 bool Promoter::insertBlockArgs(BlockEntry *node) {
-  // Determine which merge defs for the current slot still have unresolved
-  // placeholders. Check the blocking flavor first, then the delayed flavor,
-  // so block argument ordering is deterministic per slot (and the
-  // slot-iteration order in promote() gives deterministic ordering across
-  // slots).
+  // Determine which slots require a merging definition. Use the `slots` array
+  // for this to have a deterministic order for the block arguments. We only
+  // insert block arguments for the def's value or drive condition if
+  // placeholders have been created for them, indicating that they are actually
+  // used.
   enum class Which { Value, Condition };
   SmallVector<std::pair<DefSlot, Which>> neededSlots;
   auto addNeededSlot = [&](DefSlot slot) {
-    auto *def = node->getMerged(isDelayed(slot));
-    if (!def)
-      return;
-    if (!node->valueAfter->getReachingDef(isDelayed(slot)))
-      return;
-    if (def->valueIsPlaceholder)
-      neededSlots.push_back({slot, Which::Value});
-    if (def->conditionIsPlaceholder)
-      neededSlots.push_back({slot, Which::Condition});
+    if (auto *def = node->mergedDefs.lookup(slot)) {
+      if (node->valueAfter->reachingDefs.contains(slot)) {
+        if (def->valueIsPlaceholder)
+          neededSlots.push_back({slot, Which::Value});
+        if (def->conditionIsPlaceholder)
+          neededSlots.push_back({slot, Which::Condition});
+      }
+    }
   };
-  addNeededSlot(blockingSlot(currentSlot));
-  addNeededSlot(delayedSlot(currentSlot));
+  for (auto slot : slots) {
+    addNeededSlot(blockingSlot(slot));
+    addNeededSlot(delayedSlot(slot));
+  }
   if (neededSlots.empty())
     return false;
   LLVM_DEBUG(llvm::dbgs() << "- Adding " << neededSlots.size()
@@ -1824,7 +1744,7 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
 
   // Add the block arguments.
   for (auto [slot, which] : neededSlots) {
-    auto *def = node->getMerged(isDelayed(slot));
+    auto *def = node->mergedDefs.lookup(slot);
     assert(def);
     switch (which) {
     case Which::Value: {
@@ -1863,7 +1783,7 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
     // Collect the interesting reaching definitions in the predecessor.
     SmallVector<Value> args;
     for (auto [slot, which] : neededSlots) {
-      Def *def = predecessor->valueBefore->getReachingDef(isDelayed(slot));
+      auto *def = predecessor->valueBefore->reachingDefs.lookup(slot);
       auto builder = OpBuilder::atBlockTerminator(predecessor->block);
       switch (which) {
       case Which::Value:
@@ -1905,7 +1825,7 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
 /// mentions of the old value in the lattice to the new value.
 void Promoter::replaceValueWith(Value oldValue, Value newValue) {
   oldValue.replaceAllUsesWith(newValue);
-  for (auto *def : lattice->defs) {
+  for (auto *def : lattice.defs) {
     if (def->value == oldValue)
       def->value = newValue;
     if (def->condition.isConditional() &&
@@ -1918,15 +1838,22 @@ void Promoter::replaceValueWith(Value oldValue, Value newValue) {
 // Cleanup
 //===----------------------------------------------------------------------===//
 
+/// Remove all unused local signals.
+void Promoter::removeUnusedLocalSignals() {
+  for (auto *node : lattice.nodes)
+    if (auto *signal = dyn_cast<SignalNode>(node))
+      removeUnusedLocalSignal(signal);
+}
+
 /// Remove a local signal if it is only used by projection ops and drives, but
 /// never probed. Since the signal is local and cannot be observed in any other
 /// way, we can safely remove it along with any projection ops and drives.
-void Promoter::removeUnusedLocalSignal(SignalOp signalOp) {
+void Promoter::removeUnusedLocalSignal(SignalNode *signal) {
   // Check if the signal is only ever projected into and driven, but never
   // probed.
   SmallSetVector<Operation *, 8> users;
   SmallVector<Operation *> worklist;
-  worklist.push_back(signalOp);
+  worklist.push_back(signal->op);
   while (!worklist.empty()) {
     auto *op = worklist.pop_back_val();
     if (!isa<SignalOp, DriveOp, SigArrayGetOp, SigArraySliceOp, SigExtractOp,
@@ -1939,7 +1866,7 @@ void Promoter::removeUnusedLocalSignal(SignalOp signalOp) {
 
   // If we get here, the local signal is never probed. This means we can safely
   // remove it.
-  LLVM_DEBUG(llvm::dbgs() << "- Removing local signal " << *signalOp << "\n");
+  LLVM_DEBUG(llvm::dbgs() << "- Removing local signal " << *signal->op << "\n");
   for (auto *op : llvm::reverse(users))
     pruner.eraseNow(op);
 }

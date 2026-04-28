@@ -20,6 +20,7 @@
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/OM/OMAttributes.h"
 #include "circt/Dialect/OM/OMOps.h"
+#include "circt/Support/ConversionPatternSet.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Threading.h"
@@ -1783,6 +1784,14 @@ struct PropEqOpConversion : public OpConversionPattern<firrtl::PropEqOp> {
   }
 };
 
+template <typename FIRRTLOp, typename OMOp>
+static LogicalResult binaryOpConversion(FIRRTLOp op,
+                                        typename FIRRTLOp::Adaptor adaptor,
+                                        ConversionPatternRewriter &rewriter) {
+  rewriter.replaceOpWithNewOp<OMOp>(op, adaptor.getLhs(), adaptor.getRhs());
+  return success();
+}
+
 struct PathOpConversion : public OpConversionPattern<firrtl::PathOp> {
 
   PathOpConversion(TypeConverter &typeConverter, MLIRContext *context,
@@ -2233,7 +2242,7 @@ static void populateTypeConverter(TypeConverter &converter) {
 }
 
 static void populateRewritePatterns(
-    RewritePatternSet &patterns, TypeConverter &converter,
+    ConversionPatternSet &patterns, TypeConverter &converter,
     const PathInfoTable &pathInfoTable,
     const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable) {
   patterns.add<FIntegerConstantOpConversion>(converter, patterns.getContext());
@@ -2261,6 +2270,9 @@ static void populateRewritePatterns(
   patterns.add<IntegerShlOpConversion>(converter, patterns.getContext());
   patterns.add<StringConcatOpConversion>(converter, patterns.getContext());
   patterns.add<PropEqOpConversion>(converter, patterns.getContext());
+  patterns.add(binaryOpConversion<firrtl::BoolAndOp, om::IntegerAndOp>);
+  patterns.add(binaryOpConversion<firrtl::BoolOrOp, om::IntegerOrOp>);
+  patterns.add(binaryOpConversion<firrtl::BoolXorOp, om::IntegerXorOp>);
   patterns.add<UnrealizedConversionCastOpConversion>(converter,
                                                      patterns.getContext());
   patterns.add<UnknownValueOpConversion>(converter, patterns.getContext());
@@ -2276,7 +2288,7 @@ LogicalResult LowerClassesPass::dialectConversion(
   TypeConverter typeConverter;
   populateTypeConverter(typeConverter);
 
-  RewritePatternSet patterns(&getContext());
+  ConversionPatternSet patterns(&getContext(), typeConverter);
   populateRewritePatterns(patterns, typeConverter, pathInfoTable,
                           classTypeTable);
 
