@@ -530,31 +530,39 @@ void circt::om::ObjectOp::build(::mlir::OpBuilder &odsBuilder,
                classOp.getNameAttr(), actualParams);
 }
 
-LogicalResult
-circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  // Verify the result type is the same as the referred-to class.
-  StringAttr resultClassName = getResult().getType().getClassName().getAttr();
-  StringAttr className = getClassNameAttr();
+static FailureOr<ClassLike>
+verifyClassLikeSymbolUser(Operation *op, SymbolTableCollection &symbolTable,
+                          ClassType resultType, StringAttr className) {
+  StringAttr resultClassName = resultType.getClassName().getAttr();
   if (resultClassName != className)
-    return emitOpError("result type (")
+    return op->emitOpError("result type (")
            << resultClassName << ") does not match referred to class ("
            << className << ')';
 
-  // Verify the referred to ClassOp exists.
   auto classDef = dyn_cast_or_null<ClassLike>(
-      symbolTable.lookupNearestSymbolFrom(*this, className));
+      symbolTable.lookupNearestSymbolFrom(op, className));
   if (!classDef)
-    return emitOpError("refers to non-existant class (") << className << ')';
+    return op->emitOpError("refers to non-existant class (")
+           << className << ')';
+  return classDef;
+}
+
+LogicalResult
+circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto classDef = verifyClassLikeSymbolUser(
+      (*this), symbolTable, getResult().getType(), getClassNameAttr());
+  if (failed(classDef))
+    return failure();
 
   auto actualTypes = getActualParams().getTypes();
-  auto formalTypes = classDef.getBodyBlock()->getArgumentTypes();
+  auto formalTypes = classDef->getBodyBlock()->getArgumentTypes();
 
   // Verify the actual parameter list matches the formal parameter list.
   if (actualTypes.size() != formalTypes.size()) {
     auto error = emitOpError(
         "actual parameter list doesn't match formal parameter list");
-    error.attachNote(classDef.getLoc())
-        << "formal parameters: " << classDef.getBodyBlock()->getArguments();
+    error.attachNote(classDef->getLoc())
+        << "formal parameters: " << classDef->getBodyBlock()->getArguments();
     error.attachNote(getLoc()) << "actual parameters: " << getActualParams();
     return error;
   }
@@ -566,6 +574,47 @@ circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
              << actualTypes[i] << ") doesn't match formal parameter type ("
              << formalTypes[i] << ')';
     }
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ElaboratedObjectOp
+//===----------------------------------------------------------------------===//
+
+void circt::om::ElaboratedObjectOp::build(OpBuilder &odsBuilder,
+                                          OperationState &odsState,
+                                          om::ClassLike classOp,
+                                          ValueRange fieldValues) {
+  return build(odsBuilder, odsState,
+               om::ClassType::get(
+                   odsBuilder.getContext(),
+                   mlir::FlatSymbolRefAttr::get(classOp.getSymNameAttr())),
+               classOp.getSymNameAttr(), fieldValues);
+}
+
+LogicalResult circt::om::ElaboratedObjectOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  auto classDef = verifyClassLikeSymbolUser(
+      (*this), symbolTable, getResult().getType(), getClassNameAttr());
+  if (failed(classDef))
+    return failure();
+
+  auto fieldNames = classDef->getFieldNames();
+  auto fieldValues = getFieldValues();
+  if (fieldValues.size() != fieldNames.size())
+    return emitOpError("field value list doesn't match class field list, "
+                       "expected ")
+           << fieldNames.size() << " values but got " << fieldValues.size();
+
+  for (auto [fieldName, fieldValue] : llvm::zip(fieldNames, fieldValues)) {
+    Type expectedType =
+        classDef->getFieldType(cast<StringAttr>(fieldName)).value();
+    if (fieldValue.getType() != expectedType)
+      return emitOpError("field value type for ")
+             << cast<StringAttr>(fieldName) << " (" << fieldValue.getType()
+             << ") doesn't match class field type (" << expectedType << ')';
   }
 
   return success();
