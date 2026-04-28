@@ -14,13 +14,31 @@ func.func @ObjectsMustNotCSE() -> (!om.class.type<@Foo>, !om.class.type<@Foo>) {
   return %obj1, %obj2 : !om.class.type<@Foo>, !om.class.type<@Foo>
 }
 
-// Objects must DCE.
-// CHECK-LABEL: @ObjectsMustDCE
-func.func @ObjectsMustDCE() {
-  // CHECK-NOT: om.object
+// Objects must not DCE: om.object always has a write effect, so unused
+// instantiations are conservatively preserved, even if there are no "effects"
+// (e.g., asserts) in the corresponding class.
+//
+// CHECK-LABEL: @ObjectsMustNotDCE
+func.func @ObjectsMustNotDCE() {
+  // CHECK: om.object @Foo
   // CHECK-NEXT: return
   om.object @Foo() : () -> !om.class.type<@Foo>
   return
+}
+
+om.class @FooWithAssert() {
+  %0 = om.constant false
+  om.property_assert %0, "foo" : i1
+  om.class.fields
+}
+
+// An object instantiation of a class containing a property_assert must not be
+// canonicalized away, because the assert has observable side effects.
+// CHECK-LABEL: @ObjectWithAssertMustNotDCE
+om.class @ObjectWithAssertMustNotDCE() {
+  // CHECK: om.object @FooWithAssert
+  %0 = om.object @FooWithAssert() : () -> !om.class.type<@FooWithAssert>
+  om.class.fields
 }
 
 om.class @StringConcatCanonicalization(%str1: !om.string, %str2: !om.string) -> (out1: !om.string, out2: !om.string,
