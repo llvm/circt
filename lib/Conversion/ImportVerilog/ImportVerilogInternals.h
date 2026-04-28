@@ -311,9 +311,7 @@ struct Context {
       const slang::ast::CallExpression::SystemCallInfo &info, Location loc);
 
   // Traverse the whole AST to collect hierarchical names.
-  void traverseInstanceBody(const slang::ast::Symbol &symbol);
-  void traverseInstanceBody(const slang::ast::Symbol &symbol,
-                            DenseSet<StringAttr> &sameHierPaths);
+  void traverseInstanceBody(const slang::ast::InstanceSymbol &symbol);
 
   /// Build a composite key for hierValueSymbols from a hierarchical value
   /// expression. Returns {firstInstanceSymbol, dottedHierName} or std::nullopt

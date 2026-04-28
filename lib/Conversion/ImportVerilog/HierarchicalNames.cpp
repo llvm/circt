@@ -17,13 +17,15 @@ struct InstBodyVisitor
     : public slang::ast::ASTVisitor<InstBodyVisitor,
                                     /*VisitStatements=*/true,
                                     /*VisitExpressions=*/true> {
-  InstBodyVisitor(Context &context, const slang::ast::Symbol &outermostModule,
-                  DenseSet<StringAttr> &sameHierPaths)
+  InstBodyVisitor(
+      Context &context, const slang::ast::Symbol &outermostModule,
+      DenseSet<StringAttr> &sameHierPaths,
+      DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies)
       : context(context), outermostModule(outermostModule),
-        sameHierPaths(sameHierPaths) {}
+        visitedBodies(visitedBodies), sameHierPaths(sameHierPaths) {}
 
   void handle(const slang::ast::InstanceSymbol &instNode) {
-    context.traverseInstanceBody(instNode.body, sameHierPaths);
+    traverseInstanceBody(context, instNode, sameHierPaths, visitedBodies);
     // Also visit port connection expressions to find hier refs used as
     // port arguments (e.g., .in_val(b_inst.local_val)).
     for (auto *conn : instNode.getPortConnections())
@@ -112,28 +114,36 @@ struct InstBodyVisitor
 
   Context &context;
   const slang::ast::Symbol &outermostModule;
+  DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies;
 
   // Deduplication set shared across the entire traversal tree rooted at
   // the top-level traverseInstanceBody call.
   DenseSet<StringAttr> &sameHierPaths;
+
+  static void traverseInstanceBody(
+      Context& context,
+      const slang::ast::InstanceSymbol &symbol,
+      DenseSet<StringAttr> &sameHierPaths,
+      DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies) {
+    const slang::ast::InstanceBodySymbol *body = getCanonicalBody(symbol);
+    if (visitedBodies.insert(body).second)
+      for (auto &member : body->members()) {
+        auto &outermostModule = member.getParentScope()->asSymbol();
+        InstBodyVisitor visitor(context, outermostModule, sameHierPaths,
+                                visitedBodies);
+        member.visit(visitor);
+      }
+  }
 };
 
 } // namespace
 
-void Context::traverseInstanceBody(const slang::ast::Symbol &symbol) {
+void Context::traverseInstanceBody(const slang::ast::InstanceSymbol &symbol) {
   // Top-level entry point: create a fresh deduplication set that is shared
   // across all recursive traversals of this instance tree. This prevents
   // cross-hierarchy contamination between independent top-level instances.
   DenseSet<StringAttr> sameHierPaths;
-  traverseInstanceBody(symbol, sameHierPaths);
-}
-
-void Context::traverseInstanceBody(const slang::ast::Symbol &symbol,
-                                   DenseSet<StringAttr> &sameHierPaths) {
-  if (auto *instBodySymbol = symbol.as_if<slang::ast::InstanceBodySymbol>())
-    for (auto &member : instBodySymbol->members()) {
-      auto &outermostModule = member.getParentScope()->asSymbol();
-      InstBodyVisitor visitor(*this, outermostModule, sameHierPaths);
-      member.visit(visitor);
-    }
+  DenseSet<const slang::ast::InstanceBodySymbol *> visitedBodies;
+  InstBodyVisitor::traverseInstanceBody(*this, symbol, sameHierPaths,
+                                        visitedBodies);
 }

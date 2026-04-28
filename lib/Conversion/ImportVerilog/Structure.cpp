@@ -937,7 +937,7 @@ LogicalResult Context::convertCompilation() {
   // Visit the whole AST to collect the hierarchical names without any operation
   // creating.
   for (auto *inst : root.topInstances)
-    traverseInstanceBody(inst->body);
+    traverseInstanceBody(*inst);
 
   // Analyze the compilation to infer clocks for assertion system calls
   // using Slang's LRM clock inference.
