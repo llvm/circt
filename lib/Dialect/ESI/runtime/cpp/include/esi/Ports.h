@@ -31,6 +31,81 @@ namespace esi {
 class ChannelPort;
 using PortMap = std::map<std::string, ChannelPort &>;
 
+namespace detail {
+
+/// Shared queue/promise helper for polling-style read APIs.
+///
+/// Producers either fulfill the oldest waiting reader immediately or enqueue
+/// the value for a later `readAsync()`. Consumers either receive buffered data
+/// immediately or install a promise which is fulfilled by the next enqueue.
+template <typename BufferedT>
+class PollingBuffer {
+public:
+  explicit PollingBuffer(uint64_t maxQueued) : maxQueued(maxQueued) {}
+
+  /// Return the current bounded queue size. `0` means unbounded.
+  uint64_t getMaxQueued() {
+    std::scoped_lock<std::mutex> lock(mutex);
+    return maxQueued;
+  }
+
+  /// Update the bounded queue size. `0` means unbounded.
+  void setMaxQueued(uint64_t maxMsgs) {
+    std::scoped_lock<std::mutex> lock(mutex);
+    maxQueued = maxMsgs;
+  }
+
+  /// Try to deliver or enqueue a produced value.
+  ///
+  /// Returns `false` only when the bounded queue is full.
+  bool enqueue(BufferedT &value) {
+    std::scoped_lock<std::mutex> lock(mutex);
+    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
+           "Both queues are in use.");
+
+    if (!promiseQueue.empty()) {
+      std::promise<BufferedT> promise = std::move(promiseQueue.front());
+      promiseQueue.pop();
+      promise.set_value(std::move(value));
+    } else {
+      if (dataQueue.size() >= maxQueued && maxQueued != 0)
+        return false;
+      dataQueue.push(std::move(value));
+    }
+    return true;
+  }
+
+  /// Read the next value asynchronously.
+  ///
+  /// If a value is already buffered, the returned future is ready
+  /// immediately. Otherwise the future is backed by an internal promise which
+  /// is fulfilled by a later `enqueue()`.
+  std::future<BufferedT> readAsync() {
+    std::scoped_lock<std::mutex> lock(mutex);
+    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
+           "Both queues are in use.");
+
+    if (!dataQueue.empty()) {
+      std::promise<BufferedT> promise;
+      std::future<BufferedT> future = promise.get_future();
+      promise.set_value(std::move(dataQueue.front()));
+      dataQueue.pop();
+      return future;
+    }
+
+    promiseQueue.emplace();
+    return promiseQueue.back().get_future();
+  }
+
+private:
+  std::mutex mutex;
+  std::queue<BufferedT> dataQueue;
+  uint64_t maxQueued;
+  std::queue<std::promise<BufferedT>> promiseQueue;
+};
+
+} // namespace detail
+
 /// Unidirectional channels are the basic communication primitive between the
 /// host and accelerator. A 'ChannelPort' is the host side of a channel. It can
 /// be either read or write but not both. At this level, channels are untyped --
@@ -417,7 +492,11 @@ public:
   /// may be (and are) backends which have a very small amount of memory which
   /// are accelerator accessible and want to move messages out as quickly as
   /// possible.
-  void setMaxDataQueueMsgs(uint64_t maxMsgs) { maxDataQueueMsgs = maxMsgs; }
+  void setMaxDataQueueMsgs(uint64_t maxMsgs) {
+    maxDataQueueMsgs = maxMsgs;
+    if (pollingState)
+      pollingState->setMaxQueued(maxMsgs);
+  }
 
 protected:
   /// Invoke the currently registered callback.
@@ -458,20 +537,10 @@ protected:
   // Polling mode members.
   //===--------------------------------------------------------------------===//
 
-  /// Mutex to protect the two queues used for polling.
-  std::mutex pollingM;
-  /// Store incoming data here if there are no outstanding promises to be
-  /// fulfilled.
-  std::queue<MessageData> dataQueue;
-  /// Maximum number of messages to store in dataQueue. 0 means no limit.
-  uint64_t maxDataQueueMsgs;
-  /// Promises to be fulfilled when data is available.
-  std::queue<std::promise<MessageData>> promiseQueue;
+  uint64_t maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
+  std::optional<detail::PollingBuffer<MessageData>> pollingState;
 
-  //===--------------------------------------------------------------------===//
-  // Synchronizes callback revocation during disconnect.
-  //===--------------------------------------------------------------------===//
-
+  /// Synchronizes callback revocation during disconnect.
   std::mutex callbackMutex;
   std::condition_variable callbackCv;
   size_t activeCallbacks = 0;

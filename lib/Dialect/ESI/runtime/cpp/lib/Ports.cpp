@@ -80,6 +80,7 @@ void ReadChannelPort::disconnect() {
     callbackCv.wait(lock, [this]() { return activeCallbacks == 0; });
   }
 
+  pollingState.reset();
   resetTranslationState();
 }
 
@@ -166,7 +167,9 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
-  maxDataQueueMsgs = options.bufferSize.value_or(DefaultMaxDataQueueMsgs);
+  if (options.bufferSize.has_value())
+    maxDataQueueMsgs = options.bufferSize.value();
+  pollingState.emplace(maxDataQueueMsgs);
 
   resetTranslationState();
 
@@ -189,21 +192,8 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
       data = msg->toMessageData();
     }
 
-    std::scoped_lock<std::mutex> lock(pollingM);
-    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
-           "Both queues are in use.");
-
-    if (!promiseQueue.empty()) {
-      // If there are promises waiting, fulfill the first one.
-      std::promise<MessageData> p = std::move(promiseQueue.front());
-      promiseQueue.pop();
-      p.set_value(std::move(data));
-    } else {
-      // If not, add it to the data queue, unless the queue is full.
-      if (dataQueue.size() >= maxDataQueueMsgs && maxDataQueueMsgs != 0)
-        return false;
-      dataQueue.push(std::move(data));
-    }
+    if (!pollingState->enqueue(data))
+      return false;
 
     translatedMessage.reset();
     return true;
@@ -215,25 +205,17 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
 std::future<MessageData> ReadChannelPort::readAsync() {
   if (mode == Mode::Callback)
     throw std::runtime_error(
-        "Cannot read from a callback channel. `connect()` without a callback "
-        "specified to use polling mode.");
+        "Cannot read from a callback channel. Call `connect()` without a "
+        "callback specified to use polling mode.");
+  if (mode == Mode::Disconnected)
+    throw std::runtime_error(
+        "Cannot read from a disconnected channel. `connect()` the channel "
+        "without a callback before calling `readAsync()`.");
 
-  std::scoped_lock<std::mutex> lock(pollingM);
-  assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
-         "Both queues are in use.");
+  assert(mode == Mode::Polling && "Channel must be in polling mode to read");
+  assert(pollingState && "Polling state should be initialized in polling mode");
 
-  if (!dataQueue.empty()) {
-    // If there's data available, fulfill the promise immediately.
-    std::promise<MessageData> p;
-    std::future<MessageData> f = p.get_future();
-    p.set_value(std::move(dataQueue.front()));
-    dataQueue.pop();
-    return f;
-  } else {
-    // Otherwise, add a promise to the queue and return the future.
-    promiseQueue.emplace();
-    return promiseQueue.back().get_future();
-  }
+  return pollingState->readAsync();
 }
 
 //===----------------------------------------------------------------------===//
