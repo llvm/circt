@@ -19,6 +19,7 @@
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/MLIRContext.h"
@@ -544,12 +545,17 @@ static FrozenRewritePatternSet loadPatterns(MLIRContext &context) {
 static LogicalResult
 getReachableStates(llvm::SetVector<size_t> &visitableStates,
                    HWModuleOp moduleOp, size_t currentStateIndex,
-                   SmallVector<seq::CompRegOp> registers, OpBuilder opBuilder,
-                   bool isInitialState) {
+                   SmallVector<seq::CompRegOp> registers) {
+
+  // Clone into an isolated mlir::ModuleOp to avoid violating symbol uniqueness
+  // verifier conditions (which would violate pattern invariants)
+  mlir::OwningOpRef<mlir::ModuleOp> analysisModule =
+      mlir::ModuleOp::create(moduleOp.getLoc());
+  OpBuilder b(moduleOp.getContext());
+  b.setInsertionPointToStart(analysisModule->getBody());
 
   IRMapping mapping;
-  auto clonedBody =
-      llvm::dyn_cast<HWModuleOp>(opBuilder.clone(*moduleOp, mapping));
+  auto clonedBody = llvm::dyn_cast<HWModuleOp>(b.clone(*moduleOp, mapping));
 
   llvm::MapVector<Value, int> stateMap =
       intToRegMap(registers, currentStateIndex);
@@ -563,11 +569,10 @@ getReachableStates(llvm::SetVector<size_t> &visitableStates,
     Operation *clonedRegOp = clonedRegValue.getDefiningOp();
     auto reg = cast<seq::CompRegOp>(clonedRegOp);
     Type constantType = reg.getType();
-    IntegerAttr constantAttr =
-        opBuilder.getIntegerAttr(constantType, constStateValue);
-    opBuilder.setInsertionPoint(clonedRegOp);
+    IntegerAttr constantAttr = b.getIntegerAttr(constantType, constStateValue);
+    b.setInsertionPoint(clonedRegOp);
     auto otherStateConstant =
-        hw::ConstantOp::create(opBuilder, reg.getLoc(), constantAttr);
+        hw::ConstantOp::create(b, reg.getLoc(), constantAttr);
     // If the register input is self-referential (input == output), use the
     // constant we're replacing it with. Otherwise, the value would become
     // dangling after we erase the register.
@@ -579,9 +584,21 @@ getReachableStates(llvm::SetVector<size_t> &visitableStates,
     clonedRegValue.replaceAllUsesWith(otherStateConstant.getResult());
     reg.erase();
   }
-  opBuilder.setInsertionPointToEnd(clonedBody.front().getBlock());
-  auto newOutput = hw::OutputOp::create(opBuilder, output.getLoc(), values);
+  b.setInsertionPointToEnd(clonedBody.front().getBlock());
+  auto newOutput = hw::OutputOp::create(b, output.getLoc(), values);
   output.erase();
+
+  // Update the module type to match the new hw.output operands to avoid
+  // violating verifier conditions
+  SmallVector<hw::ModulePort> newPorts;
+  for (hw::ModulePort p : clonedBody.getHWModuleType().getPorts())
+    if (p.dir == hw::ModulePort::Direction::Input)
+      newPorts.push_back(p);
+  for (auto [i, val] : llvm::enumerate(values))
+    newPorts.push_back({b.getStringAttr("out" + std::to_string(i)),
+                        val.getType(), hw::ModulePort::Direction::Output});
+  clonedBody.setHWModuleType(hw::ModuleType::get(b.getContext(), newPorts));
+
   FrozenRewritePatternSet frozenPatterns = loadPatterns(*moduleOp.getContext());
 
   SmallVector<Operation *> opsToProcess;
@@ -613,7 +630,7 @@ getReachableStates(llvm::SetVector<size_t> &visitableStates,
     visitableStates.insert(i);
   }
 
-  clonedBody.erase();
+  // Cloned body is destroyed when analysisModule goes out of scope
   return success();
 }
 
@@ -890,8 +907,7 @@ public:
       Region &transitionRegion = stateOp.getTransitions();
       llvm::SetVector<size_t> visitableStates;
       if (failed(getReachableStates(visitableStates, moduleOp,
-                                    currentStateIndex, registers, opBuilder,
-                                    currentStateIndex == initialStateIndex)))
+                                    currentStateIndex, registers)))
         return failure();
       for (size_t j : visitableStates) {
         StateOp toState;
