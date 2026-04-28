@@ -323,3 +323,35 @@ hw.module @flatten_concat2(in %val : i8, out res: !sim.fstring) {
 
   hw.output %ccccc : !sim.fstring
 }
+
+// CHECK-LABEL: hw.module @fmt_string_fold_nopad
+// CHECK: sim.fmt.literal "abc"
+hw.module @fmt_string_fold_nopad(out res: !sim.fstring) {
+  %s = sim.string.literal "abc"
+  %f = sim.fmt.string %s : !sim.dstring
+  hw.output %f : !sim.fstring
+}
+
+// CHECK-LABEL: hw.module @fmt_string_fold_pad_nothing
+// CHECK: sim.fmt.literal "abc"
+hw.module @fmt_string_fold_pad_nothing(out res: !sim.fstring) {
+  %s = sim.string.literal "abc"
+  %f = sim.fmt.string %s paddingChar 46  specifierWidth 2 : !sim.dstring
+  hw.output %f : !sim.fstring
+}
+
+// CHECK-LABEL: hw.module @fmt_string_fold_pad_right_aligned
+// CHECK: sim.fmt.literal "  hi"
+hw.module @fmt_string_fold_pad_right_aligned(out res: !sim.fstring) {
+  %s = sim.string.literal "hi"
+  %f = sim.fmt.string %s specifierWidth 4 : !sim.dstring
+  hw.output %f : !sim.fstring
+}
+
+// CHECK-LABEL: hw.module @fmt_string_fold_pad_left_aligned
+// CHECK: sim.fmt.literal "hi.."
+hw.module @fmt_string_fold_pad_left_aligned(out res: !sim.fstring) {
+  %s = sim.string.literal "hi"
+  %f = sim.fmt.string %s isLeftAligned true paddingChar 46 specifierWidth 4 : !sim.dstring
+  hw.output %f : !sim.fstring
+}

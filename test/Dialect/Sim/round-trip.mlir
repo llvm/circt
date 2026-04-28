@@ -160,3 +160,11 @@ hw.module @StdoutAndStderr(in %clock: !seq.clock, in %condition: i1) {
   sim.print %stdout_str on %clock if %condition to %stdout
   sim.print %stderr_str on %clock if %condition to %stderr
 }
+
+// CHECK-LABEL: hw.module @FormatString(in %str : !sim.dstring)
+hw.module @FormatString(in %str: !sim.dstring) {
+  // CHECK: sim.fmt.string %str : !sim.dstring
+  %fmt0 = sim.fmt.string %str : !sim.dstring
+  // CHECK: sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
+  %fmt1 = sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
+}

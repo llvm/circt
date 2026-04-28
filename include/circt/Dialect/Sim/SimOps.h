@@ -40,6 +40,8 @@ namespace sim {
 /// Returns the value operand of a value formatting operation.
 /// Returns a null value for all other operations.
 static inline mlir::Value getFormattedValue(mlir::Operation *fmtOp) {
+  if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatStringOp>(fmtOp))
+    return fmt.getValue();
   if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatBinOp>(fmtOp))
     return fmt.getValue();
   if (auto fmt = llvm::dyn_cast_or_null<circt::sim::FormatDecOp>(fmtOp))
