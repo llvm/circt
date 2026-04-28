@@ -88,10 +88,10 @@ with Context() as ctx, Location.unknown():
 
     om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer) {
       %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>
-      %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
+      %1 = om.object.field %0["value"] : (!om.class.type<@Class1>) -> !om.integer
 
       %2 = om.object @Class2() : () -> !om.class.type<@Class2>
-      %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
+      %3 = om.object.field %2["value"] : (!om.class.type<@Class2>) -> !om.integer
 
       %5 = om.integer.add %1, %3 : !om.integer
       om.class.fields %5 : !om.integer
@@ -152,13 +152,13 @@ print("child.foo.loc", obj.child.get_field_loc("foo"))
 print(obj.reference)
 
 for (name, field) in obj:
-  # location from om.class.field @child, %0 : !om.class.type<@Child>
+  # location from om.class.field "child"
   # CHECK: name: child, field: <circt.dialects.om.Object object
   # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
-  # location from om.class.field @field, %param : !om.integer
+  # location from om.class.field "field"
   # CHECK: name: field, field: 42
   # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
-  # location from om.class.field @reference, %sym : !om.ref
+  # location from om.class.field "reference"
   # CHECK: name: reference, field: ('Root', 'x')
   # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
   loc = obj.get_field_loc(name)

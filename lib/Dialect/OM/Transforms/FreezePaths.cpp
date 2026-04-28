@@ -292,7 +292,7 @@ LogicalResult PathVisitor::process(ObjectFieldOp objectFieldOp) {
   OpBuilder builder(objectFieldOp);
   auto newObjectFieldOp = ObjectFieldOp::create(
       builder, objectFieldOp.getLoc(), newResultType, objectFieldOp.getObject(),
-      objectFieldOp.getFieldPath());
+      objectFieldOp.getFieldAttr());
   objectFieldOp.replaceAllUsesWith(newObjectFieldOp.getResult());
   objectFieldOp->erase();
   return success();

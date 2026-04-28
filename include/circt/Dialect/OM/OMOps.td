@@ -238,10 +238,13 @@ def ElaboratedObjectOp : OMOp<"elaborated_object", [
   }];
 }
 
-def ObjectFieldOp : OMOp<"object.field", [Pure]> {
+def ObjectFieldOp : OMOp<"object.field", [
+    Pure,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  ]> {
   let arguments = (ins
     ClassType:$object,
-    FlatSymbolRefArrayAttr:$fieldPath
+    StrAttr:$field
   );
 
   let results = (outs
@@ -249,7 +252,7 @@ def ObjectFieldOp : OMOp<"object.field", [Pure]> {
   );
 
   let assemblyFormat = [{
-    $object `,` $fieldPath attr-dict `:` functional-type($object, $result)
+    $object `[` $field `]` attr-dict `:` functional-type($object, $result)
   }];
 }
 
