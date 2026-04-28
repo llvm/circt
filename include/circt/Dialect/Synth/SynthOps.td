@@ -29,7 +29,8 @@ class InvertibleOperandsOp<string mnemonic, list<Trait> traits = []>
       // syntax across Synth ops such as `synth.aig.and_inv`.
       SameOperandsAndResultType, Pure,
       DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
-        "areInputsPermutationInvariant", "getLogicDepthCost",
+        "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
+        "supportsNumInputs", "createBooleanLogicOp", "getLogicDepthCost",
         "getLogicAreaCost"
       ]> ] # traits> {
   // TODO: Restrict to HWIntegerType.
@@ -132,6 +133,61 @@ def XorInverterOp : InvertibleOperandsOp<"xor_inv"> {
     let hasFolder = 1;
     let hasCanonicalizeMethod = 1;
 
+}
+
+def DotOp : SynthOp<"dot", [
+    SameOperandsAndResultType, Pure,
+    DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
+      "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
+      "supportsNumInputs", "createBooleanLogicOp",
+      "getLogicAreaCost"
+    ]>
+  ]> {
+  let summary = "Ordered 3-input DOT gate with invertible inputs";
+  let description = [{
+    The `synth.dot` operation represents the ordered three-input Boolean
+    function `x xor (z or (x and y))`, applied after optional per-input
+    inversion.
+
+    Unlike common AND, OR, XOR, and majority gates, `synth.dot` is not
+    permutation-invariant: its operands play distinct roles in the Boolean
+    expression. Dot gates are known to be a promising intermediate
+    representation for area optimization, as discussed in "Three-Input Gates
+    for Logic Synthesis" (Dewmini Sudara Marakkalage et al., TCAD 2021).
+
+    Example:
+    ```mlir
+      %r0 = synth.dot %x, %y, %z : i1
+      %r1 = synth.dot not %x, %y, not %z : i8
+    ```
+  }];
+
+  let arguments = (ins AnyType:$x, AnyType:$y, AnyType:$z,
+                       DenseBoolArrayAttr:$inverted);
+  let results = (outs AnyType:$result);
+
+  let builders = [
+    OpBuilder<(ins "Value":$x, "Value":$y, "Value":$z,
+                                CArg<"bool", "false">:$invertX,
+                                CArg<"bool", "false">:$invertY,
+                                CArg<"bool", "false">:$invertZ), [{
+      SmallVector<bool> inverted{invertX, invertY, invertZ};
+      return build($_builder, $_state, x.getType(), x, y, z,
+                   $_builder.getDenseBoolArrayAttr(inverted));
+    }]>,
+    OpBuilder<(ins "ValueRange":$inputs, "ArrayRef<bool>":$inverted), [{
+      assert(inputs.size() == 3 && "dot expects exactly three operands");
+      assert(inverted.size() == 3 && "dot expects exactly three inversion flags");
+      return build($_builder, $_state, inputs[0].getType(), inputs[0], inputs[1],
+                   inputs[2], $_builder.getDenseBoolArrayAttr(inverted));
+    }]>,
+    OpBuilder<(ins "Type":$resultType, "ValueRange":$inputs,
+                                "ArrayRef<bool>":$inverted), [{
+      return build($_builder, $_state, inputs, inverted);
+    }]>];
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def ChoiceOp : SynthOp<"choice", [SameOperandsAndResultType, Pure]> {

@@ -559,6 +559,15 @@ VariableOp UpdateOp::getVariableOp() {
   return getVariable().getDefiningOp<VariableOp>();
 }
 
+LogicalResult UpdateOp::canonicalize(UpdateOp op, PatternRewriter &rewriter) {
+  // Remove no-op updates that update a variable to itself
+  if (op.getVariable() == op.getValue()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
+}
+
 LogicalResult UpdateOp::verify() {
   if (!getVariable())
     return emitOpError("destination is not a variable operation");

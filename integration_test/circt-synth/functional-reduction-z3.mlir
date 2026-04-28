@@ -70,11 +70,27 @@ hw.module @functional_reduction_inversion_equiv_sat(in %a: i1, in %b: i1,
 // CHECK-LABEL: hw.module @functional_reduction_xor_inv_sat
 hw.module @functional_reduction_xor_inv_sat(in %a: i1, in %b: i1,
                                             out out0: i1, out out1: i1) {
-  // CHECK: hw.output %[[CHOICE:.+]], %[[CHOICE]] : i1, i1
+  // CHECK: %[[CHOICE:.+]] = synth.choice
+  // CHECK-NEXT: %[[CHOICE_NOT:.+]] = synth.aig.and_inv not %[[CHOICE]]
+  // CHECK-NEXT: hw.output %[[CHOICE]], %[[CHOICE]] : i1, i1
   %0 = synth.xor_inv %a, %b : i1
   %1 = synth.aig.and_inv not %a, %b : i1
   %2 = synth.aig.and_inv %a, not %b : i1
   %3 = synth.aig.and_inv not %1, not %2 : i1
   %4 = synth.aig.and_inv not %3 : i1
   hw.output %0, %4 : i1, i1
+}
+
+// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 test_dot --c2 test_dot | FileCheck %s --check-prefix=DOT
+// DOT: c1 == c2
+// CHECK-LABEL: hw.module @test_dot
+hw.module @test_dot(in %a: i1, in %b: i1, in %c: i1,
+                                    out out0: i1, out out1: i1) {
+  // CHECK: %[[CHOICE:.+]] = synth.choice
+  // CHECK: hw.output %[[CHOICE]], %[[CHOICE]] : i1, i1
+  %0 = synth.aig.and_inv not %a, %b : i1 // !a & b
+  %1 = synth.aig.and_inv %c, not %0 : i1 // !(!a & b) & c
+  %2 = synth.xor_inv not %a, not %1 : i1 // !a ^ !(!(!a & b) & c) = !a ^ ((!a) & b || !c) = dot(!a, b, !c)
+  %3 = synth.dot not %a, %b, not %c : i1
+  hw.output %2, %3 : i1, i1
 }

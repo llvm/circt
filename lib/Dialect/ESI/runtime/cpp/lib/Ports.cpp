@@ -167,6 +167,8 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
+  if (options.bufferSize.has_value())
+    maxDataQueueMsgs = options.bufferSize.value();
   pollingState.emplace(maxDataQueueMsgs);
 
   resetTranslationState();
@@ -203,17 +205,15 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
 std::future<MessageData> ReadChannelPort::readAsync() {
   if (mode == Mode::Callback)
     throw std::runtime_error(
-        "Cannot read from a callback channel. `connect()` without a callback "
-        "specified to use polling mode.");
+        "Cannot read from a callback channel. Call `connect()` without a "
+        "callback specified to use polling mode.");
   if (mode == Mode::Disconnected)
     throw std::runtime_error(
         "Cannot read from a disconnected channel. `connect()` the channel "
-        "before calling `readAsync()`.");
+        "without a callback before calling `readAsync()`.");
 
-  if (!pollingState)
-    throw std::runtime_error(
-        "Cannot read from a disconnected channel. `connect()` the channel "
-        "before calling `readAsync()`.");
+  assert(mode == Mode::Polling && "Channel must be in polling mode to read");
+  assert(pollingState && "Polling state should be initialized in polling mode");
 
   return pollingState->readAsync();
 }

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
@@ -27,20 +28,13 @@ using namespace mlir;
 using namespace circt;
 using namespace circt::synth;
 using namespace circt::synth::aig;
+using namespace circt::comb;
 using namespace matchers;
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.cpp.inc"
 
 namespace {
-
-// Keep inversion semantics identical across folding, analysis, and CNF
-// lowering so new invertible Synth ops can reuse the same helpers.
-inline APInt applyInversion(APInt value, bool inverted) {
-  if (inverted)
-    value.flipAllBits();
-  return value;
-}
 
 inline llvm::KnownBits applyInversion(llvm::KnownBits value, bool inverted) {
   if (inverted)
@@ -247,16 +241,17 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   return success();
 }
 
-APInt AndInverterOp::evaluateBooleanLogic(
-    llvm::function_ref<const APInt &(unsigned)> getInputValue) {
-  assert(getNumOperands() > 0 && "Expected non-empty input list");
-  APInt result = APInt::getAllOnes(getInputValue(0).getBitWidth());
-  for (auto [idx, inverted] : llvm::enumerate(getInverted())) {
-    const APInt &input = getInputValue(idx);
-    // Model each operand inversion before intersecting with the running AND.
-    result &= applyInversion(input, inverted);
-  }
+APInt AndInverterOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(!inputs.empty() && "expected non-empty input list");
+  APInt result = APInt::getAllOnes(inputs.front().getBitWidth());
+  for (const APInt &input : inputs)
+    result &= input;
   return result;
+}
+
+bool AndInverterOp::supportsNumInputs(unsigned numInputs) {
+  return numInputs >= 1;
 }
 
 llvm::KnownBits AndInverterOp::computeKnownBits(
@@ -400,13 +395,17 @@ LogicalResult XorInverterOp::canonicalize(XorInverterOp op,
   return success();
 }
 
-APInt XorInverterOp::evaluateBooleanLogic(
-    llvm::function_ref<const APInt &(unsigned)> getInputValue) {
-  assert(getNumOperands() > 0 && "Expected non-empty input list");
-  APInt result = APInt::getZero(getInputValue(0).getBitWidth());
-  for (auto [idx, inverted] : llvm::enumerate(getInverted()))
-    result ^= applyInversion(getInputValue(idx), inverted);
+APInt XorInverterOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(!inputs.empty() && "expected non-empty input list");
+  APInt result = APInt::getZero(inputs.front().getBitWidth());
+  for (const APInt &input : inputs)
+    result ^= input;
   return result;
+}
+
+bool XorInverterOp::supportsNumInputs(unsigned numInputs) {
+  return numInputs >= 1;
 }
 
 llvm::KnownBits XorInverterOp::computeKnownBits(
@@ -435,6 +434,85 @@ void XorInverterOp::emitCNFWithoutInversion(
     llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
     llvm::function_ref<int()> newVar) {
   circt::addParityClauses(outVar, inputVars, addClause, newVar);
+}
+
+//===----------------------------------------------------------------------===//
+// DotOp
+//===----------------------------------------------------------------------===//
+
+ParseResult DotOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand> operands;
+  Type resultType;
+  DenseBoolArrayAttr inverted;
+  NamedAttrList attrs;
+
+  if (parseVariadicInvertibleOperands(parser, operands, resultType, inverted,
+                                      attrs))
+    return failure();
+  if (operands.size() != 3)
+    return parser.emitError(parser.getCurrentLocation())
+           << "expected exactly three operands";
+  if (parser.resolveOperands(operands, resultType, result.operands))
+    return failure();
+
+  result.addTypes(resultType);
+  result.addAttributes(attrs);
+  result.addAttribute("inverted", inverted);
+  return success();
+}
+
+void DotOp::print(OpAsmPrinter &printer) {
+  printer << ' ';
+  printVariadicInvertibleOperands(printer, getOperation(), getOperands(),
+                                  getType(), getInvertedAttr(),
+                                  (*this)->getAttrDictionary());
+}
+
+LogicalResult DotOp::verify() {
+  if (getInverted().size() != 3)
+    return emitOpError("requires exactly three inversion flags");
+  return success();
+}
+
+APInt DotOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(supportsNumInputs(inputs.size()) &&
+         "dot expects exactly three operands");
+  return evaluateDotLogic(inputs[0], inputs[1], inputs[2]);
+}
+
+bool DotOp::areInputsPermutationInvariant() { return false; }
+
+bool DotOp::supportsNumInputs(unsigned numInputs) { return numInputs == 3; }
+
+llvm::KnownBits DotOp::computeKnownBits(
+    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
+  auto x = applyInversion(getInputKnownBits(0), isInverted(0));
+  auto y = applyInversion(getInputKnownBits(1), isInverted(1));
+  auto z = applyInversion(getInputKnownBits(2), isInverted(2));
+  return evaluateDotLogic(x, y, z);
+}
+
+std::optional<uint64_t> DotOp::getLogicAreaCost() {
+  int64_t bitWidth = hw::getBitWidth(getType());
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<uint64_t>(bitWidth);
+}
+
+void DotOp::emitCNFWithoutInversion(
+    int outVar, llvm::ArrayRef<int> inputVars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  assert(inputVars.size() == 3 && "expected one SAT variable per operand");
+  int andVar = newVar();
+  int orVar = newVar();
+  // andVar = x and y
+  circt::addAndClauses(andVar, {inputVars[0], inputVars[1]}, addClause);
+  // orVar = z or andVar
+  circt::addOrClauses(orVar, {inputVars[2], andVar}, addClause);
+  // outVar = x xor orVar
+  circt::addXorClauses(outVar, inputVars[0], orVar, addClause);
 }
 
 static Value lowerVariadicInvertibleOp(
@@ -489,6 +567,11 @@ void circt::synth::populateVariadicAndInverterLoweringPatterns(
 void circt::synth::populateVariadicXorInverterLoweringPatterns(
     RewritePatternSet &patterns) {
   patterns.add(lowerVariadicAndInverterOpConversion<XorInverterOp>);
+}
+
+bool circt::synth::isLogicNetworkOp(Operation *op) {
+  return isa<synth::BooleanLogicOpInterface, synth::ChoiceOp, comb::ExtractOp,
+             comb::ReplicateOp, comb::ConcatOp>(op);
 }
 
 LogicalResult circt::synth::topologicallySortGraphRegionBlocks(

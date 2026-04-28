@@ -43,6 +43,19 @@ om.class @Empty() {
   om.class.fields
 }
 
+// CHECK-LABEL: om.class @ElaboratedWidget
+// CHECK-SAME: -> (widget: !om.class.type<@Widget>, blue: i8)
+om.class @ElaboratedWidget() -> (widget: !om.class.type<@Widget>, blue: i8) {
+  %0 = om.constant 5 : i8
+  %1 = om.constant 6 : i32
+  // CHECK: %[[widget:.+]] = om.elaborated_object @Widget(%{{.+}}, %{{.+}}) : (i8, i32) -> !om.class.type<@Widget>
+  %2 = om.elaborated_object @Widget(%0, %1) : (i8, i32) -> !om.class.type<@Widget>
+  // CHECK: %[[blue:.+]] = om.object.field %[[widget]], [@blue_1] : (!om.class.type<@Widget>) -> i8
+  %3 = om.object.field %2, [@blue_1] : (!om.class.type<@Widget>) -> i8
+  // CHECK: om.class.fields %[[widget]], %[[blue]] : !om.class.type<@Widget>, i8
+  om.class.fields %2, %3 : !om.class.type<@Widget>, i8
+}
+
 // CHECK-LABEL: om.class @DiscardableAttrs
 // CHECK-SAME: attributes {foo.bar = "baz"}
 om.class @DiscardableAttrs() attributes {foo.bar="baz"} {
@@ -313,6 +326,35 @@ om.class @IntegerArithmetic() {
 
   // CHECK: om.integer.shl %0, %1 : !om.integer
   %5 = om.integer.shl %0, %1 : !om.integer
+
+  om.class.fields
+}
+
+// CHECK-LABEL: @IntegerBitwise
+om.class @IntegerBitwise() {
+  %0 = om.constant false
+  %1 = om.constant true
+
+  // CHECK: om.integer.and %0, %1 : i1
+  %2 = om.integer.and %0, %1 : i1
+
+  // CHECK: om.integer.or %0, %1 : i1
+  %3 = om.integer.or %0, %1 : i1
+
+  // CHECK: om.integer.xor %0, %1 : i1
+  %4 = om.integer.xor %0, %1 : i1
+
+  %5 = om.constant 0 : i8
+  %6 = om.constant -1 : i8
+
+  // CHECK: om.integer.and %5, %6 : i8
+  %7 = om.integer.and %5, %6 : i8
+
+  // CHECK: om.integer.or %5, %6 : i8
+  %8 = om.integer.or %5, %6 : i8
+
+  // CHECK: om.integer.xor %5, %6 : i8
+  %9 = om.integer.xor %5, %6 : i8
 
   om.class.fields
 }

@@ -154,3 +154,43 @@ om.class @PropEqFold(%str: !om.string, %b: i1, %n: !om.integer) -> (out1: i1, ou
   // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[EQ]], [[TRUE]], [[FALSE]], [[BEQ]], [[TRUE]], [[FALSE]], [[IEQ]]
   om.class.fields %0, %1, %2, %3, %4, %5, %6, %7, %8 : i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
+
+// CHECK-LABEL: @IntegerBitwiseFold
+om.class @IntegerBitwiseFold(%b: i8) -> (out1: i8, out2: i8, out3: i8,
+                                          out4: i8, out5: i8, out6: i8,
+                                          out7: i8, out8: i8) {
+  // CHECK-DAG: [[ZERO:%.+]] = om.constant 0 : i8
+  // CHECK-DAG: [[ONES:%.+]] = om.constant -1 : i8
+  %zero = om.constant 0 : i8
+  %ones = om.constant -1 : i8
+
+  // 0xFF AND 0x00 = 0x00.
+  %0 = om.integer.and %ones, %zero : i8
+
+  // 0xFF OR 0x00 = 0xFF.
+  %1 = om.integer.or %ones, %zero : i8
+
+  // 0xFF XOR 0x00 = 0xFF.
+  %2 = om.integer.xor %ones, %zero : i8
+
+  // 0xFF XOR 0xFF = 0x00.
+  %3 = om.integer.xor %ones, %ones : i8
+
+  // Non-constant AND does not fold.
+  // CHECK: [[AND:%.+]] = om.integer.and %b, %b : i8
+  %4 = om.integer.and %b, %b : i8
+
+  // Non-constant OR does not fold.
+  // CHECK: [[OR:%.+]] = om.integer.or %b, %b : i8
+  %5 = om.integer.or %b, %b : i8
+
+  // Non-constant XOR does not fold.
+  // CHECK: [[XOR:%.+]] = om.integer.xor %b, %b : i8
+  %6 = om.integer.xor %b, %b : i8
+
+  // XOR with all-zeros is identity.
+  %7 = om.integer.xor %b, %zero : i8
+
+  // CHECK: om.class.fields [[ZERO]], [[ONES]], [[ONES]], [[ZERO]], [[AND]], [[OR]], [[XOR]], %b
+  om.class.fields %0, %1, %2, %3, %4, %5, %6, %7 : i8, i8, i8, i8, i8, i8, i8, i8
+}

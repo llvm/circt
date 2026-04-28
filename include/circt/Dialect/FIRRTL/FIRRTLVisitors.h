@@ -69,7 +69,7 @@ public:
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, ListConcatOp, UnresolvedPathOp,
             PathOp, IntegerAddOp, IntegerMulOp, IntegerShrOp, StringConcatOp,
-            PropEqOp, UnknownValueOp,
+            PropEqOp, BoolAndOp, BoolOrOp, BoolXorOp, UnknownValueOp,
             // Format String expressions
             TimeOp, HierarchicalModuleNameOp>([&](auto expr) -> ResultType {
           return thisCast->visitExpr(expr, args...);
@@ -235,6 +235,9 @@ public:
   HANDLE(IntegerShrOp, Unhandled);
   HANDLE(StringConcatOp, Unhandled);
   HANDLE(PropEqOp, Unhandled);
+  HANDLE(BoolAndOp, Unhandled);
+  HANDLE(BoolOrOp, Unhandled);
+  HANDLE(BoolXorOp, Unhandled);
   HANDLE(UnknownValueOp, Unhandled);
 
   // Format string expressions

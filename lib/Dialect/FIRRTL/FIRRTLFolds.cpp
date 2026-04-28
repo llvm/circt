@@ -1670,6 +1670,62 @@ OpFoldResult PropEqOp::fold(FoldAdaptor adaptor) {
   return BoolAttr::get(getContext(), lhsAttr == rhsAttr);
 }
 
+//===----------------------------------------------------------------------===//
+// Boolean Property Ops
+//===----------------------------------------------------------------------===//
+
+// Helper to extract the bool value from a BoolAttr.
+static std::optional<bool> getBoolValue(Attribute attr) {
+  if (auto boolAttr = dyn_cast_or_null<BoolAttr>(attr))
+    return boolAttr.getValue();
+  return std::nullopt;
+}
+
+OpFoldResult BoolAndOp::fold(FoldAdaptor adaptor) {
+  auto lhs = getBoolValue(adaptor.getLhs());
+  auto rhs = getBoolValue(adaptor.getRhs());
+  if (lhs && rhs)
+    return BoolAttr::get(getContext(), *lhs && *rhs);
+  // AND with false is always false.
+  if ((lhs && !*lhs) || (rhs && !*rhs))
+    return BoolAttr::get(getContext(), false);
+  // AND with true is identity.
+  if (lhs && *lhs)
+    return getRhs();
+  if (rhs && *rhs)
+    return getLhs();
+  return {};
+}
+
+OpFoldResult BoolOrOp::fold(FoldAdaptor adaptor) {
+  auto lhs = getBoolValue(adaptor.getLhs());
+  auto rhs = getBoolValue(adaptor.getRhs());
+  if (lhs && rhs)
+    return BoolAttr::get(getContext(), *lhs || *rhs);
+  // OR with true is always true.
+  if ((lhs && *lhs) || (rhs && *rhs))
+    return BoolAttr::get(getContext(), true);
+  // OR with false is identity.
+  if (lhs && !*lhs)
+    return getRhs();
+  if (rhs && !*rhs)
+    return getLhs();
+  return {};
+}
+
+OpFoldResult BoolXorOp::fold(FoldAdaptor adaptor) {
+  auto lhs = getBoolValue(adaptor.getLhs());
+  auto rhs = getBoolValue(adaptor.getRhs());
+  if (lhs && rhs)
+    return BoolAttr::get(getContext(), *lhs ^ *rhs);
+  // XOR with false is identity.
+  if (lhs && !*lhs)
+    return getRhs();
+  if (rhs && !*rhs)
+    return getLhs();
+  return {};
+}
+
 OpFoldResult BitCastOp::fold(FoldAdaptor adaptor) {
   auto op = (*this);
   // BitCast is redundant if input and result types are same.

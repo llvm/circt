@@ -171,6 +171,15 @@ firrtl.module @PropertyPropEq() {
 
   // CHECK: firrtl.prop.eq %6, %7 : !firrtl.integer
   %8 = firrtl.prop.eq %6, %7 : !firrtl.integer
+
+  // CHECK: firrtl.bool.and %3, %4
+  %9 = firrtl.bool.and %3, %4
+
+  // CHECK: firrtl.bool.or %3, %4
+  %10 = firrtl.bool.or %3, %4
+
+  // CHECK: firrtl.bool.xor %3, %4
+  %11 = firrtl.bool.xor %3, %4
 }
 
 // CHECK-LABEL: firrtl.module @PropertyListOps

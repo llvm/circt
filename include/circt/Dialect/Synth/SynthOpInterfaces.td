@@ -27,12 +27,15 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
   }];
 
   let methods = [
+    //===------------------------------------------------------------------===//
+    // Accessors
+    //===------------------------------------------------------------------===//
     InterfaceMethod<[{
         Get the logical input values.
       }],
       "::mlir::ValueRange", "getInputs", (ins), "",
       [{
-        return $_op.getInputs();
+        return $_op.getOperands();
       }]
     >,
     InterfaceMethod<[{
@@ -79,24 +82,46 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
         return $_op->getResult(0);
       }]
     >,
-    InterfaceMethod<[{
-        Return whether the operation semantics are invariant under
-        permutation of logical input pairs. Reordering a logical input means
-        moving both the input value and its inversion flag together.
-      }],
-      "bool", "areInputsPermutationInvariant", (ins), "",
-      [{
-        return false;
-      }]
-    >,
+    //===------------------------------------------------------------------===//
+    // Instance Semantics
+    //===------------------------------------------------------------------===//
     InterfaceMethod<[{
         Evaluate the boolean logic operation for the provided raw operand
         inputs. The implementations are responsible for applying any per-input
         inversion described by the operation itself.
       }],
       "::llvm::APInt", "evaluateBooleanLogic",
-      (ins "::llvm::function_ref<const ::llvm::APInt &(unsigned)>":$getInputValue)
+      (ins "::llvm::function_ref<const ::llvm::APInt &(unsigned)>":$getInputValue),
+      "",
+      [{
+        ::llvm::SmallVector<::llvm::APInt, 4> adjustedInputs;
+        auto inverted = $_op.getInverted();
+        adjustedInputs.reserve(inverted.size());
+        for (auto [index, isInverted] : llvm::enumerate(inverted)) {
+          ::llvm::APInt input = getInputValue(index);
+          if (isInverted)
+            input.flipAllBits();
+          adjustedInputs.push_back(std::move(input));
+        }
+        return ConcreteOp::evaluateBooleanLogicWithoutInversion(adjustedInputs);
+      }]
     >,
+    InterfaceMethod<[{
+        Evaluate the boolean logic operation for the provided raw operand
+        inputs.
+      }],
+      "::llvm::APInt", "evaluateBooleanLogic",
+      (ins "::llvm::ArrayRef<::llvm::APInt>":$inputs), "",
+      [{
+        auto getInputValue = [&](unsigned index) -> const ::llvm::APInt & {
+          return inputs[index];
+        };
+        return $_op.evaluateBooleanLogic(getInputValue);
+      }]
+    >,
+    //===------------------------------------------------------------------===//
+    // Analysis Helpers
+    //===------------------------------------------------------------------===//
     InterfaceMethod<[{
         Compute known bits for the result from the logical inputs.
         The implementations are responsible for applying any per-input inversion
@@ -122,17 +147,6 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
       }],
       "std::optional<uint64_t>", "getLogicAreaCost", (ins)
     >,
-    StaticInterfaceMethod<[{
-        Emit CNF clauses encoding `outVar <=> op(inputVars...)` for the
-        non-inverted form of the operation. The provided `inputVars` are SAT
-        literals corresponding to the logical operands in operand order, after
-        any per-input inversion has already been materialized by the caller.
-      }],
-      "void", "emitCNFWithoutInversion",
-      (ins "int":$outVar, "::llvm::ArrayRef<int>":$inputVars,
-           "::llvm::function_ref<void(::llvm::ArrayRef<int>)>":$addClause,
-           "::llvm::function_ref<int()>":$newVar)
-    >,
     InterfaceMethod<[{
         Emit CNF clauses encoding `outVar <=> op(inputVars...)`.
         The provided `inputVars` correspond to this operation's operands in
@@ -157,6 +171,9 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
                                                    newVar);
       }]
     >,
+    //===------------------------------------------------------------------===//
+    // Cloning
+    //===------------------------------------------------------------------===//
     InterfaceMethod<[{
         Clone or fold this operation with the provided inputs while preserving
         the existing inversion flags.
@@ -171,6 +188,54 @@ def BooleanLogicOpInterface : OpInterface<"BooleanLogicOpInterface"> {
                                                 newInputs,
                                                 concreteOp.getInverted());
       }]
+    >,
+    //===------------------------------------------------------------------===//
+    // Static Helpers
+    //===------------------------------------------------------------------===//
+    StaticInterfaceMethod<[{
+        Return whether this op supports the given number of logical inputs.
+      }],
+      "bool", "supportsNumInputs",
+      (ins "unsigned":$numInputs)
+    >,
+    StaticInterfaceMethod<[{
+        Evaluate the boolean logic operation for raw operand inputs after any
+        per-input inversion has already been applied by the caller.
+      }],
+      "::llvm::APInt", "evaluateBooleanLogicWithoutInversion",
+      (ins "::llvm::ArrayRef<::llvm::APInt>":$inputs)
+    >,
+    StaticInterfaceMethod<[{
+        Build this boolean logic operation with the given operands and
+        per-input inversion flags.
+      }],
+      "::mlir::Value", "createBooleanLogicOp",
+      (ins "::mlir::OpBuilder &":$builder, "::mlir::Location":$loc,
+           "::llvm::ArrayRef<::mlir::Value>":$operands,
+           "::llvm::ArrayRef<bool>":$inverted),
+      [{
+        assert(!operands.empty() && "expected at least one operand");
+        return builder.createOrFold<ConcreteOp>(loc, operands.front().getType(),
+                                                operands, inverted);
+      }]
+    >,
+    StaticInterfaceMethod<[{
+        Return whether the operation semantics are invariant under
+        permutation of logical input pairs. Reordering an input means moving
+        both the input value and its inversion flag together.
+      }],
+      "bool", "areInputsPermutationInvariant", (ins)
+    >,
+    StaticInterfaceMethod<[{
+        Emit CNF clauses encoding `outVar <=> op(inputVars...)` for the
+        non-inverted form of the operation. The provided `inputVars` are SAT
+        literals corresponding to the logical operands in operand order, after
+        any per-input inversion has already been materialized by the caller.
+      }],
+      "void", "emitCNFWithoutInversion",
+      (ins "int":$outVar, "::llvm::ArrayRef<int>":$inputVars,
+           "::llvm::function_ref<void(::llvm::ArrayRef<int>)>":$addClause,
+           "::llvm::function_ref<int()>":$newVar)
     >
   ];
 }

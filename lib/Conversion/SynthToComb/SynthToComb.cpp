@@ -70,7 +70,7 @@ struct SynthInverterOpConversion : OpConversionPattern<SynthOp> {
     operands.reserve(op.getNumOperands());
     hw::ConstantOp allOnes;
     for (auto [input, inverted] :
-         llvm::zip(adaptor.getInputs(), op.getInverted()))
+         llvm::zip(adaptor.getOperands(), op.getInverted()))
       operands.push_back(materializeInvertedInput(op.getLoc(), input, inverted,
                                                   rewriter, allOnes));
     // `createOp` now only needs to encode the core boolean operator.
@@ -99,6 +99,18 @@ struct SynthXorInverterOpConversion
   }
 };
 
+struct SynthDotOpConversion : SynthInverterOpConversion<synth::DotOp> {
+  using SynthInverterOpConversion<synth::DotOp>::SynthInverterOpConversion;
+  Value createOp(Location loc, ArrayRef<Value> inputs,
+                 ConversionPatternRewriter &rewriter) const override {
+    assert(inputs.size() == 3 && "expected exactly three inputs");
+    auto xy =
+        rewriter.createOrFold<comb::AndOp>(loc, inputs[0], inputs[1], true);
+    auto zOrXy = rewriter.createOrFold<comb::OrOp>(loc, inputs[2], xy, true);
+    return rewriter.createOrFold<comb::XorOp>(loc, inputs[0], zOrXy, true);
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -116,7 +128,8 @@ struct ConvertSynthToCombPass
 
 static void populateSynthToCombConversionPatterns(RewritePatternSet &patterns) {
   patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion,
-               SynthXorInverterOpConversion>(patterns.getContext());
+               SynthXorInverterOpConversion, SynthDotOpConversion>(
+      patterns.getContext());
 }
 
 void ConvertSynthToCombPass::runOnOperation() {

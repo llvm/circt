@@ -160,3 +160,17 @@ hw.module @extract_concat_test(in %data : i4, in %ctrl : i2, out result : i3) {
     
     hw.output %result_concat : i3
 }
+
+hw.module @dot_lib(in %x : i1, in %y : i1, in %z : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1], [1]]}} {
+    %0 = synth.dot %z, not %x, not %y : i1
+    hw.output %0 : i1
+}
+
+// CHECK-LABEL: @dot_test
+hw.module @dot_test(in %x : i1, in %y : i1, in %z : i1, out result : i1) {
+    // Permute inputs to test the truth table computation and input handling of the dot operation.
+    // CHECK-NEXT: %[[DOT:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @dot_lib(x: %z: i1, y: %y: i1, z: %x: i1) -> (result: i1) {test.arrival_times = [1]}
+    // CHECK-NEXT: hw.output %[[DOT]] : i1
+    %0 = synth.dot %x, not %y, not %z : i1
+    hw.output %0 : i1
+}

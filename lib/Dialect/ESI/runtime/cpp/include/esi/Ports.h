@@ -487,10 +487,11 @@ public:
   }
 
   /// Set maximum number of messages to store in the dataQueue. 0 means no
-  /// limit. This is only used in polling mode. While it may seem redundant to
-  /// have this and bufferSize, there may be (and are) backends which have a
-  /// very small amount of memory which are accelerator accessible and want to
-  /// move messages out as quickly as possible.
+  /// limit. This is only used in polling mode and is set to default of 32 upon
+  /// connect. While it may seem redundant to have this and bufferSize, there
+  /// may be (and are) backends which have a very small amount of memory which
+  /// are accelerator accessible and want to move messages out as quickly as
+  /// possible.
   void setMaxDataQueueMsgs(uint64_t maxMsgs) {
     maxDataQueueMsgs = maxMsgs;
     if (pollingState)
@@ -500,10 +501,8 @@ public:
 protected:
   /// Invoke the currently registered callback.
   ///
-  /// `disconnect()` swaps the callback to a rejecting callback and waits for
-  /// any in-flight callback invocations to complete before tearing down
-  /// per-connection state. Backends should use this helper instead of calling
-  /// `callback` directly.
+  /// Handles synchronization race conditions with disconnects. Backends should
+  /// use this helper instead of calling `callback` directly.
   bool invokeCallback(std::unique_ptr<SegmentedMessageData> &msg);
 
 private:
