@@ -415,7 +415,7 @@ protected:
 /// A ChannelPort which reads data from the accelerator. It has two modes:
 /// Callback and Polling which cannot be used at the same time. The mode is set
 /// at connect() time. To change the mode, disconnect() and then connect()
-/// again.
+/// again. When the port is disconnected, it will backpressure hardware.
 class ReadChannelPort : public ChannelPort {
 
 public:
@@ -433,6 +433,10 @@ public:
 
   ReadChannelPort(const Type *type)
       : ChannelPort(type), mode(Mode::Disconnected) {}
+
+  /// Disconnect the channel. Warning: this method may block until all callbacks
+  /// have returned. Do not call it anywhere which could be in a callback
+  /// control path otherwise deadlock will occur.
   virtual void disconnect() override;
   virtual bool isConnected() const override {
     return mode != Mode::Disconnected;
@@ -493,6 +497,7 @@ public:
       pollingState->setMaxQueued(maxMsgs);
   }
 
+protected:
   /// Invoke the currently registered callback.
   ///
   /// `disconnect()` swaps the callback to a rejecting callback and waits for
@@ -501,18 +506,15 @@ public:
   /// `callback` directly.
   bool invokeCallback(std::unique_ptr<SegmentedMessageData> &msg);
 
+private:
+  /// Backends should not call this directly. Use `invokeCallback()` instead,
+  /// which handles synchronization with disconnects.
+  ReadCallback callback;
+
 protected:
   /// Indicates the current mode of the channel.
   enum Mode { Disconnected, Callback, Polling };
   volatile Mode mode;
-
-  /// Backends call this callback when new data is available.
-  ///
-  /// In the disconnected state this callback rejects messages to apply
-  /// backpressure rather than silently consuming them.
-  ReadCallback callback = [](std::unique_ptr<SegmentedMessageData> &) {
-    return false;
-  };
 
   /// If a translated message has been assembled but not yet consumed, retain
   /// ownership here so retries present the same message object.

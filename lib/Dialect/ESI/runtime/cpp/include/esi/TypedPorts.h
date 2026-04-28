@@ -162,7 +162,9 @@ const MessageData &getMessageDataRef(const SegmentedMessageData &msg,
 /// Default deserializer for simple 1:1 typed reads.
 ///
 /// This path converts one raw message into one typed value and forwards it to
-/// the typed callback without maintaining any retry queue of its own.
+/// the typed callback. If the callback rejects the decoded object, preserve it
+/// until the raw message is retried so the same owned object is presented
+/// again.
 template <typename T>
 class PODTypeDeserializer {
 public:
@@ -176,12 +178,21 @@ public:
     if (!msg)
       throw std::runtime_error("PODTypeDeserializer::push: null message");
 
+    if (pendingOutput) {
+      if (!output(pendingOutput))
+        return false;
+      pendingOutput.reset();
+      msg.reset();
+      return true;
+    }
+
     MessageData scratch;
     const MessageData &flat = getMessageDataRef<T>(*msg, scratch);
-    auto typed = std::make_unique<T>(fromMessageData<T>(flat, wireInfo));
-    if (!output(typed))
+    pendingOutput = std::make_unique<T>(fromMessageData<T>(flat, wireInfo));
+    if (!output(pendingOutput))
       return false;
 
+    pendingOutput.reset();
     msg.reset();
     return true;
   }
@@ -192,6 +203,7 @@ private:
   OutputCallback output;
   WireInfo wireInfo;
   std::mutex mutex;
+  std::unique_ptr<T> pendingOutput;
 };
 
 template <typename T, typename = void>

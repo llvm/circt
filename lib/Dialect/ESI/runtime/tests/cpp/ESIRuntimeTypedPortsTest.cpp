@@ -394,11 +394,35 @@ public:
   }
 
   bool hasPending() const { return static_cast<bool>(pending); }
+  size_t numActiveCallbacks() const { return activeCallbacks; }
 
   size_t deliveryCount = 0;
 
 private:
   std::unique_ptr<SegmentedMessageData> pending;
+};
+
+class ThrowOnCopyReadCallback {
+public:
+  explicit ThrowOnCopyReadCallback(std::shared_ptr<bool> shouldThrow)
+      : shouldThrow(std::move(shouldThrow)) {}
+
+  ThrowOnCopyReadCallback(const ThrowOnCopyReadCallback &other)
+      : shouldThrow(other.shouldThrow) {
+    if (*shouldThrow)
+      throw std::runtime_error("ThrowOnCopyReadCallback copy failure");
+  }
+
+  ThrowOnCopyReadCallback(ThrowOnCopyReadCallback &&) = default;
+  ThrowOnCopyReadCallback &operator=(const ThrowOnCopyReadCallback &) = default;
+  ThrowOnCopyReadCallback &operator=(ThrowOnCopyReadCallback &&) = default;
+
+  bool operator()(std::unique_ptr<SegmentedMessageData> &) const {
+    return true;
+  }
+
+private:
+  std::shared_ptr<bool> shouldThrow;
 };
 
 static MessageData packUint32Words(std::initializer_list<uint32_t> values) {
@@ -470,6 +494,34 @@ TEST(TypedPortsTest, TypedReadPortPODRetriesAtRawMessageBoundary) {
   std::unique_ptr<uint32_t> second = typed.read();
   ASSERT_TRUE(second);
   EXPECT_EQ(*second, 22u);
+}
+
+TEST(TypedPortsTest, TypedReadPortPODRetriesSameOwnedObject) {
+  UIntType uint32("ui32", 32);
+  CallbackDrivenMockReadPort mock(&uint32);
+
+  TypedReadPort<uint32_t> typed(mock);
+  const uint32_t *firstObject = nullptr;
+  size_t callbackAttempts = 0;
+
+  typed.connect([&](std::unique_ptr<uint32_t> &value) {
+    ++callbackAttempts;
+    EXPECT_TRUE(value);
+    EXPECT_EQ(*value, 11u);
+    if (callbackAttempts == 1) {
+      firstObject = value.get();
+      return false;
+    }
+    EXPECT_EQ(value.get(), firstObject);
+    return true;
+  });
+
+  EXPECT_FALSE(
+      mock.deliver(std::make_unique<MessageData>(packUint32Words({11}))));
+  EXPECT_TRUE(mock.hasPending());
+  EXPECT_TRUE(mock.retryPending());
+  EXPECT_FALSE(mock.hasPending());
+  EXPECT_EQ(callbackAttempts, 2u);
 }
 
 TEST(TypedPortsTest, TypedReadPortCustomDeserializerPokesBlockedOutput) {
@@ -884,6 +936,14 @@ TEST(TypedPortsTest, ReadChannelPortPollingReadAsyncThrowsWhenDisconnected) {
   EXPECT_EQ(*out.as<uint32_t>(), 11u);
 }
 
+TEST(TypedPortsTest, ReadChannelPortPollingConnectRejectsReconnect) {
+  UIntType uint32("ui32", 32);
+  CallbackDrivenMockReadPort mock(&uint32);
+
+  mock.connect();
+  EXPECT_THROW(mock.connect(), std::runtime_error);
+}
+
 TEST(TypedPortsTest, ReadChannelPortDisconnectRevokesCallback) {
   UIntType uint32("ui32", 32);
   CallbackDrivenMockReadPort mock(&uint32);
@@ -927,6 +987,21 @@ TEST(TypedPortsTest, TypedReadPortDestructorDisconnectsRawPort) {
   std::unique_ptr<uint32_t> out = reconnected.read();
   ASSERT_TRUE(out);
   EXPECT_EQ(*out, 11u);
+}
+
+TEST(TypedPortsTest,
+     ReadChannelPortInvokeCallbackMaintainsCountOnCallbackCopyFailure) {
+  UIntType uint32("ui32", 32);
+  CallbackDrivenMockReadPort mock(&uint32);
+  auto shouldThrow = std::make_shared<bool>(false);
+
+  mock.connect(ThrowOnCopyReadCallback(shouldThrow));
+  *shouldThrow = true;
+
+  EXPECT_THROW(
+      mock.deliver(std::make_unique<MessageData>(packUint32Words({11}))),
+      std::runtime_error);
+  EXPECT_EQ(mock.numActiveCallbacks(), 0u);
 }
 
 TEST(TypedPortsTest, TypedWritePortSegmentedMessageData) {

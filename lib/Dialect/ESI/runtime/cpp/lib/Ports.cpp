@@ -23,10 +23,6 @@
 
 using namespace esi;
 
-static bool rejectDisconnectedMessage(std::unique_ptr<SegmentedMessageData> &) {
-  return false;
-}
-
 ChannelPort::ChannelPort(const Type *type) {
   if (auto chanType = dynamic_cast<const ChannelType *>(type))
     type = chanType->getInner();
@@ -74,8 +70,13 @@ void ReadChannelPort::resetTranslationState() {
 void ReadChannelPort::disconnect() {
   {
     std::unique_lock<std::mutex> lock(callbackMutex);
-    callback = rejectDisconnectedMessage;
+    // Revoke the callback under the same mutex used by invokeCallback(). New
+    // deliveries need to observe the disconnected state and the callback
+    // nullification at the same time.
+    callback = nullptr;
     mode = Mode::Disconnected;
+    // Wait for any callback which already snapped the old function to finish
+    // before clearing per-connection state below.
     callbackCv.wait(lock, [this]() { return activeCallbacks == 0; });
   }
 
@@ -88,10 +89,22 @@ bool ReadChannelPort::invokeCallback(
   ReadCallback activeCallback;
   {
     std::lock_guard<std::mutex> lock(callbackMutex);
-    ++activeCallbacks;
+    // Check the disconnected state and snapshot the callback while holding the
+    // same mutex as disconnect(). That prevents disconnect() from clearing the
+    // callback after we decide to invoke it but before we've retained our own
+    // safe local copy.
+    if (mode == Mode::Disconnected)
+      return false;
+    assert(callback && "Callback should be set in non-disconnected mode");
     activeCallback = callback;
+    // Count only callbacks which successfully captured a callable target.
+    // disconnect() waits on this count so it can safely tear down state which
+    // the callback path may still reference.
+    ++activeCallbacks;
   }
 
+  // Release the in-flight slot on every exit path, including exceptions from
+  // the callback itself.
   auto finish = [this]() {
     std::lock_guard<std::mutex> lock(callbackMutex);
     assert(activeCallbacks > 0 && "Callback count underflow");
@@ -151,6 +164,9 @@ void ReadChannelPort::connect(FlatReadCallback callback,
 }
 
 void ReadChannelPort::connect(const ConnectOptions &options) {
+  if (mode != Mode::Disconnected)
+    throw std::runtime_error("Channel already connected");
+
   pollingState.emplace(maxDataQueueMsgs);
 
   resetTranslationState();
