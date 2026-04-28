@@ -535,16 +535,20 @@ public:
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     prepareConnect();
     pollingState.emplace(maxDataQueueMsgs);
-    auto nextDeserializer =
-        makeDeserializer([this](std::unique_ptr<T> &value) -> bool {
-          return pollingState->enqueue(value);
-        });
-    inner->connect(
-        [nextDeserializer](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
-          return nextDeserializer->push(msg);
-        },
-        opts);
-    deserializer = nextDeserializer;
+    emplaceDeserializer([this](std::unique_ptr<T> &value) -> bool {
+      return pollingState->enqueue(value);
+    });
+    try {
+      inner->connect(
+          [this](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
+            assert(deserializer && "Deserializer should be connected");
+            return deserializer->push(msg);
+          },
+          opts);
+    } catch (...) {
+      resetConnectState();
+      throw;
+    }
     mode = Mode::Polling;
   }
 
@@ -569,13 +573,18 @@ public:
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     prepareConnect();
-    auto nextDeserializer = makeDeserializer(std::move(callback));
-    deserializer = nextDeserializer;
-    inner->connect(
-        [nextDeserializer](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
-          return nextDeserializer->push(msg);
-        },
-        opts);
+    emplaceDeserializer(std::move(callback));
+    try {
+      inner->connect(
+          [this](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
+            assert(deserializer && "Deserializer should be connected");
+            return deserializer->push(msg);
+          },
+          opts);
+    } catch (...) {
+      resetConnectState();
+      throw;
+    }
     // TODO: Hook callback-mode custom-deserializer poke() retries into the
     // existing periodic poll/background-worker path.
     mode = Mode::Callback;
@@ -606,9 +615,8 @@ public:
 
     std::future<std::unique_ptr<T>> future = pollingState->readAsync();
 
-    auto activeDeserializer = deserializer;
-    if (activeDeserializer)
-      activeDeserializer->poke();
+    if (deserializer)
+      deserializer->poke();
     return future;
   }
 
@@ -624,8 +632,7 @@ public:
   void disconnect() {
     inner->disconnect();
     mode = Mode::Disconnected;
-    deserializer.reset();
-    pollingState.reset();
+    resetConnectState();
   }
   bool isConnected() const { return inner && inner->isConnected(); }
 
@@ -636,6 +643,19 @@ private:
   using Deserializer = detail::DeserializerFor<T>;
   enum Mode { Disconnected, Callback, Polling };
   using PollingState = detail::PollingBuffer<std::unique_ptr<T>>;
+
+  void resetConnectState() {
+    deserializer.reset();
+    pollingState.reset();
+  }
+
+  void emplaceDeserializer(detail::DeserializerOutputCallback<T> callback) {
+    if constexpr (detail::has_type_deserializer_v<T>) {
+      deserializer.emplace(std::move(callback));
+    } else {
+      deserializer.emplace(std::move(callback), wireInfo_);
+    }
+  }
 
   void prepareConnect() {
     if (mode != Mode::Disconnected)
@@ -648,20 +668,11 @@ private:
     }
   }
 
-  std::shared_ptr<Deserializer>
-  makeDeserializer(detail::DeserializerOutputCallback<T> callback) {
-    if constexpr (detail::has_type_deserializer_v<T>) {
-      return std::make_shared<Deserializer>(std::move(callback));
-    } else {
-      return std::make_shared<Deserializer>(std::move(callback), wireInfo_);
-    }
-  }
-
   ReadChannelPort *inner;
   WireInfo wireInfo_;
   Mode mode = Mode::Disconnected;
   uint64_t maxDataQueueMsgs = ReadChannelPort::DefaultMaxDataQueueMsgs;
-  std::shared_ptr<Deserializer> deserializer;
+  std::optional<Deserializer> deserializer;
   std::optional<PollingState> pollingState;
 };
 
