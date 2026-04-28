@@ -348,7 +348,7 @@ public:
     if (!pending)
       throw std::runtime_error(
           "CallbackDrivenMockReadPort::retryPending with no message");
-    if (!callback(pending))
+    if (!invokeCallback(pending))
       return false;
     pending.reset();
     return true;

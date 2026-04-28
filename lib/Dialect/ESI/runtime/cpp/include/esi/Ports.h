@@ -21,7 +21,10 @@
 #include "esi/Utils.h"
 
 #include <cassert>
+#include <condition_variable>
 #include <future>
+#include <mutex>
+#include <queue>
 
 namespace esi {
 
@@ -337,17 +340,29 @@ protected:
 /// A ChannelPort which reads data from the accelerator. It has two modes:
 /// Callback and Polling which cannot be used at the same time. The mode is set
 /// at connect() time. To change the mode, disconnect() and then connect()
-/// again.
+/// again. When the port is disconnected, it will backpressure hardware.
 class ReadChannelPort : public ChannelPort {
 
 public:
+  /// Primary callback API for raw reads.
+  ///
+  /// The message is passed by owning reference so the callee can consume it,
+  /// move storage out of it, or leave it intact when returning `false` to
+  /// request a retry with the same message object.
   using ReadCallback =
       std::function<bool(std::unique_ptr<SegmentedMessageData> &)>;
+
+  /// Compatibility callback API for callers which want flattened message
+  /// bytes instead of the owning segmented message object.
   using FlatReadCallback = std::function<bool(MessageData)>;
 
   ReadChannelPort(const Type *type)
       : ChannelPort(type), mode(Mode::Disconnected) {}
-  virtual void disconnect() override { mode = Mode::Disconnected; }
+
+  /// Disconnect the channel. Warning: this method may block until all callbacks
+  /// have returned. Do not call it anywhere which could be in a callback
+  /// control path otherwise deadlock will occur.
+  virtual void disconnect() override;
   virtual bool isConnected() const override {
     return mode != Mode::Disconnected;
   }
@@ -366,6 +381,8 @@ public:
   virtual void connect(ReadCallback callback,
                        const ConnectOptions &options = {});
 
+  /// Connect a compatibility callback which receives flattened `MessageData`
+  /// objects. This adapts the primary segmented callback path.
   virtual void connect(FlatReadCallback callback,
                        const ConnectOptions &options = {});
 
@@ -380,7 +397,10 @@ public:
   /// Connect to the channel in polling mode.
   virtual void connect(const ConnectOptions &options = {}) override;
 
-  /// Asynchronous read.
+  /// Asynchronous polling read.
+  ///
+  /// Throws if the port is disconnected or currently connected in callback
+  /// mode.
   virtual std::future<MessageData> readAsync();
 
   /// Specify a buffer to read into. Blocking. Basic API, will likely change
@@ -400,12 +420,21 @@ public:
   void setMaxDataQueueMsgs(uint64_t maxMsgs) { maxDataQueueMsgs = maxMsgs; }
 
 protected:
+  /// Invoke the currently registered callback.
+  ///
+  /// Handles synchronization race conditions with disconnects. Backends should
+  /// use this helper instead of calling `callback` directly.
+  bool invokeCallback(std::unique_ptr<SegmentedMessageData> &msg);
+
+private:
+  /// Backends should not call this directly. Use `invokeCallback()` instead,
+  /// which handles synchronization with disconnects.
+  ReadCallback callback;
+
+protected:
   /// Indicates the current mode of the channel.
   enum Mode { Disconnected, Callback, Polling };
   volatile Mode mode;
-
-  /// Backends call this callback when new data is available.
-  ReadCallback callback;
 
   /// If a translated message has been assembled but not yet consumed, retain
   /// ownership here so retries present the same message object.
@@ -438,6 +467,14 @@ protected:
   uint64_t maxDataQueueMsgs;
   /// Promises to be fulfilled when data is available.
   std::queue<std::promise<MessageData>> promiseQueue;
+
+  //===--------------------------------------------------------------------===//
+  // Synchronizes callback revocation during disconnect.
+  //===--------------------------------------------------------------------===//
+
+  std::mutex callbackMutex;
+  std::condition_variable callbackCv;
+  size_t activeCallbacks = 0;
 };
 
 /// Instantiated when a backend does not know how to create a read channel.
