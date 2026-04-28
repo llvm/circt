@@ -23,6 +23,10 @@
 
 using namespace esi;
 
+static bool rejectDisconnectedMessage(std::unique_ptr<SegmentedMessageData> &) {
+  return false;
+}
+
 ChannelPort::ChannelPort(const Type *type) {
   if (auto chanType = dynamic_cast<const ChannelType *>(type))
     type = chanType->getInner();
@@ -67,6 +71,45 @@ void ReadChannelPort::resetTranslationState() {
   translatedMessage.reset();
 }
 
+void ReadChannelPort::disconnect() {
+  {
+    std::unique_lock<std::mutex> lock(callbackMutex);
+    callback = rejectDisconnectedMessage;
+    mode = Mode::Disconnected;
+    callbackCv.wait(lock, [this]() { return activeCallbacks == 0; });
+  }
+
+  pollingState.reset();
+  resetTranslationState();
+}
+
+bool ReadChannelPort::invokeCallback(
+    std::unique_ptr<SegmentedMessageData> &msg) {
+  ReadCallback activeCallback;
+  {
+    std::lock_guard<std::mutex> lock(callbackMutex);
+    ++activeCallbacks;
+    activeCallback = callback;
+  }
+
+  auto finish = [this]() {
+    std::lock_guard<std::mutex> lock(callbackMutex);
+    assert(activeCallbacks > 0 && "Callback count underflow");
+    --activeCallbacks;
+    if (activeCallbacks == 0)
+      callbackCv.notify_all();
+  };
+
+  try {
+    bool consumed = activeCallback(msg);
+    finish();
+    return consumed;
+  } catch (...) {
+    finish();
+    throw;
+  }
+}
+
 void ReadChannelPort::connect(ReadCallback callback,
                               const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
@@ -108,7 +151,7 @@ void ReadChannelPort::connect(FlatReadCallback callback,
 }
 
 void ReadChannelPort::connect(const ConnectOptions &options) {
-  pollingState.reset(DefaultMaxDataQueueMsgs);
+  pollingState.emplace(maxDataQueueMsgs);
 
   resetTranslationState();
 
@@ -131,7 +174,7 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
       data = msg->toMessageData();
     }
 
-    if (!pollingState.enqueue(data))
+    if (!pollingState->enqueue(data))
       return false;
 
     translatedMessage.reset();
@@ -151,7 +194,12 @@ std::future<MessageData> ReadChannelPort::readAsync() {
         "Cannot read from a disconnected channel. `connect()` the channel "
         "before calling `readAsync()`.");
 
-  return pollingState.readAsync();
+  if (!pollingState)
+    throw std::runtime_error(
+        "Cannot read from a disconnected channel. `connect()` the channel "
+        "before calling `readAsync()`.");
+
+  return pollingState->readAsync();
 }
 
 //===----------------------------------------------------------------------===//

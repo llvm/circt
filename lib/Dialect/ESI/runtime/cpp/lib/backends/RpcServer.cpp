@@ -119,7 +119,7 @@ public:
   void push(MessageData &data) {
     std::unique_ptr<SegmentedMessageData> msg =
         std::make_unique<MessageData>(data);
-    while (!callback(msg))
+    while (!isConnected() || !invokeCallback(msg))
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 };

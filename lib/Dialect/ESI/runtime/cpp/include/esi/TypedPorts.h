@@ -133,6 +133,10 @@ T fromMessageData(const MessageData &msg, const Type *portType) {
 
 namespace detail {
 
+/// Owning callback used by typed read deserializers.
+///
+/// Returning `false` means the callee did not accept the object and wants the
+/// exact same owned value retried later.
 template <typename T>
 using TypedReadOwnedCallback = std::function<bool(std::unique_ptr<T> &)>;
 
@@ -155,6 +159,10 @@ const MessageData &getMessageDataRef(const SegmentedMessageData &msg,
   return scratch;
 }
 
+/// Default deserializer for simple 1:1 typed reads.
+///
+/// This path converts one raw message into one typed value and forwards it to
+/// the typed callback without maintaining any retry queue of its own.
 template <typename T>
 class PODTypeDeserializer {
 public:
@@ -204,6 +212,12 @@ using DeserializerOutputCallback = typename DeserializerFor<T>::OutputCallback;
 
 } // namespace detail
 
+/// Helper base class for stateful deserializers which may emit zero, one, or
+/// many typed outputs for each raw input message.
+///
+/// Derived classes implement `decode()` and must consume the raw input message
+/// before returning. This base class handles retrying blocked typed outputs and
+/// preserving them in FIFO order until the client accepts them.
 template <typename T>
 class QueuedDecodeTypeDeserializer {
 public:
@@ -215,6 +229,11 @@ public:
 
   virtual ~QueuedDecodeTypeDeserializer() = default;
 
+  /// Push one raw message into the deserializer.
+  ///
+  /// Returns `false` only when previously decoded typed outputs are still
+  /// blocked on delivery. In that case `msg` is left untouched so the caller
+  /// can retry it later.
   bool push(std::unique_ptr<SegmentedMessageData> &msg) {
     std::scoped_lock<std::mutex> lock(mutex);
     if (!msg)
@@ -238,12 +257,18 @@ public:
     return true;
   }
 
+  /// Retry delivery of any typed outputs which were previously blocked by the
+  /// client callback.
   bool poke() {
     std::scoped_lock<std::mutex> lock(mutex);
     return pokeLocked();
   }
 
 protected:
+  /// Decode one raw message into zero or more typed outputs.
+  ///
+  /// Implementations must consume `msg` before returning, even when zero
+  /// outputs are produced.
   virtual DecodedOutputs decode(std::unique_ptr<SegmentedMessageData> &msg) = 0;
 
 private:
@@ -466,32 +491,57 @@ private:
 // TypedReadPort<T>
 //===----------------------------------------------------------------------===//
 
+/// Strongly typed wrapper around a raw read channel.
+///
+/// For scalar/POD-like `T`, this performs a 1:1 conversion from raw messages.
+/// If `T` defines a nested `TypeDeserializer`, one instance is created per
+/// connection and drives both callback and polling reads through that
+/// deserializer.
+///
+/// Polling reads return `std::unique_ptr<T>` so complex decoded values can be
+/// delivered without an extra copy.
 template <typename T>
 class TypedReadPort {
 public:
   explicit TypedReadPort(ReadChannelPort &port) : inner(&port) {}
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedReadPort(ReadChannelPort *port) : inner(port) {}
+  TypedReadPort(const TypedReadPort &) = delete;
+  TypedReadPort &operator=(const TypedReadPort &) = delete;
+  TypedReadPort(TypedReadPort &&) = delete;
+  TypedReadPort &operator=(TypedReadPort &&) = delete;
 
+  ~TypedReadPort() {
+    if (inner && mode != Mode::Disconnected)
+      disconnect();
+  }
+
+  /// Connect in polling mode.
+  ///
+  /// The port installs an internal typed output queue. `read()` and
+  /// `readAsync()` consume from that queue.
   void connect(const ChannelPort::ConnectOptions &opts = {}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     prepareConnect();
-    auto pollState = pollingState;
+    pollingState.emplace(maxDataQueueMsgs);
     auto nextDeserializer =
-        makeDeserializer([pollState](std::unique_ptr<T> &value) -> bool {
-          return pollState->enqueue(value);
+        makeDeserializer([this](std::unique_ptr<T> &value) -> bool {
+          return pollingState->enqueue(value);
         });
     inner->connect(
         [nextDeserializer](std::unique_ptr<SegmentedMessageData> &msg) -> bool {
           return nextDeserializer->push(msg);
         },
         opts);
-    pollingState = std::move(pollState);
     deserializer = nextDeserializer;
     mode = Mode::Polling;
   }
 
+  /// Connect a non-owning typed callback.
+  ///
+  /// The callback sees the decoded value by reference. Returning `false`
+  /// requests that the same decoded value be retried later.
   void connect(std::function<bool(const T &)> callback,
                const ChannelPort::ConnectOptions &opts = {}) {
     connect([cb = std::move(callback)](
@@ -499,6 +549,11 @@ public:
             opts);
   }
 
+  /// Connect an owning typed callback.
+  ///
+  /// This is the typed analogue of `ReadChannelPort::ReadCallback`: the
+  /// callback may take ownership of the decoded value or return `false` to
+  /// retry delivery later with the same object.
   void connect(detail::TypedReadOwnedCallback<T> callback,
                const ChannelPort::ConnectOptions &opts = {}) {
     if (!inner)
@@ -516,12 +571,16 @@ public:
     mode = Mode::Callback;
   }
 
+  /// Blocking typed read in polling mode.
   std::unique_ptr<T> read() {
     std::future<std::unique_ptr<T>> f = readAsync();
     f.wait();
     return f.get();
   }
 
+  /// Asynchronous typed read in polling mode.
+  ///
+  /// The returned future yields ownership of the next decoded value.
   std::future<std::unique_ptr<T>> readAsync() {
     if (mode == Mode::Callback)
       throw std::runtime_error(
@@ -531,12 +590,11 @@ public:
       throw std::runtime_error(
           "Cannot read from a disconnected channel. `connect()` first.");
 
-    auto pollState = pollingState;
-    if (!pollState)
+    if (!pollingState)
       throw std::runtime_error(
           "Cannot read from a disconnected channel. `connect()` first.");
 
-    std::future<std::unique_ptr<T>> future = pollState->readAsync();
+    std::future<std::unique_ptr<T>> future = pollingState->readAsync();
 
     auto activeDeserializer = deserializer;
     if (activeDeserializer)
@@ -544,19 +602,20 @@ public:
     return future;
   }
 
+  /// Set the maximum number of decoded typed values buffered in polling mode.
+  /// `0` means unbounded.
   void setMaxDataQueueMsgs(uint64_t maxMsgs) {
-    pollingState->setMaxQueued(maxMsgs);
+    maxDataQueueMsgs = maxMsgs;
+    if (pollingState)
+      pollingState->setMaxQueued(maxMsgs);
   }
 
+  /// Disconnect the typed port and abandon any pending polling reads.
   void disconnect() {
-    if (auto oldPollingState = pollingState) {
-      pollingState =
-          std::make_shared<PollingState>(oldPollingState->getMaxQueued());
-      oldPollingState->deactivate();
-    }
     inner->disconnect();
     mode = Mode::Disconnected;
     deserializer.reset();
+    pollingState.reset();
   }
   bool isConnected() const { return inner && inner->isConnected(); }
 
@@ -591,9 +650,9 @@ private:
   ReadChannelPort *inner;
   WireInfo wireInfo_;
   Mode mode = Mode::Disconnected;
+  uint64_t maxDataQueueMsgs = ReadChannelPort::DefaultMaxDataQueueMsgs;
   std::shared_ptr<Deserializer> deserializer;
-  std::shared_ptr<PollingState> pollingState =
-      std::make_shared<PollingState>(ReadChannelPort::DefaultMaxDataQueueMsgs);
+  std::optional<PollingState> pollingState;
 };
 
 /// Specialization for void — read discards data and returns nothing.
@@ -603,6 +662,15 @@ public:
   explicit TypedReadPort(ReadChannelPort &port) : inner(&port) {}
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedReadPort(ReadChannelPort *port) : inner(port) {}
+  TypedReadPort(const TypedReadPort &) = delete;
+  TypedReadPort &operator=(const TypedReadPort &) = delete;
+  TypedReadPort(TypedReadPort &&) = delete;
+  TypedReadPort &operator=(TypedReadPort &&) = delete;
+
+  ~TypedReadPort() {
+    if (inner && inner->isConnected())
+      disconnect();
+  }
 
   void connect(const ChannelPort::ConnectOptions &opts = {}) {
     if (!inner)

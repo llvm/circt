@@ -21,6 +21,7 @@
 #include "esi/Utils.h"
 
 #include <cassert>
+#include <condition_variable>
 #include <future>
 #include <mutex>
 #include <queue>
@@ -32,33 +33,33 @@ using PortMap = std::map<std::string, ChannelPort &>;
 
 namespace detail {
 
+/// Shared queue/promise helper for polling-style read APIs.
+///
+/// Producers either fulfill the oldest waiting reader immediately or enqueue
+/// the value for a later `readAsync()`. Consumers either receive buffered data
+/// immediately or install a promise which is fulfilled by the next enqueue.
 template <typename BufferedT>
 class PollingBuffer {
 public:
   explicit PollingBuffer(uint64_t maxQueued) : maxQueued(maxQueued) {}
 
-  void reset(uint64_t maxMsgs) {
-    std::scoped_lock<std::mutex> lock(mutex);
-    clearLocked();
-    maxQueued = maxMsgs;
-    active = true;
-  }
-
+  /// Return the current bounded queue size. `0` means unbounded.
   uint64_t getMaxQueued() {
     std::scoped_lock<std::mutex> lock(mutex);
     return maxQueued;
   }
 
+  /// Update the bounded queue size. `0` means unbounded.
   void setMaxQueued(uint64_t maxMsgs) {
     std::scoped_lock<std::mutex> lock(mutex);
     maxQueued = maxMsgs;
   }
 
+  /// Try to deliver or enqueue a produced value.
+  ///
+  /// Returns `false` only when the bounded queue is full.
   bool enqueue(BufferedT &value) {
     std::scoped_lock<std::mutex> lock(mutex);
-    if (!active)
-      return true;
-
     assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
            "Both queues are in use.");
 
@@ -74,6 +75,11 @@ public:
     return true;
   }
 
+  /// Read the next value asynchronously.
+  ///
+  /// If a value is already buffered, the returned future is ready
+  /// immediately. Otherwise the future is backed by an internal promise which
+  /// is fulfilled by a later `enqueue()`.
   std::future<BufferedT> readAsync() {
     std::scoped_lock<std::mutex> lock(mutex);
     assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
@@ -91,25 +97,11 @@ public:
     return promiseQueue.back().get_future();
   }
 
-  void deactivate() {
-    std::scoped_lock<std::mutex> lock(mutex);
-    active = false;
-    clearLocked();
-  }
-
 private:
-  void clearLocked() {
-    while (!dataQueue.empty())
-      dataQueue.pop();
-    while (!promiseQueue.empty())
-      promiseQueue.pop();
-  }
-
   std::mutex mutex;
   std::queue<BufferedT> dataQueue;
   uint64_t maxQueued;
   std::queue<std::promise<BufferedT>> promiseQueue;
-  bool active = true;
 };
 
 } // namespace detail
@@ -427,17 +419,21 @@ protected:
 class ReadChannelPort : public ChannelPort {
 
 public:
+  /// Primary callback API for raw reads.
+  ///
+  /// The message is passed by owning reference so the callee can consume it,
+  /// move storage out of it, or leave it intact when returning `false` to
+  /// request a retry with the same message object.
   using ReadCallback =
       std::function<bool(std::unique_ptr<SegmentedMessageData> &)>;
+
+  /// Compatibility callback API for callers which want flattened message
+  /// bytes instead of the owning segmented message object.
   using FlatReadCallback = std::function<bool(MessageData)>;
 
   ReadChannelPort(const Type *type)
-      : ChannelPort(type), mode(Mode::Disconnected),
-        pollingState(DefaultMaxDataQueueMsgs) {}
-  virtual void disconnect() override {
-    mode = Mode::Disconnected;
-    pollingState.deactivate();
-  }
+      : ChannelPort(type), mode(Mode::Disconnected) {}
+  virtual void disconnect() override;
   virtual bool isConnected() const override {
     return mode != Mode::Disconnected;
   }
@@ -456,6 +452,8 @@ public:
   virtual void connect(ReadCallback callback,
                        const ConnectOptions &options = {});
 
+  /// Connect a compatibility callback which receives flattened `MessageData`
+  /// objects. This adapts the primary segmented callback path.
   virtual void connect(FlatReadCallback callback,
                        const ConnectOptions &options = {});
 
@@ -470,7 +468,10 @@ public:
   /// Connect to the channel in polling mode.
   virtual void connect(const ConnectOptions &options = {}) override;
 
-  /// Asynchronous read.
+  /// Asynchronous polling read.
+  ///
+  /// Throws if the port is disconnected or currently connected in callback
+  /// mode.
   virtual std::future<MessageData> readAsync();
 
   /// Specify a buffer to read into. Blocking. Basic API, will likely change
@@ -482,14 +483,23 @@ public:
   }
 
   /// Set maximum number of messages to store in the dataQueue. 0 means no
-  /// limit. This is only used in polling mode and is set to default of 32 upon
-  /// connect. While it may seem redundant to have this and bufferSize, there
-  /// may be (and are) backends which have a very small amount of memory which
-  /// are accelerator accessible and want to move messages out as quickly as
-  /// possible.
+  /// limit. This is only used in polling mode. While it may seem redundant to
+  /// have this and bufferSize, there may be (and are) backends which have a
+  /// very small amount of memory which are accelerator accessible and want to
+  /// move messages out as quickly as possible.
   void setMaxDataQueueMsgs(uint64_t maxMsgs) {
-    pollingState.setMaxQueued(maxMsgs);
+    maxDataQueueMsgs = maxMsgs;
+    if (pollingState)
+      pollingState->setMaxQueued(maxMsgs);
   }
+
+  /// Invoke the currently registered callback.
+  ///
+  /// `disconnect()` swaps the callback to a rejecting callback and waits for
+  /// any in-flight callback invocations to complete before tearing down
+  /// per-connection state. Backends should use this helper instead of calling
+  /// `callback` directly.
+  bool invokeCallback(std::unique_ptr<SegmentedMessageData> &msg);
 
 protected:
   /// Indicates the current mode of the channel.
@@ -497,7 +507,12 @@ protected:
   volatile Mode mode;
 
   /// Backends call this callback when new data is available.
-  ReadCallback callback;
+  ///
+  /// In the disconnected state this callback rejects messages to apply
+  /// backpressure rather than silently consuming them.
+  ReadCallback callback = [](std::unique_ptr<SegmentedMessageData> &) {
+    return false;
+  };
 
   /// If a translated message has been assembled but not yet consumed, retain
   /// ownership here so retries present the same message object.
@@ -521,7 +536,13 @@ protected:
   // Polling mode members.
   //===--------------------------------------------------------------------===//
 
-  detail::PollingBuffer<MessageData> pollingState;
+  uint64_t maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
+  std::optional<detail::PollingBuffer<MessageData>> pollingState;
+
+  /// Synchronizes callback revocation during disconnect.
+  std::mutex callbackMutex;
+  std::condition_variable callbackCv;
+  size_t activeCallbacks = 0;
 };
 
 /// Instantiated when a backend does not know how to create a read channel.

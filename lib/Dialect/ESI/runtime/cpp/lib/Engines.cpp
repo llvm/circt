@@ -215,7 +215,7 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
           (*details)["message_data"] = flat.toHex();
         });
 
-    if (!callback(pendingMessage)) {
+    if (!invokeCallback(pendingMessage)) {
       logger.trace(
           [&](std::string &subsystem, std::string &msg,
               std::unique_ptr<std::map<std::string, std::any>> &details) {

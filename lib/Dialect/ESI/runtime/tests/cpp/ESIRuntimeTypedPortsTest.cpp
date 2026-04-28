@@ -387,7 +387,7 @@ public:
     if (!pending)
       throw std::runtime_error(
           "CallbackDrivenMockReadPort::retryPending with no message");
-    if (!callback(pending))
+    if (!invokeCallback(pending))
       return false;
     pending.reset();
     return true;
@@ -882,6 +882,51 @@ TEST(TypedPortsTest, ReadChannelPortPollingReadAsyncThrowsWhenDisconnected) {
   MessageData out;
   mock.read(out);
   EXPECT_EQ(*out.as<uint32_t>(), 11u);
+}
+
+TEST(TypedPortsTest, ReadChannelPortDisconnectRevokesCallback) {
+  UIntType uint32("ui32", 32);
+  CallbackDrivenMockReadPort mock(&uint32);
+
+  mock.connect();
+  mock.disconnect();
+
+  EXPECT_FALSE(
+      mock.deliver(std::make_unique<MessageData>(packUint32Words({11}))));
+  EXPECT_TRUE(mock.hasPending());
+
+  mock.connect();
+  EXPECT_TRUE(mock.retryPending());
+  EXPECT_FALSE(mock.hasPending());
+
+  MessageData out;
+  mock.read(out);
+  EXPECT_EQ(*out.as<uint32_t>(), 11u);
+}
+
+TEST(TypedPortsTest, TypedReadPortDestructorDisconnectsRawPort) {
+  UIntType uint32("ui32", 32);
+  CallbackDrivenMockReadPort mock(&uint32);
+
+  {
+    TypedReadPort<uint32_t> typed(mock);
+    typed.connect();
+    EXPECT_TRUE(mock.isConnected());
+  }
+
+  EXPECT_FALSE(mock.isConnected());
+  EXPECT_FALSE(
+      mock.deliver(std::make_unique<MessageData>(packUint32Words({11}))));
+  EXPECT_TRUE(mock.hasPending());
+
+  TypedReadPort<uint32_t> reconnected(mock);
+  reconnected.connect();
+  EXPECT_TRUE(mock.retryPending());
+  EXPECT_FALSE(mock.hasPending());
+
+  std::unique_ptr<uint32_t> out = reconnected.read();
+  ASSERT_TRUE(out);
+  EXPECT_EQ(*out, 11u);
 }
 
 TEST(TypedPortsTest, TypedWritePortSegmentedMessageData) {
