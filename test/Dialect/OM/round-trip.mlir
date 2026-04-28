@@ -44,14 +44,16 @@ om.class @Empty() {
 }
 
 // CHECK-LABEL: om.class @ElaboratedWidget
-// CHECK-SAME: -> (widget: !om.class.type<@Widget>)
-om.class @ElaboratedWidget() -> (widget: !om.class.type<@Widget>) {
+// CHECK-SAME: -> (widget: !om.class.type<@Widget>, blue: i8)
+om.class @ElaboratedWidget() -> (widget: !om.class.type<@Widget>, blue: i8) {
   %0 = om.constant 5 : i8
   %1 = om.constant 6 : i32
   // CHECK: %[[widget:.+]] = om.elaborated_object @Widget(%{{.+}}, %{{.+}}) : (i8, i32) -> !om.class.type<@Widget>
   %2 = om.elaborated_object @Widget(%0, %1) : (i8, i32) -> !om.class.type<@Widget>
-  // CHECK: om.class.fields %[[widget]] : !om.class.type<@Widget>
-  om.class.fields %2 : !om.class.type<@Widget>
+  // CHECK: %[[blue:.+]] = om.object.field %[[widget]], [@blue_1] : (!om.class.type<@Widget>) -> i8
+  %3 = om.object.field %2, [@blue_1] : (!om.class.type<@Widget>) -> i8
+  // CHECK: om.class.fields %[[widget]], %[[blue]] : !om.class.type<@Widget>, i8
+  om.class.fields %2, %3 : !om.class.type<@Widget>, i8
 }
 
 // CHECK-LABEL: om.class @DiscardableAttrs

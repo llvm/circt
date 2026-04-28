@@ -604,7 +604,9 @@ LogicalResult circt::om::ElaboratedObjectOp::verifySymbolUses(
   auto fieldNames = classDef->getFieldNames();
   auto fieldValues = getFieldValues();
   if (fieldValues.size() != fieldNames.size())
-    return emitOpError("field value list doesn't match class field list");
+    return emitOpError("field value list doesn't match class field list, "
+                       "expected ")
+           << fieldNames.size() << " values but got " << fieldValues.size();
 
   for (auto [fieldName, fieldValue] : llvm::zip(fieldNames, fieldValues)) {
     Type expectedType =

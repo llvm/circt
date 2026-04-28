@@ -30,7 +30,7 @@ om.class @Foo() -> (bar: i1) {
 }
 
 om.class @Class() {
-  // expected-error @+1 {{'om.elaborated_object' op field value list doesn't match class field list}}
+  // expected-error @+1 {{'om.elaborated_object' op field value list doesn't match class field list, expected 1 values but got 0}}
   %0 = om.elaborated_object @Foo() : () -> !om.class.type<@Foo>
   om.class.fields
 }
