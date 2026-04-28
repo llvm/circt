@@ -523,12 +523,6 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
 
 namespace {
 
-LogicalResult emitFormatLoweringError(Location loc, StringRef context,
-                                      const Twine &reason) {
-  return mlir::emitError(loc)
-         << "cannot lower " << context << " to SystemVerilog: " << reason;
-}
-
 void appendLiteralToSVFormat(SmallString<128> &formatString,
                              StringRef literal) {
   for (char ch : literal) {
@@ -573,12 +567,12 @@ void appendFloatSpecifier(SmallString<128> &formatString, bool isLeftAligned,
   formatString.push_back(spec);
 }
 
-LogicalResult getFlattenedFormatFragments(Value input, StringRef context,
+LogicalResult getFlattenedFormatFragments(Value input,
                                           SmallVectorImpl<Value> &fragments) {
   if (auto concat = input.getDefiningOp<FormatStringConcatOp>()) {
     if (failed(concat.getFlattenedInputs(fragments)))
-      return emitFormatLoweringError(input.getLoc(), context,
-                                     "cyclic sim.fmt.concat is unsupported");
+      return mlir::emitError(input.getLoc(),
+                             "cyclic sim.fmt.concat is unsupported");
     return success();
   }
 
@@ -586,15 +580,14 @@ LogicalResult getFlattenedFormatFragments(Value input, StringRef context,
   return success();
 }
 
-LogicalResult appendFormatFragmentToSVFormat(Value fragment, StringRef context,
+LogicalResult appendFormatFragmentToSVFormat(Value fragment,
                                              SmallString<128> &formatString,
                                              SmallVectorImpl<Value> &args,
                                              OpBuilder &builder) {
   Operation *fragmentOp = fragment.getDefiningOp();
   if (!fragmentOp)
-    return emitFormatLoweringError(
-        fragment.getLoc(), context,
-        "block argument format strings are unsupported");
+    return mlir::emitError(fragment.getLoc(),
+                           "block argument format strings are unsupported");
 
   return TypeSwitch<Operation *, LogicalResult>(fragmentOp)
       .Case<FormatLiteralOp>([&](auto literal) -> LogicalResult {
@@ -614,9 +607,9 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment, StringRef context,
         if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 'd'))) {
-          return emitFormatLoweringError(
-              fmt.getLoc(), context,
-              "sim.fmt.dec only supports paddingChar 32 (' ') or 48 ('0')");
+          return mlir::emitError(fmt.getLoc())
+                 << "sim.fmt.dec only supports paddingChar 32 (' ') or 48 "
+                    "('0')";
         }
         // Match sim.fmt.dec signedness semantics explicitly in SV.
         if (fmt.getIsSigned()) {
@@ -637,9 +630,9 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment, StringRef context,
                 formatString, fmt.getIsLeftAligned(), fmt.getPaddingChar(),
                 fmt.getSpecifierWidth(),
                 fmt.getIsHexUppercase() ? 'X' : 'x'))) {
-          return emitFormatLoweringError(
-              fmt.getLoc(), context,
-              "sim.fmt.hex only supports paddingChar 32 (' ') or 48 ('0')");
+          return mlir::emitError(fmt.getLoc())
+                 << "sim.fmt.hex only supports paddingChar 32 (' ') or 48 "
+                    "('0')";
         }
         args.push_back(fmt.getValue());
         return success();
@@ -648,9 +641,9 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment, StringRef context,
         if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 'o'))) {
-          return emitFormatLoweringError(
-              fmt.getLoc(), context,
-              "sim.fmt.oct only supports paddingChar 32 (' ') or 48 ('0')");
+          return mlir::emitError(fmt.getLoc())
+                 << "sim.fmt.oct only supports paddingChar 32 (' ') or 48 "
+                    "('0')";
         }
         args.push_back(fmt.getValue());
         return success();
@@ -659,9 +652,9 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment, StringRef context,
         if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 'b'))) {
-          return emitFormatLoweringError(
-              fmt.getLoc(), context,
-              "sim.fmt.bin only supports paddingChar 32 (' ') or 48 ('0')");
+          return mlir::emitError(fmt.getLoc())
+                 << "sim.fmt.bin only supports paddingChar 32 (' ') or 48 "
+                    "('0')";
         }
         args.push_back(fmt.getValue());
         return success();
@@ -685,35 +678,37 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment, StringRef context,
         return success();
       })
       .Default([&](auto unsupportedOp) {
-        return emitFormatLoweringError(
-            unsupportedOp->getLoc(), context,
-            Twine("unsupported format fragment '") +
-                unsupportedOp->getName().getStringRef() + "'");
+        return mlir::emitError(unsupportedOp->getLoc())
+               << "unsupported format fragment '"
+               << unsupportedOp->getName().getStringRef() << "'";
       });
 }
 
-LogicalResult lowerFormatStringToSVFormat(Value input, StringRef context,
+LogicalResult lowerFormatStringToSVFormat(Value input,
                                           SmallString<128> &formatString,
                                           SmallVectorImpl<Value> &args,
                                           OpBuilder &builder) {
   SmallVector<Value, 8> fragments;
-  if (failed(getFlattenedFormatFragments(input, context, fragments)))
+  if (failed(getFlattenedFormatFragments(input, fragments)))
     return failure();
   for (auto fragment : fragments)
-    if (failed(appendFormatFragmentToSVFormat(fragment, context, formatString,
-                                              args, builder)))
+    if (failed(appendFormatFragmentToSVFormat(fragment, formatString, args,
+                                              builder)))
       return failure();
   return success();
 }
 
-FailureOr<Value> lowerGetFileToSVAtUse(GetFileOp getFileOp,
-                                       OpBuilder &builder) {
+FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
+                                                      OpBuilder &builder) {
   SmallString<128> formatString;
   SmallVector<Value> args;
-  if (failed(lowerFormatStringToSVFormat(getFileOp.getFileName(),
-                                         "file name for 'sim.get_file'",
-                                         formatString, args, builder)))
+  if (failed(lowerFormatStringToSVFormat(getFileOp.getFileName(), formatString,
+                                         args, builder))) {
+    getFileOp.emitError("cannot lower 'sim.get_file' to SystemVerilog")
+            .attachNote(getFileOp.getFileName().getLoc())
+        << "while lowering file name";
     return failure();
+  }
 
   Value fileName =
       args.empty()
@@ -740,9 +735,11 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     OpBuilder builder(printOp);
     SmallString<128> formatString;
     SmallVector<Value> args;
-    if (failed(lowerFormatStringToSVFormat(printOp.getInput(),
-                                           "format string for 'sim.proc.print'",
-                                           formatString, args, builder))) {
+    if (failed(lowerFormatStringToSVFormat(printOp.getInput(), formatString,
+                                           args, builder))) {
+      printOp.emitError("cannot lower 'sim.proc.print' to SystemVerilog")
+              .attachNote(printOp.getInput().getLoc())
+          << "while lowering format string";
       return failure();
     }
     auto stream = printOp.getStream();
@@ -752,7 +749,8 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     } else {
       Value fd;
       if (auto getFileOp = stream.getDefiningOp<GetFileOp>()) {
-        auto fdOrFailure = lowerGetFileToSVAtUse(getFileOp, builder);
+        auto fdOrFailure =
+            createFileDescriptorGetterForGetFile(getFileOp, builder);
         if (failed(fdOrFailure))
           return failure();
         fd = *fdOrFailure;
