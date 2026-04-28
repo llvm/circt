@@ -78,6 +78,21 @@ static bool shouldCreateClassImpl(igraph::InstanceGraphNode *node) {
           return true;
   }
 
+  // If the module contains _any_ property ops, we need to create a class for
+  // it.  These may be dead or unused.  LowerToHW assumes that all property
+  // operations are gone after this pass.
+  if (auto fmodule = dyn_cast<FModuleOp>(moduleLike.getOperation())) {
+    auto isPropertyType = [](Type t) { return isa<PropertyType>(t); };
+    auto walkResult = fmodule.walk([&](Operation *op) {
+      if (llvm::any_of(op->getOperandTypes(), isPropertyType) ||
+          llvm::any_of(op->getResultTypes(), isPropertyType))
+        return WalkResult::interrupt();
+      return WalkResult::advance();
+    });
+    if (walkResult.wasInterrupted())
+      return true;
+  }
+
   return false;
 }
 
