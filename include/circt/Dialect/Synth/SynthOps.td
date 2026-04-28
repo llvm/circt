@@ -29,7 +29,8 @@ class InvertibleOperandsOp<string mnemonic, list<Trait> traits = []>
       // syntax across Synth ops such as `synth.aig.and_inv`.
       SameOperandsAndResultType, Pure,
       DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
-        "areInputsPermutationInvariant", "getLogicDepthCost",
+        "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
+        "supportsNumInputs", "createBooleanLogicOp", "getLogicDepthCost",
         "getLogicAreaCost"
       ]> ] # traits> {
   // TODO: Restrict to HWIntegerType.
@@ -137,6 +138,8 @@ def XorInverterOp : InvertibleOperandsOp<"xor_inv"> {
 def DotOp : SynthOp<"dot", [
     SameOperandsAndResultType, Pure,
     DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
+      "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
+      "supportsNumInputs", "createBooleanLogicOp",
       "getLogicAreaCost"
     ]>
   ]> {

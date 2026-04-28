@@ -36,14 +36,6 @@ using namespace matchers;
 
 namespace {
 
-// Keep inversion semantics identical across folding, analysis, and CNF
-// lowering so new invertible Synth ops can reuse the same helpers.
-inline APInt applyInversion(APInt value, bool inverted) {
-  if (inverted)
-    value.flipAllBits();
-  return value;
-}
-
 inline llvm::KnownBits applyInversion(llvm::KnownBits value, bool inverted) {
   if (inverted)
     std::swap(value.Zero, value.One);
@@ -249,16 +241,17 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   return success();
 }
 
-APInt AndInverterOp::evaluateBooleanLogic(
-    llvm::function_ref<const APInt &(unsigned)> getInputValue) {
-  assert(getNumOperands() > 0 && "Expected non-empty input list");
-  APInt result = APInt::getAllOnes(getInputValue(0).getBitWidth());
-  for (auto [idx, inverted] : llvm::enumerate(getInverted())) {
-    const APInt &input = getInputValue(idx);
-    // Model each operand inversion before intersecting with the running AND.
-    result &= applyInversion(input, inverted);
-  }
+APInt AndInverterOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(!inputs.empty() && "expected non-empty input list");
+  APInt result = APInt::getAllOnes(inputs.front().getBitWidth());
+  for (const APInt &input : inputs)
+    result &= input;
   return result;
+}
+
+bool AndInverterOp::supportsNumInputs(unsigned numInputs) {
+  return numInputs >= 1;
 }
 
 llvm::KnownBits AndInverterOp::computeKnownBits(
@@ -402,13 +395,17 @@ LogicalResult XorInverterOp::canonicalize(XorInverterOp op,
   return success();
 }
 
-APInt XorInverterOp::evaluateBooleanLogic(
-    llvm::function_ref<const APInt &(unsigned)> getInputValue) {
-  assert(getNumOperands() > 0 && "Expected non-empty input list");
-  APInt result = APInt::getZero(getInputValue(0).getBitWidth());
-  for (auto [idx, inverted] : llvm::enumerate(getInverted()))
-    result ^= applyInversion(getInputValue(idx), inverted);
+APInt XorInverterOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(!inputs.empty() && "expected non-empty input list");
+  APInt result = APInt::getZero(inputs.front().getBitWidth());
+  for (const APInt &input : inputs)
+    result ^= input;
   return result;
+}
+
+bool XorInverterOp::supportsNumInputs(unsigned numInputs) {
+  return numInputs >= 1;
 }
 
 llvm::KnownBits XorInverterOp::computeKnownBits(
@@ -477,13 +474,16 @@ LogicalResult DotOp::verify() {
   return success();
 }
 
-APInt DotOp::evaluateBooleanLogic(
-    llvm::function_ref<const APInt &(unsigned)> getInputValue) {
-  APInt x = applyInversion(getInputValue(0), isInverted(0));
-  APInt y = applyInversion(getInputValue(1), isInverted(1));
-  APInt z = applyInversion(getInputValue(2), isInverted(2));
-  return evaluateDotLogic(x, y, z);
+APInt DotOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(supportsNumInputs(inputs.size()) &&
+         "dot expects exactly three operands");
+  return evaluateDotLogic(inputs[0], inputs[1], inputs[2]);
 }
+
+bool DotOp::areInputsPermutationInvariant() { return false; }
+
+bool DotOp::supportsNumInputs(unsigned numInputs) { return numInputs == 3; }
 
 llvm::KnownBits DotOp::computeKnownBits(
     llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
