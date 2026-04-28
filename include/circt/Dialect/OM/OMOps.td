@@ -193,7 +193,7 @@ def ObjectOp : OMOp<"object", [
   );
 
   let results = (outs
-    Res<ClassType, "", [MemAlloc]>:$result
+    ClassType:$result
   );
 
   let builders = [
