@@ -96,6 +96,29 @@ hw.module @area_flow_test(in %a : i1, in %b : i1, in %c: i1, out result : i1) {
     hw.output %1 : i1
 }
 
+// One output arrives later and gives the other output enough slack to switch
+// to a cheaper implementation during recovery.
+// CHECK-LABEL: @shared_slack_allows_area_recovery
+hw.module @shared_slack_allows_area_recovery(in %a : i1, in %b : i1,
+                                             in %c : i1, in %d : i1,
+                                             in %e : i1,
+                                             out slow : i1, out cheap : i1) {
+    // The first output is deep enough to arrive at 3, so recovery should switch the second output to the cheaper 2-stage implementation.
+    // Without recovery @and_inv_3 would be used for the second output.
+    // TIMING:    {test.arrival_times = [3]}
+    // TIMING-NEXT: %[[TCHEAP0:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv(a: %a: i1, b: %b: i1) -> (result: i1) {test.arrival_times = [1]}
+    // TIMING-NEXT: %[[TCHEAP1:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_n(a: %[[TCHEAP0]]: i1, b: %c: i1) -> (result: i1) {test.arrival_times = [2]}
+    // TIMING-NEXT: hw.output %{{.+}}, %[[TCHEAP1]] : i1, i1
+    %slow0 = synth.aig.and_inv %a, %b : i1
+    %slow1 = synth.aig.and_inv %c, not %slow0 : i1
+    %slow2 = synth.aig.and_inv %d, not %slow1 : i1
+    %slow3 = synth.aig.and_inv %e, not %slow2 : i1
+
+    %cheap0 = synth.aig.and_inv %a, %b : i1
+    %cheap1 = synth.aig.and_inv %c, not %cheap0 : i1
+    hw.output %slow3, %cheap1 : i1, i1
+}
+
 // Test primary inputs handling
 // CHECK-LABEL: @primary_inputs_test
 hw.module @primary_inputs_test(in %a : i1, in %b : i1, out result : i1) {

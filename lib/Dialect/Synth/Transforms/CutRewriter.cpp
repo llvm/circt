@@ -26,6 +26,7 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/LLVM.h"
 #include "circt/Support/TruthTable.h"
 #include "circt/Support/UnusedOpPruner.h"
@@ -51,6 +52,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/LogicalResult.h"
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -236,6 +238,28 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
       return result;
   }
 
+  auto isInternalLogicUser = [&](Operation *user) {
+    if (user->getNumResults() != 1)
+      return false;
+    Value result = user->getResult(0);
+    if (!hasIndex(result))
+      return false;
+    return getGate(getIndex(result)).isLogicGate();
+  };
+
+  // Note: Iteration over DenseMap is safe here since the order doesn't affect
+  // the results.
+  for (auto &[value, index] : valueToIndex) {
+    if (index == kConstant0 || index == kConstant1)
+      continue;
+
+    // Record observations that remain visible after cut covering.
+    for (OpOperand &use : value.getUses()) {
+      if (!isInternalLogicUser(use.getOwner()))
+        recordExternalUse(index);
+    }
+  }
+
   return success();
 }
 
@@ -255,10 +279,19 @@ void LogicNetwork::clear() {
 // Helper functions
 //===----------------------------------------------------------------------===//
 
-// Return true if the gate at the given index is always a cut input.
-static bool isAlwaysCutInput(const LogicNetwork &network, uint32_t index) {
+// Return true if the gate at the given index must remain a cut leaf.
+static bool isCutLeaf(const LogicNetwork &network, uint32_t index) {
   const auto &gate = network.getGate(index);
-  return gate.isAlwaysCutInput();
+  return gate.isCutLeaf();
+}
+
+// Return this node's cut set, unless it is a leaf or we never built one.
+static CutSet *getNonLeafCutSet(llvm::DenseMap<uint32_t, CutSet *> &cutSets,
+                                const LogicNetwork &network, uint32_t index) {
+  if (isCutLeaf(network, index))
+    return nullptr;
+  auto it = cutSets.find(index);
+  return it == cutSets.end() ? nullptr : it->second;
 }
 
 // Return true if the new area/delay is better than the old area/delay in the
@@ -271,6 +304,34 @@ static bool compareDelayAndArea(OptimizationStrategy strategy, double newArea,
   if (strategy == OptimizationStrategyTiming)
     return newDelay < oldDelay || (newDelay == oldDelay && newArea < oldArea);
   llvm_unreachable("Unknown mapping strategy");
+}
+
+static constexpr double kAreaComparisonEpsilon = 1e-9;
+
+static bool areEquivalent(double lhs, double rhs) {
+  return std::abs(lhs - rhs) < kAreaComparisonEpsilon;
+}
+
+static SmallVector<DelayType, 1>
+computeOutputArrivalTimes(unsigned numOutputs, unsigned numInputs,
+                          ArrayRef<DelayType> delays,
+                          ArrayRef<DelayType> inputArrivalTimes,
+                          ArrayRef<unsigned> inputPermutation = {}) {
+  assert(inputPermutation.empty() || inputPermutation.size() == numInputs);
+  SmallVector<DelayType, 1> outputArrivalTimes;
+  outputArrivalTimes.reserve(numOutputs);
+  for (unsigned outputIndex = 0; outputIndex < numOutputs; ++outputIndex) {
+    DelayType outputArrivalTime = 0;
+    for (unsigned inputIndex = 0; inputIndex < numInputs; ++inputIndex) {
+      unsigned cutOriginalInput =
+          inputPermutation.empty() ? inputIndex : inputPermutation[inputIndex];
+      outputArrivalTime = std::max(
+          outputArrivalTime, delays[outputIndex * numInputs + inputIndex] +
+                                 inputArrivalTimes[cutOriginalInput]);
+    }
+    outputArrivalTimes.push_back(outputArrivalTime);
+  }
+  return outputArrivalTimes;
 }
 
 LogicalResult circt::synth::topologicallySortLogicNetwork(Operation *topOp) {
@@ -393,7 +454,7 @@ Cut::getInputArrivalTimes(CutEnumerator &enumerator,
 
   // Compute arrival times for each input.
   for (auto inputIndex : inputs) {
-    if (isAlwaysCutInput(network, inputIndex)) {
+    if (isCutLeaf(network, inputIndex)) {
       // If the input is a primary input, it has no delay.
       results.push_back(0);
       continue;
@@ -663,6 +724,13 @@ ArrayRef<DelayType> MatchedPattern::getArrivalTimes() const {
   return arrivalTimes;
 }
 
+DelayType MatchedPattern::getWorstOutputArrivalTime() const {
+  assert(pattern && "Pattern must be set to get arrival time");
+  return arrivalTimes.empty()
+             ? 0
+             : *std::max_element(arrivalTimes.begin(), arrivalTimes.end());
+}
+
 DelayType MatchedPattern::getArrivalTime(unsigned index) const {
   assert(pattern && "Pattern must be set to get arrival time");
   return arrivalTimes[index];
@@ -675,7 +743,22 @@ const CutRewritePattern *MatchedPattern::getPattern() const {
 
 double MatchedPattern::getArea() const {
   assert(pattern && "Pattern must be set to get area");
-  return area;
+  return matchResult.area;
+}
+
+ArrayRef<DelayType> MatchedPattern::getDelays() const {
+  assert(pattern && "Pattern must be set to get delays");
+  return matchResult.getDelays();
+}
+
+DelayType MatchedPattern::getDelayForCutInput(unsigned cutInputIndex) const {
+  assert(pattern && "Pattern must be set to get delays");
+  for (auto [patternInputIndex, mappedCutInput] :
+       llvm::enumerate(patternInputToCutInput)) {
+    if (mappedCutInput == cutInputIndex)
+      return getDelays()[patternInputIndex];
+  }
+  llvm_unreachable("cut input not found in matched permutation");
 }
 
 //===----------------------------------------------------------------------===//
@@ -797,7 +880,8 @@ void CutSet::finalize(
       std::stable_partition(cuts.begin(), cuts.end(),
                             [](const Cut *cut) { return cut->isTrivialCut(); });
 
-  auto isBetterCut = [&options](const Cut *a, const Cut *b) {
+  auto isBetterCut = [seedStrategy = options.strategy](const Cut *a,
+                                                       const Cut *b) {
     assert(!a->isTrivialCut() && !b->isTrivialCut() &&
            "Trivial cuts should have been excluded");
     const auto &aMatched = a->getMatchedPattern();
@@ -805,7 +889,7 @@ void CutSet::finalize(
 
     if (aMatched && bMatched)
       return compareDelayAndArea(
-          options.strategy, aMatched->getArea(), aMatched->getArrivalTimes(),
+          seedStrategy, aMatched->getArea(), aMatched->getArrivalTimes(),
           bMatched->getArea(), bMatched->getArrivalTimes());
 
     if (static_cast<bool>(aMatched) != static_cast<bool>(bMatched))
@@ -826,6 +910,8 @@ void CutSet::finalize(
     if (!currentMatch)
       continue;
     bestCut = cut;
+    bestArrivalTime = currentMatch->getWorstOutputArrivalTime();
+    areaFlow = currentMatch->getArea();
     break;
   }
 
@@ -1239,6 +1325,353 @@ void CutEnumerator::dump() const {
   llvm::outs() << "Cut enumeration completed successfully\n";
 }
 
+void CutEnumerator::computeRequiredTimes() {
+  DelayType globalWorstArrival = 0;
+  SmallVector<CutSet *, 16> outputCutSets;
+  for (auto &[index, cutSet] : cutSets) {
+    if (!logicNetwork.isPrimaryOutput(index))
+      continue;
+
+    auto *bestCut = cutSet->getBestMatchedCut();
+    if (!bestCut)
+      continue;
+
+    globalWorstArrival =
+        std::max(globalWorstArrival,
+                 bestCut->getMatchedPattern()->getWorstOutputArrivalTime());
+    outputCutSets.push_back(cutSet);
+  }
+
+  // There is no output.
+  if (outputCutSets.empty())
+    return;
+
+  // Seed outputs with the worst arrival from the current timing-feasible map.
+  for (auto *cutSet : outputCutSets)
+    cutSet->requiredTime = globalWorstArrival;
+
+  for (auto it = processingOrder.rbegin(); it != processingOrder.rend(); ++it) {
+    auto cutSetIt = cutSets.find(*it);
+    if (cutSetIt == cutSets.end())
+      continue;
+
+    auto *cutSet = cutSetIt->second;
+    auto *bestCut = cutSet->getBestMatchedCut();
+    if (!bestCut)
+      continue;
+
+    for (auto [i, inputNodeIndex] : llvm::enumerate(bestCut->inputs)) {
+      auto *inputCutSet =
+          getNonLeafCutSet(cutSets, logicNetwork, inputNodeIndex);
+      if (!inputCutSet)
+        continue;
+
+      DelayType inputRequired =
+          cutSet->requiredTime -
+          bestCut->getMatchedPattern()->getDelayForCutInput(i);
+      inputCutSet->requiredTime =
+          std::min(inputCutSet->requiredTime, inputRequired);
+    }
+  }
+}
+
+// Pick cuts again using area-flow, while staying within the timing bound set
+// by the current mapping.
+void CutEnumerator::reselectCutsForAreaFlow() {
+  SmallVector<unsigned, 0> selectedRefCounts(logicNetwork.size(), 0);
+  for (auto [index, gate] : llvm::enumerate(logicNetwork.getGates()))
+    selectedRefCounts[index] = gate.getExternalUseCount();
+
+  auto addSelectedCutRefs = [&](const Cut *cut) {
+    if (!cut)
+      return;
+    for (uint32_t inputIndex : cut->inputs)
+      ++selectedRefCounts[inputIndex];
+  };
+
+  auto dropSelectedCutRefs = [&](const Cut *cut) {
+    if (!cut)
+      return;
+    for (uint32_t inputIndex : cut->inputs) {
+      assert(selectedRefCounts[inputIndex] != 0 &&
+             "selected reference count underflow");
+      --selectedRefCounts[inputIndex];
+    }
+  };
+
+  // Start from the arrival times of the cuts we already selected.
+  for (auto index : processingOrder) {
+    auto it = cutSets.find(index);
+    if (it == cutSets.end())
+      continue;
+
+    auto *bestCut = it->second->getBestMatchedCut();
+    if (!bestCut)
+      continue;
+
+    it->second->bestArrivalTime =
+        bestCut->getMatchedPattern()->getWorstOutputArrivalTime();
+    addSelectedCutRefs(bestCut);
+  }
+
+  for (auto index : processingOrder) {
+    auto cutSetIt = cutSets.find(index);
+    if (cutSetIt == cutSets.end())
+      continue;
+
+    auto *cutSet = cutSetIt->second;
+    Cut *currentBestCut = cutSet->getBestMatchedCut();
+    Cut *bestAreaFlowCut = nullptr;
+    std::optional<MatchedPattern> bestAreaFlowMatch;
+    double bestFlow = std::numeric_limits<double>::max();
+    DelayType bestFlowArrival = std::numeric_limits<DelayType>::max();
+    double bestLocalArea = std::numeric_limits<double>::max();
+
+    for (Cut *cut : cutSet->getCuts()) {
+      // Only cuts we already know how to implement can be reconsidered here.
+      const auto &candidateMatch = cut->getMatchedPattern();
+      if (!candidateMatch)
+        continue;
+
+      SmallVector<DelayType, 4> inputArrivalTimes;
+      inputArrivalTimes.reserve(cut->getInputSize());
+      for (uint32_t inputIndex : cut->inputs) {
+        DelayType inputArrival = 0;
+        if (auto *inputCutSet =
+                getNonLeafCutSet(cutSets, logicNetwork, inputIndex))
+          inputArrival = inputCutSet->bestArrivalTime;
+        inputArrivalTimes.push_back(inputArrival);
+      }
+
+      // Recompute this cut's timing from the fanins we currently picked.
+      auto outputArrivalTimes = computeOutputArrivalTimes(
+          cut->getOutputSize(logicNetwork), cut->getInputSize(),
+          candidateMatch->getDelays(), inputArrivalTimes,
+          candidateMatch->getInputPermutation());
+      DelayType arrivalTime = *std::max_element(outputArrivalTimes.begin(),
+                                                outputArrivalTimes.end());
+      // Do not spend area if it would break the current timing bound.
+      if (arrivalTime > cutSet->requiredTime)
+        continue;
+
+      // Count this cut's own area plus its share of the fanins it depends on.
+      double flow = candidateMatch->getArea();
+      for (uint32_t inputIndex : cut->inputs) {
+        auto *inputCutSet = getNonLeafCutSet(cutSets, logicNetwork, inputIndex);
+        if (!inputCutSet)
+          continue;
+
+        unsigned effectiveRefCount = selectedRefCounts[inputIndex];
+        if (!currentBestCut ||
+            !llvm::is_contained(currentBestCut->inputs, inputIndex))
+          ++effectiveRefCount;
+        assert(effectiveRefCount != 0 && "cut inputs must be referenced");
+        flow += inputCutSet->areaFlow / effectiveRefCount;
+      }
+
+      // Break ties in a stable way: lower flow, then earlier timing, then
+      // lower local area.
+      if (flow < bestFlow ||
+          (areEquivalent(flow, bestFlow) && arrivalTime < bestFlowArrival) ||
+          (areEquivalent(flow, bestFlow) && arrivalTime == bestFlowArrival &&
+           candidateMatch->getArea() < bestLocalArea)) {
+        bestFlow = flow;
+        bestFlowArrival = arrivalTime;
+        bestLocalArea = candidateMatch->getArea();
+        bestAreaFlowCut = cut;
+        bestAreaFlowMatch = MatchedPattern(
+            candidateMatch->getPattern(), std::move(outputArrivalTimes),
+            candidateMatch->getMatchResult(),
+            candidateMatch->getInputPermutation());
+      }
+    }
+
+    if (!bestAreaFlowCut || !bestAreaFlowMatch)
+      continue;
+
+    // Later nodes should see the timing and flow of the cut we picked here.
+    dropSelectedCutRefs(currentBestCut);
+    addSelectedCutRefs(bestAreaFlowCut);
+    bestAreaFlowCut->setMatchedPattern(std::move(*bestAreaFlowMatch));
+    cutSet->setBestCut(bestAreaFlowCut);
+    cutSet->areaFlow = bestFlow;
+    cutSet->bestArrivalTime =
+        bestAreaFlowCut->getMatchedPattern()->getWorstOutputArrivalTime();
+  }
+}
+
+// Pick cuts again using exact-area deref/ref while staying within the timing
+// bound set by the current mapping.
+void CutEnumerator::reselectCutsForExactArea() {
+  SmallVector<unsigned, 0> selectedRefCounts(logicNetwork.size(), 0);
+  for (auto [index, gate] : llvm::enumerate(logicNetwork.getGates()))
+    selectedRefCounts[index] = gate.getExternalUseCount();
+
+  auto referenceNode = [&](auto &&self, uint32_t index) -> double {
+    auto *cutSet = getNonLeafCutSet(cutSets, logicNetwork, index);
+    if (!cutSet)
+      return 0.0;
+
+    if (selectedRefCounts[index]++ > 0)
+      return 0.0;
+
+    auto *bestCut = cutSet->getBestMatchedCut();
+    if (!bestCut)
+      return 0.0;
+
+    double area = bestCut->getMatchedPattern()->getArea();
+    for (uint32_t inputIndex : bestCut->inputs)
+      area += self(self, inputIndex);
+    return area;
+  };
+
+  auto dereferenceNode = [&](auto &&self, uint32_t index) -> double {
+    auto *cutSet = getNonLeafCutSet(cutSets, logicNetwork, index);
+    if (!cutSet)
+      return 0.0;
+
+    assert(selectedRefCounts[index] != 0 &&
+           "selected reference count underflow");
+    if (--selectedRefCounts[index] > 0)
+      return 0.0;
+
+    auto *bestCut = cutSet->getBestMatchedCut();
+    if (!bestCut)
+      return 0.0;
+
+    double area = bestCut->getMatchedPattern()->getArea();
+    for (uint32_t inputIndex : bestCut->inputs)
+      area += self(self, inputIndex);
+    return area;
+  };
+
+  auto referenceCut = [&](Cut *cut) -> double {
+    if (!cut)
+      return 0.0;
+    double area = cut->getMatchedPattern()->getArea();
+    for (uint32_t inputIndex : cut->inputs)
+      area += referenceNode(referenceNode, inputIndex);
+    return area;
+  };
+
+  auto dereferenceCut = [&](Cut *cut) -> double {
+    if (!cut)
+      return 0.0;
+    double area = cut->getMatchedPattern()->getArea();
+    for (uint32_t inputIndex : cut->inputs)
+      area += dereferenceNode(dereferenceNode, inputIndex);
+    return area;
+  };
+
+  // Seed counts and arrival times from the current mapping.
+  for (auto index : processingOrder) {
+    auto it = cutSets.find(index);
+    if (it == cutSets.end())
+      continue;
+
+    auto *bestCut = it->second->getBestMatchedCut();
+    if (!bestCut)
+      continue;
+
+    it->second->bestArrivalTime =
+        bestCut->getMatchedPattern()->getWorstOutputArrivalTime();
+    selectedRefCounts[index] = logicNetwork.getExternalUseCount(index);
+  }
+  for (auto index : processingOrder) {
+    if (selectedRefCounts[index] == 0)
+      continue;
+
+    auto cutSetIt = cutSets.find(index);
+    if (cutSetIt == cutSets.end())
+      continue;
+
+    auto *bestCut = cutSetIt->second->getBestMatchedCut();
+    if (!bestCut)
+      continue;
+
+    (void)referenceCut(bestCut);
+  }
+
+  for (auto index : processingOrder) {
+    auto cutSetIt = cutSets.find(index);
+    if (cutSetIt == cutSets.end())
+      continue;
+
+    auto *cutSet = cutSetIt->second;
+    Cut *currentBestCut = cutSet->getBestMatchedCut();
+    if (!currentBestCut)
+      continue;
+
+    bool isActive = selectedRefCounts[index] != 0;
+    if (isActive)
+      (void)dereferenceCut(currentBestCut);
+
+    Cut *bestExactCut = nullptr;
+    std::optional<MatchedPattern> bestExactMatch;
+    double bestExactArea = std::numeric_limits<double>::max();
+    DelayType bestExactArrival = std::numeric_limits<DelayType>::max();
+    double bestLocalArea = std::numeric_limits<double>::max();
+
+    for (Cut *cut : cutSet->getCuts()) {
+      const auto &candidateMatch = cut->getMatchedPattern();
+      if (!candidateMatch)
+        continue;
+
+      SmallVector<DelayType, 4> inputArrivalTimes;
+      inputArrivalTimes.reserve(cut->getInputSize());
+      for (uint32_t inputIndex : cut->inputs) {
+        DelayType inputArrival = 0;
+        if (auto *inputCutSet =
+                getNonLeafCutSet(cutSets, logicNetwork, inputIndex))
+          inputArrival = inputCutSet->bestArrivalTime;
+        inputArrivalTimes.push_back(inputArrival);
+      }
+
+      auto outputArrivalTimes = computeOutputArrivalTimes(
+          cut->getOutputSize(logicNetwork), cut->getInputSize(),
+          candidateMatch->getDelays(), inputArrivalTimes,
+          candidateMatch->getInputPermutation());
+      DelayType arrivalTime = *std::max_element(outputArrivalTimes.begin(),
+                                                outputArrivalTimes.end());
+      if (arrivalTime > cutSet->requiredTime)
+        continue;
+
+      double exactArea = referenceCut(cut);
+      (void)dereferenceCut(cut);
+
+      if (exactArea < bestExactArea ||
+          (areEquivalent(exactArea, bestExactArea) &&
+           arrivalTime < bestExactArrival) ||
+          (areEquivalent(exactArea, bestExactArea) &&
+           arrivalTime == bestExactArrival &&
+           candidateMatch->getArea() < bestLocalArea)) {
+        bestExactArea = exactArea;
+        bestExactArrival = arrivalTime;
+        bestLocalArea = candidateMatch->getArea();
+        bestExactCut = cut;
+        bestExactMatch = MatchedPattern(candidateMatch->getPattern(),
+                                        std::move(outputArrivalTimes),
+                                        candidateMatch->getMatchResult(),
+                                        candidateMatch->getInputPermutation());
+      }
+    }
+
+    if (!bestExactCut || !bestExactMatch) {
+      if (isActive)
+        (void)referenceCut(currentBestCut);
+      continue;
+    }
+
+    bestExactCut->setMatchedPattern(std::move(*bestExactMatch));
+    cutSet->setBestCut(bestExactCut);
+    cutSet->bestArrivalTime =
+        bestExactCut->getMatchedPattern()->getWorstOutputArrivalTime();
+
+    if (isActive)
+      (void)referenceCut(bestExactCut);
+  }
+}
+
 //===----------------------------------------------------------------------===//
 // CutRewriter
 //===----------------------------------------------------------------------===//
@@ -1280,6 +1713,14 @@ LogicalResult CutRewriter::run(Operation *topOp) {
     return success();
   }
 
+  // Run area-flow based reselection.
+  // TODO: This selection must be controlled by the strategy option, but
+  // currently it runs area recovery unconditionally since it improves area
+  // regardless of the strategy.
+  cutEnumerator.computeRequiredTimes();
+  cutEnumerator.reselectCutsForAreaFlow();
+  cutEnumerator.reselectCutsForExactArea();
+
   // Select best cuts and perform mapping
   if (failed(runBottomUpRewrite(topOp)))
     return failure();
@@ -1318,41 +1759,29 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
   const CutRewritePattern *bestPattern = nullptr;
   SmallVector<DelayType, 4> inputArrivalTimes;
   SmallVector<DelayType, 1> bestArrivalTimes;
-  double bestArea = 0.0;
+  SmallVector<unsigned, 6> bestInputPermutation;
+  std::optional<MatchResult> bestMatchResult;
   inputArrivalTimes.reserve(cut.getInputSize());
   bestArrivalTimes.reserve(cut.getOutputSize(network));
+  SmallVector<unsigned, 6> identityMapping(cut.getInputSize());
+  for (auto [idx, mapped] : llvm::enumerate(identityMapping))
+    mapped = idx;
 
   // Compute arrival times for each input.
   if (failed(cut.getInputArrivalTimes(cutEnumerator, inputArrivalTimes)))
     return {};
 
   auto computeArrivalTimeAndPickBest =
-      [&](const CutRewritePattern *pattern, const MatchResult &matchResult,
-          llvm::function_ref<unsigned(unsigned)> mapIndex) {
-        SmallVector<DelayType, 1> outputArrivalTimes;
-        // Compute the maximum delay for each output from inputs.
-        for (unsigned outputIndex = 0, outputSize = cut.getOutputSize(network);
-             outputIndex < outputSize; ++outputIndex) {
-          // Compute the arrival time for this output.
-          DelayType outputArrivalTime = 0;
-          auto delays = matchResult.getDelays();
-          for (unsigned inputIndex = 0, inputSize = cut.getInputSize();
-               inputIndex < inputSize; ++inputIndex) {
-            // Map pattern input i to cut input through NPN transformations
-            unsigned cutOriginalInput = mapIndex(inputIndex);
-            outputArrivalTime =
-                std::max(outputArrivalTime,
-                         delays[outputIndex * inputSize + inputIndex] +
-                             inputArrivalTimes[cutOriginalInput]);
-          }
-
-          outputArrivalTimes.push_back(outputArrivalTime);
-        }
+      [&](const CutRewritePattern *pattern, MatchResult matchResult,
+          ArrayRef<unsigned> patternInputToCutInput) {
+        auto outputArrivalTimes = computeOutputArrivalTimes(
+            cut.getOutputSize(network), cut.getInputSize(),
+            matchResult.getDelays(), inputArrivalTimes, patternInputToCutInput);
 
         // Update the arrival time
         if (!bestPattern ||
             compareDelayAndArea(options.strategy, matchResult.area,
-                                outputArrivalTimes, bestArea,
+                                outputArrivalTimes, bestMatchResult->area,
                                 bestArrivalTimes)) {
           LLVM_DEBUG({
             llvm::dbgs() << "== Matched Pattern ==============\n";
@@ -1374,9 +1803,11 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
             llvm::dbgs() << "== Matched Pattern End ==============\n";
           });
 
-          bestArrivalTimes = std::move(outputArrivalTimes);
-          bestArea = matchResult.area;
+          bestArrivalTimes = outputArrivalTimes;
+          bestInputPermutation.assign(patternInputToCutInput.begin(),
+                                      patternInputToCutInput.end());
           bestPattern = pattern;
+          bestMatchResult = std::move(matchResult);
         }
       };
 
@@ -1391,20 +1822,21 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
     // Get the input mapping from pattern's NPN class to cut's NPN class
     SmallVector<unsigned> inputMapping;
     cutNPN.getInputPermutation(patternNPN, inputMapping);
-    computeArrivalTimeAndPickBest(pattern, *matchResult,
-                                  [&](unsigned i) { return inputMapping[i]; });
+    computeArrivalTimeAndPickBest(pattern, std::move(*matchResult),
+                                  inputMapping);
   }
 
   for (const CutRewritePattern *pattern : patterns.nonNPNPatterns) {
     if (auto matchResult = pattern->match(cutEnumerator, cut))
-      computeArrivalTimeAndPickBest(pattern, *matchResult,
-                                    [&](unsigned i) { return i; });
+      computeArrivalTimeAndPickBest(pattern, std::move(*matchResult),
+                                    identityMapping);
   }
 
   if (!bestPattern)
     return {}; // No matching pattern found
 
-  return MatchedPattern(bestPattern, std::move(bestArrivalTimes), bestArea);
+  return MatchedPattern(bestPattern, std::move(bestArrivalTimes),
+                        std::move(*bestMatchResult), bestInputPermutation);
 }
 
 LogicalResult CutRewriter::runBottomUpRewrite(Operation *top) {
@@ -1432,7 +1864,7 @@ LogicalResult CutRewriter::runBottomUpRewrite(Operation *top) {
       continue;
     }
 
-    if (isAlwaysCutInput(network, index)) {
+    if (isCutLeaf(network, index)) {
       // If the value is a primary input, skip it
       LLVM_DEBUG(llvm::dbgs() << "Skipping inputs: " << value << "\n");
       continue;
