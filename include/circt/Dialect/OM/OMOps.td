@@ -206,7 +206,6 @@ def ObjectOp : OMOp<"object", [
   }];
 }
 
-
 def ElaboratedObjectOp : OMOp<"elaborated_object", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
 ]> {
