@@ -250,7 +250,7 @@ private:
   bool pollImpl() override {
     if (!pendingMessage)
       pendingMessage = std::make_unique<MessageData>(genMessage());
-    if (!callback(pendingMessage))
+    if (!invokeCallback(pendingMessage))
       return false;
     pendingMessage.reset();
     return true;

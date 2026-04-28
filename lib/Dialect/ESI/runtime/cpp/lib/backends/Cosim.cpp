@@ -123,7 +123,7 @@ public:
                 (*details)["message_data"] = flat.toHex();
               });
 
-          bool consumed = callback(data);
+          bool consumed = invokeCallback(data);
 
           if (consumed) {
             // Log the message consumption.
