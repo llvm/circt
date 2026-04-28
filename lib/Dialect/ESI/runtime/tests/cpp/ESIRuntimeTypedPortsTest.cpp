@@ -472,7 +472,7 @@ struct BufferedSequence {
   };
 };
 
-TEST(TypedPortsTest, TypedReadPortPODRetriesAtRawMessageBoundary) {
+TEST(TypedPortsTest, TypedReadPortPODBackpressuresAfterOneBufferedOutput) {
   UIntType uint32("ui32", 32);
   CallbackDrivenMockReadPort mock(&uint32);
 
@@ -482,8 +482,14 @@ TEST(TypedPortsTest, TypedReadPortPODRetriesAtRawMessageBoundary) {
 
   EXPECT_TRUE(
       mock.deliver(std::make_unique<MessageData>(packUint32Words({11}))));
-  EXPECT_FALSE(
+  // The second raw message is consumed into the POD deserializer's single-slot
+  // typed buffer even though the polling queue is full. Backpressure shows up
+  // on the next raw message boundary.
+  EXPECT_TRUE(
       mock.deliver(std::make_unique<MessageData>(packUint32Words({22}))));
+  EXPECT_FALSE(mock.hasPending());
+  EXPECT_FALSE(
+      mock.deliver(std::make_unique<MessageData>(packUint32Words({33}))));
   EXPECT_TRUE(mock.hasPending());
 
   std::unique_ptr<uint32_t> first = typed.read();
@@ -494,9 +500,12 @@ TEST(TypedPortsTest, TypedReadPortPODRetriesAtRawMessageBoundary) {
   std::unique_ptr<uint32_t> second = typed.read();
   ASSERT_TRUE(second);
   EXPECT_EQ(*second, 22u);
+  std::unique_ptr<uint32_t> third = typed.read();
+  ASSERT_TRUE(third);
+  EXPECT_EQ(*third, 33u);
 }
 
-TEST(TypedPortsTest, TypedReadPortPODRetriesSameOwnedObject) {
+TEST(TypedPortsTest, TypedReadPortPODRetriesSameOwnedObjectOnLaterPush) {
   UIntType uint32("ui32", 32);
   CallbackDrivenMockReadPort mock(&uint32);
 
@@ -507,21 +516,29 @@ TEST(TypedPortsTest, TypedReadPortPODRetriesSameOwnedObject) {
   typed.connect([&](std::unique_ptr<uint32_t> &value) {
     ++callbackAttempts;
     EXPECT_TRUE(value);
-    EXPECT_EQ(*value, 11u);
     if (callbackAttempts == 1) {
+      EXPECT_EQ(*value, 11u);
       firstObject = value.get();
       return false;
     }
-    EXPECT_EQ(value.get(), firstObject);
+    if (callbackAttempts == 2) {
+      EXPECT_EQ(*value, 11u);
+      EXPECT_EQ(value.get(), firstObject);
+      return true;
+    }
+    EXPECT_EQ(*value, 22u);
     return true;
   });
 
-  EXPECT_FALSE(
+  EXPECT_TRUE(
       mock.deliver(std::make_unique<MessageData>(packUint32Words({11}))));
-  EXPECT_TRUE(mock.hasPending());
-  EXPECT_TRUE(mock.retryPending());
   EXPECT_FALSE(mock.hasPending());
-  EXPECT_EQ(callbackAttempts, 2u);
+  // A later raw push first retries the buffered typed value, then handles the
+  // new message once that buffered value is accepted.
+  EXPECT_TRUE(
+      mock.deliver(std::make_unique<MessageData>(packUint32Words({22}))));
+  EXPECT_FALSE(mock.hasPending());
+  EXPECT_EQ(callbackAttempts, 3u);
 }
 
 TEST(TypedPortsTest, TypedReadPortCustomDeserializerPokesBlockedOutput) {

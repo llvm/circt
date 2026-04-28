@@ -178,26 +178,28 @@ public:
     if (!msg)
       throw std::runtime_error("PODTypeDeserializer::push: null message");
 
-    if (pendingOutput) {
-      if (!output(pendingOutput))
-        return false;
-      pendingOutput.reset();
-      msg.reset();
-      return true;
-    }
+    // Flush the buffer, bail if still full.
+    poke();
+    if (pendingOutput)
+      return false;
 
+    // Translate the raw message into a typed object. This always consumes the
+    // raw message.
     MessageData scratch;
     const MessageData &flat = getMessageDataRef<T>(*msg, scratch);
     pendingOutput = std::make_unique<T>(fromMessageData<T>(flat, wireInfo));
-    if (!output(pendingOutput))
-      return false;
-
-    pendingOutput.reset();
     msg.reset();
+    poke();
     return true;
   }
 
-  bool poke() { return true; }
+  bool poke() {
+    if (pendingOutput && output(pendingOutput)) {
+      pendingOutput.reset();
+      return true;
+    }
+    return false;
+  }
 
 private:
   OutputCallback output;
@@ -260,8 +262,13 @@ public:
       throw std::runtime_error(
           "QueuedDecodeTypeDeserializer::push: decode must consume the "
           "message");
+    for (std::unique_ptr<T> &value : decoded) {
+      if (!value)
+        throw std::runtime_error(
+            "QueuedDecodeTypeDeserializer::push: null decoded output");
+      pendingOutputs.push(std::move(value));
+    }
 
-    enqueueDecodedOutputsLocked(decoded);
     // Once decode() has consumed the raw message, keep any blocked typed
     // outputs in the pending queue and report success. pokeLocked() still
     // opportunistically drains what it can before returning.
@@ -295,15 +302,6 @@ private:
       pendingOutputs.pop();
     }
     return true;
-  }
-
-  void enqueueDecodedOutputsLocked(DecodedOutputs &decoded) {
-    for (std::unique_ptr<T> &value : decoded) {
-      if (!value)
-        throw std::runtime_error(
-            "QueuedDecodeTypeDeserializer::push: null decoded output");
-      pendingOutputs.push(std::move(value));
-    }
   }
 
   OutputCallback output;
