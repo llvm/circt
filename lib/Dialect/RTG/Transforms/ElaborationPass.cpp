@@ -984,9 +984,6 @@ public:
   /// before the insertion point.
   LogicalResult materialize(Operation *op,
                             DenseMap<Value, ElaboratorValue> &state) {
-    if (op->getNumRegions() > 0)
-      return op->emitOpError("ops with nested regions must be elaborated away");
-
     // We don't support opaque values. If there is an SSA value that has a
     // use-site it needs an equivalent ElaborationValue representation.
     // NOTE: We could support cases where there is initially a use-site but that
@@ -1055,6 +1052,8 @@ public:
   ArrayRef<Type> getBlockArgTypes() const { return blockArgTypes; }
 
   void map(ElaboratorValue eval, Value val) { materializedValues[eval] = val; }
+
+  OpBuilder &getBuilder() { return builder; }
 
   template <typename OpTy, typename... Args>
   OpTy create(Location location, Args &&...args) {
@@ -1401,7 +1400,31 @@ public:
   }
 
   FailureOr<DeletionKind> visitExternalOp(Operation *op) {
-    return visitOpGeneric(op);
+    if (op->getNumRegions() == 0)
+      return visitOpGeneric(op);
+
+    // Elaborate all regions of unknown external ops. Any op appearing inside
+    // an RTG test body with regions is expected to contain RTG constructs.
+    auto *newOp = op->cloneWithoutRegions();
+    materializer.getBuilder().insert(newOp);
+
+    for (unsigned i = 0; i < op->getNumRegions(); ++i) {
+      Block &newBlock = newOp->getRegion(i).emplaceBlock();
+      {
+        OpBuilder::InsertionGuard guard(materializer.getBuilder());
+        materializer.getBuilder().setInsertionPoint(&newBlock,
+                                                    newBlock.begin());
+        SmallVector<ElaboratorValue> unused;
+        // keepTerminator=true: the original terminator (rtg.yield, scf.yield,
+        // etc.) is cloned into the new block, preserving the op's expected
+        // terminator type.
+        if (failed(elaborate(op->getRegion(i), {},
+                             /*keepTerminator=*/true, unused)))
+          return failure();
+      }
+    }
+
+    return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(GetSequenceOp op) {

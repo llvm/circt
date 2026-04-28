@@ -1125,15 +1125,35 @@ rtg.test @registerIndexConversions(singleton = %none: index) {
 
 // -----
 
+// Test: external ops (from non-RTG dialects) that have regions have their
+// regions elaborated in-place by visitExternalOp.  RTG constructs inside the
+// region are resolved; the op itself and its (dialect-appropriate) terminator
+// survive unchanged.
+
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   %0 = index.constant 0
   rtg.yield %0 : index
 }
 
-rtg.test @nestedRegionsNotSupported(singleton = %none: index) {
-  // expected-error @below {{ops with nested regions must be elaborated away}}
-  scf.execute_region { scf.yield }
+func.func @consume_index(%arg0: index) -> () { return }
+
+// CHECK-LABEL: rtg.test @externalOpRegionElaborated
+rtg.test @externalOpRegionElaborated(singleton = %none: index) {
+  %c1 = index.constant 1
+  %c2 = index.constant 2
+  %set = rtg.set_create %c1, %c2 : index
+  // scf.execute_region is an external (non-RTG) op with a region.
+  scf.execute_region {
+    %sel = rtg.set_select_random %set : !rtg.set<index>
+    func.call @consume_index(%sel) : (index) -> ()
+    scf.yield
+  }
 }
+// The external op survives; RTG constructs inside its region are resolved.
+// CHECK: scf.execute_region
+// CHECK-NOT: rtg.set_select_random
+// CHECK: func.call @consume_index
+// CHECK-NOT: scf.execute_region
 
 // -----
 
