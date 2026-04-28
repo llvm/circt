@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstring>
 
 using namespace esi;
@@ -858,6 +859,29 @@ TEST(TypedPortsTest, ReadChannelPortPollingRetriesFlattenedSegmentedMessage) {
   MessageData secondOut;
   mock.read(secondOut);
   EXPECT_EQ(secondOut.getData(), secondExpected.getData());
+}
+
+TEST(TypedPortsTest, ReadChannelPortPollingReadAsyncThrowsWhenDisconnected) {
+  UIntType uint32("ui32", 32);
+  CallbackDrivenMockReadPort mock(&uint32);
+
+  EXPECT_THROW(mock.readAsync(), std::runtime_error);
+
+  mock.connect();
+  std::future<MessageData> pending = mock.readAsync();
+  mock.disconnect();
+
+  EXPECT_EQ(pending.wait_for(std::chrono::milliseconds(0)),
+            std::future_status::ready);
+  EXPECT_THROW(pending.get(), std::future_error);
+  EXPECT_THROW(mock.readAsync(), std::runtime_error);
+
+  mock.connect();
+  EXPECT_TRUE(
+      mock.deliver(std::make_unique<MessageData>(packUint32Words({11}))));
+  MessageData out;
+  mock.read(out);
+  EXPECT_EQ(*out.as<uint32_t>(), 11u);
 }
 
 TEST(TypedPortsTest, TypedWritePortSegmentedMessageData) {

@@ -37,6 +37,13 @@ class PollingBuffer {
 public:
   explicit PollingBuffer(uint64_t maxQueued) : maxQueued(maxQueued) {}
 
+  void reset(uint64_t maxMsgs) {
+    std::scoped_lock<std::mutex> lock(mutex);
+    clearLocked();
+    maxQueued = maxMsgs;
+    active = true;
+  }
+
   uint64_t getMaxQueued() {
     std::scoped_lock<std::mutex> lock(mutex);
     return maxQueued;
@@ -427,7 +434,10 @@ public:
   ReadChannelPort(const Type *type)
       : ChannelPort(type), mode(Mode::Disconnected),
         pollingState(DefaultMaxDataQueueMsgs) {}
-  virtual void disconnect() override { mode = Mode::Disconnected; }
+  virtual void disconnect() override {
+    mode = Mode::Disconnected;
+    pollingState.deactivate();
+  }
   virtual bool isConnected() const override {
     return mode != Mode::Disconnected;
   }

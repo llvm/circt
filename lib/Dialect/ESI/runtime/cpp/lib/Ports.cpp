@@ -108,7 +108,7 @@ void ReadChannelPort::connect(FlatReadCallback callback,
 }
 
 void ReadChannelPort::connect(const ConnectOptions &options) {
-  pollingState.setMaxQueued(DefaultMaxDataQueueMsgs);
+  pollingState.reset(DefaultMaxDataQueueMsgs);
 
   resetTranslationState();
 
@@ -146,6 +146,10 @@ std::future<MessageData> ReadChannelPort::readAsync() {
     throw std::runtime_error(
         "Cannot read from a callback channel. `connect()` without a callback "
         "specified to use polling mode.");
+  if (mode == Mode::Disconnected)
+    throw std::runtime_error(
+        "Cannot read from a disconnected channel. `connect()` the channel "
+        "before calling `readAsync()`.");
 
   return pollingState.readAsync();
 }

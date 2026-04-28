@@ -25,6 +25,7 @@
 #include "esi/Services.h"
 #include "esi/TypedPorts.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
