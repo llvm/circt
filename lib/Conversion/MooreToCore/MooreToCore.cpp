@@ -2502,6 +2502,28 @@ struct FormatLiteralOpConversion : public OpConversionPattern<FormatLiteralOp> {
   }
 };
 
+struct FormatStringOpConversion : public OpConversionPattern<FormatStringOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatStringOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    char padChar =
+        op.getPadding().value_or(IntPadding::Space) == IntPadding::Space ? 32
+                                                                         : 48;
+    IntegerAttr padCharAttr = rewriter.getI8IntegerAttr(padChar);
+    auto widthAttr = adaptor.getWidthAttr();
+
+    bool isLeftAligned =
+        op.getAlignment().value_or(IntAlign::Right) == IntAlign::Left;
+    BoolAttr isLeftAlignedAttr = rewriter.getBoolAttr(isLeftAligned);
+
+    rewriter.replaceOpWithNewOp<sim::FormatStringOp>(
+        op, adaptor.getString(), isLeftAlignedAttr, padCharAttr, widthAttr);
+    return success();
+  }
+};
+
 struct FormatConcatOpConversion : public OpConversionPattern<FormatConcatOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3472,6 +3494,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
     // Format strings.
     FormatLiteralOpConversion,
+    FormatStringOpConversion,
     FormatConcatOpConversion,
     FormatHierPathOpConversion,
     FormatIntOpConversion,
