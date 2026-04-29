@@ -67,6 +67,11 @@ TEST(SparseOpSCCsTest, SimpleChain) {
     EXPECT_EQ(orOp, cast<Operation *>(*(revTopoIt++)));
     EXPECT_EQ(andOp, cast<Operation *>(*(revTopoIt++)));
     EXPECT_EQ(revTopoIt, opScc.reverseTopological_end());
+
+    // getSCC maps each visited op to its own trivial SCC entry.
+    EXPECT_EQ(cast<Operation *>(opScc.getSCC(andOp)), andOp);
+    EXPECT_EQ(cast<Operation *>(opScc.getSCC(orOp)), orOp);
+    EXPECT_EQ(cast<Operation *>(opScc.getSCC(outputOp)), outputOp);
   }
 
   // Inverse reachability from outputOp.
@@ -141,6 +146,12 @@ TEST(SparseOpSCCsTest, BoundarySeed) {
     auto topoIt = opScc.topological_begin();
     EXPECT_EQ(cast<Operation *>(*(topoIt++)), outputOp);
     EXPECT_EQ(topoIt, opScc.topological_end());
+
+    // getSCC returns a valid entry for the visited op and NullOpSCC for
+    // unvisited.
+    EXPECT_EQ(cast<Operation *>(opScc.getSCC(outputOp)), outputOp);
+    EXPECT_TRUE(isa<NullOpSCC>(opScc.getSCC(andOp)));
+    EXPECT_FALSE(opScc.getSCC(andOp));
   }
 
   {
@@ -343,6 +354,11 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
     EXPECT_TRUE(llvm::is_contained(scc, regOp));
     EXPECT_TRUE(llvm::is_contained(scc, andOp));
     EXPECT_EQ(revIt, opScc.reverseTopological_end());
+
+    // getSCC: both cycle members map to the same CyclicOpSCC entry.
+    EXPECT_EQ(cast<CyclicOpSCC>(opScc.getSCC(regOp)), scc);
+    EXPECT_EQ(cast<CyclicOpSCC>(opScc.getSCC(andOp)), scc);
+    EXPECT_EQ(cast<Operation *>(opScc.getSCC(outputOp)), outputOp);
   }
 
   // With filter that excludes regOp: no cycle, both ops are trivial.
@@ -696,6 +712,81 @@ TEST(SparseOpSCCsTest, SelfLoopRegWithEdgeFilter) {
     EXPECT_EQ(cast<Operation *>(*(revIt++)), regOp);
     EXPECT_EQ(revIt, opScc.reverseTopological_end());
   }
+}
+
+// IR for casting test: a reg<->and cycle, a leaf output, and a disconnected
+// or-op that is never reached by a forward DFS from andOp.
+const char *castingIr = R"MLIR(
+  hw.module private @casting(in %clock: !seq.clock, in %reset: i1, in %a: i1, out x: i1) {
+    %reg     = seq.firreg %and clock %clock reset sync %reset, %and : i1
+    %and     = comb.and %reg, %a : i1
+    %unused  = comb.or  %a, %a : i1
+    hw.output %and : i1
+  }
+)MLIR";
+
+// Verify isa / dyn_cast behaviour across all three OpSCC variants.
+TEST(SparseOpSCCsTest, OpSCCCasting) {
+  MLIRContext context;
+  context.loadDialect<hw::HWDialect>();
+  context.loadDialect<comb::CombDialect>();
+  context.loadDialect<seq::SeqDialect>();
+
+  OwningOpRef<ModuleOp> module =
+      parseSourceString<ModuleOp>(castingIr, &context);
+  ASSERT_TRUE(module);
+
+  SymbolTable symbolTable(module.get());
+  auto hwModule = symbolTable.lookup<hw::HWModuleOp>("casting");
+  ASSERT_TRUE(hwModule);
+
+  auto it = hwModule.getBodyBlock()->begin();
+  Operation *regOp = &*it++;
+  Operation *andOp = &*it++;
+  Operation *unusedOp = &*it++;
+  Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
+
+  SparseOpSCC<OpSCCDirection::Forward> opScc;
+  opScc.visit(andOp);
+
+  // Obtain one entry of each kind via getSCC.
+  OpSCC trivialEntry = opScc.getSCC(outputOp); // trivial: no cycle
+  OpSCC cyclicEntry = opScc.getSCC(andOp);     // cyclic: reg <-> and
+  OpSCC nullEntry = opScc.getSCC(unusedOp);    // not reachable from andOp
+
+  // isa<> correctly identifies each variant.
+  EXPECT_TRUE(isa<Operation *>(trivialEntry));
+  EXPECT_FALSE(isa<CyclicOpSCC>(trivialEntry));
+  EXPECT_FALSE(isa<NullOpSCC>(trivialEntry));
+
+  EXPECT_FALSE(isa<Operation *>(cyclicEntry));
+  EXPECT_TRUE(isa<CyclicOpSCC>(cyclicEntry));
+  EXPECT_FALSE(isa<NullOpSCC>(cyclicEntry));
+
+  EXPECT_FALSE(isa<Operation *>(nullEntry));
+  EXPECT_FALSE(isa<CyclicOpSCC>(nullEntry));
+  EXPECT_TRUE(isa<NullOpSCC>(nullEntry));
+
+  // A NullOpSCC entry is bool-false; present entries are bool-true.
+  EXPECT_FALSE(nullEntry);
+  EXPECT_TRUE(trivialEntry);
+  EXPECT_TRUE(cyclicEntry);
+
+  // dyn_cast on known-present values.
+  EXPECT_EQ(dyn_cast<Operation *>(trivialEntry), outputOp);
+  EXPECT_EQ(dyn_cast<Operation *>(cyclicEntry), nullptr);
+  EXPECT_FALSE(dyn_cast<CyclicOpSCC>(trivialEntry));
+  if (auto scc = dyn_cast<CyclicOpSCC>(cyclicEntry)) {
+    EXPECT_EQ(scc.size(), 2u);
+    EXPECT_TRUE(llvm::is_contained(scc, regOp));
+    EXPECT_TRUE(llvm::is_contained(scc, andOp));
+  } else {
+    FAIL() << "expected CyclicOpSCC for cyclicEntry";
+  }
+
+  // dyn_cast_if_present additionally handles null entries gracefully.
+  EXPECT_EQ(dyn_cast_if_present<Operation *>(nullEntry), nullptr);
+  EXPECT_FALSE(dyn_cast_if_present<CyclicOpSCC>(nullEntry));
 }
 
 } // namespace

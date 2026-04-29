@@ -113,6 +113,16 @@ namespace circt {
 /// argument.
 using OpSCCFilter = std::function<bool(mlir::Operation *, mlir::OpOperand &)>;
 
+/// Sentinel type representing "no SCC" in an OpSCC PointerUnion.
+/// It is placed first in the union so that the all-zero (default-constructed)
+/// state identifies unambiguously as NullOpSCC, not as a null Operation*.
+struct NullOpSCC {
+  void *getAsVoidPointer() const { return nullptr; }
+  static NullOpSCC getFromVoidPointer(void *) { return NullOpSCC{}; }
+  static constexpr int NumLowBitsAvailable =
+      llvm::PointerLikeTypeTraits<mlir::Operation *>::NumLowBitsAvailable;
+};
+
 namespace detail {
 /// Backing storage for a cyclic SCC (implementation detail).
 using CyclicOpSCCStorage = llvm::SmallVector<mlir::Operation *, 4>;
@@ -127,14 +137,19 @@ class CyclicOpSCC {
 public:
   using iterator = detail::CyclicOpSCCStorage::const_iterator;
 
-  explicit CyclicOpSCC(const detail::CyclicOpSCCStorage *storage)
-      : storage(storage) {}
+  CyclicOpSCC() : storage(nullptr) {}
+  CyclicOpSCC(const detail::CyclicOpSCCStorage *storage) : storage(storage) {}
 
   iterator begin() const { return storage->begin(); }
   iterator end() const { return storage->end(); }
   size_t size() const { return storage->size(); }
   mlir::Operation *const *data() const { return storage->data(); }
   mlir::Operation *operator[](size_t i) const { return (*storage)[i]; }
+
+  operator bool() const { return storage != nullptr; }
+
+  bool operator==(CyclicOpSCC other) const { return storage == other.storage; }
+  bool operator!=(CyclicOpSCC other) const { return storage != other.storage; }
 
   // Interface for PointerLikeTypeTraits.
   void *getAsVoidPointer() const {
@@ -154,6 +169,16 @@ private:
 
 namespace llvm {
 template <>
+struct PointerLikeTypeTraits<circt::NullOpSCC> {
+  static void *getAsVoidPointer(circt::NullOpSCC) { return nullptr; }
+  static circt::NullOpSCC getFromVoidPointer(void *) {
+    return circt::NullOpSCC{};
+  }
+  static constexpr int NumLowBitsAvailable =
+      circt::NullOpSCC::NumLowBitsAvailable;
+};
+
+template <>
 struct PointerLikeTypeTraits<circt::CyclicOpSCC> {
   static void *getAsVoidPointer(circt::CyclicOpSCC scc) {
     return scc.getAsVoidPointer();
@@ -168,9 +193,11 @@ struct PointerLikeTypeTraits<circt::CyclicOpSCC> {
 
 namespace circt {
 
-/// One entry in the SCC output: either a trivial (non-cyclic) operation or a
-/// cyclic group.  Use llvm::isa / llvm::cast / llvm::dyn_cast to distinguish.
-using OpSCC = llvm::PointerUnion<mlir::Operation *, CyclicOpSCC>;
+/// One entry in the SCC output: a null sentinel, a trivial (non-cyclic)
+/// operation, or a cyclic group.  Use llvm::isa / llvm::cast / llvm::dyn_cast
+/// to distinguish.  The null state (isa<NullOpSCC>) is returned by getSCC()
+/// when the queried operation has not been visited.
+using OpSCC = llvm::PointerUnion<NullOpSCC, mlir::Operation *, CyclicOpSCC>;
 
 /// Traversal direction for SparseOpSCC.
 ///   - Forward: follow def-use edges forward (defining op -> users).
@@ -238,15 +265,14 @@ public:
   void reset() {
     sccStack.clear();
     dfsStack.clear();
-    indexAndLowLinkMap.clear();
+    opToSccIndex.clear();
     sccs.clear();
     cyclicSccs.clear();
-    nextIdx = 0;
   }
 
   /// Visit `op` if it passes the shouldTraverseFn and has not been visited yet.
   void visit(mlir::Operation *op) {
-    if (!indexAndLowLinkMap.contains(op))
+    if (!opToSccIndex.contains(op))
       tarjanImpl(op);
   }
 
@@ -258,11 +284,25 @@ public:
 
   /// Return true if `op` was reached by any previous visit() call.
   bool hasVisited(mlir::Operation *op) const {
-    return indexAndLowLinkMap.contains(op);
+    return opToSccIndex.contains(op);
+  }
+
+  /// Return the SCC that `op` belongs to, or an OpSCC holding NullOpSCC if it
+  /// has not been visited.  Check with isa<NullOpSCC> or the bool conversion
+  /// before dispatching with isa/cast.
+  OpSCC getSCC(mlir::Operation *op) const {
+    auto it = opToSccIndex.find(op);
+    if (it == opToSccIndex.end())
+      return OpSCC(NullOpSCC{});
+    detail::OpOrIndex entry = sccs[it->second];
+    if (llvm::isa<mlir::Operation *>(entry))
+      return OpSCC(llvm::cast<mlir::Operation *>(entry));
+    unsigned cyclicIdx = llvm::cast<detail::OpSccEmbeddedIndex>(entry);
+    return OpSCC(CyclicOpSCC(&cyclicSccs[cyclicIdx]));
   }
 
   /// Number of operations visited so far.
-  unsigned getNumVisited() const { return indexAndLowLinkMap.size(); }
+  unsigned getNumVisited() const { return opToSccIndex.size(); }
   /// Total number of SCC entries emitted (trivial ops + cyclic groups).
   unsigned getNumSCCs() const { return sccs.size(); }
   /// Number of cyclic SCC groups (excludes trivial ops).
@@ -382,62 +422,70 @@ private:
   }
 
   void tarjanImpl(mlir::Operation *startOp) {
-    indexAndLowLinkMap[startOp] = {nextIdx, nextIdx};
-    nextIdx++;
-    sccStack.insert(startOp);
-    dfsStack.push_back(FrameT(startOp));
+    // Per-call Tarjan state: {index, lowlink} for each op discovered in this
+    // DFS. Discarded when the call returns.
+    llvm::DenseMap<mlir::Operation *, std::pair<unsigned, unsigned>> tarjanData;
+    unsigned nextIdx = 0;
+
+    auto pushFrame = [&](mlir::Operation *op) {
+      tarjanData[op] = {nextIdx, nextIdx};
+      ++nextIdx;
+      sccStack.insert(op);
+      dfsStack.push_back(FrameT(op));
+    };
+
+    pushFrame(startOp);
 
     while (!dfsStack.empty()) {
       FrameT &frame = dfsStack.back();
       mlir::Operation *op = frame.op;
 
       if (auto *child = frame.nextChild(shouldTraverseFn)) {
-        // Visit successor node
-        auto it = indexAndLowLinkMap.find(child);
-        if (it == indexAndLowLinkMap.end()) {
-          // Unvisited — push a new frame and recurse.
-          indexAndLowLinkMap[child] = {nextIdx, nextIdx};
-          nextIdx++;
-          sccStack.insert(child);
-          dfsStack.push_back(FrameT(child));
-        } else if (sccStack.contains(child)) {
-          // Back edge — update lowlink.
-          auto &opLowLink = indexAndLowLinkMap.at(op).second;
-          auto childIndex = it->second.first;
-          opLowLink = std::min(opLowLink, childIndex);
+        auto it = tarjanData.find(child);
+        if (it != tarjanData.end()) {
+          // Already seen in this DFS.
+          if (sccStack.contains(child))
+            // Back edge — update lowlink.
+            tarjanData[op].second =
+                std::min(tarjanData[op].second, it->second.first);
+          // else: forward/cross edge within this DFS — ignore.
+        } else if (!opToSccIndex.contains(child)) {
+          // Not yet seen in any DFS — recurse.
+          pushFrame(child);
         }
-        // Forward/cross edge: ignore.
+        // else: completed in a previous visit() call — cross edge, ignore.
         continue;
       }
 
-      // Backtrack
-      auto [opIndex, opLowLink] = indexAndLowLinkMap.at(op);
-      // All children processed — pop this frame.
+      // All children processed — backtrack.
+      auto [opIndex, opLowLink] = tarjanData.at(op);
       dfsStack.pop_back();
 
-      // If op is the root of an SCC, pop and emit it.
+      // If op is the root of its SCC, pop and emit it.
       if (opLowLink == opIndex) {
         detail::CyclicOpSCCStorage sccOps;
         do {
           sccOps.push_back(sccStack.pop_back_val());
         } while (sccOps.back() != op);
 
+        unsigned sccIdx = sccs.size();
+        for (auto *sccOp : sccOps)
+          opToSccIndex[sccOp] = sccIdx;
+
         if (sccOps.size() == 1 && !hasSelfLoop(sccOps.front())) {
-          // Non-cyclic SCC
           sccs.push_back(detail::OpOrIndex(sccOps.front()));
         } else {
-          // Cyclic SCC
-          unsigned idx = cyclicSccs.size();
+          unsigned cyclicIdx = cyclicSccs.size();
           cyclicSccs.emplace_back(std::move(sccOps));
-          sccs.push_back(detail::OpOrIndex(idx));
+          sccs.push_back(detail::OpOrIndex(cyclicIdx));
         }
         continue;
       }
 
-      // Not a root. Back-propagate lowlink to the parent frame.
+      // Not an SCC root — back-propagate lowlink to the parent frame.
       if (!dfsStack.empty()) {
-        auto &backLowLink = indexAndLowLinkMap.at(dfsStack.back().op).second;
-        backLowLink = std::min(backLowLink, opLowLink);
+        auto &parentLowLink = tarjanData.at(dfsStack.back().op).second;
+        parentLowLink = std::min(parentLowLink, opLowLink);
       }
     }
   }
@@ -446,12 +494,9 @@ private:
 
   llvm::SmallSetVector<mlir::Operation *, NumInlineElts> sccStack;
   llvm::SmallVector<FrameT, NumInlineElts> dfsStack;
-  llvm::SmallDenseMap<mlir::Operation *, std::pair<unsigned, unsigned>,
-                      NumInlineElts>
-      indexAndLowLinkMap;
+  llvm::SmallDenseMap<mlir::Operation *, unsigned, NumInlineElts> opToSccIndex;
   llvm::SmallVector<detail::OpOrIndex, NumInlineElts> sccs;
   llvm::SmallVector<detail::CyclicOpSCCStorage, 0> cyclicSccs;
-  unsigned nextIdx = 0;
 };
 
 } // namespace circt
