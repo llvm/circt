@@ -253,11 +253,13 @@ void XMRRemoteOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 ParseResult XMRRemoteOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Parse the symbol reference (@Module::@symbol)
+  // Parse @Module::@symbol, index format
   mlir::SymbolRefAttr symRef;
   Type resultType;
+  int64_t index;
 
-  if (parser.parseAttribute(symRef) ||
+  if (parser.parseAttribute(symRef) || parser.parseComma() ||
+      parser.parseInteger(index) ||
       parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
       parser.parseType(resultType))
     return failure();
@@ -270,18 +272,28 @@ ParseResult XMRRemoteOp::parse(OpAsmParser &parser, OperationState &result) {
   auto innerRef =
       InnerRefAttr::get(symRef.getRootReference(), symRef.getLeafReference());
   result.addAttribute("target", innerRef);
+  result.addAttribute("index", parser.getBuilder().getI64IntegerAttr(index));
   result.addTypes(resultType);
 
   return success();
 }
 
 void XMRRemoteOp::print(OpAsmPrinter &p) {
-  // Print as @Module::@symbol : !hw.rwprobe<type>
+  // Print as @Module::@symbol, index : !hw.rwprobe<type>
   auto target = getTargetAttr();
   p << " @" << target.getModule().getValue() << "::@"
-    << target.getName().getValue();
-  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"target"});
+    << target.getName().getValue() << ", " << getIndex();
+  p.printOptionalAttrDict((*this)->getAttrs(),
+                          /*elidedAttrs=*/{"target", "index"});
   p << " : " << getResult().getType();
+}
+
+LogicalResult XMRRemoteOp::verify() {
+  // Verify that index is non-negative
+  if (getIndex() < 0)
+    return emitOpError("index must be non-negative, got ") << getIndex();
+
+  return success();
 }
 
 LogicalResult XMRRemoteOp::verifyInnerRefs(InnerRefNamespace &ns) {
@@ -291,22 +303,23 @@ LogicalResult XMRRemoteOp::verifyInnerRefs(InnerRefNamespace &ns) {
   if (!target)
     return emitOpError() << "has target that cannot be resolved: " << targetRef;
 
-  // Target can be either an operation with inner symbols or a module port
-  if (target.isPort()) {
-    // Verify it's a port of a module
-    if (!isa<HWModuleLike>(target.getOp()))
-      return emitOpError("target port must be on a HW module")
-          .attachNote(target.getOp()->getLoc())
-          .append("target resolves here");
-  } else if (target.isOpOnly()) {
-    // Verify the operation has inner symbol support
-    if (!isa<InnerSymbolOpInterface>(target.getOp()))
-      return emitOpError("target operation does not support inner symbols")
-          .attachNote(target.getOp()->getLoc())
-          .append("target resolves here");
-  } else {
-    return emitOpError("target must be an operation or a port");
-  }
+  // Target must be an instance operation
+  if (!target.isOpOnly())
+    return emitOpError("target must be an operation (instance), not a port");
+
+  auto *op = target.getOp();
+  if (!isa<InstanceOp>(op))
+    return emitOpError("target operation must be an instance")
+        .attachNote(op->getLoc())
+        .append("target resolves here");
+
+  // Verify that the index is within bounds of the instance results
+  auto instOp = cast<InstanceOp>(op);
+  size_t numResults = instOp.getNumResults();
+  if (getIndex() >= numResults)
+    return emitOpError("index ")
+           << getIndex() << " out of bounds for instance with " << numResults
+           << " results";
 
   return success();
 }
