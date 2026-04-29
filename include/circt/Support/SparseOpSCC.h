@@ -115,15 +115,6 @@ namespace circt {
 /// first argument; for backward traversal its defining op equals the first
 /// argument.
 using OpSCCFilter = std::function<bool(mlir::Operation *, mlir::OpOperand &)>;
-
-/// Sentinel type representing "no SCC" in an OpSCC PointerUnion.
-struct NullOpSCC {
-  void *getAsVoidPointer() const { return nullptr; }
-  static NullOpSCC getFromVoidPointer(void *) { return NullOpSCC{}; }
-  static constexpr int NumLowBitsAvailable =
-      llvm::PointerLikeTypeTraits<mlir::Operation *>::NumLowBitsAvailable;
-};
-
 namespace detail {
 /// Backing storage for a cyclic SCC (implementation detail).
 using CyclicOpSCCStorage = llvm::SmallVector<mlir::Operation *, 4>;
@@ -170,18 +161,6 @@ private:
 
 namespace llvm {
 template <>
-struct PointerLikeTypeTraits<circt::NullOpSCC> {
-  static void *getAsVoidPointer(circt::NullOpSCC) { return nullptr; }
-  static circt::NullOpSCC getFromVoidPointer(void *ptr) {
-    (void)ptr;
-    assert(ptr == nullptr);
-    return circt::NullOpSCC{};
-  }
-  static constexpr int NumLowBitsAvailable =
-      circt::NullOpSCC::NumLowBitsAvailable;
-};
-
-template <>
 struct PointerLikeTypeTraits<circt::CyclicOpSCC> {
   static void *getAsVoidPointer(circt::CyclicOpSCC scc) {
     return scc.getAsVoidPointer();
@@ -198,12 +177,11 @@ namespace circt {
 
 /// One entry in the SCC output: a null sentinel, a trivial (non-cyclic)
 /// operation, or a cyclic group.  Use llvm::isa / llvm::cast / llvm::dyn_cast
-/// to distinguish.  The null state (isa<NullOpSCC>) is returned by getSCC()
-/// when the queried operation has not been discovered.
-/// Note: NullOpSCC must be placed first in the union so that the all-zero
-/// (default-constructed) state identifies unambiguously as NullOpSCC, not as a
+/// to distinguish.
+/// Note: void * must be placed first in the union so that the all-zero
+/// (default-constructed) state identifies unambiguously as invalid, not as a
 /// null Operation*.
-using OpSCC = llvm::PointerUnion<NullOpSCC, mlir::Operation *, CyclicOpSCC>;
+using OpSCC = llvm::PointerUnion<void *, mlir::Operation *, CyclicOpSCC>;
 
 /// Traversal direction for SparseOpSCC.
 ///   - Forward: follow def-use edges forward (defining op -> users).
@@ -292,12 +270,12 @@ public:
     return opToSccIndex.contains(op);
   }
 
-  /// Return the SCC that `op` belongs to, or an OpSCC holding NullOpSCC if it
-  /// has not been discovered.
+  /// Return the SCC that `op` belongs to. If the operation has not been
+  /// discovered, it returns a `nullptr` sentinel.
   OpSCC getSCC(mlir::Operation *op) const {
     auto it = opToSccIndex.find(op);
     if (it == opToSccIndex.end())
-      return OpSCC(NullOpSCC{});
+      return OpSCC(nullptr);
     detail::OpOrIndex entry = sccs[it->second];
     if (llvm::isa<mlir::Operation *>(entry))
       return OpSCC(llvm::cast<mlir::Operation *>(entry));

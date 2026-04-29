@@ -147,11 +147,10 @@ TEST(SparseOpSCCsTest, BoundarySeed) {
     EXPECT_EQ(cast<Operation *>(*(topoIt++)), outputOp);
     EXPECT_EQ(topoIt, opScc.topological_end());
 
-    // getSCC returns a valid entry for the visited op and NullOpSCC for
+    // getSCC returns a valid entry for the visited op and null for
     // unvisited.
     EXPECT_EQ(cast<Operation *>(opScc.getSCC(outputOp)), outputOp);
-    EXPECT_TRUE(isa<NullOpSCC>(opScc.getSCC(andOp)));
-    EXPECT_FALSE(opScc.getSCC(andOp));
+    EXPECT_FALSE(static_cast<bool>(opScc.getSCC(andOp)));
   }
 
   {
@@ -487,11 +486,21 @@ TEST(SparseOpSCCsTest, TwoCycles) {
   EXPECT_TRUE(llvm::is_contained(scc0, reg1Op));
   EXPECT_TRUE(llvm::is_contained(scc0, and1Op));
 
+  EXPECT_EQ(opScc.getSCC(reg1Op), opScc.getSCC(and1Op));
+  EXPECT_NE(opScc.getSCC(reg1Op), opScc.getSCC(or1Op));
+  EXPECT_NE(opScc.getSCC(reg1Op), opScc.getSCC(xorOp));
+  EXPECT_NE(opScc.getSCC(reg1Op), opScc.getSCC(hwModule));
+
   // Second cyclic SCC: reg2 <-> or1.
   CyclicOpSCC scc1 = cast<CyclicOpSCC>(*revIt++);
   EXPECT_EQ(scc1.size(), 2u);
   EXPECT_TRUE(llvm::is_contained(scc1, reg2Op));
   EXPECT_TRUE(llvm::is_contained(scc1, or1Op));
+
+  EXPECT_EQ(opScc.getSCC(reg2Op), opScc.getSCC(or1Op));
+  EXPECT_NE(opScc.getSCC(or1Op), opScc.getSCC(and1Op));
+  EXPECT_NE(opScc.getSCC(or1Op), opScc.getSCC(xorOp));
+  EXPECT_NE(opScc.getSCC(or1Op), opScc.getSCC(hwModule));
 
   EXPECT_EQ(revIt, opScc.reverseTopological_end());
 }
@@ -558,7 +567,10 @@ TEST(SparseOpSCCsTest, TwoInternalCycles) {
 
     auto revIt = opScc.reverseTopological_begin();
     EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
-    checkFiveOpSCC(cast<CyclicOpSCC>(*revIt++));
+    auto cyclicSCC = cast<CyclicOpSCC>(*revIt++);
+    checkFiveOpSCC(cyclicSCC);
+    EXPECT_TRUE(llvm::all_equal(llvm::map_range(
+        cyclicSCC, [&](Operation *op) -> OpSCC { return opScc.getSCC(op); })));
     EXPECT_EQ(revIt, opScc.reverseTopological_end());
   }
 
@@ -572,7 +584,10 @@ TEST(SparseOpSCCsTest, TwoInternalCycles) {
     EXPECT_EQ(opScc.getNumCyclicSCCs(), 1u);
 
     auto topoIt = opScc.topological_begin();
-    checkFiveOpSCC(cast<CyclicOpSCC>(*topoIt++));
+    auto cyclicSCC = cast<CyclicOpSCC>(*topoIt++);
+    checkFiveOpSCC(cyclicSCC);
+    EXPECT_TRUE(llvm::all_equal(llvm::map_range(
+        cyclicSCC, [&](Operation *op) -> OpSCC { return opScc.getSCC(op); })));
     EXPECT_EQ(cast<Operation *>(*(topoIt++)), outputOp);
     EXPECT_EQ(topoIt, opScc.topological_end());
   }
@@ -757,25 +772,27 @@ TEST(SparseOpSCCsTest, OpSCCCasting) {
   // isa<> correctly identifies each variant.
   EXPECT_TRUE(isa<Operation *>(trivialEntry));
   EXPECT_FALSE(isa<CyclicOpSCC>(trivialEntry));
-  EXPECT_FALSE(isa<NullOpSCC>(trivialEntry));
 
   EXPECT_FALSE(isa<Operation *>(cyclicEntry));
   EXPECT_TRUE(isa<CyclicOpSCC>(cyclicEntry));
-  EXPECT_FALSE(isa<NullOpSCC>(cyclicEntry));
 
   EXPECT_FALSE(isa<Operation *>(nullEntry));
   EXPECT_FALSE(isa<CyclicOpSCC>(nullEntry));
-  EXPECT_TRUE(isa<NullOpSCC>(nullEntry));
 
-  // A NullOpSCC entry is bool-false; present entries are bool-true.
-  EXPECT_FALSE(nullEntry);
-  EXPECT_TRUE(trivialEntry);
-  EXPECT_TRUE(cyclicEntry);
+  // An undiscovered entry is bool-false; present entries are bool-true.
+  EXPECT_FALSE(static_cast<bool>(nullEntry));
+  EXPECT_TRUE(static_cast<bool>(trivialEntry));
+  EXPECT_TRUE(static_cast<bool>(cyclicEntry));
 
   // dyn_cast on known-present values.
   EXPECT_EQ(dyn_cast<Operation *>(trivialEntry), outputOp);
   EXPECT_EQ(dyn_cast<Operation *>(cyclicEntry), nullptr);
-  EXPECT_FALSE(dyn_cast<CyclicOpSCC>(trivialEntry));
+
+  EXPECT_EQ(dyn_cast<CyclicOpSCC>(cyclicEntry), opScc.getSCC(regOp));
+  EXPECT_NE(dyn_cast<CyclicOpSCC>(cyclicEntry), opScc.getSCC(outputOp));
+  EXPECT_NE(dyn_cast<CyclicOpSCC>(cyclicEntry), opScc.getSCC(unusedOp));
+
+  EXPECT_FALSE(static_cast<bool>(dyn_cast<CyclicOpSCC>(trivialEntry)));
   if (auto scc = dyn_cast<CyclicOpSCC>(cyclicEntry)) {
     EXPECT_EQ(scc.size(), 2u);
     EXPECT_TRUE(llvm::is_contained(scc, regOp));
@@ -786,7 +803,7 @@ TEST(SparseOpSCCsTest, OpSCCCasting) {
 
   // dyn_cast_if_present additionally handles null entries gracefully.
   EXPECT_EQ(dyn_cast_if_present<Operation *>(nullEntry), nullptr);
-  EXPECT_FALSE(dyn_cast_if_present<CyclicOpSCC>(nullEntry));
+  EXPECT_FALSE(static_cast<bool>(dyn_cast_if_present<CyclicOpSCC>(nullEntry)));
 }
 
 } // namespace
