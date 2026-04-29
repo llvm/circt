@@ -401,8 +401,9 @@ private:
   ///
   /// Defined out-of-line in InstanceGraph.cpp to keep the header free of
   /// <atomic>, ThreadPool, and Threading includes.
-  LogicalResult walkParallelImpl(
-      llvm::function_ref<LogicalResult(InstanceGraphNode &)> fn, bool forward);
+  LogicalResult
+  walkParallelImpl(llvm::function_ref<LogicalResult(InstanceGraphNode &)> fn,
+                   bool forward);
 
 protected:
   ModuleOpInterface getReferencedModuleImpl(InstanceOpInterface op);
