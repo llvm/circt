@@ -1569,8 +1569,18 @@ static StringRef getVerilogDeclWord(Operation *op,
         return "";
     }
     if (auto innerType = dyn_cast<UnpackedArrayType>(elementType)) {
+      // Unwrap nested unpacked array layers.
       while (isa<UnpackedArrayType>(innerType.getElementType()))
         innerType = cast<UnpackedArrayType>(innerType.getElementType());
+      // The innermost unpacked element may itself be a packed array; unwrap
+      // those too to check whether the base element type is a struct.
+      if (auto packedInner = dyn_cast<ArrayType>(innerType.getElementType())) {
+        while (isa<ArrayType>(packedInner.getElementType()))
+          packedInner = cast<ArrayType>(packedInner.getElementType());
+        if (isa<StructType>(packedInner.getElementType()) ||
+            isa<TypeAliasType>(packedInner.getElementType()))
+          return "";
+      }
       if (isa<StructType>(innerType.getElementType()) ||
           isa<TypeAliasType>(innerType.getElementType()))
         return "";
