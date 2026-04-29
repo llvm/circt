@@ -421,6 +421,103 @@ class SerialCoordTranslator(Module):
     result_chan.assign(out_chan)
 
 
+class AutoSerialCoordTranslator(Module):
+  """Like CoordTranslator, but exposes the function with the serial
+  (bulk-transfer) list encoding on both the argument and result. Internally,
+  the serial input is converted to the parallel one-item-per-message form via
+  `ListWindowToParallel`, the per-coordinate translation is applied, and the
+  parallel result is converted back to the serial wire form via
+  `ListWindowToSerial`.
+
+  This exercises the automatic serial<->parallel conversion modules instead of
+  building the frame state machine by hand (as `SerialCoordTranslator` does).
+  """
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    from pycde.types import StructType, List, Window
+    from pycde.esi import ListWindowToParallel, ListWindowToSerial
+
+    bulk_count_width = 16
+    items_per_frame = 1
+    # ListWindowToSerial buffers a complete burst before emitting (it cannot
+    # emit a header until the burst's `last` is observed). Depth must be >=
+    # the largest burst the host sends.
+    fifo_depth = 256
+
+    # ---- Externally-visible (serial) function arg/result types. ----
+    # NOTE: use Bits for coord/translation fields. The window lowering for
+    # bulk-transfer encoding currently strips signedness from union variant
+    # fields, which causes type mismatches when the underlying struct uses
+    # UInt; SerialCoordTranslator hits the same constraint.
+    coord_type = StructType([("x", Bits(32)), ("y", Bits(32))])
+
+    arg_struct_type = StructType([("x_translation", Bits(32)),
+                                  ("y_translation", Bits(32)),
+                                  ("coords", List(coord_type))])
+    arg_window_type = Window.serial_of(arg_struct_type, bulk_count_width,
+                                       items_per_frame)
+
+    result_type = List(coord_type)
+    result_window_type = Window.serial_of(result_type, bulk_count_width,
+                                          items_per_frame)
+
+    # Result channel back to FuncService is the serial output of the
+    # parallel->serial converter (assigned at the end).
+    result_chan = Wire(Channel(result_window_type))
+    args = esi.FuncService.get_call_chans(
+        AppID("translate_coords_auto_serial"),
+        arg_type=arg_window_type,
+        result=result_chan)
+
+    # ---- Convert the serial argument stream into a parallel one. ----
+    s2p = ListWindowToParallel(arg_struct_type, bulk_count_width,
+                               items_per_frame)(
+                                   clk=ports.clk,
+                                   rst=ports.rst,
+                                   serial_in=args)
+    parallel_arg = s2p.parallel_out
+
+    # ---- Apply the per-coordinate translation. ----
+    par_ready = Wire(Bits(1))
+    par_window, par_valid = parallel_arg.unwrap(par_ready)
+    par_struct = par_window.unwrap()
+
+    x_translation = par_struct["x_translation"].as_uint(32)
+    y_translation = par_struct["y_translation"].as_uint(32)
+    input_coord = par_struct["coords"]
+    last_bit = par_struct["last"]
+
+    result_x = (x_translation +
+                input_coord["x"].as_uint(32)).as_uint(32).as_bits(32)
+    result_y = (y_translation +
+                input_coord["y"].as_uint(32)).as_uint(32).as_bits(32)
+    result_coord = coord_type({"x": result_x, "y": result_y})
+
+    parallel_result_window_type = Window.default_of(result_type)
+    parallel_result_struct = parallel_result_window_type.lowered_type({
+        "data": result_coord,
+        "last": last_bit,
+    })
+    parallel_result_window = parallel_result_window_type.wrap(
+        parallel_result_struct)
+
+    parallel_result_chan, parallel_result_ready = Channel(
+        parallel_result_window_type).wrap(parallel_result_window, par_valid)
+    par_ready.assign(parallel_result_ready)
+
+    # ---- Convert the parallel result stream back into a serial one. ----
+    p2s = ListWindowToSerial(result_type, bulk_count_width, items_per_frame,
+                             fifo_depth)(
+                                 clk=ports.clk,
+                                 rst=ports.rst,
+                                 parallel_in=parallel_result_chan)
+    result_chan.assign(p2s.serial_out)
+
+
 @modparams
 def MMIOAdd(add_amt: int) -> Type[Module]:
 
@@ -1171,6 +1268,12 @@ class EsiTester(Module):
         rst=ports.rst,
         instance_name="coord_translator_serial",
         appid=AppID("coord_translator_serial"),
+    )
+    AutoSerialCoordTranslator(
+        clk=ports.clk,
+        rst=ports.rst,
+        instance_name="coord_translator_auto_serial",
+        appid=AppID("coord_translator_auto_serial"),
     )
 
     for i in range(4, 18, 5):

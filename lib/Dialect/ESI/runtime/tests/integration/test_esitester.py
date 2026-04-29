@@ -75,6 +75,16 @@ class TestCosimEsitester:
         "Serial coord translate test passed",
     ])
 
+  def test_auto_serial_coords(self, host: str, port: int) -> None:
+    conn = f"{host}:{port}"
+    stdout = run_cmd(
+        ["esitester", "cosim", conn, "auto_serial_coords", "-n", "5"])
+    check_lines(stdout, [
+        "Auto serial coord translate test results:",
+        "coord[0]=",
+        "Auto serial coord translate test passed",
+    ])
+
   def test_channel(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
     stdout = run_cmd(["esitester", "cosim", conn, "channel", "-i", "3"])

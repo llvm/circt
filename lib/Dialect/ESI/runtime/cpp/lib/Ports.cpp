@@ -230,6 +230,23 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
     throw std::runtime_error(
         "Window intoType must be a struct for translation");
 
+  // Reject serial-encoded windows: any field with bulkCountWidth > 0 indicates
+  // serial (bulk) encoding, which the translator does not yet support. Surface
+  // this clearly at connect()-time rather than silently buffering forever in
+  // translateIncoming().
+  for (const auto &frame : windowType->getFrames()) {
+    for (const auto &field : frame.fields) {
+      if (field.bulkCountWidth > 0)
+        throw std::runtime_error(
+            "Window translation for serial (bulk) list encoding is not "
+            "implemented (window '" +
+            windowType->getName() + "', frame '" + frame.name + "', field '" +
+            field.name +
+            "'). Connect the port with ConnectOptions{translateMessage=false} "
+            "and decode the frames manually.");
+    }
+  }
+
   const auto &intoFields = intoStruct->getFields();
 
   // Build a map from field name to (offset, type, isListField).

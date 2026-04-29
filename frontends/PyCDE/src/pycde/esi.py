@@ -12,7 +12,8 @@ from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal,
 from .support import clog2, optional_dict_to_dict_attr, get_user_loc
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
-                    ChannelDirection, StructType, Type, UInt, _FromCirctType)
+                    ChannelDirection, ChannelSignaling, StructType, Type,
+                    Window, UInt, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -1235,3 +1236,360 @@ def Mailbox(type):
       ports.valid = valid
 
   return Mailbox
+
+
+@modparams
+def ListWindowToParallel(into_type: Type,
+                         count_bitwidth: int = 16,
+                         items_per_frame: int = 1):
+  """Build a module which converts a 'serial' (bulk-transfer) window of a
+  struct-with-a-list into a 'parallel' one. The serial window is expected to
+  consist of a single 'header' frame containing the static struct fields plus
+  the list `count`, followed by `ceil(count/items_per_frame)` 'data' frames each
+  carrying `items_per_frame` list items. The parallel output produces one
+  message per list item, replicating the static fields and asserting the `last`
+  field on the final item of the list.
+  """
+
+  from .types import List as ListType, TypeAlias
+
+  if items_per_frame != 1:
+    raise NotImplementedError(
+        "ListWindowToParallel currently only supports items_per_frame=1, "
+        f"got {items_per_frame}")
+
+  # Determine the underlying struct type, mirroring Window.serial_of /
+  # Window.default_of.
+  def _is_struct_type(t: Type) -> bool:
+    return isinstance(t, StructType) or (isinstance(t, TypeAlias) and
+                                         isinstance(t.inner_type, StructType))
+
+  if _is_struct_type(into_type):
+    target_struct = into_type
+  else:
+    target_struct = StructType({"data": into_type})
+
+  static_field_names: List[str] = []
+  list_field_name: Optional[str] = None
+  for name, ftype in target_struct.fields:
+    if isinstance(ftype, ListType):
+      if list_field_name is not None:
+        raise ValueError("ListWindowToParallel requires exactly one list field")
+      list_field_name = name
+    else:
+      static_field_names.append(name)
+  if list_field_name is None:
+    raise ValueError("ListWindowToParallel requires exactly one list field")
+
+  serial_window_type = Window.serial_of(into_type, count_bitwidth,
+                                        items_per_frame)
+  parallel_window_type = Window.default_of(into_type)
+  parallel_lowered = parallel_window_type.lowered_type
+  count_field_name = f"{list_field_name}_count"
+
+  class ListWindowToParallel(Module):
+    """Converts a 'serial' or 'bulk' window into a list to a 'parallel' one."""
+
+    clk = Clock()
+    rst = Reset()
+
+    serial_in = InputChannel(serial_window_type)
+    parallel_out = OutputChannel(parallel_window_type)
+
+    @generator
+    def build(ports):
+      # State: 0 = waiting for header, 1 = emitting data items.
+      state_wire = Wire(Bits(1))
+      in_wait_hdr = state_wire == Bits(1)(0)
+      in_emit_data = state_wire == Bits(1)(1)
+
+      # Out-channel ready wire; serial_in ready computed below.
+      serial_ready_wire = Wire(Bits(1))
+      serial_window_sig, serial_valid = ports.serial_in.unwrap(
+          serial_ready_wire)
+      serial_union = serial_window_sig.unwrap()
+
+      # Extract the header and data variant overlays of the union. Only one is
+      # valid at a time, controlled by the state register.
+      header_struct = serial_union["header"]
+      data_struct = serial_union["data"]
+
+      # Header acceptance: when waiting for header, accept it whenever it is
+      # valid.
+      hdr_xact = serial_valid & in_wait_hdr
+
+      # Latch the static fields and the count when the header is accepted.
+      static_regs: Dict[str, Signal] = {}
+      for name in static_field_names:
+        static_regs[name] = header_struct[name].reg(ports.clk,
+                                                    ports.rst,
+                                                    ce=hdr_xact,
+                                                    name=f"static_{name}")
+      count_reg = header_struct[count_field_name].reg(ports.clk,
+                                                      ports.rst,
+                                                      ce=hdr_xact,
+                                                      name="count")
+
+      # Counter of items emitted so far for the current list. Increments on
+      # each successful parallel_out transaction.
+      emitted_wire = Wire(UInt(count_bitwidth))
+      one = UInt(count_bitwidth)(1)
+      zero = UInt(count_bitwidth)(0)
+      next_idx = (emitted_wire + one).as_uint(count_bitwidth)
+      last_item = next_idx == count_reg.as_uint(count_bitwidth)
+
+      # The single item is element 0 of the data frame's array.
+      data_array = data_struct[list_field_name]
+      data_item = data_array[0]
+
+      # Build the parallel output struct (static fields + item + last).
+      parallel_fields = {name: static_regs[name] for name in static_field_names}
+      parallel_fields[list_field_name] = data_item
+      parallel_fields["last"] = last_item
+      parallel_struct = parallel_lowered(parallel_fields)
+      parallel_window = parallel_window_type.wrap(parallel_struct)
+
+      # Drive the output channel: valid only when emitting data and the input
+      # data frame is valid.
+      out_valid = serial_valid & in_emit_data
+      out_chan, out_ready = Channel(parallel_window_type).wrap(
+          parallel_window, out_valid)
+      ports.parallel_out = out_chan
+
+      # data frame consumed exactly once per emitted item (items_per_frame == 1).
+      data_xact = out_valid & out_ready
+
+      # Drive serial_in.ready: accept header in WAIT_HDR; in EMIT_DATA pass
+      # output ready up.
+      serial_ready_wire.assign(in_wait_hdr | (in_emit_data & out_ready))
+
+      # Update emitted-item counter: reset to 0 on last item, increment on any
+      # other data transaction, hold otherwise.
+      next_emitted = Mux(data_xact, emitted_wire,
+                         Mux(last_item, next_idx, zero))
+      emitted_reg = next_emitted.reg(ports.clk,
+                                     ports.rst,
+                                     rst_value=0,
+                                     name="emitted")
+      emitted_wire.assign(emitted_reg)
+
+      # Update state: WAIT_HDR -> EMIT_DATA on header accept; EMIT_DATA ->
+      # WAIT_HDR on last-item transaction.
+      next_state = Mux(hdr_xact, state_wire, Bits(1)(1))
+      next_state = Mux(last_item & data_xact, next_state, Bits(1)(0))
+      state_reg = next_state.reg(ports.clk,
+                                 ports.rst,
+                                 rst_value=0,
+                                 name="state")
+      state_wire.assign(state_reg)
+
+  return ListWindowToParallel
+
+
+@modparams
+def ListWindowToSerial(into_type: Type,
+                         count_bitwidth: int = 16,
+                         items_per_frame: int = 1,
+                         fifo_depth: int = 16):
+  """Build a module which converts a 'parallel' window of a struct-with-a-list
+  back into a 'serial' (bulk-transfer) window. Each parallel input message
+  carries one list item plus the static struct fields and a `last` flag marking
+  the final item of the list. Items are buffered in an ESI FIFO of `fifo_depth`
+  entries; when a complete list (terminated by `last`) is available, the module
+  emits one serial header frame (containing the static fields and the item
+  count) followed by `count` data frames, each carrying `items_per_frame` list
+  items. `fifo_depth` controls the depth of both the data FIFO and the burst-
+  metadata FIFO (the latter sized to allow the same number of in-flight bursts).
+  """
+
+  from .types import List as ListType, TypeAlias
+
+  if items_per_frame != 1:
+    raise NotImplementedError(
+        "ListWindowToSerial currently only supports items_per_frame=1, "
+        f"got {items_per_frame}")
+  if fifo_depth < 1:
+    raise ValueError(f"fifo_depth must be >= 1, got {fifo_depth}")
+
+  def _is_struct_type(t: Type) -> bool:
+    return isinstance(t, StructType) or (isinstance(t, TypeAlias) and
+                                         isinstance(t.inner_type, StructType))
+
+  if _is_struct_type(into_type):
+    target_struct = into_type
+  else:
+    target_struct = StructType({"data": into_type})
+
+  static_field_names: List[str] = []
+  list_field_name: Optional[str] = None
+  list_element_type: Optional[Type] = None
+  for name, ftype in target_struct.fields:
+    if isinstance(ftype, ListType):
+      if list_field_name is not None:
+        raise ValueError("ListWindowToSerial requires exactly one list field")
+      list_field_name = name
+      list_element_type = ftype.element_type
+    else:
+      static_field_names.append(name)
+  if list_field_name is None:
+    raise ValueError("ListWindowToSerial requires exactly one list field")
+
+  parallel_window_type = Window.default_of(into_type)
+  serial_window_type = Window.serial_of(into_type, count_bitwidth,
+                                        items_per_frame)
+  parallel_lowered = parallel_window_type.lowered_type
+  serial_lowered = serial_window_type.lowered_type
+  count_field_name = f"{list_field_name}_count"
+
+  # The serial-window lowered type is a union of {header_struct, data_struct}.
+  serial_variants = {n: t for (n, t, _) in serial_lowered.fields}
+  header_struct_type = serial_variants["header"]
+  data_struct_type = serial_variants["data"]
+
+  # The static-fields-plus-count metadata pushed into the burst FIFO has the
+  # same shape as the lowered header struct.
+  burst_meta_type = header_struct_type
+  # The data FIFO carries one list element per slot.
+  data_elem_type = list_element_type
+
+  class ListWindowToSerial(Module):
+    """Converts a 'parallel' window of a list into a 'serial' (bulk-transfer)
+    window, buffering items in an ESI FIFO until a complete list (terminated by
+    `last`) can be emitted as a header frame followed by data frames."""
+
+    clk = Clock()
+    rst = Reset()
+
+    parallel_in = InputChannel(parallel_window_type)
+    serial_out = OutputChannel(serial_window_type)
+
+    @generator
+    def build(ports):
+      # ----- Input side: unwrap the parallel window. -----
+      par_ready_wire = Wire(Bits(1))
+      par_window, par_valid = ports.parallel_in.unwrap(par_ready_wire)
+      par_struct = par_window.unwrap()
+      par_last = par_struct["last"]
+      par_item = par_struct[list_field_name]
+
+      # ----- Per-burst item counter (drives the header `count` field). -----
+      burst_count_wire = Wire(UInt(count_bitwidth))
+      one_c = UInt(count_bitwidth)(1)
+      zero_c = UInt(count_bitwidth)(0)
+      next_burst_count = (burst_count_wire + one_c).as_uint(count_bitwidth)
+      # Push 'count' = burst_count + 1 (this xact is the last item).
+      push_count = next_burst_count
+
+      # ----- Instantiate two seq.FIFOs (one for data, one for burst meta).
+      # We use seq.FIFO directly (rather than esi.fifo) because seq.FIFO
+      # exposes the actual `full`/`empty` registered signals — these are
+      # state-driven and feedback-safe, which lets us implement atomic
+      # accept (write to data FIFO iff burst FIFO can also accept the meta
+      # for the burst's last item) without forming a combinational loop.
+      from .seq import FIFO as SeqFIFO
+      par_xact_wire = Wire(Bits(1))
+
+      # Build the burst metadata struct (static fields + count).
+      meta_fields: Dict[str, Signal] = {
+          name: par_struct[name] for name in static_field_names
+      }
+      meta_fields[count_field_name] = push_count.as_bits(count_bitwidth)
+      meta_value = burst_meta_type(meta_fields)
+
+      data_fifo = SeqFIFO(data_elem_type, fifo_depth, ports.clk, ports.rst)
+      burst_fifo = SeqFIFO(burst_meta_type, fifo_depth, ports.clk, ports.rst)
+
+      # par_ready: accept iff data FIFO not full AND, if last, burst FIFO
+      # not full. `full` is a registered signal — no comb loop.
+      par_ready = (~data_fifo.full) & ((~par_last) | ~burst_fifo.full)
+      par_ready_wire.assign(par_ready)
+      par_xact = par_valid & par_ready
+      par_xact_wire.assign(par_xact)
+
+      data_fifo.push(par_item, par_xact)
+      burst_fifo.push(meta_value, par_xact & par_last)
+
+      # Update the burst counter: reset on a "last" xact, increment on a non-
+      # last xact, hold otherwise.
+      next_bc = Mux(par_xact, burst_count_wire,
+                    Mux(par_last, next_burst_count, zero_c))
+      bc_reg = next_bc.reg(ports.clk,
+                           ports.rst,
+                           rst_value=0,
+                           name="burst_count")
+      burst_count_wire.assign(bc_reg)
+
+      # ----- Output side: state machine emitting header then data frames. -----
+      data_pop_rden = Wire(Bits(1))
+      burst_pop_rden = Wire(Bits(1))
+      data_value = data_fifo.pop(data_pop_rden)
+      burst_value = burst_fifo.pop(burst_pop_rden)
+      data_valid = ~data_fifo.empty
+      burst_valid = ~burst_fifo.empty
+
+      # State: 0 = WAIT_HDR, 1 = EMIT_DATA.
+      state_wire = Wire(Bits(1))
+      in_wait_hdr = state_wire == Bits(1)(0)
+      in_emit_data = state_wire == Bits(1)(1)
+
+      # Latched count for the current burst (loaded when header is emitted).
+      cur_count_wire = Wire(UInt(count_bitwidth))
+      # Items emitted so far for the current burst.
+      emitted_wire = Wire(UInt(count_bitwidth))
+      next_emitted = (emitted_wire + one_c).as_uint(count_bitwidth)
+      last_item = next_emitted == cur_count_wire
+
+      # Build the two output union variants.
+      header_union = serial_lowered(("header", burst_value))
+      data_struct_value = data_struct_type({list_field_name: [data_value]})
+      data_union = serial_lowered(("data", data_struct_value))
+
+      # Mux the union into the serial frame based on state.
+      out_union = Mux(state_wire, header_union, data_union)
+      out_window = serial_window_type.wrap(out_union)
+
+      # serial_out valid: in WAIT_HDR if a burst is queued; in EMIT_DATA if the
+      # next item is queued.
+      out_valid = (in_wait_hdr & burst_valid) | (in_emit_data & data_valid)
+      out_chan, out_ready = Channel(serial_window_type).wrap(
+          out_window, out_valid)
+      ports.serial_out = out_chan
+
+      hdr_xact = in_wait_hdr & burst_valid & out_ready
+      data_xact = in_emit_data & data_valid & out_ready
+      burst_pop_rden.assign(hdr_xact)
+      data_pop_rden.assign(data_xact)
+
+      # Update the latched count when popping the header.
+      cur_count_next = Mux(hdr_xact,
+                           cur_count_wire,
+                           burst_value[count_field_name].as_uint(count_bitwidth))
+      cur_count_reg = cur_count_next.reg(ports.clk,
+                                         ports.rst,
+                                         rst_value=0,
+                                         name="cur_count")
+      cur_count_wire.assign(cur_count_reg)
+
+      # Update the emitted-item counter: reset on last-item xact, increment on
+      # any other data xact, hold otherwise. Mux semantics: Mux(sel, A, B)
+      # returns B when sel=1, so the inner mux must be ordered (false_arg,
+      # true_arg) = (next_emitted, zero_c).
+      next_emit = Mux(data_xact, emitted_wire,
+                      Mux(last_item, next_emitted, zero_c))
+      emit_reg = next_emit.reg(ports.clk,
+                               ports.rst,
+                               rst_value=0,
+                               name="emitted")
+      emitted_wire.assign(emit_reg)
+
+      # State transitions: WAIT_HDR -> EMIT_DATA on header xact; EMIT_DATA ->
+      # WAIT_HDR on last-item xact.
+      next_state = Mux(hdr_xact, state_wire, Bits(1)(1))
+      next_state = Mux(last_item & data_xact, next_state, Bits(1)(0))
+      state_reg = next_state.reg(ports.clk,
+                                 ports.rst,
+                                 rst_value=0,
+                                 name="state")
+      state_wire.assign(state_reg)
+
+  return ListWindowToSerial
