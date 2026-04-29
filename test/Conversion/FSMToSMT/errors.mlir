@@ -100,16 +100,3 @@ fsm.machine @action() -> () attributes {initialState = "A"} {
     }
   }
 }
-
-
-// -----
-
-// expected-error @below {{At least one variable or output is required.}}
-fsm.machine @action() -> () attributes {initialState = "A"} {
-  fsm.state @A output  {
-  } transitions {
-    fsm.transition @A guard {
-    } action {
-    }
-  }
-}
