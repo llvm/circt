@@ -1568,6 +1568,13 @@ static StringRef getVerilogDeclWord(Operation *op,
           isa<TypeAliasType>(innerType.getElementType()))
         return "";
     }
+    if (auto innerType = dyn_cast<UnpackedArrayType>(elementType)) {
+      while (isa<UnpackedArrayType>(innerType.getElementType()))
+        innerType = cast<UnpackedArrayType>(innerType.getElementType());
+      if (isa<StructType>(innerType.getElementType()) ||
+          isa<TypeAliasType>(innerType.getElementType()))
+        return "";
+    }
     if (isa<TypeAliasType>(elementType))
       return "";
 

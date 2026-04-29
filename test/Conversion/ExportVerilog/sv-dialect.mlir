@@ -1092,6 +1092,18 @@ hw.module @RegisterOfStructOrArrayOfStruct() {
   %reg3 = sv.reg : !hw.inout<array<4xarray<8xstruct<a: i1, b: i1>>>>
 }
 
+// See https://github.com/llvm/circt/issues/7733
+// CHECK-LABEL: module RegisterOfUnpackedArrayOfStruct
+hw.module @RegisterOfUnpackedArrayOfStruct() {
+  // CHECK-NOT: reg
+  // CHECK: struct packed {logic a; logic b; }{{.*}}reg4[0:7]
+  %reg4 = sv.reg : !hw.inout<uarray<8xstruct<a: i1, b: i1>>>
+
+  // CHECK-NOT: reg
+  // CHECK: struct packed {logic a; logic b; }{{.*}}reg5[0:3][0:7]
+  %reg5 = sv.reg : !hw.inout<uarray<4xuarray<8xstruct<a: i1, b: i1>>>>
+}
+
 
 // CHECK-LABEL: module MultiUseReadInOut(
 // Issue #1564
