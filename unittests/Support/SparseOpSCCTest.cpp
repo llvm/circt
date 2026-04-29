@@ -98,6 +98,46 @@ TEST(SparseOpSCCsTest, SimpleChain) {
   }
 }
 
+// reset() clears all accumulated state; re-visiting produces fresh results.
+TEST(SparseOpSCCsTest, Reset) {
+  MLIRContext context;
+  context.loadDialect<hw::HWDialect>();
+  context.loadDialect<comb::CombDialect>();
+
+  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &context);
+  ASSERT_TRUE(module);
+
+  SymbolTable symbolTable(module.get());
+  auto hwModule = symbolTable.lookup<hw::HWModuleOp>("test");
+  ASSERT_TRUE(hwModule);
+
+  auto it = hwModule.getBodyBlock()->begin();
+  Operation *andOp = &*it++;
+  Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
+
+  SparseOpSCC<OpSCCDirection::Forward> opScc;
+  opScc.visit(andOp); // discovers andOp, orOp, outputOp
+  EXPECT_EQ(opScc.getNumDiscovered(), 3u);
+  EXPECT_EQ(opScc.getNumSCCs(), 3u);
+
+  opScc.reset();
+
+  // All state cleared.
+  EXPECT_EQ(opScc.getNumDiscovered(), 0u);
+  EXPECT_EQ(opScc.getNumSCCs(), 0u);
+  EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
+  EXPECT_FALSE(opScc.hasDiscovered(andOp));
+  EXPECT_FALSE(opScc.hasDiscovered(outputOp));
+  EXPECT_EQ(opScc.topological_begin(), opScc.topological_end());
+
+  // Re-visiting with a different seed produces the correct fresh result.
+  opScc.visit(outputOp); // boundary seed: no results, only outputOp discovered
+  EXPECT_EQ(opScc.getNumDiscovered(), 1u);
+  EXPECT_EQ(opScc.getNumSCCs(), 1u);
+  EXPECT_TRUE(opScc.hasDiscovered(outputOp));
+  EXPECT_FALSE(opScc.hasDiscovered(andOp));
+}
+
 // Passing an empty seed list leaves all counts at zero.
 TEST(SparseOpSCCsTest, EmptySeeds) {
   SparseOpSCC<OpSCCDirection::Forward> fwd;
@@ -199,6 +239,75 @@ TEST(SparseOpSCCsTest, OverlappingSeeds) {
   EXPECT_EQ(cast<Operation *>(*(topoIt++)), orOp);
   EXPECT_EQ(cast<Operation *>(*(topoIt++)), outputOp);
   EXPECT_EQ(topoIt, opScc.topological_end());
+}
+
+// Incremental visit: two independent roots feeding a shared merge node.
+//
+//   %av    = comb.and %a, %a : i1   seed 1 (independent)
+//   %bv    = comb.or  %b, %b : i1   seed 2 (independent)
+//   %merge = comb.xor %av, %bv : i1 shared successor
+//   hw.output %merge : i1
+//
+// visit(avOp) discovers {avOp, mergeOp, outputOp}.
+// visit(bvOp) discovers only bvOp: mergeOp is already discovered and is
+// treated as a cross-edge, not re-entered.
+const char *incrementalIr = R"MLIR(
+  hw.module private @incremental(in %a: i1, in %b: i1, out x: i1) {
+    %av    = comb.and %a, %a : i1
+    %bv    = comb.or  %b, %b : i1
+    %merge = comb.xor %av, %bv : i1
+    hw.output %merge : i1
+  }
+)MLIR";
+
+TEST(SparseOpSCCsTest, IncrementalVisit) {
+  MLIRContext context;
+  context.loadDialect<hw::HWDialect>();
+  context.loadDialect<comb::CombDialect>();
+
+  OwningOpRef<ModuleOp> module =
+      parseSourceString<ModuleOp>(incrementalIr, &context);
+  ASSERT_TRUE(module);
+
+  SymbolTable symbolTable(module.get());
+  auto hwModule = symbolTable.lookup<hw::HWModuleOp>("incremental");
+  ASSERT_TRUE(hwModule);
+
+  auto it = hwModule.getBodyBlock()->begin();
+  Operation *avOp = &*it++;
+  Operation *bvOp = &*it++;
+  Operation *mergeOp = &*it++;
+  Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
+
+  SparseOpSCC<OpSCCDirection::Forward> opScc;
+
+  // First visit: avOp → mergeOp → outputOp.
+  opScc.visit(avOp);
+  EXPECT_EQ(opScc.getNumDiscovered(), 3u);
+  EXPECT_TRUE(opScc.hasDiscovered(avOp));
+  EXPECT_TRUE(opScc.hasDiscovered(mergeOp));
+  EXPECT_TRUE(opScc.hasDiscovered(outputOp));
+  EXPECT_FALSE(opScc.hasDiscovered(bvOp));
+
+  // Second visit: bvOp is new; mergeOp/outputOp are cross-edges — not
+  // re-entered, so only bvOp is added.
+  opScc.visit(bvOp);
+  EXPECT_EQ(opScc.getNumDiscovered(), 4u);
+  EXPECT_TRUE(opScc.hasDiscovered(bvOp));
+  EXPECT_EQ(opScc.getNumSCCs(), 4u);
+  EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
+
+  // mergeOp's SCC was assigned by the first visit and is unchanged.
+  EXPECT_EQ(cast<Operation *>(opScc.getSCC(mergeOp)), mergeOp);
+
+  // Reverse-topological (leaves first): outputOp, mergeOp, avOp, bvOp.
+  // bvOp trails because it was emitted by the second DFS.
+  auto revIt = opScc.reverseTopological_begin();
+  EXPECT_EQ(cast<Operation *>(*(revIt++)), outputOp);
+  EXPECT_EQ(cast<Operation *>(*(revIt++)), mergeOp);
+  EXPECT_EQ(cast<Operation *>(*(revIt++)), avOp);
+  EXPECT_EQ(cast<Operation *>(*(revIt++)), bvOp);
+  EXPECT_EQ(revIt, opScc.reverseTopological_end());
 }
 
 // Diamond: %and splits into two branches that join at %merge; no cycle.
@@ -786,7 +895,12 @@ TEST(SparseOpSCCsTest, OpSCCCasting) {
 
   // dyn_cast on known-present values.
   EXPECT_EQ(dyn_cast<Operation *>(trivialEntry), outputOp);
+  EXPECT_TRUE(static_cast<bool>(dyn_cast<Operation *>(trivialEntry)));
+  EXPECT_FALSE(static_cast<bool>(dyn_cast<CyclicOpSCC>(trivialEntry)));
+
   EXPECT_EQ(dyn_cast<Operation *>(cyclicEntry), nullptr);
+  EXPECT_FALSE(static_cast<bool>(dyn_cast<Operation *>(cyclicEntry)));
+  EXPECT_TRUE(static_cast<bool>(dyn_cast<CyclicOpSCC>(cyclicEntry)));
 
   EXPECT_EQ(dyn_cast<CyclicOpSCC>(cyclicEntry), opScc.getSCC(regOp));
   EXPECT_NE(dyn_cast<CyclicOpSCC>(cyclicEntry), opScc.getSCC(outputOp));
@@ -803,6 +917,7 @@ TEST(SparseOpSCCsTest, OpSCCCasting) {
 
   // dyn_cast_if_present additionally handles null entries gracefully.
   EXPECT_EQ(dyn_cast_if_present<Operation *>(nullEntry), nullptr);
+  EXPECT_FALSE(static_cast<bool>(dyn_cast_if_present<Operation *>(nullEntry)));
   EXPECT_FALSE(static_cast<bool>(dyn_cast_if_present<CyclicOpSCC>(nullEntry)));
 }
 
