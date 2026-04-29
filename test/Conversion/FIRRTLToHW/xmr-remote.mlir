@@ -1,54 +1,52 @@
-// RUN: circt-opt --lower-firrtl-to-hw %s | FileCheck %s
+// RUN: circt-opt --lower-firrtl-to-hw -split-input-file %s | FileCheck %s
 
+// Test basic xmr.remote targeting an instance result
 firrtl.circuit "XMRRemoteBasic" {
+  firrtl.extmodule @Child(out probe: !firrtl.rwprobe<uint<8>>)
+
   // CHECK-LABEL: hw.module @XMRRemoteBasic
   firrtl.module @XMRRemoteBasic() {
-    %w = firrtl.wire sym @myWire : !firrtl.uint<1>
-    // CHECK: %[[WIRE:.+]] = hw.wire %{{.+}} sym @myWire
-    %0 = firrtl.xmr.remote @XMRRemoteBasic::@myWire : !firrtl.rwprobe<uint<1>>
-    // CHECK: %[[XMR:.+]] = hw.xmr.remote @XMRRemoteBasic::@myWire : !hw.rwprobe<i1>
+    %child_probe = firrtl.instance child sym @childInst @Child(out probe: !firrtl.rwprobe<uint<8>>)
+    // CHECK: hw.instance "child" sym @childInst @Child
+
+    %0 = firrtl.xmr.remote @XMRRemoteBasic::@childInst, 0 : !firrtl.rwprobe<uint<8>>
+    // CHECK: hw.xmr.remote @XMRRemoteBasic::@childInst, 0 : !hw.rwprobe<i8>
   }
 }
 
 // -----
 
-firrtl.circuit "XMRRemoteFromExtModule" {
-  firrtl.extmodule @Bar(out rwprobe: !firrtl.rwprobe<uint<8>> sym @probePort)
+// Test xmr.remote targeting external module instance with multiple results
+firrtl.circuit "XMRRemoteMultiResult" {
+  firrtl.extmodule @Bar(out probe1: !firrtl.rwprobe<uint<8>>, out probe2: !firrtl.rwprobe<uint<16>>)
 
-  // CHECK-LABEL: hw.module @XMRRemoteFromExtModule
-  firrtl.module @XMRRemoteFromExtModule(in %clk: !firrtl.clock) {
-    %bar_rwprobe = firrtl.instance bar @Bar(out rwprobe: !firrtl.rwprobe<uint<8>>)
+  // CHECK-LABEL: hw.module @XMRRemoteMultiResult
+  firrtl.module @XMRRemoteMultiResult() {
+    %bar_probe1, %bar_probe2 = firrtl.instance bar sym @barInst @Bar(out probe1: !firrtl.rwprobe<uint<8>>, out probe2: !firrtl.rwprobe<uint<16>>)
+    // CHECK: hw.instance "bar" sym @barInst @Bar
 
-    %0 = firrtl.xmr.remote @Bar::@probePort : !firrtl.rwprobe<uint<8>>
-    // CHECK: hw.xmr.remote @Bar::@probePort : !hw.rwprobe<i8>
+    // Target first result (index 0)
+    %xmr1 = firrtl.xmr.remote @XMRRemoteMultiResult::@barInst, 0 : !firrtl.rwprobe<uint<8>>
+    // CHECK: hw.xmr.remote @XMRRemoteMultiResult::@barInst, 0 : !hw.rwprobe<i8>
+
+    // Target second result (index 1)
+    %xmr2 = firrtl.xmr.remote @XMRRemoteMultiResult::@barInst, 1 : !firrtl.rwprobe<uint<16>>
+    // CHECK: hw.xmr.remote @XMRRemoteMultiResult::@barInst, 1 : !hw.rwprobe<i16>
   }
 }
 
 // -----
 
-firrtl.circuit "XMRRemoteToReg" {
-  // CHECK-LABEL: hw.module @XMRRemoteToReg
-  firrtl.module @XMRRemoteToReg(in %clk: !firrtl.clock) {
-    %reg = firrtl.reg sym @myReg %clk : !firrtl.clock, !firrtl.uint<16>
-    // CHECK: %[[REG:.+]] = seq.compreg sym @myReg
-    %0 = firrtl.xmr.remote @XMRRemoteToReg::@myReg : !firrtl.rwprobe<uint<16>>
-    // CHECK: %[[XMR:.+]] = hw.xmr.remote @XMRRemoteToReg::@myReg : !hw.rwprobe<i16>
-  }
-}
+// Test xmr.remote targeting instance with single probe output
+firrtl.circuit "XMRRemoteSingleProbe" {
+  firrtl.extmodule @Source(out data: !firrtl.rwprobe<uint<32>>)
 
-// -----
+  // CHECK-LABEL: hw.module @XMRRemoteSingleProbe
+  firrtl.module @XMRRemoteSingleProbe() {
+    %source_data = firrtl.instance source sym @sourceInst @Source(out data: !firrtl.rwprobe<uint<32>>)
+    // CHECK: hw.instance "source" sym @sourceInst @Source
 
-firrtl.circuit "XMRRemoteMultiple" {
-  // CHECK-LABEL: hw.module @XMRRemoteMultiple
-  firrtl.module @XMRRemoteMultiple() {
-    %w1 = firrtl.wire sym @wire1 : !firrtl.uint<4>
-    %w2 = firrtl.wire sym @wire2 : !firrtl.uint<8>
-    // CHECK: hw.wire %{{.+}} sym @wire1
-    // CHECK: hw.wire %{{.+}} sym @wire2
-    
-    %xmr1 = firrtl.xmr.remote @XMRRemoteMultiple::@wire1 : !firrtl.rwprobe<uint<4>>
-    %xmr2 = firrtl.xmr.remote @XMRRemoteMultiple::@wire2 : !firrtl.rwprobe<uint<8>>
-    // CHECK: hw.xmr.remote @XMRRemoteMultiple::@wire1 : !hw.rwprobe<i4>
-    // CHECK: hw.xmr.remote @XMRRemoteMultiple::@wire2 : !hw.rwprobe<i8>
+    %xmr = firrtl.xmr.remote @XMRRemoteSingleProbe::@sourceInst, 0 : !firrtl.rwprobe<uint<32>>
+    // CHECK: hw.xmr.remote @XMRRemoteSingleProbe::@sourceInst, 0 : !hw.rwprobe<i32>
   }
 }
