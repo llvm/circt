@@ -263,8 +263,6 @@ public:
 
   /// Clear all accumulated state.
   void reset() {
-    sccStack.clear();
-    dfsStack.clear();
     opToSccIndex.clear();
     sccs.clear();
     cyclicSccs.clear();
@@ -422,13 +420,15 @@ private:
   }
 
   void tarjanImpl(mlir::Operation *startOp) {
-    // Per-call Tarjan state: {index, lowlink} for each op discovered in this
-    // DFS. Discarded when the call returns.
-    llvm::DenseMap<mlir::Operation *, std::pair<unsigned, unsigned>> tarjanData;
+    // All state below is local to this DFS and discarded when the call returns.
     unsigned nextIdx = 0;
+    llvm::SmallDenseMap<mlir::Operation *, std::pair<unsigned, unsigned>>
+        idxAndLowLinkMap;
+    llvm::SetVector<mlir::Operation *> sccStack;
+    llvm::SmallVector<FrameT> dfsStack;
 
     auto pushFrame = [&](mlir::Operation *op) {
-      tarjanData[op] = {nextIdx, nextIdx};
+      idxAndLowLinkMap[op] = {nextIdx, nextIdx};
       ++nextIdx;
       sccStack.insert(op);
       dfsStack.push_back(FrameT(op));
@@ -441,13 +441,13 @@ private:
       mlir::Operation *op = frame.op;
 
       if (auto *child = frame.nextChild(shouldTraverseFn)) {
-        auto it = tarjanData.find(child);
-        if (it != tarjanData.end()) {
+        auto it = idxAndLowLinkMap.find(child);
+        if (it != idxAndLowLinkMap.end()) {
           // Already seen in this DFS.
           if (sccStack.contains(child))
             // Back edge — update lowlink.
-            tarjanData[op].second =
-                std::min(tarjanData[op].second, it->second.first);
+            idxAndLowLinkMap[op].second =
+                std::min(idxAndLowLinkMap[op].second, it->second.first);
           // else: forward/cross edge within this DFS — ignore.
         } else if (!opToSccIndex.contains(child)) {
           // Not yet seen in any DFS — recurse.
@@ -458,7 +458,7 @@ private:
       }
 
       // All children processed — backtrack.
-      auto [opIndex, opLowLink] = tarjanData.at(op);
+      auto [opIndex, opLowLink] = idxAndLowLinkMap.at(op);
       dfsStack.pop_back();
 
       // If op is the root of its SCC, pop and emit it.
@@ -484,18 +484,21 @@ private:
 
       // Not an SCC root — back-propagate lowlink to the parent frame.
       if (!dfsStack.empty()) {
-        auto &parentLowLink = tarjanData.at(dfsStack.back().op).second;
+        auto &parentLowLink = idxAndLowLinkMap.at(dfsStack.back().op).second;
         parentLowLink = std::min(parentLowLink, opLowLink);
       }
     }
   }
 
+  /// Optional edge filter supplied at construction time.
   OpSCCFilter shouldTraverseFn;
 
-  llvm::SmallSetVector<mlir::Operation *, NumInlineElts> sccStack;
-  llvm::SmallVector<FrameT, NumInlineElts> dfsStack;
+  /// Maps each visited op to the index of its SCC in `sccs`. Persists across
+  /// visit() calls and is the authoritative "already visited" guard.
   llvm::SmallDenseMap<mlir::Operation *, unsigned, NumInlineElts> opToSccIndex;
+  /// Flat list of SCC entries emitted by Tarjan, in emission order.
   llvm::SmallVector<detail::OpOrIndex, NumInlineElts> sccs;
+  /// Backing storage for cyclic SCCs; CyclicOpSCC holds a pointer into here.
   llvm::SmallVector<detail::CyclicOpSCCStorage, 0> cyclicSccs;
 };
 
