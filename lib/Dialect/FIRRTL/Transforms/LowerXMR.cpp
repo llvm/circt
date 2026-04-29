@@ -344,7 +344,7 @@ class LowerXMRPass : public circt::firrtl::impl::LowerXMRBase<LowerXMRPass> {
     SmallVector<FModuleOp> publicModules;
 
     // Traverse the modules in post order.
-    auto result = instanceGraph.walkParallelPostOrder([&](auto &node) -> LogicalResult {
+    auto result = instanceGraph.walkPostOrder([&](auto &node) -> LogicalResult {
       auto module = dyn_cast<FModuleOp>(*node.getModule());
       if (!module)
         return success();
