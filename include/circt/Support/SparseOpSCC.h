@@ -247,7 +247,7 @@ private:
 /// Iterative Tarjan SCC analysis on a sparse subgraph of MLIR operations.
 ///
 /// Call visit() with one or more seed operations to trigger the DFS.  Results
-/// accumulate across multiple visit() calls, so the visited subgraph can be
+/// accumulate across multiple visit() calls, so the discovered subgraph can be
 /// expanded incrementally.
 ///
 /// The optional filter passed to the constructor is applied to every
@@ -270,26 +270,26 @@ public:
     cyclicSccs.clear();
   }
 
-  /// Visit `op` if it passes the shouldTraverseFn and has not been visited yet.
+  /// Seed `op` into the DFS if it has not already been discovered.
   void visit(mlir::Operation *op) {
     if (!opToSccIndex.contains(op))
       tarjanImpl(op);
   }
 
-  /// Visit each operation in `ops`, skipping already-visited or filtered ones.
+  /// Visit each operation in `ops`, skipping already-discovered ones.
   void visit(llvm::ArrayRef<mlir::Operation *> ops) {
     for (auto *op : ops)
       visit(op);
   }
 
-  /// Return true if `op` was reached by any previous visit() call.
-  bool hasVisited(mlir::Operation *op) const {
+  /// Return true if `op` was discovered (as a seed or transitively) by any
+  /// previous visit() call.
+  bool hasDiscovered(mlir::Operation *op) const {
     return opToSccIndex.contains(op);
   }
 
   /// Return the SCC that `op` belongs to, or an OpSCC holding NullOpSCC if it
-  /// has not been visited.  Check with isa<NullOpSCC> or the bool conversion
-  /// before dispatching with isa/cast.
+  /// has not been discovered.
   OpSCC getSCC(mlir::Operation *op) const {
     auto it = opToSccIndex.find(op);
     if (it == opToSccIndex.end())
@@ -301,8 +301,8 @@ public:
     return OpSCC(CyclicOpSCC(&cyclicSccs[cyclicIdx]));
   }
 
-  /// Number of operations visited so far.
-  unsigned getNumVisited() const { return opToSccIndex.size(); }
+  /// Number of operations discovered so far across all visit() calls.
+  unsigned getNumDiscovered() const { return opToSccIndex.size(); }
   /// Total number of SCC entries emitted (trivial ops + cyclic groups).
   unsigned getNumSCCs() const { return sccs.size(); }
   /// Number of cyclic SCC groups (excludes trivial ops).

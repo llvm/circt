@@ -53,7 +53,7 @@ TEST(SparseOpSCCsTest, SimpleChain) {
     SparseOpSCC<OpSCCDirection::Forward> opScc;
     opScc.visit(andOp);
 
-    EXPECT_EQ(opScc.getNumVisited(), 3u);
+    EXPECT_EQ(opScc.getNumDiscovered(), 3u);
     EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
 
     auto topoIt = opScc.topological_begin();
@@ -81,7 +81,7 @@ TEST(SparseOpSCCsTest, SimpleChain) {
     SparseOpSCC<OpSCCDirection::Backward> opScc;
     opScc.visit(outputOp);
 
-    EXPECT_EQ(opScc.getNumVisited(), 3u);
+    EXPECT_EQ(opScc.getNumDiscovered(), 3u);
     EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
 
     auto topoIt = opScc.topological_begin();
@@ -102,13 +102,13 @@ TEST(SparseOpSCCsTest, SimpleChain) {
 TEST(SparseOpSCCsTest, EmptySeeds) {
   SparseOpSCC<OpSCCDirection::Forward> fwd;
   fwd.visit(ArrayRef<Operation *>{});
-  EXPECT_EQ(fwd.getNumVisited(), 0u);
+  EXPECT_EQ(fwd.getNumDiscovered(), 0u);
   EXPECT_EQ(fwd.getNumSCCs(), 0u);
   EXPECT_EQ(fwd.getNumCyclicSCCs(), 0u);
 
   SparseOpSCC<OpSCCDirection::Backward> inv;
   inv.visit(ArrayRef<Operation *>{});
-  EXPECT_EQ(inv.getNumVisited(), 0u);
+  EXPECT_EQ(inv.getNumDiscovered(), 0u);
   EXPECT_EQ(inv.getNumSCCs(), 0u);
   EXPECT_EQ(inv.getNumCyclicSCCs(), 0u);
 }
@@ -139,7 +139,7 @@ TEST(SparseOpSCCsTest, BoundarySeed) {
     SparseOpSCC<OpSCCDirection::Forward> opScc;
     opScc.visit(outputOp);
 
-    EXPECT_EQ(opScc.getNumVisited(), 1u);
+    EXPECT_EQ(opScc.getNumDiscovered(), 1u);
     EXPECT_EQ(opScc.getNumSCCs(), 1u);
     EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
 
@@ -158,7 +158,7 @@ TEST(SparseOpSCCsTest, BoundarySeed) {
     SparseOpSCC<OpSCCDirection::Backward> opScc;
     opScc.visit(andOp);
 
-    EXPECT_EQ(opScc.getNumVisited(), 1u);
+    EXPECT_EQ(opScc.getNumDiscovered(), 1u);
     EXPECT_EQ(opScc.getNumSCCs(), 1u);
     EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
 
