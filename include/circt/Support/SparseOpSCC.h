@@ -171,7 +171,9 @@ namespace llvm {
 template <>
 struct PointerLikeTypeTraits<circt::NullOpSCC> {
   static void *getAsVoidPointer(circt::NullOpSCC) { return nullptr; }
-  static circt::NullOpSCC getFromVoidPointer(void *) {
+  static circt::NullOpSCC getFromVoidPointer(void *ptr) {
+    (void)ptr;
+    assert(ptr == nullptr);
     return circt::NullOpSCC{};
   }
   static constexpr int NumLowBitsAvailable =
@@ -248,8 +250,8 @@ private:
 /// accumulate across multiple visit() calls, so the visited subgraph can be
 /// expanded incrementally.
 ///
-/// The optional filter passed to the constructor is applied to every candidate
-/// operation before it is visited.  An operation that fails the filter is
+/// The optional filter passed to the constructor is applied to every
+/// discovered edge before it is traversed. An edge that fails the filter is
 /// treated as if it did not exist in the graph.
 ///
 /// Iterators obtained from topological() and reverseTopological() hold a
@@ -420,7 +422,6 @@ private:
   }
 
   void tarjanImpl(mlir::Operation *startOp) {
-    // All state below is local to this DFS and discarded when the call returns.
     unsigned nextIdx = 0;
     llvm::SmallDenseMap<mlir::Operation *, std::pair<unsigned, unsigned>>
         idxAndLowLinkMap;
@@ -468,10 +469,15 @@ private:
           sccOps.push_back(sccStack.pop_back_val());
         } while (sccOps.back() != op);
 
+        // Store the SCC index of the discovered ops
         unsigned sccIdx = sccs.size();
-        for (auto *sccOp : sccOps)
-          opToSccIndex[sccOp] = sccIdx;
+        for (auto *sccOp : sccOps) {
+          bool inserted = opToSccIndex.insert({sccOp, sccIdx}).second;
+          (void)inserted;
+          assert(inserted && "Unexpectedly revisited node");
+        }
 
+        // Insert the pointers into the persistent storage
         if (sccOps.size() == 1 && !hasSelfLoop(sccOps.front())) {
           sccs.push_back(detail::OpOrIndex(sccOps.front()));
         } else {
@@ -483,11 +489,10 @@ private:
       }
 
       // Not an SCC root — back-propagate lowlink to the parent frame.
-      if (!dfsStack.empty()) {
-        auto &parentLowLink = idxAndLowLinkMap.at(dfsStack.back().op).second;
-        parentLowLink = std::min(parentLowLink, opLowLink);
-      }
+      auto &parentLowLink = idxAndLowLinkMap.at(dfsStack.back().op).second;
+      parentLowLink = std::min(parentLowLink, opLowLink);
     }
+    assert(sccStack.empty());
   }
 
   /// Optional edge filter supplied at construction time.
