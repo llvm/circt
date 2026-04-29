@@ -886,14 +886,6 @@ public:
       }
       outputRegion.front().eraseArguments(
           [](BlockArgument arg) { return true; });
-      FrozenRewritePatternSet patterns(opBuilder.getContext());
-      config.setScope(&outputRegion);
-
-      bool changed = false;
-      if (failed(applyOpPatternsGreedily(opsToProcess, patterns, config,
-                                         &changed)))
-        return failure();
-      opBuilder.setInsertionPoint(stateOp);
       // hw.module uses graph regions that allow cycles (e.g., registers feeding
       // back into themselves). By this point we've replaced all registers with
       // constants, but cycles in purely combinational logic (e.g., cyclic
@@ -904,6 +896,14 @@ public:
             << "cannot convert module with combinational cycles to FSM";
         return failure();
       }
+      FrozenRewritePatternSet patterns(opBuilder.getContext());
+      config.setScope(&outputRegion);
+
+      bool changed = false;
+      if (failed(applyOpPatternsGreedily(opsToProcess, patterns, config,
+                                         &changed)))
+        return failure();
+      opBuilder.setInsertionPoint(stateOp);
       Region &transitionRegion = stateOp.getTransitions();
       llvm::SetVector<size_t> visitableStates;
       if (failed(getReachableStates(visitableStates, moduleOp,
@@ -1014,6 +1014,14 @@ public:
           clonedRegValue.replaceAllUsesWith(constantOp.getResult());
           clonedRegOp->erase();
         }
+        // Sort before running patterns to avoid violating dominance and
+        // therefore pattern invariants
+        bool guardSorted = sortTopologically(&newGuardBlock);
+        if (!guardSorted) {
+          moduleOp.emitError()
+              << "cannot convert module with combinational cycles to FSM";
+          return failure();
+        }
         Region &actionRegion = transitionOp.getAction();
         if (!variableRegs.empty()) {
           Block *actionBlock = opBuilder.createBlock(&actionRegion);
@@ -1056,6 +1064,15 @@ public:
             clonedRegOp->erase();
           }
 
+          // Sort before running patterns to avoid violating dominance and
+          // therefore pattern invariants
+          bool actionSorted = sortTopologically(&actionRegion.front());
+          if (!actionSorted) {
+            moduleOp.emitError()
+                << "cannot convert module with combinational cycles to FSM";
+            return failure();
+          }
+
           GreedyRewriteConfig config;
           SmallVector<Operation *> opsToProcess;
           actionRegion.walk([&](Operation *op) { opsToProcess.push_back(op); });
@@ -1065,27 +1082,8 @@ public:
           if (failed(applyOpPatternsGreedily(opsToProcess, frozenPatterns,
                                              config, &changed)))
             return failure();
-
-          // hw.module uses graph regions that allow cycles. By this point
-          // we've replaced all registers with constants, but cycles in purely
-          // combinational logic may still exist.
-          bool actionSorted = sortTopologically(&actionRegion.front());
-          if (!actionSorted) {
-            moduleOp.emitError()
-                << "cannot convert module with combinational cycles to FSM";
-            return failure();
-          }
         }
 
-        // hw.module uses graph regions that allow cycles. By this point
-        // we've replaced all registers with constants, but cycles in purely
-        // combinational logic may still exist.
-        bool guardSorted = sortTopologically(&newGuardBlock);
-        if (!guardSorted) {
-          moduleOp.emitError()
-              << "cannot convert module with combinational cycles to FSM";
-          return failure();
-        }
         SmallVector<Operation *> outputOps;
         stateOp.getOutput().walk(
             [&](Operation *op) { outputOps.push_back(op); });
