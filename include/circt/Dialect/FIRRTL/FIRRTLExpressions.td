@@ -1747,34 +1747,37 @@ def XMRRemoteOp : FIRRTLOp<"xmr.remote",
                    HasCustomSSAName,
                    Pure
                   ]> {
-  let summary = "FIRRTL XMR remote operation creating RWProbe from InnerRef";
+  let summary = "FIRRTL XMR remote operation creating RWProbe from instance result";
   let description = [{
-    Creates an RWProbe reference to a remote target specified by an InnerRef.
-    This operation is primarily used by the LowerLayers pass to work around the
-    limitation that probe types cannot be passed through module input ports.
+    Creates an RWProbe reference to a remote instance result specified by an
+    InnerRef and result index. This operation is primarily used by the
+    LowerLayers pass to work around the limitation that probe types cannot be
+    passed through module input ports.
 
     When lowering layer blocks into separate modules, captured RWProbe values
     need to be accessible inside the extracted layer module. Since probe types
     cannot be passed as input ports, this operation uses cross-module references
-    (XMR) to directly reference the remote RWProbe target via its InnerRef.
+    (XMR) to directly reference the remote instance result via its InnerRef and
+    index.
 
-    The InnerRef can target either:
-    - A module port with an inner symbol (e.g., extmodule output ports)
-    - An operation with an inner symbol (e.g., wires, registers)
+    The InnerRef must target an instance operation with an inner symbol.
+    The index specifies which result of the instance to reference.
 
     The result can be used with force and release operations for simulation
     control.
 
     Example:
     ```
-      %rwProbe = firrtl.xmr.remote @ChildModule::@myReg : !firrtl.rwprobe<uint<8>>
+      // Reference the first result (index 0) of instance @myInst
+      %rwProbe = firrtl.xmr.remote @ParentModule::@myInst, 0 : !firrtl.rwprobe<uint<8>>
       firrtl.ref.force %clk, %cond, %rwProbe, %value
     ```
   }];
 
-  let arguments = (ins InnerRefAttr:$target);
+  let arguments = (ins InnerRefAttr:$target, I64Attr:$index);
   let results = (outs RWProbe:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
