@@ -15,15 +15,12 @@
 
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/OpDefinition.h"
-#include "mlir/IR/Threading.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/GraphTraits.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/Support/DOTGraphTraits.h"
-#include "llvm/Support/ThreadPool.h"
-#include <atomic>
 
 /// The InstanceGraph op interface, see InstanceGraphInterface.td for more
 /// details.
@@ -293,13 +290,32 @@ public:
   /// but sibling nodes (those sharing no ancestor/descendant relationship) may
   /// be visited concurrently.
   ///
-  /// **Thread safety:** The callback `fn` must be safe to call from multiple
-  /// threads simultaneously.  The callback must *not* mutate the InstanceGraph
-  /// (add/remove nodes or instances).  Mutations must be performed outside of
-  /// the walk or on a serial walk.
+  /// **Thread safety:** The callback `fn` must be safe to invoke from
+  /// multiple threads concurrently.
+  ///
+  /// The callback must *not* mutate the InstanceGraph's structure.  In
+  /// particular it must not:
+  ///   * add or remove InstanceGraphNodes (`addModule` / `erase`),
+  ///   * add, remove, or replace InstanceRecords (`addInstance` /
+  ///     `InstanceRecord::erase` / `replaceInstance`),
+  ///   * mutate any node's `instances` or `uses` lists by any means.
+  ///
+  /// The callback MAY:
+  ///   * read any field of any InstanceGraphNode or InstanceRecord (target,
+  ///     parent, module, instance),
+  ///   * mutate the underlying MLIR IR of the node's own module, subject to
+  ///     the usual MLIR parallel-walk rules (no cross-thread access to
+  ///     parent regions, symbol tables, or sibling modules' ops),
+  ///   * accumulate results into user-owned data structures using the
+  ///     user's own synchronization.
+  ///
+  /// If the graph must be mutated based on the walk's results, collect the
+  /// required edits into a thread-safe side buffer during the walk, then
+  /// apply them serially after the walk returns.
   ///
   /// **DAG requirement:** The InstanceGraph must be a DAG for the parallel
-  /// walk.  If there are cycles, the walk will assert in debug builds.
+  /// walk.  If there are cycles, nodes belonging to a cycle will be silently
+  /// skipped (their pending counts never reach zero).
   ///
   /// If `fn` returns a `LogicalResult`, the walk returns `failure()` as soon
   /// as any invocation fails.  Remaining ready but unstarted nodes are
@@ -316,13 +332,32 @@ public:
   /// been visited (and their callbacks completed) before the node itself is
   /// visited, but sibling nodes may be visited concurrently.
   ///
-  /// **Thread safety:** The callback `fn` must be safe to call from multiple
-  /// threads simultaneously.  The callback must *not* mutate the InstanceGraph
-  /// (add/remove nodes or instances).  Mutations must be performed outside of
-  /// the walk or on a serial walk.
+  /// **Thread safety:** The callback `fn` must be safe to invoke from
+  /// multiple threads concurrently.
+  ///
+  /// The callback must *not* mutate the InstanceGraph's structure.  In
+  /// particular it must not:
+  ///   * add or remove InstanceGraphNodes (`addModule` / `erase`),
+  ///   * add, remove, or replace InstanceRecords (`addInstance` /
+  ///     `InstanceRecord::erase` / `replaceInstance`),
+  ///   * mutate any node's `instances` or `uses` lists by any means.
+  ///
+  /// The callback MAY:
+  ///   * read any field of any InstanceGraphNode or InstanceRecord (target,
+  ///     parent, module, instance),
+  ///   * mutate the underlying MLIR IR of the node's own module, subject to
+  ///     the usual MLIR parallel-walk rules (no cross-thread access to
+  ///     parent regions, symbol tables, or sibling modules' ops),
+  ///   * accumulate results into user-owned data structures using the
+  ///     user's own synchronization.
+  ///
+  /// If the graph must be mutated based on the walk's results, collect the
+  /// required edits into a thread-safe side buffer during the walk, then
+  /// apply them serially after the walk returns.
   ///
   /// **DAG requirement:** The InstanceGraph must be a DAG for the parallel
-  /// walk.  If there are cycles, the walk will assert in debug builds.
+  /// walk.  If there are cycles, nodes belonging to a cycle will be silently
+  /// skipped (their pending counts never reach zero).
   ///
   /// If `fn` returns a `LogicalResult`, the walk returns `failure()` as soon
   /// as any invocation fails.  Remaining ready but unstarted nodes are
@@ -358,25 +393,16 @@ public:
                                InstanceOpInterface newInst);
 
 private:
-  /// Shared implementation for walkParallelPostOrder and
-  /// walkParallelInversePostOrder.
+  /// Shared non-template implementation for walkParallelPostOrder and
+  /// walkParallelInversePostOrder.  The `forward` flag selects the direction.
+  /// When true, the walk is post-order (children before parents): prereqs
+  /// are a node's children (targets), notifyees are its parents (uses).
+  /// When false, the walk is inverse-post-order.
   ///
-  /// @param fn      The user callback, infallible or returning LogicalResult.
-  /// @param prereqs Populates a vector with the nodes that must finish before
-  ///                a given node is ready.  Used to compute the initial
-  ///                pending count.  May include duplicates or unmanaged
-  ///                sentinel nodes.  walkParallelImpl deduplicates and
-  ///                filters to managed nodes.
-  /// @param notify  Populates a vector with the nodes to notify (i.e., whose
-  ///                pending count to decrement) after a given node finishes.
-  ///                Same filtering applies.
-  /// @param serial  The sequential fallback walk, called when multithreading
-  ///                is disabled.  Accepts no arguments and captures its
-  ///                callback via closure.
-  template <typename Fn, typename PrereqFn, typename NotifyFn,
-            typename SerialFn>
-  decltype(auto) walkParallelImpl(Fn &&fn, PrereqFn &&prereqs,
-                                  NotifyFn &&notify, SerialFn &&serial);
+  /// Defined out-of-line in InstanceGraph.cpp to keep the header free of
+  /// <atomic>, ThreadPool, and Threading includes.
+  LogicalResult walkParallelImpl(
+      llvm::function_ref<LogicalResult(InstanceGraphNode &)> fn, bool forward);
 
 protected:
   ModuleOpInterface getReferencedModuleImpl(InstanceOpInterface op);
@@ -650,227 +676,42 @@ decltype(auto) InstanceGraph::walkInversePostOrder(Fn &&fn) {
 
 template <typename Fn>
 decltype(auto) InstanceGraph::walkParallelPostOrder(Fn &&fn) {
-  return walkParallelImpl(
-      std::forward<Fn>(fn),
-      // Prerequisites: the distinct children (targets) this node instantiates
-      // must all finish before this node is ready.
-      [](InstanceGraphNode &node, SmallVectorImpl<InstanceGraphNode *> &out) {
-        for (auto *record : node)
-          out.push_back(record->getTarget());
-      },
-      // Notify: the parents (uses) of this node become one step closer to
-      // ready when this node finishes.
-      [](InstanceGraphNode &node, SmallVectorImpl<InstanceGraphNode *> &out) {
-        for (auto *use : node.uses())
-          out.push_back(use->getParent());
-      },
-      // Serial fallback.  Capturing fn by reference is safe because
-      // walkParallelImpl calls serial() before returning.
-      [&]() { return walkPostOrder(std::forward<Fn>(fn)); });
+  constexpr bool fallible =
+      std::is_invocable_r_v<LogicalResult, Fn &, InstanceGraphNode &>;
+  // Forward to the non-template core implementation in InstanceGraph.cpp.
+  // The lambda that adapts `fn` to a LogicalResult-returning callback must
+  // be constructed in this scope so that the function_ref bound to it in
+  // walkParallelImpl does not outlive the underlying callable.
+  if constexpr (fallible) {
+    return walkParallelImpl(
+        [&](InstanceGraphNode &node) -> LogicalResult { return fn(node); },
+        /*forward=*/true);
+  } else {
+    (void)walkParallelImpl(
+        [&](InstanceGraphNode &node) -> LogicalResult {
+          fn(node);
+          return success();
+        },
+        /*forward=*/true);
+  }
 }
 
 template <typename Fn>
 decltype(auto) InstanceGraph::walkParallelInversePostOrder(Fn &&fn) {
-  return walkParallelImpl(
-      std::forward<Fn>(fn),
-      // Prerequisites: the distinct parents (uses) of this node must all
-      // finish before this node is ready.
-      [](InstanceGraphNode &node, SmallVectorImpl<InstanceGraphNode *> &out) {
-        for (auto *use : node.uses())
-          out.push_back(use->getParent());
-      },
-      // Notify: the children (targets) of this node become one step closer to
-      // ready when this node finishes.
-      [](InstanceGraphNode &node, SmallVectorImpl<InstanceGraphNode *> &out) {
-        for (auto *record : node)
-          out.push_back(record->getTarget());
-      },
-      // Serial fallback.  Wrap fn to skip nodes not in the managed `nodes`
-      // list.  walkInversePostOrder may visit sentinel nodes reachable via
-      // graph traversal (e.g., the virtual top-level entry in
-      // hw::InstanceGraph).  This wrapper ensures both paths visit exactly
-      // the same set of nodes.
-      [&]() {
-        constexpr bool fallible =
-            std::is_invocable_r_v<LogicalResult, Fn &, InstanceGraphNode &>;
-        DenseSet<InstanceGraphNode *> managed;
-        for (auto &node : nodes)
-          managed.insert(&node);
-        auto filtered = [&](InstanceGraphNode &node) -> decltype(auto) {
-          if (!managed.count(&node)) {
-            if constexpr (fallible)
-              return success();
-            else
-              return;
-          }
-          return fn(node);
-        };
-        return walkInversePostOrder(filtered);
-      });
-}
-
-template <typename Fn, typename PrereqFn, typename NotifyFn, typename SerialFn>
-decltype(auto) InstanceGraph::walkParallelImpl(Fn &&fn, PrereqFn &&prereqs,
-                                               NotifyFn &&notify,
-                                               SerialFn &&serial) {
   constexpr bool fallible =
       std::is_invocable_r_v<LogicalResult, Fn &, InstanceGraphNode &>;
-
-  // If multithreading is disabled fall back to the sequential walk so that
-  // callers don't have to reason about two code paths.
-  MLIRContext *ctx = parent->getContext();
-  if (!ctx->isMultithreadingEnabled()) {
-    return serial();
+  if constexpr (fallible) {
+    return walkParallelImpl(
+        [&](InstanceGraphNode &node) -> LogicalResult { return fn(node); },
+        /*forward=*/false);
+  } else {
+    (void)walkParallelImpl(
+        [&](InstanceGraphNode &node) -> LogicalResult {
+          fn(node);
+          return success();
+        },
+        /*forward=*/false);
   }
-
-  // --- Phase 1: compute per-node pending counts (sequential) ----------------
-  //
-  // `prereqs(node, out)` fills `out` with the nodes that must finish before
-  // `node` becomes ready (post-order: children, inverse post-order: parents).
-  // The pending count of a node is the number of distinct managed prereqs
-  // it has.  A node whose count is zero is a seed for the traversal.
-  //
-  // `notify(node, out)` fills `out` with the nodes to notify when `node`
-  // finishes (post-order: parents, inverse post-order: children).
-  //
-  // Filtering to managed nodes (via nodeIndex) means that sentinel nodes
-  // introduced by subclasses (e.g., the virtual top-level entry in
-  // hw::InstanceGraph) are automatically excluded from both.
-  //
-  // std::atomic is not movable, so we store atomics in a flat vector indexed
-  // by a stable integer assigned to each node.
-
-  // Assign a stable index to every node and compute pending counts in one
-  // pass to avoid a second O(N) scan and extra hash lookups.
-  DenseMap<InstanceGraphNode *, size_t> nodeIndex;
-  size_t numNodes = 0;
-  for (auto &node : nodes) {
-    (void)node;
-    ++numNodes;
-  }
-  nodeIndex.reserve(numNodes);
-
-  // Allocate one atomic<unsigned> per node (value initialised to 0).
-  std::vector<std::atomic<unsigned>> pending(numNodes);
-  // Collect the initial seeds (nodes with zero managed prereqs) while
-  // computing the pending counts.  Seeds must be gathered before submitting
-  // any tasks.  Once a task is running it may decrement another node's
-  // pending count to zero concurrently with this loop.  That node is
-  // submitted by the decrementing thread and must not be resubmitted here.
-  SmallVector<InstanceGraphNode *, 8> seeds;
-  {
-    // First assign indices so nodeIndex is populated for the filtering below.
-    size_t idx = 0;
-    for (auto &node : nodes)
-      nodeIndex[&node] = idx++;
-
-    SmallVector<InstanceGraphNode *, 4> buf;
-    for (auto &node : nodes) {
-      buf.clear();
-      prereqs(node, buf);
-      // Count distinct managed prereqs.
-      SmallPtrSet<InstanceGraphNode *, 4> seen;
-      unsigned count = 0;
-      for (auto *nb : buf)
-        if (nodeIndex.count(nb) && seen.insert(nb).second)
-          ++count;
-      size_t nodeIdx = nodeIndex[&node];
-      pending[nodeIdx].store(count, std::memory_order_relaxed);
-      if (count == 0)
-        seeds.push_back(&node);
-    }
-  }
-
-  // --- Phase 2: parallel traversal via thread pool --------------------------
-
-  // All three accesses to processingFailed use relaxed ordering.  The flag
-  // carries no associated payload.  It is a pure boolean signal.  The
-  // happens-before edge established by taskGroup.wait() provides the
-  // synchronization needed for the final read.
-  std::atomic<bool> processingFailed(false);
-
-  // visitedCount tracks how many nodes were actually executed.  After
-  // taskGroup.wait() it must equal numNodes for a cycle-free DAG.
-  std::atomic<size_t> visitedCount(0);
-
-  llvm::ThreadPoolInterface &threadPool = ctx->getThreadPool();
-  llvm::ThreadPoolTaskGroup taskGroup(threadPool);
-
-  // Submit a single node for execution on the thread pool.  After the
-  // callback completes, decrement the pending count of each unique managed
-  // notifyee.  Those whose count drops to zero are immediately resubmitted.
-  //
-  // `submitNode` calls itself transitively (on different threads) to schedule
-  // newly ready nodes, so we declare it as a std::function to allow the
-  // lambda to capture itself by reference.  taskGroup.async() only enqueues
-  // the task.  It does not execute it on the current stack, so there is no
-  // actual call-stack recursion.
-  //
-  // NOTE: taskGroup.wait() below is load-bearing for the lifetime of
-  // `submitNode`.  Worker threads capture `submitNode` by reference.  The
-  // outer stack frame must not be destroyed until wait() returns.
-  std::function<void(InstanceGraphNode *)> submitNode;
-  submitNode = [&](InstanceGraphNode *node) {
-    taskGroup.async([&, node] {
-      // Skip remaining work after a failure.
-      if (processingFailed.load(std::memory_order_relaxed))
-        return;
-
-      if constexpr (fallible) {
-        if (failed(fn(*node))) {
-          processingFailed.store(true, std::memory_order_relaxed);
-          return;
-        }
-      } else {
-        fn(*node);
-      }
-
-      visitedCount.fetch_add(1, std::memory_order_relaxed);
-
-      // Notify each unique managed notifyee that one of their prereqs is
-      // done.  We use relaxed ordering on the fetch_sub because the user
-      // callback is responsible for its own synchronization and we only need
-      // the counter itself to be atomically decremented.  The overall
-      // happens-before relationship across tasks is guaranteed by the thread
-      // pool.
-      SmallVector<InstanceGraphNode *, 4> toNotify;
-      notify(*node, toNotify);
-      SmallPtrSet<InstanceGraphNode *, 4> notified;
-      for (auto *nb : toNotify) {
-        auto it = nodeIndex.find(nb);
-        if (it == nodeIndex.end())
-          continue;
-        if (!notified.insert(nb).second)
-          continue;
-        // If the notifyee's pending count reaches zero it is now ready.
-        if (pending[it->second].fetch_sub(1, std::memory_order_relaxed) == 1)
-          submitNode(nb);
-      }
-    });
-  };
-
-  // Seed the traversal by submitting all nodes whose initial pending count
-  // was zero.  We use the seeds collected during Phase 1 rather than
-  // re-reading `pending` here because worker threads started by earlier
-  // `submitNode` calls may already be decrementing entries in `pending` to
-  // zero.  Those nodes are submitted by the decrementing thread and must not
-  // be submitted again from this loop.
-  for (auto *node : seeds)
-    submitNode(node);
-
-  taskGroup.wait();
-
-  // If every node was visited the graph is a DAG.  Otherwise there is a
-  // cycle.  Only check this when no failure was reported because a failure
-  // stops scheduling and naturally leaves nodes unvisited.
-  assert((processingFailed.load(std::memory_order_relaxed) ||
-          visitedCount.load(std::memory_order_relaxed) == numNodes) &&
-         "InstanceGraph has a cycle. "
-         "walkParallelPostOrder and walkParallelInversePostOrder require a "
-         "DAG");
-
-  if constexpr (fallible)
-    return failure(processingFailed.load(std::memory_order_relaxed));
 }
 
 } // namespace igraph
