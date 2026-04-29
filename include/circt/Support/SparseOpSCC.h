@@ -36,9 +36,12 @@
 //
 // Output ordering
 // ---------------
-// SCCs are available in topological order of the condensation DAG (seeds /
-// sources first, leaves last) via topological(), and in the reverse via
-// reverseTopological().
+// SCCs are available in a topological order of the condensation DAG via
+// the iterator returned by topological(), and in the reverse via
+// reverseTopological(). The returned order is deterministic (identical graphs
+// will result in an identical order). However, if more than one topological
+// order exists, there is no guarantee on the specific order. Equally, the
+// order of operations within an SCC is deterministic but unspecified.
 //
 // Blocks and Regions
 // ------------------
@@ -50,12 +53,12 @@
 // Operation Graph Mutation
 // ------------------------
 // The SparseOpSCC class internally stores the result of the SCC analysis
-// and is only updated when visit(...) is called. It is not recommended
-// to mutate the IR between visit calls. Calling visit invalidates all
-// iterators. It is safe to mutate the IR while iterating. However, the
-// iteration sequence may contain invalid operation pointers, if the underlying
-// operation is erased after visiting the graph. To reflect the changes in the
-// analysis, reset() must be called and the graph must be re-visited.
+// and is only updated when visit(...) is called. The IR should not be mutated
+// between visit calls. Calling visit invalidates all iterators.
+// It is safe to mutate the IR while iterating. However, the iteration sequence
+// may contain invalid operation pointers, if the underlying operation is erased
+// after visiting the graph. To reflect changes to the graph in the analysis,
+// reset() must be called and the graph must be re-visited.
 //
 // Usage example
 // -------------
@@ -114,8 +117,6 @@ namespace circt {
 using OpSCCFilter = std::function<bool(mlir::Operation *, mlir::OpOperand &)>;
 
 /// Sentinel type representing "no SCC" in an OpSCC PointerUnion.
-/// It is placed first in the union so that the all-zero (default-constructed)
-/// state identifies unambiguously as NullOpSCC, not as a null Operation*.
 struct NullOpSCC {
   void *getAsVoidPointer() const { return nullptr; }
   static NullOpSCC getFromVoidPointer(void *) { return NullOpSCC{}; }
@@ -198,7 +199,10 @@ namespace circt {
 /// One entry in the SCC output: a null sentinel, a trivial (non-cyclic)
 /// operation, or a cyclic group.  Use llvm::isa / llvm::cast / llvm::dyn_cast
 /// to distinguish.  The null state (isa<NullOpSCC>) is returned by getSCC()
-/// when the queried operation has not been visited.
+/// when the queried operation has not been discovered.
+/// Note: NullOpSCC must be placed first in the union so that the all-zero
+/// (default-constructed) state identifies unambiguously as NullOpSCC, not as a
+/// null Operation*.
 using OpSCC = llvm::PointerUnion<NullOpSCC, mlir::Operation *, CyclicOpSCC>;
 
 /// Traversal direction for SparseOpSCC.
@@ -502,6 +506,8 @@ private:
   /// visit() calls and is the authoritative "already visited" guard.
   llvm::SmallDenseMap<mlir::Operation *, unsigned, NumInlineElts> opToSccIndex;
   /// Flat list of SCC entries emitted by Tarjan, in emission order.
+  /// Trivial SCCs are stored directly. Cyclic SCCs are stored as index into
+  /// the `cyclicSccs` vector.
   llvm::SmallVector<detail::OpOrIndex, NumInlineElts> sccs;
   /// Backing storage for cyclic SCCs; CyclicOpSCC holds a pointer into here.
   llvm::SmallVector<detail::CyclicOpSCCStorage, 0> cyclicSccs;
