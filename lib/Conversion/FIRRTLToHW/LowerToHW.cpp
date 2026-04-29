@@ -5323,12 +5323,13 @@ LogicalResult FIRRTLLowering::visitExpr(XMRRemoteOp op) {
   if (!resultType)
     return failure();
 
-  // Get the target InnerRef
+  // Get the target InnerRef and index
   auto targetRef = op.getTargetAttr();
+  int64_t index = op.getIndex();
 
-  // Create hw.xmr.remote with the same InnerRef and result type
-  auto xmrRemote =
-      builder.create<hw::XMRRemoteOp>(op.getLoc(), resultType, targetRef);
+  // Create hw.xmr.remote with the InnerRef, index, and result type
+  auto xmrRemote = builder.create<hw::XMRRemoteOp>(op.getLoc(), resultType,
+                                                   targetRef, index);
   return setLowering(op, xmrRemote.getResult());
 }
 
