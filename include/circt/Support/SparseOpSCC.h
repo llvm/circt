@@ -349,10 +349,12 @@ private:
   // DFS stack frame for forward traversal. Skips over unused results.
   struct ForwardFrame {
     mlir::Operation *op;
-    unsigned resultIdx;
     std::optional<mlir::Value::use_iterator> useIt;
+    unsigned resultIdx;
+    bool hasSelfLoop = false;
 
-    explicit ForwardFrame(mlir::Operation *op) : op(op), resultIdx(0) {
+    explicit ForwardFrame(mlir::Operation *op)
+        : op(op), useIt(std::nullopt), resultIdx(0) {
       if (op->getNumResults() > 0)
         useIt = op->getResult(0).use_begin();
     }
@@ -378,6 +380,7 @@ private:
   struct InverseFrame {
     mlir::Operation *op;
     unsigned operandIdx;
+    bool hasSelfLoop = false;
 
     explicit InverseFrame(mlir::Operation *op) : op(op), operandIdx(0) {}
 
@@ -394,14 +397,6 @@ private:
 
   using FrameT = std::conditional_t<Direction == OpSCCDirection::Forward,
                                     ForwardFrame, InverseFrame>;
-
-  bool hasSelfLoop(mlir::Operation *op) const {
-    for (mlir::OpOperand &operand : op->getOpOperands())
-      if (operand.get().getDefiningOp() == op &&
-          (!shouldTraverseFn || shouldTraverseFn(op, operand)))
-        return true;
-    return false;
-  }
 
   void tarjanImpl(mlir::Operation *startOp) {
     unsigned nextIdx = 0;
@@ -424,23 +419,29 @@ private:
       mlir::Operation *op = frame.op;
 
       if (auto *child = frame.nextChild(shouldTraverseFn)) {
-        auto it = idxAndLowLinkMap.find(child);
-        if (it != idxAndLowLinkMap.end()) {
-          // Already seen in this DFS.
-          if (sccStack.contains(child))
-            // Back edge — update lowlink.
-            idxAndLowLinkMap[op].second =
-                std::min(idxAndLowLinkMap[op].second, it->second.first);
-          // else: forward/cross edge within this DFS — ignore.
-        } else if (!opToSccIndex.contains(child)) {
-          // Not yet seen in any DFS — recurse.
-          pushFrame(child);
+        if (child == op) {
+          // Self-loop — record it in the frame; no lowlink update needed.
+          frame.hasSelfLoop = true;
+        } else {
+          auto it = idxAndLowLinkMap.find(child);
+          if (it != idxAndLowLinkMap.end()) {
+            // Already seen in this DFS.
+            if (sccStack.contains(child))
+              // Back edge — update lowlink.
+              idxAndLowLinkMap[op].second =
+                  std::min(idxAndLowLinkMap[op].second, it->second.first);
+            // else: forward/cross edge within this DFS — ignore.
+          } else if (!opToSccIndex.contains(child)) {
+            // Not yet seen in any DFS — recurse.
+            pushFrame(child);
+          }
+          // else: completed in a previous visit() call — cross edge, ignore.
         }
-        // else: completed in a previous visit() call — cross edge, ignore.
         continue;
       }
 
       // All children processed — backtrack.
+      bool selfLoop = frame.hasSelfLoop;
       auto [opIndex, opLowLink] = idxAndLowLinkMap.at(op);
       dfsStack.pop_back();
 
@@ -460,7 +461,7 @@ private:
         }
 
         // Insert the pointers into the persistent storage
-        if (sccOps.size() == 1 && !hasSelfLoop(sccOps.front())) {
+        if (sccOps.size() == 1 && !selfLoop) {
           sccs.push_back(detail::OpOrIndex(sccOps.front()));
         } else {
           unsigned cyclicIdx = cyclicSccs.size();
