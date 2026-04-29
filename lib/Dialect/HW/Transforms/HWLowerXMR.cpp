@@ -22,6 +22,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/EquivalenceClasses.h"
 #include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/Support/raw_ostream.h"
 
 #define DEBUG_TYPE "hw-lower-xmr"
 
@@ -53,6 +54,7 @@ private:
   LogicalResult handleProbeSend(ProbeSendOp send);
   LogicalResult handleProbeResolve(ProbeResolveOp resolve);
   LogicalResult handleProbeXMRRef(ProbeXMRRefOp xmrRef);
+  LogicalResult handleXMRRemote(XMRRemoteOp xmrRemote);
   LogicalResult handleInstance(InstanceOp inst);
   LogicalResult handleProbeRWProbe(ProbeRWProbeOp rwprobe);
   LogicalResult handleProbeSub(ProbeSubOp sub);
@@ -63,6 +65,10 @@ private:
   InnerRefAttr getOrAddInnerSym(Value target);
   InnerRefAttr getInnerRefTo(Operation *op);
   InnerRefAttr getInnerRefTo(Value val);
+
+  /// Resolve an InnerRefAttr to the Operation it targets.
+  /// Returns null if the target cannot be resolved or is not an operation.
+  Operation *resolveInnerRef(InnerRefAttr innerRef);
 
   // Add an entry recording the path to a RefSend
   size_t addReachingSendsEntry(Value val, InnerRefAttr node,
@@ -94,6 +100,9 @@ private:
   InnerSymbolNamespace moduleNamespace;
   HierPathCache *hierPathCache = nullptr;
 
+  // Cache for resolveInnerRef to avoid repeated lookups
+  DenseMap<InnerRefAttr, Operation *> innerRefCache;
+
   // Dataflow analysis: track which RefSend reaches each RefType value
   llvm::EquivalenceClasses<Value> dataFlowClasses;
   DenseMap<Value, size_t> dataflowAt;
@@ -105,6 +114,7 @@ private:
   SmallVector<ProbeSendOp> sendsToRemove;
   SmallVector<ProbeResolveOp> resolvesToRemove;
   SmallVector<ProbeXMRRefOp> xmrRefsToRemove;
+  SmallVector<XMRRemoteOp> xmrRemotesToRemove;
   SmallVector<ProbeDefineOp> definesToRemove;
   SmallVector<WireOp> wiresToRemove;
   SmallVector<ProbeSubOp> subsToRemove;
@@ -184,12 +194,13 @@ void HWLowerXMRPass::runOnOperation() {
   // Remove probe operations after port removal
   // Removal order is critical to avoid use-after-free:
   // 1. Defines first (they use rwprobes and other probe values)
-  // 2. Resolves and XMRRefs next (they use subs, wires, sends, and other probe
-  // values)
-  // 3. Subs (they are used by resolves/xmrRefs, can be chained)
+  // 2. Resolves, XMRRefs, and XMRRemotes next (they use subs, wires, sends, and
+  //    other probe values)
+  // 3. Subs (they are used by resolves/xmrRefs/xmrRemotes, can be chained)
   //    Note: Subs are removed in reverse order they were added, so leaf subs
   //    (those used by other subs) are removed before parent subs
-  // 4. Wires (they are used by resolves/xmrRefs, produce probe values)
+  // 4. Wires (they are used by resolves/xmrRefs/xmrRemotes, produce probe
+  // values)
   // 5. Sends (they produce probe values)
   // 6. Other ops last
   for (auto define : definesToRemove)
@@ -198,6 +209,8 @@ void HWLowerXMRPass::runOnOperation() {
     resolve->erase();
   for (auto xmrRef : xmrRefsToRemove)
     xmrRef->erase();
+  for (auto xmrRemote : xmrRemotesToRemove)
+    xmrRemote->erase();
   // Remove subs in reverse order to handle chained subs correctly
   for (auto sub : llvm::reverse(subsToRemove))
     sub->erase();
@@ -213,6 +226,7 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
   SmallVector<ProbeSendOp> sends;
   SmallVector<ProbeResolveOp> resolves;
   SmallVector<ProbeXMRRefOp> xmrRefs;
+  SmallVector<XMRRemoteOp> xmrRemotes;
   SmallVector<InstanceOp> instances;
   SmallVector<ProbeRWProbeOp> rwprobes;
   SmallVector<ProbeSubOp> subs;
@@ -228,6 +242,8 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
       resolves.push_back(resolve);
     else if (auto xmrRef = dyn_cast<ProbeXMRRefOp>(op))
       xmrRefs.push_back(xmrRef);
+    else if (auto xmrRemote = dyn_cast<XMRRemoteOp>(op))
+      xmrRemotes.push_back(xmrRemote);
     else if (auto inst = dyn_cast<InstanceOp>(op))
       instances.push_back(inst);
     else if (auto rwprobe = dyn_cast<ProbeRWProbeOp>(op))
@@ -274,6 +290,11 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
   // Handle rwprobes
   for (auto rwprobe : rwprobes)
     if (failed(handleProbeRWProbe(rwprobe)))
+      return failure();
+
+  // Handle xmr.remote operations (similar to rwprobes, they create XMR targets)
+  for (auto xmrRemote : xmrRemotes)
+    if (failed(handleXMRRemote(xmrRemote)))
       return failure();
 
   // Handle instances for cross-module dataflow
@@ -400,6 +421,49 @@ InnerRefAttr HWLowerXMRPass::getInnerRefTo(Value val) {
     return getInnerRefTo(op);
 
   return {};
+}
+
+Operation *HWLowerXMRPass::resolveInnerRef(InnerRefAttr innerRef) {
+  // Check the cache first
+  auto it = innerRefCache.find(innerRef);
+  if (it != innerRefCache.end())
+    return it->second;
+
+  // Get the target module from the InnerRef
+  auto topModule = getOperation();
+  auto targetModule = topModule.lookupSymbol<HWModuleOp>(innerRef.getModule());
+  if (!targetModule) {
+    // Cache the null result to avoid repeated failed lookups
+    innerRefCache[innerRef] = nullptr;
+    return nullptr;
+  }
+
+  // Build an InnerSymbolTable for the target module to lookup the target
+  InnerSymbolTable innerSymTable(targetModule);
+  auto target = innerSymTable.lookup(innerRef.getName());
+  if (!target) {
+    // Cache the null result
+    innerRefCache[innerRef] = nullptr;
+    return nullptr;
+  }
+
+  // The target must be an operation, not a port
+  if (target.isPort()) {
+    // Fail if target is a port
+    innerRefCache[innerRef] = nullptr;
+    return nullptr;
+  }
+
+  // Get the operation
+  auto *op = target.getOp();
+  if (!op) {
+    innerRefCache[innerRef] = nullptr;
+    return nullptr;
+  }
+
+  // Cache and return the operation
+  innerRefCache[innerRef] = op;
+  return op;
 }
 
 LogicalResult HWLowerXMRPass::handleProbeSend(ProbeSendOp send) {
@@ -606,6 +670,7 @@ LogicalResult HWLowerXMRPass::handleInstance(InstanceOp inst) {
   // Check each result to see if it's a probe type
   auto numResults = inst.getNumResults();
 
+  llvm::errs() << " \n instance: " << inst;
   // Handle extern modules specially
   if (refExtModule) {
     // Get total number of ports in the extern module
@@ -632,8 +697,9 @@ LogicalResult HWLowerXMRPass::handleInstance(InstanceOp inst) {
       setPortToRemove(refExtModule, portIdx, numPorts);
 
       // Skip if no uses or zero-width (will be removed anyway)
-      if (result.use_empty())
-        continue;
+      // if (result.use_empty())
+      //   continue;
+      llvm::errs() << "\n result: " << result;
 
       if (probeType && isZeroWidth(probeType.getInnerType()))
         continue;
@@ -792,6 +858,72 @@ LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeXMRRefOp xmrRef) {
 
   xmrRef.getResult().replaceAllUsesWith(xmr);
   xmrRefsToRemove.push_back(xmrRef);
+  return success();
+}
+
+LogicalResult HWLowerXMRPass::handleXMRRemote(XMRRemoteOp xmrRemote) {
+  // XMRRemoteOp creates an RWProbe reference from an InnerRef target.
+  // This is very similar to ProbeRWProbeOp, but works across module boundaries
+  // (hence the "remote" in the name). Like ProbeRWProbeOp, we simply add a
+  // reaching sends entry with the InnerRef target, which will be resolved
+  // when the probe is used.
+
+  auto targetRef = xmrRemote.getTarget();
+
+  // Get the inner type from the rwprobe result
+  auto rwProbeType = dyn_cast<RWProbeType>(xmrRemote.getResult().getType());
+  if (!rwProbeType)
+    return xmrRemote.emitError("xmr.remote must produce an rwprobe type");
+
+  Type innerType = rwProbeType.getInnerType();
+
+  // Check for zero-width type
+  if (isZeroWidth(innerType)) {
+    // For zero-width types, just mark for removal
+    xmrRemotesToRemove.push_back(xmrRemote);
+    return success();
+  }
+
+  // Resolve the InnerRef to get the instance operation
+  auto *targetOp = resolveInnerRef(targetRef);
+  if (!targetOp)
+    return xmrRemote.emitError("could not resolve target InnerRef: ")
+           << targetRef;
+
+  // Verify the target is an instance
+  auto instOp = dyn_cast<InstanceOp>(targetOp);
+  if (!instOp)
+    return xmrRemote.emitError("target must be an instance operation");
+
+  // Get the specific result using the index
+  size_t index = xmrRemote.getIndex();
+  if (index >= instOp.getNumResults())
+    return xmrRemote.emitError("index ")
+           << index << " out of bounds for instance with "
+           << instOp.getNumResults() << " results";
+
+  Value targetVal = instOp.getResult(index);
+
+  // Verify the result type is rwprobe
+  if (!isa<RWProbeType>(targetVal.getType()))
+    return xmrRemote.emitError("instance result at index ")
+           << index << " is not an rwprobe type";
+
+  // Get the remote ref send for this target value
+  auto srcPathIdx = getRemoteRefSend(targetVal);
+  if (!srcPathIdx.has_value())
+    return targetOp->emitError("could not trace source probe to send");
+
+  auto dest = xmrRemote.getResult();
+  // Unify the destination with the source in the dataflow classes
+  dataFlowClasses.unionSets(dataFlowClasses.getOrInsertLeaderValue(dest),
+                            dataFlowClasses.getOrInsertLeaderValue(targetVal));
+
+  // Record the reaching send for the destination
+  dataflowAt[dataFlowClasses.getOrInsertLeaderValue(dest)] = srcPathIdx.value();
+
+  // Mark for removal
+  xmrRemotesToRemove.push_back(xmrRemote);
   return success();
 }
 
