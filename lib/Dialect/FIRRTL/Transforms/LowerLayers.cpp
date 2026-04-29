@@ -1131,74 +1131,63 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
           // Special case for RWProbe: create xmr.remote instead of port
           if (refType.getForceable()) {
-            // Get or create an inner ref to the RWProbe source
+            // xmr.remote must target an instance, so we need to get the
+            // instance and result index
             hw::InnerRefAttr innerRef;
+            int64_t resultIndex = 0;
 
             // Try to get inner ref from the defining operation
             if (auto *definingOp = operand.getDefiningOp()) {
               // Check if it's an instance output port (RWProbe result)
               if (auto instanceOp = dyn_cast<InstanceOp>(definingOp)) {
-                auto resultNum = cast<OpResult>(operand).getResultNumber();
+                resultIndex = cast<OpResult>(operand).getResultNumber();
 
-                // Look up the referenced module to get the port's inner symbol
-                auto *symbolTable =
-                    SymbolTable::getNearestSymbolTable(instanceOp);
-                if (auto referencedMod = dyn_cast_or_null<FModuleLike>(
-                        SymbolTable::lookupSymbolIn(
-                            symbolTable, instanceOp.getModuleName()))) {
-                  // Get the port's inner symbol from the referenced module
-                  auto portSym = referencedMod.getPortSymbolAttr(resultNum);
-                  if (portSym) {
-                    // Create InnerRef directly to the module's port
-                    innerRef = hw::InnerRefAttr::get(
-                        SymbolTable::getSymbolName(referencedMod),
-                        portSym.getSymName());
-                  } else {
-                    // Port doesn't have a symbol, add one
-                    innerRef = getInnerRefTo(
-                        referencedMod, resultNum,
-                        [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
-                  }
-                }
+                // Get or add inner symbol to the instance
+                innerRef = getInnerRefTo(
+                    instanceOp,
+                    [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
               } else if (auto symOp =
                              dyn_cast<hw::InnerSymbolOpInterface>(definingOp)) {
-                // For operations that can directly support inner symbols
+                // For non-instance operations, we need to wrap them in an
+                // instance-like structure. For now, fall back to creating a
+                // wire.
+                // TODO: Better handling for non-instance RWProbe sources
+                OpBuilder::InsertionGuard guard(builder);
+                builder.setInsertionPointAfterValue(operand);
+
+                // Create a wire with an inner symbol
+                auto wireName = ns.newName("rwprobe_capture");
+                auto wireOp = builder.create<WireOp>(
+                    operand.getLoc(), refType, wireName,
+                    NameKindEnum::DroppableName,
+                    /*annotations=*/builder.getArrayAttr({}),
+                    hw::InnerSymAttr::get(builder.getStringAttr(wireName)),
+                    /*forceable=*/false);
+
+                // Define the wire with the operand
+                builder.create<RefDefineOp>(operand.getLoc(),
+                                            wireOp.getResult(), operand);
+
+                // Get inner ref to the wire
                 innerRef = getInnerRefTo(
-                    symOp,
+                    wireOp,
                     [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+                resultIndex = 0; // Wire has single result
               }
             }
 
-            // If we couldn't get an inner ref, fall back to creating a wire
-            // with an inner symbol in the parent module
+            // If we still don't have an inner ref, skip this operand
             if (!innerRef) {
-              OpBuilder::InsertionGuard guard(builder);
-              builder.setInsertionPointAfterValue(operand);
-
-              // Create a wire with an inner symbol
-              auto wireName = ns.newName("rwprobe_capture");
-              auto wireOp = builder.create<WireOp>(
-                  operand.getLoc(), refType, wireName,
-                  NameKindEnum::DroppableName,
-                  /*annotations=*/builder.getArrayAttr({}),
-                  hw::InnerSymAttr::get(builder.getStringAttr(wireName)),
-                  /*forceable=*/false);
-
-              // Define the wire with the operand
-              builder.create<RefDefineOp>(operand.getLoc(), wireOp.getResult(),
-                                          operand);
-
-              // Get inner ref to the wire
-              innerRef = getInnerRefTo(
-                  wireOp,
-                  [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+              op->emitWarning(
+                  "could not create xmr.remote for RWProbe operand");
+              continue;
             }
 
             // Create xmr.remote operation inside the layer block
             OpBuilder::InsertionGuard guard(builder);
             builder.setInsertionPointToStart(body);
             auto xmrRemote = builder.create<XMRRemoteOp>(
-                op->getLoc(), refType.removeLayer(), innerRef);
+                op->getLoc(), refType.removeLayer(), innerRef, resultIndex);
 
             // Replace uses of the RWProbe inside the layer block
             operand.replaceUsesWithIf(
