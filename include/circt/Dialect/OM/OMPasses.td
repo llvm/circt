@@ -25,6 +25,20 @@ def LinkModules: Pass<"om-link-modules", "mlir::ModuleOp"> {
   }];
 }
 
+def ElaborateObject: Pass<"om-elaborate-object", "mlir::ModuleOp"> {
+  let summary = "Perform elaboration of OM objects";
+  let description = [{
+    Performs evaluation of a specified OM class by inlining all object
+    instantiations and folding field accesses.
+  }];
+  let options = [
+    Option<"targetClass", "target-class", "std::string", /*default=*/"",
+           "The class to elaborate">,
+    Option<"test", "test", "bool", /*default=*/"false",
+           "Test mode: elaborate all zero-argument classes in the module">
+  ];
+}
+
 def StripOMPass : Pass<"strip-om", "mlir::ModuleOp"> {
   let summary = "Remove OM information";
   let description = [{
