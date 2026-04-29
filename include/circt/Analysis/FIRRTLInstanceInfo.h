@@ -129,6 +129,10 @@ public:
     /// Indicates if this module is instantiated within (or transitively within)
     /// an instance choice operation.
     InstanceInfo::LatticeValue inInstanceChoice;
+
+    /// Indicates if this module has any property operations within (or
+    /// transitively within) it.
+    bool hasProperties = false;
   };
 
   //===--------------------------------------------------------------------===//
@@ -208,6 +212,11 @@ public:
   /// Note: allInstancesInInstanceChoice is intentionally not provided because
   /// that property is relative to the public module.
   bool anyInstanceInInstanceChoice(igraph::ModuleOpInterface op);
+
+  /// Return true if this module contains (or its children transitively contain)
+  /// any property operations, i.e., operations whose operands or results have
+  /// a PropertyType, or if any port of the module has a PropertyType.
+  bool moduleContainsProperties(igraph::ModuleOpInterface op);
 
 private:
   /// Stores circuit-level attributes.
