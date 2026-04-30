@@ -49,6 +49,15 @@ module ActiveLowReset(input logic clock, input logic reset, input int d1, input 
   always @(posedge clock, negedge reset) q2 <= !reset ? 42 : d2;
 endmodule
 
+// CHECK-LABEL: hw.module @ActiveLowResetOnlyHold(
+module ActiveLowResetOnlyHold(input logic clock, input logic reset, input int rstval, output int q);
+  // CHECK: [[CLK:%.+]] = seq.to_clock %clock
+  // CHECK: [[RST_INV:%.+]] = comb.xor %reset, %true
+  // CHECK: [[REG:%.+]] = seq.firreg [[REG]] clock [[CLK]] reset async [[RST_INV]], %rstval : i32
+  // CHECK: hw.output [[REG]]
+  always @(posedge clock, negedge reset) if (!reset) q <= rstval; else begin end
+endmodule
+
 // CHECK-LABEL: hw.module @Enable(
 module Enable(input logic clock, input logic enable, input int d, output int q);
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
