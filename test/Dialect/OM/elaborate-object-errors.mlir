@@ -19,7 +19,7 @@ om.class @AssertFalseBool() {
 
 // -----
 
-// Multiple assertions, one fails
+// Multiple assertions
 om.class @MultipleAsserts() {
   %false = om.constant false
   // expected-error @below {{OM property assertion failed: first assertion fails}}

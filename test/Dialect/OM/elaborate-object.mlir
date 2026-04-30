@@ -70,9 +70,7 @@ om.class @IntegerArithTop() -> (result: !om.integer) {
   om.class.fields %sum : !om.integer
 }
 
-
 // Test list operations with object fields
-
 om.class @ListBox(%l: !om.list<!om.integer>) -> (value: !om.list<!om.integer>) {
   om.class.fields %l : !om.list<!om.integer>
 }
@@ -114,7 +112,6 @@ om.class @AssertInteger() {
   om.property_assert %one, "one is true" : i1
   om.class.fields
 }
-
 
 // Test property assertion with unknown condition (should pass and be erased)
 // CHECK-LABEL: om.class @AssertUnknown() {
