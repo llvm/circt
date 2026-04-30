@@ -196,7 +196,7 @@ public:
   bool anyInstanceInDesign(igraph::ModuleOpInterface op);
 
   /// Return true if all instances of this module are within (or transitively
-  /// withiin) the design.
+  /// within) the design.
   bool allInstancesInDesign(igraph::ModuleOpInterface op);
 
   /// Return true if any instance of this module is within (or transitively
@@ -204,7 +204,7 @@ public:
   bool anyInstanceInEffectiveDesign(igraph::ModuleOpInterface op);
 
   /// Return true if all instances of this module are within (or transitively
-  /// withiin) the effective design.
+  /// within) the effective design.
   bool allInstancesInEffectiveDesign(igraph::ModuleOpInterface op);
 
   /// Return true if any instance of this module is within (or transitively
@@ -215,7 +215,8 @@ public:
 
   /// Return true if this module contains (or its children transitively contain)
   /// any property operations, i.e., operations whose operands or results have
-  /// a PropertyType, or if any port of the module has a PropertyType.
+  /// a PropertyType, if any port of the module has a PropertyType, or if the
+  /// module is a class.
   bool moduleContainsProperties(igraph::ModuleOpInterface op);
 
 private:

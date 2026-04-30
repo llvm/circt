@@ -210,7 +210,9 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
         });
 
     // Walk the ops to populate information, short circuiting as soon as
-    // we've gathered enough information to stop the walk.
+    // we've gathered enough information to stop the walk.  Only FModuleOp has
+    // a body to walk; external/intrinsic modules are fully characterized by
+    // their ports, already checked above.
     if (auto fmodule = dyn_cast<FModuleOp>(moduleLike.getOperation())) {
       auto isPropertyType = [](Type t) { return isa<PropertyType>(t); };
       fmodule.walk([&](Operation *op) {
@@ -248,7 +250,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
           << llvm::indent(6)
           << "isDut: " << (isDut(moduleOp) ? "true" : "false") << "\n"
           << llvm::indent(6)
-          << "isEffectiveDue: " << (isEffectiveDut(moduleOp) ? "true" : "false")
+          << "isEffectiveDut: " << (isEffectiveDut(moduleOp) ? "true" : "false")
           << "\n"
           << llvm::indent(6) << "underDut: " << attributes.underDut << "\n"
           << llvm::indent(6) << "underLayer: " << attributes.underLayer << "\n"

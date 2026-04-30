@@ -613,6 +613,11 @@ firrtl.circuit "Top" {
     writeLatency = 1 : ui32
   }
 
+  // Top instantiates children with properties, so moduleContainsProperties is
+  // true transitively.
+  //
+  // CHECK:      @Top
+  // CHECK:        moduleContainsProperties: true
   firrtl.module @Top() {
     firrtl.instance has_prop_port @HasPropPort(in p: !firrtl.string)
     firrtl.instance has_prop_op @HasPropOp()
