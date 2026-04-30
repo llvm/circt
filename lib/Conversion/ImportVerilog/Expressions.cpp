@@ -2819,7 +2819,7 @@ Value Context::convertToSimpleBitVector(Value value) {
 /// corresponding simple bit vector `IntType`. This will apply special handling
 /// to time values, which requires scaling by the local timescale.
 static Value materializePackedToSBVConversion(Context &context, Value value,
-                                              Location loc) {
+                                              Location loc, bool fallible) {
   if (isa<moore::IntType>(value.getType()))
     return value;
 
@@ -2842,9 +2842,10 @@ static Value materializePackedToSBVConversion(Context &context, Value value,
   // `TimeType` fields. These require special conversion to ensure that the
   // local timescale is in effect.
   if (packedType.containsTimeType()) {
-    mlir::emitError(loc) << "unsupported conversion: " << packedType
-                         << " cannot be converted to " << intType
-                         << "; contains a time type";
+    if (!fallible)
+      mlir::emitError(loc) << "unsupported conversion: " << packedType
+                           << " cannot be converted to " << intType
+                           << "; contains a time type";
     return {};
   }
 
@@ -2857,7 +2858,8 @@ static Value materializePackedToSBVConversion(Context &context, Value value,
 /// time values, which requires scaling by the local timescale.
 static Value materializeSBVToPackedConversion(Context &context,
                                               moore::PackedType packedType,
-                                              Value value, Location loc) {
+                                              Value value, Location loc,
+                                              bool fallible) {
   if (value.getType() == packedType)
     return value;
 
@@ -2879,9 +2881,10 @@ static Value materializeSBVToPackedConversion(Context &context,
   // `TimeType` fields. These require special conversion to ensure that the
   // local timescale is in effect.
   if (packedType.containsTimeType()) {
-    mlir::emitError(loc) << "unsupported conversion: " << intType
-                         << " cannot be converted to " << packedType
-                         << "; contains a time type";
+    if (!fallible)
+      mlir::emitError(loc) << "unsupported conversion: " << intType
+                           << " cannot be converted to " << packedType
+                           << "; contains a time type";
     return {};
   }
 
@@ -2923,7 +2926,7 @@ static mlir::Value maybeUpcastHandle(Context &context, mlir::Value actualHandle,
 }
 
 Value Context::materializeConversion(Type type, Value value, bool isSigned,
-                                     Location loc) {
+                                     Location loc, bool fallible) {
   // Nothing to do if the types are already equal.
   if (type == value.getType())
     return value;
@@ -2937,7 +2940,7 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
 
   if (dstInt && srcInt) {
     // Convert the value to a simple bit vector if it isn't one already.
-    value = materializePackedToSBVConversion(*this, value, loc);
+    value = materializePackedToSBVConversion(*this, value, loc, fallible);
     if (!value)
       return {};
 
@@ -2963,7 +2966,8 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     }
 
     // Convert the value from a simple bit vector back to the packed type.
-    value = materializeSBVToPackedConversion(*this, dstPacked, value, loc);
+    value = materializeSBVToPackedConversion(*this, dstPacked, value, loc,
+                                             fallible);
     if (!value)
       return {};
 
@@ -3004,13 +3008,10 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
   }
 
   // Handle Real To Int conversion
-  if (isa<moore::IntType>(type) && isa<moore::RealType>(value.getType())) {
+  if (dstInt && isa<moore::RealType>(value.getType())) {
     auto twoValInt = builder.createOrFold<moore::RealToIntOp>(
-        loc, dyn_cast<moore::IntType>(type).getTwoValued(), value);
-
-    if (dyn_cast<moore::IntType>(type).getDomain() == moore::Domain::FourValued)
-      return materializePackedToSBVConversion(*this, twoValInt, loc);
-    return twoValInt;
+        loc, dstInt.getTwoValued(), value);
+    return materializeConversion(type, twoValInt, true, loc, fallible);
   }
 
   // Handle Int to Real conversion
@@ -3103,6 +3104,8 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
     return maybeUpcastHandle(*this, value, cast<moore::ClassHandleType>(type));
 
   // TODO: Handle other conversions with dedicated ops.
+  if (fallible && value.getType() != type)
+    return {};
   if (value.getType() != type)
     value = moore::ConversionOp::create(builder, loc, type, value);
   return value;
@@ -3253,6 +3256,40 @@ Value Context::convertSystemCall(
   if (nameId == ksn::BitsToShortreal)
     return convertRealMathBI<moore::BitstoshortrealBIOp>(*this, loc, name,
                                                          args);
+
+  if (nameId == ksn::Cast) {
+    assert(numArgs == 2 && "`cast` takes 2 arguments");
+    auto *dstExpr = args[0];
+    auto dstType = convertType(*dstExpr->type);
+    if (!dstType)
+      return {};
+
+    if (auto *assign = dstExpr->as_if<slang::ast::AssignmentExpression>())
+      dstExpr = &assign->left();
+    auto dst = convertLvalueExpression(*dstExpr);
+    if (!dst)
+      return {};
+
+    auto src = convertRvalueExpression(*args[1]);
+    if (!src)
+      return {};
+    // Class-typed $cast (upcast/downcast) is intentionally left for follow-up.
+    if (isa<moore::ClassHandleType>(dstType) ||
+        isa<moore::ClassHandleType>(src.getType())) {
+      auto i1Ty = moore::IntType::getInt(builder.getContext(), 1);
+      return moore::ConstantOp::create(builder, loc, i1Ty, 0,
+                                       /*isSigned=*/false);
+    }
+    auto converted = materializeConversion(
+        dstType, src, args[1]->type->isSigned(), loc, /*fallible=*/true);
+    auto i1Ty = moore::IntType::getInt(builder.getContext(), 1);
+    if (!converted)
+      return moore::ConstantOp::create(builder, loc, i1Ty, 0,
+                                       /*isSigned=*/false);
+    moore::BlockingAssignOp::create(builder, loc, dst, converted);
+    return moore::ConstantOp::create(builder, loc, i1Ty, 1,
+                                     /*isSigned=*/false);
+  }
 
   //===--------------------------------------------------------------------===//
   // String Methods
