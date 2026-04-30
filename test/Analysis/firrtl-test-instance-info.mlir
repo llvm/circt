@@ -84,7 +84,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK:        anyInstanceInInstanceChoice: false
-  // CHECK-NEXT:   moduleContainsProperties: false
+  // CHECK-NEXT:   moduleContainsProperties: true
   firrtl.module @Foo() {
     firrtl.instance bar @Bar()
     firrtl.instance_choice qux @Qux alternatives @Platform {
@@ -118,7 +118,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK:        anyInstanceInInstanceChoice: false
-  // CHECK-NEXT:   moduleContainsProperties: false
+  // CHECK-NEXT:   moduleContainsProperties: true
   firrtl.module @Foo() {}
 }
 
@@ -591,11 +591,11 @@ firrtl.circuit "Top" {
   // CHECK:        moduleContainsProperties: true
   firrtl.class private @EmptyClass() {}
 
-  // MemMod is a firrtl.memmodule. It has no body and its ports are not
-  // property types, so moduleContainsProperties is false.
+  // MemMod is a firrtl.memmodule.  It has no body and its ports are not
+  // property types, but it is public, so moduleContainsProperties is true.
   //
   // CHECK:      @MemMod
-  // CHECK:        moduleContainsProperties: false
+  // CHECK:        moduleContainsProperties: true
   firrtl.memmodule @MemMod(
     in W0_addr: !firrtl.uint<1>,
     in W0_en: !firrtl.uint<1>,
@@ -613,8 +613,7 @@ firrtl.circuit "Top" {
     writeLatency = 1 : ui32
   }
 
-  // Top instantiates children with properties, so moduleContainsProperties is
-  // true transitively.
+  // Top is public and instantiates children with properties.
   //
   // CHECK:      @Top
   // CHECK:        moduleContainsProperties: true
@@ -631,3 +630,4 @@ firrtl.circuit "Top" {
     )
   }
 }
+
