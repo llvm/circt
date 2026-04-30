@@ -721,6 +721,7 @@ class CppTypeEmitter:
     hdr.write("public:\n")
     hdr.write(f"  using value_type = {info['element_cpp']};\n")
     hdr.write(f"  using count_type = {info['count_cpp']};\n\n")
+    hdr.write("#pragma pack(push, 1)\n")
     hdr.write("  struct data_frame {\n")
     if info["data_pad_bytes"] > 0:
       hdr.write(f"    uint8_t _pad[{info['data_pad_bytes']}];\n")
@@ -741,7 +742,8 @@ class CppTypeEmitter:
       else:
         decl = self._format_window_field_decl(field_name, field_type)
       hdr.write(f"    {decl}\n")
-    hdr.write("  };\n\n")
+    hdr.write("  };\n")
+    hdr.write("#pragma pack(pop)\n\n")
     hdr.write("  header_frame header{};\n")
     hdr.write("  std::vector<data_frame> data_frames;\n")
     hdr.write("  header_frame footer{};\n\n")

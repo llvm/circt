@@ -130,8 +130,11 @@ void ReadChannelPort::connect(ReadCallback callback,
 
   resetTranslationState();
 
-  if (options.translateMessage && translationInfo) {
+  if (translationInfo)
     translationInfo->precomputeFrameInfo();
+
+  if (options.translateMessage && translationInfo) {
+    translationInfo->requireTranslationSupported();
     this->callback = [this, cb = std::move(callback)](
                          std::unique_ptr<SegmentedMessageData> &data) {
       if (!translatedMessage) {
@@ -173,9 +176,12 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
 
   resetTranslationState();
 
+  if (translationInfo)
+    translationInfo->precomputeFrameInfo();
+
   bool translate = options.translateMessage && translationInfo;
   if (translate)
-    translationInfo->precomputeFrameInfo();
+    translationInfo->requireTranslationSupported();
   this->callback = [this,
                     translate](std::unique_ptr<SegmentedMessageData> &msg) {
     MessageData data;
@@ -222,14 +228,7 @@ std::future<MessageData> ReadChannelPort::readAsync() {
 // Window translation support
 //===----------------------------------------------------------------------===//
 
-void ChannelPort::TranslationInfo::precomputeFrameInfo() {
-  const Type *intoType = windowType->getIntoType();
-
-  const StructType *intoStruct = dynamic_cast<const StructType *>(intoType);
-  if (!intoStruct)
-    throw std::runtime_error(
-        "Window intoType must be a struct for translation");
-
+void ChannelPort::TranslationInfo::requireTranslationSupported() const {
   // Reject serial-encoded windows: any field with bulkCountWidth > 0 indicates
   // serial (bulk) encoding, which the translator does not yet support. Surface
   // this clearly at connect()-time rather than silently buffering forever in
@@ -246,6 +245,15 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
             "and decode the frames manually.");
     }
   }
+}
+
+void ChannelPort::TranslationInfo::precomputeFrameInfo() {
+  const Type *intoType = windowType->getIntoType();
+
+  const StructType *intoStruct = dynamic_cast<const StructType *>(intoType);
+  if (!intoStruct)
+    throw std::runtime_error(
+        "Window intoType must be a struct for translation");
 
   const auto &intoFields = intoStruct->getFields();
 

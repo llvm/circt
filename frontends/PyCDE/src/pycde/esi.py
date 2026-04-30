@@ -1365,8 +1365,8 @@ def ListWindowToParallel(into_type: Type,
 
       # Update emitted-item counter: reset to 0 on last item, increment on any
       # other data transaction, hold otherwise.
-      next_emitted = Mux(data_xact, emitted_wire,
-                         Mux(last_item, next_idx, zero))
+      next_emitted = Mux(data_xact, emitted_wire, Mux(last_item, next_idx,
+                                                      zero))
       emitted_reg = next_emitted.reg(ports.clk,
                                      ports.rst,
                                      rst_value=0,
@@ -1388,9 +1388,9 @@ def ListWindowToParallel(into_type: Type,
 
 @modparams
 def ListWindowToSerial(into_type: Type,
-                         count_bitwidth: int = 16,
-                         items_per_frame: int = 1,
-                         fifo_depth: int = 16):
+                       count_bitwidth: int = 16,
+                       items_per_frame: int = 1,
+                       fifo_depth: int = 16):
   """Build a module which converts a 'parallel' window of a struct-with-a-list
   back into a 'serial' (bulk-transfer) window. Each parallel input message
   carries one list item plus the static struct fields and a `last` flag marking
@@ -1561,9 +1561,9 @@ def ListWindowToSerial(into_type: Type,
       data_pop_rden.assign(data_xact)
 
       # Update the latched count when popping the header.
-      cur_count_next = Mux(hdr_xact,
-                           cur_count_wire,
-                           burst_value[count_field_name].as_uint(count_bitwidth))
+      cur_count_next = Mux(
+          hdr_xact, cur_count_wire,
+          burst_value[count_field_name].as_uint(count_bitwidth))
       cur_count_reg = cur_count_next.reg(ports.clk,
                                          ports.rst,
                                          rst_value=0,
