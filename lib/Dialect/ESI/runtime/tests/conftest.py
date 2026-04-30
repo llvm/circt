@@ -33,10 +33,8 @@ def get_runtime_root() -> Path:
   # otherwise discard the build location where the runtime libraries live.
   package_file = Path(esiaccel.__file__)
   candidates = [
-      package_file.parent,
       package_file.parent.parent,
       package_file.parent.parent.parent,
-      package_file.resolve().parent,
       package_file.resolve().parent.parent,
       package_file.resolve().parent.parent.parent,
   ]

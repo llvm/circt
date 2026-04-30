@@ -1839,12 +1839,19 @@ struct SerialCoordInput : SegmentedMessageData {
 private:
   SerialCoordHeader header;
   std::vector<SerialCoordData> coords;
+  SerialCoordHeader footer;
 
 public:
   SerialCoordInput() {
     header.coordsCount = 0;
     header.xTranslation = 0;
     header.yTranslation = 0;
+    // The footer is a count==0 header that terminates the list per the ESI
+    // bulk-transfer serial encoding. Static fields are constant within a
+    // list so the footer's translation values are irrelevant; zero them.
+    footer.coordsCount = 0;
+    footer.xTranslation = 0;
+    footer.yTranslation = 0;
   }
   void yTranslation(uint32_t yTrans) { header.yTranslation = yTrans; }
   uint32_t yTranslation() const { return header.yTranslation; }
@@ -1856,6 +1863,42 @@ public:
   }
   const std::vector<SerialCoordData> &getCoords() const { return coords; }
 
+  size_t numSegments() const override { return 3; }
+  Segment segment(size_t idx) const override {
+    if (idx == 0)
+      return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};
+    else if (idx == 1)
+      return {reinterpret_cast<const uint8_t *>(coords.data()),
+              coords.size() * sizeof(SerialCoordData)};
+    else if (idx == 2)
+      return {reinterpret_cast<const uint8_t *>(&footer), sizeof(footer)};
+    else
+      throw std::out_of_range("SerialCoordInput: invalid segment index");
+  }
+};
+
+// Like SerialCoordInput but without the trailing count==0 terminator. Used
+// when streaming multiple bursts that together comprise a single logical
+// list; the caller is responsible for sending a separate terminator burst
+// (a SerialCoordBurst with count==0 and no data).
+struct SerialCoordBurst : SegmentedMessageData {
+private:
+  SerialCoordHeader header;
+  std::vector<SerialCoordData> coords;
+
+public:
+  SerialCoordBurst() {
+    header.coordsCount = 0;
+    header.xTranslation = 0;
+    header.yTranslation = 0;
+  }
+  void yTranslation(uint32_t yTrans) { header.yTranslation = yTrans; }
+  void xTranslation(uint32_t xTrans) { header.xTranslation = xTrans; }
+  void appendCoord(uint32_t x, uint32_t y) {
+    coords.emplace_back(x, y);
+    header.coordsCount = (uint16_t)coords.size();
+  }
+
   size_t numSegments() const override { return 2; }
   Segment segment(size_t idx) const override {
     if (idx == 0)
@@ -1864,7 +1907,7 @@ public:
       return {reinterpret_cast<const uint8_t *>(coords.data()),
               coords.size() * sizeof(SerialCoordData)};
     else
-      throw std::out_of_range("SerialCoordInput: invalid segment index");
+      throw std::out_of_range("SerialCoordBurst: invalid segment index");
   }
 };
 
@@ -1982,22 +2025,30 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     throw std::runtime_error(
         "Serial coord translate test: no 'translate_coords_serial' port found");
 
-  TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
+  TypedWritePort<SerialCoordBurst, /*SkipTypeCheck=*/true> argPort(
       portIter->second.getRawWrite("arg"));
-  TypedReadPort<SerialCoordOutputBatch> resultPort(
-      portIter->second.getRawRead("result"));
+  // Use the raw read port so we can verify the multi-burst output framing
+  // explicitly rather than relying on the typed deserializer to accumulate
+  // frames until the terminator.
+  ReadChannelPort &resultRaw = portIter->second.getRawRead("result");
 
   argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
-  resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+  // Use an unlimited read queue so the device output isn't stalled by a full
+  // queue while we're still writing. With raw reads (translateMessage=false),
+  // each output frame becomes its own queued message, so the default 32-msg
+  // limit can be hit easily on a multi-burst run.
+  resultRaw.connect(
+      ChannelPort::ConnectOptions(/*bufferSize=*/0,
+                                  /*translateMessage=*/false));
 
   size_t sent = 0;
   while (sent < numCoords) {
     size_t batchSize = std::min(batchSizeLimit, numCoords - sent);
 
-    // Send Header. Only the first header needs the translation values, test the
-    // subsequent ones with zero translation to verify that the hardware
+    // Send Header. Only the first header needs the translation values, test
+    // the subsequent ones with zero translation to verify that the hardware
     // correctly applies the first header's translation to the whole list.
-    auto batch = std::make_unique<SerialCoordInput>();
+    auto batch = std::make_unique<SerialCoordBurst>();
     batch->xTranslation(sent == 0 ? xTrans : 0);
     batch->yTranslation(sent == 0 ? yTrans : 0);
     // Send Data
@@ -2007,18 +2058,43 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     argPort.write(batch);
     sent += batchSize;
   }
-  // Send final header with count=0 to signal end of input
-  auto footerData = std::make_unique<SerialCoordInput>();
-  argPort.write(footerData);
+  // Send final header with count=0 to signal end of input.
+  auto footerBurst = std::make_unique<SerialCoordBurst>();
+  argPort.write(footerBurst);
 
-  // Read the deserialized result batch. The TypeDeserializer accumulates all
-  // header+data frame sequences until the zero-count footer, producing a
-  // single SerialCoordOutputBatch with the complete coordinate list.
-  std::unique_ptr<SerialCoordOutputBatch> result = resultPort.read();
-  if (!result)
-    throw std::runtime_error(
-        "Serial coord translate test: typed read returned null result");
-  const std::vector<Coord> &results = result->coords;
+  // Read raw output frames, walking the bulk-transfer wire format: zero or
+  // more (HDR(N) + N data frames) sequences followed by a single HDR(0)
+  // terminator. Each `read()` returns whatever the transport layer has
+  // available, which is not guaranteed to align with frame boundaries
+  // (e.g., DMA channel engines may coalesce or split across frames). So
+  // we accumulate bytes into a buffer and only consume whole frames.
+  constexpr size_t frameSize = sizeof(SerialCoordOutputFrame);
+  std::vector<uint8_t> rxBuf;
+  auto readFrame = [&](SerialCoordOutputFrame &out) {
+    while (rxBuf.size() < frameSize) {
+      MessageData data;
+      resultRaw.read(data);
+      rxBuf.insert(rxBuf.end(), data.getBytes(),
+                   data.getBytes() + data.getSize());
+    }
+    std::memcpy(&out, rxBuf.data(), frameSize);
+    rxBuf.erase(rxBuf.begin(), rxBuf.begin() + frameSize);
+  };
+
+  std::vector<Coord> results;
+  results.reserve(numCoords);
+  while (true) {
+    SerialCoordOutputFrame hdr{};
+    readFrame(hdr);
+    uint16_t batchCount = hdr.header.coordsCount;
+    if (batchCount == 0)
+      break;
+    for (uint16_t i = 0; i < batchCount; ++i) {
+      SerialCoordOutputFrame frame{};
+      readFrame(frame);
+      results.push_back({frame.data.y, frame.data.x});
+    }
+  }
 
   // Verify
   bool passed = true;
@@ -2043,7 +2119,7 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
   }
 
   argPort.disconnect();
-  resultPort.disconnect();
+  resultRaw.disconnect();
 
   if (!passed)
     throw std::runtime_error("Serial coord translate test failed");
@@ -2102,7 +2178,11 @@ static void autoSerialCoordTranslateTest(AcceleratorConnection *conn,
   // window-message translation so we get one frame per `read()` instead of
   // assembled higher-level messages.
   ReadChannelPort &resultRaw = portIter->second.getRawRead("result");
-  resultRaw.connect(ChannelPort::ConnectOptions(std::nullopt,
+  // Use an unlimited read queue so the device output isn't stalled by a full
+  // queue while we're still writing. With raw reads (translateMessage=false),
+  // each output frame becomes its own queued message, so the default 32-msg
+  // limit can be hit easily on a multi-frame run.
+  resultRaw.connect(ChannelPort::ConnectOptions(/*bufferSize=*/0,
                                                 /*translateMessage=*/false));
 
   // Send a single header+data burst.
@@ -2113,15 +2193,20 @@ static void autoSerialCoordTranslateTest(AcceleratorConnection *conn,
     batch->appendCoord(inputCoords[i].x, inputCoords[i].y);
   argPort.write(batch);
 
-  // Helper: read one raw frame.
+  // Helper: read one raw frame, accumulating bytes across `read()` calls
+  // since transports such as DMA channel engines do not guarantee that
+  // each `read()` returns exactly one frame.
+  constexpr size_t frameSize = sizeof(SerialCoordOutputFrame);
+  std::vector<uint8_t> rxBuf;
   auto readFrame = [&](SerialCoordOutputFrame &out) {
-    MessageData data;
-    resultRaw.read(data);
-    if (data.getSize() < sizeof(SerialCoordOutputFrame))
-      throw std::runtime_error("Auto serial coord translate test: frame "
-                               "smaller than expected (" +
-                               std::to_string(data.getSize()) + " bytes)");
-    std::memcpy(&out, data.getBytes(), sizeof(SerialCoordOutputFrame));
+    while (rxBuf.size() < frameSize) {
+      MessageData data;
+      resultRaw.read(data);
+      rxBuf.insert(rxBuf.end(), data.getBytes(),
+                   data.getBytes() + data.getSize());
+    }
+    std::memcpy(&out, rxBuf.data(), frameSize);
+    rxBuf.erase(rxBuf.begin(), rxBuf.begin() + frameSize);
   };
 
   // First frame: header carrying coords_count == numCoords.

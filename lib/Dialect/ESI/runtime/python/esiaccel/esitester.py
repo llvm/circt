@@ -473,8 +473,7 @@ class AutoSerialCoordTranslator(Module):
                                           result=result_chan)
 
     # ---- Convert the serial argument stream into a parallel one. ----
-    s2p = ListWindowToParallel(arg_struct_type, bulk_count_width,
-                               items_per_frame)(clk=ports.clk,
+    s2p = ListWindowToParallel(arg_window_type)(clk=ports.clk,
                                                 rst=ports.rst,
                                                 serial_in=args)
     parallel_arg = s2p.parallel_out
@@ -508,7 +507,8 @@ class AutoSerialCoordTranslator(Module):
     par_ready.assign(parallel_result_ready)
 
     # ---- Convert the parallel result stream back into a serial one. ----
-    p2s = ListWindowToSerial(result_type, bulk_count_width, items_per_frame,
+    p2s = ListWindowToSerial(parallel_result_window_type, bulk_count_width,
+                             items_per_frame,
                              fifo_depth)(clk=ports.clk,
                                          rst=ports.rst,
                                          parallel_in=parallel_result_chan)
