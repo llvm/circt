@@ -443,10 +443,11 @@ class AutoSerialCoordTranslator(Module):
 
     bulk_count_width = 16
     items_per_frame = 1
-    # ListWindowToSerial buffers a complete burst before emitting (it cannot
-    # emit a header until the burst's `last` is observed). Depth must be >=
-    # the largest burst the host sends.
-    fifo_depth = 256
+    # Intentionally tiny FIFO so the host's coord lists (which can be much
+    # larger than this) get split across many bulk transfers, exercising the
+    # multi-burst code paths in `ListWindowToSerial` (drain-on-full bursts
+    # interleaved with the producer, plus the count==0 terminator).
+    fifo_depth = 4
 
     # ---- Externally-visible (serial) function arg/result types. ----
     # NOTE: use Bits for coord/translation fields. The window lowering for

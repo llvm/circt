@@ -2037,9 +2037,8 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
   // queue while we're still writing. With raw reads (translateMessage=false),
   // each output frame becomes its own queued message, so the default 32-msg
   // limit can be hit easily on a multi-burst run.
-  resultRaw.connect(
-      ChannelPort::ConnectOptions(/*bufferSize=*/0,
-                                  /*translateMessage=*/false));
+  resultRaw.connect(ChannelPort::ConnectOptions(/*bufferSize=*/0,
+                                                /*translateMessage=*/false));
 
   size_t sent = 0;
   while (sent < numCoords) {
@@ -2133,14 +2132,15 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
 //
 // The hardware module pipes the input through ListWindowToParallel ->
 // per-coordinate translation -> ListWindowToSerial. The conversion modules
-// produce one burst per call (no terminating count=0 footer), so this test
-// uses a simpler protocol than `serialCoordTranslateTest`:
-//   * Send exactly one batch: header(numCoords) followed by numCoords data
-//     frames (no trailing count=0 footer).
-//   * Read back: one header frame containing numCoords, followed by numCoords
-//     data frames. Use raw frame reads because the canonical
-//     `SerialCoordOutputBatch` deserializer waits for a count=0 footer that
-//     the converter pair does not emit.
+// emit one or more bulk transfers per call (each `header(count>0)` followed
+// by `count` data frames) terminated by a `header(count==0)` footer per the
+// ESI WindowField serial-encoding spec. This test:
+//   * Sends exactly one input batch: header(numCoords) + numCoords data
+//     frames + header(0) footer.
+//   * Reads back: a sequence of one-or-more `header(count>0) + count data`
+//     bursts terminated by `header(0)`. Use raw frame reads since the
+//     canonical `SerialCoordOutputBatch` deserializer hasn't been wired in
+//     for the converter pair.
 //
 static void autoSerialCoordTranslateTest(AcceleratorConnection *conn,
                                          Accelerator *accel, uint32_t xTrans,
@@ -2209,23 +2209,32 @@ static void autoSerialCoordTranslateTest(AcceleratorConnection *conn,
     rxBuf.erase(rxBuf.begin(), rxBuf.begin() + frameSize);
   };
 
-  // First frame: header carrying coords_count == numCoords.
-  SerialCoordOutputFrame hdr{};
-  readFrame(hdr);
-  uint16_t headerCount = hdr.header.coordsCount;
-  if (headerCount != numCoords)
-    throw std::runtime_error(
-        "Auto serial coord translate test: unexpected header count " +
-        std::to_string(headerCount) + " (expected " +
-        std::to_string(numCoords) + ")");
-
+  // Read a sequence of one-or-more `header(count>0) + count data` bursts
+  // followed by a `header(count==0)` terminator footer. Total data items
+  // received across all bursts must equal numCoords.
   std::vector<Coord> results;
   results.reserve(numCoords);
-  for (uint32_t i = 0; i < numCoords; ++i) {
-    SerialCoordOutputFrame frame{};
-    readFrame(frame);
-    results.push_back({frame.data.y, frame.data.x});
+  while (true) {
+    SerialCoordOutputFrame hdr{};
+    readFrame(hdr);
+    uint16_t burstCount = hdr.header.coordsCount;
+    if (burstCount == 0)
+      break;
+    if (results.size() + burstCount > numCoords)
+      throw std::runtime_error(
+          "Auto serial coord translate test: bursts overflow expected total " +
+          std::to_string(numCoords));
+    for (uint32_t i = 0; i < burstCount; ++i) {
+      SerialCoordOutputFrame frame{};
+      readFrame(frame);
+      results.push_back({frame.data.y, frame.data.x});
+    }
   }
+  if (results.size() != numCoords)
+    throw std::runtime_error("Auto serial coord translate test: got " +
+                             std::to_string(results.size()) +
+                             " coords across all bursts " + "(expected " +
+                             std::to_string(numCoords) + ")");
 
   argPort.disconnect();
   resultRaw.disconnect();

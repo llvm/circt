@@ -1372,6 +1372,7 @@ def ListWindowToParallel(serial_window_type: Window):
 
     @generator
     def build(ports):
+      from .constructs import Counter
       # State machine for serial-to-parallel conversion. Per the ESI spec, the
       # serial encoding may transmit a list across multiple bursts, each of
       # which is a header (with a non-zero count of items) followed by `count`
@@ -1422,11 +1423,14 @@ def ListWindowToParallel(serial_window_type: Window):
       data_struct = serial_union[data_frame_name]
 
       # ----- Counters -----
-      one = UInt(count_bitwidth)(1)
       zero = UInt(count_bitwidth)(0)
+      # `emitted` counts the number of items already emitted in the current
+      # burst. It is driven below by a constructs.Counter; we predeclare a
+      # Wire so it can be used in handshake/state expressions before the
+      # Counter is instantiated.
       emitted_wire = Wire(UInt(count_bitwidth))
-      # TODO: counters can be made clearer using constructs.Counter. Please use it.
-      next_emitted = (emitted_wire + one).as_uint(count_bitwidth)
+      next_emitted = (emitted_wire +
+                      UInt(count_bitwidth)(1)).as_uint(count_bitwidth)
 
       # ----- Header acceptance -----
       # Headers are accepted whenever we are in S_WAIT or S_PEEK and serial_in
@@ -1484,7 +1488,6 @@ def ListWindowToParallel(serial_window_type: Window):
       # - S_EMIT, with serial_in valid, for non-last-of-burst items (the
       #   last-of-burst item is silently consumed into buf_item instead).
       # - S_EMIT_BUF, where the buffered item is always available.
-      # TODO: I'm pretty sure that the 'out_last' bit is only valid in_emit_buf _and_ serial_valid...
       out_valid = (in_emit & serial_valid & ~is_last_of_burst) | in_emit_buf
 
       out_chan, out_ready = Channel(parallel_window_type).wrap(
@@ -1492,31 +1495,39 @@ def ListWindowToParallel(serial_window_type: Window):
       ports.parallel_out = out_chan
 
       # serial_in.ready:
-      # - S_WAIT, S_PEEK: 1 (waiting for a header).
-      # - S_EMIT: ready iff out_ready (lockstep) OR we are silently consuming
-      #   the last item of the burst into buf_item.
-      # - S_EMIT_BUF: 0 (we are not consuming serial_in this cycle).
-      # TODO: can't this just be out_ready? I don't think this module ever backpressures.
-      serial_ready_wire.assign(in_wait | in_peek |
-                               (in_emit & (is_last_of_burst | out_ready)))
+      # We assert ready in every state EXCEPT S_EMIT_BUF, gated by out_ready.
+      # The simpler/more-precise form would split by state (header consumes
+      # in S_WAIT/S_PEEK don't strictly need out_ready, and the silent
+      # last-of-burst consume in S_EMIT doesn't either), but in practice
+      # the consumer's readiness gates overall progress anyway, and
+      # collapsing to a single out_ready term shortens the combinational
+      # path by removing the is_last_of_burst comparator.
+      #
+      # The ~in_emit_buf gate is REQUIRED for correctness: in S_EMIT_BUF
+      # out_valid is asserted (we are emitting the buffered item), but we
+      # are not consuming serial_in. Without this gate, the cycle the
+      # buffered item is accepted would also spuriously consume whatever
+      # beat is sitting on serial_in (the next list's header/data),
+      # dropping it.
+      serial_ready_wire.assign(~in_emit_buf & out_ready)
 
       # ----- Transactions -----
       # TODO: I don't think out_ready is necessary for muxing and looking at it introduces an unnecessary combinational path.
       emit_normal_xact = in_emit & serial_valid & ~is_last_of_burst & out_ready
       emit_buf_xact = in_emit_buf & out_ready
 
-      # ----- emitted_wire update -----
-      # Increment on each non-last emit; reset to 0 when accepting a new
+      # ----- emitted counter -----
+      # Increment on each non-last emit; clear to 0 when accepting a new
       # header (start of a new burst) or finishing the buffered emit.
+      # `increment` and `clear` are mutually exclusive (they require
+      # different states), and Counter.clear takes precedence over
+      # increment, matching the prior cascaded-Mux semantics.
       reset_emitted = hdr_xact | emit_buf_xact
-      next_emitted_val = Mux(reset_emitted,
-                             Mux(emit_normal_xact, emitted_wire, next_emitted),
-                             zero)
-      emitted_reg = next_emitted_val.reg(ports.clk,
-                                         ports.rst,
-                                         rst_value=0,
-                                         name="emitted")
-      emitted_wire.assign(emitted_reg)
+      emitted_counter = Counter(count_bitwidth)(clk=ports.clk,
+                                                rst=ports.rst,
+                                                clear=reset_emitted,
+                                                increment=emit_normal_xact)
+      emitted_wire.assign(emitted_counter.out)
 
       # ----- State transitions -----
       # The conditions below are mutually exclusive (each requires a specific
@@ -1532,15 +1543,23 @@ def ListWindowToParallel(serial_window_type: Window):
       new_count_zero = new_count == zero
       cur_count_zero = cur_count == zero
 
-      # TODO: this is _tough_ to read. It may be clearer with fsm.Machine. If you disagree, please make it more readable.
-      next_state = state_wire
-      next_state = Mux(in_wait & hdr_xact & ~new_count_zero, next_state, S_EMIT)
-      next_state = Mux(consume_burst_last, next_state, S_PEEK)
-      next_state = Mux(in_peek & hdr_xact, next_state, S_EMIT_BUF)
-      next_state = Mux(in_emit_buf & emit_buf_xact & ~cur_count_zero,
-                       next_state, S_EMIT)
-      next_state = Mux(in_emit_buf & emit_buf_xact & cur_count_zero, next_state,
-                       S_WAIT)
+      # Per-state next-state expressions, selected by the current state.
+      # Each branch only needs to consider the events relevant to that
+      # state, since the multi-input Mux is indexed by state_wire (no
+      # need to gate guards with in_<state>). fsm.Machine was considered
+      # here, but it is geared toward Moore-style FSMs whose outputs are
+      # decoded from named states; this FSM's outputs are derived from
+      # the in_<state> wires used pervasively above, so a direct state-
+      # indexed Mux is simpler.
+      next_in_wait = Mux(hdr_xact & ~new_count_zero, S_WAIT, S_EMIT)
+      next_in_emit = Mux(consume_burst_last, S_EMIT, S_PEEK)
+      next_in_peek = Mux(hdr_xact, S_PEEK, S_EMIT_BUF)
+      # S_EMIT_BUF: stay until emit_buf_xact, then go to S_WAIT if the
+      # peeked terminator carried count==0, else back to S_EMIT.
+      next_in_emit_buf = Mux(emit_buf_xact, S_EMIT_BUF,
+                             Mux(cur_count_zero, S_EMIT, S_WAIT))
+      next_state = Mux(state_wire, next_in_wait, next_in_emit, next_in_peek,
+                       next_in_emit_buf)
 
       state_reg = next_state.reg(ports.clk,
                                  ports.rst,
@@ -1555,22 +1574,37 @@ def ListWindowToParallel(serial_window_type: Window):
 def ListWindowToSerial(parallel_window_type: Window,
                        count_bitwidth: int = 16,
                        items_per_frame: int = 1,
-                       fifo_depth: int = 16):
+                       fifo_depth: int = 64,
+                       meta_fifo_depth: Optional[int] = None):
   """Build a module which converts a 'parallel' window of a struct-with-a-list
-  back into a 'serial' (bulk-transfer) window. Each parallel input message
+  back into a 'serial' (burst-transfer) window. Each parallel input message
   carries one list item plus the static struct fields and a `last` flag marking
-  the final item of the list. Items are buffered in an ESI FIFO of `fifo_depth`
-  entries; when a complete list (terminated by `last`) is available, the module
-  emits one serial header frame (containing the static fields and the item
-  count) followed by `count` data frames, each carrying `items_per_frame` list
-  items. `fifo_depth` controls the depth of both the data FIFO and the burst-
-  metadata FIFO (the latter sized to allow the same number of in-flight bursts).
+  the final item of the list.
 
-  `parallel_window_type` must be a Window produced by `Window.default_of`; the
-  `into_type` is derived from it automatically.
+  Items are buffered in a data FIFO of `fifo_depth` entries; per-burst
+  metadata (static fields, item count, end-of-list flag) is buffered in a
+  separate metadata FIFO of `meta_fifo_depth` entries. The output side emits
+  one burst transfer per metadata entry: a header frame (carrying the static
+  fields and the burst's item count) followed by `count` data frames; if the
+  metadata entry is flagged as the end of the list, an additional header
+  frame with `count==0` is emitted afterwards as the terminator (per the ESI
+  WindowField serial-encoding spec).
+
+  Because metadata is queued (rather than held in a single register), the
+  input side does NOT back-pressure the producer once `last` is observed --
+  it remains free to accept the next list's items, so multiple lists may be
+  in flight at any given time. A burst transfer is closed (and a metadata
+  entry pushed) either when the producer asserts `last` (end-of-list) or
+  when the data FIFO would otherwise fill (split-on-full back-pressure
+  relief). This means the supported list length is unbounded -- not
+  constrained by `fifo_depth` -- and lists do not need to wait for each
+  other to drain.
+
+  `parallel_window_type` must be a Window produced by `Window.default_of`;
+  the `into_type` is derived from it automatically.
   """
 
-  from .types import List as ListType
+  from .types import List as ListType, StructType
 
   if items_per_frame != 1:
     raise NotImplementedError(
@@ -1578,6 +1612,15 @@ def ListWindowToSerial(parallel_window_type: Window,
         f"got {items_per_frame}")
   if fifo_depth < 1:
     raise ValueError(f"fifo_depth must be >= 1, got {fifo_depth}")
+  if fifo_depth >= (1 << count_bitwidth):
+    raise ValueError(
+        f"fifo_depth ({fifo_depth}) must fit in count_bitwidth "
+        f"({count_bitwidth}) bits since the per-burst count is at most "
+        "fifo_depth")
+  if meta_fifo_depth is None:
+    meta_fifo_depth = max(2, fifo_depth // 4)
+  if meta_fifo_depth < 2:
+    raise ValueError(f"meta_fifo_depth must be >= 2, got {meta_fifo_depth}")
 
   # Derive into_type (the underlying struct) directly from the window.
   into_type = parallel_window_type.into
@@ -1598,7 +1641,6 @@ def ListWindowToSerial(parallel_window_type: Window,
 
   serial_window_type = Window.serial_of(into_type, count_bitwidth,
                                         items_per_frame)
-  parallel_lowered = parallel_window_type.lowered_type
   serial_lowered = serial_window_type.lowered_type
   count_field_name = f"{list_field_name}_count"
 
@@ -1607,16 +1649,28 @@ def ListWindowToSerial(parallel_window_type: Window,
   header_struct_type = serial_variants["header"]
   data_struct_type = serial_variants["data"]
 
-  # The static-fields-plus-count metadata pushed into the burst FIFO has the
-  # same shape as the lowered header struct.
-  burst_meta_type = header_struct_type
   # The data FIFO carries one list element per slot.
   data_elem_type = list_element_type
 
+  # Burst-count counter width: must hold values 0..fifo_depth.
+  bc_bitwidth = max(1, (fifo_depth + 1).bit_length())
+
+  # Metadata FIFO entry: a complete header (static fields + count) plus an
+  # is_last flag indicating whether this burst ends the current list (and
+  # therefore should be followed by a count==0 terminator footer).
+  meta_entry_type = StructType([
+      ("hdr", header_struct_type),
+      ("is_last", Bits(1)),
+  ])
+
   class ListWindowToSerial(Module):
-    """Converts a 'parallel' window of a list into a 'serial' (bulk-transfer)
-    window, buffering items in an ESI FIFO until a complete list (terminated by
-    `last`) can be emitted as a header frame followed by data frames."""
+    """Converts a 'parallel' window of a list into a 'serial' (burst-transfer)
+    window using paired data + metadata FIFOs. Multiple lists may be in
+    flight simultaneously; lists of arbitrary length are supported by
+    splitting them across multiple burst transfers (each with its own
+    header), with a final count==0 terminator header per list (per the ESI
+    serial-encoding spec).
+    """
 
     clk = Clock()
     rst = Reset()
@@ -1626,127 +1680,230 @@ def ListWindowToSerial(parallel_window_type: Window,
 
     @generator
     def build(ports):
-      # ----- Input side: unwrap the parallel window. -----
+      from .seq import FIFO as SeqFIFO
+      from .constructs import ControlReg, Counter
+
+      one_bc = UInt(bc_bitwidth)(1)
+      depth_bc = UInt(bc_bitwidth)(fifo_depth)
+
+      # ===== Input side: split into (data, metadata) FIFOs. =====
       par_ready_wire = Wire(Bits(1))
       par_window, par_valid = ports.parallel_in.unwrap(par_ready_wire)
       par_struct = par_window.unwrap()
       par_last = par_struct["last"]
       par_item = par_struct[list_field_name]
 
-      # ----- Per-burst item counter (drives the header `count` field). -----
-      burst_count_wire = Wire(UInt(count_bitwidth))
-      one_c = UInt(count_bitwidth)(1)
-      zero_c = UInt(count_bitwidth)(0)
-      next_burst_count = (burst_count_wire + one_c).as_uint(count_bitwidth)
-      # Push 'count' = burst_count + 1 (this xact is the last item).
-      push_count = next_burst_count
-
-      # ----- Instantiate two seq.FIFOs (one for data, one for burst meta).
-      # We use seq.FIFO directly (rather than esi.fifo) because seq.FIFO
-      # exposes the actual `full`/`empty` registered signals — these are
-      # state-driven and feedback-safe, which lets us implement atomic
-      # accept (write to data FIFO iff burst FIFO can also accept the meta
-      # for the burst's last item) without forming a combinational loop.
-      from .seq import FIFO as SeqFIFO
-      par_xact_wire = Wire(Bits(1))
-
-      # Build the burst metadata struct (static fields + count).
-      meta_fields: Dict[str, Signal] = {
-          name: par_struct[name] for name in static_field_names
-      }
-      meta_fields[count_field_name] = push_count.as_bits(count_bitwidth)
-      meta_value = burst_meta_type(meta_fields)
-
       data_fifo = SeqFIFO(data_elem_type, fifo_depth, ports.clk, ports.rst)
-      burst_fifo = SeqFIFO(burst_meta_type, fifo_depth, ports.clk, ports.rst)
+      meta_fifo = SeqFIFO(meta_entry_type, meta_fifo_depth, ports.clk,
+                          ports.rst)
 
-      # par_ready: accept iff data FIFO not full AND, if last, burst FIFO
-      # not full. `full` is a registered signal — no comb loop.
-      par_ready = (~data_fifo.full) & ((~par_last) | ~burst_fifo.full)
-      par_ready_wire.assign(par_ready)
-      par_xact = par_valid & par_ready
-      par_xact_wire.assign(par_xact)
+      # par_ready: require space in BOTH FIFOs unconditionally (a meta push
+      # may happen on any par_xact, and computing whether one is needed
+      # this cycle would require par_xact -> par_ready -> par_xact comb
+      # loop). The slight throughput penalty is acceptable since meta_fifo
+      # drains at the bulk-transfer rate.
+      par_ready_wire.assign(~data_fifo.full & ~meta_fifo.full)
+      par_xact = par_valid & par_ready_wire
+      par_xact_last = par_xact & par_last
 
       data_fifo.push(par_item, par_xact)
-      burst_fifo.push(meta_value, par_xact & par_last)
 
-      # Update the burst counter: reset on a "last" xact, increment on a non-
-      # last xact, hold otherwise.
-      next_bc = Mux(par_xact, burst_count_wire,
-                    Mux(par_last, next_burst_count, zero_c))
-      bc_reg = next_bc.reg(ports.clk,
+      # Track whether we're currently mid-list (i.e. have seen at least one
+      # item of the current list but not yet its `last`). `at_list_start`
+      # fires on the first par_xact of a new list -- that's where we latch
+      # the static fields the spec says should remain constant.
+      in_list = ControlReg(ports.clk,
                            ports.rst,
-                           rst_value=0,
-                           name="burst_count")
-      burst_count_wire.assign(bc_reg)
+                           asserts=[par_xact & ~par_last],
+                           resets=[par_xact_last],
+                           name="in_list")
+      at_list_start = par_xact & ~in_list
 
-      # ----- Output side: state machine emitting header then data frames. -----
-      data_pop_rden = Wire(Bits(1))
-      burst_pop_rden = Wire(Bits(1))
-      data_value = data_fifo.pop(data_pop_rden)
-      burst_value = burst_fifo.pop(burst_pop_rden)
-      data_valid = ~data_fifo.empty
-      burst_valid = ~burst_fifo.empty
+      # Latch static fields at the start of each list. The spec says these
+      # fields are constant within a list, but we don't trust the producer
+      # blindly: we capture once and then compare for mismatches below.
+      latched_static: Dict[str, Signal] = {}
+      for name in static_field_names:
+        f = par_struct[name]
+        latched_static[name] = f.reg(ports.clk,
+                                     ports.rst,
+                                     ce=at_list_start,
+                                     name=f"latched_{name}")
 
-      # State: 0 = WAIT_HDR, 1 = EMIT_DATA.
-      state_wire = Wire(Bits(1))
-      in_wait_hdr = state_wire == Bits(1)(0)
-      in_emit_data = state_wire == Bits(1)(1)
+      # Effective static fields used for the meta entry: on at_list_start
+      # the register hasn't captured yet (it updates at end-of-cycle), so
+      # forward this cycle's value. This matters for single-item lists
+      # where at_list_start and par_xact_last coincide.
+      def effective_static(name: str) -> Signal:
+        return Mux(at_list_start, latched_static[name], par_struct[name])
 
-      # Latched count for the current burst (loaded when header is emitted).
-      cur_count_wire = Wire(UInt(count_bitwidth))
-      # Items emitted so far for the current burst.
+      # Mismatch detection: on every par_xact except the very first item
+      # of a list, any static field that differs from what we latched at
+      # the start of the list is a spec violation. Count the cycles in
+      # which any field mismatches and report via telemetry.
+      mismatch_any = Bits(1)(0)
+      for name in static_field_names:
+        # `!=` works for any peer-typed Signals.
+        diff = par_struct[name] != latched_static[name]
+        mismatch_any = mismatch_any | diff
+      mismatch_event = par_xact & in_list & mismatch_any
+
+      mismatch_bitwidth = 32
+      mismatch_counter = Counter(mismatch_bitwidth)(clk=ports.clk,
+                                                    rst=ports.rst,
+                                                    clear=Bits(1)(0),
+                                                    increment=mismatch_event)
+      Telemetry.report_signal(
+          ports.clk,
+          ports.rst,
+          AppID("listStaticFieldMismatches"),
+          mismatch_counter.out,
+      )
+
+      # Per-burst item counter: counts items pushed into data_fifo so far
+      # for the current (in-progress) burst. burst_count_wire is the
+      # registered value BEFORE this cycle's push, so the count of items
+      # *including* this cycle's push is burst_count_wire + 1.
+      burst_count_wire = Wire(UInt(bc_bitwidth))
+      next_burst_count = (burst_count_wire + one_bc).as_uint(bc_bitwidth)
+
+      # Push a meta entry whenever a burst boundary occurs:
+      #   - par_xact_last: end-of-list (is_last=1).
+      #   - drain_split:   non-last xact that fills the data FIFO. Without
+      #                    this, a long list with no `last` would stall
+      #                    once data_fifo fills. is_last=0.
+      # The two are mutually exclusive (drain_split requires ~par_last).
+      drain_split = par_xact & ~par_last & (next_burst_count == depth_bc)
+      meta_push_xact = par_xact_last | drain_split
+
+      # Build the meta entry: count snapshot plus the static fields we
+      # latched at the start of the current list (rather than trusting
+      # whatever the producer happens to be presenting at the boundary
+      # cycle).
+      hdr_fields: Dict[str, Signal] = {
+          name: effective_static(name) for name in static_field_names
+      }
+      hdr_fields[count_field_name] = next_burst_count.as_bits(count_bitwidth)
+      hdr_value = header_struct_type(hdr_fields)
+      meta_entry_value = meta_entry_type({
+          "hdr": hdr_value,
+          "is_last": par_xact_last,
+      })
+      meta_fifo.push(meta_entry_value, meta_push_xact)
+
+      # Burst counter: increment on each par_xact, clear on meta_push_xact.
+      # Counter.clear takes precedence over .increment, so when both fire
+      # in the same cycle the counter resets to 0 (correct: that cycle's
+      # item is the last of the burst, and the next burst starts at 0).
+      burst_counter = Counter(bc_bitwidth)(clk=ports.clk,
+                                           rst=ports.rst,
+                                           clear=meta_push_xact,
+                                           increment=par_xact)
+      burst_count_wire.assign(burst_counter.out)
+
+      # ===== Output side: drain meta + data FIFOs into serial frames. =====
+      # State (2 bits):
+      #   S_IDLE   - waiting for a meta entry; pop one to start a burst.
+      #   S_HDR    - emit the latched header.
+      #   S_DATA   - emit `count` data frames.
+      #   S_FOOTER - emit a count==0 terminator (only if cur_is_last).
+      S_IDLE = Bits(2)(0)
+      S_HDR = Bits(2)(1)
+      S_DATA = Bits(2)(2)
+      S_FOOTER = Bits(2)(3)
+
+      state_wire = Wire(Bits(2))
+      in_idle = state_wire == S_IDLE
+      in_hdr = state_wire == S_HDR
+      in_data = state_wire == S_DATA
+      in_footer = state_wire == S_FOOTER
+
+      # Pop one meta entry when we're idle and meta is available; latch it
+      # into cur_meta so it's stable through HDR/DATA/FOOTER states.
+      meta_pop_rden = Wire(Bits(1))
+      meta_value = meta_fifo.pop(meta_pop_rden)
+      meta_avail = ~meta_fifo.empty
+      arm_burst = in_idle & meta_avail
+      meta_pop_rden.assign(arm_burst)
+
+      cur_meta = meta_value.reg(ports.clk,
+                                ports.rst,
+                                ce=arm_burst,
+                                name="cur_meta")
+      cur_hdr = cur_meta["hdr"]
+      cur_count = cur_hdr[count_field_name].as_uint(count_bitwidth)
+      cur_is_last = cur_meta["is_last"]
+
+      # Footer struct: same static fields as the latched header, count=0.
+      footer_fields: Dict[str, Signal] = {
+          name: cur_hdr[name] for name in static_field_names
+      }
+      footer_fields[count_field_name] = Bits(count_bitwidth)(0)
+      footer_value = header_struct_type(footer_fields)
+
+      # Per-burst emitted-item counter, cleared at burst end.
       emitted_wire = Wire(UInt(count_bitwidth))
-      next_emitted = (emitted_wire + one_c).as_uint(count_bitwidth)
-      last_item = next_emitted == cur_count_wire
+      next_emitted = (emitted_wire +
+                      UInt(count_bitwidth)(1)).as_uint(count_bitwidth)
+      last_item_in_burst = next_emitted == cur_count
 
-      # Build the two output union variants.
-      header_union = serial_lowered(("header", burst_value))
+      # Data FIFO pop.
+      data_pop_rden = Wire(Bits(1))
+      data_value = data_fifo.pop(data_pop_rden)
+      data_valid = ~data_fifo.empty
+
+      # Output union variants.
+      header_union = serial_lowered(("header", cur_hdr))
+      footer_union = serial_lowered(("header", footer_value))
       data_struct_value = data_struct_type({list_field_name: [data_value]})
       data_union = serial_lowered(("data", data_struct_value))
 
-      # Mux the union into the serial frame based on state.
-      out_union = Mux(state_wire, header_union, data_union)
+      # Mux the union by current state. The S_IDLE slot is don't-care
+      # since out_valid is deasserted there; we plug in data_union to
+      # avoid an extra distinct constant.
+      out_union = Mux(state_wire, data_union, header_union, data_union,
+                      footer_union)
       out_window = serial_window_type.wrap(out_union)
 
-      # serial_out valid: in WAIT_HDR if a burst is queued; in EMIT_DATA if the
-      # next item is queued.
-      out_valid = (in_wait_hdr & burst_valid) | (in_emit_data & data_valid)
+      # out_valid:
+      #   - S_HDR / S_FOOTER: always (driven from registers).
+      #   - S_DATA:           when the next item is queued in data_fifo.
+      out_valid = in_hdr | in_footer | (in_data & data_valid)
       out_chan, out_ready = Channel(serial_window_type).wrap(
           out_window, out_valid)
       ports.serial_out = out_chan
 
-      hdr_xact = in_wait_hdr & burst_valid & out_ready
-      data_xact = in_emit_data & data_valid & out_ready
-      burst_pop_rden.assign(hdr_xact)
+      # Transactions.
+      hdr_xact = in_hdr & out_ready
+      data_xact = in_data & data_valid & out_ready
+      burst_done = data_xact & last_item_in_burst
+      footer_xact = in_footer & out_ready
       data_pop_rden.assign(data_xact)
 
-      # Update the latched count when popping the header.
-      cur_count_next = Mux(
-          hdr_xact, cur_count_wire,
-          burst_value[count_field_name].as_uint(count_bitwidth))
-      cur_count_reg = cur_count_next.reg(ports.clk,
-                                         ports.rst,
-                                         rst_value=0,
-                                         name="cur_count")
-      cur_count_wire.assign(cur_count_reg)
+      # Emitted-counter: clear at burst_done, increment on every other
+      # data xact. Counter.clear takes precedence over .increment.
+      emitted_counter = Counter(count_bitwidth)(clk=ports.clk,
+                                                rst=ports.rst,
+                                                clear=burst_done,
+                                                increment=data_xact &
+                                                ~last_item_in_burst)
+      emitted_wire.assign(emitted_counter.out)
 
-      # Update the emitted-item counter: reset on last-item xact, increment on
-      # any other data xact, hold otherwise. Mux semantics: Mux(sel, A, B)
-      # returns B when sel=1, so the inner mux must be ordered (false_arg,
-      # true_arg) = (next_emitted, zero_c).
-      next_emit = Mux(data_xact, emitted_wire,
-                      Mux(last_item, next_emitted, zero_c))
-      emit_reg = next_emit.reg(ports.clk,
-                               ports.rst,
-                               rst_value=0,
-                               name="emitted")
-      emitted_wire.assign(emit_reg)
-
-      # State transitions: WAIT_HDR -> EMIT_DATA on header xact; EMIT_DATA ->
-      # WAIT_HDR on last-item xact.
-      next_state = Mux(hdr_xact, state_wire, Bits(1)(1))
-      next_state = Mux(last_item & data_xact, next_state, Bits(1)(0))
+      # Per-state next-state expressions, selected by the current state.
+      # Transitions:
+      #   S_IDLE   -> S_HDR    on arm_burst
+      #   S_HDR    -> S_DATA   on hdr_xact (cur_count is always >= 1, since
+      #                        meta is only pushed on a real boundary that
+      #                        includes at least one item).
+      #   S_DATA   -> S_FOOTER on burst_done & cur_is_last
+      #   S_DATA   -> S_IDLE   on burst_done & ~cur_is_last
+      #   S_FOOTER -> S_IDLE   on footer_xact
+      next_in_idle = Mux(arm_burst, S_IDLE, S_HDR)
+      next_in_hdr = Mux(hdr_xact, S_HDR, S_DATA)
+      next_in_data = Mux(burst_done, S_DATA, Mux(cur_is_last, S_IDLE, S_FOOTER))
+      next_in_footer = Mux(footer_xact, S_FOOTER, S_IDLE)
+      next_state = Mux(state_wire, next_in_idle, next_in_hdr, next_in_data,
+                       next_in_footer)
       state_reg = next_state.reg(ports.clk,
                                  ports.rst,
                                  rst_value=0,
