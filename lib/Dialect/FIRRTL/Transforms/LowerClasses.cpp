@@ -951,9 +951,6 @@ void LowerClassesPass::runOnOperation() {
 
 // Predicate to check if a module-like needs a Class to be created.
 bool LowerClassesPass::shouldCreateClass(igraph::ModuleOpInterface modOp) {
-  if (auto moduleLike = dyn_cast<FModuleLike>(modOp.getOperation()))
-    if (moduleLike.isPublic())
-      return true;
   return instanceInfo->moduleContainsProperties(modOp);
 }
 
