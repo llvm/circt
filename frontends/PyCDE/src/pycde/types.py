@@ -1379,6 +1379,51 @@ class Window(Type):
     return Window("default_window", target_type,
                   [Window.Frame(None, frame_members)])
 
+  @staticmethod
+  def serial_of(type: Type,
+                count_bitwidth: int = 16,
+                items_per_frame: int = 1) -> "Window":
+    """Get a window which serializes a type. The window has two frames: a header
+    frame which contains all the static fields and a 'count' field indicating
+    how many items follow, and a data frame which contains only the list
+    field(s). 'items_per_frame' controls how many items are transmitted in each
+    data frame. 'count_bitwidth' controls the bitwidth of the 'count' field in
+    the header frame."""
+
+    def is_struct_type(t: Type) -> bool:
+      return isinstance(t, StructType) or (isinstance(t, TypeAlias) and
+                                           isinstance(t.inner_type, StructType))
+
+    target_type = type
+    if not is_struct_type(target_type):
+      target_type = StructType({"data": type})
+
+    static_fields = []
+    list_fields = []
+
+    for name, ftype in target_type.fields:
+      if isinstance(ftype, List):
+        list_fields.append(name)
+      elif not ftype.has_computable_bitwidth:
+        raise ValueError(f"Field '{name}' has indeterminate bitwidth")
+      else:
+        static_fields.append(name)
+
+    if len(list_fields) != 1:
+      raise ValueError("serial_of requires exactly one list field, got "
+                       f"{len(list_fields)}")
+
+    list_field = list_fields[0]
+    header_members: typing.List[typing.Union[str, typing.Tuple]] = list(
+        static_fields)
+    header_members.append((list_field, 0, count_bitwidth))
+    data_members = [(list_field, items_per_frame, 0)]
+
+    return Window("serial_window", target_type, [
+        Window.Frame("header", header_members),
+        Window.Frame("data", data_members),
+    ])
+
 
 def dim(inner_type_or_bitwidth: typing.Union[Type, int],
         *size: typing.List[int],

@@ -73,6 +73,9 @@ static void coordTranslateTest(AcceleratorConnection *, Accelerator *,
 static void serialCoordTranslateTest(AcceleratorConnection *, Accelerator *,
                                      uint32_t xTrans, uint32_t yTrans,
                                      uint32_t numCoords, size_t batchSizeLimit);
+static void autoSerialCoordTranslateTest(AcceleratorConnection *, Accelerator *,
+                                         uint32_t xTrans, uint32_t yTrans,
+                                         uint32_t numCoords);
 static void channelTest(AcceleratorConnection *, Accelerator *,
                         uint32_t iterations);
 
@@ -299,6 +302,21 @@ int main(int argc, const char *argv[]) {
                    "Coordinates per header (default 240, max 65535)")
       ->check(CLI::Range(1u, 0xFFFFu));
 
+  CLI::App *autoSerialCoordTranslateSub = cli.add_subcommand(
+      "auto_serial_coords",
+      "Test AutoSerialCoordTranslator (uses ListWindowToParallel/Serial "
+      "converters under the hood)");
+  uint32_t autoCoordXTrans = 10;
+  uint32_t autoCoordYTrans = 20;
+  uint32_t autoCoordNumItems = 5;
+  autoSerialCoordTranslateSub->add_option("-x,--x-translation", autoCoordXTrans,
+                                          "X translation amount (default 10)");
+  autoSerialCoordTranslateSub->add_option("-y,--y-translation", autoCoordYTrans,
+                                          "Y translation amount (default 20)");
+  autoSerialCoordTranslateSub->add_option(
+      "-n,--num-coords", autoCoordNumItems,
+      "Number of random coordinates (default 5)");
+
   CLI::App *channelTestSub = cli.add_subcommand(
       "channel", "Test ChannelService to_host and from_host");
   uint32_t channelIters = 10;
@@ -348,6 +366,9 @@ int main(int argc, const char *argv[]) {
     } else if (*serialCoordTranslateSub) {
       serialCoordTranslateTest(acc, accel, coordXTrans, coordYTrans,
                                coordNumItems, serialBatchSize);
+    } else if (*autoSerialCoordTranslateSub) {
+      autoSerialCoordTranslateTest(acc, accel, autoCoordXTrans, autoCoordYTrans,
+                                   autoCoordNumItems);
     } else if (*channelTestSub) {
       channelTest(acc, accel, channelIters);
     }
@@ -1818,12 +1839,19 @@ struct SerialCoordInput : SegmentedMessageData {
 private:
   SerialCoordHeader header;
   std::vector<SerialCoordData> coords;
+  SerialCoordHeader footer;
 
 public:
   SerialCoordInput() {
     header.coordsCount = 0;
     header.xTranslation = 0;
     header.yTranslation = 0;
+    // The footer is a count==0 header that terminates the list per the ESI
+    // bulk-transfer serial encoding. Static fields are constant within a
+    // list so the footer's translation values are irrelevant; zero them.
+    footer.coordsCount = 0;
+    footer.xTranslation = 0;
+    footer.yTranslation = 0;
   }
   void yTranslation(uint32_t yTrans) { header.yTranslation = yTrans; }
   uint32_t yTranslation() const { return header.yTranslation; }
@@ -1835,6 +1863,42 @@ public:
   }
   const std::vector<SerialCoordData> &getCoords() const { return coords; }
 
+  size_t numSegments() const override { return 3; }
+  Segment segment(size_t idx) const override {
+    if (idx == 0)
+      return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};
+    else if (idx == 1)
+      return {reinterpret_cast<const uint8_t *>(coords.data()),
+              coords.size() * sizeof(SerialCoordData)};
+    else if (idx == 2)
+      return {reinterpret_cast<const uint8_t *>(&footer), sizeof(footer)};
+    else
+      throw std::out_of_range("SerialCoordInput: invalid segment index");
+  }
+};
+
+// Like SerialCoordInput but without the trailing count==0 terminator. Used
+// when streaming multiple bursts that together comprise a single logical
+// list; the caller is responsible for sending a separate terminator burst
+// (a SerialCoordBurst with count==0 and no data).
+struct SerialCoordBurst : SegmentedMessageData {
+private:
+  SerialCoordHeader header;
+  std::vector<SerialCoordData> coords;
+
+public:
+  SerialCoordBurst() {
+    header.coordsCount = 0;
+    header.xTranslation = 0;
+    header.yTranslation = 0;
+  }
+  void yTranslation(uint32_t yTrans) { header.yTranslation = yTrans; }
+  void xTranslation(uint32_t xTrans) { header.xTranslation = xTrans; }
+  void appendCoord(uint32_t x, uint32_t y) {
+    coords.emplace_back(x, y);
+    header.coordsCount = (uint16_t)coords.size();
+  }
+
   size_t numSegments() const override { return 2; }
   Segment segment(size_t idx) const override {
     if (idx == 0)
@@ -1843,7 +1907,7 @@ public:
       return {reinterpret_cast<const uint8_t *>(coords.data()),
               coords.size() * sizeof(SerialCoordData)};
     else
-      throw std::out_of_range("SerialCoordInput: invalid segment index");
+      throw std::out_of_range("SerialCoordBurst: invalid segment index");
   }
 };
 
@@ -1940,7 +2004,7 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
                                      uint32_t yTrans, uint32_t numCoords,
                                      size_t batchSizeLimit) {
   Logger &logger = conn->getLogger();
-  logger.info("esitester", "Starting serial coord translate test");
+  logger.info("esitester", "Starting Serial coord translate test");
 
   // Generate random coordinates.
   std::mt19937 rng(0xDEADBEEF);
@@ -1961,22 +2025,29 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     throw std::runtime_error(
         "Serial coord translate test: no 'translate_coords_serial' port found");
 
-  TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
+  TypedWritePort<SerialCoordBurst, /*SkipTypeCheck=*/true> argPort(
       portIter->second.getRawWrite("arg"));
-  TypedReadPort<SerialCoordOutputBatch> resultPort(
-      portIter->second.getRawRead("result"));
+  // Use the raw read port so we can verify the multi-burst output framing
+  // explicitly rather than relying on the typed deserializer to accumulate
+  // frames until the terminator.
+  ReadChannelPort &resultRaw = portIter->second.getRawRead("result");
 
   argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
-  resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+  // Use an unlimited read queue so the device output isn't stalled by a full
+  // queue while we're still writing. With raw reads (translateMessage=false),
+  // each output frame becomes its own queued message, so the default 32-msg
+  // limit can be hit easily on a multi-burst run.
+  resultRaw.connect(ChannelPort::ConnectOptions(/*bufferSize=*/0,
+                                                /*translateMessage=*/false));
 
   size_t sent = 0;
   while (sent < numCoords) {
     size_t batchSize = std::min(batchSizeLimit, numCoords - sent);
 
-    // Send Header. Only the first header needs the translation values, test the
-    // subsequent ones with zero translation to verify that the hardware
+    // Send Header. Only the first header needs the translation values, test
+    // the subsequent ones with zero translation to verify that the hardware
     // correctly applies the first header's translation to the whole list.
-    auto batch = std::make_unique<SerialCoordInput>();
+    auto batch = std::make_unique<SerialCoordBurst>();
     batch->xTranslation(sent == 0 ? xTrans : 0);
     batch->yTranslation(sent == 0 ? yTrans : 0);
     // Send Data
@@ -1986,18 +2057,43 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
     argPort.write(batch);
     sent += batchSize;
   }
-  // Send final header with count=0 to signal end of input
-  auto footerData = std::make_unique<SerialCoordInput>();
-  argPort.write(footerData);
+  // Send final header with count=0 to signal end of input.
+  auto footerBurst = std::make_unique<SerialCoordBurst>();
+  argPort.write(footerBurst);
 
-  // Read the deserialized result batch. The TypeDeserializer accumulates all
-  // header+data frame sequences until the zero-count footer, producing a
-  // single SerialCoordOutputBatch with the complete coordinate list.
-  std::unique_ptr<SerialCoordOutputBatch> result = resultPort.read();
-  if (!result)
-    throw std::runtime_error(
-        "Serial coord translate test: typed read returned null result");
-  const std::vector<Coord> &results = result->coords;
+  // Read raw output frames, walking the bulk-transfer wire format: zero or
+  // more (HDR(N) + N data frames) sequences followed by a single HDR(0)
+  // terminator. Each `read()` returns whatever the transport layer has
+  // available, which is not guaranteed to align with frame boundaries
+  // (e.g., DMA channel engines may coalesce or split across frames). So
+  // we accumulate bytes into a buffer and only consume whole frames.
+  constexpr size_t frameSize = sizeof(SerialCoordOutputFrame);
+  std::vector<uint8_t> rxBuf;
+  auto readFrame = [&](SerialCoordOutputFrame &out) {
+    while (rxBuf.size() < frameSize) {
+      MessageData data;
+      resultRaw.read(data);
+      rxBuf.insert(rxBuf.end(), data.getBytes(),
+                   data.getBytes() + data.getSize());
+    }
+    std::memcpy(&out, rxBuf.data(), frameSize);
+    rxBuf.erase(rxBuf.begin(), rxBuf.begin() + frameSize);
+  };
+
+  std::vector<Coord> results;
+  results.reserve(numCoords);
+  while (true) {
+    SerialCoordOutputFrame hdr{};
+    readFrame(hdr);
+    uint16_t batchCount = hdr.header.coordsCount;
+    if (batchCount == 0)
+      break;
+    for (uint16_t i = 0; i < batchCount; ++i) {
+      SerialCoordOutputFrame frame{};
+      readFrame(frame);
+      results.push_back({frame.data.y, frame.data.x});
+    }
+  }
 
   // Verify
   bool passed = true;
@@ -2022,13 +2118,148 @@ static void serialCoordTranslateTest(AcceleratorConnection *conn,
   }
 
   argPort.disconnect();
-  resultPort.disconnect();
+  resultRaw.disconnect();
 
   if (!passed)
     throw std::runtime_error("Serial coord translate test failed");
 
   logger.info("esitester", "Serial coord translate test passed");
   std::cout << "Serial coord translate test passed" << std::endl;
+}
+
+//
+// AutoSerialCoordTranslator test
+//
+// The hardware module pipes the input through ListWindowToParallel ->
+// per-coordinate translation -> ListWindowToSerial. The conversion modules
+// emit one or more bulk transfers per call (each `header(count>0)` followed
+// by `count` data frames) terminated by a `header(count==0)` footer per the
+// ESI WindowField serial-encoding spec. This test:
+//   * Sends exactly one input batch: header(numCoords) + numCoords data
+//     frames + header(0) footer.
+//   * Reads back: a sequence of one-or-more `header(count>0) + count data`
+//     bursts terminated by `header(0)`. Use raw frame reads since the
+//     canonical `SerialCoordOutputBatch` deserializer hasn't been wired in
+//     for the converter pair.
+//
+static void autoSerialCoordTranslateTest(AcceleratorConnection *conn,
+                                         Accelerator *accel, uint32_t xTrans,
+                                         uint32_t yTrans, uint32_t numCoords) {
+  Logger &logger = conn->getLogger();
+  logger.info("esitester", "Starting Auto serial coord translate test");
+
+  // Generate random coordinates.
+  std::mt19937 rng(0xDEADBEEF);
+  std::uniform_int_distribution<uint32_t> dist(0, 1000000);
+  std::vector<Coord> inputCoords;
+  inputCoords.reserve(numCoords);
+  for (uint32_t i = 0; i < numCoords; ++i)
+    inputCoords.push_back({dist(rng), dist(rng)});
+
+  auto child = accel->getChildren().find(AppID("coord_translator_auto_serial"));
+  if (child == accel->getChildren().end())
+    throw std::runtime_error("Auto serial coord translate test: no "
+                             "'coord_translator_auto_serial' child found");
+
+  auto &ports = child->second->getPorts();
+  auto portIter = ports.find(AppID("translate_coords_auto_serial"));
+  if (portIter == ports.end())
+    throw std::runtime_error("Auto serial coord translate test: no "
+                             "'translate_coords_auto_serial' port found");
+
+  // Reuse SerialCoordInput: the input wire format is identical (header with
+  // x/y_translation+count, followed by data frames each carrying one coord).
+  TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
+      portIter->second.getRawWrite("arg"));
+  argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
+
+  // Use the raw read port for results: read one header frame then numCoords
+  // data frames as raw `SerialCoordOutputFrame`-shaped messages. Disable
+  // window-message translation so we get one frame per `read()` instead of
+  // assembled higher-level messages.
+  ReadChannelPort &resultRaw = portIter->second.getRawRead("result");
+  // Use an unlimited read queue so the device output isn't stalled by a full
+  // queue while we're still writing. With raw reads (translateMessage=false),
+  // each output frame becomes its own queued message, so the default 32-msg
+  // limit can be hit easily on a multi-frame run.
+  resultRaw.connect(ChannelPort::ConnectOptions(/*bufferSize=*/0,
+                                                /*translateMessage=*/false));
+
+  // Send a single header+data burst.
+  auto batch = std::make_unique<SerialCoordInput>();
+  batch->xTranslation(xTrans);
+  batch->yTranslation(yTrans);
+  for (uint32_t i = 0; i < numCoords; ++i)
+    batch->appendCoord(inputCoords[i].x, inputCoords[i].y);
+  argPort.write(batch);
+
+  // Helper: read one raw frame, accumulating bytes across `read()` calls
+  // since transports such as DMA channel engines do not guarantee that
+  // each `read()` returns exactly one frame.
+  constexpr size_t frameSize = sizeof(SerialCoordOutputFrame);
+  std::vector<uint8_t> rxBuf;
+  auto readFrame = [&](SerialCoordOutputFrame &out) {
+    while (rxBuf.size() < frameSize) {
+      MessageData data;
+      resultRaw.read(data);
+      rxBuf.insert(rxBuf.end(), data.getBytes(),
+                   data.getBytes() + data.getSize());
+    }
+    std::memcpy(&out, rxBuf.data(), frameSize);
+    rxBuf.erase(rxBuf.begin(), rxBuf.begin() + frameSize);
+  };
+
+  // Read a sequence of one-or-more `header(count>0) + count data` bursts
+  // followed by a `header(count==0)` terminator footer. Total data items
+  // received across all bursts must equal numCoords.
+  std::vector<Coord> results;
+  results.reserve(numCoords);
+  while (true) {
+    SerialCoordOutputFrame hdr{};
+    readFrame(hdr);
+    uint16_t burstCount = hdr.header.coordsCount;
+    if (burstCount == 0)
+      break;
+    if (results.size() + burstCount > numCoords)
+      throw std::runtime_error(
+          "Auto serial coord translate test: bursts overflow expected total " +
+          std::to_string(numCoords));
+    for (uint32_t i = 0; i < burstCount; ++i) {
+      SerialCoordOutputFrame frame{};
+      readFrame(frame);
+      results.push_back({frame.data.y, frame.data.x});
+    }
+  }
+  if (results.size() != numCoords)
+    throw std::runtime_error("Auto serial coord translate test: got " +
+                             std::to_string(results.size()) +
+                             " coords across all bursts " + "(expected " +
+                             std::to_string(numCoords) + ")");
+
+  argPort.disconnect();
+  resultRaw.disconnect();
+
+  bool passed = true;
+  std::cout << "Auto serial coord translate test results:" << std::endl;
+  for (size_t i = 0; i < inputCoords.size(); ++i) {
+    uint32_t expX = inputCoords[i].x + xTrans;
+    uint32_t expY = inputCoords[i].y + yTrans;
+    std::cout << "  coord[" << i << "]=(" << inputCoords[i].x << ","
+              << inputCoords[i].y << ") + (" << xTrans << "," << yTrans
+              << ") = (" << results[i].x << "," << results[i].y
+              << ") (expected (" << expX << "," << expY << "))";
+    if (results[i].x != expX || results[i].y != expY) {
+      std::cout << " MISMATCH!";
+      passed = false;
+    }
+    std::cout << std::endl;
+  }
+
+  if (!passed)
+    throw std::runtime_error("Auto serial coord translate test failed");
+
+  logger.info("esitester", "Auto serial coord translate test passed");
+  std::cout << "Auto serial coord translate test passed" << std::endl;
 }
 
 static void channelTest(AcceleratorConnection *conn, Accelerator *accel,
