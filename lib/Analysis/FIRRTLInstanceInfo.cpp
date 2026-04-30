@@ -190,27 +190,36 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
     auto moduleOp = modIt.getModule();
     ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
-    // Merge in attributes from children.
-    attributes
-        .hasProperties |= llvm::any_of(modIt, [&](InstanceRecord *record) {
-      return moduleAttributes[record->getTarget()->getModule()].hasProperties;
-    });
+    // Merge in attributes of instances within the module.
+    for (auto *instIt : modIt) {
+      attributes.hasProperties |=
+          moduleAttributes[instIt->getTarget()->getModule()].hasProperties;
+      if (attributes.postOrderSaturated())
+        break;
+    }
 
-    if (attributes.hasProperties)
-      return;
-
-    // Compute attributes of the module itself.
+    // Early exit if there is no body to examine or if the module cannot be
+    // public.
     auto moduleLike = modIt.getModule<FModuleLike>();
     if (!moduleLike)
       return;
 
-    // If the module is classlike consider this a "property" or if any of the
-    // ports have property type.
-    attributes.hasProperties |=
-        isa<ClassLike>(moduleLike.getOperation()) ||
-        llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
-          return isa<PropertyType>(port.type);
-        });
+    // Merge in attributes of the module.
+    attributes.hasProperties |= moduleLike.isPublic();
+
+    // If the module is classlike, it is a property.  Walk the ports and update
+    // attributes for each.
+    attributes.hasProperties |= isa<ClassLike>(moduleLike.getOperation());
+    for (auto port : moduleLike.getPorts()) {
+      attributes.hasProperties |= isa<PropertyType>(port.type);
+      if (attributes.postOrderSaturated())
+        break;
+    }
+
+    // Early exit if the attributes can no longer change.  This avoids needing
+    // to do a walk of the module body.
+    if (attributes.postOrderSaturated())
+      return;
 
     // Walk the ops to populate information, short circuiting as soon as
     // we've gathered enough information to stop the walk.  Only FModuleOp has

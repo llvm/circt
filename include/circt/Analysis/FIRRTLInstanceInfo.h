@@ -106,7 +106,8 @@ public:
   };
 
   /// Information about a module
-  struct ModuleAttributes {
+  class ModuleAttributes {
+  public:
     /// Indicates if this module is instantiated under the design-under-test.
     InstanceInfo::LatticeValue underDut;
 
@@ -131,8 +132,23 @@ public:
     InstanceInfo::LatticeValue inInstanceChoice;
 
     /// Indicates if this module has any property operations within (or
-    /// transitively within) it.
+    /// transitively within) it, or if it is public or contains (transitively)
+    /// any public modules.
     bool hasProperties = false;
+
+    /// Return true if the product of post-order information is saturated
+    /// (cannot ever change).  This corresponds to all attributes populated
+    /// during the post-order walk are true.  This is an optimization that is
+    /// used to short circuit the walk when no more information can change.
+    bool postOrderSaturated() {
+      if (!saturated)
+        saturated = hasProperties;
+
+      return saturated;
+    }
+
+  private:
+    bool saturated = false;
   };
 
   //===--------------------------------------------------------------------===//
@@ -215,8 +231,9 @@ public:
 
   /// Return true if this module contains (or its children transitively contain)
   /// any property operations, i.e., operations whose operands or results have
-  /// a PropertyType, if any port of the module has a PropertyType, or if the
-  /// module is a class.
+  /// a PropertyType, if any port of the module has a PropertyType, if the
+  /// module is a class, or if the module is public or contains any public
+  /// modules.
   bool moduleContainsProperties(igraph::ModuleOpInterface op);
 
 private:
