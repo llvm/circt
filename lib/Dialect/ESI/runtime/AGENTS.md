@@ -161,3 +161,35 @@ The GTest-based unit tests live in `lib/Dialect/ESI/runtime/tests/cpp` and they 
   - `test_*.py`: pytest files using `@cosim_test`
 - The `sw/CMakeLists.txt` builds C++ test binaries against the ESI runtime. It searches for the runtime headers/libs using `ESI_RUNTIME_ROOT`.
 - `check_lines(stdout, expected)` asserts substrings appear in order.
+
+## Debugging hardware + software via cosim
+
+Cosim failures usually look like one of: a hang/timeout, a wrong-data assertion, or a simulator crash. The HW (verilator) and SW (host runtime + test) are two independent processes communicating over RPC, so a bug in either side can manifest as a symptom in the other. Some hard-won notes:
+
+### Triage order
+1. **Reproduce the smallest failing pytest in isolation** with `-v --tb=short`. Verilator first-compile per test class is slow (~3 min); subsequent runs of tests in the same class are ~1 min. Don't iterate on the full suite.
+2. **Decide which side is stuck** before changing anything. A timeout almost always means one side is waiting on a message from the other; figure out which.
+   - Add temporary `std::cerr` (host) / `$display` (HW) prints around the suspected stall point. `std::ofstream` to a file under `tmp/` works too and avoids interleaving with pytest output.
+   - On the HW side, enabling waveform tracing (`ESI_RUNTIME_TRACE=ON` build, plus simulator-specific flags) is invaluable for protocol-level bugs (valid/ready, framing).
+3. **Bisect against a known-good baseline.** `git stash` your changes, rebuild just the affected target (`ninja -C $CIRCT_BUILD esitester` or `PyCDE`), and rerun. If the baseline passes, the regression is yours; if it fails too, it's pre-existing.
+4. Only after you know which side is the producer of the bad behavior, read the matching sources.
+
+### Common cosim-specific pitfalls
+- **Read-queue overflow deadlocks bidirectional flows.** With raw `ReadChannelPort::connect()` (i.e. `translateMessage=false`) every backend frame consumes one slot in the polling queue (default `maxDataQueueMsgs = 32`). If the host writes a long burst before reading any results, the device output buffer fills, the device stops draining its input, and the in-flight host `write()` deadlocks. Pass `ConnectOptions(/*bufferSize=*/0, /*translateMessage=*/false)` for unlimited buffering when the SW pattern is "write everything, then read everything." `TypedReadPort<T>` with a custom `TypeDeserializer` hides this because the deserializer batches frames into a single queued message — switching from typed to raw reads can silently introduce the deadlock.
+- **DMA channel engines (`OneItemBuffersToHost` / `OneItemBuffersFromHost`) are one-frame-at-a-time.** `OneItemBuffersToHostReadPort::pollImpl` only re-arms the device buffer when `invokeCallback()` returns true. A full polling queue therefore stops device progress entirely — same root cause as above, but the symptom is harder to spot because nothing on the wire looks broken.
+- **`MessageData` is effectively non-movable.** It has a user-declared destructor and no move ops, so `std::move(MessageData)` copies the underlying byte vector. Don't rely on move-only semantics in hot paths or queueing wrappers.
+- **`MessageData::from(T&)` uses `sizeof(T)`, not the wire width.** For non-byte-aligned ESI types (e.g., `si24`, `ui4`) this produces the wrong frame size. Compute wire bytes from the port's bit width (`(bitWidth + 7) / 8`) and memcpy the low bytes; sign-extend on read using the actual bit width, not `sizeof(T)*8`.
+- **Multi-segment / list types need a stateful `TypeDeserializer`.** Per-port deserializers (`PODTypeDeserializer<T>` or `T::TypeDeserializer`) collapse N raw frames into one `unique_ptr<T>` returned from `read()`/`readAsync()`. If you see "one segment per read" behavior in the host but the HW is generating header+body+footer frames, you probably need a deserializer rather than a queue-size knob.
+- **Channel handshake gating.** When unwrapping ValidReady, upstream `ready` should be gated by downstream `ready AND xact_valid`, otherwise messages get consumed without being forwarded. This is the standard idiom in `Channel.join` / `ChannelSignal.fork`; mirror it in any custom HW you build.
+- **First-compile latency hides progress.** If a test appears stuck in the first 2–3 minutes after launching, it's almost certainly verilator compiling, not the test hanging. Check `pgrep -af 'verilator|VESI|esitester'` before assuming a deadlock.
+
+### When to suspect HW vs SW
+- Wrong-data assertion that fires on the *first* message → almost always SW serialization (wire-width / sign / endianness) or the wrong port.
+- Wrong-data after N correct messages → HW state-machine bug (FSM stuck in a transient state, missed reset, off-by-one in a counter), or backpressure bug.
+- Timeout with both sides idle → handshake mismatch (one side waiting for valid, the other for ready) or queue-overflow deadlock as above.
+- Simulator crash / `$fatal` → HW assertion; read the simulator stderr, not the pytest output.
+
+### Useful commands
+- Build only what you need: `ninja -C $CIRCT_BUILD esitester PyCDE` (skip full `check-circt`).
+- Run a single cosim test: `cd lib/Dialect/ESI/runtime && PATH=$CIRCT_BUILD/bin:$PATH python -m pytest tests/integration/test_<x>.py::<Class>::<test> -v --tb=short`.
+- Watch for stuck child processes between iterations: `pgrep -af 'esitester|verilator|pytest'` and `kill` any stragglers from a previous failed run before relaunching.
