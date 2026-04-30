@@ -30,10 +30,6 @@ jobs:
     strategy:
       matrix:
         python-env:
-          - cp310-manylinux_x86_64
-          - cp311-manylinux_x86_64
-          - cp312-manylinux_x86_64
-          - cp313-manylinux_x86_64
           - cp314-manylinux_x86_64
     steps:
       - name: Free disk space
@@ -119,10 +115,6 @@ jobs:
     strategy:
       matrix:
         python-env:
-          - cp310-win_amd64
-          - cp311-win_amd64
-          - cp312-win_amd64
-          - cp313-win_amd64
           - cp314-win_amd64
     steps:
       # Since we don't use docker on Windows, we need to install the dependencies.

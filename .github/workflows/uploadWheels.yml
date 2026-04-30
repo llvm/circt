@@ -42,10 +42,7 @@ jobs:
           if [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ inputs.cibw-build }}" == "all" ]]; then
             matrix='{
               "config": [
-                {"os":"ubuntu-22.04","cibw_build":"cp310-manylinux_x86_64"},
-                {"os":"ubuntu-22.04","cibw_build":"cp313-manylinux_x86_64"},
                 {"os":"ubuntu-22.04","cibw_build":"cp314-manylinux_x86_64"},
-                {"os":"macos-14","cibw_build":"cp313-macosx_arm64"},
                 {"os":"macos-14","cibw_build":"cp314-macosx_arm64"}
               ]
             }'
