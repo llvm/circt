@@ -130,8 +130,11 @@ void ReadChannelPort::connect(ReadCallback callback,
 
   resetTranslationState();
 
-  if (options.translateMessage && translationInfo) {
+  if (translationInfo)
     translationInfo->precomputeFrameInfo();
+
+  if (options.translateMessage && translationInfo) {
+    translationInfo->requireTranslationSupported();
     this->callback = [this, cb = std::move(callback)](
                          std::unique_ptr<SegmentedMessageData> &data) {
       if (!translatedMessage) {
@@ -173,9 +176,12 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
 
   resetTranslationState();
 
+  if (translationInfo)
+    translationInfo->precomputeFrameInfo();
+
   bool translate = options.translateMessage && translationInfo;
   if (translate)
-    translationInfo->precomputeFrameInfo();
+    translationInfo->requireTranslationSupported();
   this->callback = [this,
                     translate](std::unique_ptr<SegmentedMessageData> &msg) {
     MessageData data;
@@ -221,6 +227,25 @@ std::future<MessageData> ReadChannelPort::readAsync() {
 //===----------------------------------------------------------------------===//
 // Window translation support
 //===----------------------------------------------------------------------===//
+
+void ChannelPort::TranslationInfo::requireTranslationSupported() const {
+  // Reject serial-encoded windows: any field with bulkCountWidth > 0 indicates
+  // serial (bulk) encoding, which the translator does not yet support. Surface
+  // this clearly at connect()-time rather than silently buffering forever in
+  // translateIncoming().
+  for (const auto &frame : windowType->getFrames()) {
+    for (const auto &field : frame.fields) {
+      if (field.bulkCountWidth > 0)
+        throw std::runtime_error(
+            "Window translation for serial (bulk) list encoding is not "
+            "implemented (window '" +
+            windowType->getName() + "', frame '" + frame.name + "', field '" +
+            field.name +
+            "'). Connect the port with ConnectOptions{translateMessage=false} "
+            "and decode the frames manually.");
+    }
+  }
+}
 
 void ChannelPort::TranslationInfo::precomputeFrameInfo() {
   const Type *intoType = windowType->getIntoType();
