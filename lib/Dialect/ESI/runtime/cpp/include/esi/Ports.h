@@ -225,10 +225,6 @@ protected:
     /// Precompute and optimize the copy operations for translating frames.
     void precomputeFrameInfo();
 
-    /// Throw if this window cannot be translated by the runtime translator
-    /// (e.g. uses serial/bulk list encoding which is not yet supported).
-    void requireTranslationSupported() const;
-
     /// The window type being translated.
     const WindowType *windowType;
 
@@ -300,11 +296,8 @@ public:
 
   virtual void connect(const ConnectOptions &options = {}) override {
     translateMessages = options.translateMessage && translationInfo;
-    if (translationInfo) {
+    if (translationInfo)
       translationInfo->precomputeFrameInfo();
-      if (translateMessages)
-        translationInfo->requireTranslationSupported();
-    }
     connectImpl(options);
     connected = true;
   }
