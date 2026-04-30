@@ -1441,6 +1441,11 @@ def ListWindowToParallel(serial_window_type: Window):
       # terminator may carry stale/zero values, so we must not let it
       # overwrite the registers used to construct the buffered item's
       # parallel output.
+      #
+      # All FSM-advancing events below are qualified by `serial_xact`
+      # (valid AND ready), not by `serial_valid` alone, so a beat that the
+      # producer is presenting while we are back-pressured is not
+      # "consumed" by latching/state-transitioning multiple times.
       hdr_xact = (in_wait | in_peek) & serial_valid
       first_hdr_xact = in_wait & serial_valid
 
@@ -1463,7 +1468,8 @@ def ListWindowToParallel(serial_window_type: Window):
 
       # ----- Buffered item -----
       # Latch the last data item of a burst into a register before peeking
-      # the next header.
+      # the next header. Gated by serial_xact so a back-pressured beat is
+      # only latched once.
       data_item = data_struct[list_field_name][0]
       consume_burst_last = in_emit & is_last_of_burst & serial_valid
       buf_item = data_item.reg(ports.clk,
@@ -1494,25 +1500,25 @@ def ListWindowToParallel(serial_window_type: Window):
           parallel_window, out_valid)
       ports.parallel_out = out_chan
 
-      # serial_in.ready:
-      # We assert ready in every state EXCEPT S_EMIT_BUF, gated by out_ready.
-      # The simpler/more-precise form would split by state (header consumes
-      # in S_WAIT/S_PEEK don't strictly need out_ready, and the silent
-      # last-of-burst consume in S_EMIT doesn't either), but in practice
-      # the consumer's readiness gates overall progress anyway, and
-      # collapsing to a single out_ready term shortens the combinational
-      # path by removing the is_last_of_burst comparator.
-      #
-      # The ~in_emit_buf gate is REQUIRED for correctness: in S_EMIT_BUF
-      # out_valid is asserted (we are emitting the buffered item), but we
-      # are not consuming serial_in. Without this gate, the cycle the
-      # buffered item is accepted would also spuriously consume whatever
-      # beat is sitting on serial_in (the next list's header/data),
-      # dropping it.
-      serial_ready_wire.assign(~in_emit_buf & out_ready)
+      # serial_in.ready policy (per state):
+      #   - S_WAIT / S_PEEK:           always 1. Header consumes do not
+      #     drive parallel_out (out_valid==0 in these states), so gating by
+      #     out_ready would deadlock against any downstream that derives
+      #     ready as a function of valid -- the converter would never
+      #     accept the first header of a list.
+      #   - S_EMIT, last-of-burst:     always 1. The beat is silently
+      #     latched into buf_item (out_valid==0), so gating by out_ready
+      #     would similarly deadlock.
+      #   - S_EMIT, non-last-of-burst: gated by out_ready; the beat is
+      #     being forwarded to parallel_out, so consume in lockstep.
+      #   - S_EMIT_BUF:                always 0. We are not consuming
+      #     serial_in this cycle (we're emitting buf_item), and a spurious
+      #     ready would also drop the next list's incoming beat sitting on
+      #     serial_in.
+      serial_ready_wire.assign((in_wait | in_peek) |
+                               (in_emit & (is_last_of_burst | out_ready)))
 
       # ----- Transactions -----
-      # TODO: I don't think out_ready is necessary for muxing and looking at it introduces an unnecessary combinational path.
       emit_normal_xact = in_emit & serial_valid & ~is_last_of_burst & out_ready
       emit_buf_xact = in_emit_buf & out_ready
 
