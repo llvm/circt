@@ -196,6 +196,9 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
       return moduleAttributes[record->getTarget()->getModule()].hasProperties;
     });
 
+    if (attributes.hasProperties)
+      return;
+
     // Compute attributes of the module itself.
     auto moduleLike = modIt.getModule<FModuleLike>();
     if (!moduleLike)
