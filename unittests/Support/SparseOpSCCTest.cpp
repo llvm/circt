@@ -30,6 +30,17 @@ const char *ir = R"MLIR(
   }
 )MLIR";
 
+// Graph with a register-and cycle: reg uses and's result as next/resetValue,
+// and uses reg's result as an operand.
+//   Forward edges: reg->and, and->{reg(next), reg(resetValue), output}
+const char *cycleIr = R"MLIR(
+  hw.module private @cycle(in %clock: !seq.clock, in %reset: i1, in %a: i1, out x: i1) {
+    %reg = seq.firreg %and clock %clock reset sync %reset, %and : i1
+    %and = comb.and %reg, %a : i1
+    hw.output %and : i1
+  }
+)MLIR";
+
 TEST(SparseOpSCCsTest, SimpleChain) {
   MLIRContext context;
   context.loadDialect<hw::HWDialect>();
@@ -48,7 +59,6 @@ TEST(SparseOpSCCsTest, SimpleChain) {
   Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
 
   // Forward reachability from andOp.
-  // Reverse topological order: leaves-first -> [outputOp, orOp, andOp].
   {
     SparseOpSCC<OpSCCDirection::Forward> opScc;
     opScc.visit(andOp);
@@ -98,42 +108,49 @@ TEST(SparseOpSCCsTest, SimpleChain) {
   }
 }
 
-// reset() clears all accumulated state; re-visiting produces fresh results.
+// reset() clears all accumulated state including cyclic SCC storage;
+// re-visiting produces fresh results.
 TEST(SparseOpSCCsTest, Reset) {
   MLIRContext context;
   context.loadDialect<hw::HWDialect>();
   context.loadDialect<comb::CombDialect>();
+  context.loadDialect<seq::SeqDialect>();
 
-  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(ir, &context);
+  OwningOpRef<ModuleOp> module = parseSourceString<ModuleOp>(cycleIr, &context);
   ASSERT_TRUE(module);
 
   SymbolTable symbolTable(module.get());
-  auto hwModule = symbolTable.lookup<hw::HWModuleOp>("test");
+  auto hwModule = symbolTable.lookup<hw::HWModuleOp>("cycle");
   ASSERT_TRUE(hwModule);
 
   auto it = hwModule.getBodyBlock()->begin();
+  Operation *regOp = &*it++;
   Operation *andOp = &*it++;
   Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
 
   SparseOpSCC<OpSCCDirection::Forward> opScc;
-  opScc.visit(andOp); // discovers andOp, orOp, outputOp
+  opScc.visit(andOp); // discovers CyclicOpSCC{reg,and} + trivial outputOp
   EXPECT_EQ(opScc.getNumDiscovered(), 3u);
-  EXPECT_EQ(opScc.getNumSCCs(), 3u);
+  EXPECT_EQ(opScc.getNumSCCs(), 2u);
+  EXPECT_EQ(opScc.getNumCyclicSCCs(), 1u);
 
   opScc.reset();
 
-  // All state cleared.
+  // All state cleared, including cyclic SCC storage.
   EXPECT_EQ(opScc.getNumDiscovered(), 0u);
   EXPECT_EQ(opScc.getNumSCCs(), 0u);
   EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
+  EXPECT_FALSE(opScc.hasDiscovered(regOp));
   EXPECT_FALSE(opScc.hasDiscovered(andOp));
   EXPECT_FALSE(opScc.hasDiscovered(outputOp));
   EXPECT_EQ(opScc.topological_begin(), opScc.topological_end());
+  EXPECT_EQ(opScc.reverseTopological_begin(), opScc.reverseTopological_end());
 
-  // Re-visiting with a different seed produces the correct fresh result.
-  opScc.visit(outputOp); // boundary seed: no results, only outputOp discovered
+  // Re-visiting with a boundary seed produces the correct fresh result.
+  opScc.visit(outputOp); // hw.output has no results: only outputOp discovered.
   EXPECT_EQ(opScc.getNumDiscovered(), 1u);
   EXPECT_EQ(opScc.getNumSCCs(), 1u);
+  EXPECT_EQ(opScc.getNumCyclicSCCs(), 0u);
   EXPECT_TRUE(opScc.hasDiscovered(outputOp));
   EXPECT_FALSE(opScc.hasDiscovered(andOp));
 }
@@ -411,7 +428,7 @@ TEST(SparseOpSCCsTest, DiamondNoCycle) {
   }
 }
 
-// Graph with a cycle: and uses reg's result, reg uses and's result.
+// Graph with a cycle: "and" uses "reg"'s result, "reg" uses "and"'s result.
 //
 //   %reg = seq.firreg %and clock %clock reset sync %reset, %and : i1
 //   %and = comb.and %reg, %a : i1
@@ -420,13 +437,6 @@ TEST(SparseOpSCCsTest, DiamondNoCycle) {
 // %and feeds reg.next (the cycle edge) and reg.resetValue.
 // Block order: regOp, andOp, outputOp (terminator).
 // Forward edges: reg->and, and->{reg(next), reg(resetValue), output}.
-const char *cycleIr = R"MLIR(
-  hw.module private @cycle(in %clock: !seq.clock, in %reset: i1, in %a: i1, out x: i1) {
-    %reg = seq.firreg %and clock %clock reset sync %reset, %and : i1
-    %and = comb.and %reg, %a : i1
-    hw.output %and : i1
-  }
-)MLIR";
 
 TEST(SparseOpSCCsTest, CycleWithRegister) {
   MLIRContext context;
@@ -446,7 +456,7 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
   Operation *andOp = &*it++;
   Operation *outputOp = hwModule.getBodyBlock()->getTerminator();
 
-  // Without filter: reg and and form a cycle -> one CyclicOpSCC.
+  // Without filter: "reg" and "and" form a cycle -> one CyclicOpSCC.
   {
     SparseOpSCC<OpSCCDirection::Forward> opScc;
     opScc.visit(andOp);
@@ -612,6 +622,36 @@ TEST(SparseOpSCCsTest, TwoCycles) {
   EXPECT_NE(opScc.getSCC(or1Op), opScc.getSCC(hwModule));
 
   EXPECT_EQ(revIt, opScc.reverseTopological_end());
+
+  // Backward from xorOp: discovers both cycles plus xorOp itself.
+  // outputOp is downstream of xorOp in the forward graph and is not reached.
+  // reverseTopological: xorOp first (forward-graph leaf), then the two cyclic
+  // SCCs in unspecified order.
+  {
+    SparseOpSCC<OpSCCDirection::Backward> opScc;
+    opScc.visit(xorOp);
+
+    EXPECT_EQ(opScc.getNumDiscovered(), 5u); // reg1, and1, reg2, or1, xor
+    EXPECT_EQ(opScc.getNumSCCs(), 3u);
+    EXPECT_EQ(opScc.getNumCyclicSCCs(), 2u);
+    EXPECT_FALSE(opScc.hasDiscovered(outputOp));
+
+    auto revIt = opScc.reverseTopological_begin();
+    EXPECT_EQ(cast<Operation *>(*(revIt++)), xorOp);
+
+    std::array<CyclicOpSCC, 2> cycles = {cast<CyclicOpSCC>(*revIt++),
+                                         cast<CyclicOpSCC>(*revIt++)};
+    EXPECT_TRUE(llvm::any_of(cycles, [&](CyclicOpSCC scc) {
+      return scc.size() == 2 && llvm::is_contained(scc, reg1Op) &&
+             llvm::is_contained(scc, and1Op);
+    }));
+    EXPECT_TRUE(llvm::any_of(cycles, [&](CyclicOpSCC scc) {
+      return scc.size() == 2 && llvm::is_contained(scc, reg2Op) &&
+             llvm::is_contained(scc, or1Op);
+    }));
+
+    EXPECT_EQ(revIt, opScc.reverseTopological_end());
+  }
 }
 
 // One large SCC containing two internal cycles and five operations.

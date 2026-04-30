@@ -60,8 +60,35 @@
 // after visiting the graph. To reflect changes to the graph in the analysis,
 // reset() must be called and the graph must be re-visited.
 //
-// Usage example
+// Usage examples
 // -------------
+//
+// Check if seedOp can be reached from someOp:
+//
+//   SparseOpSCC<OpSCCDirection::Backward> sccs(regFilter);
+//   sccs.visit(seedOp);
+//   if (OpSCC someScc = sccs.getSCC(someOp)) {
+//     if (someScc == sccs.getSCC(seedOp)) {
+//       if (auto cycScc = llvm::dyn_cast<CyclicOpSCC>(someScc)) {
+//         // seedOp and someOp are on at least one common cycle
+//         if (cycScc.size() == 1) {
+//           // seedOp and someOp are equal and there is a self-loop (i.e., at
+//           // least one operand of seedOp is a result of itself)
+//         }
+//       } else {
+//         // seedOp and someOp are equal and there is no self-loop
+//         // (trivial SCC)
+//       }
+//     } else {
+//       // seedOp is reachable from someOp but not the other way around
+//       // (someOp discovered during backwards traversal, but different SCCs)
+//     }
+//   } else {
+//     // seedOp is not reachable from someOp (someOp not discovered during
+//     // backwards traversal)
+//   }
+//
+//
 // Collect all ops reachable from seedOp, excluding register ops, and process
 // them in topological order:
 //
@@ -377,12 +404,12 @@ private:
   };
 
   // DFS stack frame for backward traversal. Skips over block arguments.
-  struct InverseFrame {
+  struct BackwardFrame {
     mlir::Operation *op;
     unsigned operandIdx;
     bool hasSelfLoop = false;
 
-    explicit InverseFrame(mlir::Operation *op) : op(op), operandIdx(0) {}
+    explicit BackwardFrame(mlir::Operation *op) : op(op), operandIdx(0) {}
 
     mlir::Operation *nextChild(OpSCCFilter shouldTraverseFn) {
       while (operandIdx < op->getNumOperands()) {
@@ -396,7 +423,7 @@ private:
   };
 
   using FrameT = std::conditional_t<Direction == OpSCCDirection::Forward,
-                                    ForwardFrame, InverseFrame>;
+                                    ForwardFrame, BackwardFrame>;
 
   void tarjanImpl(mlir::Operation *startOp) {
     unsigned nextIdx = 0;
