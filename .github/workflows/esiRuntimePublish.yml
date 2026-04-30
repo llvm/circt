@@ -1,6 +1,10 @@
 name: Publish ESI Runtime
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/esiRuntimePublish.yml'
+      - 'lib/Dialect/ESI/runtime/**'
   push:
     tags:
       - ESIRuntime-*
@@ -10,7 +14,7 @@ jobs:
   build_wheels:
     name: Build wheels with ${{ matrix.config.cibw_build }}
     runs-on: ${{ matrix.config.os }}
-    if: github.repository == 'llvm/circt'
+    if: github.repository == 'llvm/circt' || github.repository == 'jumerckx/circt'
     strategy:
       fail-fast: false
       matrix:

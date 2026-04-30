@@ -1,6 +1,10 @@
 name: Upload Wheels
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/uploadWheels.yml'
+      - 'lib/Bindings/Python/**'
   release:
     types: [created]
   workflow_dispatch:
@@ -28,7 +32,7 @@ jobs:
   select_matrix:
     name: Select wheel matrix
     runs-on: ubuntu-22.04
-    if: github.repository == 'llvm/circt'
+    if: github.repository == 'llvm/circt' || github.repository == 'jumerckx/circt'
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
@@ -67,7 +71,7 @@ jobs:
   build_wheels:
     name: Build wheels with ${{ matrix.config.cibw_build }}
     runs-on: ${{ matrix.config.os }}
-    if: github.repository == 'llvm/circt'
+    if: github.repository == 'llvm/circt' || github.repository == 'jumerckx/circt'
     needs: select_matrix
     strategy:
       fail-fast: false
