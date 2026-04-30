@@ -293,9 +293,9 @@ hw.module @TrackDriveCondition(in %u: i42, in %v: i42) {
   %c = llhd.sig %c0_i42 : i42
   // CHECK: llhd.process
   llhd.process {
+    // CHECK-NEXT: [[C:%.+]] = llhd.prb %c
     // CHECK-NEXT: %false = hw.constant false
     // CHECK-NEXT: [[B:%.+]] = llhd.prb %b
-    // CHECK-NEXT: [[C:%.+]] = llhd.prb %c
     // CHECK-NOT: llhd.drv
     llhd.drv %a, %u after %0 : i42
     // CHECK-NEXT: cf.br ^bb2(%u, [[B]], %false, [[C]] : i42, i42, i1, i42)
