@@ -233,30 +233,29 @@ static void printModuleInfo(igraph::ModuleOpInterface op,
   flags.skipRegions();
   llvm::errs() << "  - operation: ";
   op->print(llvm::errs(), flags);
-  llvm::errs() << "\n"
-               << "    isDut: " << iInfo.isDut(op) << "\n"
-               << "    anyInstanceUnderDut: " << iInfo.anyInstanceUnderDut(op)
-               << "\n"
-               << "    allInstancesUnderDut: " << iInfo.allInstancesUnderDut(op)
-               << "\n"
-               << "    anyInstanceUnderEffectiveDut: "
-               << iInfo.anyInstanceUnderEffectiveDut(op) << "\n"
-               << "    allInstancesUnderEffectiveDut: "
-               << iInfo.allInstancesUnderEffectiveDut(op) << "\n"
-               << "    anyInstanceUnderLayer: "
-               << iInfo.anyInstanceUnderLayer(op) << "\n"
-               << "    allInstancesUnderLayer: "
-               << iInfo.allInstancesUnderLayer(op) << "\n"
-               << "    anyInstanceInDesign: " << iInfo.anyInstanceInDesign(op)
-               << "\n"
-               << "    allInstancesInDesign: " << iInfo.allInstancesInDesign(op)
-               << "\n"
-               << "    anyInstanceInEffectiveDesign: "
-               << iInfo.anyInstanceInEffectiveDesign(op) << "\n"
-               << "    allInstancesInEffectiveDesign: "
-               << iInfo.allInstancesInEffectiveDesign(op) << "\n"
-               << "    anyInstanceInInstanceChoice: "
-               << iInfo.anyInstanceInInstanceChoice(op) << "\n";
+  llvm::errs()
+      << "\n"
+      << "    isDut: " << iInfo.isDut(op) << "\n"
+      << "    anyInstanceUnderDut: " << iInfo.anyInstanceUnderDut(op) << "\n"
+      << "    allInstancesUnderDut: " << iInfo.allInstancesUnderDut(op) << "\n"
+      << "    anyInstanceUnderEffectiveDut: "
+      << iInfo.anyInstanceUnderEffectiveDut(op) << "\n"
+      << "    allInstancesUnderEffectiveDut: "
+      << iInfo.allInstancesUnderEffectiveDut(op) << "\n"
+      << "    anyInstanceUnderLayer: " << iInfo.anyInstanceUnderLayer(op)
+      << "\n"
+      << "    allInstancesUnderLayer: " << iInfo.allInstancesUnderLayer(op)
+      << "\n"
+      << "    anyInstanceInDesign: " << iInfo.anyInstanceInDesign(op) << "\n"
+      << "    allInstancesInDesign: " << iInfo.allInstancesInDesign(op) << "\n"
+      << "    anyInstanceInEffectiveDesign: "
+      << iInfo.anyInstanceInEffectiveDesign(op) << "\n"
+      << "    allInstancesInEffectiveDesign: "
+      << iInfo.allInstancesInEffectiveDesign(op) << "\n"
+      << "    anyInstanceInInstanceChoice: "
+      << iInfo.anyInstanceInInstanceChoice(op) << "\n"
+      << "    moduleContainsProperties: " << iInfo.moduleContainsProperties(op)
+      << "\n";
 }
 
 void FIRRTLInstanceInfoPass::runOnOperation() {

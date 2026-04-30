@@ -22,6 +22,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   anyInstanceUnderLayer: true
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK:        anyInstanceInInstanceChoice: true
+  // CHECK-NEXT:   moduleContainsProperties: false
   firrtl.module private @Corge() {}
   // CHECK:      @Quz
   // CHECK-NEXT:   isDut: false
@@ -32,6 +33,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   anyInstanceUnderLayer: true
   // CHECK-NEXT:   allInstancesUnderLayer: true
   // CHECK:        anyInstanceInInstanceChoice: false
+  // CHECK-NEXT:   moduleContainsProperties: false
   firrtl.module private @Quz() {}
   // CHECK:      @Qux
   // CHECK-NEXT:   isDut: false
@@ -42,6 +44,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK:        anyInstanceInInstanceChoice: true
+  // CHECK-NEXT:   moduleContainsProperties: false
   firrtl.module private @Qux() {}
   // CHECK:      @Baz
   // CHECK-NEXT:   isDut: false
@@ -52,6 +55,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK:        anyInstanceInInstanceChoice: false
+  // CHECK-NEXT:   moduleContainsProperties: false
   firrtl.module private @Baz() {}
   // CHECK:      @Bar
   // CHECK-NEXT:   isDut: true
@@ -62,6 +66,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK:        anyInstanceInInstanceChoice: false
+  // CHECK-NEXT:   moduleContainsProperties: false
   firrtl.module private @Bar() attributes {
     annotations = [
       {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
@@ -79,6 +84,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK:        anyInstanceInInstanceChoice: false
+  // CHECK-NEXT:   moduleContainsProperties: false
   firrtl.module @Foo() {
     firrtl.instance bar @Bar()
     firrtl.instance_choice qux @Qux alternatives @Platform {
@@ -112,6 +118,7 @@ firrtl.circuit "Foo" {
   // CHECK-NEXT:   anyInstanceUnderLayer: false
   // CHECK-NEXT:   allInstancesUnderLayer: false
   // CHECK:        anyInstanceInInstanceChoice: false
+  // CHECK-NEXT:   moduleContainsProperties: false
   firrtl.module @Foo() {}
 }
 
@@ -536,5 +543,91 @@ firrtl.circuit "Testharness" {
   // CHECK-NEXT:   anyInstanceUnderDut: false
   // CHECK-NEXT:   allInstancesUnderDut: false
   firrtl.module private @Foo() {
+  }
+}
+
+// -----
+
+// Test moduleContainsProperties.
+firrtl.circuit "Top" {
+  // HasPropPort has a !firrtl.string port, so the flag is set from the port
+  // check alone.
+  //
+  // CHECK:      @HasPropPort
+  // CHECK:        moduleContainsProperties: true
+  firrtl.module private @HasPropPort(in %p: !firrtl.string) {}
+
+  // HasPropOp has no property port but contains a firrtl.integer op whose
+  // result has a property type, so the flag is set from the body walk.
+  //
+  // CHECK:      @HasPropOp
+  // CHECK:        moduleContainsProperties: true
+  firrtl.module private @HasPropOp() {
+    %0 = firrtl.integer 42
+  }
+
+  // NoProp has no property ports and no property ops.
+  //
+  // CHECK:      @NoProp
+  // CHECK:        moduleContainsProperties: false
+  firrtl.module private @NoProp() {
+    %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+  }
+
+  // TransitiveProp has no properties itself, but instantiates HasPropPort, so
+  // the flag is propagated upward from the child.
+  //
+  // CHECK:      @TransitiveProp
+  // CHECK:        moduleContainsProperties: true
+  firrtl.module private @TransitiveProp() {
+    firrtl.instance child @HasPropPort(in p: !firrtl.string)
+  }
+
+  // EmptyClass has no ports and no body ops, but a ClassLike op is itself a
+  // property, so the flag is unconditionally true for all classes.  This covers
+  // checking of classes with properties or any transitive checking.
+  //
+  // CHECK:      @EmptyClass
+  // CHECK:        moduleContainsProperties: true
+  firrtl.class private @EmptyClass() {}
+
+  // MemMod is a firrtl.memmodule. It has no body and its ports are not
+  // property types, so moduleContainsProperties is false.
+  //
+  // CHECK:      @MemMod
+  // CHECK:        moduleContainsProperties: false
+  firrtl.memmodule @MemMod(
+    in W0_addr: !firrtl.uint<1>,
+    in W0_en: !firrtl.uint<1>,
+    in W0_clk: !firrtl.clock,
+    in W0_data: !firrtl.uint<8>
+  ) attributes {
+    dataWidth = 8 : ui32,
+    depth = 2 : ui64,
+    extraPorts = [],
+    maskBits = 1 : ui32,
+    numReadPorts = 0 : ui32,
+    numReadWritePorts = 0 : ui32,
+    numWritePorts = 1 : ui32,
+    readLatency = 1 : ui32,
+    writeLatency = 1 : ui32
+  }
+
+  // Top instantiates children with properties, so moduleContainsProperties is
+  // true transitively.
+  //
+  // CHECK:      @Top
+  // CHECK:        moduleContainsProperties: true
+  firrtl.module @Top() {
+    firrtl.instance has_prop_port @HasPropPort(in p: !firrtl.string)
+    firrtl.instance has_prop_op @HasPropOp()
+    firrtl.instance no_prop @NoProp()
+    firrtl.instance transitive @TransitiveProp()
+    %0:4 = firrtl.instance mem @MemMod(
+      in W0_addr: !firrtl.uint<1>,
+      in W0_en: !firrtl.uint<1>,
+      in W0_clk: !firrtl.clock,
+      in W0_data: !firrtl.uint<8>
+    )
   }
 }
