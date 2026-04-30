@@ -468,17 +468,15 @@ class AutoSerialCoordTranslator(Module):
     # Result channel back to FuncService is the serial output of the
     # parallel->serial converter (assigned at the end).
     result_chan = Wire(Channel(result_window_type))
-    args = esi.FuncService.get_call_chans(
-        AppID("translate_coords_auto_serial"),
-        arg_type=arg_window_type,
-        result=result_chan)
+    args = esi.FuncService.get_call_chans(AppID("translate_coords_auto_serial"),
+                                          arg_type=arg_window_type,
+                                          result=result_chan)
 
     # ---- Convert the serial argument stream into a parallel one. ----
     s2p = ListWindowToParallel(arg_struct_type, bulk_count_width,
-                               items_per_frame)(
-                                   clk=ports.clk,
-                                   rst=ports.rst,
-                                   serial_in=args)
+                               items_per_frame)(clk=ports.clk,
+                                                rst=ports.rst,
+                                                serial_in=args)
     parallel_arg = s2p.parallel_out
 
     # ---- Apply the per-coordinate translation. ----
@@ -511,10 +509,9 @@ class AutoSerialCoordTranslator(Module):
 
     # ---- Convert the parallel result stream back into a serial one. ----
     p2s = ListWindowToSerial(result_type, bulk_count_width, items_per_frame,
-                             fifo_depth)(
-                                 clk=ports.clk,
-                                 rst=ports.rst,
-                                 parallel_in=parallel_result_chan)
+                             fifo_depth)(clk=ports.clk,
+                                         rst=ports.rst,
+                                         parallel_in=parallel_result_chan)
     result_chan.assign(p2s.serial_out)
 
 

@@ -73,9 +73,9 @@ static void coordTranslateTest(AcceleratorConnection *, Accelerator *,
 static void serialCoordTranslateTest(AcceleratorConnection *, Accelerator *,
                                      uint32_t xTrans, uint32_t yTrans,
                                      uint32_t numCoords, size_t batchSizeLimit);
-static void autoSerialCoordTranslateTest(AcceleratorConnection *,
-                                         Accelerator *, uint32_t xTrans,
-                                         uint32_t yTrans, uint32_t numCoords);
+static void autoSerialCoordTranslateTest(AcceleratorConnection *, Accelerator *,
+                                         uint32_t xTrans, uint32_t yTrans,
+                                         uint32_t numCoords);
 static void channelTest(AcceleratorConnection *, Accelerator *,
                         uint32_t iterations);
 
@@ -309,11 +309,9 @@ int main(int argc, const char *argv[]) {
   uint32_t autoCoordXTrans = 10;
   uint32_t autoCoordYTrans = 20;
   uint32_t autoCoordNumItems = 5;
-  autoSerialCoordTranslateSub->add_option("-x,--x-translation",
-                                          autoCoordXTrans,
+  autoSerialCoordTranslateSub->add_option("-x,--x-translation", autoCoordXTrans,
                                           "X translation amount (default 10)");
-  autoSerialCoordTranslateSub->add_option("-y,--y-translation",
-                                          autoCoordYTrans,
+  autoSerialCoordTranslateSub->add_option("-y,--y-translation", autoCoordYTrans,
                                           "Y translation amount (default 20)");
   autoSerialCoordTranslateSub->add_option(
       "-n,--num-coords", autoCoordNumItems,
@@ -2082,8 +2080,7 @@ static void autoSerialCoordTranslateTest(AcceleratorConnection *conn,
   for (uint32_t i = 0; i < numCoords; ++i)
     inputCoords.push_back({dist(rng), dist(rng)});
 
-  auto child =
-      accel->getChildren().find(AppID("coord_translator_auto_serial"));
+  auto child = accel->getChildren().find(AppID("coord_translator_auto_serial"));
   if (child == accel->getChildren().end())
     throw std::runtime_error("Auto serial coord translate test: no "
                              "'coord_translator_auto_serial' child found");
