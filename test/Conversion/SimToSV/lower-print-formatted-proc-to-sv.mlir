@@ -143,6 +143,20 @@ hw.module @print_to_file(in %clk : i1, in %idx : i8) {
   }
 }
 
+hw.module @print_to_literal_file(in %clk : i1) {
+  // CHECK-LABEL: hw.module @print_to_literal_file
+  // CHECK-SAME: emit.fragments = [@CIRCT_LIB_LOGGING_FRAGMENT]
+  hw.triggered posedge %clk {
+    %fileName = sim.fmt.literal "static.log"
+    %file = sim.get_file %fileName
+    %msg = sim.fmt.literal "value"
+    // CHECK: %[[FILENAME:.+]] = sv.constantStr "static.log"
+    // CHECK-NEXT: %[[FD:.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[FILENAME]]) : (!hw.string) -> i32
+    // CHECK-NEXT: sv.fwrite %[[FD]], "value"
+    sim.proc.print %msg to %file
+  }
+}
+
 hw.module @print_to_file_under_condition(in %clk : i1, in %idx : i8, in %en : i1) {
   // CHECK-LABEL: hw.module @print_to_file_under_condition
   // CHECK-SAME: emit.fragments = [@CIRCT_LIB_LOGGING_FRAGMENT]

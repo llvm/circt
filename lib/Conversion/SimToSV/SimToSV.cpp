@@ -755,6 +755,7 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
           return failure();
         fd = *fdOrFailure;
         state.usedFileDescriptorRuntime = true;
+        state.usedSynthesisMacro = true;
       } else {
         auto fdType = typeConverter.convertType(stream.getType());
         assert(fdType && "expected output stream type conversion");
@@ -842,7 +843,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
             context, circuit.getOps<hw::HWModuleOp>(), lowerModule)))
       return signalPassFailure();
 
-    if (usedSynthesisMacro || usedFileDescriptorRuntime) {
+    if (usedSynthesisMacro) {
       Operation *op = circuit.lookupSymbol("SYNTHESIS");
       if (op) {
         if (!isa<sv::MacroDeclOp>(op)) {
