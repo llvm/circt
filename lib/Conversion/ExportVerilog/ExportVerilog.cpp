@@ -1555,20 +1555,14 @@ static StringRef getVerilogDeclWord(Operation *op,
     // should be left off.
     auto elementType =
         cast<InOutType>(op->getResult(0).getType()).getElementType();
-    if (isa<StructType>(elementType))
-      return "";
-    if (isa<UnionType>(elementType))
-      return "";
-    if (isa<EnumType>(elementType))
-      return "";
-    if (auto innerType = dyn_cast<ArrayType>(elementType)) {
-      while (isa<ArrayType>(innerType.getElementType()))
-        innerType = cast<ArrayType>(innerType.getElementType());
-      if (isa<StructType>(innerType.getElementType()) ||
-          isa<TypeAliasType>(innerType.getElementType()))
-        return "";
-    }
-    if (isa<TypeAliasType>(elementType))
+    // Unwrap arrays. Since packed arrays cannot contain unpacked arrays, we can
+    // unpack unpacked arrays first.
+    while (auto arrayType = hw::type_dyn_cast<UnpackedArrayType>(elementType))
+      elementType = arrayType.getElementType();
+    while (auto arrayType = hw::type_dyn_cast<ArrayType>(elementType))
+      elementType = arrayType.getElementType();
+
+    if (isa<StructType, UnionType, EnumType, TypeAliasType>(elementType))
       return "";
 
     return "reg";
