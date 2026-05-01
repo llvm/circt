@@ -533,12 +533,11 @@ class TestListWindowToParallel(Module):
   @generator
   def build(self):
     to_parallel = ListWindowToParallel(
-        Window.serial_of(TestListWindowToParallel.into_type,
-                         TestListWindowToParallel.data_count_width,
-                         TestListWindowToParallel.items_per_frame))(
-                             clk=self.clk,
-                             rst=self.rst,
-                             serial_in=self.serial_lst_in)
+        TestListWindowToParallel.into_type,
+        TestListWindowToParallel.data_count_width,
+        TestListWindowToParallel.items_per_frame)(clk=self.clk,
+                                                  rst=self.rst,
+                                                  serial_in=self.serial_lst_in)
     self.parallel_lst_out = to_parallel.parallel_out
 
 
@@ -560,11 +559,11 @@ class TestListWindowToSerial(Module):
 
   @generator
   def build(self):
-    to_serial = ListWindowToSerial(
-        Window.default_of(TestListWindowToSerial.into_type),
-        TestListWindowToSerial.data_count_width,
-        TestListWindowToSerial.items_per_frame,
-        TestListWindowToSerial.fifo_depth)(clk=self.clk,
-                                           rst=self.rst,
-                                           parallel_in=self.parallel_lst_in)
+    to_serial = ListWindowToSerial(TestListWindowToSerial.into_type,
+                                   TestListWindowToSerial.data_count_width,
+                                   TestListWindowToSerial.items_per_frame,
+                                   TestListWindowToSerial.fifo_depth)(
+                                       clk=self.clk,
+                                       rst=self.rst,
+                                       parallel_in=self.parallel_lst_in)
     self.serial_lst_out = to_serial.serial_out
