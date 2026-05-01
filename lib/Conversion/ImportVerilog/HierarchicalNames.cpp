@@ -43,6 +43,14 @@ struct InstBodyVisitor
     if (currentInstBody == outermostInstBody)
       return;
 
+    // References resolved via an interface port (e.g. `bus.member` where `bus`
+    // is an `Iface.modport` port) are not cross-instance hierarchical accesses;
+    // they are handled by the interface port lowering machinery in
+    // Structure.cpp. Recording them here would add a spurious hierPath input
+    // to the module signature that nothing fills in at the instance site.
+    if (expr.ref.isViaIfacePort())
+      return;
+
     auto hierName = builder.getStringAttr(expr.symbol.name);
     const slang::ast::InstanceBodySymbol *parentInstBody = nullptr;
 
