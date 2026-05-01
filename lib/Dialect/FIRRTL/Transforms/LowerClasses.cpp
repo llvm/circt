@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLDialect.h"
@@ -42,44 +43,6 @@ using namespace circt;
 using namespace circt::firrtl;
 
 namespace {
-
-static bool shouldCreateClassImpl(igraph::InstanceGraphNode *node) {
-  auto moduleLike = node->getModule<FModuleLike>();
-  if (!moduleLike)
-    return false;
-
-  if (isa<firrtl::ClassLike>(moduleLike.getOperation()))
-    return true;
-
-  // Always create a class for public modules.
-  if (moduleLike.isPublic())
-    return true;
-
-  // Create a class for modules with property ports.
-  bool hasClassPorts = llvm::any_of(moduleLike.getPorts(), [](PortInfo port) {
-    return isa<PropertyType>(port.type);
-  });
-
-  if (hasClassPorts)
-    return true;
-
-  // Create a class for modules that instantiate classes or modules with
-  // property ports.
-  for (auto *instance : *node) {
-    // ObjectOp instantiates a class directly and always requires a class.
-    // Note: if combined with the check below, this has the same result (as
-    // objects always have one result, even if they have no ports).
-    if (instance->getInstance<firrtl::ObjectOp>())
-      return true;
-    // There is an instance with property ports.
-    if (auto op = instance->getInstance<FInstanceLike>())
-      for (auto result : op->getResults())
-        if (type_isa<PropertyType>(result.getType()))
-          return true;
-  }
-
-  return false;
-}
 
 /// Helper class which holds a hierarchical path op reference and a pointer to
 /// to the targeted operation.
@@ -220,6 +183,7 @@ private:
                              SymbolTable &symbolTable);
 
   // Predicate to check if a module-like needs a Class to be created.
+  bool shouldCreateClass(igraph::ModuleOpInterface modOp);
   bool shouldCreateClass(StringAttr modName);
 
   // Create an OM Class op from a FIRRTL Class op.
@@ -251,8 +215,11 @@ private:
       Operation *op, const PathInfoTable &pathInfoTable,
       const DenseMap<StringAttr, firrtl::ClassType> &classTypeTable);
 
-  // State to memoize repeated calls to shouldCreateClass.
-  DenseMap<StringAttr, bool> shouldCreateClassMemo;
+  // Cached pointer to the InstanceInfo analysis, set in runOnOperation.
+  InstanceInfo *instanceInfo = nullptr;
+
+  // Cached pointer to the InstanceGraph analysis, set in runOnOperation.
+  InstanceGraph *instanceGraph = nullptr;
 
   // State used while creating the optional 'ports' list of RtlPort objects.
   SmallVector<RtlPortsInfo> rtlPortsToCreate;
@@ -822,8 +789,7 @@ LogicalResult LowerClassesPass::processPaths(
       }
 
       // If we aren't creating a class for this child, skip this hierarchy.
-      if (!shouldCreateClass(
-              it->getModule<FModuleLike>().getModuleNameAttr())) {
+      if (!shouldCreateClass(it->getModule())) {
         it = it.skipChildren();
         continue;
       }
@@ -853,28 +819,17 @@ void LowerClassesPass::runOnOperation() {
   // Get the CircuitOp.
   CircuitOp circuit = getOperation();
 
-  // Get the InstanceGraph and SymbolTable.
-  InstanceGraph &instanceGraph = getAnalysis<InstanceGraph>();
+  // Get the InstanceGraph, InstanceInfo, and SymbolTable.
+  instanceGraph = &getAnalysis<InstanceGraph>();
+  instanceInfo = &getAnalysis<InstanceInfo>();
   SymbolTable &symbolTable = getAnalysis<SymbolTable>();
 
   hw::InnerSymbolNamespaceCollection namespaces;
   HierPathCache cache(circuit, symbolTable);
 
-  // Fill `shouldCreateClassMemo`.
-  for (auto *node : instanceGraph)
-    if (auto moduleLike = node->getModule<firrtl::FModuleLike>())
-      shouldCreateClassMemo.insert({moduleLike.getModuleNameAttr(), false});
-
-  parallelForEach(circuit.getContext(), instanceGraph,
-                  [&](igraph::InstanceGraphNode *node) {
-                    if (auto moduleLike = node->getModule<FModuleLike>())
-                      shouldCreateClassMemo[moduleLike.getModuleNameAttr()] =
-                          shouldCreateClassImpl(node);
-                  });
-
   // Rewrite all path annotations into inner symbol targets.
   PathInfoTable pathInfoTable;
-  if (failed(processPaths(instanceGraph, namespaces, cache, pathInfoTable,
+  if (failed(processPaths(*instanceGraph, namespaces, cache, pathInfoTable,
                           symbolTable))) {
     signalPassFailure();
     return;
@@ -886,12 +841,12 @@ void LowerClassesPass::runOnOperation() {
   // erasure.
   DenseMap<StringAttr, firrtl::ClassType> classTypeTable;
   SmallVector<FModuleLike> modulesToErasePortsFrom;
-  for (auto *node : instanceGraph) {
+  for (auto *node : *instanceGraph) {
     auto moduleLike = node->getModule<firrtl::FModuleLike>();
     if (!moduleLike)
       continue;
 
-    if (shouldCreateClass(moduleLike.getModuleNameAttr())) {
+    if (shouldCreateClass(moduleLike)) {
       auto omClass = createClass(moduleLike, pathInfoTable, intraPassMutex);
       auto &classLoweringState = loweringState.classLoweringStateTable[omClass];
       // For external modules with the same defname, the same omClass is reused.
@@ -914,7 +869,7 @@ void LowerClassesPass::runOnOperation() {
           continue;
         // Get the referenced module.
         auto module = instance->getTarget()->getModule<FModuleLike>();
-        if (module && shouldCreateClass(module.getModuleNameAttr())) {
+        if (module && shouldCreateClass(module)) {
           auto targetSym = getInnerRefTo(
               {inst, 0}, [&](FModuleLike module) -> hw::InnerSymbolNamespace & {
                 return namespaces[module];
@@ -954,10 +909,10 @@ void LowerClassesPass::runOnOperation() {
   // Completely erase Class module-likes, and remove from the InstanceGraph.
   for (auto &[omClass, state] : loweringState.classLoweringStateTable) {
     if (isa<firrtl::ClassLike>(state.moduleLike.getOperation())) {
-      InstanceGraphNode *node = instanceGraph.lookup(state.moduleLike);
+      InstanceGraphNode *node = instanceGraph->lookup(state.moduleLike);
       for (auto *use : llvm::make_early_inc_range(node->uses()))
         use->erase();
-      instanceGraph.erase(node);
+      instanceGraph->erase(node);
       state.moduleLike.erase();
     }
   }
@@ -971,7 +926,7 @@ void LowerClassesPass::runOnOperation() {
   // Update Object creation ops in Classes or Modules in parallel.
   if (failed(
           mlir::failableParallelForEach(ctx, objectContainers, [&](auto *op) {
-            return updateInstances(op, instanceGraph, loweringState,
+            return updateInstances(op, *instanceGraph, loweringState,
                                    pathInfoTable, intraPassMutex);
           })))
     return signalPassFailure();
@@ -995,9 +950,12 @@ void LowerClassesPass::runOnOperation() {
 }
 
 // Predicate to check if a module-like needs a Class to be created.
+bool LowerClassesPass::shouldCreateClass(igraph::ModuleOpInterface modOp) {
+  return instanceInfo->moduleContainsProperties(modOp);
+}
+
 bool LowerClassesPass::shouldCreateClass(StringAttr modName) {
-  // Return a memoized result.
-  return shouldCreateClassMemo.at(modName);
+  return shouldCreateClass(instanceGraph->lookup(modName)->getModule());
 }
 
 void checkAddContainingModulePorts(bool hasContainingModule, OpBuilder builder,

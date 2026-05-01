@@ -767,3 +767,23 @@ firrtl.circuit "UnknownValue" {
     firrtl.property_assert %cond, "module invariant" : !firrtl.bool
   }
 }
+
+// CHECK-LABEL: firrtl.circuit "NoPropPorts"
+// Test that modules without property ports, but that contain property
+// operations still get classes created for them.  This is mandatory for
+// things like property assertions.  It is suboptimal for dead property
+// operations.  However, LowerToHW assumes that all of these are gone from
+// module bodies.
+firrtl.circuit "NoPropPorts" {
+  // CHECK-LABEL: om.class @NoPropPorts_Class
+  firrtl.module @NoPropPorts(in %clock: !firrtl.clock) {
+    // CHECK: %[[U0:.+]] = om.unknown : !om.string
+    %0 = firrtl.unknown : !firrtl.string
+    // CHECK: %[[U1:.+]] = om.unknown : !om.string
+    %1 = firrtl.unknown : !firrtl.string
+    // CHECK: %[[EQ:.+]] = om.prop.eq %[[U0]], %[[U1]] : !om.string
+    %2 = firrtl.prop.eq %0, %1 : !firrtl.string
+    // CHECK: om.property_assert %[[EQ]], "srcs must match" : i1
+    firrtl.property_assert %2, "srcs must match" : !firrtl.bool
+  }
+}
