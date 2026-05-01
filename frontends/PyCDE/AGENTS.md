@@ -15,11 +15,13 @@ for the canonical environment setup; the same exports (`PYTHONPATH`,
 `LD_LIBRARY_PATH`, `PATH`) are required for PyCDE work because the runtime
 and PyCDE are co-developed.
 
-The PyCDE source under [frontends/PyCDE/src/pycde](src/pycde) is symlinked
-into both the build's `python_packages/pycde` and the venv's
-`site-packages/pycde`, so edits to `.py` files take effect without
-rebuilding. C++ changes (CAPI, dialects) require `ninja -C build/default
-PyCDE`.
+When using the in-tree CIRCT build via `PYTHONPATH`, the PyCDE package
+under the build's `python_packages/pycde` reflects edits to
+[frontends/PyCDE/src/pycde](src/pycde), so `.py` changes are picked up
+without rebuilding. If PyCDE has been installed into the venv's
+`site-packages` (via `pip install` / `setup.py`), rebuild and reinstall
+to pick up source edits — the install copies sources without symlinks.
+C++ changes (CAPI, dialects) require `ninja -C build/default PyCDE`.
 
 Common test invocations:
 
@@ -87,12 +89,16 @@ elaboration-time bug; double assignment raises.
   cascaded `Mux(a, Mux(b, ...))` when the selection is naturally
   state-indexed — it reads better and lowers to a flat case.
 - `ControlReg(clk, rst, asserts=[...], resets=[...], name=...)` returns a
-  `BitsSignal(1)` that stays high after any `assert` pulse and goes low
-  after any `reset` pulse. `asserts` has priority over `resets` on the
-  same cycle. This is the right primitive for "set on one event, clear
-  on another" flags (e.g. `in_list`, `busy`); it is much clearer than a
-  hand-rolled `(prev | set) & ~clear` register and avoids reset/CE
-  ordering mistakes.
+  `BitsSignal(1)` backed by a register: an `assert` pulse causes the
+  output to go high on the **next** cycle, and a `reset` pulse causes the
+  output to go low on the **next** cycle. If both are high in the same
+  cycle, `asserts` has priority over `resets`. This is the right
+  primitive for "set on one event, clear on another" flags (e.g.
+  `in_list`, `busy`); it is much clearer than a hand-rolled
+  `(prev | set) & ~clear` register and avoids reset/CE ordering mistakes.
+  Because of the 1-cycle latency, do not use `ControlReg` as a
+  combinational gate in the same-cycle handshake path it is meant to
+  control.
 
 ## Counters
 
@@ -110,9 +116,11 @@ mistakes on ESI channels.
 ### Unwrap / wrap
 
 ```python
+ready_wire = Wire(Bits(1))
 data, valid = ports.in_chan.unwrap(ready_wire)
 out_chan, ready = Channel(T).wrap(data, valid)
 ports.out_chan = out_chan
+ready_wire.assign(ready)  # close the loop: upstream ready follows downstream ready
 ```
 
 A "transaction" on a channel happens **only** when both `valid` and
@@ -139,16 +147,23 @@ consumer back-pressures.
    upstream `ready` unconditionally; only gate by `out_ready` in states
    where the consumed beat is being forwarded.
 
-The repo convention for the simple forwarding case (and what
-`Channel.join` / `ChannelSignal.fork` do internally) is:
+The repo convention for **join-style** forwarding (e.g. `Channel.join`,
+which consumes one beat from each input and produces one combined beat)
+is:
 
 ```
-upstream.ready = downstream.ready & xact_predicate
+upstream.ready = downstream.ready & all_inputs_valid
 ```
 
-where `xact_predicate` includes `valid` of the channels actually being
-forwarded. See [src/pycde/types.py](src/pycde/types.py) and
-[src/pycde/signals.py](src/pycde/signals.py) for the canonical patterns.
+The `valid` term is required so an input is only consumed on cycles
+where the joined output beat is actually being produced. See
+`Channel.join` in [src/pycde/types.py](src/pycde/types.py).
+
+**Fork-style** forwarding (one input, multiple outputs that must each
+accept the beat) uses a different pattern: gate each output's `valid`
+with `all_outputs_ready`, and set the single upstream `ready` to
+`all_outputs_ready` (no extra `valid` term). See `ChannelSignal.fork` in
+[src/pycde/signals.py](src/pycde/signals.py).
 
 ## FSM idioms
 
@@ -182,8 +197,9 @@ deadlocks and dropped beats.
 - Prefer `.reg(name="...")` everywhere; the names propagate to Verilog
   and to waveform viewers.
 - For non-trivial generators, write a small lit test under [test/](test/) that
-  runs a module decorated with `unittest()` and FileChecks the IR, in addition
-  to any cosim integration test. Lit tests are seconds; cosim tests are minutes.
+  runs a module decorated with `@unittestmodule()` (from
+  `pycde.testing`) and FileChecks the IR, in addition to any cosim
+  integration test. Lit tests are seconds; cosim tests are minutes.
 
 ## Style
 
