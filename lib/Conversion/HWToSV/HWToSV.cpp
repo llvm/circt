@@ -15,6 +15,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
@@ -61,6 +62,53 @@ struct TriggeredOpConversionPattern : public OpConversionPattern<TriggeredOp> {
   }
 };
 
+struct AttachOpConversionPattern : public OpConversionPattern<hw::AttachOp> {
+  using OpConversionPattern<hw::AttachOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::AttachOp op, OpAdaptor operands,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    SmallVector<Value> inoutValues(operands.getSignals().begin(),
+                                   operands.getSignals().end());
+
+    // Assuming all the necessary macro symbols have already been declared, and
+    // these declarations will be processed in the LowerToHW phase, we will
+    // refrain from declaring macro symbols here to avoid modifying the
+    // top-level module and redefining symbols.
+    sv::IfDefOp::create(
+        rewriter, loc, "SYNTHESIS",
+        [&]() {
+          SmallVector<Value> values;
+          values.reserve(inoutValues.size());
+          for (auto inoutValue : inoutValues)
+            values.push_back(
+                sv::ReadInOutOp::create(rewriter, loc, inoutValue));
+
+          for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1)
+            for (size_t i2 = 0; i2 != e; ++i2)
+              if (i1 != i2)
+                sv::AssignOp::create(rewriter, loc, inoutValues[i1],
+                                     values[i2]);
+        },
+        [&]() {
+          sv::IfDefOp::create(
+              rewriter, loc, "VERILATOR",
+              [&]() {
+                sv::VerbatimOp::create(
+                    rewriter, loc,
+                    "`error \"Verilator does not support alias and thus "
+                    "cannot arbitrarily connect bidirectional wires and "
+                    "ports\"");
+              },
+              [&]() { sv::AliasOp::create(rewriter, loc, inoutValues); });
+        });
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 } // namespace
 
 void HWToSVPass::runOnOperation() {
@@ -70,10 +118,11 @@ void HWToSVPass::runOnOperation() {
   ConversionTarget target(context);
   RewritePatternSet patterns(&context);
 
-  target.addIllegalOp<TriggeredOp>();
+  target.addIllegalOp<TriggeredOp, hw::AttachOp>();
   target.addLegalDialect<sv::SVDialect>();
 
-  patterns.add<TriggeredOpConversionPattern>(&context);
+  patterns.add<TriggeredOpConversionPattern, AttachOpConversionPattern>(
+      &context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();

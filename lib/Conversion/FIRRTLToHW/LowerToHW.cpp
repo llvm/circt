@@ -40,6 +40,7 @@
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/Path.h"
@@ -5940,36 +5941,13 @@ LogicalResult FIRRTLLowering::visitStmt(AttachOp op) {
 
   // If the attach operands contain a port, then we can't do anything to
   // simplify the attach operation.
+
+  // TODO::Move SV-specific macro management out of FIRRTLToHW.
+  // Currently, we emit `hw.attach` but still rely on the legacy circuitState
+  // for macro tracking to avoid duplicate definitions.
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   circuitState.addMacroDecl(builder.getStringAttr("VERILATOR"));
-  addToIfDefBlock(
-      "SYNTHESIS",
-      // If we're doing synthesis, we emit an all-pairs assign complex.
-      [&]() {
-        SmallVector<Value, 4> values;
-        for (auto inoutValue : inoutValues)
-          values.push_back(getReadValue(inoutValue));
-
-        for (size_t i1 = 0, e = inoutValues.size(); i1 != e; ++i1) {
-          for (size_t i2 = 0; i2 != e; ++i2)
-            if (i1 != i2)
-              sv::AssignOp::create(builder, inoutValues[i1], values[i2]);
-        }
-      },
-      // In the non-synthesis case, we emit a SystemVerilog alias
-      // statement.
-      [&]() {
-        sv::IfDefOp::create(
-            builder, "VERILATOR",
-            [&]() {
-              sv::VerbatimOp::create(
-                  builder,
-                  "`error \"Verilator does not support alias and thus "
-                  "cannot "
-                  "arbitrarily connect bidirectional wires and ports\"");
-            },
-            [&]() { sv::AliasOp::create(builder, inoutValues); });
-      });
+  hw::AttachOp::create(builder, inoutValues);
 
   return success();
 }

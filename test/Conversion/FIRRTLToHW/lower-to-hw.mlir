@@ -806,24 +806,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @Analog(inout %a1 : i1, inout %b1 : i1,
   // CHECK:                          inout %c1 : i1, out outClock : !seq.clock) {
-  // CHECK-NEXT:   %0 = sv.read_inout %c1 : !hw.inout<i1>
-  // CHECK-NEXT:   %1 = sv.read_inout %b1 : !hw.inout<i1>
-  // CHECK-NEXT:   %2 = sv.read_inout %a1 : !hw.inout<i1>
-  // CHECK-NEXT:   sv.ifdef @SYNTHESIS {
-  // CHECK-NEXT:     sv.assign %a1, %1 : i1
-  // CHECK-NEXT:     sv.assign %a1, %0 : i1
-  // CHECK-NEXT:     sv.assign %b1, %2 : i1
-  // CHECK-NEXT:     sv.assign %b1, %0 : i1
-  // CHECK-NEXT:     sv.assign %c1, %2 : i1
-  // CHECK-NEXT:     sv.assign %c1, %1 : i1
-  // CHECK-NEXT:    } else {
-  // CHECK-NEXT:     sv.ifdef @VERILATOR {
-  // CHECK-NEXT:       sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
-  // CHECK-NEXT:     } else {
-  // CHECK-NEXT:       sv.alias %a1, %b1, %c1 : !hw.inout<i1>
-  // CHECK-NEXT:     }
-  // CHECK-NEXT:    }
-  // CHECK-NEXT:    [[CLOCK:%.+]] = seq.to_clock %2
+  // CHECK-NEXT:   %0 = sv.read_inout %a1 : !hw.inout<i1>
+  // CHECK-NEXT:   hw.attach %a1, %b1, %c1 : !hw.inout<i1>, !hw.inout<i1>, !hw.inout<i1>
+  // CHECK-NEXT:   [[CLOCK:%.+]] = seq.to_clock %0
   // CHECK-NEXT:    hw.output [[CLOCK]] : !seq.clock
   firrtl.module private @Analog(in %a1: !firrtl.analog<1>, in %b1: !firrtl.analog<1>,
                         in %c1: !firrtl.analog<1>, out %outClock: !firrtl.clock) {
@@ -930,22 +915,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: IsInvalidIssue572
   // https://github.com/llvm/circt/issues/572
   firrtl.module private @IsInvalidIssue572(in %a: !firrtl.analog<1>) {
-    // CHECK-NEXT: %0 = sv.read_inout %a : !hw.inout<i1>
-
     // CHECK-NEXT: %.invalid_analog = sv.wire : !hw.inout<i1>
-    // CHECK-NEXT: %1 = sv.read_inout %.invalid_analog : !hw.inout<i1>
     %0 = firrtl.invalidvalue : !firrtl.analog<1>
-
-    // CHECK-NEXT: sv.ifdef @SYNTHESIS {
-    // CHECK-NEXT:   sv.assign %a, %1 : i1
-    // CHECK-NEXT:   sv.assign %.invalid_analog, %0 : i1
-    // CHECK-NEXT: } else {
-    // CHECK-NEXT:   sv.ifdef @VERILATOR {
-    // CHECK-NEXT:     sv.verbatim "`error \22Verilator does not support alias and thus cannot arbitrarily connect bidirectional wires and ports\22"
-    // CHECK-NEXT:   } else {
-    // CHECK-NEXT:     sv.alias %a, %.invalid_analog : !hw.inout<i1>, !hw.inout<i1>
-    // CHECK-NEXT:   }
-    // CHECK-NEXT: }
+    // CHECK-NEXT: hw.attach %a, %.invalid_analog : !hw.inout<i1>, !hw.inout<i1>
     firrtl.attach %a, %0 : !firrtl.analog<1>, !firrtl.analog<1>
   }
 
