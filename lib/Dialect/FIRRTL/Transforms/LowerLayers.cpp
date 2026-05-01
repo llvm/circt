@@ -1148,31 +1148,49 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                     [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
               } else if (auto symOp =
                              dyn_cast<hw::InnerSymbolOpInterface>(definingOp)) {
-                // For non-instance operations, we need to wrap them in an
-                // instance-like structure. For now, fall back to creating a
-                // wire.
-                // TODO: Better handling for non-instance RWProbe sources
-                OpBuilder::InsertionGuard guard(builder);
-                builder.setInsertionPointAfterValue(operand);
+                // For non-instance forceable operations (wire, register),
+                // create an XMRRefOp with a hierarchical path directly to the
+                // source
+                ImplicitLocOpBuilder localBuilder(operand.getLoc(),
+                                                  &getContext());
+                localBuilder.setInsertionPointToStart(body);
 
-                // Create a wire with an inner symbol
-                auto wireName = ns.newName("rwprobe_capture");
-                auto wireOp = builder.create<WireOp>(
-                    operand.getLoc(), refType, wireName,
-                    NameKindEnum::DroppableName,
-                    /*annotations=*/builder.getArrayAttr({}),
-                    hw::InnerSymAttr::get(builder.getStringAttr(wireName)),
-                    /*forceable=*/false);
-
-                // Define the wire with the operand
-                builder.create<RefDefineOp>(operand.getLoc(),
-                                            wireOp.getResult(), operand);
-
-                // Get inner ref to the wire
+                // Get or add inner symbol to the source operation
                 innerRef = getInnerRefTo(
-                    wireOp,
+                    symOp,
                     [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
-                resultIndex = 0; // Wire has single result
+
+                if (!innerRef) {
+                  op->emitWarning(
+                      "could not get inner ref for forceable operand");
+                  continue;
+                }
+
+                // Create hierarchical path to the source operation
+                hw::HierPathOp hierPathOp;
+                {
+                  auto insertPoint = OpBuilder::InsertPoint(
+                      moduleOp->getBlock(), Block::iterator(moduleOp));
+                  llvm::sys::SmartScopedLock<true> circuitLock(*circuitMutex);
+                  hierPathOp = hierPathCache->getOrCreatePath(
+                      localBuilder.getArrayAttr({innerRef}), operand.getLoc(),
+                      insertPoint,
+                      layerBlockGlobals.lookup(layerBlock).hierPathName);
+                  hierPathOp.setVisibility(SymbolTable::Visibility::Private);
+                }
+
+                // Create XMRRefOp inside the layer block targeting the source
+                auto xmrRef = XMRRefOp::create(
+                    localBuilder, operand.getLoc(), refType.removeLayer(),
+                    hierPathOp.getSymNameAttr(),
+                    /*verbatimSuffix=*/localBuilder.getStringAttr(""));
+
+                // Replace uses of the RWProbe inside the layer block
+                operand.replaceUsesWithIf(xmrRef, [&](OpOperand &use) {
+                  return layerBlock->isAncestor(use.getOwner());
+                });
+
+                continue;
               }
             }
 

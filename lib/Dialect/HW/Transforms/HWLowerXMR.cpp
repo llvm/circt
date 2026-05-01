@@ -70,6 +70,19 @@ private:
   /// Returns null if the target cannot be resolved or is not an operation.
   Operation *resolveInnerRef(InnerRefAttr innerRef);
 
+  /// Handler function type for deferred processing
+  using HandlerFn = std::function<LogicalResult(Operation *)>;
+
+  /// Get the remote ref send for a value, or defer processing if not available.
+  /// If the value doesn't have a send yet, adds the operation and handler to a
+  /// pending queue. Returns the path index if available, nullopt if deferred.
+  std::optional<size_t> getRemoteRefSendOrDefer(Value val, Operation *dependent,
+                                                HandlerFn handler);
+
+  /// Process operations that were waiting for a value to be resolved.
+  /// Called after addReachingSendsEntry to process dependent operations.
+  void processPendingOps(Value val);
+
   // Add an entry recording the path to a RefSend
   size_t addReachingSendsEntry(Value val, InnerRefAttr node,
                                std::optional<size_t> next = std::nullopt);
@@ -106,6 +119,11 @@ private:
   // Dataflow analysis: track which RefSend reaches each RefType value
   llvm::EquivalenceClasses<Value> dataFlowClasses;
   DenseMap<Value, size_t> dataflowAt;
+
+  // Deferred processing: operations waiting for their dependencies
+  // Maps from a Value to the list of (operation, handler) pairs that depend on
+  // it
+  DenseMap<Value, SmallVector<std::pair<Operation *, HandlerFn>>> pendingOps;
 
   // Path tracking: list of XMR nodes forming paths
   SmallVector<XMRNode> xmrPaths;
@@ -338,6 +356,10 @@ size_t HWLowerXMRPass::addReachingSendsEntry(Value val, InnerRefAttr node,
   size_t idx = xmrPaths.size();
   xmrPaths.push_back(XMRNode{node, next, ProbeSubOp()});
   dataflowAt[dataFlowClasses.getOrInsertLeaderValue(val)] = idx;
+
+  // Process any operations that were waiting for this value
+  processPendingOps(val);
+
   return idx;
 }
 
@@ -347,6 +369,36 @@ std::optional<size_t> HWLowerXMRPass::getRemoteRefSend(Value val) {
   if (it != dataflowAt.end())
     return it->getSecond();
   return std::nullopt;
+}
+
+std::optional<size_t>
+HWLowerXMRPass::getRemoteRefSendOrDefer(Value val, Operation *dependent,
+                                        HandlerFn handler) {
+  auto pathIdx = getRemoteRefSend(val);
+  if (pathIdx.has_value())
+    return pathIdx;
+
+  // Value doesn't have a reaching send yet - defer this operation
+  auto leader = dataFlowClasses.getOrInsertLeaderValue(val);
+  pendingOps[leader].push_back({dependent, handler});
+  return std::nullopt;
+}
+
+void HWLowerXMRPass::processPendingOps(Value val) {
+  auto leader = dataFlowClasses.getOrInsertLeaderValue(val);
+  auto it = pendingOps.find(leader);
+  if (it == pendingOps.end())
+    return; // No pending operations for this value
+
+  // Get the list of pending (operation, handler) pairs and remove from map
+  SmallVector<std::pair<Operation *, HandlerFn>> pending =
+      std::move(it->second);
+  pendingOps.erase(it);
+
+  // Process each pending operation by calling its handler
+  for (auto &[op, handler] : pending) {
+    (void)handler(op);
+  }
 }
 
 InnerRefAttr HWLowerXMRPass::getInnerRefTo(Operation *op) {
@@ -670,7 +722,6 @@ LogicalResult HWLowerXMRPass::handleInstance(InstanceOp inst) {
   // Check each result to see if it's a probe type
   auto numResults = inst.getNumResults();
 
-  llvm::errs() << " \n instance: " << inst;
   // Handle extern modules specially
   if (refExtModule) {
     // Get total number of ports in the extern module
@@ -699,7 +750,6 @@ LogicalResult HWLowerXMRPass::handleInstance(InstanceOp inst) {
       // Skip if no uses or zero-width (will be removed anyway)
       // if (result.use_empty())
       //   continue;
-      llvm::errs() << "\n result: " << result;
 
       if (probeType && isZeroWidth(probeType.getInnerType()))
         continue;
@@ -712,16 +762,25 @@ LogicalResult HWLowerXMRPass::handleInstance(InstanceOp inst) {
       if (!instRef)
         continue;
 
-      // Add entry with path suffix for external module
-      auto ind = addReachingSendsEntry(result, instRef);
-
       // Generate macro name: ref_<module-name>_<port-name>
       SmallString<128> macroName;
       macroName += "`ref_";
       macroName += refExtModule.getModuleName();
       macroName += "_";
       macroName += refExtModule.getPortName(portIdx);
-      xmrPathSuffix[ind] = macroName;
+
+      // Pre-compute the path index that will be assigned
+      size_t futureInd = xmrPaths.size();
+
+      // Set the suffix BEFORE adding the reaching sends entry so that it's
+      // available when pending operations are processed
+      xmrPathSuffix[futureInd] = macroName;
+
+      // Add entry with path suffix for external module
+      auto ind = addReachingSendsEntry(result, instRef);
+
+      // Verify our prediction was correct
+      assert(ind == futureInd && "Path index mismatch");
     }
     return success();
   }
@@ -801,25 +860,40 @@ LogicalResult HWLowerXMRPass::handleProbeResolve(ProbeResolveOp resolve) {
     return success();
   }
 
-  auto pathIdx = getRemoteRefSend(ref);
+  // Handler for when the reference is resolved
+  auto handler = [this](Operation *op) -> LogicalResult {
+    auto resolve = cast<ProbeResolveOp>(op);
+    Value ref = resolve.getRef();
 
-  if (!pathIdx.has_value())
-    return resolve.emitError("could not trace probe to send");
+    auto pathIdx = getRemoteRefSend(ref);
+    if (!pathIdx.has_value())
+      return resolve.emitError("could not trace probe to send");
 
-  ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
-  FlatSymbolRefAttr pathSym;
-  StringAttr suffixSym;
+    ImplicitLocOpBuilder builder(resolve.getLoc(), resolve);
+    FlatSymbolRefAttr pathSym;
+    StringAttr suffixSym;
 
-  if (failed(buildHierPath(pathIdx.value(), builder, pathSym, suffixSym)))
-    return failure();
+    if (failed(buildHierPath(pathIdx.value(), builder, pathSym, suffixSym)))
+      return failure();
 
-  auto xmrType = sv::InOutType::get(resolve.getType());
-  Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
-  Value readValue = builder.create<sv::ReadInOutOp>(xmr);
+    auto xmrType = sv::InOutType::get(resolve.getType());
+    Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
+    Value readValue = builder.create<sv::ReadInOutOp>(xmr);
 
-  resolve.getResult().replaceAllUsesWith(readValue);
-  resolvesToRemove.push_back(resolve);
-  return success();
+    resolve.getResult().replaceAllUsesWith(readValue);
+    resolvesToRemove.push_back(resolve);
+    return success();
+  };
+
+  auto pathIdx = getRemoteRefSendOrDefer(ref, resolve, handler);
+
+  if (!pathIdx.has_value()) {
+    // Processing deferred - will be handled when ref gets its send entry
+    return success();
+  }
+
+  // Process immediately
+  return handler(resolve);
 }
 
 LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeXMRRefOp xmrRef) {
@@ -841,24 +915,39 @@ LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeXMRRefOp xmrRef) {
     return xmrRef.emitError("cannot create XMR reference to zero-width type");
   }
 
-  auto pathIdx = getRemoteRefSend(ref);
+  // Handler for when the reference is resolved
+  auto handler = [this, innerType](Operation *op) -> LogicalResult {
+    auto xmrRef = cast<ProbeXMRRefOp>(op);
+    Value ref = xmrRef.getRef();
 
-  if (!pathIdx.has_value())
-    return xmrRef.emitError("could not trace probe to send");
+    auto pathIdx = getRemoteRefSend(ref);
+    if (!pathIdx.has_value())
+      return xmrRef.emitError("could not trace probe to send");
 
-  ImplicitLocOpBuilder builder(xmrRef.getLoc(), xmrRef);
-  FlatSymbolRefAttr pathSym;
-  StringAttr suffixSym;
+    ImplicitLocOpBuilder builder(xmrRef.getLoc(), xmrRef);
+    FlatSymbolRefAttr pathSym;
+    StringAttr suffixSym;
 
-  if (failed(buildHierPath(pathIdx.value(), builder, pathSym, suffixSym)))
-    return failure();
+    if (failed(buildHierPath(pathIdx.value(), builder, pathSym, suffixSym)))
+      return failure();
 
-  auto xmrType = sv::InOutType::get(innerType);
-  Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
+    auto xmrType = sv::InOutType::get(innerType);
+    Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
 
-  xmrRef.getResult().replaceAllUsesWith(xmr);
-  xmrRefsToRemove.push_back(xmrRef);
-  return success();
+    xmrRef.getResult().replaceAllUsesWith(xmr);
+    xmrRefsToRemove.push_back(xmrRef);
+    return success();
+  };
+
+  auto pathIdx = getRemoteRefSendOrDefer(ref, xmrRef, handler);
+
+  if (!pathIdx.has_value()) {
+    // Processing deferred - will be handled when ref gets its send entry
+    return success();
+  }
+
+  // Process immediately
+  return handler(xmrRef);
 }
 
 LogicalResult HWLowerXMRPass::handleXMRRemote(XMRRemoteOp xmrRemote) {
@@ -909,22 +998,42 @@ LogicalResult HWLowerXMRPass::handleXMRRemote(XMRRemoteOp xmrRemote) {
     return xmrRemote.emitError("instance result at index ")
            << index << " is not an rwprobe type";
 
-  // Get the remote ref send for this target value
-  auto srcPathIdx = getRemoteRefSend(targetVal);
-  if (!srcPathIdx.has_value())
-    return targetOp->emitError("could not trace source probe to send");
+  // Handler for when the target value's send is resolved
+  auto handler = [this, targetVal](Operation *op) -> LogicalResult {
+    auto xmrRemote = cast<XMRRemoteOp>(op);
 
-  auto dest = xmrRemote.getResult();
-  // Unify the destination with the source in the dataflow classes
-  dataFlowClasses.unionSets(dataFlowClasses.getOrInsertLeaderValue(dest),
-                            dataFlowClasses.getOrInsertLeaderValue(targetVal));
+    auto srcPathIdx = getRemoteRefSend(targetVal);
+    if (!srcPathIdx.has_value())
+      return xmrRemote.emitError("could not trace source probe to send");
 
-  // Record the reaching send for the destination
-  dataflowAt[dataFlowClasses.getOrInsertLeaderValue(dest)] = srcPathIdx.value();
+    auto dest = xmrRemote.getResult();
+    // Unify the destination with the source in the dataflow classes
+    dataFlowClasses.unionSets(
+        dataFlowClasses.getOrInsertLeaderValue(dest),
+        dataFlowClasses.getOrInsertLeaderValue(targetVal));
 
-  // Mark for removal
-  xmrRemotesToRemove.push_back(xmrRemote);
-  return success();
+    // Record the reaching send for the destination (this will also process
+    // pending ops)
+    auto destLeader = dataFlowClasses.getOrInsertLeaderValue(dest);
+    dataflowAt[destLeader] = srcPathIdx.value();
+
+    // Process any operations that were waiting for this value
+    processPendingOps(dest);
+
+    // Mark for removal
+    xmrRemotesToRemove.push_back(xmrRemote);
+    return success();
+  };
+
+  // Get the remote ref send for this target value, or defer if not available
+  auto srcPathIdx = getRemoteRefSendOrDefer(targetVal, xmrRemote, handler);
+  if (!srcPathIdx.has_value()) {
+    // Processing deferred - will be handled when targetVal gets its send entry
+    return success();
+  }
+
+  // Process immediately
+  return handler(xmrRemote);
 }
 
 LogicalResult HWLowerXMRPass::handleProbeRWProbe(ProbeRWProbeOp rwprobe) {
@@ -944,23 +1053,38 @@ LogicalResult HWLowerXMRPass::handleProbeSub(ProbeSubOp sub) {
   //    the appropriate suffix (e.g., "[index]" for arrays or ".field" for
   //    structs)
 
-  auto inputPathIdx = getRemoteRefSend(sub.getInput());
-  if (!inputPathIdx.has_value())
-    return sub.emitError("could not trace input probe to send");
+  // Handler for when the input reference is resolved
+  auto handler = [this](Operation *op) -> LogicalResult {
+    auto sub = cast<ProbeSubOp>(op);
 
-  // Add a new path entry that references this sub operation
-  // The InnerRefAttr is null because the sub itself doesn't have a symbol,
-  // it just modifies the path with an indexing suffix
-  auto newPathIdx =
-      addReachingSendsEntry(sub.getResult(), InnerRefAttr(), inputPathIdx);
+    auto inputPathIdx = getRemoteRefSend(sub.getInput());
+    if (!inputPathIdx.has_value())
+      return sub.emitError("could not trace input probe to send");
 
-  // Store the sub operation in the path info so we can generate the suffix
-  // later
-  xmrPaths[newPathIdx].subOp = sub;
+    // Add a new path entry that references this sub operation
+    // The InnerRefAttr is null because the sub itself doesn't have a symbol,
+    // it just modifies the path with an indexing suffix
+    auto newPathIdx =
+        addReachingSendsEntry(sub.getResult(), InnerRefAttr(), inputPathIdx);
 
-  // Mark for removal after lowering (in separate list for correct order)
-  subsToRemove.push_back(sub);
-  return success();
+    // Store the sub operation in the path info so we can generate the suffix
+    // later
+    xmrPaths[newPathIdx].subOp = sub;
+
+    // Mark for removal after lowering (in separate list for correct order)
+    subsToRemove.push_back(sub);
+    return success();
+  };
+
+  auto inputPathIdx = getRemoteRefSendOrDefer(sub.getInput(), sub, handler);
+
+  if (!inputPathIdx.has_value()) {
+    // Processing deferred - will be handled when input gets its send entry
+    return success();
+  }
+
+  // Process immediately
+  return handler(sub);
 }
 
 LogicalResult HWLowerXMRPass::handleProbeCast(ProbeCastOp cast) {
@@ -980,23 +1104,42 @@ LogicalResult HWLowerXMRPass::handleProbeDefine(ProbeDefineOp define) {
   Value dest = define.getDest();
   Value src = define.getSrc();
 
-  // Get the reaching send for the source
-  auto srcPathIdx = getRemoteRefSend(src);
-  if (!srcPathIdx.has_value())
-    return define.emitError("could not trace source probe to send");
+  // Handler for when the source reference is resolved
+  auto handler = [this, dest](Operation *op) -> LogicalResult {
+    auto define = cast<ProbeDefineOp>(op);
+    Value src = define.getSrc();
 
-  // Unify the destination with the source in the dataflow classes
-  dataFlowClasses.unionSets(dataFlowClasses.getOrInsertLeaderValue(dest),
-                            dataFlowClasses.getOrInsertLeaderValue(src));
+    auto srcPathIdx = getRemoteRefSend(src);
+    if (!srcPathIdx.has_value())
+      return define.emitError("could not trace source probe to send");
 
-  // Record the reaching send for the destination
-  dataflowAt[dataFlowClasses.getOrInsertLeaderValue(dest)] = srcPathIdx.value();
+    // Unify the destination with the source in the dataflow classes
+    dataFlowClasses.unionSets(dataFlowClasses.getOrInsertLeaderValue(dest),
+                              dataFlowClasses.getOrInsertLeaderValue(src));
 
-  // Mark the define operation for removal (in separate list to ensure correct
-  // order)
-  definesToRemove.push_back(define);
+    // Record the reaching send for the destination
+    auto destLeader = dataFlowClasses.getOrInsertLeaderValue(dest);
+    dataflowAt[destLeader] = srcPathIdx.value();
 
-  return success();
+    // Process any operations that were waiting for this value
+    processPendingOps(dest);
+
+    // Mark the define operation for removal (in separate list to ensure
+    // correct order)
+    definesToRemove.push_back(define);
+
+    return success();
+  };
+
+  auto srcPathIdx = getRemoteRefSendOrDefer(src, define, handler);
+
+  if (!srcPathIdx.has_value()) {
+    // Processing deferred - will be handled when src gets its send entry
+    return success();
+  }
+
+  // Process immediately
+  return handler(define);
 }
 
 LogicalResult
@@ -1021,7 +1164,7 @@ HWLowerXMRPass::handleFirMemDebugPort(seq::FirMemDebugPortOp debugPort) {
   auto ind = addReachingSendsEntry(debugPort.getDebugPort(), inRef);
 
   // Set the path suffix to "Memory" to reference the internal storage array
-  xmrPathSuffix[ind] = "Memory";
+  xmrPathSuffix[ind] = ".Memory";
 
   // Mark the debug port operation for removal
   opsToRemove.push_back(debugPort);
