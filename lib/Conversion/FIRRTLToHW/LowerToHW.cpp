@@ -3678,6 +3678,14 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (!resultType)
     return failure();
 
+  // Probe-typed wires should be bypassed - they're just forwarding probe
+  // references and don't need actual hardware. Create a backedge that will
+  // be resolved by ref.define operations.
+  if (type_isa<hw::ProbeType, hw::RWProbeType>(resultType)) {
+    createBackedge(op.getResult(), resultType);
+    return success();
+  }
+
   if (resultType.isInteger(0)) {
     if (op.getInnerSym())
       return op.emitError("zero width wire is referenced by name [")
@@ -5335,10 +5343,18 @@ LogicalResult FIRRTLLowering::visitExpr(XMRRemoteOp op) {
 
 LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) {
   // ref.define forwards a probe
-  auto dest = getLoweredValue(op.getDest());
   auto src = getLoweredValue(op.getSrc());
-  if (!dest || !src)
+  if (!src)
     return failure();
+
+  auto dest = getLoweredValue(op.getDest());
+  if (!dest)
+    return failure();
+
+  // Check if the destination is a backedge (from a probe-typed wire)
+  // If so, resolve it directly to bypass the wire
+  if (updateIfBackedge(dest, src))
+    return success();
 
   // Create hw.probe.define to forward the probe
   builder.create<hw::ProbeDefineOp>(dest, src);
