@@ -27,6 +27,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/MathExtras.h"
@@ -66,8 +67,8 @@ static std::string getFlattenedMemRefName(StringAttr baseName,
                        type.getElementType(), uniqueID);
 }
 
-// For a arr[i, j, k] : memref<3x10x10>
-// calculates: (i * 10 + j) * 10 + k
+// For a arr[i, j, k] : memref<3x4x5>
+// calculates: (i * 4 + j) * 5 + k
 static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
                             ValueRange indices, MemRefType memrefType) {
   assert(memrefType.hasStaticShape() && "expected statically shaped memref");
@@ -81,9 +82,9 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
 
   Value finalIdx = indices.front();
 
-  for (size_t i = 1; i < indices.size(); ++i) {
-    Value partialIdx = indices[i];
-    int64_t dimSize = memrefType.getShape()[i];
+  for (auto [i, partialIdx] : llvm::enumerate(indices.drop_front())) {
+    // + 1 because enumerate starts from 0, and we are ommiting the zeroth index.
+    int64_t dimSize = memrefType.getShape()[i + 1];
 
     if (llvm::isPowerOf2_64(dimSize)) {
       auto constant =
