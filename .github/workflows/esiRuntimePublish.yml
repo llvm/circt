@@ -1,13 +1,6 @@
 name: Publish ESI Runtime
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/esiRuntimePublish.yml'
-      - 'lib/Dialect/ESI/runtime/**'
-  push:
-    tags:
-      - ESIRuntime-*
   workflow_dispatch:
 
 jobs:

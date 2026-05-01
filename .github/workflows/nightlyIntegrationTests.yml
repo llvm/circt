@@ -3,8 +3,6 @@ name: Nightly integration tests
 # Run on request and every day at 12 noon UTC
 on:
   workflow_dispatch:
-  schedule:
-    - cron: 0 12 * * *
 
 jobs:
   build-circt:

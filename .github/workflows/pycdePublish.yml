@@ -1,13 +1,6 @@
 name: PyCDE Publish
 
 on:
-  pull_request:
-    paths:
-      - '.github/workflows/pycdePublish.yml'
-      - 'frontends/PyCDE/**'
-  push:
-    tags:
-      - pycde-*
   workflow_dispatch:
 
 jobs:

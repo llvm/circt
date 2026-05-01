@@ -1,11 +1,6 @@
 name: Build and Test
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    types: [assigned, opened, synchronize, reopened]
   workflow_dispatch:
 
 # Cancel previous CI builds when a new push occurs to the same PR.

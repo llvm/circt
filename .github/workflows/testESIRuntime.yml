@@ -5,9 +5,6 @@ name: Test ESI runtime
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "lib/Dialect/ESI/runtime/**"
 
 # Cancel previous CI builds when a new push occurs to the same PR.
 concurrency:
