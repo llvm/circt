@@ -253,10 +253,14 @@ void XMRRemoteOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 ParseResult XMRRemoteOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Parse @Module::@symbol, index format
+  // Parse [forceable] @Module::@symbol, index format
   mlir::SymbolRefAttr symRef;
   Type resultType;
   int64_t index;
+
+  // Parse optional 'forceable' keyword
+  if (succeeded(parser.parseOptionalKeyword("forceable")))
+    result.addAttribute("forceable", parser.getBuilder().getUnitAttr());
 
   if (parser.parseAttribute(symRef) || parser.parseComma() ||
       parser.parseInteger(index) ||
@@ -279,12 +283,15 @@ ParseResult XMRRemoteOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void XMRRemoteOp::print(OpAsmPrinter &p) {
-  // Print as @Module::@symbol, index : !hw.rwprobe<type>
+  // Print as [forceable] @Module::@symbol, index : !hw.probe<type>
+  if (getForceable())
+    p << " forceable";
+
   auto target = getTargetAttr();
   p << " @" << target.getModule().getValue() << "::@"
     << target.getName().getValue() << ", " << getIndex();
   p.printOptionalAttrDict((*this)->getAttrs(),
-                          /*elidedAttrs=*/{"target", "index"});
+                          /*elidedAttrs=*/{"target", "index", "forceable"});
   p << " : " << getResult().getType();
 }
 

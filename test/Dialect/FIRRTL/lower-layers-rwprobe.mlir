@@ -10,7 +10,7 @@ firrtl.circuit "RWProbeFromExtModule" {
   }
 
   // CHECK: firrtl.module private @RWProbeFromExtModule_A
-  // CHECK-NEXT: %[[REMOTE:.+]] = firrtl.xmr.remote @RWProbeFromExtModule::@[[SYM:.+]], 1 : !firrtl.rwprobe<uint<1>>
+  // CHECK-NEXT: %[[REMOTE:.+]] = firrtl.xmr.remote forceable @RWProbeFromExtModule::@[[SYM:.+]], 1 : !firrtl.rwprobe<uint<1>>
   // CHECK-NEXT: %[[C1:.+]] = firrtl.constant 1
   // CHECK-NEXT: firrtl.ref.force_initial %[[C1]], %[[REMOTE]], %[[C1]]
 
@@ -66,7 +66,7 @@ firrtl.circuit "RWProbeFromModulePort" {
   }
 
   // CHECK: firrtl.module private @RWProbeFromModulePort_A
-  // CHECK-NEXT: %[[REMOTE:.+]] = firrtl.xmr.remote @RWProbeFromModulePort::@[[SYM:.+]], 0 : !firrtl.rwprobe<uint<4>>
+  // CHECK-NEXT: %[[REMOTE:.+]] = firrtl.xmr.remote forceable @RWProbeFromModulePort::@[[SYM:.+]], 0 : !firrtl.rwprobe<uint<4>>
   // CHECK-NEXT: %[[C1:.+]] = firrtl.constant 1
   // CHECK-NEXT: %[[C5:.+]] = firrtl.constant 5
   // CHECK-NEXT: firrtl.ref.force_initial %[[C1]], %[[REMOTE]], %[[C5]]

@@ -5323,21 +5323,23 @@ LogicalResult FIRRTLLowering::visitExpr(RWProbeOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(XMRRemoteOp op) {
-  // firrtl.xmr.remote creates an RWProbe reference via InnerRef
-  // Lower directly to hw.xmr.remote with the same InnerRef
+  // firrtl.xmr.remote creates a probe reference via InnerRef
+  // Lower directly to hw.xmr.remote with the same InnerRef and forceable flag
 
   // Get the lowered result type
   auto resultType = lowerType(op.getType());
   if (!resultType)
     return failure();
 
-  // Get the target InnerRef and index
+  // Get the target InnerRef, index, and forceable flag
   auto targetRef = op.getTargetAttr();
   int64_t index = op.getIndex();
+  bool forceable = op.getForceable();
 
-  // Create hw.xmr.remote with the InnerRef, index, and result type
+  // Create hw.xmr.remote with the InnerRef, index, forceable flag, and result
+  // type
   auto xmrRemote = builder.create<hw::XMRRemoteOp>(op.getLoc(), resultType,
-                                                   targetRef, index);
+                                                   targetRef, index, forceable);
   return setLowering(op, xmrRemote.getResult());
 }
 

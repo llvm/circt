@@ -115,7 +115,7 @@ hw.module @XMRRemoteInstance(out result: i8) {
 
   %source.data = hw.instance "source" sym @target_inst @Source() -> (data: !hw.rwprobe<i8>)
 
-  %probe = hw.xmr.remote @XMRRemoteInstance::@target_inst, 0 : !hw.rwprobe<i8>
+  %probe = hw.xmr.remote forceable @XMRRemoteInstance::@target_inst, 0 : !hw.rwprobe<i8>
   %value = hw.probe.resolve %probe : !hw.rwprobe<i8>
 
   hw.output %value : i8

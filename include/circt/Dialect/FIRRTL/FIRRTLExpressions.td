@@ -1747,14 +1747,14 @@ def XMRRemoteOp : FIRRTLOp<"xmr.remote",
                    HasCustomSSAName,
                    Pure
                   ]> {
-  let summary = "FIRRTL XMR remote operation creating RWProbe from instance result";
+  let summary = "FIRRTL XMR remote operation creating probe from instance result";
   let description = [{
-    Creates an RWProbe reference to a remote instance result specified by an
+    Creates a probe reference to a remote instance result specified by an
     InnerRef and result index. This operation is primarily used by the
     LowerLayers pass to work around the limitation that probe types cannot be
     passed through module input ports.
 
-    When lowering layer blocks into separate modules, captured RWProbe values
+    When lowering layer blocks into separate modules, captured probe values
     need to be accessible inside the extracted layer module. Since probe types
     cannot be passed as input ports, this operation uses cross-module references
     (XMR) to directly reference the remote instance result via its InnerRef and
@@ -1763,21 +1763,38 @@ def XMRRemoteOp : FIRRTLOp<"xmr.remote",
     The InnerRef must target an instance operation with an inner symbol.
     The index specifies which result of the instance to reference.
 
-    The result can be used with force and release operations for simulation
-    control.
+    The 'forceable' attribute determines whether the result is an RWProbe
+    (read-write, when forceable=true) or a Probe (read-only, when forceable=false).
+
+    The result can be used with force and release operations (if forceable)
+    for simulation control, or with resolve operations (if read-only).
 
     Example:
     ```
-      // Reference the first result (index 0) of instance @myInst
-      %rwProbe = firrtl.xmr.remote @ParentModule::@myInst, 0 : !firrtl.rwprobe<uint<8>>
+      // RWProbe reference (forceable)
+      %rwProbe = firrtl.xmr.remote forceable @ParentModule::@myInst, 0 : !firrtl.rwprobe<uint<8>>
       firrtl.ref.force %clk, %cond, %rwProbe, %value
+
+      // Probe reference (read-only)
+      %probe = firrtl.xmr.remote @ParentModule::@myInst, 0 : !firrtl.probe<uint<8>>
+      %value = firrtl.ref.resolve %probe
     ```
   }];
 
-  let arguments = (ins InnerRefAttr:$target, I64Attr:$index);
-  let results = (outs RWProbe:$result);
+  let arguments = (ins InnerRefAttr:$target, I64Attr:$index, UnitAttr:$forceable);
+  let results = (outs RefType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
+
+  let builders = [
+    // Builder with explicit forceable control
+    OpBuilder<(ins "Type":$resultType, "hw::InnerRefAttr":$target,
+                   "int64_t":$index, "bool":$forceable), [{
+      UnitAttr forceableAttr = forceable ? $_builder.getUnitAttr() : UnitAttr();
+      build($_builder, $_state, resultType, target,
+            $_builder.getI64IntegerAttr(index), forceableAttr);
+    }]>
+  ];
 }
 
 //===----------------------------------------------------------------------===//

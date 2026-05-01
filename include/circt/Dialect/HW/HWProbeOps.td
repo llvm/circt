@@ -201,11 +201,11 @@ def XMRRemoteOp : HWOp<"xmr.remote",
                   [DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
                    Pure
                   ]> {
-  let summary = "HW XMR remote operation creating RWProbe from instance result";
+  let summary = "HW XMR remote operation creating probe from instance result";
   let description = [{
-    Creates an RWProbe reference to a remote instance result specified by an
+    Creates a probe reference to a remote instance result specified by an
     InnerRef and result index. This is the HW dialect equivalent of
-    firrtl.xmr.remote, used to create read-write probe references via
+    firrtl.xmr.remote, used to create probe references via
     cross-module references (XMR).
 
     This operation is used when lowering FIRRTL probe operations to HW,
@@ -216,20 +216,28 @@ def XMRRemoteOp : HWOp<"xmr.remote",
     The InnerRef must target an instance operation with an inner symbol.
     The index specifies which result of the instance to reference.
 
+    The 'forceable' attribute determines whether the result is an RWProbe
+    (read-write, when forceable is present) or a Probe (read-only, when absent).
+
     The result can be used with hw.probe.xmr_ref to get an inout reference
-    for force and release operations.
+    for force and release operations (if forceable), or with hw.probe.resolve
+    for read-only access.
 
     Example:
     ```mlir
-    // Reference the first result (index 0) of instance @myInst
-    %rwProbe = hw.xmr.remote @ParentModule::@myInst, 0 : !hw.rwprobe<i32>
+    // RWProbe reference (forceable)
+    %rwProbe = hw.xmr.remote forceable @ParentModule::@myInst, 0 : !hw.rwprobe<i32>
     %inout = hw.probe.xmr_ref %rwProbe : !hw.rwprobe<i32>
     sv.force %inout, %value : i32
+
+    // Probe reference (read-only)
+    %probe = hw.xmr.remote @ParentModule::@myInst, 0 : !hw.probe<i32>
+    %value = hw.probe.resolve %probe : !hw.probe<i32>
     ```
   }];
 
-  let arguments = (ins InnerRefAttr:$target, I64Attr:$index);
-  let results = (outs RWProbeType:$result);
+  let arguments = (ins InnerRefAttr:$target, I64Attr:$index, UnitAttr:$forceable);
+  let results = (outs AnyProbeType:$result);
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 
@@ -237,6 +245,16 @@ def XMRRemoteOp : HWOp<"xmr.remote",
     /// Implement getAsmResultNames to provide auto-generated SSA names
     void getAsmResultNames(OpAsmSetValueNameFn setNameFn);
   }];
+
+  let builders = [
+    // Builder with explicit forceable control
+    OpBuilder<(ins "Type":$resultType, "InnerRefAttr":$target,
+                   "int64_t":$index, "bool":$forceable), [{
+      UnitAttr forceableAttr = forceable ? $_builder.getUnitAttr() : UnitAttr();
+      build($_builder, $_state, resultType, target,
+            $_builder.getI64IntegerAttr(index), forceableAttr);
+    }]>
+  ];
 }
 
 def ProbeXMRRefOp : HWOp<"probe.xmr_ref", []> {

@@ -688,7 +688,6 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       return WalkResult::advance();
     }
     // Strip layer requirements from any op that might represent a probe.
-
     for (auto result : op->getResults())
       removeLayersFromValue(result);
 
@@ -1204,8 +1203,16 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
             // Create xmr.remote operation inside the layer block
             OpBuilder::InsertionGuard guard(builder);
             builder.setInsertionPointToStart(body);
-            auto xmrRemote = builder.create<XMRRemoteOp>(
-                op->getLoc(), refType.removeLayer(), innerRef, resultIndex);
+
+            // Determine if the result is forceable (RWProbe) or read-only
+            // (Probe)
+            auto removedLayerType = refType.removeLayer();
+            bool forceable =
+                type_cast<RefType>(removedLayerType).getForceable();
+
+            auto xmrRemote =
+                builder.create<XMRRemoteOp>(op->getLoc(), removedLayerType,
+                                            innerRef, resultIndex, forceable);
 
             // Replace uses of the RWProbe inside the layer block
             operand.replaceUsesWithIf(

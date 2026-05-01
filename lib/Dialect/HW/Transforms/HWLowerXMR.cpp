@@ -951,7 +951,7 @@ LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeXMRRefOp xmrRef) {
 }
 
 LogicalResult HWLowerXMRPass::handleXMRRemote(XMRRemoteOp xmrRemote) {
-  // XMRRemoteOp creates an RWProbe reference from an InnerRef target.
+  // XMRRemoteOp creates a probe reference from an InnerRef target.
   // This is very similar to ProbeRWProbeOp, but works across module boundaries
   // (hence the "remote" in the name). Like ProbeRWProbeOp, we simply add a
   // reaching sends entry with the InnerRef target, which will be resolved
@@ -959,12 +959,18 @@ LogicalResult HWLowerXMRPass::handleXMRRemote(XMRRemoteOp xmrRemote) {
 
   auto targetRef = xmrRemote.getTarget();
 
-  // Get the inner type from the rwprobe result
-  auto rwProbeType = dyn_cast<RWProbeType>(xmrRemote.getResult().getType());
-  if (!rwProbeType)
-    return xmrRemote.emitError("xmr.remote must produce an rwprobe type");
-
-  Type innerType = rwProbeType.getInnerType();
+  // Get the inner type from the probe/rwprobe result
+  Type innerType;
+  if (auto rwProbeType =
+          dyn_cast<RWProbeType>(xmrRemote.getResult().getType())) {
+    innerType = rwProbeType.getInnerType();
+  } else if (auto probeType =
+                 dyn_cast<ProbeType>(xmrRemote.getResult().getType())) {
+    innerType = probeType.getInnerType();
+  } else {
+    return xmrRemote.emitError(
+        "xmr.remote must produce a probe or rwprobe type");
+  }
 
   // Check for zero-width type
   if (isZeroWidth(innerType)) {
@@ -993,10 +999,10 @@ LogicalResult HWLowerXMRPass::handleXMRRemote(XMRRemoteOp xmrRemote) {
 
   Value targetVal = instOp.getResult(index);
 
-  // Verify the result type is rwprobe
-  if (!isa<RWProbeType>(targetVal.getType()))
+  // Verify the result type is probe or rwprobe
+  if (!isa<ProbeType, RWProbeType>(targetVal.getType()))
     return xmrRemote.emitError("instance result at index ")
-           << index << " is not an rwprobe type";
+           << index << " is not a probe or rwprobe type";
 
   // Handler for when the target value's send is resolved
   auto handler = [this, targetVal](Operation *op) -> LogicalResult {
