@@ -2164,3 +2164,37 @@ firrtl.circuit "MemDebugOut" {
     firrtl.ref.define %probe_out, %mem_debug : !firrtl.probe<vector<uint<8>, 4>>
   }
 }
+
+// -----
+
+// Test probe-typed wire elimination
+// Probe-typed wires should be bypassed and the driver should be directly connected to users
+firrtl.circuit "ProbeWireElimination" {
+  // CHECK-LABEL: hw.module @ProbeWireElimination
+  firrtl.module @ProbeWireElimination(
+    in %in1: !firrtl.uint<8>,
+    in %in2: !firrtl.uint<8>,
+    out %out1: !firrtl.probe<uint<8>>,
+    out %out2: !firrtl.probe<uint<8>>
+  ) {
+    // Test 1: Simple probe wire - should be eliminated
+    // The wire %probe_wire1 should not appear in the output
+    %probe_wire1 = firrtl.wire : !firrtl.probe<uint<8>>
+    %ref1 = firrtl.ref.send %in1 : !firrtl.uint<8>
+    firrtl.ref.define %probe_wire1, %ref1 : !firrtl.probe<uint<8>>
+    firrtl.ref.define %out1, %probe_wire1 : !firrtl.probe<uint<8>>
+
+    // Test 2: Chain of probe wires - all should be eliminated
+    // The wires %probe_wire2 and %probe_wire3 should not appear in the output
+    %probe_wire2 = firrtl.wire : !firrtl.probe<uint<8>>
+    %probe_wire3 = firrtl.wire : !firrtl.probe<uint<8>>
+    %ref2 = firrtl.ref.send %in2 : !firrtl.uint<8>
+    firrtl.ref.define %probe_wire2, %ref2 : !firrtl.probe<uint<8>>
+    firrtl.ref.define %probe_wire3, %probe_wire2 : !firrtl.probe<uint<8>>
+    firrtl.ref.define %out2, %probe_wire3 : !firrtl.probe<uint<8>>
+
+    // CHECK: %[[REF1:.+]] = hw.probe.send %in1 : i8
+    // CHECK: %[[REF2:.+]] = hw.probe.send %in2 : i8
+    // CHECK: hw.output %[[REF1]], %[[REF2]] : !hw.probe<i8>, !hw.probe<i8>
+  }
+}
