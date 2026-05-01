@@ -83,7 +83,8 @@ static Value flattenIndices(ConversionPatternRewriter &rewriter, Operation *op,
   Value finalIdx = indices.front();
 
   for (auto [i, partialIdx] : llvm::enumerate(indices.drop_front())) {
-    // + 1 because enumerate starts from 0, and we are ommiting the zeroth index.
+    // + 1 because enumerate starts from 0, and we are ommiting the zeroth
+    // index.
     int64_t dimSize = memrefType.getShape()[i + 1];
 
     if (llvm::isPowerOf2_64(dimSize)) {
