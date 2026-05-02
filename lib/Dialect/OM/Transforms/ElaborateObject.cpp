@@ -87,7 +87,7 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
     return success();
   }
 
-  SymbolTable &symTable;
+  const SymbolTable &symTable;
 };
 
 /// Pattern to fold ObjectFieldOp on ElaboratedObjectOp by directly accessing
@@ -162,7 +162,9 @@ struct UnknownPropagationPattern : RewritePattern {
   }
 };
 
-bool isSerializable(Operation *op) {
+// Check if an operation can be evaluated at compile time and is valid to
+// remain in the IR after elaboration.
+bool isFullyEvaluated(Operation *op) {
   return isa<
       // Structure.
       ClassOp, ClassFieldsOp, ElaboratedObjectOp, AnyCastOp,
@@ -194,10 +196,11 @@ LogicalResult verifyResult(ClassOp module) {
                << assertOp.getMessage();
       };
 
+      // Condition is a constant integer/bool - check if it's true.
       if (matchPattern(assertOp.getCondition(), m_ConstantInt(&value)))
         return checkAssert(!value.isZero());
 
-      // Ok.
+      // Condition is unknown - treat as passing (best-effort verification).
       if (auto unknownOp = dyn_cast_or_null<UnknownValueOp>(defOp))
         return checkAssert(true);
 
@@ -205,7 +208,7 @@ LogicalResult verifyResult(ClassOp module) {
       return emitError(op->getLoc(), "failed to evaluate assertion condition");
     }
 
-    if (!isSerializable(op))
+    if (!isFullyEvaluated(op))
       return emitError(op->getLoc()) << "failed to evaluate " << op->getName();
 
     return success();
@@ -224,9 +227,8 @@ struct ElaborateObjectPass
                                       FieldIndex &fieldIndexes) {
     // Elaborate objects by inlining all ObjectOps and folding field accesses
     // using a greedy pattern rewriter. NOTE: The conversion framework is not
-    // suitable here because inlining
-    //       patterns need to be applied recursively to fully evaluate nested
-    //       object instantiations.
+    // suitable here because inlining patterns need to be applied recursively to
+    // fully evaluate nested object instantiations.
     RewritePatternSet patterns(classOp.getContext());
     patterns.add<ObjectOpInliningPattern>(classOp.getContext(), symTable);
     patterns.add<EvaluateObjectField>(classOp.getContext(), symTable,

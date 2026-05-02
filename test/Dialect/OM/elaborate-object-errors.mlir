@@ -1,16 +1,6 @@
 // RUN: circt-opt -om-elaborate-object='test=true' %s -verify-diagnostics -split-input-file
 
-om.class @AssertFalseInteger() {
-  %false = om.constant 0 : i1
-  // expected-error @below {{OM property assertion failed: test invariant must hold}}
-  om.property_assert %false, "test invariant must hold" : i1
-  om.class.fields
-}
-
-// -----
-
-// Property assertion with statically false condition (BoolAttr false)
-om.class @AssertFalseBool() {
+om.class @AssertFalse() {
   %false = om.constant false
   // expected-error @below {{OM property assertion failed: condition must be true}}
   om.property_assert %false, "condition must be true" : i1
@@ -26,6 +16,24 @@ om.class @MultipleAsserts() {
   om.property_assert %false, "first assertion fails" : i1
   // expected-error @below {{OM property assertion failed: second assertion fails}}
   om.property_assert %false, "second assertion fails" : i1
+  om.class.fields
+}
+
+// -----
+
+// Multiple assertions in nested classes
+om.class @WrapperWithAssert(%in: i1) -> (out: i1) {
+  // expected-error @below {{OM property assertion failed: wrapper assertion fails}}
+  om.property_assert %in, "wrapper assertion fails" : i1
+  om.class.fields %in : i1
+}
+
+om.class @ParentWithNestedAsserts() {
+  %false = om.constant false
+  %obj = om.object @WrapperWithAssert(%false) : (i1) -> !om.class.type<@WrapperWithAssert>
+  %result = om.object.field %obj["out"] : (!om.class.type<@WrapperWithAssert>) -> i1
+  // expected-error @below {{OM property assertion failed: parent assertion fails}}
+  om.property_assert %result, "parent assertion fails" : i1
   om.class.fields
 }
 

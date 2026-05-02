@@ -96,20 +96,12 @@ om.class @ListConcatTop() -> (result: !om.list<!om.integer>) {
   om.class.fields %concat : !om.list<!om.integer>
 }
 
-// Test property assertions with true/passing conditions
+// Test property assertion with true/passing condition
 // CHECK-LABEL: om.class @AssertTrue() {
 // CHECK-NOT:   om.property_assert
 om.class @AssertTrue() {
   %true = om.constant true
   om.property_assert %true, "this should pass" : i1
-  om.class.fields
-}
-
-// CHECK-LABEL: om.class @AssertInteger() {
-// CHECK-NOT:   om.property_assert
-om.class @AssertInteger() {
-  %one = om.constant 1 : i1
-  om.property_assert %one, "one is true" : i1
   om.class.fields
 }
 
