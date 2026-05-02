@@ -23,8 +23,10 @@ def Synth_Dialect : Dialect {
   }];
 
   let hasConstantMaterializer = 1;
+  let useDefaultAttributePrinterParser = 1;
 }
 
+include "circt/Dialect/Synth/SynthAttributes.td"
 include "circt/Dialect/Synth/SynthOps.td"
 
 #endif // CIRCT_SYNTH_DIALECT_TD
