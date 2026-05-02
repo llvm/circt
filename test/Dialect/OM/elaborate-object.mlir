@@ -1,6 +1,57 @@
 // RUN: circt-opt -om-elaborate-object='target-class=Top' %s | FileCheck %s --check-prefix=TOP
 // RUN: circt-opt -om-elaborate-object='test=true' %s | FileCheck %s --check-prefixes=TOP,CHECK
 
+// Test string operations (constant and concat - concat is folded to constant)
+// CHECK-LABEL: om.class @StringOps() -> (str: !om.string, concat: !om.string) {
+// CHECK-DAG:   %[[HELLO:.+]] = om.constant "hello" : !om.string
+// CHECK-DAG:   %[[CONCAT:.+]] = om.constant "hello world" : !om.string
+// CHECK:   om.class.fields %[[HELLO]], %[[CONCAT]] : !om.string, !om.string
+// CHECK: }
+om.class @StringOps() -> (str: !om.string, concat: !om.string) {
+  %hello = om.constant "hello" : !om.string
+  %world = om.constant " world" : !om.string
+  %concat = om.string.concat %hello, %world : !om.string
+  om.class.fields %hello, %concat : !om.string, !om.string
+}
+
+// Test list creation
+// CHECK-LABEL: om.class @SimpleList() -> (result: !om.list<!om.integer>) {
+// CHECK-DAG:   %[[C1:.+]] = om.constant #om.integer<1 : si8> : !om.integer
+// CHECK-DAG:   %[[C2:.+]] = om.constant #om.integer<2 : si8> : !om.integer
+// CHECK:   %[[LIST:.+]] = om.list_create %[[C1]], %[[C2]]
+// CHECK:   om.class.fields %[[LIST]] : !om.list<!om.integer>
+// CHECK: }
+om.class @SimpleList() -> (result: !om.list<!om.integer>) {
+  %c1 = om.constant #om.integer<1 : si8> : !om.integer
+  %c2 = om.constant #om.integer<2 : si8> : !om.integer
+  %list = om.list_create %c1, %c2 : !om.integer
+  om.class.fields %list : !om.list<!om.integer>
+}
+
+// Test integer operations (add, mul, shr, shl)
+// CHECK-LABEL: om.class @IntegerOps() -> (sum: !om.integer, product: !om.integer, shr: !om.integer, shl: !om.integer) {
+// CHECK-DAG:   %[[SUM:.+]] = om.constant #om.integer<7 : si4> : !om.integer
+// CHECK-DAG:   %[[PRODUCT:.+]] = om.constant #om.integer<12 : si8> : !om.integer
+// CHECK-DAG:   %[[SHR:.+]] = om.constant #om.integer<2 : si8> : !om.integer
+// CHECK-DAG:   %[[SHL:.+]] = om.constant #om.integer<16 : si8> : !om.integer
+// CHECK:   om.class.fields %[[SUM]], %[[PRODUCT]], %[[SHR]], %[[SHL]] : !om.integer, !om.integer, !om.integer, !om.integer
+// CHECK: }
+om.class @IntegerOps() -> (sum: !om.integer, product: !om.integer, shr: !om.integer, shl: !om.integer) {
+  %c3 = om.constant #om.integer<3 : si4> : !om.integer
+  %c4 = om.constant #om.integer<4 : si4> : !om.integer
+  %sum = om.integer.add %c3, %c4 : !om.integer
+  %c3_8 = om.constant #om.integer<3 : si8> : !om.integer
+  %c4_8 = om.constant #om.integer<4 : si8> : !om.integer
+  %product = om.integer.mul %c3_8, %c4_8 : !om.integer
+  %c8 = om.constant #om.integer<8 : si8> : !om.integer
+  %c2 = om.constant #om.integer<2 : si8> : !om.integer
+  %shr_result = om.integer.shr %c8, %c2 : !om.integer
+  %shl_result = om.integer.shl %c4_8, %c2 : !om.integer
+  om.class.fields %sum, %product, %shr_result, %shl_result : !om.integer, !om.integer, !om.integer, !om.integer
+}
+
+// More complex tests
+
 !list = !om.class.type<@LinkedList>
 
 om.class @InputBox(%input: !om.integer) -> (value: !om.integer) {
@@ -31,7 +82,7 @@ om.class @Top() -> (list: !list, head: !om.integer, tail: !list) {
 
 
 // Test nested field references
-om.class @Domain(%in: !om.string) -> (out: !om.string) {
+om.class @StringBox(%in: !om.string) -> (out: !om.string) {
   om.class.fields %in : !om.string
 }
 
@@ -41,18 +92,13 @@ om.class @Domain(%in: !om.string) -> (out: !om.string) {
 // CHECK: }
 om.class @NestedFieldTop() -> (result: !om.string) {
   %0 = om.constant "A" : !om.string
-  %1 = om.object @Domain(%0) : (!om.string) -> !om.class.type<@Domain>
-  %2 = om.object.field %1["out"] : (!om.class.type<@Domain>) -> !om.string
-  %3 = om.object @Domain(%2) : (!om.string) -> !om.class.type<@Domain>
-  %4 = om.object.field %3["out"] : (!om.class.type<@Domain>) -> !om.string
+  %1 = om.object @StringBox(%0) : (!om.string) -> !om.class.type<@StringBox>
+  %2 = om.object.field %1["out"] : (!om.class.type<@StringBox>) -> !om.string
+  %3 = om.object @StringBox(%2) : (!om.string) -> !om.class.type<@StringBox>
+  %4 = om.object.field %3["out"] : (!om.class.type<@StringBox>) -> !om.string
   om.class.fields %4 : !om.string
 }
 
-
-// Test integer arithmetic with object field access
-om.class @ValueBox(%val: !om.integer) -> (value: !om.integer) {
-  om.class.fields %val : !om.integer
-}
 
 // CHECK-LABEL: om.class @IntegerArithTop() -> (result: !om.integer) {
 // CHECK:   %[[RESULT:.+]] = om.constant #om.integer<3 : si3> : !om.integer
@@ -62,38 +108,12 @@ om.class @ValueBox(%val: !om.integer) -> (value: !om.integer) {
 om.class @IntegerArithTop() -> (result: !om.integer) {
   %1 = om.constant #om.integer<1 : si3> : !om.integer
   %2 = om.constant #om.integer<2 : si3> : !om.integer
-  %box1 = om.object @ValueBox(%1) : (!om.integer) -> !om.class.type<@ValueBox>
-  %val1 = om.object.field %box1["value"] : (!om.class.type<@ValueBox>) -> !om.integer
-  %box2 = om.object @ValueBox(%2) : (!om.integer) -> !om.class.type<@ValueBox>
-  %val2 = om.object.field %box2["value"] : (!om.class.type<@ValueBox>) -> !om.integer
+  %box1 = om.object @InputBox(%1) : (!om.integer) -> !om.class.type<@InputBox>
+  %val1 = om.object.field %box1["value"] : (!om.class.type<@InputBox>) -> !om.integer
+  %box2 = om.object @InputBox(%2) : (!om.integer) -> !om.class.type<@InputBox>
+  %val2 = om.object.field %box2["value"] : (!om.class.type<@InputBox>) -> !om.integer
   %sum = om.integer.add %val1, %val2 : !om.integer
   om.class.fields %sum : !om.integer
-}
-
-// Test list operations with object fields
-om.class @ListBox(%l: !om.list<!om.integer>) -> (value: !om.list<!om.integer>) {
-  om.class.fields %l : !om.list<!om.integer>
-}
-
-// CHECK-LABEL: om.class @ListConcatTop() -> (result: !om.list<!om.integer>) {
-// CHECK-DAG:   %[[ZERO:.+]] = om.constant #om.integer<0 : i8> : !om.integer
-// CHECK-DAG:   %[[ONE:.+]] = om.constant #om.integer<1 : i8> : !om.integer
-// CHECK-DAG:   %[[TWO:.+]] = om.constant #om.integer<2 : i8> : !om.integer
-// CHECK:   %[[L0:.+]] = om.list_create %[[ZERO]], %[[ONE]]
-// CHECK:   %[[L2:.+]] = om.list_create %[[TWO]]
-// CHECK:   %[[CONCAT:.+]] = om.list_concat %[[L0]], %[[L2]]
-// CHECK:   om.class.fields %[[CONCAT]] : !om.list<!om.integer>
-// CHECK: }
-om.class @ListConcatTop() -> (result: !om.list<!om.integer>) {
-  %0 = om.constant #om.integer<0 : i8> : !om.integer
-  %1 = om.constant #om.integer<1 : i8> : !om.integer
-  %2 = om.constant #om.integer<2 : i8> : !om.integer
-  %l0 = om.list_create %0, %1 : !om.integer
-  %box = om.object @ListBox(%l0) : (!om.list<!om.integer>) -> !om.class.type<@ListBox>
-  %l1 = om.object.field %box["value"] : (!om.class.type<@ListBox>) -> !om.list<!om.integer>
-  %l2 = om.list_create %2 : !om.integer
-  %concat = om.list_concat %l1, %l2 : !om.list<!om.integer>
-  om.class.fields %concat : !om.list<!om.integer>
 }
 
 // Test property assertion with true/passing condition

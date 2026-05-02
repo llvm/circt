@@ -200,7 +200,7 @@ LogicalResult verifyResult(ClassOp module) {
       if (matchPattern(assertOp.getCondition(), m_ConstantInt(&value)))
         return checkAssert(!value.isZero());
 
-      // Condition is unknown - treat as passing (best-effort verification).
+      // Condition is unknown - treat as passing.
       if (auto unknownOp = dyn_cast_or_null<UnknownValueOp>(defOp))
         return checkAssert(true);
 
