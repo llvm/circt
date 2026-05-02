@@ -17,9 +17,13 @@ add_circt_conversion_library(CIRCTMooreToCore
   CIRCTVerif
   CIRCTTransforms
   MLIRArithDialect
+  MLIRArithToLLVM
   MLIRControlFlowDialect
+  MLIRControlFlowToLLVM
   MLIRControlFlowTransforms
   MLIRFuncDialect
+  MLIRFuncToLLVM
+  MLIRLLVMCommonConversion
   MLIRSCFDialect
   MLIRSCFToControlFlow
   MLIRSideEffectInterfaces
