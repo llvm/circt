@@ -7,7 +7,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     input in: UInt
     output out: UInt<8>
 
-    ; CHECK: firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint
+    ; CHECK: %0 = firrtl.zext %in : (!firrtl.uint) -> !firrtl.uint<8>
+    ; CHECK: firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
     out <= in
 
   ; CHECK: }

@@ -1393,8 +1393,6 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // Nothing required.
       })
       .Case<InvalidValueOp>([&](auto op) {
-        // We must duplicate the invalid value for each use, since each use can
-        // be inferred to a different width.
         declareVars(op.getResult(), /*isDerived=*/true);
       })
       .Case<WireOp, RegOp>([&](auto op) { declareVars(op.getResult()); })
@@ -1529,6 +1527,14 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         auto e = solver.max(input, solver.known(op.getAmount()));
         setExpr(op.getResult(), e);
       })
+      .Case<SExtOp>([&](auto op) {
+        declareVars(op.getResult());
+        constrainTypes(op.getResult(), op.getInput());
+      })
+      .Case<ZExtOp>([&](auto op) {
+        declareVars(op.getResult());
+        constrainTypes(op.getResult(), op.getInput());
+      })
       .Case<ShlPrimOp>([&](auto op) {
         auto input = getExpr(op.getInput());
         auto e = solver.add(input, solver.known(op.getAmount()));
@@ -1571,8 +1577,13 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         maximumOfTypes(op.getResult(), op.getResult(), op.getV0());
       })
 
-      .Case<ConnectOp, MatchingConnectOp>(
+      .Case<ConnectOp>(
           [&](auto op) { constrainTypes(op.getDest(), op.getSrc()); })
+      .Case<MatchingConnectOp>(
+          [&](auto op) {
+            constrainTypes(op.getDest(), op.getSrc()); 
+            constrainTypes(op.getSrc(), op.getDest()); 
+          })
       .Case<RefDefineOp>([&](auto op) {
         // Dest >= Src, but also check Src <= Dest for correctness
         // (but don't solve to make this true, don't back-propagate)

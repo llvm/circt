@@ -954,16 +954,6 @@ firrtl.circuit "Top"   {
 
 // -----
 
-firrtl.circuit "Top" {
-  firrtl.module @Top (in %in : !firrtl.uint) {
-    %a = firrtl.wire : !firrtl.uint
-    // expected-error @+1 {{op operand #0 must be a sized passive base type}}
-    firrtl.matchingconnect %a, %in : !firrtl.uint
-  }
-}
-
-// -----
-
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.analog'}}
@@ -1197,7 +1187,7 @@ firrtl.circuit "Top" {
   firrtl.module @Foo (out %out: !firrtl.probe<uint<2>>) {}
   firrtl.module @Top (out %out: !firrtl.probe<uint<2>>) {
     %foo_out = firrtl.instance foo @Foo(out out: !firrtl.probe<uint<2>>)
-    // expected-error @below {{must be a sized passive base type}}
+    // expected-error @below {{must be a passive base type}}
     firrtl.matchingconnect %out, %foo_out: !firrtl.probe<uint<2>>
   }
 }
@@ -1363,7 +1353,7 @@ firrtl.circuit "PropertyDoubleDrive" {
 firrtl.circuit "PropertyConnect" {
   firrtl.module @PropertyConnect(out %out: !firrtl.string) {
     %0 = firrtl.string "hello"
-    // expected-error @below {{must be a sized passive base type}}
+    // expected-error @below {{must be a passive base type}}
     firrtl.matchingconnect %out, %0 : !firrtl.string
   }
 }

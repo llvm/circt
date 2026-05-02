@@ -162,6 +162,8 @@ struct Emitter {
     emitPrimExpr("tail", op, op.getAmount());
   }
   void emitExpression(PadPrimOp op) { emitPrimExpr("pad", op, op.getAmount()); }
+  void emitExpression(SExtOp op) { emitPrimExpr("circt_sext", op, op.getType().getBitWidthOrSentinel()); }
+  void emitExpression(ZExtOp op) { emitPrimExpr("circt_zext", op, op.getType().getBitWidthOrSentinel()); }
   void emitExpression(ShlPrimOp op) { emitPrimExpr("shl", op, op.getAmount()); }
   void emitExpression(ShrPrimOp op) { emitPrimExpr("shr", op, op.getAmount()); }
 
@@ -1546,7 +1548,7 @@ void Emitter::emitExpression(Value value) {
           AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp,
           XorRPrimOp,
           // Miscellaneous
-          BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
+          BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, SExtOp, ZExtOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,

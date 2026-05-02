@@ -1937,6 +1937,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(NotPrimOp op);
   LogicalResult visitExpr(NegPrimOp op);
   LogicalResult visitExpr(PadPrimOp op);
+  LogicalResult visitExpr(SExtOp op);
+  LogicalResult visitExpr(ZExtOp op);
   LogicalResult visitExpr(XorRPrimOp op);
   LogicalResult visitExpr(AndRPrimOp op);
   LogicalResult visitExpr(OrRPrimOp op);
@@ -4478,6 +4480,21 @@ LogicalResult FIRRTLLowering::visitExpr(NegPrimOp op) {
 
 // Pad is a noop or extension operation.
 LogicalResult FIRRTLLowering::visitExpr(PadPrimOp op) {
+  auto operand = getLoweredAndExtendedValue(op.getInput(), op.getType());
+  if (!operand)
+    return failure();
+  return setLowering(op, operand);
+}
+
+// SExt is a noop or extension operation.
+LogicalResult FIRRTLLowering::visitExpr(SExtOp op) {
+  auto operand = getLoweredAndExtendedValue(op.getInput(), op.getType());
+  if (!operand)
+    return failure();
+  return setLowering(op, operand);
+}
+// ZExt is a noop or extension operation.
+LogicalResult FIRRTLLowering::visitExpr(ZExtOp op) {
   auto operand = getLoweredAndExtendedValue(op.getInput(), op.getType());
   if (!operand)
     return failure();

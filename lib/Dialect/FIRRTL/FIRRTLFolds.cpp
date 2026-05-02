@@ -1993,6 +1993,56 @@ OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+OpFoldResult SExtOp::fold(FoldAdaptor adaptor) {
+  auto input = this->getInput();
+
+  // sext(x) -> x  if the width doesn't change and we know the width.
+  if (input.getType() == getType() && !getType().hasUninferredWidth())
+    return input;
+
+  // Need to know the input width.
+  auto inputType = input.getType().base();
+  int32_t width = inputType.getWidthOrSentinel();
+  if (width == -1)
+    return {};
+
+  // Constant fold.
+  if (auto cst = getConstant(adaptor.getInput())) {
+    auto destWidth = getType().base().getWidthOrSentinel();
+    if (destWidth == -1)
+      return {};
+
+    return getIntAttr(getType(), cst->sext(destWidth));
+  }
+
+  return {};
+}
+
+OpFoldResult ZExtOp::fold(FoldAdaptor adaptor) {
+  auto input = this->getInput();
+
+  // zext(x) -> x  if the width doesn't change and we know the width.
+  if (input.getType() == getType() && !getType().hasUninferredWidth())
+    return input;
+
+  // Need to know the input width.
+  auto inputType = input.getType().base();
+  int32_t width = inputType.getWidthOrSentinel();
+  if (width == -1)
+    return {};
+
+  // Constant fold.
+  if (auto cst = getConstant(adaptor.getInput())) {
+    auto destWidth = getType().base().getWidthOrSentinel();
+    if (destWidth == -1)
+      return {};
+
+    return getIntAttr(getType(), cst->zext(destWidth));
+  }
+
+  return {};
+}
+
 OpFoldResult ShlPrimOp::fold(FoldAdaptor adaptor) {
   auto input = this->getInput();
   IntType inputType = input.getType();

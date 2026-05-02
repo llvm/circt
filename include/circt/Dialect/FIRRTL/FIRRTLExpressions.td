@@ -86,6 +86,13 @@ class FIRRTLExprOp<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
+// A common base class for operations that implement type inference and parsed
+// argument validation.
+class FIRRTLExprSimpleOp<string mnemonic, list<Trait> traits = []> :
+    FIRRTLOp<mnemonic, traits # [HasCustomSSAName, Pure]> {
+  let hasFolder = 1;
+}
+
 def ConstantOp : FIRRTLOp<"constant",
       [Pure, ConstantLike, FirstAttrDerivedResultType,
        HasCustomSSAName]> {
@@ -911,6 +918,35 @@ def PadPrimOp : PrimOp<"pad"> {
       auto amount = adaptor.getAmountAttr().getValue().getSExtValue();
       return inferReturnType(input, amount, loc);
     }
+  }];
+}
+
+def SExtOp : FIRRTLExprSimpleOp<"sext"> {
+  let arguments = (ins SIntType:$input);
+  let results = (outs SIntType:$result);
+
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+
+  let description = [{
+    Sign extend the input to the result width.  The input may be uninferred, but
+    must be less than or equal to the final size.  It is an error if the 
+    uninferred input is inferred to be larger than the result type.
+  }];
+}
+
+def ZExtOp : FIRRTLExprSimpleOp<"zext"> {
+  let arguments = (ins UIntType:$input);
+  let results = (outs UIntType:$result);
+
+  let assemblyFormat =
+    "$input attr-dict `:` functional-type($input, $result)";
+
+  let description = [{
+    Zero extend the input to the result width.  The input or result may be 
+    uninferred.  The input must be less than or equal to the final size.  It is 
+    an error if the uninferred input is inferred to be larger than the inferred
+    result type.
   }];
 }
 

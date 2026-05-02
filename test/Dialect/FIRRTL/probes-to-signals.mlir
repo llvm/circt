@@ -29,8 +29,10 @@ firrtl.circuit "RefDefineAndCastWidths" {
   firrtl.module @RefDefineAndCastWidths(in %x: !firrtl.uint<2>, out %p : !firrtl.probe<uint>) {
     // Wire is inserted to handle the behavior of the cast (via firrtl.connect).
     // CHECK-NEXT: %[[W:.+]] = firrtl.wire : !firrtl.uint
-    // CHECK-NEXT: firrtl.connect %[[W]], %x
-    // CHECK-NEXT: firrtl.connect %p, %[[W]]
+    // CHECK-NEXT: %[[WExt2:.+]] = firrtl.zext %x
+    // CHECK-NEXT: firrtl.matchingconnect %[[W]], %[[WExt2]]
+    // CHECK-NEXT: %[[WExt:.+]] = firrtl.zext %[[W]]
+    // CHECK-NEXT: firrtl.matchingconnect %p, %[[WExt]]
     %ref = firrtl.ref.send %x : !firrtl.uint<2>
     %cast = firrtl.ref.cast %ref : (!firrtl.probe<uint<2>>) -> !firrtl.probe<uint>
     firrtl.ref.define %p, %cast : !firrtl.probe<uint>

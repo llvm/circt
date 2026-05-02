@@ -66,6 +66,7 @@ def MatchingConnectOp : FIRRTLOp<"matchingconnect", [FConnectLike,
       firrtl.matchingconnect %dest, %src : t1
       firrtl.matchingconnect %dest, %src : t1, !firrtl.alias<foo, t1>
     ```
+    If the lhs and rhs are uninferred, this implies they have the same width.
     }];
 
   let arguments = (ins MatchingConnectableType:$dest,

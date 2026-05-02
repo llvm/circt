@@ -4,8 +4,8 @@
 
 ; Complex literals should be allowed as reset values for AsyncReset.
 FIRRTL version 4.0.0
-circuit Foo:
-  public module Foo:
+circuit Foo1:
+  public module Foo1:
     input clock : Clock
     input reset : AsyncReset
     input x : UInt<1>[4]
@@ -28,8 +28,8 @@ circuit Foo:
 ; Complex literals of complex literals should be allowed as reset values for
 ; AsyncReset.
 FIRRTL version 4.0.0
-circuit Foo:
-  public module Foo:
+circuit Foo2:
+  public module Foo2:
     input clock : Clock
     input reset : AsyncReset
     input x : UInt<1>[4]
@@ -54,8 +54,8 @@ circuit Foo:
 
 ; Literals of bundle literals should be allowed as reset values for AsyncReset.
 FIRRTL version 4.0.0
-circuit Foo:
-  public module Foo:
+circuit Foo3:
+  public module Foo3:
     input clock : Clock
     input reset : AsyncReset
     input x : UInt<1>[4]
@@ -80,8 +80,8 @@ circuit Foo:
 
 ; Cast literals should be allowed as reset values for AsyncReset.
 FIRRTL version 4.0.0
-circuit Foo:
-  public module Foo:
+circuit Foo4:
+  public module Foo4:
     input clock : Clock
     input reset : AsyncReset
     input x : SInt<4>
@@ -103,8 +103,8 @@ circuit Foo:
 
 ; Unassigned asynchronously reset registers should properly constantprop.
 FIRRTL version 4.0.0
-circuit Foo:
-  public module Foo:
+circuit Foo5:
+  public module Foo5:
     input clock : Clock
     input reset : AsyncReset
     output z : UInt<1>[4]
@@ -128,8 +128,8 @@ circuit Foo:
 ; Constantly assigned asynchronously reset registers should properly
 ; constantprop.
 FIRRTL version 4.0.0
-circuit Foo:
-  public module Foo:
+circuit Foo6:
+  public module Foo6:
     input clock : Clock
     input reset : AsyncReset
     output z : UInt<1>
@@ -143,8 +143,8 @@ circuit Foo:
 ; Constantly assigned and initialized asynchronously reset registers should
 ; properly constantprop.
 FIRRTL version 4.0.0
-circuit Foo:
-  public module Foo:
+circuit Foo7:
+  public module Foo7:
     input clock : Clock
     input reset : AsyncReset
     output z : UInt<1>

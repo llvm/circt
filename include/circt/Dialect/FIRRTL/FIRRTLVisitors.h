@@ -47,7 +47,7 @@ public:
             // Unary operators.
             AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
             AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp,
-            OrRPrimOp, XorRPrimOp,
+            OrRPrimOp, XorRPrimOp, SExtOp, ZExtOp,
             // Intrinsic Expressions.
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
             SizeOfIntrinsicOp, ClockGateIntrinsicOp, ClockInverterIntrinsicOp,
@@ -165,6 +165,8 @@ public:
   HANDLE(AndRPrimOp, Unary);
   HANDLE(OrRPrimOp, Unary);
   HANDLE(XorRPrimOp, Unary);
+  HANDLE(SExtOp, Unary);
+  HANDLE(ZExtOp, Unary);
 
   HANDLE(ElementwiseOrPrimOp, Unhandled);
   HANDLE(ElementwiseAndPrimOp, Unhandled);

@@ -333,4 +333,10 @@ firrtl.module @NonConstWhenLocalNestedConstFlipAssign(in %cond: !firrtl.uint<1>,
     firrtl.connect %out, %w : !firrtl.bundle<a flip: const.uint<2>>, !firrtl.bundle<a flip: const.uint<2>>
   }
 }
+
+// CHECK-LABEL: firrtl.module @MatchedUninferred
+firrtl.module @MatchedUninferred(in %in : !firrtl.uint, out %out : !firrtl.uint) {
+  firrtl.matchingconnect %out, %in : !firrtl.uint
+}
+
 }

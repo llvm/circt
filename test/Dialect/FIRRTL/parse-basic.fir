@@ -305,7 +305,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
 
     ; CHECK: %xyz_in = firrtl.instance xyz interesting_name @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit
-    ; CHECK: [[PAD:%.*]] = firrtl.pad %i8, 80 : (!firrtl.uint<8>) -> !firrtl.uint<80>
+    ; CHECK: [[PAD:%.*]] = firrtl.zext %i8 : (!firrtl.uint<8>) -> !firrtl.uint<80>
     ; CHECK: firrtl.matchingconnect %xyz_in, [[PAD]] : !firrtl.uint<80>
     connect xyz.in, i8
 
@@ -423,7 +423,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   module expr_stmt_ambiguity :
     ; CHECK: %reg = firrtl.wire interesting_name : !firrtl.uint
     wire reg : UInt
-    ; CHECK: firrtl.connect %reg,
+    ; CHECK: firrtl.matchingconnect %reg,
     connect reg, UInt(42)
 
     ; CHECK: %write = firrtl.wire
@@ -436,7 +436,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   module expr_stmt_ambiguity2 :
     ; CHECK: firrtl.instance write interesting_name @circuit
     inst write of circuit
-    ; CHECK: firrtl.connect %write_in
+    ; CHECK: firrtl.matchingconnect %write_in
     connect write.in, UInt(1)
 
   ; CHECK-LABEL: firrtl.module private @oversize_shift(
@@ -1041,12 +1041,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK-DAG: %[[AGG_B:.+]] = firrtl.subfield %[[AGG]][b]
     ; CHECK-DAG: %[[AGG_B_PROBE:.+]] = firrtl.ref.send %[[AGG_B]]
     ; CHECK-DAG: %[[READ_AGG_B_PROBE:.+]] = firrtl.ref.resolve %[[AGG_B_PROBE]]
-    ; CHECK-DAG: connect %out2, %[[READ_AGG_B_PROBE]]
+    ; CHECK-DAG: %[[READ_AGG_B_PROBE_EXT:.+]] = firrtl.zext %[[READ_AGG_B_PROBE]]
+    ; CHECK-DAG: matchingconnect %out2, %[[READ_AGG_B_PROBE_EXT]]
     connect out2, read(probe(agg.b))
     ; CHECK-DAG: %[[AGG2_PROBE:.+]] = firrtl.ref.send %[[AGG2]]
     ; CHECK-DAG: %[[READ_AGG2_PROBE:.+]] = firrtl.ref.resolve %[[AGG2_PROBE]]
     ; CHECK-DAG: %[[READ_AGG2_PROBE__B:.+]] = firrtl.subfield %[[READ_AGG2_PROBE]][b]
-    ; CHECK-DAG: connect %out2, %[[READ_AGG2_PROBE__B]]
+    ; CHECK-DAG: matchingconnect %out2, %[[READ_AGG2_PROBE__B]]
     connect out2, read(probe(agg2)).b
 
     ; CHECK: %[[AGG3:.+]] = firrtl.wire
@@ -1333,53 +1334,63 @@ circuit RadixEncodedIntegerLiterals:
     output hs: SInt<8>
 
     ; CHECK:      %[[c42_ui7:[-a-zA-Z_0-9]+]] = firrtl.constant 42
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
-    ; CHECK-NEXT: firrtl.connect %bu, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c42_cui7:[-a-zA-Z_0-9]+]] = firrtl.zext %[[c42_ui7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_cui7]]
+    ; CHECK-NEXT: firrtl.matchingconnect %bu, %[[c_constCast]]
     bu <= UInt(0b101010)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
-    ; CHECK-NEXT: firrtl.connect %ou, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c42_c2ui7:[-a-zA-Z_0-9]+]] = firrtl.zext %[[c42_ui7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_c2ui7]]
+    ; CHECK-NEXT: firrtl.matchingconnect %ou, %[[c_constCast]]
     ou <= UInt(0o052)
 
     ; Note: this creates a second constant because the width of a parsed
     ; constant is dependent on the overestimation of LLVM::StringRef.
     ;
     ; CHECK:      %[[c42_ui8:[-a-zA-Z_0-9]+]] = firrtl.constant 42
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
-    ; CHECK-NEXT: firrtl.connect %du0, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c42_cui8:[-a-zA-Z_0-9]+]] = firrtl.zext %[[c42_ui8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_cui8]]
+    ; CHECK-NEXT: firrtl.matchingconnect %du0, %[[c_constCast]]
     du0 <= UInt(42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui8]]
-    ; CHECK-NEXT: firrtl.connect %du1, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c42_cui8:[-a-zA-Z_0-9]+]] = firrtl.zext %[[c42_ui8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_cui8]]
+    ; CHECK-NEXT: firrtl.matchingconnect %du1, %[[c_constCast]]
     du1 <= UInt(0d42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_ui7]]
-    ; CHECK-NEXT: firrtl.connect %hu, %[[c_constCast]]
+    ; CHECK-NEXT: %[[c42_cui8:[-a-zA-Z_0-9]+]] = firrtl.zext %[[c42_ui8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[c42_cui8]]
+    ; CHECK-NEXT: firrtl.matchingconnect %hu, %[[c_constCast]]
     hu <= UInt(0h2a)
 
     ; CHECK:      %[[cn42_si7:[-a-zA-Z_0-9]+]] = firrtl.constant -42
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
-    ; CHECK-NEXT: firrtl.connect %bs, %[[c_constCast]]
+    ; CHECK-NEXT: %[[cn42_csi7:[-a-zA-Z_0-9]+]] = firrtl.sext %[[cn42_si7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_csi7]]
+    ; CHECK-NEXT: firrtl.matchingconnect %bs, %[[c_constCast]]
     bs <= SInt(-0b101010)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
-    ; CHECK-NEXT: firrtl.connect %os, %[[c_constCast]]
+    ; CHECK-NEXT: %[[cn42_csi8:[-a-zA-Z_0-9]+]] = firrtl.sext %[[cn42_si7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_csi8]]
+    ; CHECK-NEXT: firrtl.matchingconnect %os, %[[c_constCast]]
     os <= SInt(-0o52)
 
     ; Note: this creates a second constant because the width of a parsed
     ; constant is dependent on the overestimation of LLVM::StringRef.
     ;
     ; CHECK:      %[[cn42_si8:[-a-zA-Z_0-9]+]] = firrtl.constant -42
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
-    ; CHECK-NEXT: firrtl.connect %dus0, %[[c_constCast]]
+    ; CHECK-NEXT: %[[cn42_csi8:[-a-zA-Z_0-9]+]] = firrtl.sext %[[cn42_si8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_csi8]]
+    ; CHECK-NEXT: firrtl.matchingconnect %dus0, %[[c_constCast]]
     dus0 <= SInt(-42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si8]]
-    ; CHECK-NEXT: firrtl.connect %dus1, %[[c_constCast]]
+    ; CHECK-NEXT: %[[cn42_csi8:[-a-zA-Z_0-9]+]] = firrtl.sext %[[cn42_si8]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_csi8]]
+    ; CHECK-NEXT: firrtl.matchingconnect %dus1, %[[c_constCast]]
     dus1 <= SInt(-0d42)
 
-    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_si7]]
-    ; CHECK-NEXT: firrtl.connect %hs, %[[c_constCast]]
+    ; CHECK-NEXT: %[[cn42_csi8:[-a-zA-Z_0-9]+]] = firrtl.sext %[[cn42_si7]]
+    ; CHECK-NEXT: %[[c_constCast:[-a-zA-Z_0-9]+]] = firrtl.constCast %[[cn42_csi8]]
+    ; CHECK-NEXT: firrtl.matchingconnect %hs, %[[c_constCast]]
     hs <= SInt(-0h2a)
 
 ;// -----
@@ -1865,48 +1876,48 @@ circuit StaticShiftRight:
     wire x : SInt
     connect x, c
 
-    ; CHECK: %0 = firrtl.shr %a, 1
-    ; CHECK: %1 = firrtl.pad %0, 1
-    ; CHECK: %a_1 = firrtl.node {{.*}} %1 : !firrtl.uint<7>
-    node a_1 = shr(a, 1)
-    ; CHECK: %2 = firrtl.shr %a, 8
+    ; CHECK: %2 = firrtl.shr %a, 1
     ; CHECK: %3 = firrtl.pad %2, 1
-    ; CHECK: %a_2 = firrtl.node {{.*}} %3 : !firrtl.uint<1>
-    node a_2 = shr(a, 8)
-    ; CHECK: %4 = firrtl.shr %a, 10
+    ; CHECK: %a_1 = firrtl.node {{.*}} %3 : !firrtl.uint<7>
+    node a_1 = shr(a, 1)
+    ; CHECK: %4 = firrtl.shr %a, 8
     ; CHECK: %5 = firrtl.pad %4, 1
-    ; CHECK: %a_3 = firrtl.node {{.*}} %5 : !firrtl.uint<1>
-    node a_3 = shr(a, 10)
-    ; CHECK: %6 = firrtl.shr %b, 0
+    ; CHECK: %a_2 = firrtl.node {{.*}} %5 : !firrtl.uint<1>
+    node a_2 = shr(a, 8)
+    ; CHECK: %6 = firrtl.shr %a, 10
     ; CHECK: %7 = firrtl.pad %6, 1
-    ; CHECK: %b_1 = firrtl.node {{.*}} %7 : !firrtl.uint<1>
-    node b_1 = shr(b, 0)
-    ; CHECK: %8 = firrtl.shr %b, 1
+    ; CHECK: %a_3 = firrtl.node {{.*}} %7 : !firrtl.uint<1>
+    node a_3 = shr(a, 10)
+    ; CHECK: %8 = firrtl.shr %b, 0
     ; CHECK: %9 = firrtl.pad %8, 1
-    ; CHECK: %b_2 = firrtl.node {{.*}} %9 : !firrtl.uint<1>
-    node b_2 = shr(b, 1)
-    ; CHECK: %10 = firrtl.shr %w, 10
+    ; CHECK: %b_1 = firrtl.node {{.*}} %9 : !firrtl.uint<1>
+    node b_1 = shr(b, 0)
+    ; CHECK: %10 = firrtl.shr %b, 1
     ; CHECK: %11 = firrtl.pad %10, 1
-    ; CHECK: %w_1 = firrtl.node {{.*}} %11 : !firrtl.uint
+    ; CHECK: %b_2 = firrtl.node {{.*}} %11 : !firrtl.uint<1>
+    node b_2 = shr(b, 1)
+    ; CHECK: %12 = firrtl.shr %w, 10
+    ; CHECK: %13 = firrtl.pad %12, 1
+    ; CHECK: %w_1 = firrtl.node {{.*}} %13 : !firrtl.uint
     node w_1 = shr(w, 10)
 
-    ; CHECK: %12 = firrtl.shr %c, 1
-    ; CHECK: %c_1 = firrtl.node {{.*}} %12 : !firrtl.sint<7>
+    ; CHECK: %14 = firrtl.shr %c, 1
+    ; CHECK: %c_1 = firrtl.node {{.*}} %14 : !firrtl.sint<7>
     node c_1 = shr(c, 1)
-    ; CHECK: %13 = firrtl.shr %c, 8
-    ; CHECK: %c_2 = firrtl.node {{.*}} %13 : !firrtl.sint<1>
+    ; CHECK: %15 = firrtl.shr %c, 8
+    ; CHECK: %c_2 = firrtl.node {{.*}} %15 : !firrtl.sint<1>
     node c_2 = shr(c, 8)
-    ; CHECK: %14 = firrtl.shr %c, 10
-    ; CHECK: %c_3 = firrtl.node {{.*}} %14 : !firrtl.sint<1>
+    ; CHECK: %16 = firrtl.shr %c, 10
+    ; CHECK: %c_3 = firrtl.node {{.*}} %16 : !firrtl.sint<1>
     node c_3 = shr(c, 10)
-    ; CHECK: %15 = firrtl.shr %d, 0
-    ; CHECK: %d_1 = firrtl.node {{.*}} %15 : !firrtl.sint<1>
+    ; CHECK: %17 = firrtl.shr %d, 0
+    ; CHECK: %d_1 = firrtl.node {{.*}} %17 : !firrtl.sint<1>
     node d_1 = shr(d, 0)
-    ; CHECK: %16 = firrtl.shr %d, 1
-    ; CHECK: %d_2 = firrtl.node {{.*}} %16 : !firrtl.sint<1>
+    ; CHECK: %18 = firrtl.shr %d, 1
+    ; CHECK: %d_2 = firrtl.node {{.*}} %18 : !firrtl.sint<1>
     node d_2 = shr(d, 1)
-    ; CHECK: %17 = firrtl.shr %x, 10
-    ; CHECK: %x_1 = firrtl.node {{.*}} %17 : !firrtl.sint
+    ; CHECK: %19 = firrtl.shr %x, 10
+    ; CHECK: %x_1 = firrtl.node {{.*}} %19 : !firrtl.sint
     node x_1 = shr(x, 10)
 
 ;// -----
@@ -1927,42 +1938,42 @@ circuit StaticShiftRight:
     wire x : SInt
     connect x, c
 
-    ; CHECK: %0 = firrtl.shr %a, 1
-    ; CHECK: %a_1 = firrtl.node {{.*}} %0 : !firrtl.uint<7>
+    ; CHECK: %2 = firrtl.shr %a, 1
+    ; CHECK: %a_1 = firrtl.node {{.*}} %2 : !firrtl.uint<7>
     node a_1 = shr(a, 1)
-    ; CHECK: %1 = firrtl.shr %a, 8
-    ; CHECK: %a_2 = firrtl.node {{.*}} %1 : !firrtl.uint<0>
+    ; CHECK: %3 = firrtl.shr %a, 8
+    ; CHECK: %a_2 = firrtl.node {{.*}} %3 : !firrtl.uint<0>
     node a_2 = shr(a, 8)
-    ; CHECK: %2 = firrtl.shr %a, 10
-    ; CHECK: %a_3 = firrtl.node {{.*}} %2 : !firrtl.uint<0>
+    ; CHECK: %4 = firrtl.shr %a, 10
+    ; CHECK: %a_3 = firrtl.node {{.*}} %4 : !firrtl.uint<0>
     node a_3 = shr(a, 10)
-    ; CHECK: %3 = firrtl.shr %b, 0
-    ; CHECK: %b_1 = firrtl.node {{.*}} %3 : !firrtl.uint<0>
+    ; CHECK: %5 = firrtl.shr %b, 0
+    ; CHECK: %b_1 = firrtl.node {{.*}} %5 : !firrtl.uint<0>
     node b_1 = shr(b, 0)
-    ; CHECK: %4 = firrtl.shr %b, 1
-    ; CHECK: %b_2 = firrtl.node {{.*}} %4 : !firrtl.uint<0>
+    ; CHECK: %6 = firrtl.shr %b, 1
+    ; CHECK: %b_2 = firrtl.node {{.*}} %6 : !firrtl.uint<0>
     node b_2 = shr(b, 1)
-    ; CHECK: %5 = firrtl.shr %w, 10
-    ; CHECK: %w_1 = firrtl.node {{.*}} %5 : !firrtl.uint
+    ; CHECK: %7 = firrtl.shr %w, 10
+    ; CHECK: %w_1 = firrtl.node {{.*}} %7 : !firrtl.uint
     node w_1 = shr(w, 10)
 
-    ; CHECK: %6 = firrtl.shr %c, 1
-    ; CHECK: %c_1 = firrtl.node {{.*}} %6 : !firrtl.sint<7>
+    ; CHECK: %8 = firrtl.shr %c, 1
+    ; CHECK: %c_1 = firrtl.node {{.*}} %8 : !firrtl.sint<7>
     node c_1 = shr(c, 1)
-    ; CHECK: %7 = firrtl.shr %c, 8
-    ; CHECK: %c_2 = firrtl.node {{.*}} %7 : !firrtl.sint<1>
+    ; CHECK: %9 = firrtl.shr %c, 8
+    ; CHECK: %c_2 = firrtl.node {{.*}} %9 : !firrtl.sint<1>
     node c_2 = shr(c, 8)
-    ; CHECK: %8 = firrtl.shr %c, 10
-    ; CHECK: %c_3 = firrtl.node {{.*}} %8 : !firrtl.sint<1>
+    ; CHECK: %10 = firrtl.shr %c, 10
+    ; CHECK: %c_3 = firrtl.node {{.*}} %10 : !firrtl.sint<1>
     node c_3 = shr(c, 10)
-    ; CHECK: %9 = firrtl.shr %d, 0
-    ; CHECK: %d_1 = firrtl.node {{.*}} %9 : !firrtl.sint<1>
+    ; CHECK: %11 = firrtl.shr %d, 0
+    ; CHECK: %d_1 = firrtl.node {{.*}} %11 : !firrtl.sint<1>
     node d_1 = shr(d, 0)
-    ; CHECK: %10 = firrtl.shr %d, 1
-    ; CHECK: %d_2 = firrtl.node {{.*}} %10 : !firrtl.sint<1>
+    ; CHECK: %12 = firrtl.shr %d, 1
+    ; CHECK: %d_2 = firrtl.node {{.*}} %12 : !firrtl.sint<1>
     node d_2 = shr(d, 1)
-    ; CHECK: %11 = firrtl.shr %x, 10
-    ; CHECK: %x_1 = firrtl.node {{.*}} %11 : !firrtl.sint
+    ; CHECK: %13 = firrtl.shr %x, 10
+    ; CHECK: %x_1 = firrtl.node {{.*}} %13 : !firrtl.sint
     node x_1 = shr(x, 10)
 
 ;// -----

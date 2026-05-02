@@ -63,7 +63,8 @@ circuit Unit :
     regreset r : UInt, clock, reset, UInt(3)
     ; expected-note @+1 {{constrained width W >= W+1 here:}}
     node T_7 = add(r, r)
-    ; expected-note @+1 {{constrained width W >= W+1 here:}}
+    ; expected-note @+2 {{constrained width W >= W+1 here:}}
+    ; expected-error @+1 {{'firrtl.zext' op is constrained to be wider than itself}}
     connect r, T_7
 
 // -----
@@ -98,6 +99,8 @@ circuit Foo :
     input clock : Clock
     inst bar of Bar
   module Bar :
-    ; expected-error @+1 {{uninferred width: wire "a.c.e" is unconstrained}}
+    ; expected-error @+1 {{uninferred width: wire "a.c.e" width cannot be determined}}
     wire a: { b : UInt<1>, c : { d : UInt<1>, e : UInt } }
+    ; expected-error @+2 {{value is unconstrained}}
+    ; expected-note @+1  {{width is constrained by an uninferred width here}}
     invalidate a
