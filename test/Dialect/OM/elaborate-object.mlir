@@ -1,7 +1,6 @@
 // RUN: circt-opt -om-elaborate-object='target-class=Top' %s | FileCheck %s --check-prefix=TOP
 // RUN: circt-opt -om-elaborate-object='test=true' %s | FileCheck %s --check-prefixes=TOP,CHECK
 
-// Test string operations (constant and concat - concat is folded to constant)
 // CHECK-LABEL: om.class @StringOps() -> (str: !om.string, concat: !om.string) {
 // CHECK-DAG:   %[[HELLO:.+]] = om.constant "hello" : !om.string
 // CHECK-DAG:   %[[CONCAT:.+]] = om.constant "hello world" : !om.string
@@ -14,7 +13,10 @@ om.class @StringOps() -> (str: !om.string, concat: !om.string) {
   om.class.fields %hello, %concat : !om.string, !om.string
 }
 
-// Test list creation
+// Test list creation.
+// Note that this is currently not folded because list_create doesn't have a folder.
+// Even when it had a folder we cannot fully evaluate list_concat since objects cannot be
+// representable with attributes.
 // CHECK-LABEL: om.class @SimpleList() -> (result: !om.list<!om.integer>) {
 // CHECK-DAG:   %[[C1:.+]] = om.constant #om.integer<1 : si8> : !om.integer
 // CHECK-DAG:   %[[C2:.+]] = om.constant #om.integer<2 : si8> : !om.integer
@@ -81,24 +83,18 @@ om.class @Top() -> (list: !list, head: !om.integer, tail: !list) {
 }
 
 
-// Test nested field references
-om.class @StringBox(%in: !om.string) -> (out: !om.string) {
-  om.class.fields %in : !om.string
-}
-
-// CHECK-LABEL: om.class @NestedFieldTop() -> (result: !om.string) {
-// CHECK:   %[[STR:.+]] = om.constant "A" : !om.string
-// CHECK:   om.class.fields %[[STR]] : !om.string
+// CHECK-LABEL: om.class @NestedFieldTop() -> (result: !om.integer) {
+// CHECK:   %[[V:.+]] = om.constant #om.integer<1 : i6>
+// CHECK:   om.class.fields %[[V]] : !om.integer
 // CHECK: }
-om.class @NestedFieldTop() -> (result: !om.string) {
-  %0 = om.constant "A" : !om.string
-  %1 = om.object @StringBox(%0) : (!om.string) -> !om.class.type<@StringBox>
-  %2 = om.object.field %1["out"] : (!om.class.type<@StringBox>) -> !om.string
-  %3 = om.object @StringBox(%2) : (!om.string) -> !om.class.type<@StringBox>
-  %4 = om.object.field %3["out"] : (!om.class.type<@StringBox>) -> !om.string
-  om.class.fields %4 : !om.string
+om.class @NestedFieldTop() -> (result: !om.integer) {
+  %0 = om.constant #om.integer<1 : i6> : !om.integer
+  %1 = om.object @InputBox(%0) : (!om.integer) -> !om.class.type<@InputBox>
+  %2 = om.object.field %1["value"] : (!om.class.type<@InputBox>) -> !om.integer
+  %3 = om.object @InputBox(%2) : (!om.integer) -> !om.class.type<@InputBox>
+  %4 = om.object.field %3["value"] : (!om.class.type<@InputBox>) -> !om.integer
+  om.class.fields %4 : !om.integer
 }
-
 
 // CHECK-LABEL: om.class @IntegerArithTop() -> (result: !om.integer) {
 // CHECK:   %[[RESULT:.+]] = om.constant #om.integer<3 : si3> : !om.integer
