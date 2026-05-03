@@ -164,14 +164,14 @@ jobs:
               "cmake_c_compiler": "gcc"
             },
             {
-              "name": "Linux (Clang) Test w/ Reverse Iteration",
+              "name": "Linux (Clang) Integration w/ Reverse Iteration",
               "install_target": "",
               "package_name_prefix": "",
               "cmake_build_type": "release",
               "llvm_enable_assertions": "OFF",
               "build_shared_libs": "OFF",
               "run_tests": true,
-              "run_integration_tests": false,
+              "run_integration_tests": true,
               "runner": "ubuntu-24.04",
               "cmake_c_compiler": "clang",
               "extra_cmake_args": "-DLLVM_ENABLE_REVERSE_ITERATION=ON"

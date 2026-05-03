@@ -975,6 +975,13 @@ struct StmtVisitor {
     auto nameId = subroutine.knownNameId;
     auto args = expr.arguments();
 
+    // The `$cast` system call is handled by `Context::convertSystemCall` in the
+    // `Expressions.cpp` file. Skip it is order to avoid visiting the
+    // `EmptyArgument` node.
+    if (nameId == ksn::Cast) {
+      return false;
+    }
+
     // Simulation Control Tasks
 
     if (nameId == ksn::Stop) {

@@ -180,6 +180,64 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
     }
   });
 
+  // Visit modules in post-order (visit children before parents) to aggregate
+  // information into parents about themselves and their children.
+  //
+  // This walk is _more expensive_ than the earlier walk as this, at worst,
+  // needs to do a full IR walk.  Mitigate this via short circuiting when we
+  // have enough information to interrupt the walk or to skip it entirely.
+  iGraph.walkPostOrder([&](igraph::InstanceGraphNode &modIt) {
+    auto moduleOp = modIt.getModule();
+    ModuleAttributes &attributes = moduleAttributes[moduleOp];
+
+    // Merge in attributes of instances within the module.
+    for (auto *instIt : modIt) {
+      attributes.hasProperties |=
+          moduleAttributes[instIt->getTarget()->getModule()].hasProperties;
+      if (attributes.postOrderSaturated())
+        break;
+    }
+
+    // Early exit if there is no body to examine or if the module cannot be
+    // public.
+    auto moduleLike = modIt.getModule<FModuleLike>();
+    if (!moduleLike)
+      return;
+
+    // Merge in attributes of the module.
+    attributes.hasProperties |= moduleLike.isPublic();
+
+    // If the module is classlike, it is a property.  Walk the ports and update
+    // attributes for each.
+    attributes.hasProperties |= isa<ClassLike>(moduleLike.getOperation());
+    for (auto port : moduleLike.getPorts()) {
+      attributes.hasProperties |= isa<PropertyType>(port.type);
+      if (attributes.postOrderSaturated())
+        break;
+    }
+
+    // Early exit if the attributes can no longer change.  This avoids needing
+    // to do a walk of the module body.
+    if (attributes.postOrderSaturated())
+      return;
+
+    // Walk the ops to populate information, short circuiting as soon as
+    // we've gathered enough information to stop the walk.  Only FModuleOp has
+    // a body to walk; external/intrinsic modules are fully characterized by
+    // their ports, already checked above.
+    if (auto fmodule = dyn_cast<FModuleOp>(moduleLike.getOperation())) {
+      auto isPropertyType = [](Type t) { return isa<PropertyType>(t); };
+      fmodule.walk([&](Operation *op) {
+        if (attributes.hasProperties)
+          return WalkResult::interrupt();
+        attributes.hasProperties |=
+            llvm::any_of(op->getOperandTypes(), isPropertyType) ||
+            llvm::any_of(op->getResultTypes(), isPropertyType);
+        return WalkResult::advance();
+      });
+    }
+  });
+
   LLVM_DEBUG({
     mlir::OpPrintingFlags flags;
     flags.skipRegions();
@@ -204,7 +262,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
           << llvm::indent(6)
           << "isDut: " << (isDut(moduleOp) ? "true" : "false") << "\n"
           << llvm::indent(6)
-          << "isEffectiveDue: " << (isEffectiveDut(moduleOp) ? "true" : "false")
+          << "isEffectiveDut: " << (isEffectiveDut(moduleOp) ? "true" : "false")
           << "\n"
           << llvm::indent(6) << "underDut: " << attributes.underDut << "\n"
           << llvm::indent(6) << "underLayer: " << attributes.underLayer << "\n"
@@ -212,7 +270,10 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
           << llvm::indent(6)
           << "inEffectiveDesign: " << attributes.inEffectiveDesign << "\n"
           << llvm::indent(6)
-          << "inInstanceChoice: " << attributes.inInstanceChoice << "\n";
+          << "inInstanceChoice: " << attributes.inInstanceChoice << "\n"
+          << llvm::indent(6)
+          << "hasProperties: " << (attributes.hasProperties ? "true" : "false")
+          << "\n";
     });
   });
 }
@@ -296,4 +357,8 @@ bool InstanceInfo::anyInstanceInInstanceChoice(igraph::ModuleOpInterface op) {
   auto inInstanceChoice = getModuleAttributes(op).inInstanceChoice;
   return inInstanceChoice.isMixed() ||
          (inInstanceChoice.isConstant() && inInstanceChoice.getConstant());
+}
+
+bool InstanceInfo::moduleContainsProperties(igraph::ModuleOpInterface op) {
+  return getModuleAttributes(op).hasProperties;
 }

@@ -1126,9 +1126,10 @@ bool Deseq::matchDriveClock(
 /// `drive.clock`.
 bool Deseq::matchDriveClockAndReset(
     DriveInfo &drive, ArrayRef<std::pair<DNFTerm, ValueEntry>> valueTable) {
-  // We need exactly three entries in the value table to represent a register
-  // with reset.
-  if (valueTable.size() != 3) {
+  // We need two or three entries in the value table to represent a register
+  // with reset. A table with two entries means that the clock edge while reset
+  // is inactive has no drive, which is a hold.
+  if (valueTable.size() != 2 && valueTable.size() != 3) {
     LLVM_DEBUG(llvm::dbgs() << "- Aborting: two trigger value table has "
                             << valueTable.size() << " entries\n");
     return false;
@@ -1175,7 +1176,8 @@ bool Deseq::matchDriveClockAndReset(
     auto clockIt = llvm::find_if(valueTable, [&](auto &pair) {
       return pair.first == clockWithoutEnable || pair.first == clockWithEnable;
     });
-    if (clockIt == valueTable.end())
+    bool clockHolds = clockIt == valueTable.end();
+    if (clockHolds && valueTable.size() != 2)
       continue;
 
     // Ensure that `/rst` and `/clk&rst` set the register to the same reset
@@ -1194,17 +1196,24 @@ bool Deseq::matchDriveClockAndReset(
 
     drive.clock.clock = triggers[clockIdx].getProjected();
     drive.clock.risingEdge = !negClock;
-    if (clockIt->first == clockWithEnable)
-      drive.clock.enable = drive.op.getEnable();
     drive.clock.value = drive.op.getValue();
-    if (!clockIt->second.isUnknown())
-      drive.clock.value = clockIt->second.value;
+    if (clockHolds) {
+      drive.clock.enable = drive.op.getEnable();
+    } else {
+      if (clockIt->first == clockWithEnable)
+        drive.clock.enable = drive.op.getEnable();
+      if (!clockIt->second.isUnknown())
+        drive.clock.value = clockIt->second.value;
+    }
 
     LLVM_DEBUG({
       llvm::dbgs() << "  - Matched " << (negClock ? "neg" : "pos")
                    << "edge clock ";
       drive.clock.clock.printAsOperand(llvm::dbgs(), OpPrintingFlags());
-      llvm::dbgs() << " -> " << clockIt->second;
+      if (clockHolds)
+        llvm::dbgs() << " -> hold";
+      else
+        llvm::dbgs() << " -> " << clockIt->second;
       if (drive.clock.enable)
         llvm::dbgs() << " (with enable)";
       llvm::dbgs() << "\n";

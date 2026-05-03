@@ -6,7 +6,7 @@ from pycde import (Clock, Input, InputChannel, Output, OutputChannel, Module,
 from pycde import esi
 from pycde.common import AppID, Constant, RecvBundle, SendBundle
 from pycde.constructs import Wire
-from pycde.esi import HostMem, MMIO
+from pycde.esi import HostMem, MMIO, ListWindowToParallel, ListWindowToSerial
 from pycde.module import Metadata
 from pycde.support import _obj_to_attribute, optional_dict_to_dict_attr
 from pycde.types import (Bit, Bits, Bundle, BundledChannel, Channel,
@@ -513,3 +513,58 @@ class TestBundleTransformBasic(Module):
         req=transform_double_width, resp=(Bits(48), transform_truncate_half))
 
     self.bundle_out = transformed_bundle
+
+
+@unittestmodule()
+class TestListWindowToParallel(Module):
+  """Test transforming a list window to parallel channels."""
+
+  clk = Clock()
+  rst = Reset()
+
+  into_type = StructType({'header': Bits(4), 'data': List(Bits(8))})
+  data_count_width = 8
+  items_per_frame = 1
+
+  serial_lst_in = InputChannel(
+      Window.serial_of(into_type, data_count_width, items_per_frame))
+  parallel_lst_out = OutputChannel(Window.default_of(into_type))
+
+  @generator
+  def build(self):
+    to_parallel = ListWindowToParallel(
+        Window.serial_of(TestListWindowToParallel.into_type,
+                         TestListWindowToParallel.data_count_width,
+                         TestListWindowToParallel.items_per_frame))(
+                             clk=self.clk,
+                             rst=self.rst,
+                             serial_in=self.serial_lst_in)
+    self.parallel_lst_out = to_parallel.parallel_out
+
+
+@unittestmodule()
+class TestListWindowToSerial(Module):
+  """Test transforming parallel channels into a serial list window."""
+
+  clk = Clock()
+  rst = Reset()
+
+  into_type = StructType({'header': Bits(4), 'data': List(Bits(8))})
+  data_count_width = 8
+  items_per_frame = 1
+  fifo_depth = 8
+
+  parallel_lst_in = InputChannel(Window.default_of(into_type))
+  serial_lst_out = OutputChannel(
+      Window.serial_of(into_type, data_count_width, items_per_frame))
+
+  @generator
+  def build(self):
+    to_serial = ListWindowToSerial(
+        Window.default_of(TestListWindowToSerial.into_type),
+        TestListWindowToSerial.data_count_width,
+        TestListWindowToSerial.items_per_frame,
+        TestListWindowToSerial.fifo_depth)(clk=self.clk,
+                                           rst=self.rst,
+                                           parallel_in=self.parallel_lst_in)
+    self.serial_lst_out = to_serial.serial_out

@@ -106,7 +106,8 @@ public:
   };
 
   /// Information about a module
-  struct ModuleAttributes {
+  class ModuleAttributes {
+  public:
     /// Indicates if this module is instantiated under the design-under-test.
     InstanceInfo::LatticeValue underDut;
 
@@ -129,6 +130,25 @@ public:
     /// Indicates if this module is instantiated within (or transitively within)
     /// an instance choice operation.
     InstanceInfo::LatticeValue inInstanceChoice;
+
+    /// Indicates if this module has any property operations within (or
+    /// transitively within) it, or if it is public or contains (transitively)
+    /// any public modules.
+    bool hasProperties = false;
+
+    /// Return true if the product of post-order information is saturated
+    /// (cannot ever change).  This corresponds to all attributes populated
+    /// during the post-order walk are true.  This is an optimization that is
+    /// used to short circuit the walk when no more information can change.
+    bool postOrderSaturated() {
+      if (!saturated)
+        saturated = hasProperties;
+
+      return saturated;
+    }
+
+  private:
+    bool saturated = false;
   };
 
   //===--------------------------------------------------------------------===//
@@ -192,7 +212,7 @@ public:
   bool anyInstanceInDesign(igraph::ModuleOpInterface op);
 
   /// Return true if all instances of this module are within (or transitively
-  /// withiin) the design.
+  /// within) the design.
   bool allInstancesInDesign(igraph::ModuleOpInterface op);
 
   /// Return true if any instance of this module is within (or transitively
@@ -200,7 +220,7 @@ public:
   bool anyInstanceInEffectiveDesign(igraph::ModuleOpInterface op);
 
   /// Return true if all instances of this module are within (or transitively
-  /// withiin) the effective design.
+  /// within) the effective design.
   bool allInstancesInEffectiveDesign(igraph::ModuleOpInterface op);
 
   /// Return true if any instance of this module is within (or transitively
@@ -208,6 +228,13 @@ public:
   /// Note: allInstancesInInstanceChoice is intentionally not provided because
   /// that property is relative to the public module.
   bool anyInstanceInInstanceChoice(igraph::ModuleOpInterface op);
+
+  /// Return true if this module contains (or its children transitively contain)
+  /// any property operations, i.e., operations whose operands or results have
+  /// a PropertyType, if any port of the module has a PropertyType, if the
+  /// module is a class, or if the module is public or contains any public
+  /// modules.
+  bool moduleContainsProperties(igraph::ModuleOpInterface op);
 
 private:
   /// Stores circuit-level attributes.

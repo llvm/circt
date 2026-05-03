@@ -5195,3 +5195,54 @@ module DisplayWithStringArg;
   initial $display(i, s);
 endmodule
 
+// CHECK-LABEL: func.func private @BuiltinCastTrue(
+// CHECK-SAME:    %arg0: !moore.ref<l32>
+// CHECK-SAME:  ) -> !moore.i32 {
+// CHECK: [[X:%.+]] = moore.variable : <struct<{a: i16, b: i16}>>
+// CHECK: [[Y:%.+]] = moore.variable : <array<4 x l8>>
+// CHECK: [[CR1:%.+]] = moore.constant_real 2.300000e+00 : f64
+// CHECK: [[REAL_TO_INT1:%.+]] = moore.real_to_int [[CR1]] : f64 -> i32
+// CHECK: [[SBV_TO_PACK1:%.+]] = moore.sbv_to_packed [[REAL_TO_INT1]] : struct<{a: i16, b: i16}>
+// CHECK: moore.blocking_assign [[X]], [[SBV_TO_PACK1]] : struct<{a: i16, b: i16}>
+// CHECK: [[SUCC1:%.+]] = moore.constant 1 : i1
+// CHECK: [[CR2:%.+]] = moore.constant_real 2.300000e+00 : f64
+// CHECK: [[REAL_TO_INT2:%.+]] = moore.real_to_int [[CR2]] : f64 -> i32
+// CHECK: [[INT_TO_LOGIC2:%.+]] = moore.int_to_logic [[REAL_TO_INT2]] : i32
+// CHECK: [[SBV_TO_PACK2:%.+]] = moore.sbv_to_packed [[INT_TO_LOGIC2]] : array<4 x l8>
+// CHECK: moore.blocking_assign [[Y]], [[SBV_TO_PACK2]] : array<4 x l8>
+// CHECK: [[SUCC2:%.+]] = moore.constant 1 : i1
+// CHECK: [[CR3:%.+]] = moore.constant_real 2.300000e+00 : f64
+// CHECK: [[REAL_TO_INT3:%.+]] = moore.real_to_int [[CR3]] : f64 -> i32
+// CHECK: [[INT_TO_LOGIC3:%.+]] = moore.int_to_logic [[REAL_TO_INT3]] : i32
+// CHECK: moore.blocking_assign %arg0, [[INT_TO_LOGIC3]] : l32
+// CHECK: [[SUCC3:%.+]] = moore.constant 1 : i1
+// CHECK: [[MAX:%.+]] = moore.constant -1 : i32
+// CHECK: return [[MAX]] : !moore.i32
+// CHECK: }
+
+function int BuiltinCastTrue(inout integer a);
+  struct packed { shortint a; shortint b; } x;
+  logic [3:0][7:0] y;
+  
+  $cast(x, 2.3);
+  $cast(y, 2.3);
+  return $cast(a, 2.3);
+endfunction
+
+// CHECK-LABEL: moore.coroutine private @BuiltinCastFalse() {
+// CHECK: [[S:%.+]] = moore.variable : <string>
+// CHECK: [[Q:%.+]] = moore.variable : <queue<l1, 0>>
+// CHECK: [[CR1:%.+]] = moore.constant_real 2.300000e+00 : f64
+// CHECK: [[FAIL1:%.+]] = moore.constant 0 : i1
+// CHECK: [[CR2:%.+]] = moore.constant_real 2.300000e+00 : f64
+// CHECK: [[FAIL2:%.+]] = moore.constant 0 : i1
+// CHECK: moore.return
+// CHECK: }
+
+task BuiltinCastFalse;
+  string s;
+  logic q [$];
+
+  $cast(s, 2.3);
+  $cast(q, 2.3);
+endtask
