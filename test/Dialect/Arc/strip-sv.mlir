@@ -34,3 +34,19 @@ hw.module @Top() {
 
 // CHECK-NOT: sv.macro.decl
 sv.macro.decl @RANDOM
+
+// CHECK-LABEL: hw.module @HasBeenReset(
+hw.module @HasBeenReset(in %clock: i1, in %reset: i1, out z: i1) {
+  // CHECK-DAG: [[CLK:%.+]] = seq.to_clock %clock
+  // CHECK-DAG: [[INIT:%.+]] = seq.initial() {
+  // CHECK-DAG:   [[FALSE:%.+]] = hw.constant false
+  // CHECK-DAG:   seq.yield [[FALSE]]
+  // CHECK-DAG: }
+  // CHECK-DAG: [[TRUE:%.+]] = hw.constant true
+  // CHECK-DAG: [[REG:%.+]] = seq.compreg [[REG]], [[CLK]] reset %reset, [[TRUE]] initial [[INIT]] : i1
+  // CHECK-DAG: [[NOT_RESET:%.+]] = comb.xor %reset, %{{.+}} : i1
+  // CHECK-DAG: [[OUT:%.+]] = comb.and bin [[REG]], [[NOT_RESET]] : i1
+  %0 = verif.has_been_reset %clock, sync %reset
+  // CHECK: hw.output [[OUT]]
+  hw.output %0 : i1
+}

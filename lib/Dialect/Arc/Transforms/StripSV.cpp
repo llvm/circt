@@ -11,6 +11,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
@@ -189,6 +190,34 @@ void StripSVPass::runOnOperation() {
           instOp.replaceAllUsesWith(gated);
           opsToDelete.push_back(instOp);
         }
+        continue;
+      }
+
+      // Canonicalize has-been-reset indicators.
+      if (auto hbr = dyn_cast<verif::HasBeenResetOp>(&op)) {
+        OpBuilder builder(hbr);
+
+        if (hbr.getAsync() && !asyncResetsAsSync) {
+          hbr.emitOpError("has async reset, but only sync resets supported");
+          return signalPassFailure();
+        }
+
+        auto clock =
+            seq::ToClockOp::create(builder, hbr.getLoc(), hbr.getClock());
+        auto initial = circt::seq::createConstantInitialValue(
+            builder, hbr.getLoc(), builder.getBoolAttr(false));
+        auto one =
+            hw::ConstantOp::create(builder, hbr.getLoc(), hbr.getType(), 1);
+        auto reg = seq::CompRegOp::create(builder, hbr.getLoc(), one, clock,
+                                          StringAttr{}, hbr.getReset(), one,
+                                          initial, hw::InnerSymAttr{});
+        reg.getInputMutable().assign(reg);
+        auto notReset =
+            comb::createOrFoldNot(builder, hbr.getLoc(), hbr.getReset());
+        auto masked =
+            comb::AndOp::create(builder, hbr.getLoc(), reg, notReset, true);
+        hbr.getResult().replaceAllUsesWith(masked);
+        opsToDelete.push_back(hbr);
         continue;
       }
     }
