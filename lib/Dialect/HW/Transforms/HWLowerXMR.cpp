@@ -729,7 +729,7 @@ LogicalResult HWLowerXMRPass::buildHierPath(size_t pathIdx,
   }
 
   if (!suffixString.empty()) {
-    suffixSym = builder.getStringAttr(suffixString);
+    suffixSym = builder.getStringAttr("." + suffixString);
   }
 
   // Create hierarchical path
