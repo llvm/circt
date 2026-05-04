@@ -36,11 +36,18 @@ def GenerateCaseOp : SVOp<"generate.case",
                            HasParent<"GenerateOp">]> {
 
   let summary = "A 'case' statement inside of a generate block";
-  let description = "See SystemVerilog 2017 27.5.";
+  let description = [{
+    See SystemVerilog 2017 27.5.
+
+    The optional `verilogCaseNames` attribute holds the per-branch names
+    actually used in Verilog output (`begin:` / `end:`), after the same
+    `legalizeName` uniquification as statement emission.
+  }];
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins TypedAttrInterface:$cond,
-                       PatternArrayAttr:$casePatterns, StrArrayAttr:$caseNames);
+                       PatternArrayAttr:$casePatterns, StrArrayAttr:$caseNames,
+                       OptionalAttr<StrArrayAttr>:$verilogCaseNames);
 
   let assemblyFormat = [{
     $cond attr-dict ` ` `[`

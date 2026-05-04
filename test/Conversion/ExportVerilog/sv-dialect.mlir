@@ -1390,6 +1390,55 @@ hw.module @wait_order() {
   hw.instance "qux" sym @qux @XMRRef_Qux(a: %xmrRead: i2, b: %xmr2Read: i1) -> ()
 }
 
+// Hierarchical XMR paths include `generate.case`/`generate` block names
+// Issue #9972: https://github.com/llvm/circt/issues/9972
+// CHECK-LABEL: module Foo
+// CHECK-LABEL: module Bar
+// CHECK: force Case1.foo_case.case0.test.x
+// CHECK: force Case2.foo_case.test.x
+
+hw.hierpath @hier_xmr1 [@Case1::@sym, @Foo::@sym]
+hw.hierpath @hier_xmr2 [@Case2::@sym, @Foo::@sym]
+
+hw.module @Foo(in %x: i1 {hw.exportPort = #hw<innerSym@sym>}) {
+  hw.output
+}
+
+hw.module @Bar() {
+  %true = hw.constant true
+  sv.initial {
+    %0 = sv.xmr.ref @hier_xmr1 : !hw.inout<i1>
+    sv.force %0, %true : i1
+    %1 = sv.xmr.ref @hier_xmr2 : !hw.inout<i1>
+    sv.force %1, %true : i1
+  }
+  hw.output
+}
+
+hw.module @Case1<NUM: i64>(in %x: i1) {
+  sv.generate "foo_case": {
+    sv.generate.case #hw.param.decl.ref<"NUM"> : i64 [
+      case (0 : i64, "case0") {
+        hw.instance "test" sym @sym @Foo(x: %x: i1) -> ()
+        hw.instance "bar" @Bar() -> ()
+      }
+      case (unit, "dflt") {
+      } 
+    ]
+  }
+  hw.output
+}
+
+
+hw.module @Case2(in %x: i1) {
+  sv.generate "foo_case": {
+    hw.instance "test" sym @sym @Foo(x: %x: i1) -> ()
+    hw.instance "bar" @Bar() -> ()
+  }
+  hw.output
+}
+
+
 hw.module.extern @MyExtModule(in %in: i8)
 hw.module.extern @ExtModule(in %in: i8, out out: i8)
 

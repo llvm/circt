@@ -2522,6 +2522,12 @@ LogicalResult GenerateCaseOp::verify() {
     return emitOpError(
         "Size of caseRegions, patterns, and caseNames must match");
 
+  if (auto verilogNames = getVerilogCaseNamesAttr()) {
+    if (verilogNames.size() != numPatterns)
+      return emitOpError(
+          "Size of verilogCaseNames must match caseRegions and caseNames");
+  }
+
   StringSet<> usedNames;
   for (Attribute name : getCaseNames()) {
     StringAttr nameStr = dyn_cast<StringAttr>(name);

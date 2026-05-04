@@ -239,6 +239,19 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
                                      ? nameAttr
                                      : StringAttr::get(ctxt, newName));
   }
+
+  // Legalize `sv.generate.case` branch names for Verilog
+  module.walk([&](GenerateCaseOp genCase) {
+    llvm::StringMap<size_t> nextGenIds;
+    SmallVector<Attribute> legalizedNames;
+    for (Attribute name : genCase.getCaseNames()) {
+      StringRef legal =
+          sv::legalizeName(cast<StringAttr>(name).getValue(), nextGenIds,
+                           options.caseInsensitiveKeywords);
+      legalizedNames.emplace_back(StringAttr::get(ctxt, legal));
+    }
+    genCase.setVerilogCaseNamesAttr(ArrayAttr::get(ctxt, legalizedNames));
+  });
 }
 
 /// Construct a GlobalNameResolver and do the initial scan to populate and
