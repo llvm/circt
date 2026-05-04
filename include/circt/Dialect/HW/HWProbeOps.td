@@ -23,6 +23,41 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/BuiltinTypes.td"
 
 //===----------------------------------------------------------------------===//
+// Probe Constants
+//===----------------------------------------------------------------------===//
+
+def UninitializedProbeConstantOp : HWOp<"probe.uninitialized", [
+    Pure,
+    ConstantLike
+  ]> {
+  let summary = "Uninitialized probe constant";
+  let description = [{
+    Represents an uninitialized probe reference. This is used as a placeholder
+    for probe-typed wires that will be defined later via hw.probe.define.
+
+    This operation produces a null/invalid probe reference that serves as an
+    initial value for probe wires when the actual probe source is not yet
+    available (e.g., when the source is defined in a nested region like an
+    ifdef block).
+
+    Example:
+    ```mlir
+    %uninit = hw.probe.uninitialized : !hw.probe<i32>
+    %wire = hw.wire %uninit : !hw.probe<i32>
+    // Later, define the wire to an actual probe
+    hw.probe.define %wire, %actual_probe : !hw.probe<i32>
+    ```
+  }];
+
+  let arguments = (ins);
+  let results = (outs AnyProbeType:$result);
+
+  let assemblyFormat = "attr-dict `:` qualified(type($result))";
+
+  let hasFolder = 1;
+}
+
+//===----------------------------------------------------------------------===//
 // Probe Send/Resolve Operations
 //===----------------------------------------------------------------------===//
 

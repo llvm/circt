@@ -21,6 +21,15 @@ using namespace circt;
 using namespace circt::hw;
 
 //===----------------------------------------------------------------------===//
+// UninitializedProbeConstantOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult UninitializedProbeConstantOp::fold(FoldAdaptor adaptor) {
+  // Always fold to itself - this is a constant operation
+  return getResult();
+}
+
+//===----------------------------------------------------------------------===//
 // ProbeSendOp
 //===----------------------------------------------------------------------===//
 

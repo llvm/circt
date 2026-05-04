@@ -2198,3 +2198,176 @@ firrtl.circuit "ProbeWireElimination" {
     // CHECK: hw.output %[[REF1]], %[[REF2]] : !hw.probe<i8>, !hw.probe<i8>
   }
 }
+
+// -----
+
+// Test probe outputs defined inside sv.ifdef blocks
+// This tests the dominance fix for probe-typed outputs that are only defined
+// inside nested SV operations like sv.ifdef, sv.if, sv.always, etc.
+firrtl.circuit "ProbeInIfdef" {
+  sv.macro.decl @ENABLE_LAYER
+
+  // CHECK-LABEL: hw.module private @ProbeInIfdef_Child
+  firrtl.module private @ProbeInIfdef_Child(
+    in %clock: !firrtl.clock,
+    in %reset: !firrtl.uint<1>,
+    in %data: !firrtl.uint<8>,
+    out %probe: !firrtl.probe<uint<8>>
+  ) {
+    // CHECK-NEXT: %[[UNINIT:.+]] = hw.probe.uninitialized : !hw.probe<i8>
+    // CHECK-NEXT: %[[WIRE:.+]] = hw.wire %[[UNINIT]] : !hw.probe<i8>
+    // CHECK-NEXT: %{{.+}} = hw.constant 0 : i8
+    // CHECK-NEXT: sv.ifdef @ENABLE_LAYER {
+    // CHECK-NEXT:   %[[REG:.+]] = seq.firreg %data clock %clock reset sync %reset, %{{.+}} : i8
+    // CHECK-NEXT:   %[[PROBE_SRC:.+]] = hw.probe.send %[[REG]] : i8
+    // CHECK-NEXT:   hw.probe.define %[[WIRE]], %[[PROBE_SRC]] : !hw.probe<i8>
+    // CHECK-NEXT: }
+    // CHECK-NEXT: hw.output %[[WIRE]] : !hw.probe<i8>
+
+    sv.ifdef @ENABLE_LAYER {
+      %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+      %reg = firrtl.regreset %clock, %reset, %c0_ui8 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+      firrtl.matchingconnect %reg, %data : !firrtl.uint<8>
+      %probe_src = firrtl.ref.send %reg : !firrtl.uint<8>
+      firrtl.ref.define %probe, %probe_src : !firrtl.probe<uint<8>>
+    }
+  }
+
+  // CHECK-LABEL: hw.module @ProbeInIfdef
+  firrtl.module @ProbeInIfdef(
+    in %clock: !firrtl.clock,
+    in %reset: !firrtl.uint<1>,
+    in %data: !firrtl.uint<8>,
+    out %probe_out: !firrtl.probe<uint<8>>
+  ) {
+    // CHECK: %[[CHILD_PROBE:.+]] = hw.instance "child" @ProbeInIfdef_Child
+    // CHECK: hw.output %[[CHILD_PROBE]]
+    %child.clock, %child.reset, %child.data, %child.probe = firrtl.instance child @ProbeInIfdef_Child(
+      in clock: !firrtl.clock,
+      in reset: !firrtl.uint<1>,
+      in data: !firrtl.uint<8>,
+      out probe: !firrtl.probe<uint<8>>
+    )
+    firrtl.matchingconnect %child.clock, %clock : !firrtl.clock
+    firrtl.matchingconnect %child.reset, %reset : !firrtl.uint<1>
+    firrtl.matchingconnect %child.data, %data : !firrtl.uint<8>
+    firrtl.ref.define %probe_out, %child.probe : !firrtl.probe<uint<8>>
+  }
+}
+
+// -----
+
+// Test probe outputs with multiple sv.ifdef blocks
+firrtl.circuit "ProbeMultipleIfdef" {
+  sv.macro.decl @LAYER_A
+  sv.macro.decl @LAYER_B
+
+  // CHECK-LABEL: hw.module @ProbeMultipleIfdef
+  firrtl.module @ProbeMultipleIfdef(
+    in %sel: !firrtl.uint<1>,
+    in %a: !firrtl.uint<4>,
+    in %b: !firrtl.uint<4>,
+    out %probe1: !firrtl.probe<uint<4>>,
+    out %probe2: !firrtl.probe<uint<4>>
+  ) {
+    // Both probes should have wires created at module level
+    // CHECK-DAG: hw.wire {{%.+}} : !hw.probe<i4>
+    // CHECK-DAG: hw.wire {{%.+}} : !hw.probe<i4>
+    // CHECK-DAG: hw.probe.uninitialized : !hw.probe<i4>
+
+    // CHECK: sv.ifdef @LAYER_A {
+    // CHECK:   {{%.+}} = hw.probe.send %a : i4
+    // CHECK:   hw.probe.define {{%.+}}, {{%.+}} : !hw.probe<i4>
+    // CHECK: }
+    sv.ifdef @LAYER_A {
+      %probe_src1 = firrtl.ref.send %a : !firrtl.uint<4>
+      firrtl.ref.define %probe1, %probe_src1 : !firrtl.probe<uint<4>>
+    }
+
+    // CHECK: sv.ifdef @LAYER_B {
+    // CHECK:   {{%.+}} = hw.probe.send %b : i4
+    // CHECK:   hw.probe.define {{%.+}}, {{%.+}} : !hw.probe<i4>
+    // CHECK: }
+    sv.ifdef @LAYER_B {
+      %probe_src2 = firrtl.ref.send %b : !firrtl.uint<4>
+      firrtl.ref.define %probe2, %probe_src2 : !firrtl.probe<uint<4>>
+    }
+
+    // CHECK: hw.output {{%.+}}, {{%.+}} : !hw.probe<i4>, !hw.probe<i4>
+  }
+}
+
+// -----
+
+// Test probe output inside sv.initial block
+firrtl.circuit "ProbeInInitial" {
+  // CHECK-LABEL: hw.module @ProbeInInitial
+  firrtl.module @ProbeInInitial(
+    in %data: !firrtl.uint<8>,
+    out %probe: !firrtl.probe<uint<8>>
+  ) {
+    // CHECK: %[[UNINIT:.+]] = hw.probe.uninitialized : !hw.probe<i8>
+    // CHECK: %[[WIRE:.+]] = hw.wire %[[UNINIT]] : !hw.probe<i8>
+    // CHECK: sv.initial {
+    // CHECK:   %[[PROBE_SRC:.+]] = hw.probe.send %data : i8
+    // CHECK:   hw.probe.define %[[WIRE]], %[[PROBE_SRC]] : !hw.probe<i8>
+    // CHECK: }
+    // CHECK: hw.output %[[WIRE]] : !hw.probe<i8>
+
+    sv.initial {
+      %probe_src = firrtl.ref.send %data : !firrtl.uint<8>
+      firrtl.ref.define %probe, %probe_src : !firrtl.probe<uint<8>>
+    }
+  }
+}
+
+// -----
+
+// Test probe output inside nested sv.ifdef (complex case)
+firrtl.circuit "ProbeNestedIfdef" {
+  sv.macro.decl @OUTER_LAYER
+  sv.macro.decl @INNER_LAYER
+
+  // CHECK-LABEL: hw.module @ProbeNestedIfdef
+  firrtl.module @ProbeNestedIfdef(
+    in %data: !firrtl.uint<8>,
+    out %probe: !firrtl.probe<uint<8>>
+  ) {
+    // CHECK: %[[UNINIT:.+]] = hw.probe.uninitialized : !hw.probe<i8>
+    // CHECK: %[[WIRE:.+]] = hw.wire %[[UNINIT]] : !hw.probe<i8>
+    // CHECK: sv.ifdef @OUTER_LAYER {
+    // CHECK:   sv.ifdef @INNER_LAYER {
+    // CHECK:     %[[PROBE_SRC:.+]] = hw.probe.send %data : i8
+    // CHECK:     hw.probe.define %[[WIRE]], %[[PROBE_SRC]] : !hw.probe<i8>
+    // CHECK:   }
+    // CHECK: }
+    // CHECK: hw.output %[[WIRE]] : !hw.probe<i8>
+
+    sv.ifdef @OUTER_LAYER {
+      sv.ifdef @INNER_LAYER {
+        %probe_src = firrtl.ref.send %data : !firrtl.uint<8>
+        firrtl.ref.define %probe, %probe_src : !firrtl.probe<uint<8>>
+      }
+    }
+  }
+}
+
+// -----
+
+// Test probe output NOT in nested region (should be bypassed normally)
+firrtl.circuit "ProbeNotNested" {
+  // CHECK-LABEL: hw.module @ProbeNotNested
+  firrtl.module @ProbeNotNested(
+    in %data: !firrtl.uint<8>,
+    out %probe: !firrtl.probe<uint<8>>
+  ) {
+    // This should NOT create a wire, just directly output the probe
+    // CHECK-NOT: hw.wire
+    // CHECK-NOT: hw.probe.uninitialized
+    // CHECK: %[[PROBE_SRC:.+]] = hw.probe.send %data : i8
+    // CHECK: hw.output %[[PROBE_SRC]] : !hw.probe<i8>
+
+    %probe_src = firrtl.ref.send %data : !firrtl.uint<8>
+    firrtl.ref.define %probe, %probe_src : !firrtl.probe<uint<8>>
+  }
+}

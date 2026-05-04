@@ -1505,6 +1505,31 @@ tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
         loweringState.lowerType(connectSrc.getType(), connectSrc.getLoc());
     if (!loweredType)
       return {};
+
+    // Check if the source is defined inside a nested SV operation with regions.
+    // Values defined inside sv.ifdef, sv.if, sv.always, etc. don't dominate the
+    // module output because they're in nested regions.
+    if (auto *srcOp = connectSrc.getDefiningOp()) {
+      Operation *current = srcOp;
+      while (current) {
+        Operation *parentOp = current->getParentOp();
+        if (!parentOp)
+          break;
+
+        // Check if we're inside a nested SV operation with regions
+        if (isa<sv::IfDefOp, sv::IfOp, sv::AlwaysOp, sv::InitialOp>(parentOp)) {
+          // Source is in a nested region, doesn't dominate the output
+          return {};
+        }
+
+        // Stop at the FIRRTL module boundary
+        if (isa<FModuleOp>(parentOp))
+          break;
+
+        current = parentOp;
+      }
+    }
+
     auto loweredValue = castFromFIRRTLType(connectSrc, loweredType, builder);
     connectOp->erase();
     return loweredValue;
@@ -1749,6 +1774,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                                bool isSigned = false) {
     return getOrCreateIntConstant(APInt(numBits, val, isSigned));
   }
+  Value getOrCreateUninitializedProbeConstant(Type probeType);
   Attribute getOrCreateAggregateConstantAttribute(Attribute value, Type type);
   Value getOrCreateXConstant(unsigned numBits);
   Value getOrCreateZConstant(Type type);
@@ -2451,6 +2477,17 @@ Value FIRRTLLowering::getOrCreateZConstant(Type type) {
   if (!entry) {
     OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
     entry = sv::ConstantZOp::create(entryBuilder, builder.getLoc(), type);
+  }
+  return entry;
+}
+
+/// Create or return a cached uninitialized probe constant of the given type.
+Value FIRRTLLowering::getOrCreateUninitializedProbeConstant(Type probeType) {
+  auto &entry = hwConstantZMap[probeType];
+  if (!entry) {
+    OpBuilder entryBuilder(&theModule.getBodyBlock()->front());
+    entry = hw::UninitializedProbeConstantOp::create(
+        entryBuilder, builder.getLoc(), probeType);
   }
   return entry;
 }
@@ -5353,10 +5390,74 @@ LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) {
   if (!dest)
     return failure();
 
-  // Check if the destination is a backedge (from a probe-typed wire)
-  // If so, resolve it directly to bypass the wire
-  if (updateIfBackedge(dest, src))
+  // Check if the source is defined inside a nested SV operation.
+  // If the source is inside sv.ifdef, sv.if, etc., it doesn't dominate the
+  // module output and we can't bypass the wire.
+  bool canBypassWire = true;
+  if (auto *srcOp = src.getDefiningOp()) {
+    Operation *current = srcOp;
+    while (current) {
+      Operation *parentOp = current->getParentOp();
+      if (!parentOp)
+        break;
+
+      // Check if we're inside a nested SV operation with regions
+      if (isa<sv::IfDefOp, sv::IfOp, sv::AlwaysOp, sv::InitialOp>(parentOp)) {
+        // Source is in a nested region, can't bypass the wire
+        canBypassWire = false;
+        break;
+      }
+
+      // Stop at the HW module boundary
+      if (isa<hw::HWModuleOp>(parentOp))
+        break;
+
+      current = parentOp;
+    }
+  }
+
+  // If we can bypass the wire and the destination is a backedge, resolve it
+  // directly
+  if (canBypassWire && updateIfBackedge(dest, src))
     return success();
+
+  // When the source is in a nested region and we have a backedge destination,
+  // we need to create a real wire instead of using a backedge, and place the
+  // hw.probe.define inside the same region as the source.
+  if (!canBypassWire && backedges.count(dest)) {
+    // The destination is a backedge but the source doesn't dominate.
+    // We need to create an actual hw.wire for the probe and update the backedge
+    // to point to that wire. The wire must be created at the module body level
+    // to ensure it dominates all uses.
+    auto wireType = dest.getType();
+
+    // Save the current insertion point and create the wire at module body level
+    OpBuilder::InsertionGuard guard(builder);
+    // Insert the wire at the beginning of the module body, after constants
+    builder.setInsertionPoint(theModule.getBodyBlock(),
+                              theModule.getBodyBlock()->begin());
+
+    // Create an uninitialized probe constant as the initial value for the wire
+    Value uninitProbe = getOrCreateUninitializedProbeConstant(wireType);
+    auto wire = hw::WireOp::create(builder, dest.getLoc(), uninitProbe,
+                                   StringAttr(), hw::InnerSymAttr());
+
+    // Update the backedge to point to the wire
+    backedges[dest] = wire;
+
+    // Now create the hw.probe.define inside the region where the source is
+    // defined This define operation will set the wire's value to the source.
+    if (auto *srcOp = src.getDefiningOp()) {
+      builder.setInsertionPointAfter(srcOp);
+      builder.create<hw::ProbeDefineOp>(wire, src);
+    } else {
+      // Source is a block argument, define at the beginning of the block
+      builder.setInsertionPointToStart(src.getParentBlock());
+      builder.create<hw::ProbeDefineOp>(wire, src);
+    }
+
+    return success();
+  }
 
   // Create hw.probe.define to forward the probe
   builder.create<hw::ProbeDefineOp>(dest, src);
