@@ -85,9 +85,9 @@ ARC_IR_EXPORT void arcRuntimeIR_deleteInstance(uint8_t *modelState);
 /// model's `eval` function.
 ARC_IR_EXPORT void arcRuntimeIR_onEval(uint8_t *modelState);
 
-/// Pre-initialization hook of the runtime library.
+/// Post-initialization hook of the runtime library.
 ///
-/// Simulation drivers must call this once before the invocation of the model's
+/// Simulation drivers must call this once after the invocation of the model's
 /// `initial` function.
 ARC_IR_EXPORT void arcRuntimeIR_onInitialized(uint8_t *modelState);
 
