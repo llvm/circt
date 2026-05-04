@@ -1148,19 +1148,18 @@ firrtl.circuit "DoNotIncludeDummyBindfiles" {
 // -----
 
 // Test capturing a probe source into a layerblock.
-// The probe should be resolved outside, then passed as a non-ref input port,
-// and ref.send should be used inside the layer module.
+// The probe should be handled via XMR - no input ports for probe types.
+// The wire with ref.send becomes an XMRRefOp inside the layer module.
 
-// CHECK:      firrtl.module private @[[ProbeCapture_A:[A-Za-z0-9_]+]](in %[[p:.+]]: !firrtl.uint<1>)
-// CHECK:        %0 = firrtl.ref.send %[[p]] : !firrtl.uint<1>
-// CHECK:        firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
+// CHECK:      hw.hierpath private @[[path:[^ ]+]] [@ProbeCapture::@[[sym:[^ ]+]]]
+// CHECK:      firrtl.module private @[[ProbeCapture_A:[A-Za-z0-9_]+]]()
+// CHECK:        %[[xmr:.+]] = firrtl.xmr.ref @[[path]] : !firrtl.probe<uint<1>>
+// CHECK:        firrtl.ref.resolve %[[xmr]] : !firrtl.probe<uint<1>>
 // CHECK:      }
 // CHECK:      firrtl.module @ProbeCapture() {
-// CHECK:        %w = firrtl.wire : !firrtl.uint<1>
+// CHECK:        %w = firrtl.wire sym @[[sym]] : !firrtl.uint<1>
 // CHECK:        %0 = firrtl.ref.send %w : !firrtl.uint<1>
-// CHECK:        %[[p:.+]] = firrtl.instance {{.+}} {doNotPrint, output_file = #hw.output_file<"layers-ProbeCapture-A.sv", excludeFromFileList>} @[[ProbeCapture_A]]
-// CHECK:        %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-// CHECK:        firrtl.matchingconnect %[[p]], %1 : !firrtl.uint<1>
+// CHECK:        firrtl.instance {{.+}} {doNotPrint, output_file = #hw.output_file<"layers-ProbeCapture-A.sv", excludeFromFileList>} @[[ProbeCapture_A]]()
 // CHECK:      }
 firrtl.circuit "ProbeCapture" {
   firrtl.layer @A bind {}
@@ -1238,17 +1237,17 @@ firrtl.circuit "ProbeRefDefSrcDstOut" {
 // -----
 
 // Test ref.define with source outside the layer.
+// The probe source (%0) should be handled via XMR.
 
-// CHECK:      firrtl.module private @[[ProbeRefDefSrcOut_A:[A-Za-z0-9_]+]](in %[[p:.+]]: !firrtl.uint<1>)
-// CHECK:        %0 = firrtl.ref.send %[[p]] : !firrtl.uint<1>
+// CHECK:      hw.hierpath private @[[path:[^ ]+]] [@ProbeRefDefSrcOut::@[[sym:[^ ]+]]]
+// CHECK:      firrtl.module private @[[ProbeRefDefSrcOut_A:[A-Za-z0-9_]+]]()
+// CHECK:        %[[xmr:.+]] = firrtl.xmr.ref @[[path]] : !firrtl.probe<uint<1>>
 // CHECK:        %1 = firrtl.wire : !firrtl.probe<uint<1>>
-// CHECK:        firrtl.ref.define %1, %0 : !firrtl.probe<uint<1>>
+// CHECK:        firrtl.ref.define %1, %[[xmr]] : !firrtl.probe<uint<1>>
 // CHECK:      }
 // CHECK:      firrtl.module @ProbeRefDefSrcOut() {
-// CHECK:        %0 = firrtl.wire : !firrtl.probe<uint<1>>
-// CHECK:        %[[p:.+]] = firrtl.instance {{.+}} {doNotPrint, output_file = #hw.output_file<"layers-ProbeRefDefSrcOut-A.sv", excludeFromFileList>} @[[ProbeRefDefSrcOut_A]]
-// CHECK:        %1 = firrtl.ref.resolve %0 : !firrtl.probe<uint<1>>
-// CHECK:        firrtl.matchingconnect %[[p]], %1 : !firrtl.uint<1>
+// CHECK:        %0 = firrtl.wire sym @[[sym]] : !firrtl.probe<uint<1>>
+// CHECK:        firrtl.instance {{.+}} {doNotPrint, output_file = #hw.output_file<"layers-ProbeRefDefSrcOut-A.sv", excludeFromFileList>} @[[ProbeRefDefSrcOut_A]]()
 // CHECK:      }
 firrtl.circuit "ProbeRefDefSrcOut" {
   firrtl.layer @A bind {}
@@ -1343,19 +1342,19 @@ firrtl.circuit "ProbeHWOut" {
 // -----
 
 // Test MatchingConnectOp with probes crossing layer boundaries
+// The probe %src_ref captured in connect should be handled via XMR.
 
-// CHECK:      firrtl.module private @[[ProbeConnect_A:[A-Za-z0-9_]+]](in %[[p:.+]]: !firrtl.uint<1>)
-// CHECK:        %[[ref:.+]] = firrtl.ref.send %[[p]] : !firrtl.uint<1>
+// CHECK:      hw.hierpath private @[[path:[^ ]+]] [@ProbeConnect::@[[sym:[^ ]+]]]
+// CHECK:      firrtl.module private @[[ProbeConnect_A:[A-Za-z0-9_]+]]()
+// CHECK:        %[[xmr:.+]] = firrtl.xmr.ref @[[path]] : !firrtl.probe<uint<1>>
 // CHECK:        %dst = firrtl.wire : !firrtl.uint<1>
-// CHECK:        %[[val:.+]] = firrtl.ref.resolve %[[ref]] : !firrtl.probe<uint<1>>
+// CHECK:        %[[val:.+]] = firrtl.ref.resolve %[[xmr]] : !firrtl.probe<uint<1>>
 // CHECK:        firrtl.matchingconnect %dst, %[[val]] : !firrtl.uint<1>
 // CHECK:      }
 // CHECK:      firrtl.module @ProbeConnect() {
-// CHECK:        %src = firrtl.wire : !firrtl.uint<1>
+// CHECK:        %src = firrtl.wire sym @[[sym]] : !firrtl.uint<1>
 // CHECK:        %[[ref:.+]] = firrtl.ref.send %src : !firrtl.uint<1>
-// CHECK:        %[[p:.+]] = firrtl.instance {{.+}} @[[ProbeConnect_A]]
-// CHECK:        %[[val:.+]] = firrtl.ref.resolve %[[ref]] : !firrtl.probe<uint<1>>
-// CHECK:        firrtl.matchingconnect %[[p]], %[[val]] : !firrtl.uint<1>
+// CHECK:        firrtl.instance {{.+}} {doNotPrint, output_file = #hw.output_file<"layers-ProbeConnect-A.sv", excludeFromFileList>} @[[ProbeConnect_A]]()
 // CHECK:      }
 firrtl.circuit "ProbeConnect" {
   firrtl.layer @A bind {}
@@ -1374,21 +1373,22 @@ firrtl.circuit "ProbeConnect" {
 // -----
 
 // Test multiple probe captures in one layer
+// Multiple probes should each be handled via XMR.
 
-// CHECK:      firrtl.module private @[[MultiProbe_A:[A-Za-z0-9_]+]](in %{{.+}}: !firrtl.uint<1>, in %{{.+}}: !firrtl.uint<2>)
-// CHECK-DAG:    firrtl.ref.send {{.+}} : !firrtl.uint<1>
-// CHECK-DAG:    firrtl.ref.send {{.+}} : !firrtl.uint<2>
+// CHECK-DAG:  hw.hierpath private @[[path1:[^ ]+]] [@MultiProbe::@[[sym1:[^ ]+]]]
+// CHECK-DAG:  hw.hierpath private @[[path2:[^ ]+]] [@MultiProbe::@[[sym2:[^ ]+]]]
+// CHECK:      firrtl.module private @[[MultiProbe_A:[A-Za-z0-9_]+]]()
+// CHECK-DAG:    firrtl.xmr.ref @[[path1]] : !firrtl.probe<uint<1>>
+// CHECK-DAG:    firrtl.xmr.ref @[[path2]] : !firrtl.probe<uint<2>>
 // CHECK-DAG:    firrtl.ref.resolve {{.+}} : !firrtl.probe<uint<1>>
 // CHECK-DAG:    firrtl.ref.resolve {{.+}} : !firrtl.probe<uint<2>>
 // CHECK:      }
 // CHECK:      firrtl.module @MultiProbe() {
-// CHECK:        %w1 = firrtl.wire : !firrtl.uint<1>
-// CHECK:        %w2 = firrtl.wire : !firrtl.uint<2>
+// CHECK-DAG:    %w1 = firrtl.wire sym @[[sym1]] : !firrtl.uint<1>
+// CHECK-DAG:    %w2 = firrtl.wire sym @[[sym2]] : !firrtl.uint<2>
 // CHECK-DAG:    firrtl.ref.send %w1 : !firrtl.uint<1>
 // CHECK-DAG:    firrtl.ref.send %w2 : !firrtl.uint<2>
-// CHECK:        firrtl.instance {{.+}} @[[MultiProbe_A]]
-// CHECK-DAG:    firrtl.matchingconnect {{.+}} : !firrtl.uint<1>
-// CHECK-DAG:    firrtl.matchingconnect {{.+}} : !firrtl.uint<2>
+// CHECK:        firrtl.instance {{.+}} {doNotPrint, output_file = #hw.output_file<"layers-MultiProbe-A.sv", excludeFromFileList>} @[[MultiProbe_A]]()
 // CHECK:      }
 firrtl.circuit "MultiProbe" {
   firrtl.layer @A bind {}
@@ -1437,18 +1437,18 @@ firrtl.circuit "RWProbeXMR" {
 // -----
 
 // Test RefSubOp with layer color stripping
+// The probe should be handled via XMR.
 
-// CHECK:      firrtl.module private @[[RefSub_A:[A-Za-z0-9_]+]](in %[[p:.+]]: !firrtl.bundle<a: uint<1>, b: uint<2>>)
-// CHECK:        %[[ref:.+]] = firrtl.ref.send %[[p]] : !firrtl.bundle<a: uint<1>, b: uint<2>>
-// CHECK:        %[[sub:.+]] = firrtl.ref.sub %[[ref]][0] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
+// CHECK:      hw.hierpath private @[[path:[^ ]+]] [@RefSub::@[[sym:[^ ]+]]]
+// CHECK:      firrtl.module private @[[RefSub_A:[A-Za-z0-9_]+]]()
+// CHECK:        %[[xmr:.+]] = firrtl.xmr.ref @[[path]] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
+// CHECK:        %[[sub:.+]] = firrtl.ref.sub %[[xmr]][0] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
 // CHECK:        firrtl.ref.resolve %[[sub]] : !firrtl.probe<uint<1>>
 // CHECK:      }
 // CHECK:      firrtl.module @RefSub() {
-// CHECK:        %w = firrtl.wire : !firrtl.bundle<a: uint<1>, b: uint<2>>
+// CHECK:        %w = firrtl.wire sym @[[sym]] : !firrtl.bundle<a: uint<1>, b: uint<2>>
 // CHECK:        %[[ref:.+]] = firrtl.ref.send %w : !firrtl.bundle<a: uint<1>, b: uint<2>>
-// CHECK:        %[[p:.+]] = firrtl.instance {{.+}} @[[RefSub_A]]
-// CHECK:        %[[val:.+]] = firrtl.ref.resolve %[[ref]] : !firrtl.probe<bundle<a: uint<1>, b: uint<2>>>
-// CHECK:        firrtl.matchingconnect %[[p]], %[[val]] : !firrtl.bundle<a: uint<1>, b: uint<2>>
+// CHECK:        firrtl.instance {{.+}} {doNotPrint, output_file = #hw.output_file<"layers-RefSub-A.sv", excludeFromFileList>} @[[RefSub_A]]()
 // CHECK:      }
 firrtl.circuit "RefSub" {
   firrtl.layer @A bind {}

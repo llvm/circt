@@ -718,52 +718,34 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     Block *body = layerBlock.getBody(0);
     OpBuilder builder(moduleOp);
 
-    // Create an input port for an operand that is captured from outside.
-    auto createInputPort = [&](Value operand, Location loc) -> LogicalResult {
-      // If the value is a ref, we must resolve the ref inside the parent,
-      // passing the input as a value instead of a ref. Inside the layer, we
-      // convert (ref.send) the value back into a ref.
-      auto type = operand.getType();
-      ConnectKind kind = ConnectKind::NonRef;
-      bool isProbe = false;
-      if (auto refType = dyn_cast<RefType>(type)) {
-        type = refType.getType();
-        kind = ConnectKind::Ref;
-        isProbe = true;
-      }
-
-      // Check if this is a domain type (only for non-probe types)
+    // Create an input port for a domain-type operand.  The source is not in the
+    // current layer block.
+    auto createInputPort = [&](Value src, Location loc) -> LogicalResult {
       Attribute domain;
-      bool isDomain = !isProbe && succeeded(getDomain(operand, domain));
+      if (failed(getDomain(src, domain)))
+        return failure();
 
-      const auto &[nameHint, rootKnown] =
-          getFieldName(FieldRef(operand, 0), true);
       StringAttr name;
-
+      auto [nameHint, rootKnown] = getFieldName(FieldRef(src, 0), true);
       if (rootKnown)
-        name = StringAttr::get(operand.getContext(), portNs.newName(nameHint));
+        name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
       else
-        name = StringAttr::get(
-            operand.getContext(),
-            portNs.newName(isDomain ? "anonDomain" : "anonRef"));
-
+        name = StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
       // Domain type ports have no associations (domain info is in the type).
-      auto domainInfo = ArrayAttr::get(operand.getContext(), {});
-      ports.push_back({name, type, Direction::In,
-                       /*symName=*/{},
-                       /*location=*/loc,
-                       /*annos=*/{}, /*domains=*/domainInfo});
-
-      // Update the layer block's body with arguments as we will swap this body
-      // into the module when we create it.  If this is a ref type, then add a
-      // refsend to convert from the non-ref type input port.
-      Value replacement = body->addArgument(type, loc);
-      if (kind == ConnectKind::Ref) {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointToStart(body);
-        replacement = RefSendOp::create(builder, loc, replacement);
-      }
-      operand.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+      auto domainInfo = ArrayAttr::get(src.getContext(), {});
+      PortInfo port(
+          /*name=*/name,
+          /*type=*/src.getType(),
+          /*dir=*/Direction::In,
+          /*symName=*/{},
+          /*location=*/loc,
+          /*annos=*/{},
+          /*domains=*/domainInfo);
+      ports.push_back(port);
+      connectValues.push_back({src, ConnectKind::NonRef});
+      BlockArgument replacement =
+          layerBlock.getBody()->addArgument(port.type, port.loc);
+      src.replaceUsesWithIf(replacement, [&](OpOperand &use) {
         auto *user = use.getOwner();
         if (!layerBlock->isAncestor(user))
           return false;
@@ -773,13 +755,11 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         // will _later_ be spilled.
         if (auto connectLike = dyn_cast<FConnectLike>(user)) {
           auto *destDefiningOp = connectLike.getDest().getDefiningOp();
-          return connectLike.getSrc() == operand &&
+          return connectLike.getSrc() == src &&
                  !createdInstances.contains(destDefiningOp);
         }
-        return isa<RefType>(use.get().getType());
+        return false;
       });
-
-      connectValues.push_back({operand, kind});
       return success();
     };
 
@@ -899,6 +879,144 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     SmallVector<sv::VerbatimOp> verbatims;
     SmallVector<RWProbeOp> rwprobes;
     DenseSet<Operation *> spilledSubOps;
+
+    // Helper lambda to handle captured probe values by creating appropriate XMR
+    // operations. This can be called for both operands and connect sources.
+    auto handleCapturedProbe = [&](Value probeValue,
+                                   Operation *userOp) -> std::optional<Value> {
+      auto refType = dyn_cast<RefType>(probeValue.getType());
+      if (!refType)
+        return std::nullopt;
+
+      auto *probeDefOp = probeValue.getDefiningOp();
+      if (!probeDefOp) {
+        // Probe values cannot be block arguments (input ports)
+        userOp->emitError(
+            "probe value is a block argument, which is not supported");
+        return std::nullopt;
+      }
+
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(body);
+      auto removedLayerType = refType.removeLayer();
+
+      // Check if the probeDefOp is an instance - use XMRRemoteOp
+      if (isa<InstanceOp>(probeDefOp)) {
+        auto instanceOp = cast<InstanceOp>(probeDefOp);
+        hw::InnerRefAttr innerRef = getInnerRefTo(
+            instanceOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+        int64_t resultIndex = cast<OpResult>(probeValue).getResultNumber();
+        bool forceable = type_cast<RefType>(removedLayerType).getForceable();
+
+        auto xmrRemote =
+            XMRRemoteOp::create(builder, instanceOp->getLoc(), removedLayerType,
+                                innerRef, resultIndex, forceable);
+        return xmrRemote.getResult();
+      }
+
+      // Check if the probeDefOp is an XMRRefOp - clone it with layer removed
+      if (auto xmrRefOp = dyn_cast<XMRRefOp>(probeDefOp)) {
+        auto clonedXmr = XMRRefOp::create(
+            builder, xmrRefOp.getLoc(), removedLayerType, xmrRefOp.getRefAttr(),
+            xmrRefOp.getVerbatimSuffixAttr());
+        return clonedXmr;
+      }
+
+      // Check if the probeDefOp is a RefSendOp - trace to its operand
+      if (auto refSend = dyn_cast<RefSendOp>(probeDefOp)) {
+        auto base = refSend.getBase();
+        auto *baseDefOp = base.getDefiningOp();
+
+        if (!baseDefOp) {
+          userOp->emitError(
+              "ref.send operand is a block argument, which is not supported");
+          return std::nullopt;
+        }
+
+        // Check if the base operation supports inner symbols
+        if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(baseDefOp)) {
+          auto innerRef = getInnerRefTo(
+              symOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+
+          if (!innerRef) {
+            userOp->emitError("ref.send operand cannot have inner symbol added")
+                    .attachNote(baseDefOp->getLoc())
+                << "base operation defined here";
+            return std::nullopt;
+          }
+
+          // Create hierarchical path to the base operation
+          hw::HierPathOp hierPathOp;
+          {
+            auto insertPoint = OpBuilder::InsertPoint(
+                moduleOp->getBlock(), Block::iterator(moduleOp));
+            llvm::sys::SmartScopedLock<true> circuitLock(*circuitMutex);
+            hierPathOp = hierPathCache->getOrCreatePath(
+                builder.getArrayAttr({innerRef}), probeValue.getLoc(),
+                insertPoint, layerBlockGlobals.lookup(layerBlock).hierPathName);
+            hierPathOp.setVisibility(SymbolTable::Visibility::Private);
+          }
+
+          auto xmrTarget = hierPathOp.getSymNameAttr();
+          auto verbatimSuffix = builder.getStringAttr("");
+
+          Value newXmr =
+              XMRRefOp::create(builder, baseDefOp->getLoc(), removedLayerType,
+                               xmrTarget, verbatimSuffix);
+          return newXmr;
+        }
+
+        // Base operation doesn't support inner symbols
+        userOp->emitError("ref.send operand must be an operation that supports "
+                          "inner symbols")
+                .attachNote(baseDefOp->getLoc())
+            << "base operation defined here";
+        return std::nullopt;
+      }
+
+      // Check if the probeDefOp supports inner symbols - use XMRRefOp
+      if (auto symOp = dyn_cast<hw::InnerSymbolOpInterface>(probeDefOp)) {
+        auto innerRef = getInnerRefTo(
+            symOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+
+        if (!innerRef) {
+          userOp->emitError(
+                    "captured probe operand cannot have inner symbol added")
+                  .attachNote(probeDefOp->getLoc())
+              << "probe source operation defined here";
+          return std::nullopt;
+        }
+
+        // Create hierarchical path to the source operation
+        hw::HierPathOp hierPathOp;
+        {
+          auto insertPoint = OpBuilder::InsertPoint(moduleOp->getBlock(),
+                                                    Block::iterator(moduleOp));
+          llvm::sys::SmartScopedLock<true> circuitLock(*circuitMutex);
+          hierPathOp = hierPathCache->getOrCreatePath(
+              builder.getArrayAttr({innerRef}), probeValue.getLoc(),
+              insertPoint, layerBlockGlobals.lookup(layerBlock).hierPathName);
+          hierPathOp.setVisibility(SymbolTable::Visibility::Private);
+        }
+
+        auto xmrTarget = hierPathOp.getSymNameAttr();
+        auto verbatimSuffix = builder.getStringAttr("");
+
+        Value newXmr =
+            XMRRefOp::create(builder, probeDefOp->getLoc(), removedLayerType,
+                             xmrTarget, verbatimSuffix);
+        return newXmr;
+      }
+
+      // Error: probe operand is from an unsupported operation type
+      userOp->emitError(
+                "captured probe operand must be from an instance, an XMR "
+                "reference, or an operation that supports inner symbols")
+              .attachNote(probeDefOp->getLoc())
+          << "probe source operation defined here";
+      return std::nullopt;
+    };
+
     auto layerBlockWalkResult = layerBlock.walk([&](Operation *op) {
       // Specialized handling of subfields, subindexes, and subaccesses which
       // need to be spilled and nodes that referred to spilled nodes.  If these
@@ -1056,11 +1174,34 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
             return WalkResult::advance();
           }
 
-          // Source outside, destination inside: create input port
+          // Source outside, destination inside
           if (!srcInLayerBlock && dstInLayerBlock) {
-            if (failed(createInputPort(src, op->getLoc())))
-              return WalkResult::interrupt();
-            return WalkResult::advance();
+            // For probe types, trace back to the source and handle via XMR
+            if (isProbeConnect) {
+              // Trace back through connects to find the actual probe source
+              Value probeSource = src;
+              if (auto driver = getDriverFromConnect(src))
+                probeSource = driver;
+
+              // Use the helper to create appropriate XMR operation
+              auto xmrValueOpt = handleCapturedProbe(probeSource, op);
+              if (!xmrValueOpt)
+                return WalkResult::interrupt();
+
+              // Replace uses of the original probe source inside the layer
+              // block
+              src.replaceUsesWithIf(*xmrValueOpt, [&](OpOperand &use) {
+                return layerBlock->isAncestor(use.getOwner());
+              });
+              return WalkResult::advance();
+            }
+
+            // For domain types, create input port as before
+            if (isDomainConnect) {
+              if (failed(createInputPort(src, op->getLoc())))
+                return WalkResult::interrupt();
+              return WalkResult::advance();
+            }
           }
 
           // Both inside the layer block: nothing to do
@@ -1108,162 +1249,19 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         if (isAncestorOfValueOwner(layerBlock, operand))
           continue;
 
-        // Handle probe-typed operands.
-        if (auto refType = dyn_cast<RefType>(operand.getType())) {
-          // Special case: if the operand is an XMR ref, clone it instead of
-          // creating an input port. This preserves rwprobe types.
-          if (auto xmrRefOp = operand.getDefiningOp<XMRRefOp>()) {
-            OpBuilder::InsertionGuard guard(builder);
-            builder.setInsertionPointToStart(body);
-            // Clone the XMR ref with layer color stripped from the result type
-            auto clonedType = refType.removeLayer();
-            auto clonedXmr = XMRRefOp::create(builder, xmrRefOp.getLoc(),
-                                              clonedType, xmrRefOp.getRefAttr(),
-                                              xmrRefOp.getVerbatimSuffixAttr());
+        // Handle probe-typed operands using the helper function
+        if (isa<RefType>(operand.getType())) {
+          auto xmrValueOpt = handleCapturedProbe(operand, op);
+          if (!xmrValueOpt)
+            return WalkResult::interrupt();
 
-            // Replace uses of the original XMR inside the layer block
-            operand.replaceUsesWithIf(clonedXmr, [&](OpOperand &use) {
-              return layerBlock->isAncestor(use.getOwner());
-            });
-            continue;
-          }
-
-          // Special case for RWProbe: create xmr.remote instead of port
-          if (refType.getForceable()) {
-            // xmr.remote must target an instance, so we need to get the
-            // instance and result index
-            hw::InnerRefAttr innerRef;
-            int64_t resultIndex = 0;
-
-            // Try to get inner ref from the defining operation
-            if (auto *definingOp = operand.getDefiningOp()) {
-              // Check if it's an instance output port (RWProbe result)
-              if (auto instanceOp = dyn_cast<InstanceOp>(definingOp)) {
-                resultIndex = cast<OpResult>(operand).getResultNumber();
-
-                // Get or add inner symbol to the instance
-                innerRef = getInnerRefTo(
-                    instanceOp,
-                    [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
-              } else if (auto symOp =
-                             dyn_cast<hw::InnerSymbolOpInterface>(definingOp)) {
-                // For non-instance forceable operations (wire, register),
-                // create an XMRRefOp with a hierarchical path directly to the
-                // source
-                ImplicitLocOpBuilder localBuilder(operand.getLoc(),
-                                                  &getContext());
-                localBuilder.setInsertionPointToStart(body);
-
-                // Get or add inner symbol to the source operation
-                innerRef = getInnerRefTo(
-                    symOp,
-                    [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
-
-                if (!innerRef) {
-                  op->emitWarning(
-                      "could not get inner ref for forceable operand");
-                  continue;
-                }
-
-                // Create hierarchical path to the source operation
-                hw::HierPathOp hierPathOp;
-                {
-                  auto insertPoint = OpBuilder::InsertPoint(
-                      moduleOp->getBlock(), Block::iterator(moduleOp));
-                  llvm::sys::SmartScopedLock<true> circuitLock(*circuitMutex);
-                  hierPathOp = hierPathCache->getOrCreatePath(
-                      localBuilder.getArrayAttr({innerRef}), operand.getLoc(),
-                      insertPoint,
-                      layerBlockGlobals.lookup(layerBlock).hierPathName);
-                  hierPathOp.setVisibility(SymbolTable::Visibility::Private);
-                }
-
-                // Create XMRRefOp inside the layer block targeting the source
-                auto xmrRef = XMRRefOp::create(
-                    localBuilder, operand.getLoc(), refType.removeLayer(),
-                    hierPathOp.getSymNameAttr(),
-                    /*verbatimSuffix=*/localBuilder.getStringAttr(""));
-
-                // Replace uses of the RWProbe inside the layer block
-                operand.replaceUsesWithIf(xmrRef, [&](OpOperand &use) {
-                  return layerBlock->isAncestor(use.getOwner());
-                });
-
-                continue;
-              }
-            }
-
-            // If we still don't have an inner ref, skip this operand
-            if (!innerRef) {
-              op->emitWarning(
-                  "could not create xmr.remote for RWProbe operand");
-              continue;
-            }
-
-            // Create xmr.remote operation inside the layer block
-            OpBuilder::InsertionGuard guard(builder);
-            builder.setInsertionPointToStart(body);
-
-            // Determine if the result is forceable (RWProbe) or read-only
-            // (Probe)
-            auto removedLayerType = refType.removeLayer();
-            bool forceable =
-                type_cast<RefType>(removedLayerType).getForceable();
-
-            auto xmrRemote =
-                builder.create<XMRRemoteOp>(op->getLoc(), removedLayerType,
-                                            innerRef, resultIndex, forceable);
-
-            // Replace uses of the RWProbe inside the layer block
-            operand.replaceUsesWithIf(
-                xmrRemote.getResult(), [&](OpOperand &use) {
-                  return layerBlock->isAncestor(use.getOwner());
-                });
-
-            continue;
-          }
-
-          // For non-XMR, non-RWProbe probe operands, create input ports with
-          // the base type and use ref.send inside the layer module (same
-          // approach as f1386fc).
-          const auto &[portName, _] = getFieldName(FieldRef(operand, 0), true);
-          auto name = builder.getStringAttr(portNs.newName(portName));
-          auto domainInfo = ArrayAttr::get(operand.getContext(), {});
-          auto baseType = refType.getType();
-
-          // Create an input port with the base type (not RefType)
-          ports.push_back({name, baseType, Direction::In,
-                           /*symName=*/{},
-                           /*location=*/op->getLoc(),
-                           /*annos=*/{}, /*domains=*/domainInfo});
-
-          // Add argument to the layer block body and convert to ref with
-          // ref.send
-          Value replacement = body->addArgument(baseType, op->getLoc());
-          OpBuilder::InsertionGuard guard(builder);
-          builder.setInsertionPointToStart(body);
-          replacement = RefSendOp::create(builder, op->getLoc(), replacement);
-
-          // Replace uses of the probe inside the layer block
-          operand.replaceUsesWithIf(replacement, [&](OpOperand &use) {
-            auto *user = use.getOwner();
-            if (!layerBlock->isAncestor(user))
-              return false;
-            if (auto connectLike = dyn_cast<FConnectLike>(user)) {
-              if (use.getOperandNumber() == 0)
-                return false;
-            }
-            return true;
+          // Replace uses of the original probe inside the layer block
+          operand.replaceUsesWithIf(*xmrValueOpt, [&](OpOperand &use) {
+            return layerBlock->isAncestor(use.getOwner());
           });
 
-          connectValues.push_back({operand, ConnectKind::NonRef});
           continue;
         }
-
-        // Skip domain-typed operands as they should have been handled by the
-        // domain-specific handlers above (FConnectLike, DomainDefineOp).
-        if (isa<DomainType>(operand.getType()))
-          continue;
 
         op->setOperand(i, getReplacement(op, operand));
       }
