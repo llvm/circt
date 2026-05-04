@@ -244,6 +244,13 @@ struct ElaborateObjectPass
     return verifyResult(classOp);
   }
 
+  LogicalResult initialize(MLIRContext *context) override {
+    if (test.getValue() ^ targetClass.getValue().empty())
+      return emitError(UnknownLoc::get(context))
+             << "either 'test' or 'target-class' must be specified";
+    return success();
+  }
+
   void runOnOperation() override {
     auto module = getOperation();
     auto &symTable = getAnalysis<SymbolTable>();
