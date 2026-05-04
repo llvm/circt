@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Emit/EmitOps.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWPasses.h"
@@ -48,6 +49,10 @@ struct XMRNode {
 /// XMR lowering pass with cross-module support
 class HWLowerXMRPass : public circt::hw::impl::HWLowerXMRBase<HWLowerXMRPass> {
   void runOnOperation() override;
+
+  void getDependentDialects(mlir::DialectRegistry &registry) const override {
+    registry.insert<emit::EmitDialect, sv::SVDialect>();
+  }
 
 private:
   LogicalResult lowerProbesInModule(HWModuleOp module);
@@ -110,6 +115,22 @@ private:
   // Remove all marked probe ports from modules and instances
   void garbageCollectProbePorts();
 
+  // Handle public module output probe ports - generate macro definitions
+  LogicalResult handlePublicModuleRefPorts(HWModuleOp module);
+
+  // Generate the ABI ref_<module> prefix string into `prefix`
+  void getRefABIPrefix(HWModuleOp mod, SmallVectorImpl<char> &prefix);
+
+  // Get full macro name as StringAttr for the specified ref port
+  StringAttr getRefABIMacroForPort(HWModuleOp mod, size_t portIndex,
+                                   const Twine &prefix, bool backTick = false);
+
+  // Resolve a probe value to its hierarchical path
+  LogicalResult resolveReferencePath(Value refVal,
+                                     ImplicitLocOpBuilder &builder,
+                                     FlatSymbolRefAttr &ref,
+                                     SmallString<128> &stringLeaf);
+
   InnerSymbolNamespace moduleNamespace;
   HierPathCache *hierPathCache = nullptr;
 
@@ -162,6 +183,9 @@ void HWLowerXMRPass::runOnOperation() {
   // Build the instance graph
   InstanceGraph instanceGraph(topModule);
 
+  // Track public modules for later processing
+  SmallVector<HWModuleOp> publicModules;
+
   // Process modules in post-order (bottom-up) to ensure that when we process
   // an instance, the referenced module has already been processed and its
   // dataflow information is available
@@ -178,6 +202,10 @@ void HWLowerXMRPass::runOnOperation() {
     moduleNamespace = InnerSymbolNamespace(hwModule);
     if (failed(lowerProbesInModule(hwModule)))
       return signalPassFailure();
+
+    // Track public modules
+    if (hwModule.isPublic())
+      publicModules.push_back(hwModule);
 
     // Mark probe ports for removal
     size_t numPorts = hwModule.getNumPorts();
@@ -203,6 +231,12 @@ void HWLowerXMRPass::runOnOperation() {
         }
       }
     }
+  }
+
+  // Handle public module output probe ports before removal
+  for (auto module : publicModules) {
+    if (failed(handlePublicModuleRefPorts(module)))
+      return signalPassFailure();
   }
 
   // Remove probe ports from modules and instances FIRST
@@ -1263,4 +1297,187 @@ void HWLowerXMRPass::garbageCollectProbePorts() {
           [](Operation *, unsigned) -> bool { return true; });
     }
   }
+}
+
+LogicalResult HWLowerXMRPass::handlePublicModuleRefPorts(HWModuleOp module) {
+  auto *body = module.getBodyBlock();
+  if (!body)
+    return success();
+
+  // Find all the output probe ports
+  SmallString<128> circuitRefPrefix;
+  SmallVector<std::tuple<StringAttr, StringAttr, ArrayAttr>> ports;
+  auto *topModuleBody = getOperation().getBody();
+  auto declBuilder =
+      ImplicitLocOpBuilder::atBlockBegin(module.getLoc(), topModuleBody);
+
+  size_t numInputs = module.getNumInputPorts();
+  for (size_t portIndex = 0, numPorts = module.getNumPorts();
+       portIndex != numPorts; ++portIndex) {
+    auto port = module.getPort(portIndex);
+    auto portType = port.type;
+    auto probeType = dyn_cast<ProbeType>(portType);
+    auto rwProbeType = dyn_cast<RWProbeType>(portType);
+
+    if (!probeType && !rwProbeType)
+      continue;
+
+    // Only handle output ports
+    if (port.dir != hw::ModulePort::Direction::Output)
+      continue;
+
+    // Get inner type
+    Type innerType =
+        probeType ? probeType.getInnerType() : rwProbeType.getInnerType();
+
+    // Skip zero-width types
+    if (isZeroWidth(innerType))
+      continue;
+
+    // Get the port value from hw.output operand
+    auto *terminator = body->getTerminator();
+    if (!terminator)
+      continue;
+
+    auto outputOp = dyn_cast<hw::OutputOp>(terminator);
+    if (!outputOp)
+      continue;
+
+    // Output port index i corresponds to operand index (portIndex - numInputs)
+    if (portIndex < numInputs)
+      continue;
+
+    size_t outputIndex = portIndex - numInputs;
+    if (outputIndex >= outputOp.getNumOperands())
+      continue;
+
+    Value portValue = outputOp.getOperand(outputIndex);
+
+    mlir::FlatSymbolRefAttr ref;
+    SmallString<128> stringLeaf;
+    if (failed(resolveReferencePath(portValue, declBuilder, ref, stringLeaf)))
+      return failure();
+
+    SmallString<128> formatString;
+    if (ref)
+      formatString += "{{0}}";
+    formatString += stringLeaf;
+
+    // Insert a macro with the format:
+    // ref_<module-name>_<port-name> <path>
+    if (circuitRefPrefix.empty())
+      getRefABIPrefix(module, circuitRefPrefix);
+    auto macroName = getRefABIMacroForPort(module, portIndex, circuitRefPrefix);
+    sv::MacroDeclOp::create(declBuilder, macroName, ArrayAttr(), StringAttr());
+    ports.emplace_back(macroName, declBuilder.getStringAttr(formatString),
+                       ref ? declBuilder.getArrayAttr({ref}) : ArrayAttr{});
+  }
+
+  // Create a file only if the module has at least one ref port
+  if (ports.empty())
+    return success();
+
+  // The macros will be exported to a `ref_<module-name>.sv` file
+  // In the IR, the file is inserted before the module
+  auto fileBuilder = ImplicitLocOpBuilder(module.getLoc(), module);
+  emit::FileOp::create(fileBuilder, circuitRefPrefix + ".sv", [&] {
+    for (auto [macroName, formatString, symbols] : ports) {
+      sv::MacroDefOp::create(fileBuilder, FlatSymbolRefAttr::get(macroName),
+                             formatString, symbols);
+    }
+  });
+
+  return success();
+}
+
+// Generate the ABI ref_<module> prefix string into `prefix`
+void HWLowerXMRPass::getRefABIPrefix(HWModuleOp mod,
+                                     SmallVectorImpl<char> &prefix) {
+  auto modName = mod.getModuleName();
+  (Twine("ref_") + modName).toVector(prefix);
+}
+
+// Get full macro name as StringAttr for the specified ref port
+StringAttr HWLowerXMRPass::getRefABIMacroForPort(HWModuleOp mod,
+                                                 size_t portIndex,
+                                                 const Twine &prefix,
+                                                 bool backTick) {
+  auto portName = mod.getPort(portIndex).name.strref();
+  return StringAttr::get(mod.getContext(),
+                         Twine(backTick ? "`" : "") + prefix + "_" + portName);
+}
+
+// Resolve a probe value to its hierarchical path
+LogicalResult HWLowerXMRPass::resolveReferencePath(
+    Value refVal, ImplicitLocOpBuilder &builder, FlatSymbolRefAttr &ref,
+    SmallString<128> &stringLeaf) {
+  assert(stringLeaf.empty());
+
+  auto remoteOpPath = getRemoteRefSend(refVal);
+  if (!remoteOpPath)
+    return failure();
+
+  SmallVector<Attribute> refSendPath;
+  SmallVector<ProbeSubOp> indexing;
+  size_t lastIndex;
+  while (remoteOpPath) {
+    lastIndex = *remoteOpPath;
+    auto &entry = xmrPaths[*remoteOpPath];
+    if (entry.ref) {
+      refSendPath.push_back(entry.ref);
+    }
+    if (entry.subOp) {
+      indexing.push_back(entry.subOp);
+    }
+    remoteOpPath = entry.next;
+  }
+
+  auto iter = xmrPathSuffix.find(lastIndex);
+
+  // If this xmr has a suffix string (internal path into a module, that is not
+  // yet generated)
+  if (iter != xmrPathSuffix.end()) {
+    if (!refSendPath.empty())
+      stringLeaf.append(".");
+    stringLeaf.append(iter->getSecond());
+  }
+
+  assert(!(refSendPath.empty() && stringLeaf.empty()) &&
+         "nothing to index through");
+
+  // All indexing done as the ref is plumbed around indexes through
+  // the target/referent, not the current point of the path which
+  // describes how to access the referent we're indexing through.
+  // Above we gathered all indexing operations, so now append them
+  // to the path (after any relevant `xmrPathSuffix`) to reach
+  // the target element.
+  for (auto sub : indexing) {
+    uint32_t index = sub.getIndex();
+    // Check if the indexed type is an array or struct to determine notation
+    auto inputProbeType = dyn_cast<ProbeType>(sub.getInput().getType());
+    auto inputRWProbeType = dyn_cast<RWProbeType>(sub.getInput().getType());
+    Type innerType = inputProbeType ? inputProbeType.getInnerType()
+                                    : inputRWProbeType.getInnerType();
+
+    if (isa<hw::ArrayType>(innerType)) {
+      // Array indexing uses [N]
+      stringLeaf.append("[");
+      stringLeaf.append(Twine(index).str());
+      stringLeaf.append("]");
+    } else if (auto structType = dyn_cast<hw::StructType>(innerType)) {
+      // Struct field access uses .fieldname
+      stringLeaf.append(".");
+      stringLeaf.append(structType.getElements()[index].name.strref());
+    }
+  }
+
+  // If the path is non-empty, build a hierarchical path
+  if (!refSendPath.empty()) {
+    // Create hierarchical path
+    auto pathOp = hierPathCache->getOrCreatePath(
+        builder.getArrayAttr(refSendPath), builder.getLoc());
+    ref = FlatSymbolRefAttr::get(pathOp.getSymNameAttr());
+  }
+
+  return success();
 }

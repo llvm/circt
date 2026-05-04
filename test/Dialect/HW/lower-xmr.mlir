@@ -1174,7 +1174,7 @@ hw.module @FirMemDebugPortBasic(in %clk: !seq.clock, in %addr: i4, out result: !
   // CHECK-NOT: seq.firmem.debug_port
   %debug_ref = seq.firmem.debug_port %mem : <12 x 42>
 
-  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[MEM_PATH]] "Memory"
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[MEM_PATH]] ".Memory"
   // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
   %value = hw.probe.resolve %debug_ref : !hw.probe<!hw.array<12xi42>>
 
@@ -1194,7 +1194,7 @@ hw.module @FirMemDebugPortMasked(out result: !hw.array<16xi32>) {
   // CHECK-NOT: seq.firmem.debug_port
   %debug_ref = seq.firmem.debug_port %mem : <16 x 32, mask 4>
 
-  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[MEM_PATH]] "Memory"
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[MEM_PATH]] ".Memory"
   // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
   %value = hw.probe.resolve %debug_ref : !hw.probe<!hw.array<16xi32>>
 
@@ -1218,11 +1218,11 @@ hw.module @FirMemDebugPortMultiple(out result1: !hw.array<8xi16>, out result2: !
   %debug_ref1 = seq.firmem.debug_port %mem1 : <8 x 16>
   %debug_ref2 = seq.firmem.debug_port %mem2 : <4 x 8>
 
-  // CHECK: %[[XMR1:.+]] = sv.xmr.ref @[[MEM1_PATH]] "Memory"
+  // CHECK: %[[XMR1:.+]] = sv.xmr.ref @[[MEM1_PATH]] ".Memory"
   // CHECK: %[[READ1:.+]] = sv.read_inout %[[XMR1]]
   %value1 = hw.probe.resolve %debug_ref1 : !hw.probe<!hw.array<8xi16>>
 
-  // CHECK: %[[XMR2:.+]] = sv.xmr.ref @[[MEM2_PATH]] "Memory"
+  // CHECK: %[[XMR2:.+]] = sv.xmr.ref @[[MEM2_PATH]] ".Memory"
   // CHECK: %[[READ2:.+]] = sv.read_inout %[[XMR2]]
   %value2 = hw.probe.resolve %debug_ref2 : !hw.probe<!hw.array<4xi8>>
 
@@ -1248,7 +1248,7 @@ hw.module @TestMemoryDebugPort(in %clk: !seq.clock, in %addr: i4, in %data: i32,
   seq.firmem.write_port %mem[%addr] = %data, clock %clk enable %en : <16 x 32>
 
   // Resolve the debug probe to get the memory contents as an array
-  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[PATH]] "Memory"
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[PATH]] ".Memory"
   // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
   %mem_array = hw.probe.resolve %debug_ref : !hw.probe<!hw.array<16xi32>>
 
@@ -1298,7 +1298,7 @@ hw.module @FirMemHierTop(in %clk: !seq.clock, in %addr: i3, in %data: i64, in %e
   %probe_out = hw.instance "middle" @FirMemHierMiddle(clk: %clk: !seq.clock, addr: %addr: i3, data: %data: i64, en: %en: i1) -> (probe: !hw.probe<!hw.array<8xi64>>)
 
   // Resolve the probe at the top level
-  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[HIER_PATH]] "Memory"
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[HIER_PATH]] ".Memory"
   // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
   %mem_array = hw.probe.resolve %probe_out : !hw.probe<!hw.array<8xi64>>
 
@@ -1569,3 +1569,152 @@ hw.module @XMRRefAndResolve(out value1: i16, out value2: i16) {
 //   DISABLED-CHECK: hw.instance "c_inst" @ModuleC
 //   hw.instance "c_inst" @ModuleC(clk: %clk: i1, cond: %cond: i1) -> ()
 // }
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Test Public Module Output Probe Port Lowering (Macro Generation)
+// This mirrors FIRRTL's ref port ABI for public modules
+//===----------------------------------------------------------------------===//
+
+// Basic public module with single output probe port
+// CHECK: hw.hierpath private @[[PATH1:.+]] [@PublicModuleBasic::@[[SYM1:.+]]]
+// CHECK: sv.macro.decl @ref_PublicModuleBasic_probe_out
+// CHECK: emit.file "ref_PublicModuleBasic.sv" {
+// CHECK:   sv.macro.def @ref_PublicModuleBasic_probe_out "{{[{][{]}}0{{[}][}]}}"([@[[PATH1]]])
+// CHECK: }
+// Probe port should be removed from module signature
+// CHECK: hw.module @PublicModuleBasic() {
+hw.module @PublicModuleBasic(out probe_out: !hw.probe<i8>) {
+  // CHECK: %[[C42:.+]] = hw.constant 42
+  // CHECK: %[[WIRE:.+]] = hw.wire %[[C42]] sym @[[SYM1]]
+  %c42_i8 = hw.constant 42 : i8
+  %wire = hw.wire %c42_i8 : i8
+
+  // CHECK-NOT: hw.probe.send
+  %probe = hw.probe.send %wire : i8
+
+  // CHECK: hw.output
+  hw.output %probe : !hw.probe<i8>
+}
+
+// -----
+
+// Public module with multiple output probe ports
+// CHECK: hw.hierpath private @[[PATH1:.+]] [@PublicModuleMultiple::@[[SYM1:.+]]]
+// CHECK: sv.macro.decl @ref_PublicModuleMultiple_probe1
+// CHECK: hw.hierpath private @[[PATH2:.+]] [@PublicModuleMultiple::@[[SYM2:.+]]]
+// CHECK: sv.macro.decl @ref_PublicModuleMultiple_probe2
+// CHECK: hw.hierpath private @[[PATH3:.+]] [@PublicModuleMultiple::@[[SYM3:.+]]]
+// CHECK: sv.macro.decl @ref_PublicModuleMultiple_probe3
+// CHECK: emit.file "ref_PublicModuleMultiple.sv" {
+// CHECK:   sv.macro.def @ref_PublicModuleMultiple_probe1 "{{[{][{]}}0{{[}][}]}}"([@[[PATH1]]])
+// CHECK:   sv.macro.def @ref_PublicModuleMultiple_probe2 "{{[{][{]}}0{{[}][}]}}"([@[[PATH2]]])
+// CHECK:   sv.macro.def @ref_PublicModuleMultiple_probe3 "{{[{][{]}}0{{[}][}]}}"([@[[PATH3]]])
+// CHECK: }
+// Probe ports should be removed from module signature
+// CHECK: hw.module @PublicModuleMultiple() {
+hw.module @PublicModuleMultiple(
+  out probe1: !hw.probe<i8>,
+  out probe2: !hw.probe<i16>,
+  out probe3: !hw.probe<i32>
+) {
+  %c1_i8 = hw.constant 1 : i8
+  %c2_i16 = hw.constant 2 : i16
+  %c3_i32 = hw.constant 3 : i32
+
+  %w1 = hw.wire %c1_i8 : i8
+  %w2 = hw.wire %c2_i16 : i16
+  %w3 = hw.wire %c3_i32 : i32
+
+  %p1 = hw.probe.send %w1 : i8
+  %p2 = hw.probe.send %w2 : i16
+  %p3 = hw.probe.send %w3 : i32
+
+  hw.output %p1, %p2, %p3 : !hw.probe<i8>, !hw.probe<i16>, !hw.probe<i32>
+}
+
+// -----
+
+// Public module with mixed regular and probe output ports
+// CHECK: hw.hierpath private @[[PATH:.+]] [@PublicModuleMixed::@[[SYM:.+]]]
+// CHECK: sv.macro.decl @ref_PublicModuleMixed_probe_out
+// CHECK: emit.file "ref_PublicModuleMixed.sv" {
+// CHECK:   sv.macro.def @ref_PublicModuleMixed_probe_out "{{[{][{]}}0{{[}][}]}}"([@[[PATH]]])
+// CHECK: }
+// Probe port removed, regular ports remain. Input port gets exportPort symbol since it's referenced by the probe
+// CHECK: hw.module @PublicModuleMixed(in %input : i8 {hw.exportPort = #hw<innerSym@[[SYM]]>}, out regular_out : i8) {
+hw.module @PublicModuleMixed(
+  in %input: i8,
+  out regular_out: i8,
+  out probe_out: !hw.probe<i8>
+) {
+  // Regular output
+  %doubled = comb.add %input, %input : i8
+
+  // Probe output
+  %probe = hw.probe.send %input : i8
+
+  hw.output %doubled, %probe : i8, !hw.probe<i8>
+}
+
+// -----
+
+// Public module with rwprobe output
+// CHECK: hw.hierpath private @[[PATH:.+]] [@PublicModuleRWProbe::@[[SYM:.+]]]
+// CHECK: sv.macro.decl @ref_PublicModuleRWProbe_rwprobe_out
+// CHECK: emit.file "ref_PublicModuleRWProbe.sv" {
+// CHECK:   sv.macro.def @ref_PublicModuleRWProbe_rwprobe_out "{{[{][{]}}0{{[}][}]}}"([@[[PATH]]])
+// CHECK: }
+// RWProbe port should be removed
+// CHECK: hw.module @PublicModuleRWProbe() {
+hw.module @PublicModuleRWProbe(out rwprobe_out: !hw.rwprobe<i16>) {
+  %c100_i16 = hw.constant 100 : i16
+  %wire = hw.wire %c100_i16 : i16
+
+  %rwprobe = hw.probe.send forceable %wire : i16
+
+  hw.output %rwprobe : !hw.rwprobe<i16>
+}
+
+// -----
+
+// Public module with complex aggregate probe type
+// CHECK: hw.hierpath private @[[PATH:.+]] [@PublicModuleAggregate::@[[SYM:.+]]]
+// CHECK: sv.macro.decl @ref_PublicModuleAggregate_struct_probe
+// CHECK: emit.file "ref_PublicModuleAggregate.sv" {
+// CHECK:   sv.macro.def @ref_PublicModuleAggregate_struct_probe "{{[{][{]}}0{{[}][}]}}"([@[[PATH]]])
+// CHECK: }
+// Aggregate probe port should be removed
+// CHECK: hw.module @PublicModuleAggregate() {
+hw.module @PublicModuleAggregate(out struct_probe: !hw.probe<!hw.struct<a: i8, b: i16>>) {
+  %c0_struct = hw.aggregate_constant [0 : i8, 0 : i16] : !hw.struct<a: i8, b: i16>
+  %wire = hw.wire %c0_struct : !hw.struct<a: i8, b: i16>
+
+  %probe = hw.probe.send %wire : !hw.struct<a: i8, b: i16>
+
+  hw.output %probe : !hw.probe<!hw.struct<a: i8, b: i16>>
+}
+
+// -----
+
+// Test that private modules do NOT generate macros
+// CHECK-NOT: sv.macro.decl @ref_PrivateModule
+// CHECK-NOT: emit.file "ref_PrivateModule.sv"
+// CHECK-LABEL: hw.module private @PrivateModule
+hw.module private @PrivateModule(out probe_out: !hw.probe<i8>) {
+  %c10_i8 = hw.constant 10 : i8
+  %wire = hw.wire %c10_i8 : i8
+  %probe = hw.probe.send %wire : i8
+  hw.output %probe : !hw.probe<i8>
+}
+
+// -----
+
+// Test public module with no probe outputs (should not generate file)
+// CHECK-NOT: emit.file "ref_PublicModuleNoProbes.sv"
+// CHECK-LABEL: hw.module @PublicModuleNoProbes
+hw.module @PublicModuleNoProbes(in %input: i8, out result: i8) {
+  %doubled = comb.add %input, %input : i8
+  hw.output %doubled : i8
+}

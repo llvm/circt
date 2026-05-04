@@ -20,6 +20,7 @@ add_circt_dialect_library(CIRCTHWTransforms
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTSV
+  CIRCTEmit
   CIRCTSeq
   CIRCTComb
   CIRCTSupport
