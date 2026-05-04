@@ -12,10 +12,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/LayerSet.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/Iterators.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-layer-merge"
@@ -51,10 +53,23 @@ void LayerMerge::runOnOperation() {
   //
   // The recursive walk will cause nested layer blocks to also be merged.
   auto moduleOp = getOperation();
+  LayerSet enabledLayers;
+  enabledLayers.insert_range(
+      moduleOp.getLayersAttr().getAsRange<SymbolRefAttr>());
+
   mlir::IRRewriter rewriter(moduleOp.getContext());
   moduleOp.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
       [&](LayerBlockOp thisBlock) {
         auto layer = thisBlock.getLayerName();
+        // If this layer is enabled, simply inline it.
+        if (isLayerCompatibleWith(layer, enabledLayers)) {
+          rewriter.inlineBlockBefore(thisBlock.getBody(), thisBlock->getBlock(),
+                                     Block::iterator(thisBlock));
+          thisBlock->erase();
+          numMerged++;
+          return WalkResult::advance();
+        }
+
         // If we haven't seen this block before, then it is the last block.
         auto [item, inserted] = lastBlockMap.try_emplace(layer, thisBlock);
         if (inserted)
