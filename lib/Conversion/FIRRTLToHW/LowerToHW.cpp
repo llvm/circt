@@ -5608,7 +5608,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceOp op) {
   if (!destVal)
     return failure();
 
-  destVal = hw::ProbeXMRRefOp::create(builder, destVal);
+  // Only convert probe types to inout via xmr_ref
+  // If already an inout type (e.g., from sv.xmr.ref), use it directly
+  if (!isa<hw::InOutType>(destVal.getType()))
+    destVal = hw::ProbeXMRRefOp::create(builder, destVal);
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
@@ -5633,7 +5636,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefForceInitialOp op) {
   if (!destVal)
     return failure();
 
-  destVal = hw::ProbeXMRRefOp::create(builder, destVal);
+  // Only convert probe types to inout via xmr_ref
+  // If already an inout type (e.g., from sv.xmr.ref), use it directly
+  if (!isa<hw::InOutType>(destVal.getType()))
+    destVal = hw::ProbeXMRRefOp::create(builder, destVal);
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
   addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
@@ -5657,7 +5663,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseOp op) {
   if (!destVal)
     return failure();
 
-  destVal = hw::ProbeXMRRefOp::create(builder, destVal);
+  // Only convert probe types to inout via xmr_ref
+  // If already an inout type (e.g., from sv.xmr.ref), use it directly
+  if (!isa<hw::InOutType>(destVal.getType()))
+    destVal = hw::ProbeXMRRefOp::create(builder, destVal);
 
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
@@ -5678,7 +5687,10 @@ LogicalResult FIRRTLLowering::visitStmt(RefReleaseInitialOp op) {
   auto pred = getLoweredValue(op.getPredicate());
   if (!destVal || !pred)
     return failure();
-  destVal = hw::ProbeXMRRefOp::create(builder, destVal);
+  // Only convert probe types to inout via xmr_ref
+  // If already an inout type (e.g., from sv.xmr.ref), use it directly
+  if (!isa<hw::InOutType>(destVal.getType()))
+    destVal = hw::ProbeXMRRefOp::create(builder, destVal);
 
   // #ifndef SYNTHESIS
   circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
