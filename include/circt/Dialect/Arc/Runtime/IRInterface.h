@@ -85,6 +85,12 @@ ARC_IR_EXPORT void arcRuntimeIR_deleteInstance(uint8_t *modelState);
 /// model's `eval` function.
 ARC_IR_EXPORT void arcRuntimeIR_onEval(uint8_t *modelState);
 
+/// Pre-initialization hook of the runtime library.
+///
+/// Simulation drivers must call this once before the invocation of the model's
+/// `initial` function.
+ARC_IR_EXPORT void arcRuntimeIR_onInitialized(uint8_t *modelState);
+
 /// Prints a formatted string to stdout.
 ///
 /// `fmt` is an array of `FmtDescriptor` objects, ending in a descriptor with
