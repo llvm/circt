@@ -7034,40 +7034,23 @@ LogicalResult XMRDerefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult LayerBlockOp::verify() {
-  auto layerName = getLayerName();
-  auto *parentOp = (*this)->getParentOp();
+  auto *region = getOperation()->getParentRegion();
+  auto *parent = region->getParentOp();
 
-  // Get parent operation that isn't a when or match.
-  while (isa<WhenOp, MatchOp>(parentOp))
-    parentOp = parentOp->getParentOp();
-
-  // Verify the correctness of the symbol reference.  Only verify that this
-  // layer block makes sense in its parent module or layer block.
-  auto nestedReferences = layerName.getNestedReferences();
-  if (nestedReferences.empty()) {
-    if (!isa<FModuleOp>(parentOp)) {
-      auto diag = emitOpError() << "has an un-nested layer symbol, but does "
-                                   "not have a 'firrtl.module' op as a parent";
-      return diag.attachNote(parentOp->getLoc())
-             << "illegal parent op defined here";
-    }
-  } else {
-    auto parentLayerBlock = dyn_cast<LayerBlockOp>(parentOp);
-    if (!parentLayerBlock) {
-      auto diag = emitOpError()
-                  << "has a nested layer symbol, but does not have a '"
-                  << getOperationName() << "' op as a parent'";
-      return diag.attachNote(parentOp->getLoc())
-             << "illegal parent op defined here";
-    }
-    auto parentLayerBlockName = parentLayerBlock.getLayerName();
-    if (parentLayerBlockName.getRootReference() !=
-            layerName.getRootReference() ||
-        parentLayerBlockName.getNestedReferences() !=
-            layerName.getNestedReferences().drop_back()) {
-      auto diag = emitOpError() << "is nested under an illegal layer block";
-      return diag.attachNote(parentLayerBlock->getLoc())
-             << "illegal parent layer block defined here";
+  // A layerblock may only be nested under a parent, if the parent is enabled
+  // whenever the child is enabled. Check that here.
+  if (auto parentLayerBlock = dyn_cast_or_null<LayerBlockOp>(parent)) {
+    auto parentLayer = parentLayerBlock.getLayerNameAttr();
+    LayerSet enabledLayers;
+    enabledLayers.insert(getLayerNameAttr());
+    auto parentModule = getRegion().getParentOfType<FModuleLike>();
+    if (parentModule)
+      enabledLayers.insert_range(
+          parentModule.getLayersAttr().getAsRange<SymbolRefAttr>());
+    if (!isLayerCompatibleWith(parentLayer, enabledLayers)) {
+      auto diag = emitOpError("is nested under an illegal layer block");
+      diag.attachNote(parentLayerBlock.getLoc()) << "illegal parent layer block defined here";
+      return failure();
     }
   }
 
