@@ -129,16 +129,6 @@ jobs:
         run: ls -laR
         working-directory: ./wheelhouse/
 
-      - name: Remove macOS wheels before PyPI upload
-        # macOS wheels are still kept as GitHub artifacts (uploaded above), but
-        # are intentionally not published to PyPI.
-        run: |
-          shopt -s nullglob
-          for f in wheelhouse/*macosx*.whl; do
-            echo "Skipping macOS wheel for PyPI: $f"
-            rm -f "$f"
-          done
-
       - name: Upload wheels to pypi
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
