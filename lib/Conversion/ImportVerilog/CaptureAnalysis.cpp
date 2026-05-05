@@ -80,7 +80,9 @@ namespace {
 /// visiting enabled so that we recurse into all function bodies.
 struct CaptureWalker
     : public ASTVisitor<CaptureWalker, /*VisitStatements=*/true,
-                        /*VisitExpressions=*/true> {
+                        /*VisitExpressions=*/true,
+                        /*VisitBad=*/false,
+                        /*VisitCanonical=*/true> {
 
   /// The function whose body we are currently inside, or nullptr if we are at
   /// a scope outside any function.
@@ -88,6 +90,8 @@ struct CaptureWalker
 
   /// Captured variables per function.
   CaptureMap capturedVars;
+
+  mlir::DenseSet<const InstanceBodySymbol *> visitedInstanceBodies;
 
   /// Inverse call graph: maps each callee to the set of callers that call it.
   /// Used to propagate captures from callees to their callers. Uses MapVector
@@ -148,6 +152,15 @@ struct CaptureWalker
               std::get_if<const SubroutineSymbol *>(&expr.subroutine))
         callers[*callee].insert(currentFunc);
     visitDefault(expr);
+  }
+
+  /// `VisitCanonical` is set above, so this visits the canonical instance body
+  /// if there is one. If there is and we've already visited it via some
+  /// other instance, don't process it again.
+  void handle(const InstanceBodySymbol &instance) {
+    if (visitedInstanceBodies.insert(&instance).second) {
+      visitDefault(instance);
+    }
   }
 
   /// Propagate captures transitively through the call graph. For each callee
