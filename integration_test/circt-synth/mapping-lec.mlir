@@ -15,29 +15,29 @@
 // COMB_MUL_LUT: c1 == c2
 
 // Set delay for binary and inv op to 5 so that others will be prioritized
-hw.module @and_inv(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[5], [5]]}} {
+hw.module @and_inv(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 5.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 5.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv %a, %b : i1
     hw.output %0 : i1
 }
 
-hw.module @and_inv_n(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[5], [5]]}} {
+hw.module @and_inv_n(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 5.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 5.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv not %a, %b : i1
     hw.output %0 : i1
 }
 
-hw.module @and_inv_nn(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[5], [5]]}} {
+hw.module @and_inv_nn(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 5.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 5.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv not %a, not %b : i1
     hw.output %0 : i1
 }
 
-hw.module @nand_nand(in %a : i1, in %b : i1, in %c : i1, in %d: i1, out result : i1) attributes {hw.techlib.info = {area = 3.0 : f64, delay = [[1], [1], [1], [1]]}} {
+hw.module @nand_nand(in %a : i1, in %b : i1, in %c : i1, in %d: i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 3.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "c", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "d", 1.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv %a, %b : i1
     %1 = synth.aig.and_inv %c, %d : i1
     %2 = synth.aig.and_inv not %0, not %1 : i1
     hw.output %2 : i1
 }
 
-hw.module @some(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
+hw.module @some(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv not %a, not %b : i1
     %1 = synth.aig.and_inv %a, %b : i1
     %2 = synth.aig.and_inv not %0, not %1 : i1

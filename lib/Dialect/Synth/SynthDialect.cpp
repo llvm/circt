@@ -9,6 +9,7 @@
 #include "circt/Dialect/Synth/SynthDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthAttributes.h"
+#include "circt/Dialect/Synth/SynthEnums.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "mlir/IR/DialectImplementation.h"
 
@@ -41,3 +42,5 @@ Operation *SynthDialect::materializeConstant(OpBuilder &builder,
 
 #define GET_ATTRDEF_CLASSES
 #include "circt/Dialect/Synth/SynthAttributes.cpp.inc"
+
+#include "circt/Dialect/Synth/SynthEnums.cpp.inc"

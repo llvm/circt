@@ -1,26 +1,26 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(synth-tech-mapper{strategy=area test=true max-cuts-per-root=8})' %s | FileCheck %s --check-prefixes CHECK,AREA
 // RUN: circt-opt --pass-pipeline='builtin.module(synth-tech-mapper{strategy=timing test=true max-cuts-per-root=8})' %s | FileCheck %s --check-prefixes CHECK,TIMING
 
-hw.module @and_inv(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
+hw.module @and_inv(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %false = hw.constant false
     %true = hw.constant true
     %0 = synth.aig.and_inv %a, %b, not %false, %true : i1
     hw.output %0 : i1
 }
 
-hw.module @and_inv_n(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
+hw.module @and_inv_n(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv not %a, %b : i1
     hw.output %0 : i1
 }
 
-hw.module @and_inv_nn(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
+hw.module @and_inv_nn(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv not %a, not %b : i1
     hw.output %0 : i1
 }
 
 // Delay is shorter than @and_inv + @and_inv_n_n. Area is (significantly) larger than @and_inv_n + @and_inv_n_n.
 // Check that we use @and_inv_3 if strategy = timing, and @and_inv_n + @and_inv_n_n if strategy = area.
-hw.module @and_inv_3(in %a : i1, in %b : i1, in %c : i1, out result : i1) attributes {hw.techlib.info = {area = 10.0 : f64, delay = [[1], [1], [1]]}} {
+hw.module @and_inv_3(in %a : i1, in %b : i1, in %c : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 10.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "c", 1.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv %a, %b : i1
     %1 = synth.aig.and_inv not %0, %c : i1
     hw.output %1 : i1
@@ -38,7 +38,7 @@ hw.module @test_strategy(in %a : i1, in %b : i1, in %c : i1, out result : i1) {
     hw.output %1 : i1
 }
 
-hw.module @permutation(in %a: i1, in %b: i1, in %c: i1, in %d: i1, out result: i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1], [1], [1]]}} {
+hw.module @permutation(in %a: i1, in %b: i1, in %c: i1, in %d: i1, out result: i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "c", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "d", 1.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv %a, not %b : i1
     %1 = synth.aig.and_inv %c, not %d : i1
     %2 = synth.aig.and_inv %0, not %1 : i1
@@ -54,7 +54,7 @@ hw.module @permutation_test(in %p: i1, in %q: i1, in %r: i1, in %s: i1, out resu
     hw.output %2 : i1
 }
 
-hw.module @and_inv_5(in %a : i1, in %b : i1, in %c : i1, in %d : i1, in %e: i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [2], [2], [2], [1]]}} {
+hw.module @and_inv_5(in %a : i1, in %b : i1, in %c : i1, in %d : i1, in %e: i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 2.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "c", 2.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "d", 2.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "e", 1.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv not %a, %b, not %c, %d, not %e : i1
     hw.output %0 : i1
 }
@@ -77,7 +77,7 @@ hw.module @and_inv_5_test(in %a : i1, in %b : i1, in %c : i1, in %d : i1, in %e:
     // CHECK-NEXT: hw.output %[[result_0]], %[[result_1]] : i1, i1
 }
 
-hw.module @area_flow(in %a : i1, in %b : i1, in %c: i1, out result : i1) attributes {hw.techlib.info = {area = 1.5 : f64, delay = [[10], [10], [10], [10], [10]]}} {
+hw.module @area_flow(in %a : i1, in %b : i1, in %c: i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.5 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 10.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 10.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "c", 10.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.aig.and_inv not %a, not %b : i1
     %1 = synth.aig.and_inv not %c, %0 : i1
     hw.output %1 : i1
@@ -163,7 +163,7 @@ hw.module @extract_concat_test(in %data : i4, in %ctrl : i2, out result : i3) {
     hw.output %result_concat : i3
 }
 
-hw.module @dot_lib(in %x : i1, in %y : i1, in %z : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1], [1]]}} {
+hw.module @dot_lib(in %x : i1, in %y : i1, in %z : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "x", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "y", 1.0, 0.0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "z", 1.0, 0.0, #synth.polarity<positive>>], input_caps = {}>} {
     %0 = synth.dot %z, not %x, not %y : i1
     hw.output %0 : i1
 }
@@ -176,3 +176,4 @@ hw.module @dot_test(in %x : i1, in %y : i1, in %z : i1, out result : i1) {
     %0 = synth.dot %x, not %y, not %z : i1
     hw.output %0 : i1
 }
+
