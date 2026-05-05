@@ -380,11 +380,11 @@ public:
   using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    if (gi.hasNInputs(1, 1) || gi.sizedInput<UIntType>(0, 1) ||
+    if (gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
         gi.sizedOutput<UIntType>(1) || gi.namedIntParam("delay") ||
         gi.hasNParam(1))
       return true;
-    if (gi.op.getNumOperands() > 1 && gi.typedInput<ClockType>(1))
+    if (gi.typedInput<ClockType>(1))
       return true;
     return false;
   }
@@ -394,9 +394,7 @@ public:
     auto delay = rewriter.getI64IntegerAttr(
         gi.getParamValue<IntegerAttr>("delay").getValue().getZExtValue());
     auto operands = adaptor.getOperands();
-    Value clock;
-    if (operands.size() > 1)
-      clock = operands[1];
+    Value clock = operands[1];
     rewriter.replaceOpWithNewOp<LTLPastIntrinsicOp>(
         gi.op, gi.op.getResultTypes(), operands[0], delay, clock);
   }

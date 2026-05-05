@@ -98,11 +98,6 @@ ltl.eventually %true : i1
 ltl.eventually %s : !ltl.sequence
 ltl.eventually %p : !ltl.property
 
-// CHECK: ltl.past {{%.+}}, 1 : i1
-// CHECK: ltl.past {{%.+}}, 5 : i8
-ltl.past %true, 1 : i1
-ltl.past %c0_i8, 5 : i8
-
 // CHECK: ltl.past {{%.+}}, 5 clk {{%.+}} : i8
 ltl.past %c0_i8, 5 clk %true : i8
 

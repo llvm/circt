@@ -4745,9 +4745,7 @@ LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLPastIntrinsicOp op) {
-  Value clk;
-  if (op.getClock())
-    clk = getLoweredNonClockValue(op.getClock());
+  Value clk = getLoweredNonClockValue(op.getClock());
   return setLoweringToLTL<ltl::PastOp>(op, getLoweredValue(op.getInput()),
                                        op.getDelayAttr(), clk);
 }
