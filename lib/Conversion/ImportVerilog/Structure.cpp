@@ -933,6 +933,10 @@ LogicalResult Context::convertCompilation() {
   for (auto *inst : root.topInstances)
     traverseInstanceBody(inst->body);
 
+  // Analyze the compilation to infer clocks for assertion system calls
+  // using Slang's LRM clock inference.
+  populateAssertionClocks();
+
   // Visit all top-level declarations in all compilation units. This does not
   // include instantiable constructs like modules, interfaces, and programs,
   // which are listed separately as top instances.

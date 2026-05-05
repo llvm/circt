@@ -267,6 +267,14 @@ struct Context {
     return currentThisRef; // block arg added in declareFunction
   }
 
+  /// Maps assertion system calls to their corresponding clocks
+  DenseMap<const slang::ast::CallExpression *,
+           const slang::ast::TimingControl *>
+      assertionCallClocks;
+
+  /// Generates a map from assertions to clocks using Slang's analysis
+  void populateAssertionClocks();
+
   Value getIndexedQueue() const { return currentQueue; }
 
   // Convert a statement AST node to MLIR ops.
@@ -387,7 +395,7 @@ struct Context {
   /// single argument.
   FailureOr<Value> convertAssertionSystemCallArity1(
       const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
-      Type originalType);
+      Type originalType, Value clockVal);
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);

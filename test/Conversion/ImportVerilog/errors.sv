@@ -187,6 +187,20 @@ endmodule
 
 // -----
 module Foo;
+  logic a, clk;
+  // expected-error @below {{sampled value functions are only supported with posedge clocks}}
+  assert property (@(negedge clk) $rose(a));
+endmodule
+
+// -----
+module Foo;
+  logic a, clk1, clk2;
+  // expected-error @below {{sampled value functions with multiple event triggers are not supported}}
+  assert property (@(posedge clk1 or posedge clk2) $rose(a));
+endmodule
+
+// -----
+module Foo;
   int a;
   // expected-error @below {{sequence has no explicit clocking event and one cannot be inferred from context}}
   assert property (a);
