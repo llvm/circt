@@ -955,7 +955,7 @@ LogicalResult Context::convertCompilation() {
   // use site, so skip them here.
   SmallVector<const slang::ast::InstanceSymbol *> topInstances;
   for (auto *inst : root.topInstances) {
-    const slang::ast::InstanceBodySymbol *body = getCanonicalBody(inst);
+    const slang::ast::InstanceBodySymbol *body = getCanonicalBody(*inst);
     if (body->getDefinition().definitionKind !=
         slang::ast::DefinitionKind::Interface)
       if (!convertModuleHeader(body))

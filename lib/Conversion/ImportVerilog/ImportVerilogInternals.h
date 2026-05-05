@@ -37,8 +37,8 @@ using moore::Domain;
 /// If there isn't one, fall back to the normal body.
 inline const slang::ast::InstanceBodySymbol *
 getCanonicalBody(const slang::ast::InstanceSymbol &inst) {
-  const slang::ast::InstanceBodySymbol *body = inst->getCanonicalBody();
-  return body == nullptr ? &inst->body : body;
+  const slang::ast::InstanceBodySymbol *body = inst.getCanonicalBody();
+  return body == nullptr ? &inst.body : body;
 }
 
 /// Port lowering information.
