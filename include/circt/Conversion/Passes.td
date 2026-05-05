@@ -661,10 +661,17 @@ def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
 // VerifToSV
 //===----------------------------------------------------------------------===//
 
-def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
+def LowerVerifToSV : Pass<"lower-verif-to-sv", "mlir::ModuleOp"> {
   let summary = "Convert Verif to SV";
   let description = [{
     This pass converts various Verif contructs to SV.
+
+    Operations that are not generally supported by synthesis (e.g.
+    `sv.fwrite`, `sv.assert_property`, `sv.assume_property`,
+    `sv.cover_property`) are emitted inside an `` `ifndef SYNTHESIS `` guard,
+    so the resulting Verilog can be consumed by synthesis tools such as Quartus
+    or Vivado without producing errors. The `SYNTHESIS` macro is declared at
+    the top of the module if it is not already present.
   }];
   let constructor = "circt::createLowerVerifToSVPass()";
   let dependentDialects = [
