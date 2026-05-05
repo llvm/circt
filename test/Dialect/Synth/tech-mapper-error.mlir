@@ -43,6 +43,16 @@ hw.module @multibit(in %a : i1, in %b: i1, out result : i2) attributes {hw.techl
 
 hw.module @multibit(in %a : i1, in %b: i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [2]]}} {
   // expected-error@+1 {{Unsupported operation for truth table simulation}}
+  %0 = hw.constant 1 : i2
+  %1 = comb.extract %0 from 1 : (i2) -> i1
+  hw.output %1: i1
+}
+
+// -----
+
+
+hw.module @multibit(in %a : i1, in %b: i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [2]]}} {
+  // expected-error@+1 {{Unsupported operation for truth table simulation}}
   %0 = comb.add %a, %b : i1
   hw.output %0: i1
 }

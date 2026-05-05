@@ -2,7 +2,9 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(synth-tech-mapper{strategy=timing test=true max-cuts-per-root=8})' %s | FileCheck %s --check-prefixes CHECK,TIMING
 
 hw.module @and_inv(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
-    %0 = synth.aig.and_inv %a, %b : i1
+    %false = hw.constant false
+    %true = hw.constant true
+    %0 = synth.aig.and_inv %a, %b, not %false, %true : i1
     hw.output %0 : i1
 }
 
