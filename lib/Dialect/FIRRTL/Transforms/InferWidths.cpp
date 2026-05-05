@@ -1404,7 +1404,7 @@ LogicalResult InferenceMapping::mapOperation(Operation *op) {
         // dialect enforces the reset signal to be an async reset or a
         // `uint<1>`.
         declareVars(op.getResult());
-        // Contrain the register to be greater than or equal to the reset
+        // Constrain the register to be greater than or equal to the reset
         // signal.
         constrainTypes(op.getResult(), op.getResetValue());
       })
