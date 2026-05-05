@@ -390,14 +390,11 @@ Value Context::convertAssertionCallExpression(
           "sampled value functions are only supported with posedge clocks");
       return {};
     }
-    clockVal = this->convertRvalueExpression(signal->expr);
+    clockVal = convertRvalueExpression(signal->expr);
     if (clockVal)
-      clockVal = this->convertToI1(clockVal);
-    if (!clockVal) {
-      mlir::emitError(loc,
-                      "failed to convert clock for sampled value function");
+      clockVal = convertToI1(clockVal);
+    if (!clockVal)
       return {};
-    }
   }
 
   const auto &subroutine = *info.subroutine;
