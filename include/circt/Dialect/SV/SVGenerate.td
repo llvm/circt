@@ -50,3 +50,21 @@ def GenerateCaseOp : SVOp<"generate.case",
 
   let hasVerifier = true;
 }
+
+def GenerateForOp : SVOp<"generate.for",
+                         [SingleBlock, NoTerminator,
+                          HasParent<"GenerateOp">,
+                          AllTypesMatch<["lowerBound", "upperBound", "step"]>]> {
+  let summary = "A 'for' loop inside of a generate block";
+  let description = "See SystemVerilog 2017 27.4.";
+
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins HWIntegerType:$lowerBound,
+                       HWIntegerType:$upperBound,
+                       HWIntegerType:$step,
+                       StrAttr:$genBlockName);
+
+  let assemblyFormat = [{
+    $lowerBound `to` $upperBound `step` $step `name` $genBlockName attr-dict `:` type($lowerBound) $body
+  }];
+}

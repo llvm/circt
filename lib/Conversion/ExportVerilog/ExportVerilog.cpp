@@ -4134,6 +4134,7 @@ private:
 
   LogicalResult visitSV(GenerateOp op);
   LogicalResult visitSV(GenerateCaseOp op);
+  LogicalResult visitSV(GenerateForOp op);
 
   LogicalResult visitSV(ForOp op);
 
@@ -4955,6 +4956,50 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
 
   startStatement();
   ps << "endcase";
+  ps.addCallback({op, false});
+  setPendingNewline();
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(GenerateForOp op) {
+  emitSVAttributes(op);
+  llvm::SmallPtrSet<Operation *, 8> ops;
+  ps.addCallback({op, true});
+  startStatement();
+
+  StringAttr inductionVarNameAttr =
+      op->getAttrOfType<StringAttr>("hw.verilogName");
+  StringRef inductionVarName =
+      inductionVarNameAttr ? inductionVarNameAttr.getValue() : "i";
+
+  StringRef blockName = op.getGenBlockName();
+
+  ps << "for (";
+  ps.scopedBox(PP::cbox0, [&]() {
+    emitAssignLike(
+        [&]() { ps << "genvar" << PP::nbsp << PPExtString(inductionVarName); },
+        [&]() { emitExpression(op.getLowerBound(), ops); }, PPExtString("="));
+    ps << PP::space;
+
+    emitAssignLike([&]() { ps << PPExtString(inductionVarName); },
+                   [&]() { emitExpression(op.getUpperBound(), ops); },
+                   PPExtString("<"));
+    ps << PP::space;
+
+    ps << PPExtString(inductionVarName) << PP::nbsp << "+=" << PP::nbsp;
+    emitExpression(op.getStep(), ops);
+    ps << ") begin";
+    if (!blockName.empty())
+      ps << " : " << PPExtString(blockName);
+  });
+
+  ps << PP::neverbreak;
+  setPendingNewline();
+  emitStatementBlock(op.getBody().getBlocks().front());
+  startStatement();
+  ps << "end";
+  if (!blockName.empty())
+    ps << " // " << PPExtString(blockName);
   ps.addCallback({op, false});
   setPendingNewline();
   return success();

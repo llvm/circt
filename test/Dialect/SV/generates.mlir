@@ -1,6 +1,10 @@
 // RUN: circt-opt %s | FileCheck %s
 // RUN: circt-opt %s | circt-opt | FileCheck %s
-// RUN: circt-opt %s --export-verilog -o %t.mlir | FileCheck %s --check-prefix=SV
+// RUN: circt-opt %s --export-verilog -o %t.mlir > %t.sv
+// RUN: FileCheck %s --check-prefix=SV < %t.sv
+
+// Check the generated SV is lint clean.
+// RUN: %if slang %{ circt-verilog --lint-only %t.sv %}
 
 hw.module @PrintPath<> () {
   %fd = hw.constant 0x80000002 : i32
@@ -90,5 +94,34 @@ hw.module @CaseNoDefault<NUM : i8> () {
 // SV:               end: bar0
 // SV:             endcase
 // SV:         end: bar
+// SV:         endgenerate
+// SV:       endmodule
+
+hw.module @Loop1() {
+  %c0 = hw.constant 0 : i32
+  %c10 = hw.constant 10 : i32
+  %c1 = hw.constant 1 : i32
+  sv.generate "foo_loop": {
+    sv.generate.for %c0 to %c10 step %c1 name "gen_blk" : i32 {
+    ^bb0(%i: i32):
+      hw.instance "print" @PrintPath() -> ()
+    }
+  }
+}
+
+// CHECK-LABEL: hw.module @Loop1
+// CHECK:         sv.generate "foo_loop" : {
+// CHECK:           sv.generate.for %{{.*}} to %{{.*}} step %{{.*}} name "gen_blk" : i32 {
+// CHECK:           ^bb0(%{{.*}}: i32):
+// CHECK:             hw.instance "print" @PrintPath() -> ()
+// CHECK:           }
+
+// SV-LABEL: module Loop1
+// SV:         generate
+// SV:         begin: foo_loop
+// SV:           for (genvar i = 32'h0; i < 32'hA; i += 32'h1) begin : gen_blk
+// SV:             PrintPath print ();
+// SV:           end
+// SV:         end: foo_loop
 // SV:         endgenerate
 // SV:       endmodule
