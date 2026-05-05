@@ -2612,16 +2612,9 @@ void GenerateForOp::print(OpAsmPrinter &p) {
 }
 
 LogicalResult GenerateForOp::verify() {
-  Type type = getLowerBound().getType();
-  if (getUpperBound().getType() != type)
-    return emitOpError("upper bound type must match lower bound type");
-  if (getStep().getType() != type)
-    return emitOpError("step type must match lower bound type");
-
-  if (getBody().getBlocks().size() != 1)
-    return emitOpError("must have exactly one block");
   if (getBody().getBlocks().front().getNumArguments() != 1)
     return emitOpError("must have exactly one block argument");
+  Type type = getLowerBound().getType();
   if (getBody().getBlocks().front().getArgument(0).getType() != type)
     return emitOpError("block argument type must match loop bounds type");
 
