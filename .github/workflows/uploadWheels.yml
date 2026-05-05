@@ -52,11 +52,11 @@ jobs:
             else
               os="ubuntu-22.04"
             fi
-            matrix="{
-              \"config\": [
-                {\"os\":\"$os\",\"cibw_build\":\"$cibw_build\"}
-              ]
-            }"
+            matrix='{
+              "config": [
+                {"os":"${{ os }}","cibw_build":"${{ cibw_build }}"}
+             ]
+            }'
           fi
           {
             echo "matrix<<EOF"
