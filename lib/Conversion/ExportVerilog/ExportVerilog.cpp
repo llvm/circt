@@ -991,6 +991,12 @@ StringRef getVerilogValueName(Value val) {
     // If the value is defined by for op, use its associated verilog name.
     if (auto forOp = dyn_cast<ForOp>(port.getParentBlock()->getParentOp()))
       return forOp->getAttrOfType<StringAttr>("hw.verilogName");
+    if (auto genForOp =
+            dyn_cast<GenerateForOp>(port.getParentBlock()->getParentOp())) {
+      if (auto attr = genForOp->getAttrOfType<StringAttr>("hw.verilogName"))
+        return attr.getValue();
+      return "i";
+    }
     return getInputPortVerilogName(port.getParentBlock()->getParentOp(),
                                    port.getArgNumber());
   }
@@ -4978,16 +4984,34 @@ LogicalResult StmtEmitter::visitSV(GenerateForOp op) {
   ps.scopedBox(PP::cbox0, [&]() {
     emitAssignLike(
         [&]() { ps << "genvar" << PP::nbsp << PPExtString(inductionVarName); },
-        [&]() { emitExpression(op.getLowerBound(), ops); }, PPExtString("="));
+        [&]() {
+          ps.invokeWithStringOS([&](auto &os) {
+            emitter.printParamValue(
+                op.getLowerBound(), os, VerilogPrecedence::LowestPrecedence,
+                [&]() { return op->emitOpError("invalid lower bound"); });
+          });
+        },
+        PPExtString("="));
     ps << PP::space;
 
-    emitAssignLike([&]() { ps << PPExtString(inductionVarName); },
-                   [&]() { emitExpression(op.getUpperBound(), ops); },
-                   PPExtString("<"));
+    emitAssignLike(
+        [&]() { ps << PPExtString(inductionVarName); },
+        [&]() {
+          ps.invokeWithStringOS([&](auto &os) {
+            emitter.printParamValue(
+                op.getUpperBound(), os, VerilogPrecedence::LowestPrecedence,
+                [&]() { return op->emitOpError("invalid upper bound"); });
+          });
+        },
+        PPExtString("<"));
     ps << PP::space;
 
     ps << PPExtString(inductionVarName) << PP::nbsp << "+=" << PP::nbsp;
-    emitExpression(op.getStep(), ops);
+    ps.invokeWithStringOS([&](auto &os) {
+      emitter.printParamValue(
+          op.getStep(), os, VerilogPrecedence::LowestPrecedence,
+          [&]() { return op->emitOpError("invalid step"); });
+    });
     ps << ") begin";
     if (!blockName.empty())
       ps << " : " << PPExtString(blockName);

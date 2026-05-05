@@ -97,30 +97,34 @@ hw.module @CaseNoDefault<NUM : i8> () {
 // SV:         endgenerate
 // SV:       endmodule
 
+hw.module @PrintVal(in %val : i32) {
+  %fd = hw.constant 0x80000002 : i32
+  sv.initial {
+    sv.fwrite %fd, "val = %d\n"(%val) : i32
+  }
+}
+
 hw.module @Loop1() {
-  %c0 = hw.constant 0 : i32
-  %c10 = hw.constant 10 : i32
-  %c1 = hw.constant 1 : i32
   sv.generate "foo_loop": {
-    sv.generate.for %c0 to %c10 step %c1 name "gen_blk" : i32 {
-    ^bb0(%i: i32):
-      hw.instance "print" @PrintPath() -> ()
+    sv.generate.for %i : i32 = 0 to 10 step 1 name "gen_blk" {
+      hw.instance "print" @PrintVal(val: %i : i32) -> ()
     }
   }
 }
 
 // CHECK-LABEL: hw.module @Loop1
 // CHECK:         sv.generate "foo_loop" : {
-// CHECK:           sv.generate.for %{{.*}} to %{{.*}} step %{{.*}} name "gen_blk" : i32 {
-// CHECK:           ^bb0(%{{.*}}: i32):
-// CHECK:             hw.instance "print" @PrintPath() -> ()
+// CHECK:           sv.generate.for %{{.*}} : i32 = 0 to 10 step 1 name "gen_blk" {
+// CHECK:             hw.instance "print" @PrintVal(val: %{{.*}} : i32) -> ()
 // CHECK:           }
 
 // SV-LABEL: module Loop1
 // SV:         generate
 // SV:         begin: foo_loop
 // SV:           for (genvar i = 32'h0; i < 32'hA; i += 32'h1) begin : gen_blk
-// SV:             PrintPath print ();
+// SV:             PrintVal print (
+// SV:               .val (i)
+// SV:             );
 // SV:           end
 // SV:         end: foo_loop
 // SV:         endgenerate

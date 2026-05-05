@@ -59,12 +59,18 @@ def GenerateForOp : SVOp<"generate.for",
   let description = "See SystemVerilog 2017 27.4.";
 
   let regions = (region SizedRegion<1>:$body);
-  let arguments = (ins HWIntegerType:$lowerBound,
-                       HWIntegerType:$upperBound,
-                       HWIntegerType:$step,
+  let arguments = (ins TypedAttrInterface:$lowerBound,
+                       TypedAttrInterface:$upperBound,
+                       TypedAttrInterface:$step,
                        StrAttr:$genBlockName);
 
-  let assemblyFormat = [{
-    $lowerBound `to` $upperBound `step` $step `name` $genBlockName attr-dict `:` type($lowerBound) $body
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    Block* getBodyBlock() { return &getBody().front(); }
+    Value getInductionVar() { return getBodyBlock()->getArgument(0); }
+    void getAsmBlockArgumentNames(mlir::Region &region,
+                                  mlir::OpAsmSetValueNameFn setNameFn);
   }];
 }

@@ -2537,6 +2537,105 @@ LogicalResult GenerateCaseOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// GenerateForOp
+//===----------------------------------------------------------------------===//
+
+ParseResult GenerateForOp::parse(OpAsmParser &parser, OperationState &result) {
+  auto &builder = parser.getBuilder();
+  Type type;
+
+  OpAsmParser::Argument inductionVariable;
+  int64_t lbVal, ubVal, stepVal;
+  StringAttr genBlockNameAttr;
+  SmallVector<OpAsmParser::Argument, 1> regionArgs;
+
+  if (parser.parseOperand(inductionVariable.ssaName) || parser.parseColon() ||
+      parser.parseType(type) || parser.parseEqual() ||
+      parser.parseInteger(lbVal) || parser.parseKeyword("to") ||
+      parser.parseInteger(ubVal) || parser.parseKeyword("step") ||
+      parser.parseInteger(stepVal) || parser.parseKeyword("name") ||
+      parser.parseAttribute(genBlockNameAttr))
+    return failure();
+
+  regionArgs.push_back(inductionVariable);
+  regionArgs.front().type = type;
+
+  result.addAttribute("lowerBound", builder.getIntegerAttr(type, lbVal));
+  result.addAttribute("upperBound", builder.getIntegerAttr(type, ubVal));
+  result.addAttribute("step", builder.getIntegerAttr(type, stepVal));
+  result.addAttribute("genBlockName", genBlockNameAttr);
+
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, regionArgs))
+    return failure();
+
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  if (!inductionVariable.ssaName.name.empty()) {
+    if (!isdigit(inductionVariable.ssaName.name[1]))
+      result.attributes.append(
+          {builder.getStringAttr("inductionVarName"),
+           builder.getStringAttr(inductionVariable.ssaName.name.drop_front())});
+  }
+
+  return success();
+}
+
+void GenerateForOp::print(OpAsmPrinter &p) {
+  p << " " << getInductionVar() << " : " << getLowerBound().getType() << " = ";
+
+  if (auto lowerAttr = dyn_cast<IntegerAttr>(getLowerBound()))
+    p << lowerAttr.getInt();
+  else
+    p.printAttribute(getLowerBound());
+
+  p << " to ";
+
+  if (auto upperAttr = dyn_cast<IntegerAttr>(getUpperBound()))
+    p << upperAttr.getInt();
+  else
+    p.printAttribute(getUpperBound());
+
+  p << " step ";
+
+  if (auto stepAttr = dyn_cast<IntegerAttr>(getStep()))
+    p << stepAttr.getInt();
+  else
+    p.printAttribute(getStep());
+
+  p << " name " << getGenBlockNameAttr();
+
+  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+LogicalResult GenerateForOp::verify() {
+  Type type = getLowerBound().getType();
+  if (getUpperBound().getType() != type)
+    return emitOpError("upper bound type must match lower bound type");
+  if (getStep().getType() != type)
+    return emitOpError("step type must match lower bound type");
+
+  if (getBody().getBlocks().size() != 1)
+    return emitOpError("must have exactly one block");
+  if (getBody().getBlocks().front().getNumArguments() != 1)
+    return emitOpError("must have exactly one block argument");
+  if (getBody().getBlocks().front().getArgument(0).getType() != type)
+    return emitOpError("block argument type must match loop bounds type");
+
+  return success();
+}
+
+void GenerateForOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  auto *block = &region.front();
+  auto attr = (*this)->getAttrOfType<StringAttr>("inductionVarName");
+  if (attr)
+    setNameFn(block->getArgument(0), attr);
+}
+
 ModportStructAttr ModportStructAttr::get(MLIRContext *context,
                                          ModportDirection direction,
                                          FlatSymbolRefAttr signal) {
