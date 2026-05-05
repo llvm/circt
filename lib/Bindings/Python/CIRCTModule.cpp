@@ -124,9 +124,16 @@ NB_MODULE(_circt, m) {
         mlirDialectHandleRegisterDialect(index, context);
         mlirDialectHandleLoadDialect(index, context);
 
+        // Register (but do not eagerly load) the LLVM dialect. Loading it
+        // would force every `DialectInterfaceCollection` (e.g. the one built
+        // by the inliner used by `hw-flatten-modules`) to query the LLVM
+        // dialect for its promised interfaces, fatally aborting in asserts
+        // builds when those interface extensions have not also been
+        // registered. Users that actually need the LLVM dialect can load it
+        // explicitly (e.g. by importing it from MLIR's own bindings) or it
+        // will be loaded on demand by translation/lowering helpers.
         MlirDialectHandle llvm = mlirGetDialectHandle__llvm__();
         mlirDialectHandleRegisterDialect(llvm, context);
-        mlirDialectHandleLoadDialect(llvm, context);
 
         MlirDialectHandle scf = mlirGetDialectHandle__scf__();
         mlirDialectHandleRegisterDialect(scf, context);
