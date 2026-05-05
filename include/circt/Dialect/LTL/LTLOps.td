@@ -119,7 +119,8 @@ def PastOp : LTLOp<"past", [TypesMatchWith<"input and result types must match",
 
   let summary = "Observe the sequence $delay cycles earlier.";
   let description = [{
-      Semantically works like `ltl.delay %seq, -$delay, 0`
+      Semantically works like `ltl.delay %seq, -$delay, 0`, clocked by the
+      optional `$clk` operand if given.
   }];
 }
 
