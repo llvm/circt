@@ -809,7 +809,66 @@ class CppTypeEmitter:
     hdr.write(
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(window_type.id)};\n"
     )
+    self._emit_window_data_accessors(hdr, info)
     hdr.write("};\n\n")
+
+  def _emit_window_data_accessors(self, hdr: TextIO, info) -> None:
+    """Emit accessors for the header and data fields of a window helper.
+
+    Exposes each static header field as a scalar accessor, the count of data
+    frames, and one vector-valued accessor per data field so decoded values
+    are easy to inspect on the read side.
+    """
+    list_field_name = info["list_field_name"]
+    hdr.write("\n")
+    for field_name, field_type in info["header_fields"]:
+      # Skip the synthetic bulk-count field; it is exposed via
+      # `<list>_count()` below.
+      if field_type is None:
+        continue
+      if isinstance(field_type, types.ArrayType):
+        base_cpp, suffix = self._array_base_and_suffix(field_type)
+        hdr.write(
+            f"  const {base_cpp} (&{field_name}() const){suffix} {{ return header.{field_name}; }}\n"
+        )
+      else:
+        cpp = self._cpp_type(field_type)
+        hdr.write(
+            f"  {cpp} {field_name}() const {{ return header.{field_name}; }}\n")
+    hdr.write(
+        f"  size_t {list_field_name}_count() const {{ return data_frames.size(); }}\n"
+    )
+    for field_name, field_type in info["data_fields"]:
+      # std::vector cannot hold C-style arrays, so skip array-typed data
+      # fields here; callers can still reach them via the underlying frames.
+      if isinstance(field_type, types.ArrayType):
+        continue
+      if field_name == list_field_name:
+        elem_cpp = "value_type"
+      else:
+        elem_cpp = self._cpp_type(field_type)
+      # C++ does not allow forming a pointer-to-member for a bit-field, so for
+      # non-byte-aligned integer fields we fall back to a lambda projection
+      # (which copies by value on each dereference) instead of a
+      # pointer-to-member projection.
+      unwrapped = self._unwrap_aliases(field_type)
+      is_bitfield = (isinstance(unwrapped, (types.BitsType, types.IntType)) and
+                     unwrapped.bit_width % 8 != 0)
+      if is_bitfield:
+        projection = f"[](const data_frame &f) {{ return f.{field_name}; }}"
+      else:
+        projection = f"&data_frame::{field_name}"
+      hdr.write(
+          f"  auto {field_name}() const {{\n"
+          f"    return data_frames | std::views::transform({projection});\n"
+          f"  }}\n")
+      hdr.write(f"  std::vector<{elem_cpp}> {field_name}_vector() const {{\n"
+                f"    std::vector<{elem_cpp}> out;\n"
+                f"    out.reserve(data_frames.size());\n"
+                f"    for (const auto &frame : data_frames)\n"
+                f"      out.push_back(frame.{field_name});\n"
+                f"    return out;\n"
+                f"  }}\n")
 
   def _emit_alias(self, hdr: TextIO, alias_type: types.TypeAlias) -> None:
     """Emit a using alias when the alias targets a different C++ type."""
@@ -837,6 +896,7 @@ class CppTypeEmitter:
         #include <any>
         #include <cstring>
         #include <limits>
+        #include <ranges>
         #include <stdexcept>
         #include <string_view>
         #include <utility>
