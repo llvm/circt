@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
@@ -42,9 +43,18 @@ ParseResult ProbeSendOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::UnresolvedOperand input;
   Type inputType;
 
-  if (parser.parseOperand(input) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(inputType))
+  if (parser.parseOperand(input))
+    return failure();
+
+  // Parse optional 'sym' keyword for inner symbol
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    InnerSymAttr innerSym;
+    if (parser.parseCustomAttributeWithFallback(innerSym))
+      return failure();
+    result.addAttribute(InnerSymbolTable::getInnerSymbolAttrName(), innerSym);
+  }
+
+  if (parser.parseColon() || parser.parseType(inputType))
     return failure();
 
   // Resolve the operand
@@ -67,9 +77,16 @@ void ProbeSendOp::print(OpAsmPrinter &p) {
 
   p << " " << getInput();
 
-  // Print attributes excluding 'forceable' (already printed as keyword)
+  // Print 'sym' keyword and inner symbol if present
+  if (auto innerSym = getInnerSymAttr()) {
+    p << " sym ";
+    innerSym.print(p);
+  }
+
+  // Print attributes excluding 'forceable', 'inner_sym' (already printed)
   SmallVector<StringRef> elidedAttrs;
   elidedAttrs.push_back("forceable");
+  elidedAttrs.push_back(InnerSymbolTable::getInnerSymbolAttrName());
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
 
   // Print the input operand type
@@ -79,6 +96,11 @@ void ProbeSendOp::print(OpAsmPrinter &p) {
 OpFoldResult ProbeSendOp::fold(FoldAdaptor adaptor) {
   // No constant folding for now
   return {};
+}
+
+std::optional<size_t> ProbeSendOp::getTargetResultIndex() {
+  // Inner symbol targets the result (the probe)
+  return 0;
 }
 
 // LogicalResult ProbeSendOp::verify() {
@@ -409,10 +431,10 @@ LogicalResult ProbeDefineOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
-// ProbeXMRRefOp
+// ProbeToInOutOp
 //===----------------------------------------------------------------------===//
 
-ParseResult ProbeXMRRefOp::parse(OpAsmParser &parser, OperationState &result) {
+ParseResult ProbeToInOutOp::parse(OpAsmParser &parser, OperationState &result) {
   OpAsmParser::UnresolvedOperand ref;
   Type refType;
 
@@ -440,13 +462,13 @@ ParseResult ProbeXMRRefOp::parse(OpAsmParser &parser, OperationState &result) {
   return success();
 }
 
-void ProbeXMRRefOp::print(OpAsmPrinter &p) {
+void ProbeToInOutOp::print(OpAsmPrinter &p) {
   p << " " << getRef();
   p.printOptionalAttrDict((*this)->getAttrs());
   p << " : " << getRef().getType();
 }
 
-LogicalResult ProbeXMRRefOp::verify() {
+LogicalResult ProbeToInOutOp::verify() {
   // Get the probe type from the input
   auto probeType = dyn_cast<ProbeType>(getRef().getType());
   auto rwProbeType = dyn_cast<RWProbeType>(getRef().getType());
@@ -468,4 +490,3 @@ LogicalResult ProbeXMRRefOp::verify() {
 
   return success();
 }
-

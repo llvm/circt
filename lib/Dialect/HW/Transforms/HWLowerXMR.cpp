@@ -58,7 +58,7 @@ private:
   LogicalResult lowerProbesInModule(HWModuleOp module);
   LogicalResult handleProbeSend(ProbeSendOp send);
   LogicalResult handleProbeResolve(ProbeResolveOp resolve);
-  LogicalResult handleProbeXMRRef(ProbeXMRRefOp xmrRef);
+  LogicalResult handleProbeXMRRef(ProbeToInOutOp xmrRef);
   LogicalResult handleXMRRemote(XMRRemoteOp xmrRemote);
   LogicalResult handleInstance(InstanceOp inst);
   LogicalResult handleProbeRWProbe(ProbeRWProbeOp rwprobe);
@@ -121,6 +121,10 @@ private:
   // Generate the ABI ref_<module> prefix string into `prefix`
   void getRefABIPrefix(HWModuleOp mod, SmallVectorImpl<char> &prefix);
 
+  // Generate the ABI ref_<module> prefix string into `prefix` for external
+  // modules
+  void getRefABIPrefix(HWModuleExternOp mod, SmallVectorImpl<char> &prefix);
+
   // Get full macro name as StringAttr for the specified ref port
   StringAttr getRefABIMacroForPort(HWModuleOp mod, size_t portIndex,
                                    const Twine &prefix, bool backTick = false);
@@ -152,7 +156,7 @@ private:
   // Operations to remove
   SmallVector<ProbeSendOp> sendsToRemove;
   SmallVector<ProbeResolveOp> resolvesToRemove;
-  SmallVector<ProbeXMRRefOp> xmrRefsToRemove;
+  SmallVector<ProbeToInOutOp> xmrRefsToRemove;
   SmallVector<XMRRemoteOp> xmrRemotesToRemove;
   SmallVector<ProbeDefineOp> definesToRemove;
   SmallVector<WireOp> wiresToRemove;
@@ -277,7 +281,7 @@ void HWLowerXMRPass::runOnOperation() {
 LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
   SmallVector<ProbeSendOp> sends;
   SmallVector<ProbeResolveOp> resolves;
-  SmallVector<ProbeXMRRefOp> xmrRefs;
+  SmallVector<ProbeToInOutOp> xmrRefs;
   SmallVector<XMRRemoteOp> xmrRemotes;
   SmallVector<InstanceOp> instances;
   SmallVector<ProbeRWProbeOp> rwprobes;
@@ -292,7 +296,7 @@ LogicalResult HWLowerXMRPass::lowerProbesInModule(HWModuleOp module) {
       sends.push_back(send);
     else if (auto resolve = dyn_cast<ProbeResolveOp>(op))
       resolves.push_back(resolve);
-    else if (auto xmrRef = dyn_cast<ProbeXMRRefOp>(op))
+    else if (auto xmrRef = dyn_cast<ProbeToInOutOp>(op))
       xmrRefs.push_back(xmrRef);
     else if (auto xmrRemote = dyn_cast<XMRRemoteOp>(op))
       xmrRemotes.push_back(xmrRemote);
@@ -729,7 +733,7 @@ LogicalResult HWLowerXMRPass::buildHierPath(size_t pathIdx,
   }
 
   if (!suffixString.empty()) {
-    suffixSym = builder.getStringAttr("." + suffixString);
+    suffixSym = builder.getStringAttr(suffixString);
   }
 
   // Create hierarchical path
@@ -797,9 +801,11 @@ LogicalResult HWLowerXMRPass::handleInstance(InstanceOp inst) {
         continue;
 
       // Generate macro name: ref_<module-name>_<port-name>
+      SmallString<128> macroPrefix;
+      getRefABIPrefix(refExtModule, macroPrefix);
       SmallString<128> macroName;
-      macroName += "`ref_";
-      macroName += refExtModule.getModuleName();
+      macroName += "`";
+      macroName += macroPrefix;
       macroName += "_";
       macroName += refExtModule.getPortName(portIdx);
 
@@ -853,8 +859,8 @@ LogicalResult HWLowerXMRPass::handleInstance(InstanceOp inst) {
     // Instance result i corresponds to output i
     if (i >= outputOp.getNumOperands()) {
       return inst.emitOpError("instance result ")
-             << i << " out of bounds (module has "
-             << outputOp.getNumOperands() << " outputs)";
+             << i << " out of bounds (module has " << outputOp.getNumOperands()
+             << " outputs)";
     }
 
     Value refModuleOutput = outputOp.getOperand(i);
@@ -910,6 +916,8 @@ LogicalResult HWLowerXMRPass::handleProbeResolve(ProbeResolveOp resolve) {
     if (failed(buildHierPath(pathIdx.value(), builder, pathSym, suffixSym)))
       return failure();
 
+    if (suffixSym && !suffixSym.empty())
+      suffixSym = builder.getStringAttr("." + suffixSym.getValue());
     auto xmrType = sv::InOutType::get(resolve.getType());
     Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
     Value readValue = builder.create<sv::ReadInOutOp>(xmr);
@@ -930,7 +938,7 @@ LogicalResult HWLowerXMRPass::handleProbeResolve(ProbeResolveOp resolve) {
   return handler(resolve);
 }
 
-LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeXMRRefOp xmrRef) {
+LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeToInOutOp xmrRef) {
   Value ref = xmrRef.getRef();
 
   // Get the inner type from the probe/rwprobe
@@ -951,7 +959,7 @@ LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeXMRRefOp xmrRef) {
 
   // Handler for when the reference is resolved
   auto handler = [this, innerType](Operation *op) -> LogicalResult {
-    auto xmrRef = cast<ProbeXMRRefOp>(op);
+    auto xmrRef = cast<ProbeToInOutOp>(op);
     Value ref = xmrRef.getRef();
 
     auto pathIdx = getRemoteRefSend(ref);
@@ -966,6 +974,8 @@ LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeXMRRefOp xmrRef) {
       return failure();
 
     auto xmrType = sv::InOutType::get(innerType);
+    if (suffixSym && !suffixSym.empty())
+      suffixSym = builder.getStringAttr("." + suffixSym.getValue());
     Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
 
     xmrRef.getResult().replaceAllUsesWith(xmr);
@@ -1204,7 +1214,7 @@ HWLowerXMRPass::handleFirMemDebugPort(seq::FirMemDebugPortOp debugPort) {
   auto ind = addReachingSendsEntry(debugPort.getDebugPort(), inRef);
 
   // Set the path suffix to "Memory" to reference the internal storage array
-  xmrPathSuffix[ind] = ".Memory";
+  xmrPathSuffix[ind] = "Memory";
 
   // Mark the debug port operation for removal
   opsToRemove.push_back(debugPort);
@@ -1394,6 +1404,15 @@ LogicalResult HWLowerXMRPass::handlePublicModuleRefPorts(HWModuleOp module) {
 void HWLowerXMRPass::getRefABIPrefix(HWModuleOp mod,
                                      SmallVectorImpl<char> &prefix) {
   auto modName = mod.getModuleName();
+  (Twine("ref_") + modName).toVector(prefix);
+}
+
+// Generate the ABI ref_<module> prefix string into `prefix` for external
+// modules
+void HWLowerXMRPass::getRefABIPrefix(HWModuleExternOp mod,
+                                     SmallVectorImpl<char> &prefix) {
+  auto modName = mod.getVerilogModuleNameAttr() ? mod.getVerilogModuleName()
+                                                : mod.getModuleName();
   (Twine("ref_") + modName).toVector(prefix);
 }
 

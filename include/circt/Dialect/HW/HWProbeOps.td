@@ -61,7 +61,9 @@ def UninitializedProbeConstantOp : HWOp<"probe.uninitialized", [
 // Probe Send/Resolve Operations
 //===----------------------------------------------------------------------===//
 
-def ProbeSendOp : HWOp<"probe.send", []> {
+def ProbeSendOp : HWOp<"probe.send", [
+    DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
+  ]> {
   let summary = "Create a probe reference";
   let description = [{
     Creates a probe reference to a value. This marks the source of a dataflow
@@ -72,6 +74,10 @@ def ProbeSendOp : HWOp<"probe.send", []> {
     When the 'forceable' attribute is present, it produces a read-write probe
     (!hw.rwprobe<T>) that can be used with force and release operations.
 
+    The operation can optionally define an inner symbol using the 'inner_sym'
+    attribute, which allows the probe to be referenced by other operations
+    using InnerRef.
+
     Example:
     ```mlir
     %wire = hw.wire %value : i32
@@ -81,21 +87,26 @@ def ProbeSendOp : HWOp<"probe.send", []> {
 
     // Read-write probe (forceable)
     %rwref = hw.probe.send forceable %wire : i32
+
+    // Probe with inner symbol
+    %ref_sym = hw.probe.send %wire sym @my_probe : i32
     ```
   }];
 
   let arguments = (ins AnyType:$input,
-                       UnitAttr:$forceable);
+                       UnitAttr:$forceable,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs AnyProbeType:$result);
 
   let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
 
   let builders = [
-    // Default builder without forceable attribute
+    // Default builder without forceable attribute or inner symbol
     OpBuilder<(ins "Value":$input), [{
       Type probeType = ProbeType::get(input.getType());
-      build($_builder, $_state, probeType, input, /*forceable=*/UnitAttr());
+      build($_builder, $_state, probeType, input, /*forceable=*/UnitAttr(),
+            /*inner_sym=*/hw::InnerSymAttr());
     }]>,
     // Builder with explicit forceable control
     OpBuilder<(ins "Value":$input, "bool":$forceable), [{
@@ -104,7 +115,8 @@ def ProbeSendOp : HWOp<"probe.send", []> {
         (Type)ProbeType::get(input.getType());
       UnitAttr forceableAttr = forceable ?
         $_builder.getUnitAttr() : UnitAttr();
-      build($_builder, $_state, probeType, input, forceableAttr);
+      build($_builder, $_state, probeType, input, forceableAttr,
+            /*inner_sym=*/hw::InnerSymAttr());
     }]>
   ];
 }
@@ -292,7 +304,7 @@ def XMRRemoteOp : HWOp<"xmr.remote",
   ];
 }
 
-def ProbeXMRRefOp : HWOp<"probe.xmr_ref", []> {
+def ProbeToInOutOp : HWOp<"probe.to_inout", []> {
   let summary = "Convert a probe reference to an inout reference";
   let description = [{
     Converts a probe or rwprobe reference to an inout reference. This operation
@@ -308,14 +320,14 @@ def ProbeXMRRefOp : HWOp<"probe.xmr_ref", []> {
     Example:
     ```mlir
     %probe = hw.probe.send %wire : i32
-    %inout = hw.probe.xmr_ref %probe : !hw.probe<i32>
+    %inout = hw.probe.to_inout %probe : !hw.probe<i32>
     %value = sv.read_inout %inout : !hw.inout<i32>
     ```
 
     Example with rwprobe for force operations:
     ```mlir
     %rwprobe = hw.probe.send forceable %wire : i32
-    %inout = hw.probe.xmr_ref %rwprobe : !hw.rwprobe<i32>
+    %inout = hw.probe.to_inout %rwprobe : !hw.rwprobe<i32>
     sv.force %inout, %newval : i32
     ```
   }];

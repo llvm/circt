@@ -222,9 +222,9 @@ hw.module @ProbeXMRRef() {
   // CHECK: %[[PROBE:.+]] = hw.probe.send %{{.+}} : i32
   %probe = hw.probe.send %wire : i32
 
-  // Convert probe to inout using probe.xmr_ref (result type inferred)
-  // CHECK: %[[INOUT:.+]] = hw.probe.xmr_ref %[[PROBE]] : !hw.probe<i32>
-  %inout = hw.probe.xmr_ref %probe : !hw.probe<i32>
+  // Convert probe to inout using probe.to_inout (result type inferred)
+  // CHECK: %[[INOUT:.+]] = hw.probe.to_inout %[[PROBE]] : !hw.probe<i32>
+  %inout = hw.probe.to_inout %probe : !hw.probe<i32>
 }
 
 // CHECK-LABEL: hw.module @ProbeXMRRefRWProbe
@@ -236,9 +236,9 @@ hw.module @ProbeXMRRefRWProbe() {
   // CHECK: %[[RWPROBE:.+]] = hw.probe.send forceable %{{.+}} : i8
   %rwprobe = hw.probe.send forceable %wire : i8
 
-  // Convert rwprobe to inout using probe.xmr_ref (result type inferred)
-  // CHECK: %[[INOUT:.+]] = hw.probe.xmr_ref %[[RWPROBE]] : !hw.rwprobe<i8>
-  %inout = hw.probe.xmr_ref %rwprobe : !hw.rwprobe<i8>
+  // Convert rwprobe to inout using probe.to_inout (result type inferred)
+  // CHECK: %[[INOUT:.+]] = hw.probe.to_inout %[[RWPROBE]] : !hw.rwprobe<i8>
+  %inout = hw.probe.to_inout %rwprobe : !hw.rwprobe<i8>
 }
 
 // CHECK-LABEL: hw.module @ProbeXMRRefAggregate
@@ -250,8 +250,8 @@ hw.module @ProbeXMRRefAggregate(in %arr_in: !hw.array<4xi16>) {
   %arr_probe = hw.probe.send %arr_wire : !hw.array<4xi16>
 
   // Convert array probe to inout (result type inferred)
-  // CHECK: %[[ARR_INOUT:.+]] = hw.probe.xmr_ref %[[ARR_PROBE]] : !hw.probe<!hw.array<4xi16>>
-  %arr_inout = hw.probe.xmr_ref %arr_probe : !hw.probe<!hw.array<4xi16>>
+  // CHECK: %[[ARR_INOUT:.+]] = hw.probe.to_inout %[[ARR_PROBE]] : !hw.probe<!hw.array<4xi16>>
+  %arr_inout = hw.probe.to_inout %arr_probe : !hw.probe<!hw.array<4xi16>>
 }
 
 // CHECK-LABEL: hw.module @ProbeClockTypes
@@ -279,4 +279,32 @@ hw.module @ProbeClockInStruct(in %clk: !seq.clock, in %data: i8) {
   // Resolve the struct probe
   // CHECK: %{{.+}} = hw.probe.resolve %[[STRUCT_PROBE]] : !hw.probe<!hw.struct<clk: !seq.clock, data: i8>>
   %struct_value = hw.probe.resolve %struct_probe : !hw.probe<!hw.struct<clk: !seq.clock, data: i8>>
+}
+
+// CHECK-LABEL: hw.module @ProbeSendWithInnerSym
+hw.module @ProbeSendWithInnerSym() {
+  %c42_i32 = hw.constant 42 : i32
+  %wire = hw.wire %c42_i32 : i32
+
+  // Create a probe with an inner symbol
+  // CHECK: %{{.+}} = hw.probe.send %{{.+}} sym @my_probe : i32
+  %probe = hw.probe.send %wire sym @my_probe : i32
+
+  // Resolve the probe
+  // CHECK: %{{.+}} = hw.probe.resolve %{{.+}} : !hw.probe<i32>
+  %value = hw.probe.resolve %probe : !hw.probe<i32>
+}
+
+// CHECK-LABEL: hw.module @ProbeSendForceableWithInnerSym
+hw.module @ProbeSendForceableWithInnerSym() {
+  %c99_i8 = hw.constant 99 : i8
+  %wire = hw.wire %c99_i8 : i8
+
+  // Create a forceable probe with an inner symbol
+  // CHECK: %{{.+}} = hw.probe.send forceable %{{.+}} sym @my_rwprobe : i8
+  %rwprobe = hw.probe.send forceable %wire sym @my_rwprobe : i8
+
+  // Convert to inout
+  // CHECK: %{{.+}} = hw.probe.to_inout %{{.+}} : !hw.rwprobe<i8>
+  %inout = hw.probe.to_inout %rwprobe : !hw.rwprobe<i8>
 }
