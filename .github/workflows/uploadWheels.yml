@@ -19,6 +19,8 @@ on:
           - cp310-manylinux_x86_64
           - cp313-manylinux_x86_64
           - cp314-manylinux_x86_64
+          - cp313-macosx_arm64
+          - cp314-macosx_arm64
   schedule:
     - cron: 0 12 * * 1
 
@@ -38,14 +40,22 @@ jobs:
               "config": [
                 {"os":"ubuntu-22.04","cibw_build":"cp310-manylinux_x86_64"},
                 {"os":"ubuntu-22.04","cibw_build":"cp313-manylinux_x86_64"},
-                {"os":"ubuntu-22.04","cibw_build":"cp314-manylinux_x86_64"}
+                {"os":"ubuntu-22.04","cibw_build":"cp314-manylinux_x86_64"},
+                {"os":"macos-14","cibw_build":"cp313-macosx_arm64"},
+                {"os":"macos-14","cibw_build":"cp314-macosx_arm64"}
               ]
             }'
           else
+            cibw_build="${{ inputs.cibw-build }}"
+            if [[ "$cibw_build" == *"macosx_arm64" ]]; then
+              os="macos-14"
+            else
+              os="ubuntu-22.04"
+            fi
             matrix='{
               "config": [
-                {"os":"ubuntu-22.04","cibw_build":"${{ inputs.cibw-build }}"}
-              ]
+                {"os":"${{ os }}","cibw_build":"${{ cibw_build }}"}
+             ]
             }'
           fi
           {
@@ -85,6 +95,7 @@ jobs:
           CIBW_BUILD: ${{ matrix.config.cibw_build }}
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
           CIBW_BUILD_FRONTEND: build
+          CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=14.0
           SETUPTOOLS_SCM_DEBUG: True
 
       - name: Upload (stage) wheels as artifacts
