@@ -740,6 +740,23 @@ SimSetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// SimGetNextWakeupOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimGetNextWakeupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
+  if (!moduleOp)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ExecuteOp
 //===----------------------------------------------------------------------===//
 

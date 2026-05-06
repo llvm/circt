@@ -200,6 +200,13 @@ LogicalResult ModuleLowering::run() {
       StorageType::get(builder.getContext(), {}), modelOp.getLoc());
   builder.setInsertionPointToStart(&modelBlock);
 
+  // Reset the next wakeup slot to `UINT64_MAX` ("no wakeup pending") at the
+  // start of every eval. Process suspension code lowers the value to the
+  // earliest scheduled wakeup over the course of the evaluation.
+  auto noWakeup = hw::ConstantOp::create(builder, moduleOp.getLoc(),
+                                         builder.getI64Type(), -1);
+  SetNextWakeupOp::create(builder, moduleOp.getLoc(), storageArg, noWakeup);
+
   // Create the `arc.initial` op to contain the ops for the initialization
   // phase.
   auto initialOp = InitialOp::create(builder, moduleOp.getLoc());

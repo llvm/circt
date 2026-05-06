@@ -710,6 +710,26 @@ struct SimSetTimeOpLowering : public OpConversionPattern<arc::SimSetTimeOp> {
   }
 };
 
+// Loads the next wakeup time (i64 femtoseconds) from `kNextWakeupOffset` of
+// the model instance's state storage.
+struct SimGetNextWakeupOpLowering
+    : public OpConversionPattern<arc::SimGetNextWakeupOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SimGetNextWakeupOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = op.getLoc();
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+    Value slotPtr = LLVM::GEPOp::create(
+        rewriter, loc, ptrType, rewriter.getI8Type(), adaptor.getInstance(),
+        ArrayRef<LLVM::GEPArg>{arc::kNextWakeupOffset});
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(),
+                                              slotPtr);
+    return success();
+  }
+};
+
 // Global string constants in the module.
 class StringCache {
 public:
@@ -1051,6 +1071,45 @@ struct TerminateOpLowering : public OpConversionPattern<arc::TerminateOp> {
     LLVM::StoreOp::create(rewriter, loc, codeVal, flagPtr);
 
     rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+// Loads the next wakeup time (i64 femtoseconds) from the model's storage at
+// `kNextWakeupOffset`.
+struct GetNextWakeupOpLowering
+    : public OpConversionPattern<arc::GetNextWakeupOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::GetNextWakeupOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+    Value slotPtr = LLVM::GEPOp::create(
+        rewriter, loc, ptrType, rewriter.getI8Type(), adaptor.getStorage(),
+        ArrayRef<LLVM::GEPArg>{arc::kNextWakeupOffset});
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, rewriter.getI64Type(),
+                                              slotPtr);
+    return success();
+  }
+};
+
+// Stores the next wakeup time (i64 femtoseconds) to the model's storage at
+// `kNextWakeupOffset`.
+struct SetNextWakeupOpLowering
+    : public OpConversionPattern<arc::SetNextWakeupOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(arc::SetNextWakeupOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+    Value slotPtr = LLVM::GEPOp::create(
+        rewriter, loc, ptrType, rewriter.getI8Type(), adaptor.getStorage(),
+        ArrayRef<LLVM::GEPArg>{arc::kNextWakeupOffset});
+    rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getTime(), slotPtr);
     return success();
   }
 };
@@ -1459,6 +1518,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     ClockInvOpLowering,
     ConstantTimeOpLowering,
     CurrentTimeOpLowering,
+    GetNextWakeupOpLowering,
     IntToTimeOpLowering,
     MemoryReadOpLowering,
     MemoryWriteOpLowering,
@@ -1467,6 +1527,8 @@ void LowerArcToLLVMPass::runOnOperation() {
     ReplaceOpWithInputPattern<seq::FromClockOp>,
     RuntimeModelOpLowering,
     SeqConstClockLowering,
+    SetNextWakeupOpLowering,
+    SimGetNextWakeupOpLowering,
     SimGetTimeOpLowering,
     SimSetTimeOpLowering,
     StateReadOpLowering,
