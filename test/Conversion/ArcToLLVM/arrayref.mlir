@@ -1,7 +1,7 @@
 // RUN: circt-opt %s --lower-arc-to-llvm | FileCheck %s
 
 // CHECK-LABEL: @Types
-// CHECK-SAME: %arg0: !llvm.ptr
+// CHECK-SAME: %arg0: !llvm.ptr {llvm.dereferenceable = 8 : i64}
 // CHECK-SAME: -> !llvm.ptr
 func.func @Types(%arg0: !arc.arrayref<2xi32>) -> !arc.arrayref<2xi32> {
   return %arg0 : !arc.arrayref<2xi32>

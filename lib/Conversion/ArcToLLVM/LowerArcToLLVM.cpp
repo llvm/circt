@@ -1322,16 +1322,14 @@ struct RuntimeModelOpLowering
 // ArrayRef patterns
 //===----------------------------------------------------------------------===//
 
-size_t computeByteWidth(ArrayRefType type,
-                        ConversionPatternRewriter &rewriter) {
+size_t computeByteWidth(ArrayRefType type) {
   auto bitWidth = computeLLVMBitWidth(type);
   assert(bitWidth.has_value());
   return llvm::divideCeil(*bitWidth, 8);
 }
 
 // Computes the padded bytewidth (stride) of each element.
-size_t computeElementByteWidth(ArrayRefType arrayRefType,
-                               ConversionPatternRewriter &rewriter) {
+size_t computeElementByteWidth(ArrayRefType arrayRefType) {
   auto arrayBitWidth = computeLLVMBitWidth(arrayRefType);
   assert(arrayBitWidth.has_value());
   size_t elementBitWidth = *arrayBitWidth / arrayRefType.getNumElements();
@@ -1347,7 +1345,7 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     ArrayRefType arrayRefType = op.getType();
-    size_t byteWidth = computeByteWidth(arrayRefType, rewriter);
+    size_t byteWidth = computeByteWidth(arrayRefType);
     auto size = LLVM::ConstantOp::create(rewriter, op.getLoc(),
                                          rewriter.getI64Type(), byteWidth);
     auto alloc =
@@ -1381,7 +1379,7 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
   void initializeArray(ConversionPatternRewriter &rewriter, Location loc,
                        Value alloc, ArrayAttr initAttr,
                        ArrayRefType arrayRefType) const {
-    size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
+    size_t elemByteWidth = computeElementByteWidth(arrayRefType);
     Type ptrTy = LLVM::LLVMPointerType::get(getContext());
     Type i8Ty = rewriter.getI8Type();
     for (unsigned i = 0; i < arrayRefType.getNumElements(); ++i) {
@@ -1407,7 +1405,7 @@ struct ArrayRefCreateOpLowering : public OpConversionPattern<ArrayRefCreateOp> {
     Value alloc = adaptor.getInput();
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
-    size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
+    size_t elemByteWidth = computeElementByteWidth(arrayRefType);
     auto elements = adaptor.getElements();
     for (unsigned i = 0; i < elements.size(); ++i) {
       // Note: hardcoded for little endian targets.
@@ -1435,7 +1433,7 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     auto i64Ty = rewriter.getI64Type();
-    size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
+    size_t elemByteWidth = computeElementByteWidth(arrayRefType);
     assert(!isa<ArrayRefType>(arrayRefType.getElementType()));
 
     Value stride =
@@ -1464,7 +1462,7 @@ struct ArrayRefInjectOpLowering : public OpConversionPattern<ArrayRefInjectOp> {
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     auto i64Ty = rewriter.getI64Type();
-    size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
+    size_t elemByteWidth = computeElementByteWidth(arrayRefType);
 
     Value stride =
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
@@ -1492,7 +1490,7 @@ struct ArrayRefSliceOpLowering : public OpConversionPattern<ArrayRefSliceOp> {
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     auto i64Ty = rewriter.getI64Type();
-    size_t elemByteWidth = computeElementByteWidth(resultType, rewriter);
+    size_t elemByteWidth = computeElementByteWidth(resultType);
 
     // Byte offset = lowIndex * elemByteWidth.
     Value stride =
@@ -1515,7 +1513,7 @@ struct ArrayRefCopyOpLowering : public OpConversionPattern<ArrayRefCopyOp> {
     auto loc = op.getLoc();
     ArrayRefType arrayRefType = cast<ArrayRefType>(op.getDestInput().getType());
     auto i64Ty = rewriter.getI64Type();
-    size_t byteWidth = computeByteWidth(arrayRefType, rewriter);
+    size_t byteWidth = computeByteWidth(arrayRefType);
     Value size = LLVM::ConstantOp::create(rewriter, loc, i64Ty, byteWidth);
     LLVM::MemcpyOp::create(rewriter, loc, adaptor.getDestInput(),
                            adaptor.getSource(), size,
@@ -1578,6 +1576,20 @@ void LowerArcToLLVMPass::runOnOperation() {
         result.replaceAllUsesWith(zero);
       }
     });
+  }
+
+  // Add `dereferenceable(<N>)` attributes to all function arguments that take
+  // ArrayRefTypes.
+  for (func::FuncOp func : getOperation().getOps<func::FuncOp>()) {
+    for (int i = 0, e = func.getNumArguments(); i != e; ++i) {
+      if (auto arrayRefType =
+              dyn_cast<ArrayRefType>(func.getArgumentTypes()[i])) {
+        size_t byteWidth = computeByteWidth(arrayRefType);
+        Builder builder(&getContext());
+        func.setArgAttr(i, LLVM::LLVMDialect::getDereferenceableAttrName(),
+                        builder.getI64IntegerAttr(byteWidth));
+      }
+    }
   }
 
   // Collect the symbols in the root op such that the HW-to-LLVM lowering can
