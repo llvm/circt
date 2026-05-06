@@ -299,6 +299,10 @@ struct Context {
   // Convert an expression AST node to MLIR ops.
   Value convertRvalueExpression(const slang::ast::Expression &expr,
                                 Type requiredType = {});
+  // When materializing a conversion, the caller may need to override the
+  // source expression's signedness with the conversion's own semantics.
+  Value convertRvalueExpression(const slang::ast::Expression &expr,
+                                       Type requiredType,bool conversionIsSigned); 
   Value convertLvalueExpression(const slang::ast::Expression &expr);
 
   // Convert an assertion expression AST node to MLIR ops.
