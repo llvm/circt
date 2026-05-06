@@ -1,4 +1,4 @@
-// RUN: circt-opt --lower-verif-to-sv %s | FileCheck %s
+// RUN: circt-opt --lower-verif-to-sv --split-input-file %s | FileCheck %s
 
 // CHECK: sv.macro.decl @SYNTHESIS
 
@@ -96,4 +96,22 @@ hw.module @ClockedAssertLike(in %clock: i1, in %p: i1) {
   // CHECK:   sv.cover_property %p on edge %clock label "c" : i1
   // CHECK: }
   verif.clocked_cover %p, edge %clock label "c" : i1
+}
+
+// -----
+
+// Verify that when a non-`sv.macro.decl` symbol named `SYNTHESIS` already
+// exists in the module, the pass falls back to a unique symbol name.
+
+// CHECK: sv.macro.decl @[[SYM:SYNTHESIS_[0-9]+]]["SYNTHESIS"]
+// CHECK: hw.module.extern @SYNTHESIS()
+hw.module.extern @SYNTHESIS()
+
+// CHECK-LABEL: hw.module @Top
+hw.module @Top(in %clock: i1, in %p: i1) {
+  // CHECK: sv.ifdef @[[SYM]] {
+  // CHECK: } else {
+  // CHECK:   sv.assert_property %p on posedge %clock label "a" : i1
+  // CHECK: }
+  verif.clocked_assert %p, posedge %clock label "a" : i1
 }

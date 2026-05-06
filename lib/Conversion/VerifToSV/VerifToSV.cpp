@@ -264,9 +264,7 @@ struct VerifToSVPass : public circt::impl::LowerVerifToSVBase<VerifToSVPass> {
 };
 } // namespace
 
-/// Run the verif-to-sv conversion patterns on a single hw.module. `guardCtx`
-/// holds the symbol name of the `sv.macro.decl` that the synthesis guards
-/// should reference, and tracks whether any guard was actually emitted.
+/// Run the verif-to-sv conversion patterns on a single hw.module.
 static LogicalResult lowerModule(hw::HWModuleOp module,
                                  const SynthesisGuardContext &guardCtx) {
   MLIRContext *context = module.getContext();
