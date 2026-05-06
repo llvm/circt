@@ -404,3 +404,64 @@ hw.module @structural_and_i2(in %a : i2, in %b : i2, out out : i2) {
   %out = comb.concat %and1, %and0 : i1, i1
   hw.output %out : i2
 }
+
+// ---------- Partial Vectorization (Chunking) ----------
+// Models the scenario where a subset of bits can be grouped into a single extract,
+// while other bits remain as scalar logic. 
+// Bits [3:1] form a linear sequence, while bit 0 is a structural XOR operation.
+
+// CHECK-LABEL: hw.module @partial_vectorization_chunking(
+// CHECK-DAG:     [[CHUNK_1:%.+]] = comb.extract %in from 1 : (i4) -> i3
+// CHECK-DAG:     [[IN_1:%.+]] = comb.extract %in from 1 : (i4) -> i1
+// CHECK-DAG:     [[IN_0:%.+]] = comb.extract %in from 0 : (i4) -> i1
+// CHECK-DAG:     [[BIT_0:%.+]] = comb.xor [[IN_1]], [[IN_0]] : i1
+// CHECK:         [[RES:%.+]] = comb.concat [[CHUNK_1]], [[BIT_0]] : i3, i1
+// CHECK-NEXT:    hw.output [[RES]] : i4
+hw.module @partial_vectorization_chunking(in %in : i4, out out : i4) {
+  // Bits [3:1] linear
+  %in_3 = comb.extract %in from 3 : (i4) -> i1
+  %in_2 = comb.extract %in from 2 : (i4) -> i1
+  %in_1 = comb.extract %in from 1 : (i4) -> i1
+
+  // Logic for bit 0
+  %in_1_for_0 = comb.extract %in from 1 : (i4) -> i1
+  %in_0 = comb.extract %in from 0 : (i4) -> i1
+  %bit_0 = comb.xor %in_1_for_0, %in_0 : i1
+
+  // Final concatenation
+  %concat = comb.concat %in_3, %in_2, %in_1, %bit_0 : i1, i1, i1, i1
+  hw.output %concat : i4
+}
+
+// ---------- Partial Vectorization: Multiple Chunks ----------
+// Tests if the chunking logic correctly handles multiple separate chunks interspersed
+// with scalar logic. Bits [5:4] are a chunk from %A, bit 3 is an AND gate, 
+// and bits [2:0] are a chunk from %B.
+
+// CHECK-LABEL: hw.module @partial_vectorization_multi_chunk(
+// CHECK-DAG:     [[CHUNK_A:%.+]] = comb.extract %A from 0 : (i2) -> i2
+// CHECK-DAG:     [[EXT_A:%.+]] = comb.extract %A from 1 : (i2) -> i1
+// CHECK-DAG:     [[EXT_B:%.+]] = comb.extract %B from 0 : (i5) -> i1
+// CHECK-DAG:     [[SCALAR:%.+]] = comb.and [[EXT_A]], [[EXT_B]] : i1
+// CHECK-DAG:     [[CHUNK_B:%.+]] = comb.extract %B from 2 : (i5) -> i3
+// CHECK:         [[RES:%.+]] = comb.concat [[CHUNK_A]], [[SCALAR]], [[CHUNK_B]] : i2, i1, i3
+// CHECK-NEXT:    hw.output [[RES]] : i6
+hw.module @partial_vectorization_multi_chunk(in %A : i2, in %B : i5, out out : i6) {
+  // Chunk A (bits 5:4) -> A[1:0]
+  %a1 = comb.extract %A from 1 : (i2) -> i1
+  %a0 = comb.extract %A from 0 : (i2) -> i1
+
+  // Scalar logic (bit 3)
+  %A_1 = comb.extract %A from 1 : (i2) -> i1
+  %B_0 = comb.extract %B from 0 : (i5) -> i1
+  %bit_3 = comb.and %A_1, %B_0 : i1
+
+  // Chunk B (bits 2:0) -> B[4:2]
+  %b4 = comb.extract %B from 4 : (i5) -> i1
+  %b3 = comb.extract %B from 3 : (i5) -> i1
+  %b2 = comb.extract %B from 2 : (i5) -> i1
+
+  // Final concatenation
+  %concat = comb.concat %a1, %a0, %bit_3, %b4, %b3, %b2 : i1, i1, i1, i1, i1, i1
+  hw.output %concat : i6
+}
