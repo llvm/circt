@@ -239,14 +239,28 @@ func.func @WriteArray(%arg0: !arc.state<!hw.array<4xi1>>, %arg1: !hw.array<4xi1>
 // CHECK-LABEL: llvm.func @DontCrashOnI0(
 func.func @DontCrashOnI0(%arg0: i1, %arg1: !hw.array<1xi42>) -> i42 {
   // CHECK: [[STACK:%.+]] = llvm.alloca {{%.+}} x !llvm.array<1 x i42>
-  // CHECK: [[ZERO:%.+]] = llvm.mlir.constant(0 : i0) : i0
-  // CHECK: [[ZEXT:%.+]] = llvm.zext [[ZERO]] : i0 to i1
+  // CHECK: [[ZERO:%.+]] = llvm.mlir.constant(false) : i1
+  // CHECK: [[ZEXT:%.+]] = llvm.zext [[ZERO]] : i1 to i2
   // CHECK: [[GEP:%.+]] = llvm.getelementptr [[STACK]][0, [[ZEXT]]] :
   // CHECK: [[RESULT:%.+]] = llvm.load [[GEP]] : !llvm.ptr -> i42
   // CHECK: llvm.return [[RESULT]]
   %0 = comb.extract %arg0 from 0 : (i1) -> i0
   %1 = hw.array_get %arg1[%0] : !hw.array<1xi42>, i0
   return %1 : i42
+}
+
+// CHECK-LABEL: llvm.func @DontCrashOnI0_2
+// CHECK-NOT: i0
+func.func @DontCrashOnI0_2(%arg0: i0, %arg1: !hw.array<1xi42>) -> i42 {
+  %0 = hw.array_get %arg1[%arg0] : !hw.array<1xi42>, i0
+  return %0 : i42
+}
+
+// CHECK-LABEL: llvm.func @DontCrashOnI0_3
+// CHECK-NOT: i0
+func.func @DontCrashOnI0_3() -> i0 {
+  %0 = hw.constant 0 : i0
+  return %0 : i0
 }
 
 // CHECK-LABEL: llvm.func @ExecuteEmpty

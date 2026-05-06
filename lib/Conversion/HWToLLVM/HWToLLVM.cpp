@@ -294,7 +294,7 @@ struct ArrayInjectOpConversion
     auto oneC =
         LLVM::ConstantOp::create(rewriter, op->getLoc(), rewriter.getI32Type(),
                                  rewriter.getI32IntegerAttr(1));
-    auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
+    auto zextIndex = zextByOne(op->getLoc(), rewriter, adaptor.getIndex());
 
     if (arrElems == 1 || !llvm::isPowerOf2_64(arrElems)) {
       // Clamp index to prevent OOB access. We add an extra element to the
@@ -353,7 +353,7 @@ struct ArrayGetOpConversion : public HWArrayOpToLLVMPattern<hw::ArrayGetOp> {
 
     auto arrTy = typeConverter->convertType(op.getInput().getType());
     auto elemTy = typeConverter->convertType(op.getResult().getType());
-    auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
+    auto zextIndex = zextByOne(op->getLoc(), rewriter, adaptor.getIndex());
 
     // During the ongoing migration to opaque types, use the constructor that
     // accepts an element type when the array pointer type is opaque, and
@@ -389,7 +389,7 @@ struct ArraySliceOpConversion
     if (!arrPtr)
       arrPtr = spillValueOnStack(rewriter, op.getLoc(), adaptor.getInput());
 
-    auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getLowIndex());
+    auto zextIndex = zextByOne(op->getLoc(), rewriter, adaptor.getLowIndex());
 
     // During the ongoing migration to opaque types, use the constructor that
     // accepts an element type when the array pointer type is opaque, and
@@ -503,9 +503,15 @@ struct HWConstantOpConversion : public ConvertToLLVMPattern {
     auto constOp = cast<hw::ConstantOp>(op);
     // Get the converted llvm type.
     auto intType = typeConverter->convertType(constOp.getValueAttr().getType());
+
+    Attribute attr = constOp.getValueAttr();
+    if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
+      // Ensure the attribute's type is converted if needed.
+      attr = IntegerAttr::get(intType, intAttr.getValue());
+    }
+
     // Replace the operation with an llvm constant op.
-    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, intType,
-                                                  constOp.getValueAttr());
+    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, intType, attr);
 
     return success();
   }

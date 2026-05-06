@@ -1381,6 +1381,21 @@ void LowerArcToLLVMPass::runOnOperation() {
     return IntegerType::get(type.getContext(), 64);
   });
 
+  // i0 is not legal in LLVM-IR. Most i0 should have been removed already,
+  // but if any manage to slip through (e.g. in function signatures), we'll turn
+  // them into i1 for now.
+  converter.addConversion([&](IntegerType type) -> Type {
+    if (type.getWidth() == 0)
+      return IntegerType::get(type.getContext(), 1);
+    return type;
+  });
+  converter.addSourceMaterialization(
+      [](OpBuilder &b, IntegerType type, ValueRange, Location loc) -> Value {
+        if (type.getWidth() != 0)
+          return nullptr;
+        return hw::ConstantOp::create(b, loc, APInt::getZero(0));
+      });
+
   // Setup the conversion patterns.
   ConversionPatternSet patterns(&getContext(), converter);
 
