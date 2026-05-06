@@ -1119,7 +1119,7 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           }
           lowering.ifacePorts.push_back({name, dir, type, portLoc, arg,
                                          &ifacePort, mpp->internalSymbol,
-                                         ifaceInst});
+                                         ifaceInst, mpp});
         }
       } else {
         // No modport: iterate interface body for all variables and nets.
@@ -1291,18 +1291,27 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     if (!valueSym)
       continue;
 
+    Value portValue;
     if (fp.direction == hw::ModulePort::Output) {
       // Output interface ports are not referenceable within the module body.
       // Create internal variables for them and return their value through the
       // module terminator.
-      auto varOp = moore::VariableOp::create(
+      portValue = moore::VariableOp::create(
           builder, fp.loc,
           moore::RefType::get(cast<moore::UnpackedType>(fp.type)), fp.name,
           Value());
-      valueSymbols.insert(valueSym, varOp);
     } else {
-      valueSymbols.insert(valueSym, fp.arg);
+      portValue = fp.arg;
     }
+    valueSymbols.insert(valueSym, portValue);
+    // Slang resolves in-body accesses (e.g. `bus.r`) through the
+    // ModportPortSymbol rather than the interface body's variable. Register
+    // both so the body-level expression lookup finds this port.
+    if (auto *mppSym = fp.modportPortSym
+                           ? fp.modportPortSym->as_if<slang::ast::ValueSymbol>()
+                           : nullptr;
+        mppSym && mppSym != valueSym)
+      valueSymbols.insert(mppSym, portValue);
 
     if (!fp.ifaceInstance)
       continue;
