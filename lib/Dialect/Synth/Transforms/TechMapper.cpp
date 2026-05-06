@@ -12,18 +12,20 @@
 //
 // The pass uses a cut-based algorithm with priority cuts and NPN canonical
 // forms for efficient pattern matching. It processes HWModuleOp instances with
-// "hw.techlib.info" attributes as technology library patterns and maps
+// "synth.mapping_cost" attributes as technology library patterns and maps
 // non-library modules to optimal gate implementations based on area and timing
 // optimization strategies.
 //
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/SynthAttributes.h"
 #include "circt/Dialect/Synth/Transforms/CutRewriter.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Support/WalkResult.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
 #include <atomic>
@@ -188,48 +190,99 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
     SmallVector<std::unique_ptr<CutRewritePattern>> libraryPatterns;
 
     unsigned maxInputSize = 0;
-    // Consider modules with the "hw.techlib.info" attribute as library
+    // Consider modules with the "synth.mapping_cost" attribute as library
     // modules.
-    // TODO: This attribute should be replaced with a more structured
-    // representation of technology library information. Specifically, we should
-    // have a dedicated operation for technology library.
     SmallVector<hw::HWModuleOp> nonLibraryModules;
     for (auto hwModule : module.getOps<hw::HWModuleOp>()) {
-      auto techInfo =
-          hwModule->getAttrOfType<DictionaryAttr>("hw.techlib.info");
-      if (!techInfo) {
-        // If the module does not have the techlib info, it is not a library
-        // TODO: Run mapping only when the module is under the specific
-        // hierarchy.
+
+      auto mappingCost =
+          hwModule->getAttrOfType<MappingCostAttr>("synth.mapping_cost");
+      if (!mappingCost) {
         nonLibraryModules.push_back(hwModule);
         continue;
       }
 
-      // Get area and delay attributes
-      auto areaAttr = techInfo.getAs<FloatAttr>("area");
-      auto delayAttr = techInfo.getAs<ArrayAttr>("delay");
-      if (!areaAttr || !delayAttr) {
-        mlir::emitError(hwModule.getLoc())
-            << "Library module " << hwModule.getModuleName()
-            << " must have 'area'(float) and 'delay' (2d array to represent "
-               "input-output pair delay) attributes";
+      double area = mappingCost.getArea().getValue().convertToDouble();
+
+      StringAttr outputName;
+      for (const auto &port : hwModule.getPortList()) {
+        if (!port.isOutput())
+          continue;
+        if (outputName)
+          continue;
+        outputName = port.name;
+      }
+      if (!outputName) {
+        hwModule.emitError("expected library module to have an output");
         signalPassFailure();
         return;
       }
 
-      double area = areaAttr.getValue().convertToDouble();
+      llvm::DenseMap<StringAttr, DelayType> delayByInput;
+      for (auto arcAttr : mappingCost.getArcs()) {
+        auto arc = dyn_cast<LinearTimingArcAttr>(arcAttr);
+        if (!arc) {
+          hwModule.emitError(
+              "expected synth.linear_timing_arc in synth.mapping_cost arcs");
+          signalPassFailure();
+          return;
+        }
 
-      SmallVector<DelayType> delay;
-      for (auto delayValue : delayAttr) {
-        auto delayArray = cast<ArrayAttr>(delayValue);
-        for (auto delayElement : delayArray) {
-          // FIXME: Currently we assume delay is given as integer attributes,
-          // this should be replaced once we have a proper cell op with
-          // dedicated timing attributes with units.
-          delay.push_back(
-              cast<mlir::IntegerAttr>(delayElement).getValue().getZExtValue());
+        if (arc.getPin() != outputName) {
+          hwModule.emitError("mapping cost arc output '")
+              << arc.getPin().getValue() << "' does not match module output '"
+              << outputName.getValue() << "'";
+          signalPassFailure();
+          return;
+        }
+
+        double intrinsic = arc.getIntrinsic().getValue().convertToDouble();
+        if (intrinsic !=
+            static_cast<double>(static_cast<DelayType>(intrinsic))) {
+          hwModule.emitError("expected integral intrinsic delay for input '")
+              << arc.getRelatedPin().getValue()
+              << "' until TechMapper supports fractional delays";
+          signalPassFailure();
+          return;
+        }
+
+        // TechMapper currently preserves the old integer per-pin delay model.
+        // The sensitivity, polarity, and input capacitance fields are carried
+        // in the attribute for future load-aware mapping.
+        if (!delayByInput
+                 .try_emplace(arc.getRelatedPin(),
+                              static_cast<DelayType>(intrinsic))
+                 .second) {
+          hwModule.emitError("duplicate mapping cost arc for input '")
+              << arc.getRelatedPin().getValue() << "'";
+          signalPassFailure();
+          return;
         }
       }
+
+      SmallVector<DelayType> delay;
+      for (const auto &port : hwModule.getPortList()) {
+        if (!port.isInput())
+          continue;
+
+        auto it = delayByInput.find(port.name);
+        if (it == delayByInput.end()) {
+          hwModule.emitError("missing mapping cost arc for input '")
+              << port.name.getValue() << "'";
+          signalPassFailure();
+          return;
+        }
+
+        delay.push_back(it->second);
+      }
+
+      if (delay.size() != delayByInput.size()) {
+        hwModule.emitError(
+            "synth.mapping_cost arcs do not match module inputs");
+        signalPassFailure();
+        return;
+      }
+
       // Compute NPN Class for the module.
       auto npnClass = getNPNClassFromModule(hwModule);
       if (failed(npnClass)) {

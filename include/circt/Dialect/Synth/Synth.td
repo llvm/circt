@@ -26,6 +26,7 @@ def Synth_Dialect : Dialect {
   let useDefaultAttributePrinterParser = 1;
 }
 
+include "circt/Dialect/Synth/SynthEnums.td"
 include "circt/Dialect/Synth/SynthAttributes.td"
 include "circt/Dialect/Synth/SynthOps.td"
 

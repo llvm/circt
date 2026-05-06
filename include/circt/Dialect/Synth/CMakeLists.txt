@@ -12,6 +12,12 @@ add_circt_interface(SynthOpInterfaces)
 add_subdirectory(Transforms)
 
 set(LLVM_TARGET_DEFINITIONS Synth.td)
+
+mlir_tablegen(SynthEnums.h.inc -gen-enum-decls)
+mlir_tablegen(SynthEnums.cpp.inc -gen-enum-defs)
+add_public_tablegen_target(CIRCTSynthEnumsIncGen)
+add_dependencies(circt-headers CIRCTSynthEnumsIncGen)
+
 mlir_tablegen(SynthAttributes.h.inc -gen-attrdef-decls -attrdefs-dialect=synth)
 mlir_tablegen(SynthAttributes.cpp.inc -gen-attrdef-defs -attrdefs-dialect=synth)
 add_public_tablegen_target(CIRCTSynthAttrIncGen)
