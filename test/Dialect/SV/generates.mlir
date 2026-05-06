@@ -3,7 +3,7 @@
 // RUN: circt-opt %s --export-verilog -o %t.mlir | FileCheck %s --check-prefix=SV
 
 // Check the generated SV is lint clean.
-// RUN: %if slang %{ circt-opt %s --export-verilog -o %t.mlir | circt-verilog --lint-only %}
+// RUN: %if slang %{ circt-opt %s --export-verilog -o %t.mlir | circt-verilog --lint-only --format=sv %}
 
 hw.module @PrintPath<> () {
   %fd = hw.constant 0x80000002 : i32
