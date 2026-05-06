@@ -53,11 +53,6 @@ LogicalResult firtool::populatePreprocessTransforms(mlir::PassManager &pm,
 
 LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
                                                   const FirtoolOptions &opt) {
-  // TODO: Ensure instance graph and other passes can handle instance choice
-  // then run this pass after all diagnostic passes have run.
-  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOption(
-      {/*selectDefaultInstanceChoice*/ opt
-           .shouldSelectDefaultInstanceChoice()}));
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createLowerSignatures());
 
   // This pass is _not_ idempotent.  It preserves its controlling annotation for
@@ -95,6 +90,11 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
       {/*replSeqMemFile=*/opt.shouldIgnoreReadEnableMemories()}));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
+
+  // TODO: Move this to the same location as SpecializeLayers.
+  pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOption(
+      {/*selectDefaultInstanceChoice*/ opt
+           .shouldSelectDefaultInstanceChoice()}));
 
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createDropConst());
 
