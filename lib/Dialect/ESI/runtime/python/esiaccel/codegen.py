@@ -809,7 +809,58 @@ class CppTypeEmitter:
     hdr.write(
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(window_type.id)};\n"
     )
+    self._emit_window_data_accessors(hdr, info)
     hdr.write("};\n\n")
+
+  def _emit_window_data_accessors(self, hdr: TextIO, info) -> None:
+    """Emit accessors for the header and data fields of a window helper.
+
+    Exposes each static header field as a scalar accessor, the count of data
+    frames, and one vector-valued accessor per data field so decoded values
+    are easy to inspect on the read side.
+    """
+    list_field_name = info["list_field_name"]
+    hdr.write("\n")
+    for field_name, field_type in info["header_fields"]:
+      # Skip the synthetic bulk-count field; it is exposed via
+      # `<list>_count()` below.
+      if field_type is None:
+        continue
+      if isinstance(field_type, types.ArrayType):
+        base_cpp, suffix = self._array_base_and_suffix(field_type)
+        hdr.write(
+            f"  const {base_cpp} (&{field_name}() const){suffix} {{ return header.{field_name}; }}\n"
+        )
+      else:
+        cpp = self._cpp_type(field_type)
+        hdr.write(
+            f"  {cpp} {field_name}() const {{ return header.{field_name}; }}\n")
+    hdr.write(
+        f"  size_t {list_field_name}_count() const {{ return data_frames.size(); }}\n"
+    )
+    for field_name, field_type in info["data_fields"]:
+      # std::vector cannot hold C-style arrays, so skip array-typed data
+      # fields here; callers can still reach them via the underlying frames.
+      if isinstance(field_type, types.ArrayType):
+        continue
+      if field_name == list_field_name:
+        elem_cpp = "value_type"
+      else:
+        elem_cpp = self._cpp_type(field_type)
+      # Lazy zero-copy view: `std::views::transform` with a pointer-to-member
+      # projection invokes the member access on each dereference and yields a
+      # reference to the underlying frame field without materializing a copy.
+      hdr.write(
+          f"  auto {field_name}() const {{\n"
+          f"    return data_frames | std::views::transform(&data_frame::{field_name});\n"
+          f"  }}\n")
+      hdr.write(f"  std::vector<{elem_cpp}> {field_name}_vector() const {{\n"
+                f"    std::vector<{elem_cpp}> out;\n"
+                f"    out.reserve(data_frames.size());\n"
+                f"    for (const auto &frame : data_frames)\n"
+                f"      out.push_back(frame.{field_name});\n"
+                f"    return out;\n"
+                f"  }}\n")
 
   def _emit_alias(self, hdr: TextIO, alias_type: types.TypeAlias) -> None:
     """Emit a using alias when the alias targets a different C++ type."""
@@ -837,6 +888,7 @@ class CppTypeEmitter:
         #include <any>
         #include <cstring>
         #include <limits>
+        #include <ranges>
         #include <stdexcept>
         #include <string_view>
         #include <utility>
