@@ -222,6 +222,31 @@ def FormatLiteralOp : SimOp<"fmt.literal", [Pure, ConstantLike]> {
   let hasFolder = true;
 }
 
+def FormatStringOp : SimOp<"fmt.string", [Pure]> {
+  let summary = "Dynamic string format specifier";
+  let description = [{
+    Format the given dynamic string value.
+
+    If `specifierWidth` is present and larger than the string length, the
+    result is padded to that width using `paddingChar`. By default, strings are
+    right-aligned and padded with spaces.
+  }];
+
+  let arguments = (ins DynamicStringType:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"32">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
+  let results = (outs FormatStringType:$result);
+
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    attr-dict `:` qualified(type($value))
+  }];
+}
+
 def FormatHexOp : SimOp<"fmt.hex",
   [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
 > {
