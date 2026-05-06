@@ -50,3 +50,31 @@ def GenerateCaseOp : SVOp<"generate.case",
 
   let hasVerifier = true;
 }
+
+def GenerateForOp : SVOp<"generate.for",
+                         [SingleBlock, NoTerminator,
+                          HasParent<"GenerateOp">,
+                          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
+                          AllTypesMatch<["lowerBound", "upperBound", "step"]>]> {
+  let summary = "A 'for' loop inside of a generate block";
+  let description = "See SystemVerilog 2017 27.4.";
+
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins TypedAttrInterface:$lowerBound,
+                       TypedAttrInterface:$upperBound,
+                       TypedAttrInterface:$step,
+                       StrAttr:$genBlockName,
+                       OptionalAttr<StrAttr>:$inductionVarName);
+
+  let assemblyFormat = [{
+    custom<ForHeader>($lowerBound, $upperBound, $step, $inductionVarName,
+                      $genBlockName, $body) attr-dict
+  }];
+
+  let hasVerifier = 1;
+
+  let extraClassDeclaration = [{
+    Block* getBodyBlock() { return &getBody().front(); }
+    Value getInductionVar() { return getBodyBlock()->getArgument(0); }
+  }];
+}

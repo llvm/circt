@@ -62,7 +62,7 @@ public:
             // Memory loading tasks
             ReadMemOp,
             // Generate statements
-            GenerateOp, GenerateCaseOp,
+            GenerateOp, GenerateCaseOp, GenerateForOp,
             // For statements
             ForOp,
             // Sampled value functiions
@@ -197,6 +197,7 @@ public:
   // Generate statements
   HANDLE(GenerateOp, Unhandled);
   HANDLE(GenerateCaseOp, Unhandled);
+  HANDLE(GenerateForOp, Unhandled);
 
   // For loop.
   HANDLE(ForOp, Unhandled);

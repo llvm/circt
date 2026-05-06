@@ -989,8 +989,14 @@ StringRef getVerilogValueName(Value val) {
 
   if (auto port = dyn_cast<BlockArgument>(val)) {
     // If the value is defined by for op, use its associated verilog name.
-    if (auto forOp = dyn_cast<ForOp>(port.getParentBlock()->getParentOp()))
+    auto parent = port.getParentBlock()->getParentOp();
+    if (auto forOp = dyn_cast<ForOp>(parent))
       return forOp->getAttrOfType<StringAttr>("hw.verilogName");
+    if (auto genForOp = dyn_cast<GenerateForOp>(parent)) {
+      if (auto attr = genForOp->getAttrOfType<StringAttr>("hw.verilogName"))
+        return attr.getValue();
+      return "i";
+    }
     return getInputPortVerilogName(port.getParentBlock()->getParentOp(),
                                    port.getArgNumber());
   }
@@ -4134,6 +4140,7 @@ private:
 
   LogicalResult visitSV(GenerateOp op);
   LogicalResult visitSV(GenerateCaseOp op);
+  LogicalResult visitSV(GenerateForOp op);
 
   LogicalResult visitSV(ForOp op);
 
@@ -4955,6 +4962,66 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
 
   startStatement();
   ps << "endcase";
+  ps.addCallback({op, false});
+  setPendingNewline();
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(GenerateForOp op) {
+  emitSVAttributes(op);
+  llvm::SmallPtrSet<Operation *, 8> ops;
+  ps.addCallback({op, true});
+  startStatement();
+
+  StringRef inductionVarName = "i";
+  if (auto nameHint = op->getAttrOfType<StringAttr>("hw.verilogName"))
+    inductionVarName = nameHint.getValue();
+
+  ps << "for (";
+  ps.scopedBox(PP::cbox0, [&]() {
+    emitAssignLike(
+        [&]() { ps << "genvar" << PP::nbsp << PPExtString(inductionVarName); },
+        [&]() {
+          ps.invokeWithStringOS([&](auto &os) {
+            emitter.printParamValue(
+                op.getLowerBound(), os, VerilogPrecedence::LowestPrecedence,
+                [&]() { return op->emitOpError("invalid lower bound"); });
+          });
+        },
+        PPExtString("="));
+    ps << PP::space;
+
+    emitAssignLike(
+        [&]() { ps << PPExtString(inductionVarName); },
+        [&]() {
+          ps.invokeWithStringOS([&](auto &os) {
+            emitter.printParamValue(
+                op.getUpperBound(), os, VerilogPrecedence::LowestPrecedence,
+                [&]() { return op->emitOpError("invalid upper bound"); });
+          });
+        },
+        PPExtString("<"));
+    ps << PP::space;
+
+    ps << PPExtString(inductionVarName) << PP::nbsp << "+=" << PP::nbsp;
+    ps.invokeWithStringOS([&](auto &os) {
+      emitter.printParamValue(
+          op.getStep(), os, VerilogPrecedence::LowestPrecedence,
+          [&]() { return op->emitOpError("invalid step"); });
+    });
+    ps << ") begin";
+    StringRef blockName = op.getGenBlockName();
+    if (!blockName.empty())
+      ps << " : " << PPExtString(blockName);
+  });
+
+  ps << PP::neverbreak;
+  setPendingNewline();
+  emitStatementBlock(op.getBody().getBlocks().front());
+  startStatement();
+  ps << "end";
+  if (StringRef blockName = op.getGenBlockName(); !blockName.empty())
+    ps << " // " << PPExtString(blockName);
   ps.addCallback({op, false});
   setPendingNewline();
   return success();
