@@ -251,7 +251,7 @@ def test_windowed_list_bulk_message_wrapper():
   assert "uint32_t y_translation() const { return header.y_translation; }" in hdr
   assert "size_t coords_count() const { return data_frames.size(); }" in hdr
   # Byte-aligned data field: pointer-to-member projection (zero-copy view).
-  assert "return data_frames | std::views::transform(&data_frame::coords);" in hdr
+  assert "return std::views::transform(data_frames, &data_frame::coords);" in hdr
   assert "std::vector<value_type> coords_vector() const" in hdr
   assert "out.push_back(frame.coords);" in hdr
 
@@ -354,7 +354,7 @@ def test_windowed_list_arrays_in_header_and_value_type():
   # Array-typed header field: const-ref accessor emitted.
   assert "const uint16_t (&header_words() const)[2] { return header.header_words; }" in hdr
   # Array-typed data field: range/vector accessors are skipped.
-  assert "return data_frames | std::views::transform" not in hdr
+  assert "return std::views::transform" not in hdr
   assert "payloads_vector" not in hdr
 
 
@@ -397,7 +397,7 @@ def test_windowed_list_struct_element_data_uses_pointer_to_member():
   assert "struct bitfield_items : public esi::SegmentedMessageData" in hdr
   # The data field "items" is a struct type (byte-aligned), so pointer-to-member
   # IS valid.  The generated accessor must use &data_frame::items, not a lambda.
-  assert "return data_frames | std::views::transform(&data_frame::items);" in hdr
+  assert "return std::views::transform(data_frames, &data_frame::items);" in hdr
   assert "[](const data_frame &f) { return f.items; }" not in hdr
   assert "std::vector<value_type> items_vector() const" in hdr
 

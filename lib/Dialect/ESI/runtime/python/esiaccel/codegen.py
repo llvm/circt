@@ -865,7 +865,7 @@ class CppTypeEmitter:
         projection = f"&data_frame::{field_name}"
       hdr.write(
           f"  auto {field_name}() const {{\n"
-          f"    return data_frames | std::views::transform({projection});\n"
+          f"    return std::views::transform(data_frames, {projection});\n"
           f"  }}\n")
       hdr.write(f"  std::vector<{elem_cpp}> {field_name}_vector() const {{\n"
                 f"    std::vector<{elem_cpp}> out;\n"
