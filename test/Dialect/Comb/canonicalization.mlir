@@ -2128,3 +2128,44 @@ hw.module private @SextMatcherBlockArguments(in %a : i6, in %b : i2, in %c : i27
   %3 = comb.extract %1 from 26 : (i35) -> i1
   hw.output
 }
+
+// CHECK-LABEL: hw.module @AndOfReplicate
+// CHECK: %c0_i4 = hw.constant 0 : i4
+// CHECK: %[[X:.*]] = comb.mux bin %p, %x, %c0_i4
+// CHECK: hw.output %[[X]]
+hw.module @AndOfReplicate(in %p: i1, in %x: i4, out y: i4) {
+  %r = comb.replicate %p : (i1) -> i4
+  %and = comb.and bin %x, %r : i4
+  hw.output %and : i4
+}
+
+// CHECK-LABEL: hw.module @AndOfReplicateNot2State
+// CHECK: comb.replicate
+// CHECK: comb.and
+hw.module @AndOfReplicateNot2State(in %p: i1, in %x: i4, out y: i4) {
+  %r = comb.replicate %p : (i1) -> i4
+  %and = comb.and %x, %r : i4
+  hw.output %and : i4
+}
+
+// CHECK-LABEL: hw.module @OrOfMuxes
+// CHECK: %[[X:.*]] = comb.mux bin %c1, %a1, %c0_i4
+// CHECK: %[[Y:.*]] = comb.mux bin %c0, %a0, %[[X]]
+// CHECK: hw.output %[[Y]]
+hw.module @OrOfMuxes(in %c0: i1, in %c1: i1, in %a0: i4, in %a1: i4, out y: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %m0 = comb.mux bin %c0, %a0, %c0_i4 : i4
+  %m1 = comb.mux bin %c1, %a1, %c0_i4 : i4
+  %or = comb.or bin %m0, %m1 : i4
+  hw.output %or : i4
+}
+
+// CHECK-LABEL: hw.module @OrOfMuxesNot2State
+// CHECK: comb.or
+hw.module @OrOfMuxesNot2State(in %c0: i1, in %c1: i1, in %a0: i4, in %a1: i4, out y: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %m0 = comb.mux %c0, %a0, %c0_i4 : i4
+  %m1 = comb.mux %c1, %a1, %c0_i4 : i4
+  %or = comb.or %m0, %m1 : i4
+  hw.output %or : i4
+}
