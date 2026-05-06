@@ -163,21 +163,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     return;
   }
 
-  // The source must be extended or truncated.
-  if (dstWidth < srcWidth) {
-    // firrtl.tail always returns uint even for sint operands.
-    IntType tmpType =
-        type_cast<IntType>(dstType).getConstType(srcType.isConst());
-    bool isSignedDest = tmpType.isSigned();
-    if (isSignedDest)
-      tmpType =
-          UIntType::get(dstType.getContext(), dstWidth, srcType.isConst());
-    src = TailPrimOp::create(builder, tmpType, src, srcWidth - dstWidth);
-    // Insert the cast back to signed if needed.
-    if (isSignedDest)
-      src = AsSIntPrimOp::create(builder,
-                                 dstType.getConstType(tmpType.isConst()), src);
-  } else if (srcWidth < dstWidth) {
+  // The source can be extended if needed, but truncation is not allowed.
+  assert(dstWidth >= srcWidth &&
+         "implicit truncation is not allowed in connect operations");
+  if (srcWidth < dstWidth) {
     // Need to extend arg.
     src = PadPrimOp::create(builder, src, dstWidth);
   }
@@ -193,8 +182,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
   if (dstType == src.getType() && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
     MatchingConnectOp::create(builder, dst, src);
-  } else
+  } else {
+    assert(0 && "Shouldn't have to emit connect");
     ConnectOp::create(builder, dst, src);
+  }
 }
 
 IntegerAttr circt::firrtl::getIntAttr(Type type, const APInt &value) {

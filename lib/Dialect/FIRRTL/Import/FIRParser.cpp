@@ -4565,6 +4565,12 @@ ParseResult FIRStmtParser::parseConnect() {
     return emitError(loc, "cannot connect non-equivalent type ")
            << rhsType << " to " << lhsType;
 
+  // Check that the destination is at least as wide as the source. This rejects
+  // implicit truncation.
+  if (!isTypeLarger(lhsType, rhsType))
+    return emitError(loc, "destination ")
+           << lhsType << " is not as wide as the source " << rhsType;
+
   locationProcessor.setLoc(loc);
   emitConnect(builder, lhs, rhs);
   return success();
@@ -4763,6 +4769,13 @@ ParseResult FIRStmtParser::parseLeadingExpStmt(Value lhs) {
   if (!areTypesEquivalent(lhsType, rhsType))
     return emitError(loc, "cannot connect non-equivalent type ")
            << rhsType << " to " << lhsType;
+
+  // Check that the destination is at least as wide as the source. This rejects
+  // implicit truncation.
+  if (!isTypeLarger(lhsType, rhsType))
+    return emitError(loc, "destination ")
+           << lhsType << " is not as wide as the source " << rhsType;
+
   emitConnect(builder, lhs, rhs);
   return success();
 }

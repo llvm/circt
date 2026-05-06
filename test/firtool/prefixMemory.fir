@@ -37,7 +37,7 @@ circuit Foo : %[[
     output readData : UInt<32>
     input writeEn : UInt<1>
     input writeAddr : UInt<3>
-    input writeData : UInt<32>
+    input writeData : UInt<1>
 
     ; REPL-FIR:     firrtl.instance mem sym @{{[^ ]+}} {annotations = [{circt.nonlocal = @memHier, class = "circt.tracker", id = distinct[0]<>}]} @prefix1_mem
     ; REPL-HW:      hw.instance "mem" sym @{{[^ ]+}} @prefix1_mem
@@ -82,7 +82,7 @@ circuit Foo : %[[
     output readData : UInt<32>
     input writeEn : UInt<1>
     input writeAddr : UInt<3>
-    input writeData : UInt<32>
+    input writeData : UInt<2>
 
     ; REPL-FIR:     firrtl.module private @Baz
     ; REPL-FIR-NEXT:     firrtl.instance mem sym @sym {annotations = [{circt.nonlocal = @memHier_0, class = "circt.tracker", id = distinct[1]<>}]} @prefix2_mem
@@ -124,7 +124,7 @@ circuit Foo : %[[
     output readData : UInt<32>
     input writeEn : UInt<1>
     input writeAddr : UInt<3>
-    input writeData : UInt<32>
+    input writeData : UInt<1>
 
     inst bar of Bar
     connect bar.clock, clock

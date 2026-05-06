@@ -7,7 +7,7 @@ circuit ForceAndRelease:
     input a: UInt<2>
     input clock : Clock
     input cond : UInt<1>
-    output o : UInt<3>
+    output o : UInt<4>
 
     inst r of AddRefs
     connect o, r.sum
@@ -21,7 +21,7 @@ circuit ForceAndRelease:
     output a : RWProbe<UInt<2>>
     output b : RWProbe<UInt<2>>
     output c : RWProbe<UInt<2>>
-    output sum : UInt<3>
+    output sum : UInt<4>
 
     ; XXX: modified, workaround inability create non-const node w/literal initializer.
     wire w : UInt<2>

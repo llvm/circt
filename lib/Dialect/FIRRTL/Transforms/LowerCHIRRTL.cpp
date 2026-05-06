@@ -378,6 +378,11 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     auto cmemoryPort = cast<MemoryPortOp>(ports[i].cmemPort);
     auto cmemoryPortAccess = cmemoryPort.getAccess();
 
+    // If there's no access operation, skip this port
+    if (!cmemoryPortAccess) {
+      continue;
+    }
+
     // Most fields on the newly created memory will be assigned an initial value
     // immediately following the memory decl, and then will be assigned a second
     // value at the location of the CHIRRTL memory port.
@@ -393,7 +398,20 @@ void LowerCHIRRTLPass::replaceMem(Operation *cmem, StringRef name,
     emitInvalid(memBuilder, clock);
 
     // Initialization at the MemoryPortOp.
-    emitConnect(portBuilder, address, cmemoryPortAccess.getIndex());
+    // If the index is wider than the address port, we need to truncate it.
+    Value indexValue = cmemoryPortAccess.getIndex();
+    auto addrType = type_cast<FIRRTLBaseType>(address.getType());
+    auto indexType = type_cast<FIRRTLBaseType>(indexValue.getType());
+    auto addrWidth = addrType.getBitWidthOrSentinel();
+    auto indexWidth = indexType.getBitWidthOrSentinel();
+
+    // If both widths are known and index is wider, insert explicit truncation
+    if (addrWidth >= 0 && indexWidth >= 0 && indexWidth > addrWidth) {
+      indexValue =
+          TailPrimOp::create(portBuilder, indexValue, indexWidth - addrWidth)
+              .getResult();
+    }
+    emitConnect(portBuilder, address, indexValue);
     // Sequential+Read ports have a more complicated "enable inference".
     auto useEnableInference = isSequential && portKind == MemOp::PortKind::Read;
     auto *addressOp = cmemoryPortAccess.getIndex().getDefiningOp();
