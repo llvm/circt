@@ -1110,12 +1110,14 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
   if (op.getTwoState() && op.getNumOperands() == 2) {
     auto isReplicateOfI1 = [](Value v) {
       auto rep = v.getDefiningOp<ReplicateOp>();
-      if (!rep) return false;
+      if (!rep)
+        return false;
       return rep.getOperand().getType().isInteger(1);
     };
     Value x = op.getOperand(0);
     Value y = op.getOperand(1);
-    if (isReplicateOfI1(x)) std::swap(x, y);
+    if (isReplicateOfI1(x))
+      std::swap(x, y);
     if (isReplicateOfI1(y)) {
       Value p = y.getDefiningOp<ReplicateOp>().getInput();
       Value zero = hw::ConstantOp::create(
@@ -1282,7 +1284,8 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
         value.isZero()) {
       auto check = [&](Value v) {
         auto mux = v.getDefiningOp<comb::MuxOp>();
-        if (!mux) return false;
+        if (!mux)
+          return false;
         return mux.getTwoState() &&
                mux.getFalseValue() == firstMux.getFalseValue();
       };
