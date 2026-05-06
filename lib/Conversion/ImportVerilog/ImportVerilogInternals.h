@@ -452,6 +452,11 @@ struct Context {
   /// because ScopedHashTable stores values by copy.
   SmallVector<std::unique_ptr<InterfaceLowering>> interfaceInstanceStorage;
 
+  /// Module instances already emitted by the `--allow-use-before-declare`
+  /// predeclaration pass. These are skipped during the later source-order
+  /// module-body walk to avoid emitting duplicate instances.
+  DenseSet<const slang::ast::InstanceSymbol *> predeclaredInstances;
+
   /// Cached virtual interface layouts (type + field order).
   DenseMap<const slang::ast::InstanceBodySymbol *, VirtualInterfaceLowering>
       virtualIfaceLowerings;
