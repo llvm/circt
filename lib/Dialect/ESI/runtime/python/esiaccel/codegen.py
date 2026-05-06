@@ -847,12 +847,20 @@ class CppTypeEmitter:
         elem_cpp = "value_type"
       else:
         elem_cpp = self._cpp_type(field_type)
-      # Lazy zero-copy view: `std::views::transform` with a pointer-to-member
-      # projection invokes the member access on each dereference and yields a
-      # reference to the underlying frame field without materializing a copy.
+      # C++ does not allow forming a pointer-to-member for a bit-field, so for
+      # non-byte-aligned integer fields we fall back to a lambda projection
+      # (which copies by value on each dereference) instead of a
+      # pointer-to-member projection.
+      unwrapped = self._unwrap_aliases(field_type)
+      is_bitfield = (isinstance(unwrapped, (types.BitsType, types.IntType)) and
+                     unwrapped.bit_width % 8 != 0)
+      if is_bitfield:
+        projection = f"[](const data_frame &f) {{ return f.{field_name}; }}"
+      else:
+        projection = f"&data_frame::{field_name}"
       hdr.write(
           f"  auto {field_name}() const {{\n"
-          f"    return data_frames | std::views::transform(&data_frame::{field_name});\n"
+          f"    return data_frames | std::views::transform({projection});\n"
           f"  }}\n")
       hdr.write(f"  std::vector<{elem_cpp}> {field_name}_vector() const {{\n"
                 f"    std::vector<{elem_cpp}> out;\n"

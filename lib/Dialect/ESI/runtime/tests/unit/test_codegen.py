@@ -246,7 +246,14 @@ def test_windowed_list_bulk_message_wrapper():
   assert "for (const auto &element : coords) {" in hdr
   assert "frame.coords = element;" in hdr
   assert '!esi.window<\\"serial_coord_args\\"' in hdr
-  assert 'throw std::out_of_range("serial_coord_args: invalid segment index")' in hdr
+  assert 'throw std::out_of_range("serial_coord_args: invalid segment index")' in hdr  # Accessor methods for header fields and data fields.
+  assert "uint32_t x_translation() const { return header.x_translation; }" in hdr
+  assert "uint32_t y_translation() const { return header.y_translation; }" in hdr
+  assert "size_t coords_count() const { return data_frames.size(); }" in hdr
+  # Byte-aligned data field: pointer-to-member projection (zero-copy view).
+  assert "return data_frames | std::views::transform(&data_frame::coords);" in hdr
+  assert "std::vector<value_type> coords_vector() const" in hdr
+  assert "out.push_back(frame.coords);" in hdr
 
 
 def test_windowed_list_header_padding_matches_frame_width():
@@ -344,3 +351,85 @@ def test_windowed_list_arrays_in_header_and_value_type():
   assert "std::memcpy(&header.header_words, &header_words, sizeof(header.header_words));" in hdr
   assert "std::memcpy(&frame.payloads, &element, sizeof(frame.payloads));" in hdr
   assert 'throw std::out_of_range("array_payloads: invalid segment index")' in hdr
+  # Array-typed header field: const-ref accessor emitted.
+  assert "const uint16_t (&header_words() const)[2] { return header.header_words; }" in hdr
+  # Array-typed data field: range/vector accessors are skipped.
+  assert "return data_frames | std::views::transform" not in hdr
+  assert "payloads_vector" not in hdr
+
+
+def test_windowed_list_bitfield_data_accessor_uses_lambda():
+  """Non-byte-aligned integer data fields use a lambda instead of pointer-to-member."""
+  sint3 = types.SIntType("si3", 3)
+  uint16 = types.UIntType("ui16", 16)
+  list_id = f"!esi.list<!hw.struct<v: si3>>"
+  elem_id = "!hw.struct<v: si3>"
+  elem_struct = types.StructType(elem_id, [("v", sint3)])
+  elem_list = types.ListType(list_id, elem_struct)
+  arg_struct_id = f"!hw.struct<items: {list_id}>"
+  arg_struct = types.StructType(arg_struct_id, [("items", elem_list)])
+  header_struct_id = "!hw.struct<items_count: ui16>"
+  header_struct = types.StructType(header_struct_id, [("items_count", uint16)])
+  data_struct_id = f"!hw.struct<items: !hw.array<1x{elem_id}>>"
+  data_struct = types.StructType(
+      data_struct_id,
+      [("items", types.ArrayType(f"!hw.array<1x{elem_id}>", elem_struct, 1))],
+  )
+  lowered_id = (
+      f"!hw.union<header: {header_struct_id}, data: {data_struct_id}>")
+  lowered = types.UnionType(lowered_id, [("header", header_struct),
+                                         ("data", data_struct)])
+  window_id = (f'!esi.window<"bitfield_items", {arg_struct_id}, '
+               '[<"header", [<"items" countWidth 16>]>, '
+               '<"data", [<"items", 1>]>]>')
+  window = types.WindowType(window_id, "bitfield_items", arg_struct, lowered, [
+      types.WindowType.Frame("header",
+                             [types.WindowType.Field("items", 0, 16)]),
+      types.WindowType.Frame("data", [types.WindowType.Field("items", 1, 0)]),
+  ])
+
+  hdr = _generate_header([elem_struct, window])
+  assert "struct bitfield_items : public esi::SegmentedMessageData" in hdr
+  # The elem_struct has a 3-bit field so data_frame embeds it as a struct
+  # (not a bit-field directly), which means pointer-to-member IS valid for
+  # the data field "items" whose type is the element struct (byte-aligned).
+  # Verify the generated accessor is present.
+  assert "items() const" in hdr
+  assert "std::vector<value_type> items_vector() const" in hdr
+
+
+def test_windowed_list_bitfield_scalar_data_uses_lambda():
+  """A window data field that is itself a non-byte-aligned int uses a lambda projection."""
+  uint3 = types.UIntType("ui3", 3)
+  uint16 = types.UIntType("ui16", 16)
+  # Build a window where the data field is directly a 3-bit uint.
+  list_id = "!esi.list<ui3>"
+  elem_list = types.ListType(list_id, uint3)
+  arg_struct_id = f"!hw.struct<vals: {list_id}>"
+  arg_struct = types.StructType(arg_struct_id, [("vals", elem_list)])
+  header_struct_id = "!hw.struct<vals_count: ui16>"
+  header_struct = types.StructType(header_struct_id, [("vals_count", uint16)])
+  data_struct_id = "!hw.struct<vals: !hw.array<1xui3>>"
+  data_struct = types.StructType(
+      data_struct_id,
+      [("vals", types.ArrayType("!hw.array<1xui3>", uint3, 1))],
+  )
+  lowered_id = (
+      f"!hw.union<header: {header_struct_id}, data: {data_struct_id}>")
+  lowered = types.UnionType(lowered_id, [("header", header_struct),
+                                         ("data", data_struct)])
+  window_id = (f'!esi.window<"bitval_window", {arg_struct_id}, '
+               '[<"header", [<"vals" countWidth 16>]>, '
+               '<"data", [<"vals", 1>]>]>')
+  window = types.WindowType(window_id, "bitval_window", arg_struct, lowered, [
+      types.WindowType.Frame("header", [types.WindowType.Field("vals", 0, 16)]),
+      types.WindowType.Frame("data", [types.WindowType.Field("vals", 1, 0)]),
+  ])
+
+  hdr = _generate_header([window])
+  assert "struct bitval_window : public esi::SegmentedMessageData" in hdr
+  # The data field "vals" stores a 3-bit uint, which becomes a bit-field.
+  # The range accessor must use a lambda, not &data_frame::vals.
+  assert "[](const data_frame &f) { return f.vals; }" in hdr
+  assert "&data_frame::vals" not in hdr
+  assert "std::vector<value_type> vals_vector() const" in hdr
