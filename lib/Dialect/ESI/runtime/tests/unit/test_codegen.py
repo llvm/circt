@@ -358,8 +358,13 @@ def test_windowed_list_arrays_in_header_and_value_type():
   assert "payloads_vector" not in hdr
 
 
-def test_windowed_list_bitfield_data_accessor_uses_lambda():
-  """Non-byte-aligned integer data fields use a lambda instead of pointer-to-member."""
+def test_windowed_list_struct_element_data_uses_pointer_to_member():
+  """Struct-typed data fields use a pointer-to-member projection, not a lambda.
+
+  Even if the struct contains a non-byte-aligned (bit-field) member, the data
+  field itself is a struct type, which is byte-aligned and supports
+  pointer-to-member projection.
+  """
   sint3 = types.SIntType("si3", 3)
   uint16 = types.UIntType("ui16", 16)
   list_id = f"!esi.list<!hw.struct<v: si3>>"
@@ -390,11 +395,10 @@ def test_windowed_list_bitfield_data_accessor_uses_lambda():
 
   hdr = _generate_header([elem_struct, window])
   assert "struct bitfield_items : public esi::SegmentedMessageData" in hdr
-  # The elem_struct has a 3-bit field so data_frame embeds it as a struct
-  # (not a bit-field directly), which means pointer-to-member IS valid for
-  # the data field "items" whose type is the element struct (byte-aligned).
-  # Verify the generated accessor is present.
-  assert "items() const" in hdr
+  # The data field "items" is a struct type (byte-aligned), so pointer-to-member
+  # IS valid.  The generated accessor must use &data_frame::items, not a lambda.
+  assert "return data_frames | std::views::transform(&data_frame::items);" in hdr
+  assert "[](const data_frame &f) { return f.items; }" not in hdr
   assert "std::vector<value_type> items_vector() const" in hdr
 
 

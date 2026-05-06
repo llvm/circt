@@ -826,8 +826,11 @@ class CppTypeEmitter:
       # `<list>_count()` below.
       if field_type is None:
         continue
-      if isinstance(field_type, types.ArrayType):
-        base_cpp, suffix = self._array_base_and_suffix(field_type)
+      # Unwrap any alias before checking for array so that alias-to-array
+      # types (e.g. `using Alias = T[N]`) get the const-ref accessor form.
+      unwrapped_header = self._unwrap_aliases(field_type)
+      if isinstance(unwrapped_header, types.ArrayType):
+        base_cpp, suffix = self._array_base_and_suffix(unwrapped_header)
         hdr.write(
             f"  const {base_cpp} (&{field_name}() const){suffix} {{ return header.{field_name}; }}\n"
         )
@@ -840,8 +843,10 @@ class CppTypeEmitter:
     )
     for field_name, field_type in info["data_fields"]:
       # std::vector cannot hold C-style arrays, so skip array-typed data
-      # fields here; callers can still reach them via the underlying frames.
-      if isinstance(field_type, types.ArrayType):
+      # fields here (including alias-to-array types); callers can still reach
+      # them via the underlying frames.
+      unwrapped_data = self._unwrap_aliases(field_type)
+      if isinstance(unwrapped_data, types.ArrayType):
         continue
       if field_name == list_field_name:
         elem_cpp = "value_type"
@@ -851,9 +856,9 @@ class CppTypeEmitter:
       # non-byte-aligned integer fields we fall back to a lambda projection
       # (which copies by value on each dereference) instead of a
       # pointer-to-member projection.
-      unwrapped = self._unwrap_aliases(field_type)
-      is_bitfield = (isinstance(unwrapped, (types.BitsType, types.IntType)) and
-                     unwrapped.bit_width % 8 != 0)
+      is_bitfield = (isinstance(unwrapped_data,
+                                (types.BitsType, types.IntType)) and
+                     unwrapped_data.bit_width % 8 != 0)
       if is_bitfield:
         projection = f"[](const data_frame &f) {{ return f.{field_name}; }}"
       else:
