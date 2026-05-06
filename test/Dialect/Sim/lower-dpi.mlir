@@ -1,4 +1,5 @@
 // RUN: circt-opt --sim-lower-dpi-func %s | FileCheck %s
+// RUN: circt-opt --sim-lower-dpi-func --sim-lower-dpi-func %s | FileCheck %s
 
 sim.func.dpi @foo(out arg0: i32, in %arg1: i32, return ret: i32)
 // CHECK-LABEL:  func.func private @foo(!llvm.ptr, i32) -> i32
@@ -58,4 +59,18 @@ hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i32,
   %6 = sim.func.dpi.call @qux(%in, %in) : (i32, i32) -> i32
 
   hw.output %0, %1, %2, %3, %4, %5, %6 : i32, i32, i32, i32, i32, i32, i32
+}
+
+// Calls that already reference a `func.func` directly (without a corresponding
+// `sim.func.dpi` declaration) should be left alone by the pass. This makes the
+// pass idempotent.
+
+// CHECK-LABEL: func.func private @already_lowered
+func.func private @already_lowered(%arg0: i32) -> i32
+
+// CHECK-LABEL: hw.module @already_lowered_call
+hw.module @already_lowered_call(in %clock : !seq.clock, in %in: i32, out o: i32) {
+  // CHECK-NEXT: sim.func.dpi.call @already_lowered(%in) clock %clock : (i32) -> i32
+  %0 = sim.func.dpi.call @already_lowered(%in) clock %clock : (i32) -> i32
+  hw.output %0 : i32
 }
