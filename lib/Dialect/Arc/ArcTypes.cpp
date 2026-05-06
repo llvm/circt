@@ -31,7 +31,7 @@ static void printArcArrayRef(AsmPrinter &printer, Attribute dim,
 /// necessary once the type has been mapped to LLVM. The idea is for this
 /// function to be conservative, such that we provide sufficient storage bytes
 /// for any type.
-std::optional<uint64_t> computeLLVMBitWidth(Type type) {
+std::optional<uint64_t> circt::arc::computeLLVMBitWidth(Type type) {
   if (isa<seq::ClockType>(type))
     return 1;
 

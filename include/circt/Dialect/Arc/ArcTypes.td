@@ -14,7 +14,8 @@ include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
 
-class ArcTypeDef<string name, list<Trait> traits = []> : TypeDef<ArcDialect, name, traits> { }
+class ArcTypeDef<string name, list<Trait> traits = []> :
+  TypeDef<ArcDialect, name, traits> { }
 
 def StateType : ArcTypeDef<"State"> {
   let mnemonic = "state";
@@ -65,7 +66,10 @@ def ArrayRefType : ArcTypeDef<"ArrayRef", [
     An array reference is a reference (pointer) to an array of values.
   }];
   let mnemonic = "arrayref";
-  let parameters = (ins "::mlir::Type":$elementType, "::mlir::IntegerAttr":$sizeAttr);
+  let parameters = (ins
+    "::mlir::Type":$elementType,
+    "::mlir::IntegerAttr":$sizeAttr
+  );
 
   let builders = [
     TypeBuilderWithInferredContext<(ins "Type":$elementType, "size_t":$size), [{

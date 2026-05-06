@@ -1322,18 +1322,20 @@ struct RuntimeModelOpLowering
 // ArrayRef patterns
 //===----------------------------------------------------------------------===//
 
+size_t computeByteWidth(ArrayRefType type,
+                        ConversionPatternRewriter &rewriter) {
+  auto bitWidth = computeLLVMBitWidth(type);
+  assert(bitWidth.has_value());
+  return llvm::divideCeil(*bitWidth, 8);
+}
+
+// Computes the padded bytewidth (stride) of each element.
 size_t computeElementByteWidth(ArrayRefType arrayRefType,
                                ConversionPatternRewriter &rewriter) {
   auto arrayBitWidth = computeLLVMBitWidth(arrayRefType);
   assert(arrayBitWidth.has_value());
   size_t elementBitWidth = *arrayBitWidth / arrayRefType.getNumElements();
   return llvm::divideCeil(elementBitWidth, 8);
-}
-
-size_t computeByteWidth(Type type, ConversionPatternRewriter &rewriter) {
-  auto bitWidth = computeLLVMBitWidth(type);
-  assert(bitWidth.has_value());
-  return llvm::divideCeil(*bitWidth, 8);
 }
 
 struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
@@ -1408,6 +1410,7 @@ struct ArrayRefCreateOpLowering : public OpConversionPattern<ArrayRefCreateOp> {
     size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
     auto elements = adaptor.getElements();
     for (unsigned i = 0; i < elements.size(); ++i) {
+      // Note: hardcoded for little endian targets.
       unsigned elemIndex = arrayRefType.getNumElements() - i - 1;
       Value elemOffset =
           LLVM::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI64Type(),
@@ -1434,8 +1437,7 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
     auto i64Ty = rewriter.getI64Type();
     size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
     assert(!isa<ArrayRefType>(arrayRefType.getElementType()));
-    // Compute byte offset = index * elemByteWidth. The index comes from the
-    // index dialect and is lowered to i64 by index-to-llvm conversion.
+
     Value stride =
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
     Value byteOffset =

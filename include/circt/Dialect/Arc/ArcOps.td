@@ -21,7 +21,6 @@ include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
-
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -552,7 +551,8 @@ def RootOutputOp : ArcOp<"root_output", [
 // Storage Access
 //===----------------------------------------------------------------------===//
 
-def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType, ArrayRefType]>;
+def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType,
+                                 ArrayRefType]>;
 
 def StorageGetOp : ArcOp<"storage.get", [Pure]> {
   let summary = "Access an allocated state, memory, or storage slice";
@@ -634,12 +634,12 @@ def TerminateOp : ArcOp<"terminate", [
   let description = [{
     Sets a termination flag in the model's storage.
     It unconditionally writes 1 for success or 2 for failure.
-    This allows the simulation to exit gracefully after the current 
+    This allows the simulation to exit gracefully after the current
     evaluation cycle.
   }];
 
-  let arguments = (ins 
-    StorageType:$storage, 
+  let arguments = (ins
+    StorageType:$storage,
     BoolAttr:$success
   );
 
@@ -1087,6 +1087,7 @@ def RuntimeModelOp : ArcOp<"runtime.model", [
 //
 // Ops that deal with bufferized arrays. The !hw.array type has value semantics;
 // the !arc.arrayref type is the equivalent but with reference semantics.
+
 def ArrayRefAllocOp : ArcOp<"arrayref.alloc", []> {
   let summary = "array allocation";
   let description = [{

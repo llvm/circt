@@ -178,7 +178,7 @@ def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "mlir::ModuleOp"> {
 }
 
 def LowerArrays : Pass<"arc-lower-arrays", "mlir::ModuleOp"> {
-  let summary = "Lower arrays in Arc dialect";
+  let summary = "Lower arrays to use bufferized arrayrefs";
   let dependentDialects = ["arc::ArcDialect"];
 }
 
