@@ -54,6 +54,7 @@ def GenerateCaseOp : SVOp<"generate.case",
 def GenerateForOp : SVOp<"generate.for",
                          [SingleBlock, NoTerminator,
                           HasParent<"GenerateOp">,
+                          DeclareOpInterfaceMethods<OpAsmOpInterface, ["getAsmBlockArgumentNames"]>,
                           AllTypesMatch<["lowerBound", "upperBound", "step"]>]> {
   let summary = "A 'for' loop inside of a generate block";
   let description = "See SystemVerilog 2017 27.4.";
@@ -62,15 +63,18 @@ def GenerateForOp : SVOp<"generate.for",
   let arguments = (ins TypedAttrInterface:$lowerBound,
                        TypedAttrInterface:$upperBound,
                        TypedAttrInterface:$step,
-                       StrAttr:$genBlockName);
+                       StrAttr:$genBlockName,
+                       OptionalAttr<StrAttr>:$inductionVarName);
 
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = [{
+    custom<ForHeader>($lowerBound, $upperBound, $step, $inductionVarName,
+                      $genBlockName, $body) attr-dict
+  }];
+
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     Block* getBodyBlock() { return &getBody().front(); }
     Value getInductionVar() { return getBodyBlock()->getArgument(0); }
-    void getAsmBlockArgumentNames(mlir::Region &region,
-                                  mlir::OpAsmSetValueNameFn setNameFn);
   }];
 }

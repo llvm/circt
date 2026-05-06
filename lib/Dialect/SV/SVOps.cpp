@@ -2541,73 +2541,72 @@ LogicalResult GenerateCaseOp::verify() {
 // GenerateForOp
 //===----------------------------------------------------------------------===//
 
-ParseResult GenerateForOp::parse(OpAsmParser &parser, OperationState &result) {
+/// Parse a generate for header and body:
+///   %i : i32 = 0 to 10 step 1 name "gen_blk" { ... }
+static ParseResult parseForHeader(OpAsmParser &parser, Attribute &lowerBound,
+                                  Attribute &upperBound, Attribute &step,
+                                  StringAttr &inductionVarName,
+                                  StringAttr &genBlockName, Region &body) {
   auto &builder = parser.getBuilder();
   Type type;
 
   OpAsmParser::Argument inductionVariable;
   int64_t lbVal, ubVal, stepVal;
-  StringAttr genBlockNameAttr;
-  SmallVector<OpAsmParser::Argument, 1> regionArgs;
 
   if (parser.parseOperand(inductionVariable.ssaName) || parser.parseColon() ||
       parser.parseType(type) || parser.parseEqual() ||
       parser.parseInteger(lbVal) || parser.parseKeyword("to") ||
       parser.parseInteger(ubVal) || parser.parseKeyword("step") ||
       parser.parseInteger(stepVal) || parser.parseKeyword("name") ||
-      parser.parseAttribute(genBlockNameAttr))
+      parser.parseAttribute(genBlockName))
     return failure();
 
-  regionArgs.push_back(inductionVariable);
-  regionArgs.front().type = type;
+  inductionVariable.type = type;
+  lowerBound = builder.getIntegerAttr(type, lbVal);
+  upperBound = builder.getIntegerAttr(type, ubVal);
+  step = builder.getIntegerAttr(type, stepVal);
 
-  result.addAttribute("lowerBound", builder.getIntegerAttr(type, lbVal));
-  result.addAttribute("upperBound", builder.getIntegerAttr(type, ubVal));
-  result.addAttribute("step", builder.getIntegerAttr(type, stepVal));
-  result.addAttribute("genBlockName", genBlockNameAttr);
+  // Store the induction variable name if it's not a number.
+  if (!inductionVariable.ssaName.name.empty() &&
+      !isdigit(inductionVariable.ssaName.name[1]))
+    inductionVarName =
+        builder.getStringAttr(inductionVariable.ssaName.name.drop_front());
 
-  Region *body = result.addRegion();
-  if (parser.parseRegion(*body, regionArgs))
-    return failure();
-
-  if (parser.parseOptionalAttrDict(result.attributes))
-    return failure();
-
-  if (!inductionVariable.ssaName.name.empty()) {
-    if (!isdigit(inductionVariable.ssaName.name[1]))
-      result.attributes.append(
-          {builder.getStringAttr("inductionVarName"),
-           builder.getStringAttr(inductionVariable.ssaName.name.drop_front())});
-  }
-
-  return success();
+  SmallVector<OpAsmParser::Argument, 1> regionArgs = {inductionVariable};
+  return parser.parseRegion(body, regionArgs);
 }
 
-void GenerateForOp::print(OpAsmPrinter &p) {
-  p << " " << getInductionVar() << " : " << getLowerBound().getType() << " = ";
+/// Print a generate for header and body:
+///   %i : i32 = 0 to 10 step 1 name "gen_blk" { ... }
+static void printForHeader(OpAsmPrinter &p, Operation *op, Attribute lowerBound,
+                           Attribute upperBound, Attribute step,
+                           StringAttr inductionVarName, StringAttr genBlockName,
+                           Region &body) {
+  auto forOp = cast<GenerateForOp>(op);
+  p << forOp.getInductionVar() << " : " << cast<TypedAttr>(lowerBound).getType()
+    << " = ";
 
-  if (auto lowerAttr = dyn_cast<IntegerAttr>(getLowerBound()))
-    p << lowerAttr.getInt();
+  if (auto lb = dyn_cast<IntegerAttr>(lowerBound))
+    p << lb.getInt();
   else
-    p.printAttribute(getLowerBound());
+    p.printAttribute(lowerBound);
 
   p << " to ";
 
-  if (auto upperAttr = dyn_cast<IntegerAttr>(getUpperBound()))
-    p << upperAttr.getInt();
+  if (auto ub = dyn_cast<IntegerAttr>(upperBound))
+    p << ub.getInt();
   else
-    p.printAttribute(getUpperBound());
+    p.printAttribute(upperBound);
 
   p << " step ";
 
-  if (auto stepAttr = dyn_cast<IntegerAttr>(getStep()))
-    p << stepAttr.getInt();
+  if (auto s = dyn_cast<IntegerAttr>(step))
+    p << s.getInt();
   else
-    p.printAttribute(getStep());
+    p.printAttribute(step);
 
-  p << " name " << getGenBlockNameAttr();
-
-  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
+  p << " name " << genBlockName << " ";
+  p.printRegion(body, /*printEntryBlockArgs=*/false,
                 /*printBlockTerminators=*/true);
 }
 
@@ -2615,6 +2614,8 @@ LogicalResult GenerateForOp::verify() {
   if (getBody().getBlocks().front().getNumArguments() != 1)
     return emitOpError("must have exactly one block argument");
   Type type = getLowerBound().getType();
+  if (!isa<IntegerType>(type))
+    return emitOpError("induction variable, bounds and step must be integral");
   if (getBody().getBlocks().front().getArgument(0).getType() != type)
     return emitOpError("block argument type must match loop bounds type");
 
@@ -2624,8 +2625,7 @@ LogicalResult GenerateForOp::verify() {
 void GenerateForOp::getAsmBlockArgumentNames(
     mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
   auto *block = &region.front();
-  auto attr = (*this)->getAttrOfType<StringAttr>("inductionVarName");
-  if (attr)
+  if (auto attr = getInductionVarNameAttr())
     setNameFn(block->getArgument(0), attr);
 }
 

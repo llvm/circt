@@ -989,10 +989,10 @@ StringRef getVerilogValueName(Value val) {
 
   if (auto port = dyn_cast<BlockArgument>(val)) {
     // If the value is defined by for op, use its associated verilog name.
-    if (auto forOp = dyn_cast<ForOp>(port.getParentBlock()->getParentOp()))
+    auto parent = port.getParentBlock()->getParentOp();
+    if (auto forOp = dyn_cast<ForOp>(parent))
       return forOp->getAttrOfType<StringAttr>("hw.verilogName");
-    if (auto genForOp =
-            dyn_cast<GenerateForOp>(port.getParentBlock()->getParentOp())) {
+    if (auto genForOp = dyn_cast<GenerateForOp>(parent)) {
       if (auto attr = genForOp->getAttrOfType<StringAttr>("hw.verilogName"))
         return attr.getValue();
       return "i";
@@ -4973,12 +4973,9 @@ LogicalResult StmtEmitter::visitSV(GenerateForOp op) {
   ps.addCallback({op, true});
   startStatement();
 
-  StringAttr inductionVarNameAttr =
-      op->getAttrOfType<StringAttr>("hw.verilogName");
-  StringRef inductionVarName =
-      inductionVarNameAttr ? inductionVarNameAttr.getValue() : "i";
-
-  StringRef blockName = op.getGenBlockName();
+  StringRef inductionVarName = "i";
+  if (auto nameHint = op->getAttrOfType<StringAttr>("hw.verilogName"))
+    inductionVarName = nameHint.getValue();
 
   ps << "for (";
   ps.scopedBox(PP::cbox0, [&]() {
@@ -5013,6 +5010,7 @@ LogicalResult StmtEmitter::visitSV(GenerateForOp op) {
           [&]() { return op->emitOpError("invalid step"); });
     });
     ps << ") begin";
+    StringRef blockName = op.getGenBlockName();
     if (!blockName.empty())
       ps << " : " << PPExtString(blockName);
   });
@@ -5022,7 +5020,7 @@ LogicalResult StmtEmitter::visitSV(GenerateForOp op) {
   emitStatementBlock(op.getBody().getBlocks().front());
   startStatement();
   ps << "end";
-  if (!blockName.empty())
+  if (StringRef blockName = op.getGenBlockName(); !blockName.empty())
     ps << " // " << PPExtString(blockName);
   ps.addCallback({op, false});
   setPendingNewline();
