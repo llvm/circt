@@ -18,6 +18,11 @@ using namespace circt;
 using namespace arc;
 using namespace mlir;
 
+static ParseResult parseArcArrayRef(AsmParser &parser, Attribute &dim,
+                                    Type &elementType);
+static void printArcArrayRef(AsmPrinter &printer, Attribute dim,
+                             Type elementType);
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Arc/ArcTypes.cpp.inc"
 
@@ -26,14 +31,14 @@ using namespace mlir;
 /// necessary once the type has been mapped to LLVM. The idea is for this
 /// function to be conservative, such that we provide sufficient storage bytes
 /// for any type.
-static std::optional<uint64_t> computeLLVMBitWidth(Type type) {
+std::optional<uint64_t> computeLLVMBitWidth(Type type) {
   if (isa<seq::ClockType>(type))
     return 1;
 
   if (auto intType = dyn_cast<IntegerType>(type))
     return intType.getWidth();
 
-  if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
+  auto computeForArrayType = [&](auto arrayType) -> std::optional<uint64_t> {
     // Compute element width.
     auto maybeWidth = computeLLVMBitWidth(arrayType.getElementType());
     if (!maybeWidth)
@@ -45,7 +50,13 @@ static std::optional<uint64_t> computeLLVMBitWidth(Type type) {
     auto alignedWidth = llvm::alignToPowerOf2(width, alignment);
     // Multiply by the number of elements in the array.
     return arrayType.getNumElements() * alignedWidth;
-  }
+  };
+
+  if (auto arrayType = dyn_cast<hw::ArrayType>(type))
+    return computeForArrayType(arrayType);
+
+  if (auto arrayRefType = dyn_cast<ArrayRefType>(type))
+    return computeForArrayType(arrayRefType);
 
   if (auto structType = dyn_cast<hw::StructType>(type)) {
     uint64_t structWidth = 0;
@@ -89,6 +100,52 @@ StateType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
 unsigned MemoryType::getStride() {
   unsigned stride = (getWordType().getWidth() + 7) / 8;
   return llvm::alignToPowerOf2(stride, llvm::bit_ceil(std::min(stride, 16U)));
+}
+size_t ArrayRefType::getNumElements() const {
+  if (auto intAttr = llvm::dyn_cast<IntegerAttr>(getSizeAttr()))
+    return intAttr.getInt();
+  return 0;
+}
+
+std::optional<int64_t> ArrayRefType::getBitWidth() const {
+  auto elementBitWidth = hw::getBitWidth(getElementType());
+  if (elementBitWidth < 0)
+    return std::nullopt;
+  int64_t numElements = getNumElements();
+  if (numElements < 0)
+    return std::nullopt;
+  return numElements * elementBitWidth;
+}
+
+static ParseResult parseArcArrayRef(AsmParser &p, Attribute &dim, Type &inner) {
+  uint64_t dimLiteral;
+  auto int64Type = p.getBuilder().getIntegerType(64);
+
+  if (auto res = p.parseOptionalInteger(dimLiteral); res.has_value()) {
+    if (failed(*res))
+      return failure();
+    dim = p.getBuilder().getI64IntegerAttr(dimLiteral);
+  } else if (auto res64 = p.parseOptionalAttribute(dim, int64Type);
+             res64.has_value()) {
+    if (failed(*res64))
+      return failure();
+  } else
+    return p.emitError(p.getNameLoc(), "expected integer");
+
+  if (!isa<IntegerAttr>(dim)) {
+    p.emitError(p.getNameLoc(), "unsupported dimension kind in arc.arrayref");
+    return failure();
+  }
+
+  if (p.parseXInDimensionList() || p.parseType(inner))
+    return failure();
+
+  return success();
+}
+
+static void printArcArrayRef(AsmPrinter &p, Attribute dim, Type elementType) {
+  p.printAttributeWithoutType(dim);
+  p << "x" << elementType;
 }
 
 void ArcDialect::registerTypes() {

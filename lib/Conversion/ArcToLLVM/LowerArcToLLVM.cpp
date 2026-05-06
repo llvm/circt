@@ -135,6 +135,12 @@ struct StateReadOpLowering : public OpConversionPattern<arc::StateReadOp> {
   LogicalResult
   matchAndRewrite(arc::StateReadOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    // Loading an ArrayRef is a no-op as ArrayRefs are accessed by reference.
+    if (isa<ArrayRefType>(op.getType())) {
+      rewriter.replaceOp(op, adaptor.getState());
+      return success();
+    }
+
     auto type = typeConverter->convertType(op.getType());
     rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, type, adaptor.getState());
     return success();
@@ -146,16 +152,29 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   LogicalResult
   matchAndRewrite(arc::StateWriteOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    auto doStore = [&](OpBuilder &builder, Location loc) {
+      if (!isa<ArrayRefType>(op.getValue().getType())) {
+        LLVM::StoreOp::create(builder, loc, adaptor.getValue(),
+                              adaptor.getState());
+        return;
+      }
+
+      int numBytes = op.getState().getType().getByteWidth();
+      Value size = LLVM::ConstantOp::create(builder, loc, rewriter.getI64Type(),
+                                            numBytes);
+      LLVM::MemcpyOp::create(builder, loc, adaptor.getState(),
+                             adaptor.getValue(), size, /*volatile=*/false);
+    };
+
     if (adaptor.getCondition()) {
       rewriter.replaceOpWithNewOp<scf::IfOp>(
           op, adaptor.getCondition(), [&](auto &builder, auto loc) {
-            LLVM::StoreOp::create(builder, loc, adaptor.getValue(),
-                                  adaptor.getState());
+            doStore(builder, loc);
             scf::YieldOp::create(builder, loc);
           });
     } else {
-      rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
-                                                 adaptor.getState());
+      doStore(rewriter, op.getLoc());
+      rewriter.eraseOp(op);
     }
     return success();
   }
@@ -1300,6 +1319,231 @@ struct RuntimeModelOpLowering
 };
 
 //===----------------------------------------------------------------------===//
+// ArrayRef patterns
+//===----------------------------------------------------------------------===//
+
+size_t computeElementByteWidth(ArrayRefType arrayRefType,
+                               ConversionPatternRewriter &rewriter) {
+  auto arrayBitWidth = computeLLVMBitWidth(arrayRefType);
+  assert(arrayBitWidth.has_value());
+  size_t elementBitWidth = *arrayBitWidth / arrayRefType.getNumElements();
+  return llvm::divideCeil(elementBitWidth, 8);
+}
+
+size_t computeByteWidth(Type type, ConversionPatternRewriter &rewriter) {
+  auto bitWidth = computeLLVMBitWidth(type);
+  assert(bitWidth.has_value());
+  return llvm::divideCeil(*bitWidth, 8);
+}
+
+struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayRefAllocOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto i8Ty = rewriter.getI8Type();
+    ArrayRefType arrayRefType = op.getType();
+    size_t byteWidth = computeByteWidth(arrayRefType, rewriter);
+    auto size = LLVM::ConstantOp::create(rewriter, op.getLoc(),
+                                         rewriter.getI64Type(), byteWidth);
+    auto alloc =
+        LLVM::AllocaOp::create(rewriter, op.getLoc(), ptrTy, i8Ty, size);
+
+    if (op.getInitAttr()) {
+      ArrayAttr initAttr = cast<ArrayAttr>(op.getInitAttr());
+      if (isZero(initAttr)) {
+        auto i8Ty = rewriter.getI8Type();
+        auto zero = LLVM::ConstantOp::create(rewriter, op.getLoc(), i8Ty, 0);
+        LLVM::MemsetOp::create(rewriter, op.getLoc(), alloc, zero, size,
+                               /*isVolatile=*/false);
+      } else {
+        initializeArray(rewriter, op.getLoc(), alloc, initAttr, arrayRefType);
+      }
+    }
+
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+
+  bool isZero(ArrayAttr arrayAttr) const {
+    for (const Attribute &elem : arrayAttr.getValue()) {
+      if (auto intAttr = dyn_cast<IntegerAttr>(elem);
+          !intAttr || !intAttr.getValue().isZero())
+        return false;
+    }
+    return true;
+  }
+
+  void initializeArray(ConversionPatternRewriter &rewriter, Location loc,
+                       Value alloc, ArrayAttr initAttr,
+                       ArrayRefType arrayRefType) const {
+    size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
+    Type ptrTy = LLVM::LLVMPointerType::get(getContext());
+    Type i8Ty = rewriter.getI8Type();
+    for (unsigned i = 0; i < arrayRefType.getNumElements(); ++i) {
+      unsigned elemIndex = arrayRefType.getNumElements() - i - 1;
+      Value elemOffset = LLVM::ConstantOp::create(
+          rewriter, loc, rewriter.getI64Type(), elemIndex * elemByteWidth);
+      auto elemAddr =
+          LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty, alloc, elemOffset);
+      auto elem = LLVM::ConstantOp::create(
+          rewriter, loc, arrayRefType.getElementType(), initAttr.getValue()[i]);
+      LLVM::StoreOp::create(rewriter, loc, elem, elemAddr);
+    }
+  }
+};
+
+struct ArrayRefCreateOpLowering : public OpConversionPattern<ArrayRefCreateOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayRefCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ArrayRefType arrayRefType = cast<ArrayRefType>(op.getType());
+    Value alloc = adaptor.getInput();
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto i8Ty = rewriter.getI8Type();
+    size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
+    auto elements = adaptor.getElements();
+    for (unsigned i = 0; i < elements.size(); ++i) {
+      unsigned elemIndex = arrayRefType.getNumElements() - i - 1;
+      Value elemOffset =
+          LLVM::ConstantOp::create(rewriter, op.getLoc(), rewriter.getI64Type(),
+                                   elemIndex * elemByteWidth);
+      auto elemAddr = LLVM::GEPOp::create(rewriter, op.getLoc(), ptrTy, i8Ty,
+                                          alloc, elemOffset);
+      LLVM::StoreOp::create(rewriter, op.getLoc(), elements[i], elemAddr);
+    }
+    rewriter.replaceOp(op, alloc);
+    return success();
+  }
+};
+
+struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayRefGetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    ArrayRefType arrayRefType = cast<ArrayRefType>(op.getArray().getType());
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto i8Ty = rewriter.getI8Type();
+    auto i64Ty = rewriter.getI64Type();
+    size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
+    assert(!isa<ArrayRefType>(arrayRefType.getElementType()));
+    // Compute byte offset = index * elemByteWidth. The index comes from the
+    // index dialect and is lowered to i64 by index-to-llvm conversion.
+    Value stride =
+        LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
+    Value byteOffset =
+        LLVM::MulOp::create(rewriter, loc, adaptor.getIndex(), stride);
+    auto elemAddr = LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty,
+                                        adaptor.getArray(), byteOffset);
+    Value loaded = LLVM::LoadOp::create(
+        rewriter, loc, typeConverter->convertType(op.getValue().getType()),
+        elemAddr);
+    rewriter.replaceOp(op, loaded);
+    return success();
+  }
+};
+
+struct ArrayRefInjectOpLowering : public OpConversionPattern<ArrayRefInjectOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayRefInjectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    ArrayRefType arrayRefType = cast<ArrayRefType>(op.getInput().getType());
+    assert(!isa<ArrayRefType>(arrayRefType.getElementType()));
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto i8Ty = rewriter.getI8Type();
+    auto i64Ty = rewriter.getI64Type();
+    size_t elemByteWidth = computeElementByteWidth(arrayRefType, rewriter);
+
+    Value stride =
+        LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
+    Value byteOffset =
+        LLVM::MulOp::create(rewriter, loc, adaptor.getIndex(), stride);
+    auto elemAddr = LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty,
+                                        adaptor.getInput(), byteOffset);
+    LLVM::StoreOp::create(rewriter, loc, adaptor.getElement(), elemAddr);
+    // Inject is pure; returns the same pointer (input buffer is modified
+    // in-place and the pointer is forwarded as the result).
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
+struct ArrayRefSliceOpLowering : public OpConversionPattern<ArrayRefSliceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayRefSliceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    // The result type is the sub-array type; use its element size.
+    ArrayRefType resultType = cast<ArrayRefType>(op.getDst().getType());
+    auto ptrTy = LLVM::LLVMPointerType::get(getContext());
+    auto i8Ty = rewriter.getI8Type();
+    auto i64Ty = rewriter.getI64Type();
+    size_t elemByteWidth = computeElementByteWidth(resultType, rewriter);
+
+    // Byte offset = lowIndex * elemByteWidth.
+    Value stride =
+        LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
+    Value byteOffset =
+        LLVM::MulOp::create(rewriter, loc, adaptor.getLowIndex(), stride);
+    auto sliceAddr = LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty,
+                                         adaptor.getInput(), byteOffset);
+    rewriter.replaceOp(op, sliceAddr);
+    return success();
+  }
+};
+
+struct ArrayRefCopyOpLowering : public OpConversionPattern<ArrayRefCopyOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayRefCopyOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    ArrayRefType arrayRefType = cast<ArrayRefType>(op.getDestInput().getType());
+    auto i64Ty = rewriter.getI64Type();
+    size_t byteWidth = computeByteWidth(arrayRefType, rewriter);
+    Value size = LLVM::ConstantOp::create(rewriter, loc, i64Ty, byteWidth);
+    LLVM::MemcpyOp::create(rewriter, loc, adaptor.getDestInput(),
+                           adaptor.getSource(), size,
+                           /*isVolatile=*/false);
+    rewriter.replaceOp(op, adaptor.getDestInput());
+    return success();
+  }
+};
+
+struct ArrayRefToLLVMArrayOpLowering
+    : public OpConversionPattern<UnrealizedConversionCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnrealizedConversionCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!isa<ArrayRefType>(op.getOperand(0).getType()) ||
+        !isa<LLVM::LLVMArrayType>(op.getResult(0).getType())) {
+      return failure();
+    }
+
+    Value loaded =
+        LLVM::LoadOp::create(rewriter, op.getLoc(), op.getResult(0).getType(),
+                             adaptor.getInputs().front());
+    rewriter.replaceOp(op, loaded);
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
 
@@ -1380,6 +1624,18 @@ void LowerArcToLLVMPass::runOnOperation() {
     // LLHD time is represented as i64 femtoseconds.
     return IntegerType::get(type.getContext(), 64);
   });
+  converter.addConversion([&](ArrayRefType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+
+  // Convert an UnrealizedConversionCastOp from !arc.arrayref<T> to
+  // !llvm.array<T>. These are inserted by the InsertRuntime pass.
+  target.addDynamicallyLegalOp<UnrealizedConversionCastOp>([&](Operation *op) {
+    Type src = op->getOperand(0).getType();
+    Type dst = op->getResult(0).getType();
+    bool needsConvert = isa<ArrayRefType>(src) && isa<LLVM::LLVMArrayType>(dst);
+    return !needsConvert;
+  });
 
   // Setup the conversion patterns.
   ConversionPatternSet patterns(&getContext(), converter);
@@ -1433,7 +1689,14 @@ void LowerArcToLLVMPass::runOnOperation() {
     StorageGetOpLowering,
     TerminateOpLowering,
     TimeToIntOpLowering,
-    ZeroCountOpLowering
+    ZeroCountOpLowering,
+    ArrayRefCreateOpLowering,
+    ArrayRefAllocOpLowering,
+    ArrayRefGetOpLowering,
+    ArrayRefInjectOpLowering,
+    ArrayRefSliceOpLowering,
+    ArrayRefCopyOpLowering,
+    ArrayRefToLLVMArrayOpLowering
   >(converter, &getContext());
   // clang-format on
   patterns.add<ExecuteOp>(convert);

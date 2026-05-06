@@ -177,6 +177,11 @@ def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::scf::SCFDialect"];
 }
 
+def LowerArrays : Pass<"arc-lower-arrays", "mlir::ModuleOp"> {
+  let summary = "Lower arrays in Arc dialect";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
   let summary = "Lowers arc.lut into a comb and hw only representation.";
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];
