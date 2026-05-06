@@ -111,16 +111,16 @@ def PastOp : LTLOp<"past", [TypesMatchWith<"input and result types must match",
   let arguments = (ins
     HWIntegerType:$input,
     I64Attr:$delay,
-    Optional<I1>:$clk);
+    I1:$clk);
   let results = (outs HWIntegerType:$result);
   let assemblyFormat = [{
-    $input `,` $delay (`clk` $clk^)? attr-dict `:` type($input)
+    $input `,` $delay `clk` $clk attr-dict `:` type($input)
   }];
 
   let summary = "Observe the sequence $delay cycles earlier.";
   let description = [{
       Semantically works like `ltl.delay %seq, -$delay, 0`, clocked by the
-      optional `$clk` operand if given.
+      `$clk` operand.
   }];
 }
 
