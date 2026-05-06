@@ -177,6 +177,46 @@ struct CurrentTimeOpLowering : public OpConversionPattern<arc::CurrentTimeOp> {
   }
 };
 
+// Lower `llhd.constant_time` to an `i64` LLVM constant holding the time in
+// femtoseconds. Time attributes with non-zero delta or epsilon, units smaller
+// than `fs`, or values that overflow `i64` femtoseconds are rejected.
+struct ConstantTimeOpLowering
+    : public OpConversionPattern<llhd::ConstantTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::ConstantTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto attr = op.getValue();
+    if (attr.getDelta() != 0 || attr.getEpsilon() != 0)
+      return rewriter.notifyMatchFailure(
+          op, "non-zero delta or epsilon time components are not supported");
+    uint64_t value = attr.getTime();
+    StringRef unit = attr.getTimeUnit();
+    uint64_t scale;
+    if (unit == "fs")
+      scale = 1;
+    else if (unit == "ps")
+      scale = 1'000ULL;
+    else if (unit == "ns")
+      scale = 1'000'000ULL;
+    else if (unit == "us")
+      scale = 1'000'000'000ULL;
+    else if (unit == "ms")
+      scale = 1'000'000'000'000ULL;
+    else if (unit == "s")
+      scale = 1'000'000'000'000'000ULL;
+    else
+      return rewriter.notifyMatchFailure(
+          op, "time units smaller than `fs` are not supported");
+    if (value > std::numeric_limits<uint64_t>::max() / scale)
+      return rewriter.notifyMatchFailure(
+          op, "time value does not fit into `i64` femtoseconds");
+    rewriter.replaceOpWithNewOp<LLVM::ConstantOp>(op, rewriter.getI64Type(),
+                                                  value * scale);
+    return success();
+  }
+};
+
 // `llhd.int_to_time` is a no-op
 struct IntToTimeOpLowering : public OpConversionPattern<llhd::IntToTimeOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1417,6 +1457,7 @@ void LowerArcToLLVMPass::runOnOperation() {
     AllocStorageOpLowering,
     ClockGateOpLowering,
     ClockInvOpLowering,
+    ConstantTimeOpLowering,
     CurrentTimeOpLowering,
     IntToTimeOpLowering,
     MemoryReadOpLowering,
