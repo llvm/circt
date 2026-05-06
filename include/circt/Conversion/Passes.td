@@ -664,7 +664,7 @@ def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
 def LowerVerifToSV : Pass<"lower-verif-to-sv", "mlir::ModuleOp"> {
   let summary = "Convert Verif to SV";
   let description = [{
-    This pass converts various Verif contructs to SV.
+    This pass converts various Verif constructs to SV.
 
     Operations that are not generally supported by synthesis (e.g.
     `sv.fwrite`, `sv.assert_property`, `sv.assume_property`,
