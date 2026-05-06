@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
+#include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -226,8 +227,9 @@ void SplitLoopsPass::runOnOperation() {
     allArcUses.insert(callOp);
 
     auto clockedOp = dyn_cast<ClockedOpInterface>(callOp.getOperation());
+    auto dpiCallOp = dyn_cast<sim::DPICallOp>(callOp.getOperation());
     if ((!clockedOp || clockedOp.getLatency() == 0) &&
-        callOp->getNumResults() > 1)
+        (!dpiCallOp || !dpiCallOp.getClock()) && callOp->getNumResults() > 1)
       arcsToSplit.insert(defOp);
 
     return WalkResult::advance();
@@ -407,6 +409,9 @@ LogicalResult SplitLoopsPass::ensureNoLoops() {
       if (auto clockedOp = dyn_cast<ClockedOpInterface>(def);
           clockedOp && clockedOp.getLatency() > 0)
         continue;
+      if (auto dpiCallOp = dyn_cast<sim::DPICallOp>(def))
+        if (dpiCallOp.getClock())
+          continue;
       if (!seen.insert(def).second) {
         auto d = def->emitError(
             "loop splitting did not eliminate all loops; loop detected");
