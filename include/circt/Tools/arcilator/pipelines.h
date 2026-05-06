@@ -126,6 +126,10 @@ struct ArcToLLVMOptions : mlir::PassPipelineOptions<ArcToLLVMOptions> {
   Option<std::string> traceFileName{
       *this, "trace-file", llvm::cl::desc("Output file for signal traces"),
       llvm::cl::init("")};
+  Option<bool> bufferizeArrays{
+      *this, "bufferize-arrays",
+      llvm::cl::desc("Bufferize arrays before lowering to LLVM"),
+      llvm::cl::init(false)};
 };
 void populateArcToLLVMPipeline(mlir::OpPassManager &pm,
                                const ArcToLLVMOptions &options = {});

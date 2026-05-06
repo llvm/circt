@@ -748,6 +748,24 @@ LogicalResult ExecuteOp::verifyRegions() {
                                    getBody().getArgumentTypes(), "input");
 }
 
+//===----------------------------------------------------------------------===//
+// ArrayRefCreateOp
+//===----------------------------------------------------------------------===//
+
+ParseResult parseARCreate(OpAsmParser &parser, Type destType, Type &inputType,
+                          SmallVectorImpl<Type> &elementsTypes) {
+  inputType = destType;
+  ArrayRefType arrayType = dyn_cast<ArrayRefType>(destType);
+  if (!arrayType)
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected arrayref type");
+  elementsTypes.append(arrayType.getNumElements(), arrayType.getElementType());
+  return success();
+}
+
+void printARCreate(OpAsmPrinter &printer, Operation *op, Type destType,
+                   Type inputType, TypeRange elementsTypes) {}
+
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES
