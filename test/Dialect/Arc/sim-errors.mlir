@@ -145,3 +145,14 @@ func.func @set_time_model_not_found() {
     }
     return
 }
+
+// -----
+
+func.func @get_next_wakeup_model_not_found() {
+    // expected-error @+1 {{model not found}}
+    arc.sim.instantiate @unknown as %model {
+        %t = arc.sim.get_next_wakeup %model : !arc.sim.instance<@unknown>
+        arc.sim.emit "next_wakeup", %t : i64
+    }
+    return
+}

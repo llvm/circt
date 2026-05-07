@@ -364,6 +364,20 @@ func.func @ConstantTime() -> (!llhd.time, !llhd.time, !llhd.time) {
 }
 
 
+// CHECK-LABEL: llvm.func @NextWakeup
+// CHECK-SAME: (%[[STATE:.*]]: !llvm.ptr, %[[T:.*]]: i64)
+func.func @NextWakeup(%state: !arc.storage<42>, %t: i64) -> i64 {
+  // CHECK-NEXT: %[[WGEP:.*]] = llvm.getelementptr %[[STATE]][16] : (!llvm.ptr) -> !llvm.ptr, i8
+  // CHECK-NEXT: llvm.store %[[T]], %[[WGEP]] : i64, !llvm.ptr
+  arc.set_next_wakeup %state, %t : !arc.storage<42>
+  // CHECK-NEXT: %[[RGEP:.*]] = llvm.getelementptr %[[STATE]][16] : (!llvm.ptr) -> !llvm.ptr, i8
+  // CHECK-NEXT: %[[OUT:.*]] = llvm.load %[[RGEP]] : !llvm.ptr -> i64
+  %0 = arc.get_next_wakeup %state : !arc.storage<42>
+  // CHECK-NEXT: llvm.return %[[OUT]]
+  return %0 : i64
+}
+
+
 // CHECK-LABEL: llvm.func @test_success_eval
 // CHECK-SAME: (%[[STATE:.*]]: !llvm.ptr, %[[COND:.*]]: i1)
 func.func @test_success_eval(%state: !arc.storage, %cond: i1) {

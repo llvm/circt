@@ -633,17 +633,51 @@ def TerminateOp : ArcOp<"terminate", [
   let description = [{
     Sets a termination flag in the model's storage.
     It unconditionally writes 1 for success or 2 for failure.
-    This allows the simulation to exit gracefully after the current 
+    This allows the simulation to exit gracefully after the current
     evaluation cycle.
   }];
 
-  let arguments = (ins 
-    StorageType:$storage, 
+  let arguments = (ins
+    StorageType:$storage,
     BoolAttr:$success
   );
 
   let assemblyFormat = [{
     $storage `,` $success attr-dict `:` qualified(type($storage))
+  }];
+}
+
+def GetNextWakeupOp : ArcOp<"get_next_wakeup", [
+  MemoryEffects<[MemRead]>
+]> {
+  let summary = "Read the model's next wakeup time";
+  let description = [{
+    Reads the next wakeup time from the model's storage. The time is
+    represented as an `i64` value in femtoseconds. A value of `0` indicates
+    "wake up immediately"; a value of `UINT64_MAX` indicates that no wakeup
+    is pending.
+  }];
+  let arguments = (ins StorageType:$storage);
+  let results = (outs I64:$time);
+  let assemblyFormat = [{
+    $storage attr-dict `:` qualified(type($storage))
+  }];
+}
+
+def SetNextWakeupOp : ArcOp<"set_next_wakeup", [
+  MemoryEffects<[MemWrite]>
+]> {
+  let summary = "Set the model's next wakeup time";
+  let description = [{
+    Writes the next wakeup time into the model's storage. The time is
+    represented as an `i64` value in femtoseconds. The model's eval body
+    establishes the slot at `UINT64_MAX` ("no wakeup pending") on entry, and
+    process suspension code lowers the value to the earliest scheduled
+    wakeup over the course of an evaluation.
+  }];
+  let arguments = (ins StorageType:$storage, I64:$time);
+  let assemblyFormat = [{
+    $storage `,` $time attr-dict `:` qualified(type($storage))
   }];
 }
 
@@ -806,6 +840,26 @@ def SimSetTimeOp : ArcOp<"sim.set_time", [
   let arguments = (ins SimModelInstance:$instance, I64:$time);
   let assemblyFormat = [{
     $instance `,` $time attr-dict `:` qualified(type($instance))
+  }];
+}
+
+def SimGetNextWakeupOp : ArcOp<"sim.get_next_wakeup", [
+  MemoryEffects<[MemRead]>,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
+  let summary = "Gets the next wakeup time of the model instance";
+  let description = [{
+    Gets the next wakeup time of the given model instance. The time is
+    represented as an `i64` value in femtoseconds. A value of `0` indicates
+    "wake up immediately"; a value of `UINT64_MAX` indicates that no wakeup
+    is pending. The slot is recomputed on every evaluation, so a driver
+    typically reads it after each `arc.sim.step` to decide how far to
+    advance simulation time before the next step.
+  }];
+  let arguments = (ins SimModelInstance:$instance);
+  let results = (outs I64:$time);
+  let assemblyFormat = [{
+    $instance attr-dict `:` qualified(type($instance))
   }];
 }
 
