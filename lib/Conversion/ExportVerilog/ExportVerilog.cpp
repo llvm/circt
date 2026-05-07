@@ -990,13 +990,8 @@ StringRef getVerilogValueName(Value val) {
   if (auto port = dyn_cast<BlockArgument>(val)) {
     // If the value is defined by for op, use its associated verilog name.
     auto parent = port.getParentBlock()->getParentOp();
-    if (auto forOp = dyn_cast<ForOp>(parent))
-      return forOp->getAttrOfType<StringAttr>("hw.verilogName");
-    if (auto genForOp = dyn_cast<GenerateForOp>(parent)) {
-      if (auto attr = genForOp->getAttrOfType<StringAttr>("hw.verilogName"))
-        return attr.getValue();
-      return "i";
-    }
+    if (isa<ForOp, GenerateForOp>(parent))
+      return parent->getAttrOfType<StringAttr>("hw.verilogName");
     return getInputPortVerilogName(port.getParentBlock()->getParentOp(),
                                    port.getArgNumber());
   }
@@ -4973,9 +4968,7 @@ LogicalResult StmtEmitter::visitSV(GenerateForOp op) {
   ps.addCallback({op, true});
   startStatement();
 
-  StringRef inductionVarName = "i";
-  if (auto nameHint = op->getAttrOfType<StringAttr>("hw.verilogName"))
-    inductionVarName = nameHint.getValue();
+  StringRef inductionVarName = op->getAttrOfType<StringAttr>("hw.verilogName");
 
   ps << "for (";
   ps.scopedBox(PP::cbox0, [&]() {

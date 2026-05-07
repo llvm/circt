@@ -67,8 +67,9 @@ def GenerateForOp : SVOp<"generate.for",
                        OptionalAttr<StrAttr>:$inductionVarName);
 
   let assemblyFormat = [{
-    custom<ForHeader>($lowerBound, $upperBound, $step, $inductionVarName,
-                      $genBlockName, $body) attr-dict
+    custom<ForInductionVar>($inductionVarName) `=` $lowerBound `to`
+    $upperBound `step` $step `name` $genBlockName
+    custom<ForBody>(ref($inductionVarName), ref($lowerBound), $body) attr-dict
   }];
 
   let hasVerifier = 1;
