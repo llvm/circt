@@ -102,20 +102,22 @@ hw.module @MultipleProbes(out o1: i16, out o2: i16) {
 // -----
 
 // Test xmr.remote targeting an instance result
-// CHECK: hw.hierpath private @[[PATH:.+]] [@XMRRemoteInstance::@[[SYM:.+]]]
+hw.hierpath private @xmr_remote_path [@XMRRemoteInstance::@target_inst]
+// CHECK: hw.hierpath private @[[PATH1:.+]] [@XMRRemoteInstance::@target_inst]
+// CHECK: hw.hierpath private @xmr_remote_path [@XMRRemoteInstance::@target_inst]
 // CHECK-LABEL: hw.module.extern @Source
 // CHECK-LABEL: hw.module @XMRRemoteInstance
 hw.module.extern @Source(out data: !hw.rwprobe<i8>)
 hw.module @XMRRemoteInstance(out result: i8) {
-  // CHECK: hw.instance "source" sym @[[SYM]]
+  // CHECK: hw.instance "source" sym @target_inst @Source
   // CHECK-NOT: hw.xmr.remote
-  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[PATH]]
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[PATH1]]
   // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
   // CHECK: hw.output %[[READ]]
 
   %source.data = hw.instance "source" sym @target_inst @Source() -> (data: !hw.rwprobe<i8>)
 
-  %probe = hw.xmr.remote forceable @XMRRemoteInstance::@target_inst, 0 : !hw.rwprobe<i8>
+  %probe = hw.xmr.remote forceable @xmr_remote_path, 0 : !hw.rwprobe<i8>
   %value = hw.probe.resolve %probe : !hw.rwprobe<i8>
 
   hw.output %value : i8
@@ -813,11 +815,11 @@ hw.module.extern @ExternModuleWithProbe(out probe_out: !hw.probe<i32>)
 // CHECK-LABEL: hw.module @ParentOfExtern
 hw.module @ParentOfExtern(out result: i32) {
   // Instance of extern module
-  // CHECK: hw.instance "ext"{{.*}}@ExternModuleWithProbe()
+  // CHECK: hw.instance "ext" sym @xmr_sym @ExternModuleWithProbe
   %ext_probe = hw.instance "ext" @ExternModuleWithProbe() -> (probe_out: !hw.probe<i32>)
 
   // Resolve the probe from extern module
-  // CHECK: sv.xmr.ref{{.*}}"`ref_ExternModuleWithProbe_probe_out"
+  // CHECK: sv.xmr.ref @xmrPath "`ref_ExternModuleWithProbe_probe_out"
   // CHECK: sv.read_inout
   %val = hw.probe.resolve %ext_probe : !hw.probe<i32>
 
@@ -843,10 +845,10 @@ hw.module @ParentOfMultiExtern(out o1: i8, out o2: i16) {
   // CHECK: hw.instance "e2"{{.*}}@ExtMod2()
   %p2 = hw.instance "e2" @ExtMod2() -> (p: !hw.probe<i16>)
 
-  // CHECK: sv.xmr.ref{{.*}}"`ref_ExtMod1_p"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "`ref_ExtMod1_p"
   %v1 = hw.probe.resolve %p1 : !hw.probe<i8>
 
-  // CHECK: sv.xmr.ref{{.*}}"`ref_ExtMod2_p"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "`ref_ExtMod2_p"
   %v2 = hw.probe.resolve %p2 : !hw.probe<i16>
 
   hw.output %v1, %v2 : i8, i16
@@ -878,7 +880,7 @@ hw.module @ParentOfMixedModules(out o1: i32, out o2: i32) {
   %preg = hw.instance "reg" @RegularModMixed() -> (probe: !hw.probe<i32>)
 
   // Extern module probe should use macro
-  // CHECK: sv.xmr.ref{{.*}}"`ref_ExtModMixed_probe"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "`ref_ExtModMixed_probe"
   %vext = hw.probe.resolve %pext : !hw.probe<i32>
 
   // Regular module probe should use regular hierpath
@@ -906,7 +908,7 @@ hw.module @TestExternPortRemoval(in %clock: i1, out o1: i32, out o2: i8) {
   %val = hw.probe.resolve %probe : !hw.probe<i8>
 
   // CHECK: %[[DATA:.+]] = hw.instance "ext"{{.*}}@ExternWithMultiplePorts({{.*}}) -> (data: i32)
-  // CHECK: sv.xmr.ref{{.*}}"`ref_ExternWithMultiplePorts_probe"{{.*}}: !hw.inout<i8>
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "`ref_ExternWithMultiplePorts_probe"{{.*}}: !hw.inout<i8>
   // CHECK: hw.output %[[DATA]]
 
   hw.output %data, %val : i32, i8
@@ -930,8 +932,8 @@ hw.module @TestAllPortsRemoved(out o1: i1, out o2: i8) {
   %v2 = hw.probe.resolve %p2 : !hw.rwprobe<i8>
 
   // CHECK: hw.instance "ext"{{.*}}@ExternOnlyProbe() -> ()
-  // CHECK: sv.xmr.ref{{.*}}"`ref_ExternOnlyProbe_p1"
-  // CHECK: sv.xmr.ref{{.*}}"`ref_ExternOnlyProbe_p2"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "`ref_ExternOnlyProbe_p1"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "`ref_ExternOnlyProbe_p2"
 
   hw.output %v1, %v2 : i1, i8
 }
@@ -959,11 +961,11 @@ hw.module @TestProbeSub(out field_a: i8, out field_b: i16) {
   // Access field 'b' (index 1)
   %probe_b = hw.probe.sub %struct_probe[1 : i32] : !hw.probe<!hw.struct<a: i8, b: i16>>
 
-  // CHECK: sv.xmr.ref{{.*}}".a"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} ".a"
   // CHECK: sv.read_inout
   %val_a = hw.probe.resolve %probe_a : !hw.probe<i8>
 
-  // CHECK: sv.xmr.ref{{.*}}".b"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} ".b"
   // CHECK: sv.read_inout
   %val_b = hw.probe.resolve %probe_b : !hw.probe<i16>
 
@@ -993,11 +995,11 @@ hw.module @TestProbeSubArray(out elem0: i32, out elem2: i32) {
   // Access element 2
   %probe_2 = hw.probe.sub %array_probe[2 : i32] : !hw.probe<!hw.array<4xi32>>
 
-  // CHECK: sv.xmr.ref{{.*}}"[0]"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "[0]"
   // CHECK: sv.read_inout
   %val_0 = hw.probe.resolve %probe_0 : !hw.probe<i32>
 
-  // CHECK: sv.xmr.ref{{.*}}"[2]"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "[2]"
   // CHECK: sv.read_inout
   %val_2 = hw.probe.resolve %probe_2 : !hw.probe<i32>
 
@@ -1137,7 +1139,7 @@ hw.module @TestProbeSubNested(out result: i8) {
   // Access .y field of the struct (index 1)
   %probe_y = hw.probe.sub %probe_elem1[1 : i32] : !hw.probe<!hw.struct<x: i8, y: i8>>
 
-  // CHECK: sv.xmr.ref{{.*}}"[1].y"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "[1].y"
   // CHECK: sv.read_inout
   %val = hw.probe.resolve %probe_y : !hw.probe<i8>
 
@@ -1165,16 +1167,16 @@ hw.module @ReleasableTarget(out ref: !hw.rwprobe<i12>) {
 //===----------------------------------------------------------------------===//
 
 // Test basic firmem debug port lowering
-// CHECK: hw.hierpath private @[[MEM_PATH:.+]] [@FirMemDebugPortBasic::@[[MEM_SYM:.+]]]
+// CHECK: hw.hierpath private @xmrPath [@FirMemDebugPortBasic::@xmr_sym]
 // CHECK-LABEL: hw.module @FirMemDebugPortBasic
 hw.module @FirMemDebugPortBasic(in %clk: !seq.clock, in %addr: i4, out result: !hw.array<12xi42>) {
-  // CHECK: %mem = seq.firmem sym @[[MEM_SYM]]
+  // CHECK: %mem = seq.firmem sym @xmr_sym
   %mem = seq.firmem 0, 1, undefined, undefined : <12 x 42>
 
   // CHECK-NOT: seq.firmem.debug_port
   %debug_ref = seq.firmem.debug_port %mem : <12 x 42>
 
-  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[MEM_PATH]] ".Memory"
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @xmrPath ".Memory"
   // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
   %value = hw.probe.resolve %debug_ref : !hw.probe<!hw.array<12xi42>>
 
@@ -1185,16 +1187,16 @@ hw.module @FirMemDebugPortBasic(in %clk: !seq.clock, in %addr: i4, out result: !
 // -----
 
 // Test firmem debug port with masked memory
-// CHECK: hw.hierpath private @[[MEM_PATH:.+]] [@FirMemDebugPortMasked::@[[MEM_SYM:.+]]]
+// CHECK: hw.hierpath private @xmrPath [@FirMemDebugPortMasked::@xmr_sym]
 // CHECK-LABEL: hw.module @FirMemDebugPortMasked
 hw.module @FirMemDebugPortMasked(out result: !hw.array<16xi32>) {
-  // CHECK: %mem = seq.firmem sym @[[MEM_SYM]]
+  // CHECK: %mem = seq.firmem sym @xmr_sym
   %mem = seq.firmem 0, 1, undefined, undefined : <16 x 32, mask 4>
 
   // CHECK-NOT: seq.firmem.debug_port
   %debug_ref = seq.firmem.debug_port %mem : <16 x 32, mask 4>
 
-  // CHECK: %[[XMR:.+]] = sv.xmr.ref @[[MEM_PATH]] ".Memory"
+  // CHECK: %[[XMR:.+]] = sv.xmr.ref @xmrPath ".Memory"
   // CHECK: %[[READ:.+]] = sv.read_inout %[[XMR]]
   %value = hw.probe.resolve %debug_ref : !hw.probe<!hw.array<16xi32>>
 
@@ -1205,24 +1207,24 @@ hw.module @FirMemDebugPortMasked(out result: !hw.array<16xi32>) {
 // -----
 
 // Test multiple firmem debug ports in same module
-// CHECK: hw.hierpath private @[[MEM1_PATH:.+]] [@FirMemDebugPortMultiple::@[[MEM1_SYM:.+]]]
-// CHECK: hw.hierpath private @[[MEM2_PATH:.+]] [@FirMemDebugPortMultiple::@[[MEM2_SYM:.+]]]
+// CHECK: hw.hierpath private @xmrPath [@FirMemDebugPortMultiple::@xmr_sym]
+// CHECK: hw.hierpath private @xmrPath_0 [@FirMemDebugPortMultiple::@xmr_sym_0]
 // CHECK-LABEL: hw.module @FirMemDebugPortMultiple
 hw.module @FirMemDebugPortMultiple(out result1: !hw.array<8xi16>, out result2: !hw.array<4xi8>) {
-  // CHECK: %mem1 = seq.firmem sym @[[MEM1_SYM]]
+  // CHECK: %mem1 = seq.firmem sym @xmr_sym
   %mem1 = seq.firmem 0, 1, undefined, undefined : <8 x 16>
-  // CHECK: %mem2 = seq.firmem sym @[[MEM2_SYM]]
+  // CHECK: %mem2 = seq.firmem sym @xmr_sym_0
   %mem2 = seq.firmem 0, 1, undefined, undefined : <4 x 8>
 
   // CHECK-NOT: seq.firmem.debug_port
   %debug_ref1 = seq.firmem.debug_port %mem1 : <8 x 16>
   %debug_ref2 = seq.firmem.debug_port %mem2 : <4 x 8>
 
-  // CHECK: %[[XMR1:.+]] = sv.xmr.ref @[[MEM1_PATH]] ".Memory"
+  // CHECK: %[[XMR1:.+]] = sv.xmr.ref @xmrPath ".Memory"
   // CHECK: %[[READ1:.+]] = sv.read_inout %[[XMR1]]
   %value1 = hw.probe.resolve %debug_ref1 : !hw.probe<!hw.array<8xi16>>
 
-  // CHECK: %[[XMR2:.+]] = sv.xmr.ref @[[MEM2_PATH]] ".Memory"
+  // CHECK: %[[XMR2:.+]] = sv.xmr.ref @xmrPath_0 ".Memory"
   // CHECK: %[[READ2:.+]] = sv.read_inout %[[XMR2]]
   %value2 = hw.probe.resolve %debug_ref2 : !hw.probe<!hw.array<4xi8>>
 
@@ -1419,7 +1421,7 @@ hw.module @MixedModules(out o1: i16, out o2: i16) {
   %preg = hw.instance "reg" @RegularMixed() -> (probe: !hw.probe<i16>)
 
   // External module should use macro (note the backtick)
-  // CHECK: sv.xmr.ref{{.*}}"`ref_ExtMixed_probe"
+  // CHECK: sv.xmr.ref @{{[a-zA-Z_0-9]+}} "`ref_ExtMixed_probe"
   %vext = hw.probe.resolve %pext : !hw.probe<i16>
 
   // Regular module should NOT use macro - check that there's NO backtick before "ref"

@@ -916,8 +916,14 @@ LogicalResult HWLowerXMRPass::handleProbeResolve(ProbeResolveOp resolve) {
     if (failed(buildHierPath(pathIdx.value(), builder, pathSym, suffixSym)))
       return failure();
 
-    if (suffixSym && !suffixSym.empty())
-      suffixSym = builder.getStringAttr("." + suffixSym.getValue());
+    if (suffixSym && !suffixSym.empty()) {
+      StringRef suffix = suffixSym.getValue();
+      // Only add a dot prefix if the suffix doesn't already start with
+      // a special character like '.', '[', or '`'
+      if (!suffix.starts_with(".") && !suffix.starts_with("[") &&
+          !suffix.starts_with("`"))
+        suffixSym = builder.getStringAttr("." + suffix);
+    }
     auto xmrType = sv::InOutType::get(resolve.getType());
     Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
     Value readValue = builder.create<sv::ReadInOutOp>(xmr);
@@ -974,8 +980,14 @@ LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeToInOutOp xmrRef) {
       return failure();
 
     auto xmrType = sv::InOutType::get(innerType);
-    if (suffixSym && !suffixSym.empty())
-      suffixSym = builder.getStringAttr("." + suffixSym.getValue());
+    if (suffixSym && !suffixSym.empty()) {
+      StringRef suffix = suffixSym.getValue();
+      // Only add a dot prefix if the suffix doesn't already start with
+      // a special character like '.', '[', or '`'
+      if (!suffix.starts_with(".") && !suffix.starts_with("[") &&
+          !suffix.starts_with("`"))
+        suffixSym = builder.getStringAttr("." + suffix);
+    }
     Value xmr = builder.create<sv::XMRRefOp>(xmrType, pathSym, suffixSym);
 
     xmrRef.getResult().replaceAllUsesWith(xmr);
@@ -995,13 +1007,30 @@ LogicalResult HWLowerXMRPass::handleProbeXMRRef(ProbeToInOutOp xmrRef) {
 }
 
 LogicalResult HWLowerXMRPass::handleXMRRemote(XMRRemoteOp xmrRemote) {
-  // XMRRemoteOp creates a probe reference from an InnerRef target.
-  // This is very similar to ProbeRWProbeOp, but works across module boundaries
-  // (hence the "remote" in the name). Like ProbeRWProbeOp, we simply add a
-  // reaching sends entry with the InnerRef target, which will be resolved
-  // when the probe is used.
+  // XMRRemoteOp creates a probe reference via a hierarchical path.
+  // We need to extract the InnerRef from the hierarchical path and resolve it
+  // to the target instance operation.
 
-  auto targetRef = xmrRemote.getTarget();
+  // Get the referenced hierarchical path
+  auto pathOp = xmrRemote.getReferencedPath(nullptr);
+  if (!pathOp)
+    return xmrRemote.emitError("could not resolve hierarchical path: ")
+           << xmrRemote.getRef();
+
+  // Get the path array
+  auto pathArray = pathOp.getNamepath();
+  if (pathArray.empty())
+    return xmrRemote.emitError("hierarchical path is empty");
+
+  // For XMRRemoteOp created from FIRRTL lowering, the path should contain
+  // a single InnerRef pointing to the target instance
+  if (pathArray.size() != 1)
+    return xmrRemote.emitError(
+        "expected single-element hierarchical path from FIRRTL lowering");
+
+  auto targetRef = dyn_cast<InnerRefAttr>(pathArray[0]);
+  if (!targetRef)
+    return xmrRemote.emitError("path element is not an InnerRef");
 
   // Get the inner type from the probe/rwprobe result
   Type innerType;
@@ -1034,19 +1063,20 @@ LogicalResult HWLowerXMRPass::handleXMRRemote(XMRRemoteOp xmrRemote) {
   if (!instOp)
     return xmrRemote.emitError("target must be an instance operation");
 
-  // Get the specific result using the index
-  size_t index = xmrRemote.getIndex();
-  if (index >= instOp.getNumResults())
+  // Get the target result using the index attribute
+  uint64_t index = xmrRemote.getIndex();
+  auto results = instOp.getResults();
+
+  if (static_cast<size_t>(index) >= results.size())
     return xmrRemote.emitError("index ")
-           << index << " out of bounds for instance with "
-           << instOp.getNumResults() << " results";
+           << index << " is out of range for instance with " << results.size()
+           << " results";
 
-  Value targetVal = instOp.getResult(index);
+  Value targetVal = results[index];
 
-  // Verify the result type is probe or rwprobe
   if (!isa<ProbeType, RWProbeType>(targetVal.getType()))
-    return xmrRemote.emitError("instance result at index ")
-           << index << " is not a probe or rwprobe type";
+    return xmrRemote.emitError("result at index ")
+           << index << " is not a probe type";
 
   // Handler for when the target value's send is resolved
   auto handler = [this, targetVal](Operation *op) -> LogicalResult {
