@@ -32,6 +32,7 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <stdexcept>
 #include <string>
@@ -362,24 +363,30 @@ private:
         break;
 
       if (remaining_ == 0) {
-        // Header or footer frame. Preserve the last non-zero header's static
-        // fields so a footer, which may only set count=0, does not clobber
-        // them before reconstruction.
-        count_type batchCount =
-            T::_headerCount(*reinterpret_cast<const frame_type *>(
-                partial_.data()));
+        // Header or footer frame. Decode into a local frame first so we can
+        // inspect the count without committing. Only the first header of a
+        // transaction is guaranteed to carry valid static fields; the static
+        // slots of continuation and footer headers may be garbage.
+        header_frame frame{};
+        std::memcpy(&frame, partial_.data(), kFrameSize);
+        partial_.clear();
+        count_type batchCount = T::_headerCount(frame);
         if (batchCount == 0) {
-          partial_.clear();
-          // Footer: emit the accumulated value using the previously saved
-          // non-zero header frame.
+          // Footer: emit the accumulated value using the first header's
+          // static fields.
+          if (!pending_header_)
+            throw std::runtime_error(
+                "SerialListTypeDeserializer: footer received before any "
+                "header");
           out.push_back(
-              T::_fromFrames(pending_header_, std::move(pending_frames_)));
+              T::_fromFrames(*pending_header_, std::move(pending_frames_)));
           pending_frames_.clear();
+          pending_header_.reset();
           continue;
         }
 
-        std::memcpy(&pending_header_, partial_.data(), kFrameSize);
-        partial_.clear();
+        if (!pending_header_)
+          pending_header_ = frame;
         remaining_ = batchCount;
         continue;
       }
@@ -396,7 +403,7 @@ private:
   }
 
   std::vector<uint8_t> partial_;
-  header_frame pending_header_{};
+  std::optional<header_frame> pending_header_;
   std::vector<data_frame> pending_frames_;
   count_type remaining_ = 0;
 };
