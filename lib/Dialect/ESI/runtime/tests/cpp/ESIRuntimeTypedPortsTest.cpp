@@ -732,6 +732,38 @@ TEST(TypedPortsTest, TypedFunctionNullThrowsAtConnect) {
   EXPECT_THROW(typed.connect(), AcceleratorMismatchError);
 }
 
+TEST(TypedPortsTest, TypedFunctionCallBeforeConnectThrows) {
+  // call() before connect() must throw, not dereference a null optional.
+  TypedFunction<uint32_t, uint16_t> typed(nullptr);
+  EXPECT_THROW(typed.call(0u).get(), std::runtime_error);
+}
+
+TEST(TypedPortsTest, TypedFunctionDoubleConnectThrows) {
+  // A second connect() on an already-connected wrapper must throw rather
+  // than silently rebuild internal state.
+  SIntType argInner("si24", 24);
+  ChannelType argChanType("channel<si24>", &argInner);
+  UIntType resultInner("ui15", 15);
+  ChannelType resultChanType("channel<ui15>", &resultInner);
+
+  BundleType::ChannelVector channels = {
+      {"arg", BundleType::Direction::To, &argChanType},
+      {"result", BundleType::Direction::From, &resultChanType},
+  };
+  BundleType bundleType("func_bundle", channels);
+
+  MockWritePort mockWrite(&argInner);
+  CallbackDrivenMockReadPort mockRead(&resultInner);
+
+  auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
+                                                    mockWrite, mockRead);
+
+  TypedFunction<int32_t, uint16_t> typed(func);
+  typed.connect();
+  EXPECT_THROW(typed.connect(), std::runtime_error);
+  delete func;
+}
+
 TEST(TypedPortsTest, TypedFunctionConnectVerifiesTypes) {
   // Create channel types matching si24 arg and ui16 result.
   SIntType argInner("si24", 24);
@@ -1157,6 +1189,12 @@ TEST(TypedPortsTest, VerifyTypeCompatibilityThrowsForUnsupportedType) {
 // Simple TypeDeserializer that decodes a single uint32 from one frame and
 // emits exactly one OneWord value per push. Used to exercise the typical
 // 1-frame-in / 1-typed-value-out custom path.
+//
+// Implements the standard backpressure/retry contract: a decoded `OneWord`
+// is buffered until the output callback accepts it; only then is the raw
+// message consumed. If `output()` returns false, the same raw message will
+// be retried later, and a follow-up `poke()` retries delivery of the
+// already-decoded value without re-decoding.
 struct OneWord {
   uint32_t value;
 
@@ -1168,21 +1206,39 @@ struct OneWord {
         : output(std::move(output)) {}
 
     bool push(std::unique_ptr<SegmentedMessageData> &msg) {
+      // First, try to flush any previously-decoded value blocked on output.
+      if (pending) {
+        if (!output(pending))
+          return false;
+        pending.reset();
+      }
+
       MessageData scratch;
       const MessageData &flat =
           detail::getMessageDataRef<OneWord>(*msg, scratch);
       if (flat.getSize() != sizeof(uint32_t))
         throw std::runtime_error("OneWord: bad size");
-      auto out = std::make_unique<OneWord>();
-      std::memcpy(&out->value, flat.getBytes(), sizeof(uint32_t));
+      pending = std::make_unique<OneWord>();
+      std::memcpy(&pending->value, flat.getBytes(), sizeof(uint32_t));
+      // Raw message is consumed regardless of whether the typed output is
+      // immediately accepted.
       msg.reset();
-      return output(out);
+      if (output(pending))
+        pending.reset();
+      return true;
     }
 
-    bool poke() { return true; }
+    bool poke() {
+      if (pending && output(pending)) {
+        pending.reset();
+        return true;
+      }
+      return false;
+    }
 
   private:
     OutputCallback output;
+    std::unique_ptr<OneWord> pending;
   };
 };
 

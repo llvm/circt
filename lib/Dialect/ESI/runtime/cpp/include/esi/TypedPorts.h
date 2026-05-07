@@ -933,12 +933,17 @@ inline ChannelPort::ConnectOptions typedFunctionConnectOptions() {
 /// `TypedReadPort::readAsync()`) into a `std::future<T>`. Uses a deferred
 /// async so `.get()` blocks only when the caller actually waits for the
 /// value, preserving the per-call FIFO ordering of the underlying polling
-/// buffer.
+/// buffer. A null `unique_ptr` from a misbehaving deserializer is reported
+/// as a runtime error rather than dereferenced.
 template <typename T>
 std::future<T> awaitDecoded(std::future<std::unique_ptr<T>> inner) {
   return std::async(std::launch::deferred,
                     [fut = std::move(inner)]() mutable -> T {
                       std::unique_ptr<T> v = fut.get();
+                      if (!v)
+                        throw std::runtime_error(
+                            "TypedFunction: deserializer produced a null "
+                            "value");
                       return std::move(*v);
                     });
 }
@@ -948,6 +953,17 @@ std::future<T> awaitDecoded(std::future<std::unique_ptr<T>> inner) {
 [[noreturn]] inline void throwNullFunction() {
   throw AcceleratorMismatchError(
       "TypedFunction: null Function pointer (getAs failed or wrong type)");
+}
+
+/// Throw a clear "not connected" error from `call()` paths.
+[[noreturn]] inline void throwNotConnected() {
+  throw std::runtime_error("TypedFunction: must be 'connect'ed before "
+                           "calling");
+}
+
+/// Throw a clear "already connected" error from `connect()` paths.
+[[noreturn]] inline void throwAlreadyConnected() {
+  throw std::runtime_error("TypedFunction is already connected");
 }
 
 } // namespace detail
@@ -964,6 +980,8 @@ public:
   void connect() {
     if (!inner)
       detail::throwNullFunction();
+    if (argPort)
+      detail::throwAlreadyConnected();
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
@@ -972,6 +990,8 @@ public:
   }
 
   std::future<ResultT> call(const ArgT &arg) {
+    if (!argPort)
+      detail::throwNotConnected();
     // Serialize the per-call write+readAsync pair so the polling buffer's
     // FIFO matches the call FIFO. Pipelined calls are still allowed -- the
     // shared deserializer drains responses in wire order and the FIFO
@@ -1023,6 +1043,8 @@ public:
   void connect() {
     if (!inner)
       detail::throwNullFunction();
+    if (argPort)
+      detail::throwAlreadyConnected();
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
@@ -1031,6 +1053,8 @@ public:
   }
 
   std::future<ResultT> call() {
+    if (!argPort)
+      detail::throwNotConnected();
     std::scoped_lock<std::mutex> lock(callMutex);
     argPort->write();
     return detail::awaitDecoded<ResultT>(resultPort->readAsync());
@@ -1061,6 +1085,8 @@ public:
   void connect() {
     if (!inner)
       detail::throwNullFunction();
+    if (argPort)
+      detail::throwAlreadyConnected();
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
@@ -1069,6 +1095,8 @@ public:
   }
 
   std::future<void> call(const ArgT &arg) {
+    if (!argPort)
+      detail::throwNotConnected();
     std::scoped_lock<std::mutex> lock(callMutex);
     argPort->write(arg);
     return resultPort->readAsync();
@@ -1115,6 +1143,8 @@ public:
   void connect() {
     if (!inner)
       detail::throwNullFunction();
+    if (argPort)
+      detail::throwAlreadyConnected();
     argPort.emplace(&inner->getRawWrite("arg"));
     resultPort.emplace(&inner->getRawRead("result"));
     auto opts = detail::typedFunctionConnectOptions();
@@ -1123,6 +1153,8 @@ public:
   }
 
   std::future<void> call() {
+    if (!argPort)
+      detail::throwNotConnected();
     std::scoped_lock<std::mutex> lock(callMutex);
     argPort->write();
     return resultPort->readAsync();
@@ -1161,6 +1193,16 @@ private:
 // custom-deserializer behavior). If service-thread dispatch is needed in the
 // future, that can be layered on top by using `TypedReadPort` polling mode
 // plus a worker.
+//
+// Lifetime: the TypedReadPort callback installed on `connect()` captures
+// `this`. The wrapper is non-copyable and non-movable, so its address is
+// stable for its entire lifetime. Destruction of the embedded TypedReadPort
+// synchronously revokes the callback and waits for any in-flight callback
+// dispatch to complete (see ReadChannelPort::disconnect), so the captured
+// `this` cannot dangle. Callers must ensure the TypedCallback outlives any
+// expected callback dispatch -- using a temporary like
+// `TypedCallback<...>(cb).connect(...)` is safe only because the destructor
+// runs at end-of-full-expression and disconnects before returning.
 //===----------------------------------------------------------------------===//
 
 namespace detail {
@@ -1170,6 +1212,12 @@ namespace detail {
 [[noreturn]] inline void throwNullCallback() {
   throw AcceleratorMismatchError(
       "TypedCallback: null Callback pointer (getAs failed or wrong type)");
+}
+
+/// Throw a clear "already connected" error from TypedCallback `connect()`
+/// paths.
+[[noreturn]] inline void throwCallbackAlreadyConnected() {
+  throw std::runtime_error("TypedCallback is already connected");
 }
 
 } // namespace detail
@@ -1187,6 +1235,8 @@ public:
     (void)quick; // See class header.
     if (!inner)
       detail::throwNullCallback();
+    if (argPort)
+      detail::throwCallbackAlreadyConnected();
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
@@ -1227,6 +1277,8 @@ public:
     (void)quick;
     if (!inner)
       detail::throwNullCallback();
+    if (argPort)
+      detail::throwCallbackAlreadyConnected();
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
@@ -1264,6 +1316,8 @@ public:
     (void)quick;
     if (!inner)
       detail::throwNullCallback();
+    if (argPort)
+      detail::throwCallbackAlreadyConnected();
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();
@@ -1301,6 +1355,8 @@ public:
     (void)quick;
     if (!inner)
       detail::throwNullCallback();
+    if (argPort)
+      detail::throwCallbackAlreadyConnected();
     argPort.emplace(&inner->getRawRead("arg"));
     resultPort.emplace(&inner->getRawWrite("result"));
     auto opts = detail::typedFunctionConnectOptions();

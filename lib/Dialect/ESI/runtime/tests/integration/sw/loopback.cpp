@@ -254,11 +254,16 @@ static void serialCoordTranslateTest(Accelerator *accel) {
   // to backpressure on the N+2 reply frames.
   TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
       func->getRawWrite("arg"));
-  ChannelPort::ConnectOptions opts(/*bufferSize=*/std::nullopt,
-                                   /*translateMessage=*/false);
-  argPort.connect(opts);
+  ChannelPort::ConnectOptions argOpts(/*bufferSize=*/std::nullopt,
+                                      /*translateMessage=*/false);
+  argPort.connect(argOpts);
   ReadChannelPort &rawResult = func->getRawRead("result");
-  rawResult.connect(opts);
+  // The reply contains numCoords + 2 raw frames (one header + N data + one
+  // footer). Use an unbounded buffer (bufferSize=0) so the polling queue
+  // doesn't backpressure the backend mid-stream.
+  ChannelPort::ConnectOptions resultOpts(/*bufferSize=*/0,
+                                         /*translateMessage=*/false);
+  rawResult.connect(resultOpts);
 
   std::vector<SerialCoordData> coords;
   for (auto &c : inputCoords)
