@@ -2602,6 +2602,8 @@ LogicalResult GenerateForOp::verify() {
   Type type = getLowerBound().getType();
   if (getBody().getBlocks().front().getArgument(0).getType() != type)
     return emitOpError("block argument type must match loop bounds type");
+  if (!isa<IntegerType>(type))
+    return emitOpError("loop bounds must be integer types");
 
   return success();
 }
