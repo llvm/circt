@@ -420,7 +420,7 @@ hw.module @compareExtractFold(in %arg0 : i8, out o1: i1, out o2: i1, out o3: i1)
   %c3_i8 = hw.constant 3 : i8
   %0 = comb.icmp ugt %arg0, %c3_i8 : i8
   // CHECK: %0 = comb.extract %arg0 from 2 : (i8) -> i6
-  // CHECK: %1 = comb.icmp ne %0, %c0_i6 : i6 
+  // CHECK: %1 = comb.icmp ne %0, %c0_i6 : i6
 
   // x < 0b11000000 -> extract(x, 6..8) != 0b11
   %c192_i8 = hw.constant 192 : i8
@@ -723,7 +723,7 @@ hw.module @extract_from_replicate(in %x: i8, out r0: i16, out r1: i4, out r2: i8
   // CHECK-NEXT: %3 = comb.extract %0 from 2 : (i24) -> i8
   %r3 = comb.extract %0 from 2 : (i24) -> i8
 
-  // CHECK-NEXT: hw.output %1, %2, %3 : 
+  // CHECK-NEXT: hw.output %1, %2, %3 :
   hw.output %r1, %r2, %r3 : i16, i4, i8
 }
 
@@ -742,7 +742,7 @@ hw.module @narrow_extract_from_and(in %arg0 : i32, out o1: i8, out o2: i14, out 
 
   %c42_i32 = hw.constant 42 : i32  // 0b101010
   %3 = comb.and %arg0, %c42_i32 : i32
-  %4 = comb.extract %3 from 1 : (i32) -> i8  
+  %4 = comb.extract %3 from 1 : (i32) -> i8
   // CHECK: %3 = comb.extract %arg0 from 1 : (i32) -> i5
   // CHECK: %4 = comb.and %3, %c-11_i5 : i5
   // CHECK: %5 = comb.concat %c0_i3, %4 : i3, i5
@@ -752,7 +752,7 @@ hw.module @narrow_extract_from_and(in %arg0 : i32, out o1: i8, out o2: i14, out 
   %6 = comb.and %5, %c12_i8 : i8
   // CHECK: %6 = comb.extract %arg0 from 25 : (i32) -> i2
   // CHECK: %7 = comb.concat %c0_i4, %6, %c0_i2 : i4, i2, i2
- 
+
   hw.output %1, %2, %4, %6 : i8, i14, i8, i8
   // CHECK: hw.output %1, %2, %5, %7 : i8, i14, i8, i8
 }
@@ -1407,7 +1407,7 @@ hw.module @muxCommon(in %cond: i1, in %cond2: i1, in %cond3: i1,
   // CHECK: [[O6:%.*]] = comb.mux [[CONDS]], %arg0, %arg1 : i32
   %0 = comb.mux %cond, %arg0, %arg1 : i32
   %o6 = comb.mux %cond2, %arg0, %0 : i32
-  
+
   // CHECK: [[CONDS:%.*]] = comb.and %cond2, %cond : i1
   // CHECK: [[O7:%.*]] = comb.mux [[CONDS]], %arg1, %arg0 : i32
   %1 = comb.mux %cond, %arg1, %arg0 : i32
@@ -1475,22 +1475,22 @@ hw.module @muxCommonOp(in %cond: i1,
   %0 = comb.concat %allones, %arg1, %arg2, %arg3 : i32, i32, i32, i32
   %1 = comb.concat %arg0, %arg2, %arg2, %arg3 : i32, i32, i32, i32
   %o1 = comb.mux %cond, %0, %1 : i128
-  // CHECK: %0 = comb.concat %c-1_i32, %arg1 : i32, i32 
-  // CHECK: %1 = comb.concat %arg0, %arg2 : i32, i32 
-  // CHECK: %2 = comb.mux %cond, %0, %1 : i64 
-  // CHECK: [[O1:%.*]] = comb.concat %2, %arg2, %arg3 : i64, i32, i32 
+  // CHECK: %0 = comb.concat %c-1_i32, %arg1 : i32, i32
+  // CHECK: %1 = comb.concat %arg0, %arg2 : i32, i32
+  // CHECK: %2 = comb.mux %cond, %0, %1 : i64
+  // CHECK: [[O1:%.*]] = comb.concat %2, %arg2, %arg3 : i64, i32, i32
 
   %2 = comb.concat %allones, %arg1, %arg2, %arg3 : i32, i32, i32, i32
   %3 = comb.concat %allones, %arg1, %arg2, %arg3 : i32, i32, i32, i32
   %o2 = comb.mux %cond, %2, %3 : i128
-  // CHECK: [[O2:%.*]] = comb.concat %c-1_i32, %arg1, %arg2, %arg3 : i32, i32, i32, i32 
+  // CHECK: [[O2:%.*]] = comb.concat %c-1_i32, %arg1, %arg2, %arg3 : i32, i32, i32, i32
 
   %4 = comb.concat %allones, %arg1, %arg2, %arg3 : i32, i32, i32, i32
   %5 = comb.concat %allones, %arg2, %arg2, %arg3 : i32, i32, i32, i32
   %o3 = comb.mux %cond, %4, %5 : i128
-  // CHECK: [[M3:%.*]] = comb.mux %cond, %arg1, %arg2 : i32 
-  // CHECK: [[O3:%.*]] = comb.concat %c-1_i32, [[M3]], %arg2, %arg3 : i32, i32, i32, i32 
- 
+  // CHECK: [[M3:%.*]] = comb.mux %cond, %arg1, %arg2 : i32
+  // CHECK: [[O3:%.*]] = comb.concat %c-1_i32, [[M3]], %arg2, %arg3 : i32, i32, i32, i32
+
   // CHECK: hw.output [[O1]], [[O2]], [[O3]]
   hw.output %o1, %o2, %o3 : i128, i128, i128
 }
@@ -1575,12 +1575,12 @@ hw.module @MuxSimplify(in %index: i1, in %a: i1, in %foo_0: i2, in %foo_1: i2, o
   %4 = comb.mux bin %a, %1, %3 : i2
   %5 = comb.mux bin %index, %c-2_i2, %foo_1 : i2
   %6 = comb.mux bin %a, %2, %5 : i2
-  
+
   %7 = comb.mux bin %a, %foo_0, %foo_1 : i2
   %8 = comb.mux bin %index, %foo_0, %foo_1 : i2
   %9 = comb.xor %a, %index : i1
   %10 = comb.mux bin %9, %7, %8 : i2
-  
+
   %11 = comb.mux bin %index, %foo_0, %foo_1 : i2
   %12 = comb.mux bin %a, %foo_0, %11 : i2
 
@@ -1599,9 +1599,9 @@ hw.module @MuxSimplify(in %index: i1, in %a: i1, in %foo_0: i2, in %foo_1: i2, o
 // CHECK-NEXT:  %1 = comb.mux bin %index, %foo_0, %0 : i2
 // CHECK-NEXT:  %2 = comb.mux %a, %c1_i2, %c-2_i2 : i2
 // CHECK-NEXT:  %3 = comb.mux bin %index, %2, %foo_1 : i2
-// CHECK-NEXT:  %4 = comb.xor %a, %index : i1 
-// CHECK-NEXT:  %5 = comb.mux %4, %a, %index : i1 
-// CHECK-NEXT:  %6 = comb.mux bin %5, %foo_0, %foo_1 : i2 
+// CHECK-NEXT:  %4 = comb.xor %a, %index : i1
+// CHECK-NEXT:  %5 = comb.mux %4, %a, %index : i1
+// CHECK-NEXT:  %6 = comb.mux bin %5, %foo_0, %foo_1 : i2
 // CHECK-NEXT:  %7 = comb.or %a, %index : i1
 // CHECK-NEXT:  %8 = comb.mux bin %7, %foo_0, %foo_1 : i2
 // CHECK-NEXT:  %9 = comb.or %a, %index : i1
@@ -2146,26 +2146,4 @@ hw.module @AndOfReplicateNot2State(in %p: i1, in %x: i4, out y: i4) {
   %r = comb.replicate %p : (i1) -> i4
   %and = comb.and %x, %r : i4
   hw.output %and : i4
-}
-
-// CHECK-LABEL: hw.module @OrOfMuxes
-// CHECK: %[[X:.*]] = comb.mux bin %c1, %a1, %c0_i4
-// CHECK: %[[Y:.*]] = comb.mux bin %c0, %a0, %[[X]]
-// CHECK: hw.output %[[Y]]
-hw.module @OrOfMuxes(in %c0: i1, in %c1: i1, in %a0: i4, in %a1: i4, out y: i4) {
-  %c0_i4 = hw.constant 0 : i4
-  %m0 = comb.mux bin %c0, %a0, %c0_i4 : i4
-  %m1 = comb.mux bin %c1, %a1, %c0_i4 : i4
-  %or = comb.or bin %m0, %m1 : i4
-  hw.output %or : i4
-}
-
-// CHECK-LABEL: hw.module @OrOfMuxesNot2State
-// CHECK: comb.or
-hw.module @OrOfMuxesNot2State(in %c0: i1, in %c1: i1, in %a0: i4, in %a1: i4, out y: i4) {
-  %c0_i4 = hw.constant 0 : i4
-  %m0 = comb.mux %c0, %a0, %c0_i4 : i4
-  %m1 = comb.mux %c1, %a1, %c0_i4 : i4
-  %or = comb.or %m0, %m1 : i4
-  hw.output %or : i4
 }

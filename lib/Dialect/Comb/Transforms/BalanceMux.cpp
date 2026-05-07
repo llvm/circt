@@ -237,6 +237,74 @@ Value PriorityMuxReshape::buildBalancedPriorityMux(
   return MuxOp::create(rewriter, loc, combinedCond, leftTree, rightTree);
 }
 
+// or(mux(c_0, a_0, 0), mux(c_1, a_1, 0), ..., mux(c_n, a_n, 0)) ->
+//   mux(c_0, a_0, mux(c_1, a_1, ...)) iff all conditions are independent.
+//
+// The mux tree should then be balanced by other MuxOp patterns.
+struct OrOfMuxToMuxChain : public OpRewritePattern<OrOp> {
+  using OpRewritePattern<OrOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(OrOp op,
+                                PatternRewriter &rewriter) const override {
+    if (!op.getTwoState()) {
+      return failure();
+    }
+
+    SmallVector<MuxOp> muxes = llvm::map_to_vector(
+        op.getOperands(), [](Value v) { return v.getDefiningOp<MuxOp>(); });
+    if (llvm::find(muxes, nullptr) != muxes.end()) {
+      return failure();
+    }
+
+    SmallVector<Value> conditions;
+    for (MuxOp mux : muxes) {
+      if (!mux.getTwoState() ||
+          !matchPattern(mux.getFalseValue(), mlir::m_Zero())) {
+        return failure();
+      }
+      conditions.push_back(mux.getCond());
+    }
+
+    if (!areConditionsIndependent(conditions)) {
+      return failure();
+    }
+
+    // Construct the mux chain from back to front.
+    SmallVector<Value> values(op.getOperands().drop_back());
+    Value v = op.getOperands().back();
+    while (!values.empty()) {
+      auto mux = values.pop_back_val().getDefiningOp<comb::MuxOp>();
+      v = comb::MuxOp::create(rewriter, op.getLoc(), mux.getCond(),
+                              mux.getTrueValue(), v, /*twoState=*/true);
+    }
+    replaceOpAndCopyNamehint(rewriter, op, v);
+    return success();
+  }
+
+  // Returns true if the given i1 conditions are independent. That is, at most
+  // one condition can be true at a time.
+  //
+  // Currently we take a shortcut and check if the conditions are defined by
+  // ICmpEqs for different values. This is a common pattern in priority
+  // encoders.
+  bool areConditionsIndependent(ArrayRef<Value> conditions) const {
+    DenseSet<APInt> seenConstants;
+    for (Value v : conditions) {
+      auto icmp = v.getDefiningOp<ICmpOp>();
+      APInt value;
+      if (!icmp || icmp.getPredicate() != ICmpPredicate::eq ||
+          !matchPattern(icmp.getRhs(), mlir::m_ConstantInt(&value))) {
+        return false;
+      }
+
+      if (!seenConstants.insert(value).second) {
+        return false;
+      }
+    }
+    return true;
+  }
+};
+
 /// Pass that performs enhanced mux chain optimizations
 struct BalanceMuxPass : public impl::BalanceMuxBase<BalanceMuxPass> {
   using BalanceMuxBase::BalanceMuxBase;
@@ -248,6 +316,7 @@ struct BalanceMuxPass : public impl::BalanceMuxBase<BalanceMuxPass> {
     RewritePatternSet patterns(context);
     patterns.add<MuxChainWithComparison, PriorityMuxReshape>(context,
                                                              muxChainThreshold);
+    patterns.add<OrOfMuxToMuxChain>(context);
 
     if (failed(applyPatternsGreedily(op, std::move(patterns))))
       return signalPassFailure();
