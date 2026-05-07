@@ -12,6 +12,7 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
 #include "mlir/IR/Builders.h"
@@ -279,85 +280,31 @@ void ProbeCastOp::getCanonicalizationPatterns(RewritePatternSet &results,
 //===----------------------------------------------------------------------===//
 
 void XMRRemoteOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  // Auto-generate SSA name from the target symbol
+  // Auto-generate SSA name from the referenced path
   setNameFn(getResult(), "xmr");
 }
 
-ParseResult XMRRemoteOp::parse(OpAsmParser &parser, OperationState &result) {
-  // Parse [forceable] @Module::@symbol, index format
-  mlir::SymbolRefAttr symRef;
-  Type resultType;
-  int64_t index;
+hw::HierPathOp XMRRemoteOp::getReferencedPath(const hw::HWSymbolCache *cache) {
+  if (cache)
+    if (auto *result = cache->getDefinition(getRefAttr().getAttr()))
+      return cast<hw::HierPathOp>(result);
 
-  // Parse optional 'forceable' keyword
-  if (succeeded(parser.parseOptionalKeyword("forceable")))
-    result.addAttribute("forceable", parser.getBuilder().getUnitAttr());
-
-  if (parser.parseAttribute(symRef) || parser.parseComma() ||
-      parser.parseInteger(index) ||
-      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
-      parser.parseType(resultType))
-    return failure();
-
-  // Convert SymbolRefAttr to InnerRefAttr
-  if (symRef.getNestedReferences().size() != 1)
-    return parser.emitError(parser.getNameLoc(),
-                            "expected @module::@symbol format");
-
-  auto innerRef =
-      InnerRefAttr::get(symRef.getRootReference(), symRef.getLeafReference());
-  result.addAttribute("target", innerRef);
-  result.addAttribute("index", parser.getBuilder().getI64IntegerAttr(index));
-  result.addTypes(resultType);
-
-  return success();
-}
-
-void XMRRemoteOp::print(OpAsmPrinter &p) {
-  // Print as [forceable] @Module::@symbol, index : !hw.probe<type>
-  if (getForceable())
-    p << " forceable";
-
-  auto target = getTargetAttr();
-  p << " @" << target.getModule().getValue() << "::@"
-    << target.getName().getValue() << ", " << getIndex();
-  p.printOptionalAttrDict((*this)->getAttrs(),
-                          /*elidedAttrs=*/{"target", "index", "forceable"});
-  p << " : " << getResult().getType();
+  auto topLevelModuleOp = (*this)->getParentOfType<ModuleOp>();
+  return topLevelModuleOp.lookupSymbol<hw::HierPathOp>(getRefAttr().getValue());
 }
 
 LogicalResult XMRRemoteOp::verify() {
-  // Verify that index is non-negative
-  if (getIndex() < 0)
-    return emitOpError("index must be non-negative, got ") << getIndex();
-
+  // Basic verification - the symbol verification is done in verifySymbolUses
   return success();
 }
 
-LogicalResult XMRRemoteOp::verifyInnerRefs(InnerRefNamespace &ns) {
-  auto targetRef = getTarget();
-
-  auto target = ns.lookup(targetRef);
-  if (!target)
-    return emitOpError() << "has target that cannot be resolved: " << targetRef;
-
-  // Target must be an instance operation
-  if (!target.isOpOnly())
-    return emitOpError("target must be an operation (instance), not a port");
-
-  auto *op = target.getOp();
-  if (!isa<InstanceOp>(op))
-    return emitOpError("target operation must be an instance")
-        .attachNote(op->getLoc())
-        .append("target resolves here");
-
-  // Verify that the index is within bounds of the instance results
-  auto instOp = cast<InstanceOp>(op);
-  size_t numResults = instOp.getNumResults();
-  if (getIndex() >= numResults)
-    return emitOpError("index ")
-           << getIndex() << " out of bounds for instance with " << numResults
-           << " results";
+LogicalResult
+XMRRemoteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *table = SymbolTable::getNearestSymbolTable(*this);
+  auto path = dyn_cast_or_null<hw::HierPathOp>(
+      symbolTable.lookupSymbolIn(table, getRefAttr()));
+  if (!path)
+    return emitError("Referenced path doesn't exist: ") << getRefAttr();
 
   return success();
 }

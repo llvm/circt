@@ -1,11 +1,18 @@
 ; RUN: rm -rf %t
-; RUN: firtool %s -split-verilog -o %t
-; RUN: cat %t/ref_Top.sv | FileCheck %s
+; RUN: firtool %s | FileCheck %s
 
-; CHECK:      `define ref_Top_direct_probe _GEN{{(_[[0-9]+])?}}
-; CHECK-NEXT: `define ref_Top_inner_x_probe inner.x
-; CHECK-NEXT: `define ref_Top_inner_y_probe _GEN{{(_[0-9]+])?}}
-; CHECK-NEXT: `define ref_Top_keyword_probe _GEN{{(_[[0-9]+])?}}
+; CHECK-LABEL: module Top()
+; CHECK:   wire [2:0] [[xmr_probe:.+]] = 3'h0;
+; CHECK:   wire       [[xmr_probe_0:.+]] = 1'h0;
+; CHECK:   wire [1:0] [[xmr_probe_1:.+]] = 2'h0;
+; 
+; CHECK-LABEL: module Inner()
+; CHECK:   wire [1:0] x = 2'h0;
+; 
+; CHECK: `define ref_Top_direct_probe [[xmr_probe_0]]
+; CHECK: `define ref_Top_inner_x_probe inner.x
+; CHECK: `define ref_Top_inner_y_probe [[xmr_probe_1]]
+; CHECK: `define ref_Top_keyword_probe [[xmr_probe]]
 
 FIRRTL version 3.0.0
 circuit Top: %[[

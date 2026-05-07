@@ -1534,10 +1534,10 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     }
   // CHECK-NEXT:  [[CLOCK:%.+]] = seq.from_clock %clock
   // CHECK-NEXT:  [[R_P:%.+]] = hw.instance "r" @RefMe() -> (p: !hw.rwprobe<i4>)
-  // CHECK-NEXT:  %[[XMR1:.+]] = hw.probe.xmr_ref [[R_P]] : !hw.rwprobe<i4>
-  // CHECK-NEXT:  %[[XMR2:.+]] = hw.probe.xmr_ref [[R_P]] : !hw.rwprobe<i4>
-  // CHECK-NEXT:  %[[XMR3:.+]] = hw.probe.xmr_ref [[R_P]] : !hw.rwprobe<i4>
-  // CHECK-NEXT:  %[[XMR4:.+]] = hw.probe.xmr_ref [[R_P]] : !hw.rwprobe<i4>
+  // CHECK-NEXT:  %[[XMR1:.+]] = hw.probe.to_inout [[R_P]] : !hw.rwprobe<i4>
+  // CHECK-NEXT:  %[[XMR2:.+]] = hw.probe.to_inout [[R_P]] : !hw.rwprobe<i4>
+  // CHECK-NEXT:  %[[XMR3:.+]] = hw.probe.to_inout [[R_P]] : !hw.rwprobe<i4>
+  // CHECK-NEXT:  %[[XMR4:.+]] = hw.probe.to_inout [[R_P]] : !hw.rwprobe<i4>
   // CHECK-NEXT:  sv.ifdef @SYNTHESIS {
   // CHECK-NEXT:  } else {
   // CHECK-NEXT:    sv.always posedge [[CLOCK]] {
@@ -2208,21 +2208,20 @@ firrtl.circuit "ProbeInIfdef" {
   sv.macro.decl @ENABLE_LAYER
 
   // CHECK-LABEL: hw.module private @ProbeInIfdef_Child
+  // CHECK-SAME: out probe : !hw.probe<i8>
   firrtl.module private @ProbeInIfdef_Child(
     in %clock: !firrtl.clock,
     in %reset: !firrtl.uint<1>,
     in %data: !firrtl.uint<8>,
     out %probe: !firrtl.probe<uint<8>>
   ) {
-    // CHECK-NEXT: %[[UNINIT:.+]] = hw.probe.uninitialized : !hw.probe<i8>
-    // CHECK-NEXT: %[[WIRE:.+]] = hw.wire %[[UNINIT]] : !hw.probe<i8>
-    // CHECK-NEXT: %{{.+}} = hw.constant 0 : i8
+    // CHECK: %[[C0:.+]] = hw.constant 0 : i8
     // CHECK-NEXT: sv.ifdef @ENABLE_LAYER {
-    // CHECK-NEXT:   %[[REG:.+]] = seq.firreg %data clock %clock reset sync %reset, %{{.+}} : i8
-    // CHECK-NEXT:   %[[PROBE_SRC:.+]] = hw.probe.send %[[REG]] : i8
-    // CHECK-NEXT:   hw.probe.define %[[WIRE]], %[[PROBE_SRC]] : !hw.probe<i8>
+    // CHECK-NEXT:   %[[REG:.+]] = seq.firreg %data clock %clock reset sync %reset, %[[C0]] : i8
+    // CHECK-NEXT:   %{{.+}} = hw.probe.send %[[REG]] sym @inst_sym : i8
     // CHECK-NEXT: }
-    // CHECK-NEXT: hw.output %[[WIRE]] : !hw.probe<i8>
+    // CHECK-NEXT: %[[XMR:.+]] = hw.xmr.remote @ProbeInIfdef_Child_inst_sym_xmr_remote_path, 0 : !hw.probe<i8>
+    // CHECK-NEXT: hw.output %[[XMR]] : !hw.probe<i8>
 
     sv.ifdef @ENABLE_LAYER {
       %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
@@ -2263,6 +2262,7 @@ firrtl.circuit "ProbeMultipleIfdef" {
   sv.macro.decl @LAYER_B
 
   // CHECK-LABEL: hw.module @ProbeMultipleIfdef
+  // CHECK-SAME: out probe1 : !hw.probe<i4>, out probe2 : !hw.probe<i4>
   firrtl.module @ProbeMultipleIfdef(
     in %sel: !firrtl.uint<1>,
     in %a: !firrtl.uint<4>,
@@ -2270,30 +2270,25 @@ firrtl.circuit "ProbeMultipleIfdef" {
     out %probe1: !firrtl.probe<uint<4>>,
     out %probe2: !firrtl.probe<uint<4>>
   ) {
-    // Both probes should have wires created at module level
-    // CHECK-DAG: hw.wire {{%.+}} : !hw.probe<i4>
-    // CHECK-DAG: hw.wire {{%.+}} : !hw.probe<i4>
-    // CHECK-DAG: hw.probe.uninitialized : !hw.probe<i4>
-
     // CHECK: sv.ifdef @LAYER_A {
-    // CHECK:   {{%.+}} = hw.probe.send %a : i4
-    // CHECK:   hw.probe.define {{%.+}}, {{%.+}} : !hw.probe<i4>
-    // CHECK: }
+    // CHECK-NEXT:   {{%.+}} = hw.probe.send %a sym @inst_sym : i4
+    // CHECK-NEXT: }
     sv.ifdef @LAYER_A {
       %probe_src1 = firrtl.ref.send %a : !firrtl.uint<4>
       firrtl.ref.define %probe1, %probe_src1 : !firrtl.probe<uint<4>>
     }
 
     // CHECK: sv.ifdef @LAYER_B {
-    // CHECK:   {{%.+}} = hw.probe.send %b : i4
-    // CHECK:   hw.probe.define {{%.+}}, {{%.+}} : !hw.probe<i4>
-    // CHECK: }
+    // CHECK-NEXT:   {{%.+}} = hw.probe.send %b sym @inst_sym_0 : i4
+    // CHECK-NEXT: }
     sv.ifdef @LAYER_B {
       %probe_src2 = firrtl.ref.send %b : !firrtl.uint<4>
       firrtl.ref.define %probe2, %probe_src2 : !firrtl.probe<uint<4>>
     }
 
-    // CHECK: hw.output {{%.+}}, {{%.+}} : !hw.probe<i4>, !hw.probe<i4>
+    // CHECK: %[[XMR1:.+]] = hw.xmr.remote @ProbeMultipleIfdef_inst_sym_xmr_remote_path, 0 : !hw.probe<i4>
+    // CHECK: %[[XMR2:.+]] = hw.xmr.remote @ProbeMultipleIfdef_inst_sym_0_xmr_remote_path, 0 : !hw.probe<i4>
+    // CHECK: hw.output %[[XMR1]], %[[XMR2]] : !hw.probe<i4>, !hw.probe<i4>
   }
 }
 
@@ -2302,17 +2297,16 @@ firrtl.circuit "ProbeMultipleIfdef" {
 // Test probe output inside sv.initial block
 firrtl.circuit "ProbeInInitial" {
   // CHECK-LABEL: hw.module @ProbeInInitial
+  // CHECK-SAME: out probe : !hw.probe<i8>
   firrtl.module @ProbeInInitial(
     in %data: !firrtl.uint<8>,
     out %probe: !firrtl.probe<uint<8>>
   ) {
-    // CHECK: %[[UNINIT:.+]] = hw.probe.uninitialized : !hw.probe<i8>
-    // CHECK: %[[WIRE:.+]] = hw.wire %[[UNINIT]] : !hw.probe<i8>
     // CHECK: sv.initial {
-    // CHECK:   %[[PROBE_SRC:.+]] = hw.probe.send %data : i8
-    // CHECK:   hw.probe.define %[[WIRE]], %[[PROBE_SRC]] : !hw.probe<i8>
-    // CHECK: }
-    // CHECK: hw.output %[[WIRE]] : !hw.probe<i8>
+    // CHECK-NEXT:   %{{.+}} = hw.probe.send %data sym @inst_sym : i8
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %[[XMR:.+]] = hw.xmr.remote @ProbeInInitial_inst_sym_xmr_remote_path, 0 : !hw.probe<i8>
+    // CHECK-NEXT: hw.output %[[XMR]] : !hw.probe<i8>
 
     sv.initial {
       %probe_src = firrtl.ref.send %data : !firrtl.uint<8>
@@ -2329,19 +2323,18 @@ firrtl.circuit "ProbeNestedIfdef" {
   sv.macro.decl @INNER_LAYER
 
   // CHECK-LABEL: hw.module @ProbeNestedIfdef
+  // CHECK-SAME: out probe : !hw.probe<i8>
   firrtl.module @ProbeNestedIfdef(
     in %data: !firrtl.uint<8>,
     out %probe: !firrtl.probe<uint<8>>
   ) {
-    // CHECK: %[[UNINIT:.+]] = hw.probe.uninitialized : !hw.probe<i8>
-    // CHECK: %[[WIRE:.+]] = hw.wire %[[UNINIT]] : !hw.probe<i8>
     // CHECK: sv.ifdef @OUTER_LAYER {
-    // CHECK:   sv.ifdef @INNER_LAYER {
-    // CHECK:     %[[PROBE_SRC:.+]] = hw.probe.send %data : i8
-    // CHECK:     hw.probe.define %[[WIRE]], %[[PROBE_SRC]] : !hw.probe<i8>
-    // CHECK:   }
-    // CHECK: }
-    // CHECK: hw.output %[[WIRE]] : !hw.probe<i8>
+    // CHECK-NEXT:   sv.ifdef @INNER_LAYER {
+    // CHECK-NEXT:     %{{.+}} = hw.probe.send %data sym @inst_sym : i8
+    // CHECK-NEXT:   }
+    // CHECK-NEXT: }
+    // CHECK-NEXT: %[[XMR:.+]] = hw.xmr.remote @ProbeNestedIfdef_inst_sym_xmr_remote_path, 0 : !hw.probe<i8>
+    // CHECK-NEXT: hw.output %[[XMR]] : !hw.probe<i8>
 
     sv.ifdef @OUTER_LAYER {
       sv.ifdef @INNER_LAYER {
@@ -2369,5 +2362,88 @@ firrtl.circuit "ProbeNotNested" {
 
     %probe_src = firrtl.ref.send %data : !firrtl.uint<8>
     firrtl.ref.define %probe, %probe_src : !firrtl.probe<uint<8>>
+  }
+}
+
+// -----
+
+// Test simple probe wire elimination (bypassed via backedge)
+firrtl.circuit "ProbeWireElimination" {
+  // CHECK-LABEL: hw.module @ProbeWireElimination
+  firrtl.module @ProbeWireElimination() {
+    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+    %a = firrtl.node sym @sym %c0_ui2 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
+
+    // Create a probe wire and define it with a probe source
+    %a_probe = firrtl.wire sym @sym_0 : !firrtl.rwprobe<uint<2>>
+    %0 = firrtl.ref.rwprobe <@ProbeWireElimination::@sym> : !firrtl.rwprobe<uint<2>>
+    firrtl.ref.define %a_probe, %0 : !firrtl.rwprobe<uint<2>>
+
+    // Use the probe wire
+    %1 = firrtl.ref.resolve %a_probe : !firrtl.rwprobe<uint<2>>
+
+    // The probe wire should be eliminated and all uses should directly use %0
+    // CHECK-NOT: hw.wire {{.*}} !hw.rwprobe
+    // CHECK: [[PROBE:%.+]] = hw.probe.send forceable
+    // CHECK: hw.probe.resolve [[PROBE]]
+  }
+}
+
+// -----
+
+// Test probe wire handling when used in a module with instance
+sv.macro.decl @SYNTHESIS
+sv.macro.decl @LAYER_B
+
+firrtl.circuit "ForceOutOfLayer" {
+  firrtl.module private @ForceOutOfLayer_A() {
+  }
+
+  // CHECK-LABEL: hw.module @ForceOutOfLayer
+  firrtl.module @ForceOutOfLayer() {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+    %a = firrtl.node sym @sym %c0_ui2 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
+    %a_probe = firrtl.wire : !firrtl.rwprobe<uint<2>>
+    %0 = firrtl.ref.rwprobe <@ForceOutOfLayer::@sym> : !firrtl.rwprobe<uint<2>>
+    firrtl.ref.define %a_probe, %0 : !firrtl.rwprobe<uint<2>>
+    firrtl.instance a {doNotPrint, output_file = #hw.output_file<"layers-ForceOutOfLayer-A.sv", excludeFromFileList>} @ForceOutOfLayer_A()
+
+    // Use the probe outside the ifdef - this should work because the probe is defined at module level
+    %read_val = firrtl.ref.resolve %a_probe : !firrtl.rwprobe<uint<2>>
+
+    // CHECK: [[PROBE:%.+]] = hw.probe.send forceable
+    // CHECK: hw.probe.resolve [[PROBE]]
+    // CHECK-NOT: hw.wire {{.*}} !hw.rwprobe
+  }
+}
+
+// -----
+
+// Test probe wire elimination with force_initial operations
+firrtl.circuit "ForceTest" {
+  // CHECK-LABEL: hw.module @ForceTest
+  firrtl.module @ForceTest() {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+    %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
+
+    // Node with DontTouch annotation
+    %a = firrtl.node sym @sym %c0_ui2 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} : !firrtl.uint<2>
+
+    // Create probe wire and define it
+    %a_probe = firrtl.wire : !firrtl.rwprobe<uint<2>>
+    %0 = firrtl.ref.rwprobe <@ForceTest::@sym> : !firrtl.rwprobe<uint<2>>
+    firrtl.ref.define %a_probe, %0 : !firrtl.rwprobe<uint<2>>
+
+    // Use the probe in a force operation
+    firrtl.ref.force_initial %c1_ui1, %a_probe, %c2_ui2 : !firrtl.uint<1>, !firrtl.rwprobe<uint<2>>, !firrtl.uint<2>
+
+    // CHECK: [[NODE:%.+]] = hw.wire %c0_i2 sym @sym
+    // CHECK: [[PROBE:%.+]] = hw.probe.send forceable [[NODE]]
+    // CHECK-NOT: hw.wire {{.*}} !hw.rwprobe
+    // CHECK: [[INOUT:%.+]] = hw.probe.to_inout [[PROBE]]
+    // CHECK: sv.force [[INOUT]]
   }
 }

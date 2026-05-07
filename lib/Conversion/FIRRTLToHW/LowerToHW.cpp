@@ -41,6 +41,7 @@
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/Path.h"
@@ -547,6 +548,34 @@ private:
 
   // Instance choice macro table for looking up option case macros
   const InstanceChoiceMacroTable &macroTable;
+
+  // Cache for hierarchical paths to avoid creating duplicates
+  DenseMap<Attribute, hw::HierPathOp> hierPathCache;
+  std::mutex hierPathMutex;
+
+  /// Get or create a hierarchical path operation for the given path array.
+  hw::HierPathOp getOrCreateHierPath(ArrayAttr pathArray, Location loc,
+                                     StringRef nameHint) {
+    std::lock_guard<std::mutex> lock(hierPathMutex);
+
+    // Check if we already have this path
+    auto it = hierPathCache.find(pathArray);
+    if (it != hierPathCache.end())
+      return it->second;
+
+    // Create a new hierarchical path
+    CircuitNamespace circuitNamespace(circuitOp);
+    auto pathName = circuitNamespace.newName(nameHint);
+
+    // Insert into the parent ModuleOp, not the FIRRTL circuit
+    OpBuilder builder(circuitOp);
+    builder.setInsertionPoint(circuitOp);
+    auto pathOp = hw::HierPathOp::create(builder, loc, pathName, pathArray);
+    pathOp.setVisibility(SymbolTable::Visibility::Private);
+
+    hierPathCache[pathArray] = pathOp;
+    return pathOp;
+  }
 };
 
 void CircuitLoweringState::processRemainingAnnotations(
@@ -1798,7 +1827,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   /// Try to eliminate a probe-type wire by finding its driver and replacing
   /// all uses with the driver directly. Returns true if the wire was
   /// eliminated.
-  bool tryEliminatingProbeWire(Value probeWire);
+  bool tryEliminatingProbeWire(Value probeWire, mlir::DominanceInfo &domInfo);
 
   /// Walk through the module and eliminate unnecessary probe-type wires.
   void eliminateProbeWires();
@@ -3224,7 +3253,8 @@ bool FIRRTLLowering::updateIfBackedge(Value dest, Value src) {
 ///   ... uses of %wire ...
 /// And eliminates the wire by replacing all uses of %wire with %src.
 /// Returns true if the wire was successfully eliminated.
-bool FIRRTLLowering::tryEliminatingProbeWire(Value probeWire) {
+bool FIRRTLLowering::tryEliminatingProbeWire(Value probeWire,
+                                             mlir::DominanceInfo &domInfo) {
   // Only process hw probe-typed values
   auto wireType = probeWire.getType();
   if (!type_isa<hw::ProbeType, hw::RWProbeType>(wireType))
@@ -3260,6 +3290,16 @@ bool FIRRTLLowering::tryEliminatingProbeWire(Value probeWire) {
   // Get the source being defined to the wire
   Value driver = defineOp.getSrc();
 
+  // Check if the driver's defining operation exists and dominates the wire
+  // If the driver is defined in a nested region (like sv.ifdef), it won't
+  // dominate uses outside that region, so we can't eliminate the wire
+  if (auto *driverDefOp = driver.getDefiningOp()) {
+    if (!domInfo.dominates(driverDefOp, wireOp.getOperation())) {
+      // Driver is in a nested region and doesn't dominate the wire
+      return false;
+    }
+  }
+
   // Replace all uses of the wire (except the define itself) with the driver
   // We need to be careful here since we're iterating over uses while modifying
   SmallVector<OpOperand *> usesToReplace;
@@ -3285,15 +3325,14 @@ void FIRRTLLowering::eliminateProbeWires() {
   // Create dominance info for checking if defining ops are in nested regions
   mlir::DominanceInfo domInfo(theModule);
 
-  llvm::errs() << "\n Eliminate wires";
   // Collect all hw.wire operations with probe types
   SmallVector<hw::WireOp> probeWires;
   SmallVector<OpOperand *> probeTypeOperands;
   theModule.walk([&](Operation *op) {
-    // for (OpOperand &operand : op->getOpOperands()) {
-    //   if (type_isa<hw::ProbeType, hw::RWProbeType>(operand.get().getType()))
-    //     probeTypeOperands.push_back(&operand);
-    // }
+    for (OpOperand &operand : op->getOpOperands()) {
+      if (type_isa<hw::ProbeType, hw::RWProbeType>(operand.get().getType()))
+        probeTypeOperands.push_back(&operand);
+    }
     if (auto wireOp = dyn_cast<hw::WireOp>(op))
       if (type_isa<hw::ProbeType, hw::RWProbeType>(wireOp.getType()))
         probeWires.push_back(wireOp);
@@ -3301,23 +3340,18 @@ void FIRRTLLowering::eliminateProbeWires() {
 
   // Try to eliminate each probe wire
   for (auto wireOp : probeWires) {
-    tryEliminatingProbeWire(wireOp.getResult());
+    tryEliminatingProbeWire(wireOp.getResult(), domInfo);
   }
 
   for (auto *probeVal : probeTypeOperands) {
 
     if (auto *defOp = probeVal->get().getDefiningOp()) {
-      if (hw::ProbeSendOp refSend = dyn_cast<hw::ProbeSendOp>(defOp)) {
-        defOp = refSend.getInput().getDefiningOp();
-      }
       auto *ownerOp = probeVal->getOwner();
       // Check if the defining op dominates this op
       if (!domInfo.properlyDominates(defOp, ownerOp)) {
         // The defining op is in a nested region and does not dominate this
         // op. We need to create an XMR reference to access it.
 
-        llvm::errs() << "\n Probe type operand: " << *ownerOp
-                     << " \n def op: " << *defOp;
         Value probeValue = probeVal->get();
         auto probeType = probeValue.getType();
 
@@ -3325,106 +3359,52 @@ void FIRRTLLowering::eliminateProbeWires() {
         bool forceable = type_isa<hw::RWProbeType>(probeType);
 
         // Check if the defOp is an instance operation
-        if (auto instOp = dyn_cast<hw::InstanceOp>(defOp)) {
-          // Case 2: defOp is an instance op - create hw.xmr.remote
+        if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(defOp)) {
 
           // Find which result of the instance this probe value is
-          auto results = instOp.getResults();
           int64_t resultIndex = -1;
-          for (size_t i = 0; i < results.size(); ++i) {
-            if (results[i] == probeValue) {
-              resultIndex = i;
+          for (auto [index, res] : llvm::enumerate(defOp->getResults())) {
+            if (res == probeValue) {
+              resultIndex = index;
               break;
             }
           }
-
-          if (resultIndex == -1) {
-            ownerOp->emitError(
-                "could not find result index for instance operand");
-            continue;
-          }
+          assert(resultIndex >= 0);
 
           // Ensure the instance has an inner symbol
-          if (auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(defOp)) {
-            auto innerSymAttr = innerSymOp.getInnerSymAttr();
-            if (!innerSymAttr) {
-              // Add inner symbol to the instance
-              auto symName = StringAttr::get(
-                  defOp->getContext(), moduleNamespace.newName("inst_sym"));
-              innerSymOp.setInnerSymbolAttr(hw::InnerSymAttr::get(symName));
-            }
-
-            // Create InnerRefAttr targeting the instance
-            auto innerRef = hw::InnerRefAttr::get(
-                theModule.getSymNameAttr(),
-                hw::InnerSymbolTable::getInnerSymbol(defOp));
-
-            // Create hw.xmr.remote operation
-            ImplicitLocOpBuilder b(ownerOp->getLoc(), ownerOp);
-            auto xmrRemote = b.create<hw::XMRRemoteOp>(probeType, innerRef,
-                                                       resultIndex, forceable);
-
-            // Replace the operand with the xmr.remote result
-            probeVal->set(xmrRemote.getResult());
+          auto innerSymAttr = innerSymOp.getInnerSymAttr();
+          if (!innerSymAttr) {
+            // Add inner symbol to the instance
+            auto symName = StringAttr::get(defOp->getContext(),
+                                           moduleNamespace.newName("inst_sym"));
+            innerSymOp.setInnerSymbolAttr(hw::InnerSymAttr::get(symName));
           }
-        } else if (auto innerSymOp =
-                       dyn_cast<hw::InnerSymbolOpInterface>(defOp)) {
-          // Case 1: defOp can take inner symbol - add symbol and create
-          // sv.xmr.ref via hierarchical path
 
-          // Check if the operation has a target result (some ops like instances
-          // have inner symbols but don't target a specific result)
-          if (innerSymOp.getTargetResult()) {
-            auto innerSymAttr = innerSymOp.getInnerSymAttr();
-            if (!innerSymAttr) {
-              // Add inner symbol to the operation
-              auto symName = StringAttr::get(
-                  defOp->getContext(), moduleNamespace.newName("xmr_sym"));
-              innerSymOp.setInnerSymbolAttr(hw::InnerSymAttr::get(symName));
-            }
+          // Create InnerRefAttr targeting the instance
+          auto innerRef = hw::InnerRefAttr::get(
+              theModule.getSymNameAttr(),
+              hw::InnerSymbolTable::getInnerSymbol(defOp));
 
-            // Create InnerRefAttr targeting the operation
-            auto innerRef = hw::InnerRefAttr::get(
-                theModule.getSymNameAttr(),
-                hw::InnerSymbolTable::getInnerSymbol(defOp));
+          // Create a hierarchical path from the InnerRef
+          auto pathArray = builder.getArrayAttr({innerRef});
+          auto nameHint = (theModule.getModuleName() + "_" +
+                           innerRef.getName().getValue() + "_xmr_remote_path")
+                              .str();
+          auto pathOp = circuitState.getOrCreateHierPath(
+              pathArray, ownerOp->getLoc(), nameHint);
 
-            // Get the inner type from the probe type
-            Type innerType;
-            if (auto pt = dyn_cast<hw::ProbeType>(probeType))
-              innerType = pt.getInnerType();
-            else if (auto rwpt = dyn_cast<hw::RWProbeType>(probeType))
-              innerType = rwpt.getInnerType();
-            else
-              continue;
+          // Create hw.xmr.remote operation with the hierarchical path and
+          // index
+          ImplicitLocOpBuilder b(ownerOp->getLoc(), ownerOp);
+          auto xmrRemote = b.create<hw::XMRRemoteOp>(
+              probeType, FlatSymbolRefAttr::get(pathOp.getSymNameAttr()),
+              resultIndex, forceable);
 
-            // Create a hierarchical path for the XMR at circuit level
-            // Save the current insertion point
-            auto savedIP = builder.saveInsertionPoint();
+          // probeValue.replaceAllUsesWith(xmrRemote.getResult());
+          // Replace the operand with the xmr.remote result
+          probeVal->set(xmrRemote.getResult());
 
-            // Insert the HierPathOp into the circuit
-            CircuitNamespace circuitNamespace(circuitState.circuitOp);
-            auto pathName =
-                builder.getStringAttr(circuitNamespace.newName("xmr_path"));
-
-            builder.setInsertionPoint(theModule);
-            auto pathOp = builder.create<hw::HierPathOp>(
-                pathName, builder.getArrayAttr({innerRef}));
-
-            // Restore insertion point
-            builder.restoreInsertionPoint(savedIP);
-
-            // Create sv.xmr.ref operation at the use site
-            ImplicitLocOpBuilder b(ownerOp->getLoc(), ownerOp);
-            auto xmrRef = b.create<sv::XMRRefOp>(
-                sv::InOutType::get(innerType),
-                FlatSymbolRefAttr::get(pathOp.getSymNameAttr()), StringAttr{});
-
-            // Replace the operand with the xmr.ref result
-            probeVal->set(xmrRef.getResult());
-            llvm::errs() << "\n after replacement: " << *ownerOp
-                         << "\n and ref def: " << *xmrRef;
-          }
-        }
+        } 
       }
     }
   }
@@ -5587,7 +5567,7 @@ LogicalResult FIRRTLLowering::visitExpr(RWProbeOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(XMRRemoteOp op) {
   // firrtl.xmr.remote creates a probe reference via InnerRef
-  // Lower directly to hw.xmr.remote with the same InnerRef and forceable flag
+  // Lower to hw.xmr.remote which uses hierarchical paths
 
   // Get the lowered result type
   auto resultType = lowerType(op.getType());
@@ -5599,10 +5579,19 @@ LogicalResult FIRRTLLowering::visitExpr(XMRRemoteOp op) {
   int64_t index = op.getIndex();
   bool forceable = op.getForceable();
 
-  // Create hw.xmr.remote with the InnerRef, index, forceable flag, and result
-  // type
-  auto xmrRemote = builder.create<hw::XMRRemoteOp>(op.getLoc(), resultType,
-                                                   targetRef, index, forceable);
+  // Create a hierarchical path from the InnerRef
+  // The InnerRef references an instance, so create a single-element path
+  auto pathArray = builder.getArrayAttr({targetRef});
+  auto nameHint = (theModule.getModuleName() + "_" +
+                   targetRef.getName().getValue() + "_xmr_remote_path")
+                      .str();
+  auto pathOp =
+      circuitState.getOrCreateHierPath(pathArray, op.getLoc(), nameHint);
+
+  // Create hw.xmr.remote with the path reference, index, and forceable flag
+  auto xmrRemote = builder.create<hw::XMRRemoteOp>(
+      op.getLoc(), resultType, FlatSymbolRefAttr::get(pathOp.getSymNameAttr()),
+      index, forceable);
   return setLowering(op, xmrRemote.getResult());
 }
 

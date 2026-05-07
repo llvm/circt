@@ -254,61 +254,67 @@ def ProbeCastOp : HWOp<"probe.cast", []> {
 //===----------------------------------------------------------------------===//
 
 def XMRRemoteOp : HWOp<"xmr.remote",
-                  [DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+                  [DeclareOpInterfaceMethods<SymbolUserOpInterface>,
                    Pure
                   ]> {
-  let summary = "HW XMR remote operation creating probe from instance result";
+  let summary = "HW XMR remote operation creating probe from hierarchical path";
   let description = [{
-    Creates a probe reference to a remote instance result specified by an
-    InnerRef and result index. This is the HW dialect equivalent of
-    firrtl.xmr.remote, used to create probe references via
-    cross-module references (XMR).
+    Creates a probe reference to a remote target specified by a hierarchical
+    path. This is the HW dialect equivalent of firrtl.xmr.remote, used to
+    create probe references via cross-module references (XMR).
 
     This operation is used when lowering FIRRTL probe operations to HW,
     specifically for scenarios where probe types cannot be passed through
-    module ports. It uses InnerRef to directly reference a remote instance,
-    and an index to specify which result of that instance to target.
+    module ports. It uses a hw.hierpath to specify the hierarchical path
+    to the target.
 
-    The InnerRef must target an instance operation with an inner symbol.
-    The index specifies which result of the instance to reference.
+    The 'ref' attribute references a hw.hierpath operation that defines the
+    hierarchical path to the target.
+
+    The 'index' attribute specifies which result of the target instance to
+    reference. This is needed when an instance has multiple probe outputs.
 
     The 'forceable' attribute determines whether the result is an RWProbe
     (read-write, when forceable is present) or a Probe (read-only, when absent).
 
-    The result can be used with hw.probe.xmr_ref to get an inout reference
+    The result can be used with hw.probe.to_inout to get an inout reference
     for force and release operations (if forceable), or with hw.probe.resolve
     for read-only access.
 
     Example:
     ```mlir
+    hw.hierpath private @xmr_path [@Parent::@inst, @Child::@target]
+
     // RWProbe reference (forceable)
-    %rwProbe = hw.xmr.remote forceable @ParentModule::@myInst, 0 : !hw.rwprobe<i32>
-    %inout = hw.probe.xmr_ref %rwProbe : !hw.rwprobe<i32>
+    %rwProbe = hw.xmr.remote forceable @xmr_path, 0 : !hw.rwprobe<i32>
+    %inout = hw.probe.to_inout %rwProbe : !hw.rwprobe<i32>
     sv.force %inout, %value : i32
 
     // Probe reference (read-only)
-    %probe = hw.xmr.remote @ParentModule::@myInst, 0 : !hw.probe<i32>
+    %probe = hw.xmr.remote @xmr_path, 0 : !hw.probe<i32>
     %value = hw.probe.resolve %probe : !hw.probe<i32>
     ```
   }];
 
-  let arguments = (ins InnerRefAttr:$target, I64Attr:$index, UnitAttr:$forceable);
+  let arguments = (ins FlatSymbolRefAttr:$ref, I64Attr:$index, UnitAttr:$forceable);
   let results = (outs AnyProbeType:$result);
-  let hasCustomAssemblyFormat = 1;
+  let assemblyFormat = "(`forceable` $forceable^)? $ref `,` $index attr-dict `:` qualified(type($result))";
   let hasVerifier = 1;
 
   let extraClassDeclaration = [{
     /// Implement getAsmResultNames to provide auto-generated SSA names
     void getAsmResultNames(OpAsmSetValueNameFn setNameFn);
+
+    /// Get the referenced hierarchical path
+    hw::HierPathOp getReferencedPath(const hw::HWSymbolCache *cache);
   }];
 
   let builders = [
     // Builder with explicit forceable control
-    OpBuilder<(ins "Type":$resultType, "InnerRefAttr":$target,
+    OpBuilder<(ins "Type":$resultType, "FlatSymbolRefAttr":$ref,
                    "int64_t":$index, "bool":$forceable), [{
       UnitAttr forceableAttr = forceable ? $_builder.getUnitAttr() : UnitAttr();
-      build($_builder, $_state, resultType, target,
-            $_builder.getI64IntegerAttr(index), forceableAttr);
+      build($_builder, $_state, resultType, ref, $_builder.getI64IntegerAttr(index), forceableAttr);
     }]>
   ];
 }
