@@ -1052,24 +1052,19 @@ LogicalResult HWLowerXMRPass::handleXMRRemote(XMRRemoteOp xmrRemote) {
     return success();
   }
 
-  // Resolve the InnerRef to get the instance operation
+  // Resolve the InnerRef to get the target operation
   auto *targetOp = resolveInnerRef(targetRef);
   if (!targetOp)
     return xmrRemote.emitError("could not resolve target InnerRef: ")
            << targetRef;
 
-  // Verify the target is an instance
-  auto instOp = dyn_cast<InstanceOp>(targetOp);
-  if (!instOp)
-    return xmrRemote.emitError("target must be an instance operation");
-
   // Get the target result using the index attribute
   uint64_t index = xmrRemote.getIndex();
-  auto results = instOp.getResults();
+  auto results = targetOp->getResults();
 
   if (static_cast<size_t>(index) >= results.size())
     return xmrRemote.emitError("index ")
-           << index << " is out of range for instance with " << results.size()
+           << index << " is out of range for operation with " << results.size()
            << " results";
 
   Value targetVal = results[index];
