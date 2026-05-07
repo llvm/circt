@@ -442,22 +442,30 @@ class CppTypeEmitter:
       raise ValueError(f"Unsupported unbounded type width for '{wrapped}'")
     return (wrapped.bit_width + 7) // 8
 
-  def _array_base_and_suffix(self,
-                             array_type: types.ArrayType) -> Tuple[str, str]:
-    """Return the base C++ type and bracket suffix for a nested array."""
+  def _array_base_and_dims(
+      self, array_type: types.ArrayType) -> Tuple[str, List[int]]:
+    """Return the base C++ type and outer-to-inner dimensions of a nested array."""
     dims: List[int] = []
     inner: types.ESIType = array_type
     while isinstance(inner, types.ArrayType):
       dims.append(inner.size)
       inner = inner.element_type
     base_cpp = self._cpp_type(inner)
-    suffix = "".join([f"[{d}]" for d in dims])
-    return base_cpp, suffix
+    return base_cpp, dims
 
-  def _format_array_type(self, array_type: types.ArrayType) -> str:
-    """Return the C++ type string for a nested array alias."""
-    base_cpp, suffix = self._array_base_and_suffix(array_type)
-    return f"{base_cpp}{suffix}"
+  def _std_array_type(self, array_type: types.ArrayType) -> str:
+    """Return the equivalent nested `std::array<...>` type for an array.
+
+    `std::array<T, N>` is layout-compatible in practice with `T[N]` on every
+    major implementation (and identical under `#pragma pack(1)`), so the
+    generator uses it everywhere a fixed-size array would appear.  This keeps
+    field/value/ctor types storable in `std::vector` and assignable with `=`.
+    """
+    base_cpp, dims = self._array_base_and_dims(array_type)
+    result = base_cpp
+    for size in reversed(dims):
+      result = f"std::array<{result}, {size}>"
+    return result
 
   def _cpp_type(self, wrapped: types.ESIType) -> str:
     """Resolve an ESI type to its C++ identifier."""
@@ -479,7 +487,7 @@ class CppTypeEmitter:
     if isinstance(wrapped, (types.BitsType, types.IntType)):
       return self._get_bitvector_str(wrapped)
     if isinstance(wrapped, types.ArrayType):
-      return self._format_array_type(wrapped)
+      return self._std_array_type(wrapped)
     if type(wrapped) is types.ESIType:
       return "std::any"
     raise NotImplementedError(
@@ -491,19 +499,13 @@ class CppTypeEmitter:
       wrapped = wrapped.inner_type
     return wrapped
 
-  def _format_array_decl(self, array_type: types.ArrayType, name: str) -> str:
-    """Emit a field declaration for a multi-dimensional array member.
-
-    The declaration flattens nested arrays into repeated bracketed sizes for C++.
-    """
-    base_cpp, suffix = self._array_base_and_suffix(array_type)
-    return f"{base_cpp} {name}{suffix};"
-
   def _format_window_field_decl(self, field_name: str,
                                 field_type: types.ESIType) -> str:
-    """Emit a packed field declaration for generated window helpers."""
-    if isinstance(field_type, types.ArrayType):
-      return self._format_array_decl(field_type, field_name)
+    """Emit a packed field declaration for generated window helpers.
+
+    Arrays use `std::array` (handled by `_cpp_type`), so no bracket syntax is
+    needed and a single uniform declaration form covers every type.
+    """
     field_cpp = self._cpp_type(field_type)
     wrapped = self._unwrap_aliases(field_type)
     if isinstance(wrapped, (types.BitsType, types.IntType)) and \
@@ -518,9 +520,6 @@ class CppTypeEmitter:
     Small scalar header fields are cheaper to pass by value than by reference.
     Larger aggregates stay as const references.
     """
-    if isinstance(field_type, types.ArrayType):
-      base_cpp, suffix = self._array_base_and_suffix(field_type)
-      return f"const {base_cpp} (&{field_name}){suffix}"
     field_cpp = self._cpp_type(field_type)
     wrapped = self._unwrap_aliases(field_type)
     if isinstance(wrapped, (types.BitsType, types.IntType)):
@@ -529,11 +528,7 @@ class CppTypeEmitter:
 
   def _emit_window_field_copy(self, hdr: TextIO, dest_expr: str, src_expr: str,
                               field_type: types.ESIType) -> None:
-    """Copy a generated window field, preserving array semantics."""
-    if isinstance(field_type, types.ArrayType):
-      hdr.write(
-          f"    std::memcpy(&{dest_expr}, &{src_expr}, sizeof({dest_expr}));\n")
-      return
+    """Copy a generated window field."""
     hdr.write(f"    {dest_expr} = {src_expr};\n")
 
   def _field_byte_width(self, field_type: types.ESIType) -> int:
@@ -633,21 +628,19 @@ class CppTypeEmitter:
       fields = list(reversed(fields))
     field_decls: List[str] = []
     for field_name, field_type in fields:
-      if isinstance(field_type, types.ArrayType):
-        field_decls.append(self._format_array_decl(field_type, field_name))
-      else:
-        field_cpp = self._cpp_type(field_type)
-        wrapped = self._unwrap_aliases(field_type)
-        if isinstance(wrapped, (types.BitsType, types.IntType)):
-          # TODO: Bitfield layout is implementation-defined; consider
-          # byte-aligned storage with explicit pack/unpack helpers.
-          bitfield_width = wrapped.bit_width
-          if bitfield_width >= 0:
-            field_decls.append(f"{field_cpp} {field_name} : {bitfield_width};")
-          else:
-            field_decls.append(f"{field_cpp} {field_name};")
+      field_cpp = self._cpp_type(field_type)
+      wrapped = self._unwrap_aliases(field_type)
+      if isinstance(wrapped, (types.BitsType, types.IntType)):
+        # TODO: Bitfield layout is implementation-defined; consider
+        # byte-aligned storage with explicit pack/unpack helpers.
+        bitfield_width = wrapped.bit_width
+        if bitfield_width >= 0:
+          field_decls.append(f"{field_cpp} {field_name} : {bitfield_width};")
         else:
           field_decls.append(f"{field_cpp} {field_name};")
+      else:
+        field_decls.append(f"{field_cpp} {field_name};")
+    hdr.write("#pragma pack(push, 1)\n")
     hdr.write(f"struct {self.type_id_map[struct_type]} {{\n")
     for decl in field_decls:
       hdr.write(f"  {decl}\n")
@@ -655,7 +648,8 @@ class CppTypeEmitter:
     hdr.write(
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(struct_type.id)};\n"
     )
-    hdr.write("};\n\n")
+    hdr.write("};\n")
+    hdr.write("#pragma pack(pop)\n\n")
 
   def _emit_union(self, hdr: TextIO, union_type: types.UnionType) -> None:
     """Emit a packed union declaration plus its type id string.
@@ -668,6 +662,7 @@ class CppTypeEmitter:
     union_bytes = self._field_byte_width(union_type)
     fields = list(union_type.fields)
 
+    hdr.write("#pragma pack(push, 1)\n")
     # First pass: emit wrapper structs for fields that need padding.
     wrapper_names: Dict[str, str] = {}
     for field_name, field_type in fields:
@@ -697,7 +692,8 @@ class CppTypeEmitter:
     hdr.write(
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(union_type.id)};\n"
     )
-    hdr.write("};\n\n")
+    hdr.write("};\n")
+    hdr.write("#pragma pack(pop)\n\n")
 
   def _emit_window(self, hdr: TextIO, window_type: types.WindowType) -> None:
     """Emit a SegmentedMessageData helper for a serial list window."""
@@ -721,14 +717,17 @@ class CppTypeEmitter:
     hdr.write("public:\n")
     hdr.write(f"  using value_type = {info['element_cpp']};\n")
     hdr.write(f"  using count_type = {info['count_cpp']};\n\n")
+    hdr.write("#pragma pack(push, 1)\n")
     hdr.write("  struct data_frame {\n")
     if info["data_pad_bytes"] > 0:
       hdr.write(f"    uint8_t _pad[{info['data_pad_bytes']}];\n")
     for field_name, field_type in info["data_fields"]:
       decl = self._format_window_field_decl(field_name, field_type)
       hdr.write(f"    {decl}\n")
-    hdr.write("  };\n\n")
+    hdr.write("  };\n")
+    hdr.write("#pragma pack(pop)\n\n")
     hdr.write("private:\n")
+    hdr.write("#pragma pack(push, 1)\n")
     hdr.write("  struct header_frame {\n")
     if info["header_pad_bytes"] > 0:
       hdr.write(f"    uint8_t _pad[{info['header_pad_bytes']}];\n")
@@ -741,7 +740,8 @@ class CppTypeEmitter:
       else:
         decl = self._format_window_field_decl(field_name, field_type)
       hdr.write(f"    {decl}\n")
-    hdr.write("  };\n\n")
+    hdr.write("  };\n")
+    hdr.write("#pragma pack(pop)\n\n")
     hdr.write("  header_frame header{};\n")
     hdr.write("  std::vector<data_frame> data_frames;\n")
     hdr.write("  header_frame footer{};\n\n")
@@ -775,15 +775,10 @@ class CppTypeEmitter:
     hdr.write(f"    frames.reserve({info['list_field_name']}.size());\n")
     hdr.write(f"    for (const auto &element : {info['list_field_name']}) {{\n")
     hdr.write("      auto &frame = frames.emplace_back();\n")
-    list_field_type = next(
-        field_type for field_name, field_type in info["data_fields"]
-        if field_name == info["list_field_name"])
-    if isinstance(list_field_type, types.ArrayType):
-      hdr.write(
-          f"      std::memcpy(&frame.{info['list_field_name']}, &element, sizeof(frame.{info['list_field_name']}));\n"
-      )
-    else:
-      hdr.write(f"      frame.{info['list_field_name']} = element;\n")
+    # The data_frame list field is now stored as either a scalar/struct
+    # (assignable) or std::array (also assignable), so a plain assignment
+    # always works regardless of element type.
+    hdr.write(f"      frame.{info['list_field_name']} = element;\n")
     hdr.write("    }\n")
     hdr.write(f"    construct({helper_call});\n")
     hdr.write("  }\n\n")
@@ -826,28 +821,26 @@ class CppTypeEmitter:
       # `<list>_count()` below.
       if field_type is None:
         continue
-      # Unwrap any alias before checking for array so that alias-to-array
-      # types (e.g. `using Alias = T[N]`) get the const-ref accessor form.
+      cpp = self._cpp_type(field_type)
       unwrapped_header = self._unwrap_aliases(field_type)
-      if isinstance(unwrapped_header, types.ArrayType):
-        base_cpp, suffix = self._array_base_and_suffix(unwrapped_header)
-        hdr.write(
-            f"  const {base_cpp} (&{field_name}() const){suffix} {{ return header.{field_name}; }}\n"
-        )
-      else:
-        cpp = self._cpp_type(field_type)
+      # Aggregate types (structs/unions/std::array) get a const-ref accessor;
+      # bit-vector scalars are returned by value.
+      if isinstance(unwrapped_header,
+                    (types.BitsType, types.IntType, types.VoidType)):
         hdr.write(
             f"  {cpp} {field_name}() const {{ return header.{field_name}; }}\n")
+      else:
+        hdr.write(
+            f"  const {cpp} &{field_name}() const {{ return header.{field_name}; }}\n"
+        )
     hdr.write(
         f"  size_t {list_field_name}_count() const {{ return data_frames.size(); }}\n"
     )
     for field_name, field_type in info["data_fields"]:
-      # std::vector cannot hold C-style arrays, so skip array-typed data
-      # fields here (including alias-to-array types); callers can still reach
-      # them via the underlying frames.
+      # All field types — scalars, structs, and arrays-as-`std::array` — are
+      # uniformly addressable via pointer-to-member, except bit-fields which
+      # have no pointer-to-member representation.
       unwrapped_data = self._unwrap_aliases(field_type)
-      if isinstance(unwrapped_data, types.ArrayType):
-        continue
       if field_name == list_field_name:
         elem_cpp = "value_type"
       else:
@@ -899,7 +892,7 @@ class CppTypeEmitter:
         #include <cstdint>
         #include <cstddef>
         #include <any>
-        #include <cstring>
+        #include <array>
         #include <limits>
         #include <ranges>
         #include <stdexcept>
@@ -910,7 +903,6 @@ class CppTypeEmitter:
         #include "esi/Common.h"
 
         namespace {system_name} {{
-        #pragma pack(push, 1)
 
       """))
       if self.has_cycle:
@@ -933,9 +925,7 @@ class CppTypeEmitter:
           sys.stderr.write(f"Error emitting type '{emit_type}': {e}\n")
           hdr.write(f"// Unsupported type '{emit_type}': {e}\n\n")
 
-      hdr.write(
-          textwrap.dedent(f"""
-    #pragma pack(pop)
+      hdr.write(textwrap.dedent(f"""
     }} // namespace {system_name}
     """))
 

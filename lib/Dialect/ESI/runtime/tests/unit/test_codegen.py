@@ -235,7 +235,7 @@ def test_windowed_list_bulk_message_wrapper():
   assert "uint8_t _pad[2];" in hdr
   assert "Coord coords;" in hdr
   assert hdr.index("struct data_frame {") < hdr.index(
-      "private:\n  struct header_frame {")
+      "private:\n#pragma pack(push, 1)\n  struct header_frame {")
   assert "std::vector<data_frame> data_frames;" in hdr
   assert "esi::Segment segment(size_t idx) const override" in hdr
   assert "footer.coords_count = 0;" in hdr
@@ -340,22 +340,29 @@ def test_windowed_list_arrays_in_header_and_value_type():
   ])
 
   hdr = _generate_header([window])
-  assert "#include <cstring>" in hdr
+  assert "#include <array>" in hdr
   assert "struct array_payloads : public esi::SegmentedMessageData" in hdr
-  assert "using value_type = uint8_t[4];" in hdr
+  # `value_type` is exposed as `std::array` so it is storable in `std::vector`.
+  assert "using value_type = std::array<uint8_t, 4>;" in hdr
   assert "using count_type = uint16_t;" in hdr
-  assert "uint16_t header_words[2];" in hdr
-  assert "uint8_t payloads[4];" in hdr
-  assert "array_payloads(const uint16_t (&header_words)[2], const std::vector<value_type> &payloads)" in hdr
-  assert "void construct(const uint16_t (&header_words)[2], std::vector<data_frame> frames)" in hdr
-  assert "std::memcpy(&header.header_words, &header_words, sizeof(header.header_words));" in hdr
-  assert "std::memcpy(&frame.payloads, &element, sizeof(frame.payloads));" in hdr
+  # All array-typed fields (header and data) are emitted as `std::array`.
+  assert "std::array<uint16_t, 2> header_words;" in hdr
+  assert "std::array<uint8_t, 4> payloads;" in hdr
+  # Constructor params for arrays are simple const-refs to `std::array`.
+  assert "array_payloads(const std::array<uint16_t, 2> &header_words, const std::vector<value_type> &payloads)" in hdr
+  assert "void construct(const std::array<uint16_t, 2> &header_words, std::vector<data_frame> frames)" in hdr
+  # Plain `=` assignment for both header and data array fields.
+  assert "header.header_words = header_words;" in hdr
+  assert "frame.payloads = element;" in hdr
   assert 'throw std::out_of_range("array_payloads: invalid segment index")' in hdr
-  # Array-typed header field: const-ref accessor emitted.
-  assert "const uint16_t (&header_words() const)[2] { return header.header_words; }" in hdr
-  # Array-typed data field: range/vector accessors are skipped.
-  assert "return std::views::transform" not in hdr
-  assert "payloads_vector" not in hdr
+  # Array-typed header field: const-ref accessor with std::array return type.
+  assert "const std::array<uint16_t, 2> &header_words() const { return header.header_words; }" in hdr
+  # Array-typed data field: pointer-to-member projection (zero-copy view) and
+  # std::array-valued vector helper. The list field uses the `value_type`
+  # alias (which equals `std::array<uint8_t, 4>`).
+  assert "return std::views::transform(data_frames, &data_frame::payloads);" in hdr
+  assert "std::vector<value_type> payloads_vector() const" in hdr
+  assert "out.push_back(frame.payloads);" in hdr
 
 
 def test_windowed_list_struct_element_data_uses_pointer_to_member():
