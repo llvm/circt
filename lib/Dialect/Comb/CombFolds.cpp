@@ -1273,36 +1273,6 @@ LogicalResult OrOp::canonicalize(OrOp op, PatternRewriter &rewriter) {
     }
   }
 
-  // or(mux(c_0, a_0, 0), mux(c_1, a_1, 0), ..., mux(c_n, a_n, 0)) ->
-  //   mux(c_0, a_0, mux(c_1, a_1, ...))
-  //
-  // The mux tree should then be balanced by MuxOp patterns.
-  if (auto firstMux = op.getOperand(0).getDefiningOp<comb::MuxOp>();
-      op.getTwoState() && firstMux && firstMux.getTwoState()) {
-    APInt value;
-    if (matchPattern(firstMux.getFalseValue(), m_ConstantInt(&value)) &&
-        value.isZero()) {
-      auto check = [&](Value v) {
-        auto mux = v.getDefiningOp<comb::MuxOp>();
-        if (!mux)
-          return false;
-        return mux.getTwoState() &&
-               mux.getFalseValue() == firstMux.getFalseValue();
-      };
-      if (llvm::all_of(op.getOperands(), check)) {
-        SmallVector<Value> values(op.getOperands().drop_back());
-        Value v = op.getOperands().back();
-        while (!values.empty()) {
-          auto mux = values.pop_back_val().getDefiningOp<comb::MuxOp>();
-          v = comb::MuxOp::create(rewriter, op.getLoc(), mux.getCond(),
-                                  mux.getTrueValue(), v, /*twoState=*/true);
-        }
-        replaceOpAndCopyNamehint(rewriter, op, v);
-        return success();
-      }
-    }
-  }
-
   /// TODO: or(..., x, not(x)) -> or(..., '1) -- complement
   return failure();
 }
