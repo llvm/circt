@@ -675,7 +675,7 @@ private:
 ///
 /// Polling reads return `std::unique_ptr<T>` so complex decoded values can be
 /// delivered without an extra copy.
-template <typename T>
+template <typename T, bool SkipTypeCheck = false>
 class TypedReadPort {
 public:
   explicit TypedReadPort(ReadChannelPort &port) : inner(&port) {}
@@ -825,7 +825,12 @@ private:
   void prepareConnect() {
     if (mode != Mode::Disconnected)
       throw std::runtime_error("Channel already connected");
-    if constexpr (has_esi_id_v<T>) {
+    if constexpr (SkipTypeCheck) {
+      // Skip verification, but still compute wireInfo for the POD path so
+      // small / non-byte-aligned wire widths still encode correctly.
+      if constexpr (!detail::has_type_deserializer_v<T>)
+        wireInfo_ = getWireInfo(inner->getType());
+    } else if constexpr (has_esi_id_v<T>) {
       verifyTypeCompatibility<T>(inner);
     } else if constexpr (!detail::has_type_deserializer_v<T>) {
       verifyTypeCompatibility<T>(inner);
@@ -899,10 +904,53 @@ private:
 //===----------------------------------------------------------------------===//
 // TypedFunction<ArgT, ResultT>
 //
-// Non-owning wrapper around FuncService::Function that provides strongly-typed
-// call() and connect() APIs. Implicitly constructible from Function* (the
-// return type of BundlePort::getAs<FuncService::Function>()).
+// Strongly-typed function-call wrapper built on top of TypedWritePort and
+// TypedReadPort. Implicitly constructible from `FuncService::Function *` (the
+// return type of `BundlePort::getAs<FuncService::Function>()`); construction
+// resolves the underlying raw "arg" / "result" channels but does not connect
+// them until `connect()` is called.
+//
+// We intentionally bypass `FuncService::Function::call`. That helper returns
+// the future from a single `result->readAsync()`, which only sees one raw
+// frame and would race when the response is multi-frame or when calls are
+// pipelined. Driving a `TypedReadPort<ResultT>` instead reuses its persistent
+// per-port deserializer (so partial frames / pending outputs survive between
+// calls) and its FIFO polling buffer (so pipelined `readAsync()` futures
+// hand back per-call decoded values in call order, even when consumers
+// `.get()` them out of order).
 //===----------------------------------------------------------------------===//
+
+namespace detail {
+
+/// Standard ConnectOptions for typed function ports: untranslated frames so
+/// the deserializer can see raw frame boundaries.
+inline ChannelPort::ConnectOptions typedFunctionConnectOptions() {
+  return ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
+                                     /*translateMessage=*/false);
+}
+
+/// Convert a `std::future<std::unique_ptr<T>>` (as returned by
+/// `TypedReadPort::readAsync()`) into a `std::future<T>`. Uses a deferred
+/// async so `.get()` blocks only when the caller actually waits for the
+/// value, preserving the per-call FIFO ordering of the underlying polling
+/// buffer.
+template <typename T>
+std::future<T> awaitDecoded(std::future<std::unique_ptr<T>> inner) {
+  return std::async(std::launch::deferred,
+                    [fut = std::move(inner)]() mutable -> T {
+                      std::unique_ptr<T> v = fut.get();
+                      return std::move(*v);
+                    });
+}
+
+/// Throw the standard "null Function pointer" error used by every
+/// TypedFunction specialization.
+[[noreturn]] inline void throwNullFunction() {
+  throw AcceleratorMismatchError(
+      "TypedFunction: null Function pointer (getAs failed or wrong type)");
+}
+
+} // namespace detail
 
 template <typename ArgT, typename ResultT, bool SkipTypeCheck = false>
 class TypedFunction {
@@ -910,29 +958,47 @@ public:
   /// Implicit conversion from Function* (returned by getAs<>()).
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedFunction(services::FuncService::Function *func) : inner(func) {}
+  TypedFunction(const TypedFunction &) = delete;
+  TypedFunction &operator=(const TypedFunction &) = delete;
 
   void connect() {
     if (!inner)
-      throw AcceleratorMismatchError(
-          "TypedFunction: null Function pointer (getAs failed or wrong type)");
-    if constexpr (!SkipTypeCheck) {
-      verifyTypeCompatibility<ArgT>(inner->getArgType());
-      verifyTypeCompatibility<ResultT>(inner->getResultType());
-    }
-    argWireInfo_ = getWireInfo(inner->getArgType());
-    resWireInfo_ = getWireInfo(inner->getResultType());
-    inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/false));
+      detail::throwNullFunction();
+    argPort.emplace(&inner->getRawWrite("arg"));
+    resultPort.emplace(&inner->getRawRead("result"));
+    auto opts = detail::typedFunctionConnectOptions();
+    argPort->connect(opts);
+    resultPort->connect(opts);
   }
 
   std::future<ResultT> call(const ArgT &arg) {
-    WireInfo rwb = resWireInfo_;
-    auto f = inner->call(toMessageData(arg, argWireInfo_));
-    return std::async(std::launch::deferred,
-                      [fut = std::move(f), rwb]() mutable -> ResultT {
-                        MessageData data = fut.get();
-                        return fromMessageData<ResultT>(data, rwb);
-                      });
+    // Serialize the per-call write+readAsync pair so the polling buffer's
+    // FIFO matches the call FIFO. Pipelined calls are still allowed -- the
+    // shared deserializer drains responses in wire order and the FIFO
+    // ensures call N's future resolves to call N's result, regardless of
+    // the order in which callers `.get()` the futures.
+    std::scoped_lock<std::mutex> lock(callMutex);
+    argPort->write(arg);
+    return detail::awaitDecoded<ResultT>(resultPort->readAsync());
+  }
+
+  /// Emplace-style call: constructs `ArgT` in-place from the forwarded
+  /// arguments and forwards to `call(const ArgT &)`. SFINAE-disabled for the
+  /// single-`ArgT`-argument case so it does not shadow the lvalue overload.
+  template <
+      typename First, typename... Rest,
+      typename = std::enable_if_t<
+          std::is_constructible_v<ArgT, First, Rest...> &&
+          (!std::is_same_v<std::decay_t<First>, ArgT> || sizeof...(Rest) != 0)>>
+  std::future<ResultT> call(First &&first, Rest &&...rest) {
+    return call(ArgT(std::forward<First>(first), std::forward<Rest>(rest)...));
+  }
+
+  /// Function-call operator overloads: forward to `call()`.
+  template <typename... Args>
+  auto operator()(Args &&...args)
+      -> decltype(this->call(std::forward<Args>(args)...)) {
+    return call(std::forward<Args>(args)...);
   }
 
   services::FuncService::Function &raw() { return *inner; }
@@ -940,8 +1006,9 @@ public:
 
 private:
   services::FuncService::Function *inner;
-  WireInfo argWireInfo_;
-  WireInfo resWireInfo_;
+  std::optional<TypedWritePort<ArgT, SkipTypeCheck>> argPort;
+  std::optional<TypedReadPort<ResultT, SkipTypeCheck>> resultPort;
+  std::mutex callMutex;
 };
 
 /// Partial specialization: void argument, typed result.
@@ -950,35 +1017,36 @@ class TypedFunction<void, ResultT, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedFunction(services::FuncService::Function *func) : inner(func) {}
+  TypedFunction(const TypedFunction &) = delete;
+  TypedFunction &operator=(const TypedFunction &) = delete;
 
   void connect() {
     if (!inner)
-      throw AcceleratorMismatchError(
-          "TypedFunction: null Function pointer (getAs failed or wrong type)");
-    if constexpr (!SkipTypeCheck) {
-      verifyTypeCompatibility<void>(inner->getArgType());
-      verifyTypeCompatibility<ResultT>(inner->getResultType());
-    }
-    inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/false));
+      detail::throwNullFunction();
+    argPort.emplace(&inner->getRawWrite("arg"));
+    resultPort.emplace(&inner->getRawRead("result"));
+    auto opts = detail::typedFunctionConnectOptions();
+    argPort->connect(opts);
+    resultPort->connect(opts);
   }
 
   std::future<ResultT> call() {
-    uint8_t zero = 0;
-    const Type *resType = inner->getResultType();
-    auto f = inner->call(MessageData(&zero, 1));
-    return std::async(std::launch::deferred,
-                      [fut = std::move(f), resType]() mutable -> ResultT {
-                        MessageData data = fut.get();
-                        return fromMessageData<ResultT>(data, resType);
-                      });
+    std::scoped_lock<std::mutex> lock(callMutex);
+    argPort->write();
+    return detail::awaitDecoded<ResultT>(resultPort->readAsync());
   }
+
+  /// Function-call operator overload: forwards to `call()`.
+  std::future<ResultT> operator()() { return call(); }
 
   services::FuncService::Function &raw() { return *inner; }
   const services::FuncService::Function &raw() const { return *inner; }
 
 private:
   services::FuncService::Function *inner;
+  std::optional<TypedWritePort<void>> argPort;
+  std::optional<TypedReadPort<ResultT, SkipTypeCheck>> resultPort;
+  std::mutex callMutex;
 };
 
 /// Partial specialization: typed argument, void result.
@@ -987,24 +1055,42 @@ class TypedFunction<ArgT, void, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedFunction(services::FuncService::Function *func) : inner(func) {}
+  TypedFunction(const TypedFunction &) = delete;
+  TypedFunction &operator=(const TypedFunction &) = delete;
 
   void connect() {
     if (!inner)
-      throw AcceleratorMismatchError(
-          "TypedFunction: null Function pointer (getAs failed or wrong type)");
-    if constexpr (!SkipTypeCheck) {
-      verifyTypeCompatibility<ArgT>(inner->getArgType());
-      verifyTypeCompatibility<void>(inner->getResultType());
-    }
-    argWireInfo_ = getWireInfo(inner->getArgType());
-    inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/false));
+      detail::throwNullFunction();
+    argPort.emplace(&inner->getRawWrite("arg"));
+    resultPort.emplace(&inner->getRawRead("result"));
+    auto opts = detail::typedFunctionConnectOptions();
+    argPort->connect(opts);
+    resultPort->connect(opts);
   }
 
   std::future<void> call(const ArgT &arg) {
-    auto f = inner->call(toMessageData(arg, argWireInfo_));
-    return std::async(std::launch::deferred,
-                      [fut = std::move(f)]() mutable -> void { fut.get(); });
+    std::scoped_lock<std::mutex> lock(callMutex);
+    argPort->write(arg);
+    return resultPort->readAsync();
+  }
+
+  /// Emplace-style call: constructs `ArgT` in-place from the forwarded
+  /// arguments and forwards to `call(const ArgT &)`. SFINAE-disabled for the
+  /// single-`ArgT`-argument case so it does not shadow the lvalue overload.
+  template <
+      typename First, typename... Rest,
+      typename = std::enable_if_t<
+          std::is_constructible_v<ArgT, First, Rest...> &&
+          (!std::is_same_v<std::decay_t<First>, ArgT> || sizeof...(Rest) != 0)>>
+  std::future<void> call(First &&first, Rest &&...rest) {
+    return call(ArgT(std::forward<First>(first), std::forward<Rest>(rest)...));
+  }
+
+  /// Function-call operator overloads: forward to `call()`.
+  template <typename... Args>
+  auto operator()(Args &&...args)
+      -> decltype(this->call(std::forward<Args>(args)...)) {
+    return call(std::forward<Args>(args)...);
   }
 
   services::FuncService::Function &raw() { return *inner; }
@@ -1012,7 +1098,9 @@ public:
 
 private:
   services::FuncService::Function *inner;
-  WireInfo argWireInfo_;
+  std::optional<TypedWritePort<ArgT, SkipTypeCheck>> argPort;
+  std::optional<TypedReadPort<void>> resultPort;
+  std::mutex callMutex;
 };
 
 /// Full specialization: void argument, void result.
@@ -1021,66 +1109,99 @@ class TypedFunction<void, void, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedFunction(services::FuncService::Function *func) : inner(func) {}
+  TypedFunction(const TypedFunction &) = delete;
+  TypedFunction &operator=(const TypedFunction &) = delete;
 
   void connect() {
     if (!inner)
-      throw AcceleratorMismatchError(
-          "TypedFunction: null Function pointer (getAs failed or wrong type)");
-    if constexpr (!SkipTypeCheck) {
-      verifyTypeCompatibility<void>(inner->getArgType());
-      verifyTypeCompatibility<void>(inner->getResultType());
-    }
-    inner->connect(ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                               /*translateMessage=*/false));
+      detail::throwNullFunction();
+    argPort.emplace(&inner->getRawWrite("arg"));
+    resultPort.emplace(&inner->getRawRead("result"));
+    auto opts = detail::typedFunctionConnectOptions();
+    argPort->connect(opts);
+    resultPort->connect(opts);
   }
 
   std::future<void> call() {
-    uint8_t zero = 0;
-    auto f = inner->call(MessageData(&zero, 1));
-    return std::async(std::launch::deferred,
-                      [fut = std::move(f)]() mutable -> void { fut.get(); });
+    std::scoped_lock<std::mutex> lock(callMutex);
+    argPort->write();
+    return resultPort->readAsync();
   }
+
+  /// Function-call operator overload: forwards to `call()`.
+  std::future<void> operator()() { return call(); }
 
   services::FuncService::Function &raw() { return *inner; }
   const services::FuncService::Function &raw() const { return *inner; }
 
 private:
   services::FuncService::Function *inner;
+  std::optional<TypedWritePort<void>> argPort;
+  std::optional<TypedReadPort<void>> resultPort;
+  std::mutex callMutex;
 };
 
 //===----------------------------------------------------------------------===//
 // TypedCallback<ArgT, ResultT>
 //
-// Non-owning wrapper around CallService::Callback that provides strongly-typed
-// connect() and automatic MessageData conversion. Implicitly constructible
-// from Callback* (the return type of BundlePort::getAs<Callback>()).
+// Strongly-typed accelerator-callback wrapper built on top of TypedReadPort
+// and TypedWritePort. Implicitly constructible from `CallService::Callback *`
+// (the return type of `BundlePort::getAs<CallService::Callback>()`);
+// construction resolves the underlying raw "arg" / "result" channels but
+// does not connect them until `connect()` is called.
+//
+// We bypass `CallService::Callback::connect` for the same reason we bypass
+// `FuncService::Function::call`: typed args may span multiple raw frames and
+// we need the persistent stateful deserializer that `TypedReadPort<ArgT>`
+// already provides.
+//
+// Note: the `quick` parameter is kept for API compatibility but has no
+// effect in this design. The typed user callback is always dispatched inline
+// from the read-channel callback thread (matching the previous
+// custom-deserializer behavior). If service-thread dispatch is needed in the
+// future, that can be layered on top by using `TypedReadPort` polling mode
+// plus a worker.
 //===----------------------------------------------------------------------===//
+
+namespace detail {
+
+/// Throw the standard "null Callback pointer" error used by every
+/// TypedCallback specialization.
+[[noreturn]] inline void throwNullCallback() {
+  throw AcceleratorMismatchError(
+      "TypedCallback: null Callback pointer (getAs failed or wrong type)");
+}
+
+} // namespace detail
 
 template <typename ArgT, typename ResultT, bool SkipTypeCheck = false>
 class TypedCallback {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
+  TypedCallback(const TypedCallback &) = delete;
+  TypedCallback &operator=(const TypedCallback &) = delete;
 
   void connect(std::function<ResultT(const ArgT &)> callback,
                bool quick = false) {
+    (void)quick; // See class header.
     if (!inner)
-      throw AcceleratorMismatchError(
-          "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-    if constexpr (!SkipTypeCheck) {
-      verifyTypeCompatibility<ArgT>(inner->getArgType());
-      verifyTypeCompatibility<ResultT>(inner->getResultType());
-    }
-    inner->connect(
-        [cb = std::move(callback), argType = inner->getArgType(),
-         resType = inner->getResultType()](
-            const MessageData &argData) -> MessageData {
-          ResultT result = cb(fromMessageData<ArgT>(argData, argType));
-          return toMessageData(result, resType);
+      detail::throwNullCallback();
+    argPort.emplace(&inner->getRawRead("arg"));
+    resultPort.emplace(&inner->getRawWrite("result"));
+    auto opts = detail::typedFunctionConnectOptions();
+    resultPort->connect(opts);
+    userCallback = std::move(callback);
+    // The TypedReadPort callback runs on the read-channel callback thread
+    // for every decoded ArgT. We forward to the user's callback and then
+    // serialize the result through the TypedWritePort.
+    argPort->connect(
+        [this](const ArgT &arg) -> bool {
+          ResultT result = userCallback(arg);
+          resultPort->write(result);
+          return true;
         },
-        quick,
-        ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/false));
+        opts);
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1088,6 +1209,9 @@ public:
 
 private:
   services::CallService::Callback *inner;
+  std::optional<TypedReadPort<ArgT, SkipTypeCheck>> argPort;
+  std::optional<TypedWritePort<ResultT, SkipTypeCheck>> resultPort;
+  std::function<ResultT(const ArgT &)> userCallback;
 };
 
 /// Partial specialization: void argument, typed result.
@@ -1096,24 +1220,25 @@ class TypedCallback<void, ResultT, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
+  TypedCallback(const TypedCallback &) = delete;
+  TypedCallback &operator=(const TypedCallback &) = delete;
 
   void connect(std::function<ResultT()> callback, bool quick = false) {
+    (void)quick;
     if (!inner)
-      throw AcceleratorMismatchError(
-          "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-    if constexpr (!SkipTypeCheck) {
-      verifyTypeCompatibility<void>(inner->getArgType());
-      verifyTypeCompatibility<ResultT>(inner->getResultType());
-    }
-    WireInfo rwb = getWireInfo(inner->getResultType());
-    inner->connect(
-        [cb = std::move(callback), rwb](const MessageData &) -> MessageData {
-          ResultT result = cb();
-          return toMessageData(result, rwb);
+      detail::throwNullCallback();
+    argPort.emplace(&inner->getRawRead("arg"));
+    resultPort.emplace(&inner->getRawWrite("result"));
+    auto opts = detail::typedFunctionConnectOptions();
+    resultPort->connect(opts);
+    userCallback = std::move(callback);
+    argPort->connect(
+        [this]() -> bool {
+          ResultT result = userCallback();
+          resultPort->write(result);
+          return true;
         },
-        quick,
-        ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/false));
+        opts);
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1121,6 +1246,9 @@ public:
 
 private:
   services::CallService::Callback *inner;
+  std::optional<TypedReadPort<void>> argPort;
+  std::optional<TypedWritePort<ResultT, SkipTypeCheck>> resultPort;
+  std::function<ResultT()> userCallback;
 };
 
 /// Partial specialization: typed argument, void result.
@@ -1129,25 +1257,25 @@ class TypedCallback<ArgT, void, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
+  TypedCallback(const TypedCallback &) = delete;
+  TypedCallback &operator=(const TypedCallback &) = delete;
 
   void connect(std::function<void(const ArgT &)> callback, bool quick = false) {
+    (void)quick;
     if (!inner)
-      throw AcceleratorMismatchError(
-          "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-    if constexpr (!SkipTypeCheck) {
-      verifyTypeCompatibility<ArgT>(inner->getArgType());
-      verifyTypeCompatibility<void>(inner->getResultType());
-    }
-    inner->connect(
-        [cb = std::move(callback), argType = inner->getArgType()](
-            const MessageData &argData) -> MessageData {
-          cb(fromMessageData<ArgT>(argData, argType));
-          uint8_t zero = 0;
-          return MessageData(&zero, 1);
+      detail::throwNullCallback();
+    argPort.emplace(&inner->getRawRead("arg"));
+    resultPort.emplace(&inner->getRawWrite("result"));
+    auto opts = detail::typedFunctionConnectOptions();
+    resultPort->connect(opts);
+    userCallback = std::move(callback);
+    argPort->connect(
+        [this](const ArgT &arg) -> bool {
+          userCallback(arg);
+          resultPort->write();
+          return true;
         },
-        quick,
-        ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/false));
+        opts);
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1155,6 +1283,9 @@ public:
 
 private:
   services::CallService::Callback *inner;
+  std::optional<TypedReadPort<ArgT, SkipTypeCheck>> argPort;
+  std::optional<TypedWritePort<void>> resultPort;
+  std::function<void(const ArgT &)> userCallback;
 };
 
 /// Full specialization: void argument, void result.
@@ -1163,24 +1294,25 @@ class TypedCallback<void, void, SkipTypeCheck> {
 public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedCallback(services::CallService::Callback *cb) : inner(cb) {}
+  TypedCallback(const TypedCallback &) = delete;
+  TypedCallback &operator=(const TypedCallback &) = delete;
 
   void connect(std::function<void()> callback, bool quick = false) {
+    (void)quick;
     if (!inner)
-      throw AcceleratorMismatchError(
-          "TypedCallback: null Callback pointer (getAs failed or wrong type)");
-    if constexpr (!SkipTypeCheck) {
-      verifyTypeCompatibility<void>(inner->getArgType());
-      verifyTypeCompatibility<void>(inner->getResultType());
-    }
-    inner->connect(
-        [cb = std::move(callback)](const MessageData &) -> MessageData {
-          cb();
-          uint8_t zero = 0;
-          return MessageData(&zero, 1);
+      detail::throwNullCallback();
+    argPort.emplace(&inner->getRawRead("arg"));
+    resultPort.emplace(&inner->getRawWrite("result"));
+    auto opts = detail::typedFunctionConnectOptions();
+    resultPort->connect(opts);
+    userCallback = std::move(callback);
+    argPort->connect(
+        [this]() -> bool {
+          userCallback();
+          resultPort->write();
+          return true;
         },
-        quick,
-        ChannelPort::ConnectOptions(/*bufferSize=*/std::nullopt,
-                                    /*translateMessage=*/false));
+        opts);
   }
 
   services::CallService::Callback &raw() { return *inner; }
@@ -1188,6 +1320,9 @@ public:
 
 private:
   services::CallService::Callback *inner;
+  std::optional<TypedReadPort<void>> argPort;
+  std::optional<TypedWritePort<void>> resultPort;
+  std::function<void()> userCallback;
 };
 
 } // namespace esi
