@@ -99,7 +99,7 @@ hw.module @CaseNoDefault<NUM : i8> () {
 hw.module @Loop1<NUM : i32, START: i32> () {
   %fd = hw.constant 0x80000002 : i32
   sv.generate "foo_loop": {
-    sv.generate.for %i = #hw.param.decl.ref<"START"> : i32 to #hw.param.decl.ref<"NUM"> : i32 step 1 : i32 name "gen_blk" {
+    sv.generate.for %i : i32 = #hw.param.decl.ref<"START"> : i32 to #hw.param.decl.ref<"NUM"> : i32 step 1 : i32 name "gen_blk" {
       sv.initial {
         sv.fwrite %fd, "i = %d\n"(%i) : i32
       }
@@ -109,7 +109,7 @@ hw.module @Loop1<NUM : i32, START: i32> () {
 
 // CHECK-LABEL: hw.module @Loop1
 // CHECK:         sv.generate "foo_loop" : {
-// CHECK:           sv.generate.for %i = #hw.param.decl.ref<"START"> : i32 to #hw.param.decl.ref<"NUM"> : i32 step 1 : i32 name "gen_blk" {
+// CHECK:           sv.generate.for %i : i32 = #hw.param.decl.ref<"START"> : i32 to #hw.param.decl.ref<"NUM"> : i32 step 1 : i32 name "gen_blk" {
 // CHECK:             sv.initial {
 // CHECK:               sv.fwrite {{%.+}}, "i = %d\0A"(%i) : i32
 // CHECK:             }
