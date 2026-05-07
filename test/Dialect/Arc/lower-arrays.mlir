@@ -132,3 +132,43 @@ func.func @test_state_write(%arg0: !arc.state<!hw.array<2xi32>>, %arg1: !hw.arra
   arc.state_write %arg0 = %arg1 : <!hw.array<2xi32>>
   return
 }
+
+// CHECK-LABEL: func.func @test_nested_array_arg
+// CHECK-SAME: (%arg0: !hw.array<3xarray<2xi32>>)
+// CHECK-SAME: -> !hw.array<3xarray<2xi32>>
+// CHECK-NEXT: return
+func.func @test_nested_array_arg(%a: !hw.array<3x!hw.array<2xi32>>) -> !hw.array<3x!hw.array<2xi32>> {
+  return %a : !hw.array<3x!hw.array<2xi32>>
+}
+
+// CHECK-LABEL: func.func @test_nested_array_get
+// CHECK-SAME: (%[[SRET:.*]]: !arc.arrayref<2xi32>, %[[ARG1:.*]]: !hw.array<3xarray<2xi32>>, %[[ARG2:.*]]: i2) -> !arc.arrayref<2xi32>
+// CHECK-NEXT: %[[GET:.*]] = hw.array_get %[[ARG1]][%[[ARG2]]] : !hw.array<3xarray<2xi32>>, i2
+// CHECK-NEXT: %[[FROM:.*]] = arc.arrayref.from_array %[[SRET]] = %[[GET]] : <2xi32>, !hw.array<2xi32>
+// CHECK-NEXT: return %[[FROM]] : !arc.arrayref<2xi32>
+func.func @test_nested_array_get(%a: !hw.array<3x!hw.array<2xi32>>, %b: i2) -> !hw.array<2xi32> {
+  %0 = hw.array_get %a[%b] : !hw.array<3x!hw.array<2xi32>>, i2
+  return %0 : !hw.array<2xi32>
+}
+
+// CHECK-LABEL: func.func @test_nested_array_create
+// CHECK-SAME: (%[[ARG0:.*]]: !hw.array<3xarray<2xi32>>, %[[ARG1:.*]]: !arc.arrayref<2xi32>, %[[ARG2:.*]]: !arc.arrayref<2xi32>, %[[ARG3:.*]]: !arc.arrayref<2xi32>) -> !hw.array<3xarray<2xi32>>
+// CHECK-NEXT: %[[TO0:.*]] = arc.arrayref.to_array %[[ARG3]] : (!arc.arrayref<2xi32>) -> !hw.array<2xi32>
+// CHECK-NEXT: %[[TO1:.*]] = arc.arrayref.to_array %[[ARG2]] : (!arc.arrayref<2xi32>) -> !hw.array<2xi32>
+// CHECK-NEXT: %[[TO2:.*]] = arc.arrayref.to_array %[[ARG1]] : (!arc.arrayref<2xi32>) -> !hw.array<2xi32>
+// CHECK-NEXT: %[[CREATE:.*]] = hw.array_create %[[TO2]], %[[TO1]], %[[TO0]] : !hw.array<2xi32>
+// CHECK-NEXT: return %[[CREATE]] : !hw.array<3xarray<2xi32>>
+func.func @test_nested_array_create(%a: !hw.array<2xi32>, %b: !hw.array<2xi32>, %c: !hw.array<2xi32>) -> !hw.array<3x!hw.array<2xi32>> {
+  %0 = hw.array_create %a, %b, %c : !hw.array<2xi32>
+  return %0 : !hw.array<3x!hw.array<2xi32>>
+}
+
+// CHECK-LABEL: func.func @test_nested_array_inject
+// CHECK-SAME: (%[[ARG0:.*]]: !hw.array<3xarray<2xi32>>, %[[ARG1:.*]]: !hw.array<3xarray<2xi32>>, %[[ARG2:.*]]: i2, %[[ARG3:.*]]: !arc.arrayref<2xi32>) -> !hw.array<3xarray<2xi32>>
+// CHECK-NEXT: %[[TO:.*]] = arc.arrayref.to_array %[[ARG3]] : (!arc.arrayref<2xi32>) -> !hw.array<2xi32>
+// CHECK-NEXT: %[[INJ:.*]] = hw.array_inject %[[ARG1]][%[[ARG2]]], %[[TO]] : !hw.array<3xarray<2xi32>>, i2
+// CHECK-NEXT: return %[[INJ]] : !hw.array<3xarray<2xi32>>
+func.func @test_nested_array_inject(%a: !hw.array<3x!hw.array<2xi32>>, %b: i2, %c: !hw.array<2xi32>) -> !hw.array<3x!hw.array<2xi32>> {
+  %0 = hw.array_inject %a[%b], %c : !hw.array<3x!hw.array<2xi32>>, i2
+  return %0 : !hw.array<3x!hw.array<2xi32>>
+}

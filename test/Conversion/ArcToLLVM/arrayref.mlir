@@ -126,3 +126,20 @@ func.func @ArrayRefCopy(%arg0: !arc.arrayref<2xi32>, %arg1: !arc.arrayref<2xi32>
   %0 = arc.arrayref.copy %arg0 = %arg1 : !arc.arrayref<2xi32>
   return %0 : !arc.arrayref<2xi32>
 }
+
+// CHECK-LABEL: @ArrayRefToArray
+// CHECK-NEXT: %[[LOAD:.*]] = llvm.load %arg0 : !llvm.ptr -> !llvm.array<2 x i32>
+// CHECK-NEXT: return %[[LOAD]]
+func.func @ArrayRefToArray(%arg0: !arc.arrayref<2xi32>) -> !hw.array<2xi32> {
+  %0 = arc.arrayref.to_array %arg0 : (!arc.arrayref<2xi32>) -> !hw.array<2xi32>
+  return %0 : !hw.array<2xi32>
+}
+
+// CHECK-LABEL: @ArrayRefFromArray
+// CHECK-NEXT: llvm.store %arg1, %arg0 : !llvm.array<2 x i32>, !llvm.ptr
+// CHECK-NEXT: return %arg0
+func.func @ArrayRefFromArray(%arg0: !arc.arrayref<2xi32>, %arg1: !hw.array<2xi32>) -> !arc.arrayref<2xi32> {
+  %0 = arc.arrayref.from_array %arg0 = %arg1 : <2xi32>, !hw.array<2xi32>
+  return %0 : !arc.arrayref<2xi32>
+}
+

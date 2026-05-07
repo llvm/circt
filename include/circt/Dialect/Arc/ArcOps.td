@@ -1185,4 +1185,42 @@ def ArrayRefCreateOp : ArcOp<"arrayref.create", [
   }];
 }
 
+def ArrayRefFromArrayOp : ArcOp<"arrayref.from_array", [
+  MemoryEffects<[MemWrite]>,
+  AllTypesMatch<["input", "output"]>,
+  TypesMatchWith<"array type matches output type",
+                 "array", "output",
+                 "ArrayRefType::get("
+                   "cast<hw::ArrayType>($_self).getElementType(), "
+                   "cast<hw::ArrayType>($_self).getNumElements())">
+]> {
+  let summary = "arrayref from array";
+  let description = [{
+    Populates an arrayref with the elements of an array.
+  }];
+  let arguments = (ins ArrayRefType:$input, ArrayType:$array);
+  let results = (outs ArrayRefType:$output);
+  let assemblyFormat = [{
+    $input `=` $array attr-dict `:` type($output) `,` type($array)
+  }];
+}
+
+def ArrayRefToArrayOp : ArcOp<"arrayref.to_array", [
+  TypesMatchWith<"array type matches result type",
+                 "input", "result",
+                 "hw::ArrayType::get("
+                   "cast<ArrayRefType>($_self).getElementType(), "
+                   "cast<ArrayRefType>($_self).getNumElements())">
+]> {
+  let summary = "arrayref to array";
+  let description = [{
+    Creates an array from an arrayref.
+  }];
+  let arguments = (ins ArrayRefType:$input);
+  let results = (outs ArrayType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
+  }];
+}
+
 #endif // CIRCT_DIALECT_ARC_ARCOPS_TD

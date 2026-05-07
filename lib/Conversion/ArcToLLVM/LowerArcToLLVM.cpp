@@ -1539,6 +1539,35 @@ struct ArrayRefToLLVMArrayOpLowering
   }
 };
 
+struct ArrayRefToArrayOpLowering
+    : public OpConversionPattern<ArrayRefToArrayOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayRefToArrayOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = getTypeConverter()->convertType(op.getResult().getType());
+    Value loaded = LLVM::LoadOp::create(rewriter, op.getLoc(), resultType,
+                                        adaptor.getInput());
+    rewriter.replaceOp(op, loaded);
+    return success();
+  }
+};
+
+struct ArrayRefFromArrayOpLowering
+    : public OpConversionPattern<ArrayRefFromArrayOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ArrayRefFromArrayOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    LLVM::StoreOp::create(rewriter, op.getLoc(), adaptor.getArray(),
+                          adaptor.getInput());
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
@@ -1706,7 +1735,9 @@ void LowerArcToLLVMPass::runOnOperation() {
     ArrayRefInjectOpLowering,
     ArrayRefSliceOpLowering,
     ArrayRefCopyOpLowering,
-    ArrayRefToLLVMArrayOpLowering
+    ArrayRefToLLVMArrayOpLowering,
+    ArrayRefToArrayOpLowering,
+    ArrayRefFromArrayOpLowering
   >(converter, &getContext());
   // clang-format on
   patterns.add<ExecuteOp>(convert);

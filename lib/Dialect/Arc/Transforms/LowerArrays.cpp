@@ -198,8 +198,8 @@ struct ConvertArrayGet : public OpConversionPattern<ArrayGetOp> {
   LogicalResult
   matchAndRewrite(hw::ArrayGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value index = asIndex(op.getIndex(), rewriter);
     Type resultType = getTypeConverter()->convertType(op.getType());
+    Value index = asIndex(op.getIndex(), rewriter);
     Value newOp = ArrayRefGetOp::create(rewriter, op.getLoc(), resultType,
                                         adaptor.getInput(), index);
     rewriter.replaceOp(op, newOp);
@@ -367,6 +367,8 @@ struct OptimizeReturnOfAlloc : public OpRewritePattern<func::ReturnOp> {
               .Case<ArrayRefCopyOp>([&](auto copy) { return copy.getInput(); })
               .Case<ArrayRefInjectOp>(
                   [&](auto inject) { return inject.getInput(); })
+              .Case<ArrayRefFromArrayOp>(
+                  [&](auto fromArray) { return fromArray.getInput(); })
               .Case<func::CallOp>([&](auto call) {
                 OpResult result = cast<OpResult>(value);
                 return call.getOperand(result.getResultNumber());
@@ -409,21 +411,50 @@ void LowerArraysPass::runOnOperation() {
   RewritePatternSet patterns(&getContext());
 
   converter.addConversion([](Type type) { return type; });
-  converter.addConversion([](ArrayType type) {
-    return ArrayRefType::get(type.getElementType(), type.getNumElements());
+  converter.addConversion([&converter](ArrayType type) -> Type {
+    Type newElem = converter.convertType(type.getElementType());
+    // Don't convert nested array types.
+    if (newElem != type.getElementType())
+      return type;
+    return ArrayRefType::get(newElem, type.getNumElements());
   });
   converter.addConversion([&converter](StateType type) {
     return StateType::get(converter.convertType(type.getType()));
   });
 
-  target.addIllegalOp<ArrayCreateOp, ArrayConcatOp, ArrayGetOp, ArrayInjectOp,
-                      ArraySliceOp>();
+  target.addLegalOp<ArrayRefFromArrayOp, ArrayRefToArrayOp>();
   target.markUnknownOpDynamicallyLegal(
       [&](Operation *op) { return converter.isLegal(op); });
   target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp func) {
     FunctionType fty = func.getFunctionType();
     return converter.isLegal(fty.getInputs()) &&
            converter.isLegal(fty.getResults());
+  });
+  // An ArrayGetOp may legally return an array if the input type was a nested
+  // array. Similarly for ArrayCreateOp and ArrayInjectOp.
+  target.addDynamicallyLegalOp<ArrayGetOp>([&](ArrayGetOp op) {
+    return converter.isLegal(op.getInput().getType());
+  });
+  target.addDynamicallyLegalOp<ArrayCreateOp, ArrayInjectOp>(
+      [&](Operation *op) {
+        return converter.isLegal(op->getResult(0).getType());
+      });
+
+  // Produces an ArrayRefType from an ArrayType.
+  converter.addTargetMaterialization([&](OpBuilder &b, ArrayRefType type,
+                                         ValueRange values, Location loc,
+                                         Type fromType) -> Value {
+    assert(isa<ArrayType>(fromType));
+    Value alloc = ArrayRefAllocOp::create(b, loc, type, {});
+    return ArrayRefFromArrayOp::create(b, loc, type, alloc, values.front());
+  });
+
+  // Produces an ArrayType from an ArrayRefType.
+  converter.addSourceMaterialization([&](OpBuilder &b, ArrayType type,
+                                         ValueRange values,
+                                         Location loc) -> Value {
+    assert(isa<ArrayRefType>(values.front().getType()));
+    return ArrayRefToArrayOp::create(b, loc, type, values.front());
   });
 
   patterns.add<ConvertFunc, ConvertReturn, ConvertCall,
