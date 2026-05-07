@@ -444,3 +444,79 @@ def test_windowed_list_bitfield_scalar_data_uses_lambda():
   assert "[](const data_frame &f) { return f.vals; }" in hdr
   assert "&data_frame::vals" not in hdr
   assert "std::vector<value_type> vals_vector() const" in hdr
+
+
+def test_size_assert_emitted_for_struct():
+  """Each packed struct gets a `static_assert` pinning its `sizeof`."""
+  uint16 = types.UIntType("ui16", 16)
+  sint8 = types.SIntType("si8", 8)
+  s = types.StructType("!hw.struct<a: ui16, b: si8>", [("a", uint16),
+                                                       ("b", sint8)])
+
+  hdr = _generate_header([s])
+  # Total: 16 + 8 = 24 bits = 3 bytes.
+  assert "static_assert(sizeof(_struct_a_ui16_b_si8) == 3," in hdr
+  assert "packed layout does not match manifest size" in hdr
+
+
+def test_size_assert_emitted_for_union_and_wrappers():
+  """Unions and their padding wrapper structs each get a size assert."""
+  uint8 = types.UIntType("ui8", 8)
+  uint16 = types.UIntType("ui16", 16)
+  union_t = types.UnionType("!hw.union<a: ui8, b: ui16>", [("a", uint8),
+                                                           ("b", uint16)])
+
+  hdr = _generate_header([union_t])
+  # The union itself is 2 bytes (max(8, 16) = 16 bits).
+  assert "static_assert(sizeof(_union_a_ui8_b_ui16) == 2," in hdr
+  # The wrapper around the narrow `a` field is also 2 bytes.
+  assert "static_assert(sizeof(_union_a_ui8_b_ui16_a) == 2," in hdr
+
+
+def test_size_assert_emitted_for_window_frames():
+  """Both `data_frame` and `header_frame` get size asserts inside the window."""
+  uint16 = types.UIntType("ui16", 16)
+  uint32 = types.UIntType("ui32", 32)
+  element_id = "!hw.struct<x: ui32, y: ui32>"
+  list_id = f"!esi.list<{element_id}>"
+  arg_struct_id = f"!hw.struct<coords: {list_id}>"
+  header_struct_id = "!hw.struct<coords_count: ui16>"
+  data_struct_id = f"!hw.struct<coords: !hw.array<1x{element_id}>>"
+  lowered_id = f"!hw.union<header: {header_struct_id}, data: {data_struct_id}>"
+  window_id = (f'!esi.window<"coords_only", {arg_struct_id}, '
+               '[<"header", [<"coords" countWidth 16>]>, '
+               '<"data", [<"coords", 1>]>]>')
+
+  element = types.StructType(element_id, [("x", uint32), ("y", uint32)])
+  coord_list = types.ListType(list_id, element)
+  arg_struct = types.StructType(arg_struct_id, [("coords", coord_list)])
+  header_struct = types.StructType(header_struct_id, [("coords_count", uint16)])
+  data_struct = types.StructType(
+      data_struct_id,
+      [("coords", types.ArrayType(f"!hw.array<1x{element_id}>", element, 1))],
+  )
+  lowered = types.UnionType(lowered_id, [("header", header_struct),
+                                         ("data", data_struct)])
+  window = types.WindowType(window_id, "coords_only", arg_struct, lowered, [
+      types.WindowType.Frame("header",
+                             [types.WindowType.Field("coords", 0, 16)]),
+      types.WindowType.Frame("data", [types.WindowType.Field("coords", 1, 0)]),
+  ])
+
+  hdr = _generate_header([window])
+  # Both inner frames are sized to the wider data frame: 8 bytes per coord.
+  assert "static_assert(sizeof(data_frame) == 8," in hdr
+  assert "static_assert(sizeof(header_frame) == 8," in hdr
+
+
+def test_size_assert_skipped_for_unbounded_struct():
+  """Structs containing an `!esi.any` field have no static size, so no assert."""
+  uint8 = types.UIntType("ui8", 8)
+  any_t = types.AnyType("!esi.any")
+  s = types.StructType("!hw.struct<tag: ui8, data: !esi.any>",
+                       [("tag", uint8), ("data", any_t)])
+
+  hdr = _generate_header([s])
+  # The struct is still emitted, but no size assert (its size is unbounded).
+  assert "struct _struct_tag_ui8_data__esi_any" in hdr
+  assert "static_assert(sizeof(_struct_tag_ui8_data__esi_any)" not in hdr

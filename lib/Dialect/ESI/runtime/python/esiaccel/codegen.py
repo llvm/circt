@@ -535,6 +535,38 @@ class CppTypeEmitter:
     """Compute the byte width of a field type, rounding up to full bytes."""
     return (field_type.bit_width + 7) // 8
 
+  def _safe_byte_width(self, esi_type: types.ESIType) -> Optional[int]:
+    """Return the bounded byte width of `esi_type`, or `None` if it has no
+    well-defined static size (e.g. unbounded `!esi.any` or recursive types).
+    """
+    try:
+      bit_width = esi_type.bit_width
+    except Exception:
+      return None
+    if bit_width is None or bit_width < 0:
+      return None
+    return (bit_width + 7) // 8
+
+  def _emit_size_assert(self,
+                        hdr: TextIO,
+                        type_name: str,
+                        expected_bytes: Optional[int],
+                        indent: str = "") -> None:
+    """Emit a `static_assert` that pins the C++ `sizeof` of a packed type to
+    the byte width derived from the manifest.
+
+    `std::array` and bit-field layout are technically implementation-defined,
+    so this assertion is the safety net that catches a toolchain that lays
+    them out differently from the wire format.  Skipped silently for types
+    without a bounded static size.
+    """
+    if expected_bytes is None:
+      return
+    hdr.write(
+        f"{indent}static_assert(sizeof({type_name}) == {expected_bytes},\n"
+        f"{indent}              \"{type_name}: packed layout does not match "
+        f"manifest size\");\n")
+
   def _analyze_window(self, window_type: types.WindowType):
     """Extract the metadata needed to emit a bulk list window wrapper."""
     into_type = self._unwrap_aliases(window_type.into_type)
@@ -615,6 +647,7 @@ class CppTypeEmitter:
         "data_fields": data_fields,
         "data_pad_bytes": frame_bytes - data_bytes,
         "element_cpp": self._cpp_type(list_type.element_type),
+        "frame_bytes": frame_bytes,
         "header_fields": header_fields,
         "header_pad_bytes": frame_bytes - header_bytes,
         "list_field_name": list_field_name,
@@ -649,6 +682,8 @@ class CppTypeEmitter:
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(struct_type.id)};\n"
     )
     hdr.write("};\n")
+    self._emit_size_assert(hdr, self.type_id_map[struct_type],
+                           self._safe_byte_width(struct_type))
     hdr.write("#pragma pack(pop)\n\n")
 
   def _emit_union(self, hdr: TextIO, union_type: types.UnionType) -> None:
@@ -676,6 +711,7 @@ class CppTypeEmitter:
         field_cpp = self._cpp_type(field_type)
         hdr.write(f"  {field_cpp} {field_name};\n")
         hdr.write("};\n")
+        self._emit_size_assert(hdr, wrapper, union_bytes)
 
     # Second pass: emit the union itself.
     union_field_decls: List[str] = []
@@ -693,6 +729,7 @@ class CppTypeEmitter:
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(union_type.id)};\n"
     )
     hdr.write("};\n")
+    self._emit_size_assert(hdr, union_name, union_bytes)
     hdr.write("#pragma pack(pop)\n\n")
 
   def _emit_window(self, hdr: TextIO, window_type: types.WindowType) -> None:
@@ -725,6 +762,7 @@ class CppTypeEmitter:
       decl = self._format_window_field_decl(field_name, field_type)
       hdr.write(f"    {decl}\n")
     hdr.write("  };\n")
+    self._emit_size_assert(hdr, "data_frame", info["frame_bytes"], indent="  ")
     hdr.write("#pragma pack(pop)\n\n")
     hdr.write("private:\n")
     hdr.write("#pragma pack(push, 1)\n")
@@ -741,6 +779,10 @@ class CppTypeEmitter:
         decl = self._format_window_field_decl(field_name, field_type)
       hdr.write(f"    {decl}\n")
     hdr.write("  };\n")
+    self._emit_size_assert(hdr,
+                           "header_frame",
+                           info["frame_bytes"],
+                           indent="  ")
     hdr.write("#pragma pack(pop)\n\n")
     hdr.write("  header_frame header{};\n")
     hdr.write("  std::vector<data_frame> data_frames;\n")
