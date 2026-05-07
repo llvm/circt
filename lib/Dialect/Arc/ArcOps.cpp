@@ -749,22 +749,28 @@ LogicalResult ExecuteOp::verifyRegions() {
 }
 
 //===----------------------------------------------------------------------===//
-// ArrayRefCreateOp
+// ArrayRefAllocOp
 //===----------------------------------------------------------------------===//
 
-ParseResult parseARCreate(OpAsmParser &parser, Type destType, Type &inputType,
-                          SmallVectorImpl<Type> &elementsTypes) {
-  inputType = destType;
-  ArrayRefType arrayType = dyn_cast<ArrayRefType>(destType);
-  if (!arrayType)
-    return parser.emitError(parser.getCurrentLocation(),
-                            "expected arrayref type");
-  elementsTypes.append(arrayType.getNumElements(), arrayType.getElementType());
+LogicalResult ArrayRefAllocOp::verify() {
+  if (auto init = getInit(); init.has_value()) {
+    if (init->size() != getType().getNumElements()) {
+      return emitOpError("init size does not match array size; init had size ")
+             << init->size() << " but array has size "
+             << getType().getNumElements();
+    }
+
+    int elemBitwidth = getType().getElementType().getIntOrFloatBitWidth();
+    for (int64_t value : *init) {
+      APInt apint(elemBitwidth, value);
+      if (apint.getSExtValue() != value) {
+        return emitOpError("value ") << value << " cannot be represented as `"
+                                     << getType().getElementType() << "`";
+      }
+    }
+  }
   return success();
 }
-
-void printARCreate(OpAsmPrinter &printer, Operation *op, Type destType,
-                   Type inputType, TypeRange elementsTypes) {}
 
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 

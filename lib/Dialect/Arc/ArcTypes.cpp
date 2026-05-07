@@ -18,10 +18,8 @@ using namespace circt;
 using namespace arc;
 using namespace mlir;
 
-static ParseResult parseArcArrayRef(AsmParser &parser, Attribute &dim,
-                                    Type &elementType);
-static void printArcArrayRef(AsmPrinter &printer, Attribute dim,
-                             Type elementType);
+static ParseResult parseXInDimList(AsmParser &p, Type &elementType);
+static void printXInDimList(AsmPrinter &p, Type elementType);
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Arc/ArcTypes.cpp.inc"
@@ -101,11 +99,8 @@ unsigned MemoryType::getStride() {
   unsigned stride = (getWordType().getWidth() + 7) / 8;
   return llvm::alignToPowerOf2(stride, llvm::bit_ceil(std::min(stride, 16U)));
 }
-size_t ArrayRefType::getNumElements() const {
-  if (auto intAttr = llvm::dyn_cast<IntegerAttr>(getSizeAttr()))
-    return intAttr.getInt();
-  return 0;
-}
+
+size_t ArrayRefType::getNumElements() const { return getSize(); }
 
 std::optional<int64_t> ArrayRefType::getBitWidth() const {
   auto elementBitWidth = hw::getBitWidth(getElementType());
@@ -117,34 +112,23 @@ std::optional<int64_t> ArrayRefType::getBitWidth() const {
   return numElements * elementBitWidth;
 }
 
-static ParseResult parseArcArrayRef(AsmParser &p, Attribute &dim, Type &inner) {
-  uint64_t dimLiteral;
-  auto int64Type = p.getBuilder().getIntegerType(64);
-
-  if (auto res = p.parseOptionalInteger(dimLiteral); res.has_value()) {
-    if (failed(*res))
-      return failure();
-    dim = p.getBuilder().getI64IntegerAttr(dimLiteral);
-  } else if (auto res64 = p.parseOptionalAttribute(dim, int64Type);
-             res64.has_value()) {
-    if (failed(*res64))
-      return failure();
-  } else
-    return p.emitError(p.getNameLoc(), "expected integer");
-
-  if (!isa<IntegerAttr>(dim)) {
-    p.emitError(p.getNameLoc(), "unsupported dimension kind in arc.arrayref");
-    return failure();
-  }
-
-  if (p.parseXInDimensionList() || p.parseType(inner))
-    return failure();
-
-  return success();
+ShapedType ArrayRefType::cloneWith(std::optional<ArrayRef<int64_t>> shape,
+                                   Type elementType) const {
+  llvm_unreachable("ArrayRefType::cloneWith not implemented!");
 }
 
-static void printArcArrayRef(AsmPrinter &p, Attribute dim, Type elementType) {
-  p.printAttributeWithoutType(dim);
+bool ArrayRefType::hasRank() const { return true; }
+
+ArrayRef<int64_t> ArrayRefType::getShape() const {
+  const uint64_t &size = getImpl()->size;
+  return ArrayRef<int64_t>(reinterpret_cast<const int64_t *>(&size), 1);
+}
+
+static ParseResult parseXInDimList(AsmParser &p, Type &elementType) {
+  return failure(p.parseXInDimensionList() || p.parseType(elementType));
+}
+
+static void printXInDimList(AsmPrinter &p, Type elementType) {
   p << "x" << elementType;
 }
 

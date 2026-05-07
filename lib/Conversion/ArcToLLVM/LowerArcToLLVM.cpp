@@ -1352,7 +1352,7 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
         LLVM::AllocaOp::create(rewriter, op.getLoc(), ptrTy, i8Ty, size);
 
     if (op.getInitAttr()) {
-      ArrayAttr initAttr = cast<ArrayAttr>(op.getInitAttr());
+      DenseI64ArrayAttr initAttr = op.getInitAttr();
       if (isZero(initAttr)) {
         auto i8Ty = rewriter.getI8Type();
         auto zero = LLVM::ConstantOp::create(rewriter, op.getLoc(), i8Ty, 0);
@@ -1367,17 +1367,13 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
     return success();
   }
 
-  bool isZero(ArrayAttr arrayAttr) const {
-    for (const Attribute &elem : arrayAttr.getValue()) {
-      if (auto intAttr = dyn_cast<IntegerAttr>(elem);
-          !intAttr || !intAttr.getValue().isZero())
-        return false;
-    }
-    return true;
+  bool isZero(DenseI64ArrayAttr arrayAttr) const {
+    return llvm::all_of(arrayAttr.asArrayRef(),
+                        [](int64_t i) { return i == 0; });
   }
 
   void initializeArray(ConversionPatternRewriter &rewriter, Location loc,
-                       Value alloc, ArrayAttr initAttr,
+                       Value alloc, DenseI64ArrayAttr initAttr,
                        ArrayRefType arrayRefType) const {
     size_t elemByteWidth = computeElementByteWidth(arrayRefType);
     Type ptrTy = LLVM::LLVMPointerType::get(getContext());
@@ -1389,7 +1385,7 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
       auto elemAddr =
           LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty, alloc, elemOffset);
       auto elem = LLVM::ConstantOp::create(
-          rewriter, loc, arrayRefType.getElementType(), initAttr.getValue()[i]);
+          rewriter, loc, arrayRefType.getElementType(), initAttr[i]);
       LLVM::StoreOp::create(rewriter, loc, elem, elemAddr);
     }
   }
@@ -1429,7 +1425,7 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
   matchAndRewrite(ArrayRefGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    ArrayRefType arrayRefType = cast<ArrayRefType>(op.getArray().getType());
+    ArrayRefType arrayRefType = cast<ArrayRefType>(op.getInput().getType());
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     auto i64Ty = rewriter.getI64Type();
@@ -1441,7 +1437,7 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
     Value byteOffset =
         LLVM::MulOp::create(rewriter, loc, adaptor.getIndex(), stride);
     auto elemAddr = LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty,
-                                        adaptor.getArray(), byteOffset);
+                                        adaptor.getInput(), byteOffset);
     Value loaded = LLVM::LoadOp::create(
         rewriter, loc, typeConverter->convertType(op.getValue().getType()),
         elemAddr);
@@ -1486,7 +1482,7 @@ struct ArrayRefSliceOpLowering : public OpConversionPattern<ArrayRefSliceOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     // The result type is the sub-array type; use its element size.
-    ArrayRefType resultType = cast<ArrayRefType>(op.getDst().getType());
+    ArrayRefType resultType = cast<ArrayRefType>(op.getOutput().getType());
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     auto i64Ty = rewriter.getI64Type();
@@ -1511,14 +1507,14 @@ struct ArrayRefCopyOpLowering : public OpConversionPattern<ArrayRefCopyOp> {
   matchAndRewrite(ArrayRefCopyOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
-    ArrayRefType arrayRefType = cast<ArrayRefType>(op.getDestInput().getType());
+    ArrayRefType arrayRefType = cast<ArrayRefType>(op.getInput().getType());
     auto i64Ty = rewriter.getI64Type();
     size_t byteWidth = computeByteWidth(arrayRefType);
     Value size = LLVM::ConstantOp::create(rewriter, loc, i64Ty, byteWidth);
-    LLVM::MemcpyOp::create(rewriter, loc, adaptor.getDestInput(),
+    LLVM::MemcpyOp::create(rewriter, loc, adaptor.getInput(),
                            adaptor.getSource(), size,
                            /*isVolatile=*/false);
-    rewriter.replaceOp(op, adaptor.getDestInput());
+    rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }
 };

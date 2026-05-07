@@ -11,6 +11,7 @@
 
 include "circt/Dialect/Arc/ArcDialect.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/OpBase.td"
 include "circt/Dialect/HW/HWTypeInterfaces.td"
 
@@ -59,7 +60,8 @@ def SimModelInstance : ArcTypeDef<"SimModelInstance"> {
 }
 
 def ArrayRefType : ArcTypeDef<"ArrayRef", [
-  DeclareTypeInterfaceMethods<BitWidthTypeInterface>
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>,
+  DeclareTypeInterfaceMethods<ShapedTypeInterface>
 ]> {
   let summary = "array reference";
   let description = [{
@@ -68,19 +70,17 @@ def ArrayRefType : ArcTypeDef<"ArrayRef", [
   let mnemonic = "arrayref";
   let parameters = (ins
     "::mlir::Type":$elementType,
-    "::mlir::IntegerAttr":$sizeAttr
+    "uint64_t":$size
   );
 
   let builders = [
-    TypeBuilderWithInferredContext<(ins "Type":$elementType, "size_t":$size), [{
+    TypeBuilderWithInferredContext<(ins "Type":$elementType, "uint64_t":$size), [{
       auto *ctx = elementType.getContext();
-      auto intType = mlir::IntegerType::get(ctx, 64);
-      auto sizeAttr = mlir::IntegerAttr::get(intType, size);
-      return $_get(ctx, elementType, sizeAttr);
+      return $_get(ctx, elementType, size);
     }]>
   ];
 
-  let assemblyFormat = "`<` custom<ArcArrayRef>($sizeAttr, $elementType) `>`";
+  let assemblyFormat = "`<` $size `` custom<XInDimList>($elementType) `>`";
 
   let extraClassDeclaration = [{
     size_t getNumElements() const;

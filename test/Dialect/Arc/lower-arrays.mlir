@@ -25,7 +25,7 @@ func.func @test_func_call(%a: !hw.array<2xi32>) -> !hw.array<2xi32> {
 
 // CHECK-LABEL: func.func @test_aggregate_constant
 // CHECK-SAME: (%[[ARG0:.*]]: !arc.arrayref<2xi32>) -> !arc.arrayref<2xi32>
-// CHECK-NEXT: %[[ALLOC:.*]] = arc.arrayref.alloc init [0 : i32, 1 : i32] <2xi32>
+// CHECK-NEXT: %[[ALLOC:.*]] = arc.arrayref.alloc init([0, 1]) : <2xi32>
 // CHECK-NEXT: %[[COPY:.*]] = arc.arrayref.copy %[[ARG0]] = %[[ALLOC]] : <2xi32>
 // CHECK-NEXT: return %[[COPY]] : !arc.arrayref<2xi32>
 func.func @test_aggregate_constant() -> !hw.array<2xi32> {
@@ -56,7 +56,7 @@ func.func @test_array_inject(%a: !hw.array<2xi32>, %b: i1, %c: i32) -> !hw.array
 
 // CHECK-LABEL: func.func @test_array_slice
 // CHECK-SAME: (%[[ARG0:.*]]: !arc.arrayref<2xi32>, %[[ARG1:.*]]: !arc.arrayref<4xi32>, %[[ARG2:.*]]: i2) -> !arc.arrayref<2xi32>
-// CHECK-NEXT: %[[ALLOC:.*]] = arc.arrayref.alloc <4xi32>
+// CHECK-NEXT: %[[ALLOC:.*]] = arc.arrayref.alloc : <4xi32>
 // CHECK-NEXT: %[[COPY1:.*]] = arc.arrayref.copy %[[ALLOC]] = %[[ARG1]] : <4xi32>
 // CHECK-NEXT: %[[IDX:.*]] = arith.index_castui %[[ARG2]] : i2 to index
 // CHECK-NEXT: %[[SLICE:.*]] = arc.arrayref.slice %[[COPY1]][%[[IDX]]] : (!arc.arrayref<4xi32>) -> !arc.arrayref<2xi32>
@@ -83,7 +83,7 @@ func.func @test_array_concat(%a: !hw.array<2xi32>, %b: !hw.array<2xi32>) -> !hw.
 
 // CHECK-LABEL: func.func @test_array_create
 // CHECK-SAME: (%[[ARG0:.*]]: !arc.arrayref<2xi32>, %[[ARG1:.*]]: i32, %[[ARG2:.*]]: i32) -> !arc.arrayref<2xi32>
-// CHECK-NEXT: %[[ALLOC:.*]] = arc.arrayref.alloc <2xi32>
+// CHECK-NEXT: %[[ALLOC:.*]] = arc.arrayref.alloc : <2xi32>
 // CHECK-NEXT: %[[CREATE:.*]] = arc.arrayref.create %[[ALLOC]] = %[[ARG1]], %[[ARG2]] : <2xi32>
 // CHECK-NEXT: %[[COPY:.*]] = arc.arrayref.copy %[[ARG0]] = %[[CREATE]] : <2xi32>
 // CHECK-NEXT: return %[[COPY]] : !arc.arrayref<2xi32>

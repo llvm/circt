@@ -54,7 +54,7 @@ func.func @ArrayRefCreate(%arg0: !arc.arrayref<2xi32>, %arg1: i32, %arg2: i32) -
 // CHECK-NEXT: %[[A:.*]] = llvm.alloca %[[C8]] x i8
 // CHECK-NEXT: return %[[A]]
 func.func @ArrayRefAlloc() -> !arc.arrayref<2xi32> {
-  %0 = arc.arrayref.alloc  !arc.arrayref<2xi32>
+  %0 = arc.arrayref.alloc : !arc.arrayref<2xi32>
   return %0 : !arc.arrayref<2xi32>
 }
 
@@ -71,7 +71,7 @@ func.func @ArrayRefAlloc() -> !arc.arrayref<2xi32> {
 // CHECK-NEXT: llvm.store %[[V456]], %[[GEP1]]
 // CHECK-NEXT: return %[[A]]
 func.func @ArrayRefInit() -> !arc.arrayref<2xi32> {
-  %0 = arc.arrayref.alloc init [123 : i32, 456 : i32] !arc.arrayref<2xi32>
+  %0 = arc.arrayref.alloc init([123, 456]) : !arc.arrayref<2xi32>
   return %0 : !arc.arrayref<2xi32>
 }
 
@@ -82,7 +82,7 @@ func.func @ArrayRefInit() -> !arc.arrayref<2xi32> {
 // CHECK-NEXT: "llvm.intr.memset"(%[[A]], %[[ZERO]], %[[C8]])
 // CHECK-NEXT: return %[[A]]
 func.func @ArrayRefInitZero() -> !arc.arrayref<2xi32> {
-  %0 = arc.arrayref.alloc init [0 : i32, 0 : i32] !arc.arrayref<2xi32>
+  %0 = arc.arrayref.alloc init([0, 0]) : !arc.arrayref<2xi32>
   return %0 : !arc.arrayref<2xi32>
 }
 

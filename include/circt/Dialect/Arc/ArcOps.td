@@ -1094,48 +1094,57 @@ def ArrayRefAllocOp : ArcOp<"arrayref.alloc", []> {
     Allocates an array on the stack. If `init` is set, the array is initialized
     to this value. Otherwise the array's contents are undefined.
   }];
-  let arguments = (ins OptionalAttr<AnyAttr>:$init);
-  let results = (outs ArrayRefType:$dest);
-  let assemblyFormat = "attr-dict (`init` $init^)? type($dest)";
+  let arguments = (ins OptionalAttr<DenseI64ArrayAttr>:$init);
+  let results = (outs ArrayRefType:$output);
+  let assemblyFormat = "attr-dict (`init` `(` $init^ `)`)? `:` type($output)";
+  let hasVerifier = 1;
 }
 
 def ArrayRefGetOp : ArcOp<"arrayref.get", [
-  MemoryEffects<[MemRead]>
+  MemoryEffects<[MemRead]>,
+  TypesMatchWith<"array element type matches the result type", "input", "value",
+                 "cast<ArrayRefType>($_self).getElementType()">
 ]> {
   let summary = "array get";
   let description = [{
     Loads a single value from an arrayref.
   }];
-  let arguments = (ins ArrayRefType:$array, Index:$index);
+  let arguments = (ins ArrayRefType:$input, Index:$index);
   let results = (outs AnyType:$value);
   let assemblyFormat = [{
-    $array `[` $index `]` attr-dict `:` type($array) `->` type($value)
+    $input `[` $index `]` attr-dict `:` type($input) `->` type($value)
   }];
 }
 
 def ArrayRefInjectOp : ArcOp<"arrayref.inject", [
-  MemoryEffects<[MemRead, MemWrite]>
+  MemoryEffects<[MemRead, MemWrite]>,
+  AllTypesMatch<["input", "output"]>,
+  TypesMatchWith<"element type matches input element type", "input", "element",
+                 "cast<ArrayRefType>($_self).getElementType()">
 ]> {
   let summary = "array inject";
   let description = [{
     Stores a single value into an arrayref.
   }];
   let arguments = (ins ArrayRefType:$input, Index:$index, AnyType:$element);
-  let results = (outs ArrayRefType:$result);
+  let results = (outs ArrayRefType:$output);
   let assemblyFormat = [{
-    $input `[` $index `]` `,` $element attr-dict `:` type($input) `,` type($element) `->` type($result)
+    $input `[` $index `]` `,` $element attr-dict `:` type($input) `,` type($element) `->` type($output)
   }];
 }
 
-def ArrayRefSliceOp : ArcOp<"arrayref.slice", [Pure]> {
+def ArrayRefSliceOp : ArcOp<"arrayref.slice", [
+  Pure,
+  AllElementTypesMatch<["input", "output"]>
+]> {
   let summary = "array slice";
   let description = [{
     Slices an array into a sub-array, returning a view into the original array.
   }];
   let arguments = (ins ArrayRefType:$input, Index:$lowIndex);
-  let results = (outs ArrayRefType:$dst);
+  let results = (outs ArrayRefType:$output);
   let assemblyFormat = [{
-    $input`[`$lowIndex`]` attr-dict `:` functional-type($input, $dst)
+    $input`[`$lowIndex`]` attr-dict `:` functional-type($input, $output)
   }];
 }
 
@@ -1147,15 +1156,20 @@ def ArrayRefCopyOp : ArcOp<"arrayref.copy", [
   let description = [{
     Copies the content of one array into another array. Returns the input array.
   }];
-  let arguments = (ins ArrayRefType:$destInput, ArrayRefType:$source);
-  let results = (outs ArrayRefType:$destResult);
+  let arguments = (ins ArrayRefType:$input, ArrayRefType:$source);
+  let results = (outs ArrayRefType:$output);
   let assemblyFormat = [{
-    $destInput `=` $source attr-dict `:` type($destInput)
+    $input `=` $source attr-dict `:` type($input)
   }];
 }
 
 def ArrayRefCreateOp : ArcOp<"arrayref.create", [
-  MemoryEffects<[MemWrite]>
+  MemoryEffects<[MemWrite]>,
+  AllTypesMatch<["input", "output"]>,
+  TypesMatchWith<"operand types match element type",
+                 "output", "elements", "SmallVector<Type, 2>("
+                 "cast<ArrayRefType>($_self).getNumElements(), "
+                 "cast<ArrayRefType>($_self).getElementType())">
 ]> {
   let summary = "array create";
   let description = [{
@@ -1165,10 +1179,9 @@ def ArrayRefCreateOp : ArcOp<"arrayref.create", [
     The `input` array is populated with `elements` and is returned.
   }];
   let arguments = (ins ArrayRefType:$input, Variadic<AnyType>:$elements);
-  let results = (outs ArrayRefType:$dest);
+  let results = (outs ArrayRefType:$output);
   let assemblyFormat = [{
-    $input `=` $elements attr-dict `:` type($dest)
-    custom<ARCreate>(ref(type($dest)), type($input), type($elements))
+    $input `=` $elements attr-dict `:` type($output)
   }];
 }
 

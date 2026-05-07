@@ -55,7 +55,7 @@ struct LowerArraysPass : public arc::impl::LowerArraysBase<LowerArraysPass> {
   void runOnOperation() override;
 };
 
-Value AsIndex(Value value, OpBuilder &builder) {
+Value asIndex(Value value, OpBuilder &builder) {
   Location loc = builder.getUnknownLoc();
   if (Operation *parent = value.getDefiningOp()) {
     loc = parent->getLoc();
@@ -64,7 +64,7 @@ Value AsIndex(Value value, OpBuilder &builder) {
                                       value);
 }
 
-Value CloneArrayRef(Value value, OpBuilder &builder, Location loc) {
+Value cloneArrayRef(Value value, OpBuilder &builder, Location loc) {
   Value newAlloc = ArrayRefAllocOp::create(builder, loc, value.getType(), {});
   return ArrayRefCopyOp::create(builder, loc, newAlloc, value);
 }
@@ -179,9 +179,14 @@ struct ConvertAggregateConstant
   LogicalResult
   matchAndRewrite(AggregateConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Type newType = getTypeConverter()->convertType(op.getType());
+    auto newType =
+        cast<ArrayRefType>(getTypeConverter()->convertType(op.getType()));
+    SmallVector<int64_t> ints;
+    for (APInt apint : op.getFieldsAttr().getAsValueRange<IntegerAttr>()) {
+      ints.push_back(apint.getSExtValue());
+    }
     Value newOp = ArrayRefAllocOp::create(rewriter, op.getLoc(), newType,
-                                          op.getFieldsAttr());
+                                          rewriter.getDenseI64ArrayAttr(ints));
     rewriter.replaceOp(op, newOp);
     return success();
   }
@@ -193,7 +198,7 @@ struct ConvertArrayGet : public OpConversionPattern<ArrayGetOp> {
   LogicalResult
   matchAndRewrite(hw::ArrayGetOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value index = AsIndex(op.getIndex(), rewriter);
+    Value index = asIndex(op.getIndex(), rewriter);
     Type resultType = getTypeConverter()->convertType(op.getType());
     Value newOp = ArrayRefGetOp::create(rewriter, op.getLoc(), resultType,
                                         adaptor.getInput(), index);
@@ -208,8 +213,8 @@ struct ConvertArrayInject : public OpConversionPattern<ArrayInjectOp> {
   LogicalResult
   matchAndRewrite(ArrayInjectOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value index = AsIndex(op.getIndex(), rewriter);
-    Value dest = CloneArrayRef(adaptor.getInput(), rewriter, op.getLoc());
+    Value index = asIndex(op.getIndex(), rewriter);
+    Value dest = cloneArrayRef(adaptor.getInput(), rewriter, op.getLoc());
     Value newOp =
         ArrayRefInjectOp::create(rewriter, op.getLoc(), dest.getType(), dest,
                                  index, adaptor.getElement());
@@ -226,8 +231,8 @@ struct ConvertArraySlice : public OpConversionPattern<ArraySliceOp> {
                   ConversionPatternRewriter &rewriter) const override {
     // Because we're converting from value semantics and ArrayRefSliceOp is
     // a subview-like operator, we must clone the input array first.
-    Value newInput = CloneArrayRef(adaptor.getInput(), rewriter, op.getLoc());
-    Value index = AsIndex(op.getLowIndex(), rewriter);
+    Value newInput = cloneArrayRef(adaptor.getInput(), rewriter, op.getLoc());
+    Value index = asIndex(op.getLowIndex(), rewriter);
     Type destType = getTypeConverter()->convertType(op.getType());
     Value newOp = ArrayRefSliceOp::create(rewriter, op.getLoc(), destType,
                                           newInput, index);
@@ -330,12 +335,15 @@ struct OptimizeReturnOfAlloc : public OpRewritePattern<func::ReturnOp> {
     for (auto [arg, result] : llvm::zip(args, results)) {
       Value resultValue = result.get();
       auto copy = resultValue.getDefiningOp<ArrayRefCopyOp>();
-      if (!copy || copy.getDestInput() != arg)
+      if (!copy || copy.getInput() != arg)
         continue;
       ArrayRefAllocOp alloc = getUltimatelyDefiningAlloc(copy.getSource());
       if (!alloc || alloc.getInit())
         continue;
-      result.set(copy.getSource());
+      // Note that `result` is a structured binding, which cannot be implicitly
+      // captured until C++20.
+      rewriter.modifyOpInPlace(
+          op, [&, &result = result] { result.set(copy.getSource()); });
       rewriter.replaceAllUsesWith(alloc, arg);
       rewriter.eraseOp(alloc);
       rewriter.eraseOp(copy);
@@ -354,16 +362,16 @@ struct OptimizeReturnOfAlloc : public OpRewritePattern<func::ReturnOp> {
       if (auto alloc = dyn_cast<ArrayRefAllocOp>(op))
         return alloc;
 
-      value = TypeSwitch<Operation *, Value>(op)
-                  .Case<ArrayRefCopyOp>(
-                      [&](auto copy) { return copy.getDestInput(); })
-                  .Case<ArrayRefInjectOp>(
-                      [&](auto inject) { return inject.getInput(); })
-                  .Case<func::CallOp>([&](auto call) {
-                    OpResult result = cast<OpResult>(value);
-                    return call.getOperand(result.getResultNumber());
-                  })
-                  .Default([&](Operation *) { return nullptr; });
+      value =
+          TypeSwitch<Operation *, Value>(op)
+              .Case<ArrayRefCopyOp>([&](auto copy) { return copy.getInput(); })
+              .Case<ArrayRefInjectOp>(
+                  [&](auto inject) { return inject.getInput(); })
+              .Case<func::CallOp>([&](auto call) {
+                OpResult result = cast<OpResult>(value);
+                return call.getOperand(result.getResultNumber());
+              })
+              .Default([&](Operation *) { return nullptr; });
     }
     return nullptr;
   }
