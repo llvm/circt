@@ -3,9 +3,7 @@
 
 # Build a simple two-module HW design (Top instantiates Inner) and run the
 # `hw-flatten-modules` pass on it. After flattening, the instantiation of
-# `Inner` should be inlined into `Top`. This also exercises the registration
-# of the LLVM dialect's inliner interface, which the FlattenModules pass
-# requires when it builds an `mlir::InlinerInterface`.
+# `Inner` should be inlined into `Top`.
 
 import circt
 from circt.dialects import comb, hw
