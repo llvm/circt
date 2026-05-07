@@ -13,6 +13,7 @@
 #include <array>
 #include <chrono>
 #include <cstring>
+#include <deque>
 
 using namespace esi;
 
@@ -731,6 +732,38 @@ TEST(TypedPortsTest, TypedFunctionNullThrowsAtConnect) {
   EXPECT_THROW(typed.connect(), AcceleratorMismatchError);
 }
 
+TEST(TypedPortsTest, TypedFunctionCallBeforeConnectThrows) {
+  // call() before connect() must throw, not dereference a null optional.
+  TypedFunction<uint32_t, uint16_t> typed(nullptr);
+  EXPECT_THROW(typed.call(0u).get(), std::runtime_error);
+}
+
+TEST(TypedPortsTest, TypedFunctionDoubleConnectThrows) {
+  // A second connect() on an already-connected wrapper must throw rather
+  // than silently rebuild internal state.
+  SIntType argInner("si24", 24);
+  ChannelType argChanType("channel<si24>", &argInner);
+  UIntType resultInner("ui15", 15);
+  ChannelType resultChanType("channel<ui15>", &resultInner);
+
+  BundleType::ChannelVector channels = {
+      {"arg", BundleType::Direction::To, &argChanType},
+      {"result", BundleType::Direction::From, &resultChanType},
+  };
+  BundleType bundleType("func_bundle", channels);
+
+  MockWritePort mockWrite(&argInner);
+  CallbackDrivenMockReadPort mockRead(&resultInner);
+
+  auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
+                                                    mockWrite, mockRead);
+
+  TypedFunction<int32_t, uint16_t> typed(func);
+  typed.connect();
+  EXPECT_THROW(typed.connect(), std::runtime_error);
+  delete func;
+}
+
 TEST(TypedPortsTest, TypedFunctionConnectVerifiesTypes) {
   // Create channel types matching si24 arg and ui16 result.
   SIntType argInner("si24", 24);
@@ -794,11 +827,7 @@ TEST(TypedPortsTest, TypedFunctionCallRoundTrip) {
   BundleType bundleType("func_bundle", channels);
 
   MockWritePort mockWrite(&argInner);
-  MockReadPort mockRead(&resultInner);
-
-  // Set up mock read to return a known uint16_t value.
-  uint16_t expected = 42;
-  mockRead.nextResponse = MessageData::from(expected);
+  CallbackDrivenMockReadPort mockRead(&resultInner);
 
   auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
                                                     mockWrite, mockRead);
@@ -807,7 +836,13 @@ TEST(TypedPortsTest, TypedFunctionCallRoundTrip) {
   typed.connect();
 
   int32_t arg = 100;
-  uint16_t result = typed.call(arg).get();
+  std::future<uint16_t> f = typed.call(arg);
+  // Deliver the response frame to satisfy the future. ui15 wire width is 2
+  // bytes so a 2-byte payload is required.
+  uint16_t expected = 42;
+  EXPECT_TRUE(mockRead.deliver(std::make_unique<MessageData>(MessageData(
+      reinterpret_cast<const uint8_t *>(&expected), sizeof(expected)))));
+  uint16_t result = f.get();
   EXPECT_EQ(result, 42);
 
   // Verify the written arg matches — si24 wire size is 3 bytes.
@@ -1093,11 +1128,7 @@ TEST(TypedPortsTest, TypedFunctionSegmentedArg) {
   BundleType bundleType("func_bundle", channels);
 
   MockWritePort mockWrite(&argInner);
-  MockReadPort mockRead(&resultInner);
-
-  // Set up mock read to return a known uint16_t value.
-  uint16_t expected = 99;
-  mockRead.nextResponse = MessageData::from(expected);
+  CallbackDrivenMockReadPort mockRead(&resultInner);
 
   auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
                                                     mockWrite, mockRead);
@@ -1110,7 +1141,12 @@ TEST(TypedPortsTest, TypedFunctionSegmentedArg) {
   arg.header.b = 0xBE;
   arg.items = {10, 20};
 
-  uint16_t result = typed.call(arg).get();
+  std::future<uint16_t> f = typed.call(arg);
+  // Deliver the response frame to satisfy the call's future.
+  uint16_t expected = 99;
+  EXPECT_TRUE(mockRead.deliver(std::make_unique<MessageData>(MessageData(
+      reinterpret_cast<const uint8_t *>(&expected), sizeof(expected)))));
+  uint16_t result = f.get();
   EXPECT_EQ(result, 99u);
 
   // Verify the flattened arg: 6 bytes header + 8 bytes items = 14 bytes.
@@ -1144,6 +1180,230 @@ TEST(TypedPortsTest, VerifyTypeCompatibilityThrowsForUnsupportedType) {
   SIntType sint16("si16", 16);
   EXPECT_THROW(verifyTypeCompatibility<UnrecognizedCppType>(&sint16),
                AcceleratorMismatchError);
+}
+
+//===----------------------------------------------------------------------===//
+// TypedFunction custom-deserializer tests
+//===----------------------------------------------------------------------===//
+
+// Simple TypeDeserializer that decodes a single uint32 from one frame and
+// emits exactly one OneWord value per push. Used to exercise the typical
+// 1-frame-in / 1-typed-value-out custom path.
+//
+// Implements the standard backpressure/retry contract: a decoded `OneWord`
+// is buffered until the output callback accepts it; only then is the raw
+// message consumed. If `output()` returns false, the same raw message will
+// be retried later, and a follow-up `poke()` retries delivery of the
+// already-decoded value without re-decoding.
+struct OneWord {
+  uint32_t value;
+
+  class TypeDeserializer {
+  public:
+    using OutputCallback = detail::TypedReadOwnedCallback<OneWord>;
+
+    explicit TypeDeserializer(OutputCallback output)
+        : output(std::move(output)) {}
+
+    bool push(std::unique_ptr<SegmentedMessageData> &msg) {
+      // First, try to flush any previously-decoded value blocked on output.
+      if (pending) {
+        if (!output(pending))
+          return false;
+        pending.reset();
+      }
+
+      MessageData scratch;
+      const MessageData &flat =
+          detail::getMessageDataRef<OneWord>(*msg, scratch);
+      if (flat.getSize() != sizeof(uint32_t))
+        throw std::runtime_error("OneWord: bad size");
+      pending = std::make_unique<OneWord>();
+      std::memcpy(&pending->value, flat.getBytes(), sizeof(uint32_t));
+      // Raw message is consumed regardless of whether the typed output is
+      // immediately accepted.
+      msg.reset();
+      if (output(pending))
+        pending.reset();
+      return true;
+    }
+
+    bool poke() {
+      if (pending && output(pending)) {
+        pending.reset();
+        return true;
+      }
+      return false;
+    }
+
+  private:
+    OutputCallback output;
+    std::unique_ptr<OneWord> pending;
+  };
+};
+
+TEST(TypedPortsTest, TypedFunctionCustomDeserializerSingleFrame) {
+  UIntType argInner("ui32", 32);
+  ChannelType argChanType("channel<ui32>", &argInner);
+  UIntType resultInner("ui32", 32);
+  ChannelType resultChanType("channel<ui32>", &resultInner);
+
+  BundleType::ChannelVector channels = {
+      {"arg", BundleType::Direction::To, &argChanType},
+      {"result", BundleType::Direction::From, &resultChanType},
+  };
+  BundleType bundleType("func_bundle", channels);
+
+  MockWritePort mockWrite(&argInner);
+  CallbackDrivenMockReadPort mockRead(&resultInner);
+
+  auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
+                                                    mockWrite, mockRead);
+
+  TypedFunction<uint32_t, OneWord> typed(func);
+  typed.connect();
+
+  std::future<OneWord> f = typed.call(0u);
+  // Deliver one frame containing a single uint32; the deserializer produces
+  // one OneWord which fulfills the call's pending future.
+  uint32_t expected = 0xCAFE;
+  EXPECT_TRUE(mockRead.deliver(std::make_unique<MessageData>(MessageData(
+      reinterpret_cast<const uint8_t *>(&expected), sizeof(expected)))));
+
+  OneWord result = f.get();
+  EXPECT_EQ(result.value, expected);
+
+  delete func;
+}
+
+TEST(TypedPortsTest, TypedFunctionCustomDeserializerReadsMultipleFrames) {
+  // FragmentedCoordBatch's TypeDeserializer emits one batch per 8-byte
+  // FragmentedCoord. By feeding partial frames across multiple raw messages,
+  // we exercise the deserializer's persistent partial-buffer state across
+  // raw callback invocations.
+  UIntType argInner("ui32", 32);
+  ChannelType argChanType("channel<ui32>", &argInner);
+  UIntType resultInner("ui32", 32);
+  ChannelType resultChanType("channel<ui32>", &resultInner);
+
+  BundleType::ChannelVector channels = {
+      {"arg", BundleType::Direction::To, &argChanType},
+      {"result", BundleType::Direction::From, &resultChanType},
+  };
+  BundleType bundleType("func_bundle", channels);
+
+  MockWritePort mockWrite(&argInner);
+  CallbackDrivenMockReadPort mockRead(&resultInner);
+
+  auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
+                                                    mockWrite, mockRead);
+
+  TypedFunction<uint32_t, FragmentedCoordBatch> typed(func);
+  typed.connect();
+
+  std::future<FragmentedCoordBatch> f = typed.call(0u);
+
+  // Split a single 8-byte FragmentedCoord across two raw frames.
+  std::array<uint8_t, sizeof(FragmentedCoord)> coordBytes =
+      packCoordBytes(/*y=*/55, /*x=*/77);
+  std::vector<uint8_t> firstChunk(coordBytes.begin(), coordBytes.begin() + 6);
+  std::vector<uint8_t> secondChunk(coordBytes.begin() + 6, coordBytes.end());
+  EXPECT_TRUE(
+      mockRead.deliver(std::make_unique<MessageData>(std::move(firstChunk))));
+  EXPECT_TRUE(
+      mockRead.deliver(std::make_unique<MessageData>(std::move(secondChunk))));
+
+  FragmentedCoordBatch batch = f.get();
+  ASSERT_EQ(batch.coords.size(), 1u);
+  EXPECT_EQ(batch.coords[0].y, 55u);
+  EXPECT_EQ(batch.coords[0].x, 77u);
+
+  delete func;
+}
+
+TEST(TypedPortsTest, TypedFunctionCustomDeserializerSkipsResultTypeCheck) {
+  // OneWord has no _ESI_ID, so the result-side type check should be skipped
+  // and we should be able to connect against an arbitrarily-typed result
+  // channel without a thrown AcceleratorMismatchError.
+  UIntType argInner("ui32", 32);
+  ChannelType argChanType("channel<ui32>", &argInner);
+  // Use a wildly mismatched result type to prove the check is skipped.
+  StructType resultInner("Anything", {});
+  ChannelType resultChanType("channel<Anything>", &resultInner);
+
+  BundleType::ChannelVector channels = {
+      {"arg", BundleType::Direction::To, &argChanType},
+      {"result", BundleType::Direction::From, &resultChanType},
+  };
+  BundleType bundleType("func_bundle", channels);
+
+  MockWritePort mockWrite(&argInner);
+  CallbackDrivenMockReadPort mockRead(&resultInner);
+
+  auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
+                                                    mockWrite, mockRead);
+
+  TypedFunction<uint32_t, OneWord> typed(func);
+  EXPECT_NO_THROW(typed.connect());
+
+  delete func;
+}
+
+TEST(TypedPortsTest, TypedFunctionPipelinedCallsGetOutOfOrder) {
+  // Two pipelined calls, each with a multi-frame response decoded by the
+  // shared deserializer. Even when the second future's get() is called
+  // before the first, each future must yield its own call's result -- not
+  // the other call's frames. This exercises the FIFO contract of the
+  // TypedReadPort polling buffer that backs `call()`.
+  UIntType argInner("ui32", 32);
+  ChannelType argChanType("channel<ui32>", &argInner);
+  UIntType resultInner("ui32", 32);
+  ChannelType resultChanType("channel<ui32>", &resultInner);
+
+  BundleType::ChannelVector channels = {
+      {"arg", BundleType::Direction::To, &argChanType},
+      {"result", BundleType::Direction::From, &resultChanType},
+  };
+  BundleType bundleType("func_bundle", channels);
+
+  MockWritePort mockWrite(&argInner);
+  CallbackDrivenMockReadPort mockRead(&resultInner);
+
+  auto *func = services::FuncService::Function::get(AppID("test"), &bundleType,
+                                                    mockWrite, mockRead);
+
+  TypedFunction<uint32_t, FragmentedCoordBatch> typed(func);
+  typed.connect();
+
+  // Issue two calls before any frames arrive; futures reserve slots in the
+  // polling buffer in call FIFO order.
+  std::future<FragmentedCoordBatch> f1 = typed.call(0u);
+  std::future<FragmentedCoordBatch> f2 = typed.call(0u);
+
+  auto deliverCoord = [&](uint32_t y, uint32_t x) {
+    auto bytes = packCoordBytes(y, x);
+    std::vector<uint8_t> first(bytes.begin(), bytes.begin() + 6);
+    std::vector<uint8_t> second(bytes.begin() + 6, bytes.end());
+    EXPECT_TRUE(
+        mockRead.deliver(std::make_unique<MessageData>(std::move(first))));
+    EXPECT_TRUE(
+        mockRead.deliver(std::make_unique<MessageData>(std::move(second))));
+  };
+  deliverCoord(/*y=*/11, /*x=*/22); // call 1's response
+  deliverCoord(/*y=*/33, /*x=*/44); // call 2's response
+
+  // Intentionally retrieve the second call's result first.
+  FragmentedCoordBatch r2 = f2.get();
+  ASSERT_EQ(r2.coords.size(), 1u);
+  EXPECT_EQ(r2.coords[0].y, 33u);
+  EXPECT_EQ(r2.coords[0].x, 44u);
+
+  FragmentedCoordBatch r1 = f1.get();
+  ASSERT_EQ(r1.coords.size(), 1u);
+  EXPECT_EQ(r1.coords[0].y, 11u);
+  EXPECT_EQ(r1.coords[0].x, 22u);
+
+  delete func;
 }
 
 } // namespace

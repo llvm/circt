@@ -205,45 +205,29 @@ static void serialCoordTranslateTest(Accelerator *accel) {
     throw std::runtime_error(
         "Serial coord translate test: no 'translate_coords_serial' port found");
 
-  auto *func = portIter->second.getAs<services::FuncService::Function>();
-  if (!func)
-    throw std::runtime_error(
-        "Serial coord translate test: port is not a FuncService::Function");
+  // Drive the serial-list window through TypedFunction. The arg helper
+  // packs the static fields and value list into the header/data/footer
+  // frame protocol; the result helper's nested TypeDeserializer reassembles
+  // the reply frames into a single SerialCoordResult value, which we then
+  // iterate via its accessors.
+  TypedFunction<SerialCoordInput, SerialCoordResult> func =
+      portIter->second.getAs<services::FuncService::Function>();
+  func.connect();
 
-  // Drive the serial-list window through the generated typed helpers. The
-  // arg helper packs the static fields and value list into the
-  // header/data/footer frame protocol; the result helper's nested
-  // TypeDeserializer reassembles the reply frames into a single
-  // SerialCoordResult value, which we then iterate via its accessors.
-  TypedWritePort<SerialCoordInput> argPort(func->getRawWrite("arg"));
-  TypedReadPort<SerialCoordResult> resultPort(func->getRawRead("result"));
+  // Use the emplace-style call() overload to construct SerialCoordInput
+  // in-place from the forwarded constructor arguments.
+  SerialCoordResult result = func(xTrans, yTrans, coords).get();
 
-  // Raw frame transport: the runtime translator does not handle serial-list
-  // windows, so leave message translation off and let the generated
-  // TypeDeserializer walk the burst protocol directly.
-  argPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
-  resultPort.connect(ChannelPort::ConnectOptions(std::nullopt, false));
-
-  auto batch = std::make_unique<SerialCoordInput>(xTrans, yTrans, coords);
-  argPort.write(batch);
-
-  std::unique_ptr<SerialCoordResult> result = resultPort.read();
-  if (!result)
-    throw std::runtime_error("Serial coord translate test: null result");
-
-  if (result->coords_count() != coords.size())
+  if (result.coords_count() != coords.size())
     throw std::runtime_error("Serial coord translate result size mismatch");
   size_t i = 0;
-  for (const SerialCoordValue &got : result->coords()) {
+  for (const SerialCoordValue &got : result.coords()) {
     uint32_t expX = coords[i].x + xTrans;
     uint32_t expY = coords[i].y + yTrans;
     if (got.x != expX || got.y != expY)
       throw std::runtime_error("Serial coord translate result mismatch");
     ++i;
   }
-
-  argPort.disconnect();
-  resultPort.disconnect();
 }
 
 int main(int argc, const char *argv[]) {
