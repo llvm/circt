@@ -164,11 +164,23 @@ class CppTypePlanner:
     return self._reserve_name("_".join(parts), is_alias=False)
 
   def _auto_window_name(self, window_type: types.WindowType) -> str:
-    """Derive a deterministic name for generated window helpers."""
-    if window_type.name:
-      return self._reserve_name(window_type.name, is_alias=False)
-    return self._reserve_name(f"_window_{self._sanitize_name(window_type.id)}",
-                              is_alias=False)
+    """Derive a deterministic name for generated window helpers.
+
+    Two distinct windows can wrap the same `into` struct (e.g. serial and
+    parallel encodings of the same payload), so the helper name must be
+    derived from BOTH the inner type's name and the window's own name/id.
+    """
+    into_type = self._unwrap_aliases(window_type.into_type)
+    into_name = self.type_id_map.get(into_type)
+    window_part = (window_type.name
+                   if window_type.name else self._sanitize_name(window_type.id))
+    if into_name:
+      base = f"{into_name}_{window_part}"
+    elif window_type.name:
+      base = window_part
+    else:
+      base = f"_window_{window_part}"
+    return self._reserve_name(base, is_alias=False)
 
   def _unwrap_aliases(self, wrapped: types.ESIType) -> types.ESIType:
     while isinstance(wrapped, types.TypeAlias):
@@ -817,9 +829,6 @@ class CppTypeEmitter:
     hdr.write(f"    frames.reserve({info['list_field_name']}.size());\n")
     hdr.write(f"    for (const auto &element : {info['list_field_name']}) {{\n")
     hdr.write("      auto &frame = frames.emplace_back();\n")
-    # The data_frame list field is now stored as either a scalar/struct
-    # (assignable) or std::array (also assignable), so a plain assignment
-    # always works regardless of element type.
     hdr.write(f"      frame.{info['list_field_name']} = element;\n")
     hdr.write("    }\n")
     hdr.write(f"    construct({helper_call});\n")
@@ -844,9 +853,16 @@ class CppTypeEmitter:
     )
     hdr.write("  }\n\n")
     hdr.write(
-        f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(window_type.id)};\n"
+        f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(self._unwrap_aliases(window_type.into_type).id)};\n"
+    )
+    # The into-type id alone cannot distinguish two different windows over
+    # the same underlying struct (e.g. serial vs. parallel list encoding).
+    # Emit the window id so the runtime can verify the wire format too.
+    hdr.write(
+        f"  static constexpr std::string_view _ESI_WINDOW_ID = {self._cpp_string_literal(window_type.id)};\n"
     )
     self._emit_window_data_accessors(hdr, info)
+    self._emit_window_deserializer(hdr, info)
     hdr.write("};\n\n")
 
   def _emit_window_data_accessors(self, hdr: TextIO, info) -> None:
@@ -910,6 +926,51 @@ class CppTypeEmitter:
                 f"    return out;\n"
                 f"  }}\n")
 
+  def _emit_window_deserializer(self, hdr: TextIO, info) -> None:
+    """Emit a few bridge helpers + a `TypeDeserializer` alias.
+
+    The actual decoder lives in `esi::SerialListTypeDeserializer<T>`, which
+    walks the header/data/footer burst protocol generically. Each window
+    helper only has to expose:
+
+      - `_headerCount(const header_frame &)` -> `count_type`
+      - `_fromFrames(const header_frame &, std::vector<data_frame> &&)`
+        -> `std::unique_ptr<T>`
+
+    plus a `friend class esi::SerialListTypeDeserializer<T>;` so the template
+    can reach the (private) `header_frame` definition.
+    """
+    window_name = info["window_name"]
+    count_field_name = info["count_field_name"]
+    ctor_args = ", ".join(f"h.{name}" for name, _ in info["ctor_params"])
+    if ctor_args:
+      ctor_args = f"{ctor_args}, std::move(frames)"
+    else:
+      ctor_args = "std::move(frames)"
+
+    hdr.write("\n")
+    hdr.write("private:\n")
+    hdr.write(
+        "  // Bridge helpers used by esi::SerialListTypeDeserializer<T>; the\n")
+    hdr.write(
+        "  // template walks the serial-list burst protocol generically and\n")
+    hdr.write(
+        "  // reaches into `header_frame` via the friend declaration below.\n")
+    hdr.write("  static count_type _headerCount(const header_frame &h) {\n")
+    hdr.write(f"    return h.{count_field_name};\n")
+    hdr.write("  }\n")
+    hdr.write(f"  static std::unique_ptr<{window_name}> _fromFrames(\n")
+    hdr.write(
+        "      const header_frame &h, std::vector<data_frame> &&frames) {\n")
+    hdr.write(f"    return std::make_unique<{window_name}>({ctor_args});\n")
+    hdr.write("  }\n")
+    hdr.write(
+        f"  friend class esi::SerialListTypeDeserializer<{window_name}>;\n\n")
+    hdr.write("public:\n")
+    hdr.write(
+        f"  using TypeDeserializer = esi::SerialListTypeDeserializer<{window_name}>;\n"
+    )
+
   def _emit_alias(self, hdr: TextIO, alias_type: types.TypeAlias) -> None:
     """Emit a using alias when the alias targets a different C++ type."""
     inner_wrapped = alias_type.inner_type
@@ -943,6 +1004,7 @@ class CppTypeEmitter:
         #include <vector>
 
         #include "esi/Common.h"
+        #include "esi/TypedPorts.h"
 
         namespace {system_name} {{
 

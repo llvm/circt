@@ -1,5 +1,6 @@
 """Tests for UnionType support in codegen (CppTypePlanner + CppTypeEmitter)."""
 
+import re
 import tempfile
 from pathlib import Path
 
@@ -14,6 +15,19 @@ def _generate_header(type_table, system_name="test_ns"):
   with tempfile.TemporaryDirectory() as tmpdir:
     emitter.write_header(Path(tmpdir), system_name)
     return (Path(tmpdir) / "types.h").read_text()
+
+
+def _window_struct_name(hdr, window_name_suffix):
+  """Find the generated SegmentedMessageData subclass name for a window.
+
+  Auto-names compose `{into_name}_{window_name}`, so locate the helper by its
+  trailing window-name suffix instead of hard-coding the full identifier.
+  """
+  match = re.search(
+      rf"struct (\S*{re.escape(window_name_suffix)}) "
+      r": public esi::SegmentedMessageData", hdr)
+  assert match, f"Window helper for '*{window_name_suffix}' not found in:\n{hdr}"
+  return match.group(1)
 
 
 def test_union_basic():
@@ -228,7 +242,8 @@ def test_windowed_list_bulk_message_wrapper():
 
   hdr = _generate_header([coord, serial_args])
   assert "Unsupported type" not in hdr
-  assert "struct serial_coord_args : public esi::SegmentedMessageData" in hdr
+  win_name = _window_struct_name(hdr, "_serial_coord_args")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
   assert "using value_type = Coord;" in hdr
   assert "using count_type = uint16_t;" in hdr
   assert "count_type coords_count;" in hdr
@@ -245,8 +260,13 @@ def test_windowed_list_bulk_message_wrapper():
   assert "auto &frame = frames.emplace_back();" in hdr
   assert "for (const auto &element : coords) {" in hdr
   assert "frame.coords = element;" in hdr
-  assert '!esi.window<\\"serial_coord_args\\"' in hdr
-  assert 'throw std::out_of_range("serial_coord_args: invalid segment index")' in hdr  # Accessor methods for header fields and data fields.
+  # Inner struct id is _ESI_ID; window id (with escaped quotes) is
+  # _ESI_WINDOW_ID so the runtime can verify the wire format too.
+  assert f'_ESI_ID = "{arg_struct_id}"' in hdr
+  escaped_serial_args_id = serial_args_id.replace('"', '\\"')
+  assert f'_ESI_WINDOW_ID = "{escaped_serial_args_id}"' in hdr
+  assert f'throw std::out_of_range("{win_name}: invalid segment index")' in hdr
+  # Accessor methods for header fields and data fields.
   assert "uint32_t x_translation() const { return header.x_translation; }" in hdr
   assert "uint32_t y_translation() const { return header.y_translation; }" in hdr
   assert "size_t coords_count() const { return data_frames.size(); }" in hdr
@@ -287,7 +307,8 @@ def test_windowed_list_header_padding_matches_frame_width():
   ])
 
   hdr = _generate_header([window])
-  assert "struct coords_only : public esi::SegmentedMessageData" in hdr
+  win_name = _window_struct_name(hdr, "_coords_only")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
   assert "struct header_frame {\n    uint8_t _pad[6];\n    count_type coords_count;\n  };" in hdr
   assert "header_frame footer{};" in hdr
   assert "void construct(std::vector<data_frame> frames)" in hdr
@@ -341,7 +362,8 @@ def test_windowed_list_arrays_in_header_and_value_type():
 
   hdr = _generate_header([window])
   assert "#include <array>" in hdr
-  assert "struct array_payloads : public esi::SegmentedMessageData" in hdr
+  win_name = _window_struct_name(hdr, "_array_payloads")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
   # `value_type` is exposed as `std::array` so it is storable in `std::vector`.
   assert "using value_type = std::array<uint8_t, 4>;" in hdr
   assert "using count_type = uint16_t;" in hdr
@@ -349,12 +371,12 @@ def test_windowed_list_arrays_in_header_and_value_type():
   assert "std::array<uint16_t, 2> header_words;" in hdr
   assert "std::array<uint8_t, 4> payloads;" in hdr
   # Constructor params for arrays are simple const-refs to `std::array`.
-  assert "array_payloads(const std::array<uint16_t, 2> &header_words, const std::vector<value_type> &payloads)" in hdr
+  assert f"{win_name}(const std::array<uint16_t, 2> &header_words, const std::vector<value_type> &payloads)" in hdr
   assert "void construct(const std::array<uint16_t, 2> &header_words, std::vector<data_frame> frames)" in hdr
   # Plain `=` assignment for both header and data array fields.
   assert "header.header_words = header_words;" in hdr
   assert "frame.payloads = element;" in hdr
-  assert 'throw std::out_of_range("array_payloads: invalid segment index")' in hdr
+  assert f'throw std::out_of_range("{win_name}: invalid segment index")' in hdr
   # Array-typed header field: const-ref accessor with std::array return type.
   assert "const std::array<uint16_t, 2> &header_words() const { return header.header_words; }" in hdr
   # Array-typed data field: pointer-to-member projection (zero-copy view) and
@@ -401,7 +423,8 @@ def test_windowed_list_struct_element_data_uses_pointer_to_member():
   ])
 
   hdr = _generate_header([elem_struct, window])
-  assert "struct bitfield_items : public esi::SegmentedMessageData" in hdr
+  win_name = _window_struct_name(hdr, "_bitfield_items")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
   # The data field "items" is a struct type (byte-aligned), so pointer-to-member
   # IS valid.  The generated accessor must use &data_frame::items, not a lambda.
   assert "return std::views::transform(data_frames, &data_frame::items);" in hdr
@@ -438,7 +461,8 @@ def test_windowed_list_bitfield_scalar_data_uses_lambda():
   ])
 
   hdr = _generate_header([window])
-  assert "struct bitval_window : public esi::SegmentedMessageData" in hdr
+  win_name = _window_struct_name(hdr, "_bitval_window")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
   # The data field "vals" stores a 3-bit uint, which becomes a bit-field.
   # The range accessor must use a lambda, not &data_frame::vals.
   assert "[](const data_frame &f) { return f.vals; }" in hdr

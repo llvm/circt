@@ -256,6 +256,16 @@ static void serialCoordTranslateTest(Accelerator *accel) {
   // TODO: List results are currently not supported so we cannot compare the
   // results.
   (void)translateCoords.call(batch).get();
+
+  // The bulk-list reply arrives as numCoords data frames plus a footer header,
+  // but `TypedFunction::call()` only waits on the first frame. Drain the rest
+  // off the raw read channel so they don't sit in the polling queue and race
+  // with disconnect/teardown.
+  auto *func = portIter->second.getAs<services::FuncService::Function>();
+  ReadChannelPort &rawResult = func->getRawRead("result");
+  MessageData drained;
+  for (size_t i = 0; i < numCoords + 1; ++i)
+    rawResult.read(drained);
 }
 
 int main(int argc, const char *argv[]) {
