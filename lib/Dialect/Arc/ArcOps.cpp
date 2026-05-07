@@ -760,12 +760,10 @@ LogicalResult ArrayRefAllocOp::verify() {
              << getType().getNumElements();
     }
 
-    int elemBitwidth = getType().getElementType().getIntOrFloatBitWidth();
-    for (int64_t value : *init) {
-      APInt apint(elemBitwidth, value);
-      if (apint.getSExtValue() != value) {
-        return emitOpError("value ") << value << " cannot be represented as `"
-                                     << getType().getElementType() << "`";
+    unsigned elemBitwidth = getType().getElementType().getIntOrFloatBitWidth();
+    for (APInt value : init->getAsValueRange<IntegerAttr>()) {
+      if (value.getBitWidth() != elemBitwidth) {
+        return emitOpError("expected element to be of type ") << getType().getElementType();
       }
     }
   }

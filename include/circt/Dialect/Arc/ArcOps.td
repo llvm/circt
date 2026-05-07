@@ -1094,7 +1094,7 @@ def ArrayRefAllocOp : ArcOp<"arrayref.alloc", []> {
     Allocates an array on the stack. If `init` is set, the array is initialized
     to this value. Otherwise the array's contents are undefined.
   }];
-  let arguments = (ins OptionalAttr<DenseI64ArrayAttr>:$init);
+  let arguments = (ins OptionalAttr<ArrayAttr>:$init);
   let results = (outs ArrayRefType:$output);
   let assemblyFormat = "attr-dict (`init` `(` $init^ `)`)? `:` type($output)";
   let hasVerifier = 1;

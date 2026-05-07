@@ -181,12 +181,8 @@ struct ConvertAggregateConstant
                   ConversionPatternRewriter &rewriter) const override {
     auto newType =
         cast<ArrayRefType>(getTypeConverter()->convertType(op.getType()));
-    SmallVector<int64_t> ints;
-    for (APInt apint : op.getFieldsAttr().getAsValueRange<IntegerAttr>()) {
-      ints.push_back(apint.getSExtValue());
-    }
     Value newOp = ArrayRefAllocOp::create(rewriter, op.getLoc(), newType,
-                                          rewriter.getDenseI64ArrayAttr(ints));
+                                          op.getFieldsAttr());
     rewriter.replaceOp(op, newOp);
     return success();
   }
@@ -229,13 +225,12 @@ struct ConvertArraySlice : public OpConversionPattern<ArraySliceOp> {
   LogicalResult
   matchAndRewrite(ArraySliceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Because we're converting from value semantics and ArrayRefSliceOp is
-    // a subview-like operator, we must clone the input array first.
-    Value newInput = cloneArrayRef(adaptor.getInput(), rewriter, op.getLoc());
+    // Because we're converting from value semantics we can assume that the
+    // input buffer is immutable, so we don't need to copy it.
     Value index = asIndex(op.getLowIndex(), rewriter);
     Type destType = getTypeConverter()->convertType(op.getType());
     Value newOp = ArrayRefSliceOp::create(rewriter, op.getLoc(), destType,
-                                          newInput, index);
+                                          adaptor.getInput(), index);
     rewriter.replaceOp(op, newOp);
     return success();
   }
@@ -359,6 +354,14 @@ struct OptimizeReturnOfAlloc : public OpRewritePattern<func::ReturnOp> {
       Operation *op = value.getDefiningOp();
       if (!op)
         return nullptr;
+
+      // If any op on the chain is used by a slice, it is not safe to replace
+      // the array with the sret buffer.
+      for (Operation *user : op->getUsers()) {
+        if (isa<ArraySliceOp>(user))
+          return nullptr;
+      }
+
       if (auto alloc = dyn_cast<ArrayRefAllocOp>(op))
         return alloc;
 
@@ -485,8 +488,10 @@ void LowerArraysPass::runOnOperation() {
                ConvertRootOutput, ConvertUnrealizedConversionCast>(
       converter, &getContext());
 
+  ConversionConfig config;
+  config.allowPatternRollback = false;
   if (failed(applyPartialConversion(getOperation(), target,
-                                    std::move(patterns)))) {
+                                    std::move(patterns), config))) {
     return signalPassFailure();
   }
 

@@ -1348,11 +1348,14 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
     size_t byteWidth = computeByteWidth(arrayRefType);
     auto size = LLVM::ConstantOp::create(rewriter, op.getLoc(),
                                          rewriter.getI64Type(), byteWidth);
+
+
+    size_t alignment = computeAllocaAlignment(arrayRefType, op);
     auto alloc =
-        LLVM::AllocaOp::create(rewriter, op.getLoc(), ptrTy, i8Ty, size);
+        LLVM::AllocaOp::create(rewriter, op.getLoc(), ptrTy, i8Ty, size, alignment);
 
     if (op.getInitAttr()) {
-      DenseI64ArrayAttr initAttr = op.getInitAttr();
+      ArrayAttr initAttr = op.getInitAttr();
       if (isZero(initAttr)) {
         auto i8Ty = rewriter.getI8Type();
         auto zero = LLVM::ConstantOp::create(rewriter, op.getLoc(), i8Ty, 0);
@@ -1367,13 +1370,28 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
     return success();
   }
 
-  bool isZero(DenseI64ArrayAttr arrayAttr) const {
-    return llvm::all_of(arrayAttr.asArrayRef(),
-                        [](int64_t i) { return i == 0; });
+  // Computes the required alignment for an AllocaOp of the given type.
+  // c.f. HWToLLVM.cpp.
+  size_t computeAllocaAlignment(ArrayRefType type, Operation* op) const {
+    if (alignmentCache.count(type)) {
+      return alignmentCache[type];
+    }
+    auto dl = DataLayout::closest(op);
+    auto hwType = hw::ArrayType::get(type.getElementType(), type.getNumElements());
+    auto llvmType = getTypeConverter()->convertType(hwType);
+    auto alignment = static_cast<unsigned>(dl.getTypePreferredAlignment(llvmType));
+    alignment = std::max(4u, alignment);
+    alignmentCache[type] = alignment;
+    return alignment;
+  }
+
+  bool isZero(ArrayAttr arrayAttr) const {
+    return llvm::all_of(arrayAttr.getAsValueRange<IntegerAttr>(),
+                        [](APInt i) { return i.isZero(); });
   }
 
   void initializeArray(ConversionPatternRewriter &rewriter, Location loc,
-                       Value alloc, DenseI64ArrayAttr initAttr,
+                       Value alloc, ArrayAttr initAttr,
                        ArrayRefType arrayRefType) const {
     size_t elemByteWidth = computeElementByteWidth(arrayRefType);
     Type ptrTy = LLVM::LLVMPointerType::get(getContext());
@@ -1389,6 +1407,9 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
       LLVM::StoreOp::create(rewriter, loc, elem, elemAddr);
     }
   }
+
+ private:
+  mutable DenseMap<ArrayRefType, size_t> alignmentCache;
 };
 
 struct ArrayRefCreateOpLowering : public OpConversionPattern<ArrayRefCreateOp> {
@@ -1429,6 +1450,7 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     auto i64Ty = rewriter.getI64Type();
+    size_t byteWidth = computeByteWidth(arrayRefType);
     size_t elemByteWidth = computeElementByteWidth(arrayRefType);
     assert(!isa<ArrayRefType>(arrayRefType.getElementType()));
 
@@ -1436,8 +1458,14 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
     Value byteOffset =
         LLVM::MulOp::create(rewriter, loc, adaptor.getIndex(), stride);
+    Value totalSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
+                                               byteWidth);
+    // Defend against out-of-bounds accesses. What we return is undefined in the
+    // case of OOB.
+    Value clampedOffset =
+        LLVM::UMinOp::create(rewriter, loc, i64Ty, byteOffset, totalSize);
     auto elemAddr = LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty,
-                                        adaptor.getInput(), byteOffset);
+                                        adaptor.getInput(), clampedOffset);
     Value loaded = LLVM::LoadOp::create(
         rewriter, loc, typeConverter->convertType(op.getValue().getType()),
         elemAddr);
@@ -1458,15 +1486,26 @@ struct ArrayRefInjectOpLowering : public OpConversionPattern<ArrayRefInjectOp> {
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     auto i64Ty = rewriter.getI64Type();
+    size_t byteWidth = computeByteWidth(arrayRefType);
     size_t elemByteWidth = computeElementByteWidth(arrayRefType);
 
     Value stride =
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
     Value byteOffset =
         LLVM::MulOp::create(rewriter, loc, adaptor.getIndex(), stride);
-    auto elemAddr = LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty,
-                                        adaptor.getInput(), byteOffset);
-    LLVM::StoreOp::create(rewriter, loc, adaptor.getElement(), elemAddr);
+    Value totalSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
+                                               byteWidth);
+    // Defend against out-of-bounds accesses. We must avoid corrupting the
+    // array.
+    Value isInbounds = LLVM::ICmpOp::create(
+        rewriter, loc, LLVM::ICmpPredicate::ult, byteOffset, totalSize);
+    scf::IfOp::create(rewriter, loc, isInbounds, [&](OpBuilder &b, Location) {
+      auto elemAddr = LLVM::GEPOp::create(b, loc, ptrTy, i8Ty,
+                                          adaptor.getInput(), byteOffset);
+      LLVM::StoreOp::create(b, loc, adaptor.getElement(), elemAddr);
+      scf::YieldOp::create(b, loc);
+    });
+
     // Inject is pure; returns the same pointer (input buffer is modified
     // in-place and the pointer is forwarded as the result).
     rewriter.replaceOp(op, adaptor.getInput());
@@ -1482,17 +1521,26 @@ struct ArrayRefSliceOpLowering : public OpConversionPattern<ArrayRefSliceOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     // The result type is the sub-array type; use its element size.
+    ArrayRefType inputType = cast<ArrayRefType>(op.getInput().getType());
     ArrayRefType resultType = cast<ArrayRefType>(op.getOutput().getType());
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     auto i64Ty = rewriter.getI64Type();
     size_t elemByteWidth = computeElementByteWidth(resultType);
 
+    // Ensure the slice doesn't go out of bounds.
+    size_t maxLowIndex = inputType.getNumElements() - resultType.getNumElements();
+    Value maxLowIndexVal =
+        LLVM::ConstantOp::create(rewriter, loc, i64Ty, maxLowIndex);
+    Value clampedLowIndex =
+        LLVM::UMinOp::create(rewriter, loc, i64Ty, adaptor.getLowIndex(),
+                             maxLowIndexVal);
+
     // Byte offset = lowIndex * elemByteWidth.
     Value stride =
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
     Value byteOffset =
-        LLVM::MulOp::create(rewriter, loc, adaptor.getLowIndex(), stride);
+        LLVM::MulOp::create(rewriter, loc, clampedLowIndex, stride);
     auto sliceAddr = LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty,
                                          adaptor.getInput(), byteOffset);
     rewriter.replaceOp(op, sliceAddr);

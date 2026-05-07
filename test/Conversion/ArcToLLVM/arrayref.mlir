@@ -51,7 +51,7 @@ func.func @ArrayRefCreate(%arg0: !arc.arrayref<2xi32>, %arg1: i32, %arg2: i32) -
 
 // CHECK-LABEL: @ArrayRefAlloc
 // CHECK-NEXT: %[[C8:.*]] = llvm.mlir.constant(8 : i64)
-// CHECK-NEXT: %[[A:.*]] = llvm.alloca %[[C8]] x i8
+// CHECK-NEXT: %[[A:.*]] = llvm.alloca %[[C8]] x i8 {alignment = 4 : i64}
 // CHECK-NEXT: return %[[A]]
 func.func @ArrayRefAlloc() -> !arc.arrayref<2xi32> {
   %0 = arc.arrayref.alloc : !arc.arrayref<2xi32>
@@ -60,7 +60,7 @@ func.func @ArrayRefAlloc() -> !arc.arrayref<2xi32> {
 
 // CHECK-LABEL: @ArrayRefInit
 // CHECK-NEXT: %[[C8:.*]] = llvm.mlir.constant(8 : i64)
-// CHECK-NEXT: %[[A:.*]] = llvm.alloca %[[C8]] x i8
+// CHECK-NEXT: %[[A:.*]] = llvm.alloca %[[C8]] x i8 {alignment = 4 : i64}
 // CHECK-NEXT: %[[C4:.*]] = llvm.mlir.constant(4 : i64)
 // CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %[[A]][%[[C4]]]
 // CHECK-NEXT: %[[V123:.*]] = llvm.mlir.constant(123 : i32)
@@ -71,25 +71,27 @@ func.func @ArrayRefAlloc() -> !arc.arrayref<2xi32> {
 // CHECK-NEXT: llvm.store %[[V456]], %[[GEP1]]
 // CHECK-NEXT: return %[[A]]
 func.func @ArrayRefInit() -> !arc.arrayref<2xi32> {
-  %0 = arc.arrayref.alloc init([123, 456]) : !arc.arrayref<2xi32>
+  %0 = arc.arrayref.alloc init([123 : i32, 456 : i32]) : !arc.arrayref<2xi32>
   return %0 : !arc.arrayref<2xi32>
 }
 
 // CHECK-LABEL: @ArrayRefInitZero
 // CHECK-NEXT: %[[C8:.*]] = llvm.mlir.constant(8 : i64)
-// CHECK-NEXT: %[[A:.*]] = llvm.alloca %[[C8]] x i8
+// CHECK-NEXT: %[[A:.*]] = llvm.alloca %[[C8]] x i8 {alignment = 4 : i64}
 // CHECK-NEXT: %[[ZERO:.*]] = llvm.mlir.constant(0 : i8)
 // CHECK-NEXT: "llvm.intr.memset"(%[[A]], %[[ZERO]], %[[C8]])
 // CHECK-NEXT: return %[[A]]
 func.func @ArrayRefInitZero() -> !arc.arrayref<2xi32> {
-  %0 = arc.arrayref.alloc init([0, 0]) : !arc.arrayref<2xi32>
+  %0 = arc.arrayref.alloc init([0 : i32, 0 : i32]) : !arc.arrayref<2xi32>
   return %0 : !arc.arrayref<2xi32>
 }
 
 // CHECK-LABEL: @ArrayRefGet
 // CHECK-NEXT: %[[STRIDE:.*]] = llvm.mlir.constant(4 : i64)
 // CHECK-NEXT: %[[OFF:.*]] = llvm.mul %arg1, %[[STRIDE]]
-// CHECK-NEXT: %[[ADDR:.*]] = llvm.getelementptr %arg0[%[[OFF]]]
+// CHECK-NEXT: %[[TOTAL:.*]] = llvm.mlir.constant(16 : i64)
+// CHECK-NEXT: %[[CLAMPED:.*]] = llvm.intr.umin(%[[OFF]], %[[TOTAL]])
+// CHECK-NEXT: %[[ADDR:.*]] = llvm.getelementptr %arg0[%[[CLAMPED]]]
 // CHECK-NEXT: %[[VAL:.*]] = llvm.load %[[ADDR]]
 // CHECK-NEXT: return %[[VAL]]
 func.func @ArrayRefGet(%arg0: !arc.arrayref<4xi32>, %idx: index) -> i32 {
@@ -100,8 +102,14 @@ func.func @ArrayRefGet(%arg0: !arc.arrayref<4xi32>, %idx: index) -> i32 {
 // CHECK-LABEL: @ArrayRefInject
 // CHECK-NEXT: %[[STRIDE:.*]] = llvm.mlir.constant(4 : i64)
 // CHECK-NEXT: %[[OFF:.*]] = llvm.mul %arg1, %[[STRIDE]]
+// CHECK-NEXT: %[[TOTAL:.*]] = llvm.mlir.constant(16 : i64)
+// CHECK-NEXT: %[[INBOUNDS:.*]] = llvm.icmp "ult" %[[OFF]], %[[TOTAL]]
+// CHECK-NEXT: llvm.cond_br %[[INBOUNDS]], ^[[BB1:.*]], ^[[BB2:.*]]
+// CHECK-NEXT: ^[[BB1]]:
 // CHECK-NEXT: %[[ADDR:.*]] = llvm.getelementptr %arg0[%[[OFF]]]
 // CHECK-NEXT: llvm.store %arg2, %[[ADDR]]
+// CHECK-NEXT: llvm.br ^[[BB2]]
+// CHECK-NEXT: ^[[BB2]]:
 // CHECK-NEXT: return %arg0
 func.func @ArrayRefInject(%arg0: !arc.arrayref<4xi32>, %idx: index, %val: i32) -> !arc.arrayref<4xi32> {
   %0 = arc.arrayref.inject %arg0[%idx], %val : !arc.arrayref<4xi32>, i32 -> !arc.arrayref<4xi32>
@@ -109,8 +117,10 @@ func.func @ArrayRefInject(%arg0: !arc.arrayref<4xi32>, %idx: index, %val: i32) -
 }
 
 // CHECK-LABEL: @ArrayRefSlice
+// CHECK-NEXT: %[[MAX:.*]] = llvm.mlir.constant(2 : i64)
+// CHECK-NEXT: %[[CLAMPED:.*]] = llvm.intr.umin(%arg1, %[[MAX]])
 // CHECK-NEXT: %[[STRIDE:.*]] = llvm.mlir.constant(4 : i64)
-// CHECK-NEXT: %[[OFF:.*]] = llvm.mul %arg1, %[[STRIDE]]
+// CHECK-NEXT: %[[OFF:.*]] = llvm.mul %[[CLAMPED]], %[[STRIDE]]
 // CHECK-NEXT: %[[ADDR:.*]] = llvm.getelementptr %arg0[%[[OFF]]]
 // CHECK-NEXT: return %[[ADDR]]
 func.func @ArrayRefSlice(%arg0: !arc.arrayref<4xi32>, %lowIdx: index) -> !arc.arrayref<2xi32> {
