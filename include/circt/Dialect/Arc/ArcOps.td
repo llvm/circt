@@ -425,15 +425,11 @@ def MemoryWriteOp : ArcOp<"memory_write", [
   let arguments = (ins
     MemoryType:$memory,
     AnyInteger:$address,
-    Optional<I1>:$enable,
     AnyInteger:$data
   );
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $data (`if` $enable^)?
-    attr-dict `:` type($memory)
+    $memory `[` $address `]` `,` $data attr-dict `:` type($memory)
   }];
-  let hasFolder = 1;
-  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

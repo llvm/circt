@@ -140,8 +140,6 @@ hw.module @memoryOps(in %clk: !seq.clock, in %en: i1, in %mask: i32, in %arg: i1
 
   // CHECK: %{{.+}} = arc.memory_read [[MEM]][%c0_i32] : <4 x i32, i32>
   %2 = arc.memory_read %mem[%c0_i32] : <4 x i32, i32>
-  // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 if %en : <4 x i32, i32>
-  arc.memory_write %mem[%c0_i32], %c0_i32 if %en : <4 x i32, i32>
 
   // CHECK-NEXT: arc.memory_write [[MEM]][%c0_i32], %c0_i32 : <4 x i32, i32>
   arc.memory_write %mem[%c0_i32], %c0_i32 : <4 x i32, i32>

@@ -79,16 +79,6 @@ hw.module @clockDomainDCE(in %clk: !seq.clock) {
   }
 }
 
-// CHECK-LABEL: hw.module @memoryOps
-hw.module @memoryOps(in %clk: i1, in %mem: !arc.memory<4 x i32, i32>, in %addr: i32, in %data: i32) {
-  %true = hw.constant true
-  // CHECK-NEXT: arc.memory_write %mem[%addr], %data : <4 x i32, i32>
-  arc.memory_write %mem[%addr], %data if %true : <4 x i32, i32>
-
-  %false = hw.constant false
-  arc.memory_write %mem[%addr], %data if %false : <4 x i32, i32>
-}
-
 // CHECK-LABEL: hw.module @clockDomainCanonicalizer
 hw.module @clockDomainCanonicalizer(in %clk: !seq.clock, in %data: i32, out out0: i32, out out1: i1, out out2: i32, out out3: i32, out out4: i32) {
   %c0_i32 = hw.constant 0 : i32

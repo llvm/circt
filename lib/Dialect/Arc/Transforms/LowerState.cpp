@@ -780,8 +780,7 @@ LogicalResult OpLowering::lower(MemoryOp op) {
     }
 
     // Actually write to the memory.
-    MemoryWriteOp::create(module.builder, write.getLoc(), state, address,
-                          Value{}, data);
+    MemoryWriteOp::create(module.builder, write.getLoc(), state, address, data);
   }
 
   return success();
