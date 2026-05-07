@@ -129,7 +129,7 @@ struct ArcToLLVMOptions : mlir::PassPipelineOptions<ArcToLLVMOptions> {
   Option<bool> bufferizeArrays{
       *this, "bufferize-arrays",
       llvm::cl::desc("Bufferize arrays before lowering to LLVM"),
-      llvm::cl::init(false)};
+      llvm::cl::init(true)};
 };
 void populateArcToLLVMPipeline(mlir::OpPassManager &pm,
                                const ArcToLLVMOptions &options = {});
