@@ -206,6 +206,8 @@ static void legalizeModuleLocalNames(HWEmittableModuleLike module,
             op, StringAttr::get(op->getContext(), getSymOpName(op)));
       } else if (auto forOp = dyn_cast<ForOp>(op)) {
         nameEntries.emplace_back(op, forOp.getInductionVarNameAttr());
+      } else if (auto genForOp = dyn_cast<GenerateForOp>(op)) {
+        nameEntries.emplace_back(op, genForOp.getInductionVarNameAttr());
       } else if (isa<AssertOp, AssumeOp, CoverOp, AssertConcurrentOp,
                      AssumeConcurrentOp, CoverConcurrentOp, AssertPropertyOp,
                      AssumePropertyOp, CoverPropertyOp, verif::AssertOp,
