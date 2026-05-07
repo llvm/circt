@@ -214,6 +214,13 @@ public:
   }
   const Type *getType() const { return type; }
 
+  /// If this port carries a windowed type, return the original WindowType
+  /// (whose `intoType` is what `getType()` returns). Returns nullptr for
+  /// non-windowed ports.
+  const WindowType *getWindowType() const {
+    return translationInfo ? translationInfo->windowType : nullptr;
+  }
+
 protected:
   const Type *type;
 

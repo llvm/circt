@@ -206,10 +206,12 @@ TEST(TypedPortsTest, ESIIDTypeCompatibility) {
 }
 
 TEST(TypedPortsTest, NullPortTypeThrows) {
-  EXPECT_THROW(verifyTypeCompatibility<int32_t>(nullptr),
-               AcceleratorMismatchError);
-  EXPECT_THROW(verifyTypeCompatibility<void>(nullptr),
-               AcceleratorMismatchError);
+  EXPECT_THROW(
+      verifyTypeCompatibility<int32_t>(static_cast<const Type *>(nullptr)),
+      AcceleratorMismatchError);
+  EXPECT_THROW(
+      verifyTypeCompatibility<void>(static_cast<const Type *>(nullptr)),
+      AcceleratorMismatchError);
 }
 
 // A type that is not integral and has no _ESI_ID — should hit fallback.

@@ -309,6 +309,91 @@ private:
   std::mutex mutex;
 };
 
+/// Reusable serial-list window deserializer.
+///
+/// Walks the serial-list multi-burst protocol used by codegen'd window
+/// helpers -- zero or more `header(N>0) + N data` bursts terminated by a
+/// `header(0)` footer -- and emits a fully-formed `T` instance built from the
+/// accumulated header fields and data frames.
+///
+/// `T` must be a generated window helper that exposes:
+///  - nested `header_frame` / `data_frame` types of identical size,
+///  - `count_type`,
+///  - `static count_type T::_headerCount(const header_frame &)`,
+///  - `static std::unique_ptr<T> T::_fromFrames(const header_frame &,
+///        std::vector<data_frame> &&)`.
+///
+/// `T` typically declares `SerialListTypeDeserializer<T>` as a friend so the
+/// template can reach the (private) `header_frame` definition; the helpers
+/// themselves can stay private as well.
+template <typename T>
+class SerialListTypeDeserializer : public QueuedDecodeTypeDeserializer<T> {
+public:
+  using Base = QueuedDecodeTypeDeserializer<T>;
+  using OutputCallback = typename Base::OutputCallback;
+  using DecodedOutputs = typename Base::DecodedOutputs;
+
+  explicit SerialListTypeDeserializer(OutputCallback output)
+      : Base(std::move(output)) {}
+
+private:
+  using header_frame = typename T::header_frame;
+  using data_frame = typename T::data_frame;
+  using count_type = typename T::count_type;
+
+  static_assert(sizeof(header_frame) == sizeof(data_frame),
+                "header and data frames must be the same width");
+  static constexpr size_t kFrameSize = sizeof(data_frame);
+
+  DecodedOutputs decode(std::unique_ptr<SegmentedMessageData> &msg) override {
+    DecodedOutputs out;
+    MessageData scratch;
+    const MessageData &flat = detail::getMessageDataRef<T>(*msg, scratch);
+    const uint8_t *bytes = flat.getBytes();
+    size_t size = flat.getSize();
+
+    size_t offset = 0;
+    while (offset < size) {
+      size_t needed = kFrameSize - partial_.size();
+      size_t chunk = std::min(needed, size - offset);
+      partial_.insert(partial_.end(), bytes + offset, bytes + offset + chunk);
+      offset += chunk;
+      if (partial_.size() != kFrameSize)
+        break;
+
+      if (remaining_ == 0) {
+        // Header frame: capture static fields and burst count.
+        std::memcpy(&pending_header_, partial_.data(), kFrameSize);
+        partial_.clear();
+        count_type batchCount = T::_headerCount(pending_header_);
+        if (batchCount == 0) {
+          // Footer: emit the accumulated value.
+          out.push_back(
+              T::_fromFrames(pending_header_, std::move(pending_frames_)));
+          pending_frames_.clear();
+          continue;
+        }
+        remaining_ = batchCount;
+        continue;
+      }
+
+      // Data frame.
+      auto &frame = pending_frames_.emplace_back();
+      std::memcpy(&frame, partial_.data(), kFrameSize);
+      partial_.clear();
+      --remaining_;
+    }
+
+    msg.reset();
+    return out;
+  }
+
+  std::vector<uint8_t> partial_;
+  header_frame pending_header_{};
+  std::vector<data_frame> pending_frames_;
+  count_type remaining_ = 0;
+};
+
 //===----------------------------------------------------------------------===//
 // Type-trait: detect T::_ESI_ID (a static constexpr std::string_view).
 //===----------------------------------------------------------------------===//
@@ -322,6 +407,18 @@ struct has_esi_id<T, std::void_t<decltype(T::_ESI_ID)>>
 
 template <typename T>
 inline constexpr bool has_esi_id_v = has_esi_id<T>::value;
+
+// Detect T::_ESI_WINDOW_ID (a static constexpr std::string_view) for
+// generated SegmentedMessageData subclasses bound to a specific WindowType.
+template <typename T, typename = void>
+struct has_esi_window_id : std::false_type {};
+
+template <typename T>
+struct has_esi_window_id<T, std::void_t<decltype(T::_ESI_WINDOW_ID)>>
+    : std::is_convertible<decltype(T::_ESI_WINDOW_ID), std::string_view> {};
+
+template <typename T>
+inline constexpr bool has_esi_window_id_v = has_esi_window_id<T>::value;
 
 //===----------------------------------------------------------------------===//
 // verifyTypeCompatibility<T>(const Type *portType)
@@ -337,6 +434,29 @@ void verifyTypeCompatibility(const Type *portType) {
 
   // Unwrap TypeAliasType to get the inner type for verification.
   portType = unwrapTypeAlias(portType);
+
+  // If the port is a windowed type, verify the window id (if T declares one)
+  // and then continue checking the inner ('into') type.
+  if (auto *windowType = dynamic_cast<const WindowType *>(portType)) {
+    if constexpr (has_esi_window_id_v<T>) {
+      if (std::string_view(windowType->getID()) != T::_ESI_WINDOW_ID)
+        throw AcceleratorMismatchError(
+            "ESI window mismatch: C++ type has _ESI_WINDOW_ID '" +
+            std::string(T::_ESI_WINDOW_ID) + "' but port window type is '" +
+            windowType->toString(/*oneLine=*/true) + "'");
+    } else {
+      throw AcceleratorMismatchError(
+          "ESI type mismatch: port is a window type ('" +
+          windowType->toString(/*oneLine=*/true) +
+          "') but C++ type has no _ESI_WINDOW_ID");
+    }
+    portType = unwrapTypeAlias(windowType->getIntoType());
+  } else if constexpr (has_esi_window_id_v<T>) {
+    throw AcceleratorMismatchError(
+        std::string("ESI type mismatch: C++ type has _ESI_WINDOW_ID '") +
+        std::string(T::_ESI_WINDOW_ID) + "' but port type is not a window: '" +
+        portType->toString(/*oneLine=*/true) + "'");
+  }
 
   if constexpr (has_esi_id_v<T>) {
     // Highest priority: user-defined ESI ID string comparison.
@@ -406,6 +526,37 @@ void verifyTypeCompatibility(const Type *portType) {
   }
 }
 
+// Port-aware overload: when checking against a ChannelPort, also reconcile
+// the windowed wrapper. ChannelPort::getType() returns the unwrapped 'into'
+// type for windowed ports, so we have to consult getWindowType() directly to
+// detect the window and forward the original WindowType into the Type-based
+// overload above.
+template <typename T>
+void verifyTypeCompatibility(const ChannelPort *port) {
+  if (!port)
+    throw AcceleratorMismatchError("Port is null");
+  const WindowType *windowType = port->getWindowType();
+  if constexpr (has_esi_window_id_v<T>) {
+    if (!windowType)
+      throw AcceleratorMismatchError(
+          std::string("ESI type mismatch: C++ type has _ESI_WINDOW_ID '") +
+          std::string(T::_ESI_WINDOW_ID) +
+          "' but port is not a window type ('" +
+          (port->getType() ? port->getType()->toString(/*oneLine=*/true)
+                           : std::string("<null>")) +
+          "')");
+  } else {
+    if (windowType)
+      throw AcceleratorMismatchError(
+          "ESI type mismatch: port is a window type ('" +
+          windowType->toString(/*oneLine=*/true) +
+          "') but C++ type has no _ESI_WINDOW_ID");
+  }
+  const Type *forwardType =
+      windowType ? static_cast<const Type *>(windowType) : port->getType();
+  verifyTypeCompatibility<T>(forwardType);
+}
+
 //===----------------------------------------------------------------------===//
 // TypedWritePort<T, SkipTypeCheck = false>
 //
@@ -425,7 +576,7 @@ public:
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
     if (!SkipTypeCheck)
-      verifyTypeCompatibility<T>(inner->getType());
+      verifyTypeCompatibility<T>(inner);
     wireInfo_ = getWireInfo(inner->getType());
     inner->connect(opts);
   }
@@ -661,9 +812,9 @@ private:
     if (mode != Mode::Disconnected)
       throw std::runtime_error("Channel already connected");
     if constexpr (has_esi_id_v<T>) {
-      verifyTypeCompatibility<T>(inner->getType());
+      verifyTypeCompatibility<T>(inner);
     } else if constexpr (!detail::has_type_deserializer_v<T>) {
-      verifyTypeCompatibility<T>(inner->getType());
+      verifyTypeCompatibility<T>(inner);
       wireInfo_ = getWireInfo(inner->getType());
     }
   }
