@@ -58,22 +58,6 @@ struct AddTwoStateFlag : OpRewritePattern<OpTy> {
   }
 };
 
-using AddOpTwoStateFlag = AddTwoStateFlag<AddOp>;
-using AndOpTwoStateFlag = AddTwoStateFlag<AndOp>;
-using DivSOpTwoStateFlag = AddTwoStateFlag<DivSOp>;
-using DivUOpTwoStateFlag = AddTwoStateFlag<DivUOp>;
-using ModSOpTwoStateFlag = AddTwoStateFlag<ModSOp>;
-using ModUOpTwoStateFlag = AddTwoStateFlag<ModUOp>;
-using MulOpTwoStateFlag = AddTwoStateFlag<MulOp>;
-using MuxOpTwoStateFlag = AddTwoStateFlag<MuxOp>;
-using OrOpTwoStateFlag = AddTwoStateFlag<OrOp>;
-using ParityOpTwoStateFlag = AddTwoStateFlag<ParityOp>;
-using ShlOpTwoStateFlag = AddTwoStateFlag<ShlOp>;
-using ShrSOpTwoStateFlag = AddTwoStateFlag<ShrSOp>;
-using ShrUOpTwoStateFlag = AddTwoStateFlag<ShrUOp>;
-using SubOpTwoStateFlag = AddTwoStateFlag<SubOp>;
-using XorOpTwoStateFlag = AddTwoStateFlag<XorOp>;
-
 } // namespace
 
 namespace {
@@ -85,15 +69,18 @@ public:
 };
 } // namespace
 
+// Alias for brevity.
+template <typename OpTy>
+using TS = AddTwoStateFlag<OpTy>;
+
 void AssumeTwoValued::runOnOperation() {
   auto *ctx = &getContext();
   RewritePatternSet patterns(ctx);
-  patterns.add<ICmpOpConversion, AddOpTwoStateFlag, AndOpTwoStateFlag,
-               DivSOpTwoStateFlag, DivUOpTwoStateFlag, ModSOpTwoStateFlag,
-               ModUOpTwoStateFlag, MulOpTwoStateFlag, MuxOpTwoStateFlag,
-               OrOpTwoStateFlag, ParityOpTwoStateFlag, ShlOpTwoStateFlag,
-               ShrSOpTwoStateFlag, ShrUOpTwoStateFlag, SubOpTwoStateFlag,
-               XorOpTwoStateFlag>(ctx);
+
+  patterns
+      .add<ICmpOpConversion, TS<AddOp>, TS<AndOp>, TS<DivSOp>, TS<DivUOp>,
+           TS<ModSOp>, TS<ModUOp>, TS<MulOp>, TS<MuxOp>, TS<OrOp>, TS<ParityOp>,
+           TS<ShlOp>, TS<ShrSOp>, TS<ShrUOp>, TS<SubOp>, TS<XorOp>>(ctx);
 
   if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
     return signalPassFailure();
