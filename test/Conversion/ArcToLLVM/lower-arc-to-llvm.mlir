@@ -77,14 +77,6 @@ func.func @StateUpdates(%arg0: !arc.storage<1>) {
   // CHECK-NEXT: [[LOAD:%.+]] = llvm.load [[PTR]] : !llvm.ptr -> i1
   arc.state_write %0 = %1 : <i1>
   // CHECK-NEXT: llvm.store [[LOAD]], [[PTR]] : i1, !llvm.ptr
-  %false = hw.constant false
-  arc.state_write %0 = %false if %1 : <i1>
-  // CHECK-NEXT:   [[FALSE:%.+]] = llvm.mlir.constant(false)
-  // CHECK-NEXT:   llvm.cond_br [[LOAD]], [[BB1:\^.+]], [[BB2:\^.+]]
-  // CHECK-NEXT: [[BB1]]:
-  // CHECK-NEXT:   llvm.store [[FALSE]], [[PTR]]
-  // CHECK-NEXT:   llvm.br [[BB2]]
-  // CHECK-NEXT: [[BB2]]:
   return
   // CHECK-NEXT: llvm.return
 }

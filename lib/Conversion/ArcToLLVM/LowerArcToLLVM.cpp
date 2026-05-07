@@ -152,30 +152,19 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   LogicalResult
   matchAndRewrite(arc::StateWriteOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto doStore = [&](OpBuilder &builder, Location loc) {
       if (!isa<ArrayRefType>(op.getValue().getType())) {
-        LLVM::StoreOp::create(builder, loc, adaptor.getValue(),
+        rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
                               adaptor.getState());
-        return;
+        return success();
       }
 
-      int numBytes = op.getState().getType().getByteWidth();
-      Value size = LLVM::ConstantOp::create(builder, loc, rewriter.getI64Type(),
-                                            numBytes);
-      LLVM::MemcpyOp::create(builder, loc, adaptor.getState(),
-                             adaptor.getValue(), size, /*volatile=*/false);
-    };
+    int numBytes = op.getState().getType().getByteWidth();
+    Value size = LLVM::ConstantOp::create(builder, loc, rewriter.getI64Type(),
+                                          numBytes);
+    rewriter.replaceOpWithNewOp<LLVM::MemcpyOp>(adaptor.getState(),
+                            adaptor.getValue(), size, /*volatile=*/false);
 
-    if (adaptor.getCondition()) {
-      rewriter.replaceOpWithNewOp<scf::IfOp>(
-          op, adaptor.getCondition(), [&](auto &builder, auto loc) {
-            doStore(builder, loc);
-            scf::YieldOp::create(builder, loc);
-          });
-    } else {
-      doStore(rewriter, op.getLoc());
-      rewriter.eraseOp(op);
-    }
+    rewriter.eraseOp(op);
     return success();
   }
 };

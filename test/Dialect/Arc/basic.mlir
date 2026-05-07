@@ -381,8 +381,6 @@ func.func @ReadsWrites(%arg0: !arc.state<i42>, %arg1: i42, %arg2: i1) {
   arc.state_read %arg0 : <i42>
   // CHECK: arc.state_write %arg0 = %arg1 : <i42>
   arc.state_write %arg0 = %arg1 : <i42>
-  // CHECK: arc.state_write %arg0 = %arg1 if %arg2 : <i42>
-  arc.state_write %arg0 = %arg1 if %arg2 : <i42>
   return
 }
 
