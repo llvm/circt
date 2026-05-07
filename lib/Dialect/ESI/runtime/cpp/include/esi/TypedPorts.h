@@ -362,17 +362,24 @@ private:
         break;
 
       if (remaining_ == 0) {
-        // Header frame: capture static fields and burst count.
-        std::memcpy(&pending_header_, partial_.data(), kFrameSize);
-        partial_.clear();
-        count_type batchCount = T::_headerCount(pending_header_);
+        // Header or footer frame. Preserve the last non-zero header's static
+        // fields so a footer, which may only set count=0, does not clobber
+        // them before reconstruction.
+        count_type batchCount =
+            T::_headerCount(*reinterpret_cast<const frame_type *>(
+                partial_.data()));
         if (batchCount == 0) {
-          // Footer: emit the accumulated value.
+          partial_.clear();
+          // Footer: emit the accumulated value using the previously saved
+          // non-zero header frame.
           out.push_back(
               T::_fromFrames(pending_header_, std::move(pending_frames_)));
           pending_frames_.clear();
           continue;
         }
+
+        std::memcpy(&pending_header_, partial_.data(), kFrameSize);
+        partial_.clear();
         remaining_ = batchCount;
         continue;
       }
