@@ -145,7 +145,8 @@ def ProbeResolveOp : HWOp<"probe.resolve", []> {
 //===----------------------------------------------------------------------===//
 
 def ProbeRWProbeOp : HWOp<"probe.rwprobe", [
-    DeclareOpInterfaceMethods<InnerRefUserOpInterface>
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+    DeclareOpInterfaceMethods<InnerSymbol, ["getTargetResultIndex"]>
   ]> {
   let summary = "Create a read-write probe reference via inner symbol";
   let description = [{
@@ -153,13 +154,21 @@ def ProbeRWProbeOp : HWOp<"probe.rwprobe", [
     This allows the target to be forced and released procedurally. The target
     must be within the same module (local reference).
 
+    The operation can optionally define an inner symbol using the 'inner_sym'
+    attribute, which allows this probe reference operation itself to be
+    referenced by other operations using InnerRef.
+
     Example:
     ```mlir
     %rwref = hw.probe.rwprobe @Module::@symbol : !hw.rwprobe<i32>
+
+    // With inner symbol
+    %rwref = hw.probe.rwprobe sym @my_rwprobe @Module::@symbol : !hw.rwprobe<i32>
     ```
   }];
 
-  let arguments = (ins InnerRefAttr:$target);
+  let arguments = (ins InnerRefAttr:$target,
+                       OptionalAttr<InnerSymAttr>:$inner_sym);
   let results = (outs RWProbeType:$result);
 
   let hasCustomAssemblyFormat = 1;

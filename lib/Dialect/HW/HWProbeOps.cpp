@@ -367,6 +367,14 @@ LogicalResult XMRRemoteOp::verifyInnerRefs(InnerRefNamespace &ns) {
 //===----------------------------------------------------------------------===//
 
 ParseResult ProbeRWProbeOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse optional 'sym' keyword for inner symbol
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    InnerSymAttr innerSym;
+    if (parser.parseCustomAttributeWithFallback(innerSym))
+      return failure();
+    result.addAttribute(InnerSymbolTable::getInnerSymbolAttrName(), innerSym);
+  }
+
   // Parse the symbol reference  (@Module::@symbol)
   mlir::SymbolRefAttr symRef;
   Type resultType;
@@ -390,11 +398,26 @@ ParseResult ProbeRWProbeOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void ProbeRWProbeOp::print(OpAsmPrinter &p) {
+  // Print optional inner symbol
+  if (auto innerSym = (*this)->getAttrOfType<InnerSymAttr>(
+          InnerSymbolTable::getInnerSymbolAttrName())) {
+    p << " sym ";
+    innerSym.print(p);
+  }
+
   // Print as @Module::@symbol
   auto target = getTargetAttr();
   p << " @" << target.getModule().getValue() << "::@"
     << target.getName().getValue();
-  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"target"});
+
+  // Print attributes excluding 'target', 'inner_sym' (already printed), and
+  // 'dummy' (internal parsing artifact)
+  SmallVector<StringRef> elidedAttrs;
+  elidedAttrs.push_back("target");
+  elidedAttrs.push_back(InnerSymbolTable::getInnerSymbolAttrName());
+  elidedAttrs.push_back("dummy");
+  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+
   p << " : " << getResult().getType();
 }
 
@@ -406,6 +429,11 @@ LogicalResult ProbeRWProbeOp::verifyInnerRefs(InnerRefNamespace &ns) {
 
   // The actual verification of the inner ref is done by the namespace
   return success();
+}
+
+std::optional<size_t> ProbeRWProbeOp::getTargetResultIndex() {
+  // Inner symbol targets the result (the rwprobe)
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//

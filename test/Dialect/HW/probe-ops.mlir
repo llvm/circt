@@ -308,3 +308,17 @@ hw.module @ProbeSendForceableWithInnerSym() {
   // CHECK: %{{.+}} = hw.probe.to_inout %{{.+}} : !hw.rwprobe<i8>
   %inout = hw.probe.to_inout %rwprobe : !hw.rwprobe<i8>
 }
+
+// CHECK-LABEL: hw.module @ProbeRWProbeWithInnerSym
+hw.module @ProbeRWProbeWithInnerSym() {
+  %c = hw.constant 0 : i32
+  %wire = hw.wire %c sym @target_wire : i32
+
+  // RWProbe without inner symbol
+  // CHECK: %{{.+}} = hw.probe.rwprobe @ProbeRWProbeWithInnerSym::@target_wire : !hw.rwprobe<i32>
+  %rwref1 = hw.probe.rwprobe @ProbeRWProbeWithInnerSym::@target_wire : !hw.rwprobe<i32>
+
+  // RWProbe with inner symbol
+  // CHECK: %{{.+}} = hw.probe.rwprobe sym @my_rwprobe_ref @ProbeRWProbeWithInnerSym::@target_wire : !hw.rwprobe<i32>
+  %rwref2 = hw.probe.rwprobe sym @my_rwprobe_ref @ProbeRWProbeWithInnerSym::@target_wire : !hw.rwprobe<i32>
+}
