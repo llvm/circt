@@ -518,8 +518,8 @@ hw.module @test_write(in %c0 : i32, in %c1 : i8) {
 hw.module @test_generate_for() {
   // CHECK: sv.generate "foo_loop" : {
   sv.generate "foo_loop" : {
-    // CHECK: sv.generate.for %i = 0 : i32 to 10 : i32 step 1 : i32 name "gen_blk" {
-    sv.generate.for %i = 0 : i32 to 10 : i32 step 1 : i32 name "gen_blk" {
+    // CHECK: sv.generate.for %i : i32 = 0 : i32 to 10 : i32 step 1 : i32 name "gen_blk" {
+    sv.generate.for %i : i32 = 0 to 10 : i32 step 1 name "gen_blk" {
       sv.initial {
         sv.write "val = %d"(%i) : i32
       }
