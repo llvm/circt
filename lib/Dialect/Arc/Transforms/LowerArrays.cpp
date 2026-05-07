@@ -379,6 +379,24 @@ struct OptimizeReturnOfAlloc : public OpRewritePattern<func::ReturnOp> {
   }
 };
 
+struct ConvertStateRead : public OpConversionPattern<StateReadOp> {
+  using OpConversionPattern<StateReadOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StateReadOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto result = convertOpResultTypes(op, adaptor.getOperands(),
+                                       *this->getTypeConverter(), rewriter);
+    if (failed(result))
+      return failure();
+
+    // For correctness we need to copy the read state into a local array.
+    Value resultValue = result.value()->getResult(0);
+    rewriter.replaceOp(op, cloneArrayRef(resultValue, rewriter, op.getLoc()));
+    return success();
+  }
+};
+
 template <typename Op>
 struct ConvertTrivially : public OpConversionPattern<Op> {
   using OpConversionPattern<Op>::OpConversionPattern;
@@ -396,7 +414,6 @@ struct ConvertTrivially : public OpConversionPattern<Op> {
 };
 
 using ConvertAllocState = ConvertTrivially<arc::AllocStateOp>;
-using ConvertStateRead = ConvertTrivially<arc::StateReadOp>;
 using ConvertStateWrite = ConvertTrivially<arc::StateWriteOp>;
 using ConvertRootInput = ConvertTrivially<arc::RootInputOp>;
 using ConvertRootOutput = ConvertTrivially<arc::RootOutputOp>;
@@ -423,6 +440,9 @@ void LowerArraysPass::runOnOperation() {
   });
 
   target.addLegalOp<ArrayRefFromArrayOp, ArrayRefToArrayOp>();
+  // Arrays within structs or unions always use !hw.array.
+  target.addLegalOp<StructCreateOp, StructInjectOp, StructExtractOp,
+                    StructExplodeOp, UnionCreateOp, UnionExtractOp>();
   target.markUnknownOpDynamicallyLegal(
       [&](Operation *op) { return converter.isLegal(op); });
   target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp func) {
