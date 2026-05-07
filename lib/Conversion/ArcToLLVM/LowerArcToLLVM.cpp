@@ -1349,10 +1349,9 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
     auto size = LLVM::ConstantOp::create(rewriter, op.getLoc(),
                                          rewriter.getI64Type(), byteWidth);
 
-
     size_t alignment = computeAllocaAlignment(arrayRefType, op);
-    auto alloc =
-        LLVM::AllocaOp::create(rewriter, op.getLoc(), ptrTy, i8Ty, size, alignment);
+    auto alloc = LLVM::AllocaOp::create(rewriter, op.getLoc(), ptrTy, i8Ty,
+                                        size, alignment);
 
     if (op.getInitAttr()) {
       ArrayAttr initAttr = op.getInitAttr();
@@ -1372,14 +1371,16 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
 
   // Computes the required alignment for an AllocaOp of the given type.
   // c.f. HWToLLVM.cpp.
-  size_t computeAllocaAlignment(ArrayRefType type, Operation* op) const {
+  size_t computeAllocaAlignment(ArrayRefType type, Operation *op) const {
     if (alignmentCache.count(type)) {
       return alignmentCache[type];
     }
     auto dl = DataLayout::closest(op);
-    auto hwType = hw::ArrayType::get(type.getElementType(), type.getNumElements());
+    auto hwType =
+        hw::ArrayType::get(type.getElementType(), type.getNumElements());
     auto llvmType = getTypeConverter()->convertType(hwType);
-    auto alignment = static_cast<unsigned>(dl.getTypePreferredAlignment(llvmType));
+    auto alignment =
+        static_cast<unsigned>(dl.getTypePreferredAlignment(llvmType));
     alignment = std::max(4u, alignment);
     alignmentCache[type] = alignment;
     return alignment;
@@ -1408,7 +1409,7 @@ struct ArrayRefAllocOpLowering : public OpConversionPattern<ArrayRefAllocOp> {
     }
   }
 
- private:
+private:
   mutable DenseMap<ArrayRefType, size_t> alignmentCache;
 };
 
@@ -1458,8 +1459,7 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
     Value byteOffset =
         LLVM::MulOp::create(rewriter, loc, adaptor.getIndex(), stride);
-    Value totalSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
-                                               byteWidth);
+    Value totalSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty, byteWidth);
     // Defend against out-of-bounds accesses. What we return is undefined in the
     // case of OOB.
     Value clampedOffset =
@@ -1493,8 +1493,7 @@ struct ArrayRefInjectOpLowering : public OpConversionPattern<ArrayRefInjectOp> {
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
     Value byteOffset =
         LLVM::MulOp::create(rewriter, loc, adaptor.getIndex(), stride);
-    Value totalSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty,
-                                               byteWidth);
+    Value totalSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty, byteWidth);
     // Defend against out-of-bounds accesses. We must avoid corrupting the
     // array.
     Value isInbounds = LLVM::ICmpOp::create(
@@ -1529,12 +1528,12 @@ struct ArrayRefSliceOpLowering : public OpConversionPattern<ArrayRefSliceOp> {
     size_t elemByteWidth = computeElementByteWidth(resultType);
 
     // Ensure the slice doesn't go out of bounds.
-    size_t maxLowIndex = inputType.getNumElements() - resultType.getNumElements();
+    size_t maxLowIndex =
+        inputType.getNumElements() - resultType.getNumElements();
     Value maxLowIndexVal =
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, maxLowIndex);
-    Value clampedLowIndex =
-        LLVM::UMinOp::create(rewriter, loc, i64Ty, adaptor.getLowIndex(),
-                             maxLowIndexVal);
+    Value clampedLowIndex = LLVM::UMinOp::create(
+        rewriter, loc, i64Ty, adaptor.getLowIndex(), maxLowIndexVal);
 
     // Byte offset = lowIndex * elemByteWidth.
     Value stride =

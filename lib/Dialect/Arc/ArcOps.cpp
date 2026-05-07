@@ -763,7 +763,8 @@ LogicalResult ArrayRefAllocOp::verify() {
     unsigned elemBitwidth = getType().getElementType().getIntOrFloatBitWidth();
     for (APInt value : init->getAsValueRange<IntegerAttr>()) {
       if (value.getBitWidth() != elemBitwidth) {
-        return emitOpError("expected element to be of type ") << getType().getElementType();
+        return emitOpError("expected element to be of type ")
+               << getType().getElementType();
       }
     }
   }

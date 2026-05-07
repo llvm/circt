@@ -490,8 +490,8 @@ void LowerArraysPass::runOnOperation() {
 
   ConversionConfig config;
   config.allowPatternRollback = false;
-  if (failed(applyPartialConversion(getOperation(), target,
-                                    std::move(patterns), config))) {
+  if (failed(applyPartialConversion(getOperation(), target, std::move(patterns),
+                                    config))) {
     return signalPassFailure();
   }
 
