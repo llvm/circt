@@ -1566,6 +1566,39 @@ struct ArrayRefCopyOpLowering : public OpConversionPattern<ArrayRefCopyOp> {
   }
 };
 
+static Value loadArrayRefAsArray(ImplicitLocOpBuilder &builder, Value arrayRef,
+                                 ArrayRefType arrayRefType,
+                                 LLVM::LLVMArrayType llvmType) {
+  auto i8Ty = builder.getI8Type();
+  auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+  size_t elemByteWidth = computeElementByteWidth(arrayRefType);
+  Value v = LLVM::UndefOp::create(builder, llvmType);
+  int32_t size = arrayRefType.getNumElements();
+  for (int32_t i = 0; i < size; i++) {
+    int32_t byteOffset = i * elemByteWidth;
+    Value gep = LLVM::GEPOp::create(builder, ptrTy, i8Ty, arrayRef,
+                                    LLVM::GEPArg{byteOffset});
+    Value load = LLVM::LoadOp::create(builder, llvmType.getElementType(), gep);
+    v = LLVM::InsertValueOp::create(builder, v, load, i);
+  }
+  return v;
+}
+
+static void storeArrayAsArrayRef(ImplicitLocOpBuilder &builder, Value array,
+                                 Value arrayRef, ArrayRefType arrayRefType) {
+  auto i8Ty = builder.getI8Type();
+  auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
+  size_t elemByteWidth = computeElementByteWidth(arrayRefType);
+  int32_t size = arrayRefType.getNumElements();
+  for (int32_t i = 0; i < size; i++) {
+    int32_t byteOffset = i * elemByteWidth;
+    Value gep = LLVM::GEPOp::create(builder, ptrTy, i8Ty, arrayRef,
+                                    LLVM::GEPArg{byteOffset});
+    Value val = LLVM::ExtractValueOp::create(builder, array, i);
+    LLVM::StoreOp::create(builder, val, gep);
+  }
+}
+
 struct ArrayRefToLLVMArrayOpLowering
     : public OpConversionPattern<UnrealizedConversionCastOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1578,9 +1611,11 @@ struct ArrayRefToLLVMArrayOpLowering
       return failure();
     }
 
-    Value loaded =
-        LLVM::LoadOp::create(rewriter, op.getLoc(), op.getResult(0).getType(),
-                             adaptor.getInputs().front());
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    Value loaded = loadArrayRefAsArray(
+        b, adaptor.getInputs().front(),
+        cast<ArrayRefType>(op.getOperand(0).getType()),
+        cast<LLVM::LLVMArrayType>(op.getResult(0).getType()));
     rewriter.replaceOp(op, loaded);
     return success();
   }
@@ -1594,8 +1629,10 @@ struct ArrayRefToArrayOpLowering
   matchAndRewrite(ArrayRefToArrayOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = getTypeConverter()->convertType(op.getResult().getType());
-    Value loaded = LLVM::LoadOp::create(rewriter, op.getLoc(), resultType,
-                                        adaptor.getInput());
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    Value loaded = loadArrayRefAsArray(
+        b, adaptor.getInput(), cast<ArrayRefType>(op.getInput().getType()),
+        cast<LLVM::LLVMArrayType>(resultType));
     rewriter.replaceOp(op, loaded);
     return success();
   }
@@ -1608,8 +1645,9 @@ struct ArrayRefFromArrayOpLowering
   LogicalResult
   matchAndRewrite(ArrayRefFromArrayOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    LLVM::StoreOp::create(rewriter, op.getLoc(), adaptor.getArray(),
-                          adaptor.getInput());
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    storeArrayAsArrayRef(b, adaptor.getArray(), adaptor.getInput(),
+                         cast<ArrayRefType>(op.getInput().getType()));
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }

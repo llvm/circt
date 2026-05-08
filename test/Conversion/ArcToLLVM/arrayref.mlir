@@ -138,15 +138,26 @@ func.func @ArrayRefCopy(%arg0: !arc.arrayref<2xi32>, %arg1: !arc.arrayref<2xi32>
 }
 
 // CHECK-LABEL: @ArrayRefToArray
-// CHECK-NEXT: %[[LOAD:.*]] = llvm.load %arg0 : !llvm.ptr -> !llvm.array<2 x i32>
-// CHECK-NEXT: return %[[LOAD]]
+// CHECK-NEXT: %[[UNDEF:.*]] = llvm.mlir.undef : !llvm.array<2 x i32>
+// CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %arg0[0] : (!llvm.ptr) -> !llvm.ptr, i8
+// CHECK-NEXT: %[[LOAD0:.*]] = llvm.load %[[GEP0]] : !llvm.ptr -> i32
+// CHECK-NEXT: %[[INS0:.*]] = llvm.insertvalue %[[LOAD0]], %[[UNDEF]][0] : !llvm.array<2 x i32>
+// CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %arg0[4] : (!llvm.ptr) -> !llvm.ptr, i8
+// CHECK-NEXT: %[[LOAD1:.*]] = llvm.load %[[GEP1]] : !llvm.ptr -> i32
+// CHECK-NEXT: %[[INS1:.*]] = llvm.insertvalue %[[LOAD1]], %[[INS0]][1] : !llvm.array<2 x i32>
+// CHECK-NEXT: return %[[INS1]]
 func.func @ArrayRefToArray(%arg0: !arc.arrayref<2xi32>) -> !hw.array<2xi32> {
   %0 = arc.arrayref.to_array %arg0 : (!arc.arrayref<2xi32>) -> !hw.array<2xi32>
   return %0 : !hw.array<2xi32>
 }
 
 // CHECK-LABEL: @ArrayRefFromArray
-// CHECK-NEXT: llvm.store %arg1, %arg0 : !llvm.array<2 x i32>, !llvm.ptr
+// CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %arg0[0] : (!llvm.ptr) -> !llvm.ptr, i8
+// CHECK-NEXT: %[[VAL0:.*]] = llvm.extractvalue %arg1[0] : !llvm.array<2 x i32>
+// CHECK-NEXT: llvm.store %[[VAL0]], %[[GEP0]] : i32, !llvm.ptr
+// CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %arg0[4] : (!llvm.ptr) -> !llvm.ptr, i8
+// CHECK-NEXT: %[[VAL1:.*]] = llvm.extractvalue %arg1[1] : !llvm.array<2 x i32>
+// CHECK-NEXT: llvm.store %[[VAL1]], %[[GEP1]] : i32, !llvm.ptr
 // CHECK-NEXT: return %arg0
 func.func @ArrayRefFromArray(%arg0: !arc.arrayref<2xi32>, %arg1: !hw.array<2xi32>) -> !arc.arrayref<2xi32> {
   %0 = arc.arrayref.from_array %arg0 = %arg1 : <2xi32>, !hw.array<2xi32>
