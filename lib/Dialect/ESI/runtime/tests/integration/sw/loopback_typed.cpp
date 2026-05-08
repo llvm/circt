@@ -1,4 +1,5 @@
 #include "loopback/LoopbackIP.h"
+#include "loopback/SerialCoordTranslator.h"
 
 #include "esi/Accelerator.h"
 #include "esi/CLI.h"
@@ -194,29 +195,20 @@ static void serialCoordTranslateTest(Accelerator *accel) {
   for (uint32_t i = 0; i < numCoords; ++i)
     coords.emplace_back(dist(rng), dist(rng));
 
-  auto child = accel->getChildren().find(AppID("coord_translator_serial"));
-  if (child == accel->getChildren().end())
+  auto childIt = accel->getChildren().find(AppID("coord_translator_serial"));
+  if (childIt == accel->getChildren().end())
     throw std::runtime_error("Serial coord translate test: no "
                              "'coord_translator_serial' child found");
 
-  auto &ports = child->second->getPorts();
-  auto portIter = ports.find(AppID("translate_coords_serial"));
-  if (portIter == ports.end())
-    throw std::runtime_error(
-        "Serial coord translate test: no 'translate_coords_serial' port found");
+  esi_system::SerialCoordTranslator translator(childIt->second);
+  auto connected = translator.connect();
 
-  // Drive the serial-list window through TypedFunction. The arg helper
-  // packs the static fields and value list into the header/data/footer
-  // frame protocol; the result helper's nested TypeDeserializer reassembles
-  // the reply frames into a single SerialCoordResult value, which we then
-  // iterate via its accessors.
-  TypedFunction<SerialCoordInput, SerialCoordResult> func =
-      portIter->second.getAs<services::FuncService::Function>();
-  func.connect();
-
-  // Use the emplace-style call() overload to construct SerialCoordInput
+  // Drive the serial-list window through the generated facade. The
+  // TypedFunction member handles frame packing and result reassembly;
+  // the emplace-style call() overload constructs SerialCoordInput
   // in-place from the forwarded constructor arguments.
-  SerialCoordResult result = func(xTrans, yTrans, coords).get();
+  SerialCoordResult result =
+      connected->translate_coords_serial(xTrans, yTrans, coords).get();
 
   if (result.coords_count() != coords.size())
     throw std::runtime_error("Serial coord translate result size mismatch");

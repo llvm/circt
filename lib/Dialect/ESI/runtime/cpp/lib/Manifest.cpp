@@ -312,7 +312,7 @@ Manifest::Impl::buildAccelerator(AcceleratorConnection &acc) const {
 
 std::optional<ModuleInfo>
 Manifest::Impl::getModInfo(const nlohmann::json &json) const {
-  auto instOfIter = json.find("instOf");
+  auto instOfIter = json.find("instanceOf");
   if (instOfIter == json.end())
     return std::nullopt;
   auto f = symbolInfoCache.find(instOfIter.value());
