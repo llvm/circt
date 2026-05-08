@@ -1192,7 +1192,8 @@ static void appendGenerateScopePrefix(Operation *defOp,
     if (isa<HWModuleOp>(parentOp))
       break;
     if (auto genCase = dyn_cast<GenerateCaseOp>(parentOp)) {
-      auto verilogCaseNames = genCase.getVerilogCaseNamesAttr();
+      auto verilogCaseNames =
+          genCase->getAttrOfType<ArrayAttr>("hw.verilogCaseNames");
       for (auto [idx, reg] : llvm::enumerate(genCase.getCaseRegions())) {
         if (&reg != region)
           continue;
@@ -1200,16 +1201,16 @@ static void appendGenerateScopePrefix(Operation *defOp,
             verilogCaseNames && verilogCaseNames.size() > idx &&
             "expected ExportVerilog name legalization to set verilogCaseNames");
         StringRef legal = cast<StringAttr>(verilogCaseNames[idx]).getValue();
-        segments.push_back(SmallString<32>(legal));
+        segments.push_back(legal);
         break;
       }
     } else if (auto gen = dyn_cast<GenerateOp>(parentOp)) {
       StringRef name = ExportVerilog::getSymOpName(gen);
-      segments.push_back(SmallString<32>(name));
+      segments.push_back(name);
     }
     block = parentOp->getBlock();
   }
-  for (const SmallString<32> &seg : llvm::reverse(segments)) {
+  for (StringRef seg : llvm::reverse(segments)) {
     if (!out.empty())
       out.push_back('.');
     out.append(seg.begin(), seg.end());
@@ -4983,7 +4984,7 @@ LogicalResult StmtEmitter::visitSV(GenerateCaseOp op) {
   // TODO: We'll probably need to store the legalized names somewhere for
   // `verbose` formatting. Set up the infra for storing names recursively. Just
   // store this locally for now.
-  auto verilogCaseNames = op.getVerilogCaseNamesAttr();
+  auto verilogCaseNames = op->getAttrOfType<ArrayAttr>("hw.verilogCaseNames");
   llvm::StringMap<size_t> nextGenIds;
   ps.scopedBox(PP::bbox2, [&]() {
     // Emit each case.
