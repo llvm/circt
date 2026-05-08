@@ -118,7 +118,6 @@ void circt::populateArcStateLoweringPipeline(
   if (options.shouldInline)
     pm.addPass(arc::createInlineArcs());
 
-  pm.addPass(arc::createRemoveI0Types());
   pm.addPass(arc::createMergeIfsPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizer());
@@ -127,6 +126,7 @@ void circt::populateArcStateLoweringPipeline(
 void circt::populateArcStateAllocationPipeline(
     OpPassManager &pm, const ArcStateAllocationOptions &options) {
   pm.addPass(arc::createLowerArcsToFuncs());
+  pm.addPass(arc::createRemoveI0Types());
   {
     AllocateStateOptions allocStateOpts;
     allocStateOpts.insertTraceTaps = options.insertTraceTaps;
