@@ -192,3 +192,18 @@ func.func @ArrayOfArrayOf1(%arg0: !hw.array<2x!hw.array<1xi32>>) ->
 func.func @StateType(%arg0: !arc.state<!hw.array<1xi32>>) {
   return
 }
+
+// CHECK-LABEL: func.func @AggregateConstantBecomesScalar
+// CHECK-SAME: -> i32
+// CHECK-NEXT: hw.constant 0 : i32
+func.func @AggregateConstantBecomesScalar() -> !hw.array<1xi32> {
+  %0 = hw.aggregate_constant [0 : i32] : !hw.array<1xi32>
+  return %0 : !hw.array<1xi32>
+}
+
+// CHECK-LABEL: func.func @AggregateConstantStaysAggregate
+// CHECK-NEXT: hw.aggregate_constant [0 : i32, 1 : i32] : !hw.array<2xi32>
+func.func @AggregateConstantStaysAggregate() -> !hw.array<2x!hw.array<1xi32>> {
+  %0 = hw.aggregate_constant [[0 : i32], [1 : i32]] : !hw.array<2x!hw.array<1xi32>>
+  return %0 : !hw.array<2x!hw.array<1xi32>>
+}

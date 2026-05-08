@@ -200,6 +200,54 @@ struct HandleGenericOp : public ConversionPattern {
     return success();
   }
 };
+
+struct ConvertAggregateConstant : public OpConversionPattern<hw::AggregateConstantOp> {
+  using OpConversionPattern<hw::AggregateConstantOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(hw::AggregateConstantOp op, OpAdaptor adaptor, ConversionPatternRewriter &rewriter) const override {
+    Type resultType = getTypeConverter()->convertType(op.getResult().getType());
+
+    // Recursively rewrite the attribute.
+    Attribute newFields = rewriteArrayAttr(op.getFields(), op.getResult().getType());
+
+    if (!isa<ArrayAttr>(newFields)) {
+      // Scalar result -> becomes hw.constant.
+      IntegerAttr attr = cast<IntegerAttr>(newFields);
+      auto result = hw::ConstantOp::create(rewriter, op.getLoc(), resultType,
+                                           attr);
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
+    // Composite result -> new aggregate_constant op.
+    auto newOp = hw::AggregateConstantOp::create(rewriter, op.getLoc(), resultType, cast<ArrayAttr>(newFields));
+    rewriter.replaceOp(op, newOp);
+    return success();
+  }
+
+  Attribute rewriteArrayAttr(ArrayAttr array, Type type) const {
+    if (getTypeConverter()->convertType(type) == type)
+      return array;
+    if (auto arrayType = dyn_cast<hw::ArrayType>(type); arrayType && arrayType.getNumElements() == 1) {
+      return *array.begin();
+    }
+
+    // Collect the immediate subtypes. FieldIDTypeInterface is supported by
+    // ArrayType, UnpackedArrayType, StructType, UnionType.
+    auto fieldIdInterface = cast<hw::FieldIDTypeInterface>(type);
+    SmallVector<Attribute> attrs;
+    for (auto [index, attr] : llvm::enumerate(array)) {
+      uint64_t fieldId = fieldIdInterface.getFieldID(index);
+      Type subType = fieldIdInterface.getSubTypeByFieldID(fieldId).first;
+      if (auto subArrayAttr = dyn_cast<ArrayAttr>(attr)) {
+        attrs.push_back(rewriteArrayAttr(subArrayAttr, subType));
+      } else {
+        attrs.push_back(attr);
+      }
+    }
+    return ArrayAttr::get(array.getContext(), attrs);
+  }
+};
 } // namespace
 
 void RemoveI0TypesPass::runOnOperation() {
@@ -254,7 +302,8 @@ void RemoveI0TypesPass::runOnOperation() {
   });
 
   patterns.add<ConvertFunc, ConvertReturn, ConvertCall, ConvertArrayGet,
-               ConvertArrayCreate, ConvertArrayInject, HandleGenericOp>(
+               ConvertArrayCreate, ConvertArrayInject, HandleGenericOp,
+               ConvertAggregateConstant>(
       converter, &getContext());
   if (failed(
           applyFullConversion(getOperation(), target, std::move(patterns)))) {
