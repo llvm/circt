@@ -93,10 +93,7 @@ class CppGenerator(Generator):
 
   def _build_module_instance_map(self) -> Dict[str, object]:
     """Walk the live hierarchy and return {module_name: first Instance}."""
-    try:
-      accel = self._conn.build_accelerator()
-    except Exception:
-      return {}
+    accel = self._conn.build_accelerator()
     result: Dict[str, object] = {}
     queue = list(accel.children.values())
     while queue:
@@ -112,67 +109,73 @@ class CppGenerator(Generator):
   def _cpp_member_type(self, port, alias_prefix: Optional[str] = None) -> str:
     """Return the C++ member type string for a port (no member name).
 
-    If `alias_prefix` is provided, typed-port template parameters are written
-    using the alias names (`<prefix>Args`, `<prefix>Result`, `<prefix>Data`)
-    that should be emitted at module-class scope via `_port_using_aliases`.
+    For typed ports (function/callback/to-host/from-host channels) `alias_prefix`
+    is required; the returned template parameters are written using the alias
+    names (`<prefix>Args`, `<prefix>Result`, `<prefix>Data`) that should be
+    emitted at module-class scope via `_port_using_aliases`. For non-typed
+    ports (MMIO regions, telemetry metrics, plain bundles) `alias_prefix` is
+    ignored and the runtime reference/pointer type is returned directly.
     """
-    try:
-      if isinstance(port, _FunctionPort):
-        if alias_prefix is not None:
-          return (f"esi::TypedFunction<{alias_prefix}Args, "
-                  f"{alias_prefix}Result>")
-        arg = self.type_emitter.type_identifier(port.arg_window_type or
-                                                port.arg_type)
-        res = self.type_emitter.type_identifier(port.result_window_type or
-                                                port.result_type)
-        return f"esi::TypedFunction<{arg}, {res}>"
-      if isinstance(port, _CallbackPort):
-        if alias_prefix is not None:
-          return (f"esi::TypedCallback<{alias_prefix}Args, "
-                  f"{alias_prefix}Result>")
-        arg = self.type_emitter.type_identifier(port.arg_window_type or
-                                                port.arg_type)
-        res = self.type_emitter.type_identifier(port.result_window_type or
-                                                port.result_type)
-        return f"esi::TypedCallback<{arg}, {res}>"
-      if isinstance(port, _ToHostPort):
-        if alias_prefix is not None:
-          return f"esi::TypedReadPort<{alias_prefix}Data>"
-        data = self.type_emitter.type_identifier(port.data_window_type or
-                                                 port.data_type)
-        return f"esi::TypedReadPort<{data}>"
-      if isinstance(port, _FromHostPort):
-        if alias_prefix is not None:
-          return f"esi::TypedWritePort<{alias_prefix}Data>"
-        data = self.type_emitter.type_identifier(port.data_window_type or
-                                                 port.data_type)
-        return f"esi::TypedWritePort<{data}>"
-    except Exception:
-      pass  # fall through to BundlePort
+    if isinstance(port, _FunctionPort):
+      assert alias_prefix is not None, (
+          "alias_prefix is required for FunctionPort to avoid emitting "
+          "long mangled type names inline (which would also collide across "
+          "modules' `using` declarations)")
+      return (f"esi::TypedFunction<{alias_prefix}Args, "
+              f"{alias_prefix}Result>")
+    if isinstance(port, _CallbackPort):
+      assert alias_prefix is not None, (
+          "alias_prefix is required for CallbackPort")
+      return (f"esi::TypedCallback<{alias_prefix}Args, "
+              f"{alias_prefix}Result>")
+    if isinstance(port, _ToHostPort):
+      assert alias_prefix is not None, (
+          "alias_prefix is required for ToHostPort")
+      return f"esi::TypedReadPort<{alias_prefix}Data>"
+    if isinstance(port, _FromHostPort):
+      assert alias_prefix is not None, (
+          "alias_prefix is required for FromHostPort")
+      return f"esi::TypedWritePort<{alias_prefix}Data>"
     if isinstance(port, _MMIORegionPort):
       return "esi::services::MMIO::MMIORegion &"
     if isinstance(port, _MetricPort):
       return "esi::services::TelemetryService::Metric &"
-    return "esi::BundlePort *"
+    return "esi::BundlePort &"
 
   def _port_using_aliases(self, alias_prefix: str,
                           port) -> List[Tuple[str, str]]:
     """Return (alias_name, type_id) pairs to emit as `using` declarations at
     module-class scope for the typed-port template parameters."""
-    try:
-      if isinstance(port, (_FunctionPort, _CallbackPort)):
-        arg = self.type_emitter.type_identifier(port.arg_window_type or
-                                                port.arg_type)
-        res = self.type_emitter.type_identifier(port.result_window_type or
-                                                port.result_type)
-        return [(f"{alias_prefix}Args", arg), (f"{alias_prefix}Result", res)]
-      if isinstance(port, (_ToHostPort, _FromHostPort)):
-        data = self.type_emitter.type_identifier(port.data_window_type or
-                                                 port.data_type)
-        return [(f"{alias_prefix}Data", data)]
-    except Exception:
-      pass
+    if isinstance(port, (_FunctionPort, _CallbackPort)):
+      arg = self.type_emitter.type_identifier(port.arg_window_type or
+                                              port.arg_type)
+      res = self.type_emitter.type_identifier(port.result_window_type or
+                                              port.result_type)
+      return [(f"{alias_prefix}Args", arg), (f"{alias_prefix}Result", res)]
+    if isinstance(port, (_ToHostPort, _FromHostPort)):
+      data = self.type_emitter.type_identifier(port.data_window_type or
+                                               port.data_type)
+      return [(f"{alias_prefix}Data", data)]
     return []
+
+  def _cpp_indexed_elem_type(self,
+                             port,
+                             alias_prefix: Optional[str] = None) -> str:
+    """Return the storage type used inside an `IndexedPorts<T>` for `port`.
+
+    Typed ports use the same `TypedFunction<...>` / `TypedReadPort<...>` etc.
+    that `_cpp_member_type` produces. MMIO regions, telemetry metrics, and
+    plain bundle ports are stored as raw pointers because `std::map<int, T&>`
+    is ill-formed.
+    """
+    if isinstance(port, _MMIORegionPort):
+      return "esi::services::MMIO::MMIORegion *"
+    if isinstance(port, _MetricPort):
+      return "esi::services::TelemetryService::Metric *"
+    if isinstance(port,
+                  (_FunctionPort, _CallbackPort, _ToHostPort, _FromHostPort)):
+      return self._cpp_member_type(port, alias_prefix=alias_prefix)
+    return "esi::BundlePort *"
 
   def _cpp_ctor_param_type(self, port) -> str:
     """Return the C++ constructor parameter type for a port."""
@@ -188,7 +191,7 @@ class CppGenerator(Generator):
       return "esi::services::MMIO::MMIORegion &"
     if isinstance(port, _MetricPort):
       return "esi::services::TelemetryService::Metric &"
-    return "esi::BundlePort *"
+    return "esi::BundlePort &"
 
   @staticmethod
   def _cpp_ctor_param_suffix(port) -> str:
@@ -248,7 +251,7 @@ class CppGenerator(Generator):
           f"        rawModule, {ae});")
     # plain BundlePort fallback
     v = f"{member_name}_port"
-    return f"auto *{v} = &esi::findPortOrThrow(rawModule, {ae});"
+    return f"auto &{v} = esi::findPortOrThrow(rawModule, {ae});"
 
   @staticmethod
   def _port_make_unique_arg(member_name: str, port) -> str:
@@ -264,13 +267,7 @@ class CppGenerator(Generator):
     """True if the generated connect() should call .connect() on this port."""
     return isinstance(port, (_FunctionPort, _ToHostPort, _FromHostPort))
     # CallbackPort.connect() requires a user-supplied callback — skip.
-    # MMIORegion, Metric, BundlePort* — no .connect() method.
-
-  @staticmethod
-  def _port_is_indexable(port) -> bool:
-    """True if this port type can appear in an IndexedPorts<T> group."""
-    return isinstance(
-        port, (_FunctionPort, _CallbackPort, _ToHostPort, _FromHostPort))
+    # MMIORegion, Metric, BundlePort — no .connect() method.
 
   def _scalar_port_group(self, member_name: str, port, appid) -> _PortGroup:
     """Build a _PortGroup for a single scalar (non-indexed) port."""
@@ -308,39 +305,86 @@ class CppGenerator(Generator):
     first_port = port_list[0][1]
     aliases = self._port_using_aliases(member_name, first_port)
     alias_prefix = member_name if aliases else None
-    elem_type = self._cpp_member_type(first_port, alias_prefix=alias_prefix)
+    elem_type = self._cpp_indexed_elem_type(first_port,
+                                            alias_prefix=alias_prefix)
     indexed_type = f"esi::IndexedPorts<{elem_type}>"
     map_var = f"{member_name}_backing"
     map_type = f"std::map<int, {elem_type}>"
     indexed_var = f"{member_name}_map"
 
-    # Build the find code: populate the map via try_emplace, then freeze.
+    # Build the find code: per-index resolve and try_emplace, then freeze
+    # into the IndexedPorts wrapper. The body of the loop differs by port
+    # kind: channel ports need an extra `getRawRead("data")` /
+    # `getRawWrite("data")` step, MMIO regions and metrics store raw
+    # pointers.
     find_parts = [
         f"{map_type} {map_var};",
-        f"for (uint32_t _idx : esi::findPortIndices(rawModule, \"{appid_name}\"))",
+        f"for (uint32_t _idx : esi::findPortIndices(rawModule, "
+        f"\"{appid_name}\")) {{",
     ]
+    appid_expr = f'esi::AppID("{appid_name}", _idx)'
     if isinstance(first_port, _FunctionPort):
-      svc = "esi::services::FuncService::Function"
+      find_parts.append(
+          f"  {map_var}.try_emplace(\n"
+          f"      static_cast<int>(_idx),\n"
+          f"      esi::findPortAsOrThrow<esi::services::FuncService::Function>"
+          f"(\n"
+          f"          rawModule, {appid_expr}));")
     elif isinstance(first_port, _CallbackPort):
-      svc = "esi::services::CallService::Callback"
+      find_parts.append(
+          f"  {map_var}.try_emplace(\n"
+          f"      static_cast<int>(_idx),\n"
+          f"      esi::findPortAsOrThrow<esi::services::CallService::Callback>"
+          f"(\n"
+          f"          rawModule, {appid_expr}));")
     elif isinstance(first_port, _ToHostPort):
-      # For channels the map holds the port object, not the channel directly.
-      # We need a different approach: store the service port, then connect.
-      # Simplest: fall back to storing the service port type in the map.
-      svc = "esi::services::ChannelService::ToHost"
-    else:  # _FromHostPort
-      svc = "esi::services::ChannelService::FromHost"
-
-    find_parts.append(
-        f"  {map_var}.try_emplace(\n"
-        f"      static_cast<int>(_idx),\n"
-        f"      esi::findPortAsOrThrow<{svc}>(\n"
-        f'          rawModule, esi::AppID("{appid_name}", _idx)));')
+      # TypedReadPort takes a ReadChannelPort&, not the service port. Resolve
+      # the service port first, then bind its underlying raw read channel.
+      find_parts.append(
+          f"  auto *_svc =\n"
+          f"      esi::findPortAsOrThrow<esi::services::ChannelService::ToHost>"
+          f"(\n"
+          f"          rawModule, {appid_expr});\n"
+          f"  {map_var}.try_emplace(\n"
+          f"      static_cast<int>(_idx),\n"
+          f"      _svc->getRawRead(\"data\"));")
+    elif isinstance(first_port, _FromHostPort):
+      find_parts.append(
+          f"  auto *_svc =\n"
+          f"      esi::findPortAsOrThrow<esi::services::ChannelService::"
+          f"FromHost>(\n"
+          f"          rawModule, {appid_expr});\n"
+          f"  {map_var}.try_emplace(\n"
+          f"      static_cast<int>(_idx),\n"
+          f"      _svc->getRawWrite(\"data\"));")
+    elif isinstance(first_port, _MMIORegionPort):
+      find_parts.append(
+          f"  {map_var}.try_emplace(\n"
+          f"      static_cast<int>(_idx),\n"
+          f"      esi::findPortAsOrThrow<esi::services::MMIO::MMIORegion>(\n"
+          f"          rawModule, {appid_expr}));")
+    elif isinstance(first_port, _MetricPort):
+      find_parts.append(
+          f"  {map_var}.try_emplace(\n"
+          f"      static_cast<int>(_idx),\n"
+          f"      esi::findPortAsOrThrow<esi::services::TelemetryService::"
+          f"Metric>(\n"
+          f"          rawModule, {appid_expr}));")
+    else:
+      # Plain BundlePort: any service port that doesn't match a standard
+      # specialization (e.g. a custom `@esi.ServiceDecl`-defined service).
+      find_parts.append(
+          f"  {map_var}.try_emplace(\n"
+          f"      static_cast<int>(_idx),\n"
+          f"      &esi::findPortOrThrow(rawModule, {appid_expr}));")
+    find_parts.append("}")
     find_parts.append(f"{indexed_type} {indexed_var}(std::move({map_var}));")
 
     post = ""
     if self._port_is_connectable(first_port):
-      post = f"for (auto &[_idx, _w] : connected->{member_name})\n  _w.connect();"
+      # IndexedPorts now exposes mutable iteration so `_w.connect()` is fine.
+      post = (f"for (auto &[_idx, _w] : connected->{member_name})\n"
+              f"  _w.connect();")
 
     return _PortGroup(
         member_decl=f"{indexed_type} {member_name};",
@@ -423,13 +467,9 @@ class CppGenerator(Generator):
         appid, port = port_list[0]
         if appid.idx is None:
           result.append(self._scalar_port_group(member_name, port, appid))
-          continue
-        # Single indexed port → use IndexedPorts if indexable, else scalar.
-        if self._port_is_indexable(port):
+        else:
           result.append(
               self._indexed_ports_group(member_name, appid_name, port_list))
-        else:
-          result.append(self._scalar_port_group(member_name, port, appid))
         continue
 
       # Multiple ports with the same name.
@@ -442,7 +482,7 @@ class CppGenerator(Generator):
         continue
 
       all_same_type = len({type(p) for _, p in port_list}) == 1
-      if all_same_type and self._port_is_indexable(port_list[0][1]):
+      if all_same_type:
         result.append(
             self._indexed_ports_group(member_name, appid_name, port_list))
       else:
@@ -606,13 +646,6 @@ class CppGenerator(Generator):
 
     out.write("private:\n  esi::HWModule *rawModule;\n};\n\n")
     out.write(f"}} // namespace {system_name}\n")
-    """Get the C++ code for a constant in a module."""
-    const_strs: List[str] = [
-        f"static constexpr {self.type_emitter.type_identifier(const.type)} "
-        f"{name} = 0x{const.value:x};"
-        for name, const in module_info.constants.items()
-    ]
-    return "\n".join(const_strs)
 
   def write_modules(self, output_dir: Path, system_name: str):
     """Write the C++ header. One for each module in the manifest."""
@@ -624,10 +657,7 @@ class CppGenerator(Generator):
       name = module_info.name
       instance = module_instances.get(name)
       if instance is not None:
-        try:
-          port_groups = self._collect_port_groups(instance.ports)
-        except Exception:
-          port_groups = []
+        port_groups = self._collect_port_groups(instance.ports)
       else:
         port_groups = []
 

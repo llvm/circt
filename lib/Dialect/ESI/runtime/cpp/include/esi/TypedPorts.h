@@ -1385,12 +1385,12 @@ private:
 };
 
 //===----------------------------------------------------------------------===//
-// IndexedPorts<T> — immutable wrapper over std::map<int, T>.
+// IndexedPorts<T> — wrapper over std::map<int, T>.
 //
 // Constructed once from a moved std::map (populated via `try_emplace` so T
-// need not be movable or default-constructible). After construction the
-// contents cannot be altered: `operator[]` delegates to `at()` and only const
-// iterators are exposed.
+// need not be movable or default-constructible). Supports both mutable and
+// const iteration / indexing so callers can invoke non-const methods on the
+// stored ports (e.g. `connect()` on a typed port wrapper).
 //===----------------------------------------------------------------------===//
 
 template <typename T>
@@ -1402,9 +1402,12 @@ public:
   IndexedPorts(const IndexedPorts &) = delete;
   IndexedPorts &operator=(const IndexedPorts &) = delete;
 
+  T &operator[](int idx) { return ports_.at(idx); }
   const T &operator[](int idx) const { return ports_.at(idx); }
-  auto begin() const { return ports_.begin(); }
-  auto end() const { return ports_.end(); }
+  auto begin() { return ports_.begin(); }
+  auto end() { return ports_.end(); }
+  auto begin() const { return ports_.cbegin(); }
+  auto end() const { return ports_.cend(); }
   size_t size() const { return ports_.size(); }
   bool contains(int idx) const { return ports_.count(idx) > 0; }
 
@@ -1414,22 +1417,33 @@ private:
 
 //===----------------------------------------------------------------------===//
 // Port-lookup helpers: findPortOrThrow, findPortAsOrThrow, findPortIndices.
+//
+// `findPortOrThrow` and `findPortAsOrThrow` are thin wrappers over
+// `HWModule::resolvePort` that translate "not found" into a thrown
+// `AcceleratorMismatchError` (instead of a nullptr return) and the typed
+// variant additionally `dynamic_cast`s to a service-specific subclass. They
+// exist so generated facade code does not have to repeat the same
+// boilerplate (build a single-element AppIDPath, check for null, format an
+// error string) for every port lookup it performs.
 //===----------------------------------------------------------------------===//
 
 /// Look up a BundlePort by AppID in `module`. Throws AcceleratorMismatchError
-/// if the port is not found.
+/// if the port is not found. The returned reference is mutable: even though
+/// `HWModule::resolvePort` is a const method, the underlying port map stores
+/// `BundlePort&` references, so callers can invoke non-const methods on the
+/// returned port (e.g. `getRawRead`, `connect`).
 inline BundlePort &findPortOrThrow(HWModule *module, const AppID &id) {
-  const auto &portIndex = module->getPorts();
-  auto it = portIndex.find(id);
-  if (it == portIndex.end())
+  AppIDPath lastLookup;
+  BundlePort *port = module->resolvePort(AppIDPath{id}, lastLookup);
+  if (!port)
     throw AcceleratorMismatchError("Expected port '" + id.toString() +
                                    "' not found in module");
-  return it->second;
+  return *port;
 }
 
 /// Look up a BundlePort by AppID and cast it to `T`. Throws
 /// AcceleratorMismatchError if the port is missing or has the wrong runtime
-/// type.
+/// type. The returned pointer is mutable.
 template <typename T>
 T *findPortAsOrThrow(HWModule *module, const AppID &id) {
   BundlePort &port = findPortOrThrow(module, id);
