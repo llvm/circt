@@ -319,21 +319,21 @@ class CppGenerator(Generator):
     # pointers.
     find_parts = [
         f"{map_type} {map_var};",
-        f"for (uint32_t _idx : esi::findPortIndices(rawModule, "
+        f"for (uint32_t idx : esi::findPortIndices(rawModule, "
         f"\"{appid_name}\")) {{",
     ]
-    appid_expr = f'esi::AppID("{appid_name}", _idx)'
+    appid_expr = f'esi::AppID("{appid_name}", idx)'
     if isinstance(first_port, _FunctionPort):
       find_parts.append(
           f"  {map_var}.try_emplace(\n"
-          f"      static_cast<int>(_idx),\n"
+          f"      static_cast<int>(idx),\n"
           f"      esi::findPortAsOrThrow<esi::services::FuncService::Function>"
           f"(\n"
           f"          rawModule, {appid_expr}));")
     elif isinstance(first_port, _CallbackPort):
       find_parts.append(
           f"  {map_var}.try_emplace(\n"
-          f"      static_cast<int>(_idx),\n"
+          f"      static_cast<int>(idx),\n"
           f"      esi::findPortAsOrThrow<esi::services::CallService::Callback>"
           f"(\n"
           f"          rawModule, {appid_expr}));")
@@ -341,32 +341,32 @@ class CppGenerator(Generator):
       # TypedReadPort takes a ReadChannelPort&, not the service port. Resolve
       # the service port first, then bind its underlying raw read channel.
       find_parts.append(
-          f"  auto *_svc =\n"
+          f"  auto *svc =\n"
           f"      esi::findPortAsOrThrow<esi::services::ChannelService::ToHost>"
           f"(\n"
           f"          rawModule, {appid_expr});\n"
           f"  {map_var}.try_emplace(\n"
-          f"      static_cast<int>(_idx),\n"
-          f"      _svc->getRawRead(\"data\"));")
+          f"      static_cast<int>(idx),\n"
+          f"      svc->getRawRead(\"data\"));")
     elif isinstance(first_port, _FromHostPort):
       find_parts.append(
-          f"  auto *_svc =\n"
+          f"  auto *svc =\n"
           f"      esi::findPortAsOrThrow<esi::services::ChannelService::"
           f"FromHost>(\n"
           f"          rawModule, {appid_expr});\n"
           f"  {map_var}.try_emplace(\n"
-          f"      static_cast<int>(_idx),\n"
-          f"      _svc->getRawWrite(\"data\"));")
+          f"      static_cast<int>(idx),\n"
+          f"      svc->getRawWrite(\"data\"));")
     elif isinstance(first_port, _MMIORegionPort):
       find_parts.append(
           f"  {map_var}.try_emplace(\n"
-          f"      static_cast<int>(_idx),\n"
+          f"      static_cast<int>(idx),\n"
           f"      esi::findPortAsOrThrow<esi::services::MMIO::MMIORegion>(\n"
           f"          rawModule, {appid_expr}));")
     elif isinstance(first_port, _MetricPort):
       find_parts.append(
           f"  {map_var}.try_emplace(\n"
-          f"      static_cast<int>(_idx),\n"
+          f"      static_cast<int>(idx),\n"
           f"      esi::findPortAsOrThrow<esi::services::TelemetryService::"
           f"Metric>(\n"
           f"          rawModule, {appid_expr}));")
@@ -375,16 +375,16 @@ class CppGenerator(Generator):
       # specialization (e.g. a custom `@esi.ServiceDecl`-defined service).
       find_parts.append(
           f"  {map_var}.try_emplace(\n"
-          f"      static_cast<int>(_idx),\n"
+          f"      static_cast<int>(idx),\n"
           f"      &esi::findPortOrThrow(rawModule, {appid_expr}));")
     find_parts.append("}")
     find_parts.append(f"{indexed_type} {indexed_var}(std::move({map_var}));")
 
     post = ""
     if self._port_is_connectable(first_port):
-      # IndexedPorts now exposes mutable iteration so `_w.connect()` is fine.
-      post = (f"for (auto &[_idx, _w] : connected->{member_name})\n"
-              f"  _w.connect();")
+      # IndexedPorts now exposes mutable iteration so `port.connect()` is fine.
+      post = (f"for (auto &[idx, port] : connected->{member_name})\n"
+              f"  port.connect();")
 
     return _PortGroup(
         member_decl=f"{indexed_type} {member_name};",
