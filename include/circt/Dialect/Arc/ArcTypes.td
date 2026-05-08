@@ -82,6 +82,8 @@ def ArrayRefType : ArcTypeDef<"ArrayRef", [
 
   let assemblyFormat = "`<` $size `` custom<XInDimList>($elementType) `>`";
 
+  let genVerifyDecl = 1;
+
   let extraClassDeclaration = [{
     size_t getNumElements() const;
 

@@ -132,6 +132,14 @@ static void printXInDimList(AsmPrinter &p, Type elementType) {
   p << "x" << elementType;
 }
 
+LogicalResult ArrayRefType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
+                          Type elementType, uint64_t size) {
+  if (size == 0) {
+    return emitError() << "must have nonzero element count";
+  }
+  return success();
+}
+
 void ArcDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
