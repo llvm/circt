@@ -246,28 +246,21 @@ struct OrOfMuxToMuxChain : public OpRewritePattern<OrOp> {
 
   LogicalResult matchAndRewrite(OrOp op,
                                 PatternRewriter &rewriter) const override {
-    if (!op.getTwoState()) {
+    if (!op.getTwoState())
       return failure();
-    }
-
-    SmallVector<MuxOp> muxes = llvm::map_to_vector(
-        op.getOperands(), [](Value v) { return v.getDefiningOp<MuxOp>(); });
-    if (llvm::find(muxes, nullptr) != muxes.end()) {
-      return failure();
-    }
 
     SmallVector<Value> conditions;
-    for (MuxOp mux : muxes) {
-      if (!mux.getTwoState() ||
-          !matchPattern(mux.getFalseValue(), mlir::m_Zero())) {
+    for (Value operand : op.getOperands()) {
+      MuxOp mux = operand.getDefiningOp<MuxOp>();
+      if (!mux || !mux.getTwoState() ||
+          !matchPattern(mux.getFalseValue(), mlir::m_Zero()))
         return failure();
-      }
+
       conditions.push_back(mux.getCond());
     }
 
-    if (!areConditionsIndependent(conditions)) {
+    if (!areConditionsIndependent(conditions))
       return failure();
-    }
 
     // Construct the mux chain from back to front.
     SmallVector<Value> values(op.getOperands().drop_back());
@@ -288,18 +281,16 @@ struct OrOfMuxToMuxChain : public OpRewritePattern<OrOp> {
   // ICmpEqs for different values. This is a common pattern in priority
   // encoders.
   bool areConditionsIndependent(ArrayRef<Value> conditions) const {
-    DenseSet<APInt> seenConstants;
+    DenseSet<IntegerAttr> seenConstants;
     for (Value v : conditions) {
       auto icmp = v.getDefiningOp<ICmpOp>();
-      APInt value;
+      IntegerAttr value;
       if (!icmp || icmp.getPredicate() != ICmpPredicate::eq ||
-          !matchPattern(icmp.getRhs(), mlir::m_ConstantInt(&value))) {
+          !matchPattern(icmp.getRhs(), mlir::m_Constant(&value)))
         return false;
-      }
 
-      if (!seenConstants.insert(value).second) {
+      if (!seenConstants.insert(value).second)
         return false;
-      }
     }
     return true;
   }
