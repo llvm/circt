@@ -1,3 +1,4 @@
+// REQUIRES: slang
 // RUN: circt-verilog %s | circt-opt -export-verilog -o /dev/null | FileCheck %s
 
 typedef union packed {
