@@ -18,6 +18,9 @@ using namespace circt;
 using namespace arc;
 using namespace mlir;
 
+static ParseResult parseXInDimList(AsmParser &p, Type &elementType);
+static void printXInDimList(AsmPrinter &p, Type elementType);
+
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/Arc/ArcTypes.cpp.inc"
 
@@ -26,14 +29,14 @@ using namespace mlir;
 /// necessary once the type has been mapped to LLVM. The idea is for this
 /// function to be conservative, such that we provide sufficient storage bytes
 /// for any type.
-static std::optional<uint64_t> computeLLVMBitWidth(Type type) {
+std::optional<uint64_t> circt::arc::computeLLVMBitWidth(Type type) {
   if (isa<seq::ClockType>(type))
     return 1;
 
   if (auto intType = dyn_cast<IntegerType>(type))
     return intType.getWidth();
 
-  if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
+  auto computeForArrayType = [&](auto arrayType) -> std::optional<uint64_t> {
     // Compute element width.
     auto maybeWidth = computeLLVMBitWidth(arrayType.getElementType());
     if (!maybeWidth)
@@ -45,7 +48,13 @@ static std::optional<uint64_t> computeLLVMBitWidth(Type type) {
     auto alignedWidth = llvm::alignToPowerOf2(width, alignment);
     // Multiply by the number of elements in the array.
     return arrayType.getNumElements() * alignedWidth;
-  }
+  };
+
+  if (auto arrayType = dyn_cast<hw::ArrayType>(type))
+    return computeForArrayType(arrayType);
+
+  if (auto arrayRefType = dyn_cast<ArrayRefType>(type))
+    return computeForArrayType(arrayRefType);
 
   if (auto structType = dyn_cast<hw::StructType>(type)) {
     uint64_t structWidth = 0;
@@ -89,6 +98,47 @@ StateType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
 unsigned MemoryType::getStride() {
   unsigned stride = (getWordType().getWidth() + 7) / 8;
   return llvm::alignToPowerOf2(stride, llvm::bit_ceil(std::min(stride, 16U)));
+}
+
+size_t ArrayRefType::getNumElements() const { return getSize(); }
+
+std::optional<int64_t> ArrayRefType::getBitWidth() const {
+  auto elementBitWidth = hw::getBitWidth(getElementType());
+  if (elementBitWidth < 0)
+    return std::nullopt;
+  int64_t numElements = getNumElements();
+  if (numElements < 0)
+    return std::nullopt;
+  return numElements * elementBitWidth;
+}
+
+ShapedType ArrayRefType::cloneWith(std::optional<ArrayRef<int64_t>> shape,
+                                   Type elementType) const {
+  llvm_unreachable("ArrayRefType::cloneWith not implemented!");
+}
+
+bool ArrayRefType::hasRank() const { return true; }
+
+ArrayRef<int64_t> ArrayRefType::getShape() const {
+  const uint64_t &size = getImpl()->size;
+  return ArrayRef<int64_t>(reinterpret_cast<const int64_t *>(&size), 1);
+}
+
+static ParseResult parseXInDimList(AsmParser &p, Type &elementType) {
+  return failure(p.parseXInDimensionList() || p.parseType(elementType));
+}
+
+static void printXInDimList(AsmPrinter &p, Type elementType) {
+  p << "x" << elementType;
+}
+
+LogicalResult
+ArrayRefType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
+                     Type elementType, uint64_t size) {
+  if (size == 0) {
+    return emitError() << "must have nonzero element count";
+  }
+  return success();
 }
 
 void ArcDialect::registerTypes() {

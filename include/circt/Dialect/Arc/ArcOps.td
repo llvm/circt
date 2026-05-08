@@ -551,7 +551,8 @@ def RootOutputOp : ArcOp<"root_output", [
 // Storage Access
 //===----------------------------------------------------------------------===//
 
-def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType]>;
+def AllocatableType : AnyTypeOf<[StateType, MemoryType, StorageType,
+                                 ArrayRefType]>;
 
 def StorageGetOp : ArcOp<"storage.get", [Pure]> {
   let summary = "Access an allocated state, memory, or storage slice";
@@ -1131,6 +1132,148 @@ def RuntimeModelOp : ArcOp<"runtime.model", [
   let assemblyFormat = [{
     $sym_name $name `numStateBytes` $numStateBytes
     (`traceTaps` $traceTaps^)? attr-dict
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayRef ops
+//===----------------------------------------------------------------------===//
+//
+// Ops that deal with bufferized arrays. The !hw.array type has value semantics;
+// the !arc.arrayref type is the equivalent but with reference semantics.
+
+def ArrayRefAllocOp : ArcOp<"arrayref.alloc", []> {
+  let summary = "array allocation";
+  let description = [{
+    Allocates an array on the stack. If `init` is set, the array is initialized
+    to this value. Otherwise the array's contents are undefined.
+  }];
+  let arguments = (ins OptionalAttr<ArrayAttr>:$init);
+  let results = (outs ArrayRefType:$output);
+  let assemblyFormat = "attr-dict (`init` `(` $init^ `)`)? `:` type($output)";
+  let hasVerifier = 1;
+}
+
+def ArrayRefGetOp : ArcOp<"arrayref.get", [
+  MemoryEffects<[MemRead]>,
+  TypesMatchWith<"array element type matches the result type", "input", "value",
+                 "cast<ArrayRefType>($_self).getElementType()">
+]> {
+  let summary = "array get";
+  let description = [{
+    Loads a single value from an arrayref.
+  }];
+  let arguments = (ins ArrayRefType:$input, Index:$index);
+  let results = (outs AnyType:$value);
+  let assemblyFormat = [{
+    $input `[` $index `]` attr-dict `:` type($input) `->` type($value)
+  }];
+}
+
+def ArrayRefInjectOp : ArcOp<"arrayref.inject", [
+  MemoryEffects<[MemRead, MemWrite]>,
+  AllTypesMatch<["input", "output"]>,
+  TypesMatchWith<"element type matches input element type", "input", "element",
+                 "cast<ArrayRefType>($_self).getElementType()">
+]> {
+  let summary = "array inject";
+  let description = [{
+    Stores a single value into an arrayref.
+  }];
+  let arguments = (ins ArrayRefType:$input, Index:$index, AnyType:$element);
+  let results = (outs ArrayRefType:$output);
+  let assemblyFormat = [{
+    $input `[` $index `]` `,` $element attr-dict `:` type($input) `,` type($element) `->` type($output)
+  }];
+}
+
+def ArrayRefSliceOp : ArcOp<"arrayref.slice", [
+  Pure,
+  AllElementTypesMatch<["input", "output"]>
+]> {
+  let summary = "array slice";
+  let description = [{
+    Slices an array into a sub-array, returning a view into the original array.
+  }];
+  let arguments = (ins ArrayRefType:$input, Index:$lowIndex);
+  let results = (outs ArrayRefType:$output);
+  let assemblyFormat = [{
+    $input`[`$lowIndex`]` attr-dict `:` functional-type($input, $output)
+  }];
+}
+
+def ArrayRefCopyOp : ArcOp<"arrayref.copy", [
+  MemoryEffects<[MemRead, MemWrite]>,
+  SameOperandsAndResultType,
+]> {
+  let summary = "array copy";
+  let description = [{
+    Copies the content of one array into another array. Returns the input array.
+  }];
+  let arguments = (ins ArrayRefType:$input, ArrayRefType:$source);
+  let results = (outs ArrayRefType:$output);
+  let assemblyFormat = [{
+    $input `=` $source attr-dict `:` type($input)
+  }];
+}
+
+def ArrayRefCreateOp : ArcOp<"arrayref.create", [
+  MemoryEffects<[MemWrite]>,
+  AllTypesMatch<["input", "output"]>,
+  TypesMatchWith<"operand types match element type",
+                 "output", "elements", "SmallVector<Type, 2>("
+                 "cast<ArrayRefType>($_self).getNumElements(), "
+                 "cast<ArrayRefType>($_self).getElementType())">
+]> {
+  let summary = "array create";
+  let description = [{
+    Creates an array from a list of values. The values are ordered from
+    most significant to least significant (the same as `hw.array_create`).
+
+    The `input` array is populated with `elements` and is returned.
+  }];
+  let arguments = (ins ArrayRefType:$input, Variadic<AnyType>:$elements);
+  let results = (outs ArrayRefType:$output);
+  let assemblyFormat = [{
+    $input `=` $elements attr-dict `:` type($output)
+  }];
+}
+
+def ArrayRefFromArrayOp : ArcOp<"arrayref.from_array", [
+  MemoryEffects<[MemWrite]>,
+  AllTypesMatch<["input", "output"]>,
+  TypesMatchWith<"array type matches output type",
+                 "array", "output",
+                 "ArrayRefType::get("
+                   "cast<hw::ArrayType>($_self).getElementType(), "
+                   "cast<hw::ArrayType>($_self).getNumElements())">
+]> {
+  let summary = "arrayref from array";
+  let description = [{
+    Populates an arrayref with the elements of an array.
+  }];
+  let arguments = (ins ArrayRefType:$input, ArrayType:$array);
+  let results = (outs ArrayRefType:$output);
+  let assemblyFormat = [{
+    $input `=` $array attr-dict `:` type($output) `,` type($array)
+  }];
+}
+
+def ArrayRefToArrayOp : ArcOp<"arrayref.to_array", [
+  TypesMatchWith<"array type matches result type",
+                 "input", "result",
+                 "hw::ArrayType::get("
+                   "cast<ArrayRefType>($_self).getElementType(), "
+                   "cast<ArrayRefType>($_self).getNumElements())">
+]> {
+  let summary = "arrayref to array";
+  let description = [{
+    Creates an array from an arrayref.
+  }];
+  let arguments = (ins ArrayRefType:$input);
+  let results = (outs ArrayType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` functional-type($input, $result)
   }];
 }
 
