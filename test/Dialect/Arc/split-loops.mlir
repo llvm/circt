@@ -210,3 +210,30 @@ func.func @UnrelatedCaller() {
   %res:2 = call @UnrelatedCallee() : () -> (i1, i1)
   return
 }
+
+//===----------------------------------------------------------------------===//
+// A clocked `sim.func.dpi.call` is arc-breaking and should be allowed to sit
+// on a feedback path between split arcs without triggering loop detection.
+
+sim.func.dpi @ClockedDpi(in %arg0: i4, return ret: i4)
+
+// CHECK-LABEL: hw.module @ClockedDpiBreaksLoop(
+hw.module @ClockedDpiBreaksLoop(in %clk: !seq.clock, in %a: i4, out x: i4, out y: i4) {
+  // CHECK-NEXT: [[X:%.+]] = arc.call @ClockedDpiArc_split_0(%a, [[D:%.+]]) :
+  // CHECK-NEXT: [[Y:%.+]] = arc.call @ClockedDpiArc_split_1([[D]], %a) :
+  // CHECK-NEXT: [[D]] = sim.func.dpi.call @ClockedDpi([[X]]) clock %clk
+  // CHECK-NEXT: hw.output [[X]], [[Y]]
+  %0:2 = arc.call @ClockedDpiArc(%a, %1) : (i4, i4) -> (i4, i4)
+  %1 = sim.func.dpi.call @ClockedDpi(%0#0) clock %clk : (i4) -> i4
+  hw.output %0#0, %0#1 : i4, i4
+}
+// CHECK-NEXT: }
+
+// CHECK-LABEL: arc.define @ClockedDpiArc_split_0
+// CHECK-LABEL: arc.define @ClockedDpiArc_split_1
+// CHECK-NOT:   arc.define @ClockedDpiArc(
+arc.define @ClockedDpiArc(%arg0: i4, %arg1: i4) -> (i4, i4) {
+  %0 = comb.add %arg0, %arg1 : i4
+  %1 = comb.mul %arg1, %arg0 : i4
+  arc.output %0, %1 : i4, i4
+}

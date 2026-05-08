@@ -1106,6 +1106,28 @@ LogicalResult AndOp::canonicalize(AndOp op, PatternRewriter &rewriter) {
     return success();
   }
 
+  // and(x, replicate(p : i1)) -> mux(p, x, zero)
+  if (op.getTwoState() && op.getNumOperands() == 2) {
+    auto isReplicateOfI1 = [](Value v) {
+      auto rep = v.getDefiningOp<ReplicateOp>();
+      if (!rep)
+        return false;
+      return rep.getOperand().getType().isInteger(1);
+    };
+    Value x = op.getOperand(0);
+    Value y = op.getOperand(1);
+    if (isReplicateOfI1(x))
+      std::swap(x, y);
+    if (isReplicateOfI1(y)) {
+      Value p = y.getDefiningOp<ReplicateOp>().getInput();
+      Value zero = hw::ConstantOp::create(
+          rewriter, op.getLoc(), rewriter.getIntegerAttr(op.getType(), 0));
+      replaceOpWithNewOpAndCopyNamehint<MuxOp>(rewriter, op, p, x, zero,
+                                               /*isTwoState=*/true);
+      return success();
+    }
+  }
+
   /// TODO: and(..., x, not(x)) -> and(..., 0) -- complement
   return failure();
 }

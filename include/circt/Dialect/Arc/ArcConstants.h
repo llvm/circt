@@ -12,13 +12,11 @@
 namespace circt {
 namespace arc {
 
-// Offset for model state allocations. The first 16 bytes of model storage are
-// reserved for the model header. The first 8 bytes contain the current
-// simulation time. The next 8 bytes are reserved for the termination flag used
-// by `SimTerminateOp`. The actual model state starts at offset 16.
+// Offsets for model state allocations.
 inline constexpr unsigned kTimeOffset = 0;
 inline constexpr unsigned kTerminateFlagOffset = 8;
-inline constexpr unsigned kStateOffset = 16;
+inline constexpr unsigned kNextWakeupOffset = 16;
+inline constexpr unsigned kStateOffset = 24;
 
 } // namespace arc
 

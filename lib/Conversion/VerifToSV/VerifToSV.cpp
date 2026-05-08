@@ -17,9 +17,13 @@
 #include "circt/Dialect/SV/SVDialect.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
+#include "circt/Support/Namespace.h"
+#include "circt/Support/ProceduralRegionTrait.h"
+#include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <atomic>
 
 namespace circt {
 #define GEN_PASS_DEF_LOWERVERIFTOSV
@@ -36,16 +40,41 @@ using namespace verif;
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+/// Shared context for the synthesis guard: the symbol name of the
+/// `sv.macro.decl` that guards reference, and a flag tracking whether any
+/// guard was actually emitted (so the pass can skip creating the macro decl
+/// if no pattern fired).
+struct SynthesisGuardContext {
+  FlatSymbolRefAttr macroSym;
+  mutable std::atomic<bool> macroUsed{false};
+};
+
+/// Build an `` `ifndef SYNTHESIS `` guard around `bodyCtor`. Picks between
+/// `sv.ifdef` and `sv.ifdef.procedural` based on the current insertion point.
+static void buildSynthesisGuard(ConversionPatternRewriter &rewriter,
+                                Location loc, const SynthesisGuardContext &ctx,
+                                std::function<void()> bodyCtor) {
+  ctx.macroUsed.store(true, std::memory_order_relaxed);
+  if (isProceduralRegionOp(rewriter.getBlock()->getParentOp())) {
+    sv::IfDefProceduralOp::create(
+        rewriter, loc, ctx.macroSym,
+        /*thenCtor=*/[]() {}, std::move(bodyCtor));
+  } else {
+    sv::IfDefOp::create(
+        rewriter, loc, ctx.macroSym,
+        /*thenCtor=*/[]() {}, std::move(bodyCtor));
+  }
+}
+
 struct PrintOpConversionPattern : public OpConversionPattern<PrintOp> {
-  using OpConversionPattern<PrintOp>::OpConversionPattern;
+  PrintOpConversionPattern(MLIRContext *context,
+                           const SynthesisGuardContext &guardCtx)
+      : OpConversionPattern<PrintOp>(context), guardCtx(guardCtx) {}
 
   LogicalResult
   matchAndRewrite(PrintOp op, OpAdaptor operands,
                   ConversionPatternRewriter &rewriter) const override {
-
-    // Printf's will be emitted to stdout (32'h8000_0001 in IEEE Std 1800-2012).
-    Value fdStdout =
-        hw::ConstantOp::create(rewriter, op.getLoc(), APInt(32, 0x80000001));
 
     auto fstrOp =
         dyn_cast_or_null<FormatVerilogStringOp>(op.getString().getDefiningOp());
@@ -53,10 +82,20 @@ struct PrintOpConversionPattern : public OpConversionPattern<PrintOp> {
       return op->emitOpError() << "expected FormatVerilogStringOp as the "
                                   "source of the formatted string";
 
-    rewriter.replaceOpWithNewOp<sv::FWriteOp>(
-        op, fdStdout, fstrOp.getFormatString(), fstrOp.getSubstitutions());
+    auto loc = op.getLoc();
+    buildSynthesisGuard(rewriter, loc, guardCtx, [&]() {
+      // Printf's will be emitted to stdout (32'h8000_0001 in IEEE Std
+      // 1800-2012).
+      Value fdStdout =
+          hw::ConstantOp::create(rewriter, loc, APInt(32, 0x80000001));
+      sv::FWriteOp::create(rewriter, loc, fdStdout, fstrOp.getFormatString(),
+                           fstrOp.getSubstitutions());
+    });
+    rewriter.eraseOp(op);
     return success();
   }
+
+  const SynthesisGuardContext &guardCtx;
 };
 
 struct HasBeenResetConversion : public OpConversionPattern<HasBeenResetOp> {
@@ -141,11 +180,14 @@ static sv::EventControl verifToSVEventControl(verif::ClockEdge ce) {
   llvm_unreachable("Unknown event control kind");
 }
 
-// Generic conversion for verif.assert, verif.assume and verif.cover
+// Generic conversion for verif.assert, verif.assume and verif.cover.
 template <typename Op, typename TargetOp>
 struct VerifAssertLikeConversion : public OpConversionPattern<Op> {
-  using OpConversionPattern<Op>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<Op>::OpAdaptor;
+
+  VerifAssertLikeConversion(MLIRContext *context,
+                            const SynthesisGuardContext &guardCtx)
+      : OpConversionPattern<Op>(context), guardCtx(guardCtx) {}
 
   // Convert the verif.assert like op that uses an enable, into an equivalent
   // sv.assert_property op that has the negated enable as its disable.
@@ -161,19 +203,26 @@ struct VerifAssertLikeConversion : public OpConversionPattern<Op> {
           rewriter.createOrFold<comb::XorOp>(op.getLoc(), enable, constOne);
     }
 
-    rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), disable,
-                                          operands.getLabelAttr());
-
+    buildSynthesisGuard(rewriter, op.getLoc(), guardCtx, [&]() {
+      TargetOp::create(rewriter, op.getLoc(), operands.getProperty(), disable,
+                       operands.getLabelAttr());
+    });
+    rewriter.eraseOp(op);
     return success();
   }
+
+  const SynthesisGuardContext &guardCtx;
 };
 
 // Generic conversion for verif.clocked_assert, verif.clocked_assume and
-// verif.clocked_cover
+// verif.clocked_cover.
 template <typename Op, typename TargetOp>
 struct VerifClockedAssertLikeConversion : public OpConversionPattern<Op> {
-  using OpConversionPattern<Op>::OpConversionPattern;
   using OpAdaptor = typename OpConversionPattern<Op>::OpAdaptor;
+
+  VerifClockedAssertLikeConversion(MLIRContext *context,
+                                   const SynthesisGuardContext &guardCtx)
+      : OpConversionPattern<Op>(context), guardCtx(guardCtx) {}
 
   // Convert the verif.assert like op that uses an enable, into an equivalent
   // sv.assert_property op that has the negated enable as its disable.
@@ -192,12 +241,15 @@ struct VerifClockedAssertLikeConversion : public OpConversionPattern<Op> {
     auto eventattr = sv::EventControlAttr::get(
         op.getContext(), verifToSVEventControl(operands.getEdge()));
 
-    rewriter.replaceOpWithNewOp<TargetOp>(op, operands.getProperty(), eventattr,
-                                          operands.getClock(), disable,
-                                          operands.getLabelAttr());
-
+    buildSynthesisGuard(rewriter, op.getLoc(), guardCtx, [&]() {
+      TargetOp::create(rewriter, op.getLoc(), operands.getProperty(), eventattr,
+                       operands.getClock(), disable, operands.getLabelAttr());
+    });
+    rewriter.eraseOp(op);
     return success();
   }
+
+  const SynthesisGuardContext &guardCtx;
 };
 
 } // namespace
@@ -212,19 +264,20 @@ struct VerifToSVPass : public circt::impl::LowerVerifToSVBase<VerifToSVPass> {
 };
 } // namespace
 
-void VerifToSVPass::runOnOperation() {
-  MLIRContext &context = getContext();
-  hw::HWModuleOp module = getOperation();
-
-  ConversionTarget target(context);
-  RewritePatternSet patterns(&context);
+/// Run the verif-to-sv conversion patterns on a single hw.module.
+static LogicalResult lowerModule(hw::HWModuleOp module,
+                                 const SynthesisGuardContext &guardCtx) {
+  MLIRContext *context = module.getContext();
+  ConversionTarget target(*context);
+  RewritePatternSet patterns(context);
 
   target.addIllegalOp<PrintOp, HasBeenResetOp, verif::AssertOp, verif::AssumeOp,
                       verif::CoverOp, ClockedAssertOp, ClockedAssumeOp,
                       ClockedCoverOp>();
   target.addLegalDialect<sv::SVDialect, hw::HWDialect, comb::CombDialect>();
+  patterns.add<HasBeenResetConversion>(context);
   patterns.add<
-      PrintOpConversionPattern, HasBeenResetConversion,
+      PrintOpConversionPattern,
       VerifAssertLikeConversion<verif::AssertOp, AssertPropertyOp>,
       VerifAssertLikeConversion<verif::AssumeOp, AssumePropertyOp>,
       VerifAssertLikeConversion<verif::CoverOp, CoverPropertyOp>,
@@ -233,13 +286,51 @@ void VerifToSVPass::runOnOperation() {
       VerifClockedAssertLikeConversion<verif::ClockedAssumeOp,
                                        AssumePropertyOp>,
       VerifClockedAssertLikeConversion<verif::ClockedCoverOp, CoverPropertyOp>>(
-      &context);
+      context, guardCtx);
 
-  if (failed(applyPartialConversion(module, target, std::move(patterns))))
-    signalPassFailure();
+  return applyPartialConversion(module, target, std::move(patterns));
 }
 
-std::unique_ptr<OperationPass<hw::HWModuleOp>>
-circt::createLowerVerifToSVPass() {
+void VerifToSVPass::runOnOperation() {
+  ModuleOp moduleOp = getOperation();
+  MLIRContext &context = getContext();
+
+  // Determine the symbol name of the `sv.macro.decl` that the synthesis
+  // guards will reference.
+  StringRef macroSymName = "SYNTHESIS";
+  bool macroDeclAlreadyExists = false;
+  Namespace names;
+
+  if (auto *existing = SymbolTable::lookupSymbolIn(moduleOp, macroSymName)) {
+    if (isa<sv::MacroDeclOp>(existing)) {
+      macroDeclAlreadyExists = true;
+    } else {
+      // Fall back to a unique symbol name.
+      names.add(moduleOp);
+      macroSymName = names.newName(macroSymName);
+    }
+  }
+  SynthesisGuardContext guardCtx{FlatSymbolRefAttr::get(&context, macroSymName),
+                                 /*macroUsed=*/{false}};
+
+  if (failed(mlir::failableParallelForEach(
+          &context, moduleOp.getOps<hw::HWModuleOp>(),
+          [&](hw::HWModuleOp module) {
+            return lowerModule(module, guardCtx);
+          })))
+    return signalPassFailure();
+
+  // Only materialize the `sv.macro.decl` if a guard pattern actually fired and
+  // the symbol isn't already provided by the input.
+  if (guardCtx.macroUsed.load(std::memory_order_relaxed) &&
+      !macroDeclAlreadyExists) {
+    auto builder = OpBuilder::atBlockBegin(moduleOp.getBody());
+    sv::MacroDeclOp::create(builder, moduleOp.getLoc(), macroSymName,
+                            /*args=*/ArrayAttr{},
+                            builder.getStringAttr("SYNTHESIS"));
+  }
+}
+
+std::unique_ptr<OperationPass<ModuleOp>> circt::createLowerVerifToSVPass() {
   return std::make_unique<VerifToSVPass>();
 }

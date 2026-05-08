@@ -346,7 +346,9 @@ NB_MODULE(esiCppAccel, m) {
       .def("connect", &ChannelPort::connect, nb::arg("options"),
            "Connect with specified options")
       .def("disconnect", &ChannelPort::disconnect)
-      .def_prop_ro("type", &ChannelPort::getType, nb::rv_policy::reference);
+      .def_prop_ro("type", &ChannelPort::getType, nb::rv_policy::reference)
+      .def_prop_ro("windowType", &ChannelPort::getWindowType,
+                   nb::rv_policy::reference);
 
   nb::class_<WriteChannelPort, ChannelPort>(m, "WriteChannelPort")
       .def("write",

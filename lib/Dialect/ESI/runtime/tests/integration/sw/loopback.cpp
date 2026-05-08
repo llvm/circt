@@ -242,20 +242,41 @@ static void serialCoordTranslateTest(Accelerator *accel) {
     throw std::runtime_error(
         "Serial coord translate test: no 'translate_coords_serial' port found");
 
-  TypedFunction<SerialCoordInput, SerialCoordOutputFrame,
-                /*SkipTypeCheck=*/true>
-      translateCoords(
-          portIter->second.getAs<services::FuncService::Function>());
+  auto *func = portIter->second.getAs<services::FuncService::Function>();
+  if (!func)
+    throw std::runtime_error(
+        "Serial coord translate test: port is not a FuncService::Function");
 
-  translateCoords.connect();
+  // Drive the raw arg port through TypedWritePort so the segmented batch is
+  // packed correctly; drain the raw result port directly. We bypass
+  // TypedFunction here because `SerialCoordOutputFrame` is a hand-written
+  // union (not a real ESI type) and we don't want the typed result decoder
+  // to backpressure on the N+2 reply frames.
+  TypedWritePort<SerialCoordInput, /*SkipTypeCheck=*/true> argPort(
+      func->getRawWrite("arg"));
+  ChannelPort::ConnectOptions argOpts(/*bufferSize=*/std::nullopt,
+                                      /*translateMessage=*/false);
+  argPort.connect(argOpts);
+  ReadChannelPort &rawResult = func->getRawRead("result");
+  // The reply contains numCoords + 2 raw frames (one header + N data + one
+  // footer). Use an unbounded buffer (bufferSize=0) so the polling queue
+  // doesn't backpressure the backend mid-stream.
+  ChannelPort::ConnectOptions resultOpts(/*bufferSize=*/0,
+                                         /*translateMessage=*/false);
+  rawResult.connect(resultOpts);
 
   std::vector<SerialCoordData> coords;
   for (auto &c : inputCoords)
     coords.emplace_back(c.x, c.y);
   SerialCoordInput batch(xTrans, yTrans, coords);
-  // TODO: List results are currently not supported so we cannot compare the
-  // results.
-  (void)translateCoords.call(batch).get();
+  argPort.write(batch);
+
+  // The bulk-list reply is one header frame + numCoords data frames + one
+  // footer frame. TODO: list results aren't decoded here; we just drain the
+  // frames so the backend doesn't backpressure / hang.
+  MessageData drained;
+  for (size_t i = 0; i < numCoords + 2; ++i)
+    rawResult.read(drained);
 }
 
 int main(int argc, const char *argv[]) {

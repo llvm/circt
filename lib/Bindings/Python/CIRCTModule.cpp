@@ -126,7 +126,9 @@ NB_MODULE(_circt, m) {
 
         MlirDialectHandle llvm = mlirGetDialectHandle__llvm__();
         mlirDialectHandleRegisterDialect(llvm, context);
-        mlirDialectHandleLoadDialect(llvm, context);
+        // We don't load the LLVM dialect here since it doesn't load all of its
+        // promised interfaces. If you need to load it, you can do so by calling
+        // `Context().load_all_available_dialects()` in Python.
 
         MlirDialectHandle scf = mlirGetDialectHandle__scf__();
         mlirDialectHandleRegisterDialect(scf, context);

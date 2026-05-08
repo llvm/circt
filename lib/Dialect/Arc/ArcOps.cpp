@@ -740,12 +740,52 @@ SimSetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// SimGetNextWakeupOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimGetNextWakeupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
+  if (!moduleOp)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ExecuteOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExecuteOp::verifyRegions() {
   return verifyTypeListEquivalence(*this, getInputs().getTypes(),
                                    getBody().getArgumentTypes(), "input");
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayRefAllocOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ArrayRefAllocOp::verify() {
+  if (auto init = getInit()) {
+    if (init->size() != getType().getNumElements()) {
+      return emitOpError("init size does not match array size; init had size ")
+             << init->size() << " but array has size "
+             << getType().getNumElements();
+    }
+
+    unsigned elemBitwidth = getType().getElementType().getIntOrFloatBitWidth();
+    for (APInt value : init->getAsValueRange<IntegerAttr>()) {
+      if (value.getBitWidth() != elemBitwidth) {
+        return emitOpError("expected element to be of type ")
+               << getType().getElementType();
+      }
+    }
+  }
+  return success();
 }
 
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"

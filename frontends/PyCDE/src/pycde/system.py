@@ -471,7 +471,7 @@ class System:
       "builtin.module(lower-seq-to-sv)",
       "builtin.module(hw.module(lower-hw-to-sv))",
       "builtin.module(lower-comb)",
-      "builtin.module(hw.module(lower-verif-to-sv))",
+      "builtin.module(lower-verif-to-sv)",
       "builtin.module(cse, canonicalize, cse)",
       "builtin.module(hw.module(prettify-verilog), hw.module(hw-cleanup))",
       "builtin.module(msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})"

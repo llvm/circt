@@ -1,5 +1,6 @@
 """Tests for UnionType support in codegen (CppTypePlanner + CppTypeEmitter)."""
 
+import re
 import tempfile
 from pathlib import Path
 
@@ -14,6 +15,19 @@ def _generate_header(type_table, system_name="test_ns"):
   with tempfile.TemporaryDirectory() as tmpdir:
     emitter.write_header(Path(tmpdir), system_name)
     return (Path(tmpdir) / "types.h").read_text()
+
+
+def _window_struct_name(hdr, window_name_suffix):
+  """Find the generated SegmentedMessageData subclass name for a window.
+
+  Auto-names compose `{into_name}_{window_name}`, so locate the helper by its
+  trailing window-name suffix instead of hard-coding the full identifier.
+  """
+  match = re.search(
+      rf"struct (\S*{re.escape(window_name_suffix)}) "
+      r": public esi::SegmentedMessageData", hdr)
+  assert match, f"Window helper for '*{window_name_suffix}' not found in:\n{hdr}"
+  return match.group(1)
 
 
 def test_union_basic():
@@ -228,14 +242,15 @@ def test_windowed_list_bulk_message_wrapper():
 
   hdr = _generate_header([coord, serial_args])
   assert "Unsupported type" not in hdr
-  assert "struct serial_coord_args : public esi::SegmentedMessageData" in hdr
+  win_name = _window_struct_name(hdr, "_serial_coord_args")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
   assert "using value_type = Coord;" in hdr
   assert "using count_type = uint16_t;" in hdr
   assert "count_type coords_count;" in hdr
   assert "uint8_t _pad[2];" in hdr
   assert "Coord coords;" in hdr
   assert hdr.index("struct data_frame {") < hdr.index(
-      "private:\n  struct header_frame {")
+      "private:\n#pragma pack(push, 1)\n  struct header_frame {")
   assert "std::vector<data_frame> data_frames;" in hdr
   assert "esi::Segment segment(size_t idx) const override" in hdr
   assert "footer.coords_count = 0;" in hdr
@@ -245,8 +260,20 @@ def test_windowed_list_bulk_message_wrapper():
   assert "auto &frame = frames.emplace_back();" in hdr
   assert "for (const auto &element : coords) {" in hdr
   assert "frame.coords = element;" in hdr
-  assert '!esi.window<\\"serial_coord_args\\"' in hdr
-  assert 'throw std::out_of_range("serial_coord_args: invalid segment index")' in hdr
+  # Inner struct id is _ESI_ID; window id (with escaped quotes) is
+  # _ESI_WINDOW_ID so the runtime can verify the wire format too.
+  assert f'_ESI_ID = "{arg_struct_id}"' in hdr
+  escaped_serial_args_id = serial_args_id.replace('"', '\\"')
+  assert f'_ESI_WINDOW_ID = "{escaped_serial_args_id}"' in hdr
+  assert f'throw std::out_of_range("{win_name}: invalid segment index")' in hdr
+  # Accessor methods for header fields and data fields.
+  assert "uint32_t x_translation() const { return header.x_translation; }" in hdr
+  assert "uint32_t y_translation() const { return header.y_translation; }" in hdr
+  assert "size_t coords_count() const { return data_frames.size(); }" in hdr
+  # Byte-aligned data field: pointer-to-member projection (zero-copy view).
+  assert "return std::views::transform(data_frames, &data_frame::coords);" in hdr
+  assert "std::vector<value_type> coords_vector() const" in hdr
+  assert "out.push_back(frame.coords);" in hdr
 
 
 def test_windowed_list_header_padding_matches_frame_width():
@@ -280,7 +307,8 @@ def test_windowed_list_header_padding_matches_frame_width():
   ])
 
   hdr = _generate_header([window])
-  assert "struct coords_only : public esi::SegmentedMessageData" in hdr
+  win_name = _window_struct_name(hdr, "_coords_only")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
   assert "struct header_frame {\n    uint8_t _pad[6];\n    count_type coords_count;\n  };" in hdr
   assert "header_frame footer{};" in hdr
   assert "void construct(std::vector<data_frame> frames)" in hdr
@@ -333,14 +361,186 @@ def test_windowed_list_arrays_in_header_and_value_type():
   ])
 
   hdr = _generate_header([window])
-  assert "#include <cstring>" in hdr
-  assert "struct array_payloads : public esi::SegmentedMessageData" in hdr
-  assert "using value_type = uint8_t[4];" in hdr
+  assert "#include <array>" in hdr
+  win_name = _window_struct_name(hdr, "_array_payloads")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
+  # `value_type` is exposed as `std::array` so it is storable in `std::vector`.
+  assert "using value_type = std::array<uint8_t, 4>;" in hdr
   assert "using count_type = uint16_t;" in hdr
-  assert "uint16_t header_words[2];" in hdr
-  assert "uint8_t payloads[4];" in hdr
-  assert "array_payloads(const uint16_t (&header_words)[2], const std::vector<value_type> &payloads)" in hdr
-  assert "void construct(const uint16_t (&header_words)[2], std::vector<data_frame> frames)" in hdr
-  assert "std::memcpy(&header.header_words, &header_words, sizeof(header.header_words));" in hdr
-  assert "std::memcpy(&frame.payloads, &element, sizeof(frame.payloads));" in hdr
-  assert 'throw std::out_of_range("array_payloads: invalid segment index")' in hdr
+  # All array-typed fields (header and data) are emitted as `std::array`.
+  assert "std::array<uint16_t, 2> header_words;" in hdr
+  assert "std::array<uint8_t, 4> payloads;" in hdr
+  # Constructor params for arrays are simple const-refs to `std::array`.
+  assert f"{win_name}(const std::array<uint16_t, 2> &header_words, const std::vector<value_type> &payloads)" in hdr
+  assert "void construct(const std::array<uint16_t, 2> &header_words, std::vector<data_frame> frames)" in hdr
+  # Plain `=` assignment for both header and data array fields.
+  assert "header.header_words = header_words;" in hdr
+  assert "frame.payloads = element;" in hdr
+  assert f'throw std::out_of_range("{win_name}: invalid segment index")' in hdr
+  # Array-typed header field: const-ref accessor with std::array return type.
+  assert "const std::array<uint16_t, 2> &header_words() const { return header.header_words; }" in hdr
+  # Array-typed data field: pointer-to-member projection (zero-copy view) and
+  # std::array-valued vector helper. The list field uses the `value_type`
+  # alias (which equals `std::array<uint8_t, 4>`).
+  assert "return std::views::transform(data_frames, &data_frame::payloads);" in hdr
+  assert "std::vector<value_type> payloads_vector() const" in hdr
+  assert "out.push_back(frame.payloads);" in hdr
+
+
+def test_windowed_list_struct_element_data_uses_pointer_to_member():
+  """Struct-typed data fields use a pointer-to-member projection, not a lambda.
+
+  Even if the struct contains a non-byte-aligned (bit-field) member, the data
+  field itself is a struct type, which is byte-aligned and supports
+  pointer-to-member projection.
+  """
+  sint3 = types.SIntType("si3", 3)
+  uint16 = types.UIntType("ui16", 16)
+  list_id = f"!esi.list<!hw.struct<v: si3>>"
+  elem_id = "!hw.struct<v: si3>"
+  elem_struct = types.StructType(elem_id, [("v", sint3)])
+  elem_list = types.ListType(list_id, elem_struct)
+  arg_struct_id = f"!hw.struct<items: {list_id}>"
+  arg_struct = types.StructType(arg_struct_id, [("items", elem_list)])
+  header_struct_id = "!hw.struct<items_count: ui16>"
+  header_struct = types.StructType(header_struct_id, [("items_count", uint16)])
+  data_struct_id = f"!hw.struct<items: !hw.array<1x{elem_id}>>"
+  data_struct = types.StructType(
+      data_struct_id,
+      [("items", types.ArrayType(f"!hw.array<1x{elem_id}>", elem_struct, 1))],
+  )
+  lowered_id = (
+      f"!hw.union<header: {header_struct_id}, data: {data_struct_id}>")
+  lowered = types.UnionType(lowered_id, [("header", header_struct),
+                                         ("data", data_struct)])
+  window_id = (f'!esi.window<"bitfield_items", {arg_struct_id}, '
+               '[<"header", [<"items" countWidth 16>]>, '
+               '<"data", [<"items", 1>]>]>')
+  window = types.WindowType(window_id, "bitfield_items", arg_struct, lowered, [
+      types.WindowType.Frame("header",
+                             [types.WindowType.Field("items", 0, 16)]),
+      types.WindowType.Frame("data", [types.WindowType.Field("items", 1, 0)]),
+  ])
+
+  hdr = _generate_header([elem_struct, window])
+  win_name = _window_struct_name(hdr, "_bitfield_items")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
+  # The data field "items" is a struct type (byte-aligned), so pointer-to-member
+  # IS valid.  The generated accessor must use &data_frame::items, not a lambda.
+  assert "return std::views::transform(data_frames, &data_frame::items);" in hdr
+  assert "[](const data_frame &f) { return f.items; }" not in hdr
+  assert "std::vector<value_type> items_vector() const" in hdr
+
+
+def test_windowed_list_bitfield_scalar_data_uses_lambda():
+  """A window data field that is itself a non-byte-aligned int uses a lambda projection."""
+  uint3 = types.UIntType("ui3", 3)
+  uint16 = types.UIntType("ui16", 16)
+  # Build a window where the data field is directly a 3-bit uint.
+  list_id = "!esi.list<ui3>"
+  elem_list = types.ListType(list_id, uint3)
+  arg_struct_id = f"!hw.struct<vals: {list_id}>"
+  arg_struct = types.StructType(arg_struct_id, [("vals", elem_list)])
+  header_struct_id = "!hw.struct<vals_count: ui16>"
+  header_struct = types.StructType(header_struct_id, [("vals_count", uint16)])
+  data_struct_id = "!hw.struct<vals: !hw.array<1xui3>>"
+  data_struct = types.StructType(
+      data_struct_id,
+      [("vals", types.ArrayType("!hw.array<1xui3>", uint3, 1))],
+  )
+  lowered_id = (
+      f"!hw.union<header: {header_struct_id}, data: {data_struct_id}>")
+  lowered = types.UnionType(lowered_id, [("header", header_struct),
+                                         ("data", data_struct)])
+  window_id = (f'!esi.window<"bitval_window", {arg_struct_id}, '
+               '[<"header", [<"vals" countWidth 16>]>, '
+               '<"data", [<"vals", 1>]>]>')
+  window = types.WindowType(window_id, "bitval_window", arg_struct, lowered, [
+      types.WindowType.Frame("header", [types.WindowType.Field("vals", 0, 16)]),
+      types.WindowType.Frame("data", [types.WindowType.Field("vals", 1, 0)]),
+  ])
+
+  hdr = _generate_header([window])
+  win_name = _window_struct_name(hdr, "_bitval_window")
+  assert f"struct {win_name} : public esi::SegmentedMessageData" in hdr
+  # The data field "vals" stores a 3-bit uint, which becomes a bit-field.
+  # The range accessor must use a lambda, not &data_frame::vals.
+  assert "[](const data_frame &f) { return f.vals; }" in hdr
+  assert "&data_frame::vals" not in hdr
+  assert "std::vector<value_type> vals_vector() const" in hdr
+
+
+def test_size_assert_emitted_for_struct():
+  """Each packed struct gets a `static_assert` pinning its `sizeof`."""
+  uint16 = types.UIntType("ui16", 16)
+  sint8 = types.SIntType("si8", 8)
+  s = types.StructType("!hw.struct<a: ui16, b: si8>", [("a", uint16),
+                                                       ("b", sint8)])
+
+  hdr = _generate_header([s])
+  # Total: 16 + 8 = 24 bits = 3 bytes.
+  assert "static_assert(sizeof(_struct_a_ui16_b_si8) == 3," in hdr
+  assert "packed layout does not match manifest size" in hdr
+
+
+def test_size_assert_emitted_for_union_and_wrappers():
+  """Unions and their padding wrapper structs each get a size assert."""
+  uint8 = types.UIntType("ui8", 8)
+  uint16 = types.UIntType("ui16", 16)
+  union_t = types.UnionType("!hw.union<a: ui8, b: ui16>", [("a", uint8),
+                                                           ("b", uint16)])
+
+  hdr = _generate_header([union_t])
+  # The union itself is 2 bytes (max(8, 16) = 16 bits).
+  assert "static_assert(sizeof(_union_a_ui8_b_ui16) == 2," in hdr
+  # The wrapper around the narrow `a` field is also 2 bytes.
+  assert "static_assert(sizeof(_union_a_ui8_b_ui16_a) == 2," in hdr
+
+
+def test_size_assert_emitted_for_window_frames():
+  """Both `data_frame` and `header_frame` get size asserts inside the window."""
+  uint16 = types.UIntType("ui16", 16)
+  uint32 = types.UIntType("ui32", 32)
+  element_id = "!hw.struct<x: ui32, y: ui32>"
+  list_id = f"!esi.list<{element_id}>"
+  arg_struct_id = f"!hw.struct<coords: {list_id}>"
+  header_struct_id = "!hw.struct<coords_count: ui16>"
+  data_struct_id = f"!hw.struct<coords: !hw.array<1x{element_id}>>"
+  lowered_id = f"!hw.union<header: {header_struct_id}, data: {data_struct_id}>"
+  window_id = (f'!esi.window<"coords_only", {arg_struct_id}, '
+               '[<"header", [<"coords" countWidth 16>]>, '
+               '<"data", [<"coords", 1>]>]>')
+
+  element = types.StructType(element_id, [("x", uint32), ("y", uint32)])
+  coord_list = types.ListType(list_id, element)
+  arg_struct = types.StructType(arg_struct_id, [("coords", coord_list)])
+  header_struct = types.StructType(header_struct_id, [("coords_count", uint16)])
+  data_struct = types.StructType(
+      data_struct_id,
+      [("coords", types.ArrayType(f"!hw.array<1x{element_id}>", element, 1))],
+  )
+  lowered = types.UnionType(lowered_id, [("header", header_struct),
+                                         ("data", data_struct)])
+  window = types.WindowType(window_id, "coords_only", arg_struct, lowered, [
+      types.WindowType.Frame("header",
+                             [types.WindowType.Field("coords", 0, 16)]),
+      types.WindowType.Frame("data", [types.WindowType.Field("coords", 1, 0)]),
+  ])
+
+  hdr = _generate_header([window])
+  # Both inner frames are sized to the wider data frame: 8 bytes per coord.
+  assert "static_assert(sizeof(data_frame) == 8," in hdr
+  assert "static_assert(sizeof(header_frame) == 8," in hdr
+
+
+def test_size_assert_skipped_for_unbounded_struct():
+  """Structs containing an `!esi.any` field have no static size, so no assert."""
+  uint8 = types.UIntType("ui8", 8)
+  any_t = types.AnyType("!esi.any")
+  s = types.StructType("!hw.struct<tag: ui8, data: !esi.any>",
+                       [("tag", uint8), ("data", any_t)])
+
+  hdr = _generate_header([s])
+  # The struct is still emitted, but no size assert (its size is unbounded).
+  assert "struct _struct_tag_ui8_data__esi_any" in hdr
+  assert "static_assert(sizeof(_struct_tag_ui8_data__esi_any)" not in hdr

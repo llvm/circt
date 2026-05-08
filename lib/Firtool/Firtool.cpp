@@ -338,7 +338,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
        !opt.isRandomEnabled(FirtoolOptions::RandomKind::Mem),
        /*emitSeparateAlwaysBlocks=*/
        opt.shouldEmitSeparateAlwaysBlocks()}));
-  pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
+  pm.addPass(createLowerVerifToSVPass());
   pm.addPass(seq::createHWMemSimImpl(
       {/*disableMemRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Mem),

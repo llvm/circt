@@ -155,6 +155,9 @@ void circt::populateArcToLLVMPipeline(OpPassManager &pm,
     opts.traceFileName = options.traceFileName;
     pm.addPass(createInsertRuntime(opts));
   }
+  if (options.bufferizeArrays) {
+    pm.addPass(createLowerArrays());
+  }
   pm.addPass(createLowerArcToLLVMPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizer());
