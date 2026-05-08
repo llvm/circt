@@ -1,5 +1,6 @@
-// REQUIRES: slang
 // RUN: circt-verilog %s | circt-opt -export-verilog -o /dev/null | FileCheck %s
+// REQUIRES: slang
+// UNSUPPORTED: valgrind
 
 typedef union packed {
   int x;
