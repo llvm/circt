@@ -118,6 +118,7 @@ void circt::populateArcStateLoweringPipeline(
   if (options.shouldInline)
     pm.addPass(arc::createInlineArcs());
 
+  pm.addPass(arc::createRemoveI0Types());
   pm.addPass(arc::createMergeIfsPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizer());
