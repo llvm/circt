@@ -19,8 +19,6 @@ on:
           - cp310-manylinux_x86_64
           - cp313-manylinux_x86_64
           - cp314-manylinux_x86_64
-  schedule:
-    - cron: 0 12 * * 1
 
 jobs:
   select_matrix:
