@@ -1274,17 +1274,28 @@ class CppTypeEmitter:
           field_decls.append(f"{field_cpp} {field_name};")
       else:
         field_decls.append(f"{field_cpp} {field_name};")
+    struct_name = self.type_id_map[struct_type]
     hdr.write("#pragma pack(push, 1)\n")
-    hdr.write(f"struct {self.type_id_map[struct_type]} {{\n")
+    hdr.write(f"struct {struct_name} {{\n")
     for decl in field_decls:
       hdr.write(f"  {decl}\n")
     hdr.write("\n")
+    # Logical-order constructor: parameters follow `struct_type.fields` order
+    # (the user-facing order from the manifest), independent of any wire-layout
+    # reversal applied to the member declarations above.
+    logical_fields = list(struct_type.fields)
+    if logical_fields:
+      hdr.write(f"  {struct_name}() = default;\n")
+      ctor_params = ", ".join(
+          self._format_window_ctor_param(name, ftype)
+          for name, ftype in logical_fields)
+      inits = ", ".join(f"{name}({name})" for name, _ in logical_fields)
+      hdr.write(f"  {struct_name}({ctor_params}) : {inits} {{}}\n\n")
     hdr.write(
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(struct_type.id)};\n"
     )
     hdr.write("};\n")
-    self._emit_size_assert(hdr, self.type_id_map[struct_type],
-                           self._safe_byte_width(struct_type))
+    self._emit_size_assert(hdr, struct_name, self._safe_byte_width(struct_type))
     hdr.write("#pragma pack(pop)\n\n")
 
   def _emit_union(self, hdr: TextIO, union_type: types.UnionType) -> None:
