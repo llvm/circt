@@ -645,6 +645,26 @@ def Mux4PadSel : Pat<
     $a, $b, $c, $d)),
   [(IntTypeWidthLTX<2> $cond)]>;
 
+
+// mux2(cond, 0, 1) -> ~cond
+def Mux2Not : Pat<
+  (Mux2CellIntrinsicOp:$old $cond, (ConstantOp:$zcst $_),
+   (ConstantOp:$ocst $_)),
+  (MoveNameHint $old, (NotPrimOp $cond)), [
+    (EqualTypes $cond, $zcst), (EqualTypes $cond, $ocst),
+    (ZeroConstantOp $zcst), (OneConstantOp $ocst)
+  ]>;
+
+// mux4(cond, 0, 1, 0, 1) -> ~cond
+def Mux4Not : Pat<
+  (Mux4CellIntrinsicOp:$old $cond, (ConstantOp:$cst0 $_),
+   (ConstantOp:$cst1 $_), (ConstantOp:$cst0b $_), (ConstantOp:$cst1b $_)),
+  (MoveNameHint $old, (NotPrimOp $cond)), [
+    (EqualTypes $cond, $cst0), (EqualTypes $cond, $cst1),
+    (ZeroConstantOp $cst0), (OneConstantOp $cst1),
+    (ZeroConstantOp $cst0b), (OneConstantOp $cst1b)
+  ]>;
+
 def CatDoubleConst : Pat <
   (CatPrimOp:$old (variadic $cst1, (CatPrimOp (variadic $cst2, $v)))),
   (MoveNameHint $old, (CatPrimOp (variadic (CatPrimOp (variadic $cst1, (AsUIntPrimOp $cst2))), (AsUIntPrimOp $v)))),

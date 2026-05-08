@@ -1871,7 +1871,73 @@ OpFoldResult Mux2CellIntrinsicOp::fold(FoldAdaptor adaptor) {
   return foldMux(*this, adaptor);
 }
 
-OpFoldResult Mux4CellIntrinsicOp::fold(FoldAdaptor adaptor) { return {}; }
+OpFoldResult Mux4CellIntrinsicOp::fold(FoldAdaptor adaptor) {
+  // mux4 : UInt<0> -> 0
+  if (getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(getType(), APInt(0, 0, getType().isSignedInteger()));
+
+  // mux4(sel, x, x, x, x) -> x
+  auto operands = {getV0(), getV1(), getV2(), getV3()};
+  if (llvm::all_of(operands, [&](auto v) { return v == getV0(); }) &&
+      getV0().getType() == getType())
+    return getV0();
+
+  // The following folds require that the result has a known width.
+  if (getType().getBitWidthOrSentinel() < 0)
+    return {};
+
+  // mux4 with constant selector
+  if (auto cond = getConstant(adaptor.getSel())) {
+    switch (cond->getZExtValue()) {
+    case 0:
+      if (getV0().getType() == getType())
+        return getV0();
+      break;
+    case 1:
+      if (getV1().getType() == getType())
+        return getV1();
+      break;
+    case 2:
+      if (getV2().getType() == getType())
+        return getV2();
+      break;
+    case 3:
+      if (getV3().getType() == getType())
+        return getV3();
+      break;
+    default:
+      break;
+    }
+  }
+
+  // mux4 with all constant operands
+  auto vVals = {adaptor.getV0(), adaptor.getV1(), adaptor.getV2(),
+                adaptor.getV3()};
+  SmallVector<APInt> constants;
+  for (auto v : vVals) {
+    if (auto c = getConstant(v)) {
+      constants.push_back(*c);
+    } else {
+      return {};
+    }
+  }
+
+  // All operands must have the same bit width
+  if (!llvm::all_of(constants,
+                    [&](auto &c) { return c.getBitWidth() == constants[0].getBitWidth(); }))
+    return {};
+
+  // mux4(sel, c, c, c, c) -> c
+  if (llvm::all_of(constants, [&](auto &c) { return c == constants[0]; }))
+    return getIntAttr(getType(), constants[0]);
+
+  // mux4(sel, 1, 0, 1, 0) -> sel
+  if (constants[0].isZero() && constants[1].isOne() && constants[2].isZero() &&
+      constants[3].isOne() && getType() == getSel().getType())
+    return getSel();
+
+  return {};
+}
 
 namespace {
 
@@ -2014,12 +2080,12 @@ void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 void Mux2CellIntrinsicOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.add<patterns::Mux2PadSel>(context);
+  results.add<patterns::Mux2PadSel, patterns::Mux2Not>(context);
 }
 
 void Mux4CellIntrinsicOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.add<patterns::Mux4PadSel>(context);
+  results.add<patterns::Mux4PadSel, patterns::Mux4Not>(context);
 }
 
 OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
