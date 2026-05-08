@@ -22,14 +22,17 @@
 #ifndef ESI_TYPED_PORTS_H
 #define ESI_TYPED_PORTS_H
 
+#include "esi/Design.h"
 #include "esi/Ports.h"
 #include "esi/Services.h"
 #include "esi/Types.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <functional>
 #include <future>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -1380,6 +1383,89 @@ private:
   std::optional<TypedWritePort<void>> resultPort;
   std::function<void()> userCallback;
 };
+
+//===----------------------------------------------------------------------===//
+// IndexedPorts<T> — wrapper over std::map<int, T>.
+//
+// Constructed once from a moved std::map (populated via `try_emplace` so T
+// need not be movable or default-constructible). Supports both mutable and
+// const iteration / indexing so callers can invoke non-const methods on the
+// stored ports (e.g. `connect()` on a typed port wrapper).
+//===----------------------------------------------------------------------===//
+
+template <typename T>
+class IndexedPorts {
+public:
+  explicit IndexedPorts(std::map<int, T> &&ports) : ports_(std::move(ports)) {}
+  IndexedPorts(IndexedPorts &&) = default;
+  IndexedPorts &operator=(IndexedPorts &&) = default;
+  IndexedPorts(const IndexedPorts &) = delete;
+  IndexedPorts &operator=(const IndexedPorts &) = delete;
+
+  T &operator[](int idx) { return ports_.at(idx); }
+  const T &operator[](int idx) const { return ports_.at(idx); }
+  auto begin() { return ports_.begin(); }
+  auto end() { return ports_.end(); }
+  auto begin() const { return ports_.cbegin(); }
+  auto end() const { return ports_.cend(); }
+  size_t size() const { return ports_.size(); }
+  bool contains(int idx) const { return ports_.count(idx) > 0; }
+
+private:
+  std::map<int, T> ports_;
+};
+
+//===----------------------------------------------------------------------===//
+// Port-lookup helpers: findPortOrThrow, findPortAsOrThrow, findPortIndices.
+//
+// `findPortOrThrow` and `findPortAsOrThrow` are thin wrappers over
+// `HWModule::resolvePort` that translate "not found" into a thrown
+// `AcceleratorMismatchError` (instead of a nullptr return) and the typed
+// variant additionally `dynamic_cast`s to a service-specific subclass. They
+// exist so generated facade code does not have to repeat the same
+// boilerplate (build a single-element AppIDPath, check for null, format an
+// error string) for every port lookup it performs.
+//===----------------------------------------------------------------------===//
+
+/// Look up a BundlePort by AppID in `module`. Throws AcceleratorMismatchError
+/// if the port is not found. The returned reference is mutable: even though
+/// `HWModule::resolvePort` is a const method, the underlying port map stores
+/// `BundlePort&` references, so callers can invoke non-const methods on the
+/// returned port (e.g. `getRawRead`, `connect`).
+inline BundlePort &findPortOrThrow(HWModule *module, const AppID &id) {
+  AppIDPath lastLookup;
+  BundlePort *port = module->resolvePort(AppIDPath{id}, lastLookup);
+  if (!port)
+    throw AcceleratorMismatchError("Expected port '" + id.toString() +
+                                   "' not found in module");
+  return *port;
+}
+
+/// Look up a BundlePort by AppID and cast it to `T`. Throws
+/// AcceleratorMismatchError if the port is missing or has the wrong runtime
+/// type. The returned pointer is mutable.
+template <typename T>
+T *findPortAsOrThrow(HWModule *module, const AppID &id) {
+  BundlePort &port = findPortOrThrow(module, id);
+  T *result = port.getAs<T>();
+  if (!result)
+    throw AcceleratorMismatchError("Port '" + id.toString() +
+                                   "' has unexpected type (expected " +
+                                   typeid(T).name() + ")");
+  return result;
+}
+
+/// Return a sorted vector of the `idx` values for every port whose AppID name
+/// matches `name`. Ports without an index are ignored.
+inline std::vector<uint32_t> findPortIndices(HWModule *module,
+                                             const std::string &name) {
+  std::vector<uint32_t> indices;
+  for (const auto &[appid, port] : module->getPorts())
+    if (appid.name == name && appid.idx.has_value())
+      indices.push_back(appid.idx.value());
+  std::sort(indices.begin(), indices.end());
+  return indices;
+}
 
 } // namespace esi
 
