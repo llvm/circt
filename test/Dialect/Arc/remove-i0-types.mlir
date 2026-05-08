@@ -179,3 +179,16 @@ func.func @MultiElementArray(%a: !hw.array<4xi32>) -> !hw.array<4xi32> {
 func.func @NoI0(%a: i32, %b: i64) -> i32 {
   return %a : i32
 }
+
+// CHECK-LABEL: func.func @ArrayOfArrayOf1
+// CHECK-SAME: !hw.array<2xi32>
+func.func @ArrayOfArrayOf1(%arg0: !hw.array<2x!hw.array<1xi32>>) ->
+  !hw.array<2x!hw.array<1xi32>> {
+  return %arg0 : !hw.array<2x!hw.array<1xi32>>
+}
+
+// CHECK-LABEL: func.func @StateType
+// CHECK-SAME: !arc.state<i32>
+func.func @StateType(%arg0: !arc.state<!hw.array<1xi32>>) {
+  return
+}

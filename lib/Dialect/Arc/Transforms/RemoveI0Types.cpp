@@ -215,7 +215,7 @@ void RemoveI0TypesPass::runOnOperation() {
   });
   converter.addConversion([&converter](hw::ArrayType type) -> Type {
     if (type.getNumElements() == 1)
-      return type.getElementType();
+      return converter.convertType(type.getElementType());
     // Recursively apply type conversion to inner types.
     return hw::ArrayType::get(converter.convertType(type.getElementType()),
                               type.getNumElements());
@@ -240,6 +240,9 @@ void RemoveI0TypesPass::runOnOperation() {
   });
   converter.addConversion([&converter](hw::TypeAliasType type) {
     return converter.convertType(type.getCanonicalType());
+  });
+  converter.addConversion([&converter](arc::StateType type) {
+    return arc::StateType::get(converter.convertType(type.getType()));
   });
 
   target.markUnknownOpDynamicallyLegal(
