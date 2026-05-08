@@ -753,7 +753,7 @@ LogicalResult ExecuteOp::verifyRegions() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ArrayRefAllocOp::verify() {
-  if (auto init = getInit(); init.has_value()) {
+  if (auto init = getInit()) {
     if (init->size() != getType().getNumElements()) {
       return emitOpError("init size does not match array size; init had size ")
              << init->size() << " but array has size "

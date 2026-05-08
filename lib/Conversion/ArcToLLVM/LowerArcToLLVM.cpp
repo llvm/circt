@@ -1332,6 +1332,7 @@ size_t computeByteWidth(ArrayRefType type) {
 size_t computeElementByteWidth(ArrayRefType arrayRefType) {
   auto arrayBitWidth = computeLLVMBitWidth(arrayRefType);
   assert(arrayBitWidth.has_value());
+  assert(arrayRefType.getNumElements() > 0 && "Cannot compute stride for zero sized array");
   size_t elementBitWidth = *arrayBitWidth / arrayRefType.getNumElements();
   return llvm::divideCeil(elementBitWidth, 8);
 }
@@ -1451,7 +1452,6 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
     auto ptrTy = LLVM::LLVMPointerType::get(getContext());
     auto i8Ty = rewriter.getI8Type();
     auto i64Ty = rewriter.getI64Type();
-    size_t byteWidth = computeByteWidth(arrayRefType);
     size_t elemByteWidth = computeElementByteWidth(arrayRefType);
     assert(!isa<ArrayRefType>(arrayRefType.getElementType()));
 
@@ -1459,11 +1459,14 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, elemByteWidth);
     Value byteOffset =
         LLVM::MulOp::create(rewriter, loc, adaptor.getIndex(), stride);
-    Value totalSize = LLVM::ConstantOp::create(rewriter, loc, i64Ty, byteWidth);
     // Defend against out-of-bounds accesses. What we return is undefined in the
     // case of OOB.
+    size_t lastElementByteOffset =
+        elemByteWidth * (arrayRefType.getNumElements() - 1);
+    Value lastElementByteOffsetVal =
+        LLVM::ConstantOp::create(rewriter, loc, i64Ty, lastElementByteOffset);
     Value clampedOffset =
-        LLVM::UMinOp::create(rewriter, loc, i64Ty, byteOffset, totalSize);
+        LLVM::UMinOp::create(rewriter, loc, i64Ty, byteOffset, lastElementByteOffsetVal);
     auto elemAddr = LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty,
                                         adaptor.getInput(), clampedOffset);
     Value loaded = LLVM::LoadOp::create(
@@ -1558,7 +1561,8 @@ struct ArrayRefCopyOpLowering : public OpConversionPattern<ArrayRefCopyOp> {
     auto i64Ty = rewriter.getI64Type();
     size_t byteWidth = computeByteWidth(arrayRefType);
     Value size = LLVM::ConstantOp::create(rewriter, loc, i64Ty, byteWidth);
-    LLVM::MemcpyOp::create(rewriter, loc, adaptor.getInput(),
+    // Use a memmove rather than a memcpy just in case the arrays alias.
+    LLVM::MemmoveOp::create(rewriter, loc, adaptor.getInput(),
                            adaptor.getSource(), size,
                            /*isVolatile=*/false);
     rewriter.replaceOp(op, adaptor.getInput());
@@ -1572,7 +1576,7 @@ static Value loadArrayRefAsArray(ImplicitLocOpBuilder &builder, Value arrayRef,
   auto i8Ty = builder.getI8Type();
   auto ptrTy = LLVM::LLVMPointerType::get(builder.getContext());
   size_t elemByteWidth = computeElementByteWidth(arrayRefType);
-  Value v = LLVM::UndefOp::create(builder, llvmType);
+  Value v = LLVM::PoisonOp::create(builder, llvmType);
   int32_t size = arrayRefType.getNumElements();
   for (int32_t i = 0; i < size; i++) {
     int32_t byteOffset = i * elemByteWidth;

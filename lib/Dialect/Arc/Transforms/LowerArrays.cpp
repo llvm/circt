@@ -355,13 +355,6 @@ struct OptimizeReturnOfAlloc : public OpRewritePattern<func::ReturnOp> {
       if (!op)
         return nullptr;
 
-      // If any op on the chain is used by a slice, it is not safe to replace
-      // the array with the sret buffer.
-      for (Operation *user : op->getUsers()) {
-        if (isa<ArraySliceOp>(user))
-          return nullptr;
-      }
-
       if (auto alloc = dyn_cast<ArrayRefAllocOp>(op))
         return alloc;
 

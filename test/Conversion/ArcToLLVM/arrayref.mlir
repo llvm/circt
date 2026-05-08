@@ -89,7 +89,7 @@ func.func @ArrayRefInitZero() -> !arc.arrayref<2xi32> {
 // CHECK-LABEL: @ArrayRefGet
 // CHECK-NEXT: %[[STRIDE:.*]] = llvm.mlir.constant(4 : i64)
 // CHECK-NEXT: %[[OFF:.*]] = llvm.mul %arg1, %[[STRIDE]]
-// CHECK-NEXT: %[[TOTAL:.*]] = llvm.mlir.constant(16 : i64)
+// CHECK-NEXT: %[[TOTAL:.*]] = llvm.mlir.constant(12 : i64)
 // CHECK-NEXT: %[[CLAMPED:.*]] = llvm.intr.umin(%[[OFF]], %[[TOTAL]])
 // CHECK-NEXT: %[[ADDR:.*]] = llvm.getelementptr %arg0[%[[CLAMPED]]]
 // CHECK-NEXT: %[[VAL:.*]] = llvm.load %[[ADDR]]
@@ -130,7 +130,7 @@ func.func @ArrayRefSlice(%arg0: !arc.arrayref<4xi32>, %lowIdx: index) -> !arc.ar
 
 // CHECK-LABEL: @ArrayRefCopy
 // CHECK-NEXT: %[[C8:.*]] = llvm.mlir.constant(8 : i64)
-// CHECK-NEXT: "llvm.intr.memcpy"(%arg0, %arg1, %[[C8]])
+// CHECK-NEXT: "llvm.intr.memmove"(%arg0, %arg1, %[[C8]])
 // CHECK-NEXT: return %arg0
 func.func @ArrayRefCopy(%arg0: !arc.arrayref<2xi32>, %arg1: !arc.arrayref<2xi32>) -> !arc.arrayref<2xi32> {
   %0 = arc.arrayref.copy %arg0 = %arg1 : !arc.arrayref<2xi32>
@@ -138,7 +138,7 @@ func.func @ArrayRefCopy(%arg0: !arc.arrayref<2xi32>, %arg1: !arc.arrayref<2xi32>
 }
 
 // CHECK-LABEL: @ArrayRefToArray
-// CHECK-NEXT: %[[UNDEF:.*]] = llvm.mlir.undef : !llvm.array<2 x i32>
+// CHECK-NEXT: %[[UNDEF:.*]] = llvm.mlir.poison : !llvm.array<2 x i32>
 // CHECK-NEXT: %[[GEP0:.*]] = llvm.getelementptr %arg0[0] : (!llvm.ptr) -> !llvm.ptr, i8
 // CHECK-NEXT: %[[LOAD0:.*]] = llvm.load %[[GEP0]] : !llvm.ptr -> i32
 // CHECK-NEXT: %[[INS0:.*]] = llvm.insertvalue %[[LOAD0]], %[[UNDEF]][0] : !llvm.array<2 x i32>
