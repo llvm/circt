@@ -1890,23 +1890,15 @@ OpFoldResult Mux4CellIntrinsicOp::fold(FoldAdaptor adaptor) {
   if (auto cond = getConstant(adaptor.getSel())) {
     switch (cond->getZExtValue()) {
     case 0:
-      if (getV0().getType() == getType())
-        return getV0();
-      break;
+      return getV0().getType() == getType() ? getV0() : Value{};
     case 1:
-      if (getV1().getType() == getType())
-        return getV1();
-      break;
+      return getV1().getType() == getType() ? getV1() : Value{};
     case 2:
-      if (getV2().getType() == getType())
-        return getV2();
-      break;
+      return getV2().getType() == getType() ? getV2() : Value{};
     case 3:
-      if (getV3().getType() == getType())
-        return getV3();
-      break;
+      return getV3().getType() == getType() ? getV3() : Value{};
     default:
-      break;
+      return {};
     }
   }
 
