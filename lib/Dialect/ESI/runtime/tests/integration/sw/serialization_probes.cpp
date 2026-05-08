@@ -10,6 +10,7 @@
 #include "serialization_probes/ByteRotate1.h"
 #include "serialization_probes/PackProbe.h"
 #include "serialization_probes/SignProbe.h"
+#include "serialization_probes/SignProbe13.h"
 
 #include "esi/Accelerator.h"
 #include "esi/CLI.h"
@@ -107,9 +108,9 @@ static void runBytePatternEchoEq(Accelerator *accel) {
   MessageData resMsg =
       func->call(MessageData(kBytePattern.data(), kBytePattern.size())).get();
   if (resMsg.getSize() != 1)
-    throw std::runtime_error(
-        "byte_pattern_echo_eq: wrong response size (got " +
-        std::to_string(resMsg.getSize()) + ", expected 1)");
+    throw std::runtime_error("byte_pattern_echo_eq: wrong response size (got " +
+                             std::to_string(resMsg.getSize()) +
+                             ", expected 1)");
   uint8_t got = *resMsg.getBytes();
   if (got != 1)
     throw std::runtime_error(
@@ -142,12 +143,70 @@ static void runSignProbe(Accelerator *accel) {
   };
   for (const Case &c : cases) {
     esi_system::SignResult r = connected->sign_probe(c.arg).get();
-    if (r.plus_one != c.plus_one || r.neg != c.neg ||
-        r.sign_bit != c.sign_bit)
+    if (r.plus_one != c.plus_one || r.neg != c.neg || r.sign_bit != c.sign_bit)
       throw std::runtime_error("sign_probe mismatch for arg=" +
                                std::to_string(c.arg));
   }
   std::cout << "sign_probe ok\n";
+}
+
+static void runSignProbe13(Accelerator *accel) {
+  esi_system::SignProbe13 mod(findProbe(accel, "sign_probe13_inst"));
+  auto connected = mod.connect();
+
+  // si13 ranges from -4096 (= -2^12) to 4095 (= 2^12 - 1). The boundary
+  // cases are where width-bounded sign extension and saturating-wrap
+  // arithmetic differ from si16 behavior; getting plus_one or neg right
+  // for both -4096 and 4095 forces the host serializer/deserializer to
+  // use the manifest's bit width, not sizeof(int16_t).
+  static constexpr int16_t kMin = -4096;
+  static constexpr int16_t kMax = 4095;
+  struct Case {
+    int16_t arg;
+    int16_t plus_one;
+    int16_t neg;
+    uint8_t sign_bit;
+  };
+  Case cases[] = {
+      {0, 1, 0, 0},
+      {-1, 0, 1, 1},
+      {1, 2, -1, 0},
+      {kMax, kMin, static_cast<int16_t>(-kMax), 0}, // 4095 + 1 wraps to -4096.
+      // -4096 is the si13 minimum: -kMin overflows back to -4096 (just like
+      // -INT16_MIN does for si16), and kMin + 1 = -4095.
+      {kMin, static_cast<int16_t>(kMin + 1), kMin, 1},
+  };
+  for (const Case &c : cases) {
+    esi_system::SignResult13 r = connected->sign_probe13(c.arg).get();
+    if (r.plus_one != c.plus_one || r.neg != c.neg || r.sign_bit != c.sign_bit)
+      throw std::runtime_error(
+          "sign_probe13 mismatch for arg=" + std::to_string(c.arg) +
+          " got plus_one=" + std::to_string(r.plus_one) + " neg=" +
+          std::to_string(r.neg) + " sign_bit=" + std::to_string(r.sign_bit));
+  }
+
+  // TODO: Out-of-range si13 args. The generated facade declares
+  // `sign_probe13Args = int16_t`, and the runtime's `toMessageData` for
+  // int16_t -> si13 just copies the low 2 wire bytes with no truncation.
+  // So a host that does ordinary int16_t arithmetic and passes a value
+  // outside [-4096, 4095] silently sends a wrong si13 to the hardware.
+  // The expected behavior is one of: (a) the codegen emits a wrapper class
+  // (e.g. `sint13_t` with a 13-bit bitfield) that masks/sign-extends on
+  // construction so this round-trip works, or (b) the runtime rejects the
+  // value at write time. Either way the assertion below should hold.
+  // Re-enable once one of those is implemented.
+  //
+  // {
+  //   int16_t out_of_range = 4096; // legal int16_t, illegal si13.
+  //   esi_system::SignResult13 r = connected->sign_probe13(out_of_range).get();
+  //   if (r.plus_one != static_cast<int16_t>(out_of_range + 1))
+  //     throw std::runtime_error(
+  //         "sign_probe13 out-of-range arg mismatch: arg=" +
+  //         std::to_string(out_of_range) +
+  //         " plus_one=" + std::to_string(r.plus_one));
+  // }
+
+  std::cout << "sign_probe13 ok\n";
 }
 
 static void runPackProbe(Accelerator *accel) {
@@ -213,9 +272,8 @@ static void runArrayProbe(Accelerator *accel) {
   std::array<uint8_t, 4> r = array_probe(arg).get();
   if (r[0] != 11 || r[1] != 22 || r[2] != 33 || r[3] != 44)
     throw std::runtime_error("array_probe element-order mismatch: got [" +
-                             std::to_string(r[0]) + "," +
-                             std::to_string(r[1]) + "," +
-                             std::to_string(r[2]) + "," +
+                             std::to_string(r[0]) + "," + std::to_string(r[1]) +
+                             "," + std::to_string(r[2]) + "," +
                              std::to_string(r[3]) + "]");
   std::cout << "array_probe ok: [" << (int)r[0] << "," << (int)r[1] << ","
             << (int)r[2] << "," << (int)r[3] << "]\n";
@@ -223,8 +281,7 @@ static void runArrayProbe(Accelerator *accel) {
 
 int main(int argc, const char *argv[]) {
   CliParser cli("serialization-probes");
-  cli.description(
-      "Hardware-vs-host serialization correctness probes for ESI.");
+  cli.description("Hardware-vs-host serialization correctness probes for ESI.");
   if (int rc = cli.esiParse(argc, argv))
     return rc;
   if (!cli.get_help_ptr()->empty())
@@ -242,6 +299,7 @@ int main(int argc, const char *argv[]) {
     runBytePatternConst(accel);
     runBytePatternEchoEq(accel);
     runSignProbe(accel);
+    runSignProbe13(accel);
     runPackProbe(accel);
     runBitPackProbe(accel);
     runArrayProbe(accel);

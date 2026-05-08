@@ -1,9 +1,3 @@
-# REQUIRES: esi-cosim, esi-runtime, rtl-sim
-# RUN: rm -rf %t
-# RUN: mkdir %t && cd %t
-
-# Build the system.
-# RUN: %PYTHON% %s %t 2>&1
 """Hardware design for serialization-correctness probes.
 
 This design exercises the on-the-wire layout invariants of the ESI runtime
@@ -55,7 +49,7 @@ class ByteRotate1(Module):
     # In bit-slice terms: the bottom 56 bits of arg become the top 56 bits
     # of the result and the top byte of arg wraps around to the bottom.
     arg_bits = arg.as_bits(64)
-    rotated = BitsSignal.concat([arg_bits[0:56], arg_bits[56:64]]).as_uint(64)
+    rotated = BitsSignal.concat([arg_bits[0:56], arg_bits[56:64]]).as_uint()
 
     out_chan, out_ready = Channel(UInt(64)).wrap(rotated, valid)
     ready.assign(out_ready)
@@ -143,6 +137,12 @@ class SignResult(Struct):
   sign_bit: UInt(1)
 
 
+class SignResult13(Struct):
+  plus_one: SInt(13)
+  neg: SInt(13)
+  sign_bit: UInt(1)
+
+
 class SignProbe(Module):
   """Function ``sign_probe``: si16 -> {plus_one, neg, sign_bit}.
 
@@ -171,6 +171,44 @@ class SignProbe(Module):
     sign_bit = arg.as_bits(16)[15].as_uint(1)
     result = SignResult(plus_one=plus_one, neg=neg, sign_bit=sign_bit)
     out_chan, out_ready = Channel(SignResult).wrap(result, valid)
+    ready.assign(out_ready)
+    result_wire.assign(out_chan)
+
+
+class SignProbe13(Module):
+  """Function ``sign_probe13``: si13 -> {plus_one: si13, neg: si13, sign_bit: ui1}.
+
+  The non-byte-aligned cousin of :class:`SignProbe`. si13 occupies a 2-byte
+  wire slot but only bit 12 carries the sign, with bits 13..15 acting as
+  padding. A host that:
+
+    - uses bit 15 (instead of bit 12) as the sign bit, or
+    - forgets to sign-extend the padding bits on read, or
+    - leaves uninitialised garbage in the padding bits on write,
+
+  will produce wrong ``plus_one`` / ``neg`` values for negative inputs and
+  for inputs near the si13 boundaries (-4096 / 4095). This catches
+  width-bounded sign-extension bugs that si16 would never trip.
+  """
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    result_wire = Wire(Channel(SignResult13))
+    args = esi.FuncService.get_call_chans(AppID("sign_probe13"),
+                                          arg_type=SInt(13),
+                                          result=result_wire)
+
+    ready = Wire(Bits(1))
+    arg, valid = args.unwrap(ready)
+
+    plus_one = (arg + SInt(13)(1)).as_sint(13)
+    neg = (-arg).as_sint(13)
+    sign_bit = arg.as_bits(13)[12].as_uint(1)
+    result = SignResult13(plus_one=plus_one, neg=neg, sign_bit=sign_bit)
+    out_chan, out_ready = Channel(SignResult13).wrap(result, valid)
     ready.assign(out_ready)
     result_wire.assign(out_chan)
 
@@ -312,9 +350,7 @@ class Top(Module):
 
   @generator
   def construct(ports):
-    ByteRotate1(clk=ports.clk,
-                rst=ports.rst,
-                appid=AppID("byte_rotate1_inst"))
+    ByteRotate1(clk=ports.clk, rst=ports.rst, appid=AppID("byte_rotate1_inst"))
     BytePatternConst(clk=ports.clk,
                      rst=ports.rst,
                      appid=AppID("byte_pattern_const_inst"))
@@ -322,6 +358,7 @@ class Top(Module):
                       rst=ports.rst,
                       appid=AppID("byte_pattern_echo_eq_inst"))
     SignProbe(clk=ports.clk, rst=ports.rst, appid=AppID("sign_probe_inst"))
+    SignProbe13(clk=ports.clk, rst=ports.rst, appid=AppID("sign_probe13_inst"))
     PackProbe(clk=ports.clk, rst=ports.rst, appid=AppID("pack_probe_inst"))
     BitPackProbe(clk=ports.clk,
                  rst=ports.rst,

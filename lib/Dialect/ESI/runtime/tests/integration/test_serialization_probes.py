@@ -27,6 +27,7 @@ PROBES_EXPECTED = [
     "byte_pattern_const ok",
     "byte_pattern_echo_eq ok",
     "sign_probe ok",
+    "sign_probe13 ok",
     "pack_probe ok",
     "bit_pack_probe ok",
     "array_probe ok",
