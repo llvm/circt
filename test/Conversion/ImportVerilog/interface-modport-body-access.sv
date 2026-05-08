@@ -7,6 +7,7 @@
 // symbol is the ModportPortSymbol; ImportVerilog must resolve them through the
 // flattened interface port instead of registering them as cross-instance
 // hierPath inputs (which would add spurious unfilled module ports).
+// UNSUPPORTED: valgrind
 
 interface IfaceModportBody;
   logic [7:0] x;
