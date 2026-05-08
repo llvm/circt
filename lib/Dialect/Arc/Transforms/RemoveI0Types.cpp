@@ -201,26 +201,30 @@ struct HandleGenericOp : public ConversionPattern {
   }
 };
 
-struct ConvertAggregateConstant : public OpConversionPattern<hw::AggregateConstantOp> {
+struct ConvertAggregateConstant
+    : public OpConversionPattern<hw::AggregateConstantOp> {
   using OpConversionPattern<hw::AggregateConstantOp>::OpConversionPattern;
   LogicalResult
-  matchAndRewrite(hw::AggregateConstantOp op, OpAdaptor adaptor, ConversionPatternRewriter &rewriter) const override {
+  matchAndRewrite(hw::AggregateConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     Type resultType = getTypeConverter()->convertType(op.getResult().getType());
 
     // Recursively rewrite the attribute.
-    Attribute newFields = rewriteArrayAttr(op.getFields(), op.getResult().getType());
+    Attribute newFields =
+        rewriteArrayAttr(op.getFields(), op.getResult().getType());
 
     if (!isa<ArrayAttr>(newFields)) {
       // Scalar result -> becomes hw.constant.
       IntegerAttr attr = cast<IntegerAttr>(newFields);
-      auto result = hw::ConstantOp::create(rewriter, op.getLoc(), resultType,
-                                           attr);
+      auto result =
+          hw::ConstantOp::create(rewriter, op.getLoc(), resultType, attr);
       rewriter.replaceOp(op, result);
       return success();
     }
 
     // Composite result -> new aggregate_constant op.
-    auto newOp = hw::AggregateConstantOp::create(rewriter, op.getLoc(), resultType, cast<ArrayAttr>(newFields));
+    auto newOp = hw::AggregateConstantOp::create(
+        rewriter, op.getLoc(), resultType, cast<ArrayAttr>(newFields));
     rewriter.replaceOp(op, newOp);
     return success();
   }
@@ -228,7 +232,8 @@ struct ConvertAggregateConstant : public OpConversionPattern<hw::AggregateConsta
   Attribute rewriteArrayAttr(ArrayAttr array, Type type) const {
     if (getTypeConverter()->convertType(type) == type)
       return array;
-    if (auto arrayType = dyn_cast<hw::ArrayType>(type); arrayType && arrayType.getNumElements() == 1) {
+    if (auto arrayType = dyn_cast<hw::ArrayType>(type);
+        arrayType && arrayType.getNumElements() == 1) {
       return *array.begin();
     }
 
@@ -303,8 +308,7 @@ void RemoveI0TypesPass::runOnOperation() {
 
   patterns.add<ConvertFunc, ConvertReturn, ConvertCall, ConvertArrayGet,
                ConvertArrayCreate, ConvertArrayInject, HandleGenericOp,
-               ConvertAggregateConstant>(
-      converter, &getContext());
+               ConvertAggregateConstant>(converter, &getContext());
   if (failed(
           applyFullConversion(getOperation(), target, std::move(patterns)))) {
     return signalPassFailure();
