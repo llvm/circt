@@ -1332,7 +1332,8 @@ size_t computeByteWidth(ArrayRefType type) {
 size_t computeElementByteWidth(ArrayRefType arrayRefType) {
   auto arrayBitWidth = computeLLVMBitWidth(arrayRefType);
   assert(arrayBitWidth.has_value());
-  assert(arrayRefType.getNumElements() > 0 && "Cannot compute stride for zero sized array");
+  assert(arrayRefType.getNumElements() > 0 &&
+         "Cannot compute stride for zero sized array");
   size_t elementBitWidth = *arrayBitWidth / arrayRefType.getNumElements();
   return llvm::divideCeil(elementBitWidth, 8);
 }
@@ -1465,8 +1466,8 @@ struct ArrayRefGetOpLowering : public OpConversionPattern<ArrayRefGetOp> {
         elemByteWidth * (arrayRefType.getNumElements() - 1);
     Value lastElementByteOffsetVal =
         LLVM::ConstantOp::create(rewriter, loc, i64Ty, lastElementByteOffset);
-    Value clampedOffset =
-        LLVM::UMinOp::create(rewriter, loc, i64Ty, byteOffset, lastElementByteOffsetVal);
+    Value clampedOffset = LLVM::UMinOp::create(rewriter, loc, i64Ty, byteOffset,
+                                               lastElementByteOffsetVal);
     auto elemAddr = LLVM::GEPOp::create(rewriter, loc, ptrTy, i8Ty,
                                         adaptor.getInput(), clampedOffset);
     Value loaded = LLVM::LoadOp::create(
@@ -1563,8 +1564,8 @@ struct ArrayRefCopyOpLowering : public OpConversionPattern<ArrayRefCopyOp> {
     Value size = LLVM::ConstantOp::create(rewriter, loc, i64Ty, byteWidth);
     // Use a memmove rather than a memcpy just in case the arrays alias.
     LLVM::MemmoveOp::create(rewriter, loc, adaptor.getInput(),
-                           adaptor.getSource(), size,
-                           /*isVolatile=*/false);
+                            adaptor.getSource(), size,
+                            /*isVolatile=*/false);
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }
