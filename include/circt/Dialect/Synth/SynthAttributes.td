@@ -62,8 +62,8 @@ def LinearTimingArcAttr : AttrDef<Synth_Dialect, "LinearTimingArc"> {
   let parameters = (ins
     "::mlir::StringAttr":$pin,
     "::mlir::StringAttr":$relatedPin,
-    "::mlir::FloatAttr":$intrinsic,
-    "::mlir::FloatAttr":$sensitivity,
+    "int64_t":$intrinsic,
+    "int64_t":$sensitivity,
     "PolarityAttr":$polarity
   );
   let assemblyFormat =

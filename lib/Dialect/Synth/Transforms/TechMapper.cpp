@@ -205,11 +205,14 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
       double area = mappingCost.getArea().getValue().convertToDouble();
 
       StringAttr outputName;
-      for (const auto &port : hwModule.getPortList()) {
-        if (!port.isOutput())
-          continue;
-        if (outputName)
-          continue;
+      hw::ModulePortInfo ports(hwModule.getPortList());
+      for (const auto &port : ports.getOutputs()) {
+        if (outputName) {
+          hwModule.emitError(
+              "Modules with multiple outputs are not supported yet");
+          signalPassFailure();
+          return;
+        }
         outputName = port.name;
       }
       if (!outputName) {
@@ -219,8 +222,8 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
       }
 
       llvm::DenseMap<StringAttr, DelayType> delayByInput;
-      for (auto arcAttr : mappingCost.getArcs()) {
-        auto arc = dyn_cast<LinearTimingArcAttr>(arcAttr);
+      for (auto attr : mappingCost.getArcs()) {
+        auto arc = cast<LinearTimingArcAttr>(attr);
         if (!arc) {
           hwModule.emitError(
               "expected synth.linear_timing_arc in synth.mapping_cost arcs");
@@ -236,22 +239,14 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
           return;
         }
 
-        double intrinsic = arc.getIntrinsic().getValue().convertToDouble();
-        if (intrinsic !=
-            static_cast<double>(static_cast<DelayType>(intrinsic))) {
-          hwModule.emitError("expected integral intrinsic delay for input '")
-              << arc.getRelatedPin().getValue()
-              << "' until TechMapper supports fractional delays";
-          signalPassFailure();
-          return;
-        }
+        int64_t intrinsicDelay = arc.getIntrinsic();
 
         // TechMapper currently preserves the old integer per-pin delay model.
         // The sensitivity, polarity, and input capacitance fields are carried
         // in the attribute for future load-aware mapping.
         if (!delayByInput
                  .try_emplace(arc.getRelatedPin(),
-                              static_cast<DelayType>(intrinsic))
+                              static_cast<DelayType>(intrinsicDelay))
                  .second) {
           hwModule.emitError("duplicate mapping cost arc for input '")
               << arc.getRelatedPin().getValue() << "'";
