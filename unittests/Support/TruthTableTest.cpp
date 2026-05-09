@@ -13,6 +13,29 @@
 using namespace circt;
 using namespace llvm;
 
+//===----------------------------------------------------------------------===//
+// Truth Table Tests
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+static APInt naiveExpandTruthTable(const APInt &tt, ArrayRef<unsigned> mapping,
+                                   unsigned numExpandedInputs) {
+  unsigned numOrigInputs = mapping.size();
+  unsigned expandedSize = 1U << numExpandedInputs;
+  APInt expected(expandedSize, 0);
+  for (unsigned expandedIdx = 0; expandedIdx < expandedSize; ++expandedIdx) {
+    unsigned origIdx = 0;
+    for (unsigned i = 0; i < numOrigInputs; ++i)
+      if ((expandedIdx >> mapping[i]) & 1U)
+        origIdx |= 1U << i;
+    if (tt[origIdx])
+      expected.setBit(expandedIdx);
+  }
+  return expected;
+}
+} // namespace
+
 TEST(BinaryTruthTableTest, BasicConstruction) {
   // Test default constructor
   BinaryTruthTable defaultTT;
@@ -331,17 +354,62 @@ TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPath) {
   // 3-input parity embedded into inputs [x0, x3, x6].
   APInt tt(8, 0b10010110);
   SmallVector<unsigned> mapping = {0, 3, 6};
-  APInt expanded = circt::detail::expandTruthTableToInputSpace(tt, mapping, 7);
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 7),
+            naiveExpandTruthTable(tt, mapping, 7));
+}
 
-  APInt expected(128, 0);
-  for (unsigned expandedIdx = 0; expandedIdx < 128; ++expandedIdx) {
-    unsigned origIdx = ((expandedIdx >> 0) & 1U) |
-                       (((expandedIdx >> 3) & 1U) << 1) |
-                       (((expandedIdx >> 6) & 1U) << 2);
-    if (tt[origIdx])
-      expected.setBit(expandedIdx);
-  }
-  EXPECT_EQ(expanded, expected);
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPathSparse) {
+  // Only the all-zeros minterm is set
+  APInt tt(8, 0b00000001);
+  SmallVector<unsigned> mapping = {0, 3, 6};
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 7),
+            naiveExpandTruthTable(tt, mapping, 7));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPathHalf) {
+  // Lower 4 minterms set, upper 4 unset.
+  APInt tt(8, 0b00001111);
+  SmallVector<unsigned> mapping = {0, 3, 6};
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 7),
+            naiveExpandTruthTable(tt, mapping, 7));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPathAllOnes) {
+  APInt tt = APInt::getAllOnes(8);
+  SmallVector<unsigned> mapping = {0, 3, 6};
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 7),
+            naiveExpandTruthTable(tt, mapping, 7));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPathAllZeros) {
+  APInt tt = APInt::getZero(8);
+  SmallVector<unsigned> mapping = {0, 3, 6};
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 7),
+            naiveExpandTruthTable(tt, mapping, 7));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPathTwoInputOR) {
+  // 2-input OR embedded into inputs [x1, x5].
+  APInt tt(4, 0b1110);
+  SmallVector<unsigned> mapping = {1, 5};
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 8),
+            naiveExpandTruthTable(tt, mapping, 8));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPathTwoInputAND) {
+  // 2-input AND embedded into inputs [x0, x3].
+  APInt tt(4, 0b1000);
+  SmallVector<unsigned> mapping = {0, 3};
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 8),
+            naiveExpandTruthTable(tt, mapping, 8));
+}
+
+TEST(TruthTableUtilTest, ExpandTruthTableToInputSpaceGenericPathFourInput) {
+  APInt tt(16, 0b1111111000000000);
+  // 4-input majority embedded into inputs [x0, x2, x4, x6]
+  SmallVector<unsigned> mapping = {0, 2, 4, 6};
+  EXPECT_EQ(circt::detail::expandTruthTableToInputSpace(tt, mapping, 8),
+            naiveExpandTruthTable(tt, mapping, 8));
 }
 
 TEST(BinaryTruthTableTest, MultiBitOutputPermutation) {
@@ -679,7 +747,6 @@ SOPForm verifyISOP(const llvm::APInt &truthTable, unsigned numVars,
 
   return sop;
 }
-
 } // namespace
 
 TEST(ISOPTest, SimpleAND) {
