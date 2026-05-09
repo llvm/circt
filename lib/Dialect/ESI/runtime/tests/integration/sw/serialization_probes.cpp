@@ -5,12 +5,14 @@
 // as wrong-but-distinguishable output rather than coincidentally-correct
 // answers; see the corresponding HW module's docstring for the rationale.
 
-#include "serialization_probes/ArrayProbe.h"
 #include "serialization_probes/BitPackProbe.h"
 #include "serialization_probes/ByteRotate1.h"
 #include "serialization_probes/PackProbe.h"
 #include "serialization_probes/SignProbe.h"
 #include "serialization_probes/SignProbe13.h"
+// Note: serialization_probes/ArrayProbe.h is intentionally not included.
+// runArrayProbe drives the raw FuncService port directly to test the wire
+// byte order; see the comment on that function for the rationale.
 
 #include "esi/Accelerator.h"
 #include "esi/CLI.h"
@@ -247,36 +249,54 @@ static void runBitPackProbe(Accelerator *accel) {
   std::cout << "bit_pack_probe ok\n";
 }
 
+// Per-index sentinels (10, 20, 30, 40) make element order observable.
+// The PyCDE source reads the argument as `arg[i]` and returns
+// `arg[i] + 10*(i+1)` packed back into the result array at logical
+// index `i`. With the request bytes [0x01, 0x02, 0x03, 0x04], a wire
+// convention that places logical element `i` at wire byte `i` produces
+// a response of [11, 22, 33, 44]; a reverse-on-wire convention would
+// produce [41, 32, 23, 14]. Either way each byte uniquely identifies
+// its source index so the actual convention is observable from the
+// failure message.
 static void runArrayProbe(Accelerator *accel) {
-  // FIXME: bypass the generated facade for this probe.
-  // verifyTypeCompatibility<std::array<T,N>>() against an ArrayType is not
-  // implemented in the runtime today, so the generated facade's connect()
-  // throws "Cannot verify type compatibility for C++ type 'St5arrayIhLm4EE'".
-  // Once that gap is closed, switch this back to:
-  //   esi_system::ArrayProbe mod(findProbe(accel, "array_probe_inst"));
-  //   auto connected = mod.connect();
-  //   ... connected->array_probe(arg).get();
-  esi::HWModule *probe = findProbe(accel, "array_probe_inst");
-  auto it = probe->getPorts().find(AppID("array_probe"));
-  if (it == probe->getPorts().end())
-    throw std::runtime_error("array_probe port not found on instance");
-  auto *funcPort = it->second.getAs<services::FuncService::Function>();
-  if (!funcPort)
-    throw std::runtime_error("array_probe is not a FuncService::Function");
-  TypedFunction<std::array<uint8_t, 4>, std::array<uint8_t, 4>,
-                /*SkipTypeCheck=*/true>
-      array_probe(funcPort);
-  array_probe.connect();
+  // Driven through the raw FuncService port with explicitly constructed
+  // wire bytes -- not via the generated facade. Two reasons:
+  //
+  //   1. `TypedFunction<std::array<T,N>, ..., SkipTypeCheck=true>` would use
+  //      `TypedPorts`' POD (memcpy) (de)serialization. That path is
+  //      symmetric: it would round-trip a wrong-but-mirrored byte order as
+  //      a false positive without ever exercising what the hardware
+  //      actually puts on (or reads off) the wire.
+  //   2. The runtime's typed `ArrayType` (de)serializer in `types.py`
+  //      reverses element order on the wire. Whether the hardware
+  //      (PyCDE-emitted RTL) also reverses is exactly the convention this
+  //      probe is meant to nail down. By writing/reading raw bytes the
+  //      test pins down the wire format independent of any host-side
+  //      mirror of that convention.
 
-  std::array<uint8_t, 4> arg{1, 2, 3, 4};
-  std::array<uint8_t, 4> r = array_probe(arg).get();
-  if (r[0] != 11 || r[1] != 22 || r[2] != 33 || r[3] != 44)
-    throw std::runtime_error("array_probe element-order mismatch: got [" +
-                             std::to_string(r[0]) + "," + std::to_string(r[1]) +
-                             "," + std::to_string(r[2]) + "," +
-                             std::to_string(r[3]) + "]");
-  std::cout << "array_probe ok: [" << (int)r[0] << "," << (int)r[1] << ","
-            << (int)r[2] << "," << (int)r[3] << "]\n";
+  auto *func = findRawFunc(findProbe(accel, "array_probe_inst"), "array_probe");
+  func->connect();
+
+  static constexpr std::array<uint8_t, 4> kRequest = {0x01, 0x02, 0x03, 0x04};
+  MessageData resMsg =
+      func->call(MessageData(kRequest.data(), kRequest.size())).get();
+  if (resMsg.getSize() != kRequest.size())
+    throw std::runtime_error("array_probe: wrong response size (got " +
+                             std::to_string(resMsg.getSize()) + ", expected " +
+                             std::to_string(kRequest.size()) + ")");
+
+  static constexpr std::array<uint8_t, 4> kExpect = {11, 22, 33, 44};
+  const uint8_t *got = resMsg.getBytes();
+  for (size_t i = 0; i < kExpect.size(); ++i) {
+    if (got[i] != kExpect[i]) {
+      std::stringstream ss;
+      ss << "array_probe: wire byte " << i << " mismatch (got 0x" << std::hex
+         << static_cast<unsigned>(got[i]) << " expected 0x"
+         << static_cast<unsigned>(kExpect[i]) << ")";
+      throw std::runtime_error(ss.str());
+    }
+  }
+  std::cout << "array_probe ok (wire order: natural element-index)\n";
 }
 
 int main(int argc, const char *argv[]) {
