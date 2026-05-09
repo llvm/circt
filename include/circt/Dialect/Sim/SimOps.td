@@ -485,6 +485,17 @@ def FormatCharOp : SimOp<"fmt.char",
   let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
 }
 
+def FormatTimeOp : SimOp<"fmt.time", [Pure]> {
+  let summary = "Simulation time format specifier";
+  let description = [{
+    Format string fragment that resolves to the current simulation time when
+    printed. This corresponds to the `%0t` format specifier paired with the
+    current simulation time in SystemVerilog.
+  }];
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
 def FormatHierPathOp : SimOp<"fmt.hier_path", [Pure]> {
   let summary = "Hierarchical path format specifier";
   let description = [{

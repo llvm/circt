@@ -64,11 +64,10 @@ static LogicalResult collectFormatStringFragments(
     fragmentList.push_back(fmtOp);
     allFStringFragments.insert(fmtOp);
 
-    // For non-literal fragments, the value to be formatted has to become a
-    // triggered region argument.
-    if (!llvm::isa<FormatLiteralOp>(fmtOp)) {
-      auto fmtVal = getFormattedValue(fmtOp);
-      assert(!!fmtVal && "Unexpected formatting fragment op.");
+    // Value formatter fragments have to carry their formatted value into the
+    // triggered region. Contextual fragments such as sim.fmt.time or
+    // sim.fmt.hier_path do not require an extra argument.
+    if (auto fmtVal = getFormattedValue(fmtOp)) {
       arguments.insert(fmtVal);
     }
   }

@@ -44,16 +44,19 @@ hw.module @all_format_fragments(
     %f6 = sim.fmt.flt %fval_in isLeftAligned true fieldWidth 8 fracDigits 2 : f64
     %i7 = sim.fmt.literal " gen="
     %f7 = sim.fmt.gen %fval_in fracDigits 4 : f64
-    %i8 = sim.fmt.literal " path="
-    %f8 = sim.fmt.hier_path
-    %i9 = sim.fmt.literal " esc="
-    %f9 = sim.fmt.hier_path escaped
-    %i10 = sim.fmt.literal " pct=%"
-    %msg = sim.fmt.concat (%i0, %f0, %i1, %f1, %i2, %f2, %i3, %f3, %i4, %f4, %i5, %f5, %i6, %f6, %i7, %f7, %i8, %f8, %i9, %f9, %i10)
+    %i8 = sim.fmt.literal " time="
+    %f8 = sim.fmt.time
+    %i9 = sim.fmt.literal " path="
+    %f9 = sim.fmt.hier_path
+    %i10 = sim.fmt.literal " esc="
+    %f10 = sim.fmt.hier_path escaped
+    %i11 = sim.fmt.literal " pct=%"
+    %msg = sim.fmt.concat (%i0, %f0, %i1, %f1, %i2, %f2, %i3, %f3, %i4, %f4, %i5, %f5, %i6, %f6, %i7, %f7, %i8, %f8, %i9, %f9, %i10, %f10, %i11)
 
     // CHECK: ^bb0(%[[IVAL:.+]]: i16, %[[CH:.+]]: i8, %[[FVAL:.+]]: f64):
     // CHECK-NEXT: %[[SIGNED:.+]] = sv.system "signed"(%[[IVAL]]) : (i16) -> i16
-    // CHECK-NEXT: sv.write "dec=%6d hex=%04X oct=%-06o bin=%8b char=%c exp=%10.3e flt=%-8.2f gen=%.4g path=%m esc=%M pct=%%"(%[[SIGNED]], %[[IVAL]], %[[IVAL]], %[[IVAL]], %[[CH]], %[[FVAL]], %[[FVAL]], %[[FVAL]]) : i16, i16, i16, i16, i8, f64, f64, f64
+    // CHECK-NEXT: %[[TIME:.+]] = sv.system.time : i64
+    // CHECK-NEXT: sv.write "dec=%6d hex=%04X oct=%-06o bin=%8b char=%c exp=%10.3e flt=%-8.2f gen=%.4g time=%0t path=%m esc=%M pct=%%"(%[[SIGNED]], %[[IVAL]], %[[IVAL]], %[[IVAL]], %[[CH]], %[[FVAL]], %[[FVAL]], %[[FVAL]], %[[TIME]]) : i16, i16, i16, i16, i8, f64, f64, f64, i64
     sim.proc.print %msg
   }
 }

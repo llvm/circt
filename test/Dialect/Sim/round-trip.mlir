@@ -80,6 +80,8 @@ func.func @SimulationControl() {
 
 // CHECK-LABEL: func.func @FormatStrings
 func.func @FormatStrings() {
+  // CHECK: sim.fmt.time
+  sim.fmt.time
   // CHECK: sim.fmt.hier_path
   sim.fmt.hier_path
   // CHECK: sim.fmt.hier_path escaped

@@ -594,6 +594,11 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         appendLiteralToSVFormat(formatString, literal.getLiteral());
         return success();
       })
+      .Case<FormatTimeOp>([&](auto fmt) -> LogicalResult {
+        formatString += "%0t";
+        args.push_back(sv::TimeOp::create(builder, fmt.getLoc()));
+        return success();
+      })
       .Case<FormatHierPathOp>([&](auto hierPath) -> LogicalResult {
         formatString += hierPath.getUseEscapes() ? "%M" : "%m";
         return success();
