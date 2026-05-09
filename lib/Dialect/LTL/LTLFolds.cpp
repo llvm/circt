@@ -95,6 +95,25 @@ void DelayOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 //===----------------------------------------------------------------------===//
+// ClockedDelayOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ClockedDelayOp::fold(FoldAdaptor adaptor) {
+  // clocked_delay(s, edge clk, 0, 0) -> s
+  if (adaptor.getDelay() == 0 && adaptor.getLength() == 0 &&
+      isa<SequenceType>(getInput().getType()))
+    return getInput();
+
+  return {};
+}
+
+void ClockedDelayOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                                 MLIRContext *context) {
+  results.add<patterns::NestedClockedDelays>(results.getContext());
+  results.add<patterns::MoveClockedDelayIntoConcat>(results.getContext());
+}
+
+//===----------------------------------------------------------------------===//
 // ConcatOp
 //===----------------------------------------------------------------------===//
 
