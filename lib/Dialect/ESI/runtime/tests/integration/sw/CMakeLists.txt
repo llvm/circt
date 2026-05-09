@@ -177,3 +177,31 @@ if (UNIX AND _esi_runtime_lib_dir)
   set_target_properties(loopback_typed_test PROPERTIES
     BUILD_RPATH "${_esi_runtime_lib_dir}")
 endif()
+
+# Hardware-vs-host serialization-correctness probes. The generated headers
+# this target depends on live under <LOOPBACK_GENERATED_DIR>/serialization_probes/
+# rather than <LOOPBACK_GENERATED_DIR>/loopback/, but the CMake variable name
+# is kept generic so callers can use a single include root.
+add_executable(serialization_probes_test
+  "${CMAKE_CURRENT_SOURCE_DIR}/serialization_probes.cpp")
+set_target_properties(serialization_probes_test PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+target_include_directories(serialization_probes_test PRIVATE
+  "${LOOPBACK_GENERATED_DIR}"
+  "${CLI11_INCLUDE_DIR}")
+
+if (ESI_RUNTIME_TARGET)
+  target_link_libraries(serialization_probes_test PRIVATE
+    "${ESI_RUNTIME_TARGET}")
+else()
+  target_include_directories(serialization_probes_test PRIVATE
+    "${ESI_RUNTIME_INCLUDE_DIR}")
+  target_link_libraries(serialization_probes_test PRIVATE
+    "${ESI_RUNTIME_LIB}")
+endif()
+
+if (UNIX AND _esi_runtime_lib_dir)
+  set_target_properties(serialization_probes_test PROPERTIES
+    BUILD_RPATH "${_esi_runtime_lib_dir}")
+endif()
