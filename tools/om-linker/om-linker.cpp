@@ -157,7 +157,7 @@ static LogicalResult executeOMLinker(MLIRContext &context) {
     builder.insert(in.mod.get());
 
   // Construct a linker pipeline.
-  pm.addPass(om::createOMLinkModulesPass());
+  pm.addPass(om::createLinkModules());
   if (failed(pm.run(module.get())))
     return failure();
 

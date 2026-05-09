@@ -4,7 +4,6 @@ add_circt_translation_library(CIRCTExportVerilog
   ExportVerilog.cpp
   LegalizeAnonEnums.cpp
   LegalizeNames.cpp
-  HWLowerInstanceChoices.cpp
   PrepareForEmission.cpp
   PruneZeroValuedLogic.cpp
 

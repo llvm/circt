@@ -11,6 +11,7 @@
 
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/LLVM.h"
+#include "circt/Support/Namespace.h"
 
 namespace circt {
 // Forward declarations.
@@ -18,9 +19,56 @@ struct Reduction;
 
 namespace reduce {
 
+/// Starting from an initial worklist of operations, traverse through it and its
+/// operands and erase operations that have no more uses.  This is useful when
+/// there are repeated calls to `pruneUnusedOp` that want to delete the same
+/// operations.
+void pruneUnusedOps(SmallVectorImpl<Operation *> &worklist,
+                    Reduction &reduction);
+
 /// Starting at the given `op`, traverse through it and its operands and erase
 /// operations that have no more uses.
 void pruneUnusedOps(Operation *initialOp, Reduction &reduction);
+
+/// A utility class that generates metasyntactic variable names for use in
+/// reductions. This provides a consistent naming scheme across different
+/// reduction patterns.
+class MetasyntacticNameGenerator {
+public:
+  MetasyntacticNameGenerator() = default;
+
+  /// Get the next metasyntactic name in the sequence.
+  const char *getNextName();
+
+  /// Get the next metasyntactic name that is not already reserved in \p ns,
+  /// and reserve it.  If the candidate name is already taken, \p ns appends a
+  /// numeric suffix (e.g. "Foo_0") to make it unique.
+  StringRef getNextName(Namespace &ns);
+
+  /// Return true if \p name already has a metasyntactic prefix, i.e. the
+  /// substring before the first '_' (or the whole string if there is no '_')
+  /// is one of the names in the generator sequence.  Examples:
+  ///   isMetasyntacticName("Foo")       → true
+  ///   isMetasyntacticName("Foo_0")     → true
+  ///   isMetasyntacticName("Foo_0_0_0") → true
+  ///   isMetasyntacticName("FooBar")    → false
+  ///   isMetasyntacticName("MyModule")  → false
+  static bool isMetasyntacticName(StringRef name);
+
+  /// Reset the generator to start from the beginning of the sequence.
+  void reset() { index = 0; }
+
+private:
+  size_t index = 0;
+  constexpr static const char *names[48] = {
+      "Foo",    "Bar",    "Baz",    "Qux",      "Quux",   "Quuux",  "Quuuux",
+      "Quz",    "Corge",  "Grault", "Bazola",   "Ztesch", "Thud",   "Grunt",
+      "Bletch", "Fum",    "Fred",   "Jim",      "Sheila", "Barney", "Flarp",
+      "Zxc",    "Spqr",   "Wombat", "Shme",     "Bongo",  "Spam",   "Eggs",
+      "Snork",  "Zot",    "Blarg",  "Wibble",   "Toto",   "Titi",   "Tata",
+      "Tutu",   "Pippo",  "Pluto",  "Paperino", "Aap",    "Noot",   "Mies",
+      "Oogle",  "Foogle", "Boogle", "Zork",     "Gork",   "Bork"};
+};
 
 /// A helper struct that scans a root operation and all its nested operations
 /// for `InnerRefAttr`s.

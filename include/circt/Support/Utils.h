@@ -28,6 +28,47 @@ inline bool isAncestorOfValueOwner(Operation *op, Value value) {
   return op->isAncestor(value.getParentBlock()->getParentOp());
 }
 
+/// Remove elements from the input array corresponding to set bits in
+/// `indicesToDrop`, returning the elements not mentioned.
+template <typename T>
+static SmallVector<T>
+removeElementsAtIndices(ArrayRef<T> input,
+                        const llvm::BitVector &indicesToDrop) {
+#ifndef NDEBUG
+  if (!input.empty()) {
+    int lastIndex = indicesToDrop.find_last();
+    if (lastIndex >= 0)
+      assert((size_t)lastIndex < input.size() && "index out of range");
+  }
+#endif
+
+  // If the input is empty (which is an optimization we do for certain array
+  // attributes), simply return an empty vector.
+  if (input.empty())
+    return {};
+
+  // Copy over the live chunks.
+  size_t lastCopied = 0;
+  SmallVector<T> result;
+  result.reserve(input.size() - indicesToDrop.count());
+
+  for (unsigned indexToDrop : indicesToDrop.set_bits()) {
+    // If we skipped over some valid elements, copy them over.
+    if (indexToDrop > lastCopied) {
+      result.append(input.begin() + lastCopied, input.begin() + indexToDrop);
+      lastCopied = indexToDrop;
+    }
+    // Ignore this value so we don't copy it in the next iteration.
+    ++lastCopied;
+  }
+
+  // If there are live elements at the end, copy them over.
+  if (lastCopied < input.size())
+    result.append(input.begin() + lastCopied, input.end());
+
+  return result;
+}
+
 //===----------------------------------------------------------------------===//
 // Parallel utilities
 //===----------------------------------------------------------------------===//

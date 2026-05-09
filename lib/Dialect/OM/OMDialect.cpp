@@ -13,6 +13,7 @@
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/OM/OMOps.h"
+#include "mlir/IR/Builders.h"
 
 #include "circt/Dialect/OM/OMDialect.cpp.inc"
 
@@ -24,6 +25,16 @@ void circt::om::OMDialect::initialize() {
 
   registerTypes();
   registerAttributes();
+}
+
+mlir::Operation *
+circt::om::OMDialect::materializeConstant(mlir::OpBuilder &builder,
+                                          mlir::Attribute value,
+                                          mlir::Type type, mlir::Location loc) {
+  if (auto typedAttr = mlir::dyn_cast<mlir::TypedAttr>(value))
+    if (typedAttr.getType() == type)
+      return ConstantOp::create(builder, loc, typedAttr);
+  return nullptr;
 }
 
 // Provide implementations for the enums we use.

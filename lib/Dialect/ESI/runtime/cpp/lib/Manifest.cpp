@@ -312,7 +312,7 @@ Manifest::Impl::buildAccelerator(AcceleratorConnection &acc) const {
 
 std::optional<ModuleInfo>
 Manifest::Impl::getModInfo(const nlohmann::json &json) const {
-  auto instOfIter = json.find("instOf");
+  auto instOfIter = json.find("instanceOf");
   if (instOfIter == json.end())
     return std::nullopt;
   auto f = symbolInfoCache.find(instOfIter.value());
@@ -575,6 +575,15 @@ StructType *parseStruct(const nlohmann::json &typeJson, Context &cache) {
   return new StructType(typeJson.at("id"), fields);
 }
 
+UnionType *parseUnion(const nlohmann::json &typeJson, Context &cache) {
+  assert(typeJson.at("mnemonic") == "union");
+  std::vector<std::pair<std::string, const Type *>> fields;
+  for (auto &fieldJson : typeJson["fields"])
+    fields.emplace_back(fieldJson.at("name"),
+                        parseType(fieldJson["type"], cache));
+  return new UnionType(typeJson.at("id"), fields);
+}
+
 ArrayType *parseArray(const nlohmann::json &typeJson, Context &cache) {
   assert(typeJson.at("mnemonic") == "array");
   uint64_t size = typeJson.at("size");
@@ -614,6 +623,23 @@ ListType *parseList(const nlohmann::json &typeJson, Context &cache) {
                       parseType(typeJson.at("element"), cache));
 }
 
+TypeAliasType *parseTypeAlias(const nlohmann::json &typeJson, Context &cache) {
+  assert(typeJson.at("mnemonic") == "alias");
+  std::string id = typeJson.at("id");
+  std::string name = typeJson.value("name", "");
+
+  const Type *innerType = nullptr;
+  if (typeJson.contains("inner"))
+    innerType = parseType(typeJson.at("inner"), cache);
+  else
+    throw std::runtime_error("typealias missing inner type");
+
+  if (name.empty())
+    name = id;
+
+  return new TypeAliasType(id, name, innerType);
+}
+
 using TypeParser = std::function<Type *(const nlohmann::json &, Context &)>;
 const std::map<std::string_view, TypeParser> typeParsers = {
     {"bundle", parseBundleType},
@@ -621,7 +647,9 @@ const std::map<std::string_view, TypeParser> typeParsers = {
     {"std::any", [](const nlohmann::json &typeJson,
                     Context &cache) { return new AnyType(typeJson.at("id")); }},
     {"int", parseInt},
+    {"alias", parseTypeAlias},
     {"struct", parseStruct},
+    {"union", parseUnion},
     {"array", parseArray},
     {"window", parseWindow},
     {"list", parseList},
@@ -648,6 +676,11 @@ const Type *parseType(const nlohmann::json &typeJson, Context &cache) {
   else
     // Types we don't know about are opaque.
     t = new Type(id);
+
+  // Store hwBitwidth from the manifest so even opaque/unrecognized types
+  // (e.g. unions) report their width correctly.
+  if (typeJson.contains("hwBitwidth"))
+    t->setHWBitwidth(typeJson.at("hwBitwidth").get<std::ptrdiff_t>());
 
   // Insert into the cache.
   cache.registerType(t);

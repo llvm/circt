@@ -38,19 +38,26 @@ namespace {
 
 // Dummy pattern that matches any cut.
 struct DummyPattern : public CutRewritePattern {
-  DummyPattern(mlir::MLIRContext *ctx) : CutRewritePattern(ctx) {}
-  bool match(const Cut &cut) const override { return true; }
+  static constexpr unsigned kMaxInputs = 16;
+  SmallVector<DelayType, kMaxInputs> cachedDelays; // Pre-computed unit delays
+
+  DummyPattern(mlir::MLIRContext *ctx)
+      : CutRewritePattern(ctx), cachedDelays(kMaxInputs, 1) {}
+
+  std::optional<MatchResult> match(CutEnumerator &enumerator,
+                                   const Cut &cut) const override {
+    assert(cut.getInputSize() <= kMaxInputs && "Too many inputs");
+    return MatchResult(
+        1.0, ArrayRef<DelayType>(cachedDelays).take_front(cut.getInputSize()));
+  }
+
   FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
-                                 Cut &cut) const override {
+                                 CutEnumerator &enumerator,
+                                 const Cut &cut) const override {
     return failure();
   }
 
   unsigned getNumOutputs() const override { return 1; }
-
-  double getArea() const override { return 1; }
-  DelayType getDelay(unsigned inputIndex, unsigned outputIndex) const override {
-    return 1;
-  }
 };
 
 struct TestPriorityCutsPass

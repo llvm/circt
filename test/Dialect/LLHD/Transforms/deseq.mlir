@@ -960,3 +960,273 @@ hw.module @OpOnConstantInputsMistakenlyPoison(in %clock: i1, in %d: i42) {
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
+
+// Test clock extraction from a multi-bit bus: the observed value is a wide
+// integer, but the actual clock trigger is a single bit extracted from it
+// (e.g., `always @(posedge bus[N])`).
+
+// CHECK-LABEL: @ClockExtractedFromBusPosEdge(
+hw.module @ClockExtractedFromBusPosEdge(in %bus: i8, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK:%.+]] = seq.to_clock {{%.+}}
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %pastSlice = comb.extract %bus from 2 : (i8) -> i4
+    %clkBit = comb.extract %pastSlice from 3 : (i4) -> i1
+    llhd.wait yield (%a, %b : i4, i1), (%bus : i8), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %presentSlice = comb.extract %bus from 5 : (i8) -> i2
+    %presentClk = comb.extract %presentSlice from 0 : (i2) -> i1
+    %notPast = comb.xor bin %pastClk, %true : i1
+    %posedge = comb.and bin %notPast, %presentClk : i1
+    cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}
+
+// CHECK-LABEL: @ClockExtractedFromBusNegEdge(
+hw.module @ClockExtractedFromBusNegEdge(in %bus: i8, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK:%.+]] = seq.to_clock {{%.+}}
+  // CHECK: [[CLK_INV:%.+]] = seq.clock_inv [[CLK]]
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK_INV]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %pastSlice = comb.extract %bus from 1 : (i8) -> i5
+    %clkBit = comb.extract %pastSlice from 3 : (i5) -> i1
+    llhd.wait yield (%a, %b : i4, i1), (%bus : i8), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %presentSlice = comb.extract %bus from 4 : (i8) -> i2
+    %presentClk = comb.extract %presentSlice from 0 : (i2) -> i1
+    %notPresent = comb.xor bin %presentClk, %true : i1
+    %negedge = comb.and bin %notPresent, %pastClk : i1
+    cf.cond_br %negedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}
+
+// Test clock extraction from chained projections. The observed value can be an
+// aggregate (struct/array) or a wide integer, while the actual clock is a bit
+// selected through one or more projections.
+
+// CHECK-LABEL: @ClockExtractedFromChainedExtractPosEdge(
+hw.module @ClockExtractedFromChainedExtractPosEdge(in %bus: i16, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK:%.+]] = seq.to_clock {{%.+}}
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %inner = comb.extract %bus from 4 : (i16) -> i8
+    %clkBit = comb.extract %inner from 2 : (i8) -> i1
+    llhd.wait yield (%a, %b : i4, i1), (%bus : i16), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %inner2 = comb.extract %bus from 5 : (i16) -> i4
+    %presentClk = comb.extract %inner2 from 1 : (i4) -> i1
+    %notPast = comb.xor bin %pastClk, %true : i1
+    %posedge = comb.and bin %notPast, %presentClk : i1
+    cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}
+
+// CHECK-LABEL: @ClockExtractedFromOverlappingExtractWidthsPosEdge(
+hw.module @ClockExtractedFromOverlappingExtractWidthsPosEdge(in %bus: i42, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK:%.+]] = seq.to_clock {{%.+}}
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %widePast = comb.extract %bus from 4 : (i42) -> i2
+    %clkBit = comb.extract %widePast from 1 : (i2) -> i1
+    llhd.wait yield (%a, %b : i4, i1), (%bus : i42), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %widePresent = comb.extract %bus from 4 : (i42) -> i4
+    %presentClk = comb.extract %widePresent from 1 : (i4) -> i1
+    %notPast = comb.xor bin %pastClk, %true : i1
+    %posedge = comb.and bin %notPast, %presentClk : i1
+    cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}
+
+// CHECK-LABEL: @ClockExtractedFromArrayGetPosEdge(
+hw.module @ClockExtractedFromArrayGetPosEdge(in %arr: !hw.array<4xi1>, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %c2_i2 = hw.constant 2 : i2
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK_BIT:%.+]] = hw.array_get %arr[{{%c-?2_i2}}] : !hw.array<4xi1>, i2
+  // CHECK: [[CLK:%.+]] = seq.to_clock [[CLK_BIT]]
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %clkBit = hw.array_get %arr[%c2_i2] : !hw.array<4xi1>, i2
+    llhd.wait yield (%a, %b : i4, i1), (%arr : !hw.array<4xi1>), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %presentClk = hw.array_get %arr[%c2_i2] : !hw.array<4xi1>, i2
+    %notPast = comb.xor bin %pastClk, %true : i1
+    %posedge = comb.and bin %notPast, %presentClk : i1
+    cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}
+
+// CHECK-LABEL: @ClockExtractedFromStructExtractPosEdge(
+hw.module @ClockExtractedFromStructExtractPosEdge(in %st: !hw.struct<a: i1, b: i1>, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK_BIT:%.+]] = hw.struct_extract %st["a"] : !hw.struct<a: i1, b: i1>
+  // CHECK: [[CLK:%.+]] = seq.to_clock [[CLK_BIT]]
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %clkBit = hw.struct_extract %st["a"] : !hw.struct<a: i1, b: i1>
+    llhd.wait yield (%a, %b : i4, i1), (%st : !hw.struct<a: i1, b: i1>), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %presentClk = hw.struct_extract %st["a"] : !hw.struct<a: i1, b: i1>
+    %notPast = comb.xor bin %pastClk, %true : i1
+    %posedge = comb.and bin %notPast, %presentClk : i1
+    cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}
+
+// CHECK-LABEL: @ClockExtractedFromArraySlicePosEdge(
+hw.module @ClockExtractedFromArraySlicePosEdge(in %arr: !hw.array<8xi1>, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %c2_i3 = hw.constant 2 : i3
+  %c1_i2 = hw.constant 1 : i2
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[SLICE:%.+]] = hw.array_slice %arr[%c2_i3] : (!hw.array<8xi1>) -> !hw.array<3xi1>
+  // CHECK: [[CLK_BIT:%.+]] = hw.array_get [[SLICE]][%c1_i2] : !hw.array<3xi1>, i2
+  // CHECK: [[CLK:%.+]] = seq.to_clock [[CLK_BIT]]
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %slice = hw.array_slice %arr[%c2_i3] : (!hw.array<8xi1>) -> !hw.array<3xi1>
+    %clkBit = hw.array_get %slice[%c1_i2] : !hw.array<3xi1>, i2
+    llhd.wait yield (%a, %b : i4, i1), (%arr : !hw.array<8xi1>), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %slice2 = hw.array_slice %arr[%c2_i3] : (!hw.array<8xi1>) -> !hw.array<3xi1>
+    %presentClk = hw.array_get %slice2[%c1_i2] : !hw.array<3xi1>, i2
+    %notPast = comb.xor bin %pastClk, %true : i1
+    %posedge = comb.and bin %notPast, %presentClk : i1
+    cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}
+
+// CHECK-LABEL: @ClockExtractedFromArrayGetThenExtractPosEdge(
+hw.module @ClockExtractedFromArrayGetThenExtractPosEdge(in %arr: !hw.array<4xi8>, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %c2_i2 = hw.constant 2 : i2
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[ELEM:%.+]] = hw.array_get %arr[{{%c-?2_i2}}] : !hw.array<4xi8>, i2
+  // CHECK: [[CLK_SLICE:%.+]] = comb.extract [[ELEM]] from 4 : (i8) -> i4
+  // CHECK: [[CLK_BIT:%.+]] = comb.extract [[CLK_SLICE]] from 1 : (i4) -> i1
+  // CHECK: [[CLK:%.+]] = seq.to_clock [[CLK_BIT]]
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %elem = hw.array_get %arr[%c2_i2] : !hw.array<4xi8>, i2
+    %pastSlice = comb.extract %elem from 4 : (i8) -> i4
+    %clkBit = comb.extract %pastSlice from 1 : (i4) -> i1
+    llhd.wait yield (%a, %b : i4, i1), (%arr : !hw.array<4xi8>), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %elem2 = hw.array_get %arr[%c2_i2] : !hw.array<4xi8>, i2
+    %presentSlice = comb.extract %elem2 from 5 : (i8) -> i2
+    %presentClk = comb.extract %presentSlice from 0 : (i2) -> i1
+    %notPast = comb.xor bin %pastClk, %true : i1
+    %posedge = comb.and bin %notPast, %presentClk : i1
+    cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}
+
+// CHECK-LABEL: @ClockExtractedFromStructArrayGetThenExtractPosEdge(
+hw.module @ClockExtractedFromStructArrayGetThenExtractPosEdge(in %st: !hw.struct<clkarr: !hw.array<4xi8>, pad: i4>, in %data: i4) {
+  %c0_i4 = hw.constant 0 : i4
+  %c2_i2 = hw.constant 2 : i2
+  %time = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[ARR:%.+]] = hw.struct_extract %st["clkarr"] : !hw.struct<clkarr: !hw.array<4xi8>, pad: i4>
+  // CHECK: [[ELEM:%.+]] = hw.array_get [[ARR]][{{%c-?2_i2}}] : !hw.array<4xi8>, i2
+  // CHECK: [[CLK_SLICE:%.+]] = comb.extract [[ELEM]] from 4 : (i8) -> i4
+  // CHECK: [[CLK_BIT:%.+]] = comb.extract [[CLK_SLICE]] from 1 : (i4) -> i1
+  // CHECK: [[CLK:%.+]] = seq.to_clock [[CLK_BIT]]
+  // CHECK: [[REG:%.+]] = seq.firreg %data clock [[CLK]]{{.*}} : i4
+  %out, %en = llhd.process -> i4, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i4, %false : i4, i1)
+  ^bb1(%a: i4, %b: i1):
+    %arr = hw.struct_extract %st["clkarr"] : !hw.struct<clkarr: !hw.array<4xi8>, pad: i4>
+    %elem = hw.array_get %arr[%c2_i2] : !hw.array<4xi8>, i2
+    %pastSlice = comb.extract %elem from 4 : (i8) -> i4
+    %clkBit = comb.extract %pastSlice from 1 : (i4) -> i1
+    llhd.wait yield (%a, %b : i4, i1), (%st : !hw.struct<clkarr: !hw.array<4xi8>, pad: i4>), ^bb2(%clkBit : i1)
+  ^bb2(%pastClk: i1):
+    %arr2 = hw.struct_extract %st["clkarr"] : !hw.struct<clkarr: !hw.array<4xi8>, pad: i4>
+    %elem2 = hw.array_get %arr2[%c2_i2] : !hw.array<4xi8>, i2
+    %presentSlice = comb.extract %elem2 from 5 : (i8) -> i2
+    %presentClk = comb.extract %presentSlice from 0 : (i2) -> i1
+    %notPast = comb.xor bin %pastClk, %true : i1
+    %posedge = comb.and bin %notPast, %presentClk : i1
+    cf.cond_br %posedge, ^bb1(%data, %true : i4, i1), ^bb1(%c0_i4, %false : i4, i1)
+  }
+  %sig = llhd.sig %c0_i4 : i4
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %sig, %out after %time if %en : i4
+}

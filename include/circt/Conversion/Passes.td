@@ -68,18 +68,6 @@ def LegalizeAnonEnums : Pass<"legalize-anon-enums", "mlir::ModuleOp"> {
   ];
 }
 
-def HWLowerInstanceChoices : Pass<"hw-lower-instance-choices",
-                                  "mlir::ModuleOp"> {
-  let summary = "Prepare the collateral for instance choice emission";
-  let description = [{
-    This pass runs as part of verilog emission.
-    It introduces the macros & file lists to which instance choices lower to.
-  }];
-  let dependentDialects = [
-    "circt::sv::SVDialect", "circt::hw::HWDialect"
-  ];
-}
-
 def PrepareForEmission : Pass<"prepare-for-emission"> {
   let summary = "Prepare IR for ExportVerilog";
   let description = [{
@@ -386,6 +374,46 @@ def ConvertFSMToSV : Pass<"convert-fsm-to-sv", "mlir::ModuleOp"> {
 }
 
 //===----------------------------------------------------------------------===//
+// FSMToSMT
+//===----------------------------------------------------------------------===//
+
+def ConvertFSMToSMT : Pass<"convert-fsm-to-smt", "mlir::ModuleOp"> {
+  let summary = "Converts FSMs to SMT models that can be used to check" 
+    "safety properties";
+  let constructor = "circt::createConvertFSMToSMTPass()";
+  let dependentDialects = ["circt::comb::CombDialect", "mlir::smt::SMTDialect",
+                           "circt::verif::VerifDialect"];
+  let options = [Option<"withTime", "with-time", "bool", "false",
+                        "Whether to include a time parameter in the predicates"
+                        "created to represent states">,
+                  Option<"timeWidth", "time-width", "int", "8",
+                        "Bitwidth of time parameter">,
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// CoreToFSM
+//===----------------------------------------------------------------------===//
+
+
+def ConvertCoreToFSM : Pass<"convert-core-to-fsm", "mlir::ModuleOp"> {
+  let summary = "Convert Core to FSM";
+  let description = [{
+    This pass extracts FSM structure from an RTL netlist. State registers
+    can be specified explicitly via the `state-regs` option, or they will
+    be inferred as registers whose names contain "state".
+  }];
+  let dependentDialects = ["circt::hw::HWDialect", "circt::comb::CombDialect",
+                           "circt::seq::SeqDialect", "circt::fsm::FSMDialect"];
+  let options = [
+    ListOption<"stateRegs", "state-regs", "std::string",
+               "Comma-separated list of names of registers to use as state"
+               "registers. If not specified, registers with names containing"
+               "'state' are used.">
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // FIRRTLToHW
 //===----------------------------------------------------------------------===//
 
@@ -410,6 +438,9 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
            "bool", "false",
     "Emit warnings on unprocessed annotations during lower-to-hw pass">,
+    Option<"lowerToCore", "lower-to-core", "bool", "false",
+           "Prefer core dialects over direct SV lowering for FIRRTL "
+           "verification and printf operations">,
     Option<"verificationFlavor", "verification-flavor",
            "circt::firrtl::VerificationFlavor",
            "circt::firrtl::VerificationFlavor::None",
@@ -422,8 +453,7 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
             clEnumValN(circt::firrtl::VerificationFlavor::Immediate,
               "immediate", "Use immediate verif statements"),
             clEnumValN(circt::firrtl::VerificationFlavor::SVA, "sva", "Use SVA")
-          )}]
-           >
+          )}]>
   ];
 }
 
@@ -598,6 +628,11 @@ def ConvertHWToBTOR2 : Pass<"convert-hw-to-btor2", "mlir::ModuleOp"> {
   let constructor = "circt::createConvertHWToBTOR2Pass()";
   let dependentDialects = ["hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
                            "seq::SeqDialect"];
+  let options =
+    [Option<"assumeInitReset", "assume-init-reset", "bool", "false",
+            "Assume registers have been reset (i.e., initialize them to their"
+            "reset value)">];
+
 }
 
 //===----------------------------------------------------------------------===//
@@ -615,16 +650,28 @@ def LowerLTLToCore : Pass<"lower-ltl-to-core", "hw::HWModuleOp"> {
     "hw::HWDialect", "sv::SVDialect", "comb::CombDialect",
     "seq::SeqDialect"
   ];
+  let options =
+    [Option<"assumeFirstClock", "assume-first-clock", "bool", "false",
+            "Assume that implicitly clocked LTL operations are clocked by the"
+            "first clock argument, or failing that, the first seq.to_clock"
+            "operation in their parent hw.module.">];
 }
 
 //===----------------------------------------------------------------------===//
 // VerifToSV
 //===----------------------------------------------------------------------===//
 
-def LowerVerifToSV : Pass<"lower-verif-to-sv", "hw::HWModuleOp"> {
+def LowerVerifToSV : Pass<"lower-verif-to-sv", "mlir::ModuleOp"> {
   let summary = "Convert Verif to SV";
   let description = [{
-    This pass converts various Verif contructs to SV.
+    This pass converts various Verif constructs to SV.
+
+    Operations that are not generally supported by synthesis (e.g.
+    `sv.fwrite`, `sv.assert_property`, `sv.assume_property`,
+    `sv.cover_property`) are emitted inside an `` `ifndef SYNTHESIS `` guard,
+    so the resulting Verilog can be consumed by synthesis tools such as Quartus
+    or Vivado without producing errors. The `SYNTHESIS` macro is declared at
+    the top of the module if it is not already present.
   }];
   let constructor = "circt::createLowerVerifToSVPass()";
   let dependentDialects = [
@@ -819,7 +866,7 @@ def LowerSimToSV: Pass<"lower-sim-to-sv",  "mlir::ModuleOp"> {
 // ConvertCombToSynth
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToSynth : Pass<"convert-comb-to-synth", "hw::HWModuleOp"> {
+def ConvertCombToSynth : Pass<"convert-comb-to-synth"> {
   let summary = "Lower Comb ops to Synth ops.";
   let dependentDialects = ["circt::comb::CombDialect",
                            "circt::synth::SynthDialect"];
@@ -827,12 +874,9 @@ def ConvertCombToSynth : Pass<"convert-comb-to-synth", "hw::HWModuleOp"> {
   let options =
       [ListOption<"additionalLegalOps", "additional-legal-ops", "std::string",
                   "Specify additional legal ops to partially legalize Comb">,
-       Option<"targetIR", "target-ir", "circt::CombToSynthTargetIR",
-              /*default=*/"circt::CombToSynthTargetIR::AIG", "Target IR kind",
-              [{::llvm::cl::values(
-             clEnumValN(circt::CombToSynthTargetIR::AIG, "aig", "Lower to AIG"),
-             clEnumValN(circt::CombToSynthTargetIR::MIG, "mig", "Lower to MIG")
-           )}]>,
+       Option<"forceAIG", "force-aig", "bool", "true",
+              "Force lowering to AIG-only synth ops instead of preserving "
+              "higher-level synth ops such as synth.xor_inv">,
        Option<"maxEmulationUnknownBits", "max-emulation-unknown-bits",
               "uint32_t", "10",
               "Maximum number of unknown bits to emulate in a table lookup">];
@@ -841,7 +885,7 @@ def ConvertCombToSynth : Pass<"convert-comb-to-synth", "hw::HWModuleOp"> {
 //===----------------------------------------------------------------------===//
 // ConvertSynthToComb
 //===----------------------------------------------------------------------===//
-def ConvertSynthToComb: Pass<"convert-synth-to-comb", "hw::HWModuleOp"> {
+def ConvertSynthToComb: Pass<"convert-synth-to-comb"> {
   let summary = "Lower Synth ops to Comb ops";
   let description = [{
     This pass converts Synth operations to Comb operations. This is mostly
@@ -856,7 +900,7 @@ def ConvertSynthToComb: Pass<"convert-synth-to-comb", "hw::HWModuleOp"> {
 // ConvertCombToDatapath
 //===----------------------------------------------------------------------===//
 
-def ConvertCombToDatapath: Pass<"convert-comb-to-datapath",  "hw::HWModuleOp"> {
+def ConvertCombToDatapath: Pass<"convert-comb-to-datapath"> {
   let summary = "Lower Comb ops to Datapath ops";
   let description = [{
     This pass converts arithmetic Comb operations into Datapath operations that

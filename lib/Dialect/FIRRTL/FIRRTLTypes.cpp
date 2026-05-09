@@ -166,7 +166,18 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
       })
       .Case<AnyRefType>([&](AnyRefType type) { os << "anyref"; })
       .Case<FStringType>([&](auto) { os << "fstring"; })
-      .Case<DomainType>([&](auto) { os << "domain"; })
+      .Case<DomainType>([&](DomainType type) {
+        os << "domain<";
+        os.printSymbolName(type.getName().getValue());
+        os << "(";
+        llvm::interleaveComma(type.getFields(), os, [&](Attribute attr) {
+          auto field = cast<DomainFieldAttr>(attr);
+          os << field.getName().getValue() << ": ";
+          os.printType(field.getType());
+        });
+        os << ")";
+        os << ">";
+      })
       .Default([&](auto) { anyFailed = true; });
   return failure(anyFailed);
 }
@@ -540,7 +551,15 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result = FStringType::get(context), success();
   }
   if (name == "domain") {
-    return result = DomainType::get(context), success();
+    // Parse: !firrtl.domain<@SymbolName> or
+    //        !firrtl.domain<@SymbolName(name: type, ...)>
+    DomainType domainType;
+    if (parser.parseLess() || DomainType::parseInterface(parser, domainType) ||
+        parser.parseGreater())
+      return failure();
+
+    result = domainType;
+    return success();
   }
 
   return {};
@@ -2731,40 +2750,237 @@ ClassType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
                         fieldID >= childRoot && fieldID <= rangeEnd);
 }
 
+namespace {
+/// Helper to parse interface-like types (ClassType, DomainType).
+/// This encapsulates the common pattern of parsing @SymbolName(field, field,
+/// ...)
+struct InterfaceParser {
+  AsmParser &parser;
+
+  InterfaceParser(AsmParser &parser) : parser(parser) {}
+
+  /// Parse the common structure: @SymbolName(field, field, ...)
+  template <typename FieldContainer>
+  ParseResult parse(
+      function_ref<ParseResult(FieldContainer &, AsmParser &parser)> parseField,
+      StringAttr &symbolName, FieldContainer &fields) {
+
+    if (parser.parseSymbolName(symbolName))
+      return failure();
+
+    // Parse required parentheses
+    if (parser.parseLParen())
+      return failure();
+
+    // Check for empty list (immediate closing paren)
+    if (failed(parser.parseOptionalRParen())) {
+      auto parseElement = [&]() -> ParseResult {
+        return parseField(fields, parser);
+      };
+
+      if (parser.parseCommaSeparatedList(parseElement) || parser.parseRParen())
+        return failure();
+    }
+
+    return success();
+  }
+};
+} // namespace
+
 ParseResult ClassType::parseInterface(AsmParser &parser, ClassType &result) {
-  StringAttr className;
-  if (parser.parseSymbolName(className))
-    return failure();
+  InterfaceParser helper(parser);
 
+  auto parseField = [](SmallVector<ClassElement> &elements,
+                       AsmParser &parser) -> ParseResult {
+    // Parse port direction.
+    Direction direction;
+    if (succeeded(parser.parseOptionalKeyword("out")))
+      direction = Direction::Out;
+    else if (succeeded(parser.parseKeyword("in", "or 'out'")))
+      direction = Direction::In;
+    else
+      return failure();
+
+    // Parse port name.
+    std::string keyword;
+    if (parser.parseKeywordOrString(&keyword))
+      return failure();
+    StringAttr name = StringAttr::get(parser.getContext(), keyword);
+
+    // Parse port type.
+    Type type;
+    if (parser.parseColonType(type))
+      return failure();
+
+    elements.emplace_back(name, type, direction);
+    return success();
+  };
+
+  StringAttr symbolName;
   SmallVector<ClassElement> elements;
-  if (parser.parseCommaSeparatedList(
-          OpAsmParser::Delimiter::Paren, [&]() -> ParseResult {
-            // Parse port direction.
-            Direction direction;
-            if (succeeded(parser.parseOptionalKeyword("out")))
-              direction = Direction::Out;
-            else if (succeeded(parser.parseKeyword("in", "or 'out'")))
-              direction = Direction::In;
-            else
-              return failure();
-
-            // Parse port name.
-            std::string keyword;
-            if (parser.parseKeywordOrString(&keyword))
-              return failure();
-            StringAttr name = StringAttr::get(parser.getContext(), keyword);
-
-            // Parse port type.
-            Type type;
-            if (parser.parseColonType(type))
-              return failure();
-
-            elements.emplace_back(name, type, direction);
-            return success();
-          }))
+  if (helper.parse<SmallVector<ClassElement>>(parseField, symbolName, elements))
     return failure();
 
-  result = ClassType::get(FlatSymbolRefAttr::get(className), elements);
+  result = ClassType::get(FlatSymbolRefAttr::get(symbolName), elements);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// DomainType
+//===----------------------------------------------------------------------===//
+
+ParseResult DomainType::parseInterface(AsmParser &parser, DomainType &result) {
+  InterfaceParser helper(parser);
+
+  auto parseField = [](SmallVector<Attribute> &fields,
+                       AsmParser &parser) -> ParseResult {
+    std::string fieldNameStr;
+    Type fieldTypeRaw;
+    if (parser.parseKeywordOrString(&fieldNameStr) || parser.parseColon() ||
+        parser.parseType(fieldTypeRaw))
+      return failure();
+
+    auto fieldType = dyn_cast<PropertyType>(fieldTypeRaw);
+    if (!fieldType)
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected property type");
+
+    auto fieldName = StringAttr::get(parser.getContext(), fieldNameStr);
+    fields.push_back(
+        DomainFieldAttr::get(parser.getContext(), fieldName, fieldType));
+    return success();
+  };
+
+  StringAttr symbolName;
+  SmallVector<Attribute> fields;
+  if (helper.parse<SmallVector<Attribute>>(parseField, symbolName, fields))
+    return failure();
+
+  result = DomainType::get(FlatSymbolRefAttr::get(symbolName),
+                           ArrayAttr::get(parser.getContext(), fields));
+  return success();
+}
+
+DomainType DomainType::get(FlatSymbolRefAttr name, ArrayAttr fields) {
+  return Base::get(name.getContext(), name, fields);
+}
+
+DomainType DomainType::getFromDomainOp(DomainOp domainOp) {
+  auto name = FlatSymbolRefAttr::get(domainOp.getNameAttr());
+  return DomainType::get(name, domainOp.getFieldsAttr());
+}
+
+DomainFieldAttr DomainType::getField(size_t index) const {
+  assert(index < getNumFields() && "index out of bounds");
+  return cast<DomainFieldAttr>(getFields()[index]);
+}
+
+std::optional<uint64_t> DomainType::getFieldIndex(StringRef fieldName) const {
+  for (const auto [i, attr] : llvm::enumerate(getFields())) {
+    auto field = cast<DomainFieldAttr>(attr);
+    if (fieldName == field.getName())
+      return i;
+  }
+  return {};
+}
+
+std::pair<Type, uint64_t>
+DomainType::getSubTypeByFieldID(uint64_t fieldID) const {
+  if (fieldID == 0)
+    return {*this, 0};
+
+  // Domain fields don't have sub-fieldIDs, so fieldID directly maps to field
+  // index
+  if (fieldID > getNumFields())
+    return {Type(), fieldID};
+
+  return {getField(fieldID - 1).getType(), 0};
+}
+
+uint64_t DomainType::getMaxFieldID() const {
+  // Each field gets one fieldID
+  return getNumFields();
+}
+
+std::pair<uint64_t, bool>
+DomainType::projectToChildFieldID(uint64_t fieldID, uint64_t index) const {
+  // Domain fields are flat, so projection is simple
+  if (index >= getNumFields())
+    return {0, false};
+
+  uint64_t childFieldID = index + 1;
+  return {0, fieldID == childFieldID};
+}
+
+uint64_t DomainType::getFieldID(uint64_t index) const {
+  // Domain fields are flat, so fieldID is just index + 1
+  assert(index < getNumFields() && "index out of bounds");
+  return index + 1;
+}
+
+uint64_t DomainType::getIndexForFieldID(uint64_t fieldID) const {
+  // Domain fields are flat, so index is just fieldID - 1
+  assert(fieldID > 0 && fieldID <= getNumFields() && "fieldID out of bounds");
+  return fieldID - 1;
+}
+
+std::pair<uint64_t, uint64_t>
+DomainType::getIndexAndSubfieldID(uint64_t fieldID) const {
+  // Domain fields are flat (no sub-fields), so subfieldID is always 0
+  assert(fieldID > 0 && fieldID <= getNumFields() && "fieldID out of bounds");
+  return {fieldID - 1, 0};
+}
+
+LogicalResult
+DomainType::verifySymbolUses(Operation *op,
+                             SymbolTableCollection &symbolTable) const {
+  // Find the circuit op to look up the domain definition
+  auto circuitOp = op->getParentOfType<CircuitOp>();
+  if (!circuitOp)
+    return op->emitError() << "domain type used outside of a circuit";
+
+  // Check that the symbol exists
+  auto *symbol = symbolTable.lookupSymbolIn(circuitOp, getName());
+  if (!symbol)
+    return op->emitError() << "domain type references undefined symbol '"
+                           << getName().getValue() << "'";
+
+  // Check that the symbol is a domain
+  auto domainOp = dyn_cast<DomainOp>(symbol);
+  if (!domainOp)
+    return op->emitError() << "domain type references symbol '"
+                           << getName().getValue() << "' which is not a domain";
+
+  // Verify that the domain type fields match the domain definition
+  auto expectedFields = domainOp.getFieldsAttr();
+  auto actualFields = getFields();
+
+  // Check field count
+  if (actualFields.size() != expectedFields.size())
+    return op->emitError() << "domain type has " << actualFields.size()
+                           << " fields but domain definition has "
+                           << expectedFields.size() << " fields";
+
+  // Check each field
+  for (size_t i = 0; i < actualFields.size(); ++i) {
+    auto actualField = cast<DomainFieldAttr>(actualFields[i]);
+    auto expectedField = cast<DomainFieldAttr>(expectedFields[i]);
+
+    // Check field name
+    if (actualField.getName() != expectedField.getName())
+      return op->emitError() << "domain type field " << i << " has name '"
+                             << actualField.getName().getValue()
+                             << "' but domain definition expects '"
+                             << expectedField.getName().getValue() << "'";
+
+    // Check field type
+    if (actualField.getType() != expectedField.getType())
+      return op->emitError()
+             << "domain type field '" << actualField.getName().getValue()
+             << "' has type " << actualField.getType()
+             << " but domain definition expects " << expectedField.getType();
+  }
+
   return success();
 }
 

@@ -63,16 +63,13 @@ struct MemToRegOfVecPass
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
 
       auto firMem = memOp.getSummary();
-      // Ignore if the memory is candidate for macro replacement.
-      // The requirements for macro replacement:
-      // 1. read latency and write latency of one.
-      // 2. only one readwrite port or write port.
-      // 3. zero or one read port.
-      // 4. undefined read-under-write behavior.
-      if (replSeqMem &&
-          ((firMem.readLatency == 1 && firMem.writeLatency == 1) &&
-           (firMem.numWritePorts + firMem.numReadWritePorts == 1) &&
-           (firMem.numReadPorts <= 1) && firMem.dataWidth > 0))
+      // Ignore if the memory is a sequential memory, i.e., something that is
+      // supposed to be an SRAM.  In either possible eventual lowering by later
+      // passes (blackboxing or lowering to a behavioral model) we don't want to
+      // blow this out here as it both breaks expectations about later passes
+      // that may add asynchronous resets (InferResets) or that expect metadata
+      // on SRAMs to not be split up (LowerClasses).
+      if (firMem.isSeqMem())
         return;
 
       generateMemory(memOp, firMem);

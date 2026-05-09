@@ -17,11 +17,11 @@ I8 = Bits(8)
 # CHECK:         %in = sv.wire sym @in : !hw.inout<i8>
 # CHECK:         {{%.+}} = sv.read_inout %in {sv.namehint = "in"} : !hw.inout<i8>
 # CHECK:         sv.assign %in, %In : i8
-# CHECK:         [[r1:%.+]] = seq.compreg %In, %clk : i8
+# CHECK:         %r1__reg1 = seq.compreg sym @r1__reg1 %In, %clk : i8
 # CHECK:         %c0_i8{{.*}} = hw.constant 0 : i8
-# CHECK:         [[r5:%.+]] = seq.compreg %In, %clk reset %rst, %c0_i8{{.*}}  : i8
-# CHECK:         [[r6:%.+]] = seq.compreg.ce %In, %clk, %InCE : i8
-# CHECK:         hw.output [[r2]], [[r1]], [[r5]], [[r6]] : i8, i8, i8, i8
+# CHECK:         %r_rst__reg1 = seq.compreg sym @r_rst__reg1 %In, %clk reset %rst, %c0_i8{{.*}}  : i8
+# CHECK:         %r_ce__reg1 = seq.compreg.ce sym @r_ce__reg1 %In, %clk, %InCE : i8
+# CHECK:         hw.output [[r2]], %r1__reg1, %r_rst__reg1, %r_ce__reg1 : i8, i8, i8, i8
 
 
 @unittestmodule()
@@ -91,12 +91,12 @@ class SystolicArrayTest(Module):
 
 
 # CHECK-LABEL:  hw.module @ControlReg_num_asserts2_num_resets1
-# CHECK:          [[r0:%.+]] = hw.array_get %asserts[%false]
-# CHECK:          [[r1:%.+]] = hw.array_get %asserts[%true]
+# CHECK:          [[r0:%.+]] = hw.array_get %asserts[%false] {sv.namehint = "asserts__0"}
+# CHECK:          [[r1:%.+]] = hw.array_get %asserts[%true] {sv.namehint = "asserts__1"}
 # CHECK:          [[r2:%.+]] = comb.or bin [[r0]], [[r1]]
-# CHECK:          [[r3:%.+]] = hw.array_get %resets[%c0_i0]
+# CHECK:          [[r3:%.+]] = hw.array_get %resets[%c0_i0] {sv.namehint = "resets__0"}
 # CHECK:          [[r4:%.+]] = comb.or bin [[r3]]
-# CHECK:          %state = seq.compreg [[r6]], %clk reset %rst, %false{{.*}}
+# CHECK:          %state = seq.compreg sym @reg__reg1 {{%.+}}, %clk reset %rst, %false{{.*}}
 # CHECK:          [[r5:%.+]] = comb.mux bin [[r4]], %false{{.*}}, %state
 # CHECK:          [[r6:%.+]] = comb.mux bin [[r2]], %true{{.*}}, [[r5]]
 # CHECK:          hw.output %state

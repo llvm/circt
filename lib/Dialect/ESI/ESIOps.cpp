@@ -56,7 +56,7 @@ LogicalResult SnoopValidReadyOp::verify() {
 
 LogicalResult SnoopValidReadyOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto i1 = IntegerType::get(context, 1);
   results.push_back(i1);
@@ -74,7 +74,7 @@ LogicalResult SnoopTransactionOp::verify() {
 
 LogicalResult SnoopTransactionOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto i1 = IntegerType::get(context, 1);
   results.push_back(i1);
@@ -236,8 +236,48 @@ LogicalResult UnwrapFIFOOp::verify() {
 LogicalResult
 UnwrapFIFOOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
                                ValueRange operands, DictionaryAttr,
-                               mlir::OpaqueProperties, mlir::RegionRange,
+                               mlir::PropertyRef, mlir::RegionRange,
                                SmallVectorImpl<Type> &inferredResulTypes) {
+  inferredResulTypes.push_back(
+      cast<ChannelType>(operands[0].getType()).getInner());
+  inferredResulTypes.push_back(
+      IntegerType::get(context, 1, IntegerType::Signless));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ValidOnly wrap / unwrap.
+//===----------------------------------------------------------------------===//
+
+circt::esi::ChannelType WrapValidOnlyOp::channelType() {
+  return cast<circt::esi::ChannelType>(getChanOutput().getType());
+}
+
+LogicalResult
+WrapValidOnlyOp::inferReturnTypes(MLIRContext *context, std::optional<Location>,
+                                  ValueRange operands, DictionaryAttr,
+                                  mlir::PropertyRef, mlir::RegionRange,
+                                  SmallVectorImpl<Type> &inferredResulTypes) {
+  auto chanType = ChannelType::get(context, operands[0].getType(),
+                                   ChannelSignaling::ValidOnly, 0);
+  inferredResulTypes.push_back(chanType);
+  return success();
+}
+
+circt::esi::ChannelType UnwrapValidOnlyOp::channelType() {
+  return cast<circt::esi::ChannelType>(getChanInput().getType());
+}
+
+LogicalResult UnwrapValidOnlyOp::verify() {
+  if (getChanInput().getType().getSignaling() != ChannelSignaling::ValidOnly)
+    return emitOpError("only supports ValidOnly signaling");
+  return success();
+}
+
+LogicalResult UnwrapValidOnlyOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location>, ValueRange operands,
+    DictionaryAttr, mlir::PropertyRef, mlir::RegionRange,
+    SmallVectorImpl<Type> &inferredResulTypes) {
   inferredResulTypes.push_back(
       cast<ChannelType>(operands[0].getType()).getInner());
   inferredResulTypes.push_back(
@@ -312,7 +352,7 @@ LogicalResult WrapWindow::verify() {
 LogicalResult
 UnwrapWindow::inferReturnTypes(MLIRContext *, std::optional<Location>,
                                ValueRange operands, DictionaryAttr,
-                               mlir::OpaqueProperties, mlir::RegionRange,
+                               mlir::PropertyRef, mlir::RegionRange,
                                SmallVectorImpl<Type> &inferredReturnTypes) {
   auto windowType = cast<WindowType>(operands.front().getType());
   inferredReturnTypes.push_back(windowType.getLoweredType());

@@ -192,7 +192,7 @@ void InjectDUTHierarchy::runOnOperation() {
   if (!instanceInfo.getDut()) {
     emitError(circuit->getLoc())
         << "contained a '" << injectDUTHierarchyAnnoClass << "', but no '"
-        << dutAnnoClass << "' was provided";
+        << markDUTAnnoClass << "' was provided";
     return signalPassFailure();
   }
 

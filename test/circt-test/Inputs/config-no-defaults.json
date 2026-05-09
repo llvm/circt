@@ -1,0 +1,10 @@
+{
+  "runners": [
+    {
+      "name": "only",
+      "binary": "true",
+      "kind": "formal"
+    }
+  ],
+  "useDefaultRunners": false
+}

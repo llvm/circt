@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --canonicalize | FileCheck --strict-whitespace %s
+// RUN: circt-opt %s --sim-fold-value-formatters --canonicalize | FileCheck --strict-whitespace %s
 
 // CHECK-LABEL: hw.module @constant_fold0
 // CHECK: sim.fmt.literal ",0,0,,,;0,0, 0,0,0,0;1,1,-1,1,1,1;0011, 3, 3,3,3,03;01010,10, 10,0a,0A,12;10000000,128,-128,80,80,200;0000001100101011111110,  51966,   51966,00cafe,00CAFE,00145376"
@@ -301,7 +301,7 @@ hw.module @flatten_concat1(in %val : i8, out res: !sim.fstring) {
   %octLit = sim.fmt.literal "Oct: "
   %octVal = sim.fmt.oct %val : i8
   %octCat = sim.fmt.concat (%octLit, %octVal)
-  
+
   %catcat = sim.fmt.concat (%binCat, %nocat, %decCat, %nocat, %hexLowCat, %nocat, %hexUpCat, %nocat, %octCat)
   hw.output %catcat : !sim.fstring
 }

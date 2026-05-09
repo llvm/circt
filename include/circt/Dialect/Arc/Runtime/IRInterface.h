@@ -51,6 +51,15 @@
 
 #include <stdint.h>
 
+// Forward-declare.
+namespace circt {
+namespace arc {
+namespace runtime {
+struct FmtDescriptor;
+} // namespace runtime
+} // namespace arc
+} // namespace circt
+
 /// Allocate and initialize the state for a new instance of the given hardware
 /// model.
 ///
@@ -75,6 +84,32 @@ ARC_IR_EXPORT void arcRuntimeIR_deleteInstance(uint8_t *modelState);
 /// Simulation drivers must call this once before every invocation of the
 /// model's `eval` function.
 ARC_IR_EXPORT void arcRuntimeIR_onEval(uint8_t *modelState);
+
+/// Post-initialization hook of the runtime library.
+///
+/// Simulation drivers must call this once after the invocation of the model's
+/// `initial` function.
+ARC_IR_EXPORT void arcRuntimeIR_onInitialized(uint8_t *modelState);
+
+/// Prints a formatted string to stdout.
+///
+/// `fmt` is an array of `FmtDescriptor` objects, ending in a descriptor with
+/// action `Action_End`.
+///
+/// The values to format are passed as variadic arguments.
+ARC_IR_EXPORT void
+arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
+
+/// Release the active trace buffer and request an empty new buffer.
+///
+/// Invoked by the model to signal that the currently active trace buffer,
+/// referenced by `modelState->traceBuffer` is ready for processing and
+/// contains `modelState->traceBufferSize` valid uint64_t words.
+///
+/// The runtime must return a pointer to a valid storage of at least
+/// `traceBufferCapacity` x uint64_t size, which will become the new active
+/// trace buffer.
+ARC_IR_EXPORT uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState);
 
 // NOLINTEND(readability-identifier-naming)
 #endif // CIRCT_DIALECT_ARC_RUNTIME_IRINTERFACE_H

@@ -143,11 +143,3 @@ void HWExportModuleHierarchyPass::runOnOperation() {
 
   markAllAnalysesPreserved();
 }
-
-//===----------------------------------------------------------------------===//
-// Pass Creation
-//===----------------------------------------------------------------------===//
-
-std::unique_ptr<mlir::Pass> sv::createHWExportModuleHierarchyPass() {
-  return std::make_unique<HWExportModuleHierarchyPass>();
-}

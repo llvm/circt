@@ -30,8 +30,10 @@ declare_mlir_python_sources(PyRTGSources.Core
     configs.py
     control_flow.py
     core.py
+    diagnostics.py
     immediates.py
     index.py
+    instructions.py
     integers.py
     labels.py
     memories.py
@@ -39,6 +41,7 @@ declare_mlir_python_sources(PyRTGSources.Core
     scf.py
     sequences.py
     sets.py
+    strings.py
     tests.py
     tuples.py
 )
@@ -47,6 +50,28 @@ declare_mlir_python_sources(PyRTGToolSources
   ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rtgtool"
   SOURCES
     rtgtool.py
+)
+
+################################################################################
+# Generate Python wrappers for RTGTest instruction operations
+################################################################################
+
+set(LLVM_TARGET_DEFINITIONS ${CIRCT_SOURCE_DIR}/include/circt/Dialect/RTGTest/IR/RTGTest.td)
+tablegen(CIRCT rtgtest_instructions.py
+  -gen-rtg-instruction-python-wrappers
+  --return-val-func=get_virtual_reg
+  --header-file=${CMAKE_CURRENT_SOURCE_DIR}/utils/rtgtest_instructions_header.py
+  DEPENDS 
+    circt-tblgen
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils/rtgtest_instructions_header.py
+)
+add_public_tablegen_target(PyRTGTestInstructionWrappersGen)
+
+declare_mlir_python_sources(PyRTGSources.Generated
+  ROOT_DIR "${CMAKE_CURRENT_BINARY_DIR}"
+  ADD_TO_PARENT PyRTGSources
+  SOURCES
+    rtgtest_instructions.py
 )
 
 ################################################################################

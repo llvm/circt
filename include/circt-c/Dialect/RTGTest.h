@@ -37,6 +37,12 @@ MLIR_CAPI_EXPORTED bool rtgtestTypeIsAIntegerRegister(MlirType type);
 /// Creates an RTGTest IntegerRegisterType in the context.
 MLIR_CAPI_EXPORTED MlirType rtgtestIntegerRegisterTypeGet(MlirContext ctxt);
 
+/// If the type is an RTGTest FloatRegisterType.
+MLIR_CAPI_EXPORTED bool rtgtestTypeIsAFloatRegister(MlirType type);
+
+/// Creates an RTGTest FloatRegisterType in the context.
+MLIR_CAPI_EXPORTED MlirType rtgtestFloatRegisterTypeGet(MlirContext ctxt);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
@@ -245,6 +251,12 @@ MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegT6(MlirAttribute attr);
 
 /// Creates an RTGTest RegT6 attribute in the context.
 MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegT6AttrGet(MlirContext ctxt);
+
+/// If the attribute is an RTGTest RegF0Attr.
+MLIR_CAPI_EXPORTED bool rtgtestAttrIsARegF0(MlirAttribute attr);
+
+/// Creates an RTGTest RegF0 attribute in the context.
+MLIR_CAPI_EXPORTED MlirAttribute rtgtestRegF0AttrGet(MlirContext ctxt);
 
 #ifdef __cplusplus
 }

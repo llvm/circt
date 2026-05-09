@@ -120,6 +120,14 @@ public:
   /// Get the ESI version number to check version compatibility.
   virtual uint32_t getEsiVersion() const = 0;
 
+  /// Get the current cycle count of the accelerator system.
+  virtual std::optional<uint64_t> getCycleCount() const { return std::nullopt; }
+  /// Get the "core" clock frequency of the accelerator system in Hz. Returns
+  /// nullopt if the accelerator does not provide this information.
+  virtual std::optional<uint64_t> getCoreClockFrequency() const {
+    return std::nullopt;
+  }
+
   /// Return the JSON-formatted system manifest.
   virtual std::string getJsonManifest() const;
 
@@ -203,6 +211,12 @@ public:
   /// Get the ESI version number to check version compatibility.
   uint32_t getEsiVersion() const override;
 
+  /// Get the current cycle count of the accelerator system's core clock.
+  std::optional<uint64_t> getCycleCount() const override;
+  /// Get the "core" clock frequency of the accelerator system in Hz. Returns
+  /// nullopt if the accelerator does not provide this information.
+  std::optional<uint64_t> getCoreClockFrequency() const override;
+
   /// Return the zlib compressed JSON system manifest.
   virtual std::vector<uint8_t> getCompressedManifest() const override;
 
@@ -263,6 +277,68 @@ public:
   virtual void unmapMemory(void *ptr) const {}
 };
 
+/// Service for raw communication channels to/from the accelerator.
+class ChannelService : public Service {
+public:
+  ChannelService(AppIDPath id, AcceleratorConnection &,
+                 ServiceImplDetails details, HWClientDetails clients);
+
+  virtual std::string getServiceSymbol() const override;
+  virtual BundlePort *getPort(AppIDPath id,
+                              const BundleType *type) const override;
+
+  /// A port which reads data from the accelerator (to_host).
+  class ToHost : public ServicePort {
+    friend class ChannelService;
+    using ServicePort::ServicePort;
+
+  public:
+    static ToHost *get(AppID id, const BundleType *type,
+                       ReadChannelPort &dataPort);
+    void connect();
+    std::future<MessageData> read();
+
+    virtual std::optional<std::string>
+    toString(bool oneLine = false) const override {
+      const esi::Type *dataType =
+          dynamic_cast<const ChannelType *>(type->findChannel("data").first)
+              ->getInner();
+      return "channel to_host " + dataType->toString(oneLine);
+    }
+
+  private:
+    ReadChannelPort *dataPort = nullptr;
+    bool connected = false;
+  };
+
+  /// A port which writes data to the accelerator (from_host).
+  class FromHost : public ServicePort {
+    friend class ChannelService;
+    using ServicePort::ServicePort;
+
+  public:
+    static FromHost *get(AppID id, const BundleType *type,
+                         WriteChannelPort &dataPort);
+    void connect();
+    void write(const MessageData &data);
+
+    virtual std::optional<std::string>
+    toString(bool oneLine = false) const override {
+      const esi::Type *dataType =
+          dynamic_cast<const ChannelType *>(type->findChannel("data").first)
+              ->getInner();
+      return "channel from_host " + dataType->toString(oneLine);
+    }
+
+  private:
+    WriteChannelPort *dataPort = nullptr;
+    bool connected = false;
+  };
+
+private:
+  std::string symbol;
+};
+
 /// Service for calling functions.
 class FuncService : public Service {
 public:
@@ -282,7 +358,7 @@ public:
     static Function *get(AppID id, BundleType *type, WriteChannelPort &arg,
                          ReadChannelPort &result);
 
-    void connect();
+    void connect(const ChannelPort::ConnectOptions &options = {});
     std::future<MessageData> call(const MessageData &arg);
 
     const esi::Type *getArgType() const {
@@ -341,7 +417,8 @@ public:
     /// sufficiently fast that it could be called in the same thread as the
     /// port callback.
     void connect(std::function<MessageData(const MessageData &)> callback,
-                 bool quick = false);
+                 bool quick = false,
+                 const ChannelPort::ConnectOptions &options = {});
 
     const esi::Type *getArgType() const {
       return dynamic_cast<const ChannelType *>(type->findChannel("arg").first)

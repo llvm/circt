@@ -294,8 +294,10 @@ private:
     SmallVector<Value> bBits = extractBits(rewriter, b);
 
     // Identify zero bits of b to reduce height of partial product array
+    auto bWidth = b.getType().getIntOrFloatBitWidth();
     auto knownBitsB = comb::computeKnownBits(b);
     if (!knownBitsB.Zero.isZero()) {
+      bWidth -= knownBitsB.Zero.countLeadingOnes();
       for (unsigned i = 0; i < width; ++i)
         if (knownBitsB.Zero[i])
           bBits[i] = zeroFalse;
@@ -309,6 +311,7 @@ private:
     // encNeg \approx (-2*b[2*i+1] + b[2*i] + b[2*i-1]) <= 0
     // encOne = (-2*b[2*i+1] + b[2*i] + b[2*i-1]) == +/- 1
     // encTwo = (-2*b[2*i+1] + b[2*i] + b[2*i-1]) == +/- 2
+    SmallVector<Value> encNegs;
     Value encNegPrev;
 
     // For even width - additional row contains the final sign correction
@@ -320,6 +323,7 @@ private:
 
       // Is the encoding zero or negative (an approximation)
       Value encNeg = bip1;
+      encNegs.push_back(encNeg); // Store for sign-extension optimisation
       // Is the encoding one = b[i] xor b[i-1]
       Value encOne = rewriter.createOrFold<comb::XorOp>(loc, bi, bim1, true);
       // Is the encoding two = (bip1 & ~bi & ~bim1) | (~bip1 & bi & bim1)
@@ -354,47 +358,6 @@ private:
       Value ppRow =
           rewriter.createOrFold<comb::XorOp>(loc, magA, encNegRepl, true);
 
-      // Sign-extension Optimisation:
-      // Section 7.2.2 of "Application Specific Arithmetic" by Dinechin &
-      // Kumm Handle sign-extension and padding to full width s = encNeg
-      // (sign-bit) {s, s, s, s, s, pp} = {1, 1, 1, 1, 1, pp}
-      //                     + {0, 0, 0, 0,!s, '0}
-      // Applying this to every row we create an upper-triangle of 1s that
-      // can be optimised away since they will not affect the final sum.
-      // {!s3,  0,!s2,  0,!s1,  0}
-      // {  1,  1,  1,  1,  1, p1}
-      // {  1,  1,  1,   p2      }
-      // {  1,       p3          }
-      if (rowWidth < width) {
-        auto padding = width - rowWidth;
-        auto encNegInv = bip1Inv;
-
-        // Sign-extension trick not worth it for padding < 3
-        if (padding < 3) {
-          Value encNegPad =
-              rewriter.createOrFold<comb::ReplicateOp>(loc, encNeg, padding);
-          ppRow = rewriter.createOrFold<comb::ConcatOp>(
-              loc, ValueRange{encNegPad, ppRow}); // Pad to full width
-        } else if (i == 0) {
-          // First row = {!encNeg, encNeg, encNeg, ppRow}
-          ppRow = rewriter.createOrFold<comb::ConcatOp>(
-              loc, ValueRange{encNegInv, encNeg, encNeg, ppRow});
-        } else {
-          // Remaining rows = {1, !encNeg, ppRow}
-          ppRow = rewriter.createOrFold<comb::ConcatOp>(
-              loc, ValueRange{constOne, encNegInv, ppRow});
-        }
-
-        // Zero pad to full width
-        auto rowWidth = ppRow.getType().getIntOrFloatBitWidth();
-        if (rowWidth < width) {
-          auto zeroPad =
-              hw::ConstantOp::create(rewriter, loc, APInt(width - rowWidth, 0));
-          ppRow = rewriter.createOrFold<comb::ConcatOp>(
-              loc, ValueRange{zeroPad, ppRow});
-        }
-      }
-
       // No sign-correction in the first row
       if (i == 0) {
         partialProducts.push_back(ppRow);
@@ -405,26 +368,58 @@ private:
       if (i == 2) {
         Value withSignCorrection = rewriter.createOrFold<comb::ConcatOp>(
             loc, ValueRange{ppRow, zeroFalse, encNegPrev});
-        Value ppAlign = rewriter.createOrFold<comb::ExtractOp>(
-            loc, withSignCorrection, 0, width);
-        partialProducts.push_back(ppAlign);
+        partialProducts.push_back(withSignCorrection);
         encNegPrev = encNeg;
         continue;
       }
 
       // Insert a sign-correction from the previous row
-      // {ppRow, 0, encNegPrev} << 2*(i-1)
+      // {ppRow, 0, encNegPrev} << (i-2)
       Value shiftBy = hw::ConstantOp::create(rewriter, loc, APInt(i - 2, 0));
       Value withSignCorrection = rewriter.createOrFold<comb::ConcatOp>(
           loc, ValueRange{ppRow, zeroFalse, encNegPrev, shiftBy});
-      Value ppAlign = rewriter.createOrFold<comb::ExtractOp>(
-          loc, withSignCorrection, 0, width);
-
-      partialProducts.push_back(ppAlign);
+      partialProducts.push_back(withSignCorrection);
       encNegPrev = encNeg;
 
       if (partialProducts.size() == op.getNumResults())
         break;
+
+      // Next row would be all zeros - need to account for the sign-correction
+      // of the previous row so the last row added is:
+      // {0, 0, 0, 0, 0, encNegPrev} << i
+      if (i > bWidth + 1)
+        break;
+    }
+
+    // Sign-extension:
+    // { s1, s1, s1, s1, s1, p1}
+    // { s2, s2, s2,   p2      }
+    // { s3,       p3          }
+    // TODO: optimize by only replicating the sign bit once using
+    // typical sign-extension trick - can be handled by separate
+    // canonicalization patterns
+    for (unsigned i = 0; i < partialProducts.size(); ++i) {
+      auto ppRow = partialProducts[i];
+      auto encNeg = encNegs[i];
+      auto ppWidth = ppRow.getType().getIntOrFloatBitWidth();
+      if (ppWidth < width) {
+        auto padding = width - ppWidth;
+
+        // Replicate the encNeg bit for sign-extension
+        Value encNegPad =
+            rewriter.createOrFold<comb::ReplicateOp>(loc, encNeg, padding);
+        ppRow = rewriter.createOrFold<comb::ConcatOp>(
+            loc, ValueRange{encNegPad, ppRow}); // Pad to full width
+      }
+
+      // Truncate any excess bits
+      ppWidth = ppRow.getType().getIntOrFloatBitWidth();
+      if (ppWidth > width) {
+        ppRow = rewriter.createOrFold<comb::ExtractOp>(loc, ppRow, 0, width);
+      }
+      partialProducts[i] = ppRow;
+      assert(partialProducts[i].getType().getIntOrFloatBitWidth() == width &&
+             "Expected sign-extended partial product to be full width");
     }
 
     // Zero-pad to match the required output width

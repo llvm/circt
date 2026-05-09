@@ -127,14 +127,14 @@ with ir.Context() as ctx, ir.Location.unknown():
   seeded_pdb.walk_placements(print_placement)
   # CHECK-LABEL: === Placements:
   # TODO: #msft.physloc<M20K, 40, 40, 1>, [@tag]
-  # CHECK: #msft.physloc<M20K, 2, 6, 1>, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
-  # CHECK: #msft.physloc<M20K, 2, 50, 1>
+  # CHECK-DAG: #msft.physloc<M20K, 2, 6, 1>, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
+  # CHECK-DAG: #msft.physloc<M20K, 2, 50, 1>
 
   print("=== Placements (col 2):")
   seeded_pdb.walk_placements(print_placement, bounds=(2, 2, None, None))
   # CHECK-LABEL: === Placements (col 2):
-  # CHECK: #msft.physloc<M20K, 2, 6, 1>, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
-  # CHECK: #msft.physloc<M20K, 2, 50, 1>
+  # CHECK-DAG: #msft.physloc<M20K, 2, 6, 1>, [#hw.innerNameRef<@top::@inst1>, #hw.innerNameRef<@MyWidget::@ext1>]
+  # CHECK-DAG: #msft.physloc<M20K, 2, 50, 1>
 
   print("=== Placements (col 2, row > 10):")
   seeded_pdb.walk_placements(print_placement, bounds=(2, 2, 10, None))

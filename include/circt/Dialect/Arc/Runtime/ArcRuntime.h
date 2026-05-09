@@ -27,7 +27,7 @@
 #define ARC_RUNTIME_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
 
-#else // #ifndef ARC_RUNTIME_EXPORT
+#else // #ifdef ARC_RUNTIME_ENABLE_EXPORT
 
 #ifdef _WIN32
 #define ARC_RUNTIME_EXPORT extern "C" __declspec(dllimport)
@@ -44,8 +44,8 @@
 #endif
 
 static_assert(sizeof(void *) == 8, "Unsupported architecture");
-static_assert(sizeof(struct ArcState) == 16, "Unexpected ArcState size");
-static_assert(sizeof(struct ArcRuntimeModelInfo) == 24,
+static_assert(sizeof(struct ArcState) == 32, "Unexpected ArcState size");
+static_assert(sizeof(struct ArcRuntimeModelInfo) == 32,
               "Unexpected ArcRuntimeModelInfo size");
 
 /// Allocate and initialize the state for a new instance of the given
@@ -65,6 +65,10 @@ ARC_RUNTIME_EXPORT void arcRuntimeDeleteInstance(struct ArcState *instance);
 
 /// Pre-Eval hook. Must be called by the driver once before every `eval` step.
 ARC_RUNTIME_EXPORT void arcRuntimeOnEval(struct ArcState *instance);
+
+/// Must be called by the driver after the model's `initial` function and
+/// before the first `onEval` call.
+ARC_RUNTIME_EXPORT void arcRuntimeOnInitialized(struct ArcState *instance);
 
 /// Return the API version of the runtime library.
 ARC_RUNTIME_EXPORT uint64_t arcRuntimeGetAPIVersion();

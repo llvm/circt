@@ -124,6 +124,15 @@ func.func @test(%a0: !smt.bv<32>, %a1: !smt.bv<32>, %a2: !smt.bv<32>, %a3: !smt.
   // CHECK-NEXT: smt.bv.xor [[V4]], [[V5]] : !smt.bv<1>
   %36 = comb.parity %arg5 : i4
 
+  // CHECK-NEXT: [[V0:%.+]] = smt.bv.extract [[ARG5]] from 0 : (!smt.bv<4>) -> !smt.bv<1>
+  // CHECK-NEXT: [[V1:%.+]] = smt.bv.extract [[ARG5]] from 1 : (!smt.bv<4>) -> !smt.bv<1>
+  // CHECK-NEXT: [[V2:%.+]] = smt.bv.concat [[V0]], [[V1]] : !smt.bv<1>, !smt.bv<1>
+  // CHECK-NEXT: [[V3:%.+]] = smt.bv.extract [[ARG5]] from 2 : (!smt.bv<4>) -> !smt.bv<1>
+  // CHECK-NEXT: [[V4:%.+]] = smt.bv.concat [[V2]], [[V3]] : !smt.bv<2>, !smt.bv<1>
+  // CHECK-NEXT: [[V5:%.+]] = smt.bv.extract [[ARG5]] from 3 : (!smt.bv<4>) -> !smt.bv<1>
+  // CHECK-NEXT: smt.bv.concat [[V4]], [[V5]] : !smt.bv<3>, !smt.bv<1>
+  %37 = comb.reverse %arg5 : i4
+
   return
 }
 

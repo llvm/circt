@@ -241,42 +241,38 @@ sim::DPIFuncOp LowerDPI::getOrCreateDPIFuncDecl(DPICallIntrinsicOp op) {
   StringAttr outputName = op.getOutputNameAttr();
   assert(outputTypes.size() <= 1);
 
-  SmallVector<hw::ModulePort> ports;
-  ports.reserve(inputTypes.size() + outputTypes.size());
+  SmallVector<sim::DPIArgument> args;
 
   // Add input arguments.
   for (auto [idx, inType] : llvm::enumerate(inputTypes)) {
-    hw::ModulePort port;
-    port.dir = hw::ModulePort::Direction::Input;
-    port.name = inputNames ? cast<StringAttr>(inputNames[idx])
+    auto name = inputNames ? cast<StringAttr>(inputNames[idx])
                            : builder.getStringAttr(Twine("in_") + Twine(idx));
-    port.type = lowerDPIArgumentType(inType);
-    ports.push_back(port);
+    args.push_back(
+        {name, lowerDPIArgumentType(inType), sim::DPIDirection::Input});
   }
 
   // Add output arguments.
   for (auto [idx, outType] : llvm::enumerate(outputTypes)) {
-    hw::ModulePort port;
-    port.dir = hw::ModulePort::Direction::Output;
-    port.name = outputName ? outputName
+    auto name = outputName ? outputName
                            : builder.getStringAttr(Twine("out_") + Twine(idx));
-    port.type = lowerDPIArgumentType(outType);
-    ports.push_back(port);
+    args.push_back(
+        {name, lowerDPIArgumentType(outType), sim::DPIDirection::Output});
   }
 
-  auto modType = hw::ModuleType::get(builder.getContext(), ports);
+  auto dpiType = sim::DPIFunctionType::get(builder.getContext(), args);
+
   auto it =
-      functionSignatureToDPIFuncOp.find({op.getFunctionNameAttr(), modType});
+      functionSignatureToDPIFuncOp.find({op.getFunctionNameAttr(), dpiType});
   if (it != functionSignatureToDPIFuncOp.end())
     return it->second;
 
   auto funcSymbol = nameSpace.newName(op.getFunctionNameAttr().getValue());
-  auto funcOp =
-      sim::DPIFuncOp::create(builder, funcSymbol, modType, ArrayAttr(),
-                             ArrayAttr(), op.getFunctionNameAttr());
+  auto funcOp = sim::DPIFuncOp::create(
+      builder, op.getLoc(), builder.getStringAttr(funcSymbol), dpiType,
+      ArrayAttr(), op.getFunctionNameAttr());
   // External function must have a private linkage.
   funcOp.setPrivate();
-  functionSignatureToDPIFuncOp[{op.getFunctionNameAttr(), modType}] = funcOp;
+  functionSignatureToDPIFuncOp[{op.getFunctionNameAttr(), dpiType}] = funcOp;
   return funcOp;
 }
 

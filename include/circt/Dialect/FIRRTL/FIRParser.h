@@ -109,6 +109,17 @@ struct FIRVersion {
     return uint64_t(*this) >= uint64_t(rhs);
   }
 
+  /// Parse a version string of the form "major.minor.patch".  Returns
+  /// std::nullopt if the string is malformed or values overflow uint16_t.
+  static std::optional<FIRVersion> fromString(StringRef str) {
+    uint16_t major, minor, patch;
+    if (str.consumeInteger(10, major) || !str.consume_front(".") ||
+        str.consumeInteger(10, minor) || !str.consume_front(".") ||
+        str.consumeInteger(10, patch) || !str.empty())
+      return std::nullopt;
+    return FIRVersion(major, minor, patch);
+  }
+
   uint16_t major;
   uint16_t minor;
   uint16_t patch;

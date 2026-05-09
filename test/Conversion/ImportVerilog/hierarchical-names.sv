@@ -69,3 +69,50 @@ module SubD;
   // CHECK: moore.assign %w, [[RD_Z]] : i32
   assign SubD.w = SubD.z;
 endmodule
+
+// -----
+
+// Check we descend into procedural blocks
+// CHECK-LABEL: moore.module @HasInitial()
+// CHECK: [[INSTRES:%.+]] = moore.instance "subE1" @SubE() -> (a: !moore.ref<l1>)
+// CHECK: moore.procedure initial {
+// CHECK: [[C1:%.+]] = moore.constant 1 : l1
+// CHECK: moore.nonblocking_assign [[INSTRES]], [[C1]] : l1
+// CHECK: moore.return
+module HasInitial;
+   SubE subE1();
+   initial
+      begin
+        subE1.a  <= 1'b1;
+      end
+endmodule
+
+// CHECK-LABEL: moore.module private @SubE(out a : !moore.ref<l1>)
+// CHECK: [[VAR:%.+]] = moore.variable : <l1>
+// CHECK: moore.output [[VAR]] : !moore.ref<l1>
+module SubE;
+   reg    a;
+endmodule
+
+// -----
+
+// Make sure we recurse through expressions
+// CHECK-LABEL: moore.module @SubExpr()
+// CHECK: [[INSTRES:%.+]] = moore.instance "subF" @SubF() -> (x: !moore.ref<l8>)
+// CHECK: [[READ:%.+]] = moore.read [[INSTRES]] : <l8>
+// CHECK: [[C1:%.+]] = moore.constant 1 : l8
+// CHECK: [[ADD:%.+]] = moore.add [[READ]], [[C1]] : l8
+// CHECK: moore.assign %a, [[ADD]] : l8
+
+module SubExpr;
+  SubF subF();
+  logic [7:0] a;
+  assign a = subF.x + 8'd1;
+endmodule
+
+// CHECK-LABEL: moore.module private @SubF(out x : !moore.ref<l8>)
+// CHECK: [[VAR:%.+]] = moore.variable : <l8>
+// CHECK: moore.output [[VAR]] : !moore.ref<l8>
+module SubF;
+  logic [7:0] x;
+endmodule

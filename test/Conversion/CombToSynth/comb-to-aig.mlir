@@ -1,4 +1,5 @@
 // RUN: circt-opt %s --convert-comb-to-synth | FileCheck %s
+// RUN: circt-opt %s --convert-comb-to-synth='force-aig=false' | FileCheck %s --check-prefix=XOR-INV
 
 // CHECK-LABEL: @test
 hw.module @test(in %arg0: i32, in %arg1: i32, in %arg2: i32, in %arg3: i32, out out0: i32, out out1: i32) {
@@ -20,6 +21,9 @@ hw.module @xor(in %arg0: i32, in %arg1: i32, in %arg2: i32, out out0: i32) {
   // CHECK-NEXT: %[[AND:.+]] = synth.aig.and_inv %arg0, %[[RHS_XOR]] : i32
   // CHECK-NEXT: %[[RESULT:.+]] = synth.aig.and_inv not %[[NOT_AND]], not %[[AND]] : i32
   // CHECK-NEXT: hw.output %[[RESULT]]
+  // XOR-INV-LABEL: @xor
+  // XOR-INV-NEXT: %[[RESULT:.+]] = synth.xor_inv %arg0, %arg1, %arg2 : i32
+  // XOR-INV-NEXT: hw.output %[[RESULT]]
   %0 = comb.xor %arg0, %arg1, %arg2 : i32
   hw.output %0 : i32
 }
@@ -51,4 +55,12 @@ hw.module @mux(in %cond: i1, in %high: !hw.array<2xi4>, in %low: !hw.array<2xi4>
   // CHECK-NEXT: hw.output %[[RESULT]] : !hw.array<2xi4>
   %0 = comb.mux %cond, %high, %low : !hw.array<2xi4>
   hw.output %0 : !hw.array<2xi4>
+}
+
+// CHECK-LABEL: func.func @parity
+func.func @parity(%arg0: i4) -> i1 {
+  // CHECK-NOT: comb.parity
+  // CHECK: synth.aig.and_inv
+  %0 = comb.parity %arg0 : i4
+  return %0 : i1
 }

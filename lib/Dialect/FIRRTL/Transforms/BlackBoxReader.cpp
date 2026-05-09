@@ -189,8 +189,8 @@ void BlackBoxReaderPass::runOnOperation() {
       llvm::dbgs().indent(4) << "annotations:\n";
     });
     AnnotationSet annotations(extmoduleOp);
-    bool isCover =
-        !coverDir.empty() && annotations.hasAnnotation(verifBlackBoxAnnoClass);
+    bool isCover = !coverDir.empty() &&
+                   annotations.hasAnnotation(internalVerifBlackBoxAnnoClass);
     bool foundBBoxAnno = false;
     annotations.removeAnnotations([&](Annotation anno) {
       AnnotationInfo annotationInfo;

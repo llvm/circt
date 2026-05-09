@@ -27,7 +27,7 @@ hw.module @unary_ops(in %arg0: i8, in %arg1: i8, in %arg2: i8, in %arg3: i1,
     // CHECK: [[XOR3:%.+]] = comb.xor %arg3, [[TRUE2]]
     // CHECK: sv.if [[XOR3]]
     sv.if %c {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   }
 
@@ -139,17 +139,17 @@ hw.module @sink_expression(in %clock: i1, in %a: i1, in %a2: i1, in %a3: i1, in 
       // CHECK: [[OR:%.*]] = comb.or %a2, %a3 : i1
       // CHECK: sv.if [[OR]]
       sv.if %0  {
-        sv.fatal 1
+        sv.fatal.procedural 1
       }
       // CHECK: sv.if [[XOR]]
       sv.if %2  {
-        sv.fatal 1
+        sv.fatal.procedural 1
       }
     }
 
     // CHECK: sv.if [[XOR]]
     sv.if %2  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   }
   hw.output
@@ -167,12 +167,12 @@ hw.module @dont_sink_se_expression(in %clock: i1, in %a: i1, in %a2: i1, in %a3:
     // CHECK: [[SINK:%.*]] = sv.verbatim.expr "SINK_ME"
     // CHECK: sv.if [[SINK]]
     sv.if %0  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
 
     // CHECK: sv.if [[DONT_TOUCH]]
     sv.if %1  {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   }
   hw.output
@@ -206,14 +206,14 @@ hw.module @unary_sink_crash(in %arg0: i1) {
     // CHECK: [[XOR1:%.+]] = comb.xor %arg0, [[TRUE1]]
     // CHECK: sv.if [[XOR1]]
     sv.if %c {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
 
     // CHECK: [[TRUE2:%.+]] = hw.constant true
     // CHECK: [[XOR2:%.+]] = comb.xor %arg0, [[TRUE2]]
     // CHECK: sv.if [[XOR2]]
     sv.if %c {
-      sv.fatal 1
+      sv.fatal.procedural 1
     }
   }
 }

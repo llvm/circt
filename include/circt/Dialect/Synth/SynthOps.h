@@ -14,6 +14,7 @@
 #define CIRCT_DIALECT_SYNTH_SYNTHOPS_H
 
 #include "circt/Dialect/Synth/SynthDialect.h"
+#include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
@@ -32,13 +33,11 @@
 
 namespace circt {
 namespace synth {
-struct AndInverterVariadicOpConversion
-    : mlir::OpRewritePattern<aig::AndInverterOp> {
-  using OpRewritePattern<aig::AndInverterOp>::OpRewritePattern;
-  mlir::LogicalResult
-  matchAndRewrite(aig::AndInverterOp op,
-                  mlir::PatternRewriter &rewriter) const override;
-};
+void populateVariadicAndInverterLoweringPatterns(
+    mlir::RewritePatternSet &patterns);
+void populateVariadicXorInverterLoweringPatterns(
+    mlir::RewritePatternSet &patterns);
+bool isLogicNetworkOp(mlir::Operation *op);
 
 /// This function performs a topological sort on the operations within each
 /// block of graph regions in the given operation. It uses MLIR's topological
@@ -77,6 +76,11 @@ public:
   mlir::Value getValue() const { return value.getPointer(); }
   bool isInverted() const { return value.getInt(); }
   int64_t getArrivalTime() const { return arrivalTime; }
+
+  ValueWithArrivalTime &flipInversion() {
+    value.setInt(!value.getInt());
+    return *this;
+  }
 
   /// Comparison operator for priority queue. Values with earlier arrival times
   /// have higher priority. When arrival times are equal, use value numbering
@@ -123,6 +127,12 @@ T buildBalancedTreeWithArrivalTimes(llvm::ArrayRef<T> elements,
   }
 
   return pq.top();
+}
+
+/// Evaluate the Boolean function `x ^ (z | (x & y))`.
+template <typename T>
+T evaluateDotLogic(const T &x, const T &y, const T &z) {
+  return x ^ (z | (x & y));
 }
 
 } // namespace synth

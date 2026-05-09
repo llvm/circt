@@ -42,7 +42,7 @@ class Tgt0(Config):
 # CHECK-NEXT:   [[RAND:%.+]] = rtg.randomize_sequence [[SUB1]]
 # CHECK-NEXT:   rtg.embed_sequence [[RAND]]
 
-#      CHECK: rtg.sequence @_context_seq_0([[ARG0:%.+]]: index, {{%.+}}: index, {{%.+}}: !rtgtest.cpu, {{%.+}}: !rtgtest.cpu, [[ARG3:%.+]]: index) {
+#      CHECK: rtg.sequence @_context_seq_0([[ARG0:%.+]]: index{{.*}}, {{%.+}}: index{{.*}}, {{%.+}}: !rtgtest.cpu{{.*}}, {{%.+}}: !rtgtest.cpu{{.*}}, [[ARG3:%.+]]: index{{.*}}) {
 # CHECK-NEXT:   [[SEQ2:%.+]] = rtg.get_sequence @consumer : !rtg.sequence<index>
 # CHECK-NEXT:   [[SUB2:%.+]] = rtg.substitute_sequence [[SEQ2]]([[ARG0]]) : !rtg.sequence<index>
 # CHECK-NEXT:   [[RAND1:%.+]] = rtg.randomize_sequence [[SUB2]]
@@ -67,7 +67,7 @@ def test0_context_args(config):
 # CHECK-NEXT:   [[V2:%.+]] = rtg.substitute_sequence [[V1]](%a, %b, %cpu0, %cpu1) : !rtg.sequence<index, index, !rtgtest.cpu, !rtgtest.cpu>
 # CHECK-NEXT:   rtg.on_context %cpu0, [[V2]] : !rtgtest.cpu
 
-#      CHECK: rtg.sequence @_context_seq_1([[ARG0:%.+]]: index, [[ARG1:%.+]]: index, [[ARG2:%.+]]: !rtgtest.cpu, [[ARG3:%.+]]: !rtgtest.cpu) {
+#      CHECK: rtg.sequence @_context_seq_1([[ARG0:%.+]]: index{{.*}}, [[ARG1:%.+]]: index{{.*}}, [[ARG2:%.+]]: !rtgtest.cpu{{.*}}, [[ARG3:%.+]]: !rtgtest.cpu{{.*}}) {
 # CHECK-NEXT:   [[V0:%.+]] = rtg.get_sequence @consumer : !rtg.sequence<index>
 # CHECK-NEXT:   [[V1:%.+]] = rtg.substitute_sequence [[V0]]([[ARG0]]) : !rtg.sequence<index>
 # CHECK-NEXT:   [[V2:%.+]] = rtg.randomize_sequence [[V1]]
@@ -79,13 +79,13 @@ def test0_context_args(config):
 # CHECK-NEXT:   [[V6:%.+]] = rtg.substitute_sequence [[V5]]([[ARG0]], [[ARG1]], [[ARG2]], [[ARG3]]) : !rtg.sequence<index, index, !rtgtest.cpu, !rtgtest.cpu>
 # CHECK-NEXT:   rtg.on_context [[ARG2]], [[V6]] : !rtgtest.cpu
 # CHECK-NEXT: }
-# CHECK-NEXT: rtg.sequence @_context_seq_2([[ARG0:%.+]]: index, [[ARG1:%.+]]: index, [[ARG2:%.+]]: !rtgtest.cpu, [[ARG3:%.+]]: !rtgtest.cpu) {
+# CHECK-NEXT: rtg.sequence @_context_seq_2([[ARG0:%.+]]: index{{.*}}, [[ARG1:%.+]]: index{{.*}}, [[ARG2:%.+]]: !rtgtest.cpu{{.*}}, [[ARG3:%.+]]: !rtgtest.cpu{{.*}}) {
 # CHECK-NEXT:   [[V0:%.+]] = rtg.get_sequence @consumer : !rtg.sequence<index>
 # CHECK-NEXT:   [[V1:%.+]] = rtg.substitute_sequence [[V0]]([[ARG1]]) : !rtg.sequence<index>
 # CHECK-NEXT:   [[V2:%.+]] = rtg.randomize_sequence [[V1]]
 # CHECK-NEXT:   rtg.embed_sequence [[V2]]
 # CHECK-NEXT: }
-# CHECK-NEXT: rtg.sequence @_context_seq_3([[ARG0:%.+]]: index, [[ARG1:%.+]]: index, [[ARG2:%.+]]: !rtgtest.cpu, [[ARG3:%.+]]: !rtgtest.cpu) {
+# CHECK-NEXT: rtg.sequence @_context_seq_3([[ARG0:%.+]]: index{{.*}}, [[ARG1:%.+]]: index{{.*}}, [[ARG2:%.+]]: !rtgtest.cpu{{.*}}, [[ARG3:%.+]]: !rtgtest.cpu{{.*}}) {
 # CHECK-NEXT:   [[V0:%.+]] = rtg.get_sequence @consumer : !rtg.sequence<index>
 # CHECK-NEXT:   [[V1:%.+]] = rtg.substitute_sequence [[V0]]([[ARG1]]) : !rtg.sequence<index>
 # CHECK-NEXT:   [[V2:%.+]] = rtg.randomize_sequence [[V1]]

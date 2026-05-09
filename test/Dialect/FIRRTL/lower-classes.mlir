@@ -41,7 +41,7 @@ firrtl.circuit "Component" {
     %obj0_someReference_in = firrtl.object.subfield %obj0[someReference_in] : !firrtl.class<@Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
     firrtl.propassign %obj0_someReference_in, %obj1 : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
 
-    // CHECK: %[[REF:.+]] = om.object.field %[[OBJ0]], [@someReference] : (!om.class.type<@Class_0>) -> !om.class.type<@Class_1>
+    // CHECK: %[[REF:.+]] = om.object.field %[[OBJ0]]["someReference"] : (!om.class.type<@Class_0>) -> !om.class.type<@Class_1>
     // CHECK: om.class.fields %[[REF]] : !om.class.type<@Class_1>
     %obj0_someReference = firrtl.object.subfield %obj0[someReference] : !firrtl.class<@Class_0(in someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>)>
     firrtl.propassign %obj_0_out, %obj0_someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
@@ -51,7 +51,7 @@ firrtl.circuit "Component" {
   // CHECK-SAME: -> (output: !om.integer)
   firrtl.class @ReadOutputPort(out %output : !firrtl.integer) {
     // CHECK: %[[OBJ:.+]] = om.object @Class_1(%basepath) : (!om.basepath) -> !om.class.type<@Class_1>
-    // CHECK: %[[FIELD:.+]] = om.object.field %[[OBJ]], [@someInt] : (!om.class.type<@Class_1>) -> !om.integer
+    // CHECK: %[[FIELD:.+]] = om.object.field %[[OBJ]]["someInt"] : (!om.class.type<@Class_1>) -> !om.integer
     // CHECK: om.class.fields %[[FIELD]] : !om.integer
     %obj = firrtl.object @Class_1(out someInt: !firrtl.integer)
     %0 = firrtl.object.subfield %obj[someInt] : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
@@ -200,7 +200,7 @@ firrtl.circuit "PathModule" {
   // CHECK:   om.object @PathTest
   // CHECK: om.class @PathTest(%basepath: !om.basepath)
   firrtl.class @PathTest() {
-    
+
     // CHECK: om.path_create reference %basepath [[PORT_PATH]]
     %port_path = firrtl.path reference distinct[0]<>
 
@@ -336,12 +336,12 @@ firrtl.circuit "ModuleInstances" {
   // CHECK: om.class @ModuleInstances_Class(%basepath: !om.basepath, %[[IN_PROP1:.+]]: !om.string) -> (outputProp: !om.string)
   // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[EXT_NLA]]
   // CHECK:   %[[O0:.+]] = om.object @ExtModule_Class(%[[BASEPATH]], %[[IN_PROP1]])
-  // CHECK:   %[[F0:.+]] = om.object.field %[[O0]], [@outputProp]
+  // CHECK:   %[[F0:.+]] = om.object.field %[[O0]]["outputProp"]
   // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[EXTDEFNAME_NLA]]
   // CHECK:   om.object @TheRealName_Class
   // CHECK:   %[[BASEPATH:.+]] = om.basepath_create %basepath @[[MOD_NLA]]
   // CHECK:   %[[O1:.+]] = om.object @Module_Class(%[[BASEPATH]], %[[F0]])
-  // CHECK:   %[[F1:.+]] = om.object.field %[[O1]], [@outputProp]
+  // CHECK:   %[[F1:.+]] = om.object.field %[[O1]]["outputProp"]
   // CHECK:   om.class.fields %[[F1]] : !om.string
 }
 
@@ -372,6 +372,21 @@ firrtl.circuit "ModuleWithPropertySubmodule" {
   // CHECK: om.class @SubmoduleWithProperty_Class
   firrtl.module private @SubmoduleWithProperty(in %prop: !firrtl.integer) {
   }
+}
+
+// CHECK-LABEL: firrtl.circuit "ModuleWithObjectNoPorts"
+firrtl.circuit "ModuleWithObjectNoPorts" {
+  firrtl.class private @Metadata() {
+  }
+  // Ensure that a module with no property ports, but contains an object results
+  // in a class.
+  //
+  // CHECK: om.class @Baz_Class
+  firrtl.module private @Baz() {
+    // CHECK: om.object @Metadata
+    %meta = firrtl.object @Metadata()
+  }
+  firrtl.extmodule @ModuleWithObjectNoPorts()
 }
 
 // CHECK-LABEL: firrtl.circuit "DownwardReferences"
@@ -406,6 +421,67 @@ firrtl.circuit "IntegerArithmetic" {
 
     // CHECK: om.integer.shl %in0, %in1 : !om.integer
     %3 = firrtl.integer.shl %in0, %in1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "StringCat"
+firrtl.circuit "StringCat" {
+  firrtl.module @StringCat() {}
+
+  // CHECK-LABEL: om.class @StringConcatClass
+  firrtl.class @StringConcatClass(in %a: !firrtl.string, in %b: !firrtl.string, out %c: !firrtl.string) {
+    // CHECK: %[[CONCAT:.+]] = om.string.concat %a, %b : !om.string
+    %0 = firrtl.string.concat %a, %b : !firrtl.string
+    // CHECK: om.class.fields %[[CONCAT]]
+    firrtl.propassign %c, %0 : !firrtl.string
+  }
+
+  // CHECK-LABEL: om.class @PropEqStringClass
+  firrtl.class @PropEqStringClass(in %a: !firrtl.string, in %b: !firrtl.string, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.string
+    %0 = firrtl.prop.eq %a, %b : !firrtl.string
+    // CHECK: om.class.fields %[[EQ]]
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @PropEqBoolClass
+  firrtl.class @PropEqBoolClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : i1
+    %0 = firrtl.prop.eq %a, %b : !firrtl.bool
+    // CHECK: om.class.fields %[[EQ]]
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @PropEqIntegerClass
+  firrtl.class @PropEqIntegerClass(in %a: !firrtl.integer, in %b: !firrtl.integer, out %eq: !firrtl.bool) {
+    // CHECK: %[[EQ:.+]] = om.prop.eq %a, %b : !om.integer
+    %0 = firrtl.prop.eq %a, %b : !firrtl.integer
+    // CHECK: om.class.fields %[[EQ]]
+    firrtl.propassign %eq, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @BoolAndClass
+  firrtl.class @BoolAndClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %out: !firrtl.bool) {
+    // CHECK: %[[AND:.+]] = om.integer.and %a, %b : i1
+    %0 = firrtl.bool.and %a, %b
+    // CHECK: om.class.fields %[[AND]]
+    firrtl.propassign %out, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @BoolOrClass
+  firrtl.class @BoolOrClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %out: !firrtl.bool) {
+    // CHECK: %[[OR:.+]] = om.integer.or %a, %b : i1
+    %0 = firrtl.bool.or %a, %b
+    // CHECK: om.class.fields %[[OR]]
+    firrtl.propassign %out, %0 : !firrtl.bool
+  }
+
+  // CHECK-LABEL: om.class @BoolXorClass
+  firrtl.class @BoolXorClass(in %a: !firrtl.bool, in %b: !firrtl.bool, out %out: !firrtl.bool) {
+    // CHECK: %[[XOR:.+]] = om.integer.xor %a, %b : i1
+    %0 = firrtl.bool.xor %a, %b
+    // CHECK: om.class.fields %[[XOR]]
+    firrtl.propassign %out, %0 : !firrtl.bool
   }
 }
 
@@ -497,6 +573,8 @@ firrtl.circuit "PathTargetReplaced" {
     %path = firrtl.path instance distinct[0]<>
   }
   firrtl.module private @WillBeReplaced(out %output: !firrtl.integer) {
+    %c = firrtl.integer 42
+    firrtl.propassign %output, %c : !firrtl.integer
   }
 }
 
@@ -609,5 +687,103 @@ firrtl.circuit "MissingConversionCastRegression" {
   }
 
   firrtl.class private @Bar() {
+  }
+}
+
+// Test that external modules with the same defname:
+//
+// 1. create only one class
+// 2. drop property ports from both external modules
+//
+// See: https://github.com/llvm/circt/issues/9468
+//
+// CHECK-LABEL: firrtl.circuit "SameDefname"
+firrtl.circuit "SameDefname" {
+  // CHECK:      firrtl.extmodule @Bar_1
+  // CHECK-NOT:    in a: !firrtl.integer
+  // CHECK-SAME:   out b: !firrtl.uint<1>
+  firrtl.extmodule @Bar_1<WIDTH: ui32 = 1>(
+    in a: !firrtl.integer,
+    out b: !firrtl.uint<1>
+  ) attributes {defname = "Bar"}
+  // CHECK:      firrtl.extmodule @Bar_2
+  // CHECK-NOT:    in a: !firrtl.integer
+  // CHECK-SAME:   out b: !firrtl.uint<2>
+  firrtl.extmodule @Bar_2<WIDTH: ui32 = 2>(
+    in a: !firrtl.integer,
+    out b: !firrtl.uint<2>
+  ) attributes {defname = "Bar"}
+  // CHECK:      om.class.extern @Bar_Class(
+  // CHECK-SAME:   %basepath: !om.basepath
+  // CHECK-SAME:   %a: !om.integer
+  firrtl.module @SameDefname() {
+    %bar_1_a, %bar_1_b = firrtl.instance bar_1 @Bar_1(
+      in a: !firrtl.integer,
+      out b: !firrtl.uint<1>
+    )
+    %bar_2_a, %bar_2_b = firrtl.instance bar_2 @Bar_2(
+      in a: !firrtl.integer,
+      out b: !firrtl.uint<2>
+    )
+    %0 = firrtl.integer 0
+    firrtl.propassign %bar_1_a, %0 : !firrtl.integer
+    firrtl.propassign %bar_2_a, %0 : !firrtl.integer
+  }
+}
+
+firrtl.circuit "UnknownValue" {
+  // Simple class for testing unknown object references
+  firrtl.class private @SimpleClass(out %value: !firrtl.integer) {
+    %0 = firrtl.integer 42
+    firrtl.propassign %value, %0 : !firrtl.integer
+  }
+
+  // CHECK-LABEL: om.class @UnknownValue_Class
+  // CHECK-SAME: -> (a: !om.integer, b: !om.string, c: !om.class.type<@SimpleClass>)
+  firrtl.module @UnknownValue(out %a: !firrtl.integer, out %b: !firrtl.string, out %c: !firrtl.class<@SimpleClass(out value: !firrtl.integer)>) {
+    // CHECK: %[[UNKNOWN_INT:.+]] = om.unknown : !om.integer
+    %0 = firrtl.unknown : !firrtl.integer
+    firrtl.propassign %a, %0 : !firrtl.integer
+    // CHECK: %[[UNKNOWN_STR:.+]] = om.unknown : !om.string
+    %1 = firrtl.unknown : !firrtl.string
+    firrtl.propassign %b, %1 : !firrtl.string
+    // CHECK: %[[UNKNOWN_OBJ:.+]] = om.unknown : !om.class.type<@SimpleClass>
+    %2 = firrtl.unknown : !firrtl.class<@SimpleClass(out value: !firrtl.integer)>
+    firrtl.propassign %c, %2 : !firrtl.class<@SimpleClass(out value: !firrtl.integer)>
+    // CHECK: om.class.fields %[[UNKNOWN_INT]], %[[UNKNOWN_STR]], %[[UNKNOWN_OBJ]] : !om.integer, !om.string, !om.class.type<@SimpleClass>
+  }
+
+  // property_assert in a class body lowers to om.property_assert.
+  // CHECK-LABEL: om.class @PropAssertClass
+  firrtl.class private @PropAssertClass(in %cond: !firrtl.bool) {
+    // CHECK: om.property_assert %cond, "must hold" : i1
+    firrtl.property_assert %cond, "must hold" : !firrtl.bool
+  }
+
+  // property_assert in a module body: the op is moved into the generated class.
+  // CHECK-LABEL: om.class @PropAssertModule_Class
+  firrtl.module @PropAssertModule(in %cond: !firrtl.bool) {
+    // CHECK: om.property_assert %cond, "module invariant" : i1
+    firrtl.property_assert %cond, "module invariant" : !firrtl.bool
+  }
+}
+
+// CHECK-LABEL: firrtl.circuit "NoPropPorts"
+// Test that modules without property ports, but that contain property
+// operations still get classes created for them.  This is mandatory for
+// things like property assertions.  It is suboptimal for dead property
+// operations.  However, LowerToHW assumes that all of these are gone from
+// module bodies.
+firrtl.circuit "NoPropPorts" {
+  // CHECK-LABEL: om.class @NoPropPorts_Class
+  firrtl.module @NoPropPorts(in %clock: !firrtl.clock) {
+    // CHECK: %[[U0:.+]] = om.unknown : !om.string
+    %0 = firrtl.unknown : !firrtl.string
+    // CHECK: %[[U1:.+]] = om.unknown : !om.string
+    %1 = firrtl.unknown : !firrtl.string
+    // CHECK: %[[EQ:.+]] = om.prop.eq %[[U0]], %[[U1]] : !om.string
+    %2 = firrtl.prop.eq %0, %1 : !firrtl.string
+    // CHECK: om.property_assert %[[EQ]], "srcs must match" : i1
+    firrtl.property_assert %2, "srcs must match" : !firrtl.bool
   }
 }

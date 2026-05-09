@@ -43,3 +43,78 @@ std::string esi::toHex(uint64_t val) {
   ss << std::hex << val;
   return ss.str();
 }
+
+//===----------------------------------------------------------------------===//
+// SegmentedMessageData
+//===----------------------------------------------------------------------===//
+
+size_t SegmentedMessageData::totalSize() const {
+  size_t total = 0;
+  for (size_t i = 0, e = numSegments(); i < e; ++i)
+    total += segment(i).size;
+  return total;
+}
+
+bool SegmentedMessageData::empty() const { return totalSize() == 0; }
+
+MessageData SegmentedMessageData::toMessageData() const {
+  size_t total = totalSize();
+  if (total == 0)
+    return MessageData();
+  std::vector<uint8_t> buf;
+  buf.reserve(total);
+  for (size_t i = 0, e = numSegments(); i < e; ++i) {
+    Segment seg = segment(i);
+    if (seg.size == 0)
+      continue;
+    buf.insert(buf.end(), seg.data, seg.data + seg.size);
+  }
+  return MessageData(std::move(buf));
+}
+
+//===----------------------------------------------------------------------===//
+// SegmentedMessageDataCursor
+//===----------------------------------------------------------------------===//
+
+std::span<const uint8_t> SegmentedMessageDataCursor::remaining() const {
+  // Scan forward past empty segments without mutating cursor state.
+  size_t idx = segIdx;
+  size_t off = offset;
+  while (idx < msg.numSegments()) {
+    Segment seg = msg.segment(idx);
+    if (seg.size > off)
+      return {seg.data + off, seg.size - off};
+    ++idx;
+    off = 0;
+  }
+  return {};
+}
+
+void SegmentedMessageDataCursor::advance(size_t n) {
+  while (n > 0 && !done()) {
+    Segment seg = msg.segment(segIdx);
+    size_t left = seg.size - offset;
+    if (left == 0) {
+      // Skip empty segments.
+      ++segIdx;
+      offset = 0;
+      continue;
+    }
+    if (n < left) {
+      offset += n;
+      return;
+    }
+    n -= left;
+    ++segIdx;
+    offset = 0;
+  }
+}
+
+bool SegmentedMessageDataCursor::done() const {
+  return segIdx >= msg.numSegments();
+}
+
+void SegmentedMessageDataCursor::reset() {
+  segIdx = 0;
+  offset = 0;
+}

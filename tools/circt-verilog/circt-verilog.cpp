@@ -17,8 +17,8 @@
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "circt/Dialect/Moore/MooreDialect.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
@@ -278,6 +278,10 @@ struct CLOptions {
           "One or more command files, which are independent compilation units "
           "where modules are automatically instantiated."),
       cl::value_desc("filename"), cl::Prefix, cl::cat(cat)};
+
+  cl::list<std::string> slangArgs{"Xslang",
+                                  cl::desc("Pass <arg> to the Slang CLI"),
+                                  cl::value_desc("arg"), cl::cat(cat)};
 };
 } // namespace
 
@@ -346,6 +350,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
   options.singleUnit = opts.singleUnit;
   options.libraryFiles = opts.libraryFiles;
   options.commandFiles = opts.commandFiles;
+  options.slangArgs = opts.slangArgs;
 
   // Open the output file.
   std::string errorMessage;

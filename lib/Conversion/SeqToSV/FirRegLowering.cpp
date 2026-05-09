@@ -757,7 +757,15 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
   if (!conditions.empty())
     regConditionTable.emplace_or_assign(svReg.reg, conditions);
 
-  reg.replaceAllUsesWith(regVal.getResult());
+  // For clock-typed registers the lowered sv.reg holds i1, but any remaining
+  // users of the original !seq.clock result (e.g. seq.from_clock, hw.wire)
+  // still expect that type.  Bridge the gap with a seq.to_clock so that those
+  // users stay type-correct until applyPartialConversion resolves them via
+  // ClockCastLowering<ToClockOp>.
+  Value replacement = regVal.getResult();
+  if (isa<seq::ClockType>(reg.getType()) && !reg.use_empty())
+    replacement = seq::ToClockOp::create(builder, loc, regVal.getResult());
+  reg.replaceAllUsesWith(replacement);
   reg.erase();
 }
 

@@ -1898,3 +1898,10 @@ hw.module @parameter<in: i8> (in %a: i8, out o1: !hw.array<1xi8>, out o2: !hw.st
   %1 = hw.struct_create (%param) : !hw.struct<foo: i8>
   hw.output %0, %1 : !hw.array<1xi8>, !hw.struct<foo: i8>
 }
+
+// A self-referential wire must not crash during canonicalization.
+// CHECK-LABEL: @SelfRefWire
+hw.module @SelfRefWire() {
+  // CHECK: hw.wire
+  %w = hw.wire %w : i1
+}

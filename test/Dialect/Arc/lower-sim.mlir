@@ -12,28 +12,42 @@ module {
   // CHECK-LABEL: llvm.func @full
   func.func @full() {
     %c = arith.constant 24 : i8
+    %tstep = arith.constant 321 : i64
 
     // CHECK: %[[format_str2_ptr:.*]] = llvm.mlir.addressof @[[format_str2]] : !llvm.ptr
     // CHECK: %[[format_str_ptr:.*]] = llvm.mlir.addressof @[[format_str]] : !llvm.ptr
     // CHECK-DAG: %[[c:.*]] = llvm.mlir.constant(24 : i8)
     // CHECK-DAG: %[[zero:.*]] = llvm.mlir.constant(0 : i8)
-    // CHECK-DAG: %[[size:.*]] = llvm.mlir.constant(3 : i64)
+    // CHECK-DAG: %[[size:.*]] = llvm.mlir.constant(27 : i64)
+    // CHECK-DAG: %[[tstep:.*]] = llvm.mlir.constant(321 : i64)
     // CHECK-DAG: %[[state:.*]] = llvm.call @malloc(%[[size:.*]]) :
     // CHECK: "llvm.intr.memset"(%[[state]], %[[zero]], %[[size]]) <{isVolatile = false}>
     arc.sim.instantiate @id as %model {
-      // CHECK-NEXT: llvm.store %[[c]], %[[state]] : i8
+      // CHECK-NEXT: %[[i_ptr:.*]] = llvm.getelementptr %[[state]][24] : (!llvm.ptr) -> !llvm.ptr, i8
+      // CHECK-NEXT: llvm.store %[[c]], %[[i_ptr]] : i8
       arc.sim.set_input %model, "i" = %c : i8, !arc.sim.instance<@id>
 
-      // CHECK-NEXT: %[[j_ptr:.*]] = llvm.getelementptr %[[state]][1] : (!llvm.ptr) -> !llvm.ptr, i8
+      // CHECK-NEXT: %[[j_ptr:.*]] = llvm.getelementptr %[[state]][25] : (!llvm.ptr) -> !llvm.ptr, i8
       // CHECK-NEXT: llvm.store %[[c]], %[[j_ptr]] : i8
       arc.sim.set_input %model, "j" = %c : i8, !arc.sim.instance<@id>
 
       // CHECK-NEXT: llvm.call @id_eval(%[[state]])
       arc.sim.step %model : !arc.sim.instance<@id>
 
-      // CHECK-NEXT: %[[o_ptr:.*]] = llvm.getelementptr %[[state]][2] : (!llvm.ptr) -> !llvm.ptr, i8
+      // CHECK-NEXT: llvm.call @id_eval(%[[state]])
+      // CHECK-NEXT: %[[told:.*]] = llvm.load %[[state]] : !llvm.ptr -> i64
+      // CHECK-NEXT: %[[tnew:.*]] = llvm.add %[[told]], %[[tstep]] : i64
+      // CHECK-NEXT: llvm.store %[[tnew]], %[[state]] : i64, !llvm.ptr
+      arc.sim.step %model by %tstep : !arc.sim.instance<@id>
+
+      // CHECK-NEXT: %[[o_ptr:.*]] = llvm.getelementptr %[[state]][26] : (!llvm.ptr) -> !llvm.ptr, i8
       // CHECK-NEXT: %[[result:.*]] = llvm.load %[[o_ptr]] : !llvm.ptr -> i8
       %result = arc.sim.get_port %model, "o" : i8, !arc.sim.instance<@id>
+
+      // CHECK-NEXT: %[[wkup_ptr:.*]] = llvm.getelementptr %[[state]][16] : (!llvm.ptr) -> !llvm.ptr, i8
+      // CHECK-NEXT: %[[wkup:.*]] = llvm.load %[[wkup_ptr]] : !llvm.ptr -> i64
+      %wkup = arc.sim.get_next_wakeup %model : !arc.sim.instance<@id>
+      arc.sim.emit "next_wakeup", %wkup : i64
 
       // CHECK-DAG: %[[to_print:.*]] = llvm.zext %[[result]] : i8 to i64
       // CHECK: llvm.call @printf(%[[format_str_ptr]], %[[to_print]])

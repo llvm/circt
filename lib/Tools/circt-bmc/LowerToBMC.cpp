@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqOps.h"
@@ -54,15 +55,6 @@ void LowerToBMCPass::runOnOperation() {
     return signalPassFailure();
   }
 
-  // TODO: Check whether instances contain properties to check
-  bool noProperties = false;
-  if (hwModule.getOps<verif::AssertOp>().empty() &&
-      hwModule.getOps<hw::InstanceOp>().empty()) {
-    hwModule.emitWarning("no property provided to check in module - will "
-                         "trivially find no assertions.");
-    noProperties = true;
-  }
-
   if (!sortTopologically(&hwModule.getBodyRegion().front())) {
     hwModule->emitError("could not resolve cycles in module");
     return signalPassFailure();
@@ -94,6 +86,16 @@ void LowerToBMCPass::runOnOperation() {
   auto entryFunc = func::FuncOp::create(builder, loc, topModule,
                                         builder.getFunctionType({}, {}));
   builder.createBlock(&entryFunc.getBody());
+
+  // Save module name and port info before the module is erased
+  auto *hwOutput = hwModule.getBody().front().getTerminator();
+  SmallVector<std::pair<StringAttr, Value>> namedPorts;
+  for (auto &port : hwModule.getPortList()) {
+    Value portValue = port.isInput()
+                          ? hwModule.getBody().front().getArgument(port.argNum)
+                          : hwOutput->getOperand(port.argNum);
+    namedPorts.push_back({builder.getStringAttr(port.getName()), portValue});
+  }
 
   {
     OpBuilder::InsertionGuard guard(builder);
@@ -196,9 +198,24 @@ void LowerToBMCPass::runOnOperation() {
       verif::YieldOp::create(builder, loc, ValueRange{});
     }
   }
+  auto moduleName = hwModule.getNameAttr();
   bmcOp.getCircuit().takeBody(hwModule.getBody());
   hwModule->erase();
 
+  // signal names for counter-example generation.
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    auto &circuitBlock = bmcOp.getCircuit().front();
+    builder.setInsertionPoint(circuitBlock.getTerminator());
+    auto scope = debug::ScopeOp::create(
+        builder, loc, moduleName.getValue(),
+        // TODO: Hierarchy support would require walking parent InstanceOps,
+        // but LowerToBMC operates on a single top-level module with no
+        // instance context available at this point.
+        moduleName, nullptr);
+    for (auto &[name, value] : namedPorts)
+      debug::VariableOp::create(builder, loc, name, value, scope);
+  }
   // Define global string constants to print on success/failure
   auto createUniqueStringGlobal = [&](StringRef str) -> FailureOr<Value> {
     Location loc = moduleOp.getLoc();
@@ -218,30 +235,19 @@ void LowerToBMCPass::runOnOperation() {
         LLVM::AddressOfOp::create(builder, loc, global)->getResult(0));
   };
 
-  Value formatString;
-  if (noProperties) {
-    auto messageString = createUniqueStringGlobal(
-        "No properties provided - trivially no violations.\n");
-    if (failed(messageString)) {
-      moduleOp->emitOpError("could not create result message string");
-      return signalPassFailure();
-    }
-    formatString = messageString.value();
-  } else {
-    auto successStrAddr =
-        createUniqueStringGlobal("Bound reached with no violations!\n");
-    auto failureStrAddr =
-        createUniqueStringGlobal("Assertion can be violated!\n");
+  auto successStrAddr =
+      createUniqueStringGlobal("Bound reached with no violations!\n");
+  auto failureStrAddr =
+      createUniqueStringGlobal("Assertion can be violated!\n");
 
-    if (failed(successStrAddr) || failed(failureStrAddr)) {
-      moduleOp->emitOpError("could not create result message strings");
-      return signalPassFailure();
-    }
-
-    formatString =
-        LLVM::SelectOp::create(builder, loc, bmcOp.getResult(),
-                               successStrAddr.value(), failureStrAddr.value());
+  if (failed(successStrAddr) || failed(failureStrAddr)) {
+    moduleOp->emitOpError("could not create result message strings");
+    return signalPassFailure();
   }
+
+  auto formatString =
+      LLVM::SelectOp::create(builder, loc, bmcOp.getResult(),
+                             successStrAddr.value(), failureStrAddr.value());
 
   LLVM::CallOp::create(builder, loc, printfFunc.value(),
                        ValueRange{formatString});

@@ -65,8 +65,9 @@ struct Emitter {
   void emitDeclaration(SimulationOp op);
   void emitFormalLike(Operation *op, StringRef keyword, StringAttr symName,
                       StringAttr moduleName, DictionaryAttr params);
-  void emitEnabledLayers(ArrayRef<Attribute> layers);
-  void emitKnownLayers(ArrayRef<Attribute> layers);
+  void emitEnabledLayers(ArrayRef<Attribute> layers, Operation *op);
+  void emitKnownLayers(ArrayRef<Attribute> layers, Operation *op);
+  void emitRequirements(ArrayRef<Attribute> requirements);
   void emitParamAssign(ParamDeclAttr param, Operation *op,
                        std::optional<PPExtString> wordBeforeLHS = std::nullopt);
   void emitParamValue(Attribute value, Operation *op);
@@ -91,6 +92,7 @@ struct Emitter {
   void emitStatement(FFlushOp op);
   void emitStatement(ConnectOp op);
   void emitStatement(MatchingConnectOp op);
+  void emitStatement(PropertyAssertOp op);
   void emitStatement(PropAssignOp op);
   void emitStatement(InstanceOp op);
   void emitStatement(InstanceChoiceOp op);
@@ -111,6 +113,7 @@ struct Emitter {
   void emitStatement(LayerBlockOp op);
   void emitStatement(GenericIntrinsicOp op);
   void emitStatement(DomainCreateAnonOp op);
+  void emitStatement(DomainCreateOp op);
 
   template <class T>
   void emitVerifStatement(T op, StringRef mnemonic);
@@ -126,6 +129,7 @@ struct Emitter {
   void emitExpression(SubindexOp op);
   void emitExpression(SubaccessOp op);
   void emitExpression(OpenSubfieldOp op);
+  void emitExpression(DomainSubfieldOp op);
   void emitExpression(OpenSubindexOp op);
   void emitExpression(RefResolveOp op);
   void emitExpression(RefSendOp op);
@@ -143,6 +147,7 @@ struct Emitter {
   void emitExpression(GenericIntrinsicOp op);
   void emitExpression(CatPrimOp op);
   void emitExpression(UnsafeDomainCastOp op);
+  void emitExpression(UnknownValueOp op);
 
   void emitPrimExpr(StringRef mnemonic, Operation *op,
                     ArrayRef<uint32_t> attrs = {});
@@ -160,7 +165,7 @@ struct Emitter {
   void emitExpression(ShlPrimOp op) { emitPrimExpr("shl", op, op.getAmount()); }
   void emitExpression(ShrPrimOp op) { emitPrimExpr("shr", op, op.getAmount()); }
 
-  void emitExpression(TimeOp op){};
+  void emitExpression(TimeOp op) {}
 
   // Funnel all ops without attrs into `emitPrimExpr`.
 #define HANDLE(OPTYPE, MNEMONIC)                                               \
@@ -186,6 +191,7 @@ struct Emitter {
   HANDLE(AsSIntPrimOp, "asSInt");
   HANDLE(AsUIntPrimOp, "asUInt");
   HANDLE(AsAsyncResetPrimOp, "asAsyncReset");
+  HANDLE(AsResetPrimOp, "asReset");
   HANDLE(AsClockPrimOp, "asClock");
   HANDLE(CvtPrimOp, "cvt");
   HANDLE(NegPrimOp, "neg");
@@ -193,7 +199,32 @@ struct Emitter {
   HANDLE(AndRPrimOp, "andr");
   HANDLE(OrRPrimOp, "orr");
   HANDLE(XorRPrimOp, "xorr");
+  HANDLE(StringConcatOp, "string_concat");
 #undef HANDLE
+
+  void emitExpression(PropEqOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "property equality")))
+      return;
+    emitPrimExpr("prop_eq", op);
+  }
+
+  void emitExpression(BoolAndOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "boolean and")))
+      return;
+    emitPrimExpr("bool_and", op);
+  }
+
+  void emitExpression(BoolOrOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "boolean or")))
+      return;
+    emitPrimExpr("bool_or", op);
+  }
+
+  void emitExpression(BoolXorOp op) {
+    if (failed(requireVersion(missingSpecFIRVersion, op, "boolean xor")))
+      return;
+    emitPrimExpr("bool_xor", op);
+  }
 
   // Attributes
   void emitAttribute(MemDirAttr attr);
@@ -306,6 +337,15 @@ private:
     return op->emitOpError(message);
   }
 
+  /// Return false and emit an error if the target version is below minVersion.
+  LogicalResult requireVersion(FIRVersion minVersion, Operation *op,
+                               Twine feature) {
+    if (version >= minVersion)
+      return success();
+
+    return emitOpError(op, feature + " requires FIRRTL ") << minVersion;
+  }
+
   /// Return the name used during emission of a `Value`, or none if the value
   /// has not yet been emitted or it was emitted inline.
   std::optional<StringRef> lookupEmittedName(Value value) {
@@ -390,7 +430,7 @@ private:
     SymbolTable symbolTable;
     hw::InnerSymbolTableCollection istc;
     hw::InnerRefNamespace irn{symbolTable, istc};
-    SymInfos(Operation *op) : symbolTable(op), istc(op){};
+    SymInfos(Operation *op) : symbolTable(op), istc(op) {}
   };
   std::optional<std::reference_wrapper<SymInfos>> symInfos;
 
@@ -436,7 +476,11 @@ void Emitter::emitCircuit(CircuitOp op) {
   symInfos = std::nullopt;
 }
 
-void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers) {
+void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers, Operation *op) {
+  if (layers.empty())
+    return;
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "enabled layers")))
+    return;
   for (auto layer : layers) {
     ps << PP::space;
     ps.cbox(2, IndentStyle::Block);
@@ -446,7 +490,11 @@ void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers) {
   }
 }
 
-void Emitter::emitKnownLayers(ArrayRef<Attribute> layers) {
+void Emitter::emitKnownLayers(ArrayRef<Attribute> layers, Operation *op) {
+  if (layers.empty())
+    return;
+  if (failed(requireVersion(nextFIRVersion, op, "known layers")))
+    return;
   for (auto layer : layers) {
     ps << PP::space;
     ps.cbox(2, IndentStyle::Block);
@@ -454,6 +502,18 @@ void Emitter::emitKnownLayers(ArrayRef<Attribute> layers) {
     emitSymbol(cast<SymbolRefAttr>(layer));
     ps << PP::end;
   }
+}
+
+void Emitter::emitRequirements(ArrayRef<Attribute> requirements) {
+  if (requirements.empty())
+    return;
+  ps << PP::space;
+  ps.cbox(2, IndentStyle::Block);
+  ps << "requires" << PP::space;
+  llvm::interleaveComma(requirements, ps, [&](Attribute req) {
+    ps.writeQuotedEscaped(cast<StringAttr>(req).getValue());
+  });
+  ps << PP::end;
 }
 
 void Emitter::emitParamAssign(ParamDeclAttr param, Operation *op,
@@ -533,10 +593,10 @@ void Emitter::emitGenericIntrinsic(GenericIntrinsicOp op) {
 void Emitter::emitModule(FModuleOp op) {
   startStatement();
   ps.cbox(4, IndentStyle::Block);
-  if (op.isPublic())
+  if (op.isPublic() && FIRVersion(3, 3, 0) <= version)
     ps << "public" << PP::nbsp;
   ps << "module " << PPExtString(legalize(op.getNameAttr()));
-  emitEnabledLayers(op.getLayers());
+  emitEnabledLayers(op.getLayers(), op);
   ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
 
@@ -561,8 +621,10 @@ void Emitter::emitModule(FExtModuleOp op) {
   startStatement();
   ps.cbox(4, IndentStyle::Block);
   ps << "extmodule " << PPExtString(legalize(op.getNameAttr()));
-  emitKnownLayers(op.getKnownLayers());
-  emitEnabledLayers(op.getLayers());
+  emitKnownLayers(op.getKnownLayers(), op);
+  emitEnabledLayers(op.getLayers(), op);
+  if (auto reqs = op.getExternalRequirements())
+    emitRequirements(reqs.getValue());
   ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
 
@@ -587,10 +649,14 @@ void Emitter::emitModule(FExtModuleOp op) {
 
 /// Emit an intrinsic module
 void Emitter::emitModule(FIntModuleOp op) {
+  if (FIRVersion(4, 0, 0) <= version) {
+    emitOpError(op, "intrinsic modules were removed in FIRRTL 4.0.0");
+    return;
+  }
   startStatement();
   ps.cbox(4, IndentStyle::Block);
   ps << "intmodule " << PPExtString(legalize(op.getNameAttr()));
-  emitEnabledLayers(op.getLayers());
+  emitEnabledLayers(op.getLayers(), op);
   ps << PP::nbsp << ":" << PP::end;
   emitLocation(op);
 
@@ -640,6 +706,8 @@ void Emitter::emitModuleParameters(Operation *op, ArrayAttr parameters) {
 }
 
 void Emitter::emitDeclaration(DomainOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "domains")))
+    return;
   startStatement();
   ps << "domain " << PPExtString(op.getSymName()) << " :";
   emitLocationAndNewLine(op);
@@ -654,6 +722,11 @@ void Emitter::emitDeclaration(DomainOp op) {
 
 /// Emit a layer definition.
 void Emitter::emitDeclaration(LayerOp op) {
+  if (failed(requireVersion(FIRVersion(3, 3, 0), op, "layers")))
+    return;
+  if (op.getConvention() == LayerConvention::Inline &&
+      failed(requireVersion(FIRVersion(4, 1, 0), op, "inline layers")))
+    return;
   startStatement();
   ps << "layer " << PPExtString(op.getSymName()) << ", "
      << PPExtString(stringifyLayerConvention(op.getConvention()));
@@ -679,6 +752,8 @@ void Emitter::emitDeclaration(LayerOp op) {
 
 /// Emit an option declaration.
 void Emitter::emitDeclaration(OptionOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "option groups")))
+    return;
   startStatement();
   ps << "option " << PPExtString(legalize(op.getSymNameAttr())) << " :";
   emitLocation(op);
@@ -694,12 +769,16 @@ void Emitter::emitDeclaration(OptionOp op) {
 
 /// Emit a formal test definition.
 void Emitter::emitDeclaration(FormalOp op) {
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "formal tests")))
+    return;
   emitFormalLike(op, "formal", op.getSymNameAttr(),
                  op.getModuleNameAttr().getAttr(), op.getParameters());
 }
 
 /// Emit a simulation test definition.
 void Emitter::emitDeclaration(SimulationOp op) {
+  if (failed(requireVersion(nextFIRVersion, op, "simulation tests")))
+    return;
   emitFormalLike(op, "simulation", op.getSymNameAttr(),
                  op.getModuleNameAttr().getAttr(), op.getParameters());
 }
@@ -748,13 +827,13 @@ void Emitter::emitStatementsInBlock(Block &block) {
     TypeSwitch<Operation *>(&bodyOp)
         .Case<WhenOp, WireOp, RegOp, RegResetOp, NodeOp, StopOp, SkipOp,
               PrintFOp, FPrintFOp, FFlushOp, AssertOp, AssumeOp, CoverOp,
-              ConnectOp, MatchingConnectOp, PropAssignOp, InstanceOp,
-              InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp, SeqMemOp,
-              CombMemOp, MemoryPortOp, MemoryDebugPortOp, MemoryPortAccessOp,
-              DomainDefineOp, RefDefineOp, RefForceOp, RefForceInitialOp,
-              RefReleaseOp, RefReleaseInitialOp, LayerBlockOp,
-              GenericIntrinsicOp, DomainCreateAnonOp>(
-            [&](auto op) { emitStatement(op); })
+              ConnectOp, MatchingConnectOp, PropertyAssertOp, PropAssignOp,
+              InstanceOp, InstanceChoiceOp, AttachOp, MemOp, InvalidValueOp,
+              SeqMemOp, CombMemOp, MemoryPortOp, MemoryDebugPortOp,
+              MemoryPortAccessOp, DomainDefineOp, RefDefineOp, RefForceOp,
+              RefForceInitialOp, RefReleaseOp, RefReleaseInitialOp,
+              LayerBlockOp, GenericIntrinsicOp, DomainCreateAnonOp,
+              DomainCreateOp>([&](auto op) { emitStatement(op); })
         .Default([&](auto op) {
           startStatement();
           ps << "// operation " << PPExtString(op->getName().getStringRef());
@@ -799,6 +878,19 @@ void Emitter::emitStatement(WireOp op) {
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "wire " << PPExtString(legalName);
     emitTypeWithColon(op.getResult().getType());
+
+    // Emit domain associations if present
+    if (!op.getDomains().empty()) {
+      ps << PP::space << "domains" << PP::space << "[";
+      ps.scopedBox(PP::cbox0, [&]() {
+        llvm::interleaveComma(op.getDomains(), ps, [&](Value domain) {
+          auto name = lookupEmittedName(domain);
+          assert(name && "domain value must have a name");
+          ps << PPExtString(*name);
+        });
+      });
+      ps << "]";
+    }
   });
   emitLocationAndNewLine(op);
 }
@@ -974,6 +1066,8 @@ void Emitter::emitStatement(PrintFOp op) {
 }
 
 void Emitter::emitStatement(FPrintFOp op) {
+  if (failed(requireVersion(nextFIRVersion, op, "fprintf")))
+    return;
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "fprintf(" << PP::ibox0;
@@ -1008,6 +1102,8 @@ void Emitter::emitStatement(FPrintFOp op) {
 }
 
 void Emitter::emitStatement(FFlushOp op) {
+  if (failed(requireVersion(nextFIRVersion, op, "fflush")))
+    return;
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "fflush(" << PP::ibox0;
@@ -1103,7 +1199,20 @@ void Emitter::emitStatement(MatchingConnectOp op) {
   emitLocationAndNewLine(op);
 }
 
+void Emitter::emitStatement(PropertyAssertOp op) {
+  startStatement();
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "propassert" << PP::space;
+    emitExpression(op.getCondition());
+    ps << "," << PP::space;
+    ps.writeQuotedEscaped(op.getMessage());
+  });
+  emitLocationAndNewLine(op);
+}
+
 void Emitter::emitStatement(PropAssignOp op) {
+  if (failed(requireVersion(FIRVersion(3, 1, 0), op, "properties")))
+    return;
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
     ps << "propassign" << PP::space;
@@ -1132,6 +1241,9 @@ void Emitter::emitStatement(InstanceOp op) {
 }
 
 void Emitter::emitStatement(InstanceChoiceOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op,
+                            "option groups/instance choices")))
+    return;
   startStatement();
   auto legalName = legalize(op.getNameAttr());
   ps << "instchoice " << PPExtString(legalName) << " of "
@@ -1284,6 +1396,8 @@ void Emitter::emitStatement(MemoryPortAccessOp op) {
 }
 
 void Emitter::emitStatement(DomainDefineOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "domains")))
+    return;
   // If the source is an anonymous domain, then we can skip emitting this op.
   if (isa_and_nonnull<DomainCreateAnonOp>(op.getSrc().getDefiningOp()))
     return;
@@ -1350,6 +1464,8 @@ void Emitter::emitStatement(RefReleaseInitialOp op) {
 }
 
 void Emitter::emitStatement(LayerBlockOp op) {
+  if (failed(requireVersion(FIRVersion(3, 3, 0), op, "layers")))
+    return;
   startStatement();
   ps << "layerblock " << op.getLayerName().getLeafReference() << " :";
   emitLocationAndNewLine(op);
@@ -1382,6 +1498,8 @@ void Emitter::emitStatement(InvalidValueOp op) {
 }
 
 void Emitter::emitStatement(GenericIntrinsicOp op) {
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "generic intrinsics")))
+    return;
   startStatement();
   if (op.use_empty())
     emitGenericIntrinsic(op);
@@ -1399,6 +1517,28 @@ void Emitter::emitStatement(DomainCreateAnonOp op) {
   // These ops are not emitted.
 }
 
+void Emitter::emitStatement(DomainCreateOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "domains")))
+    return;
+  startStatement();
+  auto name = legalize(op.getNameAttr());
+  addValueName(op.getResult(), name);
+  ps.scopedBox(PP::ibox2, [&]() {
+    ps << "domain " << PPExtString(name) << " of "
+       << PPExtString(op.getDomainAttr().getValue());
+
+    auto fieldValues = op.getFieldValues();
+    if (fieldValues.empty())
+      return;
+
+    ps << "(" << PP::ibox0;
+    interleaveComma(fieldValues, [&](auto value) { emitExpression(value); });
+    ps << ")" << PP::end;
+  });
+
+  emitLocationAndNewLine(op);
+}
+
 void Emitter::emitExpression(Value value) {
   // Handle the trivial case where we already have a name for this value which
   // we can use.
@@ -1414,19 +1554,22 @@ void Emitter::emitExpression(Value value) {
       .Case<
           // Basic expressions
           ConstantOp, SpecialConstantOp, SubfieldOp, SubindexOp, SubaccessOp,
-          OpenSubfieldOp, OpenSubindexOp,
+          OpenSubfieldOp, OpenSubindexOp, DomainSubfieldOp,
           // Binary
           AddPrimOp, SubPrimOp, MulPrimOp, DivPrimOp, RemPrimOp, AndPrimOp,
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
           EQPrimOp, NEQPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
           // Unary
-          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsClockPrimOp,
-          CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
+          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
+          AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp,
+          XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
           ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
           FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
           UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
+          UnknownValueOp, StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp,
+          BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1497,6 +1640,12 @@ void Emitter::emitExpression(OpenSubfieldOp op) {
   auto type = op.getInput().getType();
   emitExpression(op.getInput());
   ps << "." << legalize(type.getElementNameAttr(op.getFieldIndex()));
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+void Emitter::emitExpression(DomainSubfieldOp op) {
+  emitExpression(op.getInput());
+  ps << "." << legalize(op.getFieldName());
 }
 
 void Emitter::emitExpression(OpenSubindexOp op) {
@@ -1578,16 +1727,22 @@ void Emitter::emitExpression(UninferredResetCastOp op) {
 }
 
 void Emitter::emitExpression(FIntegerConstantOp op) {
+  if (failed(requireVersion(FIRVersion(3, 1, 0), op, "Integers")))
+    return;
   ps << "Integer(";
   ps.addAsString(op.getValue());
   ps << ")";
 }
 
 void Emitter::emitExpression(BoolConstantOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Bools")))
+    return;
   ps << "Bool(" << (op.getValue() ? "true" : "false") << ")";
 }
 
 void Emitter::emitExpression(DoubleConstantOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Doubles")))
+    return;
   ps << "Double(";
   // Use APFloat::toString.
   // Printing as double is not what we want,
@@ -1600,22 +1755,30 @@ void Emitter::emitExpression(DoubleConstantOp op) {
 }
 
 void Emitter::emitExpression(StringConstantOp op) {
+  if (failed(requireVersion(FIRVersion(3, 1, 0), op, "Strings")))
+    return;
   ps << "String(";
   ps.writeQuotedEscaped(op.getValue());
   ps << ")";
 }
 
 void Emitter::emitExpression(ListCreateOp op) {
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "Lists")))
+    return;
   return emitLiteralExpression(op.getType(), op.getElements());
 }
 
 void Emitter::emitExpression(UnresolvedPathOp op) {
+  if (failed(requireVersion(missingSpecFIRVersion, op, "Paths")))
+    return;
   ps << "path(";
   ps.writeQuotedEscaped(op.getTarget());
   ps << ")";
 }
 
 void Emitter::emitExpression(GenericIntrinsicOp op) {
+  if (failed(requireVersion(FIRVersion(4, 0, 0), op, "generic intrinsics")))
+    return;
   emitGenericIntrinsic(op);
 }
 
@@ -1668,10 +1831,21 @@ void Emitter::emitExpression(CatPrimOp op) {
 }
 
 void Emitter::emitExpression(UnsafeDomainCastOp op) {
+  if (failed(requireVersion(nextFIRVersion, op, "unsafe_domain_cast")))
+    return;
   ps << "unsafe_domain_cast(" << PP::ibox0;
   interleaveComma(op.getOperands(),
                   [&](Value operand) { emitExpression(operand); });
   ps << ")" << PP::end;
+}
+
+void Emitter::emitExpression(UnknownValueOp op) {
+  if (failed(
+          requireVersion(nextFIRVersion, op, "unknown property expressions")))
+    return;
+  ps << "Unknown(";
+  emitType(op.getType());
+  ps << ")";
 }
 
 void Emitter::emitAttribute(MemDirAttr attr) {
@@ -1787,7 +1961,9 @@ void Emitter::emitType(Type type, bool includeConst) {
         emitType(type.getElementType());
         ps << ">";
       })
-      .Case<DomainType>([&](DomainType type) { ps << "Domain"; })
+      .Case<DomainType>([&](DomainType type) {
+        ps << "Domain of " << PPExtString(type.getName().getValue());
+      })
       .Default([&](auto type) {
         llvm_unreachable("all types should be implemented");
       });
@@ -1796,21 +1972,16 @@ void Emitter::emitType(Type type, bool includeConst) {
 void Emitter::emitDomains(Attribute attr, ArrayRef<PortInfo> ports) {
   if (!attr)
     return;
-  if (auto domains = dyn_cast<ArrayAttr>(attr)) {
-    if (domains.empty())
-      return;
-    ps << " domains [";
-    ps.scopedBox(PP::ibox0, [&]() {
-      interleaveComma(domains, [&](Attribute attr) {
-        ps.addAsString(
-            ports[cast<IntegerAttr>(attr).getUInt()].name.getValue());
-      });
-      ps << "]";
+  auto domains = cast<ArrayAttr>(attr);
+  if (domains.empty())
+    return;
+  ps << " domains [";
+  ps.scopedBox(PP::ibox0, [&]() {
+    interleaveComma(domains, [&](Attribute attr) {
+      ps.addAsString(ports[cast<IntegerAttr>(attr).getUInt()].name.getValue());
     });
-  } else {
-    auto kind = cast<FlatSymbolRefAttr>(attr);
-    ps << " of " << PPExtString(kind.getValue());
-  }
+    ps << "]";
+  });
 }
 
 /// Emit a location as `@[<filename> <line>:<column>]` annotation, including a
@@ -1843,6 +2014,10 @@ mlir::LogicalResult
 circt::firrtl::exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
                              std::optional<size_t> targetLineLength,
                              FIRVersion version) {
+  if (version < minimumFIRVersion)
+    return module.emitError("--firrtl-version ")
+           << version << " is below the minimum supported "
+           << "version " << minimumFIRVersion;
   Emitter emitter(os, version,
                   targetLineLength.value_or(defaultTargetLineLength));
   for (auto &op : *module.getBody()) {
@@ -1858,10 +2033,24 @@ void circt::firrtl::registerToFIRFileTranslation() {
       llvm::cl::desc("Target line length for emitted .fir"),
       llvm::cl::value_desc("number of chars"),
       llvm::cl::init(defaultTargetLineLength));
+  static llvm::cl::opt<std::string> firrtlVersionStr(
+      "firrtl-version",
+      llvm::cl::desc("FIRRTL version to target (e.g. \"3.0.0\"). "
+                     "Defaults to the latest supported version."),
+      llvm::cl::value_desc("major.minor.patch"), llvm::cl::init(""));
   static mlir::TranslateFromMLIRRegistration toFIR(
       "export-firrtl", "emit FIRRTL dialect operations to .fir output",
-      [](ModuleOp module, llvm::raw_ostream &os) {
-        return exportFIRFile(module, os, targetLineLength, exportFIRVersion);
+      [](ModuleOp module, llvm::raw_ostream &os) -> mlir::LogicalResult {
+        FIRVersion version = exportFIRVersion;
+        if (!firrtlVersionStr.empty()) {
+          auto ver = FIRVersion::fromString(firrtlVersionStr);
+          if (!ver)
+            return module.emitError("invalid --firrtl-version: '")
+                   << firrtlVersionStr
+                   << "', expected format 'major.minor.patch'";
+          version = *ver;
+        }
+        return exportFIRFile(module, os, targetLineLength, version);
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();

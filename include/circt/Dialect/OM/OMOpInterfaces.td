@@ -49,9 +49,9 @@ def ClassLike : OpInterface<"ClassLike"> {
   ];
 }
 
-def IntegerBinaryArithmeticInterface : OpInterface<"IntegerBinaryArithmeticOp"> {
+def IntegerBinaryInterface : OpInterface<"IntegerBinaryOp"> {
   let cppNamespace = "circt::om";
-  let description = "Common interface for integer binary arithmetic ops.";
+  let description = "Common interface for integer binary ops.";
   let methods = [
     InterfaceMethod<"Get the lhs Value",
       "mlir::Value", "getLhs", (ins)>,
@@ -59,9 +59,25 @@ def IntegerBinaryArithmeticInterface : OpInterface<"IntegerBinaryArithmeticOp"> 
       "mlir::Value", "getRhs", (ins)>,
     InterfaceMethod<"Get the result Value",
       "mlir::Value", "getResult", (ins)>,
-    InterfaceMethod<"Evaluate the integer binary arithmetic operation",
+    InterfaceMethod<"Evaluate the integer binary operation",
       "mlir::FailureOr<llvm::APSInt>", "evaluateIntegerOperation",
       (ins "const llvm::APSInt &":$lhs, "const llvm::APSInt &":$rhs)>
+  ];
+}
+
+def BinaryEqualityInterface : OpInterface<"BinaryEqualityOp"> {
+  let cppNamespace = "circt::om";
+  let description = "Common interface for binary property equality ops.";
+  let methods = [
+    InterfaceMethod<"Get the lhs Value",
+      "mlir::Value", "getLhs", (ins)>,
+    InterfaceMethod<"Get the rhs Value",
+      "mlir::Value", "getRhs", (ins)>,
+    InterfaceMethod<"Get the result Value",
+      "mlir::Value", "getResult", (ins)>,
+    InterfaceMethod<"Evaluate the binary equality operation",
+      "mlir::FailureOr<mlir::Attribute>", "evaluateBinaryEquality",
+      (ins "mlir::Attribute":$lhs, "mlir::Attribute":$rhs)>
   ];
 }
 

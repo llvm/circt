@@ -11,6 +11,7 @@
 
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/LTL/LTLDialect.h"
 #include "circt/Dialect/LTL/LTLTypes.h"
 

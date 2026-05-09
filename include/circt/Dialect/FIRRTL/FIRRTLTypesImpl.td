@@ -607,11 +607,49 @@ def FStringImpl : FIRRTLImplType<"FString", [], "::circt::firrtl::FIRRTLType" > 
   let typeName = "firrtl.fstring";
 }
 
-def DomainTypeImpl : FIRRTLImplType<"Domain", [], "::circt::firrtl::FIRRTLType"> {
-  let summary = "A domain type";
-  let parameters = (ins);
+def DomainTypeImpl : FIRRTLImplType<"Domain", [
+  DeclareTypeInterfaceMethods<FieldIDTypeInterface>], "::circt::firrtl::FIRRTLType"> {
+  let summary = [{
+    An instance of a domain.
+
+    Examples:
+    ```mlir
+    // Domain without fields
+    !firrtl.domain<@ClockDomain()>
+
+    // Domain with fields
+    !firrtl.domain<@PowerDomain(voltage: !firrtl.integer, frequency: !firrtl.integer)>
+    ```
+  }];
+  let parameters = (ins
+    "FlatSymbolRefAttr":$name,
+    "ArrayAttr":$fields
+  );
   let genStorageClass = true;
   let typeName = "firrtl.domain";
+  let genAccessors = true;
+  let builders = [
+    TypeBuilderWithInferredContext<(ins
+      "FlatSymbolRefAttr":$name,
+      "ArrayAttr":$fields
+    )>
+  ];
+  let extraClassDeclaration = [{
+    /// Helper to parse this type as a domain interface.
+    static ParseResult parseInterface(
+      AsmParser &parser, DomainType &result);
+
+    /// Construct a DomainType from a DomainOp definition.
+    static DomainType getFromDomainOp(DomainOp domainOp);
+
+    size_t getNumFields() const { return getFields().size(); }
+    DomainFieldAttr getField(size_t index) const;
+    std::optional<uint64_t> getFieldIndex(StringRef fieldName) const;
+
+    /// Verify that this domain type matches the domain definition.
+    LogicalResult verifySymbolUses(Operation *op,
+                                   SymbolTableCollection &symbolTable) const;
+  }];
 }
 
 #endif // CIRCT_DIALECT_FIRRTL_FIRRTLTYPESIMPL_TD

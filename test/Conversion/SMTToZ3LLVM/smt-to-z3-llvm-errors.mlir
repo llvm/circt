@@ -21,3 +21,13 @@ func.func @multiple_set_logics() {
   }
   func.return
 }
+
+// -----
+
+// Make sure we don't delete dbg.scope ops whose users aren't being erased
+func.func @multiple_set_logics() {
+  // expected-error @below {{failed to legalize operation 'dbg.scope'}}
+  %scope = dbg.scope "a", "A"
+  builtin.unrealized_conversion_cast %scope : !dbg.scope to i32
+  func.return
+}

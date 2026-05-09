@@ -40,6 +40,7 @@ namespace {
 struct HWGeneratorCalloutPass
     : public circt::sv::impl::HWGeneratorCalloutPassBase<
           HWGeneratorCalloutPass> {
+  using Base::Base;
   void runOnOperation() override;
 
   void processGenerator(HWModuleGeneratedOp generatedModuleOp,
@@ -167,8 +168,4 @@ void HWGeneratorCalloutPass::processGenerator(
   // module exists in.
   extMod->setAttr("filenames", builder.getStringAttr(fileContent));
   generatedModuleOp.erase();
-}
-
-std::unique_ptr<Pass> circt::sv::createHWGeneratorCalloutPass() {
-  return std::make_unique<HWGeneratorCalloutPass>();
 }

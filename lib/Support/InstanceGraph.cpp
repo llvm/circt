@@ -226,7 +226,7 @@ InstanceGraph::getInferredTopLevelNodes() {
     err << ").";
     return err;
   }
-  assert(!candidateTopLevels.empty() &&
+  assert((visited.empty() || !candidateTopLevels.empty()) &&
          "if non-cyclic, there should be at least 1 candidate top level");
 
   inferredTopLevelNodes = llvm::SmallVector<InstanceGraphNode *>(

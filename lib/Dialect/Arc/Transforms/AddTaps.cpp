@@ -99,7 +99,3 @@ struct AddTapsPass : public arc::impl::AddTapsBase<AddTapsPass> {
   }
 };
 } // namespace
-
-std::unique_ptr<Pass> arc::createAddTapsPass(const AddTapsOptions &options) {
-  return std::make_unique<AddTapsPass>(options);
-}

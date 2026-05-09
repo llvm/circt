@@ -1,5 +1,5 @@
 add_circt_dialect(LTL ltl)
-add_circt_doc(LTLOps Dialects/LTLOps -gen-op-doc)
+add_circt_doc(LTLOps Dialects/LTLOps -gen-op-doc -dialect ltl)
 add_circt_doc(LTLTypes Dialects/LTLTypes -gen-typedef-doc -dialect ltl)
 
 set(LLVM_TARGET_DEFINITIONS LTL.td)

@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTRTGTestDialect
   MLIRRTGTestIncGen
   CIRCTRTGTestEnumsIncGen
   CIRCTRTGTestAttributeIncGen
+  CIRCTRTGTestInstructionMethodsIncGen
   
   LINK_LIBS PUBLIC
   MLIRIR

@@ -1131,3 +1131,86 @@ firrtl.circuit "DPI"   {
     firrtl.matchingconnect %out_0, %0 : !firrtl.uint<8>
   }
 }
+
+// -----
+
+// Test that InstanceChoiceOp is handled correctly - no loop case
+// CHECK: firrtl.circuit "InstanceChoiceNoLoop"
+firrtl.circuit "InstanceChoiceNoLoop" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  firrtl.module private @DefaultImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.matchingconnect %out, %in : !firrtl.uint<8>
+  }
+
+  firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.matchingconnect %out, %in : !firrtl.uint<8>
+  }
+
+  firrtl.module @InstanceChoiceNoLoop(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<8>) {
+    %inst_in, %inst_out = firrtl.instance_choice inst @DefaultImpl alternatives @Platform {
+      @FPGA -> @FPGAImpl
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.matchingconnect %inst_in, %x : !firrtl.uint<8>
+    firrtl.matchingconnect %y, %inst_out : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Test that InstanceChoiceOp detects loops through default module
+firrtl.circuit "InstanceChoiceLoopDefault" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module private @LoopImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.matchingconnect %out, %in : !firrtl.uint<8>
+  }
+
+  firrtl.module private @NoLoopImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %c0_ui8 : !firrtl.uint<8>
+  }
+
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: InstanceChoiceLoopDefault.{inst.in <- y <- inst.out <- inst.in}}
+  firrtl.module @InstanceChoiceLoopDefault(in %x: !firrtl.uint<8>) {
+    %y = firrtl.wire : !firrtl.uint<8>
+    %inst_in, %inst_out = firrtl.instance_choice inst @LoopImpl alternatives @Platform {
+      @FPGA -> @NoLoopImpl
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.matchingconnect %inst_in, %y : !firrtl.uint<8>
+    firrtl.matchingconnect %y, %inst_out : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Test that InstanceChoiceOp detects loops through alternative module
+firrtl.circuit "InstanceChoiceLoopAlt" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  firrtl.module private @NoLoopImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %c0_ui8 : !firrtl.uint<8>
+  }
+
+  firrtl.module private @LoopImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.matchingconnect %out, %in : !firrtl.uint<8>
+  }
+
+  // expected-error @below {{detected combinational cycle in a FIRRTL module, sample path: InstanceChoiceLoopAlt.{inst.in <- y <- inst.out <- inst.in}}
+  firrtl.module @InstanceChoiceLoopAlt(in %x: !firrtl.uint<8>) {
+    %y = firrtl.wire : !firrtl.uint<8>
+    %inst_in, %inst_out = firrtl.instance_choice inst @NoLoopImpl alternatives @Platform {
+      @FPGA -> @LoopImpl
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.matchingconnect %inst_in, %y : !firrtl.uint<8>
+    firrtl.matchingconnect %y, %inst_out : !firrtl.uint<8>
+  }
+}

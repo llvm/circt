@@ -8,8 +8,8 @@
 
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/Matchers.h"
@@ -22,7 +22,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_REMOVECONTROLFLOWPASS
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
+#include "circt/Dialect/LLHD/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -94,7 +94,7 @@ struct Condition {
       return false;
     if (isFalse())
       return true;
-    return comb::createOrFoldNot(getValue().getLoc(), getValue(), builder);
+    return comb::createOrFoldNot(builder, getValue().getLoc(), getValue());
   }
 
 private:

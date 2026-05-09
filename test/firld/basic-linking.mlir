@@ -28,7 +28,7 @@ module {
       firrtl.connect %6, %7 : !firrtl.uint<32>
     }
     // CHECK-NOT: firrtl.extmodule
-    firrtl.extmodule @Inner(in i: !firrtl.uint<32>, out o: !firrtl.uint<32>) attributes {defname = "Inner"}
+    firrtl.extmodule private @Inner(in i: !firrtl.uint<32>, out o: !firrtl.uint<32>) attributes {defname = "Inner"}
   }
 }
 

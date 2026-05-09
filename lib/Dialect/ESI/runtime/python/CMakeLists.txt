@@ -6,11 +6,24 @@ set(ESIPythonRuntimeSources
   esiaccel/__init__.py
   esiaccel/accelerator.py
   esiaccel/codegen.py
+  esiaccel/esitester.py
   esiaccel/types.py
   esiaccel/utils.py
   esiaccel/cosim/questa.py
+  esiaccel/cosim/pytest.py
   esiaccel/cosim/simulator.py
   esiaccel/cosim/verilator.py
+
+  esiaccel/bsp/__init__.py
+  esiaccel/bsp/common.py
+  esiaccel/bsp/cosim.py
+  esiaccel/bsp/dma.py
+  esiaccel/bsp/xrt.py
+  esiaccel/bsp/Makefile.xrt.mk
+  esiaccel/bsp/xrt_package.tcl
+  esiaccel/bsp/xrt.ini
+  esiaccel/bsp/xrt_vitis.cfg
+  esiaccel/bsp/xsim.tcl
 )
 
 # Nanobind is used to wrap the ESICppRuntime APIs.
@@ -48,10 +61,26 @@ if(Python3_FOUND)
     if (WHEEL_BUILD)
       message (FATAL_ERROR "nanobind is required for a wheel build.")
     endif()
+  elseif(MSVC AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+    # On MSVC in Debug mode, nanobind's CRT mismatch causes linking issues
+    # with the Python import library. Disable the Python module entirely.
+    message(WARNING "Disabling ESI Python API in MSVC Debug mode due to nanobind CRT incompatibility.")
   else()
     # Compile nanobind module and copy to the correct python directory.
     nanobind_add_module(esiCppAccel
       ${CMAKE_CURRENT_SOURCE_DIR}/esiaccel/esiCppAccel.cpp)
+
+    # For wheel builds on Linux, force static linking of libstdc++ to avoid
+    # undefined symbols when ESICppRuntime's static libstdc++ symbols aren't
+    # exported in its dynamic symbol table.
+    if(WHEEL_BUILD AND UNIX AND NOT APPLE)
+      target_link_options(esiCppAccel PRIVATE
+        -static-libstdc++
+        -static-libgcc
+        -Wl,--exclude-libs,ALL
+      )
+    endif()
+
     target_link_libraries(esiCppAccel PRIVATE ESICppRuntime)
     set_target_properties(esiCppAccel PROPERTIES
       LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/esiaccel"
@@ -81,7 +110,7 @@ if(Python3_FOUND)
         )
       else()
         install(FILES "${CMAKE_CURRENT_BINARY_DIR}/esiaccel/esiCppAccel.pyi"
-          DESTINATION python/esiaccel
+          DESTINATION esiaccel
           COMPONENT ESIRuntime
         )
       endif()
@@ -92,7 +121,7 @@ if(Python3_FOUND)
         INSTALL_RPATH "$ORIGIN/lib")
     else()
       set_target_properties(esiCppAccel PROPERTIES
-        INSTALL_RPATH "$ORIGIN/../../lib")
+        INSTALL_RPATH "$ORIGIN/../lib")
     endif()
     set_target_properties(esiCppAccel PROPERTIES
       INSTALL_RPATH_USE_LINK_PATH FALSE)
@@ -104,7 +133,7 @@ if(Python3_FOUND)
       )
     else()
       install(TARGETS esiCppAccel
-        DESTINATION python/esiaccel
+        DESTINATION esiaccel
         COMPONENT ESIRuntime
       )
     endif()
@@ -115,10 +144,10 @@ if(Python3_FOUND)
     )
 
     foreach(pysrc ${ESIPythonRuntimeSources})
-      # Copy each of the Python sources to the build dir.
+      # Symlink each Python source into the build dir.
       add_custom_command(
           OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
-          COMMAND ${CMAKE_COMMAND} -E copy
+          COMMAND ${CMAKE_COMMAND} -E create_symlink
               ${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}
               ${CMAKE_CURRENT_BINARY_DIR}/${pysrc}
           DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${pysrc}

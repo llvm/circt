@@ -1,8 +1,6 @@
 // See other `basic-*.mlir` files for run lines.
 // RUN: true
 
-// CHECK: 1 tests FAILED, 9 passed, 1 ignored, 3 unsupported
-
 hw.module @FullAdder(in %a: i1, in %b: i1, in %ci: i1, out s: i1, out co: i1) {
   %0 = comb.xor %a, %b : i1
   %1 = comb.xor %0, %ci : i1
@@ -35,6 +33,7 @@ hw.module @CustomAdder(in %a: i4, in %b: i4, out z: i4) {
   hw.output %z : i4
 }
 
+// CHECK: test ZeroLhs ... passed
 verif.formal @ZeroLhs {} {
   %c0_i4 = hw.constant 0 : i4
   %x = verif.symbolic_value : i4
@@ -43,6 +42,7 @@ verif.formal @ZeroLhs {} {
   verif.assert %eq : i1
 }
 
+// CHECK: test ZeroRhs ... passed
 verif.formal @ZeroRhs {} {
   %c0_i4 = hw.constant 0 : i4
   %x = verif.symbolic_value : i4
@@ -51,6 +51,7 @@ verif.formal @ZeroRhs {} {
   verif.assert %eq : i1
 }
 
+// CHECK: test CustomAdderWorks ... passed
 verif.formal @CustomAdderWorks {} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
@@ -76,6 +77,7 @@ hw.module @ALU(in %a: i4, in %b: i4, in %sub: i1, out z: i4) {
   hw.output %z : i4
 }
 
+// CHECK: test ALUCanAdd ... passed
 verif.formal @ALUCanAdd {} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
@@ -86,6 +88,7 @@ verif.formal @ALUCanAdd {} {
   verif.assert %eq : i1
 }
 
+// CHECK: test ALUCanSub ... passed
 verif.formal @ALUCanSub {mode = "cover,induction"} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
@@ -96,6 +99,7 @@ verif.formal @ALUCanSub {mode = "cover,induction"} {
   verif.assert %eq : i1
 }
 
+// CHECK: test ALUWorks ... passed
 verif.formal @ALUWorks {mode = "cover,bmc", depth = 5} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
@@ -114,6 +118,7 @@ verif.formal @ALUWorks {mode = "cover,bmc", depth = 5} {
   verif.assert %eq : i1
 }
 
+// CHECK: test ALUIgnoreFailure ... ignored
 verif.formal @ALUIgnoreFailure {ignore = true} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
@@ -132,6 +137,7 @@ verif.formal @ALUIgnoreFailure {ignore = true} {
   verif.assert %ne : i1
 }
 
+// CHECK: test ALUFailure ... FAILED
 verif.formal @ALUFailure {depth = 3} {
   %a = verif.symbolic_value : i4
   %b = verif.symbolic_value : i4
@@ -150,31 +156,41 @@ verif.formal @ALUFailure {depth = 3} {
   verif.assert %ne : i1
 }
 
+// CHECK: test RunnerRequireEither ... pass
 verif.formal @RunnerRequireEither {require_runners = ["sby", "circt-bmc"]} {
   %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
+// CHECK-SBY: test RunnerRequireSby ... pass
+// CHECK-CIRCT-BMC: test RunnerRequireSby ... unsupported
 verif.formal @RunnerRequireSby {require_runners = ["sby"]} {
   %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
+// CHECK-SBY: test RunnerRequireCirctBmc ... unsupported
+// CHECK-CIRCT-BMC: test RunnerRequireCirctBmc ... pass
 verif.formal @RunnerRequireCirctBmc {require_runners = ["circt-bmc"]} {
   %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
+// CHECK: test RunnerExcludeEither ... unsupported
 verif.formal @RunnerExcludeEither {exclude_runners = ["sby", "circt-bmc"]} {
   %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
+// CHECK-SBY: test RunnerExcludeSby ... unsupported
+// CHECK-CIRCT-BMC: test RunnerExcludeSby ... pass
 verif.formal @RunnerExcludeSby {exclude_runners = ["sby"]} {
   %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
 }
 
+// CHECK-SBY: test RunnerExcludeCirctBmc ... pass
+// CHECK-CIRCT-BMC: test RunnerExcludeCirctBmc ... unsupported
 verif.formal @RunnerExcludeCirctBmc {exclude_runners = ["circt-bmc"]} {
   %0 = hw.instance "dummy" @DummyModule() -> (z: i1)
   verif.assert %0 : i1
@@ -186,3 +202,5 @@ hw.module @DummyModule(out z: i1) {
   %true = hw.constant true
   hw.output %true : i1
 }
+
+// CHECK: 1 of 10 tests FAILED; 9 passed; 1 ignored; 3 unsupported

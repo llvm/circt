@@ -1,6 +1,6 @@
 // RUN: circt-opt -lower-handshake-to-hw --split-input-file %s | FileCheck %s
 
-// CHECK-LABEL:   hw.module @handshake_buffer_3slots_seq_1ins_1outs_ctrl(in 
+// CHECK-LABEL:   hw.module @handshake_buffer_in_none_out_none_3slots_seq_1ins_1outs_ctrl(in 
 // CHECK-SAME:            %[[VAL_0:.*]] : !esi.channel<i0>, in %[[VAL_1:.*]] : !seq.clock, in %[[VAL_2:.*]] : i1, out out0 : !esi.channel<i0>) {
 // CHECK:           %[[VAL_3:.*]], %[[VAL_4:.*]] = esi.unwrap.vr %[[VAL_0]], %[[VAL_5:.*]] : i0
 // CHECK:           %[[VAL_6:.*]], %[[VAL_7:.*]] = esi.wrap.vr %[[VAL_8:.*]], %[[VAL_9:.*]] : i0

@@ -13,6 +13,7 @@
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -68,12 +69,10 @@ class MutableNLA {
   /// A mapping of symbol to index in the NLA.
   DenseMap<Attribute, unsigned> symIdx;
 
-  /// Records which elements of the path are inlined.
+  /// Records which elements of the path are inlined.  A bit set to true
+  /// indicates the module is still in the path.  A bit set to false indicates
+  /// the module has been inlined/flattened and removed from the path.
   BitVector inlinedSymbols;
-
-  /// The point after which the NLA is flattened.  A value of "-1" indicates
-  /// that this was never set.
-  signed flattenPoint = -1;
 
   /// Indicates if the _original_ NLA is dead and should be deleted.  Updates
   /// may still need to be written if the newTops vector below is non-empty.
@@ -154,16 +153,15 @@ public:
   /// (This is done to save unnecessary state cleanup of a pass-private
   /// utility.)
   hw::HierPathOp applyUpdates() {
-    // Delete an NLA which is either dead or has been made local.
-    if (isLocal() || isDead()) {
+    // Delete an NLA which is dead.
+    if (isDead()) {
       nla.erase();
       return nullptr;
     }
 
     // The NLA was never updated, just return the NLA and do not writeback
     // anything.
-    if (inlinedSymbols.all() && newTops.empty() && flattenPoint == -1 &&
-        renames.empty())
+    if (inlinedSymbols.all() && newTops.empty() && renames.empty())
       return nla;
 
     // The NLA has updates.  Generate a new NLA with the same symbol and delete
@@ -173,19 +171,17 @@ public:
       SmallVector<Attribute> namepath;
       StringAttr lastMod;
 
-      // Root of the namepath.
-      if (!inlinedSymbols.test(1))
+      // Root of the namepath. If the next module has been inlined, set lastMod
+      // to root and skip adding to the namepath. Otherwise, add the root with
+      // its inner ref.
+      if (!inlinedSymbols.test(1)) {
         lastMod = root;
-      else
+      } else {
         namepath.push_back(InnerRefAttr::get(root, lookupRename(root)));
+      }
 
       // Everything in the middle of the namepath (excluding the root and leaf).
       for (signed i = 1, e = inlinedSymbols.size() - 1; i != e; ++i) {
-        if (i == flattenPoint) {
-          lastMod = nla.modPart(i);
-          break;
-        }
-
         if (!inlinedSymbols.test(i + 1)) {
           if (!lastMod)
             lastMod = nla.modPart(i);
@@ -237,7 +233,6 @@ public:
       llvm::errs() << llvm::formatv("{0:x-}", a);
     });
     llvm::errs() << "]\n"
-                 << "    flattenPoint:   " << flattenPoint << "\n"
                  << "    renames:\n";
     for (auto rename : renames)
       llvm::errs() << "      - " << rename.first << " -> " << rename.second
@@ -260,20 +255,20 @@ public:
       os << "firrtl.nla @" << sym.getValue() << " [";
 
       StringAttr lastMod;
-      // Root of the namepath.
-      if (!x.inlinedSymbols.test(1))
+      bool needsComma = false;
+
+      // Root of the namepath. If the next module has been inlined, set lastMod
+      // to root and skip adding to the output. Otherwise, write the root with
+      // its inner ref.
+      if (!x.inlinedSymbols.test(1)) {
         lastMod = root;
-      else
+      } else {
         writePathSegment(root, x.lookupRename(root));
+        needsComma = true;
+      }
 
       // Everything in the middle of the namepath (excluding the root and leaf).
-      bool needsComma = false;
       for (signed i = 1, e = x.inlinedSymbols.size() - 1; i != e; ++i) {
-        if (i == x.flattenPoint) {
-          lastMod = x.nla.modPart(i);
-          break;
-        }
-
         if (!x.inlinedSymbols.test(i + 1)) {
           if (!lastMod)
             lastMod = x.nla.modPart(i);
@@ -292,7 +287,8 @@ public:
       }
 
       // Leaf of the namepath.
-      os << ", ";
+      if (needsComma)
+        os << ", ";
       auto modPart = lastMod ? lastMod : x.nla.modPart(x.size - 1);
       auto refPart = x.nla.refPart(x.size - 1);
       if (x.renames.count(modPart))
@@ -328,11 +324,10 @@ public:
   bool isModuleOnly() { return moduleOnly; }
 
   /// Returns true if this NLA is local.  For this to be local, every module
-  /// after the root (up to the flatten point or the end) must be inlined.  The
-  /// root is never truly inlined as inlining the root just sets a new root.
+  /// after the root must be inlined.  The root is never truly inlined as
+  /// inlining the root just sets a new root.
   bool isLocal() {
-    unsigned end = flattenPoint > -1 ? flattenPoint + 1 : inlinedSymbols.size();
-    return inlinedSymbols.find_first_in(1, end) == -1;
+    return inlinedSymbols.find_first_in(1, inlinedSymbols.size()) == -1;
   }
 
   /// Return true if this NLA has a root that originates from a specific module.
@@ -365,8 +360,10 @@ public:
   void flattenModule(FModuleOp module) {
     auto sym = module.getNameAttr();
     assert(symIdx.count(sym) && "module is not in the symIdx map");
-    auto idx = symIdx[sym] - 1;
-    flattenPoint = idx;
+    // When flattening a module, all modules from this point onwards in the path
+    // are effectively inlined. Reset all bits from the module's index onwards.
+    auto moduleIdx = symIdx[sym];
+    inlinedSymbols.reset(moduleIdx, size);
     // If the NLA only targets a module and we're flattening the NLA,
     // then the NLA must be dead.  Mark it as such.
     if (moduleOnly)
@@ -608,6 +605,21 @@ private:
 
   /// Identify all module-only NLA's, marking their MutableNLA's accordingly.
   void identifyNLAsTargetingOnlyModules();
+
+  /// Mark referenced modules of an unknown FInstanceLike operation as live.
+  /// For non-InstanceOp FInstanceLike operations (e.g., InstanceChoiceOp,
+  /// ObjectOp), we cannot inline them, so we need to mark their referenced
+  /// modules as live to prevent them from being deleted.
+  void markUnknownFInstanceLikeModulesLive(FInstanceLike instanceLike) {
+    for (auto module : instanceLike.getReferencedModuleNamesAttr()
+                           .getAsValueRange<StringAttr>()) {
+      auto *moduleOp = symbolTable.lookup(module);
+      if (liveModules.insert(moduleOp).second) {
+        if (auto fmodule = dyn_cast<FModuleOp>(moduleOp))
+          worklist.push_back(fmodule);
+      }
+    }
+  }
 
   /// Populate the activeHierpaths with the HierPaths that are active given the
   /// current hierarchy. This is the set of HierPaths that were active in the
@@ -1041,6 +1053,8 @@ LogicalResult Inliner::flattenInto(StringRef prefix, InliningLevel &il,
     // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
+      if (auto instanceLike = dyn_cast<FInstanceLike>(op))
+        markUnknownFInstanceLikeModulesLive(instanceLike);
       cloneAndRename(prefix, il, mapper, *op, symbolRenames, localSymbols);
       return success();
     }
@@ -1089,7 +1103,12 @@ LogicalResult Inliner::flattenInstances(FModuleOp module) {
   auto moduleName = module.getNameAttr();
   ModuleInliningContext mic(module);
 
-  auto visit = [&](InstanceOp instance) {
+  auto visit = [&](FInstanceLike instanceLike) {
+    auto instance = dyn_cast<InstanceOp>(*instanceLike);
+    if (!instance) {
+      markUnknownFInstanceLikeModulesLive(instanceLike);
+      return WalkResult::advance();
+    }
     // If it's not a regular module we can't inline it. Mark it as live.
     auto *targetModule = symbolTable.lookup(instance.getModuleName());
     auto target = dyn_cast<FModuleOp>(targetModule);
@@ -1163,6 +1182,9 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
     // If it's not an instance op, clone it and continue.
     auto instance = dyn_cast<InstanceOp>(op);
     if (!instance) {
+      if (auto instanceLike = dyn_cast<FInstanceLike>(op))
+        markUnknownFInstanceLikeModulesLive(instanceLike);
+
       cloneAndRename(prefix, il, mapper, *op, symbolRenames, {});
       return success();
     }
@@ -1261,11 +1283,17 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
 }
 
 LogicalResult Inliner::inlineInstances(FModuleOp module) {
-  // Generate a namespace for this module so that we can safely inline symbols.
+  // Generate a namespace for this module so that we can safely inline
+  // symbols.
   auto moduleName = module.getNameAttr();
   ModuleInliningContext mic(module);
 
-  auto visit = [&](InstanceOp instance) {
+  auto visit = [&](FInstanceLike instanceLike) {
+    auto instance = dyn_cast<InstanceOp>(*instanceLike);
+    if (!instance) {
+      markUnknownFInstanceLikeModulesLive(instanceLike);
+      return WalkResult::advance();
+    }
     // If it's not a regular module we can't inline it. Mark it as live.
     auto *childModule = symbolTable.lookup(instance.getModuleName());
     auto target = dyn_cast<FModuleOp>(childModule);

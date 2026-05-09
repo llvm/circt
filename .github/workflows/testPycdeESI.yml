@@ -3,11 +3,16 @@ name: Test PyCDE and the ESI runtime
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 13 * * *'
+    - cron: "0 13 * * *"
   pull_request:
     paths:
-      - 'frontends/PyCDE/**'
-      - 'lib/Dialect/ESI/runtime/**'
+      - "frontends/PyCDE/**"
+      - "lib/Dialect/ESI/runtime/**"
+
+# Cancel previous CI builds when a new push occurs to the same PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -47,6 +52,17 @@ jobs:
           fetch-depth: 1
           submodules: true
 
+      - name: Setup venv and install dependencies
+        run: |
+          set -o errexit
+          whoami
+          apt update
+          apt install -y python3-venv
+          python3 -m venv venv
+          . venv/bin/activate
+          pip install --upgrade pip
+          pip install -r frontends/PyCDE/python/requirements.txt
+
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -65,6 +81,7 @@ jobs:
           BUILD_SHARED: ${{ matrix.build-shared }}
           BUILD_TYPE: ${{ matrix.build-type }}
         run: |
+          . venv/bin/activate
           export PATH="/usr/lib/ccache:/usr/local/opt/ccache/libexec:$PATH"
           mkdir build && cd build
           # In order for ccache to be effective, these flags should be kept in sync with nighly.
@@ -90,11 +107,29 @@ jobs:
 
       - name: Test CIRCT
         run: |
+          . venv/bin/activate
           ninja -C build check-circt -j$(nproc)
       - name: Test PyCDE
         run: |
+          . venv/bin/activate
           ninja -C build check-pycde -j$(nproc)
       # The PyCDE integration tests exercise the ESI runtime.
       - name: Test PyCDE and ESI runtime integration
         run: |
+          . venv/bin/activate
           ninja -C build check-pycde-integration -j$(nproc)
+
+      - name: Test ESI runtime (pytest)
+        run: |
+          . venv/bin/activate
+          # Install the ESI C++ runtime into the esiaccel Python package tree
+          # so that cmake-based tests can find headers, libraries, and the
+          # esiaccelConfig.cmake.
+          cmake --install build \
+            --prefix build/tools/circt/lib/Dialect/ESI/runtime/python/esiaccel \
+            --component ESIRuntime
+          export PYTHONPATH="$PWD/build/tools/circt/python_packages/pycde:$PWD/build/tools/circt/lib/Dialect/ESI/runtime/python"
+          export PATH="$PWD/build/bin:$PATH"
+          export LD_LIBRARY_PATH="$PWD/build/lib:$LD_LIBRARY_PATH"
+          ninja -C build ESIRuntimeCppTests -j$(nproc)
+          python3 -m pytest lib/Dialect/ESI/runtime/tests/ -v --log-cli-level=INFO

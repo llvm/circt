@@ -328,8 +328,3 @@ void InferMemoriesPass::runOnOperation() {
   for (auto *op : opsToDelete)
     op->erase();
 }
-
-std::unique_ptr<Pass>
-arc::createInferMemoriesPass(const InferMemoriesOptions &options) {
-  return std::make_unique<InferMemoriesPass>(options);
-}

@@ -17,11 +17,8 @@ import argparse
 from pathlib import Path
 import sys
 import textwrap
-from typing import Dict, List
 
-from esiaccel.cosim.questa import Questa
-from esiaccel.cosim.verilator import Verilator
-from esiaccel.cosim.simulator import SourceFiles
+from esiaccel.cosim.simulator import get_simulator, SourceFiles
 
 
 def __main__(args):
@@ -58,6 +55,11 @@ def __main__(args):
   argparser.add_argument("--debug",
                          action="store_true",
                          help="Enable debug output.")
+  argparser.add_argument(
+      "--save-waveform",
+      action="store_true",
+      help="Save waveform dumps (format depends on simulator). Requires --debug."
+  )
   argparser.add_argument("--gui",
                          action="store_true",
                          help="Run the simulator in GUI mode (if supported).")
@@ -79,20 +81,17 @@ def __main__(args):
     return
   args = argparser.parse_args(args[1:])
 
+  # Validate that save_waveform requires debug
+  if args.save_waveform and not args.debug:
+    print("ERROR: --save-waveform requires --debug to be enabled",
+          file=sys.stderr)
+    return 1
+
   sources = SourceFiles(args.top)
   sources.add_dir(Path(args.source))
 
-  if args.sim == "verilator":
-    sim = Verilator(sources, Path(args.rundir), args.debug)
-  elif args.sim == "questa":
-    sim = Questa(sources, Path(args.rundir), args.debug)
-  else:
-    print("Unknown simulator: " + args.sim)
-    print("Supported simulators: ")
-    print("  - verilator")
-    print("  - questa")
-    return 1
-
+  sim = get_simulator(args.sim, sources, Path(args.rundir), args.debug,
+                      args.save_waveform)
   if not args.no_compile:
     rc = sim.compile()
     if rc != 0:

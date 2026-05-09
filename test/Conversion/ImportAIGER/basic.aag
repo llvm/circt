@@ -208,3 +208,46 @@ aag 2 2 0 2 0
 4
 2
 4
+
+// -----
+// Test bad state property
+// CHECK-LABEL: hw.module @aiger_top
+// CHECK-SAME:    (in %[[INPUT0:.+]] : i1, in %[[CLOCK:.+]] : !seq.clock) {
+// CHECK-NEXT:    %[[REG:.+]] = seq.compreg %[[VAL2:.+]], %[[CLOCK]] : i1
+// CHECK-NEXT:    %[[VAL0:.+]] = synth.aig.and_inv not %[[REG]], not %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[VAL1:.+]] = synth.aig.and_inv %[[REG]], %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[VAL2]] = synth.aig.and_inv not %[[VAL1]], not %[[VAL0]] : i1
+// CHECK-NEXT:    %[[NOT_REG:.+]] = synth.aig.and_inv not %[[REG]] : i1
+// CHECK-NEXT:    verif.assert %[[NOT_REG]] : i1
+// CHECK-NEXT:    hw.output
+// CHECK-NEXT: }
+aag 5 1 1 0 3 1
+2
+4 10 0
+4
+6 5 3
+8 4 2
+10 9 7
+
+// -----
+// Test invariant constraint property
+// CHECK-LABEL: hw.module @aiger_top
+// CHECK-SAME:    (in %[[INPUT0:.+]] : i1, in %[[CLOCK:.+]] : !seq.clock) {
+// CHECK-NEXT:    %[[REG:.+]] = seq.compreg %[[VAL2:.+]], %[[CLOCK]] : i1
+// CHECK-NEXT:    %[[VAL0:.+]] = synth.aig.and_inv not %[[REG]], not %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[VAL1:.+]] = synth.aig.and_inv %[[REG]], %[[INPUT0]] : i1
+// CHECK-NEXT:    %[[VAL2]] = synth.aig.and_inv not %[[VAL1]], not %[[VAL0]] : i1
+// CHECK-NEXT:    %[[NOT_REG:.+]] = synth.aig.and_inv not %[[REG]] : i1
+// CHECK-NEXT:    verif.assert %[[NOT_REG]] : i1
+// CHECK-NEXT:    %[[INPUT0_VAL:.+]] = synth.aig.and_inv not %[[INPUT0]] : i1
+// CHECK-NEXT:    verif.assume %[[INPUT0_VAL]] : i1
+// CHECK-NEXT:    hw.output
+// CHECK-NEXT: }
+aag 5 1 1 0 3 1 1
+2
+4 10 0
+4
+3
+6 5 3
+8 4 2
+10 9 7

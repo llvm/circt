@@ -109,11 +109,11 @@ firrtl.module @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>
   // CHECK:  %[[v18:.+]] = firrtl.cat %[[v17]], %[[v17]] : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   // CHECK:  %[[v19:.+]] = firrtl.cat %[[v17]], %[[v18]] : (!firrtl.uint<1>, !firrtl.uint<2>) -> !firrtl.uint<3>
   // CHECK:  %[[v24:.+]] = firrtl.cat %[[v17]], %[[v23:.+]] : (!firrtl.uint<1>, !firrtl.uint<7>) -> !firrtl.uint<8>
-  // CHECK:  %[[v25:.+]] = firrtl.bits %16 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-  // CHECK:  %[[v26:.+]] = firrtl.cat %[[v25]], %[[v24]] : (!firrtl.uint<1>, !firrtl.uint<8>) -> !firrtl.uint<9>
-  // CHECK:  %[[v27:.+]] = firrtl.cat %[[v25]], %[[v26]] : (!firrtl.uint<1>, !firrtl.uint<9>) -> !firrtl.uint<10>
-  // CHECK:  %[[v28:.+]] = firrtl.cat %[[v25]], %[[v27]] : (!firrtl.uint<1>, !firrtl.uint<10>) -> !firrtl.uint<11>
-  // CHECK:  %[[v34:.+]] = firrtl.cat %[[v25]], %[[v33:.+]] : (!firrtl.uint<1>, !firrtl.uint<16>) -> !firrtl.uint<17>
+  // CHECK:  %[[v25:.+]] = firrtl.cat %[[v17]], %[[v24]] : (!firrtl.uint<1>, !firrtl.uint<8>) -> !firrtl.uint<9>
+  // CHECK:  %[[v26:.+]] = firrtl.bits %16 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
+  // CHECK:  %[[v27:.+]] = firrtl.cat %[[v26]], %[[v25]] : (!firrtl.uint<1>, !firrtl.uint<9>) -> !firrtl.uint<10>
+  // CHECK:  %[[v28:.+]] = firrtl.cat %[[v26]], %[[v27]] : (!firrtl.uint<1>, !firrtl.uint<10>) -> !firrtl.uint<11>
+  // CHECK:  %[[v34:.+]] = firrtl.cat %[[v26]], %[[v33:.+]] : (!firrtl.uint<1>, !firrtl.uint<16>) -> !firrtl.uint<17>
   // CHECK:  firrtl.matchingconnect %[[v15]], %[[v34]] :
   // Ensure 0 bit fields are handled properly.
   %ram_MPORT = firrtl.mem Undefined  {depth = 4 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<2>, en: uint<1>, clk: clock, data: bundle<entry: bundle<a: uint<0>, b: uint<1>, c: uint<2>>>, mask: bundle<entry: bundle<a: uint<1>, b: uint<1>, c: uint<1>>>>
@@ -139,7 +139,7 @@ firrtl.module @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>
     // CHECK:  %[[v11:.+]] = firrtl.bitcast %9 : (!firrtl.bundle<a: uint<1>, b: uint<1>>) -> !firrtl.uint<2>
     // CHECK:  %[[v12:.+]] = firrtl.bits %11 0 to 0 : (!firrtl.uint<2>) -> !firrtl.uint<1>
     // CHECK:  %[[v13:.+]] = firrtl.bits %11 1 to 1 : (!firrtl.uint<2>) -> !firrtl.uint<1>
-    // CHECK:  firrtl.matchingconnect %[[v10]], %[[v13]] : !firrtl.uint<1>
+    // CHECK:  firrtl.matchingconnect %[[v10]], %[[v12]] : !firrtl.uint<1>
     // CHECK:  %[[v14:.+]] = firrtl.subfield %ram_MPORT_1[data] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<20>>, mask: bundle<a: uint<1>, b: uint<1>>>
     // CHECK:  firrtl.matchingconnect %[[v14]], %invalid_0 : !firrtl.bundle<a: uint<0>, b: uint<20>>
     // CHECK:  %[[v15:.+]] = firrtl.subfield %ram_MPORT_1[mask] : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<20>>, mask: bundle<a: uint<1>, b: uint<1>>>
@@ -154,14 +154,27 @@ firrtl.module @MemoryRWSplit(in %clock: !firrtl.clock, in %rwEn: !firrtl.uint<1>
     // Case 2: All widths of the data add up to zero.
     %ram_MPORT1 = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<0>>, mask: bundle<a: uint<1>, b: uint<1>>>
     // CHECK: = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<0>, b: uint<0>>, mask: bundle<a: uint<1>, b: uint<1>>>
-    // Case 3: Aggregate contains only a single element.
-    %single     = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<b: uint<10>>, mask: bundle<b: uint<1>>>
-    // CHECK: = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<b: uint<10>>, mask: bundle<b: uint<1>>>
-    // Case 4: Ground Type with zero width.
+    // Case 3: Zero width UInt.
     %ram_MPORT2, %ram_io_deq_bits_MPORT = firrtl.mem  Undefined  {depth = 2 : i64, name = "ram", portNames = ["MPORT", "io_deq_bits_MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<0>>
     // CHECK:  = firrtl.mem  Undefined  {depth = 2 : i64, name = "ram", portNames = ["MPORT", "io_deq_bits_MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<0>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<0>>
-    // Case 5: Any Ground Type.
+    // Case 4: Non-Zero width UInt.
     %ram_MPORT3, %ram_io_deq_bits_MPORT2 = firrtl.mem  Undefined  {depth = 2 : i64, name = "ram", portNames = ["MPORT", "io_deq_bits_MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<1>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
     // CHECK:  = firrtl.mem  Undefined  {depth = 2 : i64, name = "ram", portNames = ["MPORT", "io_deq_bits_MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<1>, mask: uint<1>>, !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data flip: uint<1>>
   }
+
+  firrtl.module @BaseTypes() {
+    // Case 1: SInt Type.
+    %sint        = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: sint<10>, mask: uint<1>>
+    // CHECK:    = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<10>, mask: uint<1>>
+    // Case 2: Aggregate contains only a single UInt.
+    %uintAgg     = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: uint<11>>, mask: bundle<a: uint<1>>>
+    // CHECK:    = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<11>, mask: uint<1>>
+    // Case 3: Aggregate contains only a single SInt.
+    %sintAgg     = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: sint<12>>, mask: bundle<a: uint<1>>>
+    // CHECK:    = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<12>, mask: uint<1>>
+    // Case 4: Aggregate contains a single Enum and an empty bundle.
+    %enumAndEmpy = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: bundle<a: enum<None, Some: sint<12>>, b: bundle<>>, mask: bundle<a: uint<1>, b: bundle<>>>
+    // CHECK:    = firrtl.mem Undefined  {depth = 1 : i64, name = "ram", portNames = ["MPORT"], prefix = "foo_", readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, data: uint<13>, mask: uint<1>>
+  }
+
 }

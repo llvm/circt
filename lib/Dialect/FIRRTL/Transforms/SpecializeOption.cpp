@@ -9,6 +9,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 
@@ -30,6 +31,7 @@ struct SpecializeOptionPass
 
   void runOnOperation() override {
     auto circuit = getOperation();
+    auto &symTbl = getAnalysis<SymbolTable>();
 
     DenseMap<StringAttr, OptionCaseOp> selected;
     if (auto choiceAttr = circuit.getSelectInstChoiceAttr()) {
@@ -43,14 +45,25 @@ struct SpecializeOptionPass
         }
 
         std::string optionName = optionAndCase.substr(0, eq);
-        auto optionOp = circuit.lookupSymbol<OptionOp>(optionName);
+        // If the option is specified with `?=`, allow the absence of option.
+        bool allowNonExistent = !optionName.empty() && optionName.back() == '?';
+        if (allowNonExistent)
+          optionName.pop_back();
+        auto optionOp = symTbl.lookup<OptionOp>(optionName);
         if (!optionOp) {
+          if (allowNonExistent)
+            continue;
           mlir::emitError(circuit.getLoc(), "unknown option \"")
               << optionName << '"';
           return signalPassFailure();
         }
 
         std::string caseName = optionAndCase.substr(eq + 1);
+        if (caseName == "<default>") {
+          selected[StringAttr::get(&getContext(), optionName)] = {};
+          continue;
+        }
+
         auto caseOp = optionOp.lookupSymbol<OptionCaseOp>(caseName);
         if (!caseOp) {
           mlir::emitError(circuit.getLoc(), "invalid option case \"")
@@ -68,15 +81,16 @@ struct SpecializeOptionPass
             auto it = selected.find(inst.getOptionNameAttr());
             FlatSymbolRefAttr target;
             if (it == selected.end()) {
-              if (!selectDefaultInstanceChoice) {
-                inst.emitError("missing specialization for option ")
-                    << inst.getOptionNameAttr();
-                failed = true;
+              if (selectDefaultInstanceChoice)
+                target = inst.getDefaultTargetAttr();
+              else
                 return;
-              }
-              target = inst.getDefaultTargetAttr();
-            } else
-              target = inst.getTargetOrDefaultAttr(it->second);
+            } else {
+              if (it->second)
+                target = inst.getTargetOrDefaultAttr(it->second);
+              else
+                target = inst.getDefaultTargetAttr();
+            }
 
             ImplicitLocOpBuilder builder(inst.getLoc(), inst);
             auto newInst = InstanceOp::create(
@@ -95,6 +109,12 @@ struct SpecializeOptionPass
 
     bool analysisPreserved = numInstances == 0;
     circuit->walk([&](OptionOp optionOp) {
+      // When selectDefaultInstanceChoice is true, all instance choices are
+      // specialized (either to a selected case or to the default), so we can
+      // erase all options. Otherwise, only erase options that were selected.
+      if (!selectDefaultInstanceChoice &&
+          !selected.contains(optionOp.getSymNameAttr()))
+        return;
       optionOp->erase();
       analysisPreserved = false;
     });

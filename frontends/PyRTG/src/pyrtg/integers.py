@@ -8,6 +8,7 @@ from .base import ir
 from .core import Value, Type
 from .index import index
 from .rtg import rtg
+from .strings import String
 
 from typing import Union
 
@@ -46,6 +47,24 @@ class Integer(Value):
   def __sub__(self, other: Integer) -> Integer:
     return index.SubOp(self._get_ssa_value(), other._get_ssa_value())
 
+  def __mul__(self, other: Integer) -> Integer:
+    return index.MulOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __floordiv__(self, other: Integer) -> Integer:
+    return index.DivUOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __truediv__(self, other: Integer) -> Integer:
+    return index.CeilDivUOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __mod__(self, other: Integer) -> Integer:
+    return index.RemUOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __lshift__(self, other: Integer) -> Integer:
+    return index.ShlOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __rshift__(self, other: Integer) -> Integer:
+    return index.ShrUOp(self._get_ssa_value(), other._get_ssa_value())
+
   def __and__(self, other: Integer) -> Integer:
     return index.AndOp(self._get_ssa_value(), other._get_ssa_value())
 
@@ -72,6 +91,19 @@ class Integer(Value):
 
   def __ge__(self, other: Integer) -> Bool:
     return index.CmpOp("uge", self._get_ssa_value(), other._get_ssa_value())
+
+  def max(self, other: Integer) -> Integer:
+    return index.MaxUOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def min(self, other: Integer) -> Integer:
+    return index.MinUOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def to_string(self) -> String:
+    """
+    Format this integer as a string in unsigned decimal.
+    """
+
+    return rtg.IntFormatOp(self)
 
   def get_type(self) -> Type:
     return IntegerType()

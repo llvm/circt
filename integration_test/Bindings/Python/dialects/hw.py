@@ -53,6 +53,20 @@ with Context() as ctx, Location.unknown():
       # CHECK: hw.array_get [[ARRAY2]][%c0_i0] : !hw.array<1xi32>
       hw.ArrayGetOp.create(array2, 0)
 
+      array_type_alias = hw.TypeAliasType.get("arrayScope", "arrayAlias",
+                                              hw.ArrayType.get(i32, 1))
+      typed_array = hw.ArrayCreateOp.create([constI32], array_type_alias)
+      # CHECK: !hw.typealias<@arrayScope::@arrayAlias, !hw.array<1xi32>>
+      print(typed_array.result.type)
+
+      mismatch_type = hw.TypeAliasType.get("mismatchScope", "mismatchAlias",
+                                           hw.ArrayType.get(i1, 1))
+      try:
+        hw.ArrayCreateOp.create([constI32], mismatch_type)
+        assert False, "Expected TypeError not raised"
+      except TypeError as e:
+        assert str(e).startswith("result type:")
+
       # CHECK: [[STRUCT1:%.+]] = hw.struct_create (%c1_i32, %true) : !hw.struct<a: i32, b: i1>
       struct1 = hw.StructCreateOp.create([('a', constI32), ('b', constI1)])
 
@@ -135,6 +149,10 @@ with Context() as ctx, Location.unknown():
   print(module_type.input_names)
   # CHECK-NEXT:  ['out']
   print(module_type.output_names)
+
+  # Test StructType
+  # CHECK: !hw.struct<>
+  print(hw.StructType.get([]))
 
   # Test UnionType
   union_type = hw.UnionType.get([('a', i32, 0), ('b', i1, 4), ('c', i2, 0)])

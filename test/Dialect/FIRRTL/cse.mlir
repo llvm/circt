@@ -43,5 +43,41 @@ firrtl.module @Invalid(in %cond: !firrtl.uint<1>,
 
 }
 
+firrtl.domain @ClockDomain
+firrtl.extmodule @Domains_Bar(
+  in A: !firrtl.domain<@ClockDomain()>,
+  in B: !firrtl.domain<@ClockDomain()>
+)
+// Anonymous domains are DCE'd, but not CSE'd.
+// CHECK-LABEL: firrtl.module @Domains_Foo(
+firrtl.module @Domains_Foo() {
+  // CHECK-NEXT: %0 = firrtl.domain.anon
+  %0 = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
+  // CHECK-NEXT: %1 = firrtl.domain.anon
+  %1 = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
+  %bar_A, %bar_B = firrtl.instance bar @Domains_Bar(
+    in A: !firrtl.domain<@ClockDomain()>,
+    in B: !firrtl.domain<@ClockDomain()>
+  )
+  // CHECK: firrtl.domain.define %bar_A, %0 : !firrtl.domain<@ClockDomain()>
+  firrtl.domain.define %bar_A, %0 : !firrtl.domain<@ClockDomain()>
+  // CHECK-NEXT: firrtl.domain.define %bar_B, %1 : !firrtl.domain<@ClockDomain()>
+  firrtl.domain.define %bar_B, %1 : !firrtl.domain<@ClockDomain()>
+
+  // CHECK-NOT: firrtl.domain.define
+  %2 = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
+}
+
+// UnknownValueOp should CSE
+// CHECK-LABEL: firrtl.module @UnknownValue(
+firrtl.module @UnknownValue(out %a: !firrtl.integer, out %b: !firrtl.integer) {
+  // CHECK: %0 = firrtl.unknown : !firrtl.integer
+  %0 = firrtl.unknown : !firrtl.integer
+  // CHECK-NEXT: firrtl.propassign %a, %0
+  firrtl.propassign %a, %0 : !firrtl.integer
+  // CHECK-NEXT: firrtl.propassign %b, %0
+  %1 = firrtl.unknown : !firrtl.integer
+  firrtl.propassign %b, %1 : !firrtl.integer
+}
 
 }

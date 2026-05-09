@@ -13,14 +13,37 @@ include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 include "circt/Dialect/Sim/SimDialect.td"
+include "circt/Dialect/Sim/SimOpInterfaces.td"
 include "circt/Dialect/Sim/SimTypes.td"
+include "circt/Support/ProceduralRegionTrait.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/EnumAttr.td"
 
 class SimOp<string mnemonic, list<Trait> traits = []> :
     Op<SimDialect, mnemonic, traits>;
+
+//===----------------------------------------------------------------------===//
+// DPI Direction Enum
+//===----------------------------------------------------------------------===//
+
+def DPIDir_Input  : I32EnumAttrCase<"Input",  0, "in">;
+def DPIDir_Output : I32EnumAttrCase<"Output", 1, "out">;
+def DPIDir_InOut  : I32EnumAttrCase<"InOut",  2, "inout">;
+def DPIDir_Return : I32EnumAttrCase<"Return", 3, "return">;
+def DPIDir_Ref    : I32EnumAttrCase<"Ref",    4, "ref">;
+
+def DPIDirection : I32EnumAttr<"DPIDirection",
+    "DPI port direction",
+    [DPIDir_Input, DPIDir_Output, DPIDir_InOut, DPIDir_Return, DPIDir_Ref]> {
+  let cppNamespace = "circt::sim";
+}
+
+//===----------------------------------------------------------------------===//
+// Simulation Operations
+//===----------------------------------------------------------------------===//
 
 def PlusArgsTestOp : SimOp<"plusargs.test", [Pure]> {
   let summary = "SystemVerilog `$test$plusargs` call";
@@ -40,43 +63,73 @@ def PlusArgsValueOp : SimOp<"plusargs.value", [Pure]> {
 
 def DPIFuncOp : SimOp<"func.dpi",
      [IsolatedFromAbove, Symbol, OpAsmOpInterface,
-      FunctionOpInterface]> {
-  let summary = "A System Verilog function";
+      DeclareOpInterfaceMethods<FunctionOpInterface,
+        ["getFunctionType", "setFunctionTypeAttr", "cloneTypeWith"]>]> {
+  let summary = "A DPI-C imported function declaration";
   let description = [{
-    `sim.func.dpi` models an external function in a core dialect.
+    `sim.func.dpi` models a DPI-C imported function with first-class argument
+    direction keywords: `in`, `out`, `inout`, `return`, and `ref`.
+
+    Argument directions map to call and ABI semantics as follows:
+    - `in`     — call operand, passed by value.
+    - `out`    — call result, passed by pointer in the C ABI.
+    - `inout`  — call operand and result, passed by pointer in the C ABI.
+    - `return` — call result (last), the actual C return value.
+    - `ref`    — call operand (pass-through pointer, e.g. open-array ABI).
   }];
 
   let arguments = (ins
     SymbolNameAttr:$sym_name,
-    TypeAttrOf<ModuleType>:$module_type,
-    OptionalAttr<DictArrayAttr>:$per_argument_attrs,
+    TypeAttrOf<DPIFunctionType>:$dpi_function_type,
     OptionalAttr<LocationArrayAttr>:$argument_locs,
     OptionalAttr<StrAttr>:$verilogName
   );
   let regions = (region AnyRegion:$body);
 
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+
+  let builders = [
+    OpBuilder<(ins
+      "StringAttr":$sym_name,
+      "ArrayRef<StringAttr>":$argNames,
+      "ArrayRef<Type>":$argTypes,
+      "ArrayRef<DPIDirection>":$argDirections,
+      "ArrayAttr":$argLocs,
+      "StringAttr":$verilogName
+    )>,
+    OpBuilder<(ins
+      "StringAttr":$sym_name,
+      "DPIFunctionType":$dpiFunctionType,
+      "ArrayAttr":$argLocs,
+      "StringAttr":$verilogName
+    )>
+  ];
 
   let extraClassDeclaration = [{
-    mlir::FunctionType getFunctionType() {
-      return getModuleType().getFuncType();
-    }
-
-    void setFunctionTypeAttr(mlir::TypeAttr mlirType) {
-      setModuleType(cast<hw::ModuleType>(mlirType.getValue()));
-    }
-
     /// Returns the argument types of this function.
-    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+    ArrayRef<Type> getArgumentTypes() {
+      return ::llvm::cast<::mlir::FunctionType>(getFunctionType()).getInputs();
+    }
 
     /// Returns the result types of this function.
-    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+    ArrayRef<Type> getResultTypes() {
+      return ::llvm::cast<::mlir::FunctionType>(getFunctionType()).getResults();
+    }
 
     ::mlir::Region *getCallableRegion() { return nullptr; }
 
-    /// Stub implementations for ArgumentAttributesMethods. If desired,
-    /// implement these by defining arg_attrs and res_attrs as arguments to the
-    /// operation as OptionalAttr<DictArrayAttr>.
+    /// Provide a getFunctionTypeAttrName for FunctionOpInterface trait
+    /// (buildWithEntryBlock).  DPIFuncOp does not store function_type as a
+    /// separate attribute; it is derived from dpi_function_type.
+    static ::mlir::StringAttr getFunctionTypeAttrName(::mlir::OperationName name) {
+      return getDpiFunctionTypeAttrName(name);
+    }
+    ::mlir::StringAttr getFunctionTypeAttrName() {
+      return getDpiFunctionTypeAttrName();
+    }
+
+    /// Stub implementations for ArgumentAttributesMethods.
     mlir::ArrayAttr getArgAttrsAttr() { return nullptr; }
     mlir::ArrayAttr getResAttrsAttr() { return nullptr; }
     void setArgAttrsAttr(mlir::ArrayAttr args) {}
@@ -169,7 +222,9 @@ def FormatLiteralOp : SimOp<"fmt.literal", [Pure, ConstantLike]> {
   let hasFolder = true;
 }
 
-def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
+def FormatHexOp : SimOp<"fmt.hex",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Hexadecimal format specifier";
   let description = [{
     Format the given integer value as lower-case hexadecimal string.
@@ -181,7 +236,7 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   }];
 
 
-  let arguments = (ins AnyInteger:$value, 
+  let arguments = (ins AnyInteger:$value,
     BoolAttr:$isHexUppercase,
     DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
     DefaultValuedAttr<I8Attr,"48">:$paddingChar,
@@ -200,7 +255,9 @@ def FormatHexOp : SimOp<"fmt.hex", [Pure]> {
   }];
 }
 
-def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
+def FormatOctOp : SimOp<"fmt.oct",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Octal format specifier";
   let description = [{
     Format the given integer value as lower-case octal (base eight) string.
@@ -230,7 +287,9 @@ def FormatOctOp : SimOp<"fmt.oct", [Pure]> {
   }];
 }
 
-def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
+def FormatBinOp : SimOp<"fmt.bin",
+    [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Binary format specifier";
   let description = [{
     Format the given integer value as binary (base two) string.
@@ -257,7 +316,9 @@ def FormatBinOp : SimOp<"fmt.bin", [Pure]> {
   }];
 }
 
-def FormatScientificOp : SimOp<"fmt.exp", [Pure]> {
+def FormatScientificOp : SimOp<"fmt.exp",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Real format specifier";
   let description = [{
     Format the given real value in scientific (exponential) notation
@@ -270,8 +331,6 @@ def FormatScientificOp : SimOp<"fmt.exp", [Pure]> {
   );
   let results = (outs FormatStringType:$result);
 
-  let hasFolder = true;
-
   let assemblyFormat = [{
     $value
     (`isLeftAligned` $isLeftAligned^)?
@@ -281,10 +340,12 @@ def FormatScientificOp : SimOp<"fmt.exp", [Pure]> {
   }];
 }
 
-def FormatFloatOp : SimOp<"fmt.flt", [Pure]> {
+def FormatFloatOp : SimOp<"fmt.flt",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>
+]> {
   let summary = "Real format specifier";
   let description = [{
-    Format the given real value in floating point (decimal) notation  
+    Format the given real value in floating point (decimal) notation
   }];
 
   let arguments = (ins AnyFloat:$value,
@@ -294,8 +355,6 @@ def FormatFloatOp : SimOp<"fmt.flt", [Pure]> {
   );
   let results = (outs FormatStringType:$result);
 
-  let hasFolder = true;
-
   let assemblyFormat = [{
     $value
     (`isLeftAligned` $isLeftAligned^)?
@@ -305,16 +364,18 @@ def FormatFloatOp : SimOp<"fmt.flt", [Pure]> {
   }];
 }
 
-def FormatGeneralOp : SimOp<"fmt.gen", [Pure]> {
+def FormatGeneralOp : SimOp<"fmt.gen",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Real format specifier";
   let description = [{
     Format floating-point numbers using either decimal or scientific notation
     based on the exponent and precision parameter fracDigits (default: 6)
 
-    For exp ≥ 0: 
+    For exp ≥ 0:
     Uses decimal notation if exp + 1 ≤ max(1, fracDigits), otherwise switches
     to scientific notation with max(0, fracDigits - 1) fractional digits
-    
+
     For exp < 0:
     If exp ≥ -4: Uses decimal notation with max(b - 1, 0) + |exp| fractional digits
     If exp < -4: Uses scientific notation with max(b - 1, 0) fractional digits
@@ -327,8 +388,6 @@ def FormatGeneralOp : SimOp<"fmt.gen", [Pure]> {
   );
   let results = (outs FormatStringType:$result);
 
-  let hasFolder = true;
-
   let assemblyFormat = [{
     $value
     (`isLeftAligned` $isLeftAligned^)?
@@ -338,7 +397,9 @@ def FormatGeneralOp : SimOp<"fmt.gen", [Pure]> {
   }];
 }
 
-def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
+def FormatDecOp : SimOp<"fmt.dec",
+    [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Decimal format specifier";
   let description = [{
     Format the given integer value as signed or unsigned decimal string.
@@ -400,7 +461,9 @@ def FormatDecOp : SimOp<"fmt.dec", [Pure]> {
   }];
 }
 
-def FormatCharOp : SimOp<"fmt.char", [Pure]> {
+def FormatCharOp : SimOp<"fmt.char",
+  [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
+> {
   let summary = "Character format specifier";
   let description = [{
     Format the given integer value as a single character.
@@ -420,6 +483,24 @@ def FormatCharOp : SimOp<"fmt.char", [Pure]> {
   let hasFolder = true;
 
   let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+}
+
+def FormatHierPathOp : SimOp<"fmt.hier_path", [Pure]> {
+  let summary = "Hierarchical path format specifier";
+  let description = [{
+    Format string fragment that resolves to the hierarchical path of the module
+    instance containing this operation when printed. This corresponds to the
+    `%m` (or `%M` with escaped special characters) format specifier in
+    SystemVerilog.
+
+    See IEEE 1800-2017 § 21.2.1.6 "Hierarchical name format".
+
+    The `useEscapes` attribute distinguishes between `%m` (false) and `%M`
+    (true). When true, special characters in the path should be escaped.
+  }];
+  let arguments = (ins UnitAttr:$useEscapes);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "(`escaped` $useEscapes^)? attr-dict";
 }
 
 def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
@@ -466,7 +547,7 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
   }];
 }
 
-def PrintFormattedOp : SimOp<"print"> {
+def PrintFormattedOp : SimOp<"print", [NonProceduralOp]> {
   let summary = "Print a formatted string on a given clock and condition";
   let description = [{
     Evaluate a format string and print it to the simulation console on the
@@ -481,23 +562,82 @@ def PrintFormattedOp : SimOp<"print"> {
   let arguments = (ins
     FormatStringType:$input,
     ClockType:$clock,
-    I1:$condition
+    I1:$condition,
+    Optional<OutputStreamType>:$stream
   );
+  let builders = [
+    OpBuilder<(ins
+      "Value":$input,
+      "Value":$clock,
+      "Value":$condition
+    ), [{
+      build($_builder, $_state, input, clock, condition, mlir::Value());
+    }]>
+  ];
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = "$input `on` $clock `if` $condition attr-dict";
+  let assemblyFormat = "$input `on` $clock `if` $condition (`to` $stream^)? attr-dict";
 }
 
-def PrintFormattedProcOp : SimOp<"proc.print"> {
+def PrintFormattedProcOp : SimOp<"proc.print", [ProceduralOp]> {
   let summary = "Print a formatted string within a procedural region";
   let description = [{
     Evaluate a format string and print it to the simulation console.
 
     This operation must be within a procedural region.
   }];
-  let arguments = (ins FormatStringType:$input);
-  let hasVerifier = true;
+  let arguments = (ins
+    FormatStringType:$input,
+    Optional<OutputStreamType>:$stream
+  );
+  let builders = [
+    OpBuilder<(ins
+      "Value":$input
+    ), [{
+      build($_builder, $_state, input, mlir::Value());
+    }]>
+  ];
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = "$input attr-dict";
+  let assemblyFormat = "$input (`to` $stream^)? attr-dict";
+}
+
+def GetFileOp : SimOp<"get_file", [Pure]> {
+  let summary = "Get an output stream for a formatted file name";
+  let description = [{
+    Resolves a file name from a `!sim.fstring` value and returns an output
+    stream resource that can be consumed by `sim.print` or `sim.proc.print`.
+    The file-name format string should be constructed using `sim.fmt.*`
+    operations, just like any other Sim format-string value.
+    The file-name format string is evaluated whenever the stream is accessed.
+
+    The concrete runtime representation and lifetime management of the returned
+    stream are backend-defined.
+  }];
+
+  let arguments = (ins FormatStringType:$fileName);
+  let results = (outs OutputStreamType:$result);
+  let assemblyFormat = "$fileName attr-dict";
+}
+
+def StdoutStreamOp : SimOp<"stdout_stream", [Pure]> {
+  let summary = "The standard output stream";
+  let description = [{
+    Returns a reference to the standard output stream, which can be consumed
+    by `sim.print` or `sim.proc.print`.
+  }];
+
+  let results = (outs OutputStreamType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
+def StderrStreamOp : SimOp<"stderr_stream", [Pure]> {
+  let summary = "The standard error stream";
+  let description = [{
+    Returns a reference to the standard error stream, which can be consumed
+    by `sim.print` or `sim.proc.print`.
+  }];
+
+  let results = (outs OutputStreamType:$result);
+  let assemblyFormat = "attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
@@ -536,14 +676,14 @@ def StringConcatOp : SimOp<"string.concat", [Pure]> {
   let summary = "Concatenate strings";
   let description = [{
     Concatenates multiple strings into a single, longer string. The first
-    operand appears first in the output string. The last character of the first 
-    operand is immediately followed by the first character of the second 
+    operand appears first in the output string. The last character of the first
+    operand is immediately followed by the first character of the second
     operand. If the operation has a single operand, its result is equal to that
     operand. If the operation has zero operands, it returns an empty string.
     The length of the result is the sum of each operand's length.
-    
+
     Example:
-    
+
     ```mlir
     %0 = sim.string.literal "abc"
     %1 = sim.string.literal "def"
@@ -562,11 +702,353 @@ def StringConcatOp : SimOp<"string.concat", [Pure]> {
   let hasFolder = true;
 }
 
+def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
+  let summary = "Convert an integer into a string";
+  let description = [{
+    Converts an integer value to a string following Verilog semantics, where
+    string literals are represented as right-aligned bitvectors.
+
+    The operation reads the integer byte-by-byte, interpreting each non-zero
+    byte as an ASCII character. Zero-valued bytes are skipped and
+    not included in the output string. See Sec 6.16 of the standard saying
+    "A string variable shall not contain the special character "\0".
+    Assigning the value 0 to a string character shall be ignored"
+
+    Example:
+      Consider the hex value 0x00_00_00_48_00_00_6C_6F
+      Reading from MSB to LSB and filtering out null bytes:
+        - 0x48 = 'H'
+        - 0x6C = 'l'
+        - 0x6F = 'o'
+      This produces the string "Hlo", not "\0\0\0H\0\0lo".
+  }];
+
+  let arguments = (ins AnyInteger:$input);
+  let results = (outs DynamicStringType:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
+}
+
+def StringGetOp : SimOp<"string.get", [Pure]> {
+  let summary = "Get a character from a string at a given index";
+  let description = [{
+    Returns the character (byte) at the specified index within a dynamic string.
+    The index is zero-based, where 0 refers to the first character.
+
+    If the index is negative or greater than or equal to the string length,
+    the behavior follows IEEE 1800-2023 § 6.16, which specifies that accessing
+    an out-of-bounds index returns 0 (null character).
+
+    Example:
+    ```mlir
+    %str = sim.string.literal "Hello"
+    %idx = hw.constant 1 : i32
+    %char = sim.string.get %str[%idx] : i8  // Returns 'e' (0x65)
+    ```
+  }];
+
+  let arguments = (ins DynamicStringType:$str, I32:$index);
+  let results = (outs I8:$result);
+
+  let hasFolder = true;
+
+  let assemblyFormat = "$str `[` $index `]` attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Queues
+//===----------------------------------------------------------------------===//
+
+def QueueCmpPredicateAttr : I64EnumAttr<
+    "QueueCmpPredicate",
+    "queue.cmp comparison predicate",
+    [I64EnumAttrCase<"eq", 0>,
+      I64EnumAttrCase<"ne", 1>]> {
+  let cppNamespace = "circt::sim";
+}
+
+def QueueCmpOp : SimOp<"queue.cmp", [Pure, Commutative, SameTypeOperands]> {
+  let summary = "Compares two queues";
+  let description = [{
+    Carries out a comparison on two queues.
+    Returns 1 if the comparison is true, and 0 if it is false.
+
+    Comparing for equality and inequality are both supported.
+  }];
+
+  let arguments = (ins QueueCmpPredicateAttr:$predicate, QueueType:$lhs, QueueType:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` type($lhs)";
+}
+
+def QueueEmptyOp : SimOp<"queue.empty", [Pure]> {
+  let summary = "Creates an empty queue";
+  let description = [{
+    Creates an empty queue, which is the default value
+    for a variable holding a queue.
+  }];
+
+  let arguments = (ins);
+  let results = (outs QueueType:$outqueue);
+
+  let assemblyFormat = "attr-dict `:` type($outqueue)";
+}
+
+def QueueSizeOp : SimOp<"queue.size", [Pure]> {
+  let summary = "Length of a queue";
+  let description = [{
+    Returns the length of a queue as an `i64` value.
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs I64:$result);
+
+  let assemblyFormat = "$queue attr-dict `:` type($queue)";
+}
+
+def QueuePushBackOp : SimOp<"queue.push_back", [Pure,
+    TypesMatchWith<"queue and element types must match",
+    "queue", "element", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Push an element to the end of a queue";
+  let description = [{
+    Adds an element to the end of the queue. If the queue is a bounded queue
+    which is full, then this has no effect.
+  }];
+
+  let arguments = (ins QueueType:$queue, HWNonInOutType:$element);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$element `into` $queue attr-dict `:` type($queue)";
+}
+
+def QueuePushFrontOp : SimOp<"queue.push_front", [Pure,
+TypesMatchWith<"queue and element types must match",
+    "queue", "element", "cast<QueueType>($_self).getElementType()">,
+AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Push an element to the front of a queue";
+  let description = [{
+    Adds an element to the front of the queue. If the queue is a bounded
+    queue which is full, then this will erase the final element of the queue,
+    as to keep the queue within-bounds.
+  }];
+
+  let arguments = (ins QueueType:$queue, HWNonInOutType:$element);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$element `into` $queue attr-dict `:` type($queue)";
+}
+
+def QueuePopBackOp : SimOp<"queue.pop_back", [Pure,
+TypesMatchWith<"queue and popped types must match",
+    "queue", "popped", "cast<QueueType>($_self).getElementType()">,
+AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Removes the last element of a queue";
+  let description = [{
+    Removes an element from the back of a queue.
+
+    If the queue is empty, this has no effect, and the value of `popped`
+    will be the same as obtained by reading a non-existent array element
+    from an array with the same element type,
+    as described in IEEE 1800-2023 § 7.10.2.5 "Pop_back()".
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs QueueType:$outQueue, HWNonInOutType:$popped);
+
+  let assemblyFormat = "`from` $queue attr-dict `:` type($queue)";
+}
+
+def QueuePopFrontOp : SimOp<"queue.pop_front", [Pure,
+TypesMatchWith<"queue and popped types must match",
+    "queue", "popped", "cast<QueueType>($_self).getElementType()">,
+AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Removes the first element of a queue";
+  let description = [{
+    Removes an element from the front of a queue.
+
+    If the queue is empty, this has no effect, and the value of `popped`
+    will be the same as obtained by reading a non-existent array element
+    from an array with the same element type,
+    as described in IEEE 1800-2023 § 7.10.2.4 "Pop_front()".
+  }];
+
+  let arguments = (ins QueueType:$queue);
+  let results = (outs QueueType:$outQueue, HWNonInOutType:$popped);
+
+  let assemblyFormat = "`from` $queue attr-dict `:` type($queue)";
+}
+
+// TODO: The `index` parameter should in-fact be a 4-valued integer.
+// These are, as of writing, unsupported by the core dialects.
+// Any unknown bit within `index` should result in `queue.delete` having
+// no effect on the queue per IEEE 1800-2023 § 7.10.2.3 "Delete()"
+def QueueDeleteOp : SimOp<"queue.delete", [Pure,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Deletes an element from a queue";
+  let description = [{
+    Deletes the queue element at the position `index`. Does nothing if `index`
+    is negative or greater than or equal to the length of the queue.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "`index` $index `of` $queue attr-dict `:` type($queue)";
+}
+
+// Likewise, TODO for 4-valued ints.
+// See IEEE 1800-2023 § 7.10.2.2 "Insert()"
+def QueueInsertOp : SimOp<"queue.insert", [Pure,
+    TypesMatchWith<"queue and item types must match",
+      "queue", "item", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+  let summary = "Insert an element at an arbitrary position within the queue";
+  let description = [{
+    Inserts an element at the given index within the queue. Any elements
+    at this index or later will be shifted forward one position. If this results in
+    the last item in the queue being outside the bounds, it is discarded.
+
+    If `index` is negative or greater than the queue length, this does nothing.
+    Note that an index equal to the queue length will simply push `item` to the
+    end of the queue.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index, HWNonInOutType:$item);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = "$item `into` $queue `at` $index attr-dict `:` type($queue)";
+}
+
+def QueueSetOp : SimOp<"queue.set", [Pure,
+    TypesMatchWith<"queue and item types must match",
+      "queue", "item", "cast<QueueType>($_self).getElementType()">,
+    AllTypesMatch<["queue", "outQueue"]>]> {
+
+  let summary = "Overwrite an element at a position within a queue.";
+  let description = [{
+    Overwrites the element at $index with $item, returning an updated queue.
+
+
+    If the index is equal to the length of the queue, the operation adds $item
+    to the end of the queue.
+
+    If the index is otherwise out of bounds for the queue, the queue returned
+    is unchanged.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index, HWNonInOutType:$item);
+  let results = (outs QueueType:$outQueue);
+
+  let assemblyFormat = [{
+    $queue `[` $index `]` `=` $item attr-dict `:` type($queue)
+  }];
+}
+
+// Likewise, TODO for 4-valued ints. (see above)
+def QueueGetOp : SimOp<"queue.get", [Pure,
+   TypesMatchWith<"queue and item types must match",
+      "queue", "result", "cast<QueueType>($_self).getElementType()">]> {
+  let summary = "Returns an indexed element of the queue";
+
+  let description = [{
+    Returns the element at position `index` within the queue.
+
+    If the index is negative or greater than or equal to the queue length,
+    this returns a value as indicated in Table 7-1 of IEEE 1800-2023 § 7.4.5
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$index);
+  let results = (outs HWNonInOutType:$result);
+
+  let assemblyFormat = "$index `of` $queue attr-dict `:` type($queue)";
+}
+
+def QueueSliceOp : SimOp<"queue.slice", [Pure,
+  AllTypesMatch<["queue", "result"]>]> {
+  let summary = "Returns a range of elements from a queue";
+
+  let description = [{
+    Returns the elements from index `lowIdx` of the `queue` to `highIdx` inclusive,
+    copied into a new queue.
+
+    If either index is out of bounds, the out of bounds elements within the selection
+    will have a special value as defined by the element type in IEEE 1800-2023 § 7.4.5, Table 7-1.
+  }];
+
+  let arguments = (ins QueueType:$queue, I32:$lowIdx, I32:$highIdx);
+  let results = (outs QueueType:$result);
+
+  let assemblyFormat = "$queue `from` $lowIdx `to` $highIdx attr-dict `:` type($queue)";
+}
+
+def QueueResizeOp : SimOp<"queue.resize", [Pure]> {
+  let description = [{
+    Converts between two queues with different bounds, but the same element
+    type.
+
+    If $result has a smaller bound than the size of $input, elements at the end
+    of the queue will be discarded to ensure it fits within the space provided.
+  }];
+
+  let arguments = (ins QueueType:$input);
+  let results = (outs QueueType:$result);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+// FIXME: Currently, unpacked arrays are lowered to the hw::ArrayType,
+// whereas ideally they would be lowered to hw::UnpackedArrayType, it's just
+// that this type hasn't had any ops defined yet.
+// When we switch over to hw::UnpackedArrayType, switch this op too.
+def QueueFromArrayOp : SimOp<"queue.from_array", [Pure]> {
+  let description = [{
+    Creates a queue containing the elements of the given array.
+
+    The queue and array must have the same element type.
+
+    If the queue type has bounds, any elements outside the bounds will be
+    discarded.
+  }];
+
+  let arguments = (ins ArrayType:$input);
+  let results = (outs QueueType:$result);
+
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
+def QueueConcatOp : SimOp<"queue.concat", [Pure]> {
+  let summary = "Concatenate queues";
+  let description = [{
+    Concatenates an arbitrary number of queues into one larger queue.
+    The queues are joined from left to right.
+
+    All queues must have the same element type, but the bounds may differ.
+
+    If the total length of the inputs doesn't fit into the queue bound of
+    $result, then the excess elements at the end of the queue are discarded.
+  }];
+  let arguments = (ins Variadic<QueueType>:$inputs);
+  let results = (outs QueueType:$result);
+  let assemblyFormat = [{
+    ` ` `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
 //===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
 
-def ClockedTerminateOp : SimOp<"clocked_terminate"> {
+def ClockedTerminateOp : SimOp<"clocked_terminate", [NonProceduralOp]> {
   let summary = "Terminate the simulation";
   let description = [{
     Implements the semantics of `sim.terminate` if the given condition is true
@@ -585,7 +1067,7 @@ def ClockedTerminateOp : SimOp<"clocked_terminate"> {
   }];
 }
 
-def ClockedPauseOp : SimOp<"clocked_pause"> {
+def ClockedPauseOp : SimOp<"clocked_pause", [NonProceduralOp]> {
   let summary = "Pause the simulation";
   let description = [{
     Implements the semantics of `sim.pause` if the given condition is true on
@@ -602,7 +1084,7 @@ def ClockedPauseOp : SimOp<"clocked_pause"> {
   }];
 }
 
-def TerminateOp : SimOp<"terminate"> {
+def TerminateOp : SimOp<"terminate", [ProceduralOp]> {
   let summary = "Terminate the simulation";
   let description = [{
     Terminate the simulation with a success or failure exit code. Depending on
@@ -632,7 +1114,7 @@ def TerminateOp : SimOp<"terminate"> {
   }];
 }
 
-def PauseOp : SimOp<"pause"> {
+def PauseOp : SimOp<"pause", [ProceduralOp]> {
   let summary = "Pause the simulation";
   let description = [{
     Interrupt the simulation and give control back to the user in case of an

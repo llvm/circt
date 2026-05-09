@@ -324,7 +324,3 @@ void LowerLUTPass::runOnOperation() {
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
 }
-
-std::unique_ptr<Pass> arc::createLowerLUTPass() {
-  return std::make_unique<LowerLUTPass>();
-}

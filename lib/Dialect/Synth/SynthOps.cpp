@@ -7,148 +7,140 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Naming.h"
+#include "circt/Support/SATSolver.h"
 #include "mlir/Analysis/TopologicalSortUtils.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/Value.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/LogicalResult.h"
 
 using namespace mlir;
 using namespace circt;
-using namespace circt::synth::mig;
+using namespace circt::synth;
 using namespace circt::synth::aig;
+using namespace circt::comb;
+using namespace matchers;
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Synth/Synth.cpp.inc"
 
-LogicalResult MajorityInverterOp::verify() {
-  if (getNumOperands() % 2 != 1)
-    return emitOpError("requires an odd number of operands");
+namespace {
 
+inline llvm::KnownBits applyInversion(llvm::KnownBits value, bool inverted) {
+  if (inverted)
+    std::swap(value.Zero, value.One);
+  return value;
+}
+
+template <typename SubType>
+struct ComplementMatcher {
+  SubType lhs;
+  ComplementMatcher(SubType lhs) : lhs(std::move(lhs)) {}
+  bool match(Operation *op) {
+    auto boolOp = dyn_cast<BooleanLogicOpInterface>(op);
+    return boolOp && boolOp.getInputs().size() == 1 && boolOp.isInverted(0) &&
+           lhs.match(op->getOperand(0));
+  }
+};
+
+template <typename SubType>
+static inline ComplementMatcher<SubType> m_Complement(const SubType &subExpr) {
+  return ComplementMatcher<SubType>(subExpr);
+}
+
+} // namespace
+
+LogicalResult ChoiceOp::verify() {
+  if (getNumOperands() < 1)
+    return emitOpError("requires at least one operand");
   return success();
 }
 
-llvm::APInt MajorityInverterOp::evaluate(ArrayRef<APInt> inputs) {
-  assert(inputs.size() == getNumOperands() &&
-         "Number of inputs must match number of operands");
+OpFoldResult ChoiceOp::fold(FoldAdaptor adaptor) {
+  if (adaptor.getInputs().size() == 1)
+    return getOperand(0);
+  return {};
+}
 
-  if (inputs.size() == 3) {
-    auto a = (isInverted(0) ? ~inputs[0] : inputs[0]);
-    auto b = (isInverted(1) ? ~inputs[1] : inputs[1]);
-    auto c = (isInverted(2) ? ~inputs[2] : inputs[2]);
-    return (a & b) | (a & c) | (b & c);
-  }
+// Canonicalize a network of synth.choice operations by computing their
+// transitive closure and flattening them into a single choice operation.
+// This merges nested choices and deduplicates shared operands.
+// Pattern matched:
+//   %0 = synth.choice %x, %y, %z
+//   %1 = synth.choice %0, %u
+//   %2 = synth.choice %z, %v
+//     =>
+//   %merged = synth.choice %x, %y, %z, %u, %v
+LogicalResult ChoiceOp::canonicalize(ChoiceOp op, PatternRewriter &rewriter) {
+  llvm::SetVector<Value> worklist;
+  llvm::SmallSetVector<Operation *, 4> visitedChoices;
 
-  // General case for odd number of inputs != 3
-  auto width = inputs[0].getBitWidth();
-  APInt result(width, 0);
+  auto addToWorklist = [&](ChoiceOp choice) -> bool {
+    if (choice->getBlock() == op->getBlock() && visitedChoices.insert(choice)) {
+      worklist.insert(choice.getInputs().begin(), choice.getInputs().end());
+      return true;
+    }
+    return false;
+  };
 
-  for (size_t bit = 0; bit < width; ++bit) {
-    size_t count = 0;
-    for (size_t i = 0; i < inputs.size(); ++i) {
-      // Count the number of 1s, considering inversion.
-      if (isInverted(i) ^ inputs[i][bit])
-        count++;
+  addToWorklist(op);
+
+  bool mergedOtherChoices = false;
+
+  // Look up and down at definitions and users.
+  for (unsigned i = 0; i < worklist.size(); ++i) {
+    Value val = worklist[i];
+    if (auto defOp = val.getDefiningOp<synth::ChoiceOp>()) {
+
+      if (addToWorklist(defOp))
+        mergedOtherChoices = true;
     }
 
-    if (count > inputs.size() / 2)
-      result.setBit(bit);
-  }
-
-  return result;
-}
-
-OpFoldResult MajorityInverterOp::fold(FoldAdaptor adaptor) {
-  // TODO: Implement maj(x, 1, 1) = 1, maj(x, 0, 0) = 0
-
-  SmallVector<APInt, 3> inputValues;
-  for (auto input : adaptor.getInputs()) {
-    auto attr = llvm::dyn_cast_or_null<IntegerAttr>(input);
-    if (!attr)
-      return {};
-    inputValues.push_back(attr.getValue());
-  }
-
-  auto result = evaluate(inputValues);
-  return IntegerAttr::get(getType(), result);
-}
-
-LogicalResult MajorityInverterOp::canonicalize(MajorityInverterOp op,
-                                               PatternRewriter &rewriter) {
-  if (op.getNumOperands() == 1) {
-    if (op.getInverted()[0])
-      return failure();
-    rewriter.replaceOp(op, op.getOperand(0));
-    return success();
-  }
-
-  // For now, only support 3 operands.
-  if (op.getNumOperands() != 3)
-    return failure();
-
-  // Return if the idx-th operand is a constant (inverted if necessary),
-  // otherwise return std::nullopt.
-  auto getConstant = [&](unsigned index) -> std::optional<llvm::APInt> {
-    APInt value;
-    if (mlir::matchPattern(op.getInputs()[index], mlir::m_ConstantInt(&value)))
-      return op.isInverted(index) ? ~value : value;
-    return std::nullopt;
-  };
-
-  // Replace the op with the idx-th operand (inverted if necessary).
-  auto replaceWithIndex = [&](int index) {
-    bool inverted = op.isInverted(index);
-    if (inverted)
-      rewriter.replaceOpWithNewOp<MajorityInverterOp>(
-          op, op.getType(), op.getOperand(index), true);
-    else
-      rewriter.replaceOp(op, op.getOperand(index));
-    return success();
-  };
-
-  // Pattern match following cases:
-  // maj_inv(x, x, y) -> x
-  // maj_inv(x, y, not y) -> x
-  for (int i = 0; i < 2; ++i) {
-    for (int j = i + 1; j < 3; ++j) {
-      int k = 3 - (i + j);
-      assert(k >= 0 && k < 3);
-      // If we have two identical operands, we can fold.
-      if (op.getOperand(i) == op.getOperand(j)) {
-        // If they are inverted differently, we can fold to the third.
-        if (op.isInverted(i) != op.isInverted(j))
-          return replaceWithIndex(k);
-        return replaceWithIndex(i);
-      }
-
-      // If i and j are constant.
-      if (auto c1 = getConstant(i)) {
-        if (auto c2 = getConstant(j)) {
-          // If both constants are equal, we can fold.
-          if (*c1 == *c2) {
-            rewriter.replaceOpWithNewOp<hw::ConstantOp>(
-                op, op.getType(), mlir::IntegerAttr::get(op.getType(), *c1));
-            return success();
-          }
-          // If constants are complementary, we can fold.
-          if (*c1 == ~*c2)
-            return replaceWithIndex(k);
+    for (Operation *user : val.getUsers()) {
+      if (auto userChoice = llvm::dyn_cast<synth::ChoiceOp>(user)) {
+        if (addToWorklist(userChoice)) {
+          mergedOtherChoices = true;
         }
       }
     }
   }
-  return failure();
+
+  llvm::SmallVector<mlir::Value> finalOperands;
+  for (Value v : worklist) {
+    if (!visitedChoices.contains(v.getDefiningOp())) {
+      finalOperands.push_back(v);
+    }
+  }
+
+  if (!mergedOtherChoices && finalOperands.size() == op.getInputs().size())
+    return llvm::failure();
+
+  auto newChoice = synth::ChoiceOp::create(rewriter, op->getLoc(), op.getType(),
+                                           finalOperands);
+  for (Operation *visited : visitedChoices.takeVector())
+    rewriter.replaceOp(visited, newChoice);
+
+  for (auto value : newChoice.getInputs())
+    rewriter.replaceAllUsesExcept(value, newChoice.getResult(), newChoice);
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
-// AIG Operations
+// AndInverterOp
 //===----------------------------------------------------------------------===//
+
+bool AndInverterOp::areInputsPermutationInvariant() { return true; }
 
 OpFoldResult AndInverterOp::fold(FoldAdaptor adaptor) {
   if (getNumOperands() == 1 && !isInverted(0))
@@ -249,58 +241,337 @@ LogicalResult AndInverterOp::canonicalize(AndInverterOp op,
   return success();
 }
 
-APInt AndInverterOp::evaluate(ArrayRef<APInt> inputs) {
-  assert(inputs.size() == getNumOperands() &&
-         "Expected as many inputs as operands");
-  assert(!inputs.empty() && "Expected non-empty input list");
+APInt AndInverterOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(!inputs.empty() && "expected non-empty input list");
   APInt result = APInt::getAllOnes(inputs.front().getBitWidth());
-  for (auto [idx, input] : llvm::enumerate(inputs)) {
-    if (isInverted(idx))
-      result &= ~input;
-    else
-      result &= input;
-  }
+  for (const APInt &input : inputs)
+    result &= input;
   return result;
 }
 
-static Value lowerVariadicAndInverterOp(AndInverterOp op, OperandRange operands,
-                                        ArrayRef<bool> inverts,
-                                        PatternRewriter &rewriter) {
+bool AndInverterOp::supportsNumInputs(unsigned numInputs) {
+  return numInputs >= 1;
+}
+
+llvm::KnownBits AndInverterOp::computeKnownBits(
+    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
+  assert(getNumOperands() > 0 && "Expected non-empty input list");
+
+  auto width = getInputKnownBits(0).getBitWidth();
+  llvm::KnownBits result(width);
+  result.One = APInt::getAllOnes(width);
+  result.Zero = APInt::getZero(width);
+
+  for (auto [i, inverted] : llvm::enumerate(getInverted()))
+    result &= applyInversion(getInputKnownBits(i), inverted);
+
+  return result;
+}
+
+int64_t AndInverterOp::getLogicDepthCost() {
+  return llvm::Log2_64_Ceil(getNumOperands());
+}
+
+std::optional<uint64_t> AndInverterOp::getLogicAreaCost() {
+  int64_t bitWidth = hw::getBitWidth(getType());
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<uint64_t>(getNumOperands() - 1) * bitWidth;
+}
+
+void AndInverterOp::emitCNFWithoutInversion(
+    int outVar, llvm::ArrayRef<int> inputVars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  (void)newVar;
+  circt::addAndClauses(outVar, inputVars, addClause);
+}
+
+//===----------------------------------------------------------------------===//
+// XorInverterOp
+//===----------------------------------------------------------------------===//
+
+bool XorInverterOp::areInputsPermutationInvariant() { return true; }
+
+OpFoldResult XorInverterOp::fold(FoldAdaptor adaptor) {
+  // xor_inv(a) -> a
+  if (getNumOperands() == 1 && !isInverted(0))
+    return getOperand(0);
+
+  auto inputs = adaptor.getInputs();
+  if (inputs.size() == 2)
+    if (auto intAttr = dyn_cast_or_null<IntegerAttr>(inputs[1])) {
+      auto value = intAttr.getValue();
+      if (isInverted(1))
+        value = ~value;
+      // xor_inv(a, 0000000) -> a
+      if (value.isZero())
+        return getOperand(0);
+    }
+  return {};
+}
+
+LogicalResult XorInverterOp::canonicalize(XorInverterOp op,
+                                          PatternRewriter &rewriter) {
+
+  // Map to store active (non-canceled) operands and their inversion state
+  SmallMapVector<Value, bool, 4> activeOperands;
+
+  // XOR identity is zero; accumulate all constant operands here.
+  APInt constValue =
+      APInt::getZero(op.getResult().getType().getIntOrFloatBitWidth());
+
+  bool constFound = false;
+  bool changed = false;
+
+  for (auto [value, inverted] : llvm::zip(op.getInputs(), op.getInverted())) {
+    Value currentValue = value;
+    bool newInverted = inverted;
+
+    // xor_inv(a, c0, c1) -> xor_inv(a, c0 ^ c1)
+    // xor_inv(a, not c0) -> xor_inv(a, ~c0)
+    if (auto constOp = currentValue.getDefiningOp<hw::ConstantOp>()) {
+      APInt val = constOp.getValue();
+      if (newInverted)
+        val = ~val;
+      constValue ^= val;
+      constFound = true;
+      continue;
+    }
+
+    // xor_inv(a, not (xor_inv/aig_inv not b)) -> xor_inv(a, b)
+    Value matchedVal;
+    if (newInverted &&
+        matchPattern(currentValue, m_Complement(m_Any(&matchedVal)))) {
+      currentValue = matchedVal;
+      newInverted = false; // double inversion cancels out
+      changed = true;
+    }
+
+    // xor_inv (a, a, b) -> b
+    // xor_inv (a, not a, b) -> ~b
+    if (activeOperands.count(currentValue)) {
+      // If we see the value again, they cancel out.
+      // If one was inverted and the other wasn't (x ^ ~x), it results in a '1'.
+      if (activeOperands[currentValue] != newInverted)
+        constValue.flipAllBits();
+      activeOperands.erase(currentValue);
+      changed = true;
+    } else {
+      activeOperands[currentValue] = newInverted;
+    }
+  }
+
+  // No constants were folded and no operands cancelled out. There is nothing to
+  // do.
+  if (!changed && !constFound && activeOperands.size() == op.getInputs().size())
+    return failure();
+
+  // xor_inv(a, 1111111) -> xor_inv(not a)
+  // xor_inv(a, c0, c1) -> xor_inv(a, c0^c1)
+  if (!constValue.isZero()) {
+    if (constValue.isAllOnes() && !activeOperands.empty()) {
+      // Propagate ones as an inversion on the last operand.
+      activeOperands.back().second = !activeOperands.back().second;
+    } else {
+      if (op.getInputs().size() == 2 && !op.getInverted()[1] &&
+          activeOperands.size() == 1)
+        return failure();
+      auto constOp = hw::ConstantOp::create(rewriter, op.getLoc(), constValue);
+      activeOperands.insert({constOp, false});
+    }
+  }
+
+  if (activeOperands.empty()) {
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+        op, APInt::getZero(op.getResult().getType().getIntOrFloatBitWidth()));
+    return success();
+  }
+
+  replaceOpAndCopyNamehint(rewriter, op,
+                           XorInverterOp::create(rewriter, op.getLoc(),
+                                                 activeOperands.getArrayRef()));
+  return success();
+}
+
+APInt XorInverterOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(!inputs.empty() && "expected non-empty input list");
+  APInt result = APInt::getZero(inputs.front().getBitWidth());
+  for (const APInt &input : inputs)
+    result ^= input;
+  return result;
+}
+
+bool XorInverterOp::supportsNumInputs(unsigned numInputs) {
+  return numInputs >= 1;
+}
+
+llvm::KnownBits XorInverterOp::computeKnownBits(
+    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
+  assert(getNumOperands() > 0 && "Expected non-empty input list");
+
+  llvm::KnownBits result(getInputKnownBits(0).getBitWidth());
+  for (auto [i, inverted] : llvm::enumerate(getInverted()))
+    result ^= applyInversion(getInputKnownBits(i), inverted);
+  return result;
+}
+
+int64_t XorInverterOp::getLogicDepthCost() {
+  return llvm::Log2_64_Ceil(getNumOperands());
+}
+
+std::optional<uint64_t> XorInverterOp::getLogicAreaCost() {
+  int64_t bitWidth = hw::getBitWidth(getType());
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<uint64_t>(getNumOperands() - 1) * bitWidth;
+}
+
+void XorInverterOp::emitCNFWithoutInversion(
+    int outVar, llvm::ArrayRef<int> inputVars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  circt::addParityClauses(outVar, inputVars, addClause, newVar);
+}
+
+//===----------------------------------------------------------------------===//
+// DotOp
+//===----------------------------------------------------------------------===//
+
+ParseResult DotOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand> operands;
+  Type resultType;
+  DenseBoolArrayAttr inverted;
+  NamedAttrList attrs;
+
+  if (parseVariadicInvertibleOperands(parser, operands, resultType, inverted,
+                                      attrs))
+    return failure();
+  if (operands.size() != 3)
+    return parser.emitError(parser.getCurrentLocation())
+           << "expected exactly three operands";
+  if (parser.resolveOperands(operands, resultType, result.operands))
+    return failure();
+
+  result.addTypes(resultType);
+  result.addAttributes(attrs);
+  result.addAttribute("inverted", inverted);
+  return success();
+}
+
+void DotOp::print(OpAsmPrinter &printer) {
+  printer << ' ';
+  printVariadicInvertibleOperands(printer, getOperation(), getOperands(),
+                                  getType(), getInvertedAttr(),
+                                  (*this)->getAttrDictionary());
+}
+
+LogicalResult DotOp::verify() {
+  if (getInverted().size() != 3)
+    return emitOpError("requires exactly three inversion flags");
+  return success();
+}
+
+APInt DotOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(supportsNumInputs(inputs.size()) &&
+         "dot expects exactly three operands");
+  return evaluateDotLogic(inputs[0], inputs[1], inputs[2]);
+}
+
+bool DotOp::areInputsPermutationInvariant() { return false; }
+
+bool DotOp::supportsNumInputs(unsigned numInputs) { return numInputs == 3; }
+
+llvm::KnownBits DotOp::computeKnownBits(
+    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
+  auto x = applyInversion(getInputKnownBits(0), isInverted(0));
+  auto y = applyInversion(getInputKnownBits(1), isInverted(1));
+  auto z = applyInversion(getInputKnownBits(2), isInverted(2));
+  return evaluateDotLogic(x, y, z);
+}
+
+std::optional<uint64_t> DotOp::getLogicAreaCost() {
+  int64_t bitWidth = hw::getBitWidth(getType());
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<uint64_t>(bitWidth);
+}
+
+void DotOp::emitCNFWithoutInversion(
+    int outVar, llvm::ArrayRef<int> inputVars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  assert(inputVars.size() == 3 && "expected one SAT variable per operand");
+  int andVar = newVar();
+  int orVar = newVar();
+  // andVar = x and y
+  circt::addAndClauses(andVar, {inputVars[0], inputVars[1]}, addClause);
+  // orVar = z or andVar
+  circt::addOrClauses(orVar, {inputVars[2], andVar}, addClause);
+  // outVar = x xor orVar
+  circt::addXorClauses(outVar, inputVars[0], orVar, addClause);
+}
+
+static Value lowerVariadicInvertibleOp(
+    Location loc, ValueRange operands, ArrayRef<bool> inverts,
+    PatternRewriter &rewriter,
+    llvm::function_ref<Value(Value, bool)> createUnary,
+    llvm::function_ref<Value(Value, Value, bool, bool)> createBinary) {
   switch (operands.size()) {
   case 0:
     assert(0 && "cannot be called with empty operand range");
     break;
   case 1:
-    if (inverts[0])
-      return AndInverterOp::create(rewriter, op.getLoc(), operands[0], true);
-    else
-      return operands[0];
+    return inverts[0] ? createUnary(operands[0], true) : operands[0];
   case 2:
-    return AndInverterOp::create(rewriter, op.getLoc(), operands[0],
-                                 operands[1], inverts[0], inverts[1]);
+    return createBinary(operands[0], operands[1], inverts[0], inverts[1]);
   default:
     auto firstHalf = operands.size() / 2;
-    auto lhs =
-        lowerVariadicAndInverterOp(op, operands.take_front(firstHalf),
-                                   inverts.take_front(firstHalf), rewriter);
-    auto rhs =
-        lowerVariadicAndInverterOp(op, operands.drop_front(firstHalf),
-                                   inverts.drop_front(firstHalf), rewriter);
-    return AndInverterOp::create(rewriter, op.getLoc(), lhs, rhs);
+    auto lhs = lowerVariadicInvertibleOp(loc, operands.take_front(firstHalf),
+                                         inverts.take_front(firstHalf),
+                                         rewriter, createUnary, createBinary);
+    auto rhs = lowerVariadicInvertibleOp(loc, operands.drop_front(firstHalf),
+                                         inverts.drop_front(firstHalf),
+                                         rewriter, createUnary, createBinary);
+    return createBinary(lhs, rhs, false, false);
   }
   return Value();
 }
 
-LogicalResult circt::synth::AndInverterVariadicOpConversion::matchAndRewrite(
-    AndInverterOp op, PatternRewriter &rewriter) const {
+template <typename OpTy>
+LogicalResult lowerVariadicAndInverterOpConversion(OpTy op,
+                                                   PatternRewriter &rewriter) {
   if (op.getInputs().size() <= 2)
     return failure();
-  // TODO: This is a naive implementation that creates a balanced binary tree.
-  //       We can improve by analyzing the dataflow and creating a tree that
-  //       improves the critical path or area.
-  rewriter.replaceOp(op, lowerVariadicAndInverterOp(
-                             op, op.getOperands(), op.getInverted(), rewriter));
+  auto result = lowerVariadicInvertibleOp(
+      op.getLoc(), op.getOperands(), op.getInverted(), rewriter,
+      [&](Value input, bool invert) {
+        return OpTy::create(rewriter, op.getLoc(), input, invert);
+      },
+      [&](Value lhs, Value rhs, bool invertLhs, bool invertRhs) {
+        return OpTy::create(rewriter, op.getLoc(), lhs, rhs, invertLhs,
+                            invertRhs);
+      });
+  replaceOpAndCopyNamehint(rewriter, op, result);
   return success();
+}
+
+void circt::synth::populateVariadicAndInverterLoweringPatterns(
+    RewritePatternSet &patterns) {
+  patterns.add(lowerVariadicAndInverterOpConversion<aig::AndInverterOp>);
+}
+
+void circt::synth::populateVariadicXorInverterLoweringPatterns(
+    RewritePatternSet &patterns) {
+  patterns.add(lowerVariadicAndInverterOpConversion<XorInverterOp>);
+}
+
+bool circt::synth::isLogicNetworkOp(Operation *op) {
+  return isa<synth::BooleanLogicOpInterface, synth::ChoiceOp, comb::ExtractOp,
+             comb::ReplicateOp, comb::ConcatOp>(op);
 }
 
 LogicalResult circt::synth::topologicallySortGraphRegionBlocks(

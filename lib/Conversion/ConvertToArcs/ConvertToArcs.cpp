@@ -9,7 +9,7 @@
 #include "circt/Conversion/ConvertToArcs.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "circt/Dialect/HW/HWOps.h"
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Support/ConversionPatternSet.h"
@@ -565,26 +565,21 @@ struct ConvertToArcsPass
 } // namespace
 
 void ConvertToArcsPass::runOnOperation() {
-  // Setup the type conversion.
+  // Pass-through type converter; this pass does not change any types.
   TypeConverter converter;
-
-  // Define legal types.
-  converter.addConversion([](Type type) -> std::optional<Type> {
-    if (isa<llhd::LLHDDialect>(type.getDialect()))
-      return std::nullopt;
-    return type;
-  });
+  converter.addConversion([](Type type) { return type; });
 
   // Gather the conversion patterns.
   ConversionPatternSet patterns(&getContext(), converter);
   patterns.add<llhd::CombinationalOp>(convert);
   patterns.add<llhd::YieldOp>(convert);
 
-  // Setup the legal ops. (Sort alphabetically.)
+  // `llhd.combinational` and `llhd.yield` are the only LLHD ops rewritten by
+  // this pass; all other ops are left untouched for subsequent lowering
+  // passes to handle.
   ConversionTarget target(getContext());
-  target.addIllegalDialect<llhd::LLHDDialect>();
-  target.markUnknownOpDynamicallyLegal(
-      [](Operation *op) { return !isa<llhd::LLHDDialect>(op->getDialect()); });
+  target.addIllegalOp<llhd::CombinationalOp, llhd::YieldOp>();
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
   // Disable pattern rollback to use the faster one-shot dialect conversion.
   ConversionConfig config;

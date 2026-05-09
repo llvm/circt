@@ -3,7 +3,7 @@
 // RUN: %rtgtool% %s --seed=0 --output-format=asm | FileCheck %s --check-prefix=ASM
 
 // MLIR: rtg.sequence @seq0
-// MLIR-NEXT: rtg.label_decl
+// MLIR-NEXT: rtg.constant
 // MLIR-NEXT: rtg.label
 // MLIR-NEXT: }
 // MLIR-NEXT: rtg.test @test0
@@ -13,7 +13,7 @@
 // MLIR-NEXT: }
 
 // ELABORATED: rtg.test @test0
-// ELABORATED-NEXT: rtg.label_decl
+// ELABORATED-NEXT: rtg.constant
 // ELABORATED-NEXT: rtg.label
 // ELABORATED-NEXT: }
 
@@ -21,7 +21,7 @@
 // ASM: label_string:
 // ASM: End of test 'test0_singleton'
 rtg.sequence @seq0() {
-  %0 = rtg.label_decl "label_string"
+  %0 = rtg.constant #rtg.isa.label<"label_string">
   rtg.label local %0
 }
 

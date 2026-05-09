@@ -98,13 +98,20 @@ public:
         return true;
     if (op->getNumRegions() != 0)
       return true;
-    if (auto instance = dyn_cast<InstanceOp>(op))
-      return effectfulModules.contains(instance.getModuleNameAttr().getAttr());
-    if (isa<FConnectLike, WireOp, RegResetOp, RegOp, MemOp, NodeOp>(op))
-      return false;
-    return !(mlir::isMemoryEffectFree(op) ||
-             mlir::hasSingleEffect<mlir::MemoryEffects::Allocate>(op) ||
-             mlir::hasSingleEffect<mlir::MemoryEffects::Read>(op));
+    return TypeSwitch<Operation *, bool>(op)
+        .Case<InstanceOp, InstanceChoiceOp>([&](auto op) {
+          for (auto module : op.getReferencedModuleNamesAttr())
+            if (effectfulModules.contains(cast<StringAttr>(module)))
+              return true;
+          return false;
+        })
+        .Case<FConnectLike, WireOp, RegResetOp, RegOp, MemOp, NodeOp>(
+            [](auto) { return false; })
+        .Default([](auto op) {
+          return !(mlir::isMemoryEffectFree(op) ||
+                   mlir::hasSingleEffect<mlir::MemoryEffects::Allocate>(op) ||
+                   mlir::hasSingleEffect<mlir::MemoryEffects::Read>(op));
+        });
   }
 
 private:
@@ -334,16 +341,16 @@ void DemandInfo::updateConnects(WorkStack &work, Value value, Demand demand) {
 }
 
 void DemandInfo::updateConnects(WorkStack &work, Operation *op, Demand demand) {
-  if (isa<WireOp, RegResetOp, RegOp, MemOp, ObjectOp>(op)) {
-    for (auto result : op->getResults())
-      updateConnects(work, result, demand);
-  } else if (auto inst = dyn_cast<InstanceOp>(op)) {
-    auto dirs = inst.getPortDirections();
-    for (unsigned i = 0, e = inst->getNumResults(); i < e; ++i) {
-      if (direction::get(dirs[i]) == Direction::In)
-        updateConnects(work, inst.getResult(i), demand);
-    }
-  }
+  TypeSwitch<Operation *>(op)
+      .Case<WireOp, RegResetOp, RegOp, MemOp, ObjectOp>([&](auto op) {
+        for (auto result : op->getResults())
+          updateConnects(work, result, demand);
+      })
+      .Case<InstanceOp, InstanceChoiceOp>([&](auto op) {
+        for (auto [i, dir] : llvm::enumerate(op.getPortDirections()))
+          if (direction::get(dir) == Direction::In)
+            updateConnects(work, op->getResult(i), demand);
+      });
 }
 
 //===----------------------------------------------------------------------===//

@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <queue>
 
 using namespace esi;
 
@@ -95,6 +96,8 @@ protected:
   OneItemBuffersToHost *engine;
   // Single buffer.
   std::unique_ptr<services::HostMem::HostMemRegion> buffer;
+  // Retain the current message across callback retries.
+  std::unique_ptr<SegmentedMessageData> pendingMessage;
   // Number of times the poll function has been called.
   uint64_t pollCount = 0;
 
@@ -197,27 +200,34 @@ void OneItemBuffersToHostReadPort::connectImpl(
 }
 
 bool OneItemBuffersToHostReadPort::pollImpl() {
-  // Check to see if the buffer has been filled.
-  uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
-  if (bufferData[bufferSize - 1] == 0)
-    return false;
-
   Logger &logger = engine->conn.getLogger();
 
-  // If it has, copy the data out. If the consumer (callback) reports that it
-  // has accepted the data, re-use the buffer.
-  MessageData data(bufferData, bufferSize - 1);
-  logger.trace(
-      [this, data](std::string &subsystem, std::string &msg,
-                   std::unique_ptr<std::map<std::string, std::any>> &details) {
-        subsystem = "OneItemBuffersToHost";
-        msg = "recieved message";
-        details = std::make_unique<std::map<std::string, std::any>>();
-        (*details)["channel"] = identifier();
-        (*details)["data_size"] = data.getSize();
-        (*details)["message_data"] = data.toHex();
-      });
-  if (callback(std::move(data))) {
+  auto tryDeliverPending = [&]() {
+    logger.trace(
+        [&](std::string &subsystem, std::string &msg,
+            std::unique_ptr<std::map<std::string, std::any>> &details) {
+          subsystem = "OneItemBuffersToHost";
+          msg = "received message";
+          details = std::make_unique<std::map<std::string, std::any>>();
+          MessageData flat = pendingMessage->toMessageData();
+          (*details)["channel"] = identifier();
+          (*details)["data_size"] = flat.getSize();
+          (*details)["message_data"] = flat.toHex();
+        });
+
+    if (!invokeCallback(pendingMessage)) {
+      logger.trace(
+          [&](std::string &subsystem, std::string &msg,
+              std::unique_ptr<std::map<std::string, std::any>> &details) {
+            subsystem = "OneItemBuffersToHost";
+            msg = "callback rejected data";
+            details = std::make_unique<std::map<std::string, std::any>>();
+            (*details)["channel"] = identifier();
+          });
+      return false;
+    }
+
+    pendingMessage.reset();
     writeBufferPtr();
     logger.trace(
         [this](std::string &subsystem, std::string &msg,
@@ -228,16 +238,19 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
           (*details)["channel"] = identifier();
         });
     return true;
-  }
-  logger.trace(
-      [this](std::string &subsystem, std::string &msg,
-             std::unique_ptr<std::map<std::string, std::any>> &details) {
-        subsystem = "OneItemBuffersToHost";
-        msg = "callback rejected data";
-        details = std::make_unique<std::map<std::string, std::any>>();
-        (*details)["channel"] = identifier();
-      });
-  return false;
+  };
+
+  if (pendingMessage)
+    return tryDeliverPending();
+
+  // Check to see if the buffer has been filled.
+  uint8_t *bufferData = reinterpret_cast<uint8_t *>(buffer->getPtr());
+  if (bufferData[bufferSize - 1] == 0)
+    return false;
+
+  // If it has, copy the data out and retain it until the consumer accepts it.
+  pendingMessage = std::make_unique<MessageData>(bufferData, bufferSize - 1);
+  return tryDeliverPending();
 }
 
 REGISTER_ENGINE("OneItemBuffersToHost", OneItemBuffersToHost);
@@ -276,7 +289,7 @@ public:
                                   const std::string &channelName)
       : WriteChannelPort(type), engine(engine), idPath(idPath),
         channelName(channelName) {
-    bufferSize = type->getBitWidth() / 8;
+    frameSizeBytes = utils::bitsToBytes(type->getBitWidth());
   }
 
   // Connect allocate a buffer and prime the pump.
@@ -288,8 +301,14 @@ protected:
   void writeImpl(const MessageData &) override;
   bool tryWriteImpl(const MessageData &data) override;
 
+  /// Break an oversized message into frame-sized pieces and enqueue them.
+  void enqueueFrames(const MessageData &data);
+
+  /// Poll for ability to send more data and send if able.
+  bool pollImpl() override;
+
   // Size of buffer based on type.
-  size_t bufferSize;
+  size_t frameSizeBytes;
   // Owning engine.
   OneItemBuffersFromHost *engine;
   // Single buffer.
@@ -298,6 +317,10 @@ protected:
 
   // Thread protection.
   std::mutex bufferMutex;
+
+  // FIFO of frame-sized messages to send. When a message is larger than
+  // frameSizeBytes, it's broken into frame-sized pieces and enqueued here.
+  std::queue<MessageData> pendingFrames;
 
   // Identifing information.
   AppIDPath idPath;
@@ -386,12 +409,19 @@ void OneItemBuffersFromHost::connect() {
 void OneItemBuffersFromHostWritePort::connectImpl(
     const ChannelPort::ConnectOptions &options) {
   engine->connect();
-  data_buffer = engine->hostMem->allocate(std::max(bufferSize, (size_t)512),
+  data_buffer = engine->hostMem->allocate(std::max(frameSizeBytes, (size_t)512),
                                           {false, false});
   completion_buffer = engine->hostMem->allocate(512, {true, false});
   // Set the last byte to '1' to indicate that the buffer is ready to be filled
   // and sent to the device.
   *static_cast<uint8_t *>(completion_buffer->getPtr()) = 1;
+}
+
+void OneItemBuffersFromHostWritePort::enqueueFrames(const MessageData &data) {
+  auto frames = getMessageFrames(data);
+  std::lock_guard<std::mutex> lock(bufferMutex);
+  for (const auto &frame : frames)
+    pendingFrames.push(frame);
 }
 
 void OneItemBuffersFromHostWritePort::writeImpl(const MessageData &data) {
@@ -401,50 +431,63 @@ void OneItemBuffersFromHostWritePort::writeImpl(const MessageData &data) {
 }
 
 bool OneItemBuffersFromHostWritePort::tryWriteImpl(const MessageData &data) {
+  // We don't want to provide an infinite buffer, so limit it to one message.
+  {
+    std::lock_guard<std::mutex> lock(bufferMutex);
+    if (!pendingFrames.empty())
+      return false;
+  }
+
+  enqueueFrames(data);
+  return true;
+}
+
+bool OneItemBuffersFromHostWritePort::pollImpl() {
   Logger &logger = engine->conn.getLogger();
 
-  // Check to see if there's an outstanding write.
+  // Check to see if the device is ready.
   completion_buffer->flush();
   uint8_t *completion =
       reinterpret_cast<uint8_t *>(completion_buffer->getPtr());
-  if (*completion == 0) {
-    logger.trace(
-        [this](std::string &subsystem, std::string &msg,
-               std::unique_ptr<std::map<std::string, std::any>> &details) {
-          subsystem = "OneItemBuffersFromHost";
-          msg = identifier() + " write failed: buffer not ready";
-          details = std::make_unique<std::map<std::string, std::any>>();
-          (*details)["channel"] = identifier();
-        });
+  if (*completion == 0)
     return false;
-  }
 
-  // If the buffer is empty, use it.
   std::lock_guard<std::mutex> lock(bufferMutex);
+
+  // Determine what to send: next frame from queue, or the original message.
+  const uint8_t *src;
+  size_t sendSize;
+  if (pendingFrames.empty())
+    return false;
+
+  MessageData frame = std::move(pendingFrames.front());
+  pendingFrames.pop();
+  src = frame.getBytes();
+  sendSize = frame.getSize();
+
   void *bufferData = data_buffer->getPtr();
-  std::memcpy(bufferData, data.getBytes(), data.getSize());
+  std::memcpy(bufferData, src, sendSize);
   data_buffer->flush();
-  // Indicate that the buffer is now in use.
   *completion = 0;
   completion_buffer->flush();
-  // Write the *device-visible* address of the data buffer and completion buffer
-  // to the MMIO space.
   engine->mmio->write(BufferPtrOffset,
                       reinterpret_cast<uint64_t>(data_buffer->getDevicePtr()));
   engine->mmio->write(
       CompletionPtrOffset,
       reinterpret_cast<uint64_t>(completion_buffer->getDevicePtr()));
 
-  logger.trace(
-      [this, data](std::string &subsystem, std::string &msg,
+  logger.trace([this, sendSize](
+                   std::string &subsystem, std::string &msg,
                    std::unique_ptr<std::map<std::string, std::any>> &details) {
-        subsystem = "OneItemBuffersFromHost";
-        msg = "initiated transfer of message";
-        details = std::make_unique<std::map<std::string, std::any>>();
-        (*details)["channel"] = identifier();
-        (*details)["data_size"] = data.getSize();
-        (*details)["message_data"] = data.toHex();
-      });
+    subsystem = "OneItemBuffersFromHost";
+    msg = "initiated transfer";
+    details = std::make_unique<std::map<std::string, std::any>>();
+    (*details)["channel"] = identifier();
+    (*details)["data_size"] = sendSize;
+  });
+
+  // We initiated a transfer, so return true to indicate that an action
+  // occurred.
   return true;
 }
 

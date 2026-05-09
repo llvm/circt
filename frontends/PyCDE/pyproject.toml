@@ -5,15 +5,12 @@ requires = [
   "wheel",
   "cmake>=3.23,<4",
   "ninja>=1.10",
+  "executing",
 
   # MLIR build depends.
   "numpy",
   "nanobind>=2.2",
   "PyYAML",
-
-  # PyCDE depends
-  "cocotb>=1.6.2",
-  "cocotb-test>=0.2.2",
 ]
 build-backend = "setuptools.build_meta"
 
@@ -46,8 +43,8 @@ name = "pycde"
 dynamic = ["version"]
 description = "Python CIRCT Design Entry"
 authors = [{ name = "John Demme", email = "John.Demme@microsoft.com" }]
-dependencies = ['numpy']
-requires-python = ">=3.8"
+dependencies = ['numpy', 'executing']
+requires-python = ">=3.10"
 
 [project.urls]
 "Homepage" = "https://circt.llvm.org/docs/PyCDE/"

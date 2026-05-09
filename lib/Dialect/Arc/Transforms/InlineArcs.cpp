@@ -359,7 +359,3 @@ void InlineArcsPass::runOnOperation() {
   numSingleUseArcs = statistics.numSingleUseArcs;
   numTrivialArcs = statistics.numTrivialArcs;
 }
-
-std::unique_ptr<Pass> arc::createInlineArcsPass() {
-  return std::make_unique<InlineArcsPass>();
-}

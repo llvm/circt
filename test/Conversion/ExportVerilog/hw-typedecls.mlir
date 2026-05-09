@@ -63,6 +63,27 @@ hw.module @testRegOp() {
   %r2 = sv.reg : !hw.inout<!hw.array<3xtypealias<@__hw_typedecls::@foo,i1>>>
 }
 
+// Check that sv.reg omits the "reg" keyword for typealias types wrapped in
+// unpacked arrays, matching the behaviour for StructType in the same position.
+// CHECK-LABEL: module testRegOpUnpackedArrayTypealias
+hw.module @testRegOpUnpackedArrayTypealias() {
+  // CHECK-NOT: reg
+  // CHECK: foo{{.*}}[0:7]
+  %r1 = sv.reg : !hw.inout<uarray<8xtypealias<@__hw_typedecls::@foo, i1>>>
+
+  // CHECK-NOT: reg
+  // CHECK: foo{{.*}}[0:3][0:7]
+  %r2 = sv.reg : !hw.inout<uarray<4xuarray<8xtypealias<@__hw_typedecls::@foo, i1>>>>
+
+  // CHECK-NOT: reg
+  // CHECK: bar{{.*}}[0:7]
+  %r3 = sv.reg : !hw.inout<uarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>
+
+  // CHECK-NOT: reg
+  // CHECK: bar[7:0]{{.*}}[0:3]
+  %r4 = sv.reg : !hw.inout<uarray<4xarray<8xtypealias<@__hw_typedecls::@bar, !hw.struct<a: i1, b: i1>>>>>
+}
+
 // CHECK-LABEL: module testAggregateCreate
 hw.module @testAggregateCreate(in %i: i1, out out1: i1, out out2: i1) {
   // CHECK: wire bar [[NAME:.+]] = {{.+}};

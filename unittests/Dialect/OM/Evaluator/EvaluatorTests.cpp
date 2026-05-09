@@ -367,11 +367,9 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
   auto object = ObjectOp::create(builder, innerCls, body.getArguments());
-  auto field =
-      ObjectFieldOp::create(builder, builder.getI32Type(), object,
-                            builder.getArrayAttr(FlatSymbolRefAttr::get(
-                                builder.getStringAttr("field"))));
-  ClassFieldsOp::create(builder, loc, SmallVector<Value>({field}), ArrayAttr{});
+  auto field = ObjectFieldOp::create(builder, builder.getI32Type(), object,
+                                     builder.getStringAttr("field"));
+  ClassFieldsOp::create(builder, loc, ValueRange{field}, ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -586,7 +584,9 @@ om.class @LinkedList(%n: !ty, %val: !om.string) -> (n: !ty, val:
 }
 om.class @ReferenceEachOther() -> (field1: !ty, field2: !ty) {
   %str = om.constant "foo" : !om.string
-  %val = om.object.field %1, [@n, @n, @val] : (!ty) -> !om.string
+  %temp1 = om.object.field %1["n"] : (!ty) -> !ty
+  %temp2 = om.object.field %temp1["n"] : (!ty) -> !ty
+  %val = om.object.field %temp2["val"] : (!ty) -> !om.string
   %0 = om.object @LinkedList(%1, %val) : (!ty, !om.string) -> !ty
   %1 = om.object @LinkedList(%0, %str) : (!ty, !om.string) -> !ty
   om.class.fields %0, %1 : !ty, !ty
@@ -641,7 +641,7 @@ om.class @LinkedList(%n: !ty) -> (n: !ty){
   om.class.fields %n : !ty
 }
 om.class @ReferenceEachOther() -> (field: !ty){
-  %val = om.object.field %0, [@n] : (!ty) -> !ty
+  %val = om.object.field %0["n"] : (!ty) -> !ty
   %0 = om.object @LinkedList(%val) : (!ty) -> !ty
   om.class.fields %0 : !ty
 }
@@ -654,8 +654,9 @@ om.class @ReferenceEachOther() -> (field: !ty){
   context.getOrLoadDialect<OMDialect>();
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
-    ASSERT_EQ(diag.str(), "failed to finalize evaluation. Probably the class "
-                          "contains a dataflow cycle");
+    ASSERT_EQ(diag.str(),
+              "cycle detected: 1 values remain partially evaluated after full "
+              "pass with no progress (total fully evaluated: 1)");
   });
 
   OwningOpRef<ModuleOp> owning =
@@ -667,6 +668,50 @@ om.class @ReferenceEachOther() -> (field: !ty){
       StringAttr::get(&context, "ReferenceEachOther"), {});
 
   ASSERT_TRUE(failed(result));
+}
+
+// Test nested object field references.
+// https://github.com/llvm/circt/issues/10264
+TEST(EvaluatorTests, Issue10264NestedFieldReferences) {
+  StringRef mod = R"MLIR(
+om.class @Domain(%in: !om.string) -> (out: !om.string) {
+  om.class.fields %in : !om.string
+}
+
+om.class @Top() -> (test: i1) {
+  %0 = om.constant "A" : !om.string
+  %1 = om.object @Domain(%0) : (!om.string) -> !om.class.type<@Domain>
+  %2 = om.object.field %1["out"] : (!om.class.type<@Domain>) -> !om.string
+  %3 = om.object @Domain(%2) : (!om.string) -> !om.class.type<@Domain>
+  %4 = om.object.field %3["out"] : (!om.class.type<@Domain>) -> !om.string
+  %5 = om.constant "B" : !om.string
+  %6 = om.prop.eq %4, %5 : !om.string
+  om.class.fields %6 : i1
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  // Verify the result is correct (false since "A" != "B")
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("test")
+                        .value();
+  auto boolValue = llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                       ->getAs<BoolAttr>();
+  ASSERT_FALSE(boolValue.getValue());
 }
 
 TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
@@ -969,10 +1014,10 @@ om.class @Class2() -> (value: !om.integer){
 
 om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {
   %0 = om.object @Class1() : () -> !om.class.type<@Class1>
-  %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
+  %1 = om.object.field %0["value"] : (!om.class.type<@Class1>) -> !om.integer
 
   %2 = om.object @Class2() : () -> !om.class.type<@Class2>
-  %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
+  %3 = om.object.field %2["value"] : (!om.class.type<@Class2>) -> !om.integer
 
   %5 = om.integer.add %1, %3 : !om.integer
   om.class.fields %5 : !om.integer
@@ -1019,10 +1064,10 @@ om.class @Class2() -> (value: !om.integer){
 
 om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer){
   %0 = om.object @Class1(%5) : (!om.integer) -> !om.class.type<@Class1>
-  %1 = om.object.field %0, [@value] : (!om.class.type<@Class1>) -> !om.integer
+  %1 = om.object.field %0["value"] : (!om.class.type<@Class1>) -> !om.integer
 
   %2 = om.object @Class2() : () -> !om.class.type<@Class2>
-  %3 = om.object.field %2, [@value] : (!om.class.type<@Class2>) -> !om.integer
+  %3 = om.object.field %2["value"] : (!om.class.type<@Class2>) -> !om.integer
 
   %5 = om.integer.add %1, %3 : !om.integer
   om.class.fields %5 : !om.integer
@@ -1157,7 +1202,7 @@ om.class @ListConcatField() -> (result: !om.list<!om.integer>){
   %0 = om.constant #om.integer<0 : i8> : !om.integer
   %1 = om.constant #om.integer<1 : i8> : !om.integer
   %l0 = om.list_create %0, %1 : !om.integer
-  %l1 = om.object.field %listField, [@value] : (!om.class.type<@ListField>) -> !om.list<!om.integer>
+  %l1 = om.object.field %listField["value"] : (!om.class.type<@ListField>) -> !om.list<!om.integer>
   %concat = om.list_concat %l0, %l1 : !om.list<!om.integer>
   om.class.fields %concat : !om.list<!om.integer>
 }
@@ -1283,9 +1328,9 @@ om.class @Leaf(%id_in: !om.integer) -> (id: !om.integer) {
 }
 om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){
   %0 = om.object @Child(%7) : (!om.any) -> !om.class.type<@Child>
-  %1 = om.object.field %0, [@field] : (!om.class.type<@Child>) -> !om.list<!om.any>
+  %1 = om.object.field %0["field"] : (!om.class.type<@Child>) -> !om.list<!om.any>
   %2 = om.object @Child(%10) : (!om.any) -> !om.class.type<@Child>
-  %3 = om.object.field %2, [@field] : (!om.class.type<@Child>) -> !om.list<!om.any>
+  %3 = om.object.field %2["field"] : (!om.class.type<@Child>) -> !om.list<!om.any>
   %4 = om.list_concat %1, %3 : <!om.any>
   %5 = om.constant #om.integer<1 : i64>
   %6 = om.object @Leaf(%5) : (!om.integer) -> !om.class.type<@Leaf>
@@ -1354,9 +1399,9 @@ om.class @InnerClass2(%anyListIn: !om.list<!om.any>)  -> (any_list2: !om.list<!o
 om.class @OuterClass2()  -> (om: !om.class.type<@InnerClass2>) {
   %0 = om.object @InnerClass2(%5) : (!om.list<!om.any>) -> !om.class.type<@InnerClass2>
   %1 = om.object @Any() : () -> !om.class.type<@Any>
-  %2 = om.object.field %1, [@object] : (!om.class.type<@Any>) -> !om.any
+  %2 = om.object.field %1["object"] : (!om.class.type<@Any>) -> !om.any
   %3 = om.object @Any() : () -> !om.class.type<@Any>
-  %4 = om.object.field %3, [@object] : (!om.class.type<@Any>) -> !om.any
+  %4 = om.object.field %3["object"] : (!om.class.type<@Any>) -> !om.any
   %5 = om.list_create %2, %4 : !om.any
   om.class.fields %0 : !om.class.type<@InnerClass2>
 }
@@ -1364,10 +1409,10 @@ om.class @OuterClass1()  -> (om: !om.any) {
   %0 = om.object @InnerClass1(%8) : (!om.list<!om.any>) -> !om.class.type<@InnerClass1>
   %1 = om.any_cast %0 : (!om.class.type<@InnerClass1>) -> !om.any
   %2 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>
-  %3 = om.object.field %2, [@om] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
+  %3 = om.object.field %2["om"] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
   %4 = om.any_cast %3 : (!om.class.type<@InnerClass2>) -> !om.any
   %5 = om.object @OuterClass2() : () -> !om.class.type<@OuterClass2>
-  %6 = om.object.field %5, [@om] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
+  %6 = om.object.field %5["om"] : (!om.class.type<@OuterClass2>) -> !om.class.type<@InnerClass2>
   %7 = om.any_cast %6 : (!om.class.type<@InnerClass2>) -> !om.any
   %8 = om.list_create %4, %7 : !om.any
   om.class.fields %1 : !om.any
@@ -1455,6 +1500,8 @@ om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
 
 TEST(EvaluatorTests, UnknownValuesBasic) {
   StringRef mod = R"MLIR(
+om.class.extern @Baz() -> (a: !om.integer) {}
+
 om.class @Bar(
   %a: !om.integer
 ) -> (
@@ -1474,7 +1521,17 @@ om.class @Foo(
   d: !om.list<!om.integer>,
   e: !om.frozenbasepath,
   f: !om.frozenpath,
-  g: !om.integer
+  g: !om.integer,
+  h: !om.integer,
+  i: !om.class.type<@Baz>,
+  j: !om.integer,
+  k: !om.integer,
+  l: !om.string,
+  m: !om.list<!om.string>,
+  n: !om.class.type<@Bar>,
+  o: !om.frozenbasepath,
+  p: !om.frozenpath,
+  q: !om.class.type<@Baz>
 ) {
   %0 = om.constant #om.integer<1 : i4> : !om.integer
   %1 = om.integer.add %0, %unknown_int : !om.integer
@@ -1482,8 +1539,18 @@ om.class @Foo(
   %3 = om.list_concat %2, %2 : !om.list<!om.integer>
   %4 = om.frozenbasepath_create %unknown_frozenbasepath "Foo/bar"
   %5 = om.frozenpath_create reference %unknown_frozenbasepath "Foo/bar:Bar>w.a"
-  %6 = om.object.field %unknown_class, [@b] : (!om.class.type<@Bar>) -> !om.integer
-  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer
+  %6 = om.object.field %unknown_class["b"] : (!om.class.type<@Bar>) -> !om.integer
+  %7 = om.unknown : !om.integer
+  %8 = om.object @Baz() : () -> !om.class.type<@Baz>
+  %9 = om.object.field %8["a"] : (!om.class.type<@Baz>) -> !om.integer
+  %10 = om.unknown : !om.integer
+  %11 = om.unknown : !om.string
+  %12 = om.unknown : !om.list<!om.string>
+  %13 = om.unknown : !om.class.type<@Bar>
+  %14 = om.unknown : !om.frozenbasepath
+  %15 = om.unknown : !om.frozenpath
+  %16 = om.unknown : !om.class.type<@Baz>
+  om.class.fields %unknown_int, %1, %2, %3, %4, %5, %6, %7, %8, %9, %10, %11, %12, %13, %14, %15, %16 : !om.integer, !om.integer, !om.list<!om.integer>, !om.list<!om.integer>, !om.frozenbasepath, !om.frozenpath, !om.integer, !om.integer, !om.class.type<@Baz>, !om.integer, !om.integer, !om.string, !om.list<!om.string>, !om.class.type<@Bar>, !om.frozenbasepath, !om.frozenpath, !om.class.type<@Baz>
 }
 )MLIR";
 
@@ -1499,22 +1566,78 @@ om.class @Foo(
   Evaluator evaluator(owning.release());
 
   auto unknownLoc = UnknownLoc::get(&context);
-  auto unknownValue = std::make_shared<circt::om::evaluator::UnknownValue>(
-      circt::om::evaluator::UnknownValue(&context, unknownLoc));
+  // Create unknown values with the correct types
+  auto unknownInt = circt::om::evaluator::AttributeValue::get(
+      circt::om::OMIntegerType::get(&context), LocationAttr(unknownLoc));
+  unknownInt->markUnknown();
+
+  auto unknownBasePath = circt::om::evaluator::AttributeValue::get(
+      circt::om::FrozenBasePathType::get(&context), LocationAttr(unknownLoc));
+  unknownBasePath->markUnknown();
+
+  auto barClassType = circt::om::ClassType::get(
+      &context, mlir::FlatSymbolRefAttr::get(&context, "Bar"));
+  auto unknownClass = circt::om::evaluator::AttributeValue::get(
+      barClassType, LocationAttr(unknownLoc));
+  unknownClass->markUnknown();
+
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "Foo"),
-                            {unknownValue, unknownValue, unknownValue});
+                            {unknownInt, unknownBasePath, unknownClass});
 
   ASSERT_TRUE(succeeded(result));
 
   auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
 
-  ASSERT_EQ(object->getFieldNames().size(), 7ul);
+  ASSERT_EQ(object->getFieldNames().size(), 17ul);
 
   for (auto fieldName : object->getFieldNames()) {
     auto field = object->getField(cast<StringAttr>(fieldName));
-    ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(field->get()));
+    ASSERT_TRUE(field->get()->isUnknown());
   }
+
+  // Check that each unknown value has the correct type
+  auto checkFieldType = [&](StringRef name, auto expectedType) {
+    auto field = object->getField(name);
+    ASSERT_TRUE(succeeded(field));
+    ASSERT_TRUE(field->get()->isUnknown());
+    ASSERT_EQ(field->get()->getType(), expectedType);
+  };
+
+  // Check primitive types
+  checkFieldType("k", circt::om::OMIntegerType::get(&context));
+  checkFieldType("l", circt::om::StringType::get(&context));
+
+  // Check list type
+  auto listOfStringType =
+      circt::om::ListType::get(circt::om::StringType::get(&context));
+  checkFieldType("m", listOfStringType);
+
+  // Check class types
+  checkFieldType("n", barClassType);
+  auto bazClassType = circt::om::ClassType::get(
+      &context, mlir::FlatSymbolRefAttr::get(&context, "Baz"));
+  checkFieldType("q", bazClassType);
+
+  // Check path types
+  checkFieldType("o", circt::om::FrozenBasePathType::get(&context));
+  checkFieldType("p", circt::om::FrozenPathType::get(&context));
+
+  // Verify that the values have the correct runtime type
+  auto checkFieldValueType = [&](StringRef name, auto expectedKind) {
+    auto field = object->getField(name);
+    ASSERT_TRUE(succeeded(field));
+    ASSERT_EQ(field->get()->getKind(), expectedKind);
+  };
+
+  using Kind = circt::om::evaluator::EvaluatorValue::Kind;
+  checkFieldValueType("k", Kind::Attr);     // integer -> AttributeValue
+  checkFieldValueType("l", Kind::Attr);     // string -> AttributeValue
+  checkFieldValueType("m", Kind::List);     // list -> ListValue
+  checkFieldValueType("n", Kind::Object);   // class -> ObjectValue
+  checkFieldValueType("o", Kind::BasePath); // frozenbasepath -> BasePathValue
+  checkFieldValueType("p", Kind::Path);     // frozenpath -> PathValue
+  checkFieldValueType("q", Kind::Object);   // external class -> ObjectValue
 }
 
 TEST(EvaluatorTests, UnknownValuesNested) {
@@ -1538,8 +1661,8 @@ om.class @Foo(
   %0 = om.constant #om.integer<1 : i4> : !om.integer
 
   %bar = om.object @Bar(%0, %unknown_in) : (!om.integer, !om.integer) -> !om.class.type<@Bar>
-  %1 = om.object.field %bar, [@known_out] : (!om.class.type<@Bar>) -> !om.integer
-  %2 = om.object.field %bar, [@unknown_out] : (!om.class.type<@Bar>) -> !om.integer
+  %1 = om.object.field %bar["known_out"] : (!om.class.type<@Bar>) -> !om.integer
+  %2 = om.object.field %bar["unknown_out"] : (!om.class.type<@Bar>) -> !om.integer
 
   om.class.fields %0, %2 : !om.integer, !om.integer
 }
@@ -1557,10 +1680,13 @@ om.class @Foo(
   Evaluator evaluator(owning.release());
 
   auto unknownLoc = UnknownLoc::get(&context);
-  auto result = evaluator.instantiate(
-      StringAttr::get(&context, "Foo"),
-      {std::make_shared<circt::om::evaluator::UnknownValue>(
-          circt::om::evaluator::UnknownValue(&context, unknownLoc))});
+  // Create unknown value with the correct type (!om.integer)
+  auto unknownValue = circt::om::evaluator::AttributeValue::get(
+      circt::om::OMIntegerType::get(&context), LocationAttr(unknownLoc));
+  unknownValue->markUnknown();
+
+  auto result =
+      evaluator.instantiate(StringAttr::get(&context, "Foo"), {unknownValue});
 
   ASSERT_TRUE(succeeded(result));
 
@@ -1577,8 +1703,432 @@ om.class @Foo(
   ASSERT_TRUE(a == 1);
 
   // B should be unknown.
-  ASSERT_TRUE(isa<circt::om::evaluator::UnknownValue>(
-      object->getField("b").value().get()));
+  ASSERT_TRUE(object->getField("b").value()->isUnknown());
+}
+
+TEST(EvaluatorTests, StringConcat) {
+  const char *mod = R"MLIR(
+module {
+  om.class @Test() -> (result: !om.string) {
+    %0 = om.constant "Hello, " : !om.string
+    %1 = om.constant "World!" : !om.string
+    %2 = om.string.concat %0, %1 : !om.string
+    om.class.fields %2 : !om.string
+  }
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
+    llvm::errs() << "Diagnostic: " << diag << "\n";
+  });
+
+  auto result = evaluator.instantiate(StringAttr::get(&context, "Test"), {});
+
+  ASSERT_TRUE(succeeded(result));
+
+  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
+                        ->getField("result")
+                        .value();
+
+  ASSERT_EQ("Hello, World!",
+            llvm::cast<evaluator::AttributeValue>(fieldValue.get())
+                ->getAs<StringAttr>()
+                .getValue());
+}
+
+TEST(EvaluatorTests, UnknownObjectFieldTest) {
+  StringRef mod = R"MLIR(
+om.class.extern @Dut_Class(%basepath: !om.frozenbasepath) -> (omirOut: !om.list<!om.any>) {
+}
+
+om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<!om.any>) {
+  %0 = om.frozenbasepath_create %basepath "TestHarness/dut"
+  %1 = om.object @Dut_Class(%0) : (!om.frozenbasepath) -> !om.class.type<@Dut_Class>
+  %2 = om.object.field %1["omirOut"] : (!om.class.type<@Dut_Class>) -> !om.list<!om.any>
+  %3 = om.list_create : !om.any
+  %4 = om.list_concat %3, %2 : !om.list<!om.any>
+  om.class.fields %4 : !om.list<!om.any>
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto basepath = std::make_shared<evaluator::BasePathValue>(&context);
+
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "TestHarness_Class"), {basepath});
+
+  ASSERT_TRUE(succeeded(result));
+
+  // Verify the concatenated list is unknown
+  auto *obj = llvm::cast<evaluator::ObjectValue>(result->get());
+  auto field = obj->getField("result");
+  ASSERT_TRUE(succeeded(field));
+  EXPECT_TRUE(field->get()->isUnknown());
+}
+
+TEST(EvaluatorTests, PropertyAssertTests) {
+  StringRef mod = R"MLIR(
+// Test 1: A true assert passes.
+om.class @True() -> () {
+  %true = om.constant true
+  om.property_assert %true, "okay!" : i1
+  om.class.fields
+}
+
+// Test 2: A false assert fails.
+om.class @False() -> () {
+  %false = om.constant false
+  om.property_assert %false, "fail!" : i1
+  om.class.fields
+}
+
+// Test 3: A true parameter passes.
+// Test 4: A false parameter fails.
+om.class @Parameter(%bool: i1) -> () {
+  om.property_assert %bool, "input must be true true" : i1
+  om.class.fields
+}
+om.class @Parameter_True() -> () {
+  %true = om.constant true
+  om.object @Parameter(%true) : (i1) -> !om.class.type<@Parameter>
+  om.class.fields
+}
+om.class @Parameter_False() -> () {
+  %false = om.constant false
+  om.object @Parameter(%false) : (i1) -> !om.class.type<@Parameter>
+  om.class.fields
+}
+
+// Test 5: Order invariance of a true assert.
+om.class @Parameter_True_Partial() -> () {
+  om.object @Parameter(%true) : (i1) -> !om.class.type<@Parameter>
+  %true = om.constant true
+  om.class.fields
+}
+
+// Test 6: Order invariance of a false assert.
+om.class @Parameter_False_Partial() -> () {
+  om.object @Parameter(%false) : (i1) -> !om.class.type<@Parameter>
+  %false = om.constant false
+  om.class.fields
+}
+
+// Test 7: True -> Output Port -> Input Port -> Assert passes
+om.class @Parameter_True_Cycle(%in: i1) -> (out: i1) {
+  om.object @Parameter(%in) : (i1) -> !om.class.type<@Parameter>
+  %true = om.constant true
+  om.class.fields %true : i1
+}
+om.class @Parameter_True_Cycle_Top() -> () {
+  %obj = om.object @Parameter_True_Cycle(%in) : (i1) -> !om.class.type<@Parameter_True_Cycle>
+  %in = om.object.field %obj["out"] : (!om.class.type<@Parameter_True_Cycle>) -> i1
+  om.class.fields
+}
+
+// Test 8: False -> Output Port -> Input Port -> Assert fails
+om.class @Parameter_False_Cycle(%in: i1) -> (out: i1) {
+  om.object @Parameter(%in) : (i1) -> !om.class.type<@Parameter>
+  %false = om.constant false
+  om.class.fields %false : i1
+}
+om.class @Parameter_False_Cycle_Top() -> () {
+  %obj = om.object @Parameter_False_Cycle(%in) : (i1) -> !om.class.type<@Parameter_False_Cycle>
+  %in = om.object.field %obj["out"] : (!om.class.type<@Parameter_False_Cycle>) -> i1
+  om.class.fields
+}
+
+// Test 9: True subfield passes.
+om.class @ReturnTrue() -> (out: i1) {
+  %true = om.constant true
+  om.class.fields %true : i1
+}
+om.class @SubfieldTrue() -> () {
+  %obj = om.object @ReturnTrue() : () -> !om.class.type<@ReturnTrue>
+  %true = om.object.field %obj["out"] : (!om.class.type<@ReturnTrue>) -> i1
+  om.property_assert %true, "input must be true true" : i1
+  om.class.fields
+}
+
+// Test 10: False subfield fails.
+om.class @ReturnFalse() -> (out: i1) {
+  %false = om.constant false
+  om.class.fields %false : i1
+}
+om.class @SubfieldFalse() -> () {
+  %obj = om.object @ReturnFalse() : () -> !om.class.type<@ReturnFalse>
+  %false = om.object.field %obj["out"] : (!om.class.type<@ReturnFalse>) -> i1
+  om.property_assert %false, "input must be true true" : i1
+  om.class.fields
+}
+
+// Test 11: Test that asserts that need values to flow through objects work.
+// This was originally a bug where asserts were evaluated too early.
+//
+// See: https://github.com/llvm/circt/issues/10264
+om.class @Domain(%in: !om.string) -> (out: !om.string) {
+  om.class.fields %in : !om.string
+}
+om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
+  %0 = om.constant "A" : !om.string
+  %1 = om.object @Domain(%0) : (!om.string) -> !om.class.type<@Domain>
+  %2 = om.object.field %1["out"] : (!om.class.type<@Domain>) -> !om.string
+  %3 = om.object @Domain(%2) : (!om.string) -> !om.class.type<@Domain>
+  %4 = om.object.field %3["out"] : (!om.class.type<@Domain>) -> !om.string
+  %5 = om.constant "B" : !om.string
+  %6 = om.prop.eq %4, %5 : !om.string
+  om.property_assert %6, "hello" : i1
+  om.class.fields
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  ASSERT_TRUE(
+      succeeded(evaluator.instantiate(StringAttr::get(&context, "True"), {})));
+
+  ASSERT_TRUE(
+      failed(evaluator.instantiate(StringAttr::get(&context, "False"), {})));
+
+  ASSERT_TRUE(succeeded(
+      evaluator.instantiate(StringAttr::get(&context, "Parameter_True"), {})));
+
+  ASSERT_TRUE(failed(
+      evaluator.instantiate(StringAttr::get(&context, "Parameter_False"), {})));
+
+  ASSERT_TRUE(succeeded(evaluator.instantiate(
+      StringAttr::get(&context, "Parameter_True_Partial"), {})));
+
+  ASSERT_TRUE(failed(evaluator.instantiate(
+      StringAttr::get(&context, "Parameter_False_Partial"), {})));
+
+  ASSERT_TRUE(succeeded(evaluator.instantiate(
+      StringAttr::get(&context, "Parameter_True_Cycle_Top"), {})));
+
+  ASSERT_TRUE(failed(evaluator.instantiate(
+      StringAttr::get(&context, "Parameter_False_Cycle_Top"), {})));
+
+  ASSERT_TRUE(succeeded(
+      evaluator.instantiate(StringAttr::get(&context, "SubfieldTrue"), {})));
+
+  ASSERT_TRUE(failed(
+      evaluator.instantiate(StringAttr::get(&context, "SubfieldFalse"), {})));
+
+  // Test 11: Two asserts on a value flowing through chained object instances.
+  // Both assertions fail; the evaluator must drain the worklist before
+  // evaluating either assert (i.e. the fix for the null-ReferenceValue crash).
+  auto basepath = std::make_shared<evaluator::BasePathValue>(&context);
+  ASSERT_TRUE(failed(evaluator.instantiate(
+      StringAttr::get(&context, "ChainedDomainAssert"), {basepath})));
+}
+
+TEST(EvaluatorTests, PropEqTests) {
+  StringRef mod = R"MLIR(
+om.class @PropEqString(%s: !om.string) -> (equal: i1, not_equal: i1, unknown: i1) {
+  %a    = om.constant "hello" : !om.string
+  %b    = om.constant "hello" : !om.string
+  %c    = om.constant "world" : !om.string
+  %eq   = om.prop.eq %a, %b : !om.string
+  %neq  = om.prop.eq %a, %c : !om.string
+  %unk  = om.prop.eq %a, %s : !om.string
+  om.class.fields %eq, %neq, %unk : i1, i1, i1
+}
+
+om.class @PropEqBool(%b: i1) -> (equal: i1, not_equal: i1, unknown: i1) {
+  %t    = om.constant true
+  %f    = om.constant false
+  %eq   = om.prop.eq %t, %t : i1
+  %neq  = om.prop.eq %t, %f : i1
+  %unk  = om.prop.eq %t, %b : i1
+  om.class.fields %eq, %neq, %unk : i1, i1, i1
+}
+
+om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: i1) {
+  %a    = om.constant #om.integer<42 : si64> : !om.integer
+  %b    = om.constant #om.integer<42 : si64> : !om.integer
+  %c    = om.constant #om.integer<0 : si64> : !om.integer
+  %eq   = om.prop.eq %a, %b : !om.integer
+  %neq  = om.prop.eq %a, %c : !om.integer
+  %unk  = om.prop.eq %a, %n : !om.integer
+  om.class.fields %eq, %neq, %unk : i1, i1, i1
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
+
+  // Helper: extract the i1 integer value from a field of an ObjectValue.
+  auto getInt = [](evaluator::ObjectValue *obj, StringRef fieldName,
+                   MLIRContext *ctx) {
+    return llvm::cast<evaluator::AttributeValue>(
+               obj->getField(StringAttr::get(ctx, fieldName)).value().get())
+        ->getAs<mlir::IntegerAttr>()
+        .getValue()
+        .getZExtValue();
+  };
+
+  const std::pair<StringRef, Type> cases[] = {
+      {"PropEqString", StringType::get(&context)},
+      {"PropEqBool", mlir::IntegerType::get(&context, 1)},
+      {"PropEqInteger", OMIntegerType::get(&context)},
+  };
+  for (auto [className, paramType] : cases) {
+    auto unknown = evaluator::AttributeValue::get(paramType, unknownLoc);
+    unknown->markUnknown();
+    auto result =
+        evaluator.instantiate(StringAttr::get(&context, className), {unknown});
+    ASSERT_TRUE(succeeded(result));
+    auto *obj = llvm::cast<evaluator::ObjectValue>(result.value().get());
+    ASSERT_EQ(getInt(obj, "equal", &context), 1ul);
+    ASSERT_EQ(getInt(obj, "not_equal", &context), 0ul);
+    ASSERT_TRUE(obj->getField(StringAttr::get(&context, "unknown"))
+                    .value()
+                    ->isUnknown());
+  }
+}
+
+TEST(EvaluatorTests, IntegerBitwiseTests) {
+  StringRef mod = R"MLIR(
+om.class @IntegerBitwiseAnd(%a: i8, %b: i8) -> (result: i8) {
+  %and = om.integer.and %a, %b : i8
+  om.class.fields %and : i8
+}
+
+om.class @IntegerBitwiseOr(%a: i8, %b: i8) -> (result: i8) {
+  %or = om.integer.or %a, %b : i8
+  om.class.fields %or : i8
+}
+
+om.class @IntegerBitwiseXor(%a: i8, %b: i8) -> (result: i8) {
+  %xor = om.integer.xor %a, %b : i8
+  om.class.fields %xor : i8
+}
+
+om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
+  %zero = om.constant 0 : i8
+  %unk  = om.integer.and %zero, %b : i8
+  om.class.fields %unk : i8
+}
+)MLIR";
+
+  DialectRegistry registry;
+  registry.insert<OMDialect>();
+
+  MLIRContext context(registry);
+  context.getOrLoadDialect<OMDialect>();
+
+  OwningOpRef<ModuleOp> owning =
+      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+
+  Evaluator evaluator(owning.release());
+
+  auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
+  auto i8Type = mlir::IntegerType::get(&context, 8);
+
+  // Helper: make an i8 AttributeValue.
+  auto makeI8 = [&](uint8_t val) -> evaluator::EvaluatorValuePtr {
+    auto attr = mlir::IntegerAttr::get(i8Type, val);
+    auto v = evaluator::AttributeValue::get(i8Type, unknownLoc);
+    (void)cast<evaluator::AttributeValue>(v.get())->setAttr(attr);
+    (void)cast<evaluator::AttributeValue>(v.get())->finalize();
+    return v;
+  };
+
+  // Helper: extract the i8 value from the "result" field.
+  auto getResult = [&](evaluator::EvaluatorValuePtr obj) -> uint64_t {
+    auto *o = llvm::cast<evaluator::ObjectValue>(obj.get());
+    return llvm::cast<evaluator::AttributeValue>(
+               o->getField(StringAttr::get(&context, "result")).value().get())
+        ->getAs<mlir::IntegerAttr>()
+        .getValue()
+        .getZExtValue();
+  };
+
+  // Test AND: 0xF0 & 0x0F = 0x00, 0xFF & 0xF0 = 0xF0.
+  struct {
+    uint8_t a, b, expected;
+  } andCases[] = {{0xF0, 0x0F, 0x00}, {0xFF, 0xF0, 0xF0}, {0x00, 0xFF, 0x00}};
+  for (auto [a, b, expected] : andCases) {
+    auto r = evaluator.instantiate(
+        StringAttr::get(&context, "IntegerBitwiseAnd"), {makeI8(a), makeI8(b)});
+    ASSERT_TRUE(succeeded(r));
+    ASSERT_EQ(getResult(r.value()), static_cast<uint64_t>(expected));
+  }
+
+  // Test OR: 0xF0 | 0x0F = 0xFF, 0x00 | 0x0F = 0x0F.
+  struct {
+    uint8_t a, b, expected;
+  } orCases[] = {{0xF0, 0x0F, 0xFF}, {0x00, 0x0F, 0x0F}, {0xFF, 0x00, 0xFF}};
+  for (auto [a, b, expected] : orCases) {
+    auto r = evaluator.instantiate(
+        StringAttr::get(&context, "IntegerBitwiseOr"), {makeI8(a), makeI8(b)});
+    ASSERT_TRUE(succeeded(r));
+    ASSERT_EQ(getResult(r.value()), static_cast<uint64_t>(expected));
+  }
+
+  // Test XOR: 0xF0 ^ 0xFF = 0x0F (NOT idiom: xor(a, 0xFF) = ~a).
+  struct {
+    uint8_t a, b, expected;
+  } xorCases[] = {{0xF0, 0xFF, 0x0F}, {0xAA, 0x55, 0xFF}, {0x00, 0x00, 0x00}};
+  for (auto [a, b, expected] : xorCases) {
+    auto r = evaluator.instantiate(
+        StringAttr::get(&context, "IntegerBitwiseXor"), {makeI8(a), makeI8(b)});
+    ASSERT_TRUE(succeeded(r));
+    ASSERT_EQ(getResult(r.value()), static_cast<uint64_t>(expected));
+  }
+
+  // Test unknown propagation: AND(0x00, unknown) = unknown.
+  // Unknown is treated as poison rather than short-circuiting to zero.
+  {
+    auto unknown = evaluator::AttributeValue::get(i8Type, unknownLoc);
+    unknown->markUnknown();
+    auto r = evaluator.instantiate(
+        StringAttr::get(&context, "IntegerBitwiseUnknown"), {unknown});
+    ASSERT_TRUE(succeeded(r));
+    auto *obj = llvm::cast<evaluator::ObjectValue>(r.value().get());
+    ASSERT_TRUE(obj->getField(StringAttr::get(&context, "unknown"))
+                    .value()
+                    ->isUnknown());
+  }
 }
 
 } // namespace

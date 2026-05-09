@@ -2,12 +2,23 @@
 # with Slang must be built accordingly.
 set(CMAKE_CXX_STANDARD 20)
 
+# Fix an issue with CMake's precompiled headers mechanism. Headers would be
+# precompiled for the CIRCT's language setting (C++17), which would then break
+# here where we're locally changing language version.
+set(CMAKE_DISABLE_PRECOMPILE_HEADERS ON)
+
 # For ABI compatibility, define the SLANG_DEBUG macro in debug builds. Slang
 # sets this internally. If we don't set this here as well, header-defined things
 # like the destructor of `Driver`, which is generated in ImportVerilog's
 # compilation unit, will destroy a different set of fields than what was
 # potentially built or modified by code compiled in the Slang compilation unit.
 add_compile_definitions($<$<CONFIG:Debug>:SLANG_DEBUG>)
+
+# Keep header-defined slang assertion behavior in sync with the linked slang
+# library for LLVM assertions-enabled builds, including non-Debug configs.
+if(LLVM_ENABLE_ASSERTIONS)
+  add_compile_definitions(SLANG_ASSERT_ENABLED=1)
+endif()
 
 # HACK: When the `OBJECT` argument is passed to `llvm_add_library()`,
 # `COMPILE_DEFINITIONS` are not correctly inherited. For that reason, we

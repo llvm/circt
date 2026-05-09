@@ -19,7 +19,7 @@
 // CHECK:     scf.yield [[OR]]
 // CHECK: }
 // CHECK: func.call @bmc_loop()
-// CHECK: [[FUNCDECL:%.+]] = smt.declare_fun : !smt.bv<32>
+// CHECK: [[FUNCDECL:%.+]] = smt.declare_fun "input_0" : !smt.bv<32>
 // CHECK: scf.yield [[FUNCDECL]], [[NEWVIOLATED]]
 
 

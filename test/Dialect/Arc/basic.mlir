@@ -408,3 +408,36 @@ func.func @Execute(%arg0: i42) {
   }
   return
 }
+
+// CHECK-LABEL: func.func @CurrentTime
+func.func @CurrentTime(%arg0: !arc.storage<100>) {
+  // CHECK-NEXT: arc.current_time %arg0 : !arc.storage<100>
+  %0 = arc.current_time %arg0 : !arc.storage<100>
+  return
+}
+
+// CHECK-LABEL: func.func @NextWakeup
+func.func @NextWakeup(%arg0: !arc.storage<100>, %arg1: i64) {
+  // CHECK-NEXT: arc.get_next_wakeup %arg0 : !arc.storage<100>
+  %0 = arc.get_next_wakeup %arg0 : !arc.storage<100>
+  // CHECK-NEXT: arc.set_next_wakeup %arg0, %arg1 : !arc.storage<100>
+  arc.set_next_wakeup %arg0, %arg1 : !arc.storage<100>
+  return
+}
+
+// CHECK-LABEL: func.func @SimGetSetTime
+func.func @SimGetSetTime() {
+  arc.sim.instantiate @TimeTestModule as %model {
+    // CHECK: arc.sim.get_time %{{.*}} : !arc.sim.instance<@TimeTestModule>
+    %0 = arc.sim.get_time %model : !arc.sim.instance<@TimeTestModule>
+    // CHECK: arc.sim.set_time %{{.*}}, %{{.*}} : !arc.sim.instance<@TimeTestModule>
+    arc.sim.set_time %model, %0 : !arc.sim.instance<@TimeTestModule>
+    // CHECK: arc.sim.get_next_wakeup %{{.*}} : !arc.sim.instance<@TimeTestModule>
+    %1 = arc.sim.get_next_wakeup %model : !arc.sim.instance<@TimeTestModule>
+    // CHECK: arc.sim.step %{{.*}} by %{{.*}} : !arc.sim.instance<@TimeTestModule>
+    %tstep = arith.constant 123 : i64
+    arc.sim.step %model by %tstep : !arc.sim.instance<@TimeTestModule>
+  }
+  return
+}
+hw.module @TimeTestModule() {}

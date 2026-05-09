@@ -22,6 +22,8 @@ target_link_libraries(circt-lec
   CIRCTLECTransforms
   CIRCTOMTransforms
   CIRCTSMTToZ3LLVM
+  CIRCTSynth
+  CIRCTSynthToComb
   CIRCTSupport
   CIRCTVerif
   CIRCTVerifToSMT

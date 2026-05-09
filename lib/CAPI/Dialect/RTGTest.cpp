@@ -40,6 +40,14 @@ MlirType rtgtestIntegerRegisterTypeGet(MlirContext ctxt) {
   return wrap(IntegerRegisterType::get(unwrap(ctxt)));
 }
 
+bool rtgtestTypeIsAFloatRegister(MlirType type) {
+  return isa<FloatRegisterType>(unwrap(type));
+}
+
+MlirType rtgtestFloatRegisterTypeGet(MlirContext ctxt) {
+  return wrap(FloatRegisterType::get(unwrap(ctxt)));
+}
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//
@@ -313,4 +321,12 @@ bool rtgtestAttrIsARegT6(MlirAttribute attr) {
 
 MlirAttribute rtgtestRegT6AttrGet(MlirContext ctxt) {
   return wrap(RegT6Attr::get(unwrap(ctxt)));
+}
+
+bool rtgtestAttrIsARegF0(MlirAttribute attr) {
+  return isa<RegF0Attr>(unwrap(attr));
+}
+
+MlirAttribute rtgtestRegF0AttrGet(MlirContext ctxt) {
+  return wrap(RegF0Attr::get(unwrap(ctxt)));
 }

@@ -39,6 +39,7 @@ namespace {
 
 struct SVTraceIVerilogPass
     : public circt::sv::impl::SVTraceIVerilogBase<SVTraceIVerilogPass> {
+  using Base::Base;
   void runOnOperation() override;
 };
 
@@ -76,8 +77,4 @@ void SVTraceIVerilogPass::runOnOperation() {
        << ");\n  #1;\nend\n";
     sv::VerbatimOp::create(builder, hwmod.getLoc(), ss.str());
   }
-}
-
-std::unique_ptr<Pass> circt::sv::createSVTraceIVerilogPass() {
-  return std::make_unique<SVTraceIVerilogPass>();
 }

@@ -15,6 +15,7 @@
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Namespace.h"
@@ -142,8 +143,7 @@ LogicalResult AddSeqMemPortsPass::processAnnos(CircuitOp circuit) {
   auto loc = circuit.getLoc();
 
   // Find the metadata directory.
-  auto dirAnno =
-      AnnotationSet(circuit).getAnnotation(metadataDirectoryAttrName);
+  auto dirAnno = AnnotationSet(circuit).getAnnotation(metadataDirAnnoClass);
   StringRef metadataDir = "metadata";
   if (dirAnno) {
     auto dir = dirAnno.getMember<StringAttr>("dirname");
@@ -237,7 +237,7 @@ LogicalResult AddSeqMemPortsPass::processModule(FModuleOp moduleOp) {
       auto clone = inst.cloneWithInsertedPortsAndReplaceUses(subExtraPorts);
       instanceGraph->replaceInstance(inst, clone);
       inst->erase();
-      inst = clone;
+      inst = cast<InstanceOp>(clone);
 
       // Connect each submodule port up to the parent module ports.
       for (unsigned i = 0, e = subExtraPorts.size(); i < e; ++i) {
@@ -480,7 +480,7 @@ void AddSeqMemPortsPass::runOnOperation() {
       // For each instance of the dut, add the instance ports, but tie the port
       // to 0 instead of wiring them to the parent.
       for (auto *instRec : instanceGraph->lookup(effectiveDut)->uses()) {
-        auto inst = cast<InstanceOp>(*instRec->getInstance());
+        auto inst = cast<FInstanceLike>(*instRec->getInstance());
         auto &dutMemInfo = memInfoMap[*dut];
         // Find out how many memory ports we have to add.
         auto &subExtraPorts = dutMemInfo.extraPorts;
@@ -501,7 +501,7 @@ void AddSeqMemPortsPass::runOnOperation() {
           auto &[firstResult, portInfo] = subExtraPorts[i];
           if (portInfo.direction == Direction::Out)
             continue;
-          auto value = inst.getResult(firstResult + i);
+          auto value = inst->getResult(firstResult + i);
           auto type = value.getType();
           auto attr = getIntZerosAttr(type);
           auto zero = ConstantOp::create(builder, portInfo.loc, type, attr);

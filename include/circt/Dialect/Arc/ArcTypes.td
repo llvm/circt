@@ -11,8 +11,12 @@
 
 include "circt/Dialect/Arc/ArcDialect.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/BuiltinTypeInterfaces.td"
+include "mlir/IR/OpBase.td"
+include "circt/Dialect/HW/HWTypeInterfaces.td"
 
-class ArcTypeDef<string name> : TypeDef<ArcDialect, name> { }
+class ArcTypeDef<string name, list<Trait> traits = []> :
+  TypeDef<ArcDialect, name, traits> { }
 
 def StateType : ArcTypeDef<"State"> {
   let mnemonic = "state";
@@ -53,6 +57,44 @@ def SimModelInstance : ArcTypeDef<"SimModelInstance"> {
   let mnemonic = "sim.instance";
   let parameters = (ins "mlir::FlatSymbolRefAttr":$model);
   let assemblyFormat = "`<` $model `>`";
+}
+
+def ArrayRefType : ArcTypeDef<"ArrayRef", [
+  DeclareTypeInterfaceMethods<BitWidthTypeInterface>,
+  DeclareTypeInterfaceMethods<ShapedTypeInterface>
+]> {
+  let summary = "array reference";
+  let description = [{
+    An array reference is a reference (pointer) to an array of values.
+  }];
+  let mnemonic = "arrayref";
+  let parameters = (ins
+    "::mlir::Type":$elementType,
+    "uint64_t":$size
+  );
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "Type":$elementType, "uint64_t":$size), [{
+      auto *ctx = elementType.getContext();
+      return $_get(ctx, elementType, size);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $size `` custom<XInDimList>($elementType) `>`";
+
+  let genVerifyDecl = 1;
+
+  let extraClassDeclaration = [{
+    size_t getNumElements() const;
+
+    std::optional<size_t> getByteWidth() const {
+      std::optional<size_t> bitWidth = getBitWidth();
+      if (!bitWidth.has_value()) {
+        return std::nullopt;
+      }
+      return (*bitWidth + 7) / 8;
+    }
+  }];
 }
 
 #endif // CIRCT_DIALECT_ARC_ARCTYPES_TD

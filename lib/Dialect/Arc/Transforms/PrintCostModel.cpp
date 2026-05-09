@@ -50,7 +50,3 @@ void PrintCostModelPass::runOnOperation() {
   allVectorizeOpsCost = statVars.packingCost + statVars.shufflingCost +
                         statVars.vectorizeOpsBodyCost;
 }
-
-std::unique_ptr<Pass> arc::createPrintCostModelPass() {
-  return std::make_unique<PrintCostModelPass>();
-}

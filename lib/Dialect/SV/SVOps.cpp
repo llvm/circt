@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Matchers.h"
@@ -53,20 +54,6 @@ bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
              ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, ConstantStrOp,
              MacroRefExprOp, MacroRefExprSEOp>(op);
-}
-
-LogicalResult sv::verifyInProceduralRegion(Operation *op) {
-  if (op->getParentOp()->hasTrait<sv::ProceduralRegion>())
-    return success();
-  op->emitError() << op->getName() << " should be in a procedural region";
-  return failure();
-}
-
-LogicalResult sv::verifyInNonProceduralRegion(Operation *op) {
-  if (!op->getParentOp()->hasTrait<sv::ProceduralRegion>())
-    return success();
-  op->emitError() << op->getName() << " should be in a non-procedural region";
-  return failure();
 }
 
 /// Returns the operation registered with the given symbol name with the regions
@@ -108,6 +95,49 @@ verifyMacroIdentSymbolUses(Operation *op, FlatSymbolRefAttr attr,
 }
 
 //===----------------------------------------------------------------------===//
+// VerbatimOp
+//===----------------------------------------------------------------------===//
+
+/// Helper function to verify inner refs in symbols array for verbatim ops.
+static LogicalResult verifyVerbatimSymbols(Operation *op, ArrayAttr symbols,
+                                           hw::InnerRefNamespace &ns) {
+  // Verify each symbol reference in the symbols array
+  for (auto symbol : symbols) {
+    if (auto innerRef = dyn_cast<hw::InnerRefAttr>(symbol)) {
+      if (!ns.lookup(innerRef))
+        return op->emitError() << "inner symbol reference " << innerRef
+                               << " could not be found";
+    }
+  }
+  return success();
+}
+
+/// Helper function to verify flat symbol refs in symbols array for verbatim
+/// ops.
+static LogicalResult
+verifyVerbatimFlatSymbolRefs(Operation *op, ArrayAttr symbols,
+                             SymbolTableCollection &symbolTable) {
+  for (auto symbol : symbols) {
+    if (auto flatRef = dyn_cast<FlatSymbolRefAttr>(symbol)) {
+      auto *referencedOp = symbolTable.lookupNearestSymbolFrom(op, flatRef);
+      if (!referencedOp)
+        return op->emitOpError("references nonexistent symbol '")
+               << flatRef.getValue() << "'";
+    }
+  }
+  return success();
+}
+
+LogicalResult VerbatimOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
+LogicalResult VerbatimOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyVerbatimFlatSymbolRefs(getOperation(), getSymbols(),
+                                      symbolTable);
+}
+
+//===----------------------------------------------------------------------===//
 // VerbatimExprOp
 //===----------------------------------------------------------------------===//
 
@@ -133,9 +163,29 @@ void VerbatimExprOp::getAsmResultNames(
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
 }
 
+LogicalResult VerbatimExprOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
+LogicalResult
+VerbatimExprOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyVerbatimFlatSymbolRefs(getOperation(), getSymbols(),
+                                      symbolTable);
+}
+
 void VerbatimExprSEOp::getAsmResultNames(
     function_ref<void(Value, StringRef)> setNameFn) {
   getVerbatimExprAsmResultNames(getOperation(), std::move(setNameFn));
+}
+
+LogicalResult VerbatimExprSEOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
+  return verifyVerbatimSymbols(getOperation(), getSymbols(), ns);
+}
+
+LogicalResult
+VerbatimExprSEOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  return verifyVerbatimFlatSymbolRefs(getOperation(), getSymbols(),
+                                      symbolTable);
 }
 
 //===----------------------------------------------------------------------===//
@@ -457,6 +507,42 @@ LogicalResult IfDefOp::canonicalize(IfDefOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
+// Helper functions
+//===----------------------------------------------------------------------===//
+
+void circt::sv::createNestedIfDefs(
+    ArrayRef<StringAttr> macroSymbols,
+    llvm::function_ref<void(StringAttr, std::function<void()>,
+                            std::function<void()>)>
+        ifdefCtor,
+    llvm::function_ref<void(size_t)> thenCtor,
+    llvm::function_ref<void()> defaultCtor) {
+
+  // Helper function to recursively build nested ifdefs
+  std::function<void(size_t)> buildNested = [&](size_t index) {
+    if (index >= macroSymbols.size()) {
+      // Base case: we've processed all macros, call the default
+      if (defaultCtor)
+        defaultCtor();
+      return;
+    }
+
+    // Create an ifdef for the current macro
+    ifdefCtor(
+        macroSymbols[index],
+        /*thenCtor=*/
+        [&, index]() {
+          if (thenCtor)
+            thenCtor(index);
+        },
+        /*elseCtor=*/
+        [&, index]() { buildNested(index + 1); });
+  };
+
+  buildNested(0);
+}
+
+//===----------------------------------------------------------------------===//
 // IfDefProceduralOp
 //===----------------------------------------------------------------------===//
 
@@ -585,7 +671,7 @@ LogicalResult IfOp::canonicalize(IfOp op, PatternRewriter &rewriter) {
   // region if the condition is a 2-state operation.  This changes x prop
   // behavior so it needs to be guarded.
   if (is2StateExpression(op.getCond())) {
-    auto cond = comb::createOrFoldNot(op.getLoc(), op.getCond(), rewriter);
+    auto cond = comb::createOrFoldNot(rewriter, op.getLoc(), op.getCond());
     op.setOperand(cond);
 
     auto *thenBlock = op.getThenBlock(), *elseBlock = op.getElseBlock();
@@ -1760,7 +1846,7 @@ static Type getElementTypeOfWidth(Type type, int32_t width) {
 
 LogicalResult IndexedPartSelectInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto width = adaptor.getWidthAttr();
@@ -1813,7 +1899,7 @@ OpFoldResult IndexedPartSelectInOutOp::fold(FoldAdaptor) {
 
 LogicalResult IndexedPartSelectOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto width = adaptor.getWidthAttr();
@@ -1843,7 +1929,7 @@ LogicalResult IndexedPartSelectOp::verify() {
 
 LogicalResult StructFieldInOutOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto field = adaptor.getFieldAttr();
@@ -2449,6 +2535,132 @@ LogicalResult GenerateCaseOp::verify() {
   // mlir::FailureOr<Type> condType = evaluateParametricType();
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// GenerateForOp
+//===----------------------------------------------------------------------===//
+
+// Parse attribute and also optional trailing type if there. This is needed
+// primarily for integer types as when given a type, they hapily parse without
+// consuming the colon type.
+static ParseResult parseTypedAttrWithFallback(OpAsmParser &parser,
+                                              TypedAttr &result, Type type) {
+  Attribute attr;
+  // Try parsing with the expected type (no type suffix).
+  if (succeeded(parser.parseCustomAttributeWithFallback(attr, type))) {
+    auto typedAttr = dyn_cast<TypedAttr>(attr);
+    if (!typedAttr || typedAttr.getType() != type) {
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected typed attribute with type ")
+             << type;
+    }
+
+    // We are being given a type to parse extra.
+    if (succeeded(parser.parseOptionalColon())) {
+      Type localType;
+      if (failed(parser.parseType(localType)) || localType != type)
+        return parser.emitError(parser.getCurrentLocation(),
+                                "expected typed attribute with type ")
+               << type;
+    }
+
+    result = typedAttr;
+    return success();
+  }
+
+  return failure();
+}
+
+// Parse the header and body of a generate for loop.
+static ParseResult parseGenerateFor(OpAsmParser &parser, TypedAttr &lowerBound,
+                                    TypedAttr &upperBound, TypedAttr &step,
+                                    StringAttr &inductionVarName,
+                                    StringAttr &genBlockName, Region &body) {
+  auto &builder = parser.getBuilder();
+
+  OpAsmParser::Argument inductionVariable;
+  if (parser.parseArgument(inductionVariable, /*allowType=*/true))
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected induction variable argument");
+
+  // Parse induction variable assignment.
+  if (parser.parseEqual())
+    return failure();
+
+  // Parse lower bound.
+  Type type = inductionVariable.type;
+  if (parseTypedAttrWithFallback(parser, lowerBound, type))
+    return failure();
+
+  if (parser.parseKeyword("to"))
+    return failure();
+
+  // Parse upper bound.
+  if (parseTypedAttrWithFallback(parser, upperBound, type))
+    return failure();
+
+  if (parser.parseKeyword("step"))
+    return failure();
+
+  // Parse step.
+  if (parseTypedAttrWithFallback(parser, step, type))
+    return failure();
+
+  if (parser.parseKeyword("name"))
+    return failure();
+
+  // Parse gen block name.
+  if (parser.parseCustomAttributeWithFallback(
+          genBlockName, parser.getBuilder().getType<NoneType>()))
+    return failure();
+
+  // Store the induction variable name if it's not a number.
+  if (!isdigit(inductionVariable.ssaName.name.front()))
+    inductionVarName =
+        builder.getStringAttr(inductionVariable.ssaName.name.drop_front());
+
+  SmallVector<OpAsmParser::Argument, 1> regionArgs = {inductionVariable};
+  return parser.parseRegion(body, regionArgs);
+}
+
+// Print the header and body of a generate for loop.
+static void printGenerateFor(OpAsmPrinter &p, Operation *op,
+                             TypedAttr lowerBound, TypedAttr upperBound,
+                             TypedAttr step, StringAttr inductionVarName,
+                             StringAttr genBlockName, Region &body) {
+  auto forOp = cast<GenerateForOp>(op);
+  p << forOp.getInductionVar() << " : " << forOp.getInductionVar().getType()
+    << " = ";
+  p.printStrippedAttrOrType(lowerBound);
+  p << " to ";
+  p.printStrippedAttrOrType(upperBound);
+  p << " step ";
+  p.printStrippedAttrOrType(step);
+  p << " name ";
+  p.printAttributeWithoutType(genBlockName);
+  p << " ";
+  p.printRegion(body, /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+LogicalResult GenerateForOp::verify() {
+  if (getBody().getBlocks().front().getNumArguments() != 1)
+    return emitOpError("must have exactly one block argument");
+  Type type = getLowerBound().getType();
+  if (getBody().getBlocks().front().getArgument(0).getType() != type)
+    return emitOpError("block argument type must match loop bounds type");
+  if (!isa<IntegerType>(type))
+    return emitOpError("loop bounds must be integer types");
+
+  return success();
+}
+
+void GenerateForOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  auto *block = &region.front();
+  if (auto attr = getInductionVarNameAttr())
+    setNameFn(block->getArgument(0), attr);
 }
 
 ModportStructAttr ModportStructAttr::get(MLIRContext *context,

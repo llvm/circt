@@ -32,16 +32,21 @@ add_public_tablegen_target(CIRCTFIRRTLTypeInterfacesIncGen)
 add_dependencies(circt-headers CIRCTFIRRTLTypeInterfacesIncGen)
 
 # Generate Dialect documentation.
-add_circt_doc(FIRRTLAttributes Dialects/FIRRTLAttributes -gen-attrdef-doc)
-add_circt_doc(FIRRTLStructure Dialects/FIRRTLStructureOps -gen-op-doc)
-add_circt_doc(FIRRTLDeclarations Dialects/FIRRTLDeclarationOps -gen-op-doc)
-add_circt_doc(FIRRTLStatements Dialects/FIRRTLStatementOps -gen-op-doc)
-add_circt_doc(FIRRTLExpressions Dialects/FIRRTLExpressionOps -gen-op-doc)
-add_circt_doc(FIRRTLIntrinsics Dialects/FIRRTLIntrinsicOps -gen-op-doc)
-add_circt_doc(FIRRTLTypes Dialects/FIRRTLTypes -gen-typedef-doc)
-add_circt_doc(FIRRTLTypesImpl Dialects/FIRRTLTypesImpl -gen-typedef-doc)
-add_circt_doc(FIRRTLOpInterfaces Dialects/FIRRTLOpInterfaces -gen-op-interface-docs)
+add_circt_doc(FIRRTLAttributes Dialects/FIRRTLAttributes -gen-attrdef-doc -dialect=firrtl)
+add_circt_doc(FIRRTLStructure Dialects/FIRRTLStructureOps -gen-op-doc -dialect=firrtl)
+add_circt_doc(FIRRTLDeclarations Dialects/FIRRTLDeclarationOps -gen-op-doc -dialect=firrtl)
+add_circt_doc(FIRRTLStatements Dialects/FIRRTLStatementOps -gen-op-doc -dialect=firrtl)
+add_circt_doc(FIRRTLExpressions Dialects/FIRRTLExpressionOps -gen-op-doc -dialect=firrtl)
+add_circt_doc(FIRRTLIntrinsics Dialects/FIRRTLIntrinsicOps -gen-op-doc -dialect=firrtl)
+add_circt_doc(FIRRTLTypes Dialects/FIRRTLTypes -gen-typedef-doc -dialect=firrtl)
+add_circt_doc(FIRRTLTypesImpl Dialects/FIRRTLTypesImpl -gen-typedef-doc -dialect=firrtl)
+add_circt_doc(FIRRTLOpInterfaces Dialects/FIRRTLOpInterfaces -gen-op-interface-docs -dialect=firrtl)
 
+# Generate FIRRTL Annotations classes and documentation.
+set(LLVM_TARGET_DEFINITIONS FIRRTLAnnotations.td)
+circt_tablegen(CIRCT FIRRTLAnnotationDetails.h.inc --firrtl-annotations-details TARGETS MLIRFIRRTLIncGen)
+circt_tablegen(CIRCT FIRRTLAnnotationRecords.h.inc --firrtl-annotation-records TARGETS MLIRFIRRTLIncGen)
+circt_tablegen(CIRCT ${CIRCT_BINARY_DIR}/docs/Dialects/FIRRTLAnnotations.md --firrtl-annotations-doc TARGETS circt-doc)
 
 # Generate Pass documentation.
 add_circt_doc(Passes FIRRTLPasses -gen-pass-doc)

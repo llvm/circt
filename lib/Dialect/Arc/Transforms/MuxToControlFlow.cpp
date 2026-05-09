@@ -332,7 +332,3 @@ void MuxToControlFlowPass::runOnOperation() {
     }
   }
 }
-
-std::unique_ptr<Pass> arc::createMuxToControlFlowPass() {
-  return std::make_unique<MuxToControlFlowPass>();
-}

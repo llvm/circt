@@ -210,6 +210,11 @@ MLIR_CAPI_EXPORTED bool firrtlTypeIsARef(MlirType type);
 /// Creates a ref type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetRef(MlirType target, bool forceable);
 
+/// Creates a ref type.
+MLIR_CAPI_EXPORTED MlirType firrtlTypeGetColoredRef(MlirType target,
+                                                    bool forceable,
+                                                    MlirAttribute layer);
+
 /// Checks if this type is an anyref type.
 MLIR_CAPI_EXPORTED bool firrtlTypeIsAAnyRef(MlirType type);
 

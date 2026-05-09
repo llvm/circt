@@ -9,10 +9,12 @@
 add_circt_dialect_library(CIRCTSynthTransforms
   AIGERRunner.cpp
   CutRewriter.cpp
+  FunctionalReduction.cpp
   GenericLUTMapper.cpp
   LowerVariadic.cpp
   LowerWordToBits.cpp
   MaximumAndCover.cpp
+  SOPBalancing.cpp
   StructuralHash.cpp
   SynthesisPipeline.cpp
   TechMapper.cpp

@@ -242,7 +242,7 @@ def ConcatOp : CombOp<"concat",
                                           std::optional<Location> loc,
                                           ValueRange operands,
                                           DictionaryAttr attrs,
-                                          mlir::OpaqueProperties properties,
+                                          mlir::PropertyRef properties,
                                           mlir::RegionRange regions,
                                           SmallVectorImpl<Type> &results);
   }];
@@ -322,7 +322,7 @@ def TruthTableOp : CombOp<"truth_table", [Pure]> {
     be 'x' -- it should be the well-known result.
   }];
 
-  let arguments = (ins Variadic<I1>:$inputs, BoolArrayAttr:$lookupTable);
+  let arguments = (ins Variadic<I1>:$inputs, DenseBoolArrayAttr:$lookupTable);
   let results = (outs I1:$result);
 
   let assemblyFormat = [{

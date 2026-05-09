@@ -55,6 +55,11 @@ StateOp MachineOp::getInitialStateOp() {
   return dyn_cast_or_null<StateOp>(lookupSymbol(getInitialState()));
 }
 
+size_t MachineOp::getNumStates() {
+  auto stateOps = getBody().getOps<StateOp>();
+  return std::distance(stateOps.begin(), stateOps.end());
+}
+
 StringAttr MachineOp::getArgName(size_t i) {
   if (auto args = getArgNames())
     return cast<StringAttr>((*args)[i]);
@@ -552,6 +557,15 @@ void ReturnOp::setOperand(Value value) {
 /// Get the targeted variable operation. This returns null on invalid IR.
 VariableOp UpdateOp::getVariableOp() {
   return getVariable().getDefiningOp<VariableOp>();
+}
+
+LogicalResult UpdateOp::canonicalize(UpdateOp op, PatternRewriter &rewriter) {
+  // Remove no-op updates that update a variable to itself
+  if (op.getVariable() == op.getValue()) {
+    rewriter.eraseOp(op);
+    return success();
+  }
+  return failure();
 }
 
 LogicalResult UpdateOp::verify() {

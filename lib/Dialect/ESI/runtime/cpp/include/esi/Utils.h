@@ -96,6 +96,10 @@ public:
     return q.empty();
   }
 };
+
+/// Compute ceil(bits/8).
+inline uint64_t bitsToBytes(uint64_t bits) { return (bits + 7) / 8; }
+
 } // namespace utils
 } // namespace esi
 

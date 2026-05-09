@@ -1,4 +1,4 @@
-# circt-synth
+# Logic Synthesis
 
 **circt-synth** \[_options_] \[_filename_]
 

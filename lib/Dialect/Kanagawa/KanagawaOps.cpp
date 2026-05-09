@@ -355,7 +355,7 @@ LogicalResult CallOp::verifyInnerRefs(hw::InnerRefNamespace &ns) {
 /// Infer the return types of this operation.
 LogicalResult PathOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
-    DictionaryAttr attrs, mlir::OpaqueProperties properties,
+    DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   Adaptor adaptor(operands, attrs, properties, regions);
   auto path = adaptor.getPathAttr();

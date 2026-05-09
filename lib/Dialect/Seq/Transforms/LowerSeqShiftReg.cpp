@@ -48,9 +48,11 @@ public:
     }
 
     for (size_t i = 0; i < op.getNumElements(); ++i) {
-      StringAttr name;
-      if (baseName.has_value())
-        name = rewriter.getStringAttr(baseName.value() + "_sh" + Twine(i + 1));
+      // Needs to be initialized or will sefault on shiftregisters with
+      // generated ssa names
+      StringAttr name =
+          rewriter.getStringAttr(baseName.value_or("") + "_sh" + Twine(i + 1));
+
       in = seq::CompRegClockEnabledOp::create(
           rewriter, op.getLoc(), in, adaptor.getClk(), adaptor.getClockEnable(),
           adaptor.getReset(), adaptor.getResetValue(), name, init);
@@ -80,8 +82,4 @@ void LowerSeqShiftRegPass::runOnOperation() {
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
     signalPassFailure();
-}
-
-std::unique_ptr<Pass> circt::seq::createLowerSeqShiftRegPass() {
-  return std::make_unique<LowerSeqShiftRegPass>();
 }

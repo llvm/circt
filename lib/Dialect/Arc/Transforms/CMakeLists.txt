@@ -11,6 +11,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   IsolateClocks.cpp
   LatencyRetiming.cpp
   LowerArcsToFuncs.cpp
+  LowerArrays.cpp
   LowerClocksToFuncs.cpp
   LowerLUT.cpp
   LowerState.cpp
@@ -21,6 +22,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   MergeTaps.cpp
   MuxToControlFlow.cpp
   PrintCostModel.cpp
+  ResolveXMRRef.cpp
   SimplifyVariadicOps.cpp
   SplitFuncs.cpp
   SplitLoops.cpp

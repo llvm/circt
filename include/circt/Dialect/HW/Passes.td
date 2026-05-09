@@ -27,6 +27,27 @@ def PrintHWModuleGraph : Pass<"hw-print-module-graph", "mlir::ModuleOp"> {
   ];
 }
 
+def IMDeadCodeElim : Pass<"hw-imdce", "mlir::ModuleOp"> {
+  let summary = "Intermodule dead code elimination";
+  let description = [{
+    This pass performs inter-module liveness analysis and deletes dead code
+    aggressively. A value is considered as alive if it is connected to a port
+    of public modules or a value with a symbol. We first populate alive values
+    into a set, and then propagate the liveness by looking at their dataflow.
+  }];
+  let statistics = [Statistic<"numErasedOps", "num-erased-ops",
+                              "Number of operations erased">,
+                    Statistic<"numErasedModules", "num-erased-modules",
+                              "Number of modules erased">,
+                    Statistic<"numRemovedPorts", "num-removed-ports",
+                              "Number of ports erased">,
+  ];
+  let options = [Option<
+                     "printLiveness", "print-liveness", "bool", "false",
+                     "Print liveness analysis results before transformations.">,
+  ];
+}
+
 def FlattenIO : Pass<"hw-flatten-io", "mlir::ModuleOp"> {
   let summary = "Flattens hw::Structure typed in- and output ports.";
   let options = [
@@ -65,6 +86,8 @@ def FlattenModules : Pass<"hw-flatten-modules", "mlir::ModuleOp"> {
            "Maximum number of operations for a module to be considered small">,
     Option<"inlineWithState", "hw-inline-with-state", "bool", "false",
            "Allow inlining of modules that contain state (seq.firreg operations)">,
+    Option<"inlinePublic", "hw-inline-public", "bool", "false",
+           "Inline public modules as well as private ones">,
     Option<"inlineAll", "hw-inline-all", "bool", "true",
            "Inline all private modules regardless of heuristics (default behavior)">
   ];
@@ -109,6 +132,15 @@ def HWAggregateToComb : Pass<"hw-aggregate-to-comb", "hw::HWModuleOp"> {
     out-of-bounds access.
   }];
   let dependentDialects = ["comb::CombDialect"];
+}
+
+def HWVectorization : Pass<"hw-vectorization", "hw::HWModuleOp"> {
+  let summary = "Vectorizes bit-level operations in HW dialect";
+  let description = [{
+   This pass performs structural vectorization of hardware modules,
+    merging scalar bit-level assignments into vectorized operations.
+  }];
+  let dependentDialects = ["circt::comb::CombDialect", "circt::hw::HWDialect"];
 }
 
 def HWParameterizeConstantPorts : Pass<"hw-parameterize-constant-ports",

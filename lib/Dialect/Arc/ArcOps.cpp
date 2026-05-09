@@ -213,6 +213,38 @@ LogicalResult StateOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// StateWriteOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+StateWriteOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (!getTraceTapModel().has_value())
+    return success();
+
+  auto modelOp = symbolTable.lookupNearestSymbolFrom<ModelOp>(
+      getOperation(), getTraceTapModelAttr());
+  if (!modelOp)
+    return emitOpError() << "`" << getTraceTapModelAttr()
+                         << "` does not reference a valid `arc.model`";
+  if (!modelOp.getTraceTaps())
+    return emitOpError() << "referenced model has no trace metadata";
+  if (modelOp.getTraceTapsAttr().size() <= *getTraceTapIndex())
+    return emitOpError() << "tap index exceeds model's tap array";
+  auto tapAttr =
+      cast<TraceTapAttr>(modelOp.getTraceTapsAttr()[*getTraceTapIndex()]);
+  if (tapAttr.getSigType().getValue() != getValue().getType())
+    return emitOpError() << "incorrect signal type in referenced tap attribute";
+
+  return success();
+}
+
+LogicalResult StateWriteOp::verify() {
+  if (getTraceTapIndex().has_value() == getTraceTapModel().has_value())
+    return success();
+  return emitOpError() << "must specify both a trace tap model and index";
+}
+
+//===----------------------------------------------------------------------===//
 // CallOp
 //===----------------------------------------------------------------------===//
 
@@ -674,12 +706,86 @@ LogicalResult SimStepOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }
 
 //===----------------------------------------------------------------------===//
+// SimGetTimeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimGetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
+  if (!moduleOp)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SimSetTimeOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimSetTimeOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
+  if (!moduleOp)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// SimGetNextWakeupOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+SimGetNextWakeupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *moduleOp = getSupportedModuleOp(
+      symbolTable, getOperation(),
+      llvm::cast<SimModelInstanceType>(getInstance().getType())
+          .getModel()
+          .getAttr());
+  if (!moduleOp)
+    return failure();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // ExecuteOp
 //===----------------------------------------------------------------------===//
 
 LogicalResult ExecuteOp::verifyRegions() {
   return verifyTypeListEquivalence(*this, getInputs().getTypes(),
                                    getBody().getArgumentTypes(), "input");
+}
+
+//===----------------------------------------------------------------------===//
+// ArrayRefAllocOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ArrayRefAllocOp::verify() {
+  if (auto init = getInit()) {
+    if (init->size() != getType().getNumElements()) {
+      return emitOpError("init size does not match array size; init had size ")
+             << init->size() << " but array has size "
+             << getType().getNumElements();
+    }
+
+    unsigned elemBitwidth = getType().getElementType().getIntOrFloatBitWidth();
+    for (APInt value : init->getAsValueRange<IntegerAttr>()) {
+      if (value.getBitWidth() != elemBitwidth) {
+        return emitOpError("expected element to be of type ")
+               << getType().getElementType();
+      }
+    }
+  }
+  return success();
 }
 
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"

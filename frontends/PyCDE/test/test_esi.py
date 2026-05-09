@@ -6,7 +6,7 @@ from pycde import (Clock, Input, InputChannel, Output, OutputChannel, Module,
 from pycde import esi
 from pycde.common import AppID, Constant, RecvBundle, SendBundle
 from pycde.constructs import Wire
-from pycde.esi import HostMem, MMIO
+from pycde.esi import HostMem, MMIO, ListWindowToParallel, ListWindowToSerial
 from pycde.module import Metadata
 from pycde.support import _obj_to_attribute, optional_dict_to_dict_attr
 from pycde.types import (Bit, Bits, Bundle, BundledChannel, Channel,
@@ -27,6 +27,9 @@ print(Channel(UInt(4), ChannelSignaling.FIFO))
 
 # CHECK: Channel<UInt<4>, ValidReady(1)>
 print(Channel(UInt(4), ChannelSignaling.ValidReady, 1))
+
+# CHECK: Channel<UInt<4>, ValidOnly>
+print(Channel(UInt(4), ChannelSignaling.ValidOnly))
 
 TestBundle = Bundle([
     BundledChannel("resp", ChannelDirection.FROM, Bits(16)),
@@ -63,7 +66,7 @@ class HostComms:
 # CHECK:         %req = esi.bundle.unpack %chanOutput from [[B0]] : !esi.bundle<[!esi.channel<i16> from "resp", !esi.channel<i24> to "req"]>
 # CHECK:         %rawOutput, %valid = esi.unwrap.vr %req, %ready : i24
 # CHECK:         [[R0:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
-# CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid : i16
+# CHECK:         %chanOutput, %ready = esi.wrap.vr [[R0]], %valid {sv.namehint = "loopback"} : i16
 @unittestmodule(print=True)
 class LoopbackInOutTop(Module):
   clk = Clock()
@@ -126,7 +129,7 @@ class LoopbackCoercedCall(Module):
 # CHECK-NEXT:     %arg = esi.bundle.unpack [[R2]] from [[R0]] : !esi.bundle<[!esi.channel<i24> to "arg", !esi.channel<i16, FIFO> from "result"]>
 # CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %arg, %ready : i24
 # CHECK-NEXT:     [[R1:%.+]] = comb.extract %rawOutput from 0 : (i24) -> i16
-# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid : i16
+# CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr [[R1]], %valid {sv.namehint = "loopback_src"} : i16
 # CHECK-NEXT:     hw.output
 # CHECK-NEXT:   }
 # CHECK-NEXT:   esi.service.std.func @_FuncService
@@ -251,7 +254,7 @@ class ListTest(Module):
 # CHECK-NEXT:     [[CLK_I1:%.+]] = seq.from_clock %clk
 # CHECK-NEXT:     sv.alwaysff(posedge [[CLK_I1]]) {
 # CHECK-NEXT:       sv.if %transaction {
-# CHECK-NEXT:         sv.info "Pre-transform: %p"([[SNOOP_DATA]]) : i32
+# CHECK-NEXT:         sv.info.procedural "Pre-transform: %p"([[SNOOP_DATA]]) : i32
 # CHECK-NEXT:       }
 # CHECK-NEXT:     }
 # CHECK-NEXT:     %rawOutput, [[VALID2:%.+]] = esi.unwrap.vr %s1_in, [[READY2:%.+]] : i32
@@ -270,6 +273,22 @@ class ChannelTransform(Module):
     valid, ready, data = self.s1_in.snoop()
     xact, snooped_data = self.s1_in.snoop_xact()
     xact.when_true(lambda: print_info("Pre-transform: %p", snooped_data))
+    self.s2_out = self.s1_in.transform(lambda x: x[0:8])
+
+
+# CHECK-LABEL: hw.module @ValidOnlyTransform(in %s1_in : !esi.channel<i32, ValidOnly>, out s2_out : !esi.channel<i8, ValidOnly>)
+# CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vo %s1_in : !esi.channel<i32, ValidOnly>
+# CHECK-NEXT:     [[R0:%.+]] = comb.extract %rawOutput from 0 : (i32) -> i8
+# CHECK-NEXT:     [[R1:%.+]] = esi.wrap.vo [[R0]], %valid : i8
+# CHECK-NEXT:     %true = hw.constant true
+# CHECK-NEXT:     hw.output [[R1]] : !esi.channel<i8, ValidOnly>
+@unittestmodule()
+class ValidOnlyTransform(Module):
+  s1_in = Input(Channel(Bits(32), ChannelSignaling.ValidOnly))
+  s2_out = Output(Channel(Bits(8), ChannelSignaling.ValidOnly))
+
+  @generator
+  def build(self):
     self.s2_out = self.s1_in.transform(lambda x: x[0:8])
 
 
@@ -494,3 +513,147 @@ class TestBundleTransformBasic(Module):
         req=transform_double_width, resp=(Bits(48), transform_truncate_half))
 
     self.bundle_out = transformed_bundle
+
+
+# CHECK-LABEL: hw.module @ListWindowToParallel_{{.*}}esi_list_i8{{.*}}(in %clk : !seq.clock, in %rst : i1, in %serial_in :
+# Non-zero-width data: the per-item buffer register and forward/buffer mux
+# are present.
+# CHECK:         %buf_item = seq.compreg.ce sym @buf_item %{{.+}}, %clk, %{{.+}} reset %rst, %{{.+}} : i8
+# CHECK:         comb.mux bin %{{.+}}, %buf_item, %{{.+}} {{.+}} : i8
+# CHECK:         hw.instance "Counter" sym @Counter @Counter_width8
+# CHECK:         %state = seq.compreg sym @state %{{.+}}, %clk reset %rst, %{{.+}} : i2
+@unittestmodule()
+class TestListWindowToParallel(Module):
+  """Test transforming a list window to parallel channels."""
+
+  clk = Clock()
+  rst = Reset()
+
+  into_type = StructType({'header': Bits(4), 'data': List(Bits(8))})
+  data_count_width = 8
+  items_per_frame = 1
+
+  serial_lst_in = InputChannel(
+      Window.serial_of(into_type, data_count_width, items_per_frame))
+  parallel_lst_out = OutputChannel(Window.default_of(into_type))
+
+  @generator
+  def build(self):
+    to_parallel = ListWindowToParallel(
+        Window.serial_of(TestListWindowToParallel.into_type,
+                         TestListWindowToParallel.data_count_width,
+                         TestListWindowToParallel.items_per_frame))(
+                             clk=self.clk,
+                             rst=self.rst,
+                             serial_in=self.serial_lst_in)
+    self.parallel_lst_out = to_parallel.parallel_out
+
+
+# CHECK-LABEL: hw.module @ListWindowToSerial_{{.*}}esi_list_i8{{.*}}(in %clk : !seq.clock, in %rst : i1, in %parallel_in :
+# Non-zero-width data: a data FIFO of element type i8 is instantiated in
+# addition to the metadata FIFO.
+# CHECK:         seq.fifo depth 8 {{.+}} : i8
+# CHECK:         seq.fifo depth 2 {{.+}} : !hw.struct<hdr:
+# CHECK:         hw.instance "in_list" sym @in_list @ControlReg_num_asserts1_num_resets1
+# CHECK:         %state = seq.compreg sym @state %{{.+}}, %clk reset %rst, %{{.+}} : i2
+@unittestmodule()
+class TestListWindowToSerial(Module):
+  """Test transforming parallel channels into a serial list window."""
+
+  clk = Clock()
+  rst = Reset()
+
+  into_type = StructType({'header': Bits(4), 'data': List(Bits(8))})
+  data_count_width = 8
+  items_per_frame = 1
+  fifo_depth = 8
+
+  parallel_lst_in = InputChannel(Window.default_of(into_type))
+  serial_lst_out = OutputChannel(
+      Window.serial_of(into_type, data_count_width, items_per_frame))
+
+  @generator
+  def build(self):
+    to_serial = ListWindowToSerial(
+        Window.default_of(TestListWindowToSerial.into_type),
+        TestListWindowToSerial.data_count_width,
+        TestListWindowToSerial.items_per_frame,
+        TestListWindowToSerial.fifo_depth)(clk=self.clk,
+                                           rst=self.rst,
+                                           parallel_in=self.parallel_lst_in)
+    self.serial_lst_out = to_serial.serial_out
+
+
+# Verify ListWindowToParallel/Serial accept list element types of zero
+# bitwidth. With zero-width data the per-item buffer register and data FIFO
+# are skipped (seq.CompReg / SeqFIFO disallow zero-width types), but the
+# modules still elaborate with the same external signatures.
+# CHECK-LABEL: hw.module @ListWindowToParallel_{{.*}}esi_list_i0{{.*}}(in %clk : !seq.clock, in %rst : i1, in %serial_in :
+# Zero-width data: the per-item buffer register is omitted and the data
+# item is forwarded directly into the output struct.
+# CHECK-NOT:     @buf_item
+# CHECK:         hw.struct_create (%{{.+}}, %{{.+}}, %{{.+}}) : !hw.struct<header: i4, data: i0, last: i1>
+# CHECK:         hw.instance "Counter" sym @Counter @Counter_width8
+# CHECK-NOT:     @buf_item
+# CHECK:         %state = seq.compreg sym @state %{{.+}}, %clk reset %rst, %{{.+}} : i2
+@unittestmodule()
+class TestListWindowToParallelZeroWidth(Module):
+  """Test transforming a zero-bitwidth list window to parallel channels."""
+
+  clk = Clock()
+  rst = Reset()
+
+  into_type = StructType({'header': Bits(4), 'data': List(Bits(0))})
+  data_count_width = 8
+  items_per_frame = 1
+
+  serial_lst_in = InputChannel(
+      Window.serial_of(into_type, data_count_width, items_per_frame))
+  parallel_lst_out = OutputChannel(Window.default_of(into_type))
+
+  @generator
+  def build(self):
+    to_parallel = ListWindowToParallel(
+        Window.serial_of(TestListWindowToParallelZeroWidth.into_type,
+                         TestListWindowToParallelZeroWidth.data_count_width,
+                         TestListWindowToParallelZeroWidth.items_per_frame))(
+                             clk=self.clk,
+                             rst=self.rst,
+                             serial_in=self.serial_lst_in)
+    self.parallel_lst_out = to_parallel.parallel_out
+
+
+# CHECK-LABEL: hw.module @ListWindowToSerial_{{.*}}esi_list_i0{{.*}}(in %clk : !seq.clock, in %rst : i1, in %parallel_in :
+# Zero-width data: only the metadata FIFO is instantiated; no data FIFO.
+# CHECK-NOT:     seq.fifo {{.+}} : i0
+# CHECK:         seq.fifo depth 2 {{.+}} : !hw.struct<hdr:
+# CHECK-NOT:     seq.fifo {{.+}} : i0
+# CHECK:         hw.instance "in_list" sym @in_list @ControlReg_num_asserts1_num_resets1
+# CHECK-NOT:     seq.fifo {{.+}} : i0
+# CHECK:         %state = seq.compreg sym @state %{{.+}}, %clk reset %rst, %{{.+}} : i2
+@unittestmodule()
+class TestListWindowToSerialZeroWidth(Module):
+  """Test transforming zero-bitwidth parallel channels into a serial list
+  window."""
+
+  clk = Clock()
+  rst = Reset()
+
+  into_type = StructType({'header': Bits(4), 'data': List(Bits(0))})
+  data_count_width = 8
+  items_per_frame = 1
+  fifo_depth = 8
+
+  parallel_lst_in = InputChannel(Window.default_of(into_type))
+  serial_lst_out = OutputChannel(
+      Window.serial_of(into_type, data_count_width, items_per_frame))
+
+  @generator
+  def build(self):
+    to_serial = ListWindowToSerial(
+        Window.default_of(TestListWindowToSerialZeroWidth.into_type),
+        TestListWindowToSerialZeroWidth.data_count_width,
+        TestListWindowToSerialZeroWidth.items_per_frame,
+        TestListWindowToSerialZeroWidth.fifo_depth)(
+            clk=self.clk, rst=self.rst, parallel_in=self.parallel_lst_in)
+    self.serial_lst_out = to_serial.serial_out

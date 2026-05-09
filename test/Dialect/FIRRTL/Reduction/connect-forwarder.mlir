@@ -37,3 +37,35 @@ firrtl.circuit "ForwardThroughRegs" {
     dbg.variable "reg1", %reg1 : !firrtl.uint<42>
   }
 }
+
+firrtl.circuit "LayerblockCrossBlock" {
+  firrtl.layer @A bind {
+  }
+  // CHECK-LABEL: firrtl.module @LayerblockCrossBlock
+  firrtl.module @LayerblockCrossBlock() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %wire = firrtl.wire : !firrtl.probe<uint<1>, @A>
+    firrtl.layerblock @A {
+      %wire_0 = firrtl.wire {name = "wire"} : !firrtl.uint<1>
+      // This should not crash when connect-forwarder checks cross-block ordering
+      firrtl.matchingconnect %wire_0, %c0_ui1 : !firrtl.uint<1>
+      %0 = firrtl.ref.send %wire_0 : !firrtl.uint<1>
+      %1 = firrtl.ref.cast %0 : (!firrtl.probe<uint<1>>) -> !firrtl.probe<uint<1>, @A>
+      firrtl.ref.define %wire, %1 : !firrtl.probe<uint<1>, @A>
+    }
+  }
+}
+
+// Test that when forwarding through connects and using the "pruneUnusedOps"
+// APIs, that this doesn't break if both the source and the destination are
+// pruned twice (once by visiting the source and once by the destination).
+// See: https://github.com/llvm/circt/issues/10049
+firrtl.circuit "PruneUnusedSourceAndDest" {
+  // CHECK-LABEL: firrtl.module @PruneUnusedSourceAndDest
+  firrtl.module @PruneUnusedSourceAndDest(in %clk: !firrtl.clock, in %rst: !firrtl.asyncreset) {
+    // CHECK-NEXT: }
+    %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+    %reg = firrtl.regreset %clk, %rst, %c0_ui4 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>, !firrtl.uint<4>
+    firrtl.matchingconnect %reg, %c0_ui4 : !firrtl.uint<4>
+  }
+}

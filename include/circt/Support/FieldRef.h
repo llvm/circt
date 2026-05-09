@@ -30,6 +30,8 @@ public:
   /// Get a null FieldRef.
   FieldRef() {}
 
+  FieldRef(Value value) : value(value) {}
+
   /// Get a FieldRef location for the specified value.
   FieldRef(Value value, unsigned id) : value(value), id(id) {}
 

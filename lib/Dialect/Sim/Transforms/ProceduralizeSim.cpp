@@ -37,6 +37,81 @@ using namespace circt;
 using namespace sim;
 
 namespace {
+static LogicalResult collectFormatStringFragments(
+    Value formatString, PrintFormattedOp anchorOp,
+    SmallVectorImpl<Operation *> &fragmentList,
+    SmallSetVector<Operation *, 8> &allFStringFragments,
+    SmallSetVector<Value, 4> &arguments) {
+  SmallVector<Value> flatString;
+  if (auto concatInput = formatString.getDefiningOp<FormatStringConcatOp>()) {
+    auto isAcyclic = concatInput.getFlattenedInputs(flatString);
+    if (failed(isAcyclic)) {
+      anchorOp.emitError("Cyclic format string cannot be proceduralized.");
+      return failure();
+    }
+  } else {
+    flatString.push_back(formatString);
+  }
+
+  assert(fragmentList.empty() && "format string visited twice");
+  for (auto fragment : flatString) {
+    auto *fmtOp = fragment.getDefiningOp();
+    if (!fmtOp) {
+      anchorOp.emitError("Proceduralization of format strings passed as block "
+                         "argument is unsupported.");
+      return failure();
+    }
+    fragmentList.push_back(fmtOp);
+    allFStringFragments.insert(fmtOp);
+
+    // For non-literal fragments, the value to be formatted has to become a
+    // triggered region argument.
+    if (!llvm::isa<FormatLiteralOp>(fmtOp)) {
+      auto fmtVal = getFormattedValue(fmtOp);
+      assert(!!fmtVal && "Unexpected formatting fragment op.");
+      arguments.insert(fmtVal);
+    }
+  }
+  return success();
+}
+
+static Value
+rematerializeFormatStringFromFragments(ArrayRef<Operation *> fragments,
+                                       OpBuilder &builder, IRMapping &mapping,
+                                       Location loc) {
+  SmallVector<Value> operands;
+  operands.reserve(fragments.size());
+  for (auto *fragment : fragments) {
+    auto cloned = mapping.lookupOrNull(fragment->getResult(0));
+    assert(cloned && "missing cloned fragment");
+    operands.push_back(cloned);
+  }
+  if (operands.size() == 1)
+    return operands.front();
+  return builder.createOrFold<FormatStringConcatOp>(loc, operands);
+}
+
+static Block *getOrCreateConditionBlock(OpBuilder &builder,
+                                        hw::TriggeredOp trigOp, Location loc,
+                                        Value condition,
+                                        Value &prevConditionValue,
+                                        Block *&prevConditionBlock) {
+  if (condition != prevConditionValue)
+    prevConditionBlock = nullptr;
+
+  if (prevConditionBlock)
+    return prevConditionBlock;
+
+  builder.setInsertionPointToEnd(trigOp.getBodyBlock());
+  auto ifOp = mlir::scf::IfOp::create(builder, loc, TypeRange{}, condition,
+                                      true, false);
+  builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
+  mlir::scf::YieldOp::create(builder, loc);
+  prevConditionValue = condition;
+  prevConditionBlock = builder.getBlock();
+  return prevConditionBlock;
+}
+
 struct ProceduralizeSimPass : impl::ProceduralizeSimBase<ProceduralizeSimPass> {
 public:
   void runOnOperation() override;
@@ -44,7 +119,6 @@ public:
 private:
   LogicalResult proceduralizePrintOps(Value clock,
                                       ArrayRef<PrintFormattedOp> printOps);
-  SmallVector<Operation *> getPrintFragments(PrintFormattedOp op);
   void cleanup();
 
   // Mapping Clock -> List of printf ops
@@ -60,67 +134,66 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
 
   // List of uniqued values to become arguments of the TriggeredOp.
   SmallSetVector<Value, 4> arguments;
-  // Map printf ops -> flattened list of fragments
-  SmallDenseMap<PrintFormattedOp, SmallVector<Operation *>, 4> fragmentMap;
+  // Map print ops -> flattened list of format-string fragments.
+  SmallDenseMap<PrintFormattedOp, SmallVector<Operation *>, 4> printFragmentMap;
+  // Map get_file ops -> flattened list of filename format-string fragments.
+  SmallDenseMap<GetFileOp, SmallVector<Operation *>, 4> fileNameFragmentMap;
+  // All non-concat format-string fragment ops needed in the triggered body.
+  SmallSetVector<Operation *, 8> allFStringFragments;
+  // Keep get_file ops in first-use order.
+  SmallSetVector<GetFileOp, 4> getFileOps;
   SmallVector<Location> locs;
   SmallDenseSet<Value, 1> alwaysEnabledConditions;
+  SmallVector<PrintFormattedOp> livePrintOps;
 
   locs.reserve(printOps.size());
-
   for (auto printOp : printOps) {
-    // Handle the print condition value. If it is not constant, it has to become
-    // a region argument. If it is constant false, skip the operation.
     if (auto cstCond = printOp.getCondition().getDefiningOp<hw::ConstantOp>()) {
+      if (cstCond.getValue().isZero()) {
+        printOp.erase();
+        continue;
+      }
       if (cstCond.getValue().isAllOnes())
         alwaysEnabledConditions.insert(printOp.getCondition());
-      else
-        continue;
     } else {
       arguments.insert(printOp.getCondition());
     }
 
-    // Accumulate locations
+    livePrintOps.push_back(printOp);
     locs.push_back(printOp.getLoc());
 
-    // Get the flat list of formatting fragments and collect leaf fragments
-    SmallVector<Value> flatString;
-    if (auto concatInput =
-            printOp.getInput().getDefiningOp<FormatStringConcatOp>()) {
+    auto &printFragments = printFragmentMap[printOp];
+    if (failed(::collectFormatStringFragments(printOp.getInput(), printOp,
+                                              printFragments,
+                                              allFStringFragments, arguments)))
+      return failure();
 
-      auto isAcyclic = concatInput.getFlattenedInputs(flatString);
-      if (failed(isAcyclic)) {
-        printOp.emitError("Cyclic format string cannot be proceduralized.");
+    if (auto stream = printOp.getStream()) {
+      auto getFileOp = stream.getDefiningOp<GetFileOp>();
+      if (!getFileOp) {
+        if (!stream.getDefiningOp())
+          printOp.emitError("proceduralization requires stream to be produced "
+                            "by sim.get_file, block arguments are unsupported");
+        else
+          printOp.emitError("proceduralization requires stream to be produced "
+                            "by sim.get_file");
         return failure();
       }
-    } else {
-      flatString.push_back(printOp.getInput());
-    }
-
-    auto &fragmentList = fragmentMap[printOp];
-    assert(fragmentList.empty() && "printf operation visited twice.");
-
-    for (auto &fragment : flatString) {
-      auto *fmtOp = fragment.getDefiningOp();
-      if (!fmtOp) {
-        printOp.emitError("Proceduralization of format strings passed as block "
-                          "argument is unsupported.");
+      getFileOps.insert(getFileOp);
+      auto &fileNameFragments = fileNameFragmentMap[getFileOp];
+      if (fileNameFragments.empty() &&
+          failed(::collectFormatStringFragments(
+              getFileOp.getFileName(), printOp, fileNameFragments,
+              allFStringFragments, arguments)))
         return failure();
-      }
-      fragmentList.push_back(fmtOp);
-      // For non-literal fragments, the value to be formatted has to become an
-      // argument.
-      if (!llvm::isa<FormatLiteralOp>(fmtOp)) {
-        auto fmtVal = getFormattedValue(fmtOp);
-        assert(!!fmtVal && "Unexpected foramtting fragment op.");
-        arguments.insert(fmtVal);
-      }
     }
   }
 
-  // Build the hw::TriggeredOp
-  OpBuilder builder(printOps.back());
-  auto fusedLoc = builder.getFusedLoc(locs);
+  if (livePrintOps.empty())
+    return success();
 
+  OpBuilder builder(livePrintOps.back());
+  auto fusedLoc = builder.getFusedLoc(locs);
   SmallVector<Value> argVec = arguments.takeVector();
 
   auto clockConv = builder.createOrFold<seq::FromClockOp>(fusedLoc, clock);
@@ -130,78 +203,73 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
                                 hw::EventControl::AtPosEdge),
       clockConv, argVec);
 
-  // Map the collected arguments to the newly created block arguments.
-  IRMapping argumentMapper;
-  unsigned idx = 0;
-  for (auto arg : argVec) {
-    argumentMapper.map(arg, trigOp.getBodyBlock()->getArgument(idx));
-    idx++;
-  }
+  IRMapping mapping;
+  for (auto [idx, arg] : llvm::enumerate(argVec))
+    mapping.map(arg, trigOp.getBodyBlock()->getArgument(idx));
 
-  // Materialize and map a 'true' constant within the TriggeredOp if required.
   builder.setInsertionPointToStart(trigOp.getBodyBlock());
   if (!alwaysEnabledConditions.empty()) {
     auto cstTrue = builder.createOrFold<hw::ConstantOp>(
         fusedLoc, IntegerAttr::get(builder.getI1Type(), 1));
     for (auto cstCond : alwaysEnabledConditions)
-      argumentMapper.map(cstCond, cstTrue);
+      mapping.map(cstCond, cstTrue);
   }
 
-  SmallDenseMap<Operation *, Operation *> cloneMap;
+  for (auto *fragment : allFStringFragments) {
+    auto original = fragment->getResult(0);
+    if (mapping.lookupOrNull(original))
+      continue;
+    auto *cloned = builder.clone(*fragment, mapping);
+    mapping.map(original, cloned->getResult(0));
+  }
+
+  for (auto getFileOp : getFileOps) {
+    auto &fileNameFragments = fileNameFragmentMap[getFileOp];
+    Value clonedFileName = ::rematerializeFormatStringFromFragments(
+        fileNameFragments, builder, mapping, getFileOp.getLoc());
+
+    auto clonedGetFile =
+        GetFileOp::create(builder, getFileOp.getLoc(), clonedFileName);
+    mapping.map(getFileOp.getResult(), clonedGetFile.getResult());
+
+    cleanupList.push_back(getFileOp);
+    cleanupList.push_back(getFileOp.getFileName().getDefiningOp());
+  }
+
+  // Materialize print inputs before creating any conditional blocks.
+  // Whether to actually construct strings eagerly/lazily is left to lowering
+  // backends.
+  SmallDenseMap<PrintFormattedOp, Value> procPrintInputMap;
+  // Insert after rematerialized fragments/get_file ops so operands dominate.
+  builder.setInsertionPointToEnd(trigOp.getBodyBlock());
+  for (auto printOp : livePrintOps) {
+    auto &printFragments = printFragmentMap[printOp];
+    procPrintInputMap[printOp] = ::rematerializeFormatStringFromFragments(
+        printFragments, builder, mapping, printOp.getLoc());
+  }
+
   Value prevConditionValue;
-  Block *prevConditionBlock;
+  Block *prevConditionBlock = nullptr;
+  for (auto printOp : livePrintOps) {
+    auto condArg = mapping.lookup(printOp.getCondition());
+    auto *condBlock =
+        ::getOrCreateConditionBlock(builder, trigOp, printOp.getLoc(), condArg,
+                                    prevConditionValue, prevConditionBlock);
 
-  for (auto printOp : printOps) {
+    builder.setInsertionPoint(condBlock->getTerminator());
+    Value procPrintInput = procPrintInputMap[printOp];
 
-    // Throw away disabled prints
-    if (auto cstCond = printOp.getCondition().getDefiningOp<hw::ConstantOp>()) {
-      if (cstCond.getValue().isZero()) {
-        printOp.erase();
-        continue;
+    Value procPrintStream;
+    if (auto stream = printOp.getStream()) {
+      procPrintStream = mapping.lookupOrNull(stream);
+      if (!procPrintStream) {
+        printOp.emitError("proceduralization failed to rematerialize stream");
+        return failure();
       }
     }
 
-    // Create a copy of the required fragment operations within the
-    // TriggeredOp's body.
-    auto fragments = fragmentMap[printOp];
-    SmallVector<Value> clonedOperands;
-    builder.setInsertionPointToStart(trigOp.getBodyBlock());
-    for (auto *fragment : fragments) {
-      auto &fmtCloned = cloneMap[fragment];
-      if (!fmtCloned)
-        fmtCloned = builder.clone(*fragment, argumentMapper);
-      clonedOperands.push_back(fmtCloned->getResult(0));
-    }
-    // Concatenate fragments to a single value if necessary.
-    Value procPrintInput;
-    if (clonedOperands.size() != 1)
-      procPrintInput = builder.createOrFold<FormatStringConcatOp>(
-          printOp.getLoc(), clonedOperands);
-    else
-      procPrintInput = clonedOperands.front();
-
-    // Check if we can reuse the previous conditional block.
-    auto condArg = argumentMapper.lookup(printOp.getCondition());
-    if (condArg != prevConditionValue)
-      prevConditionBlock = nullptr;
-    auto *condBlock = prevConditionBlock;
-
-    // If not, create a new scf::IfOp for the condition.
-    if (!condBlock) {
-      builder.setInsertionPointToEnd(trigOp.getBodyBlock());
-      auto ifOp = mlir::scf::IfOp::create(builder, printOp.getLoc(),
-                                          TypeRange{}, condArg, true, false);
-      builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
-      mlir::scf::YieldOp::create(builder, printOp.getLoc());
-      condBlock = builder.getBlock();
-      prevConditionValue = condArg;
-      prevConditionBlock = condBlock;
-    }
-
-    // Create the procedural print operation and prune the operations outside of
-    // the TriggeredOp.
-    builder.setInsertionPoint(condBlock->getTerminator());
-    PrintFormattedProcOp::create(builder, printOp.getLoc(), procPrintInput);
+    PrintFormattedProcOp::create(builder, printOp.getLoc(), procPrintInput,
+                                 procPrintStream);
     cleanupList.push_back(printOp.getInput().getDefiningOp());
     printOp.erase();
   }

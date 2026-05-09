@@ -31,6 +31,17 @@
 using namespace circt;
 using namespace firrtl;
 
+bool InstanceInfo::isInstanceUnderLayer(InstanceOp inst) {
+  return inst.getLowerToBind() || inst.getDoNotPrint() ||
+         inst->getParentOfType<LayerBlockOp>() ||
+         inst->getParentOfType<sv::IfDefOp>();
+}
+
+bool InstanceInfo::isInstanceUnderLayer(InstanceChoiceOp inst) {
+  return inst->getParentOfType<LayerBlockOp>() ||
+         inst->getParentOfType<sv::IfDefOp>();
+}
+
 bool InstanceInfo::LatticeValue::isUnknown() const { return kind == Unknown; }
 
 bool InstanceInfo::LatticeValue::isConstant() const { return kind == Constant; }
@@ -86,7 +97,7 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
   for (auto *node : iGraph) {
     auto moduleOp = node->getModule();
     AnnotationSet annotations(moduleOp);
-    if (annotations.hasAnnotation(dutAnnoClass)) {
+    if (annotations.hasAnnotation(markDUTAnnoClass)) {
       circuitAttributes.dut = moduleOp;
       circuitAttributes.effectiveDut = moduleOp;
     }
@@ -104,16 +115,17 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
     attributes.inDesign.mergeIn(isDut(moduleOp));
     attributes.inEffectiveDesign.mergeIn(isEffectiveDut(moduleOp) || !hasDut());
     attributes.underLayer.mergeIn(false);
+    attributes.inInstanceChoice.mergeIn(false);
   }
 
   // Visit modules in reverse post-order (visit parents before children) to
   // merge parent attributes and per-instance attributes into children.
-  iGraph.walkInversePostOrder([&](auto &modIt) {
+  iGraph.walkInversePostOrder([&](igraph::InstanceGraphNode &modIt) {
     auto moduleOp = modIt.getModule();
     ModuleAttributes &attributes = moduleAttributes[moduleOp];
 
     AnnotationSet annotations(moduleOp);
-    auto isDut = annotations.hasAnnotation(dutAnnoClass);
+    auto isDut = annotations.hasAnnotation(markDUTAnnoClass);
     auto isGCCompanion = annotations.hasAnnotation(companionAnnoClass);
 
     if (isDut) {
@@ -139,11 +151,15 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
 
       // Update underLayer.
       bool underLayer = false;
-      if (auto instanceOp = useIt->template getInstance<InstanceOp>()) {
-        if (instanceOp.getLowerToBind() || instanceOp.getDoNotPrint() ||
-            instanceOp->template getParentOfType<LayerBlockOp>() ||
-            instanceOp->template getParentOfType<sv::IfDefOp>())
-          underLayer = true;
+      if (auto instanceOp = useIt->getInstance<InstanceOp>())
+        underLayer = InstanceInfo::isInstanceUnderLayer(instanceOp);
+
+      // Update inInstanceChoice.
+      if (auto instanceChoiceOp = useIt->getInstance<InstanceChoiceOp>()) {
+        attributes.inInstanceChoice.mergeIn(true);
+        underLayer = isInstanceUnderLayer(instanceChoiceOp);
+      } else {
+        attributes.inInstanceChoice.mergeIn(parentAttrs.inInstanceChoice);
       }
 
       if (!isGCCompanion) {
@@ -161,6 +177,64 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
         attributes.inDesign.mergeIn(parentAttrs.inDesign);
         attributes.inEffectiveDesign.mergeIn(parentAttrs.inEffectiveDesign);
       }
+    }
+  });
+
+  // Visit modules in post-order (visit children before parents) to aggregate
+  // information into parents about themselves and their children.
+  //
+  // This walk is _more expensive_ than the earlier walk as this, at worst,
+  // needs to do a full IR walk.  Mitigate this via short circuiting when we
+  // have enough information to interrupt the walk or to skip it entirely.
+  iGraph.walkPostOrder([&](igraph::InstanceGraphNode &modIt) {
+    auto moduleOp = modIt.getModule();
+    ModuleAttributes &attributes = moduleAttributes[moduleOp];
+
+    // Merge in attributes of instances within the module.
+    for (auto *instIt : modIt) {
+      attributes.hasProperties |=
+          moduleAttributes[instIt->getTarget()->getModule()].hasProperties;
+      if (attributes.postOrderSaturated())
+        break;
+    }
+
+    // Early exit if there is no body to examine or if the module cannot be
+    // public.
+    auto moduleLike = modIt.getModule<FModuleLike>();
+    if (!moduleLike)
+      return;
+
+    // Merge in attributes of the module.
+    attributes.hasProperties |= moduleLike.isPublic();
+
+    // If the module is classlike, it is a property.  Walk the ports and update
+    // attributes for each.
+    attributes.hasProperties |= isa<ClassLike>(moduleLike.getOperation());
+    for (auto port : moduleLike.getPorts()) {
+      attributes.hasProperties |= isa<PropertyType>(port.type);
+      if (attributes.postOrderSaturated())
+        break;
+    }
+
+    // Early exit if the attributes can no longer change.  This avoids needing
+    // to do a walk of the module body.
+    if (attributes.postOrderSaturated())
+      return;
+
+    // Walk the ops to populate information, short circuiting as soon as
+    // we've gathered enough information to stop the walk.  Only FModuleOp has
+    // a body to walk; external/intrinsic modules are fully characterized by
+    // their ports, already checked above.
+    if (auto fmodule = dyn_cast<FModuleOp>(moduleLike.getOperation())) {
+      auto isPropertyType = [](Type t) { return isa<PropertyType>(t); };
+      fmodule.walk([&](Operation *op) {
+        if (attributes.hasProperties)
+          return WalkResult::interrupt();
+        attributes.hasProperties |=
+            llvm::any_of(op->getOperandTypes(), isPropertyType) ||
+            llvm::any_of(op->getResultTypes(), isPropertyType);
+        return WalkResult::advance();
+      });
     }
   });
 
@@ -188,13 +262,18 @@ InstanceInfo::InstanceInfo(Operation *op, mlir::AnalysisManager &am) {
           << llvm::indent(6)
           << "isDut: " << (isDut(moduleOp) ? "true" : "false") << "\n"
           << llvm::indent(6)
-          << "isEffectiveDue: " << (isEffectiveDut(moduleOp) ? "true" : "false")
+          << "isEffectiveDut: " << (isEffectiveDut(moduleOp) ? "true" : "false")
           << "\n"
           << llvm::indent(6) << "underDut: " << attributes.underDut << "\n"
           << llvm::indent(6) << "underLayer: " << attributes.underLayer << "\n"
           << llvm::indent(6) << "inDesign: " << attributes.inDesign << "\n"
           << llvm::indent(6)
-          << "inEffectiveDesign: " << attributes.inEffectiveDesign << "\n";
+          << "inEffectiveDesign: " << attributes.inEffectiveDesign << "\n"
+          << llvm::indent(6)
+          << "inInstanceChoice: " << attributes.inInstanceChoice << "\n"
+          << llvm::indent(6)
+          << "hasProperties: " << (attributes.hasProperties ? "true" : "false")
+          << "\n";
     });
   });
 }
@@ -272,4 +351,14 @@ bool InstanceInfo::anyInstanceInEffectiveDesign(igraph::ModuleOpInterface op) {
 bool InstanceInfo::allInstancesInEffectiveDesign(igraph::ModuleOpInterface op) {
   auto inEffectiveDesign = getModuleAttributes(op).inEffectiveDesign;
   return inEffectiveDesign.isConstant() && inEffectiveDesign.getConstant();
+}
+
+bool InstanceInfo::anyInstanceInInstanceChoice(igraph::ModuleOpInterface op) {
+  auto inInstanceChoice = getModuleAttributes(op).inInstanceChoice;
+  return inInstanceChoice.isMixed() ||
+         (inInstanceChoice.isConstant() && inInstanceChoice.getConstant());
+}
+
+bool InstanceInfo::moduleContainsProperties(igraph::ModuleOpInterface op) {
+  return getModuleAttributes(op).hasProperties;
 }

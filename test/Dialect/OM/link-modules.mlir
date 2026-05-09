@@ -14,12 +14,12 @@ module {
   // CHECK-LABEL: om.class @Conflict_B
   // CHECK-LABEL: om.class @UseConflict_B()
   // CHECK-NEXT:    om.object @Conflict_B() : () -> !om.class.type<@Conflict_B>
-  // CHECK-NEXT:    om.object.field %{{.+}}, [@c] : (!om.class.type<@Conflict_B>) -> i1
+  // CHECK-NEXT:    om.object.field %{{.+}}["c"] : (!om.class.type<@Conflict_B>) -> i1
 
   // CHECK-LABEL: om.class @Conflict_module_0()
   // CHECK-LABEL: om.class @UseConflict_module_0()
   // CHECK-NEXT:    om.object @Conflict_module_0() : () -> !om.class.type<@Conflict_module_0>
-  // CHECK-NEXT:    om.object.field %{{.+}}, [@c] : (!om.class.type<@Conflict_module_0>) -> i1
+  // CHECK-NEXT:    om.object.field %{{.+}}["c"] : (!om.class.type<@Conflict_module_0>) -> i1
 
   module attributes {om.namespace = "A"} {
     om.class @A(%arg: i1) -> (a: i1) {
@@ -42,7 +42,7 @@ module {
     }
     om.class @UseConflict() -> (c: i1) {
       %0 = om.object @Conflict() : () -> !om.class.type<@Conflict>
-      %1 = om.object.field %0, [@c] : (!om.class.type<@Conflict>) -> i1
+      %1 = om.object.field %0["c"] : (!om.class.type<@Conflict>) -> i1
       om.class.fields %1 : i1
     }
   }
@@ -53,7 +53,7 @@ module {
     }
     om.class @UseConflict() {
      %0 = om.object @Conflict() : () -> !om.class.type<@Conflict>
-     %1 = om.object.field %0, [@c] : (!om.class.type<@Conflict>) -> i1
+     %1 = om.object.field %0["c"] : (!om.class.type<@Conflict>) -> i1
      om.class.fields
     }
   }

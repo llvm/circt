@@ -37,6 +37,26 @@ static ServicePortInfo createReqResp(StringAttr sym, Twine name,
   return {hw::InnerRefAttr::get(sym, StringAttr::get(ctxt, name)), bundle};
 }
 
+void ChannelServiceDeclOp::getPortList(
+    SmallVectorImpl<ServicePortInfo> &ports) {
+  auto *ctxt = getContext();
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(), StringAttr::get(ctxt, "to_host")),
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::from,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))}},
+          /*resettable=*/UnitAttr())});
+  ports.push_back(ServicePortInfo{
+      hw::InnerRefAttr::get(getSymNameAttr(),
+                            StringAttr::get(ctxt, "from_host")),
+      ChannelBundleType::get(
+          ctxt,
+          {BundledChannel{StringAttr::get(ctxt, "data"), ChannelDirection::to,
+                          ChannelType::get(ctxt, AnyType::get(ctxt))}},
+          /*resettable=*/UnitAttr())});
+}
+
 ServicePortInfo RandomAccessMemoryDeclOp::writePortInfo() {
   auto *ctxt = getContext();
   auto addressType =

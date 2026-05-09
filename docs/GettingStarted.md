@@ -8,6 +8,8 @@ Welcome to the CIRCT project!
 (experimental!) effort looking to apply MLIR and the LLVM development
 methodology to the domain of hardware design tools.
 
+CIRCT is an [LLVM Incubator Project](https://llvm.org/docs/DeveloperPolicy.html#incubating-new-projects) and follows all LLVM policies. Before contributing, please review our [Developer Policy](DeveloperPolicy.md) and [AI Tool Use Policy](AIToolPolicy.md).
+
 Take a look at the following diagram, which gives a brief overview of the
 current [dialects and how they interact](https://circt.llvm.org/includes/img/dialects.svg):
 

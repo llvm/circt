@@ -64,6 +64,14 @@ void CreateVTablesPass::collectClassDependencies(ModuleOp mod,
   auto dependencyDecl =
       symTab.lookupNearestSymbolFrom<ClassDeclOp>(mod, dependencyName);
 
+  // Due to skipping GenericClassDefSymbol now, the parameterized interface
+  // class(@Bar) will not be collected in the symbol table, such as:
+  // `interface class Bar #(parameter N); endclass` extracted from Chipsalliance
+  // class_test_26.
+  if (!dependencyDecl) {
+    return;
+  }
+
   auto &clsMap = classToMethodMap[clsDecl];
   for (auto methodDecl : dependencyDecl.getBody().getOps<ClassMethodDeclOp>()) {
 

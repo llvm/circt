@@ -1,5 +1,5 @@
 add_circt_dialect(Verif verif)
-add_circt_doc(VerifOps Dialects/VerifOps -gen-op-doc)
+add_circt_doc(VerifOps Dialects/VerifOps -gen-op-doc -dialect verif)
 
 set(LLVM_TARGET_DEFINITIONS Verif.td)
 mlir_tablegen(VerifEnums.h.inc -gen-enum-decls)

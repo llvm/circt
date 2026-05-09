@@ -37,6 +37,14 @@ hw.module @sigStructExtract(in %arg0 : !llhd.ref<!hw.struct<foo: i1, bar: i2, ba
   %1 = llhd.sig.struct_extract %arg0["baz"] : <!hw.struct<foo: i1, bar: i2, baz: i3>>
 }
 
+// CHECK-LABEL: @sigUnionExtract
+hw.module @sigUnionExtract(in %arg0 : !llhd.ref<!hw.union<foo: i1, bar: i2, baz: i3>>) {
+  // CHECK-NEXT: %{{.*}} = llhd.sig.struct_extract %arg0["foo"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
+  %0 = llhd.sig.struct_extract %arg0["foo"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
+  // CHECK-NEXT: %{{.*}} = llhd.sig.struct_extract %arg0["baz"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
+  %1 = llhd.sig.struct_extract %arg0["baz"] : <!hw.union<foo: i1, bar: i2, baz: i3>>
+}
+
 // CHECK-LABEL: @checkSigInst
 hw.module @checkSigInst() {
   // CHECK: %[[CI1:.*]] = hw.constant
@@ -212,4 +220,52 @@ func.func @TimeConversion(%arg0: i64, %arg1: !llhd.time) -> (!llhd.time, i64) {
   // CHECK: llhd.time_to_int %arg1
   %1 = llhd.time_to_int %arg1
   return %0, %1 : !llhd.time, i64
+}
+
+// CHECK-LABEL: llhd.global_signal @GlobalSig1 : i42
+llhd.global_signal @GlobalSig1 : i42
+
+// CHECK: llhd.get_global_signal @GlobalSig1 : <i42>
+llhd.get_global_signal @GlobalSig1 : <i42>
+
+// CHECK-LABEL: llhd.global_signal @GlobalSig2 : i42
+llhd.global_signal @GlobalSig2 : i42 init {
+  // CHECK-NEXT: hw.constant
+  %c9001_i42 = hw.constant 9001 : i42
+  // CHECK-NEXT: llhd.yield
+  llhd.yield %c9001_i42 : i42
+}
+
+// CHECK: llhd.get_global_signal @GlobalSig2 : <i42>
+llhd.get_global_signal @GlobalSig2 : <i42>
+
+// CHECK-LABEL: llhd.coroutine @myCoroutine(%arg0: !llhd.ref<i1>)
+llhd.coroutine @myCoroutine(%arg0: !llhd.ref<i1>) {
+  // CHECK-NEXT: llhd.return
+  llhd.return
+}
+
+// CHECK-LABEL: llhd.coroutine private @privateCoroutine()
+llhd.coroutine private @privateCoroutine() {
+  llhd.return
+}
+
+// Coroutines can contain wait, halt, and call_coroutine.
+// CHECK-LABEL: llhd.coroutine @coroutineWithWaitAndHalt
+llhd.coroutine @coroutineWithWaitAndHalt(%arg0: !llhd.ref<i1>, %arg1: i1) {
+  // CHECK: llhd.call_coroutine @myCoroutine(%arg0) : (!llhd.ref<i1>) -> ()
+  llhd.call_coroutine @myCoroutine(%arg0) : (!llhd.ref<i1>) -> ()
+  // CHECK: llhd.wait
+  llhd.wait (%arg1 : i1), ^bb1
+^bb1:
+  // CHECK: llhd.halt
+  llhd.halt
+}
+
+hw.module @coroutineCallFromProcess(in %clk: !llhd.ref<i1>) {
+  llhd.process {
+    // CHECK: llhd.call_coroutine @myCoroutine(%clk) : (!llhd.ref<i1>) -> ()
+    llhd.call_coroutine @myCoroutine(%clk) : (!llhd.ref<i1>) -> ()
+    llhd.halt
+  }
 }

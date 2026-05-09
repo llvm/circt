@@ -65,3 +65,19 @@ firrtl.circuit "Bound" {
   // CHECK-NOT: InlineAnnotation
   firrtl.module private @ChildWithNonHardwareOutput(in %x: !firrtl.uint<8>) attributes {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]} {}
 }
+
+firrtl.circuit "Layers" {
+  firrtl.layer @A bind {}
+  // CHECK-LABEL: firrtl.module private @EnabledLayers
+  // CHECK-NOT: InlineAnnotation
+  firrtl.module private @EnabledLayers() attributes {layers = [@A]} {
+    %0 = firrtl.constant 0 : !firrtl.uint<32>
+    dbg.variable "foo", %0: !firrtl.uint<32>
+  }
+
+  // CHECK-LABEL: @Layers()
+  firrtl.module @Layers() attributes {layers = [@A]} {
+    // CHECK: firrtl.instance enabledLayers {layers = [@A]} @EnabledLayers()
+    firrtl.instance enabledLayers {layers = [@A]} @EnabledLayers()
+  }
+}

@@ -38,6 +38,14 @@ void circt::python::populateDialectRTGTestSubmodule(nb::module_ &m) {
           },
           nb::arg("self"), nb::arg("ctxt") = nullptr);
 
+  mlir_type_subclass(m, "FloatRegisterType", rtgtestTypeIsAFloatRegister)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirContext ctxt) {
+            return cls(rtgtestFloatRegisterTypeGet(ctxt));
+          },
+          nb::arg("self"), nb::arg("ctxt") = nullptr);
+
   mlir_attribute_subclass(m, "CPUAttr", rtgtestAttrIsACPU)
       .def_classmethod(
           "get",
@@ -301,6 +309,14 @@ void circt::python::populateDialectRTGTestSubmodule(nb::module_ &m) {
           "get",
           [](nb::object cls, MlirContext ctxt) {
             return cls(rtgtestRegT6AttrGet(ctxt));
+          },
+          nb::arg("self"), nb::arg("ctxt") = nullptr);
+
+  mlir_attribute_subclass(m, "RegF0Attr", rtgtestAttrIsARegF0)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirContext ctxt) {
+            return cls(rtgtestRegF0AttrGet(ctxt));
           },
           nb::arg("self"), nb::arg("ctxt") = nullptr);
 }

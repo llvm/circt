@@ -439,15 +439,6 @@ A tryGetAs(DictionaryAttr dict, Attribute root, StringRef key, Location loc,
                          "Annotation", path);
 }
 
-/// Add ports to the module and all its instances and return the clone for
-/// `instOnPath`. This does not connect the new ports to anything. Replace
-/// the old instances with the new cloned instance in all the caches.
-InstanceOp addPortsToModule(FModuleLike mod, InstanceOp instOnPath,
-                            FIRRTLType portType, Direction dir,
-                            StringRef newName,
-                            InstancePathCache &instancePathcache,
-                            CircuitTargetCache *targetCaches = nullptr);
-
 ///===----------------------------------------------------------------------===//
 /// LowerAnnotations
 ///===----------------------------------------------------------------------===//

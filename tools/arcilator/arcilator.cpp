@@ -26,7 +26,7 @@
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/Emit/EmitPasses.h"
 #include "circt/Dialect/HW/HWPasses.h"
-#include "circt/Dialect/LLHD/IR/LLHDDialect.h"
+#include "circt/Dialect/LLHD/LLHDDialect.h"
 #include "circt/Dialect/OM/OMDialect.h"
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVDialect.h"
@@ -194,6 +194,11 @@ static llvm::cl::opt<bool> asyncResetsAsSync(
     llvm::cl::desc("Treat asynchronous firreg resets as synchronous"),
     llvm::cl::init(false), llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<bool> traceTaps(
+    "trace-taps",
+    llvm::cl::desc("Insert trace instrumentation for observed values"),
+    llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
 // Options to control early-out from pipeline.
 enum Until {
   UntilPreprocessing,
@@ -260,8 +265,22 @@ static llvm::cl::opt<bool> noJitRuntime(
 static llvm::cl::opt<std::string> extraRuntimeArgs(
     "extra-runtime-args",
     llvm::cl::desc(
-        "Extra arguments passed to the runtime library for JIT runs."),
+        "Extra arguments passed to the runtime library for JIT runs"),
     llvm::cl::init(""), llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<std::string> jitVcdFile(
+    "jit-vcd-file",
+    llvm::cl::desc(
+        "Create a VCD trace for JIT runs and output it to the specified file"),
+    llvm::cl::init(""), llvm::cl::cat(mainCategory));
+
+#ifdef CIRCT_LIBFST_ENABLED
+static llvm::cl::opt<std::string> jitFstFile(
+    "jit-fst-file",
+    llvm::cl::desc(
+        "Create an FST trace for JIT runs and output it to the specified file"),
+    llvm::cl::init(""), llvm::cl::cat(mainCategory));
+#endif
 
 //===----------------------------------------------------------------------===//
 // Main Tool Logic
@@ -296,6 +315,15 @@ static void bindArcRuntimeSymbols(ExecutionEngine &executionEngine) {
     bindExecutionEngineSymbol(symbolMap, interner,
                               runtimeCallbacks.symNameOnEval,
                               runtimeCallbacks.fnOnEval);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameOnInitialized,
+                              runtimeCallbacks.fnOnInitialized);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameFormat,
+                              runtimeCallbacks.fnFormat);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameSwapTraceBuffer,
+                              runtimeCallbacks.fnSwapTraceBuffer);
     return symbolMap;
   });
 }
@@ -315,10 +343,14 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   if (untilReached(UntilPreprocessing))
     return;
 
+  bool hasTrace = !jitVcdFile.empty();
+#ifdef CIRCT_LIBFST_ENABLED
+  hasTrace = hasTrace || !jitFstFile.empty();
+#endif
   ArcPreprocessingOptions preprocessingOpt;
-  preprocessingOpt.observePorts = observePorts;
-  preprocessingOpt.observeWires = observeWires;
-  preprocessingOpt.observeNamedValues = observeNamedValues;
+  preprocessingOpt.observePorts = observePorts || hasTrace;
+  preprocessingOpt.observeWires = observeWires || hasTrace;
+  preprocessingOpt.observeNamedValues = observeNamedValues || hasTrace;
   preprocessingOpt.observeMemories = observeMemories;
   preprocessingOpt.asyncResetsAsSync = asyncResetsAsSync;
   populateArcPreprocessingPipeline(pm, preprocessingOpt);
@@ -328,7 +360,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
     return;
 
   ArcConversionOptions conversionOpt;
-  conversionOpt.observeRegisters = observeRegisters;
+  conversionOpt.observeRegisters = observeRegisters || hasTrace;
   conversionOpt.shouldDedup = shouldDedup;
   populateArcConversionPipeline(pm, conversionOpt);
 
@@ -357,6 +389,7 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
 
   ArcStateAllocationOptions allocationOpt;
   allocationOpt.splitFuncsThreshold = splitFuncsThreshold;
+  allocationOpt.insertTraceTaps = traceTaps || hasTrace;
   populateArcStateAllocationPipeline(pm, allocationOpt);
 }
 
@@ -411,7 +444,31 @@ static LogicalResult processBuffer(
             "arcilator"));
 
   if (!untilReached(UntilLLVMLowering)) {
-    populateArcToLLVMPipeline(pmLlvm, !noRuntime, extraRuntimeArgs);
+    ArcToLLVMOptions opts;
+    opts.noRuntime = noRuntime;
+    std::string runtimeArgs;
+    if (!jitVcdFile.empty()) {
+      runtimeArgs += "vcd";
+      if (!extraRuntimeArgs.empty()) {
+        runtimeArgs += ';';
+        runtimeArgs += extraRuntimeArgs;
+      }
+      opts.traceFileName = jitVcdFile;
+#ifdef CIRCT_LIBFST_ENABLED
+    } else if (!jitFstFile.empty()) {
+      runtimeArgs += "fst";
+      if (!extraRuntimeArgs.empty()) {
+        runtimeArgs += ';';
+        runtimeArgs += extraRuntimeArgs;
+      }
+      opts.traceFileName = jitFstFile;
+#endif
+    } else {
+      runtimeArgs = extraRuntimeArgs;
+      opts.traceFileName = "";
+    }
+    opts.extraRuntimeArgs = runtimeArgs;
+    populateArcToLLVMPipeline(pmLlvm, opts);
   }
 
   if (printDebugInfo && outputFormat == OutputLLVM)
@@ -697,6 +754,10 @@ static LogicalResult executeArcilator(MLIRContext &context) {
 /// and modules inside of it (reducing compile time).
 int main(int argc, char **argv) {
   llvm::InitLLVM y(argc, argv);
+
+  // Set the bug report message to indicate users should file issues on
+  // llvm/circt and not llvm/llvm-project.
+  llvm::setBugReportMsg(circt::circtBugReportMsg);
 
   // Hide default LLVM options, other than for this tool.
   // MLIR options are added below.

@@ -18,6 +18,7 @@ include "circt/Dialect/HW/HWDialect.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
+include "circt/Support/ProceduralRegionTrait.td"
 include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/OpBase.td"
@@ -114,7 +115,7 @@ class HWModuleOpBase<string mnemonic, list<Trait> traits = []> :
 def HWModuleOp : HWModuleOpBase<"module",
       [IsolatedFromAbove, RegionKindInterface,
        SingleBlockImplicitTerminator<"OutputOp">,
-       HWEmittableModuleLike]>{
+       HWEmittableModuleLike, NonProceduralRegion]>{
   let summary = "HW Module";
   let description = [{
     The "hw.module" operation represents a Verilog module, including a given
@@ -511,56 +512,6 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
   }];
 }
 
-def InstanceChoiceOp : HWInstanceOpBase<"instance_choice", [
-    HWInstanceLike,
-    DeclareOpInterfaceMethods<InstanceGraphInstanceOpInterface, [
-      "getReferencedModuleNamesAttr"
-    ]>
-]> {
-  let summary = "Represents an instance with a target-specific reference";
-  let description = [{
-    This represents an instance to a module which is determined based on the
-    target through the ABI. Besides a default implementation, other targets can
-    be associated with a string, which will later determined which reference
-    is chosen.
-
-    For the purposes of analyses and transformations, it is assumed that any of
-    the targets is a possibility.
-
-    Example:
-    ```mlir
-    %b = hw.instance_choice "inst" sym
-        @TargetDefault or
-        @TargetA if "A" or
-        @TargetB if "B"
-        (a: %a: i32) -> (b: i32)
-    ```
-  }];
-
-  let arguments = (ins StrAttr:$instanceName,
-                       FlatSymbolRefArrayAttr:$moduleNames,
-                       StrAttr:$optionName,
-                       StrArrayAttr:$caseNames,
-                       Variadic<AnyType>:$inputs,
-                       StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
-                       ParamDeclArrayAttr:$parameters,
-                       OptionalAttr<InnerSymAttr>:$inner_sym,
-                       UnitAttr:$doNotPrint);
-  let results = (outs Variadic<AnyType>:$results);
-
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
-
-  let extraInstanceClassDeclaration = [{
-    /**
-     * Return the name of the default target.
-     */
-    StringAttr getDefaultModuleNameAttr() {
-      return llvm::cast<FlatSymbolRefAttr>(getModuleNamesAttr()[0]).getAttr();
-    }
-  }];
-}
-
 def OutputOp : HWOp<"output", [Terminator, HasParent<"HWModuleOp">,
                                 Pure, ReturnLike]> {
   let summary = "HW termination operation";
@@ -671,7 +622,8 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
 }
 
 def TriggeredOp : HWOp<"triggered", [
-    IsolatedFromAbove, SingleBlock, NoTerminator]> {
+    IsolatedFromAbove, SingleBlock, NoTerminator, NonProceduralOp,
+    ProceduralRegion]> {
   let summary = "A procedural region with a trigger condition";
   let description = [{
     A procedural region that can be triggered by an event. The trigger

@@ -76,6 +76,7 @@ class SequenceDeclaration(CodeGenObject):
       self.sequence_func(*[_FromCirctValue(arg) for arg in block.arguments])
 
   def _get_ssa_value(self) -> ir.Value:
+    self.register()
     return rtg.GetSequenceOp(self.get_type()._codegen(),
                              self.name)._get_ssa_value()
 

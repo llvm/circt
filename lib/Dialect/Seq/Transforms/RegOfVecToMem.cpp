@@ -194,9 +194,22 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
       /*init=*/seq::FirMemInitAttr{}, /*prefix=*/StringAttr{},
       /*outputFile=*/Attribute{});
 
+  // FIRRTL currently uses a 1-bit address for a single element memory,
+  // however HW arrays use 0-bit addresses. To bridge this gap, create a 1-bit
+  // address equal to 0 if our address is 0-bit.
+  auto fixZeroWidthAddr = [&](Value addr) -> Value {
+    if (addr.getType().getIntOrFloatBitWidth() == 0) {
+      return hw::ConstantOp::create(builder,
+                                    mlir::IntegerType::get(&getContext(), 1), 0)
+          .getResult();
+    }
+    return addr;
+  };
+
   // Create read port
+  auto readAddr = fixZeroWidthAddr(pattern.readAddr);
   Value readData = FirMemReadOp::create(
-      builder, firMem, pattern.readAddr, pattern.clock,
+      builder, firMem, readAddr, pattern.clock,
       /*enable=*/hw::ConstantOp::create(builder, builder.getI1Type(), 1));
 
   LLVM_DEBUG(llvm::dbgs() << "  Created read port\n"
@@ -204,7 +217,8 @@ bool RegOfVecToMemPass::createFirMemory(MemoryPattern &pattern) {
 
   Value mask;
   // Create write port
-  FirMemWriteOp::create(builder, firMem, pattern.writeAddr, pattern.clock,
+  auto writeAddr = fixZeroWidthAddr(pattern.writeAddr);
+  FirMemWriteOp::create(builder, firMem, writeAddr, pattern.clock,
                         pattern.writeEnable, pattern.writeData, mask);
 
   LLVM_DEBUG(llvm::dbgs() << "  Created write port\n");

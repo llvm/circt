@@ -107,10 +107,52 @@ struct HWClientDetail {
 using HWClientDetails = std::vector<HWClientDetail>;
 using ServiceImplDetails = std::map<std::string, std::any>;
 
-/// A logical chunk of data representing serialized data. Currently, just a
-/// wrapper for a vector of bytes, which is not efficient in terms of memory
-/// copying. This will change in the future as will the API.
-class MessageData {
+class MessageData;
+
+//===----------------------------------------------------------------------===//
+// SegmentedMessageData -- multi-segment message support.
+//===----------------------------------------------------------------------===//
+
+/// A contiguous, non-owning view of bytes within a SegmentedMessageData.
+/// Valid only while the owning SegmentedMessageData is alive.
+struct Segment {
+  const uint8_t *data;
+  size_t size;
+  std::span<const uint8_t> span() const { return {data, size}; }
+  bool empty() const { return size == 0; }
+};
+
+/// Abstract multi-segment message. Generated types subclass this to expose
+/// header + list segments without flattening into a contiguous buffer.
+///
+/// MessageData is the canonical flat, one-segment implementation of this
+/// interface. Other subclasses represent naturally segmented layouts.
+///
+/// Subclasses MUST own all data that their segments point to. Read and write
+/// APIs can hold the message across async boundaries / retries.
+class SegmentedMessageData {
+public:
+  virtual ~SegmentedMessageData() = default;
+
+  /// Number of segments in the message.
+  virtual size_t numSegments() const = 0;
+  /// Get a segment by index.
+  virtual Segment segment(size_t idx) const = 0;
+
+  /// Total size across all segments.
+  size_t totalSize() const;
+  /// True if totalSize() == 0.
+  bool empty() const;
+
+  /// Flatten all segments into a standard MessageData.
+  virtual MessageData toMessageData() const;
+};
+
+/// A concrete flat message backed by a single vector of bytes.
+///
+/// This is also a one-segment SegmentedMessageData so flat and segmented
+/// messages can flow through the same internal APIs.
+class MessageData : public SegmentedMessageData {
 public:
   /// Adopts the data vector buffer.
   MessageData() = default;
@@ -162,8 +204,45 @@ public:
   /// Convert the data to a hex string.
   std::string toHex() const;
 
+  size_t numSegments() const override { return 1; }
+  Segment segment(size_t idx) const override {
+    if (idx != 0)
+      throw std::out_of_range("MessageData only has one segment");
+    return {data.data(), data.size()};
+  }
+  MessageData toMessageData() const override { return *this; }
+
 private:
   std::vector<uint8_t> data;
+};
+
+/// Cursor for incremental consumption of a SegmentedMessageData.
+/// Tracks position across segment boundaries. Backends store this alongside
+/// a unique_ptr<SegmentedMessageData> for partial writes.
+///
+/// Deliberately a separate class (not embedded in SegmentedMessageData) so
+/// that generated types have no hidden members — their layout matches the
+/// hardware wire format exactly.
+class SegmentedMessageDataCursor {
+public:
+  SegmentedMessageDataCursor(const SegmentedMessageData &msg) : msg(msg) {}
+
+  /// Contiguous span from current position to end of current segment.
+  std::span<const uint8_t> remaining() const;
+
+  /// Advance by `n` bytes, crossing segment boundaries as needed.
+  void advance(size_t n);
+
+  /// True when all segments have been consumed.
+  bool done() const;
+
+  /// Reset to the beginning.
+  void reset();
+
+private:
+  const SegmentedMessageData &msg;
+  size_t segIdx = 0;
+  size_t offset = 0;
 };
 
 } // namespace esi

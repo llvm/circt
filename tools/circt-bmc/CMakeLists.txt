@@ -15,9 +15,12 @@ target_link_libraries(circt-bmc
   CIRCTBMCTransforms
   CIRCTComb
   CIRCTCombToSMT
+  CIRCTDebug
   CIRCTEmitTransforms
   CIRCTHW
   CIRCTHWToSMT
+  CIRCTHWTransforms
+  CIRCTLTLToCore
   CIRCTOMTransforms
   CIRCTSeq
   CIRCTSMTToZ3LLVM

@@ -11,23 +11,28 @@
 using namespace circt;
 using namespace ImportVerilog;
 
+/// Traverse the instance body.
 namespace {
-struct HierPathValueExprVisitor {
-  Context &context;
-  Location loc;
-  OpBuilder &builder;
+struct InstBodyVisitor
+    : public slang::ast::ASTVisitor<InstBodyVisitor,
+                                    /*VisitStatements=*/true,
+                                    /*VisitExpressions=*/true> {
+  InstBodyVisitor(Context &context, const slang::ast::Symbol &outermostModule,
+                  DenseSet<StringAttr> &sameHierPaths)
+      : context(context), outermostModule(outermostModule),
+        sameHierPaths(sameHierPaths) {}
 
-  // Such as `sub.a`, the `sub` is the outermost module for the hierarchical
-  // variable `a`.
-  const slang::ast::Symbol &outermostModule;
+  void handle(const slang::ast::InstanceSymbol &instNode) {
+    context.traverseInstanceBody(instNode.body, sameHierPaths);
+    // Also visit port connection expressions to find hier refs used as
+    // port arguments (e.g., .in_val(b_inst.local_val)).
+    for (auto *conn : instNode.getPortConnections())
+      if (auto *connExpr = conn->getExpression())
+        connExpr->visit(*this);
+  }
 
-  HierPathValueExprVisitor(Context &context, Location loc,
-                           const slang::ast::Symbol &outermostModule)
-      : context(context), loc(loc), builder(context.builder),
-        outermostModule(outermostModule) {}
-
-  // Handle hierarchical values
-  LogicalResult visit(const slang::ast::HierarchicalValueExpression &expr) {
+  void handle(const slang::ast::HierarchicalValueExpression &expr) {
+    auto builder = context.builder;
     auto *currentInstBody =
         expr.symbol.getParentScope()->getContainingInstance();
     auto *outermostInstBody =
@@ -36,7 +41,7 @@ struct HierPathValueExprVisitor {
     // Like module Foo; int a; Foo.a; endmodule.
     // Ignore "Foo.a" invoked by this module itself.
     if (currentInstBody == outermostInstBody)
-      return success();
+      return;
 
     auto hierName = builder.getStringAttr(expr.symbol.name);
     const slang::ast::InstanceBodySymbol *parentInstBody = nullptr;
@@ -46,15 +51,26 @@ struct HierPathValueExprVisitor {
         collectHierarchicalPaths = [&](auto sym, bool isUpward) {
           // Here we use "sameHierPaths" to avoid collecting the repeat
           // hierarchical names on the same path.
-          if (!context.sameHierPaths.contains(hierName) ||
+          if (!sameHierPaths.contains(hierName) ||
               !context.hierPaths.contains(sym)) {
             context.hierPaths[sym].push_back(
                 HierPathInfo{hierName,
                              {},
                              isUpward ? slang::ast::ArgumentDirection::Out
                                       : slang::ast::ArgumentDirection::In,
-                             &expr.symbol});
-            context.sameHierPaths.insert(hierName);
+                             {&expr.symbol}});
+            sameHierPaths.insert(hierName);
+          } else {
+            // The path already exists (dedup hit), but this may be a
+            // different instance resolving to a different symbol object
+            // for the same logical variable. Add it as an alias.
+            for (auto &existing : context.hierPaths[sym]) {
+              if (existing.hierName == hierName) {
+                if (!llvm::is_contained(existing.valueSyms, &expr.symbol))
+                  existing.valueSyms.push_back(&expr.symbol);
+                break;
+              }
+            }
           }
 
           // Iterate up from the current instance body symbol until meeting the
@@ -85,107 +101,39 @@ struct HierPathValueExprVisitor {
                          ->getContainingInstance();
       if (tempInstBody == outermostInstBody) {
         collectHierarchicalPaths(currentInstBody, true);
-        return success();
+        return;
       }
     }
 
     hierName = builder.getStringAttr(currentInstBody->parentInstance->name +
                                      llvm::Twine(".") + hierName.getValue());
     collectHierarchicalPaths(outermostInstBody, false);
-    return success();
   }
 
-  /// TODO:Skip all others.
-  /// But we should output a warning to display which symbol had been skipped.
-  /// However, to ensure we can test smoothly, we didn't do that.
-  template <typename T>
-  LogicalResult visit(T &&node) {
-    return success();
-  }
+  Context &context;
+  const slang::ast::Symbol &outermostModule;
 
-  LogicalResult visitInvalid(const slang::ast::Expression &expr) {
-    mlir::emitError(loc, "invalid expression");
-    return failure();
-  }
+  // Deduplication set shared across the entire traversal tree rooted at
+  // the top-level traverseInstanceBody call.
+  DenseSet<StringAttr> &sameHierPaths;
 };
+
 } // namespace
 
-LogicalResult
-Context::collectHierarchicalValues(const slang::ast::Expression &expr,
-                                   const slang::ast::Symbol &outermostModule) {
-  auto loc = convertLocation(expr.sourceRange);
-  return expr.visit(HierPathValueExprVisitor(*this, loc, outermostModule));
+void Context::traverseInstanceBody(const slang::ast::Symbol &symbol) {
+  // Top-level entry point: create a fresh deduplication set that is shared
+  // across all recursive traversals of this instance tree. This prevents
+  // cross-hierarchy contamination between independent top-level instances.
+  DenseSet<StringAttr> sameHierPaths;
+  traverseInstanceBody(symbol, sameHierPaths);
 }
 
-/// Traverse the instance body.
-namespace {
-struct InstBodyVisitor {
-  Context &context;
-  Location loc;
-
-  InstBodyVisitor(Context &context, Location loc)
-      : context(context), loc(loc) {}
-
-  // Handle instances.
-  LogicalResult visit(const slang::ast::InstanceSymbol &instNode) {
-    return context.traverseInstanceBody(instNode.body);
-  }
-
-  // Handle variables.
-  LogicalResult visit(const slang::ast::VariableSymbol &varNode) {
-    auto &outermostModule = varNode.getParentScope()->asSymbol();
-    if (const auto *init = varNode.getInitializer())
-      if (failed(context.collectHierarchicalValues(*init, outermostModule)))
-        return failure();
-    return success();
-  }
-
-  // Handle nets.
-  LogicalResult visit(const slang::ast::NetSymbol &netNode) {
-    auto &outermostModule = netNode.getParentScope()->asSymbol();
-    if (const auto *init = netNode.getInitializer())
-      if (failed(context.collectHierarchicalValues(*init, outermostModule)))
-        return failure();
-    return success();
-  }
-
-  // Handle continuous assignments.
-  LogicalResult visit(const slang::ast::ContinuousAssignSymbol &assignNode) {
-    const auto &expr =
-        assignNode.getAssignment().as<slang::ast::AssignmentExpression>();
-
-    // Such as `sub.a`, the `sub` is the outermost module for the hierarchical
-    // variable `a`.
-    auto &outermostModule = assignNode.getParentScope()->asSymbol();
-    if (expr.left().hasHierarchicalReference())
-      if (failed(
-              context.collectHierarchicalValues(expr.left(), outermostModule)))
-        return failure();
-
-    if (expr.right().hasHierarchicalReference())
-      if (failed(
-              context.collectHierarchicalValues(expr.right(), outermostModule)))
-        return failure();
-
-    return success();
-  }
-
-  /// TODO:Skip all others.
-  /// But we should output a warning to display which symbol had been skipped.
-  /// However, to ensure we can test smoothly, we didn't do that.
-  template <typename T>
-  LogicalResult visit(T &&node) {
-    return success();
-  }
-};
-} // namespace
-
-LogicalResult Context::traverseInstanceBody(const slang::ast::Symbol &symbol) {
+void Context::traverseInstanceBody(const slang::ast::Symbol &symbol,
+                                   DenseSet<StringAttr> &sameHierPaths) {
   if (auto *instBodySymbol = symbol.as_if<slang::ast::InstanceBodySymbol>())
     for (auto &member : instBodySymbol->members()) {
-      auto loc = convertLocation(member.location);
-      if (failed(member.visit(InstBodyVisitor(*this, loc))))
-        return failure();
+      auto &outermostModule = member.getParentScope()->asSymbol();
+      InstBodyVisitor visitor(*this, outermostModule, sameHierPaths);
+      member.visit(visitor);
     }
-  return success();
 }

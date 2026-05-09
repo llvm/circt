@@ -19,6 +19,7 @@
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/BuilderUtils.h"
+#include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/SymbolTable.h"
@@ -26,7 +27,11 @@
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 
+#include "circt/Dialect/Sim/SimOpInterfaces.h.inc"
+
 #define GET_OP_CLASSES
+#include "circt/Dialect/Sim/SimEnums.h.inc"
+
 #include "circt/Dialect/Sim/Sim.h.inc"
 
 namespace circt {

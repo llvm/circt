@@ -4,9 +4,18 @@ set_target_properties(esiaccel::ESICppRuntime PROPERTIES
 )
 
 if(WIN32)
+  # Default to Release variant for single-config generators and as fallback.
+  # Multi-config generators (Visual Studio, Xcode) use the per-config
+  # IMPORTED_LOCATION_<CONFIG> properties set below.
   set_target_properties(esiaccel::ESICppRuntime PROPERTIES
     IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime.dll"
     IMPORTED_IMPLIB "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime.lib"
+  )
+  set_target_properties(esiaccel::ESICppRuntime PROPERTIES
+    IMPORTED_LOCATION_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime.dll"
+    IMPORTED_IMPLIB_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime.lib"
+    IMPORTED_LOCATION_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime_d.dll"
+    IMPORTED_IMPLIB_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime_d.lib"
   )
 else()
   set_target_properties(esiaccel::ESICppRuntime PROPERTIES
@@ -25,6 +34,12 @@ if(WIN32)
     IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc.dll"
     IMPORTED_IMPLIB "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc.lib"
   )
+  set_target_properties(esiaccel::CosimRpc PROPERTIES
+    IMPORTED_LOCATION_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc.dll"
+    IMPORTED_IMPLIB_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc.lib"
+    IMPORTED_LOCATION_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc_d.dll"
+    IMPORTED_IMPLIB_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc_d.lib"
+  )
 else()
   set_target_properties(esiaccel::CosimRpc PROPERTIES
     IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../@ESIRT_INSTALL_LIBDIR@/libCosimRpc.so"
@@ -41,6 +56,12 @@ if(WIN32)
   set_target_properties(esiaccel::CosimBackend PROPERTIES
     IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.dll"
     IMPORTED_IMPLIB "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.lib"
+  )
+  set_target_properties(esiaccel::CosimBackend PROPERTIES
+    IMPORTED_LOCATION_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.dll"
+    IMPORTED_IMPLIB_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.lib"
+    IMPORTED_LOCATION_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend_d.dll"
+    IMPORTED_IMPLIB_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend_d.lib"
   )
 else()
   set_target_properties(esiaccel::CosimBackend PROPERTIES

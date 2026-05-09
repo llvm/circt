@@ -46,7 +46,7 @@ static LogicalResult inferAndLikeReturnTypes(MLIRContext *context,
 LogicalResult
 AndOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
                         ValueRange operands, DictionaryAttr attributes,
-                        OpaqueProperties properties, RegionRange regions,
+                        PropertyRef properties, RegionRange regions,
                         SmallVectorImpl<Type> &inferredReturnTypes) {
   return inferAndLikeReturnTypes(context, operands, inferredReturnTypes);
 }
@@ -54,7 +54,7 @@ AndOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
 LogicalResult
 OrOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
                        ValueRange operands, DictionaryAttr attributes,
-                       OpaqueProperties properties, RegionRange regions,
+                       PropertyRef properties, RegionRange regions,
                        SmallVectorImpl<Type> &inferredReturnTypes) {
   return inferAndLikeReturnTypes(context, operands, inferredReturnTypes);
 }
@@ -62,7 +62,7 @@ OrOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
 LogicalResult
 IntersectOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
                               ValueRange operands, DictionaryAttr attributes,
-                              OpaqueProperties properties, RegionRange regions,
+                              PropertyRef properties, RegionRange regions,
                               SmallVectorImpl<Type> &inferredReturnTypes) {
   return inferAndLikeReturnTypes(context, operands, inferredReturnTypes);
 }
@@ -74,7 +74,7 @@ IntersectOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
 LogicalResult
 ClockOp::inferReturnTypes(MLIRContext *context, std::optional<Location> loc,
                           ValueRange operands, DictionaryAttr attributes,
-                          OpaqueProperties properties, RegionRange regions,
+                          PropertyRef properties, RegionRange regions,
                           SmallVectorImpl<Type> &inferredReturnTypes) {
   if (isa<PropertyType>(operands[0].getType())) {
     inferredReturnTypes.push_back(PropertyType::get(context));

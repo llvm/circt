@@ -1,6 +1,8 @@
 numpy
-pybind11>=2.9
+nanobind>=2.2.0
 PyYAML
 cocotb>=1.6.2
 cocotb-test>=0.2.2
 jinja2
+executing>=2.2.0
+psutil

@@ -189,11 +189,6 @@ void circtFirtoolOptionsSetReplSeqMemFile(CirctFirtoolFirtoolOptions options,
   unwrap(options)->setReplSeqMemFile(unwrap(value));
 }
 
-void circtFirtoolOptionsSetExtractTestCode(CirctFirtoolFirtoolOptions options,
-                                           bool value) {
-  unwrap(options)->setExtractTestCode(value);
-}
-
 void circtFirtoolOptionsSetIgnoreReadEnableMem(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setIgnoreReadEnableMem(value);
@@ -201,24 +196,20 @@ void circtFirtoolOptionsSetIgnoreReadEnableMem(
 
 void circtFirtoolOptionsSetDisableRandom(CirctFirtoolFirtoolOptions options,
                                          CirctFirtoolRandomKind value) {
-  firtool::FirtoolOptions::RandomKind converted;
-
+  auto *opts = unwrap(options);
   switch (value) {
   case CIRCT_FIRTOOL_RANDOM_KIND_NONE:
-    converted = firtool::FirtoolOptions::RandomKind::None;
     break;
   case CIRCT_FIRTOOL_RANDOM_KIND_MEM:
-    converted = firtool::FirtoolOptions::RandomKind::Mem;
+    opts->mergeDisableRandom(firtool::FirtoolOptions::RandomKind::Mem);
     break;
   case CIRCT_FIRTOOL_RANDOM_KIND_REG:
-    converted = firtool::FirtoolOptions::RandomKind::Reg;
+    opts->mergeDisableRandom(firtool::FirtoolOptions::RandomKind::Reg);
     break;
   case CIRCT_FIRTOOL_RANDOM_KIND_ALL:
-    converted = firtool::FirtoolOptions::RandomKind::All;
+    opts->mergeDisableRandom(firtool::FirtoolOptions::RandomKind::All);
     break;
   }
-
-  unwrap(options)->setDisableRandom(converted);
 }
 
 void circtFirtoolOptionsSetOutputAnnotationFilename(
@@ -229,6 +220,11 @@ void circtFirtoolOptionsSetOutputAnnotationFilename(
 void circtFirtoolOptionsSetEnableAnnotationWarning(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setEnableAnnotationWarning(value);
+}
+
+void circtFirtoolOptionsSetLowerToCore(CirctFirtoolFirtoolOptions options,
+                                       bool value) {
+  unwrap(options)->setLowerToCore(value);
 }
 
 void circtFirtoolOptionsSetAddMuxPragmas(CirctFirtoolFirtoolOptions options,
@@ -244,21 +240,6 @@ void circtFirtoolOptionsSetVerificationFlavor(
 void circtFirtoolOptionsSetEmitSeparateAlwaysBlocks(
     CirctFirtoolFirtoolOptions options, bool value) {
   unwrap(options)->setEmitSeparateAlwaysBlocks(value);
-}
-
-void circtFirtoolOptionsSetEtcDisableInstanceExtraction(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEtcDisableInstanceExtraction(value);
-}
-
-void circtFirtoolOptionsSetEtcDisableRegisterExtraction(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEtcDisableRegisterExtraction(value);
-}
-
-void circtFirtoolOptionsSetEtcDisableModuleInlining(
-    CirctFirtoolFirtoolOptions options, bool value) {
-  unwrap(options)->setEtcDisableModuleInlining(value);
 }
 
 void circtFirtoolOptionsSetAddVivadoRAMAddressConflictSynthesisBugWorkaround(

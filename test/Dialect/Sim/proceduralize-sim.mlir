@@ -262,3 +262,84 @@ hw.module @condition_as_val(in %clk: !seq.clock, in %condval: i1) {
     %bin = sim.fmt.bin %condval specifierWidth 1 : i1
     sim.print %bin on %clk if %condval
 }
+
+// CHECK-LABEL: @print_with_stream
+// CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
+// CHECK-NEXT:  hw.triggered posedge %[[TRG]](%cond, %idx) : i1, i32 {
+// CHECK-NEXT:  ^bb0(%[[ARGCOND:.*]]: i1, %[[ARGIDX:.*]]: i32):
+// CHECK-DAG:     %[[FMT:.*]] = sim.fmt.literal "stream"
+// CHECK-DAG:     %[[PFX:.*]] = sim.fmt.literal "out_"
+// CHECK-DAG:     %[[NUM:.*]] = sim.fmt.dec %[[ARGIDX]] : i32
+// CHECK-DAG:     %[[SFX:.*]] = sim.fmt.literal ".log"
+// CHECK-DAG:     %[[FNAME:.*]] = sim.fmt.concat (%[[PFX]], %[[NUM]], %[[SFX]])
+// CHECK-DAG:     %[[FILE:.*]] = sim.get_file %[[FNAME]]
+// CHECK:         scf.if %[[ARGCOND]] {
+// CHECK-NEXT:      sim.proc.print %[[FMT]] to %[[FILE]]
+// CHECK-NEXT:    }
+// CHECK-NEXT:  }
+hw.module @print_with_stream(in %clk: !seq.clock, in %cond: i1, in %idx: i32) {
+  %fmt = sim.fmt.literal "stream"
+  %prefix = sim.fmt.literal "out_"
+  %idxFmt = sim.fmt.dec %idx : i32
+  %suffix = sim.fmt.literal ".log"
+  %fileName = sim.fmt.concat (%prefix, %idxFmt, %suffix)
+  %file = sim.get_file %fileName
+  sim.print %fmt on %clk if %cond to %file
+}
+
+// CHECK-LABEL: @print_with_stream_two_conditions
+// CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
+// CHECK-NEXT:  hw.triggered posedge %[[TRG]](%c1, %idx, %c2) : i1, i32, i1 {
+// CHECK-NEXT:  ^bb0(%[[ARGC1:.*]]: i1, %[[ARGIDX:.*]]: i32, %[[ARGC2:.*]]: i1):
+// CHECK-DAG:     %[[FMT:.*]] = sim.fmt.literal "stream2"
+// CHECK-DAG:     %[[PFX:.*]] = sim.fmt.literal "out2_"
+// CHECK-DAG:     %[[NUM:.*]] = sim.fmt.dec %[[ARGIDX]] : i32
+// CHECK-DAG:     %[[SFX:.*]] = sim.fmt.literal ".log"
+// CHECK-DAG:     %[[FNAME:.*]] = sim.fmt.concat (%[[PFX]], %[[NUM]], %[[SFX]])
+// CHECK-DAG:     %[[FILE:.*]] = sim.get_file %[[FNAME]]
+// CHECK:         scf.if %[[ARGC1]] {
+// CHECK-NEXT:      sim.proc.print %[[FMT]] to %[[FILE]]
+// CHECK-NEXT:    }
+// CHECK-NEXT:    scf.if %[[ARGC2]] {
+// CHECK-NEXT:      sim.proc.print %[[FMT]] to %[[FILE]]
+// CHECK-NEXT:    }
+// CHECK-NEXT:  }
+hw.module @print_with_stream_two_conditions(in %clk: !seq.clock, in %c1: i1, in %c2: i1, in %idx: i32) {
+  %fmt = sim.fmt.literal "stream2"
+  %prefix = sim.fmt.literal "out2_"
+  %idxFmt = sim.fmt.dec %idx : i32
+  %suffix = sim.fmt.literal ".log"
+  %fileName = sim.fmt.concat (%prefix, %idxFmt, %suffix)
+  %file = sim.get_file %fileName
+  sim.print %fmt on %clk if %c1 to %file
+  sim.print %fmt on %clk if %c2 to %file
+}
+
+// CHECK-LABEL: @shared_fmt_between_print_and_get_file
+// CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
+// CHECK-NEXT:  hw.triggered posedge %[[TRG]](%cond, %idx) : i1, i32 {
+// CHECK-NEXT:  ^bb0(%[[ARGCOND:.*]]: i1, %[[ARGIDX:.*]]: i32):
+// CHECK-DAG:     %[[SHARED:.*]] = sim.fmt.dec %[[ARGIDX]] : i32
+// CHECK-DAG:     %[[MSGPFX:.*]] = sim.fmt.literal "value="
+// CHECK-DAG:     %[[FILEPFX:.*]] = sim.fmt.literal "out_"
+// CHECK-DAG:     %[[FILESFX:.*]] = sim.fmt.literal ".log"
+// CHECK-DAG:     %[[MSG:.*]] = sim.fmt.concat (%[[MSGPFX]], %[[SHARED]])
+// CHECK-DAG:     %[[FNAME:.*]] = sim.fmt.concat (%[[FILEPFX]], %[[SHARED]], %[[FILESFX]])
+// CHECK-DAG:     %[[FILE:.*]] = sim.get_file %[[FNAME]]
+// CHECK:         scf.if %[[ARGCOND]] {
+// CHECK-NEXT:      sim.proc.print %[[MSG]] to %[[FILE]]
+// CHECK-NEXT:    }
+// CHECK-NEXT:  }
+hw.module @shared_fmt_between_print_and_get_file(
+  in %clk: !seq.clock, in %cond: i1, in %idx: i32) {
+  %shared = sim.fmt.dec %idx : i32
+  %msgPrefix = sim.fmt.literal "value="
+  %msg = sim.fmt.concat (%msgPrefix, %shared)
+
+  %filePrefix = sim.fmt.literal "out_"
+  %fileSuffix = sim.fmt.literal ".log"
+  %fileName = sim.fmt.concat (%filePrefix, %shared, %fileSuffix)
+  %file = sim.get_file %fileName
+
+  sim.print %msg on %clk if %cond to %file
+}

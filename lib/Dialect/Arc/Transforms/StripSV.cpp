@@ -11,6 +11,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
@@ -30,9 +31,7 @@ using namespace arc;
 
 namespace {
 struct StripSVPass : public arc::impl::StripSVBase<StripSVPass> {
-  explicit StripSVPass(bool asyncResetsAsSync) {
-    this->asyncResetsAsSync = asyncResetsAsSync;
-  }
+  using Base::Base;
   void runOnOperation() override;
   SmallVector<Operation *> opsToDelete;
   SmallPtrSet<StringAttr, 4> clockGateModuleNames;
@@ -99,6 +98,22 @@ void StripSVPass::runOnOperation() {
     opsToDelete.push_back(verb);
   for (auto verb : mlirModule.getOps<sv::MacroDeclOp>())
     opsToDelete.push_back(verb);
+
+  mlirModule.walk([&](sv::MacroRefExprOp macroRef) {
+    StringRef macroName = macroRef.getMacroName();
+    bool isConditionMacro = macroName == "STOP_COND_" ||
+                            macroName == "PRINTF_COND_" ||
+                            macroName == "ASSERT_VERBOSE_COND_";
+
+    if (macroRef.getType().isInteger(1) && isConditionMacro) {
+      OpBuilder builder(macroRef);
+      auto trueConst = hw::ConstantOp::create(builder, macroRef.getLoc(),
+                                              builder.getI1Type(), 1);
+
+      macroRef.replaceAllUsesWith(trueConst->getResult(0));
+      opsToDelete.push_back(macroRef);
+    }
+  });
 
   for (auto module : mlirModule.getOps<hw::HWModuleOp>()) {
     for (Operation &op : *module.getBodyBlock()) {
@@ -177,12 +192,36 @@ void StripSVPass::runOnOperation() {
         }
         continue;
       }
+
+      // Canonicalize has-been-reset indicators.
+      if (auto hbr = dyn_cast<verif::HasBeenResetOp>(&op)) {
+        OpBuilder builder(hbr);
+
+        if (hbr.getAsync() && !asyncResetsAsSync) {
+          hbr.emitOpError("has async reset, but only sync resets supported");
+          return signalPassFailure();
+        }
+
+        auto clock =
+            seq::ToClockOp::create(builder, hbr.getLoc(), hbr.getClock());
+        auto initial = circt::seq::createConstantInitialValue(
+            builder, hbr.getLoc(), builder.getBoolAttr(false));
+        auto one =
+            hw::ConstantOp::create(builder, hbr.getLoc(), hbr.getType(), 1);
+        auto reg = seq::CompRegOp::create(builder, hbr.getLoc(), one, clock,
+                                          StringAttr{}, hbr.getReset(), one,
+                                          initial, hw::InnerSymAttr{});
+        reg.getInputMutable().assign(reg);
+        auto notReset =
+            comb::createOrFoldNot(builder, hbr.getLoc(), hbr.getReset());
+        auto masked =
+            comb::AndOp::create(builder, hbr.getLoc(), reg, notReset, true);
+        hbr.getResult().replaceAllUsesWith(masked);
+        opsToDelete.push_back(hbr);
+        continue;
+      }
     }
   }
   for (auto *op : opsToDelete)
     op->erase();
-}
-
-std::unique_ptr<Pass> arc::createStripSVPass(bool asyncResetsAsSync) {
-  return std::make_unique<StripSVPass>(asyncResetsAsSync);
 }

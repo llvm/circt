@@ -19,6 +19,10 @@ class FIFO:
                clk: ClockSignal,
                rst: BitsSignal,
                rd_latency: int = 0):
+    if type.bitwidth is None:
+      raise ValueError("FIFO type must have a defined bitwidth")
+    if type.bitwidth == 0:
+      raise ValueError("FIFO type must have a non-zero bitwidth")
     self.type = type
     self.input = Wire(type)
     self.wr_en = Wire(Bits(1))

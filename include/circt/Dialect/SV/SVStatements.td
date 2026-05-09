@@ -17,6 +17,8 @@ include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/CallInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Support/ProceduralRegionTrait.td"
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -47,6 +49,7 @@ def OrderedOutputOp : SVOp<"ordered", [SingleBlock, NoTerminator, NoRegionArgume
 def IfDefOp : SVOp<"ifdef", [
     NoRegionArguments,
     NonProceduralOp,
+    NonProceduralRegion,
     GraphRegionNoTerminator,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
@@ -512,6 +515,19 @@ def AliasOp : SVOp<"alias"> {
   let hasVerifier = 1;
 }
 
+def WriteOp : SVOp<"write", [ProceduralOp]> {
+  let summary = "'$write' statement";
+
+  let arguments = (ins StrAttr:$format_string,
+                       Variadic<AnyType>:$substitutions);
+  let results = (outs);
+
+  let assemblyFormat = [{
+    $format_string attr-dict (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?
+  }];
+}
+
 def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
 
@@ -544,7 +560,10 @@ def FFlushOp : SVOp<"fflush", [ProceduralOp]> {
   }];
 }
 
-def VerbatimOp : SVOp<"verbatim"> {
+def VerbatimOp : SVOp<"verbatim", [
+    DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+]> {
   let summary = "Verbatim opaque text emitted inline.";
   let description = [{
     This operation produces opaque text inline in the SystemVerilog output.
@@ -705,14 +724,9 @@ def ExitOp : SVOp<"exit", [ProceduralOp]> {
 // Severity Message Tasks
 //===----------------------------------------------------------------------===//
 
-def FatalOp : SVOp<"fatal", [ProceduralOp]> {
-  let summary = "`$fatal` severity message task";
-  let description = [{
-    Generates a run-time fatal error which terminates the simulation with an
-    error code. Makes an implicit call to `$finish`, forwarding the `verbosity`
-    operand. If present, the optional message is printed with any additional
-    operands interpolated into the message string.
-  }];
+/// Base class for fatal message operations
+class FatalMessageOp<string mnemonic, list<Trait> traits = []> :
+    SVOp<mnemonic, traits> {
   let arguments = (ins
     VerbosityIntAttr:$verbosity,
     OptionalAttr<StrAttr>:$message, Variadic<AnyType>:$substitutions);
@@ -730,9 +744,31 @@ def FatalOp : SVOp<"fatal", [ProceduralOp]> {
   ];
 }
 
+def FatalProceduralOp : FatalMessageOp<"fatal.procedural", [ProceduralOp]> {
+  let summary = "`$fatal` severity message task (run-time)";
+  let description = [{
+    Generates a run-time fatal error which terminates the simulation with an
+    error code. Makes an implicit call to `$finish`, forwarding the `verbosity`
+    operand. See IEEE 1800-2023 section 20.10 for more information.
+    If present, the optional message is printed with any additional
+    operands interpolated into the message string.
+  }];
+}
+
+def FatalOp : FatalMessageOp<"fatal", [NonProceduralOp]> {
+  let summary = "`$fatal` severity message task (elaboration-time)";
+  let description = [{
+    Generates an elaboration-time fatal error which terminates the elaboration
+    with an error code. Makes an implicit call to `$finish`, forwarding the
+    `verbosity` operand. See IEEE 1800-2023 section 20.11 for more information.
+    If present, the optional message is printed with any additional
+    operands interpolated into the message string.
+  }];
+}
+
 /// Commonalities between `ErrorOp`, `WarningOp`, and `InfoOp`.
 class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
-    SVOp<mnemonic, [ProceduralOp] # traits> {
+    SVOp<mnemonic, traits> {
   string messageDescription = [{
     If present, the optional message is printed with any additional operands
     interpolated into the message string.
@@ -751,25 +787,29 @@ class NonfatalMessageOp<string mnemonic, list<Trait> traits = []> :
   ];
 }
 
-def ErrorOp : NonfatalMessageOp<"error"> {
-  let summary = "`$error` severity message task";
-  let description = [{
-    This system task indicates a run-time error.
-  }] # messageDescription;
-}
+foreach severity = ["Error", "Warning", "Info"] in {
+  defvar severityLower = !tolower(severity);
 
-def WarningOp : NonfatalMessageOp<"warning"> {
-  let summary = "`$warning` severity message task";
-  let description = [{
-    This system task indicates a run-time warning.
-  }] # messageDescription;
-}
+  // Define procedural (run-time) severity message operations
+  def severity # "ProceduralOp" : NonfatalMessageOp<
+      severityLower # ".procedural", [ProceduralOp]> {
+    let summary = "`$" # severityLower # "` severity message task (run-time)";
+    let description = [{
+      This system task indicates a run-time }] # severityLower # [{. It must be
+      used within a procedural region (e.g., `initial`, `always` blocks).
+      See IEEE 1800-2023 section 20.10 for more information.
+    }] # messageDescription;
+  }
 
-def InfoOp : NonfatalMessageOp<"info"> {
-  let summary = "`$info` severity message task";
-  let description = [{
-    This system task indicates a message with no specific severity.
-  }] # messageDescription;
+  // Define non-procedural (elaboration-time) severity message operations
+  def severity # "Op" : NonfatalMessageOp<severityLower, [NonProceduralOp]> {
+    let summary = "`$" # severityLower # "` severity message task (elaboration-time)";
+    let description = [{
+      This system task indicates an elaboration-time }] # severityLower # [{. It must
+      be used outside of procedural regions and will be executed during elaboration.
+      See IEEE 1800-2023 section 20.11 for more information.
+    }] # messageDescription;
+  }
 }
 
 def DepositOp : SVOp<"nonstandard.deposit",

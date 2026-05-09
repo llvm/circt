@@ -41,6 +41,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/BitVector.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-lower-types"
@@ -431,6 +432,7 @@ struct TypeLoweringVisitor : public FIRRTLVisitor<TypeLoweringVisitor, bool> {
   bool visitDecl(FExtModuleOp op);
   bool visitDecl(FModuleOp op);
   bool visitDecl(InstanceOp op);
+  bool visitDecl(InstanceChoiceOp op);
   bool visitDecl(MemOp op);
   bool visitDecl(NodeOp op);
   bool visitDecl(RegOp op);
@@ -497,6 +499,15 @@ private:
   PreserveAggregate::PreserveMode
   getPreservationModeForPorts(FModuleLike moduleLike);
   Value getSubWhatever(Value val, size_t index);
+
+  /// Helper function to lower instance-like operations (InstanceOp and
+  /// InstanceChoiceOp).
+  bool lowerInstanceLike(FInstanceLike op, PreserveAggregate::PreserveMode mode,
+                         ArrayAttr oldPortAnno,
+                         llvm::function_ref<Operation *(
+                             ArrayRef<Type>, ArrayRef<Direction>, ArrayAttr,
+                             ArrayAttr, ArrayAttr, hw::InnerSymAttr)>
+                             createNewInstance);
 
   size_t uniqueIdx = 0;
   std::string uniqueName() {
@@ -831,6 +842,42 @@ void TypeLoweringVisitor::processUsers(Value val, ArrayRef<Value> mapping) {
   }
 }
 
+/// Helper function to remove elements from a vector based on a BitVector mask.
+template <typename T>
+static void eraseElementsAtIndices(SmallVectorImpl<T> &vec,
+                                   const llvm::BitVector &removalMask) {
+  size_t writeIndex = 0, readIndex = 0;
+
+  // Iterate over each set bit (element to remove) in the mask.
+  // Between each removal point, we bulk-copy the range of elements to keep.
+  for (size_t removalIndex : removalMask.set_bits()) {
+    // Copy the range [readIndex, removalIndex) - these are elements to keep.
+    assert(removalIndex >= readIndex && "removal index before read index");
+    size_t rangeSize = removalIndex - readIndex;
+    if (rangeSize > 0) {
+      // Bulk move the range of elements to keep to the write position.
+      // Skip if the read and write positions are the same (= the first
+      // iteration).
+      if (writeIndex != readIndex)
+        std::move(vec.begin() + readIndex, vec.begin() + removalIndex,
+                  vec.begin() + writeIndex);
+      writeIndex += rangeSize;
+    }
+    readIndex = removalIndex + 1;
+  }
+
+  // Copy any remaining elements after the last removal point.
+  size_t remainingSize = vec.size() - readIndex;
+  if (remainingSize > 0) {
+    if (writeIndex != readIndex)
+      std::move(vec.begin() + readIndex, vec.end(), vec.begin() + writeIndex);
+    writeIndex += remainingSize;
+  }
+
+  // Truncate the vector to the new size (number of elements kept).
+  vec.truncate(writeIndex);
+}
+
 void TypeLoweringVisitor::lowerModule(FModuleLike op) {
   if (auto module = llvm::dyn_cast<FModuleOp>(*op))
     visitDecl(module);
@@ -1110,24 +1157,27 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
   OpBuilder builder(context);
 
   // Lower the module block arguments.
-  SmallVector<unsigned> argsToRemove;
+  llvm::BitVector argsToRemove;
   auto newArgs = extModule.getPorts();
+  argsToRemove.reserve(newArgs.size());
 
   DomainLoweringHelper domainHelper(context, extModule.getPortTypes());
 
-  for (size_t argIndex = 0, argsRemoved = 0; argIndex < newArgs.size();
-       ++argIndex) {
+  size_t argsRemoved = 0;
+  for (size_t argIndex = 0; argIndex < newArgs.size(); ++argIndex) {
     SmallVector<Value> lowering;
     if (lowerArg(extModule, argIndex, argsRemoved, newArgs, lowering)) {
-      argsToRemove.push_back(argIndex);
+      argsToRemove.push_back(true);
       ++argsRemoved;
+    } else {
+      argsToRemove.push_back(false);
     }
     // lowerArg might have invalidated any reference to newArgs, be careful
   }
 
-  // Remove block args that have been lowered
-  for (auto toRemove : llvm::reverse(argsToRemove))
-    newArgs.erase(newArgs.begin() + toRemove);
+  // Remove block args that have been lowered.
+  if (argsRemoved != 0)
+    eraseElementsAtIndices(newArgs, argsToRemove);
 
   domainHelper.computeDomainMap(newArgs);
 
@@ -1157,7 +1207,7 @@ bool TypeLoweringVisitor::visitDecl(FExtModuleOp extModule) {
     newArgSyms.push_back(port.sym);
     newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
-    if (auto &domains = port.domains) {
+    if (port.domains) {
       domainHelper.rewriteDomain(port.domains);
     } else {
       port.domains = cache.aEmpty;
@@ -1204,6 +1254,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Lower the module block arguments.
   llvm::BitVector argsToRemove;
   auto newArgs = module.getPorts();
+  argsToRemove.reserve(newArgs.size());
 
   DomainLoweringHelper domainHelper(context, module.getPortTypes());
 
@@ -1223,14 +1274,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
   // Remove block args that have been lowered.
   if (argsRemoved != 0) {
     body->eraseArguments(argsToRemove);
-    size_t size = newArgs.size();
-    for (size_t src = 0, dst = 0; src < size; ++src) {
-      if (argsToRemove[src])
-        continue;
-      newArgs[dst] = newArgs[src];
-      ++dst;
-    }
-    newArgs.erase(newArgs.end() - argsRemoved, newArgs.end());
+    eraseElementsAtIndices(newArgs, argsToRemove);
   }
 
   domainHelper.computeDomainMap(newArgs);
@@ -1260,7 +1304,7 @@ bool TypeLoweringVisitor::visitDecl(FModuleOp module) {
     newArgSyms.push_back(port.sym);
     newArgLocations.push_back(port.loc);
     newArgAnnotations.push_back(port.annotations.getArrayAttr());
-    if (auto domains = port.domains) {
+    if (port.domains) {
       domainHelper.rewriteDomain(port.domains);
     } else {
       port.domains = cache.aEmpty;
@@ -1303,7 +1347,8 @@ bool TypeLoweringVisitor::visitDecl(WireOp op) {
                    ArrayAttr attrs) -> Value {
     return WireOp::create(*builder,
                           mapLoweredType(op.getDataRaw().getType(), field.type),
-                          "", NameKindEnum::DroppableName, attrs, StringAttr{})
+                          "", NameKindEnum::DroppableName, attrs, StringAttr{},
+                          false, op.getDomains())
         .getResult();
   };
   return lowerProducer(op, clone);
@@ -1527,24 +1572,28 @@ bool TypeLoweringVisitor::visitExpr(RefCastOp op) {
   return lowerProducer(op, clone);
 }
 
-bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
+/// Helper function to lower instance-like operations. This contains the common
+/// logic for both InstanceOp and InstanceChoiceOp.
+bool TypeLoweringVisitor::lowerInstanceLike(
+    FInstanceLike op, PreserveAggregate::PreserveMode mode,
+    ArrayAttr oldPortAnno,
+    llvm::function_ref<Operation *(ArrayRef<Type>, ArrayRef<Direction>,
+                                   ArrayAttr, ArrayAttr, ArrayAttr,
+                                   hw::InnerSymAttr)>
+        createNewInstance) {
   bool skip = true;
   SmallVector<Type, 8> resultTypes;
   SmallVector<int64_t, 8> endFields; // Compressed sparse row encoding
-  auto oldPortAnno = op.getPortAnnotations();
   SmallVector<Direction> newDirs;
-  SmallVector<Attribute> newNames;
-  SmallVector<Attribute> newDomains;
-  SmallVector<Attribute> newPortAnno;
-  PreserveAggregate::PreserveMode mode = getPreservationModeForPorts(
-      cast<FModuleLike>(op.getReferencedOperation(symTbl)));
+  SmallVector<Attribute> newNames, newDomains, newPortAnno;
 
   // Create domain helper to track domain port indices.
-  DomainLoweringHelper domainHelper(context, op.getResultTypes());
+  DomainLoweringHelper domainHelper(context, op->getResultTypes());
+  auto emptyAnno = builder->getArrayAttr({});
 
   endFields.push_back(0);
-  for (size_t i = 0, e = op.getNumResults(); i != e; ++i) {
-    auto srcType = type_cast<FIRRTLType>(op.getType(i));
+  for (size_t i = 0, e = op->getNumResults(); i != e; ++i) {
+    auto srcType = type_cast<FIRRTLType>(op->getResult(i).getType());
 
     // Flatten any nested bundle types the usual way.
     SmallVector<FlatBundleFieldEntry, 8> fieldTypes;
@@ -1553,7 +1602,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
       newNames.push_back(op.getPortNameAttr(i));
       newDomains.push_back(op.getPortDomain(i));
       resultTypes.push_back(srcType);
-      newPortAnno.push_back(oldPortAnno[i]);
+      newPortAnno.push_back(oldPortAnno ? oldPortAnno[i] : emptyAnno);
     } else {
       skip = false;
       auto oldName = op.getPortName(i);
@@ -1564,9 +1613,12 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
         newNames.push_back(builder->getStringAttr(oldName + field.suffix));
         newDomains.push_back(op.getPortDomain(i));
         resultTypes.push_back(mapLoweredType(srcType, field.type));
-        auto annos = filterAnnotations(
-            context, dyn_cast_or_null<ArrayAttr>(oldPortAnno[i]), srcType,
-            field);
+        auto annos =
+            oldPortAnno
+                ? filterAnnotations(context,
+                                    dyn_cast_or_null<ArrayAttr>(oldPortAnno[i]),
+                                    srcType, field)
+                : emptyAnno;
         newPortAnno.push_back(annos);
       }
     }
@@ -1586,32 +1638,75 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
   for (auto &domain : newDomains)
     domainHelper.rewriteDomain(domain);
 
-  // FIXME: annotation update
-  auto newInstance = InstanceOp::create(
-      *builder, resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
-      op.getNameKindAttr(), direction::packAttribute(context, newDirs),
-      builder->getArrayAttr(newNames), builder->getArrayAttr(newDomains),
-      op.getAnnotations(), builder->getArrayAttr(newPortAnno),
-      op.getLayersAttr(), op.getLowerToBindAttr(), op.getDoNotPrintAttr(),
+  // Create the new instance using the provided factory function.
+  auto *newInstance = createNewInstance(
+      resultTypes, newDirs, builder->getArrayAttr(newNames),
+      builder->getArrayAttr(newDomains), builder->getArrayAttr(newPortAnno),
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   newInstance->setDiscardableAttrs(op->getDiscardableAttrDictionary());
 
   SmallVector<Value> lowered;
-  for (size_t aggIndex = 0, eAgg = op.getNumResults(); aggIndex != eAgg;
+  for (size_t aggIndex = 0, eAgg = op->getNumResults(); aggIndex != eAgg;
        ++aggIndex) {
     lowered.clear();
     for (size_t fieldIndex = endFields[aggIndex],
                 eField = endFields[aggIndex + 1];
          fieldIndex < eField; ++fieldIndex)
-      lowered.push_back(newInstance.getResult(fieldIndex));
+      lowered.push_back(newInstance->getResult(fieldIndex));
     if (lowered.size() != 1 ||
-        op.getType(aggIndex) != resultTypes[endFields[aggIndex]])
-      processUsers(op.getResult(aggIndex), lowered);
+        op->getResult(aggIndex).getType() != resultTypes[endFields[aggIndex]])
+      processUsers(op->getResult(aggIndex), lowered);
     else
-      op.getResult(aggIndex).replaceAllUsesWith(lowered[0]);
+      op->getResult(aggIndex).replaceAllUsesWith(lowered[0]);
   }
   return true;
+}
+
+bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
+  // Determine preservation mode from the referenced module.
+  PreserveAggregate::PreserveMode mode = getPreservationModeForPorts(
+      cast<FModuleLike>(op.getReferencedOperation(symTbl)));
+
+  // Lambda to create the new InstanceOp with lowered types.
+  auto createNewInstance = [&](ArrayRef<Type> resultTypes,
+                               ArrayRef<Direction> newDirs, ArrayAttr newNames,
+                               ArrayAttr newDomains, ArrayAttr newPortAnno,
+                               hw::InnerSymAttr sym) -> Operation * {
+    // FIXME: annotation update
+    return InstanceOp::create(
+        *builder, resultTypes, op.getModuleNameAttr(), op.getNameAttr(),
+        op.getNameKindAttr(), direction::packAttribute(context, newDirs),
+        newNames, newDomains, op.getAnnotations(), newPortAnno,
+        op.getLayersAttr(), op.getLowerToBindAttr(), op.getDoNotPrintAttr(),
+        sym);
+  };
+
+  return lowerInstanceLike(op, mode, op.getPortAnnotations(),
+                           createNewInstance);
+}
+
+bool TypeLoweringVisitor::visitDecl(InstanceChoiceOp op) {
+  // Get the default target module to determine preservation mode.
+  auto *moduleOp = symTbl.lookupNearestSymbolFrom(
+      op, cast<FlatSymbolRefAttr>(op.getDefaultTargetAttr()));
+  auto mode = getPreservationModeForPorts(cast<FModuleLike>(moduleOp));
+
+  // Lambda to create the new InstanceChoiceOp with lowered types.
+  auto createNewInstance = [&](ArrayRef<Type> resultTypes,
+                               ArrayRef<Direction> newDirs, ArrayAttr newNames,
+                               ArrayAttr newDomains, ArrayAttr newPortAnno,
+                               hw::InnerSymAttr sym) -> Operation * {
+    return InstanceChoiceOp::create(
+        *builder, resultTypes, op.getModuleNames(), op.getCaseNames(),
+        op.getNameAttr(), op.getNameKindAttr(),
+        direction::packAttribute(context, newDirs), newNames, newDomains,
+        op.getAnnotations(), newPortAnno, op.getLayersAttr(), sym,
+        op.getInstanceMacroAttr());
+  };
+
+  return lowerInstanceLike(op, mode, op.getPortAnnotations(),
+                           createNewInstance);
 }
 
 bool TypeLoweringVisitor::visitExpr(SubaccessOp op) {
@@ -1735,6 +1830,7 @@ void LowerTypesPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
 
   std::vector<FModuleLike> ops;
+  auto &instanceGraph = getAnalysis<InstanceGraph>();
   // Symbol Table
   auto &symTbl = getAnalysis<SymbolTable>();
   // Cached attr
@@ -1743,7 +1839,15 @@ void LowerTypesPass::runOnOperation() {
   DenseMap<FModuleLike, Convention> conventionTable;
   auto circuit = getOperation();
   for (auto module : circuit.getOps<FModuleLike>()) {
-    conventionTable.insert({module, module.getConvention()});
+    auto convention = module.getConvention();
+    // Instance choices select between modules with a shared port shape, so
+    // any module instantiated by one must use the scalarized convention.
+    if (llvm::any_of(instanceGraph.lookup(module)->uses(),
+                     [](InstanceRecord *use) {
+                       return use->getInstance<InstanceChoiceOp>();
+                     }))
+      convention = Convention::Scalarized;
+    conventionTable.insert({module, convention});
     ops.push_back(module);
   }
 

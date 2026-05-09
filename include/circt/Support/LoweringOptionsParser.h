@@ -43,14 +43,20 @@ struct LoweringOptionsOption
             llvm::cl::desc(
                 "Style options.  Valid flags include: "
                 "noAlwaysComb, exprInEventControl, disallowPackedArrays, "
+                "disallowPackedStructAssignments, "
                 "disallowLocalVariables, verifLabels, emittedLineLength=<n>, "
                 "maximumNumberOfTermsPerExpression=<n>, "
                 "explicitBitcast, emitReplicatedOpsToHeader, "
                 "locationInfoStyle={plain,wrapInAtSquareBracket,none}, "
                 "disallowPortDeclSharing, printDebugInfo, "
+                "wireSpillingHeuristic=<spillLargeTermsWithNamehints>, "
+                "wireSpillingNamehintTermLimit=<n>, "
                 "disallowExpressionInliningInPorts, disallowMuxInlining, "
-                "emitWireInPort, emitBindComments, omitVersionComment, "
-                "caseInsensitiveKeywords, disallowClockedAssertions"),
+                "mitigateVivadoArrayIndexConstPropBug, "
+                "emitWireInPorts, emitBindComments, omitVersionComment, "
+                "caseInsensitiveKeywords, emitVerilogLocations, "
+                "fixUpEmptyModules, disallowClockedAssertions, "
+                "disallowDeclAssignments"),
             llvm::cl::cat(cat), llvm::cl::value_desc("option")} {}
 };
 

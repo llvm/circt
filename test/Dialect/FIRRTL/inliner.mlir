@@ -303,8 +303,9 @@ firrtl.circuit "NLAInlining" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@NLAInlining::@bar, @Bar]
   // CHECK-NEXT: hw.hierpath private @nla2 [@NLAInlining::@bar, @Bar::@a]
   // CHECK-NEXT: hw.hierpath private @nla3 [@NLAInlining::@bar, @Bar::@port]
+  // CHECK-NEXT: hw.hierpath private @nla5 [@NLAInlining::@b]
+  // CHECK-NEXT: hw.hierpath private @nla6 [@NLAInlining::@port]
   // CHECK-NOT:  hw.hierpath private @nla4
-  // CHECK-NOT:  hw.hierpath private @nla5
   hw.hierpath private @nla1 [@NLAInlining::@foo, @Foo::@bar, @Bar]
   hw.hierpath private @nla2 [@NLAInlining::@foo, @Foo::@bar, @Bar::@a]
   hw.hierpath private @nla3 [@NLAInlining::@foo, @Foo::@bar, @Bar::@port]
@@ -383,8 +384,8 @@ firrtl.circuit "NLAInliningNotMainRoot" {
 firrtl.circuit "NLAFlattening" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@NLAFlattening::@foo, @Foo::@a]
   // CHECK-NEXT: hw.hierpath private @nla2 [@NLAFlattening::@foo, @Foo::@port]
+  // CHECK-NEXT: hw.hierpath private @nla4 [@Foo::@b]
   // CHECK-NOT:  hw.hierpath private @nla3
-  // CHECK-NOT:  hw.hierpath private @nla4
   hw.hierpath private @nla1 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@a]
   hw.hierpath private @nla2 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@port]
   hw.hierpath private @nla3 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz]
@@ -1431,12 +1432,195 @@ firrtl.circuit "FormalMarkerIsUse" {
 // -----
 
 firrtl.circuit "RemoveNonLocalFromLocal" {
-  // CHECK-NOT: @dutNLA
+  // CHECK: hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
   hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
   firrtl.module @Bar() {}
   // CHECK-LABEL: firrtl.module @RemoveNonLocalFromLocal
   firrtl.module @RemoveNonLocalFromLocal() {
     // CHECK: firrtl.instance bar sym @sym {annotations = [{class = "circt.tracker", id = distinct[0]<>}]} @Bar()
     firrtl.instance bar sym @sym {annotations = [{circt.nonlocal = @dutNLA, class = "circt.tracker", id = distinct[0]<>}]} @Bar()
+  }
+}
+
+// -----
+firrtl.circuit "Object" {
+  // CHECK: firrtl.class @MyClass
+  firrtl.class @MyClass() {}
+
+  firrtl.module private @Child() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    // Both object and instance_choice in the same module
+    %obj = firrtl.object @MyClass()
+  }
+
+  // CHECK-LABEL: firrtl.module @Object
+  firrtl.module @Object() {
+    // CHECK: firrtl.object @MyClass
+    firrtl.instance child @Child()
+  }
+}
+// -----
+
+// Test that both firrtl.object and instance_choice work together during inlining.
+// This ensures both FInstanceLike operations are handled correctly in the same module.
+firrtl.circuit "InstanceChoice" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // CHECK: firrtl.module private @ImplA
+  firrtl.module private @ImplA() {}
+
+  firrtl.module private @Child(in %x: !firrtl.uint<8>, out %y: !firrtl.uint<8>)
+    attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    // Both object and instance_choice in the same module
+    firrtl.instance_choice inst @ImplA alternatives @Platform {
+      @FPGA -> @ImplA
+    } ()
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoice
+  firrtl.module @InstanceChoice() {
+    // After inlining, both object and instance_choice should be present
+    // CHECK: firrtl.instance_choice child_inst @ImplA
+    firrtl.instance child @Child(in x: !firrtl.uint<8>, out y: !firrtl.uint<8>)
+  }
+}
+
+// -----
+
+// Test that children of modules referenced by instance_choice can still be inlined.
+// This ensures that marking modules as live doesn't prevent their children from being inlined.
+firrtl.circuit "InstanceChoiceChildrenInlineable" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
+
+  // This should be inlined into FPGAImpl and then deleted
+  // CHECK-NOT: firrtl.module private @InlineableChild
+  firrtl.module private @InlineableChild(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+    attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %c1_ui8 = firrtl.constant 1 : !firrtl.uint<8>
+    firrtl.connect %out, %c1_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // This module is referenced by instance_choice and has an inlineable child
+  // CHECK: firrtl.module private @FPGAImpl
+  firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    // CHECK-NOT: firrtl.instance child @InlineableChild
+    // CHECK: %child_in = firrtl.wire
+    // CHECK: %child_out = firrtl.wire
+    // CHECK: firrtl.constant 1
+    %child_in, %child_out = firrtl.instance child @InlineableChild(in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.connect %child_in, %in : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %out, %child_out : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK: firrtl.module private @ASICImpl
+  firrtl.module private @ASICImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    firrtl.connect %out, %in : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceChildrenInlineable
+  firrtl.module @InstanceChoiceChildrenInlineable(in %a: !firrtl.uint<8>, out %b: !firrtl.uint<8>) {
+    // CHECK: firrtl.instance_choice
+    // CHECK-SAME: @FPGAImpl
+    // CHECK-SAME: @ASICImpl
+    %inst_in, %inst_out = firrtl.instance_choice inst @FPGAImpl alternatives @Platform {
+      @FPGA -> @FPGAImpl,
+      @ASIC -> @ASICImpl
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
+    firrtl.connect %inst_in, %a : !firrtl.uint<8>, !firrtl.uint<8>
+    firrtl.connect %b, %inst_out : !firrtl.uint<8>, !firrtl.uint<8>
+  }
+}
+
+// -----
+
+// Test that instance_choice works correctly during flattening.
+// Flattening should stop at instance_choice boundaries - the instance_choice
+// itself gets inlined, but modules referenced by it are not flattened.
+firrtl.circuit "InstanceChoiceWithFlattening" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // CHECK-LABEL: firrtl.module private @ChildInsideChoice
+  firrtl.module private @ChildInsideChoice() {}
+
+  // This module is referenced by instance_choice and should be kept
+  // CHECK-LABEL: firrtl.module private @ImplA
+  firrtl.module private @ImplA() {
+    // CHECK: firrtl.instance child @ChildInsideChoice
+    firrtl.instance child @ChildInsideChoice()
+  }
+
+  // This module contains an instance_choice
+  firrtl.module private @Level2() {
+    firrtl.instance_choice inst @ImplA alternatives @Platform {
+      @FPGA -> @ImplA
+    } ()
+  }
+
+  firrtl.module private @Level1() {
+    firrtl.instance level2 @Level2()
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceWithFlattening
+  firrtl.module @InstanceChoiceWithFlattening()
+    attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    // After flattening, instance_choice should be inlined but still reference @ImplA
+    // CHECK: firrtl.instance_choice level1_level2_inst @ImplA
+    firrtl.instance level1 @Level1()
+  }
+}
+
+// -----
+
+// Test that NLAs are correctly updated when flattening.
+//
+// CHECK-LABEL: firrtl.circuit "FlattenAtRoot"
+firrtl.circuit "FlattenAtRoot" {
+  // CHECK: hw.hierpath private @nla [@Foo::@b]
+  hw.hierpath private @nla [@Foo::@bar, @Bar::@b]
+  // CHECK: firrtl.module @Bar
+  firrtl.module @Bar() {
+    // CHECK: %b = firrtl.wire sym @b {annotations = [{class = "nla"}]}
+    %b = firrtl.wire sym @b {annotations = [{circt.nonlocal = @nla, class = "nla"}]} : !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module @Foo
+  firrtl.module @Foo() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    // CHECK: %bar_b = firrtl.wire sym @b {annotations = [{class = "nla"}]}
+    firrtl.instance bar sym @bar @Bar()
+  }
+  // CHECK: firrtl.module @FlattenAtRoot
+  firrtl.module @FlattenAtRoot() {
+    firrtl.instance foo sym @foo @Foo()
+    // CHECK: sv.xmr.ref @nla : !hw.inout<i1>
+    %xmr = sv.xmr.ref @nla : !hw.inout<i1>
+  }
+}
+
+// -----
+
+// Test that hierarchical paths are correctly update when inlining.  This is the
+// same, conceptually, as the previous `FlattenAtRoot` test.
+//
+// CHECK-LABEL: firrtl.circuit "InlineBothModules"
+firrtl.circuit "InlineBothModules" {
+  // CHECK: hw.hierpath @path [@InlineBothModules::@sym_0]
+  hw.hierpath @path [@Foo::@bar, @Bar::@sym]
+  firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @sym {annotations = [{circt.nonlocal = @path, class = "test"}]} : !firrtl.uint<5>
+  }
+  firrtl.module private @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance b sym @bar @Bar()
+  }
+  // CHECK: firrtl.module @InlineBothModules
+  firrtl.module @InlineBothModules() {
+    // CHECK: %foo_b_w = firrtl.wire sym @sym_0 {annotations = [{class = "test"}]}
+    firrtl.instance foo @Foo()
+    // CHECK: sv.xmr.ref @path : !hw.inout<i5>
+    %xmr = sv.xmr.ref @path : !hw.inout<i5>
   }
 }

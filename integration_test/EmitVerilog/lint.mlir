@@ -120,3 +120,7 @@ hw.module @UniformArrayCreate(out arr: !hw.array<5xi8>) {
   %arr = hw.array_create %c0_i8, %c0_i8, %c0_i8, %c0_i8, %c0_i8 : i8
   hw.output %arr : !hw.array<5xi8>
 }
+
+hw.module @RegisterOfUnpackedArrayOfStruct() {
+  %reg6 = sv.reg : !hw.inout<uarray<4xarray<8xstruct<a: i1, b: i1>>>>
+}

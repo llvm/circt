@@ -6,12 +6,13 @@ import os
 from .accelerator import AcceleratorConnection, Context, LogLevel
 
 from .esiCppAccel import (AppID, Type, BundleType, ChannelType, ArrayType,
-                          StructType, BitsType, UIntType, SIntType)
+                          StructType, BitsType, UIntType, SIntType, ListType,
+                          WindowType)
 
 __all__ = [
     "AcceleratorConnection", "AppID", "Context", "LogLevel", "Type",
     "BundleType", "ChannelType", "ArrayType", "StructType", "BitsType",
-    "UIntType", "SIntType"
+    "UIntType", "SIntType", "ListType", "WindowType"
 ]
 
 if sys.platform == "win32":

@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - ESIRuntime-*
-  schedule:
-    - cron: 0 12 * * 1
   workflow_dispatch:
 
 jobs:
@@ -59,11 +57,27 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install ninja
 
+      - name: Setup vcpkg binary caching (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vcpkgBinaryCacheDir = "${{ github.workspace }}\vcpkg-binary-cache"
+          New-Item -ItemType Directory -Force -Path $vcpkgBinaryCacheDir
+          echo "VCPKG_BINARY_SOURCES=clear;files,$vcpkgBinaryCacheDir,readwrite" >> $env:GITHUB_ENV
+
+      - name: Cache vcpkg binaries (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}\vcpkg-binary-cache
+          key: vcpkg-${{ runner.os }}-x64-windows-zlib-grpc
+          restore-keys: |
+            vcpkg-${{ runner.os }}-x64-windows-zlib-grpc
+            vcpkg-${{ runner.os }}-x64-windows-
+
       - name: Build additional c++ deps (Windows)
         shell: pwsh
         if: runner.os == 'Windows'
-        # TODO: cache the binaries produced by vcpkg to save ~1hr of build time:
-        #    https://learn.microsoft.com/en-us/vcpkg/consume/binary-caching-github-packages?pivots=windows-runner
         run: |
           & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib grpc
 
@@ -126,7 +140,8 @@ jobs:
 
       - name: Upload wheels to pypi
         uses: pypa/gh-action-pypi-publish@release/v1
-        if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+        if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch')
         with:
           packages-dir: wheelhouse/
           verify-metadata: false
+          verbose: true

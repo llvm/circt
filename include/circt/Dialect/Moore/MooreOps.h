@@ -26,6 +26,18 @@
 
 #define GET_OP_CLASSES
 #include "circt/Dialect/Moore/MooreEnums.h.inc"
+
+namespace circt {
+namespace moore {
+/// Information about one DPI-imported function argument.
+struct DPIArgInfo {
+  mlir::StringAttr name;
+  mlir::Type type;
+  DPIArgDirection dir;
+};
+} // namespace moore
+} // namespace circt
+
 // Clang format shouldn't reorder these headers.
 #include "circt/Dialect/Moore/Moore.h.inc"
 

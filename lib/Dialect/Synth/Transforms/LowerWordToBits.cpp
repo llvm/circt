@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This pass implements bit-blasting for logic synthesis operations.
-// It converts multi-bit operations (AIG, MIG, combinatorial) into equivalent
+// It converts multi-bit operations (AIG, combinatorial) into equivalent
 // single-bit operations, enabling more efficient synthesis and optimization.
 //
 //===----------------------------------------------------------------------===//
@@ -18,12 +18,15 @@
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Support/LogicalResult.h"
+#include <array>
 
 #define DEBUG_TYPE "synth-lower-word-to-bits"
 
@@ -43,8 +46,10 @@ using namespace synth;
 
 /// Check if an operation should be lowered to bit-level operations.
 static bool shouldLowerOperation(Operation *op) {
-  return isa<aig::AndInverterOp, mig::MajorityInverterOp, comb::AndOp,
-             comb::OrOp, comb::XorOp, comb::MuxOp>(op);
+  // Lower all Synth boolean ops through the interface instead of maintaining a
+  // per-op allowlist here.
+  return isa<ChoiceOp, BooleanLogicOpInterface, comb::AndOp, comb::OrOp,
+             comb::XorOp, comb::MuxOp>(op);
 }
 
 namespace {
@@ -58,7 +63,7 @@ namespace {
 /// while maintaining correctness and optimizing for constant propagation.
 class BitBlaster {
 public:
-  explicit BitBlaster(hw::HWModuleOp moduleOp) : moduleOp(moduleOp) {}
+  explicit BitBlaster(Operation *topOp) : topOp(topOp) {}
 
   /// Run the bit-blasting algorithm on the module.
   LogicalResult run();
@@ -84,8 +89,7 @@ private:
   /// Lower a multi-bit value to individual bits.
   /// This is the main entry point for bit-blasting a value.
   ArrayRef<Value> lowerValueToBits(Value value);
-  template <typename OpTy>
-  ArrayRef<Value> lowerInvertibleOperations(OpTy op);
+  ArrayRef<Value> lowerBooleanLogicOperation(BooleanLogicOpInterface op);
   template <typename OpTy>
   ArrayRef<Value> lowerCombLogicOperations(OpTy op);
   ArrayRef<Value> lowerCombMux(comb::MuxOp op);
@@ -102,8 +106,8 @@ private:
   const llvm::KnownBits &computeKnownBits(Value value);
 
   /// Get or create a boolean constant (0 or 1).
-  /// Constants are cached to avoid duplication.
-  Value getBoolConstant(bool value);
+  /// Constants are cached by block to avoid duplication.
+  Value getBoolConstant(bool value, Block *block);
 
   //===--------------------------------------------------------------------===//
   // Helper Methods
@@ -128,11 +132,11 @@ private:
   /// Cache for computed known bits information
   llvm::MapVector<Value, llvm::KnownBits> knownBits;
 
-  /// Cached boolean constants (false at index 0, true at index 1)
-  std::array<Value, 2> constants;
+  /// Cached boolean constants by block (false at index 0, true at index 1)
+  llvm::DenseMap<Block *, std::array<Value, 2>> constantsByBlock;
 
-  /// Reference to the module being processed
-  hw::HWModuleOp moduleOp;
+  /// Reference to the top-level operation being processed
+  Operation *topOp;
 };
 
 } // namespace
@@ -155,34 +159,17 @@ const llvm::KnownBits &BitBlaster::computeKnownBits(Value value) {
     return insertKnownBits(value, llvm::KnownBits(width));
 
   llvm::KnownBits result(width);
-  if (auto aig = dyn_cast<aig::AndInverterOp>(op)) {
-    // Initialize to all ones for AND operation
-    result.One = APInt::getAllOnes(width);
-    result.Zero = APInt::getZero(width);
-
-    for (auto [operand, inverted] :
-         llvm::zip(aig.getInputs(), aig.getInverted())) {
-      auto operandKnownBits = computeKnownBits(operand);
-      if (inverted)
-        // Complement the known bits by swapping Zero and One
-        std::swap(operandKnownBits.Zero, operandKnownBits.One);
-      result &= operandKnownBits;
-    }
-  } else if (auto mig = dyn_cast<mig::MajorityInverterOp>(op)) {
-    // Give up if it's not a 3-input majority inverter.
-    if (mig.getNumOperands() == 3) {
-      std::array<llvm::KnownBits, 3> operandsKnownBits;
-      for (auto [i, operand, inverted] :
-           llvm::enumerate(mig.getInputs(), mig.getInverted())) {
-        operandsKnownBits[i] = computeKnownBits(operand);
-        // Complement the known bits by swapping Zero and One
-        if (inverted)
-          std::swap(operandsKnownBits[i].Zero, operandsKnownBits[i].One);
-      }
-
-      result = (operandsKnownBits[0] & operandsKnownBits[1]) |
-               (operandsKnownBits[0] & operandsKnownBits[2]) |
-               (operandsKnownBits[1] & operandsKnownBits[2]);
+  if (auto logicOp = dyn_cast<BooleanLogicOpInterface>(op))
+    result =
+        logicOp.computeKnownBits([&](unsigned i) -> const llvm::KnownBits & {
+          return computeKnownBits(logicOp.getInput(i));
+        });
+  else if (auto choice = dyn_cast<ChoiceOp>(op)) {
+    result = computeKnownBits(choice.getInputs().front());
+    for (auto input : choice.getInputs().drop_front()) {
+      auto known = computeKnownBits(input);
+      result.One |= known.One;
+      result.Zero |= known.Zero;
     }
   } else {
     // For other operations, use the standard known bits computation
@@ -226,7 +213,7 @@ Value BitBlaster::extractBit(Value value, size_t index) {
       })
       .Case<hw::ConstantOp>([&](hw::ConstantOp op) {
         auto value = op.getValue();
-        return getBoolConstant(value[index]);
+        return getBoolConstant(value[index], op->getBlock());
       })
       .Default([&](auto op) { return lowerValueToBits(value)[index]; });
 }
@@ -250,8 +237,15 @@ ArrayRef<Value> BitBlaster::lowerValueToBits(Value value) {
   }
 
   return TypeSwitch<Operation *, ArrayRef<Value>>(op)
-      .Case<aig::AndInverterOp, mig::MajorityInverterOp>(
-          [&](auto op) { return lowerInvertibleOperations(op); })
+      .Case<ChoiceOp>([&](ChoiceOp op) {
+        auto createOp = [&](OpBuilder &builder, ValueRange operands) {
+          return builder.createOrFold<ChoiceOp>(
+              op.getLoc(), operands[0].getType(), operands);
+        };
+        return lowerOp(op, createOp);
+      })
+      .Case<BooleanLogicOpInterface>(
+          [&](auto op) { return lowerBooleanLogicOperation(op); })
       .Case<comb::AndOp, comb::OrOp, comb::XorOp>(
           [&](auto op) { return lowerCombLogicOperations(op); })
       .Case<comb::MuxOp>([&](comb::MuxOp op) { return lowerCombMux(op); })
@@ -269,18 +263,18 @@ LogicalResult BitBlaster::run() {
   // Topologically sort operations in graph regions so that walk visits them in
   // the topological order.
   if (failed(topologicallySortGraphRegionBlocks(
-          moduleOp, [](Value value, Operation *op) -> bool {
+          topOp, [](Value value, Operation *op) -> bool {
             // Otherthan target ops, all other ops are always ready.
             return !(shouldLowerOperation(op) ||
                      isa<comb::ExtractOp, comb::ReplicateOp, comb::ConcatOp,
                          comb::ReplicateOp>(op));
           }))) {
     // If we failed to topologically sort operations we cannot proceed.
-    return mlir::emitError(moduleOp.getLoc(), "there is a combinational cycle");
+    return mlir::emitError(topOp->getLoc(), "there is a combinational cycle");
   }
 
   // Lower target operations
-  moduleOp.walk([&](Operation *op) {
+  topOp->walk([&](Operation *op) {
     // If the block is in a graph region, topologically sort it first.
     if (shouldLowerOperation(op))
       (void)lowerValueToBits(op->getResult(0));
@@ -315,21 +309,22 @@ LogicalResult BitBlaster::run() {
   return success();
 }
 
-Value BitBlaster::getBoolConstant(bool value) {
-  if (!constants[value]) {
-    auto builder = OpBuilder::atBlockBegin(moduleOp.getBodyBlock());
-    constants[value] = hw::ConstantOp::create(builder, builder.getUnknownLoc(),
-                                              builder.getI1Type(), value);
+Value BitBlaster::getBoolConstant(bool value, Block *block) {
+  auto &blockConstants = constantsByBlock[block];
+  if (!blockConstants[value]) {
+    auto builder = OpBuilder::atBlockBegin(block);
+    blockConstants[value] = hw::ConstantOp::create(
+        builder, builder.getUnknownLoc(), builder.getI1Type(), value);
   }
-  return constants[value];
+  return blockConstants[value];
 }
 
-template <typename OpTy>
-ArrayRef<Value> BitBlaster::lowerInvertibleOperations(OpTy op) {
+ArrayRef<Value>
+BitBlaster::lowerBooleanLogicOperation(BooleanLogicOpInterface op) {
   auto createOp = [&](OpBuilder &builder, ValueRange operands) {
-    return builder.createOrFold<OpTy>(op.getLoc(), operands, op.getInverted());
+    return op.cloneWithSameInversion(builder, operands);
   };
-  return lowerOp(op, createOp);
+  return lowerOp(op.getOperation(), createOp);
 }
 
 template <typename OpTy>
@@ -374,7 +369,7 @@ ArrayRef<Value> BitBlaster::lowerOp(
     operands.reserve(op->getNumOperands());
     if (knownMask[i]) {
       // Use known constant value
-      results.push_back(getBoolConstant(known.One[i]));
+      results.push_back(getBoolConstant(known.One[i], op->getBlock()));
       continue;
     }
 

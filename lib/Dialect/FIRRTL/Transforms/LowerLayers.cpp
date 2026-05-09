@@ -194,6 +194,8 @@ struct BindFileInfo {
   StringAttr filename;
   /// Where to insert bind statements into the bind file.
   Block *body;
+  /// True if including the bindfile has an effect on the design.
+  bool effectful;
 };
 } // namespace
 
@@ -264,7 +266,8 @@ class LowerLayersPass
 
   /// Build a bindfile skeleton for a particular module and layer.
   void buildBindFile(CircuitNamespace &ns, InstanceGraphNode *node,
-                     OpBuilder &b, SymbolRefAttr layerName, LayerOp layer);
+                     OpBuilder &b, SymbolRefAttr layerName, LayerOp layer,
+                     bool effectful);
 
   /// Entry point for the function.
   void runOnOperation() override;
@@ -401,17 +404,9 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                                                InnerRefMap &innerRefMap) {
   hw::InnerSymbolNamespace ns(moduleOp);
 
-  // A cache of values to nameable ops that can be used
-  DenseMap<Value, Operation *> nodeCache;
-
   // Get or create a node op for a value captured by a layer block.
   auto getOrCreateNodeOp = [&](Value operand,
-                               ImplicitLocOpBuilder &builder) -> Operation * {
-    // Use the cache hit.
-    auto *nodeOp = nodeCache.lookup(operand);
-    if (nodeOp)
-      return nodeOp;
-
+                               ImplicitLocOpBuilder &builder) -> NodeOp {
     // Create a new node.  Put it in the cache and use it.
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointAfterValue(operand);
@@ -426,17 +421,19 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       } else if (auto opName = definingOp->getAttrOfType<StringAttr>("name")) {
         nameHint.append(opName);
       }
+      nameHint.append("_layerCapture");
     }
-    return nodeOp = NodeOp::create(builder, operand.getLoc(), operand,
-                                   nameHint.empty() ? "_layer_probe"
-                                                    : StringRef(nameHint));
+
+    return NodeOp::create(builder, operand.getLoc(), operand,
+                          StringRef(nameHint));
   };
 
   // Determine the replacement for an operand within the current region.  Keep a
   // densemap of replacements around to avoid creating the same hardware
   // multiple times.
   DenseMap<Value, Value> replacements;
-  auto getReplacement = [&](Operation *user, Value value) -> Value {
+  std::function<Value(Operation *, Value)> getReplacement =
+      [&](Operation *user, Value value) -> Value {
     auto it = replacements.find(value);
     if (it != replacements.end())
       return it->getSecond();
@@ -467,15 +464,46 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       return replacement;
     }
 
+    // If the value is an instance input port, recurse on its driver instead.
+    // Instance input ports have special flow semantics (sink flow but can be
+    // read from). By recursing on the driver, we avoid creating a node for the
+    // instance port itself and instead directly XMR reference the driver,
+    // creating an intermediary node to dereference if the driver cannot support
+    // an inner symbol. This avoids creating intermediary nodes unless
+    // absolutely required while also avoiding dead code.
+    if (isa_and_present<InstanceOp, InstanceChoiceOp>(definingOp)) {
+      bool isInstanceInputPort =
+          TypeSwitch<Operation *, bool>(definingOp)
+              .Case<InstanceOp, InstanceChoiceOp>([&](auto instOp) {
+                for (auto [idx, result] : llvm::enumerate(instOp.getResults()))
+                  if (result == value)
+                    return instOp.getPortDirection(idx) == Direction::In;
+                return false;
+              })
+              .Default(false);
+
+      if (isInstanceInputPort) {
+        if (auto driver = getDriverFromConnect(value)) {
+          // Recurse on the driver to get its replacement. The connect stays
+          // as-is (driver -> instance port) in the original module.
+          replacement = getReplacement(user, driver);
+          replacements.insert({value, replacement});
+          return replacement;
+        }
+      }
+    }
+
     // Determine the replacement value for the captured operand.  There are
     // three cases that can occur:
     //
     // 1. Capturing something zero-width.  Create a zero-width constant zero.
-    // 2. Capture an expression or instance port.  Drop a node and XMR deref
-    //    that.
-    // 3. Capture something that can handle an inner sym.  XMR deref that.
+    // 2. Capture something that can handle an inner sym.  Add the inner sym if
+    //    it doesn't exist and XMRderef that.
+    // 3. Capture something that can't handle an inner sym.  Add a node and XMR
+    //    deref the node.
     //
-    // Note: (3) can be either an operation or a _module_ port.
+    // The handling of (2) and (3) is diffuse in the code below due to needing
+    // to split things based on whether a value has a defining operation or not.
     auto baseType = type_cast<FIRRTLBaseType>(value.getType());
     if (baseType && baseType.getBitWidthOrSentinel() == 0) {
       OpBuilder::InsertionGuard guard(localBuilder);
@@ -484,18 +512,27 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
           value.getType(), ConstantOp::create(localBuilder, zeroUIntType,
                                               getIntZerosAttr(zeroUIntType)));
     } else {
-      auto *definingOp = value.getDefiningOp();
       hw::InnerRefAttr innerRef;
-      if (definingOp) {
-        // Always create a node.  This is a trade-off between optimizations and
-        // dead code.  By adding the node, this allows the original path to be
-        // better optimized, but will leave dead code in the design.  If the
-        // node is not created, then the output is less optimized.  Err on the
-        // side of dead code.  This dead node _may_ be eventually inlined by
-        // `ExportVerilog`.  However, this is not guaranteed.
-        definingOp = getOrCreateNodeOp(value, localBuilder);
-        innerRef = getInnerRefTo(
-            definingOp, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+      if (auto *definingOp = value.getDefiningOp()) {
+        // Check if the operation can support an inner symbol and targets a
+        // specific result.
+        auto innerSymOp = dyn_cast<hw::InnerSymbolOpInterface>(definingOp);
+        if (innerSymOp && innerSymOp.getTargetResultIndex()) {
+          // The operation can support an inner symbol, so add one directly.
+          innerRef = getInnerRefTo(
+              innerSymOp,
+              [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+        } else {
+          // The operation cannot support an inner symbol, or it has multiple
+          // results and doesn't target a specific result, so create a node
+          // and XMR deref the node.
+          auto node = getOrCreateNodeOp(value, localBuilder);
+          innerRef = getInnerRefTo(
+              node, [&](auto) -> hw::InnerSymbolNamespace & { return ns; });
+          auto newValue = node.getResult();
+          value.replaceAllUsesExcept(newValue, node);
+          value = newValue;
+        }
       } else {
         auto portIdx = cast<BlockArgument>(value).getArgNumber();
         innerRef = getInnerRefTo(
@@ -593,7 +630,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                 return failure();
               })
               .Case<InstanceOp>([&](auto op) {
-                domain = domain =
+                domain =
                     op.getPortDomain(cast<OpResult>(value).getResultNumber());
                 return success();
               })
@@ -685,6 +722,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
       else
         name = StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
+      // Domain type ports have no associations (domain info is in the type).
+      auto domainInfo = ArrayAttr::get(src.getContext(), {});
       PortInfo port(
           /*name=*/name,
           /*type=*/src.getType(),
@@ -692,7 +731,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
           /*symName=*/{},
           /*location=*/loc,
           /*annos=*/{},
-          /*domains=*/domain);
+          /*domains=*/domainInfo);
       ports.push_back(port);
       connectValues.push_back(src);
       BlockArgument replacement =
@@ -744,6 +783,8 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         name = StringAttr::get(src.getContext(), portNs.newName(nameHint));
       else
         name = StringAttr::get(src.getContext(), portNs.newName("anonDomain"));
+      // Domain type ports have no associations (domain info is in the type).
+      auto domainInfo = ArrayAttr::get(src.getContext(), {});
       PortInfo port(
           /*name=*/name,
           /*type=*/src.getType(),
@@ -751,7 +792,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
           /*symName=*/{},
           /*location=*/getPortLoc(dest),
           /*annos=*/{},
-          /*domains=*/domain);
+          /*domains=*/domainInfo);
       ports.push_back(port);
       connectValues.push_back(dest);
       BlockArgument replacement =
@@ -1105,7 +1146,8 @@ void LowerLayersPass::preprocessLayers(CircuitNamespace &ns) {
 
 void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
                                     InstanceGraphNode *node, OpBuilder &b,
-                                    SymbolRefAttr layerName, LayerOp layer) {
+                                    SymbolRefAttr layerName, LayerOp layer,
+                                    bool effectful) {
   assert(layer.getConvention() == LayerConvention::Bind);
   auto module = node->getModule<FModuleOp>();
   auto loc = module.getLoc();
@@ -1184,15 +1226,16 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
       continue;
     auto files = bindFiles[child];
     auto lookup = files.find(layer);
-    if (lookup != files.end())
-      sv::IncludeOp::create(b, loc, IncludeStyle::Local,
-                            lookup->second.filename);
+    if (lookup == files.end() || !lookup->second.effectful)
+      continue;
+    sv::IncludeOp::create(b, loc, IncludeStyle::Local, lookup->second.filename);
   }
 
   // Save the bind file information for later.
   auto &info = bindFiles[module][layer];
   info.filename = filename;
   info.body = includeGuard.getElseBlock();
+  info.effectful = effectful;
 }
 
 void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
@@ -1202,13 +1245,13 @@ void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
   b.setInsertionPointAfter(module);
 
   // Create a bind file only if the layer is used under the module.
-  llvm::SmallDenseSet<LayerOp> layersRequiringBindFiles;
+  llvm::SmallDenseMap<LayerOp, bool> layersRequiringBindFiles;
 
   // If the module is public, create a bind file for all layers.
   if (module.isPublic() || emitAllBindFiles)
     for (auto [_, layer] : symbolToLayer)
       if (layer.getConvention() == LayerConvention::Bind)
-        layersRequiringBindFiles.insert(layer);
+        layersRequiringBindFiles[layer] = false;
 
   // Handle layers used directly in this module.
   module->walk([&](LayerBlockOp layerBlock) {
@@ -1217,7 +1260,7 @@ void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
       return;
 
     // Create a bindfile for any layer directly used in the module.
-    layersRequiringBindFiles.insert(layer);
+    layersRequiringBindFiles[layer] = true;
 
     // Determine names for all modules that will be created.
     auto moduleName = module.getModuleName();
@@ -1239,15 +1282,18 @@ void LowerLayersPass::preprocessModule(CircuitNamespace &ns,
   // Create a bindfile for layers used indirectly under this module.
   for (auto *record : *node) {
     auto *child = record->getTarget()->getModule().getOperation();
-    for (auto [layer, _] : bindFiles[child])
-      layersRequiringBindFiles.insert(layer);
+    for (auto [layer, info] : bindFiles[child])
+      layersRequiringBindFiles[layer] |= info.effectful;
   }
 
   // Build the bindfiles for any layer seen under this module. The bindfiles
   // are emitted in the order which they are declared, for readability.
-  for (auto [sym, layer] : symbolToLayer)
-    if (layersRequiringBindFiles.contains(layer))
-      buildBindFile(ns, node, b, sym, layer);
+  for (auto [sym, layer] : symbolToLayer) {
+    auto it = layersRequiringBindFiles.find(layer);
+    if (it == layersRequiringBindFiles.end())
+      continue;
+    buildBindFile(ns, node, b, sym, layer, it->second);
+  }
 }
 
 void LowerLayersPass::preprocessExtModule(CircuitNamespace &ns,
@@ -1277,6 +1323,7 @@ void LowerLayersPass::preprocessExtModule(CircuitNamespace &ns,
             fileNameForLayer(moduleName, rootLayerName, nestedLayerNames);
         info.filename = StringAttr::get(&getContext(), filename);
         info.body = nullptr;
+        info.effectful = true;
         files.insert({layer, info});
       }
       layer = layer->getParentOfType<LayerOp>();

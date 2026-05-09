@@ -287,7 +287,7 @@ private:
               reg(writeEn, seqClk, reset, op.instanceName() + "_done_reg", b);
           auto done =
               wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
-          auto clockEn = AndOp::create(b, writeEn, createOrFoldNot(done, b));
+          auto clockEn = AndOp::create(b, writeEn, createOrFoldNot(b, done));
           auto outReg =
               regCe(in, seqClk, clockEn, reset, op.instanceName() + "_reg", b);
           auto out = wireOut(outReg, op.instanceName(), "", b);
@@ -310,7 +310,7 @@ private:
           auto in =
               wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
 
-          auto notOp = comb::createOrFoldNot(in, b);
+          auto notOp = comb::createOrFoldNot(b, in);
 
           auto out =
               wireOut(notOp, op.instanceName(), op.portName(op.getOut()), b);
@@ -338,9 +338,8 @@ private:
         .Case([&](ExtSILibOp op) {
           auto in =
               wireIn(op.getIn(), op.instanceName(), op.portName(op.getIn()), b);
-          auto extsi = wireOut(
-              createOrFoldSExt(op.getLoc(), in, op.getOut().getType(), b),
-              op.instanceName(), op.portName(op.getOut()), b);
+          auto extsi = wireOut(createOrFoldSExt(b, in, op.getOut().getType()),
+                               op.instanceName(), op.portName(op.getOut()), b);
           wires.append({in.getInput(), extsi});
         })
         .Default([](Operation *) { return SmallVector<Value>(); });
@@ -390,7 +389,9 @@ private:
     wires.append({clk.getInput(), reset.getInput(), go.getInput(),
                   left.getInput(), right.getInput()});
 
-    auto doneReg = reg(go, clk, reset,
+    // Convert i1 clock to seq.clock for register creation.
+    auto seqClk = seq::ToClockOp::create(b, clk);
+    auto doneReg = reg(go, seqClk, reset,
                        op.instanceName() + "_" + op.portName(op.getDone()), b);
     auto done =
         wireOut(doneReg, op.instanceName(), op.portName(op.getDone()), b);
@@ -399,8 +400,8 @@ private:
     for (auto &&[targetRes, sourceRes] :
          llvm::zip(targetOp->getResults(), op.getOutputPorts())) {
       auto portName = op.portName(sourceRes);
-      auto clockEn = AndOp::create(b, go, createOrFoldNot(done, b));
-      auto resReg = regCe(targetRes, clk, clockEn, reset,
+      auto clockEn = AndOp::create(b, go, createOrFoldNot(b, done));
+      auto resReg = regCe(targetRes, seqClk, clockEn, reset,
                           createName(op.instanceName(), portName), b);
       wires.push_back(wireOut(resReg, op.instanceName(), portName, b));
     }

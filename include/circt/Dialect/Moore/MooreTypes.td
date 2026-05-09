@@ -53,6 +53,16 @@ def EventType : MooreTypeDef<"Event", [], "moore::UnpackedType"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Null Type
+//===----------------------------------------------------------------------===//
+
+def NullType : MooreTypeDef<"Null", [], "moore::UnpackedType"> {
+  let mnemonic = "null";
+  let summary = [{A type that represents null literals for chandles, classhandles,
+  and virtual interfaces}];
+}
+
+//===----------------------------------------------------------------------===//
 // ClassHandleType
 //===----------------------------------------------------------------------===//
 
@@ -521,7 +531,7 @@ def TwoValuedI32 : MooreType<CPred<[{
   let builderCall = "IntType::getInt($_builder.getContext(), 32)";
 }
 
-// A 32-bit two-valued integer.
+// A 8-bit two-valued integer.
 def TwoValuedI8 : MooreType<CPred<[{
     moore::isIntType($_self, 8, moore::Domain::TwoValued)
   }]>, "8-bit two-valued integer type", "moore::IntType"> {
@@ -560,6 +570,12 @@ def AnyUnionType : MooreType<
   "packed or unpacked union type",
   "moore::UnpackedType">;
 
+/// A nullable handle or NullType type
+def NullableType : MooreType<
+  Or<[ChandleType.predicate, ClassHandleType.predicate, NullType.predicate]>,
+  "Nullable handle type",
+  "mlir::Type">;
+
 /// A ref type with the specified constraints on the nested type.
 class SpecificRefType<Type type> : ConfinedType<RefType,
   [SubstLeaves<"$_self", "llvm::cast<moore::RefType>($_self).getNestedType()",
@@ -581,4 +597,17 @@ def AnyUnionRefType : SpecificRefType<AnyUnionType>;
 
 /// Class references.
 def ClassHandleRefType : SpecificRefType<ClassHandleType>;
+
+/// Queue references
+def QueueRefType : SpecificRefType<QueueType>;
+
+/// Assoc Array references
+def AssocArrayRefType : SpecificRefType<AssocArrayType>;
+
+/// Integer references
+def TwoValuedI32RefType : SpecificRefType<TwoValuedI32> {
+  let builderCall =
+    "RefType::get(IntType::getInt($_builder.getContext(), 32))";
+}
+
 #endif // CIRCT_DIALECT_MOORE_MOORETYPES

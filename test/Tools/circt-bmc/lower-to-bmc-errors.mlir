@@ -14,14 +14,6 @@ module {
 
 // -----
 
-// expected-warning @below {{no property provided to check in module - will trivially find no assertions.}}
-hw.module @testModule(in %in0 : i32, in %in1 : i32, out out : i32) attributes {num_regs = 0 : i32, initial_values = []} {
-  %0 = comb.add %in0, %in1 : i32
-  hw.output %0 : i32
-}
-
-// -----
-
 // expected-error @below {{no num_regs or initial_values attribute found - please run externalize registers pass first}}
 hw.module @testModule(in %in0 : i32, in %in1 : i32, out out : i32) {
   %0 = comb.add %in0, %in1 : i32

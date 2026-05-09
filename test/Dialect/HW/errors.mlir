@@ -496,13 +496,6 @@ builtin.module @Nested {
 
 // -----
 
-hw.module @Foo () {
-  // expected-error @+1 {{Cannot find module definition 'DoesNotExist'}}
-  hw.instance_choice "inst" option "foo" @DoesNotExist () -> ()
-}
-
-// -----
-
 // Don't crash if hw.array attribute fails to parse as integer
 // expected-error @below {{floating point value not valid for specified type}}
 hw.module @arrayTypeError(in %in: !hw.array<44.44axi0>) { }
@@ -535,6 +528,11 @@ hw.module @elementTypeError() {
 #innerRef = #hw.innerNameRef<@innerRef>
 
 // -----
+
+// expected-error @+1 {{'hw.module.extern' op requires 0 port locations but got 1}}
+hw.module.extern @bad_port_locs() attributes {port_locs = [loc("port")]}
+
+// -----
 %0 = unrealized_conversion_cast to !hw.array<1000xi42>
 %1 = hw.constant 0 : i9
 // expected-error @below {{index bit width equals ceil(log2(length(input))), or 0 or 1 if input contains only one element}}
@@ -546,3 +544,14 @@ hw.array_get %0[%1] : !hw.array<1000xi42>, i9
 %2 = hw.constant 0 : i42
 // expected-error @below {{index bit width equals ceil(log2(length(input))), or 0 or 1 if input contains only one element}}
 hw.array_inject %0[%1], %2 : !hw.array<1000xi42>, i9
+
+// -----
+
+hw.module @triggeredInTriggered(in %trigger : i1) {
+  hw.triggered posedge %trigger (%trigger) : i1 {
+    ^bb0(%arg: i1):
+    // expected-error @below {{must not be in a procedural region}}
+    hw.triggered posedge %arg {
+    }
+  }
+}

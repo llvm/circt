@@ -95,7 +95,10 @@ struct DebugPoint {
 struct OpenPath {
   OpenPath(circt::igraph::InstancePath path, Value value, size_t bitPos,
            int64_t delay = 0, llvm::ImmutableList<DebugPoint> history = {})
-      : startPoint(path, value, bitPos), delay(delay), history(history) {}
+      : OpenPath(Object(path, value, bitPos), delay, history) {}
+  OpenPath(Object startPoint, int64_t delay = 0,
+           llvm::ImmutableList<DebugPoint> history = {})
+      : startPoint(startPoint), delay(delay), history(history) {}
   OpenPath() = default;
 
   const Object &getStartPoint() const { return startPoint; }

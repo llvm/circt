@@ -82,9 +82,10 @@ endclass
 
 // CHECK-LABEL: moore.class.classdecl @PropertyCombo {
 // CHECK:   moore.class.propertydecl @pubAutoI32 : !moore.i32
-// CHECK-NEXT:   moore.class.propertydecl @protStatL18 : !moore.l18
 // CHECK-NEXT:   moore.class.propertydecl @localAutoI32 : !moore.i32
 // CHECK: }
+// CHECK-LABEL: moore.global_variable @"PropertyCombo::protStatL18" : !moore.l18
+
 class PropertyCombo;
   // public automatic int
   int pubAutoI32;
@@ -629,4 +630,217 @@ endclass
 
 class realFunctionClass implements virtualFunctionClass;
 virtual function void subroutine; endfunction
+endclass
+
+/// Check that elaboration-time parameter accesses evaluate to constants
+
+// CHECK-LABEL: moore.class.classdecl @parameterAccessClass
+
+class parameterAccessClass #(int testParam = 1);
+   extern function int testFunction();
+endclass
+
+// CHECK-LABEL: func.func private @"parameterAccessClass::testFunction
+// CHECK-SAME: (%arg0: !moore.class<@parameterAccessClass>)
+// CHECK: [[C0:%.*]] = moore.constant 7 : i32
+// CHECK: [[C1:%.*]] = moore.constant 7 : i32
+// CHECK: [[SUM:%.*]] = moore.add [[C0]], [[C1]] : i32
+// CHECK: [[C3:%.*]] = moore.constant 7 : i32
+// CHECK: [[SUM2:%.*]] = moore.add [[SUM]], [[C3]] : i32
+// CHECK: return [[SUM2]] : !moore.i32
+
+function int parameterAccessClass::testFunction();
+   return this.testParam + testParam + parameterAccessClass::testParam;
+endfunction
+
+// CHECK-LABEL: func.func private @testFun() -> !moore.i32 {
+// CHECK: [[VC:%.+]] = moore.variable : <class<@parameterAccessClass>>
+// CHECK: [[READ:%.+]] = moore.read [[VC]] : <class<@parameterAccessClass>>
+// CHECK: [[CALL:%.+]] = call @"parameterAccessClass::testFunction"([[READ]]) : (!moore.class<@parameterAccessClass>) -> !moore.i32
+// CHECK: return [[CALL]] : !moore.i32
+
+function int testFun;
+   parameterAccessClass#(7) c;
+   return c.testFunction();
+endfunction
+
+// Check method forward declarations seeing all class properties.
+
+// CHECK-LABEL:  moore.class.classdecl @methodProtoClass {
+// CHECK: moore.class.propertydecl @mytestvar : !moore.i32
+// CHECK: }
+
+class methodProtoClass;
+   extern function int testFunction;
+   int mytestvar;
+endclass
+
+// CHECK-LABEL: func.func private @"methodProtoClass::testFunction"(
+// CHECK-SAME: %arg0: !moore.class<@methodProtoClass>) -> !moore.i32 {
+// CHECK: [[PREF:%.+]] = moore.class.property_ref %arg0[@mytestvar] : <@methodProtoClass> -> <i32>
+// CHECK: [[RREF:%.+]] = moore.read [[PREF]] : <i32>
+// CHECK: return [[RREF]] : !moore.i32
+// CHECK: }
+
+function int methodProtoClass::testFunction();
+   return mytestvar;
+endfunction
+
+
+// Check static member declarations are emitted as global variables
+// Also check that name resolution properly prefixes them
+
+// CHECK-LABEL: moore.global_variable @member : !moore.i32
+static int member;
+
+// CHECK-LABEL: moore.class.classdecl @staticMemberClass {
+// CHECK-NEXT: }
+class staticMemberClass;
+
+// CHECK-LABEL:   moore.global_variable @"staticMemberClass::member" : !moore.i32
+   static int member;
+
+// CHECK-LABEL:  func.func private @next_member() -> !moore.i32 {
+// CHECK:    [[MEMVAR:%.+]] = moore.get_global_variable @"staticMemberClass::member" : <i32>
+// CHECK:    [[RVAR:%.+]] = moore.read [[MEMVAR]] : <i32>
+// CHECK:    return [[RVAR]] : !moore.i32
+// CHECK:  }
+
+    static function int next_member();
+        return member;
+    endfunction
+endclass
+
+// Check that accesses to static members of forward-declared classes without
+// an object instance are valid.
+
+typedef class staticClass;
+
+// CHECK-LABEL:  moore.class.classdecl @otherClass {
+// CHECK:  }
+
+// CHECK-LABEL:  func.func private @"otherClass::otherMemberAccess"
+// CHECK-SAME: (%arg0: !moore.class<@otherClass>) -> !moore.i32 {
+// CHECK:    [[VAR0:%.+]] = moore.get_global_variable @"staticClass::member" : <i32>
+// CHECK:    [[VAR1:%.+]] = moore.read [[VAR0]] : <i32>
+// CHECK:    return [[VAR1]] : !moore.i32
+// CHECK:  }
+
+// CHECK-LABEL:  moore.class.classdecl @staticClass {
+// CHECK:  }
+// CHECK-LABEL: moore.global_variable @"staticClass::member" : !moore.i32
+
+class otherClass;
+    function int otherMemberAccess();
+        return staticClass::member;
+    endfunction
+endclass
+
+class staticClass;
+    static int member;
+endclass
+
+// Check that non-monomorphized classtype comparisons emit a class handle BOp
+
+// CHECK:      moore.class.classdecl @forwardDeclClass {
+// CHECK:      }
+// CHECK:      moore.class.classdecl @mainDeclClass {
+// CHECK:      }
+
+// CHECK:      func.func private @get() -> !moore.class<@forwardDeclClass> {
+// CHECK:        [[M_INST:%.+]] = moore.variable : <class<@forwardDeclClass>>
+// CHECK:        [[R0:%.+]] = moore.read [[M_INST]] : <class<@forwardDeclClass>>
+// CHECK:        [[NULL:%.+]] = moore.null
+// CHECK:        [[EQ:%.+]] = moore.handle_eq [[R0]], [[NULL]] : !moore.class<@forwardDeclClass> : !moore.null -> i1
+// CHECK:        [[B:%.+]] = moore.to_builtin_int [[EQ]] : i1
+// CHECK:        cf.cond_br [[B]], ^bb1, ^bb2
+// CHECK:      ^bb1:
+// CHECK:        [[NEW:%.+]] = moore.class.new : <@forwardDeclClass>
+// CHECK:        moore.blocking_assign [[M_INST]], [[NEW]] : class<@forwardDeclClass>
+// CHECK:        cf.br ^bb2
+// CHECK:      ^bb2:
+// CHECK:        [[R1:%.+]] = moore.read [[M_INST]] : <class<@forwardDeclClass>>
+// CHECK:        return [[R1]] : !moore.class<@forwardDeclClass>
+// CHECK:      }
+
+// CHECK-LABEL: moore.module @testMod() {
+// CHECK:        [[T:%.+]] = moore.variable : <class<@mainDeclClass>>
+// CHECK:        moore.output
+// CHECK:      }
+
+class forwardDeclClass #(parameter int testParam);
+endclass
+
+class mainDeclClass #(parameter int otherTestParam);
+   typedef forwardDeclClass#(otherTestParam) this_type;
+   static function this_type get();
+      static this_type m_inst;
+      if (m_inst == null)
+        m_inst = new;
+      return m_inst;
+   endfunction
+endclass
+
+module testMod;
+   mainDeclClass#(3) t;
+endmodule
+
+// Check that all class properties are registered before function are elaborated
+
+// CHECK:      moore.class.classdecl @methodDeclTestClass {
+// CHECK:        moore.class.propertydecl @testString : !moore.string
+// CHECK:      }
+
+// CHECK:      func.func private @test() -> !moore.class<@methodDeclTestClass> {
+// CHECK:        [[OBJ:%.+]] = moore.class.new : <@methodDeclTestClass>
+// CHECK:        call @"methodDeclTestClass::new"([[OBJ]]) : (!moore.class<@methodDeclTestClass>) -> ()
+// CHECK:        [[VOIDC:%.+]] = builtin.unrealized_conversion_cast to !moore.void
+// CHECK:        return [[OBJ]] : !moore.class<@methodDeclTestClass>
+// CHECK:      }
+
+// CHECK:      func.func private @"methodDeclTestClass::new"([[THIS:%.+]]: !moore.class<@methodDeclTestClass>) {
+// CHECK:        [[REF:%.+]] = moore.class.property_ref [[THIS]][@testString] : <@methodDeclTestClass> -> <string>
+// CHECK:        [[STR:%.+]] = moore.read [[REF]] : <string>
+// CHECK:        [[FMT0:%.+]] = moore.fmt.string [[STR]]
+// CHECK:        [[LIT:%.+]] = moore.fmt.literal "\0A"
+// CHECK:        [[CAT:%.+]] = moore.fmt.concat ([[FMT0]], [[LIT]])
+// CHECK:        moore.builtin.display [[CAT]]
+// CHECK:        return
+// CHECK:      }
+
+class methodDeclTestClass;
+   static function methodDeclTestClass test();
+      return new();
+   endfunction // test
+   protected string testString;
+
+   function new();
+      $display("%s", testString);
+   endfunction
+
+endclass
+
+// CHECK:      moore.class.classdecl @c {
+// CHECK:      }
+
+// CHECK:      moore.global_variable @"c::m_inst" : !moore.class<@c>
+// CHECK:      moore.global_variable @c_handle : !moore.class<@c>
+
+// CHECK:      func.func private @get_inst() -> !moore.class<@c> {
+// CHECK:        [[V0:%.+]] = moore.variable : <class<@c>>
+// CHECK:        [[V1:%.+]] = moore.get_global_variable @c_handle : <class<@c>>
+// CHECK:        [[V2:%.+]] = moore.get_global_variable @"c::m_inst" : <class<@c>>
+// CHECK:        [[V3:%.+]] = moore.read [[V2]] : <class<@c>>
+// CHECK:        moore.blocking_assign [[V1]], [[V3]] : class<@c>
+// CHECK:        [[V4:%.+]] = moore.read [[V0]] : <class<@c>>
+// CHECK:        return [[V4]] : !moore.class<@c>
+// CHECK:      }
+
+typedef class c;
+c c_handle;
+class c;
+   static local c m_inst;
+   static function c get_inst();
+      c_handle = m_inst;
+   endfunction
 endclass

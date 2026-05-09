@@ -1490,62 +1490,125 @@ firrtl.circuit "DiscardableAttributes" {
 firrtl.circuit "Domains" {
   firrtl.domain @ClockDomain
   // CHECK:      firrtl.module @Module
-  // CHECK-SAME:   in %A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in %A: !firrtl.domain<@ClockDomain()>
   // CHECK-SAME:   in %a_a: !firrtl.uint<1> domains [%A]
   // CHECK-SAME:   in %a_c: !firrtl.uint<1> domains [%A]
   // CHECK-SAME:   in %b_a: !firrtl.uint<1> domains [%B]
   // CHECK-SAME:   in %b_c: !firrtl.uint<1> domains [%B]
-  // CHECK-SAME:   in %B: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in %B: !firrtl.domain<@ClockDomain()>
   firrtl.module @Module(
-    in %A : !firrtl.domain of @ClockDomain,
+    in %A : !firrtl.domain<@ClockDomain()>,
     in %a : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [%A],
     in %b : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [%B],
-    in %B : !firrtl.domain of @ClockDomain
+    in %B : !firrtl.domain<@ClockDomain()>
   ) {
   }
 
   // CHECK:      firrtl.extmodule @ExtModule
-  // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain()>
   // CHECK-SAME:   in a_a: !firrtl.uint<1> domains [A]
   // CHECK-SAME:   in a_c: !firrtl.uint<1> domains [A]
   // CHECK-SAME:   in b_a: !firrtl.uint<1> domains [B]
   // CHECK-SAME:   in b_c: !firrtl.uint<1> domains [B]
-  // CHECK-SAME:   in B: !firrtl.domain of @ClockDomain
+  // CHECK-SAME:   in B: !firrtl.domain<@ClockDomain()>
   firrtl.extmodule @ExtModule(
-    in A : !firrtl.domain of @ClockDomain,
+    in A : !firrtl.domain<@ClockDomain()>,
     in a : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [A],
     in b : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [B],
-    in B : !firrtl.domain of @ClockDomain
+    in B : !firrtl.domain<@ClockDomain()>
   )
 
 
   // CHECK: firrtl.module @Domains
   firrtl.module @Domains() {
     // CHECK-NEXT: firrtl.instance module @Module(
-    // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+    // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain()>
     // CHECK-SAME:   in a_a: !firrtl.uint<1> domains [A]
     // CHECK-SAME:   in a_c: !firrtl.uint<1> domains [A]
     // CHECK-SAME:   in b_a: !firrtl.uint<1> domains [B]
     // CHECK-SAME:   in b_c: !firrtl.uint<1> domains [B]
-    // CHECK-SAME:   in B: !firrtl.domain of @ClockDomain
+    // CHECK-SAME:   in B: !firrtl.domain<@ClockDomain()>
     %module_A, %module_a, %module_b, %module_B = firrtl.instance module @Module(
-      in A : !firrtl.domain of @ClockDomain,
+      in A : !firrtl.domain<@ClockDomain()>,
       in a : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [A],
       in b : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [B],
-      in B : !firrtl.domain of @ClockDomain
+      in B : !firrtl.domain<@ClockDomain()>
     )
     // CHECK-NEXT: firrtl.instance extmodule @ExtModule(
-    // CHECK-SAME:   in A: !firrtl.domain of @ClockDomain
+    // CHECK-SAME:   in A: !firrtl.domain<@ClockDomain()>
     // CHECK-SAME:   in a_a: !firrtl.uint<1> domains [A]
     // CHECK-SAME:   in a_c: !firrtl.uint<1> domains [A]
     // CHECK-SAME:   in b_a: !firrtl.uint<1> domains [B]
     // CHECK-SAME:   in b_c: !firrtl.uint<1> domains [B]
-    // CHECK-SAME:   in B: !firrtl.domain of @ClockDomain
+    // CHECK-SAME:   in B: !firrtl.domain<@ClockDomain()>
     %extmodule_A, %extmodule_a, %extmodule_b, %extmodule_B = firrtl.instance extmodule @ExtModule(
-      in A : !firrtl.domain of @ClockDomain,
+      in A : !firrtl.domain<@ClockDomain()>,
       in a : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [A],
       in b : !firrtl.bundle<a: uint<1>, b: bundle<>, c: uint<1>> domains [B],
-      in B : !firrtl.domain of @ClockDomain
+      in B : !firrtl.domain<@ClockDomain()>
     )
+  }
+}
+
+// Test that domain operands on wires are preserved when lowering bundle types.
+// CHECK-LABEL: firrtl.circuit "WireWithDomains"
+firrtl.circuit "WireWithDomains" {
+  firrtl.domain @ClockDomain
+  firrtl.module @WireWithDomains(in %A: !firrtl.domain<@ClockDomain()>) {
+    // CHECK-COUNT-2: firrtl.wire domains[%A] : !firrtl.uint<1>
+    %w = firrtl.wire domains[%A] : !firrtl.bundle<a: uint<1>, b: uint<1>> domains[!firrtl.domain<@ClockDomain()>]
+  }
+}
+
+// Test InstanceChoiceOp lowering with bundle types
+// CHECK-LABEL: firrtl.circuit "InstanceChoiceTest"
+firrtl.circuit "InstanceChoiceTest" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // CHECK-LABEL: firrtl.module private @TargetModule
+  // CHECK-SAME: in %in_a: !firrtl.uint<8>
+  firrtl.module private @TargetModule(
+    in %in: !firrtl.bundle<a: uint<8>, b: uint<8>>,
+    out %out: !firrtl.bundle<x: uint<8>, y: uint<8>>
+  ) {
+    %0 = firrtl.subfield %in[a] : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    %1 = firrtl.subfield %out[x] : !firrtl.bundle<x: uint<8>, y: uint<8>>
+    firrtl.matchingconnect %1, %0 : !firrtl.uint<8>
+  }
+
+  firrtl.extmodule private @Ext(
+    in in: !firrtl.bundle<a: uint<8>, b: uint<8>>,
+    out out: !firrtl.bundle<x: uint<8>, y: uint<8>>
+  )
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceTest
+  firrtl.module @InstanceChoiceTest(
+    in %in_a: !firrtl.uint<8>,
+    in %in_b: !firrtl.uint<8>,
+    out %out_x: !firrtl.uint<8>,
+    out %out_y: !firrtl.uint<8>
+  ) {
+    // CHECK: %inst_in_a, %inst_in_b, %inst_out_x, %inst_out_y = firrtl.instance_choice inst @Ext alternatives @Platform
+    // CHECK-SAME: @FPGA -> @TargetModule
+    // CHECK-SAME: (in in_a: !firrtl.uint<8>, in in_b: !firrtl.uint<8>, out out_x: !firrtl.uint<8>, out out_y: !firrtl.uint<8>)
+    %inst_in, %inst_out = firrtl.instance_choice inst @Ext alternatives @Platform {
+      @FPGA -> @TargetModule
+    } (in in: !firrtl.bundle<a: uint<8>, b: uint<8>>, out out: !firrtl.bundle<x: uint<8>, y: uint<8>>)
+
+    // Connect the flattened ports
+    // CHECK: firrtl.matchingconnect %inst_in_a, %in_a : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %inst_in_b, %in_b : !firrtl.uint<8>
+    %0 = firrtl.subfield %inst_in[a] : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    %1 = firrtl.subfield %inst_in[b] : !firrtl.bundle<a: uint<8>, b: uint<8>>
+    firrtl.matchingconnect %0, %in_a : !firrtl.uint<8>
+    firrtl.matchingconnect %1, %in_b : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %out_x, %inst_out_x : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %out_y, %inst_out_y : !firrtl.uint<8>
+    %2 = firrtl.subfield %inst_out[x] : !firrtl.bundle<x: uint<8>, y: uint<8>>
+    %3 = firrtl.subfield %inst_out[y] : !firrtl.bundle<x: uint<8>, y: uint<8>>
+    firrtl.matchingconnect %out_x, %2 : !firrtl.uint<8>
+    firrtl.matchingconnect %out_y, %3 : !firrtl.uint<8>
   }
 }

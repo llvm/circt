@@ -355,7 +355,7 @@ struct RTLBuilder {
   }
 
   Value sext(Value value, unsigned outWidth, StringRef name = {}) {
-    return comb::createOrFoldSExt(loc, value, b.getIntegerType(outWidth), b);
+    return comb::createOrFoldSExt(b, loc, value, b.getIntegerType(outWidth));
   }
 
   ///  Extracts a single bit v[bit].

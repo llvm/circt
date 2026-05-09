@@ -219,6 +219,7 @@ firrtl.circuit "Foo" {
     %7 = firrtl.asUInt %3 : (!firrtl.asyncreset) -> !firrtl.uint<1>
     %8 = firrtl.asClock %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
     %9 = firrtl.asAsyncReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+    %10 = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
     %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
     %c2_si3 = firrtl.constant 2 : !firrtl.sint<3>
     firrtl.connect %0, %c1_ui2 : !firrtl.uint, !firrtl.uint<2>
@@ -441,8 +442,8 @@ firrtl.circuit "Foo" {
   firrtl.module @TransparentOps(
     in %clk: !firrtl.clock,
     in %a: !firrtl.uint<1>,
-    in %A: !firrtl.domain of @ClockDomain,
-    out %B: !firrtl.domain of @ClockDomain
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %B: !firrtl.domain<@ClockDomain()>
   ) {
     %false = firrtl.constant 0 : !firrtl.uint<1>
     %true = firrtl.constant 1 : !firrtl.uint<1>
@@ -464,7 +465,7 @@ firrtl.circuit "Foo" {
     firrtl.assume %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.unclocked_assume %true, %true, "foo" : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.cover %clk, %true, %true, "foo" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>
-    firrtl.domain.define %B, %A
+    firrtl.domain.define %B, %A : !firrtl.domain<@ClockDomain()>
   }
 
   // Issue #1088

@@ -21,15 +21,17 @@ add_circt_dialect_library(CIRCTSim
   CIRCTHW
   CIRCTSV
   MLIRSimIncGen
-
+  CIRCTSimEnumsIncGen
   LINK_COMPONENTS
   Support
 
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTSeq
+  CIRCTSupport
   CIRCTSV
   MLIRFuncDialect
+  MLIRLLVMDialect
   MLIRIR
   MLIRPass
   MLIRTransforms

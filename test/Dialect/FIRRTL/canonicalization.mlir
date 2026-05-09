@@ -119,6 +119,7 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
                    in %sin: !firrtl.sint<4>,
                    in %zin1: !firrtl.uint<0>,
                    in %zin2: !firrtl.uint<0>,
+                   in %cin: !firrtl.const.uint<4>,
                    out %out: !firrtl.uint<4>,
                    out %out6: !firrtl.uint<6>,
                    out %out5: !firrtl.uint<5>,
@@ -196,6 +197,43 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
   %10 = firrtl.cvt %in : (!firrtl.uint<4>) -> !firrtl.sint<5>
   %11 = firrtl.and %10, %c3_si5 : (!firrtl.sint<5>, !firrtl.sint<5>) -> !firrtl.uint<5>
   firrtl.matchingconnect %out5, %11 : !firrtl.uint<5>
+
+  // Test that this doesn't loop infinitely.
+  %12 = firrtl.and %in, %cin : (!firrtl.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out, %12 : !firrtl.uint<4>
+}
+
+// AndOfAsSInt patterns should not crash on non-IntType inputs
+// CHECK-LABEL: firrtl.module @AndOfAsSIntNoCrash
+firrtl.module @AndOfAsSIntNoCrash(
+  in %clock: !firrtl.clock,
+  in %asyncreset: !firrtl.asyncreset,
+  in %sint: !firrtl.sint<4>,
+  in %y: !firrtl.sint<1>,
+  out %out1: !firrtl.uint<1>,
+  out %out2: !firrtl.uint<1>,
+  out %out3: !firrtl.uint<4>
+) {
+  // AndOfAsSIntL pattern should not crash on clock type
+  // CHECK: %[[ASSINT1:.+]] = firrtl.asSInt %clock
+  // CHECK: firrtl.and %[[ASSINT1]], %y
+  %0 = firrtl.asSInt %clock : (!firrtl.clock) -> !firrtl.sint<1>
+  %1 = firrtl.and %0, %y : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out1, %1 : !firrtl.uint<1>
+
+  // AndOfAsSIntR pattern should not crash on asyncreset type
+  // CHECK: %[[ASSINT2:.+]] = firrtl.asSInt %asyncreset
+  // CHECK: firrtl.and %y, %[[ASSINT2]]
+  %2 = firrtl.asSInt %asyncreset : (!firrtl.asyncreset) -> !firrtl.sint<1>
+  %3 = firrtl.and %y, %2 : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<1>
+  firrtl.matchingconnect %out2, %3 : !firrtl.uint<1>
+
+  // AndOfAsSIntL/R patterns should match on SInt.
+  // CHECK: %[[ASUINT:.+]] = firrtl.asUInt %sint
+  // CHECK: firrtl.matchingconnect %out3, %[[ASUINT]]
+  %4 = firrtl.asSInt %sint : (!firrtl.sint<4>) -> !firrtl.sint<4>
+  %5 = firrtl.and %4, %sint : (!firrtl.sint<4>, !firrtl.sint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out3, %5 : !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Or
@@ -204,6 +242,7 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
                   in %sin: !firrtl.sint<4>,
                   in %zin1: !firrtl.uint<0>,
                   in %zin2: !firrtl.uint<0>,
+                  in %cin: !firrtl.const.uint<4>,
                   out %out: !firrtl.uint<4>,
                   out %out6: !firrtl.uint<6>,
                   out %outz: !firrtl.uint<0>) {
@@ -263,6 +302,9 @@ firrtl.module @Or(in %in: !firrtl.uint<4>,
   %9 = firrtl.or %in6, %8  : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
   firrtl.connect %out6, %9 : !firrtl.uint<6>, !firrtl.uint<6>
 
+  // Test that this doesn't loop infinitely.
+  %10 = firrtl.or %in, %cin : (!firrtl.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out, %10 : !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Xor
@@ -271,6 +313,7 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
                    in %sin: !firrtl.sint<4>,
                    in %zin1: !firrtl.uint<0>,
                    in %zin2: !firrtl.uint<0>,
+                   in %cin: !firrtl.const.uint<4>,
                    out %out: !firrtl.uint<4>,
                    out %out6: !firrtl.uint<6>,
                    out %outz: !firrtl.uint<0>) {
@@ -316,6 +359,9 @@ firrtl.module @Xor(in %in: !firrtl.uint<4>,
   %9 = firrtl.xor %in6, %8  : (!firrtl.uint<6>, !firrtl.uint<6>) -> !firrtl.uint<6>
   firrtl.connect %out6, %9 : !firrtl.uint<6>, !firrtl.uint<6>
 
+  // Test that this doesn't loop infinitely.
+  %10 = firrtl.xor %in, %cin : (!firrtl.uint<4>, !firrtl.const.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out, %10 : !firrtl.uint<4>
 }
 
 // CHECK-LABEL: firrtl.module @Not
@@ -499,6 +545,42 @@ firrtl.module @Cat(in %in4: !firrtl.uint<4>,
   %tcast = firrtl.asUInt %sin4 : (!firrtl.sint<4>) -> !firrtl.uint<4>
   %11 = firrtl.cat %tcast, %tcast : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
   firrtl.matchingconnect %outu8, %11 : !firrtl.uint<8>
+}
+
+// Regression test: CatCast pattern should not crash on non-IntType inputs
+// CHECK-LABEL: firrtl.module @CatCastNoCrash
+firrtl.module @CatCastNoCrash(
+  in %clock: !firrtl.clock,
+  in %asyncreset: !firrtl.asyncreset,
+  in %sint: !firrtl.sint<4>,
+  out %out1: !firrtl.uint<2>,
+  out %out2: !firrtl.uint<2>,
+  out %out3: !firrtl.uint<8>
+) {
+  // CatCast pattern should not crash on clock type
+  // CHECK: %[[ASUINT1:.+]] = firrtl.asUInt %clock
+  // CHECK: %[[ASUINT2:.+]] = firrtl.asUInt %clock
+  // CHECK: firrtl.cat %[[ASUINT1]], %[[ASUINT2]]
+  %0 = firrtl.asUInt %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  %1 = firrtl.asUInt %clock : (!firrtl.clock) -> !firrtl.uint<1>
+  %2 = firrtl.cat %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  firrtl.matchingconnect %out1, %2 : !firrtl.uint<2>
+
+  // CatCast pattern should not crash on asyncreset type
+  // CHECK: %[[ASUINT3:.+]] = firrtl.asUInt %asyncreset
+  // CHECK: %[[ASUINT4:.+]] = firrtl.asUInt %asyncreset
+  // CHECK: firrtl.cat %[[ASUINT3]], %[[ASUINT4]]
+  %3 = firrtl.asUInt %asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
+  %4 = firrtl.asUInt %asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
+  %5 = firrtl.cat %3, %4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
+  firrtl.matchingconnect %out2, %5 : !firrtl.uint<2>
+
+  // CatCast pattern should match on SInt.
+  // CHECK: firrtl.cat %sint, %sint
+  %6 = firrtl.asUInt %sint : (!firrtl.sint<4>) -> !firrtl.uint<4>
+  %7 = firrtl.asUInt %sint : (!firrtl.sint<4>) -> !firrtl.uint<4>
+  %8 = firrtl.cat %6, %7 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<8>
+  firrtl.matchingconnect %out3, %8 : !firrtl.uint<8>
 }
 
 // CHECK-LABEL: firrtl.module @Bits
@@ -3787,8 +3869,9 @@ firrtl.module private @Issue7562(in %sel : !firrtl.uint<1>, in %a : !firrtl.cons
 }
 
 // CHECK-LABEL: firrtl.class @PropertyArithmetic
-firrtl.class @PropertyArithmetic(in %in: !firrtl.integer, out %out0: !firrtl.integer, out %out1: !firrtl.integer) {
+firrtl.class @PropertyArithmetic(in %in: !firrtl.integer, out %out0: !firrtl.integer, out %out1: !firrtl.integer, out %out2: !firrtl.integer, out %out3: !firrtl.integer) {
   // CHECK: [[C4:%.+]] = firrtl.integer 4
+  // CHECK: [[C1:%.+]] = firrtl.integer 1
   %0 = firrtl.integer 0
   %1 = firrtl.integer 1
   %2 = firrtl.integer 2
@@ -3796,10 +3879,17 @@ firrtl.class @PropertyArithmetic(in %in: !firrtl.integer, out %out0: !firrtl.int
   %3 = firrtl.integer.shl %1, %2 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
   %4 = firrtl.integer.shl %in, %0 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
 
+  %5 = firrtl.integer.shr %2, %1 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+  %6 = firrtl.integer.shr %in, %0 : (!firrtl.integer, !firrtl.integer) -> !firrtl.integer
+
   // CHECK: firrtl.propassign %out0, [[C4]]
   // CHECK: firrtl.propassign %out1, %in
+  // CHECK: firrtl.propassign %out2, [[C1]]
+  // CHECK: firrtl.propassign %out3, %in
   firrtl.propassign %out0, %3 : !firrtl.integer
   firrtl.propassign %out1, %4 : !firrtl.integer
+  firrtl.propassign %out2, %5 : !firrtl.integer
+  firrtl.propassign %out3, %6 : !firrtl.integer
 }
 
 // CHECK-LABEL: firrtl.module private @LayerBlocks
@@ -3866,4 +3956,215 @@ firrtl.module @Domains(
   firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
 
 }
+
+// CHECK-LABEL: firrtl.module @ResetCast
+firrtl.module @ResetCast(out %a0: !firrtl.reset, out %a1: !firrtl.reset) {
+  // CHECK-DAG: [[R0:%.+]] = firrtl.specialconstant 0 : !firrtl.reset
+  // CHECK-DAG: [[R1:%.+]] = firrtl.specialconstant 1 : !firrtl.reset
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+
+  // CHECK: firrtl.matchingconnect %a0, [[R0]]
+  %0 = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+  firrtl.matchingconnect %a0, %0 : !firrtl.reset
+
+  // CHECK: firrtl.matchingconnect %a1, [[R1]]
+  %1 = firrtl.asReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+  firrtl.matchingconnect %a1, %1 : !firrtl.reset
+}
+
+// CHECK-LABEL: firrtl.module @StringConcatCanonicalization
+firrtl.module @StringConcatCanonicalization(in %str1: !firrtl.string, in %str2: !firrtl.string, out %out1: !firrtl.string, out %out2: !firrtl.string, out %out3: !firrtl.string, out %out4: !firrtl.string, out %out5: !firrtl.string, out %out6: !firrtl.string, out %out7: !firrtl.string) {
+  %s1 = firrtl.string "Hello"
+  %s2 = firrtl.string "World"
+  %s3 = firrtl.string "!"
+  %empty = firrtl.string ""
+
+  // CHECK-DAG: [[EMPTY:%.+]] = firrtl.string ""
+  // CHECK-DAG: [[HELLO:%.+]] = firrtl.string "Hello"
+  // CHECK-DAG: [[HELLOWORLD:%.+]] = firrtl.string "HelloWorld!"
+  // CHECK-DAG: [[CONST:%.+]] = firrtl.string "!"
+
+  // Merge all constants
+  // CHECK: firrtl.propassign %out1, [[HELLOWORLD]]
+  %0 = firrtl.string.concat %s1, %s2, %s3 : !firrtl.string
+  firrtl.propassign %out1, %0 : !firrtl.string
+
+  // Drop empty string
+  // CHECK: firrtl.propassign %out2, [[HELLO]]
+  %1 = firrtl.string.concat %s1, %empty : !firrtl.string
+  firrtl.propassign %out2, %1 : !firrtl.string
+
+  // Single operand replaced with operand
+  // CHECK: firrtl.propassign %out3, [[HELLO]]
+  %2 = firrtl.string.concat %s1 : !firrtl.string
+  firrtl.propassign %out3, %2 : !firrtl.string
+
+  // Empty concat
+  // CHECK: firrtl.propassign %out4, [[EMPTY]]
+  %3 = firrtl.string.concat %empty, %empty : !firrtl.string
+  firrtl.propassign %out4, %3 : !firrtl.string
+
+  // Flatten nested concat (single use)
+  // CHECK: firrtl.propassign %out5, [[HELLOWORLD]]
+  %4 = firrtl.string.concat %s1, %s2 : !firrtl.string
+  %5 = firrtl.string.concat %4, %s3 : !firrtl.string
+  firrtl.propassign %out5, %5 : !firrtl.string
+
+  // Nested concat with multiple uses should NOT be flattened
+  // to avoid fighting with DCE.
+  // CHECK-DAG: [[NESTED:%.+]] = firrtl.string.concat %str1, %str2
+  // CHECK-DAG: [[CONCAT1:%.+]] = firrtl.string.concat [[NESTED]], [[CONST]]
+  // CHECK: firrtl.propassign %out6, [[CONCAT1]]
+  // CHECK: firrtl.propassign %out7, [[NESTED]]
+  %nested = firrtl.string.concat %str1, %str2 : !firrtl.string
+  %concat1 = firrtl.string.concat %nested, %s3 : !firrtl.string
+  firrtl.propassign %out6, %concat1 : !firrtl.string
+  firrtl.propassign %out7, %nested : !firrtl.string
+}
+
+// CHECK-LABEL: firrtl.module @PropEqFold
+firrtl.module @PropEqFold(in %str: !firrtl.string, in %b: !firrtl.bool,
+                          in %i: !firrtl.integer,
+                          out %out1: !firrtl.bool, out %out2: !firrtl.bool,
+                          out %out3: !firrtl.bool, out %out4: !firrtl.bool,
+                          out %out5: !firrtl.bool, out %out6: !firrtl.bool,
+                          out %out7: !firrtl.bool, out %out8: !firrtl.bool,
+                          out %out9: !firrtl.bool) {
+  %s1 = firrtl.string "hello"
+  %s2 = firrtl.string "hello"
+  %s3 = firrtl.string "world"
+
+  // CHECK-DAG: [[TRUE:%.+]] = firrtl.bool true
+  // CHECK-DAG: [[FALSE:%.+]] = firrtl.bool false
+
+  // Equal constant strings fold to true.
+  // CHECK: firrtl.propassign %out1, [[TRUE]]
+  %0 = firrtl.prop.eq %s1, %s2 : !firrtl.string
+  firrtl.propassign %out1, %0 : !firrtl.bool
+
+  // Unequal constant strings fold to false.
+  // CHECK: firrtl.propassign %out2, [[FALSE]]
+  %1 = firrtl.prop.eq %s1, %s3 : !firrtl.string
+  firrtl.propassign %out2, %1 : !firrtl.bool
+
+  // Non-constant string operands do not fold.
+  // CHECK: [[EQ:%.+]] = firrtl.prop.eq %str, %str : !firrtl.string
+  // CHECK: firrtl.propassign %out3, [[EQ]]
+  %2 = firrtl.prop.eq %str, %str : !firrtl.string
+  firrtl.propassign %out3, %2 : !firrtl.bool
+
+  // Equal constant booleans fold to true.
+  %t1 = firrtl.bool true
+  %t2 = firrtl.bool true
+  %f1 = firrtl.bool false
+  // CHECK: firrtl.propassign %out4, [[TRUE]]
+  %3 = firrtl.prop.eq %t1, %t2 : !firrtl.bool
+  firrtl.propassign %out4, %3 : !firrtl.bool
+
+  // Unequal constant booleans fold to false.
+  // CHECK: firrtl.propassign %out5, [[FALSE]]
+  %4 = firrtl.prop.eq %t1, %f1 : !firrtl.bool
+  firrtl.propassign %out5, %4 : !firrtl.bool
+
+  // Non-constant bool operands do not fold.
+  // CHECK: [[BEQB:%.+]] = firrtl.prop.eq %b, %b : !firrtl.bool
+  // CHECK: firrtl.propassign %out6, [[BEQB]]
+  %5 = firrtl.prop.eq %b, %b : !firrtl.bool
+  firrtl.propassign %out6, %5 : !firrtl.bool
+
+  // Equal constant integers fold to true.
+  %i1 = firrtl.integer 42
+  %i2 = firrtl.integer 42
+  %i3 = firrtl.integer 0
+  // CHECK: firrtl.propassign %out7, [[TRUE]]
+  %6 = firrtl.prop.eq %i1, %i2 : !firrtl.integer
+  firrtl.propassign %out7, %6 : !firrtl.bool
+
+  // Unequal constant integers fold to false.
+  // CHECK: firrtl.propassign %out8, [[FALSE]]
+  %7 = firrtl.prop.eq %i1, %i3 : !firrtl.integer
+  firrtl.propassign %out8, %7 : !firrtl.bool
+
+  // Non-constant integer operands do not fold.
+  // CHECK: [[IEQI:%.+]] = firrtl.prop.eq %i, %i : !firrtl.integer
+  // CHECK: firrtl.propassign %out9, [[IEQI]]
+  %8 = firrtl.prop.eq %i, %i : !firrtl.integer
+  firrtl.propassign %out9, %8 : !firrtl.bool
+}
+
+// CHECK-LABEL: firrtl.module @BoolBinaryFold
+firrtl.module @BoolBinaryFold(in %b: !firrtl.bool,
+                               out %out1: !firrtl.bool, out %out2: !firrtl.bool,
+                               out %out3: !firrtl.bool, out %out4: !firrtl.bool,
+                               out %out5: !firrtl.bool, out %out6: !firrtl.bool,
+                               out %out7: !firrtl.bool, out %out8: !firrtl.bool,
+                               out %out9: !firrtl.bool, out %out10: !firrtl.bool,
+                               out %out11: !firrtl.bool) {
+  // CHECK-DAG: [[TRUE:%.+]] = firrtl.bool true
+  // CHECK-DAG: [[FALSE:%.+]] = firrtl.bool false
+  %t = firrtl.bool true
+  %f = firrtl.bool false
+
+  // AND: constant folding.
+  // true AND false = false
+  // CHECK: firrtl.propassign %out1, [[FALSE]]
+  %0 = firrtl.bool.and %t, %f
+  firrtl.propassign %out1, %0 : !firrtl.bool
+
+  // AND with false is always false.
+  // CHECK: firrtl.propassign %out2, [[FALSE]]
+  %1 = firrtl.bool.and %b, %f
+  firrtl.propassign %out2, %1 : !firrtl.bool
+
+  // AND with true is identity.
+  // CHECK: firrtl.propassign %out3, %b
+  %2 = firrtl.bool.and %b, %t
+  firrtl.propassign %out3, %2 : !firrtl.bool
+
+  // OR: constant folding.
+  // true OR false = true
+  // CHECK: firrtl.propassign %out4, [[TRUE]]
+  %3 = firrtl.bool.or %t, %f
+  firrtl.propassign %out4, %3 : !firrtl.bool
+
+  // OR with true is always true.
+  // CHECK: firrtl.propassign %out5, [[TRUE]]
+  %4 = firrtl.bool.or %b, %t
+  firrtl.propassign %out5, %4 : !firrtl.bool
+
+  // OR with false is identity.
+  // CHECK: firrtl.propassign %out6, %b
+  %5 = firrtl.bool.or %b, %f
+  firrtl.propassign %out6, %5 : !firrtl.bool
+
+  // XOR: constant folding.
+  // true XOR false = true
+  // CHECK: firrtl.propassign %out7, [[TRUE]]
+  %6 = firrtl.bool.xor %t, %f
+  firrtl.propassign %out7, %6 : !firrtl.bool
+
+  // XOR: constant folding T xor T = F.
+  // CHECK: firrtl.propassign %out8, [[FALSE]]
+  %7 = firrtl.bool.xor %t, %t
+  firrtl.propassign %out8, %7 : !firrtl.bool
+
+  // XOR with false is identity.
+  // CHECK: firrtl.propassign %out9, %b
+  %8 = firrtl.bool.xor %b, %f
+  firrtl.propassign %out9, %8 : !firrtl.bool
+
+  // Non-constant bool.and operands do not fold.
+  // CHECK: [[AND:%.+]] = firrtl.bool.and %b, %b
+  // CHECK: firrtl.propassign %out10, [[AND]]
+  %9 = firrtl.bool.and %b, %b
+  firrtl.propassign %out10, %9 : !firrtl.bool
+
+  // NOT idiom: bool.xor with true = NOT.
+  // false XOR true = true
+  // CHECK: firrtl.propassign %out11, [[TRUE]]
+  %10 = firrtl.bool.xor %f, %t
+  firrtl.propassign %out11, %10 : !firrtl.bool
+}
+
 }

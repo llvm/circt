@@ -23,15 +23,24 @@ def LinkModules: Pass<"om-link-modules", "mlir::ModuleOp"> {
   let description = [{
     Flatten nested modules and resolve external classes.
   }];
-  let constructor = "circt::om::createOMLinkModulesPass()";
 }
 
-def VerifyObjectFields: Pass<"om-verify-object-fields"> {
-  let summary = "Verify fields of ObjectOp are valid";
+def ElaborateObject: Pass<"om-elaborate-object", "mlir::ModuleOp"> {
+  let summary = "Perform elaboration of OM objects";
   let description = [{
-    Verify object fields are valid.
+    Performs evaluation of a specified OM class by inlining all object
+    instantiations and folding field accesses.
+
+    The pass requires the `target-class` option to specify which class to
+    elaborate.
   }];
-  let constructor = "circt::om::createVerifyObjectFieldsPass()";
+  let options = [
+    Option<"targetClass", "target-class", "std::string", /*default=*/"",
+           "The class to elaborate">,
+    Option<"test", "test", "bool", /*default=*/"false",
+           "Internal testing mode: elaborate all zero-argument classes",
+           "llvm::cl::Hidden">
+  ];
 }
 
 def StripOMPass : Pass<"strip-om", "mlir::ModuleOp"> {

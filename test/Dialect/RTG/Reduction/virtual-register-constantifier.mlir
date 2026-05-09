@@ -5,7 +5,7 @@
 // CHECK-LABEL: rtg.test @test
 rtg.test @test() {
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtgtest.t0 : !rtgtest.ireg
-  // CHECK-NEXT: rtgtest.rv32i.add [[V0]], [[V0]], [[V0]]
+  // CHECK-NEXT: rtgtest.add [[V0]], [[V0]], [[V0]]
   %reg = rtg.virtual_reg [#rtgtest.t0, #rtgtest.t1, #rtgtest.t2]
-  rtgtest.rv32i.add %reg, %reg, %reg
+  rtgtest.add %reg, %reg, %reg
 }

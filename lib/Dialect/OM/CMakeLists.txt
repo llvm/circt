@@ -6,15 +6,23 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-add_circt_dialect_library(
-  CIRCTOM
-
+set(CIRCT_OM_Sources
   OMAttributes.cpp
   OMDialect.cpp
   OMOpInterfaces.cpp
   OMOps.cpp
   OMTypes.cpp
   OMUtils.cpp
+)
+
+set(LLVM_OPTIONAL_SOURCES
+  ${CIRCT_OM_Sources}
+  OMReductions.cpp
+)
+
+add_circt_dialect_library(
+  CIRCTOM
+  ${CIRCT_OM_Sources}
 
   DEPENDS
   MLIROMIncGen
@@ -26,6 +34,15 @@ add_circt_dialect_library(
 
   LINK_LIBS PRIVATE
   CIRCTHW
+  MLIRIR
+)
+
+add_circt_library(CIRCTOMReductions
+  OMReductions.cpp
+
+  LINK_LIBS PUBLIC
+  CIRCTReduceLib
+  CIRCTOM
   MLIRIR
 )
 

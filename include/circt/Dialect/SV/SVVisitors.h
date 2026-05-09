@@ -40,8 +40,9 @@ public:
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
-            FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp, MacroRefOp,
-            FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp, MacroErrorOp,
+            WriteOp, FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp,
+            MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
+            MacroErrorOp,
             // Type declarations.
             InterfaceOp, SVVerbatimSourceOp, InterfaceSignalOp,
             InterfaceModportOp, InterfaceInstanceOp, GetModportOp,
@@ -56,11 +57,12 @@ public:
             // Simulator control tasks
             StopOp, FinishOp, ExitOp,
             // Severity message tasks
-            FatalOp, ErrorOp, WarningOp, InfoOp,
+            FatalProceduralOp, FatalOp, ErrorProceduralOp, WarningProceduralOp,
+            InfoProceduralOp, ErrorOp, WarningOp, InfoOp,
             // Memory loading tasks
             ReadMemOp,
             // Generate statements
-            GenerateOp, GenerateCaseOp,
+            GenerateOp, GenerateCaseOp, GenerateForOp,
             // For statements
             ForOp,
             // Sampled value functiions
@@ -134,6 +136,7 @@ public:
   HANDLE(ForceOp, Unhandled);
   HANDLE(ReleaseOp, Unhandled);
   HANDLE(AliasOp, Unhandled);
+  HANDLE(WriteOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
   HANDLE(FFlushOp, Unhandled);
   HANDLE(SystemFunctionOp, Unhandled);
@@ -179,7 +182,11 @@ public:
   HANDLE(ExitOp, Unhandled);
 
   // Severity message tasks
+  HANDLE(FatalProceduralOp, Unhandled);
   HANDLE(FatalOp, Unhandled);
+  HANDLE(ErrorProceduralOp, Unhandled);
+  HANDLE(WarningProceduralOp, Unhandled);
+  HANDLE(InfoProceduralOp, Unhandled);
   HANDLE(ErrorOp, Unhandled);
   HANDLE(WarningOp, Unhandled);
   HANDLE(InfoOp, Unhandled);
@@ -190,6 +197,7 @@ public:
   // Generate statements
   HANDLE(GenerateOp, Unhandled);
   HANDLE(GenerateCaseOp, Unhandled);
+  HANDLE(GenerateForOp, Unhandled);
 
   // For loop.
   HANDLE(ForOp, Unhandled);

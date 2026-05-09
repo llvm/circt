@@ -18,6 +18,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Interfaces/InferIntRangeInterface.h"
@@ -53,14 +54,14 @@ Value createZExt(OpBuilder &builder, Location loc, Value value,
 
 /// Create a sign extension operation from a value of integer type to an equal
 /// or larger integer type.
-Value createOrFoldSExt(Location loc, Value value, Type destTy,
-                       OpBuilder &builder);
-Value createOrFoldSExt(Value value, Type destTy, ImplicitLocOpBuilder &builder);
+Value createOrFoldSExt(OpBuilder &builder, Location loc, Value value,
+                       Type destTy);
+Value createOrFoldSExt(ImplicitLocOpBuilder &builder, Value value, Type destTy);
 
 /// Create a ``Not'' gate on a value.
-Value createOrFoldNot(Location loc, Value value, OpBuilder &builder,
+Value createOrFoldNot(OpBuilder &builder, Location loc, Value value,
                       bool twoState = false);
-Value createOrFoldNot(Value value, ImplicitLocOpBuilder &builder,
+Value createOrFoldNot(ImplicitLocOpBuilder &builder, Value value,
                       bool twoState = false);
 
 /// Extract bits from a value.
@@ -110,6 +111,58 @@ bool foldMuxChainWithComparison(
     llvm::function_ref<MuxChainWithComparisonFoldingStyle(size_t indexWidth,
                                                           size_t numEntries)>
         styleFn);
+
+// Check if the operand is sext() and return the unextended operand:
+// signBit = comb.extract(baseValue, width-1, 1)
+// ext = comb.replicate(signBit, width-baseWidth)
+// sext = comb.concat(ext, baseValue)
+template <typename SubType>
+struct SextMatcher {
+  SubType lhs;
+  SextMatcher(SubType lhs) : lhs(std::move(lhs)) {}
+  bool match(Operation *op) {
+    // Check if operand is a concat operation
+    auto concatOp = dyn_cast<ConcatOp>(op);
+    if (!concatOp)
+      return false;
+
+    auto operands = concatOp.getOperands();
+    // ConcatOp must have exactly 2 operands: (sign_bits, base_value)
+    if (operands.size() != 2)
+      return false;
+
+    Value signBits = operands[0];
+    Value baseValue = operands[1];
+    auto baseWidth = baseValue.getType().getIntOrFloatBitWidth();
+
+    // Check if signBits is a replicate operation
+    auto replicateOp = dyn_cast_or_null<ReplicateOp>(signBits.getDefiningOp());
+    if (!replicateOp)
+      return false;
+
+    Value signBit = replicateOp.getInput();
+
+    // Check if signBit is the msb of baseValue
+    auto extractOp = dyn_cast_or_null<ExtractOp>(signBit.getDefiningOp());
+    if (!extractOp)
+      return false;
+
+    if ((extractOp.getInput() != baseValue) ||
+        (extractOp.getLowBit() != baseWidth - 1) ||
+        (extractOp.getType().getIntOrFloatBitWidth() != 1))
+      return false;
+
+    // Match the base unextended value against the sub-matcher
+    return mlir::detail::matchOperandOrValueAtIndex(op, 1, lhs);
+  }
+};
+
+/// Helper function to create a sign extension matcher
+template <typename SubType>
+static inline SextMatcher<SubType> m_Sext(const SubType &subExpr) {
+  return SextMatcher<SubType>(subExpr);
+}
+
 } // namespace comb
 } // namespace circt
 

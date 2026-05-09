@@ -614,7 +614,7 @@ def InnerSymbol : OpInterface<"InnerSymbolOpInterface"> {
   ];
 
   let verify = [{
-    return verifyInnerSymAttr(cast<circt::hw::InnerSymbolOpInterface>(op));
+    return verifyInnerSymOp(cast<circt::hw::InnerSymbolOpInterface>($_op));
   }];
 }
 

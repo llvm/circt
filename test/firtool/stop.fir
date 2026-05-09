@@ -22,7 +22,7 @@ circuit StopAndFinishTest:
     ; CHECK:   sv.always posedge %clock {
     ; CHECK:     sv.if [[COND]] {
     ; CHECK:       sv.finish 1
-    ; CHECK:       sv.fatal 1
+    ; CHECK:       sv.fatal.procedural 1
     ; CHECK:     }
     ; CHECK:   }
     ; CHECK: }

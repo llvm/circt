@@ -1245,3 +1245,197 @@ firrtl.circuit "top" {
     %parent_2_reset = firrtl.instance p2 @parent_2(in reset: !firrtl.asyncreset)
   }
 }
+
+// -----
+// Issue 9396
+firrtl.circuit "Foo" {
+  // CHECK-LABEL: firrtl.module @Baz
+  firrtl.module @Baz(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    firrtl.instance bar @Bar()
+    // CHECK: firrtl.matchingconnect %bar_reset, %reset : !firrtl.asyncreset
+  }
+  // CHECK-LABEL: firrtl.module private @Bar(in %reset: !firrtl.asyncreset)
+  firrtl.module private @Bar() {
+  }
+  // CHECK-LABEL: firrtl.module @Foo(in %reset: !firrtl.asyncreset
+  firrtl.module @Foo(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    firrtl.instance bar @Bar()
+    // CHECK: firrtl.matchingconnect %bar_reset, %reset : !firrtl.asyncreset
+  }
+}
+
+// -----
+firrtl.circuit "AsResetInferSync" {
+  // CHECK-LABEL: firrtl.module @AsResetInferSync
+  firrtl.module @AsResetInferSync() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %syncReset = firrtl.wire : !firrtl.uint<1>
+    %reset = firrtl.wire : !firrtl.reset
+    // CHECK-NOT: firrtl.asReset
+    // CHECK: firrtl.connect %reset, %c0_ui1
+    %0 = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+    firrtl.connect %reset, %0 : !firrtl.reset, !firrtl.reset
+    firrtl.connect %reset, %syncReset : !firrtl.reset, !firrtl.uint<1>
+  }
+}
+
+// -----
+firrtl.circuit "AsResetInferAsync" {
+  // CHECK-LABEL: firrtl.module @AsResetInferAsync
+  firrtl.module @AsResetInferAsync() {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %asyncReset = firrtl.wire : !firrtl.asyncreset
+    %reset = firrtl.wire : !firrtl.reset
+    // CHECK-NOT: firrtl.asReset
+    // CHECK: [[ASYNC:%.+]] = firrtl.asAsyncReset %c0_ui1
+    // CHECK: firrtl.connect %reset, [[ASYNC]]
+    %0 = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+    firrtl.connect %reset, %0 : !firrtl.reset, !firrtl.reset
+    firrtl.connect %reset, %asyncReset : !firrtl.reset, !firrtl.asyncreset
+  }
+}
+
+// -----
+// A module instantiated in two contexts, one forcing a specific reset kind and
+// the other adapting to that choice using an `asReset` cast should work.
+firrtl.circuit "TopA" {
+  // CHECK: firrtl.module private @ChildA({{.+}}: !firrtl.asyncreset)
+  // CHECK: firrtl.module private @ChildB({{.+}}: !firrtl.uint<1>)
+  firrtl.module private @ChildA(in %reset: !firrtl.reset) {}
+  firrtl.module private @ChildB(in %reset: !firrtl.reset) {}
+
+  // CHECK-LABEL: firrtl.module @TopA
+  firrtl.module @TopA(in %asyncReset: !firrtl.asyncreset, in %syncReset: !firrtl.uint<1>) {
+    %a_reset = firrtl.instance a @ChildA(in reset: !firrtl.reset)
+    %b_reset = firrtl.instance b @ChildB(in reset: !firrtl.reset)
+    firrtl.connect %a_reset, %asyncReset : !firrtl.reset, !firrtl.asyncreset
+    firrtl.connect %b_reset, %syncReset : !firrtl.reset, !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module @TopB
+  firrtl.module @TopB(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>) {
+    // CHECK-NEXT: [[A:%.+]] = firrtl.instance a @ChildA
+    // CHECK-NEXT: [[B:%.+]] = firrtl.instance b @ChildB
+    %a_reset = firrtl.instance a @ChildA(in reset: !firrtl.reset)
+    %b_reset = firrtl.instance b @ChildB(in reset: !firrtl.reset)
+    // CHECK-NEXT: [[ASYNC:%.+]] = firrtl.asAsyncReset %x
+    // CHECK-NOT: firrtl.asReset %y
+    %0 = firrtl.asReset %x : (!firrtl.uint<1>) -> !firrtl.reset
+    %1 = firrtl.asReset %y : (!firrtl.uint<1>) -> !firrtl.reset
+    // CHECK-NEXT: firrtl.connect [[A]], [[ASYNC]]
+    // CHECK-NEXT: firrtl.connect [[B]], %y
+    firrtl.connect %a_reset, %0 : !firrtl.reset, !firrtl.reset
+    firrtl.connect %b_reset, %1 : !firrtl.reset, !firrtl.reset
+  }
+}
+
+// -----
+// Allow modules with full reset to be instantiated outside of a reset domain,
+// with reset tied-off. (Async reset variant)
+// See https://github.com/llvm/circt/issues/9396
+firrtl.circuit "AsyncNoDomainTieOff" {
+  // CHECK-LABEL: firrtl.module @AsyncNoDomainTieOff
+  firrtl.module @AsyncNoDomainTieOff(in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) {
+    // CHECK: %foo_reset = firrtl.instance foo @AsyncFoo(in reset: !firrtl.asyncreset)
+    // CHECK-NEXT: firrtl.matchingconnect %foo_reset, %reset
+    firrtl.instance foo @AsyncFoo()
+  }
+  // CHECK-LABEL: firrtl.module @AsyncTopB
+  firrtl.module @AsyncTopB() {
+    // CHECK: %foo_reset = firrtl.instance foo @AsyncFoo(in reset: !firrtl.asyncreset)
+    // CHECK-NEXT: %c0_asyncreset = firrtl.specialconstant 0 : !firrtl.asyncreset
+    // CHECK-NEXT: firrtl.matchingconnect %foo_reset, %c0_asyncreset
+    firrtl.instance foo @AsyncFoo()
+  }
+  // CHECK-LABEL: firrtl.module private @AsyncFoo
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module private @AsyncFoo() {
+    %0 = firrtl.specialconstant false : !firrtl.clock
+    %1 = firrtl.reg %0 : !firrtl.clock, !firrtl.uint<42>
+  }
+}
+
+// -----
+// Allow modules with full reset to be instantiated outside of a reset domain,
+// with reset tied-off. (Sync reset variant)
+// See https://github.com/llvm/circt/issues/9396
+firrtl.circuit "SyncNoDomainTieOff" {
+  // CHECK-LABEL: firrtl.module @SyncNoDomainTieOff
+  firrtl.module @SyncNoDomainTieOff(in %reset: !firrtl.uint<1> [{class = "circt.FullResetAnnotation", resetType = "sync"}]) {
+    // CHECK: %foo_reset = firrtl.instance foo @SyncFoo(in reset: !firrtl.uint<1>)
+    // CHECK-NEXT: firrtl.matchingconnect %foo_reset, %reset
+    firrtl.instance foo @SyncFoo()
+  }
+  // CHECK-LABEL: firrtl.module @SyncTopB
+  firrtl.module @SyncTopB() {
+    // CHECK: %foo_reset = firrtl.instance foo @SyncFoo(in reset: !firrtl.uint<1>)
+    // CHECK-NEXT: %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.matchingconnect %foo_reset, %c0_ui1
+    firrtl.instance foo @SyncFoo()
+  }
+  // CHECK-LABEL: firrtl.module private @SyncFoo
+  // CHECK-SAME: in %reset: !firrtl.uint<1>
+  firrtl.module private @SyncFoo() {
+    %0 = firrtl.specialconstant false : !firrtl.clock
+    %1 = firrtl.reg %0 : !firrtl.clock, !firrtl.uint<42>
+  }
+}
+
+// -----
+// Test that InstanceChoiceOp works with reset inference
+firrtl.circuit "InstanceChoiceTest" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // CHECK-LABEL: firrtl.module @DefaultTarget
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module @DefaultTarget(in %reset: !firrtl.reset) {
+    // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset, %reset : !firrtl.reset
+  }
+
+  // CHECK-LABEL: firrtl.module @FPGATarget
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module @FPGATarget(in %reset: !firrtl.reset) {
+    // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset, %reset : !firrtl.reset
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceTest
+  firrtl.module @InstanceChoiceTest(in %reset: !firrtl.asyncreset) {
+    // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
+    %localReset = firrtl.wire : !firrtl.reset
+    %t = firrtl.resetCast %reset : (!firrtl.asyncreset) -> !firrtl.reset
+    firrtl.matchingconnect %localReset, %t : !firrtl.reset
+    // CHECK: %inst_reset = firrtl.instance_choice inst @DefaultTarget alternatives @Platform
+    // CHECK-SAME: @FPGA -> @FPGATarget
+    // CHECK-SAME: (in reset: !firrtl.asyncreset)
+    %inst_reset = firrtl.instance_choice inst @DefaultTarget alternatives @Platform {
+      @FPGA -> @FPGATarget,
+    } (in reset: !firrtl.reset)
+    firrtl.matchingconnect %inst_reset, %localReset : !firrtl.reset
+  }
+
+  // CHECK-LABEL: firrtl.module @Child
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module @Child(in %reset: !firrtl.reset) {
+    // CHECK: %localReset = firrtl.wire : !firrtl.asyncreset
+    %localReset = firrtl.wire : !firrtl.reset
+    firrtl.matchingconnect %localReset, %reset : !firrtl.reset
+  }
+
+  // CHECK-LABEL: firrtl.module @PropBetweenChoice
+  // CHECK-SAME: in %reset: !firrtl.asyncreset
+  firrtl.module @PropBetweenChoice(in %reset: !firrtl.reset) {
+    // Make sure FPGATarget -> Child propagates the reset type.
+    // CHECK: %inst_reset = firrtl.instance_choice inst @Child alternatives @Platform
+    // CHECK-SAME: (in reset: !firrtl.asyncreset)
+    %inst_reset = firrtl.instance_choice inst @Child alternatives @Platform {
+      @FPGA -> @FPGATarget,
+    } (in reset: !firrtl.reset)
+    firrtl.matchingconnect %inst_reset, %reset : !firrtl.reset
+  }
+}

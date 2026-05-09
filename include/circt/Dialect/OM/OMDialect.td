@@ -42,6 +42,12 @@ def OMDialect : Dialect {
 
     /// Register all OM types.
     void registerAttributes();
+
+    /// Materialize a constant value into an om.constant op.
+    ::mlir::Operation *materializeConstant(::mlir::OpBuilder &builder,
+                                           ::mlir::Attribute value,
+                                           ::mlir::Type type,
+                                           ::mlir::Location loc) override;
   }];
 }
 

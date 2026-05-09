@@ -16,6 +16,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLReductions.h"
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWReductions.h"
+#include "circt/Dialect/OM/OMReductions.h"
 #include "circt/Dialect/RTG/Reductions/RTGReductions.h"
 #include "circt/InitAllDialects.h"
 #include "circt/Reduce/GenericReductions.h"
@@ -533,6 +534,7 @@ int main(int argc, char **argv) {
   emit::registerReducePatternDialectInterface(registry);
   firrtl::registerReducePatternDialectInterface(registry);
   hw::registerReducePatternDialectInterface(registry);
+  om::registerReducePatternDialectInterface(registry);
   rtg::registerReducePatternDialectInterface(registry);
 
   // Set up dialect plugin loading callback

@@ -125,8 +125,10 @@ else()
   set(MLIR_INCLUDE_DIR ${MLIR_MAIN_SRC_DIR}/include ) # --includedir
   set(MLIR_TABLEGEN_OUTPUT_DIR ${LLVM_BINARY_DIR}/tools/mlir/include)
   set(MLIR_TABLEGEN_EXE $<TARGET_FILE:mlir-tblgen>)
-  include_directories(SYSTEM ${MLIR_INCLUDE_DIR})
-  include_directories(SYSTEM ${MLIR_TABLEGEN_OUTPUT_DIR})
+  # Keep the in-tree MLIR headers ahead of dependency prefixes that might also
+  # contain an installed MLIR checkout.
+  include_directories(BEFORE "${MLIR_INCLUDE_DIR}")
+  include_directories(BEFORE "${MLIR_TABLEGEN_OUTPUT_DIR}")
 
   # If building as part of a unified build, whether or not MLIR's execution engine
   # is enabled must be fetched from its subdirectory scope.
@@ -497,11 +499,7 @@ option(CIRCT_BINDINGS_PYTHON_ENABLED "Enables CIRCT Python bindings." OFF)
 if(CIRCT_BINDINGS_PYTHON_ENABLED)
   message(STATUS "CIRCT Python bindings are enabled.")
   set(MLIR_DISABLE_CONFIGURE_PYTHON_DEV_PACKAGES 0)
-  mlir_detect_nanobind_install()
-  # Prime the search like mlir_configure_python_dev_modules
-  find_package(Python3 3.8 COMPONENTS Interpreter Development)
-  find_package(Python3 3.8 COMPONENTS Interpreter Development.Module)
-  find_package(nanobind 2.4.0 CONFIG REQUIRED)
+  mlir_configure_python_dev_packages()
 else()
   message(STATUS "CIRCT Python bindings are disabled.")
   # Lookup python either way as some integration tests use python without the
@@ -565,7 +563,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v9.1
+      GIT_TAG v10.0
       GIT_SHALLOW ON
     )
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
@@ -578,7 +576,12 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
 
     set(BUILD_SHARED_LIBS OFF)
     set(SLANG_USE_MIMALLOC OFF)
+    set(SLANG_USE_THREADS OFF)  # avoid race condition in BS::thread_pool
     FetchContent_MakeAvailable(slang)
+
+    if(LLVM_ENABLE_ASSERTIONS)
+      target_compile_definitions(slang_slang PUBLIC SLANG_ASSERT_ENABLED=1)
+    endif()
 
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
     set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
@@ -611,8 +614,142 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
     install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 9.1 REQUIRED)
+    find_package(slang 10.0 REQUIRED)
   endif()
+endif()
+
+option(CIRCT_LIBFST_ENABLED "Enables libfst usage." OFF)
+
+llvm_canonicalize_cmake_booleans(CIRCT_LIBFST_ENABLED)
+
+if(CIRCT_LIBFST_ENABLED)
+  message(STATUS "libfst is enabled")
+
+  # Build libfst as part of CIRCT
+  include(FetchContent)
+  FetchContent_Declare(
+    libfst
+    GIT_REPOSITORY https://github.com/gtkwave/libfst.git
+    GIT_TAG 6a52070cd62ec65c29832bc95e7db493504aa7ac
+  )
+  set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
+
+  # Force libfst to be built as a static library
+  set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+  set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+
+  set(BUILD_SHARED_LIBS OFF)
+  FetchContent_MakeAvailable(libfst)
+
+  add_library(fst STATIC
+    ${libfst_SOURCE_DIR}/src/fastlz.c
+    ${libfst_SOURCE_DIR}/src/fstapi.c
+    ${libfst_SOURCE_DIR}/src/lz4.c
+  )
+  set_target_properties(fst PROPERTIES LINKER_LANGUAGE C)
+
+  # Expose the fstapi.h header under third_party/libfst/fstapi.h for consumers
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/include/third_party/libfst")
+  file(COPY "${libfst_SOURCE_DIR}/src/fstapi.h"
+        DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/include/third_party/libfst")
+
+  target_include_directories(fst PUBLIC
+    "$<BUILD_INTERFACE:${libfst_SOURCE_DIR}/src>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
+  )
+  target_compile_definitions(fst PRIVATE _GNU_SOURCE)
+
+  set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
+  set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
+
+  if(BUILD_SHARED_LIBS)
+    set_target_properties(fst PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  endif()
+
+
+  set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS fst)
+  install(TARGETS fst EXPORT CIRCTTargets)
+endif()
+
+
+option(CIRCT_CADICAL_ENABLED "Enables CaDiCaL usage." OFF)
+llvm_canonicalize_cmake_booleans(CIRCT_CADICAL_ENABLED)
+
+if(CIRCT_CADICAL_ENABLED)
+  message(STATUS "CaDiCaL is enabled")
+
+  # Build CaDiCaL as part of CIRCT.
+  include(FetchContent)
+  FetchContent_Declare(
+    cadical
+    GIT_REPOSITORY https://github.com/arminbiere/cadical.git
+    GIT_TAG 7b99c07f0bcab5824a5a3ce62c7066554017f641
+  )
+  set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
+
+  # Force CaDiCaL to be built as a static library.
+  set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+  set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+
+  set(BUILD_SHARED_LIBS OFF)
+  FetchContent_GetProperties(cadical)
+  if(NOT cadical_POPULATED)
+    FetchContent_Populate(cadical)
+  endif()
+  file(STRINGS "${cadical_SOURCE_DIR}/VERSION" cadical_version LIMIT_COUNT 1)
+
+  file(GLOB cadical_cpp_sources CONFIGURE_DEPENDS
+    "${cadical_SOURCE_DIR}/src/*.cpp"
+  )
+  file(GLOB cadical_c_sources CONFIGURE_DEPENDS
+    "${cadical_SOURCE_DIR}/src/*.c"
+  )
+  file(GLOB cadical_contrib_sources CONFIGURE_DEPENDS
+    "${cadical_SOURCE_DIR}/contrib/*.cpp"
+  )
+  # Match upstream libcadical.a, which excludes the standalone solver and
+  # model-based tester frontends from the library.
+  list(REMOVE_ITEM cadical_cpp_sources
+    "${cadical_SOURCE_DIR}/src/cadical.cpp"
+    "${cadical_SOURCE_DIR}/src/mobical.cpp"
+  )
+
+  add_library(cadical STATIC
+    ${cadical_cpp_sources}
+    ${cadical_c_sources}
+    ${cadical_contrib_sources}
+  )
+
+  # CaDiCaL supports non-make builds with NBUILD, which avoids generating
+  # build.hpp and lets consumers include only cadical.hpp.
+  target_compile_definitions(cadical PRIVATE
+    NBUILD
+    VERSION="${cadical_version}"
+    DATE="reproducible build"
+  )
+  target_compile_features(cadical PUBLIC cxx_std_11)
+
+  # Expose cadical.hpp under third_party/cadical/cadical.hpp for consumers.
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/include/third_party/cadical")
+  file(COPY "${cadical_SOURCE_DIR}/src/cadical.hpp"
+        DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/include/third_party/cadical")
+
+  target_include_directories(cadical
+    PUBLIC
+      "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>"
+    PRIVATE
+      "${cadical_SOURCE_DIR}/src"
+  )
+
+  set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
+  set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
+
+  if(BUILD_SHARED_LIBS)
+    set_target_properties(cadical PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  endif()
+
+  set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS cadical)
+  install(TARGETS cadical EXPORT CIRCTTargets)
 endif()
 
 #-------------------------------------------------------------------------------
@@ -632,6 +769,12 @@ endif()
 if (CIRCT_INCLUDE_TESTS)
   add_definitions(-DCIRCT_INCLUDE_TESTS)
 endif()
+
+# Add circt-tblgen early, since it sets a few variables needed by other parts of
+# the project.
+add_subdirectory(tools/circt-tblgen)
+set(CIRCT_TABLEGEN_EXE "${CIRCT_TABLEGEN_EXE}" CACHE INTERNAL "")
+set(CIRCT_TABLEGEN_TARGET "${CIRCT_TABLEGEN_TARGET}" CACHE INTERNAL "")
 
 add_subdirectory(include/circt)
 add_subdirectory(lib)
@@ -656,7 +799,7 @@ if (CIRCT_INCLUDE_DOCS)
 endif()
 
 install(DIRECTORY include/circt include/circt-c
-  DESTINATION include
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   COMPONENT circt-headers
   FILES_MATCHING
   PATTERN "*.def"
@@ -668,7 +811,7 @@ install(DIRECTORY include/circt include/circt-c
   )
 
 install(DIRECTORY ${CIRCT_INCLUDE_DIR}/circt ${CIRCT_INCLUDE_DIR}/circt-c
-  DESTINATION include
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   COMPONENT circt-headers
   FILES_MATCHING
   PATTERN "*.def"

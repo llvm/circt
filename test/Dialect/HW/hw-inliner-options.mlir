@@ -3,6 +3,7 @@
 // RUN: circt-opt %s --pass-pipeline='builtin.module(hw-flatten-modules{hw-inline-all=false hw-inline-single-use=false hw-inline-small=true hw-inline-empty=false hw-inline-no-outputs=false})' | FileCheck %s --check-prefix=SMALL
 // RUN: circt-opt %s --pass-pipeline='builtin.module(hw-flatten-modules{hw-inline-all=false hw-small-threshold=3 hw-inline-single-use=false})' | FileCheck %s --check-prefix=THRESHOLD
 // RUN: circt-opt %s --pass-pipeline='builtin.module(hw-flatten-modules{hw-inline-with-state=true})' | FileCheck %s --check-prefix=STATE
+// RUN: circt-opt %s --pass-pipeline='builtin.module(hw-flatten-modules{hw-inline-public=true})' | FileCheck %s --check-prefix=PUBLIC
 
 // Test that all inlining heuristics can be controlled via command line options
 
@@ -81,3 +82,15 @@ hw.module private @LargeModule(in %a: i4, out b: i4) {
   hw.output %7 : i4
 }
 
+// PUBLIC-LABEL: hw.module @TestPublic
+hw.module @TestPublic(in %x: i4, out y: i4) {
+  // PUBLIC-NEXT: %[[V0:.+]] = comb.add %x, %x
+  // PUBLIC-NEXT: hw.output %[[V0]]
+  %0 = hw.instance "public" @PublicModule(a: %x: i4) -> (b: i4)
+  hw.output %0 : i4
+}
+
+hw.module @PublicModule(in %a: i4, out b: i4) {
+  %0 = comb.add %a, %a : i4
+  hw.output %0 : i4
+}

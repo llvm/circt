@@ -18,6 +18,7 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+#include "circt/Dialect/Arc/ArcAttributes.h"
 #include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ArcTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"

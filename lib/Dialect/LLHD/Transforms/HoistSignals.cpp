@@ -6,9 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/LLHD/IR/LLHDOps.h"
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
+#include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "mlir/Analysis/Liveness.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Matchers.h"
@@ -19,7 +20,7 @@
 namespace circt {
 namespace llhd {
 #define GEN_PASS_DEF_HOISTSIGNALSPASS
-#include "circt/Dialect/LLHD/Transforms/LLHDPasses.h.inc"
+#include "circt/Dialect/LLHD/LLHDPasses.h.inc"
 } // namespace llhd
 } // namespace circt
 
@@ -329,6 +330,13 @@ void DriveHoister::findHoistableSlots() {
         }))
       return;
 
+    // Skip slots with types for which we cannot materialize a default
+    // constant (needed when yielding values across wait boundaries).
+    auto sigType = cast<RefType>(slot.getType()).getNestedType();
+    if (!isa<TimeType>(sigType) && !isa<FloatType>(sigType) &&
+        hw::getBitWidth(sigType) < 0)
+      return;
+
     slots.insert(slot);
   });
   LLVM_DEBUG(llvm::dbgs() << "Found " << slots.size()
@@ -342,6 +350,9 @@ void DriveHoister::findHoistableSlots() {
 /// terminator, the drive set will not contain an entry for that terminator.
 /// Also populates `suspendOps` with all `llhd.wait` and `llhd.halt` ops.
 void DriveHoister::collectDriveSets() {
+  SmallPtrSet<Value, 8> unhoistableSlots;
+  SmallDenseMap<Value, DriveOp, 8> laterDrives;
+
   auto trueAttr = BoolAttr::get(processOp.getContext(), true);
   for (auto &block : processOp.getBody()) {
     // We can only hoist drives before wait or halt terminators.
@@ -350,7 +361,9 @@ void DriveHoister::collectDriveSets() {
       continue;
     suspendOps.push_back(terminator);
 
-    SmallPtrSet<Value, 8> drivenSlots;
+    bool beyondSideEffect = false;
+    laterDrives.clear();
+
     for (auto &op : llvm::make_early_inc_range(
              llvm::reverse(block.without_terminator()))) {
       auto driveOp = dyn_cast<DriveOp>(op);
@@ -359,25 +372,50 @@ void DriveHoister::collectDriveSets() {
       // themselves and the terminator of the block. If we see a side-effecting
       // op, give up on this block.
       if (!driveOp) {
-        if (isMemoryEffectFree(&op))
-          continue;
-        else
-          break;
+        if (!isMemoryEffectFree(&op))
+          beyondSideEffect = true;
+        continue;
       }
 
       // Check if we can hoist drives to this signal.
-      if (!slots.contains(driveOp.getSignal())) {
+      if (!slots.contains(driveOp.getSignal()) ||
+          unhoistableSlots.contains(driveOp.getSignal())) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "- Skipping (slot unhoistable) " << driveOp << "\n");
+                   << "- Skipping (slot unhoistable): " << driveOp << "\n");
         continue;
       }
 
-      // Skip this drive if we have already seen a later drive for this slot.
-      if (!drivenSlots.insert(driveOp.getSignal()).second) {
+      // If this drive is beyond a side-effecting op, mark the slot as
+      // unhoistable.
+      if (beyondSideEffect) {
         LLVM_DEBUG(llvm::dbgs()
-                   << "- Skipping (driven later) " << driveOp << "\n");
+                   << "- Aborting slot (drive across side-effect): " << driveOp
+                   << "\n");
+        unhoistableSlots.insert(driveOp.getSignal());
         continue;
       }
+
+      // Handle the case where we've seen a later drive to this slot.
+      auto &laterDrive = laterDrives[driveOp.getSignal()];
+      if (laterDrive) {
+        // If there is a later drive with the same delay and enable condition,
+        // we can simply ignore this drive.
+        if (laterDrive.getTime() == driveOp.getTime() &&
+            laterDrive.getEnable() == driveOp.getEnable()) {
+          LLVM_DEBUG(llvm::dbgs()
+                     << "- Skipping (driven later): " << driveOp << "\n");
+          continue;
+        }
+
+        // Otherwise mark the slot as unhoistable since we cannot merge multiple
+        // drives with different delays or enable conditions into a single
+        // drive.
+        LLVM_DEBUG(llvm::dbgs()
+                   << "- Aborting slot (multiple drives): " << driveOp << "\n");
+        unhoistableSlots.insert(driveOp.getSignal());
+        continue;
+      }
+      laterDrive = driveOp;
 
       // Add the operands of this drive to the drive set for the driven slot.
       auto operands = DriveOperands{
@@ -391,6 +429,15 @@ void DriveHoister::collectDriveSets() {
       driveSet.operands.insert({terminator, operands});
     }
   }
+
+  // Remove slots we've found to be unhoistable.
+  slots.remove_if([&](auto slot) {
+    if (unhoistableSlots.contains(slot)) {
+      driveSets.erase(slot);
+      return true;
+    }
+    return false;
+  });
 }
 
 /// Make sure all drive sets specify a drive value for each terminator. If a
@@ -474,6 +521,13 @@ void DriveHoister::finalizeDriveSets() {
 void DriveHoister::hoistDrives() {
   if (driveSets.empty())
     return;
+
+  // Remove slots that have no collected drive set. This can happen when a
+  // signal is driven only in blocks that don't end with a wait/halt terminator.
+  slots.remove_if([&](auto slot) { return !driveSets.count(slot); });
+  if (slots.empty())
+    return;
+
   LLVM_DEBUG(llvm::dbgs() << "Hoisting drives of " << driveSets.size()
                           << " slots\n");
 
@@ -497,13 +551,21 @@ void DriveHoister::hoistDrives() {
             slot = ConstantTimeOp::create(builder, processOp.getLoc(), attr);
           return slot;
         })
-        .Case<Type>([&](auto type) {
+        .Case<Type>([&](auto type) -> Value {
           // TODO: This should probably create something like a `llhd.dontcare`.
           if (isa<TimeType>(type)) {
             auto attr = TimeAttr::get(builder.getContext(), 0, "ns", 0, 0);
             auto &slot = materializedConstants[attr];
             if (!slot)
               slot = ConstantTimeOp::create(builder, processOp.getLoc(), attr);
+            return slot;
+          }
+          if (auto floatTy = dyn_cast<FloatType>(type)) {
+            auto attr = FloatAttr::get(floatTy, 0.0);
+            auto &slot = materializedConstants[attr];
+            if (!slot)
+              slot =
+                  arith::ConstantOp::create(builder, processOp.getLoc(), attr);
             return slot;
           }
           auto numBits = hw::getBitWidth(type);

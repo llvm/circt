@@ -29,6 +29,15 @@ hw.module @InvertedNoCollapse(in %a: i1, in %b: i1, in %c: i1, out o1: i1) {
   hw.output %1 : i1
 }
 
+// CHECK-LABEL: @func
+func.func @func(%a: i1, %b: i1, %c: i1, %d: i1) -> (i1) {
+  // CHECK-NEXT: %[[AND:.+]] = synth.aig.and_inv %arg0, %arg1, not %arg2, %arg3 : i1
+  // CHECK-NEXT: return %[[AND]] : i1
+  %0 = synth.aig.and_inv %a, %b : i1
+  %1 = synth.aig.and_inv %0, not %c, %d : i1
+  func.return %1 : i1
+}
+
 // CHECK-LABEL: @ComplexTree
 hw.module @ComplexTree(in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1, in %f: i1, in %g: i1, out o1: i1) {
   // CHECK-NEXT: %[[AND0:.+]] = synth.aig.and_inv %d, not %e : i1

@@ -106,7 +106,7 @@ public:
     Value notStalled;
     auto getOrSetNotStalled = [&]() {
       if (!notStalled) {
-        notStalled = comb::createOrFoldNot(loc, args.stall, builder);
+        notStalled = comb::createOrFoldNot(builder, loc, args.stall);
       }
       return notStalled;
     };
@@ -396,7 +396,7 @@ public:
       case StageKind::Stallable:
         stageEnabled = seq::CompRegClockEnabledOp::create(
             builder, loc, args.enable, args.clock,
-            comb::createOrFoldNot(loc, args.stall, builder), args.reset,
+            comb::createOrFoldNot(builder, loc, args.stall), args.reset,
             enableRegResetVal, enableRegName);
         break;
       case StageKind::Runoff:
@@ -405,7 +405,7 @@ public:
         stageEnabled = seq::CompRegClockEnabledOp::create(
             builder, loc, args.enable, args.clock,
             comb::OrOp::create(builder, loc, args.lnsEn,
-                               comb::createOrFoldNot(loc, args.stall, builder)),
+                               comb::createOrFoldNot(builder, loc, args.stall)),
             args.reset, enableRegResetVal, enableRegName);
         break;
       }

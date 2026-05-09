@@ -64,20 +64,91 @@ void ReadChannelPort::resetTranslationState() {
   accumulatingListData = false;
   translationBuffer.clear();
   listDataBuffer.clear();
+  translatedMessage.reset();
 }
 
-void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
+void ReadChannelPort::disconnect() {
+  {
+    std::unique_lock<std::mutex> lock(callbackMutex);
+    // Revoke the callback under the same mutex used by invokeCallback(). New
+    // deliveries need to observe the disconnected state and the callback
+    // nullification at the same time.
+    callback = nullptr;
+    mode = Mode::Disconnected;
+    // Wait for any callback which already snapped the old function to finish
+    // before clearing per-connection state below.
+    callbackCv.wait(lock, [this]() { return activeCallbacks == 0; });
+  }
+
+  pollingState.reset();
+  resetTranslationState();
+}
+
+bool ReadChannelPort::invokeCallback(
+    std::unique_ptr<SegmentedMessageData> &msg) {
+  ReadCallback activeCallback;
+  {
+    std::lock_guard<std::mutex> lock(callbackMutex);
+    // Check the disconnected state and snapshot the callback while holding the
+    // same mutex as disconnect(). That prevents disconnect() from clearing the
+    // callback after we decide to invoke it but before we've retained our own
+    // safe local copy.
+    if (mode == Mode::Disconnected)
+      return false;
+    assert(callback && "Callback should be set in non-disconnected mode");
+    activeCallback = callback;
+    // Count only callbacks which successfully captured a callable target.
+    // disconnect() waits on this count so it can safely tear down state which
+    // the callback path may still reference.
+    ++activeCallbacks;
+  }
+
+  // Release the in-flight slot on every exit path, including exceptions from
+  // the callback itself.
+  auto finish = [this]() {
+    std::lock_guard<std::mutex> lock(callbackMutex);
+    assert(activeCallbacks > 0 && "Callback count underflow");
+    --activeCallbacks;
+    if (activeCallbacks == 0)
+      callbackCv.notify_all();
+  };
+
+  try {
+    bool consumed = activeCallback(msg);
+    finish();
+    return consumed;
+  } catch (...) {
+    finish();
+    throw;
+  }
+}
+
+void ReadChannelPort::connect(ReadCallback callback,
                               const ConnectOptions &options) {
   if (mode != Mode::Disconnected)
     throw std::runtime_error("Channel already connected");
 
   resetTranslationState();
 
-  if (options.translateMessage && translationInfo) {
+  if (translationInfo)
     translationInfo->precomputeFrameInfo();
-    this->callback = [this, cb = std::move(callback)](MessageData data) {
-      if (translateIncoming(data))
-        return cb(MessageData(std::move(translationBuffer)));
+
+  if (options.translateMessage && translationInfo) {
+    translationInfo->requireTranslationSupported();
+    this->callback = [this, cb = std::move(callback)](
+                         std::unique_ptr<SegmentedMessageData> &data) {
+      if (!translatedMessage) {
+        MessageData flat = data->toMessageData();
+        if (!translateIncoming(flat))
+          return true;
+        translatedMessage =
+            std::make_unique<MessageData>(std::move(translationBuffer));
+      }
+
+      if (!cb(translatedMessage))
+        return false;
+
+      translatedMessage.reset();
       return true;
     };
   } else {
@@ -87,36 +158,50 @@ void ReadChannelPort::connect(std::function<bool(MessageData)> callback,
   mode = Mode::Callback;
 }
 
+void ReadChannelPort::connect(FlatReadCallback callback,
+                              const ConnectOptions &options) {
+  connect(
+      [cb = std::move(callback)](std::unique_ptr<SegmentedMessageData> &data)
+          -> bool { return cb(data->toMessageData()); },
+      options);
+}
+
 void ReadChannelPort::connect(const ConnectOptions &options) {
-  maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
+  if (mode != Mode::Disconnected)
+    throw std::runtime_error("Channel already connected");
+
+  if (options.bufferSize.has_value())
+    maxDataQueueMsgs = options.bufferSize.value();
+  pollingState.emplace(maxDataQueueMsgs);
 
   resetTranslationState();
 
+  if (translationInfo)
+    translationInfo->precomputeFrameInfo();
+
   bool translate = options.translateMessage && translationInfo;
   if (translate)
-    translationInfo->precomputeFrameInfo();
-  this->callback = [this, translate](MessageData data) {
+    translationInfo->requireTranslationSupported();
+  this->callback = [this,
+                    translate](std::unique_ptr<SegmentedMessageData> &msg) {
+    MessageData data;
     if (translate) {
-      if (!translateIncoming(data))
-        return true;
-      data = MessageData(std::move(translationBuffer));
-    }
-
-    std::scoped_lock<std::mutex> lock(pollingM);
-    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
-           "Both queues are in use.");
-
-    if (!promiseQueue.empty()) {
-      // If there are promises waiting, fulfill the first one.
-      std::promise<MessageData> p = std::move(promiseQueue.front());
-      promiseQueue.pop();
-      p.set_value(std::move(data));
+      if (!translatedMessage) {
+        MessageData flat = msg->toMessageData();
+        if (!translateIncoming(flat))
+          return true;
+        translatedMessage =
+            std::make_unique<MessageData>(std::move(translationBuffer));
+      }
+      data = translatedMessage->toMessageData();
     } else {
-      // If not, add it to the data queue, unless the queue is full.
-      if (dataQueue.size() >= maxDataQueueMsgs && maxDataQueueMsgs != 0)
-        return false;
-      dataQueue.push(std::move(data));
+      data = msg->toMessageData();
     }
+
+    if (!pollingState->enqueue(data))
+      return false;
+
+    translatedMessage.reset();
     return true;
   };
   connectImpl(options);
@@ -126,30 +211,41 @@ void ReadChannelPort::connect(const ConnectOptions &options) {
 std::future<MessageData> ReadChannelPort::readAsync() {
   if (mode == Mode::Callback)
     throw std::runtime_error(
-        "Cannot read from a callback channel. `connect()` without a callback "
-        "specified to use polling mode.");
+        "Cannot read from a callback channel. Call `connect()` without a "
+        "callback specified to use polling mode.");
+  if (mode == Mode::Disconnected)
+    throw std::runtime_error(
+        "Cannot read from a disconnected channel. `connect()` the channel "
+        "without a callback before calling `readAsync()`.");
 
-  std::scoped_lock<std::mutex> lock(pollingM);
-  assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
-         "Both queues are in use.");
+  assert(mode == Mode::Polling && "Channel must be in polling mode to read");
+  assert(pollingState && "Polling state should be initialized in polling mode");
 
-  if (!dataQueue.empty()) {
-    // If there's data available, fulfill the promise immediately.
-    std::promise<MessageData> p;
-    std::future<MessageData> f = p.get_future();
-    p.set_value(std::move(dataQueue.front()));
-    dataQueue.pop();
-    return f;
-  } else {
-    // Otherwise, add a promise to the queue and return the future.
-    promiseQueue.emplace();
-    return promiseQueue.back().get_future();
-  }
+  return pollingState->readAsync();
 }
 
 //===----------------------------------------------------------------------===//
 // Window translation support
 //===----------------------------------------------------------------------===//
+
+void ChannelPort::TranslationInfo::requireTranslationSupported() const {
+  // Reject serial-encoded windows: any field with bulkCountWidth > 0 indicates
+  // serial (bulk) encoding, which the translator does not yet support. Surface
+  // this clearly at connect()-time rather than silently buffering forever in
+  // translateIncoming().
+  for (const auto &frame : windowType->getFrames()) {
+    for (const auto &field : frame.fields) {
+      if (field.bulkCountWidth > 0)
+        throw std::runtime_error(
+            "Window translation for serial (bulk) list encoding is not "
+            "implemented (window '" +
+            windowType->getName() + "', frame '" + frame.name + "', field '" +
+            field.name +
+            "'). Connect the port with ConnectOptions{translateMessage=false} "
+            "and decode the frames manually.");
+    }
+  }
+}
 
 void ChannelPort::TranslationInfo::precomputeFrameInfo() {
   const Type *intoType = windowType->getIntoType();
@@ -359,6 +455,18 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
 
     frames.push_back(std::move(frameInfo));
   }
+
+  // Set frameBytes from the lowered type's bit width. Fall back to the
+  // maximum computed frame expectedSize if the type system can't report width
+  // (e.g. opaque union types).
+  std::ptrdiff_t loweredBits = windowType->getLoweredType()->getBitWidth();
+  if (loweredBits > 0) {
+    frameBytes = (loweredBits + 7) / 8;
+  } else {
+    frameBytes = 0;
+    for (const auto &f : frames)
+      frameBytes = std::max(frameBytes, f.expectedSize);
+  }
 }
 
 bool ReadChannelPort::translateIncoming(MessageData &data) {
@@ -549,4 +657,23 @@ void WriteChannelPort::translateOutgoing(const MessageData &data) {
       }
     }
   }
+}
+
+std::vector<MessageData>
+WriteChannelPort::getMessageFrames(const MessageData &data) {
+  size_t frameBytes = getFrameSizeBytes();
+  assert(frameBytes > 0 && "Frame size must be greater than 0");
+  if (data.getSize() % frameBytes != 0)
+    throw std::runtime_error(
+        "write message size (" + std::to_string(data.getSize()) +
+        ") is not a multiple of frame size (" + std::to_string(frameBytes) +
+        ") on type " + type->toString());
+  std::vector<MessageData> frames;
+  size_t numFrames = data.getSize() / frameBytes;
+  const uint8_t *ptr = data.getBytes();
+  for (size_t i = 0; i < numFrames; ++i) {
+    frames.emplace_back(ptr, frameBytes);
+    ptr += frameBytes;
+  }
+  return frames;
 }

@@ -32,20 +32,38 @@ using namespace esi::backends::xrt;
 
 /// Parse the connection std::string and instantiate the accelerator. Connection
 /// std::string format:
-///  <xclbin>[:<device_id>]
-/// wherein <device_id> is in BDF format.
+///  <xclbin>[SEP<device_id>]
+/// wherein <device_id> is in BDF format (e.g. "0000:3b:00.1").
+/// SEP is ':' on Unix and ';' on Windows to avoid conflicts with Windows drive
+/// letters (e.g. "C:\path\to.xclbin") and BDF colons.
 std::unique_ptr<AcceleratorConnection>
 XrtAccelerator::connect(Context &ctxt, std::string connectionString) {
   std::string xclbin;
   std::string device_id;
 
-  size_t colon = connectionString.find(':');
-  if (colon == std::string::npos) {
+#ifdef _WIN32
+  constexpr char SEP = ';';
+#else
+  constexpr char SEP = ':';
+#endif
+
+  size_t sep = connectionString.find(SEP);
+  if (sep == std::string::npos) {
     xclbin = connectionString;
   } else {
-    xclbin = connectionString.substr(0, colon);
-    device_id = connectionString.substr(colon + 1);
+    xclbin = connectionString.substr(0, sep);
+    device_id = connectionString.substr(sep + 1);
   }
+
+  // Validate that both parts are non-empty when present.
+  if (xclbin.empty())
+    throw std::runtime_error(
+        std::string("connection string must be of the form ") + "'<xclbin>[" +
+        SEP + "<device_id>]': xclbin path cannot be empty");
+  if (sep != std::string::npos && device_id.empty())
+    throw std::runtime_error(
+        std::string("connection string must be of the form ") + "'<xclbin>[" +
+        SEP + "<device_id>]': device_id cannot be empty");
 
   return make_unique<XrtAccelerator>(ctxt, xclbin, device_id);
 }

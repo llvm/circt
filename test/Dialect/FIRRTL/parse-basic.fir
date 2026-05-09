@@ -178,6 +178,9 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: firrtl.asAsyncReset %reset_async : (!firrtl.asyncreset) -> !firrtl.asyncreset
     node check_ar5 = asAsyncReset(reset_async)
 
+    ; CHECK: firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
+    node check_r0 = asReset(reset)
+
     ; CHECK: firrtl.asClock %clock : (!firrtl.clock) -> !firrtl.clock
     node check_c0 = asClock(clock)
     ; CHECK: firrtl.asClock %reset : (!firrtl.uint<1>) -> !firrtl.clock
@@ -380,8 +383,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: firrtl.attach %a8, %a8, %a8 :
     attach (a8, a8, a8)
 
-    wire pred: UInt <1>
-    wire en: UInt <1>
+    wire pred: UInt<1>
+    wire en: UInt<1>
     connect pred, eq(i8, i8)
     connect en, not(reset)
     ; CHECK: firrtl.assert %clock, %pred, %en, "X equals Y when Z is valid" : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1> {eventControl = 0 : i32, isConcurrent = false}
@@ -1089,6 +1092,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
    ; CHECK-NEXT: firrtl.ref.define %inst_rw2, %[[RWPROBE_RC2_IN_BOUNCE_2]]
     define inst_rw2 = rwprobe(rc2.in)
 
+   ; CHECK-NEXT: firrtl.wire sym [<@[[RCOA_RWPROBE_SYM:.+]],1,public>] interesting_name : !firrtl.openbundle<a: uint<1>, rw flip: rwprobe<uint<1>>>
+   ; CHECK: firrtl.instance rcoa
+   inst rcoa of RefsChildOpenAgg
+   ; CHECK: firrtl.ref.rwprobe <@Refs::@[[RCOA_RWPROBE_SYM]]>
+   wire inst_rcoa_a : RWProbe<UInt<1>>
+   define inst_rcoa_a = rwprobe(rcoa.in.a)
+
   ; CHECK-LABEL: module private @ForceRelease(
   module ForceRelease :
     input in : UInt<1>
@@ -1502,6 +1512,15 @@ circuit BasicProps :
     propassign true, Bool(true)
     propassign false, Bool(false)
 
+  ; CHECK-LABEL: module private @PropAssert
+  module PropAssert :
+    input cond : Bool
+    ; CHECK: %[[TRUE:.+]] = firrtl.bool true
+    ; CHECK-NEXT: firrtl.property_assert %[[TRUE]], "always true" : !firrtl.bool
+    propassert Bool(true), "always true"
+    ; CHECK-NEXT: firrtl.property_assert %cond, "holds" : !firrtl.bool
+    propassert cond, "holds"
+
   ; CHECK-LABEL: module private @Double
   module Double :
      ; CHECK-SAME: out %x: !firrtl.double
@@ -1653,6 +1672,70 @@ circuit PropertyListOps :
     propassign c, list_concat(a, b)
 
 ;// -----
+FIRRTL version 5.1.0
+
+; CHECK-LABEL: firrtl.circuit "StringOps"
+circuit StringOps :
+  public module StringOps :
+    input a : String
+    input b : String
+    output c : String
+
+    ; CHECK: [[C:%.+]] = firrtl.string.concat %a, %b : !firrtl.string
+    ; CHECK: firrtl.propassign %c, [[C]]
+    propassign c, string_concat(a, b)
+
+;// -----
+FIRRTL version 5.1.0
+
+; CHECK-LABEL: firrtl.circuit "PropEq"
+circuit PropEq :
+  public module PropEq :
+    input a : String
+    input b : String
+    output eq : Bool
+
+    ; CHECK: [[EQ:%.+]] = firrtl.prop.eq %a, %b : !firrtl.string
+    ; CHECK: firrtl.propassign %eq, [[EQ]]
+    propassign eq, prop_eq(a, b)
+
+;// -----
+FIRRTL version 5.0.0
+
+circuit PropEqVersionError :
+  public module PropEqVersionError :
+    input a : String
+    input b : String
+    output c : String
+
+    ; expected-error @+1 {{property equality are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    propassign c, prop_eq(a, b)
+
+;// -----
+FIRRTL version 5.1.0
+
+; CHECK-LABEL: firrtl.circuit "BoolBinaryOps"
+circuit BoolBinaryOps :
+  public module BoolBinaryOps :
+    input a : Bool
+    input b : Bool
+    output andOut : Bool
+    output orOut : Bool
+    output xorOut : Bool
+
+    ; CHECK: [[AND:%.+]] = firrtl.bool.and %a, %b
+    ; CHECK: firrtl.propassign %andOut, [[AND]]
+    propassign andOut, bool_and(a, b)
+
+    ; CHECK: [[OR:%.+]] = firrtl.bool.or %a, %b
+    ; CHECK: firrtl.propassign %orOut, [[OR]]
+    propassign orOut, bool_or(a, b)
+
+    ; CHECK: [[XOR:%.+]] = firrtl.bool.xor %a, %b
+    ; CHECK: firrtl.propassign %xorOut, [[XOR]]
+    propassign xorOut, bool_xor(a, b)
+
+;// -----
 FIRRTL version 3.1.0
 
 ; CHECK-LABEL: circuit "BundleOfProps"
@@ -1765,6 +1848,22 @@ circuit KnownLayers:
   ; CHECK-SAME: knownLayers = [@A, @B::@C]
   ; CHECK-SAME: layers = [@A, @B]
   extmodule ExtModuleWithKnownLayerAndEnabledLayers enablelayer A knownlayer A enablelayer B knownlayer B.C:
+
+  ; CHECK: firrtl.extmodule private @ExtModuleWithRequirements(in clk: !firrtl.clock)
+  ; CHECK-SAME: externalRequirements = ["libdv", "vcs>=202505"]
+  extmodule ExtModuleWithRequirements requires "libdv", "vcs>=202505":
+    input clk: Clock
+
+  ; Test multiple requires keywords (like knownlayer)
+  ; CHECK: firrtl.extmodule private @ExtModuleWithMultipleRequires()
+  ; CHECK-SAME: externalRequirements = ["lib1", "lib2", "lib3"]
+  extmodule ExtModuleWithMultipleRequires requires "lib1" requires "lib2", "lib3":
+
+  ; Test intermixed knownlayer and requires
+  ; CHECK: firrtl.extmodule private @ExtModuleWithKnownLayersAndRequires()
+  ; CHECK-SAME: externalRequirements = ["libfoo", "libbar"]
+  ; CHECK-SAME: knownLayers = [@A, @B]
+  extmodule ExtModuleWithKnownLayersAndRequires knownlayer A requires "libfoo" knownlayer B requires "libbar":
 
   public module KnownLayers enablelayer A enablelayer B.C:
     ; CHECK: firrtl.instance ext1 interesting_name @ExtModuleWithKnownLayers()
@@ -2204,15 +2303,18 @@ circuit Domains:
 
   module Foo:
     input A: Domain of ClockDomain
+    input B: Domain of PowerDomain
     input a: UInt<1> domains [A]
 
   ; CHECK-LABEL: firrtl.module @Domains
-  ; CHECK-SAME:    in %A: !firrtl.domain of @ClockDomain
-  ; CHECK-SAME:    in %B: !firrtl.domain of @ClockDomain
+  ; CHECK-SAME:    in %A: !firrtl.domain<@ClockDomain()>
+  ; CHECK-SAME:    in %B: !firrtl.domain<@ClockDomain()>
   ; CHECK-SAME:    in %a: !firrtl.uint<1> domains [%A]
   ; CHECK-SAME:    in %ab: !firrtl.uint<1> domains [%A, %B]
   ; CHECK-SAME:    in %d: !firrtl.uint<1> domains [%D]
-  ; CHECK-SAME:    in %D: !firrtl.domain of @ClockDomain
+  ; CHECK-SAME:    in %D: !firrtl.domain<@ClockDomain()>
+  ; CHECK-SAME:    in %E: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+  ; CHECK-SAME:    out %F: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
   public module Domains:
     input A: Domain of ClockDomain
     input B: Domain of ClockDomain
@@ -2222,19 +2324,139 @@ circuit Domains:
     ; Test that domains can be used in associations before they are parsed.
     input d: UInt<1> domains [D]
     input D: Domain of ClockDomain
+    input E: Domain of PowerDomain
+    output F: Domain of PowerDomain
 
     ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a : !firrtl.uint<1>
     node noDomains = unsafe_domain_cast(a)
-    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a domains %A : !firrtl.uint<1>
+    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a domains[%A] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
     node oneDomain = unsafe_domain_cast(a, A)
-    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a domains %A, %B : !firrtl.uint<1>
+    ; CHECK: %{{.*}} = firrtl.unsafe_domain_cast %a domains[%A, %B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@ClockDomain()>]
     node twoDomains = unsafe_domain_cast(a, A, B)
 
-    ; CHECK %foo_A, %foo_a = firrtl.instance foo @Foo(in A: !firrtl.domain of @ClockDomain, in a: !firrtl.uint<1> domains [A])
+    ; CHECK: %foo_A, %foo_B, %foo_a = firrtl.instance foo interesting_name @Foo(in A: !firrtl.domain<@ClockDomain()>, in B: !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>, in a: !firrtl.uint<1> domains [A])
     inst foo of Foo
 
-    ; CHECK: firrtl.domain.define %foo_A, %A
+    ; CHECK: firrtl.domain.define %foo_A, %A : !firrtl.domain<@ClockDomain()>
     domain_define foo.A = A
 
-    ; CHECK: firrtl.domain.define %C, %foo_A
+    ; CHECK: firrtl.domain.define %foo_B, %E : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    domain_define foo.B = E
+
+    ; CHECK: firrtl.domain.define %C, %foo_A : !firrtl.domain<@ClockDomain()>
     domain_define C = foo.A
+
+    ; CHECK: firrtl.domain.define %F, %E : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    domain_define F = E
+
+;// -----
+FIRRTL version 5.1.0
+circuit DomainCreate:
+  domain ClockDomain:
+
+  extmodule Child:
+    input A: Domain of ClockDomain
+
+  ; CHECK-LABEL: firrtl.module @DomainCreate
+  public module DomainCreate:
+    ; CHECK: %my_clock = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+    domain my_clock of ClockDomain
+
+    ; CHECK: %child_A = firrtl.instance child interesting_name @Child(in A: !firrtl.domain<@ClockDomain()>)
+    inst child of Child
+
+    ; CHECK: firrtl.domain.define %child_A, %my_clock : !firrtl.domain<@ClockDomain()>
+    domain_define child.A = my_clock
+
+;// -----
+FIRRTL version 5.1.0
+circuit DomainCreateWithFields:
+  domain PowerDomain:
+    name: String
+    voltage: Integer
+    alwaysOn: Bool
+
+  ; CHECK-LABEL: firrtl.module @DomainCreateWithFields
+  public module DomainCreateWithFields:
+    input alwaysOn: Bool
+
+    ; CHECK: %[[NAME:.+]] = firrtl.string "FastClock"
+    ; CHECK: %[[VOLTAGE:.+]] = firrtl.integer 1000
+    ; CHECK: %powerDomain = firrtl.domain.create(%[[NAME]], %[[VOLTAGE]], %alwaysOn) : !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer, alwaysOn: !firrtl.bool)>
+    domain powerDomain of PowerDomain(String("FastClock"), Integer(1000), alwaysOn)
+
+;// -----
+FIRRTL version 6.0.0
+circuit UnknownProperties:
+  class Foo:
+    skip
+
+  ; CHECK-LABEL: firrtl.module @UnknownProperties
+  public module UnknownProperties:
+    output a: Integer
+    output b: String
+    output c: Inst<Foo>
+
+    ; CHECK:      %[[#INTEGER:]] = firrtl.unknown : !firrtl.integer
+    ; CHECK-NEXT: firrtl.propassign %a, %[[#INTEGER]] : !firrtl.integer
+    propassign a, Unknown(Integer)
+    ; CHECK:      %[[#STRING:]] = firrtl.unknown : !firrtl.string
+    ; CHECK-NEXT: firrtl.propassign %b, %[[#STRING]] : !firrtl.string
+    propassign b, Unknown(String)
+    ; CHECK:      %[[#INSTANCE:]] = firrtl.unknown : !firrtl.class<@Foo()>
+    ; CHECK-NEXT: firrtl.propassign %c, %[[#INSTANCE]] : !firrtl.class<@Foo()>
+    propassign c, Unknown(Inst<Foo>)
+
+; // -----
+
+; Test that keywords can be used as identifiers when not followed by '(' or '<'
+; and as expressions when followed by '(' or '<'
+
+FIRRTL version 4.0.0
+circuit KeywordIdentifiers :
+  public module KeywordIdentifiers :
+    ; CHECK-LABEL: firrtl.module @KeywordIdentifiers
+
+    ; Test UInt and SInt as identifiers
+    ; CHECK: %UInt = firrtl.wire
+    ; CHECK: %SInt = firrtl.wire
+    wire UInt : UInt<8>
+    wire SInt : SInt<8>
+
+    ; Test UInt<>() and SInt<>() as expressions
+    ; CHECK: firrtl.constant 42
+    ; CHECK: firrtl.constant -10
+    connect UInt, UInt<8>(42)
+    connect SInt, SInt<8>(-10)
+
+    ; Test Unknown as identifier
+    ; CHECK: %Unknown = firrtl.wire
+    wire Unknown : UInt<1>
+    ; CHECK: firrtl.constant 0
+    connect Unknown, UInt<1>(0)
+
+;// -----
+FIRRTL version 5.1.0
+; Test wire domain associations
+circuit WireDomains:
+  domain ClockDomain:
+  domain PowerDomain:
+    name : String
+    voltage : Integer
+
+  ; CHECK-LABEL: firrtl.module @WireDomains
+  public module WireDomains:
+    input A : Domain of ClockDomain
+    input B : Domain of PowerDomain
+
+    ; Wire with no domains
+    ; CHECK: %w_no_domain = firrtl.wire interesting_name : !firrtl.uint<1>
+    wire w_no_domain : UInt<1>
+
+    ; Wire with single domain
+    ; CHECK: %w_single = firrtl.wire interesting_name domains[%A] : !firrtl.uint<8> domains[!firrtl.domain<@ClockDomain()>]
+    wire w_single : UInt<8> domains [A]
+
+    ; Wire with multiple domains
+    ; CHECK: %w_multi = firrtl.wire interesting_name domains[%A, %B] : !firrtl.uint<16> domains[!firrtl.domain<@ClockDomain()>, !firrtl.domain<@PowerDomain(name: !firrtl.string, voltage: !firrtl.integer)>]
+    wire w_multi : UInt<16> domains [A, B]

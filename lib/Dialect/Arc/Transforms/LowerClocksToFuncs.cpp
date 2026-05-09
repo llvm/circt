@@ -246,7 +246,3 @@ LogicalResult LowerClocksToFuncsPass::isolateClock(Operation *clockOp,
   });
   return success(!result.wasInterrupted());
 }
-
-std::unique_ptr<Pass> arc::createLowerClocksToFuncsPass() {
-  return std::make_unique<LowerClocksToFuncsPass>();
-}

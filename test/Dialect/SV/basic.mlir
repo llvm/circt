@@ -241,35 +241,61 @@ hw.module @test1(in %arg0: i1, in %arg1: i1, in %arg8: i8) {
     sv.exit
   }
 
-  // Severity Message Tasks
+  // Severity Message Tasks (run-time)
   // CHECK-NEXT: sv.initial {
-  // CHECK-NEXT: sv.fatal 1
-  // CHECK-NEXT: sv.fatal 1, "hello"
-  // CHECK-NEXT: sv.fatal 1, "hello %d"(%arg0) : i1
-  // CHECK-NEXT: sv.error
-  // CHECK-NEXT: sv.error "hello"
-  // CHECK-NEXT: sv.error "hello %d"(%arg0) : i1
-  // CHECK-NEXT: sv.warning
-  // CHECK-NEXT: sv.warning "hello"
-  // CHECK-NEXT: sv.warning "hello %d"(%arg0) : i1
-  // CHECK-NEXT: sv.info
-  // CHECK-NEXT: sv.info "hello"
-  // CHECK-NEXT: sv.info "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.fatal.procedural 1
+  // CHECK-NEXT: sv.fatal.procedural 1, "hello"
+  // CHECK-NEXT: sv.fatal.procedural 1, "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.error.procedural
+  // CHECK-NEXT: sv.error.procedural "hello"
+  // CHECK-NEXT: sv.error.procedural "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.warning.procedural
+  // CHECK-NEXT: sv.warning.procedural "hello"
+  // CHECK-NEXT: sv.warning.procedural "hello %d"(%arg0) : i1
+  // CHECK-NEXT: sv.info.procedural
+  // CHECK-NEXT: sv.info.procedural "hello"
+  // CHECK-NEXT: sv.info.procedural "hello %d"(%arg0) : i1
   // CHECK-NEXT: }
   sv.initial {
-    sv.fatal 1
-    sv.fatal 1, "hello"
-    sv.fatal 1, "hello %d"(%arg0) : i1
-    sv.error
-    sv.error "hello"
-    sv.error "hello %d"(%arg0) : i1
-    sv.warning
-    sv.warning "hello"
-    sv.warning "hello %d"(%arg0) : i1
-    sv.info
-    sv.info "hello"
-    sv.info "hello %d"(%arg0) : i1
+    sv.fatal.procedural 1
+    sv.fatal.procedural 1, "hello"
+    sv.fatal.procedural 1, "hello %d"(%arg0) : i1
+    sv.error.procedural
+    sv.error.procedural "hello"
+    sv.error.procedural "hello %d"(%arg0) : i1
+    sv.warning.procedural
+    sv.warning.procedural "hello"
+    sv.warning.procedural "hello %d"(%arg0) : i1
+    sv.info.procedural
+    sv.info.procedural "hello"
+    sv.info.procedural "hello %d"(%arg0) : i1
   }
+
+  // Elaboration-time Severity Message Tasks
+  // CHECK-NEXT: sv.fatal 1
+  // CHECK-NEXT: sv.fatal 1, "elaboration fatal"
+  // CHECK-NEXT: sv.fatal 1, "elaboration fatal %d"(%arg0) : i1
+  // CHECK-NEXT: sv.error
+  // CHECK-NEXT: sv.error "elaboration error"
+  // CHECK-NEXT: sv.error "elaboration error %d"(%arg0) : i1
+  // CHECK-NEXT: sv.warning
+  // CHECK-NEXT: sv.warning "elaboration warning"
+  // CHECK-NEXT: sv.warning "elaboration warning %d"(%arg0) : i1
+  // CHECK-NEXT: sv.info
+  // CHECK-NEXT: sv.info "elaboration info"
+  // CHECK-NEXT: sv.info "elaboration info %d"(%arg0) : i1
+  sv.fatal 1
+  sv.fatal 1, "elaboration fatal"
+  sv.fatal 1, "elaboration fatal %d"(%arg0) : i1
+  sv.error
+  sv.error "elaboration error"
+  sv.error "elaboration error %d"(%arg0) : i1
+  sv.warning
+  sv.warning "elaboration warning"
+  sv.warning "elaboration warning %d"(%arg0) : i1
+  sv.info
+  sv.info "elaboration info"
+  sv.info "elaboration info %d"(%arg0) : i1
 
   // Tests for ReadMemOp ($readmemb/$readmemh)
   // CHECK-NEXT: sv.initial {
@@ -474,4 +500,30 @@ sv.verbatim.source @VerbatimTestModule.v<WIDTH: i32 = 8> attributes {
 // CHECK-SAME:    }
 sv.verbatim.module @VerbatimTestModule<WIDTH: i32 = 8>(in %clk: i1, out out: i1) attributes {
   source = @VerbatimTestModule.v
+}
+
+// CHECK-LABEL: hw.module @test_write(in %c0 : i32, in %c1 : i8) {
+// CHECK: sv.write "stdout"
+// CHECK-NEXT: sv.write "%d"(%c0) : i32
+// CHECK-NEXT: sv.write "%d %d"(%c0, %c1) : i32, i8
+hw.module @test_write(in %c0 : i32, in %c1 : i8) {
+  sv.initial {
+    sv.write "stdout"
+    sv.write "%d"(%c0) : i32
+    sv.write "%d %d"(%c0, %c1) : i32, i8
+  }
+}
+
+// CHECK-LABEL: hw.module @test_generate_for
+hw.module @test_generate_for() {
+  // CHECK: sv.generate "foo_loop" : {
+  sv.generate "foo_loop" : {
+    // CHECK: sv.generate.for %i : i32 = 0 : i32 to 10 : i32 step 1 : i32 name "gen_blk" {
+    sv.generate.for %i : i32 = 0 to 10 : i32 step 1 name "gen_blk" {
+      sv.initial {
+        sv.write "val = %d"(%i) : i32
+      }
+    }
+  }
+  hw.output
 }

@@ -638,9 +638,9 @@ firrtl.circuit "DomainInfo" {
   // CHECK-SAME: in %B
   // CHECK-SAME: out %b
   firrtl.module private @Bar(
-    in %A: !firrtl.domain of @ClockDomain,
+    in %A: !firrtl.domain<@ClockDomain()>,
     in %a: !firrtl.uint<1> domains [%A],
-    in %B: !firrtl.domain of @ClockDomain,
+    in %B: !firrtl.domain<@ClockDomain()>,
     out %b: !firrtl.uint<1> domains [%B]
   ) {
     %w = firrtl.wire: !firrtl.uint<1>
@@ -650,11 +650,53 @@ firrtl.circuit "DomainInfo" {
     out %b: !firrtl.uint<1>
   ) {
     %bar_A, %bar_a, %bar_B, %bar_b = firrtl.instance bar @Bar(
-      in A: !firrtl.domain of @ClockDomain,
+      in A: !firrtl.domain<@ClockDomain()>,
       in a: !firrtl.uint<1> domains [A],
-      in B: !firrtl.domain of @ClockDomain,
+      in B: !firrtl.domain<@ClockDomain()>,
       out b: !firrtl.uint<1> domains [B]
     )
     firrtl.matchingconnect %b, %bar_b: !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// Test that InstanceChoiceOp is handled conservatively by IMDCE.
+// All modules referenced by instance_choice should be kept alive, and all
+// ports should be preserved.
+
+// CHECK-LABEL: firrtl.circuit "InstanceChoiceTest"
+firrtl.circuit "InstanceChoiceTest" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+
+  // All these modules should be kept alive because they are referenced by instance_choice
+  // CHECK-LABEL: firrtl.module private @DefaultImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+  firrtl.module private @DefaultImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    %0 = firrtl.constant 0 : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %out
+    firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>)
+  firrtl.module private @FPGAImpl(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
+    // Make sure DCE is applied locally in the instance choice module.
+    // CHECK-NOT: firrtl.wire
+    // CHECK: firrtl.matchingconnect %out
+    %wire = firrtl.wire : !firrtl.uint<8>
+    %0 = firrtl.constant 0 : !firrtl.uint<8>
+    firrtl.matchingconnect %wire, %wire : !firrtl.uint<8>
+    firrtl.matchingconnect %out, %0 : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @InstanceChoiceTest
+  firrtl.module @InstanceChoiceTest() {
+    // CHECK: %inst_in, %inst_out = firrtl.instance_choice inst @DefaultImpl alternatives @Platform
+    // CHECK-SAME: @FPGA -> @FPGAImpl
+    // CHECK-SAME: in in: !firrtl.uint<8>, out out: !firrtl.uint<8>
+    %inst_in, %inst_out = firrtl.instance_choice inst @DefaultImpl alternatives @Platform {
+      @FPGA -> @FPGAImpl
+    } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
   }
 }

@@ -665,9 +665,7 @@ private:
                                SmallVectorImpl<OpenPath> &results);
 
   // Bit-logical ops.
-  LogicalResult visit(aig::AndInverterOp op, size_t bitPos,
-                      SmallVectorImpl<OpenPath> &results);
-  LogicalResult visit(mig::MajorityInverterOp op, size_t bitPos,
+  LogicalResult visit(BooleanLogicOpInterface op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results);
   LogicalResult visit(comb::AndOp op, size_t bitPos,
                       SmallVectorImpl<OpenPath> &results);
@@ -867,22 +865,9 @@ LogicalResult LocalVisitor::addEdge(Value to, size_t bitPos, int64_t delay,
   return success();
 }
 
-LogicalResult LocalVisitor::visit(aig::AndInverterOp op, size_t bitPos,
+LogicalResult LocalVisitor::visit(BooleanLogicOpInterface op, size_t bitPos,
                                   SmallVectorImpl<OpenPath> &results) {
-
   return addLogicOp(op, bitPos, results);
-}
-
-LogicalResult LocalVisitor::visit(mig::MajorityInverterOp op, size_t bitPos,
-                                  SmallVectorImpl<OpenPath> &results) {
-  // Use a 3-input majority inverter as the basic unit.
-  // An n-input majority inverter requires n/2 stages of 3-input gates.
-  size_t depth = op.getInputs().size() / 2;
-  for (auto input : op.getInputs()) {
-    if (failed(addEdge(input, bitPos, depth, results)))
-      return failure();
-  }
-  return success();
 }
 
 LogicalResult LocalVisitor::visit(comb::AndOp op, size_t bitPos,
@@ -1049,8 +1034,9 @@ LogicalResult LocalVisitor::visit(comb::ConcatOp op, size_t bitPos,
 
 LogicalResult LocalVisitor::addLogicOp(Operation *op, size_t bitPos,
                                        SmallVectorImpl<OpenPath> &results) {
-  auto size = op->getNumOperands();
-  auto cost = llvm::Log2_64_Ceil(size);
+  auto cost = isa<BooleanLogicOpInterface>(op)
+                  ? cast<BooleanLogicOpInterface>(op).getLogicDepthCost()
+                  : llvm::Log2_64_Ceil(op->getNumOperands());
   // Create edges each operand with cost ceil(log(size)).
   for (auto operand : op->getOperands())
     if (failed(addEdge(operand, bitPos, cost, results)))
@@ -1166,26 +1152,26 @@ LogicalResult LocalVisitor::visitValue(Value value, size_t bitPos,
   auto result =
       TypeSwitch<Operation *, LogicalResult>(op)
           .Case<comb::ConcatOp, comb::ExtractOp, comb::ReplicateOp,
-                aig::AndInverterOp, mig::MajorityInverterOp, comb::AndOp,
-                comb::OrOp, comb::MuxOp, comb::XorOp, comb::TruthTableOp,
-                seq::FirRegOp, seq::CompRegOp, seq::FirMemReadOp,
-                seq::FirMemReadWriteOp, hw::WireOp>([&](auto op) {
-            size_t idx = results.size();
-            auto result = visit(op, bitPos, results);
-            if (ctx->doTraceDebugPoints())
-              if (auto name =
-                      op->template getAttrOfType<StringAttr>("sv.namehint")) {
+                BooleanLogicOpInterface, comb::AndOp, comb::OrOp, comb::MuxOp,
+                comb::XorOp, comb::TruthTableOp, seq::FirRegOp, seq::CompRegOp,
+                seq::FirMemReadOp, seq::FirMemReadWriteOp, hw::WireOp>(
+              [&](auto op) {
+                size_t idx = results.size();
+                auto result = visit(op, bitPos, results);
+                if (ctx->doTraceDebugPoints())
+                  if (auto name = op->template getAttrOfType<StringAttr>(
+                          "sv.namehint")) {
 
-                for (auto i = idx, e = results.size(); i < e; ++i) {
-                  DebugPoint debugPoint({}, value, bitPos, results[i].delay,
-                                        "namehint");
-                  auto newHistory =
-                      debugPointFactory->add(debugPoint, results[i].history);
-                  results[i].history = newHistory;
-                }
-              }
-            return result;
-          })
+                    for (auto i = idx, e = results.size(); i < e; ++i) {
+                      DebugPoint debugPoint({}, value, bitPos, results[i].delay,
+                                            "namehint");
+                      auto newHistory = debugPointFactory->add(
+                          debugPoint, results[i].history);
+                      results[i].history = newHistory;
+                    }
+                  }
+                return result;
+              })
           .Case<hw::InstanceOp>([&](hw::InstanceOp op) {
             return visit(op, bitPos, cast<OpResult>(value).getResultNumber(),
                          results);
@@ -1219,6 +1205,7 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
         return failure();
 
       for (auto &result : *computedResults) {
+        // Update debug history for this path segment if tracing is enabled.
         auto newHistory = ctx->doTraceDebugPoints()
                               ? mapList(debugPointFactory.get(), history,
                                         [&](DebugPoint p) {
@@ -1229,15 +1216,22 @@ LogicalResult LocalVisitor::initializeAndRun(hw::InstanceOp instance) {
                                           return p;
                                         })
                               : debugPointFactory->getEmptyList();
+        Object newEndPoint(newPath, endPoint, endPointBitPos);
+        // Determine if this path continues upward or terminates here.
+        // If the start point is a module input port, the path
+        // continues to the parent module and needs further propagation.
         if (auto newPort = dyn_cast<BlockArgument>(result.startPoint.value)) {
+          // Record as "unclosed" - this path segment crosses module
+          // boundaries and needs to be combined with paths in the parent.
           putUnclosedResult(
-              {newPath, endPoint, endPointBitPos}, result.delay + delay,
-              newHistory,
+              newEndPoint, result.delay + delay, newHistory,
               fromInputPortToEndPoint[{newPort, result.startPoint.bitPos}]);
         } else {
-          endPointResults[{newPath, endPoint, endPointBitPos}].emplace_back(
-              newPath, result.startPoint.value, result.startPoint.bitPos,
-              result.delay + delay,
+          // This path originates from an internal sequential element
+          // in the parent module, so it's a complete register-to-register path
+          // that can be recorded as closed.
+          endPointResults[newEndPoint].emplace_back(
+              result.startPoint, result.delay + delay,
               ctx->doTraceDebugPoints() ? concatList(debugPointFactory.get(),
                                                      newHistory, result.history)
                                         : debugPointFactory->getEmptyList());
@@ -1305,12 +1299,13 @@ LogicalResult LocalVisitor::initializeAndRun() {
               return markRegEndPoint(op.getMemory(), op.getWriteData(), {}, {},
                                      op.getEnable());
             })
-            .Case<aig::AndInverterOp, comb::AndOp, comb::OrOp, comb::XorOp,
+            .Case<BooleanLogicOpInterface, comb::AndOp, comb::OrOp, comb::XorOp,
                   comb::MuxOp, seq::FirMemReadOp>([&](auto op) {
               // NOTE: Visiting and-inverter is not necessary but
               // useful to reduce recursion depth.
-              for (size_t i = 0, e = getBitWidth(op); i < e; ++i)
-                if (failed(getOrComputePaths(op, i)))
+              Value result = op->getResult(0);
+              for (size_t i = 0, e = getBitWidth(result); i < e; ++i)
+                if (failed(getOrComputePaths(result, i)))
                   return failure();
               return success();
             })

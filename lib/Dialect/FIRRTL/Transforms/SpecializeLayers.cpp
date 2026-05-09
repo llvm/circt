@@ -371,7 +371,7 @@ struct SpecializeLayers {
     insertionPoint.moveOpBefore(match);
   }
 
-  void specializeOp(InstanceOp instance, InsertionPoint &insertionPoint,
+  void specializeOp(FInstanceLike instance, InsertionPoint &insertionPoint,
                     DenseSet<Attribute> &removedSyms) {
     /// Update the types of any probe ports on the instance, and delete any
     /// probe port that is permanently disabled.
@@ -394,31 +394,6 @@ struct SpecializeLayers {
     instance.setLayersAttr(newLayers.getValue());
 
     insertionPoint.moveOpBefore(instance);
-  }
-
-  void specializeOp(InstanceChoiceOp instanceChoice,
-                    InsertionPoint &insertionPoint,
-                    DenseSet<Attribute> &removedSyms) {
-    /// Update the types of any probe ports on the instanceChoice, and delete
-    /// any probe port that is permanently disabled.
-    llvm::BitVector disabledPorts(instanceChoice->getNumResults());
-    for (auto result : instanceChoice->getResults())
-      if (!specializeValue(result))
-        disabledPorts.set(result.getResultNumber());
-    if (disabledPorts.any()) {
-      auto newInstanceChoice =
-          instanceChoice.cloneWithErasedPortsAndReplaceUses(disabledPorts);
-      instanceChoice->erase();
-      instanceChoice = newInstanceChoice;
-    }
-
-    // Specialize the required enable layers.  Due to the layer verifiers, there
-    // should not be any disabled layer in this instanceChoice and this should
-    // be infallible.
-    auto newLayers = specializeEnableLayers(instanceChoice.getLayersAttr());
-    instanceChoice.setLayersAttr(newLayers.getValue());
-
-    insertionPoint.moveOpBefore(instanceChoice);
   }
 
   void specializeOp(WireOp wire, InsertionPoint &insertionPoint,

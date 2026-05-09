@@ -26,6 +26,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
+#include <atomic>
 
 namespace circt {
 namespace synth {
@@ -87,18 +88,19 @@ static llvm::FailureOr<NPNClass> getNPNClassFromModule(hw::HWModuleOp module) {
 /// Simple technology library encoded as a HWModuleOp.
 struct TechLibraryPattern : public CutRewritePattern {
   TechLibraryPattern(hw::HWModuleOp module, double area,
-                     SmallVector<SmallVector<DelayType, 2>, 4> delay,
-                     NPNClass npnClass)
+                     SmallVector<DelayType> delay, NPNClass npnClass)
       : CutRewritePattern(module->getContext()), area(area),
         delay(std::move(delay)), module(module), npnClass(std::move(npnClass)) {
 
     LLVM_DEBUG({
       llvm::dbgs() << "Created Tech Library Pattern for module: "
                    << module.getModuleName() << "\n"
-                   << "NPN Class: " << npnClass.truthTable.table << "\n"
-                   << "Inputs: " << npnClass.inputPermutation.size() << "\n"
-                   << "Input Negation: " << npnClass.inputNegation << "\n"
-                   << "Output Negation: " << npnClass.outputNegation << "\n";
+                   << "NPN Class: " << this->npnClass.truthTable.table << "\n"
+                   << "Inputs: " << this->npnClass.inputPermutation.size()
+                   << "\n"
+                   << "Input Negation: " << this->npnClass.inputNegation << "\n"
+                   << "Output Negation: " << this->npnClass.outputNegation
+                   << "\n";
     });
   }
 
@@ -108,8 +110,13 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Match the cut set against this library primitive
-  bool match(const Cut &cut) const override {
-    return cut.getNPNClass().equivalentOtherThanPermutation(npnClass);
+  std::optional<MatchResult> match(CutEnumerator &enumerator,
+                                   const Cut &cut) const override {
+    if (!cut.getNPNClass(enumerator.getOptions().npnTable)
+             .equivalentOtherThanPermutation(npnClass))
+      return std::nullopt;
+
+    return MatchResult(area, delay);
   }
 
   /// Enable truth table matching for this pattern
@@ -121,22 +128,28 @@ struct TechLibraryPattern : public CutRewritePattern {
 
   /// Rewrite the cut set using this library primitive
   llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
-                                       Cut &cut) const override {
+                                       CutEnumerator &enumerator,
+                                       const Cut &cut) const override {
+    const auto &network = enumerator.getLogicNetwork();
     // Create a new instance of the module
+    SmallVector<unsigned> permutedInputIndices;
+    cut.getPermutatedInputIndices(enumerator.getOptions().npnTable, npnClass,
+                                  permutedInputIndices);
+
     SmallVector<Value> inputs;
-    cut.getPermutatedInputs(npnClass, inputs);
+    inputs.reserve(permutedInputIndices.size());
+    for (unsigned idx : permutedInputIndices) {
+      assert(idx < cut.inputs.size() && "input permutation index out of range");
+      inputs.push_back(network.getValue(cut.inputs[idx]));
+    }
+
+    auto *rootOp = network.getGate(cut.getRootIndex()).getOperation();
+    assert(rootOp && "cut root must be a valid operation");
 
     // TODO: Give a better name to the instance
-    auto instanceOp =
-        hw::InstanceOp::create(builder, cut.getRoot()->getLoc(), module,
-                               "mapped", ArrayRef<Value>(inputs));
+    auto instanceOp = hw::InstanceOp::create(builder, rootOp->getLoc(), module,
+                                             "mapped", ArrayRef<Value>(inputs));
     return instanceOp.getOperation();
-  }
-
-  double getArea() const override { return area; }
-
-  DelayType getDelay(unsigned inputIndex, unsigned outputIndex) const override {
-    return delay[inputIndex][outputIndex];
   }
 
   unsigned getNumInputs() const {
@@ -154,7 +167,7 @@ struct TechLibraryPattern : public CutRewritePattern {
 
 private:
   const double area;
-  const SmallVector<SmallVector<DelayType, 2>, 4> delay;
+  const SmallVector<DelayType> delay;
   hw::HWModuleOp module;
   NPNClass npnClass;
 };
@@ -162,6 +175,12 @@ private:
 namespace {
 struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
   using TechMapperBase<TechMapperPass>::TechMapperBase;
+
+  LogicalResult initialize(MLIRContext *context) override {
+    (void)context;
+    npnTable = std::make_shared<const NPNTable>();
+    return success();
+  }
 
   void runOnOperation() override {
     auto module = getOperation();
@@ -200,18 +219,16 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
 
       double area = areaAttr.getValue().convertToDouble();
 
-      SmallVector<SmallVector<DelayType, 2>, 4> delay;
+      SmallVector<DelayType> delay;
       for (auto delayValue : delayAttr) {
         auto delayArray = cast<ArrayAttr>(delayValue);
-        SmallVector<DelayType, 2> delayRow;
         for (auto delayElement : delayArray) {
           // FIXME: Currently we assume delay is given as integer attributes,
           // this should be replaced once we have a proper cell op with
           // dedicated timing attributes with units.
-          delayRow.push_back(
+          delay.push_back(
               cast<mlir::IntegerAttr>(delayElement).getValue().getZExtValue());
         }
-        delay.push_back(std::move(delayRow));
       }
       // Compute NPN Class for the module.
       auto npnClass = getNPNClassFromModule(hwModule);
@@ -241,16 +258,35 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
     options.maxCutInputSize = maxInputSize;
     options.maxCutSizePerRoot = maxCutsPerRoot;
     options.attachDebugTiming = test;
+    options.npnTable = npnTable.get();
+    std::atomic<uint64_t> numCutsCreatedCount = 0;
+    std::atomic<uint64_t> numCutSetsCreatedCount = 0;
+    std::atomic<uint64_t> numCutsRewrittenCount = 0;
     auto result = mlir::failableParallelForEach(
         module.getContext(), nonLibraryModules, [&](hw::HWModuleOp hwModule) {
           LLVM_DEBUG(llvm::dbgs() << "Processing non-library module: "
                                   << hwModule.getName() << "\n");
           CutRewriter rewriter(options, patternSet);
-          return rewriter.run(hwModule);
+          if (failed(rewriter.run(hwModule)))
+            return failure();
+          const auto &stats = rewriter.getStats();
+          numCutsCreatedCount.fetch_add(stats.numCutsCreated,
+                                        std::memory_order_relaxed);
+          numCutSetsCreatedCount.fetch_add(stats.numCutSetsCreated,
+                                           std::memory_order_relaxed);
+          numCutsRewrittenCount.fetch_add(stats.numCutsRewritten,
+                                          std::memory_order_relaxed);
+          return success();
         });
     if (failed(result))
       signalPassFailure();
+    numCutsCreated += numCutsCreatedCount;
+    numCutSetsCreated += numCutSetsCreatedCount;
+    numCutsRewritten += numCutsRewrittenCount;
   }
+
+private:
+  std::shared_ptr<const NPNTable> npnTable;
 };
 
 } // namespace

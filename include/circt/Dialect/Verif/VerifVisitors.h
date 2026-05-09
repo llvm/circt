@@ -22,10 +22,10 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AssertOp, AssumeOp, CoverOp, ClockedAssertOp,
-                       ClockedAssumeOp, ClockedCoverOp, ContractOp>(
-            [&](auto op) -> ResultType {
-              return thisCast->visitVerif(op, args...);
-            })
+                       ClockedAssumeOp, ClockedCoverOp, ContractOp,
+                       SymbolicValueOp>([&](auto op) -> ResultType {
+          return thisCast->visitVerif(op, args...);
+        })
         .Default([&](auto) -> ResultType {
           return thisCast->visitInvalidVerif(op, args...);
         });
@@ -56,6 +56,7 @@ public:
   HANDLE(ClockedAssumeOp, Unhandled);
   HANDLE(ClockedCoverOp, Unhandled);
   HANDLE(ContractOp, Unhandled);
+  HANDLE(SymbolicValueOp, Unhandled);
 #undef HANDLE
 };
 

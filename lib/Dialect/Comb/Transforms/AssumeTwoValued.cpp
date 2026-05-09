@@ -40,10 +40,24 @@ struct ICmpOpConversion : OpRewritePattern<ICmpOp> {
       return failure();
     }
     rewriter.replaceOpWithNewOp<ICmpOp>(op, newPredicate, op.getLhs(),
-                                        op.getRhs());
+                                        op.getRhs(), /*twoState=*/true);
     return success();
   }
 };
+
+template <typename OpTy>
+struct AddTwoStateFlag : OpRewritePattern<OpTy> {
+  using OpRewritePattern<OpTy>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(OpTy op,
+                                PatternRewriter &rewriter) const override {
+    if (op.getTwoState())
+      return failure();
+    rewriter.modifyOpInPlace(op, [&] { op.setTwoState(true); });
+    return success();
+  }
+};
+
 } // namespace
 
 namespace {
@@ -55,10 +69,18 @@ public:
 };
 } // namespace
 
+// Alias for brevity.
+template <typename OpTy>
+using TS = AddTwoStateFlag<OpTy>;
+
 void AssumeTwoValued::runOnOperation() {
   auto *ctx = &getContext();
   RewritePatternSet patterns(ctx);
-  patterns.add<ICmpOpConversion>(ctx);
+
+  patterns
+      .add<ICmpOpConversion, TS<AddOp>, TS<AndOp>, TS<DivSOp>, TS<DivUOp>,
+           TS<ModSOp>, TS<ModUOp>, TS<MulOp>, TS<MuxOp>, TS<OrOp>, TS<ParityOp>,
+           TS<ShlOp>, TS<ShrSOp>, TS<ShrUOp>, TS<SubOp>, TS<XorOp>>(ctx);
 
   if (failed(applyPatternsGreedily(getOperation(), std::move(patterns))))
     return signalPassFailure();

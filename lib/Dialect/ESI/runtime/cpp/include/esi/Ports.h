@@ -21,12 +21,90 @@
 #include "esi/Utils.h"
 
 #include <cassert>
+#include <condition_variable>
 #include <future>
+#include <mutex>
+#include <queue>
 
 namespace esi {
 
 class ChannelPort;
 using PortMap = std::map<std::string, ChannelPort &>;
+
+namespace detail {
+
+/// Shared queue/promise helper for polling-style read APIs.
+///
+/// Producers either fulfill the oldest waiting reader immediately or enqueue
+/// the value for a later `readAsync()`. Consumers either receive buffered data
+/// immediately or install a promise which is fulfilled by the next enqueue.
+template <typename BufferedT>
+class PollingBuffer {
+public:
+  explicit PollingBuffer(uint64_t maxQueued) : maxQueued(maxQueued) {}
+
+  /// Return the current bounded queue size. `0` means unbounded.
+  uint64_t getMaxQueued() {
+    std::scoped_lock<std::mutex> lock(mutex);
+    return maxQueued;
+  }
+
+  /// Update the bounded queue size. `0` means unbounded.
+  void setMaxQueued(uint64_t maxMsgs) {
+    std::scoped_lock<std::mutex> lock(mutex);
+    maxQueued = maxMsgs;
+  }
+
+  /// Try to deliver or enqueue a produced value.
+  ///
+  /// Returns `false` only when the bounded queue is full.
+  bool enqueue(BufferedT &value) {
+    std::scoped_lock<std::mutex> lock(mutex);
+    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
+           "Both queues are in use.");
+
+    if (!promiseQueue.empty()) {
+      std::promise<BufferedT> promise = std::move(promiseQueue.front());
+      promiseQueue.pop();
+      promise.set_value(std::move(value));
+    } else {
+      if (dataQueue.size() >= maxQueued && maxQueued != 0)
+        return false;
+      dataQueue.push(std::move(value));
+    }
+    return true;
+  }
+
+  /// Read the next value asynchronously.
+  ///
+  /// If a value is already buffered, the returned future is ready
+  /// immediately. Otherwise the future is backed by an internal promise which
+  /// is fulfilled by a later `enqueue()`.
+  std::future<BufferedT> readAsync() {
+    std::scoped_lock<std::mutex> lock(mutex);
+    assert(!(!promiseQueue.empty() && !dataQueue.empty()) &&
+           "Both queues are in use.");
+
+    if (!dataQueue.empty()) {
+      std::promise<BufferedT> promise;
+      std::future<BufferedT> future = promise.get_future();
+      promise.set_value(std::move(dataQueue.front()));
+      dataQueue.pop();
+      return future;
+    }
+
+    promiseQueue.emplace();
+    return promiseQueue.back().get_future();
+  }
+
+private:
+  std::mutex mutex;
+  std::queue<BufferedT> dataQueue;
+  uint64_t maxQueued;
+  std::queue<std::promise<BufferedT>> promiseQueue;
+};
+
+} // namespace detail
 
 /// Unidirectional channels are the basic communication primitive between the
 /// host and accelerator. A 'ChannelPort' is the host side of a channel. It can
@@ -127,7 +205,21 @@ public:
     return false;
   }
 
+  /// Get the size of each frame in bytes. For windowed types, this is the
+  /// lowered type's width; otherwise, the port type's width.
+  size_t getFrameSizeBytes() const {
+    if (translationInfo)
+      return translationInfo->frameBytes;
+    return utils::bitsToBytes(type->getBitWidth());
+  }
   const Type *getType() const { return type; }
+
+  /// If this port carries a windowed type, return the original WindowType
+  /// (whose `intoType` is what `getType()` returns). Returns nullptr for
+  /// non-windowed ports.
+  const WindowType *getWindowType() const {
+    return translationInfo ? translationInfo->windowType : nullptr;
+  }
 
 protected:
   const Type *type;
@@ -139,6 +231,10 @@ protected:
 
     /// Precompute and optimize the copy operations for translating frames.
     void precomputeFrameInfo();
+
+    /// Throw if this window cannot be translated by the runtime translator
+    /// (e.g. uses serial/bulk list encoding which is not yet supported).
+    void requireTranslationSupported() const;
 
     /// The window type being translated.
     const WindowType *windowType;
@@ -188,6 +284,8 @@ protected:
     /// Size of the 'into' type in bytes (for fixed-size types).
     /// For types with lists, this is the size of the fixed header portion.
     size_t intoTypeBytes = 0;
+    /// Number of bytes per wire frame (from the lowered type's bit width).
+    size_t frameBytes = 0;
     /// True if the window contains a list field (variable-size message).
     bool hasListField = false;
   };
@@ -209,8 +307,11 @@ public:
 
   virtual void connect(const ConnectOptions &options = {}) override {
     translateMessages = options.translateMessage && translationInfo;
-    if (translateMessages)
+    if (translationInfo) {
       translationInfo->precomputeFrameInfo();
+      if (translateMessages)
+        translationInfo->requireTranslationSupported();
+    }
     connectImpl(options);
     connected = true;
   }
@@ -230,6 +331,17 @@ public:
     } else {
       writeImpl(data);
     }
+  }
+
+  /// Write a multi-segment message. Takes ownership so the backend can hold
+  /// the message across partial writes / async completions. Default flattens
+  /// and calls the regular write(). Backends override for scatter-gather /
+  /// chunked-DMA support.
+  virtual void write(std::unique_ptr<SegmentedMessageData> msg) {
+    if (!msg)
+      throw std::runtime_error(
+          "WriteChannelPort::write: null SegmentedMessageData");
+    write(msg->toMessageData());
   }
 
   /// A basic non-blocking write API. Returns true if any of the data was queued
@@ -274,6 +386,9 @@ protected:
   /// Implementation for tryWrite(). Subclasses must implement this.
   virtual bool tryWriteImpl(const MessageData &data) = 0;
 
+  /// Break a message into its frames.
+  std::vector<MessageData> getMessageFrames(const MessageData &data);
+
   /// Whether to translate outgoing data if the port type is a window type. Set
   /// by the connect() method.
   bool translateMessages = false;
@@ -314,13 +429,29 @@ protected:
 /// A ChannelPort which reads data from the accelerator. It has two modes:
 /// Callback and Polling which cannot be used at the same time. The mode is set
 /// at connect() time. To change the mode, disconnect() and then connect()
-/// again.
+/// again. When the port is disconnected, it will backpressure hardware.
 class ReadChannelPort : public ChannelPort {
 
 public:
+  /// Primary callback API for raw reads.
+  ///
+  /// The message is passed by owning reference so the callee can consume it,
+  /// move storage out of it, or leave it intact when returning `false` to
+  /// request a retry with the same message object.
+  using ReadCallback =
+      std::function<bool(std::unique_ptr<SegmentedMessageData> &)>;
+
+  /// Compatibility callback API for callers which want flattened message
+  /// bytes instead of the owning segmented message object.
+  using FlatReadCallback = std::function<bool(MessageData)>;
+
   ReadChannelPort(const Type *type)
       : ChannelPort(type), mode(Mode::Disconnected) {}
-  virtual void disconnect() override { mode = Mode::Disconnected; }
+
+  /// Disconnect the channel. Warning: this method may block until all callbacks
+  /// have returned. Do not call it anywhere which could be in a callback
+  /// control path otherwise deadlock will occur.
+  virtual void disconnect() override;
   virtual bool isConnected() const override {
     return mode != Mode::Disconnected;
   }
@@ -336,7 +467,12 @@ public:
   // wait, and be notified.
   //===--------------------------------------------------------------------===//
 
-  virtual void connect(std::function<bool(MessageData)> callback,
+  virtual void connect(ReadCallback callback,
+                       const ConnectOptions &options = {});
+
+  /// Connect a compatibility callback which receives flattened `MessageData`
+  /// objects. This adapts the primary segmented callback path.
+  virtual void connect(FlatReadCallback callback,
                        const ConnectOptions &options = {});
 
   //===--------------------------------------------------------------------===//
@@ -350,7 +486,10 @@ public:
   /// Connect to the channel in polling mode.
   virtual void connect(const ConnectOptions &options = {}) override;
 
-  /// Asynchronous read.
+  /// Asynchronous polling read.
+  ///
+  /// Throws if the port is disconnected or currently connected in callback
+  /// mode.
   virtual std::future<MessageData> readAsync();
 
   /// Specify a buffer to read into. Blocking. Basic API, will likely change
@@ -367,15 +506,32 @@ public:
   /// may be (and are) backends which have a very small amount of memory which
   /// are accelerator accessible and want to move messages out as quickly as
   /// possible.
-  void setMaxDataQueueMsgs(uint64_t maxMsgs) { maxDataQueueMsgs = maxMsgs; }
+  void setMaxDataQueueMsgs(uint64_t maxMsgs) {
+    maxDataQueueMsgs = maxMsgs;
+    if (pollingState)
+      pollingState->setMaxQueued(maxMsgs);
+  }
+
+protected:
+  /// Invoke the currently registered callback.
+  ///
+  /// Handles synchronization race conditions with disconnects. Backends should
+  /// use this helper instead of calling `callback` directly.
+  bool invokeCallback(std::unique_ptr<SegmentedMessageData> &msg);
+
+private:
+  /// Backends should not call this directly. Use `invokeCallback()` instead,
+  /// which handles synchronization with disconnects.
+  ReadCallback callback;
 
 protected:
   /// Indicates the current mode of the channel.
   enum Mode { Disconnected, Callback, Polling };
   volatile Mode mode;
 
-  /// Backends call this callback when new data is available.
-  std::function<bool(MessageData)> callback;
+  /// If a translated message has been assembled but not yet consumed, retain
+  /// ownership here so retries present the same message object.
+  std::unique_ptr<SegmentedMessageData> translatedMessage;
 
   /// Window translation support.
   std::vector<uint8_t> translationBuffer;
@@ -395,15 +551,13 @@ protected:
   // Polling mode members.
   //===--------------------------------------------------------------------===//
 
-  /// Mutex to protect the two queues used for polling.
-  std::mutex pollingM;
-  /// Store incoming data here if there are no outstanding promises to be
-  /// fulfilled.
-  std::queue<MessageData> dataQueue;
-  /// Maximum number of messages to store in dataQueue. 0 means no limit.
-  uint64_t maxDataQueueMsgs;
-  /// Promises to be fulfilled when data is available.
-  std::queue<std::promise<MessageData>> promiseQueue;
+  uint64_t maxDataQueueMsgs = DefaultMaxDataQueueMsgs;
+  std::optional<detail::PollingBuffer<MessageData>> pollingState;
+
+  /// Synchronizes callback revocation during disconnect.
+  std::mutex callbackMutex;
+  std::condition_variable callbackCv;
+  size_t activeCallbacks = 0;
 };
 
 /// Instantiated when a backend does not know how to create a read channel.
@@ -412,7 +566,11 @@ public:
   UnknownReadChannelPort(const Type *type, std::string errmsg)
       : ReadChannelPort(type), errmsg(errmsg) {}
 
-  void connect(std::function<bool(MessageData)> callback,
+  void connect(ReadCallback callback,
+               const ConnectOptions &options = ConnectOptions()) override {
+    throw std::runtime_error(errmsg);
+  }
+  void connect(FlatReadCallback callback,
                const ConnectOptions &options = ConnectOptions()) override {
     throw std::runtime_error(errmsg);
   }

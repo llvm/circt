@@ -109,8 +109,8 @@ use the same wire for output.
 
 ### Register-transfer level (RTL)
 
-The Register-transfer level is has been commonly used to describe logic
-circuits. The process of logic synthesis is commonly used to lower RTL
+The Register-transfer level is commonly used to describe logic circuits.
+The process of logic synthesis is commonly used to lower RTL
 designs into structural netlists. Verilog, SystemVerilog, and VHDL are
 commonly used in the industry. The LLHD framework
 explicitly takes a multi-level approach to capturing RTL designs and

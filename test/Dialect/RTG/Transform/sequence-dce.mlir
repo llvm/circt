@@ -2,5 +2,6 @@
 
 // CHECK-NOT: @seq1
 rtg.sequence @seq1() {
-  rtg.comment "to be removed"
+  %str = rtg.constant "to be removed" : !rtg.string
+  rtg.comment %str
 }

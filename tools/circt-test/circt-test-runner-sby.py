@@ -11,7 +11,7 @@ parser.add_argument("verilog")
 parser.add_argument("-t", "--test", required=True)
 parser.add_argument("-d", "--directory", required=True)
 parser.add_argument("-m", "--mode")
-parser.add_argument("-k", "--depth")
+parser.add_argument("-k", "--depth", type=int)
 args = parser.parse_args()
 
 directory = Path(args.directory)

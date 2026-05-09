@@ -15,6 +15,7 @@ from .types import dim, Array, Bit, Bits, InOut, Type, UInt
 from .circt import ir
 from .circt.support import BackedgeBuilder
 from .circt.dialects import msft as raw_msft
+from .tracer import get_var_name
 
 import typing
 from typing import List, Optional, Union
@@ -77,6 +78,9 @@ def Wire(type: Type, name: str = None):
   """Declare a wire. Used to create backedges. Must assign exactly once. If
   'name' is specified, use 'NamedWire' instead."""
 
+  if name is None:
+    name = get_var_name(depth=1, skip_pycde=True)
+
   class WireValue(type._get_value_class(), AssignableSignal):
 
     def __init__(self):
@@ -138,6 +142,9 @@ def Reg(type: Type,
         ce: Signal = None,
         name: str = None) -> Signal:
   """Declare a register. Must assign exactly once."""
+
+  if name is None:
+    name = get_var_name(depth=1, skip_pycde=True)
 
   class RegisterValue(type._get_value_class()):
 

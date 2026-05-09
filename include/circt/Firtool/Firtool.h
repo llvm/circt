@@ -38,6 +38,8 @@ public:
   enum class RandomKind { None, Mem, Reg, All };
 
   enum class DomainMode {
+    /// Erase domains from the input circuit.
+    Strip,
     /// Disable domain checking.
     Disable,
     /// Check domains without inference.
@@ -53,6 +55,8 @@ public:
   static constexpr std::optional<firrtl::InferDomainsMode>
   toInferDomainsPassMode(DomainMode mode) {
     switch (mode) {
+    case DomainMode::Strip:
+      return firrtl::InferDomainsMode::Strip;
     case DomainMode::Disable:
       return std::nullopt;
     case DomainMode::Check:
@@ -66,6 +70,21 @@ public:
 
   bool isRandomEnabled(RandomKind kind) const {
     return disableRandom != RandomKind::All && disableRandom != kind;
+  }
+
+  /// Advance the disabled-randomization lattice.  Calling this twice with
+  /// the two individual kinds is equivalent to calling it once with All.
+  static RandomKind mergeRandomKind(RandomKind current, RandomKind incoming) {
+    if (current == RandomKind::None)
+      return incoming;
+    if (current == incoming)
+      return current;
+    return RandomKind::All;
+  }
+
+  FirtoolOptions &mergeDisableRandom(RandomKind kind) {
+    disableRandom = mergeRandomKind(disableRandom, kind);
+    return *this;
   }
 
   firrtl::PreserveValues::PreserveMode getPreserveMode() const {
@@ -129,15 +148,6 @@ public:
   bool shouldEnableDebugInfo() const { return enableDebugInfo; }
   bool shouldIgnoreReadEnableMemories() const { return ignoreReadEnableMem; }
   bool shouldConvertVecOfBundle() const { return vbToBV; }
-  bool shouldEtcDisableInstanceExtraction() const {
-    return etcDisableInstanceExtraction;
-  }
-  bool shouldEtcDisableRegisterExtraction() const {
-    return etcDisableRegisterExtraction;
-  }
-  bool shouldEtcDisableModuleInlining() const {
-    return etcDisableModuleInlining;
-  }
   bool shouldStripDebugInfo() const { return stripDebugInfo; }
   bool shouldStripFirDebugInfo() const { return stripFirDebugInfo; }
   bool shouldExportModuleHierarchy() const { return exportModuleHierarchy; }
@@ -145,6 +155,7 @@ public:
     return disableAggressiveMergeConnections;
   }
   bool shouldEnableAnnotationWarning() const { return enableAnnotationWarning; }
+  bool shouldLowerToCore() const { return lowerToCore; }
   auto getVerificationFlavor() const { return verificationFlavor; }
   bool shouldEmitSeparateAlwaysBlocks() const {
     return emitSeparateAlwaysBlocks;
@@ -153,7 +164,6 @@ public:
   bool shouldAddVivadoRAMAddressConflictSynthesisBugWorkaround() const {
     return addVivadoRAMAddressConflictSynthesisBugWorkaround;
   }
-  bool shouldExtractTestCode() const { return extractTestCode; }
   bool shouldFixupEICGWrapper() const { return fixupEICGWrapper; }
   bool shouldDisableCSEinClasses() const { return disableCSEinClasses; }
   bool shouldSelectDefaultInstanceChoice() const {
@@ -283,18 +293,8 @@ public:
     return *this;
   }
 
-  FirtoolOptions &setExtractTestCode(bool value) {
-    extractTestCode = value;
-    return *this;
-  }
-
   FirtoolOptions &setIgnoreReadEnableMem(bool value) {
     ignoreReadEnableMem = value;
-    return *this;
-  }
-
-  FirtoolOptions &setDisableRandom(RandomKind value) {
-    disableRandom = value;
     return *this;
   }
 
@@ -305,6 +305,11 @@ public:
 
   FirtoolOptions &setEnableAnnotationWarning(bool value) {
     enableAnnotationWarning = value;
+    return *this;
+  }
+
+  FirtoolOptions &setLowerToCore(bool value) {
+    lowerToCore = value;
     return *this;
   }
 
@@ -320,21 +325,6 @@ public:
 
   FirtoolOptions &setEmitSeparateAlwaysBlocks(bool value) {
     emitSeparateAlwaysBlocks = value;
-    return *this;
-  }
-
-  FirtoolOptions &setEtcDisableInstanceExtraction(bool value) {
-    etcDisableInstanceExtraction = value;
-    return *this;
-  }
-
-  FirtoolOptions &setEtcDisableRegisterExtraction(bool value) {
-    etcDisableRegisterExtraction = value;
-    return *this;
-  }
-
-  FirtoolOptions &setEtcDisableModuleInlining(bool value) {
-    etcDisableModuleInlining = value;
     return *this;
   }
 
@@ -459,17 +449,14 @@ private:
   std::string blackBoxRootPath;
   bool replSeqMem;
   std::string replSeqMemFile;
-  bool extractTestCode;
   bool ignoreReadEnableMem;
   RandomKind disableRandom;
   std::string outputAnnotationFilename;
   bool enableAnnotationWarning;
+  bool lowerToCore;
   bool addMuxPragmas;
   firrtl::VerificationFlavor verificationFlavor;
   bool emitSeparateAlwaysBlocks;
-  bool etcDisableInstanceExtraction;
-  bool etcDisableRegisterExtraction;
-  bool etcDisableModuleInlining;
   bool addVivadoRAMAddressConflictSynthesisBugWorkaround;
   std::string ckgModuleName;
   std::string ckgInputName;

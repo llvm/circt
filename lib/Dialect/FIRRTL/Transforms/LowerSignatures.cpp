@@ -19,8 +19,10 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/Debug.h"
+#include "circt/Support/InstanceGraphInterface.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-lower-signatures"
@@ -398,9 +400,15 @@ static LogicalResult lowerModuleSignature(FModuleLike module, Convention conv,
 
 static void lowerModuleBody(FModuleOp mod,
                             const DenseMap<StringAttr, PortConversion> &ports) {
-  mod->walk([&](InstanceOp inst) -> void {
+  auto fixupInstance = [&](auto inst, auto clone) -> void {
     ImplicitLocOpBuilder theBuilder(inst.getLoc(), inst);
-    const auto &modPorts = ports.at(inst.getModuleNameAttr().getAttr());
+
+    // Get the module name. The first element works for both InstanceOp and
+    // InstanceChoiceOp.
+    StringAttr moduleName =
+        cast<StringAttr>(inst.getReferencedModuleNamesAttr()[0]);
+
+    const auto &modPorts = ports.at(moduleName);
 
     // Fix up the Instance
     SmallVector<PortInfo> instPorts; // Oh I wish ArrayRef was polymorphic.
@@ -410,11 +418,8 @@ static void lowerModuleBody(FModuleOp mod,
       p.annotations = AnnotationSet{mod.getContext()};
       instPorts.push_back(p);
     }
-    auto annos = inst.getAnnotations();
-    auto newOp = InstanceOp::create(
-        theBuilder, instPorts, inst.getModuleName(), inst.getName(),
-        inst.getNameKind(), annos.getValue(), inst.getLayers(),
-        inst.getLowerToBind(), inst.getDoNotPrint(), inst.getInnerSymAttr());
+
+    auto newOp = clone(theBuilder, inst, instPorts);
 
     auto oldDict = inst->getDiscardableAttrDictionary();
     auto newDict = newOp->getDiscardableAttrDictionary();
@@ -461,6 +466,32 @@ static void lowerModuleBody(FModuleOp mod,
     }
     inst->erase();
     return;
+  };
+
+  mod->walk([&](Operation *op) -> void {
+    TypeSwitch<Operation *>(op)
+        .Case<InstanceOp>([&](auto inst) {
+          fixupInstance(inst, [&](ImplicitLocOpBuilder &theBuilder,
+                                  InstanceOp inst,
+                                  ArrayRef<PortInfo> newPorts) {
+            return InstanceOp::create(
+                theBuilder, newPorts, inst.getModuleName(), inst.getName(),
+                inst.getNameKind(), inst.getAnnotations().getValue(),
+                inst.getLayers(), inst.getLowerToBind(), inst.getDoNotPrint(),
+                inst.getInnerSymAttr());
+          });
+        })
+        .Case<InstanceChoiceOp>([&](auto inst) {
+          fixupInstance(inst, [&](ImplicitLocOpBuilder &theBuilder,
+                                  InstanceChoiceOp inst,
+                                  ArrayRef<PortInfo> newPorts) {
+            return InstanceChoiceOp::create(
+                theBuilder, newPorts, inst.getModuleNamesAttr(),
+                inst.getCaseNamesAttr(), inst.getName(), inst.getNameKind(),
+                inst.getAnnotationsAttr(), inst.getLayersAttr(),
+                inst.getInnerSymAttr());
+          });
+        });
   });
 }
 
@@ -478,6 +509,7 @@ struct LowerSignaturesPass
 // This is the main entrypoint for the lowering pass.
 void LowerSignaturesPass::runOnOperation() {
   CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
+  auto &instanceGraph = getAnalysis<InstanceGraph>();
 
   // Cached attr
   AttrCache cache(&getContext());
@@ -486,8 +518,15 @@ void LowerSignaturesPass::runOnOperation() {
   auto circuit = getOperation();
 
   for (auto mod : circuit.getOps<FModuleLike>()) {
-    if (lowerModuleSignature(mod, mod.getConvention(), cache,
-                             portMap[mod.getNameAttr()])
+    auto convention = mod.getConvention();
+    // Instance choices select between modules with a shared port shape, so
+    // any module instantiated by one must use the scalarized convention.
+    if (llvm::any_of(instanceGraph.lookup(mod)->uses(),
+                     [](InstanceRecord *use) {
+                       return use->getInstance<InstanceChoiceOp>();
+                     }))
+      convention = Convention::Scalarized;
+    if (lowerModuleSignature(mod, convention, cache, portMap[mod.getNameAttr()])
             .failed())
       return signalPassFailure();
   }

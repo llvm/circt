@@ -74,6 +74,10 @@ void ConvertToLLVMPass::convertFuncOp(func::FuncOp funcOp) {
   target.addLegalDialect<hw::HWDialect>();
   target.addLegalDialect<sv::SVDialect>();
 
+  // Mark hw.constant as illegal so it gets converted to arith.constant
+  // (via CombToArith) and then to llvm.mlir.constant
+  target.addIllegalOp<hw::ConstantOp>();
+
   // Setup the conversion patterns in the correct order:
   // 1. SCF to ControlFlow (for structured control flow)
   populateSCFToControlFlowConversionPatterns(patterns);

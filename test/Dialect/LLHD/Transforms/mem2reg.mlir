@@ -293,9 +293,9 @@ hw.module @TrackDriveCondition(in %u: i42, in %v: i42) {
   %c = llhd.sig %c0_i42 : i42
   // CHECK: llhd.process
   llhd.process {
+    // CHECK-NEXT: [[C:%.+]] = llhd.prb %c
     // CHECK-NEXT: %false = hw.constant false
     // CHECK-NEXT: [[B:%.+]] = llhd.prb %b
-    // CHECK-NEXT: [[C:%.+]] = llhd.prb %c
     // CHECK-NOT: llhd.drv
     llhd.drv %a, %u after %0 : i42
     // CHECK-NEXT: cf.br ^bb2(%u, [[B]], %false, [[C]] : i42, i42, i1, i42)
@@ -1015,9 +1015,11 @@ hw.module @CombCreateDynamicInject(in %u: i42, in %v: i10, in %q: i1) {
   }
 }
 
+func.func private @use_i8(%arg0: i8)
 func.func private @use_i42(%arg0: i42)
 func.func private @use_ref_i42(%arg0: !llhd.ref<i42>)
 func.func private @use_array_i42(%arg0: !hw.array<4xi42>)
+func.func private @use_union(%arg0: !hw.union<a: i8, b: i8>)
 
 // Regression test that verifies probe is inserted post use.
 // CHECK-LABEL: ProbePostDef
@@ -1136,4 +1138,192 @@ hw.module @LocalSignals(in %u: i42, in %v: i42) {
     // CHECK-NEXT: llhd.halt
     llhd.halt
   }
+}
+
+// Make sure all values live across wait terminators are captured as block
+// arguments on the wait. This allows us to more generally handle projections
+// into probes, and values computed from probes.
+// See https://github.com/llvm/circt/pull/9481
+// CHECK-LABEL: @CaptureNonProbeValuesAcrossWait
+hw.module @CaptureNonProbeValuesAcrossWait(in %a: i42, in %b: i42) {
+  llhd.process {
+    // CHECK: [[TMP1:%.+]] = comb.and %b, %b
+    %0 = comb.and %b, %b : i42
+    // CHECK: llhd.wait (%a : i42), ^bb1([[TMP1]] : i42)
+    llhd.wait (%a : i42), ^bb1
+    // CHECK: ^bb1([[TMP2:%.+]]: i42):
+  ^bb1:
+    // CHECK: comb.or [[TMP2]], [[TMP2]]
+    comb.or %0, %0 : i42
+    llhd.halt
+  }
+}
+
+// Don't try to promote signals with types that have no fixed bit width (such as
+// f64) or that exceed MLIR's IntegerType width limit, since Mem2Reg needs to
+// create integer constants for default values of promoted slots.
+// CHECK-LABEL: @RealSignalNotPromoted
+hw.module @RealSignalNotPromoted(in %clk : i1, in %a : f64, in %b : f64) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: %r = llhd.sig %b : f64
+  %r = llhd.sig %b : f64
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    llhd.wait (%clk : i1), ^bb2
+  ^bb2:
+    // CHECK: llhd.drv %r, %a after
+    llhd.drv %r, %a after %0 : f64
+    cf.br ^bb1
+  }
+}
+
+// CHECK-LABEL: @TooWideSignalNotPromoted
+hw.module @TooWideSignalNotPromoted(
+  in %clk : i1,
+  in %a : !hw.array<2097153xi8>,
+  in %b : !hw.array<2097153xi8>
+) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  // CHECK: %r = llhd.sig %b : !hw.array<2097153xi8>
+  %r = llhd.sig %b : !hw.array<2097153xi8>
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    llhd.wait (%clk : i1), ^bb2
+  ^bb2:
+    // CHECK: llhd.drv %r, %a after
+    llhd.drv %r, %a after %0 : !hw.array<2097153xi8>
+    cf.br ^bb1
+  }
+}
+
+// Promote a signal of union type. The SigStructExtractOp is used for both
+// struct and union member access; Mem2Reg must use the appropriate HW ops
+// for unpacking (union_extract) and packing (union_create).
+// CHECK-LABEL: @UnionSignalPromoted
+hw.module @UnionSignalPromoted(in %u : !hw.union<a: i8, b: i8>, in %v : i8, in %q : i1) {
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0 = hw.constant 0 : i8
+  %init = hw.bitcast %c0 : (i8) -> !hw.union<a: i8, b: i8>
+  %a = llhd.sig %init : !hw.union<a: i8, b: i8>
+  // CHECK: llhd.process
+  llhd.process {
+    // Drive the whole union, then project a field.
+    // CHECK-NOT: llhd.drv
+    llhd.drv %a, %u after %0 : !hw.union<a: i8, b: i8>
+    // CHECK-NOT: llhd.sig.struct_extract
+    %1 = llhd.sig.struct_extract %a["a"] : <!hw.union<a: i8, b: i8>>
+    // Conditionally drive the field (tests unpack and pack with unions).
+    // CHECK-NOT: llhd.drv
+    // CHECK-NEXT: [[EXT:%.+]] = hw.union_extract %u["a"]
+    // CHECK-NEXT: [[MUX:%.+]] = comb.mux %q, %v, [[EXT]]
+    // CHECK-NEXT: [[INJ:%.+]] = hw.union_create "a", [[MUX]]
+    llhd.drv %1, %v after %0 if %q : i8
+    // Probe the field (the value should be forwarded through the union).
+    // CHECK-NOT: llhd.prb
+    // CHECK-NEXT: [[READFIELD:%.+]] = hw.union_extract [[INJ]]["a"]
+    %2 = llhd.prb %1 : i8
+    // CHECK-NEXT: call @use_i8([[READFIELD]])
+    func.call @use_i8(%2) : (i8) -> ()
+    // Probe the whole union (should see the union_create result).
+    // CHECK-NOT: llhd.prb
+    %3 = llhd.prb %a : !hw.union<a: i8, b: i8>
+    // CHECK-NEXT: call @use_union([[INJ]])
+    func.call @use_union(%3) : (!hw.union<a: i8, b: i8>) -> ()
+    // CHECK-NEXT: llhd.constant_time
+    // CHECK-NEXT: llhd.drv %a, [[INJ]]
+    // CHECK-NEXT: llhd.halt
+    llhd.halt
+  }
+}
+
+// Don't promote a signal if a projection op (like sig.array_get) has a nested
+// projection user (like sig.extract) in a different block. Mem2Reg rewrites
+// signal references across block boundaries and would break the projection
+// chain, causing getProjections to encounter a BlockArgument.
+// CHECK-LABEL: @NestedProjectionAcrossBlocks
+hw.module @NestedProjectionAcrossBlocks(in %v : i4) {
+  %t = llhd.constant_time <0ns, 0d, 1e>
+  %d = llhd.constant_time <1ns, 0d, 0e>
+  %true = hw.constant true
+  %c0 = hw.constant 0 : i8
+  %c4 = hw.constant -4 : i3
+  %init = hw.aggregate_constant [0 : i8, 0 : i8] : !hw.array<2xi8>
+  // CHECK: %mem = llhd.sig
+  %mem = llhd.sig %init : !hw.array<2xi8>
+  llhd.process {
+    %e = llhd.sig.array_get %mem[%true] : <!hw.array<2xi8>>
+    llhd.drv %e, %c0 after %t : i8
+    llhd.wait delay %d, ^bb1
+  ^bb1:
+    // This sig.extract is a nested projection of %e, but in a different block.
+    // CHECK: llhd.sig.extract
+    %sub = llhd.sig.extract %e from %c4 : <i8> -> <i4>
+    llhd.drv %sub, %v after %t : i4
+    llhd.halt
+  }
+}
+
+// Don't promote a signal if a projection has multiple drives with different
+// delays. Mem2Reg splits blocking and delta drives into separate slot tracking,
+// but the reaching definition analysis doesn't handle this correctly for
+// projections, causing a "no definition reaches drive" assertion.
+// CHECK-LABEL: @MultiDelayProjectionDrive
+hw.module @MultiDelayProjectionDrive() {
+  %t_eps = llhd.constant_time <0ns, 0d, 1e>
+  %t_delta = llhd.constant_time <0ns, 1d, 0e>
+  %c0 = hw.constant 0 : i8
+  %true = hw.constant true
+  %init = hw.aggregate_constant [0 : i8, 0 : i8] : !hw.array<2xi8>
+  // CHECK: %sig = llhd.sig
+  %sig = llhd.sig %init : !hw.array<2xi8>
+  llhd.process {
+    %e = llhd.sig.array_get %sig[%true] : <!hw.array<2xi8>>
+    // CHECK: llhd.drv
+    llhd.drv %e, %c0 after %t_eps : i8
+    // CHECK: llhd.drv
+    llhd.drv %e, %c0 after %t_delta : i8
+    llhd.halt
+  }
+}
+
+// Test that the following doesn't hang.
+//
+// See: https://github.com/llvm/circt/issues/10314
+//
+// CHECK-LABEL: @Timeout_10314
+hw.module private @Timeout_10314() {
+  %c0_i5 = hw.constant 0 : i5
+  %0 = llhd.constant_time <0ns, 0d, 1e>
+  %c0_i32 = hw.constant 0 : i32
+  %c0_i4 = hw.constant 0 : i4
+  %c0_i8 = hw.constant 0 : i8
+  %false = hw.constant false
+  %c0_i3 = hw.constant 0 : i3
+  %rdptr0 = llhd.sig %c0_i3 : i3
+  %rdptr0_dec = llhd.sig %c0_i8 : i8
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:  // 2 preds: ^bb0, ^bb7
+    %1 = llhd.prb %rdptr0 : i3
+    %2 = comb.concat %c0_i5, %1 : i5, i3
+    llhd.drv %rdptr0_dec, %2 after %0 : i8
+    cf.br ^bb2
+  ^bb2:  // 2 preds: ^bb1, ^bb6
+    cf.cond_br %false, ^bb3, ^bb7
+  ^bb3:  // pred: ^bb2
+    %3 = llhd.prb %rdptr0 : i3
+    %4 = comb.icmp eq %3, %c0_i3 : i3
+    cf.cond_br %4, ^bb4, ^bb5
+  ^bb4:  // pred: ^bb3
+    cf.br ^bb6
+  ^bb5:  // pred: ^bb3
+    cf.br ^bb6
+  ^bb6:  // 2 preds: ^bb4, ^bb5
+    cf.br ^bb2
+  ^bb7:  // pred: ^bb2
+    llhd.wait (%c0_i3, %c0_i8, %c0_i32, %false, %false, %c0_i3, %c0_i8, %c0_i8, %c0_i4, %c0_i4 : i3, i8, i32, i1, i1, i3, i8, i8, i4, i4), ^bb1
+  }
+  hw.output
 }

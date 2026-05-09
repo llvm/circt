@@ -204,7 +204,3 @@ void LatencyRetimingPass::runOnOperation() {
   numOpsRemoved = statistics.numOpsRemoved;
   latencyUnitsSaved = statistics.latencyUnitsSaved;
 }
-
-std::unique_ptr<Pass> arc::createLatencyRetimingPass() {
-  return std::make_unique<LatencyRetimingPass>();
-}

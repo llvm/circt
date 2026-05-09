@@ -565,10 +565,10 @@ firrtl.domain @ClockDomain
 // CHECK-LABEL: @domaindefine
 // Note: There's nothing to check here, just that this doesn't error.
 firrtl.module @domaindefine(
-  in %A : !firrtl.domain of @ClockDomain,
-  out %B : !firrtl.domain of @ClockDomain
+  in %A : !firrtl.domain<@ClockDomain()>,
+  out %B : !firrtl.domain<@ClockDomain()>
 ) {
-  firrtl.domain.define %B, %A
+  firrtl.domain.define %B, %A : !firrtl.domain<@ClockDomain()>
 }
 
 // CHECK-LABEL: @WhenCForce
@@ -749,6 +749,30 @@ firrtl.module @dpi(
     // CHECK-NEXT: %[[AND:.+]] = firrtl.and %[[TMP]], %enable
     // CHECK-NEXT: firrtl.int.dpi.call "foo"(%in) enable %[[AND]]
     firrtl.int.dpi.call "foo"(%in) enable %enable : (!firrtl.uint<8>) -> ()
+  }
+}
+
+// Test that instance_choice works with expand-whens initialization coverage.
+firrtl.option @Platform {
+  firrtl.option_case @FPGA
+}
+
+firrtl.extmodule @TargetModule(in a : !firrtl.uint<1>)
+
+// CHECK-LABEL: firrtl.module @instance_choice_test
+firrtl.module @instance_choice_test(in %a : !firrtl.uint<1>,
+                                    in %b : !firrtl.uint<1>,
+                                    in %p : !firrtl.uint<1>) {
+  // CHECK: %inst_a = firrtl.instance_choice inst @TargetModule
+  %inst_a = firrtl.instance_choice inst @TargetModule alternatives @Platform {
+    @FPGA -> @TargetModule
+  } (in a : !firrtl.uint<1>)
+  // CHECK:      %[[MUX:.+]] = firrtl.mux(%p, %a, %b)
+  // CHECK-NEXT: firrtl.connect %inst_a, %[[MUX]]
+  firrtl.when %p : !firrtl.uint<1> {
+    firrtl.connect %inst_a, %a  : !firrtl.uint<1>, !firrtl.uint<1>
+  } else {
+    firrtl.connect %inst_a, %b : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 

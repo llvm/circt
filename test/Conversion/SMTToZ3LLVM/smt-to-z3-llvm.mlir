@@ -391,6 +391,14 @@ func.func @test(%arg0: i32) {
     // CHECK: llvm.call @Z3_mk_bv2int({{%[0-9a-zA-Z_]+}}, [[BV0]], [[SIGNEDCONST]]) : (!llvm.ptr, !llvm.ptr, i1) -> !llvm.ptr
     smt.bv2int %c0_bv4 signed : !smt.bv<4>
 
+    // CHECK-NOT: dbg.variable
+    dbg.variable "var1", %c0_bv4 : !smt.bv<4>
+
+    // CHECK-NOT: dbg.scope
+    // CHECK-NOT: dbg.variable
+    %scope = dbg.scope "a", "A"
+    dbg.variable "var2", %true scope %scope : !smt.bool
+
     // CHECK: [[C0:%.+]] = llvm.mlir.constant(0 : i32)
     // CHECK: [[C2:%.+]] = llvm.mlir.constant(2 : i32)
     // CHECK: [[ZERO:%.+]] = llvm.mlir.zero : !llvm.ptr

@@ -4,7 +4,7 @@
 import circt
 
 from circt.dialects import rtg, rtgtest
-from circt.ir import Context, Location, Module, InsertionPoint, Block, StringAttr, TypeAttr, IndexType
+from circt.ir import Context, Location, Module, InsertionPoint, Block, StringAttr, TypeAttr, IndexType, IntegerType, IntegerAttr
 from circt.passmanager import PassManager
 
 with Context() as ctx, Location.unknown():
@@ -188,13 +188,13 @@ with Context() as ctx, Location.unknown():
     seq = rtg.SequenceOp('seq', TypeAttr.get(rtg.SequenceType.get([])))
     block = Block.create_at_start(seq.bodyRegion, [])
     with InsertionPoint(block):
-      l = rtg.label_decl("label", [])
+      l = rtg.ConstantOp(rtg.LabelAttr.get("label"))
       visibility = rtg.LabelVisibilityAttr.get(rtg.GLOBAL)
       rtg.label(visibility, l)
       assert visibility.value == rtg.GLOBAL
 
   # CHECK: rtg.sequence @seq
-  # CHECK: rtg.label_decl "label"
+  # CHECK: rtg.constant #rtg.isa.label<"label">
   # CHECK: rtg.label global {{%.+}}
   print(m)
 
@@ -238,6 +238,12 @@ with Context() as ctx, Location.unknown():
   # CHECK: !rtg.isa.memory<32>
   print(memoryTy)
 
+  label_attr = rtg.LabelAttr.get("my_label")
+  # CHECK: name=my_label
+  print(f"name={label_attr.name}")
+  # CHECK: #rtg.isa.label<"my_label">
+  print(label_attr)
+
 with Context() as ctx, Location.unknown():
   circt.register_dialects(ctx)
   indexTy = IndexType.get()
@@ -259,3 +265,48 @@ with Context() as ctx, Location.unknown():
   print(f"fields={tup.fields}")
   # CHECK: !rtg.tuple
   print(tup)
+
+  stringTy = rtg.StringType.get()
+  # CHECK: !rtg.string
+  print(stringTy)
+
+with Context() as ctx, Location.unknown():
+  circt.register_dialects(ctx)
+
+  # Test MapType
+  keyTy = IntegerType.get_signless(32)
+  valueTy = IntegerType.get_signless(64)
+  mapTy = rtg.MapType.get(keyTy, valueTy)
+
+  # CHECK: key_type=i32
+  print(f"key_type={mapTy.key_type}")
+  # CHECK: value_type=i64
+  print(f"value_type={mapTy.value_type}")
+  # CHECK: !rtg.map<i32 -> i64>
+  print(mapTy)
+
+  # Test MapAttr
+  key0 = IntegerAttr.get(keyTy, 10)
+  key1 = IntegerAttr.get(keyTy, 20)
+  value0 = IntegerAttr.get(valueTy, 100)
+  value1 = IntegerAttr.get(valueTy, 200)
+
+  mapAttr = rtg.MapAttr.get(mapTy, [(key0, value0), (key1, value1)])
+  # CHECK: #rtg.map<10 : i32 -> 100 : i64, 20 : i32 -> 200 : i64>
+  print(mapAttr)
+
+  # Test key-based lookup
+  lookedUpValue = mapAttr.lookup(key0)
+  # CHECK: 100 : i64
+  print(lookedUpValue)
+
+  # Test lookup with non-existent key
+  key2 = IntegerAttr.get(keyTy, 30)
+  notFound = mapAttr.lookup(key2)
+  # CHECK: key_not_found=True
+  print(f"key_not_found={notFound is None}")
+
+  # Test empty map
+  emptyMapAttr = rtg.MapAttr.get(mapTy)
+  # CHECK: #rtg.map<>
+  print(emptyMapAttr)

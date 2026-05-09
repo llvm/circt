@@ -120,58 +120,61 @@ LogicalResult circt::firrtl::verifyModuleLikeOpInterface(FModuleLike module) {
       }))
     return module.emitOpError("port symbols should all be location attributes");
 
-  // Verify the port domains.  This can be either:
+  // Verify the port domain associations.  This can be either:
   //   1. An empty ArrayAttr.
-  //   2. An ArrayAttr, one entry-per-port, of:
-  //      a. SymbolRefAttrs if the port is a domain type
-  //      b. IntegerAttrs if the port is a non-domain type
+  //   2. An ArrayAttr, one entry-per-port, of ArrayAttr<IntegerAttr> for
+  //      associations.
   //
-  // Note: error handling here intentionally does _not_ use port info locations.
-  // This is because if any of these fail, this is almost always a
-  // CIRCT-internal bug.  These code paths are essoentially inaccessible from
-  // FIRRTL text.
+  // Note: Domain information is now stored in the DomainType itself, not
+  // in the domainInfo attribute.
+  //
+  // Note: error handling here intentionally does _not_ use port info
+  // locations. This is because if any of these fail, this is almost always
+  // a CIRCT-internal bug.  These code paths are essoentially inaccessible
+  // from FIRRTL text.
   auto domains = module.getDomainInfoAttr();
   // Domain info cannot be null.
   if (!domains)
-    return module.emitOpError("requires valid port domains");
-  // If non-empty, the one-entry-per-port.
+    return module.emitOpError("requires valid port domain associations");
+  // If non-empty, then one-entry-per-port.
   if (!domains.empty() && domains.size() != numPorts)
     return module.emitOpError("requires ")
-           << numPorts << " port domains, but has " << domains.size();
+           << numPorts << " port domain associations, but has "
+           << domains.size();
 
+  // Domain type ports should have empty associations (domain info is in the
+  // type). Non-domain type ports can have associations.
   for (auto [index, port] : llvm::enumerate(module.getPorts())) {
     auto type = cast<TypeAttr>(portTypes[index]).getValue();
-    // If this is a domain type port, then it _must_ refer to a domain.  This
-    // cannot be empty.
-    if (isa<DomainType>(type)) {
-      if (domains.empty())
-        return module.emitOpError() << "has domain port '" << port.getName()
-                                    << "', but no domain information";
-      if (!isa<FlatSymbolRefAttr>(domains[index]))
-        return module.emitOpError() << "domain information for domain port '"
-                                    << module.getPortName(index)
-                                    << "' must be a 'FlatSymbolRefAttr'";
-      continue;
-    }
 
     // Non-domain type ports can have no domain information.
     if (domains.empty())
       continue;
 
-    // If they do have domain information, then the domain info must be an array
-    // of integers and each integer must point to a domain type port.
+    // Domain associations must be an array of integers, each pointing to a
+    // domain type port.
     auto domain = domains[index];
     auto arrayAttr = dyn_cast<ArrayAttr>(domain);
     if (!arrayAttr)
       return module.emitOpError()
-             << "domain information for non-domain port '"
-             << module.getPortName(index) << "' must be an 'ArrayAttr'";
+             << "domain associations for port '" << module.getPortName(index)
+             << "' must be an 'ArrayAttr'";
+
+    // Domain type ports must have empty associations.
+    if (isa<DomainType>(type)) {
+      if (!arrayAttr.empty())
+        return module.emitOpError()
+               << "domain type port '" << module.getPortName(index)
+               << "' must have empty domain associations";
+      continue;
+    }
+
+    // Non-domain type ports: verify associations point to domain type ports.
     for (auto attr : arrayAttr) {
       auto association = dyn_cast<IntegerAttr>(attr);
       if (!association)
         return module.emitOpError()
-               << "domain information for non-domain port '"
-               << module.getPortName(index)
+               << "domain associations for port '" << module.getPortName(index)
                << "' must be an 'ArrayAttr<IntegerAttr>'";
       auto associationIdx = association.getValue().getZExtValue();
       if (associationIdx >= numPorts)

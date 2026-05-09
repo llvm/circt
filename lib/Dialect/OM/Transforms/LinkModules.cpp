@@ -62,6 +62,7 @@ struct ModuleInfo {
 
 struct LinkModulesPass
     : public circt::om::impl::LinkModulesBase<LinkModulesPass> {
+  using Base::Base;
   void runOnOperation() override;
 };
 
@@ -309,8 +310,4 @@ void LinkModulesPass::runOnOperation() {
     info.module.getBody()->getOperations().splice(
         info.module.getBody()->begin(), info.block->getOperations());
   }
-}
-
-std::unique_ptr<mlir::Pass> circt::om::createOMLinkModulesPass() {
-  return std::make_unique<LinkModulesPass>();
 }
