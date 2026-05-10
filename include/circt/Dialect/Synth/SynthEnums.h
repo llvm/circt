@@ -6,14 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef CIRCT_DIALECT_SYNTH_SYNTHATTRIBUTES_H
-#define CIRCT_DIALECT_SYNTH_SYNTHATTRIBUTES_H
+#ifndef CIRCT_DIALECT_SYNTH_SYNTHENUMS_H
+#define CIRCT_DIALECT_SYNTH_SYNTHENUMS_H
 
-#include "circt/Dialect/Synth/SynthEnums.h"
-#include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "llvm/ADT/StringRef.h"
 
-#define GET_ATTRDEF_CLASSES
-#include "circt/Dialect/Synth/SynthAttributes.h.inc"
+#include "circt/Dialect/Synth/SynthEnums.h.inc"
 
-#endif // CIRCT_DIALECT_SYNTH_SYNTHATTRIBUTES_H
+#endif // CIRCT_DIALECT_SYNTH_SYNTHENUMS_H

@@ -15,6 +15,7 @@ add_circt_dialect_library(CIRCTSynth
   DEPENDS
   MLIRSynthIncGen
   MLIRSynthOpInterfacesIncGen
+  CIRCTSynthEnumsIncGen
   CIRCTSynthAttrIncGen
 
   LINK_COMPONENTS
