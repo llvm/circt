@@ -314,9 +314,10 @@ FailureOr<BinaryTruthTable> circt::synth::getTruthTable(ValueRange values,
     eval[inputArgs[i]] = circt::createVarMask(numInputs, i, true);
 
   // Simulate the operations in the block
-  for (Operation &op : *block) {
-    if (op.getNumResults() == 0)
-      continue;
+  for (Operation &op : block->without_terminator()) {
+    if (op.getNumResults() != 1 ||
+        hw::getBitWidth(op.getResult(0).getType()) != 1)
+      return op.emitError("Unsupported operation for truth table simulation");
 
     if (auto choiceOp = dyn_cast<synth::ChoiceOp>(&op)) {
       auto it = eval.find(choiceOp.getInputs().front());
@@ -345,7 +346,12 @@ FailureOr<BinaryTruthTable> circt::synth::getTruthTable(ValueRange values,
         result ^= it->second;
       }
       eval[xorOp.getResult()] = result;
-    } else if (!isa<hw::OutputOp>(&op)) {
+    } else if (auto constantOp = dyn_cast<hw::ConstantOp>(&op)) {
+      auto tableSize = 1ULL << numInputs;
+      eval[constantOp.getResult()] = constantOp.getValue().isZero()
+                                         ? llvm::APInt::getZero(tableSize)
+                                         : llvm::APInt::getAllOnes(tableSize);
+    } else {
       return op.emitError("Unsupported operation for truth table simulation");
     }
   }

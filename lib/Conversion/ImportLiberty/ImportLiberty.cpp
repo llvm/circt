@@ -14,6 +14,8 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/SynthAttributes.h"
+#include "circt/Dialect/Synth/SynthDialect.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -471,7 +473,34 @@ private:
   ParseResult parseStatement(LibertyGroup &parent);
 
   // Lowering methods
-  ParseResult lowerCell(const LibertyGroup &group, StringAttr &cellNameAttr);
+  ParseResult
+  lowerCell(const LibertyGroup &group, StringAttr &cellNameAttr,
+            const llvm::StringMap<const LibertyGroup *> &tableTemplates);
+
+  ParseResult
+  parseNLDMTable(const LibertyGroup &group,
+                 const llvm::StringMap<const LibertyGroup *> &tableTemplates,
+                 synth::NLDMTableAttr &table);
+
+  LogicalResult
+  buildTimingArcs(const LibertyGroup &pinGroup,
+                  const llvm::StringMap<const LibertyGroup *> &tableTemplates,
+                  SmallVector<Attribute> &timingArcs);
+
+  LogicalResult
+  collectPorts(const LibertyGroup &cellGroup,
+               const llvm::StringMap<const LibertyGroup *> &tableTemplates,
+               SmallVector<hw::PortInfo> &ports,
+               SmallVector<const LibertyGroup *> &pinGroups,
+               SmallVector<Attribute> &timingArcs,
+               size_t &numOutputPinMissingFunction);
+
+  LogicalResult buildCellLogic(hw::HWModuleOp moduleOp,
+                               ArrayRef<hw::PortInfo> ports,
+                               ArrayRef<const LibertyGroup *> pinGroups);
+
+  LogicalResult parseLibertyFloatList(StringRef value, SMLoc loc,
+                                      SmallVectorImpl<double> &result) const;
 
   //===--------------------------------------------------------------------===//
   // Parser for Subgroup of "cell" group.
@@ -692,18 +721,30 @@ ParseResult LibertyParser::parseLibrary() {
   if (parseGroupBody(libertyLib))
     return failure();
 
+  // First Pass: collect lu_table_template groups by name so they can be
+  // referenced during NLDM table parsing in lowerCell. Liberty tables
+  // reference templates by name for their index axes e.g.
+  // cell_rise(delay_template_7x7) where the template defines index_1/index_2.
+
+  llvm::StringMap<const LibertyGroup *> tableTemplates;
+  for (const auto &stmt : libertyLib.subGroups)
+    if (stmt->name == "lu_table_template")
+      if (!stmt->args.empty())
+        if (auto name = dyn_cast<StringAttr>(stmt->args[0]))
+          tableTemplates[name.getValue()] = stmt.get();
+
+  // Second Pass: lower cells, passing the template map through for index
+  // lookup.
   DenseSet<StringAttr> seenCells;
   for (auto &stmt : libertyLib.subGroups) {
-    // TODO: Support more group types
-    if (stmt->name == "cell") {
-      StringAttr cellNameAttr;
-      if (lowerCell(*stmt, cellNameAttr))
-        return failure();
-      if (!seenCells.insert(cellNameAttr).second)
-        return emitError(stmt->loc, "redefinition of cell '" +
-                                        cellNameAttr.getValue() + "'");
+    if (stmt->name != "cell")
       continue;
-    }
+    StringAttr cellNameAttr;
+    if (lowerCell(*stmt, cellNameAttr, tableTemplates))
+      return failure();
+    if (!seenCells.insert(cellNameAttr).second)
+      return emitError(stmt->loc, "redefinition of cell '" +
+                                      cellNameAttr.getValue() + "'");
   }
 
   libertyLib.eraseSubGroup(
@@ -735,23 +776,168 @@ Attribute LibertyParser::convertGroupToAttr(const LibertyGroup &group) {
   return builder.getDictionaryAttr(attrs);
 }
 
-ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
-                                     StringAttr &cellNameAttr) {
-  if (group.args.empty())
-    return emitError(group.loc, "cell missing name");
+LogicalResult
+LibertyParser::parseLibertyFloatList(StringRef value, SMLoc loc,
+                                     SmallVectorImpl<double> &result) const {
+  SmallVector<StringRef> parts;
+  value.split(parts, ',');
+  for (auto part : parts) {
+    part = part.trim();
+    if (part.empty())
+      continue;
+    double val;
+    if (part.getAsDouble(val))
+      return emitError(loc, "expected floating point value in NLDM table");
+    result.push_back(val);
+  }
+  return success();
+}
 
-  cellNameAttr = dyn_cast<StringAttr>(group.args[0]);
-  if (!cellNameAttr)
-    return emitError(group.loc, "cell name must be a string");
+ParseResult LibertyParser::parseNLDMTable(
+    const LibertyGroup &group,
+    const llvm::StringMap<const LibertyGroup *> &tableTemplates,
+    synth::NLDMTableAttr &table) {
+  SmallVector<double> index1, index2, values;
 
-  SmallVector<hw::PortInfo> ports;
-  SmallVector<const LibertyGroup *> pinGroups;
+  auto parseList = [&](const LibertyGroup &source, StringRef name,
+                       SmallVectorImpl<double> &result) -> ParseResult {
+    if (auto [attr, loc] = source.getAttribute(name); attr) {
+      auto stringAttr = dyn_cast<StringAttr>(attr);
+      if (!stringAttr)
+        return emitError(loc, "expected string value for NLDM table entry");
+      if (failed(parseLibertyFloatList(stringAttr.getValue(), loc, result)))
+        return failure();
+      return success();
+    }
+
+    for (const auto &subGroup : source.subGroups) {
+      if (subGroup->name != name)
+        continue;
+      if (subGroup->args.empty())
+        return emitError(subGroup->loc, "NLDM table entry missing value");
+      for (auto arg : subGroup->args) {
+        auto stringAttr = dyn_cast<StringAttr>(arg);
+        if (!stringAttr)
+          return emitError(subGroup->loc,
+                           "expected string value for NLDM table entry");
+        if (failed(parseLibertyFloatList(stringAttr.getValue(), subGroup->loc,
+                                         result)))
+          return failure();
+      }
+      return success();
+    }
+
+    return success();
+  };
+
+  // Table-local indices override template indices when present.
+  if (parseList(group, "index_1", index1) ||
+      parseList(group, "index_2", index2) || parseList(group, "values", values))
+    return failure();
+
+  if (!group.args.empty()) {
+    auto templateName = dyn_cast<StringAttr>(group.args[0]);
+    if (!templateName)
+      return emitError(group.loc, "NLDM table template name must be a string");
+
+    auto it = tableTemplates.find(templateName.getValue());
+    if (it == tableTemplates.end())
+      return emitError(group.loc, "unknown NLDM table template '")
+             << templateName.getValue() << "'";
+
+    if (index1.empty() && parseList(*it->second, "index_1", index1))
+      return failure();
+    if (index2.empty() && parseList(*it->second, "index_2", index2))
+      return failure();
+  }
+
+  if (index1.empty())
+    return emitError(group.loc, "NLDM table missing index_1");
+  if (index2.empty())
+    return emitError(group.loc, "NLDM table missing index_2");
+  if (values.empty())
+    return emitError(group.loc, "NLDM table missing values");
+
+  if (values.size() != index1.size() * index2.size()) {
+    return emitError(group.loc, "NLDM table has ")
+           << values.size() << " values, expected "
+           << index1.size() * index2.size() << " for " << index1.size() << " x "
+           << index2.size() << " indices";
+  }
+
+  table = synth::NLDMTableAttr::get(
+      builder.getContext(),
+      DenseF64ArrayAttr::get(builder.getContext(), index1),
+      DenseF64ArrayAttr::get(builder.getContext(), index2),
+      DenseF64ArrayAttr::get(builder.getContext(), values));
+  return success();
+}
+
+static bool isNLDMTableGroup(StringRef name) {
+  return name == "cell_rise" || name == "cell_fall" ||
+         name == "rise_transition" || name == "fall_transition";
+}
+
+LogicalResult LibertyParser::buildTimingArcs(
+    const LibertyGroup &pinGroup,
+    const llvm::StringMap<const LibertyGroup *> &tableTemplates,
+    SmallVector<Attribute> &timingArcs) {
+  auto pinName = cast<StringAttr>(pinGroup.args[0]);
+
+  for (const auto &child : pinGroup.subGroups) {
+    if (child->name != "timing")
+      continue;
+
+    auto relatedPin =
+        dyn_cast_or_null<StringAttr>(child->getAttribute("related_pin").first);
+    auto timingSense =
+        dyn_cast_or_null<StringAttr>(child->getAttribute("timing_sense").first);
+    if (!relatedPin || !timingSense)
+      return emitError(child->loc,
+                       "timing related_pin and timing_sense must be strings");
+
+    synth::NLDMTableAttr cellRise, cellFall, riseTransition, fallTransition;
+    for (const auto &table : child->subGroups) {
+      if (!isNLDMTableGroup(table->name))
+        continue;
+
+      synth::NLDMTableAttr parsedTable;
+      if (parseNLDMTable(*table, tableTemplates, parsedTable))
+        return failure();
+
+      if (table->name == "cell_rise")
+        cellRise = parsedTable;
+      else if (table->name == "cell_fall")
+        cellFall = parsedTable;
+      else if (table->name == "rise_transition")
+        riseTransition = parsedTable;
+      else if (table->name == "fall_transition")
+        fallTransition = parsedTable;
+    }
+
+    if (!cellRise || !cellFall || !riseTransition || !fallTransition)
+      return emitError(child->loc,
+                       "NLDM timing arc requires cell_rise, cell_fall, "
+                       "rise_transition, and fall_transition tables");
+
+    timingArcs.push_back(synth::NLDMTimingArcAttr::get(
+        builder.getContext(), pinName, relatedPin, timingSense, cellRise,
+        cellFall, riseTransition, fallTransition));
+  }
+  return success();
+}
+
+LogicalResult LibertyParser::collectPorts(
+    const LibertyGroup &cellGroup,
+    const llvm::StringMap<const LibertyGroup *> &tableTemplates,
+    SmallVector<hw::PortInfo> &ports,
+    SmallVector<const LibertyGroup *> &pinGroups,
+    SmallVector<Attribute> &timingArcs, size_t &numOutputPinMissingFunction) {
+
   llvm::DenseSet<StringAttr> seenPins;
 
-  // First pass: gather ports and count output pins without "function"
-  // attribute.
-  size_t numOutputPinMissingFunction = 0;
-  for (const auto &sub : group.subGroups) {
+  // Gather ports and count output pins without "function" attribute.
+  for (const auto &sub : cellGroup.subGroups) {
     if (sub->name != "pin")
       continue;
 
@@ -766,31 +952,27 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
 
     std::optional<hw::ModulePort::Direction> dir;
     SmallVector<NamedAttribute> pinAttrs;
+    bool functionExist = false;
 
     // Track if this pin has a "function" attribute (only relevant for outputs).
-    bool functionExist = false;
     for (const auto &attr : sub->attrs) {
       if (attr.name == "direction") {
-        if (auto val = dyn_cast<StringAttr>(attr.value)) {
-          if (val.getValue() == "input")
-            dir = hw::ModulePort::Direction::Input;
-          else if (val.getValue() == "output")
-            dir = hw::ModulePort::Direction::Output;
-          else if (val.getValue() == "inout")
-            dir = hw::ModulePort::Direction::InOut;
-          else
-            return emitError(sub->loc,
-                             "pin direction must be input, output, or inout");
-        } else {
+        auto val = dyn_cast<StringAttr>(attr.value);
+        if (!val)
+          return emitError(sub->loc, "pin direction must be a string");
+        if (val.getValue() == "input")
+          dir = hw::ModulePort::Direction::Input;
+        else if (val.getValue() == "output")
+          dir = hw::ModulePort::Direction::Output;
+        else if (val.getValue() == "inout")
+          dir = hw::ModulePort::Direction::InOut;
+        else
           return emitError(sub->loc,
-                           "pin direction must be a string attribute");
-        }
+                           "pin direction must be input, output, or inout");
         continue;
       }
-
       if (attr.name == "function")
         functionExist = true;
-
       pinAttrs.push_back(builder.getNamedAttr(attr.name, attr.value));
     }
 
@@ -800,13 +982,17 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
     if (dir == hw::ModulePort::Direction::Output && !functionExist)
       ++numOutputPinMissingFunction;
 
-    llvm::StringMap<SmallVector<Attribute>> subGroups;
-    for (const auto &child : sub->subGroups) {
-      // TODO: Properly handle timing subgroups etc.
-      subGroups[child->name].push_back(convertGroupToAttr(*child));
-    }
+    // Build timing arcs for this pin's timing subgroups.
+    if (failed(buildTimingArcs(*sub, tableTemplates, timingArcs)))
+      return failure();
 
-    for (auto &it : subGroups)
+    // Collect non-timing subgroups as generic attrs
+    llvm::StringMap<SmallVector<Attribute>> subGroupAttrs;
+    for (const auto &child : sub->subGroups)
+      if (child->name != "timing")
+        subGroupAttrs[child->name].push_back(convertGroupToAttr(*child));
+
+    for (auto &it : subGroupAttrs)
       pinAttrs.push_back(builder.getNamedAttr(
           it.getKey(), builder.getArrayAttr(it.getValue())));
 
@@ -821,40 +1007,15 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
     port.attrs = attrs;
     ports.push_back(port);
   }
+  return success();
+}
 
-  // Fix up argNum for inputs
-  int inputIdx = 0;
-  for (auto &p : ports) {
-    if (p.dir == hw::ModulePort::Direction::Input)
-      p.argNum = inputIdx++;
-    else
-      p.argNum = 0;
-  }
+LogicalResult
+LibertyParser::buildCellLogic(hw::HWModuleOp moduleOp,
+                              ArrayRef<hw::PortInfo> ports,
+                              ArrayRef<const LibertyGroup *> pinGroups) {
 
-  auto loc = lexer.translateLocation(group.loc);
-  auto numOutput = ports.size() - inputIdx;
-
-  // Decide whether to create hw.module (with logic) or hw.module.extern (black
-  // box) based on whether output pins have "function" attributes.
-  // All outputs must either have "function" or all must lack it.
-
-  // Mixed case: some outputs have "function", others don't - error.
-  if (numOutputPinMissingFunction != 0 &&
-      numOutputPinMissingFunction != numOutput)
-    return emitError(group.loc, "cell '")
-           << cellNameAttr.getValue()
-           << "' has mixed output pins with and without "
-              "'function' attribute";
-
-  // All outputs lack "function": emit as hw.module.extern (black box).
-  if (numOutputPinMissingFunction == numOutput) {
-    hw::HWModuleExternOp::create(builder, loc, cellNameAttr, ports);
-    return success();
-  }
-
-  // All outputs have "function": emit as hw.module with logic.
-  auto moduleOp = hw::HWModuleOp::create(builder, loc, cellNameAttr, ports);
-
+  // All outputs have "function": emit logic into hw.module body.
   OpBuilder::InsertionGuard guard(builder);
   builder.setInsertionPointToStart(moduleOp.getBodyBlock());
 
@@ -877,9 +1038,11 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
 
     if (!it)
       continue;
+
     const LibertyGroup *pg = *it;
     auto attrPair = pg->getAttribute("function");
     assert(attrPair.first && "output pin missing function attribute");
+
     Value val;
     if (parseExpression(val, cast<StringAttr>(attrPair.first).getValue(),
                         portValues, attrPair.second))
@@ -887,8 +1050,69 @@ ParseResult LibertyParser::lowerCell(const LibertyGroup &group,
     outputs.push_back(val);
   }
 
-  auto *block = moduleOp.getBodyBlock();
-  block->getTerminator()->setOperands(outputs);
+  moduleOp.getBodyBlock()->getTerminator()->setOperands(outputs);
+  return success();
+}
+
+ParseResult LibertyParser::lowerCell(
+    const LibertyGroup &group, StringAttr &cellNameAttr,
+    const llvm::StringMap<const LibertyGroup *> &tableTemplates) {
+
+  if (group.args.empty())
+    return emitError(group.loc, "cell missing name");
+  cellNameAttr = dyn_cast<StringAttr>(group.args[0]);
+  if (!cellNameAttr)
+    return emitError(group.loc, "cell name must be a string");
+
+  SmallVector<hw::PortInfo> ports;
+  SmallVector<const LibertyGroup *> pinGroups;
+  SmallVector<Attribute> timingArcs;
+  size_t numOutputPinMissingFunction = 0;
+
+  if (failed(collectPorts(group, tableTemplates, ports, pinGroups, timingArcs,
+                          numOutputPinMissingFunction)))
+    return failure();
+
+  // Fix up argNum for inputs
+  int inputIdx = 0;
+  for (auto &p : ports)
+    if (p.dir == hw::ModulePort::Direction::Input)
+      p.argNum = inputIdx++;
+    else
+      p.argNum = 0;
+
+  auto loc = lexer.translateLocation(group.loc);
+  auto numOutput = ports.size() - inputIdx;
+
+  // Decide whether to create hw.module (with logic) or hw.module.extern (black
+  // box) based on whether output pins have "function" attributes.
+  // All outputs must either have "function" or all must lack it.
+
+  // Mixed case: some outputs have "function", others don't - error.
+  if (numOutputPinMissingFunction != 0 &&
+      numOutputPinMissingFunction != numOutput)
+    return emitError(group.loc, "cell '")
+           << cellNameAttr.getValue()
+           << "' has mixed output pins with and without 'function' attribute";
+
+  // All outputs lack "function": emit as hw.module.extern (black box).
+  if (numOutputPinMissingFunction == numOutput) {
+    auto externOp =
+        hw::HWModuleExternOp::create(builder, loc, cellNameAttr, ports);
+    if (!timingArcs.empty())
+      externOp->setAttr("synth.timing.nldm", builder.getArrayAttr(timingArcs));
+    return success();
+  }
+
+  // All outputs have "function": emit as hw.module with logic.
+  auto moduleOp = hw::HWModuleOp::create(builder, loc, cellNameAttr, ports);
+
+  if (failed(buildCellLogic(moduleOp, ports, pinGroups)))
+    return failure();
+
+  if (!timingArcs.empty())
+    moduleOp->setAttr("synth.timing.nldm", builder.getArrayAttr(timingArcs));
+
   return success();
 }
 
@@ -987,12 +1211,10 @@ ParseResult LibertyParser::parseAttribute(Attribute &result) {
 
   if (token.is(LibertyTokenKind::String)) {
     lexer.nextToken();
-    StringRef str = getTokenSpelling(token);
-    result = builder.getStringAttr(str);
+    result = builder.getStringAttr(getTokenSpelling(token));
     return success();
   }
 
-  // TODO: Add array for timing attributes
   return emitError(token.location, "expected attribute value");
 }
 
@@ -1017,6 +1239,8 @@ void registerImportLibertyTranslation() {
         // Load required dialects
         context->loadDialect<hw::HWDialect>();
         context->loadDialect<comb::CombDialect>();
+        context->loadDialect<synth::SynthDialect>();
+
         if (failed(parser.parse()))
           return OwningOpRef<ModuleOp>();
         return OwningOpRef<ModuleOp>(module);
@@ -1024,6 +1248,7 @@ void registerImportLibertyTranslation() {
       [](DialectRegistry &registry) {
         registry.insert<HWDialect>();
         registry.insert<comb::CombDialect>();
+        registry.insert<synth::SynthDialect>();
       });
 }
 } // namespace circt::liberty

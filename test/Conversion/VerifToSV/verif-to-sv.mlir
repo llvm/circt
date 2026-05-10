@@ -1,4 +1,6 @@
-// RUN: circt-opt --lower-verif-to-sv %s | FileCheck %s
+// RUN: circt-opt --lower-verif-to-sv --split-input-file %s | FileCheck %s
+
+// CHECK: sv.macro.decl @SYNTHESIS
 
 // CHECK-LABEL: hw.module @HasBeenResetAsync
 hw.module @HasBeenResetAsync(in %clock: i1, in %reset: i1, out out: i1) {
@@ -54,4 +56,62 @@ hw.module @HasBeenResetSync(in %clock: i1, in %reset: i1, out out: i1) {
   // CHECK-NEXT: %hasBeenReset = hw.wire [[DONE]]
 
   // CHECK-NEXT: hw.output %hasBeenReset
+}
+
+// CHECK-LABEL: hw.module @AssertLike
+hw.module @AssertLike(in %clock: i1, in %p: i1, in %en: i1) {
+  // CHECK: [[T:%.+]] = hw.constant true
+  // CHECK: [[D:%.+]] = comb.xor %en, [[T]]
+  // CHECK: sv.ifdef @SYNTHESIS {
+  // CHECK: } else {
+  // CHECK:   sv.assert_property %p disable_iff [[D]] label "a" : i1
+  // CHECK: }
+  verif.assert %p if %en label "a" : i1
+  // CHECK: sv.ifdef @SYNTHESIS {
+  // CHECK: } else {
+  // CHECK:   sv.assume_property %p label "u" : i1
+  // CHECK: }
+  verif.assume %p label "u" : i1
+  // CHECK: sv.ifdef @SYNTHESIS {
+  // CHECK: } else {
+  // CHECK:   sv.cover_property %p label "c" : i1
+  // CHECK: }
+  verif.cover %p label "c" : i1
+}
+
+// CHECK-LABEL: hw.module @ClockedAssertLike
+hw.module @ClockedAssertLike(in %clock: i1, in %p: i1) {
+  // CHECK: sv.ifdef @SYNTHESIS {
+  // CHECK: } else {
+  // CHECK:   sv.assert_property %p on posedge %clock label "a" : i1
+  // CHECK: }
+  verif.clocked_assert %p, posedge %clock label "a" : i1
+  // CHECK: sv.ifdef @SYNTHESIS {
+  // CHECK: } else {
+  // CHECK:   sv.assume_property %p on negedge %clock label "u" : i1
+  // CHECK: }
+  verif.clocked_assume %p, negedge %clock label "u" : i1
+  // CHECK: sv.ifdef @SYNTHESIS {
+  // CHECK: } else {
+  // CHECK:   sv.cover_property %p on edge %clock label "c" : i1
+  // CHECK: }
+  verif.clocked_cover %p, edge %clock label "c" : i1
+}
+
+// -----
+
+// Verify that when a non-`sv.macro.decl` symbol named `SYNTHESIS` already
+// exists in the module, the pass falls back to a unique symbol name.
+
+// CHECK: sv.macro.decl @[[SYM:SYNTHESIS_[0-9]+]]["SYNTHESIS"]
+// CHECK: hw.module.extern @SYNTHESIS()
+hw.module.extern @SYNTHESIS()
+
+// CHECK-LABEL: hw.module @Top
+hw.module @Top(in %clock: i1, in %p: i1) {
+  // CHECK: sv.ifdef @[[SYM]] {
+  // CHECK: } else {
+  // CHECK:   sv.assert_property %p on posedge %clock label "a" : i1
+  // CHECK: }
+  verif.clocked_assert %p, posedge %clock label "a" : i1
 }

@@ -1269,16 +1269,23 @@ def ListWindowToParallel(serial_window_type: Window):
   # be exactly one list field.
   static_field_names: List[str] = []
   list_field_name: Optional[str] = None
+  list_element_type: Optional[Type] = None
   for name, ftype in into_type.fields:
     if isinstance(ftype, ListType):
       if list_field_name is not None:
         raise ValueError("ListWindowToParallel requires exactly one list field")
       list_field_name = name
+      list_element_type = ftype.element_type
     else:
       static_field_names.append(name)
   if list_field_name is None:
     raise ValueError("ListWindowToParallel requires exactly one list field")
   count_field_name = f"{list_field_name}_count"
+  # Per the ESI spec, list types of zero bitwidth are supported (so callers
+  # need not special-case). With zero-width data, the per-item buffer
+  # register and forward/buffer mux are skipped: there is nothing to
+  # store or select between, and seq.CompReg disallows zero-width types.
+  data_is_zero = list_element_type.bitwidth == 0
 
   # The serial window must have exactly two frames: a header frame followed
   # by a data frame. The frame names are captured here (rather than hardcoded)
@@ -1469,19 +1476,24 @@ def ListWindowToParallel(serial_window_type: Window):
       # ----- Buffered item -----
       # Latch the last data item of a burst into a register before peeking
       # the next header. Gated by serial_xact so a back-pressured beat is
-      # only latched once.
+      # only latched once. With zero-width data there is nothing to
+      # buffer (and seq.CompReg rejects zero-width types), so out_item
+      # just forwards the (zero-width) data_item in every state.
       data_item = data_struct[list_field_name][0]
       consume_burst_last = in_emit & is_last_of_burst & serial_valid
-      buf_item = data_item.reg(ports.clk,
-                               ports.rst,
-                               ce=consume_burst_last,
-                               name="buf_item")
+      if data_is_zero:
+        out_item = data_item
+      else:
+        buf_item = data_item.reg(ports.clk,
+                                 ports.rst,
+                                 ce=consume_burst_last,
+                                 name="buf_item")
 
-      # ----- Parallel output construction -----
-      # In S_EMIT we forward the live data_item; in S_EMIT_BUF we emit the
-      # buffered item. `last` is only ever set in S_EMIT_BUF, and only when
-      # the header just consumed by S_PEEK had count==0.
-      out_item = Mux(in_emit_buf, data_item, buf_item)
+        # ----- Parallel output construction -----
+        # In S_EMIT we forward the live data_item; in S_EMIT_BUF we emit the
+        # buffered item. `last` is only ever set in S_EMIT_BUF, and only when
+        # the header just consumed by S_PEEK had count==0.
+        out_item = Mux(in_emit_buf, data_item, buf_item)
       out_last = in_emit_buf & (cur_count == zero)
 
       parallel_fields = {name: static_regs[name] for name in static_field_names}
@@ -1655,8 +1667,13 @@ def ListWindowToSerial(parallel_window_type: Window,
   header_struct_type = serial_variants["header"]
   data_struct_type = serial_variants["data"]
 
-  # The data FIFO carries one list element per slot.
+  # The data FIFO carries one list element per slot. When the element type
+  # has zero bitwidth (per the ESI spec, supported to avoid special-casing
+  # callers), the FIFO is omitted entirely: SeqFIFO disallows zero-bitwidth
+  # types, and there is nothing to actually store -- only the per-burst
+  # item count carried in the metadata FIFO matters.
   data_elem_type = list_element_type
+  data_is_zero = data_elem_type.bitwidth == 0
 
   # Burst-count counter width: must hold values 0..fifo_depth.
   bc_bitwidth = max(1, (fifo_depth + 1).bit_length())
@@ -1699,7 +1716,8 @@ def ListWindowToSerial(parallel_window_type: Window,
       par_last = par_struct["last"]
       par_item = par_struct[list_field_name]
 
-      data_fifo = SeqFIFO(data_elem_type, fifo_depth, ports.clk, ports.rst)
+      data_fifo = (None if data_is_zero else SeqFIFO(data_elem_type, fifo_depth,
+                                                     ports.clk, ports.rst))
       meta_fifo = SeqFIFO(meta_entry_type, meta_fifo_depth, ports.clk,
                           ports.rst)
 
@@ -1707,12 +1725,17 @@ def ListWindowToSerial(parallel_window_type: Window,
       # may happen on any par_xact, and computing whether one is needed
       # this cycle would require par_xact -> par_ready -> par_xact comb
       # loop). The slight throughput penalty is acceptable since meta_fifo
-      # drains at the bulk-transfer rate.
-      par_ready_wire.assign(~data_fifo.full & ~meta_fifo.full)
+      # drains at the bulk-transfer rate. With no data FIFO (zero-width
+      # elements), only meta_fifo backpressures.
+      if data_is_zero:
+        par_ready_wire.assign(~meta_fifo.full)
+      else:
+        par_ready_wire.assign(~data_fifo.full & ~meta_fifo.full)
       par_xact = par_valid & par_ready_wire
       par_xact_last = par_xact & par_last
 
-      data_fifo.push(par_item, par_xact)
+      if not data_is_zero:
+        data_fifo.push(par_item, par_xact)
 
       # Track whether we're currently mid-list (i.e. have seen at least one
       # item of the current list but not yet its `last`). `at_list_start`
@@ -1853,15 +1876,22 @@ def ListWindowToSerial(parallel_window_type: Window,
                       UInt(count_bitwidth)(1)).as_uint(count_bitwidth)
       last_item_in_burst = next_emitted == cur_count
 
-      # Data FIFO pop.
-      data_pop_rden = Wire(Bits(1))
-      data_value = data_fifo.pop(data_pop_rden)
-      data_valid = ~data_fifo.empty
+      # Data FIFO pop. With no data FIFO (zero-width elements), there is
+      # nothing to pop or wait on: data_value is a constant zero-width
+      # struct, and data_valid is unconditionally true.
+      if data_is_zero:
+        data_pop_rden = None
+        data_struct_value = Bits(0)(0).bitcast(data_struct_type)
+        data_valid = Bits(1)(1)
+      else:
+        data_pop_rden = Wire(Bits(1))
+        data_value = data_fifo.pop(data_pop_rden)
+        data_struct_value = data_struct_type({list_field_name: [data_value]})
+        data_valid = ~data_fifo.empty
 
       # Output union variants.
       header_union = serial_lowered(("header", cur_hdr))
       footer_union = serial_lowered(("header", footer_value))
-      data_struct_value = data_struct_type({list_field_name: [data_value]})
       data_union = serial_lowered(("data", data_struct_value))
 
       # Mux the union by current state. The S_IDLE slot is don't-care
@@ -1884,7 +1914,8 @@ def ListWindowToSerial(parallel_window_type: Window,
       data_xact = in_data & data_valid & out_ready
       burst_done = data_xact & last_item_in_burst
       footer_xact = in_footer & out_ready
-      data_pop_rden.assign(data_xact)
+      if not data_is_zero:
+        data_pop_rden.assign(data_xact)
 
       # Emitted-counter: clear at burst_done, increment on every other
       # data xact. Counter.clear takes precedence over .increment.

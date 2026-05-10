@@ -96,4 +96,47 @@ library(test) {
       direction: output;
     }
   }
+
+  lu_table_template(delay_template_3x3) {
+    index_1("0.1, 0.3, 0.7");
+    index_2("0.16, 0.35, 1.43");
+  }
+
+// CHECK-LABEL: hw.module @Inverter(
+// CHECK-SAME: attributes {synth.timing.nldm = [#synth.nldm_timing_arc<"Z", "A", "negative_unate",
+// CHECK-SAME: [1.000000e-01, 3.000000e-01, 7.000000e-01], [1.600000e-01, 3.500000e-01, 1.430000e+00]
+// CHECK-SAME: 5.130000e-02, 1.537000e-01, 5.280000e-01
+  cell(Inverter) {
+    pin(A) {
+      direction: input;
+    }
+    pin(Z) {
+      direction: output;
+      function: "!A";
+      timing() {
+        related_pin: "A";
+        timing_sense: negative_unate;
+        cell_rise(delay_template_3x3) {
+          values("0.0513, 0.1537, 0.5280",
+                 "0.1018, 0.2327, 0.6476",
+                 "0.1334, 0.2973, 0.7252");
+        }
+        cell_fall(delay_template_3x3) {
+          values("0.0617, 0.1537, 0.5280",
+                 "0.0918, 0.2027, 0.5676",
+                 "0.1034, 0.2273, 0.6452");
+        }
+        rise_transition(delay_template_3x3) {
+          values("0.0417, 0.1337, 0.4680",
+                 "0.0718, 0.1827, 0.5676",
+                 "0.1034, 0.2173, 0.6452");
+        }
+        fall_transition(delay_template_3x3) {
+          values("0.0817, 0.1937, 0.7280",
+                 "0.1018, 0.2327, 0.7676",
+                 "0.1334, 0.2973, 0.8452");
+        }
+      }
+    }
+  }
 }

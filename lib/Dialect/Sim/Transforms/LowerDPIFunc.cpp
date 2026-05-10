@@ -213,12 +213,10 @@ LogicalResult LowerDPIFuncPass::lowerDPI() {
       return failure();
 
   auto result = op.walk([&](sim::DPICallOp callOp) -> WalkResult {
-    auto it = state.dpiFuncDeclMapping.find(callOp.getCalleeAttr().getAttr());
-    if (it == state.dpiFuncDeclMapping.end()) {
-      callOp.emitOpError() << "references unknown DPI function";
-      return WalkResult::interrupt();
-    }
-    callOp.setCallee(it->second.getSymNameAttr());
+    auto callee =
+        state.dpiFuncDeclMapping.lookup(callOp.getCalleeAttr().getAttr());
+    if (callee)
+      callOp.setCallee(callee.getSymNameAttr());
     return WalkResult::advance();
   });
   if (result.wasInterrupted())

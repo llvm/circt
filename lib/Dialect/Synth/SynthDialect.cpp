@@ -8,12 +8,20 @@
 
 #include "circt/Dialect/Synth/SynthDialect.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Synth/SynthAttributes.h"
+#include "circt/Dialect/Synth/SynthEnums.h"
 #include "circt/Dialect/Synth/SynthOps.h"
+#include "mlir/IR/DialectImplementation.h"
 
 using namespace circt;
 using namespace synth;
 
 void SynthDialect::initialize() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "circt/Dialect/Synth/SynthAttributes.cpp.inc"
+      >();
+
   addOperations<
 #define GET_OP_LIST
 #include "circt/Dialect/Synth/Synth.cpp.inc"
@@ -31,3 +39,8 @@ Operation *SynthDialect::materializeConstant(OpBuilder &builder,
 }
 
 #include "circt/Dialect/Synth/SynthDialect.cpp.inc"
+
+#define GET_ATTRDEF_CLASSES
+#include "circt/Dialect/Synth/SynthAttributes.cpp.inc"
+
+#include "circt/Dialect/Synth/SynthEnums.cpp.inc"

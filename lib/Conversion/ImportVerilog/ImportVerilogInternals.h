@@ -33,6 +33,14 @@ namespace ImportVerilog {
 
 using moore::Domain;
 
+/// Get the slang canonical body for the given `instance`, if there is one.
+/// If there isn't one, fall back to the normal body.
+inline const slang::ast::InstanceBodySymbol *
+getCanonicalBody(const slang::ast::InstanceSymbol &inst) {
+  const slang::ast::InstanceBodySymbol *body = inst.getCanonicalBody();
+  return body == nullptr ? &inst.body : body;
+}
+
 /// Port lowering information.
 struct PortLowering {
   const slang::ast::PortSymbol &ast;
@@ -216,8 +224,16 @@ struct Context {
 
   /// Convert hierarchy and structure AST nodes to MLIR ops.
   LogicalResult convertCompilation();
+  /// Convert a module and its ports to an empty module op in the IR. Also adds
+  /// the op to the worklist of module bodies to be lowered. This acts like a
+  /// module "declaration", allowing instances to already refer to a module even
+  /// before its body has been lowered.
+  /// `module` must be the canonical module body if there is one.
   ModuleLowering *
   convertModuleHeader(const slang::ast::InstanceBodySymbol *module);
+  /// Convert a module's body to the corresponding IR ops. The module op must
+  /// have already been created earlier through a `convertModuleHeader` call.
+  /// `module` must be the canonical module body if there is one.
   LogicalResult convertModuleBody(const slang::ast::InstanceBodySymbol *module);
   LogicalResult convertPackage(const slang::ast::PackageSymbol &package);
   FunctionLowering *
@@ -266,6 +282,14 @@ struct Context {
   Value getImplicitThisRef() const {
     return currentThisRef; // block arg added in declareFunction
   }
+
+  /// Maps assertion system calls to their corresponding clocks
+  DenseMap<const slang::ast::CallExpression *,
+           const slang::ast::TimingControl *>
+      assertionCallClocks;
+
+  /// Generates a map from assertions to clocks using Slang's analysis
+  void populateAssertionClocks();
 
   Value getIndexedQueue() const { return currentQueue; }
 
@@ -387,7 +411,7 @@ struct Context {
   /// single argument.
   FailureOr<Value> convertAssertionSystemCallArity1(
       const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
-      Type originalType);
+      Type originalType, Value clockVal);
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
@@ -411,6 +435,7 @@ struct Context {
   std::map<LocationKey, Operation *> orderedRootOps;
 
   /// How we have lowered modules to MLIR.
+  /// The keys must be the slang canonical module bodies where they exist.
   DenseMap<const slang::ast::InstanceBodySymbol *,
            std::unique_ptr<ModuleLowering>>
       modules;

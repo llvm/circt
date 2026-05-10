@@ -620,6 +620,8 @@ class Port:
     self.owner = owner
     self.cpp_port = cpp_port
     self.type = _get_esi_type(cpp_port.type)
+    win = cpp_port.windowType
+    self.window_type = _get_esi_type(win) if win is not None else None
 
   def connect(self, buffer_size: Optional[int] = None):
     (supports_host, reason) = self.type.supports_host
@@ -768,8 +770,12 @@ class FunctionPort(BundlePort):
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
     super().__init__(owner, cpp_port)
-    self.arg_type = self.write_port("arg").type
-    self.result_type = self.read_port("result").type
+    arg_port = self.write_port("arg")
+    self.arg_type = arg_port.type
+    self.arg_window_type = arg_port.window_type
+    result_port = self.read_port("result")
+    self.result_type = result_port.type
+    self.result_window_type = result_port.window_type
     self.connected = False
 
   def connect(self):
@@ -811,8 +817,12 @@ class CallbackPort(BundlePort):
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
     super().__init__(owner, cpp_port)
-    self.arg_type = self.read_port("arg").type
-    self.result_type = self.write_port("result").type
+    arg_port = self.read_port("arg")
+    self.arg_type = arg_port.type
+    self.arg_window_type = arg_port.window_type
+    result_port = self.write_port("result")
+    self.result_type = result_port.type
+    self.result_window_type = result_port.window_type
     self.connected = False
 
   def connect(self, cb: Callable[[Any], Any]):
@@ -858,7 +868,9 @@ class ToHostPort(BundlePort):
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
     super().__init__(owner, cpp_port)
-    self.data_type = self.read_port("data").type
+    data_port = self.read_port("data")
+    self.data_type = data_port.type
+    self.data_window_type = data_port.window_type
     self.connected = False
 
   def connect(self):
@@ -876,7 +888,9 @@ class FromHostPort(BundlePort):
 
   def __init__(self, owner: HWModule, cpp_port: cpp.BundlePort):
     super().__init__(owner, cpp_port)
-    self.data_type = self.write_port("data").type
+    data_port = self.write_port("data")
+    self.data_type = data_port.type
+    self.data_window_type = data_port.window_type
     self.connected = False
 
   def connect(self):

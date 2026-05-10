@@ -44,6 +44,8 @@ arc.define @RandomI42AndI19Arc() -> (i42, i19) {
 
 // CHECK-LABEL: arc.model @Empty
 // CHECK-NEXT:  ^bb0(%arg0: !arc.storage):
+// CHECK-NEXT:    [[NWK:%.+]] = hw.constant -1 : i64
+// CHECK-NEXT:    arc.set_next_wakeup %arg0, [[NWK]] : !arc.storage
 // CHECK-NEXT:  }
 hw.module @Empty() {}
 

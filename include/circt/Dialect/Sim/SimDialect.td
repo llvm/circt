@@ -24,7 +24,10 @@ def SimDialect : Dialect {
     The `sim` dialect is intented to model simulator-specific operations.
   }];
 
-  let dependentDialects = ["circt::hw::HWDialect"];
+  let dependentDialects = [
+    "circt::hw::HWDialect",
+    "circt::seq::SeqDialect"
+  ];
 
   let useDefaultAttributePrinterParser = 0;
   let useDefaultTypePrinterParser = 1;

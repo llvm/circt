@@ -109,3 +109,30 @@ library(test) {
   // expected-error@+1 {{expected attribute value}}
   capacitance: 1.0.0
 }
+
+// -----
+
+library(test) {
+  lu_table_template(delay_template_2x2) {
+    index_1("0.1, 0.2");
+    index_2("0.3, 0.4");
+  }
+
+  cell(BadDims) {
+    pin(A) {
+      direction: input;
+    }
+    pin(Z) {
+      direction: output;
+      function: "A";
+      timing() {
+        related_pin: "A";
+        timing_sense: positive_unate;
+        // expected-error @below {{NLDM table has 2 values, expected 4 for 2 x 2 indices}}
+        cell_rise(delay_template_2x2) {
+          values("0.1, 0.2");
+        }
+      }
+    }
+  }
+}

@@ -2537,6 +2537,132 @@ LogicalResult GenerateCaseOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// GenerateForOp
+//===----------------------------------------------------------------------===//
+
+// Parse attribute and also optional trailing type if there. This is needed
+// primarily for integer types as when given a type, they hapily parse without
+// consuming the colon type.
+static ParseResult parseTypedAttrWithFallback(OpAsmParser &parser,
+                                              TypedAttr &result, Type type) {
+  Attribute attr;
+  // Try parsing with the expected type (no type suffix).
+  if (succeeded(parser.parseCustomAttributeWithFallback(attr, type))) {
+    auto typedAttr = dyn_cast<TypedAttr>(attr);
+    if (!typedAttr || typedAttr.getType() != type) {
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected typed attribute with type ")
+             << type;
+    }
+
+    // We are being given a type to parse extra.
+    if (succeeded(parser.parseOptionalColon())) {
+      Type localType;
+      if (failed(parser.parseType(localType)) || localType != type)
+        return parser.emitError(parser.getCurrentLocation(),
+                                "expected typed attribute with type ")
+               << type;
+    }
+
+    result = typedAttr;
+    return success();
+  }
+
+  return failure();
+}
+
+// Parse the header and body of a generate for loop.
+static ParseResult parseGenerateFor(OpAsmParser &parser, TypedAttr &lowerBound,
+                                    TypedAttr &upperBound, TypedAttr &step,
+                                    StringAttr &inductionVarName,
+                                    StringAttr &genBlockName, Region &body) {
+  auto &builder = parser.getBuilder();
+
+  OpAsmParser::Argument inductionVariable;
+  if (parser.parseArgument(inductionVariable, /*allowType=*/true))
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected induction variable argument");
+
+  // Parse induction variable assignment.
+  if (parser.parseEqual())
+    return failure();
+
+  // Parse lower bound.
+  Type type = inductionVariable.type;
+  if (parseTypedAttrWithFallback(parser, lowerBound, type))
+    return failure();
+
+  if (parser.parseKeyword("to"))
+    return failure();
+
+  // Parse upper bound.
+  if (parseTypedAttrWithFallback(parser, upperBound, type))
+    return failure();
+
+  if (parser.parseKeyword("step"))
+    return failure();
+
+  // Parse step.
+  if (parseTypedAttrWithFallback(parser, step, type))
+    return failure();
+
+  if (parser.parseKeyword("name"))
+    return failure();
+
+  // Parse gen block name.
+  if (parser.parseCustomAttributeWithFallback(
+          genBlockName, parser.getBuilder().getType<NoneType>()))
+    return failure();
+
+  // Store the induction variable name if it's not a number.
+  if (!isdigit(inductionVariable.ssaName.name.front()))
+    inductionVarName =
+        builder.getStringAttr(inductionVariable.ssaName.name.drop_front());
+
+  SmallVector<OpAsmParser::Argument, 1> regionArgs = {inductionVariable};
+  return parser.parseRegion(body, regionArgs);
+}
+
+// Print the header and body of a generate for loop.
+static void printGenerateFor(OpAsmPrinter &p, Operation *op,
+                             TypedAttr lowerBound, TypedAttr upperBound,
+                             TypedAttr step, StringAttr inductionVarName,
+                             StringAttr genBlockName, Region &body) {
+  auto forOp = cast<GenerateForOp>(op);
+  p << forOp.getInductionVar() << " : " << forOp.getInductionVar().getType()
+    << " = ";
+  p.printStrippedAttrOrType(lowerBound);
+  p << " to ";
+  p.printStrippedAttrOrType(upperBound);
+  p << " step ";
+  p.printStrippedAttrOrType(step);
+  p << " name ";
+  p.printAttributeWithoutType(genBlockName);
+  p << " ";
+  p.printRegion(body, /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+LogicalResult GenerateForOp::verify() {
+  if (getBody().getBlocks().front().getNumArguments() != 1)
+    return emitOpError("must have exactly one block argument");
+  Type type = getLowerBound().getType();
+  if (getBody().getBlocks().front().getArgument(0).getType() != type)
+    return emitOpError("block argument type must match loop bounds type");
+  if (!isa<IntegerType>(type))
+    return emitOpError("loop bounds must be integer types");
+
+  return success();
+}
+
+void GenerateForOp::getAsmBlockArgumentNames(
+    mlir::Region &region, mlir::OpAsmSetValueNameFn setNameFn) {
+  auto *block = &region.front();
+  if (auto attr = getInductionVarNameAttr())
+    setNameFn(block->getArgument(0), attr);
+}
+
 ModportStructAttr ModportStructAttr::get(MLIRContext *context,
                                          ModportDirection direction,
                                          FlatSymbolRefAttr signal) {

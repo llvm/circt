@@ -95,19 +95,44 @@ static llvm::APInt
 expandTruthTableToInputSpaceGeneric(const llvm::APInt &tt,
                                     ArrayRef<unsigned> mapping,
                                     unsigned numExpandedInputs) {
+
   unsigned numOrigInputs = mapping.size();
   unsigned expandedSize = 1U << numExpandedInputs;
+  unsigned numOrigBits = tt.getBitWidth();
 
-  llvm::APInt result = llvm::APInt::getZero(expandedSize);
-  for (unsigned expandedIdx = 0; expandedIdx < expandedSize; ++expandedIdx) {
-    unsigned origIdx = 0;
-    for (unsigned i = 0; i < numOrigInputs; ++i)
-      if ((expandedIdx >> mapping[i]) & 1U)
-        origIdx |= 1U << i;
-    if (tt[origIdx])
-      result.setBit(expandedIdx);
+  // Pre-compute masks for each original input
+  SmallVector<std::array<llvm::APInt, 2>, 16> masks;
+  masks.reserve(numOrigInputs);
+  for (unsigned i = 0; i < numOrigInputs; ++i) {
+    unsigned mappedInput = mapping[i];
+    masks.push_back({
+        createVarMask(numExpandedInputs, mappedInput, false),
+        createVarMask(numExpandedInputs, mappedInput, true),
+    });
   }
 
+  // Check sparsity
+  unsigned numOnes = tt.popcount();
+  bool enumerateSetBits = numOnes <= numOrigBits / 2;
+
+  llvm::APInt result = enumerateSetBits ? llvm::APInt::getZero(expandedSize)
+                                        : llvm::APInt::getAllOnes(expandedSize);
+
+  for (unsigned origIdx = 0, e = numOrigBits; origIdx < e; ++origIdx) {
+    if (tt[origIdx] != enumerateSetBits)
+      continue;
+
+    llvm::APInt pattern = llvm::APInt::getAllOnes(expandedSize);
+    for (unsigned i = 0; i < numOrigInputs; ++i) {
+      bool bit = (origIdx >> i) & 1U;
+      pattern &= masks[i][bit];
+    }
+
+    if (enumerateSetBits)
+      result |= pattern;
+    else
+      result &= ~pattern;
+  }
   return result;
 }
 
