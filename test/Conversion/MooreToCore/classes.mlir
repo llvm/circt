@@ -9,6 +9,12 @@
 // CHECK-DAG: llvm.mlir.global internal constant @"VirtualC::typeinfo"() {addr_space = 0 : i32} : !llvm.struct<(ptr)> {
 // CHECK-DAG: llvm.mlir.zero : !llvm.ptr
 // CHECK-DAG: llvm.insertvalue
+// CHECK-DAG: llvm.mlir.global internal constant @"tClass::vtable"()
+// CHECK-DAG: llvm.mlir.addressof @"tClass::subroutine" : !llvm.ptr
+// CHECK-DAG: llvm.mlir.addressof @"testClass::testSubroutine" : !llvm.ptr
+// CHECK-DAG: llvm.mlir.global internal constant @"testClass::vtable"()
+// CHECK-DAG: llvm.mlir.addressof @"testClass::subroutine" : !llvm.ptr
+// CHECK-DAG: llvm.mlir.addressof @"testClass::testSubroutine" : !llvm.ptr
 
 /// Check that a classdecl gets noop'd and handles are lowered to !llvm.ptr
 
@@ -158,4 +164,66 @@ func.func private @test_new7() {
 moore.class.classdecl @VirtualC {
   moore.class.propertydecl @a : !moore.i32
   moore.class.methoddecl @f : (!moore.class<@VirtualC>) -> ()
+}
+
+/// Check that symbolic vtables lower to LLVM globals and convert only the
+/// referenced methods to llvm.func.
+
+// CHECK-LABEL: llvm.func @"testClass::subroutine"(
+// CHECK: llvm.return
+
+// CHECK-LABEL: llvm.func @"testClass::testSubroutine"(
+// CHECK: llvm.return
+
+// CHECK-LABEL: llvm.func @"tClass::subroutine"(
+// CHECK: llvm.return
+
+// CHECK-NOT: moore.vtable
+// CHECK-NOT: moore.vtable_entry
+
+moore.class.classdecl @virtualFunctionClass {
+  moore.class.methoddecl @subroutine : (!moore.class<@virtualFunctionClass>) -> ()
+}
+moore.class.classdecl @realFunctionClass implements [@virtualFunctionClass] {
+  moore.class.methoddecl @testSubroutine : (!moore.class<@realFunctionClass>) -> ()
+}
+moore.class.classdecl @testClass implements [@realFunctionClass] {
+  moore.class.methoddecl @subroutine -> @"testClass::subroutine" : (!moore.class<@testClass>) -> ()
+  moore.class.methoddecl @testSubroutine -> @"testClass::testSubroutine" : (!moore.class<@testClass>) -> ()
+}
+moore.vtable @testClass::@vtable {
+  moore.vtable @realFunctionClass::@vtable {
+    moore.vtable @virtualFunctionClass::@vtable {
+      moore.vtable_entry @subroutine -> @"testClass::subroutine"
+    }
+    moore.vtable_entry @testSubroutine -> @"testClass::testSubroutine"
+  }
+  moore.vtable_entry @subroutine -> @"testClass::subroutine"
+  moore.vtable_entry @testSubroutine -> @"testClass::testSubroutine"
+}
+func.func private @"testClass::subroutine"(%arg0: !moore.class<@testClass>) {
+  return
+}
+func.func private @"testClass::testSubroutine"(%arg0: !moore.class<@testClass>) {
+  return
+}
+
+moore.class.classdecl @tClass extends @testClass {
+  moore.class.methoddecl @subroutine -> @"tClass::subroutine" : (!moore.class<@tClass>) -> ()
+}
+moore.vtable @tClass::@vtable {
+  moore.vtable @testClass::@vtable {
+    moore.vtable @realFunctionClass::@vtable {
+      moore.vtable @virtualFunctionClass::@vtable {
+        moore.vtable_entry @subroutine -> @"tClass::subroutine"
+      }
+      moore.vtable_entry @testSubroutine -> @"testClass::testSubroutine"
+    }
+    moore.vtable_entry @subroutine -> @"tClass::subroutine"
+    moore.vtable_entry @testSubroutine -> @"testClass::testSubroutine"
+  }
+  moore.vtable_entry @subroutine -> @"tClass::subroutine"
+}
+func.func private @"tClass::subroutine"(%arg0: !moore.class<@tClass>) {
+  return
 }
