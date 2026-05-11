@@ -152,19 +152,17 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   LogicalResult
   matchAndRewrite(arc::StateWriteOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-      if (!isa<ArrayRefType>(op.getValue().getType())) {
-        rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
-                              adaptor.getState());
-        return success();
-      }
+    if (!isa<ArrayRefType>(op.getValue().getType())) {
+      rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
+                                                 adaptor.getState());
+      return success();
+    }
 
     int numBytes = op.getState().getType().getByteWidth();
-    Value size = LLVM::ConstantOp::create(builder, loc, rewriter.getI64Type(),
-                                          numBytes);
-    rewriter.replaceOpWithNewOp<LLVM::MemcpyOp>(adaptor.getState(),
-                            adaptor.getValue(), size, /*volatile=*/false);
-
-    rewriter.eraseOp(op);
+    Value size = LLVM::ConstantOp::create(rewriter, op.getLoc(),
+                                          rewriter.getI64Type(), numBytes);
+    rewriter.replaceOpWithNewOp<LLVM::MemcpyOp>(
+        op, adaptor.getState(), adaptor.getValue(), size, /*volatile=*/false);
     return success();
   }
 };
