@@ -485,6 +485,16 @@ def FormatCharOp : SimOp<"fmt.char",
   let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
 }
 
+def FormatCurrentTimeOp : SimOp<"fmt.current_time", [Pure]> {
+  let summary = "Simulation time format specifier";
+  let description = [{
+    Format string fragment that resolves to the current simulation time when
+    printed. The textual representation is implementation defined.
+  }];
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
 def FormatHierPathOp : SimOp<"fmt.hier_path", [Pure]> {
   let summary = "Hierarchical path format specifier";
   let description = [{
