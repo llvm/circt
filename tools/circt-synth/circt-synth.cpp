@@ -16,6 +16,7 @@
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Comb/CombPasses.h"
+#include "circt/Dialect/Datapath/DatapathDialect.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/Emit/EmitDialect.h"
 #include "circt/Dialect/HW/HWDialect.h"
@@ -496,10 +497,11 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry.insert<comb::CombDialect, debug::DebugDialect, emit::EmitDialect,
-                  hw::HWDialect, ltl::LTLDialect, om::OMDialect,
-                  seq::SeqDialect, sim::SimDialect, synth::SynthDialect,
-                  sv::SVDialect, verif::VerifDialect>();
+  registry
+      .insert<comb::CombDialect, datapath::DatapathDialect, debug::DebugDialect,
+              emit::EmitDialect, hw::HWDialect, ltl::LTLDialect, om::OMDialect,
+              seq::SeqDialect, sim::SimDialect, synth::SynthDialect,
+              sv::SVDialect, verif::VerifDialect>();
   MLIRContext context(registry);
   if (allowUnregisteredDialects)
     context.allowUnregisteredDialects();
