@@ -1088,7 +1088,13 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     // create the bind op.
     {
-      auto builder = OpBuilder::atBlockEnd(bindFiles[moduleOp][layer].body);
+      auto *block = bindFiles[moduleOp][layer].body;
+      OpBuilder builder(block->getParent()->getContext());
+      // Insert before the terminator if present, otherwise at end
+      if (!block->empty() && block->back().hasTrait<OpTrait::IsTerminator>())
+        builder.setInsertionPoint(&block->back());
+      else
+        builder.setInsertionPointToEnd(block);
       BindOp::create(builder, layerBlock.getLoc(), moduleOp.getModuleNameAttr(),
                      instanceOp.getInnerSymAttr().getSymName());
     }
@@ -1228,6 +1234,8 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
       auto message = StringAttr::get(&getContext(),
                                      Twine(parent.getName()) + " not enabled");
       sv::MacroErrorOp::create(b, loc, message);
+      // Ensure the else block has a terminator
+      sv::IfDefOp::ensureTerminator(parentGuard.getElseRegion(), b, loc);
       parent = parent->getParentOfType<LayerOp>();
       continue;
     }
@@ -1250,10 +1258,14 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
     sv::IncludeOp::create(b, loc, IncludeStyle::Local, lookup->second.filename);
   }
 
+  // Ensure the else block has a terminator before saving it
+  auto *elseBlock = includeGuard.getElseBlock();
+  sv::IfDefOp::ensureTerminator(includeGuard.getElseRegion(), b, loc);
+
   // Save the bind file information for later.
   auto &info = bindFiles[module][layer];
   info.filename = filename;
-  info.body = includeGuard.getElseBlock();
+  info.body = elseBlock;
   info.effectful = effectful;
 }
 
