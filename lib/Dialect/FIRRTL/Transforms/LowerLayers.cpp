@@ -394,11 +394,27 @@ void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
   if (!layerBlock.getBody()->empty()) {
     OpBuilder builder(layerBlock);
     auto macroName = macroNames[layer];
-    auto ifDef = sv::IfDefOp::create(builder, layerBlock.getLoc(), macroName);
-    ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
-    // Ensure the taken region has the required terminator
-    sv::IfDefOp::ensureTerminator(ifDef.getThenRegion(), builder,
-                                  layerBlock.getLoc());
+
+    // macroName should always be set during preprocessing for inline layers
+    assert(macroName && "macro name not set for inline layer");
+
+    // Build the ifdef operation manually to ensure terminator is added
+    // before the operation is inserted and verified
+    OperationState state(layerBlock.getLoc(), sv::IfDefOp::getOperationName());
+    state.addAttribute(
+        "cond", sv::MacroIdentAttr::get(builder.getContext(), macroName));
+    Region *thenRegion = state.addRegion();
+    // Take the body from the layerblock (which has NoTerminator)
+    thenRegion->takeBody(layerBlock.getBodyRegion());
+    // Add empty else region
+    state.addRegion();
+
+    // Ensure the taken region has the required terminator BEFORE creating the
+    // op
+    sv::IfDefOp::ensureTerminator(*thenRegion, builder, layerBlock.getLoc());
+
+    // Now create and insert the operation
+    builder.create(state);
   }
   layerBlock.erase();
 }
