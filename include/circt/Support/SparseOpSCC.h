@@ -243,12 +243,12 @@ private:
   friend class circt::SparseOpSCC;
 
   OpSCCIterator(BaseIteratorT it,
-                const llvm::SmallVectorImpl<CyclicOpSCCStorage> &cyclicSccs)
+                const llvm::ArrayRef<CyclicOpSCCStorage> cyclicSccs)
       : llvm::mapped_iterator_base<OpSCCIterator<BaseIteratorT>, BaseIteratorT,
                                    OpSCC>(it),
         cyclicSccs(cyclicSccs) {}
 
-  const llvm::SmallVectorImpl<CyclicOpSCCStorage> &cyclicSccs;
+  const llvm::ArrayRef<CyclicOpSCCStorage> cyclicSccs;
 };
 
 } // namespace detail
