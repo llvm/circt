@@ -968,6 +968,44 @@ static LogicalResult legalizeHWModule(Block &block,
       continue;
     }
 
+    // Check for sv.yield operations that yield values, which should not exist.
+    // Empty yields (terminators for ifdef without results) are okay.
+    if (auto yieldOp = dyn_cast<YieldOp>(op)) {
+      if (yieldOp.getNumOperands() > 0) {
+        auto d = yieldOp.emitError()
+                 << "sv.yield operations with operands must be lowered before "
+                    "ExportVerilog";
+        d.attachNote() << "ExportVerilog does not support ifdef operations "
+                          "with results; they need to be lowered to temporary "
+                          "variables before emission";
+        return failure();
+      }
+    }
+
+    // Check for ifdef operations with results, which are not supported.
+    if (auto ifdefOp = dyn_cast<IfDefOp>(op)) {
+      if (ifdefOp.getNumResults() > 0) {
+        auto d = ifdefOp.emitError() << "sv.ifdef operations with results must "
+                                        "be lowered before ExportVerilog";
+        d.attachNote() << "ExportVerilog does not support ifdef operations "
+                          "with results; they need to be lowered to temporary "
+                          "variables before emission";
+        return failure();
+      }
+    }
+
+    if (auto ifdefProcOp = dyn_cast<IfDefProceduralOp>(op)) {
+      if (ifdefProcOp.getNumResults() > 0) {
+        auto d = ifdefProcOp.emitError()
+                 << "sv.ifdef.procedural operations with results must be "
+                    "lowered before ExportVerilog";
+        d.attachNote() << "ExportVerilog does not support ifdef operations "
+                          "with results; they need to be lowered to temporary "
+                          "variables before emission";
+        return failure();
+      }
+    }
+
     // Name legalization should have happened in a different pass for these sv
     // elements and we don't want to change their name through re-legalization
     // (e.g. letting a temporary take the name of an unvisited wire). Adding

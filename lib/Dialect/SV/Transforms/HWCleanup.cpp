@@ -87,11 +87,22 @@ static void mergeRegions(Region *region1, Region *region2) {
     return;
   }
 
-  // If the second region is not empty, splice its block into the start of the
-  // first region.
+  // If the second region is not empty, merge operations from block2 to block1.
+  // The semantics is to PREPEND block2's operations to block1, maintaining the
+  // original order when multiple operations are merged.
   if (!region2->empty()) {
     auto &block1 = region1->front();
     auto &block2 = region2->front();
+
+    // If block2 has a terminator, remove it since we'll keep block1's
+    // terminator.
+    if (!block2.empty() && block2.back().hasTrait<OpTrait::IsTerminator>()) {
+      block2.back().erase();
+    }
+
+    // Splice the operations from block2 to the beginning of block1.
+    // This preserves the historical behavior where earlier operations stay
+    // earlier.
     block1.getOperations().splice(block1.begin(), block2.getOperations());
   }
 }

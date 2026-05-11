@@ -416,6 +416,9 @@ void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
     auto macroName = macroNames[layer];
     auto ifDef = sv::IfDefOp::create(builder, layerBlock.getLoc(), macroName);
     ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
+    // Ensure the taken region has the required terminator
+    sv::IfDefOp::ensureTerminator(ifDef.getThenRegion(), builder,
+                                  layerBlock.getLoc());
   }
   layerBlock.erase();
 }

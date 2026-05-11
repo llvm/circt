@@ -527,3 +527,139 @@ hw.module @test_generate_for() {
   }
   hw.output
 }
+
+// CHECK-LABEL: hw.module @ifdef_with_results_same_type
+hw.module @ifdef_with_results_same_type(in %a: i32, in %b: i32, out z0: i32, out z1: i32) {
+  // Test sv.ifdef with results - both regions yield i32
+  // Results are concatenated: first from then, second from else
+  // CHECK: %0:2 = sv.ifdef @SYNTHESIS -> i32, i32 {
+  // CHECK-NEXT:   %1 = comb.add %a, %b : i32
+  // CHECK-NEXT:   sv.yield %1 : i32
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   %c0_i32 = hw.constant 0 : i32
+  // CHECK-NEXT:   sv.yield %c0_i32 : i32
+  // CHECK-NEXT: }
+  %0:2 = sv.ifdef @SYNTHESIS -> i32, i32 {
+    %sum = comb.add %a, %b : i32
+    sv.yield %sum : i32
+  } else {
+    %zero = hw.constant 0 : i32
+    sv.yield %zero : i32
+  }
+
+  // CHECK-NEXT: hw.output %0#0, %0#1 : i32, i32
+  hw.output %0#0, %0#1 : i32, i32
+}
+
+// CHECK-LABEL: hw.module @ifdef_with_results_different_types
+hw.module @ifdef_with_results_different_types(in %a: i32, out z0: i32, out z1: i64) {
+  // Test sv.ifdef with results of different types from each region
+  // CHECK: %0:2 = sv.ifdef @SYNTHESIS -> i32, i64 {
+  // CHECK-NEXT:   sv.yield %a : i32
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   %c42_i64 = hw.constant 42 : i64
+  // CHECK-NEXT:   sv.yield %c42_i64 : i64
+  // CHECK-NEXT: }
+  %0:2 = sv.ifdef @SYNTHESIS -> i32, i64 {
+    sv.yield %a : i32
+  } else {
+    %val = hw.constant 42 : i64
+    sv.yield %val : i64
+  }
+
+  // CHECK-NEXT: hw.output %0#0, %0#1 : i32, i64
+  hw.output %0#0, %0#1 : i32, i64
+}
+
+// CHECK-LABEL: hw.module @ifdef_with_multiple_results
+hw.module @ifdef_with_multiple_results(in %a: i32, in %b: i64, out z0: i32, out z1: i32, out z2: i64) {
+  // Test sv.ifdef where then region yields 2 values and else yields 1
+  // CHECK: %0:3 = sv.ifdef @SYNTHESIS -> i32, i32, i64 {
+  // CHECK-NEXT:   %1 = comb.add %a, %a : i32
+  // CHECK-NEXT:   sv.yield %a, %1 : i32, i32
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   sv.yield %b : i64
+  // CHECK-NEXT: }
+  %0:3 = sv.ifdef @SYNTHESIS -> i32, i32, i64 {
+    %doubled = comb.add %a, %a : i32
+    sv.yield %a, %doubled : i32, i32
+  } else {
+    sv.yield %b : i64
+  }
+
+  // CHECK-NEXT: hw.output %0#0, %0#1, %0#2 : i32, i32, i64
+  hw.output %0#0, %0#1, %0#2 : i32, i32, i64
+}
+
+// CHECK-LABEL: hw.module @ifdef_procedural_with_results
+hw.module @ifdef_procedural_with_results(in %clk: i1, in %data: i32) {
+  // Test sv.ifdef.procedural with results in a procedural context
+  sv.initial {
+    // CHECK: %0:2 = sv.ifdef.procedural @SYNTHESIS -> i32, i8 {
+    // CHECK-NEXT:   sv.yield %data : i32
+    // CHECK-NEXT: } else {
+    // CHECK-NEXT:   %c99_i8 = hw.constant 99 : i8
+    // CHECK-NEXT:   sv.yield %c99_i8 : i8
+    // CHECK-NEXT: }
+    %0:2 = sv.ifdef.procedural @SYNTHESIS -> i32, i8 {
+      sv.yield %data : i32
+    } else {
+      %debug_val = hw.constant 99 : i8
+      sv.yield %debug_val : i8
+    }
+
+    // CHECK: %c2_i32 = hw.constant 2 : i32
+    // CHECK-NEXT: sv.fwrite %c2_i32, "Result: %d %d\0A"(%0#0, %0#1) : i32, i8
+    %fd = hw.constant 2 : i32
+    sv.fwrite %fd, "Result: %d %d\n"(%0#0, %0#1) : i32, i8
+  }
+  hw.output
+}
+
+// CHECK-LABEL: hw.module @ifdef_with_empty_else_yield
+hw.module @ifdef_with_empty_else_yield(in %a: i32, out z: i32) {
+  // Test sv.ifdef where then yields a value but else yields nothing
+  // CHECK: %0 = sv.ifdef @SYNTHESIS -> i32 {
+  // CHECK-NEXT:   sv.yield %a : i32
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT: }
+  %0 = sv.ifdef @SYNTHESIS -> i32 {
+    sv.yield %a : i32
+  } else {
+    sv.yield
+  }
+
+  // CHECK-NEXT: hw.output %0 : i32
+  hw.output %0 : i32
+}
+
+// CHECK-LABEL: hw.module @ifdef_procedural_multiple_from_each
+hw.module @ifdef_procedural_multiple_from_each(in %clk: i1) {
+  sv.always posedge %clk {
+    // Test with multiple values from both regions
+    // CHECK: %0:4 = sv.ifdef.procedural @SYNTHESIS -> i32, i32, i16, i8 {
+    // CHECK-NEXT:   %c10_i32 = hw.constant 10 : i32
+    // CHECK-NEXT:   %c20_i32 = hw.constant 20 : i32
+    // CHECK-NEXT:   sv.yield %c10_i32, %c20_i32 : i32, i32
+    // CHECK-NEXT: } else {
+    // CHECK-NEXT:   %c5_i16 = hw.constant 5 : i16
+    // CHECK-NEXT:   %c7_i8 = hw.constant 7 : i8
+    // CHECK-NEXT:   sv.yield %c5_i16, %c7_i8 : i16, i8
+    // CHECK-NEXT: }
+    %0:4 = sv.ifdef.procedural @SYNTHESIS -> i32, i32, i16, i8 {
+      %v1 = hw.constant 10 : i32
+      %v2 = hw.constant 20 : i32
+      sv.yield %v1, %v2 : i32, i32
+    } else {
+      %v3 = hw.constant 5 : i16
+      %v4 = hw.constant 7 : i8
+      sv.yield %v3, %v4 : i16, i8
+    }
+
+    // CHECK: %c1_i32 = hw.constant 1 : i32
+    // CHECK-NEXT: sv.fwrite %c1_i32, "Values: %d %d %d %d\0A"(%0#0, %0#1, %0#2, %0#3) : i32, i32, i16, i8
+    %fd = hw.constant 1 : i32
+    sv.fwrite %fd, "Values: %d %d %d %d\n"(%0#0, %0#1, %0#2, %0#3) : i32, i32, i16, i8
+  }
+  hw.output
+}
