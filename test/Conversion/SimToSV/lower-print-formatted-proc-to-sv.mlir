@@ -45,7 +45,7 @@ hw.module @all_format_fragments(
     %i7 = sim.fmt.literal " gen="
     %f7 = sim.fmt.gen %fval_in fracDigits 4 : f64
     %i8 = sim.fmt.literal " time="
-    %f8 = sim.fmt.time
+    %f8 = sim.fmt.current_time
     %i9 = sim.fmt.literal " path="
     %f9 = sim.fmt.hier_path
     %i10 = sim.fmt.literal " esc="

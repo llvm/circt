@@ -111,7 +111,7 @@ hw.module @basic_real_print(in %clk : !seq.clock, in %val : f64) {
 // CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
 // CHECK-NEXT:  hw.triggered posedge %[[TRG]] {
 // CHECK-DAG:      %[[L0:.*]] = sim.fmt.literal "t="
-// CHECK-DAG:      %[[T:.*]] = sim.fmt.time
+// CHECK-DAG:      %[[T:.*]] = sim.fmt.current_time
 // CHECK-DAG:      %[[L1:.*]] = sim.fmt.literal " p="
 // CHECK-DAG:      %[[P:.*]] = sim.fmt.hier_path
 // CHECK-DAG:      %[[CAT:.*]] = sim.fmt.concat (%[[L0]], %[[T]], %[[L1]], %[[P]])
@@ -120,7 +120,7 @@ hw.module @basic_real_print(in %clk : !seq.clock, in %val : f64) {
 hw.module @contextual_fragments(in %clk : !seq.clock) {
   %true = hw.constant true
   %l0 = sim.fmt.literal "t="
-  %t = sim.fmt.time
+  %t = sim.fmt.current_time
   %l1 = sim.fmt.literal " p="
   %p = sim.fmt.hier_path
   %cat = sim.fmt.concat (%l0, %t, %l1, %p)

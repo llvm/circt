@@ -485,12 +485,11 @@ def FormatCharOp : SimOp<"fmt.char",
   let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
 }
 
-def FormatTimeOp : SimOp<"fmt.time", [Pure]> {
+def FormatCurrentTimeOp : SimOp<"fmt.current_time", [Pure]> {
   let summary = "Simulation time format specifier";
   let description = [{
     Format string fragment that resolves to the current simulation time when
-    printed. This corresponds to the `%0t` format specifier paired with the
-    current simulation time in SystemVerilog.
+    printed. The textual representation is implementation defined.
   }];
   let results = (outs FormatStringType:$result);
   let assemblyFormat = "attr-dict";
