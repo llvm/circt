@@ -3157,7 +3157,12 @@ void FIRRTLLowering::runWithInsertionPointAtEndOfBlock(
 
   auto oldIP = builder.saveInsertionPoint();
 
-  builder.setInsertionPointToEnd(&region.front());
+  auto &block = region.front();
+  // If the block has a terminator, insert before it; otherwise at the end
+  if (!block.empty() && block.back().hasTrait<OpTrait::IsTerminator>())
+    builder.setInsertionPoint(&block.back());
+  else
+    builder.setInsertionPointToEnd(&block);
   fn();
   builder.restoreInsertionPoint(oldIP);
 }

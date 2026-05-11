@@ -442,6 +442,12 @@ std::optional<size_t> LogicOp::getTargetResultIndex() { return 0; }
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
+// YieldOp
+//===----------------------------------------------------------------------===//
+
+// YieldOp verify is handled by the auto-generated code checking parent traits
+
+//===----------------------------------------------------------------------===//
 // IfDefOp
 //===----------------------------------------------------------------------===//
 
@@ -472,17 +478,180 @@ void IfDefOp::build(OpBuilder &builder, OperationState &result,
   OpBuilder::InsertionGuard guard(builder);
 
   result.addAttribute("cond", cond);
-  builder.createBlock(result.addRegion());
+  Region *thenRegion = result.addRegion();
+  builder.createBlock(thenRegion);
 
   // Fill in the body of the #ifdef.
   if (thenCtor)
     thenCtor();
 
+  // Ensure implicit terminator.
+  IfDefOp::ensureTerminator(*thenRegion, builder, result.location);
+
   Region *elseRegion = result.addRegion();
   if (elseCtor) {
     builder.createBlock(elseRegion);
     elseCtor();
+    // Ensure implicit terminator.
+    IfDefOp::ensureTerminator(*elseRegion, builder, result.location);
   }
+}
+
+void IfDefOp::build(OpBuilder &builder, OperationState &result,
+                    TypeRange resultTypes, MacroIdentAttr cond,
+                    std::function<void()> thenCtor,
+                    std::function<void()> elseCtor) {
+  OpBuilder::InsertionGuard guard(builder);
+
+  result.addTypes(resultTypes);
+  result.addAttribute("cond", cond);
+  Region *thenRegion = result.addRegion();
+  builder.createBlock(thenRegion);
+
+  // Fill in the body of the #ifdef.
+  if (thenCtor)
+    thenCtor();
+
+  // Ensure implicit terminator.
+  IfDefOp::ensureTerminator(*thenRegion, builder, result.location);
+
+  Region *elseRegion = result.addRegion();
+  if (elseCtor) {
+    builder.createBlock(elseRegion);
+    elseCtor();
+    // Ensure implicit terminator.
+    IfDefOp::ensureTerminator(*elseRegion, builder, result.location);
+  }
+}
+
+ParseResult IfDefOp::parse(OpAsmParser &parser, OperationState &result) {
+  // Parse the condition as a symbol reference
+  FlatSymbolRefAttr condSym;
+  if (parser.parseAttribute(condSym))
+    return failure();
+
+  // Convert to MacroIdentAttr
+  auto cond = MacroIdentAttr::get(parser.getContext(), condSym);
+  result.addAttribute("cond", cond);
+
+  // Parse optional result types
+  if (succeeded(parser.parseOptionalArrow())) {
+    SmallVector<Type> resultTypes;
+    if (parser.parseTypeList(resultTypes))
+      return failure();
+    result.addTypes(resultTypes);
+  }
+
+  // Parse the then region
+  Region *thenRegion = result.addRegion();
+  if (parser.parseRegion(*thenRegion))
+    return failure();
+  IfDefOp::ensureTerminator(*thenRegion, parser.getBuilder(), result.location);
+
+  // Parse optional else region
+  Region *elseRegion = result.addRegion();
+  if (succeeded(parser.parseOptionalKeyword("else"))) {
+    if (parser.parseRegion(*elseRegion))
+      return failure();
+    IfDefOp::ensureTerminator(*elseRegion, parser.getBuilder(),
+                              result.location);
+  }
+
+  // Parse attributes
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  return success();
+}
+
+void IfDefOp::print(OpAsmPrinter &p) {
+  p << " " << getCond().getIdent();
+
+  if (getNumResults() > 0) {
+    p << " -> ";
+    llvm::interleaveComma(getResultTypes(), p);
+  }
+
+  // Print the terminator in the then region only if it has operands
+  bool printThenTerminator = getNumThenResults() > 0;
+
+  p << " ";
+  p.printRegion(getThenRegion(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/printThenTerminator);
+
+  if (hasElse()) {
+    p << " else ";
+    // Print the terminator in the else region only if it has operands
+    bool printElseTerminator = getNumElseResults() > 0;
+    p.printRegion(getElseRegion(), /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/printElseTerminator);
+  }
+
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"cond"});
+}
+
+unsigned IfDefOp::getNumThenResults() {
+  auto *block = getThenBlock();
+  if (block->empty())
+    return 0;
+  if (auto yieldOp = dyn_cast<YieldOp>(&block->back()))
+    return yieldOp.getNumOperands();
+  return 0;
+}
+
+unsigned IfDefOp::getNumElseResults() {
+  if (!hasElse())
+    return 0;
+  auto *block = getElseBlock();
+  if (block->empty())
+    return 0;
+  if (auto yieldOp = dyn_cast<YieldOp>(&block->back()))
+    return yieldOp.getNumOperands();
+  return 0;
+}
+
+LogicalResult IfDefOp::verify() {
+  // Verify that the total number of results matches sum of yields from both
+  // regions
+  unsigned expectedResults = getNumThenResults() + getNumElseResults();
+  if ((*this)->getNumResults() != expectedResults)
+    return emitOpError("has ")
+           << (*this)->getNumResults() << " results but then region yields "
+           << getNumThenResults() << " and else region yields "
+           << getNumElseResults() << " (total: " << expectedResults << ")";
+
+  // Verify types match between the operation results and the yielded values
+  auto *thenBlock = getThenBlock();
+  if (!thenBlock->empty()) {
+    auto thenYield = dyn_cast<YieldOp>(&thenBlock->back());
+    if (thenYield) {
+      for (auto [idx, opType, yieldType] : llvm::enumerate(
+               getThenResults().getTypes(), thenYield.getOperandTypes())) {
+        if (opType != yieldType)
+          return emitOpError("then result type mismatch at index ")
+                 << idx << ": operation has " << opType << " but yield has "
+                 << yieldType;
+      }
+    }
+  }
+
+  if (hasElse()) {
+    auto *elseBlock = getElseBlock();
+    if (!elseBlock->empty()) {
+      auto elseYield = dyn_cast<YieldOp>(&elseBlock->back());
+      if (elseYield) {
+        for (auto [idx, opType, yieldType] : llvm::enumerate(
+                 getElseResults().getTypes(), elseYield.getOperandTypes())) {
+          if (opType != yieldType)
+            return emitOpError("else result type mismatch at index ")
+                   << idx << ": operation has " << opType << " but yield has "
+                   << yieldType;
+        }
+      }
+    }
+  }
+
+  return success();
 }
 
 LogicalResult IfDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
@@ -492,11 +661,24 @@ LogicalResult IfDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 // If both thenRegion and elseRegion are empty, erase op.
 template <class Op>
 static LogicalResult canonicalizeIfDefLike(Op op, PatternRewriter &rewriter) {
-  if (!op.getThenBlock()->empty())
+  // Check if then block is empty (ignoring implicit yield terminator)
+  auto *thenBlock = op.getThenBlock();
+  bool thenEmpty =
+      thenBlock->empty() || (thenBlock->getOperations().size() == 1 &&
+                             isa<YieldOp>(thenBlock->front()));
+
+  if (!thenEmpty)
     return failure();
 
-  if (op.hasElse() && !op.getElseBlock()->empty())
-    return failure();
+  // Check if else block is empty (ignoring implicit yield terminator)
+  if (op.hasElse()) {
+    auto *elseBlock = op.getElseBlock();
+    bool elseEmpty =
+        elseBlock->empty() || (elseBlock->getOperations().size() == 1 &&
+                               isa<YieldOp>(elseBlock->front()));
+    if (!elseEmpty)
+      return failure();
+  }
 
   rewriter.eraseOp(op);
   return success();
@@ -575,17 +757,182 @@ void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
   OpBuilder::InsertionGuard guard(builder);
 
   result.addAttribute("cond", cond);
-  builder.createBlock(result.addRegion());
+  Region *thenRegion = result.addRegion();
+  builder.createBlock(thenRegion);
 
   // Fill in the body of the #ifdef.
   if (thenCtor)
     thenCtor();
 
+  // Ensure implicit terminator.
+  IfDefProceduralOp::ensureTerminator(*thenRegion, builder, result.location);
+
   Region *elseRegion = result.addRegion();
   if (elseCtor) {
     builder.createBlock(elseRegion);
     elseCtor();
+    // Ensure implicit terminator.
+    IfDefProceduralOp::ensureTerminator(*elseRegion, builder, result.location);
   }
+}
+
+void IfDefProceduralOp::build(OpBuilder &builder, OperationState &result,
+                              TypeRange resultTypes, MacroIdentAttr cond,
+                              std::function<void()> thenCtor,
+                              std::function<void()> elseCtor) {
+  OpBuilder::InsertionGuard guard(builder);
+
+  result.addTypes(resultTypes);
+  result.addAttribute("cond", cond);
+  Region *thenRegion = result.addRegion();
+  builder.createBlock(thenRegion);
+
+  // Fill in the body of the #ifdef.
+  if (thenCtor)
+    thenCtor();
+
+  // Ensure implicit terminator.
+  IfDefProceduralOp::ensureTerminator(*thenRegion, builder, result.location);
+
+  Region *elseRegion = result.addRegion();
+  if (elseCtor) {
+    builder.createBlock(elseRegion);
+    elseCtor();
+    // Ensure implicit terminator.
+    IfDefProceduralOp::ensureTerminator(*elseRegion, builder, result.location);
+  }
+}
+
+ParseResult IfDefProceduralOp::parse(OpAsmParser &parser,
+                                     OperationState &result) {
+  // Parse the condition as a symbol reference
+  FlatSymbolRefAttr condSym;
+  if (parser.parseAttribute(condSym))
+    return failure();
+
+  // Convert to MacroIdentAttr
+  auto cond = MacroIdentAttr::get(parser.getContext(), condSym);
+  result.addAttribute("cond", cond);
+
+  // Parse optional result types
+  if (succeeded(parser.parseOptionalArrow())) {
+    SmallVector<Type> resultTypes;
+    if (parser.parseTypeList(resultTypes))
+      return failure();
+    result.addTypes(resultTypes);
+  }
+
+  // Parse the then region
+  Region *thenRegion = result.addRegion();
+  if (parser.parseRegion(*thenRegion))
+    return failure();
+  IfDefProceduralOp::ensureTerminator(*thenRegion, parser.getBuilder(),
+                                      result.location);
+
+  // Parse optional else region
+  Region *elseRegion = result.addRegion();
+  if (succeeded(parser.parseOptionalKeyword("else"))) {
+    if (parser.parseRegion(*elseRegion))
+      return failure();
+    IfDefProceduralOp::ensureTerminator(*elseRegion, parser.getBuilder(),
+                                        result.location);
+  }
+
+  // Parse attributes
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  return success();
+}
+
+void IfDefProceduralOp::print(OpAsmPrinter &p) {
+  p << " " << getCond().getIdent();
+
+  if (getNumResults() > 0) {
+    p << " -> ";
+    llvm::interleaveComma(getResultTypes(), p);
+  }
+
+  // Print the terminator in the then region only if it has operands
+  bool printThenTerminator = getNumThenResults() > 0;
+
+  p << " ";
+  p.printRegion(getThenRegion(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/printThenTerminator);
+
+  if (hasElse()) {
+    p << " else ";
+    // Print the terminator in the else region only if it has operands
+    bool printElseTerminator = getNumElseResults() > 0;
+    p.printRegion(getElseRegion(), /*printEntryBlockArgs=*/false,
+                  /*printBlockTerminators=*/printElseTerminator);
+  }
+
+  p.printOptionalAttrDict((*this)->getAttrs(), /*elidedAttrs=*/{"cond"});
+}
+
+unsigned IfDefProceduralOp::getNumThenResults() {
+  auto *block = getThenBlock();
+  if (block->empty())
+    return 0;
+  if (auto yieldOp = dyn_cast<YieldOp>(&block->back()))
+    return yieldOp.getNumOperands();
+  return 0;
+}
+
+unsigned IfDefProceduralOp::getNumElseResults() {
+  if (!hasElse())
+    return 0;
+  auto *block = getElseBlock();
+  if (block->empty())
+    return 0;
+  if (auto yieldOp = dyn_cast<YieldOp>(&block->back()))
+    return yieldOp.getNumOperands();
+  return 0;
+}
+
+LogicalResult IfDefProceduralOp::verify() {
+  // Verify that the total number of results matches sum of yields from both
+  // regions
+  unsigned expectedResults = getNumThenResults() + getNumElseResults();
+  if ((*this)->getNumResults() != expectedResults)
+    return emitOpError("has ")
+           << (*this)->getNumResults() << " results but then region yields "
+           << getNumThenResults() << " and else region yields "
+           << getNumElseResults() << " (total: " << expectedResults << ")";
+
+  // Verify types match between the operation results and the yielded values
+  auto *thenBlock = getThenBlock();
+  if (!thenBlock->empty()) {
+    auto thenYield = dyn_cast<YieldOp>(&thenBlock->back());
+    if (thenYield) {
+      for (auto [idx, opType, yieldType] : llvm::enumerate(
+               getThenResults().getTypes(), thenYield.getOperandTypes())) {
+        if (opType != yieldType)
+          return emitOpError("then result type mismatch at index ")
+                 << idx << ": operation has " << opType << " but yield has "
+                 << yieldType;
+      }
+    }
+  }
+
+  if (hasElse()) {
+    auto *elseBlock = getElseBlock();
+    if (!elseBlock->empty()) {
+      auto elseYield = dyn_cast<YieldOp>(&elseBlock->back());
+      if (elseYield) {
+        for (auto [idx, opType, yieldType] : llvm::enumerate(
+                 getElseResults().getTypes(), elseYield.getOperandTypes())) {
+          if (opType != yieldType)
+            return emitOpError("else result type mismatch at index ")
+                   << idx << ": operation has " << opType << " but yield has "
+                   << yieldType;
+        }
+      }
+    }
+  }
+
+  return success();
 }
 
 LogicalResult IfDefProceduralOp::canonicalize(IfDefProceduralOp op,
