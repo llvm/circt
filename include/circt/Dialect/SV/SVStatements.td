@@ -104,6 +104,8 @@ def IfDefOp : SVOp<"ifdef", [
     NonProceduralOp,
     NonProceduralRegion,
     SingleBlockImplicitTerminator<"YieldOp">,
+    RegionKindInterface,
+    HasOnlyGraphRegion,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "'ifdef MACRO' block";
@@ -207,6 +209,9 @@ def IfDefOp : SVOp<"ifdef", [
     mlir::ResultRange getElseResults() {
       return getResults().drop_front(getNumThenResults());
     }
+
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
   }];
 }
 
