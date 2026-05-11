@@ -661,11 +661,11 @@ LogicalResult IfDefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 // If both thenRegion and elseRegion are empty, erase op.
 template <class Op>
 static LogicalResult canonicalizeIfDefLike(Op op, PatternRewriter &rewriter) {
-  // Check if then block is empty (ignoring implicit yield terminator)
+  // Check if then block is empty (ignoring implicit yield terminator).
+  // The block always has a terminator due to SingleBlockImplicitTerminator.
   auto *thenBlock = op.getThenBlock();
-  bool thenEmpty =
-      thenBlock->empty() || (thenBlock->getOperations().size() == 1 &&
-                             isa<YieldOp>(thenBlock->front()));
+  bool thenEmpty = (thenBlock->getOperations().size() == 1 &&
+                    isa<YieldOp>(thenBlock->front()));
 
   if (!thenEmpty)
     return failure();
@@ -673,9 +673,8 @@ static LogicalResult canonicalizeIfDefLike(Op op, PatternRewriter &rewriter) {
   // Check if else block is empty (ignoring implicit yield terminator)
   if (op.hasElse()) {
     auto *elseBlock = op.getElseBlock();
-    bool elseEmpty =
-        elseBlock->empty() || (elseBlock->getOperations().size() == 1 &&
-                               isa<YieldOp>(elseBlock->front()));
+    bool elseEmpty = (elseBlock->getOperations().size() == 1 &&
+                      isa<YieldOp>(elseBlock->front()));
     if (!elseEmpty)
       return failure();
   }

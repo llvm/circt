@@ -540,19 +540,7 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
   // end of the module.  Any outputs will be writing to a wire or an output port
   // of the enclosing module anyway, and this allows inputs to be inlined into
   // the operand list as parameters.
-  // However, skip this optimization for blocks inside ifdef/procedural regions
-  // with implicit terminators, as moving instances can create dominance
-  // violations if they end up after operations that use their results.
-  bool skipInstanceSinking = false;
-  if (!body.empty() && body.back().hasTrait<OpTrait::IsTerminator>()) {
-    // Check if this is an ifdef or procedural region (has implicit terminator)
-    Operation *parentOp = body.getParentOp();
-    if (isa<sv::IfDefOp, sv::IfDefProceduralOp>(parentOp) ||
-        parentOp->hasTrait<ProceduralRegion>())
-      skipInstanceSinking = true;
-  }
-
-  if (!instances.empty() && !skipInstanceSinking) {
+  if (!instances.empty()) {
     for (Operation *instance : llvm::reverse(instances)) {
       if (instance != &body.back())
         instance->moveBefore(&body.back());

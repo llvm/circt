@@ -818,22 +818,17 @@ void FirRegLowering::buildRegConditions(OpBuilder &b, sv::RegOp reg) {
                                                  condition.getMacro(), []() {});
       // Insert before the implicit terminator
       auto *block = ifDef.getThenBlock();
-      if (!block->empty() && block->back().hasTrait<OpTrait::IsTerminator>())
-        b.setInsertionPoint(&block->back());
-      else
-        b.setInsertionPointToEnd(block);
+      b.setInsertionPoint(&block->back());
       continue;
     }
     if (kind == RegCondition::IfDefElse) {
       auto ifDef = sv::IfDefProceduralOp::create(
           b, reg.getLoc(), condition.getMacro(), []() {}, []() {});
 
-      // Insert before the implicit terminator
+      // Insert before the implicit terminator.
+      // The block will always have a terminator after create() returns.
       auto *block = ifDef.getElseBlock();
-      if (!block->empty() && block->back().hasTrait<OpTrait::IsTerminator>())
-        b.setInsertionPoint(&block->back());
-      else
-        b.setInsertionPointToEnd(block);
+      b.setInsertionPoint(&block->back());
       continue;
     }
     llvm_unreachable("unknown reg condition type");

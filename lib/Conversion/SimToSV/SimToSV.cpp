@@ -467,11 +467,9 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
         usedSynthesisMacro = true;
       }
 
-      // Move the op into the guard block (before the terminator if present).
-      if (!block->empty() && block->back().hasTrait<OpTrait::IsTerminator>())
-        op->moveBefore(&block->back());
-      else
-        op->moveBefore(block, block->end());
+      // Move the op into the guard block before the implicit terminator.
+      // sv.ifdef/sv.ifdef.procedural always have a terminator after create().
+      op->moveBefore(&block->back());
     }
 
     // Check if the op requires an clock and condition wrapper.
@@ -498,11 +496,8 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
                     .getBodyBlock();
       }
 
-      // Move the op into the process (before the terminator if present).
-      if (!block->empty() && block->back().hasTrait<OpTrait::IsTerminator>())
-        op->moveBefore(&block->back());
-      else
-        op->moveBefore(block, block->end());
+      // Move the op into the process.
+      op->moveBefore(block, block->end());
     }
 
     // Create an enclosing if condition.
@@ -519,11 +514,8 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
         block = sv::IfOp::create(builder, loc, condition, [] {}).getThenBlock();
       }
 
-      // Move the op into the if body (before the terminator if present).
-      if (!block->empty() && block->back().hasTrait<OpTrait::IsTerminator>())
-        op->moveBefore(&block->back());
-      else
-        op->moveBefore(block, block->end());
+      // Move the op into the if body.
+      op->moveBefore(block, block->end());
     }
   });
 

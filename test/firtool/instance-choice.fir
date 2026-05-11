@@ -23,11 +23,11 @@ circuit top:
     input rst: UInt<1>
     ; CHECK:       wire [31:0] [[RESULT:.+]];
     ; CHECK-NEXT:  `ifdef targets$Platform$FPGA
+    ; CHECK-NEXT:    `define targets$Platform$top$proc proc_FPGA
     ; CHECK-NEXT:    FPGATarget proc_FPGA (
     ; CHECK-NEXT:      .rst (rst),
     ; CHECK-NEXT:      .result_0 ([[RESULT]])
     ; CHECK-NEXT:    );
-    ; CHECK-NEXT:    `define targets$Platform$top$proc proc_FPGA
     ; CHECK-NEXT:  `else  // targets$Platform$FPGA
     ; CHECK-NEXT:   $error("Required instance choice option 'Platform' not selected, must define one of: 'targets$Platform$FPGA'");
     ; CHECK-NEXT:  `endif // targets$Platform$FPGA
