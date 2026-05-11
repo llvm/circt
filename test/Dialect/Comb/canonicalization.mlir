@@ -2117,6 +2117,23 @@ hw.module @notSext(in %a : i3, out negsext : i8) {
   hw.output %3 : i8
 }
 
+// CHECK-LABEL: @notSextSingleBit
+// ~sext(a) -> sext(~a)
+hw.module @notSextSingleBit(in %a : i3, out negsext : i4) {
+  // CHECK-NEXT: %c-1_i3 = hw.constant -1 : i3
+  // CHECK-NEXT: %[[NOTA:.+]] = comb.xor bin %a, %c-1_i3 : i3
+  // CHECK-NEXT: %[[NOTASIGN:.+]] = comb.extract %[[NOTA]] from 2 : (i3) -> i1
+  // CHECK-NEXT: %[[NEGSEXT:.+]] = comb.concat %[[NOTASIGN]], %[[NOTA]] : i1, i3
+  // CHECK-NEXT: hw.output %[[NEGSEXT]] : i4
+  %c-1_i4 = hw.constant -1 : i4
+  // sext(a) with single sign bit
+  %0 = comb.extract %a from 2 : (i3) -> i1
+  %1 = comb.concat %0, %a : i1, i3
+  // ~sext(a)
+  %2 = comb.xor %1, %c-1_i4 : i4
+  hw.output %2 : i4
+}
+
 // CHECK-LABEL: hw.module private @SextMatcherBlockArguments
 // Test that SextMatcher doesn't crash on block arguments (module ports)
 hw.module private @SextMatcherBlockArguments(in %a : i6, in %b : i2, in %c : i27) {
