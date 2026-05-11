@@ -152,30 +152,17 @@ struct StateWriteOpLowering : public OpConversionPattern<arc::StateWriteOp> {
   LogicalResult
   matchAndRewrite(arc::StateWriteOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    auto doStore = [&](OpBuilder &builder, Location loc) {
-      if (!isa<ArrayRefType>(op.getValue().getType())) {
-        LLVM::StoreOp::create(builder, loc, adaptor.getValue(),
-                              adaptor.getState());
-        return;
-      }
-
-      int numBytes = op.getState().getType().getByteWidth();
-      Value size = LLVM::ConstantOp::create(builder, loc, rewriter.getI64Type(),
-                                            numBytes);
-      LLVM::MemcpyOp::create(builder, loc, adaptor.getState(),
-                             adaptor.getValue(), size, /*volatile=*/false);
-    };
-
-    if (adaptor.getCondition()) {
-      rewriter.replaceOpWithNewOp<scf::IfOp>(
-          op, adaptor.getCondition(), [&](auto &builder, auto loc) {
-            doStore(builder, loc);
-            scf::YieldOp::create(builder, loc);
-          });
-    } else {
-      doStore(rewriter, op.getLoc());
-      rewriter.eraseOp(op);
+    if (!isa<ArrayRefType>(op.getValue().getType())) {
+      rewriter.replaceOpWithNewOp<LLVM::StoreOp>(op, adaptor.getValue(),
+                                                 adaptor.getState());
+      return success();
     }
+
+    int numBytes = op.getState().getType().getByteWidth();
+    Value size = LLVM::ConstantOp::create(rewriter, op.getLoc(),
+                                          rewriter.getI64Type(), numBytes);
+    rewriter.replaceOpWithNewOp<LLVM::MemcpyOp>(
+        op, adaptor.getState(), adaptor.getValue(), size, /*volatile=*/false);
     return success();
   }
 };
@@ -355,9 +342,6 @@ struct MemoryWriteOpLowering : public OpConversionPattern<arc::MemoryWriteOp> {
         op.getLoc(), adaptor.getMemory(), adaptor.getAddress(),
         cast<MemoryType>(op.getMemory().getType()), rewriter);
     auto enable = access.withinBounds;
-    if (adaptor.getEnable())
-      enable = LLVM::AndOp::create(rewriter, op.getLoc(), adaptor.getEnable(),
-                                   enable);
 
     // Only attempt to write the memory if the address is within bounds.
     rewriter.replaceOpWithNewOp<scf::IfOp>(

@@ -77,14 +77,6 @@ func.func @StateUpdates(%arg0: !arc.storage<1>) {
   // CHECK-NEXT: [[LOAD:%.+]] = llvm.load [[PTR]] : !llvm.ptr -> i1
   arc.state_write %0 = %1 : <i1>
   // CHECK-NEXT: llvm.store [[LOAD]], [[PTR]] : i1, !llvm.ptr
-  %false = hw.constant false
-  arc.state_write %0 = %false if %1 : <i1>
-  // CHECK-NEXT:   [[FALSE:%.+]] = llvm.mlir.constant(false)
-  // CHECK-NEXT:   llvm.cond_br [[LOAD]], [[BB1:\^.+]], [[BB2:\^.+]]
-  // CHECK-NEXT: [[BB1]]:
-  // CHECK-NEXT:   llvm.store [[FALSE]], [[PTR]]
-  // CHECK-NEXT:   llvm.br [[BB2]]
-  // CHECK-NEXT: [[BB2]]:
   return
   // CHECK-NEXT: llvm.return
 }
@@ -116,18 +108,6 @@ func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
   // CHECK-NEXT:   llvm.br [[BB_RESUME:\^.+]]([[TMP]] : i42)
   // CHECK-NEXT: [[BB_RESUME]]([[LOADED:%.+]]: i42):
   // CHECK:        [[ADDED:%.+]] = llvm.add [[LOADED]], [[LOADED]]
-
-  arc.memory_write %0[%c3_i19], %2 if %enable : <4 x i42, i19>
-  // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20
-  // CHECK-NEXT:   [[FOUR:%.+]] = llvm.mlir.constant(4
-  // CHECK-NEXT:   [[INBOUNDS:%.+]] = llvm.icmp "ult" [[ADDR]], [[FOUR]]
-  // CHECK-NEXT:   [[GEP:%.+]] = llvm.getelementptr [[PTR]][[[ADDR]]] : (!llvm.ptr, i20) -> !llvm.ptr, i64
-  // CHECK-NEXT:   [[COND:%.+]] = llvm.and %arg1, [[INBOUNDS]]
-  // CHECK-NEXT:   llvm.cond_br [[COND]], [[BB_STORE:\^.+]], [[BB_RESUME:\^.+]]
-  // CHECK-NEXT: [[BB_STORE]]:
-  // CHECK-NEXT:   llvm.store [[ADDED]], [[GEP]] : i42, !llvm.ptr
-  // CHECK-NEXT:   llvm.br [[BB_RESUME]]
-  // CHECK-NEXT: [[BB_RESUME]]:
 
   arc.memory_write %0[%c3_i19], %2 : <4 x i42, i19>
   // CHECK-NEXT:   [[ADDR:%.+]] = llvm.zext [[THREE]] : i19 to i20

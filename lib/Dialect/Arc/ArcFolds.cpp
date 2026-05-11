@@ -93,24 +93,6 @@ LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
 }
 
 //===----------------------------------------------------------------------===//
-// MemoryWriteOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult MemoryWriteOp::fold(FoldAdaptor adaptor,
-                                  SmallVectorImpl<OpFoldResult> &results) {
-  if (isAlways(adaptor.getEnable(), true))
-    return getEnableMutable().clear(), success();
-  return failure();
-}
-
-LogicalResult MemoryWriteOp::canonicalize(MemoryWriteOp op,
-                                          PatternRewriter &rewriter) {
-  if (isAlways(op.getEnable(), false))
-    return rewriter.eraseOp(op), success();
-  return failure();
-}
-
-//===----------------------------------------------------------------------===//
 // StorageGetOp
 //===----------------------------------------------------------------------===//
 

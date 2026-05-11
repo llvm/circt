@@ -425,15 +425,11 @@ def MemoryWriteOp : ArcOp<"memory_write", [
   let arguments = (ins
     MemoryType:$memory,
     AnyInteger:$address,
-    Optional<I1>:$enable,
     AnyInteger:$data
   );
   let assemblyFormat = [{
-    $memory `[` $address `]` `,` $data (`if` $enable^)?
-    attr-dict `:` type($memory)
+    $memory `[` $address `]` `,` $data attr-dict `:` type($memory)
   }];
-  let hasFolder = 1;
-  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -594,19 +590,17 @@ def StateWriteOp : ArcOp<"state_write", [
   let arguments = (ins
     StateType:$state,
     AnyType:$value,
-    Optional<I1>:$condition,
     OptionalAttr<FlatSymbolRefAttr>:$traceTapModel,
     OptionalAttr<UI64Attr>:$traceTapIndex);
   let assemblyFormat = [{
-    $state `=` $value (`if` $condition^)?
+    $state `=` $value
     (`tap` $traceTapModel`[`$traceTapIndex^`]` )? attr-dict `:` type($state)
   }];
   let hasVerifier = true;
   let builders = [
     OpBuilder<(ins  "mlir::Value":$state,
-                    "mlir::Value":$value,
-                    "mlir::Value":$condition), [{
-      build($_builder, $_state, state, value, condition,
+                    "mlir::Value":$value), [{
+      build($_builder, $_state, state, value,
               mlir::FlatSymbolRefAttr{}, mlir::IntegerAttr{});
     }]>
   ];

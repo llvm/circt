@@ -373,7 +373,7 @@ Value ModuleLowering::detectPosedge(Value clock) {
   // Read the old clock value from storage and write the new clock value to
   // storage.
   auto oldClock = StateReadOp::create(builder, loc, oldStorage);
-  StateWriteOp::create(builder, loc, oldStorage, clock, Value{});
+  StateWriteOp::create(builder, loc, oldStorage, clock);
 
   // Detect a rising edge.
   auto edge = comb::XorOp::create(builder, loc, oldClock, clock);
@@ -497,8 +497,7 @@ LogicalResult OpLowering::lower(StateOp op) {
       auto state = module.getAllocatedState(result);
       if (!state)
         return failure();
-      StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value,
-                           Value{});
+      StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value);
     }
     return success();
   }
@@ -628,8 +627,7 @@ LogicalResult OpLowering::lowerStateful(
       if (value.getType() != type)
         value = BitcastOp::create(module.builder, loweredReset.getLoc(), type,
                                   value);
-      StateWriteOp::create(module.builder, loweredReset.getLoc(), state, value,
-                           Value{});
+      StateWriteOp::create(module.builder, loweredReset.getLoc(), state, value);
     }
     module.builder.setInsertionPoint(ifResetOp.elseYield());
   }
@@ -664,7 +662,7 @@ LogicalResult OpLowering::lowerStateful(
   // Compute the transfer function and write its results to the state's storage.
   auto loweredResults = createMapping(loweredInputs);
   for (auto [state, value] : llvm::zip(states, loweredResults))
-    StateWriteOp::create(module.builder, value.getLoc(), state, value, Value{});
+    StateWriteOp::create(module.builder, value.getLoc(), state, value);
 
   // Since we just wrote the new state value to storage, insert read ops just
   // before the if op that keep the old value around for any later ops that
@@ -782,8 +780,7 @@ LogicalResult OpLowering::lower(MemoryOp op) {
     }
 
     // Actually write to the memory.
-    MemoryWriteOp::create(module.builder, write.getLoc(), state, address,
-                          Value{}, data);
+    MemoryWriteOp::create(module.builder, write.getLoc(), state, address, data);
   }
 
   return success();
@@ -808,7 +805,7 @@ LogicalResult OpLowering::lower(TapOp op) {
     alloc->setAttr("names", op.getNamesAttr());
     state = alloc;
   }
-  StateWriteOp::create(module.builder, op.getLoc(), state, value, Value{});
+  StateWriteOp::create(module.builder, op.getLoc(), state, value);
   return success();
 }
 
@@ -836,7 +833,7 @@ LogicalResult OpLowering::lower(InstanceOp op) {
     state->setAttr("name", module.builder.getStringAttr(
                                op.getInstanceName() + "/" +
                                cast<StringAttr>(name).getValue()));
-    StateWriteOp::create(module.builder, value.getLoc(), state, value, Value{});
+    StateWriteOp::create(module.builder, value.getLoc(), state, value);
   }
 
   // HACK: Also ensure that storage has been allocated for all outputs.
@@ -869,7 +866,7 @@ LogicalResult OpLowering::lower(hw::OutputOp op) {
     auto state = RootOutputOp::create(
         module.allocBuilder, value.getLoc(), StateType::get(value.getType()),
         cast<StringAttr>(name), module.storageArg);
-    StateWriteOp::create(module.builder, value.getLoc(), state, value, Value{});
+    StateWriteOp::create(module.builder, value.getLoc(), state, value);
   }
   return success();
 }
@@ -1267,8 +1264,7 @@ Value OpLowering::lowerValue(seq::InitialOp op, OpResult result, Phase phase) {
                                  module.storageArg);
     OpBuilder::InsertionGuard guard(module.initialBuilder);
     module.initialBuilder.setInsertionPointAfterValue(value);
-    StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value,
-                         Value{});
+    StateWriteOp::create(module.initialBuilder, value.getLoc(), state, value);
   }
 
   // Read back the value computed during the initial phase.
