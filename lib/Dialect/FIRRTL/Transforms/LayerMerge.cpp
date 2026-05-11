@@ -53,16 +53,14 @@ void LayerMerge::runOnOperation() {
   //
   // The recursive walk will cause nested layer blocks to also be merged.
   auto moduleOp = getOperation();
-  LayerSet enabledLayers;
-  enabledLayers.insert_range(
-      moduleOp.getLayersAttr().getAsRange<SymbolRefAttr>());
-
   mlir::IRRewriter rewriter(moduleOp.getContext());
   moduleOp.walk<mlir::WalkOrder::PostOrder, mlir::ReverseIterator>(
       [&](LayerBlockOp thisBlock) {
         auto layer = thisBlock.getLayerName();
+
         // If this layer is enabled, simply inline it.
-        if (isLayerCompatibleWith(layer, enabledLayers)) {
+        auto ambientLayers = getAmbientLayersAt(thisBlock->getParentOp());
+        if (isLayerCompatibleWith(layer, ambientLayers)) {
           rewriter.inlineBlockBefore(thisBlock.getBody(), thisBlock->getBlock(),
                                      Block::iterator(thisBlock));
           thisBlock->erase();
