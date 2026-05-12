@@ -10,9 +10,17 @@ firrtl.circuit "Foo" {
 }
 
 // -----
-// NOTE: This test case was removed because with LTL wire canonicalization prevention,
-// the wire is preserved and the error detection works differently. The test would need
-// to be restructured to match the new behavior where LTL-typed wires are not folded away.
+
+firrtl.circuit "Foo" {
+  firrtl.module @Foo(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
+    %0 = firrtl.wire : !firrtl.uint<1>
+    // expected-note @below {{leaking outside verification context here}}
+    %1 = firrtl.and %0, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-error @below {{verification operation used in a non-verification context}}
+    %2 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %0, %2 : !firrtl.uint<1>
+  }
+}
 
 // -----
 

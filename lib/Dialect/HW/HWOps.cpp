@@ -480,17 +480,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   if (wire.getInput() == wire.getResult())
     return failure();
 
-  // Don't canonicalize LTL-typed wires - they need special handling during
-  // lowering and should be removed by the lowering pass itself.
-  // We check by dialect name to avoid including LTL headers.
-  auto resultType = wire.getResult().getType();
-  auto inputType = wire.getInput().getType();
-  auto &resultDialect = resultType.getDialect();
-  auto &inputDialect = inputType.getDialect();
-  if (resultDialect.getNamespace() == "ltl" ||
-      inputDialect.getNamespace() == "ltl")
-    return failure();
-
   // If the wire has a name or an `sv.namehint` attribute, propagate it as an
   // `sv.namehint` to the expression.
   if (auto *inputOp = wire.getInput().getDefiningOp())
