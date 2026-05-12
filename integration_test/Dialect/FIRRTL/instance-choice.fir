@@ -23,7 +23,7 @@
 ; RUN: not verilator %driver %t/top.sv %t/ASICTarget.sv %t/FPGATarget.sv %t/DefaultTarget.sv --cc --sv --exe --build -o %t.error.exe --top-module top 2>&1 | FileCheck %s --check-prefix=ERROR
 ; ERROR: Required instance choice option 'Platform' not selected, must define one of: 'targets$Platform$ASIC', 'targets$Platform$FPGA'
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit top:
   option Platform:
     FPGA
