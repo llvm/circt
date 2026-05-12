@@ -646,7 +646,7 @@ def Mux4PadSel : Pat<
   [(IntTypeWidthLTX<2> $cond)]>;
 
 
-// mux2(cond, 0, 1) -> ~cond
+// mux2cell(cond, 0, 1) -> not(cond)
 def Mux2Not : Pat<
   (Mux2CellIntrinsicOp:$old $cond, (ConstantOp:$zcst $_),
    (ConstantOp:$ocst $_)),
@@ -655,7 +655,7 @@ def Mux2Not : Pat<
     (ZeroConstantOp $zcst), (OneConstantOp $ocst)
   ]>;
 
-// mux4(cond, 0, 1, 0, 1) -> ~cond
+// mux4cell(cond, 0, 1, 0, 1) -> not(cond)
 def Mux4Not : Pat<
   (Mux4CellIntrinsicOp:$old $cond, (ConstantOp:$cst0 $_),
    (ConstantOp:$cst1 $_), (ConstantOp:$cst0b $_), (ConstantOp:$cst1b $_)),
