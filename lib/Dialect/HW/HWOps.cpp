@@ -17,6 +17,8 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
+#include "circt/Dialect/LTL/LTLTypes.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/Naming.h"
@@ -365,19 +367,106 @@ static bool hasAdditionalAttributes(Op op,
 void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   // If the wire has an optional 'name' attribute, use it.
   auto nameAttr = (*this)->getAttrOfType<StringAttr>("name");
-  if (nameAttr && !nameAttr.getValue().empty())
+  if (nameAttr && !nameAttr.getValue().empty()) {
     setNameFn(getResult(), nameAttr.getValue());
+    // If forceable, name the reference result
+    if (isForceable())
+      setNameFn(getRef(), (nameAttr.getValue() + "_ref").str());
+  }
 }
 
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
-OpFoldResult WireOp::fold(FoldAdaptor adaptor) {
-  // If the wire has no additional attributes, no name, and no symbol, just
-  // forward its input.
+ParseResult WireOp::parse(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand input;
+  Type inputType;
+  InnerSymAttr innerSym;
+  StringAttr nameAttr;
+
+  // Parse optional 'forceable' keyword
+  bool forceable = succeeded(parser.parseOptionalKeyword("forceable"));
+
+  // Parse the input operand
+  if (parser.parseOperand(input))
+    return failure();
+
+  // Parse optional 'sym' attribute
+  if (succeeded(parser.parseOptionalKeyword("sym"))) {
+    if (parser.parseCustomAttributeWithFallback(innerSym))
+      return failure();
+  }
+
+  // Parse optional name using custom directive
+  if (parseImplicitSSAName(parser, nameAttr))
+    return failure();
+
+  // Parse optional attributes
+  if (parser.parseOptionalAttrDict(result.attributes))
+    return failure();
+
+  // Parse ':' and result types
+  if (parser.parseColon() || parser.parseType(inputType))
+    return failure();
+
+  // Resolve the input operand
+  if (parser.resolveOperand(input, inputType, result.operands))
+    return failure();
+
+  // Add attributes
+  if (innerSym)
+    result.addAttribute("inner_sym", innerSym);
+  if (nameAttr)
+    result.addAttribute("name", nameAttr);
+  if (forceable)
+    result.addAttribute("forceable", parser.getBuilder().getUnitAttr());
+
+  // Add result types
+  result.addTypes(inputType);
+  if (forceable) {
+    auto refType = sim::RefType::get(inputType, true);
+    result.addTypes(refType);
+  }
+
+  return success();
+}
+
+void WireOp::print(OpAsmPrinter &p) {
+  // Print forceable keyword if present
+  if (getForceable())
+    p << " forceable";
+
+  p << " " << getInput();
+
+  // Print symbol if present
+  if (auto sym = getInnerSymAttr()) {
+    p << " sym ";
+    sym.print(p);
+  }
+
+  // Print name using custom directive
+  printImplicitSSAName(p, *this, getNameAttr());
+
+  // Print attributes, eliding 'forceable', 'name', and 'inner_sym' since
+  // they're printed separately
+  SmallVector<StringRef> elidedAttrs;
+  elidedAttrs.push_back("forceable");
+  elidedAttrs.push_back("name");
+  elidedAttrs.push_back("inner_sym");
+  p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
+
+  p << " : " << getInput().getType();
+}
+
+LogicalResult WireOp::fold(FoldAdaptor adaptor,
+                           SmallVectorImpl<OpFoldResult> &results) {
+  // If the wire has no additional attributes, no name, no symbol, and is not
+  // forceable, just forward its input.
   if (!hasAdditionalAttributes(*this, {"sv.namehint"}) && !getNameAttr() &&
-      !getInnerSymAttr())
-    return getInput();
-  return {};
+      !getInnerSymAttr() && !getForceable()) {
+    results.push_back(getInput());
+    return success();
+  }
+  return failure();
 }
 
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
@@ -393,6 +482,14 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
   if (wire.getInput() == wire.getResult())
     return failure();
 
+  // Don't canonicalize LTL-typed wires - they need special handling during
+  // lowering and should be removed by the lowering pass itself.
+  auto resultType = wire.getResult().getType();
+  auto inputType = wire.getInput().getType();
+  if (isa<ltl::SequenceType, ltl::PropertyType>(resultType) ||
+      isa<ltl::SequenceType, ltl::PropertyType>(inputType))
+    return failure();
+
   // If the wire has a name or an `sv.namehint` attribute, propagate it as an
   // `sv.namehint` to the expression.
   if (auto *inputOp = wire.getInput().getDefiningOp())
@@ -400,7 +497,9 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
       rewriter.modifyOpInPlace(inputOp,
                                [&] { inputOp->setAttr("sv.namehint", name); });
 
-  rewriter.replaceOp(wire, wire.getInput());
+  // Replace all uses of the wire's result with its input
+  wire.getResult().replaceAllUsesWith(wire.getInput());
+  rewriter.eraseOp(wire);
   return success();
 }
 

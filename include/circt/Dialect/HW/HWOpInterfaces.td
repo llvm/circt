@@ -656,4 +656,44 @@ def CombDataflow : OpInterface<"CombDataFlow"> {
   ];
 }
 
+def HWForceable : OpInterface<"HWForceable"> {
+  let cppNamespace = "circt::hw";
+  let description = [{
+    Interaction with declarations of forceable hardware components,
+    and managing references to them. This allows operations like wires
+    to optionally produce a reference result that can be used for
+    force/release operations.
+  }];
+
+  let methods = [
+    InterfaceMethod<"Return true if the operation is forceable.",
+    "bool", "isForceable", (ins), [{}], /*defaultImplementation=*/[{
+      return $_op.getForceable();
+    }]>,
+    InterfaceMethod<"Return data value that will be targeted.",
+    "mlir::TypedValue<mlir::Type>", "getData", (ins), [{}], /*defaultImplementation=*/[{
+      return llvm::cast<mlir::TypedValue<mlir::Type>>($_op.getDataRaw());
+    }]>,
+    InterfaceMethod<"Return raw data value that will be targeted.",
+    "Value", "getDataRaw", (ins), [{}], /*defaultImplementation=*/[{
+      return $_op.getResult();
+    }]>,
+    InterfaceMethod<"Return data type that will be referenced.",
+    "Type", "getDataType", (ins), [{}], /*defaultImplementation=*/[{
+      return $_op.getDataRaw().getType();
+    }]>,
+    InterfaceMethod<"Return reference result, or null if not active.",
+    "mlir::TypedValue<::circt::sim::RefType>", "getDataRef", (ins), [{}], /*defaultImplementation=*/[{
+      return llvm::cast_or_null<mlir::TypedValue<::circt::sim::RefType>>($_op.getRef());
+    }]>,
+  ];
+  let extraClassDeclaration = [{
+    /// Attribute name for 'forceable' tracking.
+    static StringRef getForceableAttrName() { return "forceable"; }
+  }];
+  let verify = [{
+    return detail::verifyHWForceableOp(cast<::circt::hw::HWForceable>($_op));
+  }];
+}
+
 #endif

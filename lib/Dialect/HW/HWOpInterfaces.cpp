@@ -13,6 +13,7 @@
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -179,5 +180,44 @@ raw_ostream &circt::hw::operator<<(raw_ostream &printer, PortInfo port) {
           << ", args " << port.attrs << ")";
   return printer;
 }
+
+namespace circt {
+namespace hw {
+namespace detail {
+
+LogicalResult verifyHWForceableOp(HWForceable op) {
+  // Verify that ref result exists iff forceable attribute is set
+  bool hasForceable = op.isForceable();
+  bool hasRef = op.getOperation()->getNumResults() > 1;
+
+  if (hasForceable && !hasRef)
+    return op->emitOpError("is marked forceable but has no reference result");
+
+  if (!hasForceable && hasRef)
+    return op->emitOpError("has reference result but is not marked forceable");
+
+  // If forceable, verify that the ref type matches the data type
+  if (hasForceable) {
+    auto dataType = op.getDataType();
+    auto refType = op.getDataRef().getType();
+
+    // RefType should wrap the data type
+    if (refType.getType() != dataType)
+      return op->emitOpError(
+                 "reference type must match data type, got ref type ")
+             << refType << " for data type " << dataType;
+
+    // Check if it's forceable (rwprobe)
+    if (!refType.getForceable())
+      return op->emitOpError(
+          "forceable operation must produce an rwprobe reference");
+  }
+
+  return success();
+}
+
+} // namespace detail
+} // namespace hw
+} // namespace circt
 
 #include "circt/Dialect/HW/HWOpInterfaces.cpp.inc"

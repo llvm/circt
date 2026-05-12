@@ -3676,7 +3676,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(wire, svAttrs);
 
-  return setLowering(op.getResult(), wire);
+  return setLowering(op.getResult(), wire.getResult());
 }
 
 LogicalResult FIRRTLLowering::visitDecl(VerbatimWireOp op) {
@@ -3721,12 +3721,12 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   auto innerSym = lowerInnerSymbol(op);
 
   if (innerSym)
-    operand = hw::WireOp::create(builder, operand, name, innerSym);
+    operand = hw::WireOp::create(builder, operand, name, innerSym).getResult();
 
   // Move SV attributes.
   if (auto svAttrs = sv::getSVAttributes(op)) {
     if (!innerSym)
-      operand = hw::WireOp::create(builder, operand, name);
+      operand = hw::WireOp::create(builder, operand, name).getResult();
     sv::setSVAttributes(operand.getDefiningOp(), svAttrs);
   }
 
@@ -4999,7 +4999,7 @@ Value FIRRTLLowering::createValueWithMuxAnnotation(Operation *op, bool isMux2) {
           [&]() -> hw::InnerSymbolNamespace & { return moduleNamespace; });
       auto wire =
           hw::WireOp::create(builder, operand, namehint + Twine(idx), innerSym);
-      op->setOperand(idx, wire);
+      op->setOperand(idx, wire.getResult());
     }
   }
 
@@ -6024,8 +6024,9 @@ LogicalResult FIRRTLLowering::fixupLTLOps() {
 
     // Remove LTL-typed wires.
     if (auto wireOp = dyn_cast<hw::WireOp>(op)) {
-      if (isa<ltl::SequenceType, ltl::PropertyType>(wireOp.getType())) {
-        wireOp.replaceAllUsesWith(wireOp.getInput());
+      if (isa<ltl::SequenceType, ltl::PropertyType>(
+              wireOp.getResult().getType())) {
+        wireOp.getResult().replaceAllUsesWith(wireOp.getInput());
         LLVM_DEBUG(llvm::dbgs() << "- Remove " << wireOp << "\n");
         if (wireOp.use_empty())
           wireOp.erase();

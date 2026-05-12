@@ -17,6 +17,7 @@
 #include "circt/Dialect/HW/HWInstanceImplementation.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/FieldRef.h"
 #include "circt/Support/InstanceGraphInterface.h"
 #include "circt/Support/LLVM.h"
@@ -49,8 +50,11 @@ verifyInnerSymAttr(InnerSymAttr innerSym,
   return verifyInnerSymAttr(innerSym, {}, emitError);
 }
 
+class HWForceable;
+
 namespace detail {
 LogicalResult verifyInnerRefNamespace(Operation *op);
+LogicalResult verifyHWForceableOp(HWForceable op);
 } // namespace detail
 
 /// Classify operations that are InnerRefNamespace-like,

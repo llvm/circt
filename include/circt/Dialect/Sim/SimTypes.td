@@ -15,6 +15,17 @@ include "mlir/IR/OpBase.td"
 
 class SimTypeDef<string name> : TypeDef<SimDialect, name> { }
 
+// Helper class to define sim dialect type constraints
+class SimDialectType<Pred pred, string summary, string cpp, string desc = "">
+  : DialectType<SimDialect, pred, summary, cpp> {
+  let description = desc;
+}
+
+// Helper class to define sim types
+class SimDialectTypeHelper<string typeName, string summary, string desc = "">
+  : SimDialectType<CPred<"isa<" # typeName # ">($_self)">, summary,
+                   "::circt::sim::" # typeName, desc>;
+
 def FormatStringType : SimTypeDef<"FormatString"> {
   let mnemonic = "fstring";
 
@@ -123,5 +134,51 @@ def OutputStreamType : SimTypeDef<"OutputStream"> {
 
   let mnemonic = "output_stream";
 }
+
+def RefType : SimTypeDef<"Ref"> {
+  let summary = "A reference to a signal elsewhere";
+  let description = [{
+    A reference type, such as `sim.probe<i32>` or `sim.rwprobe<i8>`.
+
+    Used for remote reads and writes of the wrapped type.
+
+    Parameterized over the referenced type.
+
+    Values of this type are used to capture dataflow paths,
+    and do not represent a circuit element or entity.
+
+    Generally read-only (probe), optionally forceable (rwprobe).
+  }];
+
+  let mnemonic = "ref";
+  let parameters = (ins TypeParameter<"::mlir::Type",
+                                      "Type of reference target">:$type,
+                        "bool":$forceable);
+  let genAccessors = true;
+  let genStorageClass = true;
+  let genVerifyDecl = true;
+
+  let skipDefaultBuilders = true;
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Type":$type,
+                                        CArg<"bool", "false">:$forceable), [{
+      return $_get(type.getContext(), type, forceable);
+    }]>
+  ];
+
+  let assemblyFormat = "`<` $type `,` $forceable `>`";
+}
+
+//===----------------------------------------------------------------------===//
+// Type Helpers
+//===----------------------------------------------------------------------===//
+
+def SimRefType : DialectType<SimDialect,
+  CPred<"isa<::circt::sim::RefType>($_self)">,
+  "reference type", "::circt::sim::RefType">;
+
+def RWProbe : SimDialectType<
+  CPred<"isa<RefType>($_self) && cast<RefType>($_self).getForceable()">,
+   "rwprobe type", "::circt::sim::RefType">;
 
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD
