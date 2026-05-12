@@ -1903,10 +1903,10 @@ OpFoldResult Mux4CellIntrinsicOp::fold(FoldAdaptor adaptor) {
   }
 
   // mux4 with all constant operands
-  auto vVals = {adaptor.getV0(), adaptor.getV1(), adaptor.getV2(),
+  auto foldedVals = {adaptor.getV0(), adaptor.getV1(), adaptor.getV2(),
                 adaptor.getV3()};
   SmallVector<APInt> constants;
-  for (auto v : vVals) {
+  for (auto v : foldedVals) {
     if (auto c = getConstant(v)) {
       constants.push_back(*c);
     } else {
