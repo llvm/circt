@@ -37,6 +37,8 @@
 #include "circt-c/ExportLLVM.h"
 #include "circt-c/ExportVerilog.h"
 #include "mlir-c/Bindings/Python/Interop.h"
+#include "mlir-c/Dialect/ControlFlow.h"
+#include "mlir-c/Dialect/Func.h"
 #include "mlir-c/Dialect/Index.h"
 #include "mlir-c/Dialect/LLVM.h"
 #include "mlir-c/Dialect/SCF.h"
@@ -126,13 +128,22 @@ NB_MODULE(_circt, m) {
 
         MlirDialectHandle llvm = mlirGetDialectHandle__llvm__();
         mlirDialectHandleRegisterDialect(llvm, context);
-        // We don't load the LLVM dialect here since it doesn't load all of its
-        // promised interfaces. If you need to load it, you can do so by calling
-        // `Context().load_all_available_dialects()` in Python.
+        // We don't load the LLVM, cf, or func dialects here since they don't
+        // load all of their promised interfaces. If you need to load them, you
+        // can do so by calling `Context().load_all_available_dialects()` in
+        // Python.
 
         MlirDialectHandle scf = mlirGetDialectHandle__scf__();
         mlirDialectHandleRegisterDialect(scf, context);
         mlirDialectHandleLoadDialect(scf, context);
+
+        MlirDialectHandle cf = mlirGetDialectHandle__cf__();
+        mlirDialectHandleRegisterDialect(cf, context);
+        // no eager-load
+
+        MlirDialectHandle func = mlirGetDialectHandle__func__();
+        mlirDialectHandleRegisterDialect(func, context);
+        // no eager-load
 
         MlirDialectHandle om = mlirGetDialectHandle__om__();
         mlirDialectHandleRegisterDialect(om, context);
