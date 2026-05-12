@@ -181,6 +181,25 @@ static Value visitClassProperty(Context &context,
   return fieldRef;
 }
 
+/// Ensures that the given range is in "descending" order.
+///
+/// `type` must have a fixed range. If the range is defined such that
+/// left < right, the range is reversed.
+///
+/// For example:
+///   [3:0] => do not reverse
+///   [0:3] => reverse
+///
+/// The resulting range is suitable for passing to an ArrayCreateOp which expects
+/// operands to be in descending order of significance.
+template <typename RangeT>
+static void ensureDescendingOrder(RangeT& range, const slang::ast::Type& type) {
+  assert(type.hasFixedRange());
+  const slang::ConstantRange& cstRange = type.getFixedRange();
+  if (cstRange.left < cstRange.right)
+    std::reverse(std::begin(range), std::end(range));
+}
+
 namespace {
 /// A visitor handling expressions that can be lowered as lvalue and rvalue.
 struct ExprVisitor {
@@ -2141,6 +2160,7 @@ struct RvalueExprVisitor : public ExprVisitor {
         return {};
 
       assert(intType.getWidth() == elements->size());
+      ensureDescendingOrder(*elements, *expr.type);
       std::reverse(elements->begin(), elements->end());
       return moore::ConcatOp::create(builder, loc, intType, *elements);
     }
@@ -2194,6 +2214,7 @@ struct RvalueExprVisitor : public ExprVisitor {
       if (failed(elements))
         return {};
 
+      ensureDescendingOrder(*elements, *expr.type);
       assert(arrayType.getSize() == elements->size());
       return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
     }
@@ -2206,6 +2227,7 @@ struct RvalueExprVisitor : public ExprVisitor {
       if (failed(elements))
         return {};
 
+      ensureDescendingOrder(*elements, *expr.type);
       assert(arrayType.getSize() == elements->size());
       return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
     }
@@ -2756,6 +2778,7 @@ Value Context::materializeFixedSizeUnpackedArrayType(
 
   // Take the result of each ConstantOp and concatenate them into an array (of
   // constant values).
+  ensureDescendingOrder(elemVals, astType);
   auto arrayOp = moore::ArrayCreateOp::create(builder, loc, arrType, elemVals);
 
   return arrayOp.getResult();
