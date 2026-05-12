@@ -31,15 +31,18 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Sim/SimTransforms.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/Path.h"
@@ -1755,6 +1758,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Backedge createBackedge(Location loc, Type type);
   Backedge createBackedge(Value orig, Type type);
   bool updateIfBackedge(Value dest, Value src);
+  FailureOr<Value> resolveBackedge(Value root);
 
   /// Returns true if the lowered operation requires an inner symbol on it.
   bool requiresInnerSymbol(hw::InnerSymbolOpInterface op) {
@@ -2042,6 +2046,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitPrintfLike(T op,
                                 const FileDescriptorInfo &fileDescriptorInfo,
                                 bool usePrintfCond);
+  LogicalResult flushProceduralizedPrints();
   LogicalResult visitStmt(PrintFOp op);
   LogicalResult visitStmt(FPrintFOp op);
   LogicalResult visitStmt(FFlushOp op);
@@ -2151,6 +2156,11 @@ private:
   /// parent operation has handled the region, blocks, and block arguments.
   SmallVector<std::pair<Block::iterator, Block::iterator>> worklist;
 
+  /// Lower-to-core print requests preserved in IR order until the end of the
+  /// lowering, where they are regrouped by their resolved clocks.
+  SmallVector<std::pair<Value, sim::PrintProceduralizationRequest>, 2>
+      pendingPrintRequests;
+
   void addToWorklist(Block &block) {
     worklist.push_back({block.begin(), block.end()});
   }
@@ -2236,41 +2246,26 @@ LogicalResult FIRRTLLowering::run() {
     }
   }
 
+  if (failed(flushProceduralizedPrints())) {
+    backedgeBuilder.abandon();
+    return failure();
+  }
+
   // Replace all backedges with uses of their regular values.  We process them
   // after the module body since the lowering table is too hard to keep up to
   // date.  Multiple operations may be lowered to the same backedge when values
   // are folded, which means we would have to scan the entire lowering table to
   // safely replace a backedge.
-  for (auto &[backedge, value] : backedges) {
-    SmallVector<Location> driverLocs;
-    // In the case where we have backedges connected to other backedges, we have
-    // to find the value that actually drives the group.
-    while (true) {
-      // If we find the original backedge we have some undriven logic or
-      // a combinatorial loop. Bail out and provide information on the nodes.
-      if (backedge == value) {
-        Location edgeLoc = backedge.getLoc();
-        if (driverLocs.empty()) {
-          mlir::emitError(edgeLoc, "sink does not have a driver");
-        } else {
-          auto diag = mlir::emitError(edgeLoc, "sink in combinational loop");
-          for (auto loc : driverLocs)
-            diag.attachNote(loc) << "through driver here";
-        }
-        backedgeBuilder.abandon();
-        return failure();
-      }
-      // If the value is not another backedge, we have found the driver.
-      auto *it = backedges.find(value);
-      if (it == backedges.end())
-        break;
-      // Find what is driving the next backedge.
-      driverLocs.push_back(value.getLoc());
-      value = it->second;
+  for (auto &[backedge, ignored] : backedges) {
+    (void)ignored;
+    auto resolvedValue = resolveBackedge(backedge);
+    if (failed(resolvedValue)) {
+      backedgeBuilder.abandon();
+      return failure();
     }
     if (auto *defOp = backedge.getDefiningOp())
       maybeUnusedValues.erase(defOp);
-    backedge.replaceAllUsesWith(value);
+    backedge.replaceAllUsesWith(*resolvedValue);
   }
 
   // Now that all of the operations that can be lowered are, remove th
@@ -3146,6 +3141,38 @@ bool FIRRTLLowering::updateIfBackedge(Value dest, Value src) {
   return true;
 }
 
+FailureOr<Value> FIRRTLLowering::resolveBackedge(Value root) {
+  if (!root)
+    return root;
+
+  DenseSet<Value> visited;
+  SmallVector<Location> driverLocs;
+  Value current = root;
+  while (true) {
+    auto *it = backedges.find(current);
+    if (it == backedges.end())
+      return current;
+
+    Value next = it->second;
+    if (next == current) {
+      auto diag = mlir::emitError(root.getLoc(), "sink does not have a driver");
+      for (auto loc : driverLocs)
+        diag.attachNote(loc) << "through driver here";
+      return failure();
+    }
+
+    if (next == root || !visited.insert(next).second) {
+      auto diag = mlir::emitError(root.getLoc(), "sink in combinational loop");
+      for (auto loc : driverLocs)
+        diag.attachNote(loc) << "through driver here";
+      return failure();
+    }
+
+    driverLocs.push_back(next.getLoc());
+    current = next;
+  }
+}
+
 /// Switch the insertion point of the current builder to the end of the
 /// specified block and run the closure.  This correctly handles the case
 /// where the closure is null, but the caller needs to make sure the block
@@ -3937,6 +3964,25 @@ LogicalResult FIRRTLLowering::visitDecl(MemOp op) {
     }
   }
 
+  return success();
+}
+
+LogicalResult FIRRTLLowering::flushProceduralizedPrints() {
+  SmallMapVector<Value, SmallVector<sim::PrintProceduralizationRequest>, 2>
+      printRequestMap;
+  for (auto &[clock, request] : pendingPrintRequests) {
+    auto resolvedClock = resolveBackedge(clock);
+    if (failed(resolvedClock))
+      return failure();
+    printRequestMap[*resolvedClock].push_back(request);
+  }
+
+  for (auto &[clock, requests] : printRequestMap) {
+    OpBuilder printBuilder(requests.back().anchorOp);
+    if (failed(sim::proceduralizePrintsForClock(printBuilder, clock, requests)))
+      return failure();
+  }
+  pendingPrintRequests.clear();
   return success();
 }
 
@@ -5457,7 +5503,8 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   if (failed(formatString))
     return failure();
 
-  sim::PrintFormattedOp::create(builder, *formatString, clock, cond);
+  pendingPrintRequests.push_back(
+      {clock, {op.getLoc(), *formatString, cond, Value(), op, nullptr}});
   return success();
 }
 

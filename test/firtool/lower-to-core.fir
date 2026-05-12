@@ -12,12 +12,16 @@ circuit LowerToCore:
     printf(clock, enable, "value=%d\n", x)
 
 ; CHECK-LABEL: hw.module @LowerToCore
-; CHECK-DAG: [[NL:%.+]] = sim.fmt.literal "\0A"
-; CHECK-DAG: [[LIT:%.+]] = sim.fmt.literal "value="
 ; CHECK-DAG: [[CLK:%.+]] = seq.from_clock %clock
 ; CHECK-DAG: verif.clocked_assert %pred if %enable, posedge [[CLK]] : i1
-; CHECK-DAG: [[FMT:%.+]] = sim.fmt.dec %x signed : i4
+; CHECK: hw.triggered posedge [[CLK]](%enable, %x) : i1, i4 {
+; CHECK-NEXT: ^bb0(%[[EN:.*]]: i1, %[[XARG:.*]]: i4):
+; CHECK: [[NL:%.+]] = sim.fmt.literal "\0A"
+; CHECK: [[LIT:%.+]] = sim.fmt.literal "value="
+; CHECK: [[FMT:%.+]] = sim.fmt.dec %[[XARG]] signed : i4
 ; CHECK: [[MSG:%.+]] = sim.fmt.concat ([[LIT]], [[FMT]], [[NL]])
-; CHECK: sim.print [[MSG]] on %clock if %enable
+; CHECK: scf.if %[[EN]] {
+; CHECK-NEXT: sim.proc.print [[MSG]]
+; CHECK-NOT: sim.print
 ; CHECK-NOT: sv.assert
 ; CHECK-NOT: sv.fwrite
