@@ -141,33 +141,20 @@ func.func @ClockedDelayFolds(%arg0: !ltl.sequence, %arg1: i1, %clk: i1) {
   return
 }
 
-// CHECK-LABEL: @ClockedDelayIntoConcatFolds
-// CHECK-SAME: (%[[S0:.+]]: !ltl.sequence, %[[S1:.+]]: !ltl.sequence, %[[CLK:.+]]: i1)
-func.func @ClockedDelayIntoConcatFolds(%arg0: !ltl.sequence, %arg1: !ltl.sequence, %clk: i1) {
-  // clocked_delay(concat(s0, s1), posedge clk, N, M)
-  //   -> concat(clocked_delay(s0, posedge clk, N, M), s1)
-  // CHECK-NEXT: %[[DELAYED:.+]] = ltl.clocked_delay %[[S0]], posedge %[[CLK]], 2, 3 :
-  // CHECK-NEXT: %[[CONCAT:.+]] = ltl.concat %[[DELAYED]], %[[S1]] :
-  // CHECK-NEXT: call @Seq(%[[CONCAT]])
-  %0 = ltl.concat %arg0, %arg1 : !ltl.sequence, !ltl.sequence
-  %1 = ltl.clocked_delay %0, posedge %clk, 2, 3 : !ltl.sequence
-  call @Seq(%1) : (!ltl.sequence) -> ()
-  return
-}
-
 // CHECK-LABEL: @ConcatFolds
-func.func @ConcatFolds(%arg0: !ltl.sequence, %arg1: !ltl.sequence, %arg2: !ltl.sequence) {
+// CHECK-SAME: (%[[S0:.+]]: !ltl.sequence, %[[S1:.+]]: !ltl.sequence, %[[S2:.+]]: !ltl.sequence, %[[CLK:.+]]: i1)
+func.func @ConcatFolds(%arg0: !ltl.sequence, %arg1: !ltl.sequence, %arg2: !ltl.sequence, %clk: i1) {
   // concat(s) -> s
-  // CHECK-NEXT: call @Seq(%arg0)
+  // CHECK-NEXT: call @Seq(%[[S0]])
   %0 = ltl.concat %arg0 : !ltl.sequence
   call @Seq(%0) : (!ltl.sequence) -> ()
 
   // concat(concat(s0, s1), s2) -> concat(s0, s1, s2)
   // concat(s0, concat(s1, s2)) -> concat(s0, s1, s2)
   // concat(concat(s0, s1), s2, s0, concat(s1, s2)) -> concat(s0, s1, s2, s0, s1, s2)
-  // CHECK-NEXT: ltl.concat %arg0, %arg1, %arg2 :
-  // CHECK-NEXT: ltl.concat %arg0, %arg1, %arg2 :
-  // CHECK-NEXT: ltl.concat %arg0, %arg1, %arg2, %arg0, %arg1, %arg2 :
+  // CHECK-NEXT: ltl.concat %[[S0]], %[[S1]], %[[S2]] :
+  // CHECK-NEXT: ltl.concat %[[S0]], %[[S1]], %[[S2]] :
+  // CHECK-NEXT: ltl.concat %[[S0]], %[[S1]], %[[S2]], %[[S0]], %[[S1]], %[[S2]] :
   // CHECK-NEXT: call
   // CHECK-NEXT: call
   // CHECK-NEXT: call
@@ -181,12 +168,21 @@ func.func @ConcatFolds(%arg0: !ltl.sequence, %arg1: !ltl.sequence, %arg2: !ltl.s
   call @Seq(%5) : (!ltl.sequence) -> ()
 
   // delay(concat(s0, s1), N, M) -> concat(delay(s0, N, M), s1)
-  // CHECK-NEXT: [[TMP:%.+]] = ltl.delay %arg0, 2, 3 :
-  // CHECK-NEXT: ltl.concat [[TMP]], %arg1 :
+  // CHECK-NEXT: [[TMP:%.+]] = ltl.delay %[[S0]], 2, 3 :
+  // CHECK-NEXT: ltl.concat [[TMP]], %[[S1]] :
   // CHECK-NEXT: call
   %6 = ltl.concat %arg0, %arg1 : !ltl.sequence, !ltl.sequence
   %7 = ltl.delay %6, 2, 3 : !ltl.sequence
   call @Seq(%7) : (!ltl.sequence) -> ()
+
+  // clocked_delay(concat(s0, s1), posedge clk, N, M)
+  //   -> concat(clocked_delay(s0, posedge clk, N, M), s1)
+  // CHECK-NEXT: %[[DELAYED:.+]] = ltl.clocked_delay %[[S0]], posedge %[[CLK]], 2, 3 :
+  // CHECK-NEXT: %[[CONCAT:.+]] = ltl.concat %[[DELAYED]], %[[S1]] :
+  // CHECK-NEXT: call @Seq(%[[CONCAT]])
+  %8 = ltl.concat %arg0, %arg1 : !ltl.sequence, !ltl.sequence
+  %9 = ltl.clocked_delay %8, posedge %clk, 2, 3 : !ltl.sequence
+  call @Seq(%9) : (!ltl.sequence) -> ()
   return
 }
 
