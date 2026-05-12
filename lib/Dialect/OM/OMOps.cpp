@@ -359,9 +359,10 @@ LogicalResult circt::om::ClassOp::verifyRegions() {
     if (!fieldNameAttr)
       return this->emitOpError("field name is not a StringAttr");
 
-    if (auto fieldType = getClassLikeFieldType(*this, fieldNameAttr))
-      if (*fieldType == terminatorOperandType)
-        continue;
+    if (auto fieldType = types.get(fieldNameAttr))
+      if (auto typeAttr = dyn_cast<TypeAttr>(fieldType))
+        if (typeAttr.getValue() == terminatorOperandType)
+          continue;
 
     auto diag = this->emitOpError()
                 << "returns different field types than its terminator";
