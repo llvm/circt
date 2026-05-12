@@ -1295,6 +1295,18 @@ LogicalResult ModuleState::processOp(Operation *op) {
     processDomainDefinition(createAnon);
     return success();
   }
+  // Check that domain subfield operations access driven domains.
+  if (auto subfield = dyn_cast<DomainSubfieldOp>(op)) {
+    auto inputDomain = cast<DomainValue>(subfield.getInput());
+    auto *term = getOptTermForDomain(inputDomain);
+    // If the domain has no term, it was never driven.
+    if (!term) {
+      return subfield.emitOpError()
+             << "accesses an undriven domain; domain wires must be "
+                "driven before their subfields can be accessed";
+    }
+    return success();
+  }
 
   return unifyAssociations(op);
 }
