@@ -355,11 +355,11 @@ LogicalResult circt::om::ClassOp::verifyRegions() {
   for (auto [fieldName, terminatorOperandType] :
        llvm::zip(this->getFieldNames(), fieldsOp.getOperandTypes())) {
 
-    if (!llvm::isa_and_nonnull<StringAttr>(fieldName))
+    auto fieldNameAttr = dyn_cast_or_null<StringAttr>(fieldName);
+    if (!fieldNameAttr)
       return this->emitOpError("field name is not a StringAttr");
 
-    if (auto fieldType =
-            getClassLikeFieldType(*this, cast<StringAttr>(fieldName)))
+    if (auto fieldType = getClassLikeFieldType(*this, fieldNameAttr))
       if (*fieldType == terminatorOperandType)
         continue;
 
