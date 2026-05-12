@@ -277,9 +277,9 @@ std::optional<Type> getClassLikeFieldType(ClassLike classLike,
   DictionaryAttr fieldTypes = mlir::cast<DictionaryAttr>(
       classLike.getOperation()->getAttr("fieldTypes"));
   Attribute type = fieldTypes.get(name);
-  if (!type)
-    return std::nullopt;
-  return cast<TypeAttr>(type).getValue();
+  if (auto field = dyn_cast_or_null<TypeAttr>(type))
+    return field.getValue();
+  return std::nullopt;
 }
 
 void replaceClassLikeFieldTypes(ClassLike classLike,
@@ -336,7 +336,10 @@ void circt::om::ClassOp::print(OpAsmPrinter &printer) {
 LogicalResult circt::om::ClassOp::verify() { return verifyClassLike(*this); }
 
 LogicalResult circt::om::ClassOp::verifyRegions() {
-  auto fieldsOp = cast<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
+  auto fieldsOp =
+      dyn_cast_or_null<ClassFieldsOp>(this->getBodyBlock()->getTerminator());
+  if (!fieldsOp)
+    return this->emitOpError("expected terminator to be ClassFieldsOp");
 
   // The number of results matches the number of terminator operands.
   if (fieldsOp.getNumOperands() != this->getFieldNames().size()) {
@@ -352,9 +355,13 @@ LogicalResult circt::om::ClassOp::verifyRegions() {
   for (auto [fieldName, terminatorOperandType] :
        llvm::zip(this->getFieldNames(), fieldsOp.getOperandTypes())) {
 
-    if (terminatorOperandType ==
-        cast<TypeAttr>(types.get(cast<StringAttr>(fieldName))).getValue())
-      continue;
+    auto fieldNameAttr = dyn_cast_or_null<StringAttr>(fieldName);
+    if (!fieldNameAttr)
+      return this->emitOpError("field name is not a StringAttr");
+
+    if (auto fieldType = getClassLikeFieldType(*this, fieldNameAttr))
+      if (*fieldType == terminatorOperandType)
+        continue;
 
     auto diag = this->emitOpError()
                 << "returns different field types than its terminator";
