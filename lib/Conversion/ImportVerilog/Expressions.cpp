@@ -190,12 +190,12 @@ static Value visitClassProperty(Context &context,
 ///   [3:0] => do not reverse
 ///   [0:3] => reverse
 ///
-/// The resulting range is suitable for passing to an ArrayCreateOp which expects
-/// operands to be in descending order of significance.
+/// The resulting range is suitable for passing to an ArrayCreateOp which
+/// expects operands to be in descending order of significance.
 template <typename RangeT>
-static void ensureDescendingOrder(RangeT& range, const slang::ast::Type& type) {
+static void ensureDescendingOrder(RangeT &range, const slang::ast::Type &type) {
   assert(type.hasFixedRange());
-  const slang::ConstantRange& cstRange = type.getFixedRange();
+  const slang::ConstantRange &cstRange = type.getFixedRange();
   if (cstRange.left < cstRange.right)
     std::reverse(std::begin(range), std::end(range));
 }

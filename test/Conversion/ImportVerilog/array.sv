@@ -18,12 +18,11 @@
 // CHECK-LABEL: @array_get_dyn_packed
 // CHECK: %[[X:.*]] = moore.dyn_extract %arg0 from %idx
 // CHECK-NEXT: moore.output %[[X]]
-module array_get_dyn_packed(
-  input wire [3:0][15:0] arg0,
-  input wire [1:0]       idx,
-  output wire [15:0]	 elem
-);
-   assign elem = arg0[idx];
+module array_get_dyn_packed
+    (input wire [3 : 0][15 : 0] arg0,
+     input wire [1 : 0] idx,
+     output wire [15 : 0] elem);
+  assign elem = arg0[idx];
 endmodule
 
 // CHECK-LABEL: @array_get_dyn_packed_rev
@@ -31,12 +30,11 @@ endmodule
 // CHECK: %[[S:.*]] = moore.sub %[[C]], %idx
 // CHECK: %[[X:.*]] = moore.dyn_extract %arg0 from %[[S]]
 // CHECK-NEXT: moore.output %[[X]]
-module array_get_dyn_packed_rev(
-  input wire [0:3][15:0] arg0,
-  input wire [1:0]       idx,
-  output wire [15:0]	 elem
-);
-   assign elem = arg0[idx];
+module array_get_dyn_packed_rev
+    (input wire [0 : 3][15 : 0] arg0,
+     input wire [1 : 0] idx,
+     output wire [15 : 0] elem);
+  assign elem = arg0[idx];
 endmodule
 
 // CHECK-LABEL: @array_get_dyn_unpacked
@@ -44,127 +42,115 @@ endmodule
 // CHECK: %[[S:.*]] = moore.sub %[[C]], %idx
 // CHECK: %[[X:.*]] = moore.dyn_extract %arg0 from %[[S]]
 // CHECK-NEXT: moore.output %[[X]]
-module array_get_dyn_unpacked(
-  input wire [15:0] arg0 [4],
-  input wire [1:0]       idx,
-  output wire [15:0]	 elem
-);
-   assign elem = arg0[idx];
+module array_get_dyn_unpacked
+    (input wire [15 : 0] arg0[4],
+     input wire [1 : 0] idx,
+     output wire [15 : 0] elem);
+  assign elem = arg0[idx];
 endmodule
 
 // CHECK-LABEL: @array_get_dyn_unpacked_rev
 // CHECK: %[[X:.*]] = moore.dyn_extract %arg0 from %idx
 // CHECK-NEXT: moore.output %[[X]]
-module array_get_dyn_unpacked_rev(
-  input wire [15:0] arg0 [3:0],
-  input wire [1:0]       idx,
-  output wire [15:0]	 elem
-);
-   assign elem = arg0[idx];
+module array_get_dyn_unpacked_rev
+    (input wire [15 : 0] arg0[3 : 0],
+     input wire [1 : 0] idx,
+     output wire [15 : 0] elem);
+  assign elem = arg0[idx];
 endmodule
 
 // CHECK-LABEL: @array_get_static_packed
 // CHECK: %[[X:.*]] = moore.extract %arg0 from 1
 // CHECK-NEXT: moore.output %[[X]]
-module array_get_static_packed(
-  input wire [3:0][15:0] arg0,
-  output wire [15:0]	 elem
-);
-   assign elem = arg0[1];
+module array_get_static_packed
+    (input wire [3 : 0][15 : 0] arg0,
+     output wire [15 : 0] elem);
+  assign elem = arg0[1];
 endmodule
 
 // CHECK-LABEL: @array_get_static_packed_rev
 // CHECK: %[[X:.*]] = moore.extract %arg0 from 2
 // CHECK-NEXT: moore.output %[[X]]
-module array_get_static_packed_rev(
-  input wire [0:3][15:0] arg0,
-  output wire [15:0]	 elem
-);
-   assign elem = arg0[1];
+module array_get_static_packed_rev
+    (input wire [0 : 3][15 : 0] arg0,
+     output wire [15 : 0] elem);
+  assign elem = arg0[1];
 endmodule
 
 // CHECK-LABEL: @array_get_static_unpacked
 // CHECK: %[[X:.*]] = moore.extract %arg0 from 2
 // CHECK-NEXT: moore.output %[[X]]
-module array_get_static_unpacked(
-  input wire [15:0] arg0 [4],
-  output wire [15:0]	 elem
-);
-   assign elem = arg0[1];
+module array_get_static_unpacked
+    (input wire [15 : 0] arg0[4],
+     output wire [15 : 0] elem);
+  assign elem = arg0[1];
 endmodule
 
 // CHECK-LABEL: @array_get_static_unpacked_rev
 // CHECK: %[[X:.*]] = moore.extract %arg0 from 1
 // CHECK-NEXT: moore.output %[[X]]
-module array_get_static_unpacked_rev(
-  input wire [15:0] arg0 [3:0],
-  output wire [15:0]	 elem
-);
-   assign elem = arg0[1];
+module array_get_static_unpacked_rev
+    (input wire [15 : 0] arg0[3 : 0],
+     output wire [15 : 0] elem);
+  assign elem = arg0[1];
 endmodule
 
 // CHECK-LABEL: @array_get_static_unpacked_rev
 // CHECK: %[[X:.*]] = moore.extract %arg0 from 2
-module array_get_static_unpacked_rev_rev(
-  input wire [15:0] arg0 [0:3],
-  output wire [15:0]	 elem
-);
-   assign elem = arg0[1];
+module array_get_static_unpacked_rev_rev
+    (input wire [15 : 0] arg0[0 : 3],
+     output wire [15 : 0] elem);
+  assign elem = arg0[1];
 endmodule
 
 // CHECK-LABEL: @array_slice_dyn_packed
 // CHECK: %[[X:.*]] = moore.dyn_extract %arg0 from %idx
 // CHECK-NEXT: moore.output %[[X]]
-module array_slice_dyn_packed(
-  input wire [7:0][15:0] arg0,
-  input wire [2:0]       idx,
-  output wire [3:0][15:0] slice
-);
-  assign slice = arg0[idx+:4];
+module array_slice_dyn_packed
+    (input wire [7 : 0][15 : 0] arg0,
+     input wire [2 : 0] idx,
+     output wire [3 : 0][15 : 0] slice);
+  assign slice = arg0[idx +: 4];
 endmodule
 
 // CHECK-LABEL: @array_slice_dyn_packed_rev
 // CHECK: %[[S:.*]] = moore.sub
 // CHECK: %[[X:.*]] = moore.dyn_extract %arg0 from %[[S]]
 // CHECK-NEXT: moore.output %[[X]]
-module array_slice_dyn_packed_rev(
-  input wire [0:7][15:0] arg0,
-  input wire [2:0]       idx,
-  output wire [3:0][15:0] slice
-);
-  assign slice = arg0[idx+:4];
+module array_slice_dyn_packed_rev
+    (input wire [0 : 7][15 : 0] arg0,
+     input wire [2 : 0] idx,
+     output wire [3 : 0][15 : 0] slice);
+  assign slice = arg0[idx +: 4];
 endmodule
 
 // CHECK-LABEL: @array_slice_dyn_unpacked
 // CHECK: %[[S:.*]] = moore.sub
 // CHECK: %[[X:.*]] = moore.dyn_extract %arg0 from %[[S]]
 // CHECK-NEXT: moore.output %[[X]]
-module array_slice_dyn_unpacked(
-  input wire [15:0] arg0 [8],
-  input wire [2:0]       idx,
-  output wire [15:0] slice [4]
-);
-  assign slice = arg0[idx+:4];
+module array_slice_dyn_unpacked
+    (input wire [15 : 0] arg0[8],
+     input wire [2 : 0] idx,
+     output wire [15 : 0] slice[4]);
+  assign slice = arg0[idx +: 4];
 endmodule
 
 // CHECK-LABEL: @array_slice_static_packed
 // CHECK: %[[X:.*]] = moore.extract %arg0 from 1
 // CHECK-NEXT: moore.output %[[X]]
-module array_slice_static_packed(
-  input wire [7:0][15:0] arg0,
-  output wire [3:0][15:0] slice
-);
-  assign slice = arg0[1+:4];
+module array_slice_static_packed
+    (input wire [7 : 0][15 : 0] arg0,
+     output wire [3 : 0][15 : 0] slice);
+  assign slice = arg0[1 +: 4];
 endmodule
 
 // CHECK-LABEL: @array_slice_static_unpacked
 // CHECK: %[[X:.*]] = moore.extract %arg0 from 3
 // CHECK-NEXT: moore.output %[[X]]
-module array_slice_static_unpacked(
-  input wire [15:0] arg0 [8],
-  output wire [15:0] slice [4]
-);
-  assign slice = arg0[1+:4];
+module array_slice_static_unpacked
+    (input wire [15 : 0] arg0[8],
+     output wire [15 : 0] slice[4]);
+  assign slice = arg0[1 +: 4];
 endmodule
 
 //===----------------------------------------------------------------------===//
@@ -181,37 +167,33 @@ endmodule
 
 // CHECK-LABEL: @array_assign_packed
 // CHECK: moore.array_create %d, %c, %b, %a
-module array_assign_packed(
-  input wire [15:0] a, b, c, d,
-  output wire [3:0][15:0] out
-);
+module array_assign_packed
+    (input wire [15 : 0] a, b, c, d,
+     output wire [3 : 0][15 : 0] out);
   assign out = '{d, c, b, a};
 endmodule
 
 // CHECK-LABEL: @array_assign_unpacked
 // CHECK: moore.array_create %a, %b, %c, %d
-module array_assign_unpacked(
-  input wire [15:0] a, b, c, d,
-  output wire [15:0] out [4]
-);
+module array_assign_unpacked
+    (input wire [15 : 0] a, b, c, d,
+     output wire [15 : 0] out[4]);
   assign out = '{d, c, b, a};
 endmodule
 
 // CHECK-LABEL: @array_assign_rev_packed
 // CHECK: moore.array_create %a, %b, %c, %d
-module array_assign_rev_packed(
-  input wire [15:0] a, b, c, d,
-  output wire [0:3][15:0] out
-);
+module array_assign_rev_packed
+    (input wire [15 : 0] a, b, c, d,
+     output wire [0 : 3][15 : 0] out);
   assign out = '{d, c, b, a};
 endmodule
 
 // CHECK-LABEL: @array_assign_rev_unpacked
 // CHECK: moore.array_create %d, %c, %b, %a
-module array_assign_rev_unpacked(
-  input wire [15:0] a, b, c, d,
-  output wire [15:0] out [3:0]
-);
+module array_assign_rev_unpacked
+    (input wire [15 : 0] a, b, c, d,
+     output wire [15 : 0] out[3 : 0]);
   assign out = '{d, c, b, a};
 endmodule
 
@@ -224,11 +206,10 @@ endmodule
 // CHECK-DAG: %[[X2:.*]] = moore.constant 12
 // CHECK-DAG: %[[X3:.*]] = moore.constant 13
 // CHECK: moore.array_create %[[X0]], %[[X1]], %[[X2]], %[[X3]]
-module array_assign_constant(
-  input wire [1:0] addr,
-  output wire [15:0] out
-);
-  localparam bit [15:0] kArr[4] = '{16'hD, 16'hC, 16'hB, 16'hA};
+module array_assign_constant
+    (input wire [1 : 0] addr,
+     output wire [15 : 0] out);
+  localparam bit [15 : 0] kArr[4] = '{16'hD, 16'hC, 16'hB, 16'hA};
 
   assign out = kArr[addr];
 endmodule
@@ -240,11 +221,10 @@ endmodule
 // CHECK-DAG: %[[X2:.*]] = moore.constant 12
 // CHECK-DAG: %[[X3:.*]] = moore.constant 13
 // CHECK: moore.array_create %[[X0]], %[[X1]], %[[X2]], %[[X3]]
-module array_assign_constant_explicit(
-  input wire [1:0] addr,
-  output wire [15:0] out
-);
-  localparam bit [15:0] kArr[0:3] = '{16'hD, 16'hC, 16'hB, 16'hA};
+module array_assign_constant_explicit
+    (input wire [1 : 0] addr,
+     output wire [15 : 0] out);
+  localparam bit [15 : 0] kArr[0 : 3] = '{16'hD, 16'hC, 16'hB, 16'hA};
 
   assign out = kArr[addr];
 endmodule
@@ -257,11 +237,10 @@ endmodule
 // CHECK-DAG: %[[X2:.*]] = moore.constant 12
 // CHECK-DAG: %[[X3:.*]] = moore.constant 13
 // CHECK: moore.array_create %[[X3]], %[[X2]], %[[X1]], %[[X0]]
-module array_assign_constant_explicit_rev(
-  input wire [1:0] addr,
-  output wire [15:0] out
-);
-  localparam bit [15:0] kArr[3:0] = '{16'hD, 16'hC, 16'hB, 16'hA};
+module array_assign_constant_explicit_rev
+    (input wire [1 : 0] addr,
+     output wire [15 : 0] out);
+  localparam bit [15 : 0] kArr[3 : 0] = '{16'hD, 16'hC, 16'hB, 16'hA};
 
   assign out = kArr[addr];
 endmodule
@@ -272,9 +251,8 @@ endmodule
 // CHECK-DAG: %[[X0:.*]] = moore.constant 0 :
 // CHECK-DAG: %[[X1:.*]] = moore.constant 1 :
 // CHECK: moore.concat %[[X1]], %[[X0]]
-module int_assign_constant(
-  output wire [1:0] out
-);
+module int_assign_constant
+    (output wire [1 : 0] out);
   assign out = '{0, 1};
 endmodule
 
@@ -282,9 +260,8 @@ endmodule
 // CHECK-DAG: %[[X0:.*]] = moore.constant 0 :
 // CHECK-DAG: %[[X1:.*]] = moore.constant 1 :
 // CHECK: moore.concat %[[X0]], %[[X1]]
-module int_assign_constant_rev(
-  output wire [0:1] out
-);
+module int_assign_constant_rev
+    (output wire [0 : 1] out);
   assign out = '{0, 1};
 endmodule
 
@@ -297,22 +274,18 @@ endmodule
 //  wire [2:0] a = {1, 2, 3}  // a[0] == 3
 //  wire [0:2] b = {1, 2, 3}  // b[0] == 3
 
-module array_concat_constant_packed(
-  output wire [2:0][3:0] out
-);
+module array_concat_constant_packed
+    (output wire [2 : 0][3 : 0] out);
   assign out = {4'd1, 4'd2, 4'd3};
 endmodule
 
-module array_concat_constant_packed_rev(
-  output wire [0:2][3:0] out
-);
+module array_concat_constant_packed_rev
+    (output wire [0 : 2][3 : 0] out);
   assign out = {4'd1, 4'd2, 4'd3};
 endmodule
-
 
 // Note that the standard says that this should not compile!
-module array_concat_constant_unpacked(
-  output wire [3:0] out [3]
-);
+module array_concat_constant_unpacked
+    (output wire [3 : 0] out[3]);
   assign out = {4'd1, 4'd2, 4'd3};
 endmodule
