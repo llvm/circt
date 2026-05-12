@@ -15,17 +15,6 @@ include "mlir/IR/OpBase.td"
 
 class SimTypeDef<string name> : TypeDef<SimDialect, name> { }
 
-// Helper class to define sim dialect type constraints
-class SimDialectType<Pred pred, string summary, string cpp, string desc = "">
-  : DialectType<SimDialect, pred, summary, cpp> {
-  let description = desc;
-}
-
-// Helper class to define sim types
-class SimDialectTypeHelper<string typeName, string summary, string desc = "">
-  : SimDialectType<CPred<"isa<" # typeName # ">($_self)">, summary,
-                   "::circt::sim::" # typeName, desc>;
-
 def FormatStringType : SimTypeDef<"FormatString"> {
   let mnemonic = "fstring";
 

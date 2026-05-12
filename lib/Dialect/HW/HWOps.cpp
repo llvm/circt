@@ -17,7 +17,6 @@
 #include "circt/Dialect/HW/HWSymCache.h"
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
-#include "circt/Dialect/LTL/LTLTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/Naming.h"
@@ -479,14 +478,6 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
   // If the wire is self-referential (its input is itself), we can't remove it.
   if (wire.getInput() == wire.getResult())
-    return failure();
-
-  // Don't canonicalize LTL-typed wires - they need special handling during
-  // lowering and should be removed by the lowering pass itself.
-  auto resultType = wire.getResult().getType();
-  auto inputType = wire.getInput().getType();
-  if (isa<ltl::SequenceType, ltl::PropertyType>(resultType) ||
-      isa<ltl::SequenceType, ltl::PropertyType>(inputType))
     return failure();
 
   // If the wire has a name or an `sv.namehint` attribute, propagate it as an
