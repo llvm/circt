@@ -85,6 +85,16 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   %d5 = ltl.delay %a, 1 : i1
   sv.assert_property %d5 : !ltl.sequence
 
+  // CHECK: assert property (@(posedge clk) ##4 a);
+  %cd0 = ltl.clocked_delay %a, posedge %clk, 4, 0 : i1
+  sv.assert_property %cd0 : !ltl.sequence
+  // CHECK: assert property (@(negedge clk) ##[5:6] a);
+  %cd1 = ltl.clocked_delay %a, negedge %clk, 5, 1 : i1
+  sv.assert_property %cd1 : !ltl.sequence
+  // CHECK: assert property (@(edge clk) ##[7:$] a);
+  %cd2 = ltl.clocked_delay %a, edge %clk, 7 : i1
+  sv.assert_property %cd2 : !ltl.sequence
+
   // CHECK: assert property (a ##0 a);
   %c0 = ltl.concat %a, %a : i1, i1
   sv.assert_property %c0 : !ltl.sequence
@@ -97,6 +107,10 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (##4 a ##[5:6] a ##[7:$] a);
   %c3 = ltl.concat %d1, %d2, %d3 : !ltl.sequence, !ltl.sequence, !ltl.sequence
   sv.assert_property %c3 : !ltl.sequence
+  // CHECK: assert property (a ##0 (@(posedge clk) ##4 b));
+  %cd3 = ltl.clocked_delay %b, posedge %clk, 4, 0 : i1
+  %c4 = ltl.concat %a, %cd3 : i1, !ltl.sequence
+  sv.assert_property %c4 : !ltl.sequence
 
   // CHECK: assert property (a and ##0 a);
   %g0 = ltl.and %a, %d0 : i1, !ltl.sequence
@@ -165,6 +179,9 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (b ##0 (@(posedge clk) a));
   %k4 = ltl.concat %b, %k0 : i1, !ltl.sequence
   sv.assert_property %k4 : !ltl.sequence
+  // CHECK: assert property (@(edge clk) @(posedge clk) ##4 b);
+  %k5 = ltl.clock %cd3, edge %clk : !ltl.sequence
+  sv.assert_property %k5 : !ltl.sequence
 }
 
 // CHECK-LABEL: module Properties
