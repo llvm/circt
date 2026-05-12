@@ -70,8 +70,10 @@ TEST(EvaluatorTests, InstantiateInvalidParamSize) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
   auto cls = ClassOp::create(builder, "MyClass", params);
-  cls.getBody().emplaceBlock().addArgument(
-      circt::om::OMIntegerType::get(&context), cls.getLoc());
+  auto &body = cls.getBody().emplaceBlock();
+  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
+  builder.setInsertionPointToStart(&body);
+  ClassFieldsOp::create(builder, loc, ValueRange{}, ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -103,8 +105,10 @@ TEST(EvaluatorTests, InstantiateNullParam) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
   auto cls = ClassOp::create(builder, "MyClass", params);
-  cls.getBody().emplaceBlock().addArgument(
-      circt::om::OMIntegerType::get(&context), cls.getLoc());
+  auto &body = cls.getBody().emplaceBlock();
+  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
+  builder.setInsertionPointToStart(&body);
+  ClassFieldsOp::create(builder, loc, ValueRange{}, ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -134,8 +138,10 @@ TEST(EvaluatorTests, InstantiateInvalidParamType) {
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
   StringRef params[] = {"param"};
   auto cls = ClassOp::create(builder, "MyClass", params);
-  cls.getBody().emplaceBlock().addArgument(
-      circt::om::OMIntegerType::get(&context), cls.getLoc());
+  auto &body = cls.getBody().emplaceBlock();
+  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
+  builder.setInsertionPointToStart(&body);
+  ClassFieldsOp::create(builder, loc, ValueRange{}, ArrayAttr{});
 
   Evaluator evaluator(mod);
 
@@ -247,7 +253,9 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   auto cls = ClassOp::create(
       builder, "MyClass", builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
-          NamedAttribute(builder.getStringAttr("field"), constantType),
+          NamedAttribute(builder.getStringAttr("field"),
+                         TypeAttr::get(circt::om::OMIntegerType::get(
+                             builder.getContext()))),
 
       }));
   auto &body = cls.getBody().emplaceBlock();
@@ -355,20 +363,21 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
                                               params, fields, types);
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerType = TypeAttr::get(ClassType::get(
-      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
   auto cls = ClassOp::create(
       builder, "MyClass", params, builder.getStrArrayAttr({"field"}),
       builder.getDictionaryAttr({
-          NamedAttribute(builder.getStringAttr("field"), innerType),
+          NamedAttribute(builder.getStringAttr("field"),
+                         TypeAttr::get(circt::om::OMIntegerType::get(
+                             builder.getContext()))),
 
       }));
   auto &body = cls.getBody().emplaceBlock();
   body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
   builder.setInsertionPointToStart(&body);
   auto object = ObjectOp::create(builder, innerCls, body.getArguments());
-  auto field = ObjectFieldOp::create(builder, builder.getI32Type(), object,
-                                     builder.getStringAttr("field"));
+  auto field =
+      ObjectFieldOp::create(builder, circt::om::OMIntegerType::get(&context),
+                            object, builder.getStringAttr("field"));
   ClassFieldsOp::create(builder, loc, ValueRange{field}, ArrayAttr{});
 
   Evaluator evaluator(mod);
@@ -483,14 +492,13 @@ TEST(EvaluatorTests, AnyCastObject) {
                         ArrayAttr{});
 
   builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerType = TypeAttr::get(ClassType::get(
-      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
-  auto cls = ClassOp::create(
-      builder, "MyClass", builder.getStrArrayAttr({"field"}),
-      builder.getDictionaryAttr({
-          NamedAttribute(builder.getStringAttr("field"), innerType),
+  auto cls =
+      ClassOp::create(builder, "MyClass", builder.getStrArrayAttr({"field"}),
+                      builder.getDictionaryAttr({
+                          NamedAttribute(builder.getStringAttr("field"),
+                                         TypeAttr::get(AnyType::get(&context))),
 
-      }));
+                      }));
   auto &body = cls.getBody().emplaceBlock();
   builder.setInsertionPointToStart(&body);
   auto object = ObjectOp::create(builder, innerCls, body.getArguments());
