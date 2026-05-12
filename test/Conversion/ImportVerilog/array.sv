@@ -7,13 +7,11 @@
 //===---------------------------------------------------------------------===//
 // Array element indexing
 //===---------------------------------------------------------------------===//
-// Array element indexing should return the same value regardless of whether
-// the array is packed or unpacked, or reverse-ordered. array[X] should return
-// the X'th value.
-//
 // hw.array's indices are always ordered such that index 0 means the least
-// significant element. Therefore regardless of the SV type ([3:0] vs [0:3] vs
-// $[4]) we should always plant an array_get of the same index.
+// significant element.
+//
+// SV types provide a mapping onto those elements, with [3:0 being the identity
+// mapping and [0:3] being the reversed mapping.
 
 // CHECK-LABEL: @array_get_dyn_packed
 // CHECK: %[[X:.*]] = moore.dyn_extract %arg0 from %idx
