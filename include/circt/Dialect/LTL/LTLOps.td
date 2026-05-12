@@ -158,6 +158,8 @@ def ClockedDelayOp : LTLOp<"clocked_delay", [Pure]> {
   let assemblyFormat = [{
     $input `,` $edge $clock `,` $delay (`,` $length^)? attr-dict `:` type($input)
   }];
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 
   let summary = "Delay a sequence by a number of cycles on an explicit clock.";
   let description = [{
