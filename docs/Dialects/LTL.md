@@ -160,6 +160,32 @@ Sequence and property expressions in SVAs can specify a clock with respect to wh
 - `@(negedge clk) seqOrProp`. **Trigger on high-to-low clock edge.** Equivalent to `ltl.clock %seqOrProp, negedge %clk`.
 - `@(edge clk) seqOrProp`. **Trigger on any clock edge.** Equivalent to `ltl.clock %seqOrProp, edge %clk`.
 
+#### Delay clocking
+
+`ltl.delay` takes the delayed input first, followed by the delay window:
+
+```
+ltl.delay %input, <delay>[, <length>]
+```
+
+For explicitly clocked delays, use `ltl.clocked_delay`:
+
+```
+ltl.clocked_delay %input, <edge> %clock, <delay>[, <length>]
+```
+
+`%clock` is an `i1` value (e.g. a module clock); `<edge>` is `posedge`, `negedge`, or `edge`. For example, `ltl.clocked_delay %s, posedge %clk, 3` means `%s` must hold 3 cycles later on `%clk` rising edges.
+
+`ltl.delay` is unclocked and may be resolved by an enclosing `ltl.clock` or by the `InferLTLClocks` pass. `ltl.clock` globally associates a sequence/property with a clock/edge; `ltl.clocked_delay` carries an explicit per-delay clock.
+
+Examples:
+
+```mlir
+ltl.delay %s, 3
+ltl.delay %s, 3, 0
+ltl.clocked_delay %s, posedge %clk, 3, 0
+```
+
 
 ### Disable Iff
 
