@@ -360,7 +360,7 @@ LogicalResult circt::om::ClassOp::verifyRegions() {
       return this->emitOpError("field name is not a StringAttr");
 
     if (auto fieldType = types.get(fieldNameAttr))
-      if (auto typeAttr = dyn_cast_or_null<TypeAttr>(fieldType))
+      if (auto typeAttr = dyn_cast<TypeAttr>(fieldType))
         if (typeAttr.getValue() == terminatorOperandType)
           continue;
 
