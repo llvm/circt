@@ -147,47 +147,42 @@ firrtl.circuit "Intrinsics" {
     // the ops are totally backwards. This is tricky to lower since a lot of the
     // LTL ops' result type depends on the inputs, and LowerToHW lowers them
     // before their operands have been lowered (and have the correct LTL type).
-    // LTL-typed wires are not canonicalized away to preserve verification structure.
-    // CHECK: %c = hw.wire %[[C_VAL:.+]] : !ltl.sequence
-    // CHECK-NEXT: %d = hw.wire %[[D_VAL:.+]] : !ltl.property
-    // CHECK-NEXT: %e = hw.wire %[[E_VAL:.+]] : i1
-    // CHECK-NEXT: %f = hw.wire %[[F_VAL:.+]] : i1
-    // CHECK-NEXT: %g = hw.wire %[[G_VAL:.+]] : !ltl.property
+    // CHECK-NOT: hw.wire
     %c = firrtl.wire : !firrtl.uint<1>
     %d = firrtl.wire : !firrtl.uint<1>
     %e = firrtl.wire : !firrtl.uint<1>
     %f = firrtl.wire : !firrtl.uint<1>
     %g = firrtl.wire : !firrtl.uint<1>
 
-    // CHECK-NEXT: verif.assert %e : i1
-    // CHECK-NEXT: verif.assert %f : i1
-    // CHECK-NEXT: verif.assert %g : i1
+    // CHECK-NEXT: verif.assert [[E:%.+]] : !ltl.sequence
+    // CHECK-NEXT: verif.assert [[F:%.+]] : !ltl.property
+    // CHECK-NEXT: verif.assert [[G:%.+]] : !ltl.property
     firrtl.int.verif.assert %e : !firrtl.uint<1>
     firrtl.int.verif.assert %f : !firrtl.uint<1>
     firrtl.int.verif.assert %g : !firrtl.uint<1>
 
     // !ltl.property
-    // CHECK-NEXT: %[[G_VAL]] = ltl.implication %e, %f : i1, i1
+    // CHECK-NEXT: [[G]] = ltl.implication [[E]], [[F]] : !ltl.sequence, !ltl.property
     %4 = firrtl.int.ltl.implication %e, %f : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %g, %4 : !firrtl.uint<1>
 
     // inferred as !ltl.property
-    // CHECK-NEXT: %[[F_VAL]] = ltl.or %b, %d : i1, i1
+    // CHECK-NEXT: [[F]] = ltl.or %b, [[D:%.+]] : i1, !ltl.property
     %3 = firrtl.int.ltl.or %b, %d : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %f, %3 : !firrtl.uint<1>
 
     // inferred as !ltl.sequence
-    // CHECK-NEXT: %[[E_VAL]] = ltl.and %b, %c : i1, i1
+    // CHECK-NEXT: [[E]] = ltl.and %b, [[C:%.+]] : i1, !ltl.sequence
     %2 = firrtl.int.ltl.and %b, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %e, %2 : !firrtl.uint<1>
 
     // !ltl.property
-    // CHECK-NEXT: %[[D_VAL]] = ltl.not %b : i1
+    // CHECK-NEXT: [[D]] = ltl.not %b : i1
     %1 = firrtl.int.ltl.not %b : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %d, %1 : !firrtl.uint<1>
 
     // !ltl.sequence
-    // CHECK-NEXT: %[[C_VAL]] = ltl.delay %a, 42 : i1
+    // CHECK-NEXT: [[C]] = ltl.delay %a, 42 : i1
     %0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %c, %0 : !firrtl.uint<1>
   }
