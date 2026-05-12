@@ -13,7 +13,6 @@
 #include "circt/Dialect/OM/OMTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Location.h"
 #include "mlir/Parser/Parser.h"
 #include "llvm/ADT/STLExtras.h"
@@ -28,54 +27,77 @@ using namespace circt::om;
 
 namespace {
 
-/// Failure scenarios.
-
-TEST(EvaluatorTests, InstantiateInvalidClassName) {
+DialectRegistry createOMRegistry() {
   DialectRegistry registry;
   registry.insert<OMDialect>();
+  return registry;
+}
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
+struct EvaluatorTestContext {
+  EvaluatorTestContext() : registry(createOMRegistry()), context(registry) {
+    context.getOrLoadDialect<OMDialect>();
+  }
 
-  Location loc(UnknownLoc::get(&context));
+  OwningOpRef<ModuleOp> parseModule(StringRef moduleText) {
+    return parseSourceString<ModuleOp>(moduleText, ParserConfig(&context));
+  }
 
-  ImplicitLocOpBuilder builder(loc, &context);
+  DialectRegistry registry;
+  MLIRContext context;
+};
 
-  auto mod = ModuleOp::create(builder, loc);
+evaluator::EvaluatorValuePtr
+makeIntegerValue(MLIRContext *context, int64_t value, unsigned width = 32) {
+  auto attr = circt::om::IntegerAttr::get(
+      context,
+      mlir::IntegerAttr::get(mlir::IntegerType::get(context, width), value));
+  return evaluator::AttributeValue::get(attr,
+                                        LocationAttr(UnknownLoc::get(context)));
+}
 
-  Evaluator evaluator(mod);
+class EvaluatorTests : public ::testing::Test {
+protected:
+  OwningOpRef<ModuleOp> parseModule(StringRef moduleText) {
+    return test.parseModule(moduleText);
+  }
+
+  EvaluatorTestContext test;
+  MLIRContext &context = test.context;
+};
+
+/// Failure scenarios.
+
+TEST_F(EvaluatorTests, InstantiateInvalidClassName) {
+  StringRef mod = R"MLIR(
+module {
+}
+)MLIR";
+
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(), "unknown class name \"MyClass\"");
   });
 
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"), {});
+  auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
   ASSERT_FALSE(succeeded(result));
 }
 
-TEST(EvaluatorTests, InstantiateInvalidParamSize) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, InstantiateInvalidParamSize) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyClass(%param: !om.integer) {
+    om.class.fields
+  }
+}
+)MLIR";
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  Location loc(UnknownLoc::get(&context));
-
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  StringRef params[] = {"param"};
-  auto cls = ClassOp::create(builder, "MyClass", params);
-  auto &body = cls.getBody().emplaceBlock();
-  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
-  builder.setInsertionPointToStart(&body);
-  ClassFieldsOp::create(builder, loc, ValueRange{}, ArrayAttr{});
-
-  Evaluator evaluator(mod);
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(
@@ -84,149 +106,109 @@ TEST(EvaluatorTests, InstantiateInvalidParamSize) {
         "list length (1)");
   });
 
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"), {});
+  auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
   ASSERT_FALSE(succeeded(result));
 }
 
-TEST(EvaluatorTests, InstantiateNullParam) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, InstantiateNullParam) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyClass(%param: !om.integer) {
+    om.class.fields
+  }
+}
+)MLIR";
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  Location loc(UnknownLoc::get(&context));
-
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  StringRef params[] = {"param"};
-  auto cls = ClassOp::create(builder, "MyClass", params);
-  auto &body = cls.getBody().emplaceBlock();
-  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
-  builder.setInsertionPointToStart(&body);
-  ClassFieldsOp::create(builder, loc, ValueRange{}, ArrayAttr{});
-
-  Evaluator evaluator(mod);
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(), "actual parameter for \"param\" is null");
   });
 
   auto result =
-      evaluator.instantiate(builder.getStringAttr("MyClass"), {nullptr});
+      evaluator.instantiate(StringAttr::get(&context, "MyClass"), {nullptr});
 
   ASSERT_FALSE(succeeded(result));
 }
 
-TEST(EvaluatorTests, InstantiateInvalidParamType) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, InstantiateInvalidParamType) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyClass(%param: !om.integer) {
+    om.class.fields
+  }
+}
+)MLIR";
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  Location loc(UnknownLoc::get(&context));
-
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  StringRef params[] = {"param"};
-  auto cls = ClassOp::create(builder, "MyClass", params);
-  auto &body = cls.getBody().emplaceBlock();
-  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
-  builder.setInsertionPointToStart(&body);
-  ClassFieldsOp::create(builder, loc, ValueRange{}, ArrayAttr{});
-
-  Evaluator evaluator(mod);
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(), "actual parameter for \"param\" has invalid type");
   });
 
-  auto result =
-      evaluator.instantiate(builder.getStringAttr("MyClass"),
-                            getEvaluatorValuesFromAttributes(
-                                &context, {builder.getF32FloatAttr(42)}));
+  auto result = evaluator.instantiate(
+      StringAttr::get(&context, "MyClass"),
+      getEvaluatorValuesFromAttributes(
+          &context, {FloatAttr::get(Float32Type::get(&context), 42.0)}));
 
   ASSERT_FALSE(succeeded(result));
 }
 
-TEST(EvaluatorTests, GetFieldInvalidName) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, GetFieldInvalidName) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyClass() {
+    om.class.fields
+  }
+}
+)MLIR";
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  Location loc(UnknownLoc::get(&context));
-
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = ClassOp::create(builder, "MyClass");
-  auto &body = cls.getBody().emplaceBlock();
-  builder.setInsertionPointToStart(&body);
-  ClassFieldsOp::create(builder, loc, llvm::ArrayRef<mlir::Value>(),
-                        ArrayAttr{});
-
-  Evaluator evaluator(mod);
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(), "field \"foo\" does not exist");
   });
 
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"), {});
+  auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
   ASSERT_TRUE(succeeded(result));
 
   auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField(builder.getStringAttr("foo"));
+                        ->getField(StringAttr::get(&context, "foo"));
 
   ASSERT_FALSE(succeeded(fieldValue));
 }
 
 /// Success scenarios.
 
-TEST(EvaluatorTests, InstantiateObjectWithParamField) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, InstantiateObjectWithParamField) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyClass(%param: !om.integer) -> (field: !om.integer) {
+    om.class.fields %param : !om.integer
+  }
+}
+)MLIR";
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
-  Location loc(UnknownLoc::get(&context));
-
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  StringRef params[] = {"param"};
-  StringRef fields[] = {"field"};
-  Type types[] = {circt::om::OMIntegerType::get(&context)};
-  ClassOp::buildSimpleClassOp(builder, loc, "MyClass", params, fields, types);
-
-  Evaluator evaluator(mod);
-
-  auto result = evaluator.instantiate(
-      builder.getStringAttr("MyClass"),
-      getEvaluatorValuesFromAttributes(
-          &context, {circt::om::IntegerAttr::get(
-                        &context, builder.getI32IntegerAttr(42))}));
+  auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"),
+                                      {makeIntegerValue(&context, 42)});
 
   ASSERT_TRUE(succeeded(result));
 
   auto fieldValue = llvm::cast<evaluator::AttributeValue>(
                         llvm::cast<evaluator::ObjectValue>(result.value().get())
-                            ->getField(builder.getStringAttr("field"))
+                            ->getField("field")
                             .value()
                             .get())
                         ->getAs<circt::om::IntegerAttr>();
@@ -235,45 +217,27 @@ TEST(EvaluatorTests, InstantiateObjectWithParamField) {
   ASSERT_EQ(fieldValue.getValue().getValue(), 42);
 }
 
-TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, InstantiateObjectWithConstantField) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyClass() -> (field: !om.integer) {
+    %value = om.constant #om.integer<42 : i32> : !om.integer
+    om.class.fields %value : !om.integer
+  }
+}
+)MLIR";
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
-  Location loc(UnknownLoc::get(&context));
-
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto constantType = builder.getI32IntegerAttr(42);
-  auto cls = ClassOp::create(
-      builder, "MyClass", builder.getStrArrayAttr({"field"}),
-      builder.getDictionaryAttr({
-          NamedAttribute(builder.getStringAttr("field"),
-                         TypeAttr::get(circt::om::OMIntegerType::get(
-                             builder.getContext()))),
-
-      }));
-  auto &body = cls.getBody().emplaceBlock();
-  builder.setInsertionPointToStart(&body);
-  auto constant = ConstantOp::create(
-      builder, circt::om::IntegerAttr::get(&context, constantType));
-  ClassFieldsOp::create(builder, loc, SmallVector<Value>({constant}),
-                        ArrayAttr{});
-
-  Evaluator evaluator(mod);
-
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"), {});
+  auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
   ASSERT_TRUE(succeeded(result));
 
   auto fieldValue = cast<evaluator::AttributeValue>(
                         llvm::cast<evaluator::ObjectValue>(result.value().get())
-                            ->getField(builder.getStringAttr("field"))
+                            ->getField("field")
                             .value()
                             .get())
                         ->getAs<circt::om::IntegerAttr>();
@@ -281,117 +245,71 @@ TEST(EvaluatorTests, InstantiateObjectWithConstantField) {
   ASSERT_EQ(fieldValue.getValue().getValue(), 42);
 }
 
-TEST(EvaluatorTests, InstantiateObjectWithChildObject) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, InstantiateObjectWithChildObject) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyInnerClass(%param: !om.integer) -> (field: !om.integer) {
+    om.class.fields %param : !om.integer
+  }
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
+  om.class @MyClass(%param: !om.integer) -> (field: !om.class.type<@MyInnerClass>) {
+    %object = om.object @MyInnerClass(%param) : (!om.integer) -> !om.class.type<@MyInnerClass>
+    om.class.fields %object : !om.class.type<@MyInnerClass>
+  }
+}
+)MLIR";
 
-  Location loc(UnknownLoc::get(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  StringRef params[] = {"param"};
-  StringRef fields[] = {"field"};
-  Type types[] = {circt::om::OMIntegerType::get(&context)};
-  auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
-                                              params, fields, types);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerType = TypeAttr::get(ClassType::get(
-      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
-  auto cls = ClassOp::create(
-      builder, "MyClass", params, builder.getStrArrayAttr({"field"}),
-      builder.getDictionaryAttr({
-          NamedAttribute(builder.getStringAttr("field"), innerType),
-
-      }));
-  auto &body = cls.getBody().emplaceBlock();
-  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
-  builder.setInsertionPointToStart(&body);
-  auto object = ObjectOp::create(builder, innerCls, body.getArguments());
-  ClassFieldsOp::create(builder, loc, SmallVector<Value>({object}),
-                        ArrayAttr{});
-
-  Evaluator evaluator(mod);
-
-  auto result = evaluator.instantiate(
-      builder.getStringAttr("MyClass"),
-      {evaluator::AttributeValue::get(circt::om::IntegerAttr::get(
-          &context, builder.getI32IntegerAttr(42)))});
+  auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"),
+                                      {makeIntegerValue(&context, 42)});
 
   ASSERT_TRUE(succeeded(result));
 
   auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
       llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField(builder.getStringAttr("field"))
+          ->getField("field")
           .value()
           .get());
 
   ASSERT_TRUE(fieldValue);
 
-  auto innerFieldValue =
-      llvm::cast<evaluator::AttributeValue>(
-          fieldValue->getField(builder.getStringAttr("field")).value().get())
-          ->getAs<circt::om::IntegerAttr>();
+  auto innerFieldValue = llvm::cast<evaluator::AttributeValue>(
+                             fieldValue->getField("field").value().get())
+                             ->getAs<circt::om::IntegerAttr>();
 
   ASSERT_EQ(innerFieldValue.getValue().getValue(), 42);
 }
 
-TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, InstantiateObjectWithFieldAccess) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyInnerClass(%param: !om.integer) -> (field: !om.integer) {
+    om.class.fields %param : !om.integer
+  }
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
+  om.class @MyClass(%param: !om.integer) -> (field: !om.integer) {
+    %object = om.object @MyInnerClass(%param) : (!om.integer) -> !om.class.type<@MyInnerClass>
+    %field = om.object.field %object["field"] : (!om.class.type<@MyInnerClass>) -> !om.integer
+    om.class.fields %field : !om.integer
+  }
+}
+)MLIR";
 
-  Location loc(UnknownLoc::get(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  StringRef params[] = {"param"};
-  StringRef fields[] = {"field"};
-  Type types[] = {circt::om::OMIntegerType::get(&context)};
-  auto innerCls = ClassOp::buildSimpleClassOp(builder, loc, "MyInnerClass",
-                                              params, fields, types);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls = ClassOp::create(
-      builder, "MyClass", params, builder.getStrArrayAttr({"field"}),
-      builder.getDictionaryAttr({
-          NamedAttribute(builder.getStringAttr("field"),
-                         TypeAttr::get(circt::om::OMIntegerType::get(
-                             builder.getContext()))),
-
-      }));
-  auto &body = cls.getBody().emplaceBlock();
-  body.addArgument(circt::om::OMIntegerType::get(&context), cls.getLoc());
-  builder.setInsertionPointToStart(&body);
-  auto object = ObjectOp::create(builder, innerCls, body.getArguments());
-  auto field =
-      ObjectFieldOp::create(builder, circt::om::OMIntegerType::get(&context),
-                            object, builder.getStringAttr("field"));
-  ClassFieldsOp::create(builder, loc, ValueRange{field}, ArrayAttr{});
-
-  Evaluator evaluator(mod);
-
-  auto result = evaluator.instantiate(
-      builder.getStringAttr("MyClass"),
-      {evaluator::AttributeValue::get(circt::om::IntegerAttr::get(
-          &context, builder.getI32IntegerAttr(42)))});
+  auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"),
+                                      {makeIntegerValue(&context, 42)});
 
   ASSERT_TRUE(succeeded(result));
 
   auto fieldValue = llvm::cast<evaluator::AttributeValue>(
                         llvm::cast<evaluator::ObjectValue>(result.value().get())
-                            ->getField(builder.getStringAttr("field"))
+                            ->getField("field")
                             .value()
                             .get())
                         ->getAs<circt::om::IntegerAttr>();
@@ -400,57 +318,37 @@ TEST(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   ASSERT_EQ(fieldValue.getValue().getValue(), 42);
 }
 
-TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyInnerClass() {
+    om.class.fields
+  }
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
+  om.class @MyClass() -> (field1: !om.class.type<@MyInnerClass>, field2: !om.class.type<@MyInnerClass>) {
+    %object = om.object @MyInnerClass() : () -> !om.class.type<@MyInnerClass>
+    om.class.fields %object, %object : !om.class.type<@MyInnerClass>, !om.class.type<@MyInnerClass>
+  }
+}
+)MLIR";
 
-  Location loc(UnknownLoc::get(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerCls = ClassOp::create(builder, "MyInnerClass");
-  auto &innerBody = innerCls.getBody().emplaceBlock();
-  builder.setInsertionPointToStart(&innerBody);
-  ClassFieldsOp::create(builder, loc, llvm::ArrayRef<mlir::Value>(),
-                        ArrayAttr{});
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerType = TypeAttr::get(ClassType::get(
-      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
-  auto cls = ClassOp::create(
-      builder, "MyClass", builder.getStrArrayAttr({"field1", "field2"}),
-      builder.getDictionaryAttr({
-          NamedAttribute(builder.getStringAttr("field1"), innerType),
-          NamedAttribute(builder.getStringAttr("field2"), innerType),
-
-      }));
-  auto &body = cls.getBody().emplaceBlock();
-  builder.setInsertionPointToStart(&body);
-  auto object = ObjectOp::create(builder, innerCls, body.getArguments());
-  ClassFieldsOp::create(builder, loc, SmallVector<Value>({object, object}),
-                        ArrayAttr{});
-
-  Evaluator evaluator(mod);
-
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"), {});
+  auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
   ASSERT_TRUE(succeeded(result));
 
   auto *field1Value = llvm::cast<evaluator::ObjectValue>(
       llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField(builder.getStringAttr("field1"))
+          ->getField("field1")
           .value()
           .get());
 
   auto *field2Value = llvm::cast<evaluator::ObjectValue>(
       llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField(builder.getStringAttr("field2"))
+          ->getField("field2")
           .value()
           .get());
 
@@ -471,119 +369,81 @@ TEST(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   ASSERT_EQ(field1Value, field2Value);
 }
 
-TEST(EvaluatorTests, AnyCastObject) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, AnyCastObject) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyInnerClass() {
+    om.class.fields
+  }
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
+  om.class @MyClass() -> (field: !om.any) {
+    %object = om.object @MyInnerClass() : () -> !om.class.type<@MyInnerClass>
+    %cast = om.any_cast %object : (!om.class.type<@MyInnerClass>) -> !om.any
+    om.class.fields %cast : !om.any
+  }
+}
+)MLIR";
 
-  Location loc(UnknownLoc::get(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerCls = ClassOp::create(builder, "MyInnerClass");
-  auto &innerBody = innerCls.getBody().emplaceBlock();
-  builder.setInsertionPointToStart(&innerBody);
-  ClassFieldsOp::create(builder, loc, llvm::ArrayRef<mlir::Value>(),
-                        ArrayAttr{});
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto cls =
-      ClassOp::create(builder, "MyClass", builder.getStrArrayAttr({"field"}),
-                      builder.getDictionaryAttr({
-                          NamedAttribute(builder.getStringAttr("field"),
-                                         TypeAttr::get(AnyType::get(&context))),
-
-                      }));
-  auto &body = cls.getBody().emplaceBlock();
-  builder.setInsertionPointToStart(&body);
-  auto object = ObjectOp::create(builder, innerCls, body.getArguments());
-  auto cast = AnyCastOp::create(builder, object);
-  ClassFieldsOp::create(builder, loc, SmallVector<Value>({cast}), ArrayAttr{});
-
-  Evaluator evaluator(mod);
-
-  auto result = evaluator.instantiate(builder.getStringAttr("MyClass"), {});
+  auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
   ASSERT_TRUE(succeeded(result));
 
   auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
       llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField(builder.getStringAttr("field"))
+          ->getField("field")
           .value()
           .get());
 
   ASSERT_TRUE(fieldValue);
-
-  ASSERT_EQ(fieldValue->getClassOp(), innerCls);
+  ASSERT_EQ(fieldValue->getClassOp().getSymName(), "MyInnerClass");
 }
 
-TEST(EvaluatorTests, AnyCastParam) {
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+TEST_F(EvaluatorTests, AnyCastParam) {
+  StringRef mod = R"MLIR(
+module {
+  om.class @MyInnerClass(%param: !om.any) -> (field: !om.any) {
+    om.class.fields %param : !om.any
+  }
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
+  om.class @MyClass(%param: i64) -> (field: !om.class.type<@MyInnerClass>) {
+    %cast = om.any_cast %param : (i64) -> !om.any
+    %object = om.object @MyInnerClass(%cast) : (!om.any) -> !om.class.type<@MyInnerClass>
+    om.class.fields %object : !om.class.type<@MyInnerClass>
+  }
+}
+)MLIR";
 
-  Location loc(UnknownLoc::get(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
+  Evaluator evaluator(owning.get());
 
-  ImplicitLocOpBuilder builder(loc, &context);
-
-  auto mod = ModuleOp::create(builder, loc);
-
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  auto innerCls = ClassOp::buildSimpleClassOp(
-      builder, builder.getLoc(), "MyInnerClass", {"param"}, {"field"},
-      {AnyType::get(&context)});
-
-  auto i64 = builder.getIntegerType(64);
-  builder.setInsertionPointToStart(&mod.getBodyRegion().front());
-  StringRef params[] = {"param"};
-  auto innerType = TypeAttr::get(ClassType::get(
-      builder.getContext(), mlir::FlatSymbolRefAttr::get(innerCls)));
-  auto cls = ClassOp::create(
-      builder, "MyClass", params, builder.getStrArrayAttr({"field"}),
-      builder.getDictionaryAttr({
-          NamedAttribute(builder.getStringAttr("field"), innerType),
-
-      }));
-  auto &body = cls.getBody().emplaceBlock();
-  body.addArguments({i64}, {builder.getLoc()});
-  builder.setInsertionPointToStart(&body);
-  auto cast = AnyCastOp::create(builder, body.getArgument(0));
-  SmallVector<Value> objectParams = {cast};
-  auto object = ObjectOp::create(builder, innerCls, objectParams);
-  ClassFieldsOp::create(builder, loc, SmallVector<Value>({object}),
-                        ArrayAttr{});
-
-  Evaluator evaluator(mod);
-
+  auto i64 = IntegerType::get(&context, 64);
   auto result =
-      evaluator.instantiate(builder.getStringAttr("MyClass"),
+      evaluator.instantiate(StringAttr::get(&context, "MyClass"),
                             getEvaluatorValuesFromAttributes(
-                                &context, {builder.getIntegerAttr(i64, 42)}));
+                                &context, {mlir::IntegerAttr::get(i64, 42)}));
 
   ASSERT_TRUE(succeeded(result));
 
   auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
       llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField(builder.getStringAttr("field"))
+          ->getField("field")
           .value()
           .get());
 
   ASSERT_TRUE(fieldValue);
 
   auto *innerFieldValue = llvm::cast<evaluator::AttributeValue>(
-      fieldValue->getField(builder.getStringAttr("field")).value().get());
+      fieldValue->getField("field").value().get());
 
   ASSERT_EQ(innerFieldValue->getAs<mlir::IntegerAttr>().getValue(), 42);
 }
 
-TEST(EvaluatorTests, InstantiateGraphRegion) {
+TEST_F(EvaluatorTests, InstantiateGraphRegion) {
   StringRef mod = R"MLIR(
 !ty = !om.class.type<@LinkedList>
 om.class @LinkedList(%n: !ty, %val: !om.string) -> (n: !ty, val:
@@ -601,16 +461,10 @@ om.class @ReferenceEachOther() -> (field1: !ty, field2: !ty) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "ReferenceEachOther"), {});
@@ -642,7 +496,7 @@ om.class @ReferenceEachOther() -> (field1: !ty, field2: !ty) {
                        .getValue());
 }
 
-TEST(EvaluatorTests, InstantiateCycle) {
+TEST_F(EvaluatorTests, InstantiateCycle) {
   StringRef mod = R"MLIR(
 !ty = !om.class.type<@LinkedList>
 om.class @LinkedList(%n: !ty) -> (n: !ty){
@@ -655,22 +509,16 @@ om.class @ReferenceEachOther() -> (field: !ty){
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
-
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(),
               "cycle detected: 1 values remain partially evaluated after full "
               "pass with no progress (total fully evaluated: 1)");
   });
 
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "ReferenceEachOther"), {});
@@ -680,7 +528,7 @@ om.class @ReferenceEachOther() -> (field: !ty){
 
 // Test nested object field references.
 // https://github.com/llvm/circt/issues/10264
-TEST(EvaluatorTests, Issue10264NestedFieldReferences) {
+TEST_F(EvaluatorTests, Issue10264NestedFieldReferences) {
   StringRef mod = R"MLIR(
 om.class @Domain(%in: !om.string) -> (out: !om.string) {
   om.class.fields %in : !om.string
@@ -698,16 +546,10 @@ om.class @Top() -> (test: i1) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
 
@@ -722,7 +564,7 @@ om.class @Top() -> (test: i1) {
   ASSERT_FALSE(boolValue.getValue());
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticAdd) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticAdd) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {
   %0 = om.constant #om.integer<1 : si3> : !om.integer
@@ -732,16 +574,10 @@ om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticAdd"), {});
@@ -758,7 +594,7 @@ om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {
                    .getValue());
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticMul) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticMul) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {
   %0 = om.constant #om.integer<2 : si3> : !om.integer
@@ -768,16 +604,10 @@ om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticMul"), {});
@@ -794,7 +624,7 @@ om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {
                    .getValue());
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticShr) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShr) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -804,16 +634,10 @@ om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShr"), {});
@@ -830,7 +654,7 @@ om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){
                    .getValue());
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -840,12 +664,6 @@ om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
-
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     if (StringRef(diag.str()).starts_with("'om.integer.shr'"))
       ASSERT_EQ(diag.str(),
@@ -854,10 +672,10 @@ om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
       ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
   });
 
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShrNegative"), {});
@@ -865,7 +683,7 @@ om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
   ASSERT_TRUE(failed(result));
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -874,12 +692,6 @@ om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
   om.class.fields %2 : !om.integer
 }
 )MLIR";
-
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
-
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     if (StringRef(diag.str()).starts_with("'om.integer.shr'"))
@@ -890,10 +702,10 @@ om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
       ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
   });
 
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShrTooLarge"), {});
@@ -901,7 +713,7 @@ om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
   ASSERT_TRUE(failed(result));
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticShl) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShl) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){
   %0 = om.constant #om.integer<8 : si7> : !om.integer
@@ -911,16 +723,10 @@ om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShl"), {});
@@ -937,7 +743,7 @@ om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){
                     .getValue());
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -947,12 +753,6 @@ om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
-
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     if (StringRef(diag.str()).starts_with("'om.integer.shl'"))
       ASSERT_EQ(diag.str(),
@@ -961,10 +761,10 @@ om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
       ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
   });
 
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShlNegative"), {});
@@ -972,7 +772,7 @@ om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
   ASSERT_TRUE(failed(result));
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticShlTooLarge) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShlTooLarge) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -981,12 +781,6 @@ om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
   om.class.fields %2 : !om.integer
 }
 )MLIR";
-
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
-
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     if (StringRef(diag.str()).starts_with("'om.integer.shl'"))
@@ -997,10 +791,10 @@ om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
       ASSERT_EQ(diag.str(), "failed to evaluate integer operation");
   });
 
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShlTooLarge"), {});
@@ -1008,7 +802,7 @@ om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
   ASSERT_TRUE(failed(result));
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticObjects) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticObjects) {
   StringRef mod = R"MLIR(
 om.class @Class1() -> (value: !om.integer){
   %0 = om.constant #om.integer<1 : si3> : !om.integer
@@ -1032,16 +826,10 @@ om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticObjects"), {});
@@ -1058,7 +846,7 @@ om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {
                    .getValue());
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
   StringRef mod = R"MLIR(
 om.class @Class1(%input: !om.integer) -> (value: !om.integer, input: !om.integer) {
   %0 = om.constant #om.integer<1 : si3> : !om.integer
@@ -1082,16 +870,10 @@ om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer){
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticObjectsDelayed"), {});
@@ -1108,7 +890,7 @@ om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer){
                    .getValue());
 }
 
-TEST(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
   %0 = om.constant #om.integer<1 : si3> : !om.integer
@@ -1118,16 +900,10 @@ om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticWidthMismatch"), {});
@@ -1144,7 +920,7 @@ om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
                    .getValue());
 }
 
-TEST(EvaluatorTests, ListConcat) {
+TEST_F(EvaluatorTests, ListConcat) {
   StringRef mod = R"MLIR(
 om.class @ListConcat() -> (result: !om.list<!om.integer>) {
   %0 = om.constant #om.integer<0 : i8> : !om.integer
@@ -1157,16 +933,10 @@ om.class @ListConcat() -> (result: !om.list<!om.integer>) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "ListConcat"), {});
@@ -1198,7 +968,7 @@ om.class @ListConcat() -> (result: !om.list<!om.integer>) {
                    .getValue());
 }
 
-TEST(EvaluatorTests, ListConcatField) {
+TEST_F(EvaluatorTests, ListConcatField) {
   StringRef mod = R"MLIR(
 om.class @ListField() -> (value: !om.list<!om.integer>) {
   %0 = om.constant #om.integer<2 : i8> : !om.integer
@@ -1216,16 +986,10 @@ om.class @ListConcatField() -> (result: !om.list<!om.integer>){
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "ListConcatField"), {});
@@ -1257,7 +1021,7 @@ om.class @ListConcatField() -> (result: !om.list<!om.integer>){
                    .getValue());
 }
 
-TEST(EvaluatorTests, ListOfListConcat) {
+TEST_F(EvaluatorTests, ListOfListConcat) {
   StringRef mod = R"MLIR(
 om.class @ListOfListConcat()  -> (result: !om.list<!om.list<!om.string>>) {
   %0 = om.constant "foo" : !om.string
@@ -1273,16 +1037,10 @@ om.class @ListOfListConcat()  -> (result: !om.list<!om.list<!om.string>>) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "ListOfListConcat"), {});
@@ -1325,7 +1083,7 @@ om.class @ListOfListConcat()  -> (result: !om.list<!om.list<!om.string>>) {
                        .str());
 }
 
-TEST(EvaluatorTests, ListConcatPartialCycle) {
+TEST_F(EvaluatorTests, ListConcatPartialCycle) {
   StringRef mod = R"MLIR(
 om.class @Child(%field_in: !om.any) -> (field: !om.list<!om.any>) {
   %1 = om.list_create %field_in : !om.any
@@ -1350,16 +1108,10 @@ om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "ListConcatPartialCycle"), {});
@@ -1386,7 +1138,7 @@ om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){
   ASSERT_EQ(2U, id2->getAs<circt::om::IntegerAttr>().getValue().getValue());
 }
 
-TEST(EvaluatorTests, NestedReferenceValue) {
+TEST_F(EvaluatorTests, NestedReferenceValue) {
   StringRef mod = R"MLIR(
 om.class @Empty() {
   om.class.fields
@@ -1427,16 +1179,10 @@ om.class @OuterClass1()  -> (om: !om.any) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "OuterClass1"), {});
@@ -1461,7 +1207,7 @@ om.class @OuterClass1()  -> (om: !om.any) {
           .get()));
 }
 
-TEST(EvaluatorTests, ListAttrConcat) {
+TEST_F(EvaluatorTests, ListAttrConcat) {
   StringRef mod = R"MLIR(
 om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
   %0 = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
@@ -1470,16 +1216,10 @@ om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "ConcatListAttribute"), {});
@@ -1506,7 +1246,7 @@ om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
   checkEq(listVal[3].get(), "Y");
 }
 
-TEST(EvaluatorTests, UnknownValuesBasic) {
+TEST_F(EvaluatorTests, UnknownValuesBasic) {
   StringRef mod = R"MLIR(
 om.class.extern @Baz() -> (a: !om.integer) {}
 
@@ -1562,16 +1302,10 @@ om.class @Foo(
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto unknownLoc = UnknownLoc::get(&context);
   // Create unknown values with the correct types
@@ -1648,7 +1382,7 @@ om.class @Foo(
   checkFieldValueType("q", Kind::Object);   // external class -> ObjectValue
 }
 
-TEST(EvaluatorTests, UnknownValuesNested) {
+TEST_F(EvaluatorTests, UnknownValuesNested) {
   StringRef mod = R"MLIR(
 om.class @Bar(
   %known_in: !om.integer,
@@ -1676,16 +1410,10 @@ om.class @Foo(
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto unknownLoc = UnknownLoc::get(&context);
   // Create unknown value with the correct type (!om.integer)
@@ -1714,7 +1442,7 @@ om.class @Foo(
   ASSERT_TRUE(object->getField("b").value()->isUnknown());
 }
 
-TEST(EvaluatorTests, StringConcat) {
+TEST_F(EvaluatorTests, StringConcat) {
   const char *mod = R"MLIR(
 module {
   om.class @Test() -> (result: !om.string) {
@@ -1726,16 +1454,10 @@ module {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     llvm::errs() << "Diagnostic: " << diag << "\n";
@@ -1755,7 +1477,7 @@ module {
                 .getValue());
 }
 
-TEST(EvaluatorTests, UnknownObjectFieldTest) {
+TEST_F(EvaluatorTests, UnknownObjectFieldTest) {
   StringRef mod = R"MLIR(
 om.class.extern @Dut_Class(%basepath: !om.frozenbasepath) -> (omirOut: !om.list<!om.any>) {
 }
@@ -1770,16 +1492,10 @@ om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto basepath = std::make_shared<evaluator::BasePathValue>(&context);
 
@@ -1795,7 +1511,7 @@ om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<
   EXPECT_TRUE(field->get()->isUnknown());
 }
 
-TEST(EvaluatorTests, PropertyAssertTests) {
+TEST_F(EvaluatorTests, PropertyAssertTests) {
   StringRef mod = R"MLIR(
 // Test 1: A true assert passes.
 om.class @True() -> () {
@@ -1910,16 +1626,10 @@ om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   ASSERT_TRUE(
       succeeded(evaluator.instantiate(StringAttr::get(&context, "True"), {})));
@@ -1959,7 +1669,7 @@ om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
       StringAttr::get(&context, "ChainedDomainAssert"), {basepath})));
 }
 
-TEST(EvaluatorTests, PropEqTests) {
+TEST_F(EvaluatorTests, PropEqTests) {
   StringRef mod = R"MLIR(
 om.class @PropEqString(%s: !om.string) -> (equal: i1, not_equal: i1, unknown: i1) {
   %a    = om.constant "hello" : !om.string
@@ -1991,16 +1701,10 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
 
@@ -2034,7 +1738,7 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
   }
 }
 
-TEST(EvaluatorTests, IntegerBitwiseTests) {
+TEST_F(EvaluatorTests, IntegerBitwiseTests) {
   StringRef mod = R"MLIR(
 om.class @IntegerBitwiseAnd(%a: i8, %b: i8) -> (result: i8) {
   %and = om.integer.and %a, %b : i8
@@ -2058,16 +1762,10 @@ om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
 }
 )MLIR";
 
-  DialectRegistry registry;
-  registry.insert<OMDialect>();
+  OwningOpRef<ModuleOp> owning = parseModule(mod);
+  ASSERT_TRUE(owning);
 
-  MLIRContext context(registry);
-  context.getOrLoadDialect<OMDialect>();
-
-  OwningOpRef<ModuleOp> owning =
-      parseSourceString<ModuleOp>(mod, ParserConfig(&context));
-
-  Evaluator evaluator(owning.release());
+  Evaluator evaluator(owning.get());
 
   auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
   auto i8Type = mlir::IntegerType::get(&context, 8);
