@@ -1295,7 +1295,8 @@ LogicalResult ModuleState::processOp(Operation *op) {
     processDomainDefinition(createAnon);
     return success();
   }
-  // Check that domain subfield operations access driven domains.
+  // DomainSubfieldOp has a DomainType input which is not processed by
+  // unifyAssociations. Check here that the domain is driven before access.
   if (auto subfield = dyn_cast<DomainSubfieldOp>(op)) {
     auto inputDomain = cast<DomainValue>(subfield.getInput());
     auto *term = getOptTermForDomain(inputDomain);
