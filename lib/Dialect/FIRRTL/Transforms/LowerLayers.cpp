@@ -233,8 +233,7 @@ class LowerLayersPass
   FailureOr<InnerRefMap> runOnModuleLike(FModuleLike moduleLike);
 
   /// Extract layerblocks and strip probe colors from all ops under the module.
-  LogicalResult runOnModuleBody(FModuleOp moduleOp, InnerRefMap &innerRefMap,
-                                const LayerSet &enabledLayers);
+  LogicalResult runOnModuleBody(FModuleOp moduleOp, InnerRefMap &innerRefMap);
 
   /// Update the module's port types to remove any explicit layer requirements
   /// from any probe types.
@@ -370,12 +369,11 @@ LowerLayersPass::runOnModuleLike(FModuleLike moduleLike) {
   auto result =
       TypeSwitch<Operation *, LogicalResult>(moduleLike.getOperation())
           .Case<FModuleOp>([&](auto op) {
-            LayerSet enabledLayers;
-            enabledLayers.insert_range(
-                op.getLayersAttr().template getAsRange<SymbolRefAttr>());
+            if (failed(runOnModuleBody(op, innerRefMap)))
+              return failure();
             op.setLayers({});
             removeLayersFromPorts(op);
-            return runOnModuleBody(op, innerRefMap, enabledLayers);
+            return success();
           })
           .Case<FExtModuleOp>([&](auto op) {
             op.setKnownLayers({});
@@ -416,8 +414,7 @@ void LowerLayersPass::inlineLayerBlock(LayerBlockOp layerBlock) {
 }
 
 LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
-                                               InnerRefMap &innerRefMap,
-                                               const LayerSet &enabledLayers) {
+                                               InnerRefMap &innerRefMap) {
   hw::InnerSymbolNamespace ns(moduleOp);
 
   // Get or create a node op for a value captured by a layer block.
@@ -710,7 +707,20 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     // After this point, we are dealing with a layer block.
     auto layer = symbolToLayer.lookup(layerBlock.getLayerName());
 
-    if (isLayerCompatibleWith(layerBlock.getLayerName(), enabledLayers)) {
+    // If this layerblock would be enabled unconditionally by the ambient layer
+    // surrounding this block, just inline the layerblock. We do not need to
+    // construct a bound-in-module or sv.ifdef block.
+    auto ambientLayers = getAmbientLayersAt(layerBlock->getParentOp());
+    llvm::errs() << "ambient layers =";
+    for (auto layer : ambientLayers) {
+      llvm::errs() << " " << layer;
+    }
+    llvm::errs() << " (layer = " << layerBlock.getLayerName() << ")";
+    llvm::errs() << "\n";
+
+    if (isLayerCompatibleWith(layerBlock.getLayerName(), ambientLayers)) {
+      llvm::errs() << "ASDASDFASDFASDFASDF" << layerBlock << "\n";
+
       inlineLayerBlock(layerBlock);
       return WalkResult::advance();
     }
