@@ -2,7 +2,7 @@
 ; RUN: firtool %s -output-final-mlir - -domain-mode=check -o /dev/null | FileCheck %s -check-prefixes=CHECK,DOMAIN
 ; RUN: firtool %s -output-final-mlir - -domain-mode=strip -o /dev/null | FileCheck %s -implicit-check-not om.frozenpath_create -implicit-check-not Domain
 
-FIRRTL version 6.0.0
+FIRRTL version 7.0.0
 circuit Foo :
   domain ClockDomain :
     name : String

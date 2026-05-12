@@ -1,6 +1,6 @@
 ; RUN: circt-translate -import-firrtl -verify-diagnostics -split-input-file %s | circt-opt | FileCheck %s
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
 
   ; CHECK-LABEL: firrtl.module @MyModule(in %in: !firrtl.uint<8>, out %out: !firrtl.uint<8>) {
@@ -1488,7 +1488,7 @@ circuit Layers:
 
 ;// -----
 ; CHECK-LABEL: firrtl.circuit "BasicProps"
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit BasicProps :
   public module BasicProps :
   ; CHECK-LABEL: module private @Integer
@@ -1672,7 +1672,7 @@ circuit PropertyListOps :
     propassign c, list_concat(a, b)
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 
 ; CHECK-LABEL: firrtl.circuit "StringOps"
 circuit StringOps :
@@ -1686,7 +1686,7 @@ circuit StringOps :
     propassign c, string_concat(a, b)
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 
 ; CHECK-LABEL: firrtl.circuit "PropEq"
 circuit PropEq :
@@ -1708,11 +1708,11 @@ circuit PropEqVersionError :
     input b : String
     output c : String
 
-    ; expected-error @+1 {{property equality are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    ; expected-error @+1 {{property equality are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
     propassign c, prop_eq(a, b)
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 
 ; CHECK-LABEL: firrtl.circuit "BoolBinaryOps"
 circuit BoolBinaryOps :
@@ -1767,7 +1767,7 @@ circuit WireOfProbesAndNames:
     wire probe : Probe<UInt<1>>
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 
 ; CHECK-LABEL: circuit "AnyRef"
 circuit AnyRef:
@@ -1828,7 +1828,7 @@ circuit LayerEnabledModule:
 
 ;// -----
 
-FIRRTL version 5.2.0
+FIRRTL version 6.0.0
 
 ; CHECK-LABEL: firrtl.circuit "KnownLayers"
 circuit KnownLayers:
@@ -2051,7 +2051,7 @@ circuit Foo:
     d_map = {a = 42, b = "hello", c = [9001], d = {foo = 1337}}
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 ; CHECK-LABEL: circuit "Foo"
 circuit Foo:
 
@@ -2163,7 +2163,7 @@ circuit Foo:
     b <= a
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 ; CHECK-LABEL: firrtl.circuit "Contracts"
 circuit Contracts:
   ; CHECK-LABEL: firrtl.module @Contracts(
@@ -2228,7 +2228,7 @@ circuit Foo:
     printf(clock, UInt<1>(1), "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit Foo:
   public module Foo:
     input clock: Clock
@@ -2246,11 +2246,11 @@ FIRRTL version 5.0.0
 circuit Foo:
   public module Foo:
     input clock: Clock
-    ; expected-error @+1 {{fprintf are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    ; expected-error @+1 {{fprintf are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
     fprintf(clock, UInt<1>(1), "test.txt", "[{{SimulationTime}}]: hello from {{HierarchicalModuleName}}")
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit Foo:
   public module Foo:
     input clock: Clock
@@ -2265,7 +2265,7 @@ FIRRTL version 5.0.0
 circuit Foo:
   public module Foo:
     input clock: Clock
-    ; expected-error @+1 {{fflush are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    ; expected-error @+1 {{fflush are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
     fflush(clock, UInt<1>(1))
 
 ;// -----
@@ -2273,11 +2273,11 @@ FIRRTL version 5.0.0
 circuit Foo:
   public module Foo:
     input a: UInt<1>
-    ; expected-error @+1 {{variadic cat are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    ; expected-error @+1 {{variadic cat are a FIRRTL 6.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
     node b = cat(a, a, a)
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 ; CHECK-LABEL: firrtl.circuit "NullaryCat"
 circuit NullaryCat:
   public module NullaryCat:
@@ -2286,7 +2286,7 @@ circuit NullaryCat:
     node b = cat()
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   ; CHECK-LABEL: firrtl.domain @ClockDomain
   domain ClockDomain:
@@ -2350,7 +2350,7 @@ circuit Domains:
     domain_define F = E
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit DomainCreate:
   domain ClockDomain:
 
@@ -2369,7 +2369,7 @@ circuit DomainCreate:
     domain_define child.A = my_clock
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit DomainCreateWithFields:
   domain PowerDomain:
     name: String
@@ -2386,7 +2386,7 @@ circuit DomainCreateWithFields:
     domain powerDomain of PowerDomain(String("FastClock"), Integer(1000), alwaysOn)
 
 ;// -----
-FIRRTL version 6.0.0
+FIRRTL version 7.0.0
 circuit UnknownProperties:
   class Foo:
     skip
@@ -2436,7 +2436,7 @@ circuit KeywordIdentifiers :
     connect Unknown, UInt<1>(0)
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 ; Test wire domain associations
 circuit WireDomains:
   domain ClockDomain:

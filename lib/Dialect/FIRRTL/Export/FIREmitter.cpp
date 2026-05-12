@@ -203,25 +203,25 @@ struct Emitter {
 #undef HANDLE
 
   void emitExpression(PropEqOp op) {
-    if (failed(requireVersion(missingSpecFIRVersion, op, "property equality")))
+    if (failed(requireVersion({6, 0, 0}, op, "property equality")))
       return;
     emitPrimExpr("prop_eq", op);
   }
 
   void emitExpression(BoolAndOp op) {
-    if (failed(requireVersion(missingSpecFIRVersion, op, "boolean and")))
+    if (failed(requireVersion({6, 0, 0}, op, "boolean and")))
       return;
     emitPrimExpr("bool_and", op);
   }
 
   void emitExpression(BoolOrOp op) {
-    if (failed(requireVersion(missingSpecFIRVersion, op, "boolean or")))
+    if (failed(requireVersion({6, 0, 0}, op, "boolean or")))
       return;
     emitPrimExpr("bool_or", op);
   }
 
   void emitExpression(BoolXorOp op) {
-    if (failed(requireVersion(missingSpecFIRVersion, op, "boolean xor")))
+    if (failed(requireVersion({6, 0, 0}, op, "boolean xor")))
       return;
     emitPrimExpr("bool_xor", op);
   }
@@ -493,7 +493,7 @@ void Emitter::emitEnabledLayers(ArrayRef<Attribute> layers, Operation *op) {
 void Emitter::emitKnownLayers(ArrayRef<Attribute> layers, Operation *op) {
   if (layers.empty())
     return;
-  if (failed(requireVersion(nextFIRVersion, op, "known layers")))
+  if (failed(requireVersion({6, 0, 0}, op, "known layers")))
     return;
   for (auto layer : layers) {
     ps << PP::space;
@@ -1066,7 +1066,7 @@ void Emitter::emitStatement(PrintFOp op) {
 }
 
 void Emitter::emitStatement(FPrintFOp op) {
-  if (failed(requireVersion(nextFIRVersion, op, "fprintf")))
+  if (failed(requireVersion({6, 0, 0}, op, "fprintf")))
     return;
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
@@ -1102,7 +1102,7 @@ void Emitter::emitStatement(FPrintFOp op) {
 }
 
 void Emitter::emitStatement(FFlushOp op) {
-  if (failed(requireVersion(nextFIRVersion, op, "fflush")))
+  if (failed(requireVersion({6, 0, 0}, op, "fflush")))
     return;
   startStatement();
   ps.scopedBox(PP::ibox2, [&]() {
@@ -1735,13 +1735,13 @@ void Emitter::emitExpression(FIntegerConstantOp op) {
 }
 
 void Emitter::emitExpression(BoolConstantOp op) {
-  if (failed(requireVersion(missingSpecFIRVersion, op, "Bools")))
+  if (failed(requireVersion({6, 0, 0}, op, "Bools")))
     return;
   ps << "Bool(" << (op.getValue() ? "true" : "false") << ")";
 }
 
 void Emitter::emitExpression(DoubleConstantOp op) {
-  if (failed(requireVersion(missingSpecFIRVersion, op, "Doubles")))
+  if (failed(requireVersion({6, 0, 0}, op, "Doubles")))
     return;
   ps << "Double(";
   // Use APFloat::toString.
@@ -1769,7 +1769,7 @@ void Emitter::emitExpression(ListCreateOp op) {
 }
 
 void Emitter::emitExpression(UnresolvedPathOp op) {
-  if (failed(requireVersion(missingSpecFIRVersion, op, "Paths")))
+  if (failed(requireVersion({6, 0, 0}, op, "Paths")))
     return;
   ps << "path(";
   ps.writeQuotedEscaped(op.getTarget());

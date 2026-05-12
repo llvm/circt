@@ -3,7 +3,7 @@
 ; RUN: firtool -domain-mode=disable %s --ir-fir --select-instance-choice=Platform=FPGA | FileCheck %s --check-prefix=FPGA
 ; RUN: firtool -domain-mode=disable %s --ir-fir --select-instance-choice=Platform=ASIC | FileCheck %s --check-prefix=ASIC
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 ; CHECK: firrtl.circuit "Foo"
 ; CHECK-SAME: select_inst_choice = ["Platform=ASIC"]
 circuit Foo:

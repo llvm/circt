@@ -1,6 +1,6 @@
 ; RUN: firtool %s | FileCheck %s
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 ; CHECK: `ifndef SYNTHESIS
 ; CHECK: `ifndef __CIRCT_LIB_LOGGING
 ; CHECK-NEXT:   // CIRCT Logging Library
