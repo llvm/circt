@@ -75,7 +75,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(), "unknown class name \"MyClass\"");
@@ -97,7 +97,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(
@@ -122,7 +122,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(), "actual parameter for \"param\" is null");
@@ -145,7 +145,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(), "actual parameter for \"param\" has invalid type");
@@ -170,7 +170,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     ASSERT_EQ(diag.str(), "field \"foo\" does not exist");
@@ -199,7 +199,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"),
                                       {makeIntegerValue(&context, 42)});
@@ -229,7 +229,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
@@ -261,7 +261,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"),
                                       {makeIntegerValue(&context, 42)});
@@ -300,7 +300,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"),
                                       {makeIntegerValue(&context, 42)});
@@ -334,7 +334,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
@@ -386,7 +386,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
@@ -419,7 +419,7 @@ module {
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto i64 = IntegerType::get(&context, 64);
   auto result =
@@ -464,7 +464,7 @@ om.class @ReferenceEachOther() -> (field1: !ty, field2: !ty) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "ReferenceEachOther"), {});
@@ -518,7 +518,7 @@ om.class @ReferenceEachOther() -> (field: !ty){
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "ReferenceEachOther"), {});
@@ -549,7 +549,7 @@ om.class @Top() -> (test: i1) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
 
@@ -577,7 +577,7 @@ om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticAdd"), {});
@@ -607,7 +607,7 @@ om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticMul"), {});
@@ -637,7 +637,7 @@ om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShr"), {});
@@ -675,7 +675,7 @@ om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShrNegative"), {});
@@ -705,7 +705,7 @@ om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShrTooLarge"), {});
@@ -726,7 +726,7 @@ om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShl"), {});
@@ -764,7 +764,7 @@ om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShlNegative"), {});
@@ -794,7 +794,7 @@ om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticShlTooLarge"), {});
@@ -829,7 +829,7 @@ om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticObjects"), {});
@@ -873,7 +873,7 @@ om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer){
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticObjectsDelayed"), {});
@@ -903,7 +903,7 @@ om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "IntegerBinaryArithmeticWidthMismatch"), {});
@@ -936,7 +936,7 @@ om.class @ListConcat() -> (result: !om.list<!om.integer>) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "ListConcat"), {});
@@ -989,7 +989,7 @@ om.class @ListConcatField() -> (result: !om.list<!om.integer>){
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "ListConcatField"), {});
@@ -1040,7 +1040,7 @@ om.class @ListOfListConcat()  -> (result: !om.list<!om.list<!om.string>>) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "ListOfListConcat"), {});
@@ -1111,7 +1111,7 @@ om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "ListConcatPartialCycle"), {});
@@ -1182,7 +1182,7 @@ om.class @OuterClass1()  -> (om: !om.any) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result =
       evaluator.instantiate(StringAttr::get(&context, "OuterClass1"), {});
@@ -1219,7 +1219,7 @@ om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto result = evaluator.instantiate(
       StringAttr::get(&context, "ConcatListAttribute"), {});
@@ -1305,7 +1305,7 @@ om.class @Foo(
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto unknownLoc = UnknownLoc::get(&context);
   // Create unknown values with the correct types
@@ -1413,7 +1413,7 @@ om.class @Foo(
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto unknownLoc = UnknownLoc::get(&context);
   // Create unknown value with the correct type (!om.integer)
@@ -1457,7 +1457,7 @@ module {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
     llvm::errs() << "Diagnostic: " << diag << "\n";
@@ -1495,7 +1495,7 @@ om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto basepath = std::make_shared<evaluator::BasePathValue>(&context);
 
@@ -1629,7 +1629,7 @@ om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   ASSERT_TRUE(
       succeeded(evaluator.instantiate(StringAttr::get(&context, "True"), {})));
@@ -1704,7 +1704,7 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
 
@@ -1765,7 +1765,7 @@ om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
   OwningOpRef<ModuleOp> owning = parseModule(mod);
   ASSERT_TRUE(owning);
 
-  Evaluator evaluator(owning.get());
+  Evaluator evaluator(owning.release());
 
   auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
   auto i8Type = mlir::IntegerType::get(&context, 8);
