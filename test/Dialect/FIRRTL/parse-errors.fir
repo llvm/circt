@@ -196,7 +196,7 @@ circuit invalid_inst :
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit class_inst :
   class some_class :
   public module class_inst :
@@ -348,49 +348,49 @@ circuit circuit:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit circuit:
   public module circuit :
     input in: {|A : {flip a: UInt<1>}|} ; expected-error {{enum field "A" not passive}}
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit circuit:
   public module circuit :
     input in: {|A : Analog|} ; expected-error {{enum field "A" contains analog}}
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit circuit:
   public module circuit :
     input in: {|A : UInt|} ; expected-error {{enum field "A" has uninferred width}}
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit circuit:
   public module circuit :
     input in: {|A : Reset|} ; expected-error {{enum field "A" has uninferred reset}}
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit circuit:
   public module circuit :
     input in: {|A, A|} ; expected-error {{duplicate variant name in enum: A}}
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit circuit:
   public module circuit :
     input in: {|A, B = 0|} ; expected-error {{duplicate variant value in enum: 0 : ui0}}
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit circuit:
   public module circuit :
     input in: {|A = -1|} ; expected-error {{enum tag value must be non-negative}}
@@ -425,7 +425,7 @@ circuit PrintfExpr:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit PrintfUnknownFormatSpecifier:
   public module PrintfUnknownFormatSpecifier:
     input clock: Clock
@@ -433,7 +433,7 @@ circuit PrintfUnknownFormatSpecifier:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit PrintfIllegalCharWidth:
   public module PrintfIllegalCharWidth:
     input clock: Clock
@@ -441,7 +441,7 @@ circuit PrintfIllegalCharWidth:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit PrintfPercentWithWidth:
   public module PrintfPercentWithWidth:
     input clock: Clock
@@ -996,21 +996,21 @@ circuit LayerEmptyOutputDir:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit Top:
   ; expected-error @below {{class cannot be the top of a circuit}}
   class Top:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit Top:
   ; expected-error @below {{extclass cannot be the top of a circuit}}
   extclass Top:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit Top:
   public module Top:
   class Foo:
@@ -1019,7 +1019,7 @@ circuit Top:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit Top:
   public module Top:
   extclass Foo:
@@ -1125,7 +1125,7 @@ circuit Top :
     propassign c, list_concat()
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 
 circuit Top:
   public module Top:
@@ -1133,7 +1133,7 @@ circuit Top:
     input in : Inst<Missing>
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 
 circuit Top:
   public module Top:
@@ -1141,7 +1141,7 @@ circuit Top:
     object x of Missing
 
 ;// -----
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 
 circuit Top:
   class MyClass:
@@ -1157,7 +1157,7 @@ circuit Top:
 FIRRTL version 3.0.0
 
 circuit Top:
-  ; expected-error @below {{classes are a FIRRTL 5.1.0+ feature}}
+  ; expected-error @below {{classes are a FIRRTL 6.0.0+ feature}}
   class MyClass:
     skip
 
@@ -1169,7 +1169,7 @@ FIRRTL version 3.0.0
 
 circuit Top:
   module Top:
-    ; expected-error @below {{object statements are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{object statements are a FIRRTL 6.0.0+ feature}}
     object x of MyClass
 
 ;// -----
@@ -1177,7 +1177,7 @@ FIRRTL version 3.0.0
 
 circuit Top:
   module Top:
-    ; expected-error @below {{Inst types are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{Inst types are a FIRRTL 6.0.0+ feature}}
     output o: Inst<MyClass>
 
 ;// -----
@@ -1224,13 +1224,13 @@ circuit LeadingPath:
 FIRRTL version 3.1.0
 circuit PathVersion:
   module PathVersion:
-    ; expected-error @below {{Paths are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{Paths are a FIRRTL 6.0.0+ feature}}
     output path : Path
     propassign path, path("")
 
 ;// -----
 ; Path operation should have a single string argument.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit BadPathExpr:
   public module BadPathExp:
     output path : Path
@@ -1239,7 +1239,7 @@ circuit BadPathExpr:
 
 ;// -----
 ; Path operation should have a single string argument.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit BadPathExpr:
   public module BadPathExp:
     output path : Path
@@ -1248,7 +1248,7 @@ circuit BadPathExpr:
 
 ;// -----
 ; Path operation should have a single string argument.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit BadPathExpr:
   public module BadPathExp:
     output path : Path
@@ -1261,14 +1261,14 @@ FIRRTL version 3.0.0
 
 circuit Top:
   module Top:
-    ; expected-error @below {{Bools are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{Bools are a FIRRTL 6.0.0+ feature}}
     input in : Bool
     output out : Bool
     propassign out, in
 
 ;// -----
 ; Bool literal must be true or false.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 
 circuit Top:
   public module Top:
@@ -1278,7 +1278,7 @@ circuit Top:
 
 ;// -----
 ; Properties can't be const.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 
 circuit Top:
   public module Top:
@@ -1290,12 +1290,12 @@ circuit Top:
 FIRRTL version 3.1.0
 circuit AnyRef:
    module AnyRef:
-     ; expected-error @below {{AnyRef types are a FIRRTL 5.1.0+ feature}}
+     ; expected-error @below {{AnyRef types are a FIRRTL 6.0.0+ feature}}
      output a : AnyRef
 
 ;// -----
 ; Only objects are valid as AnyRef
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit AnyRef:
   public module AnyRef:
     output out : AnyRef
@@ -1304,7 +1304,7 @@ circuit AnyRef:
 
 ;// -----
 ; Only objects are valid as AnyRef in Lists
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit AnyRefList:
   public module AnyRefList:
     output list : List<AnyRef>
@@ -1313,7 +1313,7 @@ circuit AnyRefList:
 
 ;// -----
 ; Not Covariant.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit NotCovariant:
   class Class:
 
@@ -1326,7 +1326,7 @@ circuit NotCovariant:
 
 ;// -----
 ; Not Contravariant.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit NotContravariant:
   class Class:
 
@@ -1339,7 +1339,7 @@ circuit NotContravariant:
 
 ;// -----
 ; Double: must have digit before point.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit DoubleNegPeriod:
   public module DoubleNegPeriod:
     output d : Double
@@ -1348,7 +1348,7 @@ circuit DoubleNegPeriod:
 
 ;// -----
 ; Double: must have digit after point.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit DoublePeriodEnd:
   public module DoublePeriodEnd:
     output d : Double
@@ -1357,7 +1357,7 @@ circuit DoublePeriodEnd:
 
 ;// -----
 ; Double: Not an integer.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit DoubleInteger:
   public module DoubleInteger:
     output d : Double
@@ -1366,7 +1366,7 @@ circuit DoubleInteger:
 
 ;// -----
 ; Double: don't support NaN or inf.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit DoubleNaN:
   public module DoubleNaN:
     output d : Double
@@ -1375,7 +1375,7 @@ circuit DoubleNaN:
 
 ;// -----
 ; Double: Don't support hex.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit DoubleHex:
   public module DoubleHex:
     output d : Double
@@ -1384,7 +1384,7 @@ circuit DoubleHex:
 
 ;// -----
 ; Double: Don't suuport FIRRTL-y radix.
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit DoubleRadix:
   public module DoubleRadix:
     output d : Double
@@ -1422,7 +1422,7 @@ circuit RWProbeExprOOB :
 
 FIRRTL version 3.9.0
 circuit Foo:
-  ; expected-error @below {{option groups/instance choices are a FIRRTL 5.1.0+ feature}}
+  ; expected-error @below {{option groups/instance choices are a FIRRTL 7.0.0+ feature}}
   option Platform:
     FPGA
     ASIC
@@ -1433,14 +1433,14 @@ FIRRTL version 3.9.0
 circuit Foo:
 
   module Foo:
-    ; expected-error @below {{option groups/instance choices are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{option groups/instance choices are a FIRRTL 7.0.0+ feature}}
     instchoice inst of DefaultTarget Platform :
       FPGA => FPGATarget
       ASIC => ASICTarget
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Foo:
   option Platform:
     FPGA
@@ -1458,7 +1458,7 @@ circuit Foo:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Foo:
   option Platform:
     FPGA
@@ -1476,7 +1476,7 @@ circuit Foo:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Foo:
   option Platform:
     FPGA
@@ -1491,7 +1491,7 @@ circuit Foo:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Foo:
   module DefaultTarget:
   module FPGATarget:
@@ -1503,7 +1503,7 @@ circuit Foo:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Foo:
   ; expected-error @below {{duplicate option case definition 'FPGA'}}
   option Platform:
@@ -1695,7 +1695,7 @@ circuit Foo:
 FIRRTL version 4.1.0
 circuit Top:
   public module Top:
-    ; expected-error @below {{contracts are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{contracts are a FIRRTL 7.0.0+ feature}}
     contract:
 
 // -----
@@ -1799,14 +1799,14 @@ circuit CatSign:
 FIRRTL version 5.0.0
 circuit Domains:
   public module Domains:
-    ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{domains are a FIRRTL 7.0.0+ feature}}
     input A: Domain
 
 // -----
 FIRRTL version 5.0.0
 circuit Domains:
   public module Domains:
-    ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{domains are a FIRRTL 7.0.0+ feature}}
     input a: UInt<1> domains [A]
 
 ;// -----
@@ -1814,12 +1814,12 @@ circuit Domains:
 FIRRTL version 5.0.0
 circuit Domains:
   public module Domains:
-    ; expected-error @below {{domains are a FIRRTL 5.1.0+ feature, but the specified FIRRTL version was 5.0.0}}
+    ; expected-error @below {{domains are a FIRRTL 7.0.0+ feature, but the specified FIRRTL version was 5.0.0}}
     domain_define
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   public module Domains:
     ; expected-error @+3 {{expected domain expression}}
@@ -1827,7 +1827,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1836,7 +1836,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1846,7 +1846,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1856,7 +1856,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1866,7 +1866,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1876,7 +1876,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1887,7 +1887,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1898,7 +1898,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1909,7 +1909,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1920,7 +1920,7 @@ circuit Domains:
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Domains:
   domain D:
   public module Domains:
@@ -1935,12 +1935,12 @@ FIRRTL version 5.0.0
 circuit Foo:
   public module Foo:
     output a: Integer
-    ; expected-error @below {{unknown property expressions are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{unknown property expressions are a FIRRTL 7.0.0+ feature}}
     propassign a, Unknown(Integer)
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit Foo:
   public module Foo:
     output a: Integer
@@ -1953,12 +1953,12 @@ FIRRTL version 5.0.0
 circuit AsResetVersion:
   public module AsResetVersion:
     input in: UInt<1>
-    ; expected-error @below {{reset casts are a FIRRTL 5.1.0+ feature}}
+    ; expected-error @below {{reset casts are a FIRRTL 7.0.0+ feature}}
     node x = asReset(in)
 
 ;// -----
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit OOBFormatString:
   public module Oops:
     input clk : Clock

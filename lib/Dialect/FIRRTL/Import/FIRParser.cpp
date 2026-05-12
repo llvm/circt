@@ -954,7 +954,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
 
   case FIRToken::kw_Inst: {
-    if (requireFeature(missingSpecFIRVersion, "Inst types"))
+    if (requireFeature({6, 0, 0}, "Inst types"))
       return failure();
 
     consumeToken(FIRToken::kw_Inst);
@@ -982,7 +982,7 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
   }
 
   case FIRToken::kw_AnyRef: {
-    if (requireFeature(missingSpecFIRVersion, "AnyRef types"))
+    if (requireFeature({6, 0, 0}, "AnyRef types"))
       return failure();
 
     consumeToken(FIRToken::kw_AnyRef);
@@ -1216,19 +1216,19 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     result = FIntegerType::get(getContext());
     break;
   case FIRToken::kw_Bool:
-    if (requireFeature(missingSpecFIRVersion, "Bools"))
+    if (requireFeature({6, 0, 0}, "Bools"))
       return failure();
     consumeToken(FIRToken::kw_Bool);
     result = BoolType::get(getContext());
     break;
   case FIRToken::kw_Double:
-    if (requireFeature(missingSpecFIRVersion, "Doubles"))
+    if (requireFeature({6, 0, 0}, "Doubles"))
       return failure();
     consumeToken(FIRToken::kw_Double);
     result = DoubleType::get(getContext());
     break;
   case FIRToken::kw_Path:
-    if (requireFeature(missingSpecFIRVersion, "Paths"))
+    if (requireFeature({6, 0, 0}, "Paths"))
       return failure();
     consumeToken(FIRToken::kw_Path);
     result = PathType::get(getContext());
@@ -2322,7 +2322,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::lp_Bool: {
-    if (requireFeature(missingSpecFIRVersion, "Bools"))
+    if (requireFeature({6, 0, 0}, "Bools"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::lp_Bool);
@@ -2341,7 +2341,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
   }
   case FIRToken::lp_Double: {
-    if (requireFeature(missingSpecFIRVersion, "Doubles"))
+    if (requireFeature({6, 0, 0}, "Doubles"))
       return failure();
     locationProcessor.setLoc(getToken().getLoc());
     consumeToken(FIRToken::lp_Double);
@@ -2382,7 +2382,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
   case FIRToken::lp_path:
     if (isLeadingStmt)
       return emitError("unexpected path() as start of statement");
-    if (requireFeature(missingSpecFIRVersion, "Paths") || parsePathExp(result))
+    if (requireFeature({6, 0, 0}, "Paths") || parsePathExp(result))
       return failure();
     break;
 
@@ -2403,7 +2403,7 @@ ParseResult FIRStmtParser::parseExpImpl(Value &result, const Twine &message,
     break;
 
   case FIRToken::lp_prop_eq:
-    if (requireFeature(missingSpecFIRVersion, "property equality") ||
+    if (requireFeature({6, 0, 0}, "property equality") ||
         parsePropEqExp(result))
       return failure();
     break;
@@ -2848,7 +2848,7 @@ ParseResult FIRStmtParser::parseCatExp(Value &result) {
     return failure();
 
   if (operands.size() != 2) {
-    if (requireFeature(nextFIRVersion, "variadic cat", loc))
+    if (requireFeature({6, 0, 0}, "variadic cat", loc))
       return failure();
   }
 
@@ -3097,7 +3097,7 @@ ParseResult FIRStmtParser::parseSimpleStmtImpl(unsigned stmtIndent) {
   case FIRToken::kw_connect:
     return parseConnect();
   case FIRToken::kw_propassert:
-    if (requireFeature(missingSpecFIRVersion, "property assertions"))
+    if (requireFeature({6, 0, 0}, "property assertions"))
       return failure();
     return parsePropAssert();
   case FIRToken::kw_propassign:
@@ -3382,7 +3382,7 @@ ParseResult FIRStmtParser::parsePrintf() {
 
 /// fprintf ::= 'fprintf(' exp exp StringLit StringLit exp* ')' name? info?
 ParseResult FIRStmtParser::parseFPrintf() {
-  if (requireFeature(nextFIRVersion, "fprintf"))
+  if (requireFeature({6, 0, 0}, "fprintf"))
     return failure();
   auto startTok = consumeToken(FIRToken::lp_fprintf);
 
@@ -3447,7 +3447,7 @@ ParseResult FIRStmtParser::parseFPrintf() {
 
 /// fflush ::= 'fflush(' exp exp (StringLit exp*)? ')' info?
 ParseResult FIRStmtParser::parseFFlush() {
-  if (requireFeature(nextFIRVersion, "fflush"))
+  if (requireFeature({6, 0, 0}, "fflush"))
     return failure();
 
   auto startTok = consumeToken(FIRToken::lp_fflush);
@@ -4939,7 +4939,7 @@ ParseResult FIRStmtParser::parseObject() {
   if (auto isExpr = parseExpWithLeadingKeyword(startTok))
     return *isExpr;
 
-  if (requireFeature(missingSpecFIRVersion, "object statements"))
+  if (requireFeature({6, 0, 0}, "object statements"))
     return failure();
 
   StringRef id;
@@ -5708,7 +5708,7 @@ ParseResult FIRCircuitParser::parseExtModuleAttributesSpec(
       return failure();
 
   if (knownLayersBuffer.size() != 0)
-    if (requireFeature(nextFIRVersion, "extmodules with known layers"))
+    if (requireFeature({6, 0, 0}, "extmodules with known layers"))
       return failure();
 
   enabledLayers = ArrayAttr::get(getContext(), enabledLayersBuffer);
@@ -5927,7 +5927,7 @@ ParseResult FIRCircuitParser::parseClass(CircuitOp circuit, unsigned indent) {
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
 
-  if (requireFeature(missingSpecFIRVersion, "classes"))
+  if (requireFeature({6, 0, 0}, "classes"))
     return failure();
 
   consumeToken(FIRToken::kw_class);
@@ -6004,7 +6004,7 @@ ParseResult FIRCircuitParser::parseExtClass(CircuitOp circuit,
   SmallVector<SMLoc> portLocs;
   LocWithInfo info(getToken().getLoc(), this);
 
-  if (requireFeature(missingSpecFIRVersion, "classes"))
+  if (requireFeature({6, 0, 0}, "classes"))
     return failure();
 
   consumeToken(FIRToken::kw_extclass);

@@ -1,6 +1,6 @@
 ; RUN: firtool %s -ir-verilog | FileCheck %s
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 
 circuit Test : %[[
 {

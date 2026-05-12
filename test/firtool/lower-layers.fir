@@ -294,7 +294,7 @@ circuit Foo:
 ; Check that when bindfiles include eachother, the include directive uses a path
 ; relative to the output directory (or absolute).
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit Foo:
 
   layer A, bind, "A":
@@ -320,7 +320,7 @@ circuit Foo:
 ; Check that bindfile for Top should include layers-Bar-A, not layers-Foo-A,
 ; respecting the defname of an extmodule.
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit Top:
   layer A, bind:
 
@@ -337,7 +337,7 @@ circuit Top:
 ; Check that bindfile for Top should include layers-MyExt-A when defname is
 ; empty, falling back to the module name.
 
-FIRRTL version 5.1.0
+FIRRTL version 6.0.0
 circuit TopEmptyDefname:
   layer A, bind:
 

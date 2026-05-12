@@ -1,7 +1,7 @@
 ; RUN: firtool %s | FileCheck %s
 ; RUN: firtool %s --select-default-for-unspecified-instance-choice | FileCheck %s --check-prefix=SPECIALIZE
 
-FIRRTL version 5.1.0
+FIRRTL version 7.0.0
 circuit top:
   option Platform:
     FPGA

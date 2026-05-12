@@ -8,9 +8,9 @@
 // RUN: circt-translate --export-firrtl %s | FileCheck %s --check-prefix=LATEST
 // RUN: circt-translate --export-firrtl %s | circt-translate --import-firrtl | FileCheck %s --check-prefix=CHECK
 
-// Targeting 5.1.0 explicitly: same as default.
-// RUN: circt-translate --export-firrtl --firrtl-version=5.1.0 %s | FileCheck %s --check-prefix=LATEST
-// RUN: circt-translate --export-firrtl --firrtl-version=5.1.0 %s | circt-translate --import-firrtl | FileCheck %s --check-prefix=CHECK
+// Targeting 7.0.0 explicitly: same as default.
+// RUN: circt-translate --export-firrtl --firrtl-version=7.0.0 %s | FileCheck %s --check-prefix=LATEST
+// RUN: circt-translate --export-firrtl --firrtl-version=7.0.0 %s | circt-translate --import-firrtl | FileCheck %s --check-prefix=CHECK
 
 // Targeting 2.0.0: version header, pre-3.0.0 syntax ('<=', 'is invalid', 'reg with').
 // RUN: circt-translate --export-firrtl --firrtl-version=2.0.0 %s | FileCheck %s --check-prefix=V200
@@ -33,7 +33,7 @@
 // BAD-VERSION: invalid --firrtl-version: 'foo', expected format 'major.minor.patch'
 // BELOW-MIN:   1.0.0 is below the minimum supported version 2.0.0
 
-// LATEST: FIRRTL version 5.1.0
+// LATEST: FIRRTL version 7.0.0
 // V200:   FIRRTL version 2.0.0
 // V300:   FIRRTL version 3.0.0
 // V400:   FIRRTL version 4.0.0
