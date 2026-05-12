@@ -944,7 +944,7 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
     // Use name of `hw.wire` that carries this value.
     if (auto wireOp = dyn_cast<hw::WireOp>(user))
       if (wireOp.getInput() == result)
-        return emitExpression(wireOp);
+        return emitExpression(wireOp.getResult());
     // Use name of `sv.assign` destination that is assigned this value.
     if (auto assignOp = dyn_cast<sv::AssignOp>(user))
       if (assignOp.getSrc() == result)

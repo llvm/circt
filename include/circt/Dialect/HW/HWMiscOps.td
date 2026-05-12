@@ -104,7 +104,7 @@ def WireOp : HWOp<"wire", [
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        UnitAttr:$forceable);
   let results = (outs AnyType:$result,
-                      Optional<SimRefType>:$ref);
+                      Optional<HWRefType>:$ref);
 
   let hasFolder = true;
   let hasCanonicalizeMethod = 1;

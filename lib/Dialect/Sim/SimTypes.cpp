@@ -66,17 +66,6 @@ void SimDialect::registerTypes() {
 }
 
 //===----------------------------------------------------------------------===//
-// RefType
-//===----------------------------------------------------------------------===//
-
-LogicalResult RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
-                              Type base, bool forceable) {
-  // For sim dialect, we don't have strict constraints like FIRRTL
-  // Any type can be referenced
-  return success();
-}
-
-//===----------------------------------------------------------------------===//
 // DPIFunctionType storage
 //===----------------------------------------------------------------------===//
 

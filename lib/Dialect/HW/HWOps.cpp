@@ -18,7 +18,6 @@
 #include "circt/Dialect/HW/HWVisitors.h"
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/LTL/LTLTypes.h"
-#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/Naming.h"
@@ -423,7 +422,7 @@ ParseResult WireOp::parse(OpAsmParser &parser, OperationState &result) {
   // Add result types
   result.addTypes(inputType);
   if (forceable) {
-    auto refType = sim::RefType::get(inputType, true);
+    auto refType = hw::RefType::get(inputType, true);
     result.addTypes(refType);
   }
 

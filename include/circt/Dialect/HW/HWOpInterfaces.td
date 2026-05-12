@@ -683,8 +683,8 @@ def HWForceable : OpInterface<"HWForceable"> {
       return $_op.getDataRaw().getType();
     }]>,
     InterfaceMethod<"Return reference result, or null if not active.",
-    "mlir::TypedValue<::circt::sim::RefType>", "getDataRef", (ins), [{}], /*defaultImplementation=*/[{
-      return llvm::cast_or_null<mlir::TypedValue<::circt::sim::RefType>>($_op.getRef());
+    "mlir::TypedValue<::circt::hw::RefType>", "getDataRef", (ins), [{}], /*defaultImplementation=*/[{
+      return llvm::cast_or_null<mlir::TypedValue<::circt::hw::RefType>>($_op.getRef());
     }]>,
   ];
   let extraClassDeclaration = [{
