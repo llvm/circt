@@ -33,12 +33,13 @@ firrtl.circuit "MuxCellCanonicalization" {
     %mux4 = firrtl.int.mux4cell(%sel, %c0, %c1, %c0, %c1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %out_mux4_not, %mux4 : !firrtl.uint<1>
 
-    // Test: mux4cell(sel, 1, 0, 1, 0) -> sel (identity pattern)
+    // Test: mux4cell(sel, 1, 0, 1, 0) -> not(sel)
     // This simplifies to just the selector. Operands are (1, 0, 1, 0) which maps to:
-    //   sel=0 -> v0=0, sel=1 -> v1=1, sel=2 -> v2=0, sel=3 -> v3=1
-    // So for 1-bit selector: sel=0 returns 0, sel=1 returns 1, which is exactly sel.
+    //   sel=0 -> v0=1, sel=1 -> v1=0, sel=2 -> v2=1, sel=3 -> v3=0
+    // So for 1-bit selector: sel=0 returns 1, sel=1 returns 0, which is not(sel).
     // Without the fold, this would remain as mux4cell.
-    // CHECK: firrtl.matchingconnect %out_mux4_identity, %sel
+    // CHECK: [[NOT3:%.+]] = firrtl.not %sel
+    // CHECK: firrtl.matchingconnect %out_mux4_identity, [[NOT3]]
     %mux4id = firrtl.int.mux4cell(%sel, %c1, %c0, %c1, %c0) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %out_mux4_identity, %mux4id : !firrtl.uint<1>
   }

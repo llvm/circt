@@ -665,6 +665,17 @@ def Mux4Not : Pat<
     (ZeroConstantOp $cst0b), (OneConstantOp $cst1b)
   ]>;
 
+
+// mux4cell(sel, 1, 0, 1, 0) -> not(sel)
+def Mux4SelNot : Pat<
+  (Mux4CellIntrinsicOp:$old $cond, (ConstantOp:$cst0 $_),
+   (ConstantOp:$cst1 $_), (ConstantOp:$cst0b $_), (ConstantOp:$cst1b $_)),
+  (MoveNameHint $old, (NotPrimOp $cond)), [
+    (EqualTypes $cond, $cst0), (EqualTypes $cond, $cst1),
+    (OneConstantOp $cst0), (ZeroConstantOp $cst1),
+    (OneConstantOp $cst0b), (ZeroConstantOp $cst1b)
+  ]>;
+
 def CatDoubleConst : Pat <
   (CatPrimOp:$old (variadic $cst1, (CatPrimOp (variadic $cst2, $v)))),
   (MoveNameHint $old, (CatPrimOp (variadic (CatPrimOp (variadic $cst1, (AsUIntPrimOp $cst2))), (AsUIntPrimOp $v)))),

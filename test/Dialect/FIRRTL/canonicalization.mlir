@@ -4259,9 +4259,10 @@ firrtl.module @Mux2CellMux4CellCanon(
   // CHECK: firrtl.matchingconnect %out11, [[NOT2]]
   firrtl.matchingconnect %out11, %11 : !firrtl.uint<1>
 
-  // mux4cell(sel, 1, 0, 1, 0) -> sel (identity - all types uint<1>)
+  // mux4cell(sel, 1, 0, 1, 0) -> not(sel) (all types uint<1>)
   %12 = firrtl.int.mux4cell (%sel, %c1_ui1_2, %c0_ui1_2, %c1_ui1_2, %c0_ui1_2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  // CHECK: firrtl.matchingconnect %out12, %sel
+  // CHECK: [[NOT:%.+]] = firrtl.not %sel
+  // CHECK: firrtl.matchingconnect %out12, [[NOT]]
   firrtl.matchingconnect %out12, %12 : !firrtl.uint<1>
 }
 

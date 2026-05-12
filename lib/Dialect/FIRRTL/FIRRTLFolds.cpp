@@ -1923,11 +1923,6 @@ OpFoldResult Mux4CellIntrinsicOp::fold(FoldAdaptor adaptor) {
   if (llvm::all_of(constants, [&](auto &c) { return c == constants[0]; }))
     return getIntAttr(getType(), constants[0]);
 
-  // mux4(sel, 1, 0, 1, 0) -> sel (only when sel and result have same type)
-  if (constants[0].isZero() && constants[1].isOne() && constants[2].isZero() &&
-      constants[3].isOne() && getType() == getSel().getType())
-    return getSel();
-
   return {};
 }
 
@@ -2077,7 +2072,7 @@ void Mux2CellIntrinsicOp::getCanonicalizationPatterns(
 
 void Mux4CellIntrinsicOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.add<patterns::Mux4PadSel, patterns::Mux4Not>(context);
+  results.add<patterns::Mux4PadSel, patterns::Mux4Not, patterns::Mux4SelNot>(context);
 }
 
 OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {
