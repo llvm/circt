@@ -35,14 +35,4 @@ LogicalResult verifyNotInNonProceduralRegion(Operation *op) {
   return success();
 }
 
-bool isProceduralRegionOp(Operation *op) {
-  for (; op; op = op->getParentOp()) {
-    if (op->hasTrait<NonProceduralRegion>())
-      return false;
-    if (op->hasTrait<ProceduralRegion>())
-      return true;
-  }
-  return false;
-}
-
 } // namespace circt
