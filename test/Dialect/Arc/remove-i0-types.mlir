@@ -132,12 +132,10 @@ func.func @CallMixed(%a: i32) -> i32 {
   return %0#0 : i32
 }
 
-// A struct with an i0 field: the i0 field type is replaced with !arc.poison
-// by the type converter. Struct fields are not removed, only type-converted.
-// CHECK-LABEL: func.func @StructWithI0Field(%arg0: i32) -> !hw.struct<x: i32, y: !arc.poison>
-// CHECK-NEXT:    %0 = builtin.unrealized_conversion_cast to !arc.poison
-// CHECK-NEXT:    %1 = hw.struct_create (%arg0, %0) : !hw.struct<x: i32, y: !arc.poison>
-// CHECK-NEXT:    return %1 : !hw.struct<x: i32, y: !arc.poison>
+// A struct with an i0 field: the i0 field type is removed.
+// CHECK-LABEL: func.func @StructWithI0Field(%arg0: i32) -> !hw.struct<x: i32>
+// CHECK-NEXT:    %0 = hw.struct_create (%arg0) : !hw.struct<x: i32>
+// CHECK-NEXT:    return %0 : !hw.struct<x: i32>
 // CHECK-NEXT:  }
 func.func @StructWithI0Field(%a: i32, %b: i0) -> !hw.struct<x: i32, y: i0> {
   %0 = hw.struct_create (%a, %b) : !hw.struct<x: i32, y: i0>
@@ -145,13 +143,22 @@ func.func @StructWithI0Field(%a: i32, %b: i0) -> !hw.struct<x: i32, y: i0> {
 }
 
 // Extracting a non-i0 field from a struct that also contains an i0 field.
-// CHECK-LABEL: func.func @StructExtractNonI0(%arg0: !hw.struct<x: i32, y: !arc.poison>) -> i32
-// CHECK-NEXT:    %x = hw.struct_extract %arg0["x"] : !hw.struct<x: i32, y: !arc.poison>
+// CHECK-LABEL: func.func @StructExtractNonI0(%arg0: !hw.struct<x: i32>) -> i32
+// CHECK-NEXT:    %x = hw.struct_extract %arg0["x"] : !hw.struct<x: i32>
 // CHECK-NEXT:    return %x : i32
 // CHECK-NEXT:  }
 func.func @StructExtractNonI0(%a: !hw.struct<x: i32, y: i0>) -> i32 {
   %0 = hw.struct_extract %a["x"] : !hw.struct<x: i32, y: i0>
   return %0 : i32
+}
+
+// Extracting an i0 field from a struct that also contains a non-i0 field.
+// CHECK-LABEL: func.func @StructExtractI0(%arg0: !hw.struct<x: i32>)
+// CHECK-NEXT:    return
+// CHECK-NEXT:  }
+func.func @StructExtractI0(%a: !hw.struct<x: i32, y: i0>) -> i0 {
+  %0 = hw.struct_extract %a["y"] : !hw.struct<x: i32, y: i0>
+  return %0 : i0
 }
 
 // A function that has all i0 arguments: all are removed, leaving an empty

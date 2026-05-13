@@ -6,19 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Dialect/Arc/ArcOps.h"
+#include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/Arc/ArcPasses.h"
+#include "circt/Dialect/Arc/ArcTypes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/Location.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace circt {
 namespace arc {
@@ -43,164 +44,137 @@ bool isI0(Type type) {
   return intType && intType.getWidth() == 0;
 }
 
-bool isPoison(Type type) { return isa<OpaqueType>(type); }
-
-SmallVector<Type> filterOutPoison(TypeRange range) {
-  return llvm::filter_to_vector(range, [](Type t) { return !isPoison(t); });
+// Flattens a list of list of values into a list of values.
+SmallVector<Value> flatten(ArrayRef<ValueRange> ranges) {
+  SmallVector<Value> flat;
+  for (auto range : ranges) {
+    flat.insert(flat.end(), range.begin(), range.end());
+  }
+  return flat;
 }
 
-SmallVector<Value> filterOutPoison(ValueRange range) {
-  return llvm::filter_to_vector(range,
-                                [](Value v) { return !isPoison(v.getType()); });
-}
-
-struct ConvertFunc : public OpConversionPattern<func::FuncOp> {
-  using OpConversionPattern<func::FuncOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(func::FuncOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    const TypeConverter &converter = *getTypeConverter();
-    FunctionType fty = op.getFunctionType();
-
-    rewriter.setInsertionPointToStart(&op.getBody().front());
-    TypeConverter::SignatureConversion sig(op.getNumArguments());
-    for (auto [origIdx, type] : enumerate(fty.getInputs())) {
-      Type newType = converter.convertType(type);
-      if (!newType)
-        return failure();
-      if (isPoison(newType)) {
-        Value cast = UnrealizedConversionCastOp::create(rewriter, op.getLoc(),
-                                                        newType, ValueRange{})
-                         .getResult(0);
-        sig.remapInput(origIdx, cast);
-        continue;
-      }
-      sig.addInputs(origIdx, newType);
-    }
-
-    if (failed(rewriter.convertRegionTypes(&op.getBody(), converter, &sig))) {
-      return failure();
-    }
-
-    SmallVector<Type> filteredResultTypes;
-    if (failed(converter.convertTypes(fty.getResults(), filteredResultTypes)))
-      return failure();
-    filteredResultTypes = filterOutPoison(filteredResultTypes);
-
-    rewriter.modifyOpInPlace(op, [&]() {
-      op.setFunctionType(FunctionType::get(
-          getContext(), sig.getConvertedTypes(), filteredResultTypes));
-    });
-
-    return success();
-  }
-};
-
-struct ConvertReturn : public OpConversionPattern<func::ReturnOp> {
-  using OpConversionPattern<func::ReturnOp>::OpConversionPattern;
+// Generic pattern for ops that are legalizable by flattening their remaining
+// operands after type conversion.
+template <typename T>
+struct LegalizeGeneric : public OpConversionPattern<T> {
+  using OpConversionPattern<T>::OpConversionPattern;
+  using OneToNOpAdaptor = typename OpConversionPattern<T>::OneToNOpAdaptor;
 
   LogicalResult
-  matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
+  matchAndRewrite(T op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    SmallVector<Value> filteredOperands =
-        filterOutPoison(adaptor.getOperands());
-    rewriter.modifyOpInPlace(op, [&]() { op->setOperands(filteredOperands); });
-
-    return success();
-  }
-};
-
-struct ConvertCall : public OpConversionPattern<func::CallOp> {
-  using OpConversionPattern<func::CallOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(func::CallOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    const TypeConverter &converter = *getTypeConverter();
-    SmallVector<Value> filteredOperands =
-        filterOutPoison(adaptor.getOperands());
-    SmallVector<Type> resultTypes;
-    if (failed(converter.convertTypes(op.getResultTypes(), resultTypes)))
+    const TypeConverter &converter = *this->getTypeConverter();
+    auto result = convertOpResultTypes(op, flatten(adaptor.getOperands()),
+                                       converter, rewriter);
+    if (failed(result))
       return failure();
-    SmallVector<Type> filteredResultTypes = filterOutPoison(resultTypes);
 
-    auto newOp =
-        func::CallOp::create(rewriter, op.getLoc(), filteredResultTypes,
-                             filteredOperands, op->getAttrs());
-
-    auto newOpResultIt = newOp.result_begin();
+    // Map from old results to new results, assuming the results size may have
+    // changed.
+    Operation *newOp = *result;
+    auto newOpResultIt = newOp->result_begin();
     SmallVector<Value> results;
-    for (auto type : resultTypes) {
-      if (isPoison(type)) {
-        results.push_back(UnrealizedConversionCastOp::create(
-                              rewriter, op.getLoc(), type, ValueRange{})
-                              .getResult(0));
+    for (auto oldType : op->getResultTypes()) {
+      if (!converter.convertType(oldType)) {
+        results.push_back(nullptr);
       } else {
         results.push_back(*newOpResultIt++);
       }
     }
+    assert(newOpResultIt == newOp->result_end() && "Didn't map all results!");
     rewriter.replaceOp(op, results);
     return success();
   }
 };
 
-struct ConvertArrayGet : public OpConversionPattern<hw::ArrayGetOp> {
-  using OpConversionPattern<hw::ArrayGetOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(hw::ArrayGetOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, adaptor.getInput());
-    return success();
-  }
-};
-
-struct ConvertArrayCreate : public OpConversionPattern<hw::ArrayCreateOp> {
-  using OpConversionPattern<hw::ArrayCreateOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(hw::ArrayCreateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, adaptor.getInputs().front());
-    return success();
-  }
-};
-
-struct ConvertArrayInject : public OpConversionPattern<hw::ArrayInjectOp> {
-  using OpConversionPattern<hw::ArrayInjectOp>::OpConversionPattern;
-  LogicalResult
-  matchAndRewrite(hw::ArrayInjectOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, adaptor.getElement());
-    return success();
-  }
-};
-
-struct HandleGenericOp : public ConversionPattern {
-  HandleGenericOp(TypeConverter &converter, MLIRContext *context)
+// As above, but if any converted operand is empty (i.e. the operand was i0
+// initially) or the number of results after conversion changes, then the op is
+// erased. This is used for all ops where we don't explicitly know the legality
+// of removing operands from its operand list.
+struct ConvertGeneric : public ConversionPattern {
+  ConvertGeneric(TypeConverter &converter, MLIRContext *context)
       : ConversionPattern(converter, MatchAnyOpTypeTag{},
                           /*benefit=*/0, context) {}
 
   LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+  matchAndRewrite(Operation *op, ArrayRef<ValueRange> operands,
                   ConversionPatternRewriter &rewriter) const override {
-    // Any op returning i0 must be dead.
-    if (llvm::any_of(op->getResults(),
-                     [](Value v) { return isI0(v.getType()); })) {
+    const TypeConverter &converter = *getTypeConverter();
+
+    // If any operand wasn't converted (empty range), the op must be dead.
+    for (ValueRange range : operands) {
+      if (range.empty()) {
+        rewriter.eraseOp(op);
+        return success();
+      }
+    }
+
+    // If any result wasn't converted, the op must be dead.
+    SmallVector<Type> resultTypes;
+    if (failed(converter.convertTypes(op->getResultTypes(), resultTypes)))
+      return failure();
+    if (resultTypes.size() != op->getNumResults()) {
       rewriter.eraseOp(op);
       return success();
     }
 
-    // Otherwise just perform type replacement.
     auto result =
-        convertOpResultTypes(op, operands, *getTypeConverter(), rewriter);
+        convertOpResultTypes(op, flatten(operands), converter, rewriter);
     if (failed(result))
       return failure();
-
     rewriter.replaceOp(op, *result);
     return success();
   }
 };
 
+// An array_get with i0 index just returns the array input, which will have been
+// scalarized.
+struct ConvertArrayGet : public OpConversionPattern<hw::ArrayGetOp> {
+  using OpConversionPattern<hw::ArrayGetOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(hw::ArrayGetOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (adaptor.getIndex().empty()) {
+      assert(adaptor.getInput().size() == 1);
+      rewriter.replaceOp(op, adaptor.getInput().front());
+      return success();
+    }
+    // Handled by ConvertGeneric.
+    return failure();
+  }
+};
+
+// Replaces array_create of a single element with the element.
+struct ConvertArrayCreate : public OpConversionPattern<hw::ArrayCreateOp> {
+  using OpConversionPattern<hw::ArrayCreateOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(hw::ArrayCreateOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (adaptor.getInputs().size() == 1) {
+      rewriter.replaceOp(op, adaptor.getInputs().front());
+      return success();
+    }
+    // Handled by ConvertGeneric.
+    return failure();
+  }
+};
+
+// Converts array_inject with i0 index to just return the element.
+struct ConvertArrayInject : public OpConversionPattern<hw::ArrayInjectOp> {
+  using OpConversionPattern<hw::ArrayInjectOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(hw::ArrayInjectOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (adaptor.getIndex().empty()) {
+      rewriter.replaceOp(op, adaptor.getElement());
+      return success();
+    }
+    // Handled by ConvertGeneric.
+    return failure();
+  }
+};
+
+// Converts an aggregate_constant by recursively rewriting its attribute.
 struct ConvertAggregateConstant
     : public OpConversionPattern<hw::AggregateConstantOp> {
   using OpConversionPattern<hw::AggregateConstantOp>::OpConversionPattern;
@@ -214,7 +188,7 @@ struct ConvertAggregateConstant
         rewriteArrayAttr(op.getFields(), op.getResult().getType());
 
     if (!isa<ArrayAttr>(newFields)) {
-      // Scalar result -> becomes hw.constant.
+      // Scalar result becomes hw.constant.
       IntegerAttr attr = cast<IntegerAttr>(newFields);
       auto result =
           hw::ConstantOp::create(rewriter, op.getLoc(), resultType, attr);
@@ -222,13 +196,14 @@ struct ConvertAggregateConstant
       return success();
     }
 
-    // Composite result -> new aggregate_constant op.
+    // Composite result becomes a new aggregate_constant op.
     auto newOp = hw::AggregateConstantOp::create(
         rewriter, op.getLoc(), resultType, cast<ArrayAttr>(newFields));
     rewriter.replaceOp(op, newOp);
     return success();
   }
 
+  // NOLINTNEXTLINE(misc-no-recursion): Bounded recursion.
   Attribute rewriteArrayAttr(ArrayAttr array, Type type) const {
     if (getTypeConverter()->convertType(type) == type)
       return array;
@@ -244,15 +219,15 @@ struct ConvertAggregateConstant
     for (auto [index, attr] : llvm::enumerate(array)) {
       uint64_t fieldId = fieldIdInterface.getFieldID(index);
       Type subType = fieldIdInterface.getSubTypeByFieldID(fieldId).first;
-      if (auto subArrayAttr = dyn_cast<ArrayAttr>(attr)) {
+      if (auto subArrayAttr = dyn_cast<ArrayAttr>(attr))
         attrs.push_back(rewriteArrayAttr(subArrayAttr, subType));
-      } else {
+      else
         attrs.push_back(attr);
-      }
     }
     return ArrayAttr::get(array.getContext(), attrs);
   }
 };
+
 } // namespace
 
 void RemoveI0TypesPass::runOnOperation() {
@@ -260,43 +235,71 @@ void RemoveI0TypesPass::runOnOperation() {
   ConversionTarget target(getContext());
   RewritePatternSet patterns(&getContext());
 
-  converter.addConversion([](Type type) -> Type {
+  // The conversions for types are 1:N, where N may be 1 or 0.
+  converter.addConversion([](Type type, SmallVectorImpl<Type> &types) {
     if (isI0(type))
-      return OpaqueType::get(StringAttr::get(type.getContext(), "arc"),
-                             StringAttr::get(type.getContext(), "poison"));
-    return type;
-  });
-  converter.addConversion([&converter](hw::ArrayType type) -> Type {
-    if (type.getNumElements() == 1)
-      return converter.convertType(type.getElementType());
-    // Recursively apply type conversion to inner types.
-    return hw::ArrayType::get(converter.convertType(type.getElementType()),
-                              type.getNumElements());
+      // Do not add any types to `types`.
+      return success();
+    types.push_back(type);
+    return success();
   });
 
   // Composite types - recursively apply type conversion to inner types.
-  converter.addConversion([&converter](hw::StructType type) {
-    auto newMembers =
-        map_to_vector(type.getElements(), [&](hw::StructType::FieldInfo field) {
-          field.type = converter.convertType(field.type);
-          return field;
-        });
+  converter.addConversion([&converter](hw::ArrayType type,
+                                       SmallVectorImpl<Type> &types) {
+    // If the array has only one element, we replace the array with the element.
+    if (type.getNumElements() == 1) {
+      Type converted = converter.convertType(type.getElementType());
+      if (converted)
+        types.push_back(converted);
+      // The element was i0; no type is added to `types`.
+      return success();
+    }
+    // Recursively apply type conversion to inner types.
+    types.push_back(hw::ArrayType::get(
+        converter.convertType(type.getElementType()), type.getNumElements()));
+    return success();
+  });
+  converter.addConversion([&converter](hw::StructType type) -> Type {
+    SmallVector<hw::StructType::FieldInfo> newMembers;
+    // Convert and filter out any i0 fields.
+    for (auto &field : type.getElements()) {
+      SmallVector<Type> convertedTypes;
+      if (failed(converter.convertType(field.type, convertedTypes)))
+        return Type();
+      if (!convertedTypes.empty()) {
+        assert(convertedTypes.size() == 1);
+        newMembers.push_back({field.name, convertedTypes[0]});
+      }
+    }
     return hw::StructType::get(type.getContext(), newMembers);
   });
-  converter.addConversion([&converter](hw::UnionType type) {
-    auto newMembers =
-        map_to_vector(type.getElements(), [&](hw::UnionType::FieldInfo field) {
-          field.type = converter.convertType(field.type);
-          return field;
-        });
+  converter.addConversion([&converter](hw::UnionType type) -> Type {
+    SmallVector<hw::UnionType::FieldInfo> newMembers;
+    // Convert and filter out any i0 fields.
+    for (auto &field : type.getElements()) {
+      SmallVector<Type> convertedTypes;
+      if (failed(converter.convertType(field.type, convertedTypes)))
+        return Type();
+      if (!convertedTypes.empty()) {
+        assert(convertedTypes.size() == 1);
+        newMembers.push_back({field.name, convertedTypes[0], field.offset});
+      }
+    }
     return hw::UnionType::get(type.getContext(), newMembers);
   });
-  converter.addConversion([&converter](hw::TypeAliasType type) {
-    return converter.convertType(type.getCanonicalType());
-  });
-  converter.addConversion([&converter](arc::StateType type) {
-    return arc::StateType::get(converter.convertType(type.getType()));
-  });
+  converter.addConversion(
+      [&converter](hw::TypeAliasType type, SmallVectorImpl<Type> &types) {
+        return converter.convertType(type.getCanonicalType(), types);
+      });
+  converter.addConversion(
+      [&converter](arc::StateType type, SmallVectorImpl<Type> &types) {
+        if (failed(converter.convertType(type.getType(), types)))
+          return failure();
+        assert(types.size() == 1);
+        types[0] = arc::StateType::get(types[0]);
+        return success();
+      });
 
   target.markUnknownOpDynamicallyLegal(
       [&](Operation *op) { return converter.isLegal(op); });
@@ -306,18 +309,16 @@ void RemoveI0TypesPass::runOnOperation() {
            converter.isLegal(fty.getResults());
   });
 
-  patterns.add<ConvertFunc, ConvertReturn, ConvertCall, ConvertArrayGet,
-               ConvertArrayCreate, ConvertArrayInject, HandleGenericOp,
-               ConvertAggregateConstant>(converter, &getContext());
-  if (failed(
-          applyFullConversion(getOperation(), target, std::move(patterns)))) {
-    return signalPassFailure();
-  }
+  populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(patterns,
+                                                                 converter);
 
-  // Run an empty set of patterns through applyPatternsGreedily to perform
-  // a poor-man's DCE.
-  if (failed(applyPatternsGreedily(getOperation(),
-                                   RewritePatternSet(&getContext())))) {
+  patterns.add<LegalizeGeneric<func::ReturnOp>, LegalizeGeneric<func::CallOp>,
+               LegalizeGeneric<hw::StructCreateOp>, ConvertArrayGet,
+               ConvertArrayCreate, ConvertArrayInject, ConvertGeneric,
+               ConvertAggregateConstant>(converter, &getContext());
+  ConversionConfig config;
+  config.allowPatternRollback = false;
+  if (failed(applyFullConversion(getOperation(), target, std::move(patterns),
+                                 config)))
     return signalPassFailure();
-  }
 }
