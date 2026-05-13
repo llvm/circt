@@ -27,8 +27,9 @@
 #include "test_codegen/TypedReadChannelStruct.h"
 #include "test_codegen/TypedWriteChannelByte.h"
 
+#include "probe_runner.h"
+
 #include "esi/Accelerator.h"
-#include "esi/CLI.h"
 #include "esi/Manifest.h"
 #include "esi/Services.h"
 #include "esi/TypedPorts.h"
@@ -58,7 +59,7 @@ static esi::HWModule *findInst(Accelerator *accel, const char *appidName) {
 //===----------------------------------------------------------------------===//
 // Function: typed multi-arg call via emplace ctor.
 //===----------------------------------------------------------------------===//
-static void runTypedFuncMultiArg(Accelerator *accel) {
+static int runTypedFuncMultiArg(Accelerator *accel) {
   esi_system::TypedFuncMultiArg mod(
       findInst(accel, "typed_func_multi_arg_inst"));
   auto c = mod.connect();
@@ -70,12 +71,13 @@ static void runTypedFuncMultiArg(Accelerator *accel) {
     throw std::runtime_error("typed_func_multi_arg: expected 42, got " +
                              std::to_string(got));
   std::cout << "typed_func_multi_arg ok\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Function: void argument (typed-result specialization).
 //===----------------------------------------------------------------------===//
-static void runTypedFuncVoidArg(Accelerator *accel) {
+static int runTypedFuncVoidArg(Accelerator *accel) {
   esi_system::TypedFuncVoidArg mod(findInst(accel, "typed_func_void_arg_inst"));
   auto c = mod.connect();
 
@@ -84,12 +86,13 @@ static void runTypedFuncVoidArg(Accelerator *accel) {
     throw std::runtime_error(
         "typed_func_void_arg: expected 0xCAFEF00D, got 0x" + toHex(got));
   std::cout << "typed_func_void_arg ok\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Function: void return (typed-arg specialization).
 //===----------------------------------------------------------------------===//
-static void runTypedFuncVoidResult(Accelerator *accel) {
+static int runTypedFuncVoidResult(Accelerator *accel) {
   esi_system::TypedFuncVoidResult mod(
       findInst(accel, "typed_func_void_result_inst"));
   auto c = mod.connect();
@@ -99,12 +102,13 @@ static void runTypedFuncVoidResult(Accelerator *accel) {
   // here as a hung future or a deserializer exception.
   c->call(esi_system::AckArgs(0x5A, 0x1234)).get();
   std::cout << "typed_func_void_result ok\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Callback: HW-initiated call into the host (triggered via an MMIO write).
 //===----------------------------------------------------------------------===//
-static void runCallServiceCallback(Accelerator *accel) {
+static int runCallServiceCallback(Accelerator *accel) {
   esi_system::CallServiceCallback mod(
       findInst(accel, "call_service_callback_inst"));
   auto c = mod.connect();
@@ -144,12 +148,13 @@ static void runCallServiceCallback(Accelerator *accel) {
         "call_service_callback: wrong payload, expected 0x" + toHex(kPayload) +
         " got 0x" + toHex(seen.payload));
   std::cout << "call_service_callback ok\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // To-host channel: TypedReadPort<EventStruct> polling.
 //===----------------------------------------------------------------------===//
-static void runTypedReadChannelStruct(Accelerator *accel) {
+static int runTypedReadChannelStruct(Accelerator *accel) {
   esi_system::TypedReadChannelStruct mod(
       findInst(accel, "typed_read_channel_struct_inst"));
   auto c = mod.connect();
@@ -173,12 +178,13 @@ static void runTypedReadChannelStruct(Accelerator *accel) {
           ", got " + std::to_string(ev->val));
   }
   std::cout << "typed_read_channel_struct ok (" << kNum << " events)\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // From-host channel: TypedWritePort<uint8_t> + MMIO read-back accumulator.
 //===----------------------------------------------------------------------===//
-static void runTypedWriteChannelByte(Accelerator *accel) {
+static int runTypedWriteChannelByte(Accelerator *accel) {
   esi_system::TypedWriteChannelByte mod(
       findInst(accel, "typed_write_channel_byte_inst"));
   auto c = mod.connect();
@@ -212,12 +218,13 @@ static void runTypedWriteChannelByte(Accelerator *accel) {
         toHex(static_cast<uint64_t>(got)) + ")");
   std::cout << "typed_write_channel_byte ok (acc=0x"
             << toHex(static_cast<uint64_t>(expected)) << ")\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // MMIO region: read-write loopback at offset 0x10.
 //===----------------------------------------------------------------------===//
-static void runMmioReadWrite(Accelerator *accel) {
+static int runMmioReadWrite(Accelerator *accel) {
   esi_system::MmioReadWrite mod(findInst(accel, "mmio_read_write_inst"));
   auto c = mod.connect();
 
@@ -230,12 +237,13 @@ static void runMmioReadWrite(Accelerator *accel) {
     throw std::runtime_error("mmio_read_write: round-trip mismatch (wrote 0x" +
                              toHex(kToken) + ", read 0x" + toHex(got) + ")");
   std::cout << "mmio_read_write ok (round-trip 0x" << toHex(kToken) << ")\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Telemetry: free-running cycle counter is monotonic between reads.
 //===----------------------------------------------------------------------===//
-static void runTelemetryMetric(Accelerator *accel) {
+static int runTelemetryMetric(Accelerator *accel) {
   esi_system::TelemetryMetric mod(findInst(accel, "telemetry_metric_inst"));
   auto c = mod.connect();
 
@@ -250,12 +258,13 @@ static void runTelemetryMetric(Accelerator *accel) {
         "telemetry_metric: counter did not advance (first=" +
         std::to_string(first) + ", second=" + std::to_string(second) + ")");
   std::cout << "telemetry_metric ok (advanced by " << (second - first) << ")\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Indexed function group: exercise every entry of IndexedPorts<TypedFunction>.
 //===----------------------------------------------------------------------===//
-static void runIndexedFuncGroup(Accelerator *accel) {
+static int runIndexedFuncGroup(Accelerator *accel) {
   // Single IndexedFuncGroup module exposes N typed-function ports under the
   // same appid name ``call`` with indices 0..N-1; codegen groups them into a
   // single ``IndexedPorts<TypedFunction<...>>`` member that the driver
@@ -273,6 +282,7 @@ static void runIndexedFuncGroup(Accelerator *accel) {
                                ", got " + std::to_string(got));
   }
   std::cout << "indexed_func_group ok (" << kN << " entries)\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -283,7 +293,7 @@ static void runIndexedFuncGroup(Accelerator *accel) {
 // the runtime's blocking ``ReadChannelPort::read`` does not surface a
 // completion for zero-byte messages.
 //===----------------------------------------------------------------------===//
-static void runCustomServiceDeclChannel(Accelerator *accel, uint32_t idx) {
+static int runCustomServiceDeclChannel(Accelerator *accel, uint32_t idx) {
   auto it =
       accel->getChildren().find(AppID("custom_service_decl_channel", idx));
   if (it == accel->getChildren().end())
@@ -312,19 +322,22 @@ static void runCustomServiceDeclChannel(Accelerator *accel, uint32_t idx) {
 
   std::cout << "custom_service_decl_channel_" << idx << " ok (byte 0x"
             << toHex(static_cast<uint64_t>(sendVal)) << ")\n";
+  return 0;
 }
 
-static void runCustomServiceDeclChannel0(Accelerator *accel) {
+static int runCustomServiceDeclChannel0(Accelerator *accel) {
   runCustomServiceDeclChannel(accel, 0);
+  return 0;
 }
-static void runCustomServiceDeclChannel1(Accelerator *accel) {
+static int runCustomServiceDeclChannel1(Accelerator *accel) {
   runCustomServiceDeclChannel(accel, 1);
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Typed function: small struct -> small struct.
 //===----------------------------------------------------------------------===//
-static void runTypedFuncStruct(Accelerator *accel) {
+static int runTypedFuncStruct(Accelerator *accel) {
   esi_system::TypedFuncStruct mod(findInst(accel, "typed_func_struct_inst"));
   auto c = mod.connect();
 
@@ -337,12 +350,13 @@ static void runTypedFuncStruct(Accelerator *accel) {
         " x=" + std::to_string(res.x) + " y=" + std::to_string(res.y) + ")");
   std::cout << "typed_func_struct ok (b=" << (int)arg.b
             << " -> x=" << (int)res.x << " y=" << (int)res.y << ")\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Typed function: nested odd-bit-width struct round-trip.
 //===----------------------------------------------------------------------===//
-static void runTypedFuncNestedStruct(Accelerator *accel) {
+static int runTypedFuncNestedStruct(Accelerator *accel) {
   esi_system::TypedFuncNestedStruct mod(
       findInst(accel, "typed_func_nested_struct_inst"));
   auto c = mod.connect();
@@ -368,13 +382,14 @@ static void runTypedFuncNestedStruct(Accelerator *accel) {
   std::cout << "typed_func_nested_struct ok (a=" << res.a << " b=" << (int)res.b
             << " p=" << (int)res.inner.p << " q=" << (int)res.inner.q << " r=["
             << (int)res.inner.r[0] << "," << (int)res.inner.r[1] << "])\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Typed function: ``si4 -> si4`` identity. Probes sign extension at a
 // sub-byte width through the typed facade.
 //===----------------------------------------------------------------------===//
-static void runTypedFuncSubByteSigned(Accelerator *accel) {
+static int runTypedFuncSubByteSigned(Accelerator *accel) {
   esi_system::TypedFuncSubByteSigned mod(
       findInst(accel, "typed_func_subbyte_signed_inst"));
   auto c = mod.connect();
@@ -388,12 +403,13 @@ static void runTypedFuncSubByteSigned(Accelerator *accel) {
           " got=" + std::to_string(got));
   }
   std::cout << "typed_func_subbyte_signed ok (4 values)\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // Typed function with an array result.
 //===----------------------------------------------------------------------===//
-static void runTypedFuncArrayResult(Accelerator *accel) {
+static int runTypedFuncArrayResult(Accelerator *accel) {
   esi_system::TypedFuncArrayResult mod(
       findInst(accel, "typed_func_array_result_inst"));
   auto c = mod.connect();
@@ -409,6 +425,7 @@ static void runTypedFuncArrayResult(Accelerator *accel) {
     throw std::runtime_error("typed_func_array_result: result mismatch");
   std::cout << "typed_func_array_result ok ([" << (int)a << "," << (int)b
             << "])\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -417,7 +434,7 @@ static void runTypedFuncArrayResult(Accelerator *accel) {
 // Exercises the auto serial<->parallel windowed-list converters and the
 // `SerialListTypeDeserializer` end-to-end.
 //===----------------------------------------------------------------------===//
-static void runTypedFuncWindowedList(Accelerator *accel) {
+static int runTypedFuncWindowedList(Accelerator *accel) {
   esi_system::TypedFuncWindowedList mod(
       findInst(accel, "typed_func_windowed_list_inst"));
   auto c = mod.connect();
@@ -447,13 +464,14 @@ static void runTypedFuncWindowedList(Accelerator *accel) {
   }
   std::cout << "typed_func_windowed_list ok (" << input.size()
             << " items doubled)\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
 // To-host channel of windowed list-with-header. Exercises the typed read path
 // for serial-burst bulk transfers.
 //===----------------------------------------------------------------------===//
-static void runChannelWindowedListRead(Accelerator *accel) {
+static int runChannelWindowedListRead(Accelerator *accel) {
   esi_system::ChannelWindowedListRead mod(
       findInst(accel, "channel_windowed_list_read_inst"));
   auto c = mod.connect();
@@ -490,6 +508,7 @@ static void runChannelWindowedListRead(Accelerator *accel) {
   }
   std::cout << "channel_windowed_list_read ok (tag=0x"
             << toHex(static_cast<uint64_t>(kTag)) << ", items=[10,20,30,40])\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -498,7 +517,7 @@ static void runChannelWindowedListRead(Accelerator *accel) {
 // items, and the HW AND-reduces each beat against the expected pattern. The
 // driver verifies success via the ``match`` MMIO read region.
 //===----------------------------------------------------------------------===//
-static void runChannelWindowedListWrite(Accelerator *accel) {
+static int runChannelWindowedListWrite(Accelerator *accel) {
   esi_system::ChannelWindowedListWrite mod(
       findInst(accel, "channel_windowed_list_write_inst"));
   auto c = mod.connect();
@@ -527,6 +546,7 @@ static void runChannelWindowedListWrite(Accelerator *accel) {
         toHex(match) + ")");
   std::cout << "channel_windowed_list_write ok (tag=0x"
             << toHex(static_cast<uint64_t>(kTag)) << ", items=[10,20,30,40])\n";
+  return 0;
 }
 
 //===----------------------------------------------------------------------===//
@@ -535,7 +555,7 @@ static void runChannelWindowedListWrite(Accelerator *accel) {
 // `SerialListTypeDeserializer` works end-to-end through the
 // `TypedCallback<WindowT, void>` path.
 //===----------------------------------------------------------------------===//
-static void runCallbackWindowedList(Accelerator *accel) {
+static int runCallbackWindowedList(Accelerator *accel) {
   esi_system::CallbackWindowedList mod(
       findInst(accel, "callback_windowed_list_inst"));
   auto c = mod.connect();
@@ -591,84 +611,30 @@ static void runCallbackWindowedList(Accelerator *accel) {
   std::lock_guard<std::mutex> lk(error_mtx);
   if (!error_msg.empty())
     throw std::runtime_error(error_msg);
-}
-
-// Probe registry: maps probe names (as used by ``--probe`` and emitted in
-// the success messages) to their driver function. The registry order
-// determines the default ``--probe=all`` execution sequence.
-using ProbeFn = void (*)(Accelerator *);
-static const std::vector<std::pair<std::string, ProbeFn>> &probes() {
-  static const std::vector<std::pair<std::string, ProbeFn>> kProbes = {
-      {"typed_func_multi_arg", &runTypedFuncMultiArg},
-      {"typed_func_void_arg", &runTypedFuncVoidArg},
-      {"typed_func_void_result", &runTypedFuncVoidResult},
-      {"call_service_callback", &runCallServiceCallback},
-      {"typed_read_channel_struct", &runTypedReadChannelStruct},
-      {"typed_write_channel_byte", &runTypedWriteChannelByte},
-      {"mmio_read_write", &runMmioReadWrite},
-      {"telemetry_metric", &runTelemetryMetric},
-      {"indexed_func_group", &runIndexedFuncGroup},
-      {"custom_service_decl_channel_0", &runCustomServiceDeclChannel0},
-      {"custom_service_decl_channel_1", &runCustomServiceDeclChannel1},
-      {"typed_func_struct", &runTypedFuncStruct},
-      {"typed_func_nested_struct", &runTypedFuncNestedStruct},
-      {"typed_func_subbyte_signed", &runTypedFuncSubByteSigned},
-      {"typed_func_array_result", &runTypedFuncArrayResult},
-      {"typed_func_windowed_list", &runTypedFuncWindowedList},
-      {"channel_windowed_list_read", &runChannelWindowedListRead},
-      {"channel_windowed_list_write", &runChannelWindowedListWrite},
-      {"callback_windowed_list", &runCallbackWindowedList},
-  };
-  return kProbes;
-}
-
-int main(int argc, const char *argv[]) {
-  CliParser cli("test-codegen");
-  cli.description("Per-port-kind coverage tests for ESI runtime + facade "
-                  "codegen. Run a single probe with --probe NAME or run all "
-                  "probes (in registry order) by omitting the flag.");
-  std::string probeName;
-  cli.add_option("--probe", probeName,
-                 "Run only the named probe. Without this flag, every probe "
-                 "runs in sequence.");
-  if (int rc = cli.esiParse(argc, argv))
-    return rc;
-  if (!cli.get_help_ptr()->empty())
-    return 0;
-
-  Context &ctxt = cli.getContext();
-  AcceleratorConnection *conn = cli.connect();
-  try {
-    const auto &info = *conn->getService<services::SysInfo>();
-    Manifest manifest(ctxt, info.getJsonManifest());
-    Accelerator *accel = manifest.buildAccelerator(*conn);
-    conn->getServiceThread()->addPoll(*accel);
-
-    if (probeName.empty()) {
-      // Default sequence: every probe in registry order.
-      for (const auto &[name, fn] : probes())
-        fn(accel);
-    } else {
-      ProbeFn fn = nullptr;
-      for (const auto &[name, candidate] : probes()) {
-        if (name == probeName) {
-          fn = candidate;
-          break;
-        }
-      }
-      if (!fn) {
-        std::cerr << "test-codegen: unknown probe '" << probeName << "'\n";
-        conn->disconnect();
-        return 2;
-      }
-      fn(accel);
-    }
-
-    conn->disconnect();
-  } catch (std::exception &e) {
-    ctxt.getLogger().error("test-codegen", e.what());
-    conn->disconnect();
-    return 1;
-  }
   return 0;
 }
+
+ESI_PROBE_REGISTRY(
+    "test-codegen",
+    "Per-port-kind coverage tests for ESI runtime + facade codegen. "
+    "Run a single probe with --probe NAME or run all probes (in registry "
+    "order) by omitting the flag.",
+    {"typed_func_multi_arg", &runTypedFuncMultiArg},
+    {"typed_func_void_arg", &runTypedFuncVoidArg},
+    {"typed_func_void_result", &runTypedFuncVoidResult},
+    {"call_service_callback", &runCallServiceCallback},
+    {"typed_read_channel_struct", &runTypedReadChannelStruct},
+    {"typed_write_channel_byte", &runTypedWriteChannelByte},
+    {"mmio_read_write", &runMmioReadWrite},
+    {"telemetry_metric", &runTelemetryMetric},
+    {"indexed_func_group", &runIndexedFuncGroup},
+    {"custom_service_decl_channel_0", &runCustomServiceDeclChannel0},
+    {"custom_service_decl_channel_1", &runCustomServiceDeclChannel1},
+    {"typed_func_struct", &runTypedFuncStruct},
+    {"typed_func_nested_struct", &runTypedFuncNestedStruct},
+    {"typed_func_subbyte_signed", &runTypedFuncSubByteSigned},
+    {"typed_func_array_result", &runTypedFuncArrayResult},
+    {"typed_func_windowed_list", &runTypedFuncWindowedList},
+    {"channel_windowed_list_read", &runChannelWindowedListRead},
+    {"channel_windowed_list_write", &runChannelWindowedListWrite},
+    {"callback_windowed_list", &runCallbackWindowedList}, );

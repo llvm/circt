@@ -1,8 +1,9 @@
 #include "loopback/LoopbackIP.h"
 #include "loopback/SerialCoordTranslator.h"
 
+#include "probe_runner.h"
+
 #include "esi/Accelerator.h"
-#include "esi/CLI.h"
 #include "esi/Manifest.h"
 #include "esi/Services.h"
 #include "esi/TypedPorts.h"
@@ -15,7 +16,7 @@
 
 using namespace esi;
 
-static void runLoopbackI8(Accelerator *accel) {
+static int runLoopbackI8(Accelerator *accel) {
   AppIDPath lastLookup;
   BundlePort *inPort = accel->resolvePort(
       {AppID("loopback_inst", 0), AppID("loopback_tohw")}, lastLookup);
@@ -39,11 +40,12 @@ static void runLoopbackI8(Accelerator *accel) {
   if (!got || *got != sendVal)
     throw std::runtime_error("Loopback byte mismatch");
 
-  std::cout << "loopback i8 ok: 0x" << std::hex << (int)*got << std::dec
+  std::cout << "loopback_i8 ok: 0x" << std::hex << (int)*got << std::dec
             << "\n";
+  return 0;
 }
 
-static void runStructFunc(Accelerator *accel) {
+static int runStructFunc(Accelerator *accel) {
   AppIDPath lastLookup;
   BundlePort *port = accel->resolvePort({AppID("structFunc")}, lastLookup);
   if (!port)
@@ -64,11 +66,12 @@ static void runStructFunc(Accelerator *accel) {
   if (res.x != expectedX || res.y != arg.b)
     throw std::runtime_error("Struct func result mismatch");
 
-  std::cout << "struct func ok: b=" << (int)arg.b << " x=" << (int)res.x
+  std::cout << "struct_func ok: b=" << (int)arg.b << " x=" << (int)res.x
             << " y=" << (int)res.y << "\n";
+  return 0;
 }
 
-static void runOddStructFunc(Accelerator *accel) {
+static int runOddStructFunc(Accelerator *accel) {
   AppIDPath lastLookup;
   BundlePort *port = accel->resolvePort({AppID("oddStructFunc")}, lastLookup);
   if (!port)
@@ -100,13 +103,14 @@ static void runOddStructFunc(Accelerator *accel) {
       res.inner.r[1] != expectR1)
     throw std::runtime_error("Odd struct func result mismatch");
 
-  std::cout << "odd struct func ok: a=" << res.a << " b=" << (int)res.b
+  std::cout << "odd_struct_func ok: a=" << res.a << " b=" << (int)res.b
             << " p=" << (int)res.inner.p << " q=" << (int)res.inner.q
             << " r0=" << (int)res.inner.r[0] << " r1=" << (int)res.inner.r[1]
             << "\n";
+  return 0;
 }
 
-static void runArrayFunc(Accelerator *accel) {
+static int runArrayFunc(Accelerator *accel) {
   AppIDPath lastLookup;
   BundlePort *port = accel->resolvePort({AppID("arrayFunc")}, lastLookup);
   if (!port)
@@ -140,10 +144,11 @@ static void runArrayFunc(Accelerator *accel) {
     low = high;
     high = tmp;
   }
-  std::cout << "array func ok: " << (int)low << " " << (int)high << "\n";
+  std::cout << "array_func ok: " << (int)low << " " << (int)high << "\n";
+  return 0;
 }
 
-static void runSInt4Loopback(Accelerator *accel) {
+static int runSInt4Loopback(Accelerator *accel) {
   AppIDPath lastLookup;
   BundlePort *port = accel->resolvePort({AppID("sint4Func")}, lastLookup);
   if (!port)
@@ -169,8 +174,9 @@ static void runSInt4Loopback(Accelerator *accel) {
     throw std::runtime_error("sint4 loopback negative mismatch: got " +
                              std::to_string(negResult));
 
-  std::cout << "sint4 loopback ok: pos=" << (int)posResult
+  std::cout << "sint4_loopback ok: pos=" << (int)posResult
             << " neg=" << (int)negResult << "\n";
+  return 0;
 }
 
 //
@@ -183,7 +189,7 @@ using SerialCoordResult = esi_system::
     _struct_coords__esi_list__hw_struct_x__i32__y__i32___serial_coord_result;
 using SerialCoordValue = SerialCoordInput::value_type;
 
-static void serialCoordTranslateTest(Accelerator *accel) {
+static int serialCoordTranslateTest(Accelerator *accel) {
   size_t numCoords = 100;
   uint32_t xTrans = 10, yTrans = 20;
 
@@ -220,41 +226,21 @@ static void serialCoordTranslateTest(Accelerator *accel) {
       throw std::runtime_error("Serial coord translate result mismatch");
     ++i;
   }
-}
-
-int main(int argc, const char *argv[]) {
-  CliParser cli("loopback-typed-cpp");
-  cli.description(
-      "Loopback cosim test using generated ESI headers and typed ports.");
-  if (int rc = cli.esiParse(argc, argv))
-    return rc;
-  if (!cli.get_help_ptr()->empty())
-    return 0;
-
-  Context &ctxt = cli.getContext();
-  AcceleratorConnection *conn = cli.connect();
-  try {
-    const auto &info = *conn->getService<services::SysInfo>();
-    Manifest manifest(ctxt, info.getJsonManifest());
-    Accelerator *accel = manifest.buildAccelerator(*conn);
-    conn->getServiceThread()->addPoll(*accel);
-
-    std::cout << "depth: 0x" << std::hex << esi_system::LoopbackIP::depth
-              << std::dec << "\n";
-
-    runLoopbackI8(accel);
-    runSInt4Loopback(accel);
-    runStructFunc(accel);
-    runOddStructFunc(accel);
-    runArrayFunc(accel);
-    serialCoordTranslateTest(accel);
-
-    conn->disconnect();
-  } catch (std::exception &e) {
-    ctxt.getLogger().error("loopback-typed-cpp", e.what());
-    conn->disconnect();
-    return 1;
-  }
-
+  std::cout << "serial_coord_translate ok\n";
   return 0;
 }
+
+static int runDepthConstant(Accelerator *) {
+  std::cout << "depth: 0x" << std::hex << esi_system::LoopbackIP::depth
+            << std::dec << "\n";
+  std::cout << "depth_constant ok\n";
+  return 0;
+}
+
+ESI_PROBE_REGISTRY(
+    "loopback-typed-cpp",
+    "Loopback cosim test using generated ESI headers and typed ports.",
+    {"depth_constant", &runDepthConstant}, {"loopback_i8", &runLoopbackI8},
+    {"sint4_loopback", &runSInt4Loopback}, {"struct_func", &runStructFunc},
+    {"odd_struct_func", &runOddStructFunc}, {"array_func", &runArrayFunc},
+    {"serial_coord_translate", &serialCoordTranslateTest}, );
