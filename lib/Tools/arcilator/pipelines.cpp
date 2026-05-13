@@ -126,6 +126,7 @@ void circt::populateArcStateLoweringPipeline(
 void circt::populateArcStateAllocationPipeline(
     OpPassManager &pm, const ArcStateAllocationOptions &options) {
   pm.addPass(arc::createLowerArcsToFuncs());
+  pm.addPass(arc::createRemoveI0Types());
   {
     AllocateStateOptions allocStateOpts;
     allocStateOpts.insertTraceTaps = options.insertTraceTaps;

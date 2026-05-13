@@ -1753,29 +1753,6 @@ struct LowerArcToLLVMPass
 } // namespace
 
 void LowerArcToLLVMPass::runOnOperation() {
-  // Replace any `i0` values with an `hw.constant 0 : i0` to avoid later issues
-  // in LLVM conversion.
-  {
-    DenseMap<Region *, hw::ConstantOp> zeros;
-    getOperation().walk([&](Operation *op) {
-      if (op->hasTrait<OpTrait::ConstantLike>())
-        return;
-      for (auto result : op->getResults()) {
-        auto type = dyn_cast<IntegerType>(result.getType());
-        if (!type || type.getWidth() != 0)
-          continue;
-        auto *region = op->getParentRegion();
-        auto &zero = zeros[region];
-        if (!zero) {
-          auto builder = OpBuilder::atBlockBegin(&region->front());
-          zero = hw::ConstantOp::create(builder, result.getLoc(),
-                                        APInt::getZero(0));
-        }
-        result.replaceAllUsesWith(zero);
-      }
-    });
-  }
-
   // Add `dereferenceable(<N>)` attributes to all function arguments that take
   // ArrayRefTypes.
   for (func::FuncOp func : getOperation().getOps<func::FuncOp>()) {

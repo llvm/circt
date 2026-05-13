@@ -371,6 +371,15 @@ def StripSV : Pass<"arc-strip-sv", "mlir::ModuleOp"> {
   ];
 }
 
+def RemoveI0Types : Pass<"arc-remove-i0-types", "mlir::ModuleOp"> {
+  let summary = "Remove i0 types completely";
+  let description = [{
+    i0 types are tautologous and usually exist due to array<1xT> types. i0 is
+    not valid in LLVM-IR, so we transform array<1xT> -> T and ban i0 types.
+  }];
+  let dependentDialects = ["arc::ArcDialect", "hw::HWDialect"];
+}
+
 def ResolveXMRRef : Pass<"arc-resolve-xmr", "mlir::ModuleOp"> {
   let summary = "Resolve sv.xmr.ref into direct signal references";
   let description = [{
