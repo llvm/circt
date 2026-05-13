@@ -1146,4 +1146,31 @@ def PauseOp : SimOp<"pause", [ProceduralOp]> {
   }];
 }
 
+def TriggeredOp : SimOp<"triggered", [
+    SingleBlock, NoTerminator, NonProceduralOp, ProceduralRegion]> {
+  let summary = "A procedural region triggered on a clock edge";
+  let description = [{
+    A procedural region that executes on the rising edge of the given clock.
+    An optional 1-bit condition can be provided to guard execution of the
+    region on that clock edge.
+  }];
+
+  let arguments = (ins ClockType:$clock, Optional<I1>:$condition);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = [{
+    $clock (`if` $condition^)? $body attr-dict
+  }];
+
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins
+      "Value":$clock,
+      CArg<"Value", "mlir::Value()">:$condition)>
+  ];
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

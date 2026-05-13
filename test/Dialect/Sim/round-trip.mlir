@@ -145,6 +145,26 @@ hw.module @ProceduralPrint(in %trigger: i1, in %condition: i1) {
   }
 }
 
+// CHECK-LABEL: hw.module @SimTriggered
+hw.module @SimTriggered(in %clock: !seq.clock, in %condition: i1) {
+  // CHECK: %[[MSG0:.*]] = sim.fmt.literal "tick"
+  %msg0 = sim.fmt.literal "tick"
+  // CHECK: %[[MSG1:.*]] = sim.fmt.literal "tock"
+  %msg1 = sim.fmt.literal "tock"
+
+  // CHECK: sim.triggered %clock {
+  sim.triggered %clock {
+    // CHECK: sim.proc.print %[[MSG0]]
+    sim.proc.print %msg0
+  }
+
+  // CHECK: sim.triggered %clock if %condition {
+  sim.triggered %clock if %condition {
+    // CHECK: sim.proc.print %[[MSG1]]
+    sim.proc.print %msg1
+  }
+}
+
 // CHECK-LABEL: hw.module @StdoutAndStderr
 hw.module @StdoutAndStderr(in %clock: !seq.clock, in %condition: i1) {
   // CHECK: %[[STDOUT_STR:.*]] = sim.fmt.literal "Hello, stdout!"
