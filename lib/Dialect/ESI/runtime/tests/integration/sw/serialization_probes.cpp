@@ -14,8 +14,9 @@
 // runArrayProbe drives the raw FuncService port directly to test the wire
 // byte order; see the comment on that function for the rationale.
 
+#include "probe_runner.h"
+
 #include "esi/Accelerator.h"
-#include "esi/CLI.h"
 #include "esi/Manifest.h"
 #include "esi/Services.h"
 
@@ -44,7 +45,7 @@ static esi::HWModule *findProbe(Accelerator *accel, const char *appidName) {
 static constexpr std::array<uint8_t, 8> kBytePattern = {0x12, 0x34, 0x56, 0x78,
                                                         0x9A, 0xBC, 0xDE, 0xF0};
 
-static void runByteRotate1(Accelerator *accel) {
+static int runByteRotate1(Accelerator *accel) {
   esi_system::ByteRotate1 mod(findProbe(accel, "byte_rotate1_inst"));
   auto connected = mod.connect();
 
@@ -55,6 +56,7 @@ static void runByteRotate1(Accelerator *accel) {
     throw std::runtime_error("byte_rotate1 mismatch: got 0x" + toHex(got) +
                              " expected 0x" + toHex(expect));
   std::cout << "byte_rotate1 ok: 0x" << std::hex << got << std::dec << "\n";
+  return 0;
 }
 
 // Look up a FuncService::Function port by AppID on a probe instance, skipping
@@ -73,7 +75,7 @@ static services::FuncService::Function *findRawFunc(esi::HWModule *probe,
   return func;
 }
 
-static void runBytePatternConst(Accelerator *accel) {
+static int runBytePatternConst(Accelerator *accel) {
   // Bypasses the generated facade and the typed deserializer so the test
   // asserts on the *wire* bytes directly.
   auto *func = findRawFunc(findProbe(accel, "byte_pattern_const_inst"),
@@ -98,9 +100,10 @@ static void runBytePatternConst(Accelerator *accel) {
     }
   }
   std::cout << "byte_pattern_const ok\n";
+  return 0;
 }
 
-static void runBytePatternEchoEq(Accelerator *accel) {
+static int runBytePatternEchoEq(Accelerator *accel) {
   // Bypasses the generated facade and the typed serializer so the bytes the
   // hardware sees come straight off the wire.
   auto *func = findRawFunc(findProbe(accel, "byte_pattern_echo_eq_inst"),
@@ -119,9 +122,10 @@ static void runBytePatternEchoEq(Accelerator *accel) {
         "byte_pattern_echo_eq: hardware reported byte mismatch (got " +
         std::to_string(got) + ")");
   std::cout << "byte_pattern_echo_eq ok\n";
+  return 0;
 }
 
-static void runSignProbe(Accelerator *accel) {
+static int runSignProbe(Accelerator *accel) {
   esi_system::SignProbe mod(findProbe(accel, "sign_probe_inst"));
   auto connected = mod.connect();
 
@@ -150,9 +154,10 @@ static void runSignProbe(Accelerator *accel) {
                                std::to_string(c.arg));
   }
   std::cout << "sign_probe ok\n";
+  return 0;
 }
 
-static void runSignProbe13(Accelerator *accel) {
+static int runSignProbe13(Accelerator *accel) {
   esi_system::SignProbe13 mod(findProbe(accel, "sign_probe13_inst"));
   auto connected = mod.connect();
 
@@ -209,9 +214,10 @@ static void runSignProbe13(Accelerator *accel) {
   // }
 
   std::cout << "sign_probe13 ok\n";
+  return 0;
 }
 
-static void runPackProbe(Accelerator *accel) {
+static int runPackProbe(Accelerator *accel) {
   esi_system::PackProbe mod(findProbe(accel, "pack_probe_inst"));
   auto connected = mod.connect();
 
@@ -227,9 +233,10 @@ static void runPackProbe(Accelerator *accel) {
   std::cout << "pack_probe ok: a=0x" << std::hex << (unsigned)r.a << " b=0x"
             << r.b << " c=0x" << (unsigned)r.c << " d=0x" << r.d << std::dec
             << "\n";
+  return 0;
 }
 
-static void runBitPackProbe(Accelerator *accel) {
+static int runBitPackProbe(Accelerator *accel) {
   esi_system::BitPackProbe mod(findProbe(accel, "bit_pack_probe_inst"));
   auto connected = mod.connect();
 
@@ -247,6 +254,7 @@ static void runBitPackProbe(Accelerator *accel) {
       r.x_field != arg.w)
     throw std::runtime_error("bit_pack_probe field rotation mismatch");
   std::cout << "bit_pack_probe ok\n";
+  return 0;
 }
 
 // Per-index sentinels (10, 20, 30, 40) make element order observable.
@@ -258,7 +266,7 @@ static void runBitPackProbe(Accelerator *accel) {
 // produce [41, 32, 23, 14]. Either way each byte uniquely identifies
 // its source index so the actual convention is observable from the
 // failure message.
-static void runArrayProbe(Accelerator *accel) {
+static int runArrayProbe(Accelerator *accel) {
   // Driven through the raw FuncService port with explicitly constructed
   // wire bytes -- not via the generated facade. Two reasons:
   //
@@ -297,38 +305,16 @@ static void runArrayProbe(Accelerator *accel) {
     }
   }
   std::cout << "array_probe ok (wire order: natural element-index)\n";
-}
-
-int main(int argc, const char *argv[]) {
-  CliParser cli("serialization-probes");
-  cli.description("Hardware-vs-host serialization correctness probes for ESI.");
-  if (int rc = cli.esiParse(argc, argv))
-    return rc;
-  if (!cli.get_help_ptr()->empty())
-    return 0;
-
-  Context &ctxt = cli.getContext();
-  AcceleratorConnection *conn = cli.connect();
-  try {
-    const auto &info = *conn->getService<services::SysInfo>();
-    Manifest manifest(ctxt, info.getJsonManifest());
-    Accelerator *accel = manifest.buildAccelerator(*conn);
-    conn->getServiceThread()->addPoll(*accel);
-
-    runByteRotate1(accel);
-    runBytePatternConst(accel);
-    runBytePatternEchoEq(accel);
-    runSignProbe(accel);
-    runSignProbe13(accel);
-    runPackProbe(accel);
-    runBitPackProbe(accel);
-    runArrayProbe(accel);
-
-    conn->disconnect();
-  } catch (std::exception &e) {
-    ctxt.getLogger().error("serialization-probes", e.what());
-    conn->disconnect();
-    return 1;
-  }
   return 0;
 }
+
+ESI_PROBE_REGISTRY("serialization-probes",
+                   "Hardware-vs-host serialization correctness probes for ESI.",
+                   {"byte_rotate1", &runByteRotate1},
+                   {"byte_pattern_const", &runBytePatternConst},
+                   {"byte_pattern_echo_eq", &runBytePatternEchoEq},
+                   {"sign_probe", &runSignProbe},
+                   {"sign_probe13", &runSignProbe13},
+                   {"pack_probe", &runPackProbe},
+                   {"bit_pack_probe", &runBitPackProbe},
+                   {"array_probe", &runArrayProbe}, );
