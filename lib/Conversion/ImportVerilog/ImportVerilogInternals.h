@@ -62,6 +62,12 @@ struct FlattenedIfacePort {
   /// The connected interface instance backing this port (if any). This enables
   /// materializing virtual interface handles from interface ports.
   const slang::ast::InstanceSymbol *ifaceInstance = nullptr;
+  /// For modport-typed iface ports, the ModportPortSymbol this was flattened
+  /// from. Slang resolves in-body accesses like `bus.member` to a
+  /// `HierarchicalValueExpression` whose symbol is the `ModportPortSymbol`,
+  /// not the underlying interface body variable, so we register both keys in
+  /// `valueSymbols` to make the lookup find this port's `BlockArgument`.
+  const slang::ast::Symbol *modportPortSym = nullptr;
 };
 
 /// Lowering information for an expanded interface instance. Maps each interface
