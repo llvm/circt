@@ -6,13 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/LayerSet.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "circt/Support/InstanceGraphInterface.h"
-#include "llvm/ADT/PostOrderIterator.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/SmallSet.h"
 
 namespace circt {
 namespace firrtl {
@@ -26,119 +26,254 @@ using namespace firrtl;
 using namespace mlir;
 
 namespace {
-class CheckLayers {
-  CheckLayers(InstanceGraph &instanceGraph, InstanceInfo &instanceInfo)
-      : iGraph(instanceGraph), iInfo(instanceInfo) {}
+struct InstanceUnderLayerBlock {
+  FInstanceLike instance;
+  LayerBlockOp parent;
+};
+} // namespace
 
-  /// Walk a module and record any illegal layerblocks/Grand Central companions
-  /// under layerblocks/Grand Central companions.  This function should be run
-  /// on children before parents for accurate reporting.
-  void run(FModuleOp moduleOp) {
+namespace {
+struct InstanceUnderGCCompanion {
+  FInstanceLike instance;
+  FModuleLike parent;
+};
+} // namespace
 
-    // The module is _never_ instantiated under a layer.  There is nothing to do
-    // because erroneous instantiations are reported when examining the module.
-    // Note: Grand Central companions are under a layer (because InstanceInfo
-    // uses the inclusive definition of "under" to be consistent with how the
-    // design-under-test module is "under" the design).
-    if (!iInfo.anyInstanceUnderLayer(moduleOp))
-      return;
+using InstancesUnderLayerBlock = SmallVector<InstanceUnderLayerBlock>;
+using InstancesUnderGCCompanion = SmallVector<InstanceUnderGCCompanion>;
 
-    // Check if this module has any layerblock ops.  If these exist, then these
-    // may be errors.
-    SmallVector<Operation *> layerBlockOps;
-    moduleOp->walk([&](LayerBlockOp layerBlockOp) {
-      layerBlockOps.push_back(layerBlockOp);
-    });
+using InstancesUnderLayerBlockTable =
+    DenseMap<StringAttr, InstancesUnderLayerBlock>;
+using InstancesUnderGCCompanionTable =
+    DenseMap<StringAttr, InstancesUnderGCCompanion>;
 
-    bool isGCCompanion =
-        AnnotationSet::hasAnnotation(moduleOp, companionAnnoClass);
+static auto targetNames(igraph::InstanceOpInterface inst) {
+  return inst.getReferencedModuleNamesAttr().getAsRange<StringAttr>();
+}
 
-    // Both Grand Central copmanions and modules that transitively instantiate
-    // layerblocks/Grand Central companions require analysis of their
-    // instantiation sites.  However, if this is a normal module instantiated
-    // under a layer and it contains no layerblocks, then early exit to avoid
-    // unnecessarily examining instantiation sites.
-    if (!isGCCompanion && !transitiveModules.contains(moduleOp) &&
-        layerBlockOps.empty())
-      return;
+namespace {
+struct CheckLayersInModule {
+  CheckLayersInModule(
+      CircuitOp circuitOp, SymbolTableCollection &stc, FModuleLike moduleOp,
+      InstancesUnderLayerBlockTable &instancesUnderLayerBlocksTable,
+      InstancesUnderGCCompanionTable &instancesUnderGCCompanionsTable)
+      : circuitOp(circuitOp), stc(stc), moduleOp(moduleOp),
+        instancesUnderLayerBlocksTable(instancesUnderLayerBlocksTable),
+        instancesUnderGCCompanionsTable(instancesUnderGCCompanionsTable) {
+    auto name = moduleOp.getModuleNameAttr();
+    instancesUnderLayerBlocks = instancesUnderLayerBlocksTable[name];
+    instancesUnderGCCompanions = instancesUnderGCCompanionsTable[name];
+    isCompanion = AnnotationSet::hasAnnotation(moduleOp, companionAnnoClass);
+  }
 
-    // Record instantiations of this module under layerblocks or modules that
-    // are under layer blocks.  Update transitive modules.
-    SmallVector<Operation *> instUnderLayerBlock, instUnderLayerModule;
-    for (auto *instNode : iGraph.lookup(moduleOp)->uses()) {
-      auto *instOp = instNode->getInstance().getOperation();
-      if (instOp->getParentOfType<LayerBlockOp>())
-        instUnderLayerBlock.push_back(instOp);
-      else if (auto parent = instOp->getParentOfType<FModuleOp>();
-               iInfo.anyInstanceUnderLayer(parent)) {
-        transitiveModules.insert(parent);
-        instUnderLayerModule.push_back(instOp);
+  void noteChildLayerBlocks(InFlightDiagnostic &diag,
+                            const SmallVector<LayerBlockOp> &childLayerBlocks) {
+    for (auto child : childLayerBlocks)
+      diag.attachNote(child.getLoc()) << "illegal layerblock here";
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  void
+  noteInstancesUnderLayerBlocks(InFlightDiagnostic &diag,
+                                const InstancesUnderLayerBlock &instances) {
+    for (auto entry : instances) {
+      diag.attachNote(entry.instance.getLoc())
+          << "illegal instantiation under a layerblock here";
+
+      // If the instance is directly under a layerblock, point it out. Otherwise,
+      // recursively report the chain of layers under a layerblock.
+      if (entry.parent) {
+        diag.attachNote(entry.parent.getLoc())
+            << "enclosing bound layerblock here";
+      } else {
+        auto parent = entry.instance->getParentOfType<FModuleLike>();
+        noteInstancesUnderLayerBlocks(diag, parent.getModuleNameAttr());
+      }
+    }
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  void noteInstancesUnderLayerBlocks(InFlightDiagnostic &diag,
+                                     StringAttr target) {
+    if (instancesUnderLayerBlocksTable.contains(target)) {
+      auto &instances = instancesUnderLayerBlocksTable.at(target);
+      noteInstancesUnderLayerBlocks(diag, instances);
+    }
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  void
+  noteInstancesUnderGCCompanions(InFlightDiagnostic &diag,
+                                 const InstancesUnderGCCompanion &instances) {
+    for (auto entry : instances) {
+      diag.attachNote(entry.instance.getLoc())
+          << "illegal instantiation under a grand central companion here";
+
+      if (entry.parent) {
+        diag.attachNote(entry.parent.getLoc())
+            << "grand central companion parent module defined here";
+      } else {
+        auto parent = entry.instance->getParentOfType<FModuleLike>();
+        noteInstancesUnderLayerBlocks(diag, parent.getModuleNameAttr());
+      }
+    }
+  }
+
+  void noteInstancesUnderGCCompanions(InFlightDiagnostic &diag, StringAttr target) {
+    if (instancesUnderGCCompanionsTable.contains(target)) {
+      auto &instances = instancesUnderGCCompanionsTable.at(target);
+      noteInstancesUnderGCCompanions(diag, instances);
+    }
+  }
+
+  void processOp(const LayerSet &enabled, LayerBlockOp parentLayerBlock,
+                 FInstanceLike instance) {
+    if (parentLayerBlock || !instancesUnderLayerBlocks.empty())
+      for (auto target : targetNames(instance))
+        instancesUnderLayerBlocksTable[target].push_back(
+            {instance, parentLayerBlock});
+
+    auto parentCompanion = isCompanion ? moduleOp : nullptr;
+    if (parentCompanion || !instancesUnderGCCompanions.empty())
+      for (auto target : targetNames(instance))
+        instancesUnderGCCompanionsTable[target].push_back(
+            {instance, parentCompanion});
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  void processOp(const LayerSet &enabled, LayerBlockOp parentLayerBlock,
+                 LayerBlockOp layerBlock) {
+    // If this layer is hard-enabled according to the ambient layers, or if it
+    // is an inline layerblock, then we don't treat it as a layerblock for the
+    // purposes of detecting bind-under-bind.
+    auto layerOp =
+        cast<LayerOp>(stc.lookupSymbolIn(circuitOp, layerBlock.getLayerName()));
+    auto convention = layerOp.getConvention();
+    if (!isLayerCompatibleWith(layerBlock.getLayerNameAttr(), enabled) &&
+        convention == LayerConvention::Bind) {
+      parentLayerBlock = layerBlock;
+      childLayerBlocks.push_back(layerBlock);
+    }
+
+    for (auto &op : *layerBlock.getBody())
+      processOp(enabled, parentLayerBlock, &op);
+  }
+
+  // NOLINTNEXTLINE(misc-no-recursion)
+  void processOp(const LayerSet &enabled, LayerBlockOp parent, Operation *op) {
+    if (auto instance = dyn_cast<FInstanceLike>(op))
+      return processOp(enabled, parent, instance);
+
+    if (auto layerBlock = dyn_cast<LayerBlockOp>(op))
+      return processOp(enabled, parent, layerBlock);
+
+    for (auto &region : op->getRegions())
+      for (auto &block : region)
+        for (auto &op : block)
+          processOp(enabled, parent, &op);
+  }
+
+  void processModule() {
+    LayerSet enabled = getAmbientLayersAt(moduleOp);
+    for (auto &region : moduleOp.getOperation()->getRegions())
+      for (auto &block : region)
+        for (auto &op : block)
+          processOp(enabled, nullptr, &op);
+  }
+
+  // Detect bind-under-bind errors in this module.
+  LogicalResult checkModule() {
+    bool failed = false;
+
+    // If there are any instances of this module under a layerblock, and there
+    // is a layerblock in this module, error.
+    if (!instancesUnderLayerBlocks.empty() && !childLayerBlocks.empty()) {
+      auto diag = moduleOp.emitError();
+      diag << "module contains bound layer blocks and is instantiated "
+              "under a bound layer block";
+      noteInstancesUnderLayerBlocks(diag, instancesUnderLayerBlocks);
+      noteChildLayerBlocks(diag, childLayerBlocks);
+      failed = true;
+    }
+
+    // If there are any instances of this module under a GC companion, and there
+    // is a layerblock in this module, error.
+    if (!instancesUnderGCCompanions.empty() && !childLayerBlocks.empty()) {
+      auto diag = moduleOp.emitError();
+      diag << "module contains bound layerblocks and is instantiated "
+              "under a Grand Central companion";
+      noteInstancesUnderGCCompanions(diag, instancesUnderGCCompanions);
+      noteChildLayerBlocks(diag, childLayerBlocks);
+      failed = true;
+    }
+
+    // Handle "this module is a GC companion" case.
+    if (isCompanion) {
+      // This module cannot be instantiated under a layerblock.
+      if (!instancesUnderLayerBlocks.empty()) {
+        auto diag = moduleOp.emitError();
+        diag << "Grand Central companion is instantiated under a bound "
+                "layerblock";
+        noteInstancesUnderLayerBlocks(diag, instancesUnderLayerBlocks);
+        failed = true;
+      }
+
+      // This module cannot be instantiated under another GC companion.
+      if (!instancesUnderGCCompanions.empty()) {
+        auto diag = moduleOp.emitError();
+        diag << "Grand Central companion is instantiated under another Grand "
+                "Central companion";
+        noteInstancesUnderGCCompanions(diag, instancesUnderGCCompanions);
+        failed = true;
+      }
+
+      // This module cannot contain any layerblocks.
+      if (!childLayerBlocks.empty()) {
+        auto diag = moduleOp.emitError();
+        diag << "Grand Central companion contains bound layerblocks";
+        noteChildLayerBlocks(diag, childLayerBlocks);
+        failed = true;
       }
     }
 
-    // The module _may_ contain no errors if it is a Grand Central companion or
-    // a transitive module.  Do a final check to ensure that an error exists.
-    if (layerBlockOps.empty() && instUnderLayerBlock.empty() &&
-        instUnderLayerModule.empty())
-      return;
-
-    // Record that an error occurred and print out an error message on the
-    // module with notes for more information.
-    error = true;
-    auto diag = moduleOp->emitOpError();
-    if (isGCCompanion)
-      diag
-          << "is a Grand Central companion that either contains layerblocks or";
-
-    else
-      diag << "either contains layerblocks or";
-    diag << " has at least one instance that is or contains a Grand Central "
-            "companion or layerblocks";
-
-    for (auto *layerBlockOp : layerBlockOps)
-      diag.attachNote(layerBlockOp->getLoc()) << "illegal layerblock here";
-    for (auto *instUnderLayerBlock : instUnderLayerBlock)
-      diag.attachNote(instUnderLayerBlock->getLoc())
-          << "illegal instantiation under a layerblock here";
-    for (auto *instUnderLayerModule : instUnderLayerModule)
-      diag.attachNote(instUnderLayerModule->getLoc())
-          << "illegal instantiation in a module under a layer here";
+    return failure(failed);
   }
 
-public:
-  static LogicalResult run(InstanceGraph &instanceGraph,
-                           InstanceInfo &instanceInfo) {
-    CheckLayers checkLayers(instanceGraph, instanceInfo);
-    instanceGraph.walkPostOrder([&](auto &node) {
-      if (auto moduleOp = dyn_cast<FModuleOp>(*node.getModule()))
-        checkLayers.run(moduleOp);
-    });
-    return failure(checkLayers.error);
+  LogicalResult run() {
+    processModule();
+    return checkModule();
   }
 
-private:
-  /// Pre-populated analyses
-  InstanceGraph &iGraph;
-  InstanceInfo &iInfo;
-
-  /// A module whose instances (transitively) contain layerblocks or Grand
-  /// Central companions.  This is used so that every illegal instantiation can
-  /// be reported.  This is populated by `run` and requires child modules to be
-  /// visited before parents.
-  DenseSet<Operation *> transitiveModules;
-
-  /// Indicates if this checker found an error.
-  bool error = false;
+  CircuitOp circuitOp;
+  SymbolTableCollection &stc;
+  FModuleLike moduleOp;
+  InstancesUnderLayerBlock instancesUnderLayerBlocks;
+  InstancesUnderGCCompanion instancesUnderGCCompanions;
+  InstancesUnderLayerBlockTable &instancesUnderLayerBlocksTable;
+  InstancesUnderGCCompanionTable &instancesUnderGCCompanionsTable;
+  SmallVector<LayerBlockOp> childLayerBlocks;
+  bool isCompanion = false;
 };
-} // end anonymous namespace
+} // namespace
 
+namespace {
 class CheckLayersPass
     : public circt::firrtl::impl::CheckLayersBase<CheckLayersPass> {
 public:
   void runOnOperation() override {
-    if (failed(CheckLayers::run(getAnalysis<InstanceGraph>(),
-                                getAnalysis<InstanceInfo>())))
-      return signalPassFailure();
+    auto &ig = getAnalysis<InstanceGraph>();
+    SymbolTableCollection stc;
+    InstancesUnderLayerBlockTable instancesUnderLayerBlocksTable;
+    InstancesUnderGCCompanionTable instancesUnderGCCompanionsTable;
+    ig.walkInversePostOrder([&](InstanceGraphNode &node) -> void {
+      if (failed(CheckLayersInModule(getOperation(), stc,
+                                     node.getModule<FModuleLike>(),
+                                     instancesUnderLayerBlocksTable,
+                                     instancesUnderGCCompanionsTable)
+                     .run()))
+        signalPassFailure();
+    });
     markAllAnalysesPreserved();
   }
 };
+} // namespace
