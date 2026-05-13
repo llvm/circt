@@ -1823,9 +1823,9 @@ def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
 def LTLPastIntrinsicOp : LTLIntrinsicOp<"past"> {
   let arguments = (ins NonConstUInt1Type:$input,
                        I64Attr:$delay,
-                       Optional<ClockType>:$clock);
+                       ClockType:$clock);
   let assemblyFormat = [{
-    $input `,` $delay (`,` $clock^)? attr-dict `:`
+    $input `,` $delay `,` $clock attr-dict `:`
     functional-type(operands, results)
   }];
 }

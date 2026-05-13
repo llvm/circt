@@ -104,8 +104,6 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[E0:%.+]] = ltl.eventually [[I0]] : !ltl.property
     %e0 = firrtl.int.ltl.eventually %i0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[P0:%.+]] = ltl.past %a, 1 : i1
-    %p0 = firrtl.int.ltl.past %a, 1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[P1:%.+]] = ltl.past %b, 3 clk [[CLK]] : i1
     %p1 = firrtl.int.ltl.past %b, 3, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 

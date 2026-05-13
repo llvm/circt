@@ -260,7 +260,7 @@ def CirctLTLPast : FIRRTLIntrinsic {
     | Argument | Type    | Description               |
     | -------- | ------- | ------------------------- |
     | in       | UInt<1> | input boolean             |
-    | clock    | Clock   | clock for delay; optional |
+    | clock    | Clock   | clock for delay           |
 
     | Result | Type    | Description            |
     | ------ | ------- | ---------------------- |
