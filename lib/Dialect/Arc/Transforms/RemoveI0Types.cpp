@@ -237,10 +237,8 @@ void RemoveI0TypesPass::runOnOperation() {
 
   // The conversions for types are 1:N, where N may be 1 or 0.
   converter.addConversion([](Type type, SmallVectorImpl<Type> &types) {
-    if (isI0(type))
-      // Do not add any types to `types`.
-      return success();
-    types.push_back(type);
+    if (!isI0(type))
+      types.push_back(type);
     return success();
   });
 
@@ -249,10 +247,8 @@ void RemoveI0TypesPass::runOnOperation() {
                                        SmallVectorImpl<Type> &types) {
     // If the array has only one element, we replace the array with the element.
     if (type.getNumElements() == 1) {
-      Type converted = converter.convertType(type.getElementType());
-      if (converted)
+      if (Type converted = converter.convertType(type.getElementType()))
         types.push_back(converted);
-      // The element was i0; no type is added to `types`.
       return success();
     }
     // Recursively apply type conversion to inner types.
