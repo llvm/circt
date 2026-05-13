@@ -1307,11 +1307,10 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     // Slang resolves in-body accesses (e.g. `bus.r`) through the
     // ModportPortSymbol rather than the interface body's variable. Register
     // both so the body-level expression lookup finds this port.
-    if (auto *mppSym = fp.modportPortSym
-                           ? fp.modportPortSym->as_if<slang::ast::ValueSymbol>()
-                           : nullptr;
-        mppSym && mppSym != valueSym)
-      valueSymbols.insert(mppSym, portValue);
+    if (fp.modportPortSym)
+      if (auto *mppSym = fp.modportPortSym->as_if<slang::ast::ValueSymbol>())
+        if (mppSym != valueSym)
+          valueSymbols.insert(mppSym, portValue);
 
     if (!fp.ifaceInstance)
       continue;
