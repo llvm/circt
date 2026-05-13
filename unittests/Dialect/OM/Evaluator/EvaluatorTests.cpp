@@ -55,6 +55,49 @@ makeIntegerValue(MLIRContext *context, int64_t value, unsigned width = 32) {
                                         LocationAttr(UnknownLoc::get(context)));
 }
 
+evaluator::ObjectValue *getObject(const evaluator::EvaluatorValuePtr &value) {
+  return llvm::cast<evaluator::ObjectValue>(value.get());
+}
+
+evaluator::EvaluatorValuePtr getField(evaluator::ObjectValue *object,
+                                      StringRef fieldName) {
+  return object->getField(fieldName).value();
+}
+
+evaluator::EvaluatorValuePtr
+getField(const evaluator::EvaluatorValuePtr &object, StringRef fieldName) {
+  return getField(getObject(object), fieldName);
+}
+
+template <typename AttrT>
+AttrT getAttr(const evaluator::EvaluatorValuePtr &value) {
+  return llvm::cast<evaluator::AttributeValue>(value.get())->getAs<AttrT>();
+}
+
+int64_t getInteger(const evaluator::EvaluatorValuePtr &value) {
+  return static_cast<int64_t>(getAttr<circt::om::IntegerAttr>(value)
+                                  .getValue()
+                                  .getValue()
+                                  .getZExtValue());
+}
+
+uint64_t getBuiltinInteger(const evaluator::EvaluatorValuePtr &value) {
+  return getAttr<mlir::IntegerAttr>(value).getValue().getZExtValue();
+}
+
+StringRef getString(const evaluator::EvaluatorValuePtr &value) {
+  return getAttr<StringAttr>(value).getValue();
+}
+
+bool getBool(const evaluator::EvaluatorValuePtr &value) {
+  return getAttr<BoolAttr>(value).getValue();
+}
+
+ArrayRef<evaluator::EvaluatorValuePtr>
+getListElements(const evaluator::EvaluatorValuePtr &value) {
+  return llvm::cast<evaluator::ListValue>(value.get())->getElements();
+}
+
 class EvaluatorTests : public ::testing::Test {
 protected:
   OwningOpRef<ModuleOp> parseModule(StringRef moduleText) {
@@ -180,8 +223,8 @@ module {
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField(StringAttr::get(&context, "foo"));
+  auto fieldValue =
+      getObject(result.value())->getField(StringAttr::get(&context, "foo"));
 
   ASSERT_FALSE(succeeded(fieldValue));
 }
@@ -205,16 +248,7 @@ module {
                                       {makeIntegerValue(&context, 42)});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::AttributeValue>(
-                        llvm::cast<evaluator::ObjectValue>(result.value().get())
-                            ->getField("field")
-                            .value()
-                            .get())
-                        ->getAs<circt::om::IntegerAttr>();
-
-  ASSERT_TRUE(fieldValue);
-  ASSERT_EQ(fieldValue.getValue().getValue(), 42);
+  ASSERT_EQ(42, getInteger(getField(result.value(), "field")));
 }
 
 TEST_F(EvaluatorTests, InstantiateObjectWithConstantField) {
@@ -234,15 +268,7 @@ module {
   auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = cast<evaluator::AttributeValue>(
-                        llvm::cast<evaluator::ObjectValue>(result.value().get())
-                            ->getField("field")
-                            .value()
-                            .get())
-                        ->getAs<circt::om::IntegerAttr>();
-  ASSERT_TRUE(fieldValue);
-  ASSERT_EQ(fieldValue.getValue().getValue(), 42);
+  ASSERT_EQ(42, getInteger(getField(result.value(), "field")));
 }
 
 TEST_F(EvaluatorTests, InstantiateObjectWithChildObject) {
@@ -267,20 +293,8 @@ module {
                                       {makeIntegerValue(&context, 42)});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
-      llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField("field")
-          .value()
-          .get());
-
-  ASSERT_TRUE(fieldValue);
-
-  auto innerFieldValue = llvm::cast<evaluator::AttributeValue>(
-                             fieldValue->getField("field").value().get())
-                             ->getAs<circt::om::IntegerAttr>();
-
-  ASSERT_EQ(innerFieldValue.getValue().getValue(), 42);
+  auto *fieldValue = getObject(getField(result.value(), "field"));
+  ASSERT_EQ(42, getInteger(getField(fieldValue, "field")));
 }
 
 TEST_F(EvaluatorTests, InstantiateObjectWithFieldAccess) {
@@ -306,16 +320,7 @@ module {
                                       {makeIntegerValue(&context, 42)});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::AttributeValue>(
-                        llvm::cast<evaluator::ObjectValue>(result.value().get())
-                            ->getField("field")
-                            .value()
-                            .get())
-                        ->getAs<circt::om::IntegerAttr>();
-
-  ASSERT_TRUE(fieldValue);
-  ASSERT_EQ(fieldValue.getValue().getValue(), 42);
+  ASSERT_EQ(42, getInteger(getField(result.value(), "field")));
 }
 
 TEST_F(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
@@ -339,21 +344,9 @@ module {
   auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto *field1Value = llvm::cast<evaluator::ObjectValue>(
-      llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField("field1")
-          .value()
-          .get());
-
-  auto *field2Value = llvm::cast<evaluator::ObjectValue>(
-      llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField("field2")
-          .value()
-          .get());
-
-  auto fieldNames =
-      llvm::cast<evaluator::ObjectValue>(result.value().get())->getFieldNames();
+  auto *field1Value = getObject(getField(result.value(), "field1"));
+  auto *field2Value = getObject(getField(result.value(), "field2"));
+  auto fieldNames = getObject(result.value())->getFieldNames();
 
   ASSERT_TRUE(fieldNames.size() == 2);
   StringRef fieldNamesTruth[] = {"field1", "field2"};
@@ -391,14 +384,7 @@ module {
   auto result = evaluator.instantiate(StringAttr::get(&context, "MyClass"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
-      llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField("field")
-          .value()
-          .get());
-
-  ASSERT_TRUE(fieldValue);
+  auto *fieldValue = getObject(getField(result.value(), "field"));
   ASSERT_EQ(fieldValue->getClassOp().getSymName(), "MyInnerClass");
 }
 
@@ -428,19 +414,8 @@ module {
                                 &context, {mlir::IntegerAttr::get(i64, 42)}));
 
   ASSERT_TRUE(succeeded(result));
-
-  auto *fieldValue = llvm::cast<evaluator::ObjectValue>(
-      llvm::cast<evaluator::ObjectValue>(result.value().get())
-          ->getField("field")
-          .value()
-          .get());
-
-  ASSERT_TRUE(fieldValue);
-
-  auto *innerFieldValue = llvm::cast<evaluator::AttributeValue>(
-      fieldValue->getField("field").value().get());
-
-  ASSERT_EQ(innerFieldValue->getAs<mlir::IntegerAttr>().getValue(), 42);
+  auto *fieldValue = getObject(getField(result.value(), "field"));
+  ASSERT_EQ(42u, getBuiltinInteger(getField(fieldValue, "field")));
 }
 
 TEST_F(EvaluatorTests, InstantiateGraphRegion) {
@@ -471,29 +446,13 @@ om.class @ReferenceEachOther() -> (field1: !ty, field2: !ty) {
 
   ASSERT_TRUE(succeeded(result));
 
-  auto *field1 = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                     ->getField("field1")
-                     .value()
-                     .get();
-  auto *field2 = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                     ->getField("field2")
-                     .value()
-                     .get();
+  auto field1 = getField(result.value(), "field1");
+  auto field2 = getField(result.value(), "field2");
 
-  ASSERT_EQ(
-      field1,
-      llvm::cast<evaluator::ObjectValue>(field2)->getField("n").value().get());
-  ASSERT_EQ(
-      field2,
-      llvm::cast<evaluator::ObjectValue>(field1)->getField("n").value().get());
+  ASSERT_EQ(field1.get(), getField(field2, "n").get());
+  ASSERT_EQ(field2.get(), getField(field1, "n").get());
 
-  ASSERT_EQ("foo", llvm::cast<evaluator::AttributeValue>(
-                       llvm::cast<evaluator::ObjectValue>(field1)
-                           ->getField("val")
-                           .value()
-                           .get())
-                       ->getAs<StringAttr>()
-                       .getValue());
+  ASSERT_EQ("foo", getString(getField(field1, "val")));
 }
 
 TEST_F(EvaluatorTests, InstantiateCycle) {
@@ -554,14 +513,7 @@ om.class @Top() -> (test: i1) {
   auto result = evaluator.instantiate(StringAttr::get(&context, "Top"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  // Verify the result is correct (false since "A" != "B")
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("test")
-                        .value();
-  auto boolValue = llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                       ->getAs<BoolAttr>();
-  ASSERT_FALSE(boolValue.getValue());
+  ASSERT_FALSE(getBool(getField(result.value(), "test")));
 }
 
 TEST_F(EvaluatorTests, IntegerBinaryArithmeticAdd) {
@@ -583,15 +535,7 @@ om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {
       StringAttr::get(&context, "IntegerBinaryArithmeticAdd"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  ASSERT_EQ(3, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
+  ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
 }
 
 TEST_F(EvaluatorTests, IntegerBinaryArithmeticMul) {
@@ -613,15 +557,7 @@ om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {
       StringAttr::get(&context, "IntegerBinaryArithmeticMul"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  ASSERT_EQ(6, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
+  ASSERT_EQ(6, getInteger(getField(result.value(), "result")));
 }
 
 TEST_F(EvaluatorTests, IntegerBinaryArithmeticShr) {
@@ -643,15 +579,7 @@ om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){
       StringAttr::get(&context, "IntegerBinaryArithmeticShr"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  ASSERT_EQ(2, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
+  ASSERT_EQ(2, getInteger(getField(result.value(), "result")));
 }
 
 TEST_F(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
@@ -732,15 +660,7 @@ om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){
       StringAttr::get(&context, "IntegerBinaryArithmeticShl"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  ASSERT_EQ(32, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                    ->getAs<circt::om::IntegerAttr>()
-                    .getValue()
-                    .getValue());
+  ASSERT_EQ(32, getInteger(getField(result.value(), "result")));
 }
 
 TEST_F(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
@@ -835,15 +755,7 @@ om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {
       StringAttr::get(&context, "IntegerBinaryArithmeticObjects"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  ASSERT_EQ(3, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
+  ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
 }
 
 TEST_F(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
@@ -879,15 +791,7 @@ om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer){
       StringAttr::get(&context, "IntegerBinaryArithmeticObjectsDelayed"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  ASSERT_EQ(3, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
+  ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
 }
 
 TEST_F(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
@@ -909,15 +813,7 @@ om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
       StringAttr::get(&context, "IntegerBinaryArithmeticWidthMismatch"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  ASSERT_EQ(3, llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
+  ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
 }
 
 TEST_F(EvaluatorTests, ListConcat) {
@@ -942,30 +838,12 @@ om.class @ListConcat() -> (result: !om.list<!om.integer>) {
       evaluator.instantiate(StringAttr::get(&context, "ListConcat"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  auto finalList =
-      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
+  auto finalList = getListElements(getField(result.value(), "result"));
 
   ASSERT_EQ(3U, finalList.size());
-
-  ASSERT_EQ(0, llvm::cast<evaluator::AttributeValue>(finalList[0].get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
-
-  ASSERT_EQ(1, llvm::cast<evaluator::AttributeValue>(finalList[1].get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
-
-  ASSERT_EQ(2, llvm::cast<evaluator::AttributeValue>(finalList[2].get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
+  ASSERT_EQ(0, getInteger(finalList[0]));
+  ASSERT_EQ(1, getInteger(finalList[1]));
+  ASSERT_EQ(2, getInteger(finalList[2]));
 }
 
 TEST_F(EvaluatorTests, ListConcatField) {
@@ -995,30 +873,12 @@ om.class @ListConcatField() -> (result: !om.list<!om.integer>){
       evaluator.instantiate(StringAttr::get(&context, "ListConcatField"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  auto finalList =
-      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
+  auto finalList = getListElements(getField(result.value(), "result"));
 
   ASSERT_EQ(3U, finalList.size());
-
-  ASSERT_EQ(0, llvm::cast<evaluator::AttributeValue>(finalList[0].get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
-
-  ASSERT_EQ(1, llvm::cast<evaluator::AttributeValue>(finalList[1].get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
-
-  ASSERT_EQ(2, llvm::cast<evaluator::AttributeValue>(finalList[2].get())
-                   ->getAs<circt::om::IntegerAttr>()
-                   .getValue()
-                   .getValue());
+  ASSERT_EQ(0, getInteger(finalList[0]));
+  ASSERT_EQ(1, getInteger(finalList[1]));
+  ASSERT_EQ(2, getInteger(finalList[2]));
 }
 
 TEST_F(EvaluatorTests, ListOfListConcat) {
@@ -1047,40 +907,16 @@ om.class @ListOfListConcat()  -> (result: !om.list<!om.list<!om.string>>) {
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  auto finalList =
-      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
-
+  auto finalList = getListElements(getField(result.value(), "result"));
   ASSERT_EQ(2U, finalList.size());
 
-  auto sublist0 =
-      llvm::cast<evaluator::ListValue>(finalList[0].get())->getElements();
+  auto sublist0 = getListElements(finalList[0]);
+  ASSERT_EQ("foo", getString(sublist0[0]));
+  ASSERT_EQ("bar", getString(sublist0[1]));
 
-  ASSERT_EQ("foo", llvm::cast<evaluator::AttributeValue>(sublist0[0].get())
-                       ->getAs<StringAttr>()
-                       .getValue()
-                       .str());
-
-  ASSERT_EQ("bar", llvm::cast<evaluator::AttributeValue>(sublist0[1].get())
-                       ->getAs<StringAttr>()
-                       .getValue()
-                       .str());
-
-  auto sublist1 =
-      llvm::cast<evaluator::ListValue>(finalList[1].get())->getElements();
-
-  ASSERT_EQ("baz", llvm::cast<evaluator::AttributeValue>(sublist1[0].get())
-                       ->getAs<StringAttr>()
-                       .getValue()
-                       .str());
-
-  ASSERT_EQ("qux", llvm::cast<evaluator::AttributeValue>(sublist1[1].get())
-                       ->getAs<StringAttr>()
-                       .getValue()
-                       .str());
+  auto sublist1 = getListElements(finalList[1]);
+  ASSERT_EQ("baz", getString(sublist1[0]));
+  ASSERT_EQ("qux", getString(sublist1[1]));
 }
 
 TEST_F(EvaluatorTests, ListConcatPartialCycle) {
@@ -1118,24 +954,11 @@ om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  auto finalList =
-      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
-
+  auto finalList = getListElements(getField(result.value(), "result"));
   ASSERT_EQ(2U, finalList.size());
 
-  auto obj1 = llvm::cast<evaluator::ObjectValue>(finalList[0].get());
-  auto id1 =
-      llvm::cast<evaluator::AttributeValue>(obj1->getField("id").value().get());
-  ASSERT_EQ(1U, id1->getAs<circt::om::IntegerAttr>().getValue().getValue());
-
-  auto obj2 = llvm::cast<evaluator::ObjectValue>(finalList[1].get());
-  auto id2 =
-      llvm::cast<evaluator::AttributeValue>(obj2->getField("id").value().get());
-  ASSERT_EQ(2U, id2->getAs<circt::om::IntegerAttr>().getValue().getValue());
+  ASSERT_EQ(1, getInteger(getField(finalList[0], "id")));
+  ASSERT_EQ(2, getInteger(getField(finalList[1], "id")));
 }
 
 TEST_F(EvaluatorTests, NestedReferenceValue) {
@@ -1189,22 +1012,10 @@ om.class @OuterClass1()  -> (om: !om.any) {
 
   ASSERT_TRUE(succeeded(result));
 
-  ASSERT_TRUE(isa<evaluator::ObjectValue>(
-      llvm::cast<evaluator::ListValue>(
-          llvm::cast<evaluator::ObjectValue>(
-              llvm::cast<evaluator::ListValue>(
-                  llvm::cast<evaluator::ObjectValue>(
-                      llvm::cast<evaluator::ObjectValue>(result->get())
-                          ->getField("om")
-                          ->get())
-                      ->getField("any_list1")
-                      ->get())
-                  ->getElements()[0]
-                  .get())
-              ->getField("any_list2")
-              ->get())
-          ->getElements()[0]
-          .get()));
+  auto anyList1 =
+      getListElements(getField(getField(result.value(), "om"), "any_list1"));
+  auto anyList2 = getListElements(getField(anyList1[0], "any_list2"));
+  ASSERT_TRUE(isa<evaluator::ObjectValue>(anyList2[0].get()));
 }
 
 TEST_F(EvaluatorTests, ListAttrConcat) {
@@ -1226,24 +1037,16 @@ om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
 
   ASSERT_TRUE(succeeded(result));
 
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  auto listVal =
-      llvm::cast<evaluator::ListValue>(fieldValue.get())->getElements();
+  auto listVal = getListElements(getField(result.value(), "result"));
   ASSERT_EQ(4UL, listVal.size());
-  auto checkEq = [](evaluator::EvaluatorValue *val, const char *str) {
-    ASSERT_EQ(str, llvm::cast<evaluator::AttributeValue>(val)
-                       ->getAs<StringAttr>()
-                       .getValue()
-                       .str());
+  auto checkEq = [](evaluator::EvaluatorValuePtr val, const char *str) {
+    ASSERT_EQ(str, getString(val));
   };
 
-  checkEq(listVal[0].get(), "X");
-  checkEq(listVal[1].get(), "Y");
-  checkEq(listVal[2].get(), "X");
-  checkEq(listVal[3].get(), "Y");
+  checkEq(listVal[0], "X");
+  checkEq(listVal[1], "Y");
+  checkEq(listVal[2], "X");
+  checkEq(listVal[3], "Y");
 }
 
 TEST_F(EvaluatorTests, UnknownValuesBasic) {
@@ -1329,8 +1132,7 @@ om.class @Foo(
 
   ASSERT_TRUE(succeeded(result));
 
-  auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
-
+  auto *object = getObject(result.value());
   ASSERT_EQ(object->getFieldNames().size(), 17ul);
 
   for (auto fieldName : object->getFieldNames()) {
@@ -1426,20 +1228,8 @@ om.class @Foo(
 
   ASSERT_TRUE(succeeded(result));
 
-  auto *object = llvm::cast<evaluator::ObjectValue>(result.value().get());
-
-  // A should be a known constant.
-  auto a =
-      cast<circt::om::IntegerAttr>(cast<circt::om::evaluator::AttributeValue>(
-                                       object->getField("a").value().get())
-                                       ->getAttr())
-          .getValue()
-          .getValue()
-          .getZExtValue() == 1;
-  ASSERT_TRUE(a == 1);
-
-  // B should be unknown.
-  ASSERT_TRUE(object->getField("b").value()->isUnknown());
+  ASSERT_EQ(1, getInteger(getField(result.value(), "a")));
+  ASSERT_TRUE(getField(result.value(), "b")->isUnknown());
 }
 
 TEST_F(EvaluatorTests, StringConcat) {
@@ -1466,15 +1256,7 @@ module {
   auto result = evaluator.instantiate(StringAttr::get(&context, "Test"), {});
 
   ASSERT_TRUE(succeeded(result));
-
-  auto fieldValue = llvm::cast<evaluator::ObjectValue>(result.value().get())
-                        ->getField("result")
-                        .value();
-
-  ASSERT_EQ("Hello, World!",
-            llvm::cast<evaluator::AttributeValue>(fieldValue.get())
-                ->getAs<StringAttr>()
-                .getValue());
+  ASSERT_EQ("Hello, World!", getString(getField(result.value(), "result")));
 }
 
 TEST_F(EvaluatorTests, UnknownObjectFieldTest) {
@@ -1503,12 +1285,7 @@ om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<
       StringAttr::get(&context, "TestHarness_Class"), {basepath});
 
   ASSERT_TRUE(succeeded(result));
-
-  // Verify the concatenated list is unknown
-  auto *obj = llvm::cast<evaluator::ObjectValue>(result->get());
-  auto field = obj->getField("result");
-  ASSERT_TRUE(succeeded(field));
-  EXPECT_TRUE(field->get()->isUnknown());
+  EXPECT_TRUE(getField(result.value(), "result")->isUnknown());
 }
 
 TEST_F(EvaluatorTests, PropertyAssertTests) {
@@ -1708,14 +1485,8 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
 
   auto unknownLoc = LocationAttr(UnknownLoc::get(&context));
 
-  // Helper: extract the i1 integer value from a field of an ObjectValue.
-  auto getInt = [](evaluator::ObjectValue *obj, StringRef fieldName,
-                   MLIRContext *ctx) {
-    return llvm::cast<evaluator::AttributeValue>(
-               obj->getField(StringAttr::get(ctx, fieldName)).value().get())
-        ->getAs<mlir::IntegerAttr>()
-        .getValue()
-        .getZExtValue();
+  auto getInt = [](evaluator::EvaluatorValuePtr obj, StringRef fieldName) {
+    return getBuiltinInteger(getField(obj, fieldName));
   };
 
   const std::pair<StringRef, Type> cases[] = {
@@ -1729,12 +1500,9 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
     auto result =
         evaluator.instantiate(StringAttr::get(&context, className), {unknown});
     ASSERT_TRUE(succeeded(result));
-    auto *obj = llvm::cast<evaluator::ObjectValue>(result.value().get());
-    ASSERT_EQ(getInt(obj, "equal", &context), 1ul);
-    ASSERT_EQ(getInt(obj, "not_equal", &context), 0ul);
-    ASSERT_TRUE(obj->getField(StringAttr::get(&context, "unknown"))
-                    .value()
-                    ->isUnknown());
+    ASSERT_EQ(1ul, getInt(result.value(), "equal"));
+    ASSERT_EQ(0ul, getInt(result.value(), "not_equal"));
+    ASSERT_TRUE(getField(result.value(), "unknown")->isUnknown());
   }
 }
 
@@ -1779,14 +1547,8 @@ om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
     return v;
   };
 
-  // Helper: extract the i8 value from the "result" field.
   auto getResult = [&](evaluator::EvaluatorValuePtr obj) -> uint64_t {
-    auto *o = llvm::cast<evaluator::ObjectValue>(obj.get());
-    return llvm::cast<evaluator::AttributeValue>(
-               o->getField(StringAttr::get(&context, "result")).value().get())
-        ->getAs<mlir::IntegerAttr>()
-        .getValue()
-        .getZExtValue();
+    return getBuiltinInteger(getField(obj, "result"));
   };
 
   // Test AND: 0xF0 & 0x0F = 0x00, 0xFF & 0xF0 = 0xF0.
@@ -1830,10 +1592,7 @@ om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
     auto r = evaluator.instantiate(
         StringAttr::get(&context, "IntegerBitwiseUnknown"), {unknown});
     ASSERT_TRUE(succeeded(r));
-    auto *obj = llvm::cast<evaluator::ObjectValue>(r.value().get());
-    ASSERT_TRUE(obj->getField(StringAttr::get(&context, "unknown"))
-                    .value()
-                    ->isUnknown());
+    ASSERT_TRUE(getField(r.value(), "unknown")->isUnknown());
   }
 }
 
