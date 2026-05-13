@@ -5462,8 +5462,30 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
-  if (circuitState.lowerToCore)
-    return op.emitOpError("lower-to-core does not support firrtl.fprintf yet");
+  if (circuitState.lowerToCore) {
+    auto clock = getLoweredValue(op.getClock());
+    auto cond = getLoweredValue(op.getCond());
+    if (!clock || !cond)
+      return failure();
+
+    auto fileFormatString = lowerSimFormatString(
+        op.getOutputFileAttr(), op.getOutputFileSubstitutions());
+    if (failed(fileFormatString))
+      return failure();
+
+    auto formatString =
+        lowerSimFormatString(op.getFormatString(), op.getSubstitutions());
+    if (failed(formatString))
+      return failure();
+
+    OpBuilder::InsertionGuard guard(builder);
+    auto triggeredOp = sim::TriggeredOp::create(builder, clock, cond);
+    builder.setInsertionPointToStart(triggeredOp.getBodyBlock());
+    auto fileOp = sim::GetFileOp::create(builder, *fileFormatString);
+    sim::PrintFormattedProcOp::create(builder, *formatString,
+                                      fileOp->getResult(0));
+    return success();
+  }
 
   StringAttr outputFileAttr;
   if (failed(resolveFormatString(op.getLoc(), op.getOutputFileAttr(),
