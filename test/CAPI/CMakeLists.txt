@@ -57,6 +57,19 @@ target_link_libraries(circt-capi-firtool-test
   CIRCTCAPIFirtool
 )
 
+add_llvm_executable(circt-capi-ltl-test
+  PARTIAL_SOURCES_INTENDED
+  ltl.c
+)
+llvm_update_compile_flags(circt-capi-ltl-test)
+
+target_link_libraries(circt-capi-ltl-test
+  PRIVATE
+
+  MLIRCAPIIR
+  CIRCTCAPILTL
+)
+
 add_llvm_executable(circt-capi-arc-test
   PARTIAL_SOURCES_INTENDED
   arc.c
