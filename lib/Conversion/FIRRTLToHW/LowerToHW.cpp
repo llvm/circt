@@ -5457,7 +5457,10 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   if (failed(formatString))
     return failure();
 
-  sim::PrintFormattedOp::create(builder, *formatString, clock, cond);
+  OpBuilder::InsertionGuard guard(builder);
+  auto triggeredOp = sim::TriggeredOp::create(builder, clock, cond);
+  builder.setInsertionPointToStart(triggeredOp.getBodyBlock());
+  sim::PrintFormattedProcOp::create(builder, *formatString);
   return success();
 }
 

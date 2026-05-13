@@ -18,6 +18,8 @@ circuit LowerToCore:
 ; CHECK-DAG: verif.clocked_assert %pred if %enable, posedge [[CLK]] : i1
 ; CHECK-DAG: [[FMT:%.+]] = sim.fmt.dec %x signed : i4
 ; CHECK: [[MSG:%.+]] = sim.fmt.concat ([[LIT]], [[FMT]], [[NL]])
-; CHECK: sim.print [[MSG]] on %clock if %enable
+; CHECK: sim.triggered %clock if %enable {
+; CHECK-NEXT:   sim.proc.print [[MSG]]
+; CHECK-NEXT: }
 ; CHECK-NOT: sv.assert
 ; CHECK-NOT: sv.fwrite
