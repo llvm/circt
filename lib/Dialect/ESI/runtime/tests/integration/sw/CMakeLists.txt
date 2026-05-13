@@ -205,3 +205,31 @@ if (UNIX AND _esi_runtime_lib_dir)
   set_target_properties(serialization_probes_test PROPERTIES
     BUILD_RPATH "${_esi_runtime_lib_dir}")
 endif()
+
+# Per-port-kind / codegen coverage test. Like serialization_probes_test, the
+# generated headers live under <LOOPBACK_GENERATED_DIR>/test_codegen/ but the
+# CMake variable name is kept generic so callers can use a single include
+# root.
+add_executable(test_codegen_test
+  "${CMAKE_CURRENT_SOURCE_DIR}/test_codegen.cpp")
+set_target_properties(test_codegen_test PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+target_include_directories(test_codegen_test PRIVATE
+  "${LOOPBACK_GENERATED_DIR}"
+  "${CLI11_INCLUDE_DIR}")
+
+if (ESI_RUNTIME_TARGET)
+  target_link_libraries(test_codegen_test PRIVATE
+    "${ESI_RUNTIME_TARGET}")
+else()
+  target_include_directories(test_codegen_test PRIVATE
+    "${ESI_RUNTIME_INCLUDE_DIR}")
+  target_link_libraries(test_codegen_test PRIVATE
+    "${ESI_RUNTIME_LIB}")
+endif()
+
+if (UNIX AND _esi_runtime_lib_dir)
+  set_target_properties(test_codegen_test PROPERTIES
+    BUILD_RPATH "${_esi_runtime_lib_dir}")
+endif()

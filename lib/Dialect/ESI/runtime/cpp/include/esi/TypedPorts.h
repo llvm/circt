@@ -28,6 +28,7 @@
 #include "esi/Types.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <functional>
@@ -441,8 +442,17 @@ inline constexpr bool has_esi_window_id_v = has_esi_window_id<T>::value;
 // verifyTypeCompatibility<T>(const Type *portType)
 //
 // Checks that the ESI runtime Type is compatible with the C++ type T.
-// Dispatch order: _ESI_ID → void → bool → signed int → unsigned int → error.
+// Dispatch order: _ESI_ID → void → bool → std::array → signed int →
+// unsigned int → error.
 //===----------------------------------------------------------------------===//
+
+// Detect ``std::array<T, N>``.
+template <typename T>
+struct is_std_array : std::false_type {};
+template <typename T, std::size_t N>
+struct is_std_array<std::array<T, N>> : std::true_type {};
+template <typename T>
+inline constexpr bool is_std_array_v = is_std_array<T>::value;
 
 template <typename T>
 void verifyTypeCompatibility(const Type *portType) {
@@ -496,6 +506,25 @@ void verifyTypeCompatibility(const Type *portType) {
           "ESI type mismatch: expected BitsType with width <= 1 for "
           "bool, but port type is '" +
           portType->toString(/*oneLine=*/true) + "'");
+  } else if constexpr (is_std_array_v<T>) {
+    // std::array<U, N> maps to ESI ArrayType with matching size and element
+    // type. The ArrayType's `reverse` flag controls only wire-byte ordering
+    // during serialization (handled in toMessageData/fromMessageData) and
+    // does not affect compatibility.
+    using Element = typename T::value_type;
+    constexpr size_t N = std::tuple_size<T>::value;
+    auto *arr = dynamic_cast<const ArrayType *>(portType);
+    if (!arr)
+      throw AcceleratorMismatchError(
+          "ESI type mismatch: expected ArrayType for std::array, but port "
+          "type is '" +
+          portType->toString(/*oneLine=*/true) + "'");
+    if (arr->getSize() != N)
+      throw AcceleratorMismatchError("ESI type mismatch: ArrayType size " +
+                                     std::to_string(arr->getSize()) +
+                                     " does not match std::array size " +
+                                     std::to_string(N));
+    verifyTypeCompatibility<Element>(arr->getElementType());
   } else if constexpr (std::is_integral_v<T> && std::is_signed_v<T>) {
     auto *sint = dynamic_cast<const SIntType *>(portType);
     if (!sint)
@@ -589,7 +618,8 @@ public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
-  void connect(const ChannelPort::ConnectOptions &opts = {}) {
+  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
     if (!SkipTypeCheck)
@@ -637,7 +667,8 @@ public:
   // NOLINTNEXTLINE(google-explicit-constructor)
   TypedWritePort(WriteChannelPort *port) : inner(port) {}
 
-  void connect(const ChannelPort::ConnectOptions &opts = {}) {
+  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedWritePort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
@@ -698,7 +729,8 @@ public:
   ///
   /// The port installs an internal typed output queue. `read()` and
   /// `readAsync()` consume from that queue.
-  void connect(const ChannelPort::ConnectOptions &opts = {}) {
+  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     prepareConnect();
@@ -725,7 +757,8 @@ public:
   /// The callback sees the decoded value by reference. Returning `false`
   /// requests that the same decoded value be retried later.
   void connect(std::function<bool(const T &)> callback,
-               const ChannelPort::ConnectOptions &opts = {}) {
+               const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) {
     connect([cb = std::move(callback)](
                 std::unique_ptr<T> &value) -> bool { return cb(*value); },
             opts);
@@ -737,7 +770,8 @@ public:
   /// callback may take ownership of the decoded value or return `false` to
   /// retry delivery later with the same object.
   void connect(detail::TypedReadOwnedCallback<T> callback,
-               const ChannelPort::ConnectOptions &opts = {}) {
+               const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     prepareConnect();
@@ -866,7 +900,8 @@ public:
       disconnect();
   }
 
-  void connect(const ChannelPort::ConnectOptions &opts = {}) {
+  void connect(const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
@@ -874,7 +909,8 @@ public:
   }
 
   void connect(std::function<bool()> callback,
-               const ChannelPort::ConnectOptions &opts = {}) {
+               const ChannelPort::ConnectOptions &opts = {std::nullopt,
+                                                          false}) {
     if (!inner)
       throw AcceleratorMismatchError("TypedReadPort: null port pointer");
     verifyTypeCompatibility<void>(inner->getType());
