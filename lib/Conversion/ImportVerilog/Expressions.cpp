@@ -3479,6 +3479,26 @@ Value Context::convertSystemCall(
     return {};
   }
 
+  //===--------------------------------------------------------------------===//
+  // File I/O System Functions
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::FOpen) {
+    assert(numArgs >= 1 && numArgs <= 2 && "`$fopen` takes 1 or 2 arguments");
+    auto filename = convertRvalueExpression(
+      *args[0], moore::StringType::get(getContext()));
+    if (!filename)
+      return {};
+    Value mode;
+    if (numArgs == 2) {
+      mode = convertRvalueExpression(
+        *args[1], moore::StringType::get(getContext()));
+      if (!mode)
+        return {};
+    }
+    return moore::FOpenBIOp::create(builder, loc, filename, mode);
+  }
+
   // Unrecognized system call
   emitError(loc) << "unsupported system call `" << name << "`";
   return {};

@@ -1200,4 +1200,34 @@ def TriggeredOp : SimOp<"triggered", [
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// File I/O
+//===----------------------------------------------------------------------===//
+
+def FOpenOp : SimOp<"fopen", [ProceduralOp]> {
+  let summary = "Open a file and return a file descriptor";
+  let description = [{
+    Opens a file and return an integer handle.
+    This handle is used in subsequent file operations to identify the file.
+    A return value of 0 indicates failure to open the file, and a non-zero value
+    indicates success.
+  }];
+
+  let arguments = (ins DynamicStringType:$fileName, Optional<DynamicStringType>:$mode);
+  let results = (outs I32:$fd);
+  let assemblyFormat = "$fileName (`,` $mode^)? attr-dict";
+}
+
+def FCloseOp : SimOp<"fclose", [ProceduralOp]> {
+  let summary = "Close a file descriptor";
+  let description = [{
+    Closes a file descriptor obtained from `sim.fopen`. After this operation,
+    the file descriptor is invalid and should not be used in subsequent file
+    operations.
+  }];
+
+  let arguments = (ins I32:$fd);
+  let assemblyFormat = "$fd attr-dict";
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

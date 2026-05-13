@@ -602,3 +602,28 @@ function void StringBuiltins(string string_in, int int_in);
   // CHECK: [[CHAR:%.+]] = moore.string.get [[STR]]{{\[}}[[INT]]]
   dummyE(string_in.getc(int_in));
 endfunction
+
+// IEEE 1800-2017 § 21.3 "File I/O system tasks and functions"
+// CHECK-LABEL: func.func private @FileIOBuiltins(
+// CHECK-SAME: [[FD_INT:%.+]]: !moore.i32
+// CHECK-SAME: [[FD_INTEGER:%.+]]: !moore.l32
+function void FileIOBuiltins(int fd_int, integer fd_integer);
+  int fd;
+
+  // CHECK: [[FNAME:%.+]] = moore.constant_string "file.txt" : i64
+  // CHECK-NEXT: [[FNAME_S:%.+]] = moore.int_to_string [[FNAME]] : i64
+  // CHECK-NEXT: [[FD1:%.+]] = moore.builtin.fopen [[FNAME_S]]
+  fd = $fopen("file.txt");
+
+  // CHECK: [[FNAME2:%.+]] = moore.constant_string "file.txt" : i64
+  // CHECK-NEXT: [[FNAME2_S:%.+]] = moore.int_to_string [[FNAME2]] : i64
+  // CHECK-NEXT: [[MODE:%.+]] = moore.constant_string "w" : i8
+  // CHECK-NEXT: [[MODE_S:%.+]] = moore.int_to_string [[MODE]] : i8
+  // CHECK-NEXT: [[FD2:%.+]] = moore.builtin.fopen [[FNAME2_S]], [[MODE_S]]
+  fd = $fopen("file.txt", "w");
+
+  // CHECK: [[FDVAL:%.+]] = moore.read {{%.+}} : <i32>
+  // CHECK-NEXT: moore.builtin.fclose [[FDVAL]]
+  $fclose(fd);
+
+endfunction

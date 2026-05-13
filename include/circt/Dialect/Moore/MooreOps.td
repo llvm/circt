@@ -3069,10 +3069,41 @@ def SeverityBIOp : Builtin<"severity"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Files Builtins
+//===----------------------------------------------------------------------===//
+
+def FOpenBIOp : Builtin<"fopen"> {
+  let summary = "Open a file";
+  let description = [{
+    If one argument is provided, opens a file and returns a multi-channel
+    descriptor(MCD). If two arguments are provided, returns
+    a file descriptor(fd). This corresponds to the `$fopen` system function.
+
+    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
+  }];
+  let arguments = (ins StringType:$filename, Optional<StringType>:$mode);
+  let results = (outs TwoValuedI32:$fd);
+  let assemblyFormat = "$filename (`,` $mode^)? attr-dict";
+}
+
+def FCloseBIOp : Builtin<"fclose"> {
+  let summary = "Close a file";
+  let description = [{
+    Closes a file given its descriptor. This corresponds to the `$fclose`
+    system task.
+
+    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
+  }];
+  let arguments = (ins TwoValuedI32:$fd);
+  let results = (outs);
+  let assemblyFormat = "$fd attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
 // Math Builtins
 //===----------------------------------------------------------------------===//
 
-class RealMathFunc<string mnemonic, list<Trait> traits = []> : 
+class RealMathFunc<string mnemonic, list<Trait> traits = []> :
     Builtin<mnemonic, traits # [SameOperandsAndResultType]> {
   let description = [{
     The system real math functions shall accept real value arguments and return
