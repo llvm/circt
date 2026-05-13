@@ -326,6 +326,26 @@ OpFoldResult FormatLiteralOp::fold(FoldAdaptor adaptor) {
   return getLiteralAttr();
 }
 
+// --- FormatStringOp ---
+
+StringAttr FormatStringOp::formatConstant(Attribute constVal) {
+  auto strAttr = llvm::dyn_cast<StringAttr>(constVal);
+  if (!strAttr)
+    return {};
+
+  SmallString<128> strBuf(strAttr.getValue());
+  if (getSpecifierWidth().has_value()) {
+    auto padChar = static_cast<char>(getPaddingChar());
+    unsigned padWidth = getSpecifierWidth().value();
+    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
+    if (getIsLeftAligned())
+      strBuf.append(padWidth, padChar);
+    else
+      strBuf.insert(strBuf.begin(), padWidth, padChar);
+  }
+  return StringAttr::get(getContext(), strBuf);
+}
+
 // --- FormatDecOp ---
 
 StringAttr FormatDecOp::formatConstant(Attribute constVal) {
