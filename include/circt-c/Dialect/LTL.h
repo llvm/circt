@@ -15,7 +15,37 @@
 extern "C" {
 #endif
 
+// NOLINTNEXTLINE(modernize-use-using)
+typedef enum LTLClockEdge {
+  LTL_CLOCK_EDGE_POS = 0,
+  LTL_CLOCK_EDGE_NEG = 1,
+  LTL_CLOCK_EDGE_BOTH = 2,
+} LTLClockEdge;
+
+//===----------------------------------------------------------------------===//
+// Dialect API.
+//===----------------------------------------------------------------------===//
+
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(LTL, ltl);
+
+//===----------------------------------------------------------------------===//
+// Type API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool ltlTypeIsASequence(MlirType type);
+MLIR_CAPI_EXPORTED MlirType ltlSequenceTypeGet(MlirContext ctx);
+
+MLIR_CAPI_EXPORTED bool ltlTypeIsAProperty(MlirType type);
+MLIR_CAPI_EXPORTED MlirType ltlPropertyTypeGet(MlirContext ctx);
+
+//===----------------------------------------------------------------------===//
+// Attribute API.
+//===----------------------------------------------------------------------===//
+
+MLIR_CAPI_EXPORTED bool ltlAttrIsAClockEdgeAttr(MlirAttribute attr);
+MLIR_CAPI_EXPORTED MlirAttribute ltlClockEdgeAttrGet(MlirContext ctx,
+                                                     LTLClockEdge edge);
+MLIR_CAPI_EXPORTED LTLClockEdge ltlClockEdgeAttrGetValue(MlirAttribute attr);
 
 #ifdef __cplusplus
 }
