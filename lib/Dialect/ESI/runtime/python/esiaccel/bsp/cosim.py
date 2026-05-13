@@ -2,16 +2,14 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from typing import Dict, Tuple, Type
+from typing import Callable, Optional, Tuple, Type
 
-from pycde.signals import BundleSignal
-from pycde.common import AppID, Clock, Input, Output
+from pycde.common import AppID, Clock, Input
 from pycde.module import Module, generator
 from pycde.support import get_user_loc
 from pycde.system import System
-from pycde.types import (Bits, Bundle, BundledChannel, Channel,
-                         ChannelDirection, StructType, UInt)
-from pycde.constructs import ControlReg, NamedWire, Reg, Wire
+from pycde.types import (Bits, Channel, StructType, UInt)
+from pycde.constructs import Wire
 from pycde import esi
 
 from .common import (ChannelEngineService, ChannelHostMem, ChannelMMIO)
@@ -25,7 +23,10 @@ from pathlib import Path
 __root_dir__ = Path(__file__).parent.parent
 
 
-def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
+def CosimBSP(
+    user_module: Type[Module],
+    dma_engine_pair: Optional[Tuple[Callable, Callable]] = None,
+) -> Module:
   """Wrap and return a cosimulation 'board support package' containing
   'user_module'"""
 
@@ -56,8 +57,8 @@ def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
                         clk=ports.clk,
                         rst=ports.rst)
 
-      if emulate_dma:
-        ChannelEngineService(OneItemBuffersToHost, OneItemBuffersFromHost)(
+      if dma_engine_pair is not None:
+        ChannelEngineService(dma_engine_pair[0], dma_engine_pair[1])(
             None,
             appid=esi.AppID("__channel_engines"),
             clk=ports.clk,
@@ -126,4 +127,6 @@ def CosimBSP(user_module: Type[Module], emulate_dma: bool = False) -> Module:
 
 
 def CosimBSP_DMA(user_module: Type[Module]) -> Module:
-  return CosimBSP(user_module, emulate_dma=True)
+  return CosimBSP(user_module,
+                  dma_engine_pair=(OneItemBuffersToHost,
+                                   OneItemBuffersFromHost))
