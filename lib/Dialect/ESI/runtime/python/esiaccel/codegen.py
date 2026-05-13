@@ -264,11 +264,12 @@ class CppGenerator(Generator):
 
   @staticmethod
   def _port_is_connectable(port) -> bool:
-    """True if the generated connect() should call .connect() on this port."""
+    """True if the generated connect() should call .connect() on this port.
+
+    CallbackPort.connect() requires a user-supplied callback — skip.
+    MMIORegion, BundlePort — no .connect() method."""
     return isinstance(port,
                       (_FunctionPort, _ToHostPort, _FromHostPort, _MetricPort))
-    # CallbackPort.connect() requires a user-supplied callback — skip.
-    # MMIORegion, BundlePort — no .connect() method.
 
   def _scalar_port_group(self, member_name: str, port, appid) -> _PortGroup:
     """Build a _PortGroup for a single scalar (non-indexed) port."""

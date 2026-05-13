@@ -25,48 +25,49 @@ from .conftest import (HW_DIR, SW_DIR, check_lines, get_runtime_root,
 def _build(sources_dir: Path) -> Path:
   """Configure + build the ``test_codegen_test`` binary, returning its path.
 
-  The build is cached under ``sources_dir`` (which `cosim_test` provides
-  shared across every test method in this class). Each forked test child
-  re-enters this function, finds the compiled binary already on disk, and
-  returns immediately without re-running cmake."""
+  The configure step is skipped when the build directory already exists;
+  ``cmake --build`` always runs so that CMake's own dependency tracking
+  picks up any source or generated-header changes."""
   build_dir = sources_dir / "cpp_build"
   binary = build_dir / "test_codegen_test"
-  if binary.exists():
-    return binary
 
   require_tool("cmake")
 
   runtime_root = get_runtime_root()
   include_dir = sources_dir / "cpp_include"
   generated_dir = include_dir / "test_codegen"
-  generated_dir.mkdir(parents=True, exist_ok=True)
 
-  # Codegen was already run automatically by cosim_test; copy the generated
-  # headers into the include tree.
-  codegen_src = sources_dir / "generated"
-  if codegen_src.exists():
-    for item in codegen_src.iterdir():
-      if item.is_file():
-        shutil.copy(item, generated_dir)
+  # Only configure once; the build dir doubles as the sentinel.
+  if not build_dir.exists():
+    generated_dir.mkdir(parents=True, exist_ok=True)
 
-  result = subprocess.run(
-      [
-          "cmake",
-          "-S",
-          str(SW_DIR),
-          "-B",
-          str(build_dir),
-          f"-DLOOPBACK_GENERATED_DIR={include_dir}",
-          f"-DESI_RUNTIME_ROOT={runtime_root}",
-      ],
-      capture_output=True,
-      text=True,
-  )
-  assert result.returncode == 0, (
-      f"cmake configure failed (rc={result.returncode}):\n"
-      f"--- stdout ---\n{result.stdout}\n"
-      f"--- stderr ---\n{result.stderr}")
+    # Codegen was already run automatically by cosim_test; copy the generated
+    # headers into the include tree.
+    codegen_src = sources_dir / "generated"
+    if codegen_src.exists():
+      for item in codegen_src.iterdir():
+        if item.is_file():
+          shutil.copy(item, generated_dir)
 
+    result = subprocess.run(
+        [
+            "cmake",
+            "-S",
+            str(SW_DIR),
+            "-B",
+            str(build_dir),
+            f"-DLOOPBACK_GENERATED_DIR={include_dir}",
+            f"-DESI_RUNTIME_ROOT={runtime_root}",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, (
+        f"cmake configure failed (rc={result.returncode}):\n"
+        f"--- stdout ---\n{result.stdout}\n"
+        f"--- stderr ---\n{result.stderr}")
+
+  # Always build — cmake is a no-op when everything is up-to-date.
   result = subprocess.run(
       ["cmake", "--build",
        str(build_dir), "--target", "test_codegen_test"],
@@ -173,3 +174,7 @@ class TestCodegen:
   def test_channel_windowed_list_write(self, host: str, port: int,
                                        sources_dir: Path) -> None:
     _run_probe(_build(sources_dir), host, port, "channel_windowed_list_write")
+
+  def test_callback_windowed_list(self, host: str, port: int,
+                                  sources_dir: Path) -> None:
+    _run_probe(_build(sources_dir), host, port, "callback_windowed_list")

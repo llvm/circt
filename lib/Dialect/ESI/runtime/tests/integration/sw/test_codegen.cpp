@@ -38,6 +38,7 @@
 #include <cstdint>
 #include <iostream>
 #include <map>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -435,10 +436,6 @@ static void runTypedFuncWindowedList(Accelerator *accel) {
         "typed_func_windowed_list: wrong result size (got " +
         std::to_string(result.data_count()) + ")");
   size_t i = 0;
-  if (result.data_count() != input.size())
-    throw std::runtime_error(
-        "typed_func_windowed_list: wrong result size (got " +
-        std::to_string(result.data_count()) + ")");
   for (const esi_system::TransformListItem &item : result.data()) {
     uint32_t expected = input[i].v + input[i].v;
     if (item.v != expected)
@@ -546,32 +543,38 @@ static void runCallbackWindowedList(Accelerator *accel) {
   using WinT = esi_system::CallbackWindowedList::callbackArgs;
 
   std::atomic<bool> got_call(false);
+  std::string error_msg;
+  std::mutex error_mtx;
   c->callback.connect([&](const WinT &arg) {
-    static constexpr uint16_t kTag = 0xCAFE;
-    static const uint32_t kExpected[] = {10u, 20u, 30u, 40u};
-    if (arg.tag() != kTag)
-      throw std::runtime_error(
-          "callback_windowed_list: wrong tag, expected 0x" +
-          toHex(static_cast<uint64_t>(kTag)) + " got 0x" +
-          toHex(static_cast<uint64_t>(arg.tag())));
-    if (arg.items_count() != 4)
-      throw std::runtime_error(
-          "callback_windowed_list: wrong item count, expected 4 got " +
-          std::to_string(arg.items_count()));
-    size_t i = 0;
-    for (uint32_t v : arg.items()) {
-      if (v != kExpected[i])
-        throw std::runtime_error("callback_windowed_list: element " +
-                                 std::to_string(i) + " expected " +
-                                 std::to_string(kExpected[i]) + " got " +
-                                 std::to_string(v));
-      ++i;
+    try {
+      static constexpr uint16_t kTag = 0xCAFE;
+      static const uint32_t kExpected[] = {10u, 20u, 30u, 40u};
+      if (arg.tag() != kTag)
+        throw std::runtime_error(
+            "callback_windowed_list: wrong tag, expected 0x" +
+            toHex(static_cast<uint64_t>(kTag)) + " got 0x" +
+            toHex(static_cast<uint64_t>(arg.tag())));
+      if (arg.items_count() != 4)
+        throw std::runtime_error(
+            "callback_windowed_list: wrong item count, expected 4 got " +
+            std::to_string(arg.items_count()));
+      size_t i = 0;
+      for (uint32_t v : arg.items()) {
+        if (v != kExpected[i])
+          throw std::runtime_error("callback_windowed_list: element " +
+                                   std::to_string(i) + " expected " +
+                                   std::to_string(kExpected[i]) + " got " +
+                                   std::to_string(v));
+        ++i;
+      }
+
+      std::cout << "callback_windowed_list ok (tag=0x"
+                << toHex(static_cast<uint64_t>(kTag))
+                << ", items=[10,20,30,40])\n";
+    } catch (const std::exception &e) {
+      std::lock_guard<std::mutex> lk(error_mtx);
+      error_msg = e.what();
     }
-
-    std::cout << "callback_windowed_list ok (tag=0x"
-              << toHex(static_cast<uint64_t>(kTag))
-              << ", items=[10,20,30,40])\n";
-
     got_call.store(true, std::memory_order_release);
   });
 
@@ -585,6 +588,9 @@ static void runCallbackWindowedList(Accelerator *accel) {
   if (!got_call.load(std::memory_order_acquire))
     throw std::runtime_error(
         "callback_windowed_list: callback did not fire within timeout");
+  std::lock_guard<std::mutex> lk(error_mtx);
+  if (!error_msg.empty())
+    throw std::runtime_error(error_msg);
 }
 
 // Probe registry: maps probe names (as used by ``--probe`` and emitted in
