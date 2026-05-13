@@ -1,0 +1,63 @@
+name: Dispatch circt-tests
+
+# Trigger a test run in circt/circt-tests once a "Build and Test" run has
+# finished. We use `workflow_run` rather than driving the dispatch directly
+# from `buildAndTest.yml` because `pull_request` events from forks run with a
+# read-only token and no access to repository secrets. `workflow_run`, by
+# contrast, executes in the context of this repository and has the
+# `CIRCT_TESTS_DISPATCH_TOKEN` available regardless of where the PR
+# originated.
+on:
+  workflow_run:
+    workflows: ["Build and Test"]
+    types: [completed]
+
+jobs:
+  dispatch:
+    name: Dispatch circt-tests
+    # Only dispatch when the upstream build matrix actually succeeded.
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.CIRCT_TESTS_DISPATCH_TOKEN }}
+    steps:
+      # Pull the small metadata artifact uploaded by buildAndTest.yml. It
+      # contains only the PR number (when applicable); everything else we
+      # need is already on the `workflow_run` event payload.
+      - name: Download dispatch metadata
+        if: env.GH_TOKEN != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: dispatch-metadata
+          path: dispatch-metadata
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Dispatch circt-tests
+        if: env.GH_TOKEN != ''
+        env:
+          EVENT_NAME: ${{ github.event.workflow_run.event }}
+          HEAD_REF: ${{ github.event.workflow_run.head_branch }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            KIND=main
+            SHA=main
+            REPO="$BASE_REPO"
+            PR_NUMBER=""
+          elif [ "$EVENT_NAME" = "pull_request" ]; then
+            KIND=pr
+            SHA="$HEAD_REF"
+            REPO="$HEAD_REPO"
+            PR_NUMBER=$(cat dispatch-metadata/pr_number)
+          else
+            echo "Unhandled event type: $EVENT_NAME, skipping."
+            exit 0
+          fi
+          DISPATCH_ARGS="-f kind=$KIND -f sha=$SHA -f repo=$REPO"
+          if [ -n "$PR_NUMBER" ]; then
+            DISPATCH_ARGS="$DISPATCH_ARGS -f pr_number=$PR_NUMBER"
+          fi
+          echo "Dispatching circt-tests with args: $DISPATCH_ARGS"
+          gh workflow run test.yml --repo circt/circt-tests $DISPATCH_ARGS
