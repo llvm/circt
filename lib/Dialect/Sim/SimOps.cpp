@@ -758,6 +758,20 @@ LogicalResult QueueConcatOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// TriggeredOp
+//===----------------------------------------------------------------------===//
+
+void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
+                        Value clock, Value condition) {
+  odsState.addOperands(clock);
+  if (condition)
+    odsState.addOperands(condition);
+
+  auto *region = odsState.addRegion();
+  region->push_back(new Block());
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
