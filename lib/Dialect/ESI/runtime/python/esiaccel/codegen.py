@@ -265,9 +265,10 @@ class CppGenerator(Generator):
   @staticmethod
   def _port_is_connectable(port) -> bool:
     """True if the generated connect() should call .connect() on this port."""
-    return isinstance(port, (_FunctionPort, _ToHostPort, _FromHostPort))
+    return isinstance(port,
+                      (_FunctionPort, _ToHostPort, _FromHostPort, _MetricPort))
     # CallbackPort.connect() requires a user-supplied callback — skip.
-    # MMIORegion, Metric, BundlePort — no .connect() method.
+    # MMIORegion, BundlePort — no .connect() method.
 
   def _scalar_port_group(self, member_name: str, port, appid) -> _PortGroup:
     """Build a _PortGroup for a single scalar (non-indexed) port."""
@@ -656,10 +657,17 @@ class CppGenerator(Generator):
         continue
       name = module_info.name
       instance = module_instances.get(name)
-      if instance is not None:
-        port_groups = self._collect_port_groups(instance.ports)
-      else:
-        port_groups = []
+      try:
+        if instance is not None:
+          port_groups = self._collect_port_groups(instance.ports)
+        else:
+          port_groups = []
+      except (NotImplementedError, ValueError) as e:
+        sys.stderr.write(f"Warning: skipping module '{name}': {e}\n")
+        hdr_file = output_dir / f"{name}.h"
+        with open(hdr_file, "w") as hdr:
+          hdr.write(f"// Skipped: {e}\n")
+        continue
 
       hdr_file = output_dir / f"{name}.h"
       with open(hdr_file, "w") as hdr:
@@ -1625,8 +1633,8 @@ class CppTypeEmitter:
             self._emit_window(hdr, emit_type)
           elif isinstance(emit_type, types.TypeAlias):
             self._emit_alias(hdr, emit_type)
-        except ValueError as e:
-          sys.stderr.write(f"Error emitting type '{emit_type}': {e}\n")
+        except (ValueError, NotImplementedError) as e:
+          sys.stderr.write(f"Warning: skipping type '{emit_type}': {e}\n")
           hdr.write(f"// Unsupported type '{emit_type}': {e}\n\n")
 
       hdr.write(textwrap.dedent(f"""
