@@ -433,6 +433,7 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     "sim::SimDialect",
     "sv::SVDialect",
     "verif::VerifDialect",
+    "mlir::scf::SCFDialect",
   ];
   let options = [
     Option<"enableAnnotationWarning", "warn-on-unprocessed-annotations",
