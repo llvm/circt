@@ -111,6 +111,22 @@ struct SynthDotOpConversion : SynthInverterOpConversion<synth::DotOp> {
   }
 };
 
+struct SynthMajorityOpConversion
+    : SynthInverterOpConversion<synth::MajorityOp> {
+  using SynthInverterOpConversion<synth::MajorityOp>::SynthInverterOpConversion;
+  Value createOp(Location loc, ArrayRef<Value> inputs,
+                 ConversionPatternRewriter &rewriter) const override {
+    assert(inputs.size() == 3 && "expected exactly three inputs");
+    auto ab =
+        rewriter.createOrFold<comb::AndOp>(loc, inputs[0], inputs[1], true);
+    auto ac =
+        rewriter.createOrFold<comb::AndOp>(loc, inputs[0], inputs[2], true);
+    auto bc =
+        rewriter.createOrFold<comb::AndOp>(loc, inputs[1], inputs[2], true);
+    auto abOrAc = rewriter.createOrFold<comb::OrOp>(loc, ab, ac, true);
+    return rewriter.createOrFold<comb::OrOp>(loc, abOrAc, bc, true);
+  }
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -128,8 +144,8 @@ struct ConvertSynthToCombPass
 
 static void populateSynthToCombConversionPatterns(RewritePatternSet &patterns) {
   patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion,
-               SynthXorInverterOpConversion, SynthDotOpConversion>(
-      patterns.getContext());
+               SynthXorInverterOpConversion, SynthDotOpConversion,
+               SynthMajorityOpConversion>(patterns.getContext());
 }
 
 void ConvertSynthToCombPass::runOnOperation() {

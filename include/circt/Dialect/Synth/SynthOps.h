@@ -135,6 +135,11 @@ T evaluateDotLogic(const T &x, const T &y, const T &z) {
   return x ^ (z | (x & y));
 }
 
+template <typename T>
+T evaluateMajorityLogic(const T &a, const T &b, const T &c) {
+  return (a & b) | (a & c) | (b & c);
+}
+
 } // namespace synth
 } // namespace circt
 

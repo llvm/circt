@@ -515,6 +515,91 @@ void DotOp::emitCNFWithoutInversion(
   circt::addXorClauses(outVar, inputVars[0], orVar, addClause);
 }
 
+//===----------------------------------------------------------------------===//
+// MajorityOp
+//===----------------------------------------------------------------------===//
+
+ParseResult MajorityOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand> operands;
+  Type resultType;
+  DenseBoolArrayAttr inverted;
+  NamedAttrList attrs;
+
+  if (parseVariadicInvertibleOperands(parser, operands, resultType, inverted,
+                                      attrs))
+    return failure();
+  if (operands.size() != 3)
+    return parser.emitError(parser.getCurrentLocation())
+           << "expected exactly three operands";
+  if (parser.resolveOperands(operands, resultType, result.operands))
+    return failure();
+
+  result.addTypes(resultType);
+  result.addAttributes(attrs);
+  result.addAttribute("inverted", inverted);
+  return success();
+}
+
+void MajorityOp::print(OpAsmPrinter &printer) {
+  printer << ' ';
+  printVariadicInvertibleOperands(printer, getOperation(), getOperands(),
+                                  getType(), getInvertedAttr(),
+                                  (*this)->getAttrDictionary());
+}
+
+LogicalResult MajorityOp::verify() {
+  if (getNumOperands() != 3)
+    return emitOpError("requires exactly three operands");
+  if (getInverted().size() != 3)
+    return emitOpError("requires exactly three inversion flags");
+  return success();
+}
+
+bool MajorityOp::areInputsPermutationInvariant() { return true; }
+
+bool MajorityOp::supportsNumInputs(unsigned numInputs) {
+  return numInputs == 3;
+}
+
+std::optional<uint64_t> MajorityOp::getLogicAreaCost() {
+  int64_t bitWidth = hw::getBitWidth(getType());
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<uint64_t>(bitWidth);
+}
+
+llvm::KnownBits MajorityOp::computeKnownBits(
+    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
+  auto a = applyInversion(getInputKnownBits(0), isInverted(0));
+  auto b = applyInversion(getInputKnownBits(1), isInverted(1));
+  auto c = applyInversion(getInputKnownBits(2), isInverted(2));
+  return evaluateMajorityLogic(a, b, c);
+}
+
+APInt MajorityOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(inputs.size() == 3 && "majority requires exactly three inputs");
+  return evaluateMajorityLogic(inputs[0], inputs[1], inputs[2]);
+}
+
+void MajorityOp::emitCNFWithoutInversion(
+    int outVar, llvm::ArrayRef<int> inputVars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  assert(inputVars.size() == 3 && "expected exactly three inputs");
+  int ab = newVar();
+  int ac = newVar();
+  int bc = newVar();
+  // ab = a & b
+  circt::addAndClauses(ab, {inputVars[0], inputVars[1]}, addClause);
+  // ac = a & c
+  circt::addAndClauses(ac, {inputVars[0], inputVars[2]}, addClause);
+  // bc = b & c
+  circt::addAndClauses(bc, {inputVars[1], inputVars[2]}, addClause);
+  // out = ab | ac | bc
+  circt::addOrClauses(outVar, {ab, ac, bc}, addClause);
+}
+
 static Value lowerVariadicInvertibleOp(
     Location loc, ValueRange operands, ArrayRef<bool> inverts,
     PatternRewriter &rewriter,
