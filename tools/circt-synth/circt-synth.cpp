@@ -513,12 +513,12 @@ int main(int argc, char **argv) {
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
   mlir::transform::registerInterpreterPass();
-  mlir::registerCSEPass();
-  registry
-      .insert<comb::CombDialect, debug::DebugDialect, emit::EmitDialect,
-              hw::HWDialect, ltl::LTLDialect, om::OMDialect, seq::SeqDialect,
-              sim::SimDialect, synth::SynthDialect, sv::SVDialect,
-              verif::VerifDialect, mlir::transform::TransformDialect>();
+
+  registry.insert<comb::CombDialect, datapath::DatapathDialect,
+                  debug::DebugDialect, emit::EmitDialect, hw::HWDialect,
+                  ltl::LTLDialect, om::OMDialect, seq::SeqDialect,
+                  sim::SimDialect, synth::SynthDialect, sv::SVDialect,
+                  verif::VerifDialect, mlir::transform::TransformDialect>();
 
   // Register the standard passes we want.
   MLIRContext context(registry);
