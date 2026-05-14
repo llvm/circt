@@ -94,3 +94,18 @@ hw.module @test_dot(in %a: i1, in %b: i1, in %c: i1,
   %3 = synth.dot not %a, %b, not %c : i1
   hw.output %2, %3 : i1, i1
 }
+
+// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 test_majority --c2 test_majority | FileCheck %s --check-prefix=MAJORITY
+// MAJORITY: c1 == c2
+// CHECK-LABEL: hw.module @test_majority
+hw.module @test_majority(in %a: i1, in %b: i1, in %c: i1,
+                         out out0: i1, out out1: i1) {
+  // CHECK: %[[CHOICE:.+]] = synth.choice
+  // CHECK: hw.output %[[CHOICE]], %[[CHOICE]] : i1, i1
+  %ab = synth.aig.and_inv %a, %b : i1
+  %ac = synth.aig.and_inv %a, %c : i1
+  %bc = synth.aig.and_inv %b, %c : i1
+  %0 = comb.or %ab, %ac, %bc : i1
+  %1 = synth.majority %a, %b, %c : i1
+  hw.output %0, %1 : i1, i1
+}

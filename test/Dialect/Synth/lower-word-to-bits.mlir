@@ -114,10 +114,12 @@ func.func @Basic_No_Module(%arg0: i2, %arg1: i2) -> i2 {
 // CHECK-LABEL: hw.module @Other
 // Other operation with BooleanLogicOpInterface
 // Only check that they are lowered.
-hw.module @Other(in %a: i2, in %b: i2, in %c: i2, out x: i2, out y: i2) {
+hw.module @Other(in %a: i2, in %b: i2, in %c: i2, out x: i2, out y: i2, out z: i2) {
   %0 = synth.xor_inv %a, not %b, %c : i2
-  %1 = synth.dot %a, not %b,  %c : i2
+  %1 = synth.dot %a, not %b, %c : i2
+  %2 = synth.majority %a, not %b, %c : i2
   // CHECK-COUNT-2: synth.xor_inv %{{.+}}, not %{{.+}}, %{{.+}} : i1
   // CHECK-COUNT-2: synth.dot %{{.+}}, not %{{.+}}, %{{.+}} : i1
-  hw.output %0, %1 : i2, i2
+  // CHECK-COUNT-2: synth.majority %{{.+}}, not %{{.+}}, %{{.+}} : i1
+  hw.output %0, %1, %2 : i2, i2, i2
 }

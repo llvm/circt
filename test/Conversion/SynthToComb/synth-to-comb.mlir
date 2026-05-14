@@ -37,3 +37,14 @@ hw.module @test_dot(in %x: i8, in %y: i8, in %z: i8, out out0: i8) {
   %0 = synth.dot not %x, %y, %z : i8
   hw.output %0 : i8
 }
+
+// CHECK-LABEL: @test_majority
+hw.module @test_majority(in %a: i8, in %b: i8, in %c: i8, out out0: i8) {
+  // CHECK: %[[AB:.+]] = comb.and bin %a, %b : i8
+  // CHECK: %[[AC:.+]] = comb.and bin %a, %c : i8
+  // CHECK: %[[BC:.+]] = comb.and bin %b, %c : i8
+  // CHECK: %[[OR:.+]] = comb.or bin %[[AB]], %[[AC]] : i8
+  // CHECK: %[[RESULT:.+]] = comb.or bin %[[OR]], %[[BC]] : i8
+  %0 = synth.majority %a, %b, %c : i8
+  hw.output %0 : i8
+}

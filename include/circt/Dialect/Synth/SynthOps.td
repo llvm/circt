@@ -214,4 +214,48 @@ def ChoiceOp : SynthOp<"choice", [SameOperandsAndResultType, Pure]> {
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 }
 
+def MajorityOp : SynthOp<"majority", [
+    SameOperandsAndResultType, Pure,
+    DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
+      "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
+      "supportsNumInputs", "createBooleanLogicOp",
+      "getLogicAreaCost"
+    ]>
+  ]>{
+  let summary = "Majority gate with invertible inputs";
+  let description = [{
+    The `synth.majority` operation computes the majority function of its
+    inputs, where each operand can be optionally inverted. 
+
+    The majority function returns 1 when more than half of the inputs are 1,
+    and 0 otherwise. For three inputs, it's equivalent to:
+    (a & b) | (a & c) | (b & c).
+
+    The number of inputs must be odd to avoid ties.
+
+     Example:
+  ```mlir
+      %r0 = synth.majority %a, %b, %c : i1
+      %r1 = synth.majority not %a, %b, not %c : i1
+  ```
+  }];
+   let arguments = (ins Variadic<AnyType>:$inputs,
+                       DenseBoolArrayAttr:$inverted);
+  let results = (outs AnyType:$result);
+
+  let builders = [
+  OpBuilder<(ins "Value":$a, "Value":$b, "Value":$c,
+                              CArg<"bool", "false">:$invertA,
+                              CArg<"bool", "false">:$invertB,
+                              CArg<"bool", "false">:$invertC), [{
+    SmallVector<bool> inverted{invertA, invertB, invertC};
+    return build($_builder, $_state, ValueRange{a, b, c},
+                 $_builder.getDenseBoolArrayAttr(inverted));
+  }]>
+];
+
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+}
+
 #endif // CIRCT_DIALECT_SYNTH_SYNTHOPS_TD

@@ -157,6 +157,7 @@ struct LogicNetworkGate {
     case Xor2:
       return 2;
     case Maj3:
+      return 3;
     case Dot3:
       return 3;
     case Identity:

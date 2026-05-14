@@ -195,6 +195,18 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
                       {xSignal, ySignal, zSignal});
               return success();
             })
+            .Case<synth::MajorityOp>([&](synth::MajorityOp majOp) {
+              if (!majOp.getType().isInteger(1)) {
+                handleOtherResults(majOp);
+                return success();
+              }
+              const Signal aSignal = getInvertibleSignal(majOp, 0);
+              const Signal bSignal = getInvertibleSignal(majOp, 1);
+              const Signal cSignal = getInvertibleSignal(majOp, 2);
+              addGate(majOp, LogicNetworkGate::Maj3,
+                      {aSignal, bSignal, cSignal});
+              return success();
+            })
             .Case<comb::XorOp>([&](comb::XorOp xorOp) {
               if (xorOp->getNumOperands() != 2) {
                 handleOtherResults(xorOp);
@@ -502,7 +514,7 @@ static inline llvm::APInt applyGateSemantics(LogicNetworkGate::Kind kind,
                                              const llvm::APInt &c) {
   switch (kind) {
   case LogicNetworkGate::Maj3:
-    return (a & b) | (a & c) | (b & c);
+    return evaluateMajorityLogic(a, b, c);
   case LogicNetworkGate::Dot3:
     return evaluateDotLogic(a, b, c);
   default:
@@ -603,6 +615,10 @@ struct MergedTruthTableBuilder {
           numMergedInputs, 1,
           applyGateSemantics(rootGate.getKind(), getEdgeTT(0), getEdgeTT(1)));
     case LogicNetworkGate::Maj3:
+      return BinaryTruthTable(numMergedInputs, 1,
+                              applyGateSemantics(rootGate.getKind(),
+                                                 getEdgeTT(0), getEdgeTT(1),
+                                                 getEdgeTT(2)));
     case LogicNetworkGate::Dot3:
       return BinaryTruthTable(numMergedInputs, 1,
                               applyGateSemantics(rootGate.getKind(),
