@@ -187,7 +187,7 @@ jobs:
           INPUT_EXTRA_CMAKE: ${{ inputs.extra_cmake_args }}
       - name: Free disk space
         if: runner.os == 'Linux'
-        uses: jlumbroso/free-disk-space@6f9c3c0b8d9f0a7f6c0a1f5e8b7d4c2a1e3f4b5c # v1.3.1
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           android: true
           dotnet: true
