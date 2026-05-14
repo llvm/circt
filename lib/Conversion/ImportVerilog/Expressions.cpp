@@ -3485,14 +3485,14 @@ Value Context::convertSystemCall(
 
   if (nameId == ksn::FOpen) {
     assert(numArgs >= 1 && numArgs <= 2 && "`$fopen` takes 1 or 2 arguments");
-    auto filename = convertRvalueExpression(
-      *args[0], moore::StringType::get(getContext()));
+    auto filename =
+        convertRvalueExpression(*args[0], moore::StringType::get(getContext()));
     if (!filename)
       return {};
     Value mode;
     if (numArgs == 2) {
-      mode = convertRvalueExpression(
-        *args[1], moore::StringType::get(getContext()));
+      mode = convertRvalueExpression(*args[1],
+                                     moore::StringType::get(getContext()));
       if (!mode)
         return {};
     }

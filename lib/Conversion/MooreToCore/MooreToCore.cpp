@@ -2959,7 +2959,8 @@ struct FOpenBIOpConversion : public OpConversionPattern<FOpenBIOp> {
   LogicalResult
   matchAndRewrite(FOpenBIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::FOpenOp>(op, adaptor.getFilename(), adaptor.getMode());
+    rewriter.replaceOpWithNewOp<sim::FOpenOp>(op, adaptor.getFilename(),
+                                              adaptor.getMode());
     return success();
   }
 };
@@ -2968,7 +2969,7 @@ struct FCloseBIOpConversion : public OpConversionPattern<FCloseBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(FCloseBIOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
+                                ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<sim::FCloseOp>(op, adaptor.getFd());
     return success();
   }
