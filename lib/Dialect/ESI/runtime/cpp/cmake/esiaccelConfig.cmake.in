@@ -1,21 +1,35 @@
+# On Windows, the wheel ships only Release binaries to keep its size
+# manageable. If a consumer is configuring a Debug build on Windows, build the
+# runtime from the C++ sources shipped alongside the wheel under
+# `<wheel>/esiaccel/source` instead of pointing at non-existent debug DLLs.
+# CMAKE_BUILD_TYPE is empty for multi-config generators (Visual Studio, etc.),
+# so the source-build path is only taken for single-config generators; with
+# multi-config generators the consumer must select the Release configuration.
+if(WIN32 AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(_esiaccel_source_dir "${CMAKE_CURRENT_LIST_DIR}/../source")
+  if(NOT EXISTS "${_esiaccel_source_dir}/CMakeLists.txt")
+    message(FATAL_ERROR
+      "esiaccel: Debug build requested on Windows but C++ sources were "
+      "not found at ${_esiaccel_source_dir}. The wheel may be incomplete.")
+  endif()
+  message(STATUS
+    "esiaccel: building runtime from source for Debug build on Windows")
+  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+  add_subdirectory("${_esiaccel_source_dir}"
+                   "${CMAKE_BINARY_DIR}/esiaccel-source-build"
+                   EXCLUDE_FROM_ALL)
+  return()
+endif()
+
 add_library(esiaccel::ESICppRuntime SHARED IMPORTED)
 set_target_properties(esiaccel::ESICppRuntime PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_LIST_DIR}/../include"
 )
 
 if(WIN32)
-  # Default to Release variant for single-config generators and as fallback.
-  # Multi-config generators (Visual Studio, Xcode) use the per-config
-  # IMPORTED_LOCATION_<CONFIG> properties set below.
   set_target_properties(esiaccel::ESICppRuntime PROPERTIES
     IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime.dll"
     IMPORTED_IMPLIB "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime.lib"
-  )
-  set_target_properties(esiaccel::ESICppRuntime PROPERTIES
-    IMPORTED_LOCATION_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime.dll"
-    IMPORTED_IMPLIB_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime.lib"
-    IMPORTED_LOCATION_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime_d.dll"
-    IMPORTED_IMPLIB_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../ESICppRuntime_d.lib"
   )
 else()
   set_target_properties(esiaccel::ESICppRuntime PROPERTIES
@@ -34,12 +48,6 @@ if(WIN32)
     IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc.dll"
     IMPORTED_IMPLIB "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc.lib"
   )
-  set_target_properties(esiaccel::CosimRpc PROPERTIES
-    IMPORTED_LOCATION_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc.dll"
-    IMPORTED_IMPLIB_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc.lib"
-    IMPORTED_LOCATION_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc_d.dll"
-    IMPORTED_IMPLIB_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../CosimRpc_d.lib"
-  )
 else()
   set_target_properties(esiaccel::CosimRpc PROPERTIES
     IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../@ESIRT_INSTALL_LIBDIR@/libCosimRpc.so"
@@ -56,12 +64,6 @@ if(WIN32)
   set_target_properties(esiaccel::CosimBackend PROPERTIES
     IMPORTED_LOCATION "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.dll"
     IMPORTED_IMPLIB "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.lib"
-  )
-  set_target_properties(esiaccel::CosimBackend PROPERTIES
-    IMPORTED_LOCATION_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.dll"
-    IMPORTED_IMPLIB_RELEASE "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend.lib"
-    IMPORTED_LOCATION_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend_d.dll"
-    IMPORTED_IMPLIB_DEBUG "${CMAKE_CURRENT_LIST_DIR}/../CosimBackend_d.lib"
   )
 else()
   set_target_properties(esiaccel::CosimBackend PROPERTIES
