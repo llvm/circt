@@ -230,35 +230,27 @@ jobs:
 
   # --- end of build-circt job.
 
-  # Dispatch a test run in circt/circt-tests once the entire build matrix has
-  # succeeded.
-  dispatch-circt-tests:
-    name: Dispatch circt-tests
-    needs: build-and-test
+  # Upload metadata about the triggering event so the companion
+  # `dispatchCirctTests.yml` workflow can pick it up. That workflow runs on
+  # `workflow_run`, which executes in the context of this repository and
+  # therefore has access to `CIRCT_TESTS_DISPATCH_TOKEN` even for PRs opened
+  # from forks (regular `pull_request` runs from forks do not).
+  #
+  # We deliberately do not depend on `build-and-test` here: the dispatcher
+  # gates on `workflow_run.conclusion == 'success'`, which already reflects
+  # whether the build matrix passed.
+  upload-dispatch-metadata:
+    name: Upload Dispatch Metadata
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.CIRCT_TESTS_DISPATCH_TOKEN }}
     steps:
-      - name: Dispatch circt-tests
-        if: env.GH_TOKEN != ''
+      - name: Write PR number
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            KIND=main
-            SHA=main
-            REPO="${{ github.repository }}"
-            PR_NUMBER=""
-          elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            KIND=pr
-            SHA="${{ github.event.pull_request.head.ref }}"
-            REPO="${{ github.event.pull_request.head.repo.full_name }}"
-            PR_NUMBER="${{ github.event.pull_request.number }}"
-          else
-            echo "Unhandled event type: ${{ github.event_name }}, skipping."
-            exit 0
-          fi
-          DISPATCH_ARGS="-f kind=$KIND -f sha=$SHA -f repo=$REPO"
-          if [ -n "$PR_NUMBER" ]; then
-            DISPATCH_ARGS="$DISPATCH_ARGS -f pr_number=$PR_NUMBER"
-          fi
-          echo "Dispatching circt-tests with args: $DISPATCH_ARGS"
-          gh workflow run test.yml --repo circt/circt-tests $DISPATCH_ARGS
+          mkdir -p dispatch-metadata
+          echo "${{ github.event.pull_request.number }}" \
+            > dispatch-metadata/pr_number
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dispatch-metadata
+          path: dispatch-metadata/
+          retention-days: 1
