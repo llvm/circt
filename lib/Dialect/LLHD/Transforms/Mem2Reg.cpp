@@ -14,6 +14,7 @@
 #include "mlir/Analysis/Liveness.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/IR/Dominance.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/GenericIteratedDominanceFrontier.h"
 
@@ -29,6 +30,7 @@ namespace llhd {
 using namespace mlir;
 using namespace circt;
 using namespace llhd;
+using llvm::ArrayRef;
 using llvm::PointerIntPair;
 using llvm::SmallDenseSet;
 using llvm::SmallSetVector;
@@ -691,6 +693,7 @@ struct Promoter {
 
   void findPromotableSlots();
   Value resolveSlot(Value projectionOrSlot);
+  void populateSlotOps();
 
   void captureAcrossWait();
   void captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
@@ -763,6 +766,10 @@ struct Promoter {
 
   /// Helper to clean up unused ops.
   UnusedOpPruner pruner;
+
+  /// Maps slot values to all ops that refer to them. The operation list is
+  /// laid out in the same order as a loop over blocks in the region.
+  DenseMap<Value, SmallVector<Operation *>> slotOps;
 };
 } // namespace
 
@@ -780,9 +787,12 @@ LogicalResult Promoter::promote() {
   if (slots.empty())
     return success();
 
+
   // Run the lattice analysis and rewrite once per slot. Each iteration gets
   // its own fresh lattice with O(1)-sized state per program point, so the
-  // total cost is linear in the number of slots times the size of the region.
+  // total cost is linear in the number of slots times the number of ops that
+  // contribute to that slot.
+  populateSlotOps();
   for (auto slot : slots) {
     currentSlot = slot;
     promoteSlot();
@@ -1082,12 +1092,41 @@ void Promoter::captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
 // Lattice Construction and Propagation
 //===----------------------------------------------------------------------===//
 
+/// Preprocess all ops in the current region to populate `slotOps`.
+///
+/// This avoids a repeated linear walk of the region in every call to
+/// `constructLattice`.
+void Promoter::populateSlotOps() {
+  for (auto &block : region) {
+    for (auto &op : block.without_terminator()) {
+      Value slot = TypeSwitch<Operation *, Value>(&op)
+      .Case<ProbeOp, DriveOp>([&](auto op) {
+        if (promotable.contains(op.getSignal()))
+          return resolveSlot(op.getSignal());
+        return Value();
+      })
+      .Case([&](SignalOp op) {
+        return op.getResult();
+      })
+      .Default([&](Operation *) {
+        return Value();
+      });
+      if (slot)
+        slotOps[slot].push_back(&op);
+    }
+  }
+}
+
 /// Populate the lattice with nodes and values corresponding to the blocks and
 /// to the operations in the region that touch `currentSlot`. Ops that touch
 /// other slots are skipped entirely — they're transparent to this slot's
 /// analysis.
 void Promoter::constructLattice() {
   assert(currentSlot && "constructLattice requires currentSlot");
+
+  // Get all operations that correspond to the current slot in the region. These
+  // are arranged in the same order as a region walk.
+  ArrayRef<Operation *> currentSlotOps = slotOps[currentSlot];
 
   // Create entry nodes for each block.
   SmallDenseMap<Block *, BlockEntry *, 8> blockEntries;
@@ -1098,11 +1137,16 @@ void Promoter::constructLattice() {
   }
 
   // Create nodes for each operation that touches `currentSlot`.
-  for (auto &block : region) {
+  for (auto& block : region) {
     auto *valueBefore = blockEntries.lookup(&block)->valueAfter;
 
-    // Handle operations.
-    for (auto &op : block.without_terminator()) {
+    // Handle operations. All operations within this block will exist in the
+    // prefix of currentSlotOps.
+    ArrayRef<Operation *> blockOps = currentSlotOps.take_while(
+        [&](Operation *op) { return op->getBlock() == &block; });
+    currentSlotOps = currentSlotOps.drop_front(blockOps.size());
+
+    for (Operation *op : blockOps) {
       // Handle probes.
       if (auto probeOp = dyn_cast<ProbeOp>(op)) {
         if (!promotable.contains(probeOp.getSignal()))
@@ -1117,7 +1161,7 @@ void Promoter::constructLattice() {
 
       // Handle drives.
       if (auto driveOp = dyn_cast<DriveOp>(op)) {
-        if (!isBlockingDrive(&op) && !isDeltaDrive(&op))
+        if (!isBlockingDrive(op) && !isDeltaDrive(op))
           continue;
         if (!promotable.contains(driveOp.getSignal()))
           continue;
