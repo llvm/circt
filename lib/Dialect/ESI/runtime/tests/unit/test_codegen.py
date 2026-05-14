@@ -544,3 +544,53 @@ def test_size_assert_skipped_for_unbounded_struct():
   # The struct is still emitted, but no size assert (its size is unbounded).
   assert "struct _struct_tag_ui8_data__esi_any" in hdr
   assert "static_assert(sizeof(_struct_tag_ui8_data__esi_any)" not in hdr
+
+
+def test_struct_with_void_field_commented_out():
+  """Void-typed struct fields are commented out so the header stays valid C++.
+
+  `void x;` is not a valid C++ field declaration. The codegen must instead
+  emit `// void x;` and exclude the field from the generated constructor.
+  """
+  uint8 = types.UIntType("ui8", 8)
+  void_t = types.VoidType("!esi.void")
+  s = types.StructType(
+      "!hw.struct<valid: ui8, client_data: void>",
+      [("valid", uint8), ("client_data", void_t)],
+  )
+
+  hdr = _generate_header([s])
+  # No uncommented `void <name>;` declaration may appear in the header.
+  assert re.search(r"^\s*void\s+\w+;", hdr, re.M) is None, hdr
+  # The void field must instead show up as a commented-out placeholder.
+  assert "// void client_data;" in hdr
+  # The non-void field is still emitted normally.
+  assert "uint8_t valid" in hdr
+  # The constructor must not take a `void` parameter (which would be
+  # invalid C++); only the non-void field is in the parameter list.
+  ctor_match = re.search(r"_struct_[^\s(]*\(([^)]*)\) :", hdr)
+  assert ctor_match, f"Constructor not found in:\n{hdr}"
+  ctor_params = ctor_match.group(1)
+  assert "client_data" not in ctor_params
+  assert "valid" in ctor_params
+
+
+def test_union_with_void_field_commented_out():
+  """Void-typed union members are commented out and skip wrapper generation."""
+  uint16 = types.UIntType("ui16", 16)
+  void_t = types.VoidType("!esi.void")
+  u = types.UnionType(
+      "!hw.union<a: ui16, b: void>",
+      [("a", uint16), ("b", void_t)],
+  )
+
+  hdr = _generate_header([u])
+  # No uncommented `void <name>;` declaration may appear in the header;
+  # the void member must show up as a commented-out placeholder instead.
+  assert re.search(r"^\s*void\s+\w+;", hdr, re.M) is None, hdr
+  assert "// void b;" in hdr
+  # No padding wrapper struct is generated for the void field.
+  assert "_union_a_ui16_b__esi_void_b" not in hdr
+  # The non-void member is still present in the union body.
+  union_body = hdr[hdr.index("union "):]
+  assert "uint16_t a;" in union_body
