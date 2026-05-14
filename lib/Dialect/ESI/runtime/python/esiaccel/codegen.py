@@ -1272,6 +1272,11 @@ class CppTypeEmitter:
     field_decls: List[str] = []
     for field_name, field_type in fields:
       field_cpp = self._cpp_type(field_type)
+      if field_cpp == "void":
+        # `void` is not a valid C++ field type; emit a comment so the field
+        # remains visible in the generated header without breaking compilation.
+        field_decls.append(f"// void {field_name};")
+        continue
       wrapped = self._unwrap_aliases(field_type)
       if isinstance(wrapped, (types.BitsType, types.IntType)):
         # TODO: Bitfield layout is implementation-defined; consider
@@ -1292,7 +1297,9 @@ class CppTypeEmitter:
     # Logical-order constructor: parameters follow `struct_type.fields` order
     # (the user-facing order from the manifest), independent of any wire-layout
     # reversal applied to the member declarations above.
-    logical_fields = list(struct_type.fields)
+    logical_fields = [(name, ftype)
+                      for name, ftype in struct_type.fields
+                      if self._cpp_type(ftype) != "void"]
     if logical_fields:
       hdr.write(f"  {struct_name}() = default;\n")
       ctor_params = ", ".join(
@@ -1322,6 +1329,8 @@ class CppTypeEmitter:
     # First pass: emit wrapper structs for fields that need padding.
     wrapper_names: Dict[str, str] = {}
     for field_name, field_type in fields:
+      if self._cpp_type(field_type) == "void":
+        continue
       field_bytes = self._field_byte_width(field_type)
       pad_bytes = union_bytes - field_bytes
       if pad_bytes > 0:
@@ -1337,10 +1346,13 @@ class CppTypeEmitter:
     # Second pass: emit the union itself.
     union_field_decls: List[str] = []
     for field_name, field_type in fields:
-      if field_name in wrapper_names:
+      field_cpp = self._cpp_type(field_type)
+      if field_cpp == "void":
+        # `void` is not a valid C++ union member; emit a comment placeholder.
+        union_field_decls.append(f"// void {field_name};")
+      elif field_name in wrapper_names:
         union_field_decls.append(f"{wrapper_names[field_name]} {field_name};")
       else:
-        field_cpp = self._cpp_type(field_type)
         union_field_decls.append(f"{field_cpp} {field_name};")
     hdr.write(f"union {union_name} {{\n")
     for decl in union_field_decls:
