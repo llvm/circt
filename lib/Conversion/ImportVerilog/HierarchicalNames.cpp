@@ -25,7 +25,7 @@ struct InstBodyVisitor
         visitedBodies(visitedBodies), sameHierPaths(sameHierPaths) {}
 
   void handle(const slang::ast::InstanceSymbol &instNode) {
-    traverseInstanceBody(context, instNode, sameHierPaths, visitedBodies);
+    traverseInstanceBody(context, instNode, visitedBodies);
     // Also visit port connection expressions to find hier refs used as
     // port arguments (e.g., .in_val(b_inst.local_val)).
     for (auto *conn : instNode.getPortConnections())
@@ -130,27 +130,25 @@ struct InstBodyVisitor
 
   static void traverseInstanceBody(
       Context &context, const slang::ast::InstanceSymbol &symbol,
-      DenseSet<StringAttr> &sameHierPaths,
       DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies) {
     const slang::ast::InstanceBodySymbol *body = getCanonicalBody(symbol);
-    if (visitedBodies.insert(body).second)
+    if (visitedBodies.insert(body).second) {
+      DenseSet<StringAttr> sameHierPaths;
       for (auto &member : body->members()) {
         auto &outermostModule = member.getParentScope()->asSymbol();
         InstBodyVisitor visitor(context, outermostModule, sameHierPaths,
                                 visitedBodies);
         member.visit(visitor);
       }
+    }
   }
 };
 
 } // namespace
 
 void Context::traverseInstanceBody(const slang::ast::InstanceSymbol &symbol) {
-  // Top-level entry point: create a fresh deduplication set that is shared
-  // across all recursive traversals of this instance tree. This prevents
-  // cross-hierarchy contamination between independent top-level instances.
-  DenseSet<StringAttr> sameHierPaths;
+  // Top-level entry point: create a fresh visitedBodies set to prevent
+  // infinite recursion and to skip identical module bodies.
   DenseSet<const slang::ast::InstanceBodySymbol *> visitedBodies;
-  InstBodyVisitor::traverseInstanceBody(*this, symbol, sameHierPaths,
-                                        visitedBodies);
+  InstBodyVisitor::traverseInstanceBody(*this, symbol, visitedBodies);
 }
