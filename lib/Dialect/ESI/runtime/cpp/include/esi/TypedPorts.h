@@ -184,7 +184,7 @@ public:
       throw std::runtime_error("PODTypeDeserializer::push: null message");
 
     // Flush the buffer, bail if still full.
-    poke();
+    pokeLocked();
     if (pendingOutput)
       return false;
 
@@ -194,11 +194,17 @@ public:
     const MessageData &flat = getMessageDataRef<T>(*msg, scratch);
     pendingOutput = std::make_unique<T>(fromMessageData<T>(flat, wireInfo));
     msg.reset();
-    poke();
+    pokeLocked();
     return true;
   }
 
   bool poke() {
+    std::scoped_lock<std::mutex> lock(mutex);
+    return pokeLocked();
+  }
+
+private:
+  bool pokeLocked() {
     if (pendingOutput && output(pendingOutput)) {
       pendingOutput.reset();
       return true;
@@ -206,7 +212,6 @@ public:
     return false;
   }
 
-private:
   OutputCallback output;
   WireInfo wireInfo;
   std::mutex mutex;
