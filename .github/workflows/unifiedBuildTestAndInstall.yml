@@ -193,8 +193,8 @@ jobs:
           dotnet: true
           haskell: true
           docker-images: true
-          large-packages: true
-          tool-cache: true
+          large-packages: false
+          tool-cache: false
       - name: Clone llvm/circt
         uses: actions/checkout@v3
         with:
