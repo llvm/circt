@@ -787,7 +787,6 @@ LogicalResult Promoter::promote() {
   if (slots.empty())
     return success();
 
-
   // Run the lattice analysis and rewrite once per slot. Each iteration gets
   // its own fresh lattice with O(1)-sized state per program point, so the
   // total cost is linear in the number of slots times the number of ops that
@@ -1100,17 +1099,13 @@ void Promoter::populateSlotOps() {
   for (auto &block : region) {
     for (auto &op : block.without_terminator()) {
       Value slot = TypeSwitch<Operation *, Value>(&op)
-      .Case<ProbeOp, DriveOp>([&](auto op) {
-        if (promotable.contains(op.getSignal()))
-          return resolveSlot(op.getSignal());
-        return Value();
-      })
-      .Case([&](SignalOp op) {
-        return op.getResult();
-      })
-      .Default([&](Operation *) {
-        return Value();
-      });
+                       .Case<ProbeOp, DriveOp>([&](auto op) {
+                         if (promotable.contains(op.getSignal()))
+                           return resolveSlot(op.getSignal());
+                         return Value();
+                       })
+                       .Case([&](SignalOp op) { return op.getResult(); })
+                       .Default([&](Operation *) { return Value(); });
       if (slot)
         slotOps[slot].push_back(&op);
     }
@@ -1137,7 +1132,7 @@ void Promoter::constructLattice() {
   }
 
   // Create nodes for each operation that touches `currentSlot`.
-  for (auto& block : region) {
+  for (auto &block : region) {
     auto *valueBefore = blockEntries.lookup(&block)->valueAfter;
 
     // Handle operations. All operations within this block will exist in the
