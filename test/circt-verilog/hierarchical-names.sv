@@ -125,9 +125,9 @@ module Top2();
 endmodule
 
 // CHECK: hw.module private @Child()
-// CHECK:   hw.instance "gc" @GrandChild(c1.i: {{.+}}, c1.i: {{.+}})
+// CHECK:   hw.instance "gc" @GrandChild(c1.i: {{.+}})
 
-// CHECK: hw.module private @GrandChild(in %c1.i : !llhd.ref<i1>, in %c1.i_0 {{.+}} : !llhd.ref<i1>)
+// CHECK: hw.module private @GrandChild(in %c1.i : !llhd.ref<i1>)
 
 // CHECK: hw.module @Top1() {
 // CHECK:   hw.instance "c1" @Child() -> ()
