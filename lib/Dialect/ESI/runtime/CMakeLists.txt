@@ -310,8 +310,12 @@ if(WIN32 AND MSVC)
 endif()
 
 
-# Add the Python bindings.
-add_subdirectory(python)
+# Add the Python bindings. The `python` subdirectory is not shipped with the
+# source tree distributed inside the wheel (which is only used for on-demand
+# Debug builds on Windows), so guard against its absence.
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/python/CMakeLists.txt)
+  add_subdirectory(python)
+endif()
 
 ##===----------------------------------------------------------------------===//
 ## Backends are loaded dynamically as plugins.

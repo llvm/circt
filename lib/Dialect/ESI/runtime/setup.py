@@ -58,17 +58,14 @@ class CMakeBuild(build_py):
           os.path.join(target_dir, "..", "cmake_build"))
     src_dir = _thisdir
 
-    # On Windows, we build both Release and Debug configurations
-    # to support applications in both modes.
+    # We build a single Release configuration. On Windows, Debug builds for
+    # consumers are supported by shipping the C++ sources alongside the wheel
+    # and having the distributed esiaccelConfig.cmake compile them on demand
+    # (see the copy step below and cpp/cmake/esiaccelConfig.cmake.in).
     configs_to_build = ["Release"]
-    if platform.system() == "Windows":
-      configs_to_build.append("Debug")
 
     for cfg in configs_to_build:
-      # Use separate build directories for each configuration
       current_build_dir = cmake_build_dir
-      if len(configs_to_build) > 1:
-        current_build_dir = os.path.join(cmake_build_dir, cfg)
 
       os.makedirs(current_build_dir, exist_ok=True)
       cmake_cache_file = os.path.join(current_build_dir, "CMakeCache.txt")
@@ -163,47 +160,42 @@ class CMakeBuild(build_py):
       )
 
       # Install the runtime directly into the target directory.
-      # For the first config (Release), clear the target directory.
-      # For subsequent configs (Debug on Windows), keep existing files.
       if cfg == "Release" and os.path.exists(target_dir):
         shutil.rmtree(target_dir)
 
       print(f"Installing {cfg} configuration...")
-      if cfg == "Debug":
-        # For Debug builds, we only built the C++ runtime (not the Python
-        # extension), so we can't use cmake --install with the ESIRuntime
-        # component (it would fail trying to install the unbuilt Python
-        # extension). Instead, manually copy the debug DLLs, PDBs, import
-        # libraries, and executables for the specific ESIRuntime binaries.
-        import glob
-        install_dir = os.path.join(target_dir, "esiaccel")
-        os.makedirs(install_dir, exist_ok=True)
-        debug_patterns = [
-            "ESICppRuntime*.dll",
-            "ESICppRuntime*.lib",
-            "CosimRpc*.dll",
-            "CosimRpc*.lib",
-            "CosimBackend*.dll",
-            "CosimBackend*.lib",
-            "esiquery*.exe",
-        ]
-        for pattern in debug_patterns:
-          for f in glob.glob(os.path.join(current_build_dir, pattern)):
-            print(f"  Installing {os.path.basename(f)}")
-            shutil.copy2(f, install_dir)
-      else:
-        subprocess.check_call(
-            [
-                "cmake",
-                "--install",
-                ".",
-                "--prefix",
-                os.path.join(target_dir, "esiaccel"),
-                "--component",
-                "ESIRuntime",
-            ],
-            cwd=current_build_dir,
-        )
+      subprocess.check_call(
+          [
+              "cmake",
+              "--install",
+              ".",
+              "--prefix",
+              os.path.join(target_dir, "esiaccel"),
+              "--component",
+              "ESIRuntime",
+          ],
+          cwd=current_build_dir,
+      )
+
+    # Ship the C++ sources alongside the wheel so that consumers on Windows
+    # can build a Debug variant on demand. The distributed
+    # esiaccelConfig.cmake adds this source tree as a subdirectory when the
+    # consumer is configuring a Debug build on Windows.
+    source_dst = os.path.join(target_dir, "esiaccel", "source")
+    if os.path.exists(source_dst):
+      shutil.rmtree(source_dst)
+    os.makedirs(source_dst, exist_ok=True)
+    print(f"Copying C++ sources into wheel at {source_dst}")
+    shutil.copy2(os.path.join(src_dir, "CMakeLists.txt"), source_dst)
+    shutil.copy2(os.path.join(src_dir, "cosim.proto"), source_dst)
+    # Copy the cpp/ tree but skip the cmake/ subdirectory: the
+    # esiaccelConfig.cmake.in template is only relevant when (re)building the
+    # full wheel, not when consumers compile the runtime from these sources.
+    shutil.copytree(os.path.join(src_dir, "cpp"),
+                    os.path.join(source_dst, "cpp"),
+                    ignore=shutil.ignore_patterns("cmake"))
+    shutil.copytree(os.path.join(src_dir, "cosim_dpi_server"),
+                    os.path.join(source_dst, "cosim_dpi_server"))
 
 
 class NoopBuildExtension(build_ext):
