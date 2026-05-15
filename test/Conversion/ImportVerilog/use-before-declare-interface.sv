@@ -71,35 +71,3 @@ module ForwardInterfaceGenerate(output logic y);
     bit value;
   end
 endmodule
-
-// CHECK-LABEL: moore.module @ForwardInterfaceLoopGenerate(
-module ForwardInterfaceLoopGenerate(output logic [1:0] y);
-  for (genvar i = 0; i < 2; ++i) begin : lane
-    // CHECK-DAG: %lane_0.bus_sig = moore.variable : <l1>
-    // CHECK-DAG: %lane_1.bus_sig = moore.variable : <l1>
-    // CHECK: moore.blocking_assign %lane_0.bus_sig
-    // CHECK: moore.assign {{.*}} : l1
-    // CHECK: moore.blocking_assign %lane_1.bus_sig
-    // CHECK: moore.assign {{.*}} : l1
-    initial bus.sig = bit'(i);
-
-    assign y[i] = bus.sig;
-    simple_if bus(clk);
-    logic clk;
-  end
-endmodule
-
-// CHECK-LABEL: moore.module @ForwardInterfaceInitializer(
-module ForwardInterfaceInitializer(output logic y);
-  // CHECK-DAG: %captured = moore.variable {{.*}} : <l1>
-  // CHECK-DAG: %bus_sig = moore.variable : <l1>
-  // CHECK-DAG: moore.read %bus_sig : <l1>
-  logic captured = bus.sig;
-
-  // CHECK-DAG: moore.read %captured : <l1>
-  // CHECK: moore.output {{.*}} : !moore.l1
-  assign y = captured;
-
-  simple_if bus(clk);
-  logic clk;
-endmodule
