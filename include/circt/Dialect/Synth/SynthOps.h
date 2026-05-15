@@ -140,6 +140,22 @@ T evaluateMajorityLogic(const T &a, const T &b, const T &c) {
   return (a & b) | (a & c) | (b & c);
 }
 
+inline llvm::APInt invertBooleanLogic(llvm::APInt value) {
+  value.flipAllBits();
+  return value;
+}
+
+inline llvm::KnownBits invertBooleanLogic(llvm::KnownBits value) {
+  std::swap(value.Zero, value.One);
+  return value;
+}
+
+template <typename T>
+T evaluateOneHotLogic(const T &a, const T &b, const T &c) {
+  auto allSet = a & b & c;
+  return (a ^ b ^ c) & invertBooleanLogic(allSet);
+}
+
 } // namespace synth
 } // namespace circt
 

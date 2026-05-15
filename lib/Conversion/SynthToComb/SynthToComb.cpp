@@ -127,6 +127,35 @@ struct SynthMajorityOpConversion
     return rewriter.createOrFold<comb::OrOp>(loc, abOrAc, bc, true);
   }
 };
+
+struct SynthOneHotOpConversion : SynthInverterOpConversion<synth::OneHotOp> {
+  using SynthInverterOpConversion<synth::OneHotOp>::SynthInverterOpConversion;
+  Value createOp(Location loc, ArrayRef<Value> inputs,
+                 ConversionPatternRewriter &rewriter) const override {
+    assert(inputs.size() == 3 && "expected exactly three inputs");
+    auto width = inputs[0].getType().getIntOrFloatBitWidth();
+    auto allOnes =
+        hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
+
+    // NOT each input
+    auto notA = rewriter.createOrFold<comb::XorOp>(loc, inputs[0],
+                                                   allOnes.getResult(), true);
+    auto notB = rewriter.createOrFold<comb::XorOp>(loc, inputs[1],
+                                                   allOnes.getResult(), true);
+    auto notC = rewriter.createOrFold<comb::XorOp>(loc, inputs[2],
+                                                   allOnes.getResult(), true);
+
+    auto aOnly = rewriter.createOrFold<comb::AndOp>(
+        loc, ValueRange{inputs[0], notB, notC}, true);
+    auto bOnly = rewriter.createOrFold<comb::AndOp>(
+        loc, ValueRange{notA, inputs[1], notC}, true);
+    auto cOnly = rewriter.createOrFold<comb::AndOp>(
+        loc, ValueRange{notA, notB, inputs[2]}, true);
+    return rewriter.createOrFold<comb::OrOp>(
+        loc, ValueRange{aOnly, bOnly, cOnly}, true);
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -145,7 +174,8 @@ struct ConvertSynthToCombPass
 static void populateSynthToCombConversionPatterns(RewritePatternSet &patterns) {
   patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion,
                SynthXorInverterOpConversion, SynthDotOpConversion,
-               SynthMajorityOpConversion>(patterns.getContext());
+               SynthMajorityOpConversion, SynthOneHotOpConversion>(
+      patterns.getContext());
 }
 
 void ConvertSynthToCombPass::runOnOperation() {
