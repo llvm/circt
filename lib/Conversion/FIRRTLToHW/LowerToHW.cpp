@@ -5478,12 +5478,11 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
     if (failed(formatString))
       return failure();
 
-    OpBuilder::InsertionGuard guard(builder);
-    auto triggeredOp = sim::TriggeredOp::create(builder, clock, cond);
-    builder.setInsertionPointToStart(triggeredOp.getBodyBlock());
-    auto fileOp = sim::GetFileOp::create(builder, *fileFormatString);
-    sim::PrintFormattedProcOp::create(builder, *formatString,
-                                      fileOp->getResult(0));
+    sim::TriggeredOp::create(builder, clock, cond, [&] {
+      auto fileOp = sim::GetFileOp::create(builder, *fileFormatString);
+      sim::PrintFormattedProcOp::create(builder, *formatString,
+                                        fileOp->getResult(0));
+    });
     return success();
   }
 
