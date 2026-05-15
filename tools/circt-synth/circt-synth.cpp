@@ -38,6 +38,7 @@
 #include "circt/Transforms/Passes.h"
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
+#include "mlir/Dialect/Transform/Transforms/Passes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
@@ -93,6 +94,11 @@ static cl::opt<bool>
     emitBytecode("emit-bytecode",
                  cl::desc("Emit bytecode when generating MLIR output"),
                  cl::init(false), cl::cat(mainCategory));
+
+static cl::opt<bool>
+    useTransformInterpreter("use-transformDialect",
+                            cl::desc("transform dialect interpreter"),
+                            cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool> force("f", cl::desc("Enable binary output on terminals"),
                            cl::init(false), cl::cat(mainCategory));
@@ -455,7 +461,11 @@ static LogicalResult executeSynthesis(MLIRContext &context) {
     pm.addInstrumentation(
         std::make_unique<VerbosePassInstrumentation<mlir::ModuleOp>>(
             "circt-synth"));
-  populateCIRCTSynthPipeline(pm);
+  if (useTransformInterpreter) {
+    pm.addPass(mlir::transform::createInterpreterPass());
+  } else {
+    populateCIRCTSynthPipeline(pm);
+  }
 
   if (failed(pm.run(module.get())))
     return failure();
@@ -497,11 +507,15 @@ int main(int argc, char **argv) {
 
   // Register the supported CIRCT dialects and create a context to work with.
   DialectRegistry registry;
-  registry
-      .insert<comb::CombDialect, datapath::DatapathDialect, debug::DebugDialect,
-              emit::EmitDialect, hw::HWDialect, ltl::LTLDialect, om::OMDialect,
-              seq::SeqDialect, sim::SimDialect, synth::SynthDialect,
-              sv::SVDialect, verif::VerifDialect>();
+  mlir::transform::registerInterpreterPass();
+
+  registry.insert<comb::CombDialect, datapath::DatapathDialect,
+                  debug::DebugDialect, emit::EmitDialect, hw::HWDialect,
+                  ltl::LTLDialect, om::OMDialect, seq::SeqDialect,
+                  sim::SimDialect, synth::SynthDialect, sv::SVDialect,
+                  verif::VerifDialect, mlir::transform::TransformDialect>();
+
+  // Register the standard passes we want.
   MLIRContext context(registry);
   if (allowUnregisteredDialects)
     context.allowUnregisteredDialects();

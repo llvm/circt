@@ -22,8 +22,10 @@ target_link_libraries(circt-synth
   CIRCTTransforms
   CIRCTVerif
   MLIRBytecodeWriter
-  MLIRIR
   MLIRParser
+  MLIRIR
+  MLIRTransformDialect
+  MLIRTransformDialectTransforms
   LLVMSupport
 )
 
