@@ -611,7 +611,7 @@ def PrintFormattedProcOp : SimOp<"proc.print", [ProceduralOp]> {
 }
 
 def GetFileOp : SimOp<"get_file", [ProceduralOp]> {
-  let summary = "Create an output stream for a formatted file name";
+  let summary = "Get an output stream for a formatted file name";
   let description = [{
     Resolves a file name from a `!sim.fstring` value, immediately creates the
     corresponding file, and returns an output stream resource that can be
@@ -624,8 +624,6 @@ def GetFileOp : SimOp<"get_file", [ProceduralOp]> {
 
     The concrete runtime representation and lifetime management of the returned
     stream are backend-defined.
-
-    This operation must be within a procedural region.
   }];
 
   let arguments = (ins FormatStringType:$fileName);
