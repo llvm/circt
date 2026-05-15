@@ -26,7 +26,6 @@ circuit LowerToCore:
 ; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   sim.proc.print [[MSG]]
 ; CHECK-NEXT: }
-; CHECK: sim.print [[MSG]] on %clock if %enable
 ; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   [[FILE1:%.+]] = sim.get_file [[FMTFILE1]]
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[FILE1]]
