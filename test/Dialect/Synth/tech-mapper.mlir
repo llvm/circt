@@ -187,7 +187,7 @@ hw.module @majority_test(in %x : i1, in %y : i1, in %z : i1, out result : i1) {
     // Permute inputs to test the truth table computation and input handling of the majority operation.
     // CHECK-NEXT: %[[MAJ:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @majority_lib(x: %{{.+}}: i1, y: %{{.+}}: i1, z: %{{.+}}: i1) -> (result: i1) {test.arrival_times = [1]}
     // CHECK-NEXT: hw.output %[[MAJ]] : i1
-    %0 = synth.majority %x, not %y, not %z : i1
+    %0 = synth.majority not %y, %x, not %z : i1
     hw.output %0 : i1
 }
 
