@@ -1107,9 +1107,9 @@ struct StmtVisitor {
       auto fd = context.convertRvalueExpression(*args[0]);
       if (!fd)
         return failure();
-      auto i32 = moore::IntType::getInt(builder.getContext(), 32);
-      if (fd.getType() != i32)
-        fd = moore::ConversionOp::create(builder, loc, i32, fd);
+      auto i32Type = moore::IntType::getInt(builder.getContext(), 32);
+      if (fd.getType() != i32Type)
+        fd = moore::ConversionOp::create(builder, loc, i32Type, fd);
       moore::FCloseBIOp::create(builder, loc, fd);
       return true;
     }

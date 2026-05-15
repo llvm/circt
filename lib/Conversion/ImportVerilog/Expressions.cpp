@@ -3489,14 +3489,33 @@ Value Context::convertSystemCall(
         convertRvalueExpression(*args[0], moore::StringType::get(getContext()));
     if (!filename)
       return {};
-    Value mode;
+    moore::FOpenModeAttr modeAttr;
     if (numArgs == 2) {
-      mode = convertRvalueExpression(*args[1],
-                                     moore::StringType::get(getContext()));
+      auto *strLit = args[1]
+                         ->unwrapImplicitConversions()
+                         .as_if<slang::ast::StringLiteral>();
+      if (!strLit)
+        return emitError(loc) << "$fopen mode must be a string literal",
+               Value{};
+
+      auto mode =
+          llvm::StringSwitch<std::optional<moore::FOpenMode>>(
+              strLit->getValue())
+              .Cases({"r", "rb"}, moore::FOpenMode::Read)
+              .Cases({"w", "wb"}, moore::FOpenMode::Write)
+              .Cases({"a", "ab"}, moore::FOpenMode::Append)
+              .Cases({"r+", "r+b", "rb+"}, moore::FOpenMode::ReadUpdate)
+              .Cases({"w+", "w+b", "wb+"}, moore::FOpenMode::WriteUpdate)
+              .Cases({"a+", "a+b", "ab+"}, moore::FOpenMode::AppendUpdate)
+              .Default(std::nullopt);
+
       if (!mode)
-        return {};
+        return emitError(loc)
+                   << "invalid $fopen mode '" << strLit->getValue() << "'",
+               Value{};
+      modeAttr = moore::FOpenModeAttr::get(getContext(), *mode);
     }
-    return moore::FOpenBIOp::create(builder, loc, filename, mode);
+    return moore::FOpenBIOp::create(builder, loc, filename, modeAttr);
   }
 
   // Unrecognized system call

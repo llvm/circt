@@ -1813,3 +1813,24 @@ moore.module @CoroutineLowering() {
   }
   moore.output
 }
+
+// CHECK-LABEL: func.func @FOpenNoMode
+func.func @FOpenNoMode(%arg0: !moore.string) {
+  // CHECK: [[FD:%.+]] = sim.sv.fopen %arg0
+  %fd = moore.builtin.fopen %arg0
+  return
+}
+
+// CHECK-LABEL: func.func @FOpenWithMode
+func.func @FOpenWithMode(%arg0: !moore.string) {
+  // CHECK: [[FD:%.+]] = sim.sv.fopen %arg0 mode = w
+  %fd = moore.builtin.fopen %arg0 mode = w
+  return
+}
+
+// CHECK-LABEL: func.func @FClose
+func.func @FClose(%arg0: !moore.i32) {
+  // CHECK: sim.sv.fclose %arg0
+  moore.builtin.fclose %arg0
+  return
+}

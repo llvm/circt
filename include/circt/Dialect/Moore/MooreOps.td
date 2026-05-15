@@ -3072,18 +3072,36 @@ def SeverityBIOp : Builtin<"severity"> {
 // Files Builtins
 //===----------------------------------------------------------------------===//
 
+// File open modes corresponding to the mode string argument of the `$fopen`
+
+def FOpenModeRead : I32EnumAttrCase<"Read", 0, "r">;
+def FOpenModeWrite : I32EnumAttrCase<"Write", 1, "w">;
+def FOpenModeAppend : I32EnumAttrCase<"Append", 2, "a">;
+def FOpenModeReadUpdate : I32EnumAttrCase<"ReadUpdate", 3, "r_update">;
+def FOpenModeWriteUpdate : I32EnumAttrCase<"WriteUpdate", 4, "w_update">;
+def FOpenModeAppendUpdate : I32EnumAttrCase<"AppendUpdate", 5, "a_update">;
+
+def FOpenModeAttr : I32EnumAttr<"FOpenMode",
+    "File open mode",
+    [FOpenModeRead, FOpenModeWrite, FOpenModeAppend,
+     FOpenModeReadUpdate, FOpenModeWriteUpdate, FOpenModeAppendUpdate]> {
+  let cppNamespace = "circt::moore";
+}
+
 def FOpenBIOp : Builtin<"fopen"> {
   let summary = "Open a file";
   let description = [{
-    If one argument is provided, opens a file and returns a multi-channel
-    descriptor(MCD). If two arguments are provided, returns
-    a file descriptor(fd). This corresponds to the `$fopen` system function.
+    Open a file and returns a file descriptor. If only the filename is provided,
+    opens the file and returns a multi-channel descriptor (MCD).
+    If the optional mode argument is also provided (e.g., "r", "w", "a"),
+    opens the file in the specified mode and returns a file descriptor (fd).
+    This corresponds to the `$fopen` system function.
 
     See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
   }];
-  let arguments = (ins StringType:$filename, Optional<StringType>:$mode);
+  let arguments = (ins StringType:$filename, OptionalAttr<FOpenModeAttr>:$mode);
   let results = (outs TwoValuedI32:$fd);
-  let assemblyFormat = "$filename (`,` $mode^)? attr-dict";
+  let assemblyFormat = "$filename (`mode` `=` $mode^)? attr-dict";
 }
 
 def FCloseBIOp : Builtin<"fclose"> {

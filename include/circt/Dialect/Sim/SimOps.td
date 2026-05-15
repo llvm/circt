@@ -1204,7 +1204,20 @@ def TriggeredOp : SimOp<"triggered", [
 // File I/O
 //===----------------------------------------------------------------------===//
 
-def FOpenOp : SimOp<"fopen", [ProceduralOp]> {
+def SVFOpenModeRead : I32EnumAttrCase<"Read", 0, "r">;
+def SVFOpenModeWrite : I32EnumAttrCase<"Write", 1, "w">;
+def SVFOpenModeAppend : I32EnumAttrCase<"Append", 2, "a">;
+def SVFOpenModeReadUpdate : I32EnumAttrCase<"ReadUpdate", 3, "r_update">;
+def SVFOpenModeWriteUpdate : I32EnumAttrCase<"WriteUpdate", 4, "w_update">;
+def SVFOpenModeAppendUpdate : I32EnumAttrCase<"AppendUpdate", 5, "a_update">;
+
+def SVFOpenModeAttr : I32EnumAttr<"SVFOpenMode", "SV file open mode",
+    [SVFOpenModeRead, SVFOpenModeWrite, SVFOpenModeAppend,
+     SVFOpenModeReadUpdate, SVFOpenModeWriteUpdate, SVFOpenModeAppendUpdate]> {
+  let cppNamespace = "circt::sim";
+}
+
+def SVFOpenOp : SimOp<"sv.fopen", [ProceduralOp]> {
   let summary = "Open a file and return a file descriptor";
   let description = [{
     Opens a file and return an integer handle.
@@ -1213,20 +1226,33 @@ def FOpenOp : SimOp<"fopen", [ProceduralOp]> {
     indicates success.
   }];
 
-  let arguments = (ins DynamicStringType:$fileName, Optional<DynamicStringType>:$mode);
+  let arguments = (ins DynamicStringType:$fileName, OptionalAttr<SVFOpenModeAttr>:$mode);
   let results = (outs I32:$fd);
-  let assemblyFormat = "$fileName (`,` $mode^)? attr-dict";
+  let assemblyFormat = "$fileName (`mode` `=` $mode^)? attr-dict";
 }
 
-def FCloseOp : SimOp<"fclose", [ProceduralOp]> {
+def SVFCloseOp : SimOp<"sv.fclose", [ProceduralOp]> {
   let summary = "Close a file descriptor";
   let description = [{
-    Closes a file descriptor obtained from `sim.fopen`. After this operation,
+    Closes a file descriptor obtained from `sim.sv.fopen`. After this operation,
     the file descriptor is invalid and should not be used in subsequent file
     operations.
   }];
 
   let arguments = (ins I32:$fd);
+  let assemblyFormat = "$fd attr-dict";
+}
+
+def SVFdToOutputStreamOp : SimOp<"sv.fd_to_output_stream", [ProceduralOp]> {
+  let summary = "Cast a SV file descriptor to an output stream";
+  let description = [{
+    Casts a SystemVerilog file descriptor (an integer returned by
+    $fopen, or 1 for stdout / 2 for stderr) to an `!sim.output_stream`.
+    The cast semantically asserts that the integer represents a valid,
+    writable file handle or standard output stream
+  }];
+  let arguments = (ins I32:$fd);
+  let results = (outs OutputStreamType:$stream);
   let assemblyFormat = "$fd attr-dict";
 }
 

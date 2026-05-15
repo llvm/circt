@@ -605,8 +605,8 @@ endfunction
 
 // IEEE 1800-2017 § 21.3 "File I/O system tasks and functions"
 // CHECK-LABEL: func.func private @FileIOBuiltins(
-// CHECK-SAME: [[FD_INT:%.+]]: !moore.i32
-// CHECK-SAME: [[FD_INTEGER:%.+]]: !moore.l32
+// CHECK-SAME: [[FD_INT:%[^ ,]+]]: !moore.i32
+// CHECK-SAME: [[FD_INTEGER:%[^ ,]+]]: !moore.l32
 function void FileIOBuiltins(int fd_int, integer fd_integer);
   int fd;
 
@@ -615,12 +615,80 @@ function void FileIOBuiltins(int fd_int, integer fd_integer);
   // CHECK-NEXT: [[FD1:%.+]] = moore.builtin.fopen [[FNAME_S]]
   fd = $fopen("file.txt");
 
-  // CHECK: [[FNAME2:%.+]] = moore.constant_string "file.txt" : i64
-  // CHECK-NEXT: [[FNAME2_S:%.+]] = moore.int_to_string [[FNAME2]] : i64
-  // CHECK-NEXT: [[MODE:%.+]] = moore.constant_string "w" : i8
-  // CHECK-NEXT: [[MODE_S:%.+]] = moore.int_to_string [[MODE]] : i8
-  // CHECK-NEXT: [[FD2:%.+]] = moore.builtin.fopen [[FNAME2_S]], [[MODE_S]]
-  fd = $fopen("file.txt", "w");
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = r
+  fd = $fopen("f", "r");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = r
+  fd = $fopen("f", "rb");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = w
+  fd = $fopen("f", "w");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = w
+  fd = $fopen("f", "wb");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = a
+  fd = $fopen("f", "a");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = a
+  fd = $fopen("f", "ab");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = r_update
+  fd = $fopen("f", "r+");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = r_update
+  fd = $fopen("f", "r+b");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = r_update
+  fd = $fopen("f", "rb+");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = w_update
+  fd = $fopen("f", "w+");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = w_update
+  fd = $fopen("f", "w+b");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = w_update
+  fd = $fopen("f", "wb+");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = a_update
+  fd = $fopen("f", "a+");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = a_update
+  fd = $fopen("f", "a+b");
+
+  // CHECK: [[F:%.+]] = moore.constant_string "f" : i8
+  // CHECK-NEXT: [[FS:%.+]] = moore.int_to_string [[F]] : i8
+  // CHECK-NEXT: moore.builtin.fopen [[FS]] mode = a_update
+  fd = $fopen("f", "ab+");
 
   // CHECK: [[FDVAL:%.+]] = moore.read {{%.+}} : <i32>
   // CHECK-NEXT: moore.builtin.fclose [[FDVAL]]
