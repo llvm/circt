@@ -649,11 +649,9 @@ struct ModuleVisitor : public BaseVisitor {
 
     // Here we use the hierarchical value recorded in `Context::valueSymbols`.
     // Then we pass it as the input port with the ref<T> type of the instance.
-    // Use the canonical body from moduleLowering, not &instNode.body, because
-    // module deduplication may have remapped the body pointer and only the
-    // canonical body's hierPaths entries have valid port indices.
-    const auto *canonBody = moduleLowering->canonicalBody;
-    for (const auto &hierPath : context.hierPaths[canonBody]) {
+    // Note that `body` is always the canonical instance body here and in the
+    // `hierPaths` keys.
+    for (const auto &hierPath : context.hierPaths[body]) {
       assert(!hierPath.valueSyms.empty() && "hierPath must have valueSyms");
       if (auto hierValue =
               context.valueSymbols.lookup(hierPath.valueSyms.front());
@@ -680,7 +678,7 @@ struct ModuleVisitor : public BaseVisitor {
     // hierValueSymbols map (for cross-scope lookups from other modules).
     // The hierValueSymbols key is {&instNode, hierName} to ensure
     // instance-specific resolution (e.g., p1 vs p2 get separate entries).
-    for (const auto &hierPath : context.hierPaths[canonBody])
+    for (const auto &hierPath : context.hierPaths[body])
       if (hierPath.idx && hierPath.direction == ArgumentDirection::Out) {
         auto result = inst->getResult(*hierPath.idx);
         // Register the result for ALL aliased symbol pointers so that
@@ -1035,7 +1033,6 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
     return slot.get();
   slot = std::make_unique<ModuleLowering>();
   auto &lowering = *slot;
-  lowering.canonicalBody = module;
 
   auto loc = convertLocation(module->location);
   OpBuilder::InsertionGuard g(builder);
