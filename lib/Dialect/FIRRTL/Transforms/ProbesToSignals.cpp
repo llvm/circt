@@ -60,6 +60,16 @@ using namespace firrtl;
 
 namespace {
 
+/// Represents a force or release operation on an RWProbe
+struct ForceReleaseAccess {
+  Operation *op;                   // The force or release operation
+  Value predicate;                 // The enable/predicate condition
+  std::optional<Value> forceValue; // Value to force (nullopt for release)
+  Value clock; // Clock (may be null for force_initial/release_initial)
+
+  bool isForce() const { return forceValue.has_value(); }
+};
+
 class ProbeVisitor : public FIRRTLVisitor<ProbeVisitor, LogicalResult> {
 public:
   ProbeVisitor(hw::InnerRefNamespace &irn) : irn(irn) {}
@@ -160,19 +170,11 @@ public:
 
   LogicalResult visitStmt(RefDefineOp op);
 
-  // Force and release operations: reject as unsupported.
-  LogicalResult visitStmt(RefForceOp op) {
-    return op.emitError("force not supported");
-  }
-  LogicalResult visitStmt(RefForceInitialOp op) {
-    return op.emitError("force_initial not supported");
-  }
-  LogicalResult visitStmt(RefReleaseOp op) {
-    return op.emitError("release not supported");
-  }
-  LogicalResult visitStmt(RefReleaseInitialOp op) {
-    return op.emitError("release_initial not supported");
-  }
+  // Force and release operations: collect for later synthesis.
+  LogicalResult visitStmt(RefForceOp op);
+  LogicalResult visitStmt(RefForceInitialOp op);
+  LogicalResult visitStmt(RefReleaseOp op);
+  LogicalResult visitStmt(RefReleaseInitialOp op);
 
 private:
   /// Map from probe-typed Value's to their non-probe equivalent.
@@ -186,6 +188,12 @@ private:
 
   /// Read-only copy of inner-ref namespace for resolving inner refs.
   hw::InnerRefNamespace &irn;
+
+  /// Map from RWProbe values to all force/release accesses targeting them.
+  DenseMap<Value, SmallVector<ForceReleaseAccess>> forceReleaseMap;
+
+  /// Synthesize force/release logic for all collected accesses.
+  LogicalResult synthesizeForceReleaseLogic(FModuleLike mod);
 };
 
 } // end namespace
@@ -242,6 +250,10 @@ LogicalResult ProbeVisitor::visit(FModuleLike mod) {
           ->walk<mlir::WalkOrder::PreOrder>(
               [&](Operation *op) -> WalkResult { return dispatchVisitor(op); })
           .wasInterrupted())
+    return failure();
+
+  // Synthesize force/release logic before modifying signatures.
+  if (failed(synthesizeForceReleaseLogic(mod)))
     return failure();
 
   // Update signature and argument types.
@@ -585,6 +597,223 @@ LogicalResult ProbeVisitor::visitExpr(RefSubOp op) {
   auto newVal =
       getValueByFieldID(builder, val, op.getAccessedField().getFieldID());
   probeToHWMap[op.getResult()] = newVal;
+  toDelete.push_back(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Visitor: Force/Release Synthesis
+//===----------------------------------------------------------------------===//
+
+/// Synthesize force/release logic for all collected accesses.
+/// This implements the synchronous force/release scheme from the proposal.
+LogicalResult ProbeVisitor::synthesizeForceReleaseLogic(FModuleLike mod) {
+  auto *block = getBodyBlock(mod);
+  if (!block || forceReleaseMap.empty())
+    return success();
+
+  for (auto &[rwprobe, accesses] : forceReleaseMap) {
+    if (accesses.empty())
+      continue;
+
+    // Get the hardware value that this rwprobe maps to
+    auto targetIt = probeToHWMap.find(rwprobe);
+    if (targetIt == probeToHWMap.end()) {
+      return emitError(accesses[0].op->getLoc())
+             << "rwprobe target not found in probe to hardware map";
+    }
+    Value target = targetIt->second;
+
+    // Determine the free-running clock for this probe
+    // For now, we assume all accesses use the same clock (or are
+    // force_initial/release_initial)
+    Value freeRunningClock;
+    for (auto &access : accesses) {
+      if (access.clock) {
+        if (!freeRunningClock) {
+          freeRunningClock = access.clock;
+        } else if (freeRunningClock != access.clock) {
+          return emitError(access.op->getLoc())
+                 << "multiple different clocks on force/release operations "
+                    "targeting the same probe not supported";
+        }
+      }
+    }
+
+    if (!freeRunningClock) {
+      return emitError(accesses[0].op->getLoc())
+             << "no clock found for force/release operations (only "
+                "force_initial/release_initial present)";
+    }
+
+    // Partition into forces and releases
+    SmallVector<ForceReleaseAccess> forces, releases;
+    for (auto &access : accesses) {
+      if (access.isForce())
+        forces.push_back(access);
+      else
+        releases.push_back(access);
+    }
+
+    // Get the location for generated operations (use first access location)
+    Location loc = accesses[0].op->getLoc();
+    ImplicitLocOpBuilder builder(loc, block, block->end());
+
+    // Get the probed type
+    auto probedType = type_cast<FIRRTLBaseType>(target.getType());
+
+    // Build the priority logic following the proposal:
+    // Determine the winner if multiple forces/releases are driven concurrently
+    // forceWins = PriorityMux(accesses.map(a => a.enable -> a.isForce))
+
+    SmallVector<std::pair<Value, Value>> forceWinsPairs;
+    for (auto &access : accesses) {
+      Value isForceVal = builder.create<ConstantOp>(
+          builder.getType<UIntType>(1), APSInt::getUnsigned(access.isForce()));
+      forceWinsPairs.push_back({access.predicate, isForceVal});
+    }
+
+    // Create priority mux for forceWins
+    Value forceWins = builder.create<ConstantOp>(builder.getType<UIntType>(1),
+                                                 APSInt::getUnsigned(0));
+    for (auto it = forceWinsPairs.rbegin(); it != forceWinsPairs.rend(); ++it) {
+      forceWins = builder.create<MuxPrimOp>(it->first, it->second, forceWins);
+    }
+
+    // Build priority mux for force value
+    // forceValue = PriorityMux(forces.map(f => f.enable -> f.value))
+    Value forceValue;
+    if (!forces.empty()) {
+      // Start with a default invalid value
+      auto invalidType = probedType;
+      forceValue = builder.createOrFold<InvalidValueOp>(invalidType);
+
+      for (auto it = forces.rbegin(); it != forces.rend(); ++it) {
+        forceValue = builder.create<MuxPrimOp>(
+            it->predicate, it->forceValue.value(), forceValue);
+      }
+    } else {
+      // No forces, create invalid as placeholder
+      forceValue = builder.createOrFold<InvalidValueOp>(probedType);
+    }
+
+    // Create state registers
+    // val forced = Reg(Bool()) - initialized to false at time zero
+    // val forcedValue = Reg(forceValue.cloneType)
+    auto boolType = builder.getType<UIntType>(1);
+    auto forcedReg = builder
+                         .create<RegOp>(freeRunningClock, boolType,
+                                        builder.getStringAttr("forced"))
+                         .getResult();
+    auto forcedValueReg =
+        builder
+            .create<RegOp>(freeRunningClock, probedType,
+                           builder.getStringAttr("forcedValue"))
+            .getResult();
+
+    // Compute forceActive and releaseActive
+    // forceActive = forces.map(_.enable).reduce(_ || _) && forceWins
+    Value forceActive =
+        builder.create<ConstantOp>(boolType, APSInt::getUnsigned(0));
+    for (auto &force : forces) {
+      forceActive = builder.create<OrPrimOp>(forceActive, force.predicate);
+    }
+    forceActive = builder.create<AndPrimOp>(forceActive, forceWins);
+
+    // releaseActive = releases.map(_.enable).reduce(_ || _) && !forceWins
+    Value releaseActive =
+        builder.create<ConstantOp>(boolType, APSInt::getUnsigned(0));
+    for (auto &release : releases) {
+      releaseActive =
+          builder.create<OrPrimOp>(releaseActive, release.predicate);
+    }
+    Value notForceWins = builder.create<NotPrimOp>(forceWins);
+    releaseActive = builder.create<AndPrimOp>(releaseActive, notForceWins);
+
+    // Generate the conditional update logic:
+    // when (forceActive) {
+    //   forced := true
+    //   forcedValue := forceValue
+    // }.elsewhen(releaseActive) {
+    //   forced := false
+    // }
+    Value trueVal =
+        builder.create<ConstantOp>(boolType, APSInt::getUnsigned(1));
+    Value falseVal =
+        builder.create<ConstantOp>(boolType, APSInt::getUnsigned(0));
+
+    builder.create<WhenOp>(
+        forceActive, false,
+        [&]() {
+          builder.create<MatchingConnectOp>(forcedReg, trueVal);
+          builder.create<MatchingConnectOp>(forcedValueReg, forceValue);
+        },
+        [&]() {
+          builder.create<WhenOp>(releaseActive, false, [&]() {
+            builder.create<MatchingConnectOp>(forcedReg, falseVal);
+          });
+        });
+
+    // Generate override logic:
+    // when (forced) {
+    //   target := forcedValue
+    // }
+    builder.create<WhenOp>(forcedReg, false, [&]() {
+      emitConnect(builder, target, forcedValueReg);
+    });
+  }
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Visitor: Force/Release operations
+//===----------------------------------------------------------------------===//
+
+LogicalResult ProbeVisitor::visitStmt(RefForceOp op) {
+  // Collect for later synthesis
+  ForceReleaseAccess access;
+  access.op = op;
+  access.predicate = op.getPredicate();
+  access.forceValue = op.getSrc();
+  access.clock = op.getClock();
+  forceReleaseMap[op.getDest()].push_back(access);
+  toDelete.push_back(op);
+  return success();
+}
+
+LogicalResult ProbeVisitor::visitStmt(RefForceInitialOp op) {
+  // Collect for later synthesis
+  ForceReleaseAccess access;
+  access.op = op;
+  access.predicate = op.getPredicate();
+  access.forceValue = op.getSrc();
+  access.clock = Value(); // No clock for force_initial
+  forceReleaseMap[op.getDest()].push_back(access);
+  toDelete.push_back(op);
+  return success();
+}
+
+LogicalResult ProbeVisitor::visitStmt(RefReleaseOp op) {
+  // Collect for later synthesis
+  ForceReleaseAccess access;
+  access.op = op;
+  access.predicate = op.getPredicate();
+  access.forceValue = std::nullopt; // Release has no value
+  access.clock = op.getClock();
+  forceReleaseMap[op.getDest()].push_back(access);
+  toDelete.push_back(op);
+  return success();
+}
+
+LogicalResult ProbeVisitor::visitStmt(RefReleaseInitialOp op) {
+  // Collect for later synthesis
+  ForceReleaseAccess access;
+  access.op = op;
+  access.predicate = op.getPredicate();
+  access.forceValue = std::nullopt; // Release has no value
+  access.clock = Value();           // No clock for release_initial
+  forceReleaseMap[op.getDest()].push_back(access);
   toDelete.push_back(op);
   return success();
 }
