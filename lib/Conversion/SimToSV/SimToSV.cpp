@@ -19,8 +19,10 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/ProceduralRegionTrait.h"
+#include "circt/Support/SparseOpSCC.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -28,7 +30,6 @@
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/Twine.h"
 
 #define DEBUG_TYPE "lower-sim-to-sv"
@@ -728,19 +729,39 @@ FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
       builder, getFileOp.getLoc(), fileName);
 }
 
+static void cleanupDeadSimFmtOps(ArrayRef<Operation *> seedOps) {
+  auto filter = [](Operation *op, OpOperand &operand) {
+    return isa<FormatStringType, OutputStreamType>(operand.get().getType()) &&
+           isa_and_present<SimDialect>(op->getDialect());
+  };
+
+  SparseOpSCC<OpSCCDirection::Backward> sccs(filter);
+  sccs.visit(seedOps);
+  assert(sccs.getNumCyclicSCCs() == 0 &&
+         "Cyclic graph should have been rejected");
+
+  for (OpSCC entry : sccs.reverseTopological()) {
+    auto *op = cast<Operation *>(entry);
+    if (op->use_empty())
+      op->erase();
+    else
+      op->emitWarning("Operation has remaining (transitive) users outside of "
+                      "procedural regions.");
+  }
+}
+
 LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
                                           const TypeConverter &typeConverter,
                                           SimConversionState &state) {
   SmallVector<GetFileOp> getFileOps;
   SmallVector<PrintFormattedProcOp> printOps;
+  SmallVector<Operation *, 8> cleanupSeeds;
   module.walk([&](Operation *op) {
     if (auto getFileOp = dyn_cast<GetFileOp>(op))
       getFileOps.push_back(getFileOp);
     if (auto printOp = dyn_cast<PrintFormattedProcOp>(op))
       printOps.push_back(printOp);
   });
-
-  llvm::SmallPtrSet<Operation *, 8> dceRoots;
 
   for (auto getFileOp : getFileOps) {
     OpBuilder builder(getFileOp);
@@ -754,12 +775,7 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     getFileOp.replaceAllUsesWith(stream.getResult(0));
     state.usedFileDescriptorRuntime = true;
     state.usedSynthesisMacro = true;
-
-    auto *procRoot =
-        getFileOp->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();
-    if (procRoot)
-      dceRoots.insert(procRoot);
-    getFileOp.erase();
+    cleanupSeeds.push_back(getFileOp);
   }
 
   for (auto printOp : printOps) {
@@ -785,16 +801,10 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
                      ->getResult(0);
       sv::FWriteOp::create(builder, printOp.getLoc(), fd, formatString, args);
     }
-    auto *procRoot =
-        printOp->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();
-    if (procRoot)
-      dceRoots.insert(procRoot);
-    printOp.erase();
+    cleanupSeeds.push_back(printOp);
   }
 
-  mlir::IRRewriter rewriter(module);
-  for (Operation *dceRoot : dceRoots)
-    (void)mlir::runRegionDCE(rewriter, dceRoot->getRegions());
+  cleanupDeadSimFmtOps(cleanupSeeds);
 
   return success();
 }
