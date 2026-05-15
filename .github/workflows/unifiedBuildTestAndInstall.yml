@@ -185,6 +185,16 @@ jobs:
           INPUT_SHARED: ${{ inputs.build_shared_libs }}
           INPUT_ASSERTIONS: ${{ inputs.llvm_enable_assertions }}
           INPUT_EXTRA_CMAKE: ${{ inputs.extra_cmake_args }}
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          android: true
+          dotnet: true
+          haskell: true
+          docker-images: true
+          large-packages: false
+          tool-cache: true
       - name: Clone llvm/circt
         uses: actions/checkout@v3
         with:
