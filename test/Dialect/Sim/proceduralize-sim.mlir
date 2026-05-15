@@ -363,3 +363,46 @@ hw.module @shared_fmt_between_print_and_get_file(
 
   sim.print %msg on %clk if %cond to %file
 }
+
+// CHECK-LABEL: @mixed_conditional_and_unconditional
+// CHECK-NEXT:  %[[TRG:.*]] = seq.from_clock %clk
+// CHECK-NEXT:  hw.triggered posedge %[[TRG]](%a, %b) : i1, i1 {
+// CHECK-NEXT:  ^bb0(%[[ARGA:.*]]: i1, %[[ARGB:.*]]: i1):
+// CHECK-DAG:      %[[L0:.*]] = sim.fmt.literal "cond-a-0"
+// CHECK-DAG:      %[[L1:.*]] = sim.fmt.literal "always-1"
+// CHECK-DAG:      %[[L2:.*]] = sim.fmt.literal "cond-a-2"
+// CHECK-DAG:      %[[L3:.*]] = sim.fmt.literal "cond-b-3"
+// CHECK-DAG:      %[[L4:.*]] = sim.fmt.literal "always-4"
+// CHECK-DAG:      %[[L5:.*]] = sim.fmt.literal "cond-b-5"
+// CHECK:          scf.if %[[ARGA]] {
+// CHECK-NEXT:       sim.proc.print %[[L0]]
+// CHECK-NEXT:     }
+// CHECK-NEXT:     sim.proc.print %[[L1]]
+// CHECK-NEXT:     scf.if %[[ARGA]] {
+// CHECK-NEXT:       sim.proc.print %[[L2]]
+// CHECK-NEXT:     }
+// CHECK-NEXT:     scf.if %[[ARGB]] {
+// CHECK-NEXT:       sim.proc.print %[[L3]]
+// CHECK-NEXT:     }
+// CHECK-NEXT:     sim.proc.print %[[L4]]
+// CHECK-NEXT:     scf.if %[[ARGB]] {
+// CHECK-NEXT:       sim.proc.print %[[L5]]
+// CHECK-NEXT:     }
+// CHECK-NEXT:   }
+hw.module @mixed_conditional_and_unconditional(
+  in %clk: !seq.clock, in %a: i1, in %b: i1) {
+  %true = hw.constant true
+
+  %l0 = sim.fmt.literal "cond-a-0"
+  sim.print %l0 on %clk if %a
+  %l1 = sim.fmt.literal "always-1"
+  sim.print %l1 on %clk if %true
+  %l2 = sim.fmt.literal "cond-a-2"
+  sim.print %l2 on %clk if %a
+  %l3 = sim.fmt.literal "cond-b-3"
+  sim.print %l3 on %clk if %b
+  %l4 = sim.fmt.literal "always-4"
+  sim.print %l4 on %clk if %true
+  %l5 = sim.fmt.literal "cond-b-5"
+  sim.print %l5 on %clk if %b
+}
