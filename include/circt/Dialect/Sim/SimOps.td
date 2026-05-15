@@ -637,14 +637,17 @@ def PrintFormattedProcOp : SimOp<"proc.print", [ProceduralOp]> {
   let assemblyFormat = "$input (`to` $stream^)? attr-dict";
 }
 
-def GetFileOp : SimOp<"get_file", [Pure]> {
+def GetFileOp : SimOp<"get_file", [ProceduralOp]> {
   let summary = "Get an output stream for a formatted file name";
   let description = [{
-    Resolves a file name from a `!sim.fstring` value and returns an output
-    stream resource that can be consumed by `sim.print` or `sim.proc.print`.
-    The file-name format string should be constructed using `sim.fmt.*`
-    operations, just like any other Sim format-string value.
-    The file-name format string is evaluated whenever the stream is accessed.
+    Resolves a file name from a `!sim.fstring` value, immediately creates the
+    corresponding file, and returns an output stream resource that can be
+    consumed by `sim.proc.print`. The file-name format string should be
+    constructed using `sim.fmt.*` operations, just like any other Sim
+    format-string value.
+
+    This operation has an immediate side effect: executing it creates the file,
+    even if the returned stream is never subsequently consumed.
 
     The concrete runtime representation and lifetime management of the returned
     stream are backend-defined.
