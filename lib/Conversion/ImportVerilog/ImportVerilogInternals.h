@@ -105,11 +105,6 @@ struct ModuleLowering {
   SmallVector<FlattenedIfacePort> ifacePorts;
   DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
       portsBySyntaxNode;
-
-  /// The canonical InstanceBodySymbol used as the key in `hierPaths` after
-  /// module deduplication. When multiple instance bodies share the same
-  /// definition and parameters, they are deduplicated to a single module.
-  const slang::ast::InstanceBodySymbol *canonicalBody = nullptr;
 };
 
 /// Function lowering information. The `op` field holds either a `func::FuncOp`
@@ -509,6 +504,8 @@ struct Context {
   CaptureMap functionCaptures;
 
   /// Collect all hierarchical names used for the per module/instance.
+  /// The keys are the slang canonical instance bodies (or the real instance
+  /// if slang's getCanonicalBody() returned null).
   DenseMap<const slang::ast::InstanceBodySymbol *, SmallVector<HierPathInfo>>
       hierPaths;
 
