@@ -33,17 +33,12 @@
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
 #include "circt/Dialect/Synth/Transforms/SynthesisPipeline.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
-#include "circt/InitAllDialects.h"
-#include "circt/InitAllPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
 #include "circt/Transforms/Passes.h"
-
-#include "mlir/Dialect/Transform/Transforms/Passes.h"
-#include "mlir/Transforms/Passes.h"
-
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Bytecode/BytecodeWriter.h"
+#include "mlir/Dialect/Transform/Transforms/Passes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
