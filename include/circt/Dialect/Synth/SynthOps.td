@@ -258,4 +258,47 @@ def MajorityOp : SynthOp<"majority", [
   let hasCustomAssemblyFormat = 1;
 }
 
+def OneHotOp : SynthOp<"onehot", [
+    SameOperandsAndResultType, Pure,
+    DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
+      "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
+      "supportsNumInputs", "createBooleanLogicOp",
+      "getLogicAreaCost"
+    ]>
+  ]>{
+   let summary = "3-input Onehot gate with invertible inputs";
+  let description = [{
+    The `synth.onehot` operation computes the one-hot function of its three
+    inputs, where each operand can be optionally inverted. The one-hot function
+    returns 1 when exactly one of the inputs is 1, and 0 otherwise. For three
+    inputs, it is equivalent to:
+
+    `(a & ~b & ~c) | (~a & b & ~c) | (~a & ~b & c)`
+
+    Example:
+```mlir
+      %r0 = synth.onehot %a, %b, %c : i1
+      %r1 = synth.onehot not %a, %b, not %c : i1
+```
+  }];
+  
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       DenseBoolArrayAttr:$inverted);
+  let results = (outs AnyType:$result);
+  let builders = [
+  OpBuilder<(ins "Value":$a, "Value":$b, "Value":$c,
+                              CArg<"bool", "false">:$invertA,
+                              CArg<"bool", "false">:$invertB,
+                              CArg<"bool", "false">:$invertC), [{
+    SmallVector<bool> inverted{invertA, invertB, invertC};
+    return build($_builder, $_state, ValueRange{a, b, c},
+                 $_builder.getDenseBoolArrayAttr(inverted));
+  }]>
+];
+
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+}
+
+
 #endif // CIRCT_DIALECT_SYNTH_SYNTHOPS_TD

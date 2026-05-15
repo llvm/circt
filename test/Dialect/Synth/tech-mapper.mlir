@@ -184,8 +184,23 @@ hw.module @majority_lib(in %x : i1, in %y : i1, in %z : i1, out result : i1) att
 
 // CHECK-LABEL: @majority_test
 hw.module @majority_test(in %x : i1, in %y : i1, in %z : i1, out result : i1) {
+    // Permute inputs to test the truth table computation and input handling of the majority operation.
     // CHECK-NEXT: %[[MAJ:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @majority_lib(x: %{{.+}}: i1, y: %{{.+}}: i1, z: %{{.+}}: i1) -> (result: i1) {test.arrival_times = [1]}
     // CHECK-NEXT: hw.output %[[MAJ]] : i1
     %0 = synth.majority %x, not %y, not %z : i1
+    hw.output %0 : i1
+}
+
+hw.module @onehot_lib(in %x : i1, in %y : i1, in %z : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "x", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "y", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "z", 1, 0, #synth.polarity<positive>>], input_caps = {}>} {
+    %0 = synth.onehot %x, not %y, not %z : i1
+    hw.output %0 : i1
+}
+
+// CHECK-LABEL: @onehot_test
+hw.module @onehot_test(in %x : i1, in %y : i1, in %z : i1, out result : i1) {
+    // Permute inputs to test the truth table computation and input handling of the onehot operation.
+    // CHECK-NEXT: %[[ONEHOT:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @onehot_lib(x: %{{.+}}: i1, y: %{{.+}}: i1, z: %{{.+}}: i1) -> (result: i1) {test.arrival_times = [1]}
+    // CHECK-NEXT: hw.output %[[ONEHOT]] : i1
+    %0 = synth.onehot not %z, %x, not %y : i1
     hw.output %0 : i1
 }
