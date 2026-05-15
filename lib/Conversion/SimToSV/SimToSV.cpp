@@ -731,10 +731,36 @@ FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
 LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
                                           const TypeConverter &typeConverter,
                                           SimConversionState &state) {
+  SmallVector<GetFileOp> getFileOps;
   SmallVector<PrintFormattedProcOp> printOps;
-  module.walk([&](PrintFormattedProcOp op) { printOps.push_back(op); });
+  module.walk([&](Operation *op) {
+    if (auto getFileOp = dyn_cast<GetFileOp>(op))
+      getFileOps.push_back(getFileOp);
+    if (auto printOp = dyn_cast<PrintFormattedProcOp>(op))
+      printOps.push_back(printOp);
+  });
 
   llvm::SmallPtrSet<Operation *, 8> dceRoots;
+
+  for (auto getFileOp : getFileOps) {
+    OpBuilder builder(getFileOp);
+    auto fdOrFailure = createFileDescriptorGetterForGetFile(getFileOp, builder);
+    if (failed(fdOrFailure))
+      return failure();
+
+    auto stream = mlir::UnrealizedConversionCastOp::create(
+        builder, getFileOp.getLoc(), getFileOp.getResult().getType(),
+        *fdOrFailure);
+    getFileOp.replaceAllUsesWith(stream.getResult(0));
+    state.usedFileDescriptorRuntime = true;
+    state.usedSynthesisMacro = true;
+
+    auto *procRoot =
+        getFileOp->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();
+    if (procRoot)
+      dceRoots.insert(procRoot);
+    getFileOp.erase();
+  }
 
   for (auto printOp : printOps) {
     OpBuilder builder(printOp);
@@ -752,22 +778,11 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
       // no stream is specified, emit sv.write.
       sv::WriteOp::create(builder, printOp.getLoc(), formatString, args);
     } else {
-      Value fd;
-      if (auto getFileOp = stream.getDefiningOp<GetFileOp>()) {
-        auto fdOrFailure =
-            createFileDescriptorGetterForGetFile(getFileOp, builder);
-        if (failed(fdOrFailure))
-          return failure();
-        fd = *fdOrFailure;
-        state.usedFileDescriptorRuntime = true;
-        state.usedSynthesisMacro = true;
-      } else {
-        auto fdType = typeConverter.convertType(stream.getType());
-        assert(fdType && "expected output stream type conversion");
-        fd = mlir::UnrealizedConversionCastOp::create(builder, printOp.getLoc(),
-                                                      fdType, stream)
-                 ->getResult(0);
-      }
+      auto fdType = typeConverter.convertType(stream.getType());
+      assert(fdType && "expected output stream type conversion");
+      Value fd = mlir::UnrealizedConversionCastOp::create(
+                     builder, printOp.getLoc(), fdType, stream)
+                     ->getResult(0);
       sv::FWriteOp::create(builder, printOp.getLoc(), fd, formatString, args);
     }
     auto *procRoot =
