@@ -791,6 +791,20 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
   region->push_back(new Block());
 }
 
+void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
+                        Value clock, Value condition,
+                        llvm::function_ref<void()> bodyCtor) {
+  OpBuilder::InsertionGuard guard(builder);
+
+  odsState.addOperands(clock);
+  if (condition)
+    odsState.addOperands(condition);
+
+  builder.createBlock(odsState.addRegion());
+  if (bodyCtor)
+    bodyCtor();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//

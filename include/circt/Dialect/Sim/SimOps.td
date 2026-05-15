@@ -1196,7 +1196,16 @@ def TriggeredOp : SimOp<"triggered", [
   let builders = [
     OpBuilder<(ins
       "Value":$clock,
-      CArg<"Value", "mlir::Value()">:$condition)>
+      CArg<"Value", "mlir::Value()">:$condition)>,
+    OpBuilder<(ins
+      "Value":$clock,
+      "Value":$condition,
+      "llvm::function_ref<void()>":$bodyCtor)>,
+    OpBuilder<(ins
+      "Value":$clock,
+      "llvm::function_ref<void()>":$bodyCtor), [{
+      return build($_builder, $_state, clock, mlir::Value(), bodyCtor);
+    }]>
   ];
 }
 
