@@ -348,6 +348,14 @@ void FunctionalReductionSolver::initializeSATState() {
 //===----------------------------------------------------------------------===//
 
 void FunctionalReductionSolver::collectValues() {
+
+  // Seed zero constants so nodes can be merged
+  // if input IR does not contain constants already.
+  OpBuilder builder(module.getContext());
+  builder.setInsertionPointToStart(module.getBodyBlock());
+  auto i1Type = builder.getIntegerType(1);
+  hw::ConstantOp::create(builder, module.getLoc(), i1Type, 0);
+
   // Collect block arguments (primary inputs) that are i1
   for (auto arg : module.getBodyBlock()->getArguments()) {
     if (arg.getType().isInteger(1)) {
