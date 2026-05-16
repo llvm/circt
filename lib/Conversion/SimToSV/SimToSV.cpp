@@ -277,8 +277,7 @@ public:
     auto loc = op.getLoc();
     auto trigger = seq::FromClockOp::create(rewriter, loc, adaptor.getClock());
     auto alwaysOp = sv::AlwaysOp::create(
-        rewriter, loc,
-        ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
+        rewriter, loc, ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
         ArrayRef<Value>{trigger});
 
     Block *destination = alwaysOp.getBodyBlock();
