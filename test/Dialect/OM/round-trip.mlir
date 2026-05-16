@@ -66,9 +66,9 @@ om.class @DiscardableAttrs() attributes {foo.bar="baz"} {
 // CHECK-SAME: (%param1: i1, %param2: i2) -> (field1: i3, field2: i4)
 om.class.extern private @Extern(%param1: i1, %param2: i2) -> (field1 : i3, field2 : i4) {}
 
-// CHECK-LABEL: om.class @ExternObject
+// CHECK-LABEL: om.class public @ExternObject
 // CHECK-SAME: (%[[P0:.+]]: i1, %[[P1:.+]]: i2)
-om.class @ExternObject(%param1: i1, %param2: i2) {
+om.class public @ExternObject(%param1: i1, %param2: i2) {
   // CHECK: %[[O0:.+]] = om.object @Extern(%[[P0]], %[[P1]])
   %0 = om.object @Extern(%param1, %param2) : (i1, i2) -> !om.class.type<@Extern>
 
