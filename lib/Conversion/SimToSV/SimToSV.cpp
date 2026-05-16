@@ -28,6 +28,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/IR/Visitors.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/Twine.h"
@@ -41,6 +42,7 @@ namespace circt {
 
 using namespace circt;
 using namespace sim;
+using namespace mlir;
 
 /// Check whether an op should be placed inside an ifdef guard that prevents it
 /// from affecting synthesis runs.
@@ -268,6 +270,40 @@ static LogicalResult convert(PauseOp op, PatternRewriter &rewriter) {
   return success();
 }
 
+class TriggeredLowering : public SimConversionPattern<TriggeredOp> {
+public:
+  using SimConversionPattern<TriggeredOp>::SimConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TriggeredOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = op.getLoc();
+    state.usedSynthesisMacro = true;
+
+    sv::IfDefOp::create(
+        rewriter, loc, "SYNTHESIS", [] {},
+        [&] {
+          auto trigger =
+              seq::FromClockOp::create(rewriter, loc, adaptor.getClock());
+          auto alwaysOp = sv::AlwaysOp::create(
+              rewriter, loc,
+              ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
+              ArrayRef<Value>{trigger});
+
+          Block *destination = alwaysOp.getBodyBlock();
+          if (auto condition = adaptor.getCondition()) {
+            rewriter.setInsertionPointToStart(destination);
+            destination = sv::IfOp::create(rewriter, loc, condition, [] {
+                          }).getThenBlock();
+          }
+
+          rewriter.mergeBlocks(op.getBodyBlock(), destination);
+        });
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 class DPICallLowering : public SimConversionPattern<DPICallOp> {
 public:
   using SimConversionPattern<DPICallOp>::SimConversionPattern;
@@ -435,7 +471,13 @@ addFragments(hw::HWModuleOp module,
 static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
   bool usedSynthesisMacro = false;
 
-  rootOp->walk([&](Operation *op) {
+  rootOp->walk<WalkOrder::PreOrder>([&](Operation *op) {
+    // `sim.triggered` is lowered as a whole later on. Do not pre-wrap the
+    // ops nested inside it here, or we may create redundant/invalid
+    // structure.
+    if (isa<TriggeredOp>(op))
+      return WalkResult::skip();
+
     auto loc = op->getLoc();
 
     // Move the op into an ifdef guard if needed.
@@ -517,6 +559,7 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
       // Move the op into the if body.
       op->moveBefore(block, block->end());
     }
+    return WalkResult::advance();
   });
 
   return usedSynthesisMacro;
@@ -853,6 +896,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<ClockedPauseOp>(convert);
       patterns.add<TerminateOp>(convert);
       patterns.add<PauseOp>(convert);
+      patterns.add<TriggeredLowering>(context, state);
       patterns.add<DPICallLowering>(context, state);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 
