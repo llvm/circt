@@ -65,6 +65,7 @@ struct SimConversionState {
   bool usedSynthesisMacro = false;
   bool usedFileDescriptorRuntime = false;
   SetVector<StringAttr> dpiCallees;
+  llvm::SmallDenseMap<Block *, sv::IfDefOp> synthesisGuards;
 };
 
 struct SimTypeConverter : public TypeConverter {
@@ -267,14 +268,27 @@ static LogicalResult convert(PauseOp op, PatternRewriter &rewriter) {
   return success();
 }
 
-class TriggeredLowering : public OpConversionPattern<TriggeredOp> {
+class TriggeredLowering : public SimConversionPattern<TriggeredOp> {
 public:
-  using OpConversionPattern<TriggeredOp>::OpConversionPattern;
+  using SimConversionPattern<TriggeredOp>::SimConversionPattern;
 
   LogicalResult
   matchAndRewrite(TriggeredOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     auto loc = op.getLoc();
+    state.usedSynthesisMacro = true;
+
+    auto [it, inserted] = state.synthesisGuards.try_emplace(op->getBlock());
+    auto ifdefOp = it->second;
+    if (!inserted) {
+      ifdefOp->moveBefore(op);
+    } else {
+      ifdefOp = sv::IfDefOp::create(
+          rewriter, loc, "SYNTHESIS", [] {}, [] {});
+      it->second = ifdefOp;
+    }
+    rewriter.setInsertionPointToEnd(ifdefOp.getElseBlock());
+
     auto trigger = seq::FromClockOp::create(rewriter, loc, adaptor.getClock());
     auto alwaysOp = sv::AlwaysOp::create(
         rewriter, loc, ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
@@ -869,7 +883,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<ClockedPauseOp>(convert);
       patterns.add<TerminateOp>(convert);
       patterns.add<PauseOp>(convert);
-      patterns.add<TriggeredLowering>(typeConverter, context);
+      patterns.add<TriggeredLowering>(context, state);
       patterns.add<DPICallLowering>(context, state);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 
