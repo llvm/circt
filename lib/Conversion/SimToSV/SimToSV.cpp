@@ -745,8 +745,8 @@ static void cleanupDeadSimFmtOps(ArrayRef<Operation *> seedOps) {
     if (op->use_empty())
       op->erase();
     else
-      op->emitWarning("Operation has remaining (transitive) users outside of "
-                      "procedural regions.");
+      op->emitWarning("sim format/stream op still has users after lowering; "
+                      "dialect conversion will fail");
   }
 }
 
