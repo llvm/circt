@@ -1,7 +1,7 @@
 // RUN: circt-opt -firrtl-lower-classes %s | FileCheck %s
 
 firrtl.circuit "Component" {
-  // CHECK-LABEL: om.class @Class_0
+  // CHECK-LABEL: om.class private @Class_0
   // CHECK-SAME: %[[REF1:[^ ]+]]: !om.class.type<@Class_1>
   // CHECK-SAME: -> (someReference: !om.class.type<@Class_1>)
   firrtl.class private @Class_0(in %someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out %someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>) {
@@ -9,7 +9,7 @@ firrtl.circuit "Component" {
     firrtl.propassign %someReference, %someReference_in : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
   }
 
-  // CHECK-LABEL: om.class @Class_1
+  // CHECK-LABEL: om.class private @Class_1
   // CHECK-SAME: -> (someInt: !om.integer)
   firrtl.class private @Class_1(out %someInt: !firrtl.integer) {
     // CHECK: %[[C1:.+]] = om.constant #om.integer<1 : si4> : !om.integer
@@ -18,7 +18,7 @@ firrtl.circuit "Component" {
     firrtl.propassign %someInt, %0 : !firrtl.integer
   }
 
-  // CHECK-LABEL: om.class @Class_2
+  // CHECK-LABEL: om.class private @Class_2
   // CHECK-SAME: -> (someString: !om.string)
   firrtl.class private @Class_2(out %someString: !firrtl.string) {
     // CHECK: %[[C2:.+]] = om.constant "fubar" : !om.string
@@ -27,10 +27,10 @@ firrtl.circuit "Component" {
     firrtl.propassign %someString, %0 : !firrtl.string
   }
 
-  // CHECK-LABEL: om.class.extern @ExtClass(%basepath: !om.basepath, %input: !om.string) -> (field: !om.string)
+  // CHECK-LABEL: om.class.extern private @ExtClass(%basepath: !om.basepath, %input: !om.string) -> (field: !om.string)
   firrtl.extclass private @ExtClass(in input: !firrtl.string, out field: !firrtl.string)
 
-  // CHECK-LABEL: om.class @ClassEntrypoint
+  // CHECK-LABEL: om.class private @ClassEntrypoint
   // CHECK-SAME: -> (obj_0_out: !om.class.type<@Class_1>)
   firrtl.class private @ClassEntrypoint(out %obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>) {
     // CHECK: %[[OBJ1:.+]] = om.object @Class_1(%basepath) : (!om.basepath) -> !om.class.type<@Class_1>
@@ -326,11 +326,11 @@ firrtl.circuit "ModuleInstances" {
     firrtl.propassign %outputProp, %mod.outputProp : !firrtl.string
   }
 
-  // CHECK: om.class.extern @ExtModule_Class(%basepath: !om.basepath, %inputProp: !om.string) -> (outputProp: !om.string)
+  // CHECK: om.class.extern private @ExtModule_Class(%basepath: !om.basepath, %inputProp: !om.string) -> (outputProp: !om.string)
 
-  // CHECK: om.class.extern @TheRealName_Class(%basepath: !om.basepath, %inputProp: !om.string) -> (outputProp: !om.string)
+  // CHECK: om.class.extern private @TheRealName_Class(%basepath: !om.basepath, %inputProp: !om.string) -> (outputProp: !om.string)
 
-  // CHECK: om.class @Module_Class(%basepath: !om.basepath, %[[IN_PROP0:.+]]: !om.string) -> (outputProp: !om.string)
+  // CHECK: om.class private @Module_Class(%basepath: !om.basepath, %[[IN_PROP0:.+]]: !om.string) -> (outputProp: !om.string)
   // CHECK:   om.class.fields %[[IN_PROP0]] : !om.string
 
   // CHECK: om.class @ModuleInstances_Class(%basepath: !om.basepath, %[[IN_PROP1:.+]]: !om.string) -> (outputProp: !om.string)
@@ -369,7 +369,7 @@ firrtl.circuit "ModuleWithPropertySubmodule" {
     %inst.prop = firrtl.instance inst @SubmoduleWithProperty(in prop: !firrtl.integer)
     firrtl.propassign %inst.prop, %c0 : !firrtl.integer
   }
-  // CHECK: om.class @SubmoduleWithProperty_Class
+  // CHECK: om.class private @SubmoduleWithProperty_Class
   firrtl.module private @SubmoduleWithProperty(in %prop: !firrtl.integer) {
   }
 }
@@ -381,7 +381,7 @@ firrtl.circuit "ModuleWithObjectNoPorts" {
   // Ensure that a module with no property ports, but contains an object results
   // in a class.
   //
-  // CHECK: om.class @Baz_Class
+  // CHECK: om.class private @Baz_Class
   firrtl.module private @Baz() {
     // CHECK: om.object @Metadata
     %meta = firrtl.object @Metadata()
@@ -495,7 +495,7 @@ firrtl.circuit "AltBasePath" {
   // CHECK: firrtl.module @AltBasePath
   // CHECK: firrtl.instance foo sym [[FOO_SYM]]
 
-  // CHECK: om.class @OMIR(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK: om.class private @OMIR(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
   firrtl.class private @OMIR() {
     %node = firrtl.object @Node(in path: !firrtl.path)
     %0 = firrtl.object.subfield %node[path] : !firrtl.class<@Node(in path: !firrtl.path)>
@@ -754,7 +754,7 @@ firrtl.circuit "UnknownValue" {
   }
 
   // property_assert in a class body lowers to om.property_assert.
-  // CHECK-LABEL: om.class @PropAssertClass
+  // CHECK-LABEL: om.class private @PropAssertClass
   firrtl.class private @PropAssertClass(in %cond: !firrtl.bool) {
     // CHECK: om.property_assert %cond, "must hold" : i1
     firrtl.property_assert %cond, "must hold" : !firrtl.bool
