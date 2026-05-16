@@ -41,7 +41,7 @@ namespace circt {
 
 using namespace circt;
 using namespace sim;
-using mlir::WalkOrder;
+using namespace mlir;
 
 /// Check whether an op should be placed inside an ifdef guard that prevents it
 /// from affecting synthesis runs.
@@ -475,7 +475,7 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
     // ops nested inside it here, or we may create redundant/invalid
     // structure.
     if (isa<TriggeredOp>(op))
-      return mlir::WalkResult::skip();
+      return WalkResult::skip();
 
     auto loc = op->getLoc();
 
@@ -558,7 +558,7 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
       // Move the op into the if body.
       op->moveBefore(block, block->end());
     }
-    return mlir::WalkResult::advance();
+    return WalkResult::advance();
   });
 
   return usedSynthesisMacro;
