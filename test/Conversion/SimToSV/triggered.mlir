@@ -35,28 +35,28 @@ hw.module @conditional_triggered(
 
 // CHECK-LABEL: hw.module @multiple_triggered
 hw.module @multiple_triggered(
-    in %clock : !seq.clock) {
+    in %clock : !seq.clock, in %en : i1) {
 
   sim.triggered %clock {
     "some.user"() : () -> ()
   }
 
-  %late_cond = "some.value"() : () -> i1
-
-  sim.triggered %clock if %late_cond {
+  sim.triggered %clock if %en {
     "some.user"() : () -> ()
   }
 
-  // CHECK: %[[LATE:.*]] = "some.value"() : () -> i1
-  // CHECK-NEXT: sv.ifdef @SYNTHESIS {
+  // CHECK: sv.ifdef @SYNTHESIS {
   // CHECK-NEXT: } else {
   // CHECK-NEXT:   %[[CLOCK0:.*]] = seq.from_clock %clock
   // CHECK-NEXT:   sv.always posedge %[[CLOCK0]] {
   // CHECK-NEXT:     "some.user"() : () -> ()
   // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  // CHECK: sv.ifdef @SYNTHESIS {
+  // CHECK-NEXT: } else {
   // CHECK-NEXT:   %[[CLOCK1:.*]] = seq.from_clock %clock
   // CHECK-NEXT:   sv.always posedge %[[CLOCK1]] {
-  // CHECK-NEXT:     sv.if %[[LATE]] {
+  // CHECK-NEXT:     sv.if %en {
   // CHECK-NEXT:       "some.user"() : () -> ()
   // CHECK-NEXT:     }
   // CHECK-NEXT:   }

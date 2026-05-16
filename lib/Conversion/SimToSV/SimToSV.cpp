@@ -65,7 +65,6 @@ struct SimConversionState {
   bool usedSynthesisMacro = false;
   bool usedFileDescriptorRuntime = false;
   SetVector<StringAttr> dpiCallees;
-  llvm::SmallDenseMap<Block *, sv::IfDefOp> synthesisGuards;
 };
 
 struct SimTypeConverter : public TypeConverter {
@@ -278,30 +277,23 @@ public:
     auto loc = op.getLoc();
     state.usedSynthesisMacro = true;
 
-    auto [it, inserted] = state.synthesisGuards.try_emplace(op->getBlock());
-    auto ifdefOp = it->second;
-    if (!inserted) {
-      ifdefOp->moveBefore(op);
-    } else {
-      ifdefOp = sv::IfDefOp::create(
-          rewriter, loc, "SYNTHESIS", [] {}, [] {});
-      it->second = ifdefOp;
-    }
-    rewriter.setInsertionPointToEnd(ifdefOp.getElseBlock());
+    sv::IfDefOp::create(rewriter, loc, "SYNTHESIS", [] {}, [&] {
+      auto trigger =
+          seq::FromClockOp::create(rewriter, loc, adaptor.getClock());
+      auto alwaysOp = sv::AlwaysOp::create(
+          rewriter, loc,
+          ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
+          ArrayRef<Value>{trigger});
 
-    auto trigger = seq::FromClockOp::create(rewriter, loc, adaptor.getClock());
-    auto alwaysOp = sv::AlwaysOp::create(
-        rewriter, loc, ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
-        ArrayRef<Value>{trigger});
+      Block *destination = alwaysOp.getBodyBlock();
+      if (auto condition = adaptor.getCondition()) {
+        rewriter.setInsertionPointToStart(destination);
+        destination =
+            sv::IfOp::create(rewriter, loc, condition, [] {}).getThenBlock();
+      }
 
-    Block *destination = alwaysOp.getBodyBlock();
-    if (auto condition = adaptor.getCondition()) {
-      rewriter.setInsertionPointToStart(destination);
-      destination =
-          sv::IfOp::create(rewriter, loc, condition, [] {}).getThenBlock();
-    }
-
-    rewriter.mergeBlocks(op.getBodyBlock(), destination);
+      rewriter.mergeBlocks(op.getBodyBlock(), destination);
+    });
     rewriter.eraseOp(op);
     return success();
   }
