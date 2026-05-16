@@ -46,8 +46,10 @@ using FieldIndex = DenseMap<std::pair<StringAttr, StringAttr>, unsigned>;
 /// Pattern to inline ObjectOp instances by cloning the class body and
 /// replacing them with ElaboratedObjectOp.
 struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
-  ObjectOpInliningPattern(MLIRContext *context, SymbolTable &symTable)
-      : OpRewritePattern<ObjectOp>(context), symTable(symTable) {}
+  ObjectOpInliningPattern(MLIRContext *context, SymbolTable &symTable,
+                          bool replaceExternalWithUnknown)
+      : OpRewritePattern<ObjectOp>(context), symTable(symTable),
+        replaceExternalWithUnknown(replaceExternalWithUnknown) {}
 
   LogicalResult matchAndRewrite(ObjectOp objOp,
                                 PatternRewriter &rewriter) const override {
@@ -56,6 +58,8 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
 
     // External classes cannot be elaborated; replace with unknown values.
     if (isa<ClassExternOp>(classLike)) {
+      if (!replaceExternalWithUnknown)
+        return failure();
       rewriter.replaceOpWithNewOp<UnknownValueOp>(objOp, objOp.getType());
       return success();
     }
@@ -88,6 +92,7 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
   }
 
   const SymbolTable &symTable;
+  bool replaceExternalWithUnknown;
 };
 
 /// Pattern to fold ObjectFieldOp on ElaboratedObjectOp by directly accessing
@@ -176,8 +181,8 @@ bool isFullyEvaluated(Operation *op) {
       ListCreateOp, ListConcatOp>(op);
 }
 
-LogicalResult verifyResult(ClassOp module) {
-  auto isLegal = [](Operation *op) -> LogicalResult {
+LogicalResult verifyResult(ClassOp module, bool allowUnevaluated) {
+  auto isLegal = [allowUnevaluated](Operation *op) -> LogicalResult {
     // Check assert satisfied.
     if (auto assertOp = dyn_cast<PropertyAssertOp>(op)) {
       // Check if the condition is a constant false, which means the assertion
@@ -205,11 +210,16 @@ LogicalResult verifyResult(ClassOp module) {
         return checkAssert(true);
 
       // This means the condition was not fully evaluated.
+      if (allowUnevaluated)
+        return success();
       return emitError(op->getLoc(), "failed to evaluate assertion condition");
     }
 
-    if (!isFullyEvaluated(op))
+    if (!isFullyEvaluated(op)) {
+      if (allowUnevaluated)
+        return success();
       return emitError(op->getLoc()) << "failed to evaluate " << op->getName();
+    }
 
     return success();
   };
@@ -224,13 +234,15 @@ struct ElaborateObjectPass
   using Base::Base;
 
   static LogicalResult elaborateClass(ClassOp classOp, SymbolTable &symTable,
-                                      FieldIndex &fieldIndexes) {
+                                      FieldIndex &fieldIndexes,
+                                      bool allowUnevaluated = false) {
     // Elaborate objects by inlining all ObjectOps and folding field accesses
     // using a greedy pattern rewriter. NOTE: The conversion framework is not
     // suitable here because inlining patterns need to be applied recursively to
     // fully evaluate nested object instantiations.
     RewritePatternSet patterns(classOp.getContext());
-    patterns.add<ObjectOpInliningPattern>(classOp.getContext(), symTable);
+    patterns.add<ObjectOpInliningPattern>(classOp.getContext(), symTable,
+                                          !allowUnevaluated);
     patterns.add<EvaluateObjectField>(classOp.getContext(), symTable,
                                       fieldIndexes);
     patterns.add<UnknownPropagationPattern>(classOp.getContext());
@@ -241,13 +253,16 @@ struct ElaborateObjectPass
       return failure();
 
     // Check if elaboration succeeded after saturation.
-    return verifyResult(classOp);
+    return verifyResult(classOp, allowUnevaluated);
   }
 
   LogicalResult initialize(MLIRContext *context) override {
-    if (test.getValue() ^ targetClass.getValue().empty())
+    unsigned numModes =
+        allPublicClasses.getValue() + !targetClass.getValue().empty();
+    if (numModes != 1)
       return emitError(UnknownLoc::get(context))
-             << "either 'test' or 'target-class' must be specified";
+             << "exactly one of 'target-class' or 'all-public-classes' must "
+                "be specified";
     return success();
   }
 
@@ -265,12 +280,15 @@ struct ElaborateObjectPass
         fieldIndexes[{name, fieldName}] = idx;
     }
 
-    // Test mode: elaborate all zero-argument classes.
-    if (test) {
-      for (auto classOp : module.getOps<ClassOp>())
-        if (classOp.getBodyBlock()->getNumArguments() == 0)
-          if (failed(elaborateClass(classOp, symTable, fieldIndexes)))
-            return signalPassFailure();
+    // Elaborate all public classes.
+    if (allPublicClasses) {
+      for (auto classOp : module.getOps<ClassOp>()) {
+        if (!classOp.isPublic())
+          continue;
+        if (failed(elaborateClass(classOp, symTable, fieldIndexes,
+                                  allowUnevaluated)))
+          return signalPassFailure();
+      }
       return;
     }
 
@@ -282,7 +300,8 @@ struct ElaborateObjectPass
       return signalPassFailure();
     }
 
-    if (failed(elaborateClass(classOp, symTable, fieldIndexes)))
+    if (failed(
+            elaborateClass(classOp, symTable, fieldIndexes, allowUnevaluated)))
       return signalPassFailure();
   }
 };

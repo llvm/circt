@@ -439,6 +439,12 @@ LogicalResult firtool::populateFinalizeIR(mlir::PassManager &pm,
                                           const FirtoolOptions &opt) {
   pm.addPass(firrtl::createFinalizeIR());
   pm.addPass(om::createFreezePathsPass());
+  om::ElaborateObjectOptions options;
+  options.allPublicClasses = true;
+  options.allowUnevaluated = true;
+  pm.addPass(om::createElaborateObject(options));
+  // TODO: Add SymbolDCE to elimiate unused private classes once after we
+  // stopped using private classes.
 
   return success();
 }

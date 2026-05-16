@@ -1,5 +1,6 @@
 // RUN: circt-opt -om-elaborate-object='target-class=Top' %s | FileCheck %s --check-prefix=TOP
-// RUN: circt-opt -om-elaborate-object='test=true' %s | FileCheck %s --check-prefixes=TOP,CHECK
+// RUN: circt-opt -om-elaborate-object='target-class=UseExtern' %s | FileCheck %s --check-prefix=STRICT-EXTERN
+// RUN: circt-opt -om-elaborate-object='all-public-classes=true allow-unevaluated=true' %s | FileCheck %s --check-prefixes=CHECK,PUBLIC
 
 // CHECK-LABEL: om.class @StringOps() -> (str: !om.string, concat: !om.string) {
 // CHECK-DAG:   %[[HELLO:.+]] = om.constant "hello" : !om.string
@@ -133,10 +134,16 @@ om.class @AssertUnknown() {
 // Test external class instantiation (should be replaced with unknown)
 om.class.extern @ExternalModule(%param: !om.integer) -> (output: !om.integer) {}
 
-// CHECK-LABEL: om.class @UseExtern() -> (result: !om.integer) {
-// CHECK:   %[[UNKNOWN:.+]] = om.unknown : !om.integer
-// CHECK:   om.class.fields %[[UNKNOWN]]
-// CHECK: }
+// STRICT-EXTERN-LABEL: om.class @UseExtern() -> (result: !om.integer) {
+// STRICT-EXTERN:   %[[UNKNOWN:.+]] = om.unknown : !om.integer
+// STRICT-EXTERN:   om.class.fields %[[UNKNOWN]]
+// STRICT-EXTERN: }
+// PUBLIC-LABEL: om.class @UseExtern() -> (result: !om.integer) {
+// PUBLIC:   %[[INPUT:.+]] = om.constant #om.integer<42 : si64> : !om.integer
+// PUBLIC:   %[[EXT:.+]] = om.object @ExternalModule(%[[INPUT]]) : (!om.integer) -> !om.class.type<@ExternalModule>
+// PUBLIC:   %[[RESULT:.+]] = om.object.field %[[EXT]]["output"] : (!om.class.type<@ExternalModule>) -> !om.integer
+// PUBLIC:   om.class.fields %[[RESULT]]
+// PUBLIC: }
 om.class @UseExtern() -> (result: !om.integer) {
   %input = om.constant #om.integer<42 : si64> : !om.integer
   %ext = om.object @ExternalModule(%input) : (!om.integer) -> !om.class.type<@ExternalModule>
@@ -144,3 +151,27 @@ om.class @UseExtern() -> (result: !om.integer) {
   om.class.fields %result : !om.integer
 }
 
+// Test all-public-classes mode elaborates public classes through private
+// helpers, but does not elaborate private top-level classes.
+om.class private @PublicModeHelper() -> (value: !om.integer) {
+  %value = om.constant #om.integer<7 : si4> : !om.integer
+  om.class.fields %value : !om.integer
+}
+
+// PUBLIC-LABEL: om.class @PublicModeTop() -> (value: !om.integer) {
+// PUBLIC-NEXT:    %[[value:.+]] = om.constant
+// PUBLIC-NEXT:   om.class.fields %[[value]]
+om.class @PublicModeTop() -> (value: !om.integer) {
+  %helper = om.object @PublicModeHelper() : () -> !om.class.type<@PublicModeHelper>
+  %value = om.object.field %helper["value"] : (!om.class.type<@PublicModeHelper>) -> !om.integer
+  om.class.fields %value : !om.integer
+}
+
+// PUBLIC-LABEL: om.class private @PrivateModeTop() -> (value: !om.integer) {
+// PUBLIC:  om.object @PublicModeHelper()
+// PUBLIC:  om.object.field
+om.class private @PrivateModeTop() -> (value: !om.integer) {
+  %helper = om.object @PublicModeHelper() : () -> !om.class.type<@PublicModeHelper>
+  %value = om.object.field %helper["value"] : (!om.class.type<@PublicModeHelper>) -> !om.integer
+  om.class.fields %value : !om.integer
+}
