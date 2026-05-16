@@ -731,7 +731,7 @@ FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
 
 static void cleanupDeadSimFmtOps(ArrayRef<Operation *> seedOps) {
   auto filter = [](Operation *op, OpOperand &operand) {
-    return isa<FormatStringType, OutputStreamType>(operand.get().getType()) &&
+    return isa<FormatStringType>(operand.get().getType()) &&
            isa_and_present<SimDialect>(op->getDialect());
   };
 
