@@ -24,6 +24,7 @@
 #include "circt/Support/ConversionPatternSet.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
@@ -1083,6 +1084,8 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
     loweredClassOp = convertClass(moduleLike, builder, className + suffix,
                                   formalParamNames, hasContainingModule);
   }
+
+  SymbolTable::setSymbolVisibility(loweredClassOp, moduleLike.getVisibility());
 
   return loweredClassOp;
 }

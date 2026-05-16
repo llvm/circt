@@ -1,8 +1,8 @@
 // RUN: circt-opt %s -verify-diagnostics --mlir-print-local-scope --mlir-print-debuginfo | circt-opt --mlir-print-local-scope --mlir-print-debuginfo -verify-diagnostics | FileCheck %s
 
-// CHECK-LABEL: om.class @Thingy
+// CHECK-LABEL: om.class private @Thingy
 // CHECK-SAME: (%blue_1: i8, %blue_2: i32) -> (widget: !om.class.type<@Widget>, gadget: !om.class.type<@Gadget>, blue_1: i8, blue_2: i8)
-om.class @Thingy(%blue_1: i8, %blue_2: i32) -> (widget: !om.class.type<@Widget>, gadget: !om.class.type<@Gadget>, blue_1: i8, blue_2: i8) {
+om.class private @Thingy(%blue_1: i8, %blue_2: i32) -> (widget: !om.class.type<@Widget>, gadget: !om.class.type<@Gadget>, blue_1: i8, blue_2: i8) {
   // CHECK: %[[c5:.+]] = om.constant 5 : i8
   %0 = om.constant 5 : i8
   // CHECK: %[[c6:.+]] = om.constant 6 : i32
@@ -62,13 +62,13 @@ om.class @DiscardableAttrs() attributes {foo.bar="baz"} {
   om.class.fields
 }
 
-// CHECK-LABEL: om.class.extern @Extern
+// CHECK-LABEL: om.class.extern private @Extern
 // CHECK-SAME: (%param1: i1, %param2: i2) -> (field1: i3, field2: i4)
-om.class.extern @Extern(%param1: i1, %param2: i2) -> (field1 : i3, field2 : i4) {}
+om.class.extern private @Extern(%param1: i1, %param2: i2) -> (field1 : i3, field2 : i4) {}
 
-// CHECK-LABEL: om.class @ExternObject
+// CHECK-LABEL: om.class public @ExternObject
 // CHECK-SAME: (%[[P0:.+]]: i1, %[[P1:.+]]: i2)
-om.class @ExternObject(%param1: i1, %param2: i2) {
+om.class public @ExternObject(%param1: i1, %param2: i2) {
   // CHECK: %[[O0:.+]] = om.object @Extern(%[[P0]], %[[P1]])
   %0 = om.object @Extern(%param1, %param2) : (i1, i2) -> !om.class.type<@Extern>
 

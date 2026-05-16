@@ -16,6 +16,7 @@
 #include "circt/Dialect/OM/OMUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/STLExtras.h"
 
 using namespace mlir;
@@ -132,6 +133,9 @@ static ParseResult parseClassFieldsList(OpAsmParser &parser,
 }
 
 static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
+  // Parse the optional symbol visibility.
+  (void)mlir::impl::parseOptionalVisibilityKeyword(parser, state.attributes);
+
   // Parse the Class symbol name.
   StringAttr symName;
   if (parser.parseSymbolName(symName, mlir::SymbolTable::getSymbolAttrName(),
@@ -186,9 +190,16 @@ static ParseResult parseClassLike(OpAsmParser &parser, OperationState &state) {
 }
 
 static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
+  printer << " ";
+
+  // Print the optional symbol visibility.
+  StringRef visibilityAttrName = SymbolTable::getVisibilityAttrName();
+  if (auto visibility =
+          classLike->getAttrOfType<StringAttr>(visibilityAttrName))
+    printer << visibility.getValue() << ' ';
+
   // Print the Class symbol name.
-  printer << " @";
-  printer << classLike.getSymName();
+  printer.printSymbolName(classLike.getSymName());
 
   // Retrieve the formal parameter names and values.
   auto argNames = SmallVector<StringRef>(
@@ -222,9 +233,9 @@ static void printClassLike(ClassLike classLike, OpAsmPrinter &printer) {
   }
 
   // Print the optional attribute dictionary.
-  SmallVector<StringRef> elidedAttrs{classLike.getSymNameAttrName(),
-                                     classLike.getFormalParamNamesAttrName(),
-                                     "fieldTypes", "fieldNames"};
+  SmallVector<StringRef> elidedAttrs{
+      classLike.getSymNameAttrName(), classLike.getFormalParamNamesAttrName(),
+      visibilityAttrName, "fieldTypes", "fieldNames"};
   printer.printOptionalAttrDictWithKeyword(classLike.getOperation()->getAttrs(),
                                            elidedAttrs);
 
