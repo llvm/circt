@@ -468,89 +468,98 @@ addFragments(hw::HWModuleOp module,
 static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
   bool usedSynthesisMacro = false;
 
-  rootOp->walk([&](Operation *op) {
-    auto loc = op->getLoc();
+  rootOp->walk<mlir::WalkOrder::PreOrder>(
+      [&](Operation *op) -> mlir::WalkResult {
+        // `sim.triggered` is lowered as a whole later on. Do not pre-wrap the
+        // ops nested inside it here, or we may create redundant/invalid
+        // structure.
+        if (isa<TriggeredOp>(op))
+          return mlir::WalkResult::skip();
 
-    // Move the op into an ifdef guard if needed.
-    if (needsIfdefGuard(op)) {
-      // Try to reuse an ifdef guard immediately before the op.
-      Block *block = nullptr;
-      if (op->getPrevNode())
-        block = TypeSwitch<Operation *, Block *>(op->getPrevNode())
-                    .Case<sv::IfDefOp, sv::IfDefProceduralOp>(
-                        [&](auto guardOp) -> Block * {
-                          if (guardOp.getCond().getIdent().getAttr() ==
-                                  "SYNTHESIS" &&
-                              guardOp.hasElse())
-                            return guardOp.getElseBlock();
-                          return nullptr;
-                        })
-                    .Default([](auto) { return nullptr; });
+        auto loc = op->getLoc();
 
-      // If there was no pre-existing guard, create one.
-      if (!block) {
-        OpBuilder builder(op);
-        if (op->getParentOp()->hasTrait<ProceduralRegion>())
-          block = sv::IfDefProceduralOp::create(
-                      builder, loc, "SYNTHESIS", [] {}, [] {})
-                      .getElseBlock();
-        else
-          block = sv::IfDefOp::create(
-                      builder, loc, "SYNTHESIS", [] {}, [] {})
-                      .getElseBlock();
-        usedSynthesisMacro = true;
-      }
+        // Move the op into an ifdef guard if needed.
+        if (needsIfdefGuard(op)) {
+          // Try to reuse an ifdef guard immediately before the op.
+          Block *block = nullptr;
+          if (op->getPrevNode())
+            block = TypeSwitch<Operation *, Block *>(op->getPrevNode())
+                        .Case<sv::IfDefOp, sv::IfDefProceduralOp>(
+                            [&](auto guardOp) -> Block * {
+                              if (guardOp.getCond().getIdent().getAttr() ==
+                                      "SYNTHESIS" &&
+                                  guardOp.hasElse())
+                                return guardOp.getElseBlock();
+                              return nullptr;
+                            })
+                        .Default([](auto) { return nullptr; });
 
-      // Move the op into the guard block.
-      op->moveBefore(block, block->end());
-    }
+          // If there was no pre-existing guard, create one.
+          if (!block) {
+            OpBuilder builder(op);
+            if (op->getParentOp()->hasTrait<ProceduralRegion>())
+              block = sv::IfDefProceduralOp::create(
+                          builder, loc, "SYNTHESIS", [] {}, [] {})
+                          .getElseBlock();
+            else
+              block = sv::IfDefOp::create(
+                          builder, loc, "SYNTHESIS", [] {}, [] {})
+                          .getElseBlock();
+            usedSynthesisMacro = true;
+          }
 
-    // Check if the op requires an clock and condition wrapper.
-    auto [clock, condition] = needsClockAndConditionWrapper(op);
+          // Move the op into the guard block.
+          op->moveBefore(block, block->end());
+        }
 
-    // Create an enclosing always process.
-    if (clock) {
-      // Try to reuse an always process immediately before the op.
-      Block *block = nullptr;
-      if (auto alwaysOp = dyn_cast_or_null<sv::AlwaysOp>(op->getPrevNode()))
-        if (alwaysOp.getNumConditions() == 1 &&
-            alwaysOp.getCondition(0).event == sv::EventControl::AtPosEdge)
-          if (auto clockOp = alwaysOp.getCondition(0)
-                                 .value.getDefiningOp<seq::FromClockOp>())
-            if (clockOp.getInput() == clock)
-              block = alwaysOp.getBodyBlock();
+        // Check if the op requires an clock and condition wrapper.
+        auto [clock, condition] = needsClockAndConditionWrapper(op);
 
-      // If there was no pre-existing always process, create one.
-      if (!block) {
-        OpBuilder builder(op);
-        clock = seq::FromClockOp::create(builder, loc, clock);
-        block = sv::AlwaysOp::create(builder, loc, sv::EventControl::AtPosEdge,
-                                     clock, [] {})
-                    .getBodyBlock();
-      }
+        // Create an enclosing always process.
+        if (clock) {
+          // Try to reuse an always process immediately before the op.
+          Block *block = nullptr;
+          if (auto alwaysOp = dyn_cast_or_null<sv::AlwaysOp>(op->getPrevNode()))
+            if (alwaysOp.getNumConditions() == 1 &&
+                alwaysOp.getCondition(0).event == sv::EventControl::AtPosEdge)
+              if (auto clockOp = alwaysOp.getCondition(0)
+                                     .value.getDefiningOp<seq::FromClockOp>())
+                if (clockOp.getInput() == clock)
+                  block = alwaysOp.getBodyBlock();
 
-      // Move the op into the process.
-      op->moveBefore(block, block->end());
-    }
+          // If there was no pre-existing always process, create one.
+          if (!block) {
+            OpBuilder builder(op);
+            clock = seq::FromClockOp::create(builder, loc, clock);
+            block = sv::AlwaysOp::create(
+                        builder, loc, sv::EventControl::AtPosEdge, clock, [] {})
+                        .getBodyBlock();
+          }
 
-    // Create an enclosing if condition.
-    if (condition) {
-      // Try to reuse an if statement immediately before the op.
-      Block *block = nullptr;
-      if (auto ifOp = dyn_cast_or_null<sv::IfOp>(op->getPrevNode()))
-        if (ifOp.getCond() == condition)
-          block = ifOp.getThenBlock();
+          // Move the op into the process.
+          op->moveBefore(block, block->end());
+        }
 
-      // If there was no pre-existing if statement, create one.
-      if (!block) {
-        OpBuilder builder(op);
-        block = sv::IfOp::create(builder, loc, condition, [] {}).getThenBlock();
-      }
+        // Create an enclosing if condition.
+        if (condition) {
+          // Try to reuse an if statement immediately before the op.
+          Block *block = nullptr;
+          if (auto ifOp = dyn_cast_or_null<sv::IfOp>(op->getPrevNode()))
+            if (ifOp.getCond() == condition)
+              block = ifOp.getThenBlock();
 
-      // Move the op into the if body.
-      op->moveBefore(block, block->end());
-    }
-  });
+          // If there was no pre-existing if statement, create one.
+          if (!block) {
+            OpBuilder builder(op);
+            block =
+                sv::IfOp::create(builder, loc, condition, [] {}).getThenBlock();
+          }
+
+          // Move the op into the if body.
+          op->moveBefore(block, block->end());
+        }
+        return mlir::WalkResult::advance();
+      });
 
   return usedSynthesisMacro;
 }
