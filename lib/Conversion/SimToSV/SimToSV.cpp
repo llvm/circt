@@ -267,6 +267,33 @@ static LogicalResult convert(PauseOp op, PatternRewriter &rewriter) {
   return success();
 }
 
+class TriggeredLowering : public OpConversionPattern<TriggeredOp> {
+public:
+  using OpConversionPattern<TriggeredOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TriggeredOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = op.getLoc();
+    auto trigger = seq::FromClockOp::create(rewriter, loc, adaptor.getClock());
+    auto alwaysOp = sv::AlwaysOp::create(
+        rewriter, loc,
+        ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
+        ArrayRef<Value>{trigger});
+
+    Block *destination = alwaysOp.getBodyBlock();
+    if (auto condition = adaptor.getCondition()) {
+      rewriter.setInsertionPointToStart(destination);
+      destination =
+          sv::IfOp::create(rewriter, loc, condition, [] {}).getThenBlock();
+    }
+
+    rewriter.mergeBlocks(op.getBodyBlock(), destination);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 class DPICallLowering : public SimConversionPattern<DPICallOp> {
 public:
   using SimConversionPattern<DPICallOp>::SimConversionPattern;
@@ -843,6 +870,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<ClockedPauseOp>(convert);
       patterns.add<TerminateOp>(convert);
       patterns.add<PauseOp>(convert);
+      patterns.add<TriggeredLowering>(typeConverter, context);
       patterns.add<DPICallLowering>(context, state);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 
