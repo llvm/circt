@@ -62,3 +62,19 @@ hw.module @multiple_triggered(
   // CHECK-NEXT:   }
   // CHECK-NEXT: }
 }
+
+// CHECK-LABEL: hw.module @triggered_with_pause
+hw.module @triggered_with_pause(in %clock : !seq.clock) {
+  sim.triggered %clock {
+    sim.pause quiet
+  }
+
+  // CHECK: sv.ifdef @SYNTHESIS {
+  // CHECK-NOT: sv.ifdef.procedural @SYNTHESIS
+  // CHECK-NEXT: } else {
+  // CHECK-NEXT:   %[[CLOCK:.*]] = seq.from_clock %clock
+  // CHECK-NEXT:   sv.always posedge %[[CLOCK]] {
+  // CHECK-NEXT:     sv.stop 0
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+}
