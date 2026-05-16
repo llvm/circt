@@ -763,3 +763,68 @@ void OneHotOp::emitCNFWithoutInversion(
   // out = (a ^ b ^ c) & ~(a & b & c).
   circt::addAndClauses(outVar, {parity, -allSet}, addClause);
 }
+
+//===----------------------------------------------------------------------===//
+// MuxInverterOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult MuxInverterOp::verify() {
+  if (getNumOperands() != 3)
+    return emitOpError("requires exactly three operands");
+  if (getInverted().size() != 3)
+    return emitOpError("requires exactly three inversion flags");
+  return success();
+}
+
+bool MuxInverterOp::areInputsPermutationInvariant() { return false; }
+
+APInt MuxInverterOp::evaluateBooleanLogicWithoutInversion(
+    llvm::ArrayRef<APInt> inputs) {
+  assert(inputs.size() == 3 && "expected exactly three inputs");
+  return evaluateMuxLogic(inputs[0], inputs[1], inputs[2]);
+}
+
+bool MuxInverterOp::supportsNumInputs(unsigned numInputs) {
+  return numInputs == 3;
+}
+
+llvm::KnownBits MuxInverterOp::computeKnownBits(
+    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
+  assert(getNumOperands() == 3 && "expected exactly three inputs");
+
+  auto a = applyInversion(getInputKnownBits(0), isInverted(0));
+  auto b = applyInversion(getInputKnownBits(1), isInverted(1));
+  auto c = applyInversion(getInputKnownBits(2), isInverted(2));
+
+  return evaluateMuxLogic(a, b, c);
+}
+
+int64_t MuxInverterOp::getLogicDepthCost() { return 2; }
+
+std::optional<uint64_t> MuxInverterOp::getLogicAreaCost() {
+  int64_t bitWidth = hw::getBitWidth(getType());
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<uint64_t>(bitWidth);
+}
+
+void MuxInverterOp::emitCNFWithoutInversion(
+    int outVar, llvm::ArrayRef<int> inputVars,
+    llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
+    llvm::function_ref<int()> newVar) {
+  assert(inputVars.size() == 3 && "expected exactly three inputs");
+
+  int cond = inputVars[0];
+  int trueValue = inputVars[1];
+  int falseValue = inputVars[2];
+
+  int lhs = newVar();
+  int rhs = newVar();
+
+  // lhs = cond & trueValue
+  circt::addAndClauses(lhs, {cond, trueValue}, addClause);
+  // rhs = ~cond & falseValue
+  circt::addAndClauses(rhs, {-cond, falseValue}, addClause);
+  // out = lhs | rhs
+  circt::addOrClauses(outVar, {lhs, rhs}, addClause);
+}

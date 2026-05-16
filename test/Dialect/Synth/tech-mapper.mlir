@@ -204,3 +204,15 @@ hw.module @onehot_test(in %x : i1, in %y : i1, in %z : i1, out result : i1) {
     %0 = synth.onehot not %z, %x, not %y : i1
     hw.output %0 : i1
 }
+
+hw.module @mux_inv_lib(in %c : i1, in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "c", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "a", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1, 0, #synth.polarity<positive>>], input_caps = {}>} {
+  %0 = synth.mux_inv %c, %a, %b : i1
+  hw.output %0 : i1
+}
+
+// CHECK-LABEL: @mux_inv_test
+hw.module @mux_inv_test(in %c : i1, in %a : i1, in %b : i1, out result : i1) {
+  // CHECK-NEXT: %[[MUX:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @mux_inv_lib(c: %c: i1, a: %a: i1, b: %b: i1) -> (result: i1) {test.arrival_times = [1]}
+  %0 = synth.mux_inv %c, %a, %b : i1
+  hw.output %0 : i1
+}

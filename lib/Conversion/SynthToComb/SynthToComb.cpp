@@ -156,6 +156,30 @@ struct SynthOneHotOpConversion : SynthInverterOpConversion<synth::OneHotOp> {
   }
 };
 
+struct SynthMuxInverterOpConversion
+    : SynthInverterOpConversion<synth::MuxInverterOp> {
+  using SynthInverterOpConversion<
+      synth::MuxInverterOp>::SynthInverterOpConversion;
+
+  Value createOp(Location loc, ArrayRef<Value> inputs,
+                 ConversionPatternRewriter &rewriter) const override {
+    assert(inputs.size() == 3 && "expected exactly three inputs");
+
+    auto width = inputs[0].getType().getIntOrFloatBitWidth();
+    auto allOnes =
+        hw::ConstantOp::create(rewriter, loc, APInt::getAllOnes(width));
+
+    auto notCond =
+        rewriter.createOrFold<comb::XorOp>(loc, inputs[0], allOnes, true);
+    auto trueValue =
+        rewriter.createOrFold<comb::AndOp>(loc, inputs[0], inputs[1], true);
+    auto falseValue =
+        rewriter.createOrFold<comb::AndOp>(loc, notCond, inputs[2], true);
+
+    return rewriter.createOrFold<comb::OrOp>(loc, trueValue, falseValue, true);
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -173,9 +197,9 @@ struct ConvertSynthToCombPass
 
 static void populateSynthToCombConversionPatterns(RewritePatternSet &patterns) {
   patterns.add<SynthChoiceOpConversion, SynthAndInverterOpConversion,
-               SynthXorInverterOpConversion, SynthDotOpConversion,
-               SynthMajorityOpConversion, SynthOneHotOpConversion>(
-      patterns.getContext());
+               SynthXorInverterOpConversion, SynthMuxInverterOpConversion,
+               SynthDotOpConversion, SynthMajorityOpConversion,
+               SynthOneHotOpConversion>(patterns.getContext());
 }
 
 void ConvertSynthToCombPass::runOnOperation() {

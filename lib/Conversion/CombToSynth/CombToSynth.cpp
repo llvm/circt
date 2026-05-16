@@ -351,6 +351,66 @@ struct SynthXorInverterOpConversion
   }
 };
 
+/// Lower a comb::MuxOp operation to synth::MuxInverterOps.
+struct CombMuxOpToSynthConversion : OpConversionPattern<MuxOp> {
+  using OpConversionPattern<MuxOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(MuxOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value cond = adaptor.getCond();
+    Value trueVal = adaptor.getTrueValue();
+    Value falseVal = adaptor.getFalseValue();
+
+    if (!op.getType().isInteger()) {
+      auto widthType = rewriter.getIntegerType(hw::getBitWidth(op.getType()));
+      trueVal =
+          hw::BitcastOp::create(rewriter, op.getLoc(), widthType, trueVal);
+      falseVal =
+          hw::BitcastOp::create(rewriter, op.getLoc(), widthType, falseVal);
+    }
+
+    if (!trueVal.getType().isInteger(1))
+      cond = comb::ReplicateOp::create(rewriter, op.getLoc(), trueVal.getType(),
+                                       cond);
+
+    Value result = synth::MuxInverterOp::create(rewriter, op.getLoc(), cond,
+                                                trueVal, falseVal);
+
+    if (result.getType() != op.getType())
+      result =
+          hw::BitcastOp::create(rewriter, op.getLoc(), op.getType(), result);
+
+    replaceOpAndCopyNamehint(rewriter, op, result);
+    return success();
+  }
+};
+
+/// Lower a synth::MuxInverterOp operation to AIG operations.
+struct SynthMuxInverterOpConversion
+    : OpConversionPattern<synth::MuxInverterOp> {
+  using OpConversionPattern<synth::MuxInverterOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(synth::MuxInverterOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto inputs = adaptor.getInputs();
+    auto inverted = op.getInverted();
+
+    auto lhs = synth::aig::AndInverterOp::create(
+        rewriter, op.getLoc(), inputs[0], inputs[1], inverted[0], inverted[1]);
+
+    auto rhs = synth::aig::AndInverterOp::create(
+        rewriter, op.getLoc(), inputs[0], inputs[2], !inverted[0], inverted[2]);
+
+    auto nand = synth::aig::AndInverterOp::create(rewriter, op.getLoc(), lhs,
+                                                  rhs, true, true);
+    replaceOpWithNewOpAndCopyNamehint<synth::aig::AndInverterOp>(rewriter, op,
+                                                                 nand, true);
+    return success();
+  }
+};
+
 template <typename OpTy>
 struct CombLowerVariadicOp : OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;
@@ -384,47 +444,6 @@ struct CombLowerVariadicOp : OpConversionPattern<OpTy> {
           lowerFullyAssociativeOp(op, operands.drop_front(firstHalf), rewriter);
       return OpTy::create(rewriter, op.getLoc(), ValueRange{lhs, rhs}, true);
     }
-  }
-};
-
-// Lower comb::MuxOp to AIG operations.
-struct CombMuxOpConversion : OpConversionPattern<MuxOp> {
-  using OpConversionPattern<MuxOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(MuxOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    Value cond = op.getCond();
-    auto trueVal = op.getTrueValue();
-    auto falseVal = op.getFalseValue();
-
-    if (!op.getType().isInteger()) {
-      // If the type of the mux is not integer, bitcast the operands first.
-      auto widthType = rewriter.getIntegerType(hw::getBitWidth(op.getType()));
-      trueVal =
-          hw::BitcastOp::create(rewriter, op->getLoc(), widthType, trueVal);
-      falseVal =
-          hw::BitcastOp::create(rewriter, op->getLoc(), widthType, falseVal);
-    }
-
-    // Replicate condition if needed
-    if (!trueVal.getType().isInteger(1))
-      cond = comb::ReplicateOp::create(rewriter, op.getLoc(), trueVal.getType(),
-                                       cond);
-
-    // c ? a : b => (replicate(c) & a) | (~replicate(c) & b)
-    auto lhs =
-        synth::aig::AndInverterOp::create(rewriter, op.getLoc(), cond, trueVal);
-    auto rhs = synth::aig::AndInverterOp::create(rewriter, op.getLoc(), cond,
-                                                 falseVal, true, false);
-
-    Value result = comb::OrOp::create(rewriter, op.getLoc(), lhs, rhs);
-    // Insert the bitcast if the type of the mux is not integer.
-    if (result.getType() != op.getType())
-      result =
-          hw::BitcastOp::create(rewriter, op.getLoc(), op.getType(), result);
-    replaceOpAndCopyNamehint(rewriter, op, result);
-    return success();
   }
 };
 
@@ -1361,8 +1380,8 @@ populateCombToAIGConversionPatterns(RewritePatternSet &patterns,
                                     bool forceAIG) {
   patterns.add<
       // Bitwise Logical Ops
-      CombAndOpConversion, CombMuxOpConversion, CombParityOpConversion,
-      CombXorOpToSynthConversion,
+      CombAndOpConversion, CombParityOpConversion, CombXorOpToSynthConversion,
+      CombMuxOpToSynthConversion,
       // Arithmetic Ops
       CombMulOpConversion, CombICmpOpConversion,
       // Shift Ops
@@ -1371,9 +1390,10 @@ populateCombToAIGConversionPatterns(RewritePatternSet &patterns,
       CombLowerVariadicOp<AddOp>, CombLowerVariadicOp<MulOp>>(
       patterns.getContext());
 
-  if (forceAIG)
-    patterns.add<SynthXorInverterOpConversion>(patterns.getContext());
-
+  if (forceAIG) {
+    patterns.add<SynthXorInverterOpConversion, SynthMuxInverterOpConversion>(
+        patterns.getContext());
+  }
   patterns.add(comb::convertSubToAdd);
 
   patterns.add<CombOrToAIGConversion, CombAddOpConversion>(
@@ -1407,7 +1427,7 @@ void ConvertCombToSynthPass::runOnOperation() {
 
   target.addLegalDialect<synth::SynthDialect>();
   if (forceAIG)
-    target.addIllegalOp<synth::XorInverterOp>();
+    target.addIllegalOp<synth::XorInverterOp, synth::MuxInverterOp>();
 
   // If additional legal ops are specified, add them to the target.
   if (!additionalLegalOps.empty())
