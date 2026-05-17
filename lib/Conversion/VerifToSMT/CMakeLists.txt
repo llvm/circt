@@ -8,6 +8,7 @@ add_circt_conversion_library(CIRCTVerifToSMT
   Core
 
   LINK_LIBS PUBLIC
+  CIRCTDebug
   CIRCTHW
   CIRCTHWToSMT
   CIRCTVerif
