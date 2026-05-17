@@ -507,7 +507,8 @@ struct VerifBoundedModelCheckingOpConversion
         }
       }
       inputDecls.push_back(smt::DeclareFunOp::create(
-          rewriter, loc, newTy, getNameAttr(curIndex, curIndex >= regStartIdx)));
+          rewriter, loc, newTy,
+          getNameAttr(curIndex, curIndex >= regStartIdx)));
     }
 
     auto numStateArgs = initVals.size() - initIndex;
