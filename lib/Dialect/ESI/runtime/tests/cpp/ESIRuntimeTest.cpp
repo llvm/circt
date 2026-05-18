@@ -34,20 +34,25 @@ TEST(ESITypesTest, VoidTypeSerialization) {
   std::any invalidValue = std::any(42);
   EXPECT_THROW(voidType.ensureValid(invalidValue), std::runtime_error);
 
-  // Test serialization
-  MessageData serialized(voidType.serialize(voidValue).getSpan());
-  EXPECT_EQ(serialized.getSize(), 1UL)
-      << "VoidType serialization should produce exactly 1 byte";
-  EXPECT_EQ(serialized.getData()[0], 0)
-      << "VoidType serialization should produce a zero byte";
+  // Void carries no logical data, so serialize produces zero bits.
+  // Transports (DMA, cosim, etc.) that require a non-empty message add
+  // their own placeholder byte; that pad/strip lives in the channel-port
+  // base classes (WriteChannelPort::maybePadEmptyMessage /
+  // ReadChannelPort::invokeCallback), not at the type-serialization layer.
+  EXPECT_EQ(voidType.getBitWidth(), 0)
+      << "VoidType should report a 0-bit logical width";
+  auto serialized = voidType.serialize(voidValue);
+  EXPECT_EQ(serialized.size(), 0UL)
+      << "VoidType serialization should produce zero bits";
 
-  // Test deserialization
-  BitVector v(serialized.getData());
+  // Test deserialization consumes nothing.
+  std::vector<uint8_t> empty;
+  BitVector v(empty);
   auto deserialized = voidType.deserialize(v);
   EXPECT_FALSE(deserialized.has_value())
       << "VoidType deserialization should not have a value";
   EXPECT_EQ(v.width(), 0UL)
-      << "VoidType deserialization should consume all data";
+      << "VoidType deserialization should consume no data";
 }
 
 // Test BitsType serialization and deserialization
@@ -755,7 +760,9 @@ TEST(ESITypesTest, ArrayTypeSerialization) {
 // Test bit width calculations
 TEST(ESITypesTest, BitWidthCalculations) {
   VoidType voidType("void");
-  EXPECT_EQ(voidType.getBitWidth(), 1) << "VoidType should have bit width of 1";
+  EXPECT_EQ(voidType.getBitWidth(), 0)
+      << "VoidType should have a 0-bit logical width; transport-level "
+         "placeholder bytes are added by the channel-port base classes.";
 
   BitsType bitsType("bits16", 16);
   EXPECT_EQ(bitsType.getBitWidth(), 16)

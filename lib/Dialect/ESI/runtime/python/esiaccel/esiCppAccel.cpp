@@ -117,6 +117,7 @@ NB_MODULE(esiCppAccel, m) {
   nb::class_<Type>(m, "Type")
       .def(nb::init<const Type::ID &>(), nb::arg("id"))
       .def_prop_ro("id", &Type::getID)
+      .def_prop_ro("bit_width", &Type::getBitWidth)
       .def("__repr__", [](Type &t) { return "<" + t.getID() + ">"; });
   nb::class_<ChannelType, Type>(m, "ChannelType")
       .def(nb::init<const Type::ID &, const Type *>(), nb::arg("id"),

@@ -288,9 +288,7 @@ public:
                                   AppIDPath idPath,
                                   const std::string &channelName)
       : WriteChannelPort(type), engine(engine), idPath(idPath),
-        channelName(channelName) {
-    frameSizeBytes = utils::bitsToBytes(type->getBitWidth());
-  }
+        channelName(channelName) {}
 
   // Connect allocate a buffer and prime the pump.
   void connectImpl(const ChannelPort::ConnectOptions &options) override;
@@ -307,8 +305,6 @@ protected:
   /// Poll for ability to send more data and send if able.
   bool pollImpl() override;
 
-  // Size of buffer based on type.
-  size_t frameSizeBytes;
   // Owning engine.
   OneItemBuffersFromHost *engine;
   // Single buffer.
@@ -319,7 +315,8 @@ protected:
   std::mutex bufferMutex;
 
   // FIFO of frame-sized messages to send. When a message is larger than
-  // frameSizeBytes, it's broken into frame-sized pieces and enqueued here.
+  // getFrameSizeBytes(), it's broken into frame-sized pieces and enqueued
+  // here.
   std::queue<MessageData> pendingFrames;
 
   // Identifing information.
@@ -409,8 +406,8 @@ void OneItemBuffersFromHost::connect() {
 void OneItemBuffersFromHostWritePort::connectImpl(
     const ChannelPort::ConnectOptions &options) {
   engine->connect();
-  data_buffer = engine->hostMem->allocate(std::max(frameSizeBytes, (size_t)512),
-                                          {false, false});
+  data_buffer = engine->hostMem->allocate(
+      std::max(getFrameSizeBytes(), (size_t)512), {false, false});
   completion_buffer = engine->hostMem->allocate(512, {true, false});
   // Set the last byte to '1' to indicate that the buffer is ready to be filled
   // and sent to the device.

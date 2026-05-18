@@ -161,23 +161,17 @@ void VoidType::ensureValid(const std::any &obj) const {
 }
 
 std::any VoidType::deserialize(BitVector &data) const {
-  if (data.width() < 8)
-    throw std::runtime_error("void type cannot be represented by empty data");
-  // Extract one byte and return the rest. Check that the byte is 0.
-  BitVector value = data.lsb(8);
-  if (std::ranges::any_of(value, [](auto b) { return b; }))
-    throw std::runtime_error(std::format("void type byte must be 0, got {:b}",
-                                         value.getSpan().front()));
-
-  data >>= 8;
+  // Void carries no logical data. Transports that pad empty messages to one
+  // byte strip that byte before handing the BitVector to us, so we consume
+  // nothing here.
   return std::any{};
 }
 
 MutableBitVector VoidType::serialize(const std::any &obj) const {
   ensureValid(obj);
-  // By convention, void is represented by a single byte of value 0.
-  MutableBitVector bv(8);
-  return bv;
+  // Void carries no logical data. Transports that require a non-empty payload
+  // are responsible for adding their own placeholder byte.
+  return MutableBitVector(0);
 }
 
 void TypeAliasType::ensureValid(const std::any &obj) const {

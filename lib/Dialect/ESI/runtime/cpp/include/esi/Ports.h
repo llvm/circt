@@ -20,6 +20,7 @@
 #include "esi/Types.h"
 #include "esi/Utils.h"
 
+#include <algorithm>
 #include <cassert>
 #include <condition_variable>
 #include <future>
@@ -206,11 +207,14 @@ public:
   }
 
   /// Get the size of each frame in bytes. For windowed types, this is the
-  /// lowered type's width; otherwise, the port type's width.
+  /// lowered type's width; otherwise, the port type's width. Transports
+  /// (DMA engines, cosim, etc.) require every message to be at least one
+  /// byte, so void / zero-width port types are reported as 1 byte here; the
+  /// transport pads or strips that placeholder byte transparently.
   size_t getFrameSizeBytes() const {
-    if (translationInfo)
-      return translationInfo->frameBytes;
-    return utils::bitsToBytes(type->getBitWidth());
+    size_t bytes = translationInfo ? translationInfo->frameBytes
+                                   : utils::bitsToBytes(type->getBitWidth());
+    return std::max<size_t>(1, bytes);
   }
   const Type *getType() const { return type; }
 
@@ -326,10 +330,10 @@ public:
              "Cannot call write() with pending translated messages");
       translateOutgoing(data);
       for (auto &msg : translationBuffer)
-        writeImpl(msg);
+        writeImpl(maybePadEmptyMessage(msg));
       translationBuffer.clear();
     } else {
-      writeImpl(data);
+      writeImpl(maybePadEmptyMessage(data));
     }
   }
 
@@ -361,7 +365,7 @@ public:
       flush();
       return true;
     } else {
-      return tryWriteImpl(data);
+      return tryWriteImpl(maybePadEmptyMessage(data));
     }
   }
   /// Flush any buffered data. Returns true if all data was flushed.
@@ -370,7 +374,8 @@ public:
   /// true and perform no action, as there is no buffered data to flush.
   bool flush() {
     while (translationBufferIdx < translationBuffer.size()) {
-      if (!tryWriteImpl(translationBuffer[translationBufferIdx]))
+      if (!tryWriteImpl(
+              maybePadEmptyMessage(translationBuffer[translationBufferIdx])))
         return false;
       ++translationBufferIdx;
     }
@@ -379,6 +384,21 @@ public:
     return true;
   }
 
+protected:
+  /// Pad an empty payload with a single zero byte if the port type has a
+  /// zero-width logical width (e.g. `VoidType`). Transports (DMA engines,
+  /// cosim, etc.) require every message to carry at least one byte.
+  const MessageData &maybePadEmptyMessage(const MessageData &data) {
+    if (!data.getSize() && type && type->getBitWidth() == 0)
+      return transportPad0Bytes;
+    return data;
+  }
+
+  /// Backing storage for `maybePadEmptyMessage` return so that the returned
+  /// reference outlives the call.
+  const static MessageData transportPad0Bytes;
+
+public:
 protected:
   /// Implementation for write(). Subclasses must implement this.
   virtual void writeImpl(const MessageData &) = 0;
