@@ -94,3 +94,21 @@ hw.module @test_reachable_erased(in %a: i1, in %b: i1, out out0: i1, out out1: i
   hw.output %ab, %aba : i1, i1
 }
 
+// CHECK-LABEL: hw.module @test_mux_inv_equiv
+hw.module @test_mux_inv_equiv(in %c: i1, in %a: i1, in %b: i1, out out0: i1, out out1: i1) {
+  // CHECK: %[[MUX:.+]] = synth.mux_inv %c, %a, %b
+  // CHECK: %[[CA:.+]] = synth.aig.and_inv %c, %a
+  // CHECK: %[[CB:.+]] = synth.aig.and_inv not %c, %b
+  // CHECK: %[[OR:.+]] = synth.aig.and_inv not %[[CA]], not %[[CB]]
+  // CHECK: %[[RESULT:.+]] = synth.aig.and_inv not %[[OR]]
+  // CHECK: %[[CHOICE:.+]] = synth.choice %[[MUX]], %[[RESULT]] : i1
+  // CHECK: hw.output %[[CHOICE]], %[[CHOICE]] : i1, i1
+  %0 = synth.mux_inv %c, %a, %b {synth.test.fc_equiv_class = 12} : i1
+  %1 = synth.aig.and_inv %c, %a : i1
+  %2 = synth.aig.and_inv not %c, %b : i1
+  %3 = synth.aig.and_inv not %1, not %2 : i1
+  %4 = synth.aig.and_inv not %3 {synth.test.fc_equiv_class = 12} : i1
+  hw.output %0, %4 : i1, i1
+}
+
+

@@ -58,9 +58,10 @@ hw.module private @unrelated(in %a : i1, in %b : i1, out x : i1) {
 // CHECK-NEXT:   comb.or: 16
 // CHECK-NEXT:   comb.xor: 8
 // CHECK-NEXT:   synth.aig.and_inv: 8
+// CHECK-NEXT:   synth.mux_inv: 8
 // CHECK-NEXT:   synth.xor_inv: 16
 
-hw.module private @multibit(in %a : i8, in %b : i8, in %c : i8, out x : i8) {
+hw.module private @multibit(in %a : i8, in %b : i8, in %c : i8, out x : i8, out y : i8) {
   // 3-input AND on 8-bit: (3-1) * 8 = 16 gates
   %and3 = comb.and %a, %b, %c : i8
   // 2-input AND on 8-bit: (2-1) * 8 = 8 gates
@@ -73,7 +74,9 @@ hw.module private @multibit(in %a : i8, in %b : i8, in %c : i8, out x : i8) {
   %aig = synth.aig.and_inv not %a, %b : i8
   // XOR inverter on 8-bit: (3-1) * 8 = 16 gates
   %xor = synth.xor_inv %aig, not %b, %c : i8
-  hw.output %xor : i8
+  // MUX inverter on 8-bit: (2-1) * 8 = 8 gates
+  %mux = synth.mux_inv %a, not %b, %c : i8
+  hw.output %xor, %mux : i8, i8
 }
 
 

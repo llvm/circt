@@ -53,6 +53,13 @@ hw.module @mux(in %cond: i1, in %high: !hw.array<2xi4>, in %low: !hw.array<2xi4>
   // CHECK-NEXT: %[[NOT:.+]] = synth.aig.and_inv not %[[NAND]] : i8
   // CHECK-NEXT: %[[RESULT:.+]] = hw.bitcast %[[NOT]] : (i8) -> !hw.array<2xi4>
   // CHECK-NEXT: hw.output %[[RESULT]] : !hw.array<2xi4>
+  // XOR-INV-LABEL: @mux
+  // XOR-INV-NEXT: %[[HIGH:.+]] = hw.bitcast %high : (!hw.array<2xi4>) -> i8
+  // XOR-INV-NEXT: %[[LOW:.+]] = hw.bitcast %low : (!hw.array<2xi4>) -> i8
+  // XOR-INV-NEXT: %[[COND:.+]] = comb.replicate %cond : (i1) -> i8
+  // XOR-INV-NEXT: %[[MUX:.+]] = synth.mux_inv %[[COND]], %[[HIGH]], %[[LOW]] : i8
+  // XOR-INV-NEXT: %[[RESULT:.+]] = hw.bitcast %[[MUX]] : (i8) -> !hw.array<2xi4>
+  // XOR-INV-NEXT: hw.output %[[RESULT]] : !hw.array<2xi4>
   %0 = comb.mux %cond, %high, %low : !hw.array<2xi4>
   hw.output %0 : !hw.array<2xi4>
 }

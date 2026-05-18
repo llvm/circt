@@ -300,5 +300,37 @@ def OneHotOp : SynthOp<"onehot", [
   let hasCustomAssemblyFormat = 1;
 }
 
+def MuxInverterOp : InvertibleOperandsOp<"mux_inv"> {
+  let summary = "MUX gate with invertible inputs";
+  let description = [{
+    The `synth.mux_inv` operation represents a 3-input multiplexer node
+    whose operands can be individually inverted before evaluation.
+    The operation chooses between two values based on a condition:
+    given operands (cond, trueValue, falseValue), it calculates `cond ? trueValue : falseValue`,
+    which is equivalent to:
+    
+    `(cond & trueValue) | (~cond & falseValue)`
+
+    Example:
+    ```mlir
+      %r0 = synth.mux_inv %a, %b, %c : i8
+      %r1 = synth.mux_inv not %a, %b, not %c : i8
+    ```
+  }];
+
+  let builders = [
+  OpBuilder<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue,
+                  CArg<"bool", "false">:$invertCond,
+                  CArg<"bool", "false">:$invertTrue,
+                  CArg<"bool", "false">:$invertFalse),
+                  [{
+    SmallVector<bool> inverted {invertCond, invertTrue, invertFalse};
+    return build($_builder, $_state, {cond, trueValue, falseValue}, inverted);
+  }]>
+];
+let hasVerifier = 1;
+
+}
+
 
 #endif // CIRCT_DIALECT_SYNTH_SYNTHOPS_TD

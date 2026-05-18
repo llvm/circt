@@ -146,3 +146,12 @@ hw.module private @top(in %clock : !seq.clock) {
   %0 = hw.instance "inst1" @nest(clock: %clock: !seq.clock, a: %a: i1) -> (x: i1)
   %1 = hw.instance "inst2" @nest(clock: %clock: !seq.clock, a: %0: i1) -> (x: i1)
 }
+
+// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.a[0], delay=2, history=[{{.+}}])}}
+// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.b[0], delay=2, history=[{{.+}}])}}
+// expected-remark-re @below {{endPoint=Object($root.x[0]), startPoint=Object($root.c[0], delay=2, history=[{{.+}}])}}
+hw.module private @mux_inv_basic(in %a : i1, in %b : i1, in %c : i1, out x : i1) {
+  %m = synth.mux_inv %a, not %b, %c : i1
+  hw.output %m : i1
+}
+

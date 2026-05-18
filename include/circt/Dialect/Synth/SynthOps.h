@@ -156,6 +156,11 @@ T evaluateOneHotLogic(const T &a, const T &b, const T &c) {
   return (a ^ b ^ c) & invertBooleanLogic(allSet);
 }
 
+template <typename T>
+T evaluateMuxLogic(const T &a, const T &b, const T &c) {
+  return (a & b) | (invertBooleanLogic(a) & c);
+}
+
 } // namespace synth
 } // namespace circt
 
