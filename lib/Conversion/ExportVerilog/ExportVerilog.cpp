@@ -245,7 +245,7 @@ static StringRef getInputPortVerilogName(Operation *module, size_t portArgNum) {
 /// MemoryEffects should be checked if a client cares.
 bool ExportVerilog::isVerilogExpression(Operation *op) {
   // These are SV dialect expressions.
-  if (isa<ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
+  if (isa<HiZRead, ReadInOutOp, AggregateConstantOp, ArrayIndexInOutOp,
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
           ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp, SFormatFOp,
           SystemFunctionOp, STimeOp, TimeOp, UnpackedArrayCreateOp,
@@ -2364,6 +2364,7 @@ private:
   SubExprInfo visitTypeOp(AggregateConstantOp op);
   SubExprInfo visitTypeOp(BitcastOp op);
   SubExprInfo visitTypeOp(ParamValueOp op);
+  SubExprInfo visitTypeOp(HiZRead op);
   SubExprInfo visitTypeOp(ArraySliceOp op);
   SubExprInfo visitTypeOp(ArrayGetOp op);
   SubExprInfo visitTypeOp(ArrayCreateOp op);
@@ -2730,6 +2731,10 @@ SubExprInfo ExprEmitter::visitTypeOp(BitcastOp op) {
         [&](auto &os) { emitter.emitTypeDims(toType, op.getLoc(), os); });
     ps << ")*/";
   }
+  return emitSubExpr(op.getInput(), LowestPrecedence);
+}
+
+SubExprInfo ExprEmitter::visitTypeOp(HiZRead op) {
   return emitSubExpr(op.getInput(), LowestPrecedence);
 }
 
@@ -4031,6 +4036,7 @@ private:
 
   LogicalResult visitStmt(TypeScopeOp op);
   LogicalResult visitStmt(TypedeclOp op);
+  LogicalResult visitStmt(HiZDrive op);
 
   LogicalResult emitIfDef(Operation *op, MacroIdentAttr cond);
   LogicalResult visitSV(OrderedOutputOp op);
@@ -4246,6 +4252,34 @@ LogicalResult StmtEmitter::visitSV(ReleaseOp op) {
     emitExpression(op.getDest(), ops);
     ps << ";";
   });
+  ps.addCallback({op, false});
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitStmt(HiZDrive op) {
+  emitSVAttributes(op);
+
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  ps.addCallback({op, true});
+
+  emitAssignLike(
+      [&]() {
+        emitExpression(op.getInput(), ops, LowestPrecedence,
+                       /*isAssignmentLikeContext=*/true);
+      },
+      [&]() {
+        ps.scopedBox(PP::ibox0, [&]() {
+          emitExpression(op.getCond(), ops, Conditional);
+          ps << " ?" << PP::space;
+          emitExpression(op.getValue(), ops, Conditional);
+          ps << " : 'z";
+        });
+      },
+      PPExtString("="), PPExtString(";"), PPExtString("assign"));
+
   ps.addCallback({op, false});
   emitLocationInfoAndNewLine(ops);
   return success();

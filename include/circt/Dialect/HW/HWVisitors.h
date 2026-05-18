@@ -36,7 +36,7 @@ public:
                        // Union operations
                        UnionCreateOp, UnionExtractOp,
                        // Cast operation
-                       BitcastOp, ParamValueOp,
+                       BitcastOp, ParamValueOp, HiZRead,
                        // Enum operations
                        EnumConstantOp, EnumCmpOp>([&](auto expr) -> ResultType {
           return thisCast->visitTypeOp(expr, args...);
@@ -68,6 +68,7 @@ public:
   HANDLE(AggregateConstantOp, Unhandled);
   HANDLE(BitcastOp, Unhandled);
   HANDLE(ParamValueOp, Unhandled);
+  HANDLE(HiZRead, Unhandled);
   HANDLE(StructCreateOp, Unhandled);
   HANDLE(StructExtractOp, Unhandled);
   HANDLE(StructInjectOp, Unhandled);
@@ -92,7 +93,7 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<OutputOp, InstanceOp, InstanceChoiceOp, TypeScopeOp,
-                       TypedeclOp>([&](auto expr) -> ResultType {
+                       TypedeclOp, HiZDrive>([&](auto expr) -> ResultType {
           return thisCast->visitStmt(expr, args...);
         })
         .Default([&](auto expr) -> ResultType {
@@ -134,6 +135,7 @@ public:
   HANDLE(InstanceChoiceOp, Unhandled);
   HANDLE(TypeScopeOp, Unhandled);
   HANDLE(TypedeclOp, Unhandled);
+  HANDLE(HiZDrive, Unhandled);
 #undef HANDLE
 };
 
