@@ -38,17 +38,19 @@ using namespace hw;
 //===----------------------------------------------------------------------===//
 
 namespace {
-static llvm::SmallDenseMap<unsigned, StringAttr>
-collectDebugNames(Block &block) {
+llvm::SmallDenseMap<unsigned, StringAttr> collectDebugNames(Block &block) {
   llvm::SmallDenseMap<unsigned, StringAttr> debugNames;
-  for (auto varOp : block.getOps<debug::VariableOp>()) {
-    auto name = varOp.getNameAttr();
-    if (name.getValue().empty())
-      continue;
-    auto arg = dyn_cast<BlockArgument>(varOp.getValue());
-    if (!arg || arg.getOwner() != &block)
-      continue;
-    debugNames.try_emplace(arg.getArgNumber(), name);
+  for (auto arg : block.getArguments()) {
+    for (auto *user : arg.getUsers()) {
+      auto varOp = dyn_cast<debug::VariableOp>(user);
+      if (!varOp)
+        continue;
+      auto name = varOp.getNameAttr();
+      if (name.getValue().empty())
+        continue;
+      debugNames.try_emplace(arg.getArgNumber(), name);
+      break;
+    }
   }
   return debugNames;
 }
