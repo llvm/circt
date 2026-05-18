@@ -159,6 +159,20 @@ IF(MSVC)
 
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
+
+    # If we're building a wheel in Debug mode, the DLLs need to be as small as
+    # possible. Set some compilation flags to achieve that.
+    if (WHEEL_BUILD AND CMAKE_BUILD_TYPE STREQUAL "Debug")
+      message(STATUS "Setting additional compilation flags for Debug wheel build.")
+      foreach(config_type
+        CMAKE_EXE_LINKER_FLAGS_DEBUG
+        CMAKE_SHARED_LINKER_FLAGS_DEBUG
+        CMAKE_MODULE_LINKER_FLAGS_DEBUG)
+        string(REPLACE "/INCREMENTAL" "/INCREMENTAL:NO" ${config_type} "${${config_type}}")
+        set(${config_type} "${${config_type}} /DEBUG /OPT:REF /OPT:ICF")
+      endforeach()
+    endif()
+
 ENDIF(MSVC)
 
 if(ESI_STATIC_RUNTIME)
