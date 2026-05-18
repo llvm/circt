@@ -32,6 +32,13 @@ static void dump(DIVariable &variable, raw_indented_ostream &os) {
     os << " of type " << variable.value.getType() << " at "
        << variable.value.getLoc() << "\n";
   }
+  if (variable.enumDefRef.has_value())
+    os << "enumDefRef = " << *variable.enumDefRef << "\n";
+  if (variable.sourceLangType.typeName)
+    os << "sourceLangType.typeName = " << variable.sourceLangType.typeName
+       << "\n";
+  if (variable.sourceLangType.params)
+    os << "sourceLangType.params = " << variable.sourceLangType.params << "\n";
   os.unindent();
 }
 
@@ -53,6 +60,18 @@ static void dump(DIModule &module, raw_indented_ostream &os) {
     os << " for " << module.op->getName() << " at " << module.op->getLoc();
   os << "\n";
   os.indent();
+  if (module.sourceLangType.typeName)
+    os << "sourceLangType.typeName = " << module.sourceLangType.typeName
+       << "\n";
+  if (module.sourceLangType.params)
+    os << "sourceLangType.params = " << module.sourceLangType.params << "\n";
+  for (auto &[id, variants] : module.enumDefinitions) {
+    os << "EnumDef #" << id << " (";
+    llvm::interleaveComma(variants, os, [&](const auto &kv) {
+      os << kv.second << "=" << kv.first;
+    });
+    os << ")\n";
+  }
   for (auto *variable : module.variables)
     dump(*variable, os);
   for (auto *instance : module.instances)

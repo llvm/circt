@@ -12,6 +12,7 @@
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Operation.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 
 namespace circt {
@@ -22,6 +23,23 @@ struct DIVariable;
 namespace detail {
 struct DebugInfoBuilder;
 } // namespace detail
+
+/// Per-module integer identifier for a `dbg.enumdef` op
+using DIEnumDefId = uint32_t;
+
+/// Map from an enum's raw integer value to its variant name
+using DIEnumValMap = llvm::MapVector<int64_t, StringAttr>;
+
+/// Module-scoped table of all enum definitions: id -> variant map
+using DIEnumDefMap = llvm::MapVector<DIEnumDefId, DIEnumValMap>;
+
+/// Source-language type information lifted off
+/// `dbg.moduleinfo` and `dbg.variable` ops
+struct DISourceLang {
+  // Fields are null when absent; check before use.
+  StringAttr typeName;
+  ArrayAttr params;
+};
 
 struct DIModule {
   /// The operation that generated this level of hierarchy.
@@ -36,6 +54,16 @@ struct DIModule {
   bool isExtern = false;
   /// If this is an inline scope created by a `dbg.scope` operation.
   bool isInline = false;
+
+  /// Source-language type, from `dbg.moduleinfo`.
+  DISourceLang sourceLangType;
+
+  /// Enum defs declared inside this module (not inherited from parent scopes)
+  DIEnumDefMap enumDefinitions;
+
+  /// Maps each `dbg.enumdef` op to its id in `enumDefinitions`. Duplicates
+  /// (same enumTypeName + fqn + variants) share the first-seen id.
+  llvm::DenseMap<mlir::Operation *, DIEnumDefId> enumDefIds;
 };
 
 struct DIInstance {
@@ -54,6 +82,16 @@ struct DIVariable {
   LocationAttr loc;
   /// The SSA value representing the value of this variable.
   Value value = nullptr;
+  /// Enum definition for scalar-typed variables; null for aggregate
+  mlir::Value enumDef = nullptr;
+
+  /// Source-language type, from `dbg.variable` attributes.
+  DISourceLang sourceLangType;
+
+  /// Per-module integer id for `enumDef`. nullopt when `enumDef` is null, when
+  /// its defining op is not a `dbg.enumdef`, or when that op was not registered
+  /// in the enclosing module's `enumDefIds` (e.g. it lives in another module).
+  std::optional<DIEnumDefId> enumDefRef = std::nullopt;
 };
 
 /// Debug information attached to an operation and the operations nested within.
