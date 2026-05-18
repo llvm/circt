@@ -17,8 +17,24 @@
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/Debug/DebugTypes.h"
 
+#include <tuple>
+
 // Operation definitions generated from `Debug.td`
 #define GET_OP_CLASSES
 #include "circt/Dialect/Debug/Debug.h.inc"
+
+namespace circt {
+namespace debug {
+
+/// Content-identity key for a `dbg.enumdef`: (enumTypeName, fqn, variantsMap)
+using EnumDefContentKey =
+    std::tuple<mlir::StringAttr, mlir::StringAttr, mlir::DictionaryAttr>;
+
+inline EnumDefContentKey getEnumDefContentKey(EnumDefOp op) {
+  return {op.getEnumTypeNameAttr(), op.getFqnAttr(), op.getVariantsMapAttr()};
+}
+
+} // namespace debug
+} // namespace circt
 
 #endif // CIRCT_DIALECT_DEBUG_DEBUGOPS_H
