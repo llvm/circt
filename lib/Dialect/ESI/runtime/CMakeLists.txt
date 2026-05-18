@@ -161,9 +161,9 @@ IF(MSVC)
     set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS 1)
 
     # If we're building a wheel in Debug mode, the DLLs need to be as small as
-    # possible. Set some compilation flags to achieve that.
+    # possible. Set some linker flags to achieve that.
     if (WHEEL_BUILD AND CMAKE_BUILD_TYPE STREQUAL "Debug")
-      message(STATUS "Setting additional compilation flags for Debug wheel build.")
+      message(STATUS "Setting additional linker flags for Debug wheel build.")
       foreach(config_type
         CMAKE_EXE_LINKER_FLAGS_DEBUG
         CMAKE_SHARED_LINKER_FLAGS_DEBUG
