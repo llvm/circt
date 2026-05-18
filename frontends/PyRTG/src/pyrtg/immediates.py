@@ -9,6 +9,7 @@ from .core import Value, Type
 from .base import ir
 from .integers import Integer
 from .strings import String
+from .arith import arith
 
 from typing import Union
 
@@ -128,6 +129,146 @@ class Immediate(Value):
     """
 
     return rtg.ImmediateFormatOp(self)
+
+  def __add__(self, other: Immediate) -> Immediate:
+    return arith.AddIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __sub__(self, other: Immediate) -> Immediate:
+    return arith.SubIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __mul__(self, other: Immediate) -> Immediate:
+    return arith.MulIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __lshift__(self, other: Immediate) -> Immediate:
+    return arith.ShLIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __rshift__(self, other: Immediate) -> Immediate:
+    return arith.ShRUIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __and__(self, other: Immediate) -> Immediate:
+    return arith.AndIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __or__(self, other: Immediate) -> Immediate:
+    return arith.OrIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def __xor__(self, other: Immediate) -> Immediate:
+    return arith.XOrIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def eq(self, other: Immediate) -> Value:
+    """
+    Equality comparison.
+    """
+    return arith.CmpIOp("eq", self._get_ssa_value(), other._get_ssa_value())
+
+  def ne(self, other: Immediate) -> Value:
+    """
+    Inequality comparison.
+    """
+    return arith.CmpIOp("ne", self._get_ssa_value(), other._get_ssa_value())
+
+  def ult(self, other: Immediate) -> Value:
+    """
+    Unsigned less than comparison.
+    """
+    return arith.CmpIOp("ult", self._get_ssa_value(), other._get_ssa_value())
+
+  def ule(self, other: Immediate) -> Value:
+    """
+    Unsigned less than or equal comparison.
+    """
+    return arith.CmpIOp("ule", self._get_ssa_value(), other._get_ssa_value())
+
+  def ugt(self, other: Immediate) -> Value:
+    """
+    Unsigned greater than comparison.
+    """
+    return arith.CmpIOp("ugt", self._get_ssa_value(), other._get_ssa_value())
+
+  def uge(self, other: Immediate) -> Value:
+    """
+    Unsigned greater than or equal comparison.
+    """
+    return arith.CmpIOp("uge", self._get_ssa_value(), other._get_ssa_value())
+
+  def slt(self, other: Immediate) -> Value:
+    """
+    Signed less than comparison.
+    """
+    return arith.CmpIOp("slt", self._get_ssa_value(), other._get_ssa_value())
+
+  def sle(self, other: Immediate) -> Value:
+    """
+    Signed less than or equal comparison.
+    """
+    return arith.CmpIOp("sle", self._get_ssa_value(), other._get_ssa_value())
+
+  def sgt(self, other: Immediate) -> Value:
+    """
+    Signed greater than comparison.
+    """
+    return arith.CmpIOp("sgt", self._get_ssa_value(), other._get_ssa_value())
+
+  def sge(self, other: Immediate) -> Value:
+    """
+    Signed greater than or equal comparison.
+    """
+    return arith.CmpIOp("sge", self._get_ssa_value(), other._get_ssa_value())
+
+  def umax(self, other: Immediate) -> Immediate:
+    """
+    Unsigned maximum of this immediate and another.
+    """
+    return arith.MaxUIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def umin(self, other: Immediate) -> Immediate:
+    """
+    Unsigned minimum of this immediate and another.
+    """
+    return arith.MinUIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def smax(self, other: Immediate) -> Immediate:
+    """
+    Signed maximum of this immediate and another.
+    """
+    return arith.MaxSIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def smin(self, other: Immediate) -> Immediate:
+    """
+    Signed minimum of this immediate and another.
+    """
+    return arith.MinSIOp(self._get_ssa_value(), other._get_ssa_value())
+
+  def zext(self, target_width: int) -> Immediate:
+    """
+    Zero extension (unsigned extension) to a wider bit width.
+    The top-most bits are filled with zeros.
+    """
+    if target_width < self._width:
+      raise ValueError(
+          f"Zero extension target width ({target_width}) must be >= "
+          f"current width ({self._width})")
+
+    if target_width == self._width:
+      return self
+
+    return arith.ExtUIOp(ir.IntegerType.get_signless(target_width),
+                         self._get_ssa_value())
+
+  def sext(self, target_width: int) -> Immediate:
+    """
+    Sign extension to a wider bit width.
+    The top-most bits are filled with copies of the most significant bit.
+    """
+    if target_width < self._width:
+      raise ValueError(
+          f"Sign extension target width ({target_width}) must be >= "
+          f"current width ({self._width})")
+
+    if target_width == self._width:
+      return self
+
+    return arith.ExtSIOp(ir.IntegerType.get_signless(target_width),
+                         self._get_ssa_value())
 
   def __repr__(self) -> str:
     return f"Immediate<{self._width}, {self._value}>"

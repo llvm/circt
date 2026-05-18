@@ -136,39 +136,3 @@ class IntegerType(Type):
 
   def _codegen(self) -> ir.Type:
     return ir.IndexType.get()
-
-
-class Bool(Value):
-  """
-  This represents a boolean value. It is used to provide boolean parameter
-  values to meta-level constructs. These booleans will be fully constant folded
-  away during randomization.
-  """
-
-  def __init__(self, value: Union[ir.Value, bool]) -> Bool:
-    """
-    Use this constructor to create a Bool from a builtin Python bool.
-    """
-
-    self._value = value
-
-  def get_type(self) -> Type:
-    return BoolType()
-
-  def _get_ssa_value(self) -> ir.Value:
-    if isinstance(self._value, bool):
-      self = index.BoolConstantOp(self._value)
-
-    return self._value
-
-
-class BoolType(Type):
-  """
-  Represents the type of boolean values.
-  """
-
-  def __eq__(self, other) -> bool:
-    return isinstance(other, BoolType)
-
-  def _codegen(self) -> ir.Type:
-    return ir.IntegerType.get_signless(1)

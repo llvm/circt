@@ -1002,6 +1002,20 @@ OpFoldResult IntFormatOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// BoolFormatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult BoolFormatOp::fold(FoldAdaptor adaptor) {
+  auto intAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getValue());
+  if (!intAttr)
+    return {};
+  if (intAttr.getValue().getBitWidth() != 1)
+    return {};
+  return StringAttr::get(intAttr.getValue().isZero() ? "false" : "true",
+                         StringType::get(getContext()));
+}
+
+//===----------------------------------------------------------------------===//
 // ImmediateFormatOp
 //===----------------------------------------------------------------------===//
 

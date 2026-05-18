@@ -4,6 +4,7 @@
 
 from . import tests
 from . import core
+from .booleans import Bool, BoolType
 from .core import Value, Type
 from .tests import test, embed_comment, report_success, report_failure
 from .labels import Label, LabelType
@@ -11,9 +12,10 @@ from .rtg import rtg
 from .rtgtest import rtgtest
 from .scf import scf
 from .index import index
+from .arith import arith
 from .sets import Set, SetType
 from .strings import String, StringType
-from .integers import Integer, IntegerType, Bool, BoolType
+from .integers import Integer, IntegerType
 from .bags import Bag, BagType
 from .sequences import sequence, Sequence, SequenceType, RandomizedSequence, RandomizedSequenceType
 from .configs import config, Param, PythonParam, Config

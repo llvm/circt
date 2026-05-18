@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from .integers import Bool, Integer
+from .booleans import Bool
+from .integers import Integer
 from .arrays import Array
 from .core import Value
 from .base import ir

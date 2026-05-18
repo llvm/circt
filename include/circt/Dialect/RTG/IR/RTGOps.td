@@ -212,6 +212,17 @@ def IntFormatOp : RTGOp<"int_format", [Pure]> {
   let hasFolder = 1;
 }
 
+def BoolFormatOp : RTGOp<"bool_format", [Pure]> {
+  let summary = "format a boolean as a string";
+
+  let arguments = (ins I1:$value);
+  let results = (outs StringType:$result);
+
+  let assemblyFormat = "$value attr-dict";
+
+  let hasFolder = 1;
+}
+
 def ImmediateFormatOp : RTGOp<"immediate_format", [Pure]> {
   let summary = "convert an immediate to a string";
   let description = [{

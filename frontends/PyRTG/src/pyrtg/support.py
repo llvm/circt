@@ -38,7 +38,7 @@ def _FromCirctValue(value: ir.Value) -> Value:
     return Integer(value)
   if isinstance(type, ir.IntegerType):
     if type.width == 1:
-      from .integers import Bool
+      from .booleans import Bool
       return Bool(value)
     else:
       from .immediates import Immediate
@@ -83,7 +83,7 @@ def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
     return SetType(_FromCirctType(type.element_type))
   if isinstance(type, ir.IntegerType) and type.is_signless:
     if type.width == 1:
-      from .integers import BoolType
+      from .booleans import BoolType
       return BoolType()
     else:
       from .immediates import ImmediateType
