@@ -129,8 +129,7 @@ struct InstBodyVisitor
   DenseSet<StringAttr> &sameHierPaths;
 
   static void traverseInstanceBody(
-      Context& context,
-      const slang::ast::InstanceSymbol &symbol,
+      Context &context, const slang::ast::InstanceSymbol &symbol,
       DenseSet<StringAttr> &sameHierPaths,
       DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies) {
     const slang::ast::InstanceBodySymbol *body = getCanonicalBody(symbol);
