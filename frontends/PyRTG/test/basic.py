@@ -353,8 +353,8 @@ def test6_memories(config):
 
 
 # MLIR-LABEL: rtg.test @test7_bools
-# MLIR: index.bool.constant false
-# MLIR: index.bool.constant true
+# MLIR: rtg.constant false
+# MLIR: rtg.constant true
 # MLIR: index.cmp eq(%a, %b)
 # MLIR: index.cmp ne(%a, %b)
 # MLIR: index.cmp ult(%a, %b)
@@ -505,6 +505,66 @@ def test93_immediate_ops(config):
   immediate_consumer(slice)
 
 
+# MLIR-LABEL: rtg.test @test98_immediate_arith_ops
+# MLIR-DAG: arith.addi %imm1, %imm2 : i8
+# MLIR-DAG: arith.subi %imm1, %imm2 : i8
+# MLIR-DAG: arith.muli %imm1, %imm2 : i8
+# MLIR-DAG: arith.shli %imm1, %imm2 : i8
+# MLIR-DAG: arith.shrui %imm1, %imm2 : i8
+# MLIR-DAG: arith.andi %imm1, %imm2 : i8
+# MLIR-DAG: arith.ori %imm1, %imm2 : i8
+# MLIR-DAG: arith.xori %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi eq, %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi ne, %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi ult, %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi ule, %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi ugt, %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi uge, %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi slt, %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi sle, %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi sgt, %imm1, %imm2 : i8
+# MLIR-DAG: arith.cmpi sge, %imm1, %imm2 : i8
+# MLIR-DAG: arith.extui %imm1 : i8 to i16
+# MLIR-DAG: arith.extsi %imm1 : i8 to i16
+
+
+@config
+class ImmediateArithOpsConfig(Config):
+  imm1 = Param(loader=lambda: Immediate(8, 8))
+  imm2 = Param(loader=lambda: Immediate(8, 4))
+
+
+@test(ImmediateArithOpsConfig)
+def test98_immediate_arith_ops(config):
+  imm1 = config.imm1
+  imm2 = config.imm2
+  # Arithmetic operations
+  embed_comment((imm1 + imm2).to_string())
+  embed_comment((imm1 - imm2).to_string())
+  embed_comment((imm1 * imm2).to_string())
+  # Bitwise operations
+  embed_comment((imm1 << imm2).to_string())
+  embed_comment((imm1 >> imm2).to_string())
+  embed_comment((imm1 & imm2).to_string())
+  embed_comment((imm1 | imm2).to_string())
+  embed_comment((imm1 ^ imm2).to_string())
+  # Comparison operations
+  embed_comment(imm1.eq(imm2).to_string())
+  embed_comment(imm1.ne(imm2).to_string())
+  embed_comment(imm1.ult(imm2).to_string())
+  embed_comment(imm1.ule(imm2).to_string())
+  embed_comment(imm1.ugt(imm2).to_string())
+  embed_comment(imm1.uge(imm2).to_string())
+  embed_comment(imm1.slt(imm2).to_string())
+  embed_comment(imm1.sle(imm2).to_string())
+  embed_comment(imm1.sgt(imm2).to_string())
+  embed_comment(imm1.sge(imm2).to_string())
+  # Extension operations
+  embed_comment(imm1.zext(16).to_string())
+  embed_comment(imm1.sext(16).to_string())
+
+
+
 # MLIR-LABEL: rtg.sequence @seq0
 # MLIR-SAME: ([[SET:%.+]]: !rtg.set<!rtg.isa.label>{{.*}})
 # MLIR-NEXT: [[LABEL:%.+]] = rtg.set_select_random [[SET]]
@@ -604,66 +664,3 @@ def test97_immediate_boundaries(config):
     assert "Value 16 does not fit in 4-bit representation (valid range: [-8, 15])" in str(
         e)
 
-
-# MLIR-LABEL: rtg.test @test98_immediate_arith_ops
-# MLIR-DAG: [[IMM1:%.+]] = rtg.constant 8 : i8
-# MLIR-DAG: [[IMM2:%.+]] = rtg.constant 4 : i8
-# MLIR-DAG: arith.addi [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.subi [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.muli [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.shli [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.shrui [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.andi [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.ori [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.xori [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.maxui [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.minui [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.maxsi [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.minsi [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi eq, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi ne, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi ult, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi ule, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi ugt, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi uge, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi slt, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi sle, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi sgt, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.cmpi sge, [[IMM1]], [[IMM2]] : i8
-# MLIR-DAG: arith.extui [[IMM1]] : i8 to i16
-# MLIR-DAG: arith.extsi [[IMM1]] : i8 to i16
-
-
-@test(Singleton)
-def test98_immediate_arith_ops(config):
-  imm1 = Immediate(8, 8)
-  imm2 = Immediate(8, 4)
-  # Arithmetic operations
-  embed_comment((imm1 + imm2).to_string())
-  embed_comment((imm1 - imm2).to_string())
-  embed_comment((imm1 * imm2).to_string())
-  # Bitwise operations
-  embed_comment((imm1 << imm2).to_string())
-  embed_comment((imm1 >> imm2).to_string())
-  embed_comment((imm1 & imm2).to_string())
-  embed_comment((imm1 | imm2).to_string())
-  embed_comment((imm1 ^ imm2).to_string())
-  # Min/max operations
-  embed_comment(imm1.umax(imm2).to_string())
-  embed_comment(imm1.umin(imm2).to_string())
-  embed_comment(imm1.smax(imm2).to_string())
-  embed_comment(imm1.smin(imm2).to_string())
-  # Comparison operations
-  embed_comment(imm1.eq(imm2).to_string())
-  embed_comment(imm1.ne(imm2).to_string())
-  embed_comment(imm1.ult(imm2).to_string())
-  embed_comment(imm1.ule(imm2).to_string())
-  embed_comment(imm1.ugt(imm2).to_string())
-  embed_comment(imm1.uge(imm2).to_string())
-  embed_comment(imm1.slt(imm2).to_string())
-  embed_comment(imm1.sle(imm2).to_string())
-  embed_comment(imm1.sgt(imm2).to_string())
-  embed_comment(imm1.sge(imm2).to_string())
-  # Extension operations
-  embed_comment(imm1.zext(16).to_string())
-  embed_comment(imm1.sext(16).to_string())

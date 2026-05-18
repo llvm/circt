@@ -25,7 +25,11 @@ class Bool(Immediate):
     Use this constructor to create a Bool from a builtin Python bool.
     """
 
-    super().__init__(1, value)
+    if isinstance(value, bool):
+      value = 1 if value else 0
+
+    self._value = value
+    self._width = 1
 
   def to_string(self) -> String:
     """
@@ -37,20 +41,14 @@ class Bool(Immediate):
   def get_type(self) -> Type:
     return BoolType()
 
-  def _get_ssa_value(self) -> ir.Value:
-    if isinstance(self._value, bool):
-      self = rtg.ConstantOp(ir.BoolAttr.get(self._value))
-
-    return self._value
-
 
 class BoolType(ImmediateType):
   """
   Represents the type of boolean values.
   """
 
+  def __init__(self):
+    self.width = 1
+
   def __eq__(self, other) -> bool:
     return isinstance(other, BoolType)
-
-  def _codegen(self) -> ir.Type:
-    return ir.IntegerType.get_signless(1)

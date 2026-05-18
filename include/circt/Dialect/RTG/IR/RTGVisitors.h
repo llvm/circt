@@ -63,7 +63,7 @@ public:
             // Data segment ops
             SpaceOp, StringDataOp, SegmentOp,
             // String ops
-            StringConcatOp, IntFormatOp, ImmediateFormatOp, RegisterFormatOp,
+            StringConcatOp, IntFormatOp, BoolFormatOp, ImmediateFormatOp, RegisterFormatOp,
             // Misc ops
             CommentOp, ConstraintOp, RandomScopeOp>(
             [&](auto expr) -> ResultType {
@@ -153,6 +153,7 @@ public:
   HANDLE(SegmentOp, Unhandled);
   HANDLE(StringConcatOp, Unhandled);
   HANDLE(IntFormatOp, Unhandled);
+  HANDLE(BoolFormatOp, Unhandled);
   HANDLE(ImmediateFormatOp, Unhandled);
   HANDLE(RegisterFormatOp, Unhandled);
   HANDLE(StringToLabelOp, Unhandled);

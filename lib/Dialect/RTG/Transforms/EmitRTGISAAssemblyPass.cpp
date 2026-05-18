@@ -231,12 +231,33 @@ void EmitRTGISAAssemblyPass::runOnOperation() {
   parseUnsupportedInstructionsFile(
       &getContext(), unsupportedInstructionsFile.getValue(), unsupportedInstr);
 
+  // Determine the output file path
+  auto emitFileAttr = getOperation().getFileName();
+  StringRef finalPath;
+  std::string computedPath;
+
+  if (!outputPath.getValue().empty()) {
+    // If outputPath is provided, use it
+    if (emitFileAttr.empty() || emitFileAttr == "-") {
+      // Single file output: use outputPath as-is
+      finalPath = outputPath.getValue();
+    } else {
+      // Split output: treat emitFileAttr as relative path from outputPath
+      llvm::SmallString<128> combined(outputPath.getValue());
+      appendPossiblyAbsolutePath(combined, emitFileAttr);
+      computedPath = combined.str().str();
+      finalPath = computedPath;
+    }
+  } else {
+    // No outputPath: use the emit.file attribute as before
+    finalPath = emitFileAttr;
+  }
+
   // Create the output file
-  auto filename = getOperation().getFileName();
   std::unique_ptr<llvm::ToolOutputFile> file;
-  bool emitToFile = !filename.empty() && filename != "-";
+  bool emitToFile = !finalPath.empty() && finalPath != "-";
   if (emitToFile) {
-    file = createOutputFile(filename, std::string(),
+    file = createOutputFile(finalPath, std::string(),
                             [&]() { return getOperation().emitError(); });
     if (!file)
       return signalPassFailure();
@@ -244,8 +265,9 @@ void EmitRTGISAAssemblyPass::runOnOperation() {
     file->keep();
   }
 
-  Emitter emitter(emitToFile ? file->os()
-                             : (filename.empty() ? llvm::errs() : llvm::outs()),
+  Emitter emitter(emitToFile
+                      ? file->os()
+                      : (finalPath.empty() ? llvm::errs() : llvm::outs()),
                   unsupportedInstr);
   if (failed(emitter.emitFile(getOperation())))
     return signalPassFailure();

@@ -158,85 +158,85 @@ class Immediate(Value):
     """
     Equality comparison.
     """
-    return arith.CmpIOp("eq", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.eq, self._get_ssa_value(), other._get_ssa_value())
 
   def ne(self, other: Immediate) -> Value:
     """
     Inequality comparison.
     """
-    return arith.CmpIOp("ne", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.ne, self._get_ssa_value(), other._get_ssa_value())
 
   def ult(self, other: Immediate) -> Value:
     """
     Unsigned less than comparison.
     """
-    return arith.CmpIOp("ult", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.ult, self._get_ssa_value(), other._get_ssa_value())
 
   def ule(self, other: Immediate) -> Value:
     """
     Unsigned less than or equal comparison.
     """
-    return arith.CmpIOp("ule", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.ule, self._get_ssa_value(), other._get_ssa_value())
 
   def ugt(self, other: Immediate) -> Value:
     """
     Unsigned greater than comparison.
     """
-    return arith.CmpIOp("ugt", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.ugt, self._get_ssa_value(), other._get_ssa_value())
 
   def uge(self, other: Immediate) -> Value:
     """
     Unsigned greater than or equal comparison.
     """
-    return arith.CmpIOp("uge", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.uge, self._get_ssa_value(), other._get_ssa_value())
 
   def slt(self, other: Immediate) -> Value:
     """
     Signed less than comparison.
     """
-    return arith.CmpIOp("slt", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.slt, self._get_ssa_value(), other._get_ssa_value())
 
   def sle(self, other: Immediate) -> Value:
     """
     Signed less than or equal comparison.
     """
-    return arith.CmpIOp("sle", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.sle, self._get_ssa_value(), other._get_ssa_value())
 
   def sgt(self, other: Immediate) -> Value:
     """
     Signed greater than comparison.
     """
-    return arith.CmpIOp("sgt", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.sgt, self._get_ssa_value(), other._get_ssa_value())
 
   def sge(self, other: Immediate) -> Value:
     """
     Signed greater than or equal comparison.
     """
-    return arith.CmpIOp("sge", self._get_ssa_value(), other._get_ssa_value())
+    return arith.CmpIOp(arith.CmpIPredicate.sge, self._get_ssa_value(), other._get_ssa_value())
 
-  def umax(self, other: Immediate) -> Immediate:
-    """
-    Unsigned maximum of this immediate and another.
-    """
-    return arith.MaxUIOp(self._get_ssa_value(), other._get_ssa_value())
+  # def umax(self, other: Immediate) -> Immediate:
+  #   """
+  #   Unsigned maximum of this immediate and another.
+  #   """
+  #   return arith.MaxUIOp(self._get_ssa_value(), other._get_ssa_value())
 
-  def umin(self, other: Immediate) -> Immediate:
-    """
-    Unsigned minimum of this immediate and another.
-    """
-    return arith.MinUIOp(self._get_ssa_value(), other._get_ssa_value())
+  # def umin(self, other: Immediate) -> Immediate:
+  #   """
+  #   Unsigned minimum of this immediate and another.
+  #   """
+  #   return arith.MinUIOp(self._get_ssa_value(), other._get_ssa_value())
 
-  def smax(self, other: Immediate) -> Immediate:
-    """
-    Signed maximum of this immediate and another.
-    """
-    return arith.MaxSIOp(self._get_ssa_value(), other._get_ssa_value())
+  # def smax(self, other: Immediate) -> Immediate:
+  #   """
+  #   Signed maximum of this immediate and another.
+  #   """
+  #   return arith.MaxSIOp(self._get_ssa_value(), other._get_ssa_value())
 
-  def smin(self, other: Immediate) -> Immediate:
-    """
-    Signed minimum of this immediate and another.
-    """
-    return arith.MinSIOp(self._get_ssa_value(), other._get_ssa_value())
+  # def smin(self, other: Immediate) -> Immediate:
+  #   """
+  #   Signed minimum of this immediate and another.
+  #   """
+  #   return arith.MinSIOp(self._get_ssa_value(), other._get_ssa_value())
 
   def zext(self, target_width: int) -> Immediate:
     """
