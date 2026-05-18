@@ -573,6 +573,11 @@ def test_struct_with_void_field_commented_out():
   ctor_params = ctor_match.group(1)
   assert "client_data" not in ctor_params
   assert "valid" in ctor_params
+  # The generated struct only contains the non-void field, so the size
+  # assertion must not include the void field's wire-format byte. With one
+  # ui8 field the struct must be exactly 1 byte.
+  assert "static_assert(sizeof(_struct_valid_ui8_client_data__esi_void) == 1," \
+      in hdr
 
 
 def test_union_with_void_field_commented_out():
@@ -594,3 +599,81 @@ def test_union_with_void_field_commented_out():
   # The non-void member is still present in the union body.
   union_body = hdr[hdr.index("union "):]
   assert "uint16_t a;" in union_body
+
+
+def test_nested_struct_with_void_field_size_assert():
+  """An outer struct containing an inner struct with a void field must use
+  the inner struct's effective (post-void-elimination) size in its size
+  assertion, not the manifest's wire-format size.
+  """
+  uint8 = types.UIntType("ui8", 8)
+  uint64 = types.UIntType("ui64", 64)
+  void_t = types.VoidType("!esi.void")
+  inner = types.StructType(
+      "!hw.struct<valid: ui8, client_data: void>",
+      [("valid", uint8), ("client_data", void_t)],
+  )
+  outer = types.StructType(
+      "!hw.struct<address: ui64, tag: ui8, "
+      "data: !hw.struct<valid: ui8, client_data: void>>",
+      [("address", uint64), ("tag", uint8), ("data", inner)],
+  )
+
+  hdr = _generate_header([outer])
+  # Inner struct: 1 byte (only the ui8 field).
+  assert "static_assert(sizeof(_struct_valid_ui8_client_data__esi_void) == 1," \
+      in hdr
+  # Outer struct: 8 (address) + 1 (tag) + 1 (inner) == 10 bytes; the manifest
+  # wire-format width would have been 11 if the inner's void byte leaked
+  # through, so the regression fix must pull the inner's effective width.
+  outer_assert = re.search(
+      r"static_assert\(sizeof\(_struct_address_ui64_tag_ui8_data_[^)]+\) == (\d+),",
+      hdr,
+  )
+  assert outer_assert, f"Outer size assertion not found in:\n{hdr}"
+  assert outer_assert.group(1) == "10", \
+      f"Expected outer struct size 10, got {outer_assert.group(1)}"
+
+
+def test_all_void_struct_collapses_to_void():
+  """A struct whose fields are all void collapses to `void` everywhere.
+
+  The all-void inner struct must not be emitted at all, and an outer struct
+  that references it must comment out that field and exclude it from the
+  generated constructor.
+  """
+  uint8 = types.UIntType("ui8", 8)
+  uint64 = types.UIntType("ui64", 64)
+  void_t = types.VoidType("!esi.void")
+  inner = types.StructType(
+      "!hw.struct<a: void, b: void>",
+      [("a", void_t), ("b", void_t)],
+  )
+  outer = types.StructType(
+      "!hw.struct<address: ui64, tag: ui8, "
+      "data: !hw.struct<a: void, b: void>>",
+      [("address", uint64), ("tag", uint8), ("data", inner)],
+  )
+
+  hdr = _generate_header([outer])
+  # The inner all-void struct must not appear as a struct declaration.
+  assert "struct _struct_a__esi_void_b__esi_void" not in hdr
+  # The outer struct's `data` field collapses to a commented-out void.
+  assert "// void data;" in hdr
+  # No uncommented `void <name>;` declaration may appear anywhere.
+  assert re.search(r"^\s*void\s+\w+;", hdr, re.M) is None, hdr
+  # The outer constructor must not take the void-collapsed `data` parameter.
+  outer_ctor = re.search(
+      r"_struct_address_ui64_tag_ui8_data_[^\s(]*\(([^)]*)\) :", hdr)
+  assert outer_ctor, f"Outer constructor not found in:\n{hdr}"
+  assert "data" not in outer_ctor.group(1)
+  # The outer struct's size assert reflects the actual emitted layout
+  # (8 address + 1 tag + 0 data == 9 bytes).
+  outer_assert = re.search(
+      r"static_assert\(sizeof\(_struct_address_ui64_tag_ui8_data_[^)]+\) "
+      r"== (\d+),",
+      hdr,
+  )
+  assert outer_assert, f"Outer size assertion not found in:\n{hdr}"
+  assert outer_assert.group(1) == "9", \
+      f"Expected outer struct size 9, got {outer_assert.group(1)}"

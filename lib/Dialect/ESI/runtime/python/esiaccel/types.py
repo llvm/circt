@@ -75,7 +75,7 @@ class ESIType:
   @property
   def bit_width(self) -> int:
     """Size of this type, in bits. Negative for unbounded types."""
-    assert False, "unimplemented"
+    return self.cpp_type.bit_width
 
   @property
   def max_size(self) -> int:
@@ -112,10 +112,6 @@ class ChannelType(ESIType):
   def _init_from_cpp(self, cpp_type: cpp.ChannelType):
     super()._init_from_cpp(cpp_type)
     self.inner_type = _get_esi_type(cpp_type.inner)
-
-  @property
-  def bit_width(self) -> int:
-    return self.inner_type.bit_width
 
   @property
   def inner(self) -> "ESIType":
@@ -175,18 +171,15 @@ class VoidType(ESIType):
       return (False, f"void type cannot must represented by None, not {obj}")
     return (True, None)
 
-  @property
-  def bit_width(self) -> int:
-    return 8
-
   def serialize(self, obj) -> bytearray:
-    # By convention, void is represented by a single byte of value 0.
-    return bytearray([0])
+    # Void carries no logical data. Transports that require a non-empty
+    # payload are responsible for adding their own placeholder byte.
+    return bytearray()
 
   def deserialize(self, data: bytearray) -> Tuple[object, bytearray]:
-    if len(data) == 0:
-      raise ValueError(f"void type cannot be represented by {data}")
-    return (None, data[1:])
+    # Transports that pad empty messages to one byte strip that byte before
+    # invoking deserialize, so we consume nothing here.
+    return (None, data)
 
 
 __esi_mapping[cpp.VoidType] = VoidType
@@ -199,10 +192,6 @@ class AnyType(ESIType):
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     return (False, "any type is not supported for host communication")
-
-  @property
-  def bit_width(self) -> int:
-    return -1
 
   def serialize(self, obj) -> bytearray:
     raise ValueError("any type cannot be serialized")
@@ -229,10 +218,6 @@ class BitsType(ESIType):
       return (False, f"wrong size: {len(obj)}")
     return (True, None)
 
-  @property
-  def bit_width(self) -> int:
-    return self.cpp_type.width
-
   def serialize(self, obj: Union[bytearray, bytes, List[int]]) -> bytearray:
     if isinstance(obj, bytearray):
       return obj
@@ -251,10 +236,6 @@ class IntType(ESIType):
 
   def __init__(self, id: str, width: int):
     self._init_from_cpp(cpp.IntegerType(id, width))
-
-  @property
-  def bit_width(self) -> int:
-    return self.cpp_type.width
 
 
 class UIntType(IntType):
@@ -326,13 +307,6 @@ class StructType(ESIType):
     # For wrap_cpp path, we need to convert C++ fields back to Python
     self.fields = [(name, _get_esi_type(ty)) for (name, ty) in cpp_type.fields]
 
-  @property
-  def bit_width(self) -> int:
-    widths = [ty.bit_width for (_, ty) in self.fields]
-    if any([w < 0 for w in widths]):
-      return -1
-    return sum(widths)
-
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     fields_count = 0
     if not isinstance(obj, dict):
@@ -386,10 +360,6 @@ class ArrayType(ESIType):
     self.element_type = _get_esi_type(cpp_type.element)
     self.size = cpp_type.size
 
-  @property
-  def bit_width(self) -> int:
-    return self.element_type.bit_width * self.size
-
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, list):
       return (False, f"must be a list, not {type(obj)}")
@@ -431,10 +401,6 @@ class ListType(ESIType):
   @property
   def supports_host(self) -> Tuple[bool, Optional[str]]:
     return (False, "list types require an enclosing window encoding")
-
-  @property
-  def bit_width(self) -> int:
-    return -1
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, list):
@@ -499,10 +465,6 @@ class WindowType(ESIType):
   def supports_host(self) -> Tuple[bool, Optional[str]]:
     return (False, self._HOST_UNSUPPORTED_REASON)
 
-  @property
-  def bit_width(self) -> int:
-    return self.lowered_type.bit_width
-
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     return (False, self._HOST_UNSUPPORTED_REASON)
 
@@ -526,13 +488,6 @@ class UnionType(ESIType):
     """Initialize instance attributes from a C++ type object."""
     super()._init_from_cpp(cpp_type)
     self.fields = [(name, _get_esi_type(ty)) for (name, ty) in cpp_type.fields]
-
-  @property
-  def bit_width(self) -> int:
-    widths = [ty.bit_width for (_, ty) in self.fields]
-    if any([w < 0 for w in widths]):
-      return -1
-    return max(widths) if widths else 0
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if not isinstance(obj, dict):
@@ -591,10 +546,6 @@ class TypeAlias(ESIType):
     super()._init_from_cpp(cpp_type)
     self.name = cpp_type.name
     self.inner_type = _get_esi_type(cpp_type.inner)
-
-  @property
-  def bit_width(self) -> int:
-    return self.inner_type.bit_width
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     return self.inner_type.is_valid(obj)
