@@ -168,7 +168,7 @@ class VoidType(ESIType):
 
   def is_valid(self, obj) -> Tuple[bool, Optional[str]]:
     if obj is not None:
-      return (False, f"void type cannot must represented by None, not {obj}")
+      return (False, f"void type must be represented by None, not {obj}")
     return (True, None)
 
   def serialize(self, obj) -> bytearray:

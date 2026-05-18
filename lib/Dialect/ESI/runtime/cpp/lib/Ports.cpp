@@ -292,6 +292,9 @@ void ChannelPort::TranslationInfo::precomputeFrameInfo() {
         throw std::runtime_error(
             "Cannot translate list with dynamically-sized element type: " +
             name);
+      if (elemBits == 0)
+        throw std::runtime_error(
+            "Cannot translate list with zero-width element type: " + name);
       if (elemBits % 8 != 0)
         throw std::runtime_error(
             "Cannot translate list element with non-byte-aligned size: " +

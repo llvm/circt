@@ -212,9 +212,10 @@ public:
   /// byte, so void / zero-width port types are reported as 1 byte here; the
   /// transport pads or strips that placeholder byte transparently.
   size_t getFrameSizeBytes() const {
-    if (translationInfo)
-      return translationInfo->frameBytes;
-    return std::max<size_t>(1, utils::bitsToBytes(type->getBitWidth()));
+    size_t bytes = translationInfo
+                       ? translationInfo->frameBytes
+                       : utils::bitsToBytes(type->getBitWidth());
+    return std::max<size_t>(1, bytes);
   }
   const Type *getType() const { return type; }
 
