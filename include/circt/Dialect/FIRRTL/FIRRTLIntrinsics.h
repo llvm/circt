@@ -184,6 +184,20 @@ struct GenericIntrinsic {
   }
 };
 
+/// Side-channel list of `circt_debug_subfield` leaves staged by
+/// `liftDebugIntrinsics`. See its doc for the dictionary schema.
+using DebugLeafList = llvm::SmallVector<mlir::DictionaryAttr>;
+
+/// Per-invocation context for `IntrinsicLowerings::lower`. Non-owning;
+/// pointers may be null when no debug staging is needed.
+struct IntrinsicConvertContext {
+  const DebugLeafList *debugLeaves = nullptr;
+  const llvm::StringMap<mlir::Value> *enumDefByFqn = nullptr;
+  /// Accumulator for emitted `dbg.variable` names; a failed insert means a
+  /// duplicate was seen and triggers a warning. Null disables the check.
+  llvm::StringSet<> *existingVariableNames = nullptr;
+};
+
 /// Base class for Intrinsic Converters.
 ///
 /// Intrinsic converters contain validation logic, along with a converter
@@ -207,10 +221,24 @@ public:
   }
 
   /// Transform the intrinsic to its implementation.
+  /// Override this for context-free conversions. Converters that need
+  /// per-invocation state (e.g. debug leaf metadata) should override
+  /// `convertWithContext` instead.
   virtual void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
                        PatternRewriter &rewriter) {
-    llvm::report_fatal_error(
-        "convert() or checkAndConvert() must be implemented");
+    llvm::report_fatal_error("convert(), convertWithContext(), or "
+                             "checkAndConvert() must be implemented");
+  }
+
+  /// Transform the intrinsic to its implementation, with access to the
+  /// per-invocation lowering context. Default delegates to the context-free
+  /// `convert`. Only override this when the converter needs to read
+  /// per-module staging data (e.g. `CirctDebugVarConverter`).
+  virtual void convertWithContext(GenericIntrinsic gi,
+                                  GenericIntrinsicOpAdaptor adaptor,
+                                  PatternRewriter &rewriter,
+                                  IntrinsicConvertContext ctx) {
+    convert(gi, adaptor, rewriter);
   }
 
   /// Perform both check and convert, defaults to using check() and convert().
@@ -220,10 +248,11 @@ public:
   /// recomputing work done during check needed for the conversion.
   virtual LogicalResult checkAndConvert(GenericIntrinsic gi,
                                         GenericIntrinsicOpAdaptor adaptor,
-                                        PatternRewriter &rewriter) {
+                                        PatternRewriter &rewriter,
+                                        IntrinsicConvertContext ctx) {
     if (check(gi))
       return failure();
-    convert(gi, adaptor, rewriter);
+    convertWithContext(gi, adaptor, rewriter, ctx);
     return success();
   };
 };
@@ -263,8 +292,23 @@ public:
     (addConverter<T>(args), ...);
   }
 
+  /// Registers a converter with constructor arguments.
+  template <typename T, typename... Args>
+  void addConverter(StringRef name, Args &&...args) {
+    auto nameAttr = StringAttr::get(context, name);
+    assert(!conversions.contains(nameAttr) &&
+           "duplicate conversion for intrinsic");
+    conversions.try_emplace(nameAttr,
+                            std::make_unique<T>(std::forward<Args>(args)...));
+  }
+
   /// Lowers all intrinsics in a module.  Returns number converted or failure.
-  FailureOr<size_t> lower(FModuleOp mod, bool allowUnknownIntrinsics = false);
+  /// The optional `ctx` provides per-invocation staging data (e.g. debug
+  /// leaf metadata produced by `liftDebugIntrinsics`). It MUST live on the
+  /// caller's stack for the duration of this call; storing it on the shared
+  /// `IntrinsicLowerings` object would race across parallel pass invocations.
+  FailureOr<size_t> lower(FModuleOp mod, bool allowUnknownIntrinsics = false,
+                          IntrinsicConvertContext ctx = {});
 
 private:
   template <typename T>
@@ -300,6 +344,30 @@ struct FIRRTLIntrinsicLoweringDialectInterface
   using IntrinsicLoweringDialectInterface::IntrinsicLoweringDialectInterface;
   void populateIntrinsicLowerings(IntrinsicLowerings &lowerings) const override;
 };
+
+/// Pre-pass: in a single module walk, lift `circt_debug_enumdef` intrinsics
+/// into module-level `dbg.enumdef` ops (deduplicated by fqn; on fqn collision
+/// with mismatched variants the first wins with a warning) and collect
+/// `circt_debug_subfield` intrinsics into `outLeaves`. Both kinds of
+/// intrinsic are erased. Must run before `IntrinsicLowerings::lower`; the
+/// caller passes `outLeaves` and `outEnumDefByFqn` through
+/// `IntrinsicConvertContext`. Returns failure on malformed intrinsics.
+///
+/// Frontend contract for `circt_debug_subfield`:
+///   - `parent` (mandatory) is the enclosing var's `name` and is the sole
+///     var<->leaf linkage key. Do not derive it from `name`.
+///   - `name` is the full dotted/indexed display path (e.g. `"io.state"`,
+///     `"v[0].x"`); used for display and path-matching, NOT for linkage.
+///
+/// Each entry in `outLeaves` is a `DictionaryAttr` with keys:
+///   - `parent`   : StringAttr -- enclosing var's `name`, the linkage key.
+///   - `name`     : StringAttr -- dotted/indexed path under `parent`.
+///   - `typeName` : StringAttr (optional) -- source-language type name.
+///   - `params`   : ArrayAttr  (optional) -- parsed JSON parameter list.
+///   - `enumFqn`  : StringAttr (optional) -- FQN of an enumdef to bind.
+LogicalResult
+liftDebugIntrinsics(FModuleOp mod, OpBuilder &builder, DebugLeafList &outLeaves,
+                    llvm::StringMap<mlir::Value> &outEnumDefByFqn);
 
 } // namespace firrtl
 } // namespace circt
