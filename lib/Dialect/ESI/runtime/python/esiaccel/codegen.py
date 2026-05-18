@@ -666,12 +666,12 @@ class CppGenerator(Generator):
       except (NotImplementedError, ValueError) as e:
         sys.stderr.write(f"Warning: skipping module '{name}': {e}\n")
         hdr_file = output_dir / f"{name}.h"
-        with open(hdr_file, "w") as hdr:
+        with open(hdr_file, "w", encoding="utf-8") as hdr:
           hdr.write(f"// Skipped: {e}\n")
         continue
 
       hdr_file = output_dir / f"{name}.h"
-      with open(hdr_file, "w") as hdr:
+      with open(hdr_file, "w", encoding="utf-8") as hdr:
         self._emit_module_class(name, system_name, module_info, port_groups,
                                 hdr)
 
@@ -1607,7 +1607,7 @@ class CppTypeEmitter:
   def write_header(self, output_dir: Path, system_name: str) -> None:
     """Emit the fully ordered types.h header into the output directory."""
     hdr_file = output_dir / "types.h"
-    with open(hdr_file, "w") as hdr:
+    with open(hdr_file, "w", encoding="utf-8") as hdr:
       hdr.write(
           textwrap.dedent(f"""
         // Generated header for {system_name} types.
