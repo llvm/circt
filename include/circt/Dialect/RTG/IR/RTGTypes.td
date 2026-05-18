@@ -221,28 +221,6 @@ def LabelType : RTGISATypeDef<"Label", "label"> {
   let assemblyFormat = "";
 }
 
-def ImmediateType : RTGISATypeDef<"Immediate", "immediate"> {
-  let summary = "an ISA immediate";
-  let description = [{
-    This type represents immediates of arbitrary but fixed bit-width.
-    The RTG dialect provides this type to avoid duplication in ISA payload
-    dialects.
-  }];
-
-  let parameters = (ins "uint32_t":$width);
-  let assemblyFormat = "`<` $width `>`";
-}
-
-class ImmediateOfWidth<int width> : Type<
-  And<[ImmediateType.predicate,
-       CPred<"llvm::cast<::circt::rtg::ImmediateType>($_self).getWidth() == " #
-             width>]>,
-  "a " # width # "-bit immediate">,
-  BuildableType<"::circt::rtg::ImmediateType::get($_builder.getContext(), " #
-                width # ")"> {
-  int immWidth = width;
-}
-
 def MemoryType : RTGISATypeDef<"Memory", "memory"> {
   let summary = "handle to a memory";
   let description = [{
@@ -279,11 +257,11 @@ def MemoryBlockType : RTGISATypeDef<"MemoryBlock", "memory_block"> {
   let assemblyFormat = "`<` $addressWidth `>`";
 }
 
-def ISAMemory : AnyTypeOf<[MemoryType, ImmediateType, LabelType]>;
+def ISAMemory : AnyTypeOf<[MemoryType, AnySignlessInteger, LabelType]>;
 
 class ISAMemoryWithAddressWidth<int width> : AnyTypeOf<[
   MemoryWithAddressWidth<width>,
-  ImmediateOfWidth<width>,
+  I<width>,
   LabelType]>;
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

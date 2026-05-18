@@ -101,6 +101,7 @@ void EmbedValidationValuesPass::runOnOperation() {
     return signalPassFailure();
 
   UnusedOpPruner pruner;
+  auto *rtgDialect = getContext().getOrLoadDialect<rtg::RTGDialect>();
   for (auto op : validateOps) {
     auto value = valueMap[op.getIdAttr()];
     // If the input file did not contain a value for this ID, keep the validate
@@ -109,12 +110,10 @@ void EmbedValidationValuesPass::runOnOperation() {
       continue;
 
     OpBuilder builder(op);
-    auto *constOp = value.getDialect().materializeConstant(
-        builder, value, value.getType(), op.getLoc());
+    auto *constOp =
+        rtgDialect->materializeConstant(builder, value, value.getType(), op.getLoc());
     if (!constOp) {
-      op.emitOpError("materializer of dialect '")
-          << value.getDialect().getNamespace()
-          << "' unable to materialize value for attribute '" << value << "'";
+      op.emitOpError("unable to materialize value for attribute '") << value << "'";
       return signalPassFailure();
     }
 

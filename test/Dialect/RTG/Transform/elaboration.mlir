@@ -5,7 +5,7 @@ func.func @dummy2(%arg0: index) -> () {return}
 func.func @dummy3(%arg0: !rtg.sequence) -> () {return}
 func.func @dummy4(%arg0: index, %arg1: index, %arg2: !rtg.bag<index>, %arg3: !rtg.bag<index>) -> () {return}
 func.func @dummy5(%arg0: i1) -> () {return}
-func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
+func.func @dummy6(%arg0: i2) -> () {return}
 func.func @dummy7(%arg0: !rtg.array<index>) -> () {return}
 func.func @dummy8(%arg0: !rtg.tuple<index, index>) -> () {return}
 func.func @dummy9(%arg0: !rtg.set<!rtg.tuple<index, i1, !rtgtest.ireg>>) -> () {return}
@@ -14,9 +14,9 @@ func.func @dummy11(%arg0: !rtg.set<index>) -> () {return}
 func.func @dummy12(%arg0: !rtg.bag<index>) -> () {return}
 func.func @dummy13(%arg0: !rtg.isa.memory_block<32>) -> () {return}
 func.func @dummy14(%arg0: !rtg.isa.memory<32>) -> () {return}
-func.func @dummy15(%arg0: !rtg.isa.immediate<32>) -> () {return}
-func.func @dummy16(%arg0: !rtg.isa.immediate<12>) -> () {return}
-func.func @dummy17(%arg0: !rtg.isa.immediate<3>) -> () {return}
+func.func @dummy15(%arg0: i32) -> () {return}
+func.func @dummy16(%arg0: i12) -> () {return}
+func.func @dummy17(%arg0: i3) -> () {return}
 func.func @dummy18(%arg0: !rtg.string) -> () {return}
 func.func @dummy_reg(%arg0: !rtgtest.ireg) -> () {return}
 
@@ -27,16 +27,16 @@ rtg.target @singletonTarget : !rtg.dict<singleton: index> {
 
 // CHECK-LABEL: @immediates
 rtg.test @immediates(singleton = %none: index) {
-  // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<2, -1>
-  // CHECK-NEXT: func.call @dummy6([[V0]]) : (!rtg.isa.immediate<2>) -> ()
-  %0 = rtg.constant #rtg.isa.immediate<2, -1>
-  func.call @dummy6(%0) : (!rtg.isa.immediate<2>) -> ()
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant -1 : i2
+  // CHECK-NEXT: func.call @dummy6([[V0]]) : (i2) -> ()
+  %0 = rtg.constant -1 : i2
+  func.call @dummy6(%0) : (i2) -> ()
 
-  // CHECK-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<2, 1>
-  // CHECK-NEXT: func.call @dummy6([[V1]]) : (!rtg.isa.immediate<2>) -> ()
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant 1 : i2
+  // CHECK-NEXT: func.call @dummy6([[V1]]) : (i2) -> ()
   %1 = index.constant 1
-  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<2>
-  func.call @dummy6(%2) : (!rtg.isa.immediate<2>) -> ()
+  %2 = rtg.isa.int_to_immediate %1 : i2
+  func.call @dummy6(%2) : (i2) -> ()
 }
 
 // Test the set operations and passing a sequence to another one via argument
@@ -485,11 +485,11 @@ rtg.test @scfFor(singleton = %none: index) {
 rtg.test @fixedRegisters(singleton = %none: index) {
   // CHECK-NEXT: [[RA:%.+]] = rtg.constant #rtgtest.ra
   // CHECK-NEXT: [[SP:%.+]] = rtg.constant #rtgtest.sp
-  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant 0 : i12
   // CHECK-NEXT: rtgtest.jalr [[RA]], [[SP]], [[IMM]]
   %ra = rtg.constant #rtgtest.ra
   %sp = rtg.constant #rtgtest.sp
-  %imm = rtg.constant #rtg.isa.immediate<12, 0>
+  %imm = rtg.constant 0 : i12
   rtgtest.jalr %ra, %sp, %imm
 }
 
@@ -497,12 +497,12 @@ rtg.test @fixedRegisters(singleton = %none: index) {
 rtg.test @virtualRegisters(singleton = %none: index) {
   // CHECK-NEXT: [[R0:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg] loc("a")
   // CHECK-NEXT: [[R1:%.+]] = rtg.virtual_reg [#rtgtest.s0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg] loc("b")
-  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 0>
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant 0 : i12
   // CHECK-NEXT: rtgtest.jalr [[R0]], [[R1]], [[IMM]]
   // CHECK-NEXT: rtgtest.jalr [[R0]], [[R1]], [[IMM]]
   %r0 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1] loc("a")
   %r1 = rtg.virtual_reg [#rtgtest.s0, #rtgtest.s1] loc("b")
-  %imm = rtg.constant #rtg.isa.immediate<12, 0>
+  %imm = rtg.constant 0 : i12
   rtgtest.jalr %r0, %r1, %imm
   rtgtest.jalr %r0, %r1, %imm
 
@@ -531,7 +531,7 @@ rtg.test @virtualRegisters(singleton = %none: index) {
 // CHECK: [[V0:%.+]] = rtg.get_sequence @valuesWithIdentitySeq{{.*}} :
 // CHECK: rtg.substitute_sequence [[V0]]([[VREG0]], [[VREG2]], [[VREG1]]) :
 
-rtg.sequence @valuesWithIdentitySeq(%imm: !rtg.isa.immediate<12>, %reg: !rtgtest.ireg, %set0: !rtg.set<!rtgtest.ireg>, %set1: !rtg.set<!rtgtest.ireg>) {
+rtg.sequence @valuesWithIdentitySeq(%imm: i12, %reg: !rtgtest.ireg, %set0: !rtg.set<!rtgtest.ireg>, %set1: !rtg.set<!rtgtest.ireg>) {
   rtgtest.jalr %reg, %reg, %imm
   %r0 = rtg.set_select_random %set0 : !rtg.set<!rtgtest.ireg>
   %r1 = rtg.set_select_random %set1 : !rtg.set<!rtgtest.ireg>
@@ -543,12 +543,12 @@ rtg.test @valuesWithIdentity(singleton = %none: index) {
   %r1 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
   %r2 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
   %r3 = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
-  %imm = rtg.constant #rtg.isa.immediate<12, 0>
+  %imm = rtg.constant 0 : i12
   rtgtest.jalr %r0, %r3, %imm
   %set0 = rtg.set_create %r1, %r2 : !rtgtest.ireg
   %set1 = rtg.set_create %r3 : !rtgtest.ireg
-  %s0 = rtg.get_sequence @valuesWithIdentitySeq : !rtg.sequence<!rtg.isa.immediate<12>, !rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
-  %s1 = rtg.substitute_sequence %s0(%imm, %r0, %set0, %set1) : !rtg.sequence<!rtg.isa.immediate<12>, !rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
+  %s0 = rtg.get_sequence @valuesWithIdentitySeq : !rtg.sequence<i12, !rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
+  %s1 = rtg.substitute_sequence %s0(%imm, %r0, %set0, %set1) : !rtg.sequence<i12, !rtgtest.ireg, !rtg.set<!rtgtest.ireg>, !rtg.set<!rtgtest.ireg>>
   %s2 = rtg.randomize_sequence %s1
   rtg.embed_sequence %s2
 }
@@ -938,52 +938,52 @@ rtg.test @subtypeMatching(b = %b: index) {
 // CHECK-LABEL: rtg.test @validateOp
 rtg.test @validateOp(singleton = %none: index) {
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtgtest.t0
-  // CHECK-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
-  // CHECK-NEXT: [[V2:%.+]] = rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant 0 : i32
+  // CHECK-NEXT: [[V2:%.+]] = rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> i32
   // CHECK-NEXT: func.call @dummy15([[V2]])
   %reg = rtg.constant #rtgtest.t0
-  %default = rtg.constant #rtg.isa.immediate<32, 0>
-  %0 = rtg.validate %reg, %default, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  func.call @dummy15(%0) : (!rtg.isa.immediate<32>) -> ()
+  %default = rtg.constant 0 : i32
+  %0 = rtg.validate %reg, %default, "some_id" : !rtgtest.ireg -> i32
+  func.call @dummy15(%0) : (i32) -> ()
 
-  // CHECK-NEXT: [[V3:%.+]] = rtg.constant #rtg.isa.immediate<32, 1>
-  // CHECK-NEXT: [[V4:%.+]] = rtg.constant #rtg.isa.immediate<32, 2>
-  // CHECK-NEXT: [[V5:%.+]], [[V6:%.+]]:2 = rtg.validate [[V0]], [[V1]] ([[V3]], [[V4]] else [[V4]], [[V3]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK-NEXT: [[V3:%.+]] = rtg.constant 1 : i32
+  // CHECK-NEXT: [[V4:%.+]] = rtg.constant 2 : i32
+  // CHECK-NEXT: [[V5:%.+]], [[V6:%.+]]:2 = rtg.validate [[V0]], [[V1]] ([[V3]], [[V4]] else [[V4]], [[V3]] : i32, i32) : !rtgtest.ireg -> i32
   // CHECK-NEXT: func.call @dummy15([[V5]])
   // CHECK-NEXT: func.call @dummy15([[V6]]#0)
   // CHECK-NEXT: [[V7:%.+]] = rtg.get_sequence @validateSeq
   // CHECK-NEXT: [[V8:%.+]] = rtg.substitute_sequence [[V7]]([[V6]]#1)
   // CHECK-NEXT: [[V9:%.+]] = rtg.randomize_sequence [[V8]]
   // CHECK-NEXT: rtg.embed_sequence [[V9]]
-  %v1 = rtg.constant #rtg.isa.immediate<32, 1>
-  %v2 = rtg.constant #rtg.isa.immediate<32, 2>
-  %1:3 = rtg.validate %reg, %default (%v1, %v2 else %v2, %v1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  func.call @dummy15(%1#0) : (!rtg.isa.immediate<32>) -> ()
-  func.call @dummy15(%1#1) : (!rtg.isa.immediate<32>) -> ()
-  %2 = rtg.get_sequence @validateSeq : !rtg.sequence<!rtg.isa.immediate<32>>
-  %3 = rtg.substitute_sequence %2(%1#2) : !rtg.sequence<!rtg.isa.immediate<32>>
+  %v1 = rtg.constant 1 : i32
+  %v2 = rtg.constant 2 : i32
+  %1:3 = rtg.validate %reg, %default (%v1, %v2 else %v2, %v1 : i32, i32) : !rtgtest.ireg -> i32
+  func.call @dummy15(%1#0) : (i32) -> ()
+  func.call @dummy15(%1#1) : (i32) -> ()
+  %2 = rtg.get_sequence @validateSeq : !rtg.sequence<i32>
+  %3 = rtg.substitute_sequence %2(%1#2) : !rtg.sequence<i32>
   %4 = rtg.randomize_sequence %3
   rtg.embed_sequence %4
 }
 
-rtg.sequence @validateSeq(%arg0: !rtg.isa.immediate<32>) {
-  func.call @dummy15(%arg0) : (!rtg.isa.immediate<32>) -> ()
+rtg.sequence @validateSeq(%arg0: i32) {
+  func.call @dummy15(%arg0) : (i32) -> ()
 }
 
 // CHECK-LABEL: @immediateOps
 rtg.test @immediateOps(singleton = %none: index) {
-  // CHECK-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<12, -81>
-  // CHECK-NEXT: func.call @dummy16([[V0]]) : (!rtg.isa.immediate<12>) -> ()
-  %0 = rtg.constant #rtg.isa.immediate<4, 15>
-  %1 = rtg.constant #rtg.isa.immediate<8, 175>
-  %2 = rtg.isa.concat_immediate %0, %1 : !rtg.isa.immediate<4>, !rtg.isa.immediate<8>
-  func.call @dummy16(%2) : (!rtg.isa.immediate<12>) -> ()
+  // CHECK-NEXT: [[V0:%.+]] = rtg.constant -81 : i12
+  // CHECK-NEXT: func.call @dummy16([[V0]]) : (i12) -> ()
+  %0 = rtg.constant 15 : i4
+  %1 = rtg.constant 175 : i8
+  %2 = rtg.isa.concat_immediate %0, %1 : i4, i8
+  func.call @dummy16(%2) : (i12) -> ()
 
-  // CHECK-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<2, -2>
-  // CHECK-NEXT: func.call @dummy6([[V1]]) : (!rtg.isa.immediate<2>) -> ()
-  %3 = rtg.constant #rtg.isa.immediate<8, 175>
-  %4 = rtg.isa.slice_immediate %3 from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
-  func.call @dummy6(%4) : (!rtg.isa.immediate<2>) -> ()
+  // CHECK-NEXT: [[V1:%.+]] = rtg.constant -2 : i2
+  // CHECK-NEXT: func.call @dummy6([[V1]]) : (i2) -> ()
+  %3 = rtg.constant 175 : i8
+  %4 = rtg.isa.slice_immediate %3 from 4 : i8 -> i2
+  func.call @dummy6(%4) : (i2) -> ()
 
   // CHECK: [[V1:%.+]] = rtg.validate {{.*}}, {{.*}}, "val1" :
   // CHECK-NEXT: [[CONCAT:%.+]] = rtg.isa.concat_immediate [[V1]], [[V1]] :
@@ -991,12 +991,12 @@ rtg.test @immediateOps(singleton = %none: index) {
   // CHECK-NEXT: [[SLICE:%.+]] = rtg.isa.slice_immediate [[V1]] from 4 :
   // CHECK-NEXT: func.call @dummy6([[SLICE]]) :
   %reg = rtg.constant #rtgtest.t0
-  %def1 = rtg.constant #rtg.isa.immediate<6, 0>
-  %val1 = rtg.validate %reg, %def1, "val1" : !rtgtest.ireg -> !rtg.isa.immediate<6>
-  %concat = rtg.isa.concat_immediate %val1, %val1 : !rtg.isa.immediate<6>, !rtg.isa.immediate<6>
-  func.call @dummy16(%concat) : (!rtg.isa.immediate<12>) -> ()
-  %slice = rtg.isa.slice_immediate %val1 from 4 : !rtg.isa.immediate<6> -> !rtg.isa.immediate<2>
-  func.call @dummy6(%slice) : (!rtg.isa.immediate<2>) -> ()
+  %def1 = rtg.constant 0 : i6
+  %val1 = rtg.validate %reg, %def1, "val1" : !rtgtest.ireg -> i6
+  %concat = rtg.isa.concat_immediate %val1, %val1 : i6, i6
+  func.call @dummy16(%concat) : (i12) -> ()
+  %slice = rtg.isa.slice_immediate %val1 from 4 : i6 -> i2
+  func.call @dummy6(%slice) : (i2) -> ()
 }
 
 // CHECK-LABEL: rtg.test @testSuccessAndFailure
@@ -1051,34 +1051,34 @@ rtg.target @arith : !rtg.dict<a: i32, b: i32, c: i32, d: i32> {
 // CHECK-LABEL: rtg.test @opsHandlingSymbolicOperands
 rtg.test @opsHandlingSymbolicOperands(singleton = %none: index) {
   // CHECK-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0
-  // CHECK-NEXT: [[INIT:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
+  // CHECK-NEXT: [[INIT:%.+]] = rtg.constant 0 : i32
   %reg = rtg.constant #rtgtest.t0
   %i1 = index.bool.constant false
   %idx = index.constant 0
-  %init = rtg.constant #rtg.isa.immediate<32, 0>
+  %init = rtg.constant 0 : i32
 
-  // CHECK-NEXT: [[VAL:%.+]] = rtg.validate [[REG]], [[INIT]], "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32> loc("sym_loc")
-  %val = rtg.validate %reg, %init, "symbolic_idx" : !rtgtest.ireg -> !rtg.isa.immediate<32> loc("sym_loc")
-
-  // CHECK-NEXT: func.call @dummy15([[VAL]])
-  %arr = rtg.array_create %val, %init : !rtg.isa.immediate<32>
-  %ext1 = rtg.array_extract %arr[%idx] : !rtg.array<!rtg.isa.immediate<32>>
-  func.call @dummy15(%ext1) : (!rtg.isa.immediate<32>) -> ()
+  // CHECK-NEXT: [[VAL:%.+]] = rtg.validate [[REG]], [[INIT]], "symbolic_idx" : !rtgtest.ireg -> i32 loc("sym_loc")
+  %val = rtg.validate %reg, %init, "symbolic_idx" : !rtgtest.ireg -> i32 loc("sym_loc")
 
   // CHECK-NEXT: func.call @dummy15([[VAL]])
-  %tuple = rtg.tuple_create %val, %init : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>
-  %ext2 = rtg.tuple_extract %tuple at 0 : !rtg.tuple<!rtg.isa.immediate<32>, !rtg.isa.immediate<32>>
-  func.call @dummy15(%ext2) : (!rtg.isa.immediate<32>) -> ()
+  %arr = rtg.array_create %val, %init : i32
+  %ext1 = rtg.array_extract %arr[%idx] : !rtg.array<i32>
+  func.call @dummy15(%ext1) : (i32) -> ()
 
   // CHECK-NEXT: func.call @dummy15([[VAL]])
-  %selected = arith.select %i1, %init, %val : !rtg.isa.immediate<32>
-  func.call @dummy15(%selected) : (!rtg.isa.immediate<32>) -> ()
+  %tuple = rtg.tuple_create %val, %init : i32, i32
+  %ext2 = rtg.tuple_extract %tuple at 0 : !rtg.tuple<i32, i32>
+  func.call @dummy15(%ext2) : (i32) -> ()
 
   // CHECK-NEXT: func.call @dummy15([[VAL]])
-  %arr2 = rtg.array_create %init, %init : !rtg.isa.immediate<32>
-  %arr3 = rtg.array_inject %arr2[%idx], %val : !rtg.array<!rtg.isa.immediate<32>>
-  %ext3 = rtg.array_extract %arr3[%idx] : !rtg.array<!rtg.isa.immediate<32>>
-  func.call @dummy15(%ext3) : (!rtg.isa.immediate<32>) -> ()
+  %selected = arith.select %i1, %init, %val : i32
+  func.call @dummy15(%selected) : (i32) -> ()
+
+  // CHECK-NEXT: func.call @dummy15([[VAL]])
+  %arr2 = rtg.array_create %init, %init : i32
+  %arr3 = rtg.array_inject %arr2[%idx], %val : !rtg.array<i32>
+  %ext3 = rtg.array_extract %arr3[%idx] : !rtg.array<i32>
+  func.call @dummy15(%ext3) : (i32) -> ()
 }
 
 // CHECK-LABEL: rtg.test @strings
@@ -1280,13 +1280,13 @@ rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   rtg.yield %0 : index
 }
 
-func.func @dummy6(%arg0: !rtg.isa.immediate<2>) -> () {return}
+func.func @dummy6(%arg0: i2) -> () {return}
 
 rtg.test @integerTooBig(singleton = %none: index) {
   %1 = rtg.constant 8 : index
   // expected-error @below {{cannot represent 8 with 2 bits}}
-  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<2>
-  func.call @dummy6(%2) : (!rtg.isa.immediate<2>) -> ()
+  %2 = rtg.isa.int_to_immediate %1 : i2
+  func.call @dummy6(%2) : (i2) -> ()
 }
 
 // -----

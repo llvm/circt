@@ -9,14 +9,6 @@ def TestDialect : Dialect {
 class TestOp<string mnemonic> :
     Op<TestDialect, mnemonic, [InstructionOpInterface]>;
 
-#ifdef TEST_UNSUPPORTED_TYPE
-// RUN: not circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_UNSUPPORTED_TYPE 2>&1 | FileCheck %s --check-prefix=UNSUPPORTED-TYPE
-def UnsupportedI32Op : TestOp<"unsupported_i32"> {
-  let arguments = (ins I32:$value);
-}
-// UNSUPPORTED-TYPE: error: failed to classify operand type for 'value'
-#endif
-
 #ifdef TEST_EMPTY_NAME
 // RUN: not circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EMPTY_NAME 2>&1 | FileCheck %s --check-prefix=EMPTY-NAME
 def EmptyNameOp : TestOp<"">, ISAInstructionFormat {

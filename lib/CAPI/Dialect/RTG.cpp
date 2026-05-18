@@ -174,21 +174,6 @@ MlirType rtgTupleTypeGetFieldType(MlirType type, intptr_t idx) {
   return wrap(cast<rtg::TupleType>(unwrap(type)).getFieldTypes()[idx]);
 }
 
-// ImmediateType
-//===----------------------------------------------------------------------===//
-
-bool rtgTypeIsAImmediate(MlirType type) {
-  return isa<ImmediateType>(unwrap(type));
-}
-
-MlirType rtgImmediateTypeGet(MlirContext ctx, uint32_t width) {
-  return wrap(ImmediateType::get(unwrap(ctx), width));
-}
-
-uint32_t rtgImmediateTypeGetWidth(MlirType type) {
-  return cast<ImmediateType>(unwrap(type)).getWidth();
-}
-
 // MemoryType
 //===----------------------------------------------------------------------===//
 
@@ -275,26 +260,6 @@ MlirAttribute rtgLabelVisibilityAttrGet(MlirContext ctxt,
     }
   };
   return wrap(LabelVisibilityAttr::get(unwrap(ctxt), convert(visibility)));
-}
-
-// ImmediateAttr
-//===----------------------------------------------------------------------===//
-
-bool rtgAttrIsAImmediate(MlirAttribute attr) {
-  return isa<ImmediateAttr>(unwrap(attr));
-}
-
-MlirAttribute rtgImmediateAttrGet(MlirContext ctx, uint32_t width,
-                                  uint64_t value) {
-  return wrap(rtg::ImmediateAttr::get(unwrap(ctx), APInt(width, value)));
-}
-
-uint32_t rtgImmediateAttrGetWidth(MlirAttribute attr) {
-  return cast<ImmediateAttr>(unwrap(attr)).getValue().getBitWidth();
-}
-
-uint64_t rtgImmediateAttrGetValue(MlirAttribute attr) {
-  return cast<ImmediateAttr>(unwrap(attr)).getValue().getZExtValue();
 }
 
 // AnyContexts

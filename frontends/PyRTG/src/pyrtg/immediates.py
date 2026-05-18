@@ -17,6 +17,25 @@ class Immediate(Value):
 
   def __init__(self, width: int, value: Union[ir.Value, int,
                                               Integer]) -> Immediate:
+    if width < 0:
+      raise ValueError(f"width must be non-negative, got {width}")
+
+    if isinstance(value, int):
+      # Note: it's valid to pass in a negative value here, but also a positive
+      # value that is small enough for a unsigned representation
+      max = (1 << width) - 1
+      min = -(1 << (width - 1))
+
+      if value < min or value > max:
+        raise ValueError(
+            f"Value {value} does not fit in {width}-bit representation "
+            f"(valid range: [{min}, {max}])")
+
+      # Convert to signed representation if the high bit is set because MLIR
+      # built-in integer attributes are constructed with signed integers.
+      if value >= (1 << (width - 1)):
+        value = value - (1 << width)
+
     self._width = width
     self._value = value
 
@@ -115,9 +134,11 @@ class Immediate(Value):
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, int):
-      self = rtg.ConstantOp(rtg.ImmediateAttr.get(self._width, self._value))
+      self = rtg.ConstantOp(
+          ir.IntegerAttr.get(ir.IntegerType.get_signless(self._width),
+                             self._value))
     if isinstance(self._value, Integer):
-      self = rtg.IntToImmediateOp(rtg.ImmediateType.get(self._width),
+      self = rtg.IntToImmediateOp(ir.IntegerType.get_signless(self._width),
                                   self._value)
     return self._value
 
@@ -143,4 +164,4 @@ class ImmediateType(Type):
     return f"ImmediateType<{self.width}>"
 
   def _codegen(self) -> ir.Type:
-    return rtg.ImmediateType.get(self.width)
+    return ir.IntegerType.get(self.width)

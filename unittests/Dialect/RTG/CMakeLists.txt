@@ -1,6 +1,5 @@
 add_circt_unittest(CIRCTRTGTests
   AttrTests.cpp
-  MaterializerTest.cpp
   OpTests.cpp
 )
 

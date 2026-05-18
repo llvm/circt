@@ -80,16 +80,6 @@ MLIR_CAPI_EXPORTED MlirType rtgDictTypeGet(MlirContext ctxt,
                                            MlirAttribute const *entryNames,
                                            MlirType const *entryTypes);
 
-/// If the type is an RTG immediate.
-MLIR_CAPI_EXPORTED bool rtgTypeIsAImmediate(MlirType type);
-
-/// Creates an RTG immediate type in the context.
-MLIR_CAPI_EXPORTED MlirType rtgImmediateTypeGet(MlirContext ctx,
-                                                uint32_t width);
-
-/// Returns the width of the RTG immediate type.
-MLIR_CAPI_EXPORTED uint32_t rtgImmediateTypeGetWidth(MlirType type);
-
 /// Creates an RTG array type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgArrayTypeGet(MlirType elementType);
 
@@ -180,21 +170,6 @@ MLIR_CAPI_EXPORTED bool rtgAttrIsADefaultContextAttr(MlirAttribute attr);
 /// Creates an RTG default context attribute in the context.
 MLIR_CAPI_EXPORTED MlirAttribute rtgDefaultContextAttrGet(MlirContext ctxt,
                                                           MlirType type);
-
-/// Checks if the attribute is an RTG immediate attribute.
-MLIR_CAPI_EXPORTED bool rtgAttrIsAImmediate(MlirAttribute attr);
-
-/// Creates an RTG immediate attribute in the context with the given width and
-/// value.
-MLIR_CAPI_EXPORTED MlirAttribute rtgImmediateAttrGet(MlirContext ctx,
-                                                     uint32_t width,
-                                                     uint64_t value);
-
-/// Returns the width of the RTG immediate attribute.
-MLIR_CAPI_EXPORTED uint32_t rtgImmediateAttrGetWidth(MlirAttribute attr);
-
-/// Returns the value of the RTG immediate attribute.
-MLIR_CAPI_EXPORTED uint64_t rtgImmediateAttrGetValue(MlirAttribute attr);
 
 /// If the attribute is an RTG any context attribute.
 MLIR_CAPI_EXPORTED bool rtgAttrIsAAnyContextAttr(MlirAttribute attr);

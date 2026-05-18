@@ -216,7 +216,7 @@ class ISAInstructionFormat {
   // - $mnemonic: Operation mnemonic (extracted from operation name)
   // - signed($operand): Emit immediate as signed value
   // - unsigned($operand): Emit immediate as unsigned value
-  // - Operands with AnyTypeOf<[ImmediateType, LabelType]> automatically
+  // - Operands with AnyTypeOf<[AnySignlessInteger, LabelType]> automatically
   //   generate conditional code to handle both labels and immediates
   // Example: "$mnemonic ` ` $rd `, ` signed($imm) `(` $rs `)`"
   string isaAssemblyFormat = "";

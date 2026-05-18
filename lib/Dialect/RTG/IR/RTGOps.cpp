@@ -886,7 +886,7 @@ LogicalResult MemoryBaseAddressOp::inferReturnTypes(
   if (!memTy)
     return failure();
   inferredReturnTypes.push_back(
-      ImmediateType::get(context, memTy.getAddressWidth()));
+      IntegerType::get(context, memTy.getAddressWidth()));
   return success();
 }
 
@@ -906,7 +906,7 @@ LogicalResult ConcatImmediateOp::inferReturnTypes(
 
   unsigned totalWidth = 0;
   for (auto operand : operands) {
-    auto immType = dyn_cast<ImmediateType>(operand.getType());
+    auto immType = dyn_cast<IntegerType>(operand.getType());
     if (!immType) {
       if (loc)
         return mlir::emitError(*loc)
@@ -916,7 +916,7 @@ LogicalResult ConcatImmediateOp::inferReturnTypes(
     totalWidth += immType.getWidth();
   }
 
-  inferredReturnTypes.push_back(ImmediateType::get(context, totalWidth));
+  inferredReturnTypes.push_back(IntegerType::get(context, totalWidth));
   return success();
 }
 
@@ -927,13 +927,13 @@ OpFoldResult ConcatImmediateOp::fold(FoldAdaptor adaptor) {
 
   // If all operands are constants, fold into a single constant
   if (llvm::all_of(adaptor.getOperands(), [](Attribute attr) {
-        return isa_and_nonnull<ImmediateAttr>(attr);
+        return isa_and_nonnull<IntegerAttr>(attr);
       })) {
     auto result = APInt::getZeroWidth();
     for (auto attr : adaptor.getOperands())
-      result = result.concat(cast<ImmediateAttr>(attr).getValue());
+      result = result.concat(cast<IntegerAttr>(attr).getValue());
 
-    return ImmediateAttr::get(getContext(), result);
+    return IntegerAttr::get(IntegerType::get(getContext(), result.getBitWidth()), result);
   }
 
   return {};
@@ -961,10 +961,10 @@ LogicalResult SliceImmediateOp::verify() {
 }
 
 OpFoldResult SliceImmediateOp::fold(FoldAdaptor adaptor) {
-  if (auto inputAttr = dyn_cast_or_null<ImmediateAttr>(adaptor.getInput())) {
+  if (auto inputAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getInput())) {
     auto resultWidth = getType().getWidth();
     APInt sliced = inputAttr.getValue().extractBits(resultWidth, getLowBit());
-    return ImmediateAttr::get(getContext(), sliced);
+    return IntegerAttr::get(IntegerType::get(getContext(), sliced.getBitWidth()), sliced);
   }
 
   return {};
@@ -1006,7 +1006,7 @@ OpFoldResult IntFormatOp::fold(FoldAdaptor adaptor) {
 //===----------------------------------------------------------------------===//
 
 OpFoldResult ImmediateFormatOp::fold(FoldAdaptor adaptor) {
-  auto immAttr = dyn_cast_or_null<ImmediateAttr>(adaptor.getValue());
+  auto immAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getValue());
   if (!immAttr)
     return {};
   SmallString<16> strBuf("0x");

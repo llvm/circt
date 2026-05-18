@@ -517,7 +517,7 @@ genIfThenElse(IfThenElseNode *node, const DenseSet<StringRef> &decls,
   auto name = node->getCondition()->getName();
   if (!decls.contains(name))
     os << "::llvm::APInt " << name
-       << " = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor."
+       << " = ::llvm::cast<::mlir::IntegerAttr>(adaptor."
        << getGetterName(name) << "()).getValue();\n";
 
   os << "if (" << name;
@@ -578,7 +578,7 @@ void BinaryFormatGen::genDecl(OperandNode *node) {
          << ", ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor."
          << getterName << "()).getClassIndex());\n";
     else if (node->kinds.contains<Immediate, AnyImmediate>())
-      os << " = ::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor."
+      os << " = ::llvm::cast<::mlir::IntegerAttr>(adaptor."
          << getterName << "()).getValue();\n";
     else
       PrintFatalError(node->getLoc(),
@@ -720,7 +720,7 @@ static void printImmediate(mlir::raw_indented_ostream &os, StringRef getterName,
                            bool isSigned, bool needsDynCast) {
   if (needsDynCast) {
     os << "if (auto imm = "
-          "::llvm::dyn_cast<::circt::rtg::ImmediateAttr>(adaptor."
+          "::llvm::dyn_cast<::mlir::IntegerAttr>(adaptor."
        << getterName << "()))";
     auto scope = os.scope(" {\n", "}\n");
     {
@@ -733,7 +733,7 @@ static void printImmediate(mlir::raw_indented_ostream &os, StringRef getterName,
   } else {
     auto scope = os.scope("{\n", "}\n");
     os << "::llvm::SmallVector<char> strBuf;\n";
-    os << "::llvm::cast<::circt::rtg::ImmediateAttr>(adaptor." << getterName
+    os << "::llvm::cast<::mlir::IntegerAttr>(adaptor." << getterName
        << "()).getValue().toString" << (isSigned ? "Signed" : "Unsigned")
        << "(strBuf);\n";
     os << "os << strBuf;\n";

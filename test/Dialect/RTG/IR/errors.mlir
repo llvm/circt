@@ -1,18 +1,5 @@
 // RUN: circt-opt %s --split-input-file --verify-diagnostics
 
-rtg.test @constantTooBig() {
-  // expected-error @below {{integer value out-of-range for bit-width 2}}
-  rtg.constant #rtg.isa.immediate<2, 4>
-}
-
-// -----
-
-rtg.test @immediateWidthMismatch() {
-  // expected-error @below {{explicit immediate type bit-width does not match attribute bit-width, 1 vs 2}}
-  rtg.constant #rtg.isa.immediate<2, 1> : !rtg.isa.immediate<1>
-}
-
-// -----
 
 func.func @seq0() {
   return
@@ -301,17 +288,17 @@ rtg.test @validate() {
 // -----
 
 rtg.test @sliceImmediateLowBitTooLarge() {
-  %0 = rtg.constant #rtg.isa.immediate<4, 5>
+  %0 = rtg.constant 5 : i4
   // expected-error @below {{from bit too large for input (got 4, but input width is 4)}}
-  %1 = rtg.isa.slice_immediate %0 from 4 : !rtg.isa.immediate<4> -> !rtg.isa.immediate<2>
+  %1 = rtg.isa.slice_immediate %0 from 4 : i4 -> i2
 }
 
 // -----
 
 rtg.test @sliceImmediateSliceDoesNotFit() {
-  %0 = rtg.constant #rtg.isa.immediate<4, 5>
+  %0 = rtg.constant 5 : i4
   // expected-error @below {{slice does not fit in input (trying to extract 3 bits starting at index 2, but only 2 bits are available)}}
-  %1 = rtg.isa.slice_immediate %0 from 2 : !rtg.isa.immediate<4> -> !rtg.isa.immediate<3>
+  %1 = rtg.isa.slice_immediate %0 from 2 : i4 -> i3
 }
 
 // -----
@@ -319,7 +306,7 @@ rtg.test @sliceImmediateSliceDoesNotFit() {
 rtg.test @concatImmediateNoOperands() {
   // expected-error @below {{at least one operand must be provided}}
   // expected-error @below {{failed to infer returned types}}
-  %0 = "rtg.isa.concat_immediate"() : () -> !rtg.isa.immediate<0>
+  %0 = "rtg.isa.concat_immediate"() : () -> i0
 }
 
 // -----
