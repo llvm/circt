@@ -762,7 +762,7 @@ TEST(ESITypesTest, BitWidthCalculations) {
   VoidType voidType("void");
   EXPECT_EQ(voidType.getBitWidth(), 0)
       << "VoidType should have a 0-bit logical width; transport-level "
-         "placeholder bytes are added by the typed port layer.";
+         "placeholder bytes are added by the channel-port base classes.";
 
   BitsType bitsType("bits16", 16);
   EXPECT_EQ(bitsType.getBitWidth(), 16)
