@@ -583,8 +583,6 @@ bool ReadChannelPort::translateIncoming(MessageData &data) {
   return false;
 }
 
-const MessageData WriteChannelPort::transportPad0Bytes = MessageData({0});
-
 void WriteChannelPort::translateOutgoing(const MessageData &data) {
   assert(translationInfo &&
          "Translation type must be set for window translation.");
