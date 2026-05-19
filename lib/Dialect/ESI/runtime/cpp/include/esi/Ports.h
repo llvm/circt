@@ -396,7 +396,7 @@ protected:
 
   /// Backing storage for `maybePadEmptyMessage` return so that the returned
   /// reference outlives the call.
-  const static MessageData transportPad0Bytes;
+  inline static const MessageData transportPad0Bytes = MessageData({0});
 
 public:
 protected:
