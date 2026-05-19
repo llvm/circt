@@ -42,6 +42,33 @@ class InvertibleOperandsOp<string mnemonic, list<Trait> traits = []>
   }];
 }
 
+class SymmetricThreeInputOp<string mnemonic, list<Trait> traits = []>
+  : SynthOp<mnemonic, [
+      SameOperandsAndResultType, Pure,
+      DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
+        "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
+        "supportsNumInputs", "createBooleanLogicOp",
+        "getLogicAreaCost"
+      ]>] # traits> {
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       DenseBoolArrayAttr:$inverted);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = [{
+    custom<VariadicInvertibleOperands>($inputs, type($result), $inverted, attr-dict)
+  }];
+  let builders = [
+    OpBuilder<(ins "Value":$a, "Value":$b, "Value":$c,
+                                CArg<"bool", "false">:$invertA,
+                                CArg<"bool", "false">:$invertB,
+                                CArg<"bool", "false">:$invertC), [{
+      SmallVector<bool> inverted{invertA, invertB, invertC};
+      return build($_builder, $_state, ValueRange{a, b, c},
+                   $_builder.getDenseBoolArrayAttr(inverted));
+    }]>
+  ];
+  let hasVerifier = 1;
+}
+
 def AndInverterOp : InvertibleOperandsOp<"aig.and_inv"> {
   let summary = "AIG dialect AND operation";
   let description = [{
@@ -214,14 +241,7 @@ def ChoiceOp : SynthOp<"choice", [SameOperandsAndResultType, Pure]> {
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 }
 
-def MajorityOp : SynthOp<"majority", [
-    SameOperandsAndResultType, Pure,
-    DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
-      "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
-      "supportsNumInputs", "createBooleanLogicOp",
-      "getLogicAreaCost"
-    ]>
-  ]>{
+def MajorityOp : SymmetricThreeInputOp<"majority"> {
   let summary = "Majority gate with invertible inputs";
   let description = [{
     The `synth.majority` operation computes the majority function of its
@@ -231,41 +251,16 @@ def MajorityOp : SynthOp<"majority", [
     and 0 otherwise. For three inputs, it's equivalent to:
     (a & b) | (a & c) | (b & c).
 
-    The number of inputs must be odd to avoid ties.
 
-     Example:
+    Example:
   ```mlir
       %r0 = synth.majority %a, %b, %c : i1
       %r1 = synth.majority not %a, %b, not %c : i1
   ```
   }];
-   let arguments = (ins Variadic<AnyType>:$inputs,
-                       DenseBoolArrayAttr:$inverted);
-  let results = (outs AnyType:$result);
-
-  let builders = [
-  OpBuilder<(ins "Value":$a, "Value":$b, "Value":$c,
-                              CArg<"bool", "false">:$invertA,
-                              CArg<"bool", "false">:$invertB,
-                              CArg<"bool", "false">:$invertC), [{
-    SmallVector<bool> inverted{invertA, invertB, invertC};
-    return build($_builder, $_state, ValueRange{a, b, c},
-                 $_builder.getDenseBoolArrayAttr(inverted));
-  }]>
-];
-
-  let hasVerifier = 1;
-  let hasCustomAssemblyFormat = 1;
 }
 
-def OneHotOp : SynthOp<"onehot", [
-    SameOperandsAndResultType, Pure,
-    DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
-      "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
-      "supportsNumInputs", "createBooleanLogicOp",
-      "getLogicAreaCost"
-    ]>
-  ]>{
+def OneHotOp : SymmetricThreeInputOp<"onehot"> {
    let summary = "3-input Onehot gate with invertible inputs";
   let description = [{
     The `synth.onehot` operation computes the one-hot function of its three
@@ -281,23 +276,6 @@ def OneHotOp : SynthOp<"onehot", [
       %r1 = synth.onehot not %a, %b, not %c : i1
 ```
   }];
-  
-  let arguments = (ins Variadic<AnyType>:$inputs,
-                       DenseBoolArrayAttr:$inverted);
-  let results = (outs AnyType:$result);
-  let builders = [
-  OpBuilder<(ins "Value":$a, "Value":$b, "Value":$c,
-                              CArg<"bool", "false">:$invertA,
-                              CArg<"bool", "false">:$invertB,
-                              CArg<"bool", "false">:$invertC), [{
-    SmallVector<bool> inverted{invertA, invertB, invertC};
-    return build($_builder, $_state, ValueRange{a, b, c},
-                 $_builder.getDenseBoolArrayAttr(inverted));
-  }]>
-];
-
-  let hasVerifier = 1;
-  let hasCustomAssemblyFormat = 1;
 }
 
 def MuxInverterOp : InvertibleOperandsOp<"mux_inv"> {
@@ -317,7 +295,7 @@ def MuxInverterOp : InvertibleOperandsOp<"mux_inv"> {
       %r1 = synth.mux_inv not %a, %b, not %c : i8
     ```
   }];
-
+  
   let builders = [
   OpBuilder<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue,
                   CArg<"bool", "false">:$invertCond,
@@ -331,6 +309,25 @@ def MuxInverterOp : InvertibleOperandsOp<"mux_inv"> {
 let hasVerifier = 1;
 
 }
+
+def GambleOp : SymmetricThreeInputOp<"gamble">{
+  let summary = "3-input Gamble gate with invertible inputs";
+  let description = [{
+  The `synth.gamble` operation computes the gamble function of its three
+  inputs, where each operand can be optionally inverted. The gamble function
+  returns 1 when all inputs are 1 or all inputs are 0, and 0 otherwise.
+  For three inputs, it is equivalent to:
+
+  `(a & b & c) | (~a & ~b & ~c)`
+
+  Example:
+```mlir
+    %r0 = synth.gamble %a, %b, %c : i1
+    %r1 = synth.gamble not %a, %b, not %c : i1
+```
+}];
+}
+
 
 
 #endif // CIRCT_DIALECT_SYNTH_SYNTHOPS_TD

@@ -107,3 +107,13 @@ hw.module @mux_inv_ordered(in %c: i1, in %a: i1, in %b: i1, out o0: i1, out o1: 
   hw.output %0, %1, %2 : i1, i1, i1
 }
 
+// CHECK-LABEL: hw.module @gamble_commutative
+hw.module @gamble_commutative(in %x: i1, in %y: i1, in %z: i1, out o0: i1, out o1: i1) {
+  // gamble is permutation invariant so these should be CSE'd to the same op
+  // CHECK: %[[G0:.+]] = synth.gamble %x, not %y, %z : i1
+  // CHECK-NEXT: hw.output %[[G0]], %[[G0]] : i1, i1
+  %0 = synth.gamble %x, not %y, %z : i1
+  %1 = synth.gamble not %y, %x, %z : i1
+  hw.output %0, %1 : i1, i1
+}
+

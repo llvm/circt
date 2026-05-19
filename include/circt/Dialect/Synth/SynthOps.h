@@ -161,6 +161,12 @@ T evaluateMuxLogic(const T &a, const T &b, const T &c) {
   return (a & b) | (invertBooleanLogic(a) & c);
 }
 
+template <typename T>
+T evaluateGambleLogic(const T &a, const T &b, const T &c) {
+  auto orSet = a | b | c;
+  return (a & b & c) | invertBooleanLogic(orSet);
+}
+
 } // namespace synth
 } // namespace circt
 

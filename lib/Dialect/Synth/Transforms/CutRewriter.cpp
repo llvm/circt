@@ -209,6 +209,10 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
               return handleInvertibleTernaryGate(oneHotOp,
                                                  LogicNetworkGate::OneHot3);
             })
+            .Case<synth::GambleOp>([&](synth::GambleOp gambleOp) {
+              return handleInvertibleTernaryGate(gambleOp,
+                                                 LogicNetworkGate::Gamble3);
+            })
             .Case<comb::XorOp>([&](comb::XorOp xorOp) {
               if (xorOp->getNumOperands() != 2) {
                 handleOtherResults(xorOp);
@@ -523,6 +527,8 @@ static inline llvm::APInt applyGateSemantics(LogicNetworkGate::Kind kind,
     return evaluateDotLogic(a, b, c);
   case LogicNetworkGate::OneHot3:
     return evaluateOneHotLogic(a, b, c);
+  case LogicNetworkGate::Gamble3:
+    return evaluateGambleLogic(a, b, c);
   default:
     llvm_unreachable(
         "Unsupported ternary operation for truth table computation");
@@ -621,21 +627,10 @@ struct MergedTruthTableBuilder {
           numMergedInputs, 1,
           applyGateSemantics(rootGate.getKind(), getEdgeTT(0), getEdgeTT(1)));
     case LogicNetworkGate::Mux3:
-      return BinaryTruthTable(numMergedInputs, 1,
-                              applyGateSemantics(rootGate.getKind(),
-                                                 getEdgeTT(0), getEdgeTT(1),
-                                                 getEdgeTT(2)));
     case LogicNetworkGate::Maj3:
-      return BinaryTruthTable(numMergedInputs, 1,
-                              applyGateSemantics(rootGate.getKind(),
-                                                 getEdgeTT(0), getEdgeTT(1),
-                                                 getEdgeTT(2)));
     case LogicNetworkGate::Dot3:
-      return BinaryTruthTable(numMergedInputs, 1,
-                              applyGateSemantics(rootGate.getKind(),
-                                                 getEdgeTT(0), getEdgeTT(1),
-                                                 getEdgeTT(2)));
     case LogicNetworkGate::OneHot3:
+    case LogicNetworkGate::Gamble3:
       return BinaryTruthTable(numMergedInputs, 1,
                               applyGateSemantics(rootGate.getKind(),
                                                  getEdgeTT(0), getEdgeTT(1),

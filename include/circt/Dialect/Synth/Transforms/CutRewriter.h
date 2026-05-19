@@ -123,6 +123,7 @@ struct LogicNetworkGate {
     Dot3 = 7,         ///< Ordered DOT gate (3-input, synth.dot)
     OneHot3 = 8,      ///< OneHot gate (3-input, synth.onehot)
     Mux3 = 9,         ///< Ordered MUX gate (3-input, synth.mux_inv)
+    Gamble3 = 10,     ///< Ordered Gamble gate (3-input, synth.gamble)
   };
 
   /// Operation pointer and gate kind. Constants have a null operation pointer.
@@ -159,12 +160,10 @@ struct LogicNetworkGate {
     case Xor2:
       return 2;
     case Maj3:
-      return 3;
     case Dot3:
-      return 3;
     case OneHot3:
-      return 3;
     case Mux3:
+    case Gamble3:
       return 3;
     case Identity:
       return 1;
@@ -178,7 +177,8 @@ struct LogicNetworkGate {
   bool isLogicGate() const {
     Kind k = getKind();
     return k == And2 || k == Xor2 || k == Maj3 || k == Identity ||
-           k == Choice || k == Dot3 || k == OneHot3 || k == Mux3;
+           k == Choice || k == Dot3 || k == OneHot3 || k == Mux3 ||
+           k == Gamble3;
   }
 
   /// Check if this should always be a cut input (PI or constant).
