@@ -462,42 +462,41 @@ Value Context::convertAssertionCallExpression(
     }
 
     // OneHot/OneHot0 are handled both here and below.
-    if (subroutine.knownNameId == slang::parsing::KnownSystemName::OneHot ||
-        subroutine.knownNameId == slang::parsing::KnownSystemName::OneHot0) {
-      if (valTy.getDomain() == Domain::FourValued) {
-        // In SystemVerilog, these system only returns 1b1 if the expression is
-        // fully known and the condition is met. So if any x or y bits, then
-        // these must return 1'b0.
+    if ((subroutine.knownNameId == slang::parsing::KnownSystemName::OneHot ||
+         subroutine.knownNameId == slang::parsing::KnownSystemName::OneHot0) &&
+        if (valTy.getDomain() == Domain::FourValued)) {
+      // In SystemVerilog, these system only returns 1b1 if the expression is
+      // fully known and the condition is met. So if any x or y bits, then
+      // these must return 1'b0.
 
-        // Detect if input contain unknown bits.
-        Value isUnknownMoore =
-            getIsUnknown(builder, loc, value, valTy, getContext());
-        Value isUnknown =
-            builder.createOrFold<moore::ToBuiltinIntOp>(loc, isUnknownMoore);
+      // Detect if input contain unknown bits.
+      Value isUnknownMoore =
+          getIsUnknown(builder, loc, value, valTy, getContext());
+      Value isUnknown =
+          builder.createOrFold<moore::ToBuiltinIntOp>(loc, isUnknownMoore);
 
-        Value coerced = builder.createOrFold<moore::LogicToIntOp>(loc, value);
-        Value state2IntVal =
-            builder.createOrFold<moore::ToBuiltinIntOp>(loc, coerced);
-        if (!state2IntVal)
-          return {};
+      Value coerced = builder.createOrFold<moore::LogicToIntOp>(loc, value);
+      Value state2IntVal =
+          builder.createOrFold<moore::ToBuiltinIntOp>(loc, coerced);
+      if (!state2IntVal)
+        return {};
 
-        auto systemResult = this->convertAssertionSystemCallArity1(
-            subroutine, loc, state2IntVal, originalType, clockVal);
-        if (failed(systemResult) || !*systemResult)
-          return {};
-        Value onehot2state = *systemResult;
+      auto systemResult = this->convertAssertionSystemCallArity1(
+          subroutine, loc, state2IntVal, originalType, clockVal);
+      if (failed(systemResult) || !*systemResult)
+        return {};
+      Value onehot2state = *systemResult;
 
-        // Squash to 0 if unknown bits exist.
-        Value onehot2stateBuiltin = convertToI1(onehot2state);
-        Value zeroBuiltin =
-            hw::ConstantOp::create(builder, loc, builder.getI1Type(), 0);
-        Value resultBuiltin = builder.create<comb::MuxOp>(
-            loc, isUnknown, zeroBuiltin, onehot2stateBuiltin);
+      // Squash to 0 if unknown bits exist.
+      Value onehot2stateBuiltin = convertToI1(onehot2state);
+      Value zeroBuiltin =
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 0);
+      Value resultBuiltin = builder.create<comb::MuxOp>(
+          loc, isUnknown, zeroBuiltin, onehot2stateBuiltin);
 
-        Value finalResult =
-            moore::FromBuiltinIntOp::create(builder, loc, resultBuiltin);
-        return moore::IntToLogicOp::create(builder, loc, finalResult);
-      }
+      Value finalResult =
+          moore::FromBuiltinIntOp::create(builder, loc, resultBuiltin);
+      return moore::IntToLogicOp::create(builder, loc, finalResult);
     }
 
     // If the value is four-valued, we need to map it to two-valued before we
