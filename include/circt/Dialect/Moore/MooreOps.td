@@ -3135,6 +3135,8 @@ class RealMathFunc<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
+
+
 def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
   let summary = "Compute ceil(log2(x)) of x";
   let description = [{
@@ -3169,6 +3171,22 @@ def SqrtBIOp : RealMathFunc<"sqrt"> {
   let summary = "Square root";
 }
 
+def MinBIOp : BinaryRealOpBase<"min"> {
+  let summary = "Minimum";
+}
+
+def MaxBIOp : BinaryRealOpBase<"max"> {
+  let summary = "Maximum";
+}
+
+def AbsBIOp : RealMathFunc<"abs"> {
+  let summary = "Absolute";
+}
+
+def PowBIOp : BinaryRealOpBase<"pow"> {
+  let summary = "Power (x^y)";
+}
+
 def FloorBIOp : RealMathFunc<"floor"> {
   let summary = "Floor";
 }
@@ -3199,6 +3217,14 @@ def AcosBIOp : RealMathFunc<"acos"> {
 
 def AtanBIOp : RealMathFunc<"atan"> {
   let summary = "Arc-tangent";
+}
+
+def Atan2BIOp : BinaryRealOpBase<"atan2"> {
+  let summary = "Arc-tangent of y/x";
+}
+
+def HypotBIOp : BinaryRealOpBase<"hypot"> {
+  let summary = "(x^2+y^2)^(1/2)";
 }
 
 def SinhBIOp : RealMathFunc<"sinh"> {
