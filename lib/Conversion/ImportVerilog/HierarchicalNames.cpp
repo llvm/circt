@@ -17,13 +17,14 @@ struct InstBodyVisitor
     : public slang::ast::ASTVisitor<InstBodyVisitor,
                                     /*VisitStatements=*/true,
                                     /*VisitExpressions=*/true> {
-  InstBodyVisitor(Context &context, const slang::ast::Symbol &outermostModule,
-                  DenseSet<StringAttr> &sameHierPaths)
+  InstBodyVisitor(
+      Context &context, const slang::ast::Symbol &outermostModule,
+      DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies)
       : context(context), outermostModule(outermostModule),
-        sameHierPaths(sameHierPaths) {}
+        visitedBodies(visitedBodies) {}
 
   void handle(const slang::ast::InstanceSymbol &instNode) {
-    context.traverseInstanceBody(instNode.body, sameHierPaths);
+    traverseInstanceBody(context, instNode, visitedBodies);
     // Also visit port connection expressions to find hier refs used as
     // port arguments (e.g., .in_val(b_inst.local_val)).
     for (auto *conn : instNode.getPortConnections())
@@ -57,28 +58,29 @@ struct InstBodyVisitor
     // Collect hierarchical names that are added to the port list.
     std::function<void(const slang::ast::InstanceBodySymbol *, bool)>
         collectHierarchicalPaths = [&](auto sym, bool isUpward) {
-          // Here we use "sameHierPaths" to avoid collecting the repeat
-          // hierarchical names on the same path.
-          if (!sameHierPaths.contains(hierName) ||
-              !context.hierPaths.contains(sym)) {
+          // Check if this path already exists globally for this module
+          HierPathInfo *existing = nullptr;
+          if (context.hierPaths.contains(sym)) {
+            for (auto &path : context.hierPaths[sym]) {
+              if (path.hierName == hierName) {
+                existing = &path;
+                break;
+              }
+            }
+          }
+
+          if (!existing) {
             context.hierPaths[sym].push_back(
                 HierPathInfo{hierName,
                              {},
                              isUpward ? slang::ast::ArgumentDirection::Out
                                       : slang::ast::ArgumentDirection::In,
                              {&expr.symbol}});
-            sameHierPaths.insert(hierName);
           } else {
-            // The path already exists (dedup hit), but this may be a
-            // different instance resolving to a different symbol object
-            // for the same logical variable. Add it as an alias.
-            for (auto &existing : context.hierPaths[sym]) {
-              if (existing.hierName == hierName) {
-                if (!llvm::is_contained(existing.valueSyms, &expr.symbol))
-                  existing.valueSyms.push_back(&expr.symbol);
-                break;
-              }
-            }
+            // The path already exists, but this may be a different instance
+            // resolving to a different symbol object. Add as an alias.
+            if (!llvm::is_contained(existing->valueSyms, &expr.symbol))
+              existing->valueSyms.push_back(&expr.symbol);
           }
 
           // Iterate up from the current instance body symbol until meeting the
@@ -120,28 +122,27 @@ struct InstBodyVisitor
 
   Context &context;
   const slang::ast::Symbol &outermostModule;
+  DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies;
 
-  // Deduplication set shared across the entire traversal tree rooted at
-  // the top-level traverseInstanceBody call.
-  DenseSet<StringAttr> &sameHierPaths;
+  static void traverseInstanceBody(
+      Context &context, const slang::ast::InstanceSymbol &symbol,
+      DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies) {
+    const slang::ast::InstanceBodySymbol *body = getCanonicalBody(symbol);
+    if (visitedBodies.insert(body).second) {
+      for (auto &member : body->members()) {
+        auto &outermostModule = member.getParentScope()->asSymbol();
+        InstBodyVisitor visitor(context, outermostModule, visitedBodies);
+        member.visit(visitor);
+      }
+    }
+  }
 };
 
 } // namespace
 
-void Context::traverseInstanceBody(const slang::ast::Symbol &symbol) {
-  // Top-level entry point: create a fresh deduplication set that is shared
-  // across all recursive traversals of this instance tree. This prevents
-  // cross-hierarchy contamination between independent top-level instances.
-  DenseSet<StringAttr> sameHierPaths;
-  traverseInstanceBody(symbol, sameHierPaths);
-}
-
-void Context::traverseInstanceBody(const slang::ast::Symbol &symbol,
-                                   DenseSet<StringAttr> &sameHierPaths) {
-  if (auto *instBodySymbol = symbol.as_if<slang::ast::InstanceBodySymbol>())
-    for (auto &member : instBodySymbol->members()) {
-      auto &outermostModule = member.getParentScope()->asSymbol();
-      InstBodyVisitor visitor(*this, outermostModule, sameHierPaths);
-      member.visit(visitor);
-    }
+void Context::traverseInstanceBody(const slang::ast::InstanceSymbol &symbol) {
+  // Top-level entry point: create a fresh visitedBodies set to prevent
+  // infinite recursion and to skip identical module bodies.
+  DenseSet<const slang::ast::InstanceBodySymbol *> visitedBodies;
+  InstBodyVisitor::traverseInstanceBody(*this, symbol, visitedBodies);
 }
