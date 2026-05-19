@@ -7,8 +7,8 @@
 //===----------------------------------------------------------------------===//
 //
 // This is a specialization of the ESI C++ API (backend) for connection into a
-// simulation of an ESI system. Currently uses gRPC, but that could change.
-// Requires gRPC C++ library.
+// simulation of an ESI system. The implementation of this connection is
+// abstracted behind RpcClient and RpcServer.
 //
 // DO NOT EDIT!
 // This file is distributed as part of an ESI package. The source for this file
