@@ -1798,8 +1798,20 @@ struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
   matchAndRewrite(Clog2BIOp op, OpAdaptor adaptor,
+    // TODO: Arbitary bit with of float and int
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<math::Log2Op>(op, adaptor.getValue());
+                  Type tFloat = rewriter.getF32Type();
+                  Type tInt = rewriter.getI32Type();
+                  Location loc = op.getLoc();
+                  Value intVal = adaptor.getValue();
+                  auto tofloat = arith::UIToFPOp::create(rewriter,loc, tFloat, intVal);
+                  auto post_log = math::Log2Op(tofloat);
+                  Value ceil_log = math::CeilOp(post_log);
+                  if (intVal == 0) {
+                    ceil_log = 0;
+                  }
+                  //Value out = arith::FPToUIOp::create(rewriter,loc,tInt,ceil_log);
+    rewriter.replaceOp(op,arith::FPToUIOp::create(rewriter,loc,tInt,ceil_log));
     return success();
   }
 };
@@ -2658,6 +2670,7 @@ struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
           fracDigitsAttr);
       return success();
     }
+    return success();
   }
 };
 
@@ -3221,6 +3234,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     case moore::RealWidth::f64:
       return mlir::Float64Type::get(ctx);
     }
+    return 0;
   });
 
   typeConverter.addConversion(
