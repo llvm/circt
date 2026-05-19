@@ -3121,7 +3121,7 @@ def FCloseBIOp : Builtin<"fclose"> {
 // Math Builtins
 //===----------------------------------------------------------------------===//
 
-class RealMathFunc<string mnemonic, list<Trait> traits = []> :
+class RealMathFunc<string mnemonic, list<Trait> traits = []> : 
     Builtin<mnemonic, traits # [SameOperandsAndResultType]> {
   let description = [{
     The system real math functions shall accept real value arguments and return

@@ -1220,10 +1220,8 @@ def SVFOpenModeAttr : I32EnumAttr<"SVFOpenMode", "SV file open mode",
 def SVFOpenOp : SimOp<"sv.fopen", [ProceduralOp]> {
   let summary = "Open a file and return a file descriptor";
   let description = [{
-    Opens a file and return an integer handle.
-    This handle is used in subsequent file operations to identify the file.
-    A return value of 0 indicates failure to open the file, and a non-zero value
-    indicates success.
+    Implements the SystemVerilog `$fopen` system function.
+    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
   }];
 
   let arguments = (ins DynamicStringType:$fileName, OptionalAttr<SVFOpenModeAttr>:$mode);
@@ -1234,26 +1232,29 @@ def SVFOpenOp : SimOp<"sv.fopen", [ProceduralOp]> {
 def SVFCloseOp : SimOp<"sv.fclose", [ProceduralOp]> {
   let summary = "Close a file descriptor";
   let description = [{
-    Closes a file descriptor obtained from `sim.sv.fopen`. After this operation,
-    the file descriptor is invalid and should not be used in subsequent file
-    operations.
+    Implements the SystemVerilog `$fclose` system function.
+    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
   }];
 
   let arguments = (ins I32:$fd);
   let assemblyFormat = "$fd attr-dict";
 }
 
-def SVFdToOutputStreamOp : SimOp<"sv.fd_to_output_stream", [ProceduralOp]> {
-  let summary = "Cast a SV file descriptor to an output stream";
+def SVChannelToOutputStreamOp : SimOp<"sv.channel_to_output_stream", [ProceduralOp]> {
+  let summary = "Cast a SV file descriptor or multichannel descriptor to an output stream";
   let description = [{
-    Casts a SystemVerilog file descriptor (an integer returned by
-    $fopen, or 1 for stdout / 2 for stderr) to an `!sim.output_stream`.
-    The cast semantically asserts that the integer represents a valid,
-    writable file handle or standard output stream
+    Casts a SystemVerilog output channel (an integer returned by `sv.fopen`,
+    or a predefined channel such as stdout (`32'h8000_0001`) or stderr
+    (`32'h8000_0002`)) to an `!sim.output_stream`.
+    The input must represent a valid SystemVerilog file descriptor or
+    multichannel descriptor, which can be used for writing. Otherwise,
+    this operation causes undefined behavior.
+
+    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
   }];
-  let arguments = (ins I32:$fd);
+  let arguments = (ins I32:$channel);
   let results = (outs OutputStreamType:$stream);
-  let assemblyFormat = "$fd attr-dict";
+  let assemblyFormat = "$channel attr-dict";
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

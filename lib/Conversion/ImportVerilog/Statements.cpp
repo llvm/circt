@@ -1104,12 +1104,10 @@ struct StmtVisitor {
 
     if (nameId == ksn::FClose) {
       assert(args.size() == 1 && "$fclose takes 1 argument");
-      auto fd = context.convertRvalueExpression(*args[0]);
+      auto fd = context.convertRvalueExpression(
+          *args[0], moore::IntType::getInt(builder.getContext(), 32));
       if (!fd)
         return failure();
-      auto i32Type = moore::IntType::getInt(builder.getContext(), 32);
-      if (fd.getType() != i32Type)
-        fd = moore::ConversionOp::create(builder, loc, i32Type, fd);
       moore::FCloseBIOp::create(builder, loc, fd);
       return true;
     }
