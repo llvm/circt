@@ -464,7 +464,7 @@ Value Context::convertAssertionCallExpression(
     // OneHot/OneHot0 are handled both here and below.
     if ((subroutine.knownNameId == slang::parsing::KnownSystemName::OneHot ||
          subroutine.knownNameId == slang::parsing::KnownSystemName::OneHot0) &&
-        if (valTy.getDomain() == Domain::FourValued)) {
+        (valTy.getDomain() == Domain::FourValued)) {
       // In SystemVerilog, these system only returns 1b1 if the expression is
       // fully known and the condition is met. So if any x or y bits, then
       // these must return 1'b0.
