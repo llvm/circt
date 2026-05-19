@@ -263,9 +263,59 @@ where the `logic_to_int` conversion is only necessary if `%cond` is 4-valued.
 %isunknown = moore.case_eq %reduced, %x : i1
 ```
 
+- **`$onehot0(a)`**:
+For 2-state input `%a` (where `%a` has type `iN`):
+
+```mlir
+%one = hw.constant 1 : iN
+%sub = comb.sub %a, %one : iN
+%and = comb.and %a, %sub : iN
+%zero = hw.constant 0 : iN
+%onehot0 = comb.icmp eq %and, %zero : iN
+```
+
+For 4-state input `%a` (where `%a` has type `!moore.lN`):
+First, `%a` is checked for unknown values (equivalent to `$isunknown(a)`). If
+any bits are unknown, the result is `1'b0`. Otherwise, it uses the 2-state
+lowering above on the coerced 2-state value:
+
+```mlir
+%isunknown = ... // see $isunknown lowering
+%coerced_a = moore.logic_to_int %a
+%int_a = moore.to_builtin_int %coerced_a
+%onehot0_2state = ... // 2-state lowering on %int_a
+%zero = hw.constant 0 : i1
+%onehot0 = comb.mux %isunknown, %zero, %onehot0_2state : i1
+```
+
+- **`$onehot(a)`**:
+For 2-state input `%a` (where `%a` has type `iN`):
+
+```mlir
+%one = hw.constant 1 : iN
+%sub = comb.sub %a, %one : iN
+%and = comb.and %a, %sub : iN
+%zero = hw.constant 0 : iN
+%onehot0 = comb.icmp eq %and, %zero : iN
+%notzero = comb.icmp ne %a, %zero : iN
+%onehot = comb.and %onehot0, %notzero : i1
+```
+
+For 4-state input `%a` (where `%a` has type `!moore.lN`):
+First, `%a` is checked for unknown values (equivalent to `$isunknown(a)`). If
+any bits are unknown, the result is `1'b0`. Otherwise, it uses the 2-state
+lowering above on the coerced 2-state value:
+
+```mlir
+%isunknown = ... // see $isunknown lowering
+%coerced_a = moore.logic_to_int %a
+%int_a = moore.to_builtin_int %coerced_a
+%onehot_2state = ... // 2-state lowering on %int_a
+%zero = hw.constant 0 : i1
+%onehot = comb.mux %isunknown, %zero, %onehot_2state : i1
+```
+
 > The following functions are not yet supported by CIRCT:  
-> - **`$onehot(a)`**  
-> - **`$onehot0(a)`**  
 > - **`$countones(a)`**     
   
   
