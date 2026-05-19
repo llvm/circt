@@ -1905,6 +1905,13 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
           instanceOp.setName(newName);
           if (shouldReplacePorts)
             instanceOp.setPortNamesAttr(ArrayAttr::get(ctx, newPortNames));
+        } else if (auto instanceChoiceOp =
+                       dyn_cast<firrtl::InstanceChoiceOp>(*useOp)) {
+          if (instanceChoiceOp.getDefaultTargetAttr().getAttr() == newName)
+            instanceChoiceOp.setName(newName);
+          if (shouldReplacePorts)
+            instanceChoiceOp.setPortNamesAttr(
+                ArrayAttr::get(ctx, newPortNames));
         } else if (auto objectOp = dyn_cast<firrtl::ObjectOp>(*useOp)) {
           // ObjectOp stores the class name in its result type.  Result types
           // are not updated by SymbolTable::rename (AttrTypeReplacer is called
