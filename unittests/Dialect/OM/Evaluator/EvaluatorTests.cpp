@@ -588,8 +588,7 @@ om.class @UseNode(%node: !ty) -> (node: !ty) {
 
   if (!GetParam()) {
     context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
-      ASSERT_EQ(diag.str(),
-                "cannot import mutually referencing OM object values");
+      ASSERT_EQ(diag.str(), "cannot import mutually referential OM objects");
     });
     auto useNodeResult =
         evaluator.instantiate(StringAttr::get(&context, "UseNode"), {node});

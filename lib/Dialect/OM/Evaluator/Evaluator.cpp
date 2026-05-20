@@ -92,29 +92,35 @@ public:
     SmallVector<EvaluatorValuePtr> actualParams;
   };
 
-  ScratchIRBuilder(ModuleOp sourceModule, SymbolTable &sourceSymbols);
+  ScratchIRBuilder(ModuleOp module, SymbolTable &symbolTable,
+                   StringAttr rootClassName, Location loc)
+      : module(module), symbolTable(symbolTable), rootClassName(rootClassName),
+        wrapperClass(createWrapperClass(rootClassName, loc)) {}
 
-  FailureOr<InstantiationInfo> run(StringAttr rootClassName,
+  FailureOr<InstantiationInfo> run(ClassLike rootClass,
                                    ArrayRef<EvaluatorValuePtr> actualParams);
 
 private:
   /// Create the temporary class that owns all scratch IR.
-  StringAttr createWrapperClass(StringAttr rootClassName, Location loc);
+  ClassOp createWrapperClass(StringAttr rootClassName, Location loc);
 
   /// Convert an API input value into scratch IR, preserving opaque any-typed
   /// inputs and rejecting runtime references/cycles.
   FailureOr<Value> materializeInput(const EvaluatorValuePtr &value,
                                     Location loc, Type expectedType);
+  /// Convert a fully evaluated list value into scratch IR.
   FailureOr<Value> materializeListInput(evaluator::ListValue *listValue,
                                         Location loc);
+  /// Convert a fully evaluated object value into scratch IR.
   FailureOr<Value> materializeObjectInput(evaluator::ObjectValue *objectValue,
                                           Location loc);
+  /// Add a wrapper class parameter for an input that must stay opaque.
   FailureOr<Value> createWrapperArgument(EvaluatorValuePtr value, Location loc,
                                          Type argType);
 
   ModuleOp module;
   SymbolTable &symbolTable;
-  OpBuilder builder;
+  StringAttr rootClassName;
   ClassOp wrapperClass;
   // A mapping from evaluator input values to their corresponding imported IR
   // values.
@@ -128,25 +134,15 @@ private:
   SmallVector<EvaluatorValuePtr> wrapperActualParams;
 };
 
-ScratchIRBuilder::ScratchIRBuilder(ModuleOp sourceModule,
-                                   SymbolTable &sourceSymbols)
-    : module(sourceModule), symbolTable(sourceSymbols),
-      builder(sourceModule.getContext()) {}
-
 FailureOr<ScratchIRBuilder::InstantiationInfo>
-ScratchIRBuilder::run(StringAttr rootClassName,
+ScratchIRBuilder::run(ClassLike rootClass,
                       ArrayRef<EvaluatorValuePtr> actualParams) {
   auto *ctx = module.getContext();
-
-  auto rootClass = symbolTable.lookup<ClassLike>(rootClassName);
-  if (!rootClass)
-    return module.emitError("unknown class name ") << rootClassName;
-  if (failed(verifyActualParameters(rootClass, actualParams)))
-    return failure();
-
+  assert(rootClass.getSymNameAttr() == rootClassName &&
+         "root class must match the wrapper class target");
   auto rootLoc = rootClass.getLoc();
-  auto wrapperName = createWrapperClass(rootClassName, rootLoc);
 
+  OpBuilder builder(wrapperClass.getFieldsOp());
   builder.setInsertionPoint(wrapperClass.getFieldsOp());
   SmallVector<Value> importedActualValues;
   importedActualValues.reserve(actualParams.size());
@@ -162,17 +158,21 @@ ScratchIRBuilder::run(StringAttr rootClassName,
   wrapperClass->setAttr(wrapperClass.getFormalParamNamesAttrName(),
                         builder.getArrayAttr(wrapperArgNames));
 
-  auto rootType = ClassType::get(ctx, FlatSymbolRefAttr::get(rootClassName));
-  auto rootObject = ObjectOp::create(builder, rootLoc, rootType, rootClassName,
-                                     importedActualValues);
-  wrapperClass.updateFields({rootLoc}, {rootObject.getResult()},
-                            {builder.getStringAttr("root")});
+  wrapperClass.updateFields(
+      {rootLoc},
+      {ObjectOp::create(
+           builder, rootLoc,
+           ClassType::get(ctx, FlatSymbolRefAttr::get(rootClassName)),
+           rootClassName, importedActualValues)
+           .getResult()},
+      {builder.getStringAttr("root")});
 
   if (failed(verify(module)))
     return failure();
 
   PassManager pm(ctx);
   ElaborateObjectOptions options;
+  auto wrapperName = wrapperClass.getSymNameAttr();
   options.targetClass = wrapperName.getValue().str();
   pm.addPass(createElaborateObject(std::move(options)));
   if (failed(pm.run(module)))
@@ -181,19 +181,19 @@ ScratchIRBuilder::run(StringAttr rootClassName,
   return InstantiationInfo{wrapperName, std::move(wrapperActualParams)};
 }
 
-StringAttr ScratchIRBuilder::createWrapperClass(StringAttr rootClassName,
-                                                Location loc) {
+ClassOp ScratchIRBuilder::createWrapperClass(StringAttr rootClassName,
+                                             Location loc) {
+  OpBuilder builder(module.getBody(), module.getBody()->end());
   builder.setInsertionPointToEnd(module.getBody());
 
-  std::string wrapperName =
-      ("__om_evaluator_wrapper_" + rootClassName.getValue()).str();
-  wrapperClass = ClassOp::create(builder, loc, wrapperName);
-  auto uniqueWrapperName = symbolTable.insert(wrapperClass);
-
+  wrapperClass = ClassOp::create(builder, loc,
+                                 Twine("__om_evaluator_wrapper_") +
+                                     rootClassName.getValue());
+  (void)symbolTable.insert(wrapperClass);
   Block *body = &wrapperClass.getBody().emplaceBlock();
   builder.setInsertionPointToEnd(body);
   ClassFieldsOp::create(builder, loc, ValueRange(), ArrayAttr{});
-  return uniqueWrapperName;
+  return wrapperClass;
 }
 
 FailureOr<Value>
@@ -217,32 +217,37 @@ ScratchIRBuilder::materializeInput(const EvaluatorValuePtr &value, Location loc,
     return it->second;
 
   if (value->isUnknown()) {
+    OpBuilder builder(wrapperClass.getFieldsOp());
     auto result = UnknownValueOp::create(builder, loc, expectedType);
     importedValues[value.get()] = result.getResult();
     return result.getResult();
   }
 
-  if (auto *attrValue = dyn_cast<evaluator::AttributeValue>(value.get())) {
-    auto attr = attrValue->getAttr();
-    if (!attr)
-      return emitError(loc, "cannot import OM attribute value without an "
-                            "attribute");
+  return llvm::TypeSwitch<evaluator::EvaluatorValue *, FailureOr<Value>>(
+             value.get())
+      .Case([&](evaluator::AttributeValue *attrValue) -> FailureOr<Value> {
+        auto attr = attrValue->getAttr();
+        if (!attr)
+          return emitError(loc, "cannot import OM attribute value without an "
+                                "attribute");
 
-    auto result = ConstantOp::create(builder, loc, cast<TypedAttr>(attr));
-    importedValues[value.get()] = result.getResult();
-    return result.getResult();
-  }
-
-  if (auto *listValue = dyn_cast<evaluator::ListValue>(value.get()))
-    return materializeListInput(listValue, loc);
-
-  if (auto *objectValue = dyn_cast<evaluator::ObjectValue>(value.get()))
-    return materializeObjectInput(objectValue, loc);
-
-  auto result = createWrapperArgument(value, loc, expectedType);
-  if (succeeded(result))
-    importedValues[value.get()] = *result;
-  return result;
+        OpBuilder builder(wrapperClass.getFieldsOp());
+        auto result = ConstantOp::create(builder, loc, cast<TypedAttr>(attr));
+        importedValues[value.get()] = result.getResult();
+        return result.getResult();
+      })
+      .Case([&](evaluator::ListValue *listValue) {
+        return materializeListInput(listValue, loc);
+      })
+      .Case([&](evaluator::ObjectValue *objectValue) {
+        return materializeObjectInput(objectValue, loc);
+      })
+      .Default([&](evaluator::EvaluatorValue *) -> FailureOr<Value> {
+        auto result = createWrapperArgument(value, loc, expectedType);
+        if (succeeded(result))
+          importedValues[value.get()] = *result;
+        return result;
+      });
 }
 
 FailureOr<Value>
@@ -262,6 +267,7 @@ ScratchIRBuilder::materializeListInput(evaluator::ListValue *listValue,
     elementValues.push_back(*materializedElement);
   }
 
+  OpBuilder builder(wrapperClass.getFieldsOp());
   auto result = ListCreateOp::create(builder, loc, listType, elementValues);
   importedValues[listValue] = result.getResult();
   return result.getResult();
@@ -272,11 +278,10 @@ ScratchIRBuilder::materializeObjectInput(evaluator::ObjectValue *objectValue,
                                          Location loc) {
   // TODO: Currently we only support importing object values that don't have
   // mutual references with other object values in the inputs for the
-  // simplicity. We could consturct mutually referencing object values with a
+  // simplicity. We could construct mutually referencing object values with a
   // backedge builder but currently we don't have a use case for that.
   if (!activeObjectImports.insert(objectValue).second)
-    return emitError(loc,
-                     "cannot import mutually referencing OM object values");
+    return emitError(loc, "cannot import mutually referential OM objects");
 
   llvm::scope_exit popActiveObjectImport(
       [&] { activeObjectImports.erase(objectValue); });
@@ -297,6 +302,7 @@ ScratchIRBuilder::materializeObjectInput(evaluator::ObjectValue *objectValue,
     fieldValues.push_back(*materializedField);
   }
 
+  OpBuilder builder(wrapperClass.getFieldsOp());
   auto result =
       ElaboratedObjectOp::create(builder, loc, classLike, fieldValues);
   importedValues[objectValue] = result.getResult();
@@ -306,16 +312,11 @@ ScratchIRBuilder::materializeObjectInput(evaluator::ObjectValue *objectValue,
 FailureOr<Value>
 ScratchIRBuilder::createWrapperArgument(EvaluatorValuePtr value, Location loc,
                                         Type argType) {
-  auto argName = ("arg" + Twine(wrapperArgNames.size())).str();
-  wrapperArgNames.push_back(builder.getStringAttr(argName));
-
-  auto arg = wrapperClass.getBodyBlock()->addArgument(argType, loc);
+  Builder builder(module.getContext());
+  wrapperArgNames.push_back(
+      builder.getStringAttr(Twine("arg") + Twine(wrapperArgNames.size())));
   wrapperActualParams.push_back(value);
-  return arg;
-}
-
-bool shouldRunElaborationTransform(ModuleOp module) {
-  return !module->hasAttr(skipElaborationTransformAttr);
+  return wrapperClass.getBodyBlock()->addArgument(argType, loc);
 }
 
 } // namespace
@@ -615,11 +616,22 @@ circt::om::Evaluator::instantiate(
       dbgs() << "- " << param << "\n";
   });
 
-  if (!shouldRunElaborationTransform(getModule()))
+  // Skip the elaboration transform and directly instantiate the class if the
+  // caller explicitly requests so.
+  // TODO: Remove this after fully migrating to the new evaluator-based
+  // implementation.
+  if (getModule()->hasAttr(skipElaborationTransformAttr))
     return instantiateImpl(className, actualParams);
 
-  ScratchIRBuilder scratchBuilder(getModule(), symbolTable);
-  auto transformedInstantiation = scratchBuilder.run(className, actualParams);
+  auto rootClass = symbolTable.lookup<ClassLike>(className);
+  if (!rootClass)
+    return symbolTable.getOp()->emitError("unknown class name ") << className;
+  if (failed(verifyActualParameters(rootClass, actualParams)))
+    return failure();
+
+  ScratchIRBuilder scratchBuilder(getModule(), symbolTable, className,
+                                  rootClass.getLoc());
+  auto transformedInstantiation = scratchBuilder.run(rootClass, actualParams);
   if (failed(transformedInstantiation))
     return failure();
 
