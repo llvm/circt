@@ -778,6 +778,16 @@ module Expressions;
   // CHECK: [[CONV_CONCAT:%.+]] = moore.int_to_string [[STR_CONCAT]] : i48
   // CHECK: [[VAR_SCON:%.+]] = moore.variable [[CONV_CONCAT]] : <string>
   string concatstr = "Concat";
+  // CHECK: [[STR0:%.+]] = moore.constant_string "hello" : i40
+  // CHECK: [[INT_TO_STR0:%.+]] = moore.int_to_string [[STR0]] : i40
+  // CHECK: [[STR1:%.+]] = moore.constant_string "sad" : i24
+  // CHECK: [[INT_TO_STR1:%.+]] = moore.int_to_string [[STR1]] : i24
+  // CHECK: [[STR2:%.+]] = moore.constant_string "world" : i40
+  // CHECK: [[INT_TO_STR2:%.+]] = moore.int_to_string [[STR2]] : i40
+  // CHECK: [[ARR_CREATE:%.+]] = moore.array_create [[INT_TO_STR0]], [[INT_TO_STR1]], [[INT_TO_STR2]] : !moore.string, !moore.string, !moore.string -> uarray<3 x string>
+  // CHECK: [[STRARR_CONV:%.+]] = moore.conversion [[ARR_CREATE]] : !moore.uarray<3 x string> -> !moore.open_uarray<string>
+  // CHECK: %strArr = moore.variable [[STRARR_CONV]] : <open_uarray<string>>
+  string strArr[] = { "hello", "sad", "world" };
 
   initial begin
     // CHECK: moore.constant 0 : i32
