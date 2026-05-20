@@ -740,6 +740,7 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
         ][0]
         demuxed_upstream_channel = demux.get_out(idx)
 
+
         # TODO: Should responses come back out-of-order (interleaved tags),
         # re-order them here so the gearbox doesn't get confused. (Longer term.)
         # For now, only support one outstanding transaction at a time.  This has
@@ -748,6 +749,10 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
 
         # Gearbox the data to the client's data type.
         client_type = resp_type.inner_type
+        if client_type.data.bitwidth == 0:
+          raise ValueError("Client data type cannot be zero-width. Use a "
+                           "single-bit type if no data is needed.")
+
         gearbox = TaggedReadGearbox(read_width, client_type.data.bitwidth)(
             clk=ports.clk, rst=ports.rst, in_=demuxed_upstream_channel)
         client_resp_channel = gearbox.out.transform(lambda m: client_type({
@@ -1208,16 +1213,27 @@ def ChannelEngineService(
       def build_engine(bc: BundledChannel, input_channel=None) -> Type:
         idbase = build_engine_appid(bundle.client_name, bc.name)
         eng_appid = esi.AppID(idbase)
+        # DMA engines require at least 1 byte of data; substitute Bits(8)
+        # for zero-width (void) channel types so the engine never sees a
+        # zero-length transfer.
+        engine_client_type = bc.channel.inner_type
+        is_void = (engine_client_type.bitwidth == 0)
+        if is_void:
+          engine_client_type = Bits(8)
         if bc.direction == ChannelDirection.FROM:
-          engine_mod = to_host_engine_gen(bc.channel.inner_type)
+          engine_mod = to_host_engine_gen(engine_client_type)
         else:
-          engine_mod = from_host_engine_gen(bc.channel.inner_type)
+          engine_mod = from_host_engine_gen(engine_client_type)
         eng_inputs = {
             "clk": ports.clk,
             "rst": ports.rst,
         }
         eng_details: Dict[str, object] = {"engine_inst": eng_appid}
         if input_channel is not None:
+          # For void channels, widen the 0-bit input to the 8-bit
+          # placeholder the engine expects.
+          if is_void:
+            input_channel = input_channel.transform(lambda _: Bits(8)(0))
           if (engine_mod.input_channel.type.signaling
               != input_channel.type.signaling):
             input_channel = input_channel.buffer(
@@ -1249,7 +1265,11 @@ def ChannelEngineService(
         for bc in bundle_type.channels:
           if bc.direction == ChannelDirection.TO:
             engine = build_engine(bc)
-            to_channels[bc.name] = engine.output_channel
+            out_chan = engine.output_channel
+            # For void channels, narrow the 8-bit placeholder back to 0-bit.
+            if bc.channel.inner_type.bitwidth == 0:
+              out_chan = out_chan.transform(lambda _: Bits(0)(0))
+            to_channels[bc.name] = out_chan
 
         client_bundle_sig, froms = bundle_type.pack(**to_channels)
         bundle.assign(client_bundle_sig)

@@ -77,7 +77,11 @@ public:
                                AppIDPath idPath, const std::string &channelName)
       : ReadChannelPort(type), engine(engine), idPath(idPath),
         channelName(channelName) {
-    bufferSize = (type->getBitWidth() / 8) + 1;
+    // getFrameSizeBytes() rounds up to full bytes and clamps to at least 1,
+    // matching the byte-aligned padding applied in the PyCDE DMA hardware
+    // (OneItemBuffersToHost pads client_data so the valid flag is always the
+    // last byte of the transfer).
+    bufferSize = getFrameSizeBytes() + 1;
   }
 
   // Write the location of the buffer to the MMIO space.
