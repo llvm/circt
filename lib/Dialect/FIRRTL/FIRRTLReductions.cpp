@@ -2663,6 +2663,17 @@ struct ExtmoduleConventionRemover : public OpReduction<FExtModuleOp> {
   bool isOneShot() const override { return true; }
 };
 
+struct IMDCEPortReduction : public PassReduction {
+  IMDCEPortReduction(MLIRContext *context)
+      : PassReduction(
+            context, firrtl::createIMDeadCodeElim({/*removePortsOnly=*/true,
+                                                   /*ignoreDontTouch=*/true})) {
+  }
+  std::string getName() const override {
+    return "firrtl-imdeadcodeelim-remove-ports";
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -2702,9 +2713,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
                                   true, true);
   patterns.add<PassReduction, 19>(getContext(), firrtl::createInliner());
   patterns.add<PassReduction, 18>(getContext(), firrtl::createIMConstProp());
-  patterns.add<PassReduction, 17>(
-      getContext(),
-      firrtl::createRemoveUnusedPorts({/*ignoreDontTouch=*/true}));
+  patterns.add<IMDCEPortReduction, 17>(getContext());
   patterns.add<NodeSymbolRemover, 16>();
   patterns.add<PassReduction, 15>(getContext(), firrtl::createIMDeadCodeElim());
   patterns.add<ConnectForwarder, 14>();
