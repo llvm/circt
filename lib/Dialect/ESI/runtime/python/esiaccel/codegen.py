@@ -934,6 +934,25 @@ class CppTypePlanner:
         deps.update(self._collect_decls_from_type(field_type))
     return deps
 
+  def _contains_window(self, esi_type: types.ESIType) -> bool:
+    """Return True if `esi_type` is or transitively contains a WindowType.
+
+    Structs (and aliases/unions that reference them) which embed a window
+    cannot be emitted as C++ packed structs because the C++ window helper
+    is a variable-size multi-frame container. This helper is used to
+    exclude such types from the emission list entirely.
+    """
+    unwrapped = self._unwrap_aliases(esi_type)
+    if isinstance(unwrapped, types.WindowType):
+      return True
+    if isinstance(unwrapped, types.StructType):
+      return any(self._contains_window(ft) for _, ft in unwrapped.fields)
+    if isinstance(unwrapped, types.UnionType):
+      return any(self._contains_window(ft) for _, ft in unwrapped.fields)
+    if isinstance(unwrapped, types.ArrayType):
+      return self._contains_window(unwrapped.element_type)
+    return False
+
   def _ordered_emit_types(self) -> Tuple[List[types.ESIType], bool]:
     """Collect and order types for deterministic emission."""
     window_into_types: Set[types.ESIType] = set()
@@ -952,6 +971,11 @@ class CppTypePlanner:
         if inner is not None and self._unwrap_aliases(
             inner) in window_into_types:
           continue
+      # Skip structs/unions/aliases that transitively embed a WindowType field.
+      # WindowType itself is fine — it emits as its own helper class.
+      if (not isinstance(self._unwrap_aliases(esi_type), types.WindowType) and
+          self._contains_window(esi_type)):
+        continue
       if (isinstance(esi_type,
                      (types.StructType, types.UnionType, types.TypeAlias)) or
           self._is_supported_window(esi_type)):
