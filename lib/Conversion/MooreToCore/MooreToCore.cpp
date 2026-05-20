@@ -3153,7 +3153,7 @@ static void populateLegality(ConversionTarget &target,
   target.addDynamicallyLegalOp<scf::YieldOp, func::CallOp, func::ReturnOp,
                                UnrealizedConversionCastOp, hw::OutputOp,
                                hw::InstanceOp, debug::ArrayOp, debug::StructOp,
-                               debug::VariableOp>(
+                               debug::VariableOp, arith::SelectOp>(
       [&](Operation *op) { return converter.isLegal(op); });
 
   target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
