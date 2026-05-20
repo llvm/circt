@@ -38,8 +38,17 @@ def OneItemBuffersToHost(client_type: Type):
     # compiler), the module (usually a service implementation) must issue the
     # service requests for us then connect the input ports.
     mmio = Input(esi.MMIO.read_write.type)
+    # Compute the byte-aligned width of client_data. The DMA protocol
+    # requires the valid flag to be the last byte of the transfer, which
+    # only works when client_data is byte-aligned.
+    _client_bits = client_type.bitwidth
+    _padded_bits = ((_client_bits + 7) // 8) * 8
+    _needs_pad = (_padded_bits != _client_bits)
+    # When padding is needed, widen client_data to Bits so the struct is
+    # byte-aligned.  Otherwise keep the original type.
+    _wire_client_type = Bits(_padded_bits) if _needs_pad else client_type
     xfer_data_type = StructType([("valid", Bits(8)),
-                                 ("client_data", client_type)])
+                                 ("client_data", _wire_client_type)])
     hostmem_write = Input(esi.HostMem.write_req_bundle_type(xfer_data_type))
 
     @generator
@@ -90,12 +99,23 @@ def OneItemBuffersToHost(client_type: Type):
       hostwr_type = esi.HostMem.write_req_channel_type(
           OneItemBuffersToHost.xfer_data_type)
       hostwr_joined = Channel.join(next_buffer_loc_chan, ports.input_channel)
+      _np = OneItemBuffersToHost._needs_pad
+      _pb = OneItemBuffersToHost._padded_bits
+      _cb = OneItemBuffersToHost._client_bits
+
+      def _pad_client_data(raw):
+        """Widen the client data to byte-aligned Bits for the DMA struct."""
+        if not _np:
+          return raw
+        # bitcast to Bits of original width, then zero-extend.
+        return raw.bitcast(Bits(_cb)).pad_or_truncate(_pb)
+
       hostwr = hostwr_joined.transform(lambda joined: hostwr_type({
           "address": joined.a.as_uint(),
           "tag": 0,
           "data": {
               "valid": 1,
-              "client_data": joined.b
+              "client_data": _pad_client_data(joined.b)
           },
       }))
       ports.hostmem_write.unpack(req=hostwr)

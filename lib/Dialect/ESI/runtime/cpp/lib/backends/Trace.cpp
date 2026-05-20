@@ -241,6 +241,9 @@ private:
                                getType()->getID());
 
     std::ptrdiff_t size = (numBits + 7) / 8;
+    // Zero-width types need a 1-byte placeholder.
+    if (size == 0)
+      return MessageData({0});
     std::vector<uint8_t> bytes(size);
     for (std::ptrdiff_t i = 0; i < size; ++i)
       bytes[i] = rand() % 256;
