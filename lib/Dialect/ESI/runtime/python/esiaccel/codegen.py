@@ -1172,6 +1172,22 @@ class CppTypeEmitter:
       return None
     return (bit_width + 7) // 8
 
+  def _contains_window(self, esi_type: types.ESIType) -> bool:
+    """Return True if `esi_type` is or transitively contains a WindowType.
+
+    The C++ window helper class is a multi-frame container whose sizeof
+    differs from the manifest's compact frame bit-width, so any struct
+    that (recursively) embeds a window field must skip the sizeof assert.
+    """
+    unwrapped = self._unwrap_aliases(esi_type)
+    if isinstance(unwrapped, types.WindowType):
+      return True
+    if isinstance(unwrapped, types.StructType):
+      return any(self._contains_window(ft) for _, ft in unwrapped.fields)
+    if isinstance(unwrapped, types.ArrayType):
+      return self._contains_window(unwrapped.element_type)
+    return False
+
   def _emit_size_assert(self,
                         hdr: TextIO,
                         type_name: str,
@@ -1284,6 +1300,13 @@ class CppTypeEmitter:
     # Zero-width composite types collapse to `void` everywhere they appear
     # (see _cpp_type), so there is nothing meaningful to emit here.
     if struct_type.bit_width == 0:
+      return
+    # Structs that (recursively) contain a WindowType field are DMA-internal
+    # transport wrappers (e.g. {valid, client_data: <window>}).  The C++
+    # window helper is a variable-size multi-frame container whose sizeof
+    # cannot match the manifest's compact frame bit-width, so these types
+    # are not usable from generated C++.  Skip them entirely.
+    if self._contains_window(struct_type):
       return
     fields = list(struct_type.fields)
     if struct_type.cpp_type.reverse:
