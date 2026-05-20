@@ -592,6 +592,37 @@ struct ExprVisitor {
     if (expr.type->isQueue()) {
       return handleQueueConcat(expr);
     }
+
+    if (expr.type->isUnpackedArray()) {
+      assert(!isLvalue && "checked by Slang");
+      auto loweredType = context.convertType(*expr.type, loc);
+      if (!loweredType)
+        return {};
+
+      moore::UnpackedType elementType;
+      if (auto arrayType = dyn_cast<moore::UnpackedArrayType>(loweredType))
+        elementType = arrayType.getElementType();
+      else if (auto openType =
+                   dyn_cast<moore::OpenUnpackedArrayType>(loweredType))
+        elementType = openType.getElementType();
+      else
+        return {};
+
+      SmallVector<Value> operands;
+      for (auto *operand : expr.operands()) {
+        if (operand->type->isVoid())
+          continue;
+        auto value = context.convertRvalueExpression(*operand, elementType);
+        if (!value)
+          return {};
+        operands.push_back(value);
+      }
+
+      auto arrayType = moore::UnpackedArrayType::get(
+          context.getContext(), operands.size(), elementType);
+      return moore::ArrayCreateOp::create(builder, loc, arrayType, operands);
+    }
+
     for (auto *operand : expr.operands()) {
       // Handle empty replications like `{0{...}}` which may occur within
       // concatenations. Slang assigns them a `void` type which we can check for
@@ -2212,6 +2243,19 @@ struct RvalueExprVisitor : public ExprVisitor {
       return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
     }
 
+    // Handle open/dynamic unpacked arrays.
+    if (auto openType = dyn_cast<moore::OpenUnpackedArrayType>(type)) {
+      auto elements =
+          convertElements(expr, openType.getElementType(), replCount);
+
+      if (failed(elements))
+        return {};
+
+      auto arrayType = moore::UnpackedArrayType::get(
+          context.getContext(), elements->size(), openType.getElementType());
+      return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
+    }
+
     mlir::emitError(loc) << "unsupported assignment pattern with type " << type;
     return {};
   }
@@ -2717,6 +2761,26 @@ Value Context::materializeFixedSizeUnpackedArrayType(
   auto type = convertType(astType);
   if (!type)
     return {};
+
+  // Handle string array constants.
+  if (astType.elementType.isString()) {
+    auto arrayType = dyn_cast<moore::UnpackedArrayType>(type);
+    if (!arrayType)
+      return {};
+
+    SmallVector<Value> elemVals;
+    for (const auto &elem : constant.elements()) {
+      if (!elem.isString())
+        return {};
+      auto value = materializeString(elem, astType.elementType, loc);
+      if (!value)
+        return {};
+      elemVals.push_back(value);
+    }
+    if (elemVals.size() != arrayType.getSize())
+      return {};
+    return moore::ArrayCreateOp::create(builder, loc, arrayType, elemVals);
+  }
 
   // Check whether underlying type is an integer, if so, get bit width
   unsigned bitWidth;
