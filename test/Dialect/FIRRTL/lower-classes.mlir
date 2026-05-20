@@ -787,3 +787,25 @@ firrtl.circuit "NoPropPorts" {
     firrtl.property_assert %2, "srcs must match" : !firrtl.bool
   }
 }
+
+// Ensure that trivial leaves with paths work.
+//
+// See: https://github.com/llvm/circt/issues/10510
+//
+// CHECK-LABEL: firrtl.circuit "PathOpInLeafModule"
+firrtl.circuit "PathOpInLeafModule" {
+  // CHECK: om.class @Bar_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:   %0 = om.path_create reference %alt_basepath_0 {{@.+}}
+  firrtl.module @Bar() {
+    %0 = firrtl.path reference distinct[0]<>
+  }
+
+  firrtl.module @PathOpInLeafModule() {
+    firrtl.instance bar @Bar()
+    %a = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[0]<>}
+      ]
+    } : !firrtl.uint<1>
+  }
+}

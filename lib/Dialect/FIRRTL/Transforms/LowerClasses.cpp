@@ -794,12 +794,6 @@ LogicalResult LowerClassesPass::processPaths(
         continue;
       }
 
-      // If we are at a leaf, nothing to do.
-      if (it->begin() == it->end()) {
-        ++it;
-        continue;
-      }
-
       // Track state for this passthrough.
       StringAttr passthroughModule = it->getModule().getModuleNameAttr();
       pathInfoTable.addAltBasePathPassthrough(passthroughModule, rootModule);
