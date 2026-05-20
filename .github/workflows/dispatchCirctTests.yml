@@ -12,6 +12,10 @@ on:
     workflows: ["Build and Test"]
     types: [completed]
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   dispatch:
     name: Dispatch circt-tests
