@@ -50,14 +50,17 @@ class Immediate(Value):
     # Note that the upper limit is exclusive
     return Immediate(width, Integer.random(0, 2**width - 1))
 
-  def concat(self, *others: Immediate) -> Immediate:
+  def concat(*args: Immediate) -> Immediate:
     """
     Concatenates this immediate with the provided immediates. The operands are
     concatenated in order, with this immediate becoming the most significant
     bits of the result.
     """
 
-    return rtg.ConcatImmediateOp([self, *others])
+    if len(args) == 0:
+      raise ValueError("At least one immediate required")
+
+    return rtg.ConcatImmediateOp(list(args))
 
   def replicate(self, count: int) -> Immediate:
     """
