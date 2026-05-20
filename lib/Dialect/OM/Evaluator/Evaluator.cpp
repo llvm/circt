@@ -93,16 +93,15 @@ public:
   };
 
   ScratchIRBuilder(ModuleOp module, SymbolTable &symbolTable,
-                   StringAttr rootClassName, Location loc)
-      : module(module), symbolTable(symbolTable), rootClassName(rootClassName),
-        wrapperClass(createWrapperClass(rootClassName, loc)) {}
+                   ClassLike rootClass)
+      : module(module), symbolTable(symbolTable), rootClass(rootClass),
+        wrapperClass(createWrapperClass(rootClass)) {}
 
-  FailureOr<InstantiationInfo> run(ClassLike rootClass,
-                                   ArrayRef<EvaluatorValuePtr> actualParams);
+  FailureOr<InstantiationInfo> run(ArrayRef<EvaluatorValuePtr> actualParams);
 
 private:
   /// Create the temporary class that owns all scratch IR.
-  ClassOp createWrapperClass(StringAttr rootClassName, Location loc);
+  ClassOp createWrapperClass(ClassLike rootClass);
 
   /// Convert an API input value into scratch IR, preserving opaque any-typed
   /// inputs and rejecting runtime references/cycles.
@@ -120,7 +119,7 @@ private:
 
   ModuleOp module;
   SymbolTable &symbolTable;
-  StringAttr rootClassName;
+  ClassLike rootClass;
   ClassOp wrapperClass;
   // A mapping from evaluator input values to their corresponding imported IR
   // values.
@@ -135,12 +134,11 @@ private:
 };
 
 FailureOr<ScratchIRBuilder::InstantiationInfo>
-ScratchIRBuilder::run(ClassLike rootClass,
-                      ArrayRef<EvaluatorValuePtr> actualParams) {
+ScratchIRBuilder::run(ArrayRef<EvaluatorValuePtr> actualParams) {
   auto *ctx = module.getContext();
-  assert(rootClass.getSymNameAttr() == rootClassName &&
-         "root class must match the wrapper class target");
+  assert(rootClass && "root class must be resolved before building scratch IR");
   auto rootLoc = rootClass.getLoc();
+  auto rootClassName = rootClass.getSymNameAttr();
 
   OpBuilder builder(wrapperClass.getFieldsOp());
   builder.setInsertionPoint(wrapperClass.getFieldsOp());
@@ -181,19 +179,18 @@ ScratchIRBuilder::run(ClassLike rootClass,
   return InstantiationInfo{wrapperName, std::move(wrapperActualParams)};
 }
 
-ClassOp ScratchIRBuilder::createWrapperClass(StringAttr rootClassName,
-                                             Location loc) {
+ClassOp ScratchIRBuilder::createWrapperClass(ClassLike rootClass) {
   OpBuilder builder(module.getBody(), module.getBody()->end());
   builder.setInsertionPointToEnd(module.getBody());
 
-  wrapperClass = ClassOp::create(builder, loc,
+  auto wrapper = ClassOp::create(builder, rootClass.getLoc(),
                                  Twine("__om_evaluator_wrapper_") +
-                                     rootClassName.getValue());
-  (void)symbolTable.insert(wrapperClass);
-  Block *body = &wrapperClass.getBody().emplaceBlock();
+                                     rootClass.getSymName());
+  (void)symbolTable.insert(wrapper);
+  Block *body = &wrapper.getBody().emplaceBlock();
   builder.setInsertionPointToEnd(body);
-  ClassFieldsOp::create(builder, loc, ValueRange(), ArrayAttr{});
-  return wrapperClass;
+  ClassFieldsOp::create(builder, rootClass.getLoc(), ValueRange(), ArrayAttr{});
+  return wrapper;
 }
 
 FailureOr<Value>
@@ -629,9 +626,8 @@ circt::om::Evaluator::instantiate(
   if (failed(verifyActualParameters(rootClass, actualParams)))
     return failure();
 
-  ScratchIRBuilder scratchBuilder(getModule(), symbolTable, className,
-                                  rootClass.getLoc());
-  auto transformedInstantiation = scratchBuilder.run(rootClass, actualParams);
+  ScratchIRBuilder scratchBuilder(getModule(), symbolTable, rootClass);
+  auto transformedInstantiation = scratchBuilder.run(actualParams);
   if (failed(transformedInstantiation))
     return failure();
 
