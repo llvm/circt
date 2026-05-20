@@ -359,8 +359,8 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
 
   case ksn::OneHot0: {
     auto one = hw::ConstantOp::create(builder, loc, value.getType(), 1);
-    auto minusOne = builder.create<comb::SubOp>(loc, value, one);
-    auto anded = builder.create<comb::AndOp>(loc, value, minusOne);
+    auto minusOne = comb::SubOp::create(builder, loc, value, one);
+    auto anded = comb::AndOp::create(builder, loc, value, minusOne);
     auto zero = hw::ConstantOp::create(builder, loc, value.getType(), 0);
     return castToMoore(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::eq, anded, zero, false));
@@ -368,8 +368,8 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
 
   case ksn::OneHot: {
     auto one = hw::ConstantOp::create(builder, loc, value.getType(), 1);
-    auto minusOne = builder.create<comb::SubOp>(loc, value, one);
-    auto anded = builder.create<comb::AndOp>(loc, value, minusOne);
+    auto minusOne = comb::SubOp::create(builder, loc, value, one);
+    auto anded = comb::AndOp::create(builder, loc, value, minusOne);
     auto zero = hw::ConstantOp::create(builder, loc, value.getType(), 0);
     auto isOneHot0 = comb::ICmpOp::create(builder, loc, comb::ICmpPredicate::eq,
                                           anded, zero, false);
@@ -491,8 +491,8 @@ Value Context::convertAssertionCallExpression(
       Value onehot2stateBuiltin = convertToI1(onehot2state);
       Value zeroBuiltin =
           hw::ConstantOp::create(builder, loc, builder.getI1Type(), 0);
-      Value resultBuiltin = builder.create<comb::MuxOp>(
-          loc, isUnknown, zeroBuiltin, onehot2stateBuiltin);
+      Value resultBuiltin = comb::MuxOp::create(
+          builder, loc, isUnknown, zeroBuiltin, onehot2stateBuiltin);
 
       Value finalResult =
           moore::FromBuiltinIntOp::create(builder, loc, resultBuiltin);
