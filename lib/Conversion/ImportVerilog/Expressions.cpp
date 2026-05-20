@@ -3458,6 +3458,45 @@ Value Context::convertSystemCall(
     return {};
   }
 
+  //===--------------------------------------------------------------------===//
+  // File I/O System Functions
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::FOpen) {
+    assert(numArgs >= 1 && numArgs <= 2 && "`$fopen` takes 1 or 2 arguments");
+    auto filename =
+        convertRvalueExpression(*args[0], moore::StringType::get(getContext()));
+    if (!filename)
+      return {};
+    moore::FOpenModeAttr modeAttr;
+    if (numArgs == 2) {
+      auto *strLit = args[1]
+                         ->unwrapImplicitConversions()
+                         .as_if<slang::ast::StringLiteral>();
+      if (!strLit)
+        return emitError(loc) << "$fopen mode must be a string literal",
+               Value{};
+
+      auto mode =
+          llvm::StringSwitch<std::optional<moore::FOpenMode>>(
+              strLit->getValue())
+              .Cases({"r", "rb"}, moore::FOpenMode::Read)
+              .Cases({"w", "wb"}, moore::FOpenMode::Write)
+              .Cases({"a", "ab"}, moore::FOpenMode::Append)
+              .Cases({"r+", "r+b", "rb+"}, moore::FOpenMode::ReadUpdate)
+              .Cases({"w+", "w+b", "wb+"}, moore::FOpenMode::WriteUpdate)
+              .Cases({"a+", "a+b", "ab+"}, moore::FOpenMode::AppendUpdate)
+              .Default(std::nullopt);
+
+      if (!mode)
+        return emitError(loc)
+                   << "invalid $fopen mode '" << strLit->getValue() << "'",
+               Value{};
+      modeAttr = moore::FOpenModeAttr::get(getContext(), *mode);
+    }
+    return moore::FOpenBIOp::create(builder, loc, filename, modeAttr);
+  }
+
   // Unrecognized system call
   emitError(loc) << "unsupported system call `" << name << "`";
   return {};
