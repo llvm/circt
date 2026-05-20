@@ -9,6 +9,10 @@
 
 // CHECK-LABEL: firrtl.circuit "Foo"
 firrtl.circuit "A" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+    firrtl.option_case @ASIC
+  }
   // hw.hierpath namepath entries use InnerRefAttr, not SymbolRefAttr, so they
   // require the NLATable rename step rather than SymbolTable::rename.
   // CHECK: hw.hierpath private @nla [@Foo::@sym_b, @Bar]
@@ -77,12 +81,23 @@ firrtl.circuit "A" {
         in x: !firrtl.uint<1>,
         out y: !firrtl.uint<1>
       )
-    // CHECK: %Baz = firrtl.object @Baz()
+    // CHECK: firrtl.instance_choice Baz @Baz alternatives @Platform { @FPGA -> @Qux, @ASIC -> @Quux } (in clk: !firrtl.clock, in a: !firrtl.uint<1>)
+    %ic_clock, %ic_x = firrtl.instance_choice ic @DefaultTarget alternatives @Platform {
+      @FPGA -> @FPGATarget,
+      @ASIC -> @ASICTarget
+    } (in clock: !firrtl.clock, in x: !firrtl.uint<1>)
+    // CHECK: %Quuux = firrtl.object @Quuux()
     %obj = firrtl.object @MyClass()
   }
-  // CHECK: firrtl.class @Baz() {
+  // CHECK: firrtl.class @Quuux() {
   firrtl.class @MyClass() {
   }
+  // CHECK: firrtl.module private @Baz
+  firrtl.module private @DefaultTarget(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module private @Qux
+  firrtl.module private @FPGATarget(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>) {}
+  // CHECK: firrtl.module private @Quux
+  firrtl.module private @ASICTarget(in %clock: !firrtl.clock, in %x: !firrtl.uint<1>) {}
 }
 
 // Test reduction idempotency.  Modules that have already been renamed, should
