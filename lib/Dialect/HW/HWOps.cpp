@@ -2265,6 +2265,32 @@ OpFoldResult StructCreateOp::fold(FoldAdaptor adaptor) {
   return ArrayAttr::get(getContext(), inputs);
 }
 
+LogicalResult StructCreateOp::canonicalize(StructCreateOp op,
+                                           PatternRewriter &rewriter) {
+  // Fold away a struct_create whose inputs are struct_extract ops that
+  // reconstruct the same struct in field order from a single source value.
+  Value foldVal;
+  for (auto [i, operand] : llvm::enumerate(op.getInput())) {
+    auto extractOp = operand.getDefiningOp<StructExtractOp>();
+    if (!extractOp || extractOp.getFieldIndex() != i ||
+        extractOp.getInput().getType() != op.getType()) {
+      foldVal = {};
+      break;
+    }
+    if (i == 0) {
+      foldVal = extractOp.getInput();
+    } else if (extractOp.getInput() != foldVal) {
+      foldVal = {};
+      break;
+    }
+  }
+  if (foldVal) {
+    rewriter.replaceOp(op, foldVal);
+    return success();
+  }
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // StructExplodeOp
 //===----------------------------------------------------------------------===//
