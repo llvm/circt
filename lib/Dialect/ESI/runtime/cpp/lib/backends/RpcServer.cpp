@@ -660,7 +660,9 @@ void Impl::handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
     return;
   }
   uint64_t rawId = chIdIt->get<uint64_t>();
-  if (rawId > std::numeric_limits<uint16_t>::max()) {
+  // Parenthesize around `max` so MSVC's `<windows.h>` `max` macro can't eat
+  // the call.
+  if (rawId > (std::numeric_limits<uint16_t>::max)()) {
     sendError(ws, requestId, "protocol_error",
               std::format("channel_id {} exceeds uint16_t range", rawId));
     return;
@@ -717,7 +719,7 @@ void Impl::handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
     return;
   }
   uint64_t rawId = chIdIt->get<uint64_t>();
-  if (rawId > std::numeric_limits<uint16_t>::max()) {
+  if (rawId > (std::numeric_limits<uint16_t>::max)()) {
     sendError(ws, requestId, "protocol_error",
               std::format("channel_id {} exceeds uint16_t range", rawId));
     return;

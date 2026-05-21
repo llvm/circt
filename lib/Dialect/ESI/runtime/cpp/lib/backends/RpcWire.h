@@ -59,7 +59,8 @@ public:
     std::exception_ptr ep;
     {
       std::lock_guard<std::mutex> lock(mutex);
-      ep.swap(fault);
+      // `std::exception_ptr` has no member `swap()`; use the free function.
+      std::swap(ep, fault);
     }
     if (ep)
       std::rethrow_exception(ep);
