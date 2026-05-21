@@ -668,9 +668,9 @@ void Impl::handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
       return;
     }
     if (it->second.direction != ChannelDirection::ToClient) {
-      sendError(ws, requestId, "wrong_direction",
-                std::format("Channel id {} is not a to-client channel",
-                            channelId));
+      sendError(
+          ws, requestId, "wrong_direction",
+          std::format("Channel id {} is not a to-client channel", channelId));
       return;
     }
 

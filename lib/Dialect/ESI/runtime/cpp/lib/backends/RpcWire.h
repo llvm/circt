@@ -53,8 +53,8 @@ inline bool parseDataFrame(const std::string &data, uint64_t &channelId,
   for (int i = 0; i < 8; ++i)
     id |= static_cast<uint64_t>(static_cast<uint8_t>(data[i])) << (8 * i);
   channelId = id;
-  payload = reinterpret_cast<const uint8_t *>(data.data()) +
-            kDataFrameHeaderSize;
+  payload =
+      reinterpret_cast<const uint8_t *>(data.data()) + kDataFrameHeaderSize;
   payloadSize = data.size() - kDataFrameHeaderSize;
   return true;
 }
