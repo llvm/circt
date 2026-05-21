@@ -3191,6 +3191,21 @@ convertRealMathBI(Context &context, Location loc, StringRef name,
   return OpTy::create(context.builder, loc, value);
 }
 
+/// Helper function to convert real math builtin functions that take exactly
+/// two arguments.
+template <typename OpTy>
+static Value
+convertRealMathTwoBI(Context &context, Location loc, StringRef name,
+                  std::span<const slang::ast::Expression *const> args) {
+  // Slang already checks the arity of real math builtins.
+  assert(args.size() == 2 && "real math builtin expects 2 arguments");
+  auto lhs = context.convertRvalueExpression(*args[0]);
+  auto rhs = context.convertRvalueExpression(*args[1]);
+  if (!lhs || !rhs)
+    return {};
+  return OpTy::create(context.builder, loc, lhs, rhs);
+}
+
 Value Context::convertSystemCall(
     const slang::ast::SystemSubroutine &subroutine, Location loc,
     std::span<const slang::ast::Expression *const> args) {
@@ -3299,6 +3314,14 @@ Value Context::convertSystemCall(
     return convertRealMathBI<moore::AcoshBIOp>(*this, loc, name, args);
   if (nameId == ksn::Atanh)
     return convertRealMathBI<moore::AtanhBIOp>(*this, loc, name, args);
+
+  // Real math functions (all take 2 real arguments)
+  if (nameId == ksn::Pow)
+    return convertRealMathTwoBI<moore::PowBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Atan2)
+    return convertRealMathTwoBI<moore::Atan2BIOp>(*this, loc, name, args);
+  if (nameId == ksn::Hypot)
+    return convertRealMathTwoBI<moore::HypotBIOp>(*this, loc, name, args);
 
   //===--------------------------------------------------------------------===//
   // Type Conversion System Functions

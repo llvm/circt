@@ -1798,20 +1798,22 @@ struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
   matchAndRewrite(Clog2BIOp op, OpAdaptor adaptor,
-    // TODO: Arbitary bit with of float and int
                   ConversionPatternRewriter &rewriter) const override {
-                  Type tFloat = rewriter.getF32Type();
-                  Type tInt = rewriter.getI32Type();
-                  Location loc = op.getLoc();
-                  Value intVal = adaptor.getValue();
-                  auto tofloat = arith::UIToFPOp::create(rewriter,loc, tFloat, intVal);
-                  auto post_log = math::Log2Op(tofloat);
-                  Value ceil_log = math::CeilOp(post_log);
-                  if (intVal == 0) {
-                    ceil_log = 0;
-                  }
-                  //Value out = arith::FPToUIOp::create(rewriter,loc,tInt,ceil_log);
-    rewriter.replaceOp(op,arith::FPToUIOp::create(rewriter,loc,tInt,ceil_log));
+    // Supports only 16 bit float
+    Value ceil_log;
+    auto tofloat = arith::UIToFPOp::create(rewriter,op.getLoc(), 
+                                          rewriter.getF16Type(), 
+                                          adaptor.getValue());
+    if (tofloat == 0) {
+      ceil_log = 0;
+    } else {
+      ceil_log = math::CeilOp::create(rewriter, op.getLoc(), 
+                  math::Log2Op::create(rewriter, op.getLoc(),tofloat));
+    }
+    Value out = arith::FPToUIOp::create(rewriter, op.getLoc(),
+                                      rewriter.getI16Type(),
+                                      ceil_log);   
+    rewriter.replaceOp(op,out);
     return success();
   }
 };
@@ -1867,6 +1869,23 @@ struct RealMathFuncTwoArg : public OpConversionPattern<SourceOp> {
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(),
                                           adaptor.getRhs());
+    return success();
+  }
+};
+
+struct HypotBIOpConversion : public OpConversionPattern<HypotBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(HypotBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value  lhs = adaptor.getLhs();
+    Value  rhs = adaptor.getRhs();
+    ImplicitLocOpBuilder b(op->getLoc(), rewriter);
+    auto left = arith::MulFOp::create(b,lhs,lhs); 
+    auto right =  arith::MulFOp::create(b,rhs,rhs); 
+    auto sum = arith::AddFOp::create(b,left,right); 
+    auto out = math::RsqrtOp::create(b,sum);             
+    rewriter.replaceOp(op,out);
     return success();
   }
 };
@@ -3534,7 +3553,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     RealMathFuncTwoArg<MinBIOp, arith::MinimumFOp>,
     RealMathFuncTwoArg<MaxBIOp, arith::MaximumFOp>,
     RealMathFunc<AbsBIOp, math::AbsFOp>,
-    RealMathFuncTwoArg<PowBIOp, math::FPowIOp>,
+    RealMathFuncTwoArg<PowBIOp, math::PowFOp>,
     RealMathFunc<FloorBIOp, math::FloorOp>,
     RealMathFunc<CeilBIOp, math::CeilOp>,
     RealMathFunc<SinBIOp, math::SinOp>,
@@ -3544,7 +3563,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     RealMathFunc<AcosBIOp, math::AcosOp>,
     RealMathFunc<AtanBIOp, math::AtanOp>,
     RealMathFuncTwoArg<Atan2BIOp, math::Atan2Op>,
-    // BinaryRealOpConversion<HypotBIOp, >,
+    HypotBIOpConversion,
     RealMathFunc<SinhBIOp, math::SinhOp>,
     RealMathFunc<CoshBIOp, math::CoshOp>,
     RealMathFunc<TanhBIOp, math::TanhOp>,

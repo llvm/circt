@@ -3135,6 +3135,22 @@ class RealMathFunc<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
+class RealMathFuncTwoIn<string mnemonic, list<Trait> traits = []> : 
+    Builtin<mnemonic, traits # [SameOperandsAndResultType]> {
+  let description = [{
+    The system real math functions shall accept two real value arguments and return
+    a real result type. Their behavior shall match the equivalent C language
+    standard math library function indicated.
+
+    See IEEE 1800-2017 § 20.8.2 "Real math functions".
+   }];
+  let arguments = (ins RealType:$lhs, RealType:$rhs);
+  let results = (outs RealType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($result)
+  }];
+}
+
 
 
 def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
@@ -3155,6 +3171,7 @@ def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
+
 def LnBIOp : RealMathFunc<"ln"> {
   let summary = "Natural logarithm";
 }
@@ -3171,11 +3188,11 @@ def SqrtBIOp : RealMathFunc<"sqrt"> {
   let summary = "Square root";
 }
 
-def MinBIOp : BinaryRealOpBase<"min"> {
+def MinBIOp : RealMathFuncTwoIn<"min"> {
   let summary = "Minimum";
 }
 
-def MaxBIOp : BinaryRealOpBase<"max"> {
+def MaxBIOp : RealMathFuncTwoIn<"max"> {
   let summary = "Maximum";
 }
 
@@ -3183,7 +3200,7 @@ def AbsBIOp : RealMathFunc<"abs"> {
   let summary = "Absolute";
 }
 
-def PowBIOp : BinaryRealOpBase<"pow"> {
+def PowBIOp : RealMathFuncTwoIn<"pow"> {
   let summary = "Power (x^y)";
 }
 
@@ -3223,9 +3240,19 @@ def Atan2BIOp : BinaryRealOpBase<"atan2"> {
   let summary = "Arc-tangent of y/x";
 }
 
-def HypotBIOp : BinaryRealOpBase<"hypot"> {
-  let summary = "(x^2+y^2)^(1/2)";
+def HypotBIOp : Builtin<"hypot", [SameOperandsAndResultType]> { 
+  let description = [{
+    The hypotenusis function ((x^2+y^2)^(1/2)) from the real math functions shall accept real value arguments and return
+    a real result type. Its behavior shall match the equivalent C language
+    standard math library function indicated.
+
+    See IEEE 1800-2017 § 20.8.2 "Real math functions".
+   }];
+  let arguments = (ins RealType:$lhs, RealType:$rhs);
+  let results = (outs RealF64:$result);
+  let assemblyFormat = [{ $lhs `,` $rhs attr-dict `:` type($result) }];
 }
+
 
 def SinhBIOp : RealMathFunc<"sinh"> {
   let summary = "Hyperbolic sine";
