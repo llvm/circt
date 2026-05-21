@@ -91,3 +91,50 @@ firrtl.circuit "DontCrashOnUnassignedWire" {
     %wire = firrtl.wire : !firrtl.integer
   }
 }
+
+// -----
+
+// Cleanly error if a module containing a path op is instantiated outside of the
+// hierarchy of the module containing the path target.  This should report for
+// each path.
+//
+// This matches a documentation comment in `LowerClasses.cpp` which should be
+// kept synchronized with this.
+//
+// See: https://github.com/llvm/circt/issues/10505
+firrtl.circuit "AltBasePathStrandedInstance" {
+  firrtl.module private @D() {
+    // expected-error @below {{'firrtl.path' op in module "D" cannot be lowered because the module is not reachable from module "AltBasePathStrandedInstance" which contains the target}}
+    %P2 = firrtl.path reference distinct[1]<>
+  }
+  firrtl.module private @C() {
+    // expected-error @below {{'firrtl.path' op in module "C" cannot be lowered because there is an instantiation of module "B" in module "Y" which is not instantiated by module "AltBasePathStrandedInstance" which contains the target}}
+    // expected-error @below {{'firrtl.path' op in module "C" cannot be lowered because there is an instantiation of module "C" in module "X" which is not instantiated by module "AltBasePathStrandedInstance" which contains the target}}
+    %P1 = firrtl.path reference distinct[0]<>
+  }
+  firrtl.module private @X() {
+    // expected-note @below {{the problematic instantiation of module "C" in module "X" is here}}
+    firrtl.instance c @C()
+  }
+  firrtl.module private @B() {
+    firrtl.instance c @C()
+  }
+  firrtl.module private @Y() {
+    // expected-note @below {{the problematic instantiation of module "B" in module "Y" is here}}
+    firrtl.instance b @B()
+  }
+  firrtl.module @A() {
+    // expected-note @below {{path targets this operation in module "AltBasePathStrandedInstance"}}
+    // expected-note @below {{the path op targets this operation in module "AltBasePathStrandedInstance"}}
+    %R = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[0]<>},
+        {class = "circt.tracker", id = distinct[1]<>}
+      ]
+    } : !firrtl.uint<1>
+    firrtl.instance b @B()
+  }
+  firrtl.module @AltBasePathStrandedInstance() {
+    firrtl.instance a @A()
+  }
+}

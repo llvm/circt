@@ -787,3 +787,124 @@ firrtl.circuit "NoPropPorts" {
     firrtl.property_assert %2, "srcs must match" : !firrtl.bool
   }
 }
+
+// Ensure that trivial leaves with paths work.
+//
+// See: https://github.com/llvm/circt/issues/10510
+//
+// CHECK-LABEL: firrtl.circuit "PathOpInLeafModule"
+firrtl.circuit "PathOpInLeafModule" {
+  // CHECK: om.class @Bar_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:   %0 = om.path_create reference %alt_basepath_0 {{@.+}}
+  firrtl.module @Bar() {
+    %0 = firrtl.path reference distinct[0]<>
+  }
+
+  firrtl.module @PathOpInLeafModule() {
+    firrtl.instance bar @Bar()
+    %a = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[0]<>}
+      ]
+    } : !firrtl.uint<1>
+  }
+}
+
+// Ensure that the need for an alt base path doesn't bore ports to every module
+// that contains properties.  Deeper modules may be multiply instantiated (e.g.,
+// by test benches) and this will create ports that are not driven.
+//
+// See: https://github.com/llvm/circt/issues/10509
+//
+// CHECK-LABEL: firrtl.circuit "MinimalAltBasePath"
+firrtl.circuit "MinimalAltBasePath" {
+  // CHECK:      om.class private @Bar_Class(%basepath: !om.basepath)
+  // CHECK-NOT:    %alt_basepath
+  firrtl.module private @Bar() {
+    %0 = firrtl.string "hello"
+  }
+
+  // CHECK:      om.class private @Baz_Class(%basepath: !om.basepath)
+  // CHECK-NOT:    %alt_basepath
+  firrtl.module private @Baz() {
+    firrtl.instance baz @Bar()
+  }
+
+  // CHECK:      om.class private @Foo_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:        om.path_create reference %alt_basepath_0
+  firrtl.module private @Foo() {
+    %0 = firrtl.path reference distinct[0]<>
+    firrtl.instance baz @Bar()
+  }
+
+  // CHECK:      om.class @MinimalAltBasePath_Class(%basepath: !om.basepath)
+  // CHECK-NEXT:   %0 = om.basepath_create %basepath
+  // CHECK:        om.object @Foo_Class(%0, %basepath)
+  firrtl.module @MinimalAltBasePath() {
+    %a = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[0]<>}
+      ]
+    }: !firrtl.uint<1>
+    firrtl.instance bar @Foo()
+  }
+}
+
+// Test that alt base paths are shared where possible.  This test should create
+// one alt base path, not two.
+//
+// CHECK-LABEL: firrtl.circuit "AltBasePathSharing"
+firrtl.circuit "AltBasePathSharing" {
+  // CHECK:      om.class private @Bar_Class(%basepath: !om.basepath, %[[ALT:.+]]: !om.basepath)
+  // CHECK:        om.path_create reference %[[ALT]]
+  // CHECK-NEXT:   om.path_create reference %[[ALT]]
+  firrtl.module private @Bar() {
+    %0 = firrtl.path reference distinct[0]<>
+    %1 = firrtl.path reference distinct[1]<>
+  }
+
+  firrtl.module @AltBasePathSharing() {
+    %a = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[0]<>}
+      ]
+    } : !firrtl.uint<1>
+    %b = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[1]<>}
+      ]
+    } : !firrtl.uint<1>
+    firrtl.instance bar @Bar()
+  }
+}
+
+// Test that a containing module reached via multiple paths under an alt base
+// path root has every intermediate ancestor on every path marked.  Here, Bar
+// is reached as Foo->Bar (direct) and Foo->Baz->Bar (via Baz), so Baz must
+// also receive an alt base path port to forward.
+//
+// CHECK-LABEL: firrtl.circuit "AltBasePathMultiParent"
+firrtl.circuit "AltBasePathMultiParent" {
+  // CHECK:      om.class private @Bar_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  firrtl.module private @Bar() {
+    %0 = firrtl.path reference distinct[0]<>
+  }
+
+  // CHECK:      om.class private @Baz_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  firrtl.module private @Baz() {
+    firrtl.instance bar @Bar()
+  }
+
+  // CHECK:      om.class private @Foo_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  firrtl.module private @Foo() {
+    firrtl.instance bar @Bar()
+    firrtl.instance baz @Baz()
+  }
+
+  firrtl.module @AltBasePathMultiParent() {
+    %a = firrtl.wire {
+      annotations = [{class = "circt.tracker", id = distinct[0]<>}]
+    } : !firrtl.uint<1>
+    firrtl.instance foo @Foo()
+  }
+}
