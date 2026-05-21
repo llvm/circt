@@ -677,3 +677,69 @@ def test_all_void_struct_collapses_to_void():
   assert outer_assert, f"Outer size assertion not found in:\n{hdr}"
   assert outer_assert.group(1) == "9", \
       f"Expected outer struct size 9, got {outer_assert.group(1)}"
+
+
+def test_struct_containing_window_is_skipped():
+  """Structs that embed a WindowType field (e.g. DMA transport wrappers like
+  {valid: i8, client_data: <window>}) should not be emitted because the C++
+  window helper is a variable-size multi-frame container whose sizeof cannot
+  match the manifest's compact frame bit-width."""
+  uint8 = types.UIntType("ui8", 8)
+  uint16 = types.UIntType("ui16", 16)
+  uint32 = types.UIntType("ui32", 32)
+
+  # Build a simple window type over a struct with a list field.
+  list_t = types.ListType("!esi.list<ui32>", uint32)
+  into_struct = types.StructType("!hw.struct<data: !esi.list<ui32>>",
+                                 [("data", list_t)])
+  header_struct = types.StructType("!hw.struct<data_count: ui16>",
+                                   [("data_count", uint16)])
+  data_struct = types.StructType("!hw.struct<data: ui32>", [("data", uint32)])
+  lowered = types.UnionType(
+      "!hw.union<header: !hw.struct<data_count: ui16>, "
+      "data: !hw.struct<data: ui32>>",
+      [("header", header_struct), ("data", data_struct)],
+  )
+  window = types.WindowType(
+      '!esi.window<"test_win", !hw.struct<data: !esi.list<ui32>>, '
+      '[<"header", [<"data" countWidth 16>]>, <"data", [<"data", 1>]>]>',
+      "test_win",
+      into_struct,
+      lowered,
+      [
+          types.WindowType.Frame("header",
+                                 [types.WindowType.Field("data", 0, 16)]),
+          types.WindowType.Frame("data",
+                                 [types.WindowType.Field("data", 1, 0)]),
+      ],
+  )
+
+  # DMA-style wrapper: {valid: i8, client_data: <window>}
+  dma_wrapper = types.StructType(
+      "!hw.struct<valid: i8, client_data: !the_window>",
+      [("valid", uint8), ("client_data", window)],
+  )
+  # Nested DMA wrapper: {address: ui64, tag: ui8, data: <dma_wrapper>}
+  uint64 = types.UIntType("ui64", 64)
+  outer_wrapper = types.StructType(
+      "!hw.struct<address: ui64, tag: ui8, data: !dma_wrapper>",
+      [("address", uint64), ("tag", uint8), ("data", dma_wrapper)],
+  )
+
+  hdr = _generate_header([window, dma_wrapper, outer_wrapper])
+
+  # The window helper itself should still be emitted.
+  assert "esi::SegmentedMessageData" in hdr
+
+  # But the DMA wrapper structs containing the window should NOT be emitted.
+  assert "struct _struct_valid" not in hdr, \
+      "DMA wrapper struct with window field should not be emitted"
+  assert "struct _struct_address" not in hdr, \
+      "Outer struct nesting a window-containing struct should not be emitted"
+
+  # A TypeAlias targeting a window-containing struct should also be excluded
+  # (otherwise codegen emits `using Foo = <missing>;`).
+  alias = types.TypeAlias("!hw.typealias<@dma_wrap>", "DmaWrap", dma_wrapper)
+  hdr2 = _generate_header([window, dma_wrapper, alias])
+  assert "using DmaWrap" not in hdr2, \
+      "Alias of a window-containing struct should not be emitted"
