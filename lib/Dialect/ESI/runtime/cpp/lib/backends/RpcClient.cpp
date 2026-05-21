@@ -89,8 +89,13 @@ private:
   void failAllPending(const std::string &reason);
 
   // ---- request/response plumbing ----
+  //
+  // The promise is held by `shared_ptr` so that `handleControlFrame` can
+  // copy out a strong reference under `pendingMutex`, release the mutex,
+  // and then fulfill the promise without racing with `failAllPending()`
+  // (which can erase the map entry from a parallel shutdown/close path).
   struct PendingRequest {
-    std::promise<json> promise;
+    std::shared_ptr<std::promise<json>> promise;
   };
   /// Issue a JSON-RPC style request and synchronously await the response.
   /// Throws on error (transport or server-reported).
@@ -120,7 +125,7 @@ private:
   // user-supplied callback. That decoupling is what makes the client
   // cross-channel-deadlock-safe regardless of what the user's callback
   // does: a callback that returns `false` (rejects the message) only
-  // delays its own channel — the IX thread is free to keep delivering on
+  // delays its own channel -- the IX thread is free to keep delivering on
   // other channels.
   //
   // The queue's `notifier` rings the server-wide doorbell
@@ -166,6 +171,10 @@ private:
   std::string lastServerError;
 
   std::atomic<bool> disconnecting{false};
+
+  // Cross-thread fault propagation out of the IX network thread. See
+  // FaultStash docs in RpcWire.h.
+  ::esi::cosim::FaultStash faultStash;
 };
 
 //===----------------------------------------------------------------------===//
@@ -351,10 +360,17 @@ void RpcClient::Impl::onMessage(const ix::WebSocketMessagePtr &msg) {
     return;
   }
   case ix::WebSocketMessageType::Message:
-    if (msg->binary)
-      handleBinaryFrame(msg->str);
-    else
-      handleControlFrame(msg->str);
+    // An exception escaping this callback would kill IX's network thread.
+    // Stash the first one so the next public RpcClient method rethrows it
+    // on the user's thread.
+    try {
+      if (msg->binary)
+        handleBinaryFrame(msg->str);
+      else
+        handleControlFrame(msg->str);
+    } catch (...) {
+      faultStash.record(std::current_exception());
+    }
     return;
   default:
     return;
@@ -402,13 +418,16 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
     return;
   uint64_t requestId = idIt->get<uint64_t>();
 
-  std::promise<json> *promise = nullptr;
+  std::shared_ptr<std::promise<json>> promise;
   {
     std::lock_guard<std::mutex> lock(pendingMutex);
     auto it = pending.find(requestId);
     if (it == pending.end())
       return;
-    promise = &it->second.promise;
+    promise = it->second.promise;
+    // Erase under the lock so a concurrent `failAllPending` won't also
+    // try to fulfill the same promise.
+    pending.erase(it);
   }
 
   try {
@@ -436,9 +455,6 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
                  std::string("failed to fulfill promise for request_id=") +
                      std::to_string(requestId) + ": " + e.what());
   }
-
-  std::lock_guard<std::mutex> lock(pendingMutex);
-  pending.erase(requestId);
 }
 
 void RpcClient::Impl::handleBinaryFrame(const std::string &data) {
@@ -477,7 +493,7 @@ void RpcClient::Impl::failAllPending(const std::string &reason) {
   std::lock_guard<std::mutex> lock(pendingMutex);
   for (auto &[id, pr] : pending) {
     try {
-      pr.promise.set_exception(
+      pr.promise->set_exception(
           std::make_exception_ptr(std::runtime_error(reason)));
     } catch (const std::exception &e) {
       // Already-satisfied promise; benign but log it in case a real bug is
@@ -495,11 +511,14 @@ void RpcClient::Impl::failAllPending(const std::string &reason) {
 //===----------------------------------------------------------------------===//
 
 json RpcClient::Impl::call(const std::string &method, json params) {
+  faultStash.check();
   uint64_t requestId = nextRequestId.fetch_add(1);
   std::future<json> future;
   {
     std::lock_guard<std::mutex> lock(pendingMutex);
-    future = pending[requestId].promise.get_future();
+    auto &entry = pending[requestId];
+    entry.promise = std::make_shared<std::promise<json>>();
+    future = entry.promise->get_future();
   }
 
   json req;
@@ -519,11 +538,26 @@ json RpcClient::Impl::call(const std::string &method, json params) {
     throw std::runtime_error("RpcClient: failed to send " + method);
   }
 
+  // Bounded wait so callers cannot hang forever on a missing/lost response.
+  // On WS close or error, `failAllPending()` fires and the future becomes
+  // ready immediately. The timeout only matters if the server stays
+  // connected but never replies (server bug, lost control frame).
+  constexpr auto kCallTimeout = std::chrono::seconds(30);
+  if (future.wait_for(kCallTimeout) != std::future_status::ready) {
+    // Drop the pending entry so a late response doesn't fulfill a
+    // destroyed promise (with shared_ptr it's still safe, but it would
+    // otherwise leak the slot forever).
+    std::lock_guard<std::mutex> plock(pendingMutex);
+    pending.erase(requestId);
+    throw std::runtime_error("RpcClient: timed out waiting for response to " +
+                             method);
+  }
   return future.get();
 }
 
 void RpcClient::Impl::writeToServer(const std::string &channelName,
                                     const MessageData &data) {
+  faultStash.check();
   auto it = channelsByName.find(channelName);
   if (it == channelsByName.end())
     throw std::runtime_error("Unknown channel '" + channelName + "'");
@@ -575,6 +609,7 @@ std::vector<RpcClient::ChannelDesc> RpcClient::Impl::listChannels() const {
 std::unique_ptr<RpcClient::ReadChannelConnection>
 RpcClient::Impl::connectClientReceiver(const std::string &channelName,
                                        RpcClient::ReadCallback callback) {
+  faultStash.check();
   auto it = channelsByName.find(channelName);
   if (it == channelsByName.end())
     throw std::runtime_error("Unknown channel '" + channelName + "'");

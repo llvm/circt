@@ -18,6 +18,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <mutex>
 #include <string>
 
 namespace esi {
@@ -34,6 +36,39 @@ inline std::string buildDataFrame(uint16_t channelId, const uint8_t *bytes,
   frame.append(reinterpret_cast<const char *>(bytes), size);
   return frame;
 }
+
+/// Cross-thread error channel for the IXWebSocket network thread.
+///
+/// IXWebSocket invokes user callbacks from its internal network thread; any
+/// exception escaping that callback kills the process. Call sites catch and
+/// `record()` the first fault; the next public method on the owning
+/// RpcServer/RpcClient calls `check()`, which consumes the stash and rethrows
+/// on the user's thread.
+class FaultStash {
+public:
+  /// Stash the first exception we see (subsequent ones are dropped -- the
+  /// first is the most informative). Safe to call from any thread.
+  void record(std::exception_ptr ep) noexcept {
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!fault)
+      fault = ep;
+  }
+
+  /// Consume and rethrow the stored fault on the caller's thread, if any.
+  void check() {
+    std::exception_ptr ep;
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      ep.swap(fault);
+    }
+    if (ep)
+      std::rethrow_exception(ep);
+  }
+
+private:
+  std::mutex mutex;
+  std::exception_ptr fault;
+};
 
 } // namespace cosim
 } // namespace esi

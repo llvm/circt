@@ -10,8 +10,12 @@ that an out-of-tree client (e.g. a Python harness) can be written against it.
 
 - Single WebSocket connection per client, established at
   `ws://<host>:<port>/esi/cosim/v3`.
-- The server allows at most one connected client at a time in v3; additional
-  connections receive a WebSocket close with code 1011 (internal error).
+- The server allows at most one connected client at a time in v3. When an
+  additional client connects, the server first sends an unsolicited control
+  frame `{"type":"error","error":{"code":"server_busy","message":...}}` to
+  give the client a human-readable reason, then closes the WebSocket with
+  code 1013 ("Try Again Later", RFC 6455 §7.4). Clients SHOULD surface that
+  error message verbatim and MAY retry after a back-off.
 - TLS / `wss://` is not used in v3; both ends are expected to run on the same
   host. The transport already supports `wss://` for future remote use.
 - The server writes its bound port to `cosim.cfg` in its working directory

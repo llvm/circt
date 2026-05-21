@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstring>
 #include <format>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -217,6 +218,10 @@ private:
                  const std::string &message);
 
   void transportLoop();
+
+  // Cross-thread fault propagation out of the IX network thread. See
+  // FaultStash docs in RpcWire.h.
+  ::esi::cosim::FaultStash faultStash;
 };
 
 using Impl = esi::cosim::RpcServer::Impl;
@@ -237,7 +242,7 @@ namespace {
 /// Any back-pressure on a per-port consumer would stall that thread and risk
 /// a cross-channel deadlock when an accelerator's flow control requires
 /// ordering across channels. So we *force* polling-mode `connect` to use an
-/// unbounded internal queue regardless of what the caller passes —
+/// unbounded internal queue regardless of what the caller passes --
 /// `ReadChannelPort::pollingState` then acts as our buffer and
 /// `invokeCallback` is guaranteed non-blocking. The unbounded queue mirrors
 /// the existing `to_client` write queue and is acceptable for a cosim
@@ -339,12 +344,28 @@ Impl::Impl(Context &ctxt, int port) : ctxt(ctxt) {
 }
 
 Impl::~Impl() {
-  if (server)
-    stop(0);
+  if (server) {
+    // A pending fault from the network thread is interesting, but throwing
+    // out of a destructor is worse than swallowing it. The user can still
+    // observe the fault by calling stop() explicitly before letting the
+    // server destruct; if they didn't, log and continue.
+    try {
+      stop(0);
+    } catch (const std::exception &e) {
+      ctxt.getLogger().error(
+          "cosim",
+          std::string("Suppressed exception during ~RpcServer::Impl: ") +
+              e.what());
+    } catch (...) {
+      ctxt.getLogger().error(
+          "cosim", "Suppressed non-std::exception during ~RpcServer::Impl");
+    }
+  }
 }
 
 void Impl::setManifest(int esiVersion,
                        const std::vector<uint8_t> &compressedManifest) {
+  faultStash.check();
   {
     std::lock_guard<std::mutex> lock(manifestMutex);
     this->esiVersion = esiVersion;
@@ -356,6 +377,7 @@ void Impl::setManifest(int esiVersion,
 
 ReadChannelPort &Impl::registerReadPort(const std::string &name,
                                         const std::string &type) {
+  faultStash.check();
   std::lock_guard<std::mutex> lock(channelsMutex);
   uint16_t id = nextChannelId++;
   auto port = std::make_unique<RpcServerReadPort>(new Type(type));
@@ -370,6 +392,7 @@ ReadChannelPort &Impl::registerReadPort(const std::string &name,
 
 WriteChannelPort &Impl::registerWritePort(const std::string &name,
                                           const std::string &type) {
+  faultStash.check();
   std::lock_guard<std::mutex> lock(channelsMutex);
   uint16_t id = nextChannelId++;
   auto port = std::make_unique<RpcServerWritePort>(new Type(type), *this, id);
@@ -410,6 +433,10 @@ void Impl::stop(uint32_t /*timeoutMS*/) {
     std::lock_guard<std::mutex> lock(sessionMutex);
     session.reset();
   }
+
+  // Surface any fault the IX network thread caught while we were running.
+  // Done last so the rest of the shutdown sequence completes regardless.
+  faultStash.check();
 }
 
 //===----------------------------------------------------------------------===//
@@ -424,7 +451,7 @@ void Impl::onClientMessage(std::shared_ptr<ix::ConnectionState> /*state*/,
     // Single-client model: if a session is already active, send an unsolicited
     // JSON error frame so the new client gets an actionable, application-level
     // reason, then close with 1013 ("Try Again Later") rather than 1011
-    // ("Internal Error") — the latter falsely implies a server-side bug.
+    // ("Internal Error") -- the latter falsely implies a server-side bug.
     std::lock_guard<std::mutex> lock(sessionMutex);
     if (session) {
       ctxt.getLogger().warning(
@@ -455,10 +482,17 @@ void Impl::onClientMessage(std::shared_ptr<ix::ConnectionState> /*state*/,
     return;
   }
   case ix::WebSocketMessageType::Message:
-    if (msg->binary)
-      handleBinaryFrame(msg->str);
-    else
-      handleControlFrame(ws, msg->str);
+    // An exception escaping this callback would kill IX's network thread.
+    // Stash the first one so the next public RpcServer method rethrows it
+    // on the user's thread.
+    try {
+      if (msg->binary)
+        handleBinaryFrame(msg->str);
+      else
+        handleControlFrame(ws, msg->str);
+    } catch (...) {
+      faultStash.record(std::current_exception());
+    }
     return;
   default:
     return;
@@ -519,6 +553,7 @@ void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
         "cosim", std::format("Failed to parse control frame: {}", e.what()));
     sendError(ws, 0, "protocol_error",
               std::string("Failed to parse JSON: ") + e.what());
+    faultStash.record(std::current_exception());
     return;
   }
 
@@ -530,9 +565,21 @@ void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
     return;
   }
   uint64_t requestId = 0;
-  if (auto idIt = req.find("request_id");
-      idIt != req.end() && idIt->is_number())
-    requestId = idIt->get<uint64_t>();
+  if (auto idIt = req.find("request_id"); idIt != req.end()) {
+    // Accept only unsigned integers.
+    if (!idIt->is_number_unsigned()) {
+      sendError(ws, 0, "protocol_error",
+                "\"request_id\" must be an unsigned integer");
+      return;
+    }
+    try {
+      requestId = idIt->get<uint64_t>();
+    } catch (const std::exception &e) {
+      sendError(ws, 0, "protocol_error",
+                std::string("Invalid \"request_id\": ") + e.what());
+      return;
+    }
+  }
   auto methodIt = req.find("method");
   if (methodIt == req.end() || !methodIt->is_string()) {
     sendError(ws, requestId, "protocol_error", "Missing \"method\"");
@@ -612,7 +659,13 @@ void Impl::handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
               "subscribe requires unsigned \"channel_id\"");
     return;
   }
-  uint16_t channelId = chIdIt->get<uint16_t>();
+  uint64_t rawId = chIdIt->get<uint64_t>();
+  if (rawId > std::numeric_limits<uint16_t>::max()) {
+    sendError(ws, requestId, "protocol_error",
+              std::format("channel_id {} exceeds uint16_t range", rawId));
+    return;
+  }
+  uint16_t channelId = static_cast<uint16_t>(rawId);
 
   {
     std::lock_guard<std::mutex> chLock(channelsMutex);
@@ -663,7 +716,13 @@ void Impl::handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
               "unsubscribe requires unsigned \"channel_id\"");
     return;
   }
-  uint16_t channelId = chIdIt->get<uint16_t>();
+  uint64_t rawId = chIdIt->get<uint64_t>();
+  if (rawId > std::numeric_limits<uint16_t>::max()) {
+    sendError(ws, requestId, "protocol_error",
+              std::format("channel_id {} exceeds uint16_t range", rawId));
+    return;
+  }
+  uint16_t channelId = static_cast<uint16_t>(rawId);
 
   std::lock_guard<std::mutex> sLock(sessionMutex);
   if (!session) {
