@@ -21,6 +21,7 @@
 #include "esi/backends/RpcClient.h"
 
 #include <cstring>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -502,10 +503,22 @@ public:
                 " len=" + std::to_string(req->length) +
                 " tag=" + std::to_string(req->tag);
         });
-    // Send one response per 8 bytes.
+    // Send one response per 8 bytes. Zero-length reads (e.g. void / zero-width
+    // types) indicates a bug in the hardware and we log an error, but we still
+    // send a single response.
     uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
-    for (uint32_t i = 0, e = (req->length + 7) / 8; i < e; ++i) {
-      HostMemReadResp resp{.data = dataPtr[i], .tag = req->tag};
+    uint32_t numDataResps = (req->length + 7) / 8;
+    if (numDataResps == 0)
+      acc.getLogger().error(
+          "hostmem",
+          std::format("Read request with length=0 from addr=0x{} tag={}. "
+                      "Reads of length 0 are not valid and indicate a bug "
+                      "in the requester.",
+                      toHex(req->address), req->tag));
+    uint32_t numResps = std::max(numDataResps, 1u);
+    for (uint32_t i = 0; i < numResps; ++i) {
+      HostMemReadResp resp{.data = i < numDataResps ? dataPtr[i] : 0,
+                           .tag = req->tag};
       acc.getLogger().trace(
           [&](std::string &subsystem, std::string &msg,
               std::unique_ptr<std::map<std::string, std::any>> &details) {
