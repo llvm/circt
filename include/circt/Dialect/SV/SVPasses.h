@@ -25,9 +25,6 @@ enum class MaskNonSynthesizableMode {
   Delete,
   /// Wrap the matched ops in `` `ifndef SYNTHESIS `` ... `` `endif ``.
   Ifdef,
-  /// Surround the matched ops with `// synthesis translate_off` /
-  /// `// synthesis translate_on` comment pragmas.
-  Pragma,
 };
 
 #define GEN_PASS_DECL

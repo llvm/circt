@@ -136,23 +136,20 @@ def SVMaskNonSynthesizable : Pass<"sv-mask-non-synthesizable",
   let description = [{
     This pass hides a fixed set of `sv` ops that are not generally
     synthesizable (concurrent and property assertions) from the
-    SystemVerilog output. Three masking modes are supported:
+    SystemVerilog output. Two masking modes are supported:
 
     * `delete` — erase the matched ops entirely.
-    * `ifdef`  — wrap ops in a single
-      `` `ifndef <macro> `` ... `` `endif `` block (using `sv.ifdef` or
+    * `ifdef`  — wrap each matched op individually in
+      `` `ifndef <macro> `` ... `` `endif `` (using `sv.ifdef` or
       `sv.ifdef.procedural` as appropriate). A matching `sv.macro.decl` is
       created at the top of the module if one is not already present. The
       macro name is configurable via the `macro` option (default
-      `SYNTHESIS`).
-    * `pragma` — surround ops with
-      `// synthesis translate_off` / `// synthesis translate_on` comment
-      pragmas (emitted as `sv.verbatim` ops).
+      `SYNTHESIS`). Adjacent wrappers are not coalesced here; run
+      `hw-cleanup` afterwards to merge them where possible.
 
     The pass is intended to run as one of the last passes before `ExportVerilog`
     so we only have to know about a smaller number of ops. The set of masked op
-    names is hard-coded in the pass implementation. All three modes are
-    idempotent.
+    names is hard-coded in the pass implementation. Both modes are idempotent.
   }];
 
   let dependentDialects = ["circt::sv::SVDialect"];
@@ -165,10 +162,7 @@ def SVMaskNonSynthesizable : Pass<"sv-mask-non-synthesizable",
                         "delete", "Erase the matched ops"),
              clEnumValN(::circt::sv::MaskNonSynthesizableMode::Ifdef,
                         "ifdef",
-                        "Wrap matched ops in `ifndef SYNTHESIS"),
-             clEnumValN(::circt::sv::MaskNonSynthesizableMode::Pragma,
-                        "pragma",
-                        "Bracket matched ops with synthesis translate_off/_on")
+                        "Wrap matched ops in `ifndef SYNTHESIS")
            )}]>,
     Option<"macro", "macro", "std::string", "\"SYNTHESIS\"",
            "Macro name used by `ifdef` mode">

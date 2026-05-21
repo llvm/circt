@@ -473,8 +473,8 @@ class System:
       "builtin.module(lower-comb)",
       "builtin.module(hw.module(lower-verif-to-sv))",
       "builtin.module(cse, canonicalize, cse)",
+      "builtin.module(sv-mask-non-synthesizable)",
       "builtin.module(hw.module(prettify-verilog), hw.module(hw-cleanup))",
-      "builtin.module(sv-mask-non-synthesizable{{mode=pragma}})",
       "builtin.module(msft-export-tcl{{tops={tops} tcl-file={tcl_file}}})"
   ]
 
