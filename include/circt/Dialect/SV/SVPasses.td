@@ -144,12 +144,13 @@ def SVMaskNonSynthesizable : Pass<"sv-mask-non-synthesizable",
       `sv.ifdef.procedural` as appropriate). A matching `sv.macro.decl` is
       created at the top of the module if one is not already present. The
       macro name is configurable via the `macro` option (default
-      `SYNTHESIS`). Adjacent wrappers are not coalesced here; run
-      `hw-cleanup` afterwards to merge them where possible.
+      `SYNTHESIS`).
 
     The pass is intended to run as one of the last passes before `ExportVerilog`
-    so we only have to know about a smaller number of ops. The set of masked op
-    names is hard-coded in the pass implementation. Both modes are idempotent.
+    so we only have to know about a smaller number of ops but before the
+    HWCleanup pass (which will merge the sv.ifdef ops where it can). The set of
+    masked op names is hard-coded in the pass implementation. Both modes are
+    idempotent.
   }];
 
   let dependentDialects = ["circt::sv::SVDialect"];

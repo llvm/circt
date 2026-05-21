@@ -14,8 +14,7 @@
 //   * `ifdef` : wrap each matched op individually in an
 //               `sv.ifdef`/`sv.ifdef.procedural` whose else region holds the
 //               moved op, plus a single `sv.macro.decl @SYNTHESIS` at the top
-//               of the module if absent. Adjacent wrappers are not coalesced
-//               here; the `hw-cleanup` pass can merge them afterwards.
+//               of the module if absent.
 //
 //===----------------------------------------------------------------------===//
 
@@ -94,15 +93,11 @@ static StringAttr resolveMacroSymName(mlir::ModuleOp moduleOp,
 }
 
 /// `delete` mode: walk the block and erase every masked op.
-static bool processBlockDelete(Block &block) {
-  SmallVector<Operation *> toErase;
+static void processBlockDelete(Block &block) {
   block.walk([&](Operation *op) {
     if (isMaskedOp(op))
-      toErase.push_back(op);
+      op->erase();
   });
-  for (Operation *op : toErase)
-    op->erase();
-  return !toErase.empty();
 }
 
 /// Wrap a single masked op in its own `sv.ifdef`/`sv.ifdef.procedural`. Picks
@@ -129,17 +124,18 @@ static void maskOpByIfdef(Operation *op, StringRef macro) {
   op->moveBefore(elseBlock, elseBlock->end());
 }
 
-/// `ifdef` mode: wrap each masked sibling op in its own
+/// `ifdef` mode: wrap each masked op in its own
 /// `sv.ifdef`/`sv.ifdef.procedural`. Recurse into nested regions of non-masked
 /// ops, but skip recursion into the else region of a matching
 /// `sv.ifdef @<macro>` -- those ops are already guarded.
 static bool processBlockIfdef(Block &block, StringRef macro) {
   bool changed = false;
-  SmallVector<Operation *> toWrap;
-
-  for (Operation &op : block) {
+  // `make_early_inc_range` lets us move the current op out of `block` inside
+  // the loop body without invalidating the iterator.
+  for (Operation &op : llvm::make_early_inc_range(block)) {
     if (isMaskedOp(&op)) {
-      toWrap.push_back(&op);
+      maskOpByIfdef(&op, macro);
+      changed = true;
       continue;
     }
     Region *guardedElseRegion = getMatchingIfDefElseRegion(&op, macro);
@@ -150,10 +146,7 @@ static bool processBlockIfdef(Block &block, StringRef macro) {
         changed |= processBlockIfdef(nested, macro);
     }
   }
-
-  for (Operation *op : toWrap)
-    maskOpByIfdef(op, macro);
-  return changed || !toWrap.empty();
+  return changed;
 }
 
 //===----------------------------------------------------------------------===//
@@ -187,22 +180,19 @@ void SVMaskNonSynthesizablePass::runOnOperation() {
   std::atomic<bool> anyChanged{false};
   mlir::parallelForEach(&getContext(), hwModules, [&](hw::HWModuleOp hwModule) {
     Block &body = *hwModule.getBodyBlock();
-    bool localChanged = false;
     switch (mode) {
     case MaskNonSynthesizableMode::Delete:
-      localChanged = processBlockDelete(body);
+      processBlockDelete(body);
       break;
     case MaskNonSynthesizableMode::Ifdef:
-      localChanged = processBlockIfdef(body, passDownMacro);
+      if (processBlockIfdef(body, passDownMacro))
+        anyChanged.store(true, std::memory_order_relaxed);
       break;
     }
-    if (localChanged)
-      anyChanged.store(true, std::memory_order_relaxed);
   });
-  bool changed = anyChanged.load(std::memory_order_relaxed);
 
-  if (mode == MaskNonSynthesizableMode::Ifdef && changed &&
-      macroDeclNeedsCreation) {
+  if (mode == MaskNonSynthesizableMode::Ifdef &&
+      anyChanged.load(std::memory_order_relaxed) && macroDeclNeedsCreation) {
     auto builder = OpBuilder::atBlockBegin(moduleOp.getBody());
     sv::MacroDeclOp::create(builder, moduleOp.getLoc(), macroSymName,
                             /*args=*/ArrayAttr{}, builder.getStringAttr(macro));
