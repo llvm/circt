@@ -3133,6 +3133,19 @@ def FFlushBIOp : Builtin<"fflush"> {
   let assemblyFormat = "($fd^)? attr-dict";
 }
 
+def FDisplayBIOp : Builtin<"fdisplay"> {
+  let summary = "Print a text message to a file";
+  let description = [{
+    Prints the given format string to the file corresponding to the given
+    descriptor. This corresponds to the `$fdisplay` and `$fwrite` system tasks.
+    Message formatting is handled by `moore.fmt.*` ops.
+
+    See IEEE 1800-2017 § 21.3.2 "File output system tasks".
+  }];
+  let arguments = (ins TwoValuedI32:$fd, FormatStringType:$message);
+  let assemblyFormat = "$fd `,` $message attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Math Builtins
 //===----------------------------------------------------------------------===//

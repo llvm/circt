@@ -1005,10 +1005,12 @@ struct StmtVisitor {
       return true;
     }
 
-    // Display and Write Tasks (`$display[boh]?` or `$write[boh]?`)
+    // Display and Write Tasks (`$display[boh]?` or `$write[boh]?` or
+    // `$fdisplay[boh]?` or `$fwrite[boh]?`)
 
     using moore::IntFormat;
     bool isDisplay = false;
+    bool isFDisplay = false;
     bool appendNewline = false;
     IntFormat defaultFormat = IntFormat::Decimal;
     switch (nameId) {
@@ -1046,6 +1048,40 @@ struct StmtVisitor {
       isDisplay = true;
       defaultFormat = IntFormat::HexLower;
       break;
+    case ksn::FDisplay:
+      isFDisplay = true;
+      appendNewline = true;
+      break;
+    case ksn::FDisplayB:
+      isFDisplay = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::Binary;
+      break;
+    case ksn::FDisplayO:
+      isFDisplay = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::Octal;
+      break;
+    case ksn::FDisplayH:
+      isFDisplay = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::HexLower;
+      break;
+    case ksn::FWrite:
+      isFDisplay = true;
+      break;
+    case ksn::FWriteB:
+      isFDisplay = true;
+      defaultFormat = IntFormat::Binary;
+      break;
+    case ksn::FWriteO:
+      isFDisplay = true;
+      defaultFormat = IntFormat::Octal;
+      break;
+    case ksn::FWriteH:
+      isFDisplay = true;
+      defaultFormat = IntFormat::HexLower;
+      break;
     default:
       break;
     }
@@ -1058,6 +1094,25 @@ struct StmtVisitor {
       if (*message == Value{})
         return true;
       moore::DisplayBIOp::create(builder, loc, *message);
+      return true;
+    }
+
+    if (isFDisplay) {
+      assert(!args.empty() && "$fdisplay/$fwrite takes at least 1 argument");
+
+      auto fd = context.convertRvalueExpression(
+          *args[0], moore::IntType::getInt(builder.getContext(), 32));
+      if (!fd)
+        return failure();
+      args = args.subspan(1);
+
+      auto message =
+          context.convertFormatString(args, loc, defaultFormat, appendNewline);
+      if (failed(message))
+        return failure();
+      if (*message == Value{})
+        return true;
+      moore::FDisplayBIOp::create(builder, loc, fd, *message);
       return true;
     }
 
