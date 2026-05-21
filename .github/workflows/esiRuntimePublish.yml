@@ -57,12 +57,6 @@ jobs:
         if: runner.os == 'Windows'
         run: choco install ninja
 
-      - name: Build additional c++ deps (Windows)
-        shell: pwsh
-        if: runner.os == 'Windows'
-        run: |
-          & "${env:VCPKG_INSTALLATION_ROOT}/vcpkg" --triplet x64-windows install zlib grpc
-
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel==3.3.0
 

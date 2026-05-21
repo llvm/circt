@@ -6,13 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file contains the gRPC client implementation for ESI cosimulation.
-// It wraps all gRPC/protobuf dependencies so they don't leak into other
-// headers.
-//
-// DO NOT EDIT!
-// This file is distributed as part of an ESI package. The source for this file
-// should always be modified within CIRCT (lib/dialect/ESI/runtime/cpp).
+// Public C++ interface for the cosim RPC client. The on-the-wire protocol is
+// WebSocket + JSON; see cosim-protocol.md for the spec. This header exposes
+// no transport-specific types, so the implementation (RpcClient.cpp) is free
+// to evolve independently.
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,14 +25,15 @@
 #include <vector>
 
 namespace esi {
+class Logger;
 namespace backends {
 namespace cosim {
 
-/// A gRPC client for communicating with the cosimulation server.
-/// This class wraps all gRPC/protobuf dependencies.
+/// A client for the cosim RPC server. Hides the WebSocket + JSON transport
+/// behind a small C++ API; see cosim-protocol.md for the wire format.
 class RpcClient {
 public:
-  RpcClient(const std::string &hostname, uint16_t port);
+  RpcClient(Logger &logger, const std::string &hostname, uint16_t port);
   ~RpcClient();
 
   // Non-copyable.
@@ -87,8 +85,10 @@ public:
   std::unique_ptr<ReadChannelConnection>
   connectClientReceiver(const std::string &channelName, ReadCallback callback);
 
-private:
+  /// Hide the implementation details from this header file.
   class Impl;
+
+private:
   std::unique_ptr<Impl> impl;
 };
 

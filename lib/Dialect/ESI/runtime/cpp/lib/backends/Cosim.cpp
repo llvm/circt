@@ -1,4 +1,4 @@
-//===- Cosim.cpp - Connection to ESI simulation via GRPC ------------------===//
+//===- Cosim.cpp - Connection to ESI simulation ---------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -90,8 +90,9 @@ private:
 // ReadCosimChannelPort
 //===----------------------------------------------------------------------===//
 
-/// Cosim client implementation of a read channel port. Since gRPC read protocol
-/// streams messages back, this implementation is quite complex.
+/// Cosim client implementation of a read channel port. The wire transport
+/// (see `CosimRpc`) delivers messages via callback, so this class just
+/// forwards them to the registered `ReadChannelPort` consumer.
 class ReadCosimChannelPort : public ReadChannelPort {
 public:
   ReadCosimChannelPort(AcceleratorConnection &conn, RpcClient &client,
@@ -225,7 +226,7 @@ CosimAccelerator::CosimAccelerator(Context &ctxt, std::string hostname,
                                    uint16_t port)
     : AcceleratorConnection(ctxt) {
   // Connect to the simulation.
-  rpcClient = std::make_unique<RpcClient>(hostname, port);
+  rpcClient = std::make_unique<RpcClient>(getLogger(), hostname, port);
 }
 CosimAccelerator::~CosimAccelerator() {
   disconnect();
