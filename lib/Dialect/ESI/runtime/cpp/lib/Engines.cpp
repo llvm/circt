@@ -257,7 +257,6 @@ bool OneItemBuffersToHostReadPort::pollImpl() {
   // If it has, copy the data out and retain it until the consumer accepts it.
   pendingMessage = std::make_unique<MessageData>(bufferData, bufferSize - 1);
   return tryDeliverPending();
-  return tryDeliverPending();
 }
 
 REGISTER_ENGINE("OneItemBuffersToHost", OneItemBuffersToHost);
