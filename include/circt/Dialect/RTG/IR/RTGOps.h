@@ -42,8 +42,7 @@ struct RNGStateResource
   bool isAddressable() const override { return false; }
 };
 
-/// Abstract memory resource for RTG mutable-cell and effect handler
-/// operations.
+/// Abstract memory resource for RTG mutable-cell operations.
 struct MutResource : public mlir::SideEffects::Resource::Base<MutResource> {
   StringRef getName() const final { return "MutResource"; }
 };

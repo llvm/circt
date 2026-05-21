@@ -271,6 +271,23 @@ class ISAMemoryWithAddressWidth<int width> : AnyTypeOf<[
   I<width>,
   LabelType]>;
 
+def RTG_MutType : RTGTypeDef<"Mut"> {
+  let mnemonic = "mut";
+  let summary = "mutable cell holding a value of type T";
+  let description = [{
+    A mutable cell holding a single elaboration-time value.  Created by
+    `rtg.mut_create`; lives only during elaboration and never appears in
+    emitted assembly.
+  }];
+
+  let parameters = (ins "::mlir::Type":$elementType);
+  let assemblyFormat = "`<` $elementType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Type":$elementType),
+      "return $_get(elementType.getContext(), elementType);">,
+  ];
+}
 
 def ContinuationType : RTGTypeDef<"Continuation"> {
   let mnemonic = "continuation";
