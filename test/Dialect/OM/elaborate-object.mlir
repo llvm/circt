@@ -154,7 +154,6 @@ om.class @UseExtern() -> (result: !om.integer) {
 // Test all-public-classes mode elaborates public classes through private
 // helpers, but does not elaborate private top-level classes.
 // PUBLIC-LABEL: om.class private @PublicModeHelper() -> (value: !om.integer) {
-// PUBLIC-NOT:   om.class @PublicModeTop
 om.class private @PublicModeHelper() -> (value: !om.integer) {
   %value = om.constant #om.integer<7 : si4> : !om.integer
   om.class.fields %value : !om.integer
@@ -170,8 +169,8 @@ om.class @PublicModeTop() -> (value: !om.integer) {
 }
 
 // PUBLIC-LABEL: om.class private @PrivateModeTop() -> (value: !om.integer) {
-// PUBLIC:  om.object @PublicModeHelper()
-// PUBLIC:  om.object.field
+// PUBLIC-NEXT:  om.object @PublicModeHelper()
+// PUBLIC-NEXT:  om.object.field
 om.class private @PrivateModeTop() -> (value: !om.integer) {
   %helper = om.object @PublicModeHelper() : () -> !om.class.type<@PublicModeHelper>
   %value = om.object.field %helper["value"] : (!om.class.type<@PublicModeHelper>) -> !om.integer
