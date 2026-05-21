@@ -4,7 +4,11 @@
 
 // Test: mutable cells are collapsed during elaboration
 
-func.func @consume(%arg0: index) -> () { return }
+func.func @consume(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -25,8 +29,8 @@ rtg.test @mut_ops() {
 // CHECK-NOT: rtg.mut_read
 // CHECK-NOT: rtg.mut_write
 // The second read sees the written value (zero + one = 1).
-// CHECK-DAG: [[C1:%.+]] = rtg.constant 1 : index
-// CHECK: func.call @consume([[C1]])
+// CHECK: [[C1:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[C1]]
 
 // -----
 
@@ -34,7 +38,11 @@ rtg.test @mut_ops() {
 // resumes; each shot of the continuation observes the accumulated value.
 
 rtg.effect @tick : () -> ()
-func.func @log_val(%arg0: index) -> () { return }
+func.func @log_val(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -67,10 +75,10 @@ rtg.test @multi_shot_mut_state() {
 // CHECK-NOT: rtg.mut_read
 // CHECK-NOT: rtg.mut_write
 // First shot sees initial value (0); second shot sees mutated value (1).
-// CHECK: [[C0:%.+]] = rtg.constant 0 : index
-// CHECK: func.call @log_val([[C0]])
-// CHECK: [[C1:%.+]] = rtg.constant 1 : index
-// CHECK: func.call @log_val([[C1]])
+// CHECK: [[C0:%.+]] = rtg.constant "0" : !rtg.string
+// CHECK: rtg.comment [[C0]]
+// CHECK: [[C1:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[C1]]
 
 // -----
 
@@ -82,7 +90,11 @@ rtg.test @multi_shot_mut_state() {
 // can observe the call count.
 
 rtg.effect @ask : () -> index
-func.func @record(%arg0: index) -> () { return }
+func.func @record(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -116,10 +128,10 @@ rtg.test @deep_two_performs() {
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
 // CHECK-NOT: rtg.mut_create
-// CHECK-DAG: [[C0:%.+]] = rtg.constant 0 : index
-// CHECK: func.call @record([[C0]])
-// CHECK-DAG: [[C1:%.+]] = rtg.constant 1 : index
-// CHECK: func.call @record([[C1]])
+// CHECK: [[C0:%.+]] = rtg.constant "0" : !rtg.string
+// CHECK: rtg.comment [[C0]]
+// CHECK: [[C1:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[C1]]
 
 // -----
 
@@ -132,7 +144,11 @@ rtg.test @deep_two_performs() {
 // handler-vs-body sequencing.
 
 rtg.effect @abort_s : () -> ()
-func.func @log_state(%arg0: index) -> () { return }
+func.func @log_state(%arg0: index) {
+  %text = rtg.int_format %arg0
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -170,8 +186,8 @@ rtg.test @abort_state_ordering() {
 // CHECK-NOT: rtg.resume
 // CHECK-NOT: rtg.mut_create
 // CHECK-NOT: rtg.mut_write
-// CHECK: [[C1:%.+]] = rtg.constant 1 : index
-// CHECK: func.call @log_state([[C1]])
+// CHECK: [[C1:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[C1]]
 
 // -----
 
@@ -183,9 +199,6 @@ rtg.test @abort_state_ordering() {
 // after_handlers runs first, then after_perform runs when %k is resumed.
 
 rtg.effect @deferred_e : () -> ()
-func.func @after_perform_d() -> () { return }
-func.func @after_handlers_d() -> () { return }
-
 rtg.target @t : !rtg.dict<> {
   rtg.yield
 }
@@ -205,13 +218,15 @@ rtg.test @cont_escape_deferred() {
     do {
       rtg.perform @deferred_e() : () -> none
       // Skipped by abort — becomes the continuation's remaining ops.
-      func.call @after_perform_d() : () -> ()
+      %after_perform = rtg.constant "after_perform" : !rtg.string
+      rtg.comment %after_perform
       rtg.yield
     }
   }
 
   // Runs before the deferred continuation.
-  func.call @after_handlers_d() : () -> ()
+  %after_handlers = rtg.constant "after_handlers" : !rtg.string
+  rtg.comment %after_handlers
 
   // Retrieve and resume the escaped continuation.
   %s_out = rtg.mut_read %ref : !rtg.mut<!rtg.set<!rtg.continuation<none>>>
@@ -223,8 +238,10 @@ rtg.test @cont_escape_deferred() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: func.call @after_handlers_d
-// CHECK: func.call @after_perform_d
+// CHECK: [[AFTER_HANDLERS:%.+]] = rtg.constant "after_handlers" : !rtg.string
+// CHECK: rtg.comment [[AFTER_HANDLERS]]
+// CHECK: [[AFTER_PERFORM:%.+]] = rtg.constant "after_perform" : !rtg.string
+// CHECK: rtg.comment [[AFTER_PERFORM]]
 
 // -----
 
@@ -232,7 +249,11 @@ rtg.test @cont_escape_deferred() {
 // each cell still uses shared mutable storage.
 
 rtg.effect @ask_local : (index) -> index
-func.func @record_local(%value: index) -> () { return }
+func.func @record_local(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -259,10 +280,10 @@ rtg.test @recursive_handler_mut_locals() {
 }
 // The nested handler invocation records 2 first, then the outer invocation
 // resumes with its own local cell and records 1.
-// CHECK: [[TWO:%.+]] = rtg.constant 2 : index
-// CHECK: func.call @record_local([[TWO]])
-// CHECK: [[ONE:%.+]] = rtg.constant 1 : index
-// CHECK: func.call @record_local([[ONE]])
+// CHECK: [[TWO:%.+]] = rtg.constant "2" : !rtg.string
+// CHECK: rtg.comment [[TWO]]
+// CHECK: [[ONE:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[ONE]]
 
 // -----
 
@@ -342,7 +363,11 @@ rtg.test @continuation_escapes_sequence() {
 // completion and the outer-block suffix.
 
 rtg.effect @ev_if : () -> index
-func.func @record_if(%v: index) -> () { return }
+func.func @record_if(%v: index) {
+  %text = rtg.int_format %v
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -378,10 +403,10 @@ rtg.test @scfif_handler_delimited_continuation() {
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
 // CHECK-NOT: rtg.mut_create
-// CHECK: [[C7:%.+]] = rtg.constant 7 : index
-// CHECK: func.call @record_if([[C7]])
-// CHECK: [[C1:%.+]] = rtg.constant 1 : index
-// CHECK: func.call @record_if([[C1]])
+// CHECK: [[C7:%.+]] = rtg.constant "7" : !rtg.string
+// CHECK: rtg.comment [[C7]]
+// CHECK: [[C1:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[C1]]
 
 // -----
 
@@ -393,7 +418,11 @@ rtg.test @scfif_handler_delimited_continuation() {
 
 rtg.effect @relay_ci  : (!rtg.continuation<index>) -> ()
 rtg.effect @supply_ci : () -> index
-func.func @record_ci(%v: index) -> () { return }
+func.func @record_ci(%v: index) {
+  %text = rtg.int_format %v
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -438,8 +467,8 @@ rtg.test @cont_as_effect_input() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: [[C42:%.+]] = rtg.constant 42 : index
-// CHECK: func.call @record_ci([[C42]])
+// CHECK: [[C42:%.+]] = rtg.constant "42" : !rtg.string
+// CHECK: rtg.comment [[C42]]
 
 // -----
 
@@ -451,7 +480,11 @@ rtg.test @cont_as_effect_input() {
 
 rtg.effect @give_cont_co : () -> !rtg.continuation<index>
 rtg.effect @make_val_co  : () -> index
-func.func @record_co(%v: index) -> () { return }
+func.func @record_co(%v: index) {
+  %text = rtg.int_format %v
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -497,8 +530,8 @@ rtg.test @effect_returns_continuation() {
 // CHECK-NOT: rtg.with_handlers
 // CHECK-NOT: rtg.perform
 // CHECK-NOT: rtg.resume
-// CHECK: [[C99:%.+]] = rtg.constant 99 : index
-// CHECK: func.call @record_co([[C99]])
+// CHECK: [[C99:%.+]] = rtg.constant "99" : !rtg.string
+// CHECK: rtg.comment [[C99]]
 
 // -----
 
@@ -510,7 +543,11 @@ rtg.target @symbolic_mut_target : !rtg.dict<reg: !rtgtest.ireg> {
   rtg.yield %reg : !rtgtest.ireg
 }
 
-func.func @consume_symbolic_mut(%value: i32) -> () { return }
+func.func @consume_symbolic_mut(%value: i32) {
+  %text = rtg.immediate_format %value : i32
+  rtg.comment %text
+  return
+}
 
 // CHECK-LABEL: rtg.test @symbolic_mut_values
 rtg.test @symbolic_mut_values(reg = %reg: !rtgtest.ireg) {
@@ -527,7 +564,8 @@ rtg.test @symbolic_mut_values(reg = %reg: !rtgtest.ireg) {
 // CHECK-NOT: rtg.mut_write
 // CHECK-NOT: rtg.mut_read
 // CHECK: rtg.validate {{.*}}, [[ONE:%.+]], "mut_written" : !rtgtest.ireg -> i32
-// CHECK: func.call @consume_symbolic_mut({{%.+}})
+// CHECK: [[WRITTEN_TEXT:%.+]] = rtg.immediate_format {{.*}} : i32
+// CHECK: rtg.comment [[WRITTEN_TEXT]]
 
 // -----
 
@@ -537,7 +575,11 @@ rtg.test @symbolic_mut_values(reg = %reg: !rtgtest.ireg) {
 
 rtg.effect @outer_mut_effect : () -> ()
 rtg.effect @side_mut_effect : () -> ()
-func.func @record_handler_cut(%value: index) -> () { return }
+func.func @record_handler_cut(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
 
 rtg.target @handler_cut_target : !rtg.dict<> {
   rtg.yield
@@ -592,15 +634,19 @@ rtg.test @mutable_handler_stack_cut() {
 }
 // The outer side-effect handler runs, rather than either handler in the
 // matching or inner installations.
-// CHECK: [[THREE:%.+]] = rtg.constant 3 : index
-// CHECK: func.call @record_handler_cut([[THREE]])
+// CHECK: [[THREE:%.+]] = rtg.constant "3" : !rtg.string
+// CHECK: rtg.comment [[THREE]]
 
 // -----
 
 // Dropping a continuation from a perform nested in scf.if must abort the
 // remainder of the enclosing with_handlers body, not just the branch block.
 rtg.effect @abort_from_if : () -> ()
-func.func @record_after_abort(%value: index) -> () { return }
+func.func @record_after_abort(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -630,8 +676,8 @@ rtg.test @abort_skips_outer_if_suffix() {
   func.call @record_after_abort(%observed) : (index) -> ()
 }
 // Handler-delimited semantics require the write to be skipped, leaving 0.
-// CHECK: [[ZERO:%.+]] = rtg.constant 0 : index
-// CHECK: func.call @record_after_abort([[ZERO]])
+// CHECK: [[ZERO:%.+]] = rtg.constant "0" : !rtg.string
+// CHECK: rtg.comment [[ZERO]]
 
 // -----
 
@@ -639,7 +685,11 @@ rtg.test @abort_skips_outer_if_suffix() {
 // the current iteration, run later iterations, and then execute the body
 // suffix. Only the first iteration performs the effect.
 rtg.effect @choose_first_iteration : () -> index
-func.func @record_loop_sum(%value: index) -> () { return }
+func.func @record_loop_sum(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -676,15 +726,19 @@ rtg.test @resume_through_scffor_and_if() {
 }
 // The resumed continuation carries 5 through the first iteration and adds 1
 // in each remaining iteration, so the protected-body suffix observes 7.
-// CHECK: [[SEVEN:%.+]] = rtg.constant 7 : index
-// CHECK: func.call @record_loop_sum([[SEVEN]])
+// CHECK: [[SEVEN:%.+]] = rtg.constant "7" : !rtg.string
+// CHECK: rtg.comment [[SEVEN]]
 
 // -----
 
 // A continuation crossing a random_scope must run its scope completion before
 // the protected-body suffix consumes the random_scope result.
 rtg.effect @choose_in_random_scope : () -> index
-func.func @record_random_scope(%value: index) -> () { return }
+func.func @record_random_scope(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -710,15 +764,19 @@ rtg.test @resume_through_random_scope() {
     }
   }
 }
-// CHECK: [[SIX:%.+]] = rtg.constant 6 : index
-// CHECK: func.call @record_random_scope([[SIX]])
+// CHECK: [[SIX:%.+]] = rtg.constant "6" : !rtg.string
+// CHECK: rtg.comment [[SIX]]
 
 // -----
 
 // Dropping from a loop body abandons the remaining iterations and the suffix
 // of the protected handler body.
 rtg.effect @abort_from_for : () -> ()
-func.func @record_after_for_abort(%value: index) -> () { return }
+func.func @record_after_for_abort(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -749,15 +807,19 @@ rtg.test @abort_skips_scffor_suffix() {
   func.call @record_after_for_abort(%observed) : (index) -> ()
 }
 // Neither the rest of the loop nor the body suffix writes 1.
-// CHECK: [[ZERO:%.+]] = rtg.constant 0 : index
-// CHECK: func.call @record_after_for_abort([[ZERO]])
+// CHECK: [[ZERO:%.+]] = rtg.constant "0" : !rtg.string
+// CHECK: rtg.comment [[ZERO]]
 
 // -----
 
 // Each resume gets an independent copy of the loop-control and lexical state,
 // while both shots materialize their body suffix in order.
 rtg.effect @choose_loop_shot : () -> index
-func.func @record_loop_shot(%value: index) -> () { return }
+func.func @record_loop_shot(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -795,15 +857,19 @@ rtg.test @multi_shot_resume_through_scffor() {
   }
 }
 // The two replayed loop results are 7 and 9, respectively.
-// CHECK: [[SEVEN:%.+]] = rtg.constant 7 : index
-// CHECK: func.call @record_loop_shot([[SEVEN]])
-// CHECK: [[NINE:%.+]] = rtg.constant 9 : index
-// CHECK: func.call @record_loop_shot([[NINE]])
+// CHECK: [[SEVEN:%.+]] = rtg.constant "7" : !rtg.string
+// CHECK: rtg.comment [[SEVEN]]
+// CHECK: [[NINE:%.+]] = rtg.constant "9" : !rtg.string
+// CHECK: rtg.comment [[NINE]]
 
 // -----
 
 // Separate cells with equal initial values must retain independent identity.
 func.func @record_mutable_pair(%first: index, %second: index) -> () {
+  %first_text = rtg.int_format %first
+  rtg.comment %first_text
+  %second_text = rtg.int_format %second
+  rtg.comment %second_text
   return
 }
 
@@ -823,15 +889,19 @@ rtg.test @distinct_mutable_cells() {
   func.call @record_mutable_pair(%first_value, %second_value) :
       (index, index) -> ()
 }
-// CHECK-DAG: [[ZERO:%.+]] = rtg.constant 0 : index
-// CHECK-DAG: [[ONE:%.+]] = rtg.constant 1 : index
-// CHECK: func.call @record_mutable_pair([[ONE]], [[ZERO]])
+// CHECK: [[ONE:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[ONE]]
+// CHECK: [[ZERO:%.+]] = rtg.constant "0" : !rtg.string
+// CHECK: rtg.comment [[ZERO]]
 
 // -----
 
-// Identity values nested in tuples must fail materialization cleanly rather
-// than creating a tuple with a missing SSA operand.
-func.func @consume_mut_tuple(%tuple: !rtg.tuple<!rtg.mut<index>>) -> () {
+// Mutable identity remains usable after passing through a tuple to a helper.
+func.func @observe_mut_tuple(%tuple: !rtg.tuple<!rtg.mut<index>>) {
+  %cell = rtg.tuple_extract %tuple at 0 : !rtg.tuple<!rtg.mut<index>>
+  %value = rtg.mut_read %cell : !rtg.mut<index>
+  %text = rtg.int_format %value
+  rtg.comment %text
   return
 }
 
@@ -839,20 +909,24 @@ rtg.target @t : !rtg.dict<> {
   rtg.yield
 }
 
-rtg.test @mutable_cell_cannot_escape_through_tuple() {
+rtg.test @mutable_cell_passed_through_tuple() {
   %zero = index.constant 0
   %ref = rtg.mut_create %zero : index
   %tuple = rtg.tuple_create %ref : !rtg.mut<index>
-  // expected-error @below {{mutable cell cannot escape into materialized IR}}
-  // expected-note @below {{while materializing value for operand#0}}
-  func.call @consume_mut_tuple(%tuple) : (!rtg.tuple<!rtg.mut<index>>) -> ()
+  func.call @observe_mut_tuple(%tuple) : (!rtg.tuple<!rtg.mut<index>>) -> ()
 }
+// CHECK-LABEL: rtg.test @mutable_cell_passed_through_tuple
+// CHECK: [[ZERO:%.+]] = rtg.constant "0" : !rtg.string
+// CHECK: rtg.comment [[ZERO]]
 
 // -----
 
 rtg.effect @escape_tuple_continuation : () -> ()
-func.func @consume_continuation_tuple(
-    %tuple: !rtg.tuple<!rtg.continuation<none>>) -> () {
+func.func @resume_continuation_tuple(
+    %tuple: !rtg.tuple<!rtg.continuation<none>>) {
+  %continuation = rtg.tuple_extract %tuple at 0 :
+      !rtg.tuple<!rtg.continuation<none>>
+  rtg.resume %continuation : !rtg.continuation<none>
   return
 }
 
@@ -860,19 +934,158 @@ rtg.target @t : !rtg.dict<> {
   rtg.yield
 }
 
-rtg.test @continuation_cannot_escape_through_tuple() {
+rtg.test @continuation_passed_through_tuple_to_helper() {
   rtg.with_handlers {
     handle @escape_tuple_continuation(%k: !rtg.continuation<none>) {
       %tuple = rtg.tuple_create %k : !rtg.continuation<none>
-      // expected-error @below {{continuation cannot escape through materialized IR}}
-      // expected-note @below {{while materializing value for operand#0}}
-      func.call @consume_continuation_tuple(%tuple) :
+      func.call @resume_continuation_tuple(%tuple) :
           (!rtg.tuple<!rtg.continuation<none>>) -> ()
       rtg.yield
     }
     do {
       rtg.perform @escape_tuple_continuation() : () -> none
+      %text = rtg.constant "resumed" : !rtg.string
+      rtg.comment %text
       rtg.yield
     }
   }
 }
+// The helper resumes the continuation carried through the tuple.
+// CHECK-LABEL: rtg.test @continuation_passed_through_tuple_to_helper
+// CHECK-NOT: rtg.with_handlers
+// CHECK-NOT: rtg.perform
+// CHECK-NOT: rtg.resume
+// CHECK: [[RESUMED:%.+]] = rtg.constant "resumed" : !rtg.string
+// CHECK: rtg.comment [[RESUMED]]
+
+// -----
+
+// A mutable cell passed through an inlined helper as an effect operand remains
+// shared with the handler and across multi-shot continuation replays.
+rtg.effect @update_cell : (!rtg.mut<index>) -> index
+
+func.func @helper_with_mutable_effect(%cell: !rtg.mut<index>) -> index {
+  %value = rtg.perform @update_cell(%cell) : (!rtg.mut<index>) -> index
+  %before = rtg.mut_read %cell : !rtg.mut<index>
+  %one = index.constant 1
+  %after = index.add %before, %one
+  rtg.mut_write %cell, %after : !rtg.mut<index>
+  %result = index.add %value, %before
+  return %result : index
+}
+
+// Emit a trace comment so each replayed result is visible in the output.
+func.func @record_mutable_effect(%value: index) -> () attributes {no_inline} {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
+
+rtg.target @t : !rtg.dict<> {
+  rtg.yield
+}
+
+// CHECK-LABEL: rtg.test @mutable_state_across_inlined_multishot_effect
+rtg.test @mutable_state_across_inlined_multishot_effect() {
+  %zero = index.constant 0
+  %cell = rtg.mut_create %zero : index
+  rtg.with_handlers {
+    handle @update_cell(%handled_cell: !rtg.mut<index>,
+                        %k: !rtg.continuation<index>) {
+      %before = rtg.mut_read %handled_cell : !rtg.mut<index>
+      %one = index.constant 1
+      %updated = index.add %before, %one
+      rtg.mut_write %handled_cell, %updated : !rtg.mut<index>
+      %ten = index.constant 10
+      rtg.resume %k, %ten : !rtg.continuation<index>, index
+
+      %before_again = rtg.mut_read %handled_cell : !rtg.mut<index>
+      %updated_again = index.add %before_again, %one
+      rtg.mut_write %handled_cell, %updated_again : !rtg.mut<index>
+      %twenty = index.constant 20
+      rtg.resume %k, %twenty : !rtg.continuation<index>, index
+      rtg.yield
+    }
+    do {
+      %result = func.call @helper_with_mutable_effect(%cell) :
+          (!rtg.mut<index>) -> index
+      func.call @record_mutable_effect(%result) : (index) -> ()
+      %final = rtg.mut_read %cell : !rtg.mut<index>
+      func.call @record_mutable_effect(%final) : (index) -> ()
+      rtg.yield
+    }
+  }
+}
+// Each handler write is visible to the replayed helper, whose own write is
+// then visible to the next handler shot and to the caller suffix.
+// CHECK-NOT: rtg.with_handlers
+// CHECK-NOT: rtg.perform
+// CHECK-NOT: rtg.resume
+// CHECK-NOT: rtg.mut_create
+// CHECK-NOT: rtg.mut_read
+// CHECK-NOT: rtg.mut_write
+// CHECK-NOT: func.call @helper_with_mutable_effect
+// CHECK: [[ELEVEN:%.+]] = rtg.constant "11" : !rtg.string
+// CHECK: rtg.comment [[ELEVEN]]
+// CHECK: [[TWO:%.+]] = rtg.constant "2" : !rtg.string
+// CHECK: rtg.comment [[TWO]]
+// CHECK: [[TWENTY_THREE:%.+]] = rtg.constant "23" : !rtg.string
+// CHECK: rtg.comment [[TWENTY_THREE]]
+// CHECK: [[FOUR:%.+]] = rtg.constant "4" : !rtg.string
+// CHECK: rtg.comment [[FOUR]]
+
+// -----
+
+// Dropping a continuation captured inside a helper skips both the helper
+// suffix and the caller suffix, but preserves the handler's mutation.
+rtg.effect @abort_mutable_helper : (!rtg.mut<index>) -> ()
+
+func.func @helper_with_aborted_effect(%cell: !rtg.mut<index>) {
+  %two = index.constant 2
+  rtg.perform @abort_mutable_helper(%cell) : (!rtg.mut<index>) -> none
+  rtg.mut_write %cell, %two : !rtg.mut<index>
+  return
+}
+
+// Emit a trace comment so the handler's final state is visible.
+func.func @record_mutable_abort(%value: index) -> () attributes {no_inline} {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
+
+rtg.target @t : !rtg.dict<> {
+  rtg.yield
+}
+
+// CHECK-LABEL: rtg.test @abort_across_helper_preserves_mutable_effect
+rtg.test @abort_across_helper_preserves_mutable_effect() {
+  %zero = index.constant 0
+  %cell = rtg.mut_create %zero : index
+  rtg.with_handlers {
+    handle @abort_mutable_helper(%handled_cell: !rtg.mut<index>,
+                                 %k: !rtg.continuation<none>) {
+      %one = index.constant 1
+      rtg.mut_write %handled_cell, %one : !rtg.mut<index>
+      rtg.yield
+    }
+    do {
+      func.call @helper_with_aborted_effect(%cell) : (!rtg.mut<index>) -> ()
+      %three = index.constant 3
+      rtg.mut_write %cell, %three : !rtg.mut<index>
+      rtg.yield
+    }
+  }
+  %final = rtg.mut_read %cell : !rtg.mut<index>
+  func.call @record_mutable_abort(%final) : (index) -> ()
+}
+// Neither the helper's write of 2 nor the caller's write of 3 runs.
+// CHECK-NOT: rtg.with_handlers
+// CHECK-NOT: rtg.perform
+// CHECK-NOT: rtg.resume
+// CHECK-NOT: rtg.mut_create
+// CHECK-NOT: rtg.mut_read
+// CHECK-NOT: rtg.mut_write
+// CHECK-NOT: func.call @helper_with_aborted_effect
+// CHECK: [[ONE:%.+]] = rtg.constant "1" : !rtg.string
+// CHECK: rtg.comment [[ONE]]

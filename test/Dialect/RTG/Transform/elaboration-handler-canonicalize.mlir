@@ -3,7 +3,11 @@
 // RUN: circt-opt --canonicalize --rtg-elaborate=seed=0 %s | FileCheck %s --check-prefix=CANON
 
 rtg.effect @canonicalized_if_effect : () -> index
-func.func @record_canonicalized_if(%value: index) -> () { return }
+func.func @record_canonicalized_if(%value: index) {
+  %text = rtg.int_format %value
+  rtg.comment %text
+  return
+}
 
 rtg.target @t : !rtg.dict<> {
   rtg.yield
@@ -38,11 +42,11 @@ rtg.test @canonicalized_if_continuation() {
 // FOLDED-LABEL: rtg.test @canonicalized_if_continuation
 // FOLDED-NOT: scf.if
 // FOLDED: rtg.perform @canonicalized_if_effect
-// ELAB: [[FIVE:%.+]] = rtg.constant 5 : index
-// ELAB: func.call @record_canonicalized_if([[FIVE]])
-// ELAB: [[ONE:%.+]] = rtg.constant 1 : index
-// ELAB: func.call @record_canonicalized_if([[ONE]])
-// CANON: [[FIVE:%.+]] = rtg.constant 5 : index
-// CANON: func.call @record_canonicalized_if([[FIVE]])
-// CANON: [[ONE:%.+]] = rtg.constant 1 : index
-// CANON: func.call @record_canonicalized_if([[ONE]])
+// ELAB: [[FIVE:%.+]] = rtg.constant "5" : !rtg.string
+// ELAB: rtg.comment [[FIVE]]
+// ELAB: [[ONE:%.+]] = rtg.constant "1" : !rtg.string
+// ELAB: rtg.comment [[ONE]]
+// CANON: [[FIVE:%.+]] = rtg.constant "5" : !rtg.string
+// CANON: rtg.comment [[FIVE]]
+// CANON: [[ONE:%.+]] = rtg.constant "1" : !rtg.string
+// CANON: rtg.comment [[ONE]]
