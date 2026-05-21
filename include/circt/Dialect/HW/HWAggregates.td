@@ -229,6 +229,7 @@ def StructCreateOp : HWOp<"struct_create", [Pure]> {
   let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
   let hasVerifier = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 // Extract the value of a field of a structure.
