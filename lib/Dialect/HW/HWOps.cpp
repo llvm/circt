@@ -2284,7 +2284,7 @@ LogicalResult StructCreateOp::canonicalize(StructCreateOp op,
       break;
     }
   }
-  if (foldVal) {
+  if (foldVal && foldVal != op.getResult()) {
     rewriter.replaceOp(op, foldVal);
     return success();
   }
