@@ -599,13 +599,10 @@ struct ModuleVisitor : public BaseVisitor {
 
     for (auto &port : moduleLowering->ports) {
       auto value = portValues.lookup(&port.ast);
-      if (port.ast.direction == ArgumentDirection::Out) {
-        assert(port.outputIdx && "output port missing outputIdx");
+      if (port.ast.direction == ArgumentDirection::Out)
         outputValues[*port.outputIdx] = value;
-      } else {
-        assert(port.inputIdx && "input port missing inputIdx");
+      else
         inputValues[*port.inputIdx] = value;
-      }
     }
 
     // Resolve flattened interface port values. For each flattened port,
@@ -638,14 +635,12 @@ struct ModuleVisitor : public BaseVisitor {
       }
       Value val = valIt->second;
       if (fp.direction == hw::ModulePort::Output) {
-        assert(fp.outputIdx && "output iface port missing outputIdx");
         outputValues[*fp.outputIdx] = val;
       } else {
         // For input ports, if the value is a ref (from VariableOp/NetOp),
         // read it to get the rvalue, unless the port itself expects a ref.
         if (isa<moore::RefType>(val.getType()) && !isa<moore::RefType>(fp.type))
           val = moore::ReadOp::create(builder, loc, val);
-        assert(fp.inputIdx && "input iface port missing inputIdx");
         inputValues[*fp.inputIdx] = val;
       }
     }
@@ -1620,7 +1615,6 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     if (port.ast.direction == slang::ast::ArgumentDirection::Out) {
       if (isa<moore::RefType>(value.getType()))
         value = moore::ReadOp::create(builder, value.getLoc(), value);
-      assert(port.outputIdx && "output port missing outputIdx");
       outputs[*port.outputIdx] = value;
       continue;
     }
@@ -1645,7 +1639,6 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     Value ref = valueSymbols.lookup(valueSym);
     if (!ref)
       continue;
-    assert(fp.outputIdx && "output iface port missing outputIdx");
     outputs[*fp.outputIdx] =
         moore::ReadOp::create(builder, fp.loc, ref).getResult();
   }
