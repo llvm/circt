@@ -33,8 +33,8 @@ discriminates between them, so no extra envelope or pairing is required.
    message:
 
    ```
-   offset 0  : uint16  channel_id   (little-endian)
-   offset 2+ : payload bytes        (length = frame_len - 2)
+   offset 0  : uint64  channel_id   (little-endian)
+   offset 8+ : payload bytes        (length = frame_len - 8)
    ```
 
    No version, flags, or size fields are encoded in the binary frame. The
@@ -150,7 +150,7 @@ so the client never observes an "empty manifest" state. The reply is:
 
 ```json
 { "type": "request", "request_id": N, "method": "subscribe",
-  "params": { "channel_id": <uint16> } }
+  "params": { "channel_id": <uint64> } }
 ```
 
 - Channel must have `direction == "to_client"`.
@@ -163,7 +163,7 @@ so the client never observes an "empty manifest" state. The reply is:
 
 ```json
 { "type": "request", "request_id": N, "method": "unsubscribe",
-  "params": { "channel_id": <uint16> } }
+  "params": { "channel_id": <uint64> } }
 ```
 
 - After `result: {}`, the server stops sending frames for that channel.
@@ -173,7 +173,7 @@ so the client never observes an "empty manifest" state. The reply is:
 
 Once a channel is subscribed (server → client) or for any `to_server` channel
 (client → server), data is sent as raw WebSocket binary frames with the
-two-byte `channel_id` prefix described above. The byte stream after the
+eight-byte `channel_id` prefix described above. The byte stream after the
 prefix is the unmodified ESI message payload (`MessageData::getBytes()`).
 
 The receiver of a data frame for an unknown or wrong-direction channel logs

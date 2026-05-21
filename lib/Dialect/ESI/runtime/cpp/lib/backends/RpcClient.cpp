@@ -71,12 +71,12 @@ public:
                         RpcClient::ReadCallback callback);
 
   // Helpers used by ReadChannelConnectionImpl.
-  void unsubscribe(uint16_t channelId);
-  void unregisterCallback(uint16_t channelId);
+  void unsubscribe(uint64_t channelId);
+  void unregisterCallback(uint64_t channelId);
 
 private:
   struct ChannelMeta {
-    uint16_t id;
+    uint64_t id;
     std::string name;
     std::string type;
     RpcClient::ChannelDirection direction;
@@ -89,14 +89,7 @@ private:
   void failAllPending(const std::string &reason);
 
   // ---- request/response plumbing ----
-  //
-  // The promise is held by `shared_ptr` so that `handleControlFrame` can
-  // copy out a strong reference under `pendingMutex`, release the mutex,
-  // and then fulfill the promise without racing with `failAllPending()`
-  // (which can erase the map entry from a parallel shutdown/close path).
-  struct PendingRequest {
-    std::shared_ptr<std::promise<json>> promise;
-  };
+
   /// Issue a JSON-RPC style request and synchronously await the response.
   /// Throws on error (transport or server-reported).
   json call(const std::string &method, json params);
@@ -109,12 +102,12 @@ private:
   uint32_t esiVersion = 0;
   std::vector<uint8_t> manifest;
   std::unordered_map<std::string, ChannelMeta> channelsByName;
-  std::unordered_map<uint16_t, ChannelMeta> channelsById;
+  std::unordered_map<uint64_t, ChannelMeta> channelsById;
 
   // Pending control-plane requests, keyed by id.
   std::mutex pendingMutex;
   std::atomic<uint64_t> nextRequestId{1};
-  std::unordered_map<uint64_t, PendingRequest> pending;
+  std::unordered_map<uint64_t, std::shared_ptr<std::promise<json>>> pending;
 
   // Per-channel read state. Connection-time `subscribe` registers; the
   // ReadChannelConnection destructor unregisters and sends `unsubscribe`.
@@ -139,19 +132,19 @@ private:
   struct ReadCallbackEntry {
     RpcClient::ReadCallback callback;
     std::atomic<bool> canceled{false};
-    uint16_t channelId;
+    uint64_t channelId;
     utils::TSQueue<MessageData> queue;
 
-    ReadCallbackEntry(uint16_t channelId, std::function<void()> notifier)
+    ReadCallbackEntry(uint64_t channelId, std::function<void()> notifier)
         : channelId(channelId), queue(std::move(notifier)) {}
   };
   std::mutex readCallbacksMutex;
-  std::unordered_map<uint16_t, std::shared_ptr<ReadCallbackEntry>>
+  std::unordered_map<uint64_t, std::shared_ptr<ReadCallbackEntry>>
       readCallbacks;
 
   // Dirty-set doorbell for the transport thread. Each entry's TSQueue
   // notifier inserts the channel id into `readyIds` and wakes the consumer.
-  utils::ReadyIdSet<uint16_t> readyIds;
+  utils::ReadyIdSet<uint64_t> readyIds;
   std::thread transportThread;
 
   void transportLoop();
@@ -188,7 +181,7 @@ private:
 namespace {
 class ReadChannelConnectionImpl : public RpcClient::ReadChannelConnection {
 public:
-  ReadChannelConnectionImpl(RpcClient::Impl *impl, uint16_t channelId)
+  ReadChannelConnectionImpl(RpcClient::Impl *impl, uint64_t channelId)
       : impl(impl), channelId(channelId) {}
   ~ReadChannelConnectionImpl() override { disconnect(); }
 
@@ -210,7 +203,7 @@ public:
 
 private:
   RpcClient::Impl *impl;
-  uint16_t channelId;
+  uint64_t channelId;
   std::atomic<bool> disconnected{false};
 };
 } // namespace
@@ -270,7 +263,7 @@ RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
     throw std::runtime_error("RpcClient: hello response missing channels");
   for (const json &c : *channelsIt) {
     ChannelMeta meta;
-    meta.id = c.at("channel_id").get<uint16_t>();
+    meta.id = c.at("channel_id").get<uint64_t>();
     meta.name = c.at("name").get<std::string>();
     meta.type = c.at("type").get<std::string>();
     std::string dir = c.at("direction").get<std::string>();
@@ -424,7 +417,7 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
     auto it = pending.find(requestId);
     if (it == pending.end())
       return;
-    promise = it->second.promise;
+    promise = it->second;
     // Erase under the lock so a concurrent `failAllPending` won't also
     // try to fulfill the same promise.
     pending.erase(it);
@@ -458,11 +451,11 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
 }
 
 void RpcClient::Impl::handleBinaryFrame(const std::string &data) {
-  if (data.size() < 2)
+  uint64_t channelId;
+  const uint8_t *payloadBytes;
+  size_t payloadSize;
+  if (!::esi::cosim::parseDataFrame(data, channelId, payloadBytes, payloadSize))
     return;
-  uint16_t channelId =
-      static_cast<uint8_t>(data[0]) |
-      (static_cast<uint16_t>(static_cast<uint8_t>(data[1])) << 8);
 
   std::shared_ptr<ReadCallbackEntry> entry;
   {
@@ -485,16 +478,14 @@ void RpcClient::Impl::handleBinaryFrame(const std::string &data) {
   // never block IX's network thread on the user-supplied callback. The
   // queue's notifier rings the transport doorbell, and the dedicated
   // transport thread is what actually invokes the callback.
-  entry->queue.push(MessageData(
-      reinterpret_cast<const uint8_t *>(data.data() + 2), data.size() - 2));
+  entry->queue.push(MessageData(payloadBytes, payloadSize));
 }
 
 void RpcClient::Impl::failAllPending(const std::string &reason) {
   std::lock_guard<std::mutex> lock(pendingMutex);
   for (auto &[id, pr] : pending) {
     try {
-      pr.promise->set_exception(
-          std::make_exception_ptr(std::runtime_error(reason)));
+      pr->set_exception(std::make_exception_ptr(std::runtime_error(reason)));
     } catch (const std::exception &e) {
       // Already-satisfied promise; benign but log it in case a real bug is
       // racing with shutdown.
@@ -516,9 +507,9 @@ json RpcClient::Impl::call(const std::string &method, json params) {
   std::future<json> future;
   {
     std::lock_guard<std::mutex> lock(pendingMutex);
-    auto &entry = pending[requestId];
-    entry.promise = std::make_shared<std::promise<json>>();
-    future = entry.promise->get_future();
+    auto promise = std::make_shared<std::promise<json>>();
+    future = promise->get_future();
+    pending.emplace(requestId, std::move(promise));
   }
 
   json req;
@@ -616,7 +607,7 @@ RpcClient::Impl::connectClientReceiver(const std::string &channelName,
   if (it->second.direction != RpcClient::ChannelDirection::ToClient)
     throw std::runtime_error("Channel '" + channelName +
                              "' is not a to-client channel");
-  uint16_t channelId = it->second.id;
+  uint64_t channelId = it->second.id;
 
   // Register the callback first so any racing inbound binary frame after the
   // server's subscribe-ack has somewhere to land.
@@ -639,7 +630,7 @@ RpcClient::Impl::connectClientReceiver(const std::string &channelName,
   return std::make_unique<ReadChannelConnectionImpl>(this, channelId);
 }
 
-void RpcClient::Impl::unsubscribe(uint16_t channelId) {
+void RpcClient::Impl::unsubscribe(uint64_t channelId) {
   if (disconnecting)
     return;
   // Skip the RPC if the WS is already closed (server tore down first, network
@@ -651,7 +642,7 @@ void RpcClient::Impl::unsubscribe(uint16_t channelId) {
   call("unsubscribe", {{"channel_id", channelId}});
 }
 
-void RpcClient::Impl::unregisterCallback(uint16_t channelId) {
+void RpcClient::Impl::unregisterCallback(uint64_t channelId) {
   std::shared_ptr<ReadCallbackEntry> entry;
   {
     std::lock_guard<std::mutex> lock(readCallbacksMutex);
@@ -679,10 +670,10 @@ void RpcClient::Impl::transportLoop() {
   // queue (user callback returned `false`). We retry them after a short
   // backoff so other channels still get a chance every wake, and so a
   // permanently-busy channel doesn't pin the CPU.
-  std::unordered_set<uint16_t> retry;
+  std::unordered_set<uint64_t> retry;
 
   while (true) {
-    std::unordered_set<uint16_t> ids;
+    std::unordered_set<uint64_t> ids;
     if (!readyIds.waitDrain(
             ids, retry.empty() ? std::optional<std::chrono::milliseconds>{}
                                : std::chrono::milliseconds(1)))
@@ -690,7 +681,7 @@ void RpcClient::Impl::transportLoop() {
     ids.insert(retry.begin(), retry.end());
     retry.clear();
 
-    for (uint16_t id : ids) {
+    for (uint64_t id : ids) {
       std::shared_ptr<ReadCallbackEntry> entry;
       {
         std::lock_guard<std::mutex> lock(readCallbacksMutex);

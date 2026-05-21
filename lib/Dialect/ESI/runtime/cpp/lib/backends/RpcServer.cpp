@@ -31,7 +31,6 @@
 #include <cstdio>
 #include <cstring>
 #include <format>
-#include <limits>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -146,7 +145,7 @@ public:
   // TSQueue can pass `[&impl, id]{ impl.readyIds.markReady(id); }` as its
   // push-notifier; also called directly from `handleSubscribe` to flush
   // anything queued before the subscription arrived.
-  utils::ReadyIdSet<uint16_t> readyIds;
+  utils::ReadyIdSet<uint64_t> readyIds;
 
 private:
   // Reuse the public direction enum from the client side rather than
@@ -154,7 +153,7 @@ private:
   // values.
   using ChannelDirection = backends::cosim::RpcClient::ChannelDirection;
   struct ChannelInfo {
-    uint16_t id;
+    uint64_t id;
     std::string name;
     std::string typeId;
     ChannelDirection direction;
@@ -166,7 +165,7 @@ private:
     ix::WebSocket *ws;
     // The set of `to_client` channel ids the client subscribed to.
     std::mutex subscribedMutex;
-    std::unordered_set<uint16_t> subscribed;
+    std::unordered_set<uint64_t> subscribed;
     // True once `hello` has been answered.
     bool helloDone = false;
   };
@@ -186,9 +185,9 @@ private:
   std::mutex channelsMutex;
   std::map<std::string, std::unique_ptr<RpcServerReadPort>> readPorts;
   std::map<std::string, std::unique_ptr<RpcServerWritePort>> writePorts;
-  std::unordered_map<uint16_t, ChannelInfo> channelById;
-  std::unordered_map<std::string, uint16_t> idByName;
-  uint16_t nextChannelId = 0;
+  std::unordered_map<uint64_t, ChannelInfo> channelById;
+  std::unordered_map<std::string, uint64_t> idByName;
+  uint64_t nextChannelId = 0;
 
   // Session state. v3 of the protocol allows a single concurrent client.
   std::mutex sessionMutex;
@@ -275,13 +274,13 @@ public:
 /// block on I/O, so this path is strictly non-blocking.
 class RpcServerWritePort : public WriteChannelPort {
 public:
-  RpcServerWritePort(Type *type, Impl &impl, uint16_t channelId)
+  RpcServerWritePort(Type *type, Impl &impl, uint64_t channelId)
       : WriteChannelPort(type), channelId(channelId),
         writeQueue([&impl, channelId] { impl.readyIds.markReady(channelId); }) {
   }
 
-  uint16_t getChannelId() const { return channelId; }
-  uint16_t channelId;
+  uint64_t getChannelId() const { return channelId; }
+  uint64_t channelId;
   utils::TSQueue<MessageData> writeQueue;
 
 protected:
@@ -379,7 +378,7 @@ ReadChannelPort &Impl::registerReadPort(const std::string &name,
                                         const std::string &type) {
   faultStash.check();
   std::lock_guard<std::mutex> lock(channelsMutex);
-  uint16_t id = nextChannelId++;
+  uint64_t id = nextChannelId++;
   auto port = std::make_unique<RpcServerReadPort>(new Type(type));
   RpcServerReadPort *raw = port.get();
   readPorts.emplace(name, std::move(port));
@@ -394,7 +393,7 @@ WriteChannelPort &Impl::registerWritePort(const std::string &name,
                                           const std::string &type) {
   faultStash.check();
   std::lock_guard<std::mutex> lock(channelsMutex);
-  uint16_t id = nextChannelId++;
+  uint64_t id = nextChannelId++;
   auto port = std::make_unique<RpcServerWritePort>(new Type(type), *this, id);
   RpcServerWritePort *raw = port.get();
   writePorts.emplace(name, std::move(port));
@@ -505,14 +504,14 @@ void Impl::onClose() {
 }
 
 void Impl::handleBinaryFrame(const std::string &data) {
-  if (data.size() < 2) {
+  uint64_t channelId;
+  const uint8_t *payloadBytes;
+  size_t payloadSize;
+  if (!parseDataFrame(data, channelId, payloadBytes, payloadSize)) {
     ctxt.getLogger().error("cosim",
-                           "Received binary frame shorter than 2-byte header");
+                           "Received binary frame shorter than 8-byte header");
     return;
   }
-  uint16_t channelId =
-      static_cast<uint8_t>(data[0]) |
-      (static_cast<uint16_t>(static_cast<uint8_t>(data[1])) << 8);
 
   RpcServerReadPort *port = nullptr;
   {
@@ -527,12 +526,11 @@ void Impl::handleBinaryFrame(const std::string &data) {
   if (!port) {
     ctxt.getLogger().error(
         "cosim", std::format("Binary frame for unknown to-server channel id {}",
-                             static_cast<unsigned>(channelId)));
+                             channelId));
     return;
   }
 
-  MessageData payload(reinterpret_cast<const uint8_t *>(data.data() + 2),
-                      data.size() - 2);
+  MessageData payload(payloadBytes, payloadSize);
   // RpcServerReadPort always has an unbounded internal queue so `deliver` is
   // non-blocking: it enqueues into `ReadChannelPort`'s internal polling buffer
   // and returns. A `false` return means the port has been disconnected
@@ -541,7 +539,7 @@ void Impl::handleBinaryFrame(const std::string &data) {
     ctxt.getLogger().debug(
         "cosim",
         std::format("Dropped {} bytes for channel id {}: port not connected",
-                    payload.getSize(), static_cast<unsigned>(channelId)));
+                    payload.getSize(), channelId));
 }
 
 void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
@@ -625,7 +623,7 @@ void Impl::handleHello(ix::WebSocket &ws, uint64_t requestId,
   {
     std::lock_guard<std::mutex> lock(channelsMutex);
     // Emit in id order for deterministic output.
-    for (uint16_t i = 0; i < nextChannelId; ++i) {
+    for (uint64_t i = 0; i < nextChannelId; ++i) {
       auto it = channelById.find(i);
       if (it == channelById.end())
         continue;
@@ -659,29 +657,20 @@ void Impl::handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
               "subscribe requires unsigned \"channel_id\"");
     return;
   }
-  uint64_t rawId = chIdIt->get<uint64_t>();
-  // Parenthesize around `max` so MSVC's `<windows.h>` `max` macro can't eat
-  // the call.
-  if (rawId > (std::numeric_limits<uint16_t>::max)()) {
-    sendError(ws, requestId, "protocol_error",
-              std::format("channel_id {} exceeds uint16_t range", rawId));
-    return;
-  }
-  uint16_t channelId = static_cast<uint16_t>(rawId);
+  uint64_t channelId = chIdIt->get<uint64_t>();
 
   {
     std::lock_guard<std::mutex> chLock(channelsMutex);
     auto it = channelById.find(channelId);
     if (it == channelById.end()) {
       sendError(ws, requestId, "unknown_channel",
-                std::format("No channel with id {}",
-                            static_cast<unsigned>(channelId)));
+                std::format("No channel with id {}", channelId));
       return;
     }
     if (it->second.direction != ChannelDirection::ToClient) {
       sendError(ws, requestId, "wrong_direction",
                 std::format("Channel id {} is not a to-client channel",
-                            static_cast<unsigned>(channelId)));
+                            channelId));
       return;
     }
 
@@ -718,13 +707,7 @@ void Impl::handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
               "unsubscribe requires unsigned \"channel_id\"");
     return;
   }
-  uint64_t rawId = chIdIt->get<uint64_t>();
-  if (rawId > (std::numeric_limits<uint16_t>::max)()) {
-    sendError(ws, requestId, "protocol_error",
-              std::format("channel_id {} exceeds uint16_t range", rawId));
-    return;
-  }
-  uint16_t channelId = static_cast<uint16_t>(rawId);
+  uint64_t channelId = chIdIt->get<uint64_t>();
 
   std::lock_guard<std::mutex> sLock(sessionMutex);
   if (!session) {
@@ -735,8 +718,7 @@ void Impl::handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
   auto removed = session->subscribed.erase(channelId);
   if (!removed) {
     sendError(ws, requestId, "not_subscribed",
-              std::format("Channel id {} is not subscribed",
-                          static_cast<unsigned>(channelId)));
+              std::format("Channel id {} is not subscribed", channelId));
     return;
   }
   sendResult(ws, requestId, json::object());
@@ -769,10 +751,10 @@ void Impl::sendError(ix::WebSocket &ws, uint64_t requestId,
 
 void Impl::transportLoop() {
   while (true) {
-    std::unordered_set<uint16_t> ids;
+    std::unordered_set<uint64_t> ids;
     if (!readyIds.waitDrain(ids))
       return;
-    for (uint16_t id : ids) {
+    for (uint64_t id : ids) {
       RpcServerWritePort *writePort = nullptr;
       {
         std::lock_guard<std::mutex> chLock(channelsMutex);
