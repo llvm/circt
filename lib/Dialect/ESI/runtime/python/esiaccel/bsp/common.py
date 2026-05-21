@@ -321,7 +321,7 @@ class ChannelMMIO(esi.ServiceImplementation):
   relatively easy to adapt to physical interfaces by wrapping the wires to
   channels then bundles. Allows the implementation to be shared and (hopefully)
   platform independent.
-  
+
   Whether or not to support unaligned accesses is up to the clients. The header
   and manifest do not support unaligned accesses and throw away the lower three
   bits.
@@ -739,7 +739,6 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
             c.channel for c in client.type.channels if c.name == 'resp'
         ][0]
         demuxed_upstream_channel = demux.get_out(idx)
-
 
         # TODO: Should responses come back out-of-order (interleaved tags),
         # re-order them here so the gearbox doesn't get confused. (Longer term.)
