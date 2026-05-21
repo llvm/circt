@@ -354,7 +354,7 @@ if(ESI_COSIM)
     set(USE_ZLIB OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(ixwebsocket
       GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
-      GIT_TAG        v11.4.5
+      GIT_TAG        173f442474c4d9db16184c5e15cc96e07605e0e0
     )
     FetchContent_MakeAvailable(ixwebsocket)
   endif()
