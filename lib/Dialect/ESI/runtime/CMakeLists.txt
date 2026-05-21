@@ -14,8 +14,8 @@
 ## We require Python development package and nanobind to compile the Python API.
 ##
 ## ESI cosimulation uses a WebSocket + JSON RPC protocol (see
-## cosim-protocol.md). The IXWebSocket dependency is found via
-## find_package(ixwebsocket CONFIG) if available, otherwise it is fetched
+## cosim-protocol.md). The libwebsockets dependency is found via
+## find_package(libwebsockets CONFIG) if available, otherwise it is fetched
 ## automatically. Cosimulation is optional and can be disabled with
 ## -DESI_COSIM=OFF.
 ##
@@ -341,25 +341,44 @@ option(ESI_COSIM "Enable ESI cosimulation." ON)
 if(ESI_COSIM)
   message("-- ESI cosim enabled")
 
-  # IXWebSocket for cosimulation transport. Prefer a system / vcpkg install
-  # via CMake config; fall back to fetching the upstream source. The wire
-  # protocol is documented in cosim-protocol.md.
-  find_package(ixwebsocket QUIET CONFIG)
-  if (NOT ixwebsocket_FOUND)
-    message("-- IXWebSocket not found locally, fetching from upstream")
+  # libwebsockets for cosimulation transport. Vendored via FetchContent to
+  # avoid relying on a system / vcpkg install (and so the wire ABI we test
+  # against is the one we ship). The wire protocol is documented in
+  # cosim-protocol.md.
+  if (NOT TARGET websockets)
+    message("-- libwebsockets: fetching from upstream")
     # v3 of the cosim protocol is plaintext on localhost only. Disable
-    # TLS/zlib to keep IXWebSocket dependency-free and statically linkable
-    # into CosimRpc.
-    set(USE_TLS OFF CACHE BOOL "" FORCE)
-    set(USE_ZLIB OFF CACHE BOOL "" FORCE)
-    FetchContent_Declare(ixwebsocket
-      GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
-      GIT_TAG        v11.4.5
+    # TLS, extensions, all testapps, and shared lib build to keep LWS
+    # lean and statically linkable into CosimRpc.
+    set(LWS_WITH_SHARED OFF CACHE BOOL "" FORCE)
+    set(LWS_WITH_STATIC ON CACHE BOOL "" FORCE)
+    set(LWS_WITH_SSL OFF CACHE BOOL "" FORCE)
+    set(LWS_WITHOUT_EXTENSIONS ON CACHE BOOL "" FORCE)
+    set(LWS_WITHOUT_TESTAPPS ON CACHE BOOL "" FORCE)
+    set(LWS_WITHOUT_TEST_SERVER ON CACHE BOOL "" FORCE)
+    set(LWS_WITHOUT_TEST_SERVER_EXTPOLL ON CACHE BOOL "" FORCE)
+    set(LWS_WITHOUT_TEST_PING ON CACHE BOOL "" FORCE)
+    set(LWS_WITHOUT_TEST_CLIENT ON CACHE BOOL "" FORCE)
+    set(LWS_HAVE_LIBCAP OFF CACHE BOOL "" FORCE)
+    set(LWS_WITH_MINIMAL_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(LWS_WITH_NETWORK ON CACHE BOOL "" FORCE)
+    # Build position-independent so we can link into shared CosimRpc.
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    FetchContent_Declare(libwebsockets
+      GIT_REPOSITORY https://github.com/warmcat/libwebsockets.git
+      GIT_TAG        v4.3.5
     )
-    FetchContent_MakeAvailable(ixwebsocket)
+    FetchContent_MakeAvailable(libwebsockets)
+
+    # libwebsockets builds with -Werror and trips up on newer clang
+    # diagnostics. We don't own that source; silence all warnings on the
+    # vendored target.
+    if(TARGET websockets)
+      target_compile_options(websockets PRIVATE -w)
+    endif()
   endif()
 
-  # CosimRpc library - hides the IXWebSocket + JSON wire protocol from the
+  # CosimRpc library - hides the libwebsockets + JSON wire protocol from the
   # rest of the runtime.
   add_library(CosimRpc SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lib/backends/RpcClient.cpp
@@ -380,7 +399,7 @@ if(ESI_COSIM)
     ESICppRuntime
   )
   target_link_libraries(CosimRpc PRIVATE
-    ixwebsocket::ixwebsocket
+    websockets
     nlohmann_json::nlohmann_json
   )
 

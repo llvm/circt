@@ -6,8 +6,23 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Client implementation of the cosim WebSocket + JSON protocol. The wire
-// protocol is documented in cosim-protocol.md.
+// Client implementation of the cosim WebSocket + JSON protocol, backed by
+// libwebsockets. The wire protocol is documented in cosim-protocol.md.
+//
+// Two threads cooperate here:
+//
+//   * The LWS *service thread* (`serviceLoop`) runs `lws_service()` in a
+//     loop. It is the only thread allowed to touch the WebSocket. All
+//     outbound traffic from other threads is enqueued in `outbound` and
+//     dispatched through `lws_cancel_service()` → `LWS_CALLBACK_EVENT_WAIT_
+//     CANCELLED` → `lws_callback_on_writable()` → `LWS_CALLBACK_CLIENT_
+//     WRITEABLE`.
+//
+//   * The *transport thread* (`transportLoop`) sleeps on `readyIds` and
+//     drains per-channel TSQueues by invoking the user-supplied callbacks.
+//     It is kept separate from the service thread so a slow or stuck user
+//     callback (which may return `false` to defer a message) does not stall
+//     the LWS event loop or other channels.
 //
 //===----------------------------------------------------------------------===//
 
@@ -15,12 +30,10 @@
 #include "esi/Logging.h"
 #include "esi/Utils.h"
 
+#include "Base64.h"
 #include "RpcWire.h"
 
-#include <ixwebsocket/IXBase64.h>
-#include <ixwebsocket/IXNetSystem.h>
-#include <ixwebsocket/IXWebSocket.h>
-#include <ixwebsocket/IXWebSocketCloseConstants.h>
+#include <libwebsockets.h>
 #include <nlohmann/json.hpp>
 
 #include <atomic>
@@ -28,27 +41,33 @@
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <future>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 using namespace esi;
 using namespace esi::backends::cosim;
+using esi::cosim::buildLwsBinaryFrame;
+using esi::cosim::buildLwsTextFrame;
+using esi::cosim::WireFrame;
 using json = nlohmann::json;
-
-//===----------------------------------------------------------------------===//
-// RpcClient::Impl - hides IXWebSocket + JSON behind the public header
-//===----------------------------------------------------------------------===//
 
 namespace {
 class ReadChannelConnectionImpl;
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// RpcClient::Impl - hides libwebsockets + JSON behind the public header
+//===----------------------------------------------------------------------===//
 
 class RpcClient::Impl {
 public:
@@ -74,6 +93,10 @@ public:
   void unsubscribe(uint16_t channelId);
   void unregisterCallback(uint16_t channelId);
 
+  // LWS callback dispatch (service thread only).
+  int callback(struct lws *wsi, enum lws_callback_reasons reason, void *user,
+               void *in, size_t len);
+
 private:
   struct ChannelMeta {
     uint16_t id;
@@ -82,23 +105,25 @@ private:
     RpcClient::ChannelDirection direction;
   };
 
-  // ---- websocket lifecycle ----
-  void onMessage(const ix::WebSocketMessagePtr &msg);
+  // ---- LWS / receive plumbing ----
+  void serviceLoop();
   void handleControlFrame(const std::string &text);
   void handleBinaryFrame(const std::string &data);
   void failAllPending(const std::string &reason);
+  void enqueueText(const std::string &text);
+  void enqueueBinary(WireFrame frame);
 
   // ---- request/response plumbing ----
   struct PendingRequest {
     std::promise<json> promise;
   };
   /// Issue a JSON-RPC style request and synchronously await the response.
-  /// Throws on error (transport or server-reported).
+  /// Throws on transport or server-reported error.
   json call(const std::string &method, json params);
 
   std::string host;
+  uint16_t port;
   Logger &logger;
-  ix::WebSocket ws;
 
   // Manifest + channel table cached from the `hello` response.
   uint32_t esiVersion = 0;
@@ -111,26 +136,20 @@ private:
   std::atomic<uint64_t> nextRequestId{1};
   std::unordered_map<uint64_t, PendingRequest> pending;
 
-  // Per-channel read state. Connection-time `subscribe` registers; the
+  // Per-channel inbound state. Connect-time `subscribe` registers; the
   // ReadChannelConnection destructor unregisters and sends `unsubscribe`.
   //
-  // Each entry owns its own non-blocking TSQueue: `handleBinaryFrame` only
-  // pushes into the queue (on IX's single per-connection network thread),
-  // and a dedicated transport thread is what actually invokes the
-  // user-supplied callback. That decoupling is what makes the client
-  // cross-channel-deadlock-safe regardless of what the user's callback
-  // does: a callback that returns `false` (rejects the message) only
-  // delays its own channel — the IX thread is free to keep delivering on
-  // other channels.
+  // Each entry owns its own non-blocking TSQueue: the LWS service thread
+  // pushes into the queue on inbound binary frames, and the transport
+  // thread is what actually invokes the user-supplied callback. That
+  // decoupling makes the client cross-channel-deadlock-safe regardless of
+  // what the user's callback does: a callback that returns `false`
+  // (rejects the message) only delays its own channel.
   //
-  // The queue's `notifier` rings the server-wide doorbell
-  // (`Impl::markReady`) so the transport thread wakes up only when there's
-  // work for a specific channel.
-  //
-  // Held by `shared_ptr` so the transport thread can copy the entry under
-  // the lock and outlive a concurrent `unregisterCallback` that erases the
-  // map entry: the cancel flag flips, the transport thread sees it on its
-  // next iteration, and drops anything still in the queue.
+  // Held by `shared_ptr` so the transport thread can copy out an entry
+  // under the lock and outlive a concurrent `unregisterCallback`: the
+  // cancel flag flips, the transport thread sees it on its next iteration
+  // and drops whatever's still queued.
   struct ReadCallbackEntry {
     RpcClient::ReadCallback callback;
     std::atomic<bool> canceled{false};
@@ -144,15 +163,30 @@ private:
   std::unordered_map<uint16_t, std::shared_ptr<ReadCallbackEntry>>
       readCallbacks;
 
-  // Dirty-set doorbell for the transport thread. Each entry's TSQueue
-  // notifier inserts the channel id into `readyIds` and wakes the consumer.
+  // Doorbell for the transport thread.
   utils::ReadyIdSet<uint16_t> readyIds;
   std::thread transportThread;
-
   void transportLoop();
 
-  // Connection-open synchronization. The WS callback fires on IX's background
-  // thread, so the constructor blocks here until either Open or Error fires.
+  // LWS plumbing. `wsi` is touched from the service thread only (and read
+  // by `enqueueText`/`enqueueBinary` to know whether they can wake the
+  // service thread to drive a write — strictly via `lws_cancel_service`,
+  // which is documented thread-safe).
+  struct lws_context *context = nullptr;
+  struct lws *wsi = nullptr;
+  std::thread serviceThread;
+  std::atomic<bool> shouldStop{false};
+
+  // Cross-thread outbound queue. Any thread can push; only the service
+  // thread pops in `LWS_CALLBACK_CLIENT_WRITEABLE`.
+  std::mutex outboundMutex;
+  std::deque<WireFrame> outbound;
+
+  // Service-thread-only receive accumulator for fragmented frames.
+  std::string rxBuffer;
+
+  // Connection-open synchronization. The LWS callback fires on the service
+  // thread; the constructor blocks here until either Open or Failed fires.
   std::mutex openMutex;
   std::condition_variable openCV;
   enum class OpenState { Pending, Open, Failed } openState{OpenState::Pending};
@@ -160,8 +194,7 @@ private:
 
   // Most recent unsolicited server-initiated error (`type="error"`), if any.
   // The server sends one of these before closing the WS to explain why (e.g.
-  // `server_busy`). Recorded so a subsequent Close/Error path can surface it
-  // instead of the much-less-actionable raw WebSocket close reason.
+  // `server_busy`). Recorded so the imminent Close path can surface it.
   std::mutex lastServerErrorMutex;
   std::string lastServerError;
 
@@ -170,10 +203,6 @@ private:
 
 //===----------------------------------------------------------------------===//
 // ReadChannelConnectionImpl
-//
-// Held by the consumer of `connectClientReceiver`. Destructor unregisters the
-// callback and sends `unsubscribe`. The actual incoming bytes are delivered
-// by the shared websocket callback in RpcClient::Impl.
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -190,9 +219,8 @@ public:
     try {
       impl->unsubscribe(channelId);
     } catch (const std::exception &e) {
-      // We're tearing down a per-channel reader and can't propagate the
-      // exception (this runs in a destructor). Log it so the failure isn't
-      // silently lost.
+      // We're tearing down a per-channel reader from a destructor; can't
+      // propagate exceptions. Log so the failure isn't silently lost.
       impl->getLogger().warning(
           "cosim",
           std::string("unsubscribe during disconnect failed: ") + e.what());
@@ -207,46 +235,102 @@ private:
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// LWS protocol table
+//===----------------------------------------------------------------------===//
+
+namespace {
+// LWS allocates `per_session_data_size` bytes per connection. The client
+// only ever has one connection so we don't need any C++ state in that
+// region; route everything through `lws_context_user()`.
+struct ClientPss {};
+
+static int rpcClientCallback(struct lws *wsi, enum lws_callback_reasons reason,
+                             void *user, void *in, size_t len) {
+  struct lws_context *ctx = lws_get_context(wsi);
+  if (!ctx)
+    return 0;
+  void *impl = lws_context_user(ctx);
+  if (!impl)
+    return 0;
+  return static_cast<RpcClient::Impl *>(impl)->callback(wsi, reason, user, in,
+                                                        len);
+}
+
+static const struct lws_protocols kClientProtocols[] = {
+    {"esi-cosim-v3", rpcClientCallback, sizeof(ClientPss), /*rx_buffer_size=*/0,
+     /*id=*/0, /*user=*/nullptr, /*tx_packet_size=*/0},
+    LWS_PROTOCOL_LIST_TERM};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // RpcClient::Impl - construction / `hello` handshake
 //===----------------------------------------------------------------------===//
 
 RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
                       uint16_t port)
-    : host(hostname), logger(logger) {
-  // On Windows, `ix::initNetSystem()` calls `WSAStartup`; bail out cleanly if
-  // it fails rather than letting the WS start path fail with a less
-  // actionable `WSANOTINITIALISED`. No-op on other platforms.
-  if (!ix::initNetSystem())
-    throw std::runtime_error(
-        "RpcClient: ix::initNetSystem() failed (WSAStartup)");
+    : host(hostname), port(port), logger(logger) {
+  // Quiet libwebsockets' own log spam; keep warnings and errors.
+  lws_set_log_level(LLL_ERR | LLL_WARN, nullptr);
 
-  ws.setUrl("ws://" + host + ":" + std::to_string(port) + "/esi/cosim/v3");
-  ws.disablePerMessageDeflate();
-  ws.disableAutomaticReconnection();
+  struct lws_context_creation_info info = {};
+  info.options =
+      LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT * 0; // explicit no-SSL globals
+  info.port = CONTEXT_PORT_NO_LISTEN;
+  info.protocols = kClientProtocols;
+  info.user = this;
+  info.gid = -1;
+  info.uid = -1;
 
-  ws.setOnMessageCallback(
-      [this](const ix::WebSocketMessagePtr &msg) { onMessage(msg); });
+  context = lws_create_context(&info);
+  if (!context)
+    throw std::runtime_error("RpcClient: lws_create_context failed");
 
-  ws.start();
+  // Kick off the client connect. The actual TCP/WS handshake happens once
+  // `lws_service` runs on the service thread we are about to start.
+  struct lws_client_connect_info ci = {};
+  ci.context = context;
+  ci.address = host.c_str();
+  ci.port = static_cast<int>(port);
+  ci.path = "/esi/cosim/v3";
+  ci.host = ci.address;
+  ci.origin = ci.address;
+  ci.protocol = "esi-cosim-v3";
+  ci.local_protocol_name = "esi-cosim-v3";
+  ci.pwsi = &wsi;
+
+  if (!lws_client_connect_via_info(&ci)) {
+    lws_context_destroy(context);
+    context = nullptr;
+    throw std::runtime_error("RpcClient: lws_client_connect_via_info failed");
+  }
+
+  serviceThread = std::thread([this] { serviceLoop(); });
 
   // Wait for the WS to reach Open (or fail).
   {
     std::unique_lock<std::mutex> lock(openMutex);
     openCV.wait(lock, [&] { return openState != OpenState::Pending; });
-    if (openState == OpenState::Failed)
-      throw std::runtime_error("RpcClient: failed to connect to " +
-                               ws.getUrl() + ": " + openError);
+    if (openState == OpenState::Failed) {
+      // Tear down before throwing so the destructor isn't expected to clean
+      // up a half-constructed object.
+      std::string err = openError;
+      shouldStop.store(true, std::memory_order_release);
+      lws_cancel_service(context);
+      if (serviceThread.joinable())
+        serviceThread.join();
+      lws_context_destroy(context);
+      context = nullptr;
+      throw std::runtime_error("RpcClient: failed to connect to ws://" + host +
+                               ":" + std::to_string(port) + ": " + err);
+    }
   }
 
-  // Send `hello`; the server blocks the response until its manifest is ready.
+  // Send `hello`; the server defers the response until its manifest is ready.
   json result = call("hello", {{"client_protocol_version", 3}});
 
-  // Cache manifest blob.
   if (auto it = result.find("esi_version"); it != result.end())
     esiVersion = it->get<uint32_t>();
   if (auto it = result.find("compressed_manifest_b64"); it != result.end()) {
-    // macaron::Base64::Decode returns an empty error string on success and
-    // writes raw bytes into the out string; reinterpret as a byte vector.
     std::string raw;
     std::string err = macaron::Base64::Decode(it->get<std::string>(), raw);
     if (!err.empty())
@@ -255,7 +339,6 @@ RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
     manifest.assign(raw.begin(), raw.end());
   }
 
-  // Cache channel table.
   auto channelsIt = result.find("channels");
   if (channelsIt == result.end() || !channelsIt->is_array())
     throw std::runtime_error("RpcClient: hello response missing channels");
@@ -271,53 +354,65 @@ RpcClient::Impl::Impl(Logger &logger, const std::string &hostname,
     channelsById.emplace(meta.id, std::move(meta));
   }
 
-  // Start the transport thread now that initialisation is complete. It
-  // sleeps on `readyIds`'s internal CV until a per-channel TSQueue push
-  // wakes it.
+  // Start the transport thread now that initialisation is complete.
   transportThread = std::thread([this] { transportLoop(); });
 }
 
 RpcClient::Impl::~Impl() {
-  disconnecting = true;
+  disconnecting.store(true);
   failAllPending("client shutdown");
   // Mark every per-channel entry canceled so the transport loop drops any
-  // remaining queued frames promptly instead of spinning on the user
-  // callback.
+  // remaining queued frames promptly.
   {
     std::lock_guard<std::mutex> lock(readCallbacksMutex);
     for (auto &[id, entry] : readCallbacks)
       entry->canceled.store(true);
   }
-  // Stop IX *first* so no more `handleBinaryFrame` calls can fire and push
-  // into the per-channel queues. ws.stop() joins IX's internal threads
-  // synchronously.
-  ws.stop();
-  // Now retire the transport thread; nothing else is producing for it.
-  if (transportThread.joinable()) {
-    readyIds.requestShutdown();
-    transportThread.join();
+
+  // Stop the LWS service thread first. Once joined, no more inbound frames
+  // can be pushed into per-channel queues.
+  if (context) {
+    shouldStop.store(true, std::memory_order_release);
+    lws_cancel_service(context);
+    if (serviceThread.joinable())
+      serviceThread.join();
+    lws_context_destroy(context);
+    context = nullptr;
+    wsi = nullptr;
   }
+
+  // Retire the transport thread.
+  readyIds.requestShutdown();
+  if (transportThread.joinable())
+    transportThread.join();
 }
 
 //===----------------------------------------------------------------------===//
-// RpcClient::Impl - WebSocket message dispatch
+// RpcClient::Impl - service loop and LWS callback
 //===----------------------------------------------------------------------===//
 
-void RpcClient::Impl::onMessage(const ix::WebSocketMessagePtr &msg) {
-  switch (msg->type) {
-  case ix::WebSocketMessageType::Open: {
+void RpcClient::Impl::serviceLoop() {
+  while (!shouldStop.load(std::memory_order_acquire)) {
+    int n = lws_service(context, 0);
+    if (n < 0)
+      break;
+  }
+}
+
+int RpcClient::Impl::callback(struct lws *wsi, enum lws_callback_reasons reason,
+                              void * /*user*/, void *in, size_t len) {
+  switch (reason) {
+  case LWS_CALLBACK_CLIENT_ESTABLISHED: {
     std::lock_guard<std::mutex> lock(openMutex);
     openState = OpenState::Open;
     openCV.notify_all();
-    return;
+    return 0;
   }
-  case ix::WebSocketMessageType::Error: {
-    std::string reason = msg->errorInfo.reason;
-    {
-      std::lock_guard<std::mutex> lock(lastServerErrorMutex);
-      if (!lastServerError.empty())
-        reason = lastServerError;
-    }
+
+  case LWS_CALLBACK_CLIENT_CONNECTION_ERROR: {
+    std::string reason = in && len
+                             ? std::string(static_cast<const char *>(in), len)
+                             : std::string("connection error");
     {
       std::lock_guard<std::mutex> lock(openMutex);
       if (openState == OpenState::Pending) {
@@ -327,18 +422,19 @@ void RpcClient::Impl::onMessage(const ix::WebSocketMessagePtr &msg) {
       }
     }
     failAllPending("websocket error: " + reason);
-    return;
+    this->wsi = nullptr;
+    return 0;
   }
-  case ix::WebSocketMessageType::Close: {
-    std::string reason = msg->closeInfo.reason;
+
+  case LWS_CALLBACK_CLIENT_CLOSED: {
+    std::string reason;
     {
       std::lock_guard<std::mutex> lock(lastServerErrorMutex);
       if (!lastServerError.empty())
         reason = lastServerError;
     }
-    // If the server closed us before `Open` settled (e.g. immediate
-    // `server_busy` reject), surface that as an Open failure so the
-    // constructor's wait unblocks with a useful error.
+    if (reason.empty())
+      reason = "connection closed";
     {
       std::lock_guard<std::mutex> lock(openMutex);
       if (openState == OpenState::Pending) {
@@ -348,26 +444,77 @@ void RpcClient::Impl::onMessage(const ix::WebSocketMessagePtr &msg) {
       }
     }
     failAllPending("websocket closed: " + reason);
-    return;
+    this->wsi = nullptr;
+    return 0;
   }
-  case ix::WebSocketMessageType::Message:
-    if (msg->binary)
-      handleBinaryFrame(msg->str);
-    else
-      handleControlFrame(msg->str);
-    return;
+
+  case LWS_CALLBACK_CLIENT_RECEIVE: {
+    if (in && len)
+      rxBuffer.append(static_cast<const char *>(in), len);
+    if (lws_is_final_fragment(wsi) && lws_remaining_packet_payload(wsi) == 0) {
+      bool binary = lws_frame_is_binary(wsi);
+      std::string data;
+      data.swap(rxBuffer);
+      if (binary)
+        handleBinaryFrame(data);
+      else
+        handleControlFrame(data);
+    }
+    return 0;
+  }
+
+  case LWS_CALLBACK_CLIENT_WRITEABLE: {
+    WireFrame f;
+    bool more = false;
+    {
+      std::lock_guard<std::mutex> lock(outboundMutex);
+      if (outbound.empty())
+        return 0;
+      f = std::move(outbound.front());
+      outbound.pop_front();
+      more = !outbound.empty();
+    }
+    lws_write_protocol proto = f.isBinary ? LWS_WRITE_BINARY : LWS_WRITE_TEXT;
+    int m = lws_write(wsi, f.writePtr(), f.payloadSize, proto);
+    if (m < static_cast<int>(f.payloadSize)) {
+      logger.error("cosim", "lws_write returned short");
+      return -1;
+    }
+    if (more)
+      lws_callback_on_writable(wsi);
+    return 0;
+  }
+
+  case LWS_CALLBACK_EVENT_WAIT_CANCELLED: {
+    if (shouldStop.load(std::memory_order_acquire))
+      return 0;
+    // If we have queued outbound frames and a live wsi, ask LWS for a
+    // writable callback so we can drain them.
+    bool needWrite = false;
+    {
+      std::lock_guard<std::mutex> lock(outboundMutex);
+      needWrite = !outbound.empty();
+    }
+    if (needWrite && this->wsi)
+      lws_callback_on_writable(this->wsi);
+    return 0;
+  }
+
   default:
-    return;
+    return 0;
   }
 }
+
+//===----------------------------------------------------------------------===//
+// RpcClient::Impl - frame handling
+//===----------------------------------------------------------------------===//
 
 void RpcClient::Impl::handleControlFrame(const std::string &text) {
   json resp;
   try {
     resp = json::parse(text);
-  } catch (const std::exception &e) {
-    // Unparseable text frame: nothing useful we can do.
-    return;
+  } catch (const std::exception &) {
+    return; // Unparseable text frame: nothing useful we can do.
   }
   auto typeIt = resp.find("type");
   if (typeIt == resp.end() || !typeIt->is_string())
@@ -375,9 +522,8 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
   std::string type = typeIt->get<std::string>();
 
   // Unsolicited server-initiated error. The server sends one of these before
-  // closing the WS (e.g. `server_busy`). Stash the message so the imminent
-  // Close event surfaces this human-readable reason instead of just the raw
-  // WebSocket close reason.
+  // closing the WS. Stash it so the imminent Close event surfaces this
+  // reason instead of the raw WebSocket close reason.
   if (type == "error") {
     if (auto errIt = resp.find("error"); errIt != resp.end()) {
       std::string code = errIt->value("code", std::string("internal"));
@@ -389,10 +535,7 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
   }
 
   if (type != "response") {
-    // Unknown control-frame type. Per the protocol, receivers MUST ignore
-    // unrecognised fields/types so the wire format can evolve additively
-    // under the same `protocol_version`, but warn so genuine misbehavior
-    // doesn't go silently dropped.
+    // Receivers MUST ignore unrecognised types for forward compatibility.
     logger.debug("cosim",
                  "Ignoring control frame with unknown type \"" + type + "\"");
     return;
@@ -420,18 +563,15 @@ void RpcClient::Impl::handleControlFrame(const std::string &text) {
     } else if (auto resultIt = resp.find("result"); resultIt != resp.end()) {
       promise->set_value(*resultIt);
     } else {
-      // Per the wire spec, a `type=response` frame MUST carry either
-      // `result` (success) or `error` (failure). Surface the protocol
-      // violation to the caller instead of pretending it succeeded.
+      // Per the spec, a `type=response` frame MUST carry either `result` or
+      // `error`. Surface the protocol violation instead of pretending it
+      // succeeded.
       promise->set_exception(std::make_exception_ptr(std::runtime_error(
           "Server response missing both \"result\" and \"error\" fields "
           "(protocol violation) for request_id=" +
           std::to_string(requestId))));
     }
   } catch (const std::exception &e) {
-    // Promise might be already satisfied if we raced with a shutdown that
-    // already fulfilled it via failAllPending. Benign, but log so unexpected
-    // duplicate responses from the server don't go entirely unnoticed.
     logger.debug("cosim",
                  std::string("failed to fulfill promise for request_id=") +
                      std::to_string(requestId) + ": " + e.what());
@@ -453,10 +593,6 @@ void RpcClient::Impl::handleBinaryFrame(const std::string &data) {
     std::lock_guard<std::mutex> lock(readCallbacksMutex);
     auto it = readCallbacks.find(channelId);
     if (it == readCallbacks.end()) {
-      // Per the protocol, the server MUST stop sending frames for a channel
-      // after the unsubscribe-ack. A frame for an unknown channel is
-      // therefore either a server bug or a misrouted message: warn rather
-      // than silently dropping so the issue is visible.
       logger.warning("cosim", "Dropping inbound frame for channel id " +
                                   std::to_string(channelId) +
                                   ": no active subscriber");
@@ -465,10 +601,9 @@ void RpcClient::Impl::handleBinaryFrame(const std::string &data) {
     entry = it->second;
   }
 
-  // Push the payload into the per-channel queue and return immediately;
-  // never block IX's network thread on the user-supplied callback. The
-  // queue's notifier rings the transport doorbell, and the dedicated
-  // transport thread is what actually invokes the callback.
+  // Push into the per-channel queue. The queue's notifier rings the
+  // transport doorbell; the transport thread is what actually invokes the
+  // user callback. We must never block the LWS service thread on user code.
   entry->queue.push(MessageData(
       reinterpret_cast<const uint8_t *>(data.data() + 2), data.size() - 2));
 }
@@ -480,14 +615,35 @@ void RpcClient::Impl::failAllPending(const std::string &reason) {
       pr.promise.set_exception(
           std::make_exception_ptr(std::runtime_error(reason)));
     } catch (const std::exception &e) {
-      // Already-satisfied promise; benign but log it in case a real bug is
-      // racing with shutdown.
       logger.debug("cosim", std::string("failAllPending: request_id=") +
                                 std::to_string(id) +
                                 " already satisfied: " + e.what());
     }
   }
   pending.clear();
+}
+
+//===----------------------------------------------------------------------===//
+// RpcClient::Impl - cross-thread send helpers
+//===----------------------------------------------------------------------===//
+
+void RpcClient::Impl::enqueueText(const std::string &text) {
+  WireFrame f = buildLwsTextFrame(text);
+  {
+    std::lock_guard<std::mutex> lock(outboundMutex);
+    outbound.push_back(std::move(f));
+  }
+  if (context)
+    lws_cancel_service(context);
+}
+
+void RpcClient::Impl::enqueueBinary(WireFrame frame) {
+  {
+    std::lock_guard<std::mutex> lock(outboundMutex);
+    outbound.push_back(std::move(frame));
+  }
+  if (context)
+    lws_cancel_service(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -507,17 +663,7 @@ json RpcClient::Impl::call(const std::string &method, json params) {
   req["request_id"] = requestId;
   req["method"] = method;
   req["params"] = std::move(params);
-  std::string text = req.dump();
-
-  // No send-side mutex needed: IXWebSocket's `sendUtf8Text` is internally
-  // serialized with `sendBinary`, and every cosim frame is a single send
-  // call (no header+body splits).
-  auto info = ws.sendUtf8Text(text);
-  if (!info.success) {
-    std::lock_guard<std::mutex> plock(pendingMutex);
-    pending.erase(requestId);
-    throw std::runtime_error("RpcClient: failed to send " + method);
-  }
+  enqueueText(req.dump());
 
   return future.get();
 }
@@ -531,13 +677,8 @@ void RpcClient::Impl::writeToServer(const std::string &channelName,
     throw std::runtime_error("Channel '" + channelName +
                              "' is not a to-server channel");
 
-  std::string frame = esi::cosim::buildDataFrame(it->second.id, data.getBytes(),
-                                                 data.getSize());
-  // IXWebSocket serializes sends internally; no extra mutex needed.
-  auto info = ws.sendBinary(frame);
-  if (!info.success)
-    throw std::runtime_error("Failed to send data on channel '" + channelName +
-                             "'");
+  enqueueBinary(buildLwsBinaryFrame(it->second.id, data.getBytes(),
+                                    data.getSize()));
 }
 
 //===----------------------------------------------------------------------===//
@@ -605,13 +746,18 @@ RpcClient::Impl::connectClientReceiver(const std::string &channelName,
 }
 
 void RpcClient::Impl::unsubscribe(uint16_t channelId) {
-  if (disconnecting)
+  if (disconnecting.load())
     return;
-  // Skip the RPC if the WS is already closed (server tore down first, network
-  // drop, etc.). The unsubscribe is moot anyway, and otherwise every
+  // Skip the RPC if the WS is no longer up (server tore down first, network
+  // drop, etc.). The unsubscribe is moot anyway and otherwise every
   // per-channel cleanup during teardown would generate a noisy "failed to
-  // send unsubscribe" warning from ReadChannelConnectionImpl::disconnect.
-  if (ws.getReadyState() != ix::ReadyState::Open)
+  // send unsubscribe" warning.
+  {
+    std::lock_guard<std::mutex> lock(openMutex);
+    if (openState != OpenState::Open)
+      return;
+  }
+  if (!wsi)
     return;
   call("unsubscribe", {{"channel_id", channelId}});
 }
@@ -627,11 +773,9 @@ void RpcClient::Impl::unregisterCallback(uint16_t channelId) {
     readCallbacks.erase(it);
   }
   // Flip the cancel flag on the entry that any in-flight transport-loop
-  // iteration already copied out, so it bails out promptly and drops any
-  // remaining queued frames.
+  // iteration already copied out, so it bails out promptly.
   entry->canceled.store(true);
-  // Nudge the transport thread so it observes the cancelation promptly and
-  // drains+drops whatever's still queued.
+  // Nudge the transport thread so it observes the cancelation promptly.
   readyIds.markReady(channelId);
 }
 
@@ -665,14 +809,14 @@ void RpcClient::Impl::transportLoop() {
         entry = it->second;
       }
 
-      if (entry->canceled.load() || disconnecting)
+      if (entry->canceled.load() || disconnecting.load())
         continue;
 
       // Best-effort drain. `TSQueue::pop(callback)` peeks at the front and
       // only pops if our callback returns true; on `false` we leave the
       // message at the head and mark the channel for retry.
       bool stuck = false;
-      while (!stuck && !entry->canceled.load() && !disconnecting) {
+      while (!stuck && !entry->canceled.load() && !disconnecting.load()) {
         bool gotOne = false;
         entry->queue.pop([&](const MessageData &data) {
           gotOne = true;

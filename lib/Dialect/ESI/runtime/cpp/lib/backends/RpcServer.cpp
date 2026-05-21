@@ -6,8 +6,15 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Implementation of the cosim RPC server over the WebSocket + JSON protocol.
-// The wire protocol is documented in cosim-protocol.md.
+// Implementation of the cosim RPC server over the WebSocket + JSON protocol,
+// backed by libwebsockets. The wire protocol is documented in
+// cosim-protocol.md.
+//
+// All WebSocket I/O happens on the single LWS service thread inside
+// `serviceLoop()`. Other threads (DPI write paths, the public `setManifest`
+// caller, etc.) interact with the server by enqueuing onto thread-safe
+// structures and calling `lws_cancel_service()`, which wakes the service
+// thread which then services `LWS_CALLBACK_EVENT_WAIT_CANCELLED`.
 //
 //===----------------------------------------------------------------------===//
 
@@ -16,49 +23,36 @@
 #include "esi/Utils.h"
 #include "esi/backends/RpcClient.h" // for ChannelDirection
 
+#include "Base64.h"
 #include "RpcWire.h"
 
-#include <ixwebsocket/IXBase64.h>
-#include <ixwebsocket/IXNetSystem.h>
-#include <ixwebsocket/IXWebSocket.h>
-#include <ixwebsocket/IXWebSocketServer.h>
+#include <libwebsockets.h>
 #include <nlohmann/json.hpp>
 
 #include <atomic>
 #include <cassert>
-#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <deque>
 #include <format>
 #include <map>
+#include <memory>
 #include <mutex>
+#include <new>
 #include <optional>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#endif
 
 using namespace esi;
 using namespace esi::cosim;
 using json = nlohmann::json;
 
 namespace {
-
-//===----------------------------------------------------------------------===//
-// Helpers
-//===----------------------------------------------------------------------===//
 
 /// Write the bound port number to a file so callers (typically esi-cosim) can
 /// discover it. Necessary when the OS picks the port, since the simulator's
@@ -71,51 +65,35 @@ static void writePortFile(uint16_t port) {
   fclose(fd);
 }
 
-/// Pre-bind a temporary loopback socket to port 0 to discover an OS-assigned
-/// ephemeral port. IXWebSocket exposes the port a user passed in but does not
-/// query `getsockname` after binding, so for the "let the OS pick" path we have
-/// to find a free port ourselves and hand it to IX. SO_REUSEADDR + immediate
-/// close keep the race window minimal in practice.
-static int pickEphemeralPort() {
-#ifdef _WIN32
-  SOCKET fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (fd == INVALID_SOCKET)
-    return -1;
-#else
-  int fd = socket(AF_INET, SOCK_STREAM, 0);
-  if (fd < 0)
-    return -1;
-#endif
-  int enable = 1;
-  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR,
-             reinterpret_cast<const char *>(&enable), sizeof(enable));
-  sockaddr_in addr{};
-  addr.sin_family = AF_INET;
-  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-  addr.sin_port = 0;
-  if (bind(fd, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) < 0) {
-#ifdef _WIN32
-    closesocket(fd);
-#else
-    close(fd);
-#endif
-    return -1;
-  }
-  sockaddr_in bound{};
-  socklen_t len = sizeof(bound);
-  int rc = getsockname(fd, reinterpret_cast<sockaddr *>(&bound), &len);
-#ifdef _WIN32
-  closesocket(fd);
-#else
-  close(fd);
-#endif
-  if (rc < 0)
-    return -1;
-  return ntohs(bound.sin_port);
-}
-
 class RpcServerReadPort;
 class RpcServerWritePort;
+
+/// Per-WebSocket-session state. LWS allocates `per_session_data_size` bytes
+/// of raw memory per connection and hands a pointer to it as the `user`
+/// parameter of every callback for that connection. We placement-new this
+/// type into that buffer in `LWS_CALLBACK_ESTABLISHED` and destruct it in
+/// `LWS_CALLBACK_CLOSED`. All access is from the LWS service thread, so no
+/// locking is required.
+struct CosimSessionPss {
+  /// FIFO of outbound frames awaiting `lws_write`. Always drained from
+  /// `LWS_CALLBACK_SERVER_WRITEABLE`.
+  std::deque<WireFrame> outbound;
+  /// Accumulator for fragmented inbound WebSocket frames. Cleared on each
+  /// final fragment.
+  std::string rxBuffer;
+  /// Channels (to-client) this session is subscribed to.
+  std::unordered_set<uint16_t> subscribed;
+  /// True after we have answered the `hello` request.
+  bool helloDone = false;
+  /// `hello` arrived before `setManifest()` was called; the response is
+  /// deferred until the manifest is ready. `helloRequestId` holds the
+  /// request id to use for the deferred reply.
+  bool helloPending = false;
+  uint64_t helloRequestId = 0;
+  /// Singleton-rejection path: this connection should be closed after its
+  /// outbound queue drains.
+  bool closeAfterWrite = false;
+};
 
 } // namespace
 
@@ -141,16 +119,23 @@ public:
   void stop(uint32_t timeoutMS);
   int getPort() const { return boundPort; }
 
-  // Dirty-set doorbell for the transport thread. Public so each port's
-  // TSQueue can pass `[&impl, id]{ impl.readyIds.markReady(id); }` as its
-  // push-notifier; also called directly from `handleSubscribe` to flush
-  // anything queued before the subscription arrived.
+  /// Dirty-set doorbell for cross-thread writes. WritePort TSQueues notify
+  /// this set whenever a DPI thread enqueues data, then we wake the LWS
+  /// service thread.
   utils::ReadyIdSet<uint16_t> readyIds;
 
+  /// Called by WritePort queue notifiers (from arbitrary threads).
+  void ringDoorbell(uint16_t channelId) {
+    readyIds.markReady(channelId);
+    if (context)
+      lws_cancel_service(context);
+  }
+
+  /// LWS protocol callback dispatch (service thread only).
+  int callback(struct lws *wsi, enum lws_callback_reasons reason, void *user,
+               void *in, size_t len);
+
 private:
-  // Reuse the public direction enum from the client side rather than
-  // duplicating it; both ends of the cosim transport agree on the same two
-  // values.
   using ChannelDirection = backends::cosim::RpcClient::ChannelDirection;
   struct ChannelInfo {
     uint16_t id;
@@ -161,27 +146,16 @@ private:
     RpcServerWritePort *writePort = nullptr;
   };
 
-  struct ClientSession {
-    ix::WebSocket *ws;
-    // The set of `to_client` channel ids the client subscribed to.
-    std::mutex subscribedMutex;
-    std::unordered_set<uint16_t> subscribed;
-    // True once `hello` has been answered.
-    bool helloDone = false;
-  };
-
   Context &ctxt;
 
-  // Manifest state. setManifest() flips manifestReady and broadcasts the CV;
-  // any in-flight `hello` handler blocks on this until it is set.
+  // Manifest state. `setManifest()` flips `manifestReady` then wakes the LWS
+  // service thread so any deferred `hello` reply can fire.
   std::mutex manifestMutex;
-  std::condition_variable manifestReadyCV;
   int esiVersion = -1;
   std::vector<uint8_t> compressedManifest;
-  bool manifestReady = false;
+  std::atomic<bool> manifestReady{false};
 
   // Channel table is keyed by name in the public API and by id on the wire.
-  // Ports are owned here; ChannelInfo holds non-owning pointers.
   std::mutex channelsMutex;
   std::map<std::string, std::unique_ptr<RpcServerReadPort>> readPorts;
   std::map<std::string, std::unique_ptr<RpcServerWritePort>> writePorts;
@@ -189,74 +163,72 @@ private:
   std::unordered_map<std::string, uint16_t> idByName;
   uint16_t nextChannelId = 0;
 
-  // Session state. v3 of the protocol allows a single concurrent client.
+  // Singleton session. v3 of the protocol allows a single concurrent client;
+  // `clientWsi` is the live connection (only accessed from the service
+  // thread or with `sessionMutex` held when the service thread is paused).
   std::mutex sessionMutex;
-  std::unique_ptr<ClientSession> session;
+  struct lws *clientWsi = nullptr;
 
-  // Transport thread; drains `readyIds` and dispatches per channel id.
-  std::thread transportThread;
-
-  // The IXWebSocket server.
-  std::unique_ptr<ix::WebSocketServer> server;
+  // LWS plumbing.
+  struct lws_context *context = nullptr;
+  struct lws_vhost *vhost = nullptr;
+  std::thread serviceThread;
+  std::atomic<bool> shouldStop{false};
   int boundPort = -1;
 
-  // Connection callbacks.
-  void onClientMessage(std::shared_ptr<ix::ConnectionState> state,
-                       ix::WebSocket &ws, const ix::WebSocketMessagePtr &msg);
-  void onOpen(ix::WebSocket &ws);
-  void onClose();
-  void handleBinaryFrame(const std::string &data);
-  void handleControlFrame(ix::WebSocket &ws, const std::string &text);
-  void handleHello(ix::WebSocket &ws, uint64_t requestId, const json &params);
-  void handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
-                       const json &params);
-  void handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
-                         const json &params);
-  void sendResult(ix::WebSocket &ws, uint64_t requestId, const json &result);
-  void sendError(ix::WebSocket &ws, uint64_t requestId, const std::string &code,
-                 const std::string &message);
+  // Service-thread internals.
+  void serviceLoop();
+  void onEventCanceled();
+  void drainWritePort(uint16_t channelId);
 
-  void transportLoop();
+  // Per-message handlers (all run on service thread).
+  void handleBinaryFrame(const std::string &data);
+  void handleControlFrame(struct lws *wsi, CosimSessionPss *pss,
+                          const std::string &text);
+  void handleHello(struct lws *wsi, CosimSessionPss *pss, uint64_t requestId,
+                   const json &params);
+  void handleSubscribe(struct lws *wsi, CosimSessionPss *pss,
+                       uint64_t requestId, const json &params);
+  void handleUnsubscribe(struct lws *wsi, CosimSessionPss *pss,
+                         uint64_t requestId, const json &params);
+
+  // Frame enqueue helpers (service thread only). They push onto `pss`'s
+  // outbound queue and schedule a writable callback.
+  void enqueueResult(struct lws *wsi, CosimSessionPss *pss, uint64_t requestId,
+                     const json &result);
+  void enqueueError(struct lws *wsi, CosimSessionPss *pss, uint64_t requestId,
+                    const std::string &code, const std::string &message);
+  void enqueueFrame(struct lws *wsi, CosimSessionPss *pss, WireFrame frame);
+
+  // Build the full `hello` reply JSON from current manifest + channel table.
+  json buildHelloResult();
 };
 
 using Impl = esi::cosim::RpcServer::Impl;
 
 //===----------------------------------------------------------------------===//
 // Port implementations
-//
-// Read and write ports are simple queues; the RPC server pushes/pops as
-// appropriate. These mirror the previous gRPC implementation: they are
-// transport-agnostic except that write port writes ring the sender doorbell.
 //===----------------------------------------------------------------------===//
 
 namespace {
 /// Read port for "to server" channels.
 ///
-/// The cosim transport hands inbound frames synchronously from the IX
-/// network thread, which is shared across every channel on a connection.
-/// Any back-pressure on a per-port consumer would stall that thread and risk
-/// a cross-channel deadlock when an accelerator's flow control requires
-/// ordering across channels. So we *force* polling-mode `connect` to use an
-/// unbounded internal queue regardless of what the caller passes —
-/// `ReadChannelPort::pollingState` then acts as our buffer and
-/// `invokeCallback` is guaranteed non-blocking. The unbounded queue mirrors
-/// the existing `to_client` write queue and is acceptable for a cosim
-/// driver.
+/// Inbound binary frames are dispatched synchronously from the LWS service
+/// thread. Any back-pressure on a per-port consumer would stall every
+/// channel, so we force polling-mode `connect` to use an unbounded internal
+/// queue (`bufferSize == 0`) regardless of what the caller passes.
 class RpcServerReadPort : public ReadChannelPort {
 public:
   using ReadChannelPort::ReadChannelPort;
 
-  /// Polling-mode connect: force the internal queue to be unbounded
-  /// (`bufferSize == 0`) regardless of what the caller asked for.
   void connect(const ConnectOptions &options = {}) override {
     ConnectOptions forced = options;
     forced.bufferSize = 0;
     ReadChannelPort::connect(forced);
   }
 
-  /// Hand one inbound frame to the user callback. Returns `false` only when
-  /// the port is disconnected (typically during shutdown), in which case the
-  /// caller should drop the frame.
+  /// Hand one inbound frame to the user callback. Returns `false` if the
+  /// port has been disconnected; the caller should then drop the frame.
   bool deliver(const MessageData &data) {
     std::unique_ptr<SegmentedMessageData> msg =
         std::make_unique<MessageData>(data);
@@ -264,24 +236,23 @@ public:
   }
 };
 
-/// Write queue for "to client" channels. Writes go into the per-port TSQueue;
-/// the queue's notifier hook rings the transport doorbell so the transport
-/// thread wakes up and drains across the WebSocket. DPI threads must never
-/// block on I/O, so this path is strictly non-blocking.
+/// Write queue for "to client" channels. Writes go into a per-port TSQueue;
+/// the queue's notifier rings the server doorbell, which wakes the LWS
+/// service thread. DPI threads must never block on I/O, so this path is
+/// strictly non-blocking.
 class RpcServerWritePort : public WriteChannelPort {
 public:
   RpcServerWritePort(Type *type, Impl &impl, uint16_t channelId)
       : WriteChannelPort(type), channelId(channelId),
-        writeQueue([&impl, channelId] { impl.readyIds.markReady(channelId); }) {
-  }
+        writeQueue([&impl, channelId] { impl.ringDoorbell(channelId); }) {}
 
   uint16_t getChannelId() const { return channelId; }
   uint16_t channelId;
   utils::TSQueue<MessageData> writeQueue;
 
 protected:
-  // TODO: TSQueue is unbounded so if there's no client subscibed it'll fill up
-  // memory. We should add some backpressure mechanism here to avoid that.
+  // TODO: TSQueue is unbounded so if there's no client subscribed it'll fill
+  // up memory. We should add some backpressure mechanism here to avoid that.
   void writeImpl(const MessageData &data) override { writeQueue.push(data); }
   bool tryWriteImpl(const MessageData &data) override {
     writeImpl(data);
@@ -291,56 +262,97 @@ protected:
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// LWS protocol table
+//===----------------------------------------------------------------------===//
+
+namespace {
+static int cosimCallback(struct lws *wsi, enum lws_callback_reasons reason,
+                         void *user, void *in, size_t len) {
+  struct lws_context *ctx = lws_get_context(wsi);
+  if (!ctx)
+    return 0;
+  void *impl = lws_context_user(ctx);
+  if (!impl)
+    return 0;
+  return static_cast<Impl *>(impl)->callback(wsi, reason, user, in, len);
+}
+
+// One protocol entry; no per-protocol user-data of our own (we route through
+// `lws_context_user`).
+static const struct lws_protocols kProtocols[] = {
+    {"esi-cosim-v3", cosimCallback, sizeof(CosimSessionPss),
+     /*rx_buffer_size=*/0,
+     /*id=*/0, /*user=*/nullptr,
+     /*tx_packet_size=*/0},
+    LWS_PROTOCOL_LIST_TERM};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Impl - server lifecycle
 //===----------------------------------------------------------------------===//
 
 Impl::Impl(Context &ctxt, int port) : ctxt(ctxt) {
-  // On Windows, `ix::initNetSystem()` calls `WSAStartup` and returns false if
-  // that fails. On other platforms it's a no-op that always returns true.
-  if (!ix::initNetSystem())
-    throw std::runtime_error(
-        "RpcServer: ix::initNetSystem() failed (WSAStartup)");
+  // Quiet libwebsockets' own log spam; keep warnings and errors.
+  lws_set_log_level(LLL_ERR | LLL_WARN, nullptr);
 
-  // Resolve port 0 / negative request to an OS-assigned ephemeral port,
-  // since IXWebSocket does not expose the bound port after the fact.
-  int requestedPort = port;
-  if (requestedPort <= 0) {
-    requestedPort = pickEphemeralPort();
-    if (requestedPort <= 0)
-      throw std::runtime_error(
-          "RpcServer: failed to obtain an ephemeral TCP port");
+  // We use explicit vhosts so we can capture the vhost pointer and query the
+  // OS-assigned listen port via `lws_get_vhost_listen_port`. With implicit
+  // vhost creation we'd have no handle to the default vhost.
+  struct lws_context_creation_info ctxInfo = {};
+  ctxInfo.options =
+      LWS_SERVER_OPTION_EXPLICIT_VHOSTS | LWS_SERVER_OPTION_DISABLE_IPV6;
+  ctxInfo.user = this;
+  ctxInfo.gid = -1;
+  ctxInfo.uid = -1;
+
+  context = lws_create_context(&ctxInfo);
+  if (!context)
+    throw std::runtime_error("RpcServer: lws_create_context failed");
+
+  struct lws_context_creation_info vhInfo = {};
+  // Port 0 (or negative) tells the OS to pick an ephemeral port; LWS exposes
+  // the chosen value via `lws_get_vhost_listen_port`.
+  vhInfo.port = port < 0 ? 0 : port;
+  vhInfo.iface = "127.0.0.1";
+  vhInfo.protocols = kProtocols;
+  vhInfo.options = LWS_SERVER_OPTION_DISABLE_IPV6;
+
+  vhost = lws_create_vhost(context, &vhInfo);
+  if (!vhost) {
+    lws_context_destroy(context);
+    context = nullptr;
+    throw std::runtime_error("RpcServer: lws_create_vhost failed");
   }
 
-  const std::string host = "127.0.0.1";
-  server = std::make_unique<ix::WebSocketServer>(requestedPort, host);
-  server->disablePerMessageDeflate();
-
-  server->setOnClientMessageCallback(
-      [this](std::shared_ptr<ix::ConnectionState> state, ix::WebSocket &ws,
-             const ix::WebSocketMessagePtr &msg) {
-        onClientMessage(std::move(state), ws, msg);
-      });
-
-  auto res = server->listen();
-  if (!res.first)
-    throw std::runtime_error("RpcServer: listen failed: " + res.second);
-
-  server->start();
-  boundPort = requestedPort;
+  int actual = lws_get_vhost_listen_port(vhost);
+  if (actual <= 0) {
+    lws_context_destroy(context);
+    context = nullptr;
+    throw std::runtime_error(
+        "RpcServer: lws_get_vhost_listen_port returned no port");
+  }
+  boundPort = actual;
   writePortFile(static_cast<uint16_t>(boundPort));
-  ctxt.getLogger().info("cosim", std::format("Server listening on {}:{}", host,
-                                             static_cast<unsigned>(boundPort)));
+  ctxt.getLogger().info(
+      "cosim", std::format("Server listening on 127.0.0.1:{}",
+                           static_cast<unsigned>(boundPort)));
 
-  // Start the always-on transport thread that drains every port's queue. It
-  // lives the entire lifetime of the server and sleeps on `readyIds`'s
-  // internal CV when there is nothing to do regardless of whether a client
-  // is connected.
-  transportThread = std::thread([this] { transportLoop(); });
+  serviceThread = std::thread([this] { serviceLoop(); });
 }
 
 Impl::~Impl() {
-  if (server)
+  if (context)
     stop(0);
+}
+
+void Impl::serviceLoop() {
+  while (!shouldStop.load(std::memory_order_acquire)) {
+    // Timeout argument is ignored in modern LWS (the event loop blocks until
+    // I/O or `lws_cancel_service` arrives), but pass 0 to be safe.
+    int n = lws_service(context, 0);
+    if (n < 0)
+      break;
+  }
 }
 
 void Impl::setManifest(int esiVersion,
@@ -349,9 +361,11 @@ void Impl::setManifest(int esiVersion,
     std::lock_guard<std::mutex> lock(manifestMutex);
     this->esiVersion = esiVersion;
     this->compressedManifest = compressedManifest;
-    manifestReady = true;
   }
-  manifestReadyCV.notify_all();
+  manifestReady.store(true, std::memory_order_release);
+  // Wake the service thread so any deferred `hello` reply fires.
+  if (context)
+    lws_cancel_service(context);
 }
 
 ReadChannelPort &Impl::registerReadPort(const std::string &name,
@@ -392,41 +406,46 @@ void Impl::stop(uint32_t /*timeoutMS*/) {
       port->disconnect();
   }
 
-  // Retire the transport thread.
-  if (transportThread.joinable()) {
-    readyIds.requestShutdown();
-    transportThread.join();
-    // NB: there's no explicit "clear readyIds" step: each port's queue
-    // contents and the corresponding dirty markers belong to the ports,
-    // not to the transport thread, and the server doesn't restart in-place.
-  }
+  // Retire the doorbell to wake any consumer/producer that might still be
+  // blocked waiting on it.
+  readyIds.requestShutdown();
 
-  if (server) {
-    server->stop();
-    server.reset();
+  // Stop the LWS service thread. Setting `shouldStop` first then cancelling
+  // service forces the next `lws_service` call to return so the loop exits.
+  if (context) {
+    shouldStop.store(true, std::memory_order_release);
+    lws_cancel_service(context);
+    if (serviceThread.joinable())
+      serviceThread.join();
+    lws_context_destroy(context);
+    context = nullptr;
+    vhost = nullptr;
   }
 
   {
     std::lock_guard<std::mutex> lock(sessionMutex);
-    session.reset();
+    clientWsi = nullptr;
   }
 }
 
 //===----------------------------------------------------------------------===//
-// Impl - WebSocket message dispatch
+// Impl - LWS callback dispatch (service thread only)
 //===----------------------------------------------------------------------===//
 
-void Impl::onClientMessage(std::shared_ptr<ix::ConnectionState> /*state*/,
-                           ix::WebSocket &ws,
-                           const ix::WebSocketMessagePtr &msg) {
-  switch (msg->type) {
-  case ix::WebSocketMessageType::Open: {
-    // Single-client model: if a session is already active, send an unsolicited
-    // JSON error frame so the new client gets an actionable, application-level
-    // reason, then close with 1013 ("Try Again Later") rather than 1011
-    // ("Internal Error") — the latter falsely implies a server-side bug.
+int Impl::callback(struct lws *wsi, enum lws_callback_reasons reason,
+                   void *user, void *in, size_t len) {
+  CosimSessionPss *pss = static_cast<CosimSessionPss *>(user);
+
+  switch (reason) {
+  case LWS_CALLBACK_ESTABLISHED: {
+    // `pss` points at raw memory LWS allocated for us; placement-new the C++
+    // session state into it.
+    new (pss) CosimSessionPss();
     std::lock_guard<std::mutex> lock(sessionMutex);
-    if (session) {
+    if (clientWsi) {
+      // Singleton model: reject the new client with an application-level
+      // error frame, then close with 1013 ("Try Again Later") rather than
+      // 1011 ("Internal Error"), which would falsely imply a server bug.
       ctxt.getLogger().warning(
           "cosim", "Rejecting additional client; one already connected");
       json err;
@@ -434,41 +453,165 @@ void Impl::onClientMessage(std::shared_ptr<ix::ConnectionState> /*state*/,
       err["error"] = {{"code", "server_busy"},
                       {"message", "cosim server allows only one client at a "
                                   "time; another client is already connected"}};
-      ws.sendUtf8Text(err.dump());
-      // 1013 = Try Again Later (RFC 6455 §7.4).
-      ws.close(1013, "cosim server busy: another client is already connected");
-      return;
+      pss->outbound.push_back(buildLwsTextFrame(err.dump()));
+      pss->closeAfterWrite = true;
+      lws_callback_on_writable(wsi);
+      return 0;
     }
-    session = std::make_unique<ClientSession>();
-    session->ws = &ws;
+    clientWsi = wsi;
     ctxt.getLogger().debug("cosim", "Client connected");
-    return;
+    return 0;
   }
-  case ix::WebSocketMessageType::Close:
-  case ix::WebSocketMessageType::Error: {
-    ctxt.getLogger().debug(
-        "cosim", std::format("Client disconnected: {}",
-                             msg->type == ix::WebSocketMessageType::Error
-                                 ? msg->errorInfo.reason
-                                 : msg->closeInfo.reason));
-    onClose();
-    return;
+
+  case LWS_CALLBACK_CLOSED: {
+    {
+      std::lock_guard<std::mutex> lock(sessionMutex);
+      if (clientWsi == wsi)
+        clientWsi = nullptr;
+    }
+    ctxt.getLogger().debug("cosim", "Client disconnected");
+    if (pss)
+      pss->~CosimSessionPss();
+    return 0;
   }
-  case ix::WebSocketMessageType::Message:
-    if (msg->binary)
-      handleBinaryFrame(msg->str);
-    else
-      handleControlFrame(ws, msg->str);
-    return;
+
+  case LWS_CALLBACK_RECEIVE: {
+    if (in && len)
+      pss->rxBuffer.append(static_cast<const char *>(in), len);
+    // Reassemble fragmented messages: collect until the final fragment and
+    // no more bytes remain in the current packet.
+    if (lws_is_final_fragment(wsi) && lws_remaining_packet_payload(wsi) == 0) {
+      bool binary = lws_frame_is_binary(wsi);
+      std::string data;
+      data.swap(pss->rxBuffer);
+      if (binary)
+        handleBinaryFrame(data);
+      else
+        handleControlFrame(wsi, pss, data);
+    }
+    return 0;
+  }
+
+  case LWS_CALLBACK_SERVER_WRITEABLE: {
+    if (pss->outbound.empty()) {
+      if (pss->closeAfterWrite) {
+        const char *reason = "cosim server busy";
+        // 1013 = "Try Again Later" (RFC 6455 §7.4); libwebsockets doesn't
+        // expose a constant for it in 4.3.x, so cast directly.
+        lws_close_reason(wsi, static_cast<enum lws_close_status>(1013),
+                         reinterpret_cast<unsigned char *>(
+                             const_cast<char *>(reason)),
+                         std::strlen(reason));
+        return -1;
+      }
+      return 0;
+    }
+
+    WireFrame f = std::move(pss->outbound.front());
+    pss->outbound.pop_front();
+    lws_write_protocol proto = f.isBinary ? LWS_WRITE_BINARY : LWS_WRITE_TEXT;
+    int m = lws_write(wsi, f.writePtr(), f.payloadSize, proto);
+    if (m < static_cast<int>(f.payloadSize)) {
+      ctxt.getLogger().error("cosim", "lws_write returned short");
+      return -1;
+    }
+
+    if (!pss->outbound.empty() || pss->closeAfterWrite)
+      lws_callback_on_writable(wsi);
+    return 0;
+  }
+
+  case LWS_CALLBACK_EVENT_WAIT_CANCELLED: {
+    if (shouldStop.load(std::memory_order_acquire))
+      return 0;
+    onEventCanceled();
+    return 0;
+  }
+
   default:
-    return;
+    return 0;
   }
 }
 
-void Impl::onClose() {
-  std::lock_guard<std::mutex> lock(sessionMutex);
-  session.reset();
+void Impl::onEventCanceled() {
+  // If a `hello` was waiting on the manifest and the manifest is now ready,
+  // dispatch the deferred reply. We only need to act on the single live
+  // session.
+  struct lws *wsi = nullptr;
+  CosimSessionPss *pss = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(sessionMutex);
+    wsi = clientWsi;
+  }
+  if (wsi) {
+    pss = static_cast<CosimSessionPss *>(lws_wsi_user(wsi));
+    if (pss && pss->helloPending && manifestReady.load(std::memory_order_acquire)) {
+      uint64_t reqId = pss->helloRequestId;
+      pss->helloPending = false;
+      pss->helloDone = true;
+      enqueueResult(wsi, pss, reqId, buildHelloResult());
+    }
+  }
+
+  // Drain dirty channel ids using a zero-timeout `waitDrain`. With a 0ms
+  // backoff this returns immediately even when the set is empty, which is
+  // what we want from a single-shot service-thread callback.
+  std::unordered_set<uint16_t> ids;
+  readyIds.waitDrain(ids, std::chrono::milliseconds(0));
+  for (uint16_t id : ids)
+    drainWritePort(id);
 }
+
+void Impl::drainWritePort(uint16_t channelId) {
+  // Find the port. Lock channelsMutex only while looking it up; the port
+  // pointer itself is stable for the lifetime of the server.
+  RpcServerWritePort *writePort = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(channelsMutex);
+    auto it = channelById.find(channelId);
+    if (it == channelById.end() ||
+        it->second.direction != ChannelDirection::ToClient)
+      return;
+    writePort = it->second.writePort;
+  }
+  if (!writePort)
+    return;
+
+  // We're on the service thread; the singleton session and its pss are
+  // therefore stable for the duration of this call (no concurrent
+  // ESTABLISHED/CLOSED can interleave).
+  struct lws *wsi = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(sessionMutex);
+    wsi = clientWsi;
+  }
+  if (!wsi)
+    return;
+  CosimSessionPss *pss = static_cast<CosimSessionPss *>(lws_wsi_user(wsi));
+  if (!pss)
+    return;
+  // Only push data for subscribed channels; everything else stays queued in
+  // the port until the client subscribes (and `handleSubscribe` will then
+  // mark the id ready again).
+  if (!pss->subscribed.count(channelId))
+    return;
+
+  // Drain everything pending for this channel into outbound. We're on the
+  // service thread so no other thread will write to `pss->outbound`.
+  bool any = false;
+  while (auto msg = writePort->writeQueue.pop()) {
+    WireFrame f =
+        buildLwsBinaryFrame(channelId, msg->getBytes(), msg->getSize());
+    pss->outbound.push_back(std::move(f));
+    any = true;
+  }
+  if (any)
+    lws_callback_on_writable(wsi);
+}
+
+//===----------------------------------------------------------------------===//
+// Impl - WebSocket message dispatch
+//===----------------------------------------------------------------------===//
 
 void Impl::handleBinaryFrame(const std::string &data) {
   if (data.size() < 2) {
@@ -499,10 +642,6 @@ void Impl::handleBinaryFrame(const std::string &data) {
 
   MessageData payload(reinterpret_cast<const uint8_t *>(data.data() + 2),
                       data.size() - 2);
-  // RpcServerReadPort always has an unbounded internal queue so `deliver` is
-  // non-blocking: it enqueues into `ReadChannelPort`'s internal polling buffer
-  // and returns. A `false` return means the port has been disconnected
-  // (shutdown); just drop the frame in that case.
   if (!port->deliver(payload))
     ctxt.getLogger().debug(
         "cosim",
@@ -510,23 +649,24 @@ void Impl::handleBinaryFrame(const std::string &data) {
                     payload.getSize(), static_cast<unsigned>(channelId)));
 }
 
-void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
+void Impl::handleControlFrame(struct lws *wsi, CosimSessionPss *pss,
+                              const std::string &text) {
   json req;
   try {
     req = json::parse(text);
   } catch (const std::exception &e) {
     ctxt.getLogger().error(
         "cosim", std::format("Failed to parse control frame: {}", e.what()));
-    sendError(ws, 0, "protocol_error",
-              std::string("Failed to parse JSON: ") + e.what());
+    enqueueError(wsi, pss, 0, "protocol_error",
+                 std::string("Failed to parse JSON: ") + e.what());
     return;
   }
 
   auto typeIt = req.find("type");
   if (typeIt == req.end() || !typeIt->is_string() ||
       typeIt->get<std::string>() != "request") {
-    sendError(ws, 0, "protocol_error",
-              "Control frame missing \"type\":\"request\"");
+    enqueueError(wsi, pss, 0, "protocol_error",
+                 "Control frame missing \"type\":\"request\"");
     return;
   }
   uint64_t requestId = 0;
@@ -535,35 +675,28 @@ void Impl::handleControlFrame(ix::WebSocket &ws, const std::string &text) {
     requestId = idIt->get<uint64_t>();
   auto methodIt = req.find("method");
   if (methodIt == req.end() || !methodIt->is_string()) {
-    sendError(ws, requestId, "protocol_error", "Missing \"method\"");
+    enqueueError(wsi, pss, requestId, "protocol_error", "Missing \"method\"");
     return;
   }
   std::string method = methodIt->get<std::string>();
   json params = req.value("params", json::object());
 
   if (method == "hello")
-    handleHello(ws, requestId, params);
+    handleHello(wsi, pss, requestId, params);
   else if (method == "subscribe")
-    handleSubscribe(ws, requestId, params);
+    handleSubscribe(wsi, pss, requestId, params);
   else if (method == "unsubscribe")
-    handleUnsubscribe(ws, requestId, params);
+    handleUnsubscribe(wsi, pss, requestId, params);
   else
-    sendError(ws, requestId, "protocol_error", "Unknown method: " + method);
+    enqueueError(wsi, pss, requestId, "protocol_error",
+                 "Unknown method: " + method);
 }
 
 //===----------------------------------------------------------------------===//
 // Impl - control methods
 //===----------------------------------------------------------------------===//
 
-void Impl::handleHello(ix::WebSocket &ws, uint64_t requestId,
-                       const json & /*params*/) {
-  // Block until the manifest has been set. This replaces the gRPC-era poll
-  // loop on the client side.
-  {
-    std::unique_lock<std::mutex> lock(manifestMutex);
-    manifestReadyCV.wait(lock, [&] { return manifestReady; });
-  }
-
+json Impl::buildHelloResult() {
   json result;
   result["protocol_version"] = 3;
   {
@@ -573,7 +706,6 @@ void Impl::handleHello(ix::WebSocket &ws, uint64_t requestId,
         std::string(reinterpret_cast<const char *>(compressedManifest.data()),
                     compressedManifest.size()));
   }
-
   json channelsJson = json::array();
   {
     std::lock_guard<std::mutex> lock(channelsMutex);
@@ -594,22 +726,30 @@ void Impl::handleHello(ix::WebSocket &ws, uint64_t requestId,
     }
   }
   result["channels"] = std::move(channelsJson);
-
-  {
-    std::lock_guard<std::mutex> lock(sessionMutex);
-    if (session)
-      session->helloDone = true;
-  }
-
-  sendResult(ws, requestId, result);
+  return result;
 }
 
-void Impl::handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
-                           const json &params) {
+void Impl::handleHello(struct lws *wsi, CosimSessionPss *pss,
+                       uint64_t requestId, const json & /*params*/) {
+  // If the manifest is not yet ready, stash the request id and defer the
+  // reply until `setManifest()` wakes us via `lws_cancel_service`. The IX
+  // implementation blocked the network thread on a CV here; we can't do that
+  // on the LWS service thread without stalling every other connection.
+  if (!manifestReady.load(std::memory_order_acquire)) {
+    pss->helloPending = true;
+    pss->helloRequestId = requestId;
+    return;
+  }
+  pss->helloDone = true;
+  enqueueResult(wsi, pss, requestId, buildHelloResult());
+}
+
+void Impl::handleSubscribe(struct lws *wsi, CosimSessionPss *pss,
+                           uint64_t requestId, const json &params) {
   auto chIdIt = params.find("channel_id");
   if (chIdIt == params.end() || !chIdIt->is_number_unsigned()) {
-    sendError(ws, requestId, "protocol_error",
-              "subscribe requires unsigned \"channel_id\"");
+    enqueueError(wsi, pss, requestId, "protocol_error",
+                 "subscribe requires unsigned \"channel_id\"");
     return;
   }
   uint16_t channelId = chIdIt->get<uint16_t>();
@@ -618,141 +758,83 @@ void Impl::handleSubscribe(ix::WebSocket &ws, uint64_t requestId,
     std::lock_guard<std::mutex> chLock(channelsMutex);
     auto it = channelById.find(channelId);
     if (it == channelById.end()) {
-      sendError(ws, requestId, "unknown_channel",
-                std::format("No channel with id {}",
-                            static_cast<unsigned>(channelId)));
+      enqueueError(wsi, pss, requestId, "unknown_channel",
+                   std::format("No channel with id {}",
+                               static_cast<unsigned>(channelId)));
       return;
     }
     if (it->second.direction != ChannelDirection::ToClient) {
-      sendError(ws, requestId, "wrong_direction",
-                std::format("Channel id {} is not a to-client channel",
-                            static_cast<unsigned>(channelId)));
+      enqueueError(wsi, pss, requestId, "wrong_direction",
+                   std::format("Channel id {} is not a to-client channel",
+                               static_cast<unsigned>(channelId)));
       return;
     }
-
-    std::lock_guard<std::mutex> sLock(sessionMutex);
-    if (!session) {
-      sendError(ws, requestId, "internal", "No active session");
-      return;
-    }
-    std::lock_guard<std::mutex> subLock(session->subscribedMutex);
-    session->subscribed.insert(channelId);
   }
 
-  // Send the subscribe-ack BEFORE waking the transport thread. IXWebSocket
-  // queues sends in FIFO order on a given connection, so as long as the ack
-  // is enqueued first, any data frames the transport thread emits next will
-  // arrive after it. This spares clients from having to tolerate data on a
-  // channel before they've seen the ack confirming the subscription.
-  sendResult(ws, requestId, json::object());
+  pss->subscribed.insert(channelId);
 
-  // Now kick the transport thread: if the port already has queued data
-  // (typical for accelerator-startup writes that landed before the client
-  // subscribed), this is what flushes it; if the queue is empty, the
-  // transport thread will just see nothing to drain and go back to sleep.
-  // The dirty-set semantics of `readyIds` dedupe any concurrent doorbell
-  // from a DPI write.
-  readyIds.markReady(channelId);
+  // Enqueue the subscribe-ack BEFORE any data frames. Because the LWS
+  // writable callback drains `pss->outbound` strictly in FIFO order, any
+  // subsequent data we push will arrive after the ack. This spares clients
+  // from having to tolerate data on a channel before they've seen the ack.
+  enqueueResult(wsi, pss, requestId, json::object());
+
+  // Now flush anything the port had queued before the subscription arrived.
+  // Direct drain on the service thread; no doorbell needed since we're
+  // already here.
+  drainWritePort(channelId);
 }
 
-void Impl::handleUnsubscribe(ix::WebSocket &ws, uint64_t requestId,
-                             const json &params) {
+void Impl::handleUnsubscribe(struct lws *wsi, CosimSessionPss *pss,
+                             uint64_t requestId, const json &params) {
   auto chIdIt = params.find("channel_id");
   if (chIdIt == params.end() || !chIdIt->is_number_unsigned()) {
-    sendError(ws, requestId, "protocol_error",
-              "unsubscribe requires unsigned \"channel_id\"");
+    enqueueError(wsi, pss, requestId, "protocol_error",
+                 "unsubscribe requires unsigned \"channel_id\"");
     return;
   }
   uint16_t channelId = chIdIt->get<uint16_t>();
 
-  std::lock_guard<std::mutex> sLock(sessionMutex);
-  if (!session) {
-    sendError(ws, requestId, "internal", "No active session");
-    return;
-  }
-  std::lock_guard<std::mutex> subLock(session->subscribedMutex);
-  auto removed = session->subscribed.erase(channelId);
+  auto removed = pss->subscribed.erase(channelId);
   if (!removed) {
-    sendError(ws, requestId, "not_subscribed",
-              std::format("Channel id {} is not subscribed",
-                          static_cast<unsigned>(channelId)));
+    enqueueError(wsi, pss, requestId, "not_subscribed",
+                 std::format("Channel id {} is not subscribed",
+                             static_cast<unsigned>(channelId)));
     return;
   }
-  sendResult(ws, requestId, json::object());
+  // The ack is the next outbound frame on this connection; since we run on
+  // the service thread and `drainWritePort` only enqueues for subscribed
+  // channels, no further data frames for this channel can land after this
+  // ack — exactly the ordering the protocol spec requires.
+  enqueueResult(wsi, pss, requestId, json::object());
 }
 
-void Impl::sendResult(ix::WebSocket &ws, uint64_t requestId,
-                      const json &result) {
+//===----------------------------------------------------------------------===//
+// Impl - outbound enqueue helpers (service thread only)
+//===----------------------------------------------------------------------===//
+
+void Impl::enqueueFrame(struct lws *wsi, CosimSessionPss *pss, WireFrame frame) {
+  pss->outbound.push_back(std::move(frame));
+  lws_callback_on_writable(wsi);
+}
+
+void Impl::enqueueResult(struct lws *wsi, CosimSessionPss *pss,
+                         uint64_t requestId, const json &result) {
   json resp;
   resp["type"] = "response";
   resp["request_id"] = requestId;
   resp["result"] = result;
-  // IXWebSocket serializes concurrent send calls internally; we don't need
-  // sessionMutex here, and taking it would deadlock with handlers that hold
-  // sessionMutex while replying (e.g. handleUnsubscribe).
-  ws.sendUtf8Text(resp.dump());
+  enqueueFrame(wsi, pss, buildLwsTextFrame(resp.dump()));
 }
 
-void Impl::sendError(ix::WebSocket &ws, uint64_t requestId,
-                     const std::string &code, const std::string &message) {
+void Impl::enqueueError(struct lws *wsi, CosimSessionPss *pss,
+                        uint64_t requestId, const std::string &code,
+                        const std::string &message) {
   json resp;
   resp["type"] = "response";
   resp["request_id"] = requestId;
   resp["error"] = {{"code", code}, {"message", message}};
-  ws.sendUtf8Text(resp.dump());
-}
-
-//===----------------------------------------------------------------------===//
-// Impl - transport thread (push model, `to_client` only)
-//===----------------------------------------------------------------------===//
-
-void Impl::transportLoop() {
-  while (true) {
-    std::unordered_set<uint16_t> ids;
-    if (!readyIds.waitDrain(ids))
-      return;
-    for (uint16_t id : ids) {
-      RpcServerWritePort *writePort = nullptr;
-      {
-        std::lock_guard<std::mutex> chLock(channelsMutex);
-        auto it = channelById.find(id);
-        if (it == channelById.end() ||
-            it->second.direction != ChannelDirection::ToClient)
-          continue;
-        writePort = it->second.writePort;
-      }
-      if (!writePort)
-        continue;
-
-      // Only drain if a client is subscribed; otherwise data stays in the
-      // queue until subscription (handleSubscribe fires markReady). We
-      // re-acquire `sessionMutex` + `subscribedMutex` on every iteration so
-      // `handleUnsubscribe` can interpose between frames: once it erases the
-      // subscription and sends the unsubscribe-ack, the next iteration here
-      // sees the channel as not subscribed and breaks, guaranteeing the ack
-      // is the last `to_client` frame on that channel (as the protocol spec
-      // requires). Holding the locks across the actual `sendBinary` also
-      // keeps `session->ws` valid against a concurrent `onClose()`.
-      while (true) {
-        if (readyIds.isShutdown())
-          return;
-        std::lock_guard<std::mutex> sLock(sessionMutex);
-        if (!session)
-          break;
-        std::lock_guard<std::mutex> subLock(session->subscribedMutex);
-        if (!session->subscribed.count(id))
-          break;
-        std::optional<MessageData> msg = writePort->writeQueue.pop();
-        if (!msg)
-          break;
-        std::string frame = buildDataFrame(id, msg->getBytes(), msg->getSize());
-        // IXWebSocket serializes concurrent send calls internally and queues
-        // them in FIFO order on the WS; no extra mutex is needed for that,
-        // but we keep `sessionMutex` to guard the `ws` pointer's lifetime.
-        session->ws->sendBinary(frame);
-      }
-    }
-  }
+  enqueueFrame(wsi, pss, buildLwsTextFrame(resp.dump()));
 }
 
 //===----------------------------------------------------------------------===//
