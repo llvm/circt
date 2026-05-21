@@ -515,7 +515,7 @@ public:
                       "Reads of length 0 are not valid and indicate a bug "
                       "in the requester.",
                       toHex(req->address), req->tag));
-    uint32_t numResps = std::max(numDataResps, 1);
+    uint32_t numResps = std::max(numDataResps, 1u);
     for (uint32_t i = 0; i < numResps; ++i) {
       HostMemReadResp resp{.data = i < numDataResps ? dataPtr[i] : 0,
                            .tag = req->tag};
