@@ -8,5 +8,6 @@ add_circt_library(CIRCTOMEvaluator
 
   LINK_LIBS
   CIRCTOM
+  CIRCTOMTransforms
   MLIRIR
 )
