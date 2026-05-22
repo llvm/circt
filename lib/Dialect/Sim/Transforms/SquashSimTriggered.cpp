@@ -69,6 +69,7 @@ private:
 } // namespace
 
 bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
+  // Group all top-level sim.triggered ops in this block by their clock.
   SmallMapVector<Value, SmallVector<TriggeredOp>, 2> triggerMap;
   for (Operation &op : block)
     if (auto triggered = dyn_cast<TriggeredOp>(op))
@@ -97,6 +98,7 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
       }
     }
 
+    // Hoist a shared condition to the merged sim.triggered when possible.
     Value outerCondition;
     if (!hasUnconditionalTrigger && allConditionsIdentical)
       outerCondition = commonCondition;
@@ -112,6 +114,7 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
       auto condition = triggered.getCondition();
       auto *sourceBlock = triggered.getBodyBlock();
 
+      // Conditions not represented on the outer op become inner scf.if guards.
       if (!sourceBlock->empty() && condition && condition != outerCondition) {
         builder.setInsertionPointToEnd(mergedTriggered.getBodyBlock());
         auto *condBlock =
