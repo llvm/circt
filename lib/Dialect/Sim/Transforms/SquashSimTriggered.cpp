@@ -83,18 +83,23 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
     locs.reserve(triggers.size());
 
     bool hasUnconditionalTrigger = false;
-    SmallSetVector<Value, 4> uniqueConditions;
+    Value commonCondition;
+    bool allConditionsIdentical = true;
     for (auto triggered : triggers) {
       locs.push_back(triggered.getLoc());
-      if (auto condition = triggered.getCondition())
-        uniqueConditions.insert(condition);
-      else
+      if (auto condition = triggered.getCondition()) {
+        if (!commonCondition)
+          commonCondition = condition;
+        else if (condition != commonCondition)
+          allConditionsIdentical = false;
+      } else {
         hasUnconditionalTrigger = true;
+      }
     }
 
     Value outerCondition;
-    if (!hasUnconditionalTrigger && uniqueConditions.size() == 1)
-      outerCondition = uniqueConditions.front();
+    if (!hasUnconditionalTrigger && allConditionsIdentical)
+      outerCondition = commonCondition;
 
     OpBuilder builder(triggers.back());
     auto fusedLoc = builder.getFusedLoc(locs);
