@@ -362,9 +362,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: [[ADDSIGNED:%.+]] = comb.add
 
-    // CHECK:      sv.ifdef @SYNTHESIS {
-    // CHECK-NEXT: } else  {
-    // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
+    // CHECK:   sv.always posedge [[CLOCK]] {
     // CHECK-NEXT:     %[[PRINTF_COND:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
     // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND]], %reset
     // CHECK-NEXT:     sv.if [[AND]] {

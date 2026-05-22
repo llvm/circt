@@ -127,12 +127,10 @@ circuit TestHarness:
       define trace = x
 
   ; CHECK: module TestHarness_Verification()
-  ; CHECK:   `ifndef SYNTHESIS
   ; CHECK:     always @(posedge TestHarness.clock) begin
   ; CHECK:       if ((`PRINTF_COND_) & TestHarness.reset)
   ; CHECK:         $fwrite(32'h80000002, "The last PC was: %x", TestHarness.dut.verification.pc_d);
   ; CHECK:     end // always @(posedge)
-  ; CHECK:   `endif // not def SYNTHESIS
   ; CHECK: endmodule
 
   ; CHECK: module TestHarness(

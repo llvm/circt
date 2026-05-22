@@ -63,6 +63,7 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
   auto fragmentSymName =
       ::getFileDescriptorFragmentSymName(builder.getContext());
   auto macroSymName = builder.getStringAttr(kFileDescriptorMacroName);
+  auto synthesisSymName = builder.getStringAttr("SYNTHESIS");
   SymbolTable symbolTable(fileScopeOp);
 
   auto emitGuard = [&](StringRef guard, llvm::function_ref<void(void)> body) {
@@ -94,6 +95,9 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
     func.setPrivate();
     symbolTable.insert(func);
   }
+
+  if (!symbolTable.lookup(synthesisSymName))
+    symbolTable.insert(sv::MacroDeclOp::create(builder, synthesisSymName));
 
   if (!symbolTable.lookup(macroSymName))
     symbolTable.insert(sv::MacroDeclOp::create(builder, macroSymName));
