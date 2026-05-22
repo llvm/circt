@@ -1799,10 +1799,10 @@ struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
   LogicalResult
   matchAndRewrite(Clog2BIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Supports only bitwith value output integer
     Value ceil_log;
+    auto len_in= adaptor.getValue().getType().getIntOrFloatBitWidth();
     auto tofloat = arith::UIToFPOp::create(rewriter,op.getLoc(), 
-                                          rewriter.getF16Type(), 
+                                          rewriter.getF32Type(), 
                                           adaptor.getValue());
     if (tofloat == 0) {
       ceil_log = 0;
@@ -1811,8 +1811,8 @@ struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
                   math::Log2Op::create(rewriter, op.getLoc(),tofloat));
     }
     Value out = arith::FPToUIOp::create(rewriter, op.getLoc(),
-                                      rewriter.getIntegerType(8),
-                                      ceil_log);   
+                                      rewriter.getIntegerType(len_in),
+                                      ceil_log);
     rewriter.replaceOp(op,out);
     return success();
   }
