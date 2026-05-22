@@ -1847,7 +1847,12 @@ static OpFoldResult foldMux(OpTy op, typename OpTy::FoldAdaptor adaptor) {
       // mux(cond, cst, cst) -> cst
       if (highCst->getBitWidth() == lowCst->getBitWidth() &&
           *highCst == *lowCst)
-        return getIntAttr(op.getType(), *highCst);
+        // Ensure that this has an integer representation.  This specifically
+        // avoids problems with clocks.
+        if (auto intType = type_dyn_cast<IntType>(op.getType()))
+          if (intType.hasWidth() && (unsigned)intType.getWidthOrSentinel() ==
+                                        highCst->getBitWidth())
+            return getIntAttr(op.getType(), *highCst);
       // mux(cond, 1, 0) -> cond
       if (highCst->isOne() && lowCst->isZero() &&
           op.getType() == op.getSel().getType())
