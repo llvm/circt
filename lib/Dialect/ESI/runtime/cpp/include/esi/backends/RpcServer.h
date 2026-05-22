@@ -45,11 +45,9 @@ public:
                                       const std::string &type);
 
   // Stop the RPC server.
-  // If a millisecond timeout is provided, will forcefully stop the underlying
-  // RPC server once the timeout expires. If not, the RPC server will attempt to
-  // stop gracefully, implying that any outstanding RPC calls must be served
-  // before the server actually stops (see grpc::ServerInterface::Shutdown for
-  // more).
+  // The optional millisecond timeout is advisory; the WebSocket transport
+  // closes connections promptly, so the value is unused in v3 of the
+  // protocol.
   void stop(uint32_t timeoutMS = 0);
 
   // Start the RPC server. If no port is provided, the RPC server will let the

@@ -41,10 +41,13 @@ Now that a valid build directory exists, continue as below.
 export CIRCT_BUILD=<absolute-path-to-build-tree>
 test -f "$CIRCT_BUILD/CMakeCache.txt"
 
-# System prerequisites for cosim: gRPC and protobuf C++ libraries must be
-# installed (e.g., apt install libgrpc++-dev libprotobuf-dev protobuf-compiler-grpc
-# on Debian/Ubuntu, or via vcpkg/brew). These are required by CMake's
-# find_package(gRPC) and find_package(Protobuf) when ESI_COSIM=ON.
+# System prerequisites for cosim: IXWebSocket is required, but the build will
+# fetch and statically link it via FetchContent if it is not found via
+# `find_package(ixwebsocket CONFIG)`. To use a system install instead, install
+# the `ixwebsocket` package via vcpkg or your distro and point
+# `ixwebsocket_DIR` (or `CMAKE_PREFIX_PATH`) at it before configuring with
+# `-DESI_COSIM=ON`. The wire protocol is documented in
+# `lib/Dialect/ESI/runtime/cosim-protocol.md`.
 
 # Refresh the PyCDE and ESI runtime pieces inside the CIRCT build.
 ninja -C "$CIRCT_BUILD" PyCDE ESIRuntime ESIRuntimeCppTests

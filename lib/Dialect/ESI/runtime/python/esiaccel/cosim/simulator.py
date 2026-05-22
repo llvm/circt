@@ -344,15 +344,9 @@ class Simulator:
           port = int(m.group(1))
       portFile.close()
 
-    # Wait for the simulation to start accepting RPC connections.
-    checkCount = 0
-    while not is_port_open(port):
-      checkCount += 1
-      if checkCount > 200:
-        raise Exception(f"Cosim RPC port ({port}) never opened")
-      if proc.poll() is not None:
-        raise Exception("Simulation exited early")
-      time.sleep(0.05)
+    # The cosim server writes ``cosim.cfg`` after its TCP listen socket is
+    # bound and the accept thread has been spawned. So we don't need to wait for
+    # the port to be opened.
     return SimProcess(proc=proc, port=port, threads=threads, gui=gui)
 
   def _start_process_with_callbacks(

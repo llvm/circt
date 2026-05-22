@@ -84,3 +84,26 @@ hw.module @majority_commutative(in %x: i1, in %y: i1, in %z: i1, out o0: i1, out
   %1 = synth.majority not %y, %x, %z : i1
   hw.output %0, %1 : i1, i1
 }
+
+// CHECK-LABEL: hw.module @onehot_commutative
+hw.module @onehot_commutative(in %x: i1, in %y: i1, in %z: i1, out o0: i1, out o1: i1) {
+  // onehot is permutation invariant so these should be CSE'd to the same op
+  // CHECK: %[[O0:.+]] = synth.onehot %x, not %y, %z : i1
+  // CHECK-NEXT: hw.output %[[O0]], %[[O0]] : i1, i1
+  %0 = synth.onehot %x, not %y, %z : i1
+  %1 = synth.onehot not %y, %x, %z : i1
+  hw.output %0, %1 : i1, i1
+}
+
+// CHECK-LABEL: hw.module @mux_inv_ordered
+hw.module @mux_inv_ordered(in %c: i1, in %a: i1, in %b: i1, out o0: i1, out o1: i1, out o2: i1) {
+  // CHECK: %[[M0:.+]] = synth.mux_inv %c, %a, %b : i1
+  // CHECK-NEXT: %[[M1:.+]] = synth.mux_inv %a, %c, %b : i1
+  // CHECK-NEXT: hw.output %[[M0]], %[[M1]], %[[M0]] : i1, i1, i1
+  %0 = synth.mux_inv %c, %a, %b : i1
+  %1 = synth.mux_inv %a, %c, %b : i1
+  %notC = synth.aig.and_inv not %c : i1
+  %2 = synth.mux_inv not %notC, %a, %b : i1
+  hw.output %0, %1, %2 : i1, i1, i1
+}
+

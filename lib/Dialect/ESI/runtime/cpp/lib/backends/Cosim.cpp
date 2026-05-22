@@ -1,4 +1,4 @@
-//===- Cosim.cpp - Connection to ESI simulation via GRPC ------------------===//
+//===- Cosim.cpp - Connection to ESI simulation ---------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -21,6 +21,7 @@
 #include "esi/backends/RpcClient.h"
 
 #include <cstring>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <set>
@@ -89,8 +90,9 @@ private:
 // ReadCosimChannelPort
 //===----------------------------------------------------------------------===//
 
-/// Cosim client implementation of a read channel port. Since gRPC read protocol
-/// streams messages back, this implementation is quite complex.
+/// Cosim client implementation of a read channel port. The wire transport
+/// (see `CosimRpc`) delivers messages via callback, so this class just
+/// forwards them to the registered `ReadChannelPort` consumer.
 class ReadCosimChannelPort : public ReadChannelPort {
 public:
   ReadCosimChannelPort(AcceleratorConnection &conn, RpcClient &client,
@@ -224,7 +226,7 @@ CosimAccelerator::CosimAccelerator(Context &ctxt, std::string hostname,
                                    uint16_t port)
     : AcceleratorConnection(ctxt) {
   // Connect to the simulation.
-  rpcClient = std::make_unique<RpcClient>(hostname, port);
+  rpcClient = std::make_unique<RpcClient>(getLogger(), hostname, port);
 }
 CosimAccelerator::~CosimAccelerator() {
   disconnect();
@@ -502,10 +504,22 @@ public:
                 " len=" + std::to_string(req->length) +
                 " tag=" + std::to_string(req->tag);
         });
-    // Send one response per 8 bytes.
+    // Send one response per 8 bytes. Zero-length reads (e.g. void / zero-width
+    // types) indicates a bug in the hardware and we log an error, but we still
+    // send a single response.
     uint64_t *dataPtr = reinterpret_cast<uint64_t *>(req->address);
-    for (uint32_t i = 0, e = (req->length + 7) / 8; i < e; ++i) {
-      HostMemReadResp resp{.data = dataPtr[i], .tag = req->tag};
+    uint32_t numDataResps = (req->length + 7) / 8;
+    if (numDataResps == 0)
+      acc.getLogger().error(
+          "hostmem",
+          std::format("Read request with length=0 from addr=0x{} tag={}. "
+                      "Reads of length 0 are not valid and indicate a bug "
+                      "in the requester.",
+                      toHex(req->address), req->tag));
+    uint32_t numResps = std::max(numDataResps, 1u);
+    for (uint32_t i = 0; i < numResps; ++i) {
+      HostMemReadResp resp{.data = i < numDataResps ? dataPtr[i] : 0,
+                           .tag = req->tag};
       acc.getLogger().trace(
           [&](std::string &subsystem, std::string &msg,
               std::unique_ptr<std::map<std::string, std::any>> &details) {

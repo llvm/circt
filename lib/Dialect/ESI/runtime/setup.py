@@ -187,7 +187,9 @@ class CMakeBuild(build_py):
     os.makedirs(source_dst, exist_ok=True)
     print(f"Copying C++ sources into wheel at {source_dst}")
     shutil.copy2(os.path.join(src_dir, "CMakeLists.txt"), source_dst)
-    shutil.copy2(os.path.join(src_dir, "cosim.proto"), source_dst)
+    cosim_proto_doc = os.path.join(src_dir, "cosim-protocol.md")
+    if os.path.exists(cosim_proto_doc):
+      shutil.copy2(cosim_proto_doc, source_dst)
     # Copy the cpp/ tree but skip the cmake/ subdirectory: the
     # esiaccelConfig.cmake.in template is only relevant when (re)building the
     # full wheel, not when consumers compile the runtime from these sources.

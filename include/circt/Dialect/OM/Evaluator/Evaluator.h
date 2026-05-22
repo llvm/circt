@@ -421,6 +421,10 @@ private:
       value->setFullyEvaluatedCounter(&fullyEvaluatedCount);
   }
 
+  FailureOr<evaluator::EvaluatorValuePtr>
+  instantiateImpl(StringAttr className,
+                  ArrayRef<EvaluatorValuePtr> actualParams);
+
   FailureOr<EvaluatorValuePtr>
   getOrCreateValue(Value value, ActualParameters actualParams, Location loc);
   FailureOr<EvaluatorValuePtr>
@@ -446,6 +450,9 @@ private:
                          Location loc, ObjectKey instanceKey = {});
   FailureOr<EvaluatorValuePtr>
   evaluateObjectInstance(ObjectOp op, ActualParameters actualParams);
+  FailureOr<EvaluatorValuePtr>
+  evaluateElaboratedObject(ElaboratedObjectOp op, ActualParameters actualParams,
+                           Location loc);
   FailureOr<EvaluatorValuePtr>
   evaluateObjectField(ObjectFieldOp op, ActualParameters actualParams,
                       Location loc);

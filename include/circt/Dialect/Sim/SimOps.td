@@ -637,14 +637,17 @@ def PrintFormattedProcOp : SimOp<"proc.print", [ProceduralOp]> {
   let assemblyFormat = "$input (`to` $stream^)? attr-dict";
 }
 
-def GetFileOp : SimOp<"get_file", [Pure]> {
+def GetFileOp : SimOp<"get_file", [ProceduralOp]> {
   let summary = "Get an output stream for a formatted file name";
   let description = [{
-    Resolves a file name from a `!sim.fstring` value and returns an output
-    stream resource that can be consumed by `sim.print` or `sim.proc.print`.
-    The file-name format string should be constructed using `sim.fmt.*`
-    operations, just like any other Sim format-string value.
-    The file-name format string is evaluated whenever the stream is accessed.
+    Resolves a file name from a `!sim.fstring` value, immediately creates the
+    corresponding file, and returns an output stream resource that can be
+    consumed by `sim.proc.print`. The file-name format string should be
+    constructed using `sim.fmt.*` operations, just like any other Sim
+    format-string value.
+
+    This operation has an immediate side effect: executing it creates the file,
+    even if the returned stream is never subsequently consumed.
 
     The concrete runtime representation and lifetime management of the returned
     stream are backend-defined.
@@ -1207,6 +1210,63 @@ def TriggeredOp : SimOp<"triggered", [
       return build($_builder, $_state, clock, mlir::Value(), bodyCtor);
     }]>
   ];
+}
+
+//===----------------------------------------------------------------------===//
+// File I/O
+//===----------------------------------------------------------------------===//
+
+def SVFOpenModeRead : I32EnumAttrCase<"Read", 0, "r">;
+def SVFOpenModeWrite : I32EnumAttrCase<"Write", 1, "w">;
+def SVFOpenModeAppend : I32EnumAttrCase<"Append", 2, "a">;
+def SVFOpenModeReadUpdate : I32EnumAttrCase<"ReadUpdate", 3, "r_update">;
+def SVFOpenModeWriteUpdate : I32EnumAttrCase<"WriteUpdate", 4, "w_update">;
+def SVFOpenModeAppendUpdate : I32EnumAttrCase<"AppendUpdate", 5, "a_update">;
+
+def SVFOpenModeAttr : I32EnumAttr<"SVFOpenMode", "SV file open mode",
+    [SVFOpenModeRead, SVFOpenModeWrite, SVFOpenModeAppend,
+     SVFOpenModeReadUpdate, SVFOpenModeWriteUpdate, SVFOpenModeAppendUpdate]> {
+  let cppNamespace = "circt::sim";
+}
+
+def SVFOpenOp : SimOp<"sv.fopen", [ProceduralOp]> {
+  let summary = "Open a file and return a file descriptor";
+  let description = [{
+    Implements the SystemVerilog `$fopen` system function.
+    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
+  }];
+
+  let arguments = (ins DynamicStringType:$fileName, OptionalAttr<SVFOpenModeAttr>:$mode);
+  let results = (outs I32:$fd);
+  let assemblyFormat = "$fileName (`mode` `=` $mode^)? attr-dict";
+}
+
+def SVFCloseOp : SimOp<"sv.fclose", [ProceduralOp]> {
+  let summary = "Close a file descriptor";
+  let description = [{
+    Implements the SystemVerilog `$fclose` system function.
+    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
+  }];
+
+  let arguments = (ins I32:$fd);
+  let assemblyFormat = "$fd attr-dict";
+}
+
+def SVChannelToOutputStreamOp : SimOp<"sv.channel_to_output_stream", [ProceduralOp]> {
+  let summary = "Cast a SV file descriptor or multichannel descriptor to an output stream";
+  let description = [{
+    Casts a SystemVerilog output channel (an integer returned by `sv.fopen`,
+    or a predefined channel such as stdout (`32'h8000_0001`) or stderr
+    (`32'h8000_0002`)) to an `!sim.output_stream`.
+    The input must represent a valid SystemVerilog file descriptor or
+    multichannel descriptor, which can be used for writing. Otherwise,
+    this operation causes undefined behavior.
+
+    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
+  }];
+  let arguments = (ins I32:$channel);
+  let results = (outs OutputStreamType:$stream);
+  let assemblyFormat = "$channel attr-dict";
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

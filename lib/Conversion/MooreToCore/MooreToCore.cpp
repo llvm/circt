@@ -2953,6 +2953,50 @@ struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   }
 };
 
+struct FOpenBIOpConversion : public OpConversionPattern<FOpenBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(FOpenBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    sim::SVFOpenModeAttr simMode;
+    if (auto modeAttr = op.getModeAttr()) {
+      auto mapMode = [](moore::FOpenMode m) -> sim::SVFOpenMode {
+        switch (m) {
+        case moore::FOpenMode::Read:
+          return sim::SVFOpenMode::Read;
+        case moore::FOpenMode::Write:
+          return sim::SVFOpenMode::Write;
+        case moore::FOpenMode::Append:
+          return sim::SVFOpenMode::Append;
+        case moore::FOpenMode::ReadUpdate:
+          return sim::SVFOpenMode::ReadUpdate;
+        case moore::FOpenMode::WriteUpdate:
+          return sim::SVFOpenMode::WriteUpdate;
+        case moore::FOpenMode::AppendUpdate:
+          return sim::SVFOpenMode::AppendUpdate;
+        }
+        llvm_unreachable("unknown FOpenMode");
+      };
+      simMode = sim::SVFOpenModeAttr::get(op.getContext(),
+                                          mapMode(modeAttr.getValue()));
+    }
+    rewriter.replaceOpWithNewOp<sim::SVFOpenOp>(op, adaptor.getFilename(),
+                                                simMode);
+    return success();
+  }
+};
+
+struct FCloseBIOpConversion : public OpConversionPattern<FCloseBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FCloseBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::SVFCloseOp>(op, adaptor.getFd());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -3109,7 +3153,7 @@ static void populateLegality(ConversionTarget &target,
   target.addDynamicallyLegalOp<scf::YieldOp, func::CallOp, func::ReturnOp,
                                UnrealizedConversionCastOp, hw::OutputOp,
                                hw::InstanceOp, debug::ArrayOp, debug::StructOp,
-                               debug::VariableOp>(
+                               debug::VariableOp, arith::SelectOp>(
       [&](Operation *op) { return converter.isLegal(op); });
 
   target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
@@ -3500,6 +3544,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatIntOpConversion,
     FormatRealOpConversion,
     DisplayBIOpConversion,
+
+    // File I/O operations
+    FOpenBIOpConversion,
+    FCloseBIOpConversion,
 
     // Dynamic string operations
     StringLenOpConversion,

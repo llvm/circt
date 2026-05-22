@@ -19,16 +19,18 @@
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/ProceduralRegionTrait.h"
+#include "circt/Support/SparseOpSCC.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/IR/Visitors.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/Twine.h"
 
 #define DEBUG_TYPE "lower-sim-to-sv"
@@ -40,6 +42,7 @@ namespace circt {
 
 using namespace circt;
 using namespace sim;
+using namespace mlir;
 
 /// Check whether an op should be placed inside an ifdef guard that prevents it
 /// from affecting synthesis runs.
@@ -267,6 +270,40 @@ static LogicalResult convert(PauseOp op, PatternRewriter &rewriter) {
   return success();
 }
 
+class TriggeredLowering : public SimConversionPattern<TriggeredOp> {
+public:
+  using SimConversionPattern<TriggeredOp>::SimConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TriggeredOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto loc = op.getLoc();
+    state.usedSynthesisMacro = true;
+
+    sv::IfDefOp::create(
+        rewriter, loc, "SYNTHESIS", [] {},
+        [&] {
+          auto trigger =
+              seq::FromClockOp::create(rewriter, loc, adaptor.getClock());
+          auto alwaysOp = sv::AlwaysOp::create(
+              rewriter, loc,
+              ArrayRef<sv::EventControl>{sv::EventControl::AtPosEdge},
+              ArrayRef<Value>{trigger});
+
+          Block *destination = alwaysOp.getBodyBlock();
+          if (auto condition = adaptor.getCondition()) {
+            rewriter.setInsertionPointToStart(destination);
+            destination = sv::IfOp::create(rewriter, loc, condition, [] {
+                          }).getThenBlock();
+          }
+
+          rewriter.mergeBlocks(op.getBodyBlock(), destination);
+        });
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 class DPICallLowering : public SimConversionPattern<DPICallOp> {
 public:
   using SimConversionPattern<DPICallOp>::SimConversionPattern;
@@ -434,7 +471,13 @@ addFragments(hw::HWModuleOp module,
 static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
   bool usedSynthesisMacro = false;
 
-  rootOp->walk([&](Operation *op) {
+  rootOp->walk<WalkOrder::PreOrder>([&](Operation *op) {
+    // `sim.triggered` is lowered as a whole later on. Do not pre-wrap the
+    // ops nested inside it here, or we may create redundant/invalid
+    // structure.
+    if (isa<TriggeredOp>(op))
+      return WalkResult::skip();
+
     auto loc = op->getLoc();
 
     // Move the op into an ifdef guard if needed.
@@ -516,6 +559,7 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
       // Move the op into the if body.
       op->moveBefore(block, block->end());
     }
+    return WalkResult::advance();
   });
 
   return usedSynthesisMacro;
@@ -728,13 +772,54 @@ FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
       builder, getFileOp.getLoc(), fileName);
 }
 
+static void cleanupDeadSimFmtOps(ArrayRef<Operation *> seedOps) {
+  auto filter = [](Operation *op, OpOperand &operand) {
+    return isa<FormatStringType>(operand.get().getType()) &&
+           isa_and_present<SimDialect>(op->getDialect());
+  };
+
+  SparseOpSCC<OpSCCDirection::Backward> sccs(filter);
+  sccs.visit(seedOps);
+  assert(sccs.getNumCyclicSCCs() == 0 &&
+         "Cyclic graph should have been rejected");
+
+  for (OpSCC entry : sccs.reverseTopological()) {
+    auto *op = cast<Operation *>(entry);
+    if (op->use_empty())
+      op->erase();
+    else
+      op->emitWarning("sim format/stream op still has users after lowering; "
+                      "dialect conversion will fail");
+  }
+}
+
 LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
                                           const TypeConverter &typeConverter,
                                           SimConversionState &state) {
+  SmallVector<GetFileOp> getFileOps;
   SmallVector<PrintFormattedProcOp> printOps;
-  module.walk([&](PrintFormattedProcOp op) { printOps.push_back(op); });
+  SmallVector<Operation *, 8> cleanupSeeds;
+  module.walk([&](Operation *op) {
+    if (auto getFileOp = dyn_cast<GetFileOp>(op))
+      getFileOps.push_back(getFileOp);
+    if (auto printOp = dyn_cast<PrintFormattedProcOp>(op))
+      printOps.push_back(printOp);
+  });
 
-  llvm::SmallPtrSet<Operation *, 8> dceRoots;
+  for (auto getFileOp : getFileOps) {
+    OpBuilder builder(getFileOp);
+    auto fdOrFailure = createFileDescriptorGetterForGetFile(getFileOp, builder);
+    if (failed(fdOrFailure))
+      return failure();
+
+    auto stream = mlir::UnrealizedConversionCastOp::create(
+        builder, getFileOp.getLoc(), getFileOp.getResult().getType(),
+        *fdOrFailure);
+    getFileOp.replaceAllUsesWith(stream.getResult(0));
+    state.usedFileDescriptorRuntime = true;
+    state.usedSynthesisMacro = true;
+    cleanupSeeds.push_back(getFileOp);
+  }
 
   for (auto printOp : printOps) {
     OpBuilder builder(printOp);
@@ -752,34 +837,17 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
       // no stream is specified, emit sv.write.
       sv::WriteOp::create(builder, printOp.getLoc(), formatString, args);
     } else {
-      Value fd;
-      if (auto getFileOp = stream.getDefiningOp<GetFileOp>()) {
-        auto fdOrFailure =
-            createFileDescriptorGetterForGetFile(getFileOp, builder);
-        if (failed(fdOrFailure))
-          return failure();
-        fd = *fdOrFailure;
-        state.usedFileDescriptorRuntime = true;
-        state.usedSynthesisMacro = true;
-      } else {
-        auto fdType = typeConverter.convertType(stream.getType());
-        assert(fdType && "expected output stream type conversion");
-        fd = mlir::UnrealizedConversionCastOp::create(builder, printOp.getLoc(),
-                                                      fdType, stream)
-                 ->getResult(0);
-      }
+      auto fdType = typeConverter.convertType(stream.getType());
+      assert(fdType && "expected output stream type conversion");
+      Value fd = mlir::UnrealizedConversionCastOp::create(
+                     builder, printOp.getLoc(), fdType, stream)
+                     ->getResult(0);
       sv::FWriteOp::create(builder, printOp.getLoc(), fd, formatString, args);
     }
-    auto *procRoot =
-        printOp->getParentWithTrait<mlir::OpTrait::IsIsolatedFromAbove>();
-    if (procRoot)
-      dceRoots.insert(procRoot);
-    printOp.erase();
+    cleanupSeeds.push_back(printOp);
   }
 
-  mlir::IRRewriter rewriter(module);
-  for (Operation *dceRoot : dceRoots)
-    (void)mlir::runRegionDCE(rewriter, dceRoot->getRegions());
+  cleanupDeadSimFmtOps(cleanupSeeds);
 
   return success();
 }
@@ -828,6 +896,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<ClockedPauseOp>(convert);
       patterns.add<TerminateOp>(convert);
       patterns.add<PauseOp>(convert);
+      patterns.add<TriggeredLowering>(context, state);
       patterns.add<DPICallLowering>(context, state);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 

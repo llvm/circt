@@ -120,32 +120,34 @@ struct LogicNetworkGate {
     Maj3 = 4,         ///< Reserved 3-input gate kind
     Identity = 5,     ///< Identity gate (used for 1-input inverter)
     Choice = 6,       ///< Choice node (synth.choice)
-    Dot3 = 7          ///< Ordered DOT gate (3-input, synth.dot)
+    Dot3 = 7,         ///< Ordered DOT gate (3-input, synth.dot)
+    OneHot3 = 8,      ///< OneHot gate (3-input, synth.onehot)
+    Mux3 = 9,         ///< Ordered MUX gate (3-input, synth.mux_inv)
   };
 
-  /// Operation pointer and kind packed together.
-  /// The kind is stored in the low bits of the pointer.
-  llvm::PointerIntPair<Operation *, 3, Kind> opAndKind;
+  /// Operation pointer and gate kind. Constants have a null operation pointer.
+  Operation *op = nullptr;
+  Kind kind = Constant;
 
   /// Fanin edges (up to 3 inputs). For AND gates, only edges[0] and edges[1]
   /// are used. For PrimaryInput/Constant and Choice, none are used. The
   /// inversion bit is encoded in each edge.
   Signal edges[3];
 
-  LogicNetworkGate() : opAndKind(nullptr, Constant), edges{} {}
+  LogicNetworkGate() : op(nullptr), kind(Constant), edges{} {}
   LogicNetworkGate(Operation *op, Kind kind,
                    llvm::ArrayRef<Signal> operands = {})
-      : opAndKind(op, kind), edges{} {
+      : op(op), kind(kind), edges{} {
     assert(operands.size() <= 3 && "Too many operands for LogicNetworkGate");
     for (size_t i = 0; i < operands.size(); ++i)
       edges[i] = operands[i];
   }
 
   /// Get the kind of this gate.
-  Kind getKind() const { return opAndKind.getInt(); }
+  Kind getKind() const { return kind; }
 
   /// Get the operation pointer (nullptr for constants).
-  Operation *getOperation() const { return opAndKind.getPointer(); }
+  Operation *getOperation() const { return op; }
 
   /// Get the number of fanin edges based on kind.
   unsigned getNumFanins() const {
@@ -160,6 +162,10 @@ struct LogicNetworkGate {
       return 3;
     case Dot3:
       return 3;
+    case OneHot3:
+      return 3;
+    case Mux3:
+      return 3;
     case Identity:
       return 1;
     case Choice:
@@ -172,7 +178,7 @@ struct LogicNetworkGate {
   bool isLogicGate() const {
     Kind k = getKind();
     return k == And2 || k == Xor2 || k == Maj3 || k == Identity ||
-           k == Choice || k == Dot3;
+           k == Choice || k == Dot3 || k == OneHot3 || k == Mux3;
   }
 
   /// Check if this should always be a cut input (PI or constant).

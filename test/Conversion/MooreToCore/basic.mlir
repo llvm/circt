@@ -1813,3 +1813,31 @@ moore.module @CoroutineLowering() {
   }
   moore.output
 }
+
+// CHECK-LABEL: func.func @FOpenNoMode
+func.func @FOpenNoMode(%arg0: !moore.string) {
+  // CHECK: [[FD:%.+]] = sim.sv.fopen %arg0
+  %fd = moore.builtin.fopen %arg0
+  return
+}
+
+// CHECK-LABEL: func.func @FOpenWithMode
+func.func @FOpenWithMode(%arg0: !moore.string) {
+  // CHECK: [[FD:%.+]] = sim.sv.fopen %arg0 mode = w
+  %fd = moore.builtin.fopen %arg0 mode = w
+  return
+}
+
+// CHECK-LABEL: func.func @FClose
+func.func @FClose(%arg0: !moore.i32) {
+  // CHECK: sim.sv.fclose %arg0
+  moore.builtin.fclose %arg0
+  return
+}
+
+// CHECK-LABEL: hw.module @MooreTypedArithSelect
+moore.module @MooreTypedArithSelect(in %s: i1, in %a: !moore.i8, in %b: !moore.i8, out o: !moore.i8) {
+  // CHECK-NOT: !moore.i8
+  %sel = arith.select %s, %a, %b : !moore.i8
+  moore.output %sel : !moore.i8
+}

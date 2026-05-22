@@ -666,12 +666,12 @@ class CppGenerator(Generator):
       except (NotImplementedError, ValueError) as e:
         sys.stderr.write(f"Warning: skipping module '{name}': {e}\n")
         hdr_file = output_dir / f"{name}.h"
-        with open(hdr_file, "w") as hdr:
+        with open(hdr_file, "w", encoding="utf-8") as hdr:
           hdr.write(f"// Skipped: {e}\n")
         continue
 
       hdr_file = output_dir / f"{name}.h"
-      with open(hdr_file, "w") as hdr:
+      with open(hdr_file, "w", encoding="utf-8") as hdr:
         self._emit_module_class(name, system_name, module_info, port_groups,
                                 hdr)
 
@@ -934,6 +934,25 @@ class CppTypePlanner:
         deps.update(self._collect_decls_from_type(field_type))
     return deps
 
+  def _contains_window(self, esi_type: types.ESIType) -> bool:
+    """Return True if `esi_type` is or transitively contains a WindowType.
+
+    Structs (and aliases/unions that reference them) which embed a window
+    cannot be emitted as C++ packed structs because the C++ window helper
+    is a variable-size multi-frame container. This helper is used to
+    exclude such types from the emission list entirely.
+    """
+    unwrapped = self._unwrap_aliases(esi_type)
+    if isinstance(unwrapped, types.WindowType):
+      return True
+    if isinstance(unwrapped, types.StructType):
+      return any(self._contains_window(ft) for _, ft in unwrapped.fields)
+    if isinstance(unwrapped, types.UnionType):
+      return any(self._contains_window(ft) for _, ft in unwrapped.fields)
+    if isinstance(unwrapped, types.ArrayType):
+      return self._contains_window(unwrapped.element_type)
+    return False
+
   def _ordered_emit_types(self) -> Tuple[List[types.ESIType], bool]:
     """Collect and order types for deterministic emission."""
     window_into_types: Set[types.ESIType] = set()
@@ -952,6 +971,11 @@ class CppTypePlanner:
         if inner is not None and self._unwrap_aliases(
             inner) in window_into_types:
           continue
+      # Skip structs/unions/aliases that transitively embed a WindowType field.
+      # WindowType itself is fine — it emits as its own helper class.
+      if (not isinstance(self._unwrap_aliases(esi_type), types.WindowType) and
+          self._contains_window(esi_type)):
+        continue
       if (isinstance(esi_type,
                      (types.StructType, types.UnionType, types.TypeAlias)) or
           self._is_supported_window(esi_type)):
@@ -1083,6 +1107,13 @@ class CppTypeEmitter:
       return self.type_id_map[wrapped]
     if isinstance(wrapped,
                   (types.TypeAlias, types.StructType, types.UnionType)):
+      # Zero-width composite types (e.g. a struct of only void fields, or an
+      # alias to such a struct) collapse to `void`. C++ structs are defined to
+      # have `sizeof >= 1`, so there is no meaningful storage to emit; treat them
+      # as void everywhere they appear so callers comment them out exactly
+      # like a direct `VoidType` field.
+      if wrapped.bit_width == 0:
+        return "void"
       return self.type_id_map[wrapped]
     if isinstance(wrapped, types.BundleType):
       return "void"
@@ -1095,8 +1126,16 @@ class CppTypeEmitter:
     if isinstance(wrapped, types.AnyType):
       return "std::any"
     if isinstance(wrapped, (types.BitsType, types.IntType)):
+      # A zero-width integer carries no data; emit it as `void` so it gets
+      # commented out in field positions like any other void.
+      if wrapped.bit_width == 0:
+        return "void"
       return self._get_bitvector_str(wrapped)
     if isinstance(wrapped, types.ArrayType):
+      # `std::array<void, N>` is ill-formed; arrays of zero-width elements
+      # also collapse to `void`.
+      if wrapped.bit_width == 0:
+        return "void"
       return self._std_array_type(wrapped)
     if type(wrapped) is types.ESIType:
       return "std::any"
@@ -1266,6 +1305,10 @@ class CppTypeEmitter:
 
   def _emit_struct(self, hdr: TextIO, struct_type: types.StructType) -> None:
     """Emit a packed struct declaration plus its type id string."""
+    # Zero-width composite types collapse to `void` everywhere they appear
+    # (see _cpp_type), so there is nothing meaningful to emit here.
+    if struct_type.bit_width == 0:
+      return
     fields = list(struct_type.fields)
     if struct_type.cpp_type.reverse:
       fields = list(reversed(fields))
@@ -1311,7 +1354,14 @@ class CppTypeEmitter:
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(struct_type.id)};\n"
     )
     hdr.write("};\n")
-    self._emit_size_assert(hdr, struct_name, self._safe_byte_width(struct_type))
+    # Void / zero-width fields are commented out and contribute 0 to the
+    # struct's bit_width (see VoidType.bit_width), so the manifest-derived
+    # size already matches the emitted C++ layout. An all-void or empty
+    # struct still has `sizeof >= 1` in C++, so skip the assert in that
+    # degenerate case.
+    expected_bytes = self._safe_byte_width(struct_type)
+    if expected_bytes is not None and expected_bytes > 0:
+      self._emit_size_assert(hdr, struct_name, expected_bytes)
     hdr.write("#pragma pack(pop)\n\n")
 
   def _emit_union(self, hdr: TextIO, union_type: types.UnionType) -> None:
@@ -1321,9 +1371,13 @@ class CppTypeEmitter:
     byte array so the data sits at the MSB end, matching SV packed union
     layout where padding occupies the LSBs / lower addresses.
     """
+    # Zero-width unions collapse to `void` (see _cpp_type) so there is
+    # nothing meaningful to emit here.
+    if union_type.bit_width == 0:
+      return
     union_name = self.type_id_map[union_type]
-    union_bytes = self._field_byte_width(union_type)
     fields = list(union_type.fields)
+    union_bytes = self._field_byte_width(union_type)
 
     hdr.write("#pragma pack(push, 1)\n")
     # First pass: emit wrapper structs for fields that need padding.
@@ -1362,7 +1416,10 @@ class CppTypeEmitter:
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(union_type.id)};\n"
     )
     hdr.write("};\n")
-    self._emit_size_assert(hdr, union_name, union_bytes)
+    # Skip the assertion for all-void / empty unions; an empty union has
+    # `sizeof >= 1` in C++ and would always fail an `== 0` assert.
+    if union_bytes > 0:
+      self._emit_size_assert(hdr, union_name, union_bytes)
     hdr.write("#pragma pack(pop)\n\n")
 
   def _emit_window(self, hdr: TextIO, window_type: types.WindowType) -> None:
@@ -1607,7 +1664,7 @@ class CppTypeEmitter:
   def write_header(self, output_dir: Path, system_name: str) -> None:
     """Emit the fully ordered types.h header into the output directory."""
     hdr_file = output_dir / "types.h"
-    with open(hdr_file, "w") as hdr:
+    with open(hdr_file, "w", encoding="utf-8") as hdr:
       hdr.write(
           textwrap.dedent(f"""
         // Generated header for {system_name} types.

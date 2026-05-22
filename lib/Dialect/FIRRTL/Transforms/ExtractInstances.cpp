@@ -397,6 +397,10 @@ void ExtractInstancesPass::collectAnnos() {
                      << inst->getParentOfType<FModuleLike>().getModuleName()
                      << "." << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
+        } else {
+          instRecord->getInstance()->emitError()
+              << "cannot extract clock gate instances through non-InstanceOp";
+          anyFailures = true;
         }
       }
     }
@@ -429,6 +433,10 @@ void ExtractInstancesPass::collectAnnos() {
                      << inst->getParentOfType<FModuleLike>().getModuleName()
                      << "." << inst.getName() << "`\n");
           extractionWorklist.push_back({inst, info});
+        } else {
+          instRecord->getInstance()->emitError()
+              << "cannot extract memory instances through non-InstanceOp";
+          anyFailures = true;
         }
       }
     }
@@ -620,7 +628,13 @@ void ExtractInstancesPass::extractInstances() {
     auto *instParentNode =
         instanceGraph->lookup(cast<igraph::ModuleOpInterface>(*parent));
     for (auto *instRecord : instParentNode->uses()) {
-      auto oldParentInst = cast<InstanceOp>(*instRecord->getInstance());
+      auto oldParentInst = dyn_cast<InstanceOp>(*instRecord->getInstance());
+      if (!oldParentInst) {
+        inst.emitError("cannot extract instance `")
+            << inst.getName() << "` through a non-InstanceOp parent";
+        anyFailures = true;
+        continue;
+      }
       auto newParent = oldParentInst->getParentOfType<FModuleLike>();
       LLVM_DEBUG(llvm::dbgs() << "- Updating " << oldParentInst << "\n");
       auto newParentInst = cast<InstanceOp>(

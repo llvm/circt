@@ -72,7 +72,8 @@ using mlir::TypeSwitch;       // NOLINT(misc-unused-using-decls)
 // Forward declarations of LLVM classes to be imported in to the circt
 // namespace.
 namespace llvm {
-template <typename KeyT, typename ValueT, typename MapType, typename VectorType>
+template <typename KeyT, typename ValueT, typename MapType, typename VectorType,
+          unsigned N>
 class MapVector;
 template <typename KeyT, typename ValueT, unsigned InlineBuckets,
           typename KeyInfoT, typename BucketT>

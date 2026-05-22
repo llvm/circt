@@ -89,7 +89,7 @@ circuit Test : %[[
     output out_baz : Integer
     propassign out_baz, Integer(1)
 
-  ; CHECK-LABEL: om.class @OM_1(%basepath: !om.basepath) -> (out_foo_1: !om.class.type<@Foo_1>, out_foo_2: !om.class.type<@Foo_2>, out_foo_3: !om.class.type<@Foo_3>, out_foo_4: !om.class.type<@Foo_3>, out_1: !om.path, out_2: !om.path)
+  ; CHECK-LABEL: om.class private @OM_1(%basepath: !om.basepath) -> (out_foo_1: !om.class.type<@Foo_1>, out_foo_2: !om.class.type<@Foo_2>, out_foo_3: !om.class.type<@Foo_3>, out_foo_4: !om.class.type<@Foo_3>, out_1: !om.path, out_2: !om.path)
   class OM_1 :
     output out_1 : Path
     output out_2 : Path

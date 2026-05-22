@@ -1,7 +1,7 @@
 // RUN: circt-opt -firrtl-lower-classes %s | FileCheck %s
 
 firrtl.circuit "Component" {
-  // CHECK-LABEL: om.class @Class_0
+  // CHECK-LABEL: om.class private @Class_0
   // CHECK-SAME: %[[REF1:[^ ]+]]: !om.class.type<@Class_1>
   // CHECK-SAME: -> (someReference: !om.class.type<@Class_1>)
   firrtl.class private @Class_0(in %someReference_in: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>, out %someReference: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>) {
@@ -9,7 +9,7 @@ firrtl.circuit "Component" {
     firrtl.propassign %someReference, %someReference_in : !firrtl.class<@Class_1(out someInt: !firrtl.integer)>
   }
 
-  // CHECK-LABEL: om.class @Class_1
+  // CHECK-LABEL: om.class private @Class_1
   // CHECK-SAME: -> (someInt: !om.integer)
   firrtl.class private @Class_1(out %someInt: !firrtl.integer) {
     // CHECK: %[[C1:.+]] = om.constant #om.integer<1 : si4> : !om.integer
@@ -18,7 +18,7 @@ firrtl.circuit "Component" {
     firrtl.propassign %someInt, %0 : !firrtl.integer
   }
 
-  // CHECK-LABEL: om.class @Class_2
+  // CHECK-LABEL: om.class private @Class_2
   // CHECK-SAME: -> (someString: !om.string)
   firrtl.class private @Class_2(out %someString: !firrtl.string) {
     // CHECK: %[[C2:.+]] = om.constant "fubar" : !om.string
@@ -27,10 +27,10 @@ firrtl.circuit "Component" {
     firrtl.propassign %someString, %0 : !firrtl.string
   }
 
-  // CHECK-LABEL: om.class.extern @ExtClass(%basepath: !om.basepath, %input: !om.string) -> (field: !om.string)
+  // CHECK-LABEL: om.class.extern private @ExtClass(%basepath: !om.basepath, %input: !om.string) -> (field: !om.string)
   firrtl.extclass private @ExtClass(in input: !firrtl.string, out field: !firrtl.string)
 
-  // CHECK-LABEL: om.class @ClassEntrypoint
+  // CHECK-LABEL: om.class private @ClassEntrypoint
   // CHECK-SAME: -> (obj_0_out: !om.class.type<@Class_1>)
   firrtl.class private @ClassEntrypoint(out %obj_0_out: !firrtl.class<@Class_1(out someInt: !firrtl.integer)>) {
     // CHECK: %[[OBJ1:.+]] = om.object @Class_1(%basepath) : (!om.basepath) -> !om.class.type<@Class_1>
@@ -326,11 +326,11 @@ firrtl.circuit "ModuleInstances" {
     firrtl.propassign %outputProp, %mod.outputProp : !firrtl.string
   }
 
-  // CHECK: om.class.extern @ExtModule_Class(%basepath: !om.basepath, %inputProp: !om.string) -> (outputProp: !om.string)
+  // CHECK: om.class.extern private @ExtModule_Class(%basepath: !om.basepath, %inputProp: !om.string) -> (outputProp: !om.string)
 
-  // CHECK: om.class.extern @TheRealName_Class(%basepath: !om.basepath, %inputProp: !om.string) -> (outputProp: !om.string)
+  // CHECK: om.class.extern private @TheRealName_Class(%basepath: !om.basepath, %inputProp: !om.string) -> (outputProp: !om.string)
 
-  // CHECK: om.class @Module_Class(%basepath: !om.basepath, %[[IN_PROP0:.+]]: !om.string) -> (outputProp: !om.string)
+  // CHECK: om.class private @Module_Class(%basepath: !om.basepath, %[[IN_PROP0:.+]]: !om.string) -> (outputProp: !om.string)
   // CHECK:   om.class.fields %[[IN_PROP0]] : !om.string
 
   // CHECK: om.class @ModuleInstances_Class(%basepath: !om.basepath, %[[IN_PROP1:.+]]: !om.string) -> (outputProp: !om.string)
@@ -369,7 +369,7 @@ firrtl.circuit "ModuleWithPropertySubmodule" {
     %inst.prop = firrtl.instance inst @SubmoduleWithProperty(in prop: !firrtl.integer)
     firrtl.propassign %inst.prop, %c0 : !firrtl.integer
   }
-  // CHECK: om.class @SubmoduleWithProperty_Class
+  // CHECK: om.class private @SubmoduleWithProperty_Class
   firrtl.module private @SubmoduleWithProperty(in %prop: !firrtl.integer) {
   }
 }
@@ -381,7 +381,7 @@ firrtl.circuit "ModuleWithObjectNoPorts" {
   // Ensure that a module with no property ports, but contains an object results
   // in a class.
   //
-  // CHECK: om.class @Baz_Class
+  // CHECK: om.class private @Baz_Class
   firrtl.module private @Baz() {
     // CHECK: om.object @Metadata
     %meta = firrtl.object @Metadata()
@@ -495,7 +495,7 @@ firrtl.circuit "AltBasePath" {
   // CHECK: firrtl.module @AltBasePath
   // CHECK: firrtl.instance foo sym [[FOO_SYM]]
 
-  // CHECK: om.class @OMIR(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK: om.class private @OMIR(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
   firrtl.class private @OMIR() {
     %node = firrtl.object @Node(in path: !firrtl.path)
     %0 = firrtl.object.subfield %node[path] : !firrtl.class<@Node(in path: !firrtl.path)>
@@ -754,7 +754,7 @@ firrtl.circuit "UnknownValue" {
   }
 
   // property_assert in a class body lowers to om.property_assert.
-  // CHECK-LABEL: om.class @PropAssertClass
+  // CHECK-LABEL: om.class private @PropAssertClass
   firrtl.class private @PropAssertClass(in %cond: !firrtl.bool) {
     // CHECK: om.property_assert %cond, "must hold" : i1
     firrtl.property_assert %cond, "must hold" : !firrtl.bool
@@ -785,5 +785,126 @@ firrtl.circuit "NoPropPorts" {
     %2 = firrtl.prop.eq %0, %1 : !firrtl.string
     // CHECK: om.property_assert %[[EQ]], "srcs must match" : i1
     firrtl.property_assert %2, "srcs must match" : !firrtl.bool
+  }
+}
+
+// Ensure that trivial leaves with paths work.
+//
+// See: https://github.com/llvm/circt/issues/10510
+//
+// CHECK-LABEL: firrtl.circuit "PathOpInLeafModule"
+firrtl.circuit "PathOpInLeafModule" {
+  // CHECK: om.class @Bar_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:   %0 = om.path_create reference %alt_basepath_0 {{@.+}}
+  firrtl.module @Bar() {
+    %0 = firrtl.path reference distinct[0]<>
+  }
+
+  firrtl.module @PathOpInLeafModule() {
+    firrtl.instance bar @Bar()
+    %a = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[0]<>}
+      ]
+    } : !firrtl.uint<1>
+  }
+}
+
+// Ensure that the need for an alt base path doesn't bore ports to every module
+// that contains properties.  Deeper modules may be multiply instantiated (e.g.,
+// by test benches) and this will create ports that are not driven.
+//
+// See: https://github.com/llvm/circt/issues/10509
+//
+// CHECK-LABEL: firrtl.circuit "MinimalAltBasePath"
+firrtl.circuit "MinimalAltBasePath" {
+  // CHECK:      om.class private @Bar_Class(%basepath: !om.basepath)
+  // CHECK-NOT:    %alt_basepath
+  firrtl.module private @Bar() {
+    %0 = firrtl.string "hello"
+  }
+
+  // CHECK:      om.class private @Baz_Class(%basepath: !om.basepath)
+  // CHECK-NOT:    %alt_basepath
+  firrtl.module private @Baz() {
+    firrtl.instance baz @Bar()
+  }
+
+  // CHECK:      om.class private @Foo_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  // CHECK:        om.path_create reference %alt_basepath_0
+  firrtl.module private @Foo() {
+    %0 = firrtl.path reference distinct[0]<>
+    firrtl.instance baz @Bar()
+  }
+
+  // CHECK:      om.class @MinimalAltBasePath_Class(%basepath: !om.basepath)
+  // CHECK-NEXT:   %0 = om.basepath_create %basepath
+  // CHECK:        om.object @Foo_Class(%0, %basepath)
+  firrtl.module @MinimalAltBasePath() {
+    %a = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[0]<>}
+      ]
+    }: !firrtl.uint<1>
+    firrtl.instance bar @Foo()
+  }
+}
+
+// Test that alt base paths are shared where possible.  This test should create
+// one alt base path, not two.
+//
+// CHECK-LABEL: firrtl.circuit "AltBasePathSharing"
+firrtl.circuit "AltBasePathSharing" {
+  // CHECK:      om.class private @Bar_Class(%basepath: !om.basepath, %[[ALT:.+]]: !om.basepath)
+  // CHECK:        om.path_create reference %[[ALT]]
+  // CHECK-NEXT:   om.path_create reference %[[ALT]]
+  firrtl.module private @Bar() {
+    %0 = firrtl.path reference distinct[0]<>
+    %1 = firrtl.path reference distinct[1]<>
+  }
+
+  firrtl.module @AltBasePathSharing() {
+    %a = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[0]<>}
+      ]
+    } : !firrtl.uint<1>
+    %b = firrtl.wire {
+      annotations = [
+        {class = "circt.tracker", id = distinct[1]<>}
+      ]
+    } : !firrtl.uint<1>
+    firrtl.instance bar @Bar()
+  }
+}
+
+// Test that a containing module reached via multiple paths under an alt base
+// path root has every intermediate ancestor on every path marked.  Here, Bar
+// is reached as Foo->Bar (direct) and Foo->Baz->Bar (via Baz), so Baz must
+// also receive an alt base path port to forward.
+//
+// CHECK-LABEL: firrtl.circuit "AltBasePathMultiParent"
+firrtl.circuit "AltBasePathMultiParent" {
+  // CHECK:      om.class private @Bar_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  firrtl.module private @Bar() {
+    %0 = firrtl.path reference distinct[0]<>
+  }
+
+  // CHECK:      om.class private @Baz_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  firrtl.module private @Baz() {
+    firrtl.instance bar @Bar()
+  }
+
+  // CHECK:      om.class private @Foo_Class(%basepath: !om.basepath, %alt_basepath_0: !om.basepath)
+  firrtl.module private @Foo() {
+    firrtl.instance bar @Bar()
+    firrtl.instance baz @Baz()
+  }
+
+  firrtl.module @AltBasePathMultiParent() {
+    %a = firrtl.wire {
+      annotations = [{class = "circt.tracker", id = distinct[0]<>}]
+    } : !firrtl.uint<1>
+    firrtl.instance foo @Foo()
   }
 }

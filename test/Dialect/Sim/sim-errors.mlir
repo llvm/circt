@@ -48,6 +48,14 @@ hw.module @procedural_ops_terminate() {
 
 // -----
 
+hw.module @procedural_ops_get_file() {
+  %name = sim.fmt.literal "out.log"
+  // expected-error @below {{must not be in a non-procedural region}}
+  %file = sim.get_file %name
+}
+
+// -----
+
 hw.module @nonprocedural_ops_print(in %trigger : i1, in %clock : !seq.clock, in %cond : i1) {
   hw.triggered posedge %trigger {
     %lit = sim.fmt.literal "Nope"

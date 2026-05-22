@@ -38,8 +38,18 @@ def OneItemBuffersToHost(client_type: Type):
     # compiler), the module (usually a service implementation) must issue the
     # service requests for us then connect the input ports.
     mmio = Input(esi.MMIO.read_write.type)
+    # Compute the byte-aligned width of client_data. The DMA protocol
+    # requires the valid flag to be the last byte of the transfer, which
+    # only works when client_data is byte-aligned.
+    client_data_bitwidth = client_type.bitwidth
+    client_data_padded_bits = ((client_data_bitwidth + 7) // 8) * 8
+    client_data_needs_pad = (client_data_padded_bits != client_data_bitwidth)
+    # When padding is needed, widen client_data to Bits so the struct is
+    # byte-aligned.  Otherwise keep the original type.
+    client_data_wire_type = Bits(
+        client_data_padded_bits) if client_data_needs_pad else client_type
     xfer_data_type = StructType([("valid", Bits(8)),
-                                 ("client_data", client_type)])
+                                 ("client_data", client_data_wire_type)])
     hostmem_write = Input(esi.HostMem.write_req_bundle_type(xfer_data_type))
 
     @generator
@@ -90,12 +100,22 @@ def OneItemBuffersToHost(client_type: Type):
       hostwr_type = esi.HostMem.write_req_channel_type(
           OneItemBuffersToHost.xfer_data_type)
       hostwr_joined = Channel.join(next_buffer_loc_chan, ports.input_channel)
+
+      def _pad_client_data(raw):
+        """Widen the client data to byte-aligned Bits for the DMA struct."""
+        if not OneItemBuffersToHost.client_data_needs_pad:
+          return raw
+        # bitcast to Bits of original width, then zero-extend.
+        return raw.bitcast(Bits(
+            OneItemBuffersToHost.client_data_bitwidth)).pad_or_truncate(
+                OneItemBuffersToHost.client_data_padded_bits)
+
       hostwr = hostwr_joined.transform(lambda joined: hostwr_type({
           "address": joined.a.as_uint(),
           "tag": 0,
           "data": {
               "valid": 1,
-              "client_data": joined.b
+              "client_data": _pad_client_data(joined.b)
           },
       }))
       ports.hostmem_write.unpack(req=hostwr)

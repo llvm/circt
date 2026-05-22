@@ -592,6 +592,37 @@ struct ExprVisitor {
     if (expr.type->isQueue()) {
       return handleQueueConcat(expr);
     }
+
+    if (expr.type->isUnpackedArray()) {
+      assert(!isLvalue && "checked by Slang");
+      auto loweredType = context.convertType(*expr.type, loc);
+      if (!loweredType)
+        return {};
+
+      moore::UnpackedType elementType;
+      if (auto arrayType = dyn_cast<moore::UnpackedArrayType>(loweredType))
+        elementType = arrayType.getElementType();
+      else if (auto openType =
+                   dyn_cast<moore::OpenUnpackedArrayType>(loweredType))
+        elementType = openType.getElementType();
+      else
+        return {};
+
+      SmallVector<Value> operands;
+      for (auto *operand : expr.operands()) {
+        if (operand->type->isVoid())
+          continue;
+        auto value = context.convertRvalueExpression(*operand, elementType);
+        if (!value)
+          return {};
+        operands.push_back(value);
+      }
+
+      auto arrayType = moore::UnpackedArrayType::get(
+          context.getContext(), operands.size(), elementType);
+      return moore::ArrayCreateOp::create(builder, loc, arrayType, operands);
+    }
+
     for (auto *operand : expr.operands()) {
       // Handle empty replications like `{0{...}}` which may occur within
       // concatenations. Slang assigns them a `void` type which we can check for
@@ -2011,6 +2042,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     case ksn::Past:
     case ksn::Sampled:
     case ksn::IsUnknown:
+    case ksn::OneHot:
+    case ksn::OneHot0:
       return context.convertAssertionCallExpression(expr, info, loc);
     default:
       break;
@@ -2207,6 +2240,19 @@ struct RvalueExprVisitor : public ExprVisitor {
         return {};
 
       assert(arrayType.getSize() == elements->size());
+      return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
+    }
+
+    // Handle open/dynamic unpacked arrays.
+    if (auto openType = dyn_cast<moore::OpenUnpackedArrayType>(type)) {
+      auto elements =
+          convertElements(expr, openType.getElementType(), replCount);
+
+      if (failed(elements))
+        return {};
+
+      auto arrayType = moore::UnpackedArrayType::get(
+          context.getContext(), elements->size(), openType.getElementType());
       return moore::ArrayCreateOp::create(builder, loc, arrayType, *elements);
     }
 
@@ -2715,6 +2761,26 @@ Value Context::materializeFixedSizeUnpackedArrayType(
   auto type = convertType(astType);
   if (!type)
     return {};
+
+  // Handle string array constants.
+  if (astType.elementType.isString()) {
+    auto arrayType = dyn_cast<moore::UnpackedArrayType>(type);
+    if (!arrayType)
+      return {};
+
+    SmallVector<Value> elemVals;
+    for (const auto &elem : constant.elements()) {
+      if (!elem.isString())
+        return {};
+      auto value = materializeString(elem, astType.elementType, loc);
+      if (!value)
+        return {};
+      elemVals.push_back(value);
+    }
+    if (elemVals.size() != arrayType.getSize())
+      return {};
+    return moore::ArrayCreateOp::create(builder, loc, arrayType, elemVals);
+  }
 
   // Check whether underlying type is an integer, if so, get bit width
   unsigned bitWidth;
@@ -3454,6 +3520,45 @@ Value Context::convertSystemCall(
     }
     emitError(loc) << "unsupported system call `" << name << "`";
     return {};
+  }
+
+  //===--------------------------------------------------------------------===//
+  // File I/O System Functions
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::FOpen) {
+    assert(numArgs >= 1 && numArgs <= 2 && "`$fopen` takes 1 or 2 arguments");
+    auto filename =
+        convertRvalueExpression(*args[0], moore::StringType::get(getContext()));
+    if (!filename)
+      return {};
+    moore::FOpenModeAttr modeAttr;
+    if (numArgs == 2) {
+      auto *strLit = args[1]
+                         ->unwrapImplicitConversions()
+                         .as_if<slang::ast::StringLiteral>();
+      if (!strLit)
+        return emitError(loc) << "$fopen mode must be a string literal",
+               Value{};
+
+      auto mode =
+          llvm::StringSwitch<std::optional<moore::FOpenMode>>(
+              strLit->getValue())
+              .Cases({"r", "rb"}, moore::FOpenMode::Read)
+              .Cases({"w", "wb"}, moore::FOpenMode::Write)
+              .Cases({"a", "ab"}, moore::FOpenMode::Append)
+              .Cases({"r+", "r+b", "rb+"}, moore::FOpenMode::ReadUpdate)
+              .Cases({"w+", "w+b", "wb+"}, moore::FOpenMode::WriteUpdate)
+              .Cases({"a+", "a+b", "ab+"}, moore::FOpenMode::AppendUpdate)
+              .Default(std::nullopt);
+
+      if (!mode)
+        return emitError(loc)
+                   << "invalid $fopen mode '" << strLit->getValue() << "'",
+               Value{};
+      modeAttr = moore::FOpenModeAttr::get(getContext(), *mode);
+    }
+    return moore::FOpenBIOp::create(builder, loc, filename, modeAttr);
   }
 
   // Unrecognized system call

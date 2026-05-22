@@ -24,11 +24,12 @@
 #include "circt/Support/ConversionPatternSet.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/ADT/DepthFirstIterator.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 
 namespace circt {
@@ -130,8 +131,9 @@ struct PathInfoTable {
     }
   }
 
-  // The table mapping DistinctAttrs to PathInfo structs.
-  DenseMap<DistinctAttr, PathInfo> table;
+  // The table mapping DistinctAttrs to PathInfo structs.  This will be iterated
+  // over, so ensure stability.
+  llvm::MapVector<DistinctAttr, PathInfo> table;
 
 private:
   // Module name attributes indicating modules whose base path input should
@@ -736,9 +738,18 @@ LogicalResult LowerClassesPass::processPaths(
     PathInfoTable &pathInfoTable, SymbolTable &symbolTable) {
   auto circuit = getOperation();
 
-  // Collect the path declarations and owning modules.
+  // Collect the path declarations, owning modules, and containing modules.  An
+  // owning module is the lowest `FModuleOp` ancestor of a path.  This can be
+  // null if there are multiple lowest ancestors.  The containing module is the
+  // exact `FModuleLike` op that is the parent op of the path.  This may be a
+  // class op.
+  //
+  // Store one path op for each containing module, purely for diagnostic
+  // purposes if we need to generate an error.
   OwningModuleCache owningModuleCache(instanceGraph);
   DenseMap<DistinctAttr, FModuleOp> owningModules;
+  DenseMap<DistinctAttr, StringAttr> containingModules;
+  DenseMap<StringAttr, PathOp> containingModuleToPathOp;
   std::vector<Operation *> declarations;
   auto result = circuit.walk([&](Operation *op) {
     if (auto pathOp = dyn_cast<PathOp>(op)) {
@@ -760,6 +771,13 @@ LogicalResult LowerClassesPass::processPaths(
             << owningModule.getModuleNameAttr();
         return WalkResult::interrupt();
       }
+      // Record the FModuleLike that physically contains this path op.
+      auto container = pathOp->getParentOfType<FModuleLike>();
+      assert(container && "path op with a non-null owning module must be "
+                          "inside an FModuleLike");
+      auto containerName = container.getModuleNameAttr();
+      containingModules.try_emplace(target, containerName);
+      containingModuleToPathOp.try_emplace(containerName, pathOp);
     }
     return WalkResult::advance();
   });
@@ -771,44 +789,149 @@ LogicalResult LowerClassesPass::processPaths(
                               pathInfoTable, symbolTable, owningModules)))
     return failure();
 
-  // For each module that will be passing through a base path, compute its
-  // descendants that need this base path passed through.
-  for (auto rootModule : pathInfoTable.getAltBasePathRoots()) {
-    InstanceGraphNode *node = instanceGraph.lookup(rootModule);
+  // ---------------------------------------------------------------------------
+  // Update FModuleLikes with alt base passthrough information.  The end result
+  // of this is that every path from every alt base path root to the path op
+  // user gets marked for a new port.
+  //
+  // For each alt base path root, R, do a DFS to determine the descendant
+  // modules that it instantiates.  Then, do a reverse DFS from the containing
+  // FModuleLike for each path op P, only visiting descendants of R.
+  //
+  // There are two main error cases to consider:
+  //
+  //   1. a path is unreachable from its root,
+  //   2. a module along the path from a path to a root is instantiated by any
+  //      module that is unreachable from the root.
+  //
+  // As an example, the following shows both of these errors cases. R1 and R2
+  // are roots in module A.  P1 is a path in module C referencing R1.  P2 is a
+  // path in module D referencing R2.  The instantiation of module C by X and B
+  // by Y are both illegal by case (2).  Module D is illegal by case (1).
+  //
+  //                      X <-+
+  //                           \
+  //     A { R1, R2 } <-- B <-- C { P1(R1) }
+  //                     /
+  //                Y <-+
+  //
+  //                            D { P2(R2) }
+  //
+  // See `lower-classes-errors.mlir` for the circuit above.
+  // ---------------------------------------------------------------------------
+  // Step 1: Populate a map of R -> [P].
+  llvm::MapVector<StringAttr, SetVector<StringAttr>> rootToContainingMods;
+  for (const auto &[distinctAttr, pathInfo] : pathInfoTable.table) {
+    if (!pathInfo.altBasePathModule)
+      continue;
+    auto it = containingModules.find(distinctAttr);
+    assert(it != containingModules.end() &&
+           "path info entry with non-null altBasePathModule must have a "
+           "recorded containing FModuleLike");
+    rootToContainingMods[pathInfo.altBasePathModule].insert(it->second);
+  }
 
-    // Do a depth first traversal of the instance graph from rootModule,
-    // looking for descendants that need to be passed through.
-    auto start = llvm::df_begin(node);
-    auto end = llvm::df_end(node);
-    auto it = start;
-    while (it != end) {
-      // Nothing to do for the root module.
-      if (it == start) {
-        ++it;
+  // Step 2: Mark all paths for each (R, P) pair.  Accumulate errors.
+  InstancePathCache instancePathCache(instanceGraph);
+  bool failed = false;
+  for (auto &[altRoot, containingMods] : rootToContainingMods) {
+    InstanceGraphNode *rootNode = instanceGraph.lookup(altRoot);
+
+    // Step 2.a: For each P, use InstancePathCache to get all paths from R down
+    // to P.  An empty result means P is not reachable from R (error case 1).
+    // Collect the set of all InstanceGraphNodes that appear on any path.
+    SetVector<InstanceGraphNode *> markedNodes;
+    markedNodes.insert(rootNode);
+    // Track one reachable containing module to use as error attribution for
+    // case (2).  Any reachable P will do.
+    PathOp reachablePathOp;
+    for (StringAttr start : containingMods) {
+      auto startMod = instanceGraph.lookup(start)->getModule<FModuleLike>();
+      auto paths = instancePathCache.getRelativePaths(startMod, rootNode);
+
+      // Report error case (1): P is not reachable from R.
+      if (paths.empty()) {
+        PathOp pathOp = containingModuleToPathOp.lookup(start);
+        assert(pathOp && "every containing module name recorded in "
+                         "rootToContainingMods must have a representative "
+                         "path op");
+        auto diag = pathOp->emitOpError()
+                    << "in module " << start
+                    << " cannot be lowered because the module is not reachable "
+                       "from module "
+                    << altRoot << " which contains the target";
+        auto *pathInfoIt = pathInfoTable.table.find(pathOp.getTargetAttr());
+        assert(pathInfoIt != pathInfoTable.table.end() &&
+               pathInfoIt->second.loc.has_value() &&
+               "a path op being processed here must have a PathInfo entry "
+               "with a recorded tracked-op location");
+        diag.attachNote(pathInfoIt->second.loc.value())
+            << "path targets this operation in module " << altRoot;
+        failed = true;
         continue;
       }
 
-      // If we aren't creating a class for this child, skip this hierarchy.
-      if (!shouldCreateClass(it->getModule())) {
-        it = it.skipChildren();
-        continue;
+      // Record this as a reachable P for use in case (2) error attribution.
+      if (!reachablePathOp)
+        reachablePathOp = containingModuleToPathOp.lookup(start);
+
+      // Collect every module that appears on any path from R to P into
+      // markedNodes, and mark each for alt base path passthrough.
+      InstanceGraphNode *startNode = instanceGraph.lookup(start);
+      if (markedNodes.insert(startNode))
+        pathInfoTable.addAltBasePathPassthrough(
+            startNode->getModule().getModuleNameAttr(), altRoot);
+      for (auto path : paths) {
+        for (auto inst : path) {
+          auto *node = instanceGraph.lookup(
+              inst->getParentOfType<FModuleLike>().getModuleNameAttr());
+          if (markedNodes.insert(node))
+            pathInfoTable.addAltBasePathPassthrough(
+                node->getModule().getModuleNameAttr(), altRoot);
+        }
       }
+    }
 
-      // If we are at a leaf, nothing to do.
-      if (it->begin() == it->end()) {
-        ++it;
+    // Step 2.b: Check error case (2): walk every marked node and report any
+    // use whose parent is outside the marked set.
+    if (!reachablePathOp)
+      continue;
+    auto *pathInfoIt =
+        pathInfoTable.table.find(reachablePathOp.getTargetAttr());
+    assert(pathInfoIt != pathInfoTable.table.end() &&
+           pathInfoIt->second.loc.has_value() &&
+           "a path op being processed here must have a PathInfo entry "
+           "with a recorded tracked-op location");
+    StringAttr containing =
+        reachablePathOp->getParentOfType<FModuleLike>().getModuleNameAttr();
+    for (InstanceGraphNode *node : markedNodes) {
+      if (node == rootNode)
         continue;
+      for (InstanceRecord *use : node->uses()) {
+        if (markedNodes.contains(use->getParent()))
+          continue;
+        auto diag = reachablePathOp->emitOpError()
+                    << "in module " << containing
+                    << " cannot be lowered because there is an instantiation "
+                       "of module "
+                    << use->getTarget()->getModule().getModuleNameAttr()
+                    << " in module "
+                    << use->getParent()->getModule().getModuleNameAttr()
+                    << " which is not instantiated by module " << altRoot
+                    << " which contains the target";
+        diag.attachNote(pathInfoIt->second.loc.value())
+            << "the path op targets this operation in module " << altRoot;
+        diag.attachNote(use->getInstance()->getLoc())
+            << "the problematic instantiation of module "
+            << use->getTarget()->getModule().getModuleNameAttr()
+            << " in module "
+            << use->getParent()->getModule().getModuleNameAttr() << " is here";
+        failed = true;
       }
-
-      // Track state for this passthrough.
-      StringAttr passthroughModule = it->getModule().getModuleNameAttr();
-      pathInfoTable.addAltBasePathPassthrough(passthroughModule, rootModule);
-
-      ++it;
     }
   }
 
-  return success();
+  return failure(failed);
 }
 
 /// Lower FIRRTL Class and Object ops to OM Class and Object ops
@@ -1083,6 +1206,8 @@ om::ClassLike LowerClassesPass::createClass(FModuleLike moduleLike,
     loweredClassOp = convertClass(moduleLike, builder, className + suffix,
                                   formalParamNames, hasContainingModule);
   }
+
+  SymbolTable::setSymbolVisibility(loweredClassOp, moduleLike.getVisibility());
 
   return loweredClassOp;
 }

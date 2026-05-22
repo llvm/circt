@@ -36,3 +36,15 @@ hw.module @dot(in %x: i1, in %y: i1, in %z: i1) {
 hw.module @majority(in %x: i1, in %y: i1, in %z: i1) {
   %0 = synth.majority %x, not %y, %z : i1
 }
+
+// CHECK-LABEL: @onehot
+// CHECK-NEXT: %[[R0:.+]] = synth.onehot %x, not %y, %z : i1
+hw.module @onehot(in %x: i1, in %y: i1, in %z: i1) {
+  %0 = synth.onehot %x, not %y, %z : i1
+}
+
+// CHECK-LABEL: @mux_inv
+// CHECK-NEXT: %[[R0:.+]] = synth.mux_inv %c, not %a, %b : i4
+hw.module @mux_inv(in %c: i4, in %a: i4, in %b: i4) {
+  %0 = synth.mux_inv %c, not %a, %b : i4
+}

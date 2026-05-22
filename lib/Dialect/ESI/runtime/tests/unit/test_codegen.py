@@ -573,6 +573,11 @@ def test_struct_with_void_field_commented_out():
   ctor_params = ctor_match.group(1)
   assert "client_data" not in ctor_params
   assert "valid" in ctor_params
+  # The generated struct only contains the non-void field, so the size
+  # assertion must not include the void field's wire-format byte. With one
+  # ui8 field the struct must be exactly 1 byte.
+  assert "static_assert(sizeof(_struct_valid_ui8_client_data__esi_void) == 1," \
+      in hdr
 
 
 def test_union_with_void_field_commented_out():
@@ -594,3 +599,147 @@ def test_union_with_void_field_commented_out():
   # The non-void member is still present in the union body.
   union_body = hdr[hdr.index("union "):]
   assert "uint16_t a;" in union_body
+
+
+def test_nested_struct_with_void_field_size_assert():
+  """An outer struct containing an inner struct with a void field must use
+  the inner struct's effective (post-void-elimination) size in its size
+  assertion, not the manifest's wire-format size.
+  """
+  uint8 = types.UIntType("ui8", 8)
+  uint64 = types.UIntType("ui64", 64)
+  void_t = types.VoidType("!esi.void")
+  inner = types.StructType(
+      "!hw.struct<valid: ui8, client_data: void>",
+      [("valid", uint8), ("client_data", void_t)],
+  )
+  outer = types.StructType(
+      "!hw.struct<address: ui64, tag: ui8, "
+      "data: !hw.struct<valid: ui8, client_data: void>>",
+      [("address", uint64), ("tag", uint8), ("data", inner)],
+  )
+
+  hdr = _generate_header([outer])
+  # Inner struct: 1 byte (only the ui8 field).
+  assert "static_assert(sizeof(_struct_valid_ui8_client_data__esi_void) == 1," \
+      in hdr
+  # Outer struct: 8 (address) + 1 (tag) + 1 (inner) == 10 bytes; the manifest
+  # wire-format width would have been 11 if the inner's void byte leaked
+  # through, so the regression fix must pull the inner's effective width.
+  outer_assert = re.search(
+      r"static_assert\(sizeof\(_struct_address_ui64_tag_ui8_data_[^)]+\) == (\d+),",
+      hdr,
+  )
+  assert outer_assert, f"Outer size assertion not found in:\n{hdr}"
+  assert outer_assert.group(1) == "10", \
+      f"Expected outer struct size 10, got {outer_assert.group(1)}"
+
+
+def test_all_void_struct_collapses_to_void():
+  """A struct whose fields are all void collapses to `void` everywhere.
+
+  The all-void inner struct must not be emitted at all, and an outer struct
+  that references it must comment out that field and exclude it from the
+  generated constructor.
+  """
+  uint8 = types.UIntType("ui8", 8)
+  uint64 = types.UIntType("ui64", 64)
+  void_t = types.VoidType("!esi.void")
+  inner = types.StructType(
+      "!hw.struct<a: void, b: void>",
+      [("a", void_t), ("b", void_t)],
+  )
+  outer = types.StructType(
+      "!hw.struct<address: ui64, tag: ui8, "
+      "data: !hw.struct<a: void, b: void>>",
+      [("address", uint64), ("tag", uint8), ("data", inner)],
+  )
+
+  hdr = _generate_header([outer])
+  # The inner all-void struct must not appear as a struct declaration.
+  assert "struct _struct_a__esi_void_b__esi_void" not in hdr
+  # The outer struct's `data` field collapses to a commented-out void.
+  assert "// void data;" in hdr
+  # No uncommented `void <name>;` declaration may appear anywhere.
+  assert re.search(r"^\s*void\s+\w+;", hdr, re.M) is None, hdr
+  # The outer constructor must not take the void-collapsed `data` parameter.
+  outer_ctor = re.search(
+      r"_struct_address_ui64_tag_ui8_data_[^\s(]*\(([^)]*)\) :", hdr)
+  assert outer_ctor, f"Outer constructor not found in:\n{hdr}"
+  assert "data" not in outer_ctor.group(1)
+  # The outer struct's size assert reflects the actual emitted layout
+  # (8 address + 1 tag + 0 data == 9 bytes).
+  outer_assert = re.search(
+      r"static_assert\(sizeof\(_struct_address_ui64_tag_ui8_data_[^)]+\) "
+      r"== (\d+),",
+      hdr,
+  )
+  assert outer_assert, f"Outer size assertion not found in:\n{hdr}"
+  assert outer_assert.group(1) == "9", \
+      f"Expected outer struct size 9, got {outer_assert.group(1)}"
+
+
+def test_struct_containing_window_is_skipped():
+  """Structs that embed a WindowType field (e.g. DMA transport wrappers like
+  {valid: i8, client_data: <window>}) should not be emitted because the C++
+  window helper is a variable-size multi-frame container whose sizeof cannot
+  match the manifest's compact frame bit-width."""
+  uint8 = types.UIntType("ui8", 8)
+  uint16 = types.UIntType("ui16", 16)
+  uint32 = types.UIntType("ui32", 32)
+
+  # Build a simple window type over a struct with a list field.
+  list_t = types.ListType("!esi.list<ui32>", uint32)
+  into_struct = types.StructType("!hw.struct<data: !esi.list<ui32>>",
+                                 [("data", list_t)])
+  header_struct = types.StructType("!hw.struct<data_count: ui16>",
+                                   [("data_count", uint16)])
+  data_struct = types.StructType("!hw.struct<data: ui32>", [("data", uint32)])
+  lowered = types.UnionType(
+      "!hw.union<header: !hw.struct<data_count: ui16>, "
+      "data: !hw.struct<data: ui32>>",
+      [("header", header_struct), ("data", data_struct)],
+  )
+  window = types.WindowType(
+      '!esi.window<"test_win", !hw.struct<data: !esi.list<ui32>>, '
+      '[<"header", [<"data" countWidth 16>]>, <"data", [<"data", 1>]>]>',
+      "test_win",
+      into_struct,
+      lowered,
+      [
+          types.WindowType.Frame("header",
+                                 [types.WindowType.Field("data", 0, 16)]),
+          types.WindowType.Frame("data",
+                                 [types.WindowType.Field("data", 1, 0)]),
+      ],
+  )
+
+  # DMA-style wrapper: {valid: i8, client_data: <window>}
+  dma_wrapper = types.StructType(
+      "!hw.struct<valid: i8, client_data: !the_window>",
+      [("valid", uint8), ("client_data", window)],
+  )
+  # Nested DMA wrapper: {address: ui64, tag: ui8, data: <dma_wrapper>}
+  uint64 = types.UIntType("ui64", 64)
+  outer_wrapper = types.StructType(
+      "!hw.struct<address: ui64, tag: ui8, data: !dma_wrapper>",
+      [("address", uint64), ("tag", uint8), ("data", dma_wrapper)],
+  )
+
+  hdr = _generate_header([window, dma_wrapper, outer_wrapper])
+
+  # The window helper itself should still be emitted.
+  assert "esi::SegmentedMessageData" in hdr
+
+  # But the DMA wrapper structs containing the window should NOT be emitted.
+  assert "struct _struct_valid" not in hdr, \
+      "DMA wrapper struct with window field should not be emitted"
+  assert "struct _struct_address" not in hdr, \
+      "Outer struct nesting a window-containing struct should not be emitted"
+
+  # A TypeAlias targeting a window-containing struct should also be excluded
+  # (otherwise codegen emits `using Foo = <missing>;`).
+  alias = types.TypeAlias("!hw.typealias<@dma_wrap>", "DmaWrap", dma_wrapper)
+  hdr2 = _generate_header([window, dma_wrapper, alias])
+  assert "using DmaWrap" not in hdr2, \
+      "Alias of a window-containing struct should not be emitted"

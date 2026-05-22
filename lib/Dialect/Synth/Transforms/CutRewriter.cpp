@@ -173,6 +173,19 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
     return success();
   };
 
+  auto handleInvertibleTernaryGate = [&](auto logicOp,
+                                         LogicNetworkGate::Kind kind) {
+    if (!logicOp.getType().isInteger(1)) {
+      handleOtherResults(logicOp);
+      return success();
+    }
+    const Signal aSignal = getInvertibleSignal(logicOp, 0);
+    const Signal bSignal = getInvertibleSignal(logicOp, 1);
+    const Signal cSignal = getInvertibleSignal(logicOp, 2);
+    addGate(logicOp, kind, {aSignal, bSignal, cSignal});
+    return success();
+  };
+
   // Process operations in topological order
   for (Operation &op : block->getOperations()) {
     LogicalResult result =
@@ -183,29 +196,18 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
             .Case<synth::XorInverterOp>([&](synth::XorInverterOp xorOp) {
               return handleInvertibleBinaryGate(xorOp, LogicNetworkGate::Xor2);
             })
+            .Case<synth::MuxInverterOp>([&](synth::MuxInverterOp muxOp) {
+              return handleInvertibleTernaryGate(muxOp, LogicNetworkGate::Mux3);
+            })
             .Case<synth::DotOp>([&](synth::DotOp dotOp) {
-              if (!dotOp.getType().isInteger(1)) {
-                handleOtherResults(dotOp);
-                return success();
-              }
-              const Signal xSignal = getInvertibleSignal(dotOp, 0);
-              const Signal ySignal = getInvertibleSignal(dotOp, 1);
-              const Signal zSignal = getInvertibleSignal(dotOp, 2);
-              addGate(dotOp, LogicNetworkGate::Dot3,
-                      {xSignal, ySignal, zSignal});
-              return success();
+              return handleInvertibleTernaryGate(dotOp, LogicNetworkGate::Dot3);
             })
             .Case<synth::MajorityOp>([&](synth::MajorityOp majOp) {
-              if (!majOp.getType().isInteger(1)) {
-                handleOtherResults(majOp);
-                return success();
-              }
-              const Signal aSignal = getInvertibleSignal(majOp, 0);
-              const Signal bSignal = getInvertibleSignal(majOp, 1);
-              const Signal cSignal = getInvertibleSignal(majOp, 2);
-              addGate(majOp, LogicNetworkGate::Maj3,
-                      {aSignal, bSignal, cSignal});
-              return success();
+              return handleInvertibleTernaryGate(majOp, LogicNetworkGate::Maj3);
+            })
+            .Case<synth::OneHotOp>([&](synth::OneHotOp oneHotOp) {
+              return handleInvertibleTernaryGate(oneHotOp,
+                                                 LogicNetworkGate::OneHot3);
             })
             .Case<comb::XorOp>([&](comb::XorOp xorOp) {
               if (xorOp->getNumOperands() != 2) {
@@ -513,10 +515,14 @@ static inline llvm::APInt applyGateSemantics(LogicNetworkGate::Kind kind,
                                              const llvm::APInt &b,
                                              const llvm::APInt &c) {
   switch (kind) {
+  case LogicNetworkGate::Mux3:
+    return evaluateMuxLogic(a, b, c);
   case LogicNetworkGate::Maj3:
     return evaluateMajorityLogic(a, b, c);
   case LogicNetworkGate::Dot3:
     return evaluateDotLogic(a, b, c);
+  case LogicNetworkGate::OneHot3:
+    return evaluateOneHotLogic(a, b, c);
   default:
     llvm_unreachable(
         "Unsupported ternary operation for truth table computation");
@@ -614,12 +620,22 @@ struct MergedTruthTableBuilder {
       return BinaryTruthTable(
           numMergedInputs, 1,
           applyGateSemantics(rootGate.getKind(), getEdgeTT(0), getEdgeTT(1)));
+    case LogicNetworkGate::Mux3:
+      return BinaryTruthTable(numMergedInputs, 1,
+                              applyGateSemantics(rootGate.getKind(),
+                                                 getEdgeTT(0), getEdgeTT(1),
+                                                 getEdgeTT(2)));
     case LogicNetworkGate::Maj3:
       return BinaryTruthTable(numMergedInputs, 1,
                               applyGateSemantics(rootGate.getKind(),
                                                  getEdgeTT(0), getEdgeTT(1),
                                                  getEdgeTT(2)));
     case LogicNetworkGate::Dot3:
+      return BinaryTruthTable(numMergedInputs, 1,
+                              applyGateSemantics(rootGate.getKind(),
+                                                 getEdgeTT(0), getEdgeTT(1),
+                                                 getEdgeTT(2)));
+    case LogicNetworkGate::OneHot3:
       return BinaryTruthTable(numMergedInputs, 1,
                               applyGateSemantics(rootGate.getKind(),
                                                  getEdgeTT(0), getEdgeTT(1),

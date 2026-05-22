@@ -1100,6 +1100,18 @@ struct StmtVisitor {
       return true;
     }
 
+    // File I/O Tasks
+
+    if (nameId == ksn::FClose) {
+      assert(args.size() == 1 && "$fclose takes 1 argument");
+      auto fd = context.convertRvalueExpression(
+          *args[0], moore::IntType::getInt(builder.getContext(), 32));
+      if (!fd)
+        return failure();
+      moore::FCloseBIOp::create(builder, loc, fd);
+      return true;
+    }
+
     // Queue Tasks
 
     if (args.size() >= 1 && args[0]->type->isQueue()) {

@@ -16,6 +16,7 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Support/Debug.h"
+#include "circt/Support/SparseOpSCC.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/IndexedMap.h"
@@ -232,7 +233,6 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
     mapping.map(getFileOp.getResult(), clonedGetFile.getResult());
 
     cleanupList.push_back(getFileOp);
-    cleanupList.push_back(getFileOp.getFileName().getDefiningOp());
   }
 
   // Materialize print inputs before creating any conditional blocks.
@@ -269,8 +269,7 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
 
     PrintFormattedProcOp::create(builder, printOp.getLoc(), procPrintInput,
                                  procPrintStream);
-    cleanupList.push_back(printOp.getInput().getDefiningOp());
-    printOp.erase();
+    cleanupList.push_back(printOp);
   }
   return success();
 }
@@ -278,36 +277,21 @@ LogicalResult ProceduralizeSimPass::proceduralizePrintOps(
 // Prune the DAGs of formatting fragments left outside of the newly created
 // TriggeredOps.
 void ProceduralizeSimPass::cleanup() {
-  SmallVector<Operation *> cleanupNextList;
-  SmallDenseSet<Operation *> erasedOps;
-
-  bool noChange = true;
-  while (!cleanupList.empty() || !cleanupNextList.empty()) {
-
-    if (cleanupList.empty()) {
-      if (noChange)
-        break;
-      cleanupList = std::move(cleanupNextList);
-      cleanupNextList = {};
-      noChange = true;
-    }
-
-    auto *opToErase = cleanupList.pop_back_val();
-    if (erasedOps.contains(opToErase))
-      continue;
-
-    if (opToErase->getUses().empty()) {
-      // Remove a dead op. If it is a concat remove its operands, too.
-      if (auto concat = dyn_cast<FormatStringConcatOp>(opToErase))
-        for (auto operand : concat.getInputs())
-          cleanupNextList.push_back(operand.getDefiningOp());
-      opToErase->erase();
-      erasedOps.insert(opToErase);
-      noChange = false;
-    } else {
-      // Op still has uses, revisit later.
-      cleanupNextList.push_back(opToErase);
-    }
+  SparseOpSCC<OpSCCDirection::Backward> sccs([](Operation *op,
+                                                OpOperand &operand) {
+    return isa<FormatStringType, OutputStreamType>(operand.get().getType()) &&
+           isa_and_present<SimDialect>(op->getDialect());
+  });
+  sccs.visit(cleanupList);
+  assert(sccs.getNumCyclicSCCs() == 0 &&
+         "Cyclic graph should have been rejected");
+  for (auto scc : sccs.reverseTopological()) {
+    auto *op = cast<Operation *>(scc);
+    if (op->use_empty())
+      op->erase();
+    else
+      op->emitWarning("Operation has remaining (transitive) users outside of "
+                      "procedural regions.");
   }
 }
 

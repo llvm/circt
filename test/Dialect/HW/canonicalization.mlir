@@ -1142,6 +1142,25 @@ hw.module @struct_create1(in %in: !hw.struct<a: i2, b: i2, c: i2>, in %in1: i2, 
   hw.output %1, %2, %3 : !hw.struct<a: i2, b: i2, c: i2>, !hw.struct<a: i2, b: i2, d: i2>, !hw.struct<a: i2, b: i2, c: i2>
 }
 
+// CHECK-LABEL: hw.module @struct_create_extract_fold
+hw.module @struct_create_extract_fold(in %in_a: !hw.struct<a: i2, b: i2, c: i2>, in %in_b: !hw.struct<a: i2, b: i2, c: i2>, out out_a: !hw.struct<a: i2, b: i2, c: i2>, out out_b: !hw.struct<a: i2, b: i2, c: i2>, out out_c: !hw.struct<a: i2, b: i2, c: i2>) {
+  // One of the three StructCreateOps should be folded
+  // CHECK-COUNT-2: hw.struct_create
+  // CHECK-NOT:     hw.struct_create
+  %a = hw.struct_extract %in_a["a"] : !hw.struct<a: i2, b: i2, c: i2>
+  %b = hw.struct_extract %in_a["b"] : !hw.struct<a: i2, b: i2, c: i2>
+  %c = hw.struct_extract %in_a["c"] : !hw.struct<a: i2, b: i2, c: i2>
+  // Fold
+  %folded = hw.struct_create (%a, %b, %c) : !hw.struct<a: i2, b: i2, c: i2>
+  // Don't fold: Different field order
+  %nofold0 = hw.struct_create (%a, %c, %b) : !hw.struct<a: i2, b: i2, c: i2>
+  // Don't fold: Different inputs
+  %c_other = hw.struct_extract %in_b["c"] : !hw.struct<a: i2, b: i2, c: i2>
+  %nofold1 = hw.struct_create (%a, %b, %c_other) : !hw.struct<a: i2, b: i2, c: i2>
+  // CHECK: hw.output %in_a
+  hw.output %folded, %nofold0, %nofold1 : !hw.struct<a: i2, b: i2, c: i2>, !hw.struct<a: i2, b: i2, c: i2>, !hw.struct<a: i2, b: i2, c: i2>
+}
+
 // CHECK-LABEL: hw.module @struct_extract1
 // CHECK-NEXT:    hw.output %a0 : i3
 hw.module @struct_extract1(in %a0: i3, in %a1: i5, out r0: i3) {

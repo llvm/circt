@@ -20,12 +20,12 @@ circuit Foo :
     input b : UInt<1> domains [A, B]
 
 ; CHECK-LABEL: om.class @Foo_Class
-; DOMAIN-NEXT:   om.object @ClockDomain_out(%basepath, %A, %[[#association:]])
+; DOMAIN-NEXT:   om.elaborated_object @ClockDomain_out(%A, %[[#association:]])
 ; DOMAIN-NEXT:   %[[#a:]] = om.frozenpath_create reference %basepath "Foo>a"
 ; DOMAIN-NEXT:   %[[#b:]] = om.frozenpath_create reference %basepath "Foo>b"
 ; DOMAIN-NEXT:   %[[#association]] = om.list_create %[[#a]], %[[#b]]
 ;
-; DOMAIN:        om.object @PowerDomain_out(%basepath, %B, %[[#association:]])
+; DOMAIN:        om.elaborated_object @PowerDomain_out(%B, %[[#association:]])
 ; DOMAIN-NEXT:   %[[#a:]] = om.frozenpath_create reference %basepath "Foo>a"
 ; DOMAIN-NEXT:   %[[#b:]] = om.frozenpath_create reference %basepath "Foo>b"
 ; DOMAIN-NEXT:   %[[#association]] = om.list_create %[[#a]], %[[#b]]

@@ -142,8 +142,10 @@ class VoidType : public Type {
 public:
   using Type::deserialize;
   VoidType(const ID &id) : Type(id) {}
-  // 'void' is 1 bit by convention.
-  std::ptrdiff_t getBitWidth() const override { return 1; };
+  // 'void' carries no data. Transports (e.g. DMA engines, cosim) that require
+  // every message to be at least one byte add a placeholder byte themselves;
+  // the logical type width is 0.
+  std::ptrdiff_t getBitWidth() const override { return 0; };
 
   void ensureValid(const std::any &obj) const override;
   MutableBitVector serialize(const std::any &obj) const override;

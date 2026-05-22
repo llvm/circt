@@ -25,16 +25,6 @@ static bool isAlways(Attribute attr, bool expected) {
   return false;
 }
 
-static bool isAlways(Value value, bool expected) {
-  if (!value)
-    return false;
-
-  if (auto constOp = value.getDefiningOp<hw::ConstantOp>())
-    return constOp.getValue().getBoolValue() == expected;
-
-  return false;
-}
-
 //===----------------------------------------------------------------------===//
 // StateOp
 //===----------------------------------------------------------------------===//

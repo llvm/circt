@@ -20,3 +20,13 @@ hw.module @functional_reduction_sat(in %a: i1, in %b: i1, in %c: i1, in %d: i1,
   %4 = synth.aig.and_inv %a, not %b, not %c, not %d : i1
   hw.output %2, %3, %4 : i1, i1, i1
 }
+
+// CHECK-LABEL: hw.module @fold_constant_reduction
+hw.module @fold_constant_reduction(in %a: i1, in %b: i1, in %c: i1, out result: i1) {
+  // CHECK: %[[FALSE:.+]] = hw.constant false
+  // CHECK: %[[CHOICE:.+]] = synth.choice %[[FALSE]]
+  // CHECK: hw.output %[[CHOICE]] : i1
+  %0 = synth.aig.and_inv %a, not %a : i1
+  %1 = synth.aig.and_inv %0 : i1
+  hw.output %1 : i1
+}
