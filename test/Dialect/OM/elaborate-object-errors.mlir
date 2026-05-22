@@ -1,4 +1,4 @@
-// RUN: circt-opt -om-elaborate-object='test=true' %s -verify-diagnostics -split-input-file
+// RUN: circt-opt -om-elaborate-object='all-public-classes=true' %s -verify-diagnostics -split-input-file
 
 om.class @AssertFalse() {
   %false = om.constant false
@@ -22,7 +22,7 @@ om.class @MultipleAsserts() {
 // -----
 
 // Multiple assertions in nested classes
-om.class @WrapperWithAssert(%in: i1) -> (out: i1) {
+om.class private @WrapperWithAssert(%in: i1) -> (out: i1) {
   // expected-error @below {{OM property assertion failed: wrapper assertion fails}}
   om.property_assert %in, "wrapper assertion fails" : i1
   om.class.fields %in : i1
@@ -49,14 +49,14 @@ om.class @ComplexExpressionFalse() {
   om.class.fields
 }
 
-om.class @BoolWrapper(%in: i1) -> (out: i1) {
+om.class private @BoolWrapper(%in: i1) -> (out: i1) {
   om.class.fields %in : i1
 }
 
 // -----
 
 // Cycle in dataflow (field access creates a cycle that can't be evaluated)
-om.class @WrapperCycle(%val: !om.integer) -> (out: !om.integer) {
+om.class private @WrapperCycle(%val: !om.integer) -> (out: !om.integer) {
   om.class.fields %val : !om.integer
 }
 

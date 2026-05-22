@@ -31,15 +31,21 @@ def ElaborateObject: Pass<"om-elaborate-object", "mlir::ModuleOp"> {
     Performs evaluation of a specified OM class by inlining all object
     instantiations and folding field accesses.
 
-    The pass requires the `target-class` option to specify which class to
-    elaborate.
+    The pass requires either the `target-class` option to specify which class to
+    elaborate, or the `all-public-classes` option to elaborate all public
+    classes. By default, selected classes must elaborate fully. The
+    `allow-unevaluated` option leaves external objects and other unevaluated
+    operations in place.
   }];
   let options = [
     Option<"targetClass", "target-class", "std::string", /*default=*/"",
            "The class to elaborate">,
-    Option<"test", "test", "bool", /*default=*/"false",
-           "Internal testing mode: elaborate all zero-argument classes",
-           "llvm::cl::Hidden">
+    Option<"allPublicClasses", "all-public-classes", "bool",
+           /*default=*/"false",
+           "Elaborate all public classes">,
+    Option<"allowUnevaluated", "allow-unevaluated", "bool",
+           /*default=*/"false",
+           "Allow external objects and unevaluated operations to remain">
   ];
 }
 
