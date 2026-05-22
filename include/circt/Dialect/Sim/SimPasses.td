@@ -32,8 +32,10 @@ def SquashSimTriggered : Pass<"sim-squash-triggered", "hw::HWModuleOp"> {
   let description = [{
     Merge multiple `sim.triggered` operations in the same block that share the
     same clock into a single `sim.triggered`. When the original operations use
-    different trigger conditions, preserve the original execution order by
-    emitting `scf.if` inside the merged body as needed.
+    different trigger conditions, those conditions may be materialized as
+    `scf.if` operations inside the merged body as needed. This pass does not
+    make any guarantees about the relative execution order of the original
+    `sim.triggered` operations.
   }];
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
