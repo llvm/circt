@@ -1841,3 +1841,18 @@ moore.module @MooreTypedArithSelect(in %s: i1, in %a: !moore.i8, in %b: !moore.i
   %sel = arith.select %s, %a, %b : !moore.i8
   moore.output %sel : !moore.i8
 }
+
+// CHECK-LABEL: func.func @FFlushNoArg
+func.func @FFlushNoArg() {
+  // CHECK: sim.sv.fflush_all
+  moore.builtin.fflush
+  return
+}
+
+// CHECK-LABEL: func.func @FFlushWithArg
+func.func @FFlushWithArg(%arg0: !moore.i32) {
+  // CHECK: [[STREAM:%.+]] = sim.sv.channel_to_output_stream %arg0
+  // CHECK-NEXT: sim.fflush [[STREAM]]
+  moore.builtin.fflush %arg0
+  return
+}

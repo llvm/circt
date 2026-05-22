@@ -1112,6 +1112,19 @@ struct StmtVisitor {
       return true;
     }
 
+    if (nameId == ksn::FFlush) {
+      assert(args.size() <= 1 && "$fflush takes at most 1 argument");
+      Value fd;
+      if (args.size() == 1) {
+        fd = context.convertRvalueExpression(
+            *args[0], moore::IntType::getInt(builder.getContext(), 32));
+        if (!fd)
+          return failure();
+      }
+      moore::FFlushBIOp::create(builder, loc, fd);
+      return true;
+    }
+
     // Queue Tasks
 
     if (args.size() >= 1 && args[0]->type->isQueue()) {
