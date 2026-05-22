@@ -170,7 +170,7 @@ module Basic;
 
   // CHECK-DAG: [[STR_WELCOME:%.+]] = moore.constant_string "Welcome to Moore" : i128
   // CHECK-DAG: [[CONV_WELCOME:%.+]] = moore.int_to_string [[STR_WELCOME]] : i128
-  // CHECK-DAG: [[VAR_S:%.+]] = moore.variable {{.*}} : <string>
+  // CHECK-DAG: [[VAR_S:%.+]] = moore.variable [[CONV_WELCOME]] : <string>
   string s = "Welcome to Moore";
 
   // CHECK-DAG: [[VAR_S1:%.+]] = moore.variable : <string>
@@ -768,25 +768,25 @@ module Expressions;
   logic [3:0] m;
   // CHECK-DAG: [[STR_HELLO:%.+]] = moore.constant_string "Hello" : i40
   // CHECK-DAG: [[CONV_HELLO:%.+]] = moore.int_to_string [[STR_HELLO]] : i40
-  // CHECK-DAG: [[VAR_S:%.+]] = moore.variable {{.*}} : <string>
+  // CHECK-DAG: [[VAR_S:%.+]] = moore.variable [[CONV_HELLO]] : <string>
   string s = "Hello";
   // CHECK-DAG: [[STR_WORLD:%.+]] = moore.constant_string "World" : i40
   // CHECK-DAG: [[CONV_WORLD:%.+]] = moore.int_to_string [[STR_WORLD]] : i40
-  // CHECK-DAG: [[VAR_S1:%.+]] = moore.variable {{.*}} : <string>
+  // CHECK-DAG: [[VAR_S1:%.+]] = moore.variable [[CONV_WORLD]] : <string>
   string s1 = "World";
   // CHECK-DAG: [[STR_CONCAT:%.+]] = moore.constant_string "Concat" : i48
   // CHECK-DAG: [[CONV_CONCAT:%.+]] = moore.int_to_string [[STR_CONCAT]] : i48
-  // CHECK-DAG: [[VAR_SCON:%.+]] = moore.variable {{.*}} : <string>
+  // CHECK-DAG: [[VAR_SCON:%.+]] = moore.variable [[CONV_CONCAT]] : <string>
   string concatstr = "Concat";
-  // CHECK: [[STR0:%.+]] = moore.constant_string "hello" : i40
-  // CHECK: [[INT_TO_STR0:%.+]] = moore.int_to_string [[STR0]] : i40
-  // CHECK: [[STR1:%.+]] = moore.constant_string "sad" : i24
-  // CHECK: [[INT_TO_STR1:%.+]] = moore.int_to_string [[STR1]] : i24
-  // CHECK: [[STR2:%.+]] = moore.constant_string "world" : i40
-  // CHECK: [[INT_TO_STR2:%.+]] = moore.int_to_string [[STR2]] : i40
-  // CHECK: [[ARR_CREATE:%.+]] = moore.array_create [[INT_TO_STR0]], [[INT_TO_STR1]], [[INT_TO_STR2]] : !moore.string, !moore.string, !moore.string -> uarray<3 x string>
-  // CHECK: [[STRARR_CONV:%.+]] = moore.conversion [[ARR_CREATE]] : !moore.uarray<3 x string> -> !moore.open_uarray<string>
-  // CHECK: %strArr = moore.variable [[STRARR_CONV]] : <open_uarray<string>>
+  // CHECK-DAG: [[STR0:%.+]] = moore.constant_string "hello" : i40
+  // CHECK-DAG: [[INT_TO_STR0:%.+]] = moore.int_to_string [[STR0]] : i40
+  // CHECK-DAG: [[STR1:%.+]] = moore.constant_string "sad" : i24
+  // CHECK-DAG: [[INT_TO_STR1:%.+]] = moore.int_to_string [[STR1]] : i24
+  // CHECK-DAG: [[STR2:%.+]] = moore.constant_string "world" : i40
+  // CHECK-DAG: [[INT_TO_STR2:%.+]] = moore.int_to_string [[STR2]] : i40
+  // CHECK-DAG: [[ARR_CREATE:%.+]] = moore.array_create [[INT_TO_STR0]], [[INT_TO_STR1]], [[INT_TO_STR2]] : !moore.string, !moore.string, !moore.string -> uarray<3 x string>
+  // CHECK-DAG: [[STRARR_CONV:%.+]] = moore.conversion [[ARR_CREATE]] : !moore.uarray<3 x string> -> !moore.open_uarray<string>
+  // CHECK-DAG: %strArr = moore.variable [[STRARR_CONV]] : <open_uarray<string>>
   string strArr[] = { "hello", "sad", "world" };
 
   initial begin
