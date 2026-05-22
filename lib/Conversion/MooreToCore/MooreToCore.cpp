@@ -3008,7 +3008,7 @@ struct FFlushBIOpConversion : public OpConversionPattern<FFlushBIOp> {
     } else {
       auto stream = sim::SVChannelToOutputStreamOp::create(
           rewriter, op.getLoc(), adaptor.getFd());
-      rewriter.replaceOpWithNewOp<sim::FFlushOp>(op, stream);
+      rewriter.replaceOpWithNewOp<sim::FlushOp>(op, stream);
     }
     return success();
   }

@@ -1273,24 +1273,23 @@ def SVFFlushAllOp : SimOp<"sv.fflush_all", [ProceduralOp]> {
   let summary = "Flush all open files";
   let description = [{
     Implements the SystemVerilog `$fflush` system tasks when called with no
-    arguments, which flushes all open files.
+    arguments, which flushes all files opened by `sim.sv.fopen`.
 
     See IEEE 1800-2017 § 21.3.6 "Flushing output".
   }];
 
-  let arguments = (ins);
   let assemblyFormat = "attr-dict";
 }
 
-def FFlushOp : SimOp<"fflush", [ProceduralOp]> {
+def FlushOp : SimOp<"flush", [ProceduralOp]> {
   let summary = "Flush a output stream";
   let description = [{
     Flushes the output buffer of an output stream.
     This ensures that any buffered data is written to the file immediately.
   }];
 
-  let arguments = (ins OutputStreamType:$fd);
-  let assemblyFormat = "$fd attr-dict";
+  let arguments = (ins OutputStreamType:$stream);
+  let assemblyFormat = "$stream attr-dict";
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

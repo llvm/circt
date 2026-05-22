@@ -1852,7 +1852,7 @@ func.func @FFlushNoArg() {
 // CHECK-LABEL: func.func @FFlushWithArg
 func.func @FFlushWithArg(%arg0: !moore.i32) {
   // CHECK: [[STREAM:%.+]] = sim.sv.channel_to_output_stream %arg0
-  // CHECK-NEXT: sim.fflush [[STREAM]]
+  // CHECK-NEXT: sim.flush [[STREAM]]
   moore.builtin.fflush %arg0
   return
 }
