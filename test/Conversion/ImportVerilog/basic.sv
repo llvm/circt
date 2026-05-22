@@ -4604,9 +4604,9 @@ endmodule
 
 // CHECK-LABEL: moore.module @WaitForkTest() {
 // CHECK-DAG:     [[C0:%.+]] = moore.constant 0 : i32
-// CHECK-DAG:     [[V0:%.+]] = moore.variable {{.*}} : <i32>
+// CHECK-DAG:     [[V0:%.+]] = moore.variable [[C0]] : <i32>
 // CHECK-DAG:     [[C1:%.+]] = moore.constant 0 : i32
-// CHECK-DAG:     [[V1:%.+]] = moore.variable {{.*}} : <i32>
+// CHECK-DAG:     [[V1:%.+]] = moore.variable [[C1]] : <i32>
 // CHECK:         moore.procedure initial {
 // CHECK:           moore.fork join_none {
 // CHECK:             [[C2:%.+]] = moore.constant 1 : i32
