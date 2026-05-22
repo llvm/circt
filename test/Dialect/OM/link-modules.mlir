@@ -7,19 +7,23 @@ module {
   // CHECK-LABEL: om.class @A
   // CHECK-LABEL: om.class @Conflict_A
   // CHECK-LABEL: om.class @UseConflict_A
-  // CHECK-SAME:      -> (c: !om.class.type<@Conflict_A>)
+  // CHECK-SAME:      -> (c: !om.class.type<@Conflict_A>, d: !om.class.type<@Conflict_A>)
   // CHECK-NEXT:    om.object @Conflict_A() : () -> !om.class.type<@Conflict_A>
-  // CHECK-NEXT:    om.class.fields %{{.+}} : !om.class.type<@Conflict_A>
+  // CHECK:         om.elaborated_object @Conflict_A(%{{.+}}) : (i1) -> !om.class.type<@Conflict_A>
+  // CHECK-NEXT:    om.class.fields %{{.+}}, %{{.+}} : !om.class.type<@Conflict_A>, !om.class.type<@Conflict_A>
 
   // CHECK-LABEL: om.class @Conflict_B
   // CHECK-LABEL: om.class @UseConflict_B()
   // CHECK-NEXT:    om.object @Conflict_B() : () -> !om.class.type<@Conflict_B>
+  // CHECK-NEXT:    om.object.field %{{.+}}["c"] : (!om.class.type<@Conflict_B>) -> i1
+  // CHECK:         om.elaborated_object @Conflict_B(%{{.+}}) : (i1) -> !om.class.type<@Conflict_B>
   // CHECK-NEXT:    om.object.field %{{.+}}["c"] : (!om.class.type<@Conflict_B>) -> i1
 
   // CHECK-LABEL: om.class @Conflict_module_0()
   // CHECK-LABEL: om.class @UseConflict_module_0()
   // CHECK-NEXT:    om.object @Conflict_module_0() : () -> !om.class.type<@Conflict_module_0>
   // CHECK-NEXT:    om.object.field %{{.+}}["c"] : (!om.class.type<@Conflict_module_0>) -> i1
+  // CHECK:         om.elaborated_object @Conflict_module_0(%{{.+}}) : (i1) -> !om.class.type<@Conflict_module_0>
 
   module attributes {om.namespace = "A"} {
     om.class @A(%arg: i1) -> (a: i1) {
@@ -29,9 +33,11 @@ module {
       %0 = om.constant 0 : i1
       om.class.fields %0 : i1
     }
-    om.class @UseConflict() -> (c: !om.class.type<@Conflict>){
+    om.class @UseConflict() -> (c: !om.class.type<@Conflict>, d: !om.class.type<@Conflict>){
       %0 = om.object @Conflict() : () -> !om.class.type<@Conflict>
-      om.class.fields %0 : !om.class.type<@Conflict>
+      %1 = om.constant 0 : i1
+      %2 = om.elaborated_object @Conflict(%1) : (i1) -> !om.class.type<@Conflict>
+      om.class.fields %0, %2 : !om.class.type<@Conflict>, !om.class.type<@Conflict>
     }
   }
   module attributes {om.namespace = "B"} {
@@ -40,10 +46,12 @@ module {
       %0 = om.constant 0 : i1
       om.class.fields %0 : i1
     }
-    om.class @UseConflict() -> (c: i1) {
+    om.class @UseConflict() -> (c: i1, d: i1) {
       %0 = om.object @Conflict() : () -> !om.class.type<@Conflict>
       %1 = om.object.field %0["c"] : (!om.class.type<@Conflict>) -> i1
-      om.class.fields %1 : i1
+      %2 = om.elaborated_object @Conflict(%1) : (i1) -> !om.class.type<@Conflict>
+      %3 = om.object.field %2["c"] : (!om.class.type<@Conflict>) -> i1
+      om.class.fields %1, %3 : i1, i1
     }
   }
   module {
@@ -54,6 +62,7 @@ module {
     om.class @UseConflict() {
      %0 = om.object @Conflict() : () -> !om.class.type<@Conflict>
      %1 = om.object.field %0["c"] : (!om.class.type<@Conflict>) -> i1
+     %2 = om.elaborated_object @Conflict(%1) : (i1) -> !om.class.type<@Conflict>
      om.class.fields
     }
   }

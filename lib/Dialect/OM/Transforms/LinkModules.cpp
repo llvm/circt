@@ -19,6 +19,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #include <memory>
 
@@ -102,18 +103,21 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
       return WalkResult::skip();
     }
 
-    if (auto classOp = dyn_cast<ClassOp>(op)) {
-      // Update its class name if changed.
-      auto it = symMapping.find({module, classOp.getNameAttr()});
-      if (it != symMapping.end())
-        classOp.setSymNameAttr(it->second);
-      classOp.replaceFieldTypes(replacer);
-    } else if (auto objectOp = dyn_cast<ObjectOp>(op)) {
-      // Update its class name if changed..
-      auto it = symMapping.find({module, objectOp.getClassNameAttr()});
-      if (it != symMapping.end())
-        objectOp.setClassNameAttr(it->second);
-    }
+    llvm::TypeSwitch<Operation *>(op)
+        .Case<ClassOp>([&](ClassOp classOp) {
+          auto it = symMapping.find({module, classOp.getNameAttr()});
+          // Update its class name if changed.
+          if (it != symMapping.end())
+            classOp.setSymNameAttr(it->second);
+          classOp.replaceFieldTypes(replacer);
+        })
+        .Case<ObjectOp, ElaboratedObjectOp>([&](auto objectLike) {
+          auto it = symMapping.find({module, objectLike.getClassNameAttr()});
+          // Update its class name if changed.
+          if (it != symMapping.end())
+            objectLike.setClassNameAttr(it->second);
+          replacer.replaceElementsIn(objectLike, false, false, true);
+        });
 
     // Otherwise update om.class types.
     replacer.replaceElementsIn(op,
