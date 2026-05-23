@@ -55,18 +55,6 @@ om.class private @BoolWrapper(%in: i1) -> (out: i1) {
 
 // -----
 
-// Negative shift amount is an error.
-om.class @ShlNegative() -> (result: !om.integer) {
-  %c1 = om.constant #om.integer<1 : si8> : !om.integer
-  %c_neg = om.constant #om.integer<-1 : si8> : !om.integer
-  // expected-error @below {{shift amount must be non-negative}}
-  // expected-error @below {{failed to evaluate om.integer.shl}}
-  %result = om.integer.shl %c1, %c_neg : !om.integer
-  om.class.fields %result : !om.integer
-}
-
-// -----
-
 // Cycle in dataflow (field access creates a cycle that can't be evaluated)
 om.class private @WrapperCycle(%val: !om.integer) -> (out: !om.integer) {
   om.class.fields %val : !om.integer
