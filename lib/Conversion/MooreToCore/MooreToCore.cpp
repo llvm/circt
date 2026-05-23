@@ -2997,6 +2997,23 @@ struct FCloseBIOpConversion : public OpConversionPattern<FCloseBIOp> {
   }
 };
 
+struct FFlushBIOpConversion : public OpConversionPattern<FFlushBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FFlushBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!adaptor.getFd()) {
+      rewriter.replaceOpWithNewOp<sim::SVFFlushAllOp>(op);
+    } else {
+      auto stream = sim::SVChannelToOutputStreamOp::create(
+          rewriter, op.getLoc(), adaptor.getFd());
+      rewriter.replaceOpWithNewOp<sim::FlushOp>(op, stream);
+    }
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -3548,6 +3565,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     // File I/O operations
     FOpenBIOpConversion,
     FCloseBIOpConversion,
+    FFlushBIOpConversion,
 
     // Dynamic string operations
     StringLenOpConversion,

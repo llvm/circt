@@ -778,4 +778,10 @@ function void FileIOBuiltins(int fd_int, integer fd_integer);
   // CHECK-NEXT: moore.builtin.fclose [[FDVAL]]
   $fclose(fd);
 
+  // CHECK: [[FDVAL:%.+]] = moore.read {{%.+}} : <i32>
+  // CHECK-NEXT: moore.builtin.fflush [[FDVAL]]
+  $fflush(fd);
+
+  // CHECK: moore.builtin.fflush
+  $fflush();
 endfunction
