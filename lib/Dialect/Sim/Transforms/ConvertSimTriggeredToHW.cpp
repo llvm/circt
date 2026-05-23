@@ -181,9 +181,9 @@ LogicalResult ConvertSimTriggeredToHWPass::convertTriggered(TriggeredOp op) {
     mapping.map(original, cloned->getResult(0));
   }
   for (auto &[formatString, fragments] : formatStringFragmentMap)
-    mapping.map(formatString, rematerializeFormatStringFromFragments(
-                                  fragments, builder, mapping,
-                                  formatString.getLoc()));
+    mapping.map(formatString,
+                rematerializeFormatStringFromFragments(
+                    fragments, builder, mapping, formatString.getLoc()));
 
   if (auto condition = op.getCondition()) {
     builder.setInsertionPointToEnd(destBlock);
