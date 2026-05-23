@@ -55,6 +55,18 @@ om.class private @BoolWrapper(%in: i1) -> (out: i1) {
 
 // -----
 
+// Shift amount too large (>= 64 after auto-extending lhs to si64)
+om.class @ShlTooLarge() -> (result: !om.integer) {
+  %c1 = om.constant #om.integer<1 : si8> : !om.integer
+  %c64 = om.constant #om.integer<64 : si8> : !om.integer
+  // expected-error @below {{shift amount 64 is too large for integer width 64}}
+  // expected-error @below {{failed to evaluate integer operation}}
+  %result = om.integer.shl %c1, %c64 : !om.integer
+  om.class.fields %result : !om.integer
+}
+
+// -----
+
 // Cycle in dataflow (field access creates a cycle that can't be evaluated)
 om.class private @WrapperCycle(%val: !om.integer) -> (out: !om.integer) {
   om.class.fields %val : !om.integer

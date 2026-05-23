@@ -53,6 +53,18 @@ om.class @IntegerOps() -> (sum: !om.integer, product: !om.integer, shr: !om.inte
   om.class.fields %sum, %product, %shr_result, %shl_result : !om.integer, !om.integer, !om.integer, !om.integer
 }
 
+// Test shl with shift amount exceeding the lhs bitwidth (auto-extends lhs to si64)
+// CHECK-LABEL: om.class @IntegerShlAutoExtend() -> (result: !om.integer) {
+// CHECK:   %[[R:.+]] = om.constant #om.integer<65536 : si64> : !om.integer
+// CHECK:   om.class.fields %[[R]] : !om.integer
+// CHECK: }
+om.class @IntegerShlAutoExtend() -> (result: !om.integer) {
+  %c1 = om.constant #om.integer<1 : si8> : !om.integer
+  %c16 = om.constant #om.integer<16 : si8> : !om.integer
+  %result = om.integer.shl %c1, %c16 : !om.integer
+  om.class.fields %result : !om.integer
+}
+
 // More complex tests
 
 !list = !om.class.type<@LinkedList>
