@@ -21,3 +21,5 @@ add_circt_library(CIRCTBMCTransforms
   MLIRSCFDialect
   MLIRTransforms
 )
+
+add_subdirectory(Runtime)
