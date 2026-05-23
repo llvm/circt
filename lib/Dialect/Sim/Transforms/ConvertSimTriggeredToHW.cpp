@@ -15,6 +15,7 @@
 #include "circt/Dialect/Sim/SimOps.h"
 #include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/Dialect/Sim/SimTypes.h"
+#include "circt/Support/SparseOpSCC.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
@@ -99,18 +100,40 @@ static void cloneBodyOperations(Block *source, Block *dest, OpBuilder &builder,
   }
 }
 
+static void cleanupDeadSimFmtOps(ArrayRef<Operation *> seedOps) {
+  auto filter = [](Operation *op, OpOperand &operand) {
+    return isa<FormatStringType>(operand.get().getType()) &&
+           isa_and_present<SimDialect>(op->getDialect());
+  };
+
+  SparseOpSCC<OpSCCDirection::Backward> sccs(filter);
+  sccs.visit(seedOps);
+  assert(sccs.getNumCyclicSCCs() == 0 &&
+         "Cyclic graph should have been rejected");
+
+  for (OpSCC entry : sccs.reverseTopological()) {
+    auto *op = cast<Operation *>(entry);
+    if (op->use_empty())
+      op->erase();
+    else
+      op->emitWarning("sim format op still has users after conversion");
+  }
+}
+
 struct ConvertSimTriggeredToHWPass
     : impl::ConvertSimTriggeredToHWBase<ConvertSimTriggeredToHWPass> {
 public:
   void runOnOperation() override;
 
 private:
-  void convertTriggered(TriggeredOp op);
+  LogicalResult convertTriggered(TriggeredOp op);
+
+  SmallVector<Operation *> cleanupSeeds;
 };
 
 } // namespace
 
-void ConvertSimTriggeredToHWPass::convertTriggered(TriggeredOp op) {
+LogicalResult ConvertSimTriggeredToHWPass::convertTriggered(TriggeredOp op) {
   llvm::SetVector<Value> captures;
   mlir::getUsedValuesDefinedAbove(op.getBody(), op.getBody(), captures);
   if (auto condition = op.getCondition())
@@ -125,10 +148,12 @@ void ConvertSimTriggeredToHWPass::convertTriggered(TriggeredOp op) {
 
   for (Value formatString : externalFormatStrings) {
     captures.remove(formatString);
+    if (auto *defOp = formatString.getDefiningOp())
+      cleanupSeeds.push_back(defOp);
     auto &fragments = formatStringFragmentMap[formatString];
     if (failed(collectFormatStringFragments(formatString, op, fragments,
                                             allFStringFragments, captures)))
-      return signalPassFailure();
+      return failure();
   }
 
   SmallVector<Value> capturedVec(captures.begin(), captures.end());
@@ -172,9 +197,11 @@ void ConvertSimTriggeredToHWPass::convertTriggered(TriggeredOp op) {
 
   cloneBodyOperations(op.getBodyBlock(), destBlock, builder, mapping);
   op.erase();
+  return success();
 }
 
 void ConvertSimTriggeredToHWPass::runOnOperation() {
+  cleanupSeeds.clear();
   hw::HWModuleOp module = getOperation();
   SmallVector<TriggeredOp> triggeredOps;
   for (Operation &op : *module.getBodyBlock())
@@ -187,5 +214,10 @@ void ConvertSimTriggeredToHWPass::runOnOperation() {
   }
 
   for (auto triggered : triggeredOps)
-    convertTriggered(triggered);
+    if (failed(convertTriggered(triggered))) {
+      signalPassFailure();
+      return;
+    }
+
+  cleanupDeadSimFmtOps(cleanupSeeds);
 }
