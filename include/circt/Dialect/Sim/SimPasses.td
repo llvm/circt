@@ -40,6 +40,17 @@ def SquashSimTriggered : Pass<"sim-squash-triggered", "hw::HWModuleOp"> {
   let dependentDialects = ["mlir::scf::SCFDialect"];
 }
 
+def ConvertSimTriggeredToHW : Pass<"sim-convert-triggered-to-hw",
+                                   "hw::HWModuleOp"> {
+  let summary = "Convert sim.triggered ops to hw.triggered.";
+  let description = [{
+    Convert top-level `sim.triggered` operations in a `hw.module` body to
+    `hw.triggered`, capturing referenced values as explicit block arguments and
+    preserving the original body structure inside the resulting operation.
+  }];
+  let dependentDialects = ["circt::hw::HWDialect, circt::seq::SeqDialect, mlir::scf::SCFDialect"];
+}
+
 def LowerDPIFunc : Pass<"sim-lower-dpi-func", "mlir::ModuleOp"> {
   let summary = "Lower sim.dpi.func into func.func for the simulation flow";
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::LLVM::LLVMDialect"];
