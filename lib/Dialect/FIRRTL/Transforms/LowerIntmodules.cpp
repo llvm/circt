@@ -154,6 +154,9 @@ void LowerIntmodulesPass::runOnOperation() {
   }
 
   // Special handling for magic EICG wrapper extmodule.  Deprecate and remove.
+  //
+  // This supports both a domain-less form and a form with domains.  Both are
+  // rigid in their structure and expect an exact port order.
   if (fixupEICGWrapper) {
     constexpr StringRef eicgName = "EICG_wrapper";
     for (auto op :
@@ -174,6 +177,17 @@ void LowerIntmodulesPass::runOnOperation() {
       if (failed(checkModForAnnotations(op, eicgName)))
         return signalPassFailure();
 
+      // Detect the optional domain-port form.  When present, the wrapper has
+      // exactly two trailing domain input ports (A, B) and every preceding
+      // port has its `domains [...]` association resolved by them: data
+      // inputs bind to A, the output binds to B.  Without this, the layout is
+      // the legacy `[in, test_en?, en, out]`.
+      auto numPorts = op.getNumPorts();
+      bool hasDomains =
+          numPorts >= 2 && isa<DomainType>(op.getPortType(numPorts - 1));
+      unsigned numDataInputs = hasDomains ? numPorts - 3 : numPorts - 1;
+      unsigned outIdx = numDataInputs;
+
       auto *node = ig.lookup(op);
       changed = true;
       for (auto *use : llvm::make_early_inc_range(node->uses())) {
@@ -188,15 +202,57 @@ void LowerIntmodulesPass::runOnOperation() {
           return signalPassFailure();
 
         ImplicitLocOpBuilder builder(op.getLoc(), inst);
-        auto replaceResults = [](OpBuilder &b, auto &&range) {
-          return llvm::map_to_vector(range, [&b](auto v) {
-            auto w = WireOp::create(b, v.getLoc(), v.getType()).getResult();
-            v.replaceAllUsesWith(w);
-            return w;
-          });
-        };
 
-        auto inputs = replaceResults(builder, inst.getResults().drop_back());
+        // Replace each instance result with a wire.  Domain ports (A, B) are
+        // emitted first so that subsequent data port wires can reference them
+        // in their `domains [...]` operand list.
+        SmallVector<Value> wires(numPorts);
+        Value domA, domB;
+        if (hasDomains) {
+          auto rA = inst.getResult(numPorts - 2),
+               rB = inst.getResult(numPorts - 1);
+          domA = wires[numPorts - 2] =
+              WireOp::create(builder, rA.getLoc(), rA.getType()).getResult();
+          domB = wires[numPorts - 1] =
+              WireOp::create(builder, rB.getLoc(), rB.getType()).getResult();
+          rA.replaceAllUsesWith(domA);
+          rB.replaceAllUsesWith(domB);
+        }
+        auto wireWithDomain = [&](unsigned i, Value domain) {
+          auto r = inst.getResult(i);
+          ValueRange domains = domain ? ValueRange(domain) : ValueRange{};
+          wires[i] = WireOp::create(builder, r.getType(), /*name=*/StringRef{},
+                                    NameKindEnum::DroppableName,
+                                    /*annotations=*/ArrayRef<Attribute>{},
+                                    /*innerSym=*/StringAttr{},
+                                    /*forceable=*/false, domains)
+                         .getResult();
+          r.replaceAllUsesWith(wires[i]);
+        };
+        for (unsigned i = 0; i != numDataInputs; ++i)
+          wireWithDomain(i, domA);
+        wireWithDomain(outIdx, domB);
+
+        // If domains are in play, build a single anonymous domain that the
+        // lowered intrinsic operates within.  Data values are unsafe-cast in
+        // and out of it.  This is done because domain inference should not have
+        // custom domain inference rules for intrinsics and should, instead, use
+        // the default inference of all operands and results are single domain.
+        Value anon;
+        if (hasDomains)
+          anon = DomainCreateAnonOp::create(builder, domA.getType(), "");
+
+        // Build intrinsic operands from the data input wires, casting through
+        // the anonymous domain when domains are in play.
+        SmallVector<Value> inputs;
+        for (unsigned i = 0; i != numDataInputs; ++i) {
+          Value v = wires[i];
+          if (anon)
+            v = UnsafeDomainCastOp::create(builder, v.getType(), v,
+                                           ValueRange{anon});
+          inputs.push_back(v);
+        }
+
         // en and test_en are swapped between extmodule and intrinsic.
         if (inputs.size() > 2) {
           auto port1 = inst.getPortName(1);
@@ -214,7 +270,21 @@ void LowerIntmodulesPass::runOnOperation() {
         auto intop = GenericIntrinsicOp::create(
             builder, builder.getType<ClockType>(), "circt_clock_gate", inputs,
             op.getParameters());
-        inst.getResults().back().replaceAllUsesWith(intop.getResult());
+
+        // Drive the output.  Without domains, the output wire is unnecessary
+        // and is RAUW'd away to keep the legacy IR shape.  With domains, cast
+        // the intrinsic result back into the output's domain and connect.
+        Value out = wires[outIdx];
+        if (anon) {
+          auto cast =
+              UnsafeDomainCastOp::create(builder, out.getType(),
+                                         intop.getResult(), ValueRange{domB})
+                  .getResult();
+          MatchingConnectOp::create(builder, out, cast);
+        } else {
+          out.replaceAllUsesWith(intop.getResult());
+          out.getDefiningOp()->erase();
+        }
 
         // Remove instance from IR and instance graph.
         use->erase();
