@@ -27,6 +27,19 @@ def ProceduralizeSim : Pass<"sim-proceduralize", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::hw::HWDialect, circt::seq::SeqDialect, mlir::scf::SCFDialect"];
 }
 
+def SquashSimTriggered : Pass<"sim-squash-triggered", "hw::HWModuleOp"> {
+  let summary = "Merge sim.triggered ops with the same clock.";
+  let description = [{
+    Merge multiple `sim.triggered` operations in the same block that share the
+    same clock into a single `sim.triggered`. When the original operations use
+    different trigger conditions, those conditions may be materialized as
+    `scf.if` operations inside the merged body as needed. This pass does not
+    make any guarantees about the relative execution order of the original
+    `sim.triggered` operations.
+  }];
+  let dependentDialects = ["mlir::scf::SCFDialect"];
+}
+
 def LowerDPIFunc : Pass<"sim-lower-dpi-func", "mlir::ModuleOp"> {
   let summary = "Lower sim.dpi.func into func.func for the simulation flow";
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::LLVM::LLVMDialect"];
