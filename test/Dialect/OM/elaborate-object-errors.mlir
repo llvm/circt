@@ -60,7 +60,7 @@ om.class @ShlTooLarge() -> (result: !om.integer) {
   %c1 = om.constant #om.integer<1 : si8> : !om.integer
   %c64 = om.constant #om.integer<64 : si8> : !om.integer
   // expected-error @below {{shift amount 64 is too large for integer width 64}}
-  // expected-error @below {{failed to evaluate integer operation}}
+  // expected-error @below {{failed to evaluate om.integer.shl}}
   %result = om.integer.shl %c1, %c64 : !om.integer
   om.class.fields %result : !om.integer
 }

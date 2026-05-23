@@ -89,7 +89,7 @@ om.class @IntegerBinaryArithmeticFold(%x: !om.integer) -> (out1: !om.integer, ou
   // 3 * 4 folds to si4 -4 here.
   // CHECK-DAG: [[MUL:%.+]] = om.constant #om.integer<-4 : si4> : !om.integer
   // CHECK-DAG: [[SHR:%.+]] = om.constant #om.integer<1 : si4> : !om.integer
-  // CHECK-DAG: [[SHL:%.+]] = om.constant #om.integer<-2 : si4> : !om.integer
+  // CHECK-DAG: [[SHL:%.+]] = om.constant #om.integer<-2 : si64> : !om.integer
   // CHECK-DAG: [[WIDEADD:%.+]] = om.constant #om.integer<9 : si6> : !om.integer
   // CHECK: [[DYN:%.+]] = om.integer.add %x, %{{.+}} : !om.integer
   %0 = om.integer.add %i3, %i4 : !om.integer
