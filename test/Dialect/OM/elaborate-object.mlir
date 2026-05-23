@@ -36,7 +36,7 @@ om.class @SimpleList() -> (result: !om.list<!om.integer>) {
 // CHECK-DAG:   %[[SUM:.+]] = om.constant #om.integer<7 : si4> : !om.integer
 // CHECK-DAG:   %[[PRODUCT:.+]] = om.constant #om.integer<12 : si8> : !om.integer
 // CHECK-DAG:   %[[SHR:.+]] = om.constant #om.integer<2 : si8> : !om.integer
-// CHECK-DAG:   %[[SHL:.+]] = om.constant #om.integer<16 : si64> : !om.integer
+// CHECK-DAG:   %[[SHL:.+]] = om.constant #om.integer<16 : si10> : !om.integer
 // CHECK:   om.class.fields %[[SUM]], %[[PRODUCT]], %[[SHR]], %[[SHL]] : !om.integer, !om.integer, !om.integer, !om.integer
 // CHECK: }
 om.class @IntegerOps() -> (sum: !om.integer, product: !om.integer, shr: !om.integer, shl: !om.integer) {
@@ -53,9 +53,9 @@ om.class @IntegerOps() -> (sum: !om.integer, product: !om.integer, shr: !om.inte
   om.class.fields %sum, %product, %shr_result, %shl_result : !om.integer, !om.integer, !om.integer, !om.integer
 }
 
-// Test shl with shift amount exceeding the lhs bitwidth (auto-extends lhs to si64)
+// Test shl with shift amount exceeding the lhs bitwidth (extends lhs to lhsWidth + shiftAmt)
 // CHECK-LABEL: om.class @IntegerShlAutoExtend() -> (result: !om.integer) {
-// CHECK:   %[[R:.+]] = om.constant #om.integer<65536 : si64> : !om.integer
+// CHECK:   %[[R:.+]] = om.constant #om.integer<65536 : si24> : !om.integer
 // CHECK:   om.class.fields %[[R]] : !om.integer
 // CHECK: }
 om.class @IntegerShlAutoExtend() -> (result: !om.integer) {

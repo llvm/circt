@@ -836,15 +836,8 @@ IntegerShlOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
     return emitOpError("shift amount must be representable in 64 bits");
 
   int64_t shiftAmt = rhs.getExtValue();
-  // Extend lhs to at least 64 bits, matching the Python path which always
-  // produces si64. This handles shifts where the amount exceeds the lhs
-  // bitwidth without truncating the result.
-  llvm::APSInt extLhs = lhs.getBitWidth() < 64 ? lhs.extend(64) : lhs;
-  if ((uint64_t)shiftAmt >= extLhs.getBitWidth())
-    return emitOpError("shift amount ")
-           << shiftAmt << " is too large for integer width "
-           << extLhs.getBitWidth();
-  return success(extLhs << (unsigned)shiftAmt);
+  // Extend lhs to lhsWidth + shiftAmt bits so no bits are truncated.
+  return success(lhs.extend(lhs.getBitWidth() + shiftAmt) << shiftAmt);
 }
 
 OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {

@@ -55,13 +55,13 @@ om.class private @BoolWrapper(%in: i1) -> (out: i1) {
 
 // -----
 
-// Shift amount too large (>= 64 after auto-extending lhs to si64)
-om.class @ShlTooLarge() -> (result: !om.integer) {
+// Negative shift amount is an error.
+om.class @ShlNegative() -> (result: !om.integer) {
   %c1 = om.constant #om.integer<1 : si8> : !om.integer
-  %c64 = om.constant #om.integer<64 : si8> : !om.integer
-  // expected-error @below {{shift amount 64 is too large for integer width 64}}
+  %c_neg = om.constant #om.integer<-1 : si8> : !om.integer
+  // expected-error @below {{shift amount must be non-negative}}
   // expected-error @below {{failed to evaluate om.integer.shl}}
-  %result = om.integer.shl %c1, %c64 : !om.integer
+  %result = om.integer.shl %c1, %c_neg : !om.integer
   om.class.fields %result : !om.integer
 }
 
