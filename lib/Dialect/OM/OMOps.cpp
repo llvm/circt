@@ -834,7 +834,10 @@ IntegerShlOp::evaluateIntegerOperation(const llvm::APSInt &lhs,
   // Check size constraint from implementation detail of using getExtValue.
   if (!rhs.isRepresentableByInt64())
     return emitOpError("shift amount must be representable in 64 bits");
-  return success(lhs << rhs.getExtValue());
+
+  int64_t shiftAmt = rhs.getExtValue();
+  // Extend lhs to lhsWidth + shiftAmt bits so no bits are truncated.
+  return success(lhs.extend(lhs.getBitWidth() + shiftAmt) << shiftAmt);
 }
 
 OpFoldResult IntegerShlOp::fold(FoldAdaptor adaptor) {
