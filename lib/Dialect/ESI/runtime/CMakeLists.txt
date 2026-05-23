@@ -137,6 +137,7 @@ set(ESICppRuntimeSources
 set(ESICppRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Utils.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Accelerator.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/BitAccess.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/CLI.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Common.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Context.h

@@ -149,7 +149,8 @@ static int runSignProbe(Accelerator *accel) {
   };
   for (const Case &c : cases) {
     esi_system::SignResult r = connected->sign_probe(c.arg).get();
-    if (r.plus_one != c.plus_one || r.neg != c.neg || r.sign_bit != c.sign_bit)
+    if (r.plus_one() != c.plus_one || r.neg() != c.neg ||
+        r.sign_bit() != c.sign_bit)
       throw std::runtime_error("sign_probe mismatch for arg=" +
                                std::to_string(c.arg));
   }
@@ -185,11 +186,13 @@ static int runSignProbe13(Accelerator *accel) {
   };
   for (const Case &c : cases) {
     esi_system::SignResult13 r = connected->sign_probe13(c.arg).get();
-    if (r.plus_one != c.plus_one || r.neg != c.neg || r.sign_bit != c.sign_bit)
+    if (r.plus_one() != c.plus_one || r.neg() != c.neg ||
+        r.sign_bit() != c.sign_bit)
       throw std::runtime_error(
           "sign_probe13 mismatch for arg=" + std::to_string(c.arg) +
-          " got plus_one=" + std::to_string(r.plus_one) + " neg=" +
-          std::to_string(r.neg) + " sign_bit=" + std::to_string(r.sign_bit));
+          " got plus_one=" + std::to_string(r.plus_one()) +
+          " neg=" + std::to_string(r.neg()) +
+          " sign_bit=" + std::to_string(r.sign_bit()));
   }
 
   // TODO: Out-of-range si13 args. The generated facade declares
@@ -222,17 +225,17 @@ static int runPackProbe(Accelerator *accel) {
   auto connected = mod.connect();
 
   esi_system::PackStruct arg{};
-  arg.a = 0x01;
-  arg.b = 0x0002;
-  arg.c = 0x03;
-  arg.d = 0x00000004;
+  arg.a(0x01);
+  arg.b(0x0002);
+  arg.c(0x03);
+  arg.d(0x00000004);
 
   esi_system::PackStruct r = connected->pack_probe(arg).get();
-  if (r.a != 0xA1 || r.b != 0xB002 || r.c != 0xC3 || r.d != 0xD0000004)
+  if (r.a() != 0xA1 || r.b() != 0xB002 || r.c() != 0xC3 || r.d() != 0xD0000004)
     throw std::runtime_error("pack_probe field mismatch");
-  std::cout << "pack_probe ok: a=0x" << std::hex << (unsigned)r.a << " b=0x"
-            << r.b << " c=0x" << (unsigned)r.c << " d=0x" << r.d << std::dec
-            << "\n";
+  std::cout << "pack_probe ok: a=0x" << std::hex << (unsigned)r.a() << " b=0x"
+            << r.b() << " c=0x" << (unsigned)r.c() << " d=0x" << r.d()
+            << std::dec << "\n";
   return 0;
 }
 
@@ -244,14 +247,14 @@ static int runBitPackProbe(Accelerator *accel) {
   // Distinct values within each width: x=001, y=10001, z=1001, w=1100. A
   // shift error to a different field width would produce a value outside
   // these picks.
-  arg.x = 0b001;
-  arg.y = 0b10001;
-  arg.z = 0b1001;
-  arg.w = 0b1100;
+  arg.x(0b001);
+  arg.y(0b10001);
+  arg.z(0b1001);
+  arg.w(0b1100);
 
   esi_system::BitPackResult r = connected->bit_pack_probe(arg).get();
-  if (r.w_field != arg.x || r.z_field != arg.y || r.y_field != arg.z ||
-      r.x_field != arg.w)
+  if (r.w_field() != arg.x() || r.z_field() != arg.y() ||
+      r.y_field() != arg.z() || r.x_field() != arg.w())
     throw std::runtime_error("bit_pack_probe field rotation mismatch");
   std::cout << "bit_pack_probe ok\n";
   return 0;

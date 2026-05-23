@@ -139,14 +139,14 @@ static int runCallServiceCallback(Accelerator *accel) {
     throw std::runtime_error(
         "call_service_callback: callback did not fire within timeout");
 
-  if (seen.tag != 0xA5)
+  if (seen.tag() != 0xA5)
     throw std::runtime_error(
         "call_service_callback: wrong tag, expected 0xA5 got 0x" +
-        toHex(static_cast<uint64_t>(seen.tag)));
-  if (seen.payload != kPayload)
+        toHex(static_cast<uint64_t>(seen.tag())));
+  if (seen.payload() != kPayload)
     throw std::runtime_error(
         "call_service_callback: wrong payload, expected 0x" + toHex(kPayload) +
-        " got 0x" + toHex(seen.payload));
+        " got 0x" + toHex(seen.payload()));
   std::cout << "call_service_callback ok\n";
   return 0;
 }
@@ -167,15 +167,15 @@ static int runTypedReadChannelStruct(Accelerator *accel) {
       throw std::runtime_error(
           "typed_read_channel_struct: null read result at i=" +
           std::to_string(i));
-    if (ev->ts != i)
+    if (ev->ts() != i)
       throw std::runtime_error(
           "typed_read_channel_struct: wrong ts at i=" + std::to_string(i) +
-          ", got " + std::to_string(ev->ts));
+          ", got " + std::to_string(ev->ts()));
     int32_t expected = -static_cast<int32_t>(i);
-    if (ev->val != expected)
+    if (ev->val() != expected)
       throw std::runtime_error(
           "typed_read_channel_struct: wrong val at i=" + std::to_string(i) +
-          ", got " + std::to_string(ev->val));
+          ", got " + std::to_string(ev->val()));
   }
   std::cout << "typed_read_channel_struct ok (" << kNum << " events)\n";
   return 0;
@@ -343,13 +343,14 @@ static int runTypedFuncStruct(Accelerator *accel) {
 
   esi_system::StructArgs arg(0x1234, static_cast<int8_t>(-7));
   esi_system::StructResult res = c->call(arg).get();
-  int8_t expectedX = static_cast<int8_t>(arg.b + 1);
-  if (res.x != expectedX || res.y != arg.b)
+  int8_t expectedX = static_cast<int8_t>(arg.b() + 1);
+  if (res.x() != expectedX || res.y() != arg.b())
     throw std::runtime_error(
-        "typed_func_struct: wrong result (b=" + std::to_string(arg.b) +
-        " x=" + std::to_string(res.x) + " y=" + std::to_string(res.y) + ")");
-  std::cout << "typed_func_struct ok (b=" << (int)arg.b
-            << " -> x=" << (int)res.x << " y=" << (int)res.y << ")\n";
+        "typed_func_struct: wrong result (b=" + std::to_string(arg.b()) +
+        " x=" + std::to_string(res.x()) + " y=" + std::to_string(res.y()) +
+        ")");
+  std::cout << "typed_func_struct ok (b=" << (int)arg.b()
+            << " -> x=" << (int)res.x() << " y=" << (int)res.y() << ")\n";
   return 0;
 }
 
@@ -362,26 +363,30 @@ static int runTypedFuncNestedStruct(Accelerator *accel) {
   auto c = mod.connect();
 
   esi_system::OddStruct arg;
-  arg.a = 0xabc;
-  arg.b = static_cast<int8_t>(-17);
-  arg.inner.p = 5;
-  arg.inner.q = static_cast<int8_t>(-7);
-  arg.inner.r[0] = 3;
-  arg.inner.r[1] = 4;
+  arg.a(0xabc);
+  arg.b(static_cast<int8_t>(-17));
+  auto inner = arg.inner();
+  inner.p(5);
+  inner.q(static_cast<int8_t>(-7));
+  inner.r({3, 4});
+  arg.inner(inner);
 
   esi_system::OddStruct res = c->call(arg).get();
-  uint16_t expA = static_cast<uint16_t>(arg.a + 1);
-  int8_t expB = static_cast<int8_t>(arg.b - 3);
-  uint8_t expP = static_cast<uint8_t>(arg.inner.p + 5);
-  int8_t expQ = static_cast<int8_t>(arg.inner.q + 2);
-  uint8_t expR0 = static_cast<uint8_t>(arg.inner.r[0] + 1);
-  uint8_t expR1 = static_cast<uint8_t>(arg.inner.r[1] + 2);
-  if (res.a != expA || res.b != expB || res.inner.p != expP ||
-      res.inner.q != expQ || res.inner.r[0] != expR0 || res.inner.r[1] != expR1)
+  uint16_t expA = static_cast<uint16_t>(arg.a() + 1);
+  int8_t expB = static_cast<int8_t>(arg.b() - 3);
+  uint8_t expP = static_cast<uint8_t>(arg.inner().p() + 5);
+  int8_t expQ = static_cast<int8_t>(arg.inner().q() + 2);
+  uint8_t expR0 = static_cast<uint8_t>(arg.inner().r()[0] + 1);
+  uint8_t expR1 = static_cast<uint8_t>(arg.inner().r()[1] + 2);
+  if (res.a() != expA || res.b() != expB || res.inner().p() != expP ||
+      res.inner().q() != expQ || res.inner().r()[0] != expR0 ||
+      res.inner().r()[1] != expR1)
     throw std::runtime_error("typed_func_nested_struct: result mismatch");
-  std::cout << "typed_func_nested_struct ok (a=" << res.a << " b=" << (int)res.b
-            << " p=" << (int)res.inner.p << " q=" << (int)res.inner.q << " r=["
-            << (int)res.inner.r[0] << "," << (int)res.inner.r[1] << "])\n";
+  std::cout << "typed_func_nested_struct ok (a=" << res.a()
+            << " b=" << (int)res.b() << " p=" << (int)res.inner().p()
+            << " q=" << (int)res.inner().q() << " r=["
+            << (int)res.inner().r()[0] << "," << (int)res.inner().r()[1]
+            << "])\n";
   return 0;
 }
 
@@ -454,12 +459,12 @@ static int runTypedFuncWindowedList(Accelerator *accel) {
         std::to_string(result.data_count()) + ")");
   size_t i = 0;
   for (const esi_system::TransformListItem &item : result.data()) {
-    uint32_t expected = input[i].v + input[i].v;
-    if (item.v != expected)
+    uint32_t expected = input[i].v() + input[i].v();
+    if (item.v() != expected)
       throw std::runtime_error("typed_func_windowed_list: element " +
                                std::to_string(i) + " expected " +
                                std::to_string(expected) + ", got " +
-                               std::to_string(item.v));
+                               std::to_string(item.v()));
     ++i;
   }
   std::cout << "typed_func_windowed_list ok (" << input.size()
