@@ -57,12 +57,14 @@ om.class private @BoolWrapper(%in: i1) -> (out: i1) {
 
 // Cycle in dataflow (field access creates a cycle that can't be evaluated)
 om.class private @WrapperCycle(%val: !om.integer) -> (out: !om.integer) {
+  // FIXME: Currently the primary location points at om.field.class field op due
+  //        to backward compatibility with the old evaluator implementation.
+  // expected-error @below {{failed to evaluate om.object.field}}
   om.class.fields %val : !om.integer
 }
 
 om.class @DataflowCycle() -> (result: !om.integer) {
   %obj = om.object @WrapperCycle(%feedback) : (!om.integer) -> !om.class.type<@WrapperCycle>
-  // expected-error @below {{failed to evaluate om.object.field}}
   %feedback = om.object.field %obj["out"] : (!om.class.type<@WrapperCycle>) -> !om.integer
   om.class.fields %feedback : !om.integer
 }
