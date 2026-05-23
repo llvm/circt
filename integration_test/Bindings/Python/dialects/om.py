@@ -154,7 +154,7 @@ print(obj.reference)
 for (name, field) in obj:
   # location from om.class.field "child"
   # CHECK: name: child, field: <circt.dialects.om.Object object
-  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
+  # CHECK-SAME: loc: loc(fused
   # location from om.class.field "field"
   # CHECK: name: field, field: 42
   # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
