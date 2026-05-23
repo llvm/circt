@@ -56,6 +56,105 @@ static LogicalResult checkInstForAnnotations(FInstanceLike inst,
   return success();
 }
 
+static Value replaceResultWithWire(ImplicitLocOpBuilder &builder,
+                                   Value result) {
+  auto wire =
+      WireOp::create(builder, result.getLoc(), result.getType()).getResult();
+  result.replaceAllUsesWith(wire);
+  return wire;
+}
+
+static Value replaceResultWithWire(ImplicitLocOpBuilder &builder, Value result,
+                                   ValueRange domains) {
+  auto wire = WireOp::create(builder, result.getType(), /*name=*/StringRef{},
+                             NameKindEnum::DroppableName,
+                             /*annotations=*/ArrayRef<Attribute>{},
+                             /*innerSym=*/StringAttr{},
+                             /*forceable=*/false, domains)
+                  .getResult();
+  result.replaceAllUsesWith(wire);
+  return wire;
+}
+
+static LogicalResult swapEICGEnableInputs(FExtModuleOp op, InstanceOp inst,
+                                          SmallVectorImpl<Value> &inputs) {
+  if (inputs.size() <= 2)
+    return success();
+
+  auto port1 = inst.getPortName(1);
+  auto port2 = inst.getPortName(2);
+  if (port1 != "test_en")
+    return mlir::emitError(op.getPortLocation(1),
+                           "expected port named 'test_en'");
+  if (port2 != "en")
+    return mlir::emitError(op.getPortLocation(2), "expected port named 'en'");
+  std::swap(inputs[1], inputs[2]);
+  return success();
+}
+
+static LogicalResult lowerLegacyEICGWrapperInstance(FExtModuleOp op,
+                                                    InstanceOp inst) {
+  ImplicitLocOpBuilder builder(op.getLoc(), inst);
+
+  SmallVector<Value> inputs;
+  for (auto result : inst.getResults().drop_back())
+    inputs.push_back(replaceResultWithWire(builder, result));
+
+  // en and test_en are swapped between extmodule and intrinsic.
+  if (failed(swapEICGEnableInputs(op, inst, inputs)))
+    return failure();
+
+  auto intop = GenericIntrinsicOp::create(builder, builder.getType<ClockType>(),
+                                          "circt_clock_gate", inputs,
+                                          op.getParameters());
+  inst.getResults().back().replaceAllUsesWith(intop.getResult());
+  return success();
+}
+
+static LogicalResult lowerDomainEICGWrapperInstance(FExtModuleOp op,
+                                                    InstanceOp inst) {
+  ImplicitLocOpBuilder builder(op.getLoc(), inst);
+
+  auto numPorts = op.getNumPorts();
+  unsigned numDataInputs = numPorts - 3;
+  unsigned outIdx = numDataInputs;
+
+  // Domain ports are emitted first so that data wires can refer to them in
+  // their `domains [...]` operand list.
+  auto domA = replaceResultWithWire(builder, inst.getResult(numPorts - 2));
+  auto domB = replaceResultWithWire(builder, inst.getResult(numPorts - 1));
+
+  SmallVector<Value, 1> inputDomain{domA};
+  SmallVector<Value, 1> outputDomain{domB};
+  SmallVector<Value> inputs;
+  for (unsigned i = 0; i != numDataInputs; ++i)
+    inputs.push_back(
+        replaceResultWithWire(builder, inst.getResult(i), inputDomain));
+  auto out =
+      replaceResultWithWire(builder, inst.getResult(outIdx), outputDomain);
+
+  // The lowered intrinsic operates inside an anonymous domain.  This keeps
+  // custom domain inference rules out of intrinsics and uses the default rule
+  // that all operands and results are in one domain.
+  auto anon = DomainCreateAnonOp::create(builder, domA.getType(), "");
+  for (auto &input : inputs)
+    input = UnsafeDomainCastOp::create(builder, input.getType(), input,
+                                       ValueRange{anon});
+
+  // en and test_en are swapped between extmodule and intrinsic.
+  if (failed(swapEICGEnableInputs(op, inst, inputs)))
+    return failure();
+
+  auto intop = GenericIntrinsicOp::create(builder, builder.getType<ClockType>(),
+                                          "circt_clock_gate", inputs,
+                                          op.getParameters());
+  auto cast = UnsafeDomainCastOp::create(builder, out.getType(),
+                                         intop.getResult(), ValueRange{domB})
+                  .getResult();
+  MatchingConnectOp::create(builder, out, cast);
+  return success();
+}
+
 // This is the main entrypoint for the conversion pass.
 void LowerIntmodulesPass::runOnOperation() {
   auto &ig = getAnalysis<InstanceGraph>();
@@ -183,10 +282,8 @@ void LowerIntmodulesPass::runOnOperation() {
       // inputs bind to A, the output binds to B.  Without this, the layout is
       // the legacy `[in, test_en?, en, out]`.
       auto numPorts = op.getNumPorts();
-      bool hasDomains =
+      bool hasDomainPorts =
           numPorts >= 2 && isa<DomainType>(op.getPortType(numPorts - 1));
-      unsigned numDataInputs = hasDomains ? numPorts - 3 : numPorts - 1;
-      unsigned outIdx = numDataInputs;
 
       auto *node = ig.lookup(op);
       changed = true;
@@ -201,90 +298,9 @@ void LowerIntmodulesPass::runOnOperation() {
         if (failed(checkInstForAnnotations(inst, eicgName)))
           return signalPassFailure();
 
-        ImplicitLocOpBuilder builder(op.getLoc(), inst);
-
-        // Replace each instance result with a wire.  Domain ports (A, B) are
-        // emitted first so that subsequent data port wires can reference them
-        // in their `domains [...]` operand list.
-        SmallVector<Value> wires(numPorts);
-        Value domA, domB;
-        if (hasDomains) {
-          auto rA = inst.getResult(numPorts - 2),
-               rB = inst.getResult(numPorts - 1);
-          domA = wires[numPorts - 2] =
-              WireOp::create(builder, rA.getLoc(), rA.getType()).getResult();
-          domB = wires[numPorts - 1] =
-              WireOp::create(builder, rB.getLoc(), rB.getType()).getResult();
-          rA.replaceAllUsesWith(domA);
-          rB.replaceAllUsesWith(domB);
-        }
-        auto wireWithDomain = [&](unsigned i, Value domain) {
-          auto r = inst.getResult(i);
-          ValueRange domains = domain ? ValueRange(domain) : ValueRange{};
-          wires[i] = WireOp::create(builder, r.getType(), /*name=*/StringRef{},
-                                    NameKindEnum::DroppableName,
-                                    /*annotations=*/ArrayRef<Attribute>{},
-                                    /*innerSym=*/StringAttr{},
-                                    /*forceable=*/false, domains)
-                         .getResult();
-          r.replaceAllUsesWith(wires[i]);
-        };
-        for (unsigned i = 0; i != numDataInputs; ++i)
-          wireWithDomain(i, domA);
-        wireWithDomain(outIdx, domB);
-
-        // If domains are in play, build a single anonymous domain that the
-        // lowered intrinsic operates within.  Data values are unsafe-cast in
-        // and out of it.  This is done because domain inference should not have
-        // custom domain inference rules for intrinsics and should, instead, use
-        // the default inference of all operands and results are single domain.
-        Value anon;
-        if (hasDomains)
-          anon = DomainCreateAnonOp::create(builder, domA.getType(), "");
-
-        // Build intrinsic operands from the data input wires, casting through
-        // the anonymous domain when domains are in play.
-        SmallVector<Value> inputs;
-        for (unsigned i = 0; i != numDataInputs; ++i) {
-          Value v = wires[i];
-          if (anon)
-            v = UnsafeDomainCastOp::create(builder, v.getType(), v,
-                                           ValueRange{anon});
-          inputs.push_back(v);
-        }
-
-        // en and test_en are swapped between extmodule and intrinsic.
-        if (inputs.size() > 2) {
-          auto port1 = inst.getPortName(1);
-          auto port2 = inst.getPortName(2);
-          if (port1 != "test_en") {
-            mlir::emitError(op.getPortLocation(1),
-                            "expected port named 'test_en'");
-            return signalPassFailure();
-          } else if (port2 != "en") {
-            mlir::emitError(op.getPortLocation(2), "expected port named 'en'");
-            return signalPassFailure();
-          } else
-            std::swap(inputs[1], inputs[2]);
-        }
-        auto intop = GenericIntrinsicOp::create(
-            builder, builder.getType<ClockType>(), "circt_clock_gate", inputs,
-            op.getParameters());
-
-        // Drive the output.  Without domains, the output wire is unnecessary
-        // and is RAUW'd away to keep the legacy IR shape.  With domains, cast
-        // the intrinsic result back into the output's domain and connect.
-        Value out = wires[outIdx];
-        if (anon) {
-          auto cast =
-              UnsafeDomainCastOp::create(builder, out.getType(),
-                                         intop.getResult(), ValueRange{domB})
-                  .getResult();
-          MatchingConnectOp::create(builder, out, cast);
-        } else {
-          out.replaceAllUsesWith(intop.getResult());
-          out.getDefiningOp()->erase();
-        }
+        if (failed(hasDomainPorts ? lowerDomainEICGWrapperInstance(op, inst)
+                                  : lowerLegacyEICGWrapperInstance(op, inst)))
+          return signalPassFailure();
 
         // Remove instance from IR and instance graph.
         use->erase();
