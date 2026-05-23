@@ -499,7 +499,7 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
       // If there was no pre-existing guard, create one.
       if (!block) {
         OpBuilder builder(op);
-        if (op->getParentOp()->hasTrait<ProceduralRegion>())
+        if (isInProceduralRegion(op))
           block = sv::IfDefProceduralOp::create(
                       builder, loc, "SYNTHESIS", [] {}, [] {})
                       .getElseBlock();

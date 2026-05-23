@@ -117,3 +117,22 @@ hw.module @DontMergeDifferentClocksOrConditions(
   sim.clocked_pause %clockA, %condA, quiet
   sim.clocked_pause %clockA, %condB, verbose
 }
+
+// CHECK-LABEL: hw.module @NestedProceduralGuardInTriggered
+hw.module @NestedProceduralGuardInTriggered(in %trg: i1, in %cond: i1) {
+  // CHECK: hw.triggered posedge %trg(%cond) : i1 {
+  // CHECK-NEXT: ^bb0(%[[COND:.*]]: i1):
+  // CHECK-NEXT:   scf.if %[[COND]] {
+  // CHECK-NEXT:     sv.ifdef.procedural @SYNTHESIS {
+  // CHECK-NEXT:     } else {
+  // CHECK-NEXT:       sv.stop 0
+  // CHECK-NEXT:     }
+  // CHECK-NEXT:   }
+  // CHECK-NEXT: }
+  hw.triggered posedge %trg(%cond) : i1 {
+  ^bb0(%cond_in: i1):
+    scf.if %cond_in {
+      sim.pause quiet
+    }
+  }
+}
