@@ -155,6 +155,11 @@ def IsolateClocks : Pass<"arc-isolate-clocks", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def LowerHWTriggered : Pass<"arc-lower-hw-triggered", "hw::HWModuleOp"> {
+  let summary = "Proof-of-concept lowering of top-level hw.triggered ops to arc.clock_domain and arc.execute";
+  let dependentDialects = ["arc::ArcDialect"];
+}
+
 def LatencyRetiming : Pass<"arc-latency-retiming", "mlir::ModuleOp"> {
   let summary = "Push latencies through the design";
   let dependentDialects = ["arc::ArcDialect"];
