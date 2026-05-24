@@ -160,6 +160,18 @@ Sequence and property expressions in SVAs can specify a clock with respect to wh
 - `@(negedge clk) seqOrProp`. **Trigger on high-to-low clock edge.** Equivalent to `ltl.clock %seqOrProp, negedge %clk`.
 - `@(edge clk) seqOrProp`. **Trigger on any clock edge.** Equivalent to `ltl.clock %seqOrProp, edge %clk`.
 
+#### Atomic clocking
+
+An `i1` can be introduced as a one-cycle sequence sampled on an explicit clock with `ltl.clocked_atom`:
+
+```mlir
+ltl.clocked_atom %input, posedge %clock : i1
+```
+
+This operation is the explicitly clocked form of a boolean atom. It does not create a clocking scope for a sequence or property tree; it only records the clocking event used to sample `%input` and returns an `!ltl.sequence`.
+
+For example, `ltl.clocked_atom %a, posedge %clk : i1` represents the atomic sequence `a` sampled on the rising edge of `%clk`.
+
 #### Delay clocking
 
 `ltl.delay` takes the delayed input first, followed by the delay window:
