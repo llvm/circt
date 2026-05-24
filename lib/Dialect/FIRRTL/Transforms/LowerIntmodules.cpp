@@ -56,16 +56,8 @@ static LogicalResult checkInstForAnnotations(FInstanceLike inst,
   return success();
 }
 
-static Value replaceResultWithWire(ImplicitLocOpBuilder &builder,
-                                   Value result) {
-  auto wire =
-      WireOp::create(builder, result.getLoc(), result.getType()).getResult();
-  result.replaceAllUsesWith(wire);
-  return wire;
-}
-
 static Value replaceResultWithWire(ImplicitLocOpBuilder &builder, Value result,
-                                   ValueRange domains) {
+                                   ValueRange domains = {}) {
   auto wire = WireOp::create(builder, result.getType(), /*name=*/StringRef{},
                              NameKindEnum::DroppableName,
                              /*annotations=*/ArrayRef<Attribute>{},
