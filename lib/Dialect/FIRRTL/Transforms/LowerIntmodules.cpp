@@ -116,14 +116,10 @@ static LogicalResult lowerDomainEICGWrapperInstance(FExtModuleOp op,
   auto domA = replaceResultWithWire(builder, inst.getResult(numPorts - 2));
   auto domB = replaceResultWithWire(builder, inst.getResult(numPorts - 1));
 
-  SmallVector<Value, 1> inputDomain{domA};
-  SmallVector<Value, 1> outputDomain{domB};
   SmallVector<Value> inputs;
   for (unsigned i = 0; i != numDataInputs; ++i)
-    inputs.push_back(
-        replaceResultWithWire(builder, inst.getResult(i), inputDomain));
-  auto out =
-      replaceResultWithWire(builder, inst.getResult(outIdx), outputDomain);
+    inputs.push_back(replaceResultWithWire(builder, inst.getResult(i), {domA}));
+  auto out = replaceResultWithWire(builder, inst.getResult(outIdx), {domB});
 
   // en and test_en are swapped between extmodule and intrinsic.
   if (failed(swapEICGEnableInputs(op, inst, inputs)))
