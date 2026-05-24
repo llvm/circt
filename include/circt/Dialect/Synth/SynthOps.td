@@ -287,7 +287,7 @@ def MuxInverterOp : ThreeInputOp<"mux_inv", "evaluateMuxLogic"> {
   }];
 }
 
-def GambleOp : SymmetricThreeInputOp<"gamble", "evaluateGambleLogic">{
+def GambleOp : SymmetricThreeInputOp<"gamble", "evaluateGambleLogic"> {
   let summary = "3-input Gamble gate with invertible inputs";
   let description = [{
   The `synth.gamble` operation computes the gamble function of its three
