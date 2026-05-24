@@ -216,3 +216,16 @@ hw.module @mux_inv_test(in %c : i1, in %a : i1, in %b : i1, out result : i1) {
   %0 = synth.mux_inv %c, %a, %b : i1
   hw.output %0 : i1
 }
+
+hw.module @gamble_lib(in %x : i1, in %y : i1, in %z : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "x", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "y", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "z", 1, 0, #synth.polarity<positive>>], input_caps = {}>} {
+    %0 = synth.gamble %x, not %y, not %z : i1
+    hw.output %0 : i1
+}
+// CHECK-LABEL: @gamble_test
+hw.module @gamble_test(in %x : i1, in %y : i1, in %z : i1, out result : i1) {
+    // Permute inputs to test the truth table computation and permutation invariance of the gamble operation.
+    // CHECK-NEXT: %[[GAMBLE:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @gamble_lib(x: %{{.+}}: i1, y: %{{.+}}: i1, z: %{{.+}}: i1) -> (result: i1) {test.arrival_times = [1]}
+    // CHECK-NEXT: hw.output %[[GAMBLE]] : i1
+    %0 = synth.gamble not %z, %x, not %y : i1
+    hw.output %0 : i1
+}
