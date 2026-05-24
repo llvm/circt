@@ -48,6 +48,76 @@ firrtl.circuit "EICGWrapperPortName" {
 
 // -----
 
+// Test that an EICG wrapper with domain ports is properly lowered.
+// CHECK-LABEL: "FixupEICGWrapperDomains"
+firrtl.circuit "FixupEICGWrapperDomains" {
+  firrtl.domain @ClockDomain
+  // CHECK-NOEICG: firrtl.extmodule @LegacyClockGateDomains
+  // CHECK-EICG-NOT: firrtl.extmodule @LegacyClockGateDomains
+  firrtl.extmodule @LegacyClockGateDomains(
+    in in: !firrtl.clock domains [A],
+    in test_en: !firrtl.uint<1> domains [A],
+    in en: !firrtl.uint<1> domains [A],
+    out out: !firrtl.clock domains [B],
+    in A: !firrtl.domain<@ClockDomain()>,
+    in B: !firrtl.domain<@ClockDomain()>
+  ) attributes {defname = "EICG_wrapper"}
+
+  // CHECK: firrtl.module @FixupEICGWrapperDomains
+  firrtl.module @FixupEICGWrapperDomains(
+    in %clock: !firrtl.clock domains [%A],
+    in %test_en: !firrtl.uint<1> domains [%A],
+    in %en: !firrtl.uint<1> domains [%A],
+    out %out: !firrtl.clock domains [%B],
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %B: !firrtl.domain<@ClockDomain()>
+  ) {
+    // CHECK-NOEICG: firrtl.instance
+    // CHECK-EICG-NOT: firrtl.instance
+    //
+    // Domain ports become plain domain wires, created before any data wires.
+    // CHECK-EICG-NEXT: %[[A:.+]] = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    // CHECK-EICG-NEXT: %[[B:.+]] = firrtl.wire : !firrtl.domain<@ClockDomain()>
+    //
+    // Data port wires preserve their original domain associations.
+    // CHECK-EICG-NEXT: %[[CLK:.+]] = firrtl.wire domains[%[[A]]]
+    // CHECK-EICG-NEXT: %[[TEST_EN:.+]] = firrtl.wire domains[%[[A]]]
+    // CHECK-EICG-NEXT: %[[EN:.+]] = firrtl.wire domains[%[[A]]]
+    // CHECK-EICG-NEXT: %[[OUT:.+]] = firrtl.wire domains[%[[B]]]
+    //
+    // The intrinsic uses the cast inputs with en/test_en swapped.
+    // CHECK-EICG-NEXT: %[[INT:.+]] = firrtl.int.generic "circt_clock_gate" %[[CLK]], %[[EN]], %[[TEST_EN]]
+    //
+    // The result is unsafe-cast back to the output's real domain and
+    // connected to the output wire.
+    // CHECK-EICG: %[[OUT_C:.+]] = firrtl.unsafe_domain_cast %[[INT]] domains[%[[B]]]
+    // CHECK-EICG: firrtl.matchingconnect %[[OUT]], %[[OUT_C]]
+    %ckg_in, %ckg_test_en, %ckg_en, %ckg_out, %ckg_A, %ckg_B = firrtl.instance ckg @LegacyClockGateDomains(
+      in in: !firrtl.clock domains [A],
+      in test_en: !firrtl.uint<1> domains [A],
+      in en: !firrtl.uint<1> domains [A],
+      out out: !firrtl.clock domains [B],
+      in A: !firrtl.domain<@ClockDomain()>,
+      in B: !firrtl.domain<@ClockDomain()>
+    )
+    // All uses are properly RAUW'd.
+    // CHECK-EICG-NEXT: firrtl.domain.define %[[A]], %A
+    // CHECK-EICG-NEXT: firrtl.domain.define %[[B]], %B
+    // CHECK-EICG-NEXT: firrtl.matchingconnect %[[CLK]], %clock
+    // CHECK-EICG-NEXT: firrtl.matchingconnect %[[TEST_EN]], %test_en
+    // CHECK-EICG-NEXT: firrtl.matchingconnect %[[EN]], %en
+    // CHECK-EICG-NEXT: firrtl.matchingconnect %out, %[[OUT]]
+    firrtl.domain.define %ckg_A, %A : !firrtl.domain<@ClockDomain()>
+    firrtl.domain.define %ckg_B, %B : !firrtl.domain<@ClockDomain()>
+    firrtl.matchingconnect %ckg_in, %clock : !firrtl.clock
+    firrtl.matchingconnect %ckg_test_en, %test_en : !firrtl.uint<1>
+    firrtl.matchingconnect %ckg_en, %en : !firrtl.uint<1>
+    firrtl.matchingconnect %out, %ckg_out : !firrtl.clock
+  }
+}
+
+// -----
+
 // CHECK-LABEL: "FixupEICGWrapper2"
 firrtl.circuit "FixupEICGWrapper2" {
   // CHECK-NOEICG: LegacyClockGateNoTestEn
@@ -64,4 +134,3 @@ firrtl.circuit "FixupEICGWrapper2" {
     firrtl.matchingconnect %ckg_en, %en : !firrtl.uint<1>
   }
 }
-
