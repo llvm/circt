@@ -52,8 +52,8 @@ firrtl.circuit "EICGWrapperPortName" {
 // CHECK-LABEL: "FixupEICGWrapperDomains"
 firrtl.circuit "FixupEICGWrapperDomains" {
   firrtl.domain @ClockDomain
-  // CHECK-NOEICG: LegacyClockGateDomains
-  // CHECK-EICG-NOT: LegacyClockGateDomains
+  // CHECK-NOEICG: firrtl.extmodule @LegacyClockGateDomains
+  // CHECK-EICG-NOT: firrtl.extmodule @LegacyClockGateDomains
   firrtl.extmodule @LegacyClockGateDomains(
     in in: !firrtl.clock domains [A],
     in test_en: !firrtl.uint<1> domains [A],
@@ -63,7 +63,7 @@ firrtl.circuit "FixupEICGWrapperDomains" {
     in B: !firrtl.domain<@ClockDomain()>
   ) attributes {defname = "EICG_wrapper"}
 
-  // CHECK: FixupEICGWrapperDomains
+  // CHECK: firrtl.module @FixupEICGWrapperDomains
   firrtl.module @FixupEICGWrapperDomains(
     in %clock: !firrtl.clock domains [%A],
     in %test_en: !firrtl.uint<1> domains [%A],
@@ -85,15 +85,8 @@ firrtl.circuit "FixupEICGWrapperDomains" {
     // CHECK-EICG-NEXT: %[[EN:.+]] = firrtl.wire domains[%[[A]]]
     // CHECK-EICG-NEXT: %[[OUT:.+]] = firrtl.wire domains[%[[B]]]
     //
-    // Each input is unsafe-cast into the anonymous domain before reaching
-    // the intrinsic.
-    // CHECK-EICG-NEXT: %[[ANON:.+]] = firrtl.domain.anon : !firrtl.domain<@ClockDomain()>
-    // CHECK-EICG-NEXT: %[[CLK_C:.+]] = firrtl.unsafe_domain_cast %[[CLK]] domains[%[[ANON]]]
-    // CHECK-EICG-NEXT: %[[TEST_EN_C:.+]] = firrtl.unsafe_domain_cast %[[TEST_EN]] domains[%[[ANON]]]
-    // CHECK-EICG-NEXT: %[[EN_C:.+]] = firrtl.unsafe_domain_cast %[[EN]] domains[%[[ANON]]]
-    //
     // The intrinsic uses the cast inputs with en/test_en swapped.
-    // CHECK-EICG: %[[INT:.+]] = firrtl.int.generic "circt_clock_gate" %[[CLK_C]], %[[EN_C]], %[[TEST_EN_C]]
+    // CHECK-EICG-NEXT: %[[INT:.+]] = firrtl.int.generic "circt_clock_gate" %[[CLK]], %[[EN]], %[[TEST_EN]]
     //
     // The result is unsafe-cast back to the output's real domain and
     // connected to the output wire.
@@ -141,4 +134,3 @@ firrtl.circuit "FixupEICGWrapper2" {
     firrtl.matchingconnect %ckg_en, %en : !firrtl.uint<1>
   }
 }
-

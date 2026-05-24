@@ -133,14 +133,6 @@ static LogicalResult lowerDomainEICGWrapperInstance(FExtModuleOp op,
   auto out =
       replaceResultWithWire(builder, inst.getResult(outIdx), outputDomain);
 
-  // The lowered intrinsic operates inside an anonymous domain.  This keeps
-  // custom domain inference rules out of intrinsics and uses the default rule
-  // that all operands and results are in one domain.
-  auto anon = DomainCreateAnonOp::create(builder, domA.getType(), "");
-  for (auto &input : inputs)
-    input = UnsafeDomainCastOp::create(builder, input.getType(), input,
-                                       ValueRange{anon});
-
   // en and test_en are swapped between extmodule and intrinsic.
   if (failed(swapEICGEnableInputs(op, inst, inputs)))
     return failure();
