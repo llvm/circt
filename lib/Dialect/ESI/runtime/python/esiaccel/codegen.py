@@ -664,7 +664,6 @@ class CppGenerator(Generator):
         else:
           port_groups = []
       except (NotImplementedError, ValueError) as e:
-        sys.stderr.write(f"Warning: skipping module '{name}': {e}\n")
         hdr_file = output_dir / f"{name}.h"
         with open(hdr_file, "w", encoding="utf-8") as hdr:
           hdr.write(f"// Skipped: {e}\n")
@@ -2023,7 +2022,6 @@ class CppTypeEmitter:
             "  Emitted code may fail to compile due to ordering issues.\n")
 
       for skipped_type, reason in self.skipped_types:
-        sys.stderr.write(f"Warning: skipping type '{skipped_type}': {reason}\n")
         hdr.write(f"// Unsupported type '{skipped_type}': {reason}\n\n")
 
       for emit_type in self.ordered_types:
