@@ -5480,8 +5480,7 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
 
     sim::TriggeredOp::create(builder, clock, cond, [&] {
       auto fileOp = sim::GetFileOp::create(builder, *fileFormatString);
-      sim::PrintFormattedProcOp::create(builder, *formatString,
-                                        fileOp->getResult(0));
+      sim::PrintFormattedProcOp::create(builder, *formatString, fileOp);
     });
     return success();
   }
