@@ -150,6 +150,13 @@ inline llvm::KnownBits invertBooleanLogic(llvm::KnownBits value) {
   return value;
 }
 
+inline llvm::KnownBits applyInputInversion(llvm::KnownBits value,
+                                           bool inverted) {
+  if (inverted)
+    std::swap(value.Zero, value.One);
+  return value;
+}
+
 template <typename T>
 T evaluateOneHotLogic(const T &a, const T &b, const T &c) {
   auto allSet = a & b & c;

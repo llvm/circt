@@ -440,66 +440,6 @@ void XorInverterOp::emitCNFWithoutInversion(
 // DotOp
 //===----------------------------------------------------------------------===//
 
-ParseResult DotOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<OpAsmParser::UnresolvedOperand> operands;
-  Type resultType;
-  DenseBoolArrayAttr inverted;
-  NamedAttrList attrs;
-
-  if (parseVariadicInvertibleOperands(parser, operands, resultType, inverted,
-                                      attrs))
-    return failure();
-  if (operands.size() != 3)
-    return parser.emitError(parser.getCurrentLocation())
-           << "expected exactly three operands";
-  if (parser.resolveOperands(operands, resultType, result.operands))
-    return failure();
-
-  result.addTypes(resultType);
-  result.addAttributes(attrs);
-  result.addAttribute("inverted", inverted);
-  return success();
-}
-
-void DotOp::print(OpAsmPrinter &printer) {
-  printer << ' ';
-  printVariadicInvertibleOperands(printer, getOperation(), getOperands(),
-                                  getType(), getInvertedAttr(),
-                                  (*this)->getAttrDictionary());
-}
-
-LogicalResult DotOp::verify() {
-  if (getInverted().size() != 3)
-    return emitOpError("requires exactly three inversion flags");
-  return success();
-}
-
-APInt DotOp::evaluateBooleanLogicWithoutInversion(
-    llvm::ArrayRef<APInt> inputs) {
-  assert(supportsNumInputs(inputs.size()) &&
-         "dot expects exactly three operands");
-  return evaluateDotLogic(inputs[0], inputs[1], inputs[2]);
-}
-
-bool DotOp::areInputsPermutationInvariant() { return false; }
-
-bool DotOp::supportsNumInputs(unsigned numInputs) { return numInputs == 3; }
-
-llvm::KnownBits DotOp::computeKnownBits(
-    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
-  auto x = applyInversion(getInputKnownBits(0), isInverted(0));
-  auto y = applyInversion(getInputKnownBits(1), isInverted(1));
-  auto z = applyInversion(getInputKnownBits(2), isInverted(2));
-  return evaluateDotLogic(x, y, z);
-}
-
-std::optional<uint64_t> DotOp::getLogicAreaCost() {
-  int64_t bitWidth = hw::getBitWidth(getType());
-  if (bitWidth < 0)
-    return std::nullopt;
-  return static_cast<uint64_t>(bitWidth);
-}
-
 void DotOp::emitCNFWithoutInversion(
     int outVar, llvm::ArrayRef<int> inputVars,
     llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
@@ -518,41 +458,6 @@ void DotOp::emitCNFWithoutInversion(
 //===----------------------------------------------------------------------===//
 // MajorityOp
 //===----------------------------------------------------------------------===//
-
-LogicalResult MajorityOp::verify() {
-  if (getNumOperands() != 3)
-    return emitOpError("requires exactly three operands");
-  if (getInverted().size() != 3)
-    return emitOpError("requires exactly three inversion flags");
-  return success();
-}
-
-bool MajorityOp::areInputsPermutationInvariant() { return true; }
-
-bool MajorityOp::supportsNumInputs(unsigned numInputs) {
-  return numInputs == 3;
-}
-
-std::optional<uint64_t> MajorityOp::getLogicAreaCost() {
-  int64_t bitWidth = hw::getBitWidth(getType());
-  if (bitWidth < 0)
-    return std::nullopt;
-  return static_cast<uint64_t>(bitWidth);
-}
-
-llvm::KnownBits MajorityOp::computeKnownBits(
-    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
-  auto a = applyInversion(getInputKnownBits(0), isInverted(0));
-  auto b = applyInversion(getInputKnownBits(1), isInverted(1));
-  auto c = applyInversion(getInputKnownBits(2), isInverted(2));
-  return evaluateMajorityLogic(a, b, c);
-}
-
-APInt MajorityOp::evaluateBooleanLogicWithoutInversion(
-    llvm::ArrayRef<APInt> inputs) {
-  assert(inputs.size() == 3 && "majority requires exactly three inputs");
-  return evaluateMajorityLogic(inputs[0], inputs[1], inputs[2]);
-}
 
 void MajorityOp::emitCNFWithoutInversion(
     int outVar, llvm::ArrayRef<int> inputVars,
@@ -657,39 +562,6 @@ LogicalResult circt::synth::topologicallySortGraphRegionBlocks(
 // OneHotOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult OneHotOp::verify() {
-  if (getNumOperands() != 3)
-    return emitOpError("requires exactly three operands");
-  if (getInverted().size() != 3)
-    return emitOpError("requires exactly three inversion flags");
-  return success();
-}
-
-bool OneHotOp::areInputsPermutationInvariant() { return true; }
-
-bool OneHotOp::supportsNumInputs(unsigned numInputs) { return numInputs == 3; }
-
-std::optional<uint64_t> OneHotOp::getLogicAreaCost() {
-  int64_t bitWidth = hw::getBitWidth(getType());
-  if (bitWidth < 0)
-    return std::nullopt;
-  return static_cast<uint64_t>(bitWidth);
-}
-
-llvm::KnownBits OneHotOp::computeKnownBits(
-    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
-  auto a = applyInversion(getInputKnownBits(0), isInverted(0));
-  auto b = applyInversion(getInputKnownBits(1), isInverted(1));
-  auto c = applyInversion(getInputKnownBits(2), isInverted(2));
-  return evaluateOneHotLogic(a, b, c);
-}
-
-APInt OneHotOp::evaluateBooleanLogicWithoutInversion(
-    llvm::ArrayRef<APInt> inputs) {
-  assert(inputs.size() == 3 && "onehot requires exactly three inputs");
-  return evaluateOneHotLogic(inputs[0], inputs[1], inputs[2]);
-}
-
 void OneHotOp::emitCNFWithoutInversion(
     int outVar, llvm::ArrayRef<int> inputVars,
     llvm::function_ref<void(llvm::ArrayRef<int>)> addClause,
@@ -711,46 +583,6 @@ void OneHotOp::emitCNFWithoutInversion(
 //===----------------------------------------------------------------------===//
 // MuxInverterOp
 //===----------------------------------------------------------------------===//
-
-LogicalResult MuxInverterOp::verify() {
-  if (getNumOperands() != 3)
-    return emitOpError("requires exactly three operands");
-  if (getInverted().size() != 3)
-    return emitOpError("requires exactly three inversion flags");
-  return success();
-}
-
-bool MuxInverterOp::areInputsPermutationInvariant() { return false; }
-
-APInt MuxInverterOp::evaluateBooleanLogicWithoutInversion(
-    llvm::ArrayRef<APInt> inputs) {
-  assert(inputs.size() == 3 && "expected exactly three inputs");
-  return evaluateMuxLogic(inputs[0], inputs[1], inputs[2]);
-}
-
-bool MuxInverterOp::supportsNumInputs(unsigned numInputs) {
-  return numInputs == 3;
-}
-
-llvm::KnownBits MuxInverterOp::computeKnownBits(
-    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
-  assert(getNumOperands() == 3 && "expected exactly three inputs");
-
-  auto a = applyInversion(getInputKnownBits(0), isInverted(0));
-  auto b = applyInversion(getInputKnownBits(1), isInverted(1));
-  auto c = applyInversion(getInputKnownBits(2), isInverted(2));
-
-  return evaluateMuxLogic(a, b, c);
-}
-
-int64_t MuxInverterOp::getLogicDepthCost() { return 2; }
-
-std::optional<uint64_t> MuxInverterOp::getLogicAreaCost() {
-  int64_t bitWidth = hw::getBitWidth(getType());
-  if (bitWidth < 0)
-    return std::nullopt;
-  return static_cast<uint64_t>(bitWidth);
-}
 
 void MuxInverterOp::emitCNFWithoutInversion(
     int outVar, llvm::ArrayRef<int> inputVars,
@@ -776,39 +608,6 @@ void MuxInverterOp::emitCNFWithoutInversion(
 //===----------------------------------------------------------------------===//
 // GambleOp
 //===----------------------------------------------------------------------===//
-
-LogicalResult GambleOp::verify() {
-  if (getNumOperands() != 3)
-    return emitOpError("requires exactly three operands");
-  if (getInverted().size() != 3)
-    return emitOpError("requires exactly three inversion flags");
-  return success();
-}
-
-bool GambleOp::areInputsPermutationInvariant() { return true; }
-
-bool GambleOp::supportsNumInputs(unsigned numInputs) { return numInputs == 3; }
-
-std::optional<uint64_t> GambleOp::getLogicAreaCost() {
-  int64_t bitWidth = hw::getBitWidth(getType());
-  if (bitWidth < 0)
-    return std::nullopt;
-  return static_cast<uint64_t>(bitWidth);
-}
-
-llvm::KnownBits GambleOp::computeKnownBits(
-    llvm::function_ref<const llvm::KnownBits &(unsigned)> getInputKnownBits) {
-  auto a = applyInversion(getInputKnownBits(0), isInverted(0));
-  auto b = applyInversion(getInputKnownBits(1), isInverted(1));
-  auto c = applyInversion(getInputKnownBits(2), isInverted(2));
-  return evaluateGambleLogic(a, b, c);
-}
-
-APInt GambleOp::evaluateBooleanLogicWithoutInversion(
-    llvm::ArrayRef<APInt> inputs) {
-  assert(inputs.size() == 3 && "onehot requires exactly three inputs");
-  return evaluateGambleLogic(inputs[0], inputs[1], inputs[2]);
-}
 
 void GambleOp::emitCNFWithoutInversion(
     int outVar, llvm::ArrayRef<int> inputVars,

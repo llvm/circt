@@ -31,7 +31,7 @@ class InvertibleOperandsOp<string mnemonic, list<Trait> traits = []>
       DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
         "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
         "supportsNumInputs", "createBooleanLogicOp", "getLogicDepthCost",
-        "getLogicAreaCost"
+        "getLogicAreaCost", "emitCNFWithoutInversion"
       ]> ] # traits> {
   // TODO: Restrict to HWIntegerType.
   let arguments = (ins Variadic<AnyType>:$inputs,
@@ -42,20 +42,13 @@ class InvertibleOperandsOp<string mnemonic, list<Trait> traits = []>
   }];
 }
 
-class SymmetricThreeInputOp<string mnemonic, list<Trait> traits = []>
-  : SynthOp<mnemonic, [
-      SameOperandsAndResultType, Pure,
-      DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
-        "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
-        "supportsNumInputs", "createBooleanLogicOp",
-        "getLogicAreaCost"
-      ]>] # traits> {
-  let arguments = (ins Variadic<AnyType>:$inputs,
-                       DenseBoolArrayAttr:$inverted);
-  let results = (outs AnyType:$result);
-  let assemblyFormat = [{
-    custom<VariadicInvertibleOperands>($inputs, type($result), $inverted, attr-dict)
-  }];
+class ThreeInputOp<string mnemonic, string logicFn, bit symmetric = false,
+                   list<Trait> traits = []>
+  : InvertibleOperandsOp<mnemonic, [
+      PredOpTrait<"requires exactly three operands",
+                  CPred<"getOperation()->getNumOperands() == 3">>,
+      PredOpTrait<"requires exactly three inversion flags",
+                  CPred<"getInverted().size() == 3">>] # traits> {
   let builders = [
     OpBuilder<(ins "Value":$a, "Value":$b, "Value":$c,
                                 CArg<"bool", "false">:$invertA,
@@ -66,8 +59,39 @@ class SymmetricThreeInputOp<string mnemonic, list<Trait> traits = []>
                    $_builder.getDenseBoolArrayAttr(inverted));
     }]>
   ];
-  let hasVerifier = 1;
+  let extraClassDefinition = [{
+    bool $cppClass::areInputsPermutationInvariant() {
+      return }] # !if(symmetric, "true", "false") # [{;
+    }
+    bool $cppClass::supportsNumInputs(unsigned numInputs) {
+      return numInputs == 3;
+    }
+    int64_t $cppClass::getLogicDepthCost() { return 1; }
+    std::optional<uint64_t> $cppClass::getLogicAreaCost() {
+      int64_t bitWidth = hw::getBitWidth(getType());
+      if (bitWidth < 0)
+        return std::nullopt;
+      return static_cast<uint64_t>(bitWidth);
+    }
+    ::llvm::KnownBits $cppClass::computeKnownBits(
+        ::llvm::function_ref<const ::llvm::KnownBits &(unsigned)>
+            getInputKnownBits) {
+      auto a = applyInputInversion(getInputKnownBits(0), isInverted(0));
+      auto b = applyInputInversion(getInputKnownBits(1), isInverted(1));
+      auto c = applyInputInversion(getInputKnownBits(2), isInverted(2));
+      return }] # logicFn # [{(a, b, c);
+    }
+    ::llvm::APInt $cppClass::evaluateBooleanLogicWithoutInversion(
+        ::llvm::ArrayRef<::llvm::APInt> inputs) {
+      assert(inputs.size() == 3 && "expected exactly three inputs");
+      return }] # logicFn # [{(inputs[0], inputs[1], inputs[2]);
+    }
+  }];
 }
+
+class SymmetricThreeInputOp<string mnemonic, string logicFn,
+                            list<Trait> traits = []>
+  : ThreeInputOp<mnemonic, logicFn, true, traits>;
 
 def AndInverterOp : InvertibleOperandsOp<"aig.and_inv"> {
   let summary = "AIG dialect AND operation";
@@ -162,14 +186,7 @@ def XorInverterOp : InvertibleOperandsOp<"xor_inv"> {
 
 }
 
-def DotOp : SynthOp<"dot", [
-    SameOperandsAndResultType, Pure,
-    DeclareOpInterfaceMethods<BooleanLogicOpInterface, [
-      "areInputsPermutationInvariant", "evaluateBooleanLogicWithoutInversion",
-      "supportsNumInputs", "createBooleanLogicOp",
-      "getLogicAreaCost"
-    ]>
-  ]> {
+def DotOp : ThreeInputOp<"dot", "evaluateDotLogic"> {
   let summary = "Ordered 3-input DOT gate with invertible inputs";
   let description = [{
     The `synth.dot` operation represents the ordered three-input Boolean
@@ -188,33 +205,6 @@ def DotOp : SynthOp<"dot", [
       %r1 = synth.dot not %x, %y, not %z : i8
     ```
   }];
-
-  let arguments = (ins AnyType:$x, AnyType:$y, AnyType:$z,
-                       DenseBoolArrayAttr:$inverted);
-  let results = (outs AnyType:$result);
-
-  let builders = [
-    OpBuilder<(ins "Value":$x, "Value":$y, "Value":$z,
-                                CArg<"bool", "false">:$invertX,
-                                CArg<"bool", "false">:$invertY,
-                                CArg<"bool", "false">:$invertZ), [{
-      SmallVector<bool> inverted{invertX, invertY, invertZ};
-      return build($_builder, $_state, x.getType(), x, y, z,
-                   $_builder.getDenseBoolArrayAttr(inverted));
-    }]>,
-    OpBuilder<(ins "ValueRange":$inputs, "ArrayRef<bool>":$inverted), [{
-      assert(inputs.size() == 3 && "dot expects exactly three operands");
-      assert(inverted.size() == 3 && "dot expects exactly three inversion flags");
-      return build($_builder, $_state, inputs[0].getType(), inputs[0], inputs[1],
-                   inputs[2], $_builder.getDenseBoolArrayAttr(inverted));
-    }]>,
-    OpBuilder<(ins "Type":$resultType, "ValueRange":$inputs,
-                                "ArrayRef<bool>":$inverted), [{
-      return build($_builder, $_state, inputs, inverted);
-    }]>];
-
-  let hasCustomAssemblyFormat = 1;
-  let hasVerifier = 1;
 }
 
 def ChoiceOp : SynthOp<"choice", [SameOperandsAndResultType, Pure]> {
@@ -241,7 +231,7 @@ def ChoiceOp : SynthOp<"choice", [SameOperandsAndResultType, Pure]> {
   let assemblyFormat = "$inputs attr-dict `:` type($result)";
 }
 
-def MajorityOp : SymmetricThreeInputOp<"majority"> {
+def MajorityOp : SymmetricThreeInputOp<"majority", "evaluateMajorityLogic"> {
   let summary = "Majority gate with invertible inputs";
   let description = [{
     The `synth.majority` operation computes the majority function of its
@@ -260,7 +250,7 @@ def MajorityOp : SymmetricThreeInputOp<"majority"> {
   }];
 }
 
-def OneHotOp : SymmetricThreeInputOp<"onehot"> {
+def OneHotOp : SymmetricThreeInputOp<"onehot", "evaluateOneHotLogic"> {
    let summary = "3-input Onehot gate with invertible inputs";
   let description = [{
     The `synth.onehot` operation computes the one-hot function of its three
@@ -278,7 +268,7 @@ def OneHotOp : SymmetricThreeInputOp<"onehot"> {
   }];
 }
 
-def MuxInverterOp : InvertibleOperandsOp<"mux_inv"> {
+def MuxInverterOp : ThreeInputOp<"mux_inv", "evaluateMuxLogic"> {
   let summary = "MUX gate with invertible inputs";
   let description = [{
     The `synth.mux_inv` operation represents a 3-input multiplexer node
@@ -295,22 +285,9 @@ def MuxInverterOp : InvertibleOperandsOp<"mux_inv"> {
       %r1 = synth.mux_inv not %a, %b, not %c : i8
     ```
   }];
-  
-  let builders = [
-  OpBuilder<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue,
-                  CArg<"bool", "false">:$invertCond,
-                  CArg<"bool", "false">:$invertTrue,
-                  CArg<"bool", "false">:$invertFalse),
-                  [{
-    SmallVector<bool> inverted {invertCond, invertTrue, invertFalse};
-    return build($_builder, $_state, {cond, trueValue, falseValue}, inverted);
-  }]>
-];
-let hasVerifier = 1;
-
 }
 
-def GambleOp : SymmetricThreeInputOp<"gamble">{
+def GambleOp : SymmetricThreeInputOp<"gamble", "evaluateGambleLogic"> {
   let summary = "3-input Gamble gate with invertible inputs";
   let description = [{
   The `synth.gamble` operation computes the gamble function of its three
