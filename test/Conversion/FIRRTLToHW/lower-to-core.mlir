@@ -30,6 +30,27 @@ firrtl.circuit "LowerToCore" {
     firrtl.printf %clock, %enable, "value=%d @ {{}}\0A"(%x, %hier)
         : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<4>, !firrtl.fstring
 
+    // CHECK: [[FMTFILE1:%.+]] = sim.fmt.literal "out.txt"
+    // CHECK: [[MSG:%.+]] = sim.fmt.concat
+    // CHECK: sim.triggered %clock if %enable {
+    // CHECK-NEXT:   [[FILE1:%.+]] = sim.get_file [[FMTFILE1]]
+    // CHECK-NEXT:   sim.proc.print [[MSG]] to [[FILE1]]
+    // CHECK-NEXT: }
+    firrtl.fprintf %clock, %enable, "out.txt"(), "value=%d @ {{}}\0A"(%x, %hier)
+        : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<4>, !firrtl.fstring
+    
+    // CHECK: [[LIT2:%.+]] = sim.fmt.literal "out"
+    // CHECK: [[FILEVAL:%.+]] = sim.fmt.dec %x signed : i4
+    // CHECK: [[LIT3:%.+]] = sim.fmt.literal ".txt"
+    // CHECK: [[FMTFILE2:%.+]] = sim.fmt.concat ([[LIT2]], [[FILEVAL]], [[LIT3]])
+    // CHECK: [[MSG:%.+]] = sim.fmt.concat
+    // CHECK: sim.triggered %clock if %enable {
+    // CHECK-NEXT:   [[FILE2:%.+]] = sim.get_file [[FMTFILE2]]
+    // CHECK-NEXT:   sim.proc.print [[MSG]] to [[FILE2]]
+    // CHECK-NEXT: }
+    firrtl.fprintf %clock, %enable, "out%d.txt"(%x), "value=%d @ {{}}\0A"(%x, %hier)
+        : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<4>, !firrtl.sint<4>, !firrtl.fstring
+
     firrtl.skip
   }
 
