@@ -999,12 +999,17 @@ class CppTypePlanner:
       if isinstance(esi_type,
                     types.StructType) and esi_type in window_into_types:
         skip_set.add(esi_type)
+        self.skipped_types.append(
+            (esi_type,
+             "into-type of a windowed helper; subsumed by the helper class"))
         continue
       if isinstance(esi_type, types.TypeAlias):
         inner = esi_type.inner_type
         if inner is not None and self._unwrap_aliases(
             inner) in window_into_types:
           skip_set.add(esi_type)
+          self.skipped_types.append(
+              (esi_type, "alias of a windowed helper's into-type"))
           continue
       # Skip structs/unions/aliases that transitively embed a WindowType
       # field. WindowType itself is fine — it emits as its own helper
@@ -1428,17 +1433,21 @@ class CppTypeEmitter:
         byte_offset = bit_offset // 8
         byte_width = bit_width // 8
 
-        # Path A: standard-width byte-aligned integer. The `reinterpret_cast`
-        # aliases through the `std::array<uint8_t, N>` storage the runtime
-        # already treats as wire bytes elsewhere.
+        # Path A: standard-width byte-aligned integer. `std::memcpy`
+        # avoids the unaligned-load / strict-aliasing / object-lifetime
+        # UB that a `reinterpret_cast` deref through a `uint8_t` buffer
+        # would invoke (MSVC / ASan / UBSan in particular). The compiler
+        # collapses both calls to a single mov on -O1+.
         if bit_width in (8, 16, 32, 64):
           hdr.write(f"{indent}{field_cpp} {field_name}() const {{\n")
-          hdr.write(f"{indent}  return *reinterpret_cast<const {field_cpp} *>("
-                    f"{raw_member}.data() + {byte_offset});\n")
+          hdr.write(f"{indent}  {field_cpp} out;\n")
+          hdr.write(f"{indent}  std::memcpy(&out, {raw_member}.data() + "
+                    f"{byte_offset}, sizeof({field_cpp}));\n")
+          hdr.write(f"{indent}  return out;\n")
           hdr.write(f"{indent}}}\n")
           hdr.write(f"{indent}{self_type} &{field_name}({field_cpp} v) {{\n")
-          hdr.write(f"{indent}  *reinterpret_cast<{field_cpp} *>("
-                    f"{raw_member}.data() + {byte_offset}) = v;\n")
+          hdr.write(f"{indent}  std::memcpy({raw_member}.data() + "
+                    f"{byte_offset}, &v, sizeof({field_cpp}));\n")
           hdr.write(f"{indent}  return *this;\n")
           hdr.write(f"{indent}}}\n")
           return
@@ -1895,11 +1904,19 @@ class CppTypeEmitter:
         elem_cpp = "value_type"
       else:
         elem_cpp = self._cpp_type(field_type)
-      # The data-frame accessor is now a member function returning by value,
-      # so the projection has to call it rather than form a
-      # pointer-to-data-member. A lambda keeps the projection valid even
-      # when the accessor overload set includes an indexed `field(size_t)`
-      # variant for fixed-size arrays.
+      # The data-frame accessor is now a member function returning by value
+      # (the underlying `_bytes` is private; getters reconstruct the field
+      # value from its wire bytes), so the projection has to call it
+      # rather than form a pointer-to-data-member.
+      #
+      # TODO: For byte-aligned aggregate data fields this means iterating
+      # `field()` copies each element; the pre-B3 pointer-to-member form
+      # could yield references for free. If profiling shows it matters,
+      # we can add a separate `field_ref()` accessor on `data_frame` for
+      # byte-aligned aggregate fields (they're stored contiguously inside
+      # `_bytes` and the inner type's only member is itself a byte array,
+      # so a `reinterpret_cast`-backed reference is well-defined) and
+      # project on that instead.
       projection = (f"[](const data_frame &f) -> {elem_cpp} "
                     f"{{ return f.{field_name}(); }}")
       hdr.write(
