@@ -809,12 +809,11 @@ static void cleanupDeadSimFmtOps(ArrayRef<Operation *> seedOps) {
   }
 }
 
-LogicalResult lowerPrintLikeOps(hw::HWModuleOp module,
-                                const TypeConverter &typeConverter,
-                                SimConversionState &state) {
+LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
+                                          const TypeConverter &typeConverter,
+                                          SimConversionState &state) {
   SmallVector<GetFileOp> getFileOps;
   SmallVector<PrintFormattedProcOp> printOps;
-  SmallVector<FlushOp> flushOps;
   SmallVector<Operation *, 8> cleanupSeeds;
   module.walk([&](Operation *op) {
     if (auto getFileOp = dyn_cast<GetFileOp>(op))
@@ -886,7 +885,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       SimTypeConverter typeConverter(context);
       SimConversionState state;
 
-      if (failed(lowerPrintLikeOps(module, typeConverter, state)))
+      if (failed(lowerPrintFormattedProcToSV(module, typeConverter, state)))
         return failure();
 
       if (moveOpsIntoIfdefGuardsAndProcesses(module))
