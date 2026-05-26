@@ -1,5 +1,7 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(lower-firrtl-to-hw{lower-to-core=true})' --verify-diagnostics --split-input-file %s
 
+// -----
+
 firrtl.circuit "fflush_unsupported" {
   firrtl.module @fflush_unsupported(
       in %clock: !firrtl.clock,

@@ -52,6 +52,24 @@ firrtl.circuit "LowerToCore" {
     firrtl.fprintf %clock, %enable, "out%d.txt"(%x), "value=%d @ {{}}\0A"(%x, %hier)
         : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<4>, !firrtl.sint<4>, !firrtl.fstring
 
+    // CHECK: [[LIT4:%.+]] = sim.fmt.literal "out"
+    // CHECK: [[FILEVAL:%.+]] = sim.fmt.dec %x signed : i4
+    // CHECK: [[LIT5:%.+]] = sim.fmt.literal ".txt
+    // CHECK: [[FMTFILE3:%.+]] = sim.fmt.concat ([[LIT4]], [[FILEVAL]], [[LIT5]])
+    // CHECK: sim.triggered %clock if %enable {
+    // CHECK-NEXT:   [[FILE3:%.+]] = sim.get_file [[FMTFILE3]]
+    // CHECK-NEXT:   sim.flush [[FILE3]]
+    // CHECK-NEXT: }
+    firrtl.fflush %clock, %enable, "out%d.txt"(%x)
+        : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<4>
+
+    // CHECK: [[STDERR:%.+]] = sim.stderr_stream
+    // CHECK: sim.triggered %clock if %enable {
+    // CHECK-NEXT:   sim.flush [[STDERR]]
+    // CHECK-NEXT: }
+    firrtl.fflush %clock, %enable
+        : !firrtl.clock, !firrtl.uint<1>
+
     // CHECK: [[TIME:%.+]] = sim.fmt.current_time
     // CHECK: [[LIT4:%.+]] = sim.fmt.literal "\0A"
     // CHECK: [[MSG:%.+]] = sim.fmt.concat ([[TIME]], [[LIT4]])

@@ -12,6 +12,8 @@ circuit LowerToCore:
     printf(clock, enable, "value=%d\n", x)
     fprintf(clock, enable, "out.txt", "value=%d\n", x)
     fprintf(clock, enable, "out%d.txt", x, "value=%d\n", x)
+    fflush(clock, enable, "out%d.txt", x)
+    fflush(clock, enable)
     printf(clock, enable, "{{SimulationTime}}")
 
 ; CHECK-LABEL: hw.module @LowerToCore
@@ -36,6 +38,14 @@ circuit LowerToCore:
 ; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   [[FILE2:%.+]] = sim.get_file [[FMTFILE2]]
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[FILE2]]
+; CHECK-NEXT: }
+; CHECK: sim.triggered %clock if %enable {
+; CHECK-NEXT:   [[FILE3:%.+]] = sim.get_file [[FMTFILE2]]
+; CHECK-NEXT:   sim.flush [[FILE3]]
+; CHECK-NEXT: }
+; CHECK: [[STDERR:%.+]] = sim.stderr_stream
+; CHECK: sim.triggered %clock if %enable {
+; CHECK-NEXT:   sim.flush [[STDERR]]
 ; CHECK-NEXT: }
 ; CHECK: [[TIME:%.+]] = sim.fmt.current_time
 ; CHECK: sim.triggered %clock if %enable {

@@ -5498,8 +5498,29 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
 
 // FFlush lowers into $fflush statement.
 LogicalResult FIRRTLLowering::visitStmt(FFlushOp op) {
-  if (circuitState.lowerToCore)
-    return op.emitOpError("lower-to-core does not support firrtl.fflush yet");
+  if (circuitState.lowerToCore) {
+    auto clock = getLoweredValue(op.getClock());
+    auto cond = getLoweredValue(op.getCond());
+    if (!clock || !cond)
+      return failure();
+
+    if (!op.getOutputFileAttr()) {
+      auto stderrOp = sim::StderrStreamOp::create(builder);
+      sim::TriggeredOp::create(builder, clock, cond, [&] {
+        sim::FlushOp::create(builder, stderrOp);
+      });
+    } else {
+      auto fileFormatString = lowerSimFormatString(
+          op.getOutputFileAttr(), op.getOutputFileSubstitutions());
+      if (failed(fileFormatString))
+        return failure();
+      sim::TriggeredOp::create(builder, clock, cond, [&] {
+        auto fileOp = sim::GetFileOp::create(builder, *fileFormatString);
+        sim::FlushOp::create(builder, fileOp);
+      });
+    }
+    return success();
+  }
 
   auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
