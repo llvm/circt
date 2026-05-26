@@ -13,9 +13,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Sim/SimPasses.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SetVector.h"
 
@@ -57,13 +60,63 @@ static void moveBodyOperations(Block *source, Block *dest,
                                source->begin(), source->end());
 }
 
+static hw::TriggeredOp convertTriggeredToHW(TriggeredOp op) {
+  mlir::IRRewriter builder(op->getContext());
+  builder.setInsertionPoint(op);
+  auto captures = mlir::makeRegionIsolatedFromAbove(builder, op.getBody());
+
+  Value conditionArg;
+  if (auto condition = op.getCondition()) {
+    auto it = llvm::find(captures, condition);
+    if (it == captures.end()) {
+      conditionArg = condition;
+      op.getBodyBlock()->addArgument(condition.getType(), condition.getLoc());
+      captures.push_back(condition);
+    } else {
+      conditionArg = *it;
+    }
+  }
+
+  unsigned conditionArgIndex = 0;
+  if (conditionArg)
+    conditionArgIndex = llvm::find(captures, conditionArg) - captures.begin();
+
+  auto event = hw::EventControlAttr::get(builder.getContext(),
+                                         hw::EventControl::AtPosEdge);
+  auto trigger =
+      builder.createOrFold<seq::FromClockOp>(op.getLoc(), op.getClock());
+  auto converted =
+      hw::TriggeredOp::create(builder, op.getLoc(), event, trigger, captures);
+
+  converted.getBody().takeBody(op.getBody());
+  if (op.getCondition()) {
+    auto arg = converted.getBodyBlock()->getArgument(conditionArgIndex);
+    builder.setInsertionPointToStart(converted.getBodyBlock());
+    auto ifOp = mlir::scf::IfOp::create(builder, op.getLoc(), TypeRange{}, arg,
+                                        true, false);
+    auto *thenBlock = &ifOp.getThenRegion().front();
+    builder.setInsertionPointToEnd(thenBlock);
+    mlir::scf::YieldOp::create(builder, op.getLoc());
+    thenBlock->getOperations().splice(
+        Block::iterator(thenBlock->getTerminator()),
+        converted.getBodyBlock()->getOperations(),
+        std::next(Block::iterator(ifOp.getOperation())),
+        converted.getBodyBlock()->end());
+  }
+
+  op.erase();
+  return converted;
+}
+
 struct SquashSimTriggeredPass
     : impl::SquashSimTriggeredBase<SquashSimTriggeredPass> {
 public:
+  using SquashSimTriggeredBase::SquashSimTriggeredBase;
   void runOnOperation() override;
 
 private:
   bool squashTriggeredOpsInBlock(Block &block);
+  void convertTriggeredOpsInBlock(Block &block);
 };
 
 } // namespace
@@ -137,8 +190,23 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
   return changed;
 }
 
+void SquashSimTriggeredPass::convertTriggeredOpsInBlock(Block &block) {
+  SmallVector<TriggeredOp> triggeredOps;
+  for (Operation &op : block)
+    if (auto triggered = dyn_cast<TriggeredOp>(op))
+      triggeredOps.push_back(triggered);
+
+  for (auto triggered : triggeredOps)
+    convertTriggeredToHW(triggered);
+}
+
 void SquashSimTriggeredPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
-  if (!squashTriggeredOpsInBlock(*module.getBodyBlock()))
+  bool changed = squashTriggeredOpsInBlock(*module.getBodyBlock());
+  if (convertToHW) {
+    convertTriggeredOpsInBlock(*module.getBodyBlock());
+    changed = true;
+  }
+  if (!changed)
     markAllAnalysesPreserved();
 }

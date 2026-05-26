@@ -1,5 +1,4 @@
 add_circt_dialect_library(CIRCTSimTransforms
-  ConvertSimTriggeredToHW.cpp
   FoldValueFormatters.cpp
   LowerDPIFunc.cpp
   ProceduralizeSim.cpp

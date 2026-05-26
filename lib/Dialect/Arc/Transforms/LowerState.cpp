@@ -99,6 +99,7 @@ struct OpLowering {
   LogicalResult lower(MemoryOp op);
   LogicalResult lower(TapOp op);
   LogicalResult lower(InstanceOp op);
+  LogicalResult lower(hw::TriggeredOp op);
   LogicalResult lower(hw::OutputOp op);
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
@@ -425,9 +426,10 @@ static scf::IfOp createOrReuseIf(OpBuilder &builder, Value condition,
 LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
-      .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp,
-            seq::InitialOp, llhd::FinalOp, llhd::CurrentTimeOp,
-            sim::ClockedTerminateOp>([&](auto op) { return lower(op); })
+      .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
+            hw::TriggeredOp, hw::OutputOp, seq::InitialOp, llhd::FinalOp,
+            llhd::CurrentTimeOp, sim::ClockedTerminateOp>(
+          [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -843,6 +845,51 @@ LogicalResult OpLowering::lower(InstanceOp op) {
   for (auto result : op.getResults())
     module.getAllocatedState(result);
 
+  return success();
+}
+
+/// Lower `hw.triggered` to an `arc.execute` op guarded by a posedge check.
+LogicalResult OpLowering::lower(hw::TriggeredOp op) {
+  assert(phase == Phase::New);
+
+  if (op.getEvent() != hw::EventControl::AtPosEdge) {
+    if (!initial)
+      return op.emitOpError("only posedge triggers are supported");
+    return success();
+  }
+
+  lowerValue(op.getTrigger(), Phase::New);
+  SmallVector<Value> inputs;
+  for (auto input : op.getInputs())
+    inputs.push_back(lowerValue(input, Phase::Old));
+  if (initial)
+    return success();
+  if (llvm::is_contained(inputs, Value{}))
+    return failure();
+
+  auto ifClockOp = createIfClockOp(op.getTrigger());
+  if (!ifClockOp)
+    return failure();
+
+  OpBuilder::InsertionGuard guard(module.builder);
+  module.builder.setInsertionPoint(ifClockOp.thenYield());
+
+  auto execute =
+      ExecuteOp::create(module.builder, op.getLoc(), TypeRange{}, inputs);
+  execute.getBody().emplaceBlock();
+  auto *executeBlock = &execute.getBody().front();
+  for (auto input : inputs)
+    executeBlock->addArgument(input.getType(), input.getLoc());
+
+  IRMapping mapping;
+  for (auto [arg, loweredArg] : llvm::zip(op.getBodyBlock()->getArguments(),
+                                          executeBlock->getArguments()))
+    mapping.map(arg, loweredArg);
+
+  module.builder.setInsertionPointToEnd(executeBlock);
+  for (auto &bodyOp : op.getBodyBlock()->getOperations())
+    module.builder.clone(bodyOp, mapping);
+  arc::OutputOp::create(module.builder, op.getLoc());
   return success();
 }
 

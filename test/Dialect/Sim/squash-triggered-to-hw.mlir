@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(hw.module(sim-squash-triggered,sim-convert-triggered-to-hw))' --allow-unregistered-dialect %s | FileCheck %s
+// RUN: circt-opt --pass-pipeline='builtin.module(hw.module(sim-squash-triggered{convert-to-hw}))' --allow-unregistered-dialect %s | FileCheck %s
 
 // CHECK-LABEL: hw.module @same_condition
 // CHECK: %[[TRG:.*]] = seq.from_clock %clk
@@ -38,5 +38,21 @@ hw.module @different_conditions(
   }
   sim.triggered %clk if %enb {
     "test.b"() : () -> ()
+  }
+}
+
+// -----
+
+// CHECK-LABEL: hw.module @fstring_capture
+// CHECK: %[[TRG:.*]] = seq.from_clock %clk
+// CHECK-NEXT: hw.triggered posedge %[[TRG]](%{{.*}}) : !sim.fstring {
+// CHECK-NEXT: ^bb0(%[[MSG:.*]]: !sim.fstring):
+// CHECK-NEXT:   sim.proc.print %[[MSG]]
+// CHECK-NEXT: }
+hw.module @fstring_capture(in %clk : !seq.clock) {
+  %prefix = sim.fmt.literal "hello"
+  %msg = sim.fmt.concat (%prefix)
+  sim.triggered %clk {
+    sim.proc.print %msg
   }
 }

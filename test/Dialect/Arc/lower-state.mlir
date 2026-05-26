@@ -613,6 +613,28 @@ hw.module @OpsWithRegions(in %clock: !seq.clock, in %a: i42, in %b: i1, out c: i
   hw.output %0 : i42
 }
 
+// CHECK-LABEL: arc.model @Triggered
+hw.module @Triggered(in %clock: i1, in %a: i42) {
+  // CHECK: [[IN_CLOCK:%.+]] = arc.root_input "clock"
+  // CHECK: [[IN_A:%.+]] = arc.root_input "a"
+  // CHECK: [[CLOCK:%.+]] = arc.state_read [[IN_CLOCK]]
+  // CHECK: [[OLD_CLOCK:%.+]] = arc.state_read
+  // CHECK: arc.state_write
+  // CHECK: [[EDGE:%.+]] = comb.xor [[OLD_CLOCK]], [[CLOCK]]
+  // CHECK: [[POSEDGE:%.+]] = comb.and [[EDGE]], [[CLOCK]]
+  // CHECK: scf.if [[POSEDGE]] {
+  // CHECK:   arc.execute ([[A:%.+]] : i42) {
+  // CHECK:   ^bb0([[ARG:%.+]]: i42):
+  // CHECK:     func.call @ConsumeI42([[ARG]])
+  // CHECK:     arc.output
+  // CHECK:   }
+  // CHECK: }
+  hw.triggered posedge %clock(%a) : i42 {
+  ^bb0(%arg: i42):
+    func.call @ConsumeI42(%arg) : (i42) -> ()
+  }
+}
+
 // Regression check on worklist producing false positive comb loop errors.
 // CHECK-LABEL: @CombLoopRegression
 hw.module @CombLoopRegression(in %clk: !seq.clock) {
