@@ -112,13 +112,13 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Match the cut set against this library primitive
-  std::optional<MatchResult> match(CutEnumerator &enumerator,
+  std::optional<PatternCost> match(CutEnumerator &enumerator,
                                    const Cut &cut) const override {
-    if (!cut.getNPNClass(enumerator.getOptions().npnTable)
-             .equivalentOtherThanPermutation(npnClass))
+    const auto &cutNPN = cut.getNPNClass(enumerator.getOptions().npnTable);
+    if (!(cutNPN.truthTable == npnClass.truthTable))
       return std::nullopt;
 
-    return MatchResult(area, delay);
+    return PatternCost(area, delay);
   }
 
   /// Enable truth table matching for this pattern
@@ -133,14 +133,17 @@ struct TechLibraryPattern : public CutRewritePattern {
                                        CutEnumerator &enumerator,
                                        const Cut &cut) const override {
     const auto &network = enumerator.getLogicNetwork();
-    // Create a new instance of the module
-    SmallVector<unsigned> permutedInputIndices;
-    cut.getPermutatedInputIndices(enumerator.getOptions().npnTable, npnClass,
-                                  permutedInputIndices);
+    const auto &matchedPattern = cut.getMatchedPattern();
+    assert(matchedPattern && "tech library rewrite requires a matched pattern");
+    const MatchBinding &binding = matchedPattern->getBinding();
+    assert(!binding.hasNegation() &&
+           "phase-aware tech mapping is not implemented yet");
 
     SmallVector<Value> inputs;
-    inputs.reserve(permutedInputIndices.size());
-    for (unsigned idx : permutedInputIndices) {
+    unsigned numInputs = binding.getNumInputs();
+    inputs.reserve(numInputs);
+    for (unsigned patternInput = 0; patternInput < numInputs; ++patternInput) {
+      unsigned idx = binding.getCutInputForPatternInput(patternInput);
       assert(idx < cut.inputs.size() && "input permutation index out of range");
       inputs.push_back(network.getValue(cut.inputs[idx]));
     }
