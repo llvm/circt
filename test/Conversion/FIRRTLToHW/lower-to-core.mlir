@@ -22,8 +22,9 @@ firrtl.circuit "LowerToCore" {
     // CHECK: [[HIER:%.+]] = sim.fmt.hier_path
     // CHECK: [[NL:%.+]] = sim.fmt.literal "\0A"
     // CHECK: [[MSG:%.+]] = sim.fmt.concat ([[LIT0]], [[FMTVAL]], [[LIT1]], [[HIER]], [[NL]])
+    // CHECK: [[STDERR:%.+]] = sim.stderr_stream
     // CHECK: sim.triggered %clock if %enable { 
-    // CHECK-NEXT:   sim.proc.print [[MSG]]
+    // CHECK-NEXT:   sim.proc.print [[MSG]] to [[STDERR]]
     // CHECK-NEXT: }
     // CHECK-NOT: sv.assert
     // CHECK-NOT: sv.fwrite
