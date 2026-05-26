@@ -124,12 +124,12 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
       auto event = hw::EventControlAttr::get(builder.getContext(),
                                              hw::EventControl::AtPosEdge);
       auto trigger = builder.createOrFold<seq::FromClockOp>(fusedLoc, clock);
-      hwTriggered =
-          hw::TriggeredOp::create(builder, fusedLoc, event, trigger, ValueRange{});
+      hwTriggered = hw::TriggeredOp::create(builder, fusedLoc, event, trigger,
+                                            ValueRange{});
       mergedBlock = hwTriggered.getBodyBlock();
     } else {
-      mergedTriggered = TriggeredOp::create(builder, fusedLoc, clock,
-                                            outerCondition);
+      mergedTriggered =
+          TriggeredOp::create(builder, fusedLoc, clock, outerCondition);
       mergedBlock = mergedTriggered.getBodyBlock();
     }
 
