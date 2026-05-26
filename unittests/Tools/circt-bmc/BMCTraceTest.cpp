@@ -74,13 +74,27 @@ TEST(BMCTraceTest, PrintsTextTrace) {
   llvm::raw_string_ostream os(output);
   ASSERT_TRUE(trace.printTextTrace(os, evaluateWord));
   os.flush();
-  llvm::errs() << output;
 
   EXPECT_THAT(output, HasSubstr("counterexample for top:\n"));
   EXPECT_THAT(output,
               HasSubstr("cycle 0:\n  data_in = 0xff\n  state_q = 0x0\n"));
   EXPECT_THAT(output,
               HasSubstr("cycle 1:\n  data_in = 0x12\n  state_q = 0xff\n"));
+}
+
+TEST(BMCTraceTest, SupportsZeroWidthSignals) {
+  BMCTrace trace("top");
+  auto empty = trace.addSignal("empty", 0);
+
+  trace.record(0, empty,
+               reinterpret_cast<BMCTrace::Handle>(static_cast<uintptr_t>(0x0)));
+
+  std::string output;
+  llvm::raw_string_ostream os(output);
+  ASSERT_TRUE(trace.printTextTrace(os, evaluateWord));
+  os.flush();
+
+  EXPECT_THAT(output, HasSubstr("cycle 0:\n  empty = 0x0\n"));
 }
 
 } // namespace

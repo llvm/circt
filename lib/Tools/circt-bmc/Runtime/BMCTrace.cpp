@@ -15,7 +15,6 @@
 circt::bmc::BMCTrace::BMCTrace(llvm::StringRef topName) : topName(topName) {}
 
 size_t circt::bmc::BMCTrace::addSignal(llvm::StringRef name, unsigned width) {
-  assert(width > 0 && "tracked signals must have a positive width");
   signals.push_back({name.str(), width});
   for (auto &step : recorded)
     step.resize(signals.size());
