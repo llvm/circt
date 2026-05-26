@@ -67,7 +67,7 @@ static hw::TriggeredOp convertTriggeredToHW(TriggeredOp op) {
 
   Value conditionArg;
   if (auto condition = op.getCondition()) {
-    auto it = llvm::find(captures, condition);
+    auto *it = llvm::find(captures, condition);
     if (it == captures.end()) {
       conditionArg = condition;
       op.getBodyBlock()->addArgument(condition.getType(), condition.getLoc());
