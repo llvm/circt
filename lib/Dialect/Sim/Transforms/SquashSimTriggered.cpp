@@ -60,26 +60,36 @@ static void moveBodyOperations(Block *source, Block *dest,
                                source->begin(), source->end());
 }
 
+static void guardBodyWithIf(hw::TriggeredOp op, Value condition) {
+  OpBuilder builder(op);
+  Block *bodyBlock = op.getBodyBlock();
+  builder.setInsertionPointToStart(bodyBlock);
+  auto ifOp = mlir::scf::IfOp::create(builder, op.getLoc(), TypeRange{},
+                                      condition, true, false);
+  auto *thenBlock = &ifOp.getThenRegion().front();
+  builder.setInsertionPointToEnd(thenBlock);
+  mlir::scf::YieldOp::create(builder, op.getLoc());
+  thenBlock->getOperations().splice(
+      Block::iterator(thenBlock->getTerminator()), bodyBlock->getOperations(),
+      std::next(Block::iterator(ifOp.getOperation())), bodyBlock->end());
+}
+
 static hw::TriggeredOp convertTriggeredToHW(TriggeredOp op) {
   mlir::IRRewriter builder(op->getContext());
   builder.setInsertionPoint(op);
   auto captures = mlir::makeRegionIsolatedFromAbove(builder, op.getBody());
 
-  Value conditionArg;
+  std::optional<unsigned> conditionArgIndex;
   if (auto condition = op.getCondition()) {
     auto *it = llvm::find(captures, condition);
     if (it == captures.end()) {
-      conditionArg = condition;
       op.getBodyBlock()->addArgument(condition.getType(), condition.getLoc());
       captures.push_back(condition);
+      conditionArgIndex = captures.size() - 1;
     } else {
-      conditionArg = *it;
+      conditionArgIndex = it - captures.begin();
     }
   }
-
-  unsigned conditionArgIndex = 0;
-  if (conditionArg)
-    conditionArgIndex = llvm::find(captures, conditionArg) - captures.begin();
 
   auto event = hw::EventControlAttr::get(builder.getContext(),
                                          hw::EventControl::AtPosEdge);
@@ -89,20 +99,9 @@ static hw::TriggeredOp convertTriggeredToHW(TriggeredOp op) {
       hw::TriggeredOp::create(builder, op.getLoc(), event, trigger, captures);
 
   converted.getBody().takeBody(op.getBody());
-  if (op.getCondition()) {
-    auto arg = converted.getBodyBlock()->getArgument(conditionArgIndex);
-    builder.setInsertionPointToStart(converted.getBodyBlock());
-    auto ifOp = mlir::scf::IfOp::create(builder, op.getLoc(), TypeRange{}, arg,
-                                        true, false);
-    auto *thenBlock = &ifOp.getThenRegion().front();
-    builder.setInsertionPointToEnd(thenBlock);
-    mlir::scf::YieldOp::create(builder, op.getLoc());
-    thenBlock->getOperations().splice(
-        Block::iterator(thenBlock->getTerminator()),
-        converted.getBodyBlock()->getOperations(),
-        std::next(Block::iterator(ifOp.getOperation())),
-        converted.getBodyBlock()->end());
-  }
+  if (conditionArgIndex)
+    guardBodyWithIf(converted,
+                    converted.getBodyBlock()->getArgument(*conditionArgIndex));
 
   op.erase();
   return converted;
