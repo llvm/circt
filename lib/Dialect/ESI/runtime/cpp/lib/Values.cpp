@@ -543,17 +543,23 @@ int64_t IntView::toI64() const {
   for (size_t i = 0; i < limit; ++i)
     if (this->getBit(i))
       u |= (1ULL << i);
-  bool signBit = this->getBit(this->bitWidth - 1);
   if (this->bitWidth < 64) {
-    if (signBit) {
+    // Source is narrower than int64_t: sign-extend from the source's top bit.
+    if (this->getBit(this->bitWidth - 1))
       for (size_t i = this->bitWidth; i < 64; ++i)
         u |= (1ULL << i);
-    }
     return static_cast<int64_t>(u);
   }
-  if (this->bitWidth > 64)
-    checkHighBytesEqual(64, signBit ? uint8_t{0xFF} : uint8_t{0x00},
+  if (this->bitWidth > 64) {
+    // Source is wider than int64_t: bits [64, width-1] must all equal the
+    // destination's sign bit (bit 63 of the low 64 we're about to return),
+    // not bit `width-1` of the source. A wide value like 2^63 has source
+    // top-bit 0 but cannot fit in int64_t -- the low 64 would alias
+    // INT64_MIN if we used the source's top bit as the expected fill.
+    const bool destSignBit = (u >> 63) & 1ULL;
+    checkHighBytesEqual(64, destSignBit ? uint8_t{0xFF} : uint8_t{0x00},
                         "Int does not fit in int{}_t", 64);
+  }
   return static_cast<int64_t>(u);
 }
 

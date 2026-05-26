@@ -10,6 +10,7 @@
 #include "gtest/gtest.h"
 #include <any>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <sstream>
 #include <stdexcept>
@@ -398,6 +399,26 @@ TEST(IntTest, LargeWidthBadSignExtensionOverflow) {
 
   Int v(mbv_v);
   EXPECT_THROW((void)static_cast<int64_t>(v), std::overflow_error);
+}
+
+TEST(IntTest, LargeWidthBoundaryFitsInI64) {
+  // The wide value 2^63 (bit 63 set, all bits >= 64 clear) has a source
+  // top bit of 0 but cannot fit in int64_t -- its low 64 bits alias
+  // INT64_MIN. The narrowing must throw rather than silently flipping
+  // sign. Regression test for a bug where the high-byte equality check
+  // used the source's top bit instead of the destination's sign bit.
+  MutableBitVector mbv(128);
+  mbv.setBit(63, true);
+  Int v(mbv);
+  EXPECT_THROW((void)static_cast<int64_t>(v), std::overflow_error);
+
+  // The mirror case: bits 64..127 all set and bit 63 set is the wide
+  // representation of INT64_MIN; that one *does* fit.
+  MutableBitVector neg(128);
+  for (size_t i = 63; i < 128; ++i)
+    neg.setBit(i, true);
+  Int n(neg);
+  EXPECT_EQ(static_cast<int64_t>(n), std::numeric_limits<int64_t>::min());
 }
 
 TEST(UIntTest, BasicConstruction) {

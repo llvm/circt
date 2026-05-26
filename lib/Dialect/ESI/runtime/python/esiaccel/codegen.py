@@ -1441,8 +1441,9 @@ class CppTypeEmitter:
       * Path C — sub-byte alignment. Fall back to the
         `esi::detail::{read,write}{Un,}signedBits` helpers from
         `esi/BitAccess.h`, which loop over the constituent bits.
-      * Path D — view-class fields (`BitsType` at any width, and signed /
-        unsigned integers wider than 64 bits). Return a non-owning
+      * Path D — view-class fields. Triggered when `_is_value_class_type`
+        is true — currently widths above 64 bits, for any of `BitsType`,
+        signed, or unsigned. Returns a non-owning
         `esi::BitVector` / `esi::IntView` / `esi::UIntView` view *into*
         the parent struct's `_bytes` -- zero allocation, no copy. The
         setter accepts any `esi::BitVector` (so views and owning
@@ -1457,8 +1458,9 @@ class CppTypeEmitter:
     wrapped = self._unwrap_aliases(field_type)
 
     if isinstance(wrapped, (types.BitsType, types.IntType)):
-      # Path D: view-class field (BitsType at any width, or signed /
-      # unsigned integers wider than 64 bits).
+      # Path D: view-class field. Today this is exactly the
+      # wider-than-64-bit integer / Bits cases; gated by
+      # `_is_value_class_type` so the rule lives in one place.
       if self._is_value_class_type(field_type):
         byte_offset = bit_offset // 8
         sub_bit_index = bit_offset % 8

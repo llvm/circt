@@ -525,12 +525,17 @@ void testWideMisaligned() {
 }
 
 // ---------------------------------------------------------------------------
-// Array of view-class elements: indexed-only accessors
+// Array of view-class elements: indexed + lazy whole-array accessors
 // ---------------------------------------------------------------------------
 
-// Round-trip a 3-element array of `ui128` through the per-element
-// indexed accessors. The whole-array accessor is intentionally absent
-// for view-class element types; only `items(i)` / `items(i, v)` exist.
+// Round-trip a 3-element array of `ui128` through both the per-element
+// indexed accessors (`items(i)` / `items(i, v)`) and the lazy
+// whole-array accessor (`items()` returning a
+// `std::views::iota | std::views::transform` range of per-element
+// views, plus the `std::array<view, N>` whole-array setter and matching
+// ctor). The byte-copy whole-array path used for native-int arrays
+// doesn't apply here because the view's storage layout differs from
+// the wire layout.
 void testArrayOfViewsAligned() {
   ArrViews a;
   std::array<esi::MutableBitVector, 3> source;
