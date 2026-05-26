@@ -1408,29 +1408,106 @@ void CutEnumerator::computeRequiredTimes() {
   }
 }
 
+namespace {
+/// Tracks references from the currently selected cut cover. Reference counts are
+/// seeded by values observed outside the logic network, then propagated through
+/// selected cuts on demand.
+class SelectedCoverRefCounts {
+public:
+  SelectedCoverRefCounts(llvm::DenseMap<uint32_t, CutSet *> &cutSets,
+                         const LogicNetwork &logicNetwork)
+      : cutSets(cutSets), logicNetwork(logicNetwork),
+        refCounts(logicNetwork.size(), 0) {
+    for (auto [index, gate] : llvm::enumerate(logicNetwork.getGates()))
+      refCounts[index] = gate.getExternalUseCount();
+  }
+
+  unsigned get(uint32_t index) const { return refCounts[index]; }
+
+  void referenceSelectedCover(ArrayRef<uint32_t> processingOrder) {
+    for (auto index : processingOrder) {
+      if (refCounts[index] == 0)
+        continue;
+
+      auto *cutSet = getNonLeafCutSet(cutSets, logicNetwork, index);
+      if (!cutSet)
+        continue;
+
+      referenceCut(cutSet->getBestMatchedCut());
+    }
+  }
+
+  double referenceCut(const Cut *cut) {
+    const auto *match = getMatch(cut);
+    if (!match)
+      return 0.0;
+
+    double area = match->getArea();
+    for (uint32_t inputIndex : cut->inputs)
+      area += referenceNode(inputIndex);
+    return area;
+  }
+
+  double dereferenceCut(const Cut *cut) {
+    const auto *match = getMatch(cut);
+    if (!match)
+      return 0.0;
+
+    double area = match->getArea();
+    for (uint32_t inputIndex : cut->inputs)
+      area += dereferenceNode(inputIndex);
+    return area;
+  }
+
+private:
+  const MatchedPattern *getMatch(const Cut *cut) const {
+    if (!cut)
+      return nullptr;
+    const auto &match = cut->getMatchedPattern();
+    return match ? &*match : nullptr;
+  }
+
+  double referenceNode(uint32_t index) {
+    auto *cutSet = getNonLeafCutSet(cutSets, logicNetwork, index);
+    if (!cutSet)
+      return 0.0;
+
+    auto *bestCut = cutSet->getBestMatchedCut();
+    if (!bestCut)
+      return 0.0;
+
+    if (refCounts[index]++ > 0)
+      return 0.0;
+
+    return referenceCut(bestCut);
+  }
+
+  double dereferenceNode(uint32_t index) {
+    auto *cutSet = getNonLeafCutSet(cutSets, logicNetwork, index);
+    if (!cutSet)
+      return 0.0;
+
+    auto *bestCut = cutSet->getBestMatchedCut();
+    if (!bestCut)
+      return 0.0;
+
+    assert(refCounts[index] != 0 && "selected reference count underflow");
+    if (--refCounts[index] > 0)
+      return 0.0;
+
+    return dereferenceCut(bestCut);
+  }
+
+  llvm::DenseMap<uint32_t, CutSet *> &cutSets;
+  const LogicNetwork &logicNetwork;
+  SmallVector<unsigned, 0> refCounts;
+};
+} // namespace
+
 // Pick cuts again using area-flow, while staying within the timing bound set
 // by the current mapping.
 void CutEnumerator::reselectCutsForAreaFlow() {
-  SmallVector<unsigned, 0> selectedRefCounts(logicNetwork.size(), 0);
-  for (auto [index, gate] : llvm::enumerate(logicNetwork.getGates()))
-    selectedRefCounts[index] = gate.getExternalUseCount();
-
-  auto addSelectedCutRefs = [&](const Cut *cut) {
-    if (!cut)
-      return;
-    for (uint32_t inputIndex : cut->inputs)
-      ++selectedRefCounts[inputIndex];
-  };
-
-  auto dropSelectedCutRefs = [&](const Cut *cut) {
-    if (!cut)
-      return;
-    for (uint32_t inputIndex : cut->inputs) {
-      assert(selectedRefCounts[inputIndex] != 0 &&
-             "selected reference count underflow");
-      --selectedRefCounts[inputIndex];
-    }
-  };
+  SelectedCoverRefCounts selectedRefs(cutSets, logicNetwork);
 
   // Start from the arrival times of the cuts we already selected.
   for (auto index : processingOrder) {
@@ -1444,8 +1521,8 @@ void CutEnumerator::reselectCutsForAreaFlow() {
 
     it->second->bestArrivalTime =
         bestCut->getMatchedPattern()->getWorstOutputArrivalTime();
-    addSelectedCutRefs(bestCut);
   }
+  selectedRefs.referenceSelectedCover(processingOrder);
 
   for (auto index : processingOrder) {
     auto cutSetIt = cutSets.find(index);
@@ -1454,6 +1531,7 @@ void CutEnumerator::reselectCutsForAreaFlow() {
 
     auto *cutSet = cutSetIt->second;
     Cut *currentBestCut = cutSet->getBestMatchedCut();
+    bool isActive = selectedRefs.get(index) != 0;
     Cut *bestAreaFlowCut = nullptr;
     std::optional<MatchedPattern> bestAreaFlowMatch;
     double bestFlow = std::numeric_limits<double>::max();
@@ -1494,8 +1572,8 @@ void CutEnumerator::reselectCutsForAreaFlow() {
         if (!inputCutSet)
           continue;
 
-        unsigned effectiveRefCount = selectedRefCounts[inputIndex];
-        if (!currentBestCut ||
+        unsigned effectiveRefCount = selectedRefs.get(inputIndex);
+        if (!isActive || !currentBestCut ||
             !llvm::is_contained(currentBestCut->inputs, inputIndex))
           ++effectiveRefCount;
         assert(effectiveRefCount != 0 && "cut inputs must be referenced");
@@ -1523,78 +1601,24 @@ void CutEnumerator::reselectCutsForAreaFlow() {
       continue;
 
     // Later nodes should see the timing and flow of the cut we picked here.
-    dropSelectedCutRefs(currentBestCut);
-    addSelectedCutRefs(bestAreaFlowCut);
+    if (isActive)
+      selectedRefs.dereferenceCut(currentBestCut);
+
     bestAreaFlowCut->setMatchedPattern(std::move(*bestAreaFlowMatch));
     cutSet->setBestCut(bestAreaFlowCut);
     cutSet->areaFlow = bestFlow;
     cutSet->bestArrivalTime =
         bestAreaFlowCut->getMatchedPattern()->getWorstOutputArrivalTime();
+
+    if (isActive)
+      selectedRefs.referenceCut(bestAreaFlowCut);
   }
 }
 
 // Pick cuts again using exact-area deref/ref while staying within the timing
 // bound set by the current mapping.
 void CutEnumerator::reselectCutsForExactArea() {
-  SmallVector<unsigned, 0> selectedRefCounts(logicNetwork.size(), 0);
-  for (auto [index, gate] : llvm::enumerate(logicNetwork.getGates()))
-    selectedRefCounts[index] = gate.getExternalUseCount();
-
-  auto referenceNode = [&](auto &&self, uint32_t index) -> double {
-    auto *cutSet = getNonLeafCutSet(cutSets, logicNetwork, index);
-    if (!cutSet)
-      return 0.0;
-
-    if (selectedRefCounts[index]++ > 0)
-      return 0.0;
-
-    auto *bestCut = cutSet->getBestMatchedCut();
-    if (!bestCut)
-      return 0.0;
-
-    double area = bestCut->getMatchedPattern()->getArea();
-    for (uint32_t inputIndex : bestCut->inputs)
-      area += self(self, inputIndex);
-    return area;
-  };
-
-  auto dereferenceNode = [&](auto &&self, uint32_t index) -> double {
-    auto *cutSet = getNonLeafCutSet(cutSets, logicNetwork, index);
-    if (!cutSet)
-      return 0.0;
-
-    assert(selectedRefCounts[index] != 0 &&
-           "selected reference count underflow");
-    if (--selectedRefCounts[index] > 0)
-      return 0.0;
-
-    auto *bestCut = cutSet->getBestMatchedCut();
-    if (!bestCut)
-      return 0.0;
-
-    double area = bestCut->getMatchedPattern()->getArea();
-    for (uint32_t inputIndex : bestCut->inputs)
-      area += self(self, inputIndex);
-    return area;
-  };
-
-  auto referenceCut = [&](Cut *cut) -> double {
-    if (!cut)
-      return 0.0;
-    double area = cut->getMatchedPattern()->getArea();
-    for (uint32_t inputIndex : cut->inputs)
-      area += referenceNode(referenceNode, inputIndex);
-    return area;
-  };
-
-  auto dereferenceCut = [&](Cut *cut) -> double {
-    if (!cut)
-      return 0.0;
-    double area = cut->getMatchedPattern()->getArea();
-    for (uint32_t inputIndex : cut->inputs)
-      area += dereferenceNode(dereferenceNode, inputIndex);
-    return area;
-  };
+  SelectedCoverRefCounts selectedRefs(cutSets, logicNetwork);
 
   // Seed counts and arrival times from the current mapping.
   for (auto index : processingOrder) {
@@ -1608,22 +1632,8 @@ void CutEnumerator::reselectCutsForExactArea() {
 
     it->second->bestArrivalTime =
         bestCut->getMatchedPattern()->getWorstOutputArrivalTime();
-    selectedRefCounts[index] = logicNetwork.getExternalUseCount(index);
   }
-  for (auto index : processingOrder) {
-    if (selectedRefCounts[index] == 0)
-      continue;
-
-    auto cutSetIt = cutSets.find(index);
-    if (cutSetIt == cutSets.end())
-      continue;
-
-    auto *bestCut = cutSetIt->second->getBestMatchedCut();
-    if (!bestCut)
-      continue;
-
-    (void)referenceCut(bestCut);
-  }
+  selectedRefs.referenceSelectedCover(processingOrder);
 
   for (auto index : processingOrder) {
     auto cutSetIt = cutSets.find(index);
@@ -1635,9 +1645,9 @@ void CutEnumerator::reselectCutsForExactArea() {
     if (!currentBestCut)
       continue;
 
-    bool isActive = selectedRefCounts[index] != 0;
+    bool isActive = selectedRefs.get(index) != 0;
     if (isActive)
-      (void)dereferenceCut(currentBestCut);
+      (void)selectedRefs.dereferenceCut(currentBestCut);
 
     Cut *bestExactCut = nullptr;
     std::optional<MatchedPattern> bestExactMatch;
@@ -1669,8 +1679,8 @@ void CutEnumerator::reselectCutsForExactArea() {
       if (arrivalTime > cutSet->requiredTime)
         continue;
 
-      double exactArea = referenceCut(cut);
-      (void)dereferenceCut(cut);
+      double exactArea = selectedRefs.referenceCut(cut);
+      (void)selectedRefs.dereferenceCut(cut);
 
       if (exactArea < bestExactArea ||
           (areEquivalent(exactArea, bestExactArea) &&
@@ -1691,7 +1701,7 @@ void CutEnumerator::reselectCutsForExactArea() {
 
     if (!bestExactCut || !bestExactMatch) {
       if (isActive)
-        (void)referenceCut(currentBestCut);
+        (void)selectedRefs.referenceCut(currentBestCut);
       continue;
     }
 
@@ -1701,7 +1711,7 @@ void CutEnumerator::reselectCutsForExactArea() {
         bestExactCut->getMatchedPattern()->getWorstOutputArrivalTime();
 
     if (isActive)
-      (void)referenceCut(bestExactCut);
+      (void)selectedRefs.referenceCut(bestExactCut);
   }
 }
 
