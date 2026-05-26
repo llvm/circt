@@ -848,7 +848,7 @@ LogicalResult OpLowering::lower(InstanceOp op) {
   return success();
 }
 
-/// Lower `hw.triggered` to an `arc.execute` op guarded by a posedge check.
+/// Lower `hw.triggered` by inlining its body under a posedge check.
 LogicalResult OpLowering::lower(hw::TriggeredOp op) {
   assert(phase == Phase::New);
 
@@ -873,12 +873,16 @@ LogicalResult OpLowering::lower(hw::TriggeredOp op) {
 
   OpBuilder::InsertionGuard guard(module.builder);
   module.builder.setInsertionPoint(ifClockOp.thenYield());
+
+  // Expose the trigger inputs as values for the body block arguments.
   for (auto [arg, input] : llvm::zip(op.getBodyBlock()->getArguments(), inputs))
     module.loweredValues[{arg, Phase::New}] = input;
-
-  for (auto &bodyOp : op.getBodyBlock()->getOperations())
-    if (failed(module.lowerOp(&bodyOp)))
+  for (auto &bodyOp : llvm::make_early_inc_range(*op.getBodyBlock())) {
+    OpLowering bodyLowering(&bodyOp, Phase::New, module);
+    bodyLowering.initial = false;
+    if (failed(bodyLowering.lower()))
       return failure();
+  }
 
   return success();
 }

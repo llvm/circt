@@ -617,13 +617,13 @@ hw.module @OpsWithRegions(in %clock: !seq.clock, in %a: i42, in %b: i1, out c: i
 hw.module @Triggered(in %clock: i1, in %a: i42) {
   // CHECK: [[IN_CLOCK:%.+]] = arc.root_input "clock"
   // CHECK: [[IN_A:%.+]] = arc.root_input "a"
+  // CHECK: [[A:%.+]] = arc.state_read [[IN_A]]
   // CHECK: [[CLOCK:%.+]] = arc.state_read [[IN_CLOCK]]
   // CHECK: [[OLD_CLOCK:%.+]] = arc.state_read
   // CHECK: arc.state_write
   // CHECK: [[EDGE:%.+]] = comb.xor [[OLD_CLOCK]], [[CLOCK]]
   // CHECK: [[POSEDGE:%.+]] = comb.and [[EDGE]], [[CLOCK]]
   // CHECK: scf.if [[POSEDGE]] {
-  // CHECK:   [[A:%.+]] = arc.state_read [[IN_A]]
   // CHECK:   func.call @ConsumeI42([[A]])
   // CHECK: }
   hw.triggered posedge %clock(%a) : i42 {
