@@ -1,22 +1,22 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(synth-tech-mapper{strategy=area test=true max-cuts-per-root=8})' %s | FileCheck %s --check-prefixes CHECK,AREA
 
-hw.module @and_inv(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
+hw.module @and_inv(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1, 0, #synth.polarity<positive>>], input_caps = {}>} {
   %0 = synth.aig.and_inv %a, %b : i1
   hw.output %0 : i1
 }
 
-hw.module @and_inv_n(in %a : i1, in %b : i1, out result : i1) attributes {hw.techlib.info = {area = 1.0 : f64, delay = [[1], [1]]}} {
+hw.module @and_inv_n(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1, 0, #synth.polarity<positive>>], input_caps = {}>} {
   %0 = synth.aig.and_inv not %a, %b : i1
   hw.output %0 : i1
 }
 
-hw.module @and_inv_3_cheap(in %a : i1, in %b : i1, in %c : i1, out result : i1) attributes {hw.techlib.info = {area = 0.75 : f64, delay = [[1], [1], [1]]}} {
+hw.module @and_inv_3_cheap(in %a : i1, in %b : i1, in %c : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 0.75 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "c", 1, 0, #synth.polarity<positive>>], input_caps = {}>} {
   %0 = synth.aig.and_inv %a, %b : i1
   %1 = synth.aig.and_inv not %0, %c : i1
   hw.output %1 : i1
 }
 
-hw.module @and3_mid(in %a : i1, in %b : i1, in %c : i1, out result : i1) attributes {hw.techlib.info = {area = 1.75 : f64, delay = [[1], [1], [1]]}} {
+hw.module @and3_mid(in %a : i1, in %b : i1, in %c : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.75 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 1, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "c", 1, 0, #synth.polarity<positive>>], input_caps = {}>} {
   %0 = synth.aig.and_inv %a, %b : i1
   %1 = synth.aig.and_inv %0, %c : i1
   hw.output %1 : i1
