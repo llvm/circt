@@ -60,11 +60,6 @@ void circt::populateArcPreprocessingPipeline(
 void circt::populateArcConversionPipeline(OpPassManager &pm,
                                           const ArcConversionOptions &options) {
   {
-    sim::SquashSimTriggeredOptions opts;
-    opts.convertToHW = true;
-    pm.addNestedPass<hw::HWModuleOp>(sim::createSquashSimTriggered(opts));
-  }
-  {
     ConvertToArcsPassOptions opts;
     opts.tapRegisters = options.observeRegisters;
     pm.addPass(createConvertToArcsPass(opts));
