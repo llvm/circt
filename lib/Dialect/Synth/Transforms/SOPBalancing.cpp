@@ -182,7 +182,7 @@ void computeSOPDelays(const SOPForm &sop, ArrayRef<DelayType> inputArrivalTimes,
 struct SOPBalancingPattern : public CutRewritePattern {
   SOPBalancingPattern(MLIRContext *context) : CutRewritePattern(context) {}
 
-  std::optional<MatchResult> match(CutEnumerator &enumerator,
+  std::optional<PatternCost> match(CutEnumerator &enumerator,
                                    const Cut &cut) const override {
     const auto &network = enumerator.getLogicNetwork();
     if (cut.isTrivialCut() || cut.getOutputSize(network) != 1)
@@ -208,10 +208,10 @@ struct SOPBalancingPattern : public CutRewritePattern {
     SmallVector<DelayType, expectedISOPInputs> delays;
     computeSOPDelays(sop, arrivalTimes, delays);
 
-    MatchResult result;
-    result.area = static_cast<double>(totalGates);
-    result.setOwnedDelays(std::move(delays));
-    return result;
+    PatternCost cost;
+    cost.area = static_cast<double>(totalGates);
+    cost.setOwnedDelays(std::move(delays));
+    return cost;
   }
 
   FailureOr<Operation *> rewrite(OpBuilder &builder, CutEnumerator &enumerator,

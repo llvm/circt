@@ -319,10 +319,11 @@ private:
   llvm::SmallVector<LogicNetworkGate> gates;
 };
 
-/// Result of matching a cut against a pattern.
+/// Cost of implementing a cut with a pattern.
 ///
-/// This structure contains the area and per-input delay information
-/// computed during pattern matching.
+/// This structure contains the area and per-input delay information computed
+/// by a pattern matcher. It does not describe how the pattern inputs bind to a
+/// cut; that is tracked separately by MatchBinding.
 ///
 /// The delays can be stored in two ways:
 /// 1. As a reference to static/cached data (e.g., tech library delays)
@@ -330,15 +331,15 @@ private:
 /// 2. As owned dynamic data (e.g., computed SOP delays)
 ///    - Use setOwnedDelays() to transfer ownership
 ///
-struct MatchResult {
+struct PatternCost {
   /// Area cost of implementing this cut with the pattern.
   double area = 0.0;
 
   /// Default constructor.
-  MatchResult() = default;
+  PatternCost() = default;
 
   /// Constructor with area and delays (by reference).
-  MatchResult(double area, ArrayRef<DelayType> delays)
+  PatternCost(double area, ArrayRef<DelayType> delays)
       : area(area), borrowedDelays(delays) {}
 
   /// Set delays by reference (zero-cost for static/cached delays).
@@ -365,9 +366,50 @@ private:
 
   /// Owned delays (used when present).
   /// Only allocated when setOwnedDelays() is called. When empty (std::nullopt),
-  /// moving this MatchResult avoids constructing/moving the SmallVector,
+  /// moving this PatternCost avoids constructing/moving the SmallVector,
   /// achieving zero-cost abstraction for the common case (borrowed delays).
   std::optional<SmallVector<DelayType, 6>> ownedDelays;
+};
+
+/// Describes how a matched pattern's pins bind to a cut.
+///
+/// The binding is derived from composing the cut and pattern NPN witnesses. It
+/// records the permutation and phase changes needed to implement the cut with
+/// the matched pattern.
+struct MatchBinding {
+  /// For each pattern input, the cut input that drives it.
+  SmallVector<unsigned, 6> patternInputToCutInput;
+
+  /// Bit i is set if pattern input i must observe the inverted cut input.
+  unsigned inputNegation = 0;
+
+  /// Bit i is set if pattern output i must be inverted to match the cut.
+  unsigned outputNegation = 0;
+
+  MatchBinding() = default;
+
+  MatchBinding(ArrayRef<unsigned> patternInputToCutInput,
+               unsigned inputNegation, unsigned outputNegation);
+
+  static MatchBinding getIdentity(unsigned numInputs);
+
+  unsigned getNumInputs() const { return patternInputToCutInput.size(); }
+
+  unsigned getPatternInputForCutInput(unsigned cutInputIndex) const;
+
+  unsigned getCutInputForPatternInput(unsigned patternInputIndex) const {
+    return patternInputToCutInput[patternInputIndex];
+  }
+
+  bool isPatternInputNegated(unsigned patternInputIndex) const {
+    return inputNegation & (1u << patternInputIndex);
+  }
+
+  bool isOutputNegated(unsigned outputIndex) const {
+    return outputNegation & (1u << outputIndex);
+  }
+
+  bool hasNegation() const { return inputNegation != 0 || outputNegation != 0; }
 };
 
 /// Represents a cut that has been successfully matched to a rewriting pattern.
@@ -381,8 +423,8 @@ private:
   SmallVector<DelayType, 1>
       arrivalTimes; ///< Arrival times of outputs from this pattern
   /// Saved match data we reuse during area-flow reselection.
-  MatchResult matchResult;
-  SmallVector<unsigned, 6> patternInputToCutInput;
+  PatternCost cost;
+  MatchBinding binding;
 
 public:
   /// Default constructor creates an invalid matched pattern.
@@ -390,13 +432,10 @@ public:
 
   /// Constructor for a valid matched pattern.
   MatchedPattern(const CutRewritePattern *pattern,
-                 SmallVector<DelayType, 1> arrivalTimes,
-                 MatchResult matchResult,
-                 ArrayRef<unsigned> patternInputToCutInput)
+                 SmallVector<DelayType, 1> arrivalTimes, PatternCost cost,
+                 MatchBinding binding)
       : pattern(pattern), arrivalTimes(std::move(arrivalTimes)),
-        matchResult(std::move(matchResult)),
-        patternInputToCutInput(patternInputToCutInput.begin(),
-                               patternInputToCutInput.end()) {}
+        cost(std::move(cost)), binding(std::move(binding)) {}
 
   /// Get the arrival time of signals through this pattern.
   DelayType getArrivalTime(unsigned outputIndex) const;
@@ -412,13 +451,11 @@ public:
   /// Get the per-input delays used when scoring this match.
   ArrayRef<DelayType> getDelays() const;
 
-  /// Get the cached match payload used to rebuild this match.
-  const MatchResult &getMatchResult() const { return matchResult; }
+  /// Get the cached cost payload used to rebuild this match.
+  const PatternCost &getCost() const { return cost; }
 
-  /// Get the mapping from pattern input indices to cut input indices.
-  ArrayRef<unsigned> getInputPermutation() const {
-    return patternInputToCutInput;
-  }
+  /// Get the binding between cut inputs and pattern pins.
+  const MatchBinding &getBinding() const { return binding; }
 
   /// Get the delay for a cut input after accounting for input permutation.
   DelayType getDelayForCutInput(unsigned cutInputIndex) const;
@@ -799,12 +836,12 @@ struct CutRewritePattern {
   /// Check if a cut matches this pattern and compute area/delay metrics.
   ///
   /// This method is called to determine if a cut can be replaced by this
-  /// pattern. If the cut matches, it should return a MatchResult containing
-  /// the area and per-input delays for this specific cut.
+  /// pattern. If the cut matches, it should return a PatternCost containing the
+  /// area and per-input delays for this specific cut.
   ///
   /// If useTruthTableMatcher() returns true, this method is only
   /// called for cuts with matching truth tables.
-  virtual std::optional<MatchResult> match(CutEnumerator &enumerator,
+  virtual std::optional<PatternCost> match(CutEnumerator &enumerator,
                                            const Cut &cut) const = 0;
 
   /// Specify truth tables that this pattern can match.
