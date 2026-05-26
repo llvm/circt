@@ -60,51 +60,10 @@ static void moveBodyOperations(Block *source, Block *dest,
                                source->begin(), source->end());
 }
 
-static void guardBodyWithIf(hw::TriggeredOp op, Value condition) {
-  OpBuilder builder(op);
-  Block *bodyBlock = op.getBodyBlock();
-  builder.setInsertionPointToStart(bodyBlock);
-  auto ifOp = mlir::scf::IfOp::create(builder, op.getLoc(), TypeRange{},
-                                      condition, true, false);
-  auto *thenBlock = &ifOp.getThenRegion().front();
-  builder.setInsertionPointToEnd(thenBlock);
-  mlir::scf::YieldOp::create(builder, op.getLoc());
-  thenBlock->getOperations().splice(
-      Block::iterator(thenBlock->getTerminator()), bodyBlock->getOperations(),
-      std::next(Block::iterator(ifOp.getOperation())), bodyBlock->end());
-}
-
-static hw::TriggeredOp convertTriggeredToHW(TriggeredOp op) {
+static void finalizeHWTriggered(hw::TriggeredOp op) {
   mlir::IRRewriter builder(op->getContext());
-  builder.setInsertionPoint(op);
   auto captures = mlir::makeRegionIsolatedFromAbove(builder, op.getBody());
-
-  std::optional<unsigned> conditionArgIndex;
-  if (auto condition = op.getCondition()) {
-    auto *it = llvm::find(captures, condition);
-    if (it == captures.end()) {
-      op.getBodyBlock()->addArgument(condition.getType(), condition.getLoc());
-      captures.push_back(condition);
-      conditionArgIndex = captures.size() - 1;
-    } else {
-      conditionArgIndex = it - captures.begin();
-    }
-  }
-
-  auto event = hw::EventControlAttr::get(builder.getContext(),
-                                         hw::EventControl::AtPosEdge);
-  auto trigger =
-      builder.createOrFold<seq::FromClockOp>(op.getLoc(), op.getClock());
-  auto converted =
-      hw::TriggeredOp::create(builder, op.getLoc(), event, trigger, captures);
-
-  converted.getBody().takeBody(op.getBody());
-  if (conditionArgIndex)
-    guardBodyWithIf(converted,
-                    converted.getBodyBlock()->getArgument(*conditionArgIndex));
-
-  op.erase();
-  return converted;
+  op.getInputsMutable().append(captures);
 }
 
 struct SquashSimTriggeredPass
@@ -115,7 +74,6 @@ public:
 
 private:
   bool squashTriggeredOpsInBlock(Block &block);
-  void convertTriggeredOpsInBlock(Block &block);
 };
 
 } // namespace
@@ -129,7 +87,7 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
 
   bool changed = false;
   for (auto &[clock, triggers] : triggerMap) {
-    if (triggers.size() < 2)
+    if (triggers.size() < 2 && !convertToHW)
       continue;
 
     SmallVector<Location> locs;
@@ -150,15 +108,30 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
       }
     }
 
-    // Hoist a shared condition to the merged sim.triggered when possible.
+    // Hoist a shared condition to the merged sim.triggered when possible. When
+    // converting to hw.triggered, keep all conditions inside the body instead.
     Value outerCondition;
-    if (!hasUnconditionalTrigger && allConditionsIdentical)
+    if (!convertToHW && !hasUnconditionalTrigger && allConditionsIdentical)
       outerCondition = commonCondition;
 
     OpBuilder builder(triggers.back());
     auto fusedLoc = builder.getFusedLoc(locs);
-    auto mergedTriggered =
-        TriggeredOp::create(builder, fusedLoc, clock, outerCondition);
+
+    Block *mergedBlock = nullptr;
+    hw::TriggeredOp hwTriggered;
+    TriggeredOp mergedTriggered;
+    if (convertToHW) {
+      auto event = hw::EventControlAttr::get(builder.getContext(),
+                                             hw::EventControl::AtPosEdge);
+      auto trigger = builder.createOrFold<seq::FromClockOp>(fusedLoc, clock);
+      hwTriggered =
+          hw::TriggeredOp::create(builder, fusedLoc, event, trigger, ValueRange{});
+      mergedBlock = hwTriggered.getBodyBlock();
+    } else {
+      mergedTriggered = TriggeredOp::create(builder, fusedLoc, clock,
+                                            outerCondition);
+      mergedBlock = mergedTriggered.getBodyBlock();
+    }
 
     Value prevConditionValue;
     Block *prevConditionBlock = nullptr;
@@ -168,7 +141,7 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
 
       // Conditions not represented on the outer op become inner scf.if guards.
       if (!sourceBlock->empty() && condition && condition != outerCondition) {
-        builder.setInsertionPointToEnd(mergedTriggered.getBodyBlock());
+        builder.setInsertionPointToEnd(mergedBlock);
         auto *condBlock =
             getOrCreateConditionBlock(builder, triggered.getLoc(), condition,
                                       prevConditionValue, prevConditionBlock);
@@ -177,35 +150,22 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
       } else {
         prevConditionValue = Value();
         prevConditionBlock = nullptr;
-        moveBodyOperations(sourceBlock, mergedTriggered.getBodyBlock(),
-                           mergedTriggered.getBodyBlock()->end());
+        moveBodyOperations(sourceBlock, mergedBlock, mergedBlock->end());
       }
 
       triggered.erase();
     }
+    if (convertToHW)
+      finalizeHWTriggered(hwTriggered);
     changed = true;
   }
 
   return changed;
 }
 
-void SquashSimTriggeredPass::convertTriggeredOpsInBlock(Block &block) {
-  SmallVector<TriggeredOp> triggeredOps;
-  for (Operation &op : block)
-    if (auto triggered = dyn_cast<TriggeredOp>(op))
-      triggeredOps.push_back(triggered);
-
-  for (auto triggered : triggeredOps)
-    convertTriggeredToHW(triggered);
-}
-
 void SquashSimTriggeredPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
   bool changed = squashTriggeredOpsInBlock(*module.getBodyBlock());
-  if (convertToHW) {
-    convertTriggeredOpsInBlock(*module.getBodyBlock());
-    changed = true;
-  }
   if (!changed)
     markAllAnalysesPreserved();
 }
