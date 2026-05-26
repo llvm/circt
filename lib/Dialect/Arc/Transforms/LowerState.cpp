@@ -873,23 +873,13 @@ LogicalResult OpLowering::lower(hw::TriggeredOp op) {
 
   OpBuilder::InsertionGuard guard(module.builder);
   module.builder.setInsertionPoint(ifClockOp.thenYield());
+  for (auto [arg, input] : llvm::zip(op.getBodyBlock()->getArguments(), inputs))
+    module.loweredValues[{arg, Phase::New}] = input;
 
-  auto execute =
-      ExecuteOp::create(module.builder, op.getLoc(), TypeRange{}, inputs);
-  execute.getBody().emplaceBlock();
-  auto *executeBlock = &execute.getBody().front();
-  for (auto input : inputs)
-    executeBlock->addArgument(input.getType(), input.getLoc());
-
-  IRMapping mapping;
-  for (auto [arg, loweredArg] : llvm::zip(op.getBodyBlock()->getArguments(),
-                                          executeBlock->getArguments()))
-    mapping.map(arg, loweredArg);
-
-  module.builder.setInsertionPointToEnd(executeBlock);
   for (auto &bodyOp : op.getBodyBlock()->getOperations())
-    module.builder.clone(bodyOp, mapping);
-  arc::OutputOp::create(module.builder, op.getLoc());
+    if (failed(module.lowerOp(&bodyOp)))
+      return failure();
+
   return success();
 }
 
@@ -1152,17 +1142,21 @@ scf::IfOp OpLowering::createIfClockOp(Value clock) {
 /// cases. Some operations and values have special handling though. For example,
 /// states and memory reads are immediately materialized as a new read op.
 Value OpLowering::lowerValue(Value value, Phase phase) {
+  if (auto lowered = module.loweredValues.lookup({value, phase}))
+    return lowered;
+
   // Handle module inputs. They read the same in all phases.
   if (auto arg = dyn_cast<BlockArgument>(value)) {
+    if (arg.getOwner() != module.moduleOp.getBodyBlock()) {
+      if (!initial)
+        emitError(arg.getLoc()) << "block argument has not been lowered";
+      return {};
+    }
     if (initial)
       return {};
     auto state = module.allocatedInputs[arg.getArgNumber()];
     return StateReadOp::create(module.getBuilder(phase), arg.getLoc(), state);
   }
-
-  // Check if the value has already been lowered.
-  if (auto lowered = module.loweredValues.lookup({value, phase}))
-    return lowered;
 
   // At this point the value is the result of an op. (Block arguments are
   // handled above.)
