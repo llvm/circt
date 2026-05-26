@@ -47,7 +47,7 @@ hw.module @permutation(in %a: i1, in %b: i1, in %c: i1, in %d: i1, out result: i
 
 // CHECK-LABEL: hw.module @permutation_test(in %p : i1, in %q : i1, in %r : i1, in %s : i1, out result : i1) {
 hw.module @permutation_test(in %p: i1, in %q: i1, in %r: i1, in %s: i1, out result: i1) {
-    // CHECK-NEXT: %[[r0:.+]] = hw.instance "{{.+}}" @permutation(a: %r: i1, b: %p: i1, c: %s: i1, d: %q: i1) -> (result: i1) {test.arrival_times = [1]}
+    // CHECK-NEXT: %[[r0:.+]] = hw.instance "{{.+}}" @permutation(a: %s: i1, b: %p: i1, c: %q: i1, d: %r: i1) -> (result: i1) {test.arrival_times = [1]}
     %0 = synth.aig.and_inv %s, not %p : i1
     %1 = synth.aig.and_inv %q, not %r : i1
     %2 = synth.aig.and_inv %0, not %1 : i1
@@ -71,7 +71,7 @@ hw.module @and_inv_5_test(in %a : i1, in %b : i1, in %c : i1, in %d : i1, in %e:
     %5 = synth.aig.and_inv not %b, %e : i1
     %6 = synth.aig.and_inv %5, %c : i1
     %7 = synth.aig.and_inv %6, %4 : i1
-    // CHECK-NEXT: %[[result_1:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_5(a: %d: i1, b: %e: i1, c: %c: i1, d: %a: i1, e: %b: i1)
+    // CHECK-NEXT: %[[result_1:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @and_inv_5(a: %a: i1, b: %c: i1, c: %b: i1, d: %e: i1, e: %d: i1)
     
     hw.output %3, %7 : i1, i1
     // CHECK-NEXT: hw.output %[[result_0]], %[[result_1]] : i1, i1
@@ -171,7 +171,7 @@ hw.module @dot_lib(in %x : i1, in %y : i1, in %z : i1, out result : i1) attribut
 // CHECK-LABEL: @dot_test
 hw.module @dot_test(in %x : i1, in %y : i1, in %z : i1, out result : i1) {
     // Permute inputs to test the truth table computation and input handling of the dot operation.
-    // CHECK-NEXT: %[[DOT:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @dot_lib(x: %z: i1, y: %y: i1, z: %x: i1) -> (result: i1) {test.arrival_times = [1]}
+    // CHECK-NEXT: %[[DOT:.+]] = hw.instance "{{[a-zA-Z0-9_]+}}" @dot_lib(x: %y: i1, y: %x: i1, z: %z: i1) -> (result: i1) {test.arrival_times = [1]}
     // CHECK-NEXT: hw.output %[[DOT]] : i1
     %0 = synth.dot %x, not %y, not %z : i1
     hw.output %0 : i1
