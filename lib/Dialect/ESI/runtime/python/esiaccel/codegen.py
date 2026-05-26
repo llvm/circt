@@ -1108,14 +1108,41 @@ class CppTypeEmitter:
     return f'"{escaped}"'
 
   def _get_bitvector_str(self, type: types.ESIType) -> str:
-    """Get the textual code for the storage class of an integer type."""
+    """Get the textual code for the C++ type used to represent an integer
+    field's value at the API boundary.
+
+    Integers up to 64 bits map to the native `int{N}_t` / `uint{N}_t`
+    (or `bool` for a single bit) storage types so common scalars stay
+    zero-overhead, behave identically to plain C ints, and stay valid as
+    template parameters for the existing `TypedReadPort<T>` /
+    `TypedWritePort<T>` / `TypedFunction<...>` machinery.
+
+    Wider integers (signed > 64 bits, unsigned > 64 bits, or any
+    `BitsType` > 64 bits) fall back to the non-owning view classes from
+    `esi/Values.h`: `esi::BitVector` for `BitsType`, `esi::IntView` for
+    signed integers, `esi::UIntView` for unsigned. All three are
+    non-owning views over the parent struct's bytes, so generated
+    getters are zero-allocation; see the lifetime note on `BitVector`
+    and at the top of the generated header.
+    """
     assert isinstance(type, (types.BitsType, types.IntType))
+
+    if type.bit_width > 64:
+      if isinstance(type, types.BitsType):
+        return "esi::BitVector"
+      if isinstance(type, types.UIntType):
+        return "esi::UIntView"
+      return "esi::IntView"
 
     return self._storage_type(
         type.bit_width, not isinstance(type, (types.BitsType, types.UIntType)))
 
   def _storage_type(self, bit_width: int, signed: bool) -> str:
-    """Get the textual code for a byte-addressable integer storage type."""
+    """Get the textual code for a native byte-addressable integer storage
+    type. Only valid for widths 1..64; wider integers are handled by
+    `_get_bitvector_str` via the `esi::IntView` / `esi::UIntView` view
+    classes.
+    """
 
     if bit_width == 1:
       return "bool"
@@ -1128,11 +1155,21 @@ class CppTypeEmitter:
     elif bit_width <= 64:
       storage_width = 64
     else:
-      raise ValueError(f"Unsupported integer width: {bit_width}")
+      raise ValueError(f"Unsupported native integer width: {bit_width}")
 
     if not signed:
       return f"uint{storage_width}_t"
     return f"int{storage_width}_t"
+
+  def _is_value_class_type(self, field_type: types.ESIType) -> bool:
+    """True if the C++ representation of this integer field is one of
+    the `esi::{BitVector,IntView,UIntView}` view classes from
+    `esi/Values.h` rather than a native integer.
+    """
+    wrapped = self._unwrap_aliases(field_type)
+    if not isinstance(wrapped, (types.BitsType, types.IntType)):
+      return False
+    return wrapped.bit_width > 64
 
   def _type_byte_width(self, wrapped: types.ESIType) -> int:
     """Return the size of a fixed-width type in bytes."""
@@ -1222,6 +1259,8 @@ class CppTypeEmitter:
     field_cpp = self._cpp_type(field_type)
     wrapped = self._unwrap_aliases(field_type)
     if isinstance(wrapped, (types.BitsType, types.IntType)):
+      if self._is_value_class_type(field_type):
+        return f"const {field_cpp} &{field_name}"
       return f"{field_cpp} {field_name}"
     return f"const {field_cpp} &{field_name}"
 
@@ -1387,7 +1426,7 @@ class CppTypeEmitter:
     `self_type &` so the caller can chain calls (e.g.
     `Foo{}.a(1).b(2).inner(x)`).
 
-    For integer fields the emitter picks between three inline strategies,
+    For integer fields the emitter picks between four inline strategies,
     fastest first:
 
       * Path A — 8/16/32/64-bit fields at a byte-aligned offset. Read/write
@@ -1402,6 +1441,15 @@ class CppTypeEmitter:
       * Path C — sub-byte alignment. Fall back to the
         `esi::detail::{read,write}{Un,}signedBits` helpers from
         `esi/BitAccess.h`, which loop over the constituent bits.
+      * Path D — view-class fields. Triggered when `_is_value_class_type`
+        is true — currently widths above 64 bits, for any of `BitsType`,
+        signed, or unsigned. Returns a non-owning
+        `esi::BitVector` / `esi::IntView` / `esi::UIntView` view *into*
+        the parent struct's `_bytes` -- zero allocation, no copy. The
+        setter accepts any `esi::BitVector` (so views and owning
+        subclasses both work) and writes back via `copyBitsOut`. The
+        returned view dangles when the parent buffer dies; see the
+        lifetime warning at the top of the generated header.
     """
     field_cpp = self._cpp_type(field_type)
     if field_cpp == "void":
@@ -1410,6 +1458,45 @@ class CppTypeEmitter:
     wrapped = self._unwrap_aliases(field_type)
 
     if isinstance(wrapped, (types.BitsType, types.IntType)):
+      # Path D: view-class field. Today this is exactly the
+      # wider-than-64-bit integer / Bits cases; gated by
+      # `_is_value_class_type` so the rule lives in one place.
+      if self._is_value_class_type(field_type):
+        byte_offset = bit_offset // 8
+        sub_bit_index = bit_offset % 8
+        # Number of bytes the view needs to span: the high bit is at
+        # `sub_bit_index + bit_width - 1`, so we cover
+        # ceil((sub_bit_index + bit_width) / 8) bytes starting at
+        # `_bytes.data() + byte_offset`.
+        span_bytes = (sub_bit_index + bit_width + 7) // 8
+        hdr.write(f"{indent}{field_cpp} {field_name}() const {{\n")
+        hdr.write(f"{indent}  return {field_cpp}(\n")
+        hdr.write(f"{indent}      std::span<const uint8_t>("
+                  f"{raw_member}.data() + {byte_offset}, {span_bytes}),\n")
+        hdr.write(f"{indent}      static_cast<std::size_t>({bit_width}),\n")
+        hdr.write(f"{indent}      static_cast<uint8_t>({sub_bit_index}));\n")
+        hdr.write(f"{indent}}}\n")
+        hdr.write(f"{indent}{self_type} &{field_name}("
+                  f"const {field_cpp} &v) {{\n")
+        # Walk the input view bit-by-bit and write each bit straight
+        # into `_bytes` at its target position.
+        hdr.write(f"{indent}  const std::size_t n = "
+                  f"std::min<std::size_t>(v.width(), {bit_width});\n")
+        hdr.write(
+            f"{indent}  for (std::size_t b = 0; b < {bit_width}; ++b) {{\n")
+        hdr.write(f"{indent}    const std::size_t g = {bit_offset} + b;\n")
+        hdr.write(f"{indent}    const bool val = (b < n) && v.getBit(b);\n")
+        hdr.write(f"{indent}    if (val)\n")
+        hdr.write(f"{indent}      {raw_member}[g / 8] |= "
+                  f"static_cast<uint8_t>(uint8_t{{1}} << (g % 8));\n")
+        hdr.write(f"{indent}    else\n")
+        hdr.write(f"{indent}      {raw_member}[g / 8] &= "
+                  f"static_cast<uint8_t>(~(uint8_t{{1}} << (g % 8)));\n")
+        hdr.write(f"{indent}  }}\n")
+        hdr.write(f"{indent}  return *this;\n")
+        hdr.write(f"{indent}}}\n")
+        return
+
       # `bool` is the storage choice for a single bit; bit-precise helpers
       # are the simplest fit and the optimiser collapses them on -O2.
       if bit_width == 1 and field_cpp == "bool":
@@ -1547,40 +1634,48 @@ class CppTypeEmitter:
     byte_offset = bit_offset // 8
     byte_width = (bit_width + 7) // 8
 
-    if byte_aligned:
-      # Byte-aligned: direct byte copy between the parent's buffer slice
-      # and the inner aggregate's `_bytes`. An explicit per-byte loop
-      # avoids `memcpy` while still collapsing to one on -O2.
-      hdr.write(f"{indent}{field_cpp} {field_name}() const {{\n")
-      hdr.write(f"{indent}  {field_cpp} out{{}};\n")
-      hdr.write(f"{indent}  for (std::size_t i = 0; i < {byte_width}; ++i)\n")
-      hdr.write(f"{indent}    reinterpret_cast<uint8_t *>(&out)[i] = "
-                f"{raw_member}[{byte_offset} + i];\n")
-      hdr.write(f"{indent}  return out;\n")
-      hdr.write(f"{indent}}}\n")
-      hdr.write(f"{indent}{self_type} &{field_name}(const {field_cpp} &v) {{\n")
-      hdr.write(f"{indent}  for (std::size_t i = 0; i < {byte_width}; ++i)\n")
-      hdr.write(f"{indent}    {raw_member}[{byte_offset} + i] = "
-                f"reinterpret_cast<const uint8_t *>(&v)[i];\n")
-      hdr.write(f"{indent}  return *this;\n")
-      hdr.write(f"{indent}}}\n")
-    else:
-      # Non-byte-aligned: delegate to the per-bit copy helpers. The inner's
-      # `out{}` zero-initialiser is required by `copyBitsIn`, which only
-      # OR-sets the `1` bits.
-      hdr.write(f"{indent}{field_cpp} {field_name}() const {{\n")
-      hdr.write(f"{indent}  {field_cpp} out{{}};\n")
-      hdr.write(f"{indent}  esi::detail::copyBitsIn<{bit_offset}, "
-                f"{bit_width}>({raw_member}.data(), "
-                f"reinterpret_cast<uint8_t *>(&out));\n")
-      hdr.write(f"{indent}  return out;\n")
-      hdr.write(f"{indent}}}\n")
-      hdr.write(f"{indent}{self_type} &{field_name}(const {field_cpp} &v) {{\n")
-      hdr.write(f"{indent}  esi::detail::copyBitsOut<{bit_offset}, "
-                f"{bit_width}>({raw_member}.data(), "
-                f"reinterpret_cast<const uint8_t *>(&v));\n")
-      hdr.write(f"{indent}  return *this;\n")
-      hdr.write(f"{indent}}}\n")
+    # An array whose element is one of the `esi::{BitVector,IntView,
+    # UIntView}`.
+    is_view_array = (isinstance(wrapped, types.ArrayType) and
+                     self._is_value_class_type(wrapped.element_type))
+
+    if not is_view_array:
+      if byte_aligned:
+        # Byte-aligned: direct byte copy between the parent's buffer slice
+        # and the inner aggregate's `_bytes`. An explicit per-byte loop
+        # avoids `memcpy` while still collapsing to one on -O2.
+        hdr.write(f"{indent}{field_cpp} {field_name}() const {{\n")
+        hdr.write(f"{indent}  {field_cpp} out{{}};\n")
+        hdr.write(f"{indent}  for (std::size_t i = 0; i < {byte_width}; ++i)\n")
+        hdr.write(f"{indent}    reinterpret_cast<uint8_t *>(&out)[i] = "
+                  f"{raw_member}[{byte_offset} + i];\n")
+        hdr.write(f"{indent}  return out;\n")
+        hdr.write(f"{indent}}}\n")
+        hdr.write(
+            f"{indent}{self_type} &{field_name}(const {field_cpp} &v) {{\n")
+        hdr.write(f"{indent}  for (std::size_t i = 0; i < {byte_width}; ++i)\n")
+        hdr.write(f"{indent}    {raw_member}[{byte_offset} + i] = "
+                  f"reinterpret_cast<const uint8_t *>(&v)[i];\n")
+        hdr.write(f"{indent}  return *this;\n")
+        hdr.write(f"{indent}}}\n")
+      else:
+        # Non-byte-aligned: delegate to the per-bit copy helpers. The
+        # inner's `out{}` zero-initialiser is required by `copyBitsIn`,
+        # which only OR-sets the `1` bits.
+        hdr.write(f"{indent}{field_cpp} {field_name}() const {{\n")
+        hdr.write(f"{indent}  {field_cpp} out{{}};\n")
+        hdr.write(f"{indent}  esi::detail::copyBitsIn<{bit_offset}, "
+                  f"{bit_width}>({raw_member}.data(), "
+                  f"reinterpret_cast<uint8_t *>(&out));\n")
+        hdr.write(f"{indent}  return out;\n")
+        hdr.write(f"{indent}}}\n")
+        hdr.write(
+            f"{indent}{self_type} &{field_name}(const {field_cpp} &v) {{\n")
+        hdr.write(f"{indent}  esi::detail::copyBitsOut<{bit_offset}, "
+                  f"{bit_width}>({raw_member}.data(), "
+                  f"reinterpret_cast<const uint8_t *>(&v));\n")
+        hdr.write(f"{indent}  return *this;\n")
+        hdr.write(f"{indent}}}\n")
 
     # Convenience indexed accessors for fixed-size arrays. The whole-array
     # getter/setter above is always sufficient; these helpers just save a
@@ -1589,8 +1684,8 @@ class CppTypeEmitter:
     # position and the element width is a whole number of bytes — anything
     # else has to go through the whole-array accessor since per-element
     # bit shuffling would require its own per-element offset arithmetic.
-    if (isinstance(wrapped, types.ArrayType) and byte_aligned and
-        wrapped.element_type.bit_width % 8 == 0):
+    if (not is_view_array and isinstance(wrapped, types.ArrayType) and
+        byte_aligned and wrapped.element_type.bit_width % 8 == 0):
       elem_cpp = self._cpp_type(wrapped.element_type)
       if elem_cpp != "void":
         elem_bytes = self._field_byte_width(wrapped.element_type)
@@ -1608,6 +1703,81 @@ class CppTypeEmitter:
                   f" + j] = reinterpret_cast<const uint8_t *>(&v)[j];\n")
         hdr.write(f"{indent}  return *this;\n")
         hdr.write(f"{indent}}}\n")
+
+    # Indexed accessors for arrays whose element is one of the view
+    # classes (`BitVector` / `IntView` / `UIntView`). The whole-array
+    # byte-copy path is intentionally skipped (the view's storage layout
+    # doesn't match the wire layout). Instead we emit three accessors:
+    #
+    #   * `field(i)` / `field(i, v)` -- per-element getter (zero-copy
+    #     view into the relevant slice of `_bytes`) and setter
+    #     (runtime per-bit copy, since `copyBitsOut` needs a
+    #     compile-time offset and the array index is runtime).
+    #   * `field()` -- a lazy `std::views::iota | std::views::transform`
+    #     range that yields the per-element views on demand. Random
+    #     access, no allocation, no element materialised until accessed.
+    #   * `field(const std::array<view, N> &)` -- whole-array setter
+    #     that delegates to the per-element setter N times. Lets the
+    #     emplace-style struct ctor accept view-array fields as a
+    #     single argument.
+    #
+    # All three share the parent struct's lifetime; see the warning at
+    # the top of the generated header.
+    if is_view_array:
+      assert isinstance(wrapped, types.ArrayType)
+      elem_type = wrapped.element_type
+      elem_cpp = self._cpp_type(elem_type)
+      elem_width = elem_type.bit_width
+      elem_count = wrapped.size
+      hdr.write(f"{indent}{elem_cpp} {field_name}(std::size_t i) const {{\n")
+      hdr.write(f"{indent}  const std::size_t bit_off = "
+                f"{bit_offset} + i * {elem_width};\n")
+      hdr.write(f"{indent}  return {elem_cpp}(\n")
+      hdr.write(f"{indent}      std::span<const uint8_t>("
+                f"{raw_member}.data() + bit_off / 8,\n")
+      hdr.write(f"{indent}                               "
+                f"(bit_off % 8 + {elem_width} + 7) / 8),\n")
+      hdr.write(f"{indent}      static_cast<std::size_t>({elem_width}),\n")
+      hdr.write(f"{indent}      static_cast<uint8_t>(bit_off % 8));\n")
+      hdr.write(f"{indent}}}\n")
+      hdr.write(f"{indent}{self_type} &{field_name}(std::size_t i, "
+                f"const {elem_cpp} &v) {{\n")
+      hdr.write(f"{indent}  const std::size_t bit_off = "
+                f"{bit_offset} + i * {elem_width};\n")
+      hdr.write(f"{indent}  const std::size_t n = "
+                f"std::min<std::size_t>(v.width(), {elem_width});\n")
+      hdr.write(
+          f"{indent}  for (std::size_t b = 0; b < {elem_width}; ++b) {{\n")
+      hdr.write(f"{indent}    const std::size_t g = bit_off + b;\n")
+      hdr.write(f"{indent}    const bool val = (b < n) && v.getBit(b);\n")
+      hdr.write(f"{indent}    if (val)\n")
+      hdr.write(f"{indent}      {raw_member}[g / 8] |= "
+                f"static_cast<uint8_t>(uint8_t{{1}} << (g % 8));\n")
+      hdr.write(f"{indent}    else\n")
+      hdr.write(f"{indent}      {raw_member}[g / 8] &= "
+                f"static_cast<uint8_t>(~(uint8_t{{1}} << (g % 8)));\n")
+      hdr.write(f"{indent}  }}\n")
+      hdr.write(f"{indent}  return *this;\n")
+      hdr.write(f"{indent}}}\n")
+      # Lazy whole-array view: `iota(0, N) | transform([this](i){ ... })`
+      # gives a random-access range of `elem_cpp` views computed on
+      # access, with zero up-front allocation.
+      hdr.write(f"{indent}auto {field_name}() const {{\n")
+      hdr.write(f"{indent}  return std::views::iota("
+                f"std::size_t{{0}}, std::size_t{{{elem_count}}}) |\n")
+      hdr.write(f"{indent}         std::views::transform("
+                f"[this](std::size_t i) {{\n")
+      hdr.write(f"{indent}           return this->{field_name}(i);\n")
+      hdr.write(f"{indent}         }});\n")
+      hdr.write(f"{indent}}}\n")
+      # Whole-array setter: forwards to the per-element setter for
+      # each index.
+      hdr.write(f"{indent}{self_type} &{field_name}("
+                f"const std::array<{elem_cpp}, {elem_count}> &v) {{\n")
+      hdr.write(f"{indent}  for (std::size_t i = 0; i < {elem_count}; ++i)\n")
+      hdr.write(f"{indent}    {field_name}(i, v[i]);\n")
+      hdr.write(f"{indent}  return *this;\n")
+      hdr.write(f"{indent}}}\n")
 
   def _ctor_param_type(self, field_type: types.ESIType) -> str:
     """Return the C++ constructor-parameter type for a setter call."""
@@ -1994,11 +2164,21 @@ class CppTypeEmitter:
       hdr.write(
           textwrap.dedent(f"""
         // Generated header for {system_name} types.
+        //
+        // Lifetime note: accessors that return `esi::BitVector` (for
+        // `Bits<N>` fields), `esi::IntView` (for `Int<N>`, N > 64), or
+        // `esi::UIntView` (for `UInt<N>`, N > 64) hand back non-owning
+        // views into the parent struct's bytes. The view is only valid
+        // while the parent is alive. Bind the parent to a named local
+        // first, or construct an owning `esi::Int` / `esi::UInt` /
+        // `esi::MutableBitVector` from the view if you need the value
+        // to outlive its source. See `esi/Values.h` for details.
         #pragma once
 
         #include <cstdint>
         #include <cstddef>
         #include <cstring>
+        #include <algorithm>
         #include <any>
         #include <array>
         #include <limits>
@@ -2011,6 +2191,7 @@ class CppTypeEmitter:
         #include "esi/BitAccess.h"
         #include "esi/Common.h"
         #include "esi/TypedPorts.h"
+        #include "esi/Values.h"
 
         namespace {system_name} {{
 

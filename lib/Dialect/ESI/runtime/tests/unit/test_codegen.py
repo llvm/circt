@@ -48,6 +48,16 @@ _sint24 = types.SIntType("si24", 24)
 _sint32 = types.SIntType("si32", 32)
 _sint64 = types.SIntType("si64", 64)
 
+# Path D: value-class fields backed by `esi::IntView` / `esi::UIntView` /
+# `esi::BitVector` (any width supported; only wider-than-64 cases route
+# through the view classes -- narrower Bits/Int/UInt stay on the native
+# int paths). Tested below with 96- and 128-bit widths.
+_bits128 = types.BitsType("bits128", 128)
+_uint96 = types.UIntType("ui96", 96)
+_uint128 = types.UIntType("ui128", 128)
+_sint96 = types.SIntType("si96", 96)
+_sint128 = types.SIntType("si128", 128)
+
 # ---------------------------------------------------------------------------
 # Harness Manifest Builder
 # ---------------------------------------------------------------------------
@@ -167,9 +177,69 @@ def _build_harness_manifest():
   # Hand-name the window so the harness can spell `ListWindow` directly.
   list_window = types.TypeAlias("@ListWindow", "ListWindow", list_window_inner)
 
+  # Path D: value-class fields backed by `esi::MutableBitVector` /
+  # `esi::Int` / `esi::UInt` from `esi/Values.h`. Covers BitsType at
+  # both narrow and wide widths, plus signed/unsigned integers above
+  # the 64-bit native ceiling. Layout fields cover byte-aligned and
+  # bit-misaligned wide-int offsets so both branches of `copyBitsIn`
+  # / `copyBitsOut` get exercised.
+  wide_u_inner = types.StructType(
+      "@WideU::inner",
+      [("u96", _uint96), ("u128", _uint128)],
+  )
+  wide_u = types.TypeAlias("@WideU", "WideU", wide_u_inner)
+  wide_s_inner = types.StructType(
+      "@WideS::inner",
+      [("s96", _sint96), ("s128", _sint128)],
+  )
+  wide_s = types.TypeAlias("@WideS", "WideS", wide_s_inner)
+  # Bits-typed fields > 64 bits route through the value-class path
+  # (`esi::BitVector` view); narrower Bits stay on the native int paths
+  # and don't need a dedicated harness here.
+  bits_inner = types.StructType(
+      "@BitsField::inner",
+      [("wide", _bits128)],
+  )
+  bits_field = types.TypeAlias("@BitsField", "BitsField", bits_inner)
+  # Place the wide UInt field *before* a 3-bit tag in the manifest.
+  # Field order is reversed on the wire (`cpp_type.reverse=True`), so the
+  # LAST manifest field lands at wire bit 0. Listing `payload` first and
+  # `tag` last puts `tag` at bits 0..2 (byte-aligned) and the 128-bit
+  # `payload` at bits 3..130 — exercising the
+  # `copyBitsIn<bit_offset, 128>` / `copyBitsOut` arm of Path D rather
+  # than only the byte-aligned case.
+  wide_mis_inner = types.StructType(
+      "@WideMisaligned::inner",
+      [("payload", _uint128), ("tag", _uint3)],
+  )
+  wide_mis = types.TypeAlias("@WideMisaligned", "WideMisaligned",
+                             wide_mis_inner)
+
+  # Array of view-class elements. The planner used to skip parent types
+  # that reached this construct; now the emitter handles them by emitting
+  # per-element indexed accessors that build fresh views into `_bytes`.
+  # Use ui128 (a view-class type) at multiple element widths to exercise
+  # both byte-aligned and bit-misaligned per-element offsets.
+  arr3_u128_type = types.ArrayType("!hw.array<3xui128>", _uint128, 3)
+  arr_views_inner = types.StructType(
+      "@ArrViews::inner",
+      [("items", arr3_u128_type)],
+  )
+  arr_views = types.TypeAlias("@ArrViews", "ArrViews", arr_views_inner)
+  # Same array placed after a 3-bit tag so the array starts at bit 3
+  # and successive elements land at non-byte-aligned per-element
+  # offsets (3, 131, 259, ...).
+  arr_views_mis_inner = types.StructType(
+      "@ArrViewsMis::inner",
+      [("items", arr3_u128_type), ("tag", _uint3)],
+  )
+  arr_views_mis = types.TypeAlias("@ArrViewsMis", "ArrViewsMis",
+                                  arr_views_mis_inner)
+
   return [
       std_u, std_s, odd_u, odd_s, sub_u, sub_s, bool_field, outer, misaligned,
-      arr4, union_two, list_window
+      arr4, union_two, list_window, wide_u, wide_s, bits_field, wide_mis,
+      arr_views, arr_views_mis
   ]
 
 

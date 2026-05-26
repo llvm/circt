@@ -39,6 +39,15 @@ class MutableBitVector;
 /// BitVector is immutable wrt. modifying the underlying bits, and provides
 /// read-only access to bits. It supports bit-level access and returns new views
 /// for operations.
+///
+/// Lifetime: `BitVector`, `IntView`, and `UIntView` (defined just below)
+/// are non-owning views, in the same family as `std::span` /
+/// `std::string_view`. They store only a span pointer + width + bitIndex
+/// and do not extend the lifetime of the underlying buffer. A view
+/// returned from an accessor of a temporary dangles once the temporary
+/// is destroyed; bind the parent to a named local, or construct an
+/// owning `Int` / `UInt` / `MutableBitVector` from the view if the value
+/// needs to outlive its source.
 class BitVector {
 public:
   using byte = uint8_t;
@@ -178,6 +187,90 @@ protected:
   std::span<const byte> data{};
   size_t bitWidth = 0;  // Number of valid bits.
   uint8_t bitIndex = 0; // Starting bit offset in first byte.
+
+  // Scan bits [lowExclusive, width()-1] in byte-sized chunks and throw
+  // `std::overflow_error(std::vformat(fmt, std::make_format_args(target)))`
+  // if any of them differ from `expectedByte` (0x00 to check
+  // "all-zero" for the unsigned narrow-conversion case; 0xFF to check
+  // "all-one" for the signed narrow-conversion case with the sign bit
+  // set).
+  void checkHighBytesEqual(unsigned lowExclusive, uint8_t expectedByte,
+                           const char *fmt, unsigned target) const;
+};
+
+/// Non-owning view of an unsigned bit vector with `toUI64()` and implicit
+/// conversions to unsigned scalar types. Adds only static-type tagging and
+/// conversion methods on top of `BitVector`. See the lifetime note on
+/// `BitVector`.
+class UIntView : public BitVector {
+public:
+  using BitVector::BitVector;
+  UIntView() = default;
+  /// Adopt an existing view as unsigned. Cheap (no copy of bytes); the
+  /// resulting UIntView aliases the same buffer.
+  UIntView(const BitVector &v) : BitVector(v) {}
+
+  /// Convert to a `uint64_t`, throwing if the value does not fit.
+  uint64_t toUI64() const;
+  operator uint64_t() const { return toUI64(); }
+  operator uint32_t() const { return toUInt<uint32_t>(); }
+  operator uint16_t() const { return toUInt<uint16_t>(); }
+  operator uint8_t() const { return toUInt<uint8_t>(); }
+
+private:
+  template <typename T>
+  T toUInt() const {
+    static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
+                  "T must be an unsigned integral type");
+    constexpr unsigned N = sizeof(T) * 8;
+    // Pre-conversion range check: bits [N, width-1] must all be zero
+    // for the value to fit in unsigned `T`. We have to do this
+    // *before* `toUI64()` because `toUI64()` would itself throw
+    // "does not fit in uint64_t" for any wide value where bits 64+
+    // are set -- even if the low N bits would have fit in `T`.
+    if (this->width() > N)
+      this->checkHighBytesEqual(N, /*expectedByte=*/uint8_t{0},
+                                "UInt does not fit in uint{}_t", N);
+    return static_cast<T>(toUI64());
+  }
+};
+
+/// Non-owning view of a signed bit vector with `toI64()` and implicit
+/// conversions to signed scalar types. See the lifetime note on `BitVector`.
+class IntView : public BitVector {
+public:
+  using BitVector::BitVector;
+  IntView() = default;
+  /// Adopt an existing view as signed. Cheap (no copy of bytes); the
+  /// resulting IntView aliases the same buffer.
+  IntView(const BitVector &v) : BitVector(v) {}
+
+  /// Convert to an `int64_t`, sign-extending from the high bit and throwing
+  /// if the value does not fit.
+  int64_t toI64() const;
+  operator int64_t() const { return toI64(); }
+  operator int32_t() const { return toInt<int32_t>(); }
+  operator int16_t() const { return toInt<int16_t>(); }
+  operator int8_t() const { return toInt<int8_t>(); }
+
+private:
+  template <typename T>
+  T toInt() const {
+    static_assert(std::is_integral<T>::value && std::is_signed<T>::value,
+                  "T must be a signed integral type");
+    constexpr unsigned N = sizeof(T) * 8;
+    // Pre-conversion range check: bits [N, width-1] must all equal
+    // the sign bit (bit N-1) for the value to fit in signed `T`. We
+    // have to do this *before* `toI64()` because `toI64()` would
+    // itself throw "does not fit in int64_t" for any wide value
+    // whose bits 64+ don't sign-extend bit 63 -- even if the actual
+    // problem is that the value doesn't fit in `T`.
+    if (this->width() > N) {
+      const uint8_t expected = this->getBit(N - 1) ? uint8_t{0xFF} : uint8_t{0};
+      this->checkHighBytesEqual(N, expected, "Int does not fit in int{}_t", N);
+    }
+    return static_cast<T>(toI64());
+  }
 };
 
 /// A mutable bit vector that owns its underlying storage.
@@ -245,59 +338,31 @@ private:
 
 std::ostream &operator<<(std::ostream &os, const BitVector &bv);
 
-// Arbitrary width signed integer type built on MutableBitVector.
+// Arbitrary width signed integer type built on MutableBitVector. The
+// scalar-conversion operators all delegate to `IntView` so the
+// canonical width-check + i64 conversion lives in one place.
 class Int : public MutableBitVector {
 public:
   using MutableBitVector::MutableBitVector;
   Int() = default;
   Int(int64_t v, unsigned width = 64);
-  operator int64_t() const { return toI64(); }
-  operator int32_t() const { return toInt<int32_t>(); }
-  operator int16_t() const { return toInt<int16_t>(); }
-  operator int8_t() const { return toInt<int8_t>(); }
-
-private:
-  template <typename T>
-  T toInt() const {
-    static_assert(std::is_integral<T>::value && std::is_signed<T>::value,
-                  "T must be a signed integral type");
-    int64_t v = toI64();
-    fits(v, sizeof(T) * 8);
-    return static_cast<T>(v);
-  }
-
-  // Convert the bitvector to a signed intN_t, throwing if the value doesn't
-  // fit.
-  int64_t toI64() const;
-
-  // Check if the given value fits in the specified bit width.
-  static void fits(int64_t v, unsigned n);
+  operator int64_t() const { return IntView(*this); }
+  operator int32_t() const { return IntView(*this); }
+  operator int16_t() const { return IntView(*this); }
+  operator int8_t() const { return IntView(*this); }
 };
 
-// Arbitrary width unsigned integer type built on MutableBitVector.
+// Arbitrary width unsigned integer type built on MutableBitVector. The
+// scalar-conversion operators all delegate to `UIntView`.
 class UInt : public MutableBitVector {
 public:
   using MutableBitVector::MutableBitVector;
   UInt() = default;
   UInt(uint64_t v, unsigned width = 64);
-  operator uint64_t() const { return toUI64(); }
-  operator uint32_t() const { return toUInt<uint32_t>(); }
-  operator uint16_t() const { return toUInt<uint16_t>(); }
-  operator uint8_t() const { return toUInt<uint8_t>(); }
-
-private:
-  uint64_t toUI64() const;
-
-  static void fits(uint64_t v, unsigned n);
-
-  template <typename T>
-  T toUInt() const {
-    static_assert(std::is_integral<T>::value && std::is_unsigned<T>::value,
-                  "T must be an unsigned integral type");
-    uint64_t v = toUI64();
-    fits(v, sizeof(T) * 8);
-    return static_cast<T>(v);
-  }
+  operator uint64_t() const { return UIntView(*this); }
+  operator uint32_t() const { return UIntView(*this); }
+  operator uint16_t() const { return UIntView(*this); }
+  operator uint8_t() const { return UIntView(*this); }
 };
 
 } // namespace esi
