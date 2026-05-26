@@ -793,17 +793,20 @@ static void cleanupDeadSimFmtOps(ArrayRef<Operation *> seedOps) {
   }
 }
 
-LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
-                                          const TypeConverter &typeConverter,
-                                          SimConversionState &state) {
+LogicalResult lowerPrintLikeOps(hw::HWModuleOp module,
+                                const TypeConverter &typeConverter,
+                                SimConversionState &state) {
   SmallVector<GetFileOp> getFileOps;
   SmallVector<PrintFormattedProcOp> printOps;
+  SmallVector<FlushOp> flushOps;
   SmallVector<Operation *, 8> cleanupSeeds;
   module.walk([&](Operation *op) {
     if (auto getFileOp = dyn_cast<GetFileOp>(op))
       getFileOps.push_back(getFileOp);
     if (auto printOp = dyn_cast<PrintFormattedProcOp>(op))
       printOps.push_back(printOp);
+    if (auto flushOp = dyn_cast<FlushOp>(op))
+      flushOps.push_back(flushOp);
   });
 
   for (auto getFileOp : getFileOps) {
@@ -819,6 +822,18 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     state.usedFileDescriptorRuntime = true;
     state.usedSynthesisMacro = true;
     cleanupSeeds.push_back(getFileOp);
+  }
+
+  for (auto flushOp : flushOps) {
+    OpBuilder builder(flushOp);
+    auto stream = flushOp.getStream();
+    auto fdType = typeConverter.convertType(stream.getType());
+    assert(fdType && "expected output stream type conversion");
+    Value fd = mlir::UnrealizedConversionCastOp::create(
+                   builder, flushOp.getLoc(), fdType, stream)
+                   ->getResult(0);
+    sv::FFlushOp::create(builder, flushOp.getLoc(), fd);
+    cleanupSeeds.push_back(flushOp);
   }
 
   for (auto printOp : printOps) {
@@ -869,7 +884,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       SimTypeConverter typeConverter(context);
       SimConversionState state;
 
-      if (failed(lowerPrintFormattedProcToSV(module, typeConverter, state)))
+      if (failed(lowerPrintLikeOps(module, typeConverter, state)))
         return failure();
 
       if (moveOpsIntoIfdefGuardsAndProcesses(module))
