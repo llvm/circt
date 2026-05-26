@@ -423,6 +423,46 @@ bool BitVector::operator==(const BitVector &rhs) const {
   return std::ranges::equal(*this, rhs);
 }
 
+// Loop-peeled byte-walk over bits [lowExclusive, bitWidth-1]: the first
+// and last bytes may start/end mid-byte and need masked comparisons; every
+// byte in between is a full-byte XOR-with-expected. The masked mismatches
+// are OR-accumulated into a single byte so the only branch is the final
+// throw decision, and the middle-byte loop body is just
+// `diff |= data[b] ^ expected` -- which the compiler can auto-vectorise.
+//
+// In the common emitted-accessor case where `bitIndex == 0` and
+// `lowExclusive` is a multiple of 8 (it always is: 8, 16, 32, or 64 for
+// the narrow-int conversions), `loBit == 0` and the first-byte peel
+// collapses to a full-byte compare too -- the optimiser folds it.
+void BitVector::checkHighBytesEqual(unsigned lowExclusive, uint8_t expectedByte,
+                                    const char *fmt, unsigned target) const {
+  const size_t absLo = bitIndex + lowExclusive;
+  const size_t absHi = bitIndex + bitWidth - 1;
+  const size_t byteLo = absLo / 8;
+  const size_t byteHi = absHi / 8;
+  const unsigned loBit = absLo & 7u;
+  const unsigned hiBit = absHi & 7u;
+  uint8_t diff;
+  if (byteLo == byteHi) {
+    // Whole range fits in one byte; mask = bits [loBit, hiBit].
+    const uint8_t mask =
+        static_cast<uint8_t>(((1u << (hiBit - loBit + 1u)) - 1u) << loBit);
+    diff = static_cast<uint8_t>(data[byteLo] ^ expectedByte) & mask;
+  } else {
+    // Peel the first byte: mask off bits below loBit.
+    const uint8_t firstMask = static_cast<uint8_t>(0xFFu << loBit);
+    diff = static_cast<uint8_t>(data[byteLo] ^ expectedByte) & firstMask;
+    // Middle bytes: full-byte mask, branchless body.
+    for (size_t b = byteLo + 1; b < byteHi; ++b)
+      diff |= static_cast<uint8_t>(data[b] ^ expectedByte);
+    // Peel the last byte: mask off bits above hiBit.
+    const uint8_t lastMask = static_cast<uint8_t>((1u << (hiBit + 1u)) - 1u);
+    diff |= static_cast<uint8_t>(data[byteHi] ^ expectedByte) & lastMask;
+  }
+  if (diff != 0)
+    throw std::overflow_error(std::vformat(fmt, std::make_format_args(target)));
+}
+
 UInt::UInt(uint64_t v, unsigned width) : MutableBitVector(width) {
   if (width > 0 && width < 64 && (v >> width) != 0)
     throw std::overflow_error(
@@ -495,7 +535,7 @@ MutableBitVector::operator^(const MutableBitVector &other) const {
   return result;
 }
 
-int64_t Int::toI64() const {
+int64_t IntView::toI64() const {
   if (this->bitWidth == 0)
     return 0;
   uint64_t u = 0;
@@ -511,42 +551,19 @@ int64_t Int::toI64() const {
     }
     return static_cast<int64_t>(u);
   }
-  for (size_t i = 64; i < this->bitWidth; ++i) {
-    if (this->getBit(i) != signBit)
-      throw std::overflow_error("Int does not fit in int64_t");
-  }
+  if (this->bitWidth > 64)
+    checkHighBytesEqual(64, signBit ? uint8_t{0xFF} : uint8_t{0x00},
+                        "Int does not fit in int{}_t", 64);
   return static_cast<int64_t>(u);
 }
 
-void Int::fits(int64_t v, unsigned n) {
-  if (n == 0 || n > 64)
-    throw std::invalid_argument(std::format("Invalid bit width: {}", n));
-  int64_t min = -(1LL << (n - 1));
-  int64_t max = (1LL << (n - 1)) - 1;
-  if (v < min || v > max)
-    throw std::overflow_error(
-        std::format("Value {} does not fit in int{}_t", v, n));
-}
-
-uint64_t UInt::toUI64() const {
-  if (this->bitWidth > 64) {
-    for (size_t i = 64; i < this->bitWidth; ++i)
-      if (this->getBit(i))
-        throw std::overflow_error("Int does not fit in uint64_t");
-  }
+uint64_t UIntView::toUI64() const {
+  if (this->bitWidth > 64)
+    checkHighBytesEqual(64, uint8_t{0x00}, "UInt does not fit in uint{}_t", 64);
   uint64_t u = 0;
   size_t limit = this->bitWidth < 64 ? this->bitWidth : 64;
   for (size_t i = 0; i < limit; ++i)
     if (this->getBit(i))
       u |= (1ULL << i);
   return u;
-}
-
-void UInt::fits(uint64_t v, unsigned n) {
-  if (n == 0 || n > 64)
-    throw std::invalid_argument(std::format("Invalid bit width: {}", n));
-  uint64_t max = (n == 64) ? UINT64_MAX : ((1ULL << n) - 1);
-  if (v > max)
-    throw std::overflow_error(
-        std::format("Value {} does not fit in uint{}_t", v, n));
 }

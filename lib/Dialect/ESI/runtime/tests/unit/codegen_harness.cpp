@@ -18,8 +18,11 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <ranges>
 #include <type_traits>
 #include <vector>
+
+#include "esi/Values.h"
 
 using namespace esi_system;
 
@@ -369,6 +372,285 @@ void testWindowList() {
   assert(footer_seg.data[1] == 0);
 }
 
+// ---------------------------------------------------------------------------
+// Path D — value-class fields (esi::MutableBitVector, esi::Int, esi::UInt)
+// ---------------------------------------------------------------------------
+
+// Build a wide MutableBitVector from an arbitrary-length byte buffer
+// (LSB-first wire order). Useful for hand-constructing > 64-bit values in
+// the harness.
+esi::MutableBitVector bvFromBytes(std::initializer_list<uint8_t> bytes,
+                                  std::size_t width) {
+  std::vector<uint8_t> storage(bytes.begin(), bytes.end());
+  // The MutableBitVector(vector<byte>&&, width) ctor requires the storage
+  // size to cover `width` bits. Pad with zeros if the caller supplied
+  // fewer bytes than that.
+  std::size_t need = (width + 7) / 8;
+  if (storage.size() < need)
+    storage.resize(need, 0);
+  return esi::MutableBitVector(std::move(storage), width);
+}
+
+void testWideUnsigned() {
+  // WideU has two byte-aligned wide-int fields: ui128 at the LSB end
+  // (bits 0..127), ui96 at bits 128..223. Total 224 bits = 28 bytes.
+  WideU s;
+  // Construct a 96-bit value: low half = 0x0123456789ABCDEF,
+  // high half = 0xCAFEBABEu (32 bits worth of upper bytes).
+  auto u96 = bvFromBytes(
+      {
+          0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01, // low 64 bits
+          0xBE, 0xBA, 0xFE, 0xCA,                         // bits 64..95
+      },
+      96);
+  auto u128 = bvFromBytes(
+      {
+          0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, // low 64 bits
+          0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, // high 64 bits
+      },
+      128);
+
+  s.u96(u96).u128(u128);
+
+  // Round-trip: read the field back out and compare byte-for-byte.
+  auto got96 = s.u96();
+  assert(got96.width() == 96);
+  for (std::size_t i = 0; i < 96; ++i)
+    assert(got96.getBit(i) == u96.getBit(i));
+  auto got128 = s.u128();
+  assert(got128.width() == 128);
+  for (std::size_t i = 0; i < 128; ++i)
+    assert(got128.getBit(i) == u128.getBit(i));
+
+  // Wire layout: ui128 at byte 0..15 (LSB), then ui96 at byte 16..27.
+  std::array<uint8_t, 28> expected{
+      // u128 first (LSB):
+      0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, //
+      0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, //
+      // u96 next:
+      0xEF, 0xCD, 0xAB, 0x89, 0x67, 0x45, 0x23, 0x01, //
+      0xBE, 0xBA, 0xFE, 0xCA,                         //
+  };
+  expectBytes(s, expected, "WideU");
+
+  // Constructor takes the same value-class params, in manifest order.
+  WideU cons(u96, u128);
+  assert(wireBytes(cons) == wireBytes(s));
+}
+
+void testWideSigned() {
+  // si128 max = all ones except the sign bit = 0x7FFF...FF.
+  // si128 -1  = all ones.
+  WideS s;
+  auto s96_zero = bvFromBytes({}, 96);
+  auto s128_neg_one = bvFromBytes(
+      {
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, //
+          0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, //
+      },
+      128);
+  s.s96(s96_zero).s128(s128_neg_one);
+
+  auto got = s.s128();
+  for (std::size_t i = 0; i < 128; ++i)
+    assert(got.getBit(i)); // -1 has every bit set
+  auto got96 = s.s96();
+  for (std::size_t i = 0; i < 96; ++i)
+    assert(!got96.getBit(i));
+
+  // Wire bytes: low 16 bytes all-ones (s128), then 12 zero bytes (s96).
+  std::array<uint8_t, 28> expected{};
+  for (std::size_t i = 0; i < 16; ++i)
+    expected[i] = 0xFF;
+  expectBytes(s, expected, "WideS s128=-1, s96=0");
+}
+
+void testBitsField() {
+  // BitsType > 64 routes through Path D (non-owning `esi::BitVector`
+  // view); narrower Bits stay on the native int paths and are covered
+  // by the other tests above.
+  BitsField f;
+  auto wide = bvFromBytes(
+      {
+          0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE, //
+          0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, //
+      },
+      128);
+  f.wide(wide);
+
+  auto got_wide = f.wide();
+  assert(got_wide.width() == 128);
+  for (std::size_t i = 0; i < 128; ++i)
+    assert(got_wide.getBit(i) == wide.getBit(i));
+}
+
+void testWideMisaligned() {
+  // WideMisaligned: tag (ui3) at bits 0..2, payload (ui128) at bits
+  // 3..130 — i.e. a wide value at a non-byte-aligned offset. Hits the
+  // `copyBitsIn` / `copyBitsOut` arm of Path D.
+  WideMisaligned m;
+  auto payload = bvFromBytes(
+      {
+          0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, //
+          0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, //
+      },
+      128);
+  m.tag(0b101).payload(payload);
+  assert(m.tag() == 0b101);
+
+  auto got = m.payload();
+  assert(got.width() == 128);
+  for (std::size_t i = 0; i < 128; ++i)
+    assert(got.getBit(i) == payload.getBit(i));
+
+  // Re-setting `tag` must not disturb `payload`, and vice versa.
+  m.tag(0b010);
+  auto got2 = m.payload();
+  for (std::size_t i = 0; i < 128; ++i)
+    assert(got2.getBit(i) == payload.getBit(i));
+  assert(m.tag() == 0b010);
+
+  // A narrower input value must be zero-extended; a wider input is
+  // truncated. Verify the former here (the latter is exercised
+  // implicitly because the Path D setter clamps to bit_width).
+  auto narrow = bvFromBytes({0xAA}, 8); // only 8 bits of input
+  m.payload(narrow);
+  auto got3 = m.payload();
+  // Low 8 bits == 0xAA, upper 120 bits == 0.
+  for (std::size_t i = 0; i < 8; ++i)
+    assert(got3.getBit(i) == ((0xAA >> i) & 1));
+  for (std::size_t i = 8; i < 128; ++i)
+    assert(!got3.getBit(i));
+  assert(m.tag() == 0b010); // still preserved
+}
+
+// ---------------------------------------------------------------------------
+// Array of view-class elements: indexed-only accessors
+// ---------------------------------------------------------------------------
+
+// Round-trip a 3-element array of `ui128` through the per-element
+// indexed accessors. The whole-array accessor is intentionally absent
+// for view-class element types; only `items(i)` / `items(i, v)` exist.
+void testArrayOfViewsAligned() {
+  ArrViews a;
+  std::array<esi::MutableBitVector, 3> source;
+  for (std::size_t i = 0; i < 3; ++i) {
+    source[i] = bvFromBytes(
+        {
+            static_cast<uint8_t>(0x10 + i),
+            static_cast<uint8_t>(0x20 + i),
+            static_cast<uint8_t>(0x30 + i),
+            static_cast<uint8_t>(0x40 + i),
+            static_cast<uint8_t>(0x50 + i),
+            static_cast<uint8_t>(0x60 + i),
+            static_cast<uint8_t>(0x70 + i),
+            static_cast<uint8_t>(0x80 + i),
+            static_cast<uint8_t>(0x91 + i),
+            static_cast<uint8_t>(0xA2 + i),
+            static_cast<uint8_t>(0xB3 + i),
+            static_cast<uint8_t>(0xC4 + i),
+            static_cast<uint8_t>(0xD5 + i),
+            static_cast<uint8_t>(0xE6 + i),
+            static_cast<uint8_t>(0xF7 + i),
+            static_cast<uint8_t>(0x08 + i),
+        },
+        128);
+    a.items(i, source[i]);
+  }
+  for (std::size_t i = 0; i < 3; ++i) {
+    auto got = a.items(i);
+    assert(got.width() == 128);
+    for (std::size_t b = 0; b < 128; ++b)
+      assert(got.getBit(b) == source[i].getBit(b));
+  }
+
+  // Independence: writing element 1 must not disturb elements 0 or 2.
+  auto fresh = bvFromBytes({0xAA}, 128);
+  a.items(1, fresh);
+  for (std::size_t b = 0; b < 128; ++b) {
+    assert(a.items(0).getBit(b) == source[0].getBit(b));
+    assert(a.items(2).getBit(b) == source[2].getBit(b));
+  }
+
+  // Lazy whole-array accessor (std::views::iota | std::views::transform):
+  // yields per-element views on demand. Random-access, so size() and
+  // r[i] both work, and we can range-for it.
+  auto range = a.items();
+  assert(std::ranges::size(range) == 3);
+  std::size_t i = 0;
+  for (auto view : range) {
+    assert(view.width() == 128);
+    for (std::size_t b = 0; b < 128; ++b)
+      assert(view.getBit(b) == a.items(i).getBit(b));
+    ++i;
+  }
+  assert(i == 3);
+
+  // Whole-array setter taking `std::array<view, N>` and the matching
+  // ctor: build a fresh struct from the array argument and confirm the
+  // round-trip matches.
+  std::array<esi::UIntView, 3> bulk = {
+      esi::UIntView(source[0]),
+      esi::UIntView(source[1]),
+      esi::UIntView(source[2]),
+  };
+  ArrViews ctor_built(bulk);
+  for (std::size_t k = 0; k < 3; ++k) {
+    auto got = ctor_built.items(k);
+    for (std::size_t b = 0; b < 128; ++b)
+      assert(got.getBit(b) == source[k].getBit(b));
+  }
+  // Whole-array setter on an existing instance.
+  ArrViews bulk_set;
+  bulk_set.items(bulk);
+  for (std::size_t k = 0; k < 3; ++k) {
+    auto got = bulk_set.items(k);
+    for (std::size_t b = 0; b < 128; ++b)
+      assert(got.getBit(b) == source[k].getBit(b));
+  }
+}
+
+void testArrayOfViewsMisaligned() {
+  // `items` is the FIRST manifest field, so on the wire it lands at the
+  // top of the buffer with `tag` (ui3) at bits 0..2 and the 3 ui128
+  // elements at bits 3..130, 131..258, 259..386. Every element is
+  // bit-misaligned -- exercises the runtime per-bit setter loop and the
+  // sub-byte BitVector view constructor.
+  ArrViewsMis m;
+  m.tag(0b101);
+  std::array<esi::MutableBitVector, 3> source;
+  for (std::size_t i = 0; i < 3; ++i) {
+    source[i] = bvFromBytes(
+        {
+            static_cast<uint8_t>(0xC0 + i),
+            static_cast<uint8_t>(0xC1 + i),
+            static_cast<uint8_t>(0xC2 + i),
+            static_cast<uint8_t>(0xC3 + i),
+            static_cast<uint8_t>(0xC4 + i),
+            static_cast<uint8_t>(0xC5 + i),
+            static_cast<uint8_t>(0xC6 + i),
+            static_cast<uint8_t>(0xC7 + i),
+            static_cast<uint8_t>(0xC8 + i),
+            static_cast<uint8_t>(0xC9 + i),
+            static_cast<uint8_t>(0xCA + i),
+            static_cast<uint8_t>(0xCB + i),
+            static_cast<uint8_t>(0xCC + i),
+            static_cast<uint8_t>(0xCD + i),
+            static_cast<uint8_t>(0xCE + i),
+            static_cast<uint8_t>(0xCF + i),
+        },
+        128);
+    m.items(i, source[i]);
+  }
+  assert(m.tag() == 0b101);
+  for (std::size_t i = 0; i < 3; ++i) {
+    auto got = m.items(i);
+    assert(got.width() == 128);
+    for (std::size_t b = 0; b < 128; ++b)
+      assert(got.getBit(b) == source[i].getBit(b));
+  }
+}
+
 } // namespace
 
 int main() {
@@ -384,6 +666,12 @@ int main() {
   testArrayOfIntegers();
   testUnion();
   testWindowList();
+  testWideUnsigned();
+  testWideSigned();
+  testBitsField();
+  testWideMisaligned();
+  testArrayOfViewsAligned();
+  testArrayOfViewsMisaligned();
   std::printf("OK\n");
   return 0;
 }
