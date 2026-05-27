@@ -331,11 +331,19 @@ jobs:
 # Taken together, disable caching on non-release builds.
 #
 # [1]: https://gitlab.kitware.com/cmake/cmake/-/issues/22529
+      - name: Capture Runner image
+        id: runner-image
+        if: steps.canonicalize.outputs.cmake_build_type == 'release'
+        shell: bash
+        run: |
+          runner_image_version=${ImageVersion?"Runner Image Version not set"}
+          echo "Runner Image Version=${runner_image_version}"
+          echo "image_version=${runner_image_version}" >> "$GITHUB_OUTPUT"
       - name: sccache
         if: steps.canonicalize.outputs.cmake_build_type == 'release'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ inputs.runner }}-${{ steps.canonicalize.outputs.cmake_c_compiler }}-${{ steps.canonicalize.outputs.cmake_build_type }}-${{ steps.canonicalize.outputs.build_shared_libs }}-${{ steps.canonicalize.outputs.llvm_enable_assertions }}-${{ steps.canonicalize.outputs.extra_cmake_hash }}
+          key: ${{ inputs.runner }}-${{ steps.runner-image.outputs.image_version }}-${{ steps.canonicalize.outputs.cmake_c_compiler }}-${{ steps.canonicalize.outputs.cmake_build_type }}-${{ steps.canonicalize.outputs.build_shared_libs }}-${{ steps.canonicalize.outputs.llvm_enable_assertions }}-${{ steps.canonicalize.outputs.extra_cmake_hash }}
           max-size: 500M
           variant: sccache
           save: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
