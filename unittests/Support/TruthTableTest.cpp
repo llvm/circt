@@ -220,17 +220,9 @@ TEST(NPNClassTest, InputMapping) {
 
   SmallVector<unsigned> permutation;
   npn1.getInputPermutation(npn2, permutation);
-  // Verify the mapping is correct
-  EXPECT_EQ(permutation.size(), 3u);
-
-  // For each input in the target NPN class, mapping[i] gives the input in npn1
-  // at the same canonical position.
-  for (unsigned i = 0; i < 3; ++i) {
-    auto it = llvm::find(npn2.inputPermutation, i);
-    ASSERT_NE(it, npn2.inputPermutation.end());
-    unsigned canonicalPos = it - npn2.inputPermutation.begin();
-    EXPECT_EQ(permutation[i], npn1.inputPermutation[canonicalPos]);
-  }
+  // Target input 0 is at canonical slot 2, input 1 at slot 0, and input 2 at
+  // slot 1. Read npn1's input at those canonical slots: [1, 2, 0].
+  EXPECT_EQ(permutation, SmallVector<unsigned>({1, 2, 0}));
 }
 
 TEST(NPNClassTest, LexicographicalOrdering) {
