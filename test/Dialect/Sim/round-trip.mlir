@@ -8,6 +8,19 @@ hw.module @plusargs_value() {
   %1, %2 = sim.plusargs.value "bar" : i5
 }
 
+// CHECK-LABEL: sim.config.decl @PRINTF_COND default true
+sim.config.decl @PRINTF_COND default true
+// CHECK-LABEL: sim.config.decl @STOP_COND default false
+sim.config.decl @STOP_COND default false
+
+// CHECK-LABEL: hw.module @config_get
+hw.module @config_get() {
+  // CHECK: sim.config.get @PRINTF_COND
+  %0 = sim.config.get @PRINTF_COND
+  // CHECK: sim.config.get @STOP_COND
+  %1 = sim.config.get @STOP_COND
+}
+
 // CHECK-LABEL: sim.func.dpi @dpi(out arg0 : i1, in %arg1 : i1, return ret : i1)
 sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, return ret: i1)
 // CHECK-LABEL: sim.func.dpi @dpi_inout(in %arg0 : i1, inout %arg1 : i1)

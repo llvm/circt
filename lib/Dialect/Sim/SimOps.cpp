@@ -205,6 +205,18 @@ LogicalResult DPIFuncOp::verify() {
 }
 
 LogicalResult
+sim::ConfigGetOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto referencedOp =
+      symbolTable.lookupNearestSymbolFrom(*this, getConfigAttr());
+  if (!referencedOp)
+    return emitError("cannot find config declaration '") << getConfig() << "'";
+  if (!isa<sim::ConfigDeclOp>(referencedOp))
+    return emitError("config must reference 'sim.config.decl' but got '")
+           << referencedOp->getName() << "'";
+  return success();
+}
+
+LogicalResult
 sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto referencedOp =
       symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
