@@ -4,23 +4,10 @@
 ##
 ##===----------------------------------------------------------------------===//
 
-# Dummy library for a library which should be included by the RTL simulator.
-# Dummy is necessary for linking purposes.
-add_library(MtiPli SHARED
-  DummySvDpi.cpp
-)
-set_target_properties(MtiPli PROPERTIES CXX_VISIBILITY_PRESET "default")
-# Technically, we shouldn't have to install this as is _should_ be provided by
-# the simulator, but without it we get runtime link errors. TODO: figure out how
-# to do this properly such that we avoid packaging a dummy library.
-install(TARGETS MtiPli
-  DESTINATION ${ESIRT_INSTALL_LIBDIR}
-  COMPONENT ESIRuntime
-)
-
 # DPI calls.
 add_library(EsiCosimDpiServer SHARED
   DpiEntryPoints.cpp
+  SvDpiRuntime.cpp
 )
 set_target_properties(EsiCosimDpiServer
     PROPERTIES
@@ -28,12 +15,11 @@ set_target_properties(EsiCosimDpiServer
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
         CXX_VISIBILITY_PRESET "default"
 )
-add_dependencies(EsiCosimDpiServer ESICppRuntime MtiPli)
+add_dependencies(EsiCosimDpiServer ESICppRuntime)
 target_link_libraries(EsiCosimDpiServer
   PUBLIC
     ESICppRuntime
     CosimBackend
-    MtiPli
 )
 
 add_dependencies(ESIRuntime EsiCosimDpiServer)
