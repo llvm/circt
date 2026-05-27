@@ -603,15 +603,12 @@ module SampleValueBuiltins #() (
   // CHECK: [[ZERO:%.+]] = hw.constant 0 : i8
   // CHECK: [[EQ:%.+]] = comb.icmp eq [[AND]], [[ZERO]] : i8
   // CHECK: [[EQ_INT:%.+]] = moore.from_builtin_int [[EQ]] : i1
-  // CHECK: [[EQ_LOGIC:%.+]] = moore.int_to_logic [[EQ_INT]] : i1
-  // CHECK: [[EQ_L2I:%.+]] = moore.logic_to_int [[EQ_LOGIC]] : l1
-  // CHECK: [[EQ_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_L2I]] : i1
+  // CHECK: [[EQ_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
   // CHECK: [[FALSE:%.+]] = hw.constant false
   // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[EQ_BUILTIN]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
-  // CHECK: [[RES_L2I:%.+]] = moore.logic_to_int [[RES_LOGIC]] : l1
-  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_L2I]] : i1
+  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
   // CHECK: ltl.clock [[RES_BUILTIN]]
   onehot0_data: assert property (@(posedge clk_i) $onehot0(data_i));
 
@@ -631,15 +628,12 @@ module SampleValueBuiltins #() (
   // CHECK: [[NE:%.+]] = comb.icmp ne [[DB]], [[ZERO]] : i8
   // CHECK: [[AND2:%.+]] = comb.and [[EQ]], [[NE]] : i1
   // CHECK: [[RES_INT_2:%.+]] = moore.from_builtin_int [[AND2]] : i1
-  // CHECK: [[RES_LOGIC_2:%.+]] = moore.int_to_logic [[RES_INT_2]] : i1
-  // CHECK: [[RES_L2I_2:%.+]] = moore.logic_to_int [[RES_LOGIC_2]] : l1
-  // CHECK: [[RES_BUILTIN_2:%.+]] = moore.to_builtin_int [[RES_L2I_2]] : i1
+  // CHECK: [[RES_BUILTIN_2:%.+]] = moore.to_builtin_int [[RES_INT_2]] : i1
   // CHECK: [[FALSE:%.+]] = hw.constant false
   // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[RES_BUILTIN_2]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
-  // CHECK: [[RES_L2I:%.+]] = moore.logic_to_int [[RES_LOGIC]] : l1
-  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_L2I]] : i1
+  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
   // CHECK: ltl.clock [[RES_BUILTIN]]
   onehot_data: assert property (@(posedge clk_i) $onehot(data_i));
 
@@ -671,6 +665,37 @@ module SampleValueBuiltins #() (
   // CHECK: ltl.clock [[RES_BUILTIN]]
   onehot_bit_data: assert property (@(posedge clk_i) $onehot(data_bit_i));
 
+  // CHECK: moore.procedure always {
+  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK: [[D_L2I:%.+]] = moore.logic_to_int [[D]] : l8
+  // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D_L2I]] : i8
+  // CHECK: [[Z3:%.+]] = hw.constant 0 : i3
+  // CHECK: [[B0:%.+]] = comb.extract [[DB]] from 0 : (i8) -> i1
+  // CHECK: [[EXT0:%.+]] = comb.concat [[Z3]], [[B0]] : i3, i1
+  // CHECK: [[B1:%.+]] = comb.extract [[DB]] from 1 : (i8) -> i1
+  // CHECK: [[EXT1:%.+]] = comb.concat [[Z3]], [[B1]] : i3, i1
+  // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int {{%.+}} : i4
+  // CHECK: [[SEXT:%.+]] = moore.sext [[RES_INT]] : i4 -> i32
+  // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
+  // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
+  countones_data:
+    assert property (@(posedge clk_i) $countones(data_i) == 0);
+
+  // CHECK: moore.procedure always {
+  // CHECK: [[D:%.+]] = moore.read [[DATABITWIRE]] : <i8>
+  // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D]] : i8
+  // CHECK: [[Z3:%.+]] = hw.constant 0 : i3
+  // CHECK: [[B0:%.+]] = comb.extract [[DB]] from 0 : (i8) -> i1
+  // CHECK: [[EXT0:%.+]] = comb.concat [[Z3]], [[B0]] : i3, i1
+  // CHECK: [[B1:%.+]] = comb.extract [[DB]] from 1 : (i8) -> i1
+  // CHECK: [[EXT1:%.+]] = comb.concat [[Z3]], [[B1]] : i3, i1
+  // CHECK: comb.add
+  // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int {{%.+}} : i4
+  // CHECK: [[SEXT:%.+]] = moore.sext [[RES_INT]] : i4 -> i32
+  // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
+  // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
+  countones_bit_data:
+    assert property (@(posedge clk_i) $countones(data_bit_i) == 0);
 endmodule
 
 // CHECK-LABEL: func.func private @StringBuiltins(

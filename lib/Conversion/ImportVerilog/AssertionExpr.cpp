@@ -318,6 +318,11 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
     return v;
   };
 
+  // Helper to cast a builtin integer result to a two-valued Moore integer type.
+  auto castToTwoValued = [&](Value v) -> Value {
+    return moore::FromBuiltinIntOp::create(builder, loc, v);
+  };
+
   switch (nameId) {
   case ksn::Sampled:
     return castToMoore(ltl::SampledOp::create(builder, loc, value));
@@ -326,7 +331,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
   case ksn::Fell: {
     auto past =
         ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
-    return castToMoore(comb::ICmpOp::create(
+    return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::ugt, past, value, false));
   }
 
@@ -334,7 +339,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
   case ksn::Rose: {
     auto past =
         ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
-    return castToMoore(comb::ICmpOp::create(
+    return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::ult, past, value, false));
   }
 
@@ -342,7 +347,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
   case ksn::Changed: {
     auto past =
         ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
-    return castToMoore(comb::ICmpOp::create(
+    return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::ne, past, value, false));
   }
 
@@ -350,7 +355,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
   case ksn::Stable: {
     auto past =
         ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
-    return castToMoore(comb::ICmpOp::create(
+    return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::eq, past, value, false));
   }
 
@@ -362,7 +367,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
     auto minusOne = comb::SubOp::create(builder, loc, value, one);
     auto anded = comb::AndOp::create(builder, loc, value, minusOne);
     auto zero = hw::ConstantOp::create(builder, loc, value.getType(), 0);
-    return castToMoore(comb::ICmpOp::create(
+    return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::eq, anded, zero, false));
   }
 
@@ -376,7 +381,30 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
     auto isNotZero = comb::ICmpOp::create(builder, loc, comb::ICmpPredicate::ne,
                                           value, zero, false);
     auto result = comb::AndOp::create(builder, loc, isOneHot0, isNotZero);
-    return castToMoore(result);
+    return castToTwoValued(result);
+  }
+
+  case ksn::CountOnes: {
+    // Popcount: extract each bit, zero-extend to result width, and sum.
+    auto intTy = cast<IntegerType>(value.getType());
+    unsigned width = intTy.getWidth();
+    unsigned resultWidth = llvm::Log2_32_Ceil(width + 1);
+    auto i1Ty = builder.getI1Type();
+    unsigned padWidth = resultWidth - 1;
+    auto zeros = hw::ConstantOp::create(builder, loc,
+                                        builder.getIntegerType(padWidth), 0);
+
+    // Zero-extend the first bit to seed the accumulator.
+    auto bit0 = comb::ExtractOp::create(builder, loc, i1Ty, value, 0);
+    Value sum = comb::ConcatOp::create(builder, loc, ValueRange{zeros, bit0});
+
+    for (unsigned i = 1; i < width; ++i) {
+      auto bit = comb::ExtractOp::create(builder, loc, i1Ty, value, i);
+      auto extended =
+          comb::ConcatOp::create(builder, loc, ValueRange{zeros, bit});
+      sum = comb::AddOp::create(builder, loc, sum, extended);
+    }
+    return castToTwoValued(sum);
   }
 
   default:
@@ -458,7 +486,8 @@ Value Context::convertAssertionCallExpression(
     // would have already been converted to an integer type rather than bool
     // type as here.
     if (subroutine.knownNameId == slang::parsing::KnownSystemName::IsUnknown) {
-      return getIsUnknown(builder, loc, value, valTy, getContext());
+      result = getIsUnknown(builder, loc, value, valTy, getContext());
+      break;
     }
 
     // OneHot/OneHot0 are handled both here and below.
@@ -496,7 +525,9 @@ Value Context::convertAssertionCallExpression(
 
       Value finalResult =
           moore::FromBuiltinIntOp::create(builder, loc, resultBuiltin);
-      return moore::IntToLogicOp::create(builder, loc, finalResult);
+      result =
+          moore::IntToLogicOp::create(builder, loc, finalResult).getResult();
+      break;
     }
 
     // If the value is four-valued, we need to map it to two-valued before we
@@ -517,8 +548,11 @@ Value Context::convertAssertionCallExpression(
 
   if (failed(result))
     return {};
-  if (*result)
-    return *result;
+  if (*result) {
+    auto expectedTy = convertType(*expr.type);
+    return materializeConversion(expectedTy, *result, expr.type->isSigned(),
+                                 loc);
+  }
 
   mlir::emitError(loc) << "unsupported system call `" << subroutine.name << "`";
   return {};

@@ -2044,6 +2044,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     case ksn::IsUnknown:
     case ksn::OneHot:
     case ksn::OneHot0:
+    case ksn::CountOnes:
       return context.convertAssertionCallExpression(expr, info, loc);
     default:
       break;
