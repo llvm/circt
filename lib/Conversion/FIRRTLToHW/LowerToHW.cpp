@@ -5455,8 +5455,9 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   if (failed(formatString))
     return failure();
 
+  auto stderrOp = sim::StderrStreamOp::create(builder);
   sim::TriggeredOp::create(builder, clock, cond, [&] {
-    sim::PrintFormattedProcOp::create(builder, *formatString);
+    sim::PrintFormattedProcOp::create(builder, *formatString, stderrOp);
   });
   return success();
 }
