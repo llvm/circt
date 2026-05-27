@@ -6928,12 +6928,9 @@ LogicalResult XMRDerefOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult LayerBlockOp::verify() {
-  auto *region = getOperation()->getParentRegion();
-  auto *parent = region->getParentOp();
-
   // A layerblock may only be nested under a parent, if the parent is enabled
   // whenever the child is enabled. Check that here.
-  if (auto parentLayerBlock = dyn_cast_or_null<LayerBlockOp>(parent)) {
+  if (auto parentLayerBlock = getOperation()->getParentOfType<LayerBlockOp>()) {
     auto parentLayer = parentLayerBlock.getLayerNameAttr();
     LayerSet enabledLayers;
     enabledLayers.insert(getLayerNameAttr());
@@ -6943,7 +6940,8 @@ LogicalResult LayerBlockOp::verify() {
           parentModule.getLayersAttr().getAsRange<SymbolRefAttr>());
     if (!isLayerCompatibleWith(parentLayer, enabledLayers)) {
       auto diag = emitOpError("is nested under an illegal layer block");
-      diag.attachNote(parentLayerBlock.getLoc()) << "illegal parent layer block defined here";
+      diag.attachNote(parentLayerBlock.getLoc())
+          << "illegal parent layer block defined here";
       return failure();
     }
   }
