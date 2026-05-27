@@ -220,18 +220,9 @@ TEST(NPNClassTest, InputMapping) {
 
   SmallVector<unsigned> permutation;
   npn1.getInputPermutation(npn2, permutation);
-  // Verify the mapping is correct
-  EXPECT_EQ(permutation.size(), 3u);
-
-  // For each target input position i, mapping[i] should give us the input
-  // position in npn1 that corresponds to the same canonical position
-  for (unsigned i = 0; i < 3; ++i) {
-    // Target input i maps to canonical position npn2.inputPermutation[i]
-    unsigned targetCanonicalPos = npn2.inputPermutation[i];
-    // npn1's input mapping[i] should map to the same canonical position
-    unsigned npn1CanonicalPos = npn1.inputPermutation[permutation[i]];
-    EXPECT_EQ(targetCanonicalPos, npn1CanonicalPos);
-  }
+  // Target input 0 is at canonical slot 2, input 1 at slot 0, and input 2 at
+  // slot 1. Read npn1's input at those canonical slots: [1, 2, 0].
+  EXPECT_EQ(permutation, SmallVector<unsigned>({1, 2, 0}));
 }
 
 TEST(NPNClassTest, LexicographicalOrdering) {
@@ -534,11 +525,12 @@ TEST(NPNClassTest, MultiBitOutputMapping) {
   npn1.getInputPermutation(npn2, permutation);
   EXPECT_EQ(permutation.size(), 2u);
 
-  // Verify the mapping relationship
+  // Verify the mapping relationship.
   for (unsigned i = 0; i < 2; ++i) {
-    unsigned targetCanonicalPos = npn2.inputPermutation[i];
-    unsigned npn1CanonicalPos = npn1.inputPermutation[permutation[i]];
-    EXPECT_EQ(targetCanonicalPos, npn1CanonicalPos);
+    auto it = llvm::find(npn2.inputPermutation, i);
+    ASSERT_NE(it, npn2.inputPermutation.end());
+    unsigned canonicalPos = it - npn2.inputPermutation.begin();
+    EXPECT_EQ(permutation[i], npn1.inputPermutation[canonicalPos]);
   }
 }
 
