@@ -14,6 +14,7 @@
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
+#include "circt/Dialect/Sim/SimPasses.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Transforms/Passes.h"
@@ -306,6 +307,9 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   pm.addPass(createLowerFIRRTLToHWPass(opt.shouldEnableAnnotationWarning(),
                                        opt.getVerificationFlavor(),
                                        opt.shouldLowerToCore()));
+
+  if (opt.shouldLowerToCore())
+    pm.addNestedPass<hw::HWModuleOp>(sim::createSquashSimTriggered());
 
   if (!opt.shouldDisableOptimization()) {
     auto &modulePM = pm.nest<hw::HWModuleOp>();

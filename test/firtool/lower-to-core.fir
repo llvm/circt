@@ -26,25 +26,16 @@ circuit LowerToCore:
 ; CHECK-DAG: verif.clocked_assert %pred if %enable, posedge [[CLK]] : i1
 ; CHECK-DAG: [[FMT:%.+]] = sim.fmt.dec %x signed : i4
 ; CHECK: [[MSG:%.+]] = sim.fmt.concat ([[LIT]], [[FMT]], [[NL]])
+; CHECK: [[FMTFILE2:%.+]] = sim.fmt.concat ([[LITFILE1]], [[FMT]], [[LITFILE2]])
 ; CHECK: [[STDERR:%.+]] = sim.stderr_stream
 ; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[STDERR]]
-; CHECK-NEXT: }
-; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   [[FILE1:%.+]] = sim.get_file [[FMTFILE1]]
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[FILE1]]
-; CHECK-NEXT: }
-; CHECK: [[FMTFILE2:%.+]] = sim.fmt.concat ([[LITFILE1]], [[FMT]], [[LITFILE2]])
-; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   [[FILE2:%.+]] = sim.get_file [[FMTFILE2]]
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[FILE2]]
-; CHECK-NEXT: }
-; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   [[FILE3:%.+]] = sim.get_file [[FMTFILE2]]
 ; CHECK-NEXT:   sim.flush [[FILE3]]
-; CHECK-NEXT: }
-; CHECK: [[STDERR:%.+]] = sim.stderr_stream
-; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   sim.flush [[STDERR]]
 ; CHECK-NEXT: }
 ; CHECK: [[TIME:%.+]] = sim.fmt.current_time
