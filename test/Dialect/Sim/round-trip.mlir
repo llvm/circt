@@ -122,6 +122,8 @@ hw.module @ProceduralPrintWithGetFile(in %clock: !seq.clock, in %condition: i1, 
     %file = sim.get_file %fileName
     // CHECK: sim.proc.print %[[FMT]] to %[[FILE]]
     sim.proc.print %str to %file
+    // CHECK: sim.flush %[[FILE]]
+    sim.flush %file
   }
 }
 

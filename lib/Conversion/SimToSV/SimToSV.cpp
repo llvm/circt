@@ -32,6 +32,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/LogicalResult.h"
 
 #define DEBUG_TYPE "lower-sim-to-sv"
 
@@ -300,6 +301,21 @@ public:
           rewriter.mergeBlocks(op.getBodyBlock(), destination);
         });
     rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+class FlushLowering : public OpConversionPattern<FlushOp> {
+public:
+  using OpConversionPattern<FlushOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FlushOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Value fd = adaptor.getStream();
+    if (!fd.getType().isInteger(32))
+      return rewriter.notifyMatchFailure(op, "expected converted i32 stream");
+    rewriter.replaceOpWithNewOp<sv::FFlushOp>(op, fd);
     return success();
   }
 };
@@ -891,6 +907,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<PlusArgsValueLowering>(context, state);
       patterns.add<StdoutStreamLowering>(typeConverter, context);
       patterns.add<StderrStreamLowering>(typeConverter, context);
+      patterns.add<FlushLowering>(typeConverter, context);
       patterns.add<UnrealizedConversionCastLowering>(typeConverter, context);
       patterns.add<ClockedTerminateOp>(convert);
       patterns.add<ClockedPauseOp>(convert);
