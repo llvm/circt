@@ -13,9 +13,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Sim/SimPasses.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SetVector.h"
 
@@ -57,9 +60,16 @@ static void moveBodyOperations(Block *source, Block *dest,
                                source->begin(), source->end());
 }
 
+static void finalizeHWTriggered(hw::TriggeredOp op) {
+  mlir::IRRewriter builder(op->getContext());
+  auto captures = mlir::makeRegionIsolatedFromAbove(builder, op.getBody());
+  op.getInputsMutable().append(captures);
+}
+
 struct SquashSimTriggeredPass
     : impl::SquashSimTriggeredBase<SquashSimTriggeredPass> {
 public:
+  using SquashSimTriggeredBase::SquashSimTriggeredBase;
   void runOnOperation() override;
 
 private:
@@ -77,7 +87,7 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
 
   bool changed = false;
   for (auto &[clock, triggers] : triggerMap) {
-    if (triggers.size() < 2)
+    if (triggers.size() < 2 && !convertToHW)
       continue;
 
     SmallVector<Location> locs;
@@ -98,15 +108,30 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
       }
     }
 
-    // Hoist a shared condition to the merged sim.triggered when possible.
+    // Hoist a shared condition to the merged sim.triggered when possible. When
+    // converting to hw.triggered, keep all conditions inside the body instead.
     Value outerCondition;
-    if (!hasUnconditionalTrigger && allConditionsIdentical)
+    if (!convertToHW && !hasUnconditionalTrigger && allConditionsIdentical)
       outerCondition = commonCondition;
 
     OpBuilder builder(triggers.back());
     auto fusedLoc = builder.getFusedLoc(locs);
-    auto mergedTriggered =
-        TriggeredOp::create(builder, fusedLoc, clock, outerCondition);
+
+    Block *mergedBlock = nullptr;
+    hw::TriggeredOp hwTriggered;
+    TriggeredOp mergedTriggered;
+    if (convertToHW) {
+      auto event = hw::EventControlAttr::get(builder.getContext(),
+                                             hw::EventControl::AtPosEdge);
+      auto trigger = builder.createOrFold<seq::FromClockOp>(fusedLoc, clock);
+      hwTriggered = hw::TriggeredOp::create(builder, fusedLoc, event, trigger,
+                                            ValueRange{});
+      mergedBlock = hwTriggered.getBodyBlock();
+    } else {
+      mergedTriggered =
+          TriggeredOp::create(builder, fusedLoc, clock, outerCondition);
+      mergedBlock = mergedTriggered.getBodyBlock();
+    }
 
     Value prevConditionValue;
     Block *prevConditionBlock = nullptr;
@@ -116,7 +141,7 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
 
       // Conditions not represented on the outer op become inner scf.if guards.
       if (!sourceBlock->empty() && condition && condition != outerCondition) {
-        builder.setInsertionPointToEnd(mergedTriggered.getBodyBlock());
+        builder.setInsertionPointToEnd(mergedBlock);
         auto *condBlock =
             getOrCreateConditionBlock(builder, triggered.getLoc(), condition,
                                       prevConditionValue, prevConditionBlock);
@@ -125,12 +150,13 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
       } else {
         prevConditionValue = Value();
         prevConditionBlock = nullptr;
-        moveBodyOperations(sourceBlock, mergedTriggered.getBodyBlock(),
-                           mergedTriggered.getBodyBlock()->end());
+        moveBodyOperations(sourceBlock, mergedBlock, mergedBlock->end());
       }
 
       triggered.erase();
     }
+    if (convertToHW)
+      finalizeHWTriggered(hwTriggered);
     changed = true;
   }
 
@@ -139,6 +165,7 @@ bool SquashSimTriggeredPass::squashTriggeredOpsInBlock(Block &block) {
 
 void SquashSimTriggeredPass::runOnOperation() {
   hw::HWModuleOp module = getOperation();
-  if (!squashTriggeredOpsInBlock(*module.getBodyBlock()))
+  bool changed = squashTriggeredOpsInBlock(*module.getBodyBlock());
+  if (!changed)
     markAllAnalysesPreserved();
 }

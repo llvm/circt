@@ -37,7 +37,11 @@ def SquashSimTriggered : Pass<"sim-squash-triggered", "hw::HWModuleOp"> {
     make any guarantees about the relative execution order of the original
     `sim.triggered` operations.
   }];
-  let dependentDialects = ["mlir::scf::SCFDialect"];
+  let dependentDialects = ["circt::hw::HWDialect, circt::seq::SeqDialect, mlir::scf::SCFDialect"];
+  let options = [
+    Option<"convertToHW", "convert-to-hw", "bool", "false",
+           "Convert squashed sim.triggered ops to hw.triggered">
+  ];
 }
 
 def LowerDPIFunc : Pass<"sim-lower-dpi-func", "mlir::ModuleOp"> {
