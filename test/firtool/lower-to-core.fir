@@ -12,6 +12,7 @@ circuit LowerToCore:
     printf(clock, enable, "value=%d\n", x)
     fprintf(clock, enable, "out.txt", "value=%d\n", x)
     fprintf(clock, enable, "out%d.txt", x, "value=%d\n", x)
+    printf(clock, enable, "{{SimulationTime}}")
 
 ; CHECK-LABEL: hw.module @LowerToCore
 ; CHECK-DAG: [[LITFILE1:%.+]] = sim.fmt.literal "out"
@@ -35,6 +36,10 @@ circuit LowerToCore:
 ; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   [[FILE2:%.+]] = sim.get_file [[FMTFILE2]]
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[FILE2]]
+; CHECK-NEXT: }
+; CHECK: [[TIME:%.+]] = sim.fmt.current_time
+; CHECK: sim.triggered %clock if %enable {
+; CHECK-NEXT:   sim.proc.print [[TIME]] to [[STDERR]]
 ; CHECK-NEXT: }
 ; CHECK-NOT: sv.assert
 ; CHECK-NOT: sv.fwrite
