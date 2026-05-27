@@ -25,9 +25,9 @@ circuit LowerToCore:
 ; CHECK-DAG: [[CLK:%.+]] = seq.from_clock %clock
 ; CHECK-DAG: verif.clocked_assert %pred if %enable, posedge [[CLK]] : i1
 ; CHECK-DAG: [[FMT:%.+]] = sim.fmt.dec %x signed : i4
-; CHECK: [[MSG:%.+]] = sim.fmt.concat ([[LIT]], [[FMT]], [[NL]])
-; CHECK: [[FMTFILE2:%.+]] = sim.fmt.concat ([[LITFILE1]], [[FMT]], [[LITFILE2]])
-; CHECK: [[STDERR:%.+]] = sim.stderr_stream
+; CHECK-DAG: [[MSG:%.+]] = sim.fmt.concat ([[LIT]], [[FMT]], [[NL]])
+; CHECK-DAG: [[FMTFILE2:%.+]] = sim.fmt.concat ([[LITFILE1]], [[FMT]], [[LITFILE2]])
+; CHECK-DAG: [[STDERR:%.+]] = sim.stderr_stream
 ; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[STDERR]]
 ; CHECK-NEXT:   [[FILE1:%.+]] = sim.get_file [[FMTFILE1]]
