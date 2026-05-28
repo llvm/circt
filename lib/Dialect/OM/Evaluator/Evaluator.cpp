@@ -1011,7 +1011,8 @@ circt::om::Evaluator::evaluateElaboratedObject(ElaboratedObjectOp op,
   if (object->isFullyEvaluated())
     return objectValue;
 
-  auto classLike = symbolTable.lookup<ClassLike>(op.getClassNameAttr().getAttr());
+  auto classLike =
+      symbolTable.lookup<ClassLike>(op.getClassNameAttr().getAttr());
   if (!classLike)
     return symbolTable.getOp()->emitError("unknown class name ")
            << op.getClassNameAttr();

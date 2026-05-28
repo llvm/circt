@@ -53,7 +53,8 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
 
   LogicalResult matchAndRewrite(ObjectOp objOp,
                                 PatternRewriter &rewriter) const override {
-    auto classLike = symTable.lookup<ClassLike>(objOp.getClassNameAttr().getAttr());
+    auto classLike =
+        symTable.lookup<ClassLike>(objOp.getClassNameAttr().getAttr());
     assert(classLike);
 
     // External classes cannot be elaborated; replace with unknown values.
