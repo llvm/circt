@@ -399,7 +399,7 @@ circt::om::Evaluator::getOrCreateValue(Value value, Location loc) {
             auto error = arg.getOwner()->getParentOp()->emitError(
                 "unable to evaluate unbound parameter");
             error.attachNote() << "value: " << value;
-            return error;
+            return failure();
           })
           .Case([&](OpResult result) {
             return TypeSwitch<Operation *,
