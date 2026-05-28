@@ -222,47 +222,6 @@ struct StmtVisitor {
         if (handled == true)
           return success();
       }
-
-      // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
-      // string" the first argument of $sformat/$swrite is its output; the
-      // other arguments work like a FormatString.
-      // In Moore we only support writing to a location if it is a reference;
-      // However, Section 21.3.3 explains that the output of $sformat/$swrite
-      // is assigned as if it were cast from a string literal (Section 5.9),
-      // so this implementation casts the string to the target value.
-      if (!call->getSubroutineName().compare("$sformat") ||
-          !call->getSubroutineName().compare("$swrite")) {
-
-        // Use the first argument as the output location
-        auto *lhsExpr = call->arguments().front();
-        // Format the second and all later arguments as a string
-        auto fmtValue =
-            context.convertFormatString(call->arguments().subspan(1), loc,
-                                        moore::IntFormat::Decimal, false);
-        if (failed(fmtValue))
-          return failure();
-        // Convert the FormatString to a StringType
-        auto strValue = moore::FormatStringToStringOp::create(builder, loc,
-                                                              fmtValue.value());
-        // The Slang AST produces a `AssignmentExpression` for the first
-        // argument; the RHS of this expression is invalid though
-        // (`EmptyArgument`), so we only use the LHS of the
-        // `AssignmentExpression` and plug in the formatted string for the RHS.
-        if (auto assignExpr =
-                lhsExpr->as_if<slang::ast::AssignmentExpression>()) {
-          auto lhs = context.convertLvalueExpression(assignExpr->left());
-          if (!lhs)
-            return failure();
-
-          auto convertedValue = context.materializeConversion(
-              cast<moore::RefType>(lhs.getType()).getNestedType(), strValue,
-              false, loc);
-          moore::BlockingAssignOp::create(builder, loc, lhs, convertedValue);
-          return success();
-        } else {
-          return failure();
-        }
-      }
     }
 
     auto value = context.convertRvalueExpression(stmt.expr);
@@ -1006,11 +965,12 @@ struct StmtVisitor {
     }
 
     // Display and Write Tasks (`$display[boh]?` or `$write[boh]?` or
-    // `$fdisplay[boh]?` or `$fwrite[boh]?`)
+    // `$fdisplay[boh]?` or `$fwrite[boh]?` or `$swrite[boh]` or `$sformat`)
 
     using moore::IntFormat;
     bool isDisplay = false;
     bool isFDisplay = false;
+    bool isSWrite = false;
     bool appendNewline = false;
     IntFormat defaultFormat = IntFormat::Decimal;
     switch (nameId) {
@@ -1082,6 +1042,22 @@ struct StmtVisitor {
       isFDisplay = true;
       defaultFormat = IntFormat::HexLower;
       break;
+    case ksn::SWrite:
+    case ksn::SFormat:
+      isSWrite = true;
+      break;
+    case ksn::SWriteB:
+      isSWrite = true;
+      defaultFormat = IntFormat::Binary;
+      break;
+    case ksn::SWriteO:
+      isSWrite = true;
+      defaultFormat = IntFormat::Octal;
+      break;
+    case ksn::SWriteH:
+      isSWrite = true;
+      defaultFormat = IntFormat::HexLower;
+      break;
     default:
       break;
     }
@@ -1114,6 +1090,36 @@ struct StmtVisitor {
         return true;
       moore::FDisplayBIOp::create(builder, loc, fd, *message);
       return true;
+    }
+
+    // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
+    // string" the first argument of $sformat/$swrite is its output; the
+    // other arguments work like a FormatString.
+    // In Moore we only support writing to a location if it is a reference;
+    // However, Section 21.3.3 explains that the output of $sformat/$swrite
+    // is assigned as if it were cast from a string literal (Section 5.9),
+    // so this implementation casts the string to the target value.
+    if (isSWrite) {
+      auto fmtValue =
+          context.convertFormatString(args.subspan(1), loc, defaultFormat,
+                                      /*appendNewline=*/false);
+      if (failed(fmtValue))
+        return failure();
+      auto strValue =
+          moore::FormatStringToStringOp::create(builder, loc, *fmtValue);
+      auto *lhsExpr = args[0];
+      if (auto *assignExpr =
+              lhsExpr->as_if<slang::ast::AssignmentExpression>()) {
+        auto lhs = context.convertLvalueExpression(assignExpr->left());
+        if (!lhs)
+          return failure();
+        auto convertedValue = context.materializeConversion(
+            cast<moore::RefType>(lhs.getType()).getNestedType(), strValue,
+            false, loc);
+        moore::BlockingAssignOp::create(builder, loc, lhs, convertedValue);
+        return true;
+      }
+      return failure();
     }
 
     // Severity Tasks
