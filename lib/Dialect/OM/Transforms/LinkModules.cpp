@@ -112,10 +112,11 @@ void ModuleInfo::postProcess(const SymMappingTy &symMapping) {
           classOp.replaceFieldTypes(replacer);
         })
         .Case<ObjectOp, ElaboratedObjectOp>([&](auto objectLike) {
-          auto it = symMapping.find({module, objectLike.getClassNameAttr()});
+          auto it = symMapping.find(
+              {module, objectLike.getClassNameAttr().getAttr()});
           // Update its class name if changed.
           if (it != symMapping.end())
-            objectLike.setClassNameAttr(it->second);
+            objectLike.setClassNameAttr(FlatSymbolRefAttr::get(it->second));
           replacer.replaceElementsIn(objectLike, false, false, true);
         });
 

@@ -546,7 +546,8 @@ void circt::om::ObjectOp::build(::mlir::OpBuilder &odsBuilder,
   return build(odsBuilder, odsState,
                om::ClassType::get(odsBuilder.getContext(),
                                   mlir::FlatSymbolRefAttr::get(classOp)),
-               classOp.getNameAttr(), actualParams);
+               mlir::FlatSymbolRefAttr::get(classOp.getNameAttr()),
+               actualParams);
 }
 
 static FailureOr<ClassLike>
@@ -568,8 +569,9 @@ verifyClassLikeSymbolUser(Operation *op, SymbolTableCollection &symbolTable,
 
 LogicalResult
 circt::om::ObjectOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto classDef = verifyClassLikeSymbolUser(
-      (*this), symbolTable, getResult().getType(), getClassNameAttr());
+  auto classDef =
+      verifyClassLikeSymbolUser((*this), symbolTable, getResult().getType(),
+                                getClassNameAttr().getAttr());
   if (failed(classDef))
     return failure();
 
@@ -642,13 +644,15 @@ void circt::om::ElaboratedObjectOp::build(OpBuilder &odsBuilder,
                om::ClassType::get(
                    odsBuilder.getContext(),
                    mlir::FlatSymbolRefAttr::get(classOp.getSymNameAttr())),
-               classOp.getSymNameAttr(), fieldValues);
+               mlir::FlatSymbolRefAttr::get(classOp.getSymNameAttr()),
+               fieldValues);
 }
 
 LogicalResult circt::om::ElaboratedObjectOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  auto classDef = verifyClassLikeSymbolUser(
-      (*this), symbolTable, getResult().getType(), getClassNameAttr());
+  auto classDef =
+      verifyClassLikeSymbolUser((*this), symbolTable, getResult().getType(),
+                                getClassNameAttr().getAttr());
   if (failed(classDef))
     return failure();
 

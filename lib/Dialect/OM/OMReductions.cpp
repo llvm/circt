@@ -147,7 +147,7 @@ struct OMClassFieldPruner : public OpReduction<ClassOp> {
 
     moduleOp.walk([&](ObjectOp objectOp) {
       // Check if this object is an instance of our class
-      if (objectOp.getClassNameAttr() != classOp.getSymNameAttr())
+      if (objectOp.getClassNameAttr().getAttr() != classOp.getSymNameAttr())
         return;
 
       // Check all object field uses of this object
@@ -234,7 +234,7 @@ struct OMClassParameterPruner : public OpReduction<ClassOp> {
     SmallVector<ObjectOp> objectsToUpdate;
     auto moduleOp = classOp->getParentOfType<mlir::ModuleOp>();
     moduleOp.walk([&](ObjectOp objectOp) {
-      if (objectOp.getClassNameAttr() == classOp.getSymNameAttr())
+      if (objectOp.getClassNameAttr().getAttr() == classOp.getSymNameAttr())
         objectsToUpdate.push_back(objectOp);
     });
 
@@ -290,7 +290,7 @@ struct OMUnusedClassRemover : public OpReduction<ClassOp> {
 
     // Check if this class is instantiated via om.object anywhere
     auto result = moduleOp.walk([&](ObjectOp objectOp) {
-      if (objectOp.getClassNameAttr() == classOp.getSymNameAttr())
+      if (objectOp.getClassNameAttr().getAttr() == classOp.getSymNameAttr())
         return WalkResult::interrupt();
       return WalkResult::advance();
     });

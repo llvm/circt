@@ -188,7 +188,7 @@ def ObjectOp : OMOp<"object", [
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
 ]> {
   let arguments = (ins
-    SymbolNameAttr:$className,
+    FlatSymbolRefAttr:$className,
     Variadic<AnyType>:$actualParams
   );
 
@@ -220,7 +220,7 @@ def ElaboratedObjectOp : OMOp<"elaborated_object", [
   }];
 
   let arguments = (ins
-    SymbolNameAttr:$className,
+    FlatSymbolRefAttr:$className,
     Variadic<AnyType>:$fieldValues
   );
 
