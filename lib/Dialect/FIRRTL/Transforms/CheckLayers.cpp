@@ -44,6 +44,7 @@ using InstancesUnderGCCompanion = SmallVector<InstanceUnderGCCompanion>;
 
 using InstancesUnderLayerBlockTable =
     DenseMap<StringAttr, InstancesUnderLayerBlock>;
+
 using InstancesUnderGCCompanionTable =
     DenseMap<StringAttr, InstancesUnderGCCompanion>;
 
@@ -66,63 +67,52 @@ struct CheckLayersInModule {
     isCompanion = AnnotationSet::hasAnnotation(moduleOp, companionAnnoClass);
   }
 
-  void noteChildLayerBlocks(InFlightDiagnostic &diag,
-                            const SmallVector<LayerBlockOp> &childLayerBlocks) {
+  void noteChildLayerBlocks(InFlightDiagnostic &diag) {
     for (auto child : childLayerBlocks)
-      diag.attachNote(child.getLoc()) << "illegal layerblock here";
+      diag.attachNote(child.getLoc()) << "bound child layerblock here";
   }
 
-  // NOLINTNEXTLINE(misc-no-recursion)
   void
-  noteInstancesUnderLayerBlocks(InFlightDiagnostic &diag,
-                                const InstancesUnderLayerBlock &instances) {
-    for (auto entry : instances) {
+  noteInstancesUnderLayerBlocks(InFlightDiagnostic &diag) {
+    SmallVector<InstanceUnderLayerBlock> stack;
+    llvm::append_range(stack, llvm::reverse(instancesUnderLayerBlocks));
+    while (!stack.empty()) {
+      auto entry = stack.pop_back_val();
       diag.attachNote(entry.instance.getLoc())
-          << "illegal instantiation under a layerblock here";
+          << "instantiation under a bound layerblock here";
 
-      // If the instance is directly under a layerblock, point it out. Otherwise,
-      // recursively report the chain of layers under a layerblock.
       if (entry.parent) {
         diag.attachNote(entry.parent.getLoc())
             << "enclosing bound layerblock here";
-      } else {
-        auto parent = entry.instance->getParentOfType<FModuleLike>();
-        noteInstancesUnderLayerBlocks(diag, parent.getModuleNameAttr());
+        continue;
       }
+
+      auto parent = entry.instance->getParentOfType<FModuleLike>();
+      auto name = parent.getModuleNameAttr();
+      auto &instances = instancesUnderLayerBlocksTable.at(name);
+      llvm::append_range(stack, llvm::reverse(instances));
     }
   }
 
-  // NOLINTNEXTLINE(misc-no-recursion)
-  void noteInstancesUnderLayerBlocks(InFlightDiagnostic &diag,
-                                     StringAttr target) {
-    if (instancesUnderLayerBlocksTable.contains(target)) {
-      auto &instances = instancesUnderLayerBlocksTable.at(target);
-      noteInstancesUnderLayerBlocks(diag, instances);
-    }
-  }
-
-  // NOLINTNEXTLINE(misc-no-recursion)
   void
-  noteInstancesUnderGCCompanions(InFlightDiagnostic &diag,
-                                 const InstancesUnderGCCompanion &instances) {
-    for (auto entry : instances) {
+  noteInstancesUnderGCCompanions(InFlightDiagnostic &diag) {
+    SmallVector<InstanceUnderGCCompanion> stack;
+    llvm::append_range(stack, llvm::reverse(instancesUnderGCCompanions));
+    while (!stack.empty()) {
+      auto entry = stack.pop_back_val();
       diag.attachNote(entry.instance.getLoc())
-          << "illegal instantiation under a grand central companion here";
+          << "instantiation under a grand central companion module here";
 
       if (entry.parent) {
         diag.attachNote(entry.parent.getLoc())
-            << "grand central companion parent module defined here";
-      } else {
-        auto parent = entry.instance->getParentOfType<FModuleLike>();
-        noteInstancesUnderLayerBlocks(diag, parent.getModuleNameAttr());
+            << "enclosing grand central companion module here";
+        continue;
       }
-    }
-  }
-
-  void noteInstancesUnderGCCompanions(InFlightDiagnostic &diag, StringAttr target) {
-    if (instancesUnderGCCompanionsTable.contains(target)) {
-      auto &instances = instancesUnderGCCompanionsTable.at(target);
-      noteInstancesUnderGCCompanions(diag, instances);
+    
+      auto parent = entry.instance->getParentOfType<FModuleLike>();
+      auto name = parent.getModuleNameAttr();
+      auto instances = instancesUnderGCCompanionsTable[name];
+      llvm::append_range(stack, llvm::reverse(instances));
     }
   }
 
@@ -191,8 +181,8 @@ struct CheckLayersInModule {
       auto diag = moduleOp.emitError();
       diag << "module contains bound layer blocks and is instantiated "
               "under a bound layer block";
-      noteInstancesUnderLayerBlocks(diag, instancesUnderLayerBlocks);
-      noteChildLayerBlocks(diag, childLayerBlocks);
+      noteInstancesUnderLayerBlocks(diag);
+      noteChildLayerBlocks(diag);
       failed = true;
     }
 
@@ -201,37 +191,37 @@ struct CheckLayersInModule {
     if (!instancesUnderGCCompanions.empty() && !childLayerBlocks.empty()) {
       auto diag = moduleOp.emitError();
       diag << "module contains bound layerblocks and is instantiated "
-              "under a Grand Central companion";
-      noteInstancesUnderGCCompanions(diag, instancesUnderGCCompanions);
-      noteChildLayerBlocks(diag, childLayerBlocks);
+              "under a grand central companion module";
+      noteInstancesUnderGCCompanions(diag);
+      noteChildLayerBlocks(diag);
       failed = true;
     }
 
     // Handle "this module is a GC companion" case.
     if (isCompanion) {
+      // This module cannot contain any layerblocks.
+      if (!childLayerBlocks.empty()) {
+        auto diag = moduleOp.emitError();
+        diag << "grand central companion module contains bound layerblocks";
+        noteChildLayerBlocks(diag);
+        failed = true;
+      }
+
       // This module cannot be instantiated under a layerblock.
       if (!instancesUnderLayerBlocks.empty()) {
         auto diag = moduleOp.emitError();
-        diag << "Grand Central companion is instantiated under a bound "
+        diag << "grand central companion module is instantiated under a bound "
                 "layerblock";
-        noteInstancesUnderLayerBlocks(diag, instancesUnderLayerBlocks);
+        noteInstancesUnderLayerBlocks(diag);
         failed = true;
       }
 
       // This module cannot be instantiated under another GC companion.
       if (!instancesUnderGCCompanions.empty()) {
         auto diag = moduleOp.emitError();
-        diag << "Grand Central companion is instantiated under another Grand "
-                "Central companion";
-        noteInstancesUnderGCCompanions(diag, instancesUnderGCCompanions);
-        failed = true;
-      }
-
-      // This module cannot contain any layerblocks.
-      if (!childLayerBlocks.empty()) {
-        auto diag = moduleOp.emitError();
-        diag << "Grand Central companion contains bound layerblocks";
-        noteChildLayerBlocks(diag, childLayerBlocks);
+        diag << "grand central companion module is instantiated under another "
+                "grand central companion module";
+        noteInstancesUnderGCCompanions(diag);
         failed = true;
       }
     }
