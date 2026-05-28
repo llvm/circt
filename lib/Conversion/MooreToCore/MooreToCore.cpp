@@ -2984,6 +2984,29 @@ struct FDisplayBIOpConversion : public OpConversionPattern<FDisplayBIOp> {
   }
 };
 
+struct StrobeBIOpConversion : public OpConversionPattern<StrobeBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StrobeBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto deferOp = sim::DeferOp::create(rewriter, loc);
+    Block *deferBlock = rewriter.createBlock(&deferOp.getBody());
+
+    Block *strobeBlock = &op.getBody().front();
+    Operation *yieldOp =
+        cast<moore::StrobeYieldOp>(strobeBlock->getTerminator());
+    rewriter.inlineBlockBefore(strobeBlock, deferBlock, deferBlock->end());
+
+    auto message = rewriter.getRemappedValue(yieldOp->getOperand(0));
+    sim::PrintFormattedProcOp::create(rewriter, loc, message);
+    rewriter.eraseOp(yieldOp);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct FOpenBIOpConversion : public OpConversionPattern<FOpenBIOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -3621,6 +3644,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatCharOpConversion,
     DisplayBIOpConversion,
     FDisplayBIOpConversion,
+    StrobeBIOpConversion,
 
     // File I/O operations
     FOpenBIOpConversion,

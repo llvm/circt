@@ -815,6 +815,7 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
   SmallVector<GetFileOp> getFileOps;
   SmallVector<PrintFormattedProcOp> printOps;
   SmallVector<Operation *, 8> cleanupSeeds;
+  llvm::SetVector<sim::DeferOp> deferOpsToInline;
   module.walk([&](Operation *op) {
     if (auto getFileOp = dyn_cast<GetFileOp>(op))
       getFileOps.push_back(getFileOp);
@@ -848,8 +849,12 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
           << "while lowering format string";
       return failure();
     }
+    bool isDeferred = isa<sim::DeferOp>(printOp->getParentOp());
     auto stream = printOp.getStream();
-    if (!stream) {
+    if (isDeferred) {
+      sv::StrobeOp::create(builder, printOp.getLoc(), formatString, args);
+      deferOpsToInline.insert(cast<sim::DeferOp>(printOp->getParentOp()));
+    } else if (!stream) {
       // no stream is specified, emit sv.write.
       sv::WriteOp::create(builder, printOp.getLoc(), formatString, args);
     } else {
@@ -864,6 +869,14 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
   }
 
   cleanupDeadSimFmtOps(cleanupSeeds);
+
+  for (auto deferOp : deferOpsToInline) {
+    auto *body = deferOp.getBodyBlock();
+    auto *parentBlock = deferOp->getBlock();
+    parentBlock->getOperations().splice(Block::iterator(deferOp),
+                                        body->getOperations());
+    deferOp.erase();
+  }
 
   return success();
 }

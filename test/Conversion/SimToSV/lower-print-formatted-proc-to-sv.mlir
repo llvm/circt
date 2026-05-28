@@ -192,3 +192,21 @@ hw.module @print_to_file_under_condition(in %clk : i1, in %idx : i8, in %en : i1
     }
   }
 }
+
+// CHECK-LABEL: hw.module @deferred_print
+hw.module @deferred_print(in %clk : i1, in %arg : i8) {
+  hw.triggered posedge %clk (%arg) : i8 {
+    ^bb0(%arg_in : i8):
+    %l0 = sim.fmt.literal "val="
+    %f0 = sim.fmt.dec %arg_in specifierWidth 3 : i8
+    %msg = sim.fmt.concat (%l0, %f0)
+
+    // CHECK: ^bb0(%[[ARG:.+]]: i8):
+    // CHECK-NEXT: %[[UNSIGNED:.+]] = sv.system "unsigned"(%[[ARG]]) : (i8) -> i8
+    // CHECK-NEXT: sv.strobe "val=%3d"(%[[UNSIGNED]]) : i8
+    // CHECK-NOT: sim.defer
+    sim.defer {
+      sim.proc.print %msg
+    }
+  }
+}

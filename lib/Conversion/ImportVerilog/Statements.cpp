@@ -1054,13 +1054,15 @@ struct StmtVisitor {
     }
 
     // Display and Write Tasks (`$display[boh]?` or `$write[boh]?` or
-    // `$fdisplay[boh]?` or `$fwrite[boh]?` or `$swrite[boh]` or `$sformat`)
+    // `$fdisplay[boh]?` or `$fwrite[boh]?` or `$sformat` or
+    // `$swrite[boh]`or `$strobe[boh]?`)
 
     using moore::IntFormat;
     bool isDisplay = false;
     bool isFDisplay = false;
     bool isSWrite = false;
     bool isSFormat = false;
+    bool isStrobe = false;
     bool appendNewline = false;
     IntFormat defaultFormat = IntFormat::Decimal;
     switch (nameId) {
@@ -1150,6 +1152,25 @@ struct StmtVisitor {
       isSWrite = true;
       defaultFormat = IntFormat::HexLower;
       break;
+    case ksn::Strobe:
+      isStrobe = true;
+      appendNewline = true;
+      break;
+    case ksn::StrobeB:
+      isStrobe = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::Binary;
+      break;
+    case ksn::StrobeO:
+      isStrobe = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::Octal;
+      break;
+    case ksn::StrobeH:
+      isStrobe = true;
+      appendNewline = true;
+      defaultFormat = IntFormat::HexLower;
+      break;
     default:
       break;
     }
@@ -1219,6 +1240,23 @@ struct StmtVisitor {
         return true;
       }
       return failure();
+    }
+
+    if (isStrobe) {
+      OpBuilder::InsertionGuard guard(builder);
+      auto strobeOp = moore::StrobeBIOp::create(builder, loc);
+      auto *body = builder.createBlock(&strobeOp.getBody());
+      builder.setInsertionPointToEnd(body);
+      auto message =
+          context.convertFormatString(args, loc, defaultFormat, appendNewline);
+      if (failed(message)) {
+        strobeOp.erase();
+        return failure();
+      }
+      if (*message == Value{})
+        *message = moore::FormatLiteralOp::create(builder, loc, "");
+      moore::StrobeYieldOp::create(builder, loc, *message);
+      return true;
     }
 
     // Severity Tasks

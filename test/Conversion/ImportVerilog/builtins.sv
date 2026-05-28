@@ -966,3 +966,54 @@ function void PlusArgsBuiltins();
   // CHECK: moore.blocking_assign {{%.+}}, [[RESULT]] : i32
   rv = $value$plusargs("BAR=%d", val);
 endfunction
+
+// IEEE 1800-2017 § 21.2.2 "Strobed monitoring"
+// CHECK-LABEL: func.func private @StrobeBuiltins(
+// CHECK-SAME: [[X:%.+]]: !moore.i32
+function void StrobeBuiltins(int x);
+  // CHECK: moore.builtin.strobe {
+  // CHECK-NEXT: [[TMP:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: moore.strobe_yield [[TMP]]
+  // CHECK-NEXT: }
+  $strobe;
+
+  // CHECK: moore.builtin.strobe {
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.fmt.literal "hello"
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK-NEXT: moore.strobe_yield [[TMP3]]
+  // CHECK-NEXT: }
+  $strobe("hello");
+
+  // CHECK: moore.builtin.strobe {
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.fmt.int decimal [[X]], align right, pad space signed : i32
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK-NEXT: moore.strobe_yield [[TMP3]]
+  // CHECK-NEXT: }
+  $strobe(x);
+
+  // CHECK: moore.builtin.strobe {
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.fmt.int binary [[X]], align right, pad zero : i32
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK-NEXT: moore.strobe_yield [[TMP3]]
+  // CHECK-NEXT: }
+  $strobeb(x);
+
+  // CHECK: moore.builtin.strobe {
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.fmt.int octal [[X]], align right, pad zero : i32
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK-NEXT: moore.strobe_yield [[TMP3]]
+  // CHECK-NEXT: }
+  $strobeo(x);
+
+  // CHECK: moore.builtin.strobe {
+  // CHECK-NEXT: [[TMP1:%.+]] = moore.fmt.int hex_lower [[X]], align right, pad zero : i32
+  // CHECK-NEXT: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK-NEXT: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK-NEXT: moore.strobe_yield [[TMP3]]
+  // CHECK-NEXT: }
+  $strobeh(x);
+endfunction

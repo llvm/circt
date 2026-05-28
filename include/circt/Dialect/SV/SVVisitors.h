@@ -40,7 +40,7 @@ public:
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
-            WriteOp, FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp,
+            WriteOp, StrobeOp, FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp,
             MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
             MacroErrorOp,
             // Type declarations.
@@ -137,6 +137,7 @@ public:
   HANDLE(ReleaseOp, Unhandled);
   HANDLE(AliasOp, Unhandled);
   HANDLE(WriteOp, Unhandled);
+  HANDLE(StrobeOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
   HANDLE(FFlushOp, Unhandled);
   HANDLE(SystemFunctionOp, Unhandled);

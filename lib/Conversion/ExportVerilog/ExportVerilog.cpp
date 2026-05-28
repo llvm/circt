@@ -4114,6 +4114,7 @@ private:
   emitFormattedWriteLikeOp(OpTy op, StringRef callee, StringRef formatString,
                            ValueRange substitutions, EmitPrefixFn emitPrefix);
   LogicalResult visitSV(WriteOp op);
+  LogicalResult visitSV(StrobeOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(FFlushOp op);
   LogicalResult visitSV(VerbatimOp op);
@@ -4679,6 +4680,12 @@ LogicalResult StmtEmitter::emitFormattedWriteLikeOp(OpTy op, StringRef callee,
 
 LogicalResult StmtEmitter::visitSV(WriteOp op) {
   return emitFormattedWriteLikeOp(op, "$write(", op.getFormatString(),
+                                  op.getSubstitutions(),
+                                  [&](SmallPtrSetImpl<Operation *> &) {});
+}
+
+LogicalResult StmtEmitter::visitSV(StrobeOp op) {
+  return emitFormattedWriteLikeOp(op, "$strobe(", op.getFormatString(),
                                   op.getSubstitutions(),
                                   [&](SmallPtrSetImpl<Operation *> &) {});
 }

@@ -528,6 +528,17 @@ def WriteOp : SVOp<"write", [ProceduralOp]> {
   }];
 }
 
+def StrobeOp : SVOp<"strobe", [ProceduralOp]> {
+  let summary = "'$strobe' statement";
+  let arguments = (ins StrAttr:$format_string,
+                        Variadic<AnyType>:$substitutions);
+  let results = (outs);
+  let assemblyFormat = [{
+    $format_string attr-dict (`(` $substitutions^ `)` `:`
+    qualified(type($substitutions)))?
+  }];
+}
+
 def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   let summary = "'$fwrite' statement";
 

@@ -1998,6 +1998,23 @@ hw.module @write_task_test(in %clock : i1) {
   }
 }
 
+// CHECK-LABEL: module strobe_task_test(
+// CHECK:      always_ff @(posedge clock) begin
+// CHECK-NEXT:   $strobe("stdout");
+// CHECK-NEXT:   $strobe("%d", 32'h2A);
+// CHECK-NEXT:   $strobe("%d %d", 32'h80000001, 32'h80000002);
+// CHECK-NEXT: end
+hw.module @strobe_task_test(in %clock : i1) {
+  sv.alwaysff(posedge %clock) {
+    %c0 = hw.constant 42 : i32
+    %c1 = hw.constant 0x80000001 : i32
+    %c2 = hw.constant 0x80000002 : i32
+    sv.strobe "stdout"
+    sv.strobe "%d"(%c0) : i32
+    sv.strobe "%d %d"(%c1, %c2) : i32, i32
+  }
+}
+
 // CHECK-LABEL: module fwrite_task_test(
 // CHECK:      always_ff @(posedge clock) begin
 // CHECK-NEXT:   $fwrite(32'h80000001, "stdout");
