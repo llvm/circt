@@ -5555,9 +5555,8 @@ LogicalResult FIRRTLLowering::visitStmt(FFlushOp op) {
 
     if (!op.getOutputFileAttr()) {
       auto stderrOp = sim::StderrStreamOp::create(builder);
-      addToSimTriggeredBlock(clock, cond, [&] {
-        sim::FlushOp::create(builder, stderrOp);
-      });
+      addToSimTriggeredBlock(clock, cond,
+                             [&] { sim::FlushOp::create(builder, stderrOp); });
     } else {
       auto fileFormatString = lowerSimFormatString(
           op.getOutputFileAttr(), op.getOutputFileSubstitutions());
