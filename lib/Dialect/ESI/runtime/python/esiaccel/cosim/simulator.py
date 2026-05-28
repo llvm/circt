@@ -57,36 +57,55 @@ class SourceFiles:
         self.add_dir(file)
 
   def dpi_so_paths(self) -> List[Path]:
-    """Return a list of all the DPI shared object files."""
+    """Return a list of all the DPI shared object files (the loadable
+    artifact: ``.so`` on POSIX, ``.dll`` on Windows)."""
+    return [self._find_dpi(name, link=False) for name in self.dpi_so]
 
-    def find_so(name: str) -> Path:
+  def dpi_link_paths(self) -> List[Path]:
+    """Return a list of files to pass to the linker for the DPI libraries.
+    On POSIX this is the same as ``dpi_so_paths()``; on Windows it is the
+    import library (``.lib``) sitting next to the DLL."""
+    return [self._find_dpi(name, link=True) for name in self.dpi_so]
 
-      def check_path(p: Path) -> Optional[Path]:
-        if os.name == "nt":
-          so = p / f"{name}.dll"
-        else:
-          so = p / f"lib{name}.so"
-        return so if so.exists() else None
+  def _find_dpi(self, name: str, link: bool) -> Path:
+    is_windows = os.name == "nt"
 
-      for path in Simulator.get_env().get("LD_LIBRARY_PATH", "").split(":"):
-        p = check_path(Path(path))
-        if p is not None:
-          return p
+    def check_path(p: Path) -> Optional[Path]:
+      if is_windows:
+        suffix = ".lib" if link else ".dll"
+        cand = p / f"{name}{suffix}"
+      else:
+        cand = p / f"lib{name}.so"
+      return cand if cand.exists() else None
 
-      # If it's not in LD_LIBRARY_PATH, check a couple of parent directories
-      # relative to this file.
-      search_parent = _thisdir.parent
-      p = check_path(search_parent / "lib")
+    env = Simulator.get_env()
+    if is_windows:
+      search_env = env.get("PATH", "")
+      env_sep = os.pathsep
+    else:
+      search_env = env.get("LD_LIBRARY_PATH", "")
+      env_sep = ":"
+    for path in search_env.split(env_sep):
+      if not path:
+        continue
+      p = check_path(Path(path))
       if p is not None:
         return p
-      search_parent = search_parent.parent
-      p = check_path(search_parent / "lib")
+
+    # Check a few directories relative to this file. The build tree puts
+    # libraries under ``<package>/../lib`` and ``<package>/../../lib``; wheel
+    # installs put them directly in the esiaccel package dir.
+    for candidate in (
+        _thisdir.parent,
+        _thisdir.parent / "lib",
+        _thisdir.parent.parent / "lib",
+    ):
+      p = check_path(candidate)
       if p is not None:
         return p
 
-      raise FileNotFoundError(f"Could not find {name}.so")
-
-    return [find_so(name) for name in self.dpi_so]
+    suffix = (".lib" if link else ".dll") if is_windows else ".so"
+    raise FileNotFoundError(f"Could not find {name}{suffix}")
 
   @property
   def rtl_sources(self) -> List[Path]:
@@ -109,7 +128,15 @@ class SimProcess:
   def force_stop(self):
     """Make sure to stop the simulation no matter what."""
     if self.proc:
-      os.killpg(os.getpgid(self.proc.pid), signal.SIGINT)
+      if os.name == "nt":
+        # The child was started with CREATE_NEW_PROCESS_GROUP, so CTRL_BREAK
+        # is delivered to that group only.
+        try:
+          self.proc.send_signal(signal.CTRL_BREAK_EVENT)
+        except (OSError, ValueError):
+          pass
+      else:
+        os.killpg(os.getpgid(self.proc.pid), signal.SIGINT)
       # Allow the simulation time to flush its outputs.
       try:
         self.proc.wait(timeout=1.0)
@@ -213,10 +240,24 @@ class Simulator:
     """Get the environment variables to locate shared objects."""
 
     env = os.environ.copy()
-    env["LIBRARY_PATH"] = env.get("LIBRARY_PATH", "") + ":" + str(
-        _thisdir.parent / "lib") + ":" + str(_thisdir.parent.parent / "lib")
-    env["LD_LIBRARY_PATH"] = env.get("LD_LIBRARY_PATH", "") + ":" + str(
-        _thisdir.parent / "lib") + ":" + str(_thisdir.parent.parent / "lib")
+    # Directories that may contain the ESI runtime / cosim DPI shared
+    # libraries (build tree and wheel install layouts).
+    lib_dirs = [
+        str(_thisdir.parent),
+        str(_thisdir.parent / "lib"),
+        str(_thisdir.parent.parent / "lib"),
+    ]
+    sep = os.pathsep
+    if os.name == "nt":
+      # Windows resolves DLL loads via PATH (and the loader's own search
+      # order). Make sure both the package dir (wheel layout) and any
+      # build-tree ``lib`` dirs are visible.
+      env["PATH"] = sep.join(lib_dirs) + sep + env.get("PATH", "")
+    else:
+      env["LIBRARY_PATH"] = env.get("LIBRARY_PATH",
+                                    "") + ":" + ":".join(lib_dirs)
+      env["LD_LIBRARY_PATH"] = env.get("LD_LIBRARY_PATH",
+                                       "") + ":" + ":".join(lib_dirs)
     return env
 
   def compile_commands(self) -> List[CompileStep]:

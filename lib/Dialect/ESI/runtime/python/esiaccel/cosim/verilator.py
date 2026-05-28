@@ -166,7 +166,24 @@ class Verilator(Simulator):
     if self._use_cmake:
       verilator_cmd += [str(p) for p in self.sources.rtl_sources]
       build_dir = str(Path.cwd() / "obj_dir" / "cmake_build")
-      cmake_cmd = ["cmake", "-G", "Ninja", "-S", build_dir, "-B", build_dir]
+      # ``CMAKE_BUILD_TYPE=Release`` is important on Windows: the prebuilt
+      # ``EsiCosimDpiServer.dll`` ships with the Release MSVC runtime, and
+      # mixing it with a Debug-runtime executable causes silent failures
+      # (e.g. transport/control connections come up but requests stall).
+      cmake_cmd = [
+          "cmake", "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release", "-S", build_dir,
+          "-B", build_dir
+      ]
+      # If vcpkg is available, use its toolchain file so that
+      # ``find_package(ZLIB)`` (and other transitive deps) can pick up vcpkg
+      # installations. This is the standard story on Windows.
+      vcpkg_root = os.environ.get("VCPKG_ROOT") or os.environ.get(
+          "VCPKG_INSTALLATION_ROOT")
+      if vcpkg_root:
+        toolchain = Path(
+            vcpkg_root) / "scripts" / "buildsystems" / "vcpkg.cmake"
+        if toolchain.exists():
+          cmake_cmd.append(f"-DCMAKE_TOOLCHAIN_FILE={toolchain}")
       ninja_cmd = ["ninja", "-C", build_dir]
       return [
           verilator_cmd, self._write_cmake_from_depfile, cmake_cmd, ninja_cmd
@@ -242,6 +259,7 @@ class Verilator(Simulator):
         include_dir / "verilated.cpp",
         include_dir / "verilated_threads.cpp",
     ]
+    # Include Verilator's DPI helpers when DPI shared objects are enabled.
     if self.sources.dpi_so:
       runtime_sources.append(include_dir / "verilated_dpi.cpp")
     if self.debug:
@@ -251,30 +269,33 @@ class Verilator(Simulator):
     if random_cpp.exists():
       runtime_sources.append(random_cpp)
 
-    generated_src = "\n  ".join(str(source) for source in generated_sources)
-    rt_src = "\n  ".join(str(s) for s in runtime_sources)
-    driver = str(Verilator.DefaultDriver)
-    inc = str(include_dir)
-    vltstd = str(include_dir / "vltstd")
+    generated_src = "\n  ".join(
+        source.as_posix() for source in generated_sources)
+    rt_src = "\n  ".join(s.as_posix() for s in runtime_sources)
+    driver = Path(Verilator.DefaultDriver).as_posix()
+    inc = include_dir.as_posix()
+    vltstd = (include_dir / "vltstd").as_posix()
 
     defs = [f"TOP_MODULE={self.sources.top}"]
     if self.debug:
       defs.append("TRACE")
     defs_str = "\n  ".join(defs)
 
-    # Link DPI shared objects by full path.
+    # Link DPI shared objects by full path. On Windows, link against the
+    # ``.lib`` import library; the matching ``.dll`` is found at runtime via
+    # ``PATH`` (see ``Simulator.get_env``).
     dpi_link = ""
     if self.sources.dpi_so:
-      dpi_paths = self.sources.dpi_so_paths()
-      dpi_link = "\n  ".join(str(p) for p in dpi_paths)
+      dpi_paths = self.sources.dpi_link_paths()
+      dpi_link = "\n  ".join(p.as_posix() for p in dpi_paths)
 
     pch_setup = ""
     if pch_header is not None:
       runtime_and_driver = "\n  ".join(
-          [str(source) for source in runtime_sources] + [driver])
+          [source.as_posix() for source in runtime_sources] + [driver])
       pch_setup = f"""
 target_precompile_headers({exe_name} PRIVATE
-  {pch_header}
+  {pch_header.as_posix()}
 )
 
 set_source_files_properties(
@@ -283,10 +304,27 @@ set_source_files_properties(
 )
 """
 
+    # zlib is only needed when FST tracing (debug builds) is enabled.
+    if self.debug:
+      zlib_find = "find_package(ZLIB REQUIRED)"
+      zlib_link = "ZLIB::ZLIB"
+    else:
+      zlib_find = ""
+      zlib_link = ""
+
     content = f"""\
 cmake_minimum_required(VERSION 3.20)
 project({exe_name} CXX)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if(MSVC)
+  add_compile_options(/EHsc /bigobj)
+endif()
+
+find_package(Threads REQUIRED)
+{zlib_find}
 add_executable({exe_name}
   {generated_src}
   {rt_src}
@@ -304,11 +342,9 @@ target_compile_definitions({exe_name} PRIVATE
 )
 {pch_setup}
 
-find_package(Threads REQUIRED)
-find_package(ZLIB REQUIRED)
 target_link_libraries({exe_name} PRIVATE
   Threads::Threads
-  ZLIB::ZLIB
+  {zlib_link}
   {dpi_link}
 )
 """
@@ -326,6 +362,8 @@ target_link_libraries({exe_name} PRIVATE
     if gui:
       raise RuntimeError("Verilator does not support GUI mode.")
     exe_name = "V" + self.sources.top
+    if os.name == "nt":
+      exe_name += ".exe"
     if self._use_cmake:
       exe = Path.cwd() / "obj_dir" / "cmake_build" / exe_name
     else:
