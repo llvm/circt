@@ -177,7 +177,8 @@ class Verilator(Simulator):
       # If vcpkg is available, use its toolchain file so that
       # ``find_package(ZLIB)`` (and other transitive deps) can pick up vcpkg
       # installations. This is the standard story on Windows.
-      vcpkg_root = os.environ.get("VCPKG_ROOT")
+      vcpkg_root = os.environ.get("VCPKG_ROOT") or os.environ.get(
+          "VCPKG_INSTALLATION_ROOT")
       if vcpkg_root:
         toolchain = Path(
             vcpkg_root) / "scripts" / "buildsystems" / "vcpkg.cmake"
