@@ -785,3 +785,64 @@ function void FileIOBuiltins(int fd_int, integer fd_integer);
   // CHECK: moore.builtin.fflush
   $fflush();
 endfunction
+
+// IEEE 1800-2017 § 21.3.2 "File output system tasks"
+// CHECK-LABEL: func.func private @FileDisplayBuiltins(
+// CHECK-SAME: [[FD:%[^ ,]+]]: !moore.i32
+// CHECK-SAME: [[X:%[^ ,]+]]: !moore.i32
+function void FileDisplayBuiltins(int fd, int x);
+  // $fwrite with no message
+  // CHECK-NOT: moore.builtin.fdisplay
+  $fwrite(fd);
+
+  // $fdisplay with no args
+  // CHECK: [[TMP:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP]]
+  $fdisplay(fd);
+
+  // CHECK: [[TMP:%.+]] = moore.fmt.literal "hello"
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP]]
+  $fwrite(fd, "hello");
+
+  // $fdisplay adds \0A newline
+  // CHECK: [[TMP1:%.+]] = moore.fmt.literal "hello"
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP3]]
+  $fdisplay(fd, "hello");
+
+  // CHECK: [[TMP:%.+]] = moore.fmt.int decimal [[X]], align right, pad space signed : i32
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP]]
+  $fwrite(fd, x);
+  // CHECK: [[TMP:%.+]] = moore.fmt.int binary [[X]], align right, pad zero : i32
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP]]
+  $fwriteb(fd, x);
+  // CHECK: [[TMP:%.+]] = moore.fmt.int octal [[X]], align right, pad zero : i32
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP]]
+  $fwriteo(fd, x);
+  // CHECK: [[TMP:%.+]] = moore.fmt.int hex_lower [[X]], align right, pad zero : i32
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP]]
+  $fwriteh(fd, x);
+
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int decimal [[X]], align right, pad space signed : i32
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP3]]
+  $fdisplay(fd, x);
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int binary [[X]], align right, pad zero : i32
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP3]]
+  $fdisplayb(fd, x);
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int octal [[X]], align right, pad zero : i32
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP3]]
+  $fdisplayo(fd, x);
+  // CHECK: [[TMP1:%.+]] = moore.fmt.int hex_lower [[X]], align right, pad zero : i32
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.fdisplay [[FD]], [[TMP3]]
+  $fdisplayh(fd, x);
+
+endfunction

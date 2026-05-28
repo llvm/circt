@@ -2953,6 +2953,19 @@ struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   }
 };
 
+struct FDisplayBIOpConversion : public OpConversionPattern<FDisplayBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(FDisplayBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto stream = sim::SVChannelToOutputStreamOp::create(rewriter, op.getLoc(),
+                                                         adaptor.getFd());
+    rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(
+        op, adaptor.getMessage(), stream.getStream());
+    return success();
+  }
+};
+
 struct FOpenBIOpConversion : public OpConversionPattern<FOpenBIOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -3561,6 +3574,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatIntOpConversion,
     FormatRealOpConversion,
     DisplayBIOpConversion,
+    FDisplayBIOpConversion,
 
     // File I/O operations
     FOpenBIOpConversion,
