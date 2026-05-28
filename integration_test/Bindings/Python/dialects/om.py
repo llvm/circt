@@ -157,10 +157,10 @@ for (name, field) in obj:
   # CHECK-SAME: loc: loc(fused
   # location from om.class.field "field"
   # CHECK: name: field, field: 42
-  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
+  # CHECK-SAME: loc: loc(fused
   # location from om.class.field "reference"
   # CHECK: name: reference, field: ('Root', 'x')
-  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
+  # CHECK-SAME: loc: loc(fused
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
