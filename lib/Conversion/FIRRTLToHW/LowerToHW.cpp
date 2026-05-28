@@ -3292,26 +3292,23 @@ void FIRRTLLowering::addToSimTriggeredBlock(
                     ? lastConditionBlock.second
                     : mlir::scf::IfOp();
     if (!ifOp) {
-      auto oldIP = builder.saveInsertionPoint();
+      OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToEnd(triggered.getBodyBlock());
       ifOp = mlir::scf::IfOp::create(builder, builder.getLoc(), TypeRange{},
                                      condition, true, false);
       builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
       mlir::scf::YieldOp::create(builder, builder.getLoc());
-      builder.restoreInsertionPoint(oldIP);
       lastConditionBlock = {condition, ifOp};
     }
 
-    auto oldIP = builder.saveInsertionPoint();
+    OpBuilder::InsertionGuard guard(builder);
     auto &thenBlock = ifOp.getThenRegion().front();
     builder.setInsertionPoint(thenBlock.getTerminator());
     body();
-    builder.restoreInsertionPoint(oldIP);
   } else {
-    auto oldIP = builder.saveInsertionPoint();
+    OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(triggered.getBodyBlock());
     body();
-    builder.restoreInsertionPoint(oldIP);
     simTriggeredLastConditionBlocks[triggered] = {};
   }
 
