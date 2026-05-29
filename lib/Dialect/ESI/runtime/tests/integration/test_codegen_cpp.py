@@ -1,6 +1,7 @@
 #  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
 """Pytest harness for the codegen + port-kind coverage tests.
 
 Where ``test_serialization_probes`` exercises wire-format invariants, this
