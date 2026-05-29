@@ -24,10 +24,10 @@
 #include "circt/Dialect/SV/SVPasses.h"
 #include "circt/Support/Namespace.h"
 #include "circt/Support/ProceduralRegionTrait.h"
+#include "circt/Support/Utils.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
-#include <atomic>
+#include "llvm/ADT/TypeSwitch.h"
 
 namespace circt {
 namespace sv {
@@ -55,18 +55,13 @@ static bool isMaskedOp(Operation *op) {
 /// to identify the region that need not be re-wrapped in `ifdef` mode.
 static Region *getMatchingIfDefElseRegion(Operation *op,
                                           StringRef expectedMacro) {
-  StringRef macro;
-  Region *elseRegion = nullptr;
-  if (auto ifdef = dyn_cast<sv::IfDefOp>(op)) {
-    macro = ifdef.getCond().getName();
-    elseRegion = &ifdef.getElseRegion();
-  } else if (auto ifdef = dyn_cast<sv::IfDefProceduralOp>(op)) {
-    macro = ifdef.getCond().getName();
-    elseRegion = &ifdef.getElseRegion();
-  } else {
-    return nullptr;
-  }
-  return macro == expectedMacro ? elseRegion : nullptr;
+  return llvm::TypeSwitch<Operation *, Region *>(op)
+      .Case<sv::IfDefOp, sv::IfDefProceduralOp>([&](auto ifdef) -> Region * {
+        if (ifdef.getCond().getName() != expectedMacro)
+          return nullptr;
+        return &ifdef.getElseRegion();
+      })
+      .Default(static_cast<Region *>(nullptr));
 }
 
 /// Resolve the symbol name to use for the `sv.macro.decl` referenced by
@@ -103,14 +98,13 @@ static void processBlockDelete(Block &block) {
 /// Wrap a single masked op in its own `sv.ifdef`/`sv.ifdef.procedural`. Picks
 /// the procedural variant based on the enclosing region.
 static void maskOpByIfdef(Operation *op, StringRef macro) {
-  bool procedural = isInProceduralRegion(op);
   OpBuilder builder(op);
   Location loc = op->getLoc();
 
   // Passing a non-null `elseCtor` is what triggers the builder to create an
   // else block.
   Block *elseBlock;
-  if (procedural)
+  if (isInProceduralRegion(op))
     elseBlock =
         sv::IfDefProceduralOp::create(builder, loc, macro,
                                       /*thenCtor=*/{}, /*elseCtor=*/[]() {})
@@ -177,22 +171,22 @@ void SVMaskNonSynthesizablePass::runOnOperation() {
   // Each `hw.module`'s body is independent: `processBlock*` only mutates ops
   // inside the module it's called on.
   SmallVector<hw::HWModuleOp> hwModules(moduleOp.getOps<hw::HWModuleOp>());
-  std::atomic<bool> anyChanged{false};
-  mlir::parallelForEach(&getContext(), hwModules, [&](hw::HWModuleOp hwModule) {
-    Block &body = *hwModule.getBodyBlock();
-    switch (mode) {
-    case MaskNonSynthesizableMode::Delete:
-      processBlockDelete(body);
-      break;
-    case MaskNonSynthesizableMode::Ifdef:
-      if (processBlockIfdef(body, passDownMacro))
-        anyChanged.store(true, std::memory_order_relaxed);
-      break;
-    }
-  });
+  unsigned numChanged =
+      transformReduce(&getContext(), hwModules, /*init=*/0u, std::plus<>(),
+                      [&](hw::HWModuleOp hwModule) -> unsigned {
+                        Block &body = *hwModule.getBodyBlock();
+                        switch (mode) {
+                        case MaskNonSynthesizableMode::Delete:
+                          processBlockDelete(body);
+                          return 0;
+                        case MaskNonSynthesizableMode::Ifdef:
+                          return processBlockIfdef(body, passDownMacro) ? 1 : 0;
+                        }
+                        llvm_unreachable("all modes handled");
+                      });
 
-  if (mode == MaskNonSynthesizableMode::Ifdef &&
-      anyChanged.load(std::memory_order_relaxed) && macroDeclNeedsCreation) {
+  if (mode == MaskNonSynthesizableMode::Ifdef && numChanged > 0 &&
+      macroDeclNeedsCreation) {
     auto builder = OpBuilder::atBlockBegin(moduleOp.getBody());
     sv::MacroDeclOp::create(builder, moduleOp.getLoc(), macroSymName,
                             /*args=*/ArrayAttr{}, builder.getStringAttr(macro));

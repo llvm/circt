@@ -1,13 +1,15 @@
-// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable=mode=delete %s | FileCheck %s --check-prefix=DELETE
-// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable=mode=ifdef %s | FileCheck %s --check-prefix=IFDEF
+// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable=mode=delete %s | FileCheck %s --check-prefixes=COMMON,DELETE
+// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable=mode=ifdef %s | FileCheck %s --check-prefixes=COMMON,IFDEF
+//
 // Default mode is `ifdef`.
-// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable %s | FileCheck %s --check-prefix=IFDEF
+// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable %s | FileCheck %s --check-prefixes=COMMON,IFDEF
+//
 // Both modes are idempotent across re-runs.
-// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable=mode=delete %s | circt-opt -split-input-file -sv-mask-non-synthesizable=mode=delete | FileCheck %s --check-prefix=DELETE
-// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable=mode=ifdef %s | circt-opt -split-input-file -sv-mask-non-synthesizable=mode=ifdef | FileCheck %s --check-prefix=IFDEF
-// `ifdef` mode honors a custom macro name and is idempotent under it.
-// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable='mode=ifdef macro=MY_GUARD' %s | FileCheck %s --check-prefix=CUSTOM
-// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable='mode=ifdef macro=MY_GUARD' %s | circt-opt -split-input-file -sv-mask-non-synthesizable='mode=ifdef macro=MY_GUARD' | FileCheck %s --check-prefix=CUSTOM
+// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable=mode=delete %s | circt-opt -split-input-file -sv-mask-non-synthesizable=mode=delete | FileCheck %s --check-prefixes=COMMON,DELETE
+// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable=mode=ifdef %s | circt-opt -split-input-file -sv-mask-non-synthesizable=mode=ifdef | FileCheck %s --check-prefixes=COMMON,IFDEF
+//
+// `ifdef` mode honors a custom macro name.
+// RUN: circt-opt -split-input-file -sv-mask-non-synthesizable='mode=ifdef macro=MY_GUARD' %s | FileCheck %s --check-prefix=COMMON,CUSTOM
 
 //===----------------------------------------------------------------------===//
 // Each masked op is wrapped in its own `sv.ifdef`; adjacent wrappers are not
@@ -17,14 +19,10 @@
 // IFDEF: sv.macro.decl @SYNTHESIS
 // CUSTOM: sv.macro.decl @MY_GUARD
 
-// DELETE-LABEL: hw.module @basic
-// IFDEF-LABEL:  hw.module @basic
-// CUSTOM-LABEL: hw.module @basic
+// COMMON-LABEL: hw.module @basic
 hw.module @basic(in %clock : i1, in %prop : i1) {
   // Untouched ops outside the masked set always pass through.
-  // DELETE: hw.constant true
-  // IFDEF:  hw.constant true
-  // CUSTOM: hw.constant true
+  // COMMON: hw.constant true
   %true = hw.constant true
 
   // Each masked op gets its own wrapper, even when they are adjacent.
@@ -90,9 +88,7 @@ hw.module @basic(in %clock : i1, in %prop : i1) {
 //===----------------------------------------------------------------------===//
 
 // IFDEF: sv.macro.decl @SYNTHESIS
-
-// DELETE-LABEL: hw.module @procedural
-// IFDEF-LABEL:  hw.module @procedural
+// COMMON-LABEL: hw.module @procedural
 hw.module @procedural(in %clock : i1, in %prop : i1) {
   // DELETE:      sv.always posedge %clock {
   // DELETE-NEXT: }
@@ -211,8 +207,7 @@ hw.module @reuses_existing_decl(in %clock : i1, in %prop : i1) {
 //===----------------------------------------------------------------------===//
 
 // IFDEF-NOT:    sv.macro.decl @SYNTHESIS
-// IFDEF-LABEL:  hw.module @nothing_to_mask
-// DELETE-LABEL: hw.module @nothing_to_mask
+// COMMON-LABEL: hw.module @nothing_to_mask
 hw.module @nothing_to_mask(in %clock : i1) {
   // IFDEF-NOT:  sv.ifdef
   %true = hw.constant true

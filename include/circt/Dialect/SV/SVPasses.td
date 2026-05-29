@@ -138,8 +138,8 @@ def SVMaskNonSynthesizable : Pass<"sv-mask-non-synthesizable",
     synthesizable (concurrent and property assertions) from the
     SystemVerilog output. Two masking modes are supported:
 
-    * `delete` — erase the matched ops entirely.
-    * `ifdef`  — wrap each matched op individually in
+    * `delete`: erase the matched ops entirely.
+    * `ifdef`: wrap each matched op individually in
       `` `ifndef <macro> `` ... `` `endif `` (using `sv.ifdef` or
       `sv.ifdef.procedural` as appropriate). A matching `sv.macro.decl` is
       created at the top of the module if one is not already present. The
