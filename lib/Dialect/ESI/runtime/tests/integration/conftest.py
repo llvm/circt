@@ -97,6 +97,7 @@ def build_cpp_test(sources_dir: Path,
   picks up any source or generated-header changes.
   """
   require_tool("cmake")
+  require_tool("ninja")
 
   if build_subdir is None:
     build_subdir = target

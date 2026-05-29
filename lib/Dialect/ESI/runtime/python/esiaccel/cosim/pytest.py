@@ -560,10 +560,21 @@ def _run_isolated(
     # fork is unavailable on Windows. Under xdist, run inline and rely on the
     # worker process as the isolation boundary.
     inline_result = _run_child(None, target, config, args, kwargs, class_cache)
+    for line in inline_result.stdout_lines:
+      _logger.debug("sim stdout: %s", line)
+    for line in inline_result.stderr_lines:
+      _logger.debug("sim stderr: %s", line)
     for warning in inline_result.warning_lines:
       _logger.warning("cosim warning: %s", warning)
     if not inline_result.success:
-      raise AssertionError(inline_result.traceback)
+      parts = [inline_result.traceback]
+      if inline_result.stdout_lines:
+        parts.append("\n=== Simulator stdout ===")
+        parts.extend(inline_result.stdout_lines[-200:])
+      if inline_result.stderr_lines:
+        parts.append("\n=== Simulator stderr ===")
+        parts.extend(inline_result.stderr_lines[-200:])
+      raise AssertionError("\n".join(parts))
     return
   reader, writer = ctx.Pipe(duplex=False)
   process = ctx.Process(
