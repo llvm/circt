@@ -50,7 +50,7 @@ class TestCompileCommands:
   def test_uses_verilator_bin(self, tmp_path):
     v = _make_verilator(tmp_path)
     cmds = v.compile_commands()
-    assert Path(cmds[0][0]).name == "verilator_bin"
+    assert Path(cmds[0][0]).stem == "verilator_bin"
     assert cmds[0][0] == v.verilator_bin
 
   def test_cmake_and_ninja_commands(self, tmp_path):
@@ -189,9 +189,10 @@ class TestMakeFallback:
 
   def test_fallback_exe_path(self, tmp_path):
     v = self._make_no_cmake(tmp_path, top="MyTop")
+    exe_name = "VMyTop.exe" if os.name == "nt" else "VMyTop"
     with mock.patch.object(Path, "cwd", return_value=tmp_path):
       cmd = v.run_command(gui=False)
-      assert cmd == [str(tmp_path / "obj_dir" / "VMyTop")]
+      assert cmd == [str(tmp_path / "obj_dir" / exe_name)]
 
 
 class TestFindVerilatorRoot:
@@ -214,7 +215,10 @@ class TestFindVerilatorRoot:
     fake_bin.touch()
     fake_bin.chmod(0o755)
     with mock.patch.dict(os.environ, {}, clear=False):
+      # Clear both root and path env vars so the real Verilator install
+      # doesn't shadow the fake bin created for this test.
       os.environ.pop("VERILATOR_ROOT", None)
+      os.environ.pop("VERILATOR_PATH", None)
       with mock.patch("shutil.which", return_value=str(fake_bin)):
         v = _make_verilator(tmp_path)
         found = v._find_verilator_root()
@@ -222,7 +226,10 @@ class TestFindVerilatorRoot:
 
   def test_raises_when_not_found(self, tmp_path):
     with mock.patch.dict(os.environ, {}, clear=False):
+      # Clear both env vars so the real Verilator install doesn't satisfy
+      # root detection before the RuntimeError can be raised.
       os.environ.pop("VERILATOR_ROOT", None)
+      os.environ.pop("VERILATOR_PATH", None)
       with mock.patch("shutil.which", return_value=None):
         v = _make_verilator(tmp_path)
         with pytest.raises(RuntimeError):
@@ -244,7 +251,7 @@ class TestWriteCmake:
       assert (build_dir / "CMakeLists.txt").exists()
       content = (build_dir / "CMakeLists.txt").read_text()
       assert "VTestTop" in content
-      assert str(generated_sources[0]) in content
+      assert generated_sources[0].as_posix() in content
       assert "verilated.cpp" in content
       assert "verilated_threads.cpp" in content
       assert "driver.cpp" in content
@@ -288,6 +295,7 @@ class TestRunCommand:
     v = _make_verilator(tmp_path, top="MyTop")
     if not v._use_cmake:
       pytest.skip("cmake+ninja not available")
+    exe_name = "VMyTop.exe" if os.name == "nt" else "VMyTop"
     with mock.patch.object(Path, "cwd", return_value=tmp_path):
       cmd = v.run_command(gui=False)
-      assert cmd == [str(tmp_path / "obj_dir" / "cmake_build" / "VMyTop")]
+      assert cmd == [str(tmp_path / "obj_dir" / "cmake_build" / exe_name)]

@@ -252,11 +252,10 @@ def _build_harness_manifest():
 def _harness_env():
   """Resolve `cmake` and the runtime shared library, or skip.
 
-  The runtime library always ships next to the `esiaccel` Python package
-  at `<esiaccel>/lib/...`, which is the same binary the rest of the Python
-  test suite already loads. Using that as the anchor avoids needing to
-  plumb in a separate `ESI_RUNTIME_ROOT`, parse `esiaccelConfig.cmake`,
-  or walk the build tree.
+  The runtime library ships with the `esiaccel` Python package, either at
+  `<esiaccel>/lib/...` or next to the package modules themselves. Using
+  that as the anchor avoids needing to plumb in a separate
+  `ESI_RUNTIME_ROOT`, parse `esiaccelConfig.cmake`, or walk the build tree.
 
   On Windows, MSVC needs the `.lib` import library to link against and
   the `.dll` to load at runtime, so we look up both separately and feed
@@ -271,31 +270,38 @@ def _harness_env():
     import esiaccel
   except ImportError:
     pytest.skip("esiaccel not importable")
-  esiaccel_lib_dir = Path(esiaccel.__file__).parent / "lib"
+  esiaccel_package_dir = Path(esiaccel.__file__).parent
+  esiaccel_lib_dirs = [esiaccel_package_dir / "lib", esiaccel_package_dir]
 
   runtime_lib = None
   runtime_dll = None
   if sys.platform == "win32":
     # Prefer the MSVC import library for linking; fall back to the DLL
     # itself (which works with MinGW) if no `.lib` was shipped.
-    lib = esiaccel_lib_dir / "ESICppRuntime.lib"
-    dll = esiaccel_lib_dir / "ESICppRuntime.dll"
-    if lib.exists():
-      runtime_lib = lib
-    if dll.exists():
-      runtime_dll = dll
-      if runtime_lib is None:
-        runtime_lib = dll
+    for esiaccel_lib_dir in esiaccel_lib_dirs:
+      lib = esiaccel_lib_dir / "ESICppRuntime.lib"
+      dll = esiaccel_lib_dir / "ESICppRuntime.dll"
+      if lib.exists():
+        runtime_lib = lib
+      if dll.exists():
+        runtime_dll = dll
+        if runtime_lib is None:
+          runtime_lib = dll
+      if runtime_lib is not None:
+        break
   else:
-    for name in ("libESICppRuntime.so", "libESICppRuntime.dylib"):
-      candidate = esiaccel_lib_dir / name
-      if candidate.exists():
-        runtime_lib = candidate
+    for esiaccel_lib_dir in esiaccel_lib_dirs:
+      for name in ("libESICppRuntime.so", "libESICppRuntime.dylib"):
+        candidate = esiaccel_lib_dir / name
+        if candidate.exists():
+          runtime_lib = candidate
+          break
+      if runtime_lib is not None:
         break
 
   if runtime_lib is None:
-    pytest.skip(f"ESICppRuntime link artifact not found under "
-                f"{esiaccel_lib_dir}")
+    search_dirs = ", ".join(str(path) for path in esiaccel_lib_dirs)
+    pytest.skip(f"ESICppRuntime link artifact not found under {search_dirs}")
 
   return {"runtime_lib": runtime_lib, "runtime_dll": runtime_dll}
 
