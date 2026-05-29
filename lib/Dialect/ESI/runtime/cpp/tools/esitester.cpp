@@ -407,7 +407,6 @@ static void callbackTest(AcceleratorConnection *conn, Accelerator *accel,
   std::atomic<uint32_t> callbackCount = 0;
   callPort->connect(
       [conn, &callbackCount](const MessageData &data) mutable -> MessageData {
-        callbackCount.fetch_add(1);
         conn->getLogger().debug(
             [&](std::string &subsystem, std::string &msg,
                 std::unique_ptr<std::map<std::string, std::any>> &details) {
@@ -417,6 +416,7 @@ static void callbackTest(AcceleratorConnection *conn, Accelerator *accel,
               details->emplace("data", data);
             });
         std::cout << "callback: " << *data.as<uint64_t>() << std::endl;
+        callbackCount.fetch_add(1);
         return MessageData();
       },
       true);
