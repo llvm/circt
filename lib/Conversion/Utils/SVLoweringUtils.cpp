@@ -71,7 +71,8 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
   SymbolTable symbolTable(fileScopeOp);
 
   auto emitGuard = [&](StringAttr guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(builder, guard, [] {}, body);
+    sv::IfDefOp::create(
+        builder, guard, [] {}, body);
   };
 
   if (!symbolTable.lookup(getterSymName)) {
