@@ -326,6 +326,7 @@ def test_codegen_round_trip(_harness_env, tmp_path):
       str(_HARNESS_DIR),
       "-B",
       str(build_dir),
+      "-DCMAKE_BUILD_TYPE=Release",
       f"-DCODEGEN_HARNESS_GENERATED_DIR={generated_dir}",
       f"-DESI_RUNTIME_LIB={_harness_env['runtime_lib']}",
   ]
@@ -344,7 +345,7 @@ def test_codegen_round_trip(_harness_env, tmp_path):
 
   build_cmd = [
       "cmake", "--build",
-      str(build_dir), "--target", "codegen_harness"
+      str(build_dir), "--target", "codegen_harness", "--config", "Release"
   ]
   build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
   if build_proc.returncode != 0:

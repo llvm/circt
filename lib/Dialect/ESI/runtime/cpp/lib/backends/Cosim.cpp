@@ -230,6 +230,7 @@ CosimAccelerator::CosimAccelerator(Context &ctxt, std::string hostname,
 }
 CosimAccelerator::~CosimAccelerator() {
   disconnect();
+  clearOwnedObjects();
   channels.clear();
 }
 

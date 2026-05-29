@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 import sys
 from typing import List
 
@@ -8,6 +9,7 @@ import esiaccel
 from esiaccel.accelerator import AcceleratorConnection
 from esiaccel.cosim.pytest import cosim_test
 import esiaccel.types as types
+import pytest
 
 HW_DIR = Path(__file__).resolve().parent.parent / "hw"
 
@@ -118,6 +120,8 @@ def test_cosim_loopback(conn: AcceleratorConnection) -> None:
 
 def test_cosim_loopback_make_fallback(monkeypatch) -> None:
   """Run the loopback test using the ``make`` fallback (no cmake/ninja)."""
+  if shutil.which("make") is None:
+    pytest.skip("make fallback requires make on PATH")
   from esiaccel.cosim.verilator import Verilator
   monkeypatch.setattr(Verilator, "_use_cmake", property(lambda self: False))
   # Delegate to the already-decorated cosim test.  The monkeypatch is

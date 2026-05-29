@@ -22,6 +22,10 @@
 #include "esi/Manifest.h"
 #include "esi/Services.h"
 
+#ifdef _MSC_VER
+#include <crtdbg.h>
+#include <cstdlib>
+#endif
 #include <iostream>
 #include <string>
 #include <utility>
@@ -31,6 +35,18 @@ namespace esi_test {
 
 using ProbeFn = int (*)(esi::Accelerator *);
 using ProbeEntry = std::pair<std::string, ProbeFn>;
+
+inline void configureMsvcDebugReports() {
+#if defined(_MSC_VER) && defined(_DEBUG)
+  _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+  _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+  _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+  _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+  _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+  _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+  _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+#endif
+}
 
 /// Run the probe-runner main loop. Returns 0 on success, nonzero on failure.
 inline int runProbes(int argc, const char *argv[], const char *name,
@@ -93,6 +109,7 @@ inline int runProbes(int argc, const char *argv[], const char *name,
 /// The variadic arguments are ``{"name", &fn}`` pairs.
 #define ESI_PROBE_REGISTRY(name, description, ...)                             \
   int main(int argc, const char *argv[]) {                                     \
+    esi_test::configureMsvcDebugReports();                                     \
     static const std::vector<esi_test::ProbeEntry> kProbes = {__VA_ARGS__};    \
     return esi_test::runProbes(argc, argv, name, description, kProbes);        \
   }

@@ -110,8 +110,10 @@ def _build_loopback_codegen(tmp_path: Path, host: str, port: int) -> Path:
       f"--- stderr ---\n{result.stderr}")
 
   result = subprocess.run(
-      ["cmake", "--build",
-       str(build_dir), "--target", "loopback_test"],
+      [
+          "cmake", "--build",
+          str(build_dir), "--target", "loopback_test", "--config", "Release"
+      ],
       capture_output=True,
       text=True,
   )
