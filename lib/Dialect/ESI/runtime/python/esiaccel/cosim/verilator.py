@@ -255,6 +255,23 @@ class Verilator(Simulator):
     include_dir = verilator_root / "include"
     exe_name = "V" + self.sources.top
 
+    if os.name == "nt" and all(source.exists() for source in generated_sources):
+      # Verilator can emit deeply descriptive source filenames. CMake uses the
+      # source basename in MSVC's /Fo object path, which can overflow Windows'
+      # practical object path limits even after CMake hashes directories.
+      # Short local copies keep the build graph stable without changing the
+      # generated code or its includes.
+      short_source_dir = obj_dir / "cmake_src"
+      if short_source_dir.exists():
+        shutil.rmtree(short_source_dir)
+      short_source_dir.mkdir(parents=True)
+      shortened_sources = []
+      for index, source in enumerate(generated_sources):
+        shortened_source = short_source_dir / f"vsrc_{index}.cpp"
+        shutil.copy2(source, shortened_source)
+        shortened_sources.append(shortened_source)
+      generated_sources = shortened_sources
+
     runtime_sources = [
         include_dir / "verilated.cpp",
         include_dir / "verilated_threads.cpp",
