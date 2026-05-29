@@ -62,13 +62,16 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
   auto getterSymName = ::getFileDescriptorGetterSymName(builder.getContext());
   auto fragmentSymName =
       ::getFileDescriptorFragmentSymName(builder.getContext());
-  auto macroSymName = builder.getStringAttr(kFileDescriptorMacroName);
-  auto synthesisSymName = builder.getStringAttr("SYNTHESIS");
+  bool fileDescriptorMacroNeedsCreation = false;
+  auto macroSymName = sv::resolveMacroSymName(
+      fileScopeOp, kFileDescriptorMacroName, fileDescriptorMacroNeedsCreation);
+  bool synthesisMacroNeedsCreation = false;
+  auto synthesisSymName = sv::resolveMacroSymName(fileScopeOp, "SYNTHESIS",
+                                                  synthesisMacroNeedsCreation);
   SymbolTable symbolTable(fileScopeOp);
 
-  auto emitGuard = [&](StringRef guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        builder, guard, [] {}, body);
+  auto emitGuard = [&](StringAttr guard, llvm::function_ref<void(void)> body) {
+    sv::IfDefOp::create(builder, guard, [] {}, body);
   };
 
   if (!symbolTable.lookup(getterSymName)) {
@@ -96,18 +99,30 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
     symbolTable.insert(func);
   }
 
-  if (!symbolTable.lookup(synthesisSymName))
-    symbolTable.insert(sv::MacroDeclOp::create(builder, synthesisSymName));
+  if (synthesisMacroNeedsCreation) {
+    auto verilogName = synthesisSymName.getValue() == "SYNTHESIS"
+                           ? StringAttr{}
+                           : builder.getStringAttr("SYNTHESIS");
+    symbolTable.insert(
+        sv::MacroDeclOp::create(builder, builder.getLoc(), synthesisSymName,
+                                /*args=*/ArrayAttr{}, verilogName));
+  }
 
-  if (!symbolTable.lookup(macroSymName))
-    symbolTable.insert(sv::MacroDeclOp::create(builder, macroSymName));
+  if (fileDescriptorMacroNeedsCreation) {
+    auto verilogName = macroSymName.getValue() == kFileDescriptorMacroName
+                           ? StringAttr{}
+                           : builder.getStringAttr(kFileDescriptorMacroName);
+    symbolTable.insert(
+        sv::MacroDeclOp::create(builder, builder.getLoc(), macroSymName,
+                                /*args=*/ArrayAttr{}, verilogName));
+  }
 
   if (symbolTable.lookup(fragmentSymName))
     return;
 
   auto fragment = emit::FragmentOp::create(builder, fragmentSymName, [&] {
-    emitGuard("SYNTHESIS", [&]() {
-      emitGuard(kFileDescriptorMacroName, [&]() {
+    emitGuard(synthesisSymName, [&]() {
+      emitGuard(macroSymName, [&]() {
         sv::VerbatimOp::create(builder, R"(// CIRCT Logging Library
 package __circt_lib_logging;
   class FileDescriptor;

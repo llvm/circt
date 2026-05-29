@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/Namespace.h"
 #include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -54,6 +55,36 @@ bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
              ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, ConstantStrOp,
              MacroRefExprOp, MacroRefExprSEOp>(op);
+}
+
+StringAttr sv::resolveMacroSymName(Operation *symbolTableOp,
+                                   StringRef verilogName, bool &created) {
+  assert(symbolTableOp && "expected symbol table op");
+  assert(symbolTableOp->hasTrait<mlir::OpTrait::SymbolTable>() &&
+         "expected symbolTableOp to define a symbol table");
+  assert(symbolTableOp->getNumRegions() == 1 &&
+         "expected single-region symbol table op");
+  assert(!symbolTableOp->getRegion(0).empty() &&
+         "expected non-empty symbol table region");
+
+  for (auto decl :
+       symbolTableOp->getRegion(0).front().getOps<sv::MacroDeclOp>()) {
+    if (decl.getMacroIdentifier() == verilogName) {
+      created = false;
+      return decl.getSymNameAttr();
+    }
+  }
+
+  Namespace ns;
+  auto symbolNameId = StringAttr::get(symbolTableOp->getContext(),
+                                      SymbolTable::getSymbolAttrName());
+  for (auto &op : symbolTableOp->getRegion(0).front()) {
+    if (auto symbol = op.getAttrOfType<StringAttr>(symbolNameId))
+      ns.add(symbol.getValue());
+  }
+
+  created = true;
+  return StringAttr::get(symbolTableOp->getContext(), ns.newName(verilogName));
 }
 
 /// Returns the operation registered with the given symbol name with the regions
