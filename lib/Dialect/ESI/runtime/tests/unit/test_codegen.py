@@ -281,14 +281,12 @@ def _harness_env():
     for esiaccel_lib_dir in esiaccel_lib_dirs:
       lib = esiaccel_lib_dir / "ESICppRuntime.lib"
       dll = esiaccel_lib_dir / "ESICppRuntime.dll"
-      if lib.exists():
+      if runtime_lib is None and lib.exists():
         runtime_lib = lib
-      if dll.exists():
+      if runtime_dll is None and dll.exists():
         runtime_dll = dll
-        if runtime_lib is None:
-          runtime_lib = dll
-      if runtime_lib is not None:
-        break
+    if runtime_lib is None:
+      runtime_lib = runtime_dll
   else:
     for esiaccel_lib_dir in esiaccel_lib_dirs:
       for name in ("libESICppRuntime.so", "libESICppRuntime.dylib"):

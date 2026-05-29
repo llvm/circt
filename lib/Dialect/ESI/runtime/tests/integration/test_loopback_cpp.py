@@ -50,6 +50,7 @@ def _build_loopback_codegen(tmp_path: Path, host: str, port: int) -> Path:
   codegen path.
   """
   require_tool("cmake")
+  require_tool("ninja")
 
   runtime_root = get_runtime_root()
 
