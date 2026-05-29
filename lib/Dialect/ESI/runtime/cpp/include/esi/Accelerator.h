@@ -149,6 +149,10 @@ protected:
   void registerEngine(AppIDPath idPath, std::unique_ptr<Engine> engine,
                       const HWClientDetails &clients);
 
+  /// Drop accelerator-owned objects before a derived backend destroys resources
+  /// that those objects may reference.
+  void clearOwnedObjects();
+
   /// Called by `getServiceImpl` exclusively. It wraps the pointer returned by
   /// this in a unique_ptr and caches it. Separate this from the
   /// wrapping/caching since wrapping/caching is an implementation detail.

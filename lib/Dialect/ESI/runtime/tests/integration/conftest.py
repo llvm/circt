@@ -140,8 +140,10 @@ def build_cpp_test(sources_dir: Path,
         f"--- stderr ---\n{result.stderr}")
 
   result = subprocess.run(
-      ["cmake", "--build",
-       str(build_dir), "--target", target],
+      [
+          "cmake", "--build",
+          str(build_dir), "--target", target, "--config", "Release"
+      ],
       capture_output=True,
       text=True,
   )
