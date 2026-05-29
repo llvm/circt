@@ -425,18 +425,20 @@ def _compile_once_for_class(config: CosimPytestConfig) -> _ClassCompileCache:
 
 
 def _run_child(
-    result_pipe: multiprocessing.connection.Connection,
+    result_pipe: Optional[multiprocessing.connection.Connection],
     target: Callable[..., Any],
     config: CosimPytestConfig,
     args: Sequence[Any],
     kwargs: Dict[str, Any],
     class_cache: Optional[_ClassCompileCache],
-):
+) -> _ChildResult:
   """Entry point for the forked child process.
 
   Compiles (or reuses cached compilation), starts the simulator, injects
   connection parameters, calls the test function, scans logs for failures,
-  and sends a ``_ChildResult`` through *result_pipe*.
+  and sends a ``_ChildResult`` through *result_pipe*. When *result_pipe* is
+  ``None``, returns the result directly for callers that already have process
+  isolation (Windows pytest-xdist workers).
   """
   # Keep compile and run output separate.  Only run-time output is scanned
   # by the failure/warning matchers; compile failures are caught via exit code.
@@ -473,8 +475,8 @@ def _run_child(
       sim._run_stderr_cb = on_stderr
       sim._compile_stdout_cb = compile_stdout.append
       sim._compile_stderr_cb = compile_stderr.append
-      os.chdir(run_dir)
-      rc = sim.compile()
+      with _chdir(run_dir):
+        rc = sim.compile()
       if rc != 0:
         raise RuntimeError(f"Simulator compile failed with exit code {rc}")
     else:
@@ -485,14 +487,14 @@ def _run_child(
       sim._run_stderr_cb = on_stderr
       _copy_compiled_artifacts(class_cache.compile_dir, run_dir)
 
-    os.chdir(run_dir)
-    sim_proc = sim.run_proc()
-    injected_kwargs = _resolve_injected_params(target,
-                                               kwargs,
-                                               "localhost",
-                                               sim_proc.port,
-                                               sources_dir=sources_dir)
-    target(*args, **injected_kwargs)
+    with _chdir(run_dir):
+      sim_proc = sim.run_proc()
+      injected_kwargs = _resolve_injected_params(target,
+                                                 kwargs,
+                                                 "localhost",
+                                                 sim_proc.port,
+                                                 sources_dir=sources_dir)
+      target(*args, **injected_kwargs)
 
     failure_lines, warning_lines = _scan_logs(stdout_lines, stderr_lines,
                                               config)
@@ -500,28 +502,19 @@ def _run_child(
       raise AssertionError("Detected simulator failures:\n" +
                            "\n".join(failure_lines))
 
-    # Combine compile + run output for the diagnostic dump, but only
-    # runtime output was fed to the failure/warning matchers above.
-    all_stdout = compile_stdout + stdout_lines
-    all_stderr = compile_stderr + stderr_lines
-    result_pipe.send(
-        _ChildResult(success=True,
-                     warning_lines=warning_lines,
-                     failure_lines=failure_lines,
-                     stdout_lines=all_stdout,
-                     stderr_lines=all_stderr))
+    result = _ChildResult(success=True,
+                          warning_lines=warning_lines,
+                          failure_lines=failure_lines,
+                          stdout_lines=compile_stdout + stdout_lines,
+                          stderr_lines=compile_stderr + stderr_lines)
   except Exception:
-    all_stdout = compile_stdout + stdout_lines
-    all_stderr = compile_stderr + stderr_lines
-    result_pipe.send(
-        _ChildResult(success=False,
-                     traceback=traceback.format_exc(),
-                     warning_lines=_scan_logs(stdout_lines, stderr_lines,
-                                              config)[1],
-                     stdout_lines=all_stdout,
-                     stderr_lines=all_stderr))
+    result = _ChildResult(success=False,
+                          traceback=traceback.format_exc(),
+                          warning_lines=_scan_logs(stdout_lines, stderr_lines,
+                                                   config)[1],
+                          stdout_lines=compile_stdout + stdout_lines,
+                          stderr_lines=compile_stderr + stderr_lines)
   finally:
-    result_pipe.close()
     if sim_proc is not None and sim_proc.proc.poll() is None:
       sim_proc.force_stop()
     # When a custom tmp_dir_root is set, keep directories by default for debugging.
@@ -529,10 +522,17 @@ def _run_child(
     should_delete = config.delete_tmp_dir and not config.debug
     if run_root is not None and should_delete:
       shutil.rmtree(run_root, ignore_errors=True)
-    # Force-exit the forked child.  Non-daemon threads spawned by gRPC (or
-    # other native libraries) can prevent a normal exit even after all Python
-    # work has finished.  The result is already in the pipe, so this is safe.
-    os._exit(0)
+
+  if result_pipe is not None:
+    try:
+      result_pipe.send(result)
+    finally:
+      result_pipe.close()
+      # Force-exit the forked child.  Non-daemon threads spawned by RPC (or
+      # other libraries) can prevent a normal exit even after all Python work
+      # has finished.  The result is already in the pipe, so this is safe.
+      os._exit(0)
+  return result
 
 
 def _run_isolated(
@@ -548,10 +548,34 @@ def _run_isolated(
   the child as an ``AssertionError`` in the parent.
   """
   try:
-    ctx = multiprocessing.get_context("fork")
+    ctx: Any = multiprocessing.get_context("fork")
   except ValueError:
+    ctx = None
+
+  if ctx is None:
     import pytest as _pytest
-    _pytest.skip("fork start method unavailable on this platform")
+    if os.environ.get("PYTEST_XDIST_WORKER") is None:
+      _pytest.skip("Windows cosim tests require pytest-xdist isolation; run "
+                   "with `pytest -n 1` or more")
+    # fork is unavailable on Windows. Under xdist, run inline and rely on the
+    # worker process as the isolation boundary.
+    inline_result = _run_child(None, target, config, args, kwargs, class_cache)
+    for line in inline_result.stdout_lines:
+      _logger.debug("sim stdout: %s", line)
+    for line in inline_result.stderr_lines:
+      _logger.debug("sim stderr: %s", line)
+    for warning in inline_result.warning_lines:
+      _logger.warning("cosim warning: %s", warning)
+    if not inline_result.success:
+      parts = [inline_result.traceback]
+      if inline_result.stdout_lines:
+        parts.append("\n=== Simulator stdout ===")
+        parts.extend(inline_result.stdout_lines[-200:])
+      if inline_result.stderr_lines:
+        parts.append("\n=== Simulator stderr ===")
+        parts.extend(inline_result.stderr_lines[-200:])
+      raise AssertionError("\n".join(parts))
+    return
   reader, writer = ctx.Pipe(duplex=False)
   process = ctx.Process(
       target=_run_child,

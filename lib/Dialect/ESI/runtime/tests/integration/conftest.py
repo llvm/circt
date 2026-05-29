@@ -57,6 +57,23 @@ def check_lines(stdout: str, expected: list[str]) -> None:
     remaining = remaining[idx + len(line):]
 
 
+def _runtime_env() -> dict[str, str]:
+  """Return an environment which can load ESI runtime shared libraries."""
+  env = os.environ.copy()
+  if os.name != "nt":
+    return env
+
+  runtime_root = get_runtime_root()
+  dll_dirs = [
+      path for path in (runtime_root, runtime_root / "bin",
+                        runtime_root / "lib") if path.exists()
+  ]
+  existing_path = env.get("PATH", "")
+  env["PATH"] = os.pathsep.join(str(path) for path in dll_dirs) + \
+      os.pathsep + existing_path
+  return env
+
+
 # ---------------------------------------------------------------------------
 # Shared C++ build helper
 # ---------------------------------------------------------------------------
@@ -80,11 +97,13 @@ def build_cpp_test(sources_dir: Path,
   picks up any source or generated-header changes.
   """
   require_tool("cmake")
+  require_tool("ninja")
 
   if build_subdir is None:
     build_subdir = target
   build_dir = sources_dir / build_subdir
-  binary = build_dir / target
+  exe_suffix = ".exe" if os.name == "nt" else ""
+  binary = build_dir / (target + exe_suffix)
 
   runtime_root = get_runtime_root()
   include_dir = sources_dir / "cpp_include"
@@ -102,10 +121,13 @@ def build_cpp_test(sources_dir: Path,
     result = subprocess.run(
         [
             "cmake",
+            "-G",
+            "Ninja",
             "-S",
             str(SW_DIR),
             "-B",
             str(build_dir),
+            "-DCMAKE_BUILD_TYPE=Release",
             f"-DLOOPBACK_GENERATED_DIR={include_dir}",
             f"-DESI_RUNTIME_ROOT={runtime_root}",
         ],
@@ -146,6 +168,7 @@ def run_probe(binary: Path,
   result = subprocess.run(
       [str(binary), "--probe", probe, "cosim", f"{host}:{port}"],
       capture_output=True,
+      env=_runtime_env(),
       text=True,
       timeout=60,
   )
