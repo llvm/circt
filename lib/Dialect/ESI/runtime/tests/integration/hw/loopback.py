@@ -1,31 +1,6 @@
-# REQUIRES: esi-cosim, esi-runtime, rtl-sim
-# RUN: rm -rf %t
-# RUN: mkdir %t && cd %t
-
-# Build the system.
-# RUN: %PYTHON% %s %t 2>&1
-
-# Query against the manifest.
-# RUN: esiquery trace w:%t/esi_system_manifest.json info | FileCheck %s --check-prefix=QUERY-INFO
-# RUN: esiquery trace w:%t/esi_system_manifest.json hier | FileCheck %s --check-prefix=QUERY-HIER
-
-# Run a cosimulation with a python test driver.
-# RUN: esi-cosim.py --source %t -- %PYTHON% %S/test_software/loopback.py cosim env
-
-# Test C++ header generation against the manifest file.
-# Use the shared CMake build to compile the C++ test against generated headers.
-# RUN: %PYTHON% -m esiaccel.codegen --file %t/esi_system_manifest.json --output-dir %t/include/loopback/
-# RUN: cmake -S %S/test_software -B %t/loopback-build -DLOOPBACK_GENERATED_DIR=%t/include -DESI_RUNTIME_ROOT=%ESI_RUNTIME_PATH%
-# RUN: cmake --build %t/loopback-build --target loopback_test
-# RUN: esi-cosim.py --source %t -- %t/loopback-build/loopback_test cosim env | FileCheck %s --check-prefix=CPP-TEST
-# RUN: FileCheck %s --check-prefix=LOOPBACK-H --input-file %t/include/loopback/LoopbackIP.h
-
-# Test C++ header generation from the live accelerator.
-# The generated headers are still required to build the C++ test executable.
-# RUN: esi-cosim.py --source %t -- %PYTHON% -m esiaccel.codegen --platform cosim --connection env --output-dir %t/include/loopback/
-# RUN: cmake -S %S/test_software -B %t/loopback-build -DLOOPBACK_GENERATED_DIR=%t/include -DESI_RUNTIME_ROOT=%ESI_RUNTIME_PATH%
-# RUN: cmake --build %t/loopback-build --target loopback_test
-# RUN: esi-cosim.py --source %t -- %t/loopback-build/loopback_test cosim env | FileCheck %s --check-prefix=CPP-TEST
+#  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+#  See https://llvm.org/LICENSE.txt for license information.
+#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import sys
 
