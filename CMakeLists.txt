@@ -783,11 +783,6 @@ if(CIRCT_INCLUDE_TOOLS)
 endif()
 add_subdirectory(frontends)
 
-option(CIRCT_INCLUDE_EXAMPLES "Generate build targets for the CIRCT examples.")
-if (CIRCT_INCLUDE_EXAMPLES)
-  add_subdirectory(examples)
-endif()
-
 if (CIRCT_INCLUDE_TESTS)
   # Test directories are added after everything else so their cmake files can
   # use targets and target properties defined by the things they test.

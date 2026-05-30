@@ -23,12 +23,13 @@ Build the optimizer, plugin, and tests:
 ninja -C build-circt-standalone check-circt-standalone
 ```
 
-It can also be enabled in the CIRCT tree with `-DCIRCT_INCLUDE_EXAMPLES=ON`.
+Like MLIR's `examples/standalone`, this example is not built by the in-tree
+examples target.  Configure it separately as shown above.
 
 The plugin can be loaded into `circt-opt`:
 
 ```sh
 circt-opt input.mlir \
   --load-dialect-plugin=build-circt-standalone/lib/CIRCTStandalonePlugin.so \
-  --pass-pipeline='builtin.module(circt-standalone-rename-hw-module)'
+  --pass-pipeline='builtin.module(hw.module(circt-standalone-rename-wires))'
 ```

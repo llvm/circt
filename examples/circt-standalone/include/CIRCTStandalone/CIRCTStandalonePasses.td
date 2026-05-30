@@ -11,12 +11,12 @@
 
 include "mlir/Pass/PassBase.td"
 
-def RenameHWModule
-    : Pass<"circt-standalone-rename-hw-module", "::mlir::ModuleOp"> {
-  let summary = "Rename a hw.module named `bar` to `foo`";
+def RenameWires
+    : Pass<"circt-standalone-rename-wires", "hw::HWModuleOp"> {
+  let summary = "Rename all hw.wire operations in a module";
   let description = [{
-    This pass is intentionally small and CIRCT-specific: it finds a top-level
-    `hw.module @bar` and renames it to `hw.module @foo`.
+    This pass is intentionally small and CIRCT-specific: it walks a hardware
+    module and renames each `hw.wire` operation to `foo_<n>`.
   }];
   let dependentDialects = ["::circt::hw::HWDialect"];
 }

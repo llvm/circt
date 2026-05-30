@@ -14,8 +14,7 @@ config.test_exec_root = os.path.join(config.circt_standalone_obj_root, "test")
 config.substitutions.append(("%PATH%", config.environment["PATH"]))
 config.substitutions.append(("%shlibext", config.llvm_shlib_ext))
 config.substitutions.append(
-    ("%circt_standalone_libs", config.circt_standalone_libs_dir)
-)
+    ("%circt_standalone_libs", config.circt_standalone_libs_dir))
 
 llvm_config.with_system_environment(["HOME", "INCLUDE", "LIB", "TMP", "TEMP"])
 llvm_config.use_default_substitutions()
@@ -31,9 +30,9 @@ tools = [
     "circt-standalone-opt",
 ]
 if config.circt_standalone_has_plugin:
-    tools.append("circt-opt")
+  tools.append("circt-opt")
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
 
 if not config.circt_standalone_has_plugin:
-    config.available_features.add("no-circt-standalone-plugin")
+  config.available_features.add("no-circt-standalone-plugin")
