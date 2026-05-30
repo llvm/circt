@@ -52,6 +52,17 @@ firrtl.circuit "LowerToCore" {
     firrtl.fprintf %clock, %enable, "out%d.txt"(%x), "value=%d @ {{}}\0A"(%x, %hier)
         : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<4>, !firrtl.sint<4>, !firrtl.fstring
 
+    // CHECK: [[TIME:%.+]] = sim.fmt.current_time
+    // CHECK: [[LIT4:%.+]] = sim.fmt.literal "\0A"
+    // CHECK: [[MSG:%.+]] = sim.fmt.concat ([[TIME]], [[LIT4]])
+    // CHECK: [[STDERR:%.+]] = sim.stderr_stream
+    // CHECK: sim.triggered %clock if %enable {
+    // CHECK-NEXT:   sim.proc.print [[MSG]] to [[STDERR]]
+    // CHECK-NEXT: }
+    %time = firrtl.fstring.time : !firrtl.fstring
+    firrtl.printf %clock, %enable, "{{}}\0A"(%time)
+        : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring
+
     firrtl.skip
   }
 

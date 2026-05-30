@@ -2929,9 +2929,8 @@ FIRRTLLowering::lowerSimFormatString(StringRef originalFormatString,
                 return success();
               })
               .template Case<TimeOp>([&](auto) {
-                emitError(builder.getLoc(), "lower-to-core does not support "
-                                            "{{SimulationTime}} in printf");
-                return failure();
+                fragments.push_back(sim::FormatCurrentTimeOp::create(builder));
+                return success();
               })
               .Default([&](auto) {
                 emitError(builder.getLoc(), "has a substitution with "
