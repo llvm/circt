@@ -401,6 +401,12 @@ jobs:
         run: |
           ${{ steps.setup-windows.outputs.setup }}
           ninja -C build check-circt-capi check-circt-integration
+      - name: Check CIRCT Standalone Example
+        if: inputs.run_tests
+        run: |
+          ${{ steps.setup-windows.outputs.setup }}
+          cmake -G Ninja -S "$(pwd)/examples/circt-standalone" -B "$(pwd)/build-circt-standalone" -DCMAKE_BUILD_TYPE=${{ inputs.cmake_build_type }} -DCMAKE_C_COMPILER=${{ steps.set-cmake-options.outputs.cmake_c_compiler }} -DCMAKE_CXX_COMPILER=${{ steps.set-cmake-options.outputs.cmake_cxx_compiler }} -DCIRCT_DIR="$(pwd)/build/lib/cmake/circt" -DMLIR_DIR="$(pwd)/build/lib/cmake/mlir"
+          cmake --build "$(pwd)/build-circt-standalone" --target check-circt-standalone
       - name: Install
         if: inputs.install_target
         run: |
