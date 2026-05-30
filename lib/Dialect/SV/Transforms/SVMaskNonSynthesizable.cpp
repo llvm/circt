@@ -140,7 +140,8 @@ void SVMaskNonSynthesizablePass::runOnOperation() {
   StringAttr macroSymName;
   bool macroDeclNeedsCreation = false;
   if (mode == MaskNonSynthesizableMode::Ifdef)
-    macroSymName = resolveMacroSymName(moduleOp, macro, macroDeclNeedsCreation);
+    macroSymName = lookupOrGenerateMacroSymName(moduleOp.getBody(), macro,
+                                                macroDeclNeedsCreation);
 
   StringRef passDownMacro =
       macroSymName ? macroSymName.getValue() : StringRef();

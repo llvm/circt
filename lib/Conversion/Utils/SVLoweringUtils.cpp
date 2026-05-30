@@ -62,17 +62,18 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
   auto getterSymName = ::getFileDescriptorGetterSymName(builder.getContext());
   auto fragmentSymName =
       ::getFileDescriptorFragmentSymName(builder.getContext());
+  auto *fileScopeBlock = &fileScopeOp->getRegion(0).front();
   bool fileDescriptorMacroNeedsCreation = false;
-  auto macroSymName = sv::resolveMacroSymName(
-      fileScopeOp, kFileDescriptorMacroName, fileDescriptorMacroNeedsCreation);
+  auto macroSymName =
+      sv::lookupOrGenerateMacroSymName(fileScopeBlock, kFileDescriptorMacroName,
+                                       fileDescriptorMacroNeedsCreation);
   bool synthesisMacroNeedsCreation = false;
-  auto synthesisSymName = sv::resolveMacroSymName(fileScopeOp, "SYNTHESIS",
-                                                  synthesisMacroNeedsCreation);
+  auto synthesisSymName = sv::lookupOrGenerateMacroSymName(
+      fileScopeBlock, "SYNTHESIS", synthesisMacroNeedsCreation);
   SymbolTable symbolTable(fileScopeOp);
 
   auto emitGuard = [&](StringAttr guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        builder, guard, [] {}, body);
+    sv::IfDefOp::create(builder, guard, [] {}, body);
   };
 
   if (!symbolTable.lookup(getterSymName)) {
@@ -100,23 +101,19 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
     symbolTable.insert(func);
   }
 
-  if (synthesisMacroNeedsCreation) {
-    auto verilogName = synthesisSymName.getValue() == "SYNTHESIS"
-                           ? StringAttr{}
-                           : builder.getStringAttr("SYNTHESIS");
-    symbolTable.insert(
-        sv::MacroDeclOp::create(builder, builder.getLoc(), synthesisSymName,
-                                /*args=*/ArrayAttr{}, verilogName));
-  }
+  if (synthesisMacroNeedsCreation)
+    symbolTable.insert(sv::MacroDeclOp::create(
+        builder, builder.getLoc(), synthesisSymName, /*args=*/ArrayAttr{},
+        /*verilogName=*/synthesisSymName.getValue() == "SYNTHESIS"
+            ? StringAttr{}
+            : builder.getStringAttr("SYNTHESIS")));
 
-  if (fileDescriptorMacroNeedsCreation) {
-    auto verilogName = macroSymName.getValue() == kFileDescriptorMacroName
-                           ? StringAttr{}
-                           : builder.getStringAttr(kFileDescriptorMacroName);
-    symbolTable.insert(
-        sv::MacroDeclOp::create(builder, builder.getLoc(), macroSymName,
-                                /*args=*/ArrayAttr{}, verilogName));
-  }
+  if (fileDescriptorMacroNeedsCreation)
+    symbolTable.insert(sv::MacroDeclOp::create(
+        builder, builder.getLoc(), macroSymName, /*args=*/ArrayAttr{},
+        /*verilogName=*/macroSymName.getValue() == kFileDescriptorMacroName
+            ? StringAttr{}
+            : builder.getStringAttr(kFileDescriptorMacroName)));
 
   if (symbolTable.lookup(fragmentSymName))
     return;

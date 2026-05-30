@@ -42,14 +42,15 @@ bool isExpression(Operation *op);
 /// Returns if the expression is known to be 2-state (binary)
 bool is2StateExpression(Value v);
 
-/// Resolve the symbol name to use for the `sv.macro.decl` referenced by macro
-/// users. Returns the existing decl's sym_name if a `sv.macro.decl` whose
-/// Verilog identifier matches `verilogName` already exists in `symbolTableOp`;
-/// otherwise returns a fresh sym_name that does not collide with any existing
-/// symbol in `symbolTableOp`. `created` is set to true iff the returned name
-/// belongs to a decl that the caller still needs to materialize.
-StringAttr resolveMacroSymName(Operation *symbolTableOp, StringRef verilogName,
-                               bool &created);
+/// Look up or generate the symbol name to use for the `sv.macro.decl`
+/// referenced by macro users. Returns the existing decl's sym_name if a
+/// `sv.macro.decl` whose Verilog identifier matches `verilogName` already
+/// exists in `symbolTableBlock`; otherwise returns a fresh sym_name that does
+/// not collide with any existing symbol in `symbolTableBlock`. `created` is set
+/// to true iff the returned name belongs to a decl that the caller still needs
+/// to materialize.
+StringAttr lookupOrGenerateMacroSymName(Block *symbolTableBlock,
+                                        StringRef verilogName, bool &created);
 
 //===----------------------------------------------------------------------===//
 // CaseOp Support

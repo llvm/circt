@@ -57,18 +57,10 @@ bool sv::isExpression(Operation *op) {
              MacroRefExprOp, MacroRefExprSEOp>(op);
 }
 
-StringAttr sv::resolveMacroSymName(Operation *symbolTableOp,
-                                   StringRef verilogName, bool &created) {
-  assert(symbolTableOp && "expected symbol table op");
-  assert(symbolTableOp->hasTrait<mlir::OpTrait::SymbolTable>() &&
-         "expected symbolTableOp to define a symbol table");
-  assert(symbolTableOp->getNumRegions() == 1 &&
-         "expected single-region symbol table op");
-  assert(!symbolTableOp->getRegion(0).empty() &&
-         "expected non-empty symbol table region");
-
-  for (auto decl :
-       symbolTableOp->getRegion(0).front().getOps<sv::MacroDeclOp>()) {
+StringAttr sv::lookupOrGenerateMacroSymName(Block *symbolTableBlock,
+                                            StringRef verilogName,
+                                            bool &created) {
+  for (auto decl : symbolTableBlock->getOps<sv::MacroDeclOp>()) {
     if (decl.getMacroIdentifier() == verilogName) {
       created = false;
       return decl.getSymNameAttr();
@@ -76,15 +68,17 @@ StringAttr sv::resolveMacroSymName(Operation *symbolTableOp,
   }
 
   Namespace ns;
-  auto symbolNameId = StringAttr::get(symbolTableOp->getContext(),
-                                      SymbolTable::getSymbolAttrName());
-  for (auto &op : symbolTableOp->getRegion(0).front()) {
+  auto symbolNameId =
+      StringAttr::get(symbolTableBlock->getParentOp()->getContext(),
+                      SymbolTable::getSymbolAttrName());
+  for (auto &op : *symbolTableBlock) {
     if (auto symbol = op.getAttrOfType<StringAttr>(symbolNameId))
       ns.add(symbol.getValue());
   }
 
   created = true;
-  return StringAttr::get(symbolTableOp->getContext(), ns.newName(verilogName));
+  return StringAttr::get(symbolTableBlock->getParentOp()->getContext(),
+                         ns.newName(verilogName));
 }
 
 /// Returns the operation registered with the given symbol name with the regions
