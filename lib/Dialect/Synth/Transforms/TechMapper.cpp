@@ -112,10 +112,16 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Match the cut set against this library primitive
-  std::optional<PatternMatch> match(CutEnumerator &enumerator,
-                                    const Cut &cut) const override {
+  std::optional<PatternMatch>
+  match(CutEnumerator &enumerator, const Cut &cut,
+        const MatchBinding &binding) const override {
     const auto &cutNPN = cut.getNPNClass(enumerator.getOptions().npnTable);
     if (!(cutNPN.truthTable == npnClass.truthTable))
+      return std::nullopt;
+
+    // TODO: Support phase-aware mapping by materializing or reusing inverted
+    // input/output values from the binding.
+    if (binding.hasNegation())
       return std::nullopt;
 
     return PatternMatch(area, delay);

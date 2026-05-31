@@ -1903,12 +1903,8 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
            "Pattern input size must match cut input size");
     auto &cutNPN = cut.getNPNClass(options.npnTable);
     MatchBinding binding = computeMatchBinding(cutNPN, patternNPN);
-    // TODO: Support phase-aware mapping by materializing or reusing inverted
-    // input/output values from the binding.
-    if (binding.hasNegation())
-      continue;
 
-    auto match = pattern->match(cutEnumerator, cut);
+    auto match = pattern->match(cutEnumerator, cut, binding);
     if (!match)
       continue;
     computeArrivalTimeAndPickBest(pattern, std::move(*match),
@@ -1916,7 +1912,7 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
   }
 
   for (const CutRewritePattern *pattern : patterns.nonNPNPatterns) {
-    if (auto match = pattern->match(cutEnumerator, cut))
+    if (auto match = pattern->match(cutEnumerator, cut, identityBinding))
       computeArrivalTimeAndPickBest(pattern, std::move(*match),
                                     identityBinding);
   }

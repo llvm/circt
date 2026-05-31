@@ -196,9 +196,11 @@ buildSOPImplementation(const SOPForm &sop,
 struct SOPBalancingPattern : public CutRewritePattern {
   SOPBalancingPattern(MLIRContext *context) : CutRewritePattern(context) {}
 
-  std::optional<PatternMatch> match(CutEnumerator &enumerator,
-                                    const Cut &cut) const override {
+  std::optional<PatternMatch>
+  match(CutEnumerator &enumerator, const Cut &cut,
+        const MatchBinding &binding) const override {
     const auto &network = enumerator.getLogicNetwork();
+    (void)binding;
     if (cut.isTrivialCut() || cut.getOutputSize(network) != 1)
       return std::nullopt;
 
