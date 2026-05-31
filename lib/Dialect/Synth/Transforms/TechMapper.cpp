@@ -112,8 +112,10 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Match the cut set against this library primitive
-  std::optional<MatchResult> match(CutEnumerator &enumerator, const Cut &cut,
-                                   const MatchBinding &binding) const override {
+  std::optional<MatchResult>
+  match(CutEnumerator &enumerator, const Cut &cut, const MatchBinding &binding,
+        ArrayRef<DelayType> inputArrivalTimes) const override {
+    (void)inputArrivalTimes;
     const auto &cutNPN = cut.getNPNClass(enumerator.getOptions().npnTable);
     if (!(cutNPN.truthTable == npnClass.truthTable))
       return std::nullopt;
