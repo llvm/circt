@@ -30,6 +30,7 @@
 #include "circt/Dialect/Synth/Synth.h.inc"
 
 #include "llvm/ADT/PriorityQueue.h"
+#include <vector>
 
 namespace circt {
 namespace synth {
@@ -91,18 +92,21 @@ public:
   }
 };
 
-/// Build a balanced binary tree using a priority queue to greedily pair
-/// elements with earliest arrival times. This minimizes the critical path
-/// delay.
+/// Build a balanced binary tree using a priority queue to greedily pair the
+/// cheapest elements first. `T::operator>` defines the heap ordering, which is
+/// typically based on arrival time and a deterministic tie-breaker. `combine`
+/// creates the parent node for each selected pair and computes its new cost.
 ///
 /// Template parameters:
 ///   T - The element type (must have operator> defined)
+///   InlineCapacity - Inline storage capacity for the internal node arena
 ///
-/// The algorithm uses a min-heap to repeatedly combine the two elements with
-/// the earliest arrival times, which is optimal for minimizing maximum delay.
-template <typename T>
-T buildBalancedTreeWithArrivalTimes(llvm::ArrayRef<T> elements,
-                                    llvm::function_ref<T(T, T)> combine) {
+/// The priority queue stores indices into a node arena rather than `T` values
+/// so large plan nodes can be kept stable and only moved when appended.
+template <typename T, unsigned InlineCapacity = 8>
+T buildBalancedTreeWithArrivalTimes(
+    llvm::ArrayRef<T> elements,
+    llvm::function_ref<T(const T &, const T &)> combine) {
   assert(!elements.empty() && "Cannot build tree from empty elements");
 
   if (elements.size() == 1)
@@ -110,23 +114,31 @@ T buildBalancedTreeWithArrivalTimes(llvm::ArrayRef<T> elements,
   if (elements.size() == 2)
     return combine(elements[0], elements[1]);
 
-  // Min-heap priority queue ordered by operator>
-  llvm::PriorityQueue<T, std::vector<T>, std::greater<T>> pq(elements.begin(),
-                                                             elements.end());
+  llvm::SmallVector<T, InlineCapacity> nodes(elements.begin(), elements.end());
+  nodes.reserve(elements.size() * 2 - 1);
 
-  // Greedily pair the two earliest-arriving elements
+  auto compare = [&](unsigned lhs, unsigned rhs) {
+    return nodes[lhs] > nodes[rhs];
+  };
+  // Min-heap priority queue ordered by the referenced node. Store indices
+  // rather than values to avoid repeatedly moving large node payloads.
+  llvm::PriorityQueue<unsigned, std::vector<unsigned>, decltype(compare)> pq(
+      compare);
+  for (unsigned i = 0, e = nodes.size(); i != e; ++i)
+    pq.push(i);
+
+  // Greedily pair the two best-ranked elements.
   while (pq.size() > 1) {
-    T e1 = pq.top();
+    unsigned e1 = pq.top();
     pq.pop();
-    T e2 = pq.top();
+    unsigned e2 = pq.top();
     pq.pop();
 
-    // Combine the two elements
-    T combined = combine(e1, e2);
-    pq.push(combined);
+    nodes.push_back(combine(nodes[e1], nodes[e2]));
+    pq.push(nodes.size() - 1);
   }
 
-  return pq.top();
+  return nodes[pq.top()];
 }
 
 /// Evaluate the Boolean function `x ^ (z | (x & y))`.

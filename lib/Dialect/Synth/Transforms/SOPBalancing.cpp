@@ -26,6 +26,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
+#include <array>
 
 #define DEBUG_TYPE "synth-sop-balancing"
 
@@ -85,6 +86,10 @@ struct SOPAndNode {
 
 struct SOPImplementation : PatternImplementation {
   SmallVector<DelayType, expectedISOPInputs> delays;
+  SmallVector<DelayType, expectedISOPInputs> inputArrivalTimes;
+};
+
+struct SOPRewritePlan {
   SmallVector<SOPAndNode, 8> nodes;
   SOPSignal output;
 };
@@ -93,7 +98,7 @@ struct SOPPlanNode {
   DelayType arrivalTime = 0;
   size_t valueNumbering = 0;
   uint64_t usedMask = 0;
-  SmallVector<DelayType, expectedISOPInputs> inputDelays;
+  std::array<DelayType, maxTruthTableInputs> inputDelays = {};
   SOPSignal signal;
 
   SOPPlanNode flipInversion() const {
@@ -108,20 +113,22 @@ struct SOPPlanNode {
   }
 };
 
-static SOPPlanNode combineSOPPlanNodes(const SOPPlanNode &lhs,
-                                       const SOPPlanNode &rhs, unsigned numVars,
-                                       size_t &valueNumbering,
-                                       SOPImplementation &implementation) {
+static SOPPlanNode
+combineSOPPlanNodes(const SOPPlanNode &lhs, const SOPPlanNode &rhs,
+                    unsigned numVars, size_t &valueNumbering,
+                    SmallVectorImpl<SOPAndNode> *implementationNodes) {
   SOPPlanNode result;
   result.arrivalTime = std::max(lhs.arrivalTime, rhs.arrivalTime) + 1;
   result.valueNumbering = valueNumbering++;
   result.usedMask = lhs.usedMask | rhs.usedMask;
-  result.inputDelays.assign(numVars, 0);
+  result.inputDelays.fill(0);
 
-  implementation.nodes.push_back({lhs.signal, rhs.signal});
-  result.signal =
-      SOPSignal{static_cast<unsigned>(implementation.nodes.size() - 1),
-                /*isInput=*/false, /*inverted=*/false};
+  if (implementationNodes) {
+    implementationNodes->push_back({lhs.signal, rhs.signal});
+    result.signal =
+        SOPSignal{static_cast<unsigned>(implementationNodes->size() - 1),
+                  /*isInput=*/false, /*inverted=*/false};
+  }
 
   auto accumulateDelays = [&](const SOPPlanNode &source) {
     for (unsigned i = 0; i < numVars; ++i) {
@@ -136,10 +143,20 @@ static SOPPlanNode combineSOPPlanNodes(const SOPPlanNode &lhs,
   return result;
 }
 
-static std::shared_ptr<SOPImplementation>
-buildSOPImplementation(const SOPForm &sop,
-                       ArrayRef<DelayType> inputArrivalTimes) {
-  auto implementation = std::make_shared<SOPImplementation>();
+static unsigned getSOPArea(const SOPForm &sop) {
+  unsigned totalGates = 0;
+  for (const auto &cube : sop.cubes)
+    if (cube.size() > 1)
+      totalGates += cube.size() - 1;
+  if (sop.cubes.size() > 1)
+    totalGates += sop.cubes.size() - 1;
+  return totalGates;
+}
+
+static SOPPlanNode
+buildSOPTree(const SOPForm &sop, ArrayRef<DelayType> inputArrivalTimes,
+             bool outputInverted,
+             SmallVectorImpl<SOPAndNode> *implementationNodes) {
   SmallVector<SOPPlanNode, expectedISOPInputs> productTerms, literals;
   size_t valueNumbering = 0;
 
@@ -150,7 +167,7 @@ buildSOPImplementation(const SOPForm &sop,
         literal.arrivalTime = inputArrivalTimes[i];
         literal.valueNumbering = valueNumbering++;
         literal.usedMask = uint64_t{1} << i;
-        literal.inputDelays.assign(sop.numVars, 0);
+        literal.inputDelays.fill(0);
         literal.signal =
             SOPSignal{i, /*isInput=*/true, cube.isLiteralInverted(i)};
         literals.push_back(std::move(literal));
@@ -158,11 +175,11 @@ buildSOPImplementation(const SOPForm &sop,
 
     if (!literals.empty()) {
       productTerms.push_back(
-          buildBalancedTreeWithArrivalTimes<SOPPlanNode>(
+          buildBalancedTreeWithArrivalTimes<SOPPlanNode, expectedISOPInputs>(
               literals,
               [&](const SOPPlanNode &lhs, const SOPPlanNode &rhs) {
                 return combineSOPPlanNodes(lhs, rhs, sop.numVars,
-                                           valueNumbering, *implementation);
+                                           valueNumbering, implementationNodes);
               })
               .flipInversion());
       literals.clear();
@@ -171,21 +188,37 @@ buildSOPImplementation(const SOPForm &sop,
 
   assert(!productTerms.empty() && "No product terms");
   auto output =
-      buildBalancedTreeWithArrivalTimes<SOPPlanNode>(
+      buildBalancedTreeWithArrivalTimes<SOPPlanNode, expectedISOPInputs>(
           productTerms,
           [&](const SOPPlanNode &lhs, const SOPPlanNode &rhs) {
             return combineSOPPlanNodes(lhs, rhs, sop.numVars, valueNumbering,
-                                       *implementation);
+                                       implementationNodes);
           })
           .flipInversion();
-  implementation->output = output.signal;
+  if (outputInverted)
+    output = output.flipInversion();
+  return output;
+}
 
-  implementation->delays.assign(sop.numVars, 0);
+static SmallVector<DelayType, expectedISOPInputs>
+computeSOPDelays(const SOPForm &sop, ArrayRef<DelayType> inputArrivalTimes,
+                 bool outputInverted) {
+  auto output = buildSOPTree(sop, inputArrivalTimes, outputInverted, nullptr);
+  SmallVector<DelayType, expectedISOPInputs> delays(sop.numVars, 0);
   for (unsigned i = 0; i < sop.numVars; ++i)
     if (output.usedMask & (uint64_t{1} << i))
-      implementation->delays[i] = output.inputDelays[i];
+      delays[i] = output.inputDelays[i];
+  return delays;
+}
 
-  return implementation;
+static SOPRewritePlan buildSOPRewritePlan(const SOPForm &sop,
+                                          ArrayRef<DelayType> inputArrivalTimes,
+                                          bool outputInverted) {
+  SOPRewritePlan plan;
+  auto output =
+      buildSOPTree(sop, inputArrivalTimes, outputInverted, &plan.nodes);
+  plan.output = output.signal;
+  return plan;
 }
 
 //===----------------------------------------------------------------------===//
@@ -194,36 +227,37 @@ buildSOPImplementation(const SOPForm &sop,
 
 /// Pattern that performs SOP balancing on cuts.
 struct SOPBalancingPattern : public CutRewritePattern {
-  SOPBalancingPattern(MLIRContext *context) : CutRewritePattern(context) {}
+  SOPBalancingPattern(MLIRContext *context, SOPCache &sopCache,
+                      bool outputInverted)
+      : CutRewritePattern(context), sopCache(sopCache),
+        outputInverted(outputInverted) {}
 
-  std::optional<MatchResult> match(CutEnumerator &enumerator, const Cut &cut,
-                                   const MatchBinding &binding) const override {
+  std::optional<MatchResult>
+  match(CutEnumerator &enumerator, const Cut &cut, const MatchBinding &binding,
+        ArrayRef<DelayType> inputArrivalTimes) const override {
     const auto &network = enumerator.getLogicNetwork();
     (void)binding;
     if (cut.isTrivialCut() || cut.getOutputSize(network) != 1)
       return std::nullopt;
 
     const auto &tt = *cut.getTruthTable();
-    const SOPForm &sop = sopCache.getOrCompute(tt.table, tt.numInputs);
+    APInt truthTable = outputInverted ? ~tt.table : tt.table;
+    const SOPForm &sop = sopCache.getOrCompute(truthTable, tt.numInputs);
     if (sop.cubes.empty())
       return std::nullopt;
 
-    SmallVector<DelayType, expectedISOPInputs> arrivalTimes;
-    if (failed(cut.getInputArrivalTimes(enumerator, arrivalTimes)))
+    // Constants should already be handled by cheaper trivial cuts.
+    if (llvm::any_of(sop.cubes,
+                     [](const Cube &cube) { return cube.size() == 0; }))
       return std::nullopt;
 
-    // Compute area estimate
-    unsigned totalGates = 0;
-    for (const auto &cube : sop.cubes)
-      if (cube.size() > 1)
-        totalGates += cube.size() - 1;
-    if (sop.cubes.size() > 1)
-      totalGates += sop.cubes.size() - 1;
-
-    auto implementation = buildSOPImplementation(sop, arrivalTimes);
+    auto implementation = std::make_shared<SOPImplementation>();
+    implementation->delays =
+        computeSOPDelays(sop, inputArrivalTimes, outputInverted);
+    implementation->inputArrivalTimes.assign(inputArrivalTimes);
 
     MatchResult match;
-    match.area = static_cast<double>(totalGates);
+    match.area = static_cast<double>(getSOPArea(sop));
     match.setDelayRef(implementation->delays);
     match.setImplementation(std::move(implementation));
     return match;
@@ -234,7 +268,8 @@ struct SOPBalancingPattern : public CutRewritePattern {
                                  const MatchedPattern &matched) const override {
     const auto &network = enumerator.getLogicNetwork();
     const auto &tt = *cut.getTruthTable();
-    const SOPForm &sop = sopCache.getOrCompute(tt.table, tt.numInputs);
+    APInt truthTable = outputInverted ? ~tt.table : tt.table;
+    const SOPForm &sop = sopCache.getOrCompute(truthTable, tt.numInputs);
     LLVM_DEBUG({
       llvm::dbgs() << "Rewriting SOP:\n";
       sop.dump(llvm::dbgs());
@@ -244,6 +279,8 @@ struct SOPBalancingPattern : public CutRewritePattern {
         static_cast<const SOPImplementation *>(matched.getImplementation());
     if (!implementation)
       return failure();
+    SOPRewritePlan plan = buildSOPRewritePlan(
+        sop, implementation->inputArrivalTimes, outputInverted);
 
     // Construct the fused location.
     SetVector<Location> inputLocs;
@@ -259,21 +296,21 @@ struct SOPBalancingPattern : public CutRewritePattern {
     auto loc = builder.getFusedLoc(inputLocs.getArrayRef());
 
     SmallVector<Value> nodeValues;
-    nodeValues.reserve(implementation->nodes.size());
+    nodeValues.reserve(plan.nodes.size());
     auto resolveSignal = [&](const SOPSignal &signal) -> Value {
       return signal.isInput ? inputValues[signal.index]
                             : nodeValues[signal.index];
     };
 
-    for (const auto &node : implementation->nodes) {
+    for (const auto &node : plan.nodes) {
       Value lhs = resolveSignal(node.lhs);
       Value rhs = resolveSignal(node.rhs);
       nodeValues.push_back(aig::AndInverterOp::create(
           builder, loc, lhs, rhs, node.lhs.inverted, node.rhs.inverted));
     }
 
-    Value result = resolveSignal(implementation->output);
-    if (implementation->output.inverted)
+    Value result = resolveSignal(plan.output);
+    if (plan.output.inverted)
       result = aig::AndInverterOp::create(builder, loc, result, true);
 
     auto *op = result.getDefiningOp();
@@ -283,12 +320,13 @@ struct SOPBalancingPattern : public CutRewritePattern {
   }
 
   unsigned getNumOutputs() const override { return 1; }
-  StringRef getPatternName() const override { return "sop-balancing"; }
+  StringRef getPatternName() const override {
+    return outputInverted ? "sop-balancing-inverted-output" : "sop-balancing";
+  }
 
 private:
-  // Cache for SOP extraction results. Hence the pattern is stateful and must
-  // not be used in parallelly.
-  mutable SOPCache sopCache;
+  SOPCache &sopCache;
+  bool outputInverted = false;
 };
 
 } // namespace
@@ -310,9 +348,12 @@ struct SOPBalancingPass
     options.maxCutSizePerRoot = maxCutsPerRoot;
     options.allowNoMatch = true;
 
-    SmallVector<std::unique_ptr<CutRewritePattern>, 1> patterns;
-    patterns.push_back(
-        std::make_unique<SOPBalancingPattern>(module->getContext()));
+    SOPCache sopCache;
+    SmallVector<std::unique_ptr<CutRewritePattern>, 2> patterns;
+    patterns.push_back(std::make_unique<SOPBalancingPattern>(
+        module->getContext(), sopCache, /*outputInverted=*/false));
+    patterns.push_back(std::make_unique<SOPBalancingPattern>(
+        module->getContext(), sopCache, /*outputInverted=*/true));
 
     CutRewritePatternSet patternSet(std::move(patterns));
     CutRewriter rewriter(options, patternSet);
