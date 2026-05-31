@@ -831,18 +831,18 @@ const CutRewritePattern *MatchedPattern::getPattern() const {
 
 double MatchedPattern::getArea() const {
   assert(pattern && "Pattern must be set to get area");
-  return cost.area;
+  return match.area;
 }
 
 ArrayRef<DelayType> MatchedPattern::getDelays() const {
   assert(pattern && "Pattern must be set to get delays");
-  return cost.getDelays();
+  return match.getDelays();
 }
 
 DelayType MatchedPattern::getDelayForCutInput(unsigned cutInputIndex) const {
   assert(pattern && "Pattern must be set to get delays");
   unsigned patternInputIndex =
-      binding.getPatternInputForCutInput(cutInputIndex);
+      match.getBinding().getPatternInputForCutInput(cutInputIndex);
   return getDelays()[patternInputIndex];
 }
 
@@ -1642,9 +1642,9 @@ void CutEnumerator::reselectCutsForAreaFlow() {
         bestFlowArrival = arrivalTime;
         bestLocalArea = candidateMatch->getArea();
         bestAreaFlowCut = cut;
-        bestAreaFlowMatch = MatchedPattern(
-            candidateMatch->getPattern(), std::move(outputArrivalTimes),
-            candidateMatch->getCost(), candidateMatch->getBinding());
+        bestAreaFlowMatch = MatchedPattern(candidateMatch->getPattern(),
+                                           std::move(outputArrivalTimes),
+                                           candidateMatch->getMatch());
       }
     }
 
@@ -1743,9 +1743,9 @@ void CutEnumerator::reselectCutsForExactArea() {
         bestExactArrival = arrivalTime;
         bestLocalArea = candidateMatch->getArea();
         bestExactCut = cut;
-        bestExactMatch = MatchedPattern(
-            candidateMatch->getPattern(), std::move(outputArrivalTimes),
-            candidateMatch->getCost(), candidateMatch->getBinding());
+        bestExactMatch = MatchedPattern(candidateMatch->getPattern(),
+                                        std::move(outputArrivalTimes),
+                                        candidateMatch->getMatch());
       }
     }
 
@@ -1852,8 +1852,7 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
   const CutRewritePattern *bestPattern = nullptr;
   SmallVector<DelayType, 4> inputArrivalTimes;
   SmallVector<DelayType, 1> bestArrivalTimes;
-  MatchBinding bestBinding;
-  std::optional<PatternCost> bestCost;
+  std::optional<PatternMatch> bestMatch;
   inputArrivalTimes.reserve(cut.getInputSize());
   bestArrivalTimes.reserve(cut.getOutputSize(network));
   MatchBinding identityBinding = MatchBinding::getIdentity(cut.getInputSize());
@@ -1863,22 +1862,23 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
     return {};
 
   auto computeArrivalTimeAndPickBest = [&](const CutRewritePattern *pattern,
-                                           PatternCost cost,
+                                           PatternMatch match,
                                            MatchBinding binding) {
+    match.setBinding(std::move(binding));
     auto outputArrivalTimes = computeOutputArrivalTimes(
-        cut.getOutputSize(network), cut.getInputSize(), cost.getDelays(),
-        inputArrivalTimes, binding);
+        cut.getOutputSize(network), cut.getInputSize(), match.getDelays(),
+        inputArrivalTimes, match.getBinding());
 
     // Update the arrival time
     if (!bestPattern ||
-        compareDelayAndArea(options.strategy, cost.area, outputArrivalTimes,
-                            bestCost->area, bestArrivalTimes)) {
+        compareDelayAndArea(options.strategy, match.area, outputArrivalTimes,
+                            bestMatch->area, bestArrivalTimes)) {
       LLVM_DEBUG({
         llvm::dbgs() << "== Matched Pattern ==============\n";
         llvm::dbgs() << "Matching cut: \n";
         cut.dump(llvm::dbgs(), network);
         llvm::dbgs() << "Found better pattern: " << pattern->getPatternName();
-        llvm::dbgs() << " with area: " << cost.area;
+        llvm::dbgs() << " with area: " << match.area;
         llvm::dbgs() << " and input arrival times: ";
         for (unsigned i = 0; i < inputArrivalTimes.size(); ++i) {
           llvm::dbgs() << " " << inputArrivalTimes[i];
@@ -1893,9 +1893,8 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
       });
 
       bestArrivalTimes = outputArrivalTimes;
-      bestBinding = std::move(binding);
       bestPattern = pattern;
-      bestCost = std::move(cost);
+      bestMatch = std::move(match);
     }
   };
 
@@ -1909,23 +1908,24 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
     if (binding.hasNegation())
       continue;
 
-    auto cost = pattern->match(cutEnumerator, cut);
-    if (!cost)
+    auto match = pattern->match(cutEnumerator, cut);
+    if (!match)
       continue;
-    computeArrivalTimeAndPickBest(pattern, std::move(*cost),
+    computeArrivalTimeAndPickBest(pattern, std::move(*match),
                                   std::move(binding));
   }
 
   for (const CutRewritePattern *pattern : patterns.nonNPNPatterns) {
-    if (auto cost = pattern->match(cutEnumerator, cut))
-      computeArrivalTimeAndPickBest(pattern, std::move(*cost), identityBinding);
+    if (auto match = pattern->match(cutEnumerator, cut))
+      computeArrivalTimeAndPickBest(pattern, std::move(*match),
+                                    identityBinding);
   }
 
   if (!bestPattern)
     return {}; // No matching pattern found
 
   return MatchedPattern(bestPattern, std::move(bestArrivalTimes),
-                        std::move(*bestCost), std::move(bestBinding));
+                        std::move(*bestMatch));
 }
 
 LogicalResult CutRewriter::runBottomUpRewrite(Operation *top) {

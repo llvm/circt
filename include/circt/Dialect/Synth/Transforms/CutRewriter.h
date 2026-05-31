@@ -319,88 +319,6 @@ private:
   llvm::SmallVector<LogicNetworkGate> gates;
 };
 
-// Cut matching is split across a few small data objects:
-//
-// - PatternCost: pattern-local cost/timing data, plus optional implementation
-//   data. This is produced by CutRewritePattern::match().
-// - MatchBinding: framework-owned pin binding for NPN/permutation matches.
-// - MatchedPattern: the selected pattern, its arrival times, cost, binding, and
-//   any implementation data needed by CutRewritePattern::rewrite().
-//
-// Keeping these pieces separate lets generic framework reselection recompute
-// timing from cost/binding, while stateful patterns can still replay the exact
-// implementation that was costed during matching.
-
-/// Optional pattern-specific implementation data selected during matching.
-struct PatternImplementation {
-  virtual ~PatternImplementation() = default;
-};
-
-/// Cost of implementing a cut with a pattern.
-///
-/// This structure contains the area and per-input delay information computed
-/// by a pattern matcher. It may also carry implementation data that the pattern
-/// needs to replay exactly the realization chosen during matching.
-///
-/// The delays can be stored in two ways:
-/// 1. As a reference to static/cached data (e.g., tech library delays)
-///    - Use setDelayRef() for zero-cost reference (no allocation)
-/// 2. As owned dynamic data (e.g., computed SOP delays)
-///    - Use setOwnedDelays() to transfer ownership
-///
-struct PatternCost {
-  /// Area cost of implementing this cut with the pattern.
-  double area = 0.0;
-
-  /// Default constructor.
-  PatternCost() = default;
-
-  /// Constructor with area and delays (by reference).
-  PatternCost(double area, ArrayRef<DelayType> delays)
-      : area(area), borrowedDelays(delays) {}
-
-  /// Set delays by reference (zero-cost for static/cached delays).
-  /// The caller must ensure the referenced data remains valid.
-  void setDelayRef(ArrayRef<DelayType> delays) { borrowedDelays = delays; }
-
-  /// Set delays by transferring ownership (for dynamically computed delays).
-  /// This moves the data into internal storage.
-  void setOwnedDelays(SmallVector<DelayType, 6> delays) {
-    ownedDelays.emplace(std::move(delays));
-    borrowedDelays = {};
-  }
-
-  /// Get all delays as an ArrayRef.
-  ArrayRef<DelayType> getDelays() const {
-    return ownedDelays.has_value() ? ArrayRef<DelayType>(*ownedDelays)
-                                   : borrowedDelays;
-  }
-
-  /// Attach pattern-specific implementation data to this match.
-  void setImplementation(std::shared_ptr<const PatternImplementation> impl) {
-    implementation = std::move(impl);
-  }
-
-  /// Get the pattern-specific implementation data, if any.
-  const PatternImplementation *getImplementation() const {
-    return implementation.get();
-  }
-
-private:
-  /// Borrowed delays (used when ownedDelays is empty).
-  /// Points to external data provided via setDelayRef().
-  ArrayRef<DelayType> borrowedDelays;
-
-  /// Owned delays (used when present).
-  /// Only allocated when setOwnedDelays() is called. When empty (std::nullopt),
-  /// moving this PatternCost avoids constructing/moving the SmallVector,
-  /// achieving zero-cost abstraction for the common case (borrowed delays).
-  std::optional<SmallVector<DelayType, 6>> ownedDelays;
-
-  /// Optional implementation data for stateful/dynamic matchers.
-  std::shared_ptr<const PatternImplementation> implementation;
-};
-
 /// Describes how a matched pattern's pins bind to a cut.
 ///
 /// The binding is derived from composing the cut and pattern NPN witnesses. It
@@ -442,6 +360,97 @@ struct MatchBinding {
   bool hasNegation() const { return inputNegation != 0 || outputNegation != 0; }
 };
 
+// Cut matching is split across a few small data objects:
+//
+// - MatchBinding: framework-owned pin binding for NPN/permutation matches.
+// - PatternImplementation: optional pattern-owned rewrite recipe.
+// - PatternMatch: the complete match payload used by selection and rewrite.
+// - MatchedPattern: the selected pattern plus framework-computed arrival times.
+//
+// Keeping binding and cost data in PatternMatch lets generic framework
+// reselection recompute timing, while stateful patterns can still replay the
+// exact implementation that was costed during matching.
+
+/// Optional pattern-specific implementation data selected during matching.
+struct PatternImplementation {
+  virtual ~PatternImplementation() = default;
+};
+
+/// Full payload for implementing a cut with a pattern.
+///
+/// This contains the area and per-input delay information used for selection,
+/// the input/output binding used for NPN/permutation-aware timing and rewrite,
+/// and optional implementation data for patterns whose rewrite cannot be
+/// reconstructed from the cut alone.
+///
+/// The delays can be stored in two ways:
+/// 1. As a reference to static/cached data (e.g., tech library delays)
+///    - Use setDelayRef() for zero-cost reference (no allocation)
+/// 2. As owned dynamic data (e.g., computed SOP delays)
+///    - Use setOwnedDelays() to transfer ownership
+///
+struct PatternMatch {
+  /// Area cost of implementing this cut with the pattern.
+  double area = 0.0;
+
+  /// Default constructor.
+  PatternMatch() = default;
+
+  /// Constructor with area and delays (by reference).
+  PatternMatch(double area, ArrayRef<DelayType> delays)
+      : area(area), borrowedDelays(delays) {}
+
+  /// Set delays by reference (zero-cost for static/cached delays).
+  /// The caller must ensure the referenced data remains valid.
+  void setDelayRef(ArrayRef<DelayType> delays) { borrowedDelays = delays; }
+
+  /// Set delays by transferring ownership (for dynamically computed delays).
+  /// This moves the data into internal storage.
+  void setOwnedDelays(SmallVector<DelayType, 6> delays) {
+    ownedDelays.emplace(std::move(delays));
+    borrowedDelays = {};
+  }
+
+  /// Get all delays as an ArrayRef.
+  ArrayRef<DelayType> getDelays() const {
+    return ownedDelays.has_value() ? ArrayRef<DelayType>(*ownedDelays)
+                                   : borrowedDelays;
+  }
+
+  /// Set the binding between cut inputs and pattern pins.
+  void setBinding(MatchBinding binding) { this->binding = std::move(binding); }
+
+  /// Get the binding between cut inputs and pattern pins.
+  const MatchBinding &getBinding() const { return binding; }
+
+  /// Attach pattern-specific implementation data to this match.
+  void setImplementation(std::shared_ptr<const PatternImplementation> impl) {
+    implementation = std::move(impl);
+  }
+
+  /// Get the pattern-specific implementation data, if any.
+  const PatternImplementation *getImplementation() const {
+    return implementation.get();
+  }
+
+private:
+  /// Borrowed delays (used when ownedDelays is empty).
+  /// Points to external data provided via setDelayRef().
+  ArrayRef<DelayType> borrowedDelays;
+
+  /// Owned delays (used when present).
+  /// Only allocated when setOwnedDelays() is called. When empty (std::nullopt),
+  /// moving this PatternMatch avoids constructing/moving the SmallVector,
+  /// achieving zero-cost abstraction for the common case (borrowed delays).
+  std::optional<SmallVector<DelayType, 6>> ownedDelays;
+
+  /// Binding between the matched pattern pins and cut inputs.
+  MatchBinding binding;
+
+  /// Optional implementation data for stateful/dynamic matchers.
+  std::shared_ptr<const PatternImplementation> implementation;
+};
+
 /// Represents a cut that has been successfully matched to a rewriting pattern.
 ///
 /// This class encapsulates the result of matching a cut against a rewriting
@@ -453,8 +462,7 @@ private:
   SmallVector<DelayType, 1>
       arrivalTimes; ///< Arrival times of outputs from this pattern
   /// Saved match data we reuse during area-flow reselection.
-  PatternCost cost;
-  MatchBinding binding;
+  PatternMatch match;
 
 public:
   /// Default constructor creates an invalid matched pattern.
@@ -462,10 +470,9 @@ public:
 
   /// Constructor for a valid matched pattern.
   MatchedPattern(const CutRewritePattern *pattern,
-                 SmallVector<DelayType, 1> arrivalTimes, PatternCost cost,
-                 MatchBinding binding)
+                 SmallVector<DelayType, 1> arrivalTimes, PatternMatch match)
       : pattern(pattern), arrivalTimes(std::move(arrivalTimes)),
-        cost(std::move(cost)), binding(std::move(binding)) {}
+        match(std::move(match)) {}
 
   /// Get the arrival time of signals through this pattern.
   DelayType getArrivalTime(unsigned outputIndex) const;
@@ -481,16 +488,16 @@ public:
   /// Get the per-input delays used when scoring this match.
   ArrayRef<DelayType> getDelays() const;
 
-  /// Get the cached cost payload used to rebuild this match.
-  const PatternCost &getCost() const { return cost; }
+  /// Get the cached match payload used to rebuild this match.
+  const PatternMatch &getMatch() const { return match; }
 
   /// Get the stored pattern-specific implementation data, if any.
   const PatternImplementation *getImplementation() const {
-    return cost.getImplementation();
+    return match.getImplementation();
   }
 
   /// Get the binding between cut inputs and pattern pins.
-  const MatchBinding &getBinding() const { return binding; }
+  const MatchBinding &getBinding() const { return match.getBinding(); }
 
   /// Get the delay for a cut input after accounting for input permutation.
   DelayType getDelayForCutInput(unsigned cutInputIndex) const;
@@ -871,13 +878,13 @@ struct CutRewritePattern {
   /// Check if a cut matches this pattern and compute area/delay metrics.
   ///
   /// This method is called to determine if a cut can be replaced by this
-  /// pattern. If the cut matches, it should return a PatternCost containing the
-  /// area and per-input delays for this specific cut.
+  /// pattern. If the cut matches, it should return a PatternMatch containing
+  /// the area, delay, and optional rewrite data for this specific cut.
   ///
   /// If useTruthTableMatcher() returns true, this method is only
   /// called for cuts with matching truth tables.
-  virtual std::optional<PatternCost> match(CutEnumerator &enumerator,
-                                           const Cut &cut) const = 0;
+  virtual std::optional<PatternMatch> match(CutEnumerator &enumerator,
+                                            const Cut &cut) const = 0;
 
   /// Specify truth tables that this pattern can match.
   ///
