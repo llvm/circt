@@ -1852,7 +1852,7 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
   const CutRewritePattern *bestPattern = nullptr;
   SmallVector<DelayType, 4> inputArrivalTimes;
   SmallVector<DelayType, 1> bestArrivalTimes;
-  std::optional<PatternMatch> bestMatch;
+  std::optional<MatchResult> bestMatch;
   inputArrivalTimes.reserve(cut.getInputSize());
   bestArrivalTimes.reserve(cut.getOutputSize(network));
   MatchBinding identityBinding = MatchBinding::getIdentity(cut.getInputSize());
@@ -1862,7 +1862,7 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
     return {};
 
   auto computeArrivalTimeAndPickBest = [&](const CutRewritePattern *pattern,
-                                           PatternMatch match,
+                                           MatchResult match,
                                            MatchBinding binding) {
     match.setBinding(std::move(binding));
     auto outputArrivalTimes = computeOutputArrivalTimes(
