@@ -319,11 +319,28 @@ private:
   llvm::SmallVector<LogicNetworkGate> gates;
 };
 
+// Cut matching is split across a few small data objects:
+//
+// - PatternCost: pattern-local cost/timing data, plus optional implementation
+//   data. This is produced by CutRewritePattern::match().
+// - MatchBinding: framework-owned pin binding for NPN/permutation matches.
+// - MatchedPattern: the selected pattern, its arrival times, cost, binding, and
+//   any implementation data needed by CutRewritePattern::rewrite().
+//
+// Keeping these pieces separate lets generic framework reselection recompute
+// timing from cost/binding, while stateful patterns can still replay the exact
+// implementation that was costed during matching.
+
+/// Optional pattern-specific implementation data selected during matching.
+struct PatternImplementation {
+  virtual ~PatternImplementation() = default;
+};
+
 /// Cost of implementing a cut with a pattern.
 ///
 /// This structure contains the area and per-input delay information computed
-/// by a pattern matcher. It does not describe how the pattern inputs bind to a
-/// cut; that is tracked separately by MatchBinding.
+/// by a pattern matcher. It may also carry implementation data that the pattern
+/// needs to replay exactly the realization chosen during matching.
 ///
 /// The delays can be stored in two ways:
 /// 1. As a reference to static/cached data (e.g., tech library delays)
@@ -359,6 +376,16 @@ struct PatternCost {
                                    : borrowedDelays;
   }
 
+  /// Attach pattern-specific implementation data to this match.
+  void setImplementation(std::shared_ptr<const PatternImplementation> impl) {
+    implementation = std::move(impl);
+  }
+
+  /// Get the pattern-specific implementation data, if any.
+  const PatternImplementation *getImplementation() const {
+    return implementation.get();
+  }
+
 private:
   /// Borrowed delays (used when ownedDelays is empty).
   /// Points to external data provided via setDelayRef().
@@ -369,6 +396,9 @@ private:
   /// moving this PatternCost avoids constructing/moving the SmallVector,
   /// achieving zero-cost abstraction for the common case (borrowed delays).
   std::optional<SmallVector<DelayType, 6>> ownedDelays;
+
+  /// Optional implementation data for stateful/dynamic matchers.
+  std::shared_ptr<const PatternImplementation> implementation;
 };
 
 /// Describes how a matched pattern's pins bind to a cut.
@@ -453,6 +483,11 @@ public:
 
   /// Get the cached cost payload used to rebuild this match.
   const PatternCost &getCost() const { return cost; }
+
+  /// Get the stored pattern-specific implementation data, if any.
+  const PatternImplementation *getImplementation() const {
+    return cost.getImplementation();
+  }
 
   /// Get the binding between cut inputs and pattern pins.
   const MatchBinding &getBinding() const { return binding; }
@@ -863,9 +898,9 @@ struct CutRewritePattern {
   /// because the cut enumerator maintains references to operations throughout
   /// the circuit, making it safe to only replace the root operation of each
   /// cut while preserving all other operations unchanged.
-  virtual FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
-                                         CutEnumerator &enumerator,
-                                         const Cut &cut) const = 0;
+  virtual FailureOr<Operation *>
+  rewrite(mlir::OpBuilder &builder, CutEnumerator &enumerator, const Cut &cut,
+          const MatchedPattern &matched) const = 0;
 
   /// Get the number of outputs this pattern produces.
   virtual unsigned getNumOutputs() const = 0;
