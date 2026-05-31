@@ -52,8 +52,8 @@ struct DummyPattern : public CutRewritePattern {
   }
 
   FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
-                                 CutEnumerator &enumerator,
-                                 const Cut &cut) const override {
+                                 CutEnumerator &enumerator, const Cut &cut,
+                                 const MatchedPattern &) const override {
     return failure();
   }
 

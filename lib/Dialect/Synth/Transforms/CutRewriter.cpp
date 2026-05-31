@@ -1972,8 +1972,8 @@ LogicalResult CutRewriter::runBottomUpRewrite(Operation *top) {
     auto *rootOp = network.getGate(bestCut->getRootIndex()).getOperation();
     rewriter.setInsertionPoint(rootOp);
     const auto &matchedPattern = bestCut->getMatchedPattern();
-    auto result = matchedPattern->getPattern()->rewrite(rewriter, cutEnumerator,
-                                                        *bestCut);
+    auto result = matchedPattern->getPattern()->rewrite(
+        rewriter, cutEnumerator, *bestCut, *matchedPattern);
     if (failed(result))
       return failure();
 

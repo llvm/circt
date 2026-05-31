@@ -61,7 +61,8 @@ struct GenericLUT : public CutRewritePattern {
 
   llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &rewriter,
                                        CutEnumerator &enumerator,
-                                       const Cut &cut) const override {
+                                       const Cut &cut,
+                                       const MatchedPattern &) const override {
     const auto &network = enumerator.getLogicNetwork();
     // NOTE: Don't use NPN since it's unnecessary.
     const auto &truthTableOpt = cut.getTruthTable();

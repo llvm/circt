@@ -129,13 +129,11 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Rewrite the cut set using this library primitive
-  llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
-                                       CutEnumerator &enumerator,
-                                       const Cut &cut) const override {
+  llvm::FailureOr<Operation *>
+  rewrite(mlir::OpBuilder &builder, CutEnumerator &enumerator, const Cut &cut,
+          const MatchedPattern &matched) const override {
     const auto &network = enumerator.getLogicNetwork();
-    const auto &matchedPattern = cut.getMatchedPattern();
-    assert(matchedPattern && "tech library rewrite requires a matched pattern");
-    const MatchBinding &binding = matchedPattern->getBinding();
+    const MatchBinding &binding = matched.getBinding();
     assert(!binding.hasNegation() &&
            "phase-aware tech mapping is not implemented yet");
 
