@@ -196,8 +196,8 @@ buildSOPImplementation(const SOPForm &sop,
 struct SOPBalancingPattern : public CutRewritePattern {
   SOPBalancingPattern(MLIRContext *context) : CutRewritePattern(context) {}
 
-  std::optional<PatternCost> match(CutEnumerator &enumerator,
-                                   const Cut &cut) const override {
+  std::optional<PatternMatch> match(CutEnumerator &enumerator,
+                                    const Cut &cut) const override {
     const auto &network = enumerator.getLogicNetwork();
     if (cut.isTrivialCut() || cut.getOutputSize(network) != 1)
       return std::nullopt;
@@ -221,11 +221,11 @@ struct SOPBalancingPattern : public CutRewritePattern {
 
     auto implementation = buildSOPImplementation(sop, arrivalTimes);
 
-    PatternCost cost;
-    cost.area = static_cast<double>(totalGates);
-    cost.setDelayRef(implementation->delays);
-    cost.setImplementation(std::move(implementation));
-    return cost;
+    PatternMatch match;
+    match.area = static_cast<double>(totalGates);
+    match.setDelayRef(implementation->delays);
+    match.setImplementation(std::move(implementation));
+    return match;
   }
 
   FailureOr<Operation *> rewrite(OpBuilder &builder, CutEnumerator &enumerator,

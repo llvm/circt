@@ -112,13 +112,13 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Match the cut set against this library primitive
-  std::optional<PatternCost> match(CutEnumerator &enumerator,
-                                   const Cut &cut) const override {
+  std::optional<PatternMatch> match(CutEnumerator &enumerator,
+                                    const Cut &cut) const override {
     const auto &cutNPN = cut.getNPNClass(enumerator.getOptions().npnTable);
     if (!(cutNPN.truthTable == npnClass.truthTable))
       return std::nullopt;
 
-    return PatternCost(area, delay);
+    return PatternMatch(area, delay);
   }
 
   /// Enable truth table matching for this pattern

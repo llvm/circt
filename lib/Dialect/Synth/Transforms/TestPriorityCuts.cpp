@@ -44,10 +44,10 @@ struct DummyPattern : public CutRewritePattern {
   DummyPattern(mlir::MLIRContext *ctx)
       : CutRewritePattern(ctx), cachedDelays(kMaxInputs, 1) {}
 
-  std::optional<PatternCost> match(CutEnumerator &enumerator,
-                                   const Cut &cut) const override {
+  std::optional<PatternMatch> match(CutEnumerator &enumerator,
+                                    const Cut &cut) const override {
     assert(cut.getInputSize() <= kMaxInputs && "Too many inputs");
-    return PatternCost(
+    return PatternMatch(
         1.0, ArrayRef<DelayType>(cachedDelays).take_front(cut.getInputSize()));
   }
 
