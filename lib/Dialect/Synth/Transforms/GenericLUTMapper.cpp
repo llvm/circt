@@ -47,9 +47,11 @@ struct GenericLUT : public CutRewritePattern {
   GenericLUT(mlir::MLIRContext *context, unsigned k)
       : CutRewritePattern(context), k(k), cachedDelays(k, 1) {}
 
-  std::optional<PatternMatch> match(CutEnumerator &enumerator,
-                                    const Cut &cut) const override {
+  std::optional<PatternMatch>
+  match(CutEnumerator &enumerator, const Cut &cut,
+        const MatchBinding &binding) const override {
     const auto &network = enumerator.getLogicNetwork();
+    (void)binding;
     // This pattern can implement any cut with at most k inputs
     if (cut.getInputSize() > k || cut.getOutputSize(network) != 1)
       return std::nullopt;

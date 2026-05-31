@@ -881,10 +881,13 @@ struct CutRewritePattern {
   /// pattern. If the cut matches, it should return a PatternMatch containing
   /// the area, delay, and optional rewrite data for this specific cut.
   ///
-  /// If useTruthTableMatcher() returns true, this method is only
-  /// called for cuts with matching truth tables.
-  virtual std::optional<PatternMatch> match(CutEnumerator &enumerator,
-                                            const Cut &cut) const = 0;
+  /// If useTruthTableMatcher() returns true, this method is only called for
+  /// cuts with matching truth tables, and binding describes how the matched
+  /// pattern pins map to the cut. Non-truth-table patterns receive identity
+  /// bindings.
+  virtual std::optional<PatternMatch>
+  match(CutEnumerator &enumerator, const Cut &cut,
+        const MatchBinding &binding) const = 0;
 
   /// Specify truth tables that this pattern can match.
   ///
