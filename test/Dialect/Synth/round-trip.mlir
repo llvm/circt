@@ -54,3 +54,17 @@ hw.module @mux_inv(in %c: i4, in %a: i4, in %b: i4) {
 hw.module @gamble(in %x: i1, in %y: i1, in %z: i1) {
   %0 = synth.gamble %x, not %y, %z : i1
 }
+
+// CHECK-LABEL: synth.cut_rewrite_pattern
+// CHECK-SAME: (%{{.*}}: i1, %{{.*}}: i1, %{{.*}}: i1) -> i1
+synth.cut_rewrite_pattern (%a: i1, %b: i1, %c: i1) -> i1 attributes {cost = #synth.mapping_cost<area = 1.0 : f64>} {
+  %0 = synth.aig.and_inv %a, not %b, %c : i1
+  synth.yield %0 : i1
+}
+
+// CHECK-LABEL: synth.cut_rewrite_pattern
+// CHECK-SAME: (%{{.*}}: i1, %{{.*}}: i1) -> i1 attributes {cost = #synth.mapping_cost<area =
+synth.cut_rewrite_pattern (%a: i1, %b: i1) -> i1 attributes {cost = #synth.mapping_cost<area = 1.0 : f64>} {
+  %0 = synth.aig.and_inv %a, %b : i1
+  synth.yield %0 : i1
+}

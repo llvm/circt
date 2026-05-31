@@ -19,7 +19,10 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Value.h"
+#include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/LogicalResult.h"
@@ -625,4 +628,99 @@ void GambleOp::emitCNFWithoutInversion(
 
   // out = allSet | ~orSet
   circt::addOrClauses(outVar, {allSet, -orSet}, addClause);
+}
+
+//===----------------------------------------------------------------------===//
+// CutRewritePatternOp
+//===----------------------------------------------------------------------===//
+
+ParseResult CutRewritePatternOp::parse(OpAsmParser &parser,
+                                       OperationState &result) {
+
+  SmallVector<OpAsmParser::Argument> entryArgs;
+  SmallVector<Type> resultTypes;
+  SmallVector<DictionaryAttr> resultAttrs;
+  bool isVariadic = false;
+
+  if (function_interface_impl::parseFunctionSignatureWithArguments(
+          parser, /*allowVariadic=*/false, entryArgs, isVariadic, resultTypes,
+          resultAttrs))
+    return failure();
+
+  auto inputTypes = llvm::map_to_vector(
+      entryArgs, [](auto &arg) -> Type { return arg.type; });
+  auto functionType =
+      parser.getBuilder().getFunctionType(inputTypes, resultTypes);
+
+  result.addAttribute(getFunctionTypeAttrName(result.name),
+                      TypeAttr::get(functionType));
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  return parser.parseRegion(*result.addRegion(), entryArgs,
+                            /*enableNameShadowing=*/false);
+}
+
+void CutRewritePatternOp::print(OpAsmPrinter &p) {
+  auto functionType = getFunctionType();
+  call_interface_impl::printFunctionSignature(
+      p, functionType.getInputs(), /*argAttrs=*/{}, /*isVariadic=*/false,
+      functionType.getResults(), /*resultAttrs=*/{}, &getBody(),
+      /*printEmptyResult=*/false);
+
+  p.printOptionalAttrDictWithKeyword((*this)->getAttrs(),
+                                     {getFunctionTypeAttrName()});
+
+  p << ' ';
+  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+LogicalResult CutRewritePatternOp::verify() {
+  auto functionType = getFunctionType();
+
+  if (functionType.getNumResults() != 1)
+    return emitError() << "requires exactly one result";
+
+  for (auto type : functionType.getInputs())
+    if (!type.isInteger(1))
+      return emitError() << "argument type must be i1, but got " << type;
+
+  for (auto type : functionType.getResults())
+    if (!type.isInteger(1))
+      return emitError() << "result type must be i1, but got " << type;
+
+  // Check outputs.
+  auto *terminator = this->getBody().front().getTerminator();
+  if (terminator->getOperands().size() != functionType.getNumResults())
+    return emitError() << "result type doesn't match with the terminator";
+
+  for (auto [lhs, rhs] : llvm::zip(terminator->getOperands().getTypes(),
+                                   functionType.getResults()))
+    if (rhs != lhs)
+      return emitError() << rhs << " is expected but got " << lhs;
+
+  auto blockArgs = this->getBody().front().getArguments();
+  if (blockArgs.size() != functionType.getNumInputs())
+    return emitError() << "operand type doesn't match with the block arg";
+
+  for (auto [blockArg, inputType] :
+       llvm::zip(blockArgs, functionType.getInputs()))
+    if (blockArg.getType() != inputType)
+      return emitError() << inputType << " is expected but got "
+                         << blockArg.getType();
+
+  auto cost = getCost();
+  if (auto arcs = cost.getArcs())
+    if (!arcs.empty())
+      return emitError()
+             << "mapping cost arcs for cut rewrite patterns must not use "
+                "input/output names";
+
+  if (auto inputCaps = cost.getInputCaps())
+    if (inputCaps.size() != functionType.getNumInputs())
+      return emitError()
+             << "input_caps size must match the number of arguments";
+
+  return success();
 }

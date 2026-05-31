@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_SYNTH_SYNTHOPS_H
 #define CIRCT_DIALECT_SYNTH_SYNTHOPS_H
 
+#include "circt/Dialect/Synth/SynthAttributes.h"
 #include "circt/Dialect/Synth/SynthDialect.h"
 #include "circt/Dialect/Synth/SynthOpInterfaces.h"
 #include "circt/Support/LLVM.h"
