@@ -112,9 +112,8 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Match the cut set against this library primitive
-  std::optional<PatternMatch>
-  match(CutEnumerator &enumerator, const Cut &cut,
-        const MatchBinding &binding) const override {
+  std::optional<MatchResult> match(CutEnumerator &enumerator, const Cut &cut,
+                                   const MatchBinding &binding) const override {
     const auto &cutNPN = cut.getNPNClass(enumerator.getOptions().npnTable);
     if (!(cutNPN.truthTable == npnClass.truthTable))
       return std::nullopt;
@@ -124,7 +123,7 @@ struct TechLibraryPattern : public CutRewritePattern {
     if (binding.hasNegation())
       return std::nullopt;
 
-    return PatternMatch(area, delay);
+    return MatchResult(area, delay);
   }
 
   /// Enable truth table matching for this pattern

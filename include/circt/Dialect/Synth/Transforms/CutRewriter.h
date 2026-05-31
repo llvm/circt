@@ -364,10 +364,10 @@ struct MatchBinding {
 //
 // - MatchBinding: framework-owned pin binding for NPN/permutation matches.
 // - PatternImplementation: optional pattern-owned rewrite recipe.
-// - PatternMatch: the complete match payload used by selection and rewrite.
+// - MatchResult: the complete match payload used by selection and rewrite.
 // - MatchedPattern: the selected pattern plus framework-computed arrival times.
 //
-// Keeping binding and cost data in PatternMatch lets generic framework
+// Keeping binding and cost data in MatchResult lets generic framework
 // reselection recompute timing, while stateful patterns can still replay the
 // exact implementation that was costed during matching.
 
@@ -389,15 +389,15 @@ struct PatternImplementation {
 /// 2. As owned dynamic data (e.g., computed SOP delays)
 ///    - Use setOwnedDelays() to transfer ownership
 ///
-struct PatternMatch {
+struct MatchResult {
   /// Area cost of implementing this cut with the pattern.
   double area = 0.0;
 
   /// Default constructor.
-  PatternMatch() = default;
+  MatchResult() = default;
 
   /// Constructor with area and delays (by reference).
-  PatternMatch(double area, ArrayRef<DelayType> delays)
+  MatchResult(double area, ArrayRef<DelayType> delays)
       : area(area), borrowedDelays(delays) {}
 
   /// Set delays by reference (zero-cost for static/cached delays).
@@ -440,7 +440,7 @@ private:
 
   /// Owned delays (used when present).
   /// Only allocated when setOwnedDelays() is called. When empty (std::nullopt),
-  /// moving this PatternMatch avoids constructing/moving the SmallVector,
+  /// moving this MatchResult avoids constructing/moving the SmallVector,
   /// achieving zero-cost abstraction for the common case (borrowed delays).
   std::optional<SmallVector<DelayType, 6>> ownedDelays;
 
@@ -462,7 +462,7 @@ private:
   SmallVector<DelayType, 1>
       arrivalTimes; ///< Arrival times of outputs from this pattern
   /// Saved match data we reuse during area-flow reselection.
-  PatternMatch match;
+  MatchResult match;
 
 public:
   /// Default constructor creates an invalid matched pattern.
@@ -470,7 +470,7 @@ public:
 
   /// Constructor for a valid matched pattern.
   MatchedPattern(const CutRewritePattern *pattern,
-                 SmallVector<DelayType, 1> arrivalTimes, PatternMatch match)
+                 SmallVector<DelayType, 1> arrivalTimes, MatchResult match)
       : pattern(pattern), arrivalTimes(std::move(arrivalTimes)),
         match(std::move(match)) {}
 
@@ -489,7 +489,7 @@ public:
   ArrayRef<DelayType> getDelays() const;
 
   /// Get the cached match payload used to rebuild this match.
-  const PatternMatch &getMatch() const { return match; }
+  const MatchResult &getMatch() const { return match; }
 
   /// Get the stored pattern-specific implementation data, if any.
   const PatternImplementation *getImplementation() const {
@@ -878,14 +878,14 @@ struct CutRewritePattern {
   /// Check if a cut matches this pattern and compute area/delay metrics.
   ///
   /// This method is called to determine if a cut can be replaced by this
-  /// pattern. If the cut matches, it should return a PatternMatch containing
+  /// pattern. If the cut matches, it should return a MatchResult containing
   /// the area, delay, and optional rewrite data for this specific cut.
   ///
   /// If useTruthTableMatcher() returns true, this method is only called for
   /// cuts with matching truth tables, and binding describes how the matched
   /// pattern pins map to the cut. Non-truth-table patterns receive identity
   /// bindings.
-  virtual std::optional<PatternMatch>
+  virtual std::optional<MatchResult>
   match(CutEnumerator &enumerator, const Cut &cut,
         const MatchBinding &binding) const = 0;
 
