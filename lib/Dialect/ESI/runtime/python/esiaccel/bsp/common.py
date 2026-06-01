@@ -938,23 +938,25 @@ def EmitEveryN(message_type: Type, N: int) -> type['EmitEveryNImpl']:
         return
 
       counter_width = clog2(N)
-      increment = xact
-      clear = Wire(Bits(1))
+      counter_clear = Wire(Bits(1))
       counter = Counter(counter_width)(clk=ports.clk,
                                        rst=ports.rst,
-                                       increment=increment,
-                                       clear=clear)
+                                       increment=xact,
+                                       clear=counter_clear)
 
       # Capture last message of the group.
       last_msg = in_data.reg(ports.clk, ports.rst, ce=xact, name="last_msg")
-
+      # Clear the counter.
       hit_last = (counter.out == UInt(counter_width)(N - 1)) & xact
-      out_valid = ControlReg(ports.clk, ports.rst, [hit_last], [clear])
+      counter_clear.assign(hit_last)
+
+      emit_accepted = Wire(Bits(1))
+      out_valid = ControlReg(ports.clk, ports.rst, [hit_last], [emit_accepted])
 
       out_chan, out_ready = EmitEveryNImpl.out.type.wrap(last_msg, out_valid)
       # Stall input while waiting for downstream to accept the aggregated output.
       ready_for_in.assign(~(out_valid & ~out_ready))
-      clear.assign(out_valid & out_ready)  # Clear after successful emit.
+      emit_accepted.assign(out_valid & out_ready)  # Output consumed downstream.
 
       ports.out = out_chan
 
