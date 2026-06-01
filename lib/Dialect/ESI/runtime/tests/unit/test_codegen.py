@@ -260,8 +260,12 @@ def test_codegen_round_trip(tmp_path):
   """
   from esiaccel.utils import get_dll_dir
   esi_dll_path = get_dll_dir()
-  runtime_lib = esi_dll_path / "ESICppRuntime.lib"
-  runtime_dll = esi_dll_path / "ESICppRuntime.dll"
+  if sys.platform == "win32":
+    runtime_lib = esi_dll_path / "ESICppRuntime.lib"
+    runtime_dll = esi_dll_path / "ESICppRuntime.dll"
+  else:
+    runtime_lib = esi_dll_path / "libESICppRuntime.so"
+    runtime_dll = None
 
   # Generate the header into `<generated>/codegen_harness/types.h` so the
   # harness's `#include "codegen_harness/types.h"` resolves under
@@ -282,8 +286,9 @@ def test_codegen_round_trip(tmp_path):
       "-DCMAKE_BUILD_TYPE=Release",
       f"-DCODEGEN_HARNESS_GENERATED_DIR={generated_dir}",
       f"-DESI_RUNTIME_LIB={runtime_lib}",
-      f"-DESI_RUNTIME_DLL={runtime_dll}",
   ]
+  if sys.platform == "win32":
+    configure_cmd.append(f"-DESI_RUNTIME_DLL={runtime_dll}")
   configure_proc = subprocess.run(configure_cmd, capture_output=True, text=True)
   if configure_proc.returncode != 0:
     pytest.fail(

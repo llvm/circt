@@ -123,15 +123,13 @@ jobs:
           ninja --version
 
           $python = "$PWD\venv\Scripts\python.exe"
-          $nanobindDir = & $python -c "import nanobind; print(nanobind.cmake_dir(), end='')"
 
           cmake -S . -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DWHEEL_BUILD=ON `
             -DBUILD_TESTING=ON `
             "-DPython_EXECUTABLE=$python" `
-            "-DPython3_EXECUTABLE=$python" `
-            "-Dnanobind_DIR=$nanobindDir"
+            "-DPython3_EXECUTABLE=$python"
           cmake --build build --target ESIRuntime ESIRuntimeCppTests --config Release
 
           # Install into an esiaccel package directory. With WHEEL_BUILD=ON,

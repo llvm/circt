@@ -9,7 +9,6 @@ set(ESIPythonRuntimeSources
   esiaccel/esitester.py
   esiaccel/types.py
   esiaccel/utils.py
-  esiaccel/cosim/__init__.py
   esiaccel/cosim/questa.py
   esiaccel/cosim/pytest.py
   esiaccel/cosim/simulator.py
