@@ -11,9 +11,6 @@ add_library(EsiCosimDpiServer SHARED
 )
 set_target_properties(EsiCosimDpiServer
   PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY ${ESIRT_INSTALL_BINDIR}
-    LIBRARY_OUTPUT_DIRECTORY ${ESIRT_INSTALL_BINDIR}
-    RUNTIME_OUTPUT_DIRECTORY ${ESIRT_INSTALL_BINDIR}
     CXX_VISIBILITY_PRESET "default"
 )
 add_dependencies(EsiCosimDpiServer ESICppRuntime)

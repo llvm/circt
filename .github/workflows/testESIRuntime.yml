@@ -24,7 +24,7 @@ jobs:
   # ---------------------------------------------------------------------------
 
   build-linux:
-    name: Build and Test
+    name: Build and Test (Linux)
     runs-on: Ubuntu-latest
     container:
       image: ghcr.io/circt/images/pycde-esi-test:latest

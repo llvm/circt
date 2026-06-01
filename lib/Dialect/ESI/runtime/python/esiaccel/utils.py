@@ -49,7 +49,7 @@ def get_dll_dir() -> Path:
   import os
   if sys.platform == "win32":
     dll_name = "ESICppRuntime.dll"
-    for dir in [_thisdir, _thisdir.parent.parent]:
+    for dir in [_thisdir, _thisdir.parent, _thisdir.parent.parent]:
       if (dir / dll_name).exists():
         return dir
     raise FileNotFoundError("ESICppRuntime.dll not found")
