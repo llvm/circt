@@ -54,4 +54,8 @@ def get_dll_dir() -> Path:
         return dir
     raise FileNotFoundError("ESICppRuntime.dll not found")
   else:
-    return _thisdir / "lib"
+    so_name = "libESICppRuntime.so"
+    for dir in [_thisdir, _thisdir.parent, _thisdir.parent.parent]:
+      if (dir / "lib" / so_name).exists():
+        return dir / "lib"
+    raise FileNotFoundError("libESICppRuntime.so not found")
