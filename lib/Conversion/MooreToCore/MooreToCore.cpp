@@ -1884,7 +1884,7 @@ struct HypotBIOpConversion : public OpConversionPattern<HypotBIOp> {
     auto left = arith::MulFOp::create(b,lhs,lhs); 
     auto right =  arith::MulFOp::create(b,rhs,rhs); 
     auto sum = arith::AddFOp::create(b,left,right); 
-    auto out = math::RsqrtOp::create(b,sum);             
+    auto out = math::SqrtOp::create(b,sum);             
     rewriter.replaceOp(op,out);
     return success();
   }
@@ -3549,7 +3549,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     RealMathFunc<LnBIOp, math::LogOp>,
     RealMathFunc<Log10BIOp, math::Log10Op>,
     RealMathFunc<ExpBIOp, math::ExpOp>,
-    RealMathFunc<SqrtBIOp, math::RsqrtOp>,
+    RealMathFunc<SqrtBIOp, math::SqrtOp>,
     RealMathFuncTwoArg<MinBIOp, arith::MinimumFOp>,
     RealMathFuncTwoArg<MaxBIOp, arith::MaximumFOp>,
     RealMathFunc<AbsBIOp, math::AbsFOp>,
