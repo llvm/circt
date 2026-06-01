@@ -112,6 +112,9 @@ public:
   llvm::LogicalResult run(Operation *op);
 
 private:
+  /// Runs the structural hashing pass on the given block.
+  llvm::LogicalResult runOnBlock(Block &block);
+
   /// Maps values to unique numbers for deterministic operand sorting.
   DenseMap<Value, uint64_t> valueNumber;
   uint64_t constantCounter = 0;
@@ -246,17 +249,14 @@ uint64_t StructuralHashDriver::getNumber(Value v) {
       .first->second;
 }
 
-llvm::LogicalResult StructuralHashDriver::run(Operation *moduleOp) {
+llvm::LogicalResult StructuralHashDriver::runOnBlock(Block &block) {
+  hashTable.clear();
+
   auto isOperationReady = [&](Value value, Operation *op) -> bool {
     // Other than target ops, all other ops are always ready.
     return !isa<BooleanLogicOpInterface>(op);
   };
 
-  if (moduleOp->getNumRegions() != 1 ||
-      moduleOp->getRegion(0).getBlocks().size() != 1)
-    return llvm::success();
-
-  Block &block = moduleOp->getRegion(0).front();
   if (!mlir::sortTopologically(&block, isOperationReady))
     return failure();
 
@@ -264,12 +264,21 @@ llvm::LogicalResult StructuralHashDriver::run(Operation *moduleOp) {
     (void)getNumber(arg);
 
   // Process target ops.
-  // NOTE: Don't use walk here since the pass currently doesn't handle nested
-  // regions.
   for (auto op :
        llvm::make_early_inc_range(block.getOps<BooleanLogicOpInterface>())) {
     visitOp(op);
   }
+
+  return mlir::success();
+}
+
+llvm::LogicalResult StructuralHashDriver::run(Operation *moduleOp) {
+  auto result = moduleOp->walk([&](Block *block) {
+    return failed(runOnBlock(*block)) ? WalkResult::interrupt()
+                                      : WalkResult::advance();
+  });
+  if (result.wasInterrupted())
+    return failure();
 
   // Run DCE to remove dangling ops.
   mlir::PatternRewriter rewriter(moduleOp->getContext());
