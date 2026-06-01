@@ -30,6 +30,9 @@ from esiaccel.codegen import CppTypePlanner, CppTypeEmitter
 
 _HARNESS_DIR = Path(__file__).parent
 
+requires_cmake = pytest.mark.skipif(shutil.which("cmake") is None,
+                                    reason="cmake not available")
+
 # Small set of pre-built ESI scalar types shared by the manifest builders.
 _uint1 = types.UIntType("ui1", 1)
 _uint3 = types.UIntType("ui3", 3)
@@ -248,68 +251,18 @@ def _build_harness_manifest():
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
-def _harness_env():
-  """Resolve `cmake` and the runtime shared library, or skip.
-
-  The runtime library ships with the `esiaccel` Python package, either at
-  `<esiaccel>/lib/...` or next to the package modules themselves. Using
-  that as the anchor avoids needing to plumb in a separate
-  `ESI_RUNTIME_ROOT`, parse `esiaccelConfig.cmake`, or walk the build tree.
-
-  On Windows, MSVC needs the `.lib` import library to link against and
-  the `.dll` to load at runtime, so we look up both separately and feed
-  them through to CMake as `ESI_RUNTIME_LIB` (link target) and
-  `ESI_RUNTIME_DLL` (runtime artifact to stage next to the executable).
-  On Unix the single shared object covers both jobs.
-  """
-  if shutil.which("cmake") is None:
-    pytest.skip("cmake not available")
-
-  try:
-    import esiaccel
-  except ImportError:
-    pytest.skip("esiaccel not importable")
-  esiaccel_package_dir = Path(esiaccel.__file__).parent
-  esiaccel_lib_dirs = [esiaccel_package_dir / "lib", esiaccel_package_dir]
-
-  runtime_lib = None
-  runtime_dll = None
-  if sys.platform == "win32":
-    # Prefer the MSVC import library for linking; fall back to the DLL
-    # itself (which works with MinGW) if no `.lib` was shipped.
-    for esiaccel_lib_dir in esiaccel_lib_dirs:
-      lib = esiaccel_lib_dir / "ESICppRuntime.lib"
-      dll = esiaccel_lib_dir / "ESICppRuntime.dll"
-      if runtime_lib is None and lib.exists():
-        runtime_lib = lib
-      if runtime_dll is None and dll.exists():
-        runtime_dll = dll
-    if runtime_lib is None:
-      runtime_lib = runtime_dll
-  else:
-    for esiaccel_lib_dir in esiaccel_lib_dirs:
-      for name in ("libESICppRuntime.so", "libESICppRuntime.dylib"):
-        candidate = esiaccel_lib_dir / name
-        if candidate.exists():
-          runtime_lib = candidate
-          break
-      if runtime_lib is not None:
-        break
-
-  if runtime_lib is None:
-    search_dirs = ", ".join(str(path) for path in esiaccel_lib_dirs)
-    pytest.skip(f"ESICppRuntime link artifact not found under {search_dirs}")
-
-  return {"runtime_lib": runtime_lib, "runtime_dll": runtime_dll}
-
-
-def test_codegen_round_trip(_harness_env, tmp_path):
+@requires_cmake
+def test_codegen_round_trip(tmp_path):
   """Compile `codegen_harness.cpp` against a freshly-generated `types.h`
   and run it. The harness asserts every wire-format and accessor invariant
   end-to-end; this Python test just drives the cmake build and reports
   failures.
   """
+  from esiaccel.utils import get_dll_dir
+  esi_dll_path = get_dll_dir()
+  runtime_lib = esi_dll_path / "ESICppRuntime.lib"
+  runtime_dll = esi_dll_path / "ESICppRuntime.dll"
+
   # Generate the header into `<generated>/codegen_harness/types.h` so the
   # harness's `#include "codegen_harness/types.h"` resolves under
   # `<generated>`, which we feed to CMake as the include root.
@@ -328,10 +281,9 @@ def test_codegen_round_trip(_harness_env, tmp_path):
       str(build_dir),
       "-DCMAKE_BUILD_TYPE=Release",
       f"-DCODEGEN_HARNESS_GENERATED_DIR={generated_dir}",
-      f"-DESI_RUNTIME_LIB={_harness_env['runtime_lib']}",
+      f"-DESI_RUNTIME_LIB={runtime_lib}",
+      f"-DESI_RUNTIME_DLL={runtime_dll}",
   ]
-  if _harness_env["runtime_dll"] is not None:
-    configure_cmd.append(f"-DESI_RUNTIME_DLL={_harness_env['runtime_dll']}")
   configure_proc = subprocess.run(configure_cmd, capture_output=True, text=True)
   if configure_proc.returncode != 0:
     pytest.fail(

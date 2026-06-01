@@ -89,7 +89,7 @@ jobs:
   # ---------------------------------------------------------------------------
 
   build-windows:
-    name: Build and Test Windows
+    name: Build and Test (Windows)
     runs-on: windows-2022
 
     steps:
