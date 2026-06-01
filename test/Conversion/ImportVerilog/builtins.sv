@@ -253,16 +253,21 @@ endfunction
 // CHECK-SAME: [[X:%.+]]: !moore.i32
 // CHECK-SAME: [[Y:%.+]]: !moore.l42
 // CHECK-SAME: [[R:%.+]]: !moore.f64
-function void MathBuiltins(int x, logic [41:0] y, real r);
+function void MathBuiltins(int x, logic [41:0] y, real r );
   // CHECK: moore.builtin.clog2 [[X]] : i32
   dummyA($clog2(x));
   // CHECK: moore.builtin.clog2 [[Y]] : l42
   dummyA($clog2(y));
-
+  
   // CHECK:  moore.builtin.ln [[R]] : f64
   dummyB($ln(r));
   // CHECK:  moore.builtin.log10 [[R]] : f64
   dummyB($log10(r));
+
+  // CHECK:  moore.builtin.pow [[R]], [[R]] : f64
+  dummyB($pow(r,r));
+
+
   // CHECK:  moore.builtin.exp [[R]] : f64
   dummyB($exp(r));
   // CHECK:  moore.builtin.sqrt [[R]] : f64
@@ -283,6 +288,11 @@ function void MathBuiltins(int x, logic [41:0] y, real r);
   dummyB($acos(r));
   // CHECK:  moore.builtin.atan [[R]] : f64
   dummyB($atan(r));
+  
+  // CHECK:  moore.builtin.atan2 [[R]],[[R]] : f64
+  dummyB($atan2(r,r));
+  // CHECK:  moore.builtin.hypot [[R]],[[R]] : f64
+  dummyB($hypot(r,r));
   // CHECK:  moore.builtin.sinh [[R]] : f64
   dummyB($sinh(r));
   // CHECK:  moore.builtin.cosh [[R]] : f64
@@ -377,7 +387,7 @@ endfunction
 function void SeverityBuiltinEdgeCase(string testStr);
   // CHECK: [[CONST:%.+]] = moore.constant 1234 : i32
   // CHECK-NEXT: [[INTVAR:%.+]] = moore.variable [[CONST]] : <i32>
-  int val = 1234;
+  static int val = 1234;
   // CHECK-NEXT: [[INTVAL1:%.+]] = moore.read [[INTVAR]] : <i32>
   // CHECK-NEXT: [[FMTINT1:%.+]] = moore.fmt.int binary [[INTVAL1]], align right, pad zero : i32
   // CHECK-NEXT: [[LINE1:%.+]] = moore.fmt.literal "\0A"

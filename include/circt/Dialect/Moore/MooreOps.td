@@ -3236,9 +3236,10 @@ def AtanBIOp : RealMathFunc<"atan"> {
   let summary = "Arc-tangent";
 }
 
-def Atan2BIOp : BinaryRealOpBase<"atan2"> {
+def Atan2BIOp : RealMathFuncTwoIn<"atan2"> {
   let summary = "Arc-tangent of y/x";
 }
+
 
 def HypotBIOp : Builtin<"hypot", [SameOperandsAndResultType]> { 
   let description = [{
