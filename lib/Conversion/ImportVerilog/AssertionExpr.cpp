@@ -550,7 +550,10 @@ Value Context::convertAssertionCallExpression(
     return {};
   if (*result) {
     auto expectedTy = convertType(*expr.type);
-    return materializeConversion(expectedTy, *result, expr.type->isSigned(),
+    return materializeConversion(expectedTy, *result,
+                                 (subroutine.knownNameId !=
+                                  slang::parsing::KnownSystemName::CountOnes) &&
+                                     expr.type->isSigned(),
                                  loc);
   }
 
