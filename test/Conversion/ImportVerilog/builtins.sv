@@ -675,7 +675,7 @@ module SampleValueBuiltins #() (
   // CHECK: [[B1:%.+]] = comb.extract [[DB]] from 1 : (i8) -> i1
   // CHECK: [[EXT1:%.+]] = comb.concat [[Z3]], [[B1]] : i3, i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int {{%.+}} : i4
-  // CHECK: [[SEXT:%.+]] = moore.sext [[RES_INT]] : i4 -> i32
+  // CHECK: [[SEXT:%.+]] = moore.zext [[RES_INT]] : i4 -> i32
   // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
   // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
   countones_data:
@@ -691,7 +691,7 @@ module SampleValueBuiltins #() (
   // CHECK: [[EXT1:%.+]] = comb.concat [[Z3]], [[B1]] : i3, i1
   // CHECK: comb.add
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int {{%.+}} : i4
-  // CHECK: [[SEXT:%.+]] = moore.sext [[RES_INT]] : i4 -> i32
+  // CHECK: [[SEXT:%.+]] = moore.zext [[RES_INT]] : i4 -> i32
   // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
   // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
   countones_bit_data:
