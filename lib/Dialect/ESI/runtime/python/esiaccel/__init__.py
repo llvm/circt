@@ -3,6 +3,15 @@
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 import sys
 import os
+
+if sys.platform == "win32":
+  """Ensure that ESI libraries are in the dll path on Windows. Necessary to
+  call when users build against the esiaccel-provided prebuilt CMake/prebuilt
+  libraries, before they are loaded via. python.
+  """
+  from .utils import get_dll_dir
+  os.add_dll_directory(str(get_dll_dir()))
+
 from .accelerator import AcceleratorConnection, Context, LogLevel
 
 from .esiCppAccel import (AppID, Type, BundleType, ChannelType, ArrayType,
@@ -14,14 +23,6 @@ __all__ = [
     "BundleType", "ChannelType", "ArrayType", "StructType", "BitsType",
     "UIntType", "SIntType", "ListType", "WindowType"
 ]
-
-if sys.platform == "win32":
-  """Ensure that ESI libraries are in the dll path on Windows. Necessary to
-  call when users build against the esiaccel-provided prebuilt CMake/prebuilt
-  libraries, before they are loaded via. python.
-  """
-  from .utils import get_dll_dir
-  os.add_dll_directory(str(get_dll_dir()))
 
 
 def connect(platform: str, connection_str: str) -> "AcceleratorConnection":

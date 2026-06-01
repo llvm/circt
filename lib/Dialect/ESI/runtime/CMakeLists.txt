@@ -113,7 +113,7 @@ endif()
 ##===----------------------------------------------------------------------===//
 ## Overall target to build everything.
 ##===----------------------------------------------------------------------===//
-add_custom_target(ESIRuntime)
+add_custom_target(ESIRuntime ALL)
 
 ##===----------------------------------------------------------------------===//
 ## Core ESI runtime.
@@ -219,11 +219,11 @@ if(NOT MSVC)
 endif()
 add_dependencies(ESIRuntime ESICppRuntime)
 if (WIN32)
-  set(ESIRT_INSTALL_BINDIR ".")
-  set(ESIRT_INSTALL_LIBDIR ".")
+  set(ESIRT_INSTALL_BINDIR ${CMAKE_BINARY_DIR})
+  set(ESIRT_INSTALL_LIBDIR ${CMAKE_BINARY_DIR})
 else()
-  set(ESIRT_INSTALL_BINDIR "bin")
-  set(ESIRT_INSTALL_LIBDIR "lib")
+  set(ESIRT_INSTALL_BINDIR "${CMAKE_BINARY_DIR}/bin")
+  set(ESIRT_INSTALL_LIBDIR "${CMAKE_BINARY_DIR}/lib")
 endif()
 
 install(TARGETS ESICppRuntime

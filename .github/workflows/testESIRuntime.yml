@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - ".github/workflows/testESIRuntime.yml"
       - "lib/Dialect/ESI/runtime/**"
 
 # Cancel previous CI builds when a new push occurs to the same PR.
@@ -81,3 +82,72 @@ jobs:
           export PYTHONPATH="$PWD/esiaccel_install/"
           export PATH="$PWD/esiaccel_install/bin:$PATH"
           python3 -m pytest tests/ -v --log-cli-level=INFO
+
+  # ---------------------------------------------------------------------------
+  #  Build and test Windows. Tests that require an unavailable simulator skip
+  #  themselves based on the esiaccel.cosim simulator discovery helpers.
+  # ---------------------------------------------------------------------------
+
+  build-windows:
+    name: Build and Test Windows
+    runs-on: windows-2022
+
+    steps:
+      # Clone the CIRCT repo. Do not clone the submodule since we won't be
+      # building CIRCT or PyCDE in this workflow.
+      - name: Get CIRCT
+        uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: lib/Dialect/ESI/runtime
+        shell: pwsh
+        run: |
+          python -m venv venv
+          .\venv\Scripts\python.exe -m pip install --upgrade pip
+          .\venv\Scripts\python.exe -m pip install pytest pytest-xdist nanobind
+          .\venv\Scripts\python.exe -m pip install pycde --pre
+
+      - name: Build ESI runtime
+        working-directory: lib/Dialect/ESI/runtime
+        shell: pwsh
+        run: |
+          & "${env:GITHUB_WORKSPACE}\utils\find-vs.ps1"
+          cmake --version
+          ninja --version
+
+          $python = "$PWD\venv\Scripts\python.exe"
+          $nanobindDir = & $python -c "import nanobind; print(nanobind.cmake_dir(), end='')"
+
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DWHEEL_BUILD=ON `
+            -DBUILD_TESTING=ON `
+            "-DPython_EXECUTABLE=$python" `
+            "-DPython3_EXECUTABLE=$python" `
+            "-Dnanobind_DIR=$nanobindDir"
+          cmake --build build --target ESIRuntime ESIRuntimeCppTests --config Release
+
+          # Install into an esiaccel package directory. With WHEEL_BUILD=ON,
+          # Windows runtime DLLs/import libs and Python files are installed
+          # together, matching the layout used by the unit tests.
+          cmake --install build `
+            --prefix esiaccel_install\esiaccel `
+            --component ESIRuntime
+
+      - name: Test ESI runtime (pytest)
+        working-directory: lib/Dialect/ESI/runtime
+        shell: pwsh
+        run: |
+          & "${env:GITHUB_WORKSPACE}\utils\find-vs.ps1"
+          $env:PYTHONPATH = "$PWD\esiaccel_install"
+          $env:PATH = "$PWD\esiaccel_install\esiaccel;$PWD\build;$PWD\build\tests\cpp;$env:PATH"
+          $env:ESI_RUNTIME_TESTS_BIN = "$PWD\build\tests\cpp\ESIRuntimeCppTests.exe"
+
+          .\venv\Scripts\python.exe -m pytest tests -n 1 -v --log-cli-level=INFO

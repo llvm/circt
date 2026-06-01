@@ -19,6 +19,17 @@ class Verilator(Simulator):
   Falls back to ``make`` when cmake/ninja are not available."""
 
   DefaultDriver = CosimCollateralDir / "driver.cpp"
+  VerilatorBinNotFound = (
+      "Cannot find verilator_bin. Set VERILATOR_PATH to an absolute path "
+      "or ensure verilator_bin is in PATH.")
+  VerilatorRootNotFound = (
+      "Cannot find VERILATOR_ROOT. Set the VERILATOR_ROOT environment "
+      "variable or ensure verilator_bin is in PATH.")
+  VerilatorPathInvalid = (
+      "VERILATOR_PATH does not point to a valid verilator_bin executable.")
+  VerilatorRootInvalid = (
+      "VERILATOR_ROOT does not point to a Verilator root containing "
+      "include/verilated.h.")
 
   def __init__(
       self,
@@ -45,68 +56,64 @@ class Verilator(Simulator):
         make_default_logs=make_default_logs,
         macro_definitions=macro_definitions,
     )
-    self.verilator_bin = "verilator_bin"
+
+  @property
+  def verilator_bin(self) -> Path:
+    vpath = Verilator._find_verilator_bin()
+    if vpath is None:
+      raise RuntimeError(Verilator.VerilatorBinNotFound)
+    return vpath
+
+  @staticmethod
+  def _find_verilator_bin() -> Optional[Path]:
+    """Locate the ``verilator_bin`` executable.
+
+    When ``VERILATOR_PATH`` is set it must point to a valid executable;
+    otherwise a ``RuntimeError`` is raised. Without it, ``verilator_bin`` is
+    looked up on ``PATH``. Returns ``None`` when nothing is found."""
+
+    def check_path(path: Path | str | None) -> Optional[Path]:
+      if isinstance(path, str):
+        path = Path(path)
+      if path is not None and path.exists() and path.is_file():
+        return path.resolve()
+      return None
+
     if "VERILATOR_PATH" in os.environ:
-      vpath = os.environ["VERILATOR_PATH"]
-      # Backwards compatibility: if the env var points to the Perl wrapper,
-      # redirect to verilator_bin.
-      basename = Path(vpath).stem
-      if basename == "verilator":
-        self.verilator_bin = str(Path(vpath).parent / "verilator_bin")
-      else:
-        self.verilator_bin = vpath
+      vpath = Path(os.environ["VERILATOR_PATH"])
+      if vpath.stem == "verilator":
+        vpath = vpath.parent / "verilator_bin"
+      checked = check_path(vpath)
+      if checked is None:
+        raise RuntimeError(Verilator.VerilatorPathInvalid)
+      return checked
+    return check_path(shutil.which("verilator_bin"))
 
-  def _find_verilator_bin(self, required: bool = True) -> str:
-    verilator_bin_path = shutil.which(self.verilator_bin)
-    if verilator_bin_path:
-      return str(Path(verilator_bin_path).resolve())
+  @staticmethod
+  def _find_verilator_root() -> Optional[Path]:
+    """Locate the Verilator root containing ``include/verilated.h``.
 
-    verilator_bin_path = Path(self.verilator_bin)
-    if verilator_bin_path.is_file():
-      return str(verilator_bin_path.resolve())
-
-    if not required:
-      return self.verilator_bin
-
-    raise RuntimeError(
-        "Cannot find verilator_bin. Set VERILATOR_PATH to an absolute path "
-        "or ensure verilator_bin is in PATH.")
-
-  def _find_verilator_root(self, verilator_bin: Optional[str] = None) -> Path:
-    """Locate VERILATOR_ROOT for runtime includes and sources.
-
-    Checks the ``VERILATOR_ROOT`` environment variable first, then attempts
-    to derive the root from the location of ``verilator_bin``.  Supports both
-    source-tree layouts (``$ROOT/include/verilated.h``) and system package
-    layouts (``$PREFIX/share/verilator/include/verilated.h``)."""
+    When ``VERILATOR_ROOT`` is set it must contain ``include/verilated.h``;
+    otherwise a ``RuntimeError`` is raised. Without it, the packaged root
+    (``$PREFIX/share/verilator``) is derived from the ``verilator_bin``
+    location. Returns ``None`` when nothing is found."""
     if "VERILATOR_ROOT" in os.environ:
       root = Path(os.environ["VERILATOR_ROOT"])
-      if root.is_dir():
+      if (root / "include" / "verilated.h").exists():
         return root
+      raise RuntimeError(Verilator.VerilatorRootInvalid)
+
+    verilator_bin = Verilator._find_verilator_bin()
     if verilator_bin is None:
-      verilator_bin = self.verilator_bin
+      return None
 
-    verilator_bin_path = Path(verilator_bin)
-    if not verilator_bin_path.is_file():
-      resolved = shutil.which(verilator_bin)
-      if resolved is None:
-        raise RuntimeError(
-            "Cannot find VERILATOR_ROOT. Set the VERILATOR_ROOT environment "
-            "variable or ensure verilator_bin is in PATH.")
-      verilator_bin_path = Path(resolved)
-
-    # verilator_bin is typically in $PREFIX/bin/
-    prefix = verilator_bin_path.resolve().parent.parent
-    # Source-tree layout: $VERILATOR_ROOT/bin/verilator_bin
-    if (prefix / "include" / "verilated.h").exists():
-      return prefix
-    # System package layout: $PREFIX/share/verilator/include/verilated.h
-    pkg_root = prefix / "share" / "verilator"
+    # Packaged installations put Verilator's support files under
+    # $PREFIX/share/verilator, where $PREFIX is the bin directory's parent.
+    pkg_root = verilator_bin.parent.parent / "share" / "verilator"
     if (pkg_root / "include" / "verilated.h").exists():
       return pkg_root
-    raise RuntimeError(
-        "Cannot find VERILATOR_ROOT. Set the VERILATOR_ROOT environment "
-        "variable or ensure verilator_bin is in PATH.")
+
+    return None
 
   @property
   def _use_cmake(self) -> bool:
@@ -128,12 +135,16 @@ class Verilator(Simulator):
       1. ``verilator_bin --exe`` – generates C++ and a Makefile.
       2. ``make`` – builds via the generated Makefile.
     """
-    self.verilator_bin = self._find_verilator_bin(required=True)
-    os.environ["VERILATOR_ROOT"] = str(
-        self._find_verilator_root(self.verilator_bin))
+    verilator_bin = self._find_verilator_bin()
+    if verilator_bin is None:
+      raise RuntimeError(Verilator.VerilatorBinNotFound)
+    verilator_root = self._find_verilator_root()
+    if verilator_root is None:
+      raise RuntimeError(Verilator.VerilatorRootNotFound)
+    os.environ["VERILATOR_ROOT"] = str(verilator_root)
 
     verilator_cmd: List[str] = [
-        self.verilator_bin,
+        str(verilator_bin),
         "--cc",
     ]
 
@@ -252,6 +263,8 @@ class Verilator(Simulator):
     Returns the path to the CMake build directory."""
 
     verilator_root = self._find_verilator_root()
+    if verilator_root is None:
+      raise RuntimeError(Verilator.VerilatorRootNotFound)
     include_dir = verilator_root / "include"
     exe_name = "V" + self.sources.top
 

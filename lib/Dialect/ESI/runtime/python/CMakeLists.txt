@@ -9,6 +9,7 @@ set(ESIPythonRuntimeSources
   esiaccel/esitester.py
   esiaccel/types.py
   esiaccel/utils.py
+  esiaccel/cosim/__init__.py
   esiaccel/cosim/questa.py
   esiaccel/cosim/pytest.py
   esiaccel/cosim/simulator.py
@@ -167,7 +168,7 @@ if(Python3_FOUND)
 
     # Custom target for the Python runtime just aggregates the python sources
     # and nanobind module.
-    add_custom_target(ESIPythonRuntime
+    add_custom_target(ESIPythonRuntime ALL
       DEPENDS
         ${ESIPythonRuntimeSources}
         esiCppAccel
