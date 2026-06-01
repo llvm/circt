@@ -779,7 +779,8 @@ static bool isExpressionUnableToInline(Operation *op,
     //
     // To handle these, we push the subexpression into a temporary.
     if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, ArrayInjectOp, StructExtractOp,
-            UnionExtractOp, IndexedPartSelectOp>(user))
+            StructInjectOp, StructExplodeOp, UnionExtractOp,
+            IndexedPartSelectOp>(user))
       if (use.getOperandNumber() == 0 && // ignore index operands.
           !isOkToBitSelectFrom(use.get()))
         return true;
