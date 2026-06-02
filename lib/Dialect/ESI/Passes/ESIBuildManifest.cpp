@@ -59,11 +59,12 @@ private:
   std::string json();
 
   /// Walk the appID hierarchy and record the absolute appID paths of all client
-  /// ports whose channels are bound to a host-reachable engine (i.e. which
-  /// appear in some engine's channel assignment table). These are the only
-  /// ports which are "user accessible": present in the runtime's Accelerator
-  /// design tree.
-  void collectAssignedPorts(Block &block, SmallVectorImpl<Attribute> &path);
+  /// ports which are served by a service or engine (i.e. which appear in some
+  /// service implementation's client record). These are the only ports which
+  /// are "user accessible": those for which the runtime materializes a port in
+  /// the Accelerator design tree. Ports with no service record (e.g. host
+  /// memory ports, or function ports with no implementing engine) are not.
+  void collectServedPorts(Block &block, SmallVectorImpl<Attribute> &path);
 
   /// Walk the appID hierarchy and populate 'keepNodes' with the hierarchy nodes
   /// which contain (or have a descendant which contains) a user-accessible
@@ -75,7 +76,7 @@ private:
   bool isPortAccessible(ArrayRef<Attribute> nodePath, Attribute portID) {
     SmallVector<Attribute> portPath(nodePath.begin(), nodePath.end());
     portPath.push_back(portID);
-    return assignedPortPaths.contains(ArrayAttr::get(&getContext(), portPath));
+    return servedPortPaths.contains(ArrayAttr::get(&getContext(), portPath));
   }
 
   // Type table.
@@ -96,9 +97,14 @@ private:
   DenseSet<SymbolRefAttr> symbols;
   DenseSet<SymbolRefAttr> modules;
 
-  // Absolute appID paths of user-accessible client ports (those bound to a
-  // host-reachable engine via a channel assignment).
-  DenseSet<ArrayAttr> assignedPortPaths;
+  // Modules instantiated anywhere in the (full, unpruned) design hierarchy.
+  // Their metadata is always retained so that 'module_infos' stays complete
+  // even when an instance's subtree is pruned from the design tree.
+  DenseSet<SymbolRefAttr> instantiatedModules;
+
+  // Absolute appID paths of user-accessible client ports (those served by a
+  // service or engine via a client record).
+  DenseSet<ArrayAttr> servedPortPaths;
   // AppID hierarchy nodes to retain (those whose subtree contains a
   // user-accessible client port).
   DenseSet<Operation *> keepNodes;
@@ -125,7 +131,7 @@ void ESIBuildManifestPass::runOnOperation() {
   // since the latter relies on these sets to prune the manifest.
   {
     SmallVector<Attribute> path;
-    collectAssignedPorts(appidRoot.getChildren().front(), path);
+    collectServedPorts(appidRoot.getChildren().front(), path);
     path.clear();
     computeKeepNodes(appidRoot.getChildren().front(), path);
   }
@@ -171,24 +177,28 @@ void ESIBuildManifestPass::runOnOperation() {
   }
 }
 
-void ESIBuildManifestPass::collectAssignedPorts(
+void ESIBuildManifestPass::collectServedPorts(
     Block &block, SmallVectorImpl<Attribute> &path) {
   for (auto svc : block.getOps<ServiceImplRecordOp>())
     for (auto client :
          svc.getReqDetails().front().getOps<ServiceImplClientRecordOp>()) {
-      DictionaryAttr chanAssigns = client.getChannelAssignmentsAttr();
-      // A client port is only user-accessible if its channels are bound to a
-      // host-reachable engine, recorded via a non-empty channel assignment.
-      if (!chanAssigns || chanAssigns.empty())
-        continue;
+      // Any client port with a service implementation record is served by that
+      // service/engine and is therefore user-accessible. Note that the channel
+      // assignments may be empty (e.g. for MMIO ports, which are described by
+      // 'offset'/'size' options rather than channel assignments).
       SmallVector<Attribute> portPath(path.begin(), path.end());
       for (auto id : client.getRelAppIDPath().getAsRange<AppIDAttr>())
         portPath.push_back(id);
-      assignedPortPaths.insert(ArrayAttr::get(&getContext(), portPath));
+      servedPortPaths.insert(ArrayAttr::get(&getContext(), portPath));
     }
   for (auto node : block.getOps<AppIDHierNodeOp>()) {
+    // Record every module instantiated in the (full, unpruned) design
+    // hierarchy so that its metadata (module_infos) is always retained, even
+    // when the instance's subtree is pruned from the design tree because it
+    // contains no user-accessible ports.
+    instantiatedModules.insert(node.getModuleRefAttr());
     path.push_back(node.getAppIDAttr());
-    collectAssignedPorts(node.getChildren().front(), path);
+    collectServedPorts(node.getChildren().front(), path);
     path.pop_back();
   }
 }
@@ -328,12 +338,14 @@ std::string ESIBuildManifestPass::json() {
       FlatSymbolRefAttr sym = symInfo.getSymbolRefAttr();
       if (!sym)
         continue;
-      // Keep a module's metadata if it is instantiated somewhere in the
-      // (pruned) design hierarchy. Additionally, always keep module constants:
-      // they are semantically significant (e.g. for codegen) even when the
-      // module itself is not user-accessible.
+      // Keep a module's metadata if it is instantiated anywhere in the design
+      // hierarchy ('instantiatedModules', collected from the full unpruned
+      // hierarchy) or is otherwise referenced ('symbols'). Additionally, always
+      // keep module constants: they are semantically significant (e.g. for
+      // codegen) even when the module itself is not user-accessible.
       bool isConstants = symInfo.getManifestClass() == "symConsts";
-      if (!symbols.contains(sym) && !isConstants)
+      if (!symbols.contains(sym) && !instantiatedModules.contains(sym) &&
+          !isConstants)
         continue;
       symbolInfoLookup[sym].push_back(symInfo);
     }
