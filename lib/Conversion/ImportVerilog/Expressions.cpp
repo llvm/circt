@@ -38,6 +38,30 @@ static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
   return FVInt(APInt(svint.getBitWidth(), value));
 }
 
+/// Check if a Moore integer value contains any unknown (x/z) bits.
+/// Returns a Moore i1 result: 1 if any bit is unknown, 0 otherwise.
+static Value getIsUnknown(OpBuilder &builder, Location loc, Value value,
+                          moore::IntType valTy, MLIRContext *ctx) {
+  Value bitVal = value;
+  if (valTy.getWidth() > 1) {
+    auto mooreI1Type = moore::IntType::get(ctx, 1, valTy.getDomain());
+    bitVal = moore::ReduceXorOp::create(builder, loc, mooreI1Type, value);
+  }
+  auto xType = moore::IntType::get(ctx, 1, moore::Domain::FourValued);
+  auto xConst =
+      moore::ConstantOp::create(builder, loc, xType, FVInt::getAllX(1));
+  return moore::CaseEqOp::create(builder, loc, bitVal, xConst).getResult();
+}
+
+/// Coerce a Moore integer value to a builtin integer, handling four-valued
+/// inputs by first mapping x/z to 0 via LogicToIntOp.
+static Value coerceToBuiltinInt(OpBuilder &builder, Location loc, Value value,
+                                moore::IntType valTy) {
+  if (valTy.getDomain() == moore::Domain::FourValued)
+    value = builder.createOrFold<moore::LogicToIntOp>(loc, value);
+  return builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
+}
+
 /// Map an index into an array, with bounds `range`, to a bit offset of the
 /// underlying bit storage. This is a dynamic version of
 /// `slang::ConstantRange::translateIndex`.
@@ -3281,17 +3305,7 @@ Value Context::convertSystemCall(
       mlir::emitError(loc) << "expected integer argument for `$isunknown`";
       return {};
     }
-    Value bitVal = value;
-    if (valTy.getWidth() > 1) {
-      auto mooreI1Type =
-          moore::IntType::get(getContext(), 1, valTy.getDomain());
-      bitVal = moore::ReduceXorOp::create(builder, loc, mooreI1Type, value);
-    }
-    auto xType =
-        moore::IntType::get(getContext(), 1, moore::Domain::FourValued);
-    auto xValue = FVInt::getAllX(1);
-    auto xConst = moore::ConstantOp::create(builder, loc, xType, xValue);
-    return moore::CaseEqOp::create(builder, loc, bitVal, xConst).getResult();
+    return getIsUnknown(builder, loc, value, valTy, getContext());
   }
 
   if (nameId == ksn::OneHot0 || nameId == ksn::OneHot) {
@@ -3310,30 +3324,14 @@ Value Context::convertSystemCall(
     // contains any unknown (x/z) bits. Detect and squash if four-valued.
     Value isUnknown;
     if (valTy.getDomain() == Domain::FourValued) {
-      Value bitVal = value;
-      if (valTy.getWidth() > 1) {
-        auto mooreI1Type =
-            moore::IntType::get(getContext(), 1, valTy.getDomain());
-        bitVal = moore::ReduceXorOp::create(builder, loc, mooreI1Type, value);
-      }
-      auto xType =
-          moore::IntType::get(getContext(), 1, moore::Domain::FourValued);
-      auto xConst =
-          moore::ConstantOp::create(builder, loc, xType, FVInt::getAllX(1));
       Value isUnknownMoore =
-          moore::CaseEqOp::create(builder, loc, bitVal, xConst).getResult();
+          getIsUnknown(builder, loc, value, valTy, getContext());
       isUnknown =
           builder.createOrFold<moore::ToBuiltinIntOp>(loc, isUnknownMoore);
     }
 
     // Coerce four-valued input to two-valued for the comb ops.
-    Value intVal;
-    if (valTy.getDomain() == Domain::FourValued) {
-      Value coerced = builder.createOrFold<moore::LogicToIntOp>(loc, value);
-      intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, coerced);
-    } else {
-      intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
-    }
+    Value intVal = coerceToBuiltinInt(builder, loc, value, valTy);
 
     // Compute onehot0: (value & (value - 1)) == 0
     auto one = hw::ConstantOp::create(builder, loc, intVal.getType(), 1);
@@ -3350,22 +3348,15 @@ Value Context::convertSystemCall(
       result = comb::AndOp::create(builder, loc, result, isNotZero);
     }
 
-    // Wrap back into Moore type.
-    result = moore::FromBuiltinIntOp::create(builder, loc, result);
-
     // If four-valued, squash to 0 when unknown bits exist.
     if (isUnknown) {
-      Value resultI1 = convertToI1(result);
       Value zeroI1 =
           hw::ConstantOp::create(builder, loc, builder.getI1Type(), 0);
-      Value squashed =
-          comb::MuxOp::create(builder, loc, isUnknown, zeroI1, resultI1);
-      Value squashedMoore =
-          moore::FromBuiltinIntOp::create(builder, loc, squashed);
-      return moore::IntToLogicOp::create(builder, loc, squashedMoore)
-          .getResult();
+      result = comb::MuxOp::create(builder, loc, isUnknown, zeroI1, result);
+      Value resultMoore = moore::FromBuiltinIntOp::create(builder, loc, result);
+      return moore::IntToLogicOp::create(builder, loc, resultMoore).getResult();
     }
-    return result;
+    return moore::FromBuiltinIntOp::create(builder, loc, result);
   }
 
   if (nameId == ksn::CountOnes) {
@@ -3380,13 +3371,7 @@ Value Context::convertSystemCall(
     }
 
     // Coerce four-valued input to two-valued for the comb ops.
-    Value intVal;
-    if (valTy.getDomain() == Domain::FourValued) {
-      Value coerced = builder.createOrFold<moore::LogicToIntOp>(loc, value);
-      intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, coerced);
-    } else {
-      intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
-    }
+    Value intVal = coerceToBuiltinInt(builder, loc, value, valTy);
 
     // Popcount: extract each bit, zero-extend to result width, and sum.
     auto builtinIntTy = cast<IntegerType>(intVal.getType());

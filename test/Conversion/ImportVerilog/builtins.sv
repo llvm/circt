@@ -602,10 +602,8 @@ module SampleValueBuiltins #() (
   // CHECK: [[AND:%.+]] = comb.and [[DB]], [[SUB]] : i8
   // CHECK: [[ZERO:%.+]] = hw.constant 0 : i8
   // CHECK: [[EQ:%.+]] = comb.icmp eq [[AND]], [[ZERO]] : i8
-  // CHECK: [[EQ_INT:%.+]] = moore.from_builtin_int [[EQ]] : i1
-  // CHECK: [[EQ_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
   // CHECK: [[FALSE:%.+]] = hw.constant false
-  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[EQ_BUILTIN]] : i1
+  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[EQ]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
   // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
@@ -627,10 +625,8 @@ module SampleValueBuiltins #() (
   // CHECK: [[EQ:%.+]] = comb.icmp eq [[AND]], [[ZERO]] : i8
   // CHECK: [[NE:%.+]] = comb.icmp ne [[DB]], [[ZERO]] : i8
   // CHECK: [[AND2:%.+]] = comb.and [[EQ]], [[NE]] : i1
-  // CHECK: [[RES_INT_2:%.+]] = moore.from_builtin_int [[AND2]] : i1
-  // CHECK: [[RES_BUILTIN_2:%.+]] = moore.to_builtin_int [[RES_INT_2]] : i1
   // CHECK: [[FALSE:%.+]] = hw.constant false
-  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[RES_BUILTIN_2]] : i1
+  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[AND2]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
   // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
