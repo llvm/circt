@@ -46,14 +46,37 @@ private:
   llvm::json::Value json(Operation *errorOp, Attribute, bool elideType = false);
 
   // Output a node in the appid hierarchy.
-  void emitNode(llvm::json::OStream &, AppIDHierNodeOp nodeOp);
-  // Output the manifest data of a node in the appid hierarchy.
-  void emitBlock(llvm::json::OStream &, Block &block, StringRef manifestClass);
+  void emitNode(llvm::json::OStream &, AppIDHierNodeOp nodeOp,
+                ArrayRef<Attribute> parentPath);
+  // Output the manifest data of a node in the appid hierarchy. 'nodePath' is
+  // the absolute appID path of the node which owns 'block'.
+  void emitBlock(llvm::json::OStream &, Block &block, StringRef manifestClass,
+                 ArrayRef<Attribute> nodePath);
 
   AppIDHierRootOp appidRoot;
 
   /// Get a JSON representation of the manifest.
   std::string json();
+
+  /// Walk the appID hierarchy and record the absolute appID paths of all client
+  /// ports whose channels are bound to a host-reachable engine (i.e. which
+  /// appear in some engine's channel assignment table). These are the only
+  /// ports which are "user accessible": present in the runtime's Accelerator
+  /// design tree.
+  void collectAssignedPorts(Block &block, SmallVectorImpl<Attribute> &path);
+
+  /// Walk the appID hierarchy and populate 'keepNodes' with the hierarchy nodes
+  /// which contain (or have a descendant which contains) a user-accessible
+  /// client port. Returns true if 'block' or any descendant is to be kept.
+  bool computeKeepNodes(Block &block, SmallVectorImpl<Attribute> &path);
+
+  /// Is the client port with appID 'portID' under the node at 'nodePath' user
+  /// accessible?
+  bool isPortAccessible(ArrayRef<Attribute> nodePath, Attribute portID) {
+    SmallVector<Attribute> portPath(nodePath.begin(), nodePath.end());
+    portPath.push_back(portID);
+    return assignedPortPaths.contains(ArrayAttr::get(&getContext(), portPath));
+  }
 
   // Type table.
   std::string useType(Type type) {
@@ -73,6 +96,13 @@ private:
   DenseSet<SymbolRefAttr> symbols;
   DenseSet<SymbolRefAttr> modules;
 
+  // Absolute appID paths of user-accessible client ports (those bound to a
+  // host-reachable engine via a channel assignment).
+  DenseSet<ArrayAttr> assignedPortPaths;
+  // AppID hierarchy nodes to retain (those whose subtree contains a
+  // user-accessible client port).
+  DenseSet<Operation *> keepNodes;
+
   hw::HWSymbolCache symCache;
 };
 } // anonymous namespace
@@ -89,6 +119,16 @@ void ESIBuildManifestPass::runOnOperation() {
       appidRoot = root;
   if (!appidRoot)
     return;
+
+  // Determine which client ports are user-accessible and which hierarchy nodes
+  // need to be retained as a result. This must happen before JSONification
+  // since the latter relies on these sets to prune the manifest.
+  {
+    SmallVector<Attribute> path;
+    collectAssignedPorts(appidRoot.getChildren().front(), path);
+    path.clear();
+    computeKeepNodes(appidRoot.getChildren().front(), path);
+  }
 
   // JSONify the manifest.
   std::string jsonManifest = json();
@@ -131,8 +171,51 @@ void ESIBuildManifestPass::runOnOperation() {
   }
 }
 
+void ESIBuildManifestPass::collectAssignedPorts(
+    Block &block, SmallVectorImpl<Attribute> &path) {
+  for (auto svc : block.getOps<ServiceImplRecordOp>())
+    for (auto client :
+         svc.getReqDetails().front().getOps<ServiceImplClientRecordOp>()) {
+      DictionaryAttr chanAssigns = client.getChannelAssignmentsAttr();
+      // A client port is only user-accessible if its channels are bound to a
+      // host-reachable engine, recorded via a non-empty channel assignment.
+      if (!chanAssigns || chanAssigns.empty())
+        continue;
+      SmallVector<Attribute> portPath(path.begin(), path.end());
+      for (auto id : client.getRelAppIDPath().getAsRange<AppIDAttr>())
+        portPath.push_back(id);
+      assignedPortPaths.insert(ArrayAttr::get(&getContext(), portPath));
+    }
+  for (auto node : block.getOps<AppIDHierNodeOp>()) {
+    path.push_back(node.getAppIDAttr());
+    collectAssignedPorts(node.getChildren().front(), path);
+    path.pop_back();
+  }
+}
+
+bool ESIBuildManifestPass::computeKeepNodes(Block &block,
+                                            SmallVectorImpl<Attribute> &path) {
+  bool keep = false;
+  for (auto req : block.getOps<ServiceRequestRecordOp>())
+    if (isPortAccessible(path, req.getRequestorAttr()))
+      keep = true;
+  for (auto node : block.getOps<AppIDHierNodeOp>()) {
+    path.push_back(node.getAppIDAttr());
+    bool childKeep = computeKeepNodes(node.getChildren().front(), path);
+    path.pop_back();
+    if (childKeep) {
+      keepNodes.insert(node);
+      keep = true;
+    }
+  }
+  return keep;
+}
+
 void ESIBuildManifestPass::emitNode(llvm::json::OStream &j,
-                                    AppIDHierNodeOp nodeOp) {
+                                    AppIDHierNodeOp nodeOp,
+                                    ArrayRef<Attribute> parentPath) {
+  SmallVector<Attribute> nodePath(parentPath.begin(), parentPath.end());
+  nodePath.push_back(nodeOp.getAppIDAttr());
   std::set<StringRef> classesToEmit;
   for (auto manifestData : nodeOp.getOps<IsManifestData>())
     classesToEmit.insert(manifestData.getManifestClass());
@@ -141,20 +224,30 @@ void ESIBuildManifestPass::emitNode(llvm::json::OStream &j,
     j.attribute("instanceOf", json(nodeOp, nodeOp.getModuleRefAttr()));
     for (StringRef manifestClass : classesToEmit)
       j.attributeArray(manifestClass.str() + "s", [&]() {
-        emitBlock(j, nodeOp.getChildren().front(), manifestClass);
+        emitBlock(j, nodeOp.getChildren().front(), manifestClass, nodePath);
       });
     j.attributeArray("children", [&]() {
-      for (auto nodeOp : nodeOp.getChildren().front().getOps<AppIDHierNodeOp>())
-        emitNode(j, nodeOp);
+      for (auto childOp :
+           nodeOp.getChildren().front().getOps<AppIDHierNodeOp>())
+        if (keepNodes.contains(childOp))
+          emitNode(j, childOp, nodePath);
     });
   });
 }
 
 void ESIBuildManifestPass::emitBlock(llvm::json::OStream &j, Block &block,
-                                     StringRef manifestClass) {
+                                     StringRef manifestClass,
+                                     ArrayRef<Attribute> nodePath) {
   for (auto manifestData : block.getOps<IsManifestData>()) {
     if (manifestData.getManifestClass() != manifestClass)
       continue;
+    // Prune client ports which are not user-accessible (i.e. whose channels are
+    // not bound to a host-reachable engine). Such ports never appear in the
+    // runtime's Accelerator design tree, so they (and their types) are omitted.
+    if (auto req =
+            dyn_cast<ServiceRequestRecordOp>(manifestData.getOperation()))
+      if (!isPortAccessible(nodePath, req.getRequestorAttr()))
+        continue;
     j.object([&] {
       SmallVector<NamedAttribute, 4> attrs;
       manifestData.getDetails(attrs);
@@ -183,12 +276,13 @@ std::string ESIBuildManifestPass::json() {
     modules.insert(appidRoot.getTopModuleRefAttr());
     for (StringRef manifestClass : classesToEmit)
       j.attributeArray(manifestClass.str() + "s", [&]() {
-        emitBlock(j, appidRoot.getChildren().front(), manifestClass);
+        emitBlock(j, appidRoot.getChildren().front(), manifestClass, {});
       });
     j.attributeArray("children", [&]() {
       for (auto nodeOp :
            appidRoot.getChildren().front().getOps<AppIDHierNodeOp>())
-        emitNode(j, nodeOp);
+        if (keepNodes.contains(nodeOp))
+          emitNode(j, nodeOp, {});
     });
   });
 
@@ -208,7 +302,12 @@ std::string ESIBuildManifestPass::json() {
           for (auto port : ports) {
             j.object([&] {
               j.attribute("name", port.port.getName().getValue());
-              j.attribute("typeID", useType(port.type));
+              // Emit the port type as a plain string rather than registering it
+              // in the type table: the runtime never resolves service
+              // declaration port types, so they would only bloat the manifest.
+              std::string typeID;
+              llvm::raw_string_ostream(typeID) << port.type;
+              j.attribute("typeID", typeID);
             });
           }
         });
@@ -227,7 +326,14 @@ std::string ESIBuildManifestPass::json() {
     // Gather all manifest data for each symbol.
     for (auto symInfo : mod.getBody()->getOps<IsManifestData>()) {
       FlatSymbolRefAttr sym = symInfo.getSymbolRefAttr();
-      if (!sym || !symbols.contains(sym))
+      if (!sym)
+        continue;
+      // Keep a module's metadata if it is instantiated somewhere in the
+      // (pruned) design hierarchy. Additionally, always keep module constants:
+      // they are semantically significant (e.g. for codegen) even when the
+      // module itself is not user-accessible.
+      bool isConstants = symInfo.getManifestClass() == "symConsts";
+      if (!symbols.contains(sym) && !isConstants)
         continue;
       symbolInfoLookup[sym].push_back(symInfo);
     }
