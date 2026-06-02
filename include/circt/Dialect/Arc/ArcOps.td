@@ -113,7 +113,7 @@ def DefineOp : ArcOp<"define", [
 
 def OutputOp : ArcOp<"output", [
   Terminator,
-  ParentOneOf<["DefineOp", "LutOp", "ClockDomainOp", "ExecuteOp"]>,
+  ParentOneOf<["DefineOp", "LutOp", "ExecuteOp"]>,
   Pure,
   ReturnLike
 ]> {
@@ -430,38 +430,6 @@ def MemoryWriteOp : ArcOp<"memory_write", [
   let assemblyFormat = [{
     $memory `[` $address `]` `,` $data attr-dict `:` type($memory)
   }];
-}
-
-//===----------------------------------------------------------------------===//
-// Trigger Grouping
-//===----------------------------------------------------------------------===//
-
-def ClockDomainOp : ArcOp<"clock_domain", [
-  IsolatedFromAbove,
-  RegionKindInterface,
-  RecursiveMemoryEffects,
-  SingleBlockImplicitTerminator<"arc::OutputOp">
-]> {
-  let summary = "a clock domain";
-
-  let arguments = (ins Variadic<AnyType>:$inputs, ClockType:$clock);
-  let results = (outs Variadic<AnyType>:$outputs);
-  let regions = (region SizedRegion<1>:$body);
-
-  let assemblyFormat = [{
-    ` ` `(` $inputs `)` `clock` $clock attr-dict `:`
-    functional-type($inputs, results) $body
-  }];
-
-  let extraClassDeclaration = [{
-    static mlir::RegionKind getRegionKind(unsigned index) {
-      return mlir::RegionKind::Graph;
-    }
-    mlir::Block &getBodyBlock() { return getBody().front(); }
-  }];
-
-  let hasRegionVerifier = 1;
-  let hasCanonicalizeMethod = 1;
 }
 
 //===----------------------------------------------------------------------===//

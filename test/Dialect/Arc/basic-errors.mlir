@@ -13,7 +13,7 @@ arc.define @Bar() {
 // -----
 
 hw.module @Foo(in %clock: !seq.clock) {
-  // expected-error @+1 {{'arc.state' op outside a clock domain requires a clock}}
+  // expected-error @+1 {{'arc.state' op requires a clock}}
   arc.state @Bar() latency 1 : () -> ()
 }
 arc.define @Bar() {
@@ -188,101 +188,10 @@ arc.define @lutSideEffects () -> i32 {
 
 // -----
 
-hw.module @clockDomainNumOutputs(in %clk: !seq.clock) {
-  %0 = arc.clock_domain () clock %clk : () -> (i32) {
-  ^bb0:
-    // expected-error @+1 {{incorrect number of outputs: expected 1, but got 0}}
-    arc.output
-  }
-  hw.output
-}
-
-// -----
-
-hw.module @clockDomainNumInputs(in %clk: !seq.clock) {
-  // expected-error @+1 {{incorrect number of inputs: expected 1, but got 0}}
-  arc.clock_domain () clock %clk : () -> () {
-  ^bb0(%arg0: i32):
-    arc.output
-  }
-  hw.output
-}
-
-// -----
-
-hw.module @clockDomainInputTypes(in %clk: !seq.clock, in %arg0: i16) {
-  // expected-error @+3 {{input type mismatch: input #0}}
-  // expected-note @+2 {{expected type: 'i32'}}
-  // expected-note @+1 {{actual type: 'i16'}}
-  arc.clock_domain (%arg0) clock %clk : (i16) -> () {
-  ^bb0(%arg1: i32):
-    arc.output
-  }
-  hw.output
-}
-
-// -----
-
-hw.module @clockDomainOutputTypes(in %clk: !seq.clock) {
-  %0 = arc.clock_domain () clock %clk : () -> (i32) {
-  ^bb0:
-    %c0_i16 = hw.constant 0 : i16
-    // expected-error @+3 {{output type mismatch: output #0}}
-    // expected-note @+2 {{expected type: 'i32'}}
-    // expected-note @+1 {{actual type: 'i16'}}
-    arc.output %c0_i16 : i16
-  }
-  hw.output
-}
-
-// -----
-
-hw.module @clockDomainIsolatedFromAbove(in %clk: !seq.clock, in %arg0: i32) {
-  // expected-note @+1 {{required by region isolation constraints}}
-  %0 = arc.clock_domain () clock %clk : () -> (i32) {
-    // expected-error @+1 {{using value defined outside the region}}
-    arc.output %arg0 : i32
-  }
-  hw.output
-}
-
-// -----
-
-hw.module @stateOpInsideClockDomain(in %clk: !seq.clock) {
-  arc.clock_domain (%clk) clock %clk : (!seq.clock) -> () {
-  ^bb0(%arg0: !seq.clock):
-    // expected-error @+1 {{inside a clock domain cannot have a clock}}
-    arc.state @dummyArc() clock %arg0 latency 1 : () -> ()
-    arc.output
-  }
-  hw.output
-}
-arc.define @dummyArc() {
-  arc.output
-}
-
-// -----
-
-hw.module @memoryWritePortOpInsideClockDomain(in %clk: !seq.clock) {
-  arc.clock_domain (%clk) clock %clk : (!seq.clock) -> () {
-  ^bb0(%arg0: !seq.clock):
-    %mem = arc.memory <4 x i32, i32>
-    %c0_i32 = hw.constant 0 : i32
-    // expected-error @+1 {{inside a clock domain cannot have a clock}}
-    arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %arg0) clock %arg0 enable latency 1: !arc.memory<4 x i32, i32>, i32, i32, !seq.clock
-    arc.output
-  }
-}
-arc.define @identity(%addr: i32, %data: i32, %enable: i1) -> (i32, i32, i1) {
-  arc.output %addr, %data, %enable : i32, i32, i1
-}
-
-// -----
-
-hw.module @memoryWritePortOpOutsideClockDomain(in %clock: !seq.clock, in %en: i1) {
+hw.module @memoryWritePortOpNoClock(in %clock: !seq.clock, in %en: i1) {
   %mem = arc.memory <4 x i32, i32>
   %c0_i32 = hw.constant 0 : i32
-  // expected-error @+1 {{outside a clock domain requires a clock}}
+  // expected-error @+1 {{requires a clock}}
   arc.memory_write_port %mem, @identity(%c0_i32, %c0_i32, %en) latency 1 : !arc.memory<4 x i32, i32>, i32, i32, i1
 }
 arc.define @identity(%addr: i32, %data: i32, %enable: i1) -> (i32, i32, i1) {
