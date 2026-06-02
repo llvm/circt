@@ -53,6 +53,28 @@ func.func @test_func(%a: i2, %b: i2) -> (i2, i2) {
   return %0, %1 : i2, i2
 }
 
+// CHECK-LABEL: func.func @nested_blocks
+func.func @nested_blocks(%a: i1, %b: i1, %cond: i1) -> (i1, i1) {
+  // CHECK:      scf.if
+  // CHECK:        %[[THEN:.+]] = synth.aig.and_inv not %[[A:.+]], %[[B:.+]] : i1
+  // CHECK-NEXT:   scf.yield %[[THEN]], %[[THEN]] : i1, i1
+  // CHECK:      } else {
+  // CHECK-NEXT:   %[[ELSE:.+]] = synth.aig.and_inv not %[[A]], %[[B]] : i1
+  // CHECK-NEXT:   scf.yield %[[ELSE]], %[[ELSE]] : i1, i1
+  // CHECK-NEXT: }
+  %r:2 = scf.if %cond -> (i1, i1) {
+    %0 = synth.aig.and_inv not %a, %b : i1
+    %1 = synth.aig.and_inv %b, not %a : i1
+    scf.yield %0, %1 : i1, i1
+  } else {
+    %notA = synth.aig.and_inv not %a : i1
+    %fromNot = synth.aig.and_inv %notA, %b : i1
+    %commuted = synth.aig.and_inv %b, not %a : i1
+    scf.yield %fromNot, %commuted : i1, i1
+  }
+  return %r#0, %r#1 : i1, i1
+}
+
 // CHECK-LABEL: hw.module @xor_inv_hash
 hw.module @xor_inv_hash(in %a: i1, in %b: i1, in %c: i1, out o0: i1, out o1: i1) {
   // CHECK: %[[X:.+]] = synth.xor_inv %a, not %b, %c : i1
