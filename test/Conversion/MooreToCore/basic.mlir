@@ -798,15 +798,15 @@ func.func @BinaryRealOps(%arg0: !moore.f32, %arg1: !moore.f32) {
 // CHECK-LABEL: func.func @MathBuiltins
 func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42, 
                             %arg2: !moore.f64, %arg3: !moore.f64) {
-    // CHECK-DAG: arith.uitofp %arg0 : i32 to f32
-    // CHECK-DAG: math.log2 %3 : f32
-    // CHECK-DAG: math.ceil %4 : f32
-    // CHECK: arith.fptoui %5 : f32 to i32
+    // CHECK-DAG: [[V0:%.+]] = arith.uitofp %arg0 : i32 to f32
+    // CHECK-DAG: [[V1:%.+]] = math.log2 [[V0]] : f32
+    // CHECK-DAG: [[V2:%.+]] = math.ceil [[V1]] : f32
+    // CHECK: arith.fptoui [[V2]] : f32 to i32
     moore.builtin.clog2 %arg0 : i32
-    // CHECK-DAG: arith.uitofp %arg1 : i42 to f32
-    // CHECK-DAG: math.log2 %7 : f32
-    // CHECK-DAG: math.ceil %8 : f32
-    // CHECK: arith.fptoui %9 : f32 to i42
+    // CHECK-DAG: [[V3:%.+]] = arith.uitofp %arg1 : i42 to f32
+    // CHECK-DAG: [[V4:%.+]] = math.log2 [[V3]] : f32
+    // CHECK-DAG: [[V5:%.+]] = math.ceil [[V4]] : f32
+    // CHECK: arith.fptoui [[V5]] : f32 to i42
     moore.builtin.clog2 %arg1 : l42
 
     // CHECK: math.log %arg2 : f64
@@ -835,10 +835,10 @@ func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42,
     moore.builtin.atan %arg2 : f64
     // CHECK math.atan2 %arg2, %arg3 : f64
     moore.builtin.atan2 %arg2, %arg3  : f64
-    // CHECK-DAG: arith.mulf %arg2, %arg2 : f64
-    // CHECK-DAG: arith.mulf %arg3, %arg3 : f64
-    // CHECK-DAG: arith.addf %24, %25 : f64
-    // CHECK: math.sqrt %26 : f64
+    // CHECK-DAG: [[V6:%.+]] = arith.mulf %arg2, %arg2 : f64
+    // CHECK-DAG: [[V7:%.+]] = arith.mulf %arg3, %arg3 : f64
+    // CHECK-DAG: [[V8:%.+]] = arith.addf [[V6]], [[V7]] : f64
+    // CHECK: math.sqrt [[V8]] : f64
     moore.builtin.hypot %arg2, %arg3  : f64
 
     // CHECK: math.sinh %arg2 : f64
