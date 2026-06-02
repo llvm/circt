@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
+#include "circt/Support/FVInt.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "slang/ast/EvalContext.h"
@@ -2031,7 +2033,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     const auto &subroutine = *info.subroutine;
     auto nameId = subroutine.knownNameId;
 
-    // $rose, $fell, $stable, $changed, and $past are only valid in
+    // $rose, $fell, $stable, $changed, $past, and $sampled are only valid in
     // the context of properties and assertions. Those are treated in the
     // LTLDialect; treat them there instead.
     switch (nameId) {
@@ -2041,10 +2043,6 @@ struct RvalueExprVisitor : public ExprVisitor {
     case ksn::Changed:
     case ksn::Past:
     case ksn::Sampled:
-    case ksn::IsUnknown:
-    case ksn::OneHot:
-    case ksn::OneHot0:
-    case ksn::CountOnes:
       return context.convertAssertionCallExpression(expr, info, loc);
     default:
       break;
@@ -2073,8 +2071,14 @@ struct RvalueExprVisitor : public ExprVisitor {
       return {};
 
     auto ty = context.convertType(*expr.type);
-    return context.materializeConversion(ty, result, expr.type->isSigned(),
-                                         loc);
+    // Bit vector builtins ($countones, $isunknown, $onehot, $onehot0) return
+    // inherently unsigned results that must be zero-extended, even though
+    // Slang's declared return type may be signed int.
+    bool isSigned = expr.type->isSigned();
+    if (nameId == ksn::CountOnes || nameId == ksn::IsUnknown ||
+        nameId == ksn::OneHot || nameId == ksn::OneHot0)
+      isSigned = false;
+    return context.materializeConversion(ty, result, isSigned, loc);
   }
 
   /// Handle string literals.
@@ -3261,6 +3265,151 @@ Value Context::convertSystemCall(
     if (!value)
       return {};
     return moore::Clog2BIOp::create(builder, loc, value);
+  }
+
+  //===--------------------------------------------------------------------===//
+  // Bit Vector System Functions
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::IsUnknown) {
+    assert(numArgs == 1 && "`$isunknown` takes 1 argument");
+    auto value = convertRvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    auto valTy = dyn_cast<moore::IntType>(value.getType());
+    if (!valTy) {
+      mlir::emitError(loc) << "expected integer argument for `$isunknown`";
+      return {};
+    }
+    Value bitVal = value;
+    if (valTy.getWidth() > 1) {
+      auto mooreI1Type =
+          moore::IntType::get(getContext(), 1, valTy.getDomain());
+      bitVal = moore::ReduceXorOp::create(builder, loc, mooreI1Type, value);
+    }
+    auto xType =
+        moore::IntType::get(getContext(), 1, moore::Domain::FourValued);
+    auto xValue = FVInt::getAllX(1);
+    auto xConst = moore::ConstantOp::create(builder, loc, xType, xValue);
+    return moore::CaseEqOp::create(builder, loc, bitVal, xConst).getResult();
+  }
+
+  if (nameId == ksn::OneHot0 || nameId == ksn::OneHot) {
+    assert(numArgs == 1 && "`$onehot`/`$onehot0` takes 1 argument");
+    auto value = convertRvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    auto valTy = dyn_cast<moore::IntType>(value.getType());
+    if (!valTy) {
+      mlir::emitError(loc) << "expected integer argument for `"
+                           << subroutine.name << "`";
+      return {};
+    }
+
+    // In SystemVerilog, $onehot/$onehot0 return 1'b0 if the expression
+    // contains any unknown (x/z) bits. Detect and squash if four-valued.
+    Value isUnknown;
+    if (valTy.getDomain() == Domain::FourValued) {
+      Value bitVal = value;
+      if (valTy.getWidth() > 1) {
+        auto mooreI1Type =
+            moore::IntType::get(getContext(), 1, valTy.getDomain());
+        bitVal = moore::ReduceXorOp::create(builder, loc, mooreI1Type, value);
+      }
+      auto xType =
+          moore::IntType::get(getContext(), 1, moore::Domain::FourValued);
+      auto xConst =
+          moore::ConstantOp::create(builder, loc, xType, FVInt::getAllX(1));
+      Value isUnknownMoore =
+          moore::CaseEqOp::create(builder, loc, bitVal, xConst).getResult();
+      isUnknown =
+          builder.createOrFold<moore::ToBuiltinIntOp>(loc, isUnknownMoore);
+    }
+
+    // Coerce four-valued input to two-valued for the comb ops.
+    Value intVal;
+    if (valTy.getDomain() == Domain::FourValued) {
+      Value coerced = builder.createOrFold<moore::LogicToIntOp>(loc, value);
+      intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, coerced);
+    } else {
+      intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
+    }
+
+    // Compute onehot0: (value & (value - 1)) == 0
+    auto one = hw::ConstantOp::create(builder, loc, intVal.getType(), 1);
+    auto minusOne = comb::SubOp::create(builder, loc, intVal, one);
+    auto anded = comb::AndOp::create(builder, loc, intVal, minusOne);
+    auto zero = hw::ConstantOp::create(builder, loc, intVal.getType(), 0);
+    Value result = comb::ICmpOp::create(builder, loc, comb::ICmpPredicate::eq,
+                                        anded, zero, false);
+
+    // For $onehot, additionally require value != 0.
+    if (nameId == ksn::OneHot) {
+      auto isNotZero = comb::ICmpOp::create(
+          builder, loc, comb::ICmpPredicate::ne, intVal, zero, false);
+      result = comb::AndOp::create(builder, loc, result, isNotZero);
+    }
+
+    // Wrap back into Moore type.
+    result = moore::FromBuiltinIntOp::create(builder, loc, result);
+
+    // If four-valued, squash to 0 when unknown bits exist.
+    if (isUnknown) {
+      Value resultI1 = convertToI1(result);
+      Value zeroI1 =
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 0);
+      Value squashed =
+          comb::MuxOp::create(builder, loc, isUnknown, zeroI1, resultI1);
+      Value squashedMoore =
+          moore::FromBuiltinIntOp::create(builder, loc, squashed);
+      return moore::IntToLogicOp::create(builder, loc, squashedMoore)
+          .getResult();
+    }
+    return result;
+  }
+
+  if (nameId == ksn::CountOnes) {
+    assert(numArgs == 1 && "`$countones` takes 1 argument");
+    auto value = convertRvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    auto valTy = dyn_cast<moore::IntType>(value.getType());
+    if (!valTy) {
+      mlir::emitError(loc) << "expected integer argument for `$countones`";
+      return {};
+    }
+
+    // Coerce four-valued input to two-valued for the comb ops.
+    Value intVal;
+    if (valTy.getDomain() == Domain::FourValued) {
+      Value coerced = builder.createOrFold<moore::LogicToIntOp>(loc, value);
+      intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, coerced);
+    } else {
+      intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
+    }
+
+    // Popcount: extract each bit, zero-extend to result width, and sum.
+    auto builtinIntTy = cast<IntegerType>(intVal.getType());
+    unsigned width = builtinIntTy.getWidth();
+    unsigned resultWidth = llvm::Log2_32_Ceil(width + 1);
+    auto i1Ty = builder.getI1Type();
+    unsigned padWidth = resultWidth - 1;
+    auto zeros = hw::ConstantOp::create(builder, loc,
+                                        builder.getIntegerType(padWidth), 0);
+
+    // Zero-extend the first bit to seed the accumulator.
+    auto bit0 = comb::ExtractOp::create(builder, loc, i1Ty, intVal, 0);
+    Value sum = comb::ConcatOp::create(builder, loc, ValueRange{zeros, bit0});
+
+    for (unsigned i = 1; i < width; ++i) {
+      auto bit = comb::ExtractOp::create(builder, loc, i1Ty, intVal, i);
+      auto extended =
+          comb::ConcatOp::create(builder, loc, ValueRange{zeros, bit});
+      sum = comb::AddOp::create(builder, loc, sum, extended);
+    }
+
+    // Wrap back into Moore type (unsigned — CountOnes result is never signed).
+    return moore::FromBuiltinIntOp::create(builder, loc, sum);
   }
 
   // Real math functions (all take 1 real argument)
