@@ -30,6 +30,21 @@
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
+namespace circt {
+namespace rtg {
+
+/// A custom resource representing the RNG state. Operations that read from or
+/// write to the RNG state should declare effects on this resource to prevent
+/// CSE and DCE.
+struct RNGStateResource
+    : public mlir::SideEffects::Resource::Base<RNGStateResource> {
+  StringRef getName() const final { return "RTGRNGStateResource"; }
+  bool isAddressable() const override { return false; }
+};
+
+} // namespace rtg
+} // namespace circt
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/RTG/IR/RTG.h.inc"
 

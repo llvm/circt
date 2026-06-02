@@ -25,6 +25,10 @@ include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
 
+// Resource representing the RNG state. Operations that read from or write to
+// the RNG state should declare effects on this resource to prevent CSE and DCE.
+def RNGStateResource : Resource<"RNGStateResource">;
+
 // Base class for the operation in this dialect.
 class RTGOp<string mnemonic, list<Trait> traits = []> :
     Op<RTGDialect, mnemonic, traits>;
@@ -363,8 +367,8 @@ def SetCreateOp : RTGOp<"set_create", [Pure, SameTypeOperands]> {
 }
 
 def SetSelectRandomOp : RTGOp<"set_select_random", [
-  Pure,
-  TypesMatchWith<"output must be of the element type of input set", 
+  MemoryEffects<[MemRead<RNGStateResource>, MemWrite<RNGStateResource>]>,
+  TypesMatchWith<"output must be of the element type of input set",
                  "set", "output",
                  "llvm::cast<rtg::SetType>($_self).getElementType()">
 ]> {
@@ -496,7 +500,7 @@ def BagCreateOp : RTGOp<"bag_create", [Pure, SameVariadicOperandSize]> {
 }
 
 def BagSelectRandomOp : RTGOp<"bag_select_random", [
-  Pure,
+  MemoryEffects<[MemRead<RNGStateResource>, MemWrite<RNGStateResource>]>,
   TypesMatchWith<"output must be element type of input bag", "bag", "output",
                  "llvm::cast<rtg::BagType>($_self).getElementType()">
 ]> {
@@ -712,7 +716,9 @@ def TupleExtractOp : RTGOp<"tuple_extract", [
 
 //===- Integer Operations -------------------------------------------------===//
 
-def RandomNumberInRangeOp : RTGOp<"random_number_in_range", []> {
+def RandomNumberInRangeOp : RTGOp<"random_number_in_range", [
+  MemoryEffects<[MemRead<RNGStateResource>, MemWrite<RNGStateResource>]>
+]> {
   let summary = "returns a number uniformly at random within the given range";
   let description = [{
     This operation computes a random number based on a uniform distribution
@@ -760,6 +766,8 @@ def ConstraintOp : RTGOp<"constraint", []> {
 
 def RandomScopeOp : RTGOp<"random_scope", [
   NoRegionArguments,
+  MemoryEffects<[MemRead<RNGStateResource>, MemWrite<RNGStateResource>]>,
+  RecursiveMemoryEffects,
   SingleBlockImplicitTerminator<"rtg::YieldOp">,
 ]> {
   let summary = "introduce a new scope for randomization";
