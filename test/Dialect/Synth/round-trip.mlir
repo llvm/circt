@@ -58,7 +58,7 @@ hw.module @gamble(in %x: i1, in %y: i1, in %z: i1) {
 // CHECK-LABEL: synth.cut_rewrite_pattern
 // CHECK-SAME: (%{{.*}}: i1, %{{.*}}: i1, %{{.*}}: i1) -> i1
 // CHECK-SAME: attributes {cost = #synth.mapping_cost<area =
-// CHECK-SAME: #synth.positional_linear_timing_arc<1, 1, 0, #synth.polarity<positive>>
+// CHECK-SAME: #synth.positional_linear_timing_arc<1, 1, 0, <positive>>
 synth.cut_rewrite_pattern (%a: i1, %b: i1, %c: i1) -> i1 attributes {
   cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [
     #synth.positional_linear_timing_arc<1, 1, 0, #synth.polarity<positive>>
