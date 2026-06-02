@@ -224,13 +224,18 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
       llvm::DenseMap<StringAttr, DelayType> delayByInput;
       auto arcs = mappingCost.getArcs();
       if (!arcs) {
-        hwModule.emitError(
-            "expected synth.linear_timing_arc in synth.mapping_cost arcs");
+        hwModule.emitError("expected synth.mapping_cost to contain arcs");
         signalPassFailure();
         return;
       }
       for (auto attr : arcs) {
         auto arc = dyn_cast<LinearTimingArcAttr>(attr);
+        if (!arc) {
+          hwModule.emitError(
+              "expected synth.linear_timing_arc in synth.mapping_cost arcs");
+          signalPassFailure();
+          return;
+        }
 
         if (arc.getPin() != outputName) {
           hwModule.emitError("mapping cost arc output '")

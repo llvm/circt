@@ -10,6 +10,7 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/Synth/SynthAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Naming.h"
 #include "circt/Support/SATSolver.h"
@@ -711,11 +712,19 @@ LogicalResult CutRewritePatternOp::verify() {
                          << blockArg.getType();
 
   auto cost = getCost();
-  if (auto arcs = cost.getArcs())
-    if (!arcs.empty())
-      return emitError()
-             << "mapping cost arcs for cut rewrite patterns must not use "
-                "input/output names";
+  if (auto arcs = cost.getArcs()) {
+    for (auto attr : arcs) {
+      auto arc = dyn_cast<PositionalLinearTimingArcAttr>(attr);
+      if (!arc)
+        return emitError()
+               << "mapping cost arcs for cut rewrite patterns must use "
+                  "synth.positional_linear_timing_arc";
+
+      if (arc.getInputIndex() >= functionType.getNumInputs())
+        return emitError()
+               << "mapping cost arc input index exceeds number of arguments";
+    }
+  }
 
   if (auto inputCaps = cost.getInputCaps())
     if (inputCaps.size() != functionType.getNumInputs())

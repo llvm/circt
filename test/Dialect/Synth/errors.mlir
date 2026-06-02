@@ -43,3 +43,25 @@ synth.cut_rewrite_pattern (%a: i1) -> i1 attributes {cost = #synth.mapping_cost<
   %0 = hw.constant 0 : i2
   synth.yield %0 : i2
 }
+
+// -----
+
+// expected-error @below {{mapping cost arcs for cut rewrite patterns must use synth.positional_linear_timing_arc}}
+synth.cut_rewrite_pattern (%a: i1) -> i1 attributes {
+  cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [
+    #synth.linear_timing_arc<"result", "a", 1, 0, #synth.polarity<positive>>
+  ]>
+} {
+  synth.yield %a : i1
+}
+
+// -----
+
+// expected-error @below {{mapping cost arc input index exceeds number of arguments}}
+synth.cut_rewrite_pattern (%a: i1) -> i1 attributes {
+  cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [
+    #synth.positional_linear_timing_arc<1, 1, 0, #synth.polarity<positive>>
+  ]>
+} {
+  synth.yield %a : i1
+}

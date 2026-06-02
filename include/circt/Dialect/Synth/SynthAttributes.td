@@ -71,6 +71,19 @@ def LinearTimingArcAttr : AttrDef<Synth_Dialect, "LinearTimingArc"> {
     "$polarity `>`";
 }
 
+def PositionalLinearTimingArcAttr : AttrDef<Synth_Dialect, "PositionalLinearTimingArc"> {
+  let mnemonic = "positional_linear_timing_arc";
+  let summary = "A simplified linear timing arc using positional input index";
+  let parameters = (ins
+    "uint64_t":$inputIndex,
+    "int64_t":$intrinsic,
+    "int64_t":$sensitivity,
+    "PolarityAttr":$polarity
+  );
+  let assemblyFormat =
+    "`<` $inputIndex `,` $intrinsic `,` $sensitivity `,` $polarity `>`";
+}
+
 def MappingCostAttr : AttrDef<Synth_Dialect, "MappingCost"> {
   let mnemonic = "mapping_cost";
   let summary = "Simplified timing and area cost for tech mapping";

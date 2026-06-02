@@ -25,9 +25,8 @@ MappingCostAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                         DictionaryAttr inputCaps) {
   if (arcs)
     for (auto attr : arcs)
-      if (!isa<LinearTimingArcAttr>(attr))
-        return emitError()
-               << "expected arcs to contain synth.linear_timing_arc";
+      if (!isa<LinearTimingArcAttr, PositionalLinearTimingArcAttr>(attr))
+        return emitError() << "expected arcs to contain timing arc attributes";
 
   if (inputCaps)
     for (auto entry : inputCaps)
