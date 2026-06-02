@@ -379,3 +379,76 @@ func.func @SimGetSetTime() {
   return
 }
 hw.module @TimeTestModule() {}
+
+
+// CHECK-LABEL: arc.coroutine.define @CoroutineEmpty
+arc.coroutine.define @CoroutineEmpty() {
+  arc.coroutine.return
+}
+
+// CHECK-LABEL: arc.coroutine.define @CoroutineNoResults
+arc.coroutine.define @CoroutineNoResults(%arg0: i42) {
+  // CHECK: arc.coroutine.yield ^bb1
+  arc.coroutine.yield ^bb1
+^bb1(%arg1: i42):
+  // CHECK: arc.coroutine.yield ^bb2(%arg0 : i42)
+  arc.coroutine.yield ^bb2(%arg0 : i42)
+^bb2(%arg2: i42, %arg3: i42):
+  // CHECK: arc.coroutine.return
+  arc.coroutine.return
+^bb3:
+  // CHECK: arc.coroutine.halt
+  arc.coroutine.halt
+}
+
+// CHECK-LABEL: arc.coroutine.define @CoroutineWithResults
+arc.coroutine.define @CoroutineWithResults(%arg0: i42, %arg1: i9001) -> (i42, i9001) {
+  // CHECK: arc.coroutine.yield (%arg0, %arg1 : i42, i9001), ^bb1
+  arc.coroutine.yield (%arg0, %arg1 : i42, i9001), ^bb1
+^bb1(%arg2: i42, %arg3: i9001):
+  // CHECK: arc.coroutine.return %arg0, %arg1 : i42, i9001
+  arc.coroutine.return %arg0, %arg1 : i42, i9001
+^bb3:
+  // CHECK: arc.coroutine.halt %arg0, %arg1 : i42, i9001
+  arc.coroutine.halt %arg0, %arg1 : i42, i9001
+}
+
+// CHECK-LABEL: func.func @CoroutineCallEmpty
+func.func @CoroutineCallEmpty(%arg0: !arc.coroutine_state<@CoroutineEmpty>, %arg1: !arc.coroutine_pc<@CoroutineEmpty>) {
+  // CHECK: arc.coroutine.call @CoroutineEmpty(%arg0, %arg1)
+  // CHECK-SAME: : (!arc.coroutine_state<@CoroutineEmpty>, !arc.coroutine_pc<@CoroutineEmpty>)
+  // CHECK-SAME: -> (!arc.coroutine_state<@CoroutineEmpty>, !arc.coroutine_pc<@CoroutineEmpty>)
+  %0, %1 = arc.coroutine.call @CoroutineEmpty(%arg0, %arg1) : (!arc.coroutine_state<@CoroutineEmpty>, !arc.coroutine_pc<@CoroutineEmpty>) -> (!arc.coroutine_state<@CoroutineEmpty>, !arc.coroutine_pc<@CoroutineEmpty>)
+  return
+}
+
+// CHECK-LABEL: func.func @CoroutineCallWithResults
+func.func @CoroutineCallWithResults(
+  %arg0: !arc.coroutine_state<@CoroutineWithResults>,
+  %arg1: !arc.coroutine_pc<@CoroutineWithResults>,
+  %arg2: i42,
+  %arg3: i9001
+) {
+  // CHECK: arc.coroutine.call @CoroutineWithResults(%arg0, %arg1, %arg2, %arg3)
+  // CHECK-SAME: : (!arc.coroutine_state<@CoroutineWithResults>, !arc.coroutine_pc<@CoroutineWithResults>, i42, i9001)
+  // CHECK-SAME: -> (!arc.coroutine_state<@CoroutineWithResults>, !arc.coroutine_pc<@CoroutineWithResults>, i42, i9001)
+  %0, %1, %2:2 = arc.coroutine.call @CoroutineWithResults(%arg0, %arg1, %arg2, %arg3) : (!arc.coroutine_state<@CoroutineWithResults>, !arc.coroutine_pc<@CoroutineWithResults>, i42, i9001) -> (!arc.coroutine_state<@CoroutineWithResults>, !arc.coroutine_pc<@CoroutineWithResults>, i42, i9001)
+  return
+}
+
+// CHECK: arc.coroutine.undefined_state : <@CoroutineEmpty>
+arc.coroutine.undefined_state : !arc.coroutine_state<@CoroutineEmpty>
+// CHECK: arc.coroutine.start_pc : <@CoroutineEmpty>
+arc.coroutine.start_pc : !arc.coroutine_pc<@CoroutineEmpty>
+
+// CHECK-LABEL: hw.module @CoroutineInstanceA
+hw.module @CoroutineInstanceA(in %a: i42, out z: i9001) {
+  // CHECK: arc.coroutine.instance @CoroutineInstanceB(%a) : (i42) -> i9001
+  %0 = arc.coroutine.instance @CoroutineInstanceB(%a) : (i42) -> i9001
+  hw.output %0 : i9001
+}
+arc.coroutine.define @CoroutineInstanceB(%arg0: i42) -> (i9001, i64) {
+  %c0_i9001 = hw.constant 0 : i9001
+  %c0_i64 = hw.constant 0 : i64
+  arc.coroutine.halt %c0_i9001, %c0_i64 : i9001, i64
+}
