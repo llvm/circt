@@ -150,11 +150,6 @@ def InsertRuntime : Pass<"arc-insert-runtime", "mlir::ModuleOp"> {
   ];
 }
 
-def IsolateClocks : Pass<"arc-isolate-clocks", "mlir::ModuleOp"> {
-  let summary = "Group clocked operations into clock domains";
-  let dependentDialects = ["arc::ArcDialect"];
-}
-
 def LatencyRetiming : Pass<"arc-latency-retiming", "mlir::ModuleOp"> {
   let summary = "Push latencies through the design";
   let dependentDialects = ["arc::ArcDialect"];
