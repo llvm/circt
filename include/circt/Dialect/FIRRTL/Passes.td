@@ -134,9 +134,7 @@ def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "mlir::ModuleOp"> {
   }];
   let options = [
     Option<"removePortsOnly", "remove-ports-only", "bool", "false",
-           "only remove dead module ports and preserve other operations">,
-    Option<"ignoreDontTouch", "ignore-dont-touch", "bool", "false",
-           "remove unused ports even if they have a symbol or annotation">
+           "only remove dead module ports and preserve other operations">
   ];
   let statistics = [
     Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">,

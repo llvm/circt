@@ -83,12 +83,6 @@ struct IMDeadCodeElimPass
     return executableBlocks.count(block);
   }
 
-  /// Return true if the value has a don't touch annotation that should be
-  /// preserved (respecting the ignoreDontTouch option).
-  bool shouldPreserveDontTouch(Value value) const {
-    return !ignoreDontTouch && firrtl::hasDontTouch(value);
-  }
-
   void visitUser(Operation *op);
   void visitValue(Value value);
 
@@ -285,7 +279,7 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
 
   // Mark ports with don't touch as alive.
   for (auto blockArg : block->getArguments())
-    if (shouldPreserveDontTouch(blockArg)) {
+    if (hasDontTouch(blockArg)) {
       markAlive(blockArg);
       if (fmodule)
         markAlive(fmodule);
@@ -331,7 +325,7 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
     auto arg = module.getArgument(index);
 
     // If the port has don't touch, don't propagate the constant value.
-    if (!port.isOutput() || shouldPreserveDontTouch(arg))
+    if (!port.isOutput() || hasDontTouch(arg))
       continue;
 
     // Remember the index and constant value connected to an output port.
@@ -490,11 +484,9 @@ void IMDeadCodeElimPass::runOnOperation() {
       return false;
     };
 
-    if (!ignoreDontTouch) {
-      AnnotationSet::removePortAnnotations(module, visitAnnotation);
-      AnnotationSet::removeAnnotations(
-          module, std::bind(visitAnnotation, -1, std::placeholders::_1));
-    }
+    AnnotationSet::removePortAnnotations(module, visitAnnotation);
+    AnnotationSet::removeAnnotations(
+        module, std::bind(visitAnnotation, -1, std::placeholders::_1));
   }
 
   // If an element changed liveness then propagate liveness through it.
@@ -744,11 +736,11 @@ void IMDeadCodeElimPass::rewriteModuleSignature(FModuleOp module) {
 
   for (auto index : llvm::seq(0u, numOldPorts)) {
     auto argument = module.getArgument(index);
-    assert((!shouldPreserveDontTouch(argument) || isKnownAlive(argument)) &&
+    assert((!hasDontTouch(argument) || isKnownAlive(argument)) &&
            "If the port has don't touch, it should be known alive");
 
     // If the port has dontTouch, skip.
-    if (shouldPreserveDontTouch(argument))
+    if (hasDontTouch(argument))
       continue;
 
     if (isKnownAlive(argument)) {
