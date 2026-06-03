@@ -592,17 +592,17 @@ struct ModuleVisitor : public BaseVisitor {
     }
 
     // Match the module's ports up with the port values determined above.
-    SmallVector<Value> inputValues;
-    SmallVector<Value> outputValues;
-    inputValues.reserve(moduleType.getNumInputs());
-    outputValues.reserve(moduleType.getNumOutputs());
+    // Values are placed by slot index so regular and expanded
+    // interface-modport ports interleave in declaration order.
+    SmallVector<Value> inputValues(moduleLowering->numExplicitInputs);
+    SmallVector<Value> outputValues(moduleLowering->numExplicitOutputs);
 
     for (auto &port : moduleLowering->ports) {
       auto value = portValues.lookup(&port.ast);
       if (port.ast.direction == ArgumentDirection::Out)
-        outputValues.push_back(value);
+        outputValues[*port.outputIdx] = value;
       else
-        inputValues.push_back(value);
+        inputValues[*port.inputIdx] = value;
     }
 
     // Resolve flattened interface port values. For each flattened port,
@@ -635,19 +635,22 @@ struct ModuleVisitor : public BaseVisitor {
       }
       Value val = valIt->second;
       if (fp.direction == hw::ModulePort::Output) {
-        outputValues.push_back(val);
+        outputValues[*fp.outputIdx] = val;
       } else {
         // For input ports, if the value is a ref (from VariableOp/NetOp),
         // read it to get the rvalue, unless the port itself expects a ref.
         if (isa<moore::RefType>(val.getType()) && !isa<moore::RefType>(fp.type))
           val = moore::ReadOp::create(builder, loc, val);
-        inputValues.push_back(val);
+        inputValues[*fp.inputIdx] = val;
       }
     }
 
-    // Insert conversions for input ports.
+    // Insert conversions for input ports. Unfilled slots (e.g. unresolved
+    // interface-modport ports) are reported by the null-check loop below.
     for (auto [value, type] :
          llvm::zip(inputValues, moduleType.getInputTypes())) {
+      if (!value)
+        continue;
       // TODO: This should honor signedness in the conversion.
       value = context.materializeConversion(type, value, false, value.getLoc());
       if (!value)
@@ -1296,9 +1299,11 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
         return failure();
       auto portName = builder.getStringAttr(port.name);
       BlockArgument arg;
+      std::optional<unsigned> portOutputIdx;
+      std::optional<unsigned> portInputIdx;
       if (port.direction == ArgumentDirection::Out) {
         modulePorts.push_back({portName, type, hw::ModulePort::Output});
-        outputIdx++;
+        portOutputIdx = outputIdx++;
       } else {
         // Only the ref type wrapper exists for the time being, the net type
         // wrapper for inout may be introduced later if necessary.
@@ -1306,9 +1311,10 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           type = moore::RefType::get(cast<moore::UnpackedType>(type));
         modulePorts.push_back({portName, type, hw::ModulePort::Input});
         arg = block->addArgument(type, portLoc);
-        inputIdx++;
+        portInputIdx = inputIdx++;
       }
-      lowering.ports.push_back({port, portLoc, arg});
+      lowering.ports.push_back(
+          {port, portLoc, arg, portOutputIdx, portInputIdx});
       return success();
     };
 
@@ -1336,21 +1342,23 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
               builder.getStringAttr(Twine(portPrefix) + StringRef(mpp->name));
           BlockArgument arg;
           hw::ModulePort::Direction dir;
+          std::optional<unsigned> ifaceOutputIdx;
+          std::optional<unsigned> ifaceInputIdx;
           if (mpp->direction == ArgumentDirection::Out) {
             dir = hw::ModulePort::Output;
             modulePorts.push_back({name, type, dir});
-            outputIdx++;
+            ifaceOutputIdx = outputIdx++;
           } else {
             dir = hw::ModulePort::Input;
             if (mpp->direction != ArgumentDirection::In)
               type = moore::RefType::get(cast<moore::UnpackedType>(type));
             modulePorts.push_back({name, type, dir});
             arg = block->addArgument(type, portLoc);
-            inputIdx++;
+            ifaceInputIdx = inputIdx++;
           }
-          lowering.ifacePorts.push_back({name, dir, type, portLoc, arg,
-                                         &ifacePort, mpp->internalSymbol,
-                                         ifaceInst, mpp});
+          lowering.ifacePorts.push_back(
+              {name, dir, type, portLoc, arg, &ifacePort, mpp->internalSymbol,
+               ifaceInst, mpp, ifaceOutputIdx, ifaceInputIdx});
         }
       } else {
         // No modport: iterate interface body for all variables and nets.
@@ -1382,10 +1390,9 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           auto refType = moore::RefType::get(cast<moore::UnpackedType>(type));
           modulePorts.push_back({name, refType, hw::ModulePort::Input});
           auto arg = block->addArgument(refType, portLoc);
-          inputIdx++;
-          lowering.ifacePorts.push_back({name, hw::ModulePort::Input, refType,
-                                         portLoc, arg, &ifacePort, bodySym,
-                                         instSym});
+          lowering.ifacePorts.push_back(
+              {name, hw::ModulePort::Input, refType, portLoc, arg, &ifacePort,
+               bodySym, instSym, nullptr, std::nullopt, inputIdx++});
         }
       }
       return success();
@@ -1409,6 +1416,10 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       return {};
     }
   }
+
+  // Record explicit-port counts before hierarchical-name ports are appended.
+  lowering.numExplicitOutputs = outputIdx;
+  lowering.numExplicitInputs = inputIdx;
 
   // Mapping hierarchical names into the module's ports.
   for (auto &hierPath : hierPaths[module]) {
@@ -1583,8 +1594,9 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
 
   // Create additional ops to drive input port values onto the corresponding
   // internal variables and nets, and to collect output port values for the
-  // terminator.
-  SmallVector<Value> outputs;
+  // terminator. Outputs are placed by slot index so regular and
+  // interface-modport outputs interleave in declaration order.
+  SmallVector<Value> outputs(lowering.numExplicitOutputs);
   for (auto &port : lowering.ports) {
     Value value;
     if (auto *expr = port.ast.getInternalExpr()) {
@@ -1603,7 +1615,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     if (port.ast.direction == slang::ast::ArgumentDirection::Out) {
       if (isa<moore::RefType>(value.getType()))
         value = moore::ReadOp::create(builder, value.getLoc(), value);
-      outputs.push_back(value);
+      outputs[*port.outputIdx] = value;
       continue;
     }
 
@@ -1627,7 +1639,8 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     Value ref = valueSymbols.lookup(valueSym);
     if (!ref)
       continue;
-    outputs.push_back(moore::ReadOp::create(builder, fp.loc, ref).getResult());
+    outputs[*fp.outputIdx] =
+        moore::ReadOp::create(builder, fp.loc, ref).getResult();
   }
 
   // Ensure the number of operands of this module's terminator and the number of

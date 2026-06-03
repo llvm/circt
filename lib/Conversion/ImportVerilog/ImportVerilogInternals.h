@@ -46,6 +46,11 @@ struct PortLowering {
   const slang::ast::PortSymbol &ast;
   Location loc;
   BlockArgument arg;
+  /// Slot index in the module signature. `outputIdx` is set for outputs;
+  /// `inputIdx` is set for inputs and inouts. Regular and expanded
+  /// interface-modport ports share one numbering per direction.
+  std::optional<unsigned> outputIdx;
+  std::optional<unsigned> inputIdx;
 };
 
 /// Lowering information for a single signal flattened from an interface port.
@@ -68,6 +73,9 @@ struct FlattenedIfacePort {
   /// not the underlying interface body variable, so we register both keys in
   /// `valueSymbols` to make the lookup find this port's `BlockArgument`.
   const slang::ast::Symbol *modportPortSym = nullptr;
+  /// Slot index in the module signature; see `PortLowering::outputIdx`.
+  std::optional<unsigned> outputIdx;
+  std::optional<unsigned> inputIdx;
 };
 
 /// Lowering information for an expanded interface instance. Maps each interface
@@ -105,6 +113,10 @@ struct ModuleLowering {
   SmallVector<FlattenedIfacePort> ifacePorts;
   DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
       portsBySyntaxNode;
+  /// Number of explicit-port slots per direction. Hierarchical-name ports
+  /// are appended after these in the module signature.
+  unsigned numExplicitOutputs = 0;
+  unsigned numExplicitInputs = 0;
 };
 
 /// Function lowering information. The `op` field holds either a `func::FuncOp`
