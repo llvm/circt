@@ -712,19 +712,16 @@ LogicalResult CutRewritePatternOp::verify() {
                          << blockArg.getType();
 
   auto cost = getCost();
-  if (auto arcs = cost.getArcs()) {
+  if (auto arcs = cost.getArcs())
     for (auto attr : arcs) {
-      auto arc = dyn_cast<PositionalLinearTimingArcAttr>(attr);
-      if (!arc)
+      // TODO: LinearTimingArcAttr pin names are currently ignored for cut
+      // rewrite patterns. In the future MappingCostAttr should use a 2D
+      // ArrayAttr container for arcs. Names may be dropped from
+      // LinearTimingArcAttr in a future cleanup.
+      if (!isa<LinearTimingArcAttr>(attr))
         return emitError()
-               << "mapping cost arcs for cut rewrite patterns must use "
-                  "synth.positional_linear_timing_arc";
-
-      if (arc.getInputIndex() >= functionType.getNumInputs())
-        return emitError()
-               << "mapping cost arc input index exceeds number of arguments";
+               << "mapping cost arcs must use synth.linear_timing_arc";
     }
-  }
 
   if (auto inputCaps = cost.getInputCaps())
     if (inputCaps.size() != functionType.getNumInputs())
