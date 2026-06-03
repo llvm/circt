@@ -2665,8 +2665,8 @@ struct ExtmoduleConventionRemover : public OpReduction<FExtModuleOp> {
 
 struct IMDCEPortReduction : public PassReduction {
   IMDCEPortReduction(MLIRContext *context)
-      : PassReduction(context,
-                      firrtl::createIMDeadCodeElim({/*removePortsOnly=*/true})) {
+      : PassReduction(
+            context, firrtl::createIMDeadCodeElim({/*removePortsOnly=*/true})) {
   }
   std::string getName() const override {
     return "firrtl-imdeadcodeelim-remove-ports";
