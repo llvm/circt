@@ -10,16 +10,26 @@ collect_ignore_glob = [
 
 
 def _looks_like_runtime_root(root: Path) -> bool:
+  return _has_runtime_root_markers(root) or _has_runtime_library_markers(root)
+
+
+def _has_runtime_root_markers(root: Path) -> bool:
   markers = [
       root / "cmake" / "esiaccelConfig.cmake",
       root / "cpp" / "cmake" / "esiaccelConfig.cmake",
       root / "cpp" / "include" / "esi" / "Accelerator.h",
       root / "include" / "esi" / "Accelerator.h",
+      root / "tests" / "cpp",
+      root / "bin",
+  ]
+  return any(marker.exists() for marker in markers)
+
+
+def _has_runtime_library_markers(root: Path) -> bool:
+  markers = [
       root / "lib" / "libESICppRuntime.so",
       root / "lib" / "libESICppRuntime.dylib",
       root / "ESICppRuntime.dll",
-      root / "tests" / "cpp",
-      root / "bin",
   ]
   return any(marker.exists() for marker in markers)
 
@@ -46,10 +56,21 @@ def get_runtime_root() -> Path:
   ]
 
   seen = set()
+  unique_candidates = []
   for candidate in candidates:
-    if candidate in seen:
-      continue
-    seen.add(candidate)
+    if candidate not in seen:
+      unique_candidates.append(candidate)
+      seen.add(candidate)
+
+  # Prefer roots with headers, CMake package files, binaries, or the runtime
+  # test tree over lib-only package directories. In integrated CIRCT builds,
+  # the Python package may contain library symlinks while the source headers
+  # are only discoverable by walking up from the broader runtime build root.
+  for candidate in unique_candidates:
+    if _has_runtime_root_markers(candidate):
+      return candidate
+
+  for candidate in unique_candidates:
     if _looks_like_runtime_root(candidate):
       return candidate
 
