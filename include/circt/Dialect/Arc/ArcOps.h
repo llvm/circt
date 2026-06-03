@@ -25,6 +25,10 @@
 
 #include "circt/Dialect/Arc/ArcInterfaces.h.inc"
 
+namespace circt::hw {
+class HWModuleOp;
+} // namespace circt::hw
+
 #define GET_OP_CLASSES
 #include "circt/Dialect/Arc/Arc.h.inc"
 

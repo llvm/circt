@@ -533,3 +533,199 @@ arc.execute -> (i42) {
   // expected-note @below {{actual type: 'i19'}}
   arc.output %0 : i19
 }
+
+// -----
+
+func.func @Foo(%arg0: !arc.coroutine_state<@NotACoroutine>, %arg1: !arc.coroutine_pc<@NotACoroutine>) {
+  // expected-error @below {{`NotACoroutine` does not reference a valid `arc.coroutine.define`}}
+  arc.coroutine.call @NotACoroutine(%arg0, %arg1) : (!arc.coroutine_state<@NotACoroutine>, !arc.coroutine_pc<@NotACoroutine>) -> (!arc.coroutine_state<@NotACoroutine>, !arc.coroutine_pc<@NotACoroutine>)
+  return
+}
+func.func @NotACoroutine() {
+  return
+}
+
+// -----
+
+hw.module @Foo() {
+  // expected-error @below {{`NotACoroutine` does not reference a valid `arc.coroutine.define`}}
+  arc.coroutine.instance @NotACoroutine() : () -> ()
+}
+func.func @NotACoroutine() {
+  return
+}
+
+// -----
+
+func.func @Foo(%arg0: !arc.coroutine_state<@NeedsI42>, %arg1: !arc.coroutine_pc<@NeedsI42>, %arg2: i9001) {
+  // expected-error @below {{operand type mismatch: operand #0}}
+  // expected-note @below {{expected type: 'i42'}}
+  // expected-note @below {{actual type: 'i9001'}}
+  arc.coroutine.call @NeedsI42(%arg0, %arg1, %arg2) : (!arc.coroutine_state<@NeedsI42>, !arc.coroutine_pc<@NeedsI42>, i9001) -> (!arc.coroutine_state<@NeedsI42>, !arc.coroutine_pc<@NeedsI42>)
+  return
+}
+arc.coroutine.define @NeedsI42(%arg0: i42) {
+  arc.coroutine.return
+}
+
+// -----
+
+hw.module @Foo(in %a: i9001) {
+  // expected-error @below {{operand type mismatch: operand #0}}
+  // expected-note @below {{expected type: 'i42'}}
+  // expected-note @below {{actual type: 'i9001'}}
+  arc.coroutine.instance @NeedsI42(%a) : (i9001) -> ()
+}
+arc.coroutine.define @NeedsI42(%arg0: i42) -> i64 {
+  %c0_i64 = hw.constant 0 : i64
+  arc.coroutine.return %c0_i64 : i64
+}
+
+// -----
+
+func.func @Foo(%arg0: !arc.coroutine_state<@BarB>, %arg1: !arc.coroutine_pc<@BarB>) {
+  // expected-error @below {{bound to the op's callee symbol}}
+  arc.coroutine.call @BarA(%arg0, %arg1) : (!arc.coroutine_state<@BarB>, !arc.coroutine_pc<@BarB>) -> (!arc.coroutine_state<@BarB>, !arc.coroutine_pc<@BarB>)
+  return
+}
+arc.coroutine.define @BarA() {
+  arc.coroutine.return
+}
+arc.coroutine.define @BarB() {
+  arc.coroutine.return
+}
+
+// -----
+
+hw.module @Foo() {
+  // expected-error @below {{`DoesNotExist` does not reference a valid `arc.coroutine.define`}}
+  arc.coroutine.instance @DoesNotExist() : () -> ()
+}
+
+// -----
+
+func.func @Foo(%arg0: !arc.coroutine_state<@DoesNotExist>, %arg1: !arc.coroutine_pc<@DoesNotExist>) {
+  // expected-error @below {{`DoesNotExist` does not reference a valid `arc.coroutine.define`}}
+  arc.coroutine.call @DoesNotExist(%arg0, %arg1) : (!arc.coroutine_state<@DoesNotExist>, !arc.coroutine_pc<@DoesNotExist>) -> (!arc.coroutine_state<@DoesNotExist>, !arc.coroutine_pc<@DoesNotExist>)
+  return
+}
+
+// -----
+
+hw.module @Foo() {
+  // expected-error @below {{referenced coroutine `Bar` must produce an `i64` wakeup time as its last result}}
+  arc.coroutine.instance @Bar() : () -> ()
+}
+arc.coroutine.define @Bar() {
+  arc.coroutine.return
+}
+
+// -----
+
+hw.module @Foo() {
+  // expected-error @below {{referenced coroutine `Bar` must produce an `i64` wakeup time as its last result}}
+  arc.coroutine.instance @Bar() : () -> i42
+}
+arc.coroutine.define @Bar() -> i42 {
+  %c0_i42 = hw.constant 0 : i42
+  arc.coroutine.return %c0_i42 : i42
+}
+
+// -----
+
+arc.coroutine.define @Foo() -> i42 {
+  // expected-error @below {{incorrect number of yielded values: expected 1, but got 0}}
+  arc.coroutine.return
+}
+
+// -----
+
+arc.coroutine.define @Foo() -> i42 {
+  %c0_i9001 = hw.constant 0 : i9001
+  // expected-error @below {{yielded value type mismatch: yielded value #0}}
+  // expected-note @below {{expected type: 'i42'}}
+  // expected-note @below {{actual type: 'i9001'}}
+  arc.coroutine.return %c0_i9001 : i9001
+}
+
+// -----
+
+arc.coroutine.define @Foo() -> i42 {
+  // expected-error @below {{incorrect number of yielded values: expected 1, but got 0}}
+  arc.coroutine.halt
+}
+
+// -----
+
+arc.coroutine.define @Foo() -> i42 {
+  %c0_i9001 = hw.constant 0 : i9001
+  // expected-error @below {{yielded value type mismatch: yielded value #0}}
+  // expected-note @below {{expected type: 'i42'}}
+  // expected-note @below {{actual type: 'i9001'}}
+  arc.coroutine.halt %c0_i9001 : i9001
+}
+
+// -----
+
+arc.coroutine.define @Foo() -> i42 {
+  // expected-error @below {{incorrect number of yielded values: expected 1, but got 0}}
+  arc.coroutine.yield ^bb1
+^bb1:
+  %c0_i42 = hw.constant 0 : i42
+  arc.coroutine.halt %c0_i42 : i42
+}
+
+// -----
+
+arc.coroutine.define @Foo() -> i42 {
+  %c0_i9001 = hw.constant 0 : i9001
+  // expected-error @below {{yielded value type mismatch: yielded value #0}}
+  // expected-note @below {{expected type: 'i42'}}
+  // expected-note @below {{actual type: 'i9001'}}
+  arc.coroutine.yield (%c0_i9001 : i9001), ^bb1
+^bb1:
+  %c0_i42 = hw.constant 0 : i42
+  arc.coroutine.halt %c0_i42 : i42
+}
+
+// -----
+
+arc.coroutine.define @Foo(%arg0: i42) {
+  // expected-error @below {{destination block has 0 arguments, but expected 1}}
+  arc.coroutine.yield ^bb1
+^bb1:
+  arc.coroutine.halt
+}
+
+// -----
+
+arc.coroutine.define @Foo(%arg0: i42) {
+  %c0_i42 = hw.constant 0 : i42
+  // expected-error @below {{destination block has 1 arguments, but expected 2}}
+  arc.coroutine.yield ^bb1(%c0_i42 : i42)
+^bb1(%arg1: i42):
+  arc.coroutine.halt
+}
+
+// -----
+
+arc.coroutine.define @Foo(%arg0: i42) {
+  // expected-error @below {{destination resume argument type mismatch: destination resume argument #0}}
+  // expected-note @below {{expected type: 'i42'}}
+  // expected-note @below {{actual type: 'i9001'}}
+  arc.coroutine.yield ^bb1
+^bb1(%arg1: i9001):
+  arc.coroutine.halt
+}
+
+// -----
+
+arc.coroutine.define @Foo(%arg0: i42) {
+  %c0_i42 = hw.constant 0 : i42
+  // expected-error @below {{destination operand type mismatch: destination operand #0}}
+  // expected-note @below {{expected type: 'i9001'}}
+  // expected-note @below {{actual type: 'i42'}}
+  arc.coroutine.yield ^bb1(%c0_i42 : i42)
+^bb1(%arg1: i42, %arg2: i9001):
+  arc.coroutine.halt
+}
