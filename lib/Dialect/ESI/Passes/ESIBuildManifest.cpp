@@ -58,25 +58,24 @@ private:
   /// Get a JSON representation of the manifest.
   std::string json();
 
-  /// Walk the appID hierarchy and record the absolute appID paths of all client
-  /// ports which are served by a service or engine (i.e. which appear in some
-  /// service implementation's client record). These are the only ports which
-  /// are "user accessible": those for which the runtime materializes a port in
-  /// the Accelerator design tree. Ports with no service record (e.g. host
-  /// memory ports, or function ports with no implementing engine) are not.
-  void collectServedPorts(Block &block, SmallVectorImpl<Attribute> &path);
+  /// Walk the appID hierarchy to populate 'servedPortPaths' (absolute appID
+  /// paths of user-accessible client ports, i.e. those appearing in a service
+  /// implementation's client record) and 'instantiatedModules' (every module
+  /// instantiated in the unpruned hierarchy, whose metadata must be retained).
+  void collectAccessibilityInfo(Block &block);
 
   /// Walk the appID hierarchy and populate 'keepNodes' with the hierarchy nodes
   /// which contain (or have a descendant which contains) a user-accessible
-  /// client port. Returns true if 'block' or any descendant is to be kept.
-  bool computeKeepNodes(Block &block, SmallVectorImpl<Attribute> &path);
+  /// client port.
+  void computeKeepNodes(Block &block);
 
   /// Is the client port with appID 'portID' under the node at 'nodePath' user
   /// accessible?
-  bool isPortAccessible(ArrayRef<Attribute> nodePath, Attribute portID) {
+  bool isPortAccessible(ArrayRef<Attribute> nodePath, Attribute portID) const {
     SmallVector<Attribute> portPath(nodePath.begin(), nodePath.end());
     portPath.push_back(portID);
-    return servedPortPaths.contains(ArrayAttr::get(&getContext(), portPath));
+    return servedPortPaths.contains(
+        ArrayAttr::get(portID.getContext(), portPath));
   }
 
   // Type table.
@@ -97,9 +96,9 @@ private:
   DenseSet<SymbolRefAttr> symbols;
   DenseSet<SymbolRefAttr> modules;
 
-  // Modules instantiated anywhere in the (full, unpruned) design hierarchy.
-  // Their metadata is always retained so that 'module_infos' stays complete
-  // even when an instance's subtree is pruned from the design tree.
+  // Modules instantiated anywhere in the (full, unpruned) AppID design
+  // hierarchy. Their metadata is always retained so that 'module_infos' stays
+  // complete even when an instance's subtree is pruned from the design tree.
   DenseSet<SymbolRefAttr> instantiatedModules;
 
   // Absolute appID paths of user-accessible client ports (those served by a
@@ -127,14 +126,9 @@ void ESIBuildManifestPass::runOnOperation() {
     return;
 
   // Determine which client ports are user-accessible and which hierarchy nodes
-  // need to be retained as a result. This must happen before JSONification
-  // since the latter relies on these sets to prune the manifest.
-  {
-    SmallVector<Attribute> path;
-    collectServedPorts(appidRoot.getChildren().front(), path);
-    path.clear();
-    computeKeepNodes(appidRoot.getChildren().front(), path);
-  }
+  // need to be retained as a result.
+  collectAccessibilityInfo(appidRoot.getChildren().front());
+  computeKeepNodes(appidRoot.getChildren().front());
 
   // JSONify the manifest.
   std::string jsonManifest = json();
@@ -177,48 +171,80 @@ void ESIBuildManifestPass::runOnOperation() {
   }
 }
 
-void ESIBuildManifestPass::collectServedPorts(
-    Block &block, SmallVectorImpl<Attribute> &path) {
-  for (auto svc : block.getOps<ServiceImplRecordOp>())
-    for (auto client :
-         svc.getReqDetails().front().getOps<ServiceImplClientRecordOp>()) {
-      // Any client port with a service implementation record is served by that
-      // service/engine and is therefore user-accessible. Note that the channel
-      // assignments may be empty (e.g. for MMIO ports, which are described by
-      // 'offset'/'size' options rather than channel assignments).
-      SmallVector<Attribute> portPath(path.begin(), path.end());
-      for (auto id : client.getRelAppIDPath().getAsRange<AppIDAttr>())
-        portPath.push_back(id);
-      servedPortPaths.insert(ArrayAttr::get(&getContext(), portPath));
-    }
-  for (auto node : block.getOps<AppIDHierNodeOp>()) {
-    // Record every module instantiated in the (full, unpruned) design
-    // hierarchy so that its metadata (module_infos) is always retained, even
-    // when the instance's subtree is pruned from the design tree because it
-    // contains no user-accessible ports.
+void ESIBuildManifestPass::collectAccessibilityInfo(Block &rootBlock) {
+  // Record every module instantiated in the (full, unpruned) AppID design
+  // hierarchy so that its metadata (module_infos) is always retained.
+  rootBlock.getParentOp()->walk([&](AppIDHierNodeOp node) {
     instantiatedModules.insert(node.getModuleRefAttr());
-    path.push_back(node.getAppIDAttr());
-    collectServedPorts(node.getChildren().front(), path);
-    path.pop_back();
+  });
+
+  // Iterative pre-order walk over the appID hierarchy to collect served port
+  // paths. Each work item pairs a block with the absolute appID path of the
+  // node which owns it.
+  SmallVector<std::pair<Block *, SmallVector<Attribute>>> worklist;
+  worklist.emplace_back(&rootBlock, SmallVector<Attribute>{});
+  while (!worklist.empty()) {
+    auto [block, path] = worklist.pop_back_val();
+    for (auto svc : block->getOps<ServiceImplRecordOp>())
+      for (auto client :
+           svc.getReqDetails().front().getOps<ServiceImplClientRecordOp>()) {
+        // Any client port with a service implementation record is served by
+        // that service/engine and is therefore user-accessible. Note that the
+        // channel assignments may be empty (e.g. for MMIO ports, which are
+        // described by 'offset'/'size' options rather than channel
+        // assignments).
+        SmallVector<Attribute> portPath(path.begin(), path.end());
+        for (auto id : client.getRelAppIDPath().getAsRange<AppIDAttr>())
+          portPath.push_back(id);
+        servedPortPaths.insert(ArrayAttr::get(&getContext(), portPath));
+      }
+    for (auto node : block->getOps<AppIDHierNodeOp>()) {
+      SmallVector<Attribute> childPath(path.begin(), path.end());
+      childPath.push_back(node.getAppIDAttr());
+      worklist.emplace_back(&node.getChildren().front(), std::move(childPath));
+    }
   }
 }
 
-bool ESIBuildManifestPass::computeKeepNodes(Block &block,
-                                            SmallVectorImpl<Attribute> &path) {
-  bool keep = false;
-  for (auto req : block.getOps<ServiceRequestRecordOp>())
-    if (isPortAccessible(path, req.getRequestorAttr()))
-      keep = true;
-  for (auto node : block.getOps<AppIDHierNodeOp>()) {
-    path.push_back(node.getAppIDAttr());
-    bool childKeep = computeKeepNodes(node.getChildren().front(), path);
-    path.pop_back();
-    if (childKeep) {
-      keepNodes.insert(node);
-      keep = true;
+void ESIBuildManifestPass::computeKeepNodes(Block &rootBlock) {
+  // A node is kept if its child block has a user-accessible request port or any
+  // descendant node is kept. Compute this bottom-up without recursion: first
+  // collect every block in pre-order (so each block precedes its descendants),
+  // then process the list in reverse (so every descendant is visited before its
+  // ancestor).
+  struct WorkItem {
+    Block *block;
+    SmallVector<Attribute> path;
+    AppIDHierNodeOp owner; // Node owning 'block' (null for the root block).
+  };
+  SmallVector<WorkItem> worklist;
+  SmallVector<WorkItem> order;
+  worklist.push_back({&rootBlock, {}, {}});
+  while (!worklist.empty()) {
+    WorkItem item = worklist.pop_back_val();
+    for (auto node : item.block->getOps<AppIDHierNodeOp>()) {
+      SmallVector<Attribute> childPath(item.path.begin(), item.path.end());
+      childPath.push_back(node.getAppIDAttr());
+      worklist.push_back(
+          {&node.getChildren().front(), std::move(childPath), node});
     }
+    order.push_back(std::move(item));
   }
-  return keep;
+
+  // Maps a block to whether it (or a descendant) is to be kept.
+  DenseMap<Block *, bool> blockKeeps;
+  for (WorkItem &item : llvm::reverse(order)) {
+    bool keep = false;
+    for (auto req : item.block->getOps<ServiceRequestRecordOp>())
+      if (isPortAccessible(item.path, req.getRequestorAttr()))
+        keep = true;
+    for (auto node : item.block->getOps<AppIDHierNodeOp>())
+      if (blockKeeps.lookup(&node.getChildren().front()))
+        keep = true;
+    blockKeeps[item.block] = keep;
+    if (keep && item.owner)
+      keepNodes.insert(item.owner);
+  }
 }
 
 void ESIBuildManifestPass::emitNode(llvm::json::OStream &j,
