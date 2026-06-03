@@ -3240,20 +3240,9 @@ def Atan2BIOp : RealMathFuncTwoIn<"atan2"> {
   let summary = "Arc-tangent of y/x";
 }
 
-
-def HypotBIOp : Builtin<"hypot", [SameOperandsAndResultType]> { 
-  let description = [{
-    The hypotenusis function ((x^2+y^2)^(1/2)) from the real math functions shall accept real value arguments and return
-    a real result type. Its behavior shall match the equivalent C language
-    standard math library function indicated.
-
-    See IEEE 1800-2017 § 20.8.2 "Real math functions".
-   }];
-  let arguments = (ins RealType:$lhs, RealType:$rhs);
-  let results = (outs RealF64:$result);
-  let assemblyFormat = [{ $lhs `,` $rhs attr-dict `:` type($result) }];
+def HypotBIOp : RealMathFuncTwoIn<"hypot"> { 
+  let summary = "Hypotenusis function ((x^2+y^2)^(1/2))";
 }
-
 
 def SinhBIOp : RealMathFunc<"sinh"> {
   let summary = "Hyperbolic sine";
