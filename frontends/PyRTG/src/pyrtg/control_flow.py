@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from .integers import Bool, Integer
+from .integers import Integer
+from .immediates import Immediate
 from .arrays import Array
 from .core import Value
 from .base import ir
@@ -22,9 +23,9 @@ _current_if_stmt = ContextVar("current_pyrtg_if_stmt")
 
 class If:
   """
-  This class can be used to generate if-else statements with RTG 'Bool' values
-  as condition. They will be captured in the generated IR unlike regular Python
-  if-else statements.
+  This class can be used to generate if-else statements with single-bit RTG
+  immediate values as condition. They will be captured in the generated IR
+  unlike regular Python if-else statements.
 
   Example:
   ```
@@ -37,7 +38,11 @@ class If:
   ```
   """
 
-  def __init__(self, cond: Bool):
+  def __init__(self, cond: Immediate):
+    bitwidth = cond.get_type().width
+    if bitwidth != 1:
+      raise ValueError(f"Condition must be a 1-bit immediate, got {bitwidth}")
+
     self._cond = cond
     self._then_results: Dict[str, Value] = {}
     self._else_results: Dict[str, Value] = {}

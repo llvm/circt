@@ -18,7 +18,7 @@ def TestRegType : Type<CPred<"true">, "test register">, RegisterTypeBase {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IMM_NO_WRAPPER 2>&1 | FileCheck %s --check-prefix=IMM_NO_WRAPPER
 #ifdef TEST_IMM_NO_WRAPPER
 def ErrorImmNoWrapperOp : TestOp<"error_imm_no_wrapper"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
   let isaAssemblyFormat = "$imm";
 }
 // IMM_NO_WRAPPER: [[@LINE-2]]:28: error: immediate operand '$imm' must be wrapped in signed() or unsigned()
@@ -82,7 +82,7 @@ def ErrorUnknownOperandBinOp : TestOp<"error_unknown_operand_bin"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_INVALID_BIT_SLICE 2>&1 | FileCheck %s --check-prefix=INVALID_BIT_SLICE
 #ifdef TEST_INVALID_BIT_SLICE
 def ErrorInvalidBitSliceOp : TestOp<"error_invalid_bit_slice"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
   let isaBinaryFormat = "$imm[5:10] 0b1111";
   let isaAssemblyFormat = "signed($imm)";
 }
@@ -102,7 +102,7 @@ def ErrorInvalidBinaryLiteralOp : TestOp<"error_invalid_binary_literal"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MALFORMED_BIT_SLICE 2>&1 | FileCheck %s --check-prefix=MALFORMED_BIT_SLICE
 #ifdef TEST_MALFORMED_BIT_SLICE
 def ErrorMalformedBitSliceOp : TestOp<"error_malformed_bit_slice"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
   let isaBinaryFormat = "$imm[:5] 0b1111";
   let isaAssemblyFormat = "signed($imm)";
 }
@@ -121,7 +121,7 @@ def ErrorUnterminatedBacktickOp : TestOp<"error_unterminated_backtick"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_CLOSING_PAREN 2>&1 | FileCheck %s --check-prefix=MISSING_CLOSING_PAREN
 #ifdef TEST_MISSING_CLOSING_PAREN
 def ErrorMissingClosingParenOp : TestOp<"error_missing_closing_paren"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
   let isaAssemblyFormat = "signed($imm";
 }
 // MISSING_CLOSING_PAREN: [[@LINE-2]]:39: error: expected ')'
@@ -139,7 +139,7 @@ def ErrorUnexpectedCharOp : TestOp<"error_unexpected_char"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_OPERAND_AFTER_SIGNED 2>&1 | FileCheck %s --check-prefix=MISSING_OPERAND_AFTER_SIGNED
 #ifdef TEST_MISSING_OPERAND_AFTER_SIGNED
 def ErrorMissingOperandAfterSignedOp : TestOp<"error_missing_operand_after_signed"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
   let isaAssemblyFormat = "signed()";
 }
 // MISSING_OPERAND_AFTER_SIGNED: [[@LINE-2]]:35: error: expected operand after 'signed' specifier
@@ -148,7 +148,7 @@ def ErrorMissingOperandAfterSignedOp : TestOp<"error_missing_operand_after_signe
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_OPERAND_AFTER_UNSIGNED 2>&1 | FileCheck %s --check-prefix=MISSING_OPERAND_AFTER_UNSIGNED
 #ifdef TEST_MISSING_OPERAND_AFTER_UNSIGNED
 def ErrorMissingOperandAfterUnsignedOp : TestOp<"error_missing_operand_after_unsigned"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
   let isaAssemblyFormat = "unsigned()";
 }
 // MISSING_OPERAND_AFTER_UNSIGNED: [[@LINE-2]]:37: error: expected operand after 'unsigned' specifier
@@ -157,7 +157,7 @@ def ErrorMissingOperandAfterUnsignedOp : TestOp<"error_missing_operand_after_uns
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_NEGATIVE_BIT_SLICE 2>&1 | FileCheck %s --check-prefix=NEGATIVE_BIT_SLICE
 #ifdef TEST_NEGATIVE_BIT_SLICE
 def ErrorNegativeBitSliceOp : TestOp<"error_negative_bit_slice"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
   let isaBinaryFormat = "$imm[-1:5] 0b1111";
   let isaAssemblyFormat = "signed($imm)";
 }
@@ -177,7 +177,7 @@ def ErrorStringLiteralInBinaryOp : TestOp<"error_string_literal_in_binary"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_SIGNEDNESS_IN_BINARY 2>&1 | FileCheck %s --check-prefix=SIGNEDNESS_IN_BINARY
 #ifdef TEST_SIGNEDNESS_IN_BINARY
 def ErrorSignednessInBinaryOp : TestOp<"error_signedness_in_binary"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
   let isaBinaryFormat = "signed($imm) 0b1111";
   let isaAssemblyFormat = "signed($imm)";
 }
@@ -196,11 +196,11 @@ def ErrorBinaryLiteralInAssemblyOp : TestOp<"error_binary_literal_in_assembly"> 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_FAILED_TO_CLASSIFY 2>&1 | FileCheck %s --check-prefix=FAILED_TO_CLASSIFY
 #ifdef TEST_FAILED_TO_CLASSIFY
 def FailedToClassifyOp : TestOp<"error_failed_to_classify"> {
-  let arguments = (ins I1:$imm);
+  let arguments = (ins F32:$imm);
   let isaBinaryFormat = "$imm";
   let isaAssemblyFormat = "$imm";
 }
-// FAILED_TO_CLASSIFY: [[@LINE-2]]:28: error: failed to classify ISA type for operand 'imm' with type 'I1'
+// FAILED_TO_CLASSIFY: [[@LINE-2]]:28: error: failed to classify ISA type for operand 'imm' with type 'F32'
 #endif
 
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_SPACE 2>&1 | FileCheck %s --check-prefix=MISSING_SPACE
@@ -224,7 +224,7 @@ def ErrorEmptyOperandNameOp : TestOp<"error_empty_operand_name"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_MISSING_CLOSING_BRACKET 2>&1 | FileCheck %s --check-prefix=MISSING_CLOSING_BRACKET
 #ifdef TEST_MISSING_CLOSING_BRACKET
 def ErrorMissingClosingBracketOp : TestOp<"error_missing_closing_bracket"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
   let isaBinaryFormat = "$imm[11:5 0b1111";
   let isaAssemblyFormat = "signed($imm)";
 }
@@ -234,7 +234,7 @@ def ErrorMissingClosingBracketOp : TestOp<"error_missing_closing_bracket"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_ANYTYPE_MUST_CONTAIN_LABEL 2>&1 | FileCheck %s --check-prefix=ANYTYPE_MUST_CONTAIN_LABEL
 #ifdef TEST_ANYTYPE_MUST_CONTAIN_LABEL
 def ErrorAnyTypeMustContainLabelOp : TestOp<"error_anytype_must_contain_label"> {
-  let arguments = (ins AnyTypeOf<[TestRegType, ImmediateOfWidth<5>]>:$src);
+  let arguments = (ins AnyTypeOf<[TestRegType, I<5>]>:$src);
   let isaBinaryFormat = "$src 0b1010";
   let isaAssemblyFormat = "unsigned($src)";
 }
@@ -254,7 +254,7 @@ def ErrorDecimalLiteralOverflowOp : TestOp<"error_decimal_literal_overflow"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_BOTH_BRANCHES_EMPTY 2>&1 | FileCheck %s --check-prefix=IF_BOTH_BRANCHES_EMPTY
 #ifdef TEST_IF_BOTH_BRANCHES_EMPTY
 def ErrorIfBothBranchesEmptyOp : TestOp<"error_if_both_branches_empty"> {
-  let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
+  let arguments = (ins I<1>:$cond, TestRegType:$reg);
   let isaAssemblyFormat = "if $cond then () else ()";
 }
 // IF_BOTH_BRANCHES_EMPTY: [[@LINE-2]]:28: error: if-then-else must have at least one of 'then' or 'else' branch
@@ -263,7 +263,7 @@ def ErrorIfBothBranchesEmptyOp : TestOp<"error_if_both_branches_empty"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_MISSING_THEN_PAREN 2>&1 | FileCheck %s --check-prefix=IF_MISSING_THEN_PAREN
 #ifdef TEST_IF_MISSING_THEN_PAREN
 def ErrorIfMissingThenParenOp : TestOp<"error_if_missing_then_paren"> {
-  let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
+  let arguments = (ins I<1>:$cond, TestRegType:$reg);
   let isaAssemblyFormat = "if $cond then $reg else ()";
 }
 // IF_MISSING_THEN_PAREN: [[@LINE-2]]:41: error: expected '('
@@ -272,7 +272,7 @@ def ErrorIfMissingThenParenOp : TestOp<"error_if_missing_then_paren"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_MISSING_ELSE_PAREN 2>&1 | FileCheck %s --check-prefix=IF_MISSING_ELSE_PAREN
 #ifdef TEST_IF_MISSING_ELSE_PAREN
 def ErrorIfMissingElseParenOp : TestOp<"error_if_missing_else_paren"> {
-  let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
+  let arguments = (ins I<1>:$cond, TestRegType:$reg);
   let isaAssemblyFormat = "if $cond then () else $reg";
 }
 // IF_MISSING_ELSE_PAREN: [[@LINE-2]]:49: error: expected '('
@@ -281,7 +281,7 @@ def ErrorIfMissingElseParenOp : TestOp<"error_if_missing_else_paren"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_MISSING_OPERAND 2>&1 | FileCheck %s --check-prefix=IF_MISSING_OPERAND
 #ifdef TEST_IF_MISSING_OPERAND
 def ErrorIfMissingOperandOp : TestOp<"error_if_missing_operand"> {
-  let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
+  let arguments = (ins I<1>:$cond, TestRegType:$reg);
   let isaAssemblyFormat = "if then ($reg) else ()";
 }
 // IF_MISSING_OPERAND: [[@LINE-2]]:31: error: expected operand after 'if' keyword
@@ -290,7 +290,7 @@ def ErrorIfMissingOperandOp : TestOp<"error_if_missing_operand"> {
 // RUN: not circt-tblgen -gen-rtg-instruction-methods -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_IF_BOTH_BRANCHES_EMPTY2 2>&1 | FileCheck %s --check-prefix=IF_BOTH_BRANCHES_EMPTY2
 #ifdef TEST_IF_BOTH_BRANCHES_EMPTY2
 def ErrorIfBothBranchesEmptyOp : TestOp<"error_if_both_branches_empty"> {
-  let arguments = (ins ImmediateOfWidth<1>:$cond, TestRegType:$reg);
+  let arguments = (ins I<1>:$cond, TestRegType:$reg);
   let isaAssemblyFormat = "if $cond `end`";
 }
 // IF_BOTH_BRANCHES_EMPTY2: [[@LINE-2]]:37: error: expected 'then' or 'else' after 'if' condition

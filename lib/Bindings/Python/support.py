@@ -133,8 +133,6 @@ def type_to_pytype(t) -> ir.Type:
     return rtg.RandomizedSequenceType(t)
   if rtg.DictType.isinstance(t):
     return rtg.DictType(t)
-  if rtg.ImmediateType.isinstance(t):
-    return rtg.ImmediateType(t)
   if rtg.ArrayType.isinstance(t):
     return rtg.ArrayType(t)
   if rtg.MemoryType.isinstance(t):

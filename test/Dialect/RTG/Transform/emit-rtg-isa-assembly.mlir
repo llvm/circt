@@ -38,16 +38,16 @@ emit.file "" {
 
   %rd = rtg.constant #rtgtest.ra
   %rs = rtg.constant #rtgtest.s0
-  %imm = rtg.constant #rtg.isa.immediate<12, 0>
-  %imm5 = rtg.constant #rtg.isa.immediate<5, 31>
-  %imm21 = rtg.constant #rtg.isa.immediate<21, 0>
-  %imm32 = rtg.constant #rtg.isa.immediate<32, 0>
-  %neg_imm = rtg.constant #rtg.isa.immediate<12, 4080>
-  %imm13 = rtg.constant #rtg.isa.immediate<13, 6144>
+  %imm = rtg.constant 0 : i12
+  %imm5 = rtg.constant 31 : i5
+  %imm21 = rtg.constant 0 : i21
+  %imm32 = rtg.constant 0 : i32
+  %neg_imm = rtg.constant 4080 : i12
+  %imm13 = rtg.constant 6144 : i13
 
   // CHECK-ALLOWED-NEXT:    la ra, 0
   // CHECK-NEXT:    la ra, 0
-  rtgtest.la %rd, %imm32 : !rtg.isa.immediate<32>
+  rtgtest.la %rd, %imm32 : i32
 
   // CHECK-ALLOWED-NEXT:    jalr ra, -16(s0)
   // CHECK-NEXT:    # jalr ra, -16(s0)
@@ -92,32 +92,32 @@ emit.file "" {
   // CHECK-ALLOWED-NEXT:    beq ra, s0, 6144
   // CHECK-NEXT:    # beq ra, s0, 6144
   // CHECK-NEXT:    .word 0x808080E3
-  rtgtest.beq %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  rtgtest.beq %rd, %rs, %imm13 : i13
 
   // CHECK-ALLOWED-NEXT:    bne ra, s0, 6144
   // CHECK-NEXT:    # bne ra, s0, 6144
   // CHECK-NEXT:    .word 0x808090E3
-  rtgtest.bne %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  rtgtest.bne %rd, %rs, %imm13 : i13
 
   // CHECK-ALLOWED-NEXT:    blt ra, s0, 6144
   // CHECK-NEXT:    # blt ra, s0, 6144
   // CHECK-NEXT:    .word 0x8080C0E3
-  rtgtest.blt %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  rtgtest.blt %rd, %rs, %imm13 : i13
 
   // CHECK-ALLOWED-NEXT:    bge ra, s0, 6144
   // CHECK-NEXT:    # bge ra, s0, 6144
   // CHECK-NEXT:    .word 0x8080D0E3
-  rtgtest.bge %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  rtgtest.bge %rd, %rs, %imm13 : i13
 
   // CHECK-ALLOWED-NEXT:    bltu ra, s0, 6144
   // CHECK-NEXT:    # bltu ra, s0, 6144
   // CHECK-NEXT:    .word 0x8080E0E3
-  rtgtest.bltu %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  rtgtest.bltu %rd, %rs, %imm13 : i13
 
   // CHECK-ALLOWED-NEXT:    bgeu ra, s0, 6144
   // CHECK-NEXT:    # bgeu ra, s0, 6144
   // CHECK-NEXT:    .word 0x8080F0E3
-  rtgtest.bgeu %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  rtgtest.bgeu %rd, %rs, %imm13 : i13
 
   // CHECK-ALLOWED-NEXT:    add ra, s0, s0
   // CHECK-NEXT:    # add ra, s0, s0
@@ -187,17 +187,17 @@ emit.file "" {
   // CHECK-ALLOWED-NEXT:    lui ra, 0
   // CHECK-NEXT:    # lui ra, 0
   // CHECK-NEXT:    .word 0xB7
-  rtgtest.lui %rd, %imm32 : !rtg.isa.immediate<32>
+  rtgtest.lui %rd, %imm32 : i32
 
   // CHECK-ALLOWED-NEXT:    auipc ra, 0
   // CHECK-NEXT:    # auipc ra, 0
   // CHECK-NEXT:    .word 0x97
-  rtgtest.auipc %rd, %imm32 : !rtg.isa.immediate<32>
+  rtgtest.auipc %rd, %imm32 : i32
 
   // CHECK-ALLOWED-NEXT:    jal ra, 0
   // CHECK-NEXT:    # jal ra, 0
   // CHECK-NEXT:    .word 0xEF
-  rtgtest.jal %rd, %imm21 : !rtg.isa.immediate<21>
+  rtgtest.jal %rd, %imm21 : i21
 
   // CHECK-ALLOWED-NEXT:    addi ra, s0, -16
   // CHECK-NEXT:    # addi ra, s0, -16

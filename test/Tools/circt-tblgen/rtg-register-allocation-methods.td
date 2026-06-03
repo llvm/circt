@@ -23,7 +23,7 @@ def TestRegType : TypeDef<RTGDialect, "TestReg">, RegisterTypeBase {
 }
 
 def Test1_NoRegistersOp : TestOp<"no_registers"> {
-  let arguments = (ins ImmediateOfWidth<8>:$imm);
+  let arguments = (ins I<8>:$imm);
 }
 // CHECK-LABEL: bool NoRegistersOp::isSourceRegister(unsigned index) {
 // CHECK-NEXT:    return false;

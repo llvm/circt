@@ -13,7 +13,7 @@ from .scf import scf
 from .index import index
 from .sets import Set, SetType
 from .strings import String, StringType
-from .integers import Integer, IntegerType, Bool, BoolType
+from .integers import Integer, IntegerType
 from .bags import Bag, BagType
 from .sequences import sequence, Sequence, SequenceType, RandomizedSequence, RandomizedSequenceType
 from .configs import config, Param, PythonParam, Config

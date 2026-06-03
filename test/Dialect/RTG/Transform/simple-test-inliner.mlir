@@ -1,9 +1,9 @@
 // RUN: circt-opt --rtg-simple-test-inliner --split-input-file --verify-diagnostics %s | FileCheck %s
 
 // CHECK-NOT: rtg.target @tgt1
-rtg.target @tgt1 : !rtg.dict<imm: !rtg.isa.immediate<32>> {
-  %imm = rtg.constant #rtg.isa.immediate<32, 0>
-  rtg.yield %imm : !rtg.isa.immediate<32>
+rtg.target @tgt1 : !rtg.dict<imm: i32> {
+  %imm = rtg.constant 0 : i32
+  rtg.yield %imm : i32
 }
 
 rtg.test @test1() {
@@ -11,12 +11,12 @@ rtg.test @test1() {
   rtg.comment %0
 }
 
-rtg.test @test2(imm = %imm: !rtg.isa.immediate<32>) target @tgt1 {
+rtg.test @test2(imm = %imm: i32) target @tgt1 {
   %0 = rtg.constant "Inside test2" : !rtg.string
   rtg.comment %0
 }
 
-rtg.test @test3(imm = %imm: !rtg.isa.immediate<32>) {
+rtg.test @test3(imm = %imm: i32) {
   %0 = rtg.constant "Inside test3" : !rtg.string
   rtg.comment %0
 }
@@ -54,9 +54,9 @@ emit.file "filename" {
 // -----
 
 // expected-error @below {{cannot inline test with used arguments}}
-rtg.test @test(imm = %imm: !rtg.isa.immediate<32>) {
+rtg.test @test(imm = %imm: i32) {
   %reg = rtg.constant #rtgtest.t0
-  rtgtest.lui %reg, %imm : !rtg.isa.immediate<32>
+  rtgtest.lui %reg, %imm : i32
 }
 
 emit.file "filename" {

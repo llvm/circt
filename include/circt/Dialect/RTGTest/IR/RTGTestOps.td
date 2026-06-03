@@ -60,7 +60,7 @@ class InstFormatIOpBase<string mnemonic, string opcode7, string funct3>
 
   let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
                        Arg<IntegerRegisterType, "", [SourceReg]>:$rs,
-                       ImmediateOfWidth<12>:$imm);
+                       I<12>:$imm);
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
   let isaBinaryFormat = "$imm $rs " # funct3 # " $rd " # opcode7;
@@ -81,7 +81,7 @@ class InstFormatBOpBase<string mnemonic, string opcode7, string funct3>
 
   let arguments = (ins Arg<IntegerRegisterType, "", [SourceReg]>:$rs1,
                        Arg<IntegerRegisterType, "", [SourceReg]>:$rs2,
-                       AnyTypeOf<[ImmediateOfWidth<13>, LabelType]>:$imm);
+                       AnyTypeOf<[I<13>, LabelType]>:$imm);
 
   let assemblyFormat = [{
     $rs1 `,` $rs2 `,` $imm `:` qualified(type($imm)) attr-dict
@@ -109,7 +109,7 @@ class InstFormatSOpBase<string mnemonic, string opcode7, string funct3>
 
   let arguments = (ins Arg<IntegerRegisterType, "", [SourceReg]>:$rs1,
                        Arg<IntegerRegisterType, "", [SourceReg]>:$rs2,
-                       ImmediateOfWidth<12>:$imm);
+                       I<12>:$imm);
 
   let assemblyFormat = "$rs1 `,` $rs2 `,` $imm attr-dict";
   let isaBinaryFormat = "$imm[11:5] $rs2 $rs1 " # funct3 #
@@ -122,7 +122,7 @@ class InstFormatUOpBase<string mnemonic, string opcode7>
   : InstrFormatOp<mnemonic, [InstructionOpAdaptor]> {
 
   let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
-                       AnyTypeOf<[ImmediateOfWidth<32>, LabelType]>:$imm);
+                       AnyTypeOf<[I<32>, LabelType]>:$imm);
 
   let assemblyFormat = "$rd `,` $imm `:` type($imm) attr-dict";
   let isaBinaryFormat = "$imm[31:12] $rd " # opcode7;
@@ -133,7 +133,7 @@ class InstFormatJOpBase<string mnemonic, string opcode7>
   : InstrFormatOp<mnemonic, [InstructionOpAdaptor]> {
 
   let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
-                       AnyTypeOf<[ImmediateOfWidth<21>, LabelType]>:$imm);
+                       AnyTypeOf<[I<21>, LabelType]>:$imm);
 
   let assemblyFormat = "$rd `,` $imm `:` type($imm) attr-dict";
   let isaBinaryFormat =
@@ -146,7 +146,7 @@ class InstFormatIAOpBase<string mnemonic, string opcode7, string funct3>
 
   let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
                        Arg<IntegerRegisterType, "", [SourceReg]>:$rs,
-                       ImmediateOfWidth<12>:$imm);
+                       I<12>:$imm);
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
 
@@ -161,7 +161,7 @@ class InstFormatShiftOpBase<string mnemonic, string opcode7,
 
   let arguments = (ins Arg<IntegerRegisterType, "", [DestReg]>:$rd,
                        Arg<IntegerRegisterType, "", [SourceReg]>:$rs,
-                       ImmediateOfWidth<5>:$imm);
+                       I<5>:$imm);
 
   let assemblyFormat = "$rd `,` $rs `,` $imm attr-dict";
   let isaBinaryFormat = funct7 # " $imm $rs " # funct3 # " $rd " # opcode7;

@@ -78,7 +78,7 @@ def Test3_ReadWriteRegOp : TestOp<"read_write_reg"> {
 // CHECK-EMPTY:
 
 def Test4_ImmediateOp : TestOp<"immediate"> {
-  let arguments = (ins ImmediateOfWidth<12>:$imm);
+  let arguments = (ins I<12>:$imm);
 }
 // CHECK-NEXT: @instruction(return_val_func=mock_return_val_func,
 // CHECK-NEXT:              args=[(ImmediateType(12), SideEffect.READ)],
@@ -128,7 +128,7 @@ def Test8_NoDecoratorOp : TestOp<"no_decorator"> {
 
 def Test9_UnionWithRegisterOp : TestOp<"union_with_register"> {
   let arguments = (ins Arg<TestRegType, "", [DestReg]>:$rd,
-                       AnyTypeOf<[TestRegType, ImmediateOfWidth<12>]>:$src);
+                       AnyTypeOf<[TestRegType, I<12>]>:$src);
 }
 // CHECK-NEXT: @instruction(return_val_func=mock_return_val_func,
 // CHECK-NEXT:              args=[(TestRegType(), SideEffect.WRITE), (TestRegType(), SideEffect.READ_WRITE)],
@@ -172,7 +172,7 @@ def Test10_MultiRegisterUnionOp : TestOp<"multi_register_union"> {
 // CHECK-EMPTY:
 
 def Test11_TwoUnionArgsOp : TestOp<"two_union_args"> {
-  let arguments = (ins Arg<AnyTypeOf<[TestRegType, ImmediateOfWidth<12>]>, "", [DestReg]>:$dst,
+  let arguments = (ins Arg<AnyTypeOf<[TestRegType, I<12>]>, "", [DestReg]>:$dst,
                        AnyTypeOf<[TestRegType, TestFloatRegType]>:$src);
 }
 // CHECK-NEXT: @instruction(return_val_func=mock_return_val_func,

@@ -145,21 +145,6 @@ def TupleAttr : RTGAttrDef<"Tuple", [
 class RTGISAAttrDef<string name, list<Trait> traits = []> 
   : RTGAttrDef<name, traits> { let mnemonic = "isa." # !tolower(name); }
 
-def ImmediateAttr : RTGISAAttrDef<"Immediate", [
-  DeclareAttrInterfaceMethods<TypedAttrInterface>,
-]> {
-  let summary = "an ISA immediate value";
-  let description = [{
-    This represents an ISA immediate of arbitrary but fixed bit-width. The type
-    of this attribute must always be an `ImmediateType` of matching bit-width.
-  }];
-
-  let parameters = (ins "llvm::APInt":$value);
-
-  let hasCustomAssemblyFormat = true;
-  let genStorageClass = false;
-}
-
 def VirtualRegisterConfigAttr : RTGISAAttrDef<"VirtualRegisterConfig", [
   DeclareAttrInterfaceMethods<TypedAttrInterface>,
 ]> {

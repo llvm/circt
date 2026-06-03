@@ -212,20 +212,6 @@ with Context() as ctx, Location.unknown():
   # CHECK: #rtg.any_context : !rtgtest.cpu
   print(attr)
 
-  immediate_type = rtg.ImmediateType.get(32)
-  # CHECK: width=32
-  print(f"width={immediate_type.width}")
-  # CHECK: !rtg.isa.immediate<32>
-  print(immediate_type)
-
-  immediate_attr = rtg.ImmediateAttr.get(32, 42)
-  # CHECK: width=32
-  print(f"width={immediate_attr.width}")
-  # CHECK: value=42
-  print(f"value={immediate_attr.value}")
-  # CHECK: #rtg.isa.immediate<32, 42>
-  print(immediate_attr)
-
   memory_block_type = rtg.MemoryBlockType.get(32)
   # CHECK: width=32
   print(f"width={memory_block_type.address_width}")

@@ -1,6 +1,6 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=mlir | FileCheck %s
 
-from pyrtg import test, sequence, Integer, IntegerType, Array, Bool, If, Else, EndIf, For, Foreach, config, Config, Param
+from pyrtg import test, sequence, Integer, IntegerType, Immediate, Array, If, Else, EndIf, For, Foreach, config, Config, Param
 
 
 @sequence([IntegerType()])
@@ -13,8 +13,8 @@ class Config0(Config):
 
   a = Param(loader=lambda: Integer(0))
   b = Param(loader=lambda: Integer(1))
-  cond = Param(loader=lambda: Bool(True))
-  cond2 = Param(loader=lambda: Bool(False))
+  cond = Param(loader=lambda: Immediate(1, 1))
+  cond2 = Param(loader=lambda: Immediate(1, 0))
 
 
 # CHECK-LABEL: rtg.test @test0_if_nested

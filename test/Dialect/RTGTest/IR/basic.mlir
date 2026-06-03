@@ -88,8 +88,8 @@ rtg.test @registers(reg = %reg: !rtgtest.ireg) {
 }
 
 // CHECK-LABEL: @instructions
-// CHECK-SAME: (imm = [[IMM:%.+]]: !rtg.isa.immediate<12>, imm13 = [[IMM13:%.+]]: !rtg.isa.immediate<13>, imm21 = [[IMM21:%.+]]: !rtg.isa.immediate<21>, imm32 = [[IMM32:%.+]]: !rtg.isa.immediate<32>, imm5 = [[IMM5:%.+]]: !rtg.isa.immediate<5>, label = [[LABEL:%.+]]: !rtg.isa.label, rd = [[RD:%.+]]: !rtgtest.ireg, rs = [[RS:%.+]]: !rtgtest.ireg)
-rtg.test @instructions(imm = %imm: !rtg.isa.immediate<12>, imm13 = %imm13: !rtg.isa.immediate<13>, imm21 = %imm21: !rtg.isa.immediate<21>, imm32 = %imm32: !rtg.isa.immediate<32>, imm5 = %imm5: !rtg.isa.immediate<5>, label = %label: !rtg.isa.label, rd = %rd: !rtgtest.ireg, rs = %rs: !rtgtest.ireg) {
+// CHECK-SAME: (imm = [[IMM:%.+]]: i12, imm13 = [[IMM13:%.+]]: i13, imm21 = [[IMM21:%.+]]: i21, imm32 = [[IMM32:%.+]]: i32, imm5 = [[IMM5:%.+]]: i5, label = [[LABEL:%.+]]: !rtg.isa.label, rd = [[RD:%.+]]: !rtgtest.ireg, rs = [[RS:%.+]]: !rtgtest.ireg)
+rtg.test @instructions(imm = %imm: i12, imm13 = %imm13: i13, imm21 = %imm21: i21, imm32 = %imm32: i32, imm5 = %imm5: i5, label = %label: !rtg.isa.label, rd = %rd: !rtgtest.ireg, rs = %rs: !rtgtest.ireg) {
   // CHECK: rtgtest.jalr [[RD]], [[RS]], [[IMM]]
   rtgtest.jalr %rd, %rs, %imm
   // CHECK: rtgtest.lb [[RD]], [[RS]], [[IMM]]
@@ -106,18 +106,18 @@ rtg.test @instructions(imm = %imm: !rtg.isa.immediate<12>, imm13 = %imm13: !rtg.
   rtgtest.ecall
   // CHECK: rtgtest.ebreak
   rtgtest.ebreak
-  // CHECK: rtgtest.beq [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
-  rtgtest.beq %rd, %rs, %imm13 : !rtg.isa.immediate<13>
-  // CHECK: rtgtest.bne [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
-  rtgtest.bne %rd, %rs, %imm13 : !rtg.isa.immediate<13>
-  // CHECK: rtgtest.blt [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
-  rtgtest.blt %rd, %rs, %imm13 : !rtg.isa.immediate<13>
-  // CHECK: rtgtest.bge [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
-  rtgtest.bge %rd, %rs, %imm13 : !rtg.isa.immediate<13>
-  // CHECK: rtgtest.bltu [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
-  rtgtest.bltu %rd, %rs, %imm13 : !rtg.isa.immediate<13>
-  // CHECK: rtgtest.bgeu [[RD]], [[RS]], [[IMM13]] : !rtg.isa.immediate<13>
-  rtgtest.bgeu %rd, %rs, %imm13 : !rtg.isa.immediate<13>
+  // CHECK: rtgtest.beq [[RD]], [[RS]], [[IMM13]] : i13
+  rtgtest.beq %rd, %rs, %imm13 : i13
+  // CHECK: rtgtest.bne [[RD]], [[RS]], [[IMM13]] : i13
+  rtgtest.bne %rd, %rs, %imm13 : i13
+  // CHECK: rtgtest.blt [[RD]], [[RS]], [[IMM13]] : i13
+  rtgtest.blt %rd, %rs, %imm13 : i13
+  // CHECK: rtgtest.bge [[RD]], [[RS]], [[IMM13]] : i13
+  rtgtest.bge %rd, %rs, %imm13 : i13
+  // CHECK: rtgtest.bltu [[RD]], [[RS]], [[IMM13]] : i13
+  rtgtest.bltu %rd, %rs, %imm13 : i13
+  // CHECK: rtgtest.bgeu [[RD]], [[RS]], [[IMM13]] : i13
+  rtgtest.bgeu %rd, %rs, %imm13 : i13
   // CHECK: rtgtest.beq [[RD]], [[RS]], [[LABEL]] : !rtg.isa.label
   rtgtest.beq %rd, %rs, %label : !rtg.isa.label
   // CHECK: rtgtest.bne [[RD]], [[RS]], [[LABEL]] : !rtg.isa.label
@@ -159,12 +159,12 @@ rtg.test @instructions(imm = %imm: !rtg.isa.immediate<12>, imm13 = %imm13: !rtg.
   // CHECK: rtgtest.sw [[RD]], [[RS]], [[IMM]] {rtg.some_attr}
   rtgtest.sw %rd, %rs, %imm {rtg.some_attr}
 
-  // CHECK: rtgtest.lui [[RD]], [[IMM32]] : !rtg.isa.immediate<32> {rtg.some_attr}
-  rtgtest.lui %rd, %imm32 : !rtg.isa.immediate<32> {rtg.some_attr}
-  // CHECK: rtgtest.auipc [[RD]], [[IMM32]] : !rtg.isa.immediate<32> {rtg.some_attr}
-  rtgtest.auipc %rd, %imm32 : !rtg.isa.immediate<32> {rtg.some_attr}
-  // CHECK: rtgtest.jal [[RD]], [[IMM21]] : !rtg.isa.immediate<21> {rtg.some_attr}
-  rtgtest.jal %rd, %imm21 : !rtg.isa.immediate<21> {rtg.some_attr}
+  // CHECK: rtgtest.lui [[RD]], [[IMM32]] : i32 {rtg.some_attr}
+  rtgtest.lui %rd, %imm32 : i32 {rtg.some_attr}
+  // CHECK: rtgtest.auipc [[RD]], [[IMM32]] : i32 {rtg.some_attr}
+  rtgtest.auipc %rd, %imm32 : i32 {rtg.some_attr}
+  // CHECK: rtgtest.jal [[RD]], [[IMM21]] : i21 {rtg.some_attr}
+  rtgtest.jal %rd, %imm21 : i21 {rtg.some_attr}
 
   // CHECK: rtgtest.lui [[RD]], [[LABEL]] : !rtg.isa.label {rtg.some_attr}
   rtgtest.lui %rd, %label : !rtg.isa.label {rtg.some_attr}
