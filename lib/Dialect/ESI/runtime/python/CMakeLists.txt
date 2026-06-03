@@ -167,7 +167,7 @@ if(Python3_FOUND)
 
     # Custom target for the Python runtime just aggregates the python sources
     # and nanobind module.
-    add_custom_target(ESIPythonRuntime
+    add_custom_target(ESIPythonRuntime ALL
       DEPENDS
         ${ESIPythonRuntimeSources}
         esiCppAccel

@@ -484,18 +484,19 @@ void NPNClass::getInputPermutation(
   assert(equivalentOtherThanPermutation(targetNPN) &&
          "NPN classes must be equivalent for input mapping");
 
-  // Create inverse permutation for this NPN class
-  auto thisInverse = invertPermutation(inputPermutation);
+  auto targetInverse = invertPermutation(targetNPN.inputPermutation);
 
   // For each input position in the target NPN class, find the corresponding
   // input position in this NPN class
+  permutation.clear();
   permutation.reserve(targetNPN.inputPermutation.size());
-  for (unsigned i = 0; i < targetNPN.inputPermutation.size(); ++i) {
-    // Target input i maps to canonical position targetNPN.inputPermutation[i]
-    // We need the input in this NPN class that maps to the same canonical
-    // position
-    unsigned canonicalPos = targetNPN.inputPermutation[i];
-    permutation.push_back(thisInverse[canonicalPos]);
+  for (unsigned targetInput = 0;
+       targetInput < targetNPN.inputPermutation.size(); ++targetInput) {
+    // `inputPermutation[canonicalPos]` is the original input at that canonical
+    // position. Find the canonical position of the target input and return the
+    // input in this NPN class at the same canonical position.
+    unsigned canonicalPos = targetInverse[targetInput];
+    permutation.push_back(inputPermutation[canonicalPos]);
   }
 }
 

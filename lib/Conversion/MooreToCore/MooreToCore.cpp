@@ -3022,6 +3022,19 @@ struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   }
 };
 
+struct FDisplayBIOpConversion : public OpConversionPattern<FDisplayBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(FDisplayBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto stream = sim::SVChannelToOutputStreamOp::create(rewriter, op.getLoc(),
+                                                         adaptor.getFd());
+    rewriter.replaceOpWithNewOp<sim::PrintFormattedProcOp>(
+        op, adaptor.getMessage(), stream.getStream());
+    return success();
+  }
+};
+
 struct FOpenBIOpConversion : public OpConversionPattern<FOpenBIOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -3062,6 +3075,23 @@ struct FCloseBIOpConversion : public OpConversionPattern<FCloseBIOp> {
   matchAndRewrite(FCloseBIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<sim::SVFCloseOp>(op, adaptor.getFd());
+    return success();
+  }
+};
+
+struct FFlushBIOpConversion : public OpConversionPattern<FFlushBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FFlushBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!adaptor.getFd()) {
+      rewriter.replaceOpWithNewOp<sim::SVFFlushAllOp>(op);
+    } else {
+      auto stream = sim::SVChannelToOutputStreamOp::create(
+          rewriter, op.getLoc(), adaptor.getFd());
+      rewriter.replaceOpWithNewOp<sim::FlushOp>(op, stream);
+    }
     return success();
   }
 };
@@ -3644,10 +3674,12 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatIntOpConversion,
     FormatRealOpConversion,
     DisplayBIOpConversion,
+    FDisplayBIOpConversion,
 
     // File I/O operations
     FOpenBIOpConversion,
     FCloseBIOpConversion,
+    FFlushBIOpConversion,
 
     // Dynamic string operations
     StringLenOpConversion,

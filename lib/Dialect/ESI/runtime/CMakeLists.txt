@@ -113,7 +113,7 @@ endif()
 ##===----------------------------------------------------------------------===//
 ## Overall target to build everything.
 ##===----------------------------------------------------------------------===//
-add_custom_target(ESIRuntime)
+add_custom_target(ESIRuntime ALL)
 
 ##===----------------------------------------------------------------------===//
 ## Core ESI runtime.
@@ -137,6 +137,7 @@ set(ESICppRuntimeSources
 set(ESICppRuntimeHeaders
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Utils.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Accelerator.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/BitAccess.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/CLI.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Common.h
   ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include/esi/Context.h

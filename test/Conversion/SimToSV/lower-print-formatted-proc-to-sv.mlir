@@ -121,6 +121,10 @@ hw.module @print_to_stdout_and_stderr(in %clk : i1) {
     sim.proc.print %lit to %stdout
     // CHECK-NEXT: sv.fwrite %[[STDERR]], "literal"
     sim.proc.print %lit to %stderr
+    // CHECK-NEXT: sv.fflush fd %[[STDOUT]]
+    sim.flush %stdout
+    // CHECK-NEXT: sv.fflush fd %[[STDERR]]
+    sim.flush %stderr
   }
 }
 
@@ -143,6 +147,8 @@ hw.module @print_to_file(in %clk : i1, in %idx : i8) {
     // CHECK-NEXT: %[[FD:.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[FILENAME]]) : (!hw.string) -> i32
     // CHECK-NEXT: sv.fwrite %[[FD]], "value=%02x"(%[[IDX]]) : i8
     sim.proc.print %msg to %file
+    // CHECK-NEXT: sv.fflush fd %[[FD]]
+    sim.flush %file
   }
 }
 
@@ -157,6 +163,8 @@ hw.module @print_to_literal_file(in %clk : i1) {
     // CHECK-NEXT: %[[FD:.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"(%[[FILENAME]]) : (!hw.string) -> i32
     // CHECK-NEXT: sv.fwrite %[[FD]], "value"
     sim.proc.print %msg to %file
+    // CHECK-NEXT: sv.fflush fd %[[FD]]
+    sim.flush %file
   }
 }
 
@@ -179,6 +187,8 @@ hw.module @print_to_file_under_condition(in %clk : i1, in %idx : i8, in %en : i1
       // CHECK-NEXT: scf.if %[[EN]] {
       // CHECK-NEXT:   sv.fwrite %[[FD]], "enabled"
       sim.proc.print %msg to %file
+      // CHECK-NEXT:   sv.fflush fd %[[FD]]
+      sim.flush %file
     }
   }
 }

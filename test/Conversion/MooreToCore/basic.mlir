@@ -1896,9 +1896,34 @@ func.func @FClose(%arg0: !moore.i32) {
   return
 }
 
+// CHECK-LABEL: func.func @FDisplay
+func.func @FDisplay(%arg0: !moore.i32) {
+  // CHECK: [[MSG:%.+]] = sim.fmt.literal "hello"
+  %msg = moore.fmt.literal "hello"
+  // CHECK: [[STREAM:%.+]] = sim.sv.channel_to_output_stream %arg0
+  // CHECK: sim.proc.print [[MSG]] to [[STREAM]]
+  moore.builtin.fdisplay %arg0, %msg
+  return
+}
+
 // CHECK-LABEL: hw.module @MooreTypedArithSelect
 moore.module @MooreTypedArithSelect(in %s: i1, in %a: !moore.i8, in %b: !moore.i8, out o: !moore.i8) {
   // CHECK-NOT: !moore.i8
   %sel = arith.select %s, %a, %b : !moore.i8
   moore.output %sel : !moore.i8
+}
+
+// CHECK-LABEL: func.func @FFlushNoArg
+func.func @FFlushNoArg() {
+  // CHECK: sim.sv.fflush_all
+  moore.builtin.fflush
+  return
+}
+
+// CHECK-LABEL: func.func @FFlushWithArg
+func.func @FFlushWithArg(%arg0: !moore.i32) {
+  // CHECK: [[STREAM:%.+]] = sim.sv.channel_to_output_stream %arg0
+  // CHECK-NEXT: sim.flush [[STREAM]]
+  moore.builtin.fflush %arg0
+  return
 }

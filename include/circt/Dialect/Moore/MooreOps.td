@@ -3117,6 +3117,35 @@ def FCloseBIOp : Builtin<"fclose"> {
   let assemblyFormat = "$fd attr-dict";
 }
 
+def FFlushBIOp : Builtin<"fflush"> {
+  let summary = "Flush a descriptor's output buffer";
+  let description = [{
+    Flushes the output buffer of the specified file(s).
+    This corresponds to the `$fflush` system task. If a file descriptor is provided,
+    writes any buffered output to the file associated with that descriptor.
+    If the descriptor is a multi-channel descriptor, all associated files are flushed.
+    If invoked with no arguments, flushes all open files.
+
+    See IEEE 1800-2017 § 21.3.6 "Flushing output".
+  }];
+  let arguments = (ins Optional<TwoValuedI32>:$fd);
+  let results = (outs);
+  let assemblyFormat = "($fd^)? attr-dict";
+}
+
+def FDisplayBIOp : Builtin<"fdisplay"> {
+  let summary = "Print a text message to a file";
+  let description = [{
+    Prints the given format string to the file corresponding to the given
+    descriptor. This corresponds to the `$fdisplay` and `$fwrite` system tasks.
+    Message formatting is handled by `moore.fmt.*` ops.
+
+    See IEEE 1800-2017 § 21.3.2 "File output system tasks".
+  }];
+  let arguments = (ins TwoValuedI32:$fd, FormatStringType:$message);
+  let assemblyFormat = "$fd `,` $message attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Math Builtins
 //===----------------------------------------------------------------------===//

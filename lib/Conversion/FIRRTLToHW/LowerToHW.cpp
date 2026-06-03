@@ -2929,9 +2929,8 @@ FIRRTLLowering::lowerSimFormatString(StringRef originalFormatString,
                 return success();
               })
               .template Case<TimeOp>([&](auto) {
-                emitError(builder.getLoc(), "lower-to-core does not support "
-                                            "{{SimulationTime}} in printf");
-                return failure();
+                fragments.push_back(sim::FormatCurrentTimeOp::create(builder));
+                return success();
               })
               .Default([&](auto) {
                 emitError(builder.getLoc(), "has a substitution with "
@@ -5455,15 +5454,36 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
   if (failed(formatString))
     return failure();
 
+  auto stderrOp = sim::StderrStreamOp::create(builder);
   sim::TriggeredOp::create(builder, clock, cond, [&] {
-    sim::PrintFormattedProcOp::create(builder, *formatString);
+    sim::PrintFormattedProcOp::create(builder, *formatString, stderrOp);
   });
   return success();
 }
 
 LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
-  if (circuitState.lowerToCore)
-    return op.emitOpError("lower-to-core does not support firrtl.fprintf yet");
+  if (circuitState.lowerToCore) {
+    auto clock = getLoweredValue(op.getClock());
+    auto cond = getLoweredValue(op.getCond());
+    if (!clock || !cond)
+      return failure();
+
+    auto fileFormatString = lowerSimFormatString(
+        op.getOutputFileAttr(), op.getOutputFileSubstitutions());
+    if (failed(fileFormatString))
+      return failure();
+
+    auto formatString =
+        lowerSimFormatString(op.getFormatString(), op.getSubstitutions());
+    if (failed(formatString))
+      return failure();
+
+    sim::TriggeredOp::create(builder, clock, cond, [&] {
+      auto fileOp = sim::GetFileOp::create(builder, *fileFormatString);
+      sim::PrintFormattedProcOp::create(builder, *formatString, fileOp);
+    });
+    return success();
+  }
 
   StringAttr outputFileAttr;
   if (failed(resolveFormatString(op.getLoc(), op.getOutputFileAttr(),

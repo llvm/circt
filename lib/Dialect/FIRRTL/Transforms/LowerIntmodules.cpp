@@ -56,6 +56,85 @@ static LogicalResult checkInstForAnnotations(FInstanceLike inst,
   return success();
 }
 
+static Value replaceResultWithWire(ImplicitLocOpBuilder &builder, Value result,
+                                   ValueRange domains = {}) {
+  auto wire = WireOp::create(builder, result.getType(), /*name=*/StringRef{},
+                             NameKindEnum::DroppableName,
+                             /*annotations=*/ArrayRef<Attribute>{},
+                             /*innerSym=*/StringAttr{},
+                             /*forceable=*/false, domains)
+                  .getResult();
+  result.replaceAllUsesWith(wire);
+  return wire;
+}
+
+static LogicalResult swapEICGEnableInputs(FExtModuleOp op, InstanceOp inst,
+                                          SmallVectorImpl<Value> &inputs) {
+  if (inputs.size() <= 2)
+    return success();
+
+  auto port1 = inst.getPortName(1);
+  auto port2 = inst.getPortName(2);
+  if (port1 != "test_en")
+    return mlir::emitError(op.getPortLocation(1),
+                           "expected port named 'test_en'");
+  if (port2 != "en")
+    return mlir::emitError(op.getPortLocation(2), "expected port named 'en'");
+  std::swap(inputs[1], inputs[2]);
+  return success();
+}
+
+static LogicalResult lowerLegacyEICGWrapperInstance(FExtModuleOp op,
+                                                    InstanceOp inst) {
+  ImplicitLocOpBuilder builder(op.getLoc(), inst);
+
+  SmallVector<Value> inputs;
+  for (auto result : inst.getResults().drop_back())
+    inputs.push_back(replaceResultWithWire(builder, result));
+
+  // en and test_en are swapped between extmodule and intrinsic.
+  if (failed(swapEICGEnableInputs(op, inst, inputs)))
+    return failure();
+
+  auto intop = GenericIntrinsicOp::create(builder, builder.getType<ClockType>(),
+                                          "circt_clock_gate", inputs,
+                                          op.getParameters());
+  inst.getResults().back().replaceAllUsesWith(intop.getResult());
+  return success();
+}
+
+static LogicalResult lowerDomainEICGWrapperInstance(FExtModuleOp op,
+                                                    InstanceOp inst) {
+  ImplicitLocOpBuilder builder(op.getLoc(), inst);
+
+  auto numPorts = op.getNumPorts();
+  unsigned numDataInputs = numPorts - 3;
+  unsigned outIdx = numDataInputs;
+
+  // Domain ports are emitted first so that data wires can refer to them in
+  // their `domains [...]` operand list.
+  auto domA = replaceResultWithWire(builder, inst.getResult(numPorts - 2));
+  auto domB = replaceResultWithWire(builder, inst.getResult(numPorts - 1));
+
+  SmallVector<Value> inputs;
+  for (unsigned i = 0; i != numDataInputs; ++i)
+    inputs.push_back(replaceResultWithWire(builder, inst.getResult(i), {domA}));
+  auto out = replaceResultWithWire(builder, inst.getResult(outIdx), {domB});
+
+  // en and test_en are swapped between extmodule and intrinsic.
+  if (failed(swapEICGEnableInputs(op, inst, inputs)))
+    return failure();
+
+  auto intop = GenericIntrinsicOp::create(builder, builder.getType<ClockType>(),
+                                          "circt_clock_gate", inputs,
+                                          op.getParameters());
+  auto cast = UnsafeDomainCastOp::create(builder, out.getType(),
+                                         intop.getResult(), ValueRange{domB})
+                  .getResult();
+  MatchingConnectOp::create(builder, out, cast);
+  return success();
+}
+
 // This is the main entrypoint for the conversion pass.
 void LowerIntmodulesPass::runOnOperation() {
   auto &ig = getAnalysis<InstanceGraph>();
@@ -154,6 +233,9 @@ void LowerIntmodulesPass::runOnOperation() {
   }
 
   // Special handling for magic EICG wrapper extmodule.  Deprecate and remove.
+  //
+  // This supports both a domain-less form and a form with domains.  Both are
+  // rigid in their structure and expect an exact port order.
   if (fixupEICGWrapper) {
     constexpr StringRef eicgName = "EICG_wrapper";
     for (auto op :
@@ -174,6 +256,15 @@ void LowerIntmodulesPass::runOnOperation() {
       if (failed(checkModForAnnotations(op, eicgName)))
         return signalPassFailure();
 
+      // Detect the optional domain-port form.  When present, the wrapper has
+      // exactly two trailing domain input ports (A, B) and every preceding
+      // port has its `domains [...]` association resolved by them: data
+      // inputs bind to A, the output binds to B.  Without this, the layout is
+      // the legacy `[in, test_en?, en, out]`.
+      auto numPorts = op.getNumPorts();
+      bool hasDomainPorts =
+          numPorts >= 2 && isa<DomainType>(op.getPortType(numPorts - 1));
+
       auto *node = ig.lookup(op);
       changed = true;
       for (auto *use : llvm::make_early_inc_range(node->uses())) {
@@ -187,34 +278,9 @@ void LowerIntmodulesPass::runOnOperation() {
         if (failed(checkInstForAnnotations(inst, eicgName)))
           return signalPassFailure();
 
-        ImplicitLocOpBuilder builder(op.getLoc(), inst);
-        auto replaceResults = [](OpBuilder &b, auto &&range) {
-          return llvm::map_to_vector(range, [&b](auto v) {
-            auto w = WireOp::create(b, v.getLoc(), v.getType()).getResult();
-            v.replaceAllUsesWith(w);
-            return w;
-          });
-        };
-
-        auto inputs = replaceResults(builder, inst.getResults().drop_back());
-        // en and test_en are swapped between extmodule and intrinsic.
-        if (inputs.size() > 2) {
-          auto port1 = inst.getPortName(1);
-          auto port2 = inst.getPortName(2);
-          if (port1 != "test_en") {
-            mlir::emitError(op.getPortLocation(1),
-                            "expected port named 'test_en'");
-            return signalPassFailure();
-          } else if (port2 != "en") {
-            mlir::emitError(op.getPortLocation(2), "expected port named 'en'");
-            return signalPassFailure();
-          } else
-            std::swap(inputs[1], inputs[2]);
-        }
-        auto intop = GenericIntrinsicOp::create(
-            builder, builder.getType<ClockType>(), "circt_clock_gate", inputs,
-            op.getParameters());
-        inst.getResults().back().replaceAllUsesWith(intop.getResult());
+        if (failed(hasDomainPorts ? lowerDomainEICGWrapperInstance(op, inst)
+                                  : lowerLegacyEICGWrapperInstance(op, inst)))
+          return signalPassFailure();
 
         // Remove instance from IR and instance graph.
         use->erase();

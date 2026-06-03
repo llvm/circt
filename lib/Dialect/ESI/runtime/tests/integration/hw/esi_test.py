@@ -1,9 +1,6 @@
-# REQUIRES: esi-runtime, esi-cosim, rtl-sim
-# RUN: rm -rf %t
-# RUN: mkdir %t && cd %t
-# RUN: %PYTHON% %s %t 2>&1
-# RUN: esi-cosim.py --source %t -- %PYTHON% %S/test_software/esi_test.py cosim env
-# RUN: ESI_COSIM_MANIFEST_MMIO=1 esi-cosim.py --source %t -- %PYTHON% %S/test_software/esi_test.py cosim env
+#  Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+#  See https://llvm.org/LICENSE.txt for license information.
+#  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 import pycde
 from pycde import (AppID, Clock, Module, Reset, modparams, generator)

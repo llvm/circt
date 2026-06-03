@@ -2508,6 +2508,19 @@ firrtl.module @MuxCanon(in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>, in %d1
   // CHECK: firrtl.cat %[[mux2]], %d2
 }
 
+// See: https://github.com/llvm/circt/issues/10528
+// CHECK-LABEL: firrtl.module @MuxCanon10528
+firrtl.module @MuxCanon10528(in %cond: !firrtl.uint<1>, out %out: !firrtl.clock) {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %clk = firrtl.asClock %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
+  %n0 = firrtl.node %clk : !firrtl.clock
+  %n1 = firrtl.node %clk {name = "n1"} : !firrtl.clock
+  %0 = firrtl.mux(%cond, %n0, %n1) : (!firrtl.uint<1>, !firrtl.clock, !firrtl.clock) -> !firrtl.clock
+  firrtl.matchingconnect %out, %0 : !firrtl.clock
+  // CHECK: %[[CLK:.+]] = firrtl.specialconstant 0 : !firrtl.clock
+  // CHECK: firrtl.matchingconnect %out, %[[CLK]]
+}
+
 // CHECK-LABEL: firrtl.module @MuxShorten
 firrtl.module @MuxShorten(
   in %c1: !firrtl.uint<1>, in %c2: !firrtl.uint<1>,

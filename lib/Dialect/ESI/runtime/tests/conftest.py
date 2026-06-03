@@ -14,8 +14,10 @@ def _looks_like_runtime_root(root: Path) -> bool:
       root / "cmake" / "esiaccelConfig.cmake",
       root / "cpp" / "cmake" / "esiaccelConfig.cmake",
       root / "cpp" / "include" / "esi" / "Accelerator.h",
+      root / "include" / "esi" / "Accelerator.h",
       root / "lib" / "libESICppRuntime.so",
       root / "lib" / "libESICppRuntime.dylib",
+      root / "ESICppRuntime.dll",
       root / "tests" / "cpp",
       root / "bin",
   ]
@@ -31,10 +33,14 @@ def get_runtime_root() -> Path:
   # Keep the unresolved build-tree path first. The integrated CIRCT build uses
   # symlinks back into the source tree for Python sources, and resolve() would
   # otherwise discard the build location where the runtime libraries live.
+  # Wheel installs (e.g. ``site-packages/esiaccel/``) put cmake configs,
+  # headers and DLLs directly in the package directory, so probe that first.
   package_file = Path(esiaccel.__file__)
   candidates = [
+      package_file.parent,
       package_file.parent.parent,
       package_file.parent.parent.parent,
+      package_file.resolve().parent,
       package_file.resolve().parent.parent,
       package_file.resolve().parent.parent.parent,
   ]

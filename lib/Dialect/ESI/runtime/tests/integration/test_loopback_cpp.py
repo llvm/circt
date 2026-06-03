@@ -4,10 +4,14 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+
+# The Trace backend uses ';' as the connection-string separator on Windows.
+_TRACE_SEP = ";" if os.name == "nt" else ":"
 
 import pytest
 
@@ -46,6 +50,7 @@ def _build_loopback_codegen(tmp_path: Path, host: str, port: int) -> Path:
   codegen path.
   """
   require_tool("cmake")
+  require_tool("ninja")
 
   runtime_root = get_runtime_root()
 
@@ -86,10 +91,13 @@ def _build_loopback_codegen(tmp_path: Path, host: str, port: int) -> Path:
   result = subprocess.run(
       [
           "cmake",
+          "-G",
+          "Ninja",
           "-S",
           str(SW_DIR),
           "-B",
           str(build_dir),
+          "-DCMAKE_BUILD_TYPE=Release",
           f"-DLOOPBACK_GENERATED_DIR={include_dir}",
           f"-DESI_RUNTIME_ROOT={runtime_root}",
       ],
@@ -102,8 +110,10 @@ def _build_loopback_codegen(tmp_path: Path, host: str, port: int) -> Path:
       f"--- stderr ---\n{result.stderr}")
 
   result = subprocess.run(
-      ["cmake", "--build",
-       str(build_dir), "--target", "loopback_test"],
+      [
+          "cmake", "--build",
+          str(build_dir), "--target", "loopback_test", "--config", "Release"
+      ],
       capture_output=True,
       text=True,
   )
@@ -139,7 +149,7 @@ class TestLoopback:
     manifest = sources_dir / "esi_system_manifest.json"
     assert manifest.exists(), "Manifest not found"
     result = subprocess.run(
-        ["esiquery", "trace", f"w:{manifest}", "info"],
+        ["esiquery", "trace", f"w{_TRACE_SEP}{manifest}", "info"],
         check=True,
         capture_output=True,
         text=True,
@@ -162,7 +172,7 @@ class TestLoopback:
     manifest = sources_dir / "esi_system_manifest.json"
     assert manifest.exists(), "Manifest not found"
     result = subprocess.run(
-        ["esiquery", "trace", f"w:{manifest}", "hier"],
+        ["esiquery", "trace", f"w{_TRACE_SEP}{manifest}", "hier"],
         check=True,
         capture_output=True,
         text=True,

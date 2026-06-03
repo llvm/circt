@@ -996,8 +996,8 @@ circt::om::Evaluator::evaluateObjectInstance(ObjectOp op,
       createParametersFromOperands(op.getOperands(), actualParams, loc);
   if (failed(params))
     return failure();
-  return evaluateObjectInstance(op.getClassNameAttr(), params.value(), loc,
-                                {op, actualParams});
+  return evaluateObjectInstance(op.getClassNameAttr().getAttr(), params.value(),
+                                loc, {op, actualParams});
 }
 
 FailureOr<evaluator::EvaluatorValuePtr>
@@ -1011,7 +1011,8 @@ circt::om::Evaluator::evaluateElaboratedObject(ElaboratedObjectOp op,
   if (object->isFullyEvaluated())
     return objectValue;
 
-  auto classLike = symbolTable.lookup<ClassLike>(op.getClassNameAttr());
+  auto classLike =
+      symbolTable.lookup<ClassLike>(op.getClassNameAttr().getAttr());
   if (!classLike)
     return symbolTable.getOp()->emitError("unknown class name ")
            << op.getClassNameAttr();

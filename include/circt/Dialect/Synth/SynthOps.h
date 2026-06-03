@@ -150,6 +150,13 @@ inline llvm::KnownBits invertBooleanLogic(llvm::KnownBits value) {
   return value;
 }
 
+inline llvm::KnownBits applyInputInversion(llvm::KnownBits value,
+                                           bool inverted) {
+  if (inverted)
+    std::swap(value.Zero, value.One);
+  return value;
+}
+
 template <typename T>
 T evaluateOneHotLogic(const T &a, const T &b, const T &c) {
   auto allSet = a & b & c;
@@ -159,6 +166,12 @@ T evaluateOneHotLogic(const T &a, const T &b, const T &c) {
 template <typename T>
 T evaluateMuxLogic(const T &a, const T &b, const T &c) {
   return (a & b) | (invertBooleanLogic(a) & c);
+}
+
+template <typename T>
+T evaluateGambleLogic(const T &a, const T &b, const T &c) {
+  auto orSet = a | b | c;
+  return (a & b & c) | invertBooleanLogic(orSet);
 }
 
 } // namespace synth

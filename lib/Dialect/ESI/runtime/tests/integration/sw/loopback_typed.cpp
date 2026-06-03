@@ -57,17 +57,17 @@ static int runStructFunc(Accelerator *accel) {
   func.connect();
 
   esi_system::ArgStruct arg{};
-  arg.a = 0x1234;
-  arg.b = static_cast<int8_t>(-7);
+  arg.a(0x1234);
+  arg.b(static_cast<int8_t>(-7));
 
   esi_system::ResultStruct res = func.call(arg).get();
 
-  int8_t expectedX = static_cast<int8_t>(arg.b + 1);
-  if (res.x != expectedX || res.y != arg.b)
+  int8_t expectedX = static_cast<int8_t>(arg.b() + 1);
+  if (res.x() != expectedX || res.y() != arg.b())
     throw std::runtime_error("Struct func result mismatch");
 
-  std::cout << "struct_func ok: b=" << (int)arg.b << " x=" << (int)res.x
-            << " y=" << (int)res.y << "\n";
+  std::cout << "struct_func ok: b=" << (int)arg.b() << " x=" << (int)res.x()
+            << " y=" << (int)res.y() << "\n";
   return 0;
 }
 
@@ -83,30 +83,31 @@ static int runOddStructFunc(Accelerator *accel) {
   func.connect();
 
   esi_system::OddStruct arg{};
-  arg.a = 0xabc;
-  arg.b = static_cast<int8_t>(-17);
-  arg.inner.p = 5;
-  arg.inner.q = static_cast<int8_t>(-7);
-  arg.inner.r[0] = 3;
-  arg.inner.r[1] = 4;
+  arg.a(0xabc);
+  arg.b(static_cast<int8_t>(-17));
+  auto inner = arg.inner();
+  inner.p(5);
+  inner.q(static_cast<int8_t>(-7));
+  inner.r({3, 4});
+  arg.inner(inner);
 
   esi_system::OddStruct res = func.call(arg).get();
 
-  uint16_t expectA = static_cast<uint16_t>(arg.a + 1);
-  int8_t expectB = static_cast<int8_t>(arg.b - 3);
-  uint8_t expectP = static_cast<uint8_t>(arg.inner.p + 5);
-  int8_t expectQ = static_cast<int8_t>(arg.inner.q + 2);
-  uint8_t expectR0 = static_cast<uint8_t>(arg.inner.r[0] + 1);
-  uint8_t expectR1 = static_cast<uint8_t>(arg.inner.r[1] + 2);
-  if (res.a != expectA || res.b != expectB || res.inner.p != expectP ||
-      res.inner.q != expectQ || res.inner.r[0] != expectR0 ||
-      res.inner.r[1] != expectR1)
+  uint16_t expectA = static_cast<uint16_t>(arg.a() + 1);
+  int8_t expectB = static_cast<int8_t>(arg.b() - 3);
+  uint8_t expectP = static_cast<uint8_t>(arg.inner().p() + 5);
+  int8_t expectQ = static_cast<int8_t>(arg.inner().q() + 2);
+  uint8_t expectR0 = static_cast<uint8_t>(arg.inner().r()[0] + 1);
+  uint8_t expectR1 = static_cast<uint8_t>(arg.inner().r()[1] + 2);
+  if (res.a() != expectA || res.b() != expectB || res.inner().p() != expectP ||
+      res.inner().q() != expectQ || res.inner().r()[0] != expectR0 ||
+      res.inner().r()[1] != expectR1)
     throw std::runtime_error("Odd struct func result mismatch");
 
-  std::cout << "odd_struct_func ok: a=" << res.a << " b=" << (int)res.b
-            << " p=" << (int)res.inner.p << " q=" << (int)res.inner.q
-            << " r0=" << (int)res.inner.r[0] << " r1=" << (int)res.inner.r[1]
-            << "\n";
+  std::cout << "odd_struct_func ok: a=" << res.a() << " b=" << (int)res.b()
+            << " p=" << (int)res.inner().p() << " q=" << (int)res.inner().q()
+            << " r0=" << (int)res.inner().r()[0]
+            << " r1=" << (int)res.inner().r()[1] << "\n";
   return 0;
 }
 
@@ -220,9 +221,9 @@ static int serialCoordTranslateTest(Accelerator *accel) {
     throw std::runtime_error("Serial coord translate result size mismatch");
   size_t i = 0;
   for (const SerialCoordValue &got : result.coords()) {
-    uint32_t expX = coords[i].x + xTrans;
-    uint32_t expY = coords[i].y + yTrans;
-    if (got.x != expX || got.y != expY)
+    uint32_t expX = coords[i].x() + xTrans;
+    uint32_t expY = coords[i].y() + yTrans;
+    if (got.x() != expX || got.y() != expY)
       throw std::runtime_error("Serial coord translate result mismatch");
     ++i;
   }

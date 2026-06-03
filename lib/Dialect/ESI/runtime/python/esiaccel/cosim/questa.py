@@ -75,7 +75,7 @@ class Questa(Simulator):
     cmds.append(f"vopt -incr driver -o driver_opt +acc")
     return cmds
 
-  def compile_commands(self) -> List[List[str]]:
+  def compile_commands(self) -> List[Simulator.CompileStep]:
     with open("compile.do", "w") as f:
       for cmd in self.internal_compile_commands():
         f.write(cmd)
@@ -131,13 +131,29 @@ class Questa(Simulator):
           inner_command: str,
           gui: bool = False,
           server_only: bool = False) -> int:
-    """Override the Simulator.run() to add a soft link in the run directory (to
+    """Override the Simulator.run() to add a link in the run directory (to
     the work directory) before running vsim the usual way."""
 
-    # Create a soft link to the work directory.
+    # Ensure the work library is accessible from run_dir. Compiles run in a
+    # different directory (e.g. a cached class compile) so we need a link/copy
+    # so vsim can find it.
     workDir = self.run_dir / "work"
-    if not workDir.exists():
-      os.symlink(Path(os.getcwd()) / "work", workDir)
+    compiledWork = Path(os.getcwd()) / "work"
+    if not workDir.exists() and compiledWork.exists():
+      if os.name == "nt":
+        # os.symlink requires elevated privileges on Windows; use a junction
+        # (which doesn't need them) so compiled outputs remain shared.
+        import subprocess as _sp
+        _sp.run(
+            ["cmd", "/c", "mklink", "/J",
+             str(workDir),
+             str(compiledWork)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+      else:
+        os.symlink(compiledWork, workDir, target_is_directory=True)
 
     # Run the simulation.
     return super().run(inner_command, gui, server_only=server_only)

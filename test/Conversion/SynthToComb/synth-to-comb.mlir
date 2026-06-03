@@ -74,3 +74,14 @@ hw.module @test_mux_inv(in %c: i8, in %a: i8, in %b: i8, out out0: i8) {
   %0 = synth.mux_inv not %c, %a, not %b : i8
   hw.output %0 : i8
 }
+
+// CHECK-LABEL: @test_gamble
+hw.module @test_gamble(in %a: i8, in %b: i8, in %c: i8, out out0: i8) {
+  // CHECK: %c-1_i8 = hw.constant -1 : i8
+  // CHECK: %[[ALL_SET:.+]] = comb.and bin %a, %b, %c : i8
+  // CHECK: %[[OR_SET:.+]] = comb.or bin %a, %b, %c : i8
+  // CHECK: %[[NONE_SET:.+]] = comb.xor bin %[[OR_SET]], %c-1_i8 : i8
+  // CHECK: %[[RESULT:.+]] = comb.or bin %[[ALL_SET]], %[[NONE_SET]] : i8
+  %0 = synth.gamble %a, %b, %c : i8
+  hw.output %0 : i8
+}

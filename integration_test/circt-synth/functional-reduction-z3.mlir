@@ -138,3 +138,18 @@ hw.module @functional_reduction_mux_inv_sat(in %c: i1, in %a: i1, in %b: i1,
   %4 = synth.aig.and_inv not %3 : i1
   hw.output %0, %4 : i1, i1
 }
+
+// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 test_gamble --c2 test_gamble | FileCheck %s --check-prefix=GAMBLE
+// GAMBLE: c1 == c2
+// CHECK-LABEL: hw.module @test_gamble
+hw.module @test_gamble(in %a: i1, in %b: i1, in %c: i1,
+                       out out0: i1, out out1: i1) {
+  // CHECK: %[[CHOICE:.+]] = synth.choice
+  // CHECK: hw.output %[[CHOICE]], %[[CHOICE]] : i1, i1
+  %allSet = synth.aig.and_inv %a, %b, %c : i1
+  %orVar = comb.or %a, %b, %c : i1
+  %noneSet = synth.aig.and_inv not %orVar : i1
+  %0 = comb.or %allSet, %noneSet : i1
+  %1 = synth.gamble %a, %b, %c : i1
+  hw.output %0, %1 : i1, i1
+}

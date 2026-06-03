@@ -53,7 +53,8 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
 
   LogicalResult matchAndRewrite(ObjectOp objOp,
                                 PatternRewriter &rewriter) const override {
-    auto classLike = symTable.lookup<ClassLike>(objOp.getClassNameAttr());
+    auto classLike =
+        symTable.lookup<ClassLike>(objOp.getClassNameAttr().getAttr());
     assert(classLike);
 
     // External classes cannot be elaborated; replace with unknown values.
@@ -80,6 +81,12 @@ struct ObjectOpInliningPattern : public OpRewritePattern<ObjectOp> {
 
     auto clonedFields = cast<ClassFieldsOp>(clonedBlock->getTerminator());
     SmallVector<Value> fieldValues(clonedFields.getFields());
+    // Propagate the class's per-field locations onto each field value, fused
+    // with the value's existing location.
+    if (auto classOp = dyn_cast<ClassOp>(classLike.getOperation()))
+      for (auto [i, v] : llvm::enumerate(fieldValues))
+        v.setLoc(
+            rewriter.getFusedLoc({classOp.getFieldLocByIndex(i), v.getLoc()}));
 
     // Erase the terminator and inline the body at the object instantiation.
     rewriter.eraseOp(clonedFields);
@@ -111,7 +118,7 @@ struct EvaluateObjectField : OpRewritePattern<ObjectFieldOp> {
       return failure();
 
     auto classLike =
-        symTable.lookup<ClassLike>(elaboratedOp.getClassNameAttr());
+        symTable.lookup<ClassLike>(elaboratedOp.getClassNameAttr().getAttr());
     assert(classLike);
 
     // Find the field index and get the corresponding value.

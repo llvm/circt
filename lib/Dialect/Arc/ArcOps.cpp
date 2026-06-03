@@ -203,11 +203,8 @@ LogicalResult StateOp::verify() {
   if (getLatency() < 1)
     return emitOpError("latency must be a positive integer");
 
-  if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
-    return emitOpError("outside a clock domain requires a clock");
-
-  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
-    return emitOpError("inside a clock domain cannot have a clock");
+  if (!getClock())
+    return emitOpError("requires a clock");
 
   return success();
 }
@@ -286,22 +283,10 @@ LogicalResult MemoryWritePortOp::verify() {
   if (getLatency() < 1)
     return emitOpError("latency must be at least 1");
 
-  if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
-    return emitOpError("outside a clock domain requires a clock");
-
-  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
-    return emitOpError("inside a clock domain cannot have a clock");
+  if (!getClock())
+    return emitOpError("requires a clock");
 
   return success();
-}
-
-//===----------------------------------------------------------------------===//
-// ClockDomainOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult ClockDomainOp::verifyRegions() {
-  return verifyTypeListEquivalence(*this, getBodyBlock().getArgumentTypes(),
-                                   getInputs().getTypes(), "input");
 }
 
 //===----------------------------------------------------------------------===//

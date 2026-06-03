@@ -18,6 +18,15 @@
 namespace circt {
 namespace sv {
 
+/// Selects how `sv-mask-non-synthesizable` hides matched ops from
+/// synthesis-bound SystemVerilog output.
+enum class MaskNonSynthesizableMode {
+  /// Erase the matched ops.
+  Delete,
+  /// Wrap the matched ops in `` `ifndef SYNTHESIS `` ... `` `endif ``.
+  Ifdef,
+};
+
 #define GEN_PASS_DECL
 #include "circt/Dialect/SV/SVPasses.h.inc"
 

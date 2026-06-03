@@ -101,99 +101,99 @@ endmodule
 
 // CHECK-LABEL: moore.module @Basic
 module Basic;
-  // CHECK: %v0 = moore.variable : <l1>
-  // CHECK: %v1 = moore.variable : <i32>
-  // CHECK: [[TMP1:%.+]] = moore.read %v1 :
-  // CHECK: %v2 = moore.variable [[TMP1]] : <i32>
+  // CHECK-DAG: %v0 = moore.variable : <l1>
+  // CHECK-DAG: %v1 = moore.variable : <i32>
+  // CHECK-DAG: %v2 = moore.variable {{.*}} : <i32>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %v1 :
   var v0;
   int v1;
   int v2 = v1;
 
-  // CHECK: %w0 = moore.net wire : <l1>
+  // CHECK-DAG: %w0 = moore.net wire : <l1>
   wire w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w1 = moore.net wire [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w1 = moore.net wire {{.*}} : <l1>
   wire w1 = w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w2 = moore.net uwire [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w2 = moore.net uwire {{.*}} : <l1>
   uwire w2 = w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w3 = moore.net tri [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w3 = moore.net tri {{.*}} : <l1>
   tri w3 = w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w4 = moore.net triand [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w4 = moore.net triand {{.*}} : <l1>
   triand w4 = w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w5 = moore.net trior [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w5 = moore.net trior {{.*}} : <l1>
   trior w5 = w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w6 = moore.net wand [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w6 = moore.net wand {{.*}} : <l1>
   wand w6 = w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w7 = moore.net wor [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w7 = moore.net wor {{.*}} : <l1>
   wor w7 = w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w8 = moore.net trireg [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w8 = moore.net trireg {{.*}} : <l1>
   trireg w8 = w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w9 = moore.net tri0 [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w9 = moore.net tri0 {{.*}} : <l1>
   tri0 w9 = w0;
-  // CHECK: [[TMP1:%.+]] = moore.read %w0
-  // CHECK: %w10 = moore.net tri1 [[TMP1]] : <l1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %w0
+  // CHECK-DAG: %w10 = moore.net tri1 {{.*}} : <l1>
   tri1 w10 = w0;
-  // CHECK: %w11 = moore.net supply0 : <l1>
+  // CHECK-DAG: %w11 = moore.net supply0 : <l1>
   supply0 w11;
-  // CHECK: %w12 = moore.net supply1 : <l1>
+  // CHECK-DAG: %w12 = moore.net supply1 : <l1>
   supply1 w12;
 
-  // CHECK: %b1 = moore.variable : <i1>
-  // CHECK: [[TMP1:%.+]] = moore.read %b1
-  // CHECK: %b2 = moore.variable [[TMP1]] : <i1>
+  // CHECK-DAG: %b1 = moore.variable : <i1>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %b1
+  // CHECK-DAG: %b2 = moore.variable {{.*}} : <i1>
   bit [0:0] b1;
   bit b2 = b1;
 
-  // CHECK: [[TMP1:%.+]] = moore.read %v2
-  // CHECK: moore.assign %v1, [[TMP1]] : i32
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %v2
+  // CHECK-DAG: moore.assign %v1, [[TMP1]] : i32
   assign v1 = v2;
 
-  // CHECK: %pkgType0 = moore.variable : <l42>
+  // CHECK-DAG: %pkgType0 = moore.variable : <l42>
   PackageType pkgType0;
-  // CHECK: %pkgType1 = moore.variable : <l42>
+  // CHECK-DAG: %pkgType1 = moore.variable : <l42>
   Package::PackageType pkgType1;
 
-  // CHECK: [[VARIANT_A:%.+]] = moore.constant 0 :
-  // CHECK: %ev1 = moore.variable [[VARIANT_A]]
-  // CHECK: [[VARIANT_B:%.+]] = moore.constant 1 :
-  // CHECK: %ev2 = moore.variable [[VARIANT_B]]
+  // CHECK-DAG: [[VARIANT_A:%.+]] = moore.constant 0 :
+  // CHECK-DAG: %ev1 = moore.variable {{.*}}
+  // CHECK-DAG: [[VARIANT_B:%.+]] = moore.constant 1 :
+  // CHECK-DAG: %ev2 = moore.variable {{.*}}
   MyEnum ev1 = VariantA;
   MyEnum ev2 = VariantB;
 
-  // CHECK: [[STR_WELCOME:%.+]] = moore.constant_string "Welcome to Moore" : i128
-  // CHECK: [[CONV_WELCOME:%.+]] = moore.int_to_string [[STR_WELCOME]] : i128
-  // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_WELCOME]] : <string>
+  // CHECK-DAG: [[STR_WELCOME:%.+]] = moore.constant_string "Welcome to Moore" : i128
+  // CHECK-DAG: [[CONV_WELCOME:%.+]] = moore.int_to_string [[STR_WELCOME]] : i128
+  // CHECK-DAG: [[VAR_S:%.+]] = moore.variable [[CONV_WELCOME]] : <string>
   string s = "Welcome to Moore";
 
-  // CHECK: [[VAR_S1:%.+]] = moore.variable : <string>
-  // CHECK: [[STR_HELLO:%.+]] = moore.constant_string "Hello World" : i88
-  // CHECK: [[CONV_HELLO:%.+]] = moore.int_to_string [[STR_HELLO]] : i88
-  // CHECK: moore.assign [[VAR_S1]], [[CONV_HELLO]] : string
+  // CHECK-DAG: [[VAR_S1:%.+]] = moore.variable : <string>
+  // CHECK-DAG: [[STR_HELLO:%.+]] = moore.constant_string "Hello World" : i88
+  // CHECK-DAG: [[CONV_HELLO:%.+]] = moore.int_to_string [[STR_HELLO]] : i88
+  // CHECK-DAG: moore.assign [[VAR_S1]], [[CONV_HELLO]] : string
   string s1;
   assign s1 = "Hello World";
 
   typedef struct packed { bit x; bit y; } MyStruct;
-  // CHECK: [[VAR_S2:%.+]] = moore.variable : <struct<{x: i1, y: i1}>>
+  // CHECK-DAG: [[VAR_S2:%.+]] = moore.variable : <struct<{x: i1, y: i1}>>
   MyStruct s2;
-  // CHECK: [[TMP1:%.+]] = moore.read [[VAR_S2]]
-  // CHECK: [[TMP2:%.+]] = moore.packed_to_sbv [[TMP1]] : struct<{x: i1, y: i1}>
-  // CHECK: [[TMP3:%.+]] = moore.not [[TMP2]] : i2
-  // CHECK: [[TMP4:%.+]] = moore.sbv_to_packed [[TMP3]] : struct<{x: i1, y: i1}>
-  // CHECK: moore.assign [[VAR_S2]], [[TMP4]]
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read [[VAR_S2]]
+  // CHECK-DAG: [[TMP2:%.+]] = moore.packed_to_sbv [[TMP1]] : struct<{x: i1, y: i1}>
+  // CHECK-DAG: [[TMP3:%.+]] = moore.not [[TMP2]] : i2
+  // CHECK-DAG: [[TMP4:%.+]] = moore.sbv_to_packed [[TMP3]] : struct<{x: i1, y: i1}>
+  // CHECK-DAG: moore.assign [[VAR_S2]], [[TMP4]]
   assign s2 = ~s2;
-  // CHECK: [[TMP1:%.+]] = moore.read [[VAR_S2]]
-  // CHECK: [[TMP2:%.+]] = moore.packed_to_sbv [[TMP1]] : struct<{x: i1, y: i1}>
-  // CHECK: [[TMP3:%.+]] = moore.not [[TMP2]] : i2
-  // CHECK: [[TMP4:%.+]] = moore.sbv_to_packed [[TMP3]] : struct<{x: i1, y: i1}>
-  // CHECK: [[VAR_S3:%.+]] = moore.variable [[TMP4]] : <struct<{x: i1, y: i1}>>
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read [[VAR_S2]]
+  // CHECK-DAG: [[TMP2:%.+]] = moore.packed_to_sbv [[TMP1]] : struct<{x: i1, y: i1}>
+  // CHECK-DAG: [[TMP3:%.+]] = moore.not [[TMP2]] : i2
+  // CHECK-DAG: [[TMP4:%.+]] = moore.sbv_to_packed [[TMP3]] : struct<{x: i1, y: i1}>
+  // CHECK-DAG: [[VAR_S3:%.+]] = moore.variable {{.*}} : <struct<{x: i1, y: i1}>>
   MyStruct s3 = ~s2;
 endmodule
 
@@ -766,27 +766,27 @@ module Expressions;
   bit [31:0] arr2 [2];
   // CHECK: %m = moore.variable : <l4>
   logic [3:0] m;
-  // CHECK: [[STR_HELLO:%.+]] = moore.constant_string "Hello" : i40
-  // CHECK: [[CONV_HELLO:%.+]] = moore.int_to_string [[STR_HELLO]] : i40
-  // CHECK: [[VAR_S:%.+]] = moore.variable [[CONV_HELLO]] : <string>
+  // CHECK-DAG: [[STR_HELLO:%.+]] = moore.constant_string "Hello" : i40
+  // CHECK-DAG: [[CONV_HELLO:%.+]] = moore.int_to_string [[STR_HELLO]] : i40
+  // CHECK-DAG: [[VAR_S:%.+]] = moore.variable [[CONV_HELLO]] : <string>
   string s = "Hello";
-  // CHECK: [[STR_WORLD:%.+]] = moore.constant_string "World" : i40
-  // CHECK: [[CONV_WORLD:%.+]] = moore.int_to_string [[STR_WORLD]] : i40
-  // CHECK: [[VAR_S1:%.+]] = moore.variable [[CONV_WORLD]] : <string>
+  // CHECK-DAG: [[STR_WORLD:%.+]] = moore.constant_string "World" : i40
+  // CHECK-DAG: [[CONV_WORLD:%.+]] = moore.int_to_string [[STR_WORLD]] : i40
+  // CHECK-DAG: [[VAR_S1:%.+]] = moore.variable [[CONV_WORLD]] : <string>
   string s1 = "World";
-  // CHECK: [[STR_CONCAT:%.+]] = moore.constant_string "Concat" : i48
-  // CHECK: [[CONV_CONCAT:%.+]] = moore.int_to_string [[STR_CONCAT]] : i48
-  // CHECK: [[VAR_SCON:%.+]] = moore.variable [[CONV_CONCAT]] : <string>
+  // CHECK-DAG: [[STR_CONCAT:%.+]] = moore.constant_string "Concat" : i48
+  // CHECK-DAG: [[CONV_CONCAT:%.+]] = moore.int_to_string [[STR_CONCAT]] : i48
+  // CHECK-DAG: [[VAR_SCON:%.+]] = moore.variable [[CONV_CONCAT]] : <string>
   string concatstr = "Concat";
-  // CHECK: [[STR0:%.+]] = moore.constant_string "hello" : i40
-  // CHECK: [[INT_TO_STR0:%.+]] = moore.int_to_string [[STR0]] : i40
-  // CHECK: [[STR1:%.+]] = moore.constant_string "sad" : i24
-  // CHECK: [[INT_TO_STR1:%.+]] = moore.int_to_string [[STR1]] : i24
-  // CHECK: [[STR2:%.+]] = moore.constant_string "world" : i40
-  // CHECK: [[INT_TO_STR2:%.+]] = moore.int_to_string [[STR2]] : i40
-  // CHECK: [[ARR_CREATE:%.+]] = moore.array_create [[INT_TO_STR0]], [[INT_TO_STR1]], [[INT_TO_STR2]] : !moore.string, !moore.string, !moore.string -> uarray<3 x string>
-  // CHECK: [[STRARR_CONV:%.+]] = moore.conversion [[ARR_CREATE]] : !moore.uarray<3 x string> -> !moore.open_uarray<string>
-  // CHECK: %strArr = moore.variable [[STRARR_CONV]] : <open_uarray<string>>
+  // CHECK-DAG: [[STR0:%.+]] = moore.constant_string "hello" : i40
+  // CHECK-DAG: [[INT_TO_STR0:%.+]] = moore.int_to_string [[STR0]] : i40
+  // CHECK-DAG: [[STR1:%.+]] = moore.constant_string "sad" : i24
+  // CHECK-DAG: [[INT_TO_STR1:%.+]] = moore.int_to_string [[STR1]] : i24
+  // CHECK-DAG: [[STR2:%.+]] = moore.constant_string "world" : i40
+  // CHECK-DAG: [[INT_TO_STR2:%.+]] = moore.int_to_string [[STR2]] : i40
+  // CHECK-DAG: [[ARR_CREATE:%.+]] = moore.array_create [[INT_TO_STR0]], [[INT_TO_STR1]], [[INT_TO_STR2]] : !moore.string, !moore.string, !moore.string -> uarray<3 x string>
+  // CHECK-DAG: [[STRARR_CONV:%.+]] = moore.conversion [[ARR_CREATE]] : !moore.uarray<3 x string> -> !moore.open_uarray<string>
+  // CHECK-DAG: %strArr = moore.variable [[STRARR_CONV]] : <open_uarray<string>>
   string strArr[] = { "hello", "sad", "world" };
 
   initial begin
@@ -1685,37 +1685,37 @@ endmodule
 module Conversion;
   // Implicit conversion.
   // CHECK: %a = moore.variable
-  // CHECK: [[TMP1:%.+]] = moore.read %a
-  // CHECK: [[TMP2:%.+]] = moore.sext [[TMP1]] : i16 -> i32
-  // CHECK: %b = moore.variable [[TMP2]]
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %a
+  // CHECK-DAG: [[TMP2:%.+]] = moore.sext [[TMP1]] : i16 -> i32
+  // CHECK-DAG: %b = moore.variable {{.*}}
   shortint a;
   int b = a;
 
   // Explicit conversion.
-  // CHECK: [[TMP1:%.+]] = moore.read %a
-  // CHECK: [[TMP2:%.+]] = moore.trunc [[TMP1]] : i16 -> i8
-  // CHECK: [[TMP3:%.+]] = moore.sext [[TMP2]] : i8 -> i32
-  // CHECK: %c = moore.variable [[TMP3]]
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %a
+  // CHECK-DAG: [[TMP2:%.+]] = moore.trunc [[TMP1]] : i16 -> i8
+  // CHECK-DAG: [[TMP3:%.+]] = moore.sext [[TMP2]] : i8 -> i32
+  // CHECK-DAG: %c = moore.variable {{.*}}
   int c = byte'(a);
 
   // Sign conversion.
-  // CHECK: [[TMP1:%.+]] = moore.read %b
-  // CHECK: %d1 = moore.variable [[TMP1]]
-  // CHECK: [[TMP2:%.+]] = moore.read %b
-  // CHECK: %d2 = moore.variable [[TMP2]]
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %b
+  // CHECK-DAG: %d1 = moore.variable {{.*}}
+  // CHECK-DAG: [[TMP2:%.+]] = moore.read %b
+  // CHECK-DAG: %d2 = moore.variable {{.*}}
   bit signed [31:0] d1 = signed'(b);
   bit [31:0] d2 = unsigned'(b);
 
   // Width conversion.
-  // CHECK: [[TMP1:%.+]] = moore.read %b
-  // CHECK: [[TMP2:%.+]] = moore.trunc [[TMP1]] : i32 -> i19
-  // CHECK: %e = moore.variable [[TMP2]]
+  // CHECK-DAG: [[TMP1:%.+]] = moore.read %b
+  // CHECK-DAG: [[TMP2:%.+]] = moore.trunc [[TMP1]] : i32 -> i19
+  // CHECK-DAG: %e = moore.variable {{.*}}
   bit signed [18:0] e = 19'(b);
 
   // Implicit conversion for literals.
-  // CHECK: [[TMP1:%.+]] = moore.constant 0 : i64
-  // CHECK: [[TMP2:%.+]] = moore.sbv_to_packed [[TMP1]] : struct<{a: i32, b: i32}>
-  // CHECK: %f = moore.variable [[TMP2]]
+  // CHECK-DAG: [[TMP1:%.+]] = moore.constant 0 : i64
+  // CHECK-DAG: [[TMP2:%.+]] = moore.sbv_to_packed [[TMP1]] : struct<{a: i32, b: i32}>
+  // CHECK-DAG: %f = moore.variable {{.*}}
   struct packed { int a; int b; } f = '0;
 endmodule
 
@@ -1770,10 +1770,10 @@ endmodule
 module TimeConversion1;
   timeunit 10fs / 1fs;
   // CHECK-DAG: [[TMP:%.+]] = moore.constant_time 12340 fs
-  // CHECK: moore.variable [[TMP]] : <time>
+  // CHECK-DAG: moore.variable {{.*}} : <time>
   time t = 1234;
   // CHECK-DAG: [[TMP:%.+]] = moore.constant 1234 : i32
-  // CHECK: moore.variable [[TMP]] : <i32>
+  // CHECK-DAG: moore.variable {{.*}} : <i32>
   int i = 12.34ps;
 endmodule
 
@@ -1781,10 +1781,10 @@ endmodule
 module TimeConversion2;
   timeunit 100fs / 1fs;
   // CHECK-DAG: [[TMP:%.+]] = moore.constant_time 123400 fs
-  // CHECK: moore.variable [[TMP]] : <time>
+  // CHECK-DAG: moore.variable {{.*}} : <time>
   time t = 1234;
   // CHECK-DAG: [[TMP:%.+]] = moore.constant 123 : i32
-  // CHECK: moore.variable [[TMP]] : <i32>
+  // CHECK-DAG: moore.variable {{.*}} : <i32>
   int i = 12.34ps;
 endmodule
 
@@ -2005,33 +2005,32 @@ endmodule
 // CHECK-LABEL: moore.module @GenerateConstructs()
 module GenerateConstructs;
   genvar i;
-  // CHECK: [[TMP:%.+]] = moore.constant 2
-  // CHECK: dbg.variable "p", [[TMP]]
+  // CHECK-DAG: [[TMP:%.+]] = moore.constant 2
+  // CHECK-DAG: dbg.variable "p", [[TMP]]
   parameter p = 2;
-  
+
   generate
-    // CHECK: [[TMP:%.+]] = moore.constant 0
-    // CHECK: dbg.variable "i", [[TMP]]
-    // CHECK: [[TMP:%.+]] = moore.constant 0
-    // CHECK: %genblk1_0.g1 = moore.variable [[TMP]]
-    // CHECK: [[TMP:%.+]] = moore.constant 1
-    // CHECK: dbg.variable "i", [[TMP]]
-    // CHECK: [[TMP:%.+]] = moore.constant 1
-    // CHECK: %genblk1_1.g1 = moore.variable [[TMP]]
+    // CHECK-DAG: [[TMP:%.+]] = moore.constant 0
+    // CHECK-DAG: dbg.variable "i", [[TMP]]
+    // CHECK-DAG: [[TMP:%.+]] = moore.constant 0
+    // CHECK-DAG: %genblk1_0.g1 = moore.variable {{.*}}
+    // CHECK-DAG: [[TMP:%.+]] = moore.constant 1
+    // CHECK-DAG: dbg.variable "i", [[TMP]]
+    // CHECK-DAG: [[TMP:%.+]] = moore.constant 1
+    // CHECK-DAG: %genblk1_1.g1 = moore.variable {{.*}}
     for (i = 0; i < 2; i = i + 1) begin
       integer g1 = i;
     end
 
-    // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
-    // CHECK: %genblk2.g2 = moore.variable [[TMP]] : <i32>
+    // CHECK-DAG: [[TMP:%.+]] = moore.constant 2 : i32
+    // CHECK-DAG: %genblk2.g2 = moore.variable {{.*}} : <i32>
     if (p == 2) begin
       int g2 = 2;
     end else begin
       int g2 = 3;
     end
-    
-    // CHECK: [[TMP:%.+]] = moore.constant 2 : i32
-    // CHECK: %genblk3.g3 = moore.variable [[TMP]] : <i32>
+    // CHECK-DAG: [[TMP:%.+]] = moore.constant 2 : i32
+    // CHECK-DAG: %genblk3.g3 = moore.variable {{.*}} : <i32>
     case (p)
       2: begin
         int g3 = 2;
@@ -2434,18 +2433,18 @@ task automatic ImplicitEventControlExamples();
 endtask
 
 // CHECK-LABEL: moore.module @WaitStatementTest() {
-// CHECK:         [[C0:%.+]] = moore.constant 0 : i32
-// CHECK:         [[C1:%.+]] = moore.constant 0 : l32
-// CHECK:         [[C2:%.+]] = moore.constant 0 : l1
-// CHECK:         [[V0:%.+]] = moore.variable [[C2]] : <l1>
-// CHECK:         [[C3:%.+]] = moore.constant 1 : i32
-// CHECK:         [[C4:%.+]] = moore.constant 1 : l32
-// CHECK:         [[C5:%.+]] = moore.constant 1 : l1
-// CHECK:         [[V1:%.+]] = moore.net wire [[C5]] : <l1>
-// CHECK:         [[C6:%.+]] = moore.constant 0 : i32
-// CHECK:         [[C7:%.+]] = moore.constant 0 : l32
-// CHECK:         [[C8:%.+]] = moore.constant 0 : l1
-// CHECK:         [[V2:%.+]] = moore.variable [[C8]] : <l1>
+// CHECK-DAG:     [[C0:%.+]] = moore.constant 0 : i32
+// CHECK-DAG:     [[C1:%.+]] = moore.constant 0 : l32
+// CHECK-DAG:     [[C2:%.+]] = moore.constant 0 : l1
+// CHECK-DAG:     [[V0:%.+]] = moore.variable {{.*}} : <l1>
+// CHECK-DAG:     [[C3:%.+]] = moore.constant 1 : i32
+// CHECK-DAG:     [[C4:%.+]] = moore.constant 1 : l32
+// CHECK-DAG:     [[C5:%.+]] = moore.constant 1 : l1
+// CHECK-DAG:     [[V1:%.+]] = moore.net wire {{.*}} : <l1>
+// CHECK-DAG:     [[C6:%.+]] = moore.constant 0 : i32
+// CHECK-DAG:     [[C7:%.+]] = moore.constant 0 : l32
+// CHECK-DAG:     [[C8:%.+]] = moore.constant 0 : l1
+// CHECK-DAG:     [[V2:%.+]] = moore.variable {{.*}} : <l1>
 // CHECK:         moore.procedure initial {
 // CHECK:           moore.wait_level {
 // CHECK:             [[R0:%.+]] = moore.read [[V2]] : <l1>
@@ -3759,8 +3758,8 @@ module testFunctionCapture();
         return a;
     endfunction
 
-    // CHECK: [[RETURNEDA:%.+]] = func.call @testCapture([[A]]) : (!moore.ref<l1>) -> !moore.l1
-    // CHECK: [[B:%.+]] = moore.variable [[RETURNEDA]] : <l1>
+    // CHECK-DAG: [[RETURNEDA:%.+]] = func.call @testCapture([[A]]) : (!moore.ref<l1>) -> !moore.l1
+    // CHECK-DAG: [[B:%.+]] = moore.variable {{.*}} : <l1>
     logic b = testCapture();
 
     // These checks need to be here since testCapture gets moved to after the variable decl,
@@ -3804,12 +3803,12 @@ endfunction
 
 // CHECK-LABEL: moore.module @RealLiteral() {
 module RealLiteral();
-   // CHECK-NEXT:  [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
-   // CHECK-NEXT: [[A:%.+]] = moore.variable [[REALCONSTANT]] : <f64>
+   // CHECK-DAG: [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
+   // CHECK-DAG: [[A:%.+]] = moore.variable {{.*}} : <f64>
    real a = 0.5;
-   // CHECK-NEXT: [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
-   // CHECK-NEXT: [[SHORTREALCONSTANT:%.+]] = moore.convert_real [[REALCONSTANT]] : f64 -> f32
-   // CHECK-NEXT: [[B:%.+]] = moore.variable [[SHORTREALCONSTANT]] : <f32>
+   // CHECK-DAG: [[REALCONSTANT:%.+]] = moore.constant_real 5.000000e-01 : f64
+   // CHECK-DAG: [[SHORTREALCONSTANT:%.+]] = moore.convert_real [[REALCONSTANT]] : f64 -> f32
+   // CHECK-DAG: [[B:%.+]] = moore.variable {{.*}} : <f32>
    shortreal b = 0.5;
 
 endmodule
@@ -4204,15 +4203,15 @@ class nullableClass;
 endclass
 
 // CHECK-LABEL: moore.module @NullableTest() {
-// CHECK:         [[N0:%.*]] = moore.null
-// CHECK:         [[C0:%.*]] = moore.conversion [[N0]] : !moore.null -> !moore.chandle
-// CHECK:         [[T:%.*]] = moore.variable [[C0]] : <chandle>
-// CHECK:         [[N1:%.*]] = moore.null
-// CHECK:         [[C1:%.*]] = moore.conversion [[N1]] : !moore.null -> !moore.class<@nullableClass>
-// CHECK:         [[CVAR:%.*]] = moore.variable [[C1]] : <class<@nullableClass>>
-// CHECK:         [[N2:%.*]] = moore.null
-// CHECK:         [[C2:%.*]] = moore.conversion [[N2]] : !moore.null -> !moore.i1
-// CHECK:         [[E:%.*]] = moore.variable [[C2]] : <i1>
+// CHECK-DAG:     [[N0:%.*]] = moore.null
+// CHECK-DAG:     [[C0:%.*]] = moore.conversion [[N0]] : !moore.null -> !moore.chandle
+// CHECK-DAG:     [[T:%.*]] = moore.variable {{.*}} : <chandle>
+// CHECK-DAG:     [[N1:%.*]] = moore.null
+// CHECK-DAG:     [[C1:%.*]] = moore.conversion [[N1]] : !moore.null -> !moore.class<@nullableClass>
+// CHECK-DAG:     [[CVAR:%.*]] = moore.variable {{.*}} : <class<@nullableClass>>
+// CHECK-DAG:     [[N2:%.*]] = moore.null
+// CHECK-DAG:     [[C2:%.*]] = moore.conversion [[N2]] : !moore.null -> !moore.i1
+// CHECK-DAG:     [[E:%.*]] = moore.variable {{.*}} : <i1>
 // CHECK:         moore.output
 // CHECK:       }
 
@@ -4243,14 +4242,14 @@ module QueueSizeTest;
 endmodule
 
 // CHECK-LABEL: moore.module @testHandleComparison() {
-// CHECK:           [[NULL0:%.+]] = moore.null
-// CHECK:           [[A_INIT:%.+]] = moore.conversion [[NULL0]] : !moore.null -> !moore.chandle
-// CHECK:           [[A:%.+]] = moore.variable [[A_INIT]] : <chandle>
-// CHECK:           [[NULL1:%.+]] = moore.null
-// CHECK:           [[B_INIT:%.+]] = moore.conversion [[NULL1]] : !moore.null -> !moore.class<@nullableClass>
-// CHECK:           [[B:%.+]] = moore.variable [[B_INIT]] : <class<@nullableClass>>
-// CHECK:           [[C:%.+]] = moore.variable : <i1>
-// CHECK:           [[D:%.+]] = moore.variable : <i1>
+// CHECK-DAG:       [[NULL0:%.+]] = moore.null
+// CHECK-DAG:       [[A_INIT:%.+]] = moore.conversion [[NULL0]] : !moore.null -> !moore.chandle
+// CHECK-DAG:       [[A:%.+]] = moore.variable {{.*}} : <chandle>
+// CHECK-DAG:       [[NULL1:%.+]] = moore.null
+// CHECK-DAG:       [[B_INIT:%.+]] = moore.conversion [[NULL1]] : !moore.null -> !moore.class<@nullableClass>
+// CHECK-DAG:       [[B:%.+]] = moore.variable {{.*}} : <class<@nullableClass>>
+// CHECK-DAG:       [[C:%.+]] = moore.variable : <i1>
+// CHECK-DAG:       [[D:%.+]] = moore.variable : <i1>
 // CHECK:           [[A_R0:%.+]] = moore.read [[A]] : <chandle>
 // CHECK:           [[NULL2:%.+]] = moore.null
 // CHECK:           [[EQ0:%.+]] = moore.handle_eq [[A_R0]], [[NULL2]] : !moore.chandle : !moore.null -> i1
@@ -4521,16 +4520,16 @@ module QueueCmpTest;
 endmodule
 
 // CHECK-LABEL: moore.module @ForkJoinTest() {
-// CHECK:         [[C0:%.+]] = moore.constant 0 : i32
-// CHECK:         [[V0:%.+]] = moore.variable [[C0]] : <i32>
-// CHECK:         [[C1:%.+]] = moore.constant 0 : i32
-// CHECK:         [[V1:%.+]] = moore.variable [[C1]] : <i32>
-// CHECK:         [[C2:%.+]] = moore.constant 0 : i32
-// CHECK:         [[V2:%.+]] = moore.variable [[C2]] : <i32>
-// CHECK:         [[C3:%.+]] = moore.constant 0 : i32
-// CHECK:         [[V3:%.+]] = moore.variable [[C3]] : <i32>
-// CHECK:         [[C4:%.+]] = moore.constant 0 : i32
-// CHECK:         [[V4:%.+]] = moore.variable [[C4]] : <i32>
+// CHECK-DAG:     [[C0:%.+]] = moore.constant 0 : i32
+// CHECK-DAG:     [[V0:%.+]] = moore.variable {{.*}} : <i32>
+// CHECK-DAG:     [[C1:%.+]] = moore.constant 0 : i32
+// CHECK-DAG:     [[V1:%.+]] = moore.variable {{.*}} : <i32>
+// CHECK-DAG:     [[C2:%.+]] = moore.constant 0 : i32
+// CHECK-DAG:     [[V2:%.+]] = moore.variable {{.*}} : <i32>
+// CHECK-DAG:     [[C3:%.+]] = moore.constant 0 : i32
+// CHECK-DAG:     [[V3:%.+]] = moore.variable {{.*}} : <i32>
+// CHECK-DAG:     [[C4:%.+]] = moore.constant 0 : i32
+// CHECK-DAG:     [[V4:%.+]] = moore.variable {{.*}} : <i32>
 // CHECK:         moore.procedure initial {
 // CHECK            moore.fork join_all {
 // CHECK              [[C5:%.+]] = moore.constant 1 : i32
@@ -4614,10 +4613,10 @@ module ForkJoinTest ();
 endmodule
 
 // CHECK-LABEL: moore.module @WaitForkTest() {
-// CHECK:         [[C0:%.+]] = moore.constant 0 : i32
-// CHECK:         [[V0:%.+]] = moore.variable [[C0]] : <i32>
-// CHECK:         [[C1:%.+]] = moore.constant 0 : i32
-// CHECK:         [[V1:%.+]] = moore.variable [[C1]] : <i32>
+// CHECK-DAG:     [[C0:%.+]] = moore.constant 0 : i32
+// CHECK-DAG:     [[V0:%.+]] = moore.variable [[C0]] : <i32>
+// CHECK-DAG:     [[C1:%.+]] = moore.constant 0 : i32
+// CHECK-DAG:     [[V1:%.+]] = moore.variable [[C1]] : <i32>
 // CHECK:         moore.procedure initial {
 // CHECK:           moore.fork join_none {
 // CHECK:             [[C2:%.+]] = moore.constant 1 : i32

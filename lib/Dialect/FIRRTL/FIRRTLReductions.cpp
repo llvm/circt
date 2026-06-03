@@ -2559,6 +2559,34 @@ struct LayerDisable : public OpReduction<CircuitOp> {
   DenseMap<uint64_t, SymbolRefAttr> symbolRefAttrMap;
 };
 
+/// A reduction pattern that removes initialized layer entries
+/// from the FIRRTL module operations.
+struct LayerEnableRemover : public OpReduction<FModuleOp> {
+  void matches(FModuleOp moduleOp,
+               llvm::function_ref<void(uint64_t, uint64_t)> addMatch) override {
+
+    auto layers = moduleOp.getLayersAttr();
+    for (size_t i = 0, e = layers.size(); i != e; ++i)
+      addMatch(1, i);
+  }
+
+  LogicalResult rewriteMatches(FModuleOp moduleOp,
+                               ArrayRef<uint64_t> matches) override {
+
+    llvm::SmallDenseSet<uint64_t, 4> removed(matches.begin(), matches.end());
+    SmallVector<Attribute> newLayers;
+    auto layers = moduleOp.getLayersAttr();
+    for (size_t i = 0, e = layers.size(); i != e; ++i)
+      if (!removed.contains(i))
+        newLayers.push_back(layers[i]);
+
+    moduleOp.setLayersAttr(ArrayAttr::get(moduleOp.getContext(), newLayers));
+    return success();
+  }
+
+  std::string getName() const override { return "firrtl-layer-enable-remover"; }
+};
+
 } // namespace
 
 /// A reduction pattern that removes elements from FIRRTL list create
@@ -2652,6 +2680,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<AnnotationRemover, 32>();
   patterns.add<ModuleSwapper, 31>();
   patterns.add<LayerDisable, 30>(getContext());
+  patterns.add<LayerEnableRemover, 30>();
   patterns.add<PassReduction, 29>(
       getContext(),
       firrtl::createDropName({/*preserveMode=*/PreserveValues::None}), false,

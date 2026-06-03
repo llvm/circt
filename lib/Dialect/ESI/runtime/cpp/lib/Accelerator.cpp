@@ -103,6 +103,13 @@ AcceleratorConnection::takeOwnership(std::unique_ptr<Accelerator> acc) {
   return ownedAccelerator.get();
 }
 
+void AcceleratorConnection::clearOwnedObjects() {
+  ownedAccelerator.reset();
+  serviceCache.clear();
+  clientEngines.clear();
+  ownedEngines.clear();
+}
+
 /// Get the path to the currently running executable.
 static std::filesystem::path getExePath() {
 #ifdef __linux__

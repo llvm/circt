@@ -33,6 +33,11 @@ LogicalResult verifyNotInProceduralRegion(Operation *op);
 /// non-procedural region.
 LogicalResult verifyNotInNonProceduralRegion(Operation *op);
 
+/// Returns true if `op` has a parent marked as a procedural region that is
+/// closer than any parent marked as a non-procedural region. Returns false
+/// otherwise, including when no parent is marked as either.
+bool isInProceduralRegion(Operation *op);
+
 /// Signals that an operation's regions are procedural.
 template <typename ConcreteType>
 class ProceduralRegion

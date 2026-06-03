@@ -32,6 +32,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Support/LogicalResult.h"
 
 #define DEBUG_TYPE "lower-sim-to-sv"
 
@@ -304,6 +305,21 @@ public:
   }
 };
 
+class FlushLowering : public OpConversionPattern<FlushOp> {
+public:
+  using OpConversionPattern<FlushOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FlushOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    Value fd = adaptor.getStream();
+    if (!fd.getType().isInteger(32))
+      return rewriter.notifyMatchFailure(op, "expected converted i32 stream");
+    rewriter.replaceOpWithNewOp<sv::FFlushOp>(op, fd);
+    return success();
+  }
+};
+
 class DPICallLowering : public SimConversionPattern<DPICallOp> {
 public:
   using SimConversionPattern<DPICallOp>::SimConversionPattern;
@@ -499,7 +515,7 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
       // If there was no pre-existing guard, create one.
       if (!block) {
         OpBuilder builder(op);
-        if (op->getParentOp()->hasTrait<ProceduralRegion>())
+        if (isInProceduralRegion(op))
           block = sv::IfDefProceduralOp::create(
                       builder, loc, "SYNTHESIS", [] {}, [] {})
                       .getElseBlock();
@@ -891,6 +907,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<PlusArgsValueLowering>(context, state);
       patterns.add<StdoutStreamLowering>(typeConverter, context);
       patterns.add<StderrStreamLowering>(typeConverter, context);
+      patterns.add<FlushLowering>(typeConverter, context);
       patterns.add<UnrealizedConversionCastLowering>(typeConverter, context);
       patterns.add<ClockedTerminateOp>(convert);
       patterns.add<ClockedPauseOp>(convert);

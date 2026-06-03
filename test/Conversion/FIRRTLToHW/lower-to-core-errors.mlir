@@ -1,34 +1,5 @@
 // RUN: circt-opt --pass-pipeline='builtin.module(lower-firrtl-to-hw{lower-to-core=true})' --verify-diagnostics --split-input-file %s
 
-firrtl.circuit "time_printf" {
-  firrtl.module @time_printf(
-      in %clock: !firrtl.clock,
-      in %enable: !firrtl.uint<1>) {
-    %time = firrtl.fstring.time : !firrtl.fstring
-    // expected-error @+2 {{lower-to-core does not support {{SimulationTime}} in printf}}
-    // expected-error @below {{'firrtl.printf' op LowerToHW couldn't handle this operation}}
-    firrtl.printf %clock, %enable, "{{}}\0A"(%time)
-        : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring
-    firrtl.skip
-  }
-}
-
-// -----
-
-firrtl.circuit "fprintf_unsupported" {
-  firrtl.module @fprintf_unsupported(
-      in %clock: !firrtl.clock,
-      in %enable: !firrtl.uint<1>) {
-    // expected-error @+2 {{'firrtl.fprintf' op lower-to-core does not support firrtl.fprintf yet}}
-    // expected-error @below {{'firrtl.fprintf' op LowerToHW couldn't handle this operation}}
-    firrtl.fprintf %clock, %enable, "out.txt"(), "msg\0A"()
-        : !firrtl.clock, !firrtl.uint<1>
-    firrtl.skip
-  }
-}
-
-// -----
-
 firrtl.circuit "fflush_unsupported" {
   firrtl.module @fflush_unsupported(
       in %clock: !firrtl.clock,

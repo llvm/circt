@@ -44,7 +44,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest", "pycde", "numpy"]
+test = ["pytest", "pytest-xdist", "pycde", "numpy"]
 
 [project.scripts]
 esiquery = "esiaccel.utils:run_esiquery"
