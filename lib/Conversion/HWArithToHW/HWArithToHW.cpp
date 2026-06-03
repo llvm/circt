@@ -119,6 +119,11 @@ static bool isSignednessType(Type type) {
               return isSignednessType(element.type);
             });
           })
+          .Case<hw::UnionType>([](auto type) {
+            return llvm::any_of(type.getElements(), [](auto element) {
+              return isSignednessType(element.type);
+            });
+          })
           .Case<hw::InOutType>(
               [](auto type) { return isSignednessType(type.getElementType()); })
           .Case<hw::TypeAliasType>(
@@ -382,6 +387,15 @@ Type HWArithToHWTypeConverter::removeSignedness(Type type) {
                   {element.name, removeSignedness(element.type)});
             }
             return hw::StructType::get(type.getContext(), convertedElements);
+          })
+          .Case<hw::UnionType>([this](auto type) {
+            llvm::SmallVector<hw::UnionType::FieldInfo> convertedElements;
+            for (auto element : type.getElements()) {
+              convertedElements.push_back({element.name,
+                                           removeSignedness(element.type),
+                                           element.offset});
+            }
+            return hw::UnionType::get(type.getContext(), convertedElements);
           })
           .Case<hw::InOutType>([this](auto type) {
             return hw::InOutType::get(removeSignedness(type.getElementType()));

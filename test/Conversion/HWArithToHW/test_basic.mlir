@@ -314,6 +314,18 @@ hw.module @structAndArrays(in %a: ui8, in %b: ui8, out out: !hw.struct<foo: !hw.
 
 // -----
 
+// Type conversions of union ops.
+// CHECK:      hw.module @unions(in %a : i8, out out : !hw.union<foo: i8>) {
+// CHECK-NEXT:   %[[OUT:.*]] = hw.union_create "foo", %a : !hw.union<foo: i8>
+// CHECK-NEXT:   hw.output %[[OUT]] : !hw.union<foo: i8>
+// CHECK-NEXT: }
+hw.module @unions(in %a: ui8, out out: !hw.union<foo: ui8>) {
+  %out = hw.union_create "foo", %a : !hw.union<foo: ui8>
+  hw.output %out : !hw.union<foo: ui8>
+}
+
+// -----
+
 // CHECK: hw.module.extern @externHWModule(in %a : i8, in %b : i8, out out : !hw.struct<foo: !hw.array<2xi8>>)
 hw.module.extern @externHWModule(in %a: ui8, in %b: ui8, out out: !hw.struct<foo: !hw.array<2xui8>>)
 
