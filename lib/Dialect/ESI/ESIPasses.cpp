@@ -267,6 +267,10 @@ HWModuleOp ESIHWBuilder::declareChannelBuffer(Operation *symTable,
   if (hasData) {
     // Run-out FIFO. `almostFull` asserts at `slack` entries, leaving room for
     // the (up to) 2*stages tokens still in flight when the producer is stopped.
+    // The FIFO is read first-word-fall-through (combinational read); the data
+    // output is then captured into an explicit register stage so the module's
+    // data output is driven directly by a register, while the ready/valid
+    // handshake stays combinational.
     Backedge fifoRdEn = bb.get(i1);
     auto fifo = seq::FIFOOp::create(
         b, dataType, /*full=*/i1, /*empty=*/i1, /*almostFull=*/i1,
@@ -276,9 +280,27 @@ HWModuleOp ESIHWBuilder::declareChannelBuffer(Operation *symTable,
         /*almostEmptyThreshold=*/IntegerAttr());
     almostFullBE.setValue(fifo.getAlmostFull());
     Value notEmpty = comb::createOrFoldNot(b, loc, fifo.getEmpty());
-    xValidOut = notEmpty;
-    xDataOut = fifo.getOutput();
-    fifoRdEn.setValue(comb::AndOp::create(b, notEmpty, xReadyArg));
+
+    // Registered output stage. The output slot is free when it is empty or is
+    // being drained this cycle; a token is dequeued only when the slot is free,
+    // so the registered data and valid stay aligned.
+    Backedge outValidBE = bb.get(i1);
+    Value outValid =
+        seq::CompRegOp::create(b, outValidBE, clkArg, rstArg, c0, "out_valid");
+    Value slotFree = comb::OrOp::create(
+        b, comb::createOrFoldNot(b, loc, outValid), xReadyArg);
+    Value deq = comb::AndOp::create(b, notEmpty, slotFree);
+    fifoRdEn.setValue(deq);
+    outValidBE.setValue(comb::MuxOp::create(b, slotFree, deq, outValid));
+
+    // Output data register, updated only when a token is dequeued so it holds
+    // its value while the consumer applies backpressure.
+    Backedge outDataBE = bb.get(dataType);
+    Value outData = seq::CompRegOp::create(b, outDataBE, clkArg);
+    outDataBE.setValue(comb::MuxOp::create(b, deq, fifo.getOutput(), outData));
+
+    xValidOut = outValid;
+    xDataOut = outData;
   } else {
     // Zero-width: a saturating credit counter tracks the number of buffered
     // tokens. `depth >= 3`, so the counter is always at least 2 bits wide.

@@ -10,6 +10,7 @@ hw.module.extern @i0SenderReceiver(in %in: !esi.channel<i0>, out out: !esi.chann
 // CHECK-LABEL: hw.module @ESI_FIFOBuffer_w4_s4_k2(in %clk : !seq.clock, in %rst : i1, in %a : i4, in %a_valid : i1, out a_ready : i1, out x : i4, out x_valid : i1, in %x_ready : i1)
 // CHECK:         seq.compreg {{.*}}%clk reset %rst, %true
 // CHECK:         %{{.+}} = seq.fifo depth 10 almost_full 2 in %{{.+}} rdEn %{{.+}} wrEn %{{.+}} clk %clk rst %rst : i4
+// CHECK:         %out_valid = seq.compreg {{.*}}%clk reset %rst, %false
 // CHECK-LABEL: hw.module @ESI_FIFOBuffer_w0_s1_k2(in %clk : !seq.clock, in %rst : i1, in %a_valid : i1, out a_ready : i1, out x_valid : i1, in %x_ready : i1)
 // CHECK-NOT:     seq.fifo
 // CHECK:         %count = seq.compreg {{.*}}%clk reset %rst
