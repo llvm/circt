@@ -1,3 +1,4 @@
+import random
 from typing import List, Optional
 import cocotb
 from cocotb.clock import Clock
@@ -75,11 +76,15 @@ class ESIValidReadyInputPort(ESIInputPort):
 
 class ESIOutputPort:
 
-  def __init__(self, dut, name: str, latency: int = 0):
+  def __init__(self, dut, name: str, latency: int = 0,
+               backpressure: float = 0.0):
     self.dut = dut
     self.name = name
     self.data = getattr(dut, name)
     self.latency = latency
+    # Probability of deasserting ready on any given cycle, used to inject
+    # random consumer backpressure.
+    self.backpressure = backpressure
     self.q: List[int] = []
 
   async def read(self) -> Optional[int]:
@@ -127,8 +132,9 @@ class ESIFifoOutputPort(ESIOutputPort):
 
 class ESIValidReadyOutputPort(ESIOutputPort):
 
-  def __init__(self, dut, name: str, latency: int = 0):
-    super().__init__(dut, name, latency)
+  def __init__(self, dut, name: str, latency: int = 0,
+               backpressure: float = 0.0):
+    super().__init__(dut, name, latency, backpressure)
 
     self.valid = getattr(dut, f"{name}_valid")
     self.ready = getattr(dut, f"{name}_ready")
@@ -141,6 +147,10 @@ class ESIValidReadyOutputPort(ESIOutputPort):
     return self.q.pop(0)
 
   async def cmd_read(self):
+    # Optionally stall with ready deasserted to inject backpressure.
+    while self.backpressure > 0.0 and random.random() < self.backpressure:
+      self.ready.value = 0
+      await RisingEdge(self.dut.clk)
     self.ready.value = 1
     await RisingEdge(self.dut.clk)
     while self.valid.value == 0:

@@ -613,6 +613,9 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
     A `name` attribute may be provided to assigned a name to a buffered
     connection.
 
+    A `slack` attribute may be provided to specify the additional run-out FIFO
+    depth used to absorb backpressure latency. Must be greater than 0.
+
     Example:
 
     ```mlir
@@ -628,7 +631,8 @@ def ChannelBufferOp : ESI_Abstract_Op<"buffer", [
 
   let arguments = (ins ClockType:$clk, I1:$rst, ChannelType:$input,
     OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$stages,
-    OptionalAttr<StrAttr>:$name);
+    OptionalAttr<StrAttr>:$name,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<1>]>>:$slack);
   let results = (outs ChannelType:$output);
   let assemblyFormat = [{
     $clk `,` $rst `,` $input attr-dict

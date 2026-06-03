@@ -830,7 +830,7 @@ public:
     Type channelType = operands.getInput().getType();
     rewriter.replaceOpWithNewOp<esi::ChannelBufferOp>(
         op, channelType, clock, reset, operands.getInput(), op.getSizeAttr(),
-        nullptr);
+        nullptr, nullptr);
     return success();
   };
 };

@@ -118,7 +118,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
           fromHost = ChannelBufferOp::create(
                          b, loc, ch.type, clk, rst, fromHost,
                          /*stages=*/b.getIntegerAttr(b.getI64Type(), 1),
-                         /*name=*/StringAttr())
+                         /*name=*/StringAttr(), /*slack=*/IntegerAttr())
                          .getOutput();
         toServerValues.push_back(fromHost);
         channelAssignments.push_back(getAssignment(ch.name, cosim.getIdAttr()));
@@ -142,7 +142,7 @@ instantiateCosimEndpointOps(ServiceImplementReqOp implReq,
           fromChannel = ChannelBufferOp::create(
                             b, loc, cosimType, clk, rst, fromChannel,
                             /*stages=*/b.getIntegerAttr(b.getI64Type(), 1),
-                            /*name=*/StringAttr())
+                            /*name=*/StringAttr(), /*slack=*/IntegerAttr())
                             .getOutput();
         }
         auto cosim = CosimToHostEndpointOp::create(

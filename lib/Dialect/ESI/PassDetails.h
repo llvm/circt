@@ -31,6 +31,9 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include <map>
+#include <tuple>
+
 namespace circt {
 namespace esi {
 namespace detail {
@@ -65,6 +68,13 @@ public:
   sv::InterfaceOp getOrConstructInterface(ChannelType);
   sv::InterfaceOp constructInterface(ChannelType);
 
+  /// Declare (or look up a cached) feed-forward register chain + run-out FIFO
+  /// channel buffer module for the given data bitwidth, number of pipeline
+  /// stages, and run-out slack. The module has pure `iN`/`i1` ports. A
+  /// bitwidth of zero uses a saturating credit counter instead of a FIFO.
+  hw::HWModuleOp declareChannelBuffer(Operation *symTable, unsigned width,
+                                      uint64_t stages, uint64_t slack);
+
   // A bunch of constants for use in various places below.
   const StringAttr a, aValid, aReady, x, xValid, xReady;
   const StringAttr dataOutValid, dataOutReady, dataOut, dataInValid,
@@ -87,6 +97,8 @@ private:
   std::optional<hw::HWModuleExternOp> declaredCosimEndpointToHostModule;
   std::optional<hw::HWModuleExternOp> declaredCosimEndpointFromHostModule;
   llvm::DenseMap<Type, hw::HWModuleExternOp> declaredStage;
+  std::map<std::tuple<unsigned, uint64_t, uint64_t>, hw::HWModuleOp>
+      declaredChannelBuffer;
   llvm::DenseMap<Type, sv::InterfaceOp> portTypeLookup;
 };
 } // namespace detail

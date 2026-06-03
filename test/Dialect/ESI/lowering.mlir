@@ -7,6 +7,12 @@ hw.module.extern @ArrSender(out x: !esi.channel<!hw.array<4xi64>>) attributes {e
 hw.module.extern @Reciever(in %a: !esi.channel<i4>, in %clk: !seq.clock) attributes {esi.bundle}
 hw.module.extern @i0SenderReceiver(in %in: !esi.channel<i0>, out out: !esi.channel<i0>)
 
+// CHECK-LABEL: hw.module @ESI_FIFOBuffer_w4_s4_k2(in %clk : !seq.clock, in %rst : i1, in %a : i4, in %a_valid : i1, out a_ready : i1, out x : i4, out x_valid : i1, in %x_ready : i1)
+// CHECK:         seq.compreg {{.*}}%clk reset %rst, %true
+// CHECK:         %{{.+}} = seq.fifo depth 10 almost_full 2 in %{{.+}} rdEn %{{.+}} wrEn %{{.+}} clk %clk rst %rst : i4
+// CHECK-LABEL: hw.module @ESI_FIFOBuffer_w0_s1_k2(in %clk : !seq.clock, in %rst : i1, in %a_valid : i1, out a_ready : i1, out x_valid : i1, in %x_ready : i1)
+// CHECK-NOT:     seq.fifo
+// CHECK:         %count = seq.compreg {{.*}}%clk reset %rst
 // CHECK-LABEL: hw.module.extern @Sender(in %clk : !seq.clock, out x : !esi.channel<i4>, out y : i8)
 // CHECK-LABEL: hw.module.extern @Reciever(in %a : !esi.channel<i4>, in %clk : !seq.clock)
 
@@ -34,11 +40,12 @@ hw.module @test(in %clk: !seq.clock, in %rst:i1) {
   hw.instance "recv2" @Reciever (a: %bufferedChan2: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
 
   // CHECK:      %sender2.x, %sender2.y = hw.instance "sender2" @Sender(clk: %clk: !seq.clock) -> (x: !esi.channel<i4>, y: i8)
-  // CHECK-NEXT:  %0 = esi.stage %clk, %rst, %sender2.x : !esi.channel<i4>
-  // CHECK-NEXT:  %1 = esi.stage %clk, %rst, %0 : !esi.channel<i4>
-  // CHECK-NEXT:  %2 = esi.stage %clk, %rst, %1 : !esi.channel<i4>
-  // CHECK-NEXT:  %3 = esi.stage %clk, %rst, %2 : !esi.channel<i4>
-  // CHECK-NEXT:  hw.instance "recv2" @Reciever(a: %3: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
+  // CHECK-NEXT:  %rawOutput, %valid = esi.unwrap.vr %sender2.x, %buffer.a_ready : i4
+  // CHECK-NEXT:  %[[#inbits:]] = hw.bitcast %rawOutput : (i4) -> i4
+  // CHECK-NEXT:  %buffer.a_ready, %buffer.x, %buffer.x_valid = hw.instance "buffer" @ESI_FIFOBuffer_w4_s4_k2(clk: %clk: !seq.clock, rst: %rst: i1, a: %[[#inbits]]: i4, a_valid: %valid: i1, x_ready: %ready: i1) -> (a_ready: i1, x: i4, x_valid: i1)
+  // CHECK-NEXT:  %[[#outbits:]] = hw.bitcast %buffer.x : (i4) -> i4
+  // CHECK-NEXT:  %chanOutput, %ready = esi.wrap.vr %[[#outbits]], %buffer.x_valid : i4
+  // CHECK-NEXT:  hw.instance "recv2" @Reciever(a: %chanOutput: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
 
   // IFACE-LABEL: hw.module @test(in %clk : !seq.clock, in %rst : i1) {
   // IFACE-NEXT:    %i4FromSender2 = sv.interface.instance : !sv.interface<@IValidReady_i4>
@@ -127,8 +134,8 @@ hw.module @test_constant(in %arg0: !esi.channel<i1>, in %clock: i1, in %reset: i
 }
 
 // HW-LABEL: hw.module @i0Typed(in %a : i0, in %a_valid : i1, in %clk : !seq.clock, in %rst : i1, in %x_ready : i1, out a_ready : i1, out x : i0, out x_valid : i1) {
-// HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage1<WIDTH: ui32 = 0>(clk: %clk: !seq.clock, rst: %rst: i1, a: %a: i0, a_valid: %a_valid: i1, x_ready: %x_ready: i1) -> (a_ready: i1, x: i0, x_valid: i1)
-// HW:         hw.output %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid : i1, i0, i1
+// HW:         %buffer.a_ready, %buffer.x_valid = hw.instance "buffer" @ESI_FIFOBuffer_w0_s1_k2(clk: %clk: !seq.clock, rst: %rst: i1, a_valid: %a_valid: i1, x_ready: %x_ready: i1) -> (a_ready: i1, x_valid: i1)
+// HW:         hw.output %buffer.a_ready, %a, %buffer.x_valid : i1, i0, i1
 // HW:       }
 hw.module @i0Typed(in %a: !esi.channel<i0>, in %clk: !seq.clock, in %rst: i1, out x: !esi.channel<i0>) {
   %0 = esi.buffer %clk, %rst, %a  : !esi.channel<i0> -> !esi.channel<i0>
@@ -270,17 +277,17 @@ hw.module @fifoValidReadyOutput(
 }
 
 // CHECK-LABEL:  hw.module @testConversion(in %clk : !seq.clock, in %rst : i1) {
-// CHECK-NEXT:     [[R0:%.+]] = esi.stage %clk, %rst, [[R4:%.+]] : !esi.channel<i4>
-// CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr [[R0]], %rden : i4
-// CHECK-NEXT:     %chanOutput, %rden = esi.wrap.fifo %rawOutput, [[R1:%.+]] : !esi.channel<i4, FIFO>
-// CHECK-NEXT:     %true = hw.constant true
-// CHECK-NEXT:     [[R1]] = comb.xor %valid, %true : i1
-// CHECK-NEXT:     %data, %empty = esi.unwrap.fifo %chanOutput, [[R2:%.+]] : !esi.channel<i4, FIFO>
-// CHECK-NEXT:     %chanOutput_0, %ready = esi.wrap.vr %data, [[R3:%.+]] : i4
-// CHECK-NEXT:     [[R2]] = comb.and %ready, [[R3]] : i1
-// CHECK-NEXT:     %true_1 = hw.constant true
-// CHECK-NEXT:     [[R3]] = comb.xor %empty, %true_1 : i1
-// CHECK-NEXT:     [[R4]] = esi.stage %clk, %rst, %chanOutput_0 : !esi.channel<i4>
+// CHECK-NEXT:     %rawOutput, %valid = esi.unwrap.vr %chanOutput_11, %buffer.a_ready : i4
+// CHECK-NEXT:     %{{.+}} = hw.bitcast %rawOutput : (i4) -> i4
+// CHECK-NEXT:     %buffer.a_ready, %buffer.x, %buffer.x_valid = hw.instance "buffer" @ESI_FIFOBuffer_w4_s1_k2(clk: %clk: !seq.clock, rst: %rst: i1, a: %{{.+}}: i4, a_valid: %valid: i1, x_ready: %ready: i1) -> (a_ready: i1, x: i4, x_valid: i1)
+// CHECK-NEXT:     %{{.+}} = hw.bitcast %buffer.x : (i4) -> i4
+// CHECK-NEXT:     %chanOutput, %ready = esi.wrap.vr %{{.+}}, %buffer.x_valid : i4
+// CHECK-NEXT:     %rawOutput_0, %valid_1 = esi.unwrap.vr %chanOutput, %rden : i4
+// CHECK-NEXT:     %chanOutput_2, %rden = esi.wrap.fifo %rawOutput_0, %{{.+}} : !esi.channel<i4, FIFO>
+// CHECK:          %data, %empty = esi.unwrap.fifo %chanOutput_2, %{{.+}} : !esi.channel<i4, FIFO>
+// CHECK-NEXT:     %chanOutput_3, %ready_4 = esi.wrap.vr %data, %{{.+}} : i4
+// CHECK:          %buffer.a_ready_8, %buffer.x_9, %buffer.x_valid_10 = hw.instance "buffer" @ESI_FIFOBuffer_w4_s1_k2(clk: %clk: !seq.clock, rst: %rst: i1, a: %{{.+}}: i4, a_valid: %valid_7: i1, x_ready: %ready_12: i1) -> (a_ready: i1, x: i4, x_valid: i1)
+// CHECK:          %chanOutput_11, %ready_12 = esi.wrap.vr %{{.+}}, %buffer.x_valid_10 : i4
 
 hw.module @testConversion(in %clk: !seq.clock, in %rst:i1) {
   %intsFifo = esi.buffer %clk, %rst, %intsVR : !esi.channel<i4> -> !esi.channel<i4, FIFO>
@@ -300,11 +307,11 @@ hw.module @testSnoopTx(in %clk: !seq.clock, in %rst:i1, in %input: !esi.channel<
 // HW-LABEL:   hw.module @testSnoopTx(in %clk : !seq.clock, in %rst : i1, in %input : i32, in %input_empty : i1, in %output_ready : i1, out input_rden : i1, out output : i32, out output_valid : i1, out fifo_xact : i1, out vr_xact : i1) {
 // HW:         [[NOT_EMPTY1:%.+]] = comb.xor %input_empty, %true : i1
 // HW:         [[FIFO_XACT:%.+]] = comb.and [[NOT_EMPTY1]], [[R2:%.+]] : i1
-// HW:         [[R2]] = comb.and %pipelineStage.a_ready, [[NOT_EMPTY2:%.+]] : i1
+// HW:         [[R2]] = comb.and %buffer.a_ready, [[NOT_EMPTY2:%.+]] : i1
 // HW:         [[NOT_EMPTY2]] = comb.xor %input_empty, %true_0 : i1
-// HW:         %pipelineStage.a_ready, %pipelineStage.x, %pipelineStage.x_valid = hw.instance "pipelineStage" @ESI_PipelineStage2<WIDTH: ui32 = 32>(clk: %clk: !seq.clock, rst: %rst: i1, a: %input: i32, a_valid: %3: i1, x_ready: %output_ready: i1) -> (a_ready: i1, x: i32, x_valid: i1)
-// HW:         [[VR_XACT:%.+]] = comb.and %pipelineStage.x_valid, %output_ready : i1
-// HW:         hw.output [[R2]], %pipelineStage.x, %pipelineStage.x_valid, [[FIFO_XACT]], [[VR_XACT]] : i1, i32, i1, i1, i1
+// HW:         %buffer.a_ready, %buffer.x, %buffer.x_valid = hw.instance "buffer" @ESI_FIFOBuffer_w32_s1_k2(clk: %clk: !seq.clock, rst: %rst: i1, a: %{{.+}}: i32, a_valid: %{{.+}}: i1, x_ready: %output_ready: i1) -> (a_ready: i1, x: i32, x_valid: i1)
+// HW:         [[VR_XACT:%.+]] = comb.and %buffer.x_valid, %output_ready : i1
+// HW:         hw.output [[R2]], %{{.+}}, %buffer.x_valid, [[FIFO_XACT]], [[VR_XACT]] : i1, i32, i1, i1, i1
 
 // Test snoop on a channel passed through a module (tests channels at module boundaries)
 hw.module @SnoopPassthrough(in %chan_in: !esi.channel<i32>, out chan_out: !esi.channel<i32>, out snoop_valid: i1, out snoop_ready: i1, out snoop_data: i32) {
@@ -375,10 +382,10 @@ hw.module @voLoopbackTop() {
 // The physical pass converts ValidOnly channels to/from ValidReady at buffer
 // boundaries since pipeline stages use ValidReady internally.
 // CHECK-LABEL:  hw.module @voBufferConversion(in %clk : !seq.clock, in %rst : i1) {
-// CHECK:          %rawOutput, %valid = esi.unwrap.vr %{{.+}}, %true : i4
-// CHECK:          %{{.+}} = esi.wrap.vo %rawOutput, %valid : i4
-// CHECK:          %rawOutput_{{.+}}, %valid_{{.+}} = esi.unwrap.vo %{{.+}} : !esi.channel<i4, ValidOnly>
-// CHECK:          %chanOutput{{.*}}, %ready{{.*}} = esi.wrap.vr %rawOutput_{{.+}}, %valid_{{.+}} : i4
+// CHECK:          %{{.+}}, %{{.+}} = esi.unwrap.vr %{{.+}}, %true : i4
+// CHECK:          %{{.+}} = esi.wrap.vo %{{.+}}, %{{.+}} : i4
+// CHECK:          %{{.+}}, %{{.+}} = esi.unwrap.vo %{{.+}} : !esi.channel<i4, ValidOnly>
+// CHECK:          %chanOutput{{.*}}, %ready{{.*}} = esi.wrap.vr %{{.+}}, %{{.+}} : i4
 hw.module @voBufferConversion(in %clk: !seq.clock, in %rst:i1) {
   %intsVO = esi.buffer %clk, %rst, %intsVR : !esi.channel<i4> -> !esi.channel<i4, ValidOnly>
   %intsVR = esi.buffer %clk, %rst, %intsVO : !esi.channel<i4, ValidOnly> -> !esi.channel<i4>

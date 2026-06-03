@@ -54,7 +54,14 @@ def ESICleanMetadata : Pass<"esi-clean-metadata", "mlir::ModuleOp"> {
 def LowerESIToPhysical: Pass<"lower-esi-to-physical", "mlir::ModuleOp"> {
   let summary = "Lower ESI abstract Ops to ESI physical ops.";
   let constructor = "circt::esi::createESIPhysicalLoweringPass()";
-  let dependentDialects = ["circt::hw::HWDialect"];
+  let dependentDialects = ["circt::hw::HWDialect", "circt::seq::SeqDialect",
+                           "circt::comb::CombDialect"];
+  let options = [
+    Option<"useStages", "use-stages", "bool", "false",
+           "Lower channel buffers to the legacy double-buffered relay station "
+           "pipeline stages (esi.stage) instead of the feed-forward register "
+           "chain plus run-out FIFO.">
+  ];
 }
 
 def LowerESIBundles: Pass<"lower-esi-bundles", "mlir::ModuleOp"> {

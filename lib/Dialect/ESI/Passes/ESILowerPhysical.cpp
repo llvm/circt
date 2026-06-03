@@ -34,22 +34,30 @@ using namespace circt::esi::detail;
 using namespace circt::hw;
 
 namespace {
-/// Lower `ChannelBufferOp`s, breaking out the various options. For now, just
-/// replace with the specified number of pipeline stages (since that's the only
-/// option).
+/// Lower `ChannelBufferOp`s into a feed-forward register chain plus a run-out
+/// FIFO, implemented by instantiating a (monomorphized) channel buffer module.
+/// If `useStages` is set, fall back to the legacy double-buffered relay station
+/// pipeline (a chain of `esi.stage` ops).
 struct ChannelBufferLowering : public OpConversionPattern<ChannelBufferOp> {
 public:
-  using OpConversionPattern::OpConversionPattern;
+  ChannelBufferLowering(ESIHWBuilder &builder, bool useStages,
+                        MLIRContext *ctxt)
+      : OpConversionPattern(ctxt), builder(builder), useStages(useStages) {}
 
   LogicalResult
   matchAndRewrite(ChannelBufferOp buffer, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final;
+
+private:
+  ESIHWBuilder &builder;
+  bool useStages;
 };
 } // anonymous namespace
 
-/// Since as of now the only construct supported by the StageOp, we convert FIFO
-/// signaling to/from ValidReady signaling. This will be done opposite way when
-/// we implement FIFO-based buffers.
+/// Lower a channel buffer to an instance of a feed-forward register chain +
+/// run-out FIFO module. The channel signaling is normalized to ValidReady, the
+/// data is bitcast to a plain integer to interface with the (width-keyed)
+/// buffer module, then converted back.
 LogicalResult ChannelBufferLowering::matchAndRewrite(
     ChannelBufferOp buffer, OpAdaptor adaptor,
     ConversionPatternRewriter &rewriter) const {
@@ -85,24 +93,79 @@ LogicalResult ChannelBufferLowering::matchAndRewrite(
     stageInput = wrap.getChanOutput();
   }
 
-  // Expand 'abstract' buffer into 'physical' stages.
-  auto stages = buffer.getStagesAttr();
   uint64_t numStages = 1;
-  if (stages)
-    // Guaranteed positive by the parser.
+  if (auto stages = buffer.getStagesAttr())
     numStages = stages.getValue().getLimitedValue();
-  StringAttr bufferName = buffer.getNameAttr();
 
-  for (uint64_t i = 0; i < numStages; ++i) {
-    // Create the stages, connecting them up as we build.
-    auto stage = PipelineStageOp::create(rewriter, loc, buffer.getClk(),
-                                         buffer.getRst(), stageInput);
-    if (bufferName) {
-      SmallString<64> stageName(
-          {bufferName.getValue(), "_stage", std::to_string(i)});
-      stage->setAttr("name", StringAttr::get(rewriter.getContext(), stageName));
+  if (useStages) {
+    // Legacy lowering: expand the 'abstract' buffer into a chain of 'physical'
+    // relay station pipeline stages.
+    StringAttr bufferName = buffer.getNameAttr();
+    for (uint64_t i = 0; i < numStages; ++i) {
+      auto stage = PipelineStageOp::create(rewriter, loc, buffer.getClk(),
+                                           buffer.getRst(), stageInput);
+      if (bufferName)
+        stage->setAttr("name", rewriter.getStringAttr(bufferName.getValue() +
+                                                      "_stage" + Twine(i)));
+      stageInput = stage;
     }
-    stageInput = stage;
+  } else {
+    // The input is now ValidReady. Compute the buffer parameters.
+    ChannelType vrChanType = cast<ChannelType>(stageInput.getType());
+    Type innerType = vrChanType.getInner();
+    int64_t width = hw::getBitWidth(innerType);
+    if (width < 0)
+      return rewriter.notifyMatchFailure(
+          buffer, "cannot lower buffer with non-hw data type");
+
+    uint64_t slack = 2;
+    if (auto slackAttr = buffer.getSlackAttr())
+      slack = slackAttr.getValue().getLimitedValue();
+    if (slack < 1)
+      slack = 1;
+
+    Operation *symTable =
+        buffer->getParentWithTrait<mlir::OpTrait::SymbolTable>();
+    HWModuleOp bufMod = builder.declareChannelBuffer(
+        symTable, static_cast<unsigned>(width), numStages, slack);
+
+    // Unwrap the ValidReady input, instantiate the buffer module, and wrap the
+    // ValidReady output.
+    BackedgeBuilder bb(rewriter, loc);
+    Backedge aReady = bb.get(rewriter.getI1Type());
+    Backedge xReady = bb.get(rewriter.getI1Type());
+    auto unwrap = UnwrapValidReadyOp::create(rewriter, loc, stageInput, aReady);
+
+    SmallVector<Value> operands;
+    operands.push_back(buffer.getClk());
+    operands.push_back(buffer.getRst());
+    if (width > 0)
+      operands.push_back(hw::BitcastOp::create(rewriter, loc,
+                                               rewriter.getIntegerType(width),
+                                               unwrap.getRawOutput()));
+    operands.push_back(unwrap.getValid());
+    operands.push_back(xReady);
+
+    StringRef instName = "buffer";
+    if (StringAttr n = buffer.getNameAttr())
+      instName = n.getValue();
+    auto inst = hw::InstanceOp::create(
+        rewriter, loc, bufMod, rewriter.getStringAttr(instName), operands);
+
+    unsigned resIdx = 0;
+    aReady.setValue(inst.getResult(resIdx++));
+    Value xInner;
+    if (width > 0)
+      xInner = hw::BitcastOp::create(rewriter, loc, innerType,
+                                     inst.getResult(resIdx++));
+    else
+      xInner = unwrap.getRawOutput();
+    Value xValid = inst.getResult(resIdx++);
+
+    auto wrapOut = WrapValidReadyOp::create(
+        rewriter, loc, vrChanType, rewriter.getI1Type(), xInner, xValid);
+    xReady.setValue(wrapOut.getReady());
+    stageInput = wrapOut.getChanOutput();
   }
 
   ChannelType outputType = buffer.getOutput().getType();
@@ -363,9 +426,10 @@ void ESIToPhysicalPass::runOnOperation() {
   target.addIllegalOp<ChannelBufferOp, ESIPureModuleOp, FIFOOp>();
 
   // Add all the conversion patterns.
+  ESIHWBuilder esiBuilder(getOperation());
   RewritePatternSet patterns(&getContext());
-  patterns.insert<ChannelBufferLowering, PureModuleLowering, FIFOLowering>(
-      &getContext());
+  patterns.insert<ChannelBufferLowering>(esiBuilder, useStages, &getContext());
+  patterns.insert<PureModuleLowering, FIFOLowering>(&getContext());
 
   // Run the conversion.
   if (failed(

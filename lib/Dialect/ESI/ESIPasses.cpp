@@ -8,9 +8,12 @@
 
 #include "PassDetails.h"
 
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/ESI/ESIOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/SV/SVOps.h"
+#include "circt/Dialect/Seq/SeqOps.h"
+#include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/LLVM.h"
 
 #include "mlir/IR/SymbolTable.h"
@@ -169,6 +172,148 @@ HWModuleExternOp ESIHWBuilder::declareStage(Operation *symTable,
       *this, constructUniqueSymbol(symTable, "ESI_PipelineStage"), ports,
       "ESI_PipelineStage", getStageParameterList({}));
   return stageMod;
+}
+
+/// Construct a concrete (monomorphized) channel buffer module implementing a
+/// feed-forward register chain (valid + data) followed by a run-out FIFO which
+/// absorbs the backpressure latency. One module is generated per unique
+/// (width, stages, slack) tuple and cached. The data is carried as a plain
+/// `iN` so the module is reusable across all data types of the same bitwidth.
+/// For zero-width data a saturating credit counter replaces the FIFO.
+HWModuleOp ESIHWBuilder::declareChannelBuffer(Operation *symTable,
+                                              unsigned width, uint64_t stages,
+                                              uint64_t slack) {
+  auto key = std::make_tuple(width, stages, slack);
+  auto cached = declaredChannelBuffer.find(key);
+  if (cached != declaredChannelBuffer.end())
+    return cached->second;
+
+  Type clkType = getClockType();
+  Type i1 = getI1Type();
+  Type dataType = IntegerType::get(getContext(), width);
+  bool hasData = width > 0;
+
+  // Build the port list. Inputs and outputs are tracked with separate indices,
+  // mirroring `declareStage`.
+  size_t argn = 0, resn = 0;
+  llvm::SmallVector<PortInfo> ports = {
+      {{clk, clkType, ModulePort::Direction::Input}, argn++},
+      {{rst, i1, ModulePort::Direction::Input}, argn++}};
+  if (hasData)
+    ports.push_back({{a, dataType, ModulePort::Direction::Input}, argn++});
+  ports.push_back({{aValid, i1, ModulePort::Direction::Input}, argn++});
+  ports.push_back({{aReady, i1, ModulePort::Direction::Output}, resn++});
+  if (hasData)
+    ports.push_back({{x, dataType, ModulePort::Direction::Output}, resn++});
+  ports.push_back({{xValid, i1, ModulePort::Direction::Output}, resn++});
+  ports.push_back({{xReady, i1, ModulePort::Direction::Input}, argn++});
+
+  SmallString<64> name("ESI_FIFOBuffer_w");
+  name += llvm::utostr(width);
+  name += "_s";
+  name += llvm::utostr(stages);
+  name += "_k";
+  name += llvm::utostr(slack);
+
+  HWModuleOp mod =
+      HWModuleOp::create(*this, constructUniqueSymbol(symTable, name), ports);
+  declaredChannelBuffer[key] = mod;
+
+  // Build the module body before the auto-created `hw.output` terminator.
+  Location loc = mod.getLoc();
+  Block *body = mod.getBodyBlock();
+  Operation *outputOp = body->getTerminator();
+  ImplicitLocOpBuilder b(loc, outputOp);
+  BackedgeBuilder bb(b, loc);
+
+  // Map the block arguments (in input-port listing order).
+  auto args = body->getArguments();
+  size_t argIdx = 0;
+  Value clkArg = args[argIdx++];
+  Value rstArg = args[argIdx++];
+  Value aArg = hasData ? args[argIdx++] : Value();
+  Value aValidArg = args[argIdx++];
+  Value xReadyArg = args[argIdx++];
+
+  Value c0 = hw::ConstantOp::create(b, i1, b.getBoolAttr(false));
+  Value c1 = hw::ConstantOp::create(b, i1, b.getBoolAttr(true));
+
+  // The run-out storage reports `almostFull` to throttle the producer. It is
+  // produced below; use a backedge to break the combinational loop, then
+  // pipeline it back to the producer (reset to "full" so nothing is accepted
+  // until the storage has reported its state).
+  Backedge almostFullBE = bb.get(i1);
+  Value af = almostFullBE;
+  for (uint64_t i = 0; i < stages; ++i)
+    af = seq::CompRegOp::create(b, af, clkArg, rstArg, c1, "backpressure");
+  Value aReadyVal = comb::createOrFoldNot(b, loc, af);
+  Value aXfer = comb::AndOp::create(b, aValidArg, aReadyVal);
+
+  // Feed-forward register chain for the valid (and, if present, data) signals.
+  Value chainValid = aXfer;
+  Value chainData = aArg;
+  for (uint64_t i = 0; i < stages; ++i) {
+    chainValid =
+        seq::CompRegOp::create(b, chainValid, clkArg, rstArg, c0, "ff_valid");
+    if (hasData)
+      chainData = seq::CompRegOp::create(b, chainData, clkArg);
+  }
+
+  // Storage depth: chain length (stages) + tokens sent during the backpressure
+  // latency (stages) + user-requested slack.
+  uint64_t depth = 2 * stages + slack;
+
+  Value xValidOut, xDataOut;
+  if (hasData) {
+    // Run-out FIFO. `almostFull` asserts at `slack` entries, leaving room for
+    // the (up to) 2*stages tokens still in flight when the producer is stopped.
+    Backedge fifoRdEn = bb.get(i1);
+    auto fifo = seq::FIFOOp::create(
+        b, dataType, /*full=*/i1, /*empty=*/i1, /*almostFull=*/i1,
+        /*almostEmpty=*/Type(), chainData, fifoRdEn, chainValid, clkArg, rstArg,
+        b.getI64IntegerAttr(depth), /*rdLatency=*/b.getI64IntegerAttr(0),
+        /*almostFullThreshold=*/b.getI64IntegerAttr(slack),
+        /*almostEmptyThreshold=*/IntegerAttr());
+    almostFullBE.setValue(fifo.getAlmostFull());
+    Value notEmpty = comb::createOrFoldNot(b, loc, fifo.getEmpty());
+    xValidOut = notEmpty;
+    xDataOut = fifo.getOutput();
+    fifoRdEn.setValue(comb::AndOp::create(b, notEmpty, xReadyArg));
+  } else {
+    // Zero-width: a saturating credit counter tracks the number of buffered
+    // tokens. `depth >= 3`, so the counter is always at least 2 bits wide.
+    unsigned cntWidth = llvm::Log2_64_Ceil(depth + 1);
+    Type cntType = b.getIntegerType(cntWidth);
+    Value cntZero = hw::ConstantOp::create(b, cntType, 0);
+    Backedge cntNextBE = bb.get(cntType);
+    Value cnt =
+        seq::CompRegOp::create(b, cntNextBE, clkArg, rstArg, cntZero, "count");
+    Value notEmpty =
+        comb::ICmpOp::create(b, comb::ICmpPredicate::ne, cnt, cntZero);
+    xValidOut = notEmpty;
+    Value deq = comb::AndOp::create(b, notEmpty, xReadyArg);
+    Value enq = chainValid;
+    // cnt_next = cnt + enq - deq (all zero-extended to the counter width).
+    Value zeros = hw::ConstantOp::create(b, b.getIntegerType(cntWidth - 1), 0);
+    Value enqExt = comb::ConcatOp::create(b, zeros, enq);
+    Value deqExt = comb::ConcatOp::create(b, zeros, deq);
+    Value cntNext =
+        comb::SubOp::create(b, comb::AddOp::create(b, cnt, enqExt), deqExt);
+    cntNextBE.setValue(cntNext);
+    Value slackConst = hw::ConstantOp::create(b, cntType, slack);
+    almostFullBE.setValue(
+        comb::ICmpOp::create(b, comb::ICmpPredicate::uge, cnt, slackConst));
+  }
+
+  // Wire up the outputs (in output-port listing order).
+  SmallVector<Value> outputs;
+  outputs.push_back(aReadyVal);
+  if (hasData)
+    outputs.push_back(xDataOut);
+  outputs.push_back(xValidOut);
+  outputOp->setOperands(outputs);
+
+  return mod;
 }
 
 /// Write an 'ExternModuleOp' to use a hand-coded SystemVerilog module. Said
