@@ -2734,6 +2734,41 @@ void UnionExtractOp::build(OpBuilder &odsBuilder, OperationState &odsState,
   build(odsBuilder, odsState, resultType, input, *fieldIndex);
 }
 
+LogicalResult UnionExtractOp::canonicalize(UnionExtractOp extractOp,
+                                           PatternRewriter &rewriter) {
+  // hw.union_extract("F1", hw.union_create("F2", a)) -> a, if F1 and F2 map to
+  // the same bits
+  if (auto createOp = extractOp.getInput().getDefiningOp<UnionCreateOp>()) {
+    if (createOp.getInput().getType() == extractOp.getType() &&
+        createOp.getInput() != extractOp.getResult()) {
+      auto unionTypeElts =
+          cast<UnionType>(extractOp.getInput().getType()).getElements();
+      if (unionTypeElts[createOp.getFieldIndex()].offset ==
+          unionTypeElts[extractOp.getFieldIndex()].offset) {
+        rewriter.replaceOp(extractOp, createOp.getInput());
+        return success();
+      }
+    }
+  }
+  // Forward bitcasts if the extract covers the entire union
+  if (auto bitcastOp = extractOp.getInput().getDefiningOp<BitcastOp>()) {
+    auto inputWidth = getBitWidth(bitcastOp.getInput().getType());
+    assert(inputWidth >= 0 &&
+           inputWidth == getBitWidth(extractOp.getInput().getType()) &&
+           "bitcast does not cover entire union");
+    if (inputWidth == getBitWidth(extractOp.getType())) {
+      auto loc = FusedLoc::get(rewriter.getContext(),
+                               {bitcastOp.getLoc(), extractOp.getLoc()});
+      auto newBitcast = rewriter.createOrFold<BitcastOp>(
+          loc, extractOp.getType(), bitcastOp.getInput());
+      rewriter.replaceOp(extractOp, newBitcast);
+      return success();
+    }
+  }
+
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // ArrayGetOp
 //===----------------------------------------------------------------------===//
