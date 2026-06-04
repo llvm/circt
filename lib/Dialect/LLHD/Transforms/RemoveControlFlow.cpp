@@ -269,11 +269,7 @@ void CFRemover::run() {
         reachablePreds.push_back(pred);
 
     llvm::stable_sort(reachablePreds, [&](Block *a, Block *b) {
-      if (a == domBlock)
-        return true;
-      if (b == domBlock)
-        return false;
-      return false;
+      return a == domBlock && b != domBlock;
     });
 
     OpBuilder builder(entryBlock->getTerminator());
