@@ -9,11 +9,9 @@
 #include "slang/ast/expressions/AssertionExpr.h"
 
 #include "ImportVerilogInternals.h"
-#include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
-#include "circt/Support/FVInt.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LLVM.h"
@@ -318,6 +316,11 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
     return v;
   };
 
+  // Helper to cast a builtin integer result to a two-valued Moore integer type.
+  auto castToTwoValued = [&](Value v) -> Value {
+    return moore::FromBuiltinIntOp::create(builder, loc, v);
+  };
+
   switch (nameId) {
   case ksn::Sampled:
     return castToMoore(ltl::SampledOp::create(builder, loc, value));
@@ -326,7 +329,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
   case ksn::Fell: {
     auto past =
         ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
-    return castToMoore(comb::ICmpOp::create(
+    return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::ugt, past, value, false));
   }
 
@@ -334,7 +337,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
   case ksn::Rose: {
     auto past =
         ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
-    return castToMoore(comb::ICmpOp::create(
+    return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::ult, past, value, false));
   }
 
@@ -342,7 +345,7 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
   case ksn::Changed: {
     auto past =
         ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
-    return castToMoore(comb::ICmpOp::create(
+    return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::ne, past, value, false));
   }
 
@@ -350,53 +353,16 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
   case ksn::Stable: {
     auto past =
         ltl::PastOp::create(builder, loc, value, 1, clockVal).getResult();
-    return castToMoore(comb::ICmpOp::create(
+    return castToTwoValued(comb::ICmpOp::create(
         builder, loc, comb::ICmpPredicate::eq, past, value, false));
   }
 
   case ksn::Past:
     return castToMoore(ltl::PastOp::create(builder, loc, value, 1, clockVal));
 
-  case ksn::OneHot0: {
-    auto one = hw::ConstantOp::create(builder, loc, value.getType(), 1);
-    auto minusOne = comb::SubOp::create(builder, loc, value, one);
-    auto anded = comb::AndOp::create(builder, loc, value, minusOne);
-    auto zero = hw::ConstantOp::create(builder, loc, value.getType(), 0);
-    return castToMoore(comb::ICmpOp::create(
-        builder, loc, comb::ICmpPredicate::eq, anded, zero, false));
-  }
-
-  case ksn::OneHot: {
-    auto one = hw::ConstantOp::create(builder, loc, value.getType(), 1);
-    auto minusOne = comb::SubOp::create(builder, loc, value, one);
-    auto anded = comb::AndOp::create(builder, loc, value, minusOne);
-    auto zero = hw::ConstantOp::create(builder, loc, value.getType(), 0);
-    auto isOneHot0 = comb::ICmpOp::create(builder, loc, comb::ICmpPredicate::eq,
-                                          anded, zero, false);
-    auto isNotZero = comb::ICmpOp::create(builder, loc, comb::ICmpPredicate::ne,
-                                          value, zero, false);
-    auto result = comb::AndOp::create(builder, loc, isOneHot0, isNotZero);
-    return castToMoore(result);
-  }
-
   default:
     return Value{};
   }
-}
-
-static Value getIsUnknown(OpBuilder &builder, Location loc, Value value,
-                          moore::IntType valTy, MLIRContext *ctx) {
-  Value bitVal = value;
-  if (valTy.getWidth() > 1) {
-    auto mooreI1Type = moore::IntType::get(ctx, 1, valTy.getDomain());
-    bitVal = moore::ReduceXorOp::create(builder, loc, mooreI1Type, value);
-  }
-
-  auto xType = moore::IntType::get(ctx, 1, moore::Domain::FourValued);
-  auto xValue = FVInt::getAllX(1);
-  auto xConst = moore::ConstantOp::create(builder, loc, xType, xValue);
-
-  return moore::CaseEqOp::create(builder, loc, bitVal, xConst).getResult();
 }
 
 Value Context::convertAssertionCallExpression(
@@ -454,51 +420,6 @@ Value Context::convertAssertionCallExpression(
       return {};
     }
 
-    // IsUnknown is handled here rather than below with the others as below it
-    // would have already been converted to an integer type rather than bool
-    // type as here.
-    if (subroutine.knownNameId == slang::parsing::KnownSystemName::IsUnknown) {
-      return getIsUnknown(builder, loc, value, valTy, getContext());
-    }
-
-    // OneHot/OneHot0 are handled both here and below.
-    if ((subroutine.knownNameId == slang::parsing::KnownSystemName::OneHot ||
-         subroutine.knownNameId == slang::parsing::KnownSystemName::OneHot0) &&
-        (valTy.getDomain() == Domain::FourValued)) {
-      // In SystemVerilog, these system only returns 1b1 if the expression is
-      // fully known and the condition is met. So if any x or y bits, then
-      // these must return 1'b0.
-
-      // Detect if input contain unknown bits.
-      Value isUnknownMoore =
-          getIsUnknown(builder, loc, value, valTy, getContext());
-      Value isUnknown =
-          builder.createOrFold<moore::ToBuiltinIntOp>(loc, isUnknownMoore);
-
-      Value coerced = builder.createOrFold<moore::LogicToIntOp>(loc, value);
-      Value state2IntVal =
-          builder.createOrFold<moore::ToBuiltinIntOp>(loc, coerced);
-      if (!state2IntVal)
-        return {};
-
-      auto systemResult = this->convertAssertionSystemCallArity1(
-          subroutine, loc, state2IntVal, originalType, clockVal);
-      if (failed(systemResult) || !*systemResult)
-        return {};
-      Value onehot2state = *systemResult;
-
-      // Squash to 0 if unknown bits exist.
-      Value onehot2stateBuiltin = convertToI1(onehot2state);
-      Value zeroBuiltin =
-          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 0);
-      Value resultBuiltin = comb::MuxOp::create(
-          builder, loc, isUnknown, zeroBuiltin, onehot2stateBuiltin);
-
-      Value finalResult =
-          moore::FromBuiltinIntOp::create(builder, loc, resultBuiltin);
-      return moore::IntToLogicOp::create(builder, loc, finalResult);
-    }
-
     // If the value is four-valued, we need to map it to two-valued before we
     // cast it to a builtin int
     if (valTy.getDomain() == Domain::FourValued) {
@@ -517,8 +438,11 @@ Value Context::convertAssertionCallExpression(
 
   if (failed(result))
     return {};
-  if (*result)
-    return *result;
+  if (*result) {
+    auto expectedTy = convertType(*expr.type);
+    return materializeConversion(expectedTy, *result, expr.type->isSigned(),
+                                 loc);
+  }
 
   mlir::emitError(loc) << "unsupported system call `" << subroutine.name << "`";
   return {};
