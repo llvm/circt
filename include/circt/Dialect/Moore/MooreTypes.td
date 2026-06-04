@@ -585,6 +585,9 @@ class SpecificRefType<Type type> : ConfinedType<RefType,
   Type nestedType = type;
 }
 
+/// String references.
+def StringRefType : SpecificRefType<StringType>;
+
 /// Struct references.
 def StructRefType : SpecificRefType<StructType>;
 def UnpackedStructRefType : SpecificRefType<UnpackedStructType>;

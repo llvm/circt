@@ -3506,6 +3506,17 @@ Value Context::convertSystemCall(
     return moore::StringLenOp::create(builder, loc, value);
   }
 
+  if (nameId == ksn::Getc) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 2 && "`getc` takes 2 arguments");
+    auto stringType = moore::StringType::get(getContext());
+    auto str = convertRvalueExpression(*args[0], stringType);
+    auto index = convertRvalueExpression(*args[1]);
+    if (!str || !index)
+      return {};
+    return moore::StringGetOp::create(builder, loc, str, index);
+  }
+
   if (nameId == ksn::ToUpper) {
     // Slang already checks the arity of string methods.
     assert(numArgs == 1 && "`toupper` takes 1 argument");
@@ -3526,15 +3537,63 @@ Value Context::convertSystemCall(
     return moore::StringToLowerOp::create(builder, loc, value);
   }
 
-  if (nameId == ksn::Getc) {
+  if (nameId == ksn::Compare || nameId == ksn::ICompare) {
     // Slang already checks the arity of string methods.
-    assert(numArgs == 2 && "`getc` takes 2 arguments");
+    assert(numArgs == 2);
+    auto stringType = moore::StringType::get(getContext());
+    auto lhs = convertRvalueExpression(*args[0], stringType);
+    auto rhs = convertRvalueExpression(*args[1], stringType);
+    if (!lhs || !rhs)
+      return {};
+    if (nameId == ksn::Compare)
+      return moore::StringCompareOp::create(builder, loc, lhs, rhs);
+    return moore::StringICompareOp::create(builder, loc, lhs, rhs);
+  }
+
+  if (nameId == ksn::Substr) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 3 && "`substr` takes 3 arguments");
     auto stringType = moore::StringType::get(getContext());
     auto str = convertRvalueExpression(*args[0], stringType);
-    auto index = convertRvalueExpression(*args[1]);
-    if (!str || !index)
+    auto start = convertRvalueExpression(*args[1]);
+    auto end = convertRvalueExpression(*args[2]);
+    if (!str || !start || !end)
       return {};
-    return moore::StringGetOp::create(builder, loc, str, index);
+    return moore::StringSubstrOp::create(builder, loc, str, start, end);
+  }
+
+  if (nameId == ksn::AToI || nameId == ksn::AToHex || nameId == ksn::AToOct ||
+      nameId == ksn::AToBin) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 1 && "`atoi/hex/oct/bin` takes 1 argument");
+    auto stringType = moore::StringType::get(getContext());
+    auto str = convertRvalueExpression(*args[0], stringType);
+    if (!str)
+      return {};
+    auto integerType = moore::IntType::getLogic(builder.getContext(), 32);
+    switch (nameId) {
+    case ksn::AToI:
+      return moore::StringAtoiOp::create(builder, loc, integerType, str);
+    case ksn::AToHex:
+      return moore::StringAtohexOp::create(builder, loc, integerType, str);
+    case ksn::AToOct:
+      return moore::StringAtooctOp::create(builder, loc, integerType, str);
+    case ksn::AToBin:
+      return moore::StringAtobinOp::create(builder, loc, integerType, str);
+    default:
+      llvm_unreachable("unexpected string to integer conversion");
+    }
+  }
+
+  if (nameId == ksn::AToReal) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 1 && "`atoreal` takes 1 argument");
+    auto stringType = moore::StringType::get(getContext());
+    auto str = convertRvalueExpression(*args[0], stringType);
+    if (!str)
+      return {};
+    auto realType = moore::RealType::get(getContext(), moore::RealWidth::f64);
+    return moore::StringAtorealOp::create(builder, loc, realType, str);
   }
 
   //===--------------------------------------------------------------------===//
