@@ -613,6 +613,47 @@ hw.module @OpsWithRegions(in %clock: !seq.clock, in %a: i42, in %b: i1, out c: i
   hw.output %0 : i42
 }
 
+// CHECK-LABEL: arc.model @Triggered
+hw.module @Triggered(in %clock: i1, in %a: i42) {
+  // CHECK: [[IN_CLOCK:%.+]] = arc.root_input "clock"
+  // CHECK: [[IN_A:%.+]] = arc.root_input "a"
+  // CHECK: [[A:%.+]] = arc.state_read [[IN_A]]
+  // CHECK: [[CLOCK:%.+]] = arc.state_read [[IN_CLOCK]]
+  // CHECK: [[OLD_CLOCK:%.+]] = arc.state_read
+  // CHECK: arc.state_write
+  // CHECK: [[EDGE:%.+]] = comb.xor [[OLD_CLOCK]], [[CLOCK]]
+  // CHECK: [[POSEDGE:%.+]] = comb.and [[EDGE]], [[CLOCK]]
+  // CHECK: scf.if [[POSEDGE]] {
+  // CHECK:   func.call @ConsumeI42([[A]])
+  // CHECK: }
+  hw.triggered posedge %clock(%a) : i42 {
+  ^bb0(%arg: i42):
+    func.call @ConsumeI42(%arg) : (i42) -> ()
+  }
+}
+
+// CHECK-LABEL: arc.model @TriggeredCurrentTime
+hw.module @TriggeredCurrentTime(in %clock: i1) {
+  // CHECK: [[IN_CLOCK:%.+]] = arc.root_input "clock"
+  // CHECK: [[CLOCK:%.+]] = arc.state_read [[IN_CLOCK]]
+  // CHECK: [[OLD_CLOCK:%.+]] = arc.state_read
+  // CHECK: arc.state_write
+  // CHECK: [[EDGE:%.+]] = comb.xor [[OLD_CLOCK]], [[CLOCK]]
+  // CHECK: [[POSEDGE:%.+]] = comb.and [[EDGE]], [[CLOCK]]
+  // CHECK: scf.if [[POSEDGE]] {
+  // CHECK:   [[TIME_INT:%.+]] = arc.current_time %arg0
+  // CHECK:   [[TIME:%.+]] = llhd.int_to_time [[TIME_INT]]
+  // CHECK:   [[TIME_AS_INT:%.+]] = llhd.time_to_int [[TIME]]
+  // CHECK:   func.call @ConsumeI64([[TIME_AS_INT]])
+  // CHECK: }
+  // CHECK-NOT: llhd.current_time
+  hw.triggered posedge %clock {
+    %0 = llhd.current_time
+    %1 = llhd.time_to_int %0
+    func.call @ConsumeI64(%1) : (i64) -> ()
+  }
+}
+
 // Regression check on worklist producing false positive comb loop errors.
 // CHECK-LABEL: @CombLoopRegression
 hw.module @CombLoopRegression(in %clk: !seq.clock) {

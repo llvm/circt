@@ -99,6 +99,7 @@ struct OpLowering {
   LogicalResult lower(MemoryOp op);
   LogicalResult lower(TapOp op);
   LogicalResult lower(InstanceOp op);
+  LogicalResult lower(hw::TriggeredOp op);
   LogicalResult lower(hw::OutputOp op);
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
@@ -425,9 +426,10 @@ static scf::IfOp createOrReuseIf(OpBuilder &builder, Value condition,
 LogicalResult OpLowering::lower() {
   return TypeSwitch<Operation *, LogicalResult>(op)
       // Operations with special lowering.
-      .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp, hw::OutputOp,
-            seq::InitialOp, llhd::FinalOp, llhd::CurrentTimeOp,
-            sim::ClockedTerminateOp>([&](auto op) { return lower(op); })
+      .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
+            hw::TriggeredOp, hw::OutputOp, seq::InitialOp, llhd::FinalOp,
+            llhd::CurrentTimeOp, sim::ClockedTerminateOp>(
+          [&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -846,6 +848,45 @@ LogicalResult OpLowering::lower(InstanceOp op) {
   return success();
 }
 
+/// Lower `hw.triggered` by inlining its body under a posedge check.
+LogicalResult OpLowering::lower(hw::TriggeredOp op) {
+  assert(phase == Phase::New);
+
+  if (op.getEvent() != hw::EventControl::AtPosEdge) {
+    if (!initial)
+      return op.emitOpError("only posedge triggers are supported");
+    return success();
+  }
+
+  lowerValue(op.getTrigger(), Phase::New);
+  SmallVector<Value> inputs;
+  for (auto input : op.getInputs())
+    inputs.push_back(lowerValue(input, Phase::Old));
+  if (initial)
+    return success();
+  if (llvm::is_contained(inputs, Value{}))
+    return failure();
+
+  auto ifClockOp = createIfClockOp(op.getTrigger());
+  if (!ifClockOp)
+    return failure();
+
+  OpBuilder::InsertionGuard guard(module.builder);
+  module.builder.setInsertionPoint(ifClockOp.thenYield());
+
+  // Expose the trigger inputs as values for the body block arguments.
+  for (auto [arg, input] : llvm::zip(op.getBodyBlock()->getArguments(), inputs))
+    module.loweredValues[{arg, Phase::New}] = input;
+  for (auto &bodyOp : llvm::make_early_inc_range(*op.getBodyBlock())) {
+    OpLowering bodyLowering(&bodyOp, Phase::New, module);
+    bodyLowering.initial = false;
+    if (failed(bodyLowering.lower()))
+      return failure();
+  }
+
+  return success();
+}
+
 /// Lower the main module's outputs by allocating storage for each and then
 /// writing the current value into that storage.
 LogicalResult OpLowering::lower(hw::OutputOp op) {
@@ -1105,17 +1146,22 @@ scf::IfOp OpLowering::createIfClockOp(Value clock) {
 /// cases. Some operations and values have special handling though. For example,
 /// states and memory reads are immediately materialized as a new read op.
 Value OpLowering::lowerValue(Value value, Phase phase) {
+  // Check if the value has already been lowered.
+  if (auto lowered = module.loweredValues.lookup({value, phase}))
+    return lowered;
+
   // Handle module inputs. They read the same in all phases.
   if (auto arg = dyn_cast<BlockArgument>(value)) {
+    if (arg.getOwner() != module.moduleOp.getBodyBlock()) {
+      if (!initial)
+        emitError(arg.getLoc()) << "block argument has not been lowered";
+      return {};
+    }
     if (initial)
       return {};
     auto state = module.allocatedInputs[arg.getArgNumber()];
     return StateReadOp::create(module.getBuilder(phase), arg.getLoc(), state);
   }
-
-  // Check if the value has already been lowered.
-  if (auto lowered = module.loweredValues.lookup({value, phase}))
-    return lowered;
 
   // At this point the value is the result of an op. (Block arguments are
   // handled above.)
