@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
+#include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/Dominance.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -87,6 +88,7 @@ void EliminateWiresPass::runOnOperation() {
     auto node = NodeOp::create(builder, writer.getSrc(), wire.getName(),
                                wire.getNameKind(), wire.getAnnotations(),
                                wire.getInnerSymAttr(), wire.getForceable());
+    sv::setSVAttributes(node, sv::getSVAttributes(wire));
     wire.replaceAllUsesWith(node);
     wire.erase();
     writer.erase();
