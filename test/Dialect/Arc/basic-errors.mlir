@@ -691,7 +691,7 @@ arc.coroutine.define @Foo() -> i42 {
 // -----
 
 arc.coroutine.define @Foo(%arg0: i42) {
-  // expected-error @below {{destination block has 0 arguments, but expected 1}}
+  // expected-error @below {{branch has 1 operands for successor #0, but target block has 0}}
   arc.coroutine.yield ^bb1
 ^bb1:
   arc.coroutine.halt
@@ -701,7 +701,7 @@ arc.coroutine.define @Foo(%arg0: i42) {
 
 arc.coroutine.define @Foo(%arg0: i42) {
   %c0_i42 = hw.constant 0 : i42
-  // expected-error @below {{destination block has 1 arguments, but expected 2}}
+  // expected-error @below {{branch has 2 operands for successor #0, but target block has 1}}
   arc.coroutine.yield ^bb1(%c0_i42 : i42)
 ^bb1(%arg1: i42):
   arc.coroutine.halt
@@ -722,9 +722,7 @@ arc.coroutine.define @Foo(%arg0: i42) {
 
 arc.coroutine.define @Foo(%arg0: i42) {
   %c0_i42 = hw.constant 0 : i42
-  // expected-error @below {{destination operand type mismatch: destination operand #0}}
-  // expected-note @below {{expected type: 'i9001'}}
-  // expected-note @below {{actual type: 'i42'}}
+  // expected-error @below {{type mismatch for bb argument #1 of successor #0}}
   arc.coroutine.yield ^bb1(%c0_i42 : i42)
 ^bb1(%arg1: i42, %arg2: i9001):
   arc.coroutine.halt

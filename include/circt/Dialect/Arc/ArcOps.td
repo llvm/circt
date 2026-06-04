@@ -862,6 +862,7 @@ def CoroutineInstanceOp : ArcOp<"coroutine.instance", [
 
 def CoroutineYieldOp : ArcOp<"coroutine.yield", [
   AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<BranchOpInterface>,
   HasParent<"CoroutineDefineOp">,
   Terminator,
 ]> {
