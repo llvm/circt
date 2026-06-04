@@ -378,7 +378,7 @@ def UnionCreateOp : HWOp<"union_create", [Pure]> {
   }];
 }
 
-def UnionExtractOp : HWOp<"union_extract", [Pure, 
+def UnionExtractOp : HWOp<"union_extract", [Pure,
     DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
   ]> {
   let summary = "Get a union member.";
@@ -397,6 +397,7 @@ def UnionExtractOp : HWOp<"union_extract", [Pure,
   let arguments = (ins UnionType:$input, I32Attr:$fieldIndex);
   let results = (outs HWNonInOutType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizeMethod = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringAttr":$fieldName)>,
