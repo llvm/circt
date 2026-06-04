@@ -78,6 +78,7 @@ static void autoSerialCoordTranslateTest(AcceleratorConnection *, Accelerator *,
                                          uint32_t numCoords);
 static void channelTest(AcceleratorConnection *, Accelerator *,
                         uint32_t iterations);
+static void resetTest(AcceleratorConnection *, Accelerator *);
 
 // Default widths and default widths string for CLI help text.
 constexpr std::array<uint32_t, 5> defaultWidths = {32, 64, 128, 256, 512};
@@ -323,6 +324,9 @@ int main(int argc, const char *argv[]) {
   channelTestSub->add_option("-i,--iters", channelIters,
                              "Number of loopback iterations (default 10)");
 
+  CLI::App *resetSub = cli.add_subcommand(
+      "reset", "Test the design reset feature (telemetry clears after reset)");
+
   if (int rc = cli.esiParse(argc, argv))
     return rc;
   if (!cli.get_help_ptr()->empty())
@@ -371,6 +375,8 @@ int main(int argc, const char *argv[]) {
                                    autoCoordNumItems);
     } else if (*channelTestSub) {
       channelTest(acc, accel, channelIters);
+    } else if (*resetSub) {
+      resetTest(acc, accel);
     }
 
     acc->disconnect();
@@ -1141,6 +1147,70 @@ static void loopbackAddTest(AcceleratorConnection *conn, Accelerator *accel,
                                  " us (" + std::to_string(completionRate) +
                                  " calls/s effective)");
   }
+}
+
+// Exercise the design reset feature using existing telemetry. Run a hostmem
+// write operation on the 'writemem' module, which increments its
+// 'addrCmdResponses' telemetry counter. Confirm the telemetry advanced,
+// request a design reset, then confirm the telemetry has been cleared back to
+// zero (the counters live in the user design which the reset clears).
+static void resetTest(AcceleratorConnection *conn, Accelerator *accel) {
+  Logger &logger = conn->getLogger();
+  constexpr uint32_t width = 64;
+
+  // Run an existing test that increments telemetry. The hostmem write test
+  // bumps the writemem module's 'addrCmdResponses' counter.
+  hostmemTest(conn, accel, {width}, /*write=*/true, /*read=*/false);
+
+  // Grab the writemem module's response telemetry counter to observe the reset.
+  auto writeMemChildIter = accel->getChildren().find(AppID("writemem", width));
+  if (writeMemChildIter == accel->getChildren().end())
+    throw std::runtime_error("Reset test: no 'writemem' child");
+  auto &ports = writeMemChildIter->second->getPorts();
+  auto respIter = ports.find(AppID("addrCmdResponses"));
+  if (respIter == ports.end())
+    throw std::runtime_error(
+        "Reset test: no 'addrCmdResponses' telemetry port");
+  auto *respMetric =
+      respIter->second.getAs<services::TelemetryService::Metric>();
+  if (!respMetric)
+    throw std::runtime_error("Reset test: 'addrCmdResponses' not telemetry");
+  respMetric->connect();
+
+  uint64_t before = respMetric->readInt();
+  std::cout << "[reset] telemetry addrCmdResponses before reset = " << before
+            << std::endl;
+  if (before == 0)
+    throw std::runtime_error(
+        "Reset test: telemetry was not incremented by the hostmem write");
+
+  // Request a design reset. This writes a magic value to the header which, a
+  // fixed number of cycles later, resets the user design (clearing the
+  // telemetry counters) without tearing down the host link.
+  logger.info("esitester", "Requesting design reset");
+  if (!conn->reset())
+    throw std::runtime_error("Reset test: reset() reported failure");
+  std::cout << "[reset] reset requested" << std::endl;
+
+  // The reset is asserted a fixed number of cycles after the request (to let
+  // in-flight transactions drain), so poll the telemetry until it clears. Each
+  // MMIO read advances the simulation well past the reset delay.
+  uint64_t after = before;
+  constexpr int maxPolls = 1000000;
+  for (int polls = 0; polls < maxPolls; ++polls) {
+    after = respMetric->readInt();
+    if (after == 0)
+      break;
+    std::this_thread::sleep_for(std::chrono::microseconds(1));
+  }
+  std::cout << "[reset] telemetry addrCmdResponses after reset = " << after
+            << std::endl;
+  if (after != 0)
+    throw std::runtime_error(
+        "Reset test: telemetry was not cleared by the reset (got " +
+        std::to_string(after) + ")");
+
+  std::cout << "Reset test passed" << std::endl;
 }
 
 static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,

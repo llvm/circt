@@ -115,6 +115,15 @@ class TestCosimEsitester:
         "writemem[32].addrCmdResponses: 0",
     ])
 
+  def test_reset(self, host: str, port: int) -> None:
+    conn = f"{host}:{port}"
+    stdout = run_cmd(["esitester", "cosim", conn, "reset"])
+    check_lines(stdout, [
+        "[reset] reset requested",
+        "[reset] telemetry addrCmdResponses after reset = 0",
+        "Reset test passed",
+    ])
+
   def test_channel_python(self, conn: AcceleratorConnection) -> None:
     """Test ChannelService ToHost and FromHost ports from Python."""
     acc = conn.build_accelerator()

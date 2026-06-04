@@ -40,6 +40,25 @@ AcceleratorConnection::AcceleratorConnection(Context &ctxt)
     : ctxt(ctxt), serviceThread(nullptr) {}
 AcceleratorConnection::~AcceleratorConnection() { disconnect(); }
 
+// Request a design reset by writing the reset magic number to a particular
+// MMIO offset.
+bool AcceleratorConnection::reset() {
+  services::MMIO *mmio = getService<services::MMIO>();
+  if (!mmio)
+    return false;
+  // The MMIO write is a virtual backend interface which may throw. Honor the
+  // documented contract of returning false (rather than propagating) if the
+  // reset cannot be performed for any reason.
+  try {
+    mmio->write(ResetRequestOffset, ResetMagicNumber);
+  } catch (const std::exception &e) {
+    getLogger().error("reset",
+                      std::string("failed to request reset: ") + e.what());
+    return false;
+  }
+  return true;
+}
+
 AcceleratorServiceThread *AcceleratorConnection::getServiceThread() {
   if (!serviceThread)
     serviceThread = std::make_unique<AcceleratorServiceThread>();

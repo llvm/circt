@@ -63,6 +63,9 @@ public:
   static std::unique_ptr<AcceleratorConnection>
   connect(Context &, std::string connectionString);
 
+  /// Resets are not supported.
+  bool reset() override { return false; }
+
   /// Internal implementation.
   struct Impl;
   Impl &getImpl();

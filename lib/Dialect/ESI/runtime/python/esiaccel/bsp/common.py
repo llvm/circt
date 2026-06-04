@@ -25,6 +25,14 @@ VersionNumber = 0  # Version 0: format subject to change
 IndirectionMagicNumber = 0x312bf0cc_E5100E51  # random + ESI__ESI
 IndirectionVersionNumber = 0  # Version 0: format subject to change
 
+# Magic value which, when written by the host to header slot 7, requests a
+# design reset. Keep in sync with 'ResetMagicNumber' in the runtime
+# (cpp/include/esi/Accelerator.h).
+ResetMagicNumber = 0x00000E510000B007
+# Number of cycles to wait after a reset is requested before asserting it. This
+# gives in-flight transactions time to drain.
+ResetCycles = 8192
+
 
 class ESI_Manifest_ROM(Module):
   """Module which will be created later by CIRCT which will contain the
@@ -66,17 +74,42 @@ def HeaderMMIO(manifest_loc: int) -> Module:
 
     clk = Clock()
     rst = Reset()
-    read = Input(esi.MMIO.read.type)
+    read = Input(esi.MMIO.read_write.type)
+    # Asserted for one cycle when the host writes the reset magic number to
+    # header slot 7. Propagates up to the BSP which performs the actual reset.
+    reset_request = Output(Bits(1))
 
     @generator
     def build(ports):
+      clk = ports.clk
+      rst = ports.rst
       data_chan_wire = Wire(Channel(esi.MMIODataType))
       input_bundles = ports.read.unpack(data=data_chan_wire)
-      address_chan = input_bundles['offset']
+      cmd_chan = input_bundles['cmd']
 
-      address_ready = Wire(Bits(1))
-      address, address_valid = address_chan.unwrap(address_ready)
-      address_words = address.as_bits()[3:]  # Lop off the lower three bits.
+      # Two-stage pipeline: stage 1 captures the incoming command, stage 2 holds
+      # the looked-up response. Each stage carries its own occupancy bit so that
+      # exactly one response is produced per command and the valid/ready
+      # contract is never violated (the response valid is only deasserted once
+      # it has actually been consumed downstream).
+      cmd_ready = Wire(Bits(1))
+      data_chan_ready = Wire(Bits(1))
+      s1_to_s2 = Wire(Bits(1))
+      cmd_raw, cmd_valid = cmd_chan.unwrap(cmd_ready)
+
+      # Stage 1: command capture register and occupancy bit.
+      s1_load = cmd_valid & cmd_ready
+      cmd = cmd_raw.reg(clk, rst, ce=s1_load, name="cmd")
+      s1_valid = ControlReg(clk,
+                            rst,
+                            asserts=[s1_load],
+                            resets=[s1_to_s2],
+                            name="s1_valid")
+      # Accept a new command when stage 1 is empty or is draining into stage 2.
+      cmd_ready.assign((~s1_valid | s1_to_s2).as_bits())
+
+      address_words = cmd.offset.as_bits()[3:]  # Lop off the lower three bits.
+      slot = address_words[:3]
 
       cycles = Counter(64)(clk=ports.clk,
                            rst=ports.rst,
@@ -96,18 +129,40 @@ def HeaderMMIO(manifest_loc: int) -> Module:
           0,  # Reserved for future use.
           cycles.out.as_bits(),  # Cycle counter.
           core_freq,  # Core frequency, if known.
-          0,
+          0,  # Slot 7: write the reset magic number here to request a reset.
       ])
       header.name = "header"
-      header_response_valid = address_valid  # Zero latency read.
-      # Select the appropriate header index.
-      header_out = header[address_words[:3]]
-      header_out.name = "header_out"
+
+      # Stage 2: registered response value and its occupancy bit.
+      header_out_valid = Wire(Bits(1))
+      s2_xact = header_out_valid & data_chan_ready
+      # Stage 1 advances into stage 2 when it holds a command and stage 2 is
+      # empty or being consumed this cycle.
+      s1_to_s2.assign((s1_valid & (~header_out_valid | s2_xact)).as_bits())
+
+      header_out = header[slot].reg(clk=clk,
+                                    rst=rst,
+                                    ce=s1_to_s2,
+                                    name="header_out")
+      header_out_valid.assign(
+          ControlReg(clk,
+                     rst,
+                     asserts=[s1_to_s2],
+                     resets=[s2_xact],
+                     name="header_out_valid"))
       # Wrap the response.
-      data_chan, data_chan_ready = Channel(esi.MMIODataType).wrap(
-          header_out, header_response_valid)
+      data_chan, data_chan_ready_sig = Channel(esi.MMIODataType).wrap(
+          header_out, header_out_valid)
       data_chan_wire.assign(data_chan)
-      address_ready.assign(data_chan_ready)
+      data_chan_ready.assign(data_chan_ready_sig)
+
+      # Detect a write of the reset magic number to slot 7. Register the request
+      # so it is a clean one-cycle pulse, asserted as the command advances into
+      # the response stage. 'DesignResetController' latches it, so a single-cycle
+      # pulse is sufficient to trigger the reset.
+      reset_detect = (cmd.write & (slot == Bits(3)(7)) &
+                      (cmd.data == Bits(64)(ResetMagicNumber))).as_bits()
+      ports.reset_request = (reset_detect & s1_to_s2).as_bits()
 
   return HeaderMMIO
 
@@ -316,6 +371,56 @@ def ChannelDemuxTree_HalfStage_ReadyBlocking(
   return ChannelDemuxTree
 
 
+@modparams
+def DesignResetController(
+    delay_cycles: int) -> type["DesignResetControllerImpl"]:
+  """Counts `delay_cycles` clock cycles after a reset request is observed, then
+  asserts `design_reset` for one cycle. This module must be driven by the
+  *external* reset only (not the reset it generates) so that the countdown is
+  not disturbed by the reset it produces.
+
+  `reset_pending` is asserted from the moment a reset is requested until it
+  fires. It is intended to be used to quiesce the design (e.g. stop accepting
+  new transactions) so that nothing is in flight when the reset is asserted."""
+
+  if delay_cycles < 1:
+    raise ValueError("'delay_cycles' must be at least 1.")
+
+  counter_width = max(clog2(delay_cycles), 1)
+
+  class DesignResetControllerImpl(Module):
+    clk = Clock()
+    rst = Reset()
+    reset_request = Input(Bits(1))
+    design_reset = Output(Bits(1))
+    # High from the cycle a reset is requested until it fires. Use this to stop
+    # accepting new work so in-flight transactions can drain before the reset.
+    reset_pending = Output(Bits(1))
+
+    @generator
+    def build(ports):
+      fire = Wire(Bits(1))
+      # Latch that a reset has been requested until we fire the reset.
+      pending = ControlReg(clk=ports.clk,
+                           rst=ports.rst,
+                           asserts=[ports.reset_request],
+                           resets=[fire],
+                           name="reset_pending")
+      # Count cycles while a reset is pending.
+      count = Counter(counter_width)(clk=ports.clk,
+                                     rst=ports.rst,
+                                     clear=(fire | ~pending).as_bits(),
+                                     increment=pending,
+                                     instance_name="reset_delay_counter")
+      fire.assign(
+          (pending &
+           (count.out == UInt(counter_width)(delay_cycles - 1))).as_bits())
+      ports.design_reset = fire
+      ports.reset_pending = pending
+
+  return DesignResetControllerImpl
+
+
 class ChannelMMIO(esi.ServiceImplementation):
   """MMIO service implementation with MMIO bundle interfaces. Should be
   relatively easy to adapt to physical interfaces by wrapping the wires to
@@ -350,6 +455,10 @@ class ChannelMMIO(esi.ServiceImplementation):
   rst = Input(Bits(1))
 
   cmd = Input(esi.MMIO.read_write.type)
+
+  # Asserted for one cycle when the host requests a design reset via an MMIO
+  # write to the header. Propagates up to the BSP which performs the reset.
+  reset_request = Output(Bits(1))
 
   # Amount of register space each client gets. This is a GIANT HACK and needs to
   # be replaced by parameterizable services.
@@ -406,11 +515,11 @@ class ChannelMMIO(esi.ServiceImplementation):
 
     # Instantiate the header and manifest ROM. Fill in the read_table with
     # bundle wires to be assigned identically to the other MMIO clients.
-    header_bundle_wire = Wire(esi.MMIO.read.type)
+    header_bundle_wire = Wire(esi.MMIO.read_write.type)
     table[0] = header_bundle_wire
-    HeaderMMIO(manifest_loc)(clk=ports.clk,
-                             rst=ports.rst,
-                             read=header_bundle_wire)
+    header = HeaderMMIO(manifest_loc)(clk=ports.clk,
+                                      rst=ports.rst,
+                                      read=header_bundle_wire)
 
     mani_bundle_wire = Wire(esi.MMIO.read.type)
     table[manifest_loc] = mani_bundle_wire
@@ -463,6 +572,10 @@ class ChannelMMIO(esi.ServiceImplementation):
       client_data_channels.append(bundle_froms["data"])
     resp_channel = esi.ChannelMux(client_data_channels)
     data_resp_channel.assign(resp_channel)
+
+    # The header surfaces a reset request when the host writes the reset magic
+    # number to slot 7. Propagate it up to the caller (the BSP).
+    ports.reset_request = header.reset_request
 
   @staticmethod
   def build_addr_read(read_addr_chan: ChannelSignal, num_clients: int,
