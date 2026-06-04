@@ -1,6 +1,7 @@
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-synth{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux},cse))" | FileCheck %s
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-synth{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.add},cse))" | FileCheck %s --check-prefix=ALLOW_ADD
 // RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-synth{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.icmp}))" | FileCheck %s --check-prefix=ALLOW_ICMP
+// RUN: circt-opt %s --pass-pipeline="builtin.module(hw.module(convert-comb-to-synth{additional-legal-ops=comb.xor,comb.or,comb.and,comb.mux,comb.add,comb.mul,comb.sub},cse))" | FileCheck %s --check-prefix=ALLOW_ARITH
 
 // CHECK-LABEL: @parity
 hw.module @parity(in %arg0: i4, out out: i1) {
@@ -462,4 +463,189 @@ hw.module @divmodu_power_of_two(in %lhs: i8, out out_divu: i8, out out_modu: i8)
   // ALLOW_ICMP-NEXT: %[[MODU:.+]] = comb.concat %[[C0_I5]], %[[LOWER_3]] : i5, i3
   // ALLOW_ICMP-NEXT: hw.output %[[DIVU]], %[[MODU]] : i8, i8
   hw.output %0, %1 : i8, i8
+}
+
+// CHECK-LABEL: @divu_const_3
+// CHECK-NOT: comb.divu
+// CHECK: comb.concat
+// CHECK: comb.extract
+// ALLOW_ARITH-LABEL: @divu_const_3
+// ALLOW_ARITH-NOT: comb.divu
+// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: comb.mul
+// ALLOW_ARITH: comb.extract
+hw.module @divu_const_3(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant 3 : i8
+  %div = comb.divu %lhs, %rhs : i8
+  hw.output %div : i8
+}
+
+// CHECK-LABEL: @divu_const_7
+// CHECK-NOT: comb.divu
+// CHECK: comb.concat
+// CHECK: comb.extract
+// ALLOW_ARITH-LABEL: @divu_const_7
+// ALLOW_ARITH-NOT: comb.divu
+// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: comb.mul
+// ALLOW_ARITH: comb.sub
+// ALLOW_ARITH: comb.add
+// ALLOW_ARITH: comb.extract
+hw.module @divu_const_7(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant 7 : i8
+  %div = comb.divu %lhs, %rhs : i8
+  hw.output %div : i8
+}
+
+// CHECK-LABEL: @divu_const_10
+// CHECK-NOT: comb.divu
+// CHECK: comb.concat
+// CHECK: comb.extract
+// ALLOW_ARITH-LABEL: @divu_const_10
+// ALLOW_ARITH-NOT: comb.divu
+// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: comb.mul
+// ALLOW_ARITH: comb.extract
+hw.module @divu_const_10(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant 10 : i8
+  %div = comb.divu %lhs, %rhs : i8
+  hw.output %div : i8
+}
+
+// CHECK-LABEL: @modu_const_3
+// CHECK-NOT: comb.modu
+// CHECK: comb.concat
+// CHECK: comb.extract
+// ALLOW_ARITH-LABEL: @modu_const_3
+// ALLOW_ARITH-NOT: comb.modu
+// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: comb.mul
+// ALLOW_ARITH: comb.extract
+// ALLOW_ARITH: comb.sub
+hw.module @modu_const_3(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant 3 : i8
+  %mod = comb.modu %lhs, %rhs : i8
+  hw.output %mod : i8
+}
+
+// CHECK-LABEL: @divs_const_3
+// CHECK-NOT: comb.divs
+// CHECK: comb.replicate
+// CHECK: comb.concat
+// CHECK: comb.extract
+// ALLOW_ARITH-LABEL: @divs_const_3
+// ALLOW_ARITH-NOT: comb.divs
+// ALLOW_ARITH: comb.replicate
+// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: comb.mul
+// ALLOW_ARITH: comb.add
+hw.module @divs_const_3(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant 3 : i8
+  %div = comb.divs %lhs, %rhs : i8
+  hw.output %div : i8
+}
+
+// CHECK-LABEL: @divs_const_neg3
+// CHECK-NOT: comb.divs
+// CHECK: comb.replicate
+// CHECK: comb.concat
+// CHECK: comb.extract
+// ALLOW_ARITH-LABEL: @divs_const_neg3
+// ALLOW_ARITH-NOT: comb.divs
+// ALLOW_ARITH: comb.replicate
+// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: comb.mul
+// ALLOW_ARITH: comb.sub
+// ALLOW_ARITH: comb.add
+hw.module @divs_const_neg3(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant -3 : i8
+  %div = comb.divs %lhs, %rhs : i8
+  hw.output %div : i8
+}
+
+// CHECK-LABEL: @mods_const_3
+// CHECK-NOT: comb.mods
+// CHECK: comb.replicate
+// CHECK: comb.concat
+// CHECK: comb.extract
+// ALLOW_ARITH-LABEL: @mods_const_3
+// ALLOW_ARITH-NOT: comb.mods
+// ALLOW_ARITH: comb.replicate
+// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: comb.mul
+// ALLOW_ARITH: comb.add
+// ALLOW_ARITH: comb.sub
+hw.module @mods_const_3(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant 3 : i8
+  %mod = comb.mods %lhs, %rhs : i8
+  hw.output %mod : i8
+}
+
+// CHECK-LABEL: @mods_const_neg3
+// CHECK-NOT: comb.mods
+// CHECK: comb.replicate
+// CHECK: comb.concat
+// CHECK: comb.extract
+// ALLOW_ARITH-LABEL: @mods_const_neg3
+// ALLOW_ARITH-NOT: comb.mods
+// ALLOW_ARITH: comb.replicate
+// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: comb.mul
+// ALLOW_ARITH: comb.sub
+// ALLOW_ARITH: comb.add
+hw.module @mods_const_neg3(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant -3 : i8
+  %mod = comb.mods %lhs, %rhs : i8
+  hw.output %mod : i8
+}
+
+
+// CHECK-LABEL: @divs_const_1
+// CHECK-NOT: comb.divs
+// CHECK-NOT: comb.mul
+// CHECK-NOT: comb.replicate
+// CHECK: hw.output %lhs
+// ALLOW_ARITH-LABEL: @divs_const_1
+// ALLOW_ARITH-NOT: comb.divs
+// ALLOW_ARITH-NOT: comb.mul
+// ALLOW_ARITH-NOT: comb.replicate
+// ALLOW_ARITH: hw.output %lhs
+hw.module @divs_const_1(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant 1 : i8
+  %div = comb.divs %lhs, %rhs : i8
+  hw.output %div : i8
+}
+
+// CHECK-LABEL: @divs_const_neg1
+// CHECK-NOT: comb.divs
+// CHECK-NOT: comb.replicate
+// CHECK: comb.xor
+// ALLOW_ARITH-LABEL: @divs_const_neg1
+// ALLOW_ARITH-NOT: comb.divs
+// ALLOW_ARITH-NOT: comb.replicate
+// ALLOW_ARITH: comb.sub
+hw.module @divs_const_neg1(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant -1 : i8
+  %div = comb.divs %lhs, %rhs : i8
+  hw.output %div : i8
+}
+
+// CHECK-LABEL: @divu_const_0
+// CHECK: hw.constant 0
+// ALLOW_ARITH-LABEL: @divu_const_0
+// ALLOW_ARITH: hw.constant 0
+hw.module @divu_const_0(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant 0 : i8
+  %div = comb.divu %lhs, %rhs : i8
+  hw.output %div : i8
+}
+
+// CHECK-LABEL: @modu_const_0
+// CHECK: hw.constant 0
+// ALLOW_ARITH-LABEL: @modu_const_0
+// ALLOW_ARITH: hw.constant 0
+hw.module @modu_const_0(in %lhs: i8, out out: i8) {
+  %rhs = hw.constant 0 : i8
+  %mod = comb.modu %lhs, %rhs : i8
+  hw.output %mod : i8
 }
