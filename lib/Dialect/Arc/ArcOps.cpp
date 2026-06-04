@@ -855,33 +855,34 @@ LogicalResult CoroutineYieldOp::verify() {
   if (failed(verifyCoroutineTerminator(*this, getYieldOperands().getTypes())))
     return failure();
 
-  // Verify that the destination block's leading arguments match the
-  // coroutine's function type, and that the remaining arguments match the
-  // yield's destination operands.
+  // The `BranchOpInterface` already verifies that the destination block has
+  // the right number of arguments and that the trailing arguments match the
+  // yield's destination operands. Additionally verify that the leading
+  // arguments, which are supplied fresh by the caller upon resumption, match
+  // the coroutine's function type.
   auto parent = (*this)->getParentOfType<CoroutineDefineOp>();
   TypeRange coroutineArgTypes = parent.getArgumentTypes();
   TypeRange destArgTypes = getDest()->getArgumentTypes();
-  TypeRange destOperandTypes = getDestOperands().getTypes();
-  size_t expectedCount = coroutineArgTypes.size() + destOperandTypes.size();
-  if (destArgTypes.size() != expectedCount)
-    return emitOpError("destination block has ")
-           << destArgTypes.size() << " arguments, but expected "
-           << expectedCount << " (" << coroutineArgTypes.size()
-           << " coroutine arguments followed " << destOperandTypes.size()
-           << " yield destination operands)";
-
-  if (failed(verifyTypeListEquivalence(
-          *this, coroutineArgTypes,
-          destArgTypes.take_front(coroutineArgTypes.size()),
-          "destination resume argument")))
-    return failure();
-
-  if (failed(verifyTypeListEquivalence(
-          *this, destArgTypes.drop_front(coroutineArgTypes.size()),
-          destOperandTypes, "destination operand")))
-    return failure();
+  if (destArgTypes.size() >= coroutineArgTypes.size())
+    if (failed(verifyTypeListEquivalence(
+            *this, coroutineArgTypes,
+            destArgTypes.take_front(coroutineArgTypes.size()),
+            "destination resume argument")))
+      return failure();
 
   return success();
+}
+
+// The destination block's leading arguments match the coroutine's function
+// type and are supplied fresh by the caller upon resumption. They are
+// therefore "produced" operands from the branch's point of view. The
+// remaining destination block arguments map to the yield's destination
+// operands.
+SuccessorOperands CoroutineYieldOp::getSuccessorOperands(unsigned index) {
+  assert(index == 0 && "invalid successor index");
+  auto parent = (*this)->getParentOfType<CoroutineDefineOp>();
+  return SuccessorOperands(parent.getArgumentTypes().size(),
+                           getDestOperandsMutable());
 }
 
 LogicalResult CoroutineReturnOp::verify() {
