@@ -23,6 +23,7 @@ target_link_libraries(hlstool
   CIRCTSeq
   CIRCTSeqToSV
   CIRCTSeqTransforms
+  CIRCTVerifToSV
   CIRCTCFToHandshake
   CIRCTSV
   CIRCTSVTransforms

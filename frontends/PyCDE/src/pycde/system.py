@@ -466,7 +466,7 @@ class System:
       "builtin.module(lower-esi-types)",
       "builtin.module(convert-fsm-to-sv)",
       "builtin.module(lower-hwarith-to-hw)",
-      "builtin.module(hw.module(lower-seq-fifo))",
+      "builtin.module(lower-seq-fifo{{outline-modules=true}})",
       "builtin.module(hw.module(lower-seq-hlmem))",
       "builtin.module(lower-seq-to-sv)",
       "builtin.module(hw.module(lower-hw-to-sv))",

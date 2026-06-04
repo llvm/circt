@@ -238,6 +238,14 @@ HWModuleOp ESIHWBuilder::declareChannelBuffer(Operation *symTable,
   Value c0 = hw::ConstantOp::create(b, i1, b.getBoolAttr(false));
   Value c1 = hw::ConstantOp::create(b, i1, b.getBoolAttr(true));
 
+  // Attach an `sv.namehint` to the op defining `v` so the generated Verilog
+  // carries a meaningful net name, then return `v` for inline use.
+  auto named = [&](Value v, StringRef hint) -> Value {
+    if (Operation *op = v.getDefiningOp())
+      op->setAttr("sv.namehint", b.getStringAttr(hint));
+    return v;
+  };
+
   // The run-out storage reports `almostFull` to throttle the producer. It is
   // produced below; use a backedge to break the combinational loop, then
   // pipeline it back to the producer (reset to "full" so nothing is accepted
@@ -246,8 +254,8 @@ HWModuleOp ESIHWBuilder::declareChannelBuffer(Operation *symTable,
   Value af = almostFullBE;
   for (uint64_t i = 0; i < stages; ++i)
     af = seq::CompRegOp::create(b, af, clkArg, rstArg, c1, "backpressure");
-  Value aReadyVal = comb::createOrFoldNot(b, loc, af);
-  Value aXfer = comb::AndOp::create(b, aValidArg, aReadyVal);
+  Value aReadyVal = named(comb::createOrFoldNot(b, loc, af), "a_ready");
+  Value aXfer = named(comb::AndOp::create(b, aValidArg, aReadyVal), "a_xfer");
 
   // Feed-forward register chain for the valid (and, if present, data) signals.
   Value chainValid = aXfer;
@@ -256,7 +264,7 @@ HWModuleOp ESIHWBuilder::declareChannelBuffer(Operation *symTable,
     chainValid =
         seq::CompRegOp::create(b, chainValid, clkArg, rstArg, c0, "ff_valid");
     if (hasData)
-      chainData = seq::CompRegOp::create(b, chainData, clkArg);
+      chainData = seq::CompRegOp::create(b, chainData, clkArg, "ff_data");
   }
 
   // Storage depth: chain length (stages) + tokens sent during the backpressure
@@ -267,40 +275,112 @@ HWModuleOp ESIHWBuilder::declareChannelBuffer(Operation *symTable,
   if (hasData) {
     // Run-out FIFO. `almostFull` asserts at `slack` entries, leaving room for
     // the (up to) 2*stages tokens still in flight when the producer is stopped.
-    // The FIFO is read first-word-fall-through (combinational read); the data
-    // output is then captured into an explicit register stage so the module's
-    // data output is driven directly by a register, while the ready/valid
-    // handshake stays combinational.
+    //
+    // The FIFO uses a registered (synchronous) read (`rdLatency = 1`): a read
+    // issued in one cycle delivers its data on `fifo.output` the next cycle,
+    // and that data is valid for exactly one cycle (the read register then
+    // advances to follow the read pointer). Using a registered read keeps the
+    // SRAM read off the module's output path, improving FMax, but means the
+    // read result must be captured the cycle it appears.
+    //
+    // A depth-2 output skid buffer decouples this one-cycle read latency from
+    // the downstream valid/ready handshake and presents a registered,
+    // full-throughput, hold-under-backpressure output:
+    //   * `out0`/`out0Valid` is the consumer-facing registered output.
+    //   * `out1`/`out1Valid` is a skid slot that captures a read result which
+    //     arrives while the consumer is stalling (a read may already be in
+    //     flight when the decision to stop reading is made).
+    //   * `rdInFlight` marks that a read issued last cycle is delivering its
+    //     (single-cycle-valid) data on `fifo.output` this cycle.
     Backedge fifoRdEn = bb.get(i1);
     auto fifo = seq::FIFOOp::create(
         b, dataType, /*full=*/i1, /*empty=*/i1, /*almostFull=*/i1,
         /*almostEmpty=*/Type(), chainData, fifoRdEn, chainValid, clkArg, rstArg,
-        b.getI64IntegerAttr(depth), /*rdLatency=*/b.getI64IntegerAttr(0),
+        b.getI64IntegerAttr(depth), /*rdLatency=*/b.getI64IntegerAttr(1),
         /*almostFullThreshold=*/b.getI64IntegerAttr(slack),
         /*almostEmptyThreshold=*/IntegerAttr());
     almostFullBE.setValue(fifo.getAlmostFull());
-    Value notEmpty = comb::createOrFoldNot(b, loc, fifo.getEmpty());
+    Value notEmpty =
+        named(comb::createOrFoldNot(b, loc, fifo.getEmpty()), "not_empty");
 
-    // Registered output stage. The output slot is free when it is empty or is
-    // being drained this cycle; a token is dequeued only when the slot is free,
-    // so the registered data and valid stay aligned.
-    Backedge outValidBE = bb.get(i1);
-    Value outValid =
-        seq::CompRegOp::create(b, outValidBE, clkArg, rstArg, c0, "out_valid");
-    Value slotFree = comb::OrOp::create(
-        b, comb::createOrFoldNot(b, loc, outValid), xReadyArg);
-    Value deq = comb::AndOp::create(b, notEmpty, slotFree);
-    fifoRdEn.setValue(deq);
-    outValidBE.setValue(comb::MuxOp::create(b, slotFree, deq, outValid));
+    // Output skid buffer state.
+    Backedge out0ValidBE = bb.get(i1);
+    Backedge out1ValidBE = bb.get(i1);
+    Backedge out0DataBE = bb.get(dataType);
+    Backedge out1DataBE = bb.get(dataType);
+    Backedge rdInFlightBE = bb.get(i1);
+    Value out0Valid = seq::CompRegOp::create(b, out0ValidBE, clkArg, rstArg, c0,
+                                             "out0_valid");
+    Value out1Valid = seq::CompRegOp::create(b, out1ValidBE, clkArg, rstArg, c0,
+                                             "out1_valid");
+    Value out0Data = seq::CompRegOp::create(b, out0DataBE, clkArg, "out0_data");
+    Value out1Data = seq::CompRegOp::create(b, out1DataBE, clkArg, "out1_data");
+    Value rdInFlight = seq::CompRegOp::create(b, rdInFlightBE, clkArg, rstArg,
+                                              c0, "rd_in_flight");
 
-    // Output data register, updated only when a token is dequeued so it holds
-    // its value while the consumer applies backpressure.
-    Backedge outDataBE = bb.get(dataType);
-    Value outData = seq::CompRegOp::create(b, outDataBE, clkArg);
-    outDataBE.setValue(comb::MuxOp::create(b, deq, fifo.getOutput(), outData));
+    // The head is dequeued when it is valid and the consumer is ready. A read
+    // result arrives this cycle (and must be captured) when a read was in
+    // flight.
+    Value deq = named(comb::AndOp::create(b, out0Valid, xReadyArg), "deq");
+    Value arrive = rdInFlight;
+    Value aData = fifo.getOutput();
 
-    xValidOut = outValid;
-    xDataOut = outData;
+    // Shift the buffer down when the head is dequeued.
+    Value notDeq = named(comb::createOrFoldNot(b, loc, deq), "not_deq");
+    Value s0Valid = named(comb::MuxOp::create(b, deq, out1Valid, out0Valid),
+                          "shift0_valid");
+    Value s0Data =
+        named(comb::MuxOp::create(b, deq, out1Data, out0Data), "shift0_data");
+    Value s1Valid =
+        named(comb::AndOp::create(b, notDeq, out1Valid), "shift1_valid");
+
+    // Insert an arriving read result into the lowest free slot. The read-issue
+    // condition below guarantees there is always room, so no element is lost.
+    Value fillLow =
+        named(comb::AndOp::create(b, arrive,
+                                  named(comb::createOrFoldNot(b, loc, s0Valid),
+                                        "shift0_not_valid")),
+              "fill_low");
+    Value fillHigh = named(
+        comb::AndOp::create(
+            b, arrive,
+            comb::AndOp::create(b, s0Valid,
+                                named(comb::createOrFoldNot(b, loc, s1Valid),
+                                      "shift1_not_valid"))),
+        "fill_high");
+    out0ValidBE.setValue(
+        named(comb::OrOp::create(b, s0Valid, fillLow), "out0_valid_next"));
+    out0DataBE.setValue(named(comb::MuxOp::create(b, fillLow, aData, s0Data),
+                              "out0_data_next"));
+    out1ValidBE.setValue(
+        named(comb::OrOp::create(b, s1Valid, fillHigh), "out1_valid_next"));
+    out1DataBE.setValue(named(comb::MuxOp::create(b, fillHigh, aData, out1Data),
+                              "out1_data_next"));
+
+    // Issue a FIFO read whenever it has data and the output buffer, counting
+    // the read already in flight, has room for one more element. The buffer
+    // holds at most two elements (held plus in flight) by construction, so a
+    // read is allowed when at most one of {out0Valid, out1Valid, rdInFlight} is
+    // set, or a dequeue this cycle frees a slot.
+    Value pairAB =
+        comb::AndOp::create(b, out0Valid, out1Valid); // both output slots full
+    Value pairAC =
+        comb::AndOp::create(b, out0Valid, rdInFlight); // slot0 full + in flight
+    Value pairBC =
+        comb::AndOp::create(b, out1Valid, rdInFlight); // slot1 full + in flight
+    Value anyTwo =
+        comb::OrOp::create(b, comb::OrOp::create(b, pairAB, pairAC), pairBC);
+    Value countLe1 =
+        named(comb::createOrFoldNot(b, loc, anyTwo), "out_count_le1");
+    Value roomToRead =
+        named(comb::OrOp::create(b, countLe1, deq), "room_to_read");
+    Value readFire =
+        named(comb::AndOp::create(b, notEmpty, roomToRead), "read_fire");
+    fifoRdEn.setValue(readFire);
+    rdInFlightBE.setValue(readFire);
+
+    xValidOut = out0Valid;
+    xDataOut = out0Data;
   } else {
     // Zero-width: a saturating credit counter tracks the number of buffered
     // tokens. `depth >= 3`, so the counter is always at least 2 bits wide.
@@ -311,20 +391,25 @@ HWModuleOp ESIHWBuilder::declareChannelBuffer(Operation *symTable,
     Value cnt =
         seq::CompRegOp::create(b, cntNextBE, clkArg, rstArg, cntZero, "count");
     Value notEmpty =
-        comb::ICmpOp::create(b, comb::ICmpPredicate::ne, cnt, cntZero);
+        named(comb::ICmpOp::create(b, comb::ICmpPredicate::ne, cnt, cntZero),
+              "not_empty");
     xValidOut = notEmpty;
-    Value deq = comb::AndOp::create(b, notEmpty, xReadyArg);
+    Value deq = named(comb::AndOp::create(b, notEmpty, xReadyArg), "deq");
     Value enq = chainValid;
     // cnt_next = cnt + enq - deq (all zero-extended to the counter width).
     Value zeros = hw::ConstantOp::create(b, b.getIntegerType(cntWidth - 1), 0);
-    Value enqExt = comb::ConcatOp::create(b, zeros, enq);
-    Value deqExt = comb::ConcatOp::create(b, zeros, deq);
-    Value cntNext =
-        comb::SubOp::create(b, comb::AddOp::create(b, cnt, enqExt), deqExt);
+    Value enqExt = named(comb::ConcatOp::create(b, zeros, enq), "enq_ext");
+    Value deqExt = named(comb::ConcatOp::create(b, zeros, deq), "deq_ext");
+    Value cntNext = named(
+        comb::SubOp::create(
+            b, named(comb::AddOp::create(b, cnt, enqExt), "count_plus_enq"),
+            deqExt),
+        "count_next");
     cntNextBE.setValue(cntNext);
     Value slackConst = hw::ConstantOp::create(b, cntType, slack);
-    almostFullBE.setValue(
-        comb::ICmpOp::create(b, comb::ICmpPredicate::uge, cnt, slackConst));
+    almostFullBE.setValue(named(
+        comb::ICmpOp::create(b, comb::ICmpPredicate::uge, cnt, slackConst),
+        "almost_full"));
   }
 
   // Wire up the outputs (in output-port listing order).

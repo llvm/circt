@@ -24,12 +24,18 @@ def LowerSeqCompRegCE : Pass<"lower-seq-compreg-ce", "hw::HWModuleOp"> {
   let dependentDialects = ["circt::comb::CombDialect, circt::hw::HWDialect"];
 }
 
-def LowerSeqFIFO : Pass<"lower-seq-fifo", "hw::HWModuleOp"> {
+def LowerSeqFIFO : Pass<"lower-seq-fifo", "mlir::ModuleOp"> {
   let summary = "Lower seq.fifo ops";
   let dependentDialects = [
     "circt::hw::HWDialect",
     "circt::comb::CombDialect",
     "circt::verif::VerifDialect"
+  ];
+  let options = [
+    Option<"outlineModules", "outline-modules", "bool", "false",
+           "Lower each unique seq.fifo configuration into a separate "
+           "hw.module and replace the seq.fifo with an instance of that "
+           "module. FIFOs with identical configurations share a module.">
   ];
 }
 

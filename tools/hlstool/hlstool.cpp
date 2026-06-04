@@ -288,6 +288,11 @@ static void loadESILoweringPipeline(OpPassManager &pm) {
 
 static void loadHWLoweringPipeline(OpPassManager &pm) {
   pm.addPass(createSimpleCanonicalizerPass());
+  // `esi.buffer` lowers to a `seq.fifo` (which in turn lowers to a `seq.hlmem`
+  // plus protocol assertions), so expand FIFOs before the HLMem lowering and
+  // lower the resulting assertions to SV.
+  pm.addPass(circt::seq::createLowerSeqFIFO());
+  pm.nest<hw::HWModuleOp>().addPass(circt::createLowerVerifToSVPass());
   pm.nest<hw::HWModuleOp>().addPass(circt::seq::createLowerSeqHLMem());
   pm.addPass(seq::createHWMemSimImpl());
   pm.addPass(circt::createLowerSeqToSVPass());
