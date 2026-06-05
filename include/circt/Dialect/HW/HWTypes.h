@@ -19,6 +19,7 @@
 #include "mlir/Interfaces/MemorySlotInterfaces.h"
 
 #include "circt/Support/LLVM.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Types.h"
 
@@ -103,6 +104,44 @@ struct OffsetFieldInfo {
 } // namespace detail
 } // namespace hw
 } // namespace circt
+
+namespace mlir {
+/// Expose the field names and types of struct and union types to the generic
+/// attribute and type walking and replacement infrastructure. This allows
+/// walkers to recurse into the fields of `!hw.struct` and `!hw.union` types,
+/// and replacers such as `mlir::AttrTypeReplacer` to replace types nested
+/// within the fields.
+template <>
+struct AttrTypeSubElementHandler<circt::hw::detail::FieldInfo> {
+  static void walk(const circt::hw::detail::FieldInfo &param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.type);
+  }
+  static circt::hw::detail::FieldInfo
+  replace(const circt::hw::detail::FieldInfo &param,
+          AttrSubElementReplacements &attrRepls,
+          TypeSubElementReplacements &typeRepls) {
+    return {cast<StringAttr>(attrRepls.take_front(1)[0]),
+            typeRepls.take_front(1)[0]};
+  }
+};
+template <>
+struct AttrTypeSubElementHandler<circt::hw::detail::OffsetFieldInfo> {
+  static void walk(const circt::hw::detail::OffsetFieldInfo &param,
+                   AttrTypeImmediateSubElementWalker &walker) {
+    walker.walk(param.name);
+    walker.walk(param.type);
+  }
+  static circt::hw::detail::OffsetFieldInfo
+  replace(const circt::hw::detail::OffsetFieldInfo &param,
+          AttrSubElementReplacements &attrRepls,
+          TypeSubElementReplacements &typeRepls) {
+    return {cast<StringAttr>(attrRepls.take_front(1)[0]),
+            typeRepls.take_front(1)[0], param.offset};
+  }
+};
+} // namespace mlir
 
 #define GET_TYPEDEF_CLASSES
 #include "circt/Dialect/HW/HWTypes.h.inc"
