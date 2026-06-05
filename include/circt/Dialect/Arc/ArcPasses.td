@@ -172,6 +172,28 @@ def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::scf::SCFDialect"];
 }
 
+def LowerCoroutinesPass : Pass<"arc-lower-coroutines", "mlir::ModuleOp"> {
+  let summary = "Lower coroutines to state machine functions";
+  let description = [{
+    Convert each `arc.coroutine.define` into a regular function that takes an
+    explicit state and program counter as its leading arguments, and that
+    dispatches to its entry block or one of its resume blocks accordingly.
+    Values that are live across suspension points are persisted in the
+    explicit state, which is a union with one struct variant per resume block.
+    Calls to coroutines become regular function calls, and all uses of the
+    opaque `!arc.coroutine_state` and `!arc.coroutine_pc` types anywhere in
+    the IR are replaced with the concrete union and integer types computed for
+    each coroutine.
+  }];
+  let dependentDialects = [
+    "comb::CombDialect",
+    "hw::HWDialect",
+    "mlir::cf::ControlFlowDialect",
+    "mlir::func::FuncDialect",
+    "mlir::ub::UBDialect",
+  ];
+}
+
 def LowerArrays : Pass<"arc-lower-arrays", "mlir::ModuleOp"> {
   let summary = "Lower arrays to use bufferized arrayrefs";
   let dependentDialects = ["arc::ArcDialect"];
