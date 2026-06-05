@@ -744,3 +744,33 @@ firrtl.circuit "DriveWireWithInputDomain" {
     firrtl.matchingconnect %w2, %i : !firrtl.uint<1>
   }
 }
+
+// CHECK-LABEL: "CastConstant"
+firrtl.circuit "CastConstant" {
+  firrtl.domain @ClockDomain
+  firrtl.domain @PowerDomain
+  // CHECK:      @CastConstant(
+  // CHECK-SAME:   in %a: !firrtl.domain<@ClockDomain()>,
+  // CHECK-SAME:   in %PowerDomain: !firrtl.domain<@PowerDomain()>,
+  // CHECK-SAME:   out %o: !firrtl.uint<1> domains [%a, %PowerDomain]
+  // CHECK-SAME: )
+  firrtl.module @CastConstant(in %a: !firrtl.domain<@ClockDomain()>, out %o : !firrtl.uint<1>) {
+    %0 = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.unsafe_domain_cast %0 domains[%a] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    firrtl.connect %o, %1 : !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: "CastConstantNoDomains"
+firrtl.circuit "CastConstantNoDomains" {
+  firrtl.domain @ClockDomain
+  // CHECK:      @CastConstantNoDomains(
+  // CHECK-SAME:   in %ClockDomain: !firrtl.domain<@ClockDomain()>,
+  // CHECK-SAME:   out %o: !firrtl.uint<1> domains [%ClockDomain]
+  // CHECK-SAME: )
+  firrtl.module @CastConstantNoDomains(out %o : !firrtl.uint<1>) {
+    %0 = firrtl.constant 0 : !firrtl.uint<1>
+    %1 = firrtl.unsafe_domain_cast %0 domains[] : !firrtl.uint<1>
+    firrtl.connect %o, %1 : !firrtl.uint<1>
+  }
+}
