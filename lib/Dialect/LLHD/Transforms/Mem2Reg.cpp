@@ -185,9 +185,6 @@ struct llvm::DenseMapInfo<DriveCondition> {
   static DriveCondition getEmptyKey() {
     return DenseMapInfo<DriveCondition::ConditionAndMode>::getEmptyKey();
   }
-  static DriveCondition getTombstoneKey() {
-    return DenseMapInfo<DriveCondition::ConditionAndMode>::getTombstoneKey();
-  }
   static unsigned getHashValue(DriveCondition d) {
     return DenseMapInfo<DriveCondition::ConditionAndMode>::getHashValue(
         d.conditionAndMode);

@@ -56,10 +56,6 @@ struct DenseMapInfo<AffineAccessExpr> {
     return {DenseMapInfo<Value>::getEmptyKey(), {}, {}};
   }
 
-  static AffineAccessExpr getTombstoneKey() {
-    return {DenseMapInfo<Value>::getTombstoneKey(), {}, {}};
-  }
-
   static unsigned getHashValue(const AffineAccessExpr &expr) {
     unsigned h = DenseMapInfo<Value>::getHashValue(expr.memref);
     h = llvm::hash_combine(h, DenseMapInfo<AffineMap>::getHashValue(expr.map));

@@ -350,7 +350,7 @@ LogicalResult UnpackOp::inferReturnTypes(
     DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inputType = cast<ValueType>(operands.front().getType());
-  results.push_back(TokenType::get(context));
+  results.push_back(dc::TokenType::get(context));
   results.push_back(inputType.getInnerType());
   return success();
 }

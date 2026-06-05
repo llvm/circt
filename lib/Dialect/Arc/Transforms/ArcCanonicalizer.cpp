@@ -739,10 +739,6 @@ struct DenseMapInfo<SmallVector<Value>> {
     return SmallVector<Value>();
   }
 
-  static inline SmallVector<Value> getTombstoneKey() {
-    return SmallVector<Value>();
-  }
-
   static unsigned getHashValue(const SmallVector<Value> &inputs) {
     return hashValue(inputs);
   }

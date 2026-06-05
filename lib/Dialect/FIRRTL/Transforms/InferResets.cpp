@@ -319,9 +319,6 @@ struct DenseMapInfo<ResetSignal> {
   static inline ResetSignal getEmptyKey() {
     return ResetSignal{DenseMapInfo<FieldRef>::getEmptyKey(), {}};
   }
-  static inline ResetSignal getTombstoneKey() {
-    return ResetSignal{DenseMapInfo<FieldRef>::getTombstoneKey(), {}};
-  }
   static unsigned getHashValue(const ResetSignal &x) {
     return circt::hash_value(x.field);
   }

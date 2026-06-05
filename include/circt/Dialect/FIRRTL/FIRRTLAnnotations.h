@@ -369,7 +369,7 @@ protected:
 /// An annotation target is used to keep track of something that is targeted by
 /// an Annotation.
 struct AnnoTarget {
-  AnnoTarget(detail::AnnoTargetImpl impl = nullptr) : impl(impl){};
+  AnnoTarget(detail::AnnoTargetImpl impl = nullptr) : impl(impl) {};
 
   operator bool() const { return impl; }
   bool operator==(const AnnoTarget &other) const { return impl == other.impl; }
@@ -485,11 +485,6 @@ struct DenseMapInfo<circt::firrtl::Annotation> {
         mlir::DictionaryAttr(static_cast<mlir::Attribute::ImplType *>(
             DenseMapInfo<void *>::getEmptyKey())));
   }
-  static Annotation getTombstoneKey() {
-    return Annotation(
-        mlir::DictionaryAttr(static_cast<mlir::Attribute::ImplType *>(
-            llvm::DenseMapInfo<void *>::getTombstoneKey())));
-  }
   static unsigned getHashValue(Annotation val) {
     return mlir::hash_value(val.getAttr());
   }
@@ -504,11 +499,6 @@ struct DenseMapInfo<circt::firrtl::AnnoTarget> {
   static AnnoTarget getEmptyKey() {
     auto *o = DenseMapInfo<mlir::Operation *>::getEmptyKey();
     auto i = DenseMapInfo<unsigned>::getEmptyKey();
-    return AnnoTarget(AnnoTargetImpl(o, i));
-  }
-  static AnnoTarget getTombstoneKey() {
-    auto *o = DenseMapInfo<mlir::Operation *>::getTombstoneKey();
-    auto i = DenseMapInfo<unsigned>::getTombstoneKey();
     return AnnoTarget(AnnoTargetImpl(o, i));
   }
   static unsigned getHashValue(AnnoTarget val) {

@@ -728,10 +728,6 @@ struct DenseMapInfo<circt::FVInt, void> {
     return circt::FVInt(DenseMapInfo<APInt>::getEmptyKey());
   }
 
-  static inline circt::FVInt getTombstoneKey() {
-    return circt::FVInt(DenseMapInfo<APInt>::getTombstoneKey());
-  }
-
   static unsigned getHashValue(const circt::FVInt &Key);
 
   static bool isEqual(const circt::FVInt &LHS, const circt::FVInt &RHS) {

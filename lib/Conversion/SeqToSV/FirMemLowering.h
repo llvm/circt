@@ -122,11 +122,6 @@ struct DenseMapInfo<circt::FirMemConfig> {
     cfg.depth = DenseMapInfo<size_t>::getEmptyKey();
     return cfg;
   }
-  static inline circt::FirMemConfig getTombstoneKey() {
-    circt::FirMemConfig cfg;
-    cfg.depth = DenseMapInfo<size_t>::getTombstoneKey();
-    return cfg;
-  }
   static unsigned getHashValue(const circt::FirMemConfig &cfg) {
     return cfg.hashValue();
   }

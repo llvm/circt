@@ -416,10 +416,6 @@ struct DenseMapInfo<circt::firrtl::FIRRTLType> {
     auto pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
     return FIRRTLType(static_cast<mlir::Type::ImplType *>(pointer));
   }
-  static FIRRTLType getTombstoneKey() {
-    auto pointer = llvm::DenseMapInfo<void *>::getTombstoneKey();
-    return FIRRTLType(static_cast<mlir::Type::ImplType *>(pointer));
-  }
   static unsigned getHashValue(FIRRTLType val) { return mlir::hash_value(val); }
   static bool isEqual(FIRRTLType LHS, FIRRTLType RHS) { return LHS == RHS; }
 };

@@ -171,10 +171,6 @@ namespace llvm {
 template <>
 struct DenseMapInfo<slang::BufferID> {
   static slang::BufferID getEmptyKey() { return slang::BufferID(); }
-  static slang::BufferID getTombstoneKey() {
-    return slang::BufferID(UINT32_MAX - 1, ""sv);
-    // UINT32_MAX is already used by `BufferID::getPlaceholder`.
-  }
   static unsigned getHashValue(slang::BufferID id) {
     return llvm::hash_value(id.getId());
   }

@@ -65,11 +65,6 @@ struct llvm::DenseMapInfo<StructuralHashKey> {
                              {});
   }
 
-  static StructuralHashKey getTombstoneKey() {
-    return StructuralHashKey(
-        llvm::DenseMapInfo<OperationName>::getTombstoneKey(), {});
-  }
-
   static unsigned getHashValue(const StructuralHashKey &key) {
     auto hash = hash_value(key.opName);
     for (const auto &operand : key.operandPairs)

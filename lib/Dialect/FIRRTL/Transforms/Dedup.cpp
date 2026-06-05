@@ -432,10 +432,6 @@ struct llvm::DenseMapInfo<ModuleInfoRef> {
     return DenseMapInfo<ModuleInfo *>::getEmptyKey();
   }
 
-  static inline ModuleInfoRef getTombstoneKey() {
-    return DenseMapInfo<ModuleInfo *>::getTombstoneKey();
-  }
-
   static unsigned getHashValue(const ModuleInfoRef &ref) {
     // We assume SHA256 is already a good hash and just truncate down to the
     // number of bytes we need for DenseMap.
@@ -450,9 +446,7 @@ struct llvm::DenseMapInfo<ModuleInfoRef> {
 
   static bool isEqual(const ModuleInfoRef &lhs, const ModuleInfoRef &rhs) {
     auto *empty = getEmptyKey().info;
-    auto *tombstone = getTombstoneKey().info;
-    if (lhs.info == empty || rhs.info == empty || lhs.info == tombstone ||
-        rhs.info == tombstone)
+    if (lhs.info == empty || rhs.info == empty)
       return lhs.info == rhs.info;
     return *lhs.info == *rhs.info;
   }

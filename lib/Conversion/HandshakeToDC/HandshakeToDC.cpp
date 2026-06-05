@@ -95,7 +95,7 @@ public:
       return dc::ValueType::get(type.getContext(), type);
     });
     addConversion([](ValueType type) { return type; });
-    addConversion([](TokenType type) { return type; });
+    addConversion([](dc::TokenType type) { return type; });
 
     addTargetMaterialization([](mlir::OpBuilder &builder, mlir::Type resultType,
                                 mlir::ValueRange inputs,

@@ -114,11 +114,6 @@ struct DenseMapInfo<OperandKey> {
     return {{DenseMapInfo<mlir::Value>::getEmptyKey(), false}};
   }
 
-  static OperandKey getTombstoneKey() {
-    // Return a vector containing the mlir::Value tombstone key
-    return {{DenseMapInfo<mlir::Value>::getTombstoneKey(), false}};
-  }
-
   static unsigned getHashValue(const OperandKey &val) {
     llvm::hash_code hash = 0;
     // Iteratively combine the hash of each pair in the vector

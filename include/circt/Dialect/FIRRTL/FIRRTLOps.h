@@ -237,10 +237,6 @@ struct DenseMapInfo<circt::firrtl::FModuleOp> {
     return FModuleOp::getFromOpaquePointer(
         DenseMapInfo<Operation *>::getEmptyKey());
   }
-  static inline FModuleOp getTombstoneKey() {
-    return FModuleOp::getFromOpaquePointer(
-        DenseMapInfo<Operation *>::getTombstoneKey());
-  }
   static unsigned getHashValue(const FModuleOp &val) {
     return DenseMapInfo<Operation *>::getHashValue(val);
   }

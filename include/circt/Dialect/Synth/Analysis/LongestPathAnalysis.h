@@ -337,7 +337,7 @@ public:
 // for computing statistics and CAPI.
 class LongestPathCollection {
 public:
-  LongestPathCollection(MLIRContext *ctx) : ctx(ctx){};
+  LongestPathCollection(MLIRContext *ctx) : ctx(ctx) {};
   const DataflowPath &getPath(unsigned index) const { return paths[index]; }
   MLIRContext *getContext() const { return ctx; }
   llvm::SmallVector<DataflowPath, 64> paths;
@@ -379,11 +379,6 @@ struct DenseMapInfo<circt::synth::Object> {
   using Object = circt::synth::Object;
   static Object getEmptyKey() {
     auto [path, value, bitPos] = Info::getEmptyKey();
-    return Object(path, value, bitPos);
-  }
-
-  static Object getTombstoneKey() {
-    auto [path, value, bitPos] = Info::getTombstoneKey();
     return Object(path, value, bitPos);
   }
   static llvm::hash_code getHashValue(Object object) {
