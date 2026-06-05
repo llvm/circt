@@ -46,9 +46,7 @@ bool AcceleratorConnection::reset() {
   services::MMIO *mmio = getService<services::MMIO>();
   if (!mmio)
     return false;
-  // The MMIO write is a virtual backend interface which may throw. Honor the
-  // documented contract of returning false (rather than propagating) if the
-  // reset cannot be performed for any reason.
+  // The MMIO write is a virtual backend interface which may throw.
   try {
     mmio->write(ResetRequestOffset, ResetMagicNumber);
   } catch (const std::exception &e) {

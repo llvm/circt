@@ -1184,17 +1184,14 @@ static void resetTest(AcceleratorConnection *conn, Accelerator *accel) {
     throw std::runtime_error(
         "Reset test: telemetry was not incremented by the hostmem write");
 
-  // Request a design reset. This writes a magic value to the header which, a
-  // fixed number of cycles later, resets the user design (clearing the
-  // telemetry counters) without tearing down the host link.
+  // Request a design reset.
   logger.info("esitester", "Requesting design reset");
   if (!conn->reset())
     throw std::runtime_error("Reset test: reset() reported failure");
   std::cout << "[reset] reset requested" << std::endl;
 
   // The reset is asserted a fixed number of cycles after the request (to let
-  // in-flight transactions drain), so poll the telemetry until it clears. Each
-  // MMIO read advances the simulation well past the reset delay.
+  // in-flight transactions drain), so poll the telemetry until it clears.
   uint64_t after = before;
   constexpr int maxPolls = 1000000;
   for (int polls = 0; polls < maxPolls; ++polls) {

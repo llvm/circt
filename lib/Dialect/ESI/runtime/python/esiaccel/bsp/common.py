@@ -27,7 +27,8 @@ IndirectionVersionNumber = 0  # Version 0: format subject to change
 
 # Magic value which, when written by the host to header slot 7, requests a
 # design reset. Keep in sync with 'ResetMagicNumber' in the runtime
-# (cpp/include/esi/Accelerator.h).
+# (cpp/include/esi/Accelerator.h). This magic number guards against "write
+# spraying" which other devices have been know to do on boot.
 ResetMagicNumber = 0x00000E510000B007
 # Number of cycles to wait after a reset is requested before asserting it. This
 # gives in-flight transactions time to drain.
@@ -87,14 +88,12 @@ def HeaderMMIO(manifest_loc: int) -> Module:
       input_bundles = ports.read.unpack(data=data_chan_wire)
       cmd_chan = input_bundles['cmd']
 
-      # Two-stage pipeline: stage 1 captures the incoming command, stage 2 holds
-      # the looked-up response. Each stage carries its own occupancy bit so that
-      # exactly one response is produced per command and the valid/ready
-      # contract is never violated (the response valid is only deasserted once
-      # it has actually been consumed downstream).
+      # Two-stage half-throughput pipeline: stage 1 captures the incoming
+      # command, stage 2 holds the looked-up response. Each stage carries its
+      # own occupancy bit.
       cmd_ready = Wire(Bits(1))
       data_chan_ready = Wire(Bits(1))
-      s1_to_s2 = Wire(Bits(1))
+      s1_to_s2_xact = Wire(Bits(1))
       cmd_raw, cmd_valid = cmd_chan.unwrap(cmd_ready)
 
       # Stage 1: command capture register and occupancy bit.
@@ -103,10 +102,10 @@ def HeaderMMIO(manifest_loc: int) -> Module:
       s1_valid = ControlReg(clk,
                             rst,
                             asserts=[s1_load],
-                            resets=[s1_to_s2],
+                            resets=[s1_to_s2_xact],
                             name="s1_valid")
       # Accept a new command when stage 1 is empty or is draining into stage 2.
-      cmd_ready.assign((~s1_valid | s1_to_s2).as_bits())
+      cmd_ready.assign(~s1_valid)
 
       address_words = cmd.offset.as_bits()[3:]  # Lop off the lower three bits.
       slot = address_words[:3]
@@ -134,25 +133,24 @@ def HeaderMMIO(manifest_loc: int) -> Module:
       header.name = "header"
 
       # Stage 2: registered response value and its occupancy bit.
-      header_out_valid = Wire(Bits(1))
-      s2_xact = header_out_valid & data_chan_ready
-      # Stage 1 advances into stage 2 when it holds a command and stage 2 is
-      # empty or being consumed this cycle.
-      s1_to_s2.assign((s1_valid & (~header_out_valid | s2_xact)).as_bits())
+      s2_valid = Wire(Bits(1))
+      s2_xact = s2_valid & data_chan_ready
+      # Stage 1 advances into stage 2 only when stage 2 is empty.
+      s1_to_s2_xact.assign((s1_valid & ~s2_valid).as_bits())
 
       header_out = header[slot].reg(clk=clk,
                                     rst=rst,
-                                    ce=s1_to_s2,
+                                    ce=s1_to_s2_xact,
                                     name="header_out")
-      header_out_valid.assign(
+      s2_valid.assign(
           ControlReg(clk,
                      rst,
-                     asserts=[s1_to_s2],
+                     asserts=[s1_to_s2_xact],
                      resets=[s2_xact],
                      name="header_out_valid"))
       # Wrap the response.
       data_chan, data_chan_ready_sig = Channel(esi.MMIODataType).wrap(
-          header_out, header_out_valid)
+          header_out, s2_valid)
       data_chan_wire.assign(data_chan)
       data_chan_ready.assign(data_chan_ready_sig)
 
@@ -162,7 +160,7 @@ def HeaderMMIO(manifest_loc: int) -> Module:
       # pulse is sufficient to trigger the reset.
       reset_detect = (cmd.write & (slot == Bits(3)(7)) &
                       (cmd.data == Bits(64)(ResetMagicNumber))).as_bits()
-      ports.reset_request = (reset_detect & s1_to_s2).as_bits()
+      ports.reset_request = (reset_detect & s1_to_s2_xact).as_bits()
 
   return HeaderMMIO
 
