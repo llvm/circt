@@ -1180,8 +1180,59 @@ struct StmtVisitor {
       return true;
     }
 
-    // Queue Tasks
+    // String Tasks
+    if (args.size() >= 1 && args[0]->type->isString()) {
+      auto str = context.convertLvalueExpression(*args[0]);
 
+      if (nameId == ksn::Putc) {
+        // Slang already checks the arity of string tasks.
+        assert(args.size() == 3 && "`putc` takes 3 arguments");
+        auto index = context.convertRvalueExpression(*args[1]);
+        auto character = context.convertRvalueExpression(*args[2]);
+        moore::StringPutOp::create(builder, loc, str, index, character);
+        return true;
+      }
+
+      if (nameId == ksn::IToA || nameId == ksn::HexToA ||
+          nameId == ksn::OctToA || nameId == ksn::BinToA) {
+        // Slang already checks the arity of string tasks.
+        assert(args.size() == 2 && "`itoa/hex/oct/bin` takes 2 arguments");
+        auto integerType = moore::IntType::getLogic(builder.getContext(), 32);
+        auto input = context.convertRvalueExpression(*args[1], integerType);
+
+        switch (nameId) {
+        case ksn::IToA:
+          moore::StringItoaOp::create(builder, loc, str, input);
+          break;
+        case ksn::HexToA:
+          moore::StringHextoaOp::create(builder, loc, str, input);
+          break;
+        case ksn::OctToA:
+          moore::StringOcttoaOp::create(builder, loc, str, input);
+          break;
+        case ksn::BinToA:
+          moore::StringBintoaOp::create(builder, loc, str, input);
+          break;
+        default:
+          llvm_unreachable("unexpected ASCII integer to string conversion");
+          return false;
+        }
+        return true;
+      }
+
+      if (nameId == ksn::RealToA) {
+        // Slang already checks the arity of string tasks.
+        assert(args.size() == 2 && "`realtoa` takes 2 arguments");
+        auto realType =
+            moore::RealType::get(context.getContext(), moore::RealWidth::f64);
+        auto input = context.convertRvalueExpression(*args[1], realType);
+        moore::StringRealtoaOp::create(builder, loc, str, input);
+        return true;
+      }
+      return false;
+    }
+
+    // Queue Tasks
     if (args.size() >= 1 && args[0]->type->isQueue()) {
       auto queue = context.convertLvalueExpression(*args[0]);
 

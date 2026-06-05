@@ -695,17 +695,52 @@ module SampleValueBuiltins #() (
 endmodule
 
 // CHECK-LABEL: func.func private @StringBuiltins(
-// CHECK-SAME: [[STR:%.+]]: !moore.string
-// CHECK-SAME: [[INT:%.+]]: !moore.i32
-function void StringBuiltins(string string_in, int int_in);
-  // CHECK: [[LEN:%.+]] = moore.string.len [[STR]]
+// CHECK-SAME: [[STR:%.+]]: !moore.string,
+// CHECK-SAME: [[INT:%.+]]: !moore.i32,
+// CHECK-SAME: [[Other:%.+]]: !moore.string) {
+function void StringBuiltins(string string_in, int int_in, string other);
+  // CHECK: [[VAR:%.+]] = moore.variable [[STR]] : <string>
+  // CHECK: [[READ:%.+]] = moore.read [[VAR]] : <string>
+  // CHECK: [[LEN:%.+]] = moore.string.len [[READ]]
   dummyA(string_in.len());
-  // CHECK: [[LEN:%.+]] = moore.string.toupper [[STR]]
-  dummyD(string_in.toupper());
-  // CHECK: [[LEN:%.+]] = moore.string.tolower [[STR]]
-  dummyD(string_in.tolower());
-  // CHECK: [[CHAR:%.+]] = moore.string.get [[STR]]{{\[}}[[INT]]]
+  // CHECK: moore.string.put [[VAR]]{{\[}}[[INT]]{{\]}}, {{%.+}} : <string>
+  string_in.putc(int_in, "A");
+  // CHECK: [[GET:%.+]] = moore.string.get {{%.+}}{{\[}}{{%.+}}{{\]}}
   dummyE(string_in.getc(int_in));
+  // CHECK: [[UPPER:%.+]] = moore.string.toupper {{%.+}}
+  dummyD(string_in.toupper());
+  // CHECK: [[LOWER:%.+]] = moore.string.tolower {{%.+}}
+  dummyD(string_in.tolower());
+  // CHECK: [[CMP:%.+]] = moore.string.compare {{%.+}}, [[Other]]
+  dummyA(string_in.compare(other));
+  // CHECK: [[ICMP:%.+]] = moore.string.icompare {{%.+}}, [[Other]]
+  dummyA(string_in.icompare(other));
+  // CHECK: [[SUBSTR:%.+]] = moore.string.substr {{%.+}}{{\[}}{{%.+}} : {{%.+}}{{\]}}
+  dummyD(string_in.substr(0, 2));
+  // CHECK: [[ATOI:%.+]] = moore.string.atoi {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOI]]
+  dummyA(string_in.atoi());
+  // CHECK: [[ATOHEX:%.+]] = moore.string.atohex {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOHEX]]
+  dummyA(string_in.atohex());
+  // CHECK: [[ATOOCT:%.+]] = moore.string.atooct {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOOCT]]
+  dummyA(string_in.atooct());
+  // CHECK: [[ATOBIN:%.+]] = moore.string.atobin {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOBIN]]
+  dummyA(string_in.atobin());
+  // CHECK: [[ATOREAL:%.+]] = moore.string.atoreal {{%.+}} : f64
+  dummyB(string_in.atoreal());
+  // CHECK: moore.string.itoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.itoa(int_in);
+  // CHECK: moore.string.hextoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.hextoa(int_in);
+  // CHECK: moore.string.octtoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.octtoa(int_in);
+  // CHECK: moore.string.bintoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.bintoa(int_in);
+  // CHECK: moore.string.realtoa [[VAR]], {{%.+}} : <string>, f64
+  string_in.realtoa(1.5);
 endfunction
 
 // IEEE 1800-2017 § 21.3 "File I/O system tasks and functions"
