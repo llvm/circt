@@ -208,26 +208,6 @@ endmodule
 
 // -----
 module Foo;
-  typedef enum { A, B, C } e;
-  e val;
-  initial begin
-    // expected-error @below {{unsupported system call `next`}}
-    val = val.next();
-  end
-endmodule
-
-// -----
-module Foo;
-  typedef enum { A, B, C } e;
-  e val;
-  initial begin
-    // expected-error @below {{unsupported system call `prev`}}
-    val = val.prev();
-  end
-endmodule
-
-// -----
-module Foo;
   int inp[];
   int tmp[];
   initial begin

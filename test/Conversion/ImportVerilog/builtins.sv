@@ -743,6 +743,28 @@ function void StringBuiltins(string string_in, int int_in, string other);
   string_in.realtoa(1.5);
 endfunction
 
+// IEEE 1800-2017 § 6.19 "Enumerations"
+typedef enum { A, B, C, D } enum_t;
+
+// CHECK-LABEL: func.func private @EnumBuiltins(
+// CHECK-SAME: [[VAL:%[^ ,]+]]: !moore.i32
+// CHECK-SAME: [[STEP:%[^ ,]+]]: !moore.i32
+function void EnumBuiltins(enum_t val, int step, output enum_t out,
+                           output int num, output string name);
+  // CHECK: [[FIRST:%.+]] = moore.constant 0 : i32
+  out = val.first();
+  // CHECK: [[LAST:%.+]] = moore.constant 3 : i32
+  out = val.last();
+  // CHECK: [[NEXT:%.+]] = moore.enum.next [[VAL]] step [[STEP]] : i32
+  out = val.next(step);
+  // CHECK: [[PREV:%.+]] = moore.enum.prev [[VAL]] : i32
+  out = val.prev();
+  // CHECK: [[NUM:%.+]] = moore.constant 4 : i32
+  num = val.num();
+  // CHECK: [[NAME:%.+]] = moore.enum.name [[VAL]] : i32
+  name = val.name();
+endfunction
+
 // IEEE 1800-2017 § 21.3 "File I/O system tasks and functions"
 // CHECK-LABEL: func.func private @FileIOBuiltins(
 // CHECK-SAME: [[FD_INT:%[^ ,]+]]: !moore.i32
