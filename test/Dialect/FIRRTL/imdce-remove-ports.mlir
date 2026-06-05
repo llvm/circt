@@ -205,7 +205,7 @@ firrtl.circuit "ProbeTypes" {
 
 // -----
 
-// Test case for issue #10504 - property types with instances should not crash
+// Test case for issue #10504.  Property types with instances should not crash
 // This tests that unused property ports can be removed without assertion failures
 firrtl.circuit "PropertyTypes" {
   // CHECK-LABEL: firrtl.module @PropertyTypes
