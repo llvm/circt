@@ -315,12 +315,8 @@ static Value lowerUnsignedDivByConstant(OpBuilder &builder, Location loc,
     Value diff = builder.createOrFold<comb::SubOp>(loc, lhs, q);
     diff = createLShrByConstant(builder, loc, diff, 1);
     q = builder.createOrFold<comb::AddOp>(loc, q, diff);
-    unsigned postShift = info.PostShift > 0 ? info.PostShift - 1 : 0;
-    q = createLShrByConstant(builder, loc, q, postShift);
-  } else {
-    q = createLShrByConstant(builder, loc, q, info.PostShift);
   }
-  return q;
+  return createLShrByConstant(builder, loc, q, info.PostShift);
 }
 
 static Value lowerSignedDivByConstant(OpBuilder &builder, Location loc,
