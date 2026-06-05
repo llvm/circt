@@ -5321,7 +5321,8 @@ void StmtEmitter::emitBlockAsStatement(
 
   // Determine if we need begin/end by scanning the block.
   auto count = countStatements(*block);
-  auto needsBeginEnd = count != BlockStatementCount::One;
+  auto needsBeginEnd =
+      count != BlockStatementCount::One || state.options.alwaysEmitBeginEnd;
   if (needsBeginEnd)
     ps << " begin";
   emitLocationInfoAndNewLine(locationOps);

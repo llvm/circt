@@ -180,6 +180,10 @@ struct LoweringOptions {
   // If true, always emit assignments (both continuous and blocking) separately
   // rather than inlining them in net and variable declarations
   bool disallowDeclAssignments = false;
+
+  /// If true, always emit begin/end blocks around if/else/always bodies, even
+  /// when there is only a single statement.
+  bool alwaysEmitBeginEnd = false;
 };
 } // namespace circt
 
