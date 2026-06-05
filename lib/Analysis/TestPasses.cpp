@@ -16,6 +16,7 @@
 #include "circt/Analysis/OpCountAnalysis.h"
 #include "circt/Analysis/SchedulingAnalysis.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
+#include "circt/Dialect/FIRRTL/GatedClockConversion.h"
 #include "circt/Dialect/HW/HWInstanceGraph.h"
 #include "circt/Scheduling/Problems.h"
 #include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
@@ -268,6 +269,47 @@ void FIRRTLInstanceInfoPass::runOnOperation() {
 }
 
 //===----------------------------------------------------------------------===//
+// FIRRTL GatedClockConversion
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct FIRRTLGatedClockConversionPass
+    : public PassWrapper<FIRRTLGatedClockConversionPass,
+                         OperationPass<firrtl::CircuitOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FIRRTLGatedClockConversionPass)
+
+  void runOnOperation() override;
+  StringRef getArgument() const override {
+    return "test-firrtl-gated-clock-conversion";
+  }
+  StringRef getDescription() const override {
+    return "Run firrtl::GatedClockConversion utility and show the results.  "
+           "This pass is intended to be used for testing purposes only.";
+  }
+};
+} // namespace
+
+void FIRRTLGatedClockConversionPass::runOnOperation() {
+  auto circuit = getOperation();
+  auto &instanceGraph = getAnalysis<firrtl::InstanceGraph>();
+  firrtl::GatedClockConversion converter(instanceGraph);
+
+  // Collect all register and ref force/release operations
+  circuit.walk([&](Operation *op) {
+    if (isa<firrtl::RegOp, firrtl::RegResetOp, firrtl::RefForceOp,
+            firrtl::RefReleaseOp>(op)) {
+      converter.addRoot(op);
+    }
+  });
+
+  // Run the conversion
+  if (failed(converter.run())) {
+    signalPassFailure();
+    return;
+  }
+}
+
+//===----------------------------------------------------------------------===//
 // Comb IntRange Analysis
 //===----------------------------------------------------------------------===//
 
@@ -351,6 +393,9 @@ void registerAnalysisTestPasses() {
   });
   registerPass([]() -> std::unique_ptr<Pass> {
     return std::make_unique<FIRRTLInstanceInfoPass>();
+  });
+  registerPass([]() -> std::unique_ptr<Pass> {
+    return std::make_unique<FIRRTLGatedClockConversionPass>();
   });
   registerPass([]() -> std::unique_ptr<Pass> {
     return std::make_unique<TestCombIntegerRangeAnalysisPass>();
