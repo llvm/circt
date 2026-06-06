@@ -9,6 +9,7 @@
 #include "ImportVerilogInternals.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/ClassSymbols.h"
+#include "slang/ast/symbols/MemberSymbols.h"
 #include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxVisitor.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
@@ -930,6 +931,10 @@ struct ModuleVisitor : public BaseVisitor {
   LogicalResult visit(const slang::ast::PropertySymbol &propNode) {
     return success();
   }
+
+  // Ignore let declarations. Slang expands uses into AssertionInstance
+  // expressions, which are lowered when the use site is imported.
+  LogicalResult visit(const slang::ast::LetDeclSymbol &) { return success(); }
 
   // Handle functions and tasks.
   LogicalResult visit(const slang::ast::SubroutineSymbol &subroutine) {
