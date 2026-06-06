@@ -649,3 +649,15 @@ hw.module @modu_const_0(in %lhs: i8, out out: i8) {
   %mod = comb.modu %lhs, %rhs : i8
   hw.output %mod : i8
 }
+
+// CHECK-LABEL: @const_divmod_mods_neg1_i3
+// CHECK-NOT: comb.mods
+// CHECK: hw.constant 0 : i3
+// ALLOW_ARITH-LABEL: @const_divmod_mods_neg1_i3
+// ALLOW_ARITH-NOT: comb.mods
+// ALLOW_ARITH: hw.constant 0 : i3
+hw.module @const_divmod_mods_neg1_i3(in %lhs: i3, out out: i3) {
+  %c_neg1_i3 = hw.constant -1 : i3
+  %0 = comb.mods %lhs, %c_neg1_i3 : i3
+  hw.output %0 : i3
+}

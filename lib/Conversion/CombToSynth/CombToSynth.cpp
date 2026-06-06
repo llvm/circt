@@ -1163,7 +1163,7 @@ struct CombModSOpConversion : DivModOpConversionBase<ModSOp> {
 
     if (auto rhsConst = adaptor.getRhs().getDefiningOp<hw::ConstantOp>()) {
       APInt divisor = rhsConst.getValue();
-      if (divisor.isZero()) {
+      if (divisor.isZero() || divisor.isOne() || divisor.isAllOnes()) {
         replaceOpWithNewOpAndCopyNamehint<hw::ConstantOp>(rewriter, op,
                                                           op.getType(), 0);
         return success();

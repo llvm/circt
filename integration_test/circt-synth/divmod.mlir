@@ -76,3 +76,11 @@ hw.module @divmods_constants(in %lhs: i8, out out_divs_3: i8, out out_divs_neg3:
   %3 = comb.mods %lhs, %c-3_i8 : i8
   hw.output %0, %1, %2, %3 : i8, i8, i8, i8
 }
+
+// RUN: circt-lec %t.mlir %s -c1=const_divmod_mods_neg1_i3 -c2=const_divmod_mods_neg1_i3 --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MODS_NEG1_I3
+// COMB_MODS_NEG1_I3: c1 == c2
+hw.module @const_divmod_mods_neg1_i3(in %lhs: i3, out out: i3) {
+  %c_neg1_i3 = hw.constant -1 : i3
+  %0 = comb.mods %lhs, %c_neg1_i3 : i3
+  hw.output %0 : i3
+}
