@@ -15,11 +15,49 @@
 #include "slang/ast/SemanticFacts.h"
 #include "slang/ast/Statement.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/expressions/MiscExpressions.h"
+#include "slang/ast/symbols/CompilationUnitSymbols.h"
+#include "slang/ast/symbols/InstanceSymbols.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace ImportVerilog;
+
+/// Build the message printed by the `$printtimescale` system task. If a module
+/// instance or `$unit` is passed as argument, report that scope's time scale;
+/// otherwise report the time scale of the current scope.
+static std::string buildPrintTimeScaleMessage(
+    Context &context, std::span<const slang::ast::Expression *const> args) {
+  auto timeScale = context.timeScale;
+  std::string target;
+
+  if (!args.empty()) {
+    if (auto *expr = args[0]->as_if<slang::ast::ArbitrarySymbolExpression>()) {
+      const auto *symbol = expr->symbol.get();
+      if (auto *instance = symbol->as_if<slang::ast::InstanceSymbol>()) {
+        timeScale = instance->body.getTimeScale().value_or(timeScale);
+        target = instance->getHierarchicalPath();
+      } else if (auto *unit =
+                     symbol->as_if<slang::ast::CompilationUnitSymbol>()) {
+        timeScale = unit->getTimeScale().value_or(timeScale);
+        target = "$unit";
+      } else if (symbol->kind == slang::ast::SymbolKind::Root) {
+        target = "$root";
+      }
+    }
+  }
+
+  std::string out;
+  llvm::raw_string_ostream os(out);
+  os << "Time scale";
+  if (!target.empty())
+    os << " of " << target;
+  os << " is " << timeScale.base.toString() << " / "
+     << timeScale.precision.toString() << "\n";
+  return out;
+}
 
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
@@ -961,6 +999,15 @@ struct StmtVisitor {
       // Calls to `$exit` from outside a `program` are ignored. Since we don't
       // yet support programs, there is nothing to do here.
       // TODO: Fix this once we support programs.
+      return true;
+    }
+
+    // Timescale tasks (`$printtimescale`)
+
+    if (nameId == ksn::PrintTimeScale) {
+      auto message = moore::FormatLiteralOp::create(
+          builder, loc, buildPrintTimeScaleMessage(context, args));
+      moore::DisplayBIOp::create(builder, loc, message);
       return true;
     }
 
