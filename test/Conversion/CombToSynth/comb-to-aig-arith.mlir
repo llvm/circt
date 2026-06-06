@@ -465,7 +465,19 @@ hw.module @divmodu_power_of_two(in %lhs: i8, out out_divu: i8, out out_modu: i8)
 }
 
 // CHECK-LABEL: @mul_two_bit
-// CHECK: hw.output
+// ALLOW_ADD-LABEL: @mul_two_bit
+// ALLOW_ADD: %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
+// ALLOW_ADD: %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
+// ALLOW_ADD: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
+// ALLOW_ADD: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
+// ALLOW_ADD: %[[AND_00:.+]] = comb.and %[[LHS_0]], %[[RHS_0]] : i1
+// ALLOW_ADD: %[[AND_10:.+]] = comb.and %[[LHS_1]], %[[RHS_0]] : i1
+// ALLOW_ADD: %[[AND_01:.+]] = comb.and %[[LHS_0]], %[[RHS_1]] : i1
+// ALLOW_ADD: %false = hw.constant false
+// ALLOW_ADD: %[[ROW_0:.+]] = comb.concat %[[AND_10]], %[[AND_00]] : i1, i1
+// ALLOW_ADD: %[[ROW_1:.+]] = comb.concat %[[AND_01]], %false : i1, i1
+// ALLOW_ADD: %[[ADD:.+]] = comb.add bin %[[ROW_0]], %[[ROW_1]] : i2
+// ALLOW_ADD: hw.output %[[ADD]] : i2
 hw.module @mul_two_bit(in %lhs: i2, in %rhs: i2, out out: i2) {
   %0 = comb.mul %lhs, %rhs : i2
   hw.output %0 : i2
