@@ -169,3 +169,18 @@ module Event;
   // CHECK: %e = moore.variable : <i1>
   event e;
 endmodule
+
+// CHECK-LABEL: moore.module @TypeReferenceCompare
+module TypeReferenceCompare #(parameter type T = logic [11:0]);
+  initial begin
+    case (type(T))
+      type(logic [11:0]): ;
+      default: $stop;
+    endcase
+    if (type(T) == type(logic [12:0])) $stop;
+    if (type(T) != type(logic [11:0])) $stop;
+    if (type(T) === type(logic [12:0])) $stop;
+    if (type(T) !== type(logic [11:0])) $stop;
+    $finish;
+  end
+endmodule

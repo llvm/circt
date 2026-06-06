@@ -1495,6 +1495,34 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Handle binary operators.
   Value visit(const slang::ast::BinaryExpression &expr) {
+    if (expr.left().kind == slang::ast::ExpressionKind::TypeReference &&
+        expr.right().kind == slang::ast::ExpressionKind::TypeReference) {
+      auto &lhsType =
+          expr.left().as<slang::ast::TypeReferenceExpression>().targetType;
+      auto &rhsType =
+          expr.right().as<slang::ast::TypeReferenceExpression>().targetType;
+      bool value = lhsType.isMatching(rhsType);
+
+      using slang::ast::BinaryOperator;
+      switch (expr.op) {
+      case BinaryOperator::Equality:
+      case BinaryOperator::CaseEquality:
+        break;
+      case BinaryOperator::Inequality:
+      case BinaryOperator::CaseInequality:
+        value = !value;
+        break;
+      default:
+        mlir::emitError(loc, "unsupported type reference binary operator");
+        return {};
+      }
+
+      auto type = moore::IntType::get(context.getContext(), /*width=*/1,
+                                      moore::Domain::TwoValued);
+      return moore::ConstantOp::create(builder, loc, type, value,
+                                       /*isSigned=*/false);
+    }
+
     // First check whether we need real or integral BOps
     const auto *rhsFloatType =
         expr.right().type->as_if<slang::ast::FloatingType>();
