@@ -116,7 +116,7 @@ CompressorTree::CompressorTree(size_t width,
                                const SmallVector<SmallVector<Value>> &addends,
                                Location loc)
     : columns(width), width(width), numStages(0), numFullAdders(0), loc(loc) {
-  assert(addends.size() > 2);
+  assert(!addends.empty());
 
   // Convert addends rows to columns
   // Known bits analysis constructs a minimal array - skipping zeros

@@ -463,3 +463,10 @@ hw.module @divmodu_power_of_two(in %lhs: i8, out out_divu: i8, out out_modu: i8)
   // ALLOW_ICMP-NEXT: hw.output %[[DIVU]], %[[MODU]] : i8, i8
   hw.output %0, %1 : i8, i8
 }
+
+// CHECK-LABEL: @mul_two_bit
+// CHECK: hw.output
+hw.module @mul_two_bit(in %lhs: i2, in %rhs: i2, out out: i2) {
+  %0 = comb.mul %lhs, %rhs : i2
+  hw.output %0 : i2
+}
