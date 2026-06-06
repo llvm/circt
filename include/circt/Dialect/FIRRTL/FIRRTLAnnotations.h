@@ -369,7 +369,7 @@ protected:
 /// An annotation target is used to keep track of something that is targeted by
 /// an Annotation.
 struct AnnoTarget {
-  AnnoTarget(detail::AnnoTargetImpl impl = nullptr) : impl(impl) {};
+  AnnoTarget(detail::AnnoTargetImpl impl = nullptr) : impl(impl){};
 
   operator bool() const { return impl; }
   bool operator==(const AnnoTarget &other) const { return impl == other.impl; }

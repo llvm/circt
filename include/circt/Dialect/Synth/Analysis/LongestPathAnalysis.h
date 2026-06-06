@@ -337,7 +337,7 @@ public:
 // for computing statistics and CAPI.
 class LongestPathCollection {
 public:
-  LongestPathCollection(MLIRContext *ctx) : ctx(ctx) {};
+  LongestPathCollection(MLIRContext *ctx) : ctx(ctx){};
   const DataflowPath &getPath(unsigned index) const { return paths[index]; }
   MLIRContext *getContext() const { return ctx; }
   llvm::SmallVector<DataflowPath, 64> paths;
