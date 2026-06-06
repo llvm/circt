@@ -179,7 +179,24 @@ struct StmtVisitor {
     // This cannot be visited normally due to the need to make each statement a
     // separate thread so must be converted here.
     auto *threadList = stmt.body.as_if<slang::ast::StatementList>();
-    unsigned int threadCount = threadList ? threadList->list.size() : 1;
+
+    // Declarations inside a fork block are block items, not separate forked
+    // processes. Slang stores them in the same `StatementList` as the
+    // statements, so emit any leading declarations before creating fork
+    // regions. This lets the declared values dominate all fork threads.
+    unsigned firstThread = 0;
+    if (threadList) {
+      while (firstThread < threadList->list.size() &&
+             threadList->list[firstThread]
+                 ->as_if<slang::ast::VariableDeclStatement>()) {
+        if (failed(context.convertStatement(*threadList->list[firstThread])))
+          return failure();
+        ++firstThread;
+      }
+    }
+
+    unsigned int threadCount =
+        threadList ? threadList->list.size() - firstThread : 1;
 
     auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threadCount);
     OpBuilder::InsertionGuard guard(builder);
@@ -196,7 +213,7 @@ struct StmtVisitor {
     }
 
     int i = 0;
-    for (auto *thread : threadList->list) {
+    for (auto *thread : llvm::drop_begin(threadList->list, firstThread)) {
       auto &tBlock = forkOp->getRegion(i).emplaceBlock();
       builder.setInsertionPointToStart(&tBlock);
       // Populate thread operator with thread body and finish with a thread
