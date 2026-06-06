@@ -124,22 +124,6 @@ def RegisterOptimizer : Pass<"firrtl-register-optimizer", "firrtl::FModuleOp"> {
   }];
 }
 
-def RemoveUnusedPorts : Pass<"firrtl-remove-unused-ports", "firrtl::CircuitOp"> {
-  let summary = "Remove unused ports";
-  let description = [{
-    This pass removes unused ports without annotations or symbols. Implementation
-    wise, this pass iterates over the instance graph in a topological order from
-    leaves to the top so that we can remove unused ports optimally.
-  }];
-  let options = [
-    Option<"ignoreDontTouch", "ignore-dont-touch", "bool", "false",
-           "remove unused ports even if they have a symbol or annotation">
-  ];
-  let statistics = [
-    Statistic<"numRemovedPorts", "num-removed-ports", "Number of ports erased">,
-  ];
-}
-
 def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "mlir::ModuleOp"> {
   let summary = "Intermodule dead code elimination";
   let description = [{
@@ -148,6 +132,10 @@ def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "mlir::ModuleOp"> {
     of public modules or a value with a symbol. We first populate alive values
     into a set, and then propagate the liveness by looking at their dataflow.
   }];
+  let options = [
+    Option<"removePortsOnly", "remove-ports-only", "bool", "false",
+           "only remove dead module ports and preserve other operations">
+  ];
   let statistics = [
     Statistic<"numErasedOps", "num-erased-ops", "Number of operations erased">,
     Statistic<"numErasedModules", "num-erased-modules", "Number of modules erased">,
