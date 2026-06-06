@@ -16,6 +16,7 @@
 // CHECK-DAG: connect-source-operand-2-forwarder
 // CHECK-DAG: cse
 // CHECK-DAG: detach-subaccesses
+// CHECK-DAG: domain-field-remover
 // CHECK-DAG: extmodule-convention-remover
 // CHECK-DAG: firrtl-eager-inliner
 // CHECK-DAG: extmodule-instance-remover
