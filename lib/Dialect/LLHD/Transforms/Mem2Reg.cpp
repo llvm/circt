@@ -946,9 +946,10 @@ void Promoter::findPromotableSlots() {
 
   // Populate `promotable` with the slots and projections we are promoting.
   promotable.insert(slots.begin(), slots.end());
-  for (auto [projection, slot] : llvm::make_early_inc_range(projections))
-    if (!promotable.contains(slot))
-      projections.erase(projection);
+  projections.remove_if([&](auto elem) {
+    auto [projection, slot] = elem;
+    return !promotable.contains(slot);
+  });
   for (auto [projection, slot] : projections)
     promotable.insert(projection);
 
