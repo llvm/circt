@@ -68,6 +68,24 @@ func.func @allow_hw_structs(%arg0: !hw.struct<a: i42, b: i1337>, %arg1: !hw.stru
   return
 }
 
+// CHECK-LABEL: func @min_max_ops
+func.func @min_max_ops(%arg0: i32, %arg1: i32) {
+  // CHECK: [[CMP_MAXS:%.*]] = comb.icmp sge %arg0, %arg1 : i32
+  // CHECK: comb.mux [[CMP_MAXS]], %arg0, %arg1 : i32
+  arith.maxsi %arg0, %arg1 : i32
+  // CHECK: [[CMP_MAXU:%.*]] = comb.icmp uge %arg0, %arg1 : i32
+  // CHECK: comb.mux [[CMP_MAXU]], %arg0, %arg1 : i32
+  arith.maxui %arg0, %arg1 : i32
+  // CHECK: [[CMP_MINS:%.*]] = comb.icmp sle %arg0, %arg1 : i32
+  // CHECK: comb.mux [[CMP_MINS]], %arg0, %arg1 : i32
+  arith.minsi %arg0, %arg1 : i32
+  // CHECK: [[CMP_MINU:%.*]] = comb.icmp ule %arg0, %arg1 : i32
+  // CHECK: comb.mux [[CMP_MINU]], %arg0, %arg1 : i32
+  arith.minui %arg0, %arg1 : i32
+  // CHECK: return
+  return
+}
+
 // -----
 
 hw.module @invalidVector(in %arg0 : vector<4xi32>) {

@@ -169,6 +169,27 @@ struct ConstantConversionPattern
   }
 };
 
+// Pattern for arith min/max operations.
+// These lower to: cmp + mux
+template <typename ArithOp, comb::ICmpPredicate pred>
+class MinMaxConversionPattern : public OpConversionPattern<ArithOp> {
+public:
+  using OpConversionPattern<ArithOp>::OpConversionPattern;
+  using OpAdaptor = typename ArithOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(ArithOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // max(a, b) = mux(cmp(a, b), a, b)
+    // min(a, b) = mux(cmp(a, b), a, b)
+    auto cmp = comb::ICmpOp::create(rewriter, op.getLoc(), pred,
+                                    adaptor.getLhs(), adaptor.getRhs());
+    rewriter.replaceOpWithNewOp<comb::MuxOp>(op, cmp, adaptor.getLhs(),
+                                             adaptor.getRhs());
+    return success();
+  }
+};
+
 struct MapArithToCombPass
     : public circt::impl::MapArithToCombPassBase<MapArithToCombPass> {
 public:
@@ -204,6 +225,10 @@ public:
       target.addIllegalOp<arith::ExtUIOp>();
       target.addIllegalOp<arith::TruncIOp>();
       target.addIllegalOp<arith::CmpIOp>();
+      target.addIllegalOp<arith::MaxSIOp>();
+      target.addIllegalOp<arith::MaxUIOp>();
+      target.addIllegalOp<arith::MinSIOp>();
+      target.addIllegalOp<arith::MinUIOp>();
 
       // Force integer constants to be mapped to `hw.constant`.
       target.addDynamicallyLegalOp<arith::ConstantOp>([](Operation *op) {
@@ -224,24 +249,28 @@ public:
 
 void circt::populateArithToCombPatterns(mlir::RewritePatternSet &patterns,
                                         TypeConverter &typeConverter) {
-  patterns.insert<OneToOnePattern<arith::AddIOp, comb::AddOp>,
-                  OneToOnePattern<arith::SubIOp, comb::SubOp>,
-                  OneToOnePattern<arith::MulIOp, comb::MulOp>,
-                  OneToOnePattern<arith::DivSIOp, comb::DivSOp>,
-                  OneToOnePattern<arith::DivUIOp, comb::DivUOp>,
-                  OneToOnePattern<arith::RemSIOp, comb::ModSOp>,
-                  OneToOnePattern<arith::RemUIOp, comb::ModUOp>,
-                  OneToOnePattern<arith::AndIOp, comb::AndOp>,
-                  OneToOnePattern<arith::OrIOp, comb::OrOp>,
-                  OneToOnePattern<arith::XOrIOp, comb::XorOp>,
-                  OneToOnePattern<arith::ShLIOp, comb::ShlOp>,
-                  OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
-                  OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
-                  OneToOnePattern<arith::SelectOp, comb::MuxOp>,
-                  ExtSConversionPattern, ExtZConversionPattern,
-                  TruncateConversionPattern, CompConversionPattern,
-                  ConstantConversionPattern>(typeConverter,
-                                             patterns.getContext());
+  patterns.insert<
+      OneToOnePattern<arith::AddIOp, comb::AddOp>,
+      OneToOnePattern<arith::SubIOp, comb::SubOp>,
+      OneToOnePattern<arith::MulIOp, comb::MulOp>,
+      OneToOnePattern<arith::DivSIOp, comb::DivSOp>,
+      OneToOnePattern<arith::DivUIOp, comb::DivUOp>,
+      OneToOnePattern<arith::RemSIOp, comb::ModSOp>,
+      OneToOnePattern<arith::RemUIOp, comb::ModUOp>,
+      OneToOnePattern<arith::AndIOp, comb::AndOp>,
+      OneToOnePattern<arith::OrIOp, comb::OrOp>,
+      OneToOnePattern<arith::XOrIOp, comb::XorOp>,
+      OneToOnePattern<arith::ShLIOp, comb::ShlOp>,
+      OneToOnePattern<arith::ShRSIOp, comb::ShrSOp>,
+      OneToOnePattern<arith::ShRUIOp, comb::ShrUOp>,
+      OneToOnePattern<arith::SelectOp, comb::MuxOp>,
+      MinMaxConversionPattern<arith::MaxSIOp, comb::ICmpPredicate::sge>,
+      MinMaxConversionPattern<arith::MaxUIOp, comb::ICmpPredicate::uge>,
+      MinMaxConversionPattern<arith::MinSIOp, comb::ICmpPredicate::sle>,
+      MinMaxConversionPattern<arith::MinUIOp, comb::ICmpPredicate::ule>,
+      ExtSConversionPattern, ExtZConversionPattern, TruncateConversionPattern,
+      CompConversionPattern, ConstantConversionPattern>(typeConverter,
+                                                        patterns.getContext());
 }
 
 std::unique_ptr<mlir::Pass>
