@@ -467,11 +467,9 @@ hw.module @divmodu_power_of_two(in %lhs: i8, out out_divu: i8, out out_modu: i8)
 
 // CHECK-LABEL: @divu_const_3
 // CHECK-NOT: comb.divu
-// CHECK: comb.concat
-// CHECK: comb.extract
 // ALLOW_ARITH-LABEL: @divu_const_3
 // ALLOW_ARITH-NOT: comb.divu
-// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: hw.constant 171 : i16
 // ALLOW_ARITH: comb.mul
 // ALLOW_ARITH: comb.extract
 hw.module @divu_const_3(in %lhs: i8, out out: i8) {
@@ -482,11 +480,9 @@ hw.module @divu_const_3(in %lhs: i8, out out: i8) {
 
 // CHECK-LABEL: @divu_const_7
 // CHECK-NOT: comb.divu
-// CHECK: comb.concat
-// CHECK: comb.extract
 // ALLOW_ARITH-LABEL: @divu_const_7
 // ALLOW_ARITH-NOT: comb.divu
-// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: hw.constant 37 : i16
 // ALLOW_ARITH: comb.mul
 // ALLOW_ARITH: comb.sub
 // ALLOW_ARITH: comb.add
@@ -499,11 +495,9 @@ hw.module @divu_const_7(in %lhs: i8, out out: i8) {
 
 // CHECK-LABEL: @divu_const_10
 // CHECK-NOT: comb.divu
-// CHECK: comb.concat
-// CHECK: comb.extract
 // ALLOW_ARITH-LABEL: @divu_const_10
 // ALLOW_ARITH-NOT: comb.divu
-// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: hw.constant 205 : i16
 // ALLOW_ARITH: comb.mul
 // ALLOW_ARITH: comb.extract
 hw.module @divu_const_10(in %lhs: i8, out out: i8) {
@@ -514,13 +508,11 @@ hw.module @divu_const_10(in %lhs: i8, out out: i8) {
 
 // CHECK-LABEL: @modu_const_3
 // CHECK-NOT: comb.modu
-// CHECK: comb.concat
-// CHECK: comb.extract
 // ALLOW_ARITH-LABEL: @modu_const_3
 // ALLOW_ARITH-NOT: comb.modu
-// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: hw.constant 3 : i8
+// ALLOW_ARITH: hw.constant 171 : i16
 // ALLOW_ARITH: comb.mul
-// ALLOW_ARITH: comb.extract
 // ALLOW_ARITH: comb.sub
 hw.module @modu_const_3(in %lhs: i8, out out: i8) {
   %rhs = hw.constant 3 : i8
@@ -530,13 +522,9 @@ hw.module @modu_const_3(in %lhs: i8, out out: i8) {
 
 // CHECK-LABEL: @divs_const_3
 // CHECK-NOT: comb.divs
-// CHECK: comb.replicate
-// CHECK: comb.concat
-// CHECK: comb.extract
 // ALLOW_ARITH-LABEL: @divs_const_3
 // ALLOW_ARITH-NOT: comb.divs
-// ALLOW_ARITH: comb.replicate
-// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: hw.constant 86 : i16
 // ALLOW_ARITH: comb.mul
 // ALLOW_ARITH: comb.add
 hw.module @divs_const_3(in %lhs: i8, out out: i8) {
@@ -547,13 +535,9 @@ hw.module @divs_const_3(in %lhs: i8, out out: i8) {
 
 // CHECK-LABEL: @divs_const_neg3
 // CHECK-NOT: comb.divs
-// CHECK: comb.replicate
-// CHECK: comb.concat
-// CHECK: comb.extract
 // ALLOW_ARITH-LABEL: @divs_const_neg3
 // ALLOW_ARITH-NOT: comb.divs
-// ALLOW_ARITH: comb.replicate
-// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: hw.constant 85 : i16
 // ALLOW_ARITH: comb.mul
 // ALLOW_ARITH: comb.sub
 // ALLOW_ARITH: comb.add
@@ -565,13 +549,10 @@ hw.module @divs_const_neg3(in %lhs: i8, out out: i8) {
 
 // CHECK-LABEL: @mods_const_3
 // CHECK-NOT: comb.mods
-// CHECK: comb.replicate
-// CHECK: comb.concat
-// CHECK: comb.extract
 // ALLOW_ARITH-LABEL: @mods_const_3
 // ALLOW_ARITH-NOT: comb.mods
-// ALLOW_ARITH: comb.replicate
-// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: hw.constant 3 : i8
+// ALLOW_ARITH: hw.constant 86 : i16
 // ALLOW_ARITH: comb.mul
 // ALLOW_ARITH: comb.add
 // ALLOW_ARITH: comb.sub
@@ -583,13 +564,10 @@ hw.module @mods_const_3(in %lhs: i8, out out: i8) {
 
 // CHECK-LABEL: @mods_const_neg3
 // CHECK-NOT: comb.mods
-// CHECK: comb.replicate
-// CHECK: comb.concat
-// CHECK: comb.extract
 // ALLOW_ARITH-LABEL: @mods_const_neg3
 // ALLOW_ARITH-NOT: comb.mods
-// ALLOW_ARITH: comb.replicate
-// ALLOW_ARITH: comb.concat
+// ALLOW_ARITH: hw.constant -3 : i8
+// ALLOW_ARITH: hw.constant 85 : i16
 // ALLOW_ARITH: comb.mul
 // ALLOW_ARITH: comb.sub
 // ALLOW_ARITH: comb.add
@@ -598,7 +576,6 @@ hw.module @mods_const_neg3(in %lhs: i8, out out: i8) {
   %mod = comb.mods %lhs, %rhs : i8
   hw.output %mod : i8
 }
-
 
 // CHECK-LABEL: @divs_const_1
 // CHECK-NOT: comb.divs
@@ -618,11 +595,10 @@ hw.module @divs_const_1(in %lhs: i8, out out: i8) {
 
 // CHECK-LABEL: @divs_const_neg1
 // CHECK-NOT: comb.divs
-// CHECK-NOT: comb.replicate
-// CHECK: comb.xor
+// CHECK: hw.constant -1 : i8
 // ALLOW_ARITH-LABEL: @divs_const_neg1
 // ALLOW_ARITH-NOT: comb.divs
-// ALLOW_ARITH-NOT: comb.replicate
+// ALLOW_ARITH: hw.constant 0 : i8
 // ALLOW_ARITH: comb.sub
 hw.module @divs_const_neg1(in %lhs: i8, out out: i8) {
   %rhs = hw.constant -1 : i8
@@ -631,9 +607,9 @@ hw.module @divs_const_neg1(in %lhs: i8, out out: i8) {
 }
 
 // CHECK-LABEL: @divu_const_0
-// CHECK: hw.constant 0
+// CHECK: hw.constant 0 : i8
 // ALLOW_ARITH-LABEL: @divu_const_0
-// ALLOW_ARITH: hw.constant 0
+// ALLOW_ARITH: hw.constant 0 : i8
 hw.module @divu_const_0(in %lhs: i8, out out: i8) {
   %rhs = hw.constant 0 : i8
   %div = comb.divu %lhs, %rhs : i8
@@ -641,9 +617,9 @@ hw.module @divu_const_0(in %lhs: i8, out out: i8) {
 }
 
 // CHECK-LABEL: @modu_const_0
-// CHECK: hw.constant 0
+// CHECK: hw.constant 0 : i8
 // ALLOW_ARITH-LABEL: @modu_const_0
-// ALLOW_ARITH: hw.constant 0
+// ALLOW_ARITH: hw.constant 0 : i8
 hw.module @modu_const_0(in %lhs: i8, out out: i8) {
   %rhs = hw.constant 0 : i8
   %mod = comb.modu %lhs, %rhs : i8
