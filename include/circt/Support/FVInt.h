@@ -724,10 +724,6 @@ namespace llvm {
 /// Provide DenseMapInfo for FVInt.
 template <>
 struct DenseMapInfo<circt::FVInt, void> {
-  static inline circt::FVInt getEmptyKey() {
-    return circt::FVInt(DenseMapInfo<APInt>::getEmptyKey());
-  }
-
   static unsigned getHashValue(const circt::FVInt &Key);
 
   static bool isEqual(const circt::FVInt &LHS, const circt::FVInt &RHS) {

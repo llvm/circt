@@ -735,10 +735,6 @@ static unsigned hashValue(const SmallVector<Value> &inputs) {
 
 template <>
 struct DenseMapInfo<SmallVector<Value>> {
-  static inline SmallVector<Value> getEmptyKey() {
-    return SmallVector<Value>();
-  }
-
   static unsigned getHashValue(const SmallVector<Value> &inputs) {
     return hashValue(inputs);
   }

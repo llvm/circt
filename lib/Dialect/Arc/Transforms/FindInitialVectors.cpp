@@ -152,11 +152,6 @@ struct Vectorizer {
 namespace llvm {
 template <>
 struct DenseMapInfo<Key> {
-  static inline Key getEmptyKey() {
-    return Key(0, StringRef(), SmallVector<Type>(), SmallVector<Type>(),
-               DictionaryAttr());
-  }
-
   static unsigned getHashValue(const Key &key) {
     return hash_value(std::get<0>(key)) ^ hash_value(std::get<1>(key)) ^
            hash_value(std::get<2>(key)) ^ hash_value(std::get<3>(key)) ^

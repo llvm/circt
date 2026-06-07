@@ -316,9 +316,6 @@ static StringRef resetKindToStringRef(const ResetKind &kind) {
 namespace llvm {
 template <>
 struct DenseMapInfo<ResetSignal> {
-  static inline ResetSignal getEmptyKey() {
-    return ResetSignal{DenseMapInfo<FieldRef>::getEmptyKey(), {}};
-  }
   static unsigned getHashValue(const ResetSignal &x) {
     return circt::hash_value(x.field);
   }

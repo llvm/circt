@@ -170,7 +170,6 @@ private:
 namespace llvm {
 template <>
 struct DenseMapInfo<slang::BufferID> {
-  static slang::BufferID getEmptyKey() { return slang::BufferID(); }
   static unsigned getHashValue(slang::BufferID id) {
     return llvm::hash_value(id.getId());
   }

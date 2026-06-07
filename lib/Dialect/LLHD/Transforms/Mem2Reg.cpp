@@ -182,9 +182,6 @@ Value Def::getConditionOrPlaceholder() {
 // Allow `DriveCondition` to be used as hash map key.
 template <>
 struct llvm::DenseMapInfo<DriveCondition> {
-  static DriveCondition getEmptyKey() {
-    return DenseMapInfo<DriveCondition::ConditionAndMode>::getEmptyKey();
-  }
   static unsigned getHashValue(DriveCondition d) {
     return DenseMapInfo<DriveCondition::ConditionAndMode>::getHashValue(
         d.conditionAndMode);

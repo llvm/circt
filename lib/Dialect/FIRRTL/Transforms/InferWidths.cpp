@@ -332,14 +332,9 @@ namespace {
 // itself.
 template <typename T>
 struct InternedSlotInfo : DenseMapInfo<T *> {
-  static T *getEmptyKey() {
-    auto *pointer = llvm::DenseMapInfo<void *>::getEmptyKey();
-    return static_cast<T *>(pointer);
-  }
   static unsigned getHashValue(const T *val) { return mlir::hash_value(*val); }
   static bool isEqual(const T *lhs, const T *rhs) {
-    auto empty = getEmptyKey();
-    if (lhs == empty || rhs == empty)
+    if (!lhs || !rhs)
       return lhs == rhs;
     return *lhs == *rhs;
   }

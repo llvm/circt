@@ -233,10 +233,6 @@ template <>
 struct DenseMapInfo<circt::firrtl::FModuleOp> {
   using Operation = mlir::Operation;
   using FModuleOp = circt::firrtl::FModuleOp;
-  static inline FModuleOp getEmptyKey() {
-    return FModuleOp::getFromOpaquePointer(
-        DenseMapInfo<Operation *>::getEmptyKey());
-  }
   static unsigned getHashValue(const FModuleOp &val) {
     return DenseMapInfo<Operation *>::getHashValue(val);
   }

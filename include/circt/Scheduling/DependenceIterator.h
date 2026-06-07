@@ -128,9 +128,6 @@ using circt::scheduling::detail::Dependence;
 
 template <>
 struct DenseMapInfo<Dependence> {
-  static inline Dependence getEmptyKey() {
-    return Dependence(DenseMapInfo<mlir::Operation *>::getEmptyKey(), nullptr);
-  }
   static unsigned getHashValue(const Dependence &val) {
     return llvm::hash_value(val.getAsTuple());
   }

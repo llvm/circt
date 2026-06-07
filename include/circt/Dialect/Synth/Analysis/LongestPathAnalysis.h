@@ -377,10 +377,6 @@ struct DenseMapInfo<circt::synth::Object> {
   using Info = llvm::DenseMapInfo<
       std::tuple<circt::igraph::InstancePath, mlir::Value, size_t>>;
   using Object = circt::synth::Object;
-  static Object getEmptyKey() {
-    auto [path, value, bitPos] = Info::getEmptyKey();
-    return Object(path, value, bitPos);
-  }
   static llvm::hash_code getHashValue(Object object) {
     return Info::getHashValue(
         {object.instancePath, object.value, object.bitPos});

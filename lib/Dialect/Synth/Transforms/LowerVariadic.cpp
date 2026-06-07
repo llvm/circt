@@ -109,11 +109,6 @@ using OperandKey = llvm::SmallVector<std::pair<mlir::Value, bool>>;
 namespace llvm {
 template <>
 struct DenseMapInfo<OperandKey> {
-  static OperandKey getEmptyKey() {
-    // Return a vector containing the mlir::Value empty key
-    return {{DenseMapInfo<mlir::Value>::getEmptyKey(), false}};
-  }
-
   static unsigned getHashValue(const OperandKey &val) {
     llvm::hash_code hash = 0;
     // Iteratively combine the hash of each pair in the vector

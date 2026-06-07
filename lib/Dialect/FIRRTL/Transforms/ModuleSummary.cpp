@@ -103,7 +103,6 @@ namespace llvm {
 template <>
 struct DenseMapInfo<ModuleSummaryPass::KeyTy> {
   using KeyTy = ModuleSummaryPass::KeyTy;
-  static KeyTy getEmptyKey() { return {{}, ~0ULL}; }
   static unsigned getHashValue(const KeyTy &val) {
     return mlir::hash_value(val);
   }

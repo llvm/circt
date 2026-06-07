@@ -104,7 +104,6 @@ static FileLineColLoc findBestLocation(Location loc, bool emitted,
 namespace llvm {
 template <>
 struct DenseMapInfo<JValue> {
-  static JValue getEmptyKey() { return nullptr; }
   static unsigned getHashValue(const JValue &x) {
     SmallString<128> buffer;
     llvm::raw_svector_ostream(buffer) << x;
