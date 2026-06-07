@@ -1904,7 +1904,7 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
     auto &cutNPN = cut.getNPNClass(options.npnTable);
     MatchBinding binding = computeMatchBinding(cutNPN, patternNPN);
 
-    auto match = pattern->match(cutEnumerator, cut, binding, inputArrivalTimes);
+    auto match = pattern->match(cutEnumerator, cut, binding);
     if (!match)
       continue;
     computeArrivalTimeAndPickBest(pattern, std::move(*match),
@@ -1912,8 +1912,7 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
   }
 
   for (const CutRewritePattern *pattern : patterns.nonNPNPatterns) {
-    if (auto match = pattern->match(cutEnumerator, cut, identityBinding,
-                                    inputArrivalTimes))
+    if (auto match = pattern->match(cutEnumerator, cut, identityBinding))
       computeArrivalTimeAndPickBest(pattern, std::move(*match),
                                     identityBinding);
   }
