@@ -884,11 +884,10 @@ struct CutRewritePattern {
   /// If useTruthTableMatcher() returns true, this method is only called for
   /// cuts with matching truth tables, and binding describes how the matched
   /// pattern pins map to the cut. Non-truth-table patterns receive identity
-  /// bindings. inputArrivalTimes provides the framework-computed arrival time
-  /// for each cut input in cut-input order.
+  /// bindings.
   virtual std::optional<MatchResult>
-  match(CutEnumerator &enumerator, const Cut &cut, const MatchBinding &binding,
-        ArrayRef<DelayType> inputArrivalTimes) const = 0;
+  match(CutEnumerator &enumerator, const Cut &cut,
+        const MatchBinding &binding) const = 0;
 
   /// Specify truth tables that this pattern can match.
   ///

@@ -232,9 +232,8 @@ struct SOPBalancingPattern : public CutRewritePattern {
       : CutRewritePattern(context), sopCache(sopCache),
         outputInverted(outputInverted) {}
 
-  std::optional<MatchResult>
-  match(CutEnumerator &enumerator, const Cut &cut, const MatchBinding &binding,
-        ArrayRef<DelayType> inputArrivalTimes) const override {
+  std::optional<MatchResult> match(CutEnumerator &enumerator, const Cut &cut,
+                                   const MatchBinding &binding) const override {
     const auto &network = enumerator.getLogicNetwork();
     (void)binding;
     if (cut.isTrivialCut() || cut.getOutputSize(network) != 1)
@@ -249,6 +248,10 @@ struct SOPBalancingPattern : public CutRewritePattern {
     // Constants should already be handled by cheaper trivial cuts.
     if (llvm::any_of(sop.cubes,
                      [](const Cube &cube) { return cube.size() == 0; }))
+      return std::nullopt;
+
+    SmallVector<DelayType, expectedISOPInputs> inputArrivalTimes;
+    if (failed(cut.getInputArrivalTimes(enumerator, inputArrivalTimes)))
       return std::nullopt;
 
     auto implementation = std::make_shared<SOPImplementation>();
