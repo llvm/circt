@@ -654,3 +654,4 @@ hw.module @const_divmod_mods_neg1_i3(in %lhs: i3, out out: i3) {
   %c_neg1_i3 = hw.constant -1 : i3
   %0 = comb.mods %lhs, %c_neg1_i3 : i3
   hw.output %0 : i3
+}
