@@ -203,11 +203,8 @@ LogicalResult StateOp::verify() {
   if (getLatency() < 1)
     return emitOpError("latency must be a positive integer");
 
-  if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
-    return emitOpError("outside a clock domain requires a clock");
-
-  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
-    return emitOpError("inside a clock domain cannot have a clock");
+  if (!getClock())
+    return emitOpError("requires a clock");
 
   return success();
 }
@@ -286,22 +283,10 @@ LogicalResult MemoryWritePortOp::verify() {
   if (getLatency() < 1)
     return emitOpError("latency must be at least 1");
 
-  if (!getOperation()->getParentOfType<ClockDomainOp>() && !getClock())
-    return emitOpError("outside a clock domain requires a clock");
-
-  if (getOperation()->getParentOfType<ClockDomainOp>() && getClock())
-    return emitOpError("inside a clock domain cannot have a clock");
+  if (!getClock())
+    return emitOpError("requires a clock");
 
   return success();
-}
-
-//===----------------------------------------------------------------------===//
-// ClockDomainOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult ClockDomainOp::verifyRegions() {
-  return verifyTypeListEquivalence(*this, getBodyBlock().getArgumentTypes(),
-                                   getInputs().getTypes(), "input");
 }
 
 //===----------------------------------------------------------------------===//
@@ -754,6 +739,158 @@ SimGetNextWakeupOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return failure();
 
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// CoroutineDefineOp
+//===----------------------------------------------------------------------===//
+
+/// Resolve the callee symbol to a `CoroutineDefineOp` and verify that the
+/// given operand and result types match its function type.
+static LogicalResult verifyCoroutineCallTypes(Operation *op,
+                                              FlatSymbolRefAttr callee,
+                                              TypeRange operands,
+                                              TypeRange results,
+                                              SymbolTableCollection &symTable) {
+  auto defineOp =
+      symTable.lookupNearestSymbolFrom<CoroutineDefineOp>(op, callee);
+  if (!defineOp)
+    return op->emitOpError() << "`" << callee.getValue()
+                             << "` does not reference a valid "
+                                "`arc.coroutine.define`";
+
+  auto fnType = defineOp.getFunctionType();
+  if (failed(verifyTypeListEquivalence(op, fnType.getInputs(), operands,
+                                       "operand")))
+    return failure();
+  if (failed(verifyTypeListEquivalence(op, fnType.getResults(), results,
+                                       "result")))
+    return failure();
+  return success();
+}
+
+ParseResult CoroutineDefineOp::parse(OpAsmParser &parser,
+                                     OperationState &result) {
+  auto buildFuncType =
+      [](Builder &builder, ArrayRef<Type> argTypes, ArrayRef<Type> results,
+         function_interface_impl::VariadicFlag,
+         std::string &) { return builder.getFunctionType(argTypes, results); };
+
+  return function_interface_impl::parseFunctionOp(
+      parser, result, /*allowVariadic=*/false,
+      getFunctionTypeAttrName(result.name), buildFuncType,
+      getArgAttrsAttrName(result.name), getResAttrsAttrName(result.name));
+}
+
+void CoroutineDefineOp::print(OpAsmPrinter &p) {
+  function_interface_impl::printFunctionOp(
+      p, *this, /*isVariadic=*/false, "function_type", getArgAttrsAttrName(),
+      getResAttrsAttrName());
+}
+
+//===----------------------------------------------------------------------===//
+// CoroutineCallOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+CoroutineCallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  // The `state`/`pc` and `resumeState`/`resumePC` types are constrained to
+  // wrap the callee symbol by the `CoroutineCalleeWrappedType` traits on the
+  // op. All that remains is to resolve the callee and check that the trailing
+  // arg/result types match its signature.
+  auto callee = (*this)->getAttrOfType<FlatSymbolRefAttr>("callee");
+  return verifyCoroutineCallTypes(*this, callee, getArgs().getTypes(),
+                                  getResults().getTypes(), symbolTable);
+}
+
+//===----------------------------------------------------------------------===//
+// CoroutineInstanceOp
+//===----------------------------------------------------------------------===//
+
+// An instance hides the coroutine's trailing wakeup time. Verify that the
+// callee declares a wakeup as its last result and that the instance's args and
+// results match the callee's signature with that last result removed.
+LogicalResult
+CoroutineInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto callee = (*this)->getAttrOfType<FlatSymbolRefAttr>("callee");
+  auto defineOp =
+      symbolTable.lookupNearestSymbolFrom<CoroutineDefineOp>(*this, callee);
+  if (!defineOp)
+    return emitOpError() << "`" << callee.getValue()
+                         << "` does not reference a valid "
+                            "`arc.coroutine.define`";
+
+  auto fnType = defineOp.getFunctionType();
+  auto fnResults = fnType.getResults();
+  if (fnResults.empty() || !fnResults.back().isInteger(64))
+    return emitOpError() << "referenced coroutine `" << callee.getValue()
+                         << "` must produce an `i64` wakeup time as its "
+                            "last result";
+
+  if (failed(verifyTypeListEquivalence(*this, fnType.getInputs(),
+                                       getArgs().getTypes(), "operand")))
+    return failure();
+  if (failed(verifyTypeListEquivalence(*this, fnResults.drop_back(),
+                                       getResults().getTypes(), "result")))
+    return failure();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Coroutine Terminators
+//===----------------------------------------------------------------------===//
+
+// The three terminators all yield values back through the enclosing
+// `arc.coroutine.define`'s result types. The helper below extracts the
+// expected types from the parent and checks them against the given operand
+// types.
+static LogicalResult verifyCoroutineTerminator(Operation *op,
+                                               TypeRange yieldOperands) {
+  auto parent = op->getParentOfType<CoroutineDefineOp>();
+  return verifyTypeListEquivalence(op, parent.getResultTypes(), yieldOperands,
+                                   "yielded value");
+}
+
+LogicalResult CoroutineYieldOp::verify() {
+  if (failed(verifyCoroutineTerminator(*this, getYieldOperands().getTypes())))
+    return failure();
+
+  // The `BranchOpInterface` already verifies that the destination block has
+  // the right number of arguments and that the trailing arguments match the
+  // yield's destination operands. Additionally verify that the leading
+  // arguments, which are supplied fresh by the caller upon resumption, match
+  // the coroutine's function type.
+  auto parent = (*this)->getParentOfType<CoroutineDefineOp>();
+  TypeRange coroutineArgTypes = parent.getArgumentTypes();
+  TypeRange destArgTypes = getDest()->getArgumentTypes();
+  if (destArgTypes.size() >= coroutineArgTypes.size())
+    if (failed(verifyTypeListEquivalence(
+            *this, coroutineArgTypes,
+            destArgTypes.take_front(coroutineArgTypes.size()),
+            "destination resume argument")))
+      return failure();
+
+  return success();
+}
+
+// The destination block's leading arguments match the coroutine's function
+// type and are supplied fresh by the caller upon resumption. They are
+// therefore "produced" operands from the branch's point of view. The
+// remaining destination block arguments map to the yield's destination
+// operands.
+SuccessorOperands CoroutineYieldOp::getSuccessorOperands(unsigned index) {
+  assert(index == 0 && "invalid successor index");
+  auto parent = (*this)->getParentOfType<CoroutineDefineOp>();
+  return SuccessorOperands(parent.getArgumentTypes().size(),
+                           getDestOperandsMutable());
+}
+
+LogicalResult CoroutineReturnOp::verify() {
+  return verifyCoroutineTerminator(*this, getYieldOperands().getTypes());
+}
+
+LogicalResult CoroutineHaltOp::verify() {
+  return verifyCoroutineTerminator(*this, getYieldOperands().getTypes());
 }
 
 //===----------------------------------------------------------------------===//

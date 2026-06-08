@@ -7,11 +7,59 @@ rtg.sequence @seq0() attributes {rtg.some_attr} {
   %str = rtg.constant "label_string" : !rtg.string
   // CHECK-NEXT: rtg.label_unique_decl [[STR]]
   // CHECK-NEXT: rtg.label_unique_decl [[STR]]
-  // They are DCE'd but not CSE'd 
+  // They are DCE'd but not CSE'd
   %2 = rtg.label_unique_decl %str
   %3 = rtg.label_unique_decl %str
   %4 = rtg.label_unique_decl %str
   // CHECK-NEXT: rtg.label global
   rtg.label global %2
   rtg.label global %3
+}
+
+// CHECK-LABEL: rtg.sequence @setSelectRandom
+rtg.sequence @setSelectRandom(%arg0: i32, %arg1: i32) {
+  // CHECK: [[SET:%.+]] = rtg.set_create %arg0, %arg1 : i32
+  %set = rtg.set_create %arg0, %arg1 : i32
+  // CHECK-COUNT-3: rtg.set_select_random [[SET]] : !rtg.set<i32>
+  // CHECK-NOT: rtg.set_select_random
+  // They are not CSE'd and not DCE'd
+  %0 = rtg.set_select_random %set : !rtg.set<i32>
+  %1 = rtg.set_select_random %set : !rtg.set<i32>
+  %2 = rtg.set_select_random %set : !rtg.set<i32>
+}
+
+// CHECK-LABEL: rtg.sequence @bagSelectRandom
+rtg.sequence @bagSelectRandom(%arg0: i32, %arg1: i32, %arg2: index) {
+  // CHECK: [[BAG:%.+]] = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32
+  %bag = rtg.bag_create (%arg2 x %arg0, %arg2 x %arg1) : i32
+  // CHECK-COUNT-3: rtg.bag_select_random [[BAG]] : !rtg.bag<i32>
+  // CHECK-NOT: rtg.bag_select_random
+  // They are not CSE'd and not DCE'd
+  %0 = rtg.bag_select_random %bag : !rtg.bag<i32>
+  %1 = rtg.bag_select_random %bag : !rtg.bag<i32>
+  %2 = rtg.bag_select_random %bag : !rtg.bag<i32>
+}
+
+// CHECK-LABEL: rtg.sequence @randomScope
+rtg.sequence @randomScope() {
+  // CHECK-COUNT-3: rtg.random_scope
+  // CHECK-NOT: rtg.random_scope
+  // They are not CSE'd and not DCE'd
+  rtg.random_scope {}
+  rtg.random_scope {}
+  rtg.random_scope {}
+}
+
+// CHECK-LABEL: rtg.sequence @randomNumberInRange
+rtg.sequence @randomNumberInRange() {
+  // CHECK: [[LOW:%.+]] = index.constant 0
+  // CHECK-NEXT: [[HIGH:%.+]] = index.constant 100
+  // CHECK-COUNT-3: rtg.random_number_in_range {{\[}}[[LOW]], [[HIGH]]{{\]}}
+  // CHECK-NOT: rtg.random_number_in_range
+  %low = index.constant 0
+  %high = index.constant 100
+  // They are not CSE'd and not DCE'd
+  %0 = rtg.random_number_in_range [%low, %high]
+  %1 = rtg.random_number_in_range [%low, %high]
+  %2 = rtg.random_number_in_range [%low, %high]
 }

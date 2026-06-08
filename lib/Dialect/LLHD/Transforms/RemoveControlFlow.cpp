@@ -263,10 +263,19 @@ void CFRemover::run() {
     });
 
     // Convert the block arguments into multiplexers.
+    SmallVector<Block *, 4> reachablePreds;
+    for (auto *pred : block->getPredecessors())
+      if (domInfo.isReachableFromEntry(pred))
+        reachablePreds.push_back(pred);
+
+    llvm::stable_sort(reachablePreds, [&](Block *a, Block *b) {
+      return a == domBlock && b != domBlock;
+    });
+
     OpBuilder builder(entryBlock->getTerminator());
     SmallVector<Value> mergedArgs;
     SmallPtrSet<Block *, 4> seenPreds;
-    for (auto *pred : block->getPredecessors()) {
+    for (auto *pred : reachablePreds) {
       // A block may be listed multiple times in the predecessors.
       if (!seenPreds.insert(pred).second)
         continue;

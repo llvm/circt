@@ -1918,6 +1918,55 @@ hw.module @parameter<in: i8> (in %a: i8, out o1: !hw.array<1xi8>, out o2: !hw.st
   hw.output %0, %1 : !hw.array<1xi8>, !hw.struct<foo: i8>
 }
 
+// Fold union_extract when it undoes a union_create for the same field;
+// do NOT fold when the fields have different types (different bit widths).
+// CHECK-LABEL: hw.module @union_extract_create
+// CHECK-NEXT:    %[[U:.+]] = hw.union_create "a", %in
+// CHECK-NEXT:    %[[R1:.+]] = hw.union_extract %[[U]]["b"]
+// CHECK-NEXT:    hw.output %in, %[[R1]] : i8, i4
+hw.module @union_extract_create(in %in: i8, out r0: i8, out r1: i4) {
+  %u = hw.union_create "a", %in : !hw.union<a: i8, b: i4>
+  %r0 = hw.union_extract %u["a"] : !hw.union<a: i8, b: i4>
+  %r1 = hw.union_extract %u["b"] : !hw.union<a: i8, b: i4>
+  hw.output %r0, %r1 : i8, i4
+}
+
+// Fold union_extract("F1", union_create("F2", a)) across different fields when
+// both fields map to the same bits (same type, same offset in the union).
+// CHECK-LABEL: hw.module @union_extract_create_cross_field
+// CHECK-NEXT:    hw.output %in, %in : i8, i8
+hw.module @union_extract_create_cross_field(in %in: i8, out r0: i8, out r1: i8) {
+  %u = hw.union_create "a", %in : !hw.union<a: i8, b: i8>
+  %r0 = hw.union_extract %u["a"] : !hw.union<a: i8, b: i8>
+  %r1 = hw.union_extract %u["b"] : !hw.union<a: i8, b: i8>
+  hw.output %r0, %r1 : i8, i8
+}
+
+// Do NOT fold when the fields have the same type but sit at different offsets
+// within the union.
+// CHECK-LABEL: hw.module @union_extract_create_same_type_diff_offset
+// CHECK-NEXT:    %[[U:.+]] = hw.union_create "a", %in
+// CHECK-NEXT:    %[[R:.+]] = hw.union_extract %[[U]]["b"]
+// CHECK-NEXT:    hw.output %[[R]] : i8
+hw.module @union_extract_create_same_type_diff_offset(in %in: i8, out r: i8) {
+  %u = hw.union_create "a", %in : !hw.union<a: i8, b: i8 offset 8>
+  %r = hw.union_extract %u["b"] : !hw.union<a: i8, b: i8 offset 8>
+  hw.output %r : i8
+}
+
+// Fold union_extract of a bitcast into a direct bitcast when the field covers
+// the full union width; do NOT fold when the field is narrower.
+// CHECK-LABEL: hw.module @union_extract_bitcast
+// CHECK-NEXT:    %[[U:.+]] = hw.bitcast %in
+// CHECK-NEXT:    %[[R1:.+]] = hw.union_extract %[[U]]["b"]
+// CHECK-NEXT:    hw.output %in, %[[R1]] : i8, i4
+hw.module @union_extract_bitcast(in %in: i8, out r0: i8, out r1: i4) {
+  %u = hw.bitcast %in : (i8) -> !hw.union<a: i8, b: i4>
+  %r0 = hw.union_extract %u["a"] : !hw.union<a: i8, b: i4>
+  %r1 = hw.union_extract %u["b"] : !hw.union<a: i8, b: i4>
+  hw.output %r0, %r1 : i8, i4
+}
+
 // A self-referential wire must not crash during canonicalization.
 // CHECK-LABEL: @SelfRefWire
 hw.module @SelfRefWire() {

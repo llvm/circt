@@ -45,12 +45,12 @@ endmodule
 // CHECK-LABEL: moore.module @Bar(in %a : !moore.l1, in %b : !moore.l1, out c : !moore.l1)
 module Bar(input a, b,
            output c);
+  // CHECK-DAG: %u = moore.variable {{.*}} : <i32>
   // CHECK: %subC1.c, %subC1.subD.z = moore.instance "subC1" @SubC(a: %0: !moore.l1, b: %1: !moore.l1) -> (c: !moore.l1, subD.z: !moore.ref<i32>)
   SubC subC1(a, b, c);
   // CHECK: %subC2.c, %subC2.subD.z = moore.instance "subC2" @SubC(a: %2: !moore.l1, b: %3: !moore.l1) -> (c: !moore.l1, subD.z: !moore.ref<i32>)
   SubC subC2(a, b, c);
-  // CHECK: [[RD_SC1_SD_Z:%.+]] = moore.read %subC1.subD.z : <i32>
-  // CHECK: moore.variable [[RD_SC1_SD_Z]] : <i32>
+  // CHECK-DAG: [[RD_SC1_SD_Z:%.+]] = moore.read %subC1.subD.z : <i32>
   int u = subC1.subD.z;
 endmodule
 

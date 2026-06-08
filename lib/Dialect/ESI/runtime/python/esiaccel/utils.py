@@ -2,14 +2,12 @@
 #  See https://llvm.org/LICENSE.txt for license information.
 #  SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-from . import codegen
-
 import platform
 from pathlib import Path
 import subprocess
 import sys
 
-_thisdir = Path(__file__).absolute().resolve().parent
+_thisdir = Path(__file__).absolute().parent
 
 
 def run_esiquery():
@@ -37,6 +35,7 @@ def run_esi_cosim():
 
 
 def run_cppgen():
+  from . import codegen
   return codegen.run()
 
 
@@ -49,6 +48,14 @@ def get_dll_dir() -> Path:
   import sys
   import os
   if sys.platform == "win32":
-    return _thisdir
+    dll_name = "ESICppRuntime.dll"
+    for dir in [_thisdir, _thisdir.parent, _thisdir.parent.parent]:
+      if (dir / dll_name).exists():
+        return dir
+    raise FileNotFoundError("ESICppRuntime.dll not found")
   else:
-    return _thisdir / "lib"
+    so_name = "libESICppRuntime.so"
+    for dir in [_thisdir, _thisdir.parent, _thisdir.parent.parent]:
+      if (dir / "lib" / so_name).exists():
+        return dir / "lib"
+    raise FileNotFoundError("libESICppRuntime.so not found")

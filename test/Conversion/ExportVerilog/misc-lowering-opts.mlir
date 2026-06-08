@@ -16,6 +16,25 @@ hw.module @Foo(in %a: i1, in %foo: !fooTy, out x: i3) {
 
 // -----
 
+// alwaysEmitBeginEnd forces begin/end even for single-statement bodies.
+module attributes {circt.loweringOptions="alwaysEmitBeginEnd"} {
+// CHECK-LABEL: module AlwaysBeginEnd(
+hw.module @AlwaysBeginEnd(in %cond: i1, in %fd: i32, in %clock: i1) {
+  sv.always posedge %clock {
+    // CHECK:      always @(posedge clock) begin
+    // CHECK-NEXT:   if (cond) begin
+    // CHECK-NEXT:     $fwrite
+    // CHECK-NEXT:   end
+    // CHECK-NEXT: end
+    sv.if %cond {
+      sv.fwrite %fd, "single\n"
+    }
+  }
+}
+}
+
+// -----
+
 module attributes {circt.loweringOptions="caseInsensitiveKeywords"} {
   // CHECK-LABEL: caseInsensitiveKeywords
   hw.module @caseInsensitiveKeywords() {}

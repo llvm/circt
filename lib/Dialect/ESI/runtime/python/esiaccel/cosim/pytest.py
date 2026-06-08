@@ -43,9 +43,11 @@ import traceback
 from typing import Any, Callable, Dict, Optional, Pattern, Sequence, Union
 
 import esiaccel
+import pytest
 from esiaccel.accelerator import Accelerator, AcceleratorConnection
 
-from .simulator import get_simulator, Simulator, SourceFiles
+from .simulator import (available_simulators, get_simulator,
+                        is_simulator_available, Simulator, SourceFiles)
 
 LogMatcher = Union[str, Pattern[str], Callable[[str, str], bool]]
 SourceGeneratorFunc = Callable[["CosimPytestConfig", Path], Path]
@@ -633,6 +635,11 @@ def _decorate_function(
 
   @functools.wraps(target)
   def _wrapper(*args, **kwargs):
+    if not is_simulator_available(test_config.simulator):
+      available = available_simulators()
+      pytest.skip(
+          f"Simulator '{test_config.simulator}' not available; available simulators: "
+          f"{', '.join(available) if available else 'none'}")
     cache = class_cache_getter() if class_cache_getter is not None else None
     _run_isolated(target, test_config, args, kwargs, class_cache=cache)
 

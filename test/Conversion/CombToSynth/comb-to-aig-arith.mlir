@@ -448,7 +448,6 @@ hw.module @divmod(in %in: i1, in %rhs: i2, out out_divu: i2, out out_modu: i2, o
   hw.output %0, %1, %2, %3 : i2, i2, i2, i2
 }
 
-
 // CHECK-LABEL: @divmodu_power_of_two
 // ALLOW_ICMP-LABEL: @divmodu_power_of_two
 hw.module @divmodu_power_of_two(in %lhs: i8, out out_divu: i8, out out_modu: i8) {
@@ -463,6 +462,25 @@ hw.module @divmodu_power_of_two(in %lhs: i8, out out_divu: i8, out out_modu: i8)
   // ALLOW_ICMP-NEXT: %[[MODU:.+]] = comb.concat %[[C0_I5]], %[[LOWER_3]] : i5, i3
   // ALLOW_ICMP-NEXT: hw.output %[[DIVU]], %[[MODU]] : i8, i8
   hw.output %0, %1 : i8, i8
+}
+
+// CHECK-LABEL: @mul_two_bit
+// ALLOW_ADD-LABEL: @mul_two_bit
+// ALLOW_ADD: %[[LHS_0:.+]] = comb.extract %lhs from 0 : (i2) -> i1
+// ALLOW_ADD: %[[LHS_1:.+]] = comb.extract %lhs from 1 : (i2) -> i1
+// ALLOW_ADD: %[[RHS_0:.+]] = comb.extract %rhs from 0 : (i2) -> i1
+// ALLOW_ADD: %[[RHS_1:.+]] = comb.extract %rhs from 1 : (i2) -> i1
+// ALLOW_ADD: %[[AND_00:.+]] = comb.and %[[LHS_0]], %[[RHS_0]] : i1
+// ALLOW_ADD: %[[AND_10:.+]] = comb.and %[[LHS_1]], %[[RHS_0]] : i1
+// ALLOW_ADD: %[[AND_01:.+]] = comb.and %[[LHS_0]], %[[RHS_1]] : i1
+// ALLOW_ADD: %false = hw.constant false
+// ALLOW_ADD: %[[ROW_0:.+]] = comb.concat %[[AND_10]], %[[AND_00]] : i1, i1
+// ALLOW_ADD: %[[ROW_1:.+]] = comb.concat %[[AND_01]], %false : i1, i1
+// ALLOW_ADD: %[[ADD:.+]] = comb.add bin %[[ROW_0]], %[[ROW_1]] : i2
+// ALLOW_ADD: hw.output %[[ADD]] : i2
+hw.module @mul_two_bit(in %lhs: i2, in %rhs: i2, out out: i2) {
+  %0 = comb.mul %lhs, %rhs : i2
+  hw.output %0 : i2
 }
 
 // CHECK-LABEL: @divu_const_3
@@ -636,4 +654,3 @@ hw.module @const_divmod_mods_neg1_i3(in %lhs: i3, out out: i3) {
   %c_neg1_i3 = hw.constant -1 : i3
   %0 = comb.mods %lhs, %c_neg1_i3 : i3
   hw.output %0 : i3
-}

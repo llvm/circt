@@ -7,8 +7,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MooreTypes.h"
+#include "circt/Support/FVInt.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Value.h"
 #include "slang/ast/EvalContext.h"
@@ -34,6 +36,30 @@ static FVInt convertSVIntToFVInt(const slang::SVInt &svint) {
   }
   auto value = ArrayRef<uint64_t>(svint.getRawPtr(), svint.getNumWords());
   return FVInt(APInt(svint.getBitWidth(), value));
+}
+
+/// Check if a Moore integer value contains any unknown (x/z) bits.
+/// Returns a Moore i1 result: 1 if any bit is unknown, 0 otherwise.
+static Value getIsUnknown(OpBuilder &builder, Location loc, Value value,
+                          moore::IntType valTy, MLIRContext *ctx) {
+  Value bitVal = value;
+  if (valTy.getWidth() > 1) {
+    auto mooreI1Type = moore::IntType::get(ctx, 1, valTy.getDomain());
+    bitVal = moore::ReduceXorOp::create(builder, loc, mooreI1Type, value);
+  }
+  auto xType = moore::IntType::get(ctx, 1, moore::Domain::FourValued);
+  auto xConst =
+      moore::ConstantOp::create(builder, loc, xType, FVInt::getAllX(1));
+  return moore::CaseEqOp::create(builder, loc, bitVal, xConst).getResult();
+}
+
+/// Coerce a Moore integer value to a builtin integer, handling four-valued
+/// inputs by first mapping x/z to 0 via LogicToIntOp.
+static Value coerceToBuiltinInt(OpBuilder &builder, Location loc, Value value,
+                                moore::IntType valTy) {
+  if (valTy.getDomain() == moore::Domain::FourValued)
+    value = builder.createOrFold<moore::LogicToIntOp>(loc, value);
+  return builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
 }
 
 /// Map an index into an array, with bounds `range`, to a bit offset of the
@@ -2031,7 +2057,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     const auto &subroutine = *info.subroutine;
     auto nameId = subroutine.knownNameId;
 
-    // $rose, $fell, $stable, $changed, and $past are only valid in
+    // $rose, $fell, $stable, $changed, $past, and $sampled are only valid in
     // the context of properties and assertions. Those are treated in the
     // LTLDialect; treat them there instead.
     switch (nameId) {
@@ -2041,9 +2067,6 @@ struct RvalueExprVisitor : public ExprVisitor {
     case ksn::Changed:
     case ksn::Past:
     case ksn::Sampled:
-    case ksn::IsUnknown:
-    case ksn::OneHot:
-    case ksn::OneHot0:
       return context.convertAssertionCallExpression(expr, info, loc);
     default:
       break;
@@ -2072,8 +2095,14 @@ struct RvalueExprVisitor : public ExprVisitor {
       return {};
 
     auto ty = context.convertType(*expr.type);
-    return context.materializeConversion(ty, result, expr.type->isSigned(),
-                                         loc);
+    // Bit vector builtins ($countones, $isunknown, $onehot, $onehot0) return
+    // inherently unsigned results that must be zero-extended, even though
+    // Slang's declared return type may be signed int.
+    bool isSigned = expr.type->isSigned();
+    if (nameId == ksn::CountOnes || nameId == ksn::IsUnknown ||
+        nameId == ksn::OneHot || nameId == ksn::OneHot0)
+      isSigned = false;
+    return context.materializeConversion(ty, result, isSigned, loc);
   }
 
   /// Handle string literals.
@@ -3262,6 +3291,112 @@ Value Context::convertSystemCall(
     return moore::Clog2BIOp::create(builder, loc, value);
   }
 
+  //===--------------------------------------------------------------------===//
+  // Bit Vector System Functions
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::IsUnknown) {
+    assert(numArgs == 1 && "`$isunknown` takes 1 argument");
+    auto value = convertRvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    auto valTy = dyn_cast<moore::IntType>(value.getType());
+    if (!valTy) {
+      mlir::emitError(loc) << "expected integer argument for `$isunknown`";
+      return {};
+    }
+    return getIsUnknown(builder, loc, value, valTy, getContext());
+  }
+
+  if (nameId == ksn::OneHot0 || nameId == ksn::OneHot) {
+    assert(numArgs == 1 && "`$onehot`/`$onehot0` takes 1 argument");
+    auto value = convertRvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    auto valTy = dyn_cast<moore::IntType>(value.getType());
+    if (!valTy) {
+      mlir::emitError(loc) << "expected integer argument for `"
+                           << subroutine.name << "`";
+      return {};
+    }
+
+    // In SystemVerilog, $onehot/$onehot0 return 1'b0 if the expression
+    // contains any unknown (x/z) bits. Detect and squash if four-valued.
+    Value isUnknown;
+    if (valTy.getDomain() == Domain::FourValued) {
+      Value isUnknownMoore =
+          getIsUnknown(builder, loc, value, valTy, getContext());
+      isUnknown =
+          builder.createOrFold<moore::ToBuiltinIntOp>(loc, isUnknownMoore);
+    }
+
+    // Coerce four-valued input to two-valued for the comb ops.
+    Value intVal = coerceToBuiltinInt(builder, loc, value, valTy);
+
+    // Compute onehot0: (value & (value - 1)) == 0
+    auto one = hw::ConstantOp::create(builder, loc, intVal.getType(), 1);
+    auto minusOne = comb::SubOp::create(builder, loc, intVal, one);
+    auto anded = comb::AndOp::create(builder, loc, intVal, minusOne);
+    auto zero = hw::ConstantOp::create(builder, loc, intVal.getType(), 0);
+    Value result = comb::ICmpOp::create(builder, loc, comb::ICmpPredicate::eq,
+                                        anded, zero, false);
+
+    // For $onehot, additionally require value != 0.
+    if (nameId == ksn::OneHot) {
+      auto isNotZero = comb::ICmpOp::create(
+          builder, loc, comb::ICmpPredicate::ne, intVal, zero, false);
+      result = comb::AndOp::create(builder, loc, result, isNotZero);
+    }
+
+    // If four-valued, squash to 0 when unknown bits exist.
+    if (isUnknown) {
+      Value zeroI1 =
+          hw::ConstantOp::create(builder, loc, builder.getI1Type(), 0);
+      result = comb::MuxOp::create(builder, loc, isUnknown, zeroI1, result);
+      Value resultMoore = moore::FromBuiltinIntOp::create(builder, loc, result);
+      return moore::IntToLogicOp::create(builder, loc, resultMoore).getResult();
+    }
+    return moore::FromBuiltinIntOp::create(builder, loc, result);
+  }
+
+  if (nameId == ksn::CountOnes) {
+    assert(numArgs == 1 && "`$countones` takes 1 argument");
+    auto value = convertRvalueExpression(*args[0]);
+    if (!value)
+      return {};
+    auto valTy = dyn_cast<moore::IntType>(value.getType());
+    if (!valTy) {
+      mlir::emitError(loc) << "expected integer argument for `$countones`";
+      return {};
+    }
+
+    // Coerce four-valued input to two-valued for the comb ops.
+    Value intVal = coerceToBuiltinInt(builder, loc, value, valTy);
+
+    // Popcount: extract each bit, zero-extend to result width, and sum.
+    auto builtinIntTy = cast<IntegerType>(intVal.getType());
+    unsigned width = builtinIntTy.getWidth();
+    unsigned resultWidth = llvm::Log2_32_Ceil(width + 1);
+    auto i1Ty = builder.getI1Type();
+    unsigned padWidth = resultWidth - 1;
+    auto zeros = hw::ConstantOp::create(builder, loc,
+                                        builder.getIntegerType(padWidth), 0);
+
+    // Zero-extend the first bit to seed the accumulator.
+    auto bit0 = comb::ExtractOp::create(builder, loc, i1Ty, intVal, 0);
+    Value sum = comb::ConcatOp::create(builder, loc, ValueRange{zeros, bit0});
+
+    for (unsigned i = 1; i < width; ++i) {
+      auto bit = comb::ExtractOp::create(builder, loc, i1Ty, intVal, i);
+      auto extended =
+          comb::ConcatOp::create(builder, loc, ValueRange{zeros, bit});
+      sum = comb::AddOp::create(builder, loc, sum, extended);
+    }
+
+    // Wrap back into Moore type (unsigned — CountOnes result is never signed).
+    return moore::FromBuiltinIntOp::create(builder, loc, sum);
+  }
+
   // Real math functions (all take 1 real argument)
   if (nameId == ksn::Ln)
     return convertRealMathBI<moore::LnBIOp>(*this, loc, name, args);
@@ -3371,6 +3506,17 @@ Value Context::convertSystemCall(
     return moore::StringLenOp::create(builder, loc, value);
   }
 
+  if (nameId == ksn::Getc) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 2 && "`getc` takes 2 arguments");
+    auto stringType = moore::StringType::get(getContext());
+    auto str = convertRvalueExpression(*args[0], stringType);
+    auto index = convertRvalueExpression(*args[1]);
+    if (!str || !index)
+      return {};
+    return moore::StringGetOp::create(builder, loc, str, index);
+  }
+
   if (nameId == ksn::ToUpper) {
     // Slang already checks the arity of string methods.
     assert(numArgs == 1 && "`toupper` takes 1 argument");
@@ -3391,15 +3537,63 @@ Value Context::convertSystemCall(
     return moore::StringToLowerOp::create(builder, loc, value);
   }
 
-  if (nameId == ksn::Getc) {
+  if (nameId == ksn::Compare || nameId == ksn::ICompare) {
     // Slang already checks the arity of string methods.
-    assert(numArgs == 2 && "`getc` takes 2 arguments");
+    assert(numArgs == 2);
+    auto stringType = moore::StringType::get(getContext());
+    auto lhs = convertRvalueExpression(*args[0], stringType);
+    auto rhs = convertRvalueExpression(*args[1], stringType);
+    if (!lhs || !rhs)
+      return {};
+    if (nameId == ksn::Compare)
+      return moore::StringCompareOp::create(builder, loc, lhs, rhs);
+    return moore::StringICompareOp::create(builder, loc, lhs, rhs);
+  }
+
+  if (nameId == ksn::Substr) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 3 && "`substr` takes 3 arguments");
     auto stringType = moore::StringType::get(getContext());
     auto str = convertRvalueExpression(*args[0], stringType);
-    auto index = convertRvalueExpression(*args[1]);
-    if (!str || !index)
+    auto start = convertRvalueExpression(*args[1]);
+    auto end = convertRvalueExpression(*args[2]);
+    if (!str || !start || !end)
       return {};
-    return moore::StringGetOp::create(builder, loc, str, index);
+    return moore::StringSubstrOp::create(builder, loc, str, start, end);
+  }
+
+  if (nameId == ksn::AToI || nameId == ksn::AToHex || nameId == ksn::AToOct ||
+      nameId == ksn::AToBin) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 1 && "`atoi/hex/oct/bin` takes 1 argument");
+    auto stringType = moore::StringType::get(getContext());
+    auto str = convertRvalueExpression(*args[0], stringType);
+    if (!str)
+      return {};
+    auto integerType = moore::IntType::getLogic(builder.getContext(), 32);
+    switch (nameId) {
+    case ksn::AToI:
+      return moore::StringAtoiOp::create(builder, loc, integerType, str);
+    case ksn::AToHex:
+      return moore::StringAtohexOp::create(builder, loc, integerType, str);
+    case ksn::AToOct:
+      return moore::StringAtooctOp::create(builder, loc, integerType, str);
+    case ksn::AToBin:
+      return moore::StringAtobinOp::create(builder, loc, integerType, str);
+    default:
+      llvm_unreachable("unexpected string to integer conversion");
+    }
+  }
+
+  if (nameId == ksn::AToReal) {
+    // Slang already checks the arity of string methods.
+    assert(numArgs == 1 && "`atoreal` takes 1 argument");
+    auto stringType = moore::StringType::get(getContext());
+    auto str = convertRvalueExpression(*args[0], stringType);
+    if (!str)
+      return {};
+    auto realType = moore::RealType::get(getContext(), moore::RealWidth::f64);
+    return moore::StringAtorealOp::create(builder, loc, realType, str);
   }
 
   //===--------------------------------------------------------------------===//

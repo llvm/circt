@@ -33,7 +33,7 @@
 // CHECK-DAG: firrtl-operand0-forwarder
 // CHECK-DAG: firrtl-operand1-forwarder
 // CHECK-DAG: firrtl-operand2-forwarder
-// CHECK-DAG: firrtl-remove-unused-ports
+// CHECK-DAG: firrtl-imdeadcodeelim-remove-ports
 // CHECK-DAG: hw-constantifier
 // CHECK-DAG: hw-module-externalizer
 // CHECK-DAG: hw-module-internal-name-sanitizer

@@ -602,16 +602,11 @@ module SampleValueBuiltins #() (
   // CHECK: [[AND:%.+]] = comb.and [[DB]], [[SUB]] : i8
   // CHECK: [[ZERO:%.+]] = hw.constant 0 : i8
   // CHECK: [[EQ:%.+]] = comb.icmp eq [[AND]], [[ZERO]] : i8
-  // CHECK: [[EQ_INT:%.+]] = moore.from_builtin_int [[EQ]] : i1
-  // CHECK: [[EQ_LOGIC:%.+]] = moore.int_to_logic [[EQ_INT]] : i1
-  // CHECK: [[EQ_L2I:%.+]] = moore.logic_to_int [[EQ_LOGIC]] : l1
-  // CHECK: [[EQ_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_L2I]] : i1
   // CHECK: [[FALSE:%.+]] = hw.constant false
-  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[EQ_BUILTIN]] : i1
+  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[EQ]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
-  // CHECK: [[RES_L2I:%.+]] = moore.logic_to_int [[RES_LOGIC]] : l1
-  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_L2I]] : i1
+  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
   // CHECK: ltl.clock [[RES_BUILTIN]]
   onehot0_data: assert property (@(posedge clk_i) $onehot0(data_i));
 
@@ -630,16 +625,11 @@ module SampleValueBuiltins #() (
   // CHECK: [[EQ:%.+]] = comb.icmp eq [[AND]], [[ZERO]] : i8
   // CHECK: [[NE:%.+]] = comb.icmp ne [[DB]], [[ZERO]] : i8
   // CHECK: [[AND2:%.+]] = comb.and [[EQ]], [[NE]] : i1
-  // CHECK: [[RES_INT_2:%.+]] = moore.from_builtin_int [[AND2]] : i1
-  // CHECK: [[RES_LOGIC_2:%.+]] = moore.int_to_logic [[RES_INT_2]] : i1
-  // CHECK: [[RES_L2I_2:%.+]] = moore.logic_to_int [[RES_LOGIC_2]] : l1
-  // CHECK: [[RES_BUILTIN_2:%.+]] = moore.to_builtin_int [[RES_L2I_2]] : i1
   // CHECK: [[FALSE:%.+]] = hw.constant false
-  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[RES_BUILTIN_2]] : i1
+  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[AND2]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
-  // CHECK: [[RES_L2I:%.+]] = moore.logic_to_int [[RES_LOGIC]] : l1
-  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_L2I]] : i1
+  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
   // CHECK: ltl.clock [[RES_BUILTIN]]
   onehot_data: assert property (@(posedge clk_i) $onehot(data_i));
 
@@ -671,20 +661,86 @@ module SampleValueBuiltins #() (
   // CHECK: ltl.clock [[RES_BUILTIN]]
   onehot_bit_data: assert property (@(posedge clk_i) $onehot(data_bit_i));
 
+  // CHECK: moore.procedure always {
+  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK: [[D_L2I:%.+]] = moore.logic_to_int [[D]] : l8
+  // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D_L2I]] : i8
+  // CHECK: [[Z3:%.+]] = hw.constant 0 : i3
+  // CHECK: [[B0:%.+]] = comb.extract [[DB]] from 0 : (i8) -> i1
+  // CHECK: [[EXT0:%.+]] = comb.concat [[Z3]], [[B0]] : i3, i1
+  // CHECK: [[B1:%.+]] = comb.extract [[DB]] from 1 : (i8) -> i1
+  // CHECK: [[EXT1:%.+]] = comb.concat [[Z3]], [[B1]] : i3, i1
+  // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int {{%.+}} : i4
+  // CHECK: [[SEXT:%.+]] = moore.zext [[RES_INT]] : i4 -> i32
+  // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
+  // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
+  countones_data:
+    assert property (@(posedge clk_i) $countones(data_i) == 0);
+
+  // CHECK: moore.procedure always {
+  // CHECK: [[D:%.+]] = moore.read [[DATABITWIRE]] : <i8>
+  // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D]] : i8
+  // CHECK: [[Z3:%.+]] = hw.constant 0 : i3
+  // CHECK: [[B0:%.+]] = comb.extract [[DB]] from 0 : (i8) -> i1
+  // CHECK: [[EXT0:%.+]] = comb.concat [[Z3]], [[B0]] : i3, i1
+  // CHECK: [[B1:%.+]] = comb.extract [[DB]] from 1 : (i8) -> i1
+  // CHECK: [[EXT1:%.+]] = comb.concat [[Z3]], [[B1]] : i3, i1
+  // CHECK: comb.add
+  // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int {{%.+}} : i4
+  // CHECK: [[SEXT:%.+]] = moore.zext [[RES_INT]] : i4 -> i32
+  // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
+  // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
+  countones_bit_data:
+    assert property (@(posedge clk_i) $countones(data_bit_i) == 0);
 endmodule
 
 // CHECK-LABEL: func.func private @StringBuiltins(
-// CHECK-SAME: [[STR:%.+]]: !moore.string
-// CHECK-SAME: [[INT:%.+]]: !moore.i32
-function void StringBuiltins(string string_in, int int_in);
-  // CHECK: [[LEN:%.+]] = moore.string.len [[STR]]
+// CHECK-SAME: [[STR:%.+]]: !moore.string,
+// CHECK-SAME: [[INT:%.+]]: !moore.i32,
+// CHECK-SAME: [[Other:%.+]]: !moore.string) {
+function void StringBuiltins(string string_in, int int_in, string other);
+  // CHECK: [[VAR:%.+]] = moore.variable [[STR]] : <string>
+  // CHECK: [[READ:%.+]] = moore.read [[VAR]] : <string>
+  // CHECK: [[LEN:%.+]] = moore.string.len [[READ]]
   dummyA(string_in.len());
-  // CHECK: [[LEN:%.+]] = moore.string.toupper [[STR]]
-  dummyD(string_in.toupper());
-  // CHECK: [[LEN:%.+]] = moore.string.tolower [[STR]]
-  dummyD(string_in.tolower());
-  // CHECK: [[CHAR:%.+]] = moore.string.get [[STR]]{{\[}}[[INT]]]
+  // CHECK: moore.string.put [[VAR]]{{\[}}[[INT]]{{\]}}, {{%.+}} : <string>
+  string_in.putc(int_in, "A");
+  // CHECK: [[GET:%.+]] = moore.string.get {{%.+}}{{\[}}{{%.+}}{{\]}}
   dummyE(string_in.getc(int_in));
+  // CHECK: [[UPPER:%.+]] = moore.string.toupper {{%.+}}
+  dummyD(string_in.toupper());
+  // CHECK: [[LOWER:%.+]] = moore.string.tolower {{%.+}}
+  dummyD(string_in.tolower());
+  // CHECK: [[CMP:%.+]] = moore.string.compare {{%.+}}, [[Other]]
+  dummyA(string_in.compare(other));
+  // CHECK: [[ICMP:%.+]] = moore.string.icompare {{%.+}}, [[Other]]
+  dummyA(string_in.icompare(other));
+  // CHECK: [[SUBSTR:%.+]] = moore.string.substr {{%.+}}{{\[}}{{%.+}} : {{%.+}}{{\]}}
+  dummyD(string_in.substr(0, 2));
+  // CHECK: [[ATOI:%.+]] = moore.string.atoi {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOI]]
+  dummyA(string_in.atoi());
+  // CHECK: [[ATOHEX:%.+]] = moore.string.atohex {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOHEX]]
+  dummyA(string_in.atohex());
+  // CHECK: [[ATOOCT:%.+]] = moore.string.atooct {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOOCT]]
+  dummyA(string_in.atooct());
+  // CHECK: [[ATOBIN:%.+]] = moore.string.atobin {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOBIN]]
+  dummyA(string_in.atobin());
+  // CHECK: [[ATOREAL:%.+]] = moore.string.atoreal {{%.+}} : f64
+  dummyB(string_in.atoreal());
+  // CHECK: moore.string.itoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.itoa(int_in);
+  // CHECK: moore.string.hextoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.hextoa(int_in);
+  // CHECK: moore.string.octtoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.octtoa(int_in);
+  // CHECK: moore.string.bintoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.bintoa(int_in);
+  // CHECK: moore.string.realtoa [[VAR]], {{%.+}} : <string>, f64
+  string_in.realtoa(1.5);
 endfunction
 
 // IEEE 1800-2017 § 21.3 "File I/O system tasks and functions"

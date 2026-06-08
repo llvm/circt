@@ -343,8 +343,9 @@ def StructExplodeOp : HWOp<"struct_explode", [Pure,
 def UnionCreateOp : HWOp<"union_create", [Pure]> {
   let summary = "Create a union with the specified value.";
   let description = [{
-    Create a union with the value 'input', which can then be accessed via the
-    specified field.
+    Create a union with the value 'input' at the specified field's offset. The
+    value of the bits in the underlying representation that are not covered by
+    the specified field is undefined.
 
     ```
       %x = hw.constant 0 : i3
@@ -378,14 +379,13 @@ def UnionCreateOp : HWOp<"union_create", [Pure]> {
   }];
 }
 
-def UnionExtractOp : HWOp<"union_extract", [Pure, 
+def UnionExtractOp : HWOp<"union_extract", [Pure,
     DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>,
   ]> {
   let summary = "Get a union member.";
   let description = [{
     Get the value of a union, interpreting it as the type of the specified
-    member field.  Extracting a value belonging to a different field than the
-    union was initially created will result in undefined behavior.
+    member field.
 
     ```
       %u = ...
@@ -397,6 +397,7 @@ def UnionExtractOp : HWOp<"union_extract", [Pure,
   let arguments = (ins UnionType:$input, I32Attr:$fieldIndex);
   let results = (outs HWNonInOutType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizeMethod = 1;
 
   let builders = [
     OpBuilder<(ins "Value":$input, "StringAttr":$fieldName)>,

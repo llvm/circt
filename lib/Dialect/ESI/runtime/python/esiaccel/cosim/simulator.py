@@ -4,6 +4,7 @@
 
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -14,6 +15,7 @@ import threading
 
 _thisdir = Path(__file__).parent
 CosimCollateralDir = _thisdir
+_SUPPORTED_SIMULATORS = ("verilator", "questa")
 
 
 def is_port_open(port) -> bool:
@@ -22,6 +24,36 @@ def is_port_open(port) -> bool:
   result = sock.connect_ex(('127.0.0.1', port))
   sock.close()
   return True if result == 0 else False
+
+
+def supported_simulators() -> List[str]:
+  """Return the simulator backends known to the ESI cosim runtime."""
+  return list(_SUPPORTED_SIMULATORS)
+
+
+def is_simulator_available(name: str) -> bool:
+  """Return True if the requested simulator backend is usable.
+
+  This checks the executable and environment conventions used by the Python
+  cosim backends, so pytest callers can skip simulator-backed tests before
+  generating or compiling hardware collateral.
+  """
+  name = name.lower()
+  if name == "verilator":
+    from .verilator import Verilator
+    if Verilator._find_verilator_bin() is None:
+      return False
+    return Verilator._find_verilator_root() is not None
+  if name == "questa":
+    return shutil.which("vsim") is not None
+  raise ValueError(f"Unknown simulator: {name}")
+
+
+def available_simulators() -> List[str]:
+  """Return the known simulator backends available in this environment."""
+  return [
+      name for name in _SUPPORTED_SIMULATORS if is_simulator_available(name)
+  ]
 
 
 class SourceFiles:

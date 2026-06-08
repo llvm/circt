@@ -9,6 +9,7 @@
 #include "ImportVerilogInternals.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/ClassSymbols.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace circt;
@@ -407,6 +408,9 @@ struct ModuleVisitor : public BaseVisitor {
     using slang::ast::MultiPortSymbol;
     using slang::ast::PortSymbol;
 
+    if (context.predeclaredInstances.contains(&instNode))
+      return success();
+
     // Always operate on the canonical instance body if there is one.
     // This means any symbols we record will be the symbols from the
     // canonical body, which will match up with the symbols encountered
@@ -416,8 +420,11 @@ struct ModuleVisitor : public BaseVisitor {
     // Interface instances are expanded inline into individual variable/net ops
     // rather than creating a moore.instance op.
     auto defKind = body->getDefinition().definitionKind;
-    if (defKind == slang::ast::DefinitionKind::Interface)
+    if (defKind == slang::ast::DefinitionKind::Interface) {
+      if (context.interfaceInstances.lookup(&instNode))
+        return success();
       return expandInterfaceInstance(instNode);
+    }
 
     auto *moduleLowering = context.convertModuleHeader(body);
     if (!moduleLowering)
@@ -585,17 +592,17 @@ struct ModuleVisitor : public BaseVisitor {
     }
 
     // Match the module's ports up with the port values determined above.
-    SmallVector<Value> inputValues;
-    SmallVector<Value> outputValues;
-    inputValues.reserve(moduleType.getNumInputs());
-    outputValues.reserve(moduleType.getNumOutputs());
+    // Values are placed by slot index so regular and expanded
+    // interface-modport ports interleave in declaration order.
+    SmallVector<Value> inputValues(moduleLowering->numExplicitInputs);
+    SmallVector<Value> outputValues(moduleLowering->numExplicitOutputs);
 
     for (auto &port : moduleLowering->ports) {
       auto value = portValues.lookup(&port.ast);
       if (port.ast.direction == ArgumentDirection::Out)
-        outputValues.push_back(value);
+        outputValues[*port.outputIdx] = value;
       else
-        inputValues.push_back(value);
+        inputValues[*port.inputIdx] = value;
     }
 
     // Resolve flattened interface port values. For each flattened port,
@@ -628,19 +635,22 @@ struct ModuleVisitor : public BaseVisitor {
       }
       Value val = valIt->second;
       if (fp.direction == hw::ModulePort::Output) {
-        outputValues.push_back(val);
+        outputValues[*fp.outputIdx] = val;
       } else {
         // For input ports, if the value is a ref (from VariableOp/NetOp),
         // read it to get the rvalue, unless the port itself expects a ref.
         if (isa<moore::RefType>(val.getType()) && !isa<moore::RefType>(fp.type))
           val = moore::ReadOp::create(builder, loc, val);
-        inputValues.push_back(val);
+        inputValues[*fp.inputIdx] = val;
       }
     }
 
-    // Insert conversions for input ports.
+    // Insert conversions for input ports. Unfilled slots (e.g. unresolved
+    // interface-modport ports) are reported by the null-check loop below.
     for (auto [value, type] :
          llvm::zip(inputValues, moduleType.getInputTypes())) {
+      if (!value)
+        continue;
       // TODO: This should honor signedness in the conversion.
       value = context.materializeConversion(type, value, false, value.getLoc());
       if (!value)
@@ -704,55 +714,48 @@ struct ModuleVisitor : public BaseVisitor {
 
   // Handle variables.
   LogicalResult visit(const slang::ast::VariableSymbol &varNode) {
-    auto loweredType = context.convertType(*varNode.getDeclaredType());
-    if (!loweredType)
-      return failure();
+    auto ref = context.valueSymbols.lookup(&varNode);
+    if (!ref)
+      return mlir::emitError(loc)
+             << "internal error: missing predeclared variable `" << varNode.name
+             << "`";
 
-    Value initial;
+    auto varOp = ref.getDefiningOp<moore::VariableOp>();
+    if (!varOp)
+      return mlir::emitError(loc)
+             << "internal error: predeclared variable `" << varNode.name
+             << "` is not a moore.variable";
+
     if (const auto *init = varNode.getInitializer()) {
-      initial = context.convertRvalueExpression(*init, loweredType);
+      auto loweredType = cast<moore::RefType>(ref.getType()).getNestedType();
+      auto initial = context.convertRvalueExpression(*init, loweredType);
       if (!initial)
         return failure();
+      varOp.getInitialMutable().assign(initial);
     }
 
-    auto varOp = moore::VariableOp::create(
-        builder, loc,
-        moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
-        builder.getStringAttr(Twine(blockNamePrefix) + varNode.name), initial);
-    context.valueSymbols.insert(&varNode, varOp);
-    const auto &canonTy = varNode.getType().getCanonicalType();
-    if (const auto *vi = canonTy.as_if<slang::ast::VirtualInterfaceType>())
-      if (failed(context.registerVirtualInterfaceMembers(varNode, *vi, loc)))
-        return failure();
     return success();
   }
 
   // Handle nets.
   LogicalResult visit(const slang::ast::NetSymbol &netNode) {
-    auto loweredType = context.convertType(*netNode.getDeclaredType());
-    if (!loweredType)
-      return failure();
+    auto ref = context.valueSymbols.lookup(&netNode);
+    if (!ref)
+      return mlir::emitError(loc) << "internal error: missing predeclared net `"
+                                  << netNode.name << "`";
 
-    Value assignment;
+    auto netOp = ref.getDefiningOp<moore::NetOp>();
+    if (!netOp)
+      return mlir::emitError(loc) << "internal error: predeclared net `"
+                                  << netNode.name << "` is not a moore.net";
+
     if (const auto *init = netNode.getInitializer()) {
-      assignment = context.convertRvalueExpression(*init, loweredType);
+      auto loweredType = cast<moore::RefType>(ref.getType()).getNestedType();
+      auto assignment = context.convertRvalueExpression(*init, loweredType);
       if (!assignment)
         return failure();
+      netOp.getAssignmentMutable().assign(assignment);
     }
-
-    auto netkind = convertNetKind(netNode.netType.netKind);
-    if (netkind == moore::NetKind::Interconnect ||
-        netkind == moore::NetKind::UserDefined ||
-        netkind == moore::NetKind::Unknown)
-      return mlir::emitError(loc, "unsupported net kind `")
-             << netNode.netType.name << "`";
-
-    auto netOp = moore::NetOp::create(
-        builder, loc,
-        moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
-        builder.getStringAttr(Twine(blockNamePrefix) + netNode.name), netkind,
-        assignment);
-    context.valueSymbols.insert(&netNode, netOp);
     return success();
   }
 
@@ -911,6 +914,240 @@ struct ModuleVisitor : public BaseVisitor {
     return failure();
   }
 };
+
+struct ModulePredeclaration {
+  Context &context;
+  OpBuilder &builder;
+
+  ModulePredeclaration(Context &context)
+      : context(context), builder(context.builder) {}
+
+  LogicalResult declareVariable(const slang::ast::VariableSymbol &varNode,
+                                Location loc, StringRef blockNamePrefix) {
+    auto loweredType = context.convertType(*varNode.getDeclaredType());
+    if (!loweredType)
+      return failure();
+
+    auto varOp = moore::VariableOp::create(
+        builder, loc,
+        moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+        builder.getStringAttr(Twine(blockNamePrefix) + varNode.name), Value{});
+    context.valueSymbols.insert(&varNode, varOp);
+
+    const auto &canonTy = varNode.getType().getCanonicalType();
+    if (const auto *vi = canonTy.as_if<slang::ast::VirtualInterfaceType>())
+      if (failed(context.registerVirtualInterfaceMembers(varNode, *vi, loc)))
+        return failure();
+
+    return success();
+  }
+
+  LogicalResult declareNet(const slang::ast::NetSymbol &netNode, Location loc,
+                           StringRef blockNamePrefix) {
+    auto loweredType = context.convertType(*netNode.getDeclaredType());
+    if (!loweredType)
+      return failure();
+
+    auto netkind = convertNetKind(netNode.netType.netKind);
+    if (netkind == moore::NetKind::Interconnect ||
+        netkind == moore::NetKind::UserDefined ||
+        netkind == moore::NetKind::Unknown)
+      return mlir::emitError(loc, "unsupported net kind `")
+             << netNode.netType.name << "`";
+
+    auto netOp = moore::NetOp::create(
+        builder, loc,
+        moore::RefType::get(cast<moore::UnpackedType>(loweredType)),
+        builder.getStringAttr(Twine(blockNamePrefix) + netNode.name), netkind,
+        Value{});
+    context.valueSymbols.insert(&netNode, netOp);
+    return success();
+  }
+
+  SmallString<64>
+  getGenerateBlockPrefix(const slang::ast::GenerateBlockSymbol &genNode,
+                         StringRef blockNamePrefix) {
+    SmallString<64> prefix = blockNamePrefix;
+    if (!genNode.name.empty() ||
+        genNode.getParentScope()->asSymbol().kind !=
+            slang::ast::SymbolKind::GenerateBlockArray) {
+      prefix += genNode.getExternalName();
+      prefix += '.';
+    }
+    return prefix;
+  }
+
+  LogicalResult
+  predeclareStorageGenerateBlock(const slang::ast::GenerateBlockSymbol &genNode,
+                                 StringRef blockNamePrefix) {
+    if (genNode.isUninstantiated)
+      return success();
+    return predeclareStorageScope(
+        genNode, getGenerateBlockPrefix(genNode, blockNamePrefix));
+  }
+
+  LogicalResult predeclareInterfaceGenerateBlock(
+      const slang::ast::GenerateBlockSymbol &genNode,
+      StringRef blockNamePrefix) {
+    if (genNode.isUninstantiated)
+      return success();
+    return predeclareInterfaceScope(
+        genNode, getGenerateBlockPrefix(genNode, blockNamePrefix));
+  }
+
+  LogicalResult predeclareModuleInstanceGenerateBlock(
+      const slang::ast::GenerateBlockSymbol &genNode,
+      StringRef blockNamePrefix) {
+    if (genNode.isUninstantiated)
+      return success();
+    return predeclareModuleInstanceScope(
+        genNode, getGenerateBlockPrefix(genNode, blockNamePrefix));
+  }
+
+  LogicalResult predeclareGenerateBlockArray(
+      const slang::ast::GenerateBlockArraySymbol &genArrNode,
+      StringRef blockNamePrefix,
+      llvm::function_ref<LogicalResult(const slang::ast::GenerateBlockSymbol &,
+                                       StringRef)>
+          predeclareBlock) {
+    SmallString<64> prefix = blockNamePrefix;
+    prefix += genArrNode.getExternalName();
+    prefix += '_';
+    auto prefixBaseLen = prefix.size();
+
+    for (const auto *entry : genArrNode.entries) {
+      prefix.resize(prefixBaseLen);
+      if (entry->arrayIndex)
+        prefix += entry->arrayIndex->toString();
+      else
+        Twine(entry->constructIndex).toVector(prefix);
+      prefix += '.';
+
+      if (failed(predeclareBlock(*entry, prefix)))
+        return failure();
+    }
+    return success();
+  }
+
+  LogicalResult predeclareStorageMember(const slang::ast::Symbol &member,
+                                        StringRef blockNamePrefix) {
+    auto loc = context.convertLocation(member.location);
+    if (const auto *varNode = member.as_if<slang::ast::VariableSymbol>())
+      return declareVariable(*varNode, loc, blockNamePrefix);
+
+    if (const auto *netNode = member.as_if<slang::ast::NetSymbol>())
+      return declareNet(*netNode, loc, blockNamePrefix);
+
+    if (const auto *genNode = member.as_if<slang::ast::GenerateBlockSymbol>())
+      return predeclareStorageGenerateBlock(*genNode, blockNamePrefix);
+
+    if (const auto *genArrNode =
+            member.as_if<slang::ast::GenerateBlockArraySymbol>())
+      return predeclareGenerateBlockArray(
+          *genArrNode, blockNamePrefix,
+          [&](const slang::ast::GenerateBlockSymbol &gen, StringRef prefix) {
+            return predeclareStorageGenerateBlock(gen, prefix);
+          });
+
+    return success();
+  }
+
+  LogicalResult predeclareInterfaceMember(const slang::ast::Symbol &member,
+                                          StringRef blockNamePrefix) {
+    auto loc = context.convertLocation(member.location);
+    if (const auto *instNode = member.as_if<slang::ast::InstanceSymbol>()) {
+      if (instNode->body.getDefinition().definitionKind ==
+          slang::ast::DefinitionKind::Interface)
+        return ModuleVisitor(context, loc, blockNamePrefix)
+            .expandInterfaceInstance(*instNode);
+      return success();
+    }
+
+    if (const auto *genNode = member.as_if<slang::ast::GenerateBlockSymbol>())
+      return predeclareInterfaceGenerateBlock(*genNode, blockNamePrefix);
+
+    if (const auto *genArrNode =
+            member.as_if<slang::ast::GenerateBlockArraySymbol>())
+      return predeclareGenerateBlockArray(
+          *genArrNode, blockNamePrefix,
+          [&](const slang::ast::GenerateBlockSymbol &gen, StringRef prefix) {
+            return predeclareInterfaceGenerateBlock(gen, prefix);
+          });
+
+    return success();
+  }
+
+  LogicalResult predeclareModuleInstanceMember(const slang::ast::Symbol &member,
+                                               StringRef blockNamePrefix) {
+    auto loc = context.convertLocation(member.location);
+    if (const auto *instNode = member.as_if<slang::ast::InstanceSymbol>()) {
+      if (instNode->body.getDefinition().definitionKind !=
+          slang::ast::DefinitionKind::Interface) {
+        if (failed(
+                ModuleVisitor(context, loc, blockNamePrefix).visit(*instNode)))
+          return failure();
+        context.predeclaredInstances.insert(instNode);
+      }
+      return success();
+    }
+
+    if (const auto *genNode = member.as_if<slang::ast::GenerateBlockSymbol>())
+      return predeclareModuleInstanceGenerateBlock(*genNode, blockNamePrefix);
+
+    if (const auto *genArrNode =
+            member.as_if<slang::ast::GenerateBlockArraySymbol>())
+      return predeclareGenerateBlockArray(
+          *genArrNode, blockNamePrefix,
+          [&](const slang::ast::GenerateBlockSymbol &gen, StringRef prefix) {
+            return predeclareModuleInstanceGenerateBlock(gen, prefix);
+          });
+
+    return success();
+  }
+
+  LogicalResult predeclareStorageScope(const slang::ast::Scope &scope,
+                                       StringRef blockNamePrefix) {
+    for (auto &member : scope.members())
+      if (failed(predeclareStorageMember(member, blockNamePrefix)))
+        return failure();
+    return success();
+  }
+
+  LogicalResult predeclareInterfaceScope(const slang::ast::Scope &scope,
+                                         StringRef blockNamePrefix) {
+    for (auto &member : scope.members())
+      if (failed(predeclareInterfaceMember(member, blockNamePrefix)))
+        return failure();
+    return success();
+  }
+
+  LogicalResult predeclareModuleInstanceScope(const slang::ast::Scope &scope,
+                                              StringRef blockNamePrefix) {
+    for (auto &member : scope.members())
+      if (failed(predeclareModuleInstanceMember(member, blockNamePrefix)))
+        return failure();
+    return success();
+  }
+
+  LogicalResult predeclareScope(const slang::ast::Scope &scope,
+                                StringRef blockNamePrefix) {
+    // First create variables and nets for the whole generated scope tree so
+    // later phases can bind port connections or hierarchical references to
+    // declarations that appear later in source.
+    if (failed(predeclareStorageScope(scope, blockNamePrefix)))
+      return failure();
+
+    // Then expand interface instances. Interface expansion may lower
+    // continuous assignments or procedures from the interface body, so all
+    // storage symbols must already be available.
+    if (failed(predeclareInterfaceScope(scope, blockNamePrefix)))
+      return failure();
+
+    // Finally instantiate modules. This makes later hierarchical references
+    // to instance internals available before earlier procedural blocks lower.
+    return predeclareModuleInstanceScope(scope, blockNamePrefix);
+  }
+};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -1062,9 +1299,11 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
         return failure();
       auto portName = builder.getStringAttr(port.name);
       BlockArgument arg;
+      std::optional<unsigned> portOutputIdx;
+      std::optional<unsigned> portInputIdx;
       if (port.direction == ArgumentDirection::Out) {
         modulePorts.push_back({portName, type, hw::ModulePort::Output});
-        outputIdx++;
+        portOutputIdx = outputIdx++;
       } else {
         // Only the ref type wrapper exists for the time being, the net type
         // wrapper for inout may be introduced later if necessary.
@@ -1072,9 +1311,10 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           type = moore::RefType::get(cast<moore::UnpackedType>(type));
         modulePorts.push_back({portName, type, hw::ModulePort::Input});
         arg = block->addArgument(type, portLoc);
-        inputIdx++;
+        portInputIdx = inputIdx++;
       }
-      lowering.ports.push_back({port, portLoc, arg});
+      lowering.ports.push_back(
+          {port, portLoc, arg, portOutputIdx, portInputIdx});
       return success();
     };
 
@@ -1102,21 +1342,23 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
               builder.getStringAttr(Twine(portPrefix) + StringRef(mpp->name));
           BlockArgument arg;
           hw::ModulePort::Direction dir;
+          std::optional<unsigned> ifaceOutputIdx;
+          std::optional<unsigned> ifaceInputIdx;
           if (mpp->direction == ArgumentDirection::Out) {
             dir = hw::ModulePort::Output;
             modulePorts.push_back({name, type, dir});
-            outputIdx++;
+            ifaceOutputIdx = outputIdx++;
           } else {
             dir = hw::ModulePort::Input;
             if (mpp->direction != ArgumentDirection::In)
               type = moore::RefType::get(cast<moore::UnpackedType>(type));
             modulePorts.push_back({name, type, dir});
             arg = block->addArgument(type, portLoc);
-            inputIdx++;
+            ifaceInputIdx = inputIdx++;
           }
-          lowering.ifacePorts.push_back({name, dir, type, portLoc, arg,
-                                         &ifacePort, mpp->internalSymbol,
-                                         ifaceInst, mpp});
+          lowering.ifacePorts.push_back(
+              {name, dir, type, portLoc, arg, &ifacePort, mpp->internalSymbol,
+               ifaceInst, mpp, ifaceOutputIdx, ifaceInputIdx});
         }
       } else {
         // No modport: iterate interface body for all variables and nets.
@@ -1148,10 +1390,9 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
           auto refType = moore::RefType::get(cast<moore::UnpackedType>(type));
           modulePorts.push_back({name, refType, hw::ModulePort::Input});
           auto arg = block->addArgument(refType, portLoc);
-          inputIdx++;
-          lowering.ifacePorts.push_back({name, hw::ModulePort::Input, refType,
-                                         portLoc, arg, &ifacePort, bodySym,
-                                         instSym});
+          lowering.ifacePorts.push_back(
+              {name, hw::ModulePort::Input, refType, portLoc, arg, &ifacePort,
+               bodySym, instSym, nullptr, std::nullopt, inputIdx++});
         }
       }
       return success();
@@ -1175,6 +1416,10 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
       return {};
     }
   }
+
+  // Record explicit-port counts before hierarchical-name ports are appended.
+  lowering.numExplicitOutputs = outputIdx;
+  lowering.numExplicitInputs = inputIdx;
 
   // Mapping hierarchical names into the module's ports.
   for (auto &hierPath : hierPaths[module]) {
@@ -1322,6 +1567,20 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     }
   }
 
+  predeclaredInstances.clear();
+  llvm::scope_exit predeclaredInstancesGuard(
+      [&] { predeclaredInstances.clear(); });
+
+  // Always create module-scope storage, expanded interface members, and
+  // instance shells before the source-order body walk. Slang rejects
+  // use-before-declare before ImportVerilog runs unless the option is enabled,
+  // but once the AST is valid this predeclaration supports both source-order
+  // and forward references. Declaration initializers are still lowered when the
+  // body visitor reaches the declaration, so they see the same local context as
+  // other source-ordered expressions.
+  if (failed(ModulePredeclaration(*this).predeclareScope(*module, "")))
+    return failure();
+
   // Convert the body of the module.
   for (auto &member : module->members()) {
     auto loc = convertLocation(member.location);
@@ -1335,8 +1594,9 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
 
   // Create additional ops to drive input port values onto the corresponding
   // internal variables and nets, and to collect output port values for the
-  // terminator.
-  SmallVector<Value> outputs;
+  // terminator. Outputs are placed by slot index so regular and
+  // interface-modport outputs interleave in declaration order.
+  SmallVector<Value> outputs(lowering.numExplicitOutputs);
   for (auto &port : lowering.ports) {
     Value value;
     if (auto *expr = port.ast.getInternalExpr()) {
@@ -1355,7 +1615,7 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     if (port.ast.direction == slang::ast::ArgumentDirection::Out) {
       if (isa<moore::RefType>(value.getType()))
         value = moore::ReadOp::create(builder, value.getLoc(), value);
-      outputs.push_back(value);
+      outputs[*port.outputIdx] = value;
       continue;
     }
 
@@ -1379,7 +1639,8 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     Value ref = valueSymbols.lookup(valueSym);
     if (!ref)
       continue;
-    outputs.push_back(moore::ReadOp::create(builder, fp.loc, ref).getResult());
+    outputs[*fp.outputIdx] =
+        moore::ReadOp::create(builder, fp.loc, ref).getResult();
   }
 
   // Ensure the number of operands of this module's terminator and the number of

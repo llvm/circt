@@ -23,9 +23,8 @@ hw.module @Basic(in %a: i42, in %b: i42, in %c: i1) {
     // CHECK-NOT: cf.cond_br
     cf.cond_br %5, ^bb3(%4 : i42), ^bb4(%3 : i42)
   ^bb3(%6: i42):
-    // CHECK-NEXT: [[TMP6A:%.+]] = hw.constant true
-    // CHECK-NEXT: [[TMP6B:%.+]] = comb.xor [[TMP0]], [[TMP6A]]
-    // CHECK-NEXT: [[TMP6:%.+]] = comb.mux [[TMP6B]], [[TMP2]], [[TMP4]]
+    // CHECK-NEXT: [[TMP6_COND:%.+]] = comb.and [[TMP0]], [[TMP5]]
+    // CHECK-NEXT: [[TMP6:%.+]] = comb.mux [[TMP6_COND]], [[TMP4]], [[TMP2]]
     // CHECK-NEXT: [[TMP7:%.+]] = comb.xor [[TMP1]], [[TMP6]]
     %7 = comb.xor %1, %6 : i42
     // CHECK-NOT: cf.br

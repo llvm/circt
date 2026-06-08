@@ -92,7 +92,7 @@ def build_cpp_test(sources_dir: Path,
   * ``build_subdir``: name for the build directory under ``sources_dir``.
     Defaults to ``target``.
 
-  The configure step is skipped when the build directory already exists;
+  The configure step is skipped when the Ninja build file already exists;
   ``cmake --build`` always runs so that CMake's own dependency tracking
   picks up any source or generated-header changes.
   """
@@ -109,7 +109,10 @@ def build_cpp_test(sources_dir: Path,
   include_dir = sources_dir / "cpp_include"
   generated_dir = include_dir / header_subdir
 
-  if not build_dir.exists():
+  if not (build_dir / "build.ninja").exists():
+    if build_dir.exists():
+      shutil.rmtree(build_dir)
+
     generated_dir.mkdir(parents=True, exist_ok=True)
 
     codegen_src = sources_dir / "generated"

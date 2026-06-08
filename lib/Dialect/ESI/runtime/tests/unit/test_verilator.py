@@ -24,7 +24,10 @@ sys.modules["esiaccel.esiCppAccel"] = _accel_mock
 
 # Now we can safely import the cosim modules.
 from esiaccel.cosim.verilator import Verilator  # noqa: E402
-from esiaccel.cosim.simulator import SourceFiles  # noqa: E402
+from esiaccel.cosim.simulator import (
+    available_simulators,  # noqa: E402
+    is_simulator_available,
+    SourceFiles)
 
 
 def _make_verilator(run_dir,
@@ -45,14 +48,88 @@ def _make_verilator(run_dir,
   )
 
 
+requires_verilator_bin = pytest.mark.skipif(
+    not is_simulator_available("verilator"), reason="verilator not found")
+
+
+class TestSimulatorDiscovery:
+
+  def test_unknown_simulator_raises(self):
+    with pytest.raises(ValueError):
+      is_simulator_available("bogus")
+
+  def test_verilator_unavailable_without_bin(self, monkeypatch):
+    monkeypatch.delenv("VERILATOR_PATH", raising=False)
+    monkeypatch.delenv("VERILATOR_ROOT", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    assert not is_simulator_available("verilator")
+    assert "verilator" not in available_simulators()
+
+  def test_verilator_available_from_env_path(self, monkeypatch, tmp_path):
+    root = tmp_path / "verilator"
+    (root / "bin").mkdir(parents=True)
+    pkg_root = root / "share" / "verilator"
+    (pkg_root / "include").mkdir(parents=True)
+    (pkg_root / "include" / "verilated.h").touch()
+    fake_bin = root / "bin" / "verilator_bin"
+    fake_bin.touch()
+
+    monkeypatch.setenv("VERILATOR_PATH", str(fake_bin))
+    monkeypatch.delenv("VERILATOR_ROOT", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    assert is_simulator_available("verilator")
+    assert "verilator" in available_simulators()
+
+  def test_invalid_verilator_path_env_raises(self, monkeypatch, tmp_path):
+    monkeypatch.setenv("VERILATOR_PATH",
+                       str(tmp_path / "missing" / "verilator_bin"))
+    monkeypatch.delenv("VERILATOR_ROOT", raising=False)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    with pytest.raises(RuntimeError, match="VERILATOR_PATH"):
+      is_simulator_available("verilator")
+
+  def test_invalid_verilator_root_env_raises(self, monkeypatch, tmp_path):
+    root = tmp_path / "verilator"
+    (root / "bin").mkdir(parents=True)
+    pkg_root = root / "share" / "verilator"
+    pkg_root.mkdir(parents=True)
+    fake_bin = root / "bin" / "verilator_bin"
+    fake_bin.touch()
+
+    monkeypatch.setenv("VERILATOR_PATH", str(fake_bin))
+    monkeypatch.setenv("VERILATOR_ROOT", str(pkg_root))
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    with pytest.raises(RuntimeError, match="VERILATOR_ROOT"):
+      is_simulator_available("verilator")
+
+  def test_questa_unavailable_without_vsim(self, monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    assert not is_simulator_available("questa")
+
+  def test_questa_available_from_path(self, monkeypatch):
+    monkeypatch.delenv("VERILATOR_PATH", raising=False)
+    monkeypatch.delenv("VERILATOR_ROOT", raising=False)
+
+    def _which(name):
+      if name == "vsim":
+        return "C:/questa/vsim.exe"
+      return None
+
+    monkeypatch.setattr(shutil, "which", _which)
+    assert is_simulator_available("questa")
+    assert available_simulators() == ["questa"]
+
+
 class TestCompileCommands:
 
+  @requires_verilator_bin
   def test_uses_verilator_bin(self, tmp_path):
     v = _make_verilator(tmp_path)
     cmds = v.compile_commands()
     assert Path(cmds[0][0]).stem == "verilator_bin"
-    assert cmds[0][0] == v.verilator_bin
+    assert Path(cmds[0][0]) == v.verilator_bin
 
+  @requires_verilator_bin
   def test_cmake_and_ninja_commands(self, tmp_path):
     v = _make_verilator(tmp_path)
     cmds = v.compile_commands()
@@ -64,6 +141,7 @@ class TestCompileCommands:
       assert "-G" in cmds[2] and "Ninja" in cmds[2]
       assert cmds[3][0] == "ninja"
 
+  @requires_verilator_bin
   def test_no_exe_or_build_flags_cmake(self, tmp_path):
     """When using cmake, --exe and --build should not appear."""
     v = _make_verilator(tmp_path)
@@ -73,6 +151,7 @@ class TestCompileCommands:
     assert "--exe" not in cmd
     assert "--build" not in cmd
 
+  @requires_verilator_bin
   def test_no_cflags_or_ldflags_cmake(self, tmp_path):
     """When using cmake, -CFLAGS and -LDFLAGS should not appear."""
     v = _make_verilator(tmp_path)
@@ -82,6 +161,7 @@ class TestCompileCommands:
     assert "-CFLAGS" not in cmd
     assert "-LDFLAGS" not in cmd
 
+  @requires_verilator_bin
   def test_driver_not_in_verilator_cmd_cmake(self, tmp_path):
     """When using cmake, driver.cpp should not be in the verilator command."""
     v = _make_verilator(tmp_path)
@@ -90,6 +170,7 @@ class TestCompileCommands:
     cmd = v.compile_commands()[0]
     assert not any("driver.cpp" in str(c) for c in cmd)
 
+  @requires_verilator_bin
   def test_trace_flags_in_debug(self, tmp_path):
     v = _make_verilator(tmp_path, debug=True)
     cmd = v.compile_commands()[0]
@@ -98,16 +179,47 @@ class TestCompileCommands:
     assert "--trace-underscore" in cmd
 
   def test_respects_verilator_path_env(self, tmp_path):
-    with mock.patch.dict(os.environ,
-                         {"VERILATOR_PATH": "/custom/verilator_bin"}):
+    fake_bin = tmp_path / "custom" / "verilator_bin"
+    fake_bin.parent.mkdir()
+    fake_bin.touch()
+    with mock.patch.dict(os.environ, {"VERILATOR_PATH": str(fake_bin)}):
       v = _make_verilator(tmp_path)
-      assert v.verilator_bin == "/custom/verilator_bin"
+      assert v.verilator_bin == fake_bin.resolve()
 
   def test_verilator_path_redirects_perl_wrapper(self, tmp_path):
-    with mock.patch.dict(os.environ, {"VERILATOR_PATH": "/usr/bin/verilator"}):
+    fake_wrapper = tmp_path / "usr" / "bin" / "verilator"
+    fake_bin = fake_wrapper.parent / "verilator_bin"
+    fake_wrapper.parent.mkdir(parents=True)
+    fake_wrapper.touch()
+    fake_bin.touch()
+    with mock.patch.dict(os.environ, {"VERILATOR_PATH": str(fake_wrapper)}):
       v = _make_verilator(tmp_path)
-      assert v.verilator_bin == str(Path("/usr/bin/verilator_bin"))
+      assert v.verilator_bin == fake_bin.resolve()
 
+  def test_verilator_path_overrides_path(self, tmp_path):
+    env_root = tmp_path / "env-verilator"
+    path_root = tmp_path / "path-verilator"
+    (env_root / "bin").mkdir(parents=True)
+    (path_root / "bin").mkdir(parents=True)
+    env_bin = env_root / "bin" / "verilator_bin"
+    path_bin = path_root / "bin" / "verilator_bin"
+    env_bin.touch()
+    path_bin.touch()
+
+    with mock.patch.dict(os.environ, {"VERILATOR_PATH": str(env_bin)}):
+      with mock.patch("shutil.which", return_value=str(path_bin)):
+        assert Verilator._find_verilator_bin() == env_bin.resolve()
+
+  def test_compile_commands_requires_verilator_bin(self, tmp_path):
+    with mock.patch.dict(os.environ, {}, clear=False):
+      os.environ.pop("VERILATOR_ROOT", None)
+      os.environ.pop("VERILATOR_PATH", None)
+      with mock.patch("shutil.which", return_value=None):
+        v = _make_verilator(tmp_path)
+        with pytest.raises(RuntimeError, match="Cannot find verilator_bin"):
+          v.compile_commands()
+
+  @requires_verilator_bin
   def test_macro_definitions(self, tmp_path):
     v = _make_verilator(tmp_path, macros={"FOO": "BAR", "BAZ": None})
     cmd = v.compile_commands()[0]
@@ -115,6 +227,7 @@ class TestCompileCommands:
     assert "+define+BAZ" in cmd
 
 
+@requires_verilator_bin
 class TestMakeFallback:
   """Tests for the make fallback when cmake/ninja are not available."""
 
@@ -209,8 +322,9 @@ class TestFindVerilatorRoot:
   def test_from_bin_in_path(self, tmp_path):
     root = tmp_path / "verilator"
     (root / "bin").mkdir(parents=True)
-    (root / "include").mkdir()
-    (root / "include" / "verilated.h").touch()
+    pkg_root = root / "share" / "verilator"
+    (pkg_root / "include").mkdir(parents=True)
+    (pkg_root / "include" / "verilated.h").touch()
     fake_bin = root / "bin" / "verilator_bin"
     fake_bin.touch()
     fake_bin.chmod(0o755)
@@ -222,9 +336,9 @@ class TestFindVerilatorRoot:
       with mock.patch("shutil.which", return_value=str(fake_bin)):
         v = _make_verilator(tmp_path)
         found = v._find_verilator_root()
-        assert found == root
+        assert found == pkg_root
 
-  def test_raises_when_not_found(self, tmp_path):
+  def test_returns_none_when_not_found(self, tmp_path):
     with mock.patch.dict(os.environ, {}, clear=False):
       # Clear both env vars so the real Verilator install doesn't satisfy
       # root detection before the RuntimeError can be raised.
@@ -232,8 +346,15 @@ class TestFindVerilatorRoot:
       os.environ.pop("VERILATOR_PATH", None)
       with mock.patch("shutil.which", return_value=None):
         v = _make_verilator(tmp_path)
-        with pytest.raises(RuntimeError):
-          v._find_verilator_root()
+        assert v._find_verilator_root() is None
+
+  def test_invalid_env_raises(self, tmp_path):
+    root = tmp_path / "verilator"
+    root.mkdir()
+    with mock.patch.dict(os.environ, {"VERILATOR_ROOT": str(root)}):
+      v = _make_verilator(tmp_path)
+      with pytest.raises(RuntimeError, match="VERILATOR_ROOT"):
+        v._find_verilator_root()
 
 
 class TestWriteCmake:

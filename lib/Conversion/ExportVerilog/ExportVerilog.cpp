@@ -779,7 +779,8 @@ static bool isExpressionUnableToInline(Operation *op,
     //
     // To handle these, we push the subexpression into a temporary.
     if (isa<ExtractOp, ArraySliceOp, ArrayGetOp, ArrayInjectOp, StructExtractOp,
-            UnionExtractOp, IndexedPartSelectOp>(user))
+            StructInjectOp, StructExplodeOp, UnionExtractOp,
+            IndexedPartSelectOp>(user))
       if (use.getOperandNumber() == 0 && // ignore index operands.
           !isOkToBitSelectFrom(use.get()))
         return true;
@@ -5320,7 +5321,8 @@ void StmtEmitter::emitBlockAsStatement(
 
   // Determine if we need begin/end by scanning the block.
   auto count = countStatements(*block);
-  auto needsBeginEnd = count != BlockStatementCount::One;
+  auto needsBeginEnd =
+      count != BlockStatementCount::One || state.options.alwaysEmitBeginEnd;
   if (needsBeginEnd)
     ps << " begin";
   emitLocationInfoAndNewLine(locationOps);

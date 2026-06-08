@@ -1504,3 +1504,23 @@ hw.module @ArrayInjectProcedural(in %a: !hw.array<4xi42>, in %b: i42, in %i: i2)
   }
   // CHECK-NEXT: end
 }
+
+// CHECK-LABEL: module CondStructExtract(
+// CHECK-NOT: ).el1
+hw.module @CondStructExtract(in %sel : i1, out o : !hw.struct<el0: i1, el1 : i1>) {
+  %0 = hw.aggregate_constant [false, false] : !hw.struct<el0: i1, el1 : i1>
+  %1 = hw.aggregate_constant [true, true] : !hw.struct<el0: i1, el1 : i1>
+  %2 = comb.mux %sel, %0, %1 : !hw.struct<el0: i1, el1 : i1>
+  %3 = hw.struct_inject %2["el0"], %sel : !hw.struct<el0: i1, el1 : i1>
+  hw.output %3 : !hw.struct<el0: i1, el1 : i1>
+}
+
+// CHECK-LABEL: module CondStructExplode(
+// CHECK-NOT: ).el
+hw.module private @CondStructExplode(in %sel : i1, in %i : !hw.struct<el : i1>, out o : i1) {
+  %0 = hw.aggregate_constant [false] : !hw.struct<el : i1>
+  %1 = hw.aggregate_constant [true] : !hw.struct<el : i1>
+  %2 = comb.mux %sel, %0, %1 : !hw.struct<el : i1>
+  %el = hw.struct_explode %2 : !hw.struct<el : i1>
+  hw.output %el : i1
+}
