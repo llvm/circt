@@ -18,7 +18,6 @@
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/Synth/SynthOps.h"
 #include "circt/Dialect/Synth/Transforms/SynthPasses.h"
-#include "circt/Support/Naming.h"
 #include "circt/Support/SATSolver.h"
 #include "circt/Support/TruthTable.h"
 #include "mlir/IR/Builders.h"
@@ -710,7 +709,7 @@ struct ExactSynthesisPattern : public OpRewritePattern<comb::TruthTableOp> {
     if (failed(result))
       return failure();
 
-    replaceOpAndCopyNamehint(rewriter, op, *result);
+    rewriter.replaceOp(op, *result);
     return success();
   }
 
