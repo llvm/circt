@@ -92,7 +92,6 @@ def HeaderMMIO(manifest_loc: int) -> Module:
       # command, stage 2 holds the looked-up response. Each stage carries its
       # own occupancy bit.
       cmd_ready = Wire(Bits(1))
-      data_chan_ready = Wire(Bits(1))
       s1_to_s2_xact = Wire(Bits(1))
       cmd_raw, cmd_valid = cmd_chan.unwrap(cmd_ready)
 
@@ -104,7 +103,7 @@ def HeaderMMIO(manifest_loc: int) -> Module:
                             asserts=[s1_load],
                             resets=[s1_to_s2_xact],
                             name="s1_valid")
-      # Accept a new command when stage 1 is empty or is draining into stage 2.
+      # Accept a new command when stage 1 is empty.
       cmd_ready.assign(~s1_valid)
 
       address_words = cmd.offset.as_bits()[3:]  # Lop off the lower three bits.
@@ -134,9 +133,10 @@ def HeaderMMIO(manifest_loc: int) -> Module:
 
       # Stage 2: registered response value and its occupancy bit.
       s2_valid = Wire(Bits(1))
+      data_chan_ready = Wire(Bits(1))
       s2_xact = s2_valid & data_chan_ready
       # Stage 1 advances into stage 2 only when stage 2 is empty.
-      s1_to_s2_xact.assign((s1_valid & ~s2_valid).as_bits())
+      s1_to_s2_xact.assign(s1_valid & ~s2_valid)
 
       header_out = header[slot].reg(clk=clk,
                                     rst=rst,
