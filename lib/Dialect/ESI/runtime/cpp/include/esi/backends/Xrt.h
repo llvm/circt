@@ -37,6 +37,9 @@ public:
   static std::unique_ptr<AcceleratorConnection>
   connect(Context &, std::string connectionString);
 
+  /// Resets are not supported.
+  bool reset() override { return false; }
+
 protected:
   virtual Service *createService(Service::Type service, AppIDPath path,
                                  std::string implName,
