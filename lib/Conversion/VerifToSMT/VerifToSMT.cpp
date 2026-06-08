@@ -55,6 +55,21 @@ llvm::SmallDenseMap<unsigned, StringAttr> collectDebugNames(Block &block) {
   return debugNames;
 }
 
+static void attachDebugVariables(
+    OpBuilder &builder, Location loc, ArrayRef<Type> originalTypes,
+    ValueRange values,
+    const llvm::SmallDenseMap<unsigned, StringAttr> &debugNames) {
+  for (auto [argIndex, value] : llvm::enumerate(values)) {
+    if (isa<seq::ClockType>(originalTypes[argIndex]))
+      continue;
+    auto it = debugNames.find(argIndex);
+    if (it == debugNames.end())
+      continue;
+    debug::VariableOp::create(builder, loc, it->second, value,
+                              /*scope=*/Value{});
+  }
+}
+
 /// Lower a verif::AssertOp operation with an i1 operand to a smt::AssertOp,
 /// negated to check for unsatisfiability.
 struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
@@ -518,6 +533,11 @@ struct VerifBoundedModelCheckingOpConversion
     for (; initIndex < initVals.size(); ++initIndex)
       inputDecls.push_back(initVals[initIndex]);
 
+    attachDebugVariables(
+        rewriter, loc, oldCircuitInputTy,
+        ValueRange(inputDecls).take_front(circuitFuncOp.getNumArguments()),
+        debugNames);
+
     Value lowerBound =
         arith::ConstantOp::create(rewriter, loc, rewriter.getI32IntegerAttr(0));
     Value step =
@@ -536,6 +556,10 @@ struct VerifBoundedModelCheckingOpConversion
     auto forOp = scf::ForOp::create(
         rewriter, loc, lowerBound, upperBound, step, inputDecls,
         [&](OpBuilder &builder, Location loc, Value i, ValueRange iterArgs) {
+          attachDebugVariables(
+              builder, loc, oldCircuitInputTy,
+              iterArgs.take_front(circuitFuncOp.getNumArguments()), debugNames);
+
           // Drop existing assertions
           smt::PopOp::create(builder, loc, 1);
           smt::PushOp::create(builder, loc, 1);
@@ -670,6 +694,11 @@ struct VerifBoundedModelCheckingOpConversion
           // Add the rest of the loop state args
           for (; loopIndex < loopVals.size(); ++loopIndex)
             newDecls.push_back(loopVals[loopIndex]);
+
+          attachDebugVariables(
+              builder, loc, oldCircuitInputTy,
+              ValueRange(newDecls).take_front(circuitFuncOp.getNumArguments()),
+              debugNames);
 
           newDecls.push_back(violated);
 
