@@ -2624,6 +2624,148 @@ struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
   }
 };
 
+struct ScanLiteralOpConversion : public OpConversionPattern<ScanLiteralOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ScanLiteralOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::ScanLiteralOp>(op, adaptor.getLiteral());
+    return success();
+  }
+};
+
+struct ScanIntOpConversion : public OpConversionPattern<ScanIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ScanIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto dest = adaptor.getDest();
+    auto maxWidth = adaptor.getMaxWidthAttr();
+    switch (op.getFormat()) {
+    case IntFormat::Decimal:
+      rewriter.replaceOpWithNewOp<sim::ScanDecOp>(op, dest, maxWidth);
+      return success();
+    case IntFormat::Binary:
+      rewriter.replaceOpWithNewOp<sim::ScanBinOp>(op, dest, maxWidth);
+      return success();
+    case IntFormat::Octal:
+      rewriter.replaceOpWithNewOp<sim::ScanOctOp>(op, dest, maxWidth);
+      return success();
+    case IntFormat::HexLower:
+      rewriter.replaceOpWithNewOp<sim::ScanHexOp>(
+          op, dest, rewriter.getBoolAttr(false), maxWidth);
+      return success();
+    case IntFormat::HexUpper:
+      rewriter.replaceOpWithNewOp<sim::ScanHexOp>(
+          op, dest, rewriter.getBoolAttr(true), maxWidth);
+      return success();
+    }
+    return rewriter.notifyMatchFailure(op, "unsupported int format");
+  }
+};
+
+struct ScanRealOpConversion : public OpConversionPattern<ScanRealOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ScanRealOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::ScanRealOp>(op, adaptor.getDest(),
+                                                 adaptor.getMaxWidthAttr());
+    return success();
+  }
+};
+
+struct ScanTimeOpConversion : public OpConversionPattern<ScanTimeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ScanTimeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::ScanTimeOp>(op, adaptor.getDest(),
+                                                 adaptor.getMaxWidthAttr());
+    return success();
+  }
+};
+
+struct ScanCharOpConversion : public OpConversionPattern<ScanCharOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ScanCharOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::ScanCharOp>(op, adaptor.getDest());
+    return success();
+  }
+};
+
+struct ScanStrOpConversion : public OpConversionPattern<ScanStrOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ScanStrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::ScanStrOp>(op, adaptor.getDest(),
+                                                adaptor.getMaxWidthAttr());
+    return success();
+  }
+};
+
+struct ScanUnformattedOpConversion
+    : public OpConversionPattern<ScanUnformattedOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ScanUnformattedOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::ScanUnformattedOp>(
+        op, adaptor.getDest(), adaptor.getFourValueAttr());
+    return success();
+  }
+};
+
+struct ScanHierPathMatchOpConversion
+    : public OpConversionPattern<ScanHierPathMatchOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ScanHierPathMatchOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::ScanHierPathMatchOp>(op);
+    return success();
+  }
+};
+
+struct ScanConcatOpConversion : public OpConversionPattern<ScanConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ScanConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::ScanConcatOp>(op, adaptor.getInputs());
+    return success();
+  }
+};
+
+struct FScanFBIOpConversion : public OpConversionPattern<FScanFBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(FScanFBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto stream = sim::SVChannelToInputStreamOp::create(rewriter, op.getLoc(),
+                                                        adaptor.getFd());
+    rewriter.replaceOpWithNewOp<sim::ScanFormattedProcOp>(op, stream,
+                                                          adaptor.getFormat());
+    return success();
+  }
+};
+
+struct SScanFBIOpConversion : public OpConversionPattern<SScanFBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(SScanFBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto stream = sim::StringToInputStreamOp::create(rewriter, op.getLoc(),
+                                                     adaptor.getStr());
+    rewriter.replaceOpWithNewOp<sim::ScanFormattedProcOp>(op, stream,
+                                                          adaptor.getFormat());
+    return success();
+  }
+};
+
 struct StringLenOpConversion : public OpConversionPattern<StringLenOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3223,6 +3365,10 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return sim::FormatStringType::get(type.getContext());
   });
 
+  typeConverter.addConversion([&](ScanStringType type) {
+    return sim::ScanStringType::get(type.getContext());
+  });
+
   typeConverter.addConversion([&](StringType type) {
     return sim::DynamicStringType::get(type.getContext());
   });
@@ -3352,6 +3498,8 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });
   typeConverter.addConversion([](debug::StructType type) { return type; });
+  typeConverter.addConversion([](sim::ScanStringType type) { return type; });
+  typeConverter.addConversion([](sim::InputStreamType type) { return type; });
 
   typeConverter.addConversion([&](llhd::RefType type) -> std::optional<Type> {
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
@@ -3575,6 +3723,19 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatRealOpConversion,
     DisplayBIOpConversion,
     FDisplayBIOpConversion,
+
+    // Scan strings.
+    ScanLiteralOpConversion,
+    ScanIntOpConversion,
+    ScanRealOpConversion,
+    ScanTimeOpConversion,
+    ScanCharOpConversion,
+    ScanStrOpConversion,
+    ScanUnformattedOpConversion,
+    ScanHierPathMatchOpConversion,
+    ScanConcatOpConversion,
+    FScanFBIOpConversion,
+    SScanFBIOpConversion,
 
     // File I/O operations
     FOpenBIOpConversion,

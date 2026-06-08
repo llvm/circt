@@ -542,6 +542,34 @@ def FWriteOp : SVOp<"fwrite", [ProceduralOp]> {
   }];
 }
 
+def FScanFOp : SVOp<"fscanf", [ProceduralOp]> {
+  let summary = "'$fscanf' statement";
+  let arguments = (ins
+    I32:$fd,
+    StrAttr:$format_string,
+    Variadic<AnyType>:$outputs
+  );
+  let results = (outs I32:$count);
+  let assemblyFormat = [{
+    $fd `,` $format_string attr-dict
+    (`(` $outputs^ `)` `:` qualified(type($outputs)))?
+  }];
+}
+
+def SScanFOp : SVOp<"sscanf", [ProceduralOp]> {
+  let summary = "'$sscanf' statement";
+  let arguments = (ins
+    StrAttr:$input_string,
+    StrAttr:$format_string,
+    Variadic<AnyType>:$outputs
+  );
+  let results = (outs I32:$count);
+  let assemblyFormat = [{
+    $input_string `,` $format_string attr-dict
+    (`(` $outputs^ `)` `:` qualified(type($outputs)))?
+  }];
+}
+
 def FFlushOp : SVOp<"fflush", [ProceduralOp]> {
   let summary = "'$fflush' statement";
 

@@ -846,3 +846,304 @@ function void FileDisplayBuiltins(int fd, int x);
   $fdisplayh(fd, x);
 
 endfunction
+
+// CHECK-LABEL: func.func private @FScanfIntegerSpecifiers(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfIntegerSpecifiers(int fd);
+  int x;
+  int res;
+
+  // CHECK: [[VAR:%.+]] = moore.variable : <i32>
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> decimal
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%d", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> decimal
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%D", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> binary
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%b", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> binary
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%B", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> octal
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%o", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> octal
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%O", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> hex_lower
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%h", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> hex_lower
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%x", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> hex_upper
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%H", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[VAR]] : !moore.ref<i32> hex_upper
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%X", x);
+endfunction
+
+// CHECK-LABEL: func.func private @FScanfRealSpecifiers(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfRealSpecifiers(int fd);
+  real r;
+  int res;
+  // CHECK: [[RVAR:%.+]] = moore.variable : <f64>
+
+  // CHECK: [[S:%.+]] = moore.scan.real [[RVAR]] : !moore.ref<f64>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%f", r);
+
+  // CHECK: [[S:%.+]] = moore.scan.real [[RVAR]] : !moore.ref<f64>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%e", r);
+
+  // CHECK: [[S:%.+]] = moore.scan.real [[RVAR]] : !moore.ref<f64>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%g", r);
+
+  // CHECK: [[S:%.+]] = moore.scan.real [[RVAR]] : !moore.ref<f64>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%F", r);
+
+  // CHECK: [[S:%.+]] = moore.scan.real [[RVAR]] : !moore.ref<f64>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%E", r);
+
+  // CHECK: [[S:%.+]] = moore.scan.real [[RVAR]] : !moore.ref<f64>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%G", r);
+
+  // CHECK: [[S:%.+]] = moore.scan.time [[RVAR]] : !moore.ref<f64>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%t", r);
+
+  // CHECK: [[S:%.+]] = moore.scan.time [[RVAR]] : !moore.ref<f64>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%T", r);
+endfunction
+
+// CHECK-LABEL: func.func private @FScanfOtherSpecifiers(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfOtherSpecifiers(int fd);
+  string s;
+  byte c;
+  int raw;
+  int res;
+
+  // CHECK: [[SVAR:%.+]] = moore.variable : <string>
+  // CHECK: [[CVAR:%.+]] = moore.variable : <i8>
+  // CHECK: [[RVAR:%.+]] = moore.variable : <i32>
+
+  // CHECK: [[S:%.+]] = moore.scan.str [[SVAR]] : !moore.ref<string>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%s", s);
+
+  // CHECK: [[S:%.+]] = moore.scan.str [[SVAR]] : !moore.ref<string>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%S", s);
+
+  // CHECK: [[S:%.+]] = moore.scan.char [[CVAR]] : !moore.ref<i8>
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%c", c);
+
+  // CHECK: [[S:%.+]] = moore.scan.unformatted [[RVAR]] : !moore.ref<i32>
+  // CHECK-NOT: four_value
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%u", raw);
+
+  // CHECK: [[S:%.+]] = moore.scan.unformatted [[RVAR]] : !moore.ref<i32> four_value
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%z", raw);
+
+  // CHECK: [[S:%.+]] = moore.scan.unformatted [[RVAR]] : !moore.ref<i32> four_value
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%Z", raw);
+
+  // CHECK: [[S:%.+]] = moore.scan.hier_path_match
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%m");
+
+  // CHECK: [[S:%.+]] = moore.scan.hier_path_match
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%M");
+
+  // CHECK: [[S:%.+]] = moore.scan.literal "%"
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%%");
+endfunction
+
+// CHECK-LABEL: func.func private @FScanfModifiers(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfModifiers(int fd);
+  int x;
+  string s;
+  real r;
+  int res;
+
+  // CHECK: [[IVAR:%.+]] = moore.variable : <i32>
+  // CHECK: [[SVAR:%.+]] = moore.variable : <string>
+  // CHECK: [[RVAR:%.+]] = moore.variable : <f64>
+
+  // CHECK: [[S:%.+]] = moore.scan.int decimal
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%*d");
+
+  // CHECK: [[S:%.+]] = moore.scan.int binary
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%*b");
+
+  // CHECK: [[S:%.+]] = moore.scan.str
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%*s");
+
+  // CHECK: [[S:%.+]] = moore.scan.real
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%*f");
+
+  // CHECK: [[S:%.+]] = moore.scan.char
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%*c");
+
+  // CHECK: [[S:%.+]] = moore.scan.int [[IVAR]] : !moore.ref<i32> decimal width 8
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%8d", x);
+
+  // CHECK: [[S:%.+]] = moore.scan.str [[SVAR]] : !moore.ref<string> width 16
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%16s", s);
+
+  // CHECK: [[S:%.+]] = moore.scan.real [[RVAR]] : !moore.ref<f64> width 10
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%10f", r);
+
+
+  // CHECK: [[S:%.+]] = moore.scan.int decimal width 42
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%*42d");
+
+  // CHECK: [[S:%.+]] = moore.scan.str width 42
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%*42s");
+
+  // CHECK: [[S:%.+]] = moore.scan.int hex_lower width 42
+  // CHECK: moore.builtin.fscanf [[FD]] [[S]]
+  res = $fscanf(fd, "%*42h");
+endfunction
+
+// CHECK-LABEL: func.func private @FScanfComposition(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfComposition(int fd);
+  int a;
+  string b;
+  real r;
+  int res;
+
+  // CHECK: [[AVAR:%.+]] = moore.variable : <i32>
+  // CHECK: [[BVAR:%.+]] = moore.variable : <string>
+  // CHECK: [[RVAR:%.+]] = moore.variable : <f64>
+
+  // CHECK: [[S1:%.+]] = moore.scan.int [[AVAR]] : !moore.ref<i32> decimal
+  // CHECK: [[S2:%.+]] = moore.scan.str [[BVAR]] : !moore.ref<string>
+  // CHECK: [[CAT:%.+]] = moore.scan.concat ([[S1]], [[S2]])
+  // CHECK: moore.builtin.fscanf [[FD]] [[CAT]]
+  res = $fscanf(fd, "%d%s", a, b);
+
+  // CHECK: [[SA:%.+]] = moore.scan.int [[AVAR]] : !moore.ref<i32> decimal
+  // CHECK: [[SB:%.+]] = moore.scan.real [[RVAR]] : !moore.ref<f64>
+  // CHECK: [[SC:%.+]] = moore.scan.str [[BVAR]] : !moore.ref<string>
+  // CHECK: [[CAT:%.+]] = moore.scan.concat ([[SA]], [[SB]], [[SC]])
+  // CHECK: moore.builtin.fscanf [[FD]] [[CAT]]
+  res = $fscanf(fd, "%d%f%s", a, r, b);
+
+  // CHECK: [[LIT:%.+]] = moore.scan.literal "val="
+  // CHECK: [[SPEC:%.+]] = moore.scan.int [[AVAR]] : !moore.ref<i32> decimal
+  // CHECK: [[CAT:%.+]] = moore.scan.concat ([[LIT]], [[SPEC]])
+  // CHECK: moore.builtin.fscanf [[FD]] [[CAT]]
+  res = $fscanf(fd, "val=%d", a);
+
+  // CHECK: [[SPEC:%.+]] = moore.scan.int [[AVAR]] : !moore.ref<i32> decimal
+  // CHECK: [[LIT:%.+]] = moore.scan.literal " end"
+  // CHECK: [[CAT:%.+]] = moore.scan.concat ([[SPEC]], [[LIT]])
+  // CHECK: moore.builtin.fscanf [[FD]] [[CAT]]
+  res = $fscanf(fd, "%d end", a);
+
+  // CHECK: [[S1:%.+]] = moore.scan.int [[AVAR]] : !moore.ref<i32> decimal
+  // CHECK: [[LIT:%.+]] = moore.scan.literal " , "
+  // CHECK: [[S2:%.+]] = moore.scan.str [[BVAR]] : !moore.ref<string>
+  // CHECK: [[CAT:%.+]] = moore.scan.concat ([[S1]], [[LIT]], [[S2]])
+  // CHECK: moore.builtin.fscanf [[FD]] [[CAT]]
+  res = $fscanf(fd, "%d , %s", a, b);
+
+  // CHECK: [[S1:%.+]] = moore.scan.int decimal
+  // CHECK: [[S2:%.+]] = moore.scan.str [[BVAR]] : !moore.ref<string>
+  // CHECK: [[CAT:%.+]] = moore.scan.concat ([[S1]], [[S2]])
+  // CHECK: moore.builtin.fscanf [[FD]] [[CAT]]
+  res = $fscanf(fd, "%*d%s", b);
+
+  // CHECK: [[LIT:%.+]] = moore.scan.literal "prefix"
+  // CHECK-NOT: moore.scan.concat
+  // CHECK: moore.builtin.fscanf [[FD]] [[LIT]]
+  res = $fscanf(fd, "prefix");
+
+  // CHECK: [[LIT:%.+]] = moore.scan.literal " "
+  // CHECK: moore.builtin.fscanf [[FD]] [[LIT]]
+  res = $fscanf(fd, " ");
+
+  // CHECK-NOT: moore.builtin.fscanf
+  // CHECK: moore.constant 0 : i32
+  res = $fscanf(fd, "");
+endfunction
+
+// CHECK-LABEL: func.func private @SScanfBuiltins(
+// CHECK-SAME:  [[SRC:%[^ ,]+]]: !moore.string
+function void SScanfBuiltins(string src);
+  int x;
+  string s;
+  real r;
+  int res;
+
+  // CHECK: [[XVAR:%.+]] = moore.variable : <i32>
+  // CHECK: [[SVAR:%.+]] = moore.variable : <string>
+  // CHECK: [[RVAR:%.+]] = moore.variable : <f64>
+
+  // CHECK: [[SPEC:%.+]] = moore.scan.int [[XVAR]] : !moore.ref<i32> decimal
+  // CHECK: moore.builtin.sscanf [[SRC]] [[SPEC]]
+  res = $sscanf(src, "%d", x);
+
+  // CHECK: [[SPEC:%.+]] = moore.scan.str [[SVAR]] : !moore.ref<string>
+  // CHECK: moore.builtin.sscanf [[SRC]] [[SPEC]]
+  res = $sscanf(src, "%s", s);
+
+  // CHECK: [[SA:%.+]] = moore.scan.int [[XVAR]] : !moore.ref<i32> decimal
+  // CHECK: [[LIT:%.+]] = moore.scan.literal " "
+  // CHECK: [[SB:%.+]] = moore.scan.real [[RVAR]] : !moore.ref<f64>
+  // CHECK: [[CAT:%.+]] = moore.scan.concat ([[SA]], [[LIT]], [[SB]])
+  // CHECK: moore.builtin.sscanf [[SRC]] [[CAT]]
+  res = $sscanf(src, "%d %f", x, r);
+
+  // CHECK: [[SPEC:%.+]] = moore.scan.int decimal width 8
+  // CHECK: moore.builtin.sscanf [[SRC]] [[SPEC]]
+  res = $sscanf(src, "%*8d");
+
+  // CHECK: [[SPEC:%.+]] = moore.scan.unformatted [[XVAR]] : !moore.ref<i32> four_value
+  // CHECK: moore.builtin.sscanf [[SRC]] [[SPEC]]
+  res = $sscanf(src, "%z", x);
+
+  // CHECK-NOT: moore.builtin.sscanf
+  // CHECK: moore.constant 0 : i32
+  res = $sscanf(src, "");
+endfunction

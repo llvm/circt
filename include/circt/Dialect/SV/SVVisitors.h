@@ -40,9 +40,9 @@ public:
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
-            WriteOp, FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp,
-            MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
-            MacroErrorOp,
+            WriteOp, FWriteOp, FScanFOp, SScanFOp, FFlushOp, SystemFunctionOp,
+            VerbatimOp, MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp,
+            IncludeOp, MacroErrorOp,
             // Type declarations.
             InterfaceOp, SVVerbatimSourceOp, InterfaceSignalOp,
             InterfaceModportOp, InterfaceInstanceOp, GetModportOp,
@@ -138,6 +138,8 @@ public:
   HANDLE(AliasOp, Unhandled);
   HANDLE(WriteOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
+  HANDLE(FScanFOp, Unhandled);
+  HANDLE(SScanFOp, Unhandled);
   HANDLE(FFlushOp, Unhandled);
   HANDLE(SystemFunctionOp, Unhandled);
   HANDLE(FuncCallProceduralOp, Unhandled);

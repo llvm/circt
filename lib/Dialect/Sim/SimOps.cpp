@@ -806,6 +806,166 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
 }
 
 //===----------------------------------------------------------------------===//
+// Scan operations
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ScanLiteralOp::fold(FoldAdaptor) { return getLiteralAttr(); }
+
+LogicalResult ScanConcatOp::getFlattenedInputs(
+    llvm::SmallVectorImpl<Value> &flatOperands) {
+  llvm::SmallMapVector<ScanConcatOp, unsigned, 4> concatStack;
+  bool isCyclic = false;
+  concatStack.insert({*this, 0});
+
+  // Perform a DFS on this operation's concatenated operands,
+  // collect the leaf format string fragments.
+  while (!concatStack.empty()) {
+    auto &top = concatStack.back();
+    auto currentConcat = top.first;
+    unsigned operandIndex = top.second;
+
+    // Iterate over concatenated operands
+    while (operandIndex < currentConcat.getNumOperands()) {
+      auto currentOperand = currentConcat.getOperand(operandIndex);
+      if (auto nextConcat = currentOperand.getDefiningOp<ScanConcatOp>()) {
+        // Concat of a concat
+        if (!concatStack.contains(nextConcat)) {
+          // Save the next operand index to visit on the
+          // stack and put the new concat on top.
+          top.second = operandIndex + 1;
+          concatStack.insert({nextConcat, 0});
+          break;
+        }
+        // Cyclic concatenation encountered. Don't recurse.
+        isCyclic = true;
+      }
+      flatOperands.push_back(currentOperand);
+      operandIndex++;
+    }
+    if (operandIndex >= currentConcat.getNumOperands())
+      // Pop the concat off of the stack if we have visited all operands.
+      concatStack.pop_back();
+  }
+  return success(!isCyclic);
+}
+
+LogicalResult ScanConcatOp::verify() {
+  llvm::SmallVector<Value> flattened;
+  if (getFlattenedInputs(flattened).failed())
+    return emitOpError("scan format string concatenation is recursive");
+  return success();
+}
+
+OpFoldResult ScanConcatOp::fold(FoldAdaptor adaptor) {
+  if (getNumOperands() == 0)
+    return StringAttr::get(getContext(), "");
+  if (getNumOperands() == 1) {
+    // Don't fold to our own result to avoid an infinte loop.
+    if (getResult() == getOperand(0))
+      return {};
+    return getOperand(0);
+  }
+
+  // Fold if all operands are literals.
+  SmallVector<StringRef> lits;
+  for (auto attr : adaptor.getInputs()) {
+    auto lit = dyn_cast_or_null<StringAttr>(attr);
+    if (!lit)
+      return {};
+    lits.push_back(lit);
+  }
+  return concatLiterals(getContext(), lits);
+}
+
+LogicalResult ScanConcatOp::canonicalize(ScanConcatOp op,
+                                         PatternRewriter &rewriter) {
+  // Any helper literals created during canonicalization must dominate `op`.
+  rewriter.setInsertionPoint(op);
+
+  auto scanStrType = ScanStringType::get(op.getContext());
+
+  // Check if we can flatten concats of concats
+  bool hasBeenFlattened = false;
+  SmallVector<Value, 0> flatOperands;
+  if (!op.isFlat()) {
+    // Get a new, flattened list of operands
+    flatOperands.reserve(op.getNumOperands() + 4);
+    auto isAcyclic = op.getFlattenedInputs(flatOperands);
+
+    if (failed(isAcyclic)) {
+      // Infinite recursion, but we cannot fail compilation right here (can we?)
+      // so just emit a warning and bail out.
+      op.emitWarning("Cyclic concatenation detected.");
+      return failure();
+    }
+
+    hasBeenFlattened = true;
+  }
+
+  if (!hasBeenFlattened && op.getNumOperands() < 2)
+    return failure(); // Should be handled by the folder
+
+  // Check if there are adjacent literals we can merge or empty literals to
+  // remove
+  SmallVector<StringRef> litSequence;
+  SmallVector<Value> newOperands;
+  newOperands.reserve(op.getNumOperands());
+  ScanLiteralOp prevLitOp;
+
+  auto oldOperands = hasBeenFlattened ? flatOperands : op.getOperands();
+  for (auto operand : oldOperands) {
+    if (auto litOp = operand.getDefiningOp<ScanLiteralOp>()) {
+      if (!litOp.getLiteral().empty()) {
+        prevLitOp = litOp;
+        litSequence.push_back(litOp.getLiteral());
+      }
+    } else {
+      if (!litSequence.empty()) {
+        if (litSequence.size() > 1) {
+          // Create a fused literal.
+          auto newLit = rewriter.createOrFold<ScanLiteralOp>(
+              op.getLoc(), scanStrType,
+              concatLiterals(op.getContext(), litSequence));
+          newOperands.push_back(newLit);
+        } else {
+          // Reuse the existing literal.
+          newOperands.push_back(prevLitOp.getResult());
+        }
+        litSequence.clear();
+      }
+      newOperands.push_back(operand);
+    }
+  }
+
+  // Push trailing literals into the new operand list
+  if (!litSequence.empty()) {
+    if (litSequence.size() > 1) {
+      // Create a fused literal.
+      auto newLit = rewriter.createOrFold<ScanLiteralOp>(
+          op.getLoc(), scanStrType,
+          concatLiterals(op.getContext(), litSequence));
+      newOperands.push_back(newLit);
+    } else {
+      // Reuse the existing literal.
+      newOperands.push_back(prevLitOp.getResult());
+    }
+  }
+
+  if (!hasBeenFlattened && newOperands.size() == op.getNumOperands())
+    return failure(); // Nothing changed
+
+  if (newOperands.empty())
+    rewriter.replaceOpWithNewOp<ScanLiteralOp>(op, scanStrType,
+                                               rewriter.getStringAttr(""));
+  else if (newOperands.size() == 1)
+    rewriter.replaceOp(op, newOperands);
+  else
+    rewriter.modifyOpInPlace(op, [&]() { op->setOperands(newOperands); });
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

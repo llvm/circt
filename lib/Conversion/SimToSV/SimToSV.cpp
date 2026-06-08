@@ -77,6 +77,9 @@ struct SimTypeConverter : public TypeConverter {
     addConversion([&](OutputStreamType type) -> Type {
       return IntegerType::get(type.getContext(), 32);
     });
+    addConversion([&](InputStreamType type) -> Type {
+      return IntegerType::get(type.getContext(), 32);
+    });
   }
 };
 
@@ -133,6 +136,17 @@ public:
     });
 
     rewriter.replaceOpWithNewOp<sv::ReadInOutOp>(op, reg);
+    return success();
+  }
+};
+
+struct SVFdToInputStreamLowering
+    : public OpConversionPattern<SVChannelToInputStreamOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(SVChannelToInputStreamOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOp(op, adaptor.getFd());
     return success();
   }
 };
@@ -763,6 +777,228 @@ LogicalResult lowerFormatStringToSVFormat(Value input,
   return success();
 }
 
+static void appendScanSpecifier(SmallString<128> &formatString,
+                                std::optional<int32_t> maxWidth, char spec,
+                                bool suppress = false) {
+  formatString.push_back('%');
+  if (suppress)
+    formatString.push_back('*');
+  if (maxWidth)
+    llvm::Twine(*maxWidth).toVector(formatString);
+  formatString.push_back(spec);
+}
+
+LogicalResult getFlattenedScanFragments(Value input,
+                                        SmallVectorImpl<Value> &fragments) {
+  if (auto concat = input.getDefiningOp<ScanConcatOp>()) {
+    if (failed(concat.getFlattenedInputs(fragments)))
+      return mlir::emitError(input.getLoc(),
+                             "cyclic sim.scan.concat is unsupported");
+    return success();
+  }
+  fragments.push_back(input);
+  return success();
+}
+
+LogicalResult appendScanFragmentToSVFormat(Value fragment,
+                                           SmallString<128> &formatString,
+                                           SmallVectorImpl<Value> &outputs) {
+  Operation *op = fragment.getDefiningOp();
+  if (!op)
+    return mlir::emitError(fragment.getLoc(),
+                           "block argument scan strings are unsupported");
+
+  return TypeSwitch<Operation *, LogicalResult>(op)
+      .Case<ScanLiteralOp>([&](auto lit) -> LogicalResult {
+        appendLiteralToSVFormat(formatString, lit.getLiteral());
+        return success();
+      })
+      .Case<ScanDecOp>([&](auto s) -> LogicalResult {
+        appendScanSpecifier(formatString, s.getMaxWidth(), 'd', !s.getDest());
+        if (s.getDest())
+          outputs.push_back(s.getDest());
+        return success();
+      })
+      .Case<ScanBinOp>([&](auto s) -> LogicalResult {
+        appendScanSpecifier(formatString, s.getMaxWidth(), 'b', !s.getDest());
+        if (s.getDest())
+          outputs.push_back(s.getDest());
+        return success();
+      })
+      .Case<ScanOctOp>([&](auto s) -> LogicalResult {
+        appendScanSpecifier(formatString, s.getMaxWidth(), 'o', !s.getDest());
+        if (s.getDest())
+          outputs.push_back(s.getDest());
+        return success();
+      })
+      .Case<ScanHexOp>([&](auto s) -> LogicalResult {
+        appendScanSpecifier(formatString, s.getMaxWidth(),
+                            s.getIsUpper() ? 'X' : 'x', !s.getDest());
+        if (s.getDest())
+          outputs.push_back(s.getDest());
+        return success();
+      })
+      .Case<ScanRealOp>([&](auto s) -> LogicalResult {
+        appendScanSpecifier(formatString, s.getMaxWidth(), 'g', !s.getDest());
+        if (s.getDest())
+          outputs.push_back(s.getDest());
+        return success();
+      })
+      .Case<ScanTimeOp>([&](auto s) -> LogicalResult {
+        appendScanSpecifier(formatString, s.getMaxWidth(), 't', !s.getDest());
+        if (s.getDest())
+          outputs.push_back(s.getDest());
+        return success();
+      })
+      .Case<ScanCharOp>([&](auto s) -> LogicalResult {
+        formatString += s.getDest() ? "%c" : "%*c";
+        if (s.getDest())
+          outputs.push_back(s.getDest());
+        return success();
+      })
+      .Case<ScanStrOp>([&](auto s) -> LogicalResult {
+        appendScanSpecifier(formatString, s.getMaxWidth(), 's', !s.getDest());
+        if (s.getDest())
+          outputs.push_back(s.getDest());
+        return success();
+      })
+      .Case<ScanUnformattedOp>([&](auto s) -> LogicalResult {
+        if (s.getDest()) {
+          formatString += s.getFourValue() ? "%z" : "%u";
+          outputs.push_back(s.getDest());
+        } else {
+          formatString += s.getFourValue() ? "%*z" : "%*u";
+        }
+        return success();
+      })
+      .Case<ScanHierPathMatchOp>([&](auto) -> LogicalResult {
+        formatString += "%m";
+        return success();
+      })
+      .Default([&](auto unsupported) {
+        return mlir::emitError(unsupported->getLoc())
+               << "unsupported scan fragment '"
+               << unsupported->getName().getStringRef() << "'";
+      });
+}
+
+LogicalResult lowerScanStringToSVFormat(Value input,
+                                        SmallString<128> &formatString,
+                                        SmallVectorImpl<Value> &outputs) {
+  SmallVector<Value, 8> fragments;
+  if (failed(getFlattenedScanFragments(input, fragments)))
+    return failure();
+  for (auto fragment : fragments)
+    if (failed(appendScanFragmentToSVFormat(fragment, formatString, outputs)))
+      return failure();
+  return success();
+}
+
+static void cleanupDeadSimScanOps(ArrayRef<Operation *> seedOps) {
+  auto filter = [](Operation *op, OpOperand &operand) {
+    return isa<ScanStringType>(operand.get().getType()) &&
+           isa_and_present<SimDialect>(op->getDialect());
+  };
+  SparseOpSCC<OpSCCDirection::Backward> sccs(filter);
+  sccs.visit(seedOps);
+  assert(sccs.getNumCyclicSCCs() == 0 &&
+         "Cyclic scan graph should have been rejected");
+  for (OpSCC entry : sccs.reverseTopological()) {
+    auto *op = cast<Operation *>(entry);
+    if (op->use_empty())
+      op->erase();
+    else
+      op->emitWarning("sim scan op still has users after lowering; "
+                      "dialect conversion will fail");
+  }
+}
+
+static void materializeScanCount(OpBuilder &builder, ScanFormattedProcOp scanOp,
+                                 Value countResult) {
+  if (scanOp.getCount().use_empty())
+    return;
+  auto loc = scanOp.getLoc();
+  auto countReg = sv::RegOp::create(builder, loc, builder.getIntegerType(32),
+                                    builder.getStringAttr("scan_count"));
+  sv::BPAssignOp::create(builder, loc, countReg, countResult);
+  scanOp.getCount().replaceAllUsesWith(
+      sv::ReadInOutOp::create(builder, loc, countReg).getResult());
+}
+
+static LogicalResult lowerFScanFProc(ScanFormattedProcOp scanOp,
+                                     const TypeConverter &typeConverter,
+                                     OpBuilder &builder, StringRef formatString,
+                                     ArrayRef<Value> outputs) {
+  auto fdType = typeConverter.convertType(scanOp.getStream().getType());
+  assert(fdType && "expected input stream type conversion");
+  Value fd = mlir::UnrealizedConversionCastOp::create(
+                 builder, scanOp.getLoc(), fdType, scanOp.getStream())
+                 ->getResult(0);
+  auto fscanf =
+      sv::FScanFOp::create(builder, scanOp.getLoc(), fd,
+                           builder.getStringAttr(formatString), outputs);
+  materializeScanCount(builder, scanOp, fscanf.getCount());
+  return success();
+}
+
+static LogicalResult lowerSScanFProc(ScanFormattedProcOp scanOp,
+                                     StringToInputStreamOp strOp,
+                                     OpBuilder &builder, StringRef formatString,
+                                     ArrayRef<Value> outputs) {
+  auto srcLit = strOp.getStr().getDefiningOp<sim::StringConstantOp>();
+  if (!srcLit) {
+    return strOp.emitError(
+        "$sscanf with non-constant string source is not supported");
+  }
+
+  auto sscanf =
+      sv::SScanFOp::create(builder, scanOp.getLoc(), srcLit.getLiteralAttr(),
+                           builder.getStringAttr(formatString), outputs);
+  materializeScanCount(builder, scanOp, sscanf.getCount());
+  return success();
+}
+
+LogicalResult lowerScanFormattedProcToSV(hw::HWModuleOp module,
+                                         const TypeConverter &typeConverter) {
+  SmallVector<ScanFormattedProcOp> scanOps;
+  SmallVector<Operation *, 8> cleanupSeeds;
+  SmallVector<sim::StringConstantOp> stringLiteralsToErase;
+  module.walk([&](ScanFormattedProcOp op) { scanOps.push_back(op); });
+
+  for (auto scanOp : scanOps) {
+    OpBuilder builder(scanOp);
+    SmallString<128> formatString;
+    SmallVector<Value> outputs;
+
+    if (failed(lowerScanStringToSVFormat(scanOp.getFormat(), formatString,
+                                         outputs))) {
+      scanOp.emitError("cannot lower 'sim.proc.scan' to SystemVerilog");
+      return failure();
+    }
+
+    if (auto strOp =
+            scanOp.getStream().getDefiningOp<StringToInputStreamOp>()) {
+      if (failed(
+              lowerSScanFProc(scanOp, strOp, builder, formatString, outputs)))
+        return failure();
+      if (auto litOp = strOp.getStr().getDefiningOp<sim::StringConstantOp>())
+        stringLiteralsToErase.push_back(litOp);
+      cleanupSeeds.push_back(strOp);
+    } else {
+      if (failed(lowerFScanFProc(scanOp, typeConverter, builder, formatString,
+                                 outputs)))
+        return failure();
+    }
+    cleanupSeeds.push_back(scanOp);
+  }
+
+  cleanupDeadSimScanOps(cleanupSeeds);
+  for (auto litOp : stringLiteralsToErase)
+    if (litOp->use_empty())
+      litOp->erase();
+  return success();
+}
+
 FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
                                                       OpBuilder &builder) {
   SmallString<128> formatString;
@@ -888,6 +1124,9 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       if (failed(lowerPrintFormattedProcToSV(module, typeConverter, state)))
         return failure();
 
+      if (failed(lowerScanFormattedProcToSV(module, typeConverter)))
+        return failure();
+
       if (moveOpsIntoIfdefGuardsAndProcesses(module))
         usedSynthesisMacro = true;
 
@@ -915,6 +1154,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<PauseOp>(convert);
       patterns.add<TriggeredLowering>(context, state);
       patterns.add<DPICallLowering>(context, state);
+      patterns.add<SVFdToInputStreamLowering>(typeConverter, context);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 
       if (failed(result))

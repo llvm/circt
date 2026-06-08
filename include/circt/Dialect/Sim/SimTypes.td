@@ -27,6 +27,18 @@ def FormatStringType : SimTypeDef<"FormatString"> {
   }];
 }
 
+def ScanStringType : SimTypeDef<"ScanString"> {
+  let summary = "a scan format string type";
+  let description = [{
+    A scan format string type represents either a single scanning fragment or
+    the concatenation of an arbitrary but finite number of fragements.
+    A scanning fragment is either a static string literal to match verbatim,
+    or the association of a format specifier with an optional destination
+    operand into which the parsed value is stored.
+  }];
+  let mnemonic = "scan_string";
+}
+
 def DynamicStringType : SimTypeDef<"DynamicString"> {
   let mnemonic = "dstring";
 
@@ -122,6 +134,20 @@ def OutputStreamType : SimTypeDef<"OutputStream"> {
   }];
 
   let mnemonic = "output_stream";
+}
+
+
+def InputStreamType : SimTypeDef<"InputStream"> {
+  let summary = "a type representing an input stream";
+  let description = [{
+    Represents a simulation input stream resource.
+    This type models the existence of a stream resource at the Sim dialect level,
+    while leaving its concrete representation to the lowering backend. Backends may
+    realize this as a file descriptor, object handle, pointer, or any other target-
+    specific resource representation.
+  }];
+
+  let mnemonic = "input_stream";
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMTYPES_TD

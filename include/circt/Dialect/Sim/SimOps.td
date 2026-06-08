@@ -680,6 +680,213 @@ def StderrStreamOp : SimOp<"stderr_stream", [Pure]> {
   let assemblyFormat = "attr-dict";
 }
 
+def StdinStreamOp : SimOp<"stdin_stream", [Pure]> {
+  let summary = "The standard input stream";
+  let description = [{
+    Returns a reference to the standard input stream, which can be consumed
+    by `sim.proc.scan`.
+  }];
+
+  let results = (outs InputStreamType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// Scan string ops
+//===----------------------------------------------------------------------===//
+
+def ScanLiteralOp : SimOp<"scan.literal", [Pure, ConstantLike]> {
+  let summary = "Literal string fragment";
+  let description = [{
+    Creates a constant, raw ASCII string literal for scan matching.
+    The given string attribute will be matched verbatim against the input,
+    including non-printable characters. The literal may be empty or contain
+    null characters ('\0') which must not be interpreted as string terminators
+    by backends.
+  }];
+  let arguments = (ins StrAttr:$literal);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = "$literal attr-dict";
+  let hasFolder = true;
+}
+
+def ScanDecOp : SimOp<"scan.dec", [Pure]> {
+  let summary = "Scan a decimal integer from input";
+  let description = [{
+    Scan a decimal integer from the input. The scanned value may be optionally
+    stored into the provided destination, which must be of an integer
+    type. If the destination is not provided, the scanned value is discarded.
+  }];
+  let arguments = (ins Optional<AnyType>:$dest, OptionalAttr<I32Attr>:$maxWidth);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = "($dest^ `:` type($dest))? (`width` $maxWidth^)? attr-dict";
+}
+
+def ScanBinOp : SimOp<"scan.bin", [Pure]> {
+  let summary = "Scan a binary integer from input";
+  let description = [{
+    Scan a binary integer from the input. The scanned value may be optionally
+    stored into the provided destination, which must be of an integer
+    type. If the destination is not provided, the scanned value is discarded.
+  }];
+  let arguments = (ins Optional<AnyType>:$dest, OptionalAttr<I32Attr>:$maxWidth);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = "($dest^ `:` type($dest))? (`width` $maxWidth^)? attr-dict";
+}
+
+def ScanOctOp : SimOp<"scan.oct", [Pure]> {
+  let summary = "Scan an octal integer from input";
+  let description = [{
+    Scan an octal integer from the input. The scanned value may be optionally
+    stored into the provided destination, which must be of an integer
+    type. If the destination is not provided, the scanned value is discarded.
+  }];
+  let arguments = (ins Optional<AnyType>:$dest, OptionalAttr<I32Attr>:$maxWidth);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = "($dest^ `:` type($dest))? (`width` $maxWidth^)? attr-dict";
+}
+
+def ScanHexOp : SimOp<"scan.hex", [Pure]> {
+  let summary = "Scan a hexadecimal integer from input";
+  let description = [{
+    Scan a hexadecimal integer from the input. The scanned value may be optionally
+    stored into the provided destination, which must be of an integer type.
+    If the destination is not provided, the scanned value is discarded.
+    The `isUpper` attribute selects the lowercase or uppercase hexadecimal
+    format specifier.
+  }];
+  let arguments = (ins
+    Optional<AnyType>:$dest,
+    BoolAttr:$isUpper,
+    OptionalAttr<I32Attr>:$maxWidth
+  );
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = [{
+    ($dest^ `:` type($dest))? `isUpper` $isUpper (`width` $maxWidth^)? attr-dict
+  }];
+}
+
+def ScanRealOp : SimOp<"scan.real", [Pure]> {
+  let summary = "Scan a floating-point value from input";
+  let description = [{
+    Scan a floating-point value from the input. The scanned value may be optionally
+    stored into the provided destination, which must be of a floating-point
+    type. If the destination is not provided, the scanned value is discarded.
+  }];
+  let arguments = (ins Optional<AnyType>:$dest, OptionalAttr<I32Attr>:$maxWidth);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = [{
+    ($dest^ `:` type($dest))? (`width` $maxWidth^)? attr-dict
+  }];
+}
+
+def ScanTimeOp : SimOp<"scan.time", [Pure]> {
+  let summary = "Scan a timescale-adjusted floating-point value from input";
+  let description = [{
+    Scan a timescale-adjusted floating-point value from the input.
+    The scanned value may be optionally stored into the provided destination,
+    which must be of a floating-point type.
+    If the destination is not provided, the scanned value is discarded.
+  }];
+  let arguments = (ins Optional<AnyType>:$dest, OptionalAttr<I32Attr>:$maxWidth);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = [{
+    ($dest^ `:` type($dest))? (`width` $maxWidth^)? attr-dict
+  }];
+}
+
+def ScanCharOp : SimOp<"scan.char", [Pure]> {
+  let summary = "Scan a single character from input";
+  let description = [{
+    Scan a single character from the input. The scanned value may be optionally
+    stored into the provided destination, which must be of an integer
+    type. If the destination is not provided, the scanned value is discarded.
+  }];
+  let arguments = (ins Optional<AnyType>:$dest);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = "($dest^ `:` type($dest))? attr-dict";
+}
+
+def ScanStrOp : SimOp<"scan.str", [Pure]> {
+  let summary = "Scan a whitespace-delimited string from input";
+  let description = [{
+    Scan a whitespace-delimited string from the input. The scanned value may be optionally
+    stored into the provided destination, which must be of a string type.
+    If the destination is not provided, the scanned value is discarded.
+  }];
+  let arguments = (ins Optional<AnyType>:$dest, OptionalAttr<I32Attr>:$maxWidth);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = [{
+    ($dest^ `:` type($dest))? (`width` $maxWidth^)? attr-dict
+  }];
+}
+
+def ScanUnformattedOp : SimOp<"scan.unformatted", [Pure]> {
+  let summary = "Scan unformatted binary data from input";
+  let description = [{
+    Scan unformatted binary data from the input. The scanned value may be optionally
+    stored into the provided destination, which must be of an integer type.
+    If the destination is not provided, the scanned value is discarded.
+  }];
+  let arguments = (ins Optional<AnyType>:$dest, UnitAttr:$fourValue);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = [{
+    ($dest^ `:` type($dest))? (`four_value` $fourValue^)? attr-dict
+  }];
+}
+
+def ScanHierPathMatchOp : SimOp<"scan.hier_path_match", [Pure]> {
+  let summary = "Match the current hierarchical path in the scan input";
+  let description = [{
+    Match the hierarchical path of the module instance containing this
+    operation in the scan input. Does not consume a destination argument
+    and does not store any value.
+  }];
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
+def ScanConcatOp : SimOp<"scan.concat", [Pure]> {
+  let summary = "Concatenate scan format fragments";
+  let description = [{
+    Concatenates an arbitrary number of scan format fragments from
+    left to right. If the argument list is empty, the empty string
+    literal is produced.
+
+    Concatenations must not be recursive. I.e., a concatenated string should
+    not contain itself directly or indirectly.
+  }];
+  let arguments = (ins Variadic<ScanStringType>:$inputs);
+  let results = (outs ScanStringType:$result);
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+  let hasFolder = true;
+  let hasCanonicalizeMethod = true;
+  let hasVerifier = true;
+  let extraClassDeclaration = [{
+    bool isFlat() {
+      return llvm::none_of(getInputs(), [](Value operand) {
+        return !!operand.getDefiningOp<circt::sim::ScanConcatOp>();
+      });
+    };
+    LogicalResult getFlattenedInputs(
+        llvm::SmallVectorImpl<Value> &flatOperands);
+  }];
+}
+
+def ScanFormattedProcOp : SimOp<"proc.scan", [ProceduralOp]> {
+  let summary = "Scan formatted values from an input stream";
+  let description = [{
+    Evaluate a scan format string and scan values from the given input stream.
+    The scanned values are stored into the destination specified by
+    the format string operands.
+
+    This operation must be within a procedural region.
+  }];
+  let arguments = (ins InputStreamType:$stream, ScanStringType:$format);
+  let results = (outs I32:$count);
+  let assemblyFormat = "$stream $format attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Dynamic Strings
 //===----------------------------------------------------------------------===//
@@ -1269,6 +1476,20 @@ def SVChannelToOutputStreamOp : SimOp<"sv.channel_to_output_stream", [Procedural
   let assemblyFormat = "$channel attr-dict";
 }
 
+def SVChannelToInputStreamOp : SimOp<"sv.channel_to_input_stream", [ProceduralOp]> {
+let summary = "Cast a SV file descriptor to an input stream";
+  let description = [{
+    Casts a SystemVerilog file descriptor (integer returned by `$fopen` with
+    a read mode) to an `!sim.input_stream` or a predefined input stream stdin (`32'h8000_0000`).
+    The fd must have been opened for reading. Otherwise, this operation causes undefined behavior.
+
+    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
+  }];
+  let arguments = (ins I32:$fd);
+  let results = (outs InputStreamType:$stream);
+  let assemblyFormat = "$fd attr-dict";
+}
+
 def SVFFlushAllOp : SimOp<"sv.fflush_all", [ProceduralOp]> {
   let summary = "Flush all open files";
   let description = [{
@@ -1290,6 +1511,16 @@ def FlushOp : SimOp<"flush", [ProceduralOp]> {
 
   let arguments = (ins OutputStreamType:$stream);
   let assemblyFormat = "$stream attr-dict";
+}
+
+def StringToInputStreamOp : SimOp<"string_to_input_stream", [Pure]> {
+  let summary = "Wrap a string as an input stream";
+  let description = [{
+    Creates an input stream that read sequentially from the given string.
+  }];
+  let arguments = (ins DynamicStringType:$str);
+  let results = (outs InputStreamType:$stream);
+  let assemblyFormat = "$str attr-dict";
 }
 
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

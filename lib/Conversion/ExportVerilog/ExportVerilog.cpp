@@ -3985,8 +3985,8 @@ void NameCollector::collectNames(Block &block) {
     // Instances have an instance name to recognize but we don't need to look
     // at the result values since wires used by instances should be traversed
     // anyway.
-    if (isa<InstanceOp, InterfaceInstanceOp, FuncCallProceduralOp, FuncCallOp>(
-            op))
+    if (isa<InstanceOp, InterfaceInstanceOp, FuncCallProceduralOp, FuncCallOp,
+            FScanFOp, SScanFOp>(op))
       continue;
     if (isa<ltl::LTLDialect, debug::DebugDialect>(op.getDialect()))
       continue;
@@ -4201,6 +4201,8 @@ private:
   LogicalResult visitSV(FuncCallOp op);
   LogicalResult visitSV(ReturnOp op);
   LogicalResult visitSV(IncludeOp op);
+  LogicalResult visitSV(FScanFOp op);
+  LogicalResult visitSV(SScanFOp op);
 
 public:
   ModuleEmitter &emitter;
@@ -4298,7 +4300,9 @@ LogicalResult StmtEmitter::visitSV(AssignOp op) {
 }
 
 LogicalResult StmtEmitter::visitSV(BPAssignOp op) {
-  if (op.getSrc().getDefiningOp<FuncCallProceduralOp>())
+  if (op.getSrc().getDefiningOp<FuncCallProceduralOp>() ||
+      op.getSrc().getDefiningOp<FScanFOp>() ||
+      op.getSrc().getDefiningOp<SScanFOp>())
     return success();
 
   // If the assign is emitted into logic declaration, we must not emit again.
@@ -5925,6 +5929,66 @@ LogicalResult StmtEmitter::visitSV(MacroDefOp op) {
   }
   ps.addCallback({op, false});
   setPendingNewline();
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(FScanFOp op) {
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  ps.addCallback({op, true});
+
+  if (!op.getCount().use_empty()) {
+    auto assign = cast<sv::BPAssignOp>(*op.getCount().user_begin());
+    ops.insert(assign);
+    emitExpression(assign.getDest(), ops);
+    ps << PP::nbsp << "=" << PP::nbsp;
+  }
+
+  ps << "$fscanf(";
+  ps.scopedBox(PP::ibox0, [&]() {
+    emitExpression(op.getFd(), ops);
+    ps << "," << PP::space;
+    ps.writeQuotedEscaped(op.getFormatString());
+    for (auto output : op.getOutputs()) {
+      ps << "," << PP::space;
+      emitExpression(output, ops);
+    }
+    ps << ");";
+  });
+
+  ps.addCallback({op, false});
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(SScanFOp op) {
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+  ps.addCallback({op, true});
+
+  if (!op.getCount().use_empty()) {
+    auto assign = cast<sv::BPAssignOp>(*op.getCount().user_begin());
+    ops.insert(assign);
+    emitExpression(assign.getDest(), ops);
+    ps << PP::nbsp << "=" << PP::nbsp;
+  }
+
+  ps << "$sscanf(";
+  ps.scopedBox(PP::ibox0, [&]() {
+    ps.writeQuotedEscaped(op.getInputString());
+    ps << "," << PP::space;
+    ps.writeQuotedEscaped(op.getFormatString());
+    for (auto output : op.getOutputs()) {
+      ps << "," << PP::space;
+      emitExpression(output, ops);
+    }
+    ps << ");";
+  });
+
+  ps.addCallback({op, false});
+  emitLocationInfoAndNewLine(ops);
   return success();
 }
 
