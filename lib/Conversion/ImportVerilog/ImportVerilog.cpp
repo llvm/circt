@@ -54,12 +54,19 @@ std::string circt::getSlangVersion() {
 // Diagnostics
 //===----------------------------------------------------------------------===//
 
+std::string getFileName(const slang::SourceManager &sourceManager,
+                        slang::SourceLocation loc, bool useAbsolute) {
+  if (useAbsolute)
+    return sourceManager.getFullPath(loc.buffer()).string();
+  return std::string(sourceManager.getFileName(loc));
+}
+
 /// Convert a slang `SourceLocation` to an MLIR `Location`.
 static Location convertLocation(MLIRContext *context,
                                 const slang::SourceManager &sourceManager,
-                                slang::SourceLocation loc) {
+                                slang::SourceLocation loc, bool useAbsolute) {
   if (loc && loc.buffer() != slang::SourceLocation::NoLocation.buffer()) {
-    auto fileName = sourceManager.getFileName(loc);
+    std::string fileName = getFileName(sourceManager, loc, useAbsolute);
     auto line = sourceManager.getLineNumber(loc);
     auto column = sourceManager.getColumnNumber(loc);
     return FileLineColLoc::get(context, fileName, line, column);
@@ -70,11 +77,11 @@ static Location convertLocation(MLIRContext *context,
 /// Convert a slang `SourceRange` to an MLIR `Location`.
 static Location convertLocation(MLIRContext *context,
                                 const slang::SourceManager &sourceManager,
-                                slang::SourceRange range) {
+                                slang::SourceRange range, bool useAbsolute) {
   auto start = range.start();
   auto end = range.end();
   if (start && start.buffer() != slang::SourceLocation::NoLocation.buffer()) {
-    auto fileName = sourceManager.getFileName(start);
+    std::string fileName = getFileName(sourceManager, start, useAbsolute);
     auto startLine = sourceManager.getLineNumber(start);
     auto startColumn = sourceManager.getColumnNumber(start);
     if (end && end.buffer() == start.buffer()) {
@@ -89,11 +96,13 @@ static Location convertLocation(MLIRContext *context,
 }
 
 Location Context::convertLocation(slang::SourceLocation loc) {
-  return ::convertLocation(getContext(), sourceManager, loc);
+  return ::convertLocation(getContext(), sourceManager, loc,
+                           options.absoluteSourceLocations);
 }
 
 Location Context::convertLocation(slang::SourceRange range) {
-  return ::convertLocation(getContext(), sourceManager, range);
+  return ::convertLocation(getContext(), sourceManager, range,
+                           options.absoluteSourceLocations);
 }
 
 namespace {
@@ -101,7 +110,8 @@ namespace {
 /// that will map slang diagnostics to their MLIR counterpart and emit them.
 class MlirDiagnosticClient : public slang::DiagnosticClient {
 public:
-  MlirDiagnosticClient(MLIRContext *context) : context(context) {}
+  MlirDiagnosticClient(MLIRContext *context, bool useAbsolute)
+      : context(context), absoluteSourceLocations(useAbsolute) {}
 
   void report(const slang::ReportedDiagnostic &diag) override {
     // Generate the primary MLIR diagnostic.
@@ -138,12 +148,14 @@ public:
 
   /// Convert a slang `SourceLocation` to an MLIR `Location`.
   Location convertLocation(slang::SourceLocation loc) const {
-    return ::convertLocation(context, *sourceManager, loc);
+    return ::convertLocation(context, *sourceManager, loc,
+                             absoluteSourceLocations);
   }
 
   /// Convert a slang `SourceRange` to an MLIR `Location`.
   Location convertLocation(slang::SourceRange range) const {
-    return ::convertLocation(context, *sourceManager, range);
+    return ::convertLocation(context, *sourceManager, range,
+                             absoluteSourceLocations);
   }
 
   static DiagnosticSeverity getSeverity(slang::DiagnosticSeverity severity) {
@@ -163,6 +175,7 @@ public:
 
 private:
   MLIRContext *context;
+  bool absoluteSourceLocations;
 };
 } // namespace
 
@@ -215,7 +228,8 @@ struct ImportDriver {
 LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   // Use slang's driver which conveniently packages a lot of the things we
   // need for compilation.
-  auto diagClient = std::make_shared<MlirDiagnosticClient>(mlirContext);
+  auto diagClient = std::make_shared<MlirDiagnosticClient>(
+      mlirContext, options.absoluteSourceLocations);
   driver.diagEngine.addClient(diagClient);
 
   for (const auto &value : options.commandFiles)
@@ -433,6 +447,11 @@ LogicalResult circt::preprocessVerilog(SourceMgr &sourceMgr,
   return importDriver.preprocessVerilog(os);
 }
 
+static llvm::cl::opt<bool> importVerilogAbsoluteSourceLocations(
+    "import-verilog-absolute-source-locations",
+    llvm::cl::desc("Use absolute paths for source locations"),
+    llvm::cl::init(false));
+
 /// Entry point as an MLIR translation.
 void circt::registerFromVerilogTranslation() {
   static TranslateToMLIRRegistration fromVerilog(
@@ -444,6 +463,7 @@ void circt::registerFromVerilogTranslation() {
         ImportVerilogOptions options;
         options.debugInfo = true;
         options.warningOptions.push_back("no-missing-top");
+        options.absoluteSourceLocations = importVerilogAbsoluteSourceLocations;
         if (failed(
                 importVerilog(sourceMgr, context, ts, module.get(), &options)))
           module = {};
