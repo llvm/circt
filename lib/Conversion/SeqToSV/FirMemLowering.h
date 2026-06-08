@@ -117,16 +117,6 @@ private:
 namespace llvm {
 template <>
 struct DenseMapInfo<circt::FirMemConfig> {
-  static inline circt::FirMemConfig getEmptyKey() {
-    circt::FirMemConfig cfg;
-    cfg.depth = DenseMapInfo<size_t>::getEmptyKey();
-    return cfg;
-  }
-  static inline circt::FirMemConfig getTombstoneKey() {
-    circt::FirMemConfig cfg;
-    cfg.depth = DenseMapInfo<size_t>::getTombstoneKey();
-    return cfg;
-  }
   static unsigned getHashValue(const circt::FirMemConfig &cfg) {
     return cfg.hashValue();
   }

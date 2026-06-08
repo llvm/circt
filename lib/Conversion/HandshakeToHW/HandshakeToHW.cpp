@@ -1204,6 +1204,25 @@ public:
   };
 };
 
+// Pattern for arith min/max operations.
+// These lower to: cmp + mux
+template <typename ArithOp, comb::ICmpPredicate pred>
+class MinMaxConversionPattern : public HandshakeConversionPattern<ArithOp> {
+public:
+  using HandshakeConversionPattern<ArithOp>::HandshakeConversionPattern;
+  void buildModule(ArithOp op, BackedgeBuilder &bb, RTLBuilder &s,
+                   hw::HWModulePortAccessor &ports) const override {
+    auto unwrappedIO = this->unwrapIO(s, bb, ports);
+    this->buildUnitRateJoinLogic(s, unwrappedIO, [&](ValueRange inputs) {
+      // max(a, b) = mux(cmp(a, b), a, b)
+      // min(a, b) = mux(cmp(a, b), a, b)
+      auto cmp =
+          comb::ICmpOp::create(s.b, op.getLoc(), pred, inputs[0], inputs[1]);
+      return comb::MuxOp::create(s.b, op.getLoc(), cmp, inputs[0], inputs[1]);
+    });
+  };
+};
+
 class ComparisonConversionPattern
     : public HandshakeConversionPattern<arith::CmpIOp> {
 public:
@@ -1930,6 +1949,10 @@ static LogicalResult convertFuncOp(ESITypeConverter &typeConverter,
       UnitRateConversionPattern<arith::ShRUIOp, comb::ShrUOp>,
       UnitRateConversionPattern<arith::ShRSIOp, comb::ShrSOp>,
       UnitRateConversionPattern<arith::SelectOp, comb::MuxOp>,
+      MinMaxConversionPattern<arith::MaxSIOp, comb::ICmpPredicate::sge>,
+      MinMaxConversionPattern<arith::MaxUIOp, comb::ICmpPredicate::uge>,
+      MinMaxConversionPattern<arith::MinSIOp, comb::ICmpPredicate::sle>,
+      MinMaxConversionPattern<arith::MinUIOp, comb::ICmpPredicate::ule>,
       // HW operations.
       StructCreateConversionPattern,
       // Handshake operations.

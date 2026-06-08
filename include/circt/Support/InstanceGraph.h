@@ -586,13 +586,6 @@ template <>
 struct llvm::DenseMapInfo<circt::igraph::InstancePath> {
   using ArrayRefInfo =
       llvm::DenseMapInfo<ArrayRef<circt::igraph::InstanceOpInterface>>;
-  static circt::igraph::InstancePath getEmptyKey() {
-    return circt::igraph::InstancePath(ArrayRefInfo::getEmptyKey());
-  }
-
-  static circt::igraph::InstancePath getTombstoneKey() {
-    return circt::igraph::InstancePath(ArrayRefInfo::getTombstoneKey());
-  }
 
   static llvm::hash_code getHashValue(circt::igraph::InstancePath path) {
     auto range =

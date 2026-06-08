@@ -51,9 +51,8 @@ struct AlwaysLikeOpInfo : public llvm::DenseMapInfo<Operation *> {
     // Trivially the same.
     if (lhs == rhs)
       return true;
-    // Filter out tombstones and empty ops.
-    if (lhs == getTombstoneKey() || lhs == getEmptyKey() ||
-        rhs == getTombstoneKey() || rhs == getEmptyKey())
+    // Filter out null ops.
+    if (!lhs || !rhs)
       return false;
     // Compare attributes.
     if (lhs->getName() != rhs->getName() ||

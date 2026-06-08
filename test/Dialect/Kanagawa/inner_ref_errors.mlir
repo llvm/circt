@@ -23,7 +23,7 @@ kanagawa.class sym @InvalidGetVar {
     %parent = kanagawa.path [
       #kanagawa.step<parent : !kanagawa.scoperef<@foo::@InvalidGetVar>>
     ]
-    // expected-error @+1 {{'kanagawa.get_var' op result #0 must be memref of any type values, but got 'i32'}}
+    // expected-error @+1 {{'kanagawa.get_var' op result #0 must be memref of any non-token type values, but got 'i32'}}
     %var = kanagawa.get_var %parent, @var : !kanagawa.scoperef<@foo::@InvalidGetVar> -> i32
     kanagawa.return
   }
