@@ -59,7 +59,7 @@ jobs:
       # Clone the CIRCT repo and its submodules. Do shallow clone to save clone
       # time.
       - name: Get CIRCT and LLVM
-        uses: actions/checkout@v3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 2
           submodules: "true"
@@ -76,7 +76,7 @@ jobs:
           shasum -a 256 circt-full-sources.tar.gz | cut -d ' ' -f1 > circt-full-sources.tar.gz.sha256
 
       - name: Upload Source Archive
-        uses: AButler/upload-release-assets@v3.0
+        uses: AButler/upload-release-assets@34491005a5d7ec239a784e460807ce844fde7962 # v4.0.0
         with:
           # The * will grab the .sha256 as well
           files: circt-full-sources.tar.gz*
@@ -90,7 +90,7 @@ jobs:
       # Clone CIRCT as shallow as possible.  We just need the `.github`
       # directory.
       - name: Get CIRCT and LLVM
-        uses: actions/checkout@v3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 1
           submodules: "false"

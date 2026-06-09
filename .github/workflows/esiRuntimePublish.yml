@@ -42,13 +42,13 @@ jobs:
 
     steps:
       - name: Get CIRCT
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
           submodules: false
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.12"
 
@@ -86,7 +86,7 @@ jobs:
           echo WHL=`ls *.whl` >> "$GITHUB_OUTPUT"
 
       - name: Upload wheels as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ steps.whl-name.outputs.WHL }}
           path: wheelhouse/${{ steps.whl-name.outputs.WHL }}
@@ -105,7 +105,7 @@ jobs:
 
     steps:
       - name: Download wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: ./wheelhouse/
           merge-multiple: true
@@ -115,7 +115,7 @@ jobs:
         working-directory: ./wheelhouse/
 
       - name: Upload wheels to pypi
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch')
         with:
           packages-dir: wheelhouse/
