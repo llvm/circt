@@ -3611,6 +3611,10 @@ function automatic void Swrite(string testStr, string otherString, ref string ou
    // CHECK: [[LV:%.+]] = moore.variable : <l64>
    logic [63:0] logicVector;
 
+   // $swrite with a single arg
+   // CHECK-NOT: moore.fstring_to_string
+   $swrite(outputString);
+
    // $swrite to a string output
    // CHECK: [[FMTSTR1:%.+]] = moore.fmt.string [[STR1]]
    // CHECK-NEXT: [[SPC:%.+]] = moore.fmt.literal " "
