@@ -483,28 +483,50 @@ hw.module @mul_two_bit(in %lhs: i2, in %rhs: i2, out out: i2) {
   hw.output %0 : i2
 }
 
-// CHECK-LABEL: @divu_const_3
+// CHECK-LABEL: @divmodu_const_3
 // CHECK-NOT: comb.divu
-// ALLOW_ARITH-LABEL: @divu_const_3
+// CHECK-NOT: comb.modu
+// CHECK: hw.output
+// ALLOW_ARITH-LABEL: @divmodu_const_3
 // ALLOW_ARITH-NOT: comb.divu
-// ALLOW_ARITH: hw.constant 171 : i16
-// ALLOW_ARITH: comb.mul
-// ALLOW_ARITH: comb.extract
-hw.module @divu_const_3(in %lhs: i8, out out: i8) {
+// ALLOW_ARITH-NOT: comb.modu
+// ALLOW_ARITH: %[[C3:.+]] = hw.constant 3 : i8
+// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i8
+// ALLOW_ARITH: %[[WIDE:.+]] = comb.concat %[[C0]], %lhs : i8, i8
+// ALLOW_ARITH: %[[MAGIC:.+]] = hw.constant 171 : i16
+// ALLOW_ARITH: %[[PROD:.+]] = comb.mul bin %[[WIDE]], %[[MAGIC]] : i16
+// ALLOW_ARITH: %[[HI:.+]] = comb.extract %[[PROD]] from 8 : (i16) -> i8
+// ALLOW_ARITH: %[[Q_BITS:.+]] = comb.extract %[[HI]] from 1 : (i8) -> i7
+// ALLOW_ARITH: %[[FALSE:.+]] = hw.constant false
+// ALLOW_ARITH: %[[Q:.+]] = comb.concat %[[FALSE]], %[[Q_BITS]] : i1, i7
+// ALLOW_ARITH: %[[Q_MUL_RHS:.+]] = comb.mul %[[Q]], %[[C3]] : i8
+// ALLOW_ARITH: %[[REM:.+]] = comb.sub %lhs, %[[Q_MUL_RHS]] : i8
+// ALLOW_ARITH: hw.output %[[Q]], %[[REM]] : i8, i8
+hw.module @divmodu_const_3(in %lhs: i8, out out_div: i8, out out_mod: i8) {
   %rhs = hw.constant 3 : i8
   %div = comb.divu %lhs, %rhs : i8
-  hw.output %div : i8
+  %mod = comb.modu %lhs, %rhs : i8
+  hw.output %div, %mod : i8, i8
 }
 
 // CHECK-LABEL: @divu_const_7
 // CHECK-NOT: comb.divu
+// CHECK: hw.output
 // ALLOW_ARITH-LABEL: @divu_const_7
 // ALLOW_ARITH-NOT: comb.divu
-// ALLOW_ARITH: hw.constant 37 : i16
-// ALLOW_ARITH: comb.mul
-// ALLOW_ARITH: comb.sub
-// ALLOW_ARITH: comb.add
-// ALLOW_ARITH: comb.extract
+// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i8
+// ALLOW_ARITH: %[[WIDE:.+]] = comb.concat %[[C0]], %lhs : i8, i8
+// ALLOW_ARITH: %[[MAGIC:.+]] = hw.constant 37 : i16
+// ALLOW_ARITH: %[[PROD:.+]] = comb.mul bin %[[WIDE]], %[[MAGIC]] : i16
+// ALLOW_ARITH: %[[HI:.+]] = comb.extract %[[PROD]] from 8 : (i16) -> i8
+// ALLOW_ARITH: %[[DIFF:.+]] = comb.sub %lhs, %[[HI]] : i8
+// ALLOW_ARITH: %[[DIFF_BITS:.+]] = comb.extract %[[DIFF]] from 1 : (i8) -> i7
+// ALLOW_ARITH: %[[FALSE:.+]] = hw.constant false
+// ALLOW_ARITH: %[[DIFF_SHR:.+]] = comb.concat %[[FALSE]], %[[DIFF_BITS]] : i1, i7
+// ALLOW_ARITH: %[[ADJUSTED:.+]] = comb.add %[[HI]], %[[DIFF_SHR]] : i8
+// ALLOW_ARITH: %[[Q_BITS:.+]] = comb.extract %[[ADJUSTED]] from 2 : (i8) -> i6
+// ALLOW_ARITH: %[[Q:.+]] = comb.concat {{.+}}, %[[Q_BITS]] : i2, i6
+// ALLOW_ARITH: hw.output %[[Q]] : i8
 hw.module @divu_const_7(in %lhs: i8, out out: i8) {
   %rhs = hw.constant 7 : i8
   %div = comb.divu %lhs, %rhs : i8
@@ -513,86 +535,83 @@ hw.module @divu_const_7(in %lhs: i8, out out: i8) {
 
 // CHECK-LABEL: @divu_const_10
 // CHECK-NOT: comb.divu
+// CHECK: hw.output
 // ALLOW_ARITH-LABEL: @divu_const_10
 // ALLOW_ARITH-NOT: comb.divu
-// ALLOW_ARITH: hw.constant 205 : i16
-// ALLOW_ARITH: comb.mul
-// ALLOW_ARITH: comb.extract
+// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i8
+// ALLOW_ARITH: %[[WIDE:.+]] = comb.concat %[[C0]], %lhs : i8, i8
+// ALLOW_ARITH: %[[MAGIC:.+]] = hw.constant 205 : i16
+// ALLOW_ARITH: %[[PROD:.+]] = comb.mul bin %[[WIDE]], %[[MAGIC]] : i16
+// ALLOW_ARITH: %[[HI:.+]] = comb.extract %[[PROD]] from 8 : (i16) -> i8
+// ALLOW_ARITH: %[[Q_BITS:.+]] = comb.extract %[[HI]] from 3 : (i8) -> i5
+// ALLOW_ARITH: %[[C0_I3:.+]] = hw.constant 0 : i3
+// ALLOW_ARITH: %[[Q:.+]] = comb.concat %[[C0_I3]], %[[Q_BITS]] : i3, i5
+// ALLOW_ARITH: hw.output %[[Q]] : i8
 hw.module @divu_const_10(in %lhs: i8, out out: i8) {
   %rhs = hw.constant 10 : i8
   %div = comb.divu %lhs, %rhs : i8
   hw.output %div : i8
 }
 
-// CHECK-LABEL: @modu_const_3
-// CHECK-NOT: comb.modu
-// ALLOW_ARITH-LABEL: @modu_const_3
-// ALLOW_ARITH-NOT: comb.modu
-// ALLOW_ARITH: hw.constant 3 : i8
-// ALLOW_ARITH: hw.constant 171 : i16
-// ALLOW_ARITH: comb.mul
-// ALLOW_ARITH: comb.sub
-hw.module @modu_const_3(in %lhs: i8, out out: i8) {
-  %rhs = hw.constant 3 : i8
-  %mod = comb.modu %lhs, %rhs : i8
-  hw.output %mod : i8
-}
-
-// CHECK-LABEL: @divs_const_3
+// CHECK-LABEL: @divmods_const_3
 // CHECK-NOT: comb.divs
-// ALLOW_ARITH-LABEL: @divs_const_3
+// CHECK-NOT: comb.mods
+// CHECK: hw.output
+// ALLOW_ARITH-LABEL: @divmods_const_3
 // ALLOW_ARITH-NOT: comb.divs
-// ALLOW_ARITH: hw.constant 86 : i16
-// ALLOW_ARITH: comb.mul
-// ALLOW_ARITH: comb.add
-hw.module @divs_const_3(in %lhs: i8, out out: i8) {
+// ALLOW_ARITH-NOT: comb.mods
+// ALLOW_ARITH: %[[C3:.+]] = hw.constant 3 : i8
+// ALLOW_ARITH: %[[SIGN:.+]] = comb.extract %lhs from 7 : (i8) -> i1
+// ALLOW_ARITH: %[[PAD:.+]] = comb.replicate %[[SIGN]] : (i1) -> i8
+// ALLOW_ARITH: %[[WIDE:.+]] = comb.concat %[[PAD]], %lhs : i8, i8
+// ALLOW_ARITH: %[[MAGIC:.+]] = hw.constant 86 : i16
+// ALLOW_ARITH: %[[PROD:.+]] = comb.mul bin %[[WIDE]], %[[MAGIC]] : i16
+// ALLOW_ARITH: %[[HI:.+]] = comb.extract %[[PROD]] from 8 : (i16) -> i8
+// ALLOW_ARITH: %[[SIGNBIT:.+]] = comb.extract %[[HI]] from 7 : (i8) -> i1
+// ALLOW_ARITH: %[[C0_I7:.+]] = hw.constant 0 : i7
+// ALLOW_ARITH: %[[SIGNPAD:.+]] = comb.concat %[[C0_I7]], %[[SIGNBIT]] : i7, i1
+// ALLOW_ARITH: %[[Q:.+]] = comb.add %[[HI]], %[[SIGNPAD]] : i8
+// ALLOW_ARITH: %[[Q_MUL_RHS:.+]] = comb.mul %[[Q]], %[[C3]] : i8
+// ALLOW_ARITH: %[[REM:.+]] = comb.sub %lhs, %[[Q_MUL_RHS]] : i8
+// ALLOW_ARITH: hw.output %[[Q]], %[[REM]] : i8, i8
+hw.module @divmods_const_3(in %lhs: i8, out out_div: i8, out out_mod: i8) {
   %rhs = hw.constant 3 : i8
   %div = comb.divs %lhs, %rhs : i8
-  hw.output %div : i8
+  %mod = comb.mods %lhs, %rhs : i8
+  hw.output %div, %mod : i8, i8
 }
 
-// CHECK-LABEL: @divs_const_neg3
+// CHECK-LABEL: @divmods_const_neg3
 // CHECK-NOT: comb.divs
-// ALLOW_ARITH-LABEL: @divs_const_neg3
+// CHECK-NOT: comb.mods
+// CHECK: hw.output
+// ALLOW_ARITH-LABEL: @divmods_const_neg3
 // ALLOW_ARITH-NOT: comb.divs
-// ALLOW_ARITH: hw.constant 85 : i16
-// ALLOW_ARITH: comb.mul
-// ALLOW_ARITH: comb.sub
-// ALLOW_ARITH: comb.add
-hw.module @divs_const_neg3(in %lhs: i8, out out: i8) {
+// ALLOW_ARITH-NOT: comb.mods
+// ALLOW_ARITH: %[[C_NEG3:.+]] = hw.constant -3 : i8
+// ALLOW_ARITH: %[[SIGN:.+]] = comb.extract %lhs from 7 : (i8) -> i1
+// ALLOW_ARITH: %[[PAD:.+]] = comb.replicate %[[SIGN]] : (i1) -> i8
+// ALLOW_ARITH: %[[WIDE:.+]] = comb.concat %[[PAD]], %lhs : i8, i8
+// ALLOW_ARITH: %[[MAGIC:.+]] = hw.constant 85 : i16
+// ALLOW_ARITH: %[[PROD:.+]] = comb.mul bin %[[WIDE]], %[[MAGIC]] : i16
+// ALLOW_ARITH: %[[HI:.+]] = comb.extract %[[PROD]] from 8 : (i16) -> i8
+// ALLOW_ARITH: %[[ADJUST:.+]] = comb.sub %[[HI]], %lhs : i8
+// ALLOW_ARITH: %[[SHIFT_SIGN:.+]] = comb.extract %[[ADJUST]] from 7 : (i8) -> i1
+// ALLOW_ARITH: %[[SHIFT_BITS:.+]] = comb.extract %[[ADJUST]] from 1 : (i8) -> i6
+// ALLOW_ARITH: %[[SHIFT_PAD:.+]] = comb.replicate %[[SHIFT_SIGN]] : (i1) -> i2
+// ALLOW_ARITH: %[[SHIFTED:.+]] = comb.concat %[[SHIFT_PAD]], %[[SHIFT_BITS]] : i2, i6
+// ALLOW_ARITH: %[[SIGNBIT:.+]] = comb.extract %[[SHIFTED]] from 7 : (i8) -> i1
+// ALLOW_ARITH: %[[C0_I7:.+]] = hw.constant 0 : i7
+// ALLOW_ARITH: %[[SIGNPAD:.+]] = comb.concat %[[C0_I7]], %[[SIGNBIT]] : i7, i1
+// ALLOW_ARITH: %[[Q:.+]] = comb.add %[[SHIFTED]], %[[SIGNPAD]] : i8
+// ALLOW_ARITH: %[[Q_MUL_RHS:.+]] = comb.mul %[[Q]], %[[C_NEG3]] : i8
+// ALLOW_ARITH: %[[REM:.+]] = comb.sub %lhs, %[[Q_MUL_RHS]] : i8
+// ALLOW_ARITH: hw.output %[[Q]], %[[REM]] : i8, i8
+hw.module @divmods_const_neg3(in %lhs: i8, out out_div: i8, out out_mod: i8) {
   %rhs = hw.constant -3 : i8
   %div = comb.divs %lhs, %rhs : i8
-  hw.output %div : i8
-}
-
-// CHECK-LABEL: @mods_const_3
-// CHECK-NOT: comb.mods
-// ALLOW_ARITH-LABEL: @mods_const_3
-// ALLOW_ARITH-NOT: comb.mods
-// ALLOW_ARITH: hw.constant 3 : i8
-// ALLOW_ARITH: hw.constant 86 : i16
-// ALLOW_ARITH: comb.mul
-// ALLOW_ARITH: comb.add
-// ALLOW_ARITH: comb.sub
-hw.module @mods_const_3(in %lhs: i8, out out: i8) {
-  %rhs = hw.constant 3 : i8
   %mod = comb.mods %lhs, %rhs : i8
-  hw.output %mod : i8
-}
-
-// CHECK-LABEL: @mods_const_neg3
-// CHECK-NOT: comb.mods
-// ALLOW_ARITH-LABEL: @mods_const_neg3
-// ALLOW_ARITH-NOT: comb.mods
-// ALLOW_ARITH: hw.constant -3 : i8
-// ALLOW_ARITH: hw.constant 85 : i16
-// ALLOW_ARITH: comb.mul
-// ALLOW_ARITH: comb.sub
-// ALLOW_ARITH: comb.add
-hw.module @mods_const_neg3(in %lhs: i8, out out: i8) {
-  %rhs = hw.constant -3 : i8
-  %mod = comb.mods %lhs, %rhs : i8
-  hw.output %mod : i8
+  hw.output %div, %mod : i8, i8
 }
 
 // CHECK-LABEL: @divs_const_1
@@ -616,32 +635,25 @@ hw.module @divs_const_1(in %lhs: i8, out out: i8) {
 // CHECK: hw.constant -1 : i8
 // ALLOW_ARITH-LABEL: @divs_const_neg1
 // ALLOW_ARITH-NOT: comb.divs
-// ALLOW_ARITH: hw.constant 0 : i8
-// ALLOW_ARITH: comb.sub
+// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i8
+// ALLOW_ARITH: %[[NEG:.+]] = comb.sub %[[C0]], %lhs : i8
+// ALLOW_ARITH: hw.output %[[NEG]] : i8
 hw.module @divs_const_neg1(in %lhs: i8, out out: i8) {
   %rhs = hw.constant -1 : i8
   %div = comb.divs %lhs, %rhs : i8
   hw.output %div : i8
 }
 
-// CHECK-LABEL: @divu_const_0
+// CHECK-LABEL: @divmodu_const_0
 // CHECK: hw.constant 0 : i8
-// ALLOW_ARITH-LABEL: @divu_const_0
-// ALLOW_ARITH: hw.constant 0 : i8
-hw.module @divu_const_0(in %lhs: i8, out out: i8) {
+// ALLOW_ARITH-LABEL: @divmodu_const_0
+// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i8
+// ALLOW_ARITH: hw.output %[[C0]], %[[C0]] : i8, i8
+hw.module @divmodu_const_0(in %lhs: i8, out out_div: i8, out out_mod: i8) {
   %rhs = hw.constant 0 : i8
   %div = comb.divu %lhs, %rhs : i8
-  hw.output %div : i8
-}
-
-// CHECK-LABEL: @modu_const_0
-// CHECK: hw.constant 0 : i8
-// ALLOW_ARITH-LABEL: @modu_const_0
-// ALLOW_ARITH: hw.constant 0 : i8
-hw.module @modu_const_0(in %lhs: i8, out out: i8) {
-  %rhs = hw.constant 0 : i8
   %mod = comb.modu %lhs, %rhs : i8
-  hw.output %mod : i8
+  hw.output %div, %mod : i8, i8
 }
 
 // CHECK-LABEL: @const_divmod_mods_neg1_i3
@@ -649,7 +661,8 @@ hw.module @modu_const_0(in %lhs: i8, out out: i8) {
 // CHECK: hw.constant 0 : i3
 // ALLOW_ARITH-LABEL: @const_divmod_mods_neg1_i3
 // ALLOW_ARITH-NOT: comb.mods
-// ALLOW_ARITH: hw.constant 0 : i3
+// ALLOW_ARITH: %[[C0:.+]] = hw.constant 0 : i3
+// ALLOW_ARITH: hw.output %[[C0]] : i3
 hw.module @const_divmod_mods_neg1_i3(in %lhs: i3, out out: i3) {
   %c_neg1_i3 = hw.constant -1 : i3
   %0 = comb.mods %lhs, %c_neg1_i3 : i3
