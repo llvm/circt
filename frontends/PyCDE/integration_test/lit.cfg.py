@@ -58,7 +58,7 @@ llvm_config.with_environment('LD_LIBRARY_PATH', [config.llvm_lib_dir],
 
 # Set the timeout, if requested.
 if config.timeout is not None and config.timeout != "":
-  lit_config.maxIndividualTestTime = int(config.timeout)
+  config.maxIndividualTestTime = int(config.timeout)
 
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
 # subdirectories contain auxiliary inputs for various tests in their parent
