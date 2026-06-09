@@ -971,6 +971,7 @@ struct StmtVisitor {
     bool isDisplay = false;
     bool isFDisplay = false;
     bool isSWrite = false;
+    bool isSFormat = false;
     bool appendNewline = false;
     IntFormat defaultFormat = IntFormat::Decimal;
     switch (nameId) {
@@ -1042,8 +1043,10 @@ struct StmtVisitor {
       isFDisplay = true;
       defaultFormat = IntFormat::HexLower;
       break;
-    case ksn::SWrite:
     case ksn::SFormat:
+      isSFormat = true;
+      break;
+    case ksn::SWrite:
       isSWrite = true;
       break;
     case ksn::SWriteB:
@@ -1099,12 +1102,19 @@ struct StmtVisitor {
     // However, Section 21.3.3 explains that the output of $sformat/$swrite
     // is assigned as if it were cast from a string literal (Section 5.9),
     // so this implementation casts the string to the target value.
-    if (isSWrite) {
+    if (isSWrite || isSFormat) {
+      if (isSFormat && args.size() < 2)
+        return emitError(loc) << "$sformat requires at least 2 arguments";
+      if (isSWrite && args.size() < 1)
+        return emitError(loc) << "$swrite requires at least 1 argument";
+
       auto fmtValue =
           context.convertFormatString(args.subspan(1), loc, defaultFormat,
                                       /*appendNewline=*/false);
       if (failed(fmtValue))
         return failure();
+      if (*fmtValue == Value{})
+        return true;
       auto strValue =
           moore::FormatStringToStringOp::create(builder, loc, *fmtValue);
       auto *lhsExpr = args[0];
