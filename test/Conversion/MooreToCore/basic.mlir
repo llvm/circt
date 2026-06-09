@@ -386,7 +386,7 @@ func.func @Statements(%arg0: !moore.i42) {
 }
 
 // CHECK-LABEL: func @FormatStrings
-func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64, %arg3: !moore.string) {
+func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64, %arg3: !moore.string, %arg4: !moore.i8) {
   // CHECK: [[TMP:%.+]] = sim.fmt.literal "hello"
   %0 = moore.fmt.literal "hello"
   // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
@@ -440,6 +440,11 @@ func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64
 
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
+
+  // CHECK: sim.fmt.char %arg0 : i42
+  moore.fmt.char %arg0 : i42
+  // CHECK: sim.fmt.char %arg4 : i8
+  moore.fmt.char %arg4 : i8
   return
 }
 
