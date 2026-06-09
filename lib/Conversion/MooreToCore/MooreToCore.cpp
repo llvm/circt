@@ -2624,6 +2624,17 @@ struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
   }
 };
 
+struct FormatCharOpConversion
+    : public OpConversionPattern<moore::FormatCharOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(moore::FormatCharOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::FormatCharOp>(op, adaptor.getValue());
+    return success();
+  }
+};
+
 struct StringLenOpConversion : public OpConversionPattern<StringLenOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3573,6 +3584,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatHierPathOpConversion,
     FormatIntOpConversion,
     FormatRealOpConversion,
+    FormatCharOpConversion,
     DisplayBIOpConversion,
     FDisplayBIOpConversion,
 

@@ -248,6 +248,20 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   if (0) $fatal(1, "%f", r);
 endfunction
 
+// CHECK-LABEL: func.func private @FormatCharSpecifier(
+function void FormatCharSpecifier();
+  byte ch = 88;
+  int ch_int = 235800858;
+  // CHECK: moore.fmt.char {{%.+}} : i8
+  $display("%c", ch);
+  // CHECK: moore.fmt.char {{%.+}} : i8
+  $display("%C", ch);
+  // CHECK: moore.fmt.char {{%.+}} : i32
+  $display("%c", ch_int);
+  // CHECK: moore.fmt.char {{%.+}} : i32
+  $display("%C", ch_int);
+endfunction
+
 // IEEE 1800-2017 § 20.8 "Math functions"
 // CHECK-LABEL: func.func private @MathBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32

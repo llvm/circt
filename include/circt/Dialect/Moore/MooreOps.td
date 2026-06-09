@@ -2839,6 +2839,20 @@ def FormatHierPathOp : MooreOp<"fmt.hier_path", [Pure]> {
   let assemblyFormat = "(`escaped` $useEscapes^)? attr-dict";
 }
 
+def FormatCharOp : MooreOp<"fmt.char", [Pure]> {
+  let summary = "Display in ASCII character format";
+  let description = [{
+    Format string fragment that formats the given integer value as a single
+    ASCII character. This corresponds to the `%c` (or `%C`) format specifier
+    in SystemVerilog.
+
+    See IEEE 1800-2017 § 21.2.1.2 "Format specifications".
+  }];
+  let arguments = (ins IntType:$value);
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "$value `:` type($value) attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions
 //===----------------------------------------------------------------------===//
