@@ -3858,6 +3858,48 @@ Value Context::convertSystemCall(
     return op.getFound();
   }
 
+  if (nameId == ksn::FScanf) {
+    auto fd = convertRvalueExpression(
+        *args[0], moore::IntType::getInt(builder.getContext(), 32));
+    if (!fd)
+      return {};
+    auto *fmtLit =
+        args[1]->unwrapImplicitConversions().as_if<slang::ast::StringLiteral>();
+    if (!fmtLit)
+      return (mlir::emitError(loc)
+              << "$fscanf requires a string literal format string"),
+             Value{};
+    auto scanFmt = convertScanString(fmtLit->getValue(), args.subspan(2), loc);
+    if (failed(scanFmt))
+      return {};
+    if (!*scanFmt) {
+      auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
+      return moore::ConstantOp::create(builder, loc, i32Ty, 0);
+    }
+    return moore::FScanFBIOp::create(builder, loc, fd, *scanFmt);
+  }
+
+  if (nameId == ksn::SScanf) {
+    auto str =
+        convertRvalueExpression(*args[0], moore::StringType::get(getContext()));
+    if (!str)
+      return {};
+    auto *fmtLit =
+        args[1]->unwrapImplicitConversions().as_if<slang::ast::StringLiteral>();
+    if (!fmtLit)
+      return (mlir::emitError(loc)
+              << "$sscanf requires a string literal format string"),
+             Value{};
+    auto scanFmt = convertScanString(fmtLit->getValue(), args.subspan(2), loc);
+    if (failed(scanFmt))
+      return {};
+    if (!*scanFmt) {
+      auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
+      return moore::ConstantOp::create(builder, loc, i32Ty, 0);
+    }
+    return moore::SScanFBIOp::create(builder, loc, str, *scanFmt);
+  }
+
   // Unrecognized system call
   emitError(loc) << "unsupported system call `" << name << "`";
   return {};

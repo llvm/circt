@@ -455,6 +455,19 @@ def FormatStringType : MooreTypeDef<"FormatString"> {
   }];
 }
 
+def ScanStringType : MooreTypeDef<"ScanString"> {
+  let mnemonic = "scan_string";
+  let summary = "a scan format string type";
+  let description = [{
+    Represents a parsed scan format directive specifying how to read values
+    from an input string or file. Each fragment captures a format specifier
+    and, for non-suppressed assignments, the destination lvalue reference
+    where the parsed value will be stored.
+
+    See IEEE 1800-2017 § 21.3.4.3 "Reading formatted data".
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Constraints
 //===----------------------------------------------------------------------===//

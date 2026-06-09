@@ -412,6 +412,15 @@ struct Context {
       moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
       bool appendNewline = false);
 
+  /// Convert a scan format string literal with format specifiers and
+  /// destination lvalue expressions into a `!moore.scan_string` value.
+  /// Returns failure if an error occurs. Returns a null value if the format
+  /// string is trivially empty. Otherwise returns the scan format string.
+  FailureOr<Value>
+  convertScanString(StringRef formatStr,
+                    std::span<const slang::ast::Expression *const> destinations,
+                    Location loc);
+
   /// Convert system function calls. Returns a null `Value` on failure after
   /// emitting an error.
   Value convertSystemCall(const slang::ast::SystemSubroutine &subroutine,
