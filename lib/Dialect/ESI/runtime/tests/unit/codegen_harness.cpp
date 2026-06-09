@@ -313,6 +313,124 @@ void testArrayOfIntegers() {
 }
 
 // ---------------------------------------------------------------------------
+// Packed arrays: element storage size != on-wire element width
+// ---------------------------------------------------------------------------
+//
+// These exercise the per-element bit-unpacking path. Unlike `Arr4` (whose
+// `ui8` elements are whole bytes), the C++ `std::array` here is wider in
+// memory than the bit-packed wire layout, so a flat byte copy would both
+// truncate the field and misplace every element after the first.
+
+void testSubByteUnsignedArray() {
+  // `8 x ui3` => 24 wire bits (3 bytes) packed into a `std::array<uint8_t, 8>`
+  // (8 bytes in memory). Each element occupies its own 3-bit window.
+  U3Arr a;
+  a.vals({1, 2, 3, 4, 5, 6, 7, 0});
+  const std::array<uint8_t, 8> expected = {1, 2, 3, 4, 5, 6, 7, 0};
+  auto whole = a.vals();
+  for (std::size_t i = 0; i < 8; ++i) {
+    assert(whole[i] == expected[i]);
+    assert(a.vals(i) == expected[i]);
+  }
+  // bit-packed LSB-first: elem i at bits [3i, 3i+2].
+  expectBytes(a, std::array<uint8_t, 3>{0xD1, 0x58, 0x1F}, "U3Arr packed");
+
+  // A single element straddling a byte boundary (elem 2 spans bits 6..8).
+  U3Arr b;
+  b.vals(2, 7);
+  assert(b.vals(2) == 7);
+  for (std::size_t i = 0; i < 8; ++i)
+    if (i != 2)
+      assert(b.vals(i) == 0);
+  expectBytes(b, std::array<uint8_t, 3>{0xC0, 0x01, 0x00}, "U3Arr cross-byte");
+}
+
+void testSubByteBoolArray() {
+  // `8 x ui1` => 8 wire bits (1 byte) packed into a `std::array<bool, 8>`
+  // (8 bytes in memory). Each element is a single bit; reads must yield a
+  // valid `bool` (0/1) rather than dumping a raw byte into bool storage.
+  Bits1Arr a;
+  const std::array<bool, 8> flags = {true, true,  false, false,
+                                     true, false, true,  true};
+  a.flags(flags);
+  auto whole = a.flags();
+  for (std::size_t i = 0; i < 8; ++i) {
+    assert(whole[i] == flags[i]);
+    assert(a.flags(i) == flags[i]);
+  }
+  expectBytes(a, std::array<uint8_t, 1>{0xD3}, "Bits1Arr");
+}
+
+void testSubByteSignedArray() {
+  // `4 x si5` => 20 wire bits (3 bytes) packed into a `std::array<int8_t, 4>`
+  // (4 bytes in memory). Reads must sign-extend the 5-bit value.
+  S5Arr a;
+  const std::array<int8_t, 4> vals = {-1, -16, 15, 0};
+  a.vals(vals);
+  auto whole = a.vals();
+  for (std::size_t i = 0; i < 4; ++i) {
+    assert(whole[i] == vals[i]);
+    assert(a.vals(i) == vals[i]);
+  }
+  expectBytes(a, std::array<uint8_t, 3>{0x1F, 0x3E, 0x00}, "S5Arr");
+}
+
+void testOddWidthArray() {
+  // `2 x ui24` => 48 wire bits (6 bytes) packed into a `std::array<uint32_t,
+  // 2>` (8 bytes in memory). The element wire stride (3 bytes) differs from
+  // the storage stride (4 bytes), so a flat copy would corrupt elem 1.
+  U24Arr a;
+  const std::array<uint32_t, 2> vals = {0xABCDEFu, 0x123456u};
+  a.vals(vals);
+  auto whole = a.vals();
+  for (std::size_t i = 0; i < 2; ++i) {
+    assert(whole[i] == vals[i]);
+    assert(a.vals(i) == vals[i]);
+  }
+  expectBytes(a, std::array<uint8_t, 6>{0xEF, 0xCD, 0xAB, 0x56, 0x34, 0x12},
+              "U24Arr");
+}
+
+void testSubByteStructArray() {
+  // `4 x {ui3 hi, ui2 lo}`: each element is 5 wire bits (20 bits = 3 bytes)
+  // but a padded 1-byte `SbCell` in memory, so the whole-array accessor must
+  // unpack each element from its own 5-bit window. Within a cell `lo` lands
+  // at bits 0..1 and `hi` at bits 2..4 (wire order is reversed manifest
+  // order).
+  SbCellArr a;
+  std::array<SbCell, 4> cells;
+  cells[0] = SbCell(1, 0);
+  cells[1] = SbCell(2, 1);
+  cells[2] = SbCell(3, 2);
+  cells[3] = SbCell(7, 3);
+  a.cells(cells);
+
+  auto whole = a.cells();
+  for (std::size_t i = 0; i < 4; ++i) {
+    assert(whole[i].hi() == cells[i].hi());
+    assert(whole[i].lo() == cells[i].lo());
+    assert(a.cells(i).hi() == cells[i].hi());
+    assert(a.cells(i).lo() == cells[i].lo());
+  }
+  // cell i value = (hi << 2) | lo, placed at bits [5i, 5i+4].
+  expectBytes(a, std::array<uint8_t, 3>{0x24, 0xB9, 0x0F}, "SbCellArr");
+
+  // Indexed setter on a single element straddling a byte boundary (cell 1
+  // spans bits 5..9). Other cells stay zero.
+  SbCellArr b;
+  b.cells(1, SbCell(7, 3));
+  assert(b.cells(1).hi() == 7);
+  assert(b.cells(1).lo() == 3);
+  for (std::size_t i = 0; i < 4; ++i)
+    if (i != 1) {
+      assert(b.cells(i).hi() == 0);
+      assert(b.cells(i).lo() == 0);
+    }
+  expectBytes(b, std::array<uint8_t, 3>{0xE0, 0x03, 0x00},
+              "SbCellArr cross-byte");
+}
+
+// ---------------------------------------------------------------------------
 // Unions
 // ---------------------------------------------------------------------------
 
@@ -683,6 +801,11 @@ int main() {
   testNestedStruct();
   testNestedStructMisaligned();
   testArrayOfIntegers();
+  testSubByteUnsignedArray();
+  testSubByteBoolArray();
+  testSubByteSignedArray();
+  testOddWidthArray();
+  testSubByteStructArray();
   testUnion();
   testWindowList();
   testWideUnsigned();
