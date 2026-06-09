@@ -1826,39 +1826,41 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  // This function is used when we flatten neighboring operands of a
-  // (variadic) concat into a new vesion of the concat.  first/last indices
-  // are inclusive.
-  auto flattenConcat = [&](size_t firstOpIndex, size_t lastOpIndex,
-                           ValueRange replacements) -> LogicalResult {
-    SmallVector<Value, 4> newOperands;
-    newOperands.append(inputs.begin(), inputs.begin() + firstOpIndex);
-    newOperands.append(replacements.begin(), replacements.end());
-    newOperands.append(inputs.begin() + lastOpIndex + 1, inputs.end());
-    if (newOperands.size() == 1)
-      replaceOpAndCopyNamehint(rewriter, op, newOperands[0]);
-    else
-      replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, op.getType(),
-                                                  newOperands);
-    return success();
-  };
+  // Holds the not-yet-processed operands in reverse order!
+  SmallVector<Value, 4> pendingOperands, processedOperands;
+  bool anyOperandChanged;
 
-  Value commonOperand = inputs[0];
-  for (size_t i = 0; i != size; ++i) {
-    // Check to see if all operands are the same.
-    if (inputs[i] != commonOperand)
-      commonOperand = Value();
+  auto pushPendingOperands = [&](ValueRange operands) {
+    auto size = operands.size();
+    for (size_t i = 0; i != size; ++i)
+      pendingOperands.push_back(operands[size - 1 - i]);
+    anyOperandChanged = true;
+  };
+  auto replacePrevOperand = [&](Value replacement) {
+    processedOperands.back() = replacement;
+    anyOperandChanged = true;
+  };
+  pendingOperands.reserve(size);
+  pushPendingOperands(inputs);
+  anyOperandChanged = false;
+
+  while (!pendingOperands.empty()) {
+    Value nextOperand = pendingOperands.pop_back_val();
 
     // If an operand to the concat is itself a concat, then we can fold them
     // together.
-    if (auto subConcat = inputs[i].getDefiningOp<ConcatOp>())
-      return flattenConcat(i, i, subConcat->getOperands());
+    if (auto subConcat = nextOperand.getDefiningOp<ConcatOp>()) {
+      pushPendingOperands(subConcat->getOperands());
+      continue;
+    }
 
     // Check for canonicalization due to neighboring operands.
-    if (i != 0) {
+    if (!processedOperands.empty()) {
+      Value prevOperand = processedOperands.back();
+
       // Merge neighboring constants.
-      if (auto cst = inputs[i].getDefiningOp<hw::ConstantOp>()) {
-        if (auto prevCst = inputs[i - 1].getDefiningOp<hw::ConstantOp>()) {
+      if (auto cst = nextOperand.getDefiningOp<hw::ConstantOp>()) {
+        if (auto prevCst = prevOperand.getDefiningOp<hw::ConstantOp>()) {
           unsigned prevWidth = prevCst.getValue().getBitWidth();
           unsigned thisWidth = cst.getValue().getBitWidth();
           auto resultCst = cst.getValue().zext(prevWidth + thisWidth);
@@ -1866,50 +1868,55 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
                        << thisWidth;
           Value replacement =
               hw::ConstantOp::create(rewriter, op.getLoc(), resultCst);
-          return flattenConcat(i - 1, i, replacement);
+          replacePrevOperand(replacement);
+          continue;
         }
       }
 
       // If the two operands are the same, turn them into a replicate.
-      if (inputs[i] == inputs[i - 1]) {
+      if (nextOperand == prevOperand) {
         Value replacement =
-            rewriter.createOrFold<ReplicateOp>(op.getLoc(), inputs[i], 2);
-        return flattenConcat(i - 1, i, replacement);
+            rewriter.createOrFold<ReplicateOp>(op.getLoc(), prevOperand, 2);
+        replacePrevOperand(replacement);
+        continue;
       }
 
       // If this input is a replicate, see if we can fold it with the previous
       // one.
-      if (auto repl = inputs[i].getDefiningOp<ReplicateOp>()) {
+      if (auto repl = nextOperand.getDefiningOp<ReplicateOp>()) {
         // ... x, repl(x, n), ...  ==> ..., repl(x, n+1), ...
-        if (repl.getOperand() == inputs[i - 1]) {
+        if (repl.getOperand() == prevOperand) {
           Value replacement = rewriter.createOrFold<ReplicateOp>(
               op.getLoc(), repl.getOperand(), repl.getMultiple() + 1);
-          return flattenConcat(i - 1, i, replacement);
+          replacePrevOperand(replacement);
+          continue;
         }
         // ... repl(x, n), repl(x, m), ...  ==> ..., repl(x, n+m), ...
-        if (auto prevRepl = inputs[i - 1].getDefiningOp<ReplicateOp>()) {
+        if (auto prevRepl = prevOperand.getDefiningOp<ReplicateOp>()) {
           if (prevRepl.getOperand() == repl.getOperand()) {
             Value replacement = rewriter.createOrFold<ReplicateOp>(
                 op.getLoc(), repl.getOperand(),
                 repl.getMultiple() + prevRepl.getMultiple());
-            return flattenConcat(i - 1, i, replacement);
+            replacePrevOperand(replacement);
+            continue;
           }
         }
       }
 
       // ... repl(x, n), x, ...  ==> ..., repl(x, n+1), ...
-      if (auto repl = inputs[i - 1].getDefiningOp<ReplicateOp>()) {
-        if (repl.getOperand() == inputs[i]) {
+      if (auto repl = prevOperand.getDefiningOp<ReplicateOp>()) {
+        if (repl.getOperand() == nextOperand) {
           Value replacement = rewriter.createOrFold<ReplicateOp>(
-              op.getLoc(), inputs[i], repl.getMultiple() + 1);
-          return flattenConcat(i - 1, i, replacement);
+              op.getLoc(), nextOperand, repl.getMultiple() + 1);
+          replacePrevOperand(replacement);
+          continue;
         }
       }
 
       // Merge neighboring extracts of neighboring inputs, e.g.
       // {A[3], A[2]} -> A[3:2]
-      if (auto extract = inputs[i].getDefiningOp<ExtractOp>()) {
-        if (auto prevExtract = inputs[i - 1].getDefiningOp<ExtractOp>()) {
+      if (auto extract = nextOperand.getDefiningOp<ExtractOp>()) {
+        if (auto prevExtract = prevOperand.getDefiningOp<ExtractOp>()) {
           if (extract.getInput() == prevExtract.getInput()) {
             auto thisWidth = cast<IntegerType>(extract.getType()).getWidth();
             if (prevExtract.getLowBit() == extract.getLowBit() + thisWidth) {
@@ -1918,7 +1925,8 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
               Value replacement =
                   ExtractOp::create(rewriter, op.getLoc(), resType,
                                     extract.getInput(), extract.getLowBit());
-              return flattenConcat(i - 1, i, replacement);
+              replacePrevOperand(replacement);
+              continue;
             }
           }
         }
@@ -1946,8 +1954,8 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
           return std::nullopt;
         }
       };
-      if (auto extractOpt = ArraySlice::get(inputs[i])) {
-        if (auto prevExtractOpt = ArraySlice::get(inputs[i - 1])) {
+      if (auto extractOpt = ArraySlice::get(nextOperand)) {
+        if (auto prevExtractOpt = ArraySlice::get(prevOperand)) {
           // Check that two array slices are mergable.
           if (prevExtractOpt->index.getType() == extractOpt->index.getType() &&
               prevExtractOpt->input == extractOpt->input &&
@@ -1963,21 +1971,27 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
                 hw::ArraySliceOp::create(rewriter, op.getLoc(), resType,
                                          prevExtractOpt->input,
                                          extractOpt->index));
-            return flattenConcat(i - 1, i, replacement);
+            replacePrevOperand(replacement);
+            continue;
           }
         }
       }
     }
+
+    processedOperands.push_back(nextOperand);
   }
 
-  // If all operands were the same, then this is a replicate.
-  if (commonOperand) {
-    replaceOpWithNewOpAndCopyNamehint<ReplicateOp>(rewriter, op, op.getType(),
-                                                   commonOperand);
-    return success();
+  if (processedOperands.size() == 1) {
+    // If the operands were all the same, we'll reach here with a single
+    // ReplicateOp.
+    replaceOpAndCopyNamehint(rewriter, op, processedOperands[0]);
+  } else if (anyOperandChanged) {
+    replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, op.getType(),
+                                                processedOperands);
+  } else {
+    return failure();
   }
-
-  return failure();
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
