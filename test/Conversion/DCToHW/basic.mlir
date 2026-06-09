@@ -202,3 +202,22 @@ hw.module.extern @ext(in %a : i32, out b : i32)
 
 // CHECK:  hw.module.extern @extDC(in %a : !esi.channel<i32>, out b : i32)
 hw.module.extern @extDC(in %a : !dc.value<i32>, out b : i32)
+
+// Regression test for https://github.com/llvm/circt/issues/7949
+// When a dc.fork result feeds through dc.pack+dc.unpack, the
+// UnpackOp::fold must not fire during conversion (it would leave a
+// dead pack whose conversion creates a second ESI channel consumer).
+// CHECK-LABEL: hw.module @forkPackUnpack
+// CHECK:       esi.wrap.vr
+// CHECK:       hw.output
+hw.module @forkPackUnpack(in %in : !dc.token,
+                          in %clk : !seq.clock {dc.clock},
+                          in %rst : i1 {dc.reset},
+                          out out0 : !dc.token,
+                          out out1 : !dc.token) {
+  %c0 = hw.constant 0 : i32
+  %0:2 = dc.fork [2] %in
+  %1 = dc.pack %0#1, %c0 : i32
+  %token, %output = dc.unpack %1 : !dc.value<i32>
+  hw.output %0#0, %token : !dc.token, !dc.token
+}

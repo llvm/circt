@@ -199,6 +199,7 @@ def PackOp : DCOp<"pack", [
     let results = (outs ValueType:$output);
     let assemblyFormat = "$token `,` $input attr-dict `:` type($input)";
     let hasFolder = 1;
+    let hasCanonicalizer = 1;
 }
 
 def UnpackOp : DCOp<"unpack", [
