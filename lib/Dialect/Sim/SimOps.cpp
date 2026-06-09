@@ -811,8 +811,8 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
 
 OpFoldResult ScanLiteralOp::fold(FoldAdaptor) { return getLiteralAttr(); }
 
-LogicalResult ScanConcatOp::getFlattenedInputs(
-    llvm::SmallVectorImpl<Value> &flatOperands) {
+LogicalResult
+ScanConcatOp::getFlattenedInputs(llvm::SmallVectorImpl<Value> &flatOperands) {
   llvm::SmallMapVector<ScanConcatOp, unsigned, 4> concatStack;
   bool isCyclic = false;
   concatStack.insert({*this, 0});
