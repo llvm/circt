@@ -82,7 +82,7 @@ jobs:
           apk add bash clang19 cmake curl file git gzip perl-utils python3 samurai tar
 # Clone the repository
       - name: Clone llvm/circt
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 2
           submodules: "true"
@@ -91,7 +91,7 @@ jobs:
           git config --global --add safe.directory /__w/circt/circt
           git fetch --unshallow --no-recurse-submodules
       - name: Clone microsoft/mimalloc
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           repository: microsoft/mimalloc
           fetch-depth: 1
@@ -105,7 +105,7 @@ jobs:
 # Taken together, disable caching on non-release builds.
       - name: sccache
         if: inputs.cmake_build_type == 'release'
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
         with:
           key: alpine-${{ inputs.cmake_build_type }}-${{ inputs.llvm_enable_assertions }}
           max-size: 500M
@@ -189,14 +189,14 @@ jobs:
 
 # Upload build artifacts
       - name: Upload Binary (Non-Tag)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: inputs.install_target && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}
           path: ${{ steps.name_archive.outputs.name }}
           retention-days: 7
       - name: Upload SHA256 (Non-Tag)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: inputs.install_target && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}.sha256
@@ -204,7 +204,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Binaries (Tag)
-        uses: AButler/upload-release-assets@v3.0
+        uses: AButler/upload-release-assets@34491005a5d7ec239a784e460807ce844fde7962 # v4.0.0
         if: inputs.install_target && github.ref_type == 'tag'
         with:
           # The * will grab the .sha256 as well

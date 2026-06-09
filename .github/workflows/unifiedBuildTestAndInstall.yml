@@ -196,7 +196,7 @@ jobs:
           large-packages: false
           tool-cache: true
       - name: Clone llvm/circt
-        uses: actions/checkout@v3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 2
           submodules: "true"
@@ -227,14 +227,14 @@ jobs:
       - name: Restore Verilator Cache (Linux)
         if: inputs.run_integration_tests && runner.os == 'Linux'
         id: cache-verilator
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: /opt/verilator
           key: verilator-${{ inputs.runner }}-${{ env.verilator-version-linux }}
       - name: Restore Yosys Cache (Linux)
         if: inputs.run_integration_tests && runner.os == 'Linux'
         id: cache-yosys
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: /opt/yosys
           key: yosys-${{ inputs.runner }}-${{ env.yosys-version-linux }}
@@ -283,13 +283,13 @@ jobs:
           fi
       - name: Save Verilator Cache (Linux)
         if: inputs.run_integration_tests && runner.os == 'Linux' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.cache-verilator.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: /opt/verilator
           key: verilator-${{ inputs.runner }}-${{ env.verilator-version-linux }}
       - name: Save Yosys Cache (Linux)
         if: inputs.run_integration_tests && runner.os == 'Linux' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.cache-yosys.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: /opt/yosys
           key: yosys-${{ inputs.runner }}-${{ env.yosys-version-linux }}
@@ -341,7 +341,7 @@ jobs:
           echo "image_version=${runner_image_version}" >> "$GITHUB_OUTPUT"
       - name: sccache
         if: steps.canonicalize.outputs.cmake_build_type == 'release'
-        uses: hendrikmuhs/ccache-action@v1.2
+        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
         with:
           key: ${{ inputs.runner }}-${{ steps.runner-image.outputs.image_version }}-${{ steps.canonicalize.outputs.cmake_c_compiler }}-${{ steps.canonicalize.outputs.cmake_build_type }}-${{ steps.canonicalize.outputs.build_shared_libs }}-${{ steps.canonicalize.outputs.llvm_enable_assertions }}-${{ steps.canonicalize.outputs.extra_cmake_hash }}
           max-size: 500M
@@ -479,14 +479,14 @@ jobs:
 
 # Upload build artifacts
       - name: Upload Binary (Non-Tag)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: inputs.install_target && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}
           path: ${{ steps.name_archive.outputs.name }}
           retention-days: 7
       - name: Upload SHA256 (Non-Tag)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: inputs.install_target && github.ref_type != 'tag'
         with:
           name: ${{ steps.name_archive.outputs.name }}.sha256
@@ -494,7 +494,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Binaries (Tag)
-        uses: AButler/upload-release-assets@v3.0
+        uses: AButler/upload-release-assets@34491005a5d7ec239a784e460807ce844fde7962 # v4.0.0
         if: inputs.install_target && github.ref_type == 'tag'
         with:
           # The * will grab the .sha256 as well
