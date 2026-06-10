@@ -27,6 +27,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include <tuple>
 
 namespace circt {
 namespace sv {
@@ -140,8 +141,8 @@ void SVMaskNonSynthesizablePass::runOnOperation() {
   StringAttr macroSymName;
   bool macroDeclNeedsCreation = false;
   if (mode == MaskNonSynthesizableMode::Ifdef)
-    macroSymName = lookupOrGenerateMacroSymName(moduleOp.getBody(), macro,
-                                                macroDeclNeedsCreation);
+    std::tie(macroSymName, macroDeclNeedsCreation) =
+        lookupOrGenerateMacroSymName(moduleOp.getBody(), macro);
 
   StringRef passDownMacro =
       macroSymName ? macroSymName.getValue() : StringRef();

@@ -57,14 +57,12 @@ bool sv::isExpression(Operation *op) {
              MacroRefExprOp, MacroRefExprSEOp>(op);
 }
 
-StringAttr sv::lookupOrGenerateMacroSymName(Block *symbolTableBlock,
-                                            StringRef verilogName,
-                                            bool &created) {
+std::pair<StringAttr, bool>
+sv::lookupOrGenerateMacroSymName(Block *symbolTableBlock,
+                                 StringRef verilogName) {
   for (auto decl : symbolTableBlock->getOps<sv::MacroDeclOp>()) {
-    if (decl.getMacroIdentifier() == verilogName) {
-      created = false;
-      return decl.getSymNameAttr();
-    }
+    if (decl.getMacroIdentifier() == verilogName)
+      return {decl.getSymNameAttr(), false};
   }
 
   Namespace ns;
@@ -76,9 +74,26 @@ StringAttr sv::lookupOrGenerateMacroSymName(Block *symbolTableBlock,
       ns.add(symbol.getValue());
   }
 
-  created = true;
-  return StringAttr::get(symbolTableBlock->getParentOp()->getContext(),
-                         ns.newName(verilogName));
+  return {StringAttr::get(symbolTableBlock->getParentOp()->getContext(),
+                          ns.newName(verilogName)),
+          true};
+}
+
+StringAttr sv::lookupOrCreateMacroDecl(OpBuilder &builder, Location loc,
+                                       Block *symbolTableBlock,
+                                       StringRef verilogName) {
+  auto [symNameAttr, created] =
+      lookupOrGenerateMacroSymName(symbolTableBlock, verilogName);
+  if (!created)
+    return symNameAttr;
+
+  auto *ctx = symbolTableBlock->getParentOp()->getContext();
+  auto verilogNameAttr = symNameAttr.getValue() == verilogName
+                             ? StringAttr{}
+                             : StringAttr::get(ctx, verilogName);
+  sv::MacroDeclOp::create(builder, loc, symNameAttr, ArrayAttr{},
+                          verilogNameAttr);
+  return symNameAttr;
 }
 
 /// Returns the operation registered with the given symbol name with the regions
