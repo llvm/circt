@@ -1293,4 +1293,30 @@ def FlushOp : SimOp<"flush", [ProceduralOp]> {
   let assemblyFormat = "$stream attr-dict";
 }
 
+//===----------------------------------------------------------------------===//
+// Time Formatting
+//===----------------------------------------------------------------------===//
+
+def SVSetTimeFormatOp : SimOp<"sv.set_time_format", [ProceduralOp]> {
+  let summary = "Set the time format for the current simulation";
+  let description = [{
+    Configures the display unit, precision, suffix, and minimum field width
+    used when formatting time values with the `%t` format specifier
+    (`sim.fmt.current_time`).
+
+    See IEEE 1800-2017 §20.4.2 "$timeformat".
+  }];
+  let arguments = (ins
+    I32:$timeUnit,
+    I32:$precision,
+    DynamicStringType:$suffix,
+    I32:$minWidth
+  );
+  let assemblyFormat = [{
+    `unit` $timeUnit `precision` $precision
+    `suffix` $suffix `min_width` $minWidth
+    attr-dict
+  }];
+}
+
 #endif // CIRCT_DIALECT_SIM_SIMOPS_TD

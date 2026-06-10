@@ -3072,6 +3072,40 @@ struct FFlushBIOpConversion : public OpConversionPattern<FFlushBIOp> {
   }
 };
 
+struct TimeFormatBIOpConversion : public OpConversionPattern<TimeFormatBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(TimeFormatBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto unit = adaptor.getUnit()
+                    ? adaptor.getUnit()
+                    : arith::ConstantOp::create(rewriter, loc,
+                                                rewriter.getI32IntegerAttr(-15))
+                          .getResult();
+    auto precision = adaptor.getPrecision()
+                         ? adaptor.getPrecision()
+                         : arith::ConstantOp::create(
+                               rewriter, loc, rewriter.getI32IntegerAttr(0))
+                               .getResult();
+    auto suffix = adaptor.getSuffix()
+                      ? adaptor.getSuffix()
+                      : sim::StringConstantOp::create(
+                            rewriter, loc, rewriter.getStringAttr(""))
+                            .getResult();
+    auto minWidth = adaptor.getMinWidth()
+                        ? adaptor.getMinWidth()
+                        : arith::ConstantOp::create(
+                              rewriter, loc, rewriter.getI32IntegerAttr(20))
+                              .getResult();
+
+    rewriter.replaceOpWithNewOp<sim::SVSetTimeFormatOp>(op, unit, precision,
+                                                        suffix, minWidth);
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -3630,6 +3664,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     // Command line input operations
     PlusArgsTestBIOpConversion,
     PlusArgsValueBIOpConversion,
+
+    // Time formatting operation
+    TimeFormatBIOpConversion,
 
     // Dynamic string operations
     StringLenOpConversion,

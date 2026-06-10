@@ -1426,6 +1426,36 @@ struct StmtVisitor {
       return true;
     }
 
+    if (nameId == ksn::TimeFormat) {
+      auto i32Ty = moore::IntType::getInt(context.getContext(), 32);
+      auto strTy = moore::StringType::get(context.getContext());
+      Value unit, precision, suffix, minWidth;
+
+      if (args.size() >= 1) {
+        unit = context.convertRvalueExpression(*args[0], i32Ty);
+        if (!unit)
+          return failure();
+      }
+      if (args.size() >= 2) {
+        precision = context.convertRvalueExpression(*args[1], i32Ty);
+        if (!precision)
+          return failure();
+      }
+      if (args.size() >= 3) {
+        suffix = context.convertRvalueExpression(*args[2], strTy);
+        if (!suffix)
+          return failure();
+      }
+      if (args.size() >= 4) {
+        minWidth = context.convertRvalueExpression(*args[3], i32Ty);
+        if (!minWidth)
+          return failure();
+      }
+      moore::TimeFormatBIOp::create(context.builder, loc, unit, precision,
+                                    suffix, minWidth);
+      return true;
+    }
+
     // Give up on any other system tasks. These will be tried again as an
     // expression later.
     return false;
