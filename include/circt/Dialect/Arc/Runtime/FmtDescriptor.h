@@ -76,13 +76,15 @@ struct FmtDescriptor {
   /// The integer value will be passed as a variadic argument by *pointer*.
   static FmtDescriptor createInt(int32_t bitwidth, int8_t radix,
                                  bool isLeftAligned, int32_t specifierWidth,
-                                 bool isUpperCase, bool isSigned) {
+                                 char paddingChar, bool isUpperCase,
+                                 bool isSigned) {
     FmtDescriptor d;
     d.action = Action_Int;
     d.intFmt.bitwidth = bitwidth;
     d.intFmt.radix = radix;
     d.intFmt.isLeftAligned = isLeftAligned;
     d.intFmt.specifierWidth = specifierWidth;
+    d.intFmt.paddingChar = paddingChar;
     d.intFmt.isUpperCase = isUpperCase;
     d.intFmt.isSigned = isSigned;
     return d;

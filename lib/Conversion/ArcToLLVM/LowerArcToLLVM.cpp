@@ -941,21 +941,24 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
                                   -> FailureOr<FormatInfo> {
         FmtDescriptor d = FmtDescriptor::createInt(
             op.getValue().getType().getWidth(), 10, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), false, op.getIsSigned());
+            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
+            op.getIsSigned());
         return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
       })
       .Case<sim::FormatHexOp>([&](sim::FormatHexOp op)
                                   -> FailureOr<FormatInfo> {
         FmtDescriptor d = FmtDescriptor::createInt(
             op.getValue().getType().getWidth(), 16, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), op.getIsHexUppercase(), false);
+            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(),
+            op.getIsHexUppercase(), false);
         return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
       })
       .Case<sim::FormatOctOp>([&](sim::FormatOctOp op)
                                   -> FailureOr<FormatInfo> {
         FmtDescriptor d = FmtDescriptor::createInt(
             op.getValue().getType().getWidth(), 8, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), false, false);
+            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
+            false);
         return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
       })
       .Case<sim::FormatLiteralOp>(
