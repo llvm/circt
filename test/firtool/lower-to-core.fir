@@ -28,6 +28,7 @@ circuit LowerToCore:
 ; CHECK-DAG: [[MSG:%.+]] = sim.fmt.concat ([[LIT]], [[FMT]], [[NL]])
 ; CHECK-DAG: [[FMTFILE2:%.+]] = sim.fmt.concat ([[LITFILE1]], [[FMT]], [[LITFILE2]])
 ; CHECK-DAG: [[STDERR:%.+]] = sim.stderr_stream
+; CHECK-DAG: [[TIME:%.+]] = sim.fmt.current_time
 ; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   sim.proc.print [[MSG]] to [[STDERR]]
 ; CHECK-NEXT:   [[FILE1:%.+]] = sim.get_file [[FMTFILE1]]
@@ -37,9 +38,6 @@ circuit LowerToCore:
 ; CHECK-NEXT:   [[FILE3:%.+]] = sim.get_file [[FMTFILE2]]
 ; CHECK-NEXT:   sim.flush [[FILE3]]
 ; CHECK-NEXT:   sim.flush [[STDERR]]
-; CHECK-NEXT: }
-; CHECK: [[TIME:%.+]] = sim.fmt.current_time
-; CHECK: sim.triggered %clock if %enable {
 ; CHECK-NEXT:   sim.proc.print [[TIME]] to [[STDERR]]
 ; CHECK-NEXT: }
 ; CHECK-NOT: sv.assert
