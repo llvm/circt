@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --allow-unregistered-dialect --convert-hw-to-llvm=spill-arrays-early=true --reconcile-unrealized-casts | FileCheck %s
+// RUN: circt-opt %s --allow-unregistered-dialect --convert-hw-to-llvm=spill-arrays-early=true | FileCheck %s
 
 
 // CHECK-LABEL: func.func @spillNonHWGet
@@ -24,11 +24,11 @@ func.func @spillNonHWGet(%idx0 : i4, %idx1 : i4) -> (i32, i32) {
 }
 
 // CHECK-LABEL: func.func @spillArgumentGet
+// CHECK-SAME: (%arg0: i4, %arg1: !llvm.array<16 x i32>) -> i32
 func.func @spillArgumentGet(%idx : i4, %arr : !hw.array<16xi32>) -> (i32) {
-    // CHECK: [[LLVAL:%.+]]  = builtin.unrealized_conversion_cast %arg1 : !hw.array<16xi32> to !llvm.array<16 x i32>
     // CHECK: [[CST1:%.+]]   = llvm.mlir.constant(1 : i32) : i32
     // CHECK: [[ALLOCA:%.+]] = llvm.alloca [[CST1]] x !llvm.array<16 x i32>
-    // CHECK: llvm.store [[LLVAL]], [[ALLOCA]]
+    // CHECK: llvm.store %arg1, [[ALLOCA]]
     // CHECK: "foo.bar"
     "foo.bar" () : () -> ()
     // CHECK-NOT: llvm.alloca

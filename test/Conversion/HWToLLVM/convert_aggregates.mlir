@@ -1,15 +1,11 @@
 // RUN: circt-opt %s --convert-hw-to-llvm=spill-arrays-early=false | FileCheck %s
 
 // CHECK-LABEL: @convertArray
+// CHECK-SAME: (%arg0: i1, %arg1: !llvm.array<2 x i32>,
 func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: i32, %arg4: i32, %arg5: i32) {
-  // CHECK-NEXT: %[[CAST0:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
-  // CHECK-NEXT: %[[CAST1:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
-  // CHECK-NEXT: %[[CAST2:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
-  // CHECK-NEXT: %[[CAST3:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<2xi32> to !llvm.array<2 x i32>
-
   // CHECK-NEXT: %[[ONE:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[ALLOCA:.*]] = llvm.alloca %[[ONE]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[CAST3]], %[[ALLOCA]] : !llvm.array<2 x i32>, !llvm.ptr
+  // CHECK-NEXT: llvm.store %arg1, %[[ALLOCA]] : !llvm.array<2 x i32>, !llvm.ptr
   // CHECK-NEXT: %[[ZEXT:.*]] = llvm.zext %arg0 : i1 to i2
   // CHECK-NEXT: %[[GEP:.*]] = llvm.getelementptr %[[ALLOCA]][0, %[[ZEXT]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i32>
   // CHECK-NEXT: llvm.load %[[GEP]] : !llvm.ptr -> i32
@@ -17,20 +13,20 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: 
 
   // CHECK-NEXT: %[[ONE4:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[ALLOCA1:.*]] = llvm.alloca %[[ONE4]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[CAST2]], %[[ALLOCA1]] : !llvm.array<2 x i32>, !llvm.ptr
+  // CHECK-NEXT: llvm.store %arg1, %[[ALLOCA1]] : !llvm.array<2 x i32>, !llvm.ptr
   // CHECK-NEXT: %[[ZEXT1:.*]] = llvm.zext %arg0 : i1 to i2
   // CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %[[ALLOCA1]][0, %[[ZEXT1]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<1 x i32>
   // CHECK-NEXT: llvm.load %[[GEP1]] : !llvm.ptr -> !llvm.array<1 x i32>
   %1 = hw.array_slice %arg1[%arg0] : (!hw.array<2xi32>) -> !hw.array<1xi32>
 
   // CHECK-NEXT: %[[UNDEF:.*]] = llvm.mlir.undef : !llvm.array<4 x i32>
-  // CHECK-NEXT: %[[E1:.*]] = llvm.extractvalue %[[CAST0]][0] : !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[E1:.*]] = llvm.extractvalue %arg1[0] : !llvm.array<2 x i32>
   // CHECK-NEXT: %[[I1:.*]] = llvm.insertvalue %[[E1]], %[[UNDEF]][0] : !llvm.array<4 x i32>
-  // CHECK-NEXT: %[[E2:.*]] = llvm.extractvalue %[[CAST0]][1] : !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[E2:.*]] = llvm.extractvalue %arg1[1] : !llvm.array<2 x i32>
   // CHECK-NEXT: %[[I2:.*]] = llvm.insertvalue %[[E2]], %[[I1]][1] : !llvm.array<4 x i32>
-  // CHECK-NEXT: %[[E3:.*]] = llvm.extractvalue %[[CAST1]][0] : !llvm.array<2 x i32>
+  // CHECK-NEXT: %[[E3:.*]] = llvm.extractvalue %arg1[0] : !llvm.array<2 x i32>
   // CHECK-NEXT: %[[I3:.*]] = llvm.insertvalue %[[E3]], %[[I2]][2] : !llvm.array<4 x i32>
-  // CHECK: %[[E4:.*]] = llvm.extractvalue %[[CAST1]][1] : !llvm.array<2 x i32>
+  // CHECK: %[[E4:.*]] = llvm.extractvalue %arg1[1] : !llvm.array<2 x i32>
   // CHECK-NEXT: llvm.insertvalue %[[E4]], %[[I3]][3] : !llvm.array<4 x i32>
   %2 = hw.array_concat %arg1, %arg1 : !hw.array<2xi32>, !hw.array<2xi32>
 
@@ -48,11 +44,6 @@ func.func @convertArray(%arg0 : i1, %arg1: !hw.array<2xi32>, %arg2: i32, %arg3: 
 func.func @convertArrayInject(
   %arg0: !hw.array<0xi32>, %arg1: !hw.array<1xi32>, %arg2: !hw.array<2xi32>, %arg3: !hw.array<5xi32>,
   %arg4: i32, %arg5: i64, %arg6: i1, %arg7: i3, %arg8: i64) {
-  // CHECK-DAG: %[[CAST0:.*]] = builtin.unrealized_conversion_cast %arg0 : !hw.array<0xi32> to !llvm.array<0 x i32>
-  // CHECK-DAG: %[[CAST1:.*]] = builtin.unrealized_conversion_cast %arg1 : !hw.array<1xi32> to !llvm.array<1 x i32>
-  // CHECK-DAG: %[[CAST2:.*]] = builtin.unrealized_conversion_cast %arg2 : !hw.array<2xi32> to !llvm.array<2 x i32>
-  // CHECK-DAG: %[[CAST3:.*]] = builtin.unrealized_conversion_cast %arg3 : !hw.array<5xi32> to !llvm.array<5 x i32>
-
   %0 = hw.array_inject %arg0[%arg5], %arg4 : !hw.array<0xi32>, i64
 
   // CHECK-NEXT: %[[ONE1:.*]] = llvm.mlir.constant(1 : i32) : i32
@@ -60,7 +51,7 @@ func.func @convertArrayInject(
   // CHECK-NEXT: %[[MAX1:.*]] = llvm.mlir.constant(1 : i32) : i2
   // CHECK-NEXT: %[[UMIN1:.*]] = llvm.intr.umin(%[[ZEXT1]], %[[MAX1]]) : (i2, i2) -> i2
   // CHECK-NEXT: %[[ALLOCA1:.*]] = llvm.alloca %[[ONE1]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[CAST1]], %[[ALLOCA1]] : !llvm.array<1 x i32>, !llvm.ptr
+  // CHECK-NEXT: llvm.store %arg1, %[[ALLOCA1]] : !llvm.array<1 x i32>, !llvm.ptr
   // CHECK-NEXT: %[[GEP1:.*]] = llvm.getelementptr %[[ALLOCA1]][0, %[[UMIN1]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i32>
   // CHECK-NEXT: llvm.store %arg4, %[[GEP1]] : i32, !llvm.ptr
   // CHECK-NEXT: llvm.load %[[ALLOCA1]] : !llvm.ptr -> !llvm.array<1 x i32>
@@ -69,7 +60,7 @@ func.func @convertArrayInject(
   // CHECK-NEXT: %[[ONE2:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[ZEXT2:.*]] = llvm.zext %arg6 : i1 to i2
   // CHECK-NEXT: %[[ALLOCA2:.*]] = llvm.alloca %[[ONE2]] x !llvm.array<2 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[CAST2]], %[[ALLOCA2]] : !llvm.array<2 x i32>, !llvm.ptr
+  // CHECK-NEXT: llvm.store %arg2, %[[ALLOCA2]] : !llvm.array<2 x i32>, !llvm.ptr
   // CHECK-NEXT: %[[GEP2:.*]] = llvm.getelementptr %[[ALLOCA2]][0, %[[ZEXT2]]] : (!llvm.ptr, i2) -> !llvm.ptr, !llvm.array<2 x i32>
   // CHECK-NEXT: llvm.store %arg4, %[[GEP2]] : i32, !llvm.ptr
   // CHECK-NEXT: llvm.load %[[ALLOCA2]] : !llvm.ptr -> !llvm.array<2 x i32>
@@ -80,7 +71,7 @@ func.func @convertArrayInject(
   // CHECK-NEXT: %[[MAX3:.*]] = llvm.mlir.constant(5 : i32) : i4
   // CHECK-NEXT: %[[UMIN3:.*]] = llvm.intr.umin(%[[ZEXT3]], %[[MAX3]]) : (i4, i4) -> i4
   // CHECK-NEXT: %[[ALLOCA3:.*]] = llvm.alloca %[[ONE3]] x !llvm.array<6 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[CAST3]], %[[ALLOCA3]] : !llvm.array<5 x i32>, !llvm.ptr
+  // CHECK-NEXT: llvm.store %arg3, %[[ALLOCA3]] : !llvm.array<5 x i32>, !llvm.ptr
   // CHECK-NEXT: %[[GEP3:.*]] = llvm.getelementptr %[[ALLOCA3]][0, %[[UMIN3]]] : (!llvm.ptr, i4) -> !llvm.ptr, !llvm.array<6 x i32>
   // CHECK-NEXT: llvm.store %arg4, %[[GEP3]] : i32, !llvm.ptr
   // CHECK-NEXT: llvm.load %[[ALLOCA3]] : !llvm.ptr -> !llvm.array<5 x i32>
@@ -88,7 +79,7 @@ func.func @convertArrayInject(
 
   // CHECK-NEXT: %[[ONE4:.*]] = llvm.mlir.constant(1 : i32) : i32
   // CHECK-NEXT: %[[ALLOCA4:.*]] = llvm.alloca %[[ONE4]] x !llvm.array<0 x i32> {alignment = 4 : i64} : (i32) -> !llvm.ptr
-  // CHECK-NEXT: llvm.store %[[CAST0]], %[[ALLOCA4]] : !llvm.array<0 x i32>, !llvm.ptr
+  // CHECK-NEXT: llvm.store %arg0, %[[ALLOCA4]] : !llvm.array<0 x i32>, !llvm.ptr
   // CHECK-NEXT: %[[ZEXT4:.*]] = llvm.zext %arg8 : i64 to i65
   // CHECK-NEXT: %[[GEP4:.*]] = llvm.getelementptr %[[ALLOCA4]][0, %[[ZEXT4]]] : (!llvm.ptr, i65) -> !llvm.ptr, !llvm.array<0 x i32>
   // CHECK-NEXT: llvm.load %[[GEP4]] : !llvm.ptr -> i32
@@ -171,18 +162,16 @@ func.func @convertConstStruct() {
 }
 
 // CHECK-LABEL: @convertStruct
+// CHECK-SAME: (%arg0: i32, %arg1: !llvm.struct<(i8, i32)>, %arg2: !llvm.struct<()>, %arg3: i1, %arg4: i2)
 func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>, %arg2: !hw.struct<>, %arg3 : i1, %arg4 : i2) {
-  // CHECK-NEXT: [[ARG1_0:%.+]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
-  // CHECK-NEXT: [[ARG1_1:%.+]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
-  // CHECK-NEXT: [[ARG1_2:%.+]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<foo: i32, bar: i8> to !llvm.struct<(i8, i32)>
-  // CHECK-NEXT: llvm.extractvalue [[ARG1_2]][1] : !llvm.struct<(i8, i32)>
+  // CHECK-NEXT: llvm.extractvalue %arg1[1] : !llvm.struct<(i8, i32)>
   %0 = hw.struct_extract %arg1["foo"] : !hw.struct<foo: i32, bar: i8>
 
-  // CHECK: llvm.insertvalue %arg0, [[ARG1_1]][1] : !llvm.struct<(i8, i32)>
+  // CHECK: llvm.insertvalue %arg0, %arg1[1] : !llvm.struct<(i8, i32)>
   %1 = hw.struct_inject %arg1["foo"], %arg0 : !hw.struct<foo: i32, bar: i8>
 
-  // CHECK: llvm.extractvalue [[ARG1_0]][1] : !llvm.struct<(i8, i32)>
-  // CHECK: llvm.extractvalue [[ARG1_0]][0] : !llvm.struct<(i8, i32)>
+  // CHECK: llvm.extractvalue %arg1[1] : !llvm.struct<(i8, i32)>
+  // CHECK: llvm.extractvalue %arg1[0] : !llvm.struct<(i8, i32)>
   %2:2 = hw.struct_explode %arg1 : !hw.struct<foo: i32, bar: i8>
 
   hw.struct_explode %arg2 : !hw.struct<>
@@ -197,10 +186,9 @@ func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>, %arg
 }
 
 // CHECK-LABEL: @nestedStructInject
+// CHECK-SAME: (%arg0: !llvm.struct<(struct<(i1)>, i1)>, %arg1: !llvm.struct<(i1)>)
 func.func @nestedStructInject(%arg0: !hw.struct<a: i1, b: !hw.struct<c: i1>>, %arg1: !hw.struct<c: i1>) {
-  // CHECK-NEXT: [[ARG1:%.+]] = builtin.unrealized_conversion_cast %arg1 : !hw.struct<c: i1> to !llvm.struct<(i1)>
-  // CHECK-NEXT: [[ARG0:%.+]] = builtin.unrealized_conversion_cast %arg0 : !hw.struct<a: i1, b: !hw.struct<c: i1>> to !llvm.struct<(struct<(i1)>, i1)>
-  // CHECK-NEXT: llvm.insertvalue [[ARG1]], [[ARG0]][0] : !llvm.struct<(struct<(i1)>, i1)>
+  // CHECK-NEXT: llvm.insertvalue %arg1, %arg0[0] : !llvm.struct<(struct<(i1)>, i1)>
   %0 = hw.struct_inject %arg0["b"], %arg1 : !hw.struct<a: i1, b: !hw.struct<c: i1>>
   return
 }
