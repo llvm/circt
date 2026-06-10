@@ -131,6 +131,10 @@ struct ImportVerilogOptions {
   /// A list of paths in which to suppress warnings.
   std::vector<std::string> suppressWarningsPaths;
 
+  /// If true, make paths for source file debug locations relative to the
+  /// current working directory. Otherwise, leave them unchanged.
+  bool makeLocationPathsProximate = true;
+
   //===--------------------------------------------------------------------===//
   // File lists
   //===--------------------------------------------------------------------===//
