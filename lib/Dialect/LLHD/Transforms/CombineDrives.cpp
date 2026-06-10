@@ -369,7 +369,17 @@ void ModuleContext::aggregateDrives(Signal &signal) {
   // If the signal has no unknown uses and all drives have the same delay and
   // condition, we can use the signal's default value to fill in undriven
   // slices.
-  if (!hasUnknownUses && drives.size() == 1) {
+  bool allowDefaultFill = !hasUnknownUses && drives.size() == 1;
+  if (allowDefaultFill) {
+    // Runtime-managed signals may be updated through opaque handles that are
+    // not visible as SSA users. Filling gaps from the init value can clobber
+    // those external updates.
+    if (auto sigOp = signal.value.getDefiningOp<SignalOp>())
+      if (sigOp->hasAttr("arcilator.sig_id"))
+        allowDefaultFill = false;
+  }
+
+  if (allowDefaultFill) {
     auto &slices = drives.begin()->second;
     addDefaultDriveSlices(signal, slices);
   }
