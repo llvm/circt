@@ -28,6 +28,32 @@ sim.global_signal @STOP_COND : i1 {
   sim.yield %stop : i1
 }
 
+// CHECK-LABEL: sim.global_signal @STOP_COND_ALIAS : i1 {
+sim.global_signal @STOP_COND_ALIAS : i1 {
+  // CHECK: %[[BASE:.*]] = sim.global_signal.read @STOP_COND : i1
+  %base = sim.global_signal.read @STOP_COND : i1
+  // CHECK: %[[TRUE:.*]] = hw.constant true
+  %true = hw.constant true
+  // CHECK: %[[ALIAS:.*]] = comb.or %[[BASE]], %[[TRUE]] : i1
+  %alias = comb.or %base, %true : i1
+  // CHECK: sim.yield %[[ALIAS]] : i1
+  sim.yield %alias : i1
+}
+
+// CHECK-LABEL: sim.global_signal @COMB_SUM : i8 {
+sim.global_signal @COMB_SUM : i8 {
+  // CHECK: %[[A:.*]] = hw.constant 1 : i8
+  %a = hw.constant 1 : i8
+  // CHECK: %[[B:.*]] = hw.constant 2 : i8
+  %b = hw.constant 2 : i8
+  // CHECK: %[[SUM:.*]] = comb.add %[[A]], %[[B]] : i8
+  %sum = comb.add %a, %b : i8
+  // CHECK: %[[CAST:.*]] = hw.bitcast %[[SUM]] : (i8) -> i8
+  %cast = hw.bitcast %sum : (i8) -> i8
+  // CHECK: sim.yield %[[CAST]] : i8
+  sim.yield %cast : i8
+}
+
 // CHECK-LABEL: hw.module @global_signal_read
 hw.module @global_signal_read(out stop_cond: i1) {
   // CHECK: %[[READ:.*]] = sim.global_signal.read @STOP_COND : i1

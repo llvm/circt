@@ -54,7 +54,7 @@ sim.global_signal @yield_type : i1 {
 
 sim.global_signal @side_effect : i1 {
   %cond = hw.constant true
-  // expected-error @below {{ops in 'sim.global_signal' must be side-effect-free}}
+  // expected-error @below {{ops in 'sim.global_signal' must be hw.constant, sim.global_signal.read, comb ops, or supported hw value ops}}
   sim.terminate success, quiet
   sim.yield %cond : i1
 }
@@ -62,7 +62,7 @@ sim.global_signal @side_effect : i1 {
 // -----
 
 sim.global_signal @sequential : i1 {
-  // expected-error @below {{ops in 'sim.global_signal' must be hw or comb ops}}
+  // expected-error @below {{ops in 'sim.global_signal' must be hw.constant, sim.global_signal.read, comb ops, or supported hw value ops}}
   %clk = seq.const_clock low
   %cond = hw.constant true
   sim.yield %cond : i1
@@ -70,9 +70,18 @@ sim.global_signal @sequential : i1 {
 
 // -----
 
+sim.global_signal @unsupported_hw : i1 {
+  %cond = hw.constant true
+  // expected-error @below {{ops in 'sim.global_signal' must be hw.constant, sim.global_signal.read, comb ops, or supported hw value ops}}
+  %wire = hw.wire %cond : i1
+  sim.yield %wire : i1
+}
+
+// -----
+
 sim.global_signal @nested_region : i1 {
   %cond = hw.constant true
-  // expected-error @below {{ops in 'sim.global_signal' must not contain regions}}
+  // expected-error @below {{ops in 'sim.global_signal' must be hw.constant, sim.global_signal.read, comb ops, or supported hw value ops}}
   scf.if %cond {
   }
   sim.yield %cond : i1

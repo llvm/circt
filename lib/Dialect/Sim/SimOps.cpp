@@ -21,7 +21,6 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
-#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/MapVector.h"
 
 using namespace mlir;
@@ -245,6 +244,17 @@ sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 // GlobalSignalOp
 //===----------------------------------------------------------------------===//
 
+static bool isSupportedGlobalSignalBodyOp(Operation *op) {
+  if (isa<GlobalSignalReadOp>(op) || isa<comb::CombDialect>(op->getDialect()))
+    return true;
+  return isa<hw::ConstantOp, hw::AggregateConstantOp, hw::ArrayCreateOp,
+             hw::ArrayConcatOp, hw::ArraySliceOp, hw::ArrayGetOp,
+             hw::ArrayInjectOp, hw::StructCreateOp, hw::StructExtractOp,
+             hw::StructInjectOp, hw::StructExplodeOp, hw::UnionCreateOp,
+             hw::UnionExtractOp, hw::BitcastOp, hw::EnumConstantOp,
+             hw::EnumCmpOp>(op);
+}
+
 LogicalResult GlobalSignalOp::verifyRegions() {
   auto terminator = dyn_cast<YieldOp>(getBodyBlock()->getTerminator());
   if (!terminator)
@@ -263,19 +273,12 @@ LogicalResult GlobalSignalOp::verifyRegions() {
   WalkResult result = getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
     if (op == getOperation() || isa<YieldOp>(op))
       return WalkResult::advance();
-    if (op->getNumRegions() != 0) {
-      op->emitError() << "ops in 'sim.global_signal' must not contain regions";
-      return WalkResult::interrupt();
-    }
-    if (!isMemoryEffectFree(op)) {
-      op->emitError() << "ops in 'sim.global_signal' must be side-effect-free";
-      return WalkResult::interrupt();
-    }
-    if (!isa<hw::HWDialect, comb::CombDialect>(op->getDialect())) {
-      op->emitError() << "ops in 'sim.global_signal' must be hw or comb ops";
-      return WalkResult::interrupt();
-    }
-    return WalkResult::advance();
+    if (isSupportedGlobalSignalBodyOp(op))
+      return WalkResult::advance();
+    op->emitError() << "ops in 'sim.global_signal' must be hw.constant, "
+                       "sim.global_signal.read, comb ops, or supported hw "
+                       "value ops";
+    return WalkResult::interrupt();
   });
   return failure(result.wasInterrupted());
 }
