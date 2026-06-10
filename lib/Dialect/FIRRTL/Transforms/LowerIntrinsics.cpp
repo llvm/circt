@@ -11,6 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/Pass/Pass.h"
@@ -39,20 +40,37 @@ struct LowerIntrinsicsPass
 };
 } // namespace
 
-/// Initialize the conversions for use during execution.
+/// Build the immutable converter set once, shared across module invocations.
 LogicalResult LowerIntrinsicsPass::initialize(MLIRContext *context) {
-  IntrinsicLowerings lowering(context);
-
-  IntrinsicLoweringInterfaceCollection loweringCollection(context);
-  loweringCollection.populateIntrinsicLowerings(lowering);
-
-  this->lowering = std::make_shared<IntrinsicLowerings>(std::move(lowering));
+  // The converter set is immutable, so it is safe to share across the parallel
+  // per-module invocations; per-module state rides in `lower`'s `ctx`.
+  this->lowering = std::make_shared<IntrinsicLowerings>(context);
+  IntrinsicLoweringInterfaceCollection collection(context);
+  collection.populateIntrinsicLowerings(*this->lowering);
   return success();
 }
 
 // This is the main entrypoint for the lowering pass.
 void LowerIntrinsicsPass::runOnOperation() {
-  auto result = lowering->lower(getOperation());
+  auto mod = getOperation();
+
+  // Phase 1: stage enumdef data, subfield leaves, and the named-declaration
+  // index into stack-local side channels (kept off the shared `lowering` for
+  // concurrency; see `lower`).
+  firrtl::DebugLeafMap debugLeaves;
+  llvm::StringMap<firrtl::EnumDefData> enumDefByFqn;
+  firrtl::NamedDeclIndex namedDecls;
+  if (mlir::failed(firrtl::liftDebugIntrinsics(mod, debugLeaves, enumDefByFqn,
+                                               namedDecls)))
+    return signalPassFailure();
+
+  // Phase 2: lower with a stack-local context. `seenVarNames` collects
+  // dbg.variable names as they are emitted; CirctDebugVarConverter uses it for
+  // O(1) duplicate detection instead of walking the growing IR each time.
+  llvm::StringSet<> seenVarNames;
+  firrtl::IntrinsicConvertContext convCtx{&debugLeaves, &enumDefByFqn,
+                                          &namedDecls, &seenVarNames};
+  auto result = lowering->lower(mod, /*allowUnknownIntrinsics=*/false, convCtx);
   if (failed(result))
     return signalPassFailure();
 
