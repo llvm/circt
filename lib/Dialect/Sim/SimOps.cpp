@@ -268,8 +268,7 @@ LogicalResult GlobalSignalOp::verifyRegions() {
     }
     if (isMemoryEffectFree(op))
       return WalkResult::advance();
-    op->emitError()
-        << "ops in 'sim.global_signal' must be side-effect-free";
+    op->emitError() << "ops in 'sim.global_signal' must be side-effect-free";
     return WalkResult::interrupt();
   });
   return failure(result.wasInterrupted());
