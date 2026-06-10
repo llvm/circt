@@ -3610,6 +3610,10 @@ function automatic void Swrite(string testStr, string otherString, ref string ou
    // CHECK: [[LV:%.+]] = moore.variable : <l64>
    logic [63:0] logicVector;
 
+   // $swrite with a single arg
+   // CHECK-NOT: moore.fstring_to_string
+   $swrite(outputString);
+
    // $swrite to a string output
    // CHECK: [[FMTSTR1:%.+]] = moore.fmt.string [[STR1]]
    // CHECK-NEXT: [[SPC:%.+]] = moore.fmt.literal " "
@@ -3629,6 +3633,26 @@ function automatic void Swrite(string testStr, string otherString, ref string ou
    // CHECK-NEXT: [[CONV:%.+]] = moore.int_to_logic [[CONV0]] : i64
    // CHECK-NEXT: moore.blocking_assign [[LV]], [[CONV]] : l64
    $swrite(logicVector, "%s %s", testStr, otherString);
+endfunction
+
+// CHECK-LABEL: func.func private @SwriteVariants(
+// CHECK-SAME: [[X:%[^,]+]]: !moore.i32
+// CHECK-SAME: [[OUT:%[^,]+]]: !moore.ref<string>
+function automatic void SwriteVariants(int x, ref string outputString);
+  // CHECK: [[FMT1:%.+]] = moore.fmt.int binary [[X]], align right, pad zero : i32
+  // CHECK-NEXT: [[STR1:%.+]] = moore.fstring_to_string [[FMT1]]
+  // CHECK-NEXT: moore.blocking_assign [[OUT]], [[STR1]] : string
+  $swriteb(outputString, x);
+
+  // CHECK: [[FMT2:%.+]] = moore.fmt.int octal [[X]], align right, pad zero : i32
+  // CHECK-NEXT: [[STR2:%.+]] = moore.fstring_to_string [[FMT2]]
+  // CHECK-NEXT: moore.blocking_assign [[OUT]], [[STR2]] : string
+  $swriteo(outputString, x);
+
+  // CHECK: [[FMT3:%.+]] = moore.fmt.int hex_lower [[X]], align right, pad zero : i32
+  // CHECK-NEXT: [[STR3:%.+]] = moore.fstring_to_string [[FMT3]]
+  // CHECK-NEXT: moore.blocking_assign [[OUT]], [[STR3]] : string
+  $swriteh(outputString, x);
 endfunction
 
 // CHECK-LABEL: moore.module @ContinuousAssignment(
