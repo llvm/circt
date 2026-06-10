@@ -53,10 +53,18 @@ sim.global_signal @yield_type : i1 {
 // -----
 
 sim.global_signal @side_effect : i1 {
-  %clk = seq.const_clock low
   %cond = hw.constant true
   // expected-error @below {{ops in 'sim.global_signal' must be side-effect-free}}
-  sim.clocked_pause %clk, %cond, quiet
+  sim.terminate success, quiet
+  sim.yield %cond : i1
+}
+
+// -----
+
+sim.global_signal @sequential : i1 {
+  // expected-error @below {{ops in 'sim.global_signal' must be hw or comb ops}}
+  %clk = seq.const_clock low
+  %cond = hw.constant true
   sim.yield %cond : i1
 }
 

@@ -26,6 +26,7 @@ add_circt_dialect_library(CIRCTSim
   Support
 
   LINK_LIBS PUBLIC
+  CIRCTComb
   CIRCTHW
   CIRCTSeq
   CIRCTSupport

@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -259,17 +260,22 @@ LogicalResult GlobalSignalOp::verifyRegions() {
            << "yielded type " << yieldedType
            << " does not match global signal type " << getType();
 
-  WalkResult result = getBody().walk([&](Operation *op) {
+  WalkResult result = getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
     if (op == getOperation() || isa<YieldOp>(op))
       return WalkResult::advance();
     if (op->getNumRegions() != 0) {
       op->emitError() << "ops in 'sim.global_signal' must not contain regions";
       return WalkResult::interrupt();
     }
-    if (isMemoryEffectFree(op))
-      return WalkResult::advance();
-    op->emitError() << "ops in 'sim.global_signal' must be side-effect-free";
-    return WalkResult::interrupt();
+    if (!isMemoryEffectFree(op)) {
+      op->emitError() << "ops in 'sim.global_signal' must be side-effect-free";
+      return WalkResult::interrupt();
+    }
+    if (!isa<hw::HWDialect, comb::CombDialect>(op->getDialect())) {
+      op->emitError() << "ops in 'sim.global_signal' must be hw or comb ops";
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
   });
   return failure(result.wasInterrupted());
 }
