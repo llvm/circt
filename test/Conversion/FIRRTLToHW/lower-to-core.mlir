@@ -49,6 +49,14 @@ firrtl.circuit "LowerToCore" {
         : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<4>
 
     // CHECK: [[STDERR1:%.+]] = sim.stderr_stream
+    firrtl.fflush %clock, %enable
+        : !firrtl.clock, !firrtl.uint<1>
+
+    // CHECK: [[TIME:%.+]] = sim.fmt.current_time
+    // CHECK: [[LIT6:%.+]] = sim.fmt.literal "\0A"
+    // CHECK: [[MSG3:%.+]] = sim.fmt.concat ([[TIME]], [[LIT6]])
+    // CHECK: [[STDERR2:%.+]] = sim.stderr_stream
+    %time = firrtl.fstring.time : !firrtl.fstring
     // CHECK: sim.triggered %clock {
     // CHECK-NEXT:   scf.if %enable {
     // CHECK-NEXT:     sim.proc.print [[MSG0]] to [[STDERR0]]
@@ -59,19 +67,9 @@ firrtl.circuit "LowerToCore" {
     // CHECK-NEXT:     [[FILE3:%.+]] = sim.get_file [[FMTFILE3]]
     // CHECK-NEXT:     sim.flush [[FILE3]]
     // CHECK-NEXT:     sim.flush [[STDERR1]]
+    // CHECK-NEXT:     sim.proc.print [[MSG3]] to [[STDERR2]]
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
-    firrtl.fflush %clock, %enable
-        : !firrtl.clock, !firrtl.uint<1>
-
-    // CHECK: [[TIME:%.+]] = sim.fmt.current_time
-    // CHECK: [[LIT4:%.+]] = sim.fmt.literal "\0A"
-    // CHECK: [[MSG:%.+]] = sim.fmt.concat ([[TIME]], [[LIT4]])
-    // CHECK: [[STDERR:%.+]] = sim.stderr_stream
-    // CHECK: sim.triggered %clock if %enable {
-    // CHECK-NEXT:   sim.proc.print [[MSG]] to [[STDERR]]
-    // CHECK-NEXT: }
-    %time = firrtl.fstring.time : !firrtl.fstring
     firrtl.printf %clock, %enable, "{{}}\0A"(%time)
         : !firrtl.clock, !firrtl.uint<1>, !firrtl.fstring
 
