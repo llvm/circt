@@ -51,3 +51,36 @@ hw.module @divmod_mix_constant(in %in: i1, in %lhs: i1, in %rhs: i1, out out_div
   hw.output %0, %1, %2, %3 : i4, i4, i4, i4
 }
 
+// RUN: circt-lec %t.mlir %s -c1=divmodu_constants -c2=divmodu_constants --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_DIVMODU_CONSTANTS
+// COMB_DIVMODU_CONSTANTS: c1 == c2
+hw.module @divmodu_constants(in %lhs: i8, out out_divu_7: i8, out out_divu_10: i8, out out_modu_3: i8) {
+  %c7_i8 = hw.constant 7 : i8
+  %c10_i8 = hw.constant 10 : i8
+  %c3_i8 = hw.constant 3 : i8
+
+  %0 = comb.divu %lhs, %c7_i8 : i8
+  %1 = comb.divu %lhs, %c10_i8 : i8
+  %2 = comb.modu %lhs, %c3_i8 : i8
+  hw.output %0, %1, %2 : i8, i8, i8
+}
+
+// RUN: circt-lec %t.mlir %s -c1=divmods_constants -c2=divmods_constants --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_DIVMODS_CONSTANTS
+// COMB_DIVMODS_CONSTANTS: c1 == c2
+hw.module @divmods_constants(in %lhs: i8, out out_divs_3: i8, out out_divs_neg3: i8, out out_mods_3: i8, out out_mods_neg3: i8) {
+  %c3_i8 = hw.constant 3 : i8
+  %c-3_i8 = hw.constant -3 : i8
+
+  %0 = comb.divs %lhs, %c3_i8 : i8
+  %1 = comb.divs %lhs, %c-3_i8 : i8
+  %2 = comb.mods %lhs, %c3_i8 : i8
+  %3 = comb.mods %lhs, %c-3_i8 : i8
+  hw.output %0, %1, %2, %3 : i8, i8, i8, i8
+}
+
+// RUN: circt-lec %t.mlir %s -c1=const_divmod_mods_neg1_i3 -c2=const_divmod_mods_neg1_i3 --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_MODS_NEG1_I3
+// COMB_MODS_NEG1_I3: c1 == c2
+hw.module @const_divmod_mods_neg1_i3(in %lhs: i3, out out: i3) {
+  %c_neg1_i3 = hw.constant -1 : i3
+  %0 = comb.mods %lhs, %c_neg1_i3 : i3
+  hw.output %0 : i3
+}
