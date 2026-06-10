@@ -14,6 +14,27 @@ sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, return ret: i1)
 sim.func.dpi @dpi_inout(in %arg0: i1, inout %arg1: i1)
 func.func private @func(%arg1: i1) -> (i1, i1)
 
+// CHECK-LABEL: sim.global_signal @STOP_COND : i1 {
+sim.global_signal @STOP_COND : i1 {
+  // CHECK: %[[TRUE:.*]] = hw.constant true
+  %true = hw.constant true
+  // CHECK: %[[FALSE:.*]] = hw.constant false
+  %false = hw.constant false
+  // CHECK: %[[NOT_FALSE:.*]] = comb.xor %[[FALSE]], %[[TRUE]] : i1
+  %not_false = comb.xor %false, %true : i1
+  // CHECK: %[[STOP:.*]] = comb.and %[[NOT_FALSE]], %[[TRUE]] : i1
+  %stop = comb.and %not_false, %true : i1
+  // CHECK: sim.yield %[[STOP]] : i1
+  sim.yield %stop : i1
+}
+
+// CHECK-LABEL: hw.module @global_signal_read
+hw.module @global_signal_read(out stop_cond: i1) {
+  // CHECK: %[[READ:.*]] = sim.global_signal.read @STOP_COND : i1
+  %stop = sim.global_signal.read @STOP_COND : i1
+  hw.output %stop : i1
+}
+
 // CHECK-LABEL: hw.module @dpi_call
 hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1) {
   // CHECK: sim.func.dpi.call @dpi(%in) clock %clock enable %enable : (i1) -> (i1, i1)

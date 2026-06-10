@@ -20,6 +20,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/MapVector.h"
 
 using namespace mlir;
@@ -237,6 +238,87 @@ sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return success();
   return emitError("callee must be 'sim.func.dpi' or 'func.func' but got '")
          << referencedOp->getName() << "'";
+}
+
+//===----------------------------------------------------------------------===//
+// GlobalSignalOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult GlobalSignalOp::verifyRegions() {
+  auto terminator = dyn_cast<YieldOp>(getBodyBlock()->getTerminator());
+  if (!terminator)
+    return emitOpError() << "must have a 'sim.yield' terminator";
+
+  if (terminator.getOperands().size() != 1)
+    return terminator.emitOpError()
+           << "must yield exactly one value for 'sim.global_signal'";
+
+  auto yieldedType = terminator.getOperands().front().getType();
+  if (yieldedType != getType())
+    return terminator.emitOpError()
+           << "yielded type " << yieldedType
+           << " does not match global signal type " << getType();
+
+  WalkResult result = getBody().walk([&](Operation *op) {
+    if (op == getOperation() || isa<YieldOp>(op))
+      return WalkResult::advance();
+    if (op->getNumRegions() != 0) {
+      op->emitError() << "ops in 'sim.global_signal' must not contain regions";
+      return WalkResult::interrupt();
+    }
+    if (isMemoryEffectFree(op))
+      return WalkResult::advance();
+    op->emitError()
+        << "ops in 'sim.global_signal' must be side-effect-free";
+    return WalkResult::interrupt();
+  });
+  return failure(result.wasInterrupted());
+}
+
+//===----------------------------------------------------------------------===//
+// GlobalSignalReadOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+GlobalSignalReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *symbol =
+      symbolTable.lookupNearestSymbolFrom(*this, getGlobalNameAttr());
+  if (!symbol)
+    return emitOpError() << "references unknown symbol " << getGlobalNameAttr();
+
+  auto signal = dyn_cast<GlobalSignalOp>(symbol);
+  if (!signal)
+    return emitOpError() << "must reference a 'sim.global_signal', but "
+                         << getGlobalNameAttr() << " is a '"
+                         << symbol->getName() << "'";
+
+  if (signal.getType() != getType())
+    return emitOpError() << "returns " << getType() << ", but "
+                         << getGlobalNameAttr() << " is of type "
+                         << signal.getType();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// YieldOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult YieldOp::verify() {
+  if (!isa<GlobalSignalOp>((*this)->getParentOp()))
+    return success();
+
+  if (getOperands().size() != 1)
+    return emitOpError()
+           << "must yield exactly one value for 'sim.global_signal'";
+
+  auto globalSignal = cast<GlobalSignalOp>((*this)->getParentOp());
+  auto yieldedType = getOperands().front().getType();
+  if (yieldedType != globalSignal.getType())
+    return emitOpError() << "yielded type " << yieldedType
+                         << " does not match global signal type "
+                         << globalSignal.getType();
+  return success();
 }
 
 static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,
