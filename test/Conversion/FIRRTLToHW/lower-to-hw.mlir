@@ -927,6 +927,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.matchingconnect %sink, %0 : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
+  // Test for https://github.com/llvm/circt/issues/7388
+  // enumcreate with a zero-width input on a data enum should not crash.
+  // CHECK-LABEL: hw.module private @DataEnumCreateZeroWidth(out sink : !hw.struct<tag: i1, body: !hw.union<Some: i8, None: i0>>) {
+  // CHECK-NEXT:   %c0_i0 = hw.constant 0 : i0
+  // CHECK-NEXT:   %None = sv.localparam {value = true} : i1
+  // CHECK-NEXT:   %0 = hw.union_create "None", %c0_i0 : !hw.union<Some: i8, None: i0>
+  // CHECK-NEXT:   %1 = hw.struct_create (%None, %0) : !hw.struct<tag: i1, body: !hw.union<Some: i8, None: i0>>
+  // CHECK-NEXT:   hw.output %1 : !hw.struct<tag: i1, body: !hw.union<Some: i8, None: i0>>
+  // CHECK-NEXT: }
+  firrtl.module private @DataEnumCreateZeroWidth(
+      out %sink: !firrtl.enum<Some: uint<8>, None: uint<0>>) {
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    %0 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.uint<0>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
+    firrtl.matchingconnect %sink, %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+  }
+
   // CHECK-LABEL: IsInvalidIssue572
   // https://github.com/llvm/circt/issues/572
   firrtl.module private @IsInvalidIssue572(in %a: !firrtl.analog<1>) {

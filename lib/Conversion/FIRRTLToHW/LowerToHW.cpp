@@ -881,8 +881,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib)
@@ -3232,8 +3231,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -3566,6 +3564,13 @@ LogicalResult FIRRTLLowering::visitExpr(FEnumCreateOp op) {
   auto element = *oldType.getElement(op.getFieldNameAttr());
 
   if (auto structType = dyn_cast<hw::StructType>(newType)) {
+    // If the input is zero-width, getLoweredValue returns a null Value.
+    // We still need a valid operand for the union body; create an i0 constant.
+    if (!input) {
+      if (!isZeroBitFIRRTLType(op.getInput().getType()))
+        return failure();
+      input = getOrCreateIntConstant(0, 0);
+    }
     auto tagType = structType.getFieldType("tag");
     auto tagValue = IntegerAttr::get(tagType, element.value.getValue());
     auto tag = sv::LocalParamOp::create(builder, op.getLoc(), tagType, tagValue,
