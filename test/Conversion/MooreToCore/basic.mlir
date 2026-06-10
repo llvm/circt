@@ -1850,6 +1850,15 @@ func.func @FDisplay(%arg0: !moore.i32) {
   return
 }
 
+// CHECK-LABEL: func.func @PlusArgs
+func.func @PlusArgs() {
+  // CHECK: sim.plusargs.test "FOO"
+  %0 = moore.builtin.plusargs_test "FOO" : i1
+  // CHECK: %{{.+}}, %{{.+}} = sim.plusargs.value "BAR=%d" : i32
+  %found, %result = moore.builtin.plusargs_value "BAR=%d" : i1, i32
+  return
+}
+
 // CHECK-LABEL: hw.module @MooreTypedArithSelect
 moore.module @MooreTypedArithSelect(in %s: i1, in %a: !moore.i8, in %b: !moore.i8, out o: !moore.i8) {
   // CHECK-NOT: !moore.i8

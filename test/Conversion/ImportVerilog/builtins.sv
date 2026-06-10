@@ -916,3 +916,17 @@ function void FileDisplayBuiltins(int fd, int x);
   $fdisplayh(fd, x);
 
 endfunction
+
+// IEEE 1800-2017 § 21.6 "Command line input"
+// CHECK-LABEL: func.func private @PlusArgsBuiltins(
+function void PlusArgsBuiltins();
+  bit rv;
+  int val;
+
+  // CHECK: [[T:%.+]] = moore.builtin.plusargs_test "FOO" : i1
+  rv = $test$plusargs("FOO");
+
+  // CHECK: [[FOUND:%.+]], [[RESULT:%.+]] = moore.builtin.plusargs_value "BAR=%d" : i1, i32
+  // CHECK: moore.blocking_assign {{%.+}}, [[RESULT]] : i32
+  rv = $value$plusargs("BAR=%d", val);
+endfunction
