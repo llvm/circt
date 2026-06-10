@@ -629,6 +629,7 @@ def LowerIntrinsics : Pass<"firrtl-lower-intrinsics", "firrtl::FModuleOp"> {
   let description = [{
     This pass lowers generic intrinsic ops to their implementation or op.
   }];
+  let dependentDialects = ["debug::DebugDialect"];
   let statistics = [
     Statistic<"numConverted", "num-converted", "Number of intrinsic operations lowered">,
   ];
