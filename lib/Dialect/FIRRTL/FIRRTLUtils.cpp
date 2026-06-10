@@ -28,13 +28,6 @@ using namespace firrtl;
 // TieOffCache
 //===----------------------------------------------------------------------===//
 
-Value TieOffCache::getInvalid(FIRRTLBaseType type) {
-  Value &cached = cache[type];
-  if (!cached)
-    cached = InvalidValueOp::create(builder, type);
-  return cached;
-}
-
 Value TieOffCache::getUnknown(PropertyType type) {
   Value &cached = cache[type];
   if (!cached)

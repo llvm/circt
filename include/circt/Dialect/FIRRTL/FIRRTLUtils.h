@@ -64,9 +64,6 @@ class TieOffCache {
 public:
   TieOffCache(ImplicitLocOpBuilder &builder) : builder(builder) {}
 
-  /// Get or create an InvalidValueOp for the given base type.
-  Value getInvalid(FIRRTLBaseType type);
-
   /// Get or create an UnknownValueOp for the given property type.
   Value getUnknown(PropertyType type);
 
