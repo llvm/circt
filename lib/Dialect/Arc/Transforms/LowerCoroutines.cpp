@@ -503,14 +503,21 @@ struct LowerCoroutinesPass
 void LowerCoroutinesPass::runOnOperation() {
   auto module = getOperation();
 
-  // Coroutine instances are expected to be lowered into explicit storage and
-  // calls before this pass runs. Reject any remaining instances instead of
-  // breaking their symbol references.
-  auto instanceResult = module->walk([](CoroutineInstanceOp op) {
-    op.emitOpError("must be lowered before LowerCoroutines");
-    return WalkResult::interrupt();
+  // Collect the coroutine definitions to lower, and reject any leftover
+  // coroutine instances in the same pass over the module. Instances are
+  // expected to be lowered into explicit storage and calls beforehand;
+  // rejecting them here avoids breaking their symbol references.
+  SmallVector<CoroutineDefineOp> defineOps;
+  auto walkResult = module->walk([&](Operation *op) {
+    if (auto instanceOp = dyn_cast<CoroutineInstanceOp>(op)) {
+      instanceOp.emitOpError("must be lowered before LowerCoroutines");
+      return WalkResult::interrupt();
+    }
+    if (auto defineOp = dyn_cast<CoroutineDefineOp>(op))
+      defineOps.push_back(defineOp);
+    return WalkResult::advance();
   });
-  if (instanceResult.wasInterrupted())
+  if (walkResult.wasInterrupted())
     return signalPassFailure();
 
   // Step 1: Lower each coroutine definition independently. Capture the values
@@ -518,9 +525,6 @@ void LowerCoroutinesPass::runOnOperation() {
   // derive the concrete PC and state types. The state types may still contain
   // opaque types of other coroutines, which the global sweep below
   // concretizes.
-  SmallVector<CoroutineDefineOp> defineOps;
-  module->walk([&](CoroutineDefineOp op) { defineOps.push_back(op); });
-
   DenseMap<StringAttr, CoroutineLowering> lowerings;
   for (auto defineOp : defineOps) {
     if (failed(captureValuesAcrossSuspension(defineOp)))
