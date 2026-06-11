@@ -2489,30 +2489,36 @@ module ImmediateAssert(input clk);
   // CHECK: [[A:%.+]] = moore.variable : <i1>
   bit a;
 
-  // CHECK: moore.procedure always
+  // CHECK: moore.procedure always_comb
     // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
     // CHECK: [[OneBX:%.+]] = moore.constant bX : l1
     // CHECK: [[NE:%.+]] = moore.ne [[READ_CLK]], [[OneBX]] : l1 -> l1
     // CHECK: moore.assert immediate [[NE]] : l1
-  assert (clk != 1'bx);
+  always_comb begin
+    assert (clk != 1'bx);
+  end
 
-  // CHECK: moore.procedure always
+  // CHECK: moore.procedure always_comb
     // CHECK: [[C100:%.+]] = moore.constant 100 : i32
     // CHECK: [[BC:%.+]] = moore.bool_cast [[C100]] : i32 -> i1
     // CHECK: moore.assume observed [[BC]] : i1
-  assume #0 (100);
+  always_comb begin
+    assume #0 (100);
+  end
 
-  // CHECK: moore.procedure always
+  // CHECK: moore.procedure always_comb
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
     // CHECK: moore.cover final [[READ_A]] : i1
-  cover final (a);
+  always_comb begin
+    cover final (a);
+  end
 endmodule
 
 // CHECK-LABEL: moore.module @ImmediateAssertiWithActionBlock() 
 module ImmediateAssertiWithActionBlock;
   logic x;
-  int a;
-// CHECK: moore.procedure always {
+  int a, b, c;
+// CHECK: moore.procedure always_comb {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
   // CHECK: [[X_INT:%.+]] = moore.logic_to_int [[READ_X]] : l1
   // CHECK: [[CONV_X:%.+]] = moore.to_builtin_int [[X_INT]] : i1
@@ -2524,9 +2530,11 @@ module ImmediateAssertiWithActionBlock;
 // CHECK: ^bb2:  // 2 preds: ^bb0, ^bb1
   // CHECK:   moore.return
 // CHECK: }
-  assert (x) a = 1;
+  always_comb begin
+    assert (x) a = 1;
+  end
 
-// CHECK: moore.procedure always {
+// CHECK: moore.procedure always_comb {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
   // CHECK: [[X_INT:%.+]] = moore.logic_to_int [[READ_X]] : l1
   // CHECK: [[CONV_X:%.+]] = moore.to_builtin_int [[X_INT]] : i1
@@ -2535,30 +2543,34 @@ module ImmediateAssertiWithActionBlock;
   // CHECK: cf.br ^bb3
 // CHECK: ^bb2:  // pred: ^bb0
   // CHECK: [[C0:%.+]] = moore.constant 0 : i32
-  // CHECK: moore.blocking_assign %a, [[C0]] : i32
+  // CHECK: moore.blocking_assign %b, [[C0]] : i32
   // CHECK: cf.br ^bb3
 // CHECK: ^bb3:  // 2 preds: ^bb1, ^bb2
   // CHECK: moore.return
 // CHECK: }
-  assert (x) else a = 0;
+  always_comb begin
+    assert (x) else b = 0;
+  end
 
-// CHECK: moore.procedure always {
+// CHECK: moore.procedure always_comb {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
   // CHECK: [[X_INT:%.+]] = moore.logic_to_int [[READ_X]] : l1
   // CHECK: [[CONV_X:%.+]] = moore.to_builtin_int [[X_INT]] : i1
   // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
 // CHECK: ^bb1:  // pred: ^bb0
   // CHECK: [[C1:%.+]] = moore.constant 1 : i32
-  // CHECK: moore.blocking_assign %a, [[C1]] : i32
+  // CHECK: moore.blocking_assign %c, [[C1]] : i32
   // CHECK: cf.br ^bb3
 // CHECK: ^bb2:  // pred: ^bb0
   // CHECK: [[C0:%.+]] = moore.constant 0 : i32
-  // CHECK: moore.blocking_assign %a, [[C0]] : i32
+  // CHECK: moore.blocking_assign %c, [[C0]] : i32
   // CHECK: cf.br ^bb3
 // CHECK: ^bb3:  // 2 preds: ^bb1, ^bb2
   // CHECK: moore.return
 // CHECK: }
-  assert (x) a = 1; else a = 0;
+  always_comb begin
+    assert (x) c = 1; else c = 0;
+  end
 endmodule
 
 // CHECK-LABEL: moore.module @AssertNoActionBlock

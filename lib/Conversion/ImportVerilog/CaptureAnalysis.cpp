@@ -79,10 +79,7 @@ namespace {
 /// each function. Uses slang's `ASTVisitor` with both statement and expression
 /// visiting enabled so that we recurse into all function bodies.
 struct CaptureWalker
-    : public ASTVisitor<CaptureWalker, /*VisitStatements=*/true,
-                        /*VisitExpressions=*/true,
-                        /*VisitBad=*/false,
-                        /*VisitCanonical=*/true> {
+    : public ASTVisitor<CaptureWalker, VisitFlags::AllCanonical> {
 
   /// The function whose body we are currently inside, or nullptr if we are at
   /// a scope outside any function.

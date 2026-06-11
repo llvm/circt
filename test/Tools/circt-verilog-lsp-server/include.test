@@ -9,7 +9,7 @@
   "uri":"test:///diagnostic.sv",
   "languageId":"verilog",
   "version":1,
-  "text":"module Foo();\n Bar bar();\nendmodule"
+  "text":"module Foo();\n Bar bar();\nendmodule\n"
 }}}
 // CHECK:        "method": "textDocument/publishDiagnostics",
 // CHECK-NEXT:   "params": {

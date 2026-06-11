@@ -21,7 +21,7 @@ endmodule
 module Foo;
   mailbox a;
   string b;
-  // expected-error @below {{value of type 'string' cannot be assigned to type 'mailbox'}}
+  // expected-error @below {{value of type 'string' cannot be assigned to type 'mailbox#(untyped)'}}
   initial a = b;
 endmodule
 

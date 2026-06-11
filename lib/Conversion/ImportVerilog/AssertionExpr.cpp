@@ -473,7 +473,8 @@ Value Context::convertToI1(Value value) {
 
 namespace {
 struct AssertionClockVisitor
-    : slang::ast::ASTVisitor<AssertionClockVisitor, true, true> {
+    : slang::ast::ASTVisitor<AssertionClockVisitor,
+                             slang::ast::VisitFlags::AllGood> {
   Context &context;
   const slang::analysis::AnalyzedAssertion &assertion;
   const slang::ast::TimingControl *currentClock = nullptr;
