@@ -10,6 +10,7 @@
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "di"
@@ -97,6 +98,10 @@ void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
     if (isa<debug::VariableOp>(op))
       hasVariables = true;
     if (auto scopeOp = dyn_cast<debug::ScopeOp>(op)) {
+      // A `dbg.scope` op declares an explicit instance in the DI hierarchy.
+      // Mark `hasInstances` so the `hw::InstanceOp` fallback below does not
+      // also add this module's `hw.instance` ops as duplicate children.
+      hasInstances = true;
       auto *node = createModule();
       node->isInline = true;
       node->name = scopeOp.getModuleNameAttr();
@@ -132,53 +137,104 @@ void DebugInfoBuilder::visitModule(hw::HWModuleOp moduleOp, DIModule &module) {
     }
   }
 
-  // Fill in any missing DI as a fallback.
-  moduleOp->walk([&](Operation *op) {
-    if (auto varOp = dyn_cast<debug::VariableOp>(op)) {
-      auto *var = createVariable();
-      var->name = varOp.getNameAttr();
-      var->loc = varOp.getLoc();
-      var->value = varOp.getValue();
-      getScope(varOp.getScope()).variables.push_back(var);
-      return;
-    }
+  // Local dedup keyed on uniqued attributes; pointer equality suffices.
+  llvm::DenseMap<debug::EnumDefContentKey, DIEnumDefId> dedupIndex;
 
-    if (auto scopeOp = dyn_cast<debug::ScopeOp>(op)) {
-      auto *instance = createInstance();
-      instance->name = scopeOp.getInstanceNameAttr();
-      instance->op = scopeOp;
-      instance->module = scopes.lookup(scopeOp);
-      getScope(scopeOp.getScope()).instances.push_back(instance);
-    }
+  // Collection walk plus fallback synthesis from `hw.instance` / `hw.wire`.
+  // PreOrder: a `dbg.variable` may live in a nested region while its
+  // `dbg.enumdef` sits at module level. PostOrder would descend into that
+  // region before visiting the outer enumdef, leaving `enumDefIds` empty at
+  // lookup. PreOrder visits each op before its regions, so every enumdef
+  // dominating a variable is registered first.
+  moduleOp->walk<WalkOrder::PreOrder>([&](Operation *op) {
+    return llvm::TypeSwitch<Operation *, WalkResult>(op)
+        .Case<debug::ModuleInfoOp>([&](auto miOp) {
+          module.sourceLangType.typeName = miOp.getTypeNameAttr();
+          module.sourceLangType.params = miOp.getParamsAttr();
+          return WalkResult::advance();
+        })
+        .Case<debug::EnumDefOp>([&](auto edOp) {
+          assert(module.enumDefIds.size() <
+                     std::numeric_limits<DIEnumDefId>::max() &&
+                 "too many enumdefs");
 
-    // Fallback if the module has no DI for its instances.
-    if (!hasInstances) {
-      if (auto instOp = dyn_cast<hw::InstanceOp>(op)) {
-        auto &childModule =
-            getOrCreateModule(instOp.getModuleNameAttr().getAttr());
-        auto *instance = createInstance();
-        instance->name = instOp.getInstanceNameAttr();
-        instance->op = instOp;
-        instance->module = &childModule;
-        module.instances.push_back(instance);
+          auto [deduIt, inserted] = dedupIndex.try_emplace(
+              debug::getEnumDefContentKey(edOp), DIEnumDefId{});
+          if (!inserted) {
+            module.enumDefIds.try_emplace(edOp, deduIt->second);
+            return WalkResult::advance();
+          }
 
-        // TODO: What do we do with the port assignments? These should be
-        // tracked somewhere.
-        return;
-      }
-    }
+          auto id = static_cast<DIEnumDefId>(module.enumDefinitions.size());
+          deduIt->second = id;
+          module.enumDefIds.try_emplace(edOp, id);
+          DIEnumValMap variants;
+          for (auto na : edOp.getVariantsMapAttr()) {
+            auto key = cast<IntegerAttr>(na.getValue()).getInt();
+            auto val = cast<StringAttr>(na.getName());
+            variants.insert({key, val});
+          }
+          module.enumDefinitions.try_emplace(id, std::move(variants));
+          return WalkResult::advance();
+        })
+        .Case<debug::VariableOp>([&](auto varOp) {
+          auto *var = createVariable();
+          var->name = varOp.getNameAttr();
+          var->loc = varOp.getLoc();
+          var->value = varOp.getValue();
+          var->sourceLangType.typeName = varOp.getTypeNameAttr();
+          var->sourceLangType.params = varOp.getParamsAttr();
+          if (auto enumDefVal = varOp.getEnumDef()) {
+            var->enumDef = enumDefVal;
+            if (auto edOp =
+                    enumDefVal.template getDefiningOp<debug::EnumDefOp>()) {
+              auto it = module.enumDefIds.find(edOp);
+              if (it != module.enumDefIds.end())
+                var->enumDefRef = it->second;
+            }
+          }
+          getScope(varOp.getScope()).variables.push_back(var);
+          return WalkResult::advance();
+        })
+        .Case<debug::ScopeOp>([&](auto scopeOp) {
+          auto *instance = createInstance();
+          instance->name = scopeOp.getInstanceNameAttr();
+          instance->op = scopeOp;
+          instance->module = scopes.lookup(scopeOp);
+          getScope(scopeOp.getScope()).instances.push_back(instance);
+          return WalkResult::advance();
+        })
+        .Default([&](Operation *op) {
+          // Fallback if the module has no DI for its instances.
+          if (!hasInstances) {
+            if (auto instOp = dyn_cast<hw::InstanceOp>(op)) {
+              auto &childModule =
+                  getOrCreateModule(instOp.getModuleNameAttr().getAttr());
+              auto *instance = createInstance();
+              instance->name = instOp.getInstanceNameAttr();
+              instance->op = instOp;
+              instance->module = &childModule;
+              module.instances.push_back(instance);
 
-    // Fallback if the module has no DI for its variables.
-    if (!hasVariables) {
-      if (auto wireOp = dyn_cast<hw::WireOp>(op)) {
-        auto *var = createVariable();
-        var->name = wireOp.getNameAttr();
-        var->loc = wireOp.getLoc();
-        var->value = wireOp;
-        module.variables.push_back(var);
-        return;
-      }
-    }
+              // TODO: What do we do with the port assignments? These should be
+              // tracked somewhere.
+              return WalkResult::advance();
+            }
+          }
+
+          // Fallback if the module has no DI for its variables.
+          if (!hasVariables) {
+            if (auto wireOp = dyn_cast<hw::WireOp>(op)) {
+              auto *var = createVariable();
+              var->name = wireOp.getNameAttr();
+              var->loc = wireOp.getLoc();
+              var->value = wireOp;
+              module.variables.push_back(var);
+            }
+          }
+
+          return WalkResult::advance();
+        });
   });
 }
 

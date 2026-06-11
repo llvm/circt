@@ -50,7 +50,7 @@ def ScopeOp : DebugOp<"scope"> {
 }
 
 
-def VariableOp : DebugOp<"variable"> {
+def VariableOp : DebugOp<"variable", [AttrSizedOperandSegments]> {
   let summary = "A named value to be captured in debug info";
   let description = [{
     Marks a value to be tracked in DI under the given name. The `dbg.variable`
@@ -65,19 +65,122 @@ def VariableOp : DebugOp<"variable"> {
     these source language values can be reconstituted from the actual IR values
     present at the end of compilation.
 
+    The optional `typeName` attribute and `params` array attribute carry
+    source-language type information (the type name and constructor parameters),
+    letting consumers reconstruct the source language type more precisely. The
+    optional `enumDef` operand links the variable to a `dbg.enumdef` that
+    describes the named variants of an enumeration type.
+
     See the rationale for examples and details. See the `dbg.scope` operation
     for additional details on how to use the `scope` operand.
   }];
   let arguments = (ins
     StrAttr:$name,
     AnyType:$value,
+    OptionalAttr<StrAttr>:$typeName,
+    OptionalAttr<ArrayAttr>:$params,
+    Optional<EnumDefType>:$enumDef,
     Optional<ScopeType>:$scope
   );
   let assemblyFormat = [{
-    $name `,` $value (`scope` $scope^)? attr-dict `:` type($value)
+    $name `,` $value (`typeName` $typeName^)? (`params` $params^)?
+        (`enumDef` $enumDef^)? (`scope` $scope^)? attr-dict `:` type($value)
   }];
+
+  let builders = [
+    OpBuilder<(ins "::mlir::StringAttr":$name, "::mlir::Value":$value,
+                   "::mlir::Value":$scope), [{
+      build($_builder, $_state, name, value, /*typeName=*/nullptr,
+            /*params=*/nullptr, /*enumDef=*/nullptr, scope);
+    }]>
+  ];
 }
 
+
+def SubFieldOp : DebugOp<"subfield"> {
+  let summary = "A named aggregate-leaf value to be captured in debug info";
+  let description = [{
+    Tags a single leaf of an aggregate for debug info, carrying the same
+    optional source-language type / enum metadata as `dbg.variable`. Unlike
+    `dbg.variable`, a `dbg.subfield` is intended to appear only as an operand
+    of a `dbg.struct` or `dbg.array`. Freshly-created ops with no users are
+    tolerated by the verifier to accommodate construction patterns; any
+    surviving user must be `dbg.struct` or `dbg.array`.
+  }];
+  let arguments = (ins
+    StrAttr:$name,
+    AnyType:$value,
+    OptionalAttr<StrAttr>:$typeName,
+    OptionalAttr<ArrayAttr>:$params,
+    Optional<EnumDefType>:$enumDef
+  );
+  let results = (outs SubFieldType:$result);
+  let assemblyFormat = [{
+    $name `,` $value (`typeName` $typeName^)? (`params` $params^)?
+        (`enumDef` $enumDef^)? attr-dict `:` type($value)
+  }];
+  let hasVerifier = 1;
+}
+
+def ModuleInfoOp : DebugOp<"moduleinfo"> {
+  let summary = "Define extra debug information for a module";
+  let description = [{
+    Creates debug information for a module. If present, this operation provides
+    extra information about the module type in the source language, such as its
+    type name and constructor parameters.
+
+    At most one `dbg.moduleinfo` may appear in a given region.
+  }];
+
+  let arguments = (ins
+    StrAttr:$typeName,
+    OptionalAttr<ArrayAttr>:$params
+  );
+
+  let assemblyFormat = [{
+    `typeName` $typeName (`params` $params^)? attr-dict
+  }];
+
+  let hasVerifier = 1;
+}
+
+def EnumDefOp : DebugOp<"enumdef"> {
+  let summary = "Define the value variants of an enumeration";
+  let description = [{
+    Defines an enumeration type so consumers can reconstruct the named
+    variants from a raw integer value. Logically the mapping is
+    `int -> name`, but in IR it is stored as a `DictionaryAttr` keyed by
+    variant name with `IntegerAttr` values (the integer is not a valid
+    dictionary key); consumers reading variants programmatically must
+    invert the map. `DictionaryAttr` sorts keys lexicographically, so
+    declaration order is not preserved and consumers must not rely on it.
+
+    Declared once per enum per scope. The result is consumed by
+    `dbg.variable` and `dbg.subfield` ops whose value has this enum type.
+
+    Intentionally not marked `Pure` (or similar): even an `enumdef` with no
+    `dbg.variable` / `dbg.subfield` users must survive DCE because
+    `DebugInfoBuilder` assigns sequential IDs to every enumdef in walk
+    order, and downstream consumers may reference those IDs via metadata
+    that the analysis cannot see.
+  }];
+
+  let arguments = (ins
+    StrAttr:$enumTypeName,
+    StrAttr:$fqn,
+    DictionaryAttr:$variantsMap,
+    Optional<ScopeType>:$scope
+  );
+
+  let results = (outs EnumDefType:$result);
+
+  let assemblyFormat = [{
+    $enumTypeName `,` `fqn` $fqn `,` $variantsMap (`scope` $scope^)? attr-dict
+  }];
+
+  let hasCanonicalizer = 1;
+  let hasVerifier = 1;
+}
 
 def StructOp : DebugOp<"struct", [
   Pure,

@@ -8,6 +8,8 @@
 
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/PatternMatch.h"
+#include "llvm/ADT/DenseSet.h"
 
 using namespace circt;
 using namespace debug;
@@ -115,7 +117,9 @@ void ArrayOp::print(OpAsmPrinter &printer) {
   }
 }
 
-// Operation implementations generated from `Debug.td`
+//===----------------------------------------------------------------------===//
+// Generated operation code
+//===----------------------------------------------------------------------===//
 #define GET_OP_CLASSES
 #include "circt/Dialect/Debug/Debug.cpp.inc"
 
@@ -124,4 +128,102 @@ void DebugDialect::registerOps() {
 #define GET_OP_LIST
 #include "circt/Dialect/Debug/Debug.cpp.inc"
       >();
+}
+
+//===----------------------------------------------------------------------===//
+// SubFieldOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SubFieldOp::verify() {
+  // Final IR is expected to have >=1 user (dbg.struct/dbg.array).
+  if (getResult().use_empty())
+    return success();
+
+  if (!llvm::all_of(getResult().getUsers(), [](Operation *user) {
+        return isa<StructOp, ArrayOp>(user);
+      }))
+    return emitOpError(
+        "must only be used as an operand of dbg.struct or dbg.array");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// EnumDefOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult EnumDefOp::verify() {
+  if (getVariantsMap().empty())
+    return emitOpError("variantsMap must not be empty");
+
+  llvm::DenseSet<int64_t> seenValues{};
+  for (auto namedAttr : getVariantsMap()) {
+    auto intAttr = dyn_cast<IntegerAttr>(namedAttr.getValue());
+    if (!intAttr)
+      return emitOpError("variantsMap entry '")
+             << namedAttr.getName().getValue()
+             << "' must be an IntegerAttr, got " << namedAttr.getValue();
+    if (!intAttr.getType().isSignlessInteger())
+      return emitOpError() << "variant '" << namedAttr.getName().getValue()
+                           << "' must have a signless integer value";
+    auto value = intAttr.getInt();
+    if (!seenValues.insert(value).second)
+      return emitOpError("duplicate enum value ") << value;
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// ModuleInfoOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ModuleInfoOp::verify() {
+  auto *region = getOperation()->getParentRegion();
+  if (!region)
+    return success();
+
+  for (auto &block : *region) {
+    for (auto mi : block.getOps<ModuleInfoOp>()) {
+      if (mi == *this)
+        return success();
+      return emitOpError("only one dbg.moduleinfo may appear in a region");
+    }
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// EnumDefOp canonicalization
+//===----------------------------------------------------------------------===//
+
+namespace {
+struct EnumDefDeduplication : public OpRewritePattern<EnumDefOp> {
+  using OpRewritePattern<EnumDefOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(EnumDefOp op,
+                                PatternRewriter &rewriter) const override {
+    // TODO(perf): O(N^2) per-op scan
+    auto opKey = getEnumDefContentKey(op);
+    auto opScope = op.getScope();
+
+    // Backward scan: every candidate dominates `op` without a DominanceInfo.
+    for (auto *prev = op->getPrevNode(); prev; prev = prev->getPrevNode()) {
+      auto otherEnumDef = dyn_cast<EnumDefOp>(prev);
+      if (!otherEnumDef)
+        continue;
+
+      if (getEnumDefContentKey(otherEnumDef) == opKey &&
+          otherEnumDef.getScope() == opScope) {
+        rewriter.replaceOp(op, otherEnumDef.getResult());
+        return success();
+      }
+    }
+    return failure();
+  }
+};
+} // namespace
+
+void EnumDefOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                            MLIRContext *context) {
+  results.add<EnumDefDeduplication>(context);
 }

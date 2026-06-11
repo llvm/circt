@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/CHIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
@@ -58,6 +59,12 @@ struct LowerCHIRRTLPass
   // Chain the CHIRRTL visitor to the FIRRTL visitor.
   void visitInvalidCHIRRTL(Operation *op) { dispatchVisitor(op); }
   void visitUnhandledCHIRRTL(Operation *op) { visitUnhandledOp(op); }
+  // Route Debug-dialect ops through the rdata remapper; all other non-FIRRTL
+  // ops are left untouched.
+  void visitInvalidOp(Operation *op) {
+    if (isa_and_nonnull<debug::DebugDialect>(op->getDialect()))
+      visitUnhandledOp(op);
+  }
 
   /// Get a the constant 0.  This constant is inserted at the beginning of the
   /// module.
