@@ -182,3 +182,30 @@ firrtl.circuit "MuxSelTooWide" {
     firrtl.connect %0, %c2_ui2 : !firrtl.uint, !firrtl.uint<2>
   }
 }
+
+// -----
+
+// Implicit truncation is not allowed in connect operations.
+firrtl.circuit "TruncateConnect" {
+  firrtl.module @TruncateConnect() {
+    %w = firrtl.wire  : !firrtl.uint
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.connect %w, %c1_ui1 : !firrtl.uint, !firrtl.uint<1>
+    %w1 = firrtl.wire  : !firrtl.uint<0>
+    // expected-error @+1 {{destination '!firrtl.uint<0>' is not as wide as the source '!firrtl.uint<1>'}}
+    firrtl.connect %w1, %w : !firrtl.uint<0>, !firrtl.uint
+  }
+}
+
+// -----
+
+// Issue #1088 - Implicit truncation is not allowed.
+firrtl.circuit "Issue1088" {
+  firrtl.module @Issue1088(out %y: !firrtl.sint<4>) {
+    %x = firrtl.wire : !firrtl.sint
+    %c200_si = firrtl.constant 200 : !firrtl.sint
+    // expected-error @+1 {{destination '!firrtl.sint<4>' is not as wide as the source '!firrtl.sint<9>'}}
+    firrtl.connect %y, %x : !firrtl.sint<4>, !firrtl.sint
+    firrtl.connect %x, %c200_si : !firrtl.sint, !firrtl.sint
+  }
+}
