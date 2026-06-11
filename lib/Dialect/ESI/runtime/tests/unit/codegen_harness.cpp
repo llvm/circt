@@ -68,7 +68,7 @@ void expectBytes(const T &value, const std::array<uint8_t, N> &expected,
 }
 
 // ---------------------------------------------------------------------------
-// Path A — 8/16/32/64-bit byte-aligned integers
+// Standard 8/16/32/64-bit byte-aligned integers
 // ---------------------------------------------------------------------------
 
 void testStandardWidthUnsigned() {
@@ -135,7 +135,7 @@ void testStandardWidthSigned() {
 }
 
 // ---------------------------------------------------------------------------
-// Path B — byte-aligned non-standard width (e.g. i24, i48)
+// Byte-aligned non-standard width (e.g. i24, i48)
 // ---------------------------------------------------------------------------
 
 void testByteAlignedOddWidthUnsigned() {
@@ -166,7 +166,7 @@ void testByteAlignedOddWidthSigned() {
 }
 
 // ---------------------------------------------------------------------------
-// Path C — sub-byte alignment (uses the BitAccess helpers)
+// Sub-byte alignment (uses the BitAccess helpers)
 // ---------------------------------------------------------------------------
 
 void testSubByteUnsigned() {
@@ -431,6 +431,65 @@ void testSubByteStructArray() {
 }
 
 // ---------------------------------------------------------------------------
+// Nested arrays (array-of-array) -- previously mis-handled by the flat-copy
+// path; now driven by the recursive per-element (un)packer.
+// ---------------------------------------------------------------------------
+
+void testNestedIntArray() {
+  // `2 x 4 x ui3`: the element type is itself the non-byte-packable array
+  // `4 x ui3` (12 wire bits, 4 bytes in memory). The old codegen emitted a
+  // corrupt whole-array copy and no indexed accessor; the recursive packer
+  // places each `ui3` leaf at wire bit `i * 12 + j * 3`.
+  Nested3 a;
+  std::array<std::array<uint8_t, 4>, 2> rows = {{{1, 2, 3, 4}, {5, 6, 7, 0}}};
+  a.rows(rows);
+
+  auto whole = a.rows();
+  for (std::size_t i = 0; i < 2; ++i)
+    for (std::size_t j = 0; j < 4; ++j) {
+      assert(whole[i][j] == rows[i][j]);
+      assert(a.rows(i)[j] == rows[i][j]);
+    }
+  // Flattened [1,2,3,4,5,6,7,0] at 3-bit strides -- identical wire bytes to
+  // the flat `8 x ui3` case.
+  expectBytes(a, std::array<uint8_t, 3>{0xD1, 0x58, 0x1F}, "Nested3");
+
+  // Indexed setter for one inner row; the other row must stay zero.
+  Nested3 b;
+  b.rows(1, {5, 6, 7, 0});
+  for (std::size_t j = 0; j < 4; ++j) {
+    assert(b.rows(1)[j] == rows[1][j]);
+    assert(b.rows(0)[j] == 0);
+  }
+  // Row 1 occupies bits 12..23: [5,6,7,0].
+  expectBytes(b, std::array<uint8_t, 3>{0x00, 0x50, 0x1F}, "Nested3 row1");
+}
+
+void testNestedStructArray() {
+  // `2 x 3 x SbCell` (each cell 5 wire bits). Array-of-array-of-sub-byte-
+  // aggregate: the recursive packer copies each cell's bits at its true
+  // wire offset `i * 15 + j * 5`.
+  NestedCell a;
+  std::array<std::array<SbCell, 3>, 2> grid = {{
+      {SbCell(1, 0), SbCell(2, 1), SbCell(3, 2)},
+      {SbCell(4, 3), SbCell(5, 0), SbCell(6, 1)},
+  }};
+  a.grid(grid);
+
+  auto whole = a.grid();
+  for (std::size_t i = 0; i < 2; ++i)
+    for (std::size_t j = 0; j < 3; ++j) {
+      assert(whole[i][j].hi() == grid[i][j].hi());
+      assert(whole[i][j].lo() == grid[i][j].lo());
+      assert(a.grid(i)[j].hi() == grid[i][j].hi());
+      assert(a.grid(i)[j].lo() == grid[i][j].lo());
+    }
+  // grid[0] reuses the first three SbCellArr cells, so bytes 0..1 match that
+  // test's leading bytes.
+  expectBytes(a, std::array<uint8_t, 4>{0x24, 0xB9, 0x49, 0x33}, "NestedCell");
+}
+
+// ---------------------------------------------------------------------------
 // Unions
 // ---------------------------------------------------------------------------
 
@@ -495,7 +554,7 @@ void testWindowList() {
 }
 
 // ---------------------------------------------------------------------------
-// Path D — value-class fields (esi::MutableBitVector, esi::Int, esi::UInt)
+// View-class fields (esi::MutableBitVector, esi::Int, esi::UInt)
 // ---------------------------------------------------------------------------
 
 // Build a wide MutableBitVector from an arbitrary-length byte buffer
@@ -588,9 +647,9 @@ void testWideSigned() {
 }
 
 void testBitsField() {
-  // BitsType > 64 routes through Path D (non-owning `esi::BitVector`
-  // view); narrower Bits stay on the native int paths and are covered
-  // by the other tests above.
+  // BitsType > 64 routes through the view-class accessor (non-owning
+  // `esi::BitVector` view); narrower Bits stay on the native int
+  // accessors and are covered by the other tests above.
   BitsField f;
   auto wide = bvFromBytes(
       {
@@ -609,7 +668,7 @@ void testBitsField() {
 void testWideMisaligned() {
   // WideMisaligned: tag (ui3) at bits 0..2, payload (ui128) at bits
   // 3..130 — i.e. a wide value at a non-byte-aligned offset. Hits the
-  // `copyBitsIn` / `copyBitsOut` arm of Path D.
+  // bit-shifted view accessor.
   WideMisaligned m;
   auto payload = bvFromBytes(
       {
@@ -634,7 +693,7 @@ void testWideMisaligned() {
 
   // A narrower input value must be zero-extended; a wider input is
   // truncated. Verify the former here (the latter is exercised
-  // implicitly because the Path D setter clamps to bit_width).
+  // implicitly because the view-class setter clamps to bit_width).
   auto narrow = bvFromBytes({0xAA}, 8); // only 8 bits of input
   m.payload(narrow);
   auto got3 = m.payload();
@@ -806,6 +865,8 @@ int main() {
   testSubByteSignedArray();
   testOddWidthArray();
   testSubByteStructArray();
+  testNestedIntArray();
+  testNestedStructArray();
   testUnion();
   testWindowList();
   testWideUnsigned();
