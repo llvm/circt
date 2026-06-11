@@ -245,7 +245,8 @@ sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 //===----------------------------------------------------------------------===//
 
 static bool isSupportedGlobalSignalBodyOp(Operation *op) {
-  if (isa<GlobalSignalReadOp>(op) || isa<comb::CombDialect>(op->getDialect()))
+  if (isa<GlobalSignalReadOp>(op) ||
+      isa_and_nonnull<comb::CombDialect>(op->getDialect()))
     return true;
   return isa<hw::ConstantOp, hw::AggregateConstantOp, hw::ArrayCreateOp,
              hw::ArrayConcatOp, hw::ArraySliceOp, hw::ArrayGetOp,

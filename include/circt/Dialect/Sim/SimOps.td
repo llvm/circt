@@ -234,6 +234,7 @@ def GlobalSignalOp : SimOp<"global_signal", [
 }
 
 def GlobalSignalReadOp : SimOp<"global_signal.read", [
+  Pure,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
 ]> {
   let summary = "Read a globally visible runtime expression";
