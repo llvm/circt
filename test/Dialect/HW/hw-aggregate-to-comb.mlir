@@ -11,12 +11,13 @@ hw.module @agg_const(out out: !hw.array<4xi4>) {
 }
 
 // CHECK-LABEL: @array_get_for_port
-hw.module @array_get_for_port(in %in: !hw.array<5xi4>, out out: i4) {
-  %c_i2 = hw.constant 3 : i3
-  // CHECK-NEXT: %[[BITCAST_IN:.+]] = hw.bitcast %in : (!hw.array<5xi4>) -> i20
-  // CHECK:      %[[EXTRACT:.+]] = comb.extract %[[BITCAST_IN]] from 12 : (i20) -> i4
-  // CHECK:      hw.output %[[EXTRACT]] : i4
-  %1 = hw.array_get %in[%c_i2] : !hw.array<5xi4>, i3
+hw.module @array_get_for_port(in %in: !hw.array<100xi4>, out out: i4) {
+  %c3_i7 = hw.constant 3 : i7
+  // CHECK-NEXT: %[[BITCAST_IN:.+]] = hw.bitcast %in : (!hw.array<100xi4>) -> i400
+  // CHECK-NEXT: %c3_i7 = hw.constant 3 : i7
+  // CHECK-NEXT: %[[EXTRACT:.+]] = comb.extract %[[BITCAST_IN]] from 12 : (i400) -> i4
+  // CHECK-NEXT: hw.output %[[EXTRACT]] : i4
+  %1 = hw.array_get %in[%c3_i7] : !hw.array<100xi4>, i7
   hw.output %1 : i4
 }
 

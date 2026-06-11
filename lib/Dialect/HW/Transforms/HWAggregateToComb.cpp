@@ -101,12 +101,24 @@ struct HWArrayGetOpConversion : OpConversionPattern<hw::ArrayGetOp> {
       return rewriter.notifyMatchFailure(op.getLoc(), "unknown element width");
 
     auto lowered = adaptor.getInput();
+    auto index = adaptor.getIndex();
+    APInt constantIndex;
+    if (matchPattern(index, m_ConstantInt(&constantIndex))) {
+      int64_t maxIndex = std::numeric_limits<int32_t>::max() / elemWidth;
+      if (constantIndex.isSingleWord() &&
+          constantIndex.getZExtValue() <= static_cast<uint64_t>(maxIndex)) {
+        rewriter.replaceOpWithNewOp<comb::ExtractOp>(
+            op, lowered, constantIndex.getZExtValue() * elemWidth, elemWidth);
+        return success();
+      }
+    }
+
     for (size_t i = 0; i < numElements; ++i)
       results.push_back(rewriter.createOrFold<comb::ExtractOp>(
           op.getLoc(), lowered, i * elemWidth, elemWidth));
 
     SmallVector<Value> bits;
-    comb::extractBits(rewriter, op.getIndex(), bits);
+    comb::extractBits(rewriter, index, bits);
     auto result = comb::constructMuxTree(rewriter, op.getLoc(), bits, results,
                                          results.back());
 
