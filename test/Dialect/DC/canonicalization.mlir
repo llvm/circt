@@ -166,3 +166,26 @@ hw.module @TestForkCanonicalization(in %arg0: !dc.token, out out0: !dc.token, ou
   dc.sink %0#2
   hw.output %1, %2 : !dc.token, !dc.token
 }
+
+// CHECK-LABEL:   func.func @unpackPack(
+// CHECK-SAME:                          %[[VAL_0:.*]]: !dc.value<i32>) -> !dc.value<i32> {
+// CHECK:           return %[[VAL_0]] : !dc.value<i32>
+// CHECK:         }
+func.func @unpackPack(%a: !dc.value<i32>) -> (!dc.value<i32>) {
+    %token, %data = dc.unpack %a : !dc.value<i32>
+    %0 = dc.pack %token, %data : i32
+    return %0 : !dc.value<i32>
+}
+
+// Like @unpackPack, but the unpack token has another user so the unpack
+// must be preserved while the pack is still eliminated.
+// CHECK-LABEL:   func.func @unpackPackTokenLive(
+// CHECK-SAME:                                   %[[VAL_0:.*]]: !dc.value<i32>) -> (!dc.value<i32>, !dc.token) {
+// CHECK:           %[[TOKEN:.*]], %[[DATA:.*]] = dc.unpack %[[VAL_0]] : !dc.value<i32>
+// CHECK:           return %[[VAL_0]], %[[TOKEN]] : !dc.value<i32>, !dc.token
+// CHECK:         }
+func.func @unpackPackTokenLive(%a: !dc.value<i32>) -> (!dc.value<i32>, !dc.token) {
+    %token, %data = dc.unpack %a : !dc.value<i32>
+    %0 = dc.pack %token, %data : i32
+    return %0, %token : !dc.value<i32>, !dc.token
+}
