@@ -327,6 +327,36 @@ struct StmtVisitor {
   LogicalResult visit(const slang::ast::CaseStatement &caseStmt) {
     using slang::ast::AttributeSymbol;
     using slang::ast::CaseStatementCondition;
+    if (auto *caseType =
+            caseStmt.expr.as_if<slang::ast::TypeReferenceExpression>()) {
+      if (caseStmt.condition != CaseStatementCondition::Normal)
+        return mlir::emitError(loc,
+                               "unsupported type reference case condition");
+
+      const slang::ast::Statement *matchedStmt = nullptr;
+      for (const auto &item : caseStmt.items) {
+        for (const auto *expr : item.expressions) {
+          auto *itemType = expr->as_if<slang::ast::TypeReferenceExpression>();
+          if (!itemType)
+            return mlir::emitError(
+                context.convertLocation(expr->sourceRange),
+                "unsupported non-type item in type reference case statement");
+          if (itemType->targetType.isMatching(caseType->targetType)) {
+            matchedStmt = item.stmt;
+            break;
+          }
+        }
+        if (matchedStmt)
+          break;
+      }
+
+      if (matchedStmt)
+        return context.convertStatement(*matchedStmt);
+      if (caseStmt.defaultCase)
+        return context.convertStatement(*caseStmt.defaultCase);
+      return success();
+    }
+
     auto caseExpr = context.convertRvalueExpression(caseStmt.expr);
     if (!caseExpr)
       return failure();
