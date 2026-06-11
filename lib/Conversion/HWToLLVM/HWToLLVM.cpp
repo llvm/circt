@@ -439,6 +439,83 @@ struct StructInjectOpConversion
 } // namespace
 
 //===----------------------------------------------------------------------===//
+// Union operations conversion
+//===----------------------------------------------------------------------===//
+//
+// A `!hw.union` is lowered to a flat `!llvm.array<N x i8>` byte buffer that is
+// large enough to hold the LLVM representation of its widest member (see
+// `convertUnionType`). Because the members keep their natural LLVM layout
+// inside that buffer -- including any alignment padding -- the conversion works
+// uniformly for integer and aggregate members alike.
+//
+// Both directions go through a stack slot. Creating a union allocates a buffer,
+// stores the member value into it, and reads the whole buffer back. Extracting
+// a member stores the buffer and reads back only the member's bytes. Bytes not
+// covered by the active member are left undefined, which matches the union
+// semantics. Members are placed at the start of the buffer; the field offset is
+// not honored, as nothing downstream of this lowering interprets the buffer's
+// bit layout.
+
+namespace {
+/// Allocate a stack slot of the given type, suitably aligned to hold a value of
+/// `accessType`, and return the pointer to it.
+static Value allocateUnionBuffer(ConversionPatternRewriter &rewriter,
+                                 Location loc, Type bufferType,
+                                 Type accessType) {
+  auto *context = rewriter.getContext();
+  auto align =
+      std::max<uint64_t>(1, DataLayout().getTypePreferredAlignment(accessType));
+  Value one = LLVM::ConstantOp::create(rewriter, loc, rewriter.getI32Type(),
+                                       rewriter.getI32IntegerAttr(1));
+  return LLVM::AllocaOp::create(rewriter, loc,
+                                LLVM::LLVMPointerType::get(context), bufferType,
+                                one, align);
+}
+
+/// Convert a UnionCreateOp to the LLVM dialect by storing the member value into
+/// a fresh union buffer and reading the buffer back.
+struct UnionCreateOpConversion
+    : public ConvertOpToLLVMPattern<hw::UnionCreateOp> {
+  using ConvertOpToLLVMPattern<hw::UnionCreateOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::UnionCreateOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto bufferType = typeConverter->convertType(op.getType());
+    if (!bufferType)
+      return failure();
+    Value input = adaptor.getInput();
+    Value ptr = allocateUnionBuffer(rewriter, loc, bufferType, input.getType());
+    LLVM::StoreOp::create(rewriter, loc, input, ptr);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, bufferType, ptr);
+    return success();
+  }
+};
+
+/// Convert a UnionExtractOp to the LLVM dialect by storing the union buffer and
+/// reading back the requested member's bytes.
+struct UnionExtractOpConversion
+    : public ConvertOpToLLVMPattern<hw::UnionExtractOp> {
+  using ConvertOpToLLVMPattern<hw::UnionExtractOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(hw::UnionExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    auto memberType = typeConverter->convertType(op.getType());
+    if (!memberType)
+      return failure();
+    Value input = adaptor.getInput();
+    Value ptr = allocateUnionBuffer(rewriter, loc, input.getType(), memberType);
+    LLVM::StoreOp::create(rewriter, loc, input, ptr);
+    rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, memberType, ptr);
+    return success();
+  }
+};
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Concat operations conversion
 //===----------------------------------------------------------------------===//
 
@@ -792,6 +869,22 @@ static Type convertStructType(hw::StructType type,
   return LLVM::LLVMStructType::getLiteral(&converter.getContext(), elements);
 }
 
+/// Convert a union to a flat byte buffer large enough to hold the LLVM
+/// representation of its widest member, including any alignment padding.
+static Type convertUnionType(hw::UnionType type, LLVMTypeConverter &converter) {
+  DataLayout layout;
+  uint64_t maxBytes = 0;
+  for (auto field : type.getElements()) {
+    auto llvmFieldTy = converter.convertType(field.type);
+    if (!llvmFieldTy)
+      return {};
+    maxBytes =
+        std::max(maxBytes, layout.getTypeSize(llvmFieldTy).getFixedValue());
+  }
+  return LLVM::LLVMArrayType::get(IntegerType::get(&converter.getContext(), 8),
+                                  maxBytes);
+}
+
 //===----------------------------------------------------------------------===//
 // Pass initialization
 //===----------------------------------------------------------------------===//
@@ -826,6 +919,9 @@ void circt::populateHWToLLVMConversionPatterns(
   patterns.add<StructExplodeOpConversion, StructExtractOpConversion,
                StructInjectOpConversion>(converter);
 
+  // Union operation conversion patterns.
+  patterns.add<UnionCreateOpConversion, UnionExtractOpConversion>(converter);
+
   patterns.add<ArrayGetOpConversion, ArrayInjectOpConversion,
                ArraySliceOpConversion, ArrayConcatOpConversion>(converter,
                                                                 spillCacheOpt);
@@ -836,6 +932,8 @@ void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {
       [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
   converter.addConversion(
       [&](hw::StructType tup) { return convertStructType(tup, converter); });
+  converter.addConversion(
+      [&](hw::UnionType uni) { return convertUnionType(uni, converter); });
 }
 
 void HWToLLVMLoweringPass::runOnOperation() {

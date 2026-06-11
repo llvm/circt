@@ -185,6 +185,39 @@ func.func @convertStruct(%arg0 : i32, %arg1: !hw.struct<foo: i32, bar: i8>, %arg
   return
 }
 
+// A union is represented as a flat byte buffer large enough to hold its widest
+// member. Creating a union stores the member into a fresh buffer and reads the
+// buffer back; extracting reverses the process.
+// CHECK-LABEL: @convertUnion
+// CHECK-SAME: (%arg0: i32, %arg1: i8, %[[ARG2:.*]]: !llvm.array<4 x i8>)
+func.func @convertUnion(%arg0: i32, %arg1: i8, %arg2: !hw.union<foo: i32, bar: i8>) {
+  // CHECK: %[[ONE0:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: %[[BUF0:.*]] = llvm.alloca %[[ONE0]] x !llvm.array<4 x i8> {alignment = 4 : i64} : (i32) -> !llvm.ptr
+  // CHECK-NEXT: llvm.store %arg0, %[[BUF0]] : i32, !llvm.ptr
+  // CHECK-NEXT: llvm.load %[[BUF0]] : !llvm.ptr -> !llvm.array<4 x i8>
+  %0 = hw.union_create "foo", %arg0 : !hw.union<foo: i32, bar: i8>
+
+  // CHECK: %[[ONE1:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: %[[BUF1:.*]] = llvm.alloca %[[ONE1]] x !llvm.array<4 x i8> {alignment = 1 : i64} : (i32) -> !llvm.ptr
+  // CHECK-NEXT: llvm.store %arg1, %[[BUF1]] : i8, !llvm.ptr
+  // CHECK-NEXT: llvm.load %[[BUF1]] : !llvm.ptr -> !llvm.array<4 x i8>
+  %1 = hw.union_create "bar", %arg1 : !hw.union<foo: i32, bar: i8>
+
+  // CHECK: %[[ONE2:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: %[[BUF2:.*]] = llvm.alloca %[[ONE2]] x !llvm.array<4 x i8> {alignment = 4 : i64} : (i32) -> !llvm.ptr
+  // CHECK-NEXT: llvm.store %[[ARG2]], %[[BUF2]] : !llvm.array<4 x i8>, !llvm.ptr
+  // CHECK-NEXT: llvm.load %[[BUF2]] : !llvm.ptr -> i32
+  %2 = hw.union_extract %arg2["foo"] : !hw.union<foo: i32, bar: i8>
+
+  // CHECK: %[[ONE3:.*]] = llvm.mlir.constant(1 : i32) : i32
+  // CHECK-NEXT: %[[BUF3:.*]] = llvm.alloca %[[ONE3]] x !llvm.array<4 x i8> {alignment = 1 : i64} : (i32) -> !llvm.ptr
+  // CHECK-NEXT: llvm.store %[[ARG2]], %[[BUF3]] : !llvm.array<4 x i8>, !llvm.ptr
+  // CHECK-NEXT: llvm.load %[[BUF3]] : !llvm.ptr -> i8
+  %3 = hw.union_extract %arg2["bar"] : !hw.union<foo: i32, bar: i8>
+
+  return
+}
+
 // CHECK-LABEL: @nestedStructInject
 // CHECK-SAME: (%arg0: !llvm.struct<(struct<(i1)>, i1)>, %arg1: !llvm.struct<(i1)>)
 func.func @nestedStructInject(%arg0: !hw.struct<a: i1, b: !hw.struct<c: i1>>, %arg1: !hw.struct<c: i1>) {
