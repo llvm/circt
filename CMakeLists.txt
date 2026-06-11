@@ -563,8 +563,8 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v11.0
-      GIT_SHALLOW ON
+      GIT_TAG 6933832c97c39976890e5f12b69245f061d60a9a # June 9, 2026: v11.0 + ~60 commits
+      # GIT_SHALLOW ON # TODO: re-enable once we use a released version again.
     )
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
@@ -612,6 +612,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
       endif()
     endforeach()
     set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
+    set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS tomlplusplus_tomlplusplus)
     install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
     find_package(slang 11.0 REQUIRED)
