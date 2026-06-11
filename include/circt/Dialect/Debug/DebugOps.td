@@ -65,6 +65,10 @@ def VariableOp : DebugOp<"variable"> {
     these source language values can be reconstituted from the actual IR values
     present at the end of compilation.
 
+    An enum-typed variable embeds a `dbg.enum` value, which carries the named
+    variants. Source-language type information is not carried on the variable
+    itself; wrap the value in a `dbg.value` to attach it.
+
     See the rationale for examples and details. See the `dbg.scope` operation
     for additional details on how to use the `scope` operand.
   }];
@@ -78,6 +82,68 @@ def VariableOp : DebugOp<"variable"> {
   }];
 }
 
+
+def ValueOp : DebugOp<"value"> {
+  let summary = "Attach source-language metadata to a value";
+  let description = [{
+    Annotates an SSA value with additional source-language information: the
+    source type name, its constructor parameters, and a dedicated location.
+    The result is a metadata wrapper accepted wherever other debug operations
+    accept plain values (`dbg.variable`, `dbg.struct`, `dbg.array`); consumers
+    unwrap it to reach the underlying value. Keeping the metadata on a
+    separate wrapper keeps `dbg.variable` and the aggregate ops orthogonal to
+    source-language type information.
+
+    An enum-typed value embeds a `dbg.enum`, so no enum linkage is carried on
+    the wrapper itself. Freshly-created ops with no users are tolerated by
+    the verifier to accommodate construction patterns; any surviving user
+    must be a debug-dialect op.
+  }];
+  let arguments = (ins
+    AnyType:$value,
+    OptionalAttr<StrAttr>:$typeName,
+    OptionalAttr<ArrayAttr>:$params
+  );
+  let results = (outs ValueType:$result);
+  let assemblyFormat = [{
+    $value (`typeName` $typeName^)? (`params` $params^)?
+        attr-dict `:` type($value)
+  }];
+  let hasVerifier = 1;
+}
+
+def EnumOp : DebugOp<"enum", [Pure]> {
+  let summary = "Interpret an integer value as an enumeration";
+  let description = [{
+    Wraps an integer value as a tag-only (C-style) enumeration, producing an
+    enum-typed debug value. Behaves like a cast: the `value` operand is the raw
+    integer tag, and `variantsMap` provides the `name -> tag` mapping consumers
+    use to reconstruct the named variant. The result is an ordinary value that
+    can be embedded in `dbg.variable`, `dbg.struct`, and `dbg.array` just like
+    any other debug value, so enum tracking needs no separate definition op,
+    scope, or subfield linkage.
+
+    `enumTypeName` is the source-language type name; the optional `fqn` is the
+    fully-qualified name used as the stable type-pool key. Consumers use it to
+    dedup identical enums that appear at many use sites or across modules.
+
+    This models tag-only enums: `variantsMap` is keyed by variant name with
+    `IntegerAttr` tags and has no slot for per-variant payload types, so
+    data-carrying variants are out of scope.
+  }];
+  let arguments = (ins
+    AnyType:$value,
+    StrAttr:$enumTypeName,
+    DictionaryAttr:$variantsMap,
+    OptionalAttr<StrAttr>:$fqn
+  );
+  let results = (outs EnumType:$result);
+  let assemblyFormat = [{
+    $value `,` $enumTypeName `,` $variantsMap (`fqn` $fqn^)? attr-dict
+        `:` type($value)
+  }];
+  let hasVerifier = 1;
+}
 
 def StructOp : DebugOp<"struct", [
   Pure,

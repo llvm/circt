@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "mlir/IR/OpImplementation.h"
+#include "llvm/ADT/DenseSet.h"
 
 using namespace circt;
 using namespace debug;
@@ -115,7 +116,9 @@ void ArrayOp::print(OpAsmPrinter &printer) {
   }
 }
 
-// Operation implementations generated from `Debug.td`
+//===----------------------------------------------------------------------===//
+// Generated operation code
+//===----------------------------------------------------------------------===//
 #define GET_OP_CLASSES
 #include "circt/Dialect/Debug/Debug.cpp.inc"
 
@@ -124,4 +127,45 @@ void DebugDialect::registerOps() {
 #define GET_OP_LIST
 #include "circt/Dialect/Debug/Debug.cpp.inc"
       >();
+}
+
+//===----------------------------------------------------------------------===//
+// ValueOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ValueOp::verify() {
+  // Final IR is expected to have >=1 user (dbg.variable/dbg.struct/dbg.array).
+  if (!llvm::all_of(getResult().getUsers(), [](Operation *user) {
+        return isa<VariableOp, StructOp, ArrayOp>(user);
+      }))
+    return emitOpError(
+        "must only be used as an operand of dbg.variable, dbg.struct, or "
+        "dbg.array");
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// EnumOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult EnumOp::verify() {
+  if (getVariantsMap().empty())
+    return emitOpError("variantsMap must not be empty");
+
+  llvm::SmallDenseSet<int64_t> seenValues{};
+  for (auto namedAttr : getVariantsMap()) {
+    auto intAttr = dyn_cast<IntegerAttr>(namedAttr.getValue());
+    if (!intAttr)
+      return emitOpError("variantsMap entry '")
+             << namedAttr.getName().getValue()
+             << "' must be an IntegerAttr, got " << namedAttr.getValue();
+    if (!intAttr.getType().isSignlessInteger())
+      return emitOpError() << "variant '" << namedAttr.getName().getValue()
+                           << "' must have a signless integer value";
+    auto value = intAttr.getInt();
+    if (!seenValues.insert(value).second)
+      return emitOpError("duplicate enum value ") << value;
+  }
+  return success();
 }
