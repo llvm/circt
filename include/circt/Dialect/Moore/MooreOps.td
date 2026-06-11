@@ -3161,6 +3161,39 @@ def FDisplayBIOp : Builtin<"fdisplay"> {
 }
 
 //===----------------------------------------------------------------------===//
+// Command Line Input System Functions
+//===----------------------------------------------------------------------===//
+
+def PlusArgsTestBIOp : Builtin<"plusargs_test"> {
+  let summary = "Test for the presence of a command-line plusarg";
+  let description = [{
+    Returns true if a command-line plus-argument matching the given format
+    string was supplied to the simulation. This corresponds to the
+    `$test$plusargs` system function.
+
+    See IEEE 1800-2017 § 21.6 "Command line input".
+  }];
+  let arguments = (ins StrAttr:$formatString);
+  let results = (outs BitType:$found);
+  let assemblyFormat = "$formatString attr-dict `:` type($found)";
+}
+
+def PlusArgsValueBIOp : Builtin<"plusargs_value"> {
+  let summary = "Read the value of a command-line plusarg";
+  let description = [{
+    Returns true if a command-line plus-argument matching the given format
+    string was supplied to the simulation, and parses the argument's value into
+    `result`. This corresponds to the `$value$plusargs` system function.
+
+    See IEEE 1800-2017 § 21.6 "Command line input".
+  }];
+  let arguments = (ins StrAttr:$formatString);
+  let results = (outs BitType:$found, UnpackedType:$result);
+  let assemblyFormat =
+      "$formatString attr-dict `:` type($found) `,` type($result)";
+}
+
+//===----------------------------------------------------------------------===//
 // Math Builtins
 //===----------------------------------------------------------------------===//
 

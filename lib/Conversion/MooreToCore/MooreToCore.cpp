@@ -3017,6 +3017,33 @@ struct FOpenBIOpConversion : public OpConversionPattern<FOpenBIOp> {
   }
 };
 
+struct PlusArgsTestBIOpConversion
+    : public OpConversionPattern<PlusArgsTestBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(PlusArgsTestBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::PlusArgsTestOp>(op, rewriter.getI1Type(),
+                                                     op.getFormatStringAttr());
+    return success();
+  }
+};
+
+struct PlusArgsValueBIOpConversion
+    : public OpConversionPattern<PlusArgsValueBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(PlusArgsValueBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto resultType = typeConverter->convertType(op.getResult().getType());
+    if (!resultType)
+      return rewriter.notifyMatchFailure(op, "unsupported result type");
+    rewriter.replaceOpWithNewOp<sim::PlusArgsValueOp>(
+        op, rewriter.getI1Type(), resultType, op.getFormatStringAttr());
+    return success();
+  }
+};
+
 struct FCloseBIOpConversion : public OpConversionPattern<FCloseBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3599,6 +3626,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FOpenBIOpConversion,
     FCloseBIOpConversion,
     FFlushBIOpConversion,
+
+    // Command line input operations
+    PlusArgsTestBIOpConversion,
+    PlusArgsValueBIOpConversion,
 
     // Dynamic string operations
     StringLenOpConversion,

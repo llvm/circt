@@ -3811,6 +3811,53 @@ Value Context::convertSystemCall(
     return moore::FOpenBIOp::create(builder, loc, filename, modeAttr);
   }
 
+  //===--------------------------------------------------------------------===//
+  // Command Line Input System Functions
+  //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::TestPlusArgs) {
+    // Slang already checks the arity of `$test$plusargs`.
+    assert(numArgs == 1 && "`$test$plusargs` takes 1 argument");
+    auto *strLit =
+        args[0]->unwrapImplicitConversions().as_if<slang::ast::StringLiteral>();
+    if (!strLit)
+      return emitError(loc) << "`$test$plusargs` argument must be a string "
+                               "literal",
+             Value{};
+    auto foundTy = moore::IntType::getInt(getContext(), 1);
+    return moore::PlusArgsTestBIOp::create(
+        builder, loc, foundTy, builder.getStringAttr(strLit->getValue()));
+  }
+
+  if (nameId == ksn::ValuePlusArgs) {
+    // Slang already checks the arity of `$value$plusargs`. The parsed value is
+    // written back into the second (lvalue) argument, and the function returns
+    // whether a matching plusarg was found.
+    assert(numArgs == 2 && "`$value$plusargs` takes 2 arguments");
+    auto *strLit =
+        args[0]->unwrapImplicitConversions().as_if<slang::ast::StringLiteral>();
+    if (!strLit)
+      return emitError(loc) << "`$value$plusargs` format must be a string "
+                               "literal",
+             Value{};
+    // Slang emits output arguments as a `<lvalue> = EmptyArgument` assignment;
+    // unpack it to recover the lvalue that receives the parsed value.
+    const auto *valueArg = args[1];
+    if (const auto *assign =
+            valueArg->as_if<slang::ast::AssignmentExpression>())
+      valueArg = &assign->left();
+    auto lvalue = convertLvalueExpression(*valueArg);
+    if (!lvalue)
+      return {};
+    auto resultType = cast<moore::RefType>(lvalue.getType()).getNestedType();
+    auto foundTy = moore::IntType::getInt(getContext(), 1);
+    auto op = moore::PlusArgsValueBIOp::create(
+        builder, loc, foundTy, resultType,
+        builder.getStringAttr(strLit->getValue()));
+    moore::BlockingAssignOp::create(builder, loc, lvalue, op.getResult());
+    return op.getFound();
+  }
+
   // Unrecognized system call
   emitError(loc) << "unsupported system call `" << name << "`";
   return {};
