@@ -3,10 +3,10 @@
 The bulk of the verification is delegated to `codegen_harness.cpp` in this
 directory: the Python side generates a `types.h` from a representative
 manifest, compiles the harness against it, and runs the result. The harness
-exercises every accessor path (Path A / B / C, bool, nested struct, array,
-union, window) and checks both the user-visible round-trip and the
-underlying wire bytes. Reviewers can read the harness directly to see what
-the codegen is contracted to do.
+exercises every accessor category (standard / odd / sub-byte integer widths,
+bool, view-class, nested struct, array, union, window) and checks both the
+user-visible round-trip and the underlying wire bytes. Reviewers can read the
+harness directly to see what the codegen is contracted to do.
 
 A small number of Python-level tests cover behaviours the harness can't
 exercise — ordering, name collisions, type aliases, and the "skip with a
@@ -52,10 +52,10 @@ _sint24 = types.SIntType("si24", 24)
 _sint32 = types.SIntType("si32", 32)
 _sint64 = types.SIntType("si64", 64)
 
-# Path D: value-class fields backed by `esi::IntView` / `esi::UIntView` /
+# View-class fields backed by `esi::IntView` / `esi::UIntView` /
 # `esi::BitVector` (any width supported; only wider-than-64 cases route
 # through the view classes -- narrower Bits/Int/UInt stay on the native
-# int paths). Tested below with 96- and 128-bit widths.
+# int accessors). Tested below with 96- and 128-bit widths.
 _bits128 = types.BitsType("bits128", 128)
 _uint96 = types.UIntType("ui96", 96)
 _uint128 = types.UIntType("ui128", 128)
@@ -74,7 +74,7 @@ def _build_harness_manifest():
   name (e.g. `StdU`) so the harness can use plain identifiers rather than
   spelling the auto-generated mangled names.
   """
-  # Path A: standard widths.
+  # Standard 8/16/32/64-bit widths.
   std_u_inner = types.StructType(
       "@StdU::inner",
       [("u8", _uint8), ("u16", _uint16), ("u32", _uint32), ("u64", _uint64)],
@@ -87,13 +87,13 @@ def _build_harness_manifest():
   )
   std_s = types.TypeAlias("@StdS", "StdS", std_s_inner)
 
-  # Path B: byte-aligned but non-standard width.
+  # Byte-aligned but non-standard width (e.g. ui24).
   odd_u_inner = types.StructType("@OddU::inner", [("u24", _uint24)])
   odd_u = types.TypeAlias("@OddU", "OddU", odd_u_inner)
   odd_s_inner = types.StructType("@OddS::inner", [("s24", _sint24)])
   odd_s = types.TypeAlias("@OddS", "OddS", odd_s_inner)
 
-  # Path C: sub-byte alignment.
+  # Sub-byte alignment.
   sub_u_inner = types.StructType("@SubU::inner", [("u3", _uint3),
                                                   ("u12", _uint12)])
   sub_u = types.TypeAlias("@SubU", "SubU", sub_u_inner)
@@ -170,6 +170,30 @@ def _build_harness_manifest():
       "@SbCellArr::inner",
       [("cells", types.ArrayType("!hw.array<4xSbCell>", sb_cell, 4))])
   sb_cell_arr = types.TypeAlias("@SbCellArr", "SbCellArr", sb_cell_arr_inner)
+
+  # Nested array of sub-byte ints: `2 x 4 x ui3`. The element type is itself
+  # the non-byte-packable array `4 x ui3` (12 wire bits but 4 bytes in the
+  # C++ `std::array<uint8_t, 4>`). The old flat-copy path handled this case
+  # incorrectly -- it emitted a corrupt whole-array copy and no indexed
+  # accessor at all -- because `is_packed_array` only matched scalar/struct
+  # elements, not array elements. The recursive (un)packer places each `ui3`
+  # leaf at its true wire offset `i * 12 + j * 3`.
+  nested3_inner = types.StructType(
+      "@Nested3::inner",
+      [("rows",
+        types.ArrayType("!hw.array<2x!hw.array<4xui3>>",
+                        types.ArrayType("!hw.array<4xui3>", _uint3, 4), 2))])
+  nested3 = types.TypeAlias("@Nested3", "Nested3", nested3_inner)
+
+  # Nested array of sub-byte STRUCT elements: `2 x 3 x SbCell` (each cell 5
+  # wire bits). Array-of-array-of-aggregate: the recursive packer copies each
+  # cell's bits at its true wire offset `i * 15 + j * 5`.
+  nested_cell_inner = types.StructType("@NestedCell::inner", [
+      ("grid",
+       types.ArrayType("!hw.array<2x!hw.array<3xSbCell>>",
+                       types.ArrayType("!hw.array<3xSbCell>", sb_cell, 3), 2))
+  ])
+  nested_cell = types.TypeAlias("@NestedCell", "NestedCell", nested_cell_inner)
 
   # Union with one narrow and one wide variant.
   union_inner = types.UnionType("@UnionTwo::inner", [("small", _uint8),
@@ -265,12 +289,12 @@ def _build_harness_manifest():
   small_list_window = types.TypeAlias("@SmallListWindow", "SmallListWindow",
                                       small_list_window_inner)
 
-  # Path D: value-class fields backed by `esi::MutableBitVector` /
+  # View-class fields backed by `esi::MutableBitVector` /
   # `esi::Int` / `esi::UInt` from `esi/Values.h`. Covers BitsType at
   # both narrow and wide widths, plus signed/unsigned integers above
   # the 64-bit native ceiling. Layout fields cover byte-aligned and
-  # bit-misaligned wide-int offsets so both branches of `copyBitsIn`
-  # / `copyBitsOut` get exercised.
+  # bit-misaligned wide-int offsets so both the aligned and the
+  # bit-shifted view accessors get exercised.
   wide_u_inner = types.StructType(
       "@WideU::inner",
       [("u96", _uint96), ("u128", _uint128)],
@@ -293,8 +317,8 @@ def _build_harness_manifest():
   # Field order is reversed on the wire (`cpp_type.reverse=True`), so the
   # LAST manifest field lands at wire bit 0. Listing `payload` first and
   # `tag` last puts `tag` at bits 0..2 (byte-aligned) and the 128-bit
-  # `payload` at bits 3..130 — exercising the
-  # `copyBitsIn<bit_offset, 128>` / `copyBitsOut` arm of Path D rather
+  # `payload` at bits 3..130 — exercising the bit-shifted view
+  # accessor for a wide field at a non-byte-aligned offset rather
   # than only the byte-aligned case.
   wide_mis_inner = types.StructType(
       "@WideMisaligned::inner",
@@ -326,9 +350,9 @@ def _build_harness_manifest():
 
   return [
       std_u, std_s, odd_u, odd_s, sub_u, sub_s, bool_field, outer, misaligned,
-      arr4, u3_arr, bits1_arr, s5_arr, u24_arr, sb_cell, sb_cell_arr, union_two,
-      list_window, small_list_window, wide_u, wide_s, bits_field, wide_mis,
-      arr_views, arr_views_mis
+      arr4, u3_arr, bits1_arr, s5_arr, u24_arr, sb_cell, sb_cell_arr, nested3,
+      nested_cell, union_two, list_window, small_list_window, wide_u, wide_s,
+      bits_field, wide_mis, arr_views, arr_views_mis
   ]
 
 
@@ -453,3 +477,104 @@ def test_unbounded_field_skips_struct_with_comment():
 
   hdr = _emit([s])
   assert "// Unsupported type '<@any_struct>'" in hdr
+
+
+def test_port_find_code_golden():
+  """Golden check of the per-port-kind `connect()` snippets for ALL kinds.
+
+  The round-trip harness only exercises the types; the live port-kind paths
+  are covered by the (heavyweight) cosim integration suite. This test pins
+  the generated resolution code for every kind -- including the ones the
+  sample manifest doesn't contain (Callback / FromHost / MMIO / Metric /
+  Bundle) -- so a typo in the `CppPortKind` table can't slip through.
+  """
+  from esiaccel.codegen.ports import CPP_PORT_KINDS, CPP_BUNDLE_KIND
+
+  kinds = {cls.__name__: kind for cls, kind in CPP_PORT_KINDS}
+  kinds["BundlePort"] = CPP_BUNDLE_KIND
+  ae = 'esi::AppID("p")'
+  aei = 'esi::AppID("p", idx)'
+
+  def scalar(name: str) -> str:
+    k = kinds[name]
+    return k.scalar_find_code(f"p{k.param_suffix}", ae)
+
+  def indexed(name: str) -> str:
+    return kinds[name].indexed_find_code("p_backing", aei)
+
+  # --- scalar resolution snippets ---
+  assert scalar("FunctionPort") == (
+      "auto *p_port =\n"
+      "    esi::findPortAsOrThrow<esi::services::FuncService::Function>(\n"
+      '        rawModule, esi::AppID("p"));')
+  assert scalar("CallbackPort") == (
+      "auto *p_port =\n"
+      "    esi::findPortAsOrThrow<esi::services::CallService::Callback>(\n"
+      '        rawModule, esi::AppID("p"));')
+  assert scalar("ToHostPort") == (
+      "auto &p_chan =\n"
+      "    esi::findPortAsOrThrow<esi::services::ChannelService::ToHost>(\n"
+      '        rawModule, esi::AppID("p"))->getRawRead("data");')
+  assert scalar("FromHostPort") == (
+      "auto &p_chan =\n"
+      "    esi::findPortAsOrThrow<esi::services::ChannelService::FromHost>(\n"
+      '        rawModule, esi::AppID("p"))->getRawWrite("data");')
+  assert scalar("MMIORegion") == (
+      "auto &p_svc =\n"
+      "    *esi::findPortAsOrThrow<esi::services::MMIO::MMIORegion>(\n"
+      '        rawModule, esi::AppID("p"));')
+  assert scalar("MetricPort") == (
+      "auto &p_svc =\n"
+      "    *esi::findPortAsOrThrow<esi::services::TelemetryService::Metric>(\n"
+      '        rawModule, esi::AppID("p"));')
+  assert scalar("BundlePort") == (
+      'auto &p_port = esi::findPortOrThrow(rawModule, esi::AppID("p"));')
+
+  # --- indexed (IndexedPorts<T>) try_emplace bodies ---
+  assert indexed("FunctionPort") == (
+      "  p_backing.try_emplace(\n"
+      "      static_cast<int>(idx),\n"
+      "      esi::findPortAsOrThrow<esi::services::FuncService::Function>(\n"
+      '          rawModule, esi::AppID("p", idx)));')
+  assert indexed("ToHostPort") == (
+      "  auto *svc =\n"
+      "      esi::findPortAsOrThrow<esi::services::ChannelService::ToHost>(\n"
+      '          rawModule, esi::AppID("p", idx));\n'
+      "  p_backing.try_emplace(\n"
+      "      static_cast<int>(idx),\n"
+      '      svc->getRawRead("data"));')
+  assert indexed("FromHostPort") == (
+      "  auto *svc =\n"
+      "      esi::findPortAsOrThrow<esi::services::ChannelService::FromHost>(\n"
+      '          rawModule, esi::AppID("p", idx));\n'
+      "  p_backing.try_emplace(\n"
+      "      static_cast<int>(idx),\n"
+      '      svc->getRawWrite("data"));')
+  assert indexed("MMIORegion") == (
+      "  p_backing.try_emplace(\n"
+      "      static_cast<int>(idx),\n"
+      "      esi::findPortAsOrThrow<esi::services::MMIO::MMIORegion>(\n"
+      '          rawModule, esi::AppID("p", idx)));')
+  assert indexed("BundlePort") == (
+      "  p_backing.try_emplace(\n"
+      "      static_cast<int>(idx),\n"
+      "      &esi::findPortOrThrow(rawModule, esi::AppID(\"p\", idx)));")
+
+  # --- per-kind field invariants ---
+  assert [
+      k.connectable
+      for k in (kinds["FunctionPort"], kinds["CallbackPort"],
+                kinds["ToHostPort"], kinds["FromHostPort"], kinds["MMIORegion"],
+                kinds["MetricPort"], kinds["BundlePort"])
+  ] == [True, False, True, True, False, True, False]
+  assert kinds["FunctionPort"].param_suffix == "_port"
+  assert kinds["ToHostPort"].param_suffix == "_chan"
+  assert kinds["MMIORegion"].param_suffix == "_svc"
+  assert (kinds["FunctionPort"].member_template ==
+          "esi::TypedFunction<{p}Args, {p}Result>")
+  assert kinds["MMIORegion"].member_template is None
+  assert (
+      kinds["MMIORegion"].indexed_elem == "esi::services::MMIO::MMIORegion *")
+  assert kinds["FunctionPort"].alias_kind == "func"
+  assert kinds["ToHostPort"].alias_kind == "chan"
+  assert kinds["MMIORegion"].alias_kind is None
