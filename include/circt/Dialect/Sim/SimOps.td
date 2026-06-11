@@ -240,10 +240,7 @@ def GlobalSignalReadOp : SimOp<"global_signal.read", [
   let summary = "Read a globally visible runtime expression";
   let description = [{
     Evaluates or materializes the selected implementation of the referenced
-    `sim.global_signal` and returns its value. Since that implementation may be
-    externally overridden by a backend, simulator, or runtime, this operation is
-    not marked pure in the IR even though the default body is required to be
-    side-effect-free.
+    `sim.global_signal` and returns its value.
   }];
   let arguments = (ins FlatSymbolRefAttr:$global_name);
   let results = (outs AnyType:$result);
