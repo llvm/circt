@@ -3300,11 +3300,18 @@ Value Context::convertSystemCall(
     auto value = convertRvalueExpression(*args[0]);
     if (!value)
       return {};
-    auto valTy = dyn_cast<moore::IntType>(value.getType());
-    if (!valTy) {
-      mlir::emitError(loc) << "expected integer argument for `$isunknown`";
-      return {};
+
+    if (!isa<moore::IntType>(value.getType())) {
+      if (!isa<moore::PackedType>(value.getType())) {
+        mlir::emitError(loc) << "expected integer argument for `$isunknown`";
+        return {};
+      }
+      value = materializePackedToSBVConversion(*this, value, loc,
+                                               /*fallible=*/false);
+      if (!value)
+        return {};
     }
+    auto valTy = dyn_cast<moore::IntType>(value.getType());
     return getIsUnknown(builder, loc, value, valTy, getContext());
   }
 
@@ -3313,6 +3320,17 @@ Value Context::convertSystemCall(
     auto value = convertRvalueExpression(*args[0]);
     if (!value)
       return {};
+    if (!isa<moore::IntType>(value.getType())) {
+      if (!isa<moore::PackedType>(value.getType())) {
+        mlir::emitError(loc)
+            << "expected integer argument for `$onehot`/`$onehot0`";
+        return {};
+      }
+      value = materializePackedToSBVConversion(*this, value, loc,
+                                               /*fallible=*/false);
+      if (!value)
+        return {};
+    }
     auto valTy = dyn_cast<moore::IntType>(value.getType());
     if (!valTy) {
       mlir::emitError(loc) << "expected integer argument for `"
@@ -3364,6 +3382,16 @@ Value Context::convertSystemCall(
     auto value = convertRvalueExpression(*args[0]);
     if (!value)
       return {};
+    if (!isa<moore::IntType>(value.getType())) {
+      if (!isa<moore::PackedType>(value.getType())) {
+        mlir::emitError(loc) << "expected integer argument for `$countones`";
+        return {};
+      }
+      value = materializePackedToSBVConversion(*this, value, loc,
+                                               /*fallible=*/false);
+      if (!value)
+        return {};
+    }
     auto valTy = dyn_cast<moore::IntType>(value.getType());
     if (!valTy) {
       mlir::emitError(loc) << "expected integer argument for `$countones`";
