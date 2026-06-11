@@ -16,6 +16,8 @@
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/Iterators.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
@@ -859,14 +861,39 @@ void HWToLLVMLoweringPass::runOnOperation() {
   // Don't touch non-HW operations
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
 
+  // Rewrite the aggregate HW types carried by function signatures and the
+  // `return`/`call` ops that wire values through them, so that no leftover
+  // values of HW type remain once the HW ops have been lowered. The op
+  // legality is keyed on the type converter.
+  target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
+    return converter.isSignatureLegal(op.getFunctionType()) &&
+           converter.isLegal(&op.getBody());
+  });
+  target.addDynamicallyLegalOp<func::ReturnOp, func::CallOp>(
+      [&](Operation *op) { return converter.isLegal(op); });
+
   // Setup the conversion.
   populateHWToLLVMConversionPatterns(converter, patterns, globals,
                                      constAggregateGlobalsMap, spillCacheOpt);
+  populateFunctionOpInterfaceTypeConversionPattern<func::FuncOp>(patterns,
+                                                                 converter);
+  populateReturnOpTypeConversionPattern(patterns, converter);
+  populateCallOpTypeConversionPattern(patterns, converter);
 
   // Apply the partial conversion.
   ConversionConfig config;
   config.allowPatternRollback = false;
   if (failed(applyPartialConversion(getOperation(), target, std::move(patterns),
                                     config)))
-    signalPassFailure();
+    return signalPassFailure();
+
+  // Reconcile the temporary `unrealized_conversion_cast` ops the conversion
+  // left behind -- in particular the `hw -> llvm -> hw` round-trips that the
+  // framework materializes around spilled values whose signature was
+  // converted. This keeps the pass self-contained instead of relying on a
+  // downstream reconcile pass; genuine boundary casts are left in place.
+  SmallVector<UnrealizedConversionCastOp> castOps;
+  getOperation()->walk(
+      [&](UnrealizedConversionCastOp op) { castOps.push_back(op); });
+  reconcileUnrealizedCasts(castOps, /*remainingCastOps=*/nullptr);
 }
