@@ -486,6 +486,9 @@ struct Context {
            std::unique_ptr<FunctionLowering>>
       functions;
 
+  /// DPI-C export directives keyed by the SystemVerilog subroutine they expose.
+  DenseMap<const slang::ast::SubroutineSymbol *, std::string> dpiExportCNames;
+
   /// Classes that have already been converted.
   DenseMap<const slang::ast::ClassType *, std::unique_ptr<ClassLowering>>
       classes;

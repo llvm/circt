@@ -9,15 +9,52 @@
 #include "ImportVerilogInternals.h"
 #include "slang/ast/Compilation.h"
 #include "slang/ast/symbols/ClassSymbols.h"
+#include "slang/syntax/AllSyntax.h"
+#include "slang/syntax/SyntaxVisitor.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/ScopeExit.h"
 
 using namespace circt;
 using namespace ImportVerilog;
 
+static constexpr StringLiteral dpiExportAttrName = "circt.dpi.export";
+
 //===----------------------------------------------------------------------===//
 // Utilities
 //===----------------------------------------------------------------------===//
+
+/// Record `export "DPI-C"` directives in the given scope so that callable
+/// declarations can be tagged with the exported C name. Slang resolves the
+/// directives during elaboration but does not expose them on the subroutine
+/// symbols themselves, so walk the scope's syntax to recover them.
+static void recordDPIExportDirectives(Context &context,
+                                      const slang::ast::Scope &scope,
+                                      const slang::syntax::SyntaxNode *syntax) {
+  if (!syntax)
+    return;
+
+  auto visitor = slang::syntax::makeSyntaxVisitor(
+      [&](auto &visitor, const slang::syntax::DPIExportSyntax &exportSyntax) {
+        auto svName = exportSyntax.name.valueText();
+        if (svName.empty())
+          return;
+
+        const auto *symbol = scope.find(svName);
+        const auto *subroutine =
+            symbol ? symbol->as_if<slang::ast::SubroutineSymbol>() : nullptr;
+        if (!subroutine)
+          return;
+
+        auto cName = exportSyntax.c_identifier.valueText();
+        if (cName.empty())
+          cName = svName;
+        context.dpiExportCNames[subroutine] = std::string(cName);
+      },
+      [](auto &visitor, const slang::syntax::SyntaxNode &node) {
+        visitor.visitDefault(node);
+      });
+  syntax->visit(visitor);
+}
 
 static void guessNamespacePrefix(const slang::ast::Symbol &symbol,
                                  SmallString<64> &prefix) {
@@ -1182,6 +1219,7 @@ LogicalResult Context::convertCompilation() {
   // include instantiable constructs like modules, interfaces, and programs,
   // which are listed separately as top instances.
   for (auto *unit : root.compilationUnits) {
+    recordDPIExportDirectives(*this, *unit, unit->getSyntax());
     for (const auto &member : unit->members()) {
       auto loc = convertLocation(member.location);
       if (failed(member.visit(RootVisitor(*this, loc))))
@@ -1477,6 +1515,8 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 LogicalResult
 Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
   auto &lowering = *modules[module];
+  recordDPIExportDirectives(*this, *module, module->getSyntax());
+
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToEnd(lowering.op.getBody());
 
@@ -1665,6 +1705,8 @@ Context::convertPackage(const slang::ast::PackageSymbol &package) {
   timeScale = package.getTimeScale().value_or(slang::TimeScale());
   llvm::scope_exit timeScaleGuard([&] { timeScale = prevTimeScale; });
 
+  recordDPIExportDirectives(*this, package, package.getSyntax());
+
   OpBuilder::InsertionGuard g(builder);
   builder.setInsertionPointToEnd(intoModuleOp.getBody());
   ValueSymbolScope scope(valueSymbols);
@@ -1848,6 +1890,19 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
 
   std::unique_ptr<FunctionLowering> lowering;
   Operation *insertedOp = nullptr;
+  auto dpiExportIt = dpiExportCNames.find(&subroutine);
+  bool isDPIExport = dpiExportIt != dpiExportCNames.end();
+  // DPI-exported subroutines must keep a public symbol tagged with the
+  // exported C name so later pipeline stages can materialize the export.
+  auto setVisibilityAndExportAttr = [&](Operation *op) {
+    if (isDPIExport) {
+      op->setAttr(dpiExportAttrName,
+                  builder.getStringAttr(dpiExportIt->second));
+      SymbolTable::setSymbolVisibility(op, SymbolTable::Visibility::Public);
+      return;
+    }
+    SymbolTable::setSymbolVisibility(op, SymbolTable::Visibility::Private);
+  };
   if (!subroutine.thisVar &&
       subroutine.flags.has(slang::ast::MethodFlags::DPIImport)) {
     // DPI-imported function: create a moore.func.dpi declaration.
@@ -1859,20 +1914,20 @@ Context::declareCallableImpl(const slang::ast::SubroutineSymbol &subroutine,
         builder, loc, StringAttr::get(getContext(), qualifiedName), *dpiSig,
         /*argumentLocs=*/ArrayAttr(),
         StringAttr::get(getContext(), subroutine.name));
-    SymbolTable::setSymbolVisibility(dpiOp, SymbolTable::Visibility::Private);
+    setVisibilityAndExportAttr(dpiOp);
     lowering = std::make_unique<FunctionLowering>(dpiOp);
     insertedOp = dpiOp;
   } else if (subroutine.subroutineKind == slang::ast::SubroutineKind::Task) {
     // Create a coroutine for tasks (which can suspend).
     auto op = moore::CoroutineOp::create(builder, loc, qualifiedName, funcTy);
-    SymbolTable::setSymbolVisibility(op, SymbolTable::Visibility::Private);
+    setVisibilityAndExportAttr(op);
     lowering = std::make_unique<FunctionLowering>(op);
     insertedOp = op;
   } else {
     // Create a function for regular functions (which cannot suspend).
     auto funcOp =
         mlir::func::FuncOp::create(builder, loc, qualifiedName, funcTy);
-    SymbolTable::setSymbolVisibility(funcOp, SymbolTable::Visibility::Private);
+    setVisibilityAndExportAttr(funcOp);
     lowering = std::make_unique<FunctionLowering>(funcOp);
     insertedOp = funcOp;
   }

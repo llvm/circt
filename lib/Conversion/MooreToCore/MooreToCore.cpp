@@ -664,6 +664,8 @@ struct CoroutineOpConversion : public OpConversionPattern<CoroutineOp> {
     auto newOp = llhd::CoroutineOp::create(rewriter, op.getLoc(),
                                            op.getSymName(), newFuncType);
     newOp.setSymVisibilityAttr(op.getSymVisibilityAttr());
+    if (auto dpiExport = op->getAttr("circt.dpi.export"))
+      newOp->setAttr("circt.dpi.export", dpiExport);
     rewriter.inlineRegionBefore(op.getBody(), newOp.getBody(),
                                 newOp.getBody().end());
     if (failed(rewriter.convertRegionTypes(&newOp.getBody(), *typeConverter,
