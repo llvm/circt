@@ -313,9 +313,6 @@ GlobalSignalReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 //===----------------------------------------------------------------------===//
 
 LogicalResult YieldOp::verify() {
-  if (!isa<GlobalSignalOp>((*this)->getParentOp()))
-    return success();
-
   if (getOperands().size() != 1)
     return emitOpError()
            << "must yield exactly one value for 'sim.global_signal'";
