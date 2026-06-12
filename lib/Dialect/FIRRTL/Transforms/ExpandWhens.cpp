@@ -707,20 +707,19 @@ void WhenOpVisitor::visitStmt(WhenOp whenOp) {
 // NOLINTNEXTLINE(misc-no-recursion)
 void WhenOpVisitor::visitStmt(LayerBlockOp layerBlockOp) {
   // Operations created inside a layerblock are not accessible in sibling
-  // layerblocks. Save and restore the LTL op caches to prevent reusing values
-  // across layerblock boundaries, which would cause dominance violations.
-  decltype(createdLTLAndOps) savedLTLAndOps;
-  decltype(createdLTLImplicationOps) savedLTLImplicationOps;
-  decltype(createdLTLClockOps) savedLTLClockOps;
-  std::swap(createdLTLAndOps, savedLTLAndOps);
-  std::swap(createdLTLImplicationOps, savedLTLImplicationOps);
-  std::swap(createdLTLClockOps, savedLTLClockOps);
+  // layerblocks. Snapshot the LTL op caches before entering and restore them
+  // afterward so that ops created inside one layerblock are not reused by a
+  // sibling, which would cause dominance violations. Parent-scope cached ops
+  // remain available inside the layerblock since they dominate it.
+  auto savedLTLAndOps = createdLTLAndOps;
+  auto savedLTLImplicationOps = createdLTLImplicationOps;
+  auto savedLTLClockOps = createdLTLClockOps;
 
   process(*layerBlockOp.getBody());
 
-  std::swap(createdLTLAndOps, savedLTLAndOps);
-  std::swap(createdLTLImplicationOps, savedLTLImplicationOps);
-  std::swap(createdLTLClockOps, savedLTLClockOps);
+  createdLTLAndOps = std::move(savedLTLAndOps);
+  createdLTLImplicationOps = std::move(savedLTLImplicationOps);
+  createdLTLClockOps = std::move(savedLTLClockOps);
 }
 
 void WhenOpVisitor::visitStmt(RefForceOp op) {
