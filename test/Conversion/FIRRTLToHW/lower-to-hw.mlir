@@ -943,6 +943,19 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.matchingconnect %sink, %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
   }
 
+  // Test for https://github.com/llvm/circt/issues/7388
+  // istag on a zero-width enum (single variant, zero-width data) should not
+  // crash. The tag check is trivially true.
+  // CHECK-LABEL: hw.module private @IsTagZeroWidthEnum(out o : i1) {
+  // CHECK-NEXT:   %true = hw.constant true
+  // CHECK-NEXT:   hw.output %true : i1
+  // CHECK-NEXT: }
+  firrtl.module private @IsTagZeroWidthEnum(
+      in %e: !firrtl.enum<A: uint<0>>, out %o: !firrtl.uint<1>) {
+    %0 = firrtl.istag %e A : !firrtl.enum<A: uint<0>>
+    firrtl.matchingconnect %o, %0 : !firrtl.uint<1>
+  }
+
   // CHECK-LABEL: IsInvalidIssue572
   // https://github.com/llvm/circt/issues/572
   firrtl.module private @IsInvalidIssue572(in %a: !firrtl.analog<1>) {

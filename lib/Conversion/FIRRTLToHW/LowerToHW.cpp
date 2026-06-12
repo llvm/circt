@@ -3594,6 +3594,10 @@ LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(IsTagOp op) {
+  // A zero-width enum has exactly one variant, so the tag check is trivially
+  // true.
+  if (isZeroBitFIRRTLType(op.getInput().getType()))
+    return setLowering(op, getOrCreateIntConstant(1, 1));
 
   auto tagName = op.getFieldNameAttr();
   auto lhs = getLoweredValue(op.getInput());
