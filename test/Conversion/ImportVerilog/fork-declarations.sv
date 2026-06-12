@@ -25,3 +25,23 @@ endmodule
 // CHECK:     [[K_VALUE:%.+]] = moore.read [[K]] : <i32>
 // CHECK:     moore.blocking_assign {{%.+}}, [[K_VALUE]] : i32
 // CHECK:     moore.complete
+
+// Forks containing only declarations spawn no threads; the declarations
+// degenerate to plain block items and no fork op is created.
+// CHECK-LABEL: moore.module @ForkDeclarationsOnly
+module ForkDeclarationsOnly;
+  int o;
+
+  initial begin
+    fork
+      automatic int k = 42;
+    join
+    o = 1;
+  end
+endmodule
+
+// CHECK: moore.procedure initial
+// CHECK-NOT: moore.fork
+// CHECK: moore.variable {{%.+}} : <i32>
+// CHECK-NOT: moore.fork
+// CHECK: moore.return

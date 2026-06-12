@@ -177,43 +177,39 @@ struct StmtVisitor {
 
     // Slang stores all threads of a fork-join block inside a `StatementList`.
     // This cannot be visited normally due to the need to make each statement a
-    // separate thread so must be converted here.
-    auto *threadList = stmt.body.as_if<slang::ast::StatementList>();
-
+    // separate thread so must be converted here. When only a single statement
+    // is present, Slang does not create a `StatementList`.
+    //
     // Declarations inside a fork block are block items, not separate forked
-    // processes. Slang stores them in the same `StatementList` as the
-    // statements, so emit any leading declarations before creating fork
-    // regions. This lets the declared values dominate all fork threads.
-    unsigned firstThread = 0;
-    if (threadList) {
-      while (firstThread < threadList->list.size() &&
-             threadList->list[firstThread]
-                 ->as_if<slang::ast::VariableDeclStatement>()) {
-        if (failed(context.convertStatement(*threadList->list[firstThread])))
+    // processes. Slang stores them in the same `StatementList` as the forked
+    // statements, so convert them in place before creating the fork regions
+    // (their values must dominate all threads) and collect the remaining
+    // statements as the actual threads.
+    SmallVector<const slang::ast::Statement *> items;
+    if (auto *threadList = stmt.body.as_if<slang::ast::StatementList>())
+      items.append(threadList->list.begin(), threadList->list.end());
+    else
+      items.push_back(&stmt.body);
+
+    SmallVector<const slang::ast::Statement *> threads;
+    for (auto *item : items) {
+      if (item->as_if<slang::ast::VariableDeclStatement>()) {
+        if (failed(context.convertStatement(*item)))
           return failure();
-        ++firstThread;
+        continue;
       }
+      threads.push_back(item);
     }
+    // If the fork contained only declarations, there are no threads to spawn
+    // and the fork degenerates to the declarations themselves. Genuinely
+    // empty forks keep producing an empty fork op.
+    if (threads.empty() && !items.empty())
+      return success();
 
-    unsigned int threadCount =
-        threadList ? threadList->list.size() - firstThread : 1;
-
-    auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threadCount);
+    auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threads.size());
     OpBuilder::InsertionGuard guard(builder);
 
-    // When only a single statement is present, Slang does not create a
-    // `StatementList`.
-    if (!threadList) {
-      auto &tBlock = forkOp->getRegion(0).emplaceBlock();
-      builder.setInsertionPointToStart(&tBlock);
-      if (failed(context.convertStatement(stmt.body)))
-        return failure();
-      moore::CompleteOp::create(builder, loc);
-      return success();
-    }
-
-    int i = 0;
-    for (auto *thread : llvm::drop_begin(threadList->list, firstThread)) {
+    for (auto [i, thread] : llvm::enumerate(threads)) {
       auto &tBlock = forkOp->getRegion(i).emplaceBlock();
       builder.setInsertionPointToStart(&tBlock);
       // Populate thread operator with thread body and finish with a thread
@@ -221,7 +217,6 @@ struct StmtVisitor {
       if (failed(context.convertStatement(*thread)))
         return failure();
       moore::CompleteOp::create(builder, loc);
-      i++;
     }
     return success();
   }
