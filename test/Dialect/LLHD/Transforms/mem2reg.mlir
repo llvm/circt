@@ -1181,20 +1181,28 @@ hw.module @CapturePostWaitValueOnlyAcrossDominatedWaits(in %a: i42) {
   }
 }
 
-// Float signals are promotable; Mem2Reg can materialize floating-point zero
-// defaults when a merge needs one. Extremely wide aggregate signals still are
-// not promotable since default values would exceed MLIR's IntegerType limit.
-// CHECK-LABEL: @RealSignalNotPromoted
-hw.module @RealSignalNotPromoted(in %clk : i1, in %a : f64, in %b : f64) {
+// Float signals are promotable; Mem2Reg materializes a floating-point zero
+// default for the merge and forwards the driven value through block arguments,
+// turning the drive into a single conditional drive. Extremely wide aggregate
+// signals still are not promotable since default values would exceed MLIR's
+// IntegerType limit.
+// CHECK-LABEL: @RealSignalDrivePromoted
+hw.module @RealSignalDrivePromoted(in %clk : i1, in %a : f64, in %b : f64) {
   %0 = llhd.constant_time <0ns, 0d, 1e>
   // CHECK: %r = llhd.sig %b : f64
   %r = llhd.sig %b : f64
+  // CHECK: llhd.process
+  // CHECK: arith.constant 0.000000e+00 : f64
+  // CHECK: ^bb1([[VAL:%.+]]: f64, [[EN:%.+]]: i1):
+  // CHECK:   llhd.drv %r, [[VAL]] after {{%.+}} if [[EN]] : f64
+  // CHECK:   llhd.wait (%clk : i1), ^bb2
+  // CHECK: ^bb2:
+  // CHECK:   cf.br ^bb1(%a, %true : f64, i1)
   llhd.process {
     cf.br ^bb1
   ^bb1:
     llhd.wait (%clk : i1), ^bb2
   ^bb2:
-    // CHECK: llhd.drv %r, {{.*}} after
     llhd.drv %r, %a after %0 : f64
     cf.br ^bb1
   }

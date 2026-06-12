@@ -1044,11 +1044,12 @@ void Promoter::captureAcrossWait() {
 /// reach the same block.
 void Promoter::captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
                                  Liveness &liveness, DominanceInfo &dominance) {
-  // Constants, time values, and signal handles can be rematerialized by later
-  // scheduling/lowering stages. Capturing them as wait successor operands may
-  // obscure constant delays or force opaque handles into scheduler frame phis.
-  if (isa<TimeType, RefType>(value.getType()))
-    return;
+  // Constant-like values are guaranteed not to change across a wait and can
+  // be rematerialized freely, so they never need to be captured. Everything
+  // else defined inside the process, including time and ref values derived
+  // from mutable state, must be captured so that uses after the wait observe
+  // the value from before the wait. Values defined outside the process are
+  // filtered by the caller.
   if (auto *defOp = value.getDefiningOp())
     if (defOp->hasTrait<OpTrait::ConstantLike>())
       return;
