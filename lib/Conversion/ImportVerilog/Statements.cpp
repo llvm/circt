@@ -25,6 +25,122 @@ using namespace mlir;
 using namespace circt;
 using namespace ImportVerilog;
 
+/// Collect the qualified-name components (instances, packages, classes) for a
+/// scope, outermost first.
+static void collectScopeNameParts(const slang::ast::Scope *scope,
+                                  SmallVectorImpl<std::string> &parts) {
+  SmallVector<std::string, 8> reversed;
+  while (scope) {
+    const auto &sym = scope->asSymbol();
+    switch (sym.kind) {
+    case slang::ast::SymbolKind::Root:
+      scope = nullptr;
+      continue;
+    case slang::ast::SymbolKind::Instance:
+    case slang::ast::SymbolKind::InstanceBody:
+    case slang::ast::SymbolKind::Package:
+    case slang::ast::SymbolKind::ClassType:
+    case slang::ast::SymbolKind::GenericClassDef:
+      if (!sym.name.empty())
+        reversed.emplace_back(sym.name);
+      break;
+    default:
+      break;
+    }
+    scope = sym.getParentScope();
+  }
+  for (auto &part : llvm::reverse(reversed))
+    parts.push_back(part);
+}
+
+/// Build the `Pkg::Class::method` qualified name for a subroutine.
+static std::string
+getQualifiedSubroutineName(const slang::ast::SubroutineSymbol &subroutine) {
+  SmallVector<std::string, 8> parts;
+  collectScopeNameParts(subroutine.getParentScope(), parts);
+  if (!subroutine.name.empty())
+    parts.emplace_back(subroutine.name);
+
+  std::string out;
+  llvm::raw_string_ostream os(out);
+  llvm::interleave(
+      parts, os, [&](const std::string &part) { os << part; }, "::");
+  return out;
+}
+
+/// Render a location as `file:line:col` if available, otherwise its default
+/// textual form.
+static std::string getLocationString(Location loc) {
+  std::string out;
+  llvm::raw_string_ostream os(out);
+  if (auto fileLoc = dyn_cast<FileLineColLoc>(loc)) {
+    os << fileLoc.getFilename();
+    if (fileLoc.getLine())
+      os << ":" << fileLoc.getLine();
+    if (fileLoc.getColumn())
+      os << ":" << fileLoc.getColumn();
+    return out;
+  }
+  loc.print(os);
+  return out;
+}
+
+/// Append the stack frame for the subroutines currently being lowered, plus the
+/// location of the `$stacktrace` call itself.
+static void buildStackTraceFrame(Context &context, Location loc,
+                                 llvm::raw_ostream &os) {
+  if (context.currentSubroutineStack.empty()) {
+    os << "\n    <procedural scope>";
+  } else {
+    for (const auto *subroutine : llvm::reverse(context.currentSubroutineStack))
+      if (subroutine)
+        os << "\n    " << getQualifiedSubroutineName(*subroutine);
+  }
+  os << "\n    at " << getLocationString(loc);
+}
+
+static std::string buildStackTraceFrame(Context &context, Location loc) {
+  std::string out;
+  llvm::raw_string_ostream os(out);
+  buildStackTraceFrame(context, loc, os);
+  return out;
+}
+
+static std::string buildStackTraceMessage(Context &context, Location loc) {
+  std::string out;
+  llvm::raw_string_ostream os(out);
+  os << "Stack trace:";
+  buildStackTraceFrame(context, loc, os);
+  return out;
+}
+
+Value Context::materializeStackTraceCallerLocation(Location loc) {
+  SmallVector<Value, 2> fragments;
+  fragments.push_back(moore::FormatLiteralOp::create(
+      builder, loc, buildStackTraceFrame(*this, loc)));
+  if (!stacktraceCallerStack.empty())
+    fragments.push_back(moore::FormatStringOp::create(
+        builder, loc, stacktraceCallerStack.back(), {}, {}, {}));
+  Value chain = fragments.size() == 1
+                    ? fragments.front()
+                    : moore::FormatConcatOp::create(builder, loc, fragments);
+  return moore::FormatStringToStringOp::create(builder, loc, chain);
+}
+
+Value Context::materializeStackTraceMessage(Location loc) {
+  if (stacktraceCallerStack.empty())
+    return moore::FormatLiteralOp::create(
+        builder, loc, buildStackTraceMessage(*this, loc) + "\n");
+
+  SmallVector<Value, 3> fragments;
+  fragments.push_back(moore::FormatLiteralOp::create(
+      builder, loc, buildStackTraceMessage(*this, loc)));
+  fragments.push_back(moore::FormatStringOp::create(
+      builder, loc, stacktraceCallerStack.back(), {}, {}, {}));
+  fragments.push_back(moore::FormatLiteralOp::create(builder, loc, "\n"));
+  return moore::FormatConcatOp::create(builder, loc, fragments);
+}
+
 /// Build the message printed by the `$printtimescale` system task. If a module
 /// instance or `$unit` is passed as argument, report that scope's time scale;
 /// otherwise report the time scale of the current scope.
@@ -1037,6 +1153,16 @@ struct StmtVisitor {
     if (nameId == ksn::PrintTimeScale) {
       auto message = moore::FormatLiteralOp::create(
           builder, loc, buildPrintTimeScaleMessage(context, args));
+      moore::DisplayBIOp::create(builder, loc, message);
+      return true;
+    }
+
+    // Stack trace task (`$stacktrace`)
+
+    if (nameId == ksn::Stacktrace) {
+      if (!args.empty())
+        return emitError(loc) << "`$stacktrace` expects no arguments";
+      auto message = context.materializeStackTraceMessage(loc);
       moore::DisplayBIOp::create(builder, loc, message);
       return true;
     }

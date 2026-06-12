@@ -252,6 +252,10 @@ struct Context {
   FunctionLowering *
   declareFunction(const slang::ast::SubroutineSymbol &subroutine);
   LogicalResult defineFunction(const slang::ast::SubroutineSymbol &subroutine);
+  bool
+  needsStacktraceCallerArgument(const slang::ast::SubroutineSymbol &subroutine);
+  Value materializeStackTraceCallerLocation(Location loc);
+  Value materializeStackTraceMessage(Location loc);
   LogicalResult
   convertPrimitiveInstance(const slang::ast::PrimitiveInstanceSymbol &prim);
   ClassLowering *declareClass(const slang::ast::ClassType &cls);
@@ -486,6 +490,12 @@ struct Context {
            std::unique_ptr<FunctionLowering>>
       functions;
 
+  /// Tri-state cache used to decide whether a subroutine needs a hidden
+  /// `$stacktrace` caller-location argument. Values are:
+  /// 1 = currently visiting, 2 = no, 3 = yes.
+  DenseMap<const slang::ast::SubroutineSymbol *, uint8_t>
+      stacktraceCallerArgState;
+
   /// DPI-C export directives keyed by the SystemVerilog subroutine they expose.
   DenseMap<const slang::ast::SubroutineSymbol *, std::string> dpiExportCNames;
 
@@ -570,6 +580,12 @@ struct Context {
   /// Variable to track the value of the current function's implicit `this`
   /// reference
   Value currentThisRef = {};
+
+  /// A stack of subroutines currently being lowered.
+  SmallVector<const slang::ast::SubroutineSymbol *> currentSubroutineStack;
+  /// Hidden caller-location strings available while lowering a subroutine that
+  /// may execute `$stacktrace`.
+  SmallVector<Value> stacktraceCallerStack;
 
   /// Variable that tracks the queue which we are currently converting the index
   /// expression for. This is necessary to implement the `$` operator, which
