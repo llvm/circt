@@ -443,15 +443,19 @@ hw.module @compareExtractFold(in %arg0 : i8, out o1: i1, out o2: i1, out o3: i1)
 // a when it is a single full element.
 // CHECK-LABEL: hw.module @extractCatAlignWithExactElements
 hw.module @extractCatAlignWithExactElements(in %arg0 : i8, in %arg1 : i9, in %arg2: i10, out o1 : i17, out o2: i19, out o3: i9, out o4: i10) {
+  // Use separate concat operations to ensure single use
   %0 = comb.concat %arg0, %arg1, %arg2 : i8, i9, i10
+  %5 = comb.concat %arg0, %arg1, %arg2 : i8, i9, i10
+  %6 = comb.concat %arg0, %arg1, %arg2 : i8, i9, i10
+  %7 = comb.concat %arg0, %arg1, %arg2 : i8, i9, i10
 
   // CHECK-NEXT:    [[R0:%.+]] = comb.concat %arg0, %arg1
   %1 = comb.extract %0 from 10 : (i27) -> i17
 
   // CHECK-NEXT:    [[R1:%.+]] = comb.concat %arg1, %arg2
-  %2 = comb.extract %0 from 0 : (i27) -> i19
-  %3 = comb.extract %0 from 10 : (i27) -> i9
-  %4 = comb.extract %0 from 0 : (i27) -> i10
+  %2 = comb.extract %5 from 0 : (i27) -> i19
+  %3 = comb.extract %6 from 10 : (i27) -> i9
+  %4 = comb.extract %7 from 0 : (i27) -> i10
 
   // CHECK-NEXT:    hw.output [[R0]], [[R1]], %arg1, %arg2
   hw.output %1, %2, %3, %4 : i17, i19, i9, i10
@@ -491,7 +495,9 @@ hw.module @extractCatOnSinglePartialElement(in %arg0 : i8, in %arg1 : i9, in %ar
 // - the order of the elements are correct.
 // CHECK-LABEL: hw.module @extractCatOnMultiplePartialElements
 hw.module @extractCatOnMultiplePartialElements(in %arg0 : i8, in %arg1 : i9, in %arg2: i10, out o1 : i11, out o2 : i5) {
+  // Use separate concat operations to ensure single use
   %0 = comb.concat %arg0, %arg1, %arg2 : i8, i9, i10
+  %3 = comb.concat %arg0, %arg1, %arg2 : i8, i9, i10
 
   // Part of arg0, all of arg1, part of arg2
   // CHECK-NEXT: [[FROMARG2:%.+]] = comb.extract %arg2 from 9 : (i10) -> i1
@@ -500,12 +506,12 @@ hw.module @extractCatOnMultiplePartialElements(in %arg0 : i8, in %arg1 : i9, in 
   %1 = comb.extract %0 from 9 : (i27) -> i11
 
   // Part of arg1 and part of arg2
-  // CHECK-NEXT: [[FROMARG2:%.+]] = comb.extract %arg2 from 9 : (i10) -> i1
+  // CHECK-NEXT: [[FROMARG2_2:%.+]] = comb.extract %arg2 from 9 : (i10) -> i1
   // CHECK-NEXT: [[FROMARG1:%.+]] = comb.extract %arg1 from 0 : (i9) -> i4
-  // CHECK-NEXT: [[RESULT2:%.+]] = comb.concat [[FROMARG1]], [[FROMARG2]] : i4, i1
-  %2 = comb.extract %0 from 9 : (i27) -> i5
+  // CHECK-NEXT: [[RESULT2:%.+]] = comb.concat [[FROMARG1]], [[FROMARG2_2]] : i4, i1
+  %2 = comb.extract %3 from 9 : (i27) -> i5
 
-  // CHECK-NEXT: hw.output [[RESULT1:%.+]], [[RESULT2:%.+]]
+  // CHECK-NEXT: hw.output [[RESULT1]], [[RESULT2]]
   hw.output %1, %2 : i11, i5
 }
 
@@ -736,25 +742,31 @@ hw.module @narrow_extract_from_and(in %arg0 : i32, out o1: i8, out o2: i14, out 
 
   %2 = comb.extract %0 from 2 : (i32) -> i14
 
-  // CHECK: %0 = comb.extract %arg0 from 4 : (i32) -> i4
-  // CHECK: %1 = comb.concat %c0_i3, %0, %false : i3, i4, i1
-  // CHECK: %2 = comb.concat %c0_i8, %0, %c0_i2 : i8, i4, i2
+  // CHECK-DAG: [[C0_I2:%.+]] = hw.constant 0 : i2
+  // CHECK-DAG: [[C0_I3:%.+]] = hw.constant 0 : i3
+  // CHECK-DAG: [[C_NEG11_I5:%.+]] = hw.constant -11 : i5
+  // CHECK-DAG: [[C0_I4:%.+]] = hw.constant 0 : i4
+  // CHECK-DAG: [[C0_I24:%.+]] = hw.constant 0 : i24
+  // CHECK: [[EXTRACT1:%.+]] = comb.extract %arg0 from 4 : (i32) -> i4
+  // CHECK: [[CONCAT1:%.+]] = comb.concat [[C0_I24]], [[EXTRACT1]], [[C0_I4]] : i24, i4, i4
+  // CHECK: [[EXTRACT2:%.+]] = comb.extract [[CONCAT1]] from 3 : (i32) -> i8
+  // CHECK: [[EXTRACT3:%.+]] = comb.extract [[CONCAT1]] from 2 : (i32) -> i14
 
   %c42_i32 = hw.constant 42 : i32  // 0b101010
   %3 = comb.and %arg0, %c42_i32 : i32
-  %4 = comb.extract %3 from 1 : (i32) -> i8  
-  // CHECK: %3 = comb.extract %arg0 from 1 : (i32) -> i5
-  // CHECK: %4 = comb.and %3, %c-11_i5 : i5
-  // CHECK: %5 = comb.concat %c0_i3, %4 : i3, i5
+  %4 = comb.extract %3 from 1 : (i32) -> i8
+  // CHECK: [[EXTRACT4:%.+]] = comb.extract %arg0 from 1 : (i32) -> i5
+  // CHECK: [[AND1:%.+]] = comb.and [[EXTRACT4]], [[C_NEG11_I5]] : i5
+  // CHECK: [[CONCAT2:%.+]] = comb.concat [[C0_I3]], [[AND1]] : i3, i5
 
   %c12_i8 = hw.constant 12 : i8
   %5 = comb.extract %arg0 from 23 : (i32) -> i8
   %6 = comb.and %5, %c12_i8 : i8
-  // CHECK: %6 = comb.extract %arg0 from 25 : (i32) -> i2
-  // CHECK: %7 = comb.concat %c0_i4, %6, %c0_i2 : i4, i2, i2
- 
+  // CHECK: [[EXTRACT5:%.+]] = comb.extract %arg0 from 25 : (i32) -> i2
+  // CHECK: [[CONCAT3:%.+]] = comb.concat [[C0_I4]], [[EXTRACT5]], [[C0_I2]] : i4, i2, i2
+
   hw.output %1, %2, %4, %6 : i8, i14, i8, i8
-  // CHECK: hw.output %1, %2, %5, %7 : i8, i14, i8, i8
+  // CHECK: hw.output [[EXTRACT2]], [[EXTRACT3]], [[CONCAT2]], [[CONCAT3]] : i8, i14, i8, i8
 }
 
 // CHECK-LABEL: hw.module @fold_mux_tree1

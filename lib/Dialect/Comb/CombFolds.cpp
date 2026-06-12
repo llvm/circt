@@ -518,7 +518,14 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
          "incorrectly failed to find an element which contains coverage of "
          "lowBit");
 
-  SmallVector<Value> reverseConcatArgs;
+  // A helper struct for each portion to be extracted
+  struct ExtractPortion {
+    Value operand;
+    size_t lowBit;
+    size_t width;
+  };
+  SmallVector<ExtractPortion> portions;
+
   size_t widthRemaining = cast<IntegerType>(op.getType()).getWidth();
   size_t extractLo = lowBit - beginOfFirstRelevantElement;
 
@@ -530,18 +537,30 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
     size_t operandWidth = concatArg.getType().getIntOrFloatBitWidth();
     size_t widthToConsume = std::min(widthRemaining, operandWidth - extractLo);
 
-    if (widthToConsume == operandWidth && extractLo == 0) {
-      reverseConcatArgs.push_back(concatArg);
-    } else {
-      auto resultType = IntegerType::get(rewriter.getContext(), widthToConsume);
-      reverseConcatArgs.push_back(
-          ExtractOp::create(rewriter, op.getLoc(), resultType, *it, extractLo));
-    }
+    portions.push_back({concatArg, extractLo, widthToConsume});
 
     widthRemaining -= widthToConsume;
-
-    // Beyond the first element, all elements are extracted from position 0.
+    // Beyond the first element, extract from position 0
     extractLo = 0;
+  }
+
+  // Only perform optimization if concat is single-used or only one portion is
+  // extracted.
+  if (!innerCat.getResult().hasOneUse() && portions.size() != 1)
+    return failure();
+
+  SmallVector<Value> reverseConcatArgs;
+  reverseConcatArgs.reserve(portions.size());
+  for (auto &portion : portions) {
+    size_t operandWidth = portion.operand.getType().getIntOrFloatBitWidth();
+
+    if (portion.width == operandWidth && portion.lowBit == 0)
+      reverseConcatArgs.push_back(portion.operand);
+    else
+      reverseConcatArgs.push_back(ExtractOp::create(
+          rewriter, op.getLoc(),
+          IntegerType::get(rewriter.getContext(), portion.width),
+          portion.operand, portion.lowBit));
   }
 
   if (reverseConcatArgs.size() == 1) {
