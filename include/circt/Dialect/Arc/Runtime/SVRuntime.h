@@ -53,6 +53,18 @@ void circt_sv_print_fvint(const void *valueData, const void *unknownData,
                           int32_t bitWidth, int32_t base, int32_t minWidth,
                           int32_t flags);
 
+/// Set the global `$timeformat` state used by `circt_sv_print_time` (the `%t`
+/// format specifier): `unit` is the base-10 exponent of the time unit (clamped
+/// to -15..0), `precision` the number of fractional digits, `suffix` an
+/// optional unit string, and `minFieldWidth` the minimum field width.
+void circt_sv_set_timeformat(int32_t unit, int32_t precision,
+                             const char *suffix, int32_t minFieldWidth);
+
+/// Print a femtosecond time value to `stdout` using the current `$timeformat`
+/// state. `widthOverride` overrides the configured minimum field width when
+/// non-negative.
+void circt_sv_print_time(int64_t timeFs, int32_t widthOverride);
+
 } // extern "C"
 
 namespace circt {

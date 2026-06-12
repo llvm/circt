@@ -89,6 +89,33 @@ uint8_t getBitLE(const uint8_t *bytes, uint32_t bitIndex) {
   return (bytes[bitIndex / 8] >> (bitIndex % 8)) & 1u;
 }
 
+uint64_t pow10u64(uint32_t exp) {
+  static const uint64_t kPow10[] = {
+      1ull,
+      10ull,
+      100ull,
+      1000ull,
+      10000ull,
+      100000ull,
+      1000000ull,
+      10000000ull,
+      100000000ull,
+      1000000000ull,
+      10000000000ull,
+      100000000000ull,
+      1000000000000ull,
+      10000000000000ull,
+      100000000000000ull,
+      1000000000000000ull,
+      10000000000000000ull,
+      100000000000000000ull,
+      1000000000000000000ull,
+  };
+  if (exp >= (sizeof(kPow10) / sizeof(kPow10[0])))
+    return 0;
+  return kPow10[exp];
+}
+
 uint32_t getBitsLEMasked(const uint8_t *bytes, uint32_t bitWidth,
                          uint32_t bitIndex, uint32_t bitCount) {
   uint32_t out = 0;
@@ -381,6 +408,107 @@ extern "C" void circt_sv_print_fvint(const void *valueData,
   emitPadded(out, minWidth, leftJustify, padChar);
 }
 
+//===----------------------------------------------------------------------===//
+// `$timeformat` / `%t`
+//===----------------------------------------------------------------------===//
+
+namespace {
+// Global `$timeformat` state used by `%t`.
+int32_t timeformatUnit = -15;      // femtoseconds
+int32_t timeformatPrecision = 0;   // digits after the decimal point
+const char *timeformatSuffix = ""; // no suffix by default
+int32_t timeformatMinWidth = 20;   // slang-style default
+} // namespace
+
+extern "C" void circt_sv_set_timeformat(int32_t unit, int32_t precision,
+                                        const char *suffix,
+                                        int32_t minFieldWidth) {
+  // Clamp to the IEEE 1800 ranges.
+  if (unit < -15)
+    unit = -15;
+  if (unit > 0)
+    unit = 0;
+  if (precision < 0)
+    precision = 0;
+  if (precision > 18)
+    precision = 18;
+  if (minFieldWidth < 0)
+    minFieldWidth = 0;
+
+  timeformatUnit = unit;
+  timeformatPrecision = precision;
+  timeformatSuffix = suffix ? suffix : "";
+  timeformatMinWidth = minFieldWidth;
+}
+
+extern "C" void circt_sv_print_time(int64_t timeFs, int32_t widthOverride) {
+  int32_t unit = timeformatUnit;
+  int32_t precision = timeformatPrecision;
+  const char *suffix = timeformatSuffix ? timeformatSuffix : "";
+
+  int32_t fieldWidth = widthOverride >= 0 ? widthOverride : timeformatMinWidth;
+  if (fieldWidth < 0)
+    fieldWidth = 0;
+  if (precision < 0)
+    precision = 0;
+  if (precision > 18)
+    precision = 18;
+
+  bool neg = timeFs < 0;
+  uint64_t absFs;
+  if (neg)
+    absFs = static_cast<uint64_t>(-(timeFs + 1)) + 1; // avoid INT64_MIN UB
+  else
+    absFs = static_cast<uint64_t>(timeFs);
+
+  // Render `absFs * 10^(precision - unitPow)`, rounded to nearest. Both the
+  // unit scale and the precision scale are powers of ten, so the wide multiply
+  // in the naive formula cancels: when precision >= unitPow it is an exact
+  // multiply, otherwise it is a divide-by-power-of-ten with round-to-nearest.
+  // This keeps everything in uint64 (no `__int128`, which MSVC lacks).
+  uint32_t unitPow = static_cast<uint32_t>(unit + 15);
+  uint64_t scale = pow10u64(static_cast<uint32_t>(precision));
+  if (scale == 0)
+    scale = 1;
+
+  uint64_t scaled;
+  if (static_cast<uint32_t>(precision) >= unitPow) {
+    uint64_t factor = pow10u64(static_cast<uint32_t>(precision) - unitPow);
+    if (factor == 0)
+      factor = 1;
+    scaled = absFs * factor;
+  } else {
+    uint64_t divisor = pow10u64(unitPow - static_cast<uint32_t>(precision));
+    if (divisor == 0)
+      divisor = 1;
+    scaled = (absFs + divisor / 2) / divisor;
+  }
+
+  uint64_t intPart = precision == 0 ? scaled : (scaled / scale);
+  uint64_t fracPart = precision == 0 ? 0 : (scaled % scale);
+
+  std::string num;
+  if (neg)
+    num.push_back('-');
+  num.append(std::to_string(intPart));
+  if (precision > 0) {
+    num.push_back('.');
+    auto fracStr = std::to_string(fracPart);
+    if (fracStr.size() < static_cast<size_t>(precision))
+      num.append(static_cast<size_t>(precision) - fracStr.size(), '0');
+    num.append(fracStr);
+  }
+
+  if (fieldWidth > 0 && static_cast<int32_t>(num.size()) < fieldWidth) {
+    int32_t padCount = fieldWidth - static_cast<int32_t>(num.size());
+    for (int32_t i = 0; i < padCount; ++i)
+      std::fputc(' ', stdout);
+  }
+  std::fwrite(num.data(), 1, num.size(), stdout);
+  if (suffix && *suffix)
+    std::fputs(suffix, stdout);
+}
+
 #ifdef ARC_RUNTIME_JIT_BIND
 namespace circt {
 namespace arc {
@@ -396,6 +524,9 @@ static const SVRuntimeSymbol svRuntimeSymbols[] = {
     {"circt_sv_print_int", reinterpret_cast<void (*)()>(&circt_sv_print_int)},
     {"circt_sv_print_fvint",
      reinterpret_cast<void (*)()>(&circt_sv_print_fvint)},
+    {"circt_sv_set_timeformat",
+     reinterpret_cast<void (*)()>(&circt_sv_set_timeformat)},
+    {"circt_sv_print_time", reinterpret_cast<void (*)()>(&circt_sv_print_time)},
     {nullptr, nullptr},
 };
 
