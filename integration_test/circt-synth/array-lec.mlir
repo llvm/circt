@@ -1,10 +1,8 @@
-// REQUIRES: libz3
-// REQUIRES: circt-lec-jit
+// REQUIRES: z3
 
 // RUN: circt-opt %s --hw-aggregate-to-comb --convert-comb-to-synth -o %t.mlir
 
-// RUN: circt-lec %t.mlir %s -c1=array -c2=array --shared-libs=%libz3 | FileCheck %s --check-prefix=COMB_ARRAY
-// COMB_ARRAY: c1 == c2
+// RUN: circt-lec.sh %t.mlir %s -c1=array -c2=array
 hw.module @array(in %arg0: i2, in %arg1: i2, in %arg2: i2, in %arg3: i2, in %sel1: i2, in %sel2: i2, in %sel3: i2, in %val: i2, out out1: i2, out out2: i2) {
   %0 = hw.array_create %arg0, %arg1, %arg2, %arg3 : i2
   %1 = hw.array_get %0[%sel1] : !hw.array<4xi2>, i2
