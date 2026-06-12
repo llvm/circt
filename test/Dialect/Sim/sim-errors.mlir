@@ -140,3 +140,99 @@ hw.module @queue_from_array(in %uparr: !hw.array<5xi33>) {
   // expected-error @below {{'sim.queue.from_array' op sim::Queue element type 'i32' doesn't match hw::ArrayType element type 'i33'}}
   sim.queue.from_array %uparr : !hw.array<5xi33> -> <i32, 0>
 }
+
+// -----
+
+// expected-error @below {{'sim.state' op currently only supports i1 state values}}
+sim.state @bad_type stop_enable : i8 {
+  %c = hw.constant 0 : i8
+  sim.state.yield %c : i8
+}
+
+// -----
+
+sim.state @missing_yield stop_enable : i1 {
+  // expected-error @below {{must yield exactly one value}}
+  sim.state.yield
+}
+
+// -----
+
+sim.state @wrong_yield_type stop_enable : i1 {
+  %c = hw.constant 0 : i8
+  // expected-error @below {{yield operand type 'i8' does not match state type 'i1'}}
+  sim.state.yield %c : i8
+}
+
+// -----
+
+sim.state @side_effect stop_enable : i1 {
+  // expected-error @below {{ops in 'sim.state' must be hw.constant, sim.state.read, comb ops, or supported hw value ops}}
+  sim.terminate success, quiet
+  %c = hw.constant true
+  sim.state.yield %c : i1
+}
+
+// -----
+
+sim.state @wire print_enable : i1 {
+  %c = hw.constant true
+  // expected-error @below {{ops in 'sim.state' must be hw.constant, sim.state.read, comb ops, or supported hw value ops}}
+  %wire = hw.wire %c : i1
+  sim.state.yield %wire : i1
+}
+
+// -----
+
+sim.state @nested_region print_enable : i1 {
+  %c = hw.constant true
+  // expected-error @below {{ops in 'sim.state' must be hw.constant, sim.state.read, comb ops, or supported hw value ops}}
+  scf.if %c {
+  }
+  sim.state.yield %c : i1
+}
+
+// -----
+
+sim.state @stop stop_enable : i1 {
+  %c = hw.constant true
+  sim.state.yield %c : i1
+}
+
+sim.state @read_type_mismatch print_enable : i1 {
+  // expected-error @below {{result type 'i8' does not match state type 'i1'}}
+  %stop = sim.state.read @stop : i8
+  %c = hw.constant true
+  sim.state.yield %c : i1
+}
+
+// -----
+
+sim.state @unknown_read print_enable : i1 {
+  // expected-error @below {{references unknown symbol @missing}}
+  %missing = sim.state.read @missing : i1
+  sim.state.yield %missing : i1
+}
+
+// -----
+
+func.func private @not_state() -> i1
+
+sim.state @wrong_symbol print_enable : i1 {
+  // expected-error @below {{must reference a 'sim.state', but @not_state is a 'func.func'}}
+  %bad = sim.state.read @not_state : i1
+  sim.state.yield %bad : i1
+}
+
+// -----
+
+sim.state @stop0 stop_enable : i1 {
+  %c = hw.constant true
+  sim.state.yield %c : i1
+}
+
+// expected-error @below {{duplicate sim.state kind 'stop_enable' in symbol table}}
+sim.state @stop1 stop_enable : i1 {
+  %c = hw.constant false
+  sim.state.yield %c : i1
+}
