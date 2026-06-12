@@ -712,16 +712,11 @@ LogicalResult CutRewritePatternOp::verify() {
                          << blockArg.getType();
 
   auto cost = getCost();
-  if (auto arcs = cost.getArcs())
-    for (auto attr : arcs) {
-      // TODO: LinearTimingArcAttr pin names are currently ignored for cut
-      // rewrite patterns. In the future MappingCostAttr should use a 2D
-      // ArrayAttr container for arcs. Names may be dropped from
-      // LinearTimingArcAttr in a future cleanup.
-      if (!isa<LinearTimingArcAttr>(attr))
-        return emitError()
-               << "mapping cost arcs must use synth.linear_timing_arc";
-    }
+
+  // TODO: Cut rewrite patterns currently accept LinearTimingArcAttr timing
+  // arcs, but pin names are ignored because pattern arguments/results have no
+  // names. Teach MappingCostAttr to carry nameless per-input/per-output delay
+  // data, likely as a 2D ArrayAttr, and use it to populate cut pattern delays.
 
   if (auto inputCaps = cost.getInputCaps())
     if (inputCaps.size() != functionType.getNumInputs())
