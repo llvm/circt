@@ -1590,12 +1590,16 @@ LogicalResult Inliner::run() {
         if (mnla.isDead())
           return true;
 
-        // If the NLA becomes local after mutation (or sometimes an NLA is
-        // annotated even when the annotation is local in the first place),
-        // remove the nonlocal field.
+        // If the NLA has become local:
+        //  - if it is rooted at this module, replace it with a local version
+        //    of the annotation (drop the nonlocal field);
+        //  - otherwise it is local elsewhere but not here (this module needed
+        //    the NLA to selectively enable it), so just drop the annotation.
         if (mnla.isLocal()) {
-          anno.removeMember("circt.nonlocal");
-          newAnnotations.push_back(anno.getAttr());
+          if (mnla.hasRoot(fmodule.getModuleNameAttr())) {
+            anno.removeMember("circt.nonlocal");
+            newAnnotations.push_back(anno.getAttr());
+          }
           return true;
         }
 

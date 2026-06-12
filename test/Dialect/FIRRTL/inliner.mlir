@@ -1585,7 +1585,8 @@ firrtl.circuit "FlattenAtRoot" {
   hw.hierpath private @nla [@Foo::@bar, @Bar::@b]
   // CHECK: firrtl.module @Bar
   firrtl.module @Bar() {
-    // CHECK: %b = firrtl.wire sym @b {annotations = [{class = "nla"}]}
+    // CHECK: %b = firrtl.wire sym @b
+    // CHECK-NOT: annotations
     %b = firrtl.wire sym @b {annotations = [{circt.nonlocal = @nla, class = "nla"}]} : !firrtl.uint<1>
   }
   // CHECK: firrtl.module @Foo
