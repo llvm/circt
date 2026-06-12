@@ -81,7 +81,7 @@ tool_dirs = [
 tools = [
     'arcilator', 'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
     'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'kanagawatool', 'circt-lec',
-    'circt-bmc', 'circt-test', 'circt-test-runner-sby.py',
+    'circt-lec.sh', 'circt-bmc', 'circt-test', 'circt-test-runner-sby.py',
     'circt-test-runner-circt-bmc.py', 'circt-cocotb-driver.py'
 ]
 
@@ -215,6 +215,10 @@ if config.have_systemc != "":
 if config.z3_library not in ("", "Z3_LIBRARIES-NOTFOUND"):
   tools.append(ToolSubst(f"%libz3", config.z3_library))
   config.available_features.add('libz3')
+
+if config.z3_path != "":
+  llvm_config.with_environment('PATH', config.z3_path, append_path=True)
+  config.available_features.add('z3')
 
 if config.llvm_with_z3 == "1":
   config.available_features.add('z3-integration')

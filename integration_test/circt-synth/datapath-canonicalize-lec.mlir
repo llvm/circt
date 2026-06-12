@@ -1,10 +1,8 @@
-// REQUIRES: libz3
-// REQUIRES: circt-lec-jit
+// REQUIRES: z3
 
 // RUN: circt-opt %s --canonicalize -o %t.mlir
 
-// RUN: circt-lec %t.mlir %s -c1=partial_product_sext_3 -c2=partial_product_sext_3 --shared-libs=%libz3 | FileCheck %s --check-prefix=AND3_SEXT
-// AND3_SEXT: c1 == c2
+// RUN: circt-lec.sh %t.mlir %s -c1=partial_product_sext_3 -c2=partial_product_sext_3
 hw.module @partial_product_sext_3(in %a : i3, in %b : i3, out sum : i6) {
   %0 = comb.extract %a from 2 : (i3) -> i1
   %1 = comb.extract %b from 2 : (i3) -> i1
@@ -17,8 +15,7 @@ hw.module @partial_product_sext_3(in %a : i3, in %b : i3, out sum : i6) {
   hw.output %7 : i6
 }
 
-// RUN: circt-lec %t.mlir %s -c1=partial_product_sext_6 -c2=partial_product_sext_6 --shared-libs=%libz3 | FileCheck %s --check-prefix=AND6_SEXT
-// AND6_SEXT: c1 == c2
+// RUN: circt-lec.sh %t.mlir %s -c1=partial_product_sext_6 -c2=partial_product_sext_6
 hw.module @partial_product_sext_6(in %a : i6, in %b : i6, out e : i12) {
   %0 = comb.extract %a from 5 : (i6) -> i1
   %1 = comb.replicate %0 : (i1) -> i6
@@ -31,8 +28,7 @@ hw.module @partial_product_sext_6(in %a : i6, in %b : i6, out e : i12) {
   hw.output %7 : i12
 }
 
-// RUN: circt-lec %t.mlir %s -c1=sext_compress -c2=sext_compress --shared-libs=%libz3 | FileCheck %s --check-prefix=COMP_SEXT
-// COMP_SEXT: c1 == c2
+// RUN: circt-lec.sh %t.mlir %s -c1=sext_compress -c2=sext_compress
 hw.module @sext_compress(in %a : i8, in %b : i8, in %c : i4, 
                          out sum1 : i8, out sum2 : i8) {
   
