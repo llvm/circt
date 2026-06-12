@@ -79,6 +79,7 @@
 #define ARC_RUNTIME_JITBIND_FNDECL
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/SVRuntime.h"
 #endif
 
 #include <optional>
@@ -327,6 +328,16 @@ static void bindArcRuntimeSymbols(ExecutionEngine &executionEngine) {
     return symbolMap;
   });
 }
+
+// Bind the SystemVerilog execution runtime symbols to the JIT execution engine.
+static void bindArcSVRuntimeSymbols(ExecutionEngine &executionEngine) {
+  executionEngine.registerSymbols([&](llvm::orc::MangleAndInterner interner) {
+    llvm::orc::SymbolMap symbolMap;
+    for (const auto *sym = runtime::getSVRuntimeSymbols(); sym->name; ++sym)
+      bindExecutionEngineSymbol(symbolMap, interner, sym->name, sym->addr);
+    return symbolMap;
+  });
+}
 #endif
 
 /// Populate a pass manager with the arc simulator pipeline for the given
@@ -545,8 +556,10 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    if (!noJitRuntime)
+    if (!noJitRuntime) {
       bindArcRuntimeSymbols(**executionEngine);
+      bindArcSVRuntimeSymbols(**executionEngine);
+    }
 
     auto expectedFunc = (*executionEngine)->lookupPacked(jitEntryPoint);
     if (!expectedFunc) {
