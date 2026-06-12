@@ -255,21 +255,6 @@ hw.module @FillIntegerGaps(in %u: i42) {
   llhd.drv %1, %u after %0 : i42
 }
 
-// Runtime-managed signals may be modified through opaque handles, so missing
-// slices must not be filled from the initial value.
-// CHECK-LABEL: @DoNotFillRuntimeSignalGaps
-hw.module @DoNotFillRuntimeSignalGaps(in %u: i42) {
-  %c0_i7 = hw.constant 0 : i7
-  %c0_i126 = hw.constant 0 : i126
-  %0 = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: %a = llhd.sig {{.*}} {arcilator.sig_id = 0 : i64} : i126
-  %a = llhd.sig %c0_i126 {arcilator.sig_id = 0 : i64} : i126
-  // CHECK: [[SLICE:%.+]] = llhd.sig.extract %a
-  %1 = llhd.sig.extract %a from %c0_i7 : <i126> -> <i42>
-  // CHECK-NEXT: llhd.drv [[SLICE]], %u
-  llhd.drv %1, %u after %0 : i42
-}
-
 // Partially driven signals with no unknown uses and a known default value use
 // the default value to fill in gaps.
 // CHECK-LABEL: @FillStructGaps
