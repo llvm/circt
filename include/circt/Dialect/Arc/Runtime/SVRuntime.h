@@ -38,6 +38,21 @@ uint8_t circt_sv_string_getc(const char *str, int32_t idx);
 /// returned as "".
 const char *circt_sv_string_substr(const char *str, int32_t start, int32_t end);
 
+/// Print a two-state integer to `stdout`. `data` points at `bitWidth` bits in
+/// little-endian byte order; `base` is 2/8/10/16; `minWidth` is the minimum
+/// field width; `flags` is a bitmask shared with the backend's console lowering
+/// (bit 0 uppercase, bit 1 left-justify, bit 2 zero-pad, bit 3 signed).
+void circt_sv_print_int(const void *data, int32_t bitWidth, int32_t base,
+                        int32_t minWidth, int32_t flags);
+
+/// Print a four-state integer to `stdout`. Like `circt_sv_print_int`, but
+/// `unknownData` carries the per-bit unknown mask: a set unknown bit prints `x`
+/// (or `z` when the corresponding value bit is set). With no unknown bits this
+/// delegates to `circt_sv_print_int`.
+void circt_sv_print_fvint(const void *valueData, const void *unknownData,
+                          int32_t bitWidth, int32_t base, int32_t minWidth,
+                          int32_t flags);
+
 } // extern "C"
 
 namespace circt {
