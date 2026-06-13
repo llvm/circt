@@ -468,6 +468,26 @@ firrtl.circuit "Foo" {
     firrtl.domain.define %B, %A : !firrtl.domain<@ClockDomain()>
   }
 
+  // unsafe_domain_cast is node-like and should be looked through during width
+  // inference.
+  // https://github.com/llvm/circt/issues/10654
+  // CHECK-LABEL: @UnsafeDomainCast
+  firrtl.module @UnsafeDomainCast(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %B: !firrtl.domain<@ClockDomain()>
+  ) {
+    // CHECK: %a = firrtl.wire : !firrtl.uint<1>
+    %a = firrtl.wire : !firrtl.uint
+    %b = firrtl.wire : !firrtl.uint<1>
+    %c = firrtl.wire : !firrtl.uint<1>
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.connect %c, %invalid_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    %0 = firrtl.unsafe_domain_cast %a domains[%B] : !firrtl.uint domains[!firrtl.domain<@ClockDomain()>]
+    firrtl.connect %b, %0 : !firrtl.uint<1>, !firrtl.uint
+    firrtl.connect %a, %c : !firrtl.uint, !firrtl.uint<1>
+  }
+
   // Issue #1088
   // CHECK-LABEL: @Issue1088
   firrtl.module @Issue1088(out %y: !firrtl.sint<4>) {
