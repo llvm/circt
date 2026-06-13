@@ -1,0 +1,25 @@
+add_mlir_library(HLSPasses
+        BRAMAnalysisAffine.cpp
+        BRAMAnalysisLoopSchedule.cpp
+        AffineToLoopScheduleModified.cpp
+
+        DEPENDS
+        CIRCTConversionPassIncGen
+        MemoryInterfaceIncGen
+        MLIRArithDialect
+
+        LINK_LIBS PUBLIC
+        HLSInterfaces
+        MLIRIR
+        MLIRPass
+        MLIRSupport
+        MLIRMemRefDialect
+        MLIRFuncDialect
+        MLIRAffineDialect
+        MLIRAffineAnalysis
+        MLIRAffineToStandard
+        MLIRPass
+        CIRCTScheduling
+        CIRCTSchedulingAnalysis
+        CIRCTLoopSchedule
+)
