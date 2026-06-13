@@ -69,14 +69,10 @@ private:
 /// Return true if this is something that will get printed as a unary operator
 /// by the Verilog printer.
 static bool isVerilogUnaryOperator(Operation *op) {
-  if (isa<comb::ParityOp>(op))
-    return true;
-
+  // NOTE: Don't allow reduction operators (^, &, |) here since they are not
+  //       cheap.
   if (auto xorOp = dyn_cast<comb::XorOp>(op))
     return xorOp.isBinaryNot();
-
-  if (auto icmpOp = dyn_cast<comb::ICmpOp>(op))
-    return icmpOp.isEqualAllOnes() || icmpOp.isNotEqualZero();
 
   return false;
 }
