@@ -504,6 +504,22 @@ hw.module @parity_constant_folding2(out result : i1) {
   hw.output %0 : i1
 }
 
+// CHECK-LABEL: hw.module @parity_concat_even_parity
+// CHECK-NEXT:  %[[RESULT0:.+]] = comb.parity %arg0 : i4
+// CHECK-NEXT:  %[[RESULT1:.+]] = comb.parity %arg0 : i4
+// CHECK-NEXT:  hw.output %[[RESULT0]], %[[RESULT1]]
+hw.module @parity_concat_even_parity(in %arg0 : i4, out o1 : i1, out o2 : i1) {
+  %c0_i4 = hw.constant 0 : i4
+  %c15_i8 = hw.constant 15 : i8
+  // parity(concat(0, x)) -> parity(x), 0 has even parity
+  %0 = comb.concat %c0_i4, %arg0 : i4, i4
+  %1 = comb.parity %0 : i8
+  // parity(concat(x, 15)) -> parity(x), 15 has even parity
+  %2 = comb.concat %arg0, %c15_i8 : i4, i8
+  %3 = comb.parity %2 : i12
+  hw.output %1, %3 : i1, i1
+}
+
 // CHECK-LABEL: hw.module @concat_fold_0
 // CHECK-NEXT:  %c120_i8 = hw.constant 120 : i8
 hw.module @concat_fold_0(out result : i8) {
