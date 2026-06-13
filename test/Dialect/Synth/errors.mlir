@@ -5,3 +5,41 @@ hw.module @test(out result : i1) {
     %0 = synth.choice : i1
     hw.output %0 : i1
 }
+
+// -----
+
+// expected-error @below {{argument type must be i1, but got 'i2'}}
+synth.cut_rewrite_pattern (%a: i2) -> i1 attributes {cost = #synth.mapping_cost<area = 1.0 : f64>} {
+  %0 = comb.extract %a from 0 : (i2) -> i1
+  synth.yield %0 : i1
+}
+
+// -----
+
+// expected-error @below {{result type must be i1, but got 'i2'}}
+synth.cut_rewrite_pattern (%a: i1) -> i2 attributes {cost = #synth.mapping_cost<area = 1.0 : f64>} {
+  %0 = hw.constant 0 : i2
+  synth.yield %0 : i2
+}
+
+// -----
+
+// expected-error @below {{requires exactly one result}}
+synth.cut_rewrite_pattern (%a: i1) -> (i1, i1) attributes {cost = #synth.mapping_cost<area = 1.0 : f64>} {
+  synth.yield %a, %a : i1, i1
+}
+
+// -----
+
+// expected-error @below {{result type doesn't match with the terminator}}
+synth.cut_rewrite_pattern (%a: i1) -> i1 attributes {cost = #synth.mapping_cost<area = 1.0 : f64>} {
+  "synth.yield"() : () -> ()
+}
+
+// -----
+
+// expected-error @below {{'i1' is expected but got 'i2'}}
+synth.cut_rewrite_pattern (%a: i1) -> i1 attributes {cost = #synth.mapping_cost<area = 1.0 : f64>} {
+  %0 = hw.constant 0 : i2
+  synth.yield %0 : i2
+}
