@@ -66,9 +66,9 @@ private:
 };
 } // end anonymous namespace
 
-/// Return true if this is something that will get printed as a unary operator
-/// by the Verilog printer.
-static bool isVerilogUnaryOperator(Operation *op) {
+/// Return true if this is a unary operator that is cheap enough to sink or
+/// duplicate into its users as part of prettification.
+static bool isPrettifiableUnaryOperator(Operation *op) {
   // NOTE: Don't allow reduction operators (^, &, |) here since they are not
   //       cheap.
   if (auto xorOp = dyn_cast<comb::XorOp>(op))
@@ -505,7 +505,7 @@ void PrettifyVerilogPass::processPostOrder(Block &body) {
     }
 
     // Sink and duplicate unary operators.
-    if (isVerilogUnaryOperator(&op) && prettifyUnaryOperator(&op))
+    if (isPrettifiableUnaryOperator(&op) && prettifyUnaryOperator(&op))
       continue;
 
     // Sink or duplicate constant ops and invisible "free" ops into the same
