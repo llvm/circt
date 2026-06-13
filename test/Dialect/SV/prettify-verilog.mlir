@@ -589,6 +589,37 @@ hw.module private @SelfConnect(in %clock: i1, in %reset: i1) {
   //VERILOG:   r <= r;
 }
 
+// CHECK-LABEL: hw.module @no_inline_reduction_ops
+// https://github.com/llvm/circt/issues/10623
+hw.module @no_inline_reduction_ops(in %arg0: i8, in %arg1: i8, out a: i1, out b: i1, out c: i1, out d: i1) {
+  %c-1_i8 = hw.constant -1 : i8
+  %c0_i8 = hw.constant 0 : i8
+
+  // Reduction operators should NOT be duplicated.
+  %parity = comb.parity %arg0 : i8
+  %a = comb.add %parity, %parity : i1
+  %eq_allones = comb.icmp eq %arg1, %c-1_i8 : i8
+  %b = comb.add %eq_allones, %eq_allones : i1
+  %ne_zero = comb.icmp ne %arg1, %c0_i8 : i8
+  %c = comb.add %ne_zero, %ne_zero : i1
+
+  // Binary NOT is still duplicated.
+  %bin_not = comb.xor %arg0, %c-1_i8 : i8
+  %d = comb.icmp eq %bin_not, %bin_not : i8
+
+  hw.output %a, %b, %c, %d : i1, i1, i1, i1
+}
+
+// VERILOG-LABEL: module no_inline_reduction_ops
+// VERILOG-NEXT: input  [7:0] arg0,
+// VERILOG:      wire [[PARITY:.+]] = ^arg0;
+// VERILOG-NEXT: wire [[REDAND:.+]] = &arg1;
+// VERILOG-NEXT: wire [[REDOR:.+]] = |arg1;
+// VERILOG-NEXT: assign a = [[PARITY]] + [[PARITY]];
+// VERILOG-NEXT: assign b = [[REDAND]] + [[REDAND]];
+// VERILOG-NEXT: assign c = [[REDOR]] + [[REDOR]];
+// VERILOG-NEXT: assign d = ~arg0 == ~arg0;
+
 // CHECK-LABEL: Issue4030
 hw.module @Issue4030(in %a: i1, in %clock: i1, in %in1: !hw.array<2xi1>, out b: !hw.array<5xi1>) {
   %c0_i3 = hw.constant 0 : i3
