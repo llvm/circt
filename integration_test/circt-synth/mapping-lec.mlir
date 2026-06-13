@@ -1,14 +1,15 @@
 // REQUIRES: z3
 
 // RUN: circt-synth %s -o %t1.mlir
+// RUN: cat %t1.mlir | FileCheck %s
 // RUN: circt-opt %t1.mlir --hw-flatten-modules=hw-inline-public -o %t1.inline.mlir
 // RUN: circt-lec.sh %t1.inline.mlir %s -c1=mul -c2=mul
 // RUN: circt-lec.sh %t1.inline.mlir %s -c1=dot_test -c2=dot_test
 
 // RUN: circt-synth %s -o %t.lut.mlir --top mul --lower-to-k-lut 6
+// RUN: cat %t.lut.mlir | FileCheck %s --check-prefix=LUT
 // RUN: circt-opt -lower-comb %t.lut.mlir -o %t2.mlir
 // RUN: circt-lec.sh %t2.mlir %s -c1=mul -c2=mul
-
 
 // Set delay for binary and inv op to 5 so that others will be prioritized
 hw.module @and_inv(in %a : i1, in %b : i1, out result : i1) attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 5, 0, #synth.polarity<positive>>, #synth.linear_timing_arc<"result", "b", 5, 0, #synth.polarity<positive>>], input_caps = {}>} {

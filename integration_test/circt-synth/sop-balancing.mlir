@@ -1,7 +1,7 @@
 // REQUIRES: z3
 
-// RUN: circt-synth %s -o %t.before.mlir --analysis-output=-
-// RUN: circt-synth %s -enable-sop-balancing -o %t.after.mlir -convert-to-comb --analysis-output=-
+// RUN: circt-synth %s -o %t.before.mlir --analysis-output=- | FileCheck %s --check-prefix=LONGEST_PATH_BEFORE
+// RUN: circt-synth %s -enable-sop-balancing -o %t.after.mlir -convert-to-comb --analysis-output=- | FileCheck %s --check-prefix=LONGEST_PATH_AFTER
 // RUN: circt-lec.sh %t.before.mlir %t.after.mlir -c1=add16 -c2=add16
 // LONGEST_PATH_BEFORE: delay: 12
 // LONGEST_PATH_AFTER:  delay: 10

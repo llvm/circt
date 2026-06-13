@@ -1,6 +1,6 @@
 // REQUIRES: z3
 // RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(synth-functional-reduction{num-random-patterns=64 sat-solver=z3}))' -o %t.mlir
-// RUN: cat %t.mlir
+// RUN: cat %t.mlir | FileCheck %s
 
 // RUN: circt-lec.sh %s %t.mlir --c1 functional_reduction_sat --c2 functional_reduction_sat
 // SAT should prove that AND(AND(a, not b), AND(c, not d)) is equivalent to

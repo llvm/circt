@@ -1,7 +1,7 @@
 // REQUIRES: z3
 
-// RUN: circt-opt %s --pass-pipeline='builtin.module(synth-print-longest-path-analysis, hw.module(comb-balance-mux{mux-chain-threshold=4}))' -o %t.mlir
-// RUN: circt-opt %t.mlir --pass-pipeline='builtin.module(synth-print-longest-path-analysis)'
+// RUN: circt-opt %s --pass-pipeline='builtin.module(synth-print-longest-path-analysis, hw.module(comb-balance-mux{mux-chain-threshold=4}))' -o %t.mlir | FileCheck %s --check-prefix=DEPTH_BEFORE
+// RUN: circt-opt %t.mlir --pass-pipeline='builtin.module(synth-print-longest-path-analysis)' | FileCheck %s --check-prefix=DEPTH_AFTER
 // RUN: circt-lec.sh %t.mlir %s -c1=priority_mux_18_depth -c2=priority_mux_18_depth
 // Check that balancing muxes reduces the longest path in a priority mux from O(n) to O(log n).
 // DEPTH_BEFORE-LABEL: priority_mux_18_depth
