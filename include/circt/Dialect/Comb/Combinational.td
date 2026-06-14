@@ -169,17 +169,14 @@ def ICmpOp : CombOp<"icmp",
 // Unary Operations
 //===----------------------------------------------------------------------===//
 
-// Base class for unary reduction operations that produce an i1.
-class UnaryI1ReductionOp<string mnemonic, list<Trait> traits = []> :
-      CombOp<mnemonic, traits # [Pure]> {
+def ParityOp: CombOp<"parity", [Pure]> {
   let arguments = (ins HWIntegerType:$input, UnitAttr:$twoState);
   let results = (outs I1:$result);
   let hasFolder = 1;
+  let hasCanonicalizeMethod = true;
 
   let assemblyFormat = "(`bin` $twoState^)? $input attr-dict `:` qualified(type($input))";
 }
-
-def ParityOp : UnaryI1ReductionOp<"parity">;
 
 //===----------------------------------------------------------------------===//
 // Integer width modifying operations.

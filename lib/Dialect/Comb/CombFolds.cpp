@@ -303,6 +303,41 @@ OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
+LogicalResult ParityOp::canonicalize(ParityOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
+  // Helper to check if a value has zero parity (even number of 1 bits)
+  auto isParityZero = [](Value v) {
+    APInt value;
+    return matchPattern(v, m_ConstantInt(&value)) && value.popcount() % 2 == 0;
+  };
+
+  // parity(concat(c, x)) -> parity(x) when parity(c) == 0
+  // parity(concat(x, c)) -> parity(x) when parity(c) == 0
+  auto concat = op.getInput().getDefiningOp<ConcatOp>();
+  if (!concat)
+    return failure();
+
+  auto operands = concat.getInputs();
+  if (operands.size() != 2)
+    return failure();
+
+  if (isParityZero(operands[0])) {
+    replaceOpWithNewOpAndCopyNamehint<ParityOp>(rewriter, op, operands[1],
+                                                op.getTwoState());
+    return success();
+  }
+
+  if (isParityZero(operands[1])) {
+    replaceOpWithNewOpAndCopyNamehint<ParityOp>(rewriter, op, operands[0],
+                                                op.getTwoState());
+    return success();
+  }
+
+  return failure();
+}
+
 //===----------------------------------------------------------------------===//
 // Binary Operations
 //===----------------------------------------------------------------------===//
