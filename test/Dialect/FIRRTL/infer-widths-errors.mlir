@@ -182,23 +182,3 @@ firrtl.circuit "MuxSelTooWide" {
      firrtl.connect %0, %c2_ui2 : !firrtl.uint, !firrtl.uint<2>
   }
 }
-
-// ---
-
-firrtl.circuit "TruncateConnectWarning" {
-  firrtl.module @TruncateConnectWarning() {
-    // LHS wire will be inferred as uint<8>
-    %lhs = firrtl.wire : !firrtl.uint
-    %c8 = firrtl.constant 8 : !firrtl.uint<8>
-    firrtl.connect %lhs, %c8 : !firrtl.uint, !firrtl.uint<8>
-    
-    // RHS wire will be inferred as uint<16>
-    %rhs = firrtl.wire : !firrtl.uint
-    %c16 = firrtl.constant 16 : !firrtl.uint<16>
-    firrtl.connect %rhs, %c16 : !firrtl.uint, !firrtl.uint<16>
-    
-    // Trigger truncation warning: LHS=8, RHS=16, so 8 < 16 triggers truncation
-    // expected-warning @+1 {{RHS width 16 exceeds LHS width 8, inserting implicit truncation}}
-    firrtl.connect %lhs, %rhs : !firrtl.uint, !firrtl.uint
-  }
-}

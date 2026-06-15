@@ -165,6 +165,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // The source must be extended or truncated.
   if (dstWidth < srcWidth) {
+    mlir::emitWarning(builder.getLoc())
+        << "RHS width " << srcWidth << " exceeds LHS width " << dstWidth
+        << ", inserting implicit truncation";
+
     // firrtl.tail always returns uint even for sint operands.
     IntType tmpType =
         type_cast<IntType>(dstType).getConstType(srcType.isConst());
@@ -172,14 +176,14 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     if (isSignedDest)
       tmpType =
           UIntType::get(dstType.getContext(), dstWidth, srcType.isConst());
-    mlir::emitWarning(builder.getLoc())
-        << "RHS width " << srcWidth << " exceeds LHS width " << dstWidth
-        << ", inserting implicit truncation";
     src = TailPrimOp::create(builder, tmpType, src, srcWidth - dstWidth);
     // Insert the cast back to signed if needed.
     if (isSignedDest)
       src = AsSIntPrimOp::create(builder,
-                                  dstType.getConstType(tmpType.isConst()), src);
+                                 dstType.getConstType(tmpType.isConst()), src);
+  } else if (srcWidth < dstWidth) {
+    // Need to extend arg.
+    src = PadPrimOp::create(builder, src, dstWidth);
   }
 
   if (auto srcType = type_cast<FIRRTLBaseType>(src.getType());
