@@ -198,7 +198,6 @@ def PackOp : DCOp<"pack", [
     let arguments = (ins TokenType:$token, AnyType:$input);
     let results = (outs ValueType:$output);
     let assemblyFormat = "$token `,` $input attr-dict `:` type($input)";
-    let hasFolder = 1;
     let hasCanonicalizer = 1;
 }
 
@@ -215,7 +214,6 @@ def UnpackOp : DCOp<"unpack", [
     let results = (outs TokenType:$token, AnyType:$output);
     let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
     let hasCanonicalizer = 1;
-    let hasFolder = 1;
 }
 
 def MergeOp : DCOp<"merge"> {

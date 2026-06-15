@@ -311,12 +311,8 @@ LogicalResult ForkOp::fold(FoldAdaptor adaptor,
 struct EliminateRedundantUnpackPattern : public OpRewritePattern<UnpackOp> {
   // Eliminates unpack(pack(token, data)) by replacing the unpack results with
   // the pack inputs directly. This is done as a canonicalization pattern
-  // (rather than a fold) so that the dead pack can be erased in the same step.
-  // Performing this in a fold is problematic because the conversion framework's
-  // OperationLegalizer applies folds before patterns. The fold would leave the
-  // dead pack in the IR; during DCToHW conversion this dead pack would still be
-  // converted, creating a spurious ESI channel consumer and violating the
-  // single-consumer constraint (see github.com/llvm/circt/issues/7949).
+  // (rather than a fold) so that the dead pack can be erased in the same step
+  // (see github.com/llvm/circt/issues/7949).
   using OpRewritePattern<UnpackOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(UnpackOp unpack,
                                 PatternRewriter &rewriter) const override {
@@ -327,8 +323,7 @@ struct EliminateRedundantUnpackPattern : public OpRewritePattern<UnpackOp> {
     // Replace unpack(pack(token, data)) -> (token, data).
     rewriter.replaceOp(unpack, {pack.getToken(), pack.getInput()});
 
-    // The pack is now dead (its sole consumer was the unpack). Erase it so
-    // that the token/data values don't pick up a stale extra user.
+    // Erase the pack in case it no longer has users.
     if (pack->use_empty())
       rewriter.eraseOp(pack);
 
@@ -339,14 +334,6 @@ struct EliminateRedundantUnpackPattern : public OpRewritePattern<UnpackOp> {
 void UnpackOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.insert<EliminateRedundantUnpackPattern>(context);
-}
-
-LogicalResult UnpackOp::fold(FoldAdaptor adaptor,
-                             SmallVectorImpl<OpFoldResult> &results) {
-  // NOTE: unpack(pack(token, data)) -> (token, data) is intentionally NOT
-  // folded here. A fold cannot erase the now-dead pack op, which causes
-  // a spurious ESI channel consumer (see github.com/llvm/circt/issues/7949).
-  return failure();
 }
 
 LogicalResult UnpackOp::inferReturnTypes(
@@ -365,9 +352,7 @@ LogicalResult UnpackOp::inferReturnTypes(
 
 struct EliminatePackOfUnpackPattern : public OpRewritePattern<PackOp> {
   // Eliminates pack(unpack(v).token, unpack(v).data) by replacing the pack
-  // result with v directly. Like EliminateRedundantUnpackPattern, this is a
-  // canonicalization pattern rather than a fold so that the dead unpack can be
-  // erased in the same step (see github.com/llvm/circt/issues/7949).
+  // result with v directly (see github.com/llvm/circt/issues/7949).
   using OpRewritePattern<PackOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(PackOp pack,
                                 PatternRewriter &rewriter) const override {
@@ -388,14 +373,6 @@ struct EliminatePackOfUnpackPattern : public OpRewritePattern<PackOp> {
 void PackOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                          MLIRContext *context) {
   results.insert<EliminatePackOfUnpackPattern>(context);
-}
-
-OpFoldResult PackOp::fold(FoldAdaptor adaptor) {
-  // NOTE: pack(unpack(v).token, unpack(v).data) -> v is intentionally NOT
-  // folded here for the same reason as UnpackOp::fold (see above and
-  // github.com/llvm/circt/issues/7949). The simplification is instead
-  // performed as a canonicalization pattern (EliminatePackOfUnpackPattern).
-  return {};
 }
 
 LogicalResult PackOp::inferReturnTypes(
