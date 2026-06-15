@@ -1,6 +1,7 @@
 // RUN: circt-opt --lower-esi-to-hw %s --verify-diagnostics --split-input-file
 
 // Issue #8219
+// expected-error@+1 {{lower-esi-to-hw left behind a channel-typed value}}
 hw.module @CoerceBundleTransform(in %b_out_result : !esi.channel<i16>, out b_in_resp : !esi.channel<i8>) {
   // expected-error@+1 {{lower-esi-to-hw left behind a channel operation}}
   %rawOutput, %valid = esi.unwrap.vr %b_out_result, %ready : i16

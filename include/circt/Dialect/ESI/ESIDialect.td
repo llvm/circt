@@ -39,7 +39,7 @@ class ESI_Op<string mnemonic, list<Trait> traits = []> :
     Op<ESI_Dialect, mnemonic, traits>;
 
 /// Marks an ESI op that legitimately operates on ESI types (e.g. data windows),
-/// which indicates that must be lowered after the channels.
+/// which indicates that it must be lowered after the channels.
 def OperatesOnESITypes : NativeOpTrait<"OperatesOnESITypes"> {
   let cppNamespace = "::circt::esi";
 }

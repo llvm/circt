@@ -795,6 +795,11 @@ static void canonicalizeChannelOps(Operation *top, MLIRContext *ctxt) {
       config);
 }
 
+/// Returns true if any of `types` is or contains an ESI channel.
+static bool anyTypeContainsChannel(TypeRange types) {
+  return llvm::any_of(types, typeContainsChannel);
+}
+
 /// Verify that no ESI channel ops or channel-typed values remain under `top`,
 /// which the channel lowering is responsible for removing. Returns true if all
 /// channels were removed; otherwise emits diagnostics on a handful of offenders
@@ -819,10 +824,13 @@ static bool verifyNoChannelsRemain(Operation *top, MLIRContext *ctxt) {
 
     // Channel types should have been fully lowered away, even if they're buried
     // inside aggregates. Look for any type that contains a channel anywhere
-    // within it.
-    bool hasChannelType =
-        llvm::any_of(op->getResultTypes(), typeContainsChannel) ||
-        llvm::any_of(op->getOperandTypes(), typeContainsChannel);
+    // within it: results, operands, and block arguments (e.g. module ports,
+    // which may not appear as an operand if they are unused).
+    bool hasChannelType = anyTypeContainsChannel(op->getResultTypes()) ||
+                          anyTypeContainsChannel(op->getOperandTypes());
+    for (Region &region : op->getRegions())
+      for (Block &block : region)
+        hasChannelType |= anyTypeContainsChannel(block.getArgumentTypes());
     if (hasChannelType) {
       op->emitError("lower-esi-to-hw left behind a channel-typed value");
       if (++numReported >= maxReported)
