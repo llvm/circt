@@ -179,6 +179,6 @@ firrtl.circuit "MuxSelTooWide" {
     // expected-note @below {{width is constrained to be at most 1 here:}}
     %1 = firrtl.mux(%0, %c1_ui1, %c1_ui1) : (!firrtl.uint, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // expected-note @below {{width is constrained to be at least 2 here:}}
-     firrtl.connect %0, %c2_ui2 : !firrtl.uint, !firrtl.uint<2>
+    firrtl.connect %0, %c2_ui2 : !firrtl.uint, !firrtl.uint<2>
   }
 }
