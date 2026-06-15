@@ -79,6 +79,14 @@ bool Lowering::matchControlFlow() {
   // Ensure that there is only a single wait op in the process and that it has
   // no destination operands.
   for (auto &block : processOp.getBody()) {
+    // Processes that can terminate are not combinational. Lowering them to
+    // `llhd.combinational` would leave an illegal `llhd.halt` terminator in the
+    // new region.
+    if (isa<HaltOp>(block.getTerminator())) {
+      LLVM_DEBUG(llvm::dbgs() << "Skipping process " << processOp.getLoc()
+                              << ": contains halt terminator\n");
+      return false;
+    }
     if (auto op = dyn_cast<WaitOp>(block.getTerminator())) {
       if (waitOp) {
         LLVM_DEBUG(llvm::dbgs() << "Skipping process " << processOp.getLoc()
