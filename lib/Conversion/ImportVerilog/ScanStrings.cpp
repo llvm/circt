@@ -236,8 +236,9 @@ struct ScanStringParser {
                             bool suppress, IntFormat format,
                             IntegerAttr maxWidth) {
     Type mlirIntTy = builder.getIntegerType(32);
+    moore::IntType mooreIntTy;
     if (!suppress) {
-      auto mooreIntTy =
+      mooreIntTy =
           llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
       if (!mooreIntTy)
         return mlir::emitError(loc)
@@ -253,6 +254,10 @@ struct ScanStringParser {
       auto mooreVal =
           moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
               .getResult();
+      if (mooreIntTy.getDomain() == moore::Domain::FourValued)
+        mooreVal =
+            moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
+                .getResult();
       assignments.push_back({destExpr, mooreVal});
     }
     return success();
@@ -286,8 +291,9 @@ struct ScanStringParser {
   LogicalResult emitScanChar(const slang::ast::Expression *destExpr,
                              bool suppress) {
     Type mlirIntTy = builder.getIntegerType(8);
+    moore::IntType mooreIntTy;
     if (!suppress) {
-      auto mooreIntTy =
+      mooreIntTy =
           llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
       if (!mooreIntTy)
         return mlir::emitError(loc)
@@ -302,6 +308,10 @@ struct ScanStringParser {
       auto mooreVal =
           moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
               .getResult();
+      if (mooreIntTy.getDomain() == moore::Domain::FourValued)
+        mooreVal =
+            moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
+                .getResult();
       assignments.push_back({destExpr, mooreVal});
     }
     return success();
@@ -320,8 +330,9 @@ struct ScanStringParser {
   LogicalResult emitScanUnformatted(const slang::ast::Expression *destExpr,
                                     bool suppress, bool fourValue) {
     Type mlirIntTy = builder.getIntegerType(32);
+    moore::IntType mooreIntTy;
     if (!suppress) {
-      auto mooreIntTy =
+      mooreIntTy =
           llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
       if (!mooreIntTy)
         return mlir::emitError(loc) << "destination of unformatted scan "
@@ -338,6 +349,10 @@ struct ScanStringParser {
       auto mooreVal =
           moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
               .getResult();
+      if (mooreIntTy.getDomain() == moore::Domain::FourValued)
+        mooreVal =
+            moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
+                .getResult();
       assignments.push_back({destExpr, mooreVal});
     }
     return success();
