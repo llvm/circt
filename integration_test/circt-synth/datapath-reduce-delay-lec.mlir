@@ -1,9 +1,7 @@
-// REQUIRES: libz3
-// REQUIRES: circt-lec-jit
+// REQUIRES: z3
 
 // RUN: circt-opt %s --datapath-reduce-delay -o %t.mlir
-// RUN: circt-lec %t.mlir %s -c1=add_compare -c2=add_compare --shared-libs=%libz3 | FileCheck %s --check-prefix=COMPARE
-// COMPARE: c1 == c2
+// RUN: circt-lec.sh %t.mlir %s -c1=add_compare -c2=add_compare
 hw.module @add_compare(in %a : i16, in %b : i16, in %c : i16, out ugt : i1, out uge : i1, out ult : i1, out ule : i1) {
   %false = hw.constant false
   %0 = comb.concat %false, %a : i1, i16
@@ -19,8 +17,7 @@ hw.module @add_compare(in %a : i16, in %b : i16, in %c : i16, out ugt : i1, out 
   hw.output %ugt, %uge, %ult, %ule : i1, i1, i1, i1
 }
 
-// RUN: circt-lec %t.mlir %s -c1=add_mux -c2=add_mux --shared-libs=%libz3 | FileCheck %s --check-prefix=ADDMUX
-// ADDMUX: c1 == c2
+// RUN: circt-lec.sh %t.mlir %s -c1=add_mux -c2=add_mux
 hw.module @add_mux(in %a : i4, in %b : i4, in %c : i4, in %d : i4, in %e : i4, in %sel : i1, out res : i4) {
   %0 = comb.add %a, %b : i4
   %1 = comb.add %c, %d, %e : i4
@@ -29,8 +26,7 @@ hw.module @add_mux(in %a : i4, in %b : i4, in %c : i4, in %d : i4, in %e : i4, i
   hw.output %3 : i4
 }
 
-// RUN: circt-lec %t.mlir %s -c1=fold_adds -c2=fold_adds --shared-libs=%libz3 | FileCheck %s --check-prefix=FOLDADD
-// FOLDADD: c1 == c2
+// RUN: circt-lec.sh %t.mlir %s -c1=fold_adds -c2=fold_adds
 hw.module @fold_adds(in %a : i4, in %b : i4, in %c : i4, in %d : i4, out abc : i4, out abd : i4) {
   %0 = comb.add %a, %b : i4
   %1 = comb.add %0, %c : i4
