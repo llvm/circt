@@ -567,7 +567,7 @@ def WindowFieldType : ESI_Type<"WindowField"> {
   let genVerifyDecl = 1;
 }
 
-def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
+def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure, OperatesOnESITypes]> {
   let summary = "wrap a union into a data window";
 
   let arguments = (ins AnyType:$frame);
@@ -583,6 +583,7 @@ def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
 
 def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
       Pure,
+      OperatesOnESITypes,
       DeclareOpInterfaceMethods<InferTypeOpInterface>
   ]> {
   let summary = "unwrap a data window into a union";

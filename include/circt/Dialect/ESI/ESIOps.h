@@ -26,6 +26,13 @@
 
 namespace circt {
 namespace esi {
+
+/// Trait marking an ESI op that operates on ESI types (e.g. data windows) and
+/// must get lowered after all the "wrapper" ESI types (e.g. channels).
+template <typename ConcreteType>
+class OperatesOnESITypes
+    : public mlir::OpTrait::TraitBase<ConcreteType, OperatesOnESITypes> {};
+
 /// Describes a service port. In the unidirection case, either (but not both)
 /// type fields will be null.
 struct ServicePortInfo {

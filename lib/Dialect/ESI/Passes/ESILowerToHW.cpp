@@ -795,6 +795,44 @@ static void canonicalizeChannelOps(Operation *top, MLIRContext *ctxt) {
       config);
 }
 
+/// Verify that no ESI channel ops or channel-typed values remain under `top`,
+/// which the channel lowering is responsible for removing. Returns true if all
+/// channels were removed; otherwise emits diagnostics on a handful of offenders
+/// (rather than all of them) and returns false.
+static bool verifyNoChannelsRemain(Operation *top, MLIRContext *ctxt) {
+  constexpr unsigned maxReported = 10;
+  unsigned numReported = 0;
+  auto *esiDialect = ctxt->getLoadedDialect<ESIDialect>();
+  top->walk([&](Operation *op) {
+    // Ops marked OperatesOnESITypes (e.g. the window wrap/unwrap ops)
+    // operate on ESI types and are lowered by a later pass.
+    if (op->hasTrait<OperatesOnESITypes>())
+      return WalkResult::advance();
+
+    // Other ESI ops must have been lowered away by now.
+    if (op->getDialect() == esiDialect) {
+      op->emitError("lower-esi-to-hw left behind a channel operation");
+      if (++numReported >= maxReported)
+        return WalkResult::interrupt();
+      return WalkResult::advance();
+    }
+
+    // Channel types should have been fully lowered away, even if they're buried
+    // inside aggregates. Look for any type that contains a channel anywhere
+    // within it.
+    bool hasChannelType =
+        llvm::any_of(op->getResultTypes(), typeContainsChannel) ||
+        llvm::any_of(op->getOperandTypes(), typeContainsChannel);
+    if (hasChannelType) {
+      op->emitError("lower-esi-to-hw left behind a channel-typed value");
+      if (++numReported >= maxReported)
+        return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  return numReported == 0;
+}
+
 void ESItoHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
@@ -874,19 +912,9 @@ void ESItoHWPass::runOnOperation() {
   // canonicalizers, including merging the adjacent wrap/unwrap pairs.
   canonicalizeChannelOps(top, ctxt);
 
-  // Verify that no channel operations remain. The canonicalizers above are
-  // responsible for removing every ESI op; this conversion provides a clear
-  // failure (rather than leaving channel-typed IR behind) if any survive.
-  ConversionTarget channelVerifyTarget(*ctxt);
-  channelVerifyTarget.addLegalDialect<comb::CombDialect>();
-  channelVerifyTarget.addLegalDialect<HWDialect>();
-  channelVerifyTarget.addLegalDialect<SVDialect>();
-  channelVerifyTarget.addIllegalDialect<ESIDialect>();
-  channelVerifyTarget.addLegalOp<WrapWindow, UnwrapWindow>();
-
-  RewritePatternSet channelVerifyPatterns(ctxt);
-  if (failed(applyPartialConversion(top, channelVerifyTarget,
-                                    std::move(channelVerifyPatterns))))
+  // The canonicalizers above are responsible for removing every ESI op and
+  // channel-typed value. Verify that none remain.
+  if (!verifyNoChannelsRemain(top, ctxt))
     signalPassFailure();
 }
 
