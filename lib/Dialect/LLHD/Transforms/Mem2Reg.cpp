@@ -12,6 +12,7 @@
 #include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "circt/Support/UnusedOpPruner.h"
 #include "mlir/Analysis/Liveness.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/IR/Dominance.h"
 #include "llvm/ADT/ArrayRef.h"
@@ -45,6 +46,15 @@ static bool isEpsilonDelay(Value value) {
   return false;
 }
 
+/// Check whether a value is defined by `llhd.constant_time <0ns, 0d, 0e>`.
+static bool isZeroDelay(Value value) {
+  if (auto timeOp = value.getDefiningOp<ConstantTimeOp>()) {
+    auto t = timeOp.getValue();
+    return t.getTime() == 0 && t.getDelta() == 0 && t.getEpsilon() == 0;
+  }
+  return false;
+}
+
 /// Check whether a value is defined by `llhd.constant_time <0ns, 1d, 0e>`.
 static bool isDeltaDelay(Value value) {
   if (auto timeOp = value.getDefiningOp<ConstantTimeOp>()) {
@@ -58,7 +68,7 @@ static bool isDeltaDelay(Value value) {
 /// corresponds to a blocking assignment in Verilog.
 static bool isBlockingDrive(Operation *op) {
   if (auto driveOp = dyn_cast<DriveOp>(op))
-    return isEpsilonDelay(driveOp.getTime());
+    return isEpsilonDelay(driveOp.getTime()) || isZeroDelay(driveOp.getTime());
   return false;
 }
 
@@ -210,6 +220,36 @@ static Type getStoredType(DefSlot slot) {
   return getStoredType(slot.getPointer());
 }
 static Location getLoc(DefSlot slot) { return slot.getPointer().getLoc(); }
+
+static std::optional<unsigned> getPromotableSlotBitWidth(Type type) {
+  if (auto intTy = dyn_cast<IntegerType>(type))
+    return intTy.getWidth();
+  if (auto floatTy = dyn_cast<FloatType>(type))
+    return floatTy.getWidth();
+
+  auto bitWidth = hw::getBitWidth(type);
+  if (bitWidth < 0)
+    return std::nullopt;
+  return static_cast<unsigned>(bitWidth);
+}
+
+static bool isPromotableSlotType(Type type) {
+  auto bitWidth = getPromotableSlotBitWidth(type);
+  return bitWidth && *bitWidth <= IntegerType::kMaxWidth;
+}
+
+static Value createZeroValue(OpBuilder &builder, Location loc, Type type) {
+  if (isa<FloatType>(type))
+    return arith::ConstantOp::create(builder, loc, builder.getZeroAttr(type));
+
+  auto bitWidth = getPromotableSlotBitWidth(type);
+  assert(bitWidth && "cannot create zero value for unpromotable slot type");
+  auto flatType = builder.getIntegerType(*bitWidth);
+  Value value = hw::ConstantOp::create(builder, loc, flatType, 0);
+  if (type != flatType)
+    value = hw::BitcastOp::create(builder, loc, type, value);
+  return value;
+}
 
 namespace {
 
@@ -929,12 +969,9 @@ void Promoter::findPromotableSlots() {
       if (hasProjection && hasBlockingDrive && hasDeltaDrive)
         continue;
 
-      // Mem2Reg needs to be able to materialize integer constants for promoted
-      // slots, which requires the bit width to fit in an IntegerType. Skip
-      // signals that are too wide.
-      auto bitWidth = hw::getBitWidth(getStoredType(operand));
-      if (bitWidth < 0 ||
-          static_cast<unsigned>(bitWidth) > IntegerType::kMaxWidth)
+      // Mem2Reg may have to materialize a zero value for promoted slots. Skip
+      // signal types for which we cannot create a suitable default.
+      if (!isPromotableSlotType(getStoredType(operand)))
         continue;
 
       slots.push_back(operand);
@@ -1006,9 +1043,32 @@ void Promoter::captureAcrossWait() {
 /// reach the same block.
 void Promoter::captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
                                  Liveness &liveness, DominanceInfo &dominance) {
+  // Constant-like values are guaranteed not to change across a wait and can
+  // be rematerialized freely, so they never need to be captured. Everything
+  // else defined inside the process, including time and ref values derived
+  // from mutable state, must be captured so that uses after the wait observe
+  // the value from before the wait. Values defined outside the process are
+  // filtered by the caller.
+  if (auto *defOp = value.getDefiningOp())
+    if (defOp->hasTrait<OpTrait::ConstantLike>())
+      return;
+
+  SmallVector<WaitOp> capturedWaitOps;
+  for (auto waitOp : waitOps) {
+    auto *waitBlock = waitOp->getBlock();
+    auto *blockLiveness = liveness.getLiveness(waitBlock);
+    if (!blockLiveness || !blockLiveness->isLiveOut(value))
+      continue;
+    if (!dominance.dominates(value, waitOp.getOperation()))
+      continue;
+    capturedWaitOps.push_back(waitOp);
+  }
+  if (capturedWaitOps.empty())
+    return;
+
   LLVM_DEBUG({
     llvm::dbgs() << "Capture " << value << "\n";
-    for (auto waitOp : waitOps)
+    for (auto waitOp : capturedWaitOps)
       llvm::dbgs() << "- Across " << waitOp << "\n";
   });
 
@@ -1021,7 +1081,7 @@ void Promoter::captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
   // value.
   SmallPtrSet<Block *, 4> definingBlocks;
   definingBlocks.insert(value.getParentBlock());
-  for (auto waitOp : waitOps)
+  for (auto waitOp : capturedWaitOps)
     definingBlocks.insert(waitOp.getDest());
   idfCalculator.setDefiningBlocks(definingBlocks);
 
@@ -1038,7 +1098,7 @@ void Promoter::captureAcrossWait(Value value, ArrayRef<WaitOp> waitOps,
   idfCalculator.calculate(mergePointsVec);
   SmallPtrSet<Block *, 16> mergePoints(mergePointsVec.begin(),
                                        mergePointsVec.end());
-  for (auto waitOp : waitOps)
+  for (auto waitOp : capturedWaitOps)
     mergePoints.insert(waitOp.getDest());
   LLVM_DEBUG(llvm::dbgs() << "- " << mergePoints.size() << " merge points\n");
 
@@ -1899,7 +1959,18 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
   }
 
   // Add successor operands to the predecessor terminators.
+  SmallPtrSet<BlockExit *, 4> updatedPredecessors;
   for (auto *predecessor : node->predecessors) {
+    // A single terminator can have multiple CFG edges to the same block, for
+    // example a `cf.cond_br` whose true and false destinations are identical
+    // but carry different values.  The lattice records one predecessor entry
+    // per edge, while the terminator update below walks and updates every edge
+    // to `node->block`.  Updating the same terminator once per edge would
+    // append duplicate operands to each successor edge without adding matching
+    // block arguments.
+    if (!updatedPredecessors.insert(predecessor).second)
+      continue;
+
     // Collect the interesting reaching definitions in the predecessor.
     SmallVector<Value> args;
     for (auto [slot, which] : neededSlots) {
@@ -1911,12 +1982,7 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
           args.push_back(def->getValueOrPlaceholder());
         } else {
           auto type = getStoredType(slot);
-          auto flatType = builder.getIntegerType(hw::getBitWidth(type));
-          Value value =
-              hw::ConstantOp::create(builder, getLoc(slot), flatType, 0);
-          if (type != flatType)
-            value = hw::BitcastOp::create(builder, getLoc(slot), type, value);
-          args.push_back(value);
+          args.push_back(createZeroValue(builder, getLoc(slot), type));
         }
         break;
       case Which::Condition:
@@ -1930,12 +1996,25 @@ bool Promoter::insertBlockArgs(BlockEntry *node) {
       }
     }
 
-    // Add the reaching definitions to the branch op.
-    auto branchOp = cast<BranchOpInterface>(predecessor->terminator);
-    for (auto &blockOperand : branchOp->getBlockOperands())
-      if (blockOperand.get() == node->block)
-        branchOp.getSuccessorOperands(blockOperand.getOperandNumber())
-            .append(args);
+    // Add the reaching definitions to the predecessor edge. `llhd.wait` is a
+    // suspending terminator with successor operands, but it does not implement
+    // BranchOpInterface.
+    if (auto branchOp = dyn_cast<BranchOpInterface>(predecessor->terminator)) {
+      SmallVector<unsigned> successorOperandNumbers;
+      for (auto &blockOperand : branchOp->getBlockOperands())
+        if (blockOperand.get() == node->block)
+          successorOperandNumbers.push_back(blockOperand.getOperandNumber());
+      for (auto operandNumber : successorOperandNumbers)
+        branchOp.getSuccessorOperands(operandNumber).append(args);
+      continue;
+    }
+    if (auto waitOp = dyn_cast<WaitOp>(predecessor->terminator)) {
+      if (waitOp.getDest() == node->block)
+        waitOp.getDestOperandsMutable().append(args);
+      continue;
+    }
+    llvm_unreachable(
+        "mem2reg predecessor terminator has no successor operands");
   }
 
   return true;
@@ -1997,7 +2076,7 @@ struct Mem2RegPass : public llhd::impl::Mem2RegPassBase<Mem2RegPass> {
 void Mem2RegPass::runOnOperation() {
   SmallVector<Region *> regions;
   getOperation()->walk<WalkOrder::PreOrder>([&](Operation *op) {
-    if (isa<ProcessOp, FinalOp, CombinationalOp>(op)) {
+    if (isa<ProcessOp, FinalOp, CombinationalOp, CoroutineOp>(op)) {
       auto &region = op->getRegion(0);
       if (!region.empty())
         regions.push_back(&region);
