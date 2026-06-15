@@ -311,8 +311,7 @@ LogicalResult ForkOp::fold(FoldAdaptor adaptor,
 struct EliminateRedundantUnpackPattern : public OpRewritePattern<UnpackOp> {
   // Eliminates unpack(pack(token, data)) by replacing the unpack results with
   // the pack inputs directly. This is done as a canonicalization pattern
-  // (rather than a fold) so that the dead pack can be erased in the same step
-  // (see github.com/llvm/circt/issues/7949).
+  // (rather than a fold) so that the dead pack can be erased in the same step.
   using OpRewritePattern<UnpackOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(UnpackOp unpack,
                                 PatternRewriter &rewriter) const override {
@@ -352,7 +351,7 @@ LogicalResult UnpackOp::inferReturnTypes(
 
 struct EliminatePackOfUnpackPattern : public OpRewritePattern<PackOp> {
   // Eliminates pack(unpack(v).token, unpack(v).data) by replacing the pack
-  // result with v directly (see github.com/llvm/circt/issues/7949).
+  // result with v directly.
   using OpRewritePattern<PackOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(PackOp pack,
                                 PatternRewriter &rewriter) const override {
