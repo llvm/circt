@@ -32,6 +32,41 @@ LogicalResult WrapValidReadyOp::canonicalize(WrapValidReadyOp op,
     rewriter.eraseOp(op);
     return success();
   }
+
+  // If the sole consumer is an unwrap, merge and erase.
+  if (!op.getChanOutput().hasOneUse())
+    return rewriter.notifyMatchFailure(
+        op, "channel output doesn't have exactly one use");
+  auto unwrap = dyn_cast_or_null<UnwrapValidReadyOp>(
+      op.getChanOutput().getUses().begin()->getOwner());
+  if (succeeded(UnwrapValidReadyOp::mergeAndErase(unwrap, op, rewriter)))
+    return success();
+  return rewriter.notifyMatchFailure(
+      op, "could not find corresponding unwrap for wrap");
+}
+
+LogicalResult UnwrapValidReadyOp::mergeAndErase(UnwrapValidReadyOp unwrap,
+                                                WrapValidReadyOp wrap,
+                                                PatternRewriter &rewriter) {
+  // Only merge when the wrap's channel feeds nothing but this unwrap. Otherwise
+  // erasing the channel value (replacing it with null below) would corrupt the
+  // other users (e.g. a snoop op observing the same channel).
+  if (unwrap && wrap && wrap.getChanOutput().hasOneUse()) {
+    // Capture the ready operand before replacing `unwrap`, which erases it.
+    Value ready = unwrap.getReady();
+    rewriter.replaceOp(unwrap, {wrap.getRawInput(), wrap.getValid()});
+    rewriter.replaceOp(wrap, {{}, ready});
+    return success();
+  }
+  return failure();
+}
+
+LogicalResult UnwrapValidReadyOp::canonicalize(UnwrapValidReadyOp op,
+                                               PatternRewriter &rewriter) {
+  auto wrap =
+      dyn_cast_or_null<WrapValidReadyOp>(op.getChanInput().getDefiningOp());
+  if (succeeded(UnwrapValidReadyOp::mergeAndErase(op, wrap, rewriter)))
+    return success();
   return failure();
 }
 

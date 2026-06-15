@@ -423,3 +423,27 @@ hw.module @voSnoopXactPassthrough(in %chan_in: !esi.channel<i32, ValidOnly>, out
 }
 // HW-LABEL: hw.module @voSnoopXactPassthrough(in %chan_in : i32, in %chan_in_valid : i1, out chan_out : i32, out chan_out_valid : i1, out snoop_xact : i1, out snoop_data : i32) {
 // HW-NEXT:    hw.output %chan_in, %chan_in_valid, %chan_in_valid, %chan_in : i32, i1, i1, i32
+
+// --- Full HW lowering: channel-typed hw.array ops are eliminated ---
+// Channels bundled into an `hw.array` and indexed back out with constant
+// indices must be folded away so the wrap/unwrap pairs can be lowered. After
+// `lower-esi-to-hw` no channel-typed (or channel-containing aggregate) IR may
+// remain.
+hw.module @ChannelArray(in %data0: i32, in %data1: i32, in %valid: i1, in %ready0: i1, in %ready1: i1, out rdy0: i1, out rdy1: i1, out out0: i32, out v0: i1, out out1: i32, out v1: i1) {
+  %c0 = hw.constant 0 : i1
+  %c1 = hw.constant 1 : i1
+  %chan0, %r0 = esi.wrap.vr %data0, %valid : i32
+  %chan1, %r1 = esi.wrap.vr %data1, %valid : i32
+  %arr = hw.array_create %chan1, %chan0 : !esi.channel<i32>
+  %e0 = hw.array_get %arr[%c0] : !hw.array<2x!esi.channel<i32>>, i1
+  %e1 = hw.array_get %arr[%c1] : !hw.array<2x!esi.channel<i32>>, i1
+  %d0, %dv0 = esi.unwrap.vr %e0, %ready0 : i32
+  %d1, %dv1 = esi.unwrap.vr %e1, %ready1 : i32
+  hw.output %r0, %r1, %d0, %dv0, %d1, %dv1 : i1, i1, i32, i1, i32, i1
+}
+// HW-LABEL: hw.module @ChannelArray(in %data0 : i32, in %data1 : i32, in %valid : i1, in %ready0 : i1, in %ready1 : i1, out rdy0 : i1, out rdy1 : i1, out out0 : i32, out v0 : i1, out out1 : i32, out v1 : i1) {
+// HW-NOT:     esi.
+// HW-NOT:     !esi.channel
+// HW-NOT:     hw.array
+// HW:         hw.output %ready0, %ready1, %data0, %valid, %data1, %valid : i1, i1, i32, i1, i32, i1
+

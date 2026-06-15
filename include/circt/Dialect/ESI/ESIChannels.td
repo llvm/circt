@@ -207,11 +207,17 @@ def UnwrapValidReadyOp : ESI_Op<"unwrap.vr", [
   let arguments = (ins ChannelType:$chanInput, I1:$ready);
   let results = (outs AnyType:$rawOutput, I1:$valid);
   let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizeMethod = 1;
   let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
   ];
+
+  let extraClassDeclaration = [{
+    static LogicalResult mergeAndErase(UnwrapValidReadyOp, WrapValidReadyOp,
+                                       PatternRewriter&);
+  }];
 }
 
 def WrapFIFOOp : ESI_Op<"wrap.fifo", [
@@ -561,7 +567,7 @@ def WindowFieldType : ESI_Type<"WindowField"> {
   let genVerifyDecl = 1;
 }
 
-def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
+def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure, OperatesOnESITypes]> {
   let summary = "wrap a union into a data window";
 
   let arguments = (ins AnyType:$frame);
@@ -577,6 +583,7 @@ def WrapWindow : ESI_Physical_Op<"window.wrap", [Pure]> {
 
 def UnwrapWindow : ESI_Physical_Op<"window.unwrap", [
       Pure,
+      OperatesOnESITypes,
       DeclareOpInterfaceMethods<InferTypeOpInterface>
   ]> {
   let summary = "unwrap a data window into a union";
