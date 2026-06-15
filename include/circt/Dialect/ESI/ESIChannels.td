@@ -207,11 +207,17 @@ def UnwrapValidReadyOp : ESI_Op<"unwrap.vr", [
   let arguments = (ins ChannelType:$chanInput, I1:$ready);
   let results = (outs AnyType:$rawOutput, I1:$valid);
   let hasCustomAssemblyFormat = 1;
+  let hasCanonicalizeMethod = 1;
   let hasVerifier = 1;
 
   let builders = [
     OpBuilder<(ins "mlir::Value":$inChan, "mlir::Value":$ready)>
   ];
+
+  let extraClassDeclaration = [{
+    static LogicalResult mergeAndErase(UnwrapValidReadyOp, WrapValidReadyOp,
+                                       PatternRewriter&);
+  }];
 }
 
 def WrapFIFOOp : ESI_Op<"wrap.fifo", [

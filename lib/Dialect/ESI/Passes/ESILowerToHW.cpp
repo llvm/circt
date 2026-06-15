@@ -22,6 +22,7 @@
 #include "circt/Support/SymCache.h"
 
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -152,107 +153,6 @@ LogicalResult NullSourceOpLowering::matchAndRewrite(
   }
   return success();
 }
-
-namespace {
-/// Eliminate a WrapValidOnlyOp and its consumer UnwrapValidOnlyOp.
-struct RemoveWrapValidOnlyOp : public OpConversionPattern<WrapValidOnlyOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(WrapValidOnlyOp wrap, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (ChannelType::hasNoConsumers(wrap.getChanOutput())) {
-      rewriter.eraseOp(wrap);
-      return success();
-    }
-    if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
-      return rewriter.notifyMatchFailure(
-          wrap, "ValidOnly wrap didn't have exactly one consumer.");
-    auto unwrap = dyn_cast<UnwrapValidOnlyOp>(
-        ChannelType::getSingleConsumer(wrap.getChanOutput())->getOwner());
-    if (!unwrap)
-      return rewriter.notifyMatchFailure(
-          wrap, "ValidOnly wrap consumer is not an unwrap.vo.");
-    rewriter.replaceOp(unwrap, {adaptor.getRawInput(), adaptor.getValid()});
-    rewriter.eraseOp(wrap);
-    return success();
-  }
-};
-
-/// Eliminate an UnwrapValidOnlyOp by finding its producing WrapValidOnlyOp.
-struct RemoveUnwrapValidOnlyOp : public OpConversionPattern<UnwrapValidOnlyOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(UnwrapValidOnlyOp unwrap, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto wrap = dyn_cast_or_null<WrapValidOnlyOp>(
-        adaptor.getChanInput().getDefiningOp());
-    if (!wrap)
-      return rewriter.notifyMatchFailure(
-          unwrap, "unwrap.vo input must come from a wrap.vo.");
-    if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
-      return rewriter.notifyMatchFailure(
-          wrap, "ValidOnly wrap didn't have exactly one consumer.");
-    rewriter.replaceOp(unwrap, {wrap.getRawInput(), wrap.getValid()});
-    rewriter.eraseOp(wrap);
-    return success();
-  }
-};
-
-/// Eliminate a WrapValidReadyOp and its consumer UnwrapValidReadyOp.
-struct RemoveWrapValidReadyOp : public OpConversionPattern<WrapValidReadyOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(WrapValidReadyOp wrap, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (ChannelType::hasNoConsumers(wrap.getChanOutput())) {
-      auto c1 = hw::ConstantOp::create(rewriter, wrap.getLoc(),
-                                       rewriter.getI1Type(), 1);
-      rewriter.replaceOp(wrap, {nullptr, c1});
-      return success();
-    }
-    if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
-      return rewriter.notifyMatchFailure(
-          wrap, "Wrap didn't have exactly one consumer.");
-    auto unwrap = dyn_cast<UnwrapValidReadyOp>(
-        ChannelType::getSingleConsumer(wrap.getChanOutput())->getOwner());
-    if (!unwrap)
-      return rewriter.notifyMatchFailure(wrap,
-                                         "Wrap consumer is not an unwrap.vr.");
-    rewriter.replaceOp(wrap, {nullptr, unwrap.getReady()});
-    rewriter.replaceOp(unwrap, {adaptor.getRawInput(), adaptor.getValid()});
-    return success();
-  }
-};
-
-/// Eliminate an UnwrapValidReadyOp by finding its producing WrapValidReadyOp.
-struct RemoveUnwrapValidReadyOp
-    : public OpConversionPattern<UnwrapValidReadyOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(UnwrapValidReadyOp unwrap, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    auto wrap = dyn_cast_or_null<WrapValidReadyOp>(
-        adaptor.getChanInput().getDefiningOp());
-    if (!wrap)
-      return rewriter.notifyMatchFailure(
-          unwrap, "unwrap.vr input must come from a wrap.vr.");
-    if (!ChannelType::hasOneConsumer(wrap.getChanOutput()))
-      return rewriter.notifyMatchFailure(
-          wrap, "Wrap didn't have exactly one consumer.");
-    rewriter.replaceOp(wrap, {nullptr, adaptor.getReady()});
-    rewriter.replaceOp(unwrap, {wrap.getRawInput(), wrap.getValid()});
-    return success();
-  }
-};
-} // anonymous namespace
 
 namespace {
 /// Eliminate snoop operations by extracting signals from wrap operations.
@@ -859,6 +759,42 @@ LogicalResult CosimManifestLowering::matchAndRewrite(
   rewriter.eraseOp(op);
   return success();
 }
+
+/// Returns true if `type` is an ESI channel or an aggregate (e.g. array,
+/// struct) that contains a channel somewhere within it.
+static bool typeContainsChannel(Type type) {
+  return type.walk([](ChannelType) { return WalkResult::interrupt(); })
+      .wasInterrupted();
+}
+
+/// Greedily canonicalize every op whose type involves an ESI channel. This
+/// hopefully removes all channel ops: channel-typed aggregates (e.g.
+/// hw.array_create/ array_get over channels) fold away, exposing adjacent
+/// wrap/unwrap pairs that the wrap/unwrap canonicalizers then merge. A greedy
+/// rewrite is used (rather than a dialect conversion) because this requires
+/// folding, DCE, and iterating to a fixpoint, none of which the conversion
+/// driver does.
+static void canonicalizeChannelOps(Operation *top, MLIRContext *ctxt) {
+  SmallVector<Operation *> channelOps;
+  DenseSet<OperationName> seenOpNames;
+  RewritePatternSet canonPatterns(ctxt);
+  top->walk([&](Operation *op) {
+    if (!llvm::any_of(op->getResultTypes(), typeContainsChannel) &&
+        !llvm::any_of(op->getOperandTypes(), typeContainsChannel))
+      return;
+    channelOps.push_back(op);
+    if (std::optional<mlir::RegisteredOperationName> info =
+            op->getRegisteredInfo();
+        info && seenOpNames.insert(op->getName()).second)
+      info->getCanonicalizationPatterns(canonPatterns, ctxt);
+  });
+  mlir::GreedyRewriteConfig config;
+  config.setStrictness(mlir::GreedyRewriteStrictness::ExistingAndNewOps);
+  (void)mlir::applyOpPatternsGreedily(
+      channelOps, mlir::FrozenRewritePatternSet(std::move(canonPatterns)),
+      config);
+}
+
 void ESItoHWPass::runOnOperation() {
   auto top = getOperation();
   auto *ctxt = &getContext();
@@ -934,25 +870,23 @@ void ESItoHWPass::runOnOperation() {
     return;
   }
 
-  // Lower the channel operations.
-  ConversionTarget pass3Target(*ctxt);
-  pass3Target.addLegalDialect<comb::CombDialect>();
-  pass3Target.addLegalDialect<HWDialect>();
-  pass3Target.addLegalDialect<SVDialect>();
-  pass3Target.addIllegalDialect<ESIDialect>();
-  pass3Target.addLegalOp<WrapWindow, UnwrapWindow>();
+  // Eliminate all channel ops (and channel-typed aggregates) via their
+  // canonicalizers, including merging the adjacent wrap/unwrap pairs.
+  canonicalizeChannelOps(top, ctxt);
 
-  RewritePatternSet pass3Patterns(ctxt);
-  pass3Patterns.insert<CanonicalizerOpLowering<UnwrapFIFOOp>>(ctxt);
-  pass3Patterns.insert<CanonicalizerOpLowering<WrapFIFOOp>>(ctxt);
-  pass3Patterns.insert<CanonicalizerOpLowering<UnwrapValidOnlyOp>>(ctxt);
-  pass3Patterns.insert<CanonicalizerOpLowering<WrapValidOnlyOp>>(ctxt);
-  pass3Patterns.insert<RemoveWrapValidOnlyOp>(ctxt);
-  pass3Patterns.insert<RemoveUnwrapValidOnlyOp>(ctxt);
-  pass3Patterns.insert<RemoveWrapValidReadyOp>(ctxt);
-  pass3Patterns.insert<RemoveUnwrapValidReadyOp>(ctxt);
-  if (failed(
-          applyPartialConversion(top, pass3Target, std::move(pass3Patterns))))
+  // Verify that no channel operations remain. The canonicalizers above are
+  // responsible for removing every ESI op; this conversion provides a clear
+  // failure (rather than leaving channel-typed IR behind) if any survive.
+  ConversionTarget channelVerifyTarget(*ctxt);
+  channelVerifyTarget.addLegalDialect<comb::CombDialect>();
+  channelVerifyTarget.addLegalDialect<HWDialect>();
+  channelVerifyTarget.addLegalDialect<SVDialect>();
+  channelVerifyTarget.addIllegalDialect<ESIDialect>();
+  channelVerifyTarget.addLegalOp<WrapWindow, UnwrapWindow>();
+
+  RewritePatternSet channelVerifyPatterns(ctxt);
+  if (failed(applyPartialConversion(top, channelVerifyTarget,
+                                    std::move(channelVerifyPatterns))))
     signalPassFailure();
 }
 
