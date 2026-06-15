@@ -1,7 +1,7 @@
 // REQUIRES: z3
 
 // Positive test: equivalent modules should return 0.
-// RUN: circt-lec.sh %s %s -c1=foo -c2=foo
+// RUN: circt-lec.sh %s -c1=foo -c2=foo
 
 // Negative test: non-equivalent modules should return non-zero.
 // RUN: not circt-lec.sh %s %s -c1=foo -c2=bar
