@@ -2857,6 +2857,45 @@ def FormatCharOp : MooreOp<"fmt.char", [Pure]> {
 // Scan String Operations
 //===----------------------------------------------------------------------===//
 
+def ScanBeginFScanFOp : MooreOp<"scan.begin_fscanf"> {
+  let summary = "Begin a $fscanf scan operation";
+  let description = [{
+    Opens a consuming scan chain that reads from the given channel.
+    The returned cursor is threaded through subsequent `moore.scan.*`
+    operations and closed with `moore.scan.end` to obtain the match count.
+
+    See IEEE 1800-2017 § 21.3.4.3 "Reading formatted data".
+  }];
+  let arguments = (ins TwoValuedI32:$channel);
+  let results = (outs ScanStringType:$cursor);
+  let assemblyFormat = "$channel attr-dict";
+}
+
+def ScanBeginSScanFOp : MooreOp<"scan.begin_sscanf"> {
+  let summary = "Begin a $sscanf scan operation";
+  let description = [{
+    Opens a consuming scan chain over the input `string`. The returned cursor
+    is threaded through subsequent `moore.scan.*` operations and closed with
+    `moore.scan.end` to obtain the match count.
+
+    See IEEE 1800-2017 § 21.3.4.3 "Reading formatted data".
+  }];
+  let arguments = (ins StringType:$string);
+  let results = (outs ScanStringType:$cursor);
+  let assemblyFormat = "$string attr-dict";
+}
+
+def ScanEndOp : MooreOp<"scan.end"> {
+  let summary = "Finalize a scan chain and return the match count";
+  let description = [{
+    Closes a consuming scan chain and returns the number of successfully
+    matched and assigned items. Returns -1 on EOF before the first match.
+  }];
+  let arguments = (ins ScanStringType:$cursor);
+  let results = (outs TwoValuedI32:$count);
+  let assemblyFormat = "$cursor attr-dict";
+}
+
 def ScanLiteralOp : MooreOp<"scan.literal", [Pure]> {
   let summary = "Match a literal string in the scan input";
   let description = [{
@@ -2865,9 +2904,9 @@ def ScanLiteralOp : MooreOp<"scan.literal", [Pure]> {
 
     See IEEE 1800-2017 § 21.3.4.3 "Reading formatted data".
   }];
-  let arguments = (ins StrAttr:$literal);
-  let results = (outs ScanStringType:$result);
-  let assemblyFormat = "$literal attr-dict";
+  let arguments = (ins ScanStringType:$input, StrAttr:$literal);
+  let results = (outs ScanStringType:$remaining);
+  let assemblyFormat = "$input $literal attr-dict";
 }
 
 def ScanIntOp : MooreOp<"scan.int", [Pure]> {
@@ -2875,40 +2914,42 @@ def ScanIntOp : MooreOp<"scan.int", [Pure]> {
   let description = [{
     Reads an integer according to the given format
     (binary, octal, decimal, or hexadecimal).
-    If dest is absent, assignment suppression (*) is active and the field
-    is consumed but not stored.
     maxWidth limits the number of input characters consumed.
+    When suppress is set, the value is consumed but not stored (%*
+    modifier).
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (b, o, d, h, x).
   }];
   let arguments = (ins
-    Optional<RefType>:$dest,
+    ScanStringType:$input,
     IntFormatAttr:$format,
-    OptionalAttr<I32Attr>:$maxWidth
+    OptionalAttr<I32Attr>:$maxWidth,
+    UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$result);
+  let results = (outs ScanStringType:$remaining, AnyInteger:$value);
   let assemblyFormat = [{
-    ($dest^ `:` type($dest))? $format (`width` $maxWidth^)? attr-dict
+    $input $format (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value)
   }];
 }
 
 def ScanRealOp : MooreOp<"scan.real", [Pure]> {
   let summary = "Scan a floating-point value from input";
   let description = [{
-    Reads a floating-point number (f, e, g specifiers) and writes it to dest.
-    If dest is absent, assignment suppression (*) is active and the field
-    is consumed but not stored.
+    Reads a floating-point number (f, e, g specifiers).
     maxWidth limits the number of input characters consumed.
+    When suppress is set, the value is consumed but not stored (%*
+    modifier).
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (f, e, g).
   }];
   let arguments = (ins
-    Optional<RefType>:$dest,
-    OptionalAttr<I32Attr>:$maxWidth
+    ScanStringType:$input,
+    OptionalAttr<I32Attr>:$maxWidth,
+    UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$result);
+  let results = (outs ScanStringType:$remaining, RealType:$value);
   let assemblyFormat = [{
-    ($dest^ `:` type($dest))? (`width` $maxWidth^)? attr-dict
+    $input (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value)
   }];
 }
 
@@ -2917,19 +2958,20 @@ def ScanTimeOp : MooreOp<"scan.time", [Pure]> {
   let description = [{
     Reads a floating-point number and scales it according to the current
     timescale and $timeformat settings (%t specifier).
-    If dest is absent, assignment suppression (*) is active and the field
-    is consumed but not stored.
     maxWidth limits the number of input characters consumed.
+    When suppress is set, the value is consumed but not stored (%*
+    modifier).
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (t).
   }];
   let arguments = (ins
-    Optional<RefType>:$dest,
-    OptionalAttr<I32Attr>:$maxWidth
+    ScanStringType:$input,
+    OptionalAttr<I32Attr>:$maxWidth,
+    UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$result);
+  let results = (outs ScanStringType:$remaining, TimeType:$value);
   let assemblyFormat = [{
-    ($dest^ `:` type($dest))? (`width` $maxWidth^)? attr-dict
+    $input (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value)
   }];
 }
 
@@ -2938,55 +2980,57 @@ def ScanCharOp : MooreOp<"scan.char", [Pure]> {
   let description = [{
     Reads a single 8-bit ASCII character from the input stream (%c specifier).
     Unlike other specifiers, leading whitespace is NOT skipped.
-    If dest is absent, assignment suppression (*) is active and the field
-    is consumed but not stored.
+    When suppress is set, the value is consumed but not stored (%*
+    modifier).
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (c).
   }];
-  let arguments = (ins Optional<RefType>:$dest);
-  let results = (outs ScanStringType:$result);
-  let assemblyFormat = "($dest^ `:` type($dest))? attr-dict";
+  let arguments = (ins ScanStringType:$input, UnitAttr:$suppress);
+  let results = (outs ScanStringType:$remaining, AnyInteger:$value);
+  let assemblyFormat = "$input (`suppress` $suppress^)? attr-dict `:` type($value)";
 }
 
 def ScanStrOp : MooreOp<"scan.str", [Pure]> {
   let summary = "Scan a whitespace-delimited string from input";
   let description = [{
-    Reads a sequence of non-whitespace characters (%s specifier) and writes
-    the result to dest.
-    If dest is absent, assignment suppression (*) is active and the field
-    is consumed but not stored.
+    Reads a sequence of non-whitespace characters (%s specifier) and write
+    it to value.
     maxWidth limits the number of characters consumed.
+    When suppress is set, the value is consumed but not stored (%*
+    modifier).
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (s).
   }];
   let arguments = (ins
-    Optional<RefType>:$dest,
-    OptionalAttr<I32Attr>:$maxWidth
+    ScanStringType:$input,
+    OptionalAttr<I32Attr>:$maxWidth,
+    UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$result);
+  let results = (outs ScanStringType:$remaining, StringType:$value);
   let assemblyFormat = [{
-    ($dest^ `:` type($dest))? (`width` $maxWidth^)? attr-dict
+    $input (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value)
   }];
 }
 
 def ScanUnformattedOp : MooreOp<"scan.unformatted", [Pure]> {
   let summary = "Scan unformatted binary data from input";
   let description = [{
-    Reads raw binary data from the input stream into dest.
+    Reads raw binary data from the input stream.
     %u reads 2-value binary data; %z reads 4-value (x/z-preserving) data.
     The fourValue attribute distinguishes the two.
-    If dest is absent, assignment suppression (*) is active and the field
-    is consumed but not stored.
+    When suppress is set, the value is consumed but not stored (%*
+    modifier).
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (u, z).
   }];
   let arguments = (ins
-    Optional<RefType>:$dest,
-    UnitAttr:$fourValue
+    ScanStringType:$input,
+    UnitAttr:$fourValue,
+    UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$result);
+  let results = (outs ScanStringType:$remaining, AnyInteger:$value);
   let assemblyFormat = [{
-    ($dest^ `:` type($dest))? (`four_value` $fourValue^)? attr-dict
+    $input (`four_value` $fourValue^)? (`suppress` $suppress^)? attr-dict `:` type($value)
   }];
 }
 
@@ -2999,19 +3043,9 @@ def ScanHierPathMatchOp : MooreOp<"scan.hier_path_match", [Pure]> {
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (m).
   }];
-  let results = (outs ScanStringType:$result);
-  let assemblyFormat = "attr-dict";
-}
-
-def ScanConcatOp : MooreOp<"scan.concat", [Pure]> {
-  let summary = "Concatenate scan format fragments";
-  let description = [{
-    Combines multiple scan format fragments into a single scan format
-    directive. Fragments are applied left to right against the input stream.
-  }];
-  let arguments = (ins Variadic<ScanStringType>:$inputs);
-  let results = (outs ScanStringType:$result);
-  let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
+  let arguments = (ins ScanStringType:$input);
+  let results = (outs ScanStringType:$remaining);
+  let assemblyFormat = "$input attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
@@ -3319,35 +3353,6 @@ def FDisplayBIOp : Builtin<"fdisplay"> {
   }];
   let arguments = (ins TwoValuedI32:$fd, FormatStringType:$message);
   let assemblyFormat = "$fd `,` $message attr-dict";
-}
-
-def FScanFBIOp : Builtin<"fscanf"> {
-  let summary = "Read formatted data from a file";
-  let description = [{
-    Reads characters from the file specified by fd, interprets them according
-    to the scan format, and stores the results in the destination lvalues
-    embedded in the format. Returns the number of successfully matched and
-    assigned items, or EOF (-1) on end of file before any match.
-
-    See IEEE 1800-2017 § 21.3.4 "Reading data from a file".
-  }];
-  let arguments = (ins TwoValuedI32:$fd, ScanStringType:$format);
-  let results = (outs TwoValuedI32:$count);
-  let assemblyFormat = "$fd $format attr-dict";
-}
-
-def SScanFBIOp : Builtin<"sscanf"> {
-  let summary = "Read formatted data from a string";
-  let description = [{
-    Reads characters from str, interprets them according to the scan format,
-    and stores the results in the destination lvalues embedded in the format.
-    Returns the number of successfully matched and assigned items, or EOF (-1).
-
-    See IEEE 1800-2017 § 21.3.4 "Reading data from a file".
-  }];
-  let arguments = (ins StringType:$str, ScanStringType:$format);
-  let results = (outs TwoValuedI32:$count);
-  let assemblyFormat = "$str $format attr-dict";
 }
 
 //===----------------------------------------------------------------------===//

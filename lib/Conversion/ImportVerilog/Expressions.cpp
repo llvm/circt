@@ -3869,14 +3869,20 @@ Value Context::convertSystemCall(
       return (mlir::emitError(loc)
               << "$fscanf requires a string literal format string"),
              Value{};
-    auto scanFmt = convertScanString(fmtLit->getValue(), args.subspan(2), loc);
-    if (failed(scanFmt))
+    auto cursor =
+        moore::ScanBeginFScanFOp::create(builder, loc, fd).getCursor();
+    auto result =
+        convertScanString(fmtLit->getValue(), cursor, args.subspan(2), loc);
+    if (failed(result))
       return {};
-    if (!*scanFmt) {
-      auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
-      return moore::ConstantOp::create(builder, loc, i32Ty, 0);
+    for (auto [destExpr, value] : result->assignments) {
+      auto lhs = convertLvalueExpression(*destExpr);
+      if (!lhs)
+        return {};
+      moore::BlockingAssignOp::create(builder, loc, lhs, value);
     }
-    return moore::FScanFBIOp::create(builder, loc, fd, *scanFmt);
+    return moore::ScanEndOp::create(builder, loc, result->finalCursor)
+        .getCount();
   }
 
   if (nameId == ksn::SScanf) {
@@ -3890,14 +3896,20 @@ Value Context::convertSystemCall(
       return (mlir::emitError(loc)
               << "$sscanf requires a string literal format string"),
              Value{};
-    auto scanFmt = convertScanString(fmtLit->getValue(), args.subspan(2), loc);
-    if (failed(scanFmt))
+    auto cursor =
+        moore::ScanBeginSScanFOp::create(builder, loc, str).getCursor();
+    auto result =
+        convertScanString(fmtLit->getValue(), cursor, args.subspan(2), loc);
+    if (failed(result))
       return {};
-    if (!*scanFmt) {
-      auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
-      return moore::ConstantOp::create(builder, loc, i32Ty, 0);
+    for (auto [destExpr, value] : result->assignments) {
+      auto lhs = convertLvalueExpression(*destExpr);
+      if (!lhs)
+        return {};
+      moore::BlockingAssignOp::create(builder, loc, lhs, value);
     }
-    return moore::SScanFBIOp::create(builder, loc, str, *scanFmt);
+    return moore::ScanEndOp::create(builder, loc, result->finalCursor)
+        .getCount();
   }
 
   // Unrecognized system call

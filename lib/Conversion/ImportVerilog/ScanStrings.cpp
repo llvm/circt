@@ -100,18 +100,21 @@ struct ScanStringParser {
   ArrayRef<const slang::ast::Expression *> destinations;
   /// Current location for ops and diagnostics.
   Location loc;
-  /// Accumulated scan format fragments.
-  SmallVector<Value> fragments;
+  /// The current tail of the consuming chain.
+  Value cursor;
+  /// Accumulated (unwrapped destination expression, scanned value) pairs to be
+  /// assigned with a moore.blocking_assign by the caller.
+  SmallVector<std::pair<const slang::ast::Expression *, Value>> assignments;
 
-  ScanStringParser(Context &context,
+  ScanStringParser(Context &context, Value initialCursor,
                    ArrayRef<const slang::ast::Expression *> destinations,
                    Location loc)
       : context(context), builder(context.builder), destinations(destinations),
-        loc(loc) {}
+        loc(loc), cursor(initialCursor) {}
 
-  /// Parse the format string and produce a ScanStringType value combining
-  /// all fragments. Returns failure if any error occurs.
-  FailureOr<Value> parse(StringRef formatStr) {
+  /// Thread the consuming chain and collect (destination, value) assignments
+  /// pairs.
+  FailureOr<Context::ScanStringResult> parse(StringRef formatStr) {
     bool anyFailure = false;
 
     auto onText = [&](StringRef text) {
@@ -137,29 +140,24 @@ struct ScanStringParser {
     if (!parseScanFormat(formatStr, onText, onArg, onError) || anyFailure)
       return failure();
 
-    if (fragments.empty())
-      return Value{};
-    if (fragments.size() == 1)
-      return fragments[0];
-    return moore::ScanConcatOp::create(builder, loc, fragments).getResult();
+    return Context::ScanStringResult{cursor, std::move(assignments)};
   }
 
   /// Emit a literal text fragment that must match verbatim in the input.
   void emitLiteral(StringRef text) {
     if (text.empty())
       return;
-    fragments.push_back(moore::ScanLiteralOp::create(builder, loc, text));
+    cursor =
+        moore::ScanLiteralOp::create(builder, loc, cursor, text).getRemaining();
   }
 
-  /// Resolve a destination expression to an lvalue reference value.
-  FailureOr<Value> resolveDest(const slang::ast::Expression &destExpr) {
-    const auto *expr = &destExpr;
-    if (auto assign = expr->as_if<slang::ast::AssignmentExpression>())
-      expr = &assign->left();
-    auto lhs = context.convertLvalueExpression(*expr);
-    if (!lhs)
-      return failure();
-    return lhs;
+  /// Strip an outer AssignmentExpression wrapper if present,
+  /// returning the actual lvalue subexpression.
+  static const slang::ast::Expression *
+  unwrapDest(const slang::ast::Expression *expr) {
+    if (auto *assign = expr->as_if<slang::ast::AssignmentExpression>())
+      return &assign->left();
+    return expr;
   }
 
   /// Consume the next destination argument (if not suppressed) and emit a
@@ -170,39 +168,36 @@ struct ScanStringParser {
 
     // Hierarchical path specifier (%m), no argument consumed.
     if (specifierLower == 'm') {
-      fragments.push_back(moore::ScanHierPathMatchOp::create(builder, loc));
+      cursor = moore::ScanHierPathMatchOp::create(builder, loc, cursor)
+                   .getRemaining();
       return success();
-    }
-
-    // All other specifiers consume a destination argument (if not suppressed).
-    Value dest;
-    if (!suppress) {
-      if (destinations.empty())
-        return mlir::emitError(loc)
-               << "too few arguments for scan format specifier '%" << specifier
-               << "'";
-      auto destOrFailure = resolveDest(*destinations.front());
-      destinations = destinations.drop_front();
-      if (failed(destOrFailure))
-        return failure();
-      dest = *destOrFailure;
     }
 
     IntegerAttr maxWidthAttr = nullptr;
     if (maxWidth)
       maxWidthAttr = builder.getI32IntegerAttr(*maxWidth);
 
+    const slang::ast::Expression *destExpr = nullptr;
+    if (!suppress) {
+      if (destinations.empty())
+        return mlir::emitError(loc)
+               << "too few arguments for scan format specifier '%" << specifier
+               << "'";
+      destExpr = unwrapDest(destinations.front());
+      destinations = destinations.drop_front();
+    }
+
     switch (specifierLower) {
     // Integer specifiers (%b, %o, %d, %h, %x)
     case 'b':
-      return emitScanInt(dest, IntFormat::Binary, maxWidthAttr);
+      return emitScanInt(destExpr, suppress, IntFormat::Binary, maxWidthAttr);
     case 'o':
-      return emitScanInt(dest, IntFormat::Octal, maxWidthAttr);
+      return emitScanInt(destExpr, suppress, IntFormat::Octal, maxWidthAttr);
     case 'd':
-      return emitScanInt(dest, IntFormat::Decimal, maxWidthAttr);
+      return emitScanInt(destExpr, suppress, IntFormat::Decimal, maxWidthAttr);
     case 'h':
     case 'x':
-      return emitScanInt(dest,
+      return emitScanInt(destExpr, suppress,
                          std::isupper(specifier) ? IntFormat::HexUpper
                                                  : IntFormat::HexLower,
                          maxWidthAttr);
@@ -211,25 +206,25 @@ struct ScanStringParser {
     case 'f':
     case 'e':
     case 'g':
-      return emitScanReal(dest, maxWidthAttr);
+      return emitScanReal(destExpr, suppress, maxWidthAttr);
 
     // Time specifier (%t)
     case 't':
-      return emitScanTime(dest, maxWidthAttr);
+      return emitScanTime(destExpr, suppress, maxWidthAttr);
 
     // Character specifier (%c)
     case 'c':
-      return emitScanChar(dest);
+      return emitScanChar(destExpr, suppress);
 
     // String specifier (%s)
     case 's':
-      return emitScanStr(dest, maxWidthAttr);
+      return emitScanStr(destExpr, suppress, maxWidthAttr);
 
     // Unformatted binary (%u, %z)
     case 'u':
-      return emitScanUnformatted(dest, /*fourValue=*/false);
+      return emitScanUnformatted(destExpr, suppress, /*fourValue=*/false);
     case 'z':
-      return emitScanUnformatted(dest, /*fourValue=*/true);
+      return emitScanUnformatted(destExpr, suppress, /*fourValue=*/true);
 
     default:
       return mlir::emitError(loc)
@@ -237,48 +232,125 @@ struct ScanStringParser {
     }
   }
 
-  LogicalResult emitScanInt(Value dest, IntFormat format,
+  LogicalResult emitScanInt(const slang::ast::Expression *destExpr,
+                            bool suppress, IntFormat format,
                             IntegerAttr maxWidth) {
-    fragments.push_back(
-        moore::ScanIntOp::create(builder, loc, dest, format, maxWidth));
+    Type mlirIntTy = builder.getIntegerType(32);
+    if (!suppress) {
+      auto mooreIntTy =
+          llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
+      if (!mooreIntTy)
+        return mlir::emitError(loc)
+               << "destination of integer scan specifier must be an integer";
+      mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
+    }
+
+    auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    auto op = moore::ScanIntOp::create(builder, loc, scanStringTy, mlirIntTy,
+                                       cursor, format, maxWidth, suppress);
+    cursor = op.getRemaining();
+    if (!suppress) {
+      auto mooreVal =
+          moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
+              .getResult();
+      assignments.push_back({destExpr, mooreVal});
+    }
     return success();
   }
 
-  LogicalResult emitScanReal(Value dest, IntegerAttr maxWidth) {
-    fragments.push_back(
-        moore::ScanRealOp::create(builder, loc, dest, maxWidth));
+  LogicalResult emitScanReal(const slang::ast::Expression *destExpr,
+                             bool suppress, IntegerAttr maxWidth) {
+    auto valueTy = suppress ? moore::RealType::get(builder.getContext(),
+                                                   moore::RealWidth::f64)
+                            : llvm::dyn_cast<moore::RealType>(
+                                  context.convertType(*destExpr->type));
+    auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    auto op = moore::ScanRealOp::create(builder, loc, scanStringTy, valueTy,
+                                        cursor, maxWidth, suppress);
+    cursor = op.getRemaining();
+    if (!suppress)
+      assignments.push_back({destExpr, op.getValue()});
     return success();
   }
 
-  LogicalResult emitScanTime(Value dest, IntegerAttr maxWidth) {
-    fragments.push_back(
-        moore::ScanTimeOp::create(builder, loc, dest, maxWidth));
+  LogicalResult emitScanTime(const slang::ast::Expression *destExpr,
+                             bool suppress, IntegerAttr maxWidth) {
+    auto op =
+        moore::ScanTimeOp::create(builder, loc, cursor, maxWidth, suppress);
+    cursor = op.getRemaining();
+    if (!suppress)
+      assignments.push_back({destExpr, op.getValue()});
     return success();
   }
 
-  LogicalResult emitScanChar(Value dest) {
-    fragments.push_back(moore::ScanCharOp::create(builder, loc, dest));
+  LogicalResult emitScanChar(const slang::ast::Expression *destExpr,
+                             bool suppress) {
+    Type mlirIntTy = builder.getIntegerType(8);
+    if (!suppress) {
+      auto mooreIntTy =
+          llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
+      if (!mooreIntTy)
+        return mlir::emitError(loc)
+               << "destination of char scan specifier must be an integer";
+      mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
+    }
+    auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    auto op = moore::ScanCharOp::create(builder, loc, scanStringTy, mlirIntTy,
+                                        cursor, suppress);
+    cursor = op.getRemaining();
+    if (!suppress) {
+      auto mooreVal =
+          moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
+              .getResult();
+      assignments.push_back({destExpr, mooreVal});
+    }
     return success();
   }
 
-  LogicalResult emitScanStr(Value dest, IntegerAttr maxWidth) {
-    fragments.push_back(moore::ScanStrOp::create(builder, loc, dest, maxWidth));
+  LogicalResult emitScanStr(const slang::ast::Expression *destExpr,
+                            bool suppress, IntegerAttr maxWidth) {
+    auto op =
+        moore::ScanStrOp::create(builder, loc, cursor, maxWidth, suppress);
+    cursor = op.getRemaining();
+    if (!suppress)
+      assignments.push_back({destExpr, op.getValue()});
     return success();
   }
 
-  LogicalResult emitScanUnformatted(Value dest, bool fourValue) {
-    fragments.push_back(
-        moore::ScanUnformattedOp::create(builder, loc, dest, fourValue));
+  LogicalResult emitScanUnformatted(const slang::ast::Expression *destExpr,
+                                    bool suppress, bool fourValue) {
+    Type mlirIntTy = builder.getIntegerType(32);
+    if (!suppress) {
+      auto mooreIntTy =
+          llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
+      if (!mooreIntTy)
+        return mlir::emitError(loc) << "destination of unformatted scan "
+                                       "specifier must be an integer";
+      mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
+    }
+
+    auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    auto op = moore::ScanUnformattedOp::create(
+        builder, loc, scanStringTy, mlirIntTy, cursor, fourValue, suppress);
+    cursor = op.getRemaining();
+
+    if (!suppress) {
+      auto mooreVal =
+          moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
+              .getResult();
+      assignments.push_back({destExpr, mooreVal});
+    }
     return success();
   }
 };
 
 } // namespace
 
-FailureOr<Value> Context::convertScanString(
-    StringRef formatStr,
+FailureOr<Context::ScanStringResult> Context::convertScanString(
+    StringRef formatStr, Value initialCursor,
     std::span<const slang::ast::Expression *const> destinations, Location loc) {
-  ScanStringParser parser(
-      *this, ArrayRef(destinations.data(), destinations.size()), loc);
+  ScanStringParser parser(*this, initialCursor,
+                          ArrayRef(destinations.data(), destinations.size()),
+                          loc);
   return parser.parse(formatStr);
 }

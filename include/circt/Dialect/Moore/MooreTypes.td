@@ -457,12 +457,14 @@ def FormatStringType : MooreTypeDef<"FormatString"> {
 
 def ScanStringType : MooreTypeDef<"ScanString"> {
   let mnemonic = "scan_string";
-  let summary = "a scan format string type";
+  let summary = "a scan cursor type";
   let description = [{
-    Represents a parsed scan format directive specifying how to read values
-    from an input string or file. Each fragment captures a format specifier
-    and, for non-suppressed assignments, the destination lvalue reference
-    where the parsed value will be stored.
+    Represents the state of an in-progress scan operation: the remaining
+    text to be consumed and the accumulated match/failure state. Each
+    `moore.scan.*` operation takes a cursor as input, attempts to consume
+    the front of the remaining text, and forwards either a new cursor
+    (with the matched prefix removed) or a failure sentinel to the next
+    operation in the chain.
 
     See IEEE 1800-2017 § 21.3.4.3 "Reading formatted data".
   }];

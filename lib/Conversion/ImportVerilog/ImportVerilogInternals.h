@@ -412,12 +412,21 @@ struct Context {
       moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
       bool appendNewline = false);
 
-  /// Convert a scan format string literal with format specifiers and
-  /// destination lvalue expressions into a `!moore.scan_string` value.
-  /// Returns failure if an error occurs. Returns a null value if the format
-  /// string is trivially empty. Otherwise returns the scan format string.
-  FailureOr<Value>
-  convertScanString(StringRef formatStr,
+  /// Result of converting a scan format string. The final cursor of the
+  /// consuming chain and the list of (destination expression, scanned value)
+  /// pairs to assign
+  struct ScanStringResult {
+    Value finalCursor;
+    SmallVector<std::pair<const slang::ast::Expression *, Value>> assignments;
+  };
+
+  /// Convert a scan format string into a consuming chain of `moore.scan.*`
+  /// operations starting from `initialCursor`. Each non-suppressed specifier
+  /// produces an entry in `assignments`; the caller is responsible for emitting
+  /// the corresponding `moore.blocking_assign` ops. Returns failur if an erro
+  /// occurs.
+  FailureOr<ScanStringResult>
+  convertScanString(StringRef formatStr, Value initialCursor,
                     std::span<const slang::ast::Expression *const> destinations,
                     Location loc);
 
