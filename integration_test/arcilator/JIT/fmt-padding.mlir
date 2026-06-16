@@ -6,10 +6,6 @@
 // others -- rather than with NUL bytes. A `specifierWidth` of 0 disables padding
 // and prints the value in its minimal representation. Values are bracketed so
 // the padding is visible to FileCheck under `--strict-whitespace`.
-//
-// `sim.fmt.bin` is omitted because the arcilator runtime only lowers the
-// decimal, hexadecimal, and octal formatters; binary is covered by the
-// constant-folder test in test/Dialect/Sim/format-strings.mlir.
 
 func.func @entry() {
   %open = sim.fmt.literal "["
@@ -36,6 +32,11 @@ func.func @entry() {
   %octMsg = sim.fmt.concat (%open, %oct, %close)
   sim.proc.print %octMsg
 
+  // CHECK:[0000000001101010]
+  %bin = sim.fmt.bin %c106 : i16
+  %binMsg = sim.fmt.concat (%open, %bin, %close)
+  sim.proc.print %binMsg
+
   // A `specifierWidth` of 0 disables padding for every radix.
 
   // CHECK:[106]
@@ -52,6 +53,11 @@ func.func @entry() {
   %o0 = sim.fmt.oct %c106 specifierWidth 0 : i16
   %o0Msg = sim.fmt.concat (%open, %o0, %close)
   sim.proc.print %o0Msg
+
+  // CHECK:[1101010]
+  %b0 = sim.fmt.bin %c106 specifierWidth 0 : i16
+  %b0Msg = sim.fmt.concat (%open, %b0, %close)
+  sim.proc.print %b0Msg
 
   return
 }
