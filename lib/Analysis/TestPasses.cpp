@@ -298,15 +298,14 @@ void FIRRTLGatedClockConversionPass::runOnOperation() {
   circuit.walk([&](Operation *op) {
     if (isa<firrtl::RegOp, firrtl::RegResetOp, firrtl::RefForceOp,
             firrtl::RefReleaseOp>(op)) {
-      converter.addRoot(op);
+      if (failed(converter.addRoot(op)))
+        return signalPassFailure();
     }
   });
 
   // Run the conversion
-  if (failed(converter.run())) {
-    signalPassFailure();
-    return;
-  }
+  if (failed(converter.run()))
+    return signalPassFailure();
 }
 
 //===----------------------------------------------------------------------===//
