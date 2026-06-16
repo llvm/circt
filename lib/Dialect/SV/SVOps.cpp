@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/ModuleImplementation.h"
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Support/CustomDirectiveImpl.h"
+#include "circt/Support/Namespace.h"
 #include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -54,6 +55,45 @@ bool sv::isExpression(Operation *op) {
   return isa<VerbatimExprOp, VerbatimExprSEOp, GetModportOp,
              ReadInterfaceSignalOp, ConstantXOp, ConstantZOp, ConstantStrOp,
              MacroRefExprOp, MacroRefExprSEOp>(op);
+}
+
+std::pair<StringAttr, bool>
+sv::lookupOrGenerateMacroSymName(Block *symbolTableBlock,
+                                 StringRef verilogName) {
+  for (auto decl : symbolTableBlock->getOps<sv::MacroDeclOp>()) {
+    if (decl.getMacroIdentifier() == verilogName)
+      return {decl.getSymNameAttr(), false};
+  }
+
+  Namespace ns;
+  auto symbolNameId =
+      StringAttr::get(symbolTableBlock->getParentOp()->getContext(),
+                      SymbolTable::getSymbolAttrName());
+  for (auto &op : *symbolTableBlock) {
+    if (auto symbol = op.getAttrOfType<StringAttr>(symbolNameId))
+      ns.add(symbol.getValue());
+  }
+
+  return {StringAttr::get(symbolTableBlock->getParentOp()->getContext(),
+                          ns.newName(verilogName)),
+          true};
+}
+
+StringAttr sv::lookupOrCreateMacroDecl(OpBuilder &builder, Location loc,
+                                       Block *symbolTableBlock,
+                                       StringRef verilogName) {
+  auto [symNameAttr, created] =
+      lookupOrGenerateMacroSymName(symbolTableBlock, verilogName);
+  if (!created)
+    return symNameAttr;
+
+  auto *ctx = symbolTableBlock->getParentOp()->getContext();
+  auto verilogNameAttr = symNameAttr.getValue() == verilogName
+                             ? StringAttr{}
+                             : StringAttr::get(ctx, verilogName);
+  sv::MacroDeclOp::create(builder, loc, symNameAttr, ArrayAttr{},
+                          verilogNameAttr);
+  return symNameAttr;
 }
 
 /// Returns the operation registered with the given symbol name with the regions
