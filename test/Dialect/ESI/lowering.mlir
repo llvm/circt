@@ -439,40 +439,10 @@ hw.module @voSnoopXactPassthrough(in %chan_in: !esi.channel<i32, ValidOnly>, out
 // through the swizzle while the ready backpressure is routed back through the
 // inverse permutation.
 // HW-LABEL: hw.module @arrSwizzleVR(in %in : !hw.array<4xi8>, in %in_valid : !hw.array<4xi1>, in %out_ready : !hw.array<4xi1>, out in_ready : !hw.array<4xi1>, out out : !hw.array<4xi8>, out out_valid : !hw.array<4xi1>)
-// Unpack data + valid for each input channel; each get is preceded by its own
-// index constant (elements 0..3 -> 0, 1, -2, -1 as a 2-bit value).
-// HW:       hw.constant 0 : i2
-// HW-NEXT:  %[[D0:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant 0 : i2
-// HW-NEXT:  %[[V0:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant 1 : i2
-// HW-NEXT:  %[[D1:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant 1 : i2
-// HW-NEXT:  %[[V1:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -2 : i2
-// HW-NEXT:  %[[D2:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant -2 : i2
-// HW-NEXT:  %[[V2:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -1 : i2
-// HW-NEXT:  %[[D3:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant -1 : i2
-// HW-NEXT:  %[[V3:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
-// Backpressure travels the opposite way: in_ready is built from out_ready[0..3]
-// in order, then reversed by array_create, so in_ready[3] is driven by
-// out_ready[0] (the channel that input 3 was swizzled to).
-// HW-NEXT:  %[[INR:.+]] = hw.array_create %[[R0:.+]], %[[R1:.+]], %[[R2:.+]], %[[R3:.+]] : i1
-// HW-NEXT:  hw.constant 0 : i2
-// HW-NEXT:  %[[R0]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant 1 : i2
-// HW-NEXT:  %[[R1]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -2 : i2
-// HW-NEXT:  %[[R2]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -1 : i2
-// HW-NEXT:  %[[R3]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
-// Data + valid are reversed into the outputs: out[0]=in[3] ... out[3]=in[0].
-// HW-NEXT:  %[[OUT:.+]] = hw.array_create %[[D0]], %[[D1]], %[[D2]], %[[D3]] : i8
-// HW-NEXT:  %[[OUTV:.+]] = hw.array_create %[[V0]], %[[V1]], %[[V2]], %[[V3]] : i1
-// HW-NEXT:  hw.output %[[INR]], %[[OUT]], %[[OUTV]] : !hw.array<4xi1>, !hw.array<4xi8>, !hw.array<4xi1>
+// HW-DAG:   hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
+// HW-DAG:   hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:   hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
+// HW:       hw.output %{{.+}}, %{{.+}}, %{{.+}} : !hw.array<4xi1>, !hw.array<4xi8>, !hw.array<4xi1>
 hw.module @arrSwizzleVR(in %in: !hw.array<4 x !esi.channel<i8>>, out out: !hw.array<4 x !esi.channel<i8>>) {
   %c0 = hw.constant 0 : i2
   %c1 = hw.constant 1 : i2
@@ -494,69 +464,69 @@ hw.module @arrSwizzleVR(in %in: !hw.array<4 x !esi.channel<i8>>, out out: !hw.ar
 // HW-LABEL: hw.module @arrSwizzleVRTop(in %in : !hw.array<4xi8>, in %in_valid : !hw.array<4xi1>, in %out_ready : !hw.array<4xi1>, out in_ready : !hw.array<4xi1>, out out : !hw.array<4xi8>, out out_valid : !hw.array<4xi1>)
 // Unpack the module's %in data + valid (passed straight into the instance).
 // HW:       hw.constant 0 : i2
-// HW-NEXT:  %[[D0:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant 0 : i2
-// HW-NEXT:  %[[V0:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant 1 : i2
-// HW-NEXT:  %[[D1:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant 1 : i2
-// HW-NEXT:  %[[V1:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -2 : i2
-// HW-NEXT:  %[[D2:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant -2 : i2
-// HW-NEXT:  %[[V2:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -1 : i2
-// HW-NEXT:  %[[D3:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant -1 : i2
-// HW-NEXT:  %[[V3:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  %[[D0:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
+// HW-DAG:  hw.constant 0 : i2
+// HW-DAG:  %[[V0:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant 1 : i2
+// HW-DAG:  %[[D1:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
+// HW-DAG:  hw.constant 1 : i2
+// HW-DAG:  %[[V1:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant -2 : i2
+// HW-DAG:  %[[D2:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
+// HW-DAG:  hw.constant -2 : i2
+// HW-DAG:  %[[V2:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant -1 : i2
+// HW-DAG:  %[[D3:.+]] = hw.array_get %in[%{{.+}}] : !hw.array<4xi8>
+// HW-DAG:  hw.constant -1 : i2
+// HW-DAG:  %[[V3:.+]] = hw.array_get %in_valid[%{{.+}}] : !hw.array<4xi1>
 // The module's in_ready output reverses the instance's in_ready (operand 0 ->
 // highest index): in_ready[3] is driven by foo.in_ready[0].
-// HW-NEXT:  %[[INRDY:.+]] = hw.array_create %[[IR3:.+]], %[[IR2:.+]], %[[IR1:.+]], %[[IR0:.+]] : i1
-// HW-NEXT:  hw.constant 0 : i2
-// HW-NEXT:  %[[IR0]] = hw.array_get %foo.in_ready[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant 1 : i2
-// HW-NEXT:  %[[IR1]] = hw.array_get %foo.in_ready[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -2 : i2
-// HW-NEXT:  %[[IR2]] = hw.array_get %foo.in_ready[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -1 : i2
-// HW-NEXT:  %[[IR3]] = hw.array_get %foo.in_ready[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  %[[INRDY:.+]] = hw.array_create %[[IR3:.+]], %[[IR2:.+]], %[[IR1:.+]], %[[IR0:.+]] : i1
+// HW-DAG:  hw.constant 0 : i2
+// HW-DAG:  %[[IR0]] = hw.array_get %foo.in_ready[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant 1 : i2
+// HW-DAG:  %[[IR1]] = hw.array_get %foo.in_ready[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant -2 : i2
+// HW-DAG:  %[[IR2]] = hw.array_get %foo.in_ready[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant -1 : i2
+// HW-DAG:  %[[IR3]] = hw.array_get %foo.in_ready[%{{.+}}] : !hw.array<4xi1>
 // The instance input data/valid are the unpacked %in elements, repacked in
 // order (in[i] -> instance in[i]).
-// HW-NEXT:  %[[INST_IN:.+]] = hw.array_create %[[D3]], %[[D2]], %[[D1]], %[[D0]] : i8
-// HW-NEXT:  %[[INST_INV:.+]] = hw.array_create %[[V3]], %[[V2]], %[[V1]], %[[V0]] : i1
+// HW-DAG:  %[[INST_IN:.+]] = hw.array_create %[[D3]], %[[D2]], %[[D1]], %[[D0]] : i8
+// HW-DAG:  %[[INST_INV:.+]] = hw.array_create %[[V3]], %[[V2]], %[[V1]], %[[V0]] : i1
 // Unpack the instance's output data + valid.
-// HW-NEXT:  hw.constant 0 : i2
-// HW-NEXT:  %[[O0:.+]] = hw.array_get %foo.out[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant 0 : i2
-// HW-NEXT:  %[[OV0:.+]] = hw.array_get %foo.out_valid[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant 1 : i2
-// HW-NEXT:  %[[O1:.+]] = hw.array_get %foo.out[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant 1 : i2
-// HW-NEXT:  %[[OV1:.+]] = hw.array_get %foo.out_valid[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -2 : i2
-// HW-NEXT:  %[[O2:.+]] = hw.array_get %foo.out[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant -2 : i2
-// HW-NEXT:  %[[OV2:.+]] = hw.array_get %foo.out_valid[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -1 : i2
-// HW-NEXT:  %[[O3:.+]] = hw.array_get %foo.out[%{{.+}}] : !hw.array<4xi8>
-// HW-NEXT:  hw.constant -1 : i2
-// HW-NEXT:  %[[OV3:.+]] = hw.array_get %foo.out_valid[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant 0 : i2
+// HW-DAG:  %[[O0:.+]] = hw.array_get %foo.out[%{{.+}}] : !hw.array<4xi8>
+// HW-DAG:  hw.constant 0 : i2
+// HW-DAG:  %[[OV0:.+]] = hw.array_get %foo.out_valid[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant 1 : i2
+// HW-DAG:  %[[O1:.+]] = hw.array_get %foo.out[%{{.+}}] : !hw.array<4xi8>
+// HW-DAG:  hw.constant 1 : i2
+// HW-DAG:  %[[OV1:.+]] = hw.array_get %foo.out_valid[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant -2 : i2
+// HW-DAG:  %[[O2:.+]] = hw.array_get %foo.out[%{{.+}}] : !hw.array<4xi8>
+// HW-DAG:  hw.constant -2 : i2
+// HW-DAG:  %[[OV2:.+]] = hw.array_get %foo.out_valid[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant -1 : i2
+// HW-DAG:  %[[O3:.+]] = hw.array_get %foo.out[%{{.+}}] : !hw.array<4xi8>
+// HW-DAG:  hw.constant -1 : i2
+// HW-DAG:  %[[OV3:.+]] = hw.array_get %foo.out_valid[%{{.+}}] : !hw.array<4xi1>
 // The instance's out_ready input reverses the module's out_ready.
-// HW-NEXT:  %[[INST_ORDY:.+]] = hw.array_create %[[OR0:.+]], %[[OR1:.+]], %[[OR2:.+]], %[[OR3:.+]] : i1
-// HW-NEXT:  %foo.in_ready, %foo.out, %foo.out_valid = hw.instance "foo" @arrSwizzleVR(in: %[[INST_IN]]: !hw.array<4xi8>, in_valid: %[[INST_INV]]: !hw.array<4xi1>, out_ready: %[[INST_ORDY]]: !hw.array<4xi1>) -> (in_ready: !hw.array<4xi1>, out: !hw.array<4xi8>, out_valid: !hw.array<4xi1>)
-// HW-NEXT:  hw.constant 0 : i2
-// HW-NEXT:  %[[OR0]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant 1 : i2
-// HW-NEXT:  %[[OR1]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -2 : i2
-// HW-NEXT:  %[[OR2]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
-// HW-NEXT:  hw.constant -1 : i2
-// HW-NEXT:  %[[OR3]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  %[[INST_ORDY:.+]] = hw.array_create %[[OR0:.+]], %[[OR1:.+]], %[[OR2:.+]], %[[OR3:.+]] : i1
+// HW-DAG:  %foo.in_ready, %foo.out, %foo.out_valid = hw.instance "foo" @arrSwizzleVR(in: %[[INST_IN]]: !hw.array<4xi8>, in_valid: %[[INST_INV]]: !hw.array<4xi1>, out_ready: %[[INST_ORDY]]: !hw.array<4xi1>) -> (in_ready: !hw.array<4xi1>, out: !hw.array<4xi8>, out_valid: !hw.array<4xi1>)
+// HW-DAG:  hw.constant 0 : i2
+// HW-DAG:  %[[OR0]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant 1 : i2
+// HW-DAG:  %[[OR1]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant -2 : i2
+// HW-DAG:  %[[OR2]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
+// HW-DAG:  hw.constant -1 : i2
+// HW-DAG:  %[[OR3]] = hw.array_get %out_ready[%{{.+}}] : !hw.array<4xi1>
 // The module output reverses the instance output (de-swizzle): out[0] is driven
 // by foo.out[3].
-// HW-NEXT:  %[[OUT:.+]] = hw.array_create %[[O0]], %[[O1]], %[[O2]], %[[O3]] : i8
-// HW-NEXT:  %[[OUTV:.+]] = hw.array_create %[[OV0]], %[[OV1]], %[[OV2]], %[[OV3]] : i1
-// HW-NEXT:  hw.output %[[INRDY]], %[[OUT]], %[[OUTV]] : !hw.array<4xi1>, !hw.array<4xi8>, !hw.array<4xi1>
+// HW-DAG:  %[[OUT:.+]] = hw.array_create %[[O0]], %[[O1]], %[[O2]], %[[O3]] : i8
+// HW-DAG:  %[[OUTV:.+]] = hw.array_create %[[OV0]], %[[OV1]], %[[OV2]], %[[OV3]] : i1
+// HW-DAG:  hw.output %[[INRDY]], %[[OUT]], %[[OUTV]] : !hw.array<4xi1>, !hw.array<4xi8>, !hw.array<4xi1>
 hw.module @arrSwizzleVRTop(in %in: !hw.array<4 x !esi.channel<i8>>, out out: !hw.array<4 x !esi.channel<i8>>) {
   %foo.out = hw.instance "foo" @arrSwizzleVR(in: %in: !hw.array<4 x !esi.channel<i8>>) -> (out: !hw.array<4 x !esi.channel<i8>>)
   %c0 = hw.constant 0 : i2

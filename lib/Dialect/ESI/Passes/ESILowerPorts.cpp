@@ -254,6 +254,16 @@ public:
             }
             return PortConversionBuilder::build(port);
           }
+          // The lowering decomposes the array element-by-element, so the size
+          // must be a known, non-zero constant. A parametric size makes
+          // `getNumElements()` return -1 and a zero size would assert in
+          // hw.array_create; emit a diagnostic rather than crash.
+          if (!isa<IntegerAttr>(arrTy.getSizeAttr()) ||
+              arrTy.getNumElements() == 0)
+            return converter.getModule()
+                .emitOpError("cannot lower array-of-channels port with a "
+                             "non-constant or zero-length size")
+                .attachNote(port.loc);
           return buildChannelPort<ArrayChannelPort>(converter, port,
                                                     chanTy.getSignaling());
         })
