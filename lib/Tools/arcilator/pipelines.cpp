@@ -126,6 +126,7 @@ void circt::populateArcStateLoweringPipeline(
   pm.addPass(arc::createMergeIfsPass());
   pm.addPass(createCSEPass());
   pm.addPass(arc::createArcCanonicalizer());
+  pm.addPass(arc::createLowerCoroutinesPass());
 }
 
 void circt::populateArcStateAllocationPipeline(
