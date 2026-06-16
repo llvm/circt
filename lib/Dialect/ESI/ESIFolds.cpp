@@ -73,8 +73,10 @@ LogicalResult UnwrapValidReadyOp::canonicalize(UnwrapValidReadyOp op,
 LogicalResult UnwrapFIFOOp::mergeAndErase(UnwrapFIFOOp unwrap, WrapFIFOOp wrap,
                                           PatternRewriter &rewriter) {
   if (unwrap && wrap) {
+    // Capture the rden operand before replacing `unwrap`, which erases it.
+    Value rden = unwrap.getRden();
     rewriter.replaceOp(unwrap, {wrap.getData(), wrap.getEmpty()});
-    rewriter.replaceOp(wrap, {{}, unwrap.getRden()});
+    rewriter.replaceOp(wrap, {{}, rden});
     return success();
   }
   return failure();
