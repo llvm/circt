@@ -95,6 +95,7 @@ struct AssertionExprVisitor {
     // boolean value
     if (!mlir::isa<ltl::SequenceType, ltl::PropertyType, mlir::IntegerType>(
             valueType)) {
+      value = context.convertToBool(value);
       value = context.convertToI1(value);
     }
     if (!value)
