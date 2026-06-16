@@ -72,7 +72,8 @@ LogicalResult UnwrapValidReadyOp::canonicalize(UnwrapValidReadyOp op,
 
 LogicalResult UnwrapFIFOOp::mergeAndErase(UnwrapFIFOOp unwrap, WrapFIFOOp wrap,
                                           PatternRewriter &rewriter) {
-  if (unwrap && wrap) {
+  // Only merge when the wrap's channel feeds nothing but this unwrap.
+  if (unwrap && wrap && wrap.getChanOutput().hasOneUse()) {
     // Capture the rden operand before replacing `unwrap`, which erases it.
     Value rden = unwrap.getRden();
     rewriter.replaceOp(unwrap, {wrap.getData(), wrap.getEmpty()});
@@ -126,7 +127,8 @@ LogicalResult WrapFIFOOp::canonicalize(WrapFIFOOp op,
 LogicalResult UnwrapValidOnlyOp::mergeAndErase(UnwrapValidOnlyOp unwrap,
                                                WrapValidOnlyOp wrap,
                                                PatternRewriter &rewriter) {
-  if (unwrap && wrap) {
+  // Only merge when the wrap's channel feeds nothing but this unwrap.
+  if (unwrap && wrap && wrap.getChanOutput().hasOneUse()) {
     rewriter.replaceOp(unwrap, {wrap.getRawInput(), wrap.getValid()});
     rewriter.eraseOp(wrap);
     return success();
