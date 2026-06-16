@@ -60,8 +60,10 @@ inline bool definitelyOutsideMainBuffer(const T &t, slang::BufferID bufferId) {
 }
 
 // Index the AST to find symbol uses and definitions.
-struct VerilogIndexer : slang::ast::ASTVisitor<VerilogIndexer, true, true> {
-  using ASTBase = slang::ast::ASTVisitor<VerilogIndexer, true, true>;
+struct VerilogIndexer
+    : slang::ast::ASTVisitor<VerilogIndexer, slang::ast::VisitFlags::AllGood> {
+  using ASTBase =
+      slang::ast::ASTVisitor<VerilogIndexer, slang::ast::VisitFlags::AllGood>;
   VerilogIndexer(VerilogIndex &index) : index(index) {}
   VerilogIndex &index;
 

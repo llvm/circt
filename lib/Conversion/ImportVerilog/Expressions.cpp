@@ -73,7 +73,7 @@ static Value getSelectIndex(Context &context, Location loc, Value index,
   // Compute offset first so we know if it is negative.
   auto lo = range.lower();
   auto hi = range.upper();
-  auto offset = range.isLittleEndian() ? lo : hi;
+  auto offset = range.isDescending() ? lo : hi;
 
   // If any bound is negative we need a signed index type.
   const bool needSigned = (lo < 0) || (hi < 0);
@@ -96,7 +96,7 @@ static Value getSelectIndex(Context &context, Location loc, Value index,
   index = context.materializeConversion(intType, index, needSigned, loc);
 
   if (offset == 0) {
-    if (range.isLittleEndian())
+    if (range.isDescending())
       return index;
     else
       return moore::NegOp::create(builder, loc, index);
@@ -104,7 +104,7 @@ static Value getSelectIndex(Context &context, Location loc, Value index,
 
   auto offsetConst =
       moore::ConstantOp::create(builder, loc, intType, offset, needSigned);
-  if (range.isLittleEndian())
+  if (range.isDescending())
     return moore::SubOp::create(builder, loc, index, offsetConst);
   else
     return moore::SubOp::create(builder, loc, offsetConst, index);
@@ -539,7 +539,7 @@ struct ExprVisitor {
       // therefore have to take the `a` from above and adjust it by `-b+1` to
       // arrive at the right bound.
       if (expr.getSelectionKind() == RangeSelectionKind::IndexedDown &&
-          range.isLittleEndian()) {
+          range.isDescending()) {
         assert(constRight && "constness checked in slang");
         offsetAdd = 1 - *constRight;
       }
@@ -548,7 +548,7 @@ struct ExprVisitor {
       // therefore have to take the `a` from above and adjust it by `+b-1` to
       // arrive at the right bound.
       if (expr.getSelectionKind() == RangeSelectionKind::IndexedUp &&
-          !range.isLittleEndian()) {
+          !range.isDescending()) {
         assert(constRight && "constness checked in slang");
         offsetAdd = *constRight - 1;
       }
