@@ -97,5 +97,5 @@ hw.module @duplicate_arc(in %a : i1, out result : i1) attributes {synth.mapping_
 // -----
 
 // expected-error@+1 {{expected library module to have an output}}
-hw.module @no_output() attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [], input_caps = {}>} {
+hw.module @no_output() attributes {synth.mapping_cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [#synth.linear_timing_arc<"result", "a", 1, 0, #synth.polarity<positive>>], input_caps = {}>} {
 }

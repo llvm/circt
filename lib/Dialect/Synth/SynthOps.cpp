@@ -713,10 +713,22 @@ LogicalResult CutRewritePatternOp::verify() {
 
   auto cost = getCost();
 
-  // TODO: Cut rewrite patterns currently accept LinearTimingArcAttr timing
-  // arcs, but pin names are ignored because pattern arguments/results have no
-  // names. Teach MappingCostAttr to carry nameless per-input/per-output delay
-  // data, likely as a 2D ArrayAttr, and use it to populate cut pattern delays.
+  auto arcs = cost.getArcs();
+  if (arcs.size() != functionType.getNumResults())
+    return emitError()
+           << "mapping cost arc rows must match the number of results";
+
+  for (auto outputArcsAttr : arcs) {
+    auto outputArcs = dyn_cast<ArrayAttr>(outputArcsAttr);
+    if (!outputArcs)
+      return emitError()
+             << "mapping cost arcs for cut rewrite patterns must use nameless "
+                "arc rows";
+    if (outputArcs.size() != functionType.getNumInputs()) {
+      return emitError()
+             << "mapping cost arc columns must match the number of arguments";
+    }
+  }
 
   if (auto inputCaps = cost.getInputCaps())
     if (inputCaps.size() != functionType.getNumInputs())

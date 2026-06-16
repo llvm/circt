@@ -76,13 +76,13 @@ def MappingCostAttr : AttrDef<Synth_Dialect, "MappingCost"> {
   let summary = "Simplified timing and area cost for tech mapping";
   let parameters = (ins
     "::mlir::FloatAttr":$area,
-    OptionalParameter<"::mlir::ArrayAttr">:$arcs,
+    "::mlir::ArrayAttr":$arcs,
     OptionalParameter<"::mlir::DictionaryAttr">:$inputCaps
   );
   let genVerifyDecl = 1;
   let assemblyFormat =
     "`<` `area` `=` $area "
-    "(`,` `arcs` `=` $arcs^)? "
+    "`,` `arcs` `=` $arcs "
     "(`,` `input_caps` `=` $inputCaps^)? `>`";
 }
 
