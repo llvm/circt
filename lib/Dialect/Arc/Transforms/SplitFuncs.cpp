@@ -64,8 +64,12 @@ LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
     numOps += block.getOperations().size();
   if (numOps < splitBound)
     return success();
+  // SplitFuncs can only split a single-block region. Leave functions with
+  // multiple blocks untouched rather than failing the pass; splitting is a
+  // performance optimization, so bailing out benignly is preferable to
+  // erroring.
   if (funcOp.getBody().getBlocks().size() > 1)
-    return funcOp.emitError("Regions with multiple blocks are not supported.");
+    return success();
   assert(funcOp->getNumRegions() == 1);
   int numBlocks = llvm::divideCeil(numOps, splitBound);
   OpBuilder opBuilder(funcOp->getContext());
