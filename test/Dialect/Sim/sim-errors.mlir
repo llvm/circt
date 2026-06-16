@@ -6,6 +6,87 @@ hw.module @fmt_infinite_concat_verify() {
   // expected-error @below {{op is infinitely recursive.}}
   %ordinal = sim.fmt.concat (%ordinal, %lp, %ordinal, %rp)
 }
+
+// -----
+
+hw.module @global_signal_unknown_symbol() {
+  // expected-error @below {{references unknown symbol @doesNotExist}}
+  %value = sim.global_signal.read @doesNotExist : i1
+}
+
+// -----
+
+func.func private @Foo()
+
+hw.module @global_signal_wrong_symbol() {
+  // expected-error @below {{must reference a 'sim.global_signal', but @Foo is a 'func.func'}}
+  %value = sim.global_signal.read @Foo : i1
+}
+
+// -----
+
+sim.global_signal @mismatched_read_type : i8 {
+  %value = hw.constant 0 : i8
+  sim.yield %value : i8
+}
+
+hw.module @global_signal_bad_read_type() {
+  // expected-error @below {{returns 'i1', but @mismatched_read_type is of type 'i8'}}
+  %value = sim.global_signal.read @mismatched_read_type : i1
+}
+
+// -----
+
+sim.global_signal @yield_count : i1 {
+  // expected-error @below {{must yield exactly one value for 'sim.global_signal'}}
+  sim.yield
+}
+
+// -----
+
+sim.global_signal @yield_type : i1 {
+  %value = hw.constant 0 : i8
+  // expected-error @below {{yielded type 'i8' does not match global signal type 'i1'}}
+  sim.yield %value : i8
+}
+
+// -----
+
+sim.global_signal @side_effect : i1 {
+  %cond = hw.constant true
+  // expected-error @below {{ops in 'sim.global_signal' must be hw.constant, sim.global_signal.read, comb ops, or supported hw value ops}}
+  sim.terminate success, quiet
+  sim.yield %cond : i1
+}
+
+// -----
+
+sim.global_signal @sequential : i1 {
+  // expected-error @below {{ops in 'sim.global_signal' must be hw.constant, sim.global_signal.read, comb ops, or supported hw value ops}}
+  %clk = seq.const_clock low
+  %cond = hw.constant true
+  sim.yield %cond : i1
+}
+
+// -----
+
+sim.global_signal @unsupported_hw : i1 {
+  %cond = hw.constant true
+  // expected-error @below {{ops in 'sim.global_signal' must be hw.constant, sim.global_signal.read, comb ops, or supported hw value ops}}
+  %wire = hw.wire %cond : i1
+  sim.yield %wire : i1
+}
+
+// -----
+
+sim.global_signal @nested_region : i1 {
+  %cond = hw.constant true
+  // expected-error @below {{ops in 'sim.global_signal' must be hw.constant, sim.global_signal.read, comb ops, or supported hw value ops}}
+  scf.if %cond {
+  }
+  sim.yield %cond : i1
+}
+
 // -----
 
 hw.module @fmt_infinite_concat_canonicalize(in %val : i8, out res: !sim.fstring) {

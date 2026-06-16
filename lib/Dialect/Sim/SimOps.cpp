@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -237,6 +238,93 @@ sim::DPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return success();
   return emitError("callee must be 'sim.func.dpi' or 'func.func' but got '")
          << referencedOp->getName() << "'";
+}
+
+//===----------------------------------------------------------------------===//
+// GlobalSignalOp
+//===----------------------------------------------------------------------===//
+
+static bool isSupportedGlobalSignalBodyOp(Operation *op) {
+  if (isa<GlobalSignalReadOp>(op) ||
+      isa_and_nonnull<comb::CombDialect>(op->getDialect()))
+    return true;
+  return isa<hw::ConstantOp, hw::AggregateConstantOp, hw::ArrayCreateOp,
+             hw::ArrayConcatOp, hw::ArraySliceOp, hw::ArrayGetOp,
+             hw::ArrayInjectOp, hw::StructCreateOp, hw::StructExtractOp,
+             hw::StructInjectOp, hw::StructExplodeOp, hw::UnionCreateOp,
+             hw::UnionExtractOp, hw::BitcastOp, hw::EnumConstantOp,
+             hw::EnumCmpOp>(op);
+}
+
+LogicalResult GlobalSignalOp::verifyRegions() {
+  auto terminator = dyn_cast<YieldOp>(getBodyBlock()->getTerminator());
+  if (!terminator)
+    return emitOpError() << "must have a 'sim.yield' terminator";
+
+  if (terminator.getOperands().size() != 1)
+    return terminator.emitOpError()
+           << "must yield exactly one value for 'sim.global_signal'";
+
+  auto yieldedType = terminator.getOperands().front().getType();
+  if (yieldedType != getType())
+    return terminator.emitOpError()
+           << "yielded type " << yieldedType
+           << " does not match global signal type " << getType();
+
+  WalkResult result = getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
+    if (op == getOperation() || isa<YieldOp>(op))
+      return WalkResult::advance();
+    if (isSupportedGlobalSignalBodyOp(op))
+      return WalkResult::advance();
+    op->emitError() << "ops in 'sim.global_signal' must be hw.constant, "
+                       "sim.global_signal.read, comb ops, or supported hw "
+                       "value ops";
+    return WalkResult::interrupt();
+  });
+  return failure(result.wasInterrupted());
+}
+
+//===----------------------------------------------------------------------===//
+// GlobalSignalReadOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+GlobalSignalReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto *symbol =
+      symbolTable.lookupNearestSymbolFrom(*this, getGlobalNameAttr());
+  if (!symbol)
+    return emitOpError() << "references unknown symbol " << getGlobalNameAttr();
+
+  auto signal = dyn_cast<GlobalSignalOp>(symbol);
+  if (!signal)
+    return emitOpError() << "must reference a 'sim.global_signal', but "
+                         << getGlobalNameAttr() << " is a '"
+                         << symbol->getName() << "'";
+
+  if (signal.getType() != getType())
+    return emitOpError() << "returns " << getType() << ", but "
+                         << getGlobalNameAttr() << " is of type "
+                         << signal.getType();
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// YieldOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult YieldOp::verify() {
+  if (getOperands().size() != 1)
+    return emitOpError()
+           << "must yield exactly one value for 'sim.global_signal'";
+
+  auto globalSignal = cast<GlobalSignalOp>((*this)->getParentOp());
+  auto yieldedType = getOperands().front().getType();
+  if (yieldedType != globalSignal.getType())
+    return emitOpError() << "yielded type " << yieldedType
+                         << " does not match global signal type "
+                         << globalSignal.getType();
+  return success();
 }
 
 static StringAttr formatIntegersByRadix(MLIRContext *ctx, unsigned radix,

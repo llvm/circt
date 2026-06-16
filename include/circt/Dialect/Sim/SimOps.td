@@ -200,6 +200,78 @@ def DPICallOp : SimOp<"func.dpi.call",
 
 }
 
+def GlobalSignalOp : SimOp<"global_signal", [
+  IsolatedFromAbove,
+  NoRegionArguments,
+  SingleBlockImplicitTerminator<"sim::YieldOp">,
+  Symbol,
+]> {
+  let summary = "A named globally visible runtime expression";
+  let description = [{
+    `sim.global_signal` defines a named, globally visible runtime expression
+    with a default implementation. The body computes the default expression
+    value and terminates with `sim.yield`.
+
+    Global signals are not mutable storage objects. A `sim.global_signal.read`
+    evaluates or materializes the selected implementation at each read site.
+    The body is the IR-visible fallback implementation, conceptually similar to
+    a link-once function body, and may be overridden externally during lowering
+    or by the simulator/runtime. The default body is restricted to
+    side-effect-free operations and must not introduce sequential or procedural
+    behavior. External overrides are backend/runtime contracts and are not
+    validated by this operation.
+  }];
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    TypeAttrOf<AnyType>:$type
+  );
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name attr-dict `:` $type $body";
+  let hasRegionVerifier = 1;
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
+def GlobalSignalReadOp : SimOp<"global_signal.read", [
+  Pure,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
+  let summary = "Read a globally visible runtime expression";
+  let description = [{
+    Evaluates or materializes the selected implementation of the referenced
+    `sim.global_signal` and returns its value.
+  }];
+  let arguments = (ins FlatSymbolRefAttr:$global_name);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$global_name attr-dict `:` type($result)";
+  let builders = [
+    OpBuilder<(ins "sim::GlobalSignalOp":$global), [{
+      build($_builder, $_state, global.getType(), global.getSymName());
+    }]>,
+  ];
+}
+
+def YieldOp : SimOp<"yield", [
+  Pure,
+  Terminator,
+  HasParent<"sim::GlobalSignalOp">,
+]> {
+  let summary = "Yield values from a sim region";
+  let description = [{
+    `sim.yield` terminates a `sim.global_signal` body and yields the value of
+    the global signal expression.
+  }];
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
+  let hasVerifier = 1;
+  let builders = [
+    OpBuilder<(ins), [{
+      build($_builder, $_state, mlir::ValueRange());
+    }]>,
+  ];
+}
+
 //===----------------------------------------------------------------------===//
 // String Formatting
 //===----------------------------------------------------------------------===//
