@@ -2584,6 +2584,8 @@ module ConcurrentAssert(input clk);
   bit a;
   // CHECK: [[B:%.+]] = moore.variable : <l1>
   logic b;
+  // CHECK: [[MULTI:%.+]] = moore.variable : <i2>
+  bit [1:0] multi;
 
   // Simple
   // CHECK-NOT: moore.procedure always
@@ -3117,6 +3119,17 @@ module ConcurrentAssert(input clk);
   // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_2_B]], posedge [[CONV_CLK]] : i1
   // CHECK: verif.assert [[CLK_OP]] if [[ENABLE_CONV]] : !ltl.sequence
   assert property (@(posedge clk) disable iff (a) b);
+
+  // CHECK-NOT: moore.procedure always {
+  // CHECK: [[READ_MULTI:%.+]] = moore.read [[MULTI]] : <i2>
+  // CHECK: [[BOOL_CAST:%.+]] = moore.bool_cast [[READ_MULTI]] : i2 -> i1
+  // CHECK: [[CONV_MULTI:%.+]] = moore.to_builtin_int [[BOOL_CAST]] : i1
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_MULTI]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) multi);
 endmodule
 
 // CHECK: [[TMP:%.+]] = moore.constant 42 : i32
