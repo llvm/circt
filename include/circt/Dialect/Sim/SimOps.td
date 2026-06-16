@@ -260,6 +260,11 @@ def FormatHexOp : SimOp<"fmt.hex",
     length required to print the maximum value of the argument's
     type. Zero width values will produce the empty string.
     No further prefix will be added.
+
+    An optional `specifierWidth` overrides this default field width; a
+    `specifierWidth` of 0 disables padding entirely and prints the value in its
+    minimal representation. This mirrors the SystemVerilog `%h`, `%0h`, and
+    `%<N>h` specifiers.
   }];
 
 
@@ -293,6 +298,11 @@ def FormatOctOp : SimOp<"fmt.oct",
     length required to print the maximum value of the argument's
     type. Zero width values will produce the empty string.
     No further prefix will be added.
+
+    An optional `specifierWidth` overrides this default field width; a
+    `specifierWidth` of 0 disables padding entirely and prints the value in its
+    minimal representation. This mirrors the SystemVerilog `%o`, `%0o`, and
+    `%<N>o` specifiers.
   }];
 
 
@@ -324,6 +334,11 @@ def FormatBinOp : SimOp<"fmt.bin",
     The printed value will be left-padded with '0' up to the number
     of bits of the argument's type. Zero width values will produce
     the empty string. No further prefix will be added.
+
+    An optional `specifierWidth` overrides this default field width; a
+    `specifierWidth` of 0 disables padding entirely and prints the value in its
+    minimal representation. This mirrors the SystemVerilog `%b`, `%0b`, and
+    `%<N>b` specifiers.
   }];
 
   let arguments = (ins AnyInteger:$value,
@@ -447,6 +462,11 @@ def FormatDecOp : SimOp<"fmt.dec",
     padded to the same width. Zero width values will produce
     a single '0'.
 
+    An optional `specifierWidth` overrides this default field width; a
+    `specifierWidth` of 0 disables padding entirely and prints the value in its
+    minimal representation. This mirrors the SystemVerilog `%d`, `%0d`, and
+    `%<N>d` specifiers.
+
     Backends are recommended to not exceed the required amount of padding.
   }];
 
@@ -466,25 +486,6 @@ def FormatDecOp : SimOp<"fmt.dec",
     (`specifierWidth` $specifierWidth^)?
     (`signed` $isSigned^)?
     attr-dict `:` qualified(type($value))
-  }];
-
-  let extraClassDeclaration = [{
-      static inline unsigned getDecimalWidth(unsigned bits, bool isSigned) {
-        if (bits == 0)
-          return 1;
-        if (bits == 1)
-          return isSigned ? 2 : 1;
-
-        if (isSigned)
-          bits--;
-
-        // Should be precise up until bits = 13301
-        // log(2) / log(10) + epsilon
-        const double baseConversionFactor = 0.30103;
-        unsigned digits = std::ceil(bits * baseConversionFactor);
-
-        return isSigned ? digits + 1 : digits;
-      }
   }];
 }
 

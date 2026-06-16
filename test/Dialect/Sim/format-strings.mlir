@@ -137,7 +137,7 @@ hw.module @constant_fold3(in %zeroWitdh: i0, out res: !sim.fstring) {
 }
 
 // CHECK-LABEL: hw.module @constant_fold4
-// CHECK: sim.fmt.literal "  106,106  ,   106,106   ,       106,106       ,       106,106       ;006A,006A,   006A,006A   ;000152,000152,   000152,000152   ;0000000001101010,0000000001101010,   0000000001101010,0000000001101010   "
+// CHECK: sim.fmt.literal "  106,106  ,   106,106   ,       106,106       ,       106,106       ;006A,6A  ,000006A,6A     ;000152,152   ,000000152,152      ;0000000001101010,1101010         ,0000000000001101010,1101010            "
 hw.module @constant_fold4(out res: !sim.fstring) {
   %1 = hw.constant 106 : i16
   %2 = hw.constant -106 : i16
@@ -177,7 +177,7 @@ hw.module @constant_fold4(out res: !sim.fstring) {
   hw.output %catout : !sim.fstring
 }
 
-// CHECK: sim.fmt.literal "  106,106  ,006A,006A,   006A,006A   "
+// CHECK: sim.fmt.literal "  106,106  ,006A,6A  ,000006A,6A     "
 hw.module @constant_fold5(out res: !sim.fstring) {
   %1 = hw.constant 106 : i16
   %2 = hw.constant -106 : i16
@@ -189,6 +189,22 @@ hw.module @constant_fold5(out res: !sim.fstring) {
   %wRightHexPad = sim.fmt.hex %1, isUpper true specifierWidth 7 : i16
   %wLeftHexPad = sim.fmt.hex %1, isUpper true isLeftAligned true specifierWidth 7: i16
   %cat = sim.fmt.concat (%wRightDec, %comma, %wLeftDec, %comma, %wRightHex, %comma, %wLeftHex, %comma, %wRightHexPad, %comma, %wLeftHexPad)
+  hw.output %cat : !sim.fstring
+}
+
+// A `specifierWidth` of 0 disables padding for every radix and prints the
+// value in its minimal representation.
+// CHECK: sim.fmt.literal "106,-106,6a,152,1101010"
+hw.module @constant_fold_width0(out res: !sim.fstring) {
+  %pos = hw.constant 106 : i16
+  %neg = hw.constant -106 : i16
+  %comma = sim.fmt.literal ","
+  %d = sim.fmt.dec %pos specifierWidth 0 : i16
+  %ds = sim.fmt.dec %neg specifierWidth 0 signed : i16
+  %h = sim.fmt.hex %pos, isUpper false specifierWidth 0 : i16
+  %o = sim.fmt.oct %pos specifierWidth 0 : i16
+  %b = sim.fmt.bin %pos specifierWidth 0 : i16
+  %cat = sim.fmt.concat (%d, %comma, %ds, %comma, %h, %comma, %o, %comma, %b)
   hw.output %cat : !sim.fstring
 }
 
