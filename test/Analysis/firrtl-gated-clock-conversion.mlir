@@ -63,14 +63,12 @@ firrtl.circuit "TwoGates" {
 firrtl.circuit "WireAlias" {
   firrtl.module @WireAlias(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>,
                            in %d: !firrtl.uint<8>) {
-    // The base clock and enable are propagated onto wires; the register is
-    // rebound to the base-clock wire and muxed with the enable wire.
-    // CHECK: %[[CW:.+]] = firrtl.wire : !firrtl.clock
-    // CHECK: %[[EW:.+]] = firrtl.wire : !firrtl.uint<1>
-    // CHECK: firrtl.matchingconnect %[[CW]], %clk
-    // CHECK: firrtl.matchingconnect %[[EW]], %en
-    // CHECK: %[[R:.+]] = firrtl.reg %[[CW]] : !firrtl.clock, !firrtl.uint<8>
-    // CHECK: %[[MUX:.+]] = firrtl.mux(%[[EW]], %d, %[[R]])
+    // The gated clock is still created and connected to the wire
+    // CHECK: firrtl.int.clock_gate %clk, %en
+    // CHECK: %[[W:.+]] = firrtl.wire : !firrtl.clock
+    // The register is rebound to the base clock and muxed with the enable
+    // CHECK: %[[R:.+]] = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<8>
+    // CHECK: %[[MUX:.+]] = firrtl.mux(%en, %d, %[[R]])
     // CHECK: firrtl.matchingconnect %[[R]], %[[MUX]]
     %g = firrtl.int.clock_gate %clk, %en
     %w = firrtl.wire : !firrtl.clock
@@ -428,7 +426,9 @@ firrtl.circuit "TestEnableHierarchy" {
 
 // CHECK-LABEL: firrtl.module @DeeplyNested
 firrtl.circuit "DeeplyNested" {
-  firrtl.layer @A bind {}
+  firrtl.layer @A bind {
+    firrtl.layer @B bind {}
+  }
 
   firrtl.module @DeepChild(in %clk: !firrtl.clock, in %data: !firrtl.uint<8>) {
     %r = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<8>
@@ -440,29 +440,21 @@ firrtl.circuit "DeeplyNested" {
                               in %selector: !firrtl.enum<A: uint<8>, B: uint<8>>,
                               in %cond: !firrtl.uint<1>,
                               in %d: !firrtl.uint<8>) {
-    // CHECK: %[[G:.+]] = firrtl.int.clock_gate %clk, %en
+    // CHECK: firrtl.int.clock_gate %clk, %en
     %g = firrtl.int.clock_gate %clk, %en
 
-    // CHECK: firrtl.match %selector
-    firrtl.match %selector : !firrtl.enum<A: uint<8>, B: uint<8>> {
-      case A(%arg0) {
-        // CHECK: firrtl.when %cond
-        firrtl.when %cond : !firrtl.uint<1> {
-          // CHECK: firrtl.layerblock @A
-          firrtl.layerblock @A {
-            // CHECK: %{{.+}}, %{{.+}}, %[[INST_BASE:.+]], %[[INST_EN:.+]] = firrtl.instance deep_child @DeepChild
-            // CHECK-SAME: in [[GBASE_NAME:[A-Za-z0-9_]*_gatedClock_baseClock_clk]]: !firrtl.clock
-            // CHECK-SAME: in [[GEN_NAME:[A-Za-z0-9_]*_gatedClock_enable_clk]]: !firrtl.uint<1>
-            %child_clk, %child_data = firrtl.instance deep_child @DeepChild(in clk: !firrtl.clock, in data: !firrtl.uint<8>)
-            firrtl.matchingconnect %child_clk, %g : !firrtl.clock
-            firrtl.matchingconnect %child_data, %arg0 : !firrtl.uint<8>
-            // CHECK: firrtl.matchingconnect %[[INST_BASE]], %clk
-            // CHECK: firrtl.matchingconnect %[[INST_EN]], %en
-          }
-        }
-      }
-      case B(%arg0) {
-        // Empty case
+    // CHECK: firrtl.layerblock @A
+    // CHECK: firrtl.layerblock @A::@B
+    // CHECK: %{{.+}}, %{{.+}}, %[[INST_BASE:.+]], %[[INST_EN:.+]] = firrtl.instance deep_child @DeepChild
+    // CHECK-SAME: in {{[A-Za-z0-9_]*_gatedClock_baseClock_clk}}: !firrtl.clock
+    // CHECK-SAME: in {{[A-Za-z0-9_]*_gatedClock_enable_clk}}: !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %[[INST_BASE]], %clk
+    // CHECK: firrtl.matchingconnect %[[INST_EN]], %en
+    firrtl.layerblock @A {
+      firrtl.layerblock @A::@B {
+        %child_clk, %child_data = firrtl.instance deep_child @DeepChild(in clk: !firrtl.clock, in data: !firrtl.uint<8>)
+        firrtl.matchingconnect %child_clk, %g : !firrtl.clock
+        firrtl.matchingconnect %child_data, %d : !firrtl.uint<8>
       }
     }
   }
@@ -492,8 +484,6 @@ firrtl.circuit "DeeplyNested" {
 // CHECK:         firrtl.matchingconnect %[[R2]], %[[MUX2]]
 
 // CHECK-LABEL: firrtl.module @DifferentGating
-// CHECK:         %[[C1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
-// CHECK:         %[[C1_0:.+]] = firrtl.constant 1 : !firrtl.uint<1>
 firrtl.circuit "DifferentGating" {
   firrtl.module @FlexibleChild(in %clk1: !firrtl.clock,
                                in %clk2: !firrtl.clock,
@@ -508,9 +498,10 @@ firrtl.circuit "DifferentGating" {
                                  in %en1: !firrtl.uint<1>,
                                  in %en2: !firrtl.uint<1>,
                                  in %d: !firrtl.uint<8>) {
-    // CHECK: %[[G1:.+]] = firrtl.int.clock_gate %base_clk, %en1
+    // CHECK: %[[C1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK: firrtl.int.clock_gate %base_clk, %en1
     %g1 = firrtl.int.clock_gate %base_clk, %en1
-    // CHECK: %[[G2:.+]] = firrtl.int.clock_gate %base_clk, %en2
+    // CHECK: firrtl.int.clock_gate %base_clk, %en2
     %g2 = firrtl.int.clock_gate %base_clk, %en2
 
     // First instance: gate on clk1, ungated on clk2
@@ -519,11 +510,8 @@ firrtl.circuit "DifferentGating" {
       in clk1: !firrtl.clock,
       in clk2: !firrtl.clock,
       in data: !firrtl.uint<8>)
-    // CHECK: firrtl.matchingconnect %{{.+}}, %[[G1]]
     firrtl.matchingconnect %inst1_clk1, %g1 : !firrtl.clock
-    // CHECK: firrtl.matchingconnect %{{.+}}, %base_clk
     firrtl.matchingconnect %inst1_clk2, %base_clk : !firrtl.clock
-    // CHECK: firrtl.matchingconnect %{{.+}}, %d
     firrtl.matchingconnect %inst1_data, %d : !firrtl.uint<8>
 
     // Second instance: ungated on clk1, gate on clk2
@@ -532,25 +520,22 @@ firrtl.circuit "DifferentGating" {
       in clk1: !firrtl.clock,
       in clk2: !firrtl.clock,
       in data: !firrtl.uint<8>)
-    // CHECK: firrtl.matchingconnect %{{.+}}, %base_clk
     firrtl.matchingconnect %inst2_clk1, %base_clk : !firrtl.clock
-    // CHECK: firrtl.matchingconnect %{{.+}}, %[[G2]]
     firrtl.matchingconnect %inst2_clk2, %g2 : !firrtl.clock
-    // CHECK: firrtl.matchingconnect %{{.+}}, %d
     firrtl.matchingconnect %inst2_data, %d : !firrtl.uint<8>
     // The new (base, enable) ports are connected after the original instance connects
     // Instance1: ungated clk2 connects
     // CHECK: firrtl.matchingconnect %[[I1_CLK2_BASE]], %base_clk
-    // CHECK: firrtl.matchingconnect %[[I1_CLK2_EN]], %[[C1_0]]
-    // Instance2: ungated clk1 connects
-    // CHECK: firrtl.matchingconnect %[[I2_CLK1_BASE]], %base_clk
-    // CHECK: firrtl.matchingconnect %[[I2_CLK1_EN]], %[[C1]]
+    // CHECK: firrtl.matchingconnect %[[I1_CLK2_EN]], %[[C1]]
     // Instance2: gated clk2 connects
     // CHECK: firrtl.matchingconnect %[[I2_CLK2_BASE]], %base_clk
     // CHECK: firrtl.matchingconnect %[[I2_CLK2_EN]], %en2
     // Instance1: gated clk1 connects
     // CHECK: firrtl.matchingconnect %[[I1_CLK1_BASE]], %base_clk
     // CHECK: firrtl.matchingconnect %[[I1_CLK1_EN]], %en1
+    // Instance2: ungated clk1 connects (reuses the same constant)
+    // CHECK: firrtl.matchingconnect %[[I2_CLK1_BASE]], %base_clk
+    // CHECK: firrtl.matchingconnect %[[I2_CLK1_EN]], %[[C1]]
   }
 }
 
@@ -584,6 +569,8 @@ firrtl.circuit "DifferentGating" {
 
 // CHECK-LABEL: firrtl.module @InstanceOutput
 firrtl.circuit "InstanceOutput" {
+  firrtl.layer @TestLayer bind {}
+
   firrtl.module @Producer(in %clk: !firrtl.clock, out %out_clk: !firrtl.clock) {
     firrtl.matchingconnect %out_clk, %clk : !firrtl.clock
   }
@@ -597,33 +584,205 @@ firrtl.circuit "InstanceOutput" {
                                 in %en: !firrtl.uint<1>,
                                 in %cond: !firrtl.uint<1>,
                                 in %d: !firrtl.uint<8>) {
-    // CHECK: %[[WIRE_BASE:.+]] = firrtl.wire : !firrtl.clock
-    // CHECK: %[[WIRE_EN:.+]] = firrtl.wire : !firrtl.uint<1>
     // CHECK: %[[GATE:.+]] = firrtl.int.clock_gate %base_clk, %en
     %gated = firrtl.int.clock_gate %base_clk, %en
-    // CHECK: %[[OUT_WIRE:.+]] = firrtl.wire : !firrtl.clock
-    %out_wire = firrtl.wire : !firrtl.clock
 
-    // CHECK: firrtl.when %cond
-    firrtl.when %cond : !firrtl.uint<1> {
+    // CHECK: firrtl.layerblock @TestLayer
+    firrtl.layerblock @TestLayer {
+      // CHECK: %[[OUT_WIRE:.+]] = firrtl.wire : !firrtl.clock
+      %out_wire = firrtl.wire : !firrtl.clock
+      // CHECK: %[[WIRE_BASE:.+]] = firrtl.wire : !firrtl.clock
+      %wire_base = firrtl.wire : !firrtl.clock
+      // CHECK: %[[WIRE_EN:.+]] = firrtl.wire : !firrtl.uint<1>
+      %wire_en = firrtl.wire : !firrtl.uint<1>
+
       // CHECK: %{{.+}}, %{{.+}}, %[[P_BASE_IN:.+]], %[[P_EN_IN:.+]], %[[P_BASE_OUT:.+]], %[[P_EN_OUT:.+]] = firrtl.instance producer @Producer
       %p_clk, %p_out = firrtl.instance producer @Producer(in clk: !firrtl.clock, out out_clk: !firrtl.clock)
-      // CHECK: firrtl.matchingconnect %[[WIRE_EN]], %[[P_EN_OUT]]
-      // CHECK: firrtl.matchingconnect %[[WIRE_BASE]], %[[P_BASE_OUT]]
-      // CHECK: firrtl.matchingconnect %{{.+}}, %[[GATE]]
       firrtl.matchingconnect %p_clk, %gated : !firrtl.clock
       firrtl.matchingconnect %out_wire, %p_out : !firrtl.clock
+      firrtl.matchingconnect %wire_base, %p_out : !firrtl.clock
+      %c1 = firrtl.constant 1 : !firrtl.uint<1>
+      firrtl.matchingconnect %wire_en, %c1 : !firrtl.uint<1>
+
+      // CHECK: %{{.+}}, %{{.+}}, %[[C_BASE:.+]], %[[C_EN:.+]] = firrtl.instance consumer @Consumer
+      %c_clk, %c_data = firrtl.instance consumer @Consumer(in clk: !firrtl.clock, in data: !firrtl.uint<8>)
+      firrtl.matchingconnect %c_clk, %out_wire : !firrtl.clock
+      firrtl.matchingconnect %c_data, %d : !firrtl.uint<8>
+      firrtl.matchingconnect %c_clk, %wire_base : !firrtl.clock
+      firrtl.matchingconnect %c_data, %d : !firrtl.uint<8>
       // CHECK: firrtl.matchingconnect %[[P_BASE_IN]], %base_clk
       // CHECK: firrtl.matchingconnect %[[P_EN_IN]], %en
+      // CHECK: firrtl.matchingconnect %[[C_BASE]], %[[P_BASE_OUT]]
+      // CHECK: firrtl.matchingconnect %[[C_EN]], %[[P_EN_OUT]]
     }
+  }
+}
 
-    // CHECK: %{{.+}}, %{{.+}}, %[[C_BASE:.+]], %[[C_EN:.+]] = firrtl.instance consumer @Consumer
-    %c_clk, %c_data = firrtl.instance consumer @Consumer(in clk: !firrtl.clock, in data: !firrtl.uint<8>)
-    // CHECK: firrtl.matchingconnect %{{.+}}, %[[OUT_WIRE]]
-    firrtl.matchingconnect %c_clk, %out_wire : !firrtl.clock
-    // CHECK: firrtl.matchingconnect %{{.+}}, %d
-    firrtl.matchingconnect %c_data, %d : !firrtl.uint<8>
-    // CHECK: firrtl.matchingconnect %[[C_BASE]], %[[WIRE_BASE]]
-    // CHECK: firrtl.matchingconnect %[[C_EN]], %[[WIRE_EN]]
+// -----
+
+firrtl.circuit "ClockOutOfChild" {
+  firrtl.module @Gen(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>,
+                     out %gclk: !firrtl.clock) {
+    %g = firrtl.int.clock_gate %clk, %en
+    firrtl.matchingconnect %gclk, %g : !firrtl.clock
+  }
+  firrtl.module @ClockOutOfChild(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>,
+                                 in %d: !firrtl.uint<8>) {
+    %c_clk, %c_en, %c_gclk = firrtl.instance c @Gen(in clk: !firrtl.clock, in en: !firrtl.uint<1>, out gclk: !firrtl.clock)
+    firrtl.matchingconnect %c_clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %c_en, %en : !firrtl.uint<1>
+    %r = firrtl.reg %c_gclk : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
+  }
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Same module instantiated twice: gated clock into one instance, ungated into another
+// This tests that the pass correctly inserts (base, enable) ports for the gated
+// instance and uses constant 1 for the enable on the ungated instance.
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: firrtl.module @FlexibleClockModule
+// CHECK-SAME:    in %clk: !firrtl.clock
+// CHECK-SAME:    in %data: !firrtl.uint<8>
+// CHECK-SAME:    in %[[BASE:[A-Za-z0-9_]*_gatedClock_baseClock_clk]]: !firrtl.clock
+// CHECK-SAME:    in %[[EN:[A-Za-z0-9_]*_gatedClock_enable_clk]]: !firrtl.uint<1>
+firrtl.circuit "MixedGatingInstances" {
+  firrtl.module @FlexibleClockModule(in %clk: !firrtl.clock, in %data: !firrtl.uint<8>) {
+    // CHECK: %[[R:.+]] = firrtl.reg %[[BASE]] : !firrtl.clock, !firrtl.uint<8>
+    // CHECK: %[[MUX:.+]] = firrtl.mux(%[[EN]], %data, %[[R]])
+    // CHECK: firrtl.matchingconnect %[[R]], %[[MUX]]
+    %r = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %data : !firrtl.uint<8>
+  }
+
+  // CHECK-LABEL: firrtl.module @MixedGatingInstances
+  firrtl.module @MixedGatingInstances(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    // CHECK: %[[C1:.+]] = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK: firrtl.int.clock_gate %clk, %en
+    // CHECK: %{{.+}}, %{{.+}}, %[[I1_BASE:.+]], %[[I1_EN:.+]] = firrtl.instance inst1 @FlexibleClockModule
+    // CHECK: %{{.+}}, %{{.+}}, %[[I2_BASE:.+]], %[[I2_EN:.+]] = firrtl.instance inst2 @FlexibleClockModule
+    %g = firrtl.int.clock_gate %clk, %en
+
+    // First instance: ungated clock
+    %inst1_clk, %inst1_data = firrtl.instance inst1 @FlexibleClockModule(in clk: !firrtl.clock, in data: !firrtl.uint<8>)
+    firrtl.matchingconnect %inst1_clk, %clk : !firrtl.clock
+    firrtl.matchingconnect %inst1_data, %d : !firrtl.uint<8>
+
+    // Second instance: gated clock
+    %inst2_clk, %inst2_data = firrtl.instance inst2 @FlexibleClockModule(in clk: !firrtl.clock, in data: !firrtl.uint<8>)
+    firrtl.matchingconnect %inst2_clk, %g : !firrtl.clock
+    firrtl.matchingconnect %inst2_data, %d : !firrtl.uint<8>
+    // CHECK: firrtl.matchingconnect %[[I1_BASE]], %clk
+    // CHECK: firrtl.matchingconnect %[[I1_EN]], %[[C1]]
+    // CHECK: firrtl.matchingconnect %[[I2_BASE]], %clk
+    // CHECK: firrtl.matchingconnect %[[I2_EN]], %en
+  }
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Multiple different clocks to the same module: one gated, one ungated
+// Tests that only the gated clock (clk2) gets (base, enable) port pair added.
+// The ungated clock (clk1) remains unchanged and uses the original clock directly.
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: firrtl.module @DualClockConsumer
+// CHECK-SAME:    in %clk1: !firrtl.clock
+// CHECK-SAME:    in %clk2: !firrtl.clock
+// CHECK-SAME:    in %data: !firrtl.uint<16>
+// CHECK-SAME:    in %[[CLK2_BASE:[A-Za-z0-9_]*_gatedClock_baseClock_clk2]]: !firrtl.clock
+// CHECK-SAME:    in %[[CLK2_EN:[A-Za-z0-9_]*_gatedClock_enable_clk2]]: !firrtl.uint<1>
+firrtl.circuit "MixedClockDomains" {
+  firrtl.module @DualClockConsumer(in %clk1: !firrtl.clock, in %clk2: !firrtl.clock, in %data: !firrtl.uint<16>) {
+    // r1 remains on the original ungated clk1
+    // CHECK: %[[R1:.+]] = firrtl.reg %clk1 : !firrtl.clock, !firrtl.uint<16>
+    // CHECK-NEXT: firrtl.matchingconnect %[[R1]], %data
+    %r1 = firrtl.reg %clk1 : !firrtl.clock, !firrtl.uint<16>
+    firrtl.matchingconnect %r1, %data : !firrtl.uint<16>
+
+    // r2 is rebound to the base clock and gets a mux with the enable
+    // CHECK: %[[R2:.+]] = firrtl.reg %[[CLK2_BASE]] : !firrtl.clock, !firrtl.uint<16>
+    // CHECK: %[[MUX2:.+]] = firrtl.mux(%[[CLK2_EN]], %data, %[[R2]])
+    // CHECK: firrtl.matchingconnect %[[R2]], %[[MUX2]]
+    %r2 = firrtl.reg %clk2 : !firrtl.clock, !firrtl.uint<16>
+    firrtl.matchingconnect %r2, %data : !firrtl.uint<16>
+  }
+
+  // CHECK-LABEL: firrtl.module @MixedClockDomains
+  firrtl.module @MixedClockDomains(in %clk: !firrtl.clock, in %en: !firrtl.uint<1>, in %d: !firrtl.uint<16>) {
+    // CHECK: firrtl.int.clock_gate %clk, %en
+    %g = firrtl.int.clock_gate %clk, %en
+
+    // Instance with one ungated (clk1) and one gated (clk2) clock
+    // Only clk2 gets the gated clock ports
+    // CHECK: %{{.+}}, %{{.+}}, %{{.+}}, %[[C2_BASE:.+]], %[[C2_EN:.+]] = firrtl.instance consumer @DualClockConsumer
+    %c_clk1, %c_clk2, %c_data = firrtl.instance consumer @DualClockConsumer(in clk1: !firrtl.clock, in clk2: !firrtl.clock, in data: !firrtl.uint<16>)
+
+    // clk1 is ungated
+    firrtl.matchingconnect %c_clk1, %clk : !firrtl.clock
+    // clk2 is gated
+    firrtl.matchingconnect %c_clk2, %g : !firrtl.clock
+    firrtl.matchingconnect %c_data, %d : !firrtl.uint<16>
+
+    // Only clk2's base and enable are connected (clk1 needs no extra ports)
+    // CHECK: firrtl.matchingconnect %[[C2_BASE]], %clk
+    // CHECK: firrtl.matchingconnect %[[C2_EN]], %en
+  }
+}
+
+// -----
+
+//===----------------------------------------------------------------------===//
+// Cyclic clock dependency detection
+// This tests that the pass correctly detects and reports cyclic clock
+// dependencies. In this case:
+// - gen1 creates a gated clock from base with en1
+// - gen2 creates a gated clock from gen1's output with en2
+// - A register uses gen2's output
+//
+// The ClockGen module outputs a clock that depends on its input clock,
+// creating a potential for cyclic dependencies when instances are connected
+// in certain ways.
+//
+// Expected behavior: The transformation detects a cyclic clock dependency
+// (the feedback loop in the clock flow graph) and emits a warning. The circuit
+// may be left unchanged or partially transformed depending on where the cycle
+// is detected.
+//===----------------------------------------------------------------------===//
+
+firrtl.circuit "ClockFeedback" {
+  // This module creates a gated clock from its input and outputs it.
+  // When instantiated in a chain (gen1 -> gen2), it creates a cyclic dependency
+  // in the clock flow graph that the pass detects and warns about:
+  // "warning: cyclic clock dependency: cannot materialize gated clocks"
+  // CHECK-LABEL: firrtl.module @ClockGen
+  // CHECK-SAME: (in %clk_in: !firrtl.clock, in %en: !firrtl.uint<1>, out %clk_out: !firrtl.clock)
+  firrtl.module @ClockGen(in %clk_in: !firrtl.clock, in %en: !firrtl.uint<1>, out %clk_out: !firrtl.clock) {
+    %g = firrtl.int.clock_gate %clk_in, %en
+    firrtl.matchingconnect %clk_out, %g : !firrtl.clock
+  }
+
+  // CHECK-LABEL: firrtl.module @ClockFeedback
+  firrtl.module @ClockFeedback(in %base: !firrtl.clock, in %en1: !firrtl.uint<1>, in %en2: !firrtl.uint<1>, in %d: !firrtl.uint<8>) {
+    // First clock generator: gates base with en1
+    %gen1_in, %gen1_en, %gen1_out = firrtl.instance gen1 @ClockGen(in clk_in: !firrtl.clock, in en: !firrtl.uint<1>, out clk_out: !firrtl.clock)
+    firrtl.matchingconnect %gen1_in, %base : !firrtl.clock
+    firrtl.matchingconnect %gen1_en, %en1 : !firrtl.uint<1>
+
+    // Second clock generator: gates gen1_out with en2 (cascaded gating)
+    // This creates a feedback loop when the pass tries to analyze the clock dependencies
+    %gen2_in, %gen2_en, %gen2_out = firrtl.instance gen2 @ClockGen(in clk_in: !firrtl.clock, in en: !firrtl.uint<1>, out clk_out: !firrtl.clock)
+    firrtl.matchingconnect %gen2_in, %gen1_out : !firrtl.clock
+    firrtl.matchingconnect %gen2_en, %en2 : !firrtl.uint<1>
+
+    // Register clocked by the doubly-gated clock
+    // Due to the cyclic dependency, the transformation cannot proceed and the
+    // circuit is left unchanged (no CHECK statements as the output is not transformed)
+    %r = firrtl.reg %gen2_out : !firrtl.clock, !firrtl.uint<8>
+    firrtl.matchingconnect %r, %d : !firrtl.uint<8>
   }
 }
