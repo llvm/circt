@@ -27,6 +27,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Visitors.h"
 #include "mlir/Pass/Pass.h"
@@ -69,6 +70,9 @@ struct SimConversionState {
   bool usedSynthesisMacro = false;
   bool usedFileDescriptorRuntime = false;
   SetVector<StringAttr> dpiCallees;
+  SetVector<StringAttr> requiredGlobalSignalFragments;
+  const llvm::DenseMap<StringAttr, SmallVector<StringAttr>>
+      *globalSignalFragments = nullptr;
 };
 
 struct SimTypeConverter : public TypeConverter {
@@ -271,6 +275,28 @@ static LogicalResult convert(PauseOp op, PatternRewriter &rewriter) {
   return success();
 }
 
+class GlobalSignalReadLowering
+    : public SimConversionPattern<GlobalSignalReadOp> {
+public:
+  using SimConversionPattern<GlobalSignalReadOp>::SimConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(GlobalSignalReadOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto globalName = op.getGlobalNameAttr().getAttr();
+    auto fragments = state.globalSignalFragments->find(globalName);
+    if (fragments == state.globalSignalFragments->end())
+      return op.emitOpError()
+             << "has no lowered fragment for " << op.getGlobalNameAttr();
+    for (auto fragment : fragments->second)
+      state.requiredGlobalSignalFragments.insert(fragment);
+
+    rewriter.replaceOpWithNewOp<sv::MacroRefExprSEOp>(
+        op, op.getType(), FlatSymbolRefAttr::get(globalName), ValueRange{});
+    return success();
+  }
+};
+
 class TriggeredLowering : public SimConversionPattern<TriggeredOp> {
 public:
   using SimConversionPattern<TriggeredOp>::SimConversionPattern;
@@ -390,6 +416,278 @@ public:
   }
 };
 
+static FailureOr<std::string> stringifyGlobalSignalExpr(Value value);
+
+static std::string parenthesize(Twine expr) {
+  SmallString<128> storage;
+  std::string result;
+  llvm::raw_string_ostream os(result);
+  os << "(" << expr.toStringRef(storage) << ")";
+  return os.str();
+}
+
+static FailureOr<std::string> stringifyGlobalSignalConstant(hw::ConstantOp op) {
+  auto type = llvm::cast<IntegerType>(op.getType());
+  SmallString<32> value;
+  op.getValue().toString(value, /*radix=*/16, /*signed=*/false,
+                         /*formatAsCLiteral=*/false);
+
+  std::string result;
+  llvm::raw_string_ostream os(result);
+  os << type.getWidth() << "'h" << value;
+  return os.str();
+}
+
+static FailureOr<std::string>
+stringifyGlobalSignalVariadicOp(Operation *op, StringRef svOperator) {
+  SmallVector<std::string> operands;
+  operands.reserve(op->getNumOperands());
+  for (auto operand : op->getOperands()) {
+    auto expr = stringifyGlobalSignalExpr(operand);
+    if (failed(expr))
+      return failure();
+    operands.push_back(parenthesize(*expr));
+  }
+
+  std::string result;
+  llvm::raw_string_ostream os(result);
+  llvm::interleave(
+      operands, [&](StringRef operand) { os << operand; },
+      [&]() { os << " " << svOperator << " "; });
+  return os.str();
+}
+
+static const char *getSVICmpOperator(comb::ICmpPredicate predicate) {
+  switch (predicate) {
+  case comb::ICmpPredicate::eq:
+    return "==";
+  case comb::ICmpPredicate::ne:
+    return "!=";
+  case comb::ICmpPredicate::slt:
+  case comb::ICmpPredicate::ult:
+    return "<";
+  case comb::ICmpPredicate::sle:
+  case comb::ICmpPredicate::ule:
+    return "<=";
+  case comb::ICmpPredicate::sgt:
+  case comb::ICmpPredicate::ugt:
+    return ">";
+  case comb::ICmpPredicate::sge:
+  case comb::ICmpPredicate::uge:
+    return ">=";
+  case comb::ICmpPredicate::ceq:
+    return "===";
+  case comb::ICmpPredicate::cne:
+    return "!==";
+  case comb::ICmpPredicate::weq:
+    return "==?";
+  case comb::ICmpPredicate::wne:
+    return "!=?";
+  }
+  llvm_unreachable("unknown comb icmp predicate");
+}
+
+static FailureOr<std::string> stringifyGlobalSignalExpr(Value value) {
+  auto *def = value.getDefiningOp();
+  if (!def)
+    return failure();
+
+  return TypeSwitch<Operation *, FailureOr<std::string>>(def)
+      .Case<hw::ConstantOp>(stringifyGlobalSignalConstant)
+      .Case<GlobalSignalReadOp>([&](GlobalSignalReadOp op) {
+        return (Twine("`") + op.getGlobalName()).str();
+      })
+      .Case<comb::AndOp>(
+          [&](auto op) { return stringifyGlobalSignalVariadicOp(op, "&"); })
+      .Case<comb::OrOp>(
+          [&](auto op) { return stringifyGlobalSignalVariadicOp(op, "|"); })
+      .Case<comb::XorOp>([&](comb::XorOp op) -> FailureOr<std::string> {
+        if (op.isBinaryNot()) {
+          auto expr = stringifyGlobalSignalExpr(op.getOperand(0));
+          if (failed(expr))
+            return failure();
+          return (Twine("~") + parenthesize(*expr)).str();
+        }
+        return stringifyGlobalSignalVariadicOp(op, "^");
+      })
+      .Case<comb::MuxOp>([&](comb::MuxOp op) -> FailureOr<std::string> {
+        auto cond = stringifyGlobalSignalExpr(op.getCond());
+        auto trueValue = stringifyGlobalSignalExpr(op.getTrueValue());
+        auto falseValue = stringifyGlobalSignalExpr(op.getFalseValue());
+        if (failed(cond) || failed(trueValue) || failed(falseValue))
+          return failure();
+        return (Twine(parenthesize(*cond)) + " ? " + parenthesize(*trueValue) +
+                " : " + parenthesize(*falseValue))
+            .str();
+      })
+      .Case<comb::ICmpOp>([&](comb::ICmpOp op) -> FailureOr<std::string> {
+        auto lhs = stringifyGlobalSignalExpr(op.getLhs());
+        auto rhs = stringifyGlobalSignalExpr(op.getRhs());
+        if (failed(lhs) || failed(rhs))
+          return failure();
+        return (Twine(parenthesize(*lhs)) + " " +
+                getSVICmpOperator(op.getPredicate()) + " " + parenthesize(*rhs))
+            .str();
+      })
+      .Case<comb::ExtractOp>([&](comb::ExtractOp op) -> FailureOr<std::string> {
+        auto input = stringifyGlobalSignalExpr(op.getInput());
+        if (failed(input))
+          return failure();
+
+        unsigned loBit = op.getLowBit();
+        unsigned hiBit =
+            loBit + llvm::cast<IntegerType>(op.getType()).getWidth() - 1;
+        std::string result;
+        llvm::raw_string_ostream os(result);
+        os << parenthesize(*input) << "[" << hiBit;
+        if (hiBit != loBit)
+          os << ":" << loBit;
+        os << "]";
+        return os.str();
+      })
+      .Case<comb::ConcatOp>([&](comb::ConcatOp op) -> FailureOr<std::string> {
+        SmallVector<std::string> operands;
+        operands.reserve(op.getNumOperands());
+        for (auto operand : op.getInputs()) {
+          auto expr = stringifyGlobalSignalExpr(operand);
+          if (failed(expr))
+            return failure();
+          operands.push_back(*expr);
+        }
+
+        std::string result;
+        llvm::raw_string_ostream os(result);
+        os << "{";
+        llvm::interleaveComma(operands, os);
+        os << "}";
+        return os.str();
+      })
+      .Case<comb::ReplicateOp>(
+          [&](comb::ReplicateOp op) -> FailureOr<std::string> {
+            auto input = stringifyGlobalSignalExpr(op.getInput());
+            if (failed(input))
+              return failure();
+
+            std::string result;
+            llvm::raw_string_ostream os(result);
+            os << "{" << op.getMultiple() << "{" << *input << "}}";
+            return os.str();
+          })
+      .Default([](Operation *) -> FailureOr<std::string> { return failure(); });
+}
+
+// A helper struct to lower global signal definitions into guarded macro
+// fragments. Reads are lowered independently in the per-module conversion.
+struct LowerGlobalSignals {
+  llvm::DenseMap<StringAttr, StringAttr> symbolToFragment;
+  llvm::DenseMap<StringAttr, SmallVector<StringAttr>> requiredFragments;
+
+  LogicalResult lower(mlir::ModuleOp module);
+};
+
+static LogicalResult
+collectGlobalSignalDependencies(GlobalSignalOp global,
+                                SymbolTableCollection &symbolTable,
+                                SetVector<StringAttr> &dependencies) {
+  WalkResult result = global.walk([&](GlobalSignalReadOp read) {
+    auto *target = symbolTable.lookupNearestSymbolFrom(
+        read.getOperation(), read.getGlobalNameAttr());
+    auto targetGlobal = dyn_cast_or_null<GlobalSignalOp>(target);
+    if (!targetGlobal) {
+      read.emitOpError() << "does not reference a live 'sim.global_signal'";
+      return WalkResult::interrupt();
+    }
+
+    dependencies.insert(targetGlobal.getSymNameAttr());
+    return WalkResult::advance();
+  });
+  return failure(result.wasInterrupted());
+}
+
+static LogicalResult computeRequiredGlobalSignalFragments(
+    StringAttr globalName,
+    const llvm::DenseMap<StringAttr, StringAttr> &fragments,
+    const llvm::DenseMap<StringAttr, SetVector<StringAttr>> &dependencies,
+    SetVector<StringAttr> &required, SetVector<StringAttr> &visiting) {
+  if (!visiting.insert(globalName)) {
+    return mlir::emitError(UnknownLoc::get(globalName.getContext()))
+           << "cyclic 'sim.global_signal' default body dependency involving @"
+           << globalName.getValue();
+  }
+
+  required.insert(fragments.lookup(globalName));
+  if (auto it = dependencies.find(globalName); it != dependencies.end())
+    for (auto dependency : it->second)
+      if (failed(computeRequiredGlobalSignalFragments(
+              dependency, fragments, dependencies, required, visiting)))
+        return failure();
+
+  visiting.remove(globalName);
+  return success();
+}
+
+LogicalResult LowerGlobalSignals::lower(mlir::ModuleOp module) {
+  SmallVector<GlobalSignalOp> globalSignals;
+  for (auto global : module.getOps<GlobalSignalOp>())
+    globalSignals.push_back(global);
+
+  if (globalSignals.empty())
+    return success();
+
+  SymbolTableCollection symbolTable;
+  llvm::DenseMap<StringAttr, SetVector<StringAttr>> dependencies;
+  for (auto global : globalSignals)
+    if (failed(collectGlobalSignalDependencies(
+            global, symbolTable, dependencies[global.getSymNameAttr()])))
+      return failure();
+
+  OpBuilder builder(module.getBodyRegion());
+  for (auto global : globalSignals) {
+    builder.setInsertionPoint(global);
+    sv::MacroDeclOp::create(builder, global.getLoc(), global.getSymNameAttr(),
+                            ArrayAttr(), StringAttr());
+  }
+
+  for (auto global : llvm::make_early_inc_range(globalSignals)) {
+    auto terminator = cast<YieldOp>(global.getBodyBlock()->getTerminator());
+    auto bodyOrFailure =
+        stringifyGlobalSignalExpr(terminator.getOperands().front());
+    if (failed(bodyOrFailure)) {
+      global.emitError("cannot lower default body of 'sim.global_signal' to a "
+                       "SystemVerilog macro expression");
+      return failure();
+    }
+
+    builder.setInsertionPointAfter(global);
+    auto fragmentName =
+        builder.getStringAttr((Twine(global.getSymName()) + "_FRAGMENT").str());
+    emit::FragmentOp::create(builder, global.getLoc(), fragmentName, [&]() {
+      sv::IfDefOp::create(
+          builder, global.getLoc(), global.getSymNameAttr(), []() {},
+          [&]() {
+            sv::MacroDefOp::create(builder, global.getLoc(),
+                                   global.getSymNameAttr(),
+                                   builder.getStringAttr(*bodyOrFailure),
+                                   builder.getArrayAttr({}));
+          });
+    });
+
+    symbolToFragment.insert({global.getSymNameAttr(), fragmentName});
+    global.erase();
+  }
+
+  for (auto [globalName, fragment] : symbolToFragment) {
+    SetVector<StringAttr> required;
+    SetVector<StringAttr> visiting;
+    if (failed(computeRequiredGlobalSignalFragments(
+            globalName, symbolToFragment, dependencies, required, visiting)))
+      return failure();
+    requiredFragments.insert({globalName, required.takeVector()});
+  }
+
+  return success();
+}
+
 // A helper struct to lower DPI function/call.
 struct LowerDPIFunc {
   llvm::DenseMap<StringAttr, StringAttr> symbolToFragment;
@@ -476,6 +774,8 @@ addFragments(hw::HWModuleOp module,
     auto attr = symbolToFragment.at(callee);
     fragments.insert(FlatSymbolRefAttr::get(attr));
   }
+  for (auto fragment : state.requiredGlobalSignalFragments)
+    fragments.insert(FlatSymbolRefAttr::get(fragment));
   if (state.usedFileDescriptorRuntime)
     fragments.insert(sv::getFileDescriptorFragmentRef(module.getContext()));
   if (!fragments.empty())
@@ -872,7 +1172,13 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
   void runOnOperation() override {
     auto circuit = getOperation();
     MLIRContext *context = &getContext();
+    LowerGlobalSignals lowerGlobalSignals;
     LowerDPIFunc lowerDPIFunc(circuit);
+
+    // Lower global signal definitions before module conversion. Read sites are
+    // lowered by conversion patterns inside each module.
+    if (failed(lowerGlobalSignals.lower(circuit)))
+      return signalPassFailure();
 
     // Lower DPI functions.
     for (auto func :
@@ -884,6 +1190,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
     auto lowerModule = [&](hw::HWModuleOp module) {
       SimTypeConverter typeConverter(context);
       SimConversionState state;
+      state.globalSignalFragments = &lowerGlobalSignals.requiredFragments;
 
       if (failed(lowerPrintFormattedProcToSV(module, typeConverter, state)))
         return failure();
@@ -915,6 +1222,7 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<PauseOp>(convert);
       patterns.add<TriggeredLowering>(context, state);
       patterns.add<DPICallLowering>(context, state);
+      patterns.add<GlobalSignalReadLowering>(context, state);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 
       if (failed(result))
