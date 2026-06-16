@@ -114,8 +114,12 @@ class CMakeBuild(build_py):
         "--target",
     ] + targets + build_args,
                           cwd=cmake_build_dir)
-    install_cmd = ["cmake", "--build", ".", "--target", "install-PyCDE"]
-    subprocess.check_call(install_cmd + build_args, cwd=cmake_build_dir)
+    # Install the PyCDE package by components, which I think is the correct way
+    # to install a subset of a build. It picks up all of the necessary files.
+    for component in ("PyCDE", "PyCDE_CIRCTPythonModules"):
+      subprocess.check_call(
+          ["cmake", "--install", ".", "--component", component],
+          cwd=cmake_build_dir)
     shutil.copytree(os.path.join(cmake_install_dir, "python_packages"),
                     target_dir,
                     symlinks=False,
