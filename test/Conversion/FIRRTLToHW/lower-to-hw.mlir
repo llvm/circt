@@ -860,7 +860,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL:  hw.module private @SimpleEnum(in %source : i2, out sink : i2) {
   // CHECK-NEXT:    %valid = sv.localparam {value = 0 : i2} : i2
-  // CHECK-NEXT:    %0 = comb.icmp bin eq %source, %valid : i2 
+  // CHECK-NEXT:    %0 = comb.icmp bin eq %source, %valid : i2
   // CHECK-NEXT:    hw.output %source : i2
   // CHECK-NEXT:  }
   firrtl.module private @SimpleEnum(in %source: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>,
@@ -1450,6 +1450,28 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: hw.output %a : !hw.array<3xi1>
   }
 
+  // Bundle and vector creates with zero-bit operands must still produce well
+  // formed `hw.struct_create` / `hw.array_create` operations whose operand
+  // counts match the lowered aggregate type.  Use a deeply nested zero-width
+  // field (`bundle<a: bundle<b: vector<uint<0>, 2>>>`) so the recursion in
+  // `getZeroAttributeForType` is exercised at multiple levels.
+  // CHECK-LABEL: hw.module @MergeBundleZeroWidth
+  firrtl.module @MergeBundleZeroWidth(in %i: !firrtl.uint<8>, out %o: !firrtl.bundle<foo: bundle<a: bundle<b: vector<uint<0>, 2>>>, t: uint<8>>) {
+    %z = firrtl.aggregateconstant [[[0 : ui0, 0 : ui0]]] : !firrtl.bundle<a: bundle<b: vector<uint<0>, 2>>>
+    %0 = firrtl.bundlecreate %z, %i : (!firrtl.bundle<a: bundle<b: vector<uint<0>, 2>>>, !firrtl.uint<8>) -> !firrtl.bundle<foo: bundle<a: bundle<b: vector<uint<0>, 2>>>, t: uint<8>>
+    firrtl.matchingconnect %o, %0 : !firrtl.bundle<foo: bundle<a: bundle<b: vector<uint<0>, 2>>>, t: uint<8>>
+    // CHECK:               %[[ZAGG:.+]] = hw.aggregate_constant
+    // CHECK{LITERAL}-SAME: [[[0 : i0, 0 : i0]]] : !hw.struct<a: !hw.struct<b: !hw.array<2xi0>>>
+    // CHECK-NEXT:          %[[B:.+]] = hw.struct_create (%[[ZAGG]], %i) : !hw.struct<foo: !hw.struct<a: !hw.struct<b: !hw.array<2xi0>>>, t: i8>
+  }
+
+  // CHECK-LABEL: hw.module @MergeVectorZeroWidth
+  firrtl.module @MergeVectorZeroWidth(in %i: !firrtl.uint<0>, out %o: !firrtl.vector<uint<0>, 2>) {
+    %0 = firrtl.vectorcreate %i, %i : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.vector<uint<0>, 2>
+    firrtl.matchingconnect %o, %0 : !firrtl.vector<uint<0>, 2>
+    // CHECK:      %[[V:.+]] = hw.aggregate_constant {{.*}} : !hw.array<2xi0>
+  }
+
   // CHECK-LABEL: hw.module @aggregateconstant
   firrtl.module @aggregateconstant(out %out : !firrtl.bundle<a: vector<vector<uint<8>, 2>, 2>, b: vector<vector<uint<8>, 2>, 2>>) {
     %0 = firrtl.aggregateconstant [[[0 : ui8, 1: ui8], [2 : ui8, 3: ui8]], [[4: ui8, 5: ui8], [6: ui8, 7:ui8]]] :
@@ -1998,7 +2020,7 @@ firrtl.circuit "InstanceChoiceTest" {
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     // CHECK: hw.output %[[READ]]
-    %inst_in, %inst_out = firrtl.instance_choice inst {instance_macro = @targets$Opt$InstanceChoiceUnit$inst} @ModuleDefault alternatives @Opt 
+    %inst_in, %inst_out = firrtl.instance_choice inst {instance_macro = @targets$Opt$InstanceChoiceUnit$inst} @ModuleDefault alternatives @Opt
                           { @FPGA -> @ModuleFPGA, @ASIC -> @ModuleDefault } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.matchingconnect %inst_in, %in : !firrtl.uint<8>
     firrtl.matchingconnect %out, %inst_out : !firrtl.uint<8>
