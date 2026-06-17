@@ -962,6 +962,14 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
             false);
         return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
       })
+      .Case<sim::FormatBinOp>([&](sim::FormatBinOp op)
+                                  -> FailureOr<FormatInfo> {
+        FmtDescriptor d = FmtDescriptor::createInt(
+            op.getValue().getType().getWidth(), 2, op.getIsLeftAligned(),
+            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
+            false);
+        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+      })
       .Case<sim::FormatLiteralOp>(
           [&](sim::FormatLiteralOp op) -> FailureOr<FormatInfo> {
             if (op.getLiteral().size() < 8 &&

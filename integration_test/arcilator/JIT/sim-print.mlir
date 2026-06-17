@@ -37,6 +37,11 @@ module {
     sim.proc.print %o0
     sim.proc.print %endl
 
+    // CHECK: {{0*}}1111011
+    %b0 = sim.fmt.bin %c123 : i32
+    sim.proc.print %b0
+    sim.proc.print %endl
+
     // CHECK: {
     %c123_8 = hw.constant 123 : i8
     %ch0 = sim.fmt.char %c123_8 : i8
