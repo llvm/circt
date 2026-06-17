@@ -321,6 +321,19 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
     return failure();
   compileTimer.stop();
 
+  // If requested, require elaboration to resolve to exactly one runnable top
+  // module. This is an opt-in check; when `detectTop` is false this block does
+  // not execute and the default behavior is unchanged. If the user explicitly
+  // listed top modules via `topModules`, honor that instead.
+  if (options.detectTop && options.topModules.empty()) {
+    auto tops = compilation->getRoot().topInstances;
+    if (tops.size() != 1) {
+      mlir::emitError(module.getLoc())
+          << "expected exactly one runnable top module; found " << tops.size();
+      return failure();
+    }
+  }
+
   // If we were only supposed to lint the input, return here. This leaves the
   // module empty, but any Slang linting messages got reported as diagnostics.
   if (options.mode == ImportVerilogOptions::Mode::OnlyLint)
