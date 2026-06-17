@@ -118,3 +118,39 @@ arc.model @ArrayPadding io !hw.modty<> {
   // element gets aligned to the next power-of-two.
   arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.array<2xi9>>
 }
+
+// CHECK-LABEL: arc.model @UnionMaxVariant
+// CHECK-NEXT: !arc.storage<32>
+arc.model @UnionMaxVariant io !hw.modty<> {
+^bb0(%arg0: !arc.storage):
+  // A !hw.union is sized by its largest variant, not the sum of its variants,
+  // so this allocates 8 bytes for the i64 rather than 9 for both fields.
+  arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.union<small: i8, big: i64>>
+}
+
+// CHECK-LABEL: arc.model @UnionVariantPadding
+// CHECK-NEXT: !arc.storage<26>
+arc.model @UnionVariantPadding io !hw.modty<> {
+^bb0(%arg0: !arc.storage):
+  // Like struct fields and array elements, each variant is widened to a byte
+  // and aligned to a power of two: the i9 maps to 16 bits, giving 2 bytes.
+  arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.union<x: i9, y: i3>>
+}
+
+// CHECK-LABEL: arc.model @UnionOffset
+// CHECK-NEXT: !arc.storage<41>
+arc.model @UnionOffset io !hw.modty<> {
+^bb0(%arg0: !arc.storage):
+  // An explicit per-variant bit offset is honored when sizing the union: the
+  // i8 sits at bit 64, requiring 9 bytes of storage.
+  arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.union<x: i8 offset 64, y: i8>>
+}
+
+// CHECK-LABEL: arc.model @UnionNested
+// CHECK-NEXT: !arc.storage<28>
+arc.model @UnionNested io !hw.modty<> {
+^bb0(%arg0: !arc.storage):
+  // Variant widths are computed recursively, so the larger struct variant of
+  // two i16 fields determines the 4-byte size.
+  arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.union<x: !hw.struct<a: i16, b: i16>, y: i8>>
+}

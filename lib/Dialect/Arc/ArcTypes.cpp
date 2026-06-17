@@ -80,6 +80,32 @@ std::optional<uint64_t> circt::arc::computeLLVMBitWidth(Type type) {
     return llvm::alignToPowerOf2(structWidth, structAlignment);
   }
 
+  // A union's variants all overlap at the same base address, so its size is
+  // determined by the largest variant rather than their sum. Honor any explicit
+  // per-variant bit offset, and pad the whole thing to the union's alignment.
+  if (auto unionType = dyn_cast<hw::UnionType>(type)) {
+    uint64_t unionWidth = 0;
+    uint64_t unionAlignment = 8;
+    for (auto element : unionType.getElements()) {
+      // Compute variant width.
+      auto maybeWidth = computeLLVMBitWidth(element.type);
+      if (!maybeWidth)
+        return {};
+      // Each variant must be at least one byte.
+      auto width = std::max<uint64_t>(*maybeWidth, 8);
+      // Align variants to their own size, up to 16 bytes.
+      auto alignment = llvm::bit_ceil(std::min<uint64_t>(width, 16 * 8));
+      auto alignedWidth = llvm::alignToPowerOf2(width, alignment);
+      // The union must be large enough to hold this variant at its offset.
+      unionWidth =
+          std::max<uint64_t>(unionWidth, element.offset + alignedWidth);
+      // Keep track of the union's alignment need.
+      unionAlignment = std::max<uint64_t>(alignment, unionAlignment);
+    }
+    // Pad the union size to align its end with the alignment.
+    return llvm::alignToPowerOf2(unionWidth, unionAlignment);
+  }
+
   // We don't know anything about any other types.
   return {};
 }
