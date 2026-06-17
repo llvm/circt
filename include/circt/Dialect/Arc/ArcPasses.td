@@ -1,4 +1,4 @@
-//===- ArcPasses.td - Arc dialect passes -------------------*- tablegen -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -209,6 +209,7 @@ def LowerStatePass : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   let dependentDialects = [
     "arc::ArcDialect",
     "comb::CombDialect",
+    "mlir::arith::ArithDialect",
     "mlir::LLVM::LLVMDialect",
     "mlir::func::FuncDialect",
     "mlir::scf::SCFDialect",

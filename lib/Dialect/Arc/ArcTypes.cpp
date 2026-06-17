@@ -89,6 +89,11 @@ unsigned StateType::getBitWidth() { return *computeLLVMBitWidth(getType()); }
 LogicalResult
 StateType::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                   Type innerType) {
+  // A coroutine's program counter and persistent state have a layout that is
+  // only fixed once coroutines are lowered. Permit them as state types with a
+  // deferred bit width; lowering later replaces them with concrete types.
+  if (isa<CoroutinePCType, CoroutineStateType>(innerType))
+    return success();
   if (!computeLLVMBitWidth(innerType))
     return emitError() << "state type must have a known bit width; got "
                        << innerType;
