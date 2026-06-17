@@ -3614,6 +3614,13 @@ LogicalResult FIRRTLLowering::visitExpr(FEnumCreateOp op) {
   auto element = *oldType.getElement(op.getFieldNameAttr());
 
   if (auto structType = dyn_cast<hw::StructType>(newType)) {
+    // If the input is zero-width, getLoweredValue returns a null Value.
+    // We still need a valid operand for the union body; create an i0 constant.
+    if (!input) {
+      if (!isZeroBitFIRRTLType(op.getInput().getType()))
+        return failure();
+      input = getOrCreateIntConstant(0, 0);
+    }
     auto tagType = structType.getFieldType("tag");
     auto tagValue = IntegerAttr::get(tagType, element.value.getValue());
     auto tag = sv::LocalParamOp::create(builder, op.getLoc(), tagType, tagValue,
@@ -3637,6 +3644,10 @@ LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(IsTagOp op) {
+  // A zero-width enum has exactly one variant, so the tag check is trivially
+  // true.
+  if (isZeroBitFIRRTLType(op.getInput().getType()))
+    return setLowering(op, getOrCreateIntConstant(1, 1));
 
   auto tagName = op.getFieldNameAttr();
   auto lhs = getLoweredValue(op.getInput());

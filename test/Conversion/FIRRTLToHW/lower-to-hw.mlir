@@ -925,6 +925,35 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     firrtl.matchingconnect %sink, %0 : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
   }
 
+  // Test for https://github.com/llvm/circt/issues/7388
+  // enumcreate with a zero-width input on a data enum should not crash.
+  // CHECK-LABEL: hw.module private @DataEnumCreateZeroWidth(out sink : !hw.struct<tag: i1, body: !hw.union<Some: i8, None: i0>>) {
+  // CHECK-NEXT:   %c0_i0 = hw.constant 0 : i0
+  // CHECK-NEXT:   %None = sv.localparam {value = true} : i1
+  // CHECK-NEXT:   %0 = hw.union_create "None", %c0_i0 : !hw.union<Some: i8, None: i0>
+  // CHECK-NEXT:   %1 = hw.struct_create (%None, %0) : !hw.struct<tag: i1, body: !hw.union<Some: i8, None: i0>>
+  // CHECK-NEXT:   hw.output %1 : !hw.struct<tag: i1, body: !hw.union<Some: i8, None: i0>>
+  // CHECK-NEXT: }
+  firrtl.module private @DataEnumCreateZeroWidth(
+      out %sink: !firrtl.enum<Some: uint<8>, None: uint<0>>) {
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    %0 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.uint<0>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
+    firrtl.matchingconnect %sink, %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+  }
+
+  // Test for https://github.com/llvm/circt/issues/7388
+  // istag on a zero-width enum (single variant, zero-width data) should not
+  // crash. The tag check is trivially true.
+  // CHECK-LABEL: hw.module private @IsTagZeroWidthEnum(out o : i1) {
+  // CHECK-NEXT:   %true = hw.constant true
+  // CHECK-NEXT:   hw.output %true : i1
+  // CHECK-NEXT: }
+  firrtl.module private @IsTagZeroWidthEnum(
+      in %e: !firrtl.enum<A: uint<0>>, out %o: !firrtl.uint<1>) {
+    %0 = firrtl.istag %e A : !firrtl.enum<A: uint<0>>
+    firrtl.matchingconnect %o, %0 : !firrtl.uint<1>
+  }
+
   // CHECK-LABEL: IsInvalidIssue572
   // https://github.com/llvm/circt/issues/572
   firrtl.module private @IsInvalidIssue572(in %a: !firrtl.analog<1>) {
