@@ -239,6 +239,12 @@ struct CLOptions {
                "figuring it out automatically)"),
       cl::value_desc("name"), cl::cat(cat)};
 
+  cl::opt<bool> detectTop{
+      "detect-top",
+      cl::desc("Auto-detect the single runnable top module from elaboration; "
+               "error if ambiguous"),
+      cl::init(false), cl::cat(cat)};
+
   cl::list<std::string> paramOverrides{
       "G",
       cl::desc("One or more parameter overrides to apply when instantiating "
@@ -364,8 +370,10 @@ static LogicalResult executeWithSources(MLIRContext *context,
     options.timeScale = opts.timeScale;
   options.allowUseBeforeDeclare = opts.allowUseBeforeDeclare;
   options.ignoreUnknownModules = opts.ignoreUnknownModules;
-  if (opts.loweringMode != LoweringMode::OnlyLint)
+  if (opts.loweringMode != LoweringMode::OnlyLint) {
     options.topModules = opts.topModules;
+    options.detectTop = opts.detectTop;
+  }
   options.paramOverrides = opts.paramOverrides;
 
   options.warningOptions = opts.warningOptions;

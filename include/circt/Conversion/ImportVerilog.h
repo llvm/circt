@@ -114,6 +114,11 @@ struct ImportVerilogOptions {
   /// based on which modules are unreferenced elsewhere.
   std::vector<std::string> topModules;
 
+  /// If true, require elaboration to resolve to exactly one runnable top module
+  /// (unless `topModules` is set explicitly). Emit an error if the design is
+  /// ambiguous, i.e. zero or multiple top modules are found.
+  bool detectTop = false;
+
   /// A list of top-level module parameters to override, of the form
   /// `<name>=<value>`.
   std::vector<std::string> paramOverrides;
