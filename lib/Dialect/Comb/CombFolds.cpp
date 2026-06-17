@@ -300,6 +300,10 @@ OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
   if (auto input = dyn_cast_or_null<IntegerAttr>(adaptor.getInput()))
     return getIntAttr(APInt(1, input.getValue().popcount() & 1), getContext());
 
+  // parity(x) -> x for single-bit values.
+  if (hw::getBitWidth(getInput().getType()) == 1)
+    return getInput();
+
   return {};
 }
 
