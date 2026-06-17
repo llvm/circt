@@ -223,6 +223,8 @@ LogicalResult ImportDriver::prepareDriver(SourceMgr &sourceMgr) {
   // source text in memory. At a later stage we'll want to extend slang's
   // SourceManager such that it can contain non-owned buffers. This will do
   // for now.
+  driver.sourceManager.setDisableProximatePaths(
+      !options.makeLocationPathsProximate);
   DenseSet<StringRef> seenBuffers;
   for (unsigned i = 0, e = sourceMgr.getNumBuffers(); i < e; ++i) {
     const llvm::MemoryBuffer *mlirBuffer = sourceMgr.getMemoryBuffer(i + 1);

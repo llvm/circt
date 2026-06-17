@@ -264,6 +264,11 @@ struct CLOptions {
       cl::desc("One or more paths in which to suppress warnings"),
       cl::value_desc("filename"), cl::cat(cat)};
 
+  cl::opt<bool> makeSourceLocationsProximate{
+      "make-source-locations-proximate",
+      cl::desc("Make paths for source file debug locations proximate"),
+      cl::init(true), cl::cat(cat)};
+
   //===--------------------------------------------------------------------===//
   // File lists
   //===--------------------------------------------------------------------===//
@@ -367,6 +372,7 @@ static LogicalResult executeWithSources(MLIRContext *context,
   if (opts.errorLimit.getNumOccurrences() > 0)
     options.errorLimit = opts.errorLimit;
   options.suppressWarningsPaths = opts.suppressWarningsPaths;
+  options.makeLocationPathsProximate = opts.makeSourceLocationsProximate;
 
   options.singleUnit = opts.singleUnit;
   options.libraryFiles = opts.libraryFiles;
