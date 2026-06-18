@@ -467,15 +467,15 @@ static hw::InnerSymAttr uniqueInNamespace(hw::InnerSymAttr old,
 
 /// Inlines, flattens, and removes dead modules in a circuit.
 ///
-/// The inliner works in a top down fashion, starting from the top level module,
-/// and inlines every possible instance. With this method of recursive top-down
-/// inlining, each operation will be cloned directly to its final location.
+/// The inliner works in a top down fashion, in parents-before-children order,
+/// visiting only live modules and inlines every possible instance.
+/// With this method of recursive top-down inlining, each operation will be
+/// cloned directly to its final location.
 ///
-/// The inliner uses a worklist to track which modules need to be processed.
-/// When an instance op is not inlined, the referenced module is added to the
-/// worklist. When the inliner is complete, it deletes every un-processed
-/// module: either all instances of the module were inlined, or it was not
-/// reachable from the top level module.
+/// Modules are initially marked live if they are public or referenced by
+/// non-module operations. Additional modules become live as they are discovered
+/// during inlining (when a live module instantiates them after
+/// inlining/flattening). Dead modules are removed at the end.
 ///
 /// During the inlining process, every cloned operation with a name must be
 /// prefixed with the instance's name. The top-down process means that we know
@@ -487,7 +487,8 @@ namespace {
 class Inliner {
 public:
   /// Initialize the inliner to run on this circuit.
-  Inliner(CircuitOp circuit, SymbolTable &symbolTable);
+  Inliner(CircuitOp circuit, SymbolTable &symbolTable,
+          InstanceGraph &instanceGraph);
 
   /// Run the inliner.
   LogicalResult run();
@@ -614,10 +615,7 @@ private:
     for (auto module : instanceLike.getReferencedModuleNamesAttr()
                            .getAsValueRange<StringAttr>()) {
       auto *moduleOp = symbolTable.lookup(module);
-      if (liveModules.insert(moduleOp).second) {
-        if (auto fmodule = dyn_cast<FModuleOp>(moduleOp))
-          worklist.push_back(fmodule);
-      }
+      liveModules.insert(moduleOp);
     }
   }
 
@@ -649,12 +647,12 @@ private:
   // A symbol table with references to each module in a circuit.
   SymbolTable &symbolTable;
 
+  // The original instance graph.  This is NOT maintained if mutations are made.
+  InstanceGraph &instanceGraph;
+
   /// The set of live modules.  Anything not recorded in this set will be
   /// removed by dead code elimination.
   DenseSet<Operation *> liveModules;
-
-  /// Worklist of modules to process for inlining or flattening.
-  SmallVector<FModuleOp, 16> worklist;
 
   /// A mapping of NLA symbol name to mutable NLA.
   DenseMap<Attribute, MutableNLA> nlaMap;
@@ -1198,11 +1196,9 @@ Inliner::inlineInto(StringRef prefix, InliningLevel &il, IRMapping &mapper,
       return success();
     }
 
-    // If we aren't inlining the target, add it to the work list.
+    // If we aren't inlining the target, mark it live.
     if (!shouldInline(childModule)) {
-      if (liveModules.insert(childModule).second) {
-        worklist.push_back(childModule);
-      }
+      liveModules.insert(childModule);
       cloneAndRename(prefix, il, mapper, *op, symbolRenames, {});
       return success();
     }
@@ -1302,11 +1298,9 @@ LogicalResult Inliner::inlineInstances(FModuleOp module) {
       return WalkResult::advance();
     }
 
-    // If we aren't inlining the target, add it to the work list.
+    // If we aren't inlining the target, mark it live.
     if (!shouldInline(target)) {
-      if (liveModules.insert(target).second) {
-        worklist.push_back(target);
-      }
+      liveModules.insert(target);
       return WalkResult::advance();
     }
 
@@ -1462,9 +1456,10 @@ void Inliner::identifyNLAsTargetingOnlyModules() {
   }
 }
 
-Inliner::Inliner(CircuitOp circuit, SymbolTable &symbolTable)
-    : circuit(circuit), context(circuit.getContext()),
-      symbolTable(symbolTable) {}
+Inliner::Inliner(CircuitOp circuit, SymbolTable &symbolTable,
+                 InstanceGraph &instanceGraph)
+    : circuit(circuit), context(circuit.getContext()), symbolTable(symbolTable),
+      instanceGraph(instanceGraph) {}
 
 LogicalResult Inliner::run() {
   CircuitNamespace circuitNamespace(circuit);
@@ -1482,15 +1477,12 @@ LogicalResult Inliner::run() {
   // These may be deleted when their module is inlined/flattened.
   identifyNLAsTargetingOnlyModules();
 
-  // Mark the top module as live, so it doesn't get deleted.
   for (auto &op : circuit.getOps()) {
-    // Mark public/non-discardable modules as live and add them to the worklist.
+    // Mark public/non-discardable modules as live.
     if (auto module = dyn_cast<FModuleLike>(op)) {
       if (module.canDiscardOnUseEmpty())
         continue;
       liveModules.insert(module);
-      if (isa<FModuleOp>(module))
-        worklist.push_back(cast<FModuleOp>(module));
       continue;
     }
 
@@ -1505,16 +1497,26 @@ LogicalResult Inliner::run() {
     for (const auto &use : *symbolUses) {
       if (auto flat = dyn_cast<FlatSymbolRefAttr>(use.getSymbolRef()))
         if (auto moduleLike = symbolTable.lookup<FModuleLike>(flat.getAttr()))
-          if (liveModules.insert(moduleLike).second)
-            if (auto module = dyn_cast<FModuleOp>(*moduleLike))
-              worklist.push_back(module);
+          liveModules.insert(moduleLike);
     }
   }
 
+  // Populate module list with ALL modules in parents-before-children order.
+  // We will only visit those known to be live, partially dynamically
+  // discovered. This ensures overall we still process parents strictly before
+  // children.
+  SmallVector<FModuleOp, 16> modules;
+  instanceGraph.walkInversePostOrder([&](igraph::InstanceGraphNode &node) {
+    if (auto module = dyn_cast<FModuleOp>(*node.getModule()))
+      modules.push_back(module);
+  });
+
   // If the module is marked for flattening, flatten it. Otherwise, inline
   // every instance marked to be inlined.
-  while (!worklist.empty()) {
-    auto moduleOp = worklist.pop_back_val();
+  for (auto moduleOp : modules) {
+    // Skip modules we haven't determined to be 'live' so far.
+    if (!liveModules.count(moduleOp))
+      continue;
     if (shouldFlatten(moduleOp)) {
       if (failed(flattenInstances(moduleOp)))
         return failure();
@@ -1660,7 +1662,8 @@ namespace {
 class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
   void runOnOperation() override {
     CIRCT_DEBUG_SCOPED_PASS_LOGGER(this);
-    Inliner inliner(getOperation(), getAnalysis<SymbolTable>());
+    Inliner inliner(getOperation(), getAnalysis<SymbolTable>(),
+                    getAnalysis<InstanceGraph>());
     if (failed(inliner.run()))
       signalPassFailure();
   }
