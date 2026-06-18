@@ -234,6 +234,7 @@ add_circt_public_c_api_library(CIRCTCAPIVerif
   LINK_LIBS PUBLIC
   MLIRCAPIIR
   CIRCTVerif
+  CIRCTVerifTransforms
   CIRCTVerifToSV
 )
 

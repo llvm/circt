@@ -8,7 +8,10 @@
 
 #include "circt-c/Dialect/Verif.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/Verif/VerifPasses.h"
 
 #include "mlir/CAPI/Registration.h"
+
+void registerVerifPasses() { circt::verif::registerPasses(); }
 
 MLIR_DEFINE_CAPI_DIALECT_REGISTRATION(Verif, verif, circt::verif::VerifDialect)
