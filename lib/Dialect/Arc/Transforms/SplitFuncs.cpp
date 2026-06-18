@@ -59,12 +59,18 @@ void SplitFuncsPass::runOnOperation() {
 LogicalResult SplitFuncsPass::lowerFunc(FuncOp funcOp) {
   if (splitBound == 0)
     return funcOp.emitError("Cannot split functions into functions of size 0.");
-  if (funcOp.getBody().getBlocks().size() > 1)
-    return funcOp.emitError("Regions with multiple blocks are not supported.");
-  assert(funcOp->getNumRegions() == 1);
-  unsigned numOps = funcOp.front().getOperations().size();
+  unsigned numOps = 0;
+  for (Block &block : funcOp.getBody())
+    numOps += block.getOperations().size();
   if (numOps < splitBound)
     return success();
+  // SplitFuncs can only split a single-block region. Leave functions with
+  // multiple blocks untouched rather than failing the pass; splitting is a
+  // performance optimization, so bailing out benignly is preferable to
+  // erroring.
+  if (funcOp.getBody().getBlocks().size() > 1)
+    return success();
+  assert(funcOp->getNumRegions() == 1);
   int numBlocks = llvm::divideCeil(numOps, splitBound);
   OpBuilder opBuilder(funcOp->getContext());
   SmallVector<Block *> blocks;
