@@ -3248,6 +3248,32 @@ convertRealMathBI(Context &context, Location loc, StringRef name,
   return OpTy::create(context.builder, loc, value);
 }
 
+static LogicalResult
+emitScanAssignments(Context &context, const Context::ScanStringResult &result,
+                    Location loc) {
+  auto &builder = context.builder;
+  for (auto [destExpr, value, matched] : result.assignments) {
+    auto lhs = context.convertLvalueExpression(*destExpr);
+    if (!lhs)
+      return failure();
+    auto refType = dyn_cast<moore::RefType>(lhs.getType());
+    if (!refType)
+      return mlir::emitError(loc) << "scan destination is not an lvalue";
+    auto destType = refType.getNestedType();
+    auto sel = moore::ConditionalOp::create(builder, loc, destType, matched);
+    {
+      OpBuilder::InsertionGuard g(builder);
+      builder.setInsertionPointToStart(&sel.getTrueRegion().emplaceBlock());
+      moore::YieldOp::create(builder, loc, value);
+      builder.setInsertionPointToStart(&sel.getFalseRegion().emplaceBlock());
+      moore::YieldOp::create(builder, loc,
+                             moore::ReadOp::create(builder, loc, lhs));
+    }
+    moore::BlockingAssignOp::create(builder, loc, lhs, sel.getResult());
+  }
+  return success();
+}
+
 Value Context::convertSystemCall(
     const slang::ast::SystemSubroutine &subroutine, Location loc,
     std::span<const slang::ast::Expression *const> args) {
@@ -3875,12 +3901,8 @@ Value Context::convertSystemCall(
         convertScanString(fmtLit->getValue(), cursor, args.subspan(2), loc);
     if (failed(result))
       return {};
-    for (auto [destExpr, value] : result->assignments) {
-      auto lhs = convertLvalueExpression(*destExpr);
-      if (!lhs)
-        return {};
-      moore::BlockingAssignOp::create(builder, loc, lhs, value);
-    }
+    if (failed(emitScanAssignments(*this, *result, loc)))
+      return {};
     return moore::ScanEndOp::create(builder, loc, result->finalCursor)
         .getCount();
   }
@@ -3902,12 +3924,8 @@ Value Context::convertSystemCall(
         convertScanString(fmtLit->getValue(), cursor, args.subspan(2), loc);
     if (failed(result))
       return {};
-    for (auto [destExpr, value] : result->assignments) {
-      auto lhs = convertLvalueExpression(*destExpr);
-      if (!lhs)
-        return {};
-      moore::BlockingAssignOp::create(builder, loc, lhs, value);
-    }
+    if (failed(emitScanAssignments(*this, *result, loc)))
+      return {};
     return moore::ScanEndOp::create(builder, loc, result->finalCursor)
         .getCount();
   }

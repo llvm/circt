@@ -102,9 +102,10 @@ struct ScanStringParser {
   Location loc;
   /// The current tail of the consuming chain.
   Value cursor;
-  /// Accumulated (unwrapped destination expression, scanned value) pairs to be
-  /// assigned with a moore.blocking_assign by the caller.
-  SmallVector<std::pair<const slang::ast::Expression *, Value>> assignments;
+  /// Accumulated (unwrapped destination expression, scanned value, matched)
+  /// tuples to be assigned with a moore.blocking_assign by the caller.
+  SmallVector<std::tuple<const slang::ast::Expression *, Value, Value>>
+      assignments;
 
   ScanStringParser(Context &context, Value initialCursor,
                    ArrayRef<const slang::ast::Expression *> destinations,
@@ -112,8 +113,8 @@ struct ScanStringParser {
       : context(context), builder(context.builder), destinations(destinations),
         loc(loc), cursor(initialCursor) {}
 
-  /// Thread the consuming chain and collect (destination, value) assignments
-  /// pairs.
+  /// Thread the consuming chain and collect (destination, value, matched)
+  /// assignments tuples.
   FailureOr<Context::ScanStringResult> parse(StringRef formatStr) {
     bool anyFailure = false;
 
@@ -247,8 +248,10 @@ struct ScanStringParser {
     }
 
     auto scanStringTy = moore::ScanStringType::get(builder.getContext());
-    auto op = moore::ScanIntOp::create(builder, loc, scanStringTy, mlirIntTy,
-                                       cursor, format, maxWidth, suppress);
+    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
+    auto op =
+        moore::ScanIntOp::create(builder, loc, scanStringTy, mlirIntTy,
+                                 matchedTy, cursor, format, maxWidth, suppress);
     cursor = op.getRemaining();
     if (!suppress) {
       auto mooreVal =
@@ -258,7 +261,7 @@ struct ScanStringParser {
         mooreVal =
             moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
                 .getResult();
-      assignments.push_back({destExpr, mooreVal});
+      assignments.push_back({destExpr, mooreVal, op.getMatched()});
     }
     return success();
   }
@@ -270,11 +273,12 @@ struct ScanStringParser {
                             : llvm::dyn_cast<moore::RealType>(
                                   context.convertType(*destExpr->type));
     auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
     auto op = moore::ScanRealOp::create(builder, loc, scanStringTy, valueTy,
-                                        cursor, maxWidth, suppress);
+                                        matchedTy, cursor, maxWidth, suppress);
     cursor = op.getRemaining();
     if (!suppress)
-      assignments.push_back({destExpr, op.getValue()});
+      assignments.push_back({destExpr, op.getValue(), op.getMatched()});
     return success();
   }
 
@@ -284,7 +288,7 @@ struct ScanStringParser {
         moore::ScanTimeOp::create(builder, loc, cursor, maxWidth, suppress);
     cursor = op.getRemaining();
     if (!suppress)
-      assignments.push_back({destExpr, op.getValue()});
+      assignments.push_back({destExpr, op.getValue(), op.getMatched()});
     return success();
   }
 
@@ -301,8 +305,9 @@ struct ScanStringParser {
       mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
     }
     auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
     auto op = moore::ScanCharOp::create(builder, loc, scanStringTy, mlirIntTy,
-                                        cursor, suppress);
+                                        matchedTy, cursor, suppress);
     cursor = op.getRemaining();
     if (!suppress) {
       auto mooreVal =
@@ -312,7 +317,7 @@ struct ScanStringParser {
         mooreVal =
             moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
                 .getResult();
-      assignments.push_back({destExpr, mooreVal});
+      assignments.push_back({destExpr, mooreVal, op.getMatched()});
     }
     return success();
   }
@@ -322,8 +327,23 @@ struct ScanStringParser {
     auto op =
         moore::ScanStrOp::create(builder, loc, cursor, maxWidth, suppress);
     cursor = op.getRemaining();
-    if (!suppress)
-      assignments.push_back({destExpr, op.getValue()});
+    if (!suppress) {
+      Value val = op.getValue();
+      auto destTy = context.convertType(*destExpr->type);
+      if (auto intTy = llvm::dyn_cast<moore::IntType>(destTy)) {
+        val = moore::StringToIntOp::create(builder, loc, intTy.getTwoValued(),
+                                           val)
+                  .getResult();
+        if (intTy.getDomain() == moore::Domain::FourValued)
+          val =
+              moore::IntToLogicOp::create(builder, loc, intTy, val).getResult();
+      } else if (!llvm::isa<moore::StringType>(destTy)) {
+        return mlir::emitError(loc)
+               << "destination of string scan specifier must be a string or "
+                  "integer";
+      }
+      assignments.push_back({destExpr, val, op.getMatched()});
+    }
     return success();
   }
 
@@ -341,8 +361,10 @@ struct ScanStringParser {
     }
 
     auto scanStringTy = moore::ScanStringType::get(builder.getContext());
-    auto op = moore::ScanUnformattedOp::create(
-        builder, loc, scanStringTy, mlirIntTy, cursor, fourValue, suppress);
+    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
+    auto op = moore::ScanUnformattedOp::create(builder, loc, scanStringTy,
+                                               mlirIntTy, matchedTy, cursor,
+                                               fourValue, suppress);
     cursor = op.getRemaining();
 
     if (!suppress) {
@@ -353,7 +375,7 @@ struct ScanStringParser {
         mooreVal =
             moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
                 .getResult();
-      assignments.push_back({destExpr, mooreVal});
+      assignments.push_back({destExpr, mooreVal, op.getMatched()});
     }
     return success();
   }

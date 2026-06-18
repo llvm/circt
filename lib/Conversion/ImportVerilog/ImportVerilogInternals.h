@@ -413,11 +413,12 @@ struct Context {
       bool appendNewline = false);
 
   /// Result of converting a scan format string. The final cursor of the
-  /// consuming chain and the list of (destination expression, scanned value)
-  /// pairs to assign
+  /// consuming chain and the list of (destination expression, scanned value,
+  /// matched flag) tuples to assign
   struct ScanStringResult {
     Value finalCursor;
-    SmallVector<std::pair<const slang::ast::Expression *, Value>> assignments;
+    SmallVector<std::tuple<const slang::ast::Expression *, Value, Value>>
+        assignments;
   };
 
   /// Convert a scan format string into a consuming chain of `moore.scan.*`

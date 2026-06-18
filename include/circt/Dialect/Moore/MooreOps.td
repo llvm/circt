@@ -2917,6 +2917,7 @@ def ScanIntOp : MooreOp<"scan.int", [Pure]> {
     maxWidth limits the number of input characters consumed.
     When suppress is set, the value is consumed but not stored (%*
     modifier).
+    Matched indicates whether a value was successfully scanned.
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (b, o, d, h, x).
   }];
@@ -2926,9 +2927,9 @@ def ScanIntOp : MooreOp<"scan.int", [Pure]> {
     OptionalAttr<I32Attr>:$maxWidth,
     UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$remaining, AnyInteger:$value);
+  let results = (outs ScanStringType:$remaining, AnyInteger:$value, BitType:$matched);
   let assemblyFormat = [{
-    $input $format (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value)
+    $input $format (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value) `,` type($matched)
   }];
 }
 
@@ -2939,6 +2940,7 @@ def ScanRealOp : MooreOp<"scan.real", [Pure]> {
     maxWidth limits the number of input characters consumed.
     When suppress is set, the value is consumed but not stored (%*
     modifier).
+    Matched indicates whether a value was successfully scanned.
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (f, e, g).
   }];
@@ -2947,9 +2949,9 @@ def ScanRealOp : MooreOp<"scan.real", [Pure]> {
     OptionalAttr<I32Attr>:$maxWidth,
     UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$remaining, RealType:$value);
+  let results = (outs ScanStringType:$remaining, RealType:$value, BitType:$matched);
   let assemblyFormat = [{
-    $input (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value)
+    $input (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value) `,` type($matched)
   }];
 }
 
@@ -2961,6 +2963,7 @@ def ScanTimeOp : MooreOp<"scan.time", [Pure]> {
     maxWidth limits the number of input characters consumed.
     When suppress is set, the value is consumed but not stored (%*
     modifier).
+    Matched indicates whether a value was successfully scanned.
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (t).
   }];
@@ -2969,9 +2972,9 @@ def ScanTimeOp : MooreOp<"scan.time", [Pure]> {
     OptionalAttr<I32Attr>:$maxWidth,
     UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$remaining, TimeType:$value);
+  let results = (outs ScanStringType:$remaining, TimeType:$value, BitType:$matched);
   let assemblyFormat = [{
-    $input (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value)
+    $input (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value) `,` type($matched)
   }];
 }
 
@@ -2982,12 +2985,15 @@ def ScanCharOp : MooreOp<"scan.char", [Pure]> {
     Unlike other specifiers, leading whitespace is NOT skipped.
     When suppress is set, the value is consumed but not stored (%*
     modifier).
+    Matched indicates whether a value was successfully scanned.
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (c).
   }];
   let arguments = (ins ScanStringType:$input, UnitAttr:$suppress);
-  let results = (outs ScanStringType:$remaining, AnyInteger:$value);
-  let assemblyFormat = "$input (`suppress` $suppress^)? attr-dict `:` type($value)";
+  let results = (outs ScanStringType:$remaining, AnyInteger:$value, BitType:$matched);
+  let assemblyFormat = [{
+    $input (`suppress` $suppress^)? attr-dict `:` type($value) `,` type($matched)
+  }];
 }
 
 def ScanStrOp : MooreOp<"scan.str", [Pure]> {
@@ -2998,6 +3004,7 @@ def ScanStrOp : MooreOp<"scan.str", [Pure]> {
     maxWidth limits the number of characters consumed.
     When suppress is set, the value is consumed but not stored (%*
     modifier).
+    Matched indicates whether a value was successfully scanned.
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (s).
   }];
@@ -3006,9 +3013,9 @@ def ScanStrOp : MooreOp<"scan.str", [Pure]> {
     OptionalAttr<I32Attr>:$maxWidth,
     UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$remaining, StringType:$value);
+  let results = (outs ScanStringType:$remaining, StringType:$value, BitType:$matched);
   let assemblyFormat = [{
-    $input (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value)
+    $input (`width` $maxWidth^)? (`suppress` $suppress^)? attr-dict `:` type($value) `,` type($matched)
   }];
 }
 
@@ -3020,6 +3027,7 @@ def ScanUnformattedOp : MooreOp<"scan.unformatted", [Pure]> {
     The fourValue attribute distinguishes the two.
     When suppress is set, the value is consumed but not stored (%*
     modifier).
+    Matched indicates whether a value was successfully scanned.
 
     See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (u, z).
   }];
@@ -3028,9 +3036,9 @@ def ScanUnformattedOp : MooreOp<"scan.unformatted", [Pure]> {
     UnitAttr:$fourValue,
     UnitAttr:$suppress
   );
-  let results = (outs ScanStringType:$remaining, AnyInteger:$value);
+  let results = (outs ScanStringType:$remaining, AnyInteger:$value, BitType:$matched);
   let assemblyFormat = [{
-    $input (`four_value` $fourValue^)? (`suppress` $suppress^)? attr-dict `:` type($value)
+    $input (`four_value` $fourValue^)? (`suppress` $suppress^)? attr-dict `:` type($value) `,` type($matched)
   }];
 }
 
