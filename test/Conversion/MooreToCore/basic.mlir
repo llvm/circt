@@ -760,7 +760,7 @@ func.func @CaseXZ(%arg0: !moore.l8, %arg1: !moore.l8) {
 
 // CHECK-LABEL: func.func @CmpReal
 func.func @CmpReal(%arg0: !moore.f32, %arg1: !moore.f32) {
-  // CHECK: arith.cmpf one, %arg0, %arg1 : f32
+  // CHECK: arith.cmpf une, %arg0, %arg1 : f32
   moore.fne %arg0, %arg1 : f32 -> i1
   // CHECK: arith.cmpf olt, %arg0, %arg1 : f32
   moore.flt %arg0, %arg1 : f32 -> i1
