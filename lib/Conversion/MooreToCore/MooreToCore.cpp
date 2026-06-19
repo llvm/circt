@@ -1734,6 +1734,54 @@ struct ReduceXorOpConversion : public OpConversionPattern<ReduceXorOp> {
   }
 };
 
+// Reduce an integer or packed-aggregate value to a single bit that is set iff
+// any bit of the value is non-zero. Packed structs and arrays are reduced by
+// OR-ing the per-element non-zero results, matching the IEEE 1800-2023 6.3.2
+// semantics of a packed value in a self-determined boolean context.
+static FailureOr<Value> createAggregateNonZero(OpBuilder &builder, Location loc,
+                                               Value input) {
+  Type type = input.getType();
+  auto i1Type = builder.getI1Type();
+
+  if (auto intType = dyn_cast<IntegerType>(type)) {
+    Value zero = hw::ConstantOp::create(builder, loc, intType, 0);
+    return comb::ICmpOp::create(builder, loc, comb::ICmpPredicate::ne, input,
+                                zero)
+        .getResult();
+  }
+
+  if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
+    Value anySet = hw::ConstantOp::create(builder, loc, i1Type, 0);
+    unsigned idxWidth =
+        std::max(1u, llvm::Log2_64_Ceil(arrayType.getNumElements()));
+    for (unsigned i = 0, e = arrayType.getNumElements(); i < e; ++i) {
+      Value idx = hw::ConstantOp::create(builder, loc,
+                                         builder.getIntegerType(idxWidth), i);
+      Value element = builder.createOrFold<hw::ArrayGetOp>(loc, input, idx);
+      auto elementNonZero = createAggregateNonZero(builder, loc, element);
+      if (failed(elementNonZero))
+        return failure();
+      anySet = builder.createOrFold<comb::OrOp>(loc, anySet, *elementNonZero);
+    }
+    return anySet;
+  }
+
+  if (auto structType = dyn_cast<hw::StructType>(type)) {
+    Value anySet = hw::ConstantOp::create(builder, loc, i1Type, 0);
+    for (auto field : structType.getElements()) {
+      Value fieldValue =
+          builder.createOrFold<hw::StructExtractOp>(loc, input, field.name);
+      auto fieldNonZero = createAggregateNonZero(builder, loc, fieldValue);
+      if (failed(fieldNonZero))
+        return failure();
+      anySet = builder.createOrFold<comb::OrOp>(loc, anySet, *fieldNonZero);
+    }
+    return anySet;
+  }
+
+  return failure();
+}
+
 struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -1752,6 +1800,14 @@ struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
           rewriter, op->getLoc(), rewriter.getFloatAttr(resultType, 0.0));
       rewriter.replaceOpWithNewOp<arith::CmpFOp>(op, arith::CmpFPredicate::ONE,
                                                  adaptor.getInput(), zero);
+      return success();
+    }
+    if (isa_and_nonnull<hw::StructType, hw::ArrayType>(resultType)) {
+      auto nonZero =
+          createAggregateNonZero(rewriter, op->getLoc(), adaptor.getInput());
+      if (failed(nonZero))
+        return failure();
+      rewriter.replaceOp(op, *nonZero);
       return success();
     }
     return failure();
