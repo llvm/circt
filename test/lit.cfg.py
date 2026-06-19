@@ -19,7 +19,7 @@ from lit.llvm.subst import FindTool
 # name: The name of this test suite.
 config.name = 'CIRCT'
 
-config.test_format = lit.formats.ShTest(execute_external=False)
+config.test_format = lit.formats.ShTest()
 
 # suffixes: A list of file extensions to treat as test files.
 config.suffixes = [
