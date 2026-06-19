@@ -34,25 +34,39 @@ struct IncludeEmitter : OpEmissionPattern<IncludeOp> {
   }
 };
 
-/// Emit emitc.apply operations.
-struct ApplyOpEmitter : OpEmissionPattern<ApplyOp> {
+/// Emit emitc.address_of operations.
+struct AddressOfOpEmitter : OpEmissionPattern<AddressOfOp> {
   using OpEmissionPattern::OpEmissionPattern;
 
   MatchResult matchInlinable(Value value) override {
-    if (value.getDefiningOp<ApplyOp>()) {
-      // We would need to check the 'applicableOperator' to select the
-      // precedence to return. However, since the dereference and address_of
-      // operators have the same precedence, we can omit that (for better
-      // performance).
+    if (value.getDefiningOp<AddressOfOp>())
       return Precedence::ADDRESS_OF;
-    }
     return {};
   }
 
   void emitInlined(Value value, EmissionPrinter &p) override {
-    auto applyOp = value.getDefiningOp<ApplyOp>();
-    p << applyOp.getApplicableOperator();
-    p.getInlinable(applyOp.getOperand())
+    auto addressOfOp = value.getDefiningOp<AddressOfOp>();
+    p << "&";
+    p.getInlinable(addressOfOp.getReference())
+        .emitWithParensOnLowerPrecedence(Precedence::ADDRESS_OF);
+  }
+};
+
+/// Emit emitc.dereference operations.
+struct DereferenceOpEmitter : OpEmissionPattern<DereferenceOp> {
+  using OpEmissionPattern::OpEmissionPattern;
+
+  MatchResult matchInlinable(Value value) override {
+    // 	`dereference` has the same precedence as `address_of`.
+    if (value.getDefiningOp<DereferenceOp>())
+      return Precedence::ADDRESS_OF;
+    return {};
+  }
+
+  void emitInlined(Value value, EmissionPrinter &p) override {
+    auto dereferenceOp = value.getDefiningOp<DereferenceOp>();
+    p << "*";
+    p.getInlinable(dereferenceOp.getPointer())
         .emitWithParensOnLowerPrecedence(Precedence::ADDRESS_OF);
   }
 };
@@ -237,8 +251,9 @@ struct OpaqueAttrEmitter : AttrEmissionPattern<OpaqueAttr> {
 
 void circt::ExportSystemC::populateEmitCOpEmitters(
     OpEmissionPatternSet &patterns, MLIRContext *context) {
-  patterns.add<IncludeEmitter, ApplyOpEmitter, CallOpEmitter, CastOpEmitter,
-               ConstantEmitter, VariableEmitter>(context);
+  patterns.add<IncludeEmitter, AddressOfOpEmitter, DereferenceOpEmitter,
+               CallOpEmitter, CastOpEmitter, ConstantEmitter, VariableEmitter>(
+      context);
 }
 
 void circt::ExportSystemC::populateEmitCTypeEmitters(
