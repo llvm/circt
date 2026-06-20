@@ -22,6 +22,7 @@
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 namespace circt {
 namespace firrtl {
@@ -706,6 +707,15 @@ void WhenOpVisitor::visitStmt(WhenOp whenOp) {
 
 // NOLINTNEXTLINE(misc-no-recursion)
 void WhenOpVisitor::visitStmt(LayerBlockOp layerBlockOp) {
+  // Operations created inside a layerblock are not accessible in sibling
+  // layerblocks. Snapshot the LTL op caches before entering and restore them
+  // afterward so that ops created inside one layerblock are not reused by a
+  // sibling, which would cause dominance violations. Parent-scope cached ops
+  // remain available inside the layerblock since they dominate it.
+  llvm::SaveAndRestore savedLTLAndOps(createdLTLAndOps);
+  llvm::SaveAndRestore savedLTLImplicationOps(createdLTLImplicationOps);
+  llvm::SaveAndRestore savedLTLClockOps(createdLTLClockOps);
+
   process(*layerBlockOp.getBody());
 }
 
