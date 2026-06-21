@@ -1340,6 +1340,18 @@ struct ReplicateOpConversion : public OpConversionPattern<ReplicateOp> {
   matchAndRewrite(ReplicateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
+    if (auto intType = dyn_cast<IntegerType>(resultType);
+        intType && intType.getWidth() == 0) {
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+          op, intType, rewriter.getIntegerAttr(intType, 0));
+      return success();
+    }
+    if (auto valueType = dyn_cast<IntegerType>(adaptor.getValue().getType());
+        valueType && valueType.getWidth() == 0) {
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+          op, resultType, rewriter.getIntegerAttr(resultType, 0));
+      return success();
+    }
 
     rewriter.replaceOpWithNewOp<comb::ReplicateOp>(op, resultType,
                                                    adaptor.getValue());
