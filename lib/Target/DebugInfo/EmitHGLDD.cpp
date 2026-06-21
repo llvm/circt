@@ -736,6 +736,13 @@ EmittedExpr FileEmitter::emitExpression(Value value) {
     return {JObject({{"bit_vector", buffer}}), type};
   }
 
+  // Look through debug metadata wrappers to the value they annotate.
+  if (auto valueOp = dyn_cast<debug::ValueOp>(op))
+    return emitExpression(valueOp.getValue());
+
+  if (auto enumOp = dyn_cast<debug::EnumOp>(op))
+    return emitExpression(enumOp.getValue());
+
   // Emit structs as assignment patterns and generate corresponding struct
   // definitions for inclusion in the main "objects" array.
   if (auto structOp = dyn_cast<debug::StructOp>(op)) {

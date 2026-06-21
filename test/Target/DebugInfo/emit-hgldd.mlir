@@ -225,6 +225,19 @@ hw.module @Expressions(in %a: i1, in %b: i1) {
   dbg.variable "constC", %k2 : i4
   dbg.variable "constD", %k3 : i0
 
+  // CHECK-LABEL: "var_name": "directEnum"
+  // CHECK: "value": {"bit_vector":"01"}
+  // CHECK: "type_name": "logic"
+  //
+  // CHECK-LABEL: "var_name": "wrappedEnum"
+  // CHECK: "value": {"bit_vector":"01"}
+  // CHECK: "type_name": "logic"
+  %k4 = hw.constant 1 : i2
+  %enum = dbg.enum %k4, "State", {Idle = 0 : i64, Run = 1 : i64} : i2
+  %value = dbg.value %enum typeName "State" : !dbg.enum
+  dbg.variable "directEnum", %enum : !dbg.enum
+  dbg.variable "wrappedEnum", %value : !dbg.value
+
   // CHECK-LABEL: "var_name": "readWire"
   // CHECK: "value": {"sig_name":"svWire"}
   // CHECK: "type_name": "logic"
