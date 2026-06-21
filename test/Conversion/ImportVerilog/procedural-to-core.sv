@@ -57,3 +57,37 @@ endmodule
 // CORE:       [[CHANGED:%.+]] = comb.icmp bin ne [[BEFORE]], %enable : i1
 // CORE:       cf.cond_br [[CHANGED]], ^[[CHECK]], ^[[WAIT]]
 // CORE:     ^[[RESUME]]:
+
+function automatic int ImmediateAssertFunction(input bit a);
+  assert (a);
+  assume (a);
+  cover (a);
+  return 1;
+endfunction
+
+task automatic ImmediateAssertTask(input bit a);
+  assert (a);
+  assume (a);
+  cover (a);
+endtask
+
+module ImmediateAssertInSubroutine(input bit a, output int y);
+  initial begin
+    y = ImmediateAssertFunction(a);
+    ImmediateAssertTask(a);
+  end
+endmodule
+
+// CORE-LABEL: llhd.coroutine private @ImmediateAssertTask
+// CORE-SAME:  (%arg0: i1)
+// CORE:       verif.assert %arg0 : i1
+// CORE:       verif.assume %arg0 : i1
+// CORE:       verif.cover %arg0 : i1
+// CORE:       llhd.return
+
+// CORE-LABEL: hw.module @ImmediateAssertInSubroutine
+// CORE:       llhd.process
+// CORE:       verif.assert %a : i1
+// CORE:       verif.assume %a : i1
+// CORE:       verif.cover %a : i1
+// CORE:       llhd.call_coroutine @ImmediateAssertTask(%a) : (i1) -> ()

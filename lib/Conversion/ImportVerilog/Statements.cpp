@@ -845,6 +845,34 @@ struct StmtVisitor {
       else if (stmt.isDeferred)
         defer = moore::DeferAssert::Observed;
 
+      auto *parentOp = builder.getInsertionBlock()->getParentOp();
+      if (!isa<moore::ProcedureOp>(parentOp)) {
+        if (defer != moore::DeferAssert::Immediate)
+          return emitError(loc) << "unsupported deferred immediate assertion "
+                                   "outside a procedure";
+
+        cond = context.convertToI1(cond);
+        if (!cond)
+          return failure();
+
+        switch (stmt.assertionKind) {
+        case slang::ast::AssertionKind::Assert:
+          verif::AssertOp::create(builder, loc, cond, Value{}, StringAttr{});
+          return success();
+        case slang::ast::AssertionKind::Assume:
+          verif::AssumeOp::create(builder, loc, cond, Value{}, StringAttr{});
+          return success();
+        case slang::ast::AssertionKind::CoverProperty:
+          verif::CoverOp::create(builder, loc, cond, Value{}, StringAttr{});
+          return success();
+        default:
+          break;
+        }
+        mlir::emitError(loc) << "unsupported immediate assertion kind: "
+                             << slang::ast::toString(stmt.assertionKind);
+        return failure();
+      }
+
       switch (stmt.assertionKind) {
       case slang::ast::AssertionKind::Assert:
         moore::AssertOp::create(builder, loc, defer, cond, StringAttr{});
