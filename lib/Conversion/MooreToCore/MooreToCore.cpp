@@ -1402,46 +1402,56 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
         if (elementWidth < 0)
           return failure();
 
-        int32_t high = low + resArrTy.getNumElements();
-        int32_t resWidth = resArrTy.getNumElements();
-
-        SmallVector<Value> toConcat;
-        if (low < 0) {
-          Value val = hw::ConstantOp::create(
-              rewriter, op.getLoc(),
-              APInt(std::min((-low) * elementWidth, resWidth * elementWidth),
-                    0));
-          Value res = rewriter.createOrFold<hw::BitcastOp>(
-              op.getLoc(), hw::ArrayType::get(arrTy.getElementType(), -low),
-              val);
-          toConcat.push_back(res);
+        int64_t high = int64_t(low) + resArrTy.getNumElements();
+        int64_t resWidth = resArrTy.getNumElements();
+        if (resWidth == 0) {
+          Value zero = createZeroValue(resultType, op.getLoc(), rewriter);
+          if (!zero)
+            return failure();
+          rewriter.replaceOp(op, zero);
+          return success();
         }
 
+        auto createZeroArray = [&](int64_t numElements) -> Value {
+          Value constZero = hw::ConstantOp::create(
+              rewriter, op.getLoc(), APInt(numElements * elementWidth, 0));
+          return rewriter.createOrFold<hw::BitcastOp>(
+              op.getLoc(),
+              hw::ArrayType::get(arrTy.getElementType(), numElements),
+              constZero);
+        };
+
+        SmallVector<Value> toConcat;
+        int64_t prefixElements = 0;
+        if (low < 0) {
+          prefixElements = std::min<int64_t>(-int64_t(low), resWidth);
+          if (prefixElements > 0)
+            toConcat.push_back(createZeroArray(prefixElements));
+        }
+
+        int64_t middleElements = 0;
         if (low < inputWidth && high > 0) {
-          int32_t lowIdx = std::max(0, low);
+          int64_t lowIdx = std::max<int64_t>(0, low);
+          middleElements =
+              std::min<int64_t>(resWidth - prefixElements,
+                                std::min<int64_t>(inputWidth, high) - lowIdx);
           Value lowIdxVal = hw::ConstantOp::create(
               rewriter, op.getLoc(), rewriter.getIntegerType(width), lowIdx);
           Value middle = rewriter.createOrFold<hw::ArraySliceOp>(
               op.getLoc(),
-              hw::ArrayType::get(
-                  arrTy.getElementType(),
-                  std::min(resWidth, std::min(inputWidth, high) - lowIdx)),
+              hw::ArrayType::get(arrTy.getElementType(), middleElements),
               adaptor.getInput(), lowIdxVal);
           toConcat.push_back(middle);
         }
 
-        int32_t diff = high - inputWidth;
-        if (diff > 0) {
-          Value constZero = hw::ConstantOp::create(
-              rewriter, op.getLoc(), APInt(diff * elementWidth, 0));
-          Value val = hw::BitcastOp::create(
-              rewriter, op.getLoc(),
-              hw::ArrayType::get(arrTy.getElementType(), diff), constZero);
-          toConcat.push_back(val);
-        }
+        int64_t suffixElements = resWidth - prefixElements - middleElements;
+        if (suffixElements > 0)
+          toConcat.push_back(createZeroArray(suffixElements));
 
-        Value concat =
-            rewriter.createOrFold<hw::ArrayConcatOp>(op.getLoc(), toConcat);
+        Value concat = toConcat.size() == 1
+                           ? toConcat.front()
+                           : rewriter.createOrFold<hw::ArrayConcatOp>(
+                                 op.getLoc(), toConcat);
         rewriter.replaceOp(op, concat);
         return success();
       }
@@ -1613,6 +1623,14 @@ struct ArrayCreateOpConversion : public OpConversionPattern<ArrayCreateOp> {
   matchAndRewrite(ArrayCreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
+    if (adaptor.getElements().empty()) {
+      Value zero = createZeroValue(resultType, op.getLoc(), rewriter);
+      if (!zero)
+        return failure();
+      rewriter.replaceOp(op, zero);
+      return success();
+    }
+
     rewriter.replaceOpWithNewOp<hw::ArrayCreateOp>(op, resultType,
                                                    adaptor.getElements());
     return success();
