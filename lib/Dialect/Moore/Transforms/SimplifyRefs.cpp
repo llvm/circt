@@ -21,6 +21,8 @@
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include <limits>
+#include <optional>
 
 namespace circt {
 namespace moore {
@@ -50,6 +52,97 @@ static void collectOperands(Value operand, SmallVectorImpl<Value> &operands,
   } else
     operands.push_back(operand);
 }
+
+static void collectLeafRefs(Value operand, SmallVectorImpl<Value> &operands) {
+  if (auto concatRefOp = operand.getDefiningOp<ConcatRefOp>()) {
+    for (auto nestedOperand : concatRefOp.getValues())
+      collectLeafRefs(nestedOperand, operands);
+  } else {
+    operands.push_back(operand);
+  }
+}
+
+static std::optional<uint64_t> getRefBitWidth(Value value) {
+  auto refType = dyn_cast<RefType>(value.getType());
+  if (!refType)
+    return std::nullopt;
+  auto bitSize = refType.getNestedType().getBitSize();
+  if (!bitSize)
+    return std::nullopt;
+  return *bitSize;
+}
+
+static void eraseDeadConcatRefs(Value value,
+                                ConversionPatternRewriter &rewriter) {
+  auto concatRefOp = value.getDefiningOp<ConcatRefOp>();
+  if (!concatRefOp || !concatRefOp->use_empty())
+    return;
+
+  SmallVector<Value> nestedOperands(concatRefOp.getValues().begin(),
+                                    concatRefOp.getValues().end());
+  rewriter.eraseOp(concatRefOp);
+  for (auto nestedOperand : nestedOperands)
+    eraseDeadConcatRefs(nestedOperand, rewriter);
+}
+
+struct ConcatRefExtractLowering : public OpConversionPattern<ExtractRefOp> {
+  using OpConversionPattern<ExtractRefOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ExtractRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto concatRefOp = op.getInput().getDefiningOp<ConcatRefOp>();
+    if (!concatRefOp)
+      return failure();
+
+    auto concatWidth = getRefBitWidth(concatRefOp.getResult());
+    auto resultWidth = getRefBitWidth(op.getResult());
+    if (!concatWidth || !resultWidth)
+      return failure();
+
+    SmallVector<Value> operands;
+    collectLeafRefs(op.getInput(), operands);
+
+    uint64_t lowBit = op.getLowBit();
+    uint64_t highBit = lowBit + *resultWidth;
+    uint64_t cursor = *concatWidth;
+    for (auto operand : operands) {
+      auto operandWidth = getRefBitWidth(operand);
+      if (!operandWidth || *operandWidth > cursor)
+        return failure();
+
+      cursor -= *operandWidth;
+      if (lowBit < cursor || highBit > cursor + *operandWidth)
+        continue;
+
+      Value replacement = operand;
+      uint64_t relativeLowBit = lowBit - cursor;
+      if (relativeLowBit != 0 || *resultWidth != *operandWidth ||
+          operand.getType() != op.getResult().getType()) {
+        if (relativeLowBit > std::numeric_limits<uint32_t>::max())
+          return failure();
+        replacement = ExtractRefOp::create(
+            rewriter, op.getLoc(), op.getResult().getType(), operand,
+            static_cast<uint32_t>(relativeLowBit));
+      }
+
+      bool eraseConcatRef = concatRefOp->hasOneUse();
+      SmallVector<Value> nestedOperands;
+      if (eraseConcatRef) {
+        nestedOperands.append(concatRefOp.getValues().begin(),
+                              concatRefOp.getValues().end());
+        rewriter.eraseOp(concatRefOp);
+      }
+
+      rewriter.replaceOp(op, replacement);
+      for (auto nestedOperand : nestedOperands)
+        eraseDeadConcatRefs(nestedOperand, rewriter);
+      return success();
+    }
+
+    return failure();
+  }
+};
 
 template <typename OpTy>
 struct ConcatRefLowering : public OpConversionPattern<OpTy> {
@@ -141,12 +234,17 @@ void SimplifyRefsPass::runOnOperation() {
                                NonBlockingAssignOp>([](auto op) {
     return !op->getOperand(0).template getDefiningOp<ConcatRefOp>();
   });
+  target.addDynamicallyLegalOp<ExtractRefOp>([](ExtractRefOp op) {
+    return !op.getInput().template getDefiningOp<ConcatRefOp>();
+  });
 
   target.addLegalDialect<MooreDialect>();
   RewritePatternSet concatRefPatterns(&context);
-  concatRefPatterns.add<ConcatRefLowering<ContinuousAssignOp>,
-                        ConcatRefLowering<BlockingAssignOp>,
-                        ConcatRefLowering<NonBlockingAssignOp>>(&context);
+  concatRefPatterns
+      .add<ConcatRefLowering<ContinuousAssignOp>,
+           ConcatRefLowering<BlockingAssignOp>,
+           ConcatRefLowering<NonBlockingAssignOp>, ConcatRefExtractLowering>(
+          &context);
 
   if (failed(applyPartialConversion(getOperation(), target,
                                     std::move(concatRefPatterns)))) {

@@ -1347,6 +1347,47 @@ struct ReplicateOpConversion : public OpConversionPattern<ReplicateOp> {
   }
 };
 
+static FailureOr<Value> extractBitsFromInteger(OpBuilder &builder, Location loc,
+                                               Value input, int32_t low,
+                                               Type resultType) {
+  auto intType = dyn_cast<IntegerType>(input.getType());
+  if (!intType)
+    return failure();
+
+  int32_t inputWidth = intType.getWidth();
+  int32_t resultWidth = hw::getBitWidth(resultType);
+  if (resultWidth < 0)
+    return failure();
+
+  int32_t high = low + resultWidth;
+
+  SmallVector<Value> toConcat;
+  if (low < 0)
+    toConcat.push_back(hw::ConstantOp::create(
+        builder, loc, APInt(std::min(-low, resultWidth), 0)));
+
+  if (low < inputWidth && high > 0) {
+    int32_t lowIdx = std::max(low, 0);
+    Value middle = builder.createOrFold<comb::ExtractOp>(
+        loc,
+        builder.getIntegerType(
+            std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
+        input, lowIdx);
+    toConcat.push_back(middle);
+  }
+
+  int32_t diff = high - inputWidth;
+  if (diff > 0) {
+    Value val = hw::ConstantOp::create(builder, loc, APInt(diff, 0));
+    toConcat.push_back(val);
+  }
+
+  Value concat = builder.createOrFold<comb::ConcatOp>(loc, toConcat);
+  if (concat.getType() == resultType)
+    return concat;
+  return builder.createOrFold<hw::BitcastOp>(loc, resultType, concat);
+}
+
 struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1356,39 +1397,21 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
     // TODO: return X if the domain is four-valued for out-of-bounds accesses
     // once we support four-valued lowering
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    Type inputType = adaptor.getInput().getType();
+    Value input = adaptor.getInput();
+    Type inputType = input.getType();
     int32_t low = adaptor.getLowBit();
 
+    if (isa<llhd::TimeType>(inputType)) {
+      input = llhd::TimeToIntOp::create(rewriter, op.getLoc(), input);
+      inputType = input.getType();
+    }
+
     if (isa<IntegerType>(inputType)) {
-      int32_t inputWidth = inputType.getIntOrFloatBitWidth();
-      int32_t resultWidth = hw::getBitWidth(resultType);
-      int32_t high = low + resultWidth;
-
-      SmallVector<Value> toConcat;
-      if (low < 0)
-        toConcat.push_back(hw::ConstantOp::create(
-            rewriter, op.getLoc(), APInt(std::min(-low, resultWidth), 0)));
-
-      if (low < inputWidth && high > 0) {
-        int32_t lowIdx = std::max(low, 0);
-        Value middle = rewriter.createOrFold<comb::ExtractOp>(
-            op.getLoc(),
-            rewriter.getIntegerType(
-                std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
-            adaptor.getInput(), lowIdx);
-        toConcat.push_back(middle);
-      }
-
-      int32_t diff = high - inputWidth;
-      if (diff > 0) {
-        Value val =
-            hw::ConstantOp::create(rewriter, op.getLoc(), APInt(diff, 0));
-        toConcat.push_back(val);
-      }
-
-      Value concat =
-          rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), toConcat);
-      rewriter.replaceOp(op, concat);
+      auto result =
+          extractBitsFromInteger(rewriter, op.getLoc(), input, low, resultType);
+      if (failed(result))
+        return failure();
+      rewriter.replaceOp(op, *result);
       return success();
     }
 
@@ -1446,6 +1469,48 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
         return success();
       }
 
+      if (arrTy.getElementType() != resultType) {
+        int32_t inputWidth = hw::getBitWidth(inputType);
+        int32_t resultWidth = hw::getBitWidth(resultType);
+        if (inputWidth < 0 || resultWidth < 0)
+          return failure();
+
+        Value input = rewriter.createOrFold<hw::BitcastOp>(
+            op.getLoc(), rewriter.getIntegerType(inputWidth),
+            adaptor.getInput());
+        int32_t high = low + resultWidth;
+
+        SmallVector<Value> toConcat;
+        if (low < 0)
+          toConcat.push_back(hw::ConstantOp::create(
+              rewriter, op.getLoc(), APInt(std::min(-low, resultWidth), 0)));
+
+        if (low < inputWidth && high > 0) {
+          int32_t lowIdx = std::max(low, 0);
+          Value middle = rewriter.createOrFold<comb::ExtractOp>(
+              op.getLoc(),
+              rewriter.getIntegerType(
+                  std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
+              input, lowIdx);
+          toConcat.push_back(middle);
+        }
+
+        int32_t diff = high - inputWidth;
+        if (diff > 0) {
+          Value val =
+              hw::ConstantOp::create(rewriter, op.getLoc(), APInt(diff, 0));
+          toConcat.push_back(val);
+        }
+
+        Value concat =
+            rewriter.createOrFold<comb::ConcatOp>(op.getLoc(), toConcat);
+        if (concat.getType() != resultType)
+          concat = rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType,
+                                                        concat);
+        rewriter.replaceOp(op, concat);
+        return success();
+      }
+
       // Otherwise, it has to be the array's element type
       if (low < 0 || low >= inputWidth) {
         int32_t bw = hw::getBitWidth(resultType);
@@ -1466,12 +1531,175 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
       return success();
     }
 
+    int64_t inputWidth = hw::getBitWidth(inputType);
+    if (inputWidth > 0) {
+      Value input = rewriter.createOrFold<hw::BitcastOp>(
+          op.getLoc(), rewriter.getIntegerType(inputWidth), adaptor.getInput());
+      auto result =
+          extractBitsFromInteger(rewriter, op.getLoc(), input, low, resultType);
+      if (failed(result))
+        return failure();
+      rewriter.replaceOp(op, *result);
+      return success();
+    }
+
     return failure();
   }
 };
 
 struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
   using OpConversionPattern::OpConversionPattern;
+
+  static FailureOr<Value> extractRefFromAggregateBits(OpBuilder &builder,
+                                                      Location loc, Value input,
+                                                      int32_t low,
+                                                      Type resultType) {
+    if (low < 0)
+      return failure();
+
+    auto inputRefType = dyn_cast<llhd::RefType>(input.getType());
+    auto resultRefType = dyn_cast<llhd::RefType>(resultType);
+    if (!inputRefType || !resultRefType)
+      return failure();
+
+    Type inputType = inputRefType.getNestedType();
+    Type resultNestedType = resultRefType.getNestedType();
+    if (inputType == resultNestedType && low == 0)
+      return input;
+
+    int64_t resultWidth = hw::getBitWidth(resultNestedType);
+    if (resultWidth < 0)
+      return failure();
+
+    auto extractRefFromPackedBits = [&]() -> FailureOr<Value> {
+      int64_t inputWidth = hw::getBitWidth(inputType);
+      if (inputWidth < 0 || low + resultWidth > inputWidth)
+        return failure();
+
+      auto packedRefType =
+          llhd::RefType::get(builder.getIntegerType(inputWidth));
+      Value packedRef = input;
+      if (input.getType() != packedRefType) {
+        packedRef = UnrealizedConversionCastOp::create(builder, loc,
+                                                       packedRefType, input)
+                        .getResult(0);
+      }
+
+      Value lowBit = hw::ConstantOp::create(
+          builder, loc, builder.getIntegerType(llvm::Log2_64_Ceil(inputWidth)),
+          low);
+      auto resultIntRefType =
+          llhd::RefType::get(builder.getIntegerType(resultWidth));
+      Type extractResultType =
+          isa<IntegerType>(resultNestedType) ? resultType : resultIntRefType;
+      Value extracted = llhd::SigExtractOp::create(
+                            builder, loc, extractResultType, packedRef, lowBit)
+                            .getResult();
+      if (extractResultType == resultType)
+        return extracted;
+
+      return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                extracted)
+          .getResult(0);
+    };
+
+    if (auto inputIntType = dyn_cast<IntegerType>(inputType)) {
+      if (low + resultWidth > inputIntType.getWidth())
+        return failure();
+
+      Value lowBit = hw::ConstantOp::create(
+          builder, loc,
+          builder.getIntegerType(llvm::Log2_64_Ceil(inputIntType.getWidth())),
+          low);
+      auto resultIntRefType =
+          llhd::RefType::get(builder.getIntegerType(resultWidth));
+      Type extractResultType =
+          isa<IntegerType>(resultNestedType) ? resultType : resultIntRefType;
+      Value extracted = llhd::SigExtractOp::create(
+                            builder, loc, extractResultType, input, lowBit)
+                            .getResult();
+      if (extractResultType == resultType)
+        return extracted;
+
+      return UnrealizedConversionCastOp::create(builder, loc, resultType,
+                                                extracted)
+          .getResult(0);
+    }
+
+    if (auto arrayType = dyn_cast<hw::ArrayType>(inputType)) {
+      int64_t elementWidth = hw::getBitWidth(arrayType.getElementType());
+      int64_t arrayWidth =
+          elementWidth * static_cast<int64_t>(arrayType.getNumElements());
+      if (elementWidth <= 0 || low + resultWidth > arrayWidth)
+        return failure();
+
+      int64_t elementOffset = low % elementWidth;
+      if (elementOffset + resultWidth > elementWidth)
+        return extractRefFromPackedBits();
+
+      Value index =
+          hw::ConstantOp::create(builder, loc,
+                                 builder.getIntegerType(llvm::Log2_64_Ceil(
+                                     arrayType.getNumElements())),
+                                 low / elementWidth);
+      auto elementRefType = llhd::RefType::get(arrayType.getElementType());
+      Value elementRef = llhd::SigArrayGetOp::create(
+          builder, loc, elementRefType, input, index);
+      return extractRefFromAggregateBits(builder, loc, elementRef,
+                                         elementOffset, resultType);
+    }
+
+    if (auto structType = dyn_cast<hw::StructType>(inputType)) {
+      int64_t totalWidth = hw::getBitWidth(structType);
+      if (totalWidth < 0 || low + resultWidth > totalWidth)
+        return failure();
+
+      int64_t consumedWidth = 0;
+      for (auto field : structType.getElements()) {
+        int64_t fieldWidth = hw::getBitWidth(field.type);
+        if (fieldWidth < 0)
+          return failure();
+
+        int64_t fieldLow = totalWidth - consumedWidth - fieldWidth;
+        if (low >= fieldLow && low + resultWidth <= fieldLow + fieldWidth) {
+          auto fieldRefType = llhd::RefType::get(field.type);
+          Value fieldRef = llhd::SigStructExtractOp::create(
+              builder, loc, fieldRefType, input, field.name);
+          return extractRefFromAggregateBits(builder, loc, fieldRef,
+                                             low - fieldLow, resultType);
+        }
+
+        consumedWidth += fieldWidth;
+      }
+
+      return extractRefFromPackedBits();
+    }
+
+    if (auto unionType = dyn_cast<hw::UnionType>(inputType)) {
+      int64_t totalWidth = hw::getBitWidth(unionType);
+      if (totalWidth < 0 || low + resultWidth > totalWidth)
+        return failure();
+
+      for (auto field : unionType.getElements()) {
+        int64_t fieldWidth = hw::getBitWidth(field.type);
+        if (fieldWidth < 0)
+          return failure();
+
+        int64_t fieldLow = field.offset;
+        if (low >= fieldLow && low + resultWidth <= fieldLow + fieldWidth) {
+          auto fieldRefType = llhd::RefType::get(field.type);
+          Value fieldRef = llhd::SigStructExtractOp::create(
+              builder, loc, fieldRefType, input, field.name);
+          return extractRefFromAggregateBits(builder, loc, fieldRef,
+                                             low - fieldLow, resultType);
+        }
+      }
+
+      return extractRefFromPackedBits();
+    }
+
+    return failure();
+  }
 
   LogicalResult
   matchAndRewrite(ExtractRefOp op, OpAdaptor adaptor,
@@ -1480,7 +1708,6 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
     Type resultType = typeConverter->convertType(op.getResult().getType());
     Type inputType =
         cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
-
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
       if (width == -1)
@@ -1496,22 +1723,47 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
     }
 
     if (auto arrType = dyn_cast<hw::ArrayType>(inputType)) {
-      Value lowBit = hw::ConstantOp::create(
-          rewriter, op.getLoc(),
-          rewriter.getIntegerType(llvm::Log2_64_Ceil(arrType.getNumElements())),
-          adaptor.getLowBit());
+      auto resultNestedType = cast<llhd::RefType>(resultType).getNestedType();
 
       // If the result type is not the same as the array's element type, then
       // it has to be a slice.
-      if (arrType.getElementType() !=
-          cast<llhd::RefType>(resultType).getNestedType()) {
+      if (arrType.getElementType() != resultNestedType) {
+        if (!isa<hw::ArrayType>(resultNestedType)) {
+          auto result = extractRefFromAggregateBits(
+              rewriter, op.getLoc(), adaptor.getInput(), adaptor.getLowBit(),
+              resultType);
+          if (failed(result))
+            return failure();
+          rewriter.replaceOp(op, *result);
+          return success();
+        }
+
+        Value lowBit =
+            hw::ConstantOp::create(rewriter, op.getLoc(),
+                                   rewriter.getIntegerType(llvm::Log2_64_Ceil(
+                                       arrType.getNumElements())),
+                                   adaptor.getLowBit());
         rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
             op, resultType, adaptor.getInput(), lowBit);
         return success();
       }
 
+      Value lowBit = hw::ConstantOp::create(
+          rewriter, op.getLoc(),
+          rewriter.getIntegerType(llvm::Log2_64_Ceil(arrType.getNumElements())),
+          adaptor.getLowBit());
       rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
                                                        lowBit);
+      return success();
+    }
+
+    if (isa<hw::StructType, hw::UnionType>(inputType)) {
+      auto result =
+          extractRefFromAggregateBits(rewriter, op.getLoc(), adaptor.getInput(),
+                                      adaptor.getLowBit(), resultType);
+      if (failed(result))
+        return failure();
+      rewriter.replaceOp(op, *result);
       return success();
     }
 
@@ -1526,15 +1778,28 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
   matchAndRewrite(DynExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    Type inputType = adaptor.getInput().getType();
+    Value input = adaptor.getInput();
+    Type inputType = input.getType();
+
+    if (isa<llhd::TimeType>(inputType)) {
+      input = llhd::TimeToIntOp::create(rewriter, op.getLoc(), input);
+      inputType = input.getType();
+    }
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       Value amount = adjustIntegerWidth(rewriter, adaptor.getLowBit(),
                                         intType.getWidth(), op->getLoc());
-      Value value = comb::ShrUOp::create(rewriter, op->getLoc(),
-                                         adaptor.getInput(), amount);
+      Value value = comb::ShrUOp::create(rewriter, op->getLoc(), input, amount);
 
-      rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, resultType, value, 0);
+      int64_t resultWidth = hw::getBitWidth(resultType);
+      if (resultWidth < 0)
+        return failure();
+      Value result = rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), rewriter.getIntegerType(resultWidth), value, 0);
+      if (result.getType() != resultType)
+        result = rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType,
+                                                      result);
+      rewriter.replaceOp(op, result);
       return success();
     }
 
@@ -1543,15 +1808,54 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
       Value idx = adjustIntegerWidth(rewriter, adaptor.getLowBit(), idxWidth,
                                      op->getLoc());
 
-      bool isSingleElementExtract = arrType.getElementType() == resultType;
-
-      if (isSingleElementExtract)
+      if (arrType.getElementType() == resultType) {
         rewriter.replaceOpWithNewOp<hw::ArrayGetOp>(op, adaptor.getInput(),
                                                     idx);
-      else
+        return success();
+      }
+
+      if (isa<hw::ArrayType>(resultType)) {
         rewriter.replaceOpWithNewOp<hw::ArraySliceOp>(op, resultType,
                                                       adaptor.getInput(), idx);
+        return success();
+      }
 
+      int64_t inputWidth = hw::getBitWidth(inputType);
+      int64_t resultWidth = hw::getBitWidth(resultType);
+      if (inputWidth < 0 || resultWidth < 0)
+        return failure();
+
+      Value input = rewriter.createOrFold<hw::BitcastOp>(
+          op.getLoc(), rewriter.getIntegerType(inputWidth), adaptor.getInput());
+      Value amount = adjustIntegerWidth(rewriter, adaptor.getLowBit(),
+                                        inputWidth, op->getLoc());
+      Value shifted =
+          comb::ShrUOp::create(rewriter, op->getLoc(), input, amount);
+      Value result = rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), rewriter.getIntegerType(resultWidth), shifted, 0);
+      if (result.getType() != resultType)
+        result = rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType,
+                                                      result);
+      rewriter.replaceOp(op, result);
+
+      return success();
+    }
+
+    int64_t inputWidth = hw::getBitWidth(inputType);
+    int64_t resultWidth = hw::getBitWidth(resultType);
+    if (inputWidth >= 0 && resultWidth >= 0) {
+      Value packedInput = rewriter.createOrFold<hw::BitcastOp>(
+          op.getLoc(), rewriter.getIntegerType(inputWidth), input);
+      Value amount = adjustIntegerWidth(rewriter, adaptor.getLowBit(),
+                                        inputWidth, op->getLoc());
+      Value shifted =
+          comb::ShrUOp::create(rewriter, op->getLoc(), packedInput, amount);
+      Value result = rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), rewriter.getIntegerType(resultWidth), shifted, 0);
+      if (result.getType() != resultType)
+        result = rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), resultType,
+                                                      result);
+      rewriter.replaceOp(op, result);
       return success();
     }
 
@@ -1569,38 +1873,91 @@ struct DynExtractRefOpConversion : public OpConversionPattern<DynExtractRefOp> {
     Type resultType = typeConverter->convertType(op.getResult().getType());
     Type inputType =
         cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
+    auto resultNestedType = cast<llhd::RefType>(resultType).getNestedType();
+
+    auto extractRefFromPackedBits = [&]() -> LogicalResult {
+      int64_t inputWidth = hw::getBitWidth(inputType);
+      int64_t resultWidth = hw::getBitWidth(resultNestedType);
+      if (inputWidth < 0 || resultWidth < 0 || resultWidth > inputWidth)
+        return failure();
+
+      auto packedRefType =
+          llhd::RefType::get(rewriter.getIntegerType(inputWidth));
+      Value packedRef = adaptor.getInput();
+      if (adaptor.getInput().getType() != packedRefType) {
+        packedRef = UnrealizedConversionCastOp::create(rewriter, op.getLoc(),
+                                                       packedRefType,
+                                                       adaptor.getInput())
+                        .getResult(0);
+      }
+
+      Value lowBit =
+          adjustIntegerWidth(rewriter, adaptor.getLowBit(),
+                             llvm::Log2_64_Ceil(inputWidth), op->getLoc());
+      auto resultIntRefType =
+          llhd::RefType::get(rewriter.getIntegerType(resultWidth));
+      Type extractResultType =
+          isa<IntegerType>(resultNestedType) ? resultType : resultIntRefType;
+      Value extracted = llhd::SigExtractOp::create(
+          rewriter, op.getLoc(), extractResultType, packedRef, lowBit);
+      if (extractResultType != resultType) {
+        extracted = UnrealizedConversionCastOp::create(rewriter, op.getLoc(),
+                                                       resultType, extracted)
+                        .getResult(0);
+      }
+      rewriter.replaceOp(op, extracted);
+      return success();
+    };
 
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
-      if (width == -1)
+      int64_t resultWidth = hw::getBitWidth(resultNestedType);
+      if (width == -1 || resultWidth < 0 || resultWidth > width)
         return failure();
 
       Value amount =
           adjustIntegerWidth(rewriter, adaptor.getLowBit(),
                              llvm::Log2_64_Ceil(width), op->getLoc());
-      rewriter.replaceOpWithNewOp<llhd::SigExtractOp>(
-          op, resultType, adaptor.getInput(), amount);
+      auto resultIntRefType =
+          llhd::RefType::get(rewriter.getIntegerType(resultWidth));
+      Type extractResultType =
+          isa<IntegerType>(resultNestedType) ? resultType : resultIntRefType;
+      Value extracted = llhd::SigExtractOp::create(
+          rewriter, op.getLoc(), extractResultType, adaptor.getInput(), amount);
+      if (extractResultType != resultType) {
+        extracted = UnrealizedConversionCastOp::create(rewriter, op.getLoc(),
+                                                       resultType, extracted)
+                        .getResult(0);
+      }
+      rewriter.replaceOp(op, extracted);
       return success();
     }
 
     if (auto arrType = dyn_cast<hw::ArrayType>(inputType)) {
-      Value idx = adjustIntegerWidth(
-          rewriter, adaptor.getLowBit(),
-          llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
-
-      auto resultNestedType = cast<llhd::RefType>(resultType).getNestedType();
       bool isSingleElementExtract =
           arrType.getElementType() == resultNestedType;
 
-      if (isSingleElementExtract)
+      if (isSingleElementExtract) {
+        Value idx = adjustIntegerWidth(
+            rewriter, adaptor.getLowBit(),
+            llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
         rewriter.replaceOpWithNewOp<llhd::SigArrayGetOp>(op, adaptor.getInput(),
                                                          idx);
-      else
+      } else if (isa<hw::ArrayType>(resultNestedType)) {
+        Value idx = adjustIntegerWidth(
+            rewriter, adaptor.getLowBit(),
+            llvm::Log2_64_Ceil(arrType.getNumElements()), op->getLoc());
         rewriter.replaceOpWithNewOp<llhd::SigArraySliceOp>(
             op, resultType, adaptor.getInput(), idx);
+      } else {
+        return extractRefFromPackedBits();
+      }
 
       return success();
     }
+
+    if (isa<hw::StructType, hw::UnionType>(inputType))
+      return extractRefFromPackedBits();
 
     return failure();
   }
@@ -1640,6 +1997,19 @@ struct StructExtractOpConversion : public OpConversionPattern<StructExtractOp> {
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<hw::StructExtractOp>(
         op, adaptor.getInput(), adaptor.getFieldNameAttr());
+    return success();
+  }
+};
+
+struct StructInjectOpConversion : public OpConversionPattern<StructInjectOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StructInjectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<hw::StructInjectOp>(op, adaptor.getInput(),
+                                                    adaptor.getFieldNameAttr(),
+                                                    adaptor.getNewValue());
     return success();
   }
 };
@@ -1918,6 +2288,20 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
       op.emitError("conversion result type is not currently supported");
       return failure();
     }
+
+    if (auto inputRefType =
+            dyn_cast<llhd::RefType>(adaptor.getInput().getType())) {
+      if (auto resultRefType = dyn_cast<llhd::RefType>(resultType)) {
+        int64_t inputBw = hw::getBitWidth(inputRefType.getNestedType());
+        int64_t resultBw = hw::getBitWidth(resultRefType.getNestedType());
+        if (inputBw >= 0 && inputBw == resultBw) {
+          rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
+              op, resultType, adaptor.getInput());
+          return success();
+        }
+      }
+    }
+
     int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
     int64_t resultBw = hw::getBitWidth(resultType);
     if (inputBw == -1 || resultBw == -1) {
@@ -1957,6 +2341,16 @@ struct BitcastConversion : public OpConversionPattern<SourceOp> {
   matchAndRewrite(SourceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto type = typeConverter->convertType(op.getResult().getType());
+    if (isa<llhd::TimeType>(adaptor.getInput().getType()) &&
+        type.isInteger(64)) {
+      rewriter.replaceOpWithNewOp<llhd::TimeToIntOp>(op, adaptor.getInput());
+      return success();
+    }
+    if (isa<llhd::TimeType>(type) &&
+        adaptor.getInput().getType().isInteger(64)) {
+      rewriter.replaceOpWithNewOp<llhd::IntToTimeOp>(op, adaptor.getInput());
+      return success();
+    }
     if (type == adaptor.getInput().getType())
       rewriter.replaceOp(op, adaptor.getInput());
     else
@@ -3508,6 +3902,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     StructExtractRefOpConversion,
     ExtractRefOpConversion,
     StructCreateOpConversion,
+    StructInjectOpConversion,
     UnionCreateOpConversion,
     UnionExtractOpConversion,
     UnionExtractRefOpConversion,

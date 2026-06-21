@@ -1510,6 +1510,31 @@ func.func @TimeConversion(%arg0: !moore.l64, %arg1: !moore.time) -> (!moore.time
   return %0, %1 : !moore.time, !moore.l64
 }
 
+// CHECK-LABEL: func.func @TimePackedCasts
+func.func @TimePackedCasts(%arg0: !moore.time, %arg1: !moore.l64) -> (!moore.l64, !moore.time) {
+  // CHECK-NEXT: [[TMP0:%.+]] = llhd.time_to_int %arg0
+  %0 = moore.packed_to_sbv %arg0 : time
+  // CHECK-NEXT: [[TMP1:%.+]] = llhd.int_to_time %arg1
+  %1 = moore.sbv_to_packed %arg1 : time
+  // CHECK-NEXT: return [[TMP0]], [[TMP1]]
+  return %0, %1 : !moore.l64, !moore.time
+}
+
+// CHECK-LABEL: func.func @TimeExtract
+func.func @TimeExtract(%arg0: !moore.time, %arg1: !moore.i32) -> (!moore.i4, !moore.i1) {
+  // CHECK-NEXT: [[TMP0:%.+]] = llhd.time_to_int %arg0
+  // CHECK-NEXT: [[TMP1:%.+]] = comb.extract [[TMP0]] from 8 : (i64) -> i4
+  %0 = moore.extract %arg0 from 8 : !moore.time -> !moore.i4
+  // CHECK-NEXT: [[TMP2:%.+]] = llhd.time_to_int %arg0
+  // CHECK-NEXT: [[ZERO:%.+]] = hw.constant 0 : i32
+  // CHECK-NEXT: [[TMP3:%.+]] = comb.concat [[ZERO]], %arg1 : i32, i32
+  // CHECK-NEXT: [[TMP4:%.+]] = comb.shru [[TMP2]], [[TMP3]] : i64
+  // CHECK-NEXT: [[TMP5:%.+]] = comb.extract [[TMP4]] from 0 : (i64) -> i1
+  %1 = moore.dyn_extract %arg0 from %arg1 : !moore.time, !moore.i32 -> !moore.i1
+  // CHECK-NEXT: return [[TMP1]], [[TMP5]]
+  return %0, %1 : !moore.i4, !moore.i1
+}
+
 // CHECK-LABEL: func.func @IntToStringConversion
 func.func @IntToStringConversion(%arg0: !moore.i45) {
   // CHECK-NEXT: sim.string.int_to_string %arg0 : i45
