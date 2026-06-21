@@ -1534,6 +1534,15 @@ struct DynExtractOpConversion : public OpConversionPattern<DynExtractOp> {
       Value value = comb::ShrUOp::create(rewriter, op->getLoc(),
                                          adaptor.getInput(), amount);
 
+      int64_t resultWidth = hw::getBitWidth(resultType);
+      if (resultWidth < 0)
+        return failure();
+      if (resultWidth > intType.getWidth()) {
+        rewriter.replaceOp(
+            op, adjustIntegerWidth(rewriter, value, resultWidth, op->getLoc()));
+        return success();
+      }
+
       rewriter.replaceOpWithNewOp<comb::ExtractOp>(op, resultType, value, 0);
       return success();
     }
@@ -2018,6 +2027,13 @@ struct SExtOpConversion : public OpConversionPattern<SExtOp> {
   matchAndRewrite(SExtOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto type = typeConverter->convertType(op.getType());
+    if (op.getInput().getType().getWidth() == 0) {
+      auto intType = cast<IntegerType>(type);
+      auto zeroAttr = rewriter.getIntegerAttr(intType, 0);
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, intType, zeroAttr);
+      return success();
+    }
+
     auto value =
         comb::createOrFoldSExt(rewriter, op.getLoc(), adaptor.getInput(), type);
     rewriter.replaceOp(op, value);
