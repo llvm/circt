@@ -1348,13 +1348,157 @@ moore.module @scfInsideProcess(in %in0: !moore.i32, in %in1: !moore.i32) {
 // CHECK-LABEL: @blockArgAsObservedValue
 moore.module @blockArgAsObservedValue(in %in0: !moore.i32, in %in1: !moore.i32) {
   %var = moore.variable : <!moore.i32>
-  // CHECK: [[PRB:%.+]] = llhd.prb %var : i32
   // CHECK: llhd.process
   moore.procedure always_comb {
       %0 = moore.add %in0, %in1 : !moore.i32
       moore.blocking_assign %var, %0 : !moore.i32
-      // CHECK:   llhd.wait (%in0, %in1, [[PRB]] : i32, i32, i32), ^bb1
+      // CHECK:   llhd.wait (%in0, %in1 : i32, i32), ^bb1
       moore.return
+  }
+}
+
+// CHECK-LABEL: @alwaysCombWrittenTimeRefs
+moore.module @alwaysCombWrittenTimeRefs(in %sel: !moore.i1, out out: !moore.time) {
+  %lhs = moore.variable : <!moore.time>
+  %rhs = moore.variable : <!moore.time>
+  %out = moore.variable : <!moore.time>
+  // CHECK: llhd.process
+  moore.procedure always_comb {
+    %0 = moore.constant_time 1000000 fs
+    %1 = moore.constant_time 2000000 fs
+    moore.blocking_assign %lhs, %0 : time
+    moore.blocking_assign %rhs, %1 : time
+    %2 = moore.read %lhs : <time>
+    %3 = moore.read %rhs : <time>
+    %4 = moore.conditional %sel : i1 -> time {
+      moore.yield %2 : time
+    } {
+      moore.yield %3 : time
+    }
+    moore.blocking_assign %out, %4 : time
+    // CHECK:   llhd.wait (%sel : i1), ^bb1
+    moore.return
+  }
+  %5 = moore.read %out : <time>
+  moore.output %5 : !moore.time
+}
+
+// CHECK-LABEL: @alwaysCombReadTimeRefs
+moore.module @alwaysCombReadTimeRefs(out out: !moore.l1) {
+  %lhs = moore.variable : <!moore.time>
+  %rhs = moore.variable : <!moore.time>
+  %out = moore.variable : <!moore.l1>
+  // CHECK: [[LHS:%.+]] = llhd.prb %lhs : !llhd.time
+  // CHECK: [[LHS_INT:%.+]] = llhd.time_to_int [[LHS]]
+  // CHECK: [[RHS:%.+]] = llhd.prb %rhs : !llhd.time
+  // CHECK: [[RHS_INT:%.+]] = llhd.time_to_int [[RHS]]
+  // CHECK: llhd.process
+  moore.procedure always_comb {
+    %0 = moore.read %lhs : <time>
+    %1 = moore.read %rhs : <time>
+    %2 = moore.time_to_logic %0
+    %3 = moore.time_to_logic %1
+    %4 = moore.eq %2, %3 : l64 -> l1
+    moore.blocking_assign %out, %4 : l1
+    // CHECK:   llhd.wait ([[LHS_INT]], [[RHS_INT]] : i64, i64), ^bb1
+    moore.return
+  }
+  %5 = moore.read %out : <l1>
+  moore.output %5 : !moore.l1
+}
+
+// CHECK-LABEL: @alwaysCombReadFloatRefs
+moore.module @alwaysCombReadFloatRefs(out realOut: !moore.l1, out shortOut: !moore.l1) {
+  %realLhs = moore.variable : <!moore.f64>
+  %realRhs = moore.variable : <!moore.f64>
+  %shortLhs = moore.variable : <!moore.f32>
+  %shortRhs = moore.variable : <!moore.f32>
+  %realOut = moore.variable : <!moore.l1>
+  %shortOut = moore.variable : <!moore.l1>
+  // CHECK: [[REAL_LHS:%.+]] = llhd.prb %realLhs : f64
+  // CHECK: [[REAL_LHS_INT:%.+]] = arith.bitcast [[REAL_LHS]] : f64 to i64
+  // CHECK: [[REAL_RHS:%.+]] = llhd.prb %realRhs : f64
+  // CHECK: [[REAL_RHS_INT:%.+]] = arith.bitcast [[REAL_RHS]] : f64 to i64
+  // CHECK: [[SHORT_LHS:%.+]] = llhd.prb %shortLhs : f32
+  // CHECK: [[SHORT_LHS_INT:%.+]] = arith.bitcast [[SHORT_LHS]] : f32 to i32
+  // CHECK: [[SHORT_RHS:%.+]] = llhd.prb %shortRhs : f32
+  // CHECK: [[SHORT_RHS_INT:%.+]] = arith.bitcast [[SHORT_RHS]] : f32 to i32
+  // CHECK: llhd.process
+  moore.procedure always_comb {
+    %0 = moore.read %realLhs : <f64>
+    %1 = moore.read %realRhs : <f64>
+    %2 = moore.feq %0, %1 : f64 -> i1
+    %3 = moore.int_to_logic %2 : i1
+    moore.blocking_assign %realOut, %3 : l1
+    %4 = moore.read %shortLhs : <f32>
+    %5 = moore.read %shortRhs : <f32>
+    %6 = moore.flt %4, %5 : f32 -> i1
+    %7 = moore.int_to_logic %6 : i1
+    moore.blocking_assign %shortOut, %7 : l1
+    // CHECK:   llhd.wait ([[REAL_LHS_INT]], [[REAL_RHS_INT]], [[SHORT_LHS_INT]], [[SHORT_RHS_INT]] : i64, i64, i32, i32), ^bb1
+    moore.return
+  }
+  %8 = moore.read %realOut : <l1>
+  %9 = moore.read %shortOut : <l1>
+  moore.output %8, %9 : !moore.l1, !moore.l1
+}
+
+// CHECK-LABEL: @waitEventReadTimeAndFloatRefs
+moore.module @waitEventReadTimeAndFloatRefs() {
+  %real = moore.variable : <!moore.f64>
+  %short = moore.variable : <!moore.f32>
+  %time = moore.variable : <!moore.time>
+  // CHECK: [[REAL:%.+]] = llhd.prb %real : f64
+  // CHECK: [[REAL_INT:%.+]] = arith.bitcast [[REAL]] : f64 to i64
+  // CHECK: [[SHORT:%.+]] = llhd.prb %short : f32
+  // CHECK: [[SHORT_INT:%.+]] = arith.bitcast [[SHORT]] : f32 to i32
+  // CHECK: [[TIME:%.+]] = llhd.prb %time : !llhd.time
+  // CHECK: [[TIME_INT:%.+]] = llhd.time_to_int [[TIME]]
+  // CHECK: llhd.process
+  moore.procedure initial {
+    moore.wait_event {
+      %0 = moore.read %real : <f64>
+      %1 = moore.read %short : <f32>
+      %2 = moore.read %time : <time>
+      moore.detect_event any %0 : f64
+      moore.detect_event any %1 : f32
+      moore.detect_event any %2 : time
+    }
+    // CHECK:   llhd.wait ([[REAL_INT]], [[SHORT_INT]], [[TIME_INT]] : i64, i32, i64), ^bb
+    moore.return
+  }
+}
+
+// CHECK-LABEL: @guardedWaitEventReadTimeAndFloatRefs
+moore.module @guardedWaitEventReadTimeAndFloatRefs() {
+  %real = moore.variable : <!moore.f64>
+  %short = moore.variable : <!moore.f32>
+  %time = moore.variable : <!moore.time>
+  %gate = moore.variable : <!moore.i1>
+  // CHECK: arith.bitcast {{.*}} : f64 to i64
+  // CHECK: arith.bitcast {{.*}} : f32 to i32
+  // CHECK: llhd.time_to_int
+  // CHECK: llhd.wait
+  // CHECK: arith.bitcast {{.*}} : f64 to i64
+  // CHECK: comb.icmp bin ne {{.*}} : i64
+  // CHECK: comb.and bin
+  // CHECK: arith.bitcast {{.*}} : f32 to i32
+  // CHECK: comb.icmp bin ne {{.*}} : i32
+  // CHECK: comb.and bin
+  // CHECK: llhd.time_to_int
+  // CHECK: comb.icmp bin ne {{.*}} : i64
+  // CHECK: comb.and bin
+  moore.procedure initial {
+    moore.wait_event {
+      %0 = moore.read %real : <f64>
+      %1 = moore.read %short : <f32>
+      %2 = moore.read %time : <time>
+      %3 = moore.read %gate : <i1>
+      moore.detect_event any %0 if %3 : f64
+      moore.detect_event any %1 if %3 : f32
+      moore.detect_event any %2 if %3 : time
+    }
+    moore.return
   }
 }
 

@@ -513,23 +513,44 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
   }
 };
 
+static Value getObservableValue(Value value, Location loc,
+                                ConversionPatternRewriter &rewriter) {
+  if (isa<llhd::RefType>(value.getType()))
+    value = llhd::ProbeOp::create(rewriter, loc, value);
+  if (isa<llhd::TimeType>(value.getType()))
+    value = llhd::TimeToIntOp::create(rewriter, loc, value);
+  if (auto floatType = dyn_cast<FloatType>(value.getType())) {
+    auto intType = rewriter.getIntegerType(floatType.getWidth());
+    value = arith::BitcastOp::create(rewriter, loc, intType, value);
+  }
+  return value;
+}
+
 static void getValuesToObserve(Region *region,
                                function_ref<void(Value)> setInsertionPoint,
                                const TypeConverter *typeConverter,
                                ConversionPatternRewriter &rewriter,
                                SmallVector<Value> &observeValues) {
   SmallDenseSet<Value> alreadyObserved;
+  SmallDenseSet<Value> writtenRefs;
   Location loc = region->getLoc();
 
-  auto probeIfSignal = [&](Value value) -> Value {
-    if (!isa<llhd::RefType>(value.getType()))
-      return value;
-    return llhd::ProbeOp::create(rewriter, loc, value);
-  };
+  // Written refs are not part of an implicit always_comb/always_latch
+  // sensitivity list.
+  region->getParentOp()->walk([&](Operation *operation) {
+    if (!region->isAncestor(operation->getParentRegion()))
+      return;
+    TypeSwitch<Operation *>(operation)
+        .Case<BlockingAssignOp, NonBlockingAssignOp, DelayedNonBlockingAssignOp,
+              ContinuousAssignOp, DelayedContinuousAssignOp>(
+            [&](auto assignOp) { writtenRefs.insert(assignOp.getDst()); });
+  });
 
   region->getParentOp()->walk<WalkOrder::PreOrder, ForwardDominanceIterator<>>(
       [&](Operation *operation) {
         for (auto value : operation->getOperands()) {
+          if (writtenRefs.contains(value))
+            continue;
           if (isa<BlockArgument>(value))
             value = rewriter.getRemappedValue(value);
 
@@ -544,13 +565,15 @@ static void getValuesToObserve(Region *region,
           OpBuilder::InsertionGuard g(rewriter);
           if (auto remapped = rewriter.getRemappedValue(value)) {
             setInsertionPoint(remapped);
-            observeValues.push_back(probeIfSignal(remapped));
+            observeValues.push_back(
+                getObservableValue(remapped, loc, rewriter));
           } else {
             setInsertionPoint(value);
             auto type = typeConverter->convertType(value.getType());
             auto converted = typeConverter->materializeTargetConversion(
                 rewriter, loc, type, value);
-            observeValues.push_back(probeIfSignal(converted));
+            observeValues.push_back(
+                getObservableValue(converted, loc, rewriter));
           }
         }
       });
@@ -809,14 +832,43 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
 
     // Helper function to detect if a certain change occurred between a value
     // before the `llhd.wait` and after.
-    auto computeTrigger = [&](Value before, Value after, Edge edge) -> Value {
+    auto computeTrigger = [&](DetectEventOp detectOp, Value before,
+                              Value after) -> FailureOr<Value> {
       assert(before.getType() == after.getType() &&
              "mismatched types after clone op");
-      auto beforeType = cast<IntType>(before.getType());
+      auto edge = detectOp.getEdge();
+
+      if (edge == Edge::AnyChange) {
+        auto convertedType = typeConverter->convertType(before.getType());
+        if (!convertedType)
+          return failure();
+
+        before = typeConverter->materializeTargetConversion(
+            rewriter, loc, convertedType, before);
+        after = typeConverter->materializeTargetConversion(
+            rewriter, loc, convertedType, after);
+        before = getObservableValue(before, loc, rewriter);
+        after = getObservableValue(after, loc, rewriter);
+        if (!isa<IntegerType>(before.getType()) ||
+            before.getType() != after.getType()) {
+          detectOp->emitError() << "requires int operand";
+          return failure();
+        }
+
+        return comb::ICmpOp::create(rewriter, loc, ICmpPredicate::ne, before,
+                                    after, true)
+            .getResult();
+      }
+
+      auto beforeType = dyn_cast<IntType>(before.getType());
+      if (!beforeType) {
+        detectOp->emitError() << "requires int operand";
+        return failure();
+      }
 
       // 9.4.2 IEEE 1800-2017: An edge event shall be detected only on the LSB
       // of the expression
-      if (beforeType.getWidth() != 1 && edge != Edge::AnyChange) {
+      if (beforeType.getWidth() != 1) {
         constexpr int LSB = 0;
         beforeType =
             IntType::get(rewriter.getContext(), 1, beforeType.getDomain());
@@ -830,10 +882,6 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
                                                           intType, before);
       after = typeConverter->materializeTargetConversion(rewriter, loc, intType,
                                                          after);
-
-      if (edge == Edge::AnyChange)
-        return comb::ICmpOp::create(rewriter, loc, ICmpPredicate::ne, before,
-                                    after, true);
 
       SmallVector<Value> disjuncts;
       Value trueVal = hw::ConstantOp::create(rewriter, loc, APInt(1, 1));
@@ -864,12 +912,12 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     SmallVector<Value> triggers;
     for (auto [detectOp, before] : llvm::zip(detectOps, valuesBefore)) {
       if (!allDetectsAreAnyChange) {
-        if (!isa<IntType>(before.getType()))
-          return detectOp->emitError() << "requires int operand";
-
         rewriter.setInsertionPoint(detectOp);
-        auto trigger =
-            computeTrigger(before, detectOp.getInput(), detectOp.getEdge());
+        auto maybeTrigger =
+            computeTrigger(detectOp, before, detectOp.getInput());
+        if (failed(maybeTrigger))
+          return failure();
+        auto trigger = *maybeTrigger;
         if (detectOp.getCondition()) {
           auto condition = typeConverter->materializeTargetConversion(
               rewriter, loc, rewriter.getI1Type(), detectOp.getCondition());
