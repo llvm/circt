@@ -1144,6 +1144,44 @@ moore.module @EmptyWaitEvent(out out : !moore.l32) {
   moore.output %1 : !moore.l32
 }
 
+// CHECK-LABEL: hw.module @WaitLevel
+moore.module @WaitLevel() {
+  // CHECK: [[OBS_A:%.+]] = llhd.prb %a : i1
+  // CHECK: [[OBS_B:%.+]] = llhd.prb %b : i1
+  %a = moore.variable : <i1>
+  %b = moore.variable : <i1>
+
+  // CHECK: llhd.process {
+  // CHECK:   cf.br ^[[CHECK:.+]]
+  // CHECK: ^[[CHECK]]:
+  // CHECK:   [[CHECK_A:%.+]] = llhd.prb %a : i1
+  // CHECK:   [[CHECK_B:%.+]] = llhd.prb %b : i1
+  // CHECK:   [[LEVEL:%.+]] = comb.and [[CHECK_A]], [[CHECK_B]] : i1
+  // CHECK:   cf.cond_br [[LEVEL]], ^[[RESUME:.+]], ^[[WAIT:.+]]
+  // CHECK: ^[[WAIT]]:
+  // CHECK:   [[BEFORE_A:%.+]] = llhd.prb %a : i1
+  // CHECK:   [[BEFORE_B:%.+]] = llhd.prb %b : i1
+  // CHECK:   [[BEFORE:%.+]] = comb.and [[BEFORE_A]], [[BEFORE_B]] : i1
+  // CHECK:   llhd.wait ([[OBS_A]], [[OBS_B]] : i1, i1), ^[[AFTER:.+]]
+  // CHECK: ^[[AFTER]]:
+  // CHECK:   [[AFTER_A:%.+]] = llhd.prb %a : i1
+  // CHECK:   [[AFTER_B:%.+]] = llhd.prb %b : i1
+  // CHECK:   [[AFTER_VAL:%.+]] = comb.and [[AFTER_A]], [[AFTER_B]] : i1
+  // CHECK:   [[CHANGED:%.+]] = comb.icmp bin ne [[BEFORE]], [[AFTER_VAL]] : i1
+  // CHECK:   cf.cond_br [[CHANGED]], ^[[CHECK]], ^[[WAIT]]
+  // CHECK: ^[[RESUME]]:
+  // CHECK:   llhd.halt
+  // CHECK: }
+  moore.procedure initial {
+    moore.wait_level {
+      %0 = moore.read %a : <i1>
+      %1 = moore.read %b : <i1>
+      %2 = moore.and %0, %1 : i1
+      moore.detect_level %2 : i1
+    }
+    moore.return
+  }
+}
 
 // CHECK-LABEL: hw.module @WaitDelay
 moore.module @WaitDelay(in %d: !moore.time) {

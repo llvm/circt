@@ -903,6 +903,126 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
   }
 };
 
+struct WaitLevelOpConversion : public OpConversionPattern<WaitLevelOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(WaitLevelOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto *resumeBlock =
+        rewriter.splitBlock(op->getBlock(), ++Block::iterator(op));
+
+    auto loc = op.getLoc();
+    if (op.getBody().front().empty()) {
+      rewriter.setInsertionPoint(op);
+      cf::BranchOp::create(rewriter, loc, resumeBlock);
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    auto *checkBlock = rewriter.createBlock(resumeBlock);
+    auto *waitBlock = rewriter.createBlock(resumeBlock);
+    auto *afterWaitBlock = rewriter.createBlock(resumeBlock);
+
+    rewriter.setInsertionPoint(op);
+    cf::BranchOp::create(rewriter, loc, checkBlock);
+
+    // If the level check fails, wait for any value used by the check to change
+    // and then execute the check again. Similar to event controls, keep a copy
+    // of the pre-wait condition values live across the wait so later LLHD
+    // cleanup preserves the actual values being observed.
+    rewriter.setInsertionPointToEnd(waitBlock);
+    auto beforeOp = cast<WaitLevelOp>(rewriter.clone(*op));
+    SmallVector<Value> valuesBefore;
+    for (auto detectOp :
+         llvm::make_early_inc_range(beforeOp.getOps<DetectLevelOp>())) {
+      valuesBefore.push_back(detectOp.getCondition());
+      rewriter.eraseOp(detectOp);
+    }
+
+    SmallVector<Value> observeValues;
+    auto setInsertionPointAfterDef = [&](Value value) {
+      if (auto *op = value.getDefiningOp())
+        rewriter.setInsertionPointAfter(op);
+      if (auto arg = dyn_cast<BlockArgument>(value))
+        rewriter.setInsertionPointToStart(value.getParentBlock());
+    };
+    getValuesToObserve(&beforeOp.getBody(), setInsertionPointAfterDef,
+                       typeConverter, rewriter, observeValues);
+    auto waitOp =
+        llhd::WaitOp::create(rewriter, loc, ValueRange{}, Value(),
+                             observeValues, ValueRange{}, afterWaitBlock);
+    rewriter.inlineBlockBefore(&beforeOp.getBody().front(), waitOp);
+    rewriter.eraseOp(beforeOp);
+
+    rewriter.setInsertionPointToEnd(afterWaitBlock);
+    auto afterOp = cast<WaitLevelOp>(rewriter.clone(*op));
+    SmallVector<DetectLevelOp> detectOpsAfter(
+        afterOp.getBody().getOps<DetectLevelOp>());
+    rewriter.inlineBlockBefore(&afterOp.getBody().front(), afterWaitBlock,
+                               afterWaitBlock->end());
+    rewriter.eraseOp(afterOp);
+
+    auto changed = [&](Value before, Value after) -> FailureOr<Value> {
+      auto type = typeConverter->convertType(before.getType());
+      if (!type)
+        return failure();
+      before = typeConverter->materializeTargetConversion(rewriter, loc, type,
+                                                          before);
+      after = typeConverter->materializeTargetConversion(rewriter, loc, type,
+                                                         after);
+      if (!before || !after)
+        return failure();
+      return comb::ICmpOp::create(rewriter, loc, ICmpPredicate::ne, before,
+                                  after, true)
+          .getResult();
+    };
+
+    SmallVector<Value> changes;
+    for (auto [detectOp, before] : llvm::zip(detectOpsAfter, valuesBefore)) {
+      rewriter.setInsertionPoint(detectOp);
+      auto change = changed(before, detectOp.getCondition());
+      if (failed(change))
+        return failure();
+      changes.push_back(*change);
+      rewriter.eraseOp(detectOp);
+    }
+    rewriter.setInsertionPointToEnd(afterWaitBlock);
+    if (changes.empty()) {
+      cf::BranchOp::create(rewriter, loc, checkBlock);
+    } else {
+      auto anyChanged = rewriter.createOrFold<comb::OrOp>(loc, changes, true);
+      cf::CondBranchOp::create(rewriter, loc, anyChanged, checkBlock,
+                               waitBlock);
+    }
+
+    SmallVector<DetectLevelOp> detectOps(op.getBody().getOps<DetectLevelOp>());
+    rewriter.inlineBlockBefore(&op.getBody().front(), checkBlock,
+                               checkBlock->end());
+    rewriter.eraseOp(op);
+
+    SmallVector<Value> triggers;
+    for (auto detectOp : detectOps) {
+      rewriter.setInsertionPoint(detectOp);
+      auto trigger = typeConverter->materializeTargetConversion(
+          rewriter, loc, rewriter.getI1Type(), detectOp.getCondition());
+      triggers.push_back(trigger);
+      rewriter.eraseOp(detectOp);
+    }
+
+    rewriter.setInsertionPointToEnd(checkBlock);
+    if (triggers.empty()) {
+      cf::BranchOp::create(rewriter, loc, resumeBlock);
+    } else {
+      auto triggered = rewriter.createOrFold<comb::OrOp>(loc, triggers, true);
+      cf::CondBranchOp::create(rewriter, loc, triggered, resumeBlock,
+                               waitBlock);
+    }
+
+    return success();
+  }
+};
+
 // moore.wait_delay -> llhd.wait
 static LogicalResult convert(WaitDelayOp op, WaitDelayOp::Adaptor adaptor,
                              ConversionPatternRewriter &rewriter) {
@@ -3581,6 +3701,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     CoroutineOpConversion,
     CallCoroutineOpConversion,
     WaitEventOpConversion,
+    WaitLevelOpConversion,
 
     // Patterns of shifting operations.
     ShrOpConversion,

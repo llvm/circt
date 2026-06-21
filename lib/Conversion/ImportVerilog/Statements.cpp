@@ -579,25 +579,27 @@ struct StmtVisitor {
     auto &exitBlock = createBlock();
     auto &stepBlock = createBlock();
     auto &bodyBlock = createBlock();
-    auto &checkBlock = createBlock();
-    cf::BranchOp::create(builder, loc, &checkBlock);
+    Block *checkBlock = stmt.stopExpr ? &createBlock() : nullptr;
+    cf::BranchOp::create(builder, loc, checkBlock ? checkBlock : &bodyBlock);
 
     // Push the blocks onto the loop stack such that we can continue and break.
     context.loopStack.push_back({&stepBlock, &exitBlock});
     llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
     // Generate the loop condition check.
-    builder.setInsertionPointToEnd(&checkBlock);
-    auto cond = context.convertRvalueExpression(*stmt.stopExpr);
-    if (!cond)
-      return failure();
-    cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
-    if (auto ty = dyn_cast<moore::IntType>(cond.getType());
-        ty && ty.getDomain() == Domain::FourValued) {
-      cond = moore::LogicToIntOp::create(builder, loc, cond);
+    if (checkBlock) {
+      builder.setInsertionPointToEnd(checkBlock);
+      auto cond = context.convertRvalueExpression(*stmt.stopExpr);
+      if (!cond)
+        return failure();
+      cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
+      if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+          ty && ty.getDomain() == Domain::FourValued) {
+        cond = moore::LogicToIntOp::create(builder, loc, cond);
+      }
+      cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
+      cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
     }
-    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
-    cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
 
     // Generate the loop body.
     builder.setInsertionPointToEnd(&bodyBlock);
@@ -612,7 +614,7 @@ struct StmtVisitor {
       if (!context.convertRvalueExpression(*stepExpr))
         return failure();
     if (!isTerminated())
-      cf::BranchOp::create(builder, loc, &checkBlock);
+      cf::BranchOp::create(builder, loc, checkBlock ? checkBlock : &bodyBlock);
 
     // If control never reaches the exit block, remove it and mark control flow
     // as terminated. Otherwise we continue inserting ops in the exit block.
