@@ -1,6 +1,9 @@
 // RUN: circt-translate --import-verilog %s | FileCheck %s
 // REQUIRES: slang
 
+// Internal issue in Slang v3 about jump depending on uninitialised value.
+// UNSUPPORTED: valgrind
+
 // CHECK: moore.global_variable @__timeformat_state : !moore.ustruct<{unit: i32, precision: i32, suffix: string, min_width: i32}> init {
 // CHECK: [[UNIT0:%.+]] = moore.constant -15 : i32
 // CHECK: [[PREC0:%.+]] = moore.constant 0 : i32
