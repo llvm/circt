@@ -2687,6 +2687,31 @@ struct QueueSizeBIOpConversion : public OpConversionPattern<QueueSizeBIOp> {
   }
 };
 
+struct ZeroWidthUArrayCmpOpConversion
+    : public OpConversionPattern<UArrayCmpOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UArrayCmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (hw::getBitWidth(adaptor.getLhs().getType()) != 0)
+      return failure();
+
+    bool result;
+    switch (adaptor.getPredicateAttr().getValue()) {
+    case circt::moore::UArrayCmpPredicate::eq:
+      result = true;
+      break;
+    case circt::moore::UArrayCmpPredicate::ne:
+      result = false;
+      break;
+    }
+
+    rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, APInt(1, result));
+    return success();
+  }
+};
+
 struct DynQueueExtractOpConversion
     : public OpConversionPattern<DynQueueExtractOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -3637,6 +3662,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     StringGetOpConversion,
 
     // Queue operations
+    ZeroWidthUArrayCmpOpConversion,
     QueueSizeBIOpConversion,
     QueuePushBackOpConversion,
     QueuePushFrontOpConversion,
