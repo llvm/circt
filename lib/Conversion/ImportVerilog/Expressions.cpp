@@ -62,6 +62,20 @@ static Value coerceToBuiltinInt(OpBuilder &builder, Location loc, Value value,
   return builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
 }
 
+static Value toCfCondition(OpBuilder &builder, Location loc, Value cond) {
+  cond = builder.createOrFold<moore::BoolCastOp>(loc, cond);
+  if (auto ty = dyn_cast<moore::IntType>(cond.getType());
+      ty && ty.getDomain() == Domain::FourValued)
+    cond = moore::LogicToIntOp::create(builder, loc, cond);
+  return moore::ToBuiltinIntOp::create(builder, loc, cond);
+}
+
+static Block *createFollowingBlock(OpBuilder &builder) {
+  auto *block = new Block();
+  block->insertAfter(builder.getInsertionBlock());
+  return block;
+}
+
 /// Map an index into an array, with bounds `range`, to a bit offset of the
 /// underlying bit storage. This is a dynamic version of
 /// `slang::ConstantRange::translateIndex`.
@@ -1742,10 +1756,14 @@ struct RvalueExprVisitor : public ExprVisitor {
 
   // Handle set membership operator.
   Value visit(const slang::ast::InsideExpression &expr) {
-    auto lhs = context.convertToSimpleBitVector(
-        context.convertRvalueExpression(expr.left()));
+    auto lhs = context.convertRvalueExpression(expr.left());
     if (!lhs)
       return {};
+    if (!isa<moore::RealType, moore::StringType>(lhs.getType())) {
+      lhs = context.convertToSimpleBitVector(lhs);
+      if (!lhs)
+        return {};
+    }
 
     // All conditions for determining whether it is inside.
     SmallVector<Value> conditions;
@@ -3937,39 +3955,270 @@ Value Context::convertInsideCheck(Value insideLhs, Location loc,
   // The value range list on the right-hand side of the inside operator is a
   // comma-separated list of expressions or ranges.
   if (const auto *valueRange = expr.as_if<slang::ast::ValueRangeExpression>()) {
-    auto lowBound =
-        convertToSimpleBitVector(convertRvalueExpression(valueRange->left()));
-    auto highBound =
-        convertToSimpleBitVector(convertRvalueExpression(valueRange->right()));
-    if (!insideLhs || !lowBound || !highBound)
+    auto isUnboundedEndpoint = [](const slang::ast::Expression &expr) {
+      return expr.unwrapImplicitConversions().kind ==
+             slang::ast::ExpressionKind::UnboundedLiteral;
+    };
+    bool leftUnbounded = isUnboundedEndpoint(valueRange->left());
+    bool rightUnbounded = isUnboundedEndpoint(valueRange->right());
+
+    if (isa<moore::RealType>(insideLhs.getType())) {
+      Value lowBound;
+      if (!leftUnbounded)
+        lowBound =
+            convertRvalueExpression(valueRange->left(), insideLhs.getType());
+
+      Value highBound;
+      if (!rightUnbounded)
+        highBound =
+            convertRvalueExpression(valueRange->right(), insideLhs.getType());
+
+      if (!insideLhs || (!leftUnbounded && !lowBound) ||
+          (!rightUnbounded && !highBound))
+        return {};
+
+      auto i1Type = moore::IntType::getInt(getContext(), 1);
+      if (leftUnbounded && rightUnbounded)
+        return moore::ConstantOp::create(builder, loc, i1Type, 1, false);
+
+      Value rangeLhs;
+      if (!leftUnbounded)
+        rangeLhs = moore::FgeOp::create(builder, loc, insideLhs, lowBound);
+
+      Value rangeRhs;
+      if (!rightUnbounded)
+        rangeRhs = moore::FleOp::create(builder, loc, insideLhs, highBound);
+
+      if (!rangeLhs)
+        return rangeRhs;
+      if (!rangeRhs)
+        return rangeLhs;
+      return moore::AndOp::create(builder, loc, rangeLhs, rangeRhs);
+    }
+
+    Value lowBound;
+    if (!leftUnbounded)
+      lowBound =
+          convertToSimpleBitVector(convertRvalueExpression(valueRange->left()));
+
+    Value highBound;
+    if (!rightUnbounded)
+      highBound = convertToSimpleBitVector(
+          convertRvalueExpression(valueRange->right()));
+
+    if (!insideLhs || (!leftUnbounded && !lowBound) ||
+        (!rightUnbounded && !highBound))
       return {};
+
+    auto i1Type = moore::IntType::getInt(getContext(), 1);
+    if (leftUnbounded && rightUnbounded)
+      return moore::ConstantOp::create(builder, loc, i1Type, 1, false);
 
     Value rangeLhs, rangeRhs;
     // Determine if the insideLhs on the left-hand side is inclusively
     // within the range.
-    if (valueRange->left().type->isSigned() ||
-        insideLhs.getType().isSignedInteger()) {
-      rangeLhs = moore::SgeOp::create(builder, loc, insideLhs, lowBound);
-    } else {
-      rangeLhs = moore::UgeOp::create(builder, loc, insideLhs, lowBound);
+    if (!leftUnbounded) {
+      if (valueRange->left().type->isSigned() ||
+          insideLhs.getType().isSignedInteger()) {
+        rangeLhs = moore::SgeOp::create(builder, loc, insideLhs, lowBound);
+      } else {
+        rangeLhs = moore::UgeOp::create(builder, loc, insideLhs, lowBound);
+      }
     }
 
-    if (valueRange->right().type->isSigned() ||
-        insideLhs.getType().isSignedInteger()) {
-      rangeRhs = moore::SleOp::create(builder, loc, insideLhs, highBound);
-    } else {
-      rangeRhs = moore::UleOp::create(builder, loc, insideLhs, highBound);
+    if (!rightUnbounded) {
+      if (valueRange->right().type->isSigned() ||
+          insideLhs.getType().isSignedInteger()) {
+        rangeRhs = moore::SleOp::create(builder, loc, insideLhs, highBound);
+      } else {
+        rangeRhs = moore::UleOp::create(builder, loc, insideLhs, highBound);
+      }
     }
 
+    if (!rangeLhs)
+      return rangeRhs;
+    if (!rangeRhs)
+      return rangeLhs;
     return moore::AndOp::create(builder, loc, rangeLhs, rangeRhs);
   }
 
   // Handle expressions.
+  if (!expr.type->isUnpackedArray()) {
+    if (isa<moore::RealType>(insideLhs.getType())) {
+      auto value = convertRvalueExpression(expr, insideLhs.getType());
+      if (!value)
+        return {};
+      return moore::EqRealOp::create(builder, loc, insideLhs, value);
+    }
+
+    if (isa<moore::StringType>(insideLhs.getType())) {
+      auto value = convertRvalueExpression(expr, insideLhs.getType());
+      if (!value)
+        return {};
+      return moore::StringCmpOp::create(
+          builder, loc, moore::StringCmpPredicate::eq, insideLhs, value);
+    }
+  }
+
   if (!expr.type->isIntegral()) {
     if (expr.type->isUnpackedArray()) {
-      mlir::emitError(loc,
-                      "unpacked arrays in 'inside' expressions not supported");
-      return {};
+      if (expr.type->isAssociativeArray()) {
+        auto arrayRef = convertLvalueExpression(expr);
+        if (!arrayRef)
+          return {};
+        auto refType = dyn_cast<moore::RefType>(arrayRef.getType());
+        if (!refType) {
+          mlir::emitError(loc) << "unsupported associative array in 'inside' "
+                                  "expression on type `"
+                               << arrayRef.getType() << "`";
+          return {};
+        }
+        auto assocArrayType =
+            dyn_cast<moore::AssocArrayType>(refType.getNestedType());
+        if (!assocArrayType) {
+          mlir::emitError(loc) << "unsupported associative array in 'inside' "
+                                  "expression on type `"
+                               << refType.getNestedType() << "`";
+          return {};
+        }
+
+        auto i1Type = moore::IntType::getInt(getContext(), 1);
+        auto falseValue =
+            moore::ConstantOp::create(builder, loc, i1Type, 0, false);
+        auto keyType = cast<moore::UnpackedType>(assocArrayType.getIndexType());
+        auto keyVar = moore::VariableOp::create(
+            builder, loc, moore::RefType::get(keyType), {}, Value{});
+
+        auto *exitBlock = createFollowingBlock(builder);
+        auto *bodyBlock = createFollowingBlock(builder);
+        auto bodyAcc = bodyBlock->addArgument(i1Type, loc);
+        auto resultArg = exitBlock->addArgument(i1Type, loc);
+
+        auto first =
+            moore::AssocArrayFirstOp::create(builder, loc, arrayRef, keyVar);
+        mlir::cf::CondBranchOp::create(
+            builder, loc, toCfCondition(builder, loc, first), bodyBlock,
+            ValueRange{falseValue}, exitBlock, ValueRange{falseValue});
+
+        builder.setInsertionPointToEnd(bodyBlock);
+        auto key = moore::ReadOp::create(builder, loc, keyVar);
+        auto array = moore::ReadOp::create(builder, loc, arrayRef);
+        auto element = moore::AssocArrayExtractOp::create(
+            builder, loc, assocArrayType.getElementType(), array, key);
+        auto value = convertToSimpleBitVector(element);
+        if (!value)
+          return {};
+        auto condition =
+            moore::WildcardEqOp::create(builder, loc, insideLhs, value)
+                .getResult();
+        auto nextAcc = moore::OrOp::create(builder, loc, bodyAcc, condition);
+        auto next =
+            moore::AssocArrayNextOp::create(builder, loc, arrayRef, keyVar);
+        mlir::cf::CondBranchOp::create(
+            builder, loc, toCfCondition(builder, loc, next), bodyBlock,
+            ValueRange{nextAcc}, exitBlock, ValueRange{nextAcc});
+
+        builder.setInsertionPointToEnd(exitBlock);
+        return resultArg;
+      }
+
+      auto array = convertRvalueExpression(expr);
+      if (!array)
+        return {};
+      auto arrayType = dyn_cast<moore::UnpackedArrayType>(array.getType());
+      if (!arrayType) {
+        auto createRuntimeCheck = [&](Value container, Value size,
+                                      moore::UnpackedType elementType,
+                                      bool isQueue) -> Value {
+          auto i32Type = moore::IntType::getInt(getContext(), 32);
+          auto i1Type = moore::IntType::getInt(getContext(), 1);
+          auto zeroIndex = moore::ConstantOp::create(builder, loc, i32Type, 0);
+          auto oneIndex = moore::ConstantOp::create(builder, loc, i32Type, 1);
+          auto falseValue =
+              moore::ConstantOp::create(builder, loc, i1Type, 0, false);
+
+          auto *exitBlock = createFollowingBlock(builder);
+          auto *bodyBlock = createFollowingBlock(builder);
+          auto *checkBlock = createFollowingBlock(builder);
+
+          auto checkIndex = checkBlock->addArgument(i32Type, loc);
+          auto checkAcc = checkBlock->addArgument(i1Type, loc);
+          auto bodyIndex = bodyBlock->addArgument(i32Type, loc);
+          auto bodyAcc = bodyBlock->addArgument(i1Type, loc);
+          auto resultArg = exitBlock->addArgument(i1Type, loc);
+
+          mlir::cf::BranchOp::create(builder, loc, checkBlock,
+                                     ValueRange{zeroIndex, falseValue});
+
+          builder.setInsertionPointToEnd(checkBlock);
+          auto inBounds = moore::SltOp::create(builder, loc, checkIndex, size);
+          mlir::cf::CondBranchOp::create(
+              builder, loc, toCfCondition(builder, loc, inBounds), bodyBlock,
+              ValueRange{checkIndex, checkAcc}, exitBlock,
+              ValueRange{checkAcc});
+
+          builder.setInsertionPointToEnd(bodyBlock);
+          Value element;
+          if (isQueue)
+            element = moore::DynQueueExtractOp::create(
+                builder, loc, elementType, container, bodyIndex, bodyIndex);
+          else
+            element = moore::DynExtractOp::create(builder, loc, elementType,
+                                                  container, bodyIndex);
+          auto value = convertToSimpleBitVector(element);
+          if (!value)
+            return {};
+          auto condition =
+              moore::WildcardEqOp::create(builder, loc, insideLhs, value)
+                  .getResult();
+          auto nextAcc = moore::OrOp::create(builder, loc, bodyAcc, condition);
+          auto nextIndex =
+              moore::AddOp::create(builder, loc, bodyIndex, oneIndex);
+          mlir::cf::BranchOp::create(builder, loc, checkBlock,
+                                     ValueRange{nextIndex, nextAcc});
+
+          builder.setInsertionPointToEnd(exitBlock);
+          return resultArg;
+        };
+
+        if (auto openArrayType =
+                dyn_cast<moore::OpenUnpackedArrayType>(array.getType())) {
+          auto size = moore::OpenUArraySizeOp::create(builder, loc, array);
+          return createRuntimeCheck(array, size, openArrayType.getElementType(),
+                                    false);
+        }
+
+        if (auto queueType = dyn_cast<moore::QueueType>(array.getType())) {
+          auto size = moore::QueueSizeBIOp::create(builder, loc, array);
+          return createRuntimeCheck(array, size, queueType.getElementType(),
+                                    true);
+        }
+
+        mlir::emitError(
+            loc, "only fixed-size unpacked arrays are supported in 'inside' "
+                 "expressions");
+        return {};
+      }
+
+      Value result;
+      for (unsigned i = 0, e = arrayType.getSize(); i != e; ++i) {
+        auto element = moore::ExtractOp::create(
+            builder, loc, arrayType.getElementType(), array, i);
+        auto value = convertToSimpleBitVector(element);
+        if (!value)
+          return {};
+        auto condition =
+            moore::WildcardEqOp::create(builder, loc, insideLhs, value)
+                .getResult();
+        result = result ? moore::OrOp::create(builder, loc, result, condition)
+                        : condition;
+      }
+      if (!result) {
+        auto i1Type = moore::IntType::getInt(getContext(), 1);
+        return moore::ConstantOp::create(builder, loc, i1Type, 0,
+                                         /*isSigned=*/false);
+      }
+      return result;
     }
     mlir::emitError(
         loc, "only simple bit vectors supported in 'inside' expressions");

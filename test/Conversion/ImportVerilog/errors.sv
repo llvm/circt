@@ -69,13 +69,6 @@ endmodule
 
 // -----
 module Foo;
-  int a, b[3];
-  // expected-error @below {{unpacked arrays in 'inside' expressions not supported}}
-  int c = a inside { b };
-endmodule
-
-// -----
-module Foo;
   int a, b, c;
   int j;
   initial begin
