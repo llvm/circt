@@ -3225,10 +3225,10 @@ static void populateLegality(ConversionTarget &target,
 
   target.addLegalOp<debug::ScopeOp>();
 
-  target.addDynamicallyLegalOp<scf::YieldOp, func::CallOp, func::ReturnOp,
-                               UnrealizedConversionCastOp, hw::OutputOp,
-                               hw::InstanceOp, debug::ArrayOp, debug::StructOp,
-                               debug::VariableOp, arith::SelectOp>(
+  target.addDynamicallyLegalOp<
+      scf::YieldOp, func::CallOp, func::ReturnOp, UnrealizedConversionCastOp,
+      hw::OutputOp, hw::InstanceOp, debug::ArrayOp, debug::EnumOp,
+      debug::StructOp, debug::ValueOp, debug::VariableOp, arith::SelectOp>(
       [&](Operation *op) { return converter.isLegal(op); });
 
   target.addDynamicallyLegalOp<scf::IfOp, scf::ForOp, scf::ExecuteRegionOp,
@@ -3395,8 +3395,10 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([](sim::DynamicStringType type) { return type; });
   typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
+  typeConverter.addConversion([](debug::EnumType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });
   typeConverter.addConversion([](debug::StructType type) { return type; });
+  typeConverter.addConversion([](debug::ValueType type) { return type; });
 
   typeConverter.addConversion([&](llhd::RefType type) -> std::optional<Type> {
     if (auto innerType = typeConverter.convertType(type.getNestedType()))
@@ -3603,7 +3605,9 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FuncDPICallOpConversion,
     UnrealizedConversionCastConversion,
     InPlaceOpConversion<debug::ArrayOp>,
+    InPlaceOpConversion<debug::EnumOp>,
     InPlaceOpConversion<debug::StructOp>,
+    InPlaceOpConversion<debug::ValueOp>,
     InPlaceOpConversion<debug::VariableOp>,
 
     // Patterns of assert-like operations
