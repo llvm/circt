@@ -2980,30 +2980,6 @@ def TimeBIOp : Builtin<"time"> {
   let assemblyFormat = "attr-dict";
 }
 
-def TimeFormatBIOp : Builtin<"timeformat", [AttrSizedOperandSegments]> {
-  let summary = "Configure the time format used for %t display";
-  let description = [{
-    Corresponds to the `$timeformat` system task. Configures the display unit,
-    decimal precision, suffix string, and minimum field width used when
-    formatting time values with the `%t` format specifier.
-
-    See IEEE 1800-2023 § 20.4.2 "$timeformat".
-  }];
-  let arguments = (ins
-    Optional<TwoValuedI32>:$unit,
-    Optional<TwoValuedI32>:$precision,
-    Optional<StringType>:$suffix,
-    Optional<TwoValuedI32>:$minWidth
-  );
-  let assemblyFormat = [{
-    (`unit` $unit^)?
-    (`precision` $precision^)?
-    (`suffix` $suffix^)?
-    (`min_width` $minWidth^)?
-    attr-dict
-  }];
-}
-
 //===----------------------------------------------------------------------===//
 // Simulation Control Builtins
 //===----------------------------------------------------------------------===//

@@ -1880,20 +1880,3 @@ func.func @FFlushWithArg(%arg0: !moore.i32) {
   moore.builtin.fflush %arg0
   return
 }
-
-// CHECK-LABEL: func.func @TimeFormatAllArgs
-func.func @TimeFormatAllArgs(%arg0: !moore.i32, %arg1: !moore.i32, %arg2: !moore.string, %arg3: !moore.i32) {
-  // CHECK: sim.sv.set_time_format unit %arg0 precision %arg1 suffix %arg2 min_width %arg3
-  moore.builtin.timeformat unit %arg0 precision %arg1 suffix %arg2 min_width %arg3
-  return
-}
-
-// CHECK-LABEL: func.func @TimeFormatUnitOnly
-func.func @TimeFormatUnitOnly(%arg0: !moore.i32) {
-  // CHECK: %[[P:.*]] = arith.constant 0 : i32
-  // CHECK: %[[S:.*]] = sim.string.literal ""
-  // CHECK: %[[W:.*]] = arith.constant 20 : i32
-  // CHECK: sim.sv.set_time_format unit %arg0 precision %[[P]] suffix %[[S]] min_width %[[W]]
-  moore.builtin.timeformat unit %arg0
-  return
-}
