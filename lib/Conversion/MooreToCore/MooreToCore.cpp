@@ -1739,19 +1739,46 @@ struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
   LogicalResult
   matchAndRewrite(BoolCastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Type resultType = typeConverter->convertType(op.getInput().getType());
-    if (isa_and_nonnull<IntegerType>(resultType)) {
-      Value zero =
-          hw::ConstantOp::create(rewriter, op->getLoc(), resultType, 0);
+    Type inputType = typeConverter->convertType(op.getInput().getType());
+    if (isa_and_nonnull<IntegerType>(inputType)) {
+      Value zero = hw::ConstantOp::create(rewriter, op->getLoc(), inputType, 0);
       rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
                                                 adaptor.getInput(), zero);
       return success();
     }
-    if (isa_and_nonnull<FloatType>(resultType)) {
+    if (isa_and_nonnull<FloatType>(inputType)) {
       Value zero = arith::ConstantOp::create(
-          rewriter, op->getLoc(), rewriter.getFloatAttr(resultType, 0.0));
+          rewriter, op->getLoc(), rewriter.getFloatAttr(inputType, 0.0));
       rewriter.replaceOpWithNewOp<arith::CmpFOp>(op, arith::CmpFPredicate::ONE,
                                                  adaptor.getInput(), zero);
+      return success();
+    }
+    if (isa_and_nonnull<llhd::TimeType>(inputType)) {
+      Value input =
+          llhd::TimeToIntOp::create(rewriter, op->getLoc(), adaptor.getInput());
+      Value zero = hw::ConstantOp::create(rewriter, op->getLoc(),
+                                          rewriter.getI64Type(), 0);
+      rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
+                                                input, zero);
+      return success();
+    }
+    if (isa_and_nonnull<sim::DynamicStringType>(inputType)) {
+      Value length = sim::StringLengthOp::create(rewriter, op->getLoc(),
+                                                 adaptor.getInput());
+      Value zero = hw::ConstantOp::create(rewriter, op->getLoc(),
+                                          rewriter.getI64Type(), 0);
+      rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
+                                                length, zero);
+      return success();
+    }
+    if (isa<ChandleType, ClassHandleType>(op.getInput().getType())) {
+      auto pointerType = dyn_cast_or_null<LLVM::LLVMPointerType>(inputType);
+      if (!pointerType)
+        return failure();
+      Value nullPointer =
+          LLVM::ZeroOp::create(rewriter, op->getLoc(), pointerType);
+      rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(
+          op, LLVM::ICmpPredicate::ne, adaptor.getInput(), nullPointer);
       return success();
     }
     return failure();
