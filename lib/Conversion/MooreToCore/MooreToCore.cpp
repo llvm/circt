@@ -351,6 +351,11 @@ static Value adjustIntegerWidth(OpBuilder &builder, Value value,
   return comb::MuxOp::create(builder, loc, isZero, lo, max, false);
 }
 
+static bool isZeroWidthInteger(Type type) {
+  auto intType = dyn_cast<IntegerType>(type);
+  return intType && intType.getWidth() == 0;
+}
+
 /// Get the ModulePortInfo from a SVModuleOp.
 static FailureOr<hw::ModulePortInfo>
 getModulePortInfo(const TypeConverter &typeConverter, SVModuleOp op) {
@@ -2031,8 +2036,15 @@ struct SIntToRealOpConversion : public OpConversionPattern<SIntToRealOp> {
   LogicalResult
   matchAndRewrite(SIntToRealOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<arith::SIToFPOp>(
-        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    auto resultType = typeConverter->convertType(op.getType());
+    if (isZeroWidthInteger(adaptor.getInput().getType())) {
+      rewriter.replaceOpWithNewOp<arith::ConstantOp>(
+          op, rewriter.getFloatAttr(resultType, 0.0));
+      return success();
+    }
+
+    rewriter.replaceOpWithNewOp<arith::SIToFPOp>(op, resultType,
+                                                 adaptor.getInput());
     return success();
   }
 };
@@ -2043,8 +2055,15 @@ struct UIntToRealOpConversion : public OpConversionPattern<UIntToRealOp> {
   LogicalResult
   matchAndRewrite(UIntToRealOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<arith::UIToFPOp>(
-        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    auto resultType = typeConverter->convertType(op.getType());
+    if (isZeroWidthInteger(adaptor.getInput().getType())) {
+      rewriter.replaceOpWithNewOp<arith::ConstantOp>(
+          op, rewriter.getFloatAttr(resultType, 0.0));
+      return success();
+    }
+
+    rewriter.replaceOpWithNewOp<arith::UIToFPOp>(op, resultType,
+                                                 adaptor.getInput());
     return success();
   }
 };
@@ -2066,8 +2085,15 @@ struct RealToIntOpConversion : public OpConversionPattern<RealToIntOp> {
   LogicalResult
   matchAndRewrite(RealToIntOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<arith::FPToSIOp>(
-        op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    auto resultType = typeConverter->convertType(op.getType());
+    if (isZeroWidthInteger(resultType)) {
+      rewriter.replaceOpWithNewOp<hw::ConstantOp>(
+          op, resultType, rewriter.getIntegerAttr(resultType, 0));
+      return success();
+    }
+
+    rewriter.replaceOpWithNewOp<arith::FPToSIOp>(op, resultType,
+                                                 adaptor.getInput());
     return success();
   }
 };
