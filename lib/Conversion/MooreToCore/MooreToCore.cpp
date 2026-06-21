@@ -1360,29 +1360,35 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
     int32_t low = adaptor.getLowBit();
 
     if (isa<IntegerType>(inputType)) {
-      int32_t inputWidth = inputType.getIntOrFloatBitWidth();
-      int32_t resultWidth = hw::getBitWidth(resultType);
-      int32_t high = low + resultWidth;
+      int64_t inputWidth = inputType.getIntOrFloatBitWidth();
+      int64_t resultWidth = hw::getBitWidth(resultType);
+      int64_t high = int64_t(low) + resultWidth;
 
       SmallVector<Value> toConcat;
-      if (low < 0)
-        toConcat.push_back(hw::ConstantOp::create(
-            rewriter, op.getLoc(), APInt(std::min(-low, resultWidth), 0)));
-
-      if (low < inputWidth && high > 0) {
-        int32_t lowIdx = std::max(low, 0);
-        Value middle = rewriter.createOrFold<comb::ExtractOp>(
-            op.getLoc(),
-            rewriter.getIntegerType(
-                std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
-            adaptor.getInput(), lowIdx);
-        toConcat.push_back(middle);
+      int64_t emittedWidth = 0;
+      if (low < 0) {
+        int64_t prefixWidth = std::min<int64_t>(-int64_t(low), resultWidth);
+        toConcat.push_back(hw::ConstantOp::create(rewriter, op.getLoc(),
+                                                  APInt(prefixWidth, 0)));
+        emittedWidth += prefixWidth;
       }
 
-      int32_t diff = high - inputWidth;
-      if (diff > 0) {
-        Value val =
-            hw::ConstantOp::create(rewriter, op.getLoc(), APInt(diff, 0));
+      if (low < inputWidth && high > 0) {
+        int64_t lowIdx = std::max<int64_t>(low, 0);
+        int64_t middleWidth =
+            std::min<int64_t>(resultWidth - emittedWidth,
+                              std::min<int64_t>(high, inputWidth) - lowIdx);
+        Value middle = rewriter.createOrFold<comb::ExtractOp>(
+            op.getLoc(), rewriter.getIntegerType(middleWidth),
+            adaptor.getInput(), lowIdx);
+        toConcat.push_back(middle);
+        emittedWidth += middleWidth;
+      }
+
+      int64_t suffixWidth = resultWidth - emittedWidth;
+      if (suffixWidth > 0) {
+        Value val = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                           APInt(suffixWidth, 0));
         toConcat.push_back(val);
       }
 
