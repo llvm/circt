@@ -812,7 +812,9 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     auto computeTrigger = [&](Value before, Value after, Edge edge) -> Value {
       assert(before.getType() == after.getType() &&
              "mismatched types after clone op");
-      auto beforeType = cast<IntType>(before.getType());
+      auto beforeType = dyn_cast<IntType>(before.getType());
+      if (!beforeType && isa<EventType>(before.getType()))
+        beforeType = IntType::get(rewriter.getContext(), 1, Domain::TwoValued);
 
       // 9.4.2 IEEE 1800-2017: An edge event shall be detected only on the LSB
       // of the expression
@@ -864,7 +866,7 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     SmallVector<Value> triggers;
     for (auto [detectOp, before] : llvm::zip(detectOps, valuesBefore)) {
       if (!allDetectsAreAnyChange) {
-        if (!isa<IntType>(before.getType()))
+        if (!isa<IntType, EventType>(before.getType()))
           return detectOp->emitError() << "requires int operand";
 
         rewriter.setInsertionPoint(detectOp);
@@ -1320,6 +1322,34 @@ struct ConstantStringOpConv : public OpConversionPattern<ConstantStringOp> {
 
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(
         op, resultType, rewriter.getIntegerAttr(resultType, value));
+    return success();
+  }
+};
+
+template <typename SourceOp, LLVM::ICmpPredicate pred>
+struct HandleCompareOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(op, pred, adaptor.getLhs(),
+                                              adaptor.getRhs());
+    return success();
+  }
+};
+
+struct NullOpConversion : public OpConversionPattern<NullOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(NullOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    if (!resultType)
+      return failure();
+
+    rewriter.replaceOpWithNewOp<LLVM::ZeroOp>(op, resultType);
     return success();
   }
 };
@@ -1918,6 +1948,19 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
       op.emitError("conversion result type is not currently supported");
       return failure();
     }
+    auto nullIntResult = dyn_cast<IntType>(op.getResult().getType());
+    if (isa<NullType>(op.getInput().getType()) && nullIntResult &&
+        nullIntResult.getWidth() == 1) {
+      rewriter.replaceOp(op, createZeroValue(resultType, loc, rewriter));
+      return success();
+    }
+    if (adaptor.getInput().getType() == resultType &&
+        (op.getInput().getType() == op.getResult().getType() ||
+         isa<NullType>(op.getInput().getType()))) {
+      rewriter.replaceOp(op, adaptor.getInput());
+      return success();
+    }
+
     int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
     int64_t resultBw = hw::getBitWidth(resultType);
     if (inputBw == -1 || resultBw == -1) {
@@ -1932,6 +1975,10 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
         op.emitError("unsupported DPI open-array conversion from ")
             << op.getInput().getType() << " to " << op.getResult().getType();
         return failure();
+      }
+      if (adaptor.getInput().getType() == resultType) {
+        rewriter.replaceOp(op, adaptor.getInput());
+        return success();
       }
       return failure();
     }
@@ -3272,6 +3319,13 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return sim::DynamicStringType::get(type.getContext());
   });
 
+  typeConverter.addConversion(
+      [&](EventType type) { return IntegerType::get(type.getContext(), 1); });
+
+  typeConverter.addConversion([&](NullType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+
   typeConverter.addConversion([&](QueueType type) {
     return sim::QueueType::get(type.getContext(),
                                typeConverter.convertType(type.getElementType()),
@@ -3497,6 +3551,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     // Patterns of miscellaneous operations.
     ConstantOpConv,
     ConstantRealOpConv,
+    NullOpConversion,
     ConcatOpConversion,
     ReplicateOpConversion,
     ConstantTimeOpConv,
@@ -3565,6 +3620,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     ICmpOpConversion<CaseNeOp, ICmpPredicate::cne>,
     ICmpOpConversion<WildcardEqOp, ICmpPredicate::weq>,
     ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
+    HandleCompareOpConversion<HandleEqOp, LLVM::ICmpPredicate::eq>,
+    HandleCompareOpConversion<HandleNeOp, LLVM::ICmpPredicate::ne>,
+    HandleCompareOpConversion<HandleCaseEqOp, LLVM::ICmpPredicate::eq>,
+    HandleCompareOpConversion<HandleCaseNeOp, LLVM::ICmpPredicate::ne>,
     FCmpOpConversion<NeRealOp, arith::CmpFPredicate::UNE>,
     FCmpOpConversion<FltOp, arith::CmpFPredicate::OLT>,
     FCmpOpConversion<FleOp, arith::CmpFPredicate::OLE>,
