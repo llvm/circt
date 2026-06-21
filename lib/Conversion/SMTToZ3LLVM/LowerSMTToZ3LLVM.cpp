@@ -27,6 +27,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -1279,34 +1280,49 @@ struct IntAbsOpLowering : public SMTLoweringPattern<IntAbsOp> {
 //===----------------------------------------------------------------------===//
 // Placeholder Debug Patterns
 //===----------------------------------------------------------------------===//
-// For now we want to ignore Debug variable and scope ops - eventually we'll
-// give this debug info to Z3
+// For now we want to ignore Debug ops - eventually we'll give this debug info
+// to Z3.
 
-/// Strip dbg.variable ops.
-struct DbgVariableLowering : public OpConversionPattern<debug::VariableOp> {
-  using OpConversionPattern::OpConversionPattern;
+static bool debugOpHasOnlyDebugUsers(Operation *op,
+                                     SmallPtrSetImpl<Operation *> &visited) {
+  if (!visited.insert(op).second)
+    return true;
+  return llvm::all_of(op->getUsers(), [&](Operation *user) {
+    if (!isa<debug::DebugDialect>(user->getDialect()))
+      return false;
+    return debugOpHasOnlyDebugUsers(user, visited);
+  });
+}
+
+static void eraseDebugOpAndUsers(Operation *op,
+                                 ConversionPatternRewriter &rewriter,
+                                 SmallPtrSetImpl<Operation *> &erased) {
+  if (!erased.insert(op).second)
+    return;
+
+  SmallVector<Operation *> users;
+  for (auto *user : op->getUsers())
+    if (!llvm::is_contained(users, user))
+      users.push_back(user);
+  for (auto *user : users)
+    eraseDebugOpAndUsers(user, rewriter, erased);
+
+  rewriter.eraseOp(op);
+}
+
+template <typename OpTy>
+struct DbgOpLowering : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(debug::VariableOp op, OpAdaptor adaptor,
+  matchAndRewrite(OpTy op, typename OpTy::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
-    rewriter.eraseOp(op);
-    return success();
-  }
-};
-
-/// Strip dbg.scope ops.
-struct DbgScopeLowering : public OpConversionPattern<debug::ScopeOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(debug::ScopeOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    // Make sure scope's only users are variables and therefore being deleted
-    if (llvm::any_of(op->getUsers(), [](Operation *user) {
-          return !isa<debug::VariableOp>(user);
-        }))
+    SmallPtrSet<Operation *, 8> visited;
+    if (!debugOpHasOnlyDebugUsers(op, visited))
       return failure();
-    rewriter.eraseOp(op);
+
+    SmallPtrSet<Operation *, 8> erased;
+    eraseDebugOpAndUsers(op, rewriter, erased);
     return success();
   }
 };
@@ -1546,7 +1562,10 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
                BV2IntOpLowering, QuantifierLowering<ForallOp>,
                QuantifierLowering<ExistsOp>>(converter, patterns.getContext(),
                                              globals, options);
-  patterns.add<DbgVariableLowering, DbgScopeLowering>(patterns.getContext());
+  patterns.add<DbgOpLowering<debug::ArrayOp>, DbgOpLowering<debug::EnumOp>,
+               DbgOpLowering<debug::ScopeOp>, DbgOpLowering<debug::StructOp>,
+               DbgOpLowering<debug::ValueOp>, DbgOpLowering<debug::VariableOp>>(
+      patterns.getContext());
 }
 
 void LowerSMTToZ3LLVMPass::runOnOperation() {

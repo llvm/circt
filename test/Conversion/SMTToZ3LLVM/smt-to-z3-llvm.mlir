@@ -399,6 +399,18 @@ func.func @test(%arg0: i32) {
     %scope = dbg.scope "a", "A"
     dbg.variable "var2", %true scope %scope : !smt.bool
 
+    // CHECK-NOT: dbg.enum
+    // CHECK-NOT: dbg.value
+    // CHECK-NOT: dbg.array
+    // CHECK-NOT: dbg.struct
+    // CHECK-NOT: dbg.variable
+    %enum = dbg.enum %c0_bv4, "State", {Idle = 0 : i64, Run = 1 : i64} : !smt.bv<4>
+    %value = dbg.value %enum typeName "State" : !dbg.enum
+    dbg.variable "state", %value : !dbg.value
+    %array = dbg.array [%c0_bv4, %c0_bv4] : !smt.bv<4>
+    %struct = dbg.struct {"raw": %c0_bv4, "array": %array} : !smt.bv<4>, !dbg.array
+    dbg.variable "packed", %struct : !dbg.struct
+
     // CHECK: [[C0:%.+]] = llvm.mlir.constant(0 : i32)
     // CHECK: [[C2:%.+]] = llvm.mlir.constant(2 : i32)
     // CHECK: [[ZERO:%.+]] = llvm.mlir.zero : !llvm.ptr
