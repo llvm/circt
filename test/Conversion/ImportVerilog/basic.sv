@@ -4703,7 +4703,6 @@ endmodule
 // CHECK:             moore.blocking_assign [[VAR_A]], [[CONST_1]] : i32
 // CHECK:             moore.complete
 // CHECK:           }
-// CHECK:           moore.fork join_all
 // CHECK:           moore.return
 // CHECK:         }
 // CHECK:         moore.output

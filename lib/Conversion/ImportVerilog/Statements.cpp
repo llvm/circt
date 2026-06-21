@@ -238,10 +238,9 @@ struct StmtVisitor {
       }
       threads.push_back(item);
     }
-    // If the fork contained only declarations, there are no threads to spawn
-    // and the fork degenerates to the declarations themselves. Genuinely
-    // empty forks keep producing an empty fork op.
-    if (threads.empty() && !items.empty())
+    // If the fork has no spawned threads, it degenerates to any declarations
+    // that were already converted above.
+    if (threads.empty())
       return success();
 
     auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threads.size());

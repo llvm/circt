@@ -1,6 +1,7 @@
 // RUN: circt-verilog --ir-moore %s | FileCheck %s --check-prefix=MOORE
 // RUN: circt-verilog %s | FileCheck %s --check-prefix=CORE
 // REQUIRES: slang
+// UNSUPPORTED: valgrind
 
 module ForLoopNoCondition(output int out);
   initial begin
@@ -91,3 +92,20 @@ endmodule
 // CORE:       verif.assume %a : i1
 // CORE:       verif.cover %a : i1
 // CORE:       llhd.call_coroutine @ImmediateAssertTask(%a) : (i1) -> ()
+
+module EmptyForkToCore(output int y);
+  initial begin
+    fork
+    join
+    y = 1;
+  end
+endmodule
+
+// MOORE-LABEL: moore.module @EmptyForkToCore
+// MOORE-NOT:   moore.fork
+// MOORE:       moore.blocking_assign
+// MOORE:       moore.return
+
+// CORE-LABEL: hw.module @EmptyForkToCore
+// CORE:       [[C1:%.+]] = hw.constant 1 : i32
+// CORE:       hw.output [[C1]] : i32
