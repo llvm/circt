@@ -2108,7 +2108,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
     // string" $sformatf works just like the string formatting but returns
     // a StringType.
-    if (nameId == ksn::SFormatF) {
+    if (nameId == ksn::SFormatF || nameId == ksn::PSPrintF ||
+        subroutine.name == "$psprintf") {
       // Create the FormatString
       auto fmtValue = context.convertFormatString(
           expr.arguments(), loc, moore::IntFormat::Decimal, false);
@@ -3255,6 +3256,15 @@ Value Context::convertSystemCall(
   StringRef name = subroutine.name;
   auto nameId = subroutine.knownNameId;
   size_t numArgs = args.size();
+
+  if (nameId == ksn::SFormatF || nameId == ksn::PSPrintF ||
+      subroutine.name == "$psprintf") {
+    auto fmtValue =
+        convertFormatString(args, loc, moore::IntFormat::Decimal, false);
+    if (failed(fmtValue))
+      return {};
+    return moore::FormatStringToStringOp::create(builder, loc, *fmtValue);
+  }
 
   //===--------------------------------------------------------------------===//
   // Random Number System Functions

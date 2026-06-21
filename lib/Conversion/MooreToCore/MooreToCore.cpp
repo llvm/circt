@@ -1918,6 +1918,19 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
       op.emitError("conversion result type is not currently supported");
       return failure();
     }
+    if (isa<sim::FormatStringType>(resultType) &&
+        isa<sim::DynamicStringType>(adaptor.getInput().getType())) {
+      rewriter.replaceOpWithNewOp<sim::FormatStringOp>(
+          op, adaptor.getInput(), rewriter.getBoolAttr(false),
+          rewriter.getI8IntegerAttr(32), IntegerAttr{});
+      return success();
+    }
+    if (isa<sim::DynamicStringType>(resultType) &&
+        isa<sim::FormatStringType>(adaptor.getInput().getType())) {
+      rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
+          op, resultType, adaptor.getInput());
+      return success();
+    }
     int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
     int64_t resultBw = hw::getBitWidth(resultType);
     if (inputBw == -1 || resultBw == -1) {
@@ -2527,6 +2540,20 @@ struct FormatStringOpConversion : public OpConversionPattern<FormatStringOp> {
 
     rewriter.replaceOpWithNewOp<sim::FormatStringOp>(
         op, adaptor.getString(), isLeftAlignedAttr, padCharAttr, widthAttr);
+    return success();
+  }
+};
+
+struct FormatStringToStringOpConversion
+    : public OpConversionPattern<FormatStringToStringOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatStringToStringOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
+        op, typeConverter->convertType(op.getResult().getType()),
+        adaptor.getFmtstring());
     return success();
   }
 };
@@ -3392,6 +3419,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   // Valid target types.
   typeConverter.addConversion([](IntegerType type) { return type; });
   typeConverter.addConversion([](FloatType type) { return type; });
+  typeConverter.addConversion([](sim::FormatStringType type) { return type; });
   typeConverter.addConversion([](sim::DynamicStringType type) { return type; });
   typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
@@ -3614,6 +3642,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     // Format strings.
     FormatLiteralOpConversion,
     FormatStringOpConversion,
+    FormatStringToStringOpConversion,
     FormatConcatOpConversion,
     FormatHierPathOpConversion,
     FormatIntOpConversion,

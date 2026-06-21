@@ -798,7 +798,11 @@ struct StmtVisitor {
       return mlir::emitError(loc) << "unsupported return statement context";
 
     if (stmt.expr) {
-      auto expr = context.convertRvalueExpression(*stmt.expr);
+      auto func = cast<mlir::func::FuncOp>(parentOp);
+      auto results =
+          cast<mlir::FunctionType>(func.getFunctionType()).getResults();
+      auto expr = context.convertRvalueExpression(
+          *stmt.expr, results.size() == 1 ? results.front() : Type{});
       if (!expr)
         return failure();
       mlir::func::ReturnOp::create(builder, loc, expr);
