@@ -1860,6 +1860,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitDecl(InstanceChoiceOp oldInstanceChoice);
   LogicalResult visitDecl(VerbatimWireOp op);
   LogicalResult visitDecl(ContractOp op);
+  LogicalResult lowerVerifContract(verif::ContractOp op);
 
   // Unary Ops.
   LogicalResult lowerNoopCast(Operation *op);
@@ -3397,6 +3398,18 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
     return LoweringFailure;
   }
 
+  // A `verif.contract` may be emitted directly (e.g. by a frontend) rather than
+  // produced from a `firrtl.contract`, in which case it carries FIRRTL-typed
+  // operands/results. The generic non-FIRRTL passthrough below would remap its
+  // operands but leave the result types as FIRRTL types, violating
+  // verif.contract's AllTypesMatch invariant. Re-create it with lowered types,
+  // mirroring visitDecl(firrtl::ContractOp).
+  if (auto contract = dyn_cast<verif::ContractOp>(op)) {
+    if (failed(lowerVerifContract(contract)))
+      return LoweringFailure;
+    return NowLowered;
+  }
+
   // Simply pass through non-FIRRTL operations and consider them already
   // lowered. This allows us to handled partially lowered inputs, and also allow
   // other FIRRTL operations to spawn additional already-lowered operations,
@@ -4316,6 +4329,40 @@ LogicalResult FIRRTLLowering::visitDecl(ContractOp oldOp) {
     if (failed(setLowering(oldArg, newResult)))
       return failure();
   }
+
+  body.getOperations().splice(body.end(),
+                              oldOp.getBody().front().getOperations());
+  addToWorklist(body);
+
+  return success();
+}
+
+// Lower a `verif.contract` that already exists in the FIRRTL module body (e.g.
+// emitted directly by a frontend) rather than being produced from a
+// `firrtl.contract`. Its operands/results are FIRRTL-typed; re-create it with
+// the lowered types (so it satisfies AllTypesMatch) and re-lower its body in
+// place. Unlike `firrtl.contract`, `verif.contract` has no block arguments
+// (NoRegionArguments): its body refers to the contract's results directly, so
+// only the results are remapped.
+LogicalResult FIRRTLLowering::lowerVerifContract(verif::ContractOp oldOp) {
+  SmallVector<Value> inputs;
+  SmallVector<Type> types;
+  for (auto input : oldOp.getInputs()) {
+    auto lowered = getLoweredValue(input);
+    if (!lowered)
+      return failure();
+    inputs.push_back(lowered);
+    types.push_back(lowered.getType());
+  }
+
+  auto newOp = verif::ContractOp::create(builder, types, inputs);
+  newOp->setDiscardableAttrs(oldOp->getDiscardableAttrDictionary());
+  auto &body = newOp.getBody().emplaceBlock();
+
+  for (auto [oldResult, newResult] :
+       llvm::zip(oldOp.getResults(), newOp.getResults()))
+    if (failed(setLowering(oldResult, newResult)))
+      return failure();
 
   body.getOperations().splice(body.end(),
                               oldOp.getBody().front().getOperations());
