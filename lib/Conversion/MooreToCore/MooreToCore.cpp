@@ -1918,6 +1918,53 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
       op.emitError("conversion result type is not currently supported");
       return failure();
     }
+
+    if (isa<llhd::TimeType>(adaptor.getInput().getType()) &&
+        isa<FloatType>(resultType)) {
+      auto timeAsInt =
+          llhd::TimeToIntOp::create(rewriter, loc, adaptor.getInput());
+      rewriter.replaceOpWithNewOp<arith::UIToFPOp>(op, resultType, timeAsInt);
+      return success();
+    }
+
+    if (isa<llhd::TimeType>(adaptor.getInput().getType()) &&
+        isa<IntegerType>(resultType)) {
+      Value input =
+          llhd::TimeToIntOp::create(rewriter, loc, adaptor.getInput());
+      Value result = adjustIntegerWidth(
+          rewriter, input, cast<IntegerType>(resultType).getWidth(), loc);
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
+    if (isa<IntegerType>(adaptor.getInput().getType()) &&
+        isa<llhd::TimeType>(resultType)) {
+      Value input = adjustIntegerWidth(rewriter, adaptor.getInput(), 64, loc);
+      rewriter.replaceOpWithNewOp<llhd::IntToTimeOp>(op, input);
+      return success();
+    }
+
+    if (isa<FloatType>(adaptor.getInput().getType()) &&
+        isa<IntegerType>(resultType)) {
+      rewriter.replaceOpWithNewOp<arith::FPToSIOp>(op, resultType,
+                                                   adaptor.getInput());
+      return success();
+    }
+
+    if (auto inputType = dyn_cast<FloatType>(adaptor.getInput().getType())) {
+      if (auto outputType = dyn_cast<FloatType>(resultType)) {
+        if (inputType == outputType) {
+          rewriter.replaceOp(op, adaptor.getInput());
+        } else if (inputType.getWidth() < outputType.getWidth()) {
+          rewriter.replaceOpWithNewOp<arith::ExtFOp>(op, resultType,
+                                                     adaptor.getInput());
+        } else {
+          rewriter.replaceOpWithNewOp<arith::TruncFOp>(op, resultType,
+                                                       adaptor.getInput());
+        }
+        return success();
+      }
+    }
     int64_t inputBw = hw::getBitWidth(adaptor.getInput().getType());
     int64_t resultBw = hw::getBitWidth(resultType);
     if (inputBw == -1 || resultBw == -1) {
