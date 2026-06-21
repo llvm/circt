@@ -17,13 +17,16 @@ add_circt_library(CIRCTTransforms
   LINK_LIBS PUBLIC
   CIRCTComb
   CIRCTHW
+  CIRCTLLHD
   CIRCTSeq
+  CIRCTSim
   CIRCTOpCountAnalysis
   MLIRArithDialect
   MLIRControlFlowDialect
   MLIRControlFlowTransforms
   MLIRFuncDialect
   MLIRIR
+  MLIRLLVMDialect
   MLIRMemRefDialect
   MLIRSupport
   MLIRTransforms

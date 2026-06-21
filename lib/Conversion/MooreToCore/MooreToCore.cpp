@@ -1933,6 +1933,19 @@ struct ConversionOpConversion : public OpConversionPattern<ConversionOp> {
             << op.getInput().getType() << " to " << op.getResult().getType();
         return failure();
       }
+      auto inputQueue = dyn_cast<QueueType>(op.getInput().getType());
+      auto resultQueue = dyn_cast<QueueType>(op.getResult().getType());
+      if (inputQueue && resultQueue) {
+        auto inputElementType =
+            getTypeConverter()->convertType(inputQueue.getElementType());
+        auto resultElementType =
+            getTypeConverter()->convertType(resultQueue.getElementType());
+        if (inputElementType && inputElementType == resultElementType) {
+          rewriter.replaceOpWithNewOp<sim::QueueResizeOp>(op, resultType,
+                                                          adaptor.getInput());
+          return success();
+        }
+      }
       return failure();
     }
 
@@ -3393,6 +3406,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([](IntegerType type) { return type; });
   typeConverter.addConversion([](FloatType type) { return type; });
   typeConverter.addConversion([](sim::DynamicStringType type) { return type; });
+  typeConverter.addConversion([](sim::QueueType type) { return type; });
   typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });

@@ -13,8 +13,11 @@
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOpInterfaces.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/LLHD/LLHDTypes.h"
+#include "circt/Dialect/Sim/SimTypes.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -28,6 +31,37 @@ using namespace circt;
 
 namespace {
 
+static bool isCombMuxPayloadType(Type type) {
+  if (hw::isHWValueType(type))
+    return true;
+
+  if (isa<FloatType, LLVM::LLVMPointerType, llhd::TimeType,
+          sim::DynamicStringType, sim::FormatStringType, sim::QueueType>(type))
+    return true;
+
+  if (auto array = hw::type_dyn_cast<hw::ArrayType>(type))
+    return isCombMuxPayloadType(array.getElementType());
+
+  if (auto array = hw::type_dyn_cast<hw::UnpackedArrayType>(type))
+    return isCombMuxPayloadType(array.getElementType());
+
+  if (auto structType = hw::type_dyn_cast<hw::StructType>(type)) {
+    for (auto field : structType.getElements())
+      if (!isCombMuxPayloadType(field.type))
+        return false;
+    return true;
+  }
+
+  if (auto unionType = hw::type_dyn_cast<hw::UnionType>(type)) {
+    for (auto field : unionType.getElements())
+      if (!isCombMuxPayloadType(field.type))
+        return false;
+    return true;
+  }
+
+  return false;
+}
+
 // A type converter which legalizes integer types, thus ensuring that vector
 // types are illegal.
 class MapArithTypeConverter : public mlir::TypeConverter {
@@ -38,6 +72,12 @@ public:
         return type;
 
       return Type();
+    });
+    addConversion([](Type type) -> std::optional<Type> {
+      if (isCombMuxPayloadType(type))
+        return type;
+
+      return std::nullopt;
     });
   }
 };
