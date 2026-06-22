@@ -236,147 +236,165 @@ struct ScanStringParser {
   LogicalResult emitScanInt(const slang::ast::Expression *destExpr,
                             bool suppress, IntFormat format,
                             IntegerAttr maxWidth) {
-    Type mlirIntTy = builder.getIntegerType(32);
-    moore::IntType mooreIntTy;
-    if (!suppress) {
-      mooreIntTy =
-          llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
-      if (!mooreIntTy)
-        return mlir::emitError(loc)
-               << "destination of integer scan specifier must be an integer";
-      mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
+    auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+
+    if (suppress) {
+      auto op = moore::ScanIntOp::create(builder, loc, TypeRange{scanStringTy},
+                                         cursor, format, maxWidth);
+      cursor = op.getRemaining();
+      return success();
     }
 
-    auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    auto mooreIntTy =
+        llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
+    if (!mooreIntTy)
+      return mlir::emitError(loc)
+             << "destination of integer scan specifier must be an integer";
+    auto mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
     auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
-    auto op =
-        moore::ScanIntOp::create(builder, loc, scanStringTy, mlirIntTy,
-                                 matchedTy, cursor, format, maxWidth, suppress);
+    auto op = moore::ScanIntOp::create(builder, loc, scanStringTy, mlirIntTy,
+                                       matchedTy, cursor, format, maxWidth);
     cursor = op.getRemaining();
-    if (!suppress) {
-      auto mooreVal =
-          moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
-              .getResult();
-      if (mooreIntTy.getDomain() == moore::Domain::FourValued)
-        mooreVal =
-            moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
-                .getResult();
-      assignments.push_back({destExpr, mooreVal, op.getMatched()});
-    }
+    auto mooreVal = moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
+                        .getResult();
+    if (mooreIntTy.getDomain() == moore::Domain::FourValued)
+      mooreVal = moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
+                     .getResult();
+    assignments.push_back({destExpr, mooreVal, op.getMatched()});
     return success();
   }
 
   LogicalResult emitScanReal(const slang::ast::Expression *destExpr,
                              bool suppress, IntegerAttr maxWidth) {
-    auto valueTy = suppress ? moore::RealType::get(builder.getContext(),
-                                                   moore::RealWidth::f64)
-                            : llvm::dyn_cast<moore::RealType>(
-                                  context.convertType(*destExpr->type));
     auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    if (suppress) {
+      auto op = moore::ScanRealOp::create(builder, loc, TypeRange{scanStringTy},
+                                          cursor, maxWidth);
+      cursor = op.getRemaining();
+      return success();
+    }
+
+    auto valueTy =
+        llvm::dyn_cast<moore::RealType>(context.convertType(*destExpr->type));
+    if (!valueTy)
+      return mlir::emitError(loc)
+             << "destination of real scan specifier must be a real";
     auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
-    auto op = moore::ScanRealOp::create(builder, loc, scanStringTy, valueTy,
-                                        matchedTy, cursor, maxWidth, suppress);
+    auto op = moore::ScanRealOp::create(
+        builder, loc, TypeRange{scanStringTy, valueTy, matchedTy}, cursor,
+        maxWidth);
     cursor = op.getRemaining();
-    if (!suppress)
-      assignments.push_back({destExpr, op.getValue(), op.getMatched()});
+    assignments.push_back({destExpr, op.getValue(), op.getMatched()});
     return success();
   }
 
   LogicalResult emitScanTime(const slang::ast::Expression *destExpr,
                              bool suppress, IntegerAttr maxWidth) {
-    auto op =
-        moore::ScanTimeOp::create(builder, loc, cursor, maxWidth, suppress);
+    auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    if (suppress) {
+      auto op = moore::ScanTimeOp::create(builder, loc, TypeRange{scanStringTy},
+                                          cursor, maxWidth);
+      cursor = op.getRemaining();
+      return success();
+    }
+    auto valueTy = moore::TimeType::get(builder.getContext());
+    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
+    auto op = moore::ScanTimeOp::create(
+        builder, loc, TypeRange{scanStringTy, valueTy, matchedTy}, cursor,
+        maxWidth);
     cursor = op.getRemaining();
-    if (!suppress)
-      assignments.push_back({destExpr, op.getValue(), op.getMatched()});
+    assignments.push_back({destExpr, op.getValue(), op.getMatched()});
     return success();
   }
 
   LogicalResult emitScanChar(const slang::ast::Expression *destExpr,
                              bool suppress) {
-    Type mlirIntTy = builder.getIntegerType(8);
-    moore::IntType mooreIntTy;
-    if (!suppress) {
-      mooreIntTy =
-          llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
-      if (!mooreIntTy)
-        return mlir::emitError(loc)
-               << "destination of char scan specifier must be an integer";
-      mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
-    }
     auto scanStringTy = moore::ScanStringType::get(builder.getContext());
-    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
-    auto op = moore::ScanCharOp::create(builder, loc, scanStringTy, mlirIntTy,
-                                        matchedTy, cursor, suppress);
-    cursor = op.getRemaining();
-    if (!suppress) {
-      auto mooreVal =
-          moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
-              .getResult();
-      if (mooreIntTy.getDomain() == moore::Domain::FourValued)
-        mooreVal =
-            moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
-                .getResult();
-      assignments.push_back({destExpr, mooreVal, op.getMatched()});
+    if (suppress) {
+      auto op = moore::ScanCharOp::create(builder, loc, TypeRange{scanStringTy},
+                                          cursor);
+      cursor = op.getRemaining();
+      return success();
     }
+    auto mooreIntTy =
+        llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
+    if (!mooreIntTy)
+      return mlir::emitError(loc)
+             << "destination of char scan specifier must be an integer";
+    auto mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
+    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
+    auto op = moore::ScanCharOp::create(
+        builder, loc, TypeRange{scanStringTy, mlirIntTy, matchedTy}, cursor);
+    cursor = op.getRemaining();
+    auto mooreVal = moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
+                        .getResult();
+    if (mooreIntTy.getDomain() == moore::Domain::FourValued)
+      mooreVal = moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
+                     .getResult();
+    assignments.push_back({destExpr, mooreVal, op.getMatched()});
     return success();
   }
 
   LogicalResult emitScanStr(const slang::ast::Expression *destExpr,
                             bool suppress, IntegerAttr maxWidth) {
-    auto op =
-        moore::ScanStrOp::create(builder, loc, cursor, maxWidth, suppress);
-    cursor = op.getRemaining();
-    if (!suppress) {
-      Value val = op.getValue();
-      auto destTy = context.convertType(*destExpr->type);
-      if (auto intTy = llvm::dyn_cast<moore::IntType>(destTy)) {
-        val = moore::StringToIntOp::create(builder, loc, intTy.getTwoValued(),
-                                           val)
-                  .getResult();
-        if (intTy.getDomain() == moore::Domain::FourValued)
-          val =
-              moore::IntToLogicOp::create(builder, loc, intTy, val).getResult();
-      } else if (!llvm::isa<moore::StringType>(destTy)) {
-        return mlir::emitError(loc)
-               << "destination of string scan specifier must be a string or "
-                  "integer";
-      }
-      assignments.push_back({destExpr, val, op.getMatched()});
+    auto scanStringTy = moore::ScanStringType::get(builder.getContext());
+    if (suppress) {
+      auto op = moore::ScanStrOp::create(builder, loc, TypeRange{scanStringTy},
+                                         cursor, maxWidth);
+      cursor = op.getRemaining();
+      return success();
     }
+    auto stringTy = moore::StringType::get(builder.getContext());
+    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
+    auto op = moore::ScanStrOp::create(
+        builder, loc, TypeRange{scanStringTy, stringTy, matchedTy}, cursor,
+        maxWidth);
+    cursor = op.getRemaining();
+    Value val = op.getValue();
+    auto destTy = context.convertType(*destExpr->type);
+    if (auto intTy = llvm::dyn_cast<moore::IntType>(destTy)) {
+      val =
+          moore::StringToIntOp::create(builder, loc, intTy.getTwoValued(), val)
+              .getResult();
+      if (intTy.getDomain() == moore::Domain::FourValued)
+        val = moore::IntToLogicOp::create(builder, loc, intTy, val).getResult();
+    } else if (!llvm::isa<moore::StringType>(destTy)) {
+      return mlir::emitError(loc)
+             << "destination of string scan specifier must be a string or "
+                "integer type";
+    }
+    assignments.push_back({destExpr, val, op.getMatched()});
     return success();
   }
 
   LogicalResult emitScanUnformatted(const slang::ast::Expression *destExpr,
                                     bool suppress, bool fourValue) {
-    Type mlirIntTy = builder.getIntegerType(32);
-    moore::IntType mooreIntTy;
-    if (!suppress) {
-      mooreIntTy =
-          llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
-      if (!mooreIntTy)
-        return mlir::emitError(loc) << "destination of unformatted scan "
-                                       "specifier must be an integer";
-      mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
-    }
-
     auto scanStringTy = moore::ScanStringType::get(builder.getContext());
-    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
-    auto op = moore::ScanUnformattedOp::create(builder, loc, scanStringTy,
-                                               mlirIntTy, matchedTy, cursor,
-                                               fourValue, suppress);
-    cursor = op.getRemaining();
 
-    if (!suppress) {
-      auto mooreVal =
-          moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
-              .getResult();
-      if (mooreIntTy.getDomain() == moore::Domain::FourValued)
-        mooreVal =
-            moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
-                .getResult();
-      assignments.push_back({destExpr, mooreVal, op.getMatched()});
+    if (suppress) {
+      auto op = moore::ScanUnformattedOp::create(
+          builder, loc, TypeRange{scanStringTy}, cursor, fourValue);
+      cursor = op.getRemaining();
+      return success();
     }
+    auto mooreIntTy =
+        llvm::dyn_cast<moore::IntType>(context.convertType(*destExpr->type));
+    if (!mooreIntTy)
+      return mlir::emitError(loc)
+             << "destination of unformatted scan specifier must be an integer";
+
+    auto mlirIntTy = builder.getIntegerType(mooreIntTy.getWidth());
+    auto matchedTy = moore::IntType::getInt(builder.getContext(), 1);
+    auto op = moore::ScanUnformattedOp::create(
+        builder, loc, TypeRange{scanStringTy, mlirIntTy, matchedTy}, cursor,
+        fourValue);
+    cursor = op.getRemaining();
+    auto mooreVal = moore::FromBuiltinIntOp::create(builder, loc, op.getValue())
+                        .getResult();
+    if (mooreIntTy.getDomain() == moore::Domain::FourValued)
+      mooreVal = moore::IntToLogicOp::create(builder, loc, mooreIntTy, mooreVal)
+                     .getResult();
+    assignments.push_back({destExpr, mooreVal, op.getMatched()});
     return success();
   }
 };

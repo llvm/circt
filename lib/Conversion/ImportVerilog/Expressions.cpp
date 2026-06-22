@@ -3252,24 +3252,28 @@ static LogicalResult
 emitScanAssignments(Context &context, const Context::ScanStringResult &result,
                     Location loc) {
   auto &builder = context.builder;
+  auto newBlockAfter = [&](Block *after) -> Block * {
+    auto block = std::make_unique<Block>();
+    block->insertAfter(after);
+    return block.release();
+  };
+
   for (auto [destExpr, value, matched] : result.assignments) {
     auto lhs = context.convertLvalueExpression(*destExpr);
     if (!lhs)
       return failure();
-    auto refType = dyn_cast<moore::RefType>(lhs.getType());
-    if (!refType)
-      return mlir::emitError(loc) << "scan destination is not an lvalue";
-    auto destType = refType.getNestedType();
-    auto sel = moore::ConditionalOp::create(builder, loc, destType, matched);
-    {
-      OpBuilder::InsertionGuard g(builder);
-      builder.setInsertionPointToStart(&sel.getTrueRegion().emplaceBlock());
-      moore::YieldOp::create(builder, loc, value);
-      builder.setInsertionPointToStart(&sel.getFalseRegion().emplaceBlock());
-      moore::YieldOp::create(builder, loc,
-                             moore::ReadOp::create(builder, loc, lhs));
-    }
-    moore::BlockingAssignOp::create(builder, loc, lhs, sel.getResult());
+    auto cond = moore::ToBuiltinIntOp::create(builder, loc, matched);
+
+    auto *assignBlock = newBlockAfter(builder.getInsertionBlock());
+    auto *continuedBlock = newBlockAfter(assignBlock);
+    mlir::cf::CondBranchOp::create(builder, loc, cond, assignBlock,
+                                   continuedBlock);
+
+    builder.setInsertionPointToEnd(assignBlock);
+    moore::BlockingAssignOp::create(builder, loc, lhs, value);
+    mlir::cf::BranchOp::create(builder, loc, continuedBlock);
+
+    builder.setInsertionPointToEnd(continuedBlock);
   }
   return success();
 }
