@@ -24,6 +24,7 @@
 #include "circt/Dialect/FIRRTL/LayerSet.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/CustomDirectiveImpl.h"
 #include "circt/Support/Utils.h"
 #include "mlir/IR/BuiltinTypes.h"

@@ -21,6 +21,7 @@
 #include "circt/Dialect/HW/InnerSymbolTable.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqAttributes.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/FieldRef.h"
 #include "circt/Support/InstanceGraph.h"
 #include "mlir/IR/Builders.h"
