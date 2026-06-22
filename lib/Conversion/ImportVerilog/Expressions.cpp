@@ -3196,7 +3196,7 @@ convertRealMathBI(Context &context, Location loc, StringRef name,
 template <typename OpTy>
 static Value
 convertRealMathTwoBI(Context &context, Location loc, StringRef name,
-                  std::span<const slang::ast::Expression *const> args) {
+                     std::span<const slang::ast::Expression *const> args) {
   // Slang already checks the arity of real math builtins.
   assert(args.size() == 2 && "real math builtin expects 2 arguments");
   auto lhs = context.convertRvalueExpression(*args[0]);

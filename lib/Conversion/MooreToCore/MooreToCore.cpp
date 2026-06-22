@@ -1800,20 +1800,19 @@ struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
   matchAndRewrite(Clog2BIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Value ceil_log;
-    auto len_in= adaptor.getValue().getType().getIntOrFloatBitWidth();
-    auto tofloat = arith::UIToFPOp::create(rewriter,op.getLoc(), 
-                                          rewriter.getF32Type(), 
-                                          adaptor.getValue());
+    auto len_in = adaptor.getValue().getType().getIntOrFloatBitWidth();
+    auto tofloat = arith::UIToFPOp::create(
+        rewriter, op.getLoc(), rewriter.getF32Type(), adaptor.getValue());
     if (tofloat == 0) {
       ceil_log = 0;
     } else {
-      ceil_log = math::CeilOp::create(rewriter, op.getLoc(), 
-                  math::Log2Op::create(rewriter, op.getLoc(),tofloat));
+      ceil_log = math::CeilOp::create(
+          rewriter, op.getLoc(),
+          math::Log2Op::create(rewriter, op.getLoc(), tofloat));
     }
-    Value out = arith::FPToUIOp::create(rewriter, op.getLoc(),
-                                      rewriter.getIntegerType(len_in),
-                                      ceil_log);
-    rewriter.replaceOp(op,out);
+    Value out = arith::FPToUIOp::create(
+        rewriter, op.getLoc(), rewriter.getIntegerType(len_in), ceil_log);
+    rewriter.replaceOp(op, out);
     return success();
   }
 };
@@ -1878,14 +1877,14 @@ struct HypotBIOpConversion : public OpConversionPattern<HypotBIOp> {
   LogicalResult
   matchAndRewrite(HypotBIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value  lhs = adaptor.getLhs();
-    Value  rhs = adaptor.getRhs();
+    Value lhs = adaptor.getLhs();
+    Value rhs = adaptor.getRhs();
     ImplicitLocOpBuilder b(op->getLoc(), rewriter);
-    auto left = arith::MulFOp::create(b,lhs,lhs); 
-    auto right =  arith::MulFOp::create(b,rhs,rhs); 
-    auto sum = arith::AddFOp::create(b,left,right); 
-    auto out = math::SqrtOp::create(b,sum);             
-    rewriter.replaceOp(op,out);
+    auto left = arith::MulFOp::create(b, lhs, lhs);
+    auto right = arith::MulFOp::create(b, rhs, rhs);
+    auto sum = arith::AddFOp::create(b, left, right);
+    auto out = math::SqrtOp::create(b, sum);
+    rewriter.replaceOp(op, out);
     return success();
   }
 };
