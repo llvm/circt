@@ -81,13 +81,20 @@ jobs:
         run: |
           git fetch --force --unshallow --tags --no-recurse-submodules
 
-      - name: Determine Python version
+      - name: Determine Python and cibuildwheel versions
         id: python-version
         shell: bash
         run: |
           cibw_build="${{ matrix.config.cibw_build }}"
           python_version=$(echo "${cibw_build%%-*}" | sed -E 's/^cp([0-9])([0-9]+)$/\1.\2/')
           echo "python-version=${python_version}" >> "$GITHUB_OUTPUT"
+          # cibuildwheel 3.x dropped Python 3.10 as a supported host
+          # interpreter, so pin to the last 2.x release in that case.
+          if [[ "$python_version" == "3.10" ]]; then
+            echo "cibuildwheel-version=2.23.4" >> "$GITHUB_OUTPUT"
+          else
+            echo "cibuildwheel-version=3.3.0" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -95,7 +102,7 @@ jobs:
           python-version: ${{ steps.python-version.outputs.python-version }}
 
       - name: Install cibuildwheel
-        run: python -m pip install cibuildwheel==3.3.0
+        run: python -m pip install cibuildwheel==${{ steps.python-version.outputs.cibuildwheel-version }}
 
       - name: Build wheels
         run: python -m cibuildwheel --output-dir wheelhouse ./lib/Bindings/Python
