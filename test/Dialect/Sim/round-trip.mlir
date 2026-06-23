@@ -89,6 +89,13 @@ func.func @FormatStrings() {
   return
 }
 
+// CHECK-LABEL: func.func @RealMath
+func.func @RealMath(%lhs: f64, %rhs: f64) -> f64 {
+  // CHECK: sim.real.hypot %{{.*}}, %{{.*}} : f64
+  %hypot = sim.real.hypot %lhs, %rhs : f64
+  return %hypot : f64
+}
+
 // CHECK-LABEL: func.func @DynamicStrings
 func.func @DynamicStrings(%idx: i32) {
   // CHECK: sim.string.literal "Hello"

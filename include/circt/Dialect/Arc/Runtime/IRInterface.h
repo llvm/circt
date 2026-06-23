@@ -100,6 +100,9 @@ ARC_IR_EXPORT void arcRuntimeIR_onInitialized(uint8_t *modelState);
 ARC_IR_EXPORT void
 arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
 
+/// Computes the hypotenuse of two real values.
+ARC_IR_EXPORT double arcRuntimeIR_realHypot(double lhs, double rhs);
+
 /// Release the active trace buffer and request an empty new buffer.
 ///
 /// Invoked by the model to signal that the currently active trace buffer,

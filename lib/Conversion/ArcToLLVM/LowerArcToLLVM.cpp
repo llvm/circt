@@ -1064,6 +1064,45 @@ struct SimPrintFormattedProcOpLowering
   StringCache &stringCache;
 };
 
+struct SimRealHypotOpLowering : public OpConversionPattern<sim::RealHypotOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(sim::RealHypotOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    Type resultType = getTypeConverter()->convertType(op.getType());
+    bool resultIsF32 = isa<Float32Type>(resultType);
+    if (!resultIsF32 && !isa<Float64Type>(resultType))
+      return rewriter.notifyMatchFailure(op, "unsupported real type");
+
+    Type f64Ty = rewriter.getF64Type();
+    Value lhs = adaptor.getLhs();
+    Value rhs = adaptor.getRhs();
+    if (resultIsF32) {
+      lhs = LLVM::FPExtOp::create(rewriter, loc, f64Ty, lhs);
+      rhs = LLVM::FPExtOp::create(rewriter, loc, f64Ty, rhs);
+    }
+
+    auto module = op->getParentOfType<ModuleOp>();
+    SmallVector<Type> argTypes{f64Ty, f64Ty};
+    auto fn = LLVM::lookupOrCreateFn(rewriter, module,
+                                     runtime::APICallbacks::symNameRealHypot,
+                                     argTypes, f64Ty);
+    if (failed(fn))
+      return failure();
+
+    Value result =
+        LLVM::CallOp::create(rewriter, loc, fn.value(), ValueRange{lhs, rhs})
+            .getResult();
+    if (resultIsF32)
+      result = LLVM::FPTruncOp::create(rewriter, loc, resultType, result);
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 struct TerminateOpLowering : public OpConversionPattern<arc::TerminateOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -1912,6 +1951,7 @@ void LowerArcToLLVMPass::runOnOperation() {
   StringCache stringCache;
   patterns.add<SimEmitValueOpLowering, SimPrintFormattedProcOpLowering>(
       converter, &getContext(), stringCache);
+  patterns.add<SimRealHypotOpLowering>(converter, &getContext());
 
   auto &modelInfo = getAnalysis<ModelInfoAnalysis>();
   llvm::DenseMap<StringRef, ModelInfoMap> modelMap(modelInfo.infoMap.size());

@@ -439,6 +439,18 @@ def FormatGeneralOp : SimOp<"fmt.gen",
   }];
 }
 
+def RealHypotOp : SimOp<"real.hypot", [Pure, SameOperandsAndResultType]> {
+  let summary = "Hypotenuse";
+  let description = [{
+    Computes the hypotenuse of two real values. Runtime backends should implement
+    the same behavior as the C standard library `hypot` function.
+  }];
+
+  let arguments = (ins AnyFloat:$lhs, AnyFloat:$rhs);
+  let results = (outs AnyFloat:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` qualified(type($lhs))";
+}
+
 def FormatDecOp : SimOp<"fmt.dec",
     [Pure, DeclareOpInterfaceMethods<SimValueFormatter>]
 > {

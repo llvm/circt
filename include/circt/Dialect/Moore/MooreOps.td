@@ -3211,6 +3211,20 @@ class RealMathFunc<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
+class BinaryRealMathFunc<string mnemonic, list<Trait> traits = []> :
+    Builtin<mnemonic, traits # [SameOperandsAndResultType]> {
+  let description = [{
+    The system real math functions shall accept real value arguments and return
+    a real result type. Their behavior shall match the equivalent C language
+    standard math library function indicated.
+
+    See IEEE 1800-2017 section 20.8.2 "Real math functions".
+   }];
+  let arguments = (ins RealF64:$lhs, RealF64:$rhs);
+  let results = (outs RealF64:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs)";
+}
+
 def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
   let summary = "Compute ceil(log2(x)) of x";
   let description = [{
@@ -3277,6 +3291,10 @@ def AtanBIOp : RealMathFunc<"atan"> {
   let summary = "Arc-tangent";
 }
 
+def Atan2BIOp : BinaryRealMathFunc<"atan2"> {
+  let summary = "Two-argument arc-tangent";
+}
+
 def SinhBIOp : RealMathFunc<"sinh"> {
   let summary = "Hyperbolic sine";
 }
@@ -3299,6 +3317,10 @@ def AcoshBIOp : RealMathFunc<"acosh"> {
 
 def AtanhBIOp : RealMathFunc<"atanh"> {
   let summary = "Arc-hyperbolic tangent";
+}
+
+def HypotBIOp : BinaryRealMathFunc<"hypot"> {
+  let summary = "Hypotenuse";
 }
 
 //===----------------------------------------------------------------------===//

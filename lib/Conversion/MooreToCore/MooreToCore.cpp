@@ -1858,6 +1858,53 @@ struct FCmpOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+template <typename SourceOp, typename TargetOp>
+struct UnaryRealBuiltinOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<TargetOp>(
+        op, this->getTypeConverter()->convertType(op.getType()),
+        adaptor.getValue());
+    return success();
+  }
+};
+
+struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(Clog2BIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto resultType =
+        dyn_cast<IntegerType>(typeConverter->convertType(op.getType()));
+    if (!resultType)
+      return failure();
+
+    Location loc = op.getLoc();
+    unsigned width = resultType.getWidth();
+    Value result = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+
+    for (unsigned i = 1; i <= width; ++i) {
+      APInt threshold(width, 0);
+      threshold.setBit(i - 1);
+      Value thresholdValue = hw::ConstantOp::create(rewriter, loc, threshold);
+      Value isGreater =
+          comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::ugt,
+                               adaptor.getValue(), thresholdValue, false);
+      Value nextResult = hw::ConstantOp::create(rewriter, loc, APInt(width, i));
+      result = comb::MuxOp::create(rewriter, loc, isGreater, nextResult, result,
+                                   false);
+    }
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 template <typename SourceOp, bool withoutX>
 struct CaseXZEqOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -2083,6 +2130,20 @@ struct ConvertRealOpConversion : public OpConversionPattern<ConvertRealOp> {
               op, typeConverter->convertType(op.getType()), adaptor.getInput())
         : rewriter.replaceOpWithNewOp<arith::TruncFOp>(
               op, typeConverter->convertType(op.getType()), adaptor.getInput());
+    return success();
+  }
+};
+
+template <typename SourceOp>
+struct RealBitcastBuiltinOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.template replaceOpWithNewOp<arith::BitcastOp>(
+        op, this->getTypeConverter()->convertType(op.getType()),
+        adaptor.getValue());
     return success();
   }
 };
@@ -3493,6 +3554,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     IntToStringOpConversion,
     RealToIntOpConversion,
     ConvertRealOpConversion,
+    RealBitcastBuiltinOpConversion<RealtobitsBIOp>,
+    RealBitcastBuiltinOpConversion<BitstorealBIOp>,
+    RealBitcastBuiltinOpConversion<ShortrealtobitsBIOp>,
+    RealBitcastBuiltinOpConversion<BitstoshortrealBIOp>,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,
@@ -3546,6 +3611,27 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     BinaryRealOpConversion<DivRealOp, arith::DivFOp>,
     BinaryRealOpConversion<MulRealOp, arith::MulFOp>,
     BinaryRealOpConversion<PowRealOp, math::PowFOp>,
+    BinaryRealOpConversion<Atan2BIOp, math::Atan2Op>,
+    BinaryRealOpConversion<HypotBIOp, sim::RealHypotOp>,
+    UnaryRealBuiltinOpConversion<LnBIOp, math::LogOp>,
+    UnaryRealBuiltinOpConversion<Log10BIOp, math::Log10Op>,
+    UnaryRealBuiltinOpConversion<ExpBIOp, math::ExpOp>,
+    UnaryRealBuiltinOpConversion<SqrtBIOp, math::SqrtOp>,
+    UnaryRealBuiltinOpConversion<FloorBIOp, math::FloorOp>,
+    UnaryRealBuiltinOpConversion<CeilBIOp, math::CeilOp>,
+    UnaryRealBuiltinOpConversion<SinBIOp, math::SinOp>,
+    UnaryRealBuiltinOpConversion<CosBIOp, math::CosOp>,
+    UnaryRealBuiltinOpConversion<TanBIOp, math::TanOp>,
+    UnaryRealBuiltinOpConversion<AsinBIOp, math::AsinOp>,
+    UnaryRealBuiltinOpConversion<AcosBIOp, math::AcosOp>,
+    UnaryRealBuiltinOpConversion<AtanBIOp, math::AtanOp>,
+    UnaryRealBuiltinOpConversion<SinhBIOp, math::SinhOp>,
+    UnaryRealBuiltinOpConversion<CoshBIOp, math::CoshOp>,
+    UnaryRealBuiltinOpConversion<TanhBIOp, math::TanhOp>,
+    UnaryRealBuiltinOpConversion<AsinhBIOp, math::AsinhOp>,
+    UnaryRealBuiltinOpConversion<AcoshBIOp, math::AcoshOp>,
+    UnaryRealBuiltinOpConversion<AtanhBIOp, math::AtanhOp>,
+    Clog2BIOpConversion,
 
     // Patterns of power operations.
     PowUOpConversion, PowSOpConversion,

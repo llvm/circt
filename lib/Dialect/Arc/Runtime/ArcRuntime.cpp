@@ -31,6 +31,7 @@
 #endif
 
 #include <cassert>
+#include <cmath>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdlib>
@@ -150,6 +151,10 @@ void arcRuntimeIR_format(const FmtDescriptor *fmt, ...) {
   va_end(args);
 }
 
+double arcRuntimeIR_realHypot(double lhs, double rhs) {
+  return std::hypot(lhs, rhs);
+}
+
 uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
   auto *modPtr = static_cast<const uint8_t *>(modelState);
   auto *statePtr =
@@ -163,9 +168,10 @@ uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
 namespace circt::arc::runtime {
 
 static const APICallbacks apiCallbacksGlobal{
-    &arcRuntimeIR_allocInstance, &arcRuntimeIR_deleteInstance,
-    &arcRuntimeIR_onEval,        &arcRuntimeIR_onInitialized,
-    &arcRuntimeIR_format,        &arcRuntimeIR_swapTraceBuffer};
+    &arcRuntimeIR_allocInstance,  &arcRuntimeIR_deleteInstance,
+    &arcRuntimeIR_onEval,         &arcRuntimeIR_onInitialized,
+    &arcRuntimeIR_format,         &arcRuntimeIR_realHypot,
+    &arcRuntimeIR_swapTraceBuffer};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }
 
