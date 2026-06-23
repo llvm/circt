@@ -334,6 +334,12 @@ static void bindArcRuntimeSymbols(ExecutionEngine &executionEngine) {
                               runtimeCallbacks.symNameFormat,
                               runtimeCallbacks.fnFormat);
     bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameFormatToString,
+                              runtimeCallbacks.fnFormatToString);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameSetTimeFormat,
+                              runtimeCallbacks.fnSetTimeFormat);
+    bindExecutionEngineSymbol(symbolMap, interner,
                               runtimeCallbacks.symNameSwapTraceBuffer,
                               runtimeCallbacks.fnSwapTraceBuffer);
     return symbolMap;

@@ -33,6 +33,9 @@ struct APICallbacks {
   void (*fnOnEval)(uint8_t *simState);
   void (*fnOnInitialized)(uint8_t *simState);
   void (*fnFormat)(const FmtDescriptor *fmt, ...);
+  const char *(*fnFormatToString)(const FmtDescriptor *fmt, ...);
+  void (*fnSetTimeFormat)(int32_t unit, int32_t precision, const char *suffix,
+                          int32_t minFieldWidth);
   uint64_t *(*fnSwapTraceBuffer)(const uint8_t *simState);
 
   static constexpr char symNameAllocInstance[] = "arcRuntimeIR_allocInstance";
@@ -40,6 +43,8 @@ struct APICallbacks {
   static constexpr char symNameOnEval[] = "arcRuntimeIR_onEval";
   static constexpr char symNameOnInitialized[] = "arcRuntimeIR_onInitialized";
   static constexpr char symNameFormat[] = "arcRuntimeIR_format";
+  static constexpr char symNameFormatToString[] = "arcRuntimeIR_formatToString";
+  static constexpr char symNameSetTimeFormat[] = "arcRuntimeIR_setTimeFormat";
   static constexpr char symNameSwapTraceBuffer[] =
       "arcRuntimeIR_swapTraceBuffer";
 };
