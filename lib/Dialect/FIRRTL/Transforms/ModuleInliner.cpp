@@ -1608,8 +1608,8 @@ LogicalResult Inliner::run() {
         // Add NLAs to the non-root portion of the NLA.  This only needs to
         // add symbols for NLAs which are after the first one.  We reused the
         // old symbol name for the first NLA.
-        NamedAttrList newAnnotation;
         for (auto rootAndSym : newTops.drop_front()) {
+          NamedAttrList newAnnotation;
           for (auto pair : anno.getDict()) {
             if (pair.getName().getValue() != "circt.nonlocal") {
               newAnnotation.push_back(pair);
