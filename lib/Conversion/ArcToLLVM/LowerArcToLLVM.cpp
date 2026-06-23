@@ -71,6 +71,86 @@ static llvm::Twine evalSymbolFromModelName(StringRef modelName) {
 
 namespace {
 
+struct DynamicStringConstantOpLowering
+    : public OpConversionPattern<sim::StringConstantOp> {
+  DynamicStringConstantOpLowering(LLVMTypeConverter &converter,
+                                  MLIRContext *ctx, unsigned *nextStringId)
+      : OpConversionPattern(converter, ctx), nextStringId(nextStringId) {}
+
+  LogicalResult
+  matchAndRewrite(sim::StringConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto module = op->getParentOfType<mlir::ModuleOp>();
+    if (!module || !nextStringId)
+      return failure();
+
+    SmallVector<char> bytes(op.getLiteral().begin(), op.getLiteral().end());
+    bytes.push_back(0);
+
+    LLVM::GlobalOp global;
+    {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(module.getBody());
+
+      SmallString<32> name;
+      name.append("_sim_str_");
+      name.append(Twine((*nextStringId)++).str());
+
+      auto i8Ty = rewriter.getI8Type();
+      auto globalType = LLVM::LLVMArrayType::get(i8Ty, bytes.size());
+      global = LLVM::GlobalOp::create(
+          rewriter, op.getLoc(), globalType, /*isConstant=*/true,
+          LLVM::Linkage::Internal, name, rewriter.getStringAttr(bytes),
+          /*alignment=*/0);
+    }
+
+    rewriter.replaceOpWithNewOp<LLVM::AddressOfOp>(op, global);
+    return success();
+  }
+
+  unsigned *nextStringId;
+};
+
+struct DynamicStringLengthOpLowering
+    : public OpConversionPattern<sim::StringLengthOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(sim::StringLengthOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto resultTy = typeConverter->convertType(op.getType());
+    auto resultIntTy = dyn_cast<IntegerType>(resultTy);
+    if (!resultIntTy)
+      return failure();
+
+    auto module = op->getParentOfType<mlir::ModuleOp>();
+    if (!module)
+      return failure();
+
+    auto ptrTy = LLVM::LLVMPointerType::get(op.getContext());
+    auto i32Ty = rewriter.getI32Type();
+    auto fnTy = LLVM::LLVMFunctionType::get(i32Ty, {ptrTy});
+    auto lenFn = module.lookupSymbol<LLVM::LLVMFuncOp>("circt_sim_string_len");
+    if (!lenFn) {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(module.getBody());
+      lenFn = LLVM::LLVMFuncOp::create(rewriter, op.getLoc(),
+                                       "circt_sim_string_len", fnTy);
+    }
+
+    Value length = LLVM::CallOp::create(rewriter, op.getLoc(), fnTy,
+                                        lenFn.getSymName(), adaptor.getInput())
+                       .getResult();
+    if (resultIntTy.getWidth() > 32)
+      length = LLVM::ZExtOp::create(rewriter, op.getLoc(), resultTy, length);
+    else if (resultIntTy.getWidth() < 32)
+      length = LLVM::TruncOp::create(rewriter, op.getLoc(), resultTy, length);
+
+    rewriter.replaceOp(op, length);
+    return success();
+  }
+};
+
 struct ModelOpLowering : public OpConversionPattern<arc::ModelOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -1821,6 +1901,9 @@ void LowerArcToLLVMPass::runOnOperation() {
   converter.addConversion([&](sim::FormatStringType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
+  converter.addConversion([&](sim::DynamicStringType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
   converter.addConversion([&](llhd::TimeType type) {
     // LLHD time is represented as i64 femtoseconds.
     return IntegerType::get(type.getContext(), 64);
@@ -1864,6 +1947,11 @@ void LowerArcToLLVMPass::runOnOperation() {
 
   populateCombToArithConversionPatterns(converter, patterns);
   populateCombToLLVMConversionPatterns(converter, patterns);
+
+  unsigned nextStringId = 0;
+  patterns.add<DynamicStringConstantOpLowering>(converter, &getContext(),
+                                                &nextStringId);
+  patterns.add<DynamicStringLengthOpLowering>(converter, &getContext());
 
   // Arc patterns.
   // clang-format off
