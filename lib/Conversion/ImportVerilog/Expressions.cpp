@@ -3248,6 +3248,23 @@ convertRealMathBI(Context &context, Location loc, StringRef name,
   return OpTy::create(context.builder, loc, value);
 }
 
+/// Helper function to convert real math builtin functions that take exactly
+/// two arguments.
+template <typename OpTy>
+static Value
+convertRealMathBI2(Context &context, Location loc, StringRef name,
+                   std::span<const slang::ast::Expression *const> args) {
+  // Slang already checks the arity of real math builtins.
+  assert(args.size() == 2 && "real math builtin expects 2 arguments");
+  auto realType =
+      moore::RealType::get(context.getContext(), moore::RealWidth::f64);
+  auto lhs = context.convertRvalueExpression(*args[0], realType);
+  auto rhs = context.convertRvalueExpression(*args[1], realType);
+  if (!lhs || !rhs)
+    return {};
+  return OpTy::create(context.builder, loc, lhs, rhs);
+}
+
 Value Context::convertSystemCall(
     const slang::ast::SystemSubroutine &subroutine, Location loc,
     std::span<const slang::ast::Expression *const> args) {
@@ -3478,6 +3495,8 @@ Value Context::convertSystemCall(
     return convertRealMathBI<moore::AcosBIOp>(*this, loc, name, args);
   if (nameId == ksn::Atan)
     return convertRealMathBI<moore::AtanBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Atan2)
+    return convertRealMathBI2<moore::Atan2BIOp>(*this, loc, name, args);
   if (nameId == ksn::Sinh)
     return convertRealMathBI<moore::SinhBIOp>(*this, loc, name, args);
   if (nameId == ksn::Cosh)
@@ -3490,6 +3509,10 @@ Value Context::convertSystemCall(
     return convertRealMathBI<moore::AcoshBIOp>(*this, loc, name, args);
   if (nameId == ksn::Atanh)
     return convertRealMathBI<moore::AtanhBIOp>(*this, loc, name, args);
+  if (nameId == ksn::Pow)
+    return convertRealMathBI2<moore::PowRealOp>(*this, loc, name, args);
+  if (nameId == ksn::Hypot)
+    return convertRealMathBI2<moore::HypotBIOp>(*this, loc, name, args);
 
   //===--------------------------------------------------------------------===//
   // Type Conversion System Functions
