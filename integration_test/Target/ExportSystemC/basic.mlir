@@ -73,7 +73,7 @@ systemc.module @emitcEmission () {
     %f = "emitc.variable"() {value=#emitc.opaque<"5">, name="f"} : () -> !emitc.lvalue<!emitc.opaque<"int">>
     %1 = emitc.address_of %f : !emitc.lvalue<!emitc.opaque<"int">>
     %2 = emitc.dereference %1 : !emitc.ptr<!emitc.opaque<"int">>
-    %3 = emitc.cast %2: !emitc.opaque<"int"> to !emitc.opaque<"long">
+    %3 = emitc.cast %0: !emitc.opaque<"int"> to !emitc.opaque<"long">
     emitc.call_opaque "printf" (%3) {args=["result: %ld\n", 0 : index]} : (!emitc.opaque<"long">) -> ()
 
     %idx = systemc.cpp.variable : index
