@@ -17,8 +17,8 @@
 // CHECK:    llvm.call @printf([[SEL]])
 // CHECK:    return
 // CHECK:  }
-// CHECK:  llvm.mlir.global private constant [[SSTR]]("Bound reached with no violations!\0A\00") {addr_space = 0 : i32}
-// CHECK:  llvm.mlir.global private constant [[FSTR]]("Assertion can be violated!\0A\00") {addr_space = 0 : i32}
+// CHECK:  llvm.mlir.global private constant [[SSTR]]("Bound reached with no violations within 10 clock cycle(s).\0A\00") {addr_space = 0 : i32}
+// CHECK:  llvm.mlir.global private constant [[FSTR]]("Assertion can be violated within 10 clock cycle(s)!\0A\00") {addr_space = 0 : i32}
 
 // RUN: circt-opt --lower-to-bmc="top-module=comb bound=10 ignore-asserts-until=3" %s | FileCheck %s --check-prefix=CHECKIGNOREUNTIL
 // CHECKIGNOREUNTIL:    {{%.+}} = verif.bmc bound 20 num_regs 0 initial_values [] attributes {ignore_asserts_until = 6 : i32} init {
@@ -58,8 +58,8 @@ hw.module @comb(in %in0: i32, in %in1: i32, out out: i32) attributes {num_regs =
 // CHECK1:    llvm.call @printf([[SEL]])
 // CHECK1:    return
 // CHECK1:  }
-// CHECK1:  llvm.mlir.global private constant [[SSTR]]("Bound reached with no violations!\0A\00") {addr_space = 0 : i32}
-// CHECK1:  llvm.mlir.global private constant [[FSTR]]("Assertion can be violated!\0A\00") {addr_space = 0 : i32}
+// CHECK1:  llvm.mlir.global private constant [[SSTR]]("Bound reached with no violations within 10 clock cycle(s).\0A\00") {addr_space = 0 : i32}
+// CHECK1:  llvm.mlir.global private constant [[FSTR]]("Assertion can be violated within 10 clock cycle(s)!\0A\00") {addr_space = 0 : i32}
 
 // RUN: circt-opt --lower-to-bmc="top-module=seq bound=10 rising-clocks-only=true" %s | FileCheck %s --check-prefix=CHECKRISING
 // CHECKRISING:    [[BMC:%.+]] = verif.bmc bound 10 num_regs 1 initial_values [unit] init {
@@ -105,8 +105,8 @@ hw.module @seq(in %clk : !seq.clock, in %in0 : i32, in %in1 : i32, in %reg_state
 // CHECK2:    llvm.call @printf([[SEL]])
 // CHECK2:    return
 // CHECK2:  }
-// CHECK2:  llvm.mlir.global private constant [[SSTR]]("Bound reached with no violations!\0A\00") {addr_space = 0 : i32}
-// CHECK2:  llvm.mlir.global private constant [[FSTR]]("Assertion can be violated!\0A\00") {addr_space = 0 : i32}
+// CHECK2:  llvm.mlir.global private constant [[SSTR]]("Bound reached with no violations within 10 clock cycle(s).\0A\00") {addr_space = 0 : i32}
+// CHECK2:  llvm.mlir.global private constant [[FSTR]]("Assertion can be violated within 10 clock cycle(s)!\0A\00") {addr_space = 0 : i32}
 hw.module @nondominance(in %clk : !seq.clock, in %in0 : i32, in %in1 : i32, in %reg_state : i32, out out : i32, out reg_input : i32) attributes {num_regs = 1 : i32, initial_values = [unit]} {
   %0 = comb.icmp eq %1, %in0 : i32
   %1 = comb.add %in0, %in1 : i32
