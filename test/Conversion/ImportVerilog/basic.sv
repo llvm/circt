@@ -1660,8 +1660,8 @@ module Expressions;
     arr = '{3{'{2{4'd1, 4'd2, 4'd3}}}};
 
     // CHECK: [[TMP0:%.+]] = moore.constant 0 :
-    // CHECK: [[TMP1:%.+]] = moore.constant 0 :
-    // CHECK: [[TMP2:%.+]] = moore.constant 1 :
+    // CHECK: [[TMP1:%.+]] = moore.constant 1 :
+    // CHECK: [[TMP2:%.+]] = moore.constant 0 :
     // CHECK: [[TMP3:%.+]] = moore.constant 0 :
     // CHECK: moore.concat [[TMP3]], [[TMP2]], [[TMP1]], [[TMP0]] : (!moore.l1, !moore.l1, !moore.l1, !moore.l1) -> l4
     m = '{default: '0, 2: '1};
@@ -1859,7 +1859,7 @@ module PortsTop;
   // CHECK: %a = moore.net wire : <l1>
   // CHECK: [[A_VALUE:%.+]] = moore.read %a
   // CHECK: [[X4:%.+]] = moore.read %x4
-  // CHECK: %c = moore.variable : <l1>
+  // CHECK: %c = moore.net wire : <l1>
   // CHECK: [[C_VALUE:%.+]] = moore.read %c
   // CHECK: [[D_VALUE:%.+]], [[E_VALUE:%.+]] = moore.instance "p4" @PortsUnconnected(
   // CHECK-SAME: a: [[A_VALUE]]: !moore.l1
@@ -1990,7 +1990,7 @@ module PortsUnconnected(
   // Internal nets and variables created by Slang for each port.
   // CHECK: [[A_INT:%.+]] = moore.net name "a" wire : <l1>
   // CHECK: [[B_INT:%.+]] = moore.net name "b" wire : <l1>
-  // CHECK: [[C_INT:%.+]] = moore.variable name "c" : <l1>
+  // CHECK: [[C_INT:%.+]] = moore.net name "c" wire : <l1>
   // CHECK: [[D_INT:%.+]] = moore.net wire : <l1>
   // CHECK: [[E_INT:%.+]] = moore.net wire : <l1>
   
@@ -3231,8 +3231,8 @@ module RangeElementSelection(
     input reg [3:0] a [0:2],
     output reg [3:0] b,
     input reg [1:0] c);
-    // CHECK: [[A:%.+]] = moore.variable name "a" : <uarray<3 x l4>
-    // CHECK: [[C:%.+]] = moore.variable name "c" : <l2>
+    // CHECK: [[A:%.+]] = moore.net name "a" wire : <uarray<3 x l4>
+    // CHECK: [[C:%.+]] = moore.net name "c" wire : <l2>
 
     always_comb begin
       // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <uarray<3 x l4>>
@@ -4111,7 +4111,7 @@ function void testRealOps;
 endfunction // testStrLiteralReturn
 
 // CHECK-LABEL:  moore.module @RejectInnerCapture(in %u : !moore.i1, out v : !moore.i1) {
-// CHECK:    [[UVAR:%.*]] = moore.variable name "u" : <i1>
+// CHECK:    [[UVAR:%.*]] = moore.net name "u" wire : <i1>
 // CHECK:    [[VVAR:%.*]] = moore.variable : <i1>
 // CHECK:    [[READU:%.*]] = moore.read [[UVAR]] : <i1>
 // CHECK:    [[CALLBAR:%.*]] = func.call @bar([[READU]]) : (!moore.i1) -> !moore.i1
