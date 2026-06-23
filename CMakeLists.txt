@@ -574,6 +574,14 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
     set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
 
+    # Slang requires its own vendored boost library when building without
+    # support for exceptions. Prevent it from automatically discovering an
+    # installed version.
+    set(ORIGINAL_CMAKE_DISABLE_FIND_PACKAGE_Boost ${CMAKE_DISABLE_FIND_PACKAGE_Boost})
+    set(ORIGINAL_Boost_FOUND ${Boost_FOUND})
+    set(CMAKE_DISABLE_FIND_PACKAGE_Boost TRUE)
+    set(Boost_FOUND FALSE)
+
     set(BUILD_SHARED_LIBS OFF)
     set(SLANG_USE_MIMALLOC OFF)
     set(SLANG_USE_THREADS OFF)  # avoid race condition in BS::thread_pool
@@ -585,6 +593,8 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
 
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
     set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
+    set(CMAKE_DISABLE_FIND_PACKAGE_Boost ${ORIGINAL_CMAKE_DISABLE_FIND_PACKAGE_Boost})
+    set(Boost_FOUND ${ORIGINAL_Boost_FOUND})
 
     if(BUILD_SHARED_LIBS)
       set_target_properties(slang_slang PROPERTIES POSITION_INDEPENDENT_CODE ON)
