@@ -428,7 +428,7 @@ module SampleValueBuiltins #() (
 );
   // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
   // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
-  // CHECK: [[DATABITWIRE:%.+]] = moore.variable name "data_bit_i" : <i8>
+  // CHECK: [[DATABITWIRE:%.+]] = moore.net name "data_bit_i" wire : <i8>
   // CHECK: moore.procedure always {
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1

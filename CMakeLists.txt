@@ -563,7 +563,7 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG 6933832c97c39976890e5f12b69245f061d60a9a # June 9, 2026: v11.0 + ~60 commits
+      GIT_TAG 44dc55f99b9c64971893013e7931e643fbedcf23 # June 19, 2026: v11.0 + ~85 commits
       # GIT_SHALLOW ON # TODO: re-enable once we use a released version again.
     )
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
