@@ -411,17 +411,30 @@ StringAttr FormatCharOp::formatConstant(Attribute constVal) {
   auto intCst = dyn_cast<IntegerAttr>(constVal);
   if (!intCst)
     return {};
-  if (intCst.getType().getIntOrFloatBitWidth() == 0)
-    return StringAttr::get(getContext(), Twine(static_cast<char>(0)));
   if (intCst.getType().getIntOrFloatBitWidth() > 8)
     return {};
-  auto intValue = intCst.getValue().getZExtValue();
-  return StringAttr::get(getContext(), Twine(static_cast<char>(intValue)));
+
+  SmallString<8> strBuf;
+  if (intCst.getType().getIntOrFloatBitWidth() == 0)
+    strBuf.push_back(0);
+  else
+    strBuf.push_back(static_cast<char>(intCst.getValue().getZExtValue()));
+
+  if (getSpecifierWidth().has_value()) {
+    auto padChar = static_cast<char>(getPaddingChar());
+    unsigned padWidth = getSpecifierWidth().value();
+    padWidth = padWidth > strBuf.size() ? padWidth - strBuf.size() : 0;
+    if (getIsLeftAligned())
+      strBuf.append(padWidth, padChar);
+    else
+      strBuf.insert(strBuf.begin(), padWidth, padChar);
+  }
+  return StringAttr::get(getContext(), strBuf);
 }
 
 OpFoldResult FormatCharOp::fold(FoldAdaptor adaptor) {
   if (getValue().getType().getIntOrFloatBitWidth() == 0)
-    return StringAttr::get(getContext(), Twine(static_cast<char>(0)));
+    return formatConstant(IntegerAttr::get(getValue().getType(), 0));
   return {};
 }
 

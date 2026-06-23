@@ -80,12 +80,27 @@ func.func @SimulationControl() {
 
 // CHECK-LABEL: func.func @FormatStrings
 func.func @FormatStrings() {
+  %time = arith.constant 42 : i64
+  %int = arith.constant 42 : i8
+  %unknown = arith.constant 1 : i8
+  // CHECK: sim.fmt.int 10 0 0 %{{.*}} : i8
+  %fmt_int = sim.fmt.int 10 0 0 %int : i8
+  // CHECK: sim.fmt.fvint 2 0 0 %{{.*}}, %{{.*}} : i8
+  %fmt_fvint = sim.fmt.fvint 2 0 0 %int, %unknown : i8
+  // CHECK: sim.fmt.time %{{.*}}, width 3 : i64
+  %fmt_time = sim.fmt.time %time, width 3 : i64
+  // CHECK: sim.proc.timeformat -9, 2, " ns", 0
+  sim.proc.timeformat -9, 2, " ns", 0
   // CHECK: sim.fmt.current_time
   sim.fmt.current_time
   // CHECK: sim.fmt.hier_path
   sim.fmt.hier_path
   // CHECK: sim.fmt.hier_path escaped
   sim.fmt.hier_path escaped
+  // CHECK: sim.fmt.concat
+  %fmt = sim.fmt.concat (%fmt_int, %fmt_fvint, %fmt_time)
+  // CHECK: sim.fmt.to_string
+  %str = sim.fmt.to_string %fmt
   return
 }
 

@@ -503,14 +503,45 @@ def FormatCharOp : SimOp<"fmt.char",
     zero extended.
     If the width is greater than eight bits, the resulting formatted string
     is undefined.
+
+    If `specifierWidth` is present and larger than one, the result is padded
+    to that width using `paddingChar`. By default, characters are right-aligned
+    and padded with spaces.
   }];
 
-  let arguments = (ins AnyInteger:$value);
+  let arguments = (ins AnyInteger:$value,
+    DefaultValuedAttr<BoolAttr,"false">:$isLeftAligned,
+    DefaultValuedAttr<I8Attr,"32">:$paddingChar,
+    OptionalAttr<I32Attr>:$specifierWidth);
   let results = (outs FormatStringType:$result);
 
   let hasFolder = true;
 
-  let assemblyFormat = "$value attr-dict `:` qualified(type($value))";
+  let assemblyFormat = [{
+    $value
+    (`isLeftAligned` $isLeftAligned^)?
+    (`paddingChar` $paddingChar^)?
+    (`specifierWidth` $specifierWidth^)?
+    attr-dict `:` qualified(type($value))
+  }];
+}
+
+def FormatTimeOp : SimOp<"fmt.time", [Pure]> {
+  let summary = "Time format specifier";
+  let description = [{
+    Format the given femtoseconds time value (`i64`) as a string fragment
+    according to the current SystemVerilog `$timeformat` state.
+
+    The `width` attribute, if present, overrides the current `$timeformat`
+    minimum field width for this formatting operation (corresponds to `%<w>t`).
+  }];
+
+  let arguments = (ins AnyInteger:$value, OptionalAttr<I32Attr>:$width);
+  let results = (outs FormatStringType:$result);
+
+  let assemblyFormat = [{
+    $value (`,` `width` $width^)? attr-dict `:` qualified(type($value))
+  }];
 }
 
 def FormatCurrentTimeOp : SimOp<"fmt.current_time", [Pure]> {
@@ -539,6 +570,55 @@ def FormatHierPathOp : SimOp<"fmt.hier_path", [Pure]> {
   let arguments = (ins UnitAttr:$useEscapes);
   let results = (outs FormatStringType:$result);
   let assemblyFormat = "(`escaped` $useEscapes^)? attr-dict";
+}
+
+def FormatIntOp : SimOp<"fmt.int", [Pure]> {
+  let summary = "Integer format specifier with explicit width";
+  let description = [{
+    Format the given integer value as a string fragment according to the given
+    base and minimum field width.
+
+    This op carries SystemVerilog integer format options after lowering to the
+    Sim dialect.
+
+    Attributes:
+    - `base`: the radix (expected: 2, 8, 10, or 16)
+    - `width`: minimum field width in digits (0 disables padding)
+    - `flags`: bitset used by backends
+  }];
+
+  let arguments = (ins AnyInteger:$value, I32Attr:$base, I32Attr:$width,
+                   I32Attr:$flags);
+  let results = (outs FormatStringType:$result);
+
+  let assemblyFormat = [{
+    $base $width $flags $value attr-dict `:` qualified(type($value))
+  }];
+}
+
+def FormatFVIntOp : SimOp<"fmt.fvint",
+  [Pure, AllTypesMatch<["value", "unknown"]>]
+> {
+  let summary = "Four-valued integer format specifier";
+  let description = [{
+    Format a four-valued integer as a string fragment according to the given
+    base and minimum field width. The integer is passed in split form as a
+    `value` bitvector and an `unknown` bitvector.
+
+    Attributes:
+    - `base`: the radix (expected: 2, 8, 10, or 16)
+    - `width`: minimum field width in digits (0 disables padding)
+    - `flags`: bitset used by backends
+  }];
+
+  let arguments = (ins AnyInteger:$value, AnyInteger:$unknown, I32Attr:$base,
+                   I32Attr:$width, I32Attr:$flags);
+  let results = (outs FormatStringType:$result);
+
+  let assemblyFormat = [{
+    $base $width $flags $value `,` $unknown attr-dict `:`
+    qualified(type($value))
+  }];
 }
 
 def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
@@ -583,6 +663,21 @@ def FormatStringConcatOp : SimOp<"fmt.concat", [Pure]> {
     LogicalResult getFlattenedInputs(
       llvm::SmallVectorImpl<Value> &flatOperands);
   }];
+}
+
+def FormatStringToStringOp : SimOp<"fmt.to_string", [Pure]> {
+  let summary = "Evaluate a format string into a dynamic string";
+  let description = [{
+    Evaluates a format string into a newly-created dynamic string. This models
+    SystemVerilog formatting operations such as `$sformatf`, `$sformat`, and
+    `$swrite` after the frontend has converted their arguments into structured
+    format fragments.
+  }];
+
+  let arguments = (ins FormatStringType:$input);
+  let results = (outs DynamicStringType:$result);
+
+  let assemblyFormat = "$input attr-dict";
 }
 
 def PrintFormattedOp : SimOp<"print", [NonProceduralOp]> {
@@ -636,6 +731,23 @@ def PrintFormattedProcOp : SimOp<"proc.print", [ProceduralOp]> {
   ];
   let hasCanonicalizeMethod = true;
   let assemblyFormat = "$input (`to` $stream^)? attr-dict";
+}
+
+def TimeFormatProcOp : SimOp<"proc.timeformat", [ProceduralOp]> {
+  let summary = "Set SystemVerilog `$timeformat` state within a procedural region";
+  let description = [{
+    Set the global time formatting state used by `%t` formatting in
+    `$display`/`$write`/`$sformatf`.
+
+    This operation must be within a procedural region.
+  }];
+
+  let arguments = (ins I32Attr:$unit, I32Attr:$precision, StrAttr:$suffix,
+                   I32Attr:$minWidth);
+
+  let assemblyFormat = [{
+    $unit `,` $precision `,` $suffix `,` $minWidth attr-dict
+  }];
 }
 
 def GetFileOp : SimOp<"get_file", [ProceduralOp]> {

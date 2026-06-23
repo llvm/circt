@@ -136,6 +136,21 @@ hw.module @constant_fold3(in %zeroWitdh: i0, out res: !sim.fstring) {
   hw.output %cat : !sim.fstring
 }
 
+// CHECK-LABEL: hw.module @constant_fold_char_width
+// CHECK: sim.fmt.literal "[  A][A__][00A]"
+hw.module @constant_fold_char_width(out res: !sim.fstring) {
+  %ch = hw.constant 65 : i8
+  %open = sim.fmt.literal "["
+  %close = sim.fmt.literal "]"
+
+  %right = sim.fmt.char %ch specifierWidth 3 : i8
+  %left = sim.fmt.char %ch isLeftAligned true paddingChar 95 specifierWidth 3 : i8
+  %zero = sim.fmt.char %ch paddingChar 48 specifierWidth 3 : i8
+  %cat = sim.fmt.concat (%open, %right, %close, %open, %left, %close, %open, %zero, %close)
+
+  hw.output %cat : !sim.fstring
+}
+
 // CHECK-LABEL: hw.module @constant_fold4
 // CHECK: sim.fmt.literal "  106,106  ,   106,106   ,       106,106       ,       106,106       ;006A,6A  ,000006A,6A     ;000152,152   ,000000152,152      ;0000000001101010,1101010         ,0000000000001101010,1101010            "
 hw.module @constant_fold4(out res: !sim.fstring) {
