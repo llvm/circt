@@ -3180,8 +3180,6 @@ class RealMathFuncTwoIn<string mnemonic, list<Trait> traits = []> :
   }];
 }
 
-
-
 def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
   let summary = "Compute ceil(log2(x)) of x";
   let description = [{
@@ -3199,7 +3197,6 @@ def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
   let results = (outs IntType:$result);
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
-
 
 def LnBIOp : RealMathFunc<"ln"> {
   let summary = "Natural logarithm";
