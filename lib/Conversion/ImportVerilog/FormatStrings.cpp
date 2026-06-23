@@ -112,10 +112,11 @@ struct FormatStringParser {
       return success();
     }
 
-    // %l prints the library and cell name of the scope; not yet supported.
-    if (specifierLower == 'l')
-      return mlir::emitError(loc)
-             << "unsupported format specifier `" << fullSpecifier << "`";
+    // %l prints the library and cell name of the scope
+    if (specifierLower == 'l') {
+      fragments.push_back(moore::FormatLibBindingOp::create(builder, loc));
+      return success();
+    }
 
     // Consume the next argument, which will provide the value to be
     // formatted.

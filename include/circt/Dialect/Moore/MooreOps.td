@@ -2839,6 +2839,20 @@ def FormatHierPathOp : MooreOp<"fmt.hier_path", [Pure]> {
   let assemblyFormat = "(`escaped` $useEscapes^)? attr-dict";
 }
 
+def FormatLibBindingOp : MooreOp<"fmt.lib_binding", [Pure]> {
+  let summary = "Library binding format specifier";
+  let description = [{
+    Format string fragment that resolves to the `library.cell` binding
+    information of the module instance containing this operation when
+    printed. This corresponds to the `%l` (or `%L`) format specifier in
+    SystemVerilog.
+
+    See IEEE 1800-2017 § 33.7 "Displaying library binding information".
+  }];
+  let results = (outs FormatStringType:$result);
+  let assemblyFormat = "attr-dict";
+}
+
 def FormatCharOp : MooreOp<"fmt.char", [Pure]> {
   let summary = "Display in ASCII character format";
   let description = [{

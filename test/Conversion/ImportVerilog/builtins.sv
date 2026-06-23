@@ -199,6 +199,18 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.builtin.display [[TMP3]]
   $display("%M");
 
+  // IEEE 1800-2017 § 33.7 "Displaying library binding information"
+  // CHECK: [[TMP1:%.+]] = moore.fmt.lib_binding
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.display [[TMP3]]
+  $display("%l");
+  // CHECK: [[TMP1:%.+]] = moore.fmt.lib_binding
+  // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+  // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+  // CHECK: moore.builtin.display [[TMP3]]
+  $display("%L");
+
   // CHECK: [[TMP:%.+]] = moore.fmt.literal ""
   // CHECK: moore.builtin.severity info [[TMP]]
   $info;

@@ -447,6 +447,9 @@ func.func @FormatStrings(%arg0: !moore.format_string, %arg1: !moore.i42, %arg2: 
   moore.fmt.hier_path
   // CHECK: moore.fmt.hier_path escaped
   moore.fmt.hier_path escaped
+
+  // CHECK: moore.fmt.lib_binding
+  moore.fmt.lib_binding
   return
 }
 

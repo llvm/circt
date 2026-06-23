@@ -712,6 +712,10 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         formatString += hierPath.getUseEscapes() ? "%M" : "%m";
         return success();
       })
+      .Case<FormatLibBindingOp>([&](auto fmt) -> LogicalResult {
+        formatString += "%l";
+        return success();
+      })
       .Case<FormatCharOp>([&](auto fmt) -> LogicalResult {
         formatString += "%c";
         args.push_back(fmt.getValue());

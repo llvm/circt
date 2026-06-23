@@ -50,16 +50,18 @@ hw.module @all_format_fragments(
     %f9 = sim.fmt.hier_path
     %i10 = sim.fmt.literal " esc="
     %f10 = sim.fmt.hier_path escaped
-    %i11 = sim.fmt.literal " pct=%"
+    %i11 = sim.fmt.literal " lib="
+    %f11 = sim.fmt.lib_binding
+    %i12 = sim.fmt.literal " pct=%"
     %lstr = sim.string.literal "literal string"
     %dstr = sim.fmt.string %lstr : !sim.dstring
-    %msg = sim.fmt.concat (%i0, %f0, %i1, %f1, %i2, %f2, %i3, %f3, %i4, %f4, %i5, %f5, %i6, %f6, %i7, %f7, %i8, %f8, %i9, %f9, %i10, %f10, %i11, %dstr)
+    %msg = sim.fmt.concat (%i0, %f0, %i1, %f1, %i2, %f2, %i3, %f3, %i4, %f4, %i5, %f5, %i6, %f6, %i7, %f7, %i8, %f8, %i9, %f9, %i10, %f10, %i11, %f11, %i12, %dstr)
 
     // CHECK: ^bb0(%[[IVAL:.+]]: i16, %[[CH:.+]]: i8, %[[FVAL:.+]]: f64):
     // CHECK-NEXT: %[[STR:.+]] = sv.constantStr "literal string"
     // CHECK-NEXT: %[[SIGNED:.+]] = sv.system "signed"(%[[IVAL]]) : (i16) -> i16
     // CHECK-NEXT: %[[TIME:.+]] = sv.system.time : i64
-    // CHECK-NEXT: sv.write "dec=%6d hex=%04X oct=%-06o bin=%8b char=%c exp=%10.3e flt=%-8.2f gen=%.4g time=%0t path=%m esc=%M pct=%%%s"(%[[SIGNED]], %[[IVAL]], %[[IVAL]], %[[IVAL]], %[[CH]], %[[FVAL]], %[[FVAL]], %[[FVAL]], %[[TIME]], %[[STR]]) : i16, i16, i16, i16, i8, f64, f64, f64, i64, !hw.string
+    // CHECK-NEXT: sv.write "dec=%6d hex=%04X oct=%-06o bin=%8b char=%c exp=%10.3e flt=%-8.2f gen=%.4g time=%0t path=%m esc=%M lib=%l pct=%%%s"(%[[SIGNED]], %[[IVAL]], %[[IVAL]], %[[IVAL]], %[[CH]], %[[FVAL]], %[[FVAL]], %[[FVAL]], %[[TIME]], %[[STR]]) : i16, i16, i16, i16, i8, f64, f64, f64, i64, !hw.string
     sim.proc.print %msg
   }
 }

@@ -438,6 +438,9 @@ func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64
   // CHECK: sim.fmt.hier_path escaped
   moore.fmt.hier_path escaped
 
+  // CHECK: sim.fmt.lib_binding
+  moore.fmt.lib_binding
+
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
 
