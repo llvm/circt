@@ -90,15 +90,23 @@ func.func @FormatStrings() {
 }
 
 // CHECK-LABEL: func.func @DynamicStrings
-func.func @DynamicStrings(%idx: i32) {
+func.func @DynamicStrings(%idx: i32, %end: i32) {
   // CHECK: sim.string.literal "Hello"
   %str = sim.string.literal "Hello"
+  // CHECK: sim.string.literal "World"
+  %rhs = sim.string.literal "World"
   // CHECK: sim.string.length
   %len = sim.string.length %str
+  // CHECK: sim.string.cmp
+  %cmp = sim.string.cmp %str, %rhs
   // CHECK: sim.string.concat
   %concat = sim.string.concat (%str, %str)
   // CHECK: sim.string.get
   %char = sim.string.get %str[%idx]
+  // CHECK: sim.string.get_char
+  %char2 = sim.string.get_char %str[%idx]
+  // CHECK: sim.string.substr
+  %substr = sim.string.substr %str[%idx : %end]
   return
 }
 

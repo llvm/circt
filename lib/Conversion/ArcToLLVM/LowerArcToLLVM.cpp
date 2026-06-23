@@ -71,6 +71,22 @@ static llvm::Twine evalSymbolFromModelName(StringRef modelName) {
 
 namespace {
 
+static Value reg2mem(ConversionPatternRewriter &rewriter, Location loc,
+                     Value value);
+
+static LLVM::LLVMFuncOp
+getOrCreateRuntimeFunction(ModuleOp module, Location loc, OpBuilder &builder,
+                           StringRef name, Type resultType,
+                           ArrayRef<Type> argTypes) {
+  if (auto fn = module.lookupSymbol<LLVM::LLVMFuncOp>(name))
+    return fn;
+
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(module.getBody());
+  auto fnTy = LLVM::LLVMFunctionType::get(resultType, argTypes);
+  return LLVM::LLVMFuncOp::create(builder, loc, name, fnTy);
+}
+
 struct DynamicStringConstantOpLowering
     : public OpConversionPattern<sim::StringConstantOp> {
   DynamicStringConstantOpLowering(LLVMTypeConverter &converter,
@@ -147,6 +163,165 @@ struct DynamicStringLengthOpLowering
       length = LLVM::TruncOp::create(rewriter, op.getLoc(), resultTy, length);
 
     rewriter.replaceOp(op, length);
+    return success();
+  }
+};
+
+struct DynamicStringCmpOpLowering
+    : public OpConversionPattern<sim::StringCmpOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(sim::StringCmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto module = op->getParentOfType<mlir::ModuleOp>();
+    if (!module)
+      return failure();
+
+    auto ptrTy = LLVM::LLVMPointerType::get(op.getContext());
+    auto i32Ty = rewriter.getI32Type();
+    auto fnTy = LLVM::LLVMFunctionType::get(i32Ty, {ptrTy, ptrTy});
+    auto cmpFn = getOrCreateRuntimeFunction(module, op.getLoc(), rewriter,
+                                            "circt_sim_string_cmp", i32Ty,
+                                            {ptrTy, ptrTy});
+
+    Value result =
+        LLVM::CallOp::create(rewriter, op.getLoc(), fnTy, cmpFn.getSymName(),
+                             ValueRange{adaptor.getLhs(), adaptor.getRhs()})
+            .getResult();
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct DynamicStringConcatOpLowering
+    : public OpConversionPattern<sim::StringConcatOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(sim::StringConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto ptrTy = LLVM::LLVMPointerType::get(op.getContext());
+    auto inputs = adaptor.getInputs();
+    if (inputs.size() == 1) {
+      rewriter.replaceOp(op, inputs.front());
+      return success();
+    }
+
+    auto module = op->getParentOfType<mlir::ModuleOp>();
+    if (!module)
+      return failure();
+
+    auto fnTy = LLVM::LLVMFunctionType::get(ptrTy, {ptrTy, ptrTy});
+    auto fn = getOrCreateRuntimeFunction(module, op.getLoc(), rewriter,
+                                         "circt_sim_string_concat", ptrTy,
+                                         {ptrTy, ptrTy});
+
+    Value result;
+    if (inputs.empty()) {
+      Value nullPtr = LLVM::ZeroOp::create(rewriter, op.getLoc(), ptrTy);
+      result =
+          LLVM::CallOp::create(rewriter, op.getLoc(), fnTy, fn.getSymName(),
+                               ValueRange{nullPtr, nullPtr})
+              .getResult();
+    } else {
+      result = inputs.front();
+      for (Value next : inputs.drop_front())
+        result = LLVM::CallOp::create(rewriter, op.getLoc(), fnTy,
+                                      fn.getSymName(), ValueRange{result, next})
+                     .getResult();
+    }
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct DynamicStringIntToStringOpLowering
+    : public OpConversionPattern<sim::IntToStringOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(sim::IntToStringOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto inputIntTy = dyn_cast<IntegerType>(op.getInput().getType());
+    if (!inputIntTy)
+      return failure();
+
+    auto module = op->getParentOfType<mlir::ModuleOp>();
+    if (!module)
+      return failure();
+
+    auto ptrTy = LLVM::LLVMPointerType::get(op.getContext());
+    auto i32Ty = rewriter.getI32Type();
+    auto fnTy = LLVM::LLVMFunctionType::get(ptrTy, {ptrTy, i32Ty});
+    auto fn = getOrCreateRuntimeFunction(module, op.getLoc(), rewriter,
+                                         "circt_sim_string_int_to_string",
+                                         ptrTy, {ptrTy, i32Ty});
+    Value inputPtr = reg2mem(rewriter, op.getLoc(), adaptor.getInput());
+    Value bitWidth = LLVM::ConstantOp::create(rewriter, op.getLoc(), i32Ty,
+                                              inputIntTy.getWidth());
+    Value result =
+        LLVM::CallOp::create(rewriter, op.getLoc(), fnTy, fn.getSymName(),
+                             ValueRange{inputPtr, bitWidth})
+            .getResult();
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+template <typename OpTy>
+struct DynamicStringGetCharLikeOpLowering : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OpTy op, typename OpTy::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto module = op->template getParentOfType<mlir::ModuleOp>();
+    if (!module)
+      return failure();
+
+    auto ptrTy = LLVM::LLVMPointerType::get(op.getContext());
+    auto i32Ty = rewriter.getI32Type();
+    auto i8Ty = rewriter.getI8Type();
+    auto fnTy = LLVM::LLVMFunctionType::get(i8Ty, {ptrTy, i32Ty});
+    auto getcFn = getOrCreateRuntimeFunction(module, op.getLoc(), rewriter,
+                                             "circt_sim_string_get_char", i8Ty,
+                                             {ptrTy, i32Ty});
+
+    Value result =
+        LLVM::CallOp::create(rewriter, op.getLoc(), fnTy, getcFn.getSymName(),
+                             ValueRange{adaptor.getStr(), adaptor.getIndex()})
+            .getResult();
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct DynamicStringSubstrOpLowering
+    : public OpConversionPattern<sim::StringSubstrOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(sim::StringSubstrOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto module = op->getParentOfType<mlir::ModuleOp>();
+    if (!module)
+      return failure();
+
+    auto ptrTy = LLVM::LLVMPointerType::get(op.getContext());
+    auto i32Ty = rewriter.getI32Type();
+    auto fnTy = LLVM::LLVMFunctionType::get(ptrTy, {ptrTy, i32Ty, i32Ty});
+    auto substrFn = getOrCreateRuntimeFunction(module, op.getLoc(), rewriter,
+                                               "circt_sim_string_substr", ptrTy,
+                                               {ptrTy, i32Ty, i32Ty});
+
+    Value result =
+        LLVM::CallOp::create(
+            rewriter, op.getLoc(), fnTy, substrFn.getSymName(),
+            ValueRange{adaptor.getStr(), adaptor.getStart(), adaptor.getEnd()})
+            .getResult();
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
@@ -1018,38 +1193,42 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
             FmtDescriptor d = FmtDescriptor::createChar();
             return FormatInfo{{d}, {op.getValue()}};
           })
-      .Case<sim::FormatDecOp>([&](sim::FormatDecOp op)
-                                  -> FailureOr<FormatInfo> {
-        FmtDescriptor d = FmtDescriptor::createInt(
-            op.getValue().getType().getWidth(), 10, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
-            op.getIsSigned());
-        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
-      })
-      .Case<sim::FormatHexOp>([&](sim::FormatHexOp op)
-                                  -> FailureOr<FormatInfo> {
-        FmtDescriptor d = FmtDescriptor::createInt(
-            op.getValue().getType().getWidth(), 16, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(),
-            op.getIsHexUppercase(), false);
-        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
-      })
-      .Case<sim::FormatOctOp>([&](sim::FormatOctOp op)
-                                  -> FailureOr<FormatInfo> {
-        FmtDescriptor d = FmtDescriptor::createInt(
-            op.getValue().getType().getWidth(), 8, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
-            false);
-        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
-      })
-      .Case<sim::FormatBinOp>([&](sim::FormatBinOp op)
-                                  -> FailureOr<FormatInfo> {
-        FmtDescriptor d = FmtDescriptor::createInt(
-            op.getValue().getType().getWidth(), 2, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
-            false);
-        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
-      })
+      .Case<sim::FormatDecOp>(
+          [&](sim::FormatDecOp op) -> FailureOr<FormatInfo> {
+            FmtDescriptor d = FmtDescriptor::createInt(
+                op.getValue().getType().getWidth(), 10, op.getIsLeftAligned(),
+                op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
+                op.getIsSigned());
+            return FormatInfo{{d},
+                              {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+          })
+      .Case<sim::FormatHexOp>(
+          [&](sim::FormatHexOp op) -> FailureOr<FormatInfo> {
+            FmtDescriptor d = FmtDescriptor::createInt(
+                op.getValue().getType().getWidth(), 16, op.getIsLeftAligned(),
+                op.getSpecifierWidth().value_or(-1), op.getPaddingChar(),
+                op.getIsHexUppercase(), false);
+            return FormatInfo{{d},
+                              {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+          })
+      .Case<sim::FormatOctOp>(
+          [&](sim::FormatOctOp op) -> FailureOr<FormatInfo> {
+            FmtDescriptor d = FmtDescriptor::createInt(
+                op.getValue().getType().getWidth(), 8, op.getIsLeftAligned(),
+                op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
+                false);
+            return FormatInfo{{d},
+                              {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+          })
+      .Case<sim::FormatBinOp>(
+          [&](sim::FormatBinOp op) -> FailureOr<FormatInfo> {
+            FmtDescriptor d = FmtDescriptor::createInt(
+                op.getValue().getType().getWidth(), 2, op.getIsLeftAligned(),
+                op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
+                false);
+            return FormatInfo{{d},
+                              {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+          })
       .Case<sim::FormatLiteralOp>(
           [&](sim::FormatLiteralOp op) -> FailureOr<FormatInfo> {
             if (op.getLiteral().size() < 8 &&
@@ -1951,7 +2130,13 @@ void LowerArcToLLVMPass::runOnOperation() {
   unsigned nextStringId = 0;
   patterns.add<DynamicStringConstantOpLowering>(converter, &getContext(),
                                                 &nextStringId);
-  patterns.add<DynamicStringLengthOpLowering>(converter, &getContext());
+  patterns
+      .add<DynamicStringLengthOpLowering, DynamicStringCmpOpLowering,
+           DynamicStringConcatOpLowering,
+           DynamicStringGetCharLikeOpLowering<sim::StringGetOp>,
+           DynamicStringGetCharLikeOpLowering<sim::StringGetCharOp>,
+           DynamicStringIntToStringOpLowering, DynamicStringSubstrOpLowering>(
+          converter, &getContext());
 
   // Arc patterns.
   // clang-format off

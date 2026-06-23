@@ -713,6 +713,19 @@ def StringLengthOp : SimOp<"string.length", [Pure]> {
   let assemblyFormat = "$input attr-dict";
 }
 
+def StringCmpOp : SimOp<"string.cmp", [Pure]> {
+  let summary = "Lexicographically compare two strings";
+  let description = [{
+    Compares two dynamic strings using the same ordering as the ANSI C
+    `strcmp` function.
+  }];
+
+  let arguments = (ins DynamicStringType:$lhs, DynamicStringType:$rhs);
+  let results = (outs I32:$result);
+
+  let assemblyFormat = "$lhs `,` $rhs attr-dict";
+}
+
 def StringConcatOp : SimOp<"string.concat", [Pure]> {
   let summary = "Concatenate strings";
   let description = [{
@@ -796,6 +809,32 @@ def StringGetOp : SimOp<"string.get", [Pure]> {
   let hasFolder = true;
 
   let assemblyFormat = "$str `[` $index `]` attr-dict";
+}
+
+def StringGetCharOp : SimOp<"string.get_char", [Pure]> {
+  let summary = "Get a character from a string at a given index";
+  let description = [{
+    Returns the character byte at the specified zero-based index within a
+    dynamic string. Out-of-bounds accesses return 0.
+  }];
+
+  let arguments = (ins DynamicStringType:$str, I32:$index);
+  let results = (outs I8:$result);
+
+  let assemblyFormat = "$str `[` $index `]` attr-dict";
+}
+
+def StringSubstrOp : SimOp<"string.substr", [Pure]> {
+  let summary = "Extract a substring";
+  let description = [{
+    Returns the characters from the start through end indices inclusive, or the
+    empty string if the range is invalid.
+  }];
+
+  let arguments = (ins DynamicStringType:$str, I32:$start, I32:$end);
+  let results = (outs DynamicStringType:$result);
+
+  let assemblyFormat = "$str `[` $start `:` $end `]` attr-dict";
 }
 
 //===----------------------------------------------------------------------===//
