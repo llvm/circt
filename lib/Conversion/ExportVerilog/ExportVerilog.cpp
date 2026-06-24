@@ -4116,6 +4116,7 @@ private:
   LogicalResult visitSV(WriteOp op);
   LogicalResult visitSV(FWriteOp op);
   LogicalResult visitSV(FFlushOp op);
+  LogicalResult visitSV(FCloseOp op);
   LogicalResult visitSV(VerbatimOp op);
   LogicalResult visitSV(MacroRefOp op);
 
@@ -4637,6 +4638,23 @@ LogicalResult StmtEmitter::visitSV(FFlushOp op) {
   if (auto fd = op.getFd())
     ps.scopedBox(PP::ibox0, [&]() { emitExpression(op.getFd(), ops); });
 
+  ps << ");";
+  ps.addCallback({op, false});
+  emitLocationInfoAndNewLine(ops);
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(FCloseOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  startStatement();
+  SmallPtrSet<Operation *, 8> ops;
+  ops.insert(op);
+
+  ps.addCallback({op, true});
+  ps << "$fclose(";
+  ps.scopedBox(PP::ibox0, [&]() { emitExpression(op.getFd(), ops); });
   ps << ");";
   ps.addCallback({op, false});
   emitLocationInfoAndNewLine(ops);

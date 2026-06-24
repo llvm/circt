@@ -560,6 +560,22 @@ def FFlushOp : SVOp<"fflush", [ProceduralOp]> {
   }];
 }
 
+def FCloseOp : SVOp<"fclose", [ProceduralOp]> {
+  let summary = "'$fclose' statement";
+
+  let description = [{
+    The $fclose system task closes the file associated with the specified file
+    descriptor.
+
+    See IEEE 1800-2023 Section 21.3.4.
+  }];
+
+  let arguments = (ins I32:$fd);
+  let results = (outs);
+
+  let assemblyFormat = "$fd attr-dict";
+}
+
 def VerbatimOp : SVOp<"verbatim", [
     DeclareOpInterfaceMethods<InnerRefUserOpInterface>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>

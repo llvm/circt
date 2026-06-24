@@ -277,6 +277,8 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
       sv.fflush
       // CHECK-NEXT: $fflush(32'h80000002);
       sv.fflush fd %fd
+      // CHECK-NEXT: $fclose(32'h80000002);
+      sv.fclose %fd
     }// CHECK-NEXT:   {{end$}}
   } {sv.attributes = [#sv.attribute<"sv attr">]}
   // CHECK-NEXT:  end // initial
