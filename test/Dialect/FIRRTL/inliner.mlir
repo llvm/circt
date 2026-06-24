@@ -1624,3 +1624,47 @@ firrtl.circuit "InlineBothModules" {
     %xmr = sv.xmr.ref @path : !hw.inout<i5>
   }
 }
+
+// -----
+
+// Minimal testcase for: https://github.com/llvm/circt/issues/3374
+// Modified so as to not expose a different unrelated bug.
+
+// Verify each top gets its own isolated annotation entry.
+// (Don't generate invalid DictionaryAttr's with many circt.local/class entries!)
+// CHECK-LABEL: "Issue3374Derived"
+firrtl.circuit "Issue3374Derived" {
+  // CHECK-NEXT: hw.hierpath @nla1 [@Issue3374Derived::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath @nla1_0 [@Quux::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath @nla1_1 [@Qux::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath @nla1_2 [@Foo::@baz, @Baz]
+  hw.hierpath @nla1 [@Bar::@baz, @Baz]
+
+  firrtl.module @Baz() {
+  // CHECK-NEXT: @Baz() {
+  // CHECK-NEXT:   wire sym @a
+  // CHECK-SAME:     {annotations = [{circt.nonlocal = @nla1, class = "hello"},
+  // CHECK-SAME:                     {circt.nonlocal = @nla1_0, class = "hello"},
+  // CHECK-SAME:                     {circt.nonlocal = @nla1_1, class = "hello"},
+  // CHECK-SAME:                     {circt.nonlocal = @nla1_2, class = "hello"}]}
+    %a = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla1, class = "hello"}]} : !firrtl.uint<1>
+  }
+  firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    firrtl.instance baz sym @baz @Baz()
+  }
+  firrtl.module private @Foo() {
+    firrtl.instance bar @Bar()
+  }
+  firrtl.module private @Qux() {
+    firrtl.instance bar @Bar()
+  }
+  firrtl.module private @Quux() {
+    firrtl.instance bar @Bar()
+  }
+  firrtl.module @Issue3374Derived() {
+    firrtl.instance b @Bar()
+    firrtl.instance c @Foo()
+    firrtl.instance d @Qux()
+    firrtl.instance e @Quux()
+  }
+}
