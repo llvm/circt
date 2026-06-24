@@ -1228,6 +1228,25 @@ private:
     auto moduleNLAs = nlaTable->lookup(fromModule.getNameAttr()).vec();
     // Change the NLA to target the toModule.
     nlaTable->renameModuleAndInnerRef(toName, fromName, renameMap);
+
+    // Fast path: if `fromModule` has exactly one instantiation, prepend that
+    // single instance reference to the namepath in place, keeping the NLA's
+    // symbol name so all annotations and targetMap entries stay valid.
+    auto *fromNode = instanceGraph.lookup(fromName);
+    bool fromHasOneUse = fromNode->hasOneUse();
+    std::optional<std::pair<Attribute, StringAttr>> singlePrefixAndName;
+    auto getPrefixAndName = [&] {
+      assert(fromHasOneUse);
+      if (!singlePrefixAndName) {
+        auto *instanceRecord = *fromNode->uses().begin();
+        auto parent =
+            cast<FModuleOp>(*instanceRecord->getParent()->getModule());
+        singlePrefixAndName = {OpAnnoTarget(instanceRecord->getInstance())
+                                   .getNLAReference(getNamespace(parent)),
+                               parent.getNameAttr()};
+      }
+      return *singlePrefixAndName;
+    };
     // Now we walk the NLA searching for ones that require more context to be
     // added.
     for (auto nla : moduleNLAs) {
@@ -1235,6 +1254,26 @@ private:
       // If we don't need to add more context, we're done here.
       if (nla.root() != toName)
         continue;
+
+      // Fast path: See the comment above.
+      if (fromHasOneUse) {
+        SmallVector<Attribute> newNamepath;
+        newNamepath.reserve(elements.size() + 1);
+        auto [singlePrefix, singleParentName] = getPrefixAndName();
+        newNamepath.push_back(singlePrefix);
+        newNamepath.append(elements.begin(), elements.end());
+        auto newPath = ArrayAttr::get(context, newNamepath);
+        // Skip if this path already exists; fall back to the general path
+        // below which merges duplicates via the cache.
+        if (!nlaCache.count(newPath)) {
+          nlaCache.erase(nla.getNamepathAttr());
+          nla.setNamepathAttr(newPath);
+          nlaCache[newPath] = nla.getNameAttr();
+          nlaTable->addNLAtoModule(nla, singleParentName);
+          continue;
+        }
+      }
+
       // Create the replacement NLAs.
       SmallVector<Attribute> namepath(elements.begin(), elements.end());
       auto nlaRefs = createNLAs(fromModule, namepath, nla.getVisibility());
