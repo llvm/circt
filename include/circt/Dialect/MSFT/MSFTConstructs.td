@@ -6,6 +6,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_MSFT_MSFTCONSTRUCTS_TD
+#define CIRCT_DIALECT_MSFT_MSFTCONSTRUCTS_TD
+
+include "circt/Dialect/MSFT/MSFTDialect.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Seq/SeqTypes.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -90,3 +96,5 @@ def OutputOp : MSFTOp<"output", [Terminator,
 
   let assemblyFormat = "attr-dict ($operands^ `:` qualified(type($operands)))?";
 }
+
+#endif // CIRCT_DIALECT_MSFT_MSFTCONSTRUCTS_TD

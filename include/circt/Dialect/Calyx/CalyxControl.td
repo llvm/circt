@@ -10,6 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_CALYX_CALYXCONTROL_TD
+#define CIRCT_DIALECT_CALYX_CALYXCONTROL_TD
+
+include "circt/Dialect/Calyx/CalyxDialect.td"
+
 def ControlLike : NativeOpTrait<"ControlLike"> {
   let cppNamespace = "::circt::calyx";
 }
@@ -463,3 +468,5 @@ def InvokeOp : CalyxOp<"invoke", [
     Value getInstDoneValue();
   }];
 }
+
+#endif // CIRCT_DIALECT_CALYX_CALYXCONTROL_TD

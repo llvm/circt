@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_RTG_IR_RTGOPS_TD
+#define CIRCT_DIALECT_RTG_IR_RTGOPS_TD
+
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/CommonTypeConstraints.td"
@@ -24,6 +27,9 @@ include "circt/Dialect/RTG/IR/RTGAttributes.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
+include "circt/Dialect/RTG/IR/RTGDialect.td"
+include "circt/Dialect/RTG/IR/RTGTypes.td"
+include "circt/Dialect/RTG/IR/RTGAttributes.td"
 
 // Resource representing the RNG state. Operations that read from or write to
 // the RNG state should declare effects on this resource to prevent CSE and DCE.
@@ -1192,3 +1198,5 @@ def SegmentOp : RTGISAOp<"segment", [
 
   let assemblyFormat = "$kind attr-dict-with-keyword $bodyRegion";
 }
+
+#endif // CIRCT_DIALECT_RTG_IR_RTGOPS_TD

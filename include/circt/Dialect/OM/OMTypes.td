@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_OMTYPES_TD
 #define CIRCT_DIALECT_OM_OMTYPES_TD
 
+include "circt/Dialect/OM/OMDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 
 def ClassType : TypeDef<OMDialect, "Class", []> {

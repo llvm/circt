@@ -13,6 +13,11 @@
 #ifndef CIRCT_DIALECT_SYSTEMC_SYSTEMCDIALECT
 #define CIRCT_DIALECT_SYSTEMC_SYSTEMCDIALECT
 
+include "mlir/IR/DialectBase.td"
+include "mlir/IR/OpBase.td"
+include "mlir/IR/OpAsmInterface.td"
+include "circt/Dialect/SystemC/SystemCOpInterfaces.td"
+
 def SystemCDialect : Dialect {
   let name = "systemc";
   let cppNamespace = "::circt::systemc";
@@ -36,5 +41,12 @@ def SystemCDialect : Dialect {
 
   let useDefaultTypePrinterParser = 0;
 }
+
+// Base class for the operations in this dialect.
+class SystemCOp<string mnemonic, list<Trait> traits = []> :
+  Op<SystemCDialect, mnemonic, traits>;
+
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
+                         ["getAsmResultNames"]>;
 
 #endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCDIALECT

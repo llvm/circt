@@ -6,6 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_MSFT_MSFTATTRIBUTES_TD
+#define CIRCT_DIALECT_MSFT_MSFTATTRIBUTES_TD
+
+include "circt/Dialect/MSFT/MSFTDialect.td"
 include "mlir/IR/EnumAttr.td"
 
 // "Forward-declare" these HW attributes rather than including or duplicating
@@ -73,3 +77,5 @@ def LocationVector : MSFT_Attr<"LocationVector"> {
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
 }
+
+#endif // CIRCT_DIALECT_MSFT_MSFTATTRIBUTES_TD

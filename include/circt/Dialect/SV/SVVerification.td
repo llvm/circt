@@ -10,7 +10,16 @@
 // declarations.
 //
 //===----------------------------------------------------------------------===//
+
+#ifndef CIRCT_DIALECT_SV_SVVERIFICATION_TD
+#define CIRCT_DIALECT_SV_SVVERIFICATION_TD
+
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/LTL/LTLTypes.td"
+include "circt/Dialect/SV/SVDialect.td"
+include "circt/Dialect/SV/SVEnums.td"
+include "circt/Support/ProceduralRegionTrait.td"
+include "mlir/IR/EnumAttr.td"
 
 /// Immediate assertions, like `assert`.
 def ImmediateAssert: I32EnumAttrCase<"Immediate", 0, "immediate">;
@@ -213,3 +222,5 @@ def CoverPropertyOp : PropertyVerifOp<"cover_property"> {
     the verif.cover operation, but with a flipped enable polarity.
   }];
 }
+
+#endif // CIRCT_DIALECT_SV_SVVERIFICATION_TD
