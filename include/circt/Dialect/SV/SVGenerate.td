@@ -10,7 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SV_SVGENERATE_TD
+#define CIRCT_DIALECT_SV_SVGENERATE_TD
+
+include "circt/Dialect/SV/SVDialect.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/OpBase.td"
 
 def GenerateOp : SVOp<"generate",
                       [SingleBlock, NoTerminator, NoRegionArguments]> {
@@ -78,3 +84,5 @@ def GenerateForOp : SVOp<"generate.for",
     Value getInductionVar() { return getBodyBlock()->getArgument(0); }
   }];
 }
+
+#endif // CIRCT_DIALECT_SV_SVGENERATE_TD

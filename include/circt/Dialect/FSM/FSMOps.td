@@ -9,6 +9,8 @@
 #ifndef CIRCT_DIALECT_FSM_FSMOPS_TD
 #define CIRCT_DIALECT_FSM_FSMOPS_TD
 
+include "circt/Dialect/FSM/FSMDialect.td"
+include "circt/Dialect/FSM/FSMTypes.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"

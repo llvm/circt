@@ -10,15 +10,25 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SV_SVSTATEMENTS_TD
+#define CIRCT_DIALECT_SV_SVSTATEMENTS_TD
+
+include "circt/Dialect/Emit/EmitOpInterfaces.td"
+include "circt/Dialect/HW/HWAttributesNaming.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/SV/SVAttributes.td"
+include "circt/Dialect/SV/SVDialect.td"
+include "circt/Dialect/SV/SVEnums.td"
+include "circt/Dialect/SV/SVTypes.td"
+include "circt/Support/ProceduralRegionTrait.td"
+include "mlir/Interfaces/CallInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
-include "mlir/Interfaces/FunctionInterfaces.td"
-include "mlir/Interfaces/CallInterfaces.td"
-include "mlir/Interfaces/ControlFlowInterfaces.td"
-include "circt/Dialect/Emit/EmitOpInterfaces.td"
-include "circt/Dialect/HW/HWOpInterfaces.td"
-include "circt/Support/ProceduralRegionTrait.td"
 
 //===----------------------------------------------------------------------===//
 // Control flow like-operations
@@ -192,21 +202,6 @@ def IfOp : SVOp<"if", [SingleBlock, NoTerminator, NoRegionArguments,
     }
   }];
 }
-
-// Edge behavior enum for always block.  See SV Spec 9.4.2.
-
-/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
-def AtPosEdge: I32EnumAttrCase<"AtPosEdge", 0, "posedge">;
-/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
-def AtNegEdge: I32EnumAttrCase<"AtNegEdge", 1, "negedge">;
-/// AtEdge(v) is syntactic sugar for "AtPosEdge(v) or AtNegEdge(v)".
-def AtEdge   : I32EnumAttrCase<"AtEdge", 2, "edge">;
-
-def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
-                                   [AtPosEdge, AtNegEdge, AtEdge]> {
-  let cppNamespace = "circt::sv";
-}
-
 
 def AlwaysOp : SVOp<"always", [SingleBlock, NoTerminator, NoRegionArguments,
                                RecursiveMemoryEffects, RecursivelySpeculatable,
@@ -1231,3 +1226,5 @@ def ReserveNamesOp : SVOp<"reserve_names", [
     $reservedNames attr-dict
   }];
 }
+
+#endif // CIRCT_DIALECT_SV_SVSTATEMENTS_TD

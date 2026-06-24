@@ -10,6 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_CALYX_CALYXPRIMITIVES_TD
+#define CIRCT_DIALECT_CALYX_CALYXPRIMITIVES_TD
+
+include "circt/Dialect/Calyx/CalyxDialect.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 
 def I3  : I<3>;
@@ -653,3 +657,5 @@ def IntToFpOpIEEE754 : UnaryFloatingPointLibraryOp<"ieee754.intToFp"> {
     }
   }];
 }
+
+#endif // CIRCT_DIALECT_CALYX_CALYXPRIMITIVES_TD

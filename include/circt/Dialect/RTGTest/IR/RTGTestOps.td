@@ -10,7 +10,14 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_TD
+#define CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_TD
+
+include "circt/Dialect/RTGTest/IR/RTGTestDialect.td"
+include "circt/Dialect/RTGTest/IR/RTGTestTypes.td"
+include "circt/Dialect/RTGTest/IR/RTGTestAttributes.td"
 include "mlir/IR/CommonAttrConstraints.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "circt/Dialect/RTG/IR/RTGTypes.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
@@ -226,3 +233,5 @@ def AND       : InstFormatROpBase<"and",  "0b0110011", "0b111", "0b0000000">;
 
 def ECALLOp   : InstFormatIImmOpBase<"ecall", "0b1110011", "0b000000000000">;
 def EBREAKOp  : InstFormatIImmOpBase<"ebreak", "0b1110011", "0b000000000001">;
+
+#endif // CIRCT_DIALECT_RTGTEST_IR_RTGTESTOPS_TD

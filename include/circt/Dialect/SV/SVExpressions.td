@@ -10,14 +10,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-include "mlir/Interfaces/InferTypeOpInterface.td"
+#ifndef CIRCT_DIALECT_SV_SVEXPRESSIONS_TD
+#define CIRCT_DIALECT_SV_SVEXPRESSIONS_TD
+
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
+include "circt/Dialect/SV/SVDialect.td"
 include "circt/Dialect/SV/SVTypes.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 def HWValueOrInOutType : AnyTypeOf<[HWValueType, InOutType]>;
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
-                         ["getAsmResultNames"]>;
 
 
 def SystemFunctionOp : SVOp<"system"> {
@@ -325,3 +329,5 @@ def UnpackedOpenArrayCastOp : SVOp<"unpacked_open_array_cast"> {
 
   let assemblyFormat = "$input attr-dict `:` functional-type($input, $result)";
 }
+
+#endif // CIRCT_DIALECT_SV_SVEXPRESSIONS_TD

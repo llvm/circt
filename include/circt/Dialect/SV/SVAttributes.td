@@ -10,6 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SV_SVATTRIBUTES_TD
+#define CIRCT_DIALECT_SV_SVATTRIBUTES_TD
+
+include "circt/Dialect/SV/SVDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+
 def MacroIdentAttr : AttrDef<SVDialect, "MacroIdent"> {
   let summary = "Macro identifier";
   let description = [{
@@ -95,3 +101,5 @@ def SVAttributeAttr : AttrDef<SVDialect, "SVAttribute"> {
         getSVAttributesAttrName() { return "sv.attributes"; }
   }];
 }
+
+#endif // CIRCT_DIALECT_SV_SVATTRIBUTES_TD

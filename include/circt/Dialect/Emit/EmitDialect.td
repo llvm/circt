@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_EMIT_EMITDIALECT
 #define CIRCT_DIALECT_EMIT_EMITDIALECT
 
+include "mlir/IR/DialectBase.td"
+
 def EmitDialect : Dialect {
   let name = "emit";
   let cppNamespace = "::circt::emit";

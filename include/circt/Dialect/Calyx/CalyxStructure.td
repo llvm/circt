@@ -10,6 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_CALYX_CALYXSTRUCTURE_TD
+#define CIRCT_DIALECT_CALYX_CALYXSTRUCTURE_TD
+
+include "circt/Dialect/Calyx/CalyxDialect.td"
 include "mlir/IR/EnumAttr.td"
 
 // "Forward-declare" these HW attributes rather than including or duplicating
@@ -676,3 +680,5 @@ def CycleOp : CalyxOp<"cycle", [
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
+
+#endif // CIRCT_DIALECT_CALYX_CALYXSTRUCTURE_TD

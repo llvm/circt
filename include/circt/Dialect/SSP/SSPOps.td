@@ -10,6 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SSP_SSPOPS_TD
+#define CIRCT_DIALECT_SSP_SSPOPS_TD
+
+include "circt/Dialect/SSP/SSPDialect.td"
+include "circt/Dialect/SSP/SSPAttributes.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -315,3 +320,4 @@ def OperationOp : SSPOp<"operation",
     }]>
   ];
 }
+#endif // CIRCT_DIALECT_SSP_SSPOPS_TD

@@ -13,6 +13,9 @@
 #ifndef CIRCT_DIALECT_SV_SVDIALECT
 #define CIRCT_DIALECT_SV_SVDIALECT
 
+include "mlir/IR/OpBase.td"
+include "mlir/IR/OpAsmInterface.td"
+
 def SVDialect : Dialect {
   let name = "sv";
   let cppNamespace = "::circt::sv";
@@ -35,5 +38,18 @@ def SVDialect : Dialect {
     void registerAttributes();
   }];
 }
+
+// Base class for the operation in this dialect.
+class SVOp<string mnemonic, list<Trait> traits = []> :
+    Op<SVDialect, mnemonic, traits>;
+
+/// Mark an operation as being a vendor extension.
+def VendorExtension : NativeOpTrait<"VendorExtension"> {
+  let cppNamespace = "::circt::sv";
+}
+
+/// Shorthand for ops that provide a custom SSA name via OpAsmOpInterface.
+def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
+                           ["getAsmResultNames"]>;
 
 #endif // CIRCT_DIALECT_SV_SVDIALECT

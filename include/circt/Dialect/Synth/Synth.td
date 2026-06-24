@@ -9,23 +9,8 @@
 #ifndef CIRCT_SYNTH_DIALECT_TD
 #define CIRCT_SYNTH_DIALECT_TD
 
-include "mlir/IR/DialectBase.td"
+include "circt/Dialect/Synth/SynthDialect.td"
 include "circt/Dialect/Synth/SynthOpInterfaces.td"
-
-def Synth_Dialect : Dialect {
-  let name = "synth";
-  let cppNamespace = "::circt::synth";
-  let summary = "Synthesis dialect for logic synthesis operations";
-  let description = [{
-    The Synth dialect provides operations and types for logic synthesis,
-    including meta operations for synthesis decisions, logic representations
-    like AIG, and synthesis pipeline infrastructure.
-  }];
-
-  let hasConstantMaterializer = 1;
-  let useDefaultAttributePrinterParser = 1;
-}
-
 include "circt/Dialect/Synth/SynthEnums.td"
 include "circt/Dialect/Synth/SynthAttributes.td"
 include "circt/Dialect/Synth/SynthOps.td"

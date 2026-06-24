@@ -9,6 +9,8 @@
 #ifndef CIRCT_DIALECT_FSM_FSMTYPES_TD
 #define CIRCT_DIALECT_FSM_FSMTYPES_TD
 
+include "circt/Dialect/FSM/FSMDialect.td"
+
 def InstanceType : FSMType<"Instance"> {
   let summary = "An FSM instance type";
   let description = [{
