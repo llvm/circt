@@ -2688,6 +2688,7 @@ struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
           fracDigitsAttr);
       return success();
     }
+    return success();
   }
 };
 
@@ -3281,6 +3282,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     case moore::RealWidth::f64:
       return mlir::Float64Type::get(ctx);
     }
+    return 0;
   });
 
   typeConverter.addConversion(
