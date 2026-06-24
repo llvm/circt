@@ -70,10 +70,10 @@ systemc.module @systemCTypes (%p0: !systemc.in<!systemc.int_base>,
 systemc.module @emitcEmission () {
   systemc.ctor {
     %0 = "emitc.constant"() {value = #emitc.opaque<"5"> : !emitc.opaque<"int">} : () -> !emitc.opaque<"int">
-    %f = "emitc.variable"() {value=#emitc.opaque<"5">, name="f"} : () -> !emitc.lvalue<!emitc.opaque<"int">>  
-    %1 = emitc.apply "&"(%f) : (!emitc.lvalue<!emitc.opaque<"int">>) -> !emitc.ptr<!emitc.opaque<"int">>
-    %2 = emitc.apply "*"(%1) : (!emitc.ptr<!emitc.opaque<"int">>) -> !emitc.opaque<"int">
-    %3 = emitc.cast %2: !emitc.opaque<"int"> to !emitc.opaque<"long">
+    %f = "emitc.variable"() {value=#emitc.opaque<"5">, name="f"} : () -> !emitc.lvalue<!emitc.opaque<"int">>
+    %1 = emitc.address_of %f : !emitc.lvalue<!emitc.opaque<"int">>
+    %2 = emitc.dereference %1 : !emitc.ptr<!emitc.opaque<"int">>
+    %3 = emitc.cast %0: !emitc.opaque<"int"> to !emitc.opaque<"long">
     emitc.call_opaque "printf" (%3) {args=["result: %ld\n", 0 : index]} : (!emitc.opaque<"long">) -> ()
 
     %idx = systemc.cpp.variable : index
