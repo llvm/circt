@@ -61,11 +61,9 @@ hw.module @gamble(in %x: i1, in %y: i1, in %z: i1) {
 // CHECK-SAME: arcs =
 synth.cut_rewrite_pattern (%a: i1, %b: i1, %c: i1) -> i1 attributes {
   cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [
-    [
-      [1, 0, #synth.polarity<positive>],
-      [1, 0, #synth.polarity<negative>],
-      [1, 0, #synth.polarity<positive>]
-    ]
+    #synth.linear_timing_arc<1, 0, #synth.polarity<positive>>,
+    #synth.linear_timing_arc<1, 0, #synth.polarity<negative>>,
+    #synth.linear_timing_arc<1, 0, #synth.polarity<positive>>
   ]>
 } {
   %0 = synth.aig.and_inv %a, not %b, %c : i1
@@ -77,10 +75,8 @@ synth.cut_rewrite_pattern (%a: i1, %b: i1, %c: i1) -> i1 attributes {
 // CHECK-SAME: arcs =
 synth.cut_rewrite_pattern (%a: i1, %b: i1) -> i1 attributes {
   cost = #synth.mapping_cost<area = 1.0 : f64, arcs = [
-    [
-      [1, 0, #synth.polarity<positive>],
-      [1, 0, #synth.polarity<positive>]
-    ]
+    #synth.linear_timing_arc<1, 0, #synth.polarity<positive>>,
+    #synth.linear_timing_arc<1, 0, #synth.polarity<positive>>
   ]>
 } {
   %0 = synth.aig.and_inv %a, %b : i1

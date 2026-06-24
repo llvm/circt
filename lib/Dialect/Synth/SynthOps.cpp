@@ -714,21 +714,9 @@ LogicalResult CutRewritePatternOp::verify() {
   auto cost = getCost();
 
   auto arcs = cost.getArcs();
-  if (arcs.size() != functionType.getNumResults())
-    return emitError()
-           << "mapping cost arc rows must match the number of results";
-
-  for (auto outputArcsAttr : arcs) {
-    auto outputArcs = dyn_cast<ArrayAttr>(outputArcsAttr);
-    if (!outputArcs)
-      return emitError()
-             << "mapping cost arcs for cut rewrite patterns must use nameless "
-                "arc rows";
-    if (outputArcs.size() != functionType.getNumInputs()) {
-      return emitError()
-             << "mapping cost arc columns must match the number of arguments";
-    }
-  }
+  if (arcs.size() != functionType.getNumResults() * functionType.getNumInputs())
+    return emitError() << "mapping cost arcs must match the number of results "
+                          "times arguments";
 
   if (auto inputCaps = cost.getInputCaps())
     if (inputCaps.size() != functionType.getNumInputs())
