@@ -38,13 +38,9 @@ struct EvaluatorTestContext {
     context.getOrLoadDialect<OMDialect>();
   }
 
-  OwningOpRef<ModuleOp> parseModule(StringRef moduleText,
-                                    bool skipElaborationTransform = false) {
+  OwningOpRef<ModuleOp> parseModule(StringRef moduleText) {
     OwningOpRef<ModuleOp> owning =
         parseSourceString<ModuleOp>(moduleText, ParserConfig(&context));
-    if (owning && skipElaborationTransform)
-      owning.get()->setAttr("om.skip_elaboration_transform",
-                            UnitAttr::get(&context));
     return owning;
   }
 
@@ -104,29 +100,19 @@ getListElements(const evaluator::EvaluatorValuePtr &value) {
   return llvm::cast<evaluator::ListValue>(value.get())->getElements();
 }
 
-class EvaluatorTests : public ::testing::TestWithParam<bool> {
+class EvaluatorTests : public ::testing::Test {
 protected:
   OwningOpRef<ModuleOp> parseModule(StringRef moduleText) {
-    return test.parseModule(moduleText, GetParam());
-  }
-
-  OwningOpRef<ModuleOp> parseModule(StringRef moduleText,
-                                    bool skipElaborationTransform) {
-    return test.parseModule(moduleText, skipElaborationTransform);
+    return test.parseModule(moduleText);
   }
 
   EvaluatorTestContext test;
   MLIRContext &context = test.context;
 };
 
-std::string getEvaluatorFlowName(const ::testing::TestParamInfo<bool> &info) {
-  return info.param ? "WithoutElaborationTransform"
-                    : "WithElaborationTransform";
-}
-
 /// Failure scenarios.
 
-TEST_P(EvaluatorTests, InstantiateInvalidClassName) {
+TEST_F(EvaluatorTests, InstantiateInvalidClassName) {
   StringRef mod = R"MLIR(
 module {
 }
@@ -145,7 +131,7 @@ module {
   ASSERT_FALSE(succeeded(result));
 }
 
-TEST_P(EvaluatorTests, InstantiateInvalidParamSize) {
+TEST_F(EvaluatorTests, InstantiateInvalidParamSize) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyClass(%param: !om.integer) {
@@ -170,7 +156,7 @@ module {
   ASSERT_FALSE(succeeded(result));
 }
 
-TEST_P(EvaluatorTests, InstantiateNullParam) {
+TEST_F(EvaluatorTests, InstantiateNullParam) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyClass(%param: !om.integer) {
@@ -193,7 +179,7 @@ module {
   ASSERT_FALSE(succeeded(result));
 }
 
-TEST_P(EvaluatorTests, InstantiateInvalidParamType) {
+TEST_F(EvaluatorTests, InstantiateInvalidParamType) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyClass(%param: !om.integer) {
@@ -218,7 +204,7 @@ module {
   ASSERT_FALSE(succeeded(result));
 }
 
-TEST_P(EvaluatorTests, GetFieldInvalidName) {
+TEST_F(EvaluatorTests, GetFieldInvalidName) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyClass() {
@@ -247,7 +233,7 @@ module {
 
 /// Success scenarios.
 
-TEST_P(EvaluatorTests, InstantiateObjectWithParamField) {
+TEST_F(EvaluatorTests, InstantiateObjectWithParamField) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyClass(%param: !om.integer) -> (field: !om.integer) {
@@ -267,7 +253,7 @@ module {
   ASSERT_EQ(42, getInteger(getField(result.value(), "field")));
 }
 
-TEST_P(EvaluatorTests, InstantiateWithStructuredInputs) {
+TEST_F(EvaluatorTests, InstantiateWithStructuredInputs) {
   StringRef mod = R"MLIR(
 module {
   om.class @Leaf(%value: !om.integer) -> (value: !om.integer) {
@@ -328,10 +314,7 @@ module {
   ASSERT_EQ(anyFieldValue->getClassOp().getSymNameAttr().getValue(), "Leaf");
 }
 
-TEST_P(EvaluatorTests, InstantiateWithPartiallyEvaluatedInputs) {
-  if (GetParam())
-    return;
-
+TEST_F(EvaluatorTests, InstantiateWithPartiallyEvaluatedInputs) {
   auto runFailure = [&](StringRef mod, StringRef className,
                         evaluator::EvaluatorValuePtr value,
                         StringRef expectedError) {
@@ -378,7 +361,7 @@ module {
              "cannot import partially evaluated OM list value");
 }
 
-TEST_P(EvaluatorTests, InstantiateObjectWithConstantField) {
+TEST_F(EvaluatorTests, InstantiateObjectWithConstantField) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyClass() -> (field: !om.integer) {
@@ -398,7 +381,7 @@ module {
   ASSERT_EQ(42, getInteger(getField(result.value(), "field")));
 }
 
-TEST_P(EvaluatorTests, InstantiateObjectWithChildObject) {
+TEST_F(EvaluatorTests, InstantiateObjectWithChildObject) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyInnerClass(%param: !om.integer) -> (field: !om.integer) {
@@ -424,7 +407,7 @@ module {
   ASSERT_EQ(42, getInteger(getField(fieldValue, "field")));
 }
 
-TEST_P(EvaluatorTests, InstantiateObjectWithFieldAccess) {
+TEST_F(EvaluatorTests, InstantiateObjectWithFieldAccess) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyInnerClass(%param: !om.integer) -> (field: !om.integer) {
@@ -450,7 +433,7 @@ module {
   ASSERT_EQ(42, getInteger(getField(result.value(), "field")));
 }
 
-TEST_P(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
+TEST_F(EvaluatorTests, InstantiateObjectWithChildObjectMemoized) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyInnerClass() {
@@ -489,7 +472,7 @@ module {
   ASSERT_EQ(field1Value, field2Value);
 }
 
-TEST_P(EvaluatorTests, AnyCastObject) {
+TEST_F(EvaluatorTests, AnyCastObject) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyInnerClass() {
@@ -515,7 +498,7 @@ module {
   ASSERT_EQ(fieldValue->getClassOp().getSymName(), "MyInnerClass");
 }
 
-TEST_P(EvaluatorTests, AnyCastParam) {
+TEST_F(EvaluatorTests, AnyCastParam) {
   StringRef mod = R"MLIR(
 module {
   om.class @MyInnerClass(%param: !om.any) -> (field: !om.any) {
@@ -545,7 +528,7 @@ module {
   ASSERT_EQ(42u, getBuiltinInteger(getField(fieldValue, "field")));
 }
 
-TEST_P(EvaluatorTests, InstantiateGraphRegion) {
+TEST_F(EvaluatorTests, InstantiateGraphRegion) {
   StringRef mod = R"MLIR(
 !ty = !om.class.type<@LinkedList>
 om.class @LinkedList(%n: !ty, %val: !om.string) -> (n: !ty, val:
@@ -586,24 +569,15 @@ om.class @UseNode(%node: !ty) -> (node: !ty) {
 
   auto node = getField(result.value(), "field1");
 
-  if (!GetParam()) {
-    context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
-      ASSERT_EQ(diag.str(), "cannot import mutually referential OM objects");
-    });
-    auto useNodeResult =
-        evaluator.instantiate(StringAttr::get(&context, "UseNode"), {node});
-    ASSERT_TRUE(failed(useNodeResult));
-    return;
-  }
-
+  context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
+    ASSERT_EQ(diag.str(), "cannot import mutually referential OM objects");
+  });
   auto useNodeResult =
       evaluator.instantiate(StringAttr::get(&context, "UseNode"), {node});
-  ASSERT_TRUE(succeeded(useNodeResult));
-  auto resultNode = getField(useNodeResult.value(), "node");
-  ASSERT_EQ(resultNode.get(), node.get());
+  ASSERT_TRUE(failed(useNodeResult));
 }
 
-TEST_P(EvaluatorTests, InstantiateCycle) {
+TEST_F(EvaluatorTests, InstantiateCycle) {
   StringRef mod = R"MLIR(
 !ty = !om.class.type<@LinkedList>
 om.class @LinkedList(%n: !ty) -> (n: !ty){
@@ -617,11 +591,7 @@ om.class @ReferenceEachOther() -> (field: !ty){
 )MLIR";
 
   context.getDiagEngine().registerHandler([&](Diagnostic &diag) {
-    ASSERT_EQ(diag.str(),
-              GetParam()
-                  ? "cycle detected: 1 values remain partially evaluated after "
-                    "full pass with no progress (total fully evaluated: 1)"
-                  : "failed to evaluate om.object.field");
+    ASSERT_EQ(diag.str(), "failed to evaluate om.object.field");
   });
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
@@ -637,7 +607,7 @@ om.class @ReferenceEachOther() -> (field: !ty){
 
 // Test nested object field references.
 // https://github.com/llvm/circt/issues/10264
-TEST_P(EvaluatorTests, Issue10264NestedFieldReferences) {
+TEST_F(EvaluatorTests, Issue10264NestedFieldReferences) {
   StringRef mod = R"MLIR(
 om.class @Domain(%in: !om.string) -> (out: !om.string) {
   om.class.fields %in : !om.string
@@ -666,7 +636,7 @@ om.class @Top() -> (test: i1) {
   ASSERT_FALSE(getBool(getField(result.value(), "test")));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticAdd) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticAdd) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {
   %0 = om.constant #om.integer<1 : si3> : !om.integer
@@ -688,7 +658,7 @@ om.class @IntegerBinaryArithmeticAdd() -> (result: !om.integer) {
   ASSERT_EQ(getInteger(getField(result.value(), "result")), 3);
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticMul) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticMul) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {
   %0 = om.constant #om.integer<2 : si3> : !om.integer
@@ -710,7 +680,7 @@ om.class @IntegerBinaryArithmeticMul() -> (result: !om.integer) {
   ASSERT_EQ(6, getInteger(getField(result.value(), "result")));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticShr) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShr) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -732,7 +702,7 @@ om.class @IntegerBinaryArithmeticShr() -> (result: !om.integer){
   ASSERT_EQ(2, getInteger(getField(result.value(), "result")));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShrNegative) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -747,8 +717,7 @@ om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
       ASSERT_EQ(diag.str(),
                 "'om.integer.shr' op shift amount must be non-negative");
     if (StringRef(diag.str()).starts_with("failed"))
-      ASSERT_EQ(diag.str(), GetParam() ? "failed to evaluate integer operation"
-                                       : "failed to evaluate om.integer.shr");
+      ASSERT_EQ(diag.str(), "failed to evaluate om.integer.shr");
   });
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
@@ -762,7 +731,7 @@ om.class @IntegerBinaryArithmeticShrNegative() -> (result: !om.integer){
   ASSERT_TRUE(failed(result));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShrTooLarge) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -778,8 +747,7 @@ om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
           diag.str(),
           "'om.integer.shr' op shift amount must be representable in 64 bits");
     if (StringRef(diag.str()).starts_with("failed"))
-      ASSERT_EQ(diag.str(), GetParam() ? "failed to evaluate integer operation"
-                                       : "failed to evaluate om.integer.shr");
+      ASSERT_EQ(diag.str(), "failed to evaluate om.integer.shr");
   });
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
@@ -793,7 +761,7 @@ om.class @IntegerBinaryArithmeticShrTooLarge() -> (result: !om.integer){
   ASSERT_TRUE(failed(result));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticShl) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShl) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){
   %0 = om.constant #om.integer<8 : si7> : !om.integer
@@ -815,7 +783,7 @@ om.class @IntegerBinaryArithmeticShl() -> (result: !om.integer){
   ASSERT_EQ(32, getInteger(getField(result.value(), "result")));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShlNegative) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -830,8 +798,7 @@ om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
       ASSERT_EQ(diag.str(),
                 "'om.integer.shl' op shift amount must be non-negative");
     if (StringRef(diag.str()).starts_with("failed"))
-      ASSERT_EQ(diag.str(), GetParam() ? "failed to evaluate integer operation"
-                                       : "failed to evaluate om.integer.shl");
+      ASSERT_EQ(diag.str(), "failed to evaluate om.integer.shl");
   });
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
@@ -845,7 +812,7 @@ om.class @IntegerBinaryArithmeticShlNegative() -> (result: !om.integer) {
   ASSERT_TRUE(failed(result));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticShlTooLarge) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticShlTooLarge) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
   %0 = om.constant #om.integer<8 : si5> : !om.integer
@@ -861,8 +828,7 @@ om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
           diag.str(),
           "'om.integer.shl' op shift amount must be representable in 64 bits");
     if (StringRef(diag.str()).starts_with("failed"))
-      ASSERT_EQ(diag.str(), GetParam() ? "failed to evaluate integer operation"
-                                       : "failed to evaluate om.integer.shl");
+      ASSERT_EQ(diag.str(), "failed to evaluate om.integer.shl");
   });
 
   OwningOpRef<ModuleOp> owning = parseModule(mod);
@@ -876,7 +842,7 @@ om.class @IntegerBinaryArithmeticShlTooLarge() -> (result: !om.integer) {
   ASSERT_TRUE(failed(result));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticObjects) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticObjects) {
   StringRef mod = R"MLIR(
 om.class @Class1() -> (value: !om.integer){
   %0 = om.constant #om.integer<1 : si3> : !om.integer
@@ -912,7 +878,7 @@ om.class @IntegerBinaryArithmeticObjects() -> (result: !om.integer) {
   ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticObjectsDelayed) {
   StringRef mod = R"MLIR(
 om.class @Class1(%input: !om.integer) -> (value: !om.integer, input: !om.integer) {
   %0 = om.constant #om.integer<1 : si3> : !om.integer
@@ -948,7 +914,7 @@ om.class @IntegerBinaryArithmeticObjectsDelayed() -> (result: !om.integer){
   ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
 }
 
-TEST_P(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
+TEST_F(EvaluatorTests, IntegerBinaryArithmeticWidthMismatch) {
   StringRef mod = R"MLIR(
 om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
   %0 = om.constant #om.integer<1 : si3> : !om.integer
@@ -970,7 +936,7 @@ om.class @IntegerBinaryArithmeticWidthMismatch() -> (result: !om.integer) {
   ASSERT_EQ(3, getInteger(getField(result.value(), "result")));
 }
 
-TEST_P(EvaluatorTests, ListConcat) {
+TEST_F(EvaluatorTests, ListConcat) {
   StringRef mod = R"MLIR(
 om.class @ListConcat() -> (result: !om.list<!om.integer>) {
   %0 = om.constant #om.integer<0 : i8> : !om.integer
@@ -1000,7 +966,7 @@ om.class @ListConcat() -> (result: !om.list<!om.integer>) {
   ASSERT_EQ(2, getInteger(finalList[2]));
 }
 
-TEST_P(EvaluatorTests, ListConcatField) {
+TEST_F(EvaluatorTests, ListConcatField) {
   StringRef mod = R"MLIR(
 om.class @ListField() -> (value: !om.list<!om.integer>) {
   %0 = om.constant #om.integer<2 : i8> : !om.integer
@@ -1035,7 +1001,7 @@ om.class @ListConcatField() -> (result: !om.list<!om.integer>){
   ASSERT_EQ(2, getInteger(finalList[2]));
 }
 
-TEST_P(EvaluatorTests, ListOfListConcat) {
+TEST_F(EvaluatorTests, ListOfListConcat) {
   StringRef mod = R"MLIR(
 om.class @ListOfListConcat()  -> (result: !om.list<!om.list<!om.string>>) {
   %0 = om.constant "foo" : !om.string
@@ -1073,7 +1039,7 @@ om.class @ListOfListConcat()  -> (result: !om.list<!om.list<!om.string>>) {
   ASSERT_EQ("qux", getString(sublist1[1]));
 }
 
-TEST_P(EvaluatorTests, ListConcatPartialCycle) {
+TEST_F(EvaluatorTests, ListConcatPartialCycle) {
   StringRef mod = R"MLIR(
 om.class @Child(%field_in: !om.any) -> (field: !om.list<!om.any>) {
   %1 = om.list_create %field_in : !om.any
@@ -1115,7 +1081,7 @@ om.class @ListConcatPartialCycle() -> (result: !om.list<!om.any>){
   ASSERT_EQ(2, getInteger(getField(finalList[1], "id")));
 }
 
-TEST_P(EvaluatorTests, NestedReferenceValue) {
+TEST_F(EvaluatorTests, NestedFieldValues) {
   StringRef mod = R"MLIR(
 om.class @Empty() {
   om.class.fields
@@ -1172,7 +1138,7 @@ om.class @OuterClass1()  -> (om: !om.any) {
   ASSERT_TRUE(isa<evaluator::ObjectValue>(anyList2[0].get()));
 }
 
-TEST_P(EvaluatorTests, ListAttrConcat) {
+TEST_F(EvaluatorTests, ListAttrConcat) {
   StringRef mod = R"MLIR(
 om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
   %0 = om.constant #om.list<!om.string, ["X" : !om.string, "Y" : !om.string]> : !om.list<!om.string>
@@ -1203,7 +1169,7 @@ om.class @ConcatListAttribute() -> (result: !om.list<!om.string>) {
   checkEq(listVal[3], "Y");
 }
 
-TEST_P(EvaluatorTests, UnknownValuesBasic) {
+TEST_F(EvaluatorTests, UnknownValuesBasic) {
   StringRef mod = R"MLIR(
 om.class.extern @Baz() -> (a: !om.integer) {}
 
@@ -1338,7 +1304,7 @@ om.class @Foo(
   checkFieldValueType("q", Kind::Object);   // external class -> ObjectValue
 }
 
-TEST_P(EvaluatorTests, UnknownValuesNested) {
+TEST_F(EvaluatorTests, UnknownValuesNested) {
   StringRef mod = R"MLIR(
 om.class @Bar(
   %known_in: !om.integer,
@@ -1386,7 +1352,7 @@ om.class @Foo(
   ASSERT_TRUE(getField(result.value(), "b")->isUnknown());
 }
 
-TEST_P(EvaluatorTests, StringConcat) {
+TEST_F(EvaluatorTests, StringConcat) {
   const char *mod = R"MLIR(
 module {
   om.class @Test() -> (result: !om.string) {
@@ -1413,7 +1379,7 @@ module {
   ASSERT_EQ("Hello, World!", getString(getField(result.value(), "result")));
 }
 
-TEST_P(EvaluatorTests, UnknownObjectFieldTest) {
+TEST_F(EvaluatorTests, UnknownObjectFieldTest) {
   StringRef mod = R"MLIR(
 om.class.extern @Dut_Class(%basepath: !om.frozenbasepath) -> (omirOut: !om.list<!om.any>) {
 }
@@ -1442,7 +1408,7 @@ om.class @TestHarness_Class(%basepath: !om.frozenbasepath) -> (result: !om.list<
   EXPECT_TRUE(getField(result.value(), "result")->isUnknown());
 }
 
-TEST_P(EvaluatorTests, PropertyAssertTests) {
+TEST_F(EvaluatorTests, PropertyAssertTests) {
   StringRef mod = R"MLIR(
 // Test 1: A true assert passes.
 om.class @True() -> () {
@@ -1598,8 +1564,7 @@ om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
       evaluator.instantiate(StringAttr::get(&context, "SubfieldFalse"), {})));
 
   // Test 11: Two asserts on a value flowing through chained object instances.
-  // Both assertions fail; the evaluator must drain the worklist before
-  // evaluating either assert (i.e. the fix for the null-ReferenceValue crash).
+  // Both assertions fail.
   auto basepath = std::make_shared<evaluator::BasePathValue>(&context);
   ASSERT_TRUE(failed(evaluator.instantiate(
       StringAttr::get(&context, "ChainedDomainAssert"), {basepath})));
@@ -1616,7 +1581,7 @@ om.class @ChainedDomainAssert(%basepath: !om.frozenbasepath) -> () {
     EXPECT_EQ(actual, expected);
 }
 
-TEST_P(EvaluatorTests, PropEqTests) {
+TEST_F(EvaluatorTests, PropEqTests) {
   StringRef mod = R"MLIR(
 om.class @PropEqString(%s: !om.string) -> (equal: i1, not_equal: i1, unknown: i1) {
   %a    = om.constant "hello" : !om.string
@@ -1676,7 +1641,7 @@ om.class @PropEqInteger(%n: !om.integer) -> (equal: i1, not_equal: i1, unknown: 
   }
 }
 
-TEST_P(EvaluatorTests, IntegerBitwiseTests) {
+TEST_F(EvaluatorTests, IntegerBitwiseTests) {
   StringRef mod = R"MLIR(
 om.class @IntegerBitwiseAnd(%a: i8, %b: i8) -> (result: i8) {
   %and = om.integer.and %a, %b : i8
@@ -1713,7 +1678,6 @@ om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
     auto attr = mlir::IntegerAttr::get(i8Type, val);
     auto v = evaluator::AttributeValue::get(i8Type, unknownLoc);
     (void)cast<evaluator::AttributeValue>(v.get())->setAttr(attr);
-    (void)cast<evaluator::AttributeValue>(v.get())->finalize();
     return v;
   };
 
@@ -1762,11 +1726,8 @@ om.class @IntegerBitwiseUnknown(%b: i8) -> (unknown: i8) {
     auto r = evaluator.instantiate(
         StringAttr::get(&context, "IntegerBitwiseUnknown"), {unknown});
     ASSERT_TRUE(succeeded(r));
-    ASSERT_EQ(getField(r.value(), "unknown")->isUnknown(), GetParam());
+    ASSERT_FALSE(getField(r.value(), "unknown")->isUnknown());
   }
 }
-
-INSTANTIATE_TEST_SUITE_P(EvaluatorFlows, EvaluatorTests,
-                         ::testing::Values(false, true), getEvaluatorFlowName);
 
 } // namespace
