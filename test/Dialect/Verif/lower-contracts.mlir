@@ -348,3 +348,39 @@ hw.module @Counter(in %in : i2, out out : i2, in %clock : !seq.clock, in %reset 
   }
   hw.output %4 : i2
 }
+
+// Same as @Mul9, but the contract body references its input through a block
+// argument (which aliases the result) instead of the result directly. The
+// lowering must map the block argument like the result, producing identical IR.
+
+// CHECK-LABEL: hw.module @Mul9BlockArg
+// CHECK-NEXT:   %c9_i42 = hw.constant 9 : i42
+// CHECK-NEXT:   [[TMP:%.+]] = comb.mul %a, %c9_i42 : i42
+// CHECK-NEXT:   hw.output [[TMP]] : i42
+// CHECK-NEXT: }
+
+// CHECK-LABEL: verif.formal @Mul9BlockArg_CheckContract_0
+// CHECK-NEXT:   %c0_i3 = hw.constant 0 : i3
+// CHECK-NEXT:   %c9_i42 = hw.constant 9 : i42
+// CHECK-NEXT:   [[A:%.+]] = verif.symbolic_value : i42
+// CHECK-NEXT:   [[TMP1:%.+]] = comb.extract [[A]] from 0 : (i42) -> i39
+// CHECK-NEXT:   [[TMP2:%.+]] = comb.concat [[TMP1]], %c0_i3 : i39, i3
+// CHECK-NEXT:   [[TMP1:%.+]] = comb.add [[A]], [[TMP2]] : i42
+// CHECK-NEXT:   [[TMP2:%.+]] = comb.mul [[A]], %c9_i42 : i42
+// CHECK-NEXT:   [[TMP3:%.+]] = comb.icmp eq [[TMP1]], [[TMP2]] : i42
+// CHECK-NEXT:   verif.assert [[TMP3]] : i1
+// CHECK-NEXT: }
+
+hw.module @Mul9BlockArg(in %a: i42, out z: i42) {
+  %c3_i42 = hw.constant 3 : i42
+  %c9_i42 = hw.constant 9 : i42
+  %0 = comb.shl %a, %c3_i42 : i42    // 8*a
+  %1 = comb.add %a, %0 : i42         // a + 8*a
+  %2 = verif.contract %1 : i42 {
+  ^bb0(%arg0: i42):
+    %3 = comb.mul %a, %c9_i42 : i42  // 9*a
+    %4 = comb.icmp eq %arg0, %3 : i42  // 9*a == a + 8*a, via the block argument
+    verif.ensure %4 : i1
+  }
+  hw.output %2 : i42
+}

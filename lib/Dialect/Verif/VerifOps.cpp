@@ -345,6 +345,19 @@ void SymbolicValueOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 //===----------------------------------------------------------------------===//
+// ContractOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ContractOp::verify() {
+  // Body block arguments are optional, but if present must match the inputs.
+  auto args = getBody().getArgumentTypes();
+  if (!args.empty() && args != getInputs().getType())
+    return emitOpError(
+        "body block arguments must be empty or match the input types");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Generated code
 //===----------------------------------------------------------------------===//
 

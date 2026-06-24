@@ -88,6 +88,10 @@ void assumeContractHolds(OpBuilder &builder, IRMapping &mapping,
                                        result.getType(), StringAttr({}));
     mapping.map(result, sym);
   }
+  // Block arguments (if any) alias the results; map them to the same values.
+  for (auto [arg, result] :
+       llvm::zip(contract.getBody().getArguments(), contract.getResults()))
+    mapping.map(arg, mapping.lookup(result));
   auto &contractOps = contract.getBody().front().getOperations();
   for (auto it = contractOps.rbegin(); it != contractOps.rend(); ++it) {
     workList.push(&*it);
@@ -200,6 +204,11 @@ LogicalResult inlineContract(ContractOp &contract, OpBuilder &builder,
       mapping.map(result, mapping.lookup(input));
     }
   }
+  // Block arguments (if any) alias the results; map them to the same values so
+  // a body built against the block arguments clones correctly.
+  for (auto [arg, result] :
+       llvm::zip(contract.getBody().getArguments(), contract.getResults()))
+    mapping.map(arg, mapping.lookup(result));
 
   // Clone body of the contract
   for (auto &op : contract.getBody().front().getOperations()) {

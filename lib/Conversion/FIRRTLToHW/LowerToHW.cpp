@@ -3398,12 +3398,9 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
     return LoweringFailure;
   }
 
-  // A `verif.contract` may be emitted directly (e.g. by a frontend) rather than
-  // produced from a `firrtl.contract`, in which case it carries FIRRTL-typed
-  // operands/results. The generic non-FIRRTL passthrough below would remap its
-  // operands but leave the result types as FIRRTL types, violating
-  // verif.contract's AllTypesMatch invariant. Re-create it with lowered types,
-  // mirroring visitDecl(firrtl::ContractOp).
+  // A directly-emitted verif.contract carries FIRRTL-typed results; the generic
+  // passthrough below would leave them FIRRTL-typed and break AllTypesMatch, so
+  // re-create it with lowered types instead.
   if (auto contract = dyn_cast<verif::ContractOp>(op)) {
     if (failed(lowerVerifContract(contract)))
       return LoweringFailure;
@@ -4337,13 +4334,8 @@ LogicalResult FIRRTLLowering::visitDecl(ContractOp oldOp) {
   return success();
 }
 
-// Lower a `verif.contract` that already exists in the FIRRTL module body (e.g.
-// emitted directly by a frontend) rather than being produced from a
-// `firrtl.contract`. Its operands/results are FIRRTL-typed; re-create it with
-// the lowered types (so it satisfies AllTypesMatch) and re-lower its body in
-// place. Unlike `firrtl.contract`, `verif.contract` has no block arguments
-// (NoRegionArguments): its body refers to the contract's results directly, so
-// only the results are remapped.
+// Re-create a directly-emitted verif.contract with lowered operand/result types
+// and re-lower its body in place.
 LogicalResult FIRRTLLowering::lowerVerifContract(verif::ContractOp oldOp) {
   SmallVector<Value> inputs;
   SmallVector<Type> types;
@@ -4362,6 +4354,12 @@ LogicalResult FIRRTLLowering::lowerVerifContract(verif::ContractOp oldOp) {
   for (auto [oldResult, newResult] :
        llvm::zip(oldOp.getResults(), newOp.getResults()))
     if (failed(setLowering(oldResult, newResult)))
+      return failure();
+
+  // Remap body block arguments (if any) to the results, like firrtl.contract.
+  for (auto [oldArg, newResult] :
+       llvm::zip(oldOp.getBody().getArguments(), newOp.getResults()))
+    if (failed(setLowering(oldArg, newResult)))
       return failure();
 
   body.getOperations().splice(body.end(),

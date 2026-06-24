@@ -508,7 +508,6 @@ def SymbolicValueOp : VerifOp<"symbolic_value", [
 
 def ContractOp : VerifOp<"contract", [
   AllTypesMatch<["inputs", "outputs"]>,
-  NoRegionArguments,
   NoTerminator,
   RegionKindInterface,
   SingleBlock,
@@ -531,6 +530,11 @@ def ContractOp : VerifOp<"contract", [
     inlining them and replacing `require` with `assert` and `ensure` with
     `assume`. The results of the contract are replaced with symbolic values.
 
+    The body region may optionally carry block arguments matching the input
+    types, which a frontend can use to reference the inputs when its dialect
+    requires SSA dominance (e.g. FIRRTL); lowering remaps them to the results.
+    Without block arguments the body refers to the contract's results directly.
+
     See the documentation of the Verif dialect for more details.
   }];
   let arguments = (ins Variadic<AnyType>:$inputs);
@@ -539,6 +543,7 @@ def ContractOp : VerifOp<"contract", [
   let assemblyFormat = [{
     ($inputs^ `:` type($inputs))? attr-dict-with-keyword $body
   }];
+  let hasVerifier = 1;
   let extraClassDeclaration = [{
     static RegionKind getRegionKind(unsigned index) {
       return RegionKind::Graph;
