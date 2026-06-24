@@ -3053,6 +3053,42 @@ def DisplayBIOp : Builtin<"display"> {
   let assemblyFormat = "$message attr-dict";
 }
 
+def StrobeYieldOp : MooreOp<"strobe_yield", [
+  Pure, Terminator, HasParent<"StrobeBIOp">,
+]> {
+  let summary = "terminates a moore.builtin.strobe body, yielding its message";
+  let description = [{
+    Terminates the `body` region of a `moore.builtin.strobe` op, yielding the
+    `!moore.format_string` to print once the region is executed. See
+    `moore.builtin.strobe` for the scope of the Postponed region guarantee
+    this is meant to support.
+  }];
+  let arguments = (ins FormatStringType:$message);
+  let assemblyFormat = "$message attr-dict";
+}
+
+def StrobeBIOp : Builtin<"strobe"> {
+  let summary = "Display formatted values at end of simulation timestep";
+  let description = [{
+    Schedules a display of the formatted message in the Postponed region of
+    the current simulation time, after all Active and NBA updates have
+    settled. The `body` region is built lazily, at the point where the
+    message is needed, rather than at the original `$strobe` call site, so
+    that the ops that read variables or signals while building the message
+    can be relocated as a single, indivisible unit relative to surrounding ops.
+    Corresponds to `$strobe[boh]` system task.
+
+    See IEEE 1800-2017 § 21.2.2 "Strobed monitoring".
+  }];
+  let arguments = (ins);
+  let results = (outs);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$body attr-dict";
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
 def SeverityInfo : I32EnumAttrCase<"Info", 0, "info">;
 def SeverityWarning : I32EnumAttrCase<"Warning", 1, "warning">;
 def SeverityError : I32EnumAttrCase<"Error", 2, "error">;

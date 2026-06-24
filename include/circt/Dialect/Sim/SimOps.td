@@ -1213,6 +1213,20 @@ def TriggeredOp : SimOp<"triggered", [
   ];
 }
 
+def DeferOp : SimOp<"defer", [
+    SingleBlock, NoTerminator, ProceduralOp, ProceduralRegion]> {
+  let summary = "Execute a region at the end of the current simulation time";
+  let description = [{
+    Schedules its body for execution in the Postponed region of the current
+    simulation time.
+  }];
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$body attr-dict";
+  let extraClassDeclaration = [{
+    Block *getBodyBlock() { return &getBody().front(); }
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // File I/O
 //===----------------------------------------------------------------------===//

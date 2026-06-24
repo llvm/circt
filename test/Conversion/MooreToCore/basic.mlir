@@ -448,6 +448,19 @@ func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64
   return
 }
 
+// CHECK-LABEL: func @StrobeToPrint
+func.func @StrobeToPrint() {
+  // CHECK: sim.defer {
+  // CHECK-NEXT: [[TMP:%.+]] = sim.fmt.literal "hello\0A"
+  // CHECK-NEXT: sim.proc.print [[TMP]]
+  // CHECK-NEXT: }
+  moore.builtin.strobe {
+    %0 = moore.fmt.literal "hello\0A"
+    moore.strobe_yield %0
+  }
+  return
+}
+
 // CHECK-LABEL: hw.module @InstanceNull() {
 moore.module @InstanceNull() {
 
