@@ -615,10 +615,11 @@ def GetNextWakeupOp : ArcOp<"get_next_wakeup", [
 ]> {
   let summary = "Read the model's next wakeup time";
   let description = [{
-    Reads the next wakeup time from the model's storage. The time is
-    represented as an `i64` value in femtoseconds. A value of `0` indicates
-    "wake up immediately"; a value of `UINT64_MAX` indicates that no wakeup
-    is pending.
+    Reads the next wakeup time from the model's storage. The time is an
+    absolute timestamp in femtoseconds, not a duration relative to the current
+    simulation time. A wakeup at the current time requests an immediate
+    re-evaluation in the same time step; a value of `UINT64_MAX` indicates that
+    no wakeup is pending.
   }];
   let arguments = (ins StorageType:$storage);
   let results = (outs I64:$time);
@@ -1136,11 +1137,12 @@ def SimGetNextWakeupOp : ArcOp<"sim.get_next_wakeup", [
 ]> {
   let summary = "Gets the next wakeup time of the model instance";
   let description = [{
-    Gets the next wakeup time of the given model instance. The time is
-    represented as an `i64` value in femtoseconds. A value of `0` indicates
-    "wake up immediately"; a value of `UINT64_MAX` indicates that no wakeup
-    is pending. The slot is recomputed on every evaluation, so a driver
-    typically reads it after each `arc.sim.step` to decide how far to
+    Gets the next wakeup time of the given model instance. The time is an
+    absolute timestamp in femtoseconds, not a duration relative to the current
+    simulation time. A wakeup at the current time requests an immediate
+    re-evaluation in the same time step; a value of `UINT64_MAX` indicates that
+    no wakeup is pending. The slot is recomputed on every evaluation, so a
+    driver typically reads it after each `arc.sim.step` to decide how far to
     advance simulation time before the next step.
   }];
   let arguments = (ins SimModelInstance:$instance);

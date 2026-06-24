@@ -252,6 +252,11 @@ static llvm::cl::list<std::string>
             llvm::cl::ZeroOrMore, llvm::cl::CommaSeparated,
             llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<bool> noGenerateDriver(
+    "no-generate-driver",
+    llvm::cl::desc("Don't emit a simulation driver function for each model"),
+    llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
 static llvm::cl::opt<bool>
     noRuntime("no-runtime",
               llvm::cl::desc("Don't emit calls to the runtime library"),
@@ -445,6 +450,7 @@ static LogicalResult processBuffer(
 
   if (!untilReached(UntilLLVMLowering)) {
     ArcToLLVMOptions opts;
+    opts.noGenerateDriver = noGenerateDriver;
     opts.noRuntime = noRuntime;
     std::string runtimeArgs;
     if (!jitVcdFile.empty()) {

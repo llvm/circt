@@ -1,4 +1,4 @@
-// RUN: arcilator --run %s --jit-entry=entry --jit-vcd-file=%t | FileCheck %s
+// RUN: arcilator --run %s --jit-entry=CoroutineProc_main --jit-vcd-file=%t | FileCheck %s
 // RUN: FileCheck %s --check-prefix=VCD --input-file=%t
 // REQUIRES: arcilator-jit
 
@@ -11,26 +11,15 @@
 // `now + delay`.
 
 // CHECK:      A 0 @ 0
-// CHECK-NEXT: out=42
 // CHECK-NEXT: A 1 @ 100
-// CHECK-NEXT: out=43
 // CHECK-NEXT: A 2 @ 200
-// CHECK-NEXT: out=44
 // CHECK-NEXT: A 3 @ 300
-// CHECK-NEXT: out=45
 // CHECK-NEXT: A 4 @ 400
-// CHECK-NEXT: out=46
 // CHECK-NEXT: B 0 @ 500
-// CHECK-NEXT: out=42
 // CHECK-NEXT: B 1 @ 511
-// CHECK-NEXT: out=43
 // CHECK-NEXT: B 2 @ 522
-// CHECK-NEXT: out=44
 // CHECK-NEXT: B 3 @ 533
-// CHECK-NEXT: out=45
 // CHECK-NEXT: B 4 @ 544
-// CHECK-NEXT: out=46
-// CHECK-NEXT: out=47
 
 // Two counting loops with different suspension delays. The current time is
 // supplied as the `%now` argument on every entry. Each iteration yields the
@@ -106,35 +95,6 @@ hw.module @CoroutineProc(out o: i42) {
   %c42 = hw.constant 42 : i42
   %sum = comb.add %0, %c42 : i42
   hw.output %sum : i42
-}
-
-// Drives the model like a simulator: query the next wakeup, advance time to it,
-// evaluate, and print the latched output. Stops once no wakeup is pending.
-func.func @entry() {
-  arc.sim.instantiate @CoroutineProc as %inst {
-    %never = hw.constant -1 : i64
-    %w0 = arc.sim.get_next_wakeup %inst : !arc.sim.instance<@CoroutineProc>
-
-    scf.while (%w = %w0) : (i64) -> i64 {
-      %pending = comb.icmp ne %w, %never : i64
-      scf.condition(%pending) %w : i64
-    } do {
-    ^bb0(%w: i64):
-      arc.sim.set_time %inst, %w : !arc.sim.instance<@CoroutineProc>
-      arc.sim.step %inst : !arc.sim.instance<@CoroutineProc>
-
-      %out = arc.sim.get_port %inst, "o" : i42, !arc.sim.instance<@CoroutineProc>
-      %lit = sim.fmt.literal "out="
-      %dec = sim.fmt.dec %out specifierWidth 0 : i42
-      %nl = sim.fmt.literal "\n"
-      %msg = sim.fmt.concat (%lit, %dec, %nl)
-      sim.proc.print %msg
-
-      %wn = arc.sim.get_next_wakeup %inst : !arc.sim.instance<@CoroutineProc>
-      scf.yield %wn : i64
-    }
-  }
-  return
 }
 
 // The VCD trace records `o` against simulation time, advancing in steps of 100

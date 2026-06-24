@@ -199,6 +199,23 @@ def LowerArrays : Pass<"arc-lower-arrays", "mlir::ModuleOp"> {
   let dependentDialects = ["arc::ArcDialect"];
 }
 
+def GenerateDriver : Pass<"arc-generate-driver", "mlir::ModuleOp"> {
+  let summary = "Generate a simulation driver function for each model";
+  let description = [{
+    Emit a `func.func @<model>_main` for every `arc.model` that instantiates the
+    model and drives it forward in time until no more events are scheduled: it
+    repeatedly advances simulation time to the next scheduled wakeup and
+    evaluates the model until no further wakeup is pending. This lets a model be
+    run directly through the arcilator JIT without a hand-written driver loop.
+  }];
+  let dependentDialects = [
+    "arc::ArcDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::func::FuncDialect",
+    "mlir::scf::SCFDialect",
+  ];
+}
+
 def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
   let summary = "Lowers arc.lut into a comb and hw only representation.";
   let dependentDialects = ["hw::HWDialect", "comb::CombDialect"];

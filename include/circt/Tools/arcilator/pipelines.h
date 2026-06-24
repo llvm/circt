@@ -114,6 +114,10 @@ void populateArcStateAllocationPipeline(
 // Lower the arcs and update functions to LLVM. This pipeline lowers modules to
 // LLVM IR.
 struct ArcToLLVMOptions : mlir::PassPipelineOptions<ArcToLLVMOptions> {
+  Option<bool> noGenerateDriver{
+      *this, "no-generate-driver",
+      llvm::cl::desc("Don't emit a simulation driver function for each model"),
+      llvm::cl::init(false)};
   Option<bool> noRuntime{
       *this, "no-runtime",
       llvm::cl::desc("Don't emit calls to the runtime library"),

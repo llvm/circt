@@ -4,6 +4,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   ArcCanonicalizer.cpp
   Dedup.cpp
   FindInitialVectors.cpp
+  GenerateDriver.cpp
   InferMemories.cpp
   InferStateProperties.cpp
   InlineArcs.cpp
