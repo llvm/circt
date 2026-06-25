@@ -392,7 +392,7 @@ LogicalResult
 HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
   // Gather memref ports to be converted. This is an ordered map, and will be
   // iterated from lo to hi indices.
-  std::map<unsigned, Value> memrefArgs;
+  std::map<unsigned, BlockArgument> memrefArgs;
   for (auto [i, arg] : llvm::enumerate(func.getArguments()))
     if (isa<MemRefType>(arg.getType()))
       memrefArgs[i] = arg;
@@ -411,8 +411,10 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
   OpBuilder b(func);
   for (auto it : memrefArgs) {
     // Do not use structured bindings for 'it' - cannot reference inside lambda.
-    unsigned i = it.first;
     auto arg = it.second;
+    // arg.getArgNumber() reflects the current position after any insertions/
+    // erasures from processing earlier memref arguments.
+    unsigned i = arg.getArgNumber();
     auto loc = arg.getLoc();
     // Get the attached extmemory external module.
     auto extmemOp = cast<handshake::ExternalMemoryOp>(*arg.getUsers().begin());
@@ -489,7 +491,8 @@ HandshakeLowerExtmemToHWPass::lowerExtmemToHW(handshake::FuncOp func) {
       return failure();
     eraseFromArrayAttr(func, "argNames", i + addedInPorts);
 
-    argReplacements[i] = memIOTypes;
+    // it.first is the original (pre-lowering) argument index
+    argReplacements[it.first] = memIOTypes;
   }
 
   if (createESIWrapper)
