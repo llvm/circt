@@ -24,6 +24,59 @@ include "circt/Support/ProceduralRegionTrait.td"
 // Control flow like-operations
 //===----------------------------------------------------------------------===//
 
+def YieldOp : SVOp<"yield", [Pure, ReturnLike, Terminator,
+    ParentOneOf<["IfDefOp", "IfDefProceduralOp"]>]> {
+  let summary = "yield values from SV ifdef operations";
+  let description = [{
+    The `sv.yield` operation yields SSA values from an SV ifdef operation's
+    region and terminates the region. The parent ifdef operation concatenates
+    the results from the then region with the results from the else region.
+
+    Each region can yield a different number and types of values. The yielded
+    values from each region become results of the parent operation in order:
+    first all values from the then region, then all values from the else region.
+
+    If the parent operation defines no values, then the `sv.yield` may be
+    left out in the custom syntax and the builders will insert one implicitly.
+    Otherwise, it has to be present in the syntax to indicate which values are
+    yielded.
+
+    Example with different types from each region:
+    ```mlir
+    // Returns 2 results: i32 from then, i64 from else
+    %0:2 = sv.ifdef @MACRO -> i32, i64 {
+      %then_val = ...
+      sv.yield %then_val : i32
+    } else {
+      %else_val = ...
+      sv.yield %else_val : i64
+    }
+    ```
+
+    Example with multiple values from one region:
+    ```mlir
+    // Returns 3 results: 2 from then, 1 from else
+    %0:3 = sv.ifdef @MACRO -> i32, i64, i8 {
+      %v1 = ...
+      %v2 = ...
+      sv.yield %v1, %v2 : i32, i64
+    } else {
+      %v3 = ...
+      sv.yield %v3 : i8
+    }
+    ```
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$results);
+  let assemblyFormat = "($results^ `:` type($results))? attr-dict";
+
+  let builders = [
+    OpBuilder<(ins), [{
+      build($_builder, $_state, mlir::ValueRange());
+    }]>
+  ];
+}
+
 def OrderedOutputOp : SVOp<"ordered", [SingleBlock, NoTerminator, NoRegionArguments,
                              NonProceduralOp]> {
   let summary = "a sub-graph region which guarantees to output statements in-order";
@@ -50,7 +103,9 @@ def IfDefOp : SVOp<"ifdef", [
     NoRegionArguments,
     NonProceduralOp,
     NonProceduralRegion,
-    GraphRegionNoTerminator,
+    SingleBlockImplicitTerminator<"YieldOp">,
+    RegionKindInterface,
+    HasOnlyGraphRegion,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
 ]> {
   let summary = "'ifdef MACRO' block";
@@ -58,14 +113,51 @@ def IfDefOp : SVOp<"ifdef", [
   let description = [{
     This operation is an #ifdef block, which has a "then" and "else" region.
     This operation is for non-procedural regions and its body is non-procedural.
+
+    The `sv.ifdef` operation may produce results. The results are formed by
+    concatenating the values yielded from the then region followed by the values
+    yielded from the else region. The then and else regions can yield different
+    numbers and types of values.
+
+    Example without results:
+    ```mlir
+    sv.ifdef @MACRO {
+      ...
+    } else {
+      ...
+    }
+    ```
+
+    Example with results from both regions:
+    ```mlir
+    // Returns 2 results: first from then, second from else
+    %0:2 = sv.ifdef @MACRO -> i32, i64 {
+      %then_val = ...
+      sv.yield %then_val : i32
+    } else {
+      %else_val = ...
+      sv.yield %else_val : i64
+    }
+    ```
+
+    Example with only then region having results:
+    ```mlir
+    %0 = sv.ifdef @MACRO -> i32 {
+      %value = ...
+      sv.yield %value : i32
+    } else {
+      sv.yield
+    }
+    ```
   }];
 
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let arguments = (ins MacroIdentAttr:$cond);
-  let results = (outs);
+  let results = (outs Variadic<AnyType>:$results);
 
   let hasCanonicalizeMethod = true;
-  let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
@@ -81,6 +173,9 @@ def IfDefOp : SVOp<"ifdef", [
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>,
     OpBuilder<(ins "MacroIdentAttr":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilder<(ins "TypeRange":$resultTypes, "MacroIdentAttr":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
@@ -98,12 +193,31 @@ def IfDefOp : SVOp<"ifdef", [
       assert(hasElse() && "Empty 'else' region.");
       return &getElseRegion().front();
     }
+
+    /// Get the number of results from the then region.
+    unsigned getNumThenResults();
+
+    /// Get the number of results from the else region.
+    unsigned getNumElseResults();
+
+    /// Get results from the then region.
+    mlir::ResultRange getThenResults() {
+      return getResults().take_front(getNumThenResults());
+    }
+
+    /// Get results from the else region.
+    mlir::ResultRange getElseResults() {
+      return getResults().drop_front(getNumThenResults());
+    }
+
+    // Implement RegionKindInterface.
+    static RegionKind getRegionKind(unsigned index) { return RegionKind::Graph; }
   }];
 }
 
 def IfDefProceduralOp : SVOp<"ifdef.procedural", [
       SingleBlock,
-      NoTerminator,
+      SingleBlockImplicitTerminator<"YieldOp">,
       NoRegionArguments,
       ProceduralRegion,
       ProceduralOp,
@@ -114,14 +228,44 @@ def IfDefProceduralOp : SVOp<"ifdef.procedural", [
   let description = [{
     This operation is an #ifdef block, which has a "then" and "else" region.
     This operation is for procedural regions and its body is procedural.
+
+    The `sv.ifdef.procedural` operation may produce results. The results are
+    formed by concatenating the values yielded from the then region followed by
+    the values yielded from the else region. The then and else regions can yield
+    different numbers and types of values.
+
+    Example without results:
+    ```mlir
+    sv.initial {
+      sv.ifdef.procedural @MACRO {
+        ...
+      } else {
+        ...
+      }
+    }
+    ```
+
+    Example with results from both regions:
+    ```mlir
+    sv.initial {
+      // Returns 2 results: first from then, second from else
+      %0:2 = sv.ifdef.procedural @MACRO -> i32, i64 {
+        %then_val = ...
+        sv.yield %then_val : i32
+      } else {
+        %else_val = ...
+        sv.yield %else_val : i64
+      }
+    }
+    ```
   }];
 
   let hasCanonicalizeMethod = true;
+  let hasVerifier = 1;
   let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
   let arguments = (ins MacroIdentAttr:$cond);
-  let results = (outs);
-
-  let assemblyFormat = "$cond $thenRegion (`else` $elseRegion^)? attr-dict";
+  let results = (outs Variadic<AnyType>:$results);
+  let hasCustomAssemblyFormat = 1;
 
   // TODO: ODS forces using a custom builder just to get the region terminator
   // implicitly installed.
@@ -138,6 +282,9 @@ def IfDefProceduralOp : SVOp<"ifdef.procedural", [
                       CArg<"std::function<void()>", "{}">:$elseCtor)>,
     OpBuilder<(ins "MacroIdentAttr":$cond,
                       CArg<"std::function<void()>", "{}">:$thenCtor,
+                      CArg<"std::function<void()>", "{}">:$elseCtor)>,
+    OpBuilder<(ins "TypeRange":$resultTypes, "MacroIdentAttr":$cond,
+                      CArg<"std::function<void()>", "{}">:$thenCtor,
                       CArg<"std::function<void()>", "{}">:$elseCtor)>
   ];
 
@@ -153,6 +300,22 @@ def IfDefProceduralOp : SVOp<"ifdef.procedural", [
     Block *getElseBlock() {
       assert(hasElse() && "Empty 'else' region.");
       return &getElseRegion().front();
+    }
+
+    /// Get the number of results from the then region.
+    unsigned getNumThenResults();
+
+    /// Get the number of results from the else region.
+    unsigned getNumElseResults();
+
+    /// Get results from the then region.
+    mlir::ResultRange getThenResults() {
+      return getResults().take_front(getNumThenResults());
+    }
+
+    /// Get results from the else region.
+    mlir::ResultRange getElseResults() {
+      return getResults().drop_front(getNumThenResults());
     }
   }];
 }

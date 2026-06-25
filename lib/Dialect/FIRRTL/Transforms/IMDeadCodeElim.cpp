@@ -661,8 +661,10 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
         }
 
         // Delete dead wires, regs, nodes and alloc/read ops.
+        // However, never remove terminators as they are essential for block
+        // structure.
         if ((isDeclaration(op) || !hasUnknownSideEffect(op)) &&
-            isAssumedDead(op)) {
+            isAssumedDead(op) && !op->hasTrait<OpTrait::IsTerminator>()) {
           LLVM_DEBUG(llvm::dbgs() << "DEAD: " << *op << "\n";);
           assert(op->use_empty() && "users should be already removed");
           op->erase();
@@ -671,7 +673,10 @@ void IMDeadCodeElimPass::rewriteModuleBody(FModuleOp module) {
         }
 
         // Remove non-sideeffect op using `isOpTriviallyDead`.
-        if (mlir::isOpTriviallyDead(op)) {
+        // However, never remove terminators as they are essential for block
+        // structure.
+        if (!op->hasTrait<OpTrait::IsTerminator>() &&
+            mlir::isOpTriviallyDead(op)) {
           op->erase();
           ++numErasedOps;
         }

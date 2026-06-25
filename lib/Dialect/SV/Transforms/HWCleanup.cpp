@@ -91,6 +91,12 @@ static void mergeRegions(Region *region1, Region *region2) {
   if (!region2->empty()) {
     auto &block1 = region1->front();
     auto &block2 = region2->front();
+
+    // If block2 has a terminator, remove it since we'll keep block1's
+    // terminator.
+    if (!block2.empty() && block2.back().hasTrait<OpTrait::IsTerminator>())
+      block2.back().erase();
+
     block1.getOperations().splice(block1.begin(), block2.getOperations());
   }
 }

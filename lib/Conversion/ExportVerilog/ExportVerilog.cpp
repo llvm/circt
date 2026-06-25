@@ -4109,6 +4109,7 @@ private:
   LogicalResult visitSV(AlwaysFFOp op);
   LogicalResult visitSV(InitialOp op);
   LogicalResult visitSV(CaseOp op);
+  LogicalResult visitSV(YieldOp op);
   template <typename OpTy, typename EmitPrefixFn>
   LogicalResult
   emitFormattedWriteLikeOp(OpTy op, StringRef callee, StringRef formatString,
@@ -5276,12 +5277,21 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
 
+  // Note: ifdef operations with results should be caught and rejected in the
+  // PrepareForEmission pass, so we don't need to check here.
+  assert(op->getNumResults() == 0 &&
+         "ifdef with results should be rejected in PrepareForEmission");
+
   auto ident = PPExtString(
       cast<MacroDeclOp>(state.symbolCache.getDefinition(cond.getIdent()))
           .getMacroIdentifier());
 
   startStatement();
-  bool hasEmptyThen = op->getRegion(0).front().empty();
+  // Check if the then block is empty (ignoring the implicit yield terminator)
+  auto &thenBlock = op->getRegion(0).front();
+  bool hasEmptyThen =
+      thenBlock.empty() || (thenBlock.getOperations().size() == 1 &&
+                            isa<YieldOp>(thenBlock.front()));
   if (hasEmptyThen)
     ps << "`ifndef " << ident;
   else
@@ -5308,6 +5318,15 @@ LogicalResult StmtEmitter::emitIfDef(Operation *op, MacroIdentAttr cond) {
     ps << "not def ";
   ps << ident;
   setPendingNewline();
+  return success();
+}
+
+LogicalResult StmtEmitter::visitSV(YieldOp op) {
+  // sv.yield is a terminator and doesn't emit anything.
+  // Yields with operands (results) should be rejected in PrepareForEmission.
+  // Empty yields (for ifdef without results) are simply skipped.
+  assert(op.getNumOperands() == 0 &&
+         "yield with operands should be rejected in PrepareForEmission");
   return success();
 }
 

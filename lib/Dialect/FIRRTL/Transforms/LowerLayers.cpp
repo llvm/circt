@@ -394,8 +394,30 @@ void LowerLayersPass::lowerInlineLayerBlock(LayerOp layer,
   if (!layerBlock.getBody()->empty()) {
     OpBuilder builder(layerBlock);
     auto macroName = macroNames[layer];
-    auto ifDef = sv::IfDefOp::create(builder, layerBlock.getLoc(), macroName);
-    ifDef.getBodyRegion().takeBody(layerBlock.getBodyRegion());
+
+    // macroName should always be set during preprocessing for inline layers
+    assert(macroName && "macro name not set for inline layer");
+
+    sv::IfDefOp::create(builder, layerBlock.getLoc(), macroName,
+                        /*thenCtor=*/
+                        [&]() {
+                          // The builder creates a new block, but we need to
+                          // replace it with the layerblock's body. Get the
+                          // current block and its parent region.
+                          Block *newBlock = builder.getBlock();
+                          Region *thenRegion = newBlock->getParent();
+
+                          // Erase the newly created block.
+                          newBlock->erase();
+
+                          // Take the body from the layerblock (which has
+                          // NoTerminator).
+                          thenRegion->takeBody(layerBlock.getBodyRegion());
+
+                          // The builder will call ensureTerminator after this
+                          // lambda returns.
+                        },
+                        /*elseCtor=*/{});
   }
   layerBlock.erase();
 }
@@ -1097,7 +1119,13 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
 
     // create the bind op.
     {
-      auto builder = OpBuilder::atBlockEnd(bindFiles[moduleOp][layer].body);
+      auto *block = bindFiles[moduleOp][layer].body;
+      OpBuilder builder(block->getParent()->getContext());
+      // Insert before the terminator if present, otherwise at end
+      if (!block->empty() && block->back().hasTrait<OpTrait::IsTerminator>())
+        builder.setInsertionPoint(&block->back());
+      else
+        builder.setInsertionPointToEnd(block);
       BindOp::create(builder, layerBlock.getLoc(), moduleOp.getModuleNameAttr(),
                      instanceOp.getInnerSymAttr().getSymName());
     }
@@ -1210,59 +1238,68 @@ void LowerLayersPass::buildBindFile(CircuitNamespace &ns,
   b.setInsertionPointToEnd(bindFile.getBody());
 
   // Create the #ifndef for the include guard.
-  auto includeGuard = sv::IfDefOp::create(b, loc, macroSymbolRefAttr);
-  b.createBlock(&includeGuard.getElseRegion());
+  Block *elseBlock = nullptr;
+  sv::IfDefOp::create(
+      b, loc, macroSymbolRefAttr,
+      /*thenCtor=*/{},
+      /*elseCtor=*/
+      [&]() {
+        elseBlock = b.getBlock();
 
-  // Create the #define for the include guard.
-  sv::MacroDefOp::create(b, loc, macroSymbolRefAttr);
+        // Create the #define for the include guard.
+        sv::MacroDefOp::create(b, loc, macroSymbolRefAttr);
 
-  // Create IR to enable any parent layers.
-  auto parent = layer->getParentOfType<LayerOp>();
-  while (parent) {
-    // If the parent is bound-in, we enable it by including the bindfile.
-    // The parent bindfile will enable all ancestors.
-    if (parent.getConvention() == LayerConvention::Bind) {
-      auto target = bindFiles[module][parent].filename;
-      sv::IncludeOp::create(b, loc, IncludeStyle::Local, target);
-      break;
-    }
+        // Create IR to enable any parent layers.
+        auto parent = layer->getParentOfType<LayerOp>();
+        while (parent) {
+          // If the parent is bound-in, we enable it by including the bindfile.
+          // The parent bindfile will enable all ancestors.
+          if (parent.getConvention() == LayerConvention::Bind) {
+            auto target = bindFiles[module][parent].filename;
+            sv::IncludeOp::create(b, loc, IncludeStyle::Local, target);
+            break;
+          }
 
-    // If the parent layer is inline, we can only assert that the parent is
-    // already enabled.
-    if (parent.getConvention() == LayerConvention::Inline) {
-      auto parentMacroSymbolRefAttr = macroNames[parent];
-      auto parentGuard = sv::IfDefOp::create(b, loc, parentMacroSymbolRefAttr);
-      OpBuilder::InsertionGuard guard(b);
-      b.createBlock(&parentGuard.getElseRegion());
-      auto message = StringAttr::get(&getContext(),
-                                     Twine(parent.getName()) + " not enabled");
-      sv::MacroErrorOp::create(b, loc, message);
-      parent = parent->getParentOfType<LayerOp>();
-      continue;
-    }
+          // If the parent layer is inline, we can only assert that the parent
+          // is already enabled.
+          if (parent.getConvention() == LayerConvention::Inline) {
+            auto parentMacroSymbolRefAttr = macroNames[parent];
+            auto message = StringAttr::get(
+                &getContext(), Twine(parent.getName()) + " not enabled");
+            sv::IfDefOp::create(
+                b, loc, parentMacroSymbolRefAttr,
+                /*thenCtor=*/{},
+                /*elseCtor=*/
+                [&]() { sv::MacroErrorOp::create(b, loc, message); });
+            parent = parent->getParentOfType<LayerOp>();
+            continue;
+          }
 
-    // Unknown Layer convention.
-    llvm_unreachable("unknown layer convention");
-  }
+          // Unknown Layer convention.
+          llvm_unreachable("unknown layer convention");
+        }
 
-  // Create IR to include bind files for child modules. If a module is
-  // instantiated more than once, we only need to include the bindfile once.
-  SmallPtrSet<Operation *, 8> seen;
-  for (auto *record : *node) {
-    auto *child = record->getTarget()->getModule().getOperation();
-    if (!std::get<bool>(seen.insert(child)))
-      continue;
-    auto files = bindFiles[child];
-    auto lookup = files.find(layer);
-    if (lookup == files.end() || !lookup->second.effectful)
-      continue;
-    sv::IncludeOp::create(b, loc, IncludeStyle::Local, lookup->second.filename);
-  }
+        // Create IR to include bind files for child modules. If a module is
+        // instantiated more than once, we only need to include the bindfile
+        // once.
+        SmallPtrSet<Operation *, 8> seen;
+        for (auto *record : *node) {
+          auto *child = record->getTarget()->getModule().getOperation();
+          if (!std::get<bool>(seen.insert(child)))
+            continue;
+          auto files = bindFiles[child];
+          auto lookup = files.find(layer);
+          if (lookup == files.end() || !lookup->second.effectful)
+            continue;
+          sv::IncludeOp::create(b, loc, IncludeStyle::Local,
+                                lookup->second.filename);
+        }
+      });
 
   // Save the bind file information for later.
   auto &info = bindFiles[module][layer];
   info.filename = filename;
-  info.body = includeGuard.getElseBlock();
+  info.body = elseBlock;
   info.effectful = effectful;
 }
 

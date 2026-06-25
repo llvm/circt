@@ -526,8 +526,9 @@ static bool moveOpsIntoIfdefGuardsAndProcesses(Operation *rootOp) {
         usedSynthesisMacro = true;
       }
 
-      // Move the op into the guard block.
-      op->moveBefore(block, block->end());
+      // Move the op into the guard block before the implicit terminator.
+      // sv.ifdef/sv.ifdef.procedural always have a terminator after create().
+      op->moveBefore(&block->back());
     }
 
     // Check if the op requires an clock and condition wrapper.
