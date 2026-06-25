@@ -112,10 +112,15 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Match the cut set against this library primitive
-  std::optional<MatchResult> match(CutEnumerator &enumerator,
-                                   const Cut &cut) const override {
-    if (!cut.getNPNClass(enumerator.getOptions().npnTable)
-             .equivalentOtherThanPermutation(npnClass))
+  std::optional<MatchResult> match(CutEnumerator &enumerator, const Cut &cut,
+                                   const MatchBinding &binding) const override {
+    const auto &cutNPN = cut.getNPNClass(enumerator.getOptions().npnTable);
+    if (!(cutNPN.truthTable == npnClass.truthTable))
+      return std::nullopt;
+
+    // TODO: Support phase-aware mapping by materializing or reusing inverted
+    // input/output values from the binding.
+    if (binding.hasNegation())
       return std::nullopt;
 
     return MatchResult(area, delay);
@@ -129,18 +134,19 @@ struct TechLibraryPattern : public CutRewritePattern {
   }
 
   /// Rewrite the cut set using this library primitive
-  llvm::FailureOr<Operation *> rewrite(mlir::OpBuilder &builder,
-                                       CutEnumerator &enumerator,
-                                       const Cut &cut) const override {
+  llvm::FailureOr<Operation *>
+  rewrite(mlir::OpBuilder &builder, CutEnumerator &enumerator, const Cut &cut,
+          const MatchedPattern &matched) const override {
     const auto &network = enumerator.getLogicNetwork();
-    // Create a new instance of the module
-    SmallVector<unsigned> permutedInputIndices;
-    cut.getPermutatedInputIndices(enumerator.getOptions().npnTable, npnClass,
-                                  permutedInputIndices);
+    const MatchBinding &binding = matched.getBinding();
+    assert(!binding.hasNegation() &&
+           "phase-aware tech mapping is not implemented yet");
 
     SmallVector<Value> inputs;
-    inputs.reserve(permutedInputIndices.size());
-    for (unsigned idx : permutedInputIndices) {
+    unsigned numInputs = binding.getNumInputs();
+    inputs.reserve(numInputs);
+    for (unsigned patternInput = 0; patternInput < numInputs; ++patternInput) {
+      unsigned idx = binding.getCutInputForPatternInput(patternInput);
       assert(idx < cut.inputs.size() && "input permutation index out of range");
       inputs.push_back(network.getValue(cut.inputs[idx]));
     }
