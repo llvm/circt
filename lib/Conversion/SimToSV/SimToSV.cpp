@@ -637,8 +637,8 @@ void appendLiteralToSVFormat(SmallString<128> &formatString,
 }
 
 LogicalResult appendPaddedSpecifier(SmallString<128> &formatString,
-                                     bool isLeftAligned, uint8_t paddingChar,
-                                     std::optional<int32_t> width, char spec) {
+                                    bool isLeftAligned, uint8_t paddingChar,
+                                    std::optional<int32_t> width, char spec) {
   formatString.push_back('%');
   if (isLeftAligned)
     formatString.push_back('-');
@@ -699,8 +699,8 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
       })
       .Case<FormatStringOp>([&](auto fmt) -> LogicalResult {
         if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
-                                          fmt.getPaddingChar(),
-                                          fmt.getSpecifierWidth(), 's'))) {
+                                         fmt.getPaddingChar(),
+                                         fmt.getSpecifierWidth(), 's'))) {
           return mlir::emitError(fmt.getLoc())
                  << "sim.fmt.string only supports paddingChar 32 (' ') or 48 "
                     "('0')";
@@ -728,8 +728,8 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
       })
       .Case<FormatDecOp>([&](auto fmt) -> LogicalResult {
         if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
-                                          fmt.getPaddingChar(),
-                                          fmt.getSpecifierWidth(), 'd'))) {
+                                         fmt.getPaddingChar(),
+                                         fmt.getSpecifierWidth(), 'd'))) {
           return mlir::emitError(fmt.getLoc())
                  << "sim.fmt.dec only supports paddingChar 32 (' ') or 48 "
                     "('0')";
@@ -762,8 +762,8 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
       })
       .Case<FormatOctOp>([&](auto fmt) -> LogicalResult {
         if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
-                                          fmt.getPaddingChar(),
-                                          fmt.getSpecifierWidth(), 'o'))) {
+                                         fmt.getPaddingChar(),
+                                         fmt.getSpecifierWidth(), 'o'))) {
           return mlir::emitError(fmt.getLoc())
                  << "sim.fmt.oct only supports paddingChar 32 (' ') or 48 "
                     "('0')";
@@ -773,8 +773,8 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
       })
       .Case<FormatBinOp>([&](auto fmt) -> LogicalResult {
         if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
-                                          fmt.getPaddingChar(),
-                                          fmt.getSpecifierWidth(), 'b'))) {
+                                         fmt.getPaddingChar(),
+                                         fmt.getSpecifierWidth(), 'b'))) {
           return mlir::emitError(fmt.getLoc())
                  << "sim.fmt.bin only supports paddingChar 32 (' ') or 48 "
                     "('0')";
