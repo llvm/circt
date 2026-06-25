@@ -572,6 +572,30 @@ firrtl.circuit "Test" {
     }
   }
 
+  // Test that a domain captured directly as an operand (here, by an
+  // `unsafe_domain_cast`) results in an input domain port being created and
+  // hooked up.  Or: this should work for things which aren't `domain.define`.
+  //
+  // See: https://github.com/llvm/circt/issues/10729
+  //
+  // CHECK:      firrtl.module private @DomainCaptureUnsafeCast_A(
+  // CHECK-SAME:   in %a: !firrtl.domain<@ClockDomain()>
+  // CHECK:        %[[xmr:.+]] = firrtl.xmr.deref {{.+}} : !firrtl.uint<1>
+  // CHECK-NEXT:   firrtl.unsafe_domain_cast %[[xmr]] domains[%a]
+  //
+  // CHECK:      firrtl.module @DomainCaptureUnsafeCast(
+  // CHECK-SAME:   in %a: !firrtl.domain<@ClockDomain()>
+  // CHECK:        %[[port:.+]] = firrtl.instance a {{.*}} @DomainCaptureUnsafeCast_A(in a: !firrtl.domain<@ClockDomain()>)
+  // CHECK-NEXT:   firrtl.domain.define %[[port]], %a : !firrtl.domain<@ClockDomain()>
+  firrtl.module @DomainCaptureUnsafeCast(
+    in %a: !firrtl.domain<@ClockDomain()>
+  ) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.layerblock @A {
+      %0 = firrtl.unsafe_domain_cast %c0_ui1 domains[%a] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    }
+  }
+
   //===--------------------------------------------------------------------===//
   // Cloning of special operations
   //===--------------------------------------------------------------------===//
@@ -1142,5 +1166,5 @@ firrtl.circuit "DoNotIncludeDummyBindfiles" {
 
   // CHECK-NOT: sv.include local "layers-Child1-A.sv"
   // CHECK: sv.include local "layers-Child2-A.sv"
-  // CHECK-NOT: sv.include local "layers-Child1-A.sv"  
+  // CHECK-NOT: sv.include local "layers-Child1-A.sv"
 }
