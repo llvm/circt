@@ -23,7 +23,7 @@
 // DBGOFF-NOT: [ArcRuntime] Created instance of model "flipflop" with ID 1
 // DBGOFF-NOT: [ArcRuntime] Instance with ID 1 initialized
 
-// DBGON-NEXT: [ArcRuntime] Created instance of model "flipflop" with ID 1
+// DBGON:      [ArcRuntime] Created instance of model "flipflop" with ID 1
 // DBGON:      [ArcRuntime] Instance with ID 1 initialized
 
 // CHECK:      d1 = 00
