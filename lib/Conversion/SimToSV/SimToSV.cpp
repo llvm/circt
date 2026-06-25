@@ -636,7 +636,7 @@ void appendLiteralToSVFormat(SmallString<128> &formatString,
   }
 }
 
-LogicalResult appendIntegerSpecifier(SmallString<128> &formatString,
+LogicalResult appendPaddedSpecifier(SmallString<128> &formatString,
                                      bool isLeftAligned, uint8_t paddingChar,
                                      std::optional<int32_t> width, char spec) {
   formatString.push_back('%');
@@ -698,7 +698,7 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         return success();
       })
       .Case<FormatStringOp>([&](auto fmt) -> LogicalResult {
-        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
+        if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 's'))) {
           return mlir::emitError(fmt.getLoc())
@@ -727,7 +727,7 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         return success();
       })
       .Case<FormatDecOp>([&](auto fmt) -> LogicalResult {
-        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
+        if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 'd'))) {
           return mlir::emitError(fmt.getLoc())
@@ -749,7 +749,7 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         return success();
       })
       .Case<FormatHexOp>([&](auto fmt) -> LogicalResult {
-        if (failed(appendIntegerSpecifier(
+        if (failed(appendPaddedSpecifier(
                 formatString, fmt.getIsLeftAligned(), fmt.getPaddingChar(),
                 fmt.getSpecifierWidth(),
                 fmt.getIsHexUppercase() ? 'X' : 'x'))) {
@@ -761,7 +761,7 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         return success();
       })
       .Case<FormatOctOp>([&](auto fmt) -> LogicalResult {
-        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
+        if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 'o'))) {
           return mlir::emitError(fmt.getLoc())
@@ -772,7 +772,7 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         return success();
       })
       .Case<FormatBinOp>([&](auto fmt) -> LogicalResult {
-        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
+        if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
                                           fmt.getPaddingChar(),
                                           fmt.getSpecifierWidth(), 'b'))) {
           return mlir::emitError(fmt.getLoc())
