@@ -576,6 +576,10 @@ struct Context {
   /// returns the index of the last element of the queue.
   Value currentQueue = {};
 
+  /// The definition symbol of the module body currently being converted.
+  /// Used to resolve the `%l`/`%L` library binding format specifier.
+  const slang::ast::DefinitionSymbol *currentDefinition = nullptr;
+
   /// Ensure that the global variables for `$monitor` state exist. This creates
   /// the `__monitor_active_id` and `__monitor_enabled` globals on first call.
   void ensureMonitorGlobals();

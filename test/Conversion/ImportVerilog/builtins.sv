@@ -200,12 +200,12 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   $display("%M");
 
   // IEEE 1800-2017 § 33.7 "Displaying library binding information"
-  // CHECK: [[TMP1:%.+]] = moore.fmt.lib_binding
+  // CHECK: [[TMP1:%.+]] = moore.fmt.literal ""
   // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
   // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
   // CHECK: moore.builtin.display [[TMP3]]
   $display("%l");
-  // CHECK: [[TMP1:%.+]] = moore.fmt.lib_binding
+  // CHECK: [[TMP1:%.+]] = moore.fmt.literal ""
   // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
   // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
   // CHECK: moore.builtin.display [[TMP3]]
@@ -259,6 +259,22 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: moore.unreachable
   if (0) $fatal(1, "%f", r);
 endfunction
+
+module LibraryBindingBuiltin;
+  initial begin
+     // IEEE 1800-2017 § 33.7 "Displaying library binding information"
+    // CHECK: [[TMP1:%.+]] = moore.fmt.literal "work.LibraryBindingBuiltin"
+    // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+    // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+    // CHECK: moore.builtin.display [[TMP3]]
+    $display("%l");
+    // CHECK: [[TMP1:%.+]] = moore.fmt.literal "work.LibraryBindingBuiltin"
+    // CHECK: [[TMP2:%.+]] = moore.fmt.literal "\0A"
+    // CHECK: [[TMP3:%.+]] = moore.fmt.concat ([[TMP1]], [[TMP2]])
+    // CHECK: moore.builtin.display [[TMP3]]
+    $display("%L");
+  end
+endmodule
 
 // CHECK-LABEL: func.func private @FormatCharSpecifier(
 function void FormatCharSpecifier();

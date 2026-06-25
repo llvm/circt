@@ -114,7 +114,11 @@ struct FormatStringParser {
 
     // %l prints the library and cell name of the scope
     if (specifierLower == 'l') {
-      fragments.push_back(moore::FormatLibBindingOp::create(builder, loc));
+      if (context.currentDefinition)
+        emitLiteral(context.currentDefinition->sourceLibrary.name + "." +
+                  std::string(context.currentDefinition->name));
+      else
+        emitLiteral("");
       return success();
     }
 

@@ -2556,18 +2556,6 @@ struct FormatHierPathOpConversion
   }
 };
 
-struct FormatLibBindingOpConversion
-    : public OpConversionPattern<FormatLibBindingOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(FormatLibBindingOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::FormatLibBindingOp>(op);
-    return success();
-  }
-};
-
 struct FormatIntOpConversion : public OpConversionPattern<FormatIntOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3628,7 +3616,6 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatStringOpConversion,
     FormatConcatOpConversion,
     FormatHierPathOpConversion,
-    FormatLibBindingOpConversion,
     FormatIntOpConversion,
     FormatRealOpConversion,
     FormatCharOpConversion,
