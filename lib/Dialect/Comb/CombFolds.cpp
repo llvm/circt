@@ -525,6 +525,7 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
     assert(beginOfFirstRelevantElement <= lowBit &&
            "incorrectly moved past an element that lowBit has coverage over");
     auto operand = *it;
+    if (operand == op.getResult()) return failure();
 
     size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
     if (lowBit < beginOfFirstRelevantElement + operandWidth) {
@@ -582,6 +583,9 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
     // Beyond the first element, all elements are extracted from position 0.
     extractLo = 0;
   }
+
+  if (llvm::is_contained(reverseConcatArgs, op.getResult()))
+    return failure();
 
   if (reverseConcatArgs.size() == 1) {
     replaceOpAndCopyNamehint(rewriter, op, reverseConcatArgs[0]);
