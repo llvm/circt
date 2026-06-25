@@ -170,7 +170,7 @@ def ResourceLibraryOp : SSPOp<"resource",
 
 def DependenceGraphOp : SSPOp<"graph",
     [HasOnlyGraphRegion, NoRegionArguments,
-     SingleBlock, NoTerminator, OpAsmOpInterface, SymbolTable,
+     SingleBlock, NoTerminator, OpAsmOpInterface,
      HasParent<"InstanceOp">]> {
   let summary = "Container for (scheduling) operations.";
   let description = [{
@@ -181,6 +181,8 @@ def DependenceGraphOp : SSPOp<"graph",
   let assemblyFormat = "$body attr-dict";
   let regions = (region SizedRegion<1>:$body);
 
+  let hasRegionVerifier = true;
+
   let extraClassDeclaration = [{
     // OpAsmOpInterface
     static ::llvm::StringRef getDefaultDialect() { return "ssp"; }
@@ -189,6 +191,9 @@ def DependenceGraphOp : SSPOp<"graph",
     ::mlir::Block *getBodyBlock() {
       return &getBody().getBlocks().front();
     }
+
+    // Retrieve `OperationOp`s by name (for auxiliary dependences).
+    ::circt::ssp::OperationOp lookupNamedOperation(::mlir::StringRef name);
   }];
 
   let skipDefaultBuilders = true;
@@ -278,7 +283,7 @@ def OperationOp : SSPOp<"operation",
   }];
 
   let arguments = (ins Variadic<NoneType>:$operands,
-                       OptionalAttr<SymbolNameAttr>:$sym_name,
+                       OptionalAttr<StrAttr>:$name,
                        OptionalAttr<DependenceArrayAttr>:$dependences,
                        OptionalAttr<ArrayAttr>:$sspProperties);
   let results = (outs Variadic<NoneType>:$results);
@@ -287,9 +292,6 @@ def OperationOp : SSPOp<"operation",
   let hasVerifier = true;
 
   let extraClassDeclaration = [{
-    // SymbolOpInterface
-    static bool isOptionalSymbol() { return true; }
-
     // Find the attribute modeling the `linkedOperatorType` property
     ::circt::ssp::LinkedOperatorTypeAttr getLinkedOperatorTypeAttr();
 
@@ -301,13 +303,13 @@ def OperationOp : SSPOp<"operation",
   let builders = [
     OpBuilder<(ins "unsigned":$numResults,
                    "::mlir::ValueRange":$operands,
-                   CArg<"::mlir::StringAttr", "::mlir::StringAttr()">:$sym_name,
+                   CArg<"::mlir::StringAttr", "::mlir::StringAttr()">:$name,
                    CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$dependences,
                    CArg<"::mlir::ArrayAttr", "::mlir::ArrayAttr()">:$sspProperties), [{
       $_state.addTypes(::llvm::SmallVector<::mlir::Type>(numResults, $_builder.getNoneType()));
       $_state.addOperands(operands);
-      if (sym_name)
-        $_state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(), sym_name);
+      if (name)
+        $_state.addAttribute($_builder.getStringAttr("name"), name);
       if (dependences)
         $_state.addAttribute($_builder.getStringAttr("dependences"), dependences);
       if (sspProperties)

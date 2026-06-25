@@ -224,14 +224,20 @@ ProblemT loadProblem(InstanceOp instOp,
   if (auto rsrcLibName = rsrcLibraryOp.getSymNameAttr())
     prob.setRsrcLibraryName(rsrcLibName);
 
+  // Build ad-hoc symbol table to resolve auxiliary dependences.
+  SmallDenseMap<StringAttr, OperationOp> namedOps;
+
   // Register all operations first, in order to retain their original order.
   auto graphOp = instOp.getDependenceGraph();
   graphOp.walk([&](OperationOp opOp) {
     prob.insertOperation(opOp);
     loadOperationProperties<ProblemT, OperationPropertyTs...>(
         prob, opOp, opOp.getSspPropertiesAttr());
-    if (auto opName = opOp.getSymNameAttr())
+    if (StringAttr opName = opOp.getNameAttr()) {
       prob.setOperationName(opOp, opName);
+      [[maybe_unused]] auto [it, ins] = namedOps.try_emplace(opName, opOp);
+      assert(ins && "Non-unique operation name detected");
+    }
 
     // Nothing else to check if no linked operator type is set for `opOp`,
     // because the operation doesn't carry a `LinkedOperatorTypeAttr`, or that
@@ -315,8 +321,8 @@ ProblemT loadProblem(InstanceOp instOp,
 
     for (auto depAttr : depsAttr.getAsRange<DependenceAttr>()) {
       Dependence dep;
-      if (FlatSymbolRefAttr sourceRef = depAttr.getSourceRef()) {
-        Operation *sourceOp = SymbolTable::lookupSymbolIn(graphOp, sourceRef);
+      if (StringAttr sourceRef = depAttr.getSourceRef()) {
+        OperationOp sourceOp = namedOps.lookup(sourceRef);
         assert(sourceOp);
         dep = Dependence(sourceOp, opOp);
         LogicalResult res = prob.insertDependence(dep);
@@ -507,7 +513,7 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
                                                                       b);
       if (dep.isDefUse() && depProps) {
         auto depAttr = b.getAttr<DependenceAttr>(*dep.getDestinationIndex(),
-                                                 FlatSymbolRefAttr(), depProps);
+                                                 StringAttr(), depProps);
         depAttrs.push_back(depAttr);
         continue;
       }
@@ -515,9 +521,8 @@ saveProblem(ProblemT &prob, std::tuple<OperationPropertyTs...> opProps,
       if (!dep.isAuxiliary())
         continue;
 
-      auto sourceOpName = opNames.lookup(dep.getSource());
-      assert(sourceOpName);
-      auto sourceRef = b.getAttr<FlatSymbolRefAttr>(sourceOpName);
+      auto sourceRef = opNames.lookup(dep.getSource());
+      assert(sourceRef);
       auto depAttr =
           b.getAttr<DependenceAttr>(auxOperandIdx, sourceRef, depProps);
       depAttrs.push_back(depAttr);
