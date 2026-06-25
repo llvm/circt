@@ -1,25 +1,23 @@
 // REQUIRES: z3-integration, circt-lec-jit
-// RUN: circt-opt %s --lower-comb -o %t.lowered.mlir
-
 // and2 exact synthesis.
 // RUN: circt-opt %s --pass-pipeline='builtin.module(synth-exact-synthesis{allowed-ops=synth.aig.and_inv:2 sat-solver=z3})' -o %t.mlir
 // RUN: FileCheck %s --input-file=%t.mlir --check-prefixes=CHECK,AND2
-// RUN: circt-lec %t.lowered.mlir %t.mlir -c1=test -c2=test --shared-libs=%libz3 | FileCheck %s --check-prefix=LEC
+// RUN: circt-lec.sh %s %t.mlir -c1=test -c2=test
 
 // and3 exact synthesis.
 // RUN: circt-opt %s --pass-pipeline='builtin.module(synth-exact-synthesis{allowed-ops=synth.aig.and_inv:3 sat-solver=z3})' -o %t.mlir
 // RUN: FileCheck %s --input-file=%t.mlir --check-prefixes=CHECK,AND3
-// RUN: circt-lec %t.lowered.mlir %t.mlir -c1=test -c2=test --shared-libs=%libz3 | FileCheck %s --check-prefix=LEC
+// RUN: circt-lec.sh %s %t.mlir -c1=test -c2=test
 
 // dot exact synthesis.
 // RUN: circt-opt %s --pass-pipeline='builtin.module(synth-exact-synthesis{allowed-ops=synth.dot:3 sat-solver=z3})' -o %t.mlir
 // RUN: FileCheck %s --input-file=%t.mlir --check-prefixes=CHECK,DOT
-// RUN: circt-lec %t.lowered.mlir %t.mlir -c1=test -c2=test --shared-libs=%libz3 | FileCheck %s --check-prefix=LEC
+// RUN: circt-lec.sh %s %t.mlir -c1=test -c2=test
 
 // xag exact synthesis.
 // RUN: circt-opt %s --pass-pipeline='builtin.module(synth-exact-synthesis{allowed-ops=synth.xor_inv:2 allowed-ops=synth.aig.and_inv:2 sat-solver=z3})' -o %t.mlir
 // RUN: FileCheck %s --input-file=%t.mlir --check-prefixes=CHECK,XAG
-// RUN: circt-lec %t.lowered.mlir %t.mlir -c1=test -c2=test --shared-libs=%libz3 | FileCheck %s --check-prefix=LEC
+// RUN: circt-lec.sh %s %t.mlir -c1=test -c2=test
 
 // Test exact synthesis of some simple functions.
 // CHECK-LABEL: hw.module @test
@@ -30,7 +28,6 @@
 // XAG-DAG: synth.aig.and_inv {{.*}}, {{.*}} : i1
 // CHECK-NOT: comb.truth_table
 // CHECK: hw.output
-// LEC: c1 == c2
 
 hw.module @test(in %a : i1, in %b : i1, in %c : i1,
                 out y : i1) {
