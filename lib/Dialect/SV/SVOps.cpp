@@ -362,6 +362,18 @@ LogicalResult ConstantZOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// ConcatStrOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConcatStrOp::verify() {
+  // Concatenation of fewer than two operands is meaningless and would emit
+  // invalid (`{}`) or trivial (`{x}`) SystemVerilog.
+  if (getInputs().size() < 2)
+    return emitError("sv.concat_str requires at least two operands");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // LocalParamOp
 //===----------------------------------------------------------------------===//
 

@@ -255,7 +255,7 @@ bool ExportVerilog::isVerilogExpression(Operation *op) {
           IndexedPartSelectInOutOp, StructFieldInOutOp, IndexedPartSelectOp,
           ParamValueOp, XMROp, XMRRefOp, SampledOp, EnumConstantOp, SFormatFOp,
           SystemFunctionOp, STimeOp, TimeOp, UnpackedArrayCreateOp,
-          UnpackedOpenArrayCastOp>(op))
+          UnpackedOpenArrayCastOp, ConcatStrOp>(op))
     return true;
 
   // These are Verif dialect expressions.
@@ -2357,6 +2357,7 @@ private:
   SubExprInfo visitSV(ConstantXOp op);
   SubExprInfo visitSV(ConstantZOp op);
   SubExprInfo visitSV(ConstantStrOp op);
+  SubExprInfo visitSV(ConcatStrOp op);
 
   SubExprInfo visitSV(sv::UnpackedArrayCreateOp op);
   SubExprInfo visitSV(sv::UnpackedOpenArrayCastOp op) {
@@ -2951,6 +2952,16 @@ SubExprInfo ExprEmitter::visitSV(ConstantStrOp op) {
 
   ps.writeQuotedEscaped(op.getStr());
   return {Symbol, IsUnsigned}; // is a string unsigned?  Yes! SV 5.9
+}
+
+SubExprInfo ExprEmitter::visitSV(ConcatStrOp op) {
+  if (hasSVAttributes(op))
+    emitError(op, "SV attributes emission is unimplemented for the op");
+
+  // Emits the SystemVerilog concatenation `{a, b, ...}`. Strings are unsigned
+  // (SV 5.9) and braces bind at the primary/Symbol level.
+  emitBracedList(op.getInputs());
+  return {Symbol, IsUnsigned};
 }
 
 SubExprInfo ExprEmitter::visitSV(ConstantZOp op) {

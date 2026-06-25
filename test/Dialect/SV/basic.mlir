@@ -527,3 +527,14 @@ hw.module @test_generate_for() {
   }
   hw.output
 }
+
+// CHECK-LABEL: hw.module @test_concat_str
+hw.module @test_concat_str(out o : !hw.string) {
+  // CHECK: sv.constantStr "foo"
+  // CHECK: sv.constantStr "bar"
+  // CHECK: sv.concat_str({{[^)]*}}) : !hw.string
+  %a = sv.constantStr "foo"
+  %b = sv.constantStr "bar"
+  %c = sv.concat_str (%a, %b) : !hw.string
+  hw.output %c : !hw.string
+}

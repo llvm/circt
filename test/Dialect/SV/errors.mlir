@@ -371,3 +371,22 @@ hw.module @InvalidVerbatimExpr(out out: i32) {
   %0 = sv.verbatim.expr "MACRO" : () -> i32 {symbols=[@Foo]}
   hw.output %0 : i32
 }
+
+// -----
+
+hw.module @ConcatStrOneOperand(out o: i1) {
+  %foo = sv.constantStr "foo"
+  // expected-error @+1 {{sv.concat_str requires at least two operands}}
+  %cat = sv.concat_str (%foo) : !hw.string
+  %0 = sv.system "test$plusargs"(%cat) : (!hw.string) -> i1
+  hw.output %0 : i1
+}
+
+// -----
+
+hw.module @ConcatStrNoOperands(out o: i1) {
+  // expected-error @+1 {{sv.concat_str requires at least two operands}}
+  %cat = sv.concat_str () : !hw.string
+  %0 = sv.system "test$plusargs"(%cat) : (!hw.string) -> i1
+  hw.output %0 : i1
+}

@@ -216,6 +216,23 @@ def SFormatFOp : SVOp<"sformatf", [Pure]> {
     "$format_string attr-dict (`(` $substitutions^ `)` `:` qualified(type($substitutions)))?";
 }
 
+def ConcatStrOp : SVOp<"concat_str", [Pure]> {
+  let summary = "Concatenate string values";
+  let description = [{
+    This operation concatenates two or more string values using the
+    SystemVerilog concatenation operator `{a, b, ...}` to produce a single
+    string. The result is a string whose contents are the operands joined in
+    order.
+
+    See section 11.4.12 of 1800-2023 for more details.
+  }];
+
+  let arguments = (ins Variadic<HWStringType>:$inputs);
+  let results = (outs HWStringType:$result);
+  let assemblyFormat = "`(` $inputs `)` attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
 def LocalParamOp : SVOp<"localparam",
       [FirstAttrDerivedResultType, Pure, HasCustomSSAName]> {
   let summary = "Declare a localparam";
