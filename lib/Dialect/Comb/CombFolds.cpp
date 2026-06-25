@@ -512,60 +512,53 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
 // Transforms extract(lo, cat(a, b, c, d, e)) into
 // cat(extract(lo1, b), c, extract(lo2, d)).
 // innerCat must be the argument of the provided ExtractOp.
-static LogicalResult extractConcatToConcatExtract(ExtractOp op,
-                                                  ConcatOp innerCat,
-                                                  PatternRewriter &rewriter) {
-  auto reversedConcatArgs = llvm::reverse(innerCat.getInputs());
-  size_t beginOfFirstRelevantElement = 0;
-  auto it = reversedConcatArgs.begin();
+//
+// When prefixWidths is non-empty it is used for O(log N) binary-search lookup
+// of the first relevant concat operand instead of the default O(N) linear scan.
+// The array must contain cumulative bit widths in LSB-first (reversed) order:
+//   prefixWidths[i] = sum of bitwidths of concat operands [N-1, N-2, ..., N-i]
+static LogicalResult
+extractConcatToConcatExtract(ExtractOp op, ConcatOp innerCat,
+                             PatternRewriter &rewriter,
+                             ArrayRef<size_t> prefixWidths = {}) {
+  auto concatInputs = innerCat.getInputs();
+  size_t numOperands = concatInputs.size();
   size_t lowBit = op.getLowBit();
 
-  // This loop finds the first concatArg that is covered by the ExtractOp
-  for (; it != reversedConcatArgs.end(); it++) {
-    assert(beginOfFirstRelevantElement <= lowBit &&
-           "incorrectly moved past an element that lowBit has coverage over");
-    auto operand = *it;
-
-    size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
-    if (lowBit < beginOfFirstRelevantElement + operandWidth) {
-      // A bit other than the first bit will be used in this element.
-      // ...... ........ ...
-      //           ^---lowBit
-      //        ^---beginOfFirstRelevantElement
-      //
-      // Edge-case close to the end of the range.
-      // ...... ........ ...
-      //                 ^---(position + operandWidth)
-      //               ^---lowBit
-      //        ^---beginOfFirstRelevantElement
-      //
-      // Edge-case close to the beginning of the rang
-      // ...... ........ ...
-      //        ^---lowBit
-      //        ^---beginOfFirstRelevantElement
-      //
-      break;
+  // Find the first operand (in LSB-first order) that contains lowBit.
+  size_t firstIdx;
+  size_t beginOfFirst;
+  if (!prefixWidths.empty()) {
+    // O(log N) binary search path.
+    auto it =
+        std::upper_bound(prefixWidths.begin(), prefixWidths.end(), lowBit);
+    assert(it != prefixWidths.end());
+    firstIdx = it - prefixWidths.begin();
+    beginOfFirst = (firstIdx > 0) ? prefixWidths[firstIdx - 1] : 0;
+  } else {
+    // O(N) linear scan path.
+    firstIdx = 0;
+    beginOfFirst = 0;
+    for (size_t i = 0; i < numOperands; ++i) {
+      size_t w =
+          concatInputs[numOperands - 1 - i].getType().getIntOrFloatBitWidth();
+      if (lowBit < beginOfFirst + w) {
+        firstIdx = i;
+        break;
+      }
+      beginOfFirst += w;
     }
-
-    // extraction discards this element.
-    // ...... ........  ...
-    // |      ^---lowBit
-    // ^---beginOfFirstRelevantElement
-    beginOfFirstRelevantElement += operandWidth;
   }
-  assert(it != reversedConcatArgs.end() &&
-         "incorrectly failed to find an element which contains coverage of "
-         "lowBit");
 
   SmallVector<Value> reverseConcatArgs;
-  size_t widthRemaining = cast<IntegerType>(op.getType()).getWidth();
-  size_t extractLo = lowBit - beginOfFirstRelevantElement;
+  size_t widthRemaining = op.getType().getIntOrFloatBitWidth();
+  size_t extractLo = lowBit - beginOfFirst;
 
-  // Transform individual arguments of innerCat(..., a, b, c,) into
-  // [ extract(a), b, extract(c) ], skipping an extract operation where
-  // possible.
-  for (; widthRemaining != 0 && it != reversedConcatArgs.end(); it++) {
-    auto concatArg = *it;
+  // Walk forward from firstIdx in LSB-first order, building
+  // [ extract(a), b, extract(c) ], skipping an extract where possible (where
+  // the whole operand is consumed).
+  for (size_t i = firstIdx; widthRemaining != 0 && i < numOperands; ++i) {
+    Value concatArg = concatInputs[numOperands - 1 - i];
     size_t operandWidth = concatArg.getType().getIntOrFloatBitWidth();
     size_t widthToConsume = std::min(widthRemaining, operandWidth - extractLo);
 
@@ -573,12 +566,11 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
       reverseConcatArgs.push_back(concatArg);
     } else {
       auto resultType = IntegerType::get(rewriter.getContext(), widthToConsume);
-      reverseConcatArgs.push_back(
-          ExtractOp::create(rewriter, op.getLoc(), resultType, *it, extractLo));
+      reverseConcatArgs.push_back(ExtractOp::create(
+          rewriter, op.getLoc(), resultType, concatArg, extractLo));
     }
 
     widthRemaining -= widthToConsume;
-
     // Beyond the first element, all elements are extracted from position 0.
     extractLo = 0;
   }
@@ -1985,6 +1977,48 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
     processedOperands.push_back(nextOperand);
   }
 
+  // Batch-resolve all ExtractOp users of this concat using a prefix-sum array
+  // and binary search. This avoids the O(M*N) cost of having each ExtractOp
+  // independently do a linear scan over the concat's operands.
+  //
+  // Only do this when:
+  //  - the concat operands are unchanged (if they changed, we'll replace the
+  //    concat below and the extract users will be re-enqueued naturally)
+  //  - there are enough extract users to justify batching (for small counts,
+  //    the per-ExtractOp canonicalization is fine and preserves output order)
+  constexpr size_t kBatchExtractThreshold = 16;
+  bool anyExtractsResolved = false;
+  if (!anyOperandChanged && processedOperands.size() > 1) {
+    SmallVector<ExtractOp, 8> extractUsers;
+    for (auto *user : op->getUsers()) {
+      if (auto extract = dyn_cast<ExtractOp>(user))
+        extractUsers.push_back(extract);
+    }
+
+    if (extractUsers.size() >= kBatchExtractThreshold) {
+      // Build prefix-sum of bit widths in LSB-first (reversed) order.
+      auto concatInputs = op.getInputs();
+      size_t numConcatOperands = concatInputs.size();
+      SmallVector<size_t> prefixWidths(numConcatOperands);
+      size_t cumWidth = 0;
+      for (size_t i = 0; i < numConcatOperands; ++i) {
+        // Note: we can just query bitwidth here as is as the ExtractOp above's
+        // type constraints means this is valid in valid IR.
+        cumWidth += concatInputs[numConcatOperands - 1 - i]
+                        .getType()
+                        .getIntOrFloatBitWidth();
+        prefixWidths[i] = cumWidth;
+      }
+
+      // Resolve each extract user.
+      for (auto extract : extractUsers) {
+        if (succeeded(extractConcatToConcatExtract(extract, op, rewriter,
+                                                   prefixWidths)))
+          anyExtractsResolved = true;
+      }
+    }
+  }
+
   if (processedOperands.size() == 1) {
     // If the operands were all the same, we'll reach here with a single
     // ReplicateOp.
@@ -1992,7 +2026,7 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
   } else if (anyOperandChanged) {
     replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, op.getType(),
                                                 processedOperands);
-  } else {
+  } else if (!anyExtractsResolved) {
     return failure();
   }
   return success();
