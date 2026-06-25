@@ -23,11 +23,12 @@ LogicalResult
 MappingCostAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                         FloatAttr area, ArrayAttr arcs,
                         DictionaryAttr inputCaps) {
-  if (arcs)
-    for (auto attr : arcs)
-      if (!isa<LinearTimingArcAttr>(attr))
-        return emitError()
-               << "expected arcs to contain synth.linear_timing_arc";
+  if (arcs.empty())
+    return emitError() << "expected arcs to be non-empty";
+
+  for (auto attr : arcs)
+    if (!isa<LinearTimingArcAttr>(attr))
+      return emitError() << "expected arcs to contain synth.linear_timing_arc";
 
   if (inputCaps)
     for (auto entry : inputCaps)
