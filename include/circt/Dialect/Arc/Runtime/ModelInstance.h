@@ -21,7 +21,9 @@
 #include "circt/Dialect/Arc/Runtime/TraceEncoder.h"
 
 #include <filesystem>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace circt {
@@ -51,11 +53,11 @@ private:
   const uint64_t instanceID;
   const ArcRuntimeModelInfo *const modelInfo;
   const ArcState *const state;
+  std::map<std::string, std::optional<std::string>> arguments;
   // FST is always in the enum so headers don't depend on build configuration.
   // If FST is selected at runtime but not compiled in, an error is emitted.
   enum class TraceMode { DUMMY, VCD, FST };
   TraceMode traceMode;
-  std::optional<std::string> traceFileArg;
   std::unique_ptr<TraceEncoder> traceEncoder;
   bool verbose = false;
   uint64_t stepCounter = 0;
