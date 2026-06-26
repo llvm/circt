@@ -1025,12 +1025,10 @@ public:
   // Folds the enable signal into the property and converts the result into a
   // bad instruction.
   void visitVerif(verif::AssertOp op) { visitAssertLike(op); }
-  void visitVerif(verif::ClockedAssertOp op) { visitAssertLike(op); }
 
   // Fold the enable into the property and convert the assumption into a
   // constraint instruction.
   void visitVerif(verif::AssumeOp op) { visitAssumeLike(op); }
-  void visitVerif(verif::ClockedAssumeOp op) { visitAssumeLike(op); }
 
   // Symbolic values get handled the same way as block arguments.
   // The one difference if that we treat them as regular opertions rather than
@@ -1164,9 +1162,9 @@ public:
 
   void visit(seq::FromClockOp op) {
     for (auto *user : op->getResult(0).getUsers()) {
-      if (!isa<sv::AlwaysOp, verif::ClockedAssertOp>(user)) {
+      if (!isa<sv::AlwaysOp>(user)) {
         op->emitError("This pass only supports seq.from_clock results being "
-                      "used by sv.always and verif.clocked_assert operations.");
+                      "used by sv.always operations.");
         signalPassFailure();
       }
     }

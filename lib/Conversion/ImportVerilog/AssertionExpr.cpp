@@ -20,6 +20,7 @@
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/SystemSubroutine.h"
 #include "slang/parsing/KnownSystemName.h"
+#include "llvm/Support/SaveAndRestore.h"
 
 #include <optional>
 #include <utility>
@@ -36,6 +37,24 @@ struct AssertionExprVisitor {
 
   AssertionExprVisitor(Context &context, Location loc)
       : context(context), loc(loc), builder(context.builder) {}
+
+  Value addExplicitClock(Value value) {
+    if (!context.currentLTLClock || !isa<IntegerType>(value.getType()))
+      return value;
+    auto [edge, clock] = *context.currentLTLClock;
+    return ltl::ClockedAtomOp::create(builder, loc, value, edge, clock);
+  }
+
+  Value createDelay(Value input, IntegerAttr delay, IntegerAttr length) {
+    if (!context.currentLTLClock) {
+      mlir::emitError(loc,
+                      "sequence delay requires an explicit clocking event");
+      return {};
+    }
+    auto [edge, clock] = *context.currentLTLClock;
+    return ltl::ClockedDelayOp::create(builder, loc, input, edge, clock, delay,
+                                       length);
+  }
 
   /// Helper to convert a range (min, optional max) to MLIR integer attributes
   std::pair<mlir::IntegerAttr, mlir::IntegerAttr>
@@ -70,16 +89,26 @@ struct AssertionExprVisitor {
       return {};
     }
 
+    if (!context.currentLTLClock) {
+      mlir::emitError(
+          loc, "sequence repetition requires an explicit clocking event");
+      return {};
+    }
+
+    auto [edge, clock] = *context.currentLTLClock;
     switch (repetition.kind) {
     case SequenceRepetition::Consecutive:
-      return ltl::RepeatOp::create(builder, loc, inputSequence, minRepetitions,
-                                   repetitionRange);
+      return ltl::ClockedRepeatOp::create(builder, loc, inputSequence, edge,
+                                          clock, minRepetitions,
+                                          repetitionRange);
     case SequenceRepetition::Nonconsecutive:
-      return ltl::NonConsecutiveRepeatOp::create(
-          builder, loc, inputSequence, minRepetitions, repetitionRange);
+      return ltl::ClockedNonConsecutiveRepeatOp::create(
+          builder, loc, inputSequence, edge, clock, minRepetitions,
+          repetitionRange);
     case SequenceRepetition::GoTo:
-      return ltl::GoToRepeatOp::create(builder, loc, inputSequence,
-                                       minRepetitions, repetitionRange);
+      return ltl::ClockedGoToRepeatOp::create(builder, loc, inputSequence, edge,
+                                              clock, minRepetitions,
+                                              repetitionRange);
     }
     llvm_unreachable("All enum values handled in switch");
   }
@@ -100,6 +129,7 @@ struct AssertionExprVisitor {
     }
     if (!value)
       return {};
+    value = addExplicitClock(value);
 
     // Handle repetition
     // The optional repetition is empty, return the converted expression
@@ -129,8 +159,9 @@ struct AssertionExprVisitor {
 
       auto [delayMin, delayRange] =
           convertRangeToAttrs(concatElement.delay.min, concatElement.delay.max);
-      auto delayedSequence = ltl::DelayOp::create(builder, loc, sequenceValue,
-                                                  delayMin, delayRange);
+      auto delayedSequence = createDelay(sequenceValue, delayMin, delayRange);
+      if (!delayedSequence)
+        return {};
       sequenceElements.push_back(delayedSequence);
     }
 
@@ -149,9 +180,13 @@ struct AssertionExprVisitor {
       if (expr.range.has_value()) {
         mlir::emitError(loc, "Strong eventually with range not supported");
         return {};
-      } else {
-        return ltl::EventuallyOp::create(builder, loc, value);
       }
+      if (context.currentLTLClock) {
+        auto [edge, clock] = *context.currentLTLClock;
+        return ltl::ClockedEventuallyOp::create(builder, loc, value, edge,
+                                                clock);
+      }
+      return ltl::EventuallyOp::create(builder, loc, value);
     case UnaryAssertionOperator::Always: {
       std::pair<mlir::IntegerAttr, mlir::IntegerAttr> attr = {
           builder.getI64IntegerAttr(0), mlir::IntegerAttr{}};
@@ -159,16 +194,20 @@ struct AssertionExprVisitor {
         attr =
             convertRangeToAttrs(expr.range.value().min, expr.range.value().max);
       }
-      return ltl::RepeatOp::create(builder, loc, value, attr.first,
-                                   attr.second);
+      if (!context.currentLTLClock) {
+        mlir::emitError(loc, "`always` requires an explicit clocking event");
+        return {};
+      }
+      auto [edge, clock] = *context.currentLTLClock;
+      return ltl::ClockedRepeatOp::create(builder, loc, value, edge, clock,
+                                          attr.first, attr.second);
     }
     case UnaryAssertionOperator::NextTime: {
       auto minRepetitions = builder.getI64IntegerAttr(1);
       if (expr.range.has_value()) {
         minRepetitions = builder.getI64IntegerAttr(expr.range.value().min);
       }
-      return ltl::DelayOp::create(builder, loc, value, minRepetitions,
-                                  builder.getI64IntegerAttr(0));
+      return createDelay(value, minRepetitions, builder.getI64IntegerAttr(0));
     }
     case UnaryAssertionOperator::Eventually:
     case UnaryAssertionOperator::SNextTime:
@@ -195,25 +234,39 @@ struct AssertionExprVisitor {
     case BinaryAssertionOperator::Intersect:
       return ltl::IntersectOp::create(builder, loc, operands);
     case BinaryAssertionOperator::Throughout: {
-      auto lhsRepeat = ltl::RepeatOp::create(
-          builder, loc, lhs, builder.getI64IntegerAttr(0), mlir::IntegerAttr{});
+      if (!context.currentLTLClock) {
+        mlir::emitError(loc,
+                        "`throughout` requires an explicit clocking event");
+        return {};
+      }
+      auto [edge, clock] = *context.currentLTLClock;
+      auto lhsRepeat = ltl::ClockedRepeatOp::create(
+          builder, loc, lhs, edge, clock, builder.getI64IntegerAttr(0),
+          mlir::IntegerAttr{});
       return ltl::IntersectOp::create(builder, loc,
                                       SmallVector<Value, 2>{lhsRepeat, rhs});
     }
     case BinaryAssertionOperator::Within: {
+      if (!context.currentLTLClock) {
+        mlir::emitError(loc, "`within` requires an explicit clocking event");
+        return {};
+      }
+      auto [edge, clock] = *context.currentLTLClock;
       auto constOne =
           hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
-      auto oneRepeat = ltl::RepeatOp::create(builder, loc, constOne,
-                                             builder.getI64IntegerAttr(0),
-                                             mlir::IntegerAttr{});
-      auto repeatDelay = ltl::DelayOp::create(builder, loc, oneRepeat,
-                                              builder.getI64IntegerAttr(1),
-                                              builder.getI64IntegerAttr(0));
-      auto lhsDelay =
-          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
-                               builder.getI64IntegerAttr(0));
+      Value clockedOne = addExplicitClock(constOne);
+      auto oneRepeat = ltl::ClockedRepeatOp::create(
+          builder, loc, clockedOne, edge, clock, builder.getI64IntegerAttr(0),
+          mlir::IntegerAttr{});
+      auto repeatDelay = createDelay(oneRepeat, builder.getI64IntegerAttr(1),
+                                     builder.getI64IntegerAttr(0));
+      auto lhsDelay = createDelay(lhs, builder.getI64IntegerAttr(1),
+                                  builder.getI64IntegerAttr(0));
+      if (!repeatDelay || !lhsDelay)
+        return {};
       auto combined = ltl::ConcatOp::create(
-          builder, loc, SmallVector<Value, 3>{repeatDelay, lhsDelay, constOne});
+          builder, loc,
+          SmallVector<Value, 3>{repeatDelay, lhsDelay, clockedOne});
       return ltl::IntersectOp::create(builder, loc,
                                       SmallVector<Value, 2>{combined, rhs});
     }
@@ -224,10 +277,23 @@ struct AssertionExprVisitor {
       return ltl::OrOp::create(builder, loc,
                                SmallVector<Value, 2>{notOred, anded});
     }
-    case BinaryAssertionOperator::Until:
-      return ltl::UntilOp::create(builder, loc, operands);
+    case BinaryAssertionOperator::Until: {
+      if (!context.currentLTLClock) {
+        mlir::emitError(loc, "`until` requires an explicit clocking event");
+        return {};
+      }
+      auto [edge, clock] = *context.currentLTLClock;
+      return ltl::ClockedUntilOp::create(builder, loc, lhs, edge, clock, rhs);
+    }
     case BinaryAssertionOperator::UntilWith: {
-      auto untilOp = ltl::UntilOp::create(builder, loc, operands);
+      if (!context.currentLTLClock) {
+        mlir::emitError(loc,
+                        "`until_with` requires an explicit clocking event");
+        return {};
+      }
+      auto [edge, clock] = *context.currentLTLClock;
+      auto untilOp =
+          ltl::ClockedUntilOp::create(builder, loc, lhs, edge, clock, rhs);
       auto andOp = ltl::AndOp::create(builder, loc, operands);
       auto notUntil = ltl::NotOp::create(builder, loc, untilOp);
       return ltl::OrOp::create(builder, loc,
@@ -243,11 +309,13 @@ struct AssertionExprVisitor {
     case BinaryAssertionOperator::NonOverlappedImplication: {
       auto constOne =
           hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
-      auto lhsDelay =
-          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
-                               builder.getI64IntegerAttr(0));
+      auto clockedOne = addExplicitClock(constOne);
+      auto lhsDelay = createDelay(lhs, builder.getI64IntegerAttr(1),
+                                  builder.getI64IntegerAttr(0));
+      if (!lhsDelay)
+        return {};
       auto antecedent = ltl::ConcatOp::create(
-          builder, loc, SmallVector<Value, 2>{lhsDelay, constOne});
+          builder, loc, SmallVector<Value, 2>{lhsDelay, clockedOne});
       return ltl::ImplicationOp::create(builder, loc,
                                         SmallVector<Value, 2>{antecedent, rhs});
     }
@@ -260,12 +328,14 @@ struct AssertionExprVisitor {
     case BinaryAssertionOperator::NonOverlappedFollowedBy: {
       auto constOne =
           hw::ConstantOp::create(builder, loc, builder.getI1Type(), 1);
+      auto clockedOne = addExplicitClock(constOne);
       auto notRhs = ltl::NotOp::create(builder, loc, rhs);
-      auto lhsDelay =
-          ltl::DelayOp::create(builder, loc, lhs, builder.getI64IntegerAttr(1),
-                               builder.getI64IntegerAttr(0));
+      auto lhsDelay = createDelay(lhs, builder.getI64IntegerAttr(1),
+                                  builder.getI64IntegerAttr(0));
+      if (!lhsDelay)
+        return {};
       auto antecedent = ltl::ConcatOp::create(
-          builder, loc, SmallVector<Value, 2>{lhsDelay, constOne});
+          builder, loc, SmallVector<Value, 2>{lhsDelay, clockedOne});
       auto implication = ltl::ImplicationOp::create(
           builder, loc, SmallVector<Value, 2>{antecedent, notRhs});
       return ltl::NotOp::create(builder, loc, implication);
@@ -280,10 +350,21 @@ struct AssertionExprVisitor {
   }
 
   Value visit(const slang::ast::ClockingAssertionExpr &expr) {
-    auto assertionExpr = context.convertAssertionExpression(expr.expr, loc);
-    if (!assertionExpr)
+    // Let sampled value calls diagnose event lists themselves. They have a more
+    // specific diagnostic than the generic unsupported LTL clock control error.
+    if (expr.clocking.kind == slang::ast::TimingControlKind::EventList) {
+      if (!context.convertAssertionExpression(expr.expr, loc))
+        return {};
+      mlir::emitError(loc, "unsupported LTL clock control: EventList");
       return {};
-    return context.convertLTLTimingControl(expr.clocking, assertionExpr);
+    }
+
+    auto clock = context.convertLTLTimingControl(expr.clocking);
+    if (failed(clock))
+      return {};
+    llvm::SaveAndRestore savedClock(context.currentLTLClock);
+    context.currentLTLClock = *clock;
+    return context.convertAssertionExpression(expr.expr, loc);
   }
 
   /// Emit an error for all other expressions.

@@ -291,9 +291,8 @@ void LowerLTLToCorePass::runOnOperation() {
 
   auto isLegal = [](Operation *op) {
     auto hasNonAssertUsers = std::any_of(
-        op->getUsers().begin(), op->getUsers().end(), [](Operation *user) {
-          return !isa<verif::AssertOp, verif::ClockedAssertOp>(user);
-        });
+        op->getUsers().begin(), op->getUsers().end(),
+        [](Operation *user) { return !isa<verif::AssertOp>(user); });
     auto hasIntegerResultTypes =
         std::all_of(op->getResultTypes().begin(), op->getResultTypes().end(),
                     [](Type type) { return isa<IntegerType>(type); });
@@ -359,7 +358,7 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Clean up remaining unrealized casts by changing assert argument types
   getOperation().walk([&](Operation *op) {
-    if (!isa<verif::AssertOp, verif::ClockedAssertOp>(op))
+    if (!isa<verif::AssertOp>(op))
       return;
     Value prop = op->getOperand(0);
     if (auto cast = prop.getDefiningOp<UnrealizedConversionCastOp>()) {

@@ -674,7 +674,7 @@ firrtl.module @ModuleWithObjectWire(in %in: !firrtl.class<@ClassWithInput(in in:
 }
 
 // Conditions of when blocks should be folded into the LHS of implications in
-// assert/assume ops, or int othe LHS of ands in cover ops.
+// assert/assume ops, or into the LHS of ands in cover ops.
 // CHECK-LABEL: firrtl.module @WhenAroundPropertyAssertAssumeCover
 firrtl.module @WhenAroundPropertyAssertAssumeCover(
   in %clock: !firrtl.clock,
@@ -683,52 +683,199 @@ firrtl.module @WhenAroundPropertyAssertAssumeCover(
   in %c: !firrtl.uint<1>,
   in %d: !firrtl.uint<1>
 ) {
-  // b |-> c
-  // CHECK: [[P0:%.+]] = firrtl.int.ltl.implication %b, %c :
-  %0 = firrtl.int.ltl.implication %b, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  %p0 = firrtl.node interesting_name %0 : !firrtl.uint<1>
-  // @(posedge clock) b |-> c
-  %1 = firrtl.int.ltl.clock %p0, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-  %p1 = firrtl.node interesting_name %1 : !firrtl.uint<1>
+  // @(negedge clock) b |-> c
+  // CHECK: [[B:%.+]] = firrtl.int.ltl.clocked_atom %b, negedge %clock :
+  %0 = firrtl.int.ltl.clocked_atom %b, negedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[C:%.+]] = firrtl.int.ltl.clocked_atom %c, negedge %clock :
+  %1 = firrtl.int.ltl.clocked_atom %c, negedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[P0:%.+]] = firrtl.int.ltl.implication [[B]], [[C]] :
+  %2 = firrtl.int.ltl.implication %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  %p1 = firrtl.node interesting_name %2 : !firrtl.uint<1>
 
   // CHECK-NOT: firrtl.when
   firrtl.when %a : !firrtl.uint<1> {
-    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and %a, %b
-    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], %c
-    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.clock [[TMP2]], posedge %clock
-    // CHECK: firrtl.int.verif.assert [[TMP3]], %d :
-    // CHECK: firrtl.int.verif.assert [[TMP3]] :
-    // CHECK: firrtl.int.verif.assume [[TMP3]], %d :
-    // CHECK: firrtl.int.verif.assume [[TMP3]] :
+    // CHECK: [[COND:%.+]] = firrtl.int.ltl.clocked_atom %a, negedge %clock
+    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and [[COND]], [[B]]
+    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], [[C]]
+    // CHECK: firrtl.int.verif.assert [[TMP2]], %d :
+    // CHECK: firrtl.int.verif.assert [[TMP2]] :
+    // CHECK: firrtl.int.verif.assume [[TMP2]], %d :
+    // CHECK: firrtl.int.verif.assume [[TMP2]] :
     firrtl.int.verif.assert %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.assert %p1 : !firrtl.uint<1>
     firrtl.int.verif.assume %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.assume %p1 : !firrtl.uint<1>
-    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and %a, [[P0]]
-    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.clock [[TMP1]], posedge %clock
-    // CHECK: firrtl.int.verif.cover [[TMP2]], %d :
-    // CHECK: firrtl.int.verif.cover [[TMP2]] :
+    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.and [[COND]], [[P0]]
+    // CHECK: firrtl.int.verif.cover [[TMP3]], %d :
+    // CHECK: firrtl.int.verif.cover [[TMP3]] :
     firrtl.int.verif.cover %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.cover %p1 : !firrtl.uint<1>
   } else {
     // CHECK: [[NOTA:%.+]] = firrtl.not %a
-    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and [[NOTA]], %b
-    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], %c
-    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.clock [[TMP2]], posedge %clock
-    // CHECK: firrtl.int.verif.assert [[TMP3]], %d :
-    // CHECK: firrtl.int.verif.assert [[TMP3]] :
-    // CHECK: firrtl.int.verif.assume [[TMP3]], %d :
-    // CHECK: firrtl.int.verif.assume [[TMP3]] :
+    // CHECK: [[ELSE_COND:%.+]] = firrtl.int.ltl.clocked_atom [[NOTA]], negedge %clock
+    // CHECK: [[TMP4:%.+]] = firrtl.int.ltl.and [[ELSE_COND]], [[B]]
+    // CHECK: [[TMP5:%.+]] = firrtl.int.ltl.implication [[TMP4]], [[C]]
+    // CHECK: firrtl.int.verif.assert [[TMP5]], %d :
+    // CHECK: firrtl.int.verif.assert [[TMP5]] :
+    // CHECK: firrtl.int.verif.assume [[TMP5]], %d :
+    // CHECK: firrtl.int.verif.assume [[TMP5]] :
     firrtl.int.verif.assert %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.assert %p1 : !firrtl.uint<1>
     firrtl.int.verif.assume %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.assume %p1 : !firrtl.uint<1>
-    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and [[NOTA]], [[P0]]
-    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.clock [[TMP1]], posedge %clock
-    // CHECK: firrtl.int.verif.cover [[TMP2]], %d :
-    // CHECK: firrtl.int.verif.cover [[TMP2]] :
+    // CHECK: [[TMP6:%.+]] = firrtl.int.ltl.and [[ELSE_COND]], [[P0]]
+    // CHECK: firrtl.int.verif.cover [[TMP6]], %d :
+    // CHECK: firrtl.int.verif.cover [[TMP6]] :
     firrtl.int.verif.cover %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.cover %p1 : !firrtl.uint<1>
+  }
+}
+
+// CHECK-LABEL: firrtl.module @WhenAroundClockedAtom
+firrtl.module @WhenAroundClockedAtom(
+  in %clock: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %d: !firrtl.uint<1>
+) {
+  // CHECK: [[B_ATOM:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock :
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.when
+  firrtl.when %a : !firrtl.uint<1> {
+    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.assert [[TMP2]], %d :
+    firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.and [[TMP1]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.cover [[TMP3]] :
+    firrtl.int.verif.cover %0 : !firrtl.uint<1>
+  } else {
+    // CHECK: [[NOTA:%.+]] = firrtl.not %a
+    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.clocked_atom [[NOTA]], posedge %clock :
+    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.assert [[TMP2]], %d :
+    firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.and [[TMP1]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.cover [[TMP3]] :
+    firrtl.int.verif.cover %0 : !firrtl.uint<1>
+  }
+}
+
+// Test that when two clocked-atom properties under the same `when` share a
+// clock but use different edges, the `when` condition is sampled at each
+// atom's OWN edge rather than reusing a cached atom built for a different
+// edge on the same clock. See ExpandWhens' clockedConditionWithClock helper,
+// whose cache key must include the edge.
+// CHECK-LABEL: firrtl.module @WhenAroundClockedAtomMixedEdges
+firrtl.module @WhenAroundClockedAtomMixedEdges(
+  in %clock: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %c: !firrtl.uint<1>,
+  in %d: !firrtl.uint<1>
+) {
+  // CHECK: [[B_ATOM:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock :
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[C_ATOM:%.+]] = firrtl.int.ltl.clocked_atom %c, negedge %clock :
+  %1 = firrtl.int.ltl.clocked_atom %c, negedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.when
+  firrtl.when %a : !firrtl.uint<1> {
+    // CHECK: [[POS_COND:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+    // CHECK: [[IMPL_POS:%.+]] = firrtl.int.ltl.implication [[POS_COND]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.assert [[IMPL_POS]], %d :
+    firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    // The negedge atom must sample %a with its OWN edge (negedge), not reuse
+    // the posedge atom created above for the same condition/clock pair.
+    // CHECK: [[NEG_COND:%.+]] = firrtl.int.ltl.clocked_atom %a, negedge %clock :
+    // CHECK: [[IMPL_NEG:%.+]] = firrtl.int.ltl.implication [[NEG_COND]], [[C_ATOM]]
+    // CHECK: firrtl.int.verif.assert [[IMPL_NEG]], %d :
+    firrtl.int.verif.assert %1, %d : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// Look through clocked temporal ops and clockless combinators when determining
+// how to sample a wrapping when condition.
+// CHECK-LABEL: firrtl.module @WhenAroundClockedProperty
+firrtl.module @WhenAroundClockedProperty(
+  in %clock: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %c: !firrtl.uint<1>
+) {
+  // CHECK: [[B_ATOM:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock :
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[EVENTUALLY:%.+]] = firrtl.int.ltl.clocked_eventually [[B_ATOM]], posedge %clock :
+  %1 = firrtl.int.ltl.clocked_eventually %0, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.when
+  firrtl.when %a : !firrtl.uint<1> {
+    // CHECK: [[COND:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+    // CHECK: [[IMPL:%.+]] = firrtl.int.ltl.implication [[COND]], [[EVENTUALLY]]
+    // CHECK: firrtl.int.verif.assert [[IMPL]], %c :
+    firrtl.int.verif.assert %1, %c : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// A wrapping condition cannot be assigned arbitrarily to one side of a
+// genuinely multi-clock property.
+// CHECK-LABEL: firrtl.module @WhenAroundMultiClockProperty
+firrtl.module @WhenAroundMultiClockProperty(
+  in %clock0: !firrtl.clock,
+  in %clock1: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %c: !firrtl.uint<1>
+) {
+  // CHECK: [[B0:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock0 :
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock0 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[B1:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock1 :
+  %1 = firrtl.int.ltl.clocked_atom %b, posedge %clock1 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[MULTI:%.+]] = firrtl.int.ltl.and [[B0]], [[B1]]
+  %2 = firrtl.int.ltl.and %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.when
+  firrtl.when %a : !firrtl.uint<1> {
+    // CHECK: [[GATED:%.+]] = firrtl.int.ltl.and %a, [[MULTI]]
+    // CHECK: firrtl.int.verif.cover [[GATED]], %c :
+    firrtl.int.verif.cover %2, %c : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// Test that sibling layerblocks inside a when each get their own clocked-atom
+// when-condition sample and do not share a cached clocked_atom across
+// layerblock boundaries (which would cause dominance violations). This
+// mirrors @SiblingLayerblocksImplication above, but for the clocked-atom
+// when-condition cache (createdLTLClockedConditionOps), which must be
+// snapshotted/restored around layerblock processing just like the other LTL
+// op caches.
+firrtl.layer @LayerClockedAtom bind attributes {sym_visibility = "private"} {}
+// CHECK-LABEL: firrtl.module @SiblingLayerblocksClockedAtom
+firrtl.module @SiblingLayerblocksClockedAtom(
+  in %clock: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %d: !firrtl.uint<1>
+) {
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: firrtl.layerblock @LayerClockedAtom {
+  // CHECK:   [[COND1:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+  // CHECK:   [[IMPL1:%.+]] = firrtl.int.ltl.implication [[COND1]],
+  // CHECK:   firrtl.int.verif.assert [[IMPL1]], %d :
+  // CHECK: }
+  // CHECK: firrtl.layerblock @LayerClockedAtom {
+  // CHECK:   [[COND2:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+  // CHECK:   [[IMPL2:%.+]] = firrtl.int.ltl.implication [[COND2]],
+  // CHECK:   firrtl.int.verif.assert [[IMPL2]], %d :
+  // CHECK: }
+  firrtl.when %a : !firrtl.uint<1> {
+    firrtl.layerblock @LayerClockedAtom {
+      firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+    firrtl.layerblock @LayerClockedAtom {
+      firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    }
   }
 }
 
@@ -805,34 +952,6 @@ firrtl.module @SiblingLayerblocksImplication() {
       %0 = firrtl.int.ltl.implication %c0_ui1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
       firrtl.int.verif.assert %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     }
-  }
-}
-
-// Test that expand-whens preserves an explicit negedge on ltl.clock.
-// CHECK-LABEL: firrtl.module @WhenAroundNegedgeProperty
-firrtl.module @WhenAroundNegedgeProperty(
-  in %clock: !firrtl.clock,
-  in %a: !firrtl.uint<1>,
-  in %b: !firrtl.uint<1>,
-  in %c: !firrtl.uint<1>,
-  in %d: !firrtl.uint<1>
-) {
-  // CHECK: [[P0:%.+]] = firrtl.int.ltl.implication %b, %c :
-  %0 = firrtl.int.ltl.implication %b, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  %1 = firrtl.int.ltl.clock %0, negedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-
-  // CHECK-NOT: firrtl.when
-  firrtl.when %a : !firrtl.uint<1> {
-    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and %a, %b
-    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], %c
-    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.clock [[TMP2]], negedge %clock
-    // CHECK: firrtl.int.verif.assert [[TMP3]], %d :
-    firrtl.int.verif.assert %1, %d : !firrtl.uint<1>, !firrtl.uint<1>
-
-    // CHECK: [[TMP4:%.+]] = firrtl.int.ltl.and %a, [[P0]]
-    // CHECK: [[TMP5:%.+]] = firrtl.int.ltl.clock [[TMP4]], negedge %clock
-    // CHECK: firrtl.int.verif.cover [[TMP5]] :
-    firrtl.int.verif.cover %1 : !firrtl.uint<1>
   }
 }
 

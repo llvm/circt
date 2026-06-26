@@ -52,12 +52,8 @@ unrealized_conversion_cast %p3 : !ltl.property to index
 // Sequences
 //===----------------------------------------------------------------------===//
 
-// CHECK: ltl.delay {{%.+}}, 0 : !ltl.sequence
-// CHECK: ltl.delay {{%.+}}, 42, 1337 : !ltl.sequence
 // CHECK: ltl.clocked_delay {{%.+}}, posedge {{%.+}}, 0 : !ltl.sequence
 // CHECK: ltl.clocked_delay {{%.+}}, posedge {{%.+}}, 42, 1337 : !ltl.sequence
-ltl.delay %s, 0 : !ltl.sequence
-ltl.delay %s, 42, 1337 : !ltl.sequence
 ltl.clocked_delay %s, posedge %clk, 0 : !ltl.sequence
 ltl.clocked_delay %s, posedge %clk, 42, 1337 : !ltl.sequence
 
@@ -68,17 +64,14 @@ ltl.concat %s : !ltl.sequence
 ltl.concat %s, %s : !ltl.sequence, !ltl.sequence
 ltl.concat %s, %s, %s : !ltl.sequence, !ltl.sequence, !ltl.sequence
 
-// CHECK: ltl.repeat {{%.+}}, 0 : !ltl.sequence
-// CHECK: ltl.repeat {{%.+}}, 42 : !ltl.sequence
-// CHECK: ltl.repeat {{%.+}}, 42, 1337 : !ltl.sequence
-ltl.repeat %s, 0 : !ltl.sequence
-ltl.repeat %s, 42 : !ltl.sequence
-ltl.repeat %s, 42, 1337 : !ltl.sequence
+// CHECK: ltl.clocked_repeat {{%.+}}, posedge {{%.+}}, 2, 2 : !ltl.sequence
+%cr = ltl.clocked_repeat %s, posedge %true, 2, 2 : !ltl.sequence
 
-// CHECK: ltl.weak {{%.+}} : !ltl.sequence
-// CHECK: ltl.strong {{%.+}} : !ltl.sequence
-ltl.weak %s : !ltl.sequence
-ltl.strong %s : !ltl.sequence
+// CHECK: ltl.clocked_goto_repeat {{%.+}}, posedge {{%.+}}, 1, 2 : !ltl.sequence
+%cg = ltl.clocked_goto_repeat %s, posedge %true, 1, 2 : !ltl.sequence
+
+// CHECK: ltl.clocked_non_consecutive_repeat {{%.+}}, posedge {{%.+}}, 1, 2 : !ltl.sequence
+%cn = ltl.clocked_non_consecutive_repeat %s, posedge %true, 1, 2 : !ltl.sequence
 
 //===----------------------------------------------------------------------===//
 // Properties
@@ -98,8 +91,8 @@ ltl.not %p : !ltl.property
 // CHECK: ltl.implication {{%.+}}, {{%.+}} : !ltl.sequence, !ltl.property
 ltl.implication %s, %p : !ltl.sequence, !ltl.property
 
-// CHECK: ltl.until {{%.+}}, {{%.+}} : !ltl.property, !ltl.property
-ltl.until %p, %p : !ltl.property, !ltl.property
+// CHECK: ltl.clocked_until {{%.+}}, posedge {{%.+}}, {{%.+}} : !ltl.property, !ltl.property
+%cu = ltl.clocked_until %p, posedge %true, %p : !ltl.property, !ltl.property
 
 // CHECK: ltl.eventually {{%.+}} : i1
 // CHECK: ltl.eventually {{%.+}} : !ltl.sequence
@@ -108,27 +101,8 @@ ltl.eventually %true : i1
 ltl.eventually %s : !ltl.sequence
 ltl.eventually %p : !ltl.property
 
+// CHECK: ltl.clocked_eventually {{%.+}}, posedge {{%.+}} : !ltl.property
+%ce = ltl.clocked_eventually %p, posedge %true : !ltl.property
+
 // CHECK: ltl.past {{%.+}}, 5 clk {{%.+}} : i8
 ltl.past %c0_i8, 5 clk %true : i8
-
-//===----------------------------------------------------------------------===//
-// Clocking
-//===----------------------------------------------------------------------===//
-
-// CHECK: ltl.clock {{%.+}}, posedge {{%.+}} : !ltl.sequence
-// CHECK: ltl.clock {{%.+}}, negedge {{%.+}} : !ltl.sequence
-// CHECK: ltl.clock {{%.+}}, edge {{%.+}} : i1
-// CHECK: ltl.clock {{%.+}}, edge {{%.+}} : !ltl.sequence
-// CHECK: ltl.clock {{%.+}}, edge {{%.+}} : !ltl.property
-ltl.clock %s, posedge %true : !ltl.sequence
-ltl.clock %s, negedge %true : !ltl.sequence
-%clk0 = ltl.clock %true, edge %true : i1
-%clk1 = ltl.clock %s, edge %true : !ltl.sequence
-%clk2 = ltl.clock %p, edge %true : !ltl.property
-
-// Type inference. `unrealized_conversion_cast` used to detect unexpected return
-// types on `ltl.and`.
-unrealized_conversion_cast %clk0 : !ltl.sequence to index
-unrealized_conversion_cast %clk1 : !ltl.sequence to index
-unrealized_conversion_cast %clk2 : !ltl.property to index
-

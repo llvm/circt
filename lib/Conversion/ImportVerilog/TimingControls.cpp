@@ -118,32 +118,30 @@ struct DelayControlVisitor {
 struct LTLClockControlVisitor {
   Context &context;
   Location loc;
-  OpBuilder &builder;
-  Value seqOrPro;
 
-  Value visit(const slang::ast::SignalEventControl &ctrl) {
-    auto edge = convertEdgeKindLTL(ctrl.edge);
+  FailureOr<std::pair<ltl::ClockEdgeAttr, Value>>
+  visit(const slang::ast::SignalEventControl &ctrl) {
+    auto edge = ltl::ClockEdgeAttr::get(context.builder.getContext(),
+                                        convertEdgeKindLTL(ctrl.edge));
     auto expr = context.convertRvalueExpression(ctrl.expr);
     if (!expr)
-      return Value{};
-    Value condition;
+      return failure();
     if (ctrl.iffCondition) {
-      condition = context.convertRvalueExpression(*ctrl.iffCondition);
-      condition = context.convertToBool(condition, Domain::TwoValued);
-      if (!condition)
-        return Value{};
+      mlir::emitError(loc, "`iff` qualifiers on LTL clocking events are not "
+                           "supported");
+      return failure();
     }
     expr = context.convertToI1(expr);
     if (!expr)
-      return Value{};
-    return ltl::ClockOp::create(builder, loc, seqOrPro, edge, expr);
+      return failure();
+    return std::make_pair(edge, expr);
   }
 
   template <typename T>
-  Value visit(T &&ctrl) {
+  FailureOr<std::pair<ltl::ClockEdgeAttr, Value>> visit(T &&ctrl) {
     mlir::emitError(loc, "unsupported LTL clock control: ")
         << slang::ast::toString(ctrl.kind);
-    return Value{};
+    return failure();
   }
 };
 
@@ -264,11 +262,10 @@ Context::convertTimingControl(const slang::ast::TimingControl &ctrl,
   return success();
 }
 
-Value Context::convertLTLTimingControl(const slang::ast::TimingControl &ctrl,
-                                       const Value &seqOrPro) {
-  auto &builder = this->builder;
+FailureOr<std::pair<ltl::ClockEdgeAttr, Value>>
+Context::convertLTLTimingControl(const slang::ast::TimingControl &ctrl) {
   auto loc = this->convertLocation(ctrl.sourceRange);
-  LTLClockControlVisitor visitor{*this, loc, builder, seqOrPro};
+  LTLClockControlVisitor visitor{*this, loc};
   return ctrl.visit(visitor);
 }
 // NOLINTEND(misc-no-recursion)

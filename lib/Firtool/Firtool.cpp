@@ -323,9 +323,6 @@ LogicalResult firtool::populateLowFIRRTLToHW(mlir::PassManager &pm,
   // Check inner symbols and inner refs.
   pm.addPass(hw::createVerifyInnerRefNamespace());
 
-  // Run the verif op verification pass
-  pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
-
   return success();
 }
 
@@ -379,9 +376,6 @@ namespace detail {
 LogicalResult
 populatePrepareForExportVerilog(mlir::PassManager &pm,
                                 const firtool::FirtoolOptions &opt) {
-
-  // Run the verif op verification pass
-  pm.addNestedPass<hw::HWModuleOp>(verif::createVerifyClockedAssertLikePass());
 
   // Legalize unsupported operations within the modules.
   pm.nest<hw::HWModuleOp>().addPass(sv::createHWLegalizeModules());

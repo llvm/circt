@@ -794,10 +794,10 @@ static bool isExpressionUnableToInline(Operation *op,
       // based on what the operation using it is and as which operand.
       auto usedInExprControl = [user, &use]() {
         return TypeSwitch<Operation *, bool>(user)
-            .Case<ltl::ClockOp>([&](auto clockOp) {
-              // LTL Clock op's clock operand must be a name.
-              return clockOp.getClock() == use.get();
-            })
+            .Case<ltl::ClockedAtomOp, ltl::ClockedDelayOp, ltl::ClockedUntilOp,
+                  ltl::ClockedEventuallyOp, ltl::ClockedRepeatOp,
+                  ltl::ClockedGoToRepeatOp, ltl::ClockedNonConsecutiveRepeatOp>(
+                [&](auto atomOp) { return atomOp.getClock() == use.get(); })
             .Case<sv::AssertConcurrentOp, sv::AssumeConcurrentOp,
                   sv::CoverConcurrentOp>(
                 [&](auto op) { return op.getClock() == use.get(); })
@@ -2326,8 +2326,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -3630,29 +3629,47 @@ private:
   using ltl::Visitor<PropertyEmitter, EmittedProperty>::visitLTL;
   friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
 
-  EmittedProperty visitUnhandledLTL(Operation *op);
   EmittedProperty visitLTL(ltl::BooleanConstantOp op);
   EmittedProperty visitLTL(ltl::AndOp op);
   EmittedProperty visitLTL(ltl::OrOp op);
   EmittedProperty visitLTL(ltl::IntersectOp op);
-  EmittedProperty visitLTL(ltl::DelayOp op);
   EmittedProperty visitLTL(ltl::ClockedDelayOp op);
   EmittedProperty visitLTL(ltl::ConcatOp op);
-  EmittedProperty visitLTL(ltl::RepeatOp op);
-  EmittedProperty visitLTL(ltl::GoToRepeatOp op);
-  EmittedProperty visitLTL(ltl::NonConsecutiveRepeatOp op);
+  EmittedProperty visitLTL(ltl::ClockedRepeatOp op);
+  EmittedProperty visitLTL(ltl::ClockedGoToRepeatOp op);
+  EmittedProperty visitLTL(ltl::ClockedNonConsecutiveRepeatOp op);
   EmittedProperty visitLTL(ltl::NotOp op);
   EmittedProperty visitLTL(ltl::ImplicationOp op);
-  EmittedProperty visitLTL(ltl::UntilOp op);
+  EmittedProperty visitLTL(ltl::ClockedUntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
-  EmittedProperty visitLTL(ltl::ClockOp op);
-  EmittedProperty visitLTL(ltl::WeakOp op);
-  EmittedProperty visitLTL(ltl::StrongOp op);
+  EmittedProperty visitLTL(ltl::ClockedEventuallyOp op);
+  EmittedProperty visitLTL(ltl::ClockedAtomOp op);
 
-  EmittedProperty emitWeakStrongOp(StringRef mnemonic, Value input);
   void emitLTLDelay(int64_t delay, std::optional<int64_t> length);
   void emitLTLClockingEvent(ltl::ClockEdge edge, Value clock);
   void emitLTLConcat(ValueRange inputs);
+
+  // Emit a clocking event `@(edge clk)` unless that exact clock is already in
+  // scope, then emit `body` with the clock installed as ambient. This removes
+  // redundant same-clock events nested below a clocked operation. Different
+  // clocks remain inline as required for multiclocked SVA.
+  template <typename BodyFn>
+  EmittedProperty emitClocked(ltl::ClockEdge edge, Value clock, BodyFn body) {
+    std::pair<ltl::ClockEdge, Value> clk{edge, clock};
+    if (currentClock == clk)
+      return body(); // already in scope; suppress the redundant event
+    auto saved = currentClock;
+    emitLTLClockingEvent(edge, clock);
+    ps << PP::space;
+    currentClock = clk;
+    body();
+    currentClock = saved;
+    return {PropertyPrecedence::Clocking};
+  }
+
+  // The `edge`+`clock` currently in scope while emitting a clocked property
+  // subtree. Used to suppress redundant nested clocking events.
+  std::optional<std::pair<ltl::ClockEdge, Value>> currentClock;
 
 public:
   ModuleEmitter &emitter;
@@ -3772,12 +3789,6 @@ EmittedProperty PropertyEmitter::emitNestedProperty(
   return info;
 }
 
-EmittedProperty PropertyEmitter::visitUnhandledLTL(Operation *op) {
-  emitOpError(op, "emission as Verilog property or sequence not supported");
-  ps << "<<unsupported: " << PPExtString(op->getName().getStringRef()) << ">>";
-  return {PropertyPrecedence::Symbol};
-}
-
 EmittedProperty PropertyEmitter::visitLTL(ltl::BooleanConstantOp op) {
   // Emit the boolean constant value as a literal.
   ps << (op.getValueAttr().getValue() ? "1'h1" : "1'h0");
@@ -3845,20 +3856,19 @@ void PropertyEmitter::emitLTLClockingEvent(ltl::ClockEdge edge, Value clock) {
   });
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
-  emitLTLDelay(op.getDelay(), op.getLength());
-  ps << PP::space;
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Concat);
-  return {PropertyPrecedence::Concat};
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedDelayOp op) {
+  return emitClocked(op.getEdge(), op.getClock(), [&] {
+    emitLTLDelay(op.getDelay(), op.getLength());
+    ps << PP::space;
+    emitNestedProperty(op.getInput(), PropertyPrecedence::Concat);
+    return EmittedProperty{PropertyPrecedence::Concat};
+  });
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedDelayOp op) {
-  emitLTLClockingEvent(op.getEdge(), op.getClock());
-  ps << PP::space;
-  emitLTLDelay(op.getDelay(), op.getLength());
-  ps << PP::space;
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Concat);
-  return {PropertyPrecedence::Clocking};
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedAtomOp op) {
+  return emitClocked(op.getEdge(), op.getClock(), [&] {
+    return emitNestedProperty(op.getInput(), PropertyPrecedence::Symbol);
+  });
 }
 
 void PropertyEmitter::emitLTLConcat(ValueRange inputs) {
@@ -3866,7 +3876,11 @@ void PropertyEmitter::emitLTLConcat(ValueRange inputs) {
   for (auto input : inputs) {
     if (addSeparator) {
       ps << PP::space;
-      if (!input.getDefiningOp<ltl::DelayOp>())
+      auto delayOp = input.getDefiningOp<ltl::ClockedDelayOp>();
+      bool delayUsesCurrentClock = delayOp && currentClock &&
+                                   currentClock->first == delayOp.getEdge() &&
+                                   currentClock->second == delayOp.getClock();
+      if (!delayUsesCurrentClock)
         ps << "##0" << PP::space;
     }
     addSeparator = true;
@@ -3879,58 +3893,65 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ConcatOp op) {
   return {PropertyPrecedence::Concat};
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
-  if (auto more = op.getMore()) {
-    ps << "[*";
-    ps.addAsString(op.getBase());
-    if (*more != 0) {
-      ps << ":";
-      ps.addAsString(op.getBase() + *more);
-    }
-    ps << "]";
-  } else {
-    if (op.getBase() == 0) {
-      ps << "[*]";
-    } else if (op.getBase() == 1) {
-      ps << "[+]";
-    } else {
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedRepeatOp op) {
+  return emitClocked(op.getEdge(), op.getClock(), [&] {
+    emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
+    if (auto more = op.getMore()) {
       ps << "[*";
       ps.addAsString(op.getBase());
-      ps << ":$]";
+      if (*more != 0) {
+        ps << ":";
+        ps.addAsString(op.getBase() + *more);
+      }
+      ps << "]";
+    } else {
+      if (op.getBase() == 0) {
+        ps << "[*]";
+      } else if (op.getBase() == 1) {
+        ps << "[+]";
+      } else {
+        ps << "[*";
+        ps.addAsString(op.getBase());
+        ps << ":$]";
+      }
     }
-  }
-  return {PropertyPrecedence::Repeat};
+    return EmittedProperty{PropertyPrecedence::Repeat};
+  });
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::GoToRepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
-  // More always exists
-  auto more = op.getMore();
-  ps << "[->";
-  ps.addAsString(op.getBase());
-  if (more != 0) {
-    ps << ":";
-    ps.addAsString(op.getBase() + more);
-  }
-  ps << "]";
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedGoToRepeatOp op) {
+  return emitClocked(op.getEdge(), op.getClock(), [&] {
+    emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
+    // More always exists
+    auto more = op.getMore();
+    ps << "[->";
+    ps.addAsString(op.getBase());
+    if (more != 0) {
+      ps << ":";
+      ps.addAsString(op.getBase() + more);
+    }
+    ps << "]";
 
-  return {PropertyPrecedence::Repeat};
+    return EmittedProperty{PropertyPrecedence::Repeat};
+  });
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
-  // More always exists
-  auto more = op.getMore();
-  ps << "[=";
-  ps.addAsString(op.getBase());
-  if (more != 0) {
-    ps << ":";
-    ps.addAsString(op.getBase() + more);
-  }
-  ps << "]";
+EmittedProperty
+PropertyEmitter::visitLTL(ltl::ClockedNonConsecutiveRepeatOp op) {
+  return emitClocked(op.getEdge(), op.getClock(), [&] {
+    emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
+    // More always exists
+    auto more = op.getMore();
+    ps << "[=";
+    ps.addAsString(op.getBase());
+    if (more != 0) {
+      ps << ":";
+      ps.addAsString(op.getBase() + more);
+    }
+    ps << "]";
 
-  return {PropertyPrecedence::Repeat};
+    return EmittedProperty{PropertyPrecedence::Repeat};
+  });
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {
@@ -3953,40 +3974,20 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {
   return {PropertyPrecedence::Unary};
 }
 
-/// For a value `concat(..., delay(const(true), 1, 0))`, return `...`. This is
-/// useful for emitting `(seq ##1 true) |-> prop` as `seq |=> prop`.
-static ValueRange getNonOverlappingConcatSubrange(Value value) {
-  auto concatOp = value.getDefiningOp<ltl::ConcatOp>();
-  if (!concatOp || concatOp.getInputs().size() < 2)
-    return {};
-  auto delayOp = concatOp.getInputs().back().getDefiningOp<ltl::DelayOp>();
-  if (!delayOp || delayOp.getDelay() != 1 || delayOp.getLength() != 0)
-    return {};
-  auto constOp = delayOp.getInput().getDefiningOp<ConstantOp>();
-  if (!constOp || !constOp.getValue().isOne())
-    return {};
-  return concatOp.getInputs().drop_back();
-}
-
 EmittedProperty PropertyEmitter::visitLTL(ltl::ImplicationOp op) {
-  // Emit `(seq ##1 true) |-> prop` as `seq |=> prop`.
-  if (auto range = getNonOverlappingConcatSubrange(op.getAntecedent());
-      !range.empty()) {
-    emitLTLConcat(range);
-    ps << PP::space << "|=>" << PP::nbsp;
-  } else {
-    emitNestedProperty(op.getAntecedent(), PropertyPrecedence::Implication);
-    ps << PP::space << "|->" << PP::nbsp;
-  }
+  emitNestedProperty(op.getAntecedent(), PropertyPrecedence::Implication);
+  ps << PP::space << "|->" << PP::nbsp;
   emitNestedProperty(op.getConsequent(), PropertyPrecedence::Implication);
   return {PropertyPrecedence::Implication};
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::UntilOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Until);
-  ps << PP::space << "until" << PP::space;
-  emitNestedProperty(op.getCondition(), PropertyPrecedence::Until);
-  return {PropertyPrecedence::Until};
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedUntilOp op) {
+  return emitClocked(op.getEdge(), op.getClock(), [&] {
+    emitNestedProperty(op.getInput(), PropertyPrecedence::Until);
+    ps << PP::space << "until" << PP::space;
+    emitNestedProperty(op.getCondition(), PropertyPrecedence::Until);
+    return EmittedProperty{PropertyPrecedence::Until};
+  });
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
@@ -3995,30 +3996,12 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::EventuallyOp op) {
   return {PropertyPrecedence::Qualifier};
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
-  emitLTLClockingEvent(op.getEdge(), op.getClock());
-  ps << PP::space;
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
-  return {PropertyPrecedence::Clocking};
-}
-
-// Weak and strong are emitted identically
-EmittedProperty PropertyEmitter::emitWeakStrongOp(StringRef mnemonic,
-                                                  Value input) {
-  ps << mnemonic << PP::space << "(";
-  ps.scopedBox(PP::ibox2, [&] {
-    emitNestedProperty(input, PropertyPrecedence::Unary);
-    ps << ")";
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedEventuallyOp op) {
+  return emitClocked(op.getEdge(), op.getClock(), [&] {
+    ps << "s_eventually" << PP::space;
+    emitNestedProperty(op.getInput(), PropertyPrecedence::Qualifier);
+    return EmittedProperty{PropertyPrecedence::Qualifier};
   });
-  return {PropertyPrecedence::Lowest};
-}
-
-EmittedProperty PropertyEmitter::visitLTL(ltl::WeakOp op) {
-  return emitWeakStrongOp("weak", op.getInput());
-}
-
-EmittedProperty PropertyEmitter::visitLTL(ltl::StrongOp op) {
-  return emitWeakStrongOp("strong", op.getInput());
 }
 
 // NOLINTEND(misc-no-recursion)

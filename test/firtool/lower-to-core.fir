@@ -21,7 +21,8 @@ circuit LowerToCore:
 ; CHECK-DAG: [[NL:%.+]] = sim.fmt.literal "\0A"
 ; CHECK-DAG: [[LIT:%.+]] = sim.fmt.literal "value="
 ; CHECK-DAG: [[CLK:%.+]] = seq.from_clock %clock
-; CHECK-DAG: verif.clocked_assert %pred if %enable, posedge [[CLK]] : i1
+; CHECK-DAG: [[PROP:%.+]] = ltl.clocked_atom %pred, posedge [[CLK]] : i1
+; CHECK-DAG: verif.assert [[PROP]] if %enable : !ltl.sequence
 ; CHECK-DAG: [[FMT:%.+]] = sim.fmt.dec %x signed : i4
 ; CHECK: [[MSG:%.+]] = sim.fmt.concat ([[LIT]], [[FMT]], [[NL]])
 ; CHECK: [[STDERR:%.+]] = sim.stderr_stream

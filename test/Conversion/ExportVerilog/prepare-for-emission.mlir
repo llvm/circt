@@ -156,10 +156,16 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
     // CHECK: %[[XOR:.+]] = comb.xor
     // CHECK: %[[WIRE:.+]] = sv.wire
     // CHECK: sv.assign %[[WIRE]], %[[XOR]]
-    // CHECK: %[[READ:.+]] = sv.read_inout %[[WIRE]]
-    // CHECK: ltl.clock %{{.+}} posedge %[[READ]]
-    %i0 = ltl.implication %a, %b : i1, i1
-    %k0 = ltl.clock %i0, posedge %clk_xor_b : !ltl.property
+    // CHECK: %[[READ0:.+]] = sv.read_inout %[[WIRE]]
+    // CHECK: ltl.clocked_atom %{{.+}}, posedge %[[READ0]]
+    // CHECK: %[[READ1:.+]] = sv.read_inout %[[WIRE]]
+    // CHECK: ltl.clocked_atom %{{.+}}, posedge %[[READ1]]
+    // CHECK: %[[READ2:.+]] = sv.read_inout %[[WIRE]]
+    // CHECK: ltl.clocked_delay %{{.+}}, posedge %[[READ2]], 1, 0
+    %a0 = ltl.clocked_atom %a, posedge %clk_xor_b : i1
+    %b0 = ltl.clocked_atom %b, posedge %clk_xor_b : i1
+    %b1 = ltl.clocked_delay %b0, posedge %clk_xor_b, 1, 0 : !ltl.sequence
+    %k0 = ltl.implication %a0, %b1 : !ltl.sequence, !ltl.sequence
 
     verif.assert %k0 : !ltl.property
   }
@@ -264,7 +270,7 @@ hw.module @Issue5613(in %a: i1, in %b: i1) {
   %1 = ltl.or %b, %3 : i1, !ltl.property
   %2 = ltl.and %b, %4 : i1, !ltl.sequence
   %3 = ltl.not %b : i1
-  %4 = ltl.delay %a, 42 : i1
+  %4 = ltl.clocked_delay %a, posedge %b, 42 : i1
   hw.output
 }
 

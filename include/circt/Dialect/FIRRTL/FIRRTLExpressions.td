@@ -1773,51 +1773,63 @@ def LTLOrIntrinsicOp : BinaryLTLIntrinsicOp<"or", [Commutative]>;
 def LTLIntersectIntrinsicOp : BinaryLTLIntrinsicOp<"intersect", [Commutative]>;
 
 // Sequences
-def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
+def LTLClockedDelayIntrinsicOp : LTLIntrinsicOp<"clocked_delay"> {
   let arguments = (ins NonConstUInt1Type:$input,
+                       EventControlAttr:$edge,
+                       ClockType:$clock,
                        I64Attr:$delay,
                        OptionalAttr<I64Attr>:$length);
   let assemblyFormat = [{
-    $input `,` $delay (`,` $length^)? attr-dict `:`
+    $input `,` $edge $clock `,` $delay (`,` $length^)? attr-dict `:`
     functional-type(operands, results)
+  }];
+}
+def LTLClockedAtomIntrinsicOp : LTLIntrinsicOp<"clocked_atom"> {
+  let arguments = (ins NonConstUInt1Type:$input, EventControlAttr:$edge,
+                       ClockType:$clock);
+  let assemblyFormat = [{
+    $input `,` $edge $clock attr-dict `:` functional-type(operands, results)
   }];
 }
 def LTLConcatIntrinsicOp : BinaryLTLIntrinsicOp<"concat">;
-def LTLRepeatIntrinsicOp : LTLIntrinsicOp<"repeat"> {
-  let arguments = (ins NonConstUInt1Type:$input,
-                       I64Attr:$base,
-                       OptionalAttr<I64Attr>:$more);
-  let assemblyFormat = [{
-    $input `,` $base (`,` $more^)? attr-dict `:`
-    functional-type(operands, results)
-  }];
+def LTLClockedRepeatIntrinsicOp : LTLIntrinsicOp<"clocked_repeat"> {
+  let arguments = (ins NonConstUInt1Type:$input, EventControlAttr:$edge,
+                       ClockType:$clock, I64Attr:$base, OptionalAttr<I64Attr>:$more);
+  let assemblyFormat = [{ $input `,` $edge $clock `,` $base (`,` $more^)?
+                          attr-dict `:` functional-type(operands, results) }];
 }
-
-def LTLGoToRepeatIntrinsicOp : LTLIntrinsicOp<"goto_repeat"> {
-  let arguments = (ins NonConstUInt1Type:$input,
-                       I64Attr:$base,
-                       I64Attr:$more);
-  let assemblyFormat = [{
-    $input `,` $base `,` $more attr-dict `:`
-    functional-type(operands, results)
-  }];
+def LTLClockedGoToRepeatIntrinsicOp : LTLIntrinsicOp<"clocked_goto_repeat"> {
+  let arguments = (ins NonConstUInt1Type:$input, EventControlAttr:$edge,
+                       ClockType:$clock, I64Attr:$base, I64Attr:$more);
+  let assemblyFormat = [{ $input `,` $edge $clock `,` $base `,` $more
+                          attr-dict `:` functional-type(operands, results) }];
 }
-
-def LTLNonConsecutiveRepeatIntrinsicOp : LTLIntrinsicOp<"non_consecutive_repeat"> {
-  let arguments = (ins NonConstUInt1Type:$input,
-                       I64Attr:$base,
-                       I64Attr:$more);
-  let assemblyFormat = [{
-    $input `,` $base `,` $more attr-dict `:`
-    functional-type(operands, results)
-  }];
+def LTLClockedNonConsecutiveRepeatIntrinsicOp :
+    LTLIntrinsicOp<"clocked_non_consecutive_repeat"> {
+  let arguments = (ins NonConstUInt1Type:$input, EventControlAttr:$edge,
+                       ClockType:$clock, I64Attr:$base, I64Attr:$more);
+  let assemblyFormat = [{ $input `,` $edge $clock `,` $base `,` $more
+                          attr-dict `:` functional-type(operands, results) }];
 }
 
 // Properties
 def LTLNotIntrinsicOp : UnaryLTLIntrinsicOp<"not">;
 def LTLImplicationIntrinsicOp : BinaryLTLIntrinsicOp<"implication">;
-def LTLUntilIntrinsicOp : BinaryLTLIntrinsicOp<"until">;
+def LTLClockedUntilIntrinsicOp : LTLIntrinsicOp<"clocked_until"> {
+  let arguments = (ins NonConstUInt1Type:$input, EventControlAttr:$edge,
+                       ClockType:$clock, NonConstUInt1Type:$condition);
+  let assemblyFormat = [{
+    $input `,` $edge $clock `,` $condition attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
 def LTLEventuallyIntrinsicOp : UnaryLTLIntrinsicOp<"eventually">;
+def LTLClockedEventuallyIntrinsicOp : LTLIntrinsicOp<"clocked_eventually"> {
+  let arguments = (ins NonConstUInt1Type:$input, EventControlAttr:$edge,
+                       ClockType:$clock);
+  let assemblyFormat = [{ $input `,` $edge $clock attr-dict `:`
+                          functional-type(operands, results) }];
+}
 
 // Past
 def LTLPastIntrinsicOp : LTLIntrinsicOp<"past"> {
@@ -1827,15 +1839,6 @@ def LTLPastIntrinsicOp : LTLIntrinsicOp<"past"> {
   let assemblyFormat = [{
     $input `,` $delay `,` $clock attr-dict `:`
     functional-type(operands, results)
-  }];
-}
-
-// Clocking
-def LTLClockIntrinsicOp : LTLIntrinsicOp<"clock"> {
-  let arguments = (ins NonConstUInt1Type:$input, EventControlAttr:$edge,
-                       ClockType:$clock);
-  let assemblyFormat = [{
-    $input `,` $edge $clock attr-dict `:` functional-type(operands, results)
   }];
 }
 

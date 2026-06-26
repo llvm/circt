@@ -55,58 +55,6 @@ def CoverOp : AssertLikeOp<"cover"> {
   let summary = "Ensure that a property can hold.";
 }
 
-// Edge behavior enum for always block.  See SV Spec 9.4.2.
-
-/// AtPosEdge triggers on a rise from 0 to 1/X/Z, or X/Z to 1.
-def AtPosEdge: I32EnumAttrCase<"Pos", 0, "posedge">;
-/// AtNegEdge triggers on a drop from 1 to 0/X/Z, or X/Z to 0.
-def AtNegEdge: I32EnumAttrCase<"Neg", 1, "negedge">;
-/// AtEdge is syntactic sugar for AtPosEdge or AtNegEdge.
-def AtEdge   : I32EnumAttrCase<"Both", 2, "edge">;
-
-def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "clock edge",
-                                [AtPosEdge, AtNegEdge, AtEdge]> {
-  let cppNamespace = "circt::verif";
-}
-
-class ClockedAssertLikeOp<string mnemonic, list<Trait> traits = []> :
-  VerifOp<mnemonic, traits> {
-  let arguments = (ins LTLAnyPropertyType:$property,
-                      ClockEdgeAttr:$edge, I1:$clock,
-                      Optional<I1>:$enable,
-                      OptionalAttr<StrAttr>:$label);
-  let assemblyFormat = [{
-    $property (`if` $enable^)? `,` $edge $clock
-    (`label` $label^)? attr-dict `:` type($property)
-  }];
-
-  let hasCanonicalizer = true;
-}
-
-def ClockedAssertOp : ClockedAssertLikeOp<"clocked_assert"> {
-  let summary = [{
-    Assert that a property holds, checked on a given clock's
-    ticks and enabled if a given condition holds. Only supports
-    a single clock and a single disable.
-  }];
-}
-
-def ClockedAssumeOp : ClockedAssertLikeOp<"clocked_assume"> {
-  let summary = [{
-    Assume that a property holds, checked on a given clock's
-    ticks and enabled if a given condition holds. Only supports
-    a single clock and a single disable.
-  }];
-}
-
-def ClockedCoverOp : ClockedAssertLikeOp<"clocked_cover"> {
-  let summary = [{
-    Cover on the holding of a property, checked on a given clock's
-    ticks and enabled if a given condition holds. Only supports
-    a single clock and a single disable.
-  }];
-}
-
 //===----------------------------------------------------------------------===//
 // Printing Formatted Messages
 //===----------------------------------------------------------------------===//

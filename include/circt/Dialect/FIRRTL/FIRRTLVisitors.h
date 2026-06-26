@@ -52,12 +52,14 @@ public:
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
             SizeOfIntrinsicOp, ClockGateIntrinsicOp, ClockInverterIntrinsicOp,
             ClockDividerIntrinsicOp, LTLAndIntrinsicOp, LTLOrIntrinsicOp,
-            LTLIntersectIntrinsicOp, LTLDelayIntrinsicOp, LTLConcatIntrinsicOp,
-            LTLRepeatIntrinsicOp, LTLGoToRepeatIntrinsicOp,
-            LTLNonConsecutiveRepeatIntrinsicOp, LTLNotIntrinsicOp,
-            LTLImplicationIntrinsicOp, LTLUntilIntrinsicOp,
-            LTLEventuallyIntrinsicOp, LTLPastIntrinsicOp, LTLClockIntrinsicOp,
-            Mux2CellIntrinsicOp, Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
+            LTLIntersectIntrinsicOp, LTLConcatIntrinsicOp,
+            LTLClockedDelayIntrinsicOp, LTLClockedAtomIntrinsicOp,
+            LTLClockedRepeatIntrinsicOp, LTLClockedGoToRepeatIntrinsicOp,
+            LTLClockedNonConsecutiveRepeatIntrinsicOp, LTLNotIntrinsicOp,
+            LTLImplicationIntrinsicOp, LTLClockedUntilIntrinsicOp,
+            LTLEventuallyIntrinsicOp, LTLClockedEventuallyIntrinsicOp,
+            LTLPastIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
+            HasBeenResetIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -181,17 +183,18 @@ public:
   HANDLE(LTLAndIntrinsicOp, Unhandled);
   HANDLE(LTLOrIntrinsicOp, Unhandled);
   HANDLE(LTLIntersectIntrinsicOp, Unhandled);
-  HANDLE(LTLDelayIntrinsicOp, Unhandled);
+  HANDLE(LTLClockedDelayIntrinsicOp, Unhandled);
+  HANDLE(LTLClockedAtomIntrinsicOp, Unhandled);
   HANDLE(LTLConcatIntrinsicOp, Unhandled);
-  HANDLE(LTLRepeatIntrinsicOp, Unhandled);
-  HANDLE(LTLGoToRepeatIntrinsicOp, Unhandled);
-  HANDLE(LTLNonConsecutiveRepeatIntrinsicOp, Unhandled);
+  HANDLE(LTLClockedRepeatIntrinsicOp, Unhandled);
+  HANDLE(LTLClockedGoToRepeatIntrinsicOp, Unhandled);
+  HANDLE(LTLClockedNonConsecutiveRepeatIntrinsicOp, Unhandled);
   HANDLE(LTLNotIntrinsicOp, Unhandled);
   HANDLE(LTLImplicationIntrinsicOp, Unhandled);
-  HANDLE(LTLUntilIntrinsicOp, Unhandled);
+  HANDLE(LTLClockedUntilIntrinsicOp, Unhandled);
   HANDLE(LTLEventuallyIntrinsicOp, Unhandled);
+  HANDLE(LTLClockedEventuallyIntrinsicOp, Unhandled);
   HANDLE(LTLPastIntrinsicOp, Unhandled);
-  HANDLE(LTLClockIntrinsicOp, Unhandled);
   HANDLE(Mux4CellIntrinsicOp, Unhandled);
   HANDLE(Mux2CellIntrinsicOp, Unhandled);
   HANDLE(HasBeenResetIntrinsicOp, Unhandled);

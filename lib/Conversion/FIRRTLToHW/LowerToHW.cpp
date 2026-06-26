@@ -884,8 +884,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib)
@@ -1978,17 +1977,18 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLAndIntrinsicOp op);
   LogicalResult visitExpr(LTLOrIntrinsicOp op);
   LogicalResult visitExpr(LTLIntersectIntrinsicOp op);
-  LogicalResult visitExpr(LTLDelayIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedDelayIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedAtomIntrinsicOp op);
   LogicalResult visitExpr(LTLConcatIntrinsicOp op);
-  LogicalResult visitExpr(LTLRepeatIntrinsicOp op);
-  LogicalResult visitExpr(LTLGoToRepeatIntrinsicOp op);
-  LogicalResult visitExpr(LTLNonConsecutiveRepeatIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedRepeatIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedGoToRepeatIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedNonConsecutiveRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLNotIntrinsicOp op);
   LogicalResult visitExpr(LTLImplicationIntrinsicOp op);
-  LogicalResult visitExpr(LTLUntilIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedUntilIntrinsicOp op);
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLPastIntrinsicOp op);
-  LogicalResult visitExpr(LTLClockIntrinsicOp op);
 
   template <typename TargetOp, typename IntrinsicOp>
   LogicalResult lowerVerifIntrinsicOp(IntrinsicOp op);
@@ -3292,8 +3292,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -4842,9 +4841,33 @@ LogicalResult FIRRTLLowering::visitExpr(LTLIntersectIntrinsicOp op) {
       ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLDelayIntrinsicOp op) {
-  return setLoweringToLTL<ltl::DelayOp>(op, getLoweredValue(op.getInput()),
-                                        op.getDelayAttr(), op.getLengthAttr());
+static ltl::ClockEdge firrtlToLTLClockEdge(EventControl eventControl) {
+  switch (eventControl) {
+  case EventControl::AtPosEdge:
+    return ltl::ClockEdge::Pos;
+  case EventControl::AtEdge:
+    return ltl::ClockEdge::Both;
+  case EventControl::AtNegEdge:
+    return ltl::ClockEdge::Neg;
+  }
+  llvm_unreachable("unhandled FIRRTL event control");
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedDelayIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedDelayOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()), op.getDelayAttr(),
+      op.getLengthAttr());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedAtomIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedAtomOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLConcatIntrinsicOp op) {
@@ -4853,19 +4876,32 @@ LogicalResult FIRRTLLowering::visitExpr(LTLConcatIntrinsicOp op) {
       ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLRepeatIntrinsicOp op) {
-  return setLoweringToLTL<ltl::RepeatOp>(op, getLoweredValue(op.getInput()),
-                                         op.getBaseAttr(), op.getMoreAttr());
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedRepeatIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedRepeatOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()), op.getBaseAttr(),
+      op.getMoreAttr());
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLGoToRepeatIntrinsicOp op) {
-  return setLoweringToLTL<ltl::GoToRepeatOp>(
-      op, getLoweredValue(op.getInput()), op.getBaseAttr(), op.getMoreAttr());
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedGoToRepeatIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedGoToRepeatOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()), op.getBaseAttr(),
+      op.getMoreAttr());
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLNonConsecutiveRepeatIntrinsicOp op) {
-  return setLoweringToLTL<ltl::NonConsecutiveRepeatOp>(
-      op, getLoweredValue(op.getInput()), op.getBaseAttr(), op.getMoreAttr());
+LogicalResult
+FIRRTLLowering::visitExpr(LTLClockedNonConsecutiveRepeatIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedNonConsecutiveRepeatOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()), op.getBaseAttr(),
+      op.getMoreAttr());
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLNotIntrinsicOp op) {
@@ -4878,10 +4914,13 @@ LogicalResult FIRRTLLowering::visitExpr(LTLImplicationIntrinsicOp op) {
       ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLUntilIntrinsicOp op) {
-  return setLoweringToLTL<ltl::UntilOp>(
-      op,
-      ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedUntilIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedUntilOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()),
+      getLoweredValue(op.getCondition()));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
@@ -4889,28 +4928,18 @@ LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
                                              getLoweredValue(op.getInput()));
 }
 
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedEventuallyIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedEventuallyOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()));
+}
+
 LogicalResult FIRRTLLowering::visitExpr(LTLPastIntrinsicOp op) {
   Value clk = getLoweredNonClockValue(op.getClock());
   return setLoweringToLTL<ltl::PastOp>(op, getLoweredValue(op.getInput()),
                                        op.getDelayAttr(), clk);
-}
-
-static ltl::ClockEdge firrtlToLTLClockEdge(EventControl eventControl) {
-  switch (eventControl) {
-  case EventControl::AtPosEdge:
-    return ltl::ClockEdge::Pos;
-  case EventControl::AtEdge:
-    return ltl::ClockEdge::Both;
-  case EventControl::AtNegEdge:
-    return ltl::ClockEdge::Neg;
-  }
-  llvm_unreachable("unknown event control");
-}
-
-LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
-  return setLoweringToLTL<ltl::ClockOp>(op, getLoweredValue(op.getInput()),
-                                        firrtlToLTLClockEdge(op.getEdge()),
-                                        getLoweredNonClockValue(op.getClock()));
 }
 
 template <typename TargetOp, typename IntrinsicOp>
@@ -5737,18 +5766,6 @@ static Operation *buildConcurrentVerifOp(ImplicitLocOpBuilder &builder,
   llvm_unreachable("unknown verification op");
 }
 
-static verif::ClockEdge firrtlToVerifClockEdge(EventControl eventControl) {
-  switch (eventControl) {
-  case EventControl::AtPosEdge:
-    return verif::ClockEdge::Pos;
-  case EventControl::AtEdge:
-    return verif::ClockEdge::Both;
-  case EventControl::AtNegEdge:
-    return verif::ClockEdge::Neg;
-  }
-  llvm_unreachable("unknown FIRRTL event control");
-}
-
 LogicalResult FIRRTLLowering::lowerVerificationStatementToCore(
     Operation *op, StringRef labelPrefix, Value opClock, Value opPredicate,
     Value opEnable, StringAttr opNameAttr, EventControl opEventControl) {
@@ -5768,21 +5785,19 @@ LogicalResult FIRRTLLowering::lowerVerificationStatementToCore(
     label = StringAttr::get(builder.getContext(),
                             labelPrefix + opNameAttr.getValue());
 
-  auto edge = firrtlToVerifClockEdge(opEventControl);
+  auto property = ltl::ClockedAtomOp::create(
+      builder, predicate, firrtlToLTLClockEdge(opEventControl), clock);
   auto opName = op->getName().stripDialect();
   if (opName == "assert") {
-    verif::ClockedAssertOp::create(builder, predicate, edge, clock, enable,
-                                   label);
+    verif::AssertOp::create(builder, property, enable, label);
     return success();
   }
   if (opName == "assume") {
-    verif::ClockedAssumeOp::create(builder, predicate, edge, clock, enable,
-                                   label);
+    verif::AssumeOp::create(builder, property, enable, label);
     return success();
   }
   if (opName == "cover") {
-    verif::ClockedCoverOp::create(builder, predicate, edge, clock, enable,
-                                  label);
+    verif::CoverOp::create(builder, property, enable, label);
     return success();
   }
   llvm_unreachable("unknown verification op");

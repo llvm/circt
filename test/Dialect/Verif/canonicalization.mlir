@@ -73,13 +73,6 @@ hw.module @AssertEnableTrue(in %a : i1) {
   // CHECK: hw.output
 }
 
-// CHECK-LABEL: @AssertLowerToClocked
-hw.module @AssertLowerToClocked(in %clock : i1, in %a : i1, in %en : i1) {
-  // CHECK: verif.clocked_assert %a if %en, posedge %clock : i1
-  %clk = ltl.clock %a, posedge %clock : i1
-  verif.assert %clk if %en : !ltl.sequence
-}
-
 //===----------------------------------------------------------------------===//
 // AssumeOp
 //===----------------------------------------------------------------------===//
@@ -117,13 +110,6 @@ hw.module @AssumeEnableTrue(in %a : i1) {
   // CHECK: hw.output
 }
 
-// CHECK-LABEL: @AssumeLowerToClocked
-hw.module @AssumeLowerToClocked(in %clock : i1, in %a : i1, in %en : i1) {
-  // CHECK: verif.clocked_assume %a if %en, posedge %clock : i1
-  %clk = ltl.clock %a, posedge %clock : i1
-  verif.assume %clk if %en : !ltl.sequence
-}
-
 //===----------------------------------------------------------------------===//
 // CoverOp
 //===----------------------------------------------------------------------===//
@@ -135,13 +121,6 @@ hw.module @CoverEnableTrue(in %a : i1) {
   // CHECK-NOT: if
   verif.cover %a if %true : i1
   // CHECK: hw.output
-}
-
-// CHECK-LABEL: @CoverLowerToClocked
-hw.module @CoverLowerToClocked(in %clock : i1, in %a : i1, in %en : i1) {
-  // CHECK: verif.clocked_cover %a if %en,  posedge %clock : i1
-  %clk = ltl.clock %a, posedge %clock : i1
-  verif.cover %clk if %en : !ltl.sequence
 }
 
 // Cover operations are NOT canonicalized like asserts and assumes.  Covers are
@@ -168,113 +147,6 @@ hw.module @CoverBooleanConstantTrue() {
   %prop = ltl.boolean_constant true
   // CHECK: verif.cover
   verif.cover %prop : !ltl.property
-  // CHECK: hw.output
-}
-
-//===----------------------------------------------------------------------===//
-// ClockedAssertOp
-//===----------------------------------------------------------------------===//
-
-// CHECK-LABEL: @ClockedAssertEnableTrue
-hw.module @ClockedAssertEnableTrue(in %clock : i1, in %a : i1) {
-  %true = hw.constant true
-  // CHECK: verif.clocked_assert
-  // CHECK-NOT: if
-  verif.clocked_assert %a if %true, posedge %clock : i1
-  // CHECK: hw.output
-}
-
-// CHECK-LABEL: @ClockedAssertEnableFalse
-hw.module @ClockedAssertEnableFalse(in %clock : i1, in %a : i1) {
-  %false = hw.constant false
-  // CHECK-NOT: verif.clocked_assert
-  // CHECK: hw.output
-  verif.clocked_assert %a if %false, posedge %clock : i1
-}
-
-// CHECK-LABEL: @ClockedAssertBooleanConstantTrue
-hw.module @ClockedAssertBooleanConstantTrue(in %clock : i1) {
-  %prop = ltl.boolean_constant true
-  // CHECK-NOT: verif.clocked_assert
-  verif.clocked_assert %prop, posedge %clock : !ltl.property
-  // CHECK: hw.output
-}
-
-// CHECK-LABEL: @ClockedAssertHWConstantTrue
-hw.module @ClockedAssertHWConstantTrue(in %clock : i1) {
-  %true = hw.constant true
-  // CHECK-NOT: verif.clocked_assert
-  verif.clocked_assert %true, posedge %clock : i1
-  // CHECK: hw.output
-}
-
-//===----------------------------------------------------------------------===//
-// ClockedAssumeOp
-//===----------------------------------------------------------------------===//
-
-// CHECK-LABEL: @ClockedAssumeEnableTrue
-hw.module @ClockedAssumeEnableTrue(in %clock : i1, in %a : i1) {
-  %true = hw.constant true
-  // CHECK: verif.clocked_assume
-  // CHECK-NOT: if
-  verif.clocked_assume %a if %true, posedge %clock : i1
-  // CHECK: hw.output
-}
-
-// CHECK-LABEL: @ClockedAssumeEnableFalse
-hw.module @ClockedAssumeEnableFalse(in %clock : i1, in %a : i1) {
-  %false = hw.constant false
-  // CHECK-NOT: verif.clocked_assume
-  // CHECK: hw.output
-  verif.clocked_assume %a if %false, posedge %clock : i1
-}
-
-// CHECK-LABEL: @ClockedAssumeBooleanConstantTrue
-hw.module @ClockedAssumeBooleanConstantTrue(in %clock : i1) {
-  %prop = ltl.boolean_constant true
-  // CHECK-NOT: verif.clocked_assume
-  verif.clocked_assume %prop, posedge %clock : !ltl.property
-  // CHECK: hw.output
-}
-
-// CHECK-LABEL: @ClockedAssumeHWConstantTrue
-hw.module @ClockedAssumeHWConstantTrue(in %clock : i1) {
-  %true = hw.constant true
-  // CHECK-NOT: verif.clocked_assume
-  verif.clocked_assume %true, posedge %clock : i1
-  // CHECK: hw.output
-}
-
-//===----------------------------------------------------------------------===//
-// ClockedCoverOp
-//===----------------------------------------------------------------------===//
-
-// CHECK-LABEL: @ClockedCoverEnableTrue
-hw.module @ClockedCoverEnableTrue(in %clock : i1, in %a : i1) {
-  %true = hw.constant true
-  // CHECK: verif.clocked_cover
-  // CHECK-NOT: if
-  verif.clocked_cover %a if %true, posedge %clock : i1
-  // CHECK: hw.output
-}
-
-// Clocked covers are NOT canonicalized like clocked asserts and assumes for the
-// same reasons as regular covers.  See the comment above for details.
-
-// CHECK-LABEL: @ClockedCoverEnableFalse
-hw.module @ClockedCoverEnableFalse(in %clock : i1, in %a : i1) {
-  %false = hw.constant false
-  // CHECK: verif.clocked_cover
-  // CHECK-SAME: if %false
-  verif.clocked_cover %a if %false, posedge %clock : i1
-  // CHECK: hw.output
-}
-
-// CHECK-LABEL: @ClockedCoverBooleanConstantTrue
-hw.module @ClockedCoverBooleanConstantTrue(in %clock : i1) {
-  %prop = ltl.boolean_constant true
-  // CHECK: verif.clocked_cover
-  verif.clocked_cover %prop, posedge %clock : !ltl.property
   // CHECK: hw.output
 }
 

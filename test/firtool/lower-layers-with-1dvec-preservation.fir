@@ -14,7 +14,7 @@ FIRRTL version 5.1.0
 ; CHECK:       hasBeenResetReg <= 1'h1;
 ; CHECK:   end // always @(posedge)
 ; CHECK:   wire _GEN = ~(hasBeenResetReg === 1'h1 & Foo.reset === 1'h0);
-; CHECK:   assert property (@(posedge Foo.clock) disable iff (_GEN) Foo.in[Foo.addr] == 4'h0);
+; CHECK:   assert property (disable iff (_GEN) @(posedge Foo.clock) Foo.in[Foo.addr] == 4'h0);
 ; CHECK: endmodule
 
 circuit Foo :
@@ -39,6 +39,6 @@ circuit Foo :
 
     layerblock Verification :
       layerblock Assert :
-        node ltl_clock = intrinsic(circt_ltl_clock : UInt<1>, _T, clock)
+        node ltl_clock = intrinsic(circt_ltl_clocked_atom<edge="posedge"> : UInt<1>, _T, clock)
         node _T_1 = eq(disable, UInt<1>(0h0))
         intrinsic(circt_verif_assert, ltl_clock, _T_1)

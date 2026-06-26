@@ -568,6 +568,74 @@ private:
         condition.getLoc(), condition.getType(), condition, value);
   }
 
+  /// Sample the current condition as an atom clocked by the given clock,
+  /// reusing a previously created clocked atom for the same condition/clock
+  /// pair if one exists.
+  Value clockedConditionWithClock(Operation *op, EventControlAttr edge,
+                                  Value clock) {
+    auto &newOp = createdLTLClockedConditionOps[{condition, clock, edge}];
+    if (!newOp)
+      newOp = OpBuilder(op).createOrFold<LTLClockedAtomIntrinsicOp>(
+          condition.getLoc(), condition.getType(), condition, edge, clock);
+    return newOp;
+  }
+
+  /// Find the unique explicit clock used by an LTL property. Returns no clock
+  /// if the property is unclocked or contains multiple clock domains.
+  std::optional<std::pair<EventControlAttr, Value>>
+  findUniqueLTLClock(Value property, bool &hasConflict) {
+    while (auto nodeOp = property.getDefiningOp<NodeOp>())
+      property = nodeOp.getInput();
+
+    auto *def = property.getDefiningOp();
+    if (!def)
+      return std::nullopt;
+
+    auto directClock =
+        TypeSwitch<Operation *,
+                   std::optional<std::pair<EventControlAttr, Value>>>(def)
+            .Case<LTLClockedAtomIntrinsicOp, LTLClockedDelayIntrinsicOp,
+                  LTLClockedRepeatIntrinsicOp, LTLClockedGoToRepeatIntrinsicOp,
+                  LTLClockedNonConsecutiveRepeatIntrinsicOp,
+                  LTLClockedUntilIntrinsicOp, LTLClockedEventuallyIntrinsicOp>(
+                [](auto op) {
+                  return std::pair{op.getEdgeAttr(), op.getClock()};
+                })
+            .Default([](auto) { return std::nullopt; });
+    // Logical LTL combinators do not carry a clock. Inspect their operands to
+    // determine whether the complete property has one unique clock domain.
+    // Clocked operations are inspected as well to detect a differently
+    // clocked nested operand.
+    if (!directClock &&
+        !def->getName().getStringRef().starts_with("firrtl.int.ltl."))
+      return std::nullopt;
+
+    auto uniqueClock = directClock;
+    for (auto operand : def->getOperands()) {
+      auto operandClock = findUniqueLTLClock(operand, hasConflict);
+      if (hasConflict)
+        return std::nullopt;
+      if (!operandClock)
+        continue;
+      if (uniqueClock && uniqueClock != operandClock) {
+        hasConflict = true;
+        return std::nullopt;
+      }
+      uniqueClock = operandClock;
+    }
+    return uniqueClock;
+  }
+
+  /// Sample the current when condition on the property's unique clock. Leave
+  /// it unclocked for an unclocked or genuinely multi-clock property.
+  Value conditionForProperty(Operation *op, Value property) {
+    bool hasConflict = false;
+    auto clock = findUniqueLTLClock(property, hasConflict);
+    if (!clock)
+      return condition;
+    return clockedConditionWithClock(op, clock->first, clock->second);
+  }
+
   /// Concurrent and of a property with the current condition.  If we are in
   /// the outer scope, i.e. not in a WhenOp region, then there is no condition.
   Value ltlAndWithCondition(Operation *op, Value property) {
@@ -575,15 +643,15 @@ private:
     while (auto nodeOp = property.getDefiningOp<NodeOp>())
       property = nodeOp.getInput();
 
-    // Look through `ltl.clock` ops.
-    if (auto clockOp = property.getDefiningOp<LTLClockIntrinsicOp>()) {
-      auto input = ltlAndWithCondition(op, clockOp.getInput());
-      auto &newClockOp = createdLTLClockOps[{clockOp, input}];
-      if (!newClockOp) {
-        newClockOp = OpBuilder(op).cloneWithoutRegions(clockOp);
-        newClockOp.getInputMutable().assign(input);
-      }
-      return newClockOp;
+    // If the property has one explicit clock domain, sample the condition on
+    // that same clock.
+    if (auto clockedCondition = conditionForProperty(op, property);
+        clockedCondition != condition) {
+      auto &newOp = createdLTLAndOps[{clockedCondition, property}];
+      if (!newOp)
+        newOp = OpBuilder(op).createOrFold<LTLAndIntrinsicOp>(
+            condition.getLoc(), property.getType(), clockedCondition, property);
+      return newOp;
     }
 
     // Otherwise create a new `ltl.and` with the condition.
@@ -602,17 +670,6 @@ private:
     while (auto nodeOp = property.getDefiningOp<NodeOp>())
       property = nodeOp.getInput();
 
-    // Look through `ltl.clock` ops.
-    if (auto clockOp = property.getDefiningOp<LTLClockIntrinsicOp>()) {
-      auto input = ltlImplicationWithCondition(op, clockOp.getInput());
-      auto &newClockOp = createdLTLClockOps[{clockOp, input}];
-      if (!newClockOp) {
-        newClockOp = OpBuilder(op).cloneWithoutRegions(clockOp);
-        newClockOp.getInputMutable().assign(input);
-      }
-      return newClockOp;
-    }
-
     // Merge condition into `ltl.implication` left-hand side.
     if (auto implOp = property.getDefiningOp<LTLImplicationIntrinsicOp>()) {
       auto lhs = ltlAndWithCondition(op, implOp.getLhs());
@@ -622,6 +679,17 @@ private:
         clonedOp.getLhsMutable().assign(lhs);
         newImplOp = clonedOp;
       }
+      return newImplOp;
+    }
+
+    // If the property has one explicit clock domain, sample the condition on
+    // that same clock.
+    if (auto clockedCondition = conditionForProperty(op, property);
+        clockedCondition != condition) {
+      auto &newImplOp = createdLTLImplicationOps[{clockedCondition, property}];
+      if (!newImplOp)
+        newImplOp = OpBuilder(op).createOrFold<LTLImplicationIntrinsicOp>(
+            condition.getLoc(), property.getType(), clockedCondition, property);
       return newImplOp;
     }
 
@@ -643,9 +711,11 @@ private:
   /// The `ltl.implication` operations that have been created.
   SmallDenseMap<std::pair<Value, Value>, Value> createdLTLImplicationOps;
 
-  /// The `ltl.clock` operations that have been created.
-  SmallDenseMap<std::pair<LTLClockIntrinsicOp, Value>, LTLClockIntrinsicOp>
-      createdLTLClockOps;
+  /// The clocked atoms for when conditions that have been created.  Keyed
+  /// on the condition, clock, *and* edge, since two clocked atoms on the
+  /// same clock but different edges must not be conflated.
+  SmallDenseMap<std::tuple<Value, Value, EventControlAttr>, Value>
+      createdLTLClockedConditionOps;
 };
 } // namespace
 
@@ -714,7 +784,8 @@ void WhenOpVisitor::visitStmt(LayerBlockOp layerBlockOp) {
   // remain available inside the layerblock since they dominate it.
   llvm::SaveAndRestore savedLTLAndOps(createdLTLAndOps);
   llvm::SaveAndRestore savedLTLImplicationOps(createdLTLImplicationOps);
-  llvm::SaveAndRestore savedLTLClockOps(createdLTLClockOps);
+  llvm::SaveAndRestore savedLTLClockedConditionOps(
+      createdLTLClockedConditionOps);
 
   process(*layerBlockOp.getBody());
 }
