@@ -56,6 +56,8 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42, 1337 :
     firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42, length: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: firrtl.int.ltl.clocked_delay %in0, negedge %clk, 42, 1337 :
+    firrtl.int.generic "circt_ltl_clocked_delay" <delay: i64 = 42, length: i64 = 1337, edge: none = "negedge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42 :
     firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
