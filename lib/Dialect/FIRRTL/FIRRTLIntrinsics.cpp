@@ -351,6 +351,24 @@ public:
   }
 };
 
+static ParseResult checkLTLEdgeParam(GenericIntrinsic gi) {
+  auto edge = gi.getParamValue<StringAttr>("edge");
+  if (!edge)
+    return success();
+  if (!symbolizeEventControl(edge.getValue()))
+    return gi.emitError() << " has parameter 'edge' with unsupported value '"
+                          << edge.getValue()
+                          << "'; expected 'posedge', 'negedge', or 'edge'";
+  return success();
+}
+
+static EventControl getLTLEdgeParam(GenericIntrinsic gi) {
+  auto edge = gi.getParamValue<StringAttr>("edge");
+  if (!edge)
+    return EventControl::AtPosEdge;
+  return *symbolizeEventControl(edge.getValue());
+}
+
 class CirctLTLDelayConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -372,6 +390,35 @@ public:
     auto length = getI64Attr(gi.getParamValue<IntegerAttr>("length"));
     rewriter.replaceOpWithNewOp<LTLDelayIntrinsicOp>(
         gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], delay, length);
+  }
+};
+
+class CirctLTLClockedDelayConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+           gi.namedIntParam("delay") || gi.namedIntParam("length", true) ||
+           gi.namedParam("edge", true) || checkLTLEdgeParam(gi) ||
+           gi.hasNParam(1, 2);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto operands = adaptor.getOperands();
+    auto delay = getI64Attr(gi.getParamValue<IntegerAttr>("delay"));
+    auto length = getI64Attr(gi.getParamValue<IntegerAttr>("length"));
+    auto edge = EventControlAttr::get(gi.op.getContext(), getLTLEdgeParam(gi));
+    rewriter.replaceOpWithNewOp<LTLClockedDelayIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0], edge, operands[1], delay,
+        length);
   }
 };
 

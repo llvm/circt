@@ -1782,6 +1782,17 @@ def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
     functional-type(operands, results)
   }];
 }
+def LTLClockedDelayIntrinsicOp : LTLIntrinsicOp<"clocked_delay"> {
+  let arguments = (ins NonConstUInt1Type:$input,
+                       EventControlAttr:$edge,
+                       ClockType:$clock,
+                       I64Attr:$delay,
+                       OptionalAttr<I64Attr>:$length);
+  let assemblyFormat = [{
+    $input `,` $edge $clock `,` $delay (`,` $length^)? attr-dict `:`
+    functional-type(operands, results)
+  }];
+}
 def LTLConcatIntrinsicOp : BinaryLTLIntrinsicOp<"concat">;
 def LTLRepeatIntrinsicOp : LTLIntrinsicOp<"repeat"> {
   let arguments = (ins NonConstUInt1Type:$input,
