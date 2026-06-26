@@ -1876,7 +1876,60 @@ OpFoldResult Mux2CellIntrinsicOp::fold(FoldAdaptor adaptor) {
   return foldMux(*this, adaptor);
 }
 
-OpFoldResult Mux4CellIntrinsicOp::fold(FoldAdaptor adaptor) { return {}; }
+OpFoldResult Mux4CellIntrinsicOp::fold(FoldAdaptor adaptor) {
+  // mux4 : UInt<0> -> 0
+  if (getType().getBitWidthOrSentinel() == 0)
+    return getIntAttr(getType(), APInt(0, 0, getType().isSignedInteger()));
+
+  // mux4(sel, x, x, x, x) -> x
+  auto operands = {getV0(), getV1(), getV2(), getV3()};
+  if (llvm::all_of(operands, [&](auto v) { return v == getV0(); }) &&
+      getV0().getType() == getType())
+    return getV0();
+
+  // The following folds require that the result has a known width.
+  if (getType().getBitWidthOrSentinel() < 0)
+    return {};
+
+  // mux4 with constant selector
+  if (auto cond = getConstant(adaptor.getSel())) {
+    switch (cond->getZExtValue()) {
+    case 0:
+      return getV0().getType() == getType() ? getV0() : Value{};
+    case 1:
+      return getV1().getType() == getType() ? getV1() : Value{};
+    case 2:
+      return getV2().getType() == getType() ? getV2() : Value{};
+    case 3:
+      return getV3().getType() == getType() ? getV3() : Value{};
+    default:
+      return {};
+    }
+  }
+
+  // mux4 with all constant operands
+  auto foldedVals = {adaptor.getV0(), adaptor.getV1(), adaptor.getV2(),
+                adaptor.getV3()};
+  SmallVector<APInt> constants;
+  for (auto v : foldedVals) {
+    if (auto c = getConstant(v)) {
+      constants.push_back(*c);
+    } else {
+      return {};
+    }
+  }
+
+  // All operands must have the same bit width
+  if (!llvm::all_of(constants,
+                    [&](auto &c) { return c.getBitWidth() == constants[0].getBitWidth(); }))
+    return {};
+
+  // mux4(sel, c, c, c, c) -> c
+  if (llvm::all_of(constants, [&](auto &c) { return c == constants[0]; }))
+    return getIntAttr(getType(), constants[0]);
+
+  return {};
+}
 
 namespace {
 
@@ -2019,12 +2072,12 @@ void MuxPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 void Mux2CellIntrinsicOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.add<patterns::Mux2PadSel>(context);
+  results.add<patterns::Mux2PadSel, patterns::Mux2Not>(context);
 }
 
 void Mux4CellIntrinsicOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.add<patterns::Mux4PadSel>(context);
+  results.add<patterns::Mux4PadSel, patterns::Mux4Not, patterns::Mux4SelNot>(context);
 }
 
 OpFoldResult PadPrimOp::fold(FoldAdaptor adaptor) {

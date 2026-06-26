@@ -4181,3 +4181,102 @@ firrtl.module @BoolBinaryFold(in %b: !firrtl.bool,
 }
 
 }
+
+// CHECK-LABEL: firrtl.circuit "Mux2CellMux4CellCanon"
+firrtl.circuit "Mux2CellMux4CellCanon" {
+
+// CHECK-LABEL: firrtl.module @Mux2CellMux4CellCanon
+firrtl.module @Mux2CellMux4CellCanon(
+  in %sel: !firrtl.uint<1>,
+  in %sel2: !firrtl.uint<2>,
+  in %a: !firrtl.uint<4>,
+  in %b: !firrtl.uint<4>,
+  in %c: !firrtl.uint<4>,
+  in %d: !firrtl.uint<4>,
+  out %out1: !firrtl.uint<4>,
+  out %out2: !firrtl.uint<4>,
+  out %out3: !firrtl.uint<4>,
+  out %out4: !firrtl.uint<1>,
+  out %out5: !firrtl.uint<4>,
+  out %out6: !firrtl.uint<4>,
+  out %out7: !firrtl.uint<4>,
+  out %out8: !firrtl.uint<4>,
+  out %out9: !firrtl.uint<4>,
+  out %out10: !firrtl.uint<4>,
+  out %out11: !firrtl.uint<1>,
+  out %out12: !firrtl.uint<1>
+) {
+  // mux2cell(sel, a, a) -> a (fold)
+  // CHECK: firrtl.matchingconnect %out1, %a
+  %1 = firrtl.int.mux2cell (%sel, %a, %a) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out1, %1 : !firrtl.uint<4>
+
+  // mux2cell(0, a, b) -> b (fold)
+  // CHECK: firrtl.matchingconnect %out2, %b
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  %2 = firrtl.int.mux2cell (%c0_ui1, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out2, %2 : !firrtl.uint<4>
+
+  // mux2cell(1, a, b) -> a (fold)
+  // CHECK: firrtl.matchingconnect %out3, %a
+  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %3 = firrtl.int.mux2cell (%c1_ui1, %a, %b) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out3, %3 : !firrtl.uint<4>
+
+  // mux2cell(sel, 0, 1) -> not(sel) (canonicalization - all types uint<1>)
+  %c0_ui1_2 = firrtl.constant 0 : !firrtl.uint<1>
+  %c1_ui1_2 = firrtl.constant 1 : !firrtl.uint<1>
+  %4 = firrtl.int.mux2cell (%sel, %c0_ui1_2, %c1_ui1_2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK: [[NOT:%.+]] = firrtl.not %sel
+  // CHECK: firrtl.matchingconnect %out4, [[NOT]]
+  firrtl.matchingconnect %out4, %4 : !firrtl.uint<1>
+
+  // mux2cell with all constant operands -> mux2cell
+  %c10_ui4 = firrtl.constant 10 : !firrtl.uint<4>
+  %c12_ui4 = firrtl.constant 12 : !firrtl.uint<4>
+  %5 = firrtl.int.mux2cell (%sel, %c10_ui4, %c12_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  // CHECK: [[MUX:%.+]] = firrtl.int.mux2cell
+  // CHECK: firrtl.matchingconnect %out5, [[MUX]]
+  firrtl.matchingconnect %out5, %5 : !firrtl.uint<4>
+
+  // mux4cell(sel, a, a, a, a) -> a (fold)
+  // CHECK: firrtl.matchingconnect %out6, %a
+  %6 = firrtl.int.mux4cell (%sel, %a, %a, %a, %a) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out6, %6 : !firrtl.uint<4>
+
+  // mux4cell(0, d, c, b, a) -> a (fold)
+  // CHECK: firrtl.matchingconnect %out7, %a
+  %7 = firrtl.int.mux4cell (%c0_ui1, %d, %c, %b, %a) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out7, %7 : !firrtl.uint<4>
+
+  // mux4cell(1, d, c, b, a) -> b (fold)
+  // CHECK: firrtl.matchingconnect %out8, %b
+  %8 = firrtl.int.mux4cell (%c1_ui1, %d, %c, %b, %a) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out8, %8 : !firrtl.uint<4>
+
+  // mux4cell(2, d, c, b, a) -> c (fold)
+  %c2_ui2 = firrtl.constant 2 : !firrtl.uint<2>
+  // CHECK: firrtl.matchingconnect %out9, %c
+  %9 = firrtl.int.mux4cell (%c2_ui2, %d, %c, %b, %a) : (!firrtl.uint<2>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out9, %9 : !firrtl.uint<4>
+
+  // mux4cell(3, d, c, b, a) -> d (fold)
+  %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
+  // CHECK: firrtl.matchingconnect %out10, %d
+  %10 = firrtl.int.mux4cell (%c3_ui2, %d, %c, %b, %a) : (!firrtl.uint<2>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+  firrtl.matchingconnect %out10, %10 : !firrtl.uint<4>
+
+  // mux4cell(sel, 0, 1, 0, 1) -> not(sel) (canonicalization - all types uint<1>)
+  %11 = firrtl.int.mux4cell (%sel, %c0_ui1_2, %c1_ui1_2, %c0_ui1_2, %c1_ui1_2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK: [[NOT2:%.+]] = firrtl.not %sel
+  // CHECK: firrtl.matchingconnect %out11, [[NOT2]]
+  firrtl.matchingconnect %out11, %11 : !firrtl.uint<1>
+
+  // mux4cell(sel, 1, 0, 1, 0) -> not(sel) (all types uint<1>)
+  %12 = firrtl.int.mux4cell (%sel, %c1_ui1_2, %c0_ui1_2, %c1_ui1_2, %c0_ui1_2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+  // CHECK: [[NOT:%.+]] = firrtl.not %sel
+  // CHECK: firrtl.matchingconnect %out12, [[NOT]]
+  firrtl.matchingconnect %out12, %12 : !firrtl.uint<1>
+}
+
+}
