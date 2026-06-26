@@ -74,7 +74,7 @@ hw.module @dynamic_string_concat(in %clk : i1) {
     %fmt = sim.fmt.string %str specifierWidth 12 : !sim.dstring
     // CHECK: %[[DYN:.+]] = sv.sformatf "dyn"
     // CHECK-NEXT: %[[LHS:.+]] = sv.constantStr "hello"
-    // CHECK-NEXT: %[[STR:.+]] = sv.sformatf "%s%s"(%[[LHS]], %[[DYN]]) : !hw.string, !hw.string
+    // CHECK-NEXT: %[[STR:.+]] = sv.concat_str (%[[LHS]], %[[DYN]]) : !hw.string
     // CHECK-NEXT: sv.write "%12s"(%[[STR]]) : !hw.string
     sim.proc.print %fmt
   }

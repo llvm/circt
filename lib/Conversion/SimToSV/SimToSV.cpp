@@ -419,16 +419,7 @@ public:
       return success();
     }
 
-    if (inputs.size() == 1) {
-      rewriter.replaceOp(op, inputs.front());
-      return success();
-    }
-
-    SmallString<32> formatString;
-    for (size_t i = 0, e = inputs.size(); i != e; ++i)
-      formatString += "%s";
-    rewriter.replaceOpWithNewOp<sv::SFormatFOp>(
-        op, rewriter.getStringAttr(formatString), inputs);
+    rewriter.replaceOpWithNewOp<sv::ConcatStrOp>(op, inputs);
     return success();
   }
 };

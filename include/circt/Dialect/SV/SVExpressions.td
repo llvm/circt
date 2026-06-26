@@ -229,7 +229,7 @@ def ConcatStrOp : SVOp<"concat_str", [Pure]> {
 
   let arguments = (ins Variadic<HWStringType>:$inputs);
   let results = (outs HWStringType:$result);
-  let assemblyFormat = "`(` $inputs `)` attr-dict `:` type($result)";
+  let assemblyFormat = "` ` `(` $inputs `)` attr-dict `:` type($result)";
   let hasVerifier = 1;
   let hasFolder = 1;
 }
