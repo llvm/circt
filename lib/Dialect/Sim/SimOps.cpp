@@ -19,6 +19,7 @@
 #include "circt/Support/ProceduralRegionTrait.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/MapVector.h"
@@ -763,6 +764,30 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
   builder.createBlock(odsState.addRegion());
   if (bodyCtor)
     bodyCtor();
+}
+
+LogicalResult TriggeredOp::canonicalize(TriggeredOp op,
+                                        PatternRewriter &rewriter) {
+  if (op.getCondition())
+    return failure();
+
+  Block *body = op.getBodyBlock();
+  if (!llvm::hasSingleElement(body->getOperations()))
+    return failure();
+
+  auto ifOp = dyn_cast<mlir::scf::IfOp>(body->front());
+  if (!ifOp || ifOp->getNumResults() != 0 || ifOp.elseBlock())
+    return failure();
+
+  op.getConditionMutable().append(ifOp.getCondition());
+
+  Block *thenBlock = ifOp.thenBlock();
+  auto insertionPoint = ifOp->getIterator();
+  body->getOperations().splice(insertionPoint, thenBlock->getOperations(),
+                               thenBlock->begin(),
+                               Block::iterator(thenBlock->getTerminator()));
+  rewriter.eraseOp(ifOp);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
