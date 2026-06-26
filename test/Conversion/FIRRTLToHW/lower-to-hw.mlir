@@ -362,63 +362,65 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // CHECK: [[ADDSIGNED:%.+]] = comb.add
 
-    // CHECK:     sv.always posedge [[CLOCK]] {
-    // CHECK-NEXT:   %[[PRINTF_COND:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:   [[AND:%.+]] = comb.and bin %[[PRINTF_COND]], %reset
-    // CHECK-NEXT:   sv.if [[AND]] {
-    // CHECK-NEXT:     %[[STDERR:.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:     sv.fwrite %[[STDERR]], "No operands and literal: %%\0A"
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:   [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
-    // CHECK-NEXT:   sv.if [[AND]] {
-    // CHECK-NEXT:     %[[STDERR:.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:     sv.fwrite %[[STDERR]], "Binary: %b %0b %4b\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:   [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
-    // CHECK-NEXT:   sv.if [[AND]] {
-    // CHECK-NEXT:     %[[STDERR:.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:     sv.fwrite %[[STDERR]], "Decimal: %d %0d %4d\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:   [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
-    // CHECK-NEXT:   sv.if [[AND]] {
-    // CHECK-NEXT:     %[[STDERR:.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:     sv.fwrite %[[STDERR]], "Hexadecimal: %x %0x %4x\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:   [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
-    // CHECK-NEXT:   sv.if [[AND]] {
-    // CHECK-NEXT:     %[[STDERR:.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:     sv.fwrite %[[STDERR]], "ASCII Character: %c\0A"([[ADD]]) : i5
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:   [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
-    // CHECK-NEXT:   sv.if [[AND]] {
-    // CHECK-NEXT:     %[[STDERR:.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:     [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
-    // CHECK-NEXT:     [[DSIGNED:%.+]] = sv.system "signed"(%d)
-    // CHECK-NEXT:     sv.fwrite %[[STDERR]], "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
-    // CHECK-NEXT:   [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
-    // CHECK-NEXT:   sv.if [[AND]] {
-    // CHECK-NEXT:     %[[STDERR:.+]] = hw.constant -2147483646 : i32
-    // CHECK-NEXT:     [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:     sv.fwrite %[[STDERR]], "[%0t]: %d %m"([[TIME]], %a) : i64, i4
-    // CHECK-NEXT:   }
-    // CHECK-NEXT:   sv.if %reset {
-    // CHECK-NEXT:     [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:     [[STR:%.+]] = sv.sformatf "%0t%d.txt"([[TIME]], %a) : i64, i4
-    // CHECK-NEXT:     [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"([[STR]]) : (!hw.string) -> i32
-    // CHECK-NEXT:     [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:     sv.fwrite [[FD]], "[%0t]: dynamic file name\0A"([[TIME]]) : i64
-    // CHECK-NEXT:     [[TIME:%.+]] = sv.system.time : i64
-    // CHECK-NEXT:     [[STR:%.+]] = sv.sformatf "%0t%d.txt"([[TIME]], %a) : i64, i4
-    // CHECK-NEXT:     [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"([[STR]]) : (!hw.string) -> i32
-    // CHECK-NEXT:     sv.fflush fd [[FD]]
-    // CHECK-NEXT:   }
+    // CHECK:      sv.ifdef @SYNTHESIS {
+    // CHECK-NEXT: } else  {
+    // CHECK-NEXT:   sv.always posedge [[CLOCK]] {
+    // CHECK-NEXT:     %[[PRINTF_COND:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND]], %reset
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "No operands and literal: %%\0A"
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "Binary: %b %0b %4b\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "Decimal: %d %0d %4d\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "Hexadecimal: %x %0x %4x\0A"([[ADD]], %b, [[ADD]]) : i5, i4, i5
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "ASCII Character: %c\0A"([[ADD]]) : i5
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       [[SUMSIGNED:%.+]] = sv.system "signed"([[ADDSIGNED]])
+    // CHECK-NEXT:       [[DSIGNED:%.+]] = sv.system "signed"(%d)
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "Hi signed %d %d\0A"([[SUMSIGNED]], [[DSIGNED]]) : i5, i4
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     %[[PRINTF_COND_:.+]] = sv.macro.ref.expr @PRINTF_COND_() : () -> i1
+    // CHECK-NEXT:     [[AND:%.+]] = comb.and bin %[[PRINTF_COND_]], %reset : i1
+    // CHECK-NEXT:     sv.if [[AND]] {
+    // CHECK-NEXT:       %[[STDERR:.+]] = hw.constant -2147483646 : i32
+    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CHECK-NEXT:       sv.fwrite %[[STDERR]], "[%0t]: %d %m"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:     }
+    // CHECK-NEXT:     sv.if %reset {
+    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CHECK-NEXT:       [[STR:%.+]] = sv.sformatf "%0t%d.txt"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:       [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"([[STR]]) : (!hw.string) -> i32
+    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CHECK-NEXT:       sv.fwrite [[FD]], "[%0t]: dynamic file name\0A"([[TIME]]) : i64
+    // CHECK-NEXT:       [[TIME:%.+]] = sv.system.time : i64
+    // CHECK-NEXT:       [[STR:%.+]] = sv.sformatf "%0t%d.txt"([[TIME]], %a) : i64, i4
+    // CHECK-NEXT:       [[FD:%.+]] = sv.func.call.procedural @"__circt_lib_logging::FileDescriptor::get"([[STR]]) : (!hw.string) -> i32
+    // CHECK-NEXT:       sv.fflush fd [[FD]]
+    // CHECK-NEXT:     }
     firrtl.printf %clock, %reset, "No operands and literal: %%\0A" : !firrtl.clock, !firrtl.uint<1>
 
     %0 = firrtl.add %a, %a : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>

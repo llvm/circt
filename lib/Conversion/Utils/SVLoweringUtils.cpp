@@ -62,10 +62,10 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
   auto getterSymName = ::getFileDescriptorGetterSymName(builder.getContext());
   auto fragmentSymName =
       ::getFileDescriptorFragmentSymName(builder.getContext());
-  auto *fileScopeBlock = &fileScopeOp->getRegion(0).front();
+  auto macroSymName = builder.getStringAttr(kFileDescriptorMacroName);
   SymbolTable symbolTable(fileScopeOp);
 
-  auto emitGuard = [&](StringAttr guard, llvm::function_ref<void(void)> body) {
+  auto emitGuard = [&](StringRef guard, llvm::function_ref<void(void)> body) {
     sv::IfDefOp::create(
         builder, guard, [] {}, body);
   };
@@ -95,17 +95,15 @@ void sv::emitFileDescriptorRuntime(Operation *fileScopeOp,
     symbolTable.insert(func);
   }
 
-  auto macroSymName = sv::lookupOrCreateMacroDecl(
-      builder, builder.getLoc(), fileScopeBlock, kFileDescriptorMacroName);
-  auto synthesisSymName = sv::lookupOrCreateMacroDecl(
-      builder, builder.getLoc(), fileScopeBlock, "SYNTHESIS");
+  if (!symbolTable.lookup(macroSymName))
+    symbolTable.insert(sv::MacroDeclOp::create(builder, macroSymName));
 
   if (symbolTable.lookup(fragmentSymName))
     return;
 
   auto fragment = emit::FragmentOp::create(builder, fragmentSymName, [&] {
-    emitGuard(synthesisSymName, [&]() {
-      emitGuard(macroSymName, [&]() {
+    emitGuard("SYNTHESIS", [&]() {
+      emitGuard(kFileDescriptorMacroName, [&]() {
         sv::VerbatimOp::create(builder, R"(// CIRCT Logging Library
 package __circt_lib_logging;
   class FileDescriptor;
