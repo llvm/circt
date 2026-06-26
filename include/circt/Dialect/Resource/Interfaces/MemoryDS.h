@@ -4,7 +4,7 @@
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Operation.h"
 
-namespace hls {
+namespace circt::hls_analysis {
 
     enum class StorageKind {
       RAM_1P,
@@ -27,8 +27,6 @@ namespace hls {
       bool isWrite;
       unsigned stageStart;
       unsigned latency;
-      std::optional<mlir::AffineMap> accessMap;
-
       // Temporal grouping. Accesses with different `scope`s run in different
       // loops and do not contend for ports (unless in a dataflow region).
       mlir::Operation *scope = nullptr;
@@ -44,6 +42,9 @@ namespace hls {
         std::string note;          // human-readable explanation
     };
 
-} // namespace hls
+    llvm::DenseMap<llvm::StringRef, PartitionSpec>
+    getPartitionSpecs(mlir::Operation* op);
+
+} // namespace circt::hls_analysis
 
 #endif

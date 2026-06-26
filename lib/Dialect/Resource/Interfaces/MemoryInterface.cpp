@@ -6,8 +6,8 @@
 #include "circt/Dialect/LoopSchedule/LoopScheduleOps.h"
 
 using namespace mlir;
-using namespace hls;
 // OpInterface dispatch tables. Include exactly once in the project.
+
 #include "circt/Dialect/Resource/Interfaces/MemoryOpInterface.cpp.inc"
 
 //===----------------------------------------------------------------------===//
@@ -33,7 +33,7 @@ static std::pair<Operation *, unsigned> getScopeAndII(Operation *user) {
   return {user->getParentOfType<func::FuncOp>(), 0u}; // top level
 }
 struct MemRefLoopScheduleExternalModel :
-MemoryResourceOpInterface::ExternalModel<MemRefLoopScheduleExternalModel,
+circt::hls_analysis::MemoryResourceOpInterface::ExternalModel<MemRefLoopScheduleExternalModel,
 memref::AllocaOp> {
   Type getElementType(Operation *op) const {
     return cast<memref::AllocaOp>(op).getType().getElementType();
@@ -61,12 +61,12 @@ memref::AllocaOp> {
     return n * static_cast<int64_t>(w);
   }
 
-  std::optional<StorageKind> getPragmaStorageKind(Operation *op) const {
+  std::optional<circt::hls_analysis::StorageKind> getPragmaStorageKind(Operation *op) const {
     // Stub add later (ex hls.bind_op = ...)
     return std::nullopt;
   }
 
-  std::optional<PartitionSpec> getPartitionSpec(Operation *op) const {
+  std::optional<circt::hls_analysis::PartitionSpec> getPartitionSpec(Operation *op) const {
     auto arr = op->getAttrOfType<ArrayAttr>("hls.array_partition");
     if (!arr || arr.empty())
       return std::nullopt;   // no pragma → unpartitioned, caller treats as Pf=1
@@ -76,16 +76,16 @@ memref::AllocaOp> {
     if (!dict)
       return std::nullopt;
 
-    PartitionSpec spec;
+    circt::hls_analysis::PartitionSpec spec;
 
     // kind (required to disambiguate the enum)
     auto kindAttr = dict.getAs<StringAttr>("kind");
     if (!kindAttr)
       return std::nullopt;
     StringRef k = kindAttr.getValue();
-    if (k == "cyclic")        spec.kind = PartitionSpec::Cyclic;
-    else if (k == "block")    spec.kind = PartitionSpec::Block;
-    else if (k == "complete") spec.kind = PartitionSpec::Complete;
+    if (k == "cyclic")        spec.kind = circt::hls_analysis::PartitionSpec::Cyclic;
+    else if (k == "block")    spec.kind = circt::hls_analysis::PartitionSpec::Block;
+    else if (k == "complete") spec.kind = circt::hls_analysis::PartitionSpec::Complete;
     else
       return std::nullopt;    // unknown kind → don't guess
 
@@ -110,58 +110,27 @@ memref::AllocaOp> {
     // Stub add later
     return std::nullopt;
   }
-
-  SmallVector<AccessSummary> getAccessSummary(Operation *op) const {
-    memref::AllocaOp alloca = cast<memref::AllocaOp>(op);
-    Value mem = alloca.getResult();
-    SmallVector<AccessSummary> accesses;
-
-    for (OpOperand &use : mem.getUses()) {
-      Operation *user = use.getOwner();
-      AccessSummary access;
-      access.op = user;
-      access.stageStart = getStageStart(user);
-      std::tie(access.scope, access.ii) = getScopeAndII(user);
-      // TODO: supplied by the user
-      access.latency = 2;
-      access.accessMap = std::nullopt;
-
-      if (auto ld = dyn_cast<affine::AffineLoadOp>(user)) {
-        access.isWrite = false;
-        access.accessMap = ld.getAffineMap();
-      } else if (auto st = dyn_cast<affine::AffineStoreOp>(user)) {
-        access.isWrite = true;
-        access.accessMap = st.getAffineMap();
-      } else if (isa<memref::LoadOp>(user)) {
-        access.isWrite = false;          // index is SSA Value, no affine map
-      } else if (isa<memref::StoreOp>(user)) {
-        access.isWrite = true;
-      } else {
-        continue;  // not a load/store user (e.g. a cast); skip
-      }
-      accesses.push_back(access);
-    }
-    
-    return accesses;
-  }
+  
   bool contributesToBRAMCost(Operation *op) const {
     // Opt out of cost accounting if the user explicitly annotated this
     // allocation as not BRAM-backed (e.g. registers, FIFO, stream).
     if (auto kind = getPragmaStorageKind(op)) {
-      if (*kind == hls::StorageKind::LUTRAM) return false;
+      if (*kind == circt::hls_analysis::StorageKind::LUTRAM) return false;
       // URAM goes through a different resource pool; up to your tool
       // whether to count it here.
     }
-    // Skip zero-sized or fully-dynamic allocations.
-    return getStaticSizeInBits(op) > 0;
+    // TODO: most tools have a threshold where the memory is promoted to
+    //       block ram. This number is placeholder make parmaterizable
+    //       either in a td file or from some specification somewhere
+    // Assume 32 width * 4 byte data for threshold to promote to bram for now 
+    unsigned bramPromotion = 32 * 32;
+    return getStaticSizeInBits(op) > bramPromotion;
   }
 };
 
-void hls::registerBRAMInterfaceExternalModels(DialectRegistry &registry) {
+void circt::hls_analysis::registerBRAMInterfaceExternalModels(DialectRegistry &registry) {
   registry.addExtension(+[](MLIRContext *ctx,
                          memref::MemRefDialect *dialect) {
     memref::AllocaOp::attachInterface<MemRefLoopScheduleExternalModel>(*ctx);
   });
-  
-  
 }

@@ -19,6 +19,7 @@ add_subdirectory(hlstool)
 add_subdirectory(kanagawatool)
 add_subdirectory(om-linker)
 add_subdirectory(py-split-input-file)
+add_subdirectory(hls-est)
 
 # NOTE: circt-tblgen is included in the root CMakeLists.txt
 
