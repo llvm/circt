@@ -64,6 +64,7 @@ void circt::populateArcConversionPipeline(OpPassManager &pm,
     opts.convertToHW = true;
     pm.addNestedPass<hw::HWModuleOp>(sim::createSquashSimTriggered(opts));
   }
+  pm.addPass(arc::createLowerProcessesPass());
   {
     ConvertToArcsPassOptions opts;
     opts.tapRegisters = options.observeRegisters;
