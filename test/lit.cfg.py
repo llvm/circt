@@ -35,8 +35,6 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
-if config.python_executable:
-  config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 
@@ -64,10 +62,10 @@ tool_dirs = [
 tools = [
     'arcilator', 'circt-as', 'circt-bmc', 'circt-capi-synth-test',
     'circt-capi-ir-test', 'circt-capi-om-test', 'circt-capi-firrtl-test',
-    'circt-capi-firtool-test', 'circt-capi-ltl-test', 'circt-capi-rtg-test',
-    'circt-capi-rtgtest-test', 'circt-capi-support-test', 'circt-dis',
-    'circt-lec', 'circt-reduce', 'circt-synth', 'circt-test', 'circt-translate',
-    'domaintool', 'firld', 'firtool', 'hlstool', 'om-linker', 'kanagawatool'
+    'circt-capi-firtool-test', 'circt-capi-rtg-test', 'circt-capi-rtgtest-test',
+    'circt-capi-support-test', 'circt-dis', 'circt-lec', 'circt-reduce',
+    'circt-synth', 'circt-test', 'circt-translate', 'domaintool', 'firld',
+    'firtool', 'hlstool', 'om-linker', 'kanagawatool', 'hls-est'
 ]
 
 if "CIRCT_OPT_CHECK_IR_ROUNDTRIP" in os.environ:
@@ -96,8 +94,5 @@ if config.slang_frontend_enabled:
   config.available_features.add('slang')
   tools.append('circt-verilog')
   tools.append('circt-verilog-lsp-server')
-
-if config.libfst_enabled:
-  config.available_features.add('libfst')
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

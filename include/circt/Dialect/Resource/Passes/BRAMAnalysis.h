@@ -4,9 +4,9 @@
 #include "mlir/Pass/Pass.h"
 #include <memory>
 
-namespace hls {
+namespace circt::hls_analysis {
     std::unique_ptr<::mlir::Pass> createBRAMAnalysisPass();
     void registerBRAMLoopscheduleAnalysisPass();
-} // namespace hls
+} // namespace circt::hls_analysis
 
 #endif

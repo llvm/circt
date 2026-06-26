@@ -16,7 +16,7 @@ namespace mlir {
 class Pass;
 } // namespace mlir
 
-namespace hls {
+namespace circt::hls_analysis {
 
 #define GEN_PASS_DECL_AFFINETOLOOPSCHEDULE
 #include "circt/Conversion/Passes.h.inc"

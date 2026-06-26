@@ -1,15 +1,23 @@
 add_mlir_library(HLSPasses
-        BRAMAnalysisAffine.cpp
-        BRAMAnalysisLoopSchedule.cpp
+        BRAMAnalysis.cpp
         AffineToLoopScheduleModified.cpp
+        MergeConditionalStores.cpp
+        MemrefBankClassification.cpp
+        MemoryBankModified.cpp
+        CyclicSchedulingAnalysisModified.cpp
+        AutoPipelineUnroll.cpp
+        DebugUnroll.cpp
 
         DEPENDS
         CIRCTConversionPassIncGen
         MemoryInterfaceIncGen
+        BRAMTransformsIncGen
+        CIRCTHLSIncGen
         MLIRArithDialect
 
         LINK_LIBS PUBLIC
         HLSInterfaces
+        CIRCTHLS
         MLIRIR
         MLIRPass
         MLIRSupport

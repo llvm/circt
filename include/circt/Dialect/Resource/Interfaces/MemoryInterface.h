@@ -10,7 +10,7 @@
 #include "circt/Dialect/Resource/Interfaces/MemoryOpInterface.h.inc"
 #include "circt/Dialect/Resource/Interfaces/MemoryDialectInterface.h.inc"
 
-namespace hls {
+namespace circt::hls_analysis {
     // One-call registration that attaches everything to a DialectRegistry.
     void registerBRAMInterfaceExternalModels(mlir::DialectRegistry &registry);
 } // namespace mlir::hls
