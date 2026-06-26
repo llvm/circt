@@ -362,6 +362,23 @@ LogicalResult ConstantZOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// ConcatStrOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ConcatStrOp::verify() {
+  // Concatenation of zero operands would emit invalid (`{}`) SystemVerilog.
+  if (getInputs().empty())
+    return emitError("sv.concat_str requires at least one operand");
+  return success();
+}
+
+OpFoldResult ConcatStrOp::fold(FoldAdaptor) {
+  if (getInputs().size() == 1)
+    return getInputs().front();
+  return {};
+}
+
+//===----------------------------------------------------------------------===//
 // LocalParamOp
 //===----------------------------------------------------------------------===//
 

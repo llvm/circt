@@ -156,6 +156,16 @@ hw.module @svAttrPreventsCanonicalization(in %arg0: i1) {
   sv.assign %0, %arg0 {sv.attributes = [#sv.attribute<"attr">]} : i1
 }
 
+// CHECK-LABEL: hw.module @concat_str_single_operand
+hw.module @concat_str_single_operand(out o: !hw.string) {
+  // CHECK: %[[STR:.*]] = sv.constantStr "foo"
+  // CHECK-NOT: sv.concat_str
+  // CHECK: hw.output %[[STR]] : !hw.string
+  %0 = sv.constantStr "foo"
+  %1 = sv.concat_str (%0) : !hw.string
+  hw.output %1 : !hw.string
+}
+
 // CHECK-LABEL: @case_stmt
 hw.module @case_stmt(in %arg: i3) {
   %fd = hw.constant 0x80000002 : i32
