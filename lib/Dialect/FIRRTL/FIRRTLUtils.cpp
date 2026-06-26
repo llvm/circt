@@ -158,6 +158,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // The source must be extended or truncated.
   if (dstWidth < srcWidth) {
+    mlir::emitWarning(builder.getLoc())
+        << "RHS width " << srcWidth << " exceeds LHS width " << dstWidth
+        << ", inserting implicit truncation";
+
     // firrtl.tail always returns uint even for sint operands.
     IntType tmpType =
         type_cast<IntType>(dstType).getConstType(srcType.isConst());
