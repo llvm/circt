@@ -4835,18 +4835,6 @@ LogicalResult FIRRTLLowering::visitExpr(LTLPastIntrinsicOp op) {
                                        op.getDelayAttr(), clk);
 }
 
-static ltl::ClockEdge firrtlToLTLClockEdge(EventControl eventControl) {
-  switch (eventControl) {
-  case EventControl::AtPosEdge:
-    return ltl::ClockEdge::Pos;
-  case EventControl::AtEdge:
-    return ltl::ClockEdge::Both;
-  case EventControl::AtNegEdge:
-    return ltl::ClockEdge::Neg;
-  }
-  llvm_unreachable("unknown event control");
-}
-
 LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
   return setLoweringToLTL<ltl::ClockOp>(op, getLoweredValue(op.getInput()),
                                         firrtlToLTLClockEdge(op.getEdge()),
