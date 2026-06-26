@@ -339,6 +339,7 @@ LogicalResult firtool::populateHWToSV(mlir::PassManager &pm,
        /*emitSeparateAlwaysBlocks=*/
        opt.shouldEmitSeparateAlwaysBlocks()}));
   pm.addNestedPass<hw::HWModuleOp>(createLowerVerifToSVPass());
+  pm.addNestedPass<hw::HWModuleOp>(createLowerHWToSVPass());
   pm.addPass(seq::createHWMemSimImpl(
       {/*disableMemRandomization=*/!opt.isRandomEnabled(
            FirtoolOptions::RandomKind::Mem),
