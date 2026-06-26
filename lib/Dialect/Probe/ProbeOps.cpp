@@ -21,15 +21,15 @@ static Type getElementType(Type type) {
 }
 
 LogicalResult SendOp::inferReturnTypes(MLIRContext *context,
-                                       std::optional<Location> loc,
+                                       std::optional<Location> location,
                                        ValueRange operands,
-                                       DictionaryAttr attrs,
+                                       DictionaryAttr attributes,
                                        mlir::PropertyRef properties,
                                        mlir::RegionRange regions,
-                                       SmallVectorImpl<Type> &results) {
+                                       SmallVectorImpl<Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
-  results.push_back(RefType::get(operands[0].getType()));
+  inferredReturnTypes.push_back(RefType::get(operands[0].getType()));
   return success();
 }
 
@@ -40,22 +40,22 @@ LogicalResult SendOp::verify() {
 }
 
 LogicalResult ReadOp::inferReturnTypes(MLIRContext *context,
-                                       std::optional<Location> loc,
+                                       std::optional<Location> location,
                                        ValueRange operands,
-                                       DictionaryAttr attrs,
+                                       DictionaryAttr attributes,
                                        mlir::PropertyRef properties,
                                        mlir::RegionRange regions,
-                                       SmallVectorImpl<Type> &results) {
+                                       SmallVectorImpl<Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
   auto inputType = dyn_cast<RefType>(operands[0].getType());
   if (!inputType) {
-    if (loc)
-      return mlir::emitError(*loc, "input must be a probe reference");
+    if (location)
+      return mlir::emitError(*location, "input must be a probe reference");
     return failure();
   }
 
-  results.push_back(inputType.getElementType());
+  inferredReturnTypes.push_back(inputType.getElementType());
   return success();
 }
 
@@ -66,43 +66,43 @@ LogicalResult ReadOp::verify() {
 }
 
 LogicalResult SubfieldOp::inferReturnTypes(MLIRContext *context,
-                                           std::optional<Location> loc,
+                                           std::optional<Location> location,
                                            ValueRange operands,
-                                           DictionaryAttr attrs,
+                                           DictionaryAttr attributes,
                                            mlir::PropertyRef properties,
                                            mlir::RegionRange regions,
-                                           SmallVectorImpl<Type> &results) {
-  Adaptor adaptor(operands, attrs, properties, regions);
+                                           SmallVectorImpl<Type> &inferredReturnTypes) {
+  Adaptor adaptor(operands, attributes, properties, regions);
   auto field = adaptor.getFieldAttr();
   if (!field)
     return failure();
 
   auto inputRefType = dyn_cast<RefType>(adaptor.getInput().getType());
   if (!inputRefType) {
-    if (loc)
-      return mlir::emitError(*loc, "input must be a probe reference");
+    if (location)
+      return mlir::emitError(*location, "input must be a probe reference");
     return failure();
   }
 
   auto inputType =
       hw::type_dyn_cast<hw::StructType>(inputRefType.getElementType());
   if (!inputType) {
-    if (loc)
-      return mlir::emitError(*loc,
+    if (location)
+      return mlir::emitError(*location,
                              "input probe element type must be an hw.struct");
     return failure();
   }
 
   auto fieldType = inputType.getFieldType(field);
   if (!fieldType) {
-    if (loc)
-      return mlir::emitError(*loc, "field '")
+    if (location)
+      return mlir::emitError(*location, "field '")
              << field.getValue() << "' not found in "
              << inputRefType.getElementType();
     return failure();
   }
 
-  results.push_back(RefType::get(fieldType));
+  inferredReturnTypes.push_back(RefType::get(fieldType));
   return success();
 }
 
@@ -125,42 +125,42 @@ LogicalResult SubfieldOp::verify() {
 }
 
 LogicalResult SubindexOp::inferReturnTypes(MLIRContext *context,
-                                           std::optional<Location> loc,
+                                           std::optional<Location> location,
                                            ValueRange operands,
-                                           DictionaryAttr attrs,
+                                           DictionaryAttr attributes,
                                            mlir::PropertyRef properties,
                                            mlir::RegionRange regions,
-                                           SmallVectorImpl<Type> &results) {
-  Adaptor adaptor(operands, attrs, properties, regions);
+                                           SmallVectorImpl<Type> &inferredReturnTypes) {
+  Adaptor adaptor(operands, attributes, properties, regions);
   auto indexAttr = adaptor.getIndexAttr();
   if (!indexAttr)
     return failure();
 
   auto inputRefType = dyn_cast<RefType>(adaptor.getInput().getType());
   if (!inputRefType) {
-    if (loc)
-      return mlir::emitError(*loc, "input must be a probe reference");
+    if (location)
+      return mlir::emitError(*location, "input must be a probe reference");
     return failure();
   }
 
   auto inputType =
       hw::type_dyn_cast<hw::ArrayType>(inputRefType.getElementType());
   if (!inputType) {
-    if (loc)
-      return mlir::emitError(*loc,
+    if (location)
+      return mlir::emitError(*location,
                              "input probe element type must be an hw.array");
     return failure();
   }
 
   auto index = indexAttr.getInt();
   if (static_cast<uint64_t>(index) >= inputType.getNumElements()) {
-    if (loc)
-      return mlir::emitError(*loc, "index ")
+    if (location)
+      return mlir::emitError(*location, "index ")
              << index << " out of bounds for " << inputRefType.getElementType();
     return failure();
   }
 
-  results.push_back(RefType::get(inputType.getElementType()));
+  inferredReturnTypes.push_back(RefType::get(inputType.getElementType()));
   return success();
 }
 
