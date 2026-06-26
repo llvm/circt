@@ -366,11 +366,16 @@ LogicalResult ConstantZOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult ConcatStrOp::verify() {
-  // Concatenation of fewer than two operands is meaningless and would emit
-  // invalid (`{}`) or trivial (`{x}`) SystemVerilog.
-  if (getInputs().size() < 2)
-    return emitError("sv.concat_str requires at least two operands");
+  // Concatenation of zero operands would emit invalid (`{}`) SystemVerilog.
+  if (getInputs().empty())
+    return emitError("sv.concat_str requires at least one operand");
   return success();
+}
+
+OpFoldResult ConcatStrOp::fold(FoldAdaptor) {
+  if (getInputs().size() == 1)
+    return getInputs().front();
+  return {};
 }
 
 //===----------------------------------------------------------------------===//
