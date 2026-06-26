@@ -45,6 +45,36 @@ def DPIDirection : I32EnumAttr<"DPIDirection",
 // Simulation Operations
 //===----------------------------------------------------------------------===//
 
+def ConfigDeclOp : SimOp<"config.decl",
+    [Symbol, HasParent<"mlir::ModuleOp">]> {
+  let summary = "Declare an externally controlled simulation value";
+  let description = [{
+    Declares a named configuration value for simulation-related behavior. The
+    concrete mechanism used to override the value is backend-defined and may be
+    a preprocessor macro, a plusarg, a parameter, or another backend-specific
+    facility. If no override is provided, the configuration value has the given
+    default value.
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name, BoolAttr:$defaultValue);
+  let assemblyFormat = "$sym_name `default` $defaultValue attr-dict";
+}
+
+def ConfigGetOp : SimOp<"config.get",
+    [Pure, DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Read an externally controlled simulation value";
+  let description = [{
+    Reads a named configuration value declared by `sim.config.decl`. The result
+    is an SSA value that can be used to guard simulation, verification, or other
+    behavior. The operation does not prescribe whether the value is provided by
+    a compile-time, elaboration-time, or runtime mechanism.
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$config);
+  let results = (outs I1:$result);
+  let assemblyFormat = "$config attr-dict";
+}
+
 def PlusArgsTestOp : SimOp<"plusargs.test", [Pure]> {
   let summary = "SystemVerilog `$test$plusargs` call";
 
