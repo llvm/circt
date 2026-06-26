@@ -534,7 +534,7 @@ hw.module @test_generate_for() {
 hw.module @test_concat_str(out o : !hw.string) {
   // CHECK: sv.constantStr "foo"
   // CHECK: sv.constantStr "bar"
-  // CHECK: sv.concat_str ({{[^)]*}}) : !hw.string
+  // CHECK: sv.concat_str({{[^)]*}}) : !hw.string
   %a = sv.constantStr "foo"
   %b = sv.constantStr "bar"
   %c = sv.concat_str (%a, %b) : !hw.string
