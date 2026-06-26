@@ -26,7 +26,7 @@ class ProbeInferTypeOp<string mnemonic, list<Trait> traits = []> :
 
 def SendOp : ProbeInferTypeOp<"send"> {
   let summary = "create a read-only probe handle for a hardware value";
-  let arguments = (ins HWNonInOutType:$input);
+  let arguments = (ins ProbeElementType:$input);
   let results = (outs RefTypeConstraint:$result);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` qualified(type($result))";
   let hasVerifier = 1;
@@ -35,7 +35,7 @@ def SendOp : ProbeInferTypeOp<"send"> {
 def ReadOp : ProbeInferTypeOp<"read"> {
   let summary = "read the value observed by a probe handle";
   let arguments = (ins RefTypeConstraint:$input);
-  let results = (outs HWNonInOutType:$result);
+  let results = (outs ProbeElementType:$result);
   let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `->` type($result)";
   let hasVerifier = 1;
 }

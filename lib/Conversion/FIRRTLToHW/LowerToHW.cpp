@@ -1700,10 +1700,7 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
     auto resultHWType = loweringState.lowerType(port.type, port.loc);
     if (!resultHWType.isInteger(0)) {
       auto output =
-          loweringState.lowerToCore && type_isa<RefType>(port.type)
-              ? newArg.getResult()
-              : castFromFIRRTLType(newArg.getResult(), resultHWType,
-                                   outputBuilder);
+          castFromFIRRTLType(newArg.getResult(), resultHWType, outputBuilder);
       outputs.push_back(output);
 
       // If output port has symbol, move it to this wire.
@@ -2320,6 +2317,9 @@ LogicalResult FIRRTLLowering::run() {
   // are folded, which means we would have to scan the entire lowering table to
   // safely replace a backedge.
   for (auto &[backedge, value] : backedges) {
+    if (backedge.use_empty())
+      continue;
+
     SmallVector<Location> driverLocs;
     // In the case where we have backedges connected to other backedges, we have
     // to find the value that actually drives the group.
@@ -3547,6 +3547,8 @@ LogicalResult FIRRTLLowering::visitExpr(RefResolveOp op) {
   auto refType = dyn_cast<probe::RefType>(input.getType());
   if (!refType)
     return op.emitOpError("expected lowered probe reference");
+  if (isZeroBitFIRRTLType(op.getType()))
+    return setLowering(op, Value());
   auto read = probe::ReadOp::create(builder, input);
   return setLowering(op, castToHWProbePayload(read.getResult(),
                                               lowerType(op.getType())));
@@ -4341,6 +4343,10 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceChoiceOp oldInstanceChoice) {
     auto &port = portInfo[portIndex];
     if (port.isInput())
       continue;
+    if (circuitState.lowerToCore && type_isa<RefType>(port.type))
+      return oldInstanceChoice->emitOpError(
+                 "lower-to-core does not support probe output port ")
+             << port.getName() << " on instance_choice";
     auto portType = lowerType(port.type);
     if (!portType || portType.isInteger(0))
       continue;

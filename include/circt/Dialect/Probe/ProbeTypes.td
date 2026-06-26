@@ -11,6 +11,7 @@
 
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Probe/ProbeDialect.td"
+include "circt/Dialect/Seq/SeqTypes.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/OpBase.td"
 
@@ -39,5 +40,9 @@ def RefType : ProbeTypeDef<"Ref"> {
 def RefTypeConstraint : DialectType<ProbeDialect,
     CPred<"::llvm::isa<::circt::probe::RefType>($_self)">,
     "probe ref type", "::circt::probe::RefType">;
+
+def ProbeElementType : Type<CPred<
+    "::circt::probe::isProbeElementType($_self)">,
+    "probe element type">;
 
 #endif // CIRCT_DIALECT_PROBE_PROBETYPES_TD

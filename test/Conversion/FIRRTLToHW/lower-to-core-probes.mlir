@@ -21,6 +21,30 @@ firrtl.circuit "Top" {
     // CHECK: hw.output %[[V]] : i8
   }
 
+  // CHECK-LABEL: hw.module @ClockProbe
+  // CHECK-SAME: in %clock : !seq.clock
+  // CHECK-SAME: out p : !probe.ref<!seq.clock>
+  // CHECK-SAME: out out : !seq.clock
+  firrtl.module @ClockProbe(in %clock: !firrtl.clock, out %p: !firrtl.probe<clock>, out %out: !firrtl.clock) {
+    // CHECK: %[[P:.+]] = probe.send %clock : !seq.clock -> !probe.ref<!seq.clock>
+    %ref = firrtl.ref.send %clock : !firrtl.clock
+    firrtl.ref.define %p, %ref : !firrtl.probe<clock>
+    // CHECK: %[[V:.+]] = probe.read %[[P]] : !probe.ref<!seq.clock> -> !seq.clock
+    %v = firrtl.ref.resolve %ref : !firrtl.probe<clock>
+    firrtl.connect %out, %v : !firrtl.clock, !firrtl.clock
+    // CHECK: hw.output %[[P]], %[[V]] : !probe.ref<!seq.clock>, !seq.clock
+  }
+
+  // CHECK-LABEL: hw.module @ClockAggregateProbe
+  // CHECK-SAME: in %in : !hw.struct<clk: !seq.clock, data: i1>
+  // CHECK-SAME: out p : !probe.ref<!hw.struct<clk: !seq.clock, data: i1>>
+  firrtl.module @ClockAggregateProbe(in %in: !firrtl.bundle<clk: clock, data: uint<1>>, out %p: !firrtl.probe<bundle<clk: clock, data: uint<1>>>) {
+    // CHECK: %[[P:.+]] = probe.send %in : !hw.struct<clk: !seq.clock, data: i1> -> !probe.ref<!hw.struct<clk: !seq.clock, data: i1>>
+    %ref = firrtl.ref.send %in : !firrtl.bundle<clk: clock, data: uint<1>>
+    firrtl.ref.define %p, %ref : !firrtl.probe<bundle<clk: clock, data: uint<1>>>
+    // CHECK: hw.output %[[P]] : !probe.ref<!hw.struct<clk: !seq.clock, data: i1>>
+  }
+
   // CHECK-LABEL: hw.module @Aggregates
   firrtl.module @Aggregates(
       in %s: !firrtl.bundle<a: uint<1>, b: uint<5>>,
@@ -59,5 +83,34 @@ firrtl.circuit "Top" {
     firrtl.ref.define %w, %ref : !firrtl.probe<uint<8>>
     firrtl.ref.define %p, %w : !firrtl.probe<uint<8>>
     // CHECK: hw.output %[[P]] : !probe.ref<i8>
+  }
+
+  // CHECK-LABEL: hw.module @UnusedProbeWire
+  firrtl.module @UnusedProbeWire() {
+    %w = firrtl.wire : !firrtl.probe<uint<8>>
+  }
+
+  // CHECK-LABEL: hw.module @OutputProbeUsed
+  // CHECK-SAME: out p : !probe.ref<i8>
+  firrtl.module @OutputProbeUsed(in %in: !firrtl.uint<8>, out %p: !firrtl.probe<uint<8>>, out %out: !firrtl.uint<8>) {
+    // CHECK: %[[P:.+]] = probe.send %in : i8 -> !probe.ref<i8>
+    %ref = firrtl.ref.send %in : !firrtl.uint<8>
+    firrtl.ref.define %p, %ref : !firrtl.probe<uint<8>>
+    // CHECK: %[[V:.+]] = probe.read %[[P]] : !probe.ref<i8> -> i8
+    %v = firrtl.ref.resolve %p : !firrtl.probe<uint<8>>
+    firrtl.connect %out, %v : !firrtl.uint<8>, !firrtl.uint<8>
+    // CHECK: hw.output %[[P]], %[[V]] : !probe.ref<i8>, i8
+  }
+
+  // CHECK-LABEL: hw.module @ZeroWidthResolve
+  // CHECK-SAME: out p : !probe.ref<i0>
+  firrtl.module @ZeroWidthResolve(in %in: !firrtl.uint<0>, out %out: !firrtl.uint<0>, out %p: !firrtl.probe<uint<0>>) {
+    // CHECK: %[[P:.+]] = probe.send
+    %ref = firrtl.ref.send %in : !firrtl.uint<0>
+    firrtl.ref.define %p, %ref : !firrtl.probe<uint<0>>
+    // CHECK-NOT: probe.read
+    %v = firrtl.ref.resolve %ref : !firrtl.probe<uint<0>>
+    firrtl.connect %out, %v : !firrtl.uint<0>, !firrtl.uint<0>
+    // CHECK: hw.output %[[P]] : !probe.ref<i0>
   }
 }

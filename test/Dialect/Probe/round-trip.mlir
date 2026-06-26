@@ -9,6 +9,26 @@ hw.module @Basic(in %in: i8, out out: i8) {
   hw.output %v : i8
 }
 
+// CHECK-LABEL: hw.module @Clock
+// CHECK-SAME: in %clock : !seq.clock
+// CHECK-SAME: out out : !seq.clock
+hw.module @Clock(in %clock: !seq.clock, out out: !seq.clock) {
+  // CHECK: %[[P:.+]] = probe.send %clock : !seq.clock -> !probe.ref<!seq.clock>
+  %p = probe.send %clock : !seq.clock -> !probe.ref<!seq.clock>
+  // CHECK: %[[V:.+]] = probe.read %[[P]] : !probe.ref<!seq.clock> -> !seq.clock
+  %v = probe.read %p : !probe.ref<!seq.clock> -> !seq.clock
+  hw.output %v : !seq.clock
+}
+
+// CHECK-LABEL: hw.module @ClockAggregate
+hw.module @ClockAggregate(in %in: !hw.struct<clk: !seq.clock, data: i1>, out out: !hw.struct<clk: !seq.clock, data: i1>) {
+  // CHECK: %[[P:.+]] = probe.send %in : !hw.struct<clk: !seq.clock, data: i1> -> !probe.ref<!hw.struct<clk: !seq.clock, data: i1>>
+  %p = probe.send %in : !hw.struct<clk: !seq.clock, data: i1> -> !probe.ref<!hw.struct<clk: !seq.clock, data: i1>>
+  // CHECK: %[[V:.+]] = probe.read %[[P]] : !probe.ref<!hw.struct<clk: !seq.clock, data: i1>> -> !hw.struct<clk: !seq.clock, data: i1>
+  %v = probe.read %p : !probe.ref<!hw.struct<clk: !seq.clock, data: i1>> -> !hw.struct<clk: !seq.clock, data: i1>
+  hw.output %v : !hw.struct<clk: !seq.clock, data: i1>
+}
+
 // CHECK-LABEL: hw.module @ProbePort
 // CHECK-SAME: in %p : !probe.ref<i8>
 hw.module @ProbePort(in %p: !probe.ref<i8>, out out: i8) {
