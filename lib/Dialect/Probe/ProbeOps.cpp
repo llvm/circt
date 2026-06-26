@@ -20,15 +20,89 @@ static Type getElementType(Type type) {
   return cast<RefType>(type).getElementType();
 }
 
+LogicalResult SendOp::inferReturnTypes(MLIRContext *context,
+                                       std::optional<Location> loc,
+                                       ValueRange operands,
+                                       DictionaryAttr attrs,
+                                       mlir::PropertyRef properties,
+                                       mlir::RegionRange regions,
+                                       SmallVectorImpl<Type> &results) {
+  if (operands.empty())
+    return failure();
+  results.push_back(RefType::get(operands[0].getType()));
+  return success();
+}
+
 LogicalResult SendOp::verify() {
   if (getElementType(getResult().getType()) != getInput().getType())
     return emitOpError("result probe element type must match input type");
   return success();
 }
 
+LogicalResult ReadOp::inferReturnTypes(MLIRContext *context,
+                                       std::optional<Location> loc,
+                                       ValueRange operands,
+                                       DictionaryAttr attrs,
+                                       mlir::PropertyRef properties,
+                                       mlir::RegionRange regions,
+                                       SmallVectorImpl<Type> &results) {
+  if (operands.empty())
+    return failure();
+  auto inputType = dyn_cast<RefType>(operands[0].getType());
+  if (!inputType) {
+    if (loc)
+      return mlir::emitError(*loc, "input must be a probe reference");
+    return failure();
+  }
+
+  results.push_back(inputType.getElementType());
+  return success();
+}
+
 LogicalResult ReadOp::verify() {
   if (getElementType(getInput().getType()) != getResult().getType())
     return emitOpError("result type must match input probe element type");
+  return success();
+}
+
+LogicalResult SubfieldOp::inferReturnTypes(MLIRContext *context,
+                                           std::optional<Location> loc,
+                                           ValueRange operands,
+                                           DictionaryAttr attrs,
+                                           mlir::PropertyRef properties,
+                                           mlir::RegionRange regions,
+                                           SmallVectorImpl<Type> &results) {
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto field = adaptor.getFieldAttr();
+  if (!field)
+    return failure();
+
+  auto inputRefType = dyn_cast<RefType>(adaptor.getInput().getType());
+  if (!inputRefType) {
+    if (loc)
+      return mlir::emitError(*loc, "input must be a probe reference");
+    return failure();
+  }
+
+  auto inputType =
+      hw::type_dyn_cast<hw::StructType>(inputRefType.getElementType());
+  if (!inputType) {
+    if (loc)
+      return mlir::emitError(*loc,
+                             "input probe element type must be an hw.struct");
+    return failure();
+  }
+
+  auto fieldType = inputType.getFieldType(field);
+  if (!fieldType) {
+    if (loc)
+      return mlir::emitError(*loc, "field '")
+             << field.getValue() << "' not found in "
+             << inputRefType.getElementType();
+    return failure();
+  }
+
+  results.push_back(RefType::get(fieldType));
   return success();
 }
 
@@ -47,6 +121,46 @@ LogicalResult SubfieldOp::verify() {
     return emitOpError("result probe element type must match selected field "
                        "type ")
            << fieldType;
+  return success();
+}
+
+LogicalResult SubindexOp::inferReturnTypes(MLIRContext *context,
+                                           std::optional<Location> loc,
+                                           ValueRange operands,
+                                           DictionaryAttr attrs,
+                                           mlir::PropertyRef properties,
+                                           mlir::RegionRange regions,
+                                           SmallVectorImpl<Type> &results) {
+  Adaptor adaptor(operands, attrs, properties, regions);
+  auto indexAttr = adaptor.getIndexAttr();
+  if (!indexAttr)
+    return failure();
+
+  auto inputRefType = dyn_cast<RefType>(adaptor.getInput().getType());
+  if (!inputRefType) {
+    if (loc)
+      return mlir::emitError(*loc, "input must be a probe reference");
+    return failure();
+  }
+
+  auto inputType =
+      hw::type_dyn_cast<hw::ArrayType>(inputRefType.getElementType());
+  if (!inputType) {
+    if (loc)
+      return mlir::emitError(*loc,
+                             "input probe element type must be an hw.array");
+    return failure();
+  }
+
+  auto index = indexAttr.getInt();
+  if (static_cast<uint64_t>(index) >= inputType.getNumElements()) {
+    if (loc)
+      return mlir::emitError(*loc, "index ")
+             << index << " out of bounds for " << inputRefType.getElementType();
+    return failure();
+  }
+
+  results.push_back(RefType::get(inputType.getElementType()));
   return success();
 }
 

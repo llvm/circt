@@ -3537,7 +3537,7 @@ LogicalResult FIRRTLLowering::visitExpr(RefSendOp op) {
 
   auto elementType = cast<probe::RefType>(probeType).getElementType();
   auto input = castToHWProbePayload(op.getBase(), elementType);
-  return setLowering(op, probe::SendOp::create(builder, probeType, input));
+  return setLowering(op, probe::SendOp::create(builder, input));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(RefResolveOp op) {
@@ -3547,8 +3547,7 @@ LogicalResult FIRRTLLowering::visitExpr(RefResolveOp op) {
   auto refType = dyn_cast<probe::RefType>(input.getType());
   if (!refType)
     return op.emitOpError("expected lowered probe reference");
-  auto read =
-      probe::ReadOp::create(builder, refType.getElementType(), input);
+  auto read = probe::ReadOp::create(builder, input);
   return setLowering(op, castToHWProbePayload(read.getResult(),
                                               lowerType(op.getType())));
 }
@@ -3560,8 +3559,7 @@ LogicalResult FIRRTLLowering::visitExpr(RefSubOp op) {
   auto inputRefType = dyn_cast<probe::RefType>(input.getType());
   if (!inputRefType)
     return op.emitOpError("expected lowered probe reference");
-  auto resultType = lowerProbeType(op.getType());
-  if (!resultType)
+  if (!lowerProbeType(op.getType()))
     return op.emitOpError("lower-to-core only supports read-only, unlayered "
                           "FIRRTL probes");
 
@@ -3571,13 +3569,12 @@ LogicalResult FIRRTLLowering::visitExpr(RefSubOp op) {
     auto index = op.getIndex();
     if (index >= structType.getElements().size())
       return op.emitOpError("subfield index out of bounds");
-    result = probe::SubfieldOp::create(
-        builder, resultType, input, structType.getElements()[index].name);
+    result = probe::SubfieldOp::create(builder, input,
+                                       structType.getElements()[index].name);
   } else if (auto arrayType = hw::type_dyn_cast<hw::ArrayType>(elementType)) {
     if (op.getIndex() >= arrayType.getNumElements())
       return op.emitOpError("subindex out of bounds");
-    result =
-        probe::SubindexOp::create(builder, resultType, input, op.getIndexAttr());
+    result = probe::SubindexOp::create(builder, input, op.getIndexAttr());
   } else {
     return op.emitOpError("input probe element type must be an aggregate");
   }
