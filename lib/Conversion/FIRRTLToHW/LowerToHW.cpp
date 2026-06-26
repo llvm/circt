@@ -28,6 +28,7 @@
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/InnerSymbolNamespace.h"
 #include "circt/Dialect/LTL/LTLOps.h"
+#include "circt/Dialect/Probe/ProbeOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
@@ -321,6 +322,7 @@ struct CircuitLoweringState {
 
   FModuleLike getDut() { return dut; }
   FModuleLike getTestHarness() { return testHarness; }
+  bool isLoweringToCore() const { return lowerToCore; }
 
   // Return true if this module is the DUT or is instantiated by the DUT.
   // Returns false if the module is not instantiated by the DUT or is
@@ -345,11 +347,38 @@ struct CircuitLoweringState {
   ///  A wrapper to the FIRRTLUtils::lowerType, required to ensure safe addition
   ///  of TypeScopeOp for all the TypeDecls.
   Type lowerType(Type type, Location loc) {
+    if (lowerToCore) {
+      if (auto refType = type_dyn_cast<RefType>(type)) {
+        if (refType.getForceable() || refType.getLayer())
+          return {};
+        auto elementType = lowerType(refType.getType(), loc);
+        if (!elementType)
+          return {};
+        return probe::RefType::get(elementType);
+      }
+    }
+
     return ::lowerType(type, loc,
                        [&](Type rawType, BaseTypeAliasType firrtlType,
                            Location typeLoc) -> hw::TypeAliasType {
                          return getTypeAlias(rawType, firrtlType, typeLoc);
                        });
+  }
+
+  /// Given a FIRRTL RefType, return its corresponding Probe dialect type if
+  /// lower-to-core is enabled.
+  Type lowerProbeType(Type type, Location loc) {
+    if (lowerToCore) {
+      if (auto refType = type_dyn_cast<RefType>(type)) {
+        if (refType.getForceable() || refType.getLayer())
+          return {};
+        auto elementType = lowerType(refType.getType(), loc);
+        if (!elementType)
+          return {};
+        return probe::RefType::get(elementType);
+      }
+    }
+    return {};
   }
 
   /// Get the sv.verbatim.source op for a filename, if it exists.
@@ -1457,6 +1486,36 @@ static Value tryEliminatingAttachesToAnalogValue(Value value,
 static Value
 tryEliminatingConnectsToValue(Value flipValue, Operation *insertPoint,
                               CircuitLoweringState &loweringState) {
+  if (loweringState.isLoweringToCore() &&
+      type_isa<RefType>(flipValue.getType())) {
+    Operation *defineOp = nullptr;
+    for (auto &use : flipValue.getUses()) {
+      if (use.getOperandNumber() != 0)
+        return {};
+      if (!isa<RefDefineOp>(use.getOwner()))
+        return {};
+      if (defineOp)
+        return {};
+      defineOp = use.getOwner();
+    }
+
+    if (!defineOp)
+      return {};
+
+    auto src = defineOp->getOperand(1);
+    defineOp->erase();
+    auto loweredType =
+        loweringState.lowerType(flipValue.getType(), flipValue.getLoc());
+    if (!loweredType)
+      return {};
+    if (src.getType() != loweredType) {
+      ImplicitLocOpBuilder builder(insertPoint->getLoc(), insertPoint);
+      src = mlir::UnrealizedConversionCastOp::create(builder, loweredType, src)
+                .getResult(0);
+    }
+    return src;
+  }
+
   // Handle analog's separately.
   if (type_isa<AnalogType>(flipValue.getType()))
     return tryEliminatingAttachesToAnalogValue(flipValue, insertPoint);
@@ -1596,6 +1655,11 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
       // just map them over.  We model zero bit outputs as inouts.
       Value newArg = newModule.getBody().getArgument(nextHWInputArg++);
 
+      if (loweringState.lowerToCore && type_isa<RefType>(oldArg.getType())) {
+        oldArg.replaceAllUsesWith(newArg);
+        continue;
+      }
+
       // Cast the argument to the old type, reintroducing sign information in
       // the hw.module body.
       newArg = castToFIRRTLType(newArg, oldArg.getType(), bodyBuilder);
@@ -1636,7 +1700,10 @@ LogicalResult FIRRTLModuleLowering::lowerModulePortsAndMoveBody(
     auto resultHWType = loweringState.lowerType(port.type, port.loc);
     if (!resultHWType.isInteger(0)) {
       auto output =
-          castFromFIRRTLType(newArg.getResult(), resultHWType, outputBuilder);
+          loweringState.lowerToCore && type_isa<RefType>(port.type)
+              ? newArg.getResult()
+              : castFromFIRRTLType(newArg.getResult(), resultHWType,
+                                   outputBuilder);
       outputs.push_back(output);
 
       // If output port has symbol, move it to this wire.
@@ -1843,6 +1910,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(IsTagOp op);
   LogicalResult visitExpr(SubtagOp op);
   LogicalResult visitExpr(TagExtractOp op);
+  LogicalResult visitExpr(RefSendOp op);
+  LogicalResult visitExpr(RefResolveOp op);
+  LogicalResult visitExpr(RefSubOp op);
+  LogicalResult visitExpr(RefCastOp op);
   LogicalResult visitUnhandledOp(Operation *op) { return failure(); }
   LogicalResult visitInvalidOp(Operation *op) {
     if (auto castOp = dyn_cast<mlir::UnrealizedConversionCastOp>(op))
@@ -2052,6 +2123,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitStmt(AssumeOp op);
   LogicalResult visitStmt(CoverOp op);
   LogicalResult visitStmt(AttachOp op);
+  LogicalResult visitStmt(RefDefineOp op);
   LogicalResult visitStmt(RefForceOp op);
   LogicalResult visitStmt(RefForceInitialOp op);
   LogicalResult visitStmt(RefReleaseOp op);
@@ -2067,6 +2139,10 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   Type lowerType(Type type) {
     return circuitState.lowerType(type, builder.getLoc());
   }
+  Type lowerProbeType(Type type) {
+    return circuitState.lowerProbeType(type, builder.getLoc());
+  }
+  Value castToHWProbePayload(Value value, Type type);
 
 private:
   /// The module we're lowering into.
@@ -3078,17 +3154,19 @@ LogicalResult FIRRTLLowering::setLowering(Value orig, Value result) {
            "Lowering didn't turn a FIRRTL value into a non-FIRRTL value");
 
 #ifndef NDEBUG
-    auto baseType = getBaseType(origType);
-    auto srcWidth = baseType.getPassiveType().getBitWidthOrSentinel();
+    if (!type_isa<RefType>(origType)) {
+      auto baseType = getBaseType(origType);
+      auto srcWidth = baseType.getPassiveType().getBitWidthOrSentinel();
 
-    // Caller should pass null value iff this was a zero bit value.
-    if (srcWidth != -1) {
-      if (result)
-        assert((srcWidth != 0) &&
-               "Lowering produced value for zero width source");
-      else
-        assert((srcWidth == 0) &&
-               "Lowering produced null value but source wasn't zero width");
+      // Caller should pass null value iff this was a zero bit value.
+      if (srcWidth != -1) {
+        if (result)
+          assert((srcWidth != 0) &&
+                 "Lowering produced value for zero width source");
+        else
+          assert((srcWidth == 0) &&
+                 "Lowering produced null value but source wasn't zero width");
+      }
     }
 #endif
   } else {
@@ -3436,6 +3514,88 @@ FIRRTLLowering::handleUnloweredOp(Operation *op) {
   return LoweringFailure;
 }
 
+Value FIRRTLLowering::castToHWProbePayload(Value value, Type type) {
+  if (value.getType() == type)
+    return value;
+  if (type_isa<FIRRTLType>(value.getType())) {
+    if (auto lowered = getLoweredValue(value))
+      return castToHWProbePayload(lowered, type);
+    if (auto castOp = value.getDefiningOp<mlir::UnrealizedConversionCastOp>())
+      if (castOp.getNumOperands() == 1 &&
+          !type_isa<FIRRTLType>(castOp.getOperand(0).getType()))
+        return castToHWProbePayload(castOp.getOperand(0), type);
+  }
+  return mlir::UnrealizedConversionCastOp::create(builder, type, value)
+      .getResult(0);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RefSendOp op) {
+  auto probeType = lowerProbeType(op.getType());
+  if (!probeType)
+    return op.emitOpError("lower-to-core only supports read-only, unlayered "
+                          "FIRRTL probes");
+
+  auto elementType = cast<probe::RefType>(probeType).getElementType();
+  auto input = castToHWProbePayload(op.getBase(), elementType);
+  return setLowering(op, probe::SendOp::create(builder, probeType, input));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RefResolveOp op) {
+  auto input = getLoweredValue(op.getRef());
+  if (!input)
+    return failure();
+  auto refType = dyn_cast<probe::RefType>(input.getType());
+  if (!refType)
+    return op.emitOpError("expected lowered probe reference");
+  auto read =
+      probe::ReadOp::create(builder, refType.getElementType(), input);
+  return setLowering(op, castToHWProbePayload(read.getResult(),
+                                              lowerType(op.getType())));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RefSubOp op) {
+  auto input = getLoweredValue(op->getOperand(0));
+  if (!input)
+    return failure();
+  auto inputRefType = dyn_cast<probe::RefType>(input.getType());
+  if (!inputRefType)
+    return op.emitOpError("expected lowered probe reference");
+  auto resultType = lowerProbeType(op.getType());
+  if (!resultType)
+    return op.emitOpError("lower-to-core only supports read-only, unlayered "
+                          "FIRRTL probes");
+
+  auto elementType = inputRefType.getElementType();
+  Value result;
+  if (auto structType = hw::type_dyn_cast<hw::StructType>(elementType)) {
+    auto index = op.getIndex();
+    if (index >= structType.getElements().size())
+      return op.emitOpError("subfield index out of bounds");
+    result = probe::SubfieldOp::create(
+        builder, resultType, input, structType.getElements()[index].name);
+  } else if (auto arrayType = hw::type_dyn_cast<hw::ArrayType>(elementType)) {
+    if (op.getIndex() >= arrayType.getNumElements())
+      return op.emitOpError("subindex out of bounds");
+    result =
+        probe::SubindexOp::create(builder, resultType, input, op.getIndexAttr());
+  } else {
+    return op.emitOpError("input probe element type must be an aggregate");
+  }
+
+  return setLowering(op, result);
+}
+
+LogicalResult FIRRTLLowering::visitExpr(RefCastOp op) {
+  auto input = getLoweredValue(op->getOperand(0));
+  if (!input)
+    return failure();
+  auto resultType = lowerProbeType(op.getType());
+  if (!resultType)
+    return op.emitOpError("lower-to-core only supports read-only, unlayered "
+                          "FIRRTL probes");
+  return setLowering(op, probe::CastOp::create(builder, resultType, input));
+}
+
 LogicalResult FIRRTLLowering::visitExpr(ConstantOp op) {
   // Zero width values must be lowered to nothing.
   if (isZeroBitFIRRTLType(op.getType()))
@@ -3715,6 +3875,11 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
   auto resultType = lowerType(origResultType);
   if (!resultType)
     return failure();
+
+  if (circuitState.lowerToCore && type_isa<RefType>(origResultType)) {
+    createBackedge(op.getResult(), resultType);
+    return success();
+  }
 
   if (resultType.isInteger(0)) {
     if (op.getInnerSym())
@@ -4364,6 +4529,19 @@ LogicalResult FIRRTLLowering::visitUnrealizedConversionCast(
 
   auto operand = op.getOperand(0);
   auto result = op.getResult(0);
+
+  if (circuitState.lowerToCore && type_isa<RefType>(result.getType()) &&
+      isa<probe::RefType>(operand.getType()))
+    return setLowering(result, operand);
+
+  if (circuitState.lowerToCore && type_isa<RefType>(operand.getType()) &&
+      isa<probe::RefType>(result.getType())) {
+    auto lowered = getPossiblyInoutLoweredValue(operand);
+    if (!lowered)
+      return failure();
+    result.replaceAllUsesWith(lowered);
+    return success();
+  }
 
   // FIRRTL -> FIRRTL
   if (type_isa<FIRRTLType>(operand.getType()) &&
@@ -5270,6 +5448,23 @@ LogicalResult FIRRTLLowering::visitStmt(MatchingConnectOp op) {
     return op.emitError("destination isn't an inout type");
 
   sv::AssignOp::create(builder, destVal, srcVal);
+  return success();
+}
+
+LogicalResult FIRRTLLowering::visitStmt(RefDefineOp op) {
+  if (!circuitState.lowerToCore)
+    return failure();
+  auto src = getLoweredValue(op.getSrc());
+  if (!src)
+    return failure();
+  auto dest = getPossiblyInoutLoweredValue(op.getDest());
+  if (!dest)
+    return failure();
+  if (updateIfBackedge(dest, src))
+    return success();
+  if (dest == src)
+    return success();
+  op.getDest().replaceAllUsesExcept(op.getSrc(), op);
   return success();
 }
 
