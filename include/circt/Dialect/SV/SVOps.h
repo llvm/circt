@@ -26,7 +26,6 @@
 #include "mlir/Interfaces/CallInterfaces.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
-#include <utility>
 
 namespace circt {
 namespace hw {
@@ -42,23 +41,6 @@ bool isExpression(Operation *op);
 
 /// Returns if the expression is known to be 2-state (binary)
 bool is2StateExpression(Value v);
-
-/// Look up or generate the symbol name to use for the `sv.macro.decl`
-/// referenced by macro users. Returns the existing decl's sym_name if a
-/// `sv.macro.decl` whose Verilog identifier matches `verilogName` already
-/// exists in `symbolTableBlock`; otherwise returns a fresh sym_name that does
-/// not collide with any existing symbol in `symbolTableBlock`. The bool is true
-/// iff the returned name belongs to a decl that the caller still needs to
-/// materialize.
-std::pair<StringAttr, bool>
-lookupOrGenerateMacroSymName(Block *symbolTableBlock, StringRef verilogName);
-
-/// Looks up an existing `sv.macro.decl` whose Verilog identifier matches
-/// `verilogName` in `symbolTableBlock`. If none is found, creates one using
-/// `builder` at `loc` and returns its symbol name.
-StringAttr lookupOrCreateMacroDecl(OpBuilder &builder, Location loc,
-                                   Block *symbolTableBlock,
-                                   StringRef verilogName);
 
 //===----------------------------------------------------------------------===//
 // CaseOp Support

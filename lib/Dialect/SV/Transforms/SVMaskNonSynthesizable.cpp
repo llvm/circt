@@ -22,12 +22,12 @@
 #include "circt/Dialect/SV/SVAttributes.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/SV/SVPasses.h"
+#include "circt/Support/Namespace.h"
 #include "circt/Support/ProceduralRegionTrait.h"
 #include "circt/Support/Utils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include <tuple>
 
 namespace circt {
 namespace sv {
@@ -62,6 +62,29 @@ static Region *getMatchingIfDefElseRegion(Operation *op,
         return &ifdef.getElseRegion();
       })
       .Default(static_cast<Region *>(nullptr));
+}
+
+/// Resolve the symbol name to use for the `sv.macro.decl` referenced by
+/// `ifdef` mode's `sv.ifdef` ops. Returns the existing decl's sym_name if a
+/// `sv.macro.decl` whose Verilog identifier matches `verilogName` already
+/// exists at top level; otherwise returns a fresh sym_name that does not
+/// collide with any existing top-level symbol (which may differ from
+/// `verilogName` if a non-`sv.macro.decl` symbol of that name is present).
+/// `created` is set to true iff the returned name belongs to a decl that
+/// the caller still needs to materialize.
+static StringAttr resolveMacroSymName(mlir::ModuleOp moduleOp,
+                                      StringRef verilogName, bool &created) {
+  for (auto decl : moduleOp.getOps<sv::MacroDeclOp>()) {
+    if (decl.getMacroIdentifier() == verilogName) {
+      created = false;
+      return decl.getSymNameAttr();
+    }
+  }
+  Namespace ns;
+  ns.add(moduleOp);
+  StringRef name = ns.newName(verilogName);
+  created = true;
+  return StringAttr::get(moduleOp.getContext(), name);
 }
 
 /// `delete` mode: walk the block and erase every masked op.
@@ -141,8 +164,7 @@ void SVMaskNonSynthesizablePass::runOnOperation() {
   StringAttr macroSymName;
   bool macroDeclNeedsCreation = false;
   if (mode == MaskNonSynthesizableMode::Ifdef)
-    std::tie(macroSymName, macroDeclNeedsCreation) =
-        lookupOrGenerateMacroSymName(moduleOp.getBody(), macro);
+    macroSymName = resolveMacroSymName(moduleOp, macro, macroDeclNeedsCreation);
 
   StringRef passDownMacro =
       macroSymName ? macroSymName.getValue() : StringRef();

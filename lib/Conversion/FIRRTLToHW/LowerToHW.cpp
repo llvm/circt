@@ -3004,38 +3004,43 @@ FIRRTLLowering::lowerSimFormatString(StringRef originalFormatString,
 LogicalResult FIRRTLLowering::lowerStatementWithFd(
     const FileDescriptorInfo &fileDescriptor, Value clock, Value cond,
     const std::function<LogicalResult(Value)> &fn, bool usePrintfCond) {
+  // Emit an "#ifndef SYNTHESIS" guard into the always block.
   bool failed = false;
-  addToAlwaysBlock(clock, [&]() {
-    // TODO: This is not printf specific anymore. Replace "Printf" with "FD"
-    // or similar but be aware that changing macro name breaks existing uses.
-    circuitState.usedPrintf = true;
-    if (usePrintfCond)
-      circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
+  circuitState.addMacroDecl(builder.getStringAttr("SYNTHESIS"));
+  addToIfDefBlock("SYNTHESIS", std::function<void()>(), [&]() {
+    addToAlwaysBlock(clock, [&]() {
+      // TODO: This is not printf specific anymore. Replace "Printf" with "FD"
+      // or similar but be aware that changing macro name breaks existing uses.
+      circuitState.usedPrintf = true;
+      if (usePrintfCond)
+        circuitState.addFragment(theModule, "PRINTF_COND_FRAGMENT");
 
-    Value ifCond = cond;
-    if (usePrintfCond) {
-      ifCond =
-          sv::MacroRefExprOp::create(builder, cond.getType(), "PRINTF_COND_");
-      ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
-    }
-
-    addIfProceduralBlock(ifCond, [&]() {
-      // `fd`represents a file decriptor. Use the stdout or the one opened
-      // using $fopen.
-      Value fd;
-      if (fileDescriptor.isDefaultFd()) {
-        // Emit the sv.fwrite, writing to stderr by default.
-        fd = hw::ConstantOp::create(builder, APInt(32, 0x80000002));
-      } else {
-        // Call the library function to get the FD.
-        auto fdOrError = callFileDescriptorLib(fileDescriptor);
-        if (llvm::failed(fdOrError)) {
-          failed = true;
-          return;
-        }
-        fd = *fdOrError;
+      // Emit an "sv.if '`PRINTF_COND_ & cond' into the #ifndef.
+      Value ifCond = cond;
+      if (usePrintfCond) {
+        ifCond =
+            sv::MacroRefExprOp::create(builder, cond.getType(), "PRINTF_COND_");
+        ifCond = builder.createOrFold<comb::AndOp>(ifCond, cond, true);
       }
-      failed = llvm::failed(fn(fd));
+
+      addIfProceduralBlock(ifCond, [&]() {
+        // `fd`represents a file decriptor. Use the stdout or the one opened
+        // using $fopen.
+        Value fd;
+        if (fileDescriptor.isDefaultFd()) {
+          // Emit the sv.fwrite, writing to stderr by default.
+          fd = hw::ConstantOp::create(builder, APInt(32, 0x80000002));
+        } else {
+          // Call the library function to get the FD.
+          auto fdOrError = callFileDescriptorLib(fileDescriptor);
+          if (llvm::failed(fdOrError)) {
+            failed = true;
+            return;
+          }
+          fd = *fdOrError;
+        }
+        failed = llvm::failed(fn(fd));
+      });
     });
   });
   return failure(failed);
