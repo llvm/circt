@@ -12,6 +12,7 @@
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/LTL/LTLDialect.td"
 include "circt/Dialect/LTL/LTLTypes.td"
+include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/PatternBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -110,8 +111,8 @@ def ClockOp : LTLOp<"clock", [
 def DelayOp : LTLOp<"delay", [Pure]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
-    I64Attr:$delay,
-    OptionalAttr<I64Attr>:$length);
+    ConfinedAttr<I64Attr, [IntMinValue<0>]>:$delay,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$length);
   let results = (outs LTLSequenceType:$result);
   let assemblyFormat = [{
     $input `,` $delay (`,` $length^)? attr-dict `:` type($input)
@@ -152,8 +153,8 @@ def ClockedDelayOp : LTLOp<"clocked_delay", [Pure]> {
     LTLAnySequenceType:$input,
     ClockEdgeAttr:$edge,
     I1:$clock,
-    I64Attr:$delay,
-    OptionalAttr<I64Attr>:$length);
+    ConfinedAttr<I64Attr, [IntMinValue<0>]>:$delay,
+    OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$length);
   let results = (outs LTLSequenceType:$result);
   let assemblyFormat = [{
     $input `,` $edge $clock `,` $delay (`,` $length^)? attr-dict `:` type($input)
@@ -167,7 +168,8 @@ def ClockedDelayOp : LTLOp<"clocked_delay", [Pure]> {
     on the specified `$clock` and `$edge`.
 
     The optional `$length` specifies during how many cycles after the initial
-    delay the sequence can match. Omitting `$length` indicates an unbounded but
+    delay the sequence can match. The delay and length, when present, must be
+    greater than or equal to zero. Omitting `$length` indicates an unbounded but
     finite delay.
 
     For example:

@@ -20,6 +20,7 @@ include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Types.td"
+include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -1775,8 +1776,8 @@ def LTLIntersectIntrinsicOp : BinaryLTLIntrinsicOp<"intersect", [Commutative]>;
 // Sequences
 def LTLDelayIntrinsicOp : LTLIntrinsicOp<"delay"> {
   let arguments = (ins NonConstUInt1Type:$input,
-                       I64Attr:$delay,
-                       OptionalAttr<I64Attr>:$length);
+                       ConfinedAttr<I64Attr, [IntMinValue<0>]>:$delay,
+                       OptionalAttr<ConfinedAttr<I64Attr, [IntMinValue<0>]>>:$length);
   let assemblyFormat = [{
     $input `,` $delay (`,` $length^)? attr-dict `:`
     functional-type(operands, results)
