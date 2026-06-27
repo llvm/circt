@@ -20,13 +20,10 @@ static Type getElementType(Type type) {
   return cast<RefType>(type).getElementType();
 }
 
-LogicalResult SendOp::inferReturnTypes(MLIRContext *context,
-                                       std::optional<Location> location,
-                                       ValueRange operands,
-                                       DictionaryAttr attributes,
-                                       mlir::PropertyRef properties,
-                                       mlir::RegionRange regions,
-                                       SmallVectorImpl<Type> &inferredReturnTypes) {
+LogicalResult SendOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, mlir::PropertyRef properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
   inferredReturnTypes.push_back(RefType::get(operands[0].getType()));
@@ -39,13 +36,10 @@ LogicalResult SendOp::verify() {
   return success();
 }
 
-LogicalResult ReadOp::inferReturnTypes(MLIRContext *context,
-                                       std::optional<Location> location,
-                                       ValueRange operands,
-                                       DictionaryAttr attributes,
-                                       mlir::PropertyRef properties,
-                                       mlir::RegionRange regions,
-                                       SmallVectorImpl<Type> &inferredReturnTypes) {
+LogicalResult ReadOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, mlir::PropertyRef properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &inferredReturnTypes) {
   if (operands.empty())
     return failure();
   auto inputType = dyn_cast<RefType>(operands[0].getType());
@@ -65,13 +59,10 @@ LogicalResult ReadOp::verify() {
   return success();
 }
 
-LogicalResult SubfieldOp::inferReturnTypes(MLIRContext *context,
-                                           std::optional<Location> location,
-                                           ValueRange operands,
-                                           DictionaryAttr attributes,
-                                           mlir::PropertyRef properties,
-                                           mlir::RegionRange regions,
-                                           SmallVectorImpl<Type> &inferredReturnTypes) {
+LogicalResult SubfieldOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, mlir::PropertyRef properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &inferredReturnTypes) {
   Adaptor adaptor(operands, attributes, properties, regions);
   auto field = adaptor.getFieldAttr();
   if (!field)
@@ -107,8 +98,8 @@ LogicalResult SubfieldOp::inferReturnTypes(MLIRContext *context,
 }
 
 LogicalResult SubfieldOp::verify() {
-  auto inputType = hw::type_dyn_cast<hw::StructType>(
-      getElementType(getInput().getType()));
+  auto inputType =
+      hw::type_dyn_cast<hw::StructType>(getElementType(getInput().getType()));
   if (!inputType)
     return emitOpError("input probe element type must be an hw.struct");
 
@@ -124,13 +115,10 @@ LogicalResult SubfieldOp::verify() {
   return success();
 }
 
-LogicalResult SubindexOp::inferReturnTypes(MLIRContext *context,
-                                           std::optional<Location> location,
-                                           ValueRange operands,
-                                           DictionaryAttr attributes,
-                                           mlir::PropertyRef properties,
-                                           mlir::RegionRange regions,
-                                           SmallVectorImpl<Type> &inferredReturnTypes) {
+LogicalResult SubindexOp::inferReturnTypes(
+    MLIRContext *context, std::optional<Location> location, ValueRange operands,
+    DictionaryAttr attributes, mlir::PropertyRef properties,
+    mlir::RegionRange regions, SmallVectorImpl<Type> &inferredReturnTypes) {
   Adaptor adaptor(operands, attributes, properties, regions);
   auto indexAttr = adaptor.getIndexAttr();
   if (!indexAttr)
@@ -173,7 +161,7 @@ LogicalResult SubindexOp::verify() {
   auto index = getIndex();
   if (static_cast<uint64_t>(index) >= inputType.getNumElements())
     return emitOpError("index ") << index << " out of bounds for "
-                                  << getElementType(getInput().getType());
+                                 << getElementType(getInput().getType());
 
   if (getElementType(getResult().getType()) != inputType.getElementType())
     return emitOpError("result probe element type must match array element "

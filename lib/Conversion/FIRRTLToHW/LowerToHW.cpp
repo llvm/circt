@@ -3550,8 +3550,8 @@ LogicalResult FIRRTLLowering::visitExpr(RefResolveOp op) {
   if (isZeroBitFIRRTLType(op.getType()))
     return setLowering(op, Value());
   auto read = probe::ReadOp::create(builder, input);
-  return setLowering(op, castToHWProbePayload(read.getResult(),
-                                              lowerType(op.getType())));
+  return setLowering(
+      op, castToHWProbePayload(read.getResult(), lowerType(op.getType())));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(RefSubOp op) {
