@@ -64,7 +64,7 @@ hw.module @TestState(in %clk: !seq.clock, in %x: i4, out y: i4) {
 }
 
 hw.module private @RegModule(in %clk: !seq.clock, in %a: i4, out b: i4) {
-  %0 = seq.firreg %a clock %clk : i4
+  %0 = seq.firreg %a clock %clk {clockEdge = 0 : i32} : i4
   hw.output %0 : i4
 }
 

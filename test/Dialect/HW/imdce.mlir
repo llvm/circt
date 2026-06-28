@@ -141,14 +141,14 @@ module {
   // ELIMINATE-LABEL:   hw.module private @Child2(in
   // ELIMINATE-SAME:      %[[INPUT:.*]] : i1, in
   // ELIMINATE-SAME:      %[[CLOCK:.*]] : !seq.clock, out output : i1) {
-  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[INPUT]] clock %[[CLOCK]] {firrtl.random_init_start = 0 : ui64} : i1
+  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[INPUT]] clock %[[CLOCK]] {clockEdge = 0 : i32, firrtl.random_init_start = 0 : ui64} : i1
   // ELIMINATE:           hw.output %[[FIRREG_0]] : i1
   // ELIMINATE:         }
   hw.module private @Child2(in %input : i1, in %clock : !seq.clock, out output: i1) {
     // LIVENESS: seq.firreg
     // LIVENESS-SAME: "op-liveness" = "LIVE"
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
-    %r = seq.firreg %input clock %clock {firrtl.random_init_start = 0 : ui64} : i1
+    %r = seq.firreg %input clock %clock {clockEdge = 0 : i32, firrtl.random_init_start = 0 : ui64} : i1
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
     hw.output %r : i1
@@ -297,14 +297,14 @@ module {
   // ELIMINATE-LABEL:   hw.module public @DeadOpsInBody(in
   // ELIMINATE-SAME:      %[[A:.*]] : i1, in
   // ELIMINATE-SAME:      %[[CLK:.*]] : !seq.clock, out result : i1) {
-  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[A]] clock %[[CLK]] : i1
+  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[A]] clock %[[CLK]] {clockEdge = 0 : i32} : i1
   // ELIMINATE:           hw.output %[[A]] : i1
   // ELIMINATE:         }
   hw.module public @DeadOpsInBody(in %a: i1, in %clk: !seq.clock, out result: i1) {
     // LIVENESS: seq.firreg
     // LIVENESS-SAME: "op-liveness" = "LIVE"
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
-    %dead_reg = seq.firreg %a clock %clk : i1
+    %dead_reg = seq.firreg %a clock %clk {clockEdge = 0 : i32} : i1
     // LIVENESS: comb.and
     // LIVENESS-SAME: "op-liveness" = "DEAD"
     // LIVENESS-SAME: "val-liveness" = ["DEAD"]
@@ -386,7 +386,7 @@ module {
   // ELIMINATE-SAME:      %[[A:.*]] : i1, in
   // ELIMINATE-SAME:      %[[CLK:.*]] : !seq.clock, out result : i1) {
   // ELIMINATE:           %[[CONSTANT_0:.*]] = hw.constant true
-  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[A]] clock %[[CLK]] reset sync %[[CONSTANT_0]], %[[A]] : i1
+  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[A]] clock %[[CLK]] reset sync %[[CONSTANT_0]], %[[A]] {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i1
   // ELIMINATE:           hw.output %[[A]] : i1
   // ELIMINATE:         }
   hw.module public @SideEffectPreserved(in %a: i1, in %clk: !seq.clock, out result: i1) {
@@ -397,7 +397,7 @@ module {
     // LIVENESS: seq.firreg
     // LIVENESS-SAME: "op-liveness" = "LIVE"
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
-    %live_reg = seq.firreg %a clock %clk reset sync %reset, %a : i1
+    %live_reg = seq.firreg %a clock %clk reset sync %reset, %a {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i1
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
     hw.output %a : i1
@@ -681,14 +681,14 @@ module {
   // ELIMINATE-LABEL:   hw.module private @SideEffectMod(in
   // ELIMINATE-SAME:      %[[VAL_0]] : i1, in
   // ELIMINATE-SAME:      %[[CLK:.*]] : !seq.clock, out y : i1) {
-  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[VAL_0]] clock %[[CLK]] {firrtl.random_init_start = 0 : ui64} : i1
+  // ELIMINATE:           %[[FIRREG_0:.*]] = seq.firreg %[[VAL_0]] clock %[[CLK]] {clockEdge = 0 : i32, firrtl.random_init_start = 0 : ui64} : i1
   // ELIMINATE:           hw.output %[[FIRREG_0]] : i1
   // ELIMINATE:         }
   hw.module private @SideEffectMod(in %x: i1, in %clk: !seq.clock, out y: i1) {
     // LIVENESS: seq.firreg
     // LIVENESS-SAME: "op-liveness" = "LIVE"
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
-    %r = seq.firreg %x clock %clk {firrtl.random_init_start = 0 : ui64} : i1
+    %r = seq.firreg %x clock %clk {clockEdge = 0 : i32, firrtl.random_init_start = 0 : ui64} : i1
     // LIVENESS: hw.output
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
     hw.output %r : i1

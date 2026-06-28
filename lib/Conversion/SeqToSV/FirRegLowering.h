@@ -92,9 +92,10 @@ public:
   FirRegLowering(TypeConverter &typeConverter, hw::HWModuleOp module,
                  const PathTable &pathTable,
                  bool disableRegRandomization = false,
-                 bool emitSeparateAlwaysBlocks = false);
+                 bool emitSeparateAlwaysBlocks = false,
+                 bool emitFirRegAlwaysFF = false);
 
-  void lower();
+  LogicalResult lower();
   bool needsRegRandomization() const { return needsRandom; }
 
   unsigned numSubaccessRestored = 0;
@@ -140,11 +141,18 @@ private:
   tryRestoringSubaccess(OpBuilder &builder, Value reg, Value term,
                         hw::ArrayCreateOp nextRegValue);
 
+  // `reset` is the signal placed in the asynchronous sensitivity list (with
+  // `resetEdge`), while `resetCond` is the value tested by the `sv.if` (and
+  // used for the synchronous condition). They differ for an active-low reset,
+  // where the sensitivity uses the original signal on its falling edge but the
+  // condition is inverted (`if (!rst)`). When `resetCond` is null it defaults
+  // to `reset`.
   void addToAlwaysBlock(Block *block, sv::EventControl clockEdge, Value clock,
                         const std::function<void(OpBuilder &)> &body,
                         sv::ResetType resetStyle = {},
                         sv::EventControl resetEdge = {}, Value reset = {},
-                        const std::function<void(OpBuilder &)> &resetBody = {});
+                        const std::function<void(OpBuilder &)> &resetBody = {},
+                        Value resetCond = {});
 
   void addToIfBlock(OpBuilder &builder, Value cond,
                     const std::function<void()> &trueSide,
@@ -172,8 +180,9 @@ private:
   /// its insertion point inside the created ifdef guards.
   void buildRegConditions(OpBuilder &b, sv::RegOp reg);
 
-  using AlwaysKeyType = std::tuple<Block *, sv::EventControl, Value,
-                                   sv::ResetType, sv::EventControl, Value>;
+  using AlwaysKeyType =
+      std::tuple<Block *, sv::EventControl, Value, sv::ResetType,
+                 sv::EventControl, Value, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
 
@@ -204,8 +213,14 @@ private:
 
   bool disableRegRandomization;
   bool emitSeparateAlwaysBlocks;
+  bool emitFirRegAlwaysFF;
 
   bool needsRandom = false;
+
+  // Set when a register cannot be lowered to race-free SystemVerilog (e.g. an
+  // active-low asynchronous reset with a non-leaf reset expression in plain
+  // `always` mode). `lower()` returns failure when set.
+  bool encounteredError = false;
 };
 } // namespace circt
 

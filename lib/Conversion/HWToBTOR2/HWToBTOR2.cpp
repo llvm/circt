@@ -619,13 +619,37 @@ private:
                        });
 
     // Exit if an invalid register op was detected
-    if (failed(extract))
+    if (failed(extract)) {
+      signalPassFailure();
       return;
+    }
+
+    // The transitions emitted below model a posedge-clocked register with an
+    // active-high reset (`ite(reset, resetVal, next)` sampled on the raw
+    // clock). A non-default reset polarity or clock edge would be silently
+    // modeled as active-high / posedge, so reject those registers rather than
+    // emit an incorrect model.
+    if (auto firReg = dyn_cast<seq::FirRegOp>(op)) {
+      if (firReg.getResetPolarity().value_or(seq::ResetPolarity::PosReset) ==
+          seq::ResetPolarity::NegReset) {
+        op->emitError("active-low (NegReset) resets are not supported by the "
+                      "BTOR2 conversion");
+        signalPassFailure();
+        return;
+      }
+      if (firReg.getClockEdge() != seq::ClockEdge::Pos) {
+        op->emitError("non-posedge clock edges are not supported by the BTOR2 "
+                      "conversion");
+        signalPassFailure();
+        return;
+      }
+    }
 
     // Check for multiple clocks
     if (foundClock) {
       if (clk != foundClock) {
         op->emitError("Multi-clock designs are not currently supported.");
+        signalPassFailure();
         return;
       }
     } else {

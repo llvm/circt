@@ -6,7 +6,7 @@
 
 hw.module @AsyncReg(in %clk : !seq.clock, in %rst : i1, in %arg0: i8) {
   %c0_i8 = hw.constant 0 : i8
-  %int_rtc_tick_value = seq.firreg %arg0 clock %clk reset async %rst, %c0_i8 : i8
+  %int_rtc_tick_value = seq.firreg %arg0 clock %clk reset async %rst, %c0_i8 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i8
 }
 
 // CHECK-LABEL: hw.module @HasBeenResetAsync(
