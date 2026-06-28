@@ -467,10 +467,10 @@ def CirctHasBeenReset : FIRRTLIntrinsic {
     `UInt<1>` that is low before the reset has ever been asserted, and high
     afterwards.
 
-    | Argument | Type             | Description  |
-    | -------- | ---------------- | ------------ |
-    | clock    | Clock            | input clock  |
-    | reset    | Reset/AsyncReset | reset signal |
+    | Argument | Type  | Description  |
+    | -------- | ----- | ------------ |
+    | clock    | Clock | input clock  |
+    | reset    | Reset | reset signal |
 
     | Result | Type    | Description             |
     | ------ | ------- | ----------------------- |

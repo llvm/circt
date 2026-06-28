@@ -4,10 +4,10 @@ FIRRTL version 4.0.0
 circuit Counter :
   public module Counter :
     input clock : Clock
-    input reset : UInt<1>
+    input reset : Reset
     input en : UInt<1>
 
-    regreset count : UInt<32>, clock, reset, UInt<32>(0h0)
+    regreset count : UInt<32>, posedge clock, sync activehigh reset, UInt<32>(0h0)
 
     when and(eq(count, UInt<32>(22)), en) :
       connect count, UInt<1>(0h0)

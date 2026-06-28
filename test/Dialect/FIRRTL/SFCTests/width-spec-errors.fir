@@ -29,18 +29,9 @@ FIRRTL version 4.0.0
 circuit Unit :
   public module Unit :
     input i: UInt<2>
-    ; expected-error @+1 {{must be 1-bit uint/sint/analog, reset, asyncreset, or clock}}
+    ; expected-error @+1 {{must be 1-bit uint/sint/analog, reset, or clock}}
     node x = asClock(i)
 
-// -----
-
-; Casting a multi-bit signal to AsyncReset should result in error
-FIRRTL version 4.0.0
-circuit Unit :
-  public module Unit :
-    input i: UInt<2>
-    ; expected-error @+1 {{operand must be single bit scalar type}}
-    node x = asAsyncReset(i)
 
 // -----
 
@@ -58,9 +49,9 @@ FIRRTL version 4.0.0
 circuit Unit :
   public module Unit :
     input clock: Clock
-    input reset: UInt<1>
+    input reset: Reset
     ; expected-error @+1 {{'firrtl.regreset' op is constrained to be wider than itself}}
-    regreset r : UInt, clock, reset, UInt(3)
+    regreset r : UInt, posedge clock, sync activehigh reset, UInt(3)
     ; expected-note @+1 {{constrained width W >= W+1 here:}}
     node T_7 = add(r, r)
     ; expected-note @+1 {{constrained width W >= W+1 here:}}

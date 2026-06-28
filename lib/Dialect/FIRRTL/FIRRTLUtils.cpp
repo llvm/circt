@@ -131,12 +131,6 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
           builder, dst, dstFType, src, srcFType)))
     return;
 
-  if ((dstType.hasUninferredReset() || srcType.hasUninferredReset()) &&
-      dstType != srcType) {
-    srcType = dstType.getConstType(srcType.isConst());
-    src = UninferredResetCastOp::create(builder, srcType, src);
-  }
-
   // Handle passive types with possibly uninferred widths.
   auto dstWidth = dstType.getBitWidthOrSentinel();
   auto srcWidth = srcType.getBitWidthOrSentinel();
@@ -181,8 +175,7 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
     src = ConstCastOp::create(builder, dstType, src);
   }
 
-  // Strict connect requires the types to be completely equal, including
-  // connecting uint<1> to abstract reset types.
+  // Strict connect requires the types to be completely equal.
   if (dstType == src.getType() && dstType.isPassive() &&
       !dstType.hasUninferredWidth()) {
     MatchingConnectOp::create(builder, dst, src);
@@ -304,8 +297,7 @@ Value circt::firrtl::getModuleScopedDriver(Value val, bool lookThroughWires,
     }
 
     if (lookThroughCasts &&
-        isa<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp, AsAsyncResetPrimOp>(
-            op)) {
+        isa<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp, AsResetPrimOp>(op)) {
       val = op->getOperand(0);
       continue;
     }
@@ -430,8 +422,7 @@ bool circt::firrtl::walkDrivers(FIRRTLBaseValue value, bool lookThroughWires,
 
       // If told to look through casts, continue from the cast input.
       if (lookThroughCasts &&
-          isa<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp, AsAsyncResetPrimOp>(
-              op)) {
+          isa<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp, AsResetPrimOp>(op)) {
         auto input = op->getOperand(0);
         auto next = getFieldRefFromValue(input);
         fieldRef = next.getSubField(fieldRef.getFieldID());
@@ -540,12 +531,11 @@ FieldRef circt::firrtl::getDeltaRef(Value value, bool lookThroughCasts) {
   // dispatch to index operations' getAccesssedField(),
   // or return no delta.
   return TypeSwitch<Operation *, FieldRef>(op)
-      .Case<RefCastOp, ConstCastOp, UninferredResetCastOp>(
-          [lookThroughCasts](auto op) {
-            if (!lookThroughCasts)
-              return FieldRef();
-            return FieldRef(op.getInput(), 0);
-          })
+      .Case<RefCastOp, ConstCastOp>([lookThroughCasts](auto op) {
+        if (!lookThroughCasts)
+          return FieldRef();
+        return FieldRef(op.getInput(), 0);
+      })
       .Case<SubfieldOp, OpenSubfieldOp, SubindexOp, OpenSubindexOp, RefSubOp,
             ObjectSubfieldOp>(
           [](auto subOp) { return subOp.getAccessedField(); })

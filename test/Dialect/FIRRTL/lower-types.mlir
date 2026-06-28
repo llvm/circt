@@ -311,11 +311,11 @@ firrtl.circuit "TopLevel" {
 
     // CHECK-LABEL: firrtl.module private @RegBundle(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>)
     firrtl.module private @RegBundle(in %a: !firrtl.bundle<a: uint<1>>, in %clk: !firrtl.clock, out %b: !firrtl.bundle<a: uint<1>>) {
-      // CHECK-NEXT: %x_a = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<1>
+      // CHECK-NEXT: %x_a = firrtl.reg %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %x_a, %a_a : !firrtl.uint<1>
       // CHECK-NEXT: firrtl.connect %b_a, %x_a : !firrtl.uint<1>
-      // SIG: %x = firrtl.reg %clk : !firrtl.clock, !firrtl.bundle<a: uint<1>>
-      %x = firrtl.reg %clk {name = "x"} : !firrtl.clock, !firrtl.bundle<a: uint<1>>
+      // SIG: %x = firrtl.reg %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.bundle<a: uint<1>>
+      %x = firrtl.reg %clk {clockEdge = 0 : i32, name = "x"} : !firrtl.clock, !firrtl.bundle<a: uint<1>>
       %0 = firrtl.subfield %x[a] : !firrtl.bundle<a: uint<1>>
       %1 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>>
       firrtl.connect %0, %1 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -326,10 +326,10 @@ firrtl.circuit "TopLevel" {
 
     // CHECK-LABEL: firrtl.module private @RegBundleWithBulkConnect(in %a_a: !firrtl.uint<1>, in %clk: !firrtl.clock, out %b_a: !firrtl.uint<1>)
     firrtl.module private @RegBundleWithBulkConnect(in %a: !firrtl.bundle<a: uint<1>>, in %clk: !firrtl.clock, out %b: !firrtl.bundle<a: uint<1>>) {
-      // CHECK-NEXT: %x_a = firrtl.reg %clk : !firrtl.clock, !firrtl.uint<1>
+      // CHECK-NEXT: %x_a = firrtl.reg %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
       // CHECK-NEXT: firrtl.matchingconnect %x_a, %a_a : !firrtl.uint<1>
       // CHECK-NEXT: firrtl.matchingconnect %b_a, %x_a : !firrtl.uint<1>
-      %x = firrtl.reg %clk {name = "x"} : !firrtl.clock, !firrtl.bundle<a: uint<1>>
+      %x = firrtl.reg %clk {clockEdge = 0 : i32, name = "x"} : !firrtl.clock, !firrtl.bundle<a: uint<1>>
       firrtl.connect %x, %a : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
       firrtl.connect %b, %x : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
     }
@@ -409,14 +409,14 @@ firrtl.circuit "TopLevel" {
 
 // Test RegResetOp lowering
   // COMMON-LABEL: firrtl.module private @LowerRegResetOp
-  firrtl.module private @LowerRegResetOp(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a_d: !firrtl.vector<uint<1>, 2>, out %a_q: !firrtl.vector<uint<1>, 2>) {
+  firrtl.module private @LowerRegResetOp(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %a_d: !firrtl.vector<uint<1>, 2>, out %a_q: !firrtl.vector<uint<1>, 2>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %init = firrtl.wire  : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %init[0] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %r = firrtl.regreset %clock, %reset, %init {name = "r"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %r = firrtl.regreset %clock, %reset, %init {clockEdge = 0 : i32, name = "r", resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
@@ -425,8 +425,8 @@ firrtl.circuit "TopLevel" {
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_1, %c0_ui1 : !firrtl.uint<1>
-  // CHECK:   %r_0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %r_1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %r_0 = firrtl.regreset %clock, %reset, %init_0 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %r_1 = firrtl.regreset %clock, %reset, %init_1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.matchingconnect %r_0, %a_d_0 : !firrtl.uint<1>
   // CHECK:   firrtl.matchingconnect %r_1, %a_d_1 : !firrtl.uint<1>
   // CHECK:   firrtl.matchingconnect %a_q_0, %r_0 : !firrtl.uint<1>
@@ -437,7 +437,7 @@ firrtl.circuit "TopLevel" {
   // AGGREGATE-NEXT:  firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>
   // AGGREGATE-NEXT:  %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>
-  // AGGREGATE-NEXT:  %r = firrtl.regreset %clock, %reset, %init  : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+  // AGGREGATE-NEXT:  %r = firrtl.regreset %clock, %reset, %init {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  %2 = firrtl.subindex %a_d[0] : !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  %3 = firrtl.subindex %r[0] : !firrtl.vector<uint<1>, 2>
   // AGGREGATE-NEXT:  firrtl.matchingconnect %3, %2 : !firrtl.uint<1>
@@ -454,14 +454,14 @@ firrtl.circuit "TopLevel" {
 // Test RegResetOp lowering without name attribute
 // https://github.com/llvm/circt/issues/795
   // CHECK-LABEL: firrtl.module private @LowerRegResetOpNoName
-  firrtl.module private @LowerRegResetOpNoName(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a_d: !firrtl.vector<uint<1>, 2>, out %a_q: !firrtl.vector<uint<1>, 2>) {
+  firrtl.module private @LowerRegResetOpNoName(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %a_d: !firrtl.vector<uint<1>, 2>, out %a_q: !firrtl.vector<uint<1>, 2>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %init = firrtl.wire  : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %init[0] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %init[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %r = firrtl.regreset %clock, %reset, %init {name = ""} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %r = firrtl.regreset %clock, %reset, %init {clockEdge = 0 : i32, name = "", resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
     firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
@@ -470,8 +470,8 @@ firrtl.circuit "TopLevel" {
   // CHECK:   %init_1 = firrtl.wire  : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_0, %c0_ui1 : !firrtl.uint<1>
   // CHECK:   firrtl.connect %init_1, %c0_ui1 : !firrtl.uint<1>
-  // CHECK:   %0 = firrtl.regreset %clock, %reset, %init_0 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
-  // CHECK:   %1 = firrtl.regreset %clock, %reset, %init_1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %0 = firrtl.regreset %clock, %reset, %init_0 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:   %1 = firrtl.regreset %clock, %reset, %init_1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:   firrtl.matchingconnect %0, %a_d_0 : !firrtl.uint<1>
   // CHECK:   firrtl.matchingconnect %1, %a_d_1 : !firrtl.uint<1>
   // CHECK:   firrtl.matchingconnect %a_q_0, %0 : !firrtl.uint<1>
@@ -481,12 +481,12 @@ firrtl.circuit "TopLevel" {
 // https://github.com/llvm/circt/issues/795
   // CHECK-LABEL: firrtl.module private @lowerRegOpNoName
   firrtl.module private @lowerRegOpNoName(in %clock: !firrtl.clock, in %a_d: !firrtl.vector<uint<1>, 2>, out %a_q: !firrtl.vector<uint<1>, 2>) {
-    %r = firrtl.reg %clock {name = ""} : !firrtl.clock, !firrtl.vector<uint<1>, 2>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32, name = ""} : !firrtl.clock, !firrtl.vector<uint<1>, 2>
       firrtl.connect %r, %a_d : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
       firrtl.connect %a_q, %r : !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
- // CHECK:    %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
- // CHECK:    %1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+ // CHECK:    %0 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+ // CHECK:    %1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
  // CHECK:    firrtl.matchingconnect %0, %a_d_0 : !firrtl.uint<1>
  // CHECK:    firrtl.matchingconnect %1, %a_d_1 : !firrtl.uint<1>
  // CHECK:    firrtl.matchingconnect %a_q_0, %0 : !firrtl.uint<1>
@@ -525,15 +525,15 @@ firrtl.circuit "TopLevel" {
 
 // Test that Reg/RegResetOp Annotations are copied to lowered registers.
   // CHECK-LABEL: firrtl.module private @AnnotationsRegOp
-  firrtl.module private @AnnotationsRegOp(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  firrtl.module private @AnnotationsRegOp(in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
     %bazInit = firrtl.wire  : !firrtl.vector<uint<1>, 2>
     %0 = firrtl.subindex %bazInit[0] : !firrtl.vector<uint<1>, 2>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     firrtl.connect %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
     %1 = firrtl.subindex %bazInit[1] : !firrtl.vector<uint<1>, 2>
     firrtl.connect %1, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
-    %bar = firrtl.reg %clock  {annotations = [{a = "a"}], name = "bar"} : !firrtl.clock, !firrtl.vector<uint<1>, 2>
-    %baz = firrtl.regreset %clock, %reset, %bazInit  {annotations = [{b = "b"}], name = "baz"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+    %bar = firrtl.reg %clock  {annotations = [{a = "a"}], clockEdge = 0 : i32, name = "bar"} : !firrtl.clock, !firrtl.vector<uint<1>, 2>
+    %baz = firrtl.regreset %clock, %reset, %bazInit  {annotations = [{b = "b"}], clockEdge = 0 : i32, name = "baz", resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   }
   // CHECK: firrtl.reg
   // CHECK-SAME: annotations = [{a = "a"}]
@@ -594,16 +594,16 @@ firrtl.circuit "TopLevel" {
 // Test that subfield annotations on reg are lowred to appropriate instance based on fieldID.
  // CHECK-LABEL: firrtl.module private @AnnotationsBundle2
   firrtl.module private @AnnotationsBundle2(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock  {annotations = [
+    %bar = firrtl.reg %clock  {clockEdge = 0 : i32, annotations = [
       {circt.fieldID = 3, one},
       {circt.fieldID = 5, two}
     ]} : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
 
     // TODO: Enable this
-    // CHECK: %bar_0_baz = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_0_qux = firrtl.reg %clock  {annotations = [{one}]} : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_1_baz = firrtl.reg %clock  {annotations = [{two}]} : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_1_qux = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_baz = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_qux = firrtl.reg %clock {annotations = [{one}], clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_baz = firrtl.reg %clock {annotations = [{two}], clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_qux = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
   }
 
 // Test that subfield annotations on reg are lowred to appropriate instance based on fieldID. Ignore un-flattened array targets
@@ -612,6 +612,7 @@ firrtl.circuit "TopLevel" {
  // CHECK-LABEL: firrtl.module private @AnnotationsBundle3
   firrtl.module private @AnnotationsBundle3(in %clock: !firrtl.clock) {
     %bar = firrtl.reg %clock  {
+      clockEdge = 0 : i32,
       annotations = [
         {circt.fieldID = 6, one},
         {circt.fieldID = 12, two},
@@ -619,18 +620,18 @@ firrtl.circuit "TopLevel" {
       ]} : !firrtl.clock, !firrtl.vector<bundle<baz: vector<uint<1>, 2>, qux: vector<uint<1>, 2>, yes: bundle<a: uint<1>, b: uint<1>>>, 2>
 
     // TODO: Enable this
-    // CHECK: %bar_0_baz_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_0_baz_1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_0_qux_0 = firrtl.reg %clock  {annotations = [{one}]} : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_0_qux_1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_0_yes_a = firrtl.reg %clock  {annotations = [{three}]} : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_0_yes_b = firrtl.reg %clock  {annotations = [{three}]} : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_1_baz_0 = firrtl.reg %clock  {annotations = [{two}]} : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_1_baz_1 = firrtl.reg %clock  {annotations = [{two}]} : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_1_qux_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_1_qux_1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_1_yes_a = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: %bar_1_yes_b = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_baz_0 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_baz_1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_qux_0 = firrtl.reg %clock {annotations = [{one}], clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_qux_1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_yes_a = firrtl.reg %clock {annotations = [{three}], clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_0_yes_b = firrtl.reg %clock {annotations = [{three}], clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_baz_0 = firrtl.reg %clock {annotations = [{two}], clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_baz_1 = firrtl.reg %clock {annotations = [{two}], clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_qux_0 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_qux_1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_yes_a = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: %bar_1_yes_b = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
   }
 
 // Test wire connection semantics.  Based on the flippedness of the destination
@@ -1420,7 +1421,7 @@ firrtl.circuit "Conventions1" {
   // AGGREGATE-NEXT: firrtl.reg
   // AGGREGATE-SAME: !firrtl.vector<uint<8>, 1>
   firrtl.module public @Conventions1(in %input: !firrtl.vector<uint<8>, 1>, in %clk: !firrtl.clock, out %port: !firrtl.vector<uint<8>, 1>) attributes {convention = #firrtl<convention scalarized>, body_type_lowering = #firrtl<convention internal>}{
-    %r = firrtl.reg interesting_name %clk : !firrtl.clock, !firrtl.vector<uint<8>, 1>
+    %r = firrtl.reg interesting_name %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<uint<8>, 1>
     firrtl.matchingconnect %r, %input : !firrtl.vector<uint<8>, 1>
     firrtl.matchingconnect %port, %r : !firrtl.vector<uint<8>, 1>
   }
@@ -1429,7 +1430,7 @@ firrtl.circuit "Conventions1" {
   // AGGREGATE-NEXT: firrtl.reg
   // AGGREGATE-SAME: !firrtl.uint<8>
   firrtl.module private @Conventions2(in %input: !firrtl.vector<uint<8>, 1>, in %clk: !firrtl.clock, out %port: !firrtl.vector<uint<8>, 1>) attributes {convention = #firrtl<convention scalarized>, body_type_lowering = #firrtl<convention scalarized>}{
-    %r = firrtl.reg interesting_name %clk : !firrtl.clock, !firrtl.vector<uint<8>, 1>
+    %r = firrtl.reg interesting_name %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<uint<8>, 1>
     firrtl.matchingconnect %r, %input : !firrtl.vector<uint<8>, 1>
     firrtl.matchingconnect %port, %r : !firrtl.vector<uint<8>, 1>
   }
@@ -1438,7 +1439,7 @@ firrtl.circuit "Conventions1" {
   // AGGREGATE-NEXT: firrtl.reg
   // AGGREGATE-SAME: !firrtl.vector<uint<8>, 1>
   firrtl.module private @Conventions3(in %input: !firrtl.vector<uint<8>, 1>, in %clk: !firrtl.clock, out %port: !firrtl.vector<uint<8>, 1>) attributes {convention = #firrtl<convention internal>, body_type_lowering = #firrtl<convention internal>}{
-    %r = firrtl.reg interesting_name %clk : !firrtl.clock, !firrtl.vector<uint<8>, 1>
+    %r = firrtl.reg interesting_name %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<uint<8>, 1>
     firrtl.matchingconnect %r, %input : !firrtl.vector<uint<8>, 1>
     firrtl.matchingconnect %port, %r : !firrtl.vector<uint<8>, 1>
   }
@@ -1447,7 +1448,7 @@ firrtl.circuit "Conventions1" {
   // AGGREGATE-NEXT: firrtl.reg
   // AGGREGATE-SAME: !firrtl.uint<8>
   firrtl.module private @Conventions4(in %input: !firrtl.vector<uint<8>, 1>, in %clk: !firrtl.clock, out %port: !firrtl.vector<uint<8>, 1>) attributes {convention = #firrtl<convention internal>, body_type_lowering = #firrtl<convention scalarized>}{
-    %r = firrtl.reg interesting_name %clk : !firrtl.clock, !firrtl.vector<uint<8>, 1>
+    %r = firrtl.reg interesting_name %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<uint<8>, 1>
     firrtl.matchingconnect %r, %input : !firrtl.vector<uint<8>, 1>
     firrtl.matchingconnect %port, %r : !firrtl.vector<uint<8>, 1>
   }
@@ -1474,15 +1475,15 @@ firrtl.circuit "MemoryPrefixCopying" {
 
 firrtl.circuit "DiscardableAttributes" {
   // COMMON-LABEL: firrtl.module @DiscardableAttributes
-  firrtl.module @DiscardableAttributes(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.bundle<a: uint<1>>) {
+  firrtl.module @DiscardableAttributes(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %a: !firrtl.bundle<a: uint<1>>) {
     // CHECK-NEXT: %node_a = firrtl.node %a_a {foo}
     // CHECK-NEXT: %wire_a = firrtl.wire {foo = "bar"}
-    // CHECK-NEXT: %reg_a = firrtl.reg %clock {foo}
-    // CHECK-NEXT: %regreset_a = firrtl.regreset %clock, %reset, %a_a {foo}
+    // CHECK-NEXT: %reg_a = firrtl.reg %clock {clockEdge = 0 : i32, foo}
+    // CHECK-NEXT: %regreset_a = firrtl.regreset %clock, %reset, %a_a {clockEdge = 0 : i32, foo, resetPolarity = 0 : i32, resetType = 0 : i32}
     %node = firrtl.node %a {foo}: !firrtl.bundle<a: uint<1>>
     %wire = firrtl.wire {foo = "bar"} : !firrtl.bundle<a: uint<1>>
-    %reg = firrtl.reg %clock {foo}: !firrtl.clock, !firrtl.bundle<a: uint<1>>
-    %regreset = firrtl.regreset %clock, %reset, %a {foo}: !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
+    %reg = firrtl.reg %clock {clockEdge = 0 : i32, foo}: !firrtl.clock, !firrtl.bundle<a: uint<1>>
+    %regreset = firrtl.regreset %clock, %reset, %a {clockEdge = 0 : i32, foo, resetPolarity = 0 : i32, resetType = 0 : i32}: !firrtl.clock, !firrtl.reset, !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
   }
 }
 

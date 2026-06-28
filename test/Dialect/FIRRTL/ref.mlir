@@ -198,7 +198,7 @@ firrtl.circuit "Forceable" {
   // Check forceable declarations
   firrtl.module @Forceable(
     in %clock : !firrtl.clock,
-    in %reset : !firrtl.uint<1>,
+    in %reset : !firrtl.reset,
     in %value : !firrtl.uint<2>,
     out %node_ref : !firrtl.rwprobe<uint<2>>,
     out %wire_ref : !firrtl.rwprobe<uint>,
@@ -213,10 +213,10 @@ firrtl.circuit "Forceable" {
     firrtl.ref.define %wire_ref, %w_f : !firrtl.rwprobe<uint>
     firrtl.connect %w, %value : !firrtl.uint, !firrtl.uint<2>
 
-    %reg, %reg_f = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    %reg, %reg_f = firrtl.reg %clock forceable {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %reg_ref, %reg_f : !firrtl.rwprobe<uint<2>>
 
-    %regreset, %regreset_f = firrtl.regreset %clock, %reset, %value forceable : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
+    %regreset, %regreset_f = firrtl.regreset %clock, %reset, %value forceable {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<2>, !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %regreset_ref, %regreset_f : !firrtl.rwprobe<uint<2>>
   }
 }

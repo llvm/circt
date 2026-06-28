@@ -1053,18 +1053,6 @@ void AsUIntPrimOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<patterns::UtoStoU>(context);
 }
 
-OpFoldResult AsAsyncResetPrimOp::fold(FoldAdaptor adaptor) {
-  // No effect.
-  if (getInput().getType() == getType())
-    return getInput();
-
-  // Constant fold.
-  if (auto cst = getConstant(adaptor.getInput()))
-    return BoolAttr::get(getContext(), cst->getBoolValue());
-
-  return {};
-}
-
 OpFoldResult AsResetPrimOp::fold(FoldAdaptor adaptor) {
   if (auto cst = getConstant(adaptor.getInput()))
     return BoolAttr::get(getContext(), cst->getBoolValue());
@@ -2724,12 +2712,6 @@ OpFoldResult VectorCreateOp::fold(FoldAdaptor adaptor) {
   return collectFields(getContext(), adaptor.getOperands());
 }
 
-OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
-  if (getOperand().getType() == getType())
-    return getOperand();
-  return {};
-}
-
 namespace {
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
@@ -2900,7 +2882,8 @@ static void erasePort(PatternRewriter &rewriter, Value port) {
     auto subfield = dyn_cast<SubfieldOp>(op);
     if (!subfield) {
       auto ty = port.getType();
-      auto reg = RegOp::create(rewriter, port.getLoc(), ty, getClock());
+      auto reg = RegOp::create(rewriter, port.getLoc(), ty, getClock(),
+                               EventControl::AtPosEdge);
       rewriter.replaceAllUsesWith(port, reg.getResult());
       return;
     }
@@ -2927,7 +2910,8 @@ static void erasePort(PatternRewriter &rewriter, Value port) {
     // Replace read values with a register that is never written, handing off
     // the canonicalization of such a register to another canonicalizer.
     auto ty = access.getType();
-    auto reg = RegOp::create(rewriter, access.getLoc(), ty, getClock());
+    auto reg = RegOp::create(rewriter, access.getLoc(), ty, getClock(),
+                             EventControl::AtPosEdge);
     rewriter.replaceOp(access, reg.getResult());
   }
   assert(port.use_empty() && "port should have no remaining uses");
@@ -3471,8 +3455,9 @@ struct FoldRegMems : public mlir::OpRewritePattern<MemOp> {
     // new register (including the clock). All other ops will be placed
     // after the register.
     rewriter.setInsertionPointToEnd(block);
-    auto memReg =
-        RegOp::create(rewriter, loc, ty, clock, mem.getName()).getResult();
+    auto memReg = RegOp::create(rewriter, loc, ty, clock,
+                                EventControl::AtPosEdge, mem.getName())
+                      .getResult();
 
     // Connect the output of the register to the wire.
     MatchingConnectOp::create(rewriter, loc, memWire, memReg);
@@ -3488,6 +3473,7 @@ struct FoldRegMems : public mlir::OpRewritePattern<MemOp> {
           os << mem.getName() << "_" << name << "_" << i;
         }
         auto reg = RegOp::create(rewriter, mem.getLoc(), value.getType(), clock,
+                                 EventControl::AtPosEdge,
                                  rewriter.getStringAttr(regName))
                        .getResult();
         MatchingConnectOp::create(rewriter, value.getLoc(), reg, value);
@@ -3658,9 +3644,20 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 
   if (!constReg) {
     SmallVector<NamedAttribute, 2> attrs(reg->getDialectAttrs());
+    // The mux selector is a `UInt<1>`, but a register reset operand must be the
+    // `reset` type; convert it explicitly.
+    rewriter.setInsertionPoint(reg);
+    Value resetSignal = AsResetPrimOp::create(
+        rewriter, reg.getLoc(),
+        ResetType::get(rewriter.getContext(), isConst(mux.getSel().getType())),
+        mux.getSel());
+    // Forward the source register's clock edge; the mux-derived reset is a
+    // synchronous, active-high reset (asserted when the selector is high,
+    // sampled at the clock edge).
     auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
         rewriter, reg, reg.getResult().getType(), reg.getClockVal(),
-        mux.getSel(), mux.getHigh(), reg.getNameAttr(), reg.getNameKindAttr(),
+        resetSignal, mux.getHigh(), reg.getClockEdge(), RegResetType::SyncReset,
+        RegResetPolarity::PosReset, reg.getNameAttr(), reg.getNameKindAttr(),
         reg.getAnnotationsAttr(), reg.getInnerSymAttr(),
         reg.getForceableAttr());
     newReg->setDialectAttrs(attrs);
@@ -3894,8 +3891,10 @@ OpFoldResult HasBeenResetIntrinsicOp::fold(FoldAdaptor adaptor) {
     return getIntZerosAttr(UIntType::get(getContext(), 1));
 
   // Fold to zero if the clock is a constant and the reset is synchronous. In
-  // that case the reset will never be started.
-  if (isUInt1(getReset().getType()) && adaptor.getClock())
+  // that case the reset will never be started. Synchrony is recorded by the
+  // absence of the `asyncReset` attribute (the reset operand is the agnostic
+  // `reset` type).
+  if (!getAsyncReset() && adaptor.getClock())
     return getIntZerosAttr(UIntType::get(getContext(), 1));
 
   return {};

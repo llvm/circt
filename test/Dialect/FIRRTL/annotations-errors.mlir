@@ -128,7 +128,7 @@ firrtl.circuit "Foo"  attributes {
     // expected-error @+3 {{index access '42' into non-vector type}}
     // expected-error @+2 {{cannot resolve field 'qnx' in subtype}}
     // expected-error @+1 {{index access '1337' into non-vector type}}
-    %bar = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
   }
 }
 

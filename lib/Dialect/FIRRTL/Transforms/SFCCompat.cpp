@@ -82,10 +82,12 @@ void SFCCompatPass::runOnOperation() {
                                           return src.isa<InvalidValueOp>();
                                         })) {
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
-      RegOp newReg = RegOp::create(
-          builder, reg.getResult().getType(), reg.getClockVal(),
-          reg.getNameAttr(), reg.getNameKindAttr(), reg.getAnnotationsAttr(),
-          reg.getInnerSymAttr(), reg.getForceableAttr());
+      // Forward the (required) clock edge when dropping the reset.
+      RegOp newReg =
+          RegOp::create(builder, reg.getResult().getType(), reg.getClockVal(),
+                        reg.getClockEdge(), reg.getNameAttr(),
+                        reg.getNameKindAttr(), reg.getAnnotationsAttr(),
+                        reg.getInnerSymAttr(), reg.getForceableAttr());
       reg.replaceAllUsesWith(newReg);
       reg.erase();
       madeModifications = true;
@@ -94,8 +96,10 @@ void SFCCompatPass::runOnOperation() {
 
     // If the `RegResetOp` has an asynchronous reset and the reset value is not
     // a module-scoped constant when looking through wires and nodes, then
-    // generate an error.  This implements the SFC's CheckResets pass.
-    if (!isa<AsyncResetType>(reg.getResetSignal().getType()))
+    // generate an error.  This implements the SFC's CheckResets pass. Whether
+    // the reset is asynchronous is read from the authoritative `resetType`
+    // attribute, not the operand type (which is the agnostic `reset` type).
+    if (reg.getResetType() != RegResetType::AsyncReset)
       return WalkResult::advance();
     if (walkDrivers(
             reg.getResetValue(), true, true, true,
@@ -135,11 +139,10 @@ void SFCCompatPass::runOnOperation() {
     ImplicitLocOpBuilder builder(inv.getLoc(), inv);
     Value replacement =
         FIRRTLTypeSwitch<FIRRTLType, Value>(inv.getType())
-            .Case<ClockType, AsyncResetType, ResetType>(
-                [&](auto type) -> Value {
-                  return SpecialConstantOp::create(builder, type,
-                                                   builder.getBoolAttr(false));
-                })
+            .Case<ClockType, ResetType>([&](auto type) -> Value {
+              return SpecialConstantOp::create(builder, type,
+                                               builder.getBoolAttr(false));
+            })
             .Case<IntType>([&](IntType type) -> Value {
               return ConstantOp::create(builder, type, getIntZerosAttr(type));
             })

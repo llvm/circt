@@ -106,21 +106,6 @@ def ResetTypeImpl : FIRRTLImplType<"Reset"> {
   }];
 }
 
-def AsyncResetTypeImpl : FIRRTLImplType<"AsyncReset"> {
-  let summary = "AsyncReset signal";
-  let parameters = (ins "bool":$isConst);
-  let storageClass = "FIRRTLBaseTypeStorage";
-  let typeName = "firrtl.asyncreset";
-  let builders = [
-    TypeBuilder<(ins), [{
-      return $_get($_ctxt, false);
-    }]>
-  ];
-  let extraClassDeclaration = [{
-    AsyncResetType getConstType(bool isConst) const;
-  }];
-}
-
 def AnalogTypeImpl : FIRRTLImplType<"Analog",
   [WidthQualifiedTypeTrait]> {
   let summary = "Analog signal";

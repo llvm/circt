@@ -8,7 +8,6 @@ firrtl.circuit "Foo" {
     %1 = firrtl.and %0, %b : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   }
 }
-
 // -----
 
 firrtl.circuit "Foo" {
@@ -19,17 +18,5 @@ firrtl.circuit "Foo" {
     // expected-error @below {{verification operation used in a non-verification context}}
     %2 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %0, %2 : !firrtl.uint<1>
-  }
-}
-
-// -----
-
-firrtl.circuit "Foo" {
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %hbr: !firrtl.uint<1>) {
-    // expected-error @below {{uninferred reset passed to 'has_been_reset'; requires sync or async reset}}
-    // expected-note @below {{reset is of type '!firrtl.reset', should be '!firrtl.uint<1>' or '!firrtl.asyncreset'}}
-    // expected-error @below {{couldn't handle this operation}}
-    %0 = firrtl.int.has_been_reset %clock, %reset : !firrtl.reset
-    firrtl.matchingconnect %hbr, %0 : !firrtl.uint<1>
   }
 }
