@@ -21,7 +21,6 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   IMDeadCodeElim.cpp
   InferDomains.cpp
   InferReadWrite.cpp
-  InferResets.cpp
   InferWidths.cpp
   InjectDUTHierarchy.cpp
   InnerSymbolDCE.cpp

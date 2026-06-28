@@ -77,7 +77,7 @@ circuit Top :
 
   public module Top :
     input clock : Clock
-    input reset : UInt<1>
+    input reset : Reset
     input in : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
     output out : { uint : UInt<1>, vec : UInt<1>[2], vecOfBundle : { uint : UInt<4>, sint : SInt<2>}[2], otherOther : { other : { uint : UInt<4>, sint : SInt<2>}}}
 
