@@ -137,6 +137,23 @@ void ExternalizeRegistersPass::runOnOperation() {
           Twine regName = regOp.getName().empty() ? "reg_" + Twine(numRegs)
                                                   : regOp.getName();
 
+          // externalizeReg models a posedge-clocked register with an
+          // active-high reset (`mux(reset, resetValue, next)` on the raw
+          // clock). A non-default reset polarity or clock edge would be
+          // silently modeled as active-high / posedge, so reject those
+          // registers instead of miscompiling.
+          if (regOp.getResetPolarity().value_or(seq::ResetPolarity::PosReset) ==
+              seq::ResetPolarity::NegReset) {
+            regOp.emitError("active-low (NegReset) resets are not supported by "
+                            "externalize-registers");
+            return signalPassFailure();
+          }
+          if (regOp.getClockEdge() != seq::ClockEdge::Pos) {
+            regOp.emitError("non-posedge clock edges are not supported by "
+                            "externalize-registers");
+            return signalPassFailure();
+          }
+
           if (failed(externalizeReg(module, op, regName, regOp.getClk(),
                                     initState, regOp.getReset(),
                                     regOp.getIsAsync(), regOp.getResetValue(),

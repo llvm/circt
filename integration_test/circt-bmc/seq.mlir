@@ -78,7 +78,7 @@ hw.module @Counter_with_firreg_sync_reset(in %clk: !seq.clock, in %rst: i1, out 
   %c0_i3 = hw.constant 0 : i3
   %c1_i3 = hw.constant 1 : i3
   %regPlusOne = comb.add %reg, %c1_i3 : i3
-  %reg = seq.firreg %regPlusOne clock %clk reset sync %rst, %c0_i3 preset 1 : i3
+  %reg = seq.firreg %regPlusOne clock %clk reset sync %rst, %c0_i3 preset 1 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i3
   %neq = comb.icmp bin ne %reg, %c0_i3 : i3
   // Assertion will be violated if the reset is triggered
   verif.assert %neq : i1

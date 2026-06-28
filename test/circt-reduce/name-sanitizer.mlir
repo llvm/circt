@@ -42,22 +42,22 @@ firrtl.circuit "A" {
   ) {
     // CHECK-NEXT: %reg = firrtl.reg
     // CHECK:      firrtl.regreset
-    // CHECK-SAME:   {name = "reg"}
-    %derp = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    // CHECK-SAME:   name = "reg"
+    %derp = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
-    %herp = firrtl.regreset %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.reset, !firrtl.const.uint<1>, !firrtl.uint<1>
+    %herp = firrtl.regreset %clock, %reset, %c1_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.uint<1>, !firrtl.uint<1>
   }
   // CHECK:      firrtl.module @Foo
   // CHECK-SAME:   in %clk: !firrtl.clock
   // CHECK-SAME:   in %a: !firrtl.uint<1>
-  // CHECK-SAME:   in %rst: !firrtl.asyncreset
+  // CHECK-SAME:   in %rst: !firrtl.reset
   // CHECK-SAME:   out %b: !firrtl.uint<1>
   // CHECK-SAME:   out %ref: !firrtl.probe<uint<1>>
   // CHECK-SAME:   out %ref_0: !firrtl.rwprobe<uint<1>>
   firrtl.module @A(
     in %clock: !firrtl.clock,
     in %reset: !firrtl.uint<1>,
-    in %reset2: !firrtl.asyncreset,
+    in %reset2: !firrtl.reset,
     out %out: !firrtl.uint<1>,
     out %aProbe: !firrtl.probe<uint<1>>,
     out %bProbe: !firrtl.rwprobe<uint<1>>

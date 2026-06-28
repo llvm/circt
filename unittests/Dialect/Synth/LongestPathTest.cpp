@@ -29,8 +29,8 @@ namespace {
 
 const char *ir = R"MLIR(
     hw.module private @basic(in %clock : !seq.clock, in %a : i2, in %b : i2, out x : i2, out y: i4) {
-      %p = seq.firreg %a clock %clock : i2
-      %q = seq.firreg %s clock %clock : i2
+      %p = seq.firreg %a clock %clock {clockEdge = 0 : i32} : i2
+      %q = seq.firreg %s clock %clock {clockEdge = 0 : i32} : i2
       %r = hw.instance "inst" @child(a: %p: i2, b: %b: i2) -> (x: i2)
       %s = synth.aig.and_inv not %p, %q, %r : i2
       %dummy = comb.concat %s, %a : i2, i2

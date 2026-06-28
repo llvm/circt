@@ -89,6 +89,11 @@ bool RegOfVecToMemPass::analyzeMemoryPattern(FirRegOp reg,
   if (!isArrayType(reg.getType()))
     return false;
 
+  // Memories are posedge-clocked; do not fold a non-posedge array register into
+  // a memory, which would silently change its clock edge.
+  if (reg.getClockEdge() != ClockEdge::Pos)
+    return false;
+
   ArrayGetOp readAccess;
   ArrayInjectOp writeAccess;
   comb::MuxOp writeMux;
@@ -154,6 +159,10 @@ bool RegOfVecToMemPass::analyzeMemoryPattern(FirRegOp reg,
   for (auto *readUser : arrayGet.getResult().getUsers()) {
     if (auto outputReg = dyn_cast<FirRegOp>(readUser)) {
       if (outputReg.getClk() == pattern.clock) {
+        // A non-posedge output register cannot be folded into the posedge
+        // memory read pipeline; leave the whole pattern alone.
+        if (outputReg.getClockEdge() != ClockEdge::Pos)
+          return false;
         LLVM_DEBUG(llvm::dbgs()
                    << "  Found output register: " << outputReg << "\n");
         pattern.outputReg = outputReg;

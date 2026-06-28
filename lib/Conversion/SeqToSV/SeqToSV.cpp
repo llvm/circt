@@ -46,6 +46,7 @@ struct SeqToSVPass : public impl::LowerSeqToSVBase<SeqToSVPass> {
   using LowerSeqToSVBase<SeqToSVPass>::lowerToAlwaysFF;
   using LowerSeqToSVBase<SeqToSVPass>::disableRegRandomization;
   using LowerSeqToSVBase<SeqToSVPass>::emitSeparateAlwaysBlocks;
+  using LowerSeqToSVBase<SeqToSVPass>::emitFirRegAlwaysFF;
   using LowerSeqToSVBase<SeqToSVPass>::LowerSeqToSVBase;
   using LowerSeqToSVBase<SeqToSVPass>::numSubaccessRestored;
 };
@@ -623,10 +624,11 @@ void SeqToSVPass::runOnOperation() {
         auto &state = moduleAndState.second;
         auto module = state.module;
         SeqToSVTypeConverter typeConverter;
-        FirRegLowering regLowering(typeConverter, module, pathTable,
-                                   disableRegRandomization,
-                                   emitSeparateAlwaysBlocks);
-        regLowering.lower();
+        FirRegLowering regLowering(
+            typeConverter, module, pathTable, disableRegRandomization,
+            emitSeparateAlwaysBlocks, emitFirRegAlwaysFF);
+        if (failed(regLowering.lower()))
+          return failure();
         if (regLowering.needsRegRandomization()) {
           if (!disableRegRandomization) {
             state.fragment.needsRegFragment = true;

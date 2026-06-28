@@ -17,9 +17,9 @@ module {
 
   hw.module @shiftreg(in %clock : i1, in %reset : i1, in %en : i1, in %din : i8, out dout : i8) {
     %seq_clk = seq.to_clock %clock
-    %srA = seq.firreg %0 clock %seq_clk preset 0xFE : i8
-    %srB = seq.firreg %1 clock %seq_clk : i8
-    %srC = seq.firreg %2 clock %seq_clk preset 0xCA : i8
+    %srA = seq.firreg %0 clock %seq_clk preset 0xFE {clockEdge = 0 : i32} : i8
+    %srB = seq.firreg %1 clock %seq_clk {clockEdge = 0 : i32} : i8
+    %srC = seq.firreg %2 clock %seq_clk preset 0xCA {clockEdge = 0 : i32} : i8
     %0 = comb.mux bin %en, %din, %srA : i8
     %1 = comb.mux bin %en, %srA, %srB : i8
     %2 = comb.mux bin %en, %srB, %srC : i8

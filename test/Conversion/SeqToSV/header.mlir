@@ -75,7 +75,7 @@ emit.fragment @SomeFragment {}
 // CHECK-SAME: emit.fragments = [@SomeFragment, @RANDOM_INIT_REG_FRAGMENT, @RANDOM_INIT_FRAGMENT]
 hw.module @fragment_ref(in %clk : !seq.clock) attributes {emit.fragments = [@SomeFragment]} {
   %cst0_i32 = hw.constant 0 : i32
-  %rA = seq.firreg %cst0_i32 clock %clk sym @regA : i32
+  %rA = seq.firreg %cst0_i32 clock %clk sym @regA {clockEdge = 0 : i32} : i32
 
   %0 = seq.firmem 0, 1, undefined, undefined : <3 x 19>
 }

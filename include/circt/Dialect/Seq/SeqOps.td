@@ -235,7 +235,9 @@ def FirRegOp : SeqOp<"firreg",
     OptionalAttr<InnerSymAttr>:$inner_sym,
     OptionalAttr<APIntAttr>:$preset,
     Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-    UnitAttr:$isAsync
+    OptionalAttr<ResetTypeAttr>:$resetType,
+    ClockEdgeAttr:$clockEdge,
+    OptionalAttr<ResetPolarityAttr>:$resetPolarity
   );
   let results = (outs AnyType:$data);
 
@@ -243,14 +245,15 @@ def FirRegOp : SeqOp<"firreg",
   let hasFolder = true;
   let builders = [
     OpBuilder<(ins "Value":$next, "Value":$clk,
-                   "StringAttr":$name,
+                   "StringAttr":$name, "ClockEdge":$clockEdge,
                    CArg<"hw::InnerSymAttr", "{}">:$innerSym,
                    CArg<"Attribute","{}">:$preset)>,
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
                    "Value":$reset, "Value":$resetValue,
-                   CArg<"hw::InnerSymAttr", "{}">:$innerSym,
-                   CArg<"bool", "false">:$isAsync)>
+                   "ClockEdge":$clockEdge, "ResetType":$resetType,
+                   "ResetPolarity":$resetPolarity,
+                   CArg<"hw::InnerSymAttr", "{}">:$innerSym)>
   ];
 
   let hasCustomAssemblyFormat = 1;
@@ -261,6 +264,12 @@ def FirRegOp : SeqOp<"firreg",
     bool hasReset() { return !!getReset(); }
     /// Check whether the register has a preset value.
     bool hasPresetValue() { return !!getPresetAttr(); }
+    /// Compatibility helper: whether the reset is asynchronous. The reset kind
+    /// is stored in the `resetType` enum, which is required whenever the
+    /// register is reset-bearing; a resetless register is never asynchronous.
+    bool getIsAsync() {
+      return getResetType() == ResetType::AsyncReset;
+    }
   }];
 }
 

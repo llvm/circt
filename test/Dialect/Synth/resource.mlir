@@ -95,7 +95,7 @@ hw.module private @sequential(in %clk : !seq.clock, in %a : i8, in %b : i8, out 
   // CompReg on 8-bit: 8 DFF bits
   %r2 = seq.compreg %b, %clk : i8
   // FirReg on 8-bit: 8 DFF bits
-  %r3 = seq.firreg %a clock %clk : i8
+  %r3 = seq.firreg %a clock %clk {clockEdge = 0 : i32} : i8
   // XOR on 8-bit: (2-1) * 8 = 8 gates
   %xor = comb.xor %r1, %r2 : i8
   // Constant: no resource count
