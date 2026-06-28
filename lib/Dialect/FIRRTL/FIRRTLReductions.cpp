@@ -890,69 +890,6 @@ struct AnnotationRemover : public Reduction {
   NLARemover nlaRemover;
 };
 
-/// A reduction pattern that replaces ResetType with UInt<1> across an entire
-/// circuit. This walks all operations in the circuit and replaces ResetType in
-/// results, block arguments, and attributes.
-struct SimplifyResets : public OpReduction<CircuitOp> {
-  uint64_t match(CircuitOp circuit) override {
-    uint64_t numResets = 0;
-    AttrTypeWalker walker;
-    walker.addWalk([&](ResetType type) { ++numResets; });
-
-    circuit.walk([&](Operation *op) {
-      for (auto result : op->getResults())
-        walker.walk(result.getType());
-
-      for (auto &region : op->getRegions())
-        for (auto &block : region)
-          for (auto arg : block.getArguments())
-            walker.walk(arg.getType());
-
-      walker.walk(op->getAttrDictionary());
-    });
-
-    return numResets;
-  }
-
-  LogicalResult rewrite(CircuitOp circuit) override {
-    auto uint1Type = UIntType::get(circuit->getContext(), 1, false);
-    auto constUint1Type = UIntType::get(circuit->getContext(), 1, true);
-
-    AttrTypeReplacer replacer;
-    replacer.addReplacement([&](ResetType type) {
-      return type.isConst() ? constUint1Type : uint1Type;
-    });
-    replacer.recursivelyReplaceElementsIn(circuit, /*replaceAttrs=*/true,
-                                          /*replaceLocs=*/false,
-                                          /*replaceTypes=*/true);
-
-    // Remove annotations related to InferResets pass
-    circuit.walk([&](Operation *op) {
-      // Remove operation annotations
-      AnnotationSet::removeAnnotations(op, [&](Annotation anno) {
-        return anno.isClass(fullResetAnnoClass, excludeFromFullResetAnnoClass,
-                            fullAsyncResetAnnoClass,
-                            ignoreFullAsyncResetAnnoClass);
-      });
-
-      // Remove port annotations for module-like operations
-      if (auto module = dyn_cast<FModuleLike>(op)) {
-        AnnotationSet::removePortAnnotations(module, [&](unsigned portIdx,
-                                                         Annotation anno) {
-          return anno.isClass(fullResetAnnoClass, excludeFromFullResetAnnoClass,
-                              fullAsyncResetAnnoClass,
-                              ignoreFullAsyncResetAnnoClass);
-        });
-      }
-    });
-
-    return success();
-  }
-
-  std::string getName() const override { return "firrtl-simplify-resets"; }
-  bool acceptSizeIncrease() const override { return true; }
-};
-
 /// A sample reduction pattern that removes ports from the root `firrtl.module`
 /// if the port is not used or just invalidated.
 struct RootPortPruner : public OpReduction<firrtl::FModuleOp> {
@@ -1385,7 +1322,8 @@ struct ConnectSourceOperandForwarder : public Reduction {
       // the error might be caused by the register.
       auto clock = destOp->getOperand(0);
       newDest = firrtl::RegOp::create(builder, forwardedOperand.getType(),
-                                      clock, regName ? regName.str() : "")
+                                      clock, firrtl::EventControl::AtPosEdge,
+                                      regName ? regName.str() : "")
                     .getResult();
     }
 
@@ -1446,7 +1384,8 @@ struct DetachSubaccesses : public Reduction {
         replOp = firrtl::WireOp::create(builder, user->getLoc(), type);
       else
         replOp =
-            firrtl::RegOp::create(builder, user->getLoc(), type, invalidClock);
+            firrtl::RegOp::create(builder, user->getLoc(), type, invalidClock,
+                                  firrtl::EventControl::AtPosEdge);
       user->replaceAllUsesWith(replOp);
       opsToErase.insert(user);
     }
@@ -1745,9 +1684,9 @@ struct ResetDisconnector : public OpReduction<RegResetOp> {
     ImplicitLocOpBuilder builder(regResetOp.getLoc(), regResetOp);
     auto regOp = RegOp::create(
         builder, regResetOp.getResult().getType(), regResetOp.getClockVal(),
-        regResetOp.getNameAttr(), regResetOp.getNameKindAttr(),
-        regResetOp.getAnnotationsAttr(), regResetOp.getInnerSymAttr(),
-        regResetOp.getForceableAttr());
+        regResetOp.getClockEdge(), regResetOp.getNameAttr(),
+        regResetOp.getNameKindAttr(), regResetOp.getAnnotationsAttr(),
+        regResetOp.getInnerSymAttr(), regResetOp.getForceableAttr());
 
     regResetOp.getResult().replaceAllUsesWith(regOp.getResult());
     if (regResetOp.getForceable())
@@ -1874,7 +1813,7 @@ struct ModuleNameSanitizer : OpReduction<firrtl::CircuitOp> {
           auto newName = firrtl::FIRRTLTypeSwitch<Type, StringRef>(port.type)
                              .Case<firrtl::ClockType>(
                                  [&](auto a) { return ns.newName("clk"); })
-                             .Case<firrtl::ResetType, firrtl::AsyncResetType>(
+                             .Case<firrtl::ResetType>(
                                  [&](auto a) { return ns.newName("rst"); })
                              .Case<firrtl::RefType>(
                                  [&](auto a) { return ns.newName("ref"); })
@@ -2684,7 +2623,6 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   // prioritized). For example, things that can knock out entire modules while
   // being cheap should be tried first (and thus have higher benefit), before
   // trying to tweak operands of individual arithmetic ops.
-  patterns.add<SimplifyResets, 35>();
   patterns.add<ForceDedup, 34>();
   patterns.add<MustDedupChildren, 33>();
   patterns.add<AnnotationRemover, 32>();
@@ -2698,8 +2636,6 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
   patterns.add<PassReduction, 28>(getContext(),
                                   firrtl::createLowerCHIRRTLPass(), true, true);
   patterns.add<PassReduction, 27>(getContext(), firrtl::createInferWidths(),
-                                  true, true);
-  patterns.add<PassReduction, 26>(getContext(), firrtl::createInferResets(),
                                   true, true);
   patterns.add<FIRRTLModuleExternalizer, 25>();
   patterns.add<InstanceStubber, 24>();

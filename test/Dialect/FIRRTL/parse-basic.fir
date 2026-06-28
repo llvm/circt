@@ -60,7 +60,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   module types :
     input c: Clock         ; CHECK: %c: !firrtl.clock,
     input r: Reset         ; CHECK: %r: !firrtl.reset,
-    input ar: AsyncReset   ; CHECK: %ar: !firrtl.asyncreset,
+    input ar: Reset   ; CHECK: %ar: !firrtl.reset,
     input a: Analog        ; CHECK: %a: !firrtl.analog,
     input a8: Analog<8>    ; CHECK: %a8: !firrtl.analog<8>,
     input s: SInt          ; CHECK: %s: !firrtl.sint,
@@ -75,7 +75,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   ; CHECK-LABEL: firrtl.module private @stmts(
   module stmts :
     input reset : UInt<1>         ; CHECK: in %reset: !firrtl.uint<1>,
-    input reset_async: AsyncReset ; CHECK: in %reset_async: !firrtl.asyncreset,
+    input reset_async: Reset ; CHECK: in %reset_async: !firrtl.reset,
     input reset_abstract: Reset   ; CHECK: in %reset_abstract: !firrtl.reset,
     input clock : Clock           ; CHECK: in %clock: !firrtl.clock,
     output auto : UInt<1>         ; CHECK: out %auto: !firrtl.uint<1>,
@@ -149,7 +149,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     node check_u3 = asUInt(a8)
     ; CHECK: firrtl.asUInt %reset_abstract : (!firrtl.reset) -> !firrtl.uint<1>
     node check_u5 = asUInt(reset_abstract)
-    ; CHECK: firrtl.asUInt %reset_async : (!firrtl.asyncreset) -> !firrtl.uint<1>
+    ; CHECK: firrtl.asUInt %reset_async : (!firrtl.reset) -> !firrtl.uint<1>
     node check_u6 = asUInt(reset_async)
 
     ; CHECK: firrtl.asSInt %clock : (!firrtl.clock) -> !firrtl.sint<1>
@@ -162,21 +162,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     node check_s3 = asSInt(a8)
     ; CHECK: firrtl.asSInt %reset_abstract : (!firrtl.reset) -> !firrtl.sint<1>
     node check_s5 = asSInt(reset_abstract)
-    ; CHECK: firrtl.asSInt %reset_async : (!firrtl.asyncreset) -> !firrtl.sint<1>
+    ; CHECK: firrtl.asSInt %reset_async : (!firrtl.reset) -> !firrtl.sint<1>
     node check_s6 = asSInt(reset_async)
-
-    ; CHECK: firrtl.asAsyncReset %clock : (!firrtl.clock) -> !firrtl.asyncreset
-    node check_ar0 = asAsyncReset(clock)
-    ; CHECK: firrtl.asAsyncReset %reset : (!firrtl.uint<1>) -> !firrtl.asyncreset
-    node check_ar1 = asAsyncReset(reset)
-    ; CHECK: firrtl.asAsyncReset %s1 : (!firrtl.sint<1>) -> !firrtl.asyncreset
-    node check_ar2 = asAsyncReset(s1)
-    ; CHECK: firrtl.asAsyncReset %a1 : (!firrtl.analog<1>) -> !firrtl.asyncreset
-    node check_ar3 = asAsyncReset(a1)
-    ; CHECK: firrtl.asAsyncReset %reset_abstract : (!firrtl.reset) -> !firrtl.asyncreset
-    node check_ar4 = asAsyncReset(reset_abstract)
-    ; CHECK: firrtl.asAsyncReset %reset_async : (!firrtl.asyncreset) -> !firrtl.asyncreset
-    node check_ar5 = asAsyncReset(reset_async)
 
     ; CHECK: firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
     node check_r0 = asReset(reset)
@@ -191,7 +178,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     node check_c3 = asClock(a1)
     ; CHECK: firrtl.asClock %reset_abstract : (!firrtl.reset) -> !firrtl.clock
     node check_c4 = asClock(reset_abstract)
-    ; CHECK: firrtl.asClock %reset_async : (!firrtl.asyncreset) -> !firrtl.clock
+    ; CHECK: firrtl.asClock %reset_async : (!firrtl.reset) -> !firrtl.clock
     node check_c5 = asClock(reset_async)
 
     ; CHECK: firrtl.node interesting_name %auto : !firrtl.uint<1>
@@ -283,11 +270,13 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: firrtl.mux(%reset, %i8, %{{.*}}) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.const.uint) -> !firrtl.uint
     node n8 = mux(reset, i8, UInt(4))
 
-    ; CHECK: %_t_2621 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<4>, !firrtl.uint<4>
-    regreset _t_2621 : UInt<4>, clock, reset, UInt<4>(0h0) @[Edges.scala 230:27]
+    ; CHECK: [[RST2621:%.+]] = firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
+    ; CHECK: %_t_2621 = firrtl.regreset interesting_name %clock, [[RST2621]], %{{.*}} {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.uint<4>, !firrtl.uint<4>
+    regreset _t_2621 : UInt<4>, posedge clock, sync activehigh asReset(reset), UInt<4>(0h0) @[Edges.scala 230:27]
 
-    ; CHECK: %_t_1601 = firrtl.regreset interesting_name %clock, %reset, %{{.*}} : !firrtl.clock, !firrtl.uint<1>, !firrtl.const.uint<2>, !firrtl.uint<2>
-    regreset _t_1601 : UInt<2>, clock, reset, UInt<2>(0h00) @[Edges.scala 230:27]
+    ; CHECK: [[RST1601:%.+]] = firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
+    ; CHECK: %_t_1601 = firrtl.regreset interesting_name %clock, [[RST1601]], %{{.*}} {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.uint<2>, !firrtl.uint<2>
+    regreset _t_1601 : UInt<2>, posedge clock, sync activehigh asReset(reset), UInt<2>(0h00) @[Edges.scala 230:27]
 
     ; CHECK: firrtl.div %i8, %{{.*}} : (!firrtl.uint<8>, !firrtl.const.uint<4>) -> !firrtl.uint<8>
     node n9 = div(i8, UInt<4>(4))
@@ -300,8 +289,8 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     ; CHECK: firrtl.tail %{{.*}}, 3 : (!firrtl.sint<8>) -> !firrtl.uint<5>
     node n10s = tail(asSInt(i8), 3)
 
-    ; CHECK: %_t_2622 = firrtl.reg interesting_name %clock : !firrtl.clock, !firrtl.uint<4>
-    reg _t_2622 : UInt<4>, clock
+    ; CHECK: %_t_2622 = firrtl.reg interesting_name %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<4>
+    reg _t_2622 : UInt<4>, posedge clock
 
     ; CHECK: %xyz_in = firrtl.instance xyz interesting_name @circuit(in in: !firrtl.uint<80>)
     inst xyz of circuit
@@ -632,26 +621,26 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
     output clkOut: Clock
     connect clkOut, clkIn
     ; CHECK: firrtl.reg interesting_name %clkOut
-    reg r: UInt<1>, clkOut
+    reg r: UInt<1>, posedge clkOut
 
   ; Check that a register reset sink is converted to passive
   ; CHECK-LABEL: firrtl.module private @register_reset_passive
   module register_reset_passive:
     input clk: Clock
-    output rst: UInt<1>
+    output rst: Reset
     invalidate rst
     ; CHECK: firrtl.regreset interesting_name %clk, %rst
-    regreset r: UInt<1>, clk, rst, UInt<1>(0)
+    regreset r: UInt<1>, posedge clk, sync activehigh rst, UInt<1>(0)
 
   ; Check that a register init sink is converted to passive
   ; CHECK-LABEL: firrtl.module private @register_init_passive
   module register_init_passive:
     input clk: Clock
-    input rst: UInt<1>
+    input rst: Reset
     output init: UInt<1>
     invalidate init
     ; CHECK: firrtl.regreset interesting_name %clk, %rst, %init
-    regreset r: UInt<1>, clk, rst, init
+    regreset r: UInt<1>, posedge clk, sync activehigh rst, init
 
   ; https://github.com/llvm/circt/issues/492
   ; CHECK-LABEL: firrtl.module private @WriteOnlyMemIssue492
@@ -880,27 +869,20 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
 
   ; CHECK-LABEL: firrtl.module private @issue1303
   module issue1303:
+    input i: UInt<1>
     output out: Reset
-    connect out, UInt(1)
-    ; CHECK: %[[c1:.*]] = firrtl.constant 1 : !firrtl.const.uint
-    ; CHECK-NEXT: %[[c2:.*]] = firrtl.resetCast %[[c1]]
-    ; CHECK-NEXT: %[[c3:.*]] = firrtl.constCast %[[c2]]
-    ; CHECK-NEXT: firrtl.matchingconnect %out, %[[c3]] : !firrtl.reset
+    connect out, asReset(i)
+    ; CHECK: %[[r1:.*]] = firrtl.asReset %i : (!firrtl.uint<1>) -> !firrtl.reset
+    ; CHECK-NEXT: firrtl.matchingconnect %out, %[[r1]] : !firrtl.reset
 
 
   ; CHECK-LABEL: @resetBundle
   module resetBundle:
-    input a: {a: UInt<1>, b: AsyncReset}
+    input a: {a: Reset, b: Reset}
     output b: {a: Reset, b: Reset}
 
     connect b, a
-    ; CHECK: %1 = firrtl.subfield %a[a] : !firrtl.bundle<a: uint<1>, b: asyncreset>
-    ; CHECK: %[[r1:.*]] = firrtl.resetCast %1
-    ; CHECK: firrtl.matchingconnect %0, %[[r1]] : !firrtl.reset
-    ; CHECK: %3 = firrtl.subfield %b[b] : !firrtl.bundle<a: reset, b: reset>
-    ; CHECK: %4 = firrtl.subfield %a[b] : !firrtl.bundle<a: uint<1>, b: asyncreset>
-    ; CHECK: %[[r4:.*]] = firrtl.resetCast %4
-    ; CHECK: firrtl.matchingconnect %3, %[[r4]] : !firrtl.reset
+    ; CHECK: firrtl.matchingconnect %b, %a : !firrtl.bundle<a: reset, b: reset>
 
   module LargeMem :
     input clock : Clock
@@ -1188,7 +1170,7 @@ circuit MyModule :     ; CHECK: firrtl.circuit "MyModule"
   module ConstTypes:
     input c: const Clock         ; CHECK: %c: !firrtl.const.clock,
     input r: const Reset         ; CHECK: %r: !firrtl.const.reset,
-    input ar: const AsyncReset   ; CHECK: %ar: !firrtl.const.asyncreset,
+    input ar: const Reset   ; CHECK: %ar: !firrtl.const.reset,
     input a: const Analog        ; CHECK: %a: !firrtl.const.analog,
     input a8: const Analog<8>    ; CHECK: %a8: !firrtl.const.analog<8>,
     input s: const SInt          ; CHECK: %s: !firrtl.const.sint,
@@ -1242,7 +1224,7 @@ FIRRTL version 3.0.0
 circuit Foo_v3p0p0:
   module Foo_v3p0p0:
     input clock: Clock
-    input reset: UInt<1>
+    input reset: Reset
     input a: UInt<1>
     output b: UInt<1>
 
@@ -1255,7 +1237,7 @@ circuit Foo_v3p0p0:
 
     ; CHECK:      %[[zero:[0-9A-Za-z_]+]] = firrtl.constant 0
     ; CHECK-NEXT: %r = firrtl.regreset interesting_name %clock, %reset, %[[zero]]
-    regreset r: UInt<1>, clock, reset, UInt<1>(0)
+    regreset r: UInt<1>, posedge clock, sync activehigh reset, UInt<1>(0)
 
   ; CHECK: module private @LiteralIdentifiers
   ; CHECK-SAME: in %_0: !firrtl.bundle<"1": uint<1>>

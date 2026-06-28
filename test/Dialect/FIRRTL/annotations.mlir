@@ -374,10 +374,10 @@ firrtl.circuit "Foo" attributes {
     }
   ]
 } {
-  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
-    %bar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+  firrtl.module @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
+    %bar = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %baz = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %baz = firrtl.regreset %clock, %reset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -461,7 +461,7 @@ firrtl.circuit "Foo" attributes {
   ]
 } {
   firrtl.module @Foo(in %clock: !firrtl.clock) {
-    %bar = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
+    %bar = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<bundle<baz: uint<1>, qux: uint<1>>, 2>
   }
 }
 
@@ -966,12 +966,13 @@ firrtl.circuit "Foo"  attributes {
     %_T_0 = firrtl.wire  : !firrtl.uint<1>
     // CHECK-NEXT: %_T_1 = firrtl.node %_T_0 {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_1 = firrtl.node %_T_0  : !firrtl.uint<1>
-    // CHECK-NEXT: %_T_2 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
-    %_T_2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    // CHECK-NEXT: %_T_2 = firrtl.reg %clock {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], clockEdge = 0 : i32}
+    %_T_2 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
+    %reset_r = firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
     // CHECK: %_T_3 = firrtl.regreset
-    // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
-    %_T_3 = firrtl.regreset %clock, %reset, %c0_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>
+    // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}], clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32}
+    %_T_3 = firrtl.regreset %clock, %reset_r, %c0_ui4 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<4>, !firrtl.uint<4>
     // CHECK-NEXT: %_T_4 = chirrtl.seqmem
     // CHECK-SAME: {annotations = [{class = "firrtl.transforms.DontTouchAnnotation"}]}
     %_T_4 = chirrtl.seqmem Undefined  : !chirrtl.cmemory<vector<uint<1>, 9>, 256>
@@ -1208,8 +1209,8 @@ firrtl.circuit "GCTInterface"  attributes {
     firrtl.skip
   }
   firrtl.module @GCTInterface(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %a: !firrtl.uint<1>) {
-    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
-    %forceable_reg, %forceable_reg_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>, !firrtl.rwprobe<bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+    %forceable_reg, %forceable_reg_ref = firrtl.reg %clock forceable {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>, !firrtl.rwprobe<bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>>
     firrtl.instance view_companion  @view_companion()
   }
 }
@@ -1285,8 +1286,8 @@ firrtl.circuit "GCTInterface"  attributes {
 // The RefSend must be generated.
 // CHECK: firrtl.module @GCTInterface
 // CHECK-SAME: %a: !firrtl.uint<1>
-// CHECK:      %r = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
-// CHECK:      %forceable_reg, %forceable_reg_ref = firrtl.reg %clock forceable : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>, !firrtl.rwprobe<bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>>
+// CHECK:      %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
+// CHECK:      %forceable_reg, %forceable_reg_ref = firrtl.reg %clock forceable {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>, !firrtl.rwprobe<bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>>
 // CHECK:      %[[view_companion_view__2refPort:.+]], %[[view_companion_view__2refPort_1:.+]], %[[view_companion_view__1refPort:.+]], %[[view_companion_view__0refPort:.+]], %[[view_companion_view_portrefPort:.+]] = firrtl.instance view_companion  @view_companion(in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>, in {{.*}}: !firrtl.uint<1>)
 // CHECK:      %0 = firrtl.subfield %r[_2] : !firrtl.bundle<_0: bundle<_0: uint<1>, _1: uint<1>>, _2: vector<uint<1>, 2>>
 // CHECK:      %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 2>
@@ -1641,7 +1642,7 @@ firrtl.circuit "GrandCentralViewInsideCompanion" attributes {
   // CHECK:      firrtl.module @Companion
   firrtl.module @Companion(out %b: !firrtl.uint<2>) {
     %clock = firrtl.specialconstant 0 : !firrtl.clock
-    %a = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    %a = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     // CHECK:      firrtl.node %a
     // CHECK-SAME:   {class = "sifive.enterprise.grandcentral.AugmentedGroundType", id = [[aId]] : i64}
     // CHECK-SAME:   : !firrtl.uint<1>
@@ -1855,8 +1856,9 @@ firrtl.circuit "Top" attributes {
 }
 
 // -----
-// Check that FullAsyncResetAnnotation is lowered to FullResetAnnotation (and prints a warning)
-// CHECK-LABEL: firrtl.circuit "Top"
+// Check that FullAsyncResetAnnotation is rejected: reset inference (InferResets)
+// has been removed, so the full-reset annotations are no longer implemented.
+// expected-error @+1 {{Unable to apply annotation}}
 firrtl.circuit "Top" attributes {
   rawAnnotations = [
     {
@@ -1864,15 +1866,13 @@ firrtl.circuit "Top" attributes {
       target = "~Top|Top>reset"
     }]
   } {
-  // CHECK-LABEL: firrtl.module @Top
-  // CHECK-SAME: (in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}])
-  // expected-warning @+1 {{'sifive.enterprise.firrtl.FullAsyncResetAnnotation' is deprecated, use 'circt.FullResetAnnotation' instead}}
-  firrtl.module @Top(in %reset: !firrtl.asyncreset) {}
+  // expected-error @+1 {{the 'sifive.enterprise.firrtl.FullAsyncResetAnnotation' annotation is no longer supported}}
+  firrtl.module @Top(in %reset: !firrtl.reset) {}
 }
 
 // -----
-// Check that IgnoreFullAsyncResetAnnotation is lowered to ExcludeFromFullResetAnnotation (and prints a warning)
-// CHECK-LABEL: firrtl.circuit "Top"
+// Check that IgnoreFullAsyncResetAnnotation is likewise rejected.
+// expected-error @+1 {{Unable to apply annotation}}
 firrtl.circuit "Top" attributes {
   rawAnnotations = [
     {
@@ -1880,8 +1880,6 @@ firrtl.circuit "Top" attributes {
       target = "~Top|Top"
     }]
   } {
-  // CHECK-LABEL: firrtl.module @Top
-  // CHECK-SAME: (in %reset: !firrtl.asyncreset) attributes {annotations = [{class = "circt.ExcludeFromFullResetAnnotation"}]}
-  // expected-warning @+1 {{'sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation' is deprecated, use 'circt.ExcludeFromFullResetAnnotation' instead}}
-  firrtl.module @Top(in %reset: !firrtl.asyncreset) {}
+  // expected-error @+1 {{the 'sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation' annotation is no longer supported}}
+  firrtl.module @Top(in %reset: !firrtl.reset) {}
 }

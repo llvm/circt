@@ -47,7 +47,7 @@ firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.analog) {
 }
 }
 
-/// Reset types can be connected to Reset, UInt<1>, or AsyncReset types.
+/// A reset connects only to another reset; a `UInt<1>` is not a reset.
 
 // Reset source.
 
@@ -113,15 +113,6 @@ firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.clock) {
 
 }
 
-// -----
-
-firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.uint<1>, out %b : !firrtl.asyncreset) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.asyncreset' and source '!firrtl.uint<1>'}}
-  firrtl.connect %b, %a : !firrtl.asyncreset, !firrtl.uint<1>
-}
-}
-
 // SInt<> source.
 
 // -----
@@ -145,9 +136,9 @@ firrtl.module @test(in %a : !firrtl.sint<1>, out %b : !firrtl.clock) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.sint<1>, out %b : !firrtl.asyncreset) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.asyncreset' and source '!firrtl.sint<1>'}}
-  firrtl.connect %b, %a : !firrtl.asyncreset, !firrtl.sint<1>
+firrtl.module @test(in %a : !firrtl.sint<1>, out %b : !firrtl.reset) {
+  // expected-error @+1 {{type mismatch between destination '!firrtl.reset' and source '!firrtl.sint<1>'}}
+  firrtl.connect %b, %a : !firrtl.reset, !firrtl.sint<1>
 }
 }
 
@@ -174,38 +165,27 @@ firrtl.module @test(in %a : !firrtl.clock, out %b : !firrtl.sint<1>) {
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.clock, out %b : !firrtl.asyncreset) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.asyncreset' and source '!firrtl.clock'}}
-  firrtl.connect %b, %a : !firrtl.asyncreset, !firrtl.clock
-}
-}
-
-// AsyncReset source.
-
-// -----
-
-firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.asyncreset, out %b : !firrtl.uint<1>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.uint<1>' and source '!firrtl.asyncreset'}}
-  firrtl.connect %b, %a : !firrtl.uint<1>, !firrtl.asyncreset
+firrtl.module @test(in %a : !firrtl.clock, out %b : !firrtl.reset) {
+  // expected-error @+1 {{type mismatch between destination '!firrtl.reset' and source '!firrtl.clock'}}
+  firrtl.connect %b, %a : !firrtl.reset, !firrtl.clock
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.asyncreset, out %b : !firrtl.sint<1>) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.sint<1>' and source '!firrtl.asyncreset'}}
-  firrtl.connect %b, %a : !firrtl.sint<1>, !firrtl.asyncreset
+firrtl.module @test(in %a : !firrtl.reset, out %b : !firrtl.sint<1>) {
+  // expected-error @+1 {{type mismatch between destination '!firrtl.sint<1>' and source '!firrtl.reset'}}
+  firrtl.connect %b, %a : !firrtl.sint<1>, !firrtl.reset
 }
 }
 
 // -----
 
 firrtl.circuit "test" {
-firrtl.module @test(in %a : !firrtl.asyncreset, out %b : !firrtl.clock) {
-  // expected-error @+1 {{type mismatch between destination '!firrtl.clock' and source '!firrtl.asyncreset'}}
-  firrtl.connect %b, %a : !firrtl.clock, !firrtl.asyncreset
+firrtl.module @test(in %a : !firrtl.reset, out %b : !firrtl.clock) {
+  // expected-error @+1 {{type mismatch between destination '!firrtl.clock' and source '!firrtl.reset'}}
+  firrtl.connect %b, %a : !firrtl.clock, !firrtl.reset
 }
 }
 

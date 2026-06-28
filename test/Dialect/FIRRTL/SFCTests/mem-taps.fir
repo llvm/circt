@@ -38,7 +38,7 @@ circuit Top : %[[
 
   public module Top :
     input clock : Clock
-    input reset : UInt<1>
+    input reset : Reset
     output io : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}
 
     inst dut of DUTModule

@@ -67,8 +67,7 @@ struct MemToRegOfVecPass
       // supposed to be an SRAM.  In either possible eventual lowering by later
       // passes (blackboxing or lowering to a behavioral model) we don't want to
       // blow this out here as it both breaks expectations about later passes
-      // that may add asynchronous resets (InferResets) or that expect metadata
-      // on SRAMs to not be split up (LowerClasses).
+      // or that expect metadata on SRAMs to not be split up (LowerClasses).
       if (firMem.isSeqMem())
         return;
 
@@ -83,7 +82,9 @@ struct MemToRegOfVecPass
       return pipeInput;
 
     while (stages--) {
-      auto reg = RegOp::create(b, pipeInput.getType(), clock, name).getResult();
+      auto reg = RegOp::create(b, pipeInput.getType(), clock,
+                               EventControl::AtPosEdge, name)
+                     .getResult();
       if (gate) {
         WhenOp::create(b, gate, /*withElseRegion*/ false,
                        [&]() { MatchingConnectOp::create(b, reg, pipeInput); });
@@ -368,7 +369,7 @@ struct MemToRegOfVecPass
         // Create the register corresponding to the memory.
         regOfVec =
             RegOp::create(builder, FVectorType::get(dataType, firMem.depth),
-                          clk, memOp.getNameAttr());
+                          clk, EventControl::AtPosEdge, memOp.getNameAttr());
 
         // Copy all the memory annotations.
         if (!memOp.getAnnotationsAttr().empty())

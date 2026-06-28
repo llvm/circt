@@ -45,9 +45,8 @@ public:
             // Misc Binary Primitives.
             CatPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
             // Unary operators.
-            AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
-            AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp,
-            OrRPrimOp, XorRPrimOp,
+            AsSIntPrimOp, AsUIntPrimOp, AsResetPrimOp, AsClockPrimOp, CvtPrimOp,
+            NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
             // Intrinsic Expressions.
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
             SizeOfIntrinsicOp, ClockGateIntrinsicOp, ClockInverterIntrinsicOp,
@@ -64,7 +63,7 @@ public:
             RefResolveOp, RefSubOp, RWProbeOp, XMRRefOp, XMRDerefOp,
             UnsafeDomainCastOp,
             // Casts to deal with weird stuff
-            UninferredResetCastOp, ConstCastOp, RefCastOp,
+            ConstCastOp, RefCastOp,
             // Property expressions.
             StringConstantOp, FIntegerConstantOp, BoolConstantOp,
             DoubleConstantOp, ListCreateOp, ListConcatOp, UnresolvedPathOp,
@@ -156,7 +155,6 @@ public:
   // Unary operators.
   HANDLE(AsSIntPrimOp, Unary);
   HANDLE(AsUIntPrimOp, Unary);
-  HANDLE(AsAsyncResetPrimOp, Unary);
   HANDLE(AsResetPrimOp, Unary);
   HANDLE(AsClockPrimOp, Unary);
   HANDLE(CvtPrimOp, Unary);
@@ -216,7 +214,6 @@ public:
 
   // Conversions.
   HANDLE(HWStructCastOp, Unhandled);
-  HANDLE(UninferredResetCastOp, Unhandled);
   HANDLE(ConstCastOp, Unhandled);
   HANDLE(BitCastOp, Unhandled);
   HANDLE(RefCastOp, Unhandled);

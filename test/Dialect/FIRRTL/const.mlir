@@ -18,9 +18,6 @@ firrtl.module @ConstClock(in %a: !firrtl.const.clock) {}
 // CHECK-LABEL: firrtl.module @ConstReset(in %a: !firrtl.const.reset) {
 firrtl.module @ConstReset(in %a: !firrtl.const.reset) {}
 
-// CHECK-LABEL: firrtl.module @ConstAsyncReset(in %a: !firrtl.const.asyncreset) {
-firrtl.module @ConstAsyncReset(in %a: !firrtl.const.asyncreset) {}
-
 // CHECK-LABEL: firrtl.module @ConstEnum(in %a: !firrtl.const.enum<a: uint<1>, b: uint<2>>) {
 firrtl.module @ConstEnum(in %a: !firrtl.const.enum<a: uint<1>, b: uint<2>>) {}
 
@@ -130,8 +127,8 @@ firrtl.module @ConstSubtag(in %in : !firrtl.const.enum<a: uint<1>, b: uint<2>>,
 }
 
 // CHECK-LABEL: firrtl.module @ConstRegResetValue
-firrtl.module @ConstRegResetValue(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetValue: !firrtl.const.sint<1>) {
-  %0 = firrtl.regreset %clock, %reset, %resetValue : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.sint<1>, !firrtl.sint<1>
+firrtl.module @ConstRegResetValue(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetValue: !firrtl.const.sint<1>) {
+  %0 = firrtl.regreset %clock, %reset, %resetValue {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.sint<1>, !firrtl.sint<1>
 }
 
 // CHECK-LABEL: firrtl.module @ConstCast

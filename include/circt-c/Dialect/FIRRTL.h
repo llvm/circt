@@ -152,12 +152,6 @@ MLIR_CAPI_EXPORTED bool firrtlTypeIsAReset(MlirType type);
 /// Creates a reset type.
 MLIR_CAPI_EXPORTED MlirType firrtlTypeGetReset(MlirContext ctx);
 
-/// Checks if this type is an async reset type.
-MLIR_CAPI_EXPORTED bool firrtlTypeIsAAsyncReset(MlirType type);
-
-/// Creates an async reset type.
-MLIR_CAPI_EXPORTED MlirType firrtlTypeGetAsyncReset(MlirContext ctx);
-
 /// Checks if this type is an analog type.
 MLIR_CAPI_EXPORTED bool firrtlTypeIsAAnalog(MlirType type);
 

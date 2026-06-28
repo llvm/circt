@@ -662,10 +662,24 @@ def CatBitsBits : Pat <
   (MoveNameHint $old, (BitsPrimOp $x, $hi, $low)),
   [(AdjInt $mid2, $mid)]>;
 
+// The register's reset polarity is active-high (PosReset).  resetPolarity is a
+// required attribute on a reset-bearing register, so this matches the value
+// explicitly rather than the (now impossible) absence of the attribute.
+def ResetPolarityIsPosReset : Constraint<CPred<
+  "$0 && llvm::cast<::circt::firrtl::RegResetPolarityAttr>($0).getValue() == "
+  "::circt::firrtl::RegResetPolarity::PosReset">,
+  "reset polarity is active-high (PosReset)">;
+
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
+// Only valid for active-high reset, where a constant-zero reset never asserts.
+// The clock edge is preserved; the reset kind/polarity attributes are dropped
+// along with the reset.  Restricted to active-high (PosReset) reset polarity so
+// an active-low reset, where a constant-zero reset is always asserted, is never
+// silently dropped.
 def RegResetWithZeroReset : Pat<
-  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable),
-  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable), [(ZeroConstantOp $reset)]>;
+  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable, $clockEdge, $resetType, $resetPolarity),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable, $clockEdge),
+  [(ZeroConstantOp $reset), (ResetPolarityIsPosReset $resetPolarity)]>;
 
 // ref.resolve(ref.send(a)) -> a
 def RefResolveOfRefSend : Pat<

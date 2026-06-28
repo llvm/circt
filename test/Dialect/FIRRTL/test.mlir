@@ -24,8 +24,6 @@ firrtl.module @Constants() {
   firrtl.specialconstant 1 : !firrtl.clock
   // CHECK: %c1_reset = firrtl.specialconstant 1 : !firrtl.reset
   firrtl.specialconstant 1 : !firrtl.reset
-  // CHECK: %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
-  firrtl.specialconstant 1 : !firrtl.asyncreset
   // CHECK: firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
   firrtl.constant 4 : !firrtl.uint<8> {name = "test"}
 
@@ -129,8 +127,8 @@ firrtl.module @TestDshRL(in %in1 : !firrtl.uint<2>, in %in2: !firrtl.uint<3>) {
 
 // We allow implicit truncation of a register's reset value.
 // CHECK-LABEL: @RegResetTruncation
-firrtl.module @RegResetTruncation(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %value: !firrtl.bundle<a: uint<2>>, out %out: !firrtl.bundle<a: uint<1>>) {
-  %r2 = firrtl.regreset %clock, %reset, %value  : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
+firrtl.module @RegResetTruncation(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %value: !firrtl.bundle<a: uint<2>>, out %out: !firrtl.bundle<a: uint<1>>) {
+  %r2 = firrtl.regreset %clock, %reset, %value  {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<1>>
   firrtl.connect %out, %r2 : !firrtl.bundle<a: uint<1>>, !firrtl.bundle<a: uint<1>>
 }
 

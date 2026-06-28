@@ -3,7 +3,7 @@
 firrtl.circuit "TLRAM" {
 // Test the case when the enable is a simple not of write enable.
 // CHECK-LABEL: firrtl.module @TLRAM
-    firrtl.module @TLRAM(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %index: !firrtl.uint<4>, in %index2: !firrtl.uint<4>, in %data_0: !firrtl.uint<8>, in %wen: !firrtl.uint<1>, in %_T_29: !firrtl.uint<1>, out %auto_0: !firrtl.uint<8>, out %dbg_0: !firrtl.probe<vector<uint<8>, 16>>) {
+    firrtl.module @TLRAM(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %index: !firrtl.uint<4>, in %index2: !firrtl.uint<4>, in %data_0: !firrtl.uint<8>, in %wen: !firrtl.uint<1>, in %_T_29: !firrtl.uint<1>, out %auto_0: !firrtl.uint<8>, out %dbg_0: !firrtl.probe<vector<uint<8>, 16>>) {
       %mem_MPORT_en = firrtl.wire  : !firrtl.uint<1>
       %mem_MPORT_data_0 = firrtl.wire  : !firrtl.uint<8>
       %debug, %mem_0_MPORT, %mem_0_MPORT_1 = firrtl.mem Undefined  {depth = 16 : i64, name = "mem_0", portNames = ["dbgs", "MPORT", "MPORT_1"], prefix = "foo_", readLatency = 1 : i32, writeLatency = 1 : i32} :  !firrtl.probe<vector<uint<8>, 16>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
@@ -28,9 +28,9 @@ firrtl.circuit "TLRAM" {
       firrtl.connect %8, %_T_29 : !firrtl.uint<1>, !firrtl.uint<1>
       %9 = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
       firrtl.connect %mem_MPORT_en, %9 : !firrtl.uint<1>, !firrtl.uint<1>
-      %REG = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+      %REG = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
       firrtl.connect %REG, %9 : !firrtl.uint<1>, !firrtl.uint<1>
-      %r_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<8>
+      %r_0 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<8>
       %10 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
       firrtl.connect %r_0, %10 : !firrtl.uint<8>, !firrtl.uint<8>
       %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
@@ -243,7 +243,7 @@ firrtl.circuit "TLRAM" {
     firrtl.connect %io_dataOut, %8 : !firrtl.uint<32>, !firrtl.uint<32>
   }
 
-    firrtl.module @constMask(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %index: !firrtl.uint<4>, in %index2: !firrtl.uint<4>, in %data_0: !firrtl.uint<8>, in %wen: !firrtl.uint<1>, in %_T_29: !firrtl.uint<1>, out %auto_0: !firrtl.uint<8>) {
+    firrtl.module @constMask(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %index: !firrtl.uint<4>, in %index2: !firrtl.uint<4>, in %data_0: !firrtl.uint<8>, in %wen: !firrtl.uint<1>, in %_T_29: !firrtl.uint<1>, out %auto_0: !firrtl.uint<8>) {
       %mem_MPORT_en = firrtl.wire  : !firrtl.uint<1>
       %mem_MPORT_data_0 = firrtl.wire  : !firrtl.uint<8>
       %mem_0_MPORT, %mem_0_MPORT_1 = firrtl.mem Undefined  {depth = 16 : i64, name = "mem_0", portNames = ["MPORT", "MPORT_1"], prefix = "Foo_", readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<8>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<2>>
@@ -273,9 +273,9 @@ firrtl.circuit "TLRAM" {
       firrtl.connect %8, %c1 : !firrtl.uint<2>, !firrtl.uint<2>
       %9 = firrtl.not %wen : (!firrtl.uint<1>) -> !firrtl.uint<1>
       firrtl.connect %mem_MPORT_en, %9 : !firrtl.uint<1>, !firrtl.uint<1>
-      %REG = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+      %REG = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
       firrtl.connect %REG, %9 : !firrtl.uint<1>, !firrtl.uint<1>
-      %r_0 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<8>
+      %r_0 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<8>
       %10 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
       firrtl.connect %r_0, %10 : !firrtl.uint<8>, !firrtl.uint<8>
       %11 = firrtl.mux(%REG, %mem_MPORT_data_0, %r_0) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>

@@ -367,12 +367,13 @@ def BlackBoxTargetDirAnno : NoTargetAnnotation {
 def FullResetAnnotation : SingleTargetAnnotation {
   let className = "circt.FullResetAnnotation";
   let allowPortTargets = 1;
+  let customHandler = "rejectRemovedFullResetAnno";
   let members = (ins
     Doc<EnumParam<["async", "sync"]>, "Type of reset">:$resetType
   );
   let description = [{
     The target must be a signal that is a reset. The type of the signal must be
-    (or inferred to be) the same as the reset type specified in the annotation.
+    the same as the reset type specified in the annotation.
 
     Indicates that all reset-less registers which are children of the module
     containing the target will have the reset targeted attached, with a reset
@@ -396,6 +397,7 @@ def ExcludeFromFullResetAnnotation : SingleTargetAnnotation {
   let className = "circt.ExcludeFromFullResetAnnotation";
   let allowNonLocal = 1;
   let targets = [Module];
+  let customHandler = "rejectRemovedFullResetAnno";
   let description = [{
     This annotation indicates that the target module should be excluded from the
     FullResetAnnotation of a parent module.
@@ -556,7 +558,7 @@ def VerbatimBlackBoxAnno : SingleTargetAnnotation {
 def FullAsyncResetAnnotation : SingleTargetAnnotation {
   let className = "sifive.enterprise.firrtl.FullAsyncResetAnnotation";
   let description = [{
-    The target must be a signal that is or is inferred to be an asynchronous reset.
+    The target must be a signal that is a reset.
 
     Indicates that all reset-less registers which are children of the module
     containing the target will have the asynchronous reset targeted attached,
@@ -574,7 +576,7 @@ def FullAsyncResetAnnotation : SingleTargetAnnotation {
     }
     ```
   }];
-  let customHandler = "convertToFullResetAnnotation";
+  let customHandler = "rejectRemovedFullResetAnno";
 }
 
 def IgnoreFullAsyncResetAnnotation : SingleTargetAnnotation {
@@ -591,7 +593,7 @@ def IgnoreFullAsyncResetAnnotation : SingleTargetAnnotation {
     }
     ```
   }];
-  let customHandler = "convertToExcludeFromFullResetAnnotation";
+  let customHandler = "rejectRemovedFullResetAnno";
 }
 
 //===----------------------------------------------------------------------===//

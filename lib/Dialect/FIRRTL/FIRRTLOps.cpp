@@ -3808,6 +3808,28 @@ RegOp::computeDataFlow() {
   return {};
 }
 
+LogicalResult RegOp::verify() {
+  // Reset behavior attributes are meaningless on a register that has no reset.
+  // Reject them rather than silently ignoring them so that mis-stamped IR is
+  // caught instead of producing surprising hardware.
+  for (StringRef attrName : {"resetType", "resetPolarity"})
+    if ((*this)->hasAttr(attrName))
+      return emitOpError("has reset attribute '")
+             << attrName
+             << "', which is only valid on 'firrtl.regreset' (this register "
+                "has no reset)";
+
+  // A dual-edge clock is not valid synthesizable logic, so reject it rather
+  // than carry it through to emission. The `clockEdge` attribute itself is
+  // required (front-end-explicit, no default); the ODS-generated verifier
+  // rejects its absence.
+  if (getClockEdge() == EventControl::AtEdge)
+    return emitOpError("has 'clockEdge = edge' (dual-edge), which is not valid "
+                       "synthesizable logic; use 'posedge' or 'negedge'");
+
+  return success();
+}
+
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
 
@@ -3818,6 +3840,18 @@ LogicalResult RegResetOp::verify() {
   if (!areTypesEquivalent(regType, resetType))
     return emitError("type mismatch between register ")
            << regType << " and reset value " << resetType;
+
+  // Whether the reset is synchronous or asynchronous is recorded solely by the
+  // `resetType` attribute (front-end-explicit). The reset signal's `reset` type
+  // is deliberately agnostic and carries no sync/async information.
+
+  // A dual-edge clock is not valid synthesizable logic, so reject it rather
+  // than carry it through to emission. The clock edge, reset kind, and reset
+  // polarity attributes are required (front-end-explicit, no defaults); the
+  // ODS-generated verifier rejects their absence.
+  if (getClockEdge() == EventControl::AtEdge)
+    return emitOpError("has 'clockEdge = edge' (dual-edge), which is not valid "
+                       "synthesizable logic; use 'posedge' or 'negedge'");
 
   return success();
 }
@@ -4665,9 +4699,7 @@ void InvalidValueOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
       name = "invalid_analog";
     else
       name = ("invalid_analog" + Twine(width)).str();
-  } else if (type_isa<AsyncResetType>(getType()))
-    name = "invalid_asyncreset";
-  else if (type_isa<ResetType>(getType()))
+  } else if (type_isa<ResetType>(getType()))
     name = "invalid_reset";
   else if (type_isa<ClockType>(getType()))
     name = "invalid_clock";
@@ -4835,8 +4867,6 @@ void SpecialConstantOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
     specialName << "_clock";
   } else if (type_isa<ResetType>(type)) {
     specialName << "_reset";
-  } else if (type_isa<AsyncResetType>(type)) {
-    specialName << "_asyncreset";
   }
   setNameFn(getResult(), specialName.str());
 }
@@ -5837,18 +5867,6 @@ FIRRTLType AsUIntPrimOp::inferReturnType(FIRRTLType input,
   return UIntType::get(input.getContext(), width, base.isConst());
 }
 
-FIRRTLType AsAsyncResetPrimOp::inferReturnType(FIRRTLType input,
-                                               std::optional<Location> loc) {
-  auto base = type_dyn_cast<FIRRTLBaseType>(input);
-  if (!base)
-    return emitInferRetTypeError(loc,
-                                 "operand must be single bit scalar base type");
-  int32_t width = base.getBitWidthOrSentinel();
-  if (width == -2 || width == 0 || width > 1)
-    return emitInferRetTypeError(loc, "operand must be single bit scalar type");
-  return AsyncResetType::get(input.getContext(), base.isConst());
-}
-
 FIRRTLType AsResetPrimOp::inferReturnType(FIRRTLType input,
                                           std::optional<Location> loc) {
   auto base = type_dyn_cast<FIRRTLBaseType>(input);
@@ -6627,9 +6645,6 @@ void AndRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 void SizeOfIntrinsicOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
-void AsAsyncResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
 void AsResetPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
@@ -6802,10 +6817,6 @@ void XorPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 }
 
 void XorRPrimOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
-  genericAsmResultNames(*this, setNameFn);
-}
-
-void UninferredResetCastOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
   genericAsmResultNames(*this, setNameFn);
 }
 

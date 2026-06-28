@@ -238,7 +238,7 @@ circuit test_mod : %[[{"class": "circt.testNT", "data": "a"}]]
     input a_d: UInt<1>
     output a_q: UInt<1>
 
-    reg r: UInt<1>, clock
+    reg r: UInt<1>, posedge clock
 
     connect r, a_d
     connect a_q, r

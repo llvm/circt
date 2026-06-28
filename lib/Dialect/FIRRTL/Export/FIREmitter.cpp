@@ -136,7 +136,6 @@ struct Emitter {
   void emitExpression(RefSubOp op);
   void emitExpression(RWProbeOp op);
   void emitExpression(RefCastOp op);
-  void emitExpression(UninferredResetCastOp op);
   void emitExpression(ConstCastOp op);
   void emitExpression(StringConstantOp op);
   void emitExpression(FIntegerConstantOp op);
@@ -190,7 +189,6 @@ struct Emitter {
   HANDLE(MuxPrimOp, "mux");
   HANDLE(AsSIntPrimOp, "asSInt");
   HANDLE(AsUIntPrimOp, "asUInt");
-  HANDLE(AsAsyncResetPrimOp, "asAsyncReset");
   HANDLE(AsResetPrimOp, "asReset");
   HANDLE(AsClockPrimOp, "asClock");
   HANDLE(CvtPrimOp, "cvt");
@@ -903,6 +901,8 @@ void Emitter::emitStatement(RegOp op) {
     ps << "reg " << PPExtString(legalName);
     emitTypeWithColon(op.getResult().getType());
     ps << "," << PP::space;
+    ps << (op.getClockEdge() == EventControl::AtNegEdge ? "negedge" : "posedge")
+       << PP::space;
     emitExpression(op.getClockVal());
   });
   emitLocationAndNewLine(op);
@@ -912,22 +912,43 @@ void Emitter::emitStatement(RegResetOp op) {
   auto legalName = legalize(op.getNameAttr());
   addForceable(op, legalName);
   startStatement();
+  const char *clockEdge =
+      op.getClockEdge() == EventControl::AtNegEdge ? "negedge" : "posedge";
   if (FIRVersion(3, 0, 0) <= version) {
+    const char *resetKind =
+        op.getResetType() == RegResetType::AsyncReset ? "async" : "sync";
+    const char *resetPolarity =
+        op.getResetPolarity() == RegResetPolarity::NegReset ? "activelow"
+                                                            : "activehigh";
     ps.scopedBox(PP::ibox2, [&]() {
       ps << "regreset " << legalName;
       emitTypeWithColon(op.getResult().getType());
       ps << "," << PP::space;
+      ps << clockEdge << PP::space;
       emitExpression(op.getClockVal());
       ps << "," << PP::space;
+      ps << resetKind << PP::space << resetPolarity << PP::space;
       emitExpression(op.getResetSignal());
       ps << "," << PP::space;
       emitExpression(op.getResetValue());
     });
   } else {
+    // The legacy `reg ... with :` form (FIRRTL < 3.0.0) has no syntax for the
+    // reset kind or polarity; it is always synchronous active-high. Refuse to
+    // export an asynchronous or active-low reset rather than silently emit it
+    // as synchronous active-high, which would change the hardware on re-import.
+    if (op.getResetType() == RegResetType::AsyncReset ||
+        op.getResetPolarity() == RegResetPolarity::NegReset) {
+      emitOpError(op, "cannot be exported to FIRRTL versions < 3.0.0: the "
+                      "legacy register syntax cannot represent an asynchronous "
+                      "or active-low reset; emit version >= 3.0.0 or MLIR");
+      return;
+    }
     ps.scopedBox(PP::ibox2, [&]() {
       ps << "reg " << legalName;
       emitTypeWithColon(op.getResult().getType());
       ps << "," << PP::space;
+      ps << clockEdge << PP::space;
       emitExpression(op.getClockVal());
       ps << PP::space << "with :";
       // Don't break this because of the newline.
@@ -1560,16 +1581,14 @@ void Emitter::emitExpression(Value value) {
           OrPrimOp, XorPrimOp, LEQPrimOp, LTPrimOp, GEQPrimOp, GTPrimOp,
           EQPrimOp, NEQPrimOp, DShlPrimOp, DShlwPrimOp, DShrPrimOp,
           // Unary
-          AsSIntPrimOp, AsUIntPrimOp, AsAsyncResetPrimOp, AsResetPrimOp,
-          AsClockPrimOp, CvtPrimOp, NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp,
-          XorRPrimOp,
+          AsSIntPrimOp, AsUIntPrimOp, AsResetPrimOp, AsClockPrimOp, CvtPrimOp,
+          NegPrimOp, NotPrimOp, AndRPrimOp, OrRPrimOp, XorRPrimOp,
           // Miscellaneous
           BitsPrimOp, HeadPrimOp, TailPrimOp, PadPrimOp, MuxPrimOp, ShlPrimOp,
-          ShrPrimOp, UninferredResetCastOp, ConstCastOp, StringConstantOp,
-          FIntegerConstantOp, BoolConstantOp, DoubleConstantOp, ListCreateOp,
-          UnresolvedPathOp, GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp,
-          UnknownValueOp, StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp,
-          BoolXorOp,
+          ShrPrimOp, ConstCastOp, StringConstantOp, FIntegerConstantOp,
+          BoolConstantOp, DoubleConstantOp, ListCreateOp, UnresolvedPathOp,
+          GenericIntrinsicOp, CatPrimOp, UnsafeDomainCastOp, UnknownValueOp,
+          StringConcatOp, PropEqOp, BoolAndOp, BoolOrOp, BoolXorOp,
           // Reference expressions
           RefSendOp, RefResolveOp, RefSubOp, RWProbeOp, RefCastOp,
           // Format String expressions
@@ -1605,9 +1624,16 @@ void Emitter::emitExpression(SpecialConstantOp op) {
         emitInner();
         ps << ")";
       })
-      .Case<ResetType>([&](auto type) { emitInner(); })
-      .Case<AsyncResetType>([&](auto type) {
-        ps << "asAsyncReset(";
+      .Case<ResetType>([&](auto type) {
+        // A `UInt<1>` is no longer accepted directly as a reset value, so wrap
+        // the constant with `asReset` to keep the emitted FIRRTL re-parseable.
+        // `asReset` is only available from FIRVersion 7.0.0
+        // (missingSpecFIRVersion), and a bare `UInt<1>` does not re-import as a
+        // reset under strict reset typing, so there is no earlier-version form
+        // for a reset constant: reject export to an older target version rather
+        // than emit output that will not re-parse.
+        (void)requireVersion(missingSpecFIRVersion, op, "reset constants");
+        ps << "asReset(";
         emitInner();
         ps << ")";
       });
@@ -1721,10 +1747,6 @@ void Emitter::emitExpression(RWProbeOp op) {
 }
 
 void Emitter::emitExpression(RefCastOp op) { emitExpression(op.getInput()); }
-
-void Emitter::emitExpression(UninferredResetCastOp op) {
-  emitExpression(op.getInput());
-}
 
 void Emitter::emitExpression(FIntegerConstantOp op) {
   if (failed(requireVersion(FIRVersion(3, 1, 0), op, "Integers")))
@@ -1894,7 +1916,6 @@ void Emitter::emitType(Type type, bool includeConst) {
   FIRRTLTypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { ps << "Clock"; })
       .Case<ResetType>([&](auto) { ps << "Reset"; })
-      .Case<AsyncResetType>([&](auto) { ps << "AsyncReset"; })
       .Case<UIntType>([&](auto type) {
         ps << "UInt";
         emitWidth(type.getWidth());

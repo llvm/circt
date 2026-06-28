@@ -54,7 +54,6 @@ static LogicalResult customTypePrinter(Type type, AsmPrinter &os) {
   TypeSwitch<Type>(type)
       .Case<ClockType>([&](auto) { os << "clock"; })
       .Case<ResetType>([&](auto) { os << "reset"; })
-      .Case<AsyncResetType>([&](auto) { os << "asyncreset"; })
       .Case<SIntType>([&](auto sIntType) {
         os << "sint";
         printWidthQualifier(sIntType.getWidth());
@@ -210,7 +209,6 @@ void circt::firrtl::printNestedType(Type type, AsmPrinter &os) {
 /// firrtl-type
 ///   ::= clock
 ///   ::= reset
-///   ::= asyncreset
 ///   ::= sint ('<' int '>')?
 ///   ::= uint ('<' int '>')?
 ///   ::= analog ('<' int '>')?
@@ -236,8 +234,13 @@ static OptionalParseResult customTypeParser(AsmParser &parser, StringRef name,
     return result = ClockType::get(context, isConst), success();
   if (name == "reset")
     return result = ResetType::get(context, isConst), success();
-  if (name == "asyncreset")
-    return result = AsyncResetType::get(context, isConst), success();
+  if (name == "asyncreset") {
+    parser.emitError(parser.getCurrentLocation())
+        << "the 'asyncreset' type has been removed; represent the reset as "
+           "'reset' and record the asynchronous behavior with the register's "
+           "'resetType' attribute";
+    return failure();
+  }
 
   if (name == "sint" || name == "uint" || name == "analog") {
     // Parse the width specifier if it exists.
@@ -718,8 +721,8 @@ struct circt::firrtl::detail::FIRRTLBaseTypeStorage : mlir::TypeStorage {
 /// Return true if this is a 'ground' type, aka a non-aggregate type.
 bool FIRRTLType::isGround() {
   return TypeSwitch<FIRRTLType, bool>(*this)
-      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType>([](Type) { return true; })
+      .Case<ClockType, ResetType, SIntType, UIntType, AnalogType>(
+          [](Type) { return true; })
       .Case<BundleType, FVectorType, FEnumType, OpenBundleType, OpenVectorType>(
           [](Type) { return false; })
       .Case<BaseTypeAliasType>([](BaseTypeAliasType alias) {
@@ -744,14 +747,12 @@ bool FIRRTLBaseType::isConst() const { return getImpl()->isConst; }
 
 RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
   return TypeSwitch<FIRRTLType, RecursiveTypeProperties>(*this)
-      .Case<ClockType, ResetType, AsyncResetType>([](FIRRTLBaseType type) {
-        return RecursiveTypeProperties{true,
-                                       false,
-                                       false,
-                                       type.isConst(),
-                                       false,
-                                       false,
-                                       firrtl::type_isa<ResetType>(type)};
+      .Case<ClockType, ResetType>([](FIRRTLBaseType type) {
+        // `reset` is now a concrete, sync/async-agnostic reset type (the
+        // dedicated `asyncreset` type is gone and there is no reset inference),
+        // so it never counts as an "uninferred reset".
+        return RecursiveTypeProperties{true,  false, false, type.isConst(),
+                                       false, false, false};
       })
       .Case<SIntType, UIntType>([](auto type) {
         return RecursiveTypeProperties{
@@ -787,8 +788,8 @@ RecursiveTypeProperties FIRRTLType::getRecursiveTypeProperties() const {
 /// Return this type with any type aliases recursively removed from itself.
 FIRRTLBaseType FIRRTLBaseType::getAnonymousType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
-      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType>([&](Type) { return *this; })
+      .Case<ClockType, ResetType, SIntType, UIntType, AnalogType>(
+          [&](Type) { return *this; })
       .Case<BundleType, FVectorType, FEnumType, BaseTypeAliasType>(
           [](auto type) { return type.getAnonymousType(); })
       .Default([](Type) {
@@ -800,8 +801,8 @@ FIRRTLBaseType FIRRTLBaseType::getAnonymousType() {
 /// Return this type with any flip types recursively removed from itself.
 FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
-      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType, FEnumType>([&](Type) { return *this; })
+      .Case<ClockType, ResetType, SIntType, UIntType, AnalogType, FEnumType>(
+          [&](Type) { return *this; })
       .Case<BundleType, FVectorType, FEnumType, BaseTypeAliasType>(
           [](auto type) { return type.getPassiveType(); })
       .Default([](Type) {
@@ -813,8 +814,8 @@ FIRRTLBaseType FIRRTLBaseType::getPassiveType() {
 /// Return a 'const' or non-'const' version of this type.
 FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) const {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
-      .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
-            UIntType, BundleType, FVectorType, FEnumType, BaseTypeAliasType>(
+      .Case<ClockType, ResetType, AnalogType, SIntType, UIntType, BundleType,
+            FVectorType, FEnumType, BaseTypeAliasType>(
           [&](auto type) { return type.getConstType(isConst); })
       .Default([](Type) {
         llvm_unreachable("unknown FIRRTL type");
@@ -825,8 +826,8 @@ FIRRTLBaseType FIRRTLBaseType::getConstType(bool isConst) const {
 /// Return this type with a 'const' modifiers dropped
 FIRRTLBaseType FIRRTLBaseType::getAllConstDroppedType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
-      .Case<ClockType, ResetType, AsyncResetType, AnalogType, SIntType,
-            UIntType>([&](auto type) { return type.getConstType(false); })
+      .Case<ClockType, ResetType, AnalogType, SIntType, UIntType>(
+          [&](auto type) { return type.getConstType(false); })
       .Case<BundleType, FVectorType, FEnumType, BaseTypeAliasType>(
           [&](auto type) { return type.getAllConstDroppedType(); })
       .Default([](Type) {
@@ -839,10 +840,10 @@ FIRRTLBaseType FIRRTLBaseType::getAllConstDroppedType() {
 /// used for `mem` operations.
 FIRRTLBaseType FIRRTLBaseType::getMaskType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
-      .Case<ClockType, ResetType, AsyncResetType, SIntType, UIntType,
-            AnalogType, FEnumType>([&](Type) {
-        return UIntType::get(this->getContext(), 1, this->isConst());
-      })
+      .Case<ClockType, ResetType, SIntType, UIntType, AnalogType, FEnumType>(
+          [&](Type) {
+            return UIntType::get(this->getContext(), 1, this->isConst());
+          })
       .Case<BundleType>([&](BundleType bundleType) {
         SmallVector<BundleType::BundleElement, 4> newElements;
         newElements.reserve(bundleType.getElements().size());
@@ -870,7 +871,7 @@ FIRRTLBaseType FIRRTLBaseType::getMaskType() {
 /// unknown width.
 FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
   return TypeSwitch<FIRRTLBaseType, FIRRTLBaseType>(*this)
-      .Case<ClockType, ResetType, AsyncResetType>([](auto a) { return a; })
+      .Case<ClockType, ResetType>([](auto a) { return a; })
       .Case<UIntType, SIntType, AnalogType>(
           [&](auto a) { return a.get(this->getContext(), -1, a.isConst()); })
       .Case<BundleType>([&](auto a) {
@@ -908,7 +909,7 @@ FIRRTLBaseType FIRRTLBaseType::getWidthlessType() {
 /// type.
 int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
   return TypeSwitch<FIRRTLBaseType, int32_t>(*this)
-      .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+      .Case<ClockType, ResetType>([](Type) { return 1; })
       .Case<SIntType, UIntType>(
           [&](IntType intType) { return intType.getWidthOrSentinel(); })
       .Case<AnalogType>(
@@ -925,14 +926,12 @@ int32_t FIRRTLBaseType::getBitWidthOrSentinel() {
       });
 }
 
-/// Return true if this is a type usable as a reset. This must be
-/// either an abstract reset, a concrete 1-bit UInt, an
-/// asynchronous reset, or an uninfered width UInt.
+/// Return true if this is a reset signal type. The only reset signal type is
+/// the (sync/async-agnostic) `reset` type; a bare `UInt<1>` is NOT a reset and
+/// must be converted explicitly with `asReset`.
 bool FIRRTLBaseType::isResetType() {
   return TypeSwitch<FIRRTLType, bool>(*this)
-      .Case<ResetType, AsyncResetType>([](Type) { return true; })
-      .Case<UIntType>(
-          [](UIntType a) { return !a.hasWidth() || a.getWidth() == 1; })
+      .Case<ResetType>([](Type) { return true; })
       .Case<BaseTypeAliasType>(
           [](auto type) { return type.getInnerType().isResetType(); })
       .Default([](Type) { return false; });
@@ -1075,11 +1074,12 @@ bool firrtl::areTypesEquivalent(FIRRTLType destFType, FIRRTLType srcFType,
   if (destIsConst && !srcIsConst)
     return false;
 
-  // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+  // A reset can only be driven by another reset; a `UInt<1>` must be converted
+  // with `asReset` first.
   if (firrtl::type_isa<ResetType>(destType))
     return srcType.isResetType();
 
-  // Reset types can drive UInt<1>, AsyncReset, or Reset types.
+  // A reset can only drive another reset; use `asUInt` to read it as data.
   if (firrtl::type_isa<ResetType>(srcType))
     return destType.isResetType();
 
@@ -1234,7 +1234,8 @@ bool firrtl::areTypesRefCastable(Type dstType, Type srcType) {
                  });
     }
 
-    // Reset types can be driven by UInt<1>, AsyncReset, or Reset types.
+    // A reset can only be driven by another reset; a `UInt<1>` must be
+    // converted with `asReset` first.
     if (type_isa<ResetType>(dest))
       return src.isResetType();
     // (but don't allow the other direction, can only become more general)
@@ -2613,16 +2614,6 @@ ResetType ResetType::getConstType(bool isConst) const {
 }
 
 //===----------------------------------------------------------------------===//
-// AsyncResetType
-//===----------------------------------------------------------------------===//
-
-AsyncResetType AsyncResetType::getConstType(bool isConst) const {
-  if (isConst == this->isConst())
-    return *this;
-  return get(getContext(), isConst);
-}
-
-//===----------------------------------------------------------------------===//
 // ClassType
 //===----------------------------------------------------------------------===//
 
@@ -3035,7 +3026,7 @@ std::optional<int64_t> firrtl::getBitWidth(FIRRTLBaseType type,
           return *w * vector.getNumElements();
         })
         .Case<IntType>([&](IntType iType) { return iType.getWidth(); })
-        .Case<ClockType, ResetType, AsyncResetType>([](Type) { return 1; })
+        .Case<ClockType, ResetType>([](Type) { return 1; })
         .Default([&](auto t) { return std::nullopt; });
   };
   return getWidth(type);

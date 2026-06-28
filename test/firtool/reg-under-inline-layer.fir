@@ -8,7 +8,7 @@ circuit RegUnderInlineLayer:
   layer A, inline:
 
   public module RegUnderInlineLayer:
-    input reset: UInt<1>
+    input reset: Reset
     input clock: Clock
     input data: UInt<1>
     output probe: Probe<UInt<1>, A>
@@ -31,7 +31,7 @@ circuit RegUnderInlineLayer:
     ; CHECK:   `endif // layer$A
     ; CHECK:    end // initial
     layerblock A:
-      regreset myreg : UInt<1>, clock, reset, UInt<1>(0)
+      regreset myreg : UInt<1>, posedge clock, sync activehigh reset, UInt<1>(0)
       connect myreg, data
       define probe = probe(myreg)
 
@@ -46,7 +46,7 @@ circuit RegUnderInlineLayer:
     layer B, inline:
 
   public module RegUnderInlineLayer:
-    input reset: UInt<1>
+    input reset: Reset
     input clock: Clock
     input data: UInt<1>
     output probe: Probe<UInt<1>, A.B>
@@ -74,7 +74,7 @@ circuit RegUnderInlineLayer:
     ; CHECK:    end // initial
     layerblock A:
       layerblock B:
-        regreset myreg : UInt<1>, clock, reset, UInt<1>(0)
+        regreset myreg : UInt<1>, posedge clock, sync activehigh reset, UInt<1>(0)
         connect myreg, data
         define probe = probe(myreg)
 
@@ -113,13 +113,13 @@ circuit RegUnderInlineLayer:
   ; CHECK: endmodule
 
   public module RegUnderInlineLayer:
-    input reset: UInt<1>
+    input reset: Reset
     input clock: Clock
     input data: UInt<1>
     output probe: Probe<UInt<1>, A.B>
 
     layerblock A:
       layerblock B:
-        regreset myreg : UInt<1>, clock, reset, UInt<1>(0)
+        regreset myreg : UInt<1>, posedge clock, sync activehigh reset, UInt<1>(0)
         connect myreg, data
         define probe = probe(myreg)

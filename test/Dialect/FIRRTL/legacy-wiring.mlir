@@ -166,12 +166,11 @@ firrtl.circuit "ResetToI1" attributes {
   }
   // CHECK-LABEL: module @ResetToI1
   firrtl.module @ResetToI1() {
-    // CHECK: %[[r1:.+]] = firrtl.resetCast %{{[^ ]*}}
-    // CHECK-NEXT: firrtl.matchingconnect %x, %[[r1]] : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %x, %{{[^ ]*}} : !firrtl.reset
     firrtl.instance bar interesting_name @Bar()
-    %x = firrtl.wire interesting_name : !firrtl.uint<1>
-    %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
-    firrtl.matchingconnect %x, %invalid_ui1 : !firrtl.uint<1>
+    %x = firrtl.wire interesting_name : !firrtl.reset
+    %invalid_ui1 = firrtl.invalidvalue : !firrtl.reset
+    firrtl.matchingconnect %x, %invalid_ui1 : !firrtl.reset
   }
 }
 

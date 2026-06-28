@@ -157,8 +157,8 @@ firrtl.circuit "padConstWire"   {
 firrtl.circuit "padConstReg"   {
   // CHECK-LABEL: firrtl.module @padConstReg
   firrtl.module @padConstReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<16>) {
-    %r_a = firrtl.reg droppable_name %clock  :  !firrtl.clock, !firrtl.uint<8>
-    %r_b = firrtl.reg droppable_name %clock  :  !firrtl.clock, !firrtl.uint<8>
+    %r_a = firrtl.reg droppable_name %clock {clockEdge = 0 : i32} :  !firrtl.clock, !firrtl.uint<8>
+    %r_b = firrtl.reg droppable_name %clock {clockEdge = 0 : i32} :  !firrtl.clock, !firrtl.uint<8>
     %c3_ui2 = firrtl.constant 3 : !firrtl.uint<2>
     firrtl.connect %r_a, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
     firrtl.connect %r_b, %c3_ui2 : !firrtl.uint<8>, !firrtl.uint<2>
@@ -220,9 +220,9 @@ firrtl.circuit "removePad"   {
 //"Registers async reset and a constant connection" should "NOT be removed
 firrtl.circuit "asyncReset"   {
   // CHECK-LABEL: firrtl.module @asyncReset
-  firrtl.module @asyncReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %en: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  firrtl.module @asyncReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %en: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
-    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>, !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32}  : !firrtl.clock, !firrtl.reset, !firrtl.uint<4>, !firrtl.uint<8>
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
     %0 = firrtl.mux(%en, %c0_ui4, %r) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
@@ -236,7 +236,7 @@ firrtl.circuit "asyncReset"   {
 firrtl.circuit "constReg2"   {
   // CHECK-LABEL: firrtl.module @constReg2
   firrtl.module @constReg2(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.sint<8>) {
-    %r = firrtl.reg %clock  :  !firrtl.clock, !firrtl.sint<8>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} :  !firrtl.clock, !firrtl.sint<8>
     %c-5_si4 = firrtl.constant -5 : !firrtl.sint<4>
     firrtl.connect %r, %c-5_si4 : !firrtl.sint<8>, !firrtl.sint<4>
     firrtl.connect %z, %r : !firrtl.sint<8>, !firrtl.sint<8>
@@ -342,9 +342,9 @@ firrtl.circuit "ZeroWidthAdd"   {
 //"Registers with constant reset and connection to the same constant" should "be replaced with that constant"
 firrtl.circuit "regConstReset"   {
   // CHECK-LABEL: firrtl.module @regConstReset
-  firrtl.module @regConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  firrtl.module @regConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
     %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
-    %r = firrtl.regreset %clock, %reset, %c11_ui8  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui8 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32}  : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>, !firrtl.uint<8>
     %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %z, %r : !firrtl.uint<8>, !firrtl.uint<8>
@@ -357,8 +357,8 @@ firrtl.circuit "regConstReset"   {
 firrtl.circuit "constPropRegMux"   {
   // CHECK-LABEL: firrtl.module @constPropRegMux
   firrtl.module @constPropRegMux(in %clock: !firrtl.clock, in %en: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-  %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-  %r2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+  %r1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+  %r2 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %0 = firrtl.mux(%en, %c1_ui1, %r1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -376,7 +376,7 @@ firrtl.circuit "constPropRegMux"   {
 firrtl.circuit "uninitSelfReg"   {
   // CHECK-LABEL: firrtl.module @uninitSelfReg
   firrtl.module @uninitSelfReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<8>) {
-    %r = firrtl.reg %clock  :  !firrtl.clock, !firrtl.uint<8>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} :  !firrtl.clock, !firrtl.uint<8>
     firrtl.matchingconnect %r, %r : !firrtl.uint<8>
     firrtl.matchingconnect %z, %r : !firrtl.uint<8>
     // CHECK: %invalid_ui8 = firrtl.invalidvalue : !firrtl.uint<8>
@@ -384,10 +384,10 @@ firrtl.circuit "uninitSelfReg"   {
   }
 
 //"Registers with ONLY constant reset" should "be replaced with that constant" in {
-  // CHECK-LABEL: firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
-  firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  // CHECK-LABEL: firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %z: !firrtl.uint<8>) {
+  firrtl.module @constResetReg(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
-    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32}  : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.matchingconnect %r, %r : !firrtl.uint<8>
     firrtl.matchingconnect %z, %r : !firrtl.uint<8>
     // CHECK: %[[C11:.+]] = firrtl.constant 11 : !firrtl.uint<8>
@@ -396,9 +396,9 @@ firrtl.circuit "uninitSelfReg"   {
 
 //"Registers with identical constant reset and connection" should "be replaced with that constant" in {
   // CHECK-LABEL: firrtl.module @regSameConstReset
-  firrtl.module @regSameConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+  firrtl.module @regSameConstReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %z: !firrtl.uint<8>) {
     %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
-    %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+    %r = firrtl.regreset %clock, %reset, %c11_ui4 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32}  : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.matchingconnect %r, %c11_ui4 : !firrtl.uint<8>
     firrtl.matchingconnect %z, %r : !firrtl.uint<8>
     // CHECK: %[[C13:.+]] = firrtl.constant 11 : !firrtl.uint<8>

@@ -1361,9 +1361,11 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
-    return RegOp::create(*builder, field.type, op.getClockVal(), "",
-                         NameKindEnum::DroppableName, attrs, StringAttr{})
-        .getResult();
+    // Forward the (required) clock edge to the per-field registers.
+    auto newReg =
+        RegOp::create(*builder, field.type, op.getClockVal(), op.getClockEdge(),
+                      "", NameKindEnum::DroppableName, attrs, StringAttr{});
+    return newReg.getResult();
   };
   return lowerProducer(op, clone);
 }
@@ -1376,10 +1378,16 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto resetVal = getSubWhatever(op.getResetValue(), field.index);
-    return RegResetOp::create(*builder, field.type, op.getClockVal(),
-                              op.getResetSignal(), resetVal, "",
-                              NameKindEnum::DroppableName, attrs, StringAttr{})
-        .getResult();
+    // Forward the clock-edge / reset-type / reset-polarity attributes so the
+    // per-field registers keep the same behavior. `resetType` in particular
+    // must be carried because it is the sole source of async-vs-sync (the reset
+    // operand has the agnostic `reset` type) and the operand is reused
+    // unchanged.
+    auto newReg = RegResetOp::create(
+        *builder, field.type, op.getClockVal(), op.getResetSignal(), resetVal,
+        op.getClockEdge(), op.getResetType(), op.getResetPolarity(), "",
+        NameKindEnum::DroppableName, attrs, StringAttr{});
+    return newReg.getResult();
   };
   return lowerProducer(op, clone);
 }

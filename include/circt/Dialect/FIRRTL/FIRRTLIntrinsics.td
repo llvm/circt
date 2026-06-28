@@ -201,8 +201,14 @@ def HasBeenResetIntrinsicOp : FIRRTLOp<"int.has_been_reset", [Pure]> {
     deasserted again.
 
     See the corresponding `verif.has_been_reset` operation.
+
+    The optional `asyncReset` unit attribute records, front-end-explicitly,
+    that the reset is asynchronous. It is the sole authoritative source of the
+    reset kind: the reset operand has the sync/async-agnostic `reset` type, so
+    when the attribute is absent the reset is synchronous.
   }];
-  let arguments = (ins NonConstClockType:$clock, AnyResetType:$reset);
+  let arguments = (ins NonConstClockType:$clock, AnyResetType:$reset,
+                       UnitAttr:$asyncReset);
   let results = (outs NonConstUInt1Type:$result);
   let hasFolder = 1;
   let assemblyFormat = "$clock `,` $reset attr-dict `:` type($reset)";

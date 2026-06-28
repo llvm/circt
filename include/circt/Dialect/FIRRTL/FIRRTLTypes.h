@@ -44,7 +44,6 @@ class AnyRefType;
 class ClassType;
 class ClockType;
 class ResetType;
-class AsyncResetType;
 class SIntType;
 class UIntType;
 class AnalogType;

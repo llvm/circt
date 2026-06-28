@@ -5,7 +5,7 @@
 
   // CHECK-LABEL: firrtl.module @padZeroReg
   firrtl.module @padZeroReg(in %clock: !firrtl.clock, out %z: !firrtl.uint<16>) {
-      %_r = firrtl.reg droppable_name %clock  :  !firrtl.uint<8>
+      %_r = firrtl.reg droppable_name %clock {clockEdge = 0 : i32} : !firrtl.uint<8>
       firrtl.matchingconnect %_r, %_r : !firrtl.uint<8>
       %c171_ui8 = firrtl.constant 171 : !firrtl.uint<8>
       %_n = firrtl.node droppable_name %c171_ui8  : !firrtl.uint<8>

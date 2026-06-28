@@ -38,4 +38,4 @@
 FIRRTL version 3.3.0
 circuit Test:
   module Test:
-    input a: Reset @[subdir/source.dummy 2:3]
+    output a: UInt<1> @[subdir/source.dummy 2:3]

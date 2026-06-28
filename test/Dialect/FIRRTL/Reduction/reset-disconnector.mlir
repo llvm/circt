@@ -7,15 +7,15 @@
 // CHECK-LABEL: firrtl.circuit "Test"
 firrtl.circuit "Test" {
   // CHECK-LABEL: firrtl.module @Test
-  firrtl.module @Test(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
-    // ALL: %reg1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
-    // ALL: %reg2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<16>
+  firrtl.module @Test(in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
+    // ALL: %reg1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<8>
+    // ALL: %reg2 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<16>
     // ALL-NOT: regreset
     // KEEP_REG1: %reg1 = firrtl.regreset %clock, %reset
-    // KEEP_REG1: %reg2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<16>
+    // KEEP_REG1: %reg2 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<16>
     %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
     %c0_ui16 = firrtl.constant 0 : !firrtl.uint<16>
-    %reg1 = firrtl.regreset %clock, %reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
-    %reg2 = firrtl.regreset %clock, %reset, %c0_ui16 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<16>, !firrtl.uint<16>
+    %reg1 = firrtl.regreset %clock, %reset, %c0_ui8 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>, !firrtl.uint<8>
+    %reg2 = firrtl.regreset %clock, %reset, %c0_ui16 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<16>, !firrtl.uint<16>
   }
 }

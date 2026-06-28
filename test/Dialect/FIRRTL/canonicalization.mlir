@@ -6,10 +6,10 @@ firrtl.layer @A bind {}
 
 // CHECK-LABEL: firrtl.module @Casts
 firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
-    in %clock : !firrtl.clock, in %asyncreset : !firrtl.asyncreset,
+    in %clock : !firrtl.clock, in %asyncreset : !firrtl.reset,
     in %inreset : !firrtl.reset, out %outreset : !firrtl.reset,
     out %out_ui1 : !firrtl.uint<1>, out %out_si1 : !firrtl.sint<1>,
-    out %out_clock : !firrtl.clock, out %out_asyncreset : !firrtl.asyncreset,
+    out %out_clock : !firrtl.clock, out %out_asyncreset : !firrtl.reset,
     out %out2_si1 : !firrtl.sint<1>, out %out2_ui1 : !firrtl.uint<1>) {
 
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
@@ -17,7 +17,7 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
   %invalid_si1 = firrtl.invalidvalue : !firrtl.sint<1>
   %invalid_clock = firrtl.invalidvalue : !firrtl.clock
-  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
+  %invalid_asyncreset = firrtl.invalidvalue : !firrtl.reset
 
   // No effect
   // CHECK: firrtl.matchingconnect %out_ui1, %ui1 : !firrtl.uint<1>
@@ -29,9 +29,8 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   // CHECK: firrtl.matchingconnect %out_clock, %clock : !firrtl.clock
   %2 = firrtl.asClock %clock : (!firrtl.clock) -> !firrtl.clock
   firrtl.connect %out_clock, %2 : !firrtl.clock, !firrtl.clock
-  // CHECK: firrtl.matchingconnect %out_asyncreset, %asyncreset : !firrtl.asyncreset
-  %3 = firrtl.asAsyncReset %asyncreset : (!firrtl.asyncreset) -> !firrtl.asyncreset
-  firrtl.connect %out_asyncreset, %3 : !firrtl.asyncreset, !firrtl.asyncreset
+  // CHECK: firrtl.matchingconnect %out_asyncreset, %asyncreset : !firrtl.reset
+  firrtl.matchingconnect %out_asyncreset, %asyncreset : !firrtl.reset
 
   // Constant fold.
   // CHECK: firrtl.matchingconnect %out_ui1, %c1_ui1 : !firrtl.uint<1>
@@ -43,12 +42,8 @@ firrtl.module @Casts(in %ui1 : !firrtl.uint<1>, in %si1 : !firrtl.sint<1>,
   // CHECK: firrtl.matchingconnect %out_clock, %c1_clock : !firrtl.clock
   %6 = firrtl.asClock %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.clock
   firrtl.connect %out_clock, %6 : !firrtl.clock, !firrtl.clock
-  // CHECK: firrtl.matchingconnect %out_asyncreset, %c1_asyncreset : !firrtl.asyncreset
-  %7 = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
-  firrtl.connect %out_asyncreset, %7 : !firrtl.asyncreset, !firrtl.asyncreset
   // CHECK: firrtl.matchingconnect %outreset, %inreset : !firrtl.reset
-  %8 = firrtl.resetCast %inreset : (!firrtl.reset) -> !firrtl.reset
-  firrtl.matchingconnect %outreset, %8 : !firrtl.reset
+  firrtl.matchingconnect %outreset, %inreset : !firrtl.reset
 
   // Transparent
   // CHECK: firrtl.matchingconnect %out2_si1, %si1
@@ -207,7 +202,7 @@ firrtl.module @And(in %in: !firrtl.uint<4>,
 // CHECK-LABEL: firrtl.module @AndOfAsSIntNoCrash
 firrtl.module @AndOfAsSIntNoCrash(
   in %clock: !firrtl.clock,
-  in %asyncreset: !firrtl.asyncreset,
+  in %asyncreset: !firrtl.reset,
   in %sint: !firrtl.sint<4>,
   in %y: !firrtl.sint<1>,
   out %out1: !firrtl.uint<1>,
@@ -221,10 +216,10 @@ firrtl.module @AndOfAsSIntNoCrash(
   %1 = firrtl.and %0, %y : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<1>
   firrtl.matchingconnect %out1, %1 : !firrtl.uint<1>
 
-  // AndOfAsSIntR pattern should not crash on asyncreset type
+  // AndOfAsSIntR pattern should not crash on reset type
   // CHECK: %[[ASSINT2:.+]] = firrtl.asSInt %asyncreset
   // CHECK: firrtl.and %y, %[[ASSINT2]]
-  %2 = firrtl.asSInt %asyncreset : (!firrtl.asyncreset) -> !firrtl.sint<1>
+  %2 = firrtl.asSInt %asyncreset : (!firrtl.reset) -> !firrtl.sint<1>
   %3 = firrtl.and %y, %2 : (!firrtl.sint<1>, !firrtl.sint<1>) -> !firrtl.uint<1>
   firrtl.matchingconnect %out2, %3 : !firrtl.uint<1>
 
@@ -551,7 +546,7 @@ firrtl.module @Cat(in %in4: !firrtl.uint<4>,
 // CHECK-LABEL: firrtl.module @CatCastNoCrash
 firrtl.module @CatCastNoCrash(
   in %clock: !firrtl.clock,
-  in %asyncreset: !firrtl.asyncreset,
+  in %asyncreset: !firrtl.reset,
   in %sint: !firrtl.sint<4>,
   out %out1: !firrtl.uint<2>,
   out %out2: !firrtl.uint<2>,
@@ -566,12 +561,12 @@ firrtl.module @CatCastNoCrash(
   %2 = firrtl.cat %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   firrtl.matchingconnect %out1, %2 : !firrtl.uint<2>
 
-  // CatCast pattern should not crash on asyncreset type
+  // CatCast pattern should not crash on reset type
   // CHECK: %[[ASUINT3:.+]] = firrtl.asUInt %asyncreset
   // CHECK: %[[ASUINT4:.+]] = firrtl.asUInt %asyncreset
   // CHECK: firrtl.cat %[[ASUINT3]], %[[ASUINT4]]
-  %3 = firrtl.asUInt %asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
-  %4 = firrtl.asUInt %asyncreset : (!firrtl.asyncreset) -> !firrtl.uint<1>
+  %3 = firrtl.asUInt %asyncreset : (!firrtl.reset) -> !firrtl.uint<1>
+  %4 = firrtl.asUInt %asyncreset : (!firrtl.reset) -> !firrtl.uint<1>
   %5 = firrtl.cat %3, %4 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<2>
   firrtl.matchingconnect %out2, %5 : !firrtl.uint<2>
 
@@ -1354,8 +1349,8 @@ firrtl.module @issue516(in %inp_0: !firrtl.uint<0>, out %tmp3: !firrtl.uint<0>) 
 // CHECK-NEXT:  }
 firrtl.module @reg_cst_prop1(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<8>) {
   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
-  %_tmp_a = firrtl.reg droppable_name %clock {name = "_tmp_a"} : !firrtl.clock, !firrtl.uint<8>
-  %tmp_b = firrtl.reg droppable_name %clock {name = "_tmp_b"} : !firrtl.clock, !firrtl.uint<8>
+  %_tmp_a = firrtl.reg droppable_name %clock {clockEdge = 0 : i32, name = "_tmp_a"} : !firrtl.clock, !firrtl.uint<8>
+  %tmp_b = firrtl.reg droppable_name %clock {clockEdge = 0 : i32, name = "_tmp_b"} : !firrtl.clock, !firrtl.uint<8>
   firrtl.connect %_tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
   firrtl.connect %tmp_b, %_tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
   firrtl.connect %out_b, %tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
@@ -1364,16 +1359,16 @@ firrtl.module @reg_cst_prop1(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<
 // Check for DontTouch annotation
 // CHECK-LABEL: @reg_cst_prop1_DontTouch
 // CHECK-NEXT:      %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
-// CHECK-NEXT:      %tmp_a = firrtl.reg sym @reg1 %clock : !firrtl.clock, !firrtl.uint<8>
-// CHECK-NEXT:      %tmp_b = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<8>
+// CHECK-NEXT:      %tmp_a = firrtl.reg sym @reg1 %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<8>
+// CHECK-NEXT:      %tmp_b = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<8>
 // CHECK-NEXT:      firrtl.matchingconnect %tmp_a, %c5_ui8 : !firrtl.uint<8>
 // CHECK-NEXT:      firrtl.matchingconnect %tmp_b, %tmp_a : !firrtl.uint<8>
 // CHECK-NEXT:      firrtl.matchingconnect %out_b, %tmp_b : !firrtl.uint<8>
 
 firrtl.module @reg_cst_prop1_DontTouch(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<8>) {
   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
-  %_tmp_a = firrtl.reg  sym @reg1 %clock {name = "tmp_a"} : !firrtl.clock, !firrtl.uint<8>
-  %_tmp_b = firrtl.reg %clock {name = "tmp_b"} : !firrtl.clock, !firrtl.uint<8>
+  %_tmp_a = firrtl.reg  sym @reg1 %clock {clockEdge = 0 : i32, name = "tmp_a"} : !firrtl.clock, !firrtl.uint<8>
+  %_tmp_b = firrtl.reg %clock {clockEdge = 0 : i32, name = "tmp_b"} : !firrtl.clock, !firrtl.uint<8>
   firrtl.connect %_tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
   firrtl.connect %_tmp_b, %_tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
   firrtl.connect %out_b, %_tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
@@ -1383,10 +1378,10 @@ firrtl.module @reg_cst_prop1_DontTouch(in %clock: !firrtl.clock, out %out_b: !fi
 // CHECK-NEXT:   firrtl.matchingconnect %out_b, %c5_ui8 : !firrtl.uint<8>
 // CHECK-NEXT:  }
 firrtl.module @reg_cst_prop2(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<8>) {
-  %_tmp_b = firrtl.reg droppable_name %clock {name = "_tmp_b"} : !firrtl.clock, !firrtl.uint<8>
+  %_tmp_b = firrtl.reg droppable_name %clock {clockEdge = 0 : i32, name = "_tmp_b"} : !firrtl.clock, !firrtl.uint<8>
   firrtl.connect %out_b, %_tmp_b : !firrtl.uint<8>, !firrtl.uint<8>
 
-  %_tmp_a = firrtl.reg droppable_name %clock {name = "_tmp_a"} : !firrtl.clock, !firrtl.uint<8>
+  %_tmp_a = firrtl.reg droppable_name %clock {clockEdge = 0 : i32, name = "_tmp_a"} : !firrtl.clock, !firrtl.uint<8>
   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   firrtl.connect %_tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
   firrtl.connect %_tmp_b, %_tmp_a : !firrtl.uint<8>, !firrtl.uint<8>
@@ -1397,7 +1392,7 @@ firrtl.module @reg_cst_prop2(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<
 // CHECK-NEXT:   firrtl.matchingconnect %out_b, %c0_ui8 : !firrtl.uint<8>
 // CHECK-NEXT:  }
 firrtl.module @reg_cst_prop3(in %clock: !firrtl.clock, out %out_b: !firrtl.uint<8>) {
-  %_tmp_a = firrtl.reg droppable_name %clock {name = "_tmp_a"} : !firrtl.clock, !firrtl.uint<8>
+  %_tmp_a = firrtl.reg droppable_name %clock {clockEdge = 0 : i32, name = "_tmp_a"} : !firrtl.clock, !firrtl.uint<8>
   %c5_ui8 = firrtl.constant 5 : !firrtl.uint<8>
   firrtl.connect %_tmp_a, %c5_ui8 : !firrtl.uint<8>, !firrtl.uint<8>
 
@@ -2548,29 +2543,37 @@ firrtl.module @MuxShorten(
 
 
 // CHECK-LABEL: firrtl.module @RegresetToReg
-firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>) {
+firrtl.module @RegresetToReg(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo1: !firrtl.uint<1>, out %foo2: !firrtl.uint<1>, out %foo3: !firrtl.uint<1>) {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %zero_asyncreset = firrtl.asAsyncReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
-  %one_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
-  // CHECK: %bar1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
-  // CHECK: firrtl.matchingconnect %foo2, %dummy : !firrtl.uint<1>
-  %bar1 = firrtl.regreset %clock, %zero_asyncreset, %dummy : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
-  %bar2 = firrtl.regreset %clock, %one_asyncreset, %dummy : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  %zero_asyncreset = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+  %one_asyncreset = firrtl.asReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
+  // An active-high (PosReset) constant-zero reset never asserts, so the reset is
+  // dropped and the regreset folds to a plain reg (clock edge preserved).
+  // CHECK: %bar1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+  %bar1 = firrtl.regreset %clock, %zero_asyncreset, %dummy {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+  %bar2 = firrtl.regreset %clock, %one_asyncreset, %dummy {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+  // An active-low (NegReset) constant-zero reset is always asserted, so it must
+  // NOT be dropped; the regreset is kept.
+  // CHECK: %bar3 = firrtl.regreset %clock, %c0_reset, %dummy {clockEdge = 0 : i32, resetPolarity = 1 : i32, resetType = 1 : i32}
+  %bar3 = firrtl.regreset %clock, %zero_asyncreset, %dummy {clockEdge = 0 : i32, resetPolarity = 1 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
 
   firrtl.matchingconnect %bar2, %bar1 : !firrtl.uint<1> // Force a use to trigger a crash on a sink replacement
 
+  // CHECK: firrtl.matchingconnect %foo1, %bar1 : !firrtl.uint<1>
   firrtl.connect %foo1, %bar1 : !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK: firrtl.matchingconnect %foo2, %dummy : !firrtl.uint<1>
   firrtl.connect %foo2, %bar2 : !firrtl.uint<1>, !firrtl.uint<1>
+  firrtl.connect %foo3, %bar3 : !firrtl.uint<1>, !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @ForceableRegResetToNode
 // Correctness, revisit if this is "valid" if forceable.
 firrtl.module @ForceableRegResetToNode(in %clock: !firrtl.clock, in %dummy : !firrtl.uint<1>, out %foo: !firrtl.uint<1>, out %ref : !firrtl.rwprobe<uint<1>>) {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-  %one_asyncreset = firrtl.asAsyncReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+  %one_asyncreset = firrtl.asReset %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
   // CHECK: %reg, %reg_ref = firrtl.node %dummy forceable : !firrtl.uint<1>
-  %reg, %reg_f = firrtl.regreset %clock, %one_asyncreset, %dummy forceable : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
+  %reg, %reg_f = firrtl.regreset %clock, %one_asyncreset, %dummy forceable {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
   firrtl.ref.define %ref, %reg_f: !firrtl.rwprobe<uint<1>>
 
   firrtl.connect %reg, %dummy: !firrtl.uint<1>, !firrtl.uint<1>
@@ -2583,9 +2586,9 @@ firrtl.module @ForceableRegResetToNode(in %clock: !firrtl.clock, in %dummy : !fi
 firrtl.module @RegResetInvalidResetValueType(in %c : !firrtl.clock, out %out : !firrtl.uint<2>) {
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %c0_ui2 = firrtl.constant 0 : !firrtl.uint<2>
-  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.reset
   // CHECK: %reg = firrtl.regreset
-  %reg = firrtl.regreset %c, %c1_asyncreset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<2>
+  %reg = firrtl.regreset %c, %c1_asyncreset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<2>
   // CHECK: firrtl.matchingconnect %out, %reg : !firrtl.uint<2>
   firrtl.matchingconnect %out, %reg : !firrtl.uint<2>
   firrtl.matchingconnect %reg, %c0_ui2 : !firrtl.uint<2>
@@ -2728,17 +2731,16 @@ firrtl.module @PadMuxOperands(
 }
 
 // CHECK-LABEL: firrtl.module @regsyncreset
-firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %foo : !firrtl.uint<2>, out %bar: !firrtl.uint<2>) attributes {firrtl.random_init_width = 2 : ui64} {
+firrtl.module @regsyncreset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %foo : !firrtl.uint<2>, out %bar: !firrtl.uint<2>) attributes {firrtl.random_init_width = 2 : ui64} {
   // CHECK: %[[const:.*]] = firrtl.constant 1
-  // CHECK-NEXT: firrtl.regreset %clock, %reset, %[[const]] {firrtl.random_init_end = 1 : ui64, firrtl.random_init_start = 0 : ui64}
+  // CHECK-NEXT: firrtl.regreset %clock, %reset, %[[const]] {clockEdge = 0 : i32, firrtl.random_init_end = 1 : ui64, firrtl.random_init_start = 0 : ui64, resetPolarity = 0 : i32, resetType = 0 : i32}
   // CHECK-NEXT:  firrtl.matchingconnect %bar, %d : !firrtl.uint<2>
   // CHECK-NEXT:  firrtl.matchingconnect %d, %foo : !firrtl.uint<2>
   // CHECK-NEXT: }
-  %d = firrtl.reg %clock {firrtl.random_init_end = 1 : ui64, firrtl.random_init_start = 0 : ui64} : !firrtl.clock, !firrtl.uint<2>
-  firrtl.connect %bar, %d : !firrtl.uint<2>, !firrtl.uint<2>
   %c1_ui2 = firrtl.constant 1 : !firrtl.uint<2>
-  %1 = firrtl.mux(%reset, %c1_ui2, %foo) : (!firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>) -> !firrtl.uint<2>
-  firrtl.connect %d, %1 : !firrtl.uint<2>, !firrtl.uint<2>
+  %d = firrtl.regreset %clock, %reset, %c1_ui2 {clockEdge = 0 : i32, firrtl.random_init_end = 1 : ui64, firrtl.random_init_start = 0 : ui64, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.connect %bar, %d : !firrtl.uint<2>, !firrtl.uint<2>
+  firrtl.connect %d, %foo : !firrtl.uint<2>, !firrtl.uint<2>
 }
 
 // CHECK-LABEL: firrtl.module @regsyncreset_no
@@ -2749,7 +2751,7 @@ firrtl.module @regsyncreset_no(in %clock: !firrtl.clock, in %reset: !firrtl.uint
   // CHECK-NEXT:  %0 = firrtl.mux(%reset, %[[const]], %foo) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
   // CHECK-NEXT:  firrtl.connect %d, %0 : !firrtl.uint
   // CHECK-NEXT: }
-  %d = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint
+  %d = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint
   firrtl.connect %bar, %d : !firrtl.uint, !firrtl.uint
   %c1_ui2 = firrtl.constant 1 : !firrtl.uint
   %1 = firrtl.mux(%reset, %c1_ui2, %foo) : (!firrtl.uint<1>, !firrtl.uint, !firrtl.uint) -> !firrtl.uint
@@ -2791,7 +2793,7 @@ firrtl.module @dshifts_to_ishifts(in %a_in: !firrtl.sint<58>,
 // CHECK-LABEL: firrtl.module @constReg
 firrtl.module @constReg(in %clock: !firrtl.clock,
               in %en: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-  %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+  %r1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %0 = firrtl.mux(%en, %c1_ui1, %r1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -2815,8 +2817,8 @@ firrtl.module @SingleConnectInWhen(in %p1: !firrtl.uint<8>, in %p2: !firrtl.uint
 // CHECK-LABEL: firrtl.module @constReg
 firrtl.module @constReg2(in %clock: !firrtl.clock,
               in %en: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-  %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-  %r2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+  %r1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+  %r2 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
   %0 = firrtl.mux(%en, %c1_ui1, %r1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -2830,9 +2832,9 @@ firrtl.module @constReg2(in %clock: !firrtl.clock,
 }
 
 // CHECK-LABEL: firrtl.module @constReg3
-firrtl.module @constReg3(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+firrtl.module @constReg3(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
-  %r = firrtl.regreset %clock, %reset, %c11_ui8  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %reset, %c11_ui8 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>, !firrtl.uint<8>
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK:  %[[C14:.+]] = firrtl.constant 11
@@ -2841,10 +2843,10 @@ firrtl.module @constReg3(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, i
 }
 
 // CHECK-LABEL: firrtl.module @constReg4
-firrtl.module @constReg4(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+firrtl.module @constReg4(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
   %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
-  %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %reset, %c11_ui4 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>, !firrtl.uint<8>
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK:  %[[C13:.+]] = firrtl.constant 11
@@ -2857,7 +2859,8 @@ firrtl.module @constReg6(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, i
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
   %c11_ui4 = firrtl.constant 11 : !firrtl.uint<8>
   %resCond = firrtl.and %reset, %cond : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-  %r = firrtl.regreset %clock, %resCond, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %resCondReset = firrtl.asReset %resCond : (!firrtl.uint<1>) -> !firrtl.reset
+  %r = firrtl.regreset %clock, %resCondReset, %c11_ui4 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<8>, !firrtl.uint<8>
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   firrtl.connect %r, %0 : !firrtl.uint<8>, !firrtl.uint<8>
   // CHECK:  %[[C13:.+]] = firrtl.constant 11
@@ -2867,10 +2870,10 @@ firrtl.module @constReg6(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, i
 
 // Cannot optimize if bit mismatch with constant reset.
 // CHECK-LABEL: firrtl.module @constReg5
-firrtl.module @constReg5(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
+firrtl.module @constReg5(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %cond: !firrtl.uint<1>, out %z: !firrtl.uint<8>) {
   %c11_ui8 = firrtl.constant 11 : !firrtl.uint<8>
   %c11_ui4 = firrtl.constant 11 : !firrtl.uint<4>
-  %r = firrtl.regreset %clock, %reset, %c11_ui4  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<8>
+  %r = firrtl.regreset %clock, %reset, %c11_ui4 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<4>, !firrtl.uint<8>
   // CHECK: %0 = firrtl.mux(%cond, %c11_ui8, %r)
   %0 = firrtl.mux(%cond, %c11_ui8, %r) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
   // CHECK: firrtl.matchingconnect %r, %0
@@ -2880,7 +2883,7 @@ firrtl.module @constReg5(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, i
 
 // Should not crash when the reset value is a block argument.
 firrtl.module @constReg7(in %v: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
-  %r = firrtl.regreset %clock, %reset, %v  : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<4>
+  %r = firrtl.regreset %clock, %reset, %v {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<4>
 }
 
 // Check that firrtl.regreset reset mux folding doesn't respects
@@ -2888,15 +2891,16 @@ firrtl.module @constReg7(in %v: !firrtl.uint<1>, in %clock: !firrtl.clock, in %r
 // CHECK-LABEL: firrtl.module @constReg8
 firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out1: !firrtl.uint<1>, out %out2: !firrtl.uint<1>) {
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+  %resetCast = firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
   // CHECK: firrtl.regreset sym @s2
-  %r1 = firrtl.regreset sym @s2 %clock, %reset, %c1_ui1 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  %r1 = firrtl.regreset sym @s2 %clock, %resetCast, %c1_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
   %0 = firrtl.mux(%reset, %c1_ui1, %r1) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %r1, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %out1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
 
   // CHECK: firrtl.regreset
   // CHECK-SAME: Foo
-  %r2 = firrtl.regreset  %clock, %reset, %c1_ui1 {annotations = [{class = "Foo"}]} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+  %r2 = firrtl.regreset  %clock, %resetCast, %c1_ui1 {annotations = [{class = "Foo"}], clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
   %1 = firrtl.mux(%reset, %c1_ui1, %r2) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %r2, %1 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %out2, %r2 : !firrtl.uint<1>, !firrtl.uint<1>
@@ -2908,7 +2912,7 @@ firrtl.module @constReg8(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, o
 firrtl.module @constReg9(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %en_0: !firrtl.uint<1>, in %en_1: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
   // CHECK-NOT: firrtl.reg
   // CHECK: firrtl.matchingconnect %out, %c0_ui1
-  %r = firrtl.reg %clock {firrtl.random_init_start = 0 : ui64} : !firrtl.clock, !firrtl.uint<1>
+  %r = firrtl.reg %clock {clockEdge = 0 : i32, firrtl.random_init_start = 0 : ui64} : !firrtl.clock, !firrtl.uint<1>
   %0 = firrtl.and %en_0, %en_1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %1 = firrtl.mux(%0, %c0_ui1, %r) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -3061,7 +3065,7 @@ firrtl.module @Issue2251(out %o: !firrtl.sint<15>) {
 // Issue mentioned in #2289
 // CHECK-LABEL: @Issue2289
 firrtl.module @Issue2289(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %out: !firrtl.uint<5>) {
-  %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+  %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
   firrtl.connect %r, %r : !firrtl.uint<1>, !firrtl.uint<1>
   %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
   %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
@@ -3308,10 +3312,10 @@ firrtl.module @Issue6237(out %out: !firrtl.uint<0>) {
 
 
 // CHECK-LABEL: firrtl.module @CrashRegResetWithOneReset
-firrtl.module @CrashRegResetWithOneReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %io_d: !firrtl.uint<1>, out %io_q: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>) {
-  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+firrtl.module @CrashRegResetWithOneReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %io_d: !firrtl.uint<1>, out %io_q: !firrtl.uint<1>, in %io_en: !firrtl.uint<1>) {
+  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.reset
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %reg = firrtl.regreset  %clock, %c1_asyncreset, %c0_ui1  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  %reg = firrtl.regreset  %clock, %c1_asyncreset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32}  : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
   %0 = firrtl.mux(%io_en, %io_d, %reg) : (!firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   firrtl.connect %reg, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   firrtl.connect %io_q, %reg : !firrtl.uint<1>, !firrtl.uint<1>
@@ -3606,7 +3610,7 @@ firrtl.module private @RWProbeUnused(in %in: !firrtl.uint<4>, in %clk: !firrtl.c
   %n, %n_ref = firrtl.node interesting_name %in forceable : !firrtl.uint<4>
   %w, %w_ref = firrtl.wire interesting_name forceable : !firrtl.uint, !firrtl.rwprobe<uint>
   firrtl.connect %w, %n : !firrtl.uint, !firrtl.uint<4>
-  %r, %r_ref = firrtl.reg interesting_name %clk forceable : !firrtl.clock, !firrtl.uint, !firrtl.rwprobe<uint>
+  %r, %r_ref = firrtl.reg interesting_name %clk forceable {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint, !firrtl.rwprobe<uint>
   firrtl.connect %r, %w : !firrtl.uint, !firrtl.uint
   firrtl.connect %out, %r : !firrtl.uint, !firrtl.uint
 }
@@ -3742,60 +3746,44 @@ firrtl.module @Issue5650(in %io_y: !firrtl.uint<1>, out %io_x: !firrtl.uint<1>) 
 }
 
 // CHECK-LABEL: @HasBeenReset
-firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1>, in %reset2: !firrtl.asyncreset, in %reset3: !firrtl.reset) {
-  // CHECK-NEXT: %c0_clock = firrtl.specialconstant 0
-  // CHECK-NEXT: %c1_clock = firrtl.specialconstant 1
-  // CHECK-NEXT: %c0_ui1 = firrtl.constant 0
-  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
-  %c0_asyncreset = firrtl.specialconstant 0 : !firrtl.asyncreset
-  %c1_asyncreset = firrtl.specialconstant 1 : !firrtl.asyncreset
+firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
   %c0_reset = firrtl.specialconstant 0 : !firrtl.reset
   %c1_reset = firrtl.specialconstant 1 : !firrtl.reset
   %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
   %c1_clock = firrtl.specialconstant 1 : !firrtl.clock
 
+  // A constant reset never deasserts, so `has_been_reset` is always 0 -- for
+  // both synchronous and asynchronous (`asyncReset`) resets. A synchronous
+  // reset (no `asyncReset` attr) with a constant clock never starts, so it also
+  // folds to 0; an asynchronous reset can still fire without a clock edge, so
+  // it does not fold.
+  // CHECK: %c0_ui1 = firrtl.constant 0
   // CHECK-NEXT: firrtl.node sym @constResetS0 %c0_ui1
   // CHECK-NEXT: firrtl.node sym @constResetS1 %c0_ui1
   // CHECK-NEXT: firrtl.node sym @constResetA0 %c0_ui1
   // CHECK-NEXT: firrtl.node sym @constResetA1 %c0_ui1
-  // CHECK-NEXT: firrtl.node sym @constResetR0 %c0_ui1
-  // CHECK-NEXT: firrtl.node sym @constResetR1 %c0_ui1
-  %r0 = firrtl.int.has_been_reset %clock, %c0_ui1 : !firrtl.uint<1>
-  %r1 = firrtl.int.has_been_reset %clock, %c1_ui1 : !firrtl.uint<1>
-  %r2 = firrtl.int.has_been_reset %clock, %c0_asyncreset : !firrtl.asyncreset
-  %r3 = firrtl.int.has_been_reset %clock, %c1_asyncreset : !firrtl.asyncreset
-  %r4 = firrtl.int.has_been_reset %clock, %c0_reset : !firrtl.reset
-  %r5 = firrtl.int.has_been_reset %clock, %c1_reset : !firrtl.reset
+  // CHECK-NEXT: [[A0:%.+]] = firrtl.int.has_been_reset %c0_clock, %reset {asyncReset}
+  // CHECK-NEXT: [[A1:%.+]] = firrtl.int.has_been_reset %c1_clock, %reset {asyncReset}
+  // CHECK-NEXT: firrtl.node sym @constClockS0 %c0_ui1
+  // CHECK-NEXT: firrtl.node sym @constClockS1 %c0_ui1
+  // CHECK-NEXT: firrtl.node sym @constClockA0 [[A0]]
+  // CHECK-NEXT: firrtl.node sym @constClockA1 [[A1]]
+  %r0 = firrtl.int.has_been_reset %clock, %c0_reset : !firrtl.reset
+  %r1 = firrtl.int.has_been_reset %clock, %c1_reset : !firrtl.reset
+  %r2 = firrtl.int.has_been_reset %clock, %c0_reset {asyncReset} : !firrtl.reset
+  %r3 = firrtl.int.has_been_reset %clock, %c1_reset {asyncReset} : !firrtl.reset
   %constResetS0 = firrtl.node sym @constResetS0 %r0 : !firrtl.uint<1>
   %constResetS1 = firrtl.node sym @constResetS1 %r1 : !firrtl.uint<1>
   %constResetA0 = firrtl.node sym @constResetA0 %r2 : !firrtl.uint<1>
   %constResetA1 = firrtl.node sym @constResetA1 %r3 : !firrtl.uint<1>
-  %constResetR0 = firrtl.node sym @constResetR0 %r4 : !firrtl.uint<1>
-  %constResetR1 = firrtl.node sym @constResetR1 %r5 : !firrtl.uint<1>
-
-  // CHECK-NEXT: [[TMP1:%.+]] = firrtl.int.has_been_reset %c0_clock, %reset2
-  // CHECK-NEXT: [[TMP2:%.+]] = firrtl.int.has_been_reset %c1_clock, %reset2
-  // CHECK-NEXT: [[TMP3:%.+]] = firrtl.int.has_been_reset %c0_clock, %reset3
-  // CHECK-NEXT: [[TMP4:%.+]] = firrtl.int.has_been_reset %c1_clock, %reset3
-  // CHECK-NEXT: firrtl.node sym @constClockS0 %c0_ui1
-  // CHECK-NEXT: firrtl.node sym @constClockS1 %c0_ui1
-  // CHECK-NEXT: firrtl.node sym @constClockA0 [[TMP1]]
-  // CHECK-NEXT: firrtl.node sym @constClockA1 [[TMP2]]
-  // CHECK-NEXT: firrtl.node sym @constClockR0 [[TMP3]]
-  // CHECK-NEXT: firrtl.node sym @constClockR1 [[TMP4]]
-  %c0 = firrtl.int.has_been_reset %c0_clock, %reset1 : !firrtl.uint<1>
-  %c1 = firrtl.int.has_been_reset %c1_clock, %reset1 : !firrtl.uint<1>
-  %c2 = firrtl.int.has_been_reset %c0_clock, %reset2 : !firrtl.asyncreset
-  %c3 = firrtl.int.has_been_reset %c1_clock, %reset2 : !firrtl.asyncreset
-  %c4 = firrtl.int.has_been_reset %c0_clock, %reset3 : !firrtl.reset
-  %c5 = firrtl.int.has_been_reset %c1_clock, %reset3 : !firrtl.reset
+  %c0 = firrtl.int.has_been_reset %c0_clock, %reset : !firrtl.reset
+  %c1 = firrtl.int.has_been_reset %c1_clock, %reset : !firrtl.reset
+  %c2 = firrtl.int.has_been_reset %c0_clock, %reset {asyncReset} : !firrtl.reset
+  %c3 = firrtl.int.has_been_reset %c1_clock, %reset {asyncReset} : !firrtl.reset
   %constClockS0 = firrtl.node sym @constClockS0 %c0 : !firrtl.uint<1>
   %constClockS1 = firrtl.node sym @constClockS1 %c1 : !firrtl.uint<1>
   %constClockA0 = firrtl.node sym @constClockA0 %c2 : !firrtl.uint<1>
   %constClockA1 = firrtl.node sym @constClockA1 %c3 : !firrtl.uint<1>
-  %constClockR0 = firrtl.node sym @constClockR0 %c4 : !firrtl.uint<1>
-  %constClockR1 = firrtl.node sym @constClockR1 %c5 : !firrtl.uint<1>
 }
 
 // CHECK-LABEL: firrtl.module @Whens
@@ -3913,8 +3901,8 @@ firrtl.module private @LayerBlocks() {
 
 // CHECK-LABEL: firrtl.module @name_prop
 firrtl.module @name_prop(in %clock: !firrtl.clock, in %next: !firrtl.uint<8>, out %out_b: !firrtl.uint<8>) {
-  // CHECK: %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
-  %reg = firrtl.reg droppable_name %clock : !firrtl.clock, !firrtl.uint<8>
+  // CHECK: %reg = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<8>
+  %reg = firrtl.reg droppable_name %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<8>
   // CHECK-NOT: firrtl.node
   firrtl.connect %reg, %next : !firrtl.uint<8>, !firrtl.uint<8>
   %n = firrtl.node %reg : !firrtl.uint<8>

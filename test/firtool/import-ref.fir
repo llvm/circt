@@ -67,7 +67,7 @@ circuit Inner:
     output read: Probe<UInt<32>>
     output write: RWProbe<UInt<32>>
 
-    reg r : UInt<32>, clock
+    reg r : UInt<32>, posedge clock
     define read = probe(r)
     define write = rwprobe(r)
     ; CHECK: reg  [31:0] [[REG:.+]];

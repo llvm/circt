@@ -112,14 +112,14 @@ circuit TestHarness:
     output b: UInt<32>
     output trace: Probe<UInt<32>, Verification>
 
-    reg pc: UInt<32>, clock
+    reg pc: UInt<32>, posedge clock
     connect pc, a
     connect b, pc
 
     wire x : Probe<UInt<32>, Verification>
 
     layerblock Verification:
-      reg pc_d: UInt<32>, clock
+      reg pc_d: UInt<32>, posedge clock
       connect pc_d, a
       define x = probe(pc_d)
 

@@ -6,7 +6,7 @@ firrtl.circuit "Ports" {
 firrtl.module @Ports(
   in %inA: !firrtl.uint<42>,
   in %inB: !firrtl.bundle<a: sint<19>, b: clock>,
-  in %inC: !firrtl.vector<asyncreset, 2>,
+  in %inC: !firrtl.vector<reset, 2>,
   in %inD: !firrtl.bundle<clocks: vector<clock, 4>>,
   out %outA: !firrtl.uint<42>
 ) {
@@ -45,6 +45,8 @@ firrtl.module @Decls() {
   %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
   %c0_ui17 = firrtl.constant 0 : !firrtl.uint<17>
   %c0_clock = firrtl.specialconstant 0 : !firrtl.clock
+  // CHECK-NEXT: firrtl.asReset
+  %reset = firrtl.asReset %c0_ui1 : (!firrtl.uint<1>) -> !firrtl.reset
 
   // CHECK-NEXT: firrtl.wire
   // CHECK-NEXT: dbg.variable "someWire", %someWire
@@ -56,11 +58,11 @@ firrtl.module @Decls() {
 
   // CHECK-NEXT: firrtl.reg
   // CHECK-NEXT: dbg.variable "someReg1", %someReg1
-  %someReg1 = firrtl.reg %c0_clock : !firrtl.clock, !firrtl.uint<17>
+  %someReg1 = firrtl.reg %c0_clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<17>
 
   // CHECK-NEXT: firrtl.regreset
   // CHECK-NEXT: dbg.variable "someReg2", %someReg2
-  %someReg2 = firrtl.regreset %c0_clock, %c0_ui1, %c0_ui17 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<17>, !firrtl.uint<17>
+  %someReg2 = firrtl.regreset %c0_clock, %reset, %c0_ui17 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<17>, !firrtl.uint<17>
 
   // CHECK-NEXT: firrtl.matchingconnect
   firrtl.matchingconnect %someWire, %c0_ui17 : !firrtl.uint<17>
