@@ -795,6 +795,65 @@ func.func @BinaryRealOps(%arg0: !moore.f32, %arg1: !moore.f32) {
   return
 }
 
+// CHECK-LABEL: func.func @MathBuiltins
+func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42, 
+                            %arg2: !moore.f64, %arg3: !moore.f64) {
+    // CHECK-DAG: [[V0:%.+]] = arith.uitofp %arg0 : i32 to f32
+    // CHECK-DAG: [[V1:%.+]] = math.log2 [[V0]] : f32
+    // CHECK-DAG: [[V2:%.+]] = math.ceil [[V1]] : f32
+    // CHECK: arith.fptoui [[V2]] : f32 to i32
+    moore.builtin.clog2 %arg0 : i32
+    // CHECK-DAG: [[V3:%.+]] = arith.uitofp %arg1 : i42 to f32
+    // CHECK-DAG: [[V4:%.+]] = math.log2 [[V3]] : f32
+    // CHECK-DAG: [[V5:%.+]] = math.ceil [[V4]] : f32
+    // CHECK: arith.fptoui [[V5]] : f32 to i42
+    moore.builtin.clog2 %arg1 : l42
+    // CHECK: math.log %arg2 : f64
+    moore.builtin.ln %arg2 : f64
+    // CHECK: math.log10 %arg2 : f64
+    moore.builtin.log10 %arg2 : f64
+    // CHECK: math.powf %arg2, %arg3 : f64
+    moore.builtin.pow %arg2, %arg3 : f64
+    // CHECK: math.exp %arg2 : f64
+    moore.builtin.exp %arg2 : f64
+    // CHECK: math.floor %arg2 : f64
+    moore.builtin.floor %arg2 : f64
+    // CHECK: math.ceil %arg2 : f64
+    moore.builtin.ceil %arg2 : f64
+    // CHECK: math.sin %arg2 : f64
+    moore.builtin.sin %arg2 : f64
+    // CHECK: math.cos %arg2 : f64
+    moore.builtin.cos %arg2 : f64
+    // CHECK: math.tan %arg2 : f64
+    moore.builtin.tan %arg2 : f64
+    // CHECK: math.asin %arg2 : f64
+    moore.builtin.asin %arg2 : f64
+    // CHECK: math.acos %arg2 : f64
+    moore.builtin.acos %arg2 : f64
+    // CHECK: math.atan %arg2 : f64
+    moore.builtin.atan %arg2 : f64
+    // CHECK math.atan2 %arg2, %arg3 : f64
+    moore.builtin.atan2 %arg2, %arg3  : f64
+    // CHECK-DAG: [[V6:%.+]] = arith.mulf %arg2, %arg2 : f64
+    // CHECK-DAG: [[V7:%.+]] = arith.mulf %arg3, %arg3 : f64
+    // CHECK-DAG: [[V8:%.+]] = arith.addf [[V6]], [[V7]] : f64
+    // CHECK: math.sqrt [[V8]] : f64
+    moore.builtin.hypot %arg2, %arg3  : f64
+    // CHECK: math.sinh %arg2 : f64
+    moore.builtin.sinh %arg2 : f64
+    // CHECK: math.cosh %arg2 : f64
+    moore.builtin.cosh %arg2 : f64
+    // CHECK: math.tanh %arg2 : f64
+    moore.builtin.tanh %arg2 : f64
+    // CHECK: math.asinh %arg2 : f64
+    moore.builtin.asinh %arg2 : f64
+    // CHECK: math.acosh %arg2 : f64
+    moore.builtin.acosh %arg2 : f64
+    // CHECK: math.atanh %arg2 : f64
+    moore.builtin.atanh %arg2 : f64
+  return
+}
+
 // CHECK-LABEL: hw.module @Procedures
 moore.module @Procedures() {
   // CHECK: llhd.process {

@@ -1794,6 +1794,29 @@ struct NegRealOpConversion : public OpConversionPattern<NegRealOp> {
   }
 };
 
+struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(Clog2BIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value ceil_log;
+    auto len_in = adaptor.getValue().getType().getIntOrFloatBitWidth();
+    auto tofloat = arith::UIToFPOp::create(
+        rewriter, op.getLoc(), rewriter.getF32Type(), adaptor.getValue());
+    if (tofloat == 0) {
+      ceil_log = 0;
+    } else {
+      ceil_log = math::CeilOp::create(
+          rewriter, op.getLoc(),
+          math::Log2Op::create(rewriter, op.getLoc(), tofloat));
+    }
+    Value out = arith::FPToUIOp::create(
+        rewriter, op.getLoc(), rewriter.getIntegerType(len_in), ceil_log);
+    rewriter.replaceOp(op, out);
+    return success();
+  }
+}
+
 template <typename SourceOp, typename TargetOp>
 struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -1818,6 +1841,50 @@ struct BinaryRealOpConversion : public OpConversionPattern<SourceOp> {
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(),
                                           adaptor.getRhs());
+    return success();
+  }
+};
+
+template <typename SourceOp, typename TargetOp>
+struct RealMathFunc : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getValue());
+    return success();
+  }
+};
+
+template <typename SourceOp, typename TargetOp>
+struct RealMathFuncTwoArg : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<TargetOp>(op, adaptor.getLhs(),
+                                          adaptor.getRhs());
+    return success();
+  }
+};
+
+struct HypotBIOpConversion : public OpConversionPattern<HypotBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(HypotBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value lhs = adaptor.getLhs();
+    Value rhs = adaptor.getRhs();
+    ImplicitLocOpBuilder b(op->getLoc(), rewriter);
+    auto left = arith::MulFOp::create(b, lhs, lhs);
+    auto right = arith::MulFOp::create(b, rhs, rhs);
+    auto sum = arith::AddFOp::create(b, left, right);
+    auto out = math::SqrtOp::create(b, sum);
+    rewriter.replaceOp(op, out);
     return success();
   }
 };
@@ -3501,6 +3568,35 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     BinaryRealOpConversion<DivRealOp, arith::DivFOp>,
     BinaryRealOpConversion<MulRealOp, arith::MulFOp>,
     BinaryRealOpConversion<PowRealOp, math::PowFOp>,
+
+    // Pattern for Verilog standard integer mathematical functions 
+    Clog2BIOpConversion,
+
+    // Pattern for Verilog standard mathematical functions 
+    RealMathFunc<LnBIOp, math::LogOp>,
+    RealMathFunc<Log10BIOp, math::Log10Op>,
+    RealMathFunc<ExpBIOp, math::ExpOp>,
+    RealMathFunc<SqrtBIOp, math::SqrtOp>,
+    RealMathFuncTwoArg<MinBIOp, arith::MinimumFOp>,
+    RealMathFuncTwoArg<MaxBIOp, arith::MaximumFOp>,
+    RealMathFunc<AbsBIOp, math::AbsFOp>,
+    RealMathFuncTwoArg<PowBIOp, math::PowFOp>,
+    RealMathFunc<FloorBIOp, math::FloorOp>,
+    RealMathFunc<CeilBIOp, math::CeilOp>,
+    RealMathFunc<SinBIOp, math::SinOp>,
+    RealMathFunc<CosBIOp, math::CosOp>,
+    RealMathFunc<TanBIOp, math::TanOp>,
+    RealMathFunc<AsinBIOp, math::AsinOp>,
+    RealMathFunc<AcosBIOp, math::AcosOp>,
+    RealMathFunc<AtanBIOp, math::AtanOp>,
+    RealMathFuncTwoArg<Atan2BIOp, math::Atan2Op>,
+    HypotBIOpConversion,
+    RealMathFunc<SinhBIOp, math::SinhOp>,
+    RealMathFunc<CoshBIOp, math::CoshOp>,
+    RealMathFunc<TanhBIOp, math::TanhOp>,
+    RealMathFunc<AsinhBIOp, math::AsinhOp>,
+    RealMathFunc<AcoshBIOp, math::AcoshOp>,
+    RealMathFunc<AtanhBIOp, math::AtanhOp>,
 
     // Patterns of power operations.
     PowUOpConversion, PowSOpConversion,
