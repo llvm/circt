@@ -138,8 +138,8 @@ static InstanceOp scheduleWithSimplex(InstanceOp instOp, StringRef options,
     return scheduleProblemTWithSimplex<Problem>(instOp, lastOp, builder);
   if (problemName == "CyclicProblem")
     return scheduleProblemTWithSimplex<CyclicProblem>(instOp, lastOp, builder);
-  if (problemName == "SharedOperatorsProblem")
-    return scheduleProblemTWithSimplex<SharedOperatorsProblem>(instOp, lastOp,
+  if (problemName == "SharedResourcesProblem")
+    return scheduleProblemTWithSimplex<SharedResourcesProblem>(instOp, lastOp,
                                                                builder);
   if (problemName == "ModuloProblem")
     return scheduleProblemTWithSimplex<ModuloProblem>(instOp, lastOp, builder);
@@ -219,13 +219,13 @@ static InstanceOp scheduleWithCPSAT(InstanceOp instOp, StringRef options,
   }
 
   auto problemName = instOp.getProblemName();
-  if (problemName != "SharedOperatorsProblem") {
+  if (problemName != "SharedResourcesProblem") {
     llvm::errs() << "ssp-schedule: Unsupported problem '" << problemName
                  << "' for CPSAT scheduler\n";
     return {};
   }
 
-  auto prob = loadProblem<SharedOperatorsProblem>(instOp);
+  auto prob = loadProblem<SharedResourcesProblem>(instOp);
   if (failed(prob.check()) || failed(scheduling::scheduleCPSAT(prob, lastOp)) ||
       failed(prob.verify()))
     return {};
