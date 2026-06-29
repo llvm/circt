@@ -1815,7 +1815,7 @@ struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
     rewriter.replaceOp(op, out);
     return success();
   }
-}
+};
 
 template <typename SourceOp, typename TargetOp>
 struct BinaryOpConversion : public OpConversionPattern<SourceOp> {
