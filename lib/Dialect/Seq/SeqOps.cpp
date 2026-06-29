@@ -301,6 +301,36 @@ LogicalResult FIFOOp::verify() {
 
   return success();
 }
+//===----------------------------------------------------------------------===//
+// CompRegOp Printer
+//===----------------------------------------------------------------------===//
+//test
+//ensures proper quoting (@"foo/bar") when
+// special characters are present.
+static ParseResult parseOptionalInnerSym(OpAsmParser &parser,
+                                         hw::InnerSymAttr &innerSym) {
+  // If "sym" keyword is absent, treat as not present.
+  if (failed(parser.parseOptionalKeyword("sym"))) {
+    innerSym = hw::InnerSymAttr();
+    return success();
+  }
+
+  // Reuse the same  parser path from FirRegOp.
+  if (parser.parseCustomAttributeWithFallback(
+          innerSym, /*type=*/nullptr, "inner_sym", /*attr list*/std::nullopt))
+    return failure();
+
+  return success();
+}
+
+static void printOptionalInnerSym(OpAsmPrinter &p, Operation *op,
+                                  hw::InnerSymAttr innerSym) {
+  if (!innerSym)
+    return;
+  p << " sym ";
+  innerSym.print(p);
+}
+
 
 //===----------------------------------------------------------------------===//
 // CompRegOp
