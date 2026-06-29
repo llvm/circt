@@ -3248,6 +3248,36 @@ convertRealMathBI(Context &context, Location loc, StringRef name,
   return OpTy::create(context.builder, loc, value);
 }
 
+static LogicalResult
+emitScanAssignments(Context &context, const Context::ScanStringResult &result,
+                    Location loc) {
+  auto &builder = context.builder;
+  auto newBlockAfter = [&](Block *after) -> Block * {
+    auto block = std::make_unique<Block>();
+    block->insertAfter(after);
+    return block.release();
+  };
+
+  for (auto [destExpr, value, matched] : result.assignments) {
+    auto lhs = context.convertLvalueExpression(*destExpr);
+    if (!lhs)
+      return failure();
+    auto cond = moore::ToBuiltinIntOp::create(builder, loc, matched);
+
+    auto *assignBlock = newBlockAfter(builder.getInsertionBlock());
+    auto *continuedBlock = newBlockAfter(assignBlock);
+    mlir::cf::CondBranchOp::create(builder, loc, cond, assignBlock,
+                                   continuedBlock);
+
+    builder.setInsertionPointToEnd(assignBlock);
+    moore::BlockingAssignOp::create(builder, loc, lhs, value);
+    mlir::cf::BranchOp::create(builder, loc, continuedBlock);
+
+    builder.setInsertionPointToEnd(continuedBlock);
+  }
+  return success();
+}
+
 Value Context::convertSystemCall(
     const slang::ast::SystemSubroutine &subroutine, Location loc,
     std::span<const slang::ast::Expression *const> args) {
@@ -3856,6 +3886,52 @@ Value Context::convertSystemCall(
         builder.getStringAttr(strLit->getValue()));
     moore::BlockingAssignOp::create(builder, loc, lvalue, op.getResult());
     return op.getFound();
+  }
+
+  if (nameId == ksn::FScanf) {
+    auto fd = convertRvalueExpression(
+        *args[0], moore::IntType::getInt(builder.getContext(), 32));
+    if (!fd)
+      return {};
+    auto *fmtLit =
+        args[1]->unwrapImplicitConversions().as_if<slang::ast::StringLiteral>();
+    if (!fmtLit)
+      return (mlir::emitError(loc)
+              << "$fscanf requires a string literal format string"),
+             Value{};
+    auto cursor =
+        moore::ScanBeginFScanFOp::create(builder, loc, fd).getCursor();
+    auto result =
+        convertScanString(fmtLit->getValue(), cursor, args.subspan(2), loc);
+    if (failed(result))
+      return {};
+    if (failed(emitScanAssignments(*this, *result, loc)))
+      return {};
+    return moore::ScanEndOp::create(builder, loc, result->finalCursor)
+        .getCount();
+  }
+
+  if (nameId == ksn::SScanf) {
+    auto str =
+        convertRvalueExpression(*args[0], moore::StringType::get(getContext()));
+    if (!str)
+      return {};
+    auto *fmtLit =
+        args[1]->unwrapImplicitConversions().as_if<slang::ast::StringLiteral>();
+    if (!fmtLit)
+      return (mlir::emitError(loc)
+              << "$sscanf requires a string literal format string"),
+             Value{};
+    auto cursor =
+        moore::ScanBeginSScanFOp::create(builder, loc, str).getCursor();
+    auto result =
+        convertScanString(fmtLit->getValue(), cursor, args.subspan(2), loc);
+    if (failed(result))
+      return {};
+    if (failed(emitScanAssignments(*this, *result, loc)))
+      return {};
+    return moore::ScanEndOp::create(builder, loc, result->finalCursor)
+        .getCount();
   }
 
   // Unrecognized system call

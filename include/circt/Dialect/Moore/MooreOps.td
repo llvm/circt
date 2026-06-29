@@ -2854,6 +2854,228 @@ def FormatCharOp : MooreOp<"fmt.char", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Scan String Operations
+//===----------------------------------------------------------------------===//
+
+def ScanBeginFScanFOp : MooreOp<"scan.begin_fscanf"> {
+  let summary = "Begin a $fscanf scan operation";
+  let description = [{
+    Opens a consuming scan chain that reads from the given channel.
+    The returned cursor is threaded through subsequent `moore.scan.*`
+    operations and closed with `moore.scan.end` to obtain the match count.
+
+    See IEEE 1800-2017 § 21.3.4.3 "Reading formatted data".
+  }];
+  let arguments = (ins TwoValuedI32:$channel);
+  let results = (outs ScanStringType:$cursor);
+  let assemblyFormat = "$channel attr-dict";
+}
+
+def ScanBeginSScanFOp : MooreOp<"scan.begin_sscanf"> {
+  let summary = "Begin a $sscanf scan operation";
+  let description = [{
+    Opens a consuming scan chain over the input `string`. The returned cursor
+    is threaded through subsequent `moore.scan.*` operations and closed with
+    `moore.scan.end` to obtain the match count.
+
+    See IEEE 1800-2017 § 21.3.4.3 "Reading formatted data".
+  }];
+  let arguments = (ins StringType:$string);
+  let results = (outs ScanStringType:$cursor);
+  let assemblyFormat = "$string attr-dict";
+}
+
+def ScanEndOp : MooreOp<"scan.end"> {
+  let summary = "Finalize a scan chain and return the match count";
+  let description = [{
+    Closes a consuming scan chain and returns the number of successfully
+    matched and assigned items. Returns -1 on EOF before the first match.
+  }];
+  let arguments = (ins ScanStringType:$cursor);
+  let results = (outs TwoValuedI32:$count);
+  let assemblyFormat = "$cursor attr-dict";
+}
+
+def ScanLiteralOp : MooreOp<"scan.literal", [Pure]> {
+  let summary = "Match a literal string in the scan input";
+  let description = [{
+    Matches the given literal text. If the input does not match, the scan
+    operation fails and no input is consumed.
+
+    See IEEE 1800-2017 § 21.3.4.3 "Reading formatted data".
+  }];
+  let arguments = (ins ScanStringType:$input, StrAttr:$literal);
+  let results = (outs ScanStringType:$remaining);
+  let assemblyFormat = "$input $literal attr-dict";
+}
+
+def ScanIntOp : MooreOp<"scan.int", [Pure, SameVariadicResultSize]> {
+  let summary = "Scan an integer value from input";
+  let description = [{
+    Reads an integer according to the given format
+    (binary, octal, decimal, or hexadecimal).
+    maxWidth limits the number of input characters consumed.
+    If the value/matched results are omitted, the field is consumed but
+    not stored (%* modifier).
+    Matched indicates whether a value was successfully scanned.
+
+    See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (b, o, d, h, x).
+  }];
+  let arguments = (ins
+    ScanStringType:$input,
+    IntFormatAttr:$format,
+    OptionalAttr<I32Attr>:$maxWidth
+  );
+  let results = (outs
+    ScanStringType:$remaining,
+    Optional<AnyInteger>:$value,
+    Optional<BitType>:$matched
+  );
+  let assemblyFormat = [{
+    $input $format (`width` $maxWidth^)? attr-dict (`:` type($value)^ `,` type($matched))?
+  }];
+}
+
+def ScanRealOp : MooreOp<"scan.real", [Pure, SameVariadicResultSize]> {
+  let summary = "Scan a floating-point value from input";
+  let description = [{
+    Reads a floating-point number (f, e, g specifiers).
+    maxWidth limits the number of input characters consumed.
+    If the value/matched results are omitted, the field is consumed but
+    not stored (%* modifier).
+    Matched indicates whether a value was successfully scanned.
+
+    See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (f, e, g).
+  }];
+  let arguments = (ins
+    ScanStringType:$input,
+    OptionalAttr<I32Attr>:$maxWidth
+  );
+  let results = (outs
+    ScanStringType:$remaining,
+    Optional<RealType>:$value,
+    Optional<BitType>:$matched
+);
+  let assemblyFormat = [{
+    $input (`width` $maxWidth^)? attr-dict (`:` type($value)^ `,` type($matched))?
+  }];
+}
+
+def ScanTimeOp : MooreOp<"scan.time", [Pure, SameVariadicResultSize]> {
+  let summary = "Scan a timescale-adjusted floating-point value from input";
+  let description = [{
+    Reads a floating-point number and scales it according to the current
+    timescale and $timeformat settings (%t specifier).
+    maxWidth limits the number of input characters consumed.
+    If the value/matched results are omitted, the field is consumed but
+    not stored (%* modifier).
+    Matched indicates whether a value was successfully scanned.
+
+    See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (t).
+  }];
+  let arguments = (ins
+    ScanStringType:$input,
+    OptionalAttr<I32Attr>:$maxWidth
+  );
+  let results = (outs
+    ScanStringType:$remaining,
+    Optional<TimeType>:$value,
+    Optional<BitType>:$matched
+  );
+  let assemblyFormat = [{
+    $input (`width` $maxWidth^)? attr-dict (`:` type($value)^ `,` type($matched))?
+  }];
+}
+
+def ScanCharOp : MooreOp<"scan.char", [Pure, SameVariadicResultSize]> {
+  let summary = "Scan a single character from input";
+  let description = [{
+    Reads a single 8-bit ASCII character from the input stream (%c specifier).
+    Unlike other specifiers, leading whitespace is NOT skipped.
+    If the value/matched results are omitted, the field is consumed but
+    not stored (%* modifier).
+    Matched indicates whether a value was successfully scanned.
+
+    See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (c).
+  }];
+  let arguments = (ins ScanStringType:$input);
+  let results = (outs
+    ScanStringType:$remaining,
+    Optional<AnyInteger>:$value,
+    Optional<BitType>:$matched
+  );
+  let assemblyFormat = [{
+    $input attr-dict (`:` type($value)^ `,` type($matched))?
+  }];
+}
+
+def ScanStrOp : MooreOp<"scan.str", [Pure, SameVariadicResultSize]> {
+  let summary = "Scan a whitespace-delimited string from input";
+  let description = [{
+    Reads a sequence of non-whitespace characters (%s specifier) and write
+    it to value.
+    maxWidth limits the number of characters consumed.
+    If the value/matched results are omitted, the field is consumed but
+    not stored (%* modifier).
+    Matched indicates whether a value was successfully scanned.
+
+    See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (s).
+  }];
+  let arguments = (ins
+    ScanStringType:$input,
+    OptionalAttr<I32Attr>:$maxWidth
+  );
+  let results = (outs
+    ScanStringType:$remaining,
+    Optional<StringType>:$value,
+    Optional<BitType>:$matched
+  );
+  let assemblyFormat = [{
+    $input (`width` $maxWidth^)? attr-dict (`:` type($value)^ `,` type($matched))?
+  }];
+}
+
+def ScanUnformattedOp : MooreOp<"scan.unformatted", [Pure, SameVariadicResultSize]> {
+  let summary = "Scan unformatted binary data from input";
+  let description = [{
+    Reads raw binary data from the input stream.
+    %u reads 2-value binary data; %z reads 4-value (x/z-preserving) data.
+    The fourValue attribute distinguishes the two.
+    If the value/matched results are omitted, the field is consumed but
+    not stored (%* modifier).
+    Matched indicates whether a value was successfully scanned.
+
+    See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (u, z).
+  }];
+  let arguments = (ins
+    ScanStringType:$input,
+    UnitAttr:$fourValue
+  );
+  let results = (outs
+    ScanStringType:$remaining,
+    Optional<AnyInteger>:$value,
+    Optional<BitType>:$matched
+  );
+  let assemblyFormat = [{
+    $input (`four_value` $fourValue^)? attr-dict (`:` type($value)^ `,` type($matched))?
+  }];
+}
+
+def ScanHierPathMatchOp : MooreOp<"scan.hier_path_match", [Pure]> {
+  let summary = "Match the current hierarchical path in the scan input";
+  let description = [{
+    Matches the current hierarchical scope path in the input stream (%m
+    specifier). Does not consume a destination argument and does not
+    store any value.
+
+    See IEEE 1800-2017 § 21.3.4.3, Table 21-8 (m).
+  }];
+  let arguments = (ins ScanStringType:$input);
+  let results = (outs ScanStringType:$remaining);
+  let assemblyFormat = "$input attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
 // Builtin System Tasks and Functions
 //===----------------------------------------------------------------------===//
 

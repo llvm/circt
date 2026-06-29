@@ -412,6 +412,25 @@ struct Context {
       moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
       bool appendNewline = false);
 
+  /// Result of converting a scan format string. The final cursor of the
+  /// consuming chain and the list of (destination expression, scanned value,
+  /// matched flag) tuples to assign
+  struct ScanStringResult {
+    Value finalCursor;
+    SmallVector<std::tuple<const slang::ast::Expression *, Value, Value>>
+        assignments;
+  };
+
+  /// Convert a scan format string into a consuming chain of `moore.scan.*`
+  /// operations starting from `initialCursor`. Each non-suppressed specifier
+  /// produces an entry in `assignments`; the caller is responsible for emitting
+  /// the corresponding `moore.blocking_assign` ops. Returns failur if an erro
+  /// occurs.
+  FailureOr<ScanStringResult>
+  convertScanString(StringRef formatStr, Value initialCursor,
+                    std::span<const slang::ast::Expression *const> destinations,
+                    Location loc);
+
   /// Convert system function calls. Returns a null `Value` on failure after
   /// emitting an error.
   Value convertSystemCall(const slang::ast::SystemSubroutine &subroutine,
