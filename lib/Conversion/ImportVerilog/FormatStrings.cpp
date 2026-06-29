@@ -116,7 +116,7 @@ struct FormatStringParser {
     if (specifierLower == 'l') {
       if (context.currentDefinition)
         emitLiteral(context.currentDefinition->sourceLibrary.name + "." +
-                  std::string(context.currentDefinition->name));
+                    std::string(context.currentDefinition->name));
       else
         emitLiteral("");
       return success();
