@@ -1233,20 +1233,7 @@ private:
     // single instance reference to the namepath in place, keeping the NLA's
     // symbol name so all annotations and targetMap entries stay valid.
     auto *fromNode = instanceGraph.lookup(fromName);
-    bool fromHasOneUse = fromNode->hasOneUse();
     std::optional<std::pair<Attribute, StringAttr>> singlePrefixAndName;
-    auto getPrefixAndName = [&] {
-      assert(fromHasOneUse);
-      if (!singlePrefixAndName) {
-        auto *instanceRecord = *fromNode->uses().begin();
-        auto parent =
-            cast<FModuleOp>(*instanceRecord->getParent()->getModule());
-        singlePrefixAndName = {OpAnnoTarget(instanceRecord->getInstance())
-                                   .getNLAReference(getNamespace(parent)),
-                               parent.getNameAttr()};
-      }
-      return *singlePrefixAndName;
-    };
     // Now we walk the NLA searching for ones that require more context to be
     // added.
     for (auto nla : moduleNLAs) {
@@ -1256,10 +1243,18 @@ private:
         continue;
 
       // Fast path: See the comment above.
-      if (fromHasOneUse) {
+      if (fromNode->hasOneUse()) {
+        if (!singlePrefixAndName) {
+          auto *instanceRecord = *fromNode->uses().begin();
+          auto parent =
+              cast<FModuleOp>(*instanceRecord->getParent()->getModule());
+          singlePrefixAndName = {OpAnnoTarget(instanceRecord->getInstance())
+                                     .getNLAReference(getNamespace(parent)),
+                                 parent.getNameAttr()};
+        }
         SmallVector<Attribute> newNamepath;
         newNamepath.reserve(elements.size() + 1);
-        auto [singlePrefix, singleParentName] = getPrefixAndName();
+        auto [singlePrefix, singleParentName] = *singlePrefixAndName;
         newNamepath.push_back(singlePrefix);
         newNamepath.append(elements.begin(), elements.end());
         auto newPath = ArrayAttr::get(context, newNamepath);
