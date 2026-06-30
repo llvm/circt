@@ -309,21 +309,23 @@ LogicalResult ForkOp::fold(FoldAdaptor adaptor,
 // =============================================================================
 
 struct EliminateRedundantUnpackPattern : public OpRewritePattern<UnpackOp> {
-  // Eliminates unpacks where only the token is used.
+  // Eliminates unpack(pack(token, data)) by replacing the unpack results with
+  // the pack inputs directly. This is done as a canonicalization pattern
+  // (rather than a fold) so that the dead pack can be erased in the same step.
   using OpRewritePattern<UnpackOp>::OpRewritePattern;
   LogicalResult matchAndRewrite(UnpackOp unpack,
                                 PatternRewriter &rewriter) const override {
-    // Is the value-side of the unpack used?
-    if (!unpack.getOutput().use_empty())
-      return failure();
-
     auto pack = unpack.getInput().getDefiningOp<PackOp>();
     if (!pack)
       return failure();
 
-    // Replace all uses of the unpack token with the packed token.
-    rewriter.replaceAllUsesWith(unpack.getToken(), pack.getToken());
-    rewriter.eraseOp(unpack);
+    // Replace unpack(pack(token, data)) -> (token, data).
+    rewriter.replaceOp(unpack, {pack.getToken(), pack.getInput()});
+
+    // Erase the pack in case it no longer has users.
+    if (pack->use_empty())
+      rewriter.eraseOp(pack);
+
     return success();
   }
 };
@@ -333,24 +335,12 @@ void UnpackOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.insert<EliminateRedundantUnpackPattern>(context);
 }
 
-LogicalResult UnpackOp::fold(FoldAdaptor adaptor,
-                             SmallVectorImpl<OpFoldResult> &results) {
-  // Unpack of a pack is a no-op.
-  if (auto pack = getInput().getDefiningOp<PackOp>()) {
-    results.push_back(pack.getToken());
-    results.push_back(pack.getInput());
-    return success();
-  }
-
-  return failure();
-}
-
 LogicalResult UnpackOp::inferReturnTypes(
     MLIRContext *context, std::optional<Location> loc, ValueRange operands,
     DictionaryAttr attrs, mlir::PropertyRef properties,
     mlir::RegionRange regions, SmallVectorImpl<Type> &results) {
   auto inputType = cast<ValueType>(operands.front().getType());
-  results.push_back(TokenType::get(context));
+  results.push_back(dc::TokenType::get(context));
   results.push_back(inputType.getInnerType());
   return success();
 }
@@ -359,15 +349,29 @@ LogicalResult UnpackOp::inferReturnTypes(
 // PackOp
 // =============================================================================
 
-OpFoldResult PackOp::fold(FoldAdaptor adaptor) {
-  auto token = getToken();
+struct EliminatePackOfUnpackPattern : public OpRewritePattern<PackOp> {
+  // Eliminates pack(unpack(v).token, unpack(v).data) by replacing the pack
+  // result with v directly.
+  using OpRewritePattern<PackOp>::OpRewritePattern;
+  LogicalResult matchAndRewrite(PackOp pack,
+                                PatternRewriter &rewriter) const override {
+    auto unpack = pack.getToken().getDefiningOp<UnpackOp>();
+    if (!unpack || unpack.getOutput() != pack.getInput())
+      return failure();
 
-  // Pack of an unpack is a no-op.
-  if (auto unpack = token.getDefiningOp<UnpackOp>()) {
-    if (unpack.getOutput() == getInput())
-      return unpack.getInput();
+    rewriter.replaceOp(pack, unpack.getInput());
+
+    // Erase the now-dead unpack.
+    if (unpack.getToken().use_empty() && unpack.getOutput().use_empty())
+      rewriter.eraseOp(unpack);
+
+    return success();
   }
-  return {};
+};
+
+void PackOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.insert<EliminatePackOfUnpackPattern>(context);
 }
 
 LogicalResult PackOp::inferReturnTypes(

@@ -277,6 +277,8 @@ hw.module @M1<param1: i42>(in %clock : i1, in %cond : i1, in %val : i8) {
       sv.fflush
       // CHECK-NEXT: $fflush(32'h80000002);
       sv.fflush fd %fd
+      // CHECK-NEXT: $fclose(32'h80000002);
+      sv.fclose %fd
     }// CHECK-NEXT:   {{end$}}
   } {sv.attributes = [#sv.attribute<"sv attr">]}
   // CHECK-NEXT:  end // initial
@@ -1948,6 +1950,17 @@ hw.module @sformatf(in %a: i1, out o: i1) {
   %1 = sv.system "test$plusargs"(%0) : (!hw.string) -> i1
 
   hw.output %1 : i1
+}
+
+// CHECK-LABEL: module concat_str
+hw.module @concat_str(out o: i1) {
+  %foo = sv.constantStr "foo"
+  %bar = sv.constantStr "bar"
+  %baz = sv.constantStr "baz"
+  %cat = sv.concat_str (%foo, %bar, %baz) : !hw.string
+  // CHECK: assign o = $test$plusargs({"foo", "bar", "baz"})
+  %0 = sv.system "test$plusargs"(%cat) : (!hw.string) -> i1
+  hw.output %0 : i1
 }
 
 hw.module @bindInMod() {

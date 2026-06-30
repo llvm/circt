@@ -38,6 +38,12 @@ def ESI_Dialect : Dialect {
 class ESI_Op<string mnemonic, list<Trait> traits = []> :
     Op<ESI_Dialect, mnemonic, traits>;
 
+/// Marks an ESI op that legitimately operates on ESI types (e.g. data windows),
+/// which indicates that it must be lowered after the channels.
+def OperatesOnESITypes : NativeOpTrait<"OperatesOnESITypes"> {
+  let cppNamespace = "::circt::esi";
+}
+
 // Divide ESI ops into abstract and physical. Abstract ops are ones which
 // need to be lowered to physical ops before they get lowered further (into
 // HW). The abstract to physical lowering may not be fully constrained -- this

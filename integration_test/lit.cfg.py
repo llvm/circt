@@ -20,7 +20,7 @@ from lit.llvm.subst import FindTool
 # name: The name of this test suite.
 config.name = 'CIRCT'
 
-config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
+config.test_format = lit.formats.ShTest()
 
 # suffixes: A list of file extensions to treat as test files.
 config.suffixes = ['.td', '.mlir', '.ll', '.fir', '.sv', '.py', '.tcl']
@@ -47,7 +47,7 @@ llvm_config.use_default_substitutions()
 
 # Set the timeout, if requested.
 if config.timeout is not None and config.timeout != "":
-  lit_config.maxIndividualTestTime = int(config.timeout)
+  config.maxIndividualTestTime = int(config.timeout)
 
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
 # subdirectories contain auxiliary inputs for various tests in their parent
@@ -81,7 +81,7 @@ tool_dirs = [
 tools = [
     'arcilator', 'circt-opt', 'circt-translate', 'firtool', 'circt-rtl-sim.py',
     'equiv-rtl.sh', 'handshake-runner', 'hlstool', 'kanagawatool', 'circt-lec',
-    'circt-bmc', 'circt-test', 'circt-test-runner-sby.py',
+    'circt-lec.sh', 'circt-bmc', 'circt-test', 'circt-test-runner-sby.py',
     'circt-test-runner-circt-bmc.py', 'circt-cocotb-driver.py'
 ]
 
@@ -215,6 +215,10 @@ if config.have_systemc != "":
 if config.z3_library not in ("", "Z3_LIBRARIES-NOTFOUND"):
   tools.append(ToolSubst(f"%libz3", config.z3_library))
   config.available_features.add('libz3')
+
+if config.z3_path != "":
+  llvm_config.with_environment('PATH', config.z3_path, append_path=True)
+  config.available_features.add('z3')
 
 if config.llvm_with_z3 == "1":
   config.available_features.add('z3-integration')

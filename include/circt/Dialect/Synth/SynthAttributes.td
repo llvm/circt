@@ -60,15 +60,12 @@ def LinearTimingArcAttr : AttrDef<Synth_Dialect, "LinearTimingArc"> {
   let mnemonic = "linear_timing_arc";
   let summary = "A single simplified linear timing arc";
   let parameters = (ins
-    "::mlir::StringAttr":$pin,
-    "::mlir::StringAttr":$relatedPin,
     "int64_t":$intrinsic,
     "int64_t":$sensitivity,
     "PolarityAttr":$polarity
   );
   let assemblyFormat =
-    "`<` $pin `,` $relatedPin `,` $intrinsic `,` $sensitivity `,` "
-    "$polarity `>`";
+    "`<` $intrinsic `,` $sensitivity `,` $polarity `>`";
 }
 
 def MappingCostAttr : AttrDef<Synth_Dialect, "MappingCost"> {
@@ -77,11 +74,13 @@ def MappingCostAttr : AttrDef<Synth_Dialect, "MappingCost"> {
   let parameters = (ins
     "::mlir::FloatAttr":$area,
     "::mlir::ArrayAttr":$arcs,
-    "::mlir::DictionaryAttr":$inputCaps
+    OptionalParameter<"::mlir::DictionaryAttr">:$inputCaps
   );
+  let genVerifyDecl = 1;
   let assemblyFormat =
-    "`<` `area` `=` $area `,` `arcs` `=` $arcs `,` "
-    "`input_caps` `=` $inputCaps `>`";
+    "`<` `area` `=` $area "
+    "`,` `arcs` `=` $arcs "
+    "(`,` `input_caps` `=` $inputCaps^)? `>`";
 }
 
 #endif // CIRCT_DIALECT_SYNTH_SYNTHATTRIBUTES_TD

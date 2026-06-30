@@ -1017,6 +1017,9 @@ LogicalResult ModuleState::unifyAssociations(Operation *op, Value lhs,
   if (lhs == rhs)
     return success();
 
+  if (!isHardware(lhs) || !isHardware(rhs))
+    return success();
+
   LLVM_DEBUG({
     llvm::dbgs().indent(6) << "unify domains(" << render(lhs) << ") = domains("
                            << render(rhs) << ")\n";
@@ -1204,8 +1207,13 @@ LogicalResult ModuleState::processOp(UnsafeDomainCastOp op) {
     return unifyAssociations(op, op.getInput(), op.getResult());
 
   auto input = op.getInput();
-  RowTerm *inputRow = getDomainAssociationAsRow(input);
-  SmallVector<Term *> elements(inputRow->elements);
+
+  SmallVector<Term *> elements(getNumDomains());
+  if (isHardware(input)) {
+    auto *inputRow = getDomainAssociationAsRow(input);
+    elements.assign(inputRow->elements);
+  }
+
   for (auto value : op.getDomains()) {
     auto domain = cast<DomainValue>(value);
     auto typeID = getDomainTypeID(domain);

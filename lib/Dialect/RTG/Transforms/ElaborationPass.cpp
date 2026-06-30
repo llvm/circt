@@ -136,8 +136,6 @@ namespace llvm {
 
 template <>
 struct DenseMapInfo<bool> {
-  static inline unsigned getEmptyKey() { return false; }
-  static inline unsigned getTombstoneKey() { return true; }
   static unsigned getHashValue(const bool &val) { return val * 37U; }
 
   static bool isEqual(const bool &lhs, const bool &rhs) { return lhs == rhs; }
@@ -170,15 +168,6 @@ struct HashedStorage {
 /// 'isEqual' method.
 template <typename StorageTy>
 struct StorageKeyInfo {
-  static inline HashedStorage<StorageTy> getEmptyKey() {
-    return HashedStorage<StorageTy>(0,
-                                    DenseMapInfo<StorageTy *>::getEmptyKey());
-  }
-  static inline HashedStorage<StorageTy> getTombstoneKey() {
-    return HashedStorage<StorageTy>(
-        0, DenseMapInfo<StorageTy *>::getTombstoneKey());
-  }
-
   static inline unsigned getHashValue(const HashedStorage<StorageTy> &key) {
     return key.hashcode;
   }
@@ -192,7 +181,7 @@ struct StorageKeyInfo {
   }
   static inline bool isEqual(const StorageTy &lhs,
                              const HashedStorage<StorageTy> &rhs) {
-    if (isEqual(rhs, getEmptyKey()) || isEqual(rhs, getTombstoneKey()))
+    if (!rhs.storage)
       return false;
 
     return lhs.isEqual(rhs.storage);

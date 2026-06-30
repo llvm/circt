@@ -463,13 +463,15 @@ hw.module @test_sformatf(in %a : i8) {
   %0 = sv.sformatf "foo%d"(%a) : i8
 }
 
-// CHECK-LABEL: hw.module @test_fflush(in %a : i32) {
+// CHECK-LABEL: hw.module @test_fflush_and_fclose(in %a : i32) {
 // CHECK: sv.fflush
 // CHECK-NEXT: sv.fflush fd %a
-hw.module @test_fflush(in %a : i32) {
+// CHECK-NEXT: sv.fclose %a
+hw.module @test_fflush_and_fclose(in %a : i32) {
   sv.initial {
     sv.fflush
     sv.fflush fd %a
+    sv.fclose %a
   }
 }
 
@@ -526,4 +528,15 @@ hw.module @test_generate_for() {
     }
   }
   hw.output
+}
+
+// CHECK-LABEL: hw.module @test_concat_str
+hw.module @test_concat_str(out o : !hw.string) {
+  // CHECK: sv.constantStr "foo"
+  // CHECK: sv.constantStr "bar"
+  // CHECK: sv.concat_str({{[^)]*}}) : !hw.string
+  %a = sv.constantStr "foo"
+  %b = sv.constantStr "bar"
+  %c = sv.concat_str (%a, %b) : !hw.string
+  hw.output %c : !hw.string
 }

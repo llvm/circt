@@ -403,9 +403,6 @@ bool Deseq::analyzeProcess() {
                  << use.getOwner()->getLoc() << "\n");
       return false;
     }
-    if (!seenDrives.insert(driveOp).second)
-      continue;
-
     // We can only deal with conditional drives.
     if (!driveOp.getEnable()) {
       LLVM_DEBUG(llvm::dbgs()
@@ -416,13 +413,17 @@ bool Deseq::analyzeProcess() {
 
     // We can only deal with the process result being used as drive value or
     // condition.
-    if (use.getOperandNumber() != 1 && use.getOperandNumber() != 2) {
+    // `llhd.drv` operands are: signal (0), value (1), time (2), enable (3).
+    if (use.getOperandNumber() != 1 && use.getOperandNumber() != 3) {
       LLVM_DEBUG(llvm::dbgs()
                  << "Skipping " << process.getLoc()
                  << ": feeds drive operand that is neither value nor enable: "
                  << driveOp << "\n");
       return false;
     }
+
+    if (!seenDrives.insert(driveOp).second)
+      continue;
 
     driveInfos.push_back(DriveInfo(driveOp));
   }

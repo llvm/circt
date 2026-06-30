@@ -300,7 +300,46 @@ OpFoldResult ParityOp::fold(FoldAdaptor adaptor) {
   if (auto input = dyn_cast_or_null<IntegerAttr>(adaptor.getInput()))
     return getIntAttr(APInt(1, input.getValue().popcount() & 1), getContext());
 
+  // parity(x) -> x for single-bit values.
+  if (hw::getBitWidth(getInput().getType()) == 1)
+    return getInput();
+
   return {};
+}
+
+LogicalResult ParityOp::canonicalize(ParityOp op, PatternRewriter &rewriter) {
+  if (isOpTriviallyRecursive(op))
+    return failure();
+
+  // Helper to check if a value has zero parity (even number of 1 bits)
+  auto isParityZero = [](Value v) {
+    APInt value;
+    return matchPattern(v, m_ConstantInt(&value)) && value.popcount() % 2 == 0;
+  };
+
+  // parity(concat(c, x)) -> parity(x) when parity(c) == 0
+  // parity(concat(x, c)) -> parity(x) when parity(c) == 0
+  auto concat = op.getInput().getDefiningOp<ConcatOp>();
+  if (!concat)
+    return failure();
+
+  auto operands = concat.getInputs();
+  if (operands.size() != 2)
+    return failure();
+
+  if (isParityZero(operands[0])) {
+    replaceOpWithNewOpAndCopyNamehint<ParityOp>(rewriter, op, operands[1],
+                                                op.getTwoState());
+    return success();
+  }
+
+  if (isParityZero(operands[1])) {
+    replaceOpWithNewOpAndCopyNamehint<ParityOp>(rewriter, op, operands[0],
+                                                op.getTwoState());
+    return success();
+  }
+
+  return failure();
 }
 
 //===----------------------------------------------------------------------===//
@@ -473,60 +512,53 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
 // Transforms extract(lo, cat(a, b, c, d, e)) into
 // cat(extract(lo1, b), c, extract(lo2, d)).
 // innerCat must be the argument of the provided ExtractOp.
-static LogicalResult extractConcatToConcatExtract(ExtractOp op,
-                                                  ConcatOp innerCat,
-                                                  PatternRewriter &rewriter) {
-  auto reversedConcatArgs = llvm::reverse(innerCat.getInputs());
-  size_t beginOfFirstRelevantElement = 0;
-  auto it = reversedConcatArgs.begin();
+//
+// When prefixWidths is non-empty it is used for O(log N) binary-search lookup
+// of the first relevant concat operand instead of the default O(N) linear scan.
+// The array must contain cumulative bit widths in LSB-first (reversed) order:
+//   prefixWidths[i] = sum of bitwidths of concat operands [N-1, N-2, ..., N-i]
+static LogicalResult
+extractConcatToConcatExtract(ExtractOp op, ConcatOp innerCat,
+                             PatternRewriter &rewriter,
+                             ArrayRef<size_t> prefixWidths = {}) {
+  auto concatInputs = innerCat.getInputs();
+  size_t numOperands = concatInputs.size();
   size_t lowBit = op.getLowBit();
 
-  // This loop finds the first concatArg that is covered by the ExtractOp
-  for (; it != reversedConcatArgs.end(); it++) {
-    assert(beginOfFirstRelevantElement <= lowBit &&
-           "incorrectly moved past an element that lowBit has coverage over");
-    auto operand = *it;
-
-    size_t operandWidth = operand.getType().getIntOrFloatBitWidth();
-    if (lowBit < beginOfFirstRelevantElement + operandWidth) {
-      // A bit other than the first bit will be used in this element.
-      // ...... ........ ...
-      //           ^---lowBit
-      //        ^---beginOfFirstRelevantElement
-      //
-      // Edge-case close to the end of the range.
-      // ...... ........ ...
-      //                 ^---(position + operandWidth)
-      //               ^---lowBit
-      //        ^---beginOfFirstRelevantElement
-      //
-      // Edge-case close to the beginning of the rang
-      // ...... ........ ...
-      //        ^---lowBit
-      //        ^---beginOfFirstRelevantElement
-      //
-      break;
+  // Find the first operand (in LSB-first order) that contains lowBit.
+  size_t firstIdx;
+  size_t beginOfFirst;
+  if (!prefixWidths.empty()) {
+    // O(log N) binary search path.
+    auto it =
+        std::upper_bound(prefixWidths.begin(), prefixWidths.end(), lowBit);
+    assert(it != prefixWidths.end());
+    firstIdx = it - prefixWidths.begin();
+    beginOfFirst = (firstIdx > 0) ? prefixWidths[firstIdx - 1] : 0;
+  } else {
+    // O(N) linear scan path.
+    firstIdx = 0;
+    beginOfFirst = 0;
+    for (size_t i = 0; i < numOperands; ++i) {
+      size_t w =
+          concatInputs[numOperands - 1 - i].getType().getIntOrFloatBitWidth();
+      if (lowBit < beginOfFirst + w) {
+        firstIdx = i;
+        break;
+      }
+      beginOfFirst += w;
     }
-
-    // extraction discards this element.
-    // ...... ........  ...
-    // |      ^---lowBit
-    // ^---beginOfFirstRelevantElement
-    beginOfFirstRelevantElement += operandWidth;
   }
-  assert(it != reversedConcatArgs.end() &&
-         "incorrectly failed to find an element which contains coverage of "
-         "lowBit");
 
   SmallVector<Value> reverseConcatArgs;
-  size_t widthRemaining = cast<IntegerType>(op.getType()).getWidth();
-  size_t extractLo = lowBit - beginOfFirstRelevantElement;
+  size_t widthRemaining = op.getType().getIntOrFloatBitWidth();
+  size_t extractLo = lowBit - beginOfFirst;
 
-  // Transform individual arguments of innerCat(..., a, b, c,) into
-  // [ extract(a), b, extract(c) ], skipping an extract operation where
-  // possible.
-  for (; widthRemaining != 0 && it != reversedConcatArgs.end(); it++) {
-    auto concatArg = *it;
+  // Walk forward from firstIdx in LSB-first order, building
+  // [ extract(a), b, extract(c) ], skipping an extract where possible (where
+  // the whole operand is consumed).
+  for (size_t i = firstIdx; widthRemaining != 0 && i < numOperands; ++i) {
+    Value concatArg = concatInputs[numOperands - 1 - i];
     size_t operandWidth = concatArg.getType().getIntOrFloatBitWidth();
     size_t widthToConsume = std::min(widthRemaining, operandWidth - extractLo);
 
@@ -534,12 +566,11 @@ static LogicalResult extractConcatToConcatExtract(ExtractOp op,
       reverseConcatArgs.push_back(concatArg);
     } else {
       auto resultType = IntegerType::get(rewriter.getContext(), widthToConsume);
-      reverseConcatArgs.push_back(
-          ExtractOp::create(rewriter, op.getLoc(), resultType, *it, extractLo));
+      reverseConcatArgs.push_back(ExtractOp::create(
+          rewriter, op.getLoc(), resultType, concatArg, extractLo));
     }
 
     widthRemaining -= widthToConsume;
-
     // Beyond the first element, all elements are extracted from position 0.
     extractLo = 0;
   }
@@ -1791,39 +1822,41 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
   auto size = inputs.size();
   assert(size > 1 && "expected 2 or more operands");
 
-  // This function is used when we flatten neighboring operands of a
-  // (variadic) concat into a new vesion of the concat.  first/last indices
-  // are inclusive.
-  auto flattenConcat = [&](size_t firstOpIndex, size_t lastOpIndex,
-                           ValueRange replacements) -> LogicalResult {
-    SmallVector<Value, 4> newOperands;
-    newOperands.append(inputs.begin(), inputs.begin() + firstOpIndex);
-    newOperands.append(replacements.begin(), replacements.end());
-    newOperands.append(inputs.begin() + lastOpIndex + 1, inputs.end());
-    if (newOperands.size() == 1)
-      replaceOpAndCopyNamehint(rewriter, op, newOperands[0]);
-    else
-      replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, op.getType(),
-                                                  newOperands);
-    return success();
-  };
+  // Holds the not-yet-processed operands in reverse order!
+  SmallVector<Value, 4> pendingOperands, processedOperands;
+  bool anyOperandChanged;
 
-  Value commonOperand = inputs[0];
-  for (size_t i = 0; i != size; ++i) {
-    // Check to see if all operands are the same.
-    if (inputs[i] != commonOperand)
-      commonOperand = Value();
+  auto pushPendingOperands = [&](ValueRange operands) {
+    auto size = operands.size();
+    for (size_t i = 0; i != size; ++i)
+      pendingOperands.push_back(operands[size - 1 - i]);
+    anyOperandChanged = true;
+  };
+  auto replacePrevOperand = [&](Value replacement) {
+    processedOperands.back() = replacement;
+    anyOperandChanged = true;
+  };
+  pendingOperands.reserve(size);
+  pushPendingOperands(inputs);
+  anyOperandChanged = false;
+
+  while (!pendingOperands.empty()) {
+    Value nextOperand = pendingOperands.pop_back_val();
 
     // If an operand to the concat is itself a concat, then we can fold them
     // together.
-    if (auto subConcat = inputs[i].getDefiningOp<ConcatOp>())
-      return flattenConcat(i, i, subConcat->getOperands());
+    if (auto subConcat = nextOperand.getDefiningOp<ConcatOp>()) {
+      pushPendingOperands(subConcat->getOperands());
+      continue;
+    }
 
     // Check for canonicalization due to neighboring operands.
-    if (i != 0) {
+    if (!processedOperands.empty()) {
+      Value prevOperand = processedOperands.back();
+
       // Merge neighboring constants.
-      if (auto cst = inputs[i].getDefiningOp<hw::ConstantOp>()) {
-        if (auto prevCst = inputs[i - 1].getDefiningOp<hw::ConstantOp>()) {
+      if (auto cst = nextOperand.getDefiningOp<hw::ConstantOp>()) {
+        if (auto prevCst = prevOperand.getDefiningOp<hw::ConstantOp>()) {
           unsigned prevWidth = prevCst.getValue().getBitWidth();
           unsigned thisWidth = cst.getValue().getBitWidth();
           auto resultCst = cst.getValue().zext(prevWidth + thisWidth);
@@ -1831,50 +1864,55 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
                        << thisWidth;
           Value replacement =
               hw::ConstantOp::create(rewriter, op.getLoc(), resultCst);
-          return flattenConcat(i - 1, i, replacement);
+          replacePrevOperand(replacement);
+          continue;
         }
       }
 
       // If the two operands are the same, turn them into a replicate.
-      if (inputs[i] == inputs[i - 1]) {
+      if (nextOperand == prevOperand) {
         Value replacement =
-            rewriter.createOrFold<ReplicateOp>(op.getLoc(), inputs[i], 2);
-        return flattenConcat(i - 1, i, replacement);
+            rewriter.createOrFold<ReplicateOp>(op.getLoc(), prevOperand, 2);
+        replacePrevOperand(replacement);
+        continue;
       }
 
       // If this input is a replicate, see if we can fold it with the previous
       // one.
-      if (auto repl = inputs[i].getDefiningOp<ReplicateOp>()) {
+      if (auto repl = nextOperand.getDefiningOp<ReplicateOp>()) {
         // ... x, repl(x, n), ...  ==> ..., repl(x, n+1), ...
-        if (repl.getOperand() == inputs[i - 1]) {
+        if (repl.getOperand() == prevOperand) {
           Value replacement = rewriter.createOrFold<ReplicateOp>(
               op.getLoc(), repl.getOperand(), repl.getMultiple() + 1);
-          return flattenConcat(i - 1, i, replacement);
+          replacePrevOperand(replacement);
+          continue;
         }
         // ... repl(x, n), repl(x, m), ...  ==> ..., repl(x, n+m), ...
-        if (auto prevRepl = inputs[i - 1].getDefiningOp<ReplicateOp>()) {
+        if (auto prevRepl = prevOperand.getDefiningOp<ReplicateOp>()) {
           if (prevRepl.getOperand() == repl.getOperand()) {
             Value replacement = rewriter.createOrFold<ReplicateOp>(
                 op.getLoc(), repl.getOperand(),
                 repl.getMultiple() + prevRepl.getMultiple());
-            return flattenConcat(i - 1, i, replacement);
+            replacePrevOperand(replacement);
+            continue;
           }
         }
       }
 
       // ... repl(x, n), x, ...  ==> ..., repl(x, n+1), ...
-      if (auto repl = inputs[i - 1].getDefiningOp<ReplicateOp>()) {
-        if (repl.getOperand() == inputs[i]) {
+      if (auto repl = prevOperand.getDefiningOp<ReplicateOp>()) {
+        if (repl.getOperand() == nextOperand) {
           Value replacement = rewriter.createOrFold<ReplicateOp>(
-              op.getLoc(), inputs[i], repl.getMultiple() + 1);
-          return flattenConcat(i - 1, i, replacement);
+              op.getLoc(), nextOperand, repl.getMultiple() + 1);
+          replacePrevOperand(replacement);
+          continue;
         }
       }
 
       // Merge neighboring extracts of neighboring inputs, e.g.
       // {A[3], A[2]} -> A[3:2]
-      if (auto extract = inputs[i].getDefiningOp<ExtractOp>()) {
-        if (auto prevExtract = inputs[i - 1].getDefiningOp<ExtractOp>()) {
+      if (auto extract = nextOperand.getDefiningOp<ExtractOp>()) {
+        if (auto prevExtract = prevOperand.getDefiningOp<ExtractOp>()) {
           if (extract.getInput() == prevExtract.getInput()) {
             auto thisWidth = cast<IntegerType>(extract.getType()).getWidth();
             if (prevExtract.getLowBit() == extract.getLowBit() + thisWidth) {
@@ -1883,7 +1921,8 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
               Value replacement =
                   ExtractOp::create(rewriter, op.getLoc(), resType,
                                     extract.getInput(), extract.getLowBit());
-              return flattenConcat(i - 1, i, replacement);
+              replacePrevOperand(replacement);
+              continue;
             }
           }
         }
@@ -1911,8 +1950,8 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
           return std::nullopt;
         }
       };
-      if (auto extractOpt = ArraySlice::get(inputs[i])) {
-        if (auto prevExtractOpt = ArraySlice::get(inputs[i - 1])) {
+      if (auto extractOpt = ArraySlice::get(nextOperand)) {
+        if (auto prevExtractOpt = ArraySlice::get(prevOperand)) {
           // Check that two array slices are mergable.
           if (prevExtractOpt->index.getType() == extractOpt->index.getType() &&
               prevExtractOpt->input == extractOpt->input &&
@@ -1928,21 +1967,69 @@ LogicalResult ConcatOp::canonicalize(ConcatOp op, PatternRewriter &rewriter) {
                 hw::ArraySliceOp::create(rewriter, op.getLoc(), resType,
                                          prevExtractOpt->input,
                                          extractOpt->index));
-            return flattenConcat(i - 1, i, replacement);
+            replacePrevOperand(replacement);
+            continue;
           }
         }
       }
     }
+
+    processedOperands.push_back(nextOperand);
   }
 
-  // If all operands were the same, then this is a replicate.
-  if (commonOperand) {
-    replaceOpWithNewOpAndCopyNamehint<ReplicateOp>(rewriter, op, op.getType(),
-                                                   commonOperand);
-    return success();
+  // Batch-resolve all ExtractOp users of this concat using a prefix-sum array
+  // and binary search. This avoids the O(M*N) cost of having each ExtractOp
+  // independently do a linear scan over the concat's operands.
+  //
+  // Only do this when:
+  //  - the concat operands are unchanged (if they changed, we'll replace the
+  //    concat below and the extract users will be re-enqueued naturally)
+  //  - there are enough extract users to justify batching (for small counts,
+  //    the per-ExtractOp canonicalization is fine and preserves output order)
+  constexpr size_t kBatchExtractThreshold = 16;
+  bool anyExtractsResolved = false;
+  if (!anyOperandChanged && processedOperands.size() > 1) {
+    SmallVector<ExtractOp, 8> extractUsers;
+    for (auto *user : op->getUsers()) {
+      if (auto extract = dyn_cast<ExtractOp>(user))
+        extractUsers.push_back(extract);
+    }
+
+    if (extractUsers.size() >= kBatchExtractThreshold) {
+      // Build prefix-sum of bit widths in LSB-first (reversed) order.
+      auto concatInputs = op.getInputs();
+      size_t numConcatOperands = concatInputs.size();
+      SmallVector<size_t> prefixWidths(numConcatOperands);
+      size_t cumWidth = 0;
+      for (size_t i = 0; i < numConcatOperands; ++i) {
+        // Note: we can just query bitwidth here as is as the ExtractOp above's
+        // type constraints means this is valid in valid IR.
+        cumWidth += concatInputs[numConcatOperands - 1 - i]
+                        .getType()
+                        .getIntOrFloatBitWidth();
+        prefixWidths[i] = cumWidth;
+      }
+
+      // Resolve each extract user.
+      for (auto extract : extractUsers) {
+        if (succeeded(extractConcatToConcatExtract(extract, op, rewriter,
+                                                   prefixWidths)))
+          anyExtractsResolved = true;
+      }
+    }
   }
 
-  return failure();
+  if (processedOperands.size() == 1) {
+    // If the operands were all the same, we'll reach here with a single
+    // ReplicateOp.
+    replaceOpAndCopyNamehint(rewriter, op, processedOperands[0]);
+  } else if (anyOperandChanged) {
+    replaceOpWithNewOpAndCopyNamehint<ConcatOp>(rewriter, op, op.getType(),
+                                                processedOperands);
+  } else if (!anyExtractsResolved) {
+    return failure();
+  }
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

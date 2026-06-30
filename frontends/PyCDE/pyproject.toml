@@ -38,6 +38,19 @@ environment-pass = [
   "COMPILER_LAUNCHER",
 ]
 
+[tool.cibuildwheel.windows]
+# The native libraries that the extension modules link against (the shared
+# `nanobind-mlir` runtime, the CIRCT/MLIR CAPI aggregate, the MLIR support
+# library, and zlib) are already bundled inside the wheel's `_mlir_libs`
+# directory by the build. By default delvewheel only searches the system PATH
+# for an extension module's dependencies (it sets its internal `wheel_dirs` to
+# None unless `--ignore-existing` is given), so it fails with
+# "Unable to find library: nanobind-mlir.dll" even though the DLL is present in
+# the wheel. `--ignore-existing` tells delvewheel that those DLLs are
+# intentionally vendored: it finds them in the wheel, leaves them in place
+# (un-mangled), and patches the runtime DLL search path accordingly.
+repair-wheel-command = "delvewheel repair --ignore-existing -w {dest_dir} {wheel}"
+
 [project]
 name = "pycde"
 dynamic = ["version"]

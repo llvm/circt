@@ -15,11 +15,49 @@
 #include "slang/ast/SemanticFacts.h"
 #include "slang/ast/Statement.h"
 #include "slang/ast/SystemSubroutine.h"
+#include "slang/ast/expressions/MiscExpressions.h"
+#include "slang/ast/symbols/CompilationUnitSymbols.h"
+#include "slang/ast/symbols/InstanceSymbols.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace mlir;
 using namespace circt;
 using namespace ImportVerilog;
+
+/// Build the message printed by the `$printtimescale` system task. If a module
+/// instance or `$unit` is passed as argument, report that scope's time scale;
+/// otherwise report the time scale of the current scope.
+static std::string buildPrintTimeScaleMessage(
+    Context &context, std::span<const slang::ast::Expression *const> args) {
+  auto timeScale = context.timeScale;
+  std::string target;
+
+  if (!args.empty()) {
+    if (auto *expr = args[0]->as_if<slang::ast::ArbitrarySymbolExpression>()) {
+      const auto *symbol = expr->symbol.get();
+      if (auto *instance = symbol->as_if<slang::ast::InstanceSymbol>()) {
+        timeScale = instance->body.getTimeScale().value_or(timeScale);
+        target = instance->getHierarchicalPath();
+      } else if (auto *unit =
+                     symbol->as_if<slang::ast::CompilationUnitSymbol>()) {
+        timeScale = unit->getTimeScale().value_or(timeScale);
+        target = "$unit";
+      } else if (symbol->kind == slang::ast::SymbolKind::Root) {
+        target = "$root";
+      }
+    }
+  }
+
+  std::string out;
+  llvm::raw_string_ostream os(out);
+  os << "Time scale";
+  if (!target.empty())
+    os << " of " << target;
+  os << " is " << timeScale.base.toString() << " / "
+     << timeScale.precision.toString() << "\n";
+  return out;
+}
 
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
@@ -177,26 +215,39 @@ struct StmtVisitor {
 
     // Slang stores all threads of a fork-join block inside a `StatementList`.
     // This cannot be visited normally due to the need to make each statement a
-    // separate thread so must be converted here.
-    auto *threadList = stmt.body.as_if<slang::ast::StatementList>();
-    unsigned int threadCount = threadList ? threadList->list.size() : 1;
+    // separate thread so must be converted here. When only a single statement
+    // is present, Slang does not create a `StatementList`.
+    //
+    // Declarations inside a fork block are block items, not separate forked
+    // processes. Slang stores them in the same `StatementList` as the forked
+    // statements, so convert them in place before creating the fork regions
+    // (their values must dominate all threads) and collect the remaining
+    // statements as the actual threads.
+    SmallVector<const slang::ast::Statement *> items;
+    if (auto *threadList = stmt.body.as_if<slang::ast::StatementList>())
+      items.append(threadList->list.begin(), threadList->list.end());
+    else
+      items.push_back(&stmt.body);
 
-    auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threadCount);
+    SmallVector<const slang::ast::Statement *> threads;
+    for (auto *item : items) {
+      if (item->as_if<slang::ast::VariableDeclStatement>()) {
+        if (failed(context.convertStatement(*item)))
+          return failure();
+        continue;
+      }
+      threads.push_back(item);
+    }
+    // If the fork contained only declarations, there are no threads to spawn
+    // and the fork degenerates to the declarations themselves. Genuinely
+    // empty forks keep producing an empty fork op.
+    if (threads.empty() && !items.empty())
+      return success();
+
+    auto forkOp = moore::ForkJoinOp::create(builder, loc, kind, threads.size());
     OpBuilder::InsertionGuard guard(builder);
 
-    // When only a single statement is present, Slang does not create a
-    // `StatementList`.
-    if (!threadList) {
-      auto &tBlock = forkOp->getRegion(0).emplaceBlock();
-      builder.setInsertionPointToStart(&tBlock);
-      if (failed(context.convertStatement(stmt.body)))
-        return failure();
-      moore::CompleteOp::create(builder, loc);
-      return success();
-    }
-
-    int i = 0;
-    for (auto *thread : threadList->list) {
+    for (auto [i, thread] : llvm::enumerate(threads)) {
       auto &tBlock = forkOp->getRegion(i).emplaceBlock();
       builder.setInsertionPointToStart(&tBlock);
       // Populate thread operator with thread body and finish with a thread
@@ -204,7 +255,6 @@ struct StmtVisitor {
       if (failed(context.convertStatement(*thread)))
         return failure();
       moore::CompleteOp::create(builder, loc);
-      i++;
     }
     return success();
   }
@@ -221,47 +271,6 @@ struct StmtVisitor {
           return failure();
         if (handled == true)
           return success();
-      }
-
-      // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
-      // string" the first argument of $sformat/$swrite is its output; the
-      // other arguments work like a FormatString.
-      // In Moore we only support writing to a location if it is a reference;
-      // However, Section 21.3.3 explains that the output of $sformat/$swrite
-      // is assigned as if it were cast from a string literal (Section 5.9),
-      // so this implementation casts the string to the target value.
-      if (!call->getSubroutineName().compare("$sformat") ||
-          !call->getSubroutineName().compare("$swrite")) {
-
-        // Use the first argument as the output location
-        auto *lhsExpr = call->arguments().front();
-        // Format the second and all later arguments as a string
-        auto fmtValue =
-            context.convertFormatString(call->arguments().subspan(1), loc,
-                                        moore::IntFormat::Decimal, false);
-        if (failed(fmtValue))
-          return failure();
-        // Convert the FormatString to a StringType
-        auto strValue = moore::FormatStringToStringOp::create(builder, loc,
-                                                              fmtValue.value());
-        // The Slang AST produces a `AssignmentExpression` for the first
-        // argument; the RHS of this expression is invalid though
-        // (`EmptyArgument`), so we only use the LHS of the
-        // `AssignmentExpression` and plug in the formatted string for the RHS.
-        if (auto assignExpr =
-                lhsExpr->as_if<slang::ast::AssignmentExpression>()) {
-          auto lhs = context.convertLvalueExpression(assignExpr->left());
-          if (!lhs)
-            return failure();
-
-          auto convertedValue = context.materializeConversion(
-              cast<moore::RefType>(lhs.getType()).getNestedType(), strValue,
-              false, loc);
-          moore::BlockingAssignOp::create(builder, loc, lhs, convertedValue);
-          return success();
-        } else {
-          return failure();
-        }
       }
     }
 
@@ -368,6 +377,36 @@ struct StmtVisitor {
   LogicalResult visit(const slang::ast::CaseStatement &caseStmt) {
     using slang::ast::AttributeSymbol;
     using slang::ast::CaseStatementCondition;
+    if (auto *caseType =
+            caseStmt.expr.as_if<slang::ast::TypeReferenceExpression>()) {
+      if (caseStmt.condition != CaseStatementCondition::Normal)
+        return mlir::emitError(loc,
+                               "unsupported type reference case condition");
+
+      const slang::ast::Statement *matchedStmt = nullptr;
+      for (const auto &item : caseStmt.items) {
+        for (const auto *expr : item.expressions) {
+          auto *itemType = expr->as_if<slang::ast::TypeReferenceExpression>();
+          if (!itemType)
+            return mlir::emitError(
+                context.convertLocation(expr->sourceRange),
+                "unsupported non-type item in type reference case statement");
+          if (itemType->targetType.isMatching(caseType->targetType)) {
+            matchedStmt = item.stmt;
+            break;
+          }
+        }
+        if (matchedStmt)
+          break;
+      }
+
+      if (matchedStmt)
+        return context.convertStatement(*matchedStmt);
+      if (caseStmt.defaultCase)
+        return context.convertStatement(*caseStmt.defaultCase);
+      return success();
+    }
+
     auto caseExpr = context.convertRvalueExpression(caseStmt.expr);
     if (!caseExpr)
       return failure();
@@ -1005,12 +1044,23 @@ struct StmtVisitor {
       return true;
     }
 
+    // Timescale tasks (`$printtimescale`)
+
+    if (nameId == ksn::PrintTimeScale) {
+      auto message = moore::FormatLiteralOp::create(
+          builder, loc, buildPrintTimeScaleMessage(context, args));
+      moore::DisplayBIOp::create(builder, loc, message);
+      return true;
+    }
+
     // Display and Write Tasks (`$display[boh]?` or `$write[boh]?` or
-    // `$fdisplay[boh]?` or `$fwrite[boh]?`)
+    // `$fdisplay[boh]?` or `$fwrite[boh]?` or `$swrite[boh]` or `$sformat`)
 
     using moore::IntFormat;
     bool isDisplay = false;
     bool isFDisplay = false;
+    bool isSWrite = false;
+    bool isSFormat = false;
     bool appendNewline = false;
     IntFormat defaultFormat = IntFormat::Decimal;
     switch (nameId) {
@@ -1082,6 +1132,24 @@ struct StmtVisitor {
       isFDisplay = true;
       defaultFormat = IntFormat::HexLower;
       break;
+    case ksn::SFormat:
+      isSFormat = true;
+      break;
+    case ksn::SWrite:
+      isSWrite = true;
+      break;
+    case ksn::SWriteB:
+      isSWrite = true;
+      defaultFormat = IntFormat::Binary;
+      break;
+    case ksn::SWriteO:
+      isSWrite = true;
+      defaultFormat = IntFormat::Octal;
+      break;
+    case ksn::SWriteH:
+      isSWrite = true;
+      defaultFormat = IntFormat::HexLower;
+      break;
     default:
       break;
     }
@@ -1114,6 +1182,43 @@ struct StmtVisitor {
         return true;
       moore::FDisplayBIOp::create(builder, loc, fd, *message);
       return true;
+    }
+
+    // According to IEEE 1800-2023 Section 21.3.3 "Formatting data to a
+    // string" the first argument of $sformat/$swrite is its output; the
+    // other arguments work like a FormatString.
+    // In Moore we only support writing to a location if it is a reference;
+    // However, Section 21.3.3 explains that the output of $sformat/$swrite
+    // is assigned as if it were cast from a string literal (Section 5.9),
+    // so this implementation casts the string to the target value.
+    if (isSWrite || isSFormat) {
+      if (isSFormat && args.size() < 2)
+        return emitError(loc) << "$sformat requires at least 2 arguments";
+      if (isSWrite && args.size() < 1)
+        return emitError(loc) << "$swrite requires at least 1 argument";
+
+      auto fmtValue =
+          context.convertFormatString(args.subspan(1), loc, defaultFormat,
+                                      /*appendNewline=*/false);
+      if (failed(fmtValue))
+        return failure();
+      if (*fmtValue == Value{})
+        return true;
+      auto strValue =
+          moore::FormatStringToStringOp::create(builder, loc, *fmtValue);
+      auto *lhsExpr = args[0];
+      if (auto *assignExpr =
+              lhsExpr->as_if<slang::ast::AssignmentExpression>()) {
+        auto lhs = context.convertLvalueExpression(assignExpr->left());
+        if (!lhs)
+          return failure();
+        auto convertedValue = context.materializeConversion(
+            cast<moore::RefType>(lhs.getType()).getNestedType(), strValue,
+            false, loc);
+        moore::BlockingAssignOp::create(builder, loc, lhs, convertedValue);
+        return true;
+      }
+      return failure();
     }
 
     // Severity Tasks
@@ -1180,8 +1285,59 @@ struct StmtVisitor {
       return true;
     }
 
-    // Queue Tasks
+    // String Tasks
+    if (args.size() >= 1 && args[0]->type->isString()) {
+      auto str = context.convertLvalueExpression(*args[0]);
 
+      if (nameId == ksn::Putc) {
+        // Slang already checks the arity of string tasks.
+        assert(args.size() == 3 && "`putc` takes 3 arguments");
+        auto index = context.convertRvalueExpression(*args[1]);
+        auto character = context.convertRvalueExpression(*args[2]);
+        moore::StringPutOp::create(builder, loc, str, index, character);
+        return true;
+      }
+
+      if (nameId == ksn::IToA || nameId == ksn::HexToA ||
+          nameId == ksn::OctToA || nameId == ksn::BinToA) {
+        // Slang already checks the arity of string tasks.
+        assert(args.size() == 2 && "`itoa/hex/oct/bin` takes 2 arguments");
+        auto integerType = moore::IntType::getLogic(builder.getContext(), 32);
+        auto input = context.convertRvalueExpression(*args[1], integerType);
+
+        switch (nameId) {
+        case ksn::IToA:
+          moore::StringItoaOp::create(builder, loc, str, input);
+          break;
+        case ksn::HexToA:
+          moore::StringHextoaOp::create(builder, loc, str, input);
+          break;
+        case ksn::OctToA:
+          moore::StringOcttoaOp::create(builder, loc, str, input);
+          break;
+        case ksn::BinToA:
+          moore::StringBintoaOp::create(builder, loc, str, input);
+          break;
+        default:
+          llvm_unreachable("unexpected ASCII integer to string conversion");
+          return false;
+        }
+        return true;
+      }
+
+      if (nameId == ksn::RealToA) {
+        // Slang already checks the arity of string tasks.
+        assert(args.size() == 2 && "`realtoa` takes 2 arguments");
+        auto realType =
+            moore::RealType::get(context.getContext(), moore::RealWidth::f64);
+        auto input = context.convertRvalueExpression(*args[1], realType);
+        moore::StringRealtoaOp::create(builder, loc, str, input);
+        return true;
+      }
+      return false;
+    }
+
+    // Queue Tasks
     if (args.size() >= 1 && args[0]->type->isQueue()) {
       auto queue = context.convertLvalueExpression(*args[0]);
 

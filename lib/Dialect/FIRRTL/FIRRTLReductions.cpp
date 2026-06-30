@@ -284,7 +284,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
       builder.create<RefDefineOp>(value, refSend.getResult());
 
       // Invalidate the underlying wire.
-      auto invalid = tieOffCache.getInvalid(underlyingType);
+      auto invalid = InvalidValueOp::create(builder, underlyingType);
       MatchingConnectOp::create(builder, targetWire.getResult(), invalid);
       return;
     }
@@ -304,7 +304,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
     builder.create<RefDefineOp>(value, forceableRef);
 
     // Invalidate the underlying wire.
-    auto invalid = tieOffCache.getInvalid(underlyingType);
+    auto invalid = InvalidValueOp::create(builder, underlyingType);
     MatchingConnectOp::create(builder, targetWire, invalid);
     return;
   }
@@ -338,7 +338,7 @@ static void invalidateOutputs(ImplicitLocOpBuilder &builder, Value value,
 
   // Create InvalidValueOp for FIRRTLBaseType.
   if (auto baseType = type_dyn_cast<FIRRTLBaseType>(type)) {
-    auto invalid = tieOffCache.getInvalid(baseType);
+    auto invalid = InvalidValueOp::create(builder, baseType);
     ConnectOp::create(builder, value, invalid);
     return;
   }
@@ -1056,7 +1056,7 @@ struct ExtmoduleInstanceRemover : public OpReduction<firrtl::InstanceOp> {
       if (info.isOutput()) {
         // Tie off output ports using TieOffCache.
         if (auto baseType = dyn_cast<firrtl::FIRRTLBaseType>(info.type)) {
-          auto inv = tieOffCache.getInvalid(baseType);
+          auto inv = InvalidValueOp::create(builder, baseType);
           firrtl::ConnectOp::create(builder, wire, inv);
         } else if (auto propType = dyn_cast<firrtl::PropertyType>(info.type)) {
           auto unknown = tieOffCache.getUnknown(propType);
@@ -2663,6 +2663,16 @@ struct ExtmoduleConventionRemover : public OpReduction<FExtModuleOp> {
   bool isOneShot() const override { return true; }
 };
 
+struct IMDCEPortReduction : public PassReduction {
+  IMDCEPortReduction(MLIRContext *context)
+      : PassReduction(
+            context, firrtl::createIMDeadCodeElim({/*removePortsOnly=*/true})) {
+  }
+  std::string getName() const override {
+    return "firrtl-imdeadcodeelim-remove-ports";
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Reduction Registration
 //===----------------------------------------------------------------------===//
@@ -2702,9 +2712,7 @@ void firrtl::FIRRTLReducePatternDialectInterface::populateReducePatterns(
                                   true, true);
   patterns.add<PassReduction, 19>(getContext(), firrtl::createInliner());
   patterns.add<PassReduction, 18>(getContext(), firrtl::createIMConstProp());
-  patterns.add<PassReduction, 17>(
-      getContext(),
-      firrtl::createRemoveUnusedPorts({/*ignoreDontTouch=*/true}));
+  patterns.add<IMDCEPortReduction, 17>(getContext());
   patterns.add<NodeSymbolRemover, 16>();
   patterns.add<PassReduction, 15>(getContext(), firrtl::createIMDeadCodeElim());
   patterns.add<ConnectForwarder, 14>();

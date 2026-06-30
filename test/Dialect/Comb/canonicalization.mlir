@@ -2164,3 +2164,10 @@ hw.module @AndOfReplicateNot2State(in %p: i1, in %x: i4, out y: i4) {
   %and = comb.and %x, %r : i4
   hw.output %and : i4
 }
+
+// CHECK-LABEL: @paritySingleBit
+hw.module @paritySingleBit(in %a: i1, out o: i1) {
+  // CHECK-NEXT: hw.output %a : i1
+  %0 = comb.parity %a : i1
+  hw.output %0 : i1
+}

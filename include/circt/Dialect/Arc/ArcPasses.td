@@ -1,4 +1,4 @@
-//===- ArcPasses.td - Arc dialect passes -------------------*- tablegen -*-===//
+//===----------------------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -172,9 +172,48 @@ def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::scf::SCFDialect"];
 }
 
+def LowerCoroutinesPass : Pass<"arc-lower-coroutines", "mlir::ModuleOp"> {
+  let summary = "Lower coroutines to state machine functions";
+  let description = [{
+    Convert each `arc.coroutine.define` into a regular function that takes an
+    explicit state and program counter as its leading arguments, and that
+    dispatches to its entry block or one of its resume blocks accordingly.
+    Values that are live across suspension points are persisted in the
+    explicit state, which is a union with one struct variant per resume block.
+    Calls to coroutines become regular function calls, and all uses of the
+    opaque `!arc.coroutine_state` and `!arc.coroutine_pc` types anywhere in
+    the IR are replaced with the concrete union and integer types computed for
+    each coroutine.
+  }];
+  let dependentDialects = [
+    "comb::CombDialect",
+    "hw::HWDialect",
+    "mlir::cf::ControlFlowDialect",
+    "mlir::func::FuncDialect",
+    "mlir::ub::UBDialect",
+  ];
+}
+
 def LowerArrays : Pass<"arc-lower-arrays", "mlir::ModuleOp"> {
   let summary = "Lower arrays to use bufferized arrayrefs";
   let dependentDialects = ["arc::ArcDialect"];
+}
+
+def GenerateDriver : Pass<"arc-generate-driver", "mlir::ModuleOp"> {
+  let summary = "Generate a simulation driver function for each model";
+  let description = [{
+    Emit a `func.func @<model>_main` for every `arc.model` that instantiates the
+    model and drives it forward in time until no more events are scheduled: it
+    repeatedly advances simulation time to the next scheduled wakeup and
+    evaluates the model until no further wakeup is pending. This lets a model be
+    run directly through the arcilator JIT without a hand-written driver loop.
+  }];
+  let dependentDialects = [
+    "arc::ArcDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::func::FuncDialect",
+    "mlir::scf::SCFDialect",
+  ];
 }
 
 def LowerLUT : Pass<"arc-lower-lut", "arc::DefineOp"> {
@@ -187,6 +226,7 @@ def LowerStatePass : Pass<"arc-lower-state", "mlir::ModuleOp"> {
   let dependentDialects = [
     "arc::ArcDialect",
     "comb::CombDialect",
+    "mlir::arith::ArithDialect",
     "mlir::LLVM::LLVMDialect",
     "mlir::func::FuncDialect",
     "mlir::scf::SCFDialect",

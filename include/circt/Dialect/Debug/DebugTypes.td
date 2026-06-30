@@ -32,4 +32,16 @@ def ArrayType : DebugTypeDef<"Array"> {
   let description = "The result of a `dbg.array` operation.";
 }
 
+def ValueType : DebugTypeDef<"Value"> {
+  let mnemonic = "value";
+  let summary = "debug value annotated with source-language metadata";
+  let description = "The result of a `dbg.value` operation.";
+}
+
+def EnumType : DebugTypeDef<"Enum"> {
+  let mnemonic = "enum";
+  let summary = "debug enum value";
+  let description = "The result of a `dbg.enum` operation.";
+}
+
 #endif // CIRCT_DIALECT_DEBUG_DEBUGTYPES_TD

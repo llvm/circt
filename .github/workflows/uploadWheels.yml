@@ -16,7 +16,6 @@ on:
         type: choice
         options:
           - all
-          - cp310-manylinux_x86_64
           - cp313-manylinux_x86_64
           - cp314-manylinux_x86_64
           - cp313-macosx_arm64
@@ -36,7 +35,6 @@ jobs:
           if [[ "${{ github.event_name }}" != "workflow_dispatch" || "${{ inputs.cibw-build }}" == "all" ]]; then
             matrix='{
               "config": [
-                {"os":"ubuntu-22.04","cibw_build":"cp310-manylinux_x86_64"},
                 {"os":"ubuntu-22.04","cibw_build":"cp313-manylinux_x86_64"},
                 {"os":"ubuntu-22.04","cibw_build":"cp314-manylinux_x86_64"},
                 {"os":"macos-14","cibw_build":"cp313-macosx_arm64"},
@@ -72,7 +70,7 @@ jobs:
       matrix: ${{ fromJSON(needs.select_matrix.outputs.matrix) }}
     steps:
       - name: Get CIRCT
-        uses: actions/checkout@v3
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 2
           submodules: "true"
@@ -81,8 +79,18 @@ jobs:
         run: |
           git fetch --force --unshallow --tags --no-recurse-submodules
 
+      - name: Determine Python version
+        id: python-version
+        shell: bash
+        run: |
+          cibw_build="${{ matrix.config.cibw_build }}"
+          python_version=$(echo "${cibw_build%%-*}" | sed -E 's/^cp([0-9])([0-9]+)$/\1.\2/')
+          echo "python-version=${python_version}" >> "$GITHUB_OUTPUT"
+
       - name: Setup Python
-        uses: actions/setup-python@v3
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: ${{ steps.python-version.outputs.python-version }}
 
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel==3.3.0
@@ -97,7 +105,7 @@ jobs:
           SETUPTOOLS_SCM_DEBUG: True
 
       - name: Upload (stage) wheels as artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: python-wheels-${{ matrix.config.cibw_build }}
           path: ./wheelhouse/*.whl
@@ -117,7 +125,7 @@ jobs:
 
     steps:
       - name: Download wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: python-wheels-*
           merge-multiple: true
@@ -128,7 +136,7 @@ jobs:
         working-directory: ./wheelhouse/
 
       - name: Upload wheels to pypi
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
         with:
           packages-dir: wheelhouse/
           verify-metadata: false

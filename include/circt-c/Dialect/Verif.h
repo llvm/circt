@@ -16,6 +16,7 @@ extern "C" {
 #endif
 
 MLIR_DECLARE_CAPI_DIALECT_REGISTRATION(Verif, verif);
+MLIR_CAPI_EXPORTED void registerVerifPasses(void);
 
 #ifdef __cplusplus
 }

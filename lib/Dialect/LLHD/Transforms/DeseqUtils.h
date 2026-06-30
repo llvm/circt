@@ -314,12 +314,6 @@ template <>
 struct DenseMapInfo<circt::llhd::deseq::FixedValue> {
   using Value = mlir::Value;
   using FixedValue = circt::llhd::deseq::FixedValue;
-  static inline FixedValue getEmptyKey() {
-    return FixedValue{DenseMapInfo<Value>::getEmptyKey(), false, false};
-  }
-  static inline FixedValue getTombstoneKey() {
-    return FixedValue{DenseMapInfo<Value>::getTombstoneKey(), false, false};
-  }
   static unsigned getHashValue(const FixedValue &key) {
     return hash_value(key);
   }
@@ -333,12 +327,6 @@ template <>
 struct DenseMapInfo<circt::llhd::deseq::FixedValues> {
   using FixedValue = circt::llhd::deseq::FixedValue;
   using FixedValues = circt::llhd::deseq::FixedValues;
-  static inline FixedValues getEmptyKey() {
-    return {DenseMapInfo<FixedValue>::getEmptyKey()};
-  }
-  static inline FixedValues getTombstoneKey() {
-    return {DenseMapInfo<FixedValue>::getTombstoneKey()};
-  }
   static unsigned getHashValue(const FixedValues &key) {
     return hash_value(key);
   }
@@ -351,12 +339,6 @@ struct DenseMapInfo<circt::llhd::deseq::FixedValues> {
 template <>
 struct DenseMapInfo<circt::llhd::deseq::ValueField> {
   using VF = circt::llhd::deseq::ValueField;
-  static inline VF getEmptyKey() {
-    return VF(DenseMapInfo<mlir::Value>::getEmptyKey(), ~0ULL);
-  }
-  static inline VF getTombstoneKey() {
-    return VF(DenseMapInfo<mlir::Value>::getTombstoneKey(), ~0ULL - 1);
-  }
   static unsigned getHashValue(const VF &key) {
     return DenseMapInfo<mlir::Value>::getHashValue(key.value) ^
            DenseMapInfo<uint64_t>::getHashValue(key.fieldID) ^

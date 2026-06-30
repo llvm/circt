@@ -1,4 +1,4 @@
-// RUN: arcilator %s --run --jit-entry=main --jit-vcd-file=%t && cat %t | FileCheck %s --match-full-lines --check-prefix VCD
+// RUN: arcilator %s --run --jit-entry=main --no-generate-driver --jit-vcd-file=%t && cat %t | FileCheck %s --match-full-lines --check-prefix VCD
 // REQUIRES: arcilator-jit
 
 hw.module @dut(out dout : i136) {

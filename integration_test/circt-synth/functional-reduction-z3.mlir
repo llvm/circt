@@ -1,9 +1,8 @@
-// REQUIRES: z3-integration, libz3
+// REQUIRES: z3
 // RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(synth-functional-reduction{num-random-patterns=64 sat-solver=z3}))' -o %t.mlir
 // RUN: cat %t.mlir | FileCheck %s
 
-// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 functional_reduction_sat --c2 functional_reduction_sat | FileCheck %s --check-prefix=BASIC
-// BASIC: c1 == c2
+// RUN: circt-lec.sh %s %t.mlir --c1 functional_reduction_sat --c2 functional_reduction_sat
 // SAT should prove that AND(AND(a, not b), AND(c, not d)) is equivalent to
 // AND(a, not b, c, not d), and the pass should materialize that with a choice.
 // CHECK-LABEL: hw.module @functional_reduction_sat
@@ -26,8 +25,7 @@ hw.module @functional_reduction_sat(in %a: i1, in %b: i1, in %c: i1, in %d: i1,
 
 // SAT should also prove equivalence across the newly supported comb
 // nodes.
-// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 functional_reduction_supported_ops_sat --c2 functional_reduction_supported_ops_sat | FileCheck %s --check-prefix=MIXED
-// MIXED: c1 == c2
+// RUN: circt-lec.sh %s %t.mlir --c1 functional_reduction_supported_ops_sat --c2 functional_reduction_supported_ops_sat
 // CHECK-LABEL: hw.module @functional_reduction_supported_ops_sat
 hw.module @functional_reduction_supported_ops_sat(
     in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1,
@@ -47,8 +45,7 @@ hw.module @functional_reduction_supported_ops_sat(
 }
 
 // SAT should satisfy inversion equivalences
-// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 functional_reduction_inversion_equiv_sat --c2 functional_reduction_inversion_equiv_sat | FileCheck %s --check-prefix=INVERSION
-// INVERSION: c1 == c2
+// RUN: circt-lec.sh %s %t.mlir --c1 functional_reduction_inversion_equiv_sat --c2 functional_reduction_inversion_equiv_sat
 // CHECK-LABEL: hw.module @functional_reduction_inversion_equiv_sat
 hw.module @functional_reduction_inversion_equiv_sat(in %a: i1, in %b: i1,
                                                     out out0: i1, out out1: i1) {
@@ -65,8 +62,7 @@ hw.module @functional_reduction_inversion_equiv_sat(in %a: i1, in %b: i1,
 
 // SAT should also prove equivalence between synth.xor_inv and an AND/OR
 // implementation of XOR.
-// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 functional_reduction_xor_inv_sat --c2 functional_reduction_xor_inv_sat | FileCheck %s --check-prefix=XOR-INV
-// XOR-INV: c1 == c2
+// RUN: circt-lec.sh %s %t.mlir --c1 functional_reduction_xor_inv_sat --c2 functional_reduction_xor_inv_sat
 // CHECK-LABEL: hw.module @functional_reduction_xor_inv_sat
 hw.module @functional_reduction_xor_inv_sat(in %a: i1, in %b: i1,
                                             out out0: i1, out out1: i1) {
@@ -81,8 +77,7 @@ hw.module @functional_reduction_xor_inv_sat(in %a: i1, in %b: i1,
   hw.output %0, %4 : i1, i1
 }
 
-// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 test_dot --c2 test_dot | FileCheck %s --check-prefix=DOT
-// DOT: c1 == c2
+// RUN: circt-lec.sh %s %t.mlir --c1 test_dot --c2 test_dot
 // CHECK-LABEL: hw.module @test_dot
 hw.module @test_dot(in %a: i1, in %b: i1, in %c: i1,
                                     out out0: i1, out out1: i1) {
@@ -95,8 +90,7 @@ hw.module @test_dot(in %a: i1, in %b: i1, in %c: i1,
   hw.output %2, %3 : i1, i1
 }
 
-// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 test_majority --c2 test_majority | FileCheck %s --check-prefix=MAJORITY
-// MAJORITY: c1 == c2
+// RUN: circt-lec.sh %s %t.mlir --c1 test_majority --c2 test_majority
 // CHECK-LABEL: hw.module @test_majority
 hw.module @test_majority(in %a: i1, in %b: i1, in %c: i1,
                          out out0: i1, out out1: i1) {
@@ -110,8 +104,7 @@ hw.module @test_majority(in %a: i1, in %b: i1, in %c: i1,
   hw.output %0, %1 : i1, i1
 }
 
-// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 test_onehot --c2 test_onehot | FileCheck %s --check-prefix=ONEHOT
-// ONEHOT: c1 == c2
+// RUN: circt-lec.sh %s %t.mlir --c1 test_onehot --c2 test_onehot
 // CHECK-LABEL: hw.module @test_onehot
 hw.module @test_onehot(in %a: i1, in %b: i1, in %c: i1,
                        out out0: i1, out out1: i1) {
@@ -125,8 +118,7 @@ hw.module @test_onehot(in %a: i1, in %b: i1, in %c: i1,
   hw.output %0, %1 : i1, i1
 }
 
-// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 functional_reduction_mux_inv_sat --c2 functional_reduction_mux_inv_sat | FileCheck %s --check-prefix=MUX-INV
-// MUX-INV: c1 == c2
+// RUN: circt-lec.sh %s %t.mlir --c1 functional_reduction_mux_inv_sat --c2 functional_reduction_mux_inv_sat
 // CHECK-LABEL: hw.module @functional_reduction_mux_inv_sat
 hw.module @functional_reduction_mux_inv_sat(in %c: i1, in %a: i1, in %b: i1,
                                             out out0: i1, out out1: i1) {
@@ -139,8 +131,7 @@ hw.module @functional_reduction_mux_inv_sat(in %c: i1, in %a: i1, in %b: i1,
   hw.output %0, %4 : i1, i1
 }
 
-// RUN: circt-lec %s %t.mlir --shared-libs=%libz3 --c1 test_gamble --c2 test_gamble | FileCheck %s --check-prefix=GAMBLE
-// GAMBLE: c1 == c2
+// RUN: circt-lec.sh %s %t.mlir --c1 test_gamble --c2 test_gamble
 // CHECK-LABEL: hw.module @test_gamble
 hw.module @test_gamble(in %a: i1, in %b: i1, in %c: i1,
                        out out0: i1, out out1: i1) {

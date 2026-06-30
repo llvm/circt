@@ -85,7 +85,7 @@ static Type toESIHWType(Type t) {
             return esi::ChannelType::get(vt.getContext(),
                                          toHWType(vt.getInnerType()));
           })
-          .Case([](TokenType tt) {
+          .Case([](dc::TokenType tt) {
             return esi::ChannelType::get(tt.getContext(),
                                          IntegerType::get(tt.getContext(), 0));
           })
@@ -837,7 +837,7 @@ public:
 
 } // namespace
 
-static bool isDCType(Type type) { return isa<TokenType, ValueType>(type); }
+static bool isDCType(Type type) { return isa<dc::TokenType, ValueType>(type); }
 
 ///  Returns true if the given `op` is considered as legal - i.e. it does not
 ///  contain any dc-typed values.

@@ -56,6 +56,8 @@ static bool isDeletableDeclaration(Operation *op) {
 namespace {
 struct IMDeadCodeElimPass
     : public circt::firrtl::impl::IMDeadCodeElimBase<IMDeadCodeElimPass> {
+  using Base::Base;
+
   void runOnOperation() override;
 
   void rewriteModuleSignature(FModuleOp module);
@@ -200,6 +202,12 @@ void IMDeadCodeElimPass::markUnknownSideEffectOp(Operation *op) {
   for (auto operand : op->getOperands())
     markAlive(operand);
   markBlockUndeletable(op);
+
+  // Recursively mark any blocks contained within these operations as
+  // executable.
+  for (auto &region : op->getRegions())
+    for (auto &block : region.getBlocks())
+      markBlockExecutable(&block);
 }
 
 void IMDeadCodeElimPass::visitUser(Operation *op) {
@@ -266,7 +274,7 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
     return; // Already executable.
 
   auto fmodule = dyn_cast<FModuleOp>(block->getParentOp());
-  if (fmodule && fmodule.isPublic())
+  if (fmodule && (fmodule.isPublic() || removePortsOnly))
     markAlive(fmodule);
 
   // Mark ports with don't touch as alive.
@@ -278,29 +286,36 @@ void IMDeadCodeElimPass::markBlockExecutable(Block *block) {
     }
 
   for (auto &op : *block) {
+    if (auto instance = dyn_cast<FInstanceLike>(op)) {
+      markFInstanceLikeOp(instance);
+      continue;
+    }
+
+    // Skip connects in both modes.
+    if (isa<FConnectLike>(op))
+      continue;
+
+    if (removePortsOnly) {
+      // In port-only mode, all non-instance, non-connect ops are alive.
+      markUnknownSideEffectOp(&op);
+      continue;
+    }
+
+    // Full IMDCE mode: handle declarations and side effects.
     if (isDeclaration(&op))
       markDeclaration(&op);
-    else if (auto instance = dyn_cast<FInstanceLike>(op))
-      markFInstanceLikeOp(instance);
-    else if (isa<FConnectLike>(op))
-      // Skip connect op.
-      continue;
-    else if (hasUnknownSideEffect(&op)) {
+    else if (hasUnknownSideEffect(&op))
       markUnknownSideEffectOp(&op);
-      // Recursively mark any blocks contained within these operations as
-      // executable.
-      for (auto &region : op.getRegions())
-        for (auto &block : region.getBlocks())
-          markBlockExecutable(&block);
-    }
 
     // TODO: Handle attach etc.
   }
 }
 
 void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
-  // This tracks constant values of output ports.
-  SmallVector<std::pair<unsigned, APSInt>> constantPortIndicesAndValues;
+  // This tracks constant values of output ports. std::nullopt represents an
+  // invalid value.
+  SmallVector<std::pair<unsigned, std::optional<APSInt>>>
+      constantPortIndicesAndValues;
   auto ports = module.getPorts();
   auto *instanceGraphNode = instanceGraph->lookup(module);
 
@@ -314,12 +329,15 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
       continue;
 
     // Remember the index and constant value connected to an output port.
-    if (auto connect = getSingleConnectUserOf(arg))
+    if (auto connect = getSingleConnectUserOf(arg)) {
       if (auto constant = connect.getSrc().getDefiningOp<ConstantOp>())
         constantPortIndicesAndValues.push_back({index, constant.getValue()});
+      else if (connect.getSrc().getDefiningOp<InvalidValueOp>())
+        constantPortIndicesAndValues.push_back({index, std::nullopt});
+    }
   }
 
-  // If there is no constant port, abort.
+  // If there is no constant or invalid port, abort.
   if (constantPortIndicesAndValues.empty())
     return;
 
@@ -334,8 +352,13 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
       auto result = instance.getResult(index);
       assert(ports[index].isOutput() && "must be an output port");
 
-      // Replace the port with the constant.
-      result.replaceAllUsesWith(ConstantOp::create(builder, constant));
+      // Replace the port with the constant or invalid value.
+      Value replacement;
+      if (constant)
+        replacement = ConstantOp::create(builder, *constant);
+      else
+        replacement = InvalidValueOp::create(builder, result.getType());
+      result.replaceAllUsesWith(replacement);
     }
   }
 }
@@ -435,11 +458,13 @@ void IMDeadCodeElimPass::runOnOperation() {
     forwardConstantOutputPort(module);
 
   for (auto module : circuit.getBodyBlock()->getOps<FModuleOp>()) {
-    // Mark the ports of public modules as alive.
-    if (module.isPublic()) {
+    bool isPublic = module.isPublic();
+    if (isPublic || removePortsOnly) {
       markBlockExecutable(module.getBodyBlock());
-      for (auto port : module.getBodyBlock()->getArguments())
-        markAlive(port);
+      // Mark the ports of public modules as alive.
+      if (isPublic)
+        for (auto port : module.getBodyBlock()->getArguments())
+          markAlive(port);
     }
 
     // Walk annotations and populate a map from hierpath to attached annotation
@@ -502,8 +527,9 @@ void IMDeadCodeElimPass::runOnOperation() {
     if (!liveElements.count(op))
       op.erase();
 
-  for (auto module : modules)
-    eraseEmptyModule(module);
+  if (!removePortsOnly)
+    for (auto module : modules)
+      eraseEmptyModule(module);
 
   // Clean up data structures.
   executableBlocks.clear();

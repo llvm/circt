@@ -563,8 +563,8 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     FetchContent_Declare(
       slang
       GIT_REPOSITORY https://github.com/MikePopoloski/slang.git
-      GIT_TAG v10.0
-      GIT_SHALLOW ON
+      GIT_TAG 44dc55f99b9c64971893013e7931e643fbedcf23 # June 19, 2026: v11.0 + ~85 commits
+      # GIT_SHALLOW ON # TODO: re-enable once we use a released version again.
     )
     set(FETCHCONTENT_TRY_FIND_PACKAGE_MODE "NEVER")
 
@@ -573,6 +573,14 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
     # will embed Slang into ImportVerilog and circt-verilog-lsp-server.
     set(ORIGINAL_CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
     set(ORIGINAL_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
+
+    # Slang requires its own vendored boost library when building without
+    # support for exceptions. Prevent it from automatically discovering an
+    # installed version.
+    set(ORIGINAL_CMAKE_DISABLE_FIND_PACKAGE_Boost ${CMAKE_DISABLE_FIND_PACKAGE_Boost})
+    set(ORIGINAL_Boost_FOUND ${Boost_FOUND})
+    set(CMAKE_DISABLE_FIND_PACKAGE_Boost TRUE)
+    set(Boost_FOUND FALSE)
 
     set(BUILD_SHARED_LIBS OFF)
     set(SLANG_USE_MIMALLOC OFF)
@@ -585,6 +593,8 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
 
     set(CMAKE_CXX_FLAGS ${ORIGINAL_CMAKE_CXX_FLAGS})
     set(BUILD_SHARED_LIBS ${ORIGINAL_BUILD_SHARED_LIBS})
+    set(CMAKE_DISABLE_FIND_PACKAGE_Boost ${ORIGINAL_CMAKE_DISABLE_FIND_PACKAGE_Boost})
+    set(Boost_FOUND ${ORIGINAL_Boost_FOUND})
 
     if(BUILD_SHARED_LIBS)
       set_target_properties(slang_slang PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -612,9 +622,10 @@ if(CIRCT_SLANG_FRONTEND_ENABLED)
       endif()
     endforeach()
     set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS slang_slang)
+    set_property(GLOBAL APPEND PROPERTY CIRCT_EXPORTS tomlplusplus_tomlplusplus)
     install(TARGETS slang_slang EXPORT CIRCTTargets)
   else()
-    find_package(slang 10.0 REQUIRED)
+    find_package(slang 11.0 REQUIRED)
   endif()
 endif()
 

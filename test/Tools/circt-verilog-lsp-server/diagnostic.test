@@ -8,7 +8,7 @@
   "uri":"test:///diagnostic.sv",
   "languageId":"verilog",
   "version":1,
-  "text":"function foo()\n int bar = 0;\nendfunction"
+  "text":"function foo()\n int bar = 0;\nendfunction\n"
 }}}
 // CHECK:      "method": "textDocument/publishDiagnostics",
 // CHECK-NEXT:   "params": {

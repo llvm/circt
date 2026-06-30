@@ -58,6 +58,13 @@ constexpr uint32_t ManifestPtrOffset = 0x10;
 constexpr uint32_t CycleCountOffset = 0x20;
 constexpr uint32_t CoreFreqOffset = 0x28;
 
+/// Magic value which, when written to MMIO offset `ResetRequestOffset`,
+/// requests a design reset.  Keep in sync with 'ResetMagicNumber' in the PyCDE
+/// BSP (python/esiaccel/bsp/common.py).
+constexpr uint64_t ResetMagicNumber = 0x00000E510000B007;
+/// Offset into the (global) MMIO space at which to request a design reset.
+constexpr uint32_t ResetRequestOffset = 0x38;
+
 //===----------------------------------------------------------------------===//
 // Accelerator design hierarchy root.
 //===----------------------------------------------------------------------===//
@@ -95,6 +102,11 @@ public:
 
   /// Disconnect from the accelerator cleanly.
   virtual void disconnect();
+
+  /// Request a reset of the accelerator design. Returns true if the reset was
+  /// successfully requested, false if it could not be performed for any reason
+  /// -- most commonly because the backend (BSP) does not support resets.
+  virtual bool reset();
 
   /// Return a pointer to the accelerator 'service' thread (or threads). If the
   /// thread(s) are not running, they will be started when this method is

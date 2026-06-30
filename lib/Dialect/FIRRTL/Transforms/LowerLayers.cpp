@@ -709,9 +709,16 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
     SmallVector<Value> connectValues;
     Namespace portNs;
 
-    // Create an input port for a domain-type operand.  The source is not in the
-    // current layer block.
-    auto createInputPort = [&](Value src, Location loc) -> LogicalResult {
+    // Create an input port for a domain-type source captured from outside the
+    // current layer block.  Returns the block argument that should be used in
+    // place of the original source within the layer block.  Repeated calls with
+    // the same source reuse the previously created, cached port.
+    DenseMap<Value, BlockArgument> domainInputPorts;
+    auto getOrCreateDomainInputPort =
+        [&](Value src, Location loc) -> FailureOr<BlockArgument> {
+      if (auto it = domainInputPorts.find(src); it != domainInputPorts.end())
+        return it->getSecond();
+
       Attribute domain;
       if (failed(getDomain(src, domain)))
         return failure();
@@ -736,7 +743,18 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
       connectValues.push_back(src);
       BlockArgument replacement =
           layerBlock.getBody()->addArgument(port.type, port.loc);
-      src.replaceUsesWithIf(replacement, [&](OpOperand &use) {
+      domainInputPorts[src] = replacement;
+      return replacement;
+    };
+
+    // Create an input port for a domain-type operand that is connected to a
+    // value inside the current layer block.  The source is not in the current
+    // layer block.
+    auto createInputPort = [&](Value src, Location loc) -> LogicalResult {
+      auto replacement = getOrCreateDomainInputPort(src, loc);
+      if (failed(replacement))
+        return failure();
+      src.replaceUsesWithIf(*replacement, [&](OpOperand &use) {
         auto *user = use.getOwner();
         if (!layerBlock->isAncestor(user))
           return false;
@@ -991,6 +1009,16 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
         // Note: This check is what avoids handling ConnectOp destinations.
         if (isAncestorOfValueOwner(layerBlock, operand))
           continue;
+
+        // Domain-type operands have no XMR representation and need to have
+        // input ports created.
+        if (type_isa<DomainType>(operand.getType())) {
+          auto replacement = getOrCreateDomainInputPort(operand, op->getLoc());
+          if (failed(replacement))
+            return WalkResult::interrupt();
+          op->setOperand(i, *replacement);
+          continue;
+        }
 
         op->setOperand(i, getReplacement(op, operand));
       }

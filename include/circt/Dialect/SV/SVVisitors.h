@@ -32,7 +32,7 @@ public:
             IndexedPartSelectInOutOp, IndexedPartSelectOp, StructFieldInOutOp,
             ConstantXOp, ConstantZOp, ConstantStrOp, MacroRefExprOp,
             MacroRefExprSEOp, UnpackedArrayCreateOp, UnpackedOpenArrayCastOp,
-            SFormatFOp,
+            SFormatFOp, ConcatStrOp,
             // Declarations.
             RegOp, WireOp, LogicOp, LocalParamOp, XMROp, XMRRefOp,
             // Control flow.
@@ -40,7 +40,7 @@ public:
             AlwaysCombOp, AlwaysFFOp, InitialOp, CaseOp,
             // Other Statements.
             AssignOp, BPAssignOp, PAssignOp, ForceOp, ReleaseOp, AliasOp,
-            WriteOp, FWriteOp, FFlushOp, SystemFunctionOp, VerbatimOp,
+            WriteOp, FWriteOp, FFlushOp, FCloseOp, SystemFunctionOp, VerbatimOp,
             MacroRefOp, FuncCallOp, FuncCallProceduralOp, ReturnOp, IncludeOp,
             MacroErrorOp,
             // Type declarations.
@@ -117,6 +117,7 @@ public:
   HANDLE(UnpackedArrayCreateOp, Unhandled);
   HANDLE(UnpackedOpenArrayCastOp, Unhandled);
   HANDLE(SFormatFOp, Unhandled);
+  HANDLE(ConcatStrOp, Unhandled);
 
   // Control flow.
   HANDLE(OrderedOutputOp, Unhandled);
@@ -139,6 +140,7 @@ public:
   HANDLE(WriteOp, Unhandled);
   HANDLE(FWriteOp, Unhandled);
   HANDLE(FFlushOp, Unhandled);
+  HANDLE(FCloseOp, Unhandled);
   HANDLE(SystemFunctionOp, Unhandled);
   HANDLE(FuncCallProceduralOp, Unhandled);
   HANDLE(FuncCallOp, Unhandled);

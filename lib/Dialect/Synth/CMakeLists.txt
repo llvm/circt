@@ -5,6 +5,7 @@
 ##===----------------------------------------------------------------------===//
 
 add_circt_dialect_library(CIRCTSynth
+  SynthAttributes.cpp
   SynthDialect.cpp
   SynthOpInterfaces.cpp
   SynthOps.cpp

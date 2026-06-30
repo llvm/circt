@@ -576,16 +576,6 @@ namespace llvm {
 
 template <>
 struct DenseMapInfo<circt::scheduling::Problem::OperatorType> {
-  static inline circt::scheduling::Problem::OperatorType getEmptyKey() {
-    return circt::scheduling::Problem::OperatorType(
-        DenseMapInfo<mlir::StringAttr>::getEmptyKey());
-  }
-
-  static inline circt::scheduling::Problem::OperatorType getTombstoneKey() {
-    return circt::scheduling::Problem::OperatorType{
-        DenseMapInfo<mlir::StringAttr>::getTombstoneKey()};
-  }
-
   static unsigned
   getHashValue(const circt::scheduling::Problem::OperatorType &val) {
     return DenseMapInfo<mlir::StringAttr>::getHashValue(val.attr);
@@ -599,16 +589,6 @@ struct DenseMapInfo<circt::scheduling::Problem::OperatorType> {
 
 template <>
 struct DenseMapInfo<circt::scheduling::Problem::ResourceType> {
-  static inline circt::scheduling::Problem::ResourceType getEmptyKey() {
-    return circt::scheduling::Problem::ResourceType(
-        DenseMapInfo<mlir::StringAttr>::getEmptyKey());
-  }
-
-  static inline circt::scheduling::Problem::ResourceType getTombstoneKey() {
-    return circt::scheduling::Problem::ResourceType(
-        DenseMapInfo<mlir::StringAttr>::getTombstoneKey());
-  }
-
   static unsigned
   getHashValue(const circt::scheduling::Problem::ResourceType &val) {
     return DenseMapInfo<mlir::StringAttr>::getHashValue(val.attr);

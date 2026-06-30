@@ -307,12 +307,24 @@ LogicalResult RunnerSuite::resolve() {
   // If the user has provided a concrete list of runners to use, mark all other
   // runners as to be ignored.
   if (opts.runners.getNumOccurrences() > 0) {
+    // Strip leading backslashes from runner names to handle lit shell escaping.
+    // This allows test files to use `-r \verilator` to prevent lit substitution
+    // while still matching the actual runner name "verilator".
+    SmallVector<std::string> normalizedRunners;
+    for (const auto &name : opts.runners) {
+      StringRef runnerName = name;
+      if (runnerName.starts_with("\\"))
+        normalizedRunners.push_back(runnerName.substr(1).str());
+      else
+        normalizedRunners.push_back(name);
+    }
+
     for (auto &runner : runners)
-      if (!llvm::is_contained(opts.runners, runner.name))
+      if (!llvm::is_contained(normalizedRunners, runner.name))
         runner.ignore = true;
 
     // Produce errors if the user listed any runners that don't exist.
-    for (auto &name : opts.runners) {
+    for (const auto &name : normalizedRunners) {
       if (!llvm::is_contained(
               llvm::map_range(runners,
                               [](auto &runner) { return runner.name; }),

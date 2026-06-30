@@ -77,6 +77,9 @@ struct SimTypeConverter : public TypeConverter {
     addConversion([&](OutputStreamType type) -> Type {
       return IntegerType::get(type.getContext(), 32);
     });
+    addConversion([&](DynamicStringType type) -> Type {
+      return hw::StringType::get(type.getContext());
+    });
   }
 };
 
@@ -390,6 +393,37 @@ public:
   }
 };
 
+class StringConstantLowering : public OpConversionPattern<StringConstantOp> {
+public:
+  using OpConversionPattern<StringConstantOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.replaceOpWithNewOp<sv::ConstantStrOp>(op, op.getLiteralAttr());
+    return success();
+  }
+};
+
+class StringConcatLowering : public OpConversionPattern<StringConcatOp> {
+public:
+  using OpConversionPattern<StringConcatOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringConcatOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    auto inputs = adaptor.getInputs();
+    if (inputs.empty()) {
+      rewriter.replaceOpWithNewOp<sv::ConstantStrOp>(
+          op, rewriter.getStringAttr(""));
+      return success();
+    }
+
+    rewriter.replaceOpWithNewOp<sv::ConcatStrOp>(op, inputs);
+    return success();
+  }
+};
+
 // A helper struct to lower DPI function/call.
 struct LowerDPIFunc {
   llvm::DenseMap<StringAttr, StringAttr> symbolToFragment;
@@ -593,9 +627,9 @@ void appendLiteralToSVFormat(SmallString<128> &formatString,
   }
 }
 
-LogicalResult appendIntegerSpecifier(SmallString<128> &formatString,
-                                     bool isLeftAligned, uint8_t paddingChar,
-                                     std::optional<int32_t> width, char spec) {
+LogicalResult appendPaddedSpecifier(SmallString<128> &formatString,
+                                    bool isLeftAligned, uint8_t paddingChar,
+                                    std::optional<int32_t> width, char spec) {
   formatString.push_back('%');
   if (isLeftAligned)
     formatString.push_back('-');
@@ -654,6 +688,21 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         appendLiteralToSVFormat(formatString, literal.getLiteral());
         return success();
       })
+      .Case<FormatStringOp>([&](auto fmt) -> LogicalResult {
+        if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
+                                         fmt.getPaddingChar(),
+                                         fmt.getSpecifierWidth(), 's'))) {
+          return mlir::emitError(fmt.getLoc())
+                 << "sim.fmt.string only supports paddingChar 32 (' ') or 48 "
+                    "('0')";
+        }
+        args.push_back(mlir::UnrealizedConversionCastOp::create(
+                           builder, fmt.getLoc(),
+                           hw::StringType::get(builder.getContext()),
+                           fmt.getValue())
+                           .getResult(0));
+        return success();
+      })
       .Case<FormatCurrentTimeOp>([&](auto fmt) -> LogicalResult {
         formatString += "%0t";
         args.push_back(sv::TimeOp::create(builder, fmt.getLoc()));
@@ -669,9 +718,9 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         return success();
       })
       .Case<FormatDecOp>([&](auto fmt) -> LogicalResult {
-        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
-                                          fmt.getPaddingChar(),
-                                          fmt.getSpecifierWidth(), 'd'))) {
+        if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
+                                         fmt.getPaddingChar(),
+                                         fmt.getSpecifierWidth(), 'd'))) {
           return mlir::emitError(fmt.getLoc())
                  << "sim.fmt.dec only supports paddingChar 32 (' ') or 48 "
                     "('0')";
@@ -691,7 +740,7 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         return success();
       })
       .Case<FormatHexOp>([&](auto fmt) -> LogicalResult {
-        if (failed(appendIntegerSpecifier(
+        if (failed(appendPaddedSpecifier(
                 formatString, fmt.getIsLeftAligned(), fmt.getPaddingChar(),
                 fmt.getSpecifierWidth(),
                 fmt.getIsHexUppercase() ? 'X' : 'x'))) {
@@ -703,9 +752,9 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         return success();
       })
       .Case<FormatOctOp>([&](auto fmt) -> LogicalResult {
-        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
-                                          fmt.getPaddingChar(),
-                                          fmt.getSpecifierWidth(), 'o'))) {
+        if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
+                                         fmt.getPaddingChar(),
+                                         fmt.getSpecifierWidth(), 'o'))) {
           return mlir::emitError(fmt.getLoc())
                  << "sim.fmt.oct only supports paddingChar 32 (' ') or 48 "
                     "('0')";
@@ -714,9 +763,9 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
         return success();
       })
       .Case<FormatBinOp>([&](auto fmt) -> LogicalResult {
-        if (failed(appendIntegerSpecifier(formatString, fmt.getIsLeftAligned(),
-                                          fmt.getPaddingChar(),
-                                          fmt.getSpecifierWidth(), 'b'))) {
+        if (failed(appendPaddedSpecifier(formatString, fmt.getIsLeftAligned(),
+                                         fmt.getPaddingChar(),
+                                         fmt.getSpecifierWidth(), 'b'))) {
           return mlir::emitError(fmt.getLoc())
                  << "sim.fmt.bin only supports paddingChar 32 (' ') or 48 "
                     "('0')";
@@ -915,6 +964,8 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<PauseOp>(convert);
       patterns.add<TriggeredLowering>(context, state);
       patterns.add<DPICallLowering>(context, state);
+      patterns.add<StringConstantLowering, StringConcatLowering>(typeConverter,
+                                                                 context);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 
       if (failed(result))

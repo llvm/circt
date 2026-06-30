@@ -1,15 +1,13 @@
-// REQUIRES: libz3
-// REQUIRES: circt-lec-jit
+// REQUIRES: z3
 
 // RUN: circt-opt %s --pass-pipeline='builtin.module(synth-print-longest-path-analysis, hw.module(comb-balance-mux{mux-chain-threshold=4}))' -o %t.mlir | FileCheck %s --check-prefix=DEPTH_BEFORE
 // RUN: circt-opt %t.mlir --pass-pipeline='builtin.module(synth-print-longest-path-analysis)' | FileCheck %s --check-prefix=DEPTH_AFTER
-// RUN: circt-lec %t.mlir %s -c1=priority_mux_18_depth -c2=priority_mux_18_depth --shared-libs=%libz3 | FileCheck %s --check-prefix=MUX18_LEC
+// RUN: circt-lec.sh %t.mlir %s -c1=priority_mux_18_depth -c2=priority_mux_18_depth
 // Check that balancing muxes reduces the longest path in a priority mux from O(n) to O(log n).
 // DEPTH_BEFORE-LABEL: priority_mux_18_depth
 // DEPTH_BEFORE: Maximum path delay: 17
 // DEPTH_AFTER-LABEL: priority_mux_18_depth
 // DEPTH_AFTER: Maximum path delay: 6
-// MUX18_LEC: c1 == c2
 hw.module @priority_mux_18_depth(in %cond0: i1, in %cond1: i1, in %cond2: i1, in %cond3: i1, in %cond4: i1, in %cond5: i1, in %cond6: i1, in %cond7: i1, in %cond8: i1, in %cond9: i1, in %cond10: i1, in %cond11: i1, in %cond12: i1, in %cond13: i1, in %cond14: i1, in %cond15: i1, in %cond16: i1, in %cond17: i1, out true_output: i5, out false_side: i5) {
   %c0_i5 = hw.constant 0 : i5
   %c1_i5 = hw.constant 1 : i5
@@ -69,12 +67,11 @@ hw.module @priority_mux_18_depth(in %cond0: i1, in %cond1: i1, in %cond2: i1, in
   hw.output %mux1_t, %mux1_f : i5, i5
 }
 
-// RUN: circt-lec %t.mlir %s -c1=index_to_balanced_mux -c2=index_to_balanced_mux --shared-libs=%libz3 | FileCheck %s --check-prefix=INDEX_TO_BALANCED_MUX_LEC
+// RUN: circt-lec.sh %t.mlir %s -c1=index_to_balanced_mux -c2=index_to_balanced_mux
 // DEPTH_BEFORE-LABEL: Longest Path Analysis result for "index_to_balanced_mux"
 // DEPTH_BEFORE: Maximum path delay: 11
 // DEPTH_AFTER-LABEL: Longest Path Analysis result for "index_to_balanced_mux"
 // DEPTH_AFTER: Maximum path delay: 3
-// INDEX_TO_BALANCED_MUX_LEC: c1 == c2
 hw.module @index_to_balanced_mux(in %index: i3, out result: i8) {
   // Values to select from based on index
   %a = hw.constant 10 : i8

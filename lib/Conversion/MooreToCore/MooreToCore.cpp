@@ -664,6 +664,8 @@ struct CoroutineOpConversion : public OpConversionPattern<CoroutineOp> {
     auto newOp = llhd::CoroutineOp::create(rewriter, op.getLoc(),
                                            op.getSymName(), newFuncType);
     newOp.setSymVisibilityAttr(op.getSymVisibilityAttr());
+    if (auto dpiExport = op->getAttr("circt.dpi.export"))
+      newOp->setAttr("circt.dpi.export", dpiExport);
     rewriter.inlineRegionBefore(op.getBody(), newOp.getBody(),
                                 newOp.getBody().end());
     if (failed(rewriter.convertRegionTypes(&newOp.getBody(), *typeConverter,
@@ -2514,10 +2516,15 @@ struct YieldOpConversion : public OpConversionPattern<YieldOp> {
   LogicalResult
   matchAndRewrite(YieldOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (isa<llhd::GlobalSignalOp>(op->getParentOp()))
+    Operation *parent = op->getParentOp();
+    if (isa<llhd::GlobalSignalOp>(parent))
       rewriter.replaceOpWithNewOp<llhd::YieldOp>(op, adaptor.getResult());
-    else
+    else if (isa<scf::ExecuteRegionOp, scf::ForOp, scf::IfOp,
+                 scf::IndexSwitchOp, scf::WhileOp>(parent))
       rewriter.replaceOpWithNewOp<scf::YieldOp>(op, adaptor.getResult());
+    else
+      return rewriter.notifyMatchFailure(
+          op, "yield parent has not been converted to a legal region op yet");
     return success();
   }
 };
@@ -2688,6 +2695,17 @@ struct FormatRealOpConversion : public OpConversionPattern<FormatRealOp> {
           fracDigitsAttr);
       return success();
     }
+  }
+};
+
+struct FormatCharOpConversion
+    : public OpConversionPattern<moore::FormatCharOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(moore::FormatCharOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::FormatCharOp>(op, adaptor.getValue());
+    return success();
   }
 };
 
@@ -3062,6 +3080,33 @@ struct FOpenBIOpConversion : public OpConversionPattern<FOpenBIOp> {
     }
     rewriter.replaceOpWithNewOp<sim::SVFOpenOp>(op, adaptor.getFilename(),
                                                 simMode);
+    return success();
+  }
+};
+
+struct PlusArgsTestBIOpConversion
+    : public OpConversionPattern<PlusArgsTestBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(PlusArgsTestBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::PlusArgsTestOp>(op, rewriter.getI1Type(),
+                                                     op.getFormatStringAttr());
+    return success();
+  }
+};
+
+struct PlusArgsValueBIOpConversion
+    : public OpConversionPattern<PlusArgsValueBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(PlusArgsValueBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto resultType = typeConverter->convertType(op.getResult().getType());
+    if (!resultType)
+      return rewriter.notifyMatchFailure(op, "unsupported result type");
+    rewriter.replaceOpWithNewOp<sim::PlusArgsValueOp>(
+        op, rewriter.getI1Type(), resultType, op.getFormatStringAttr());
     return success();
   }
 };
@@ -3616,7 +3661,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     ICmpOpConversion<CaseNeOp, ICmpPredicate::cne>,
     ICmpOpConversion<WildcardEqOp, ICmpPredicate::weq>,
     ICmpOpConversion<WildcardNeOp, ICmpPredicate::wne>,
-    FCmpOpConversion<NeRealOp, arith::CmpFPredicate::ONE>,
+    FCmpOpConversion<NeRealOp, arith::CmpFPredicate::UNE>,
     FCmpOpConversion<FltOp, arith::CmpFPredicate::OLT>,
     FCmpOpConversion<FleOp, arith::CmpFPredicate::OLE>,
     FCmpOpConversion<FgtOp, arith::CmpFPredicate::OGT>,
@@ -3669,6 +3714,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatHierPathOpConversion,
     FormatIntOpConversion,
     FormatRealOpConversion,
+    FormatCharOpConversion,
     DisplayBIOpConversion,
     FDisplayBIOpConversion,
 
@@ -3676,6 +3722,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FOpenBIOpConversion,
     FCloseBIOpConversion,
     FFlushBIOpConversion,
+
+    // Command line input operations
+    PlusArgsTestBIOpConversion,
+    PlusArgsValueBIOpConversion,
 
     // Dynamic string operations
     StringLenOpConversion,

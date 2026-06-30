@@ -5,6 +5,7 @@ add_circt_translation_library(CIRCTImportVerilog
   CaptureAnalysis.cpp
   Expressions.cpp
   FormatStrings.cpp
+  ScanStrings.cpp
   HierarchicalNames.cpp
   ImportVerilog.cpp
   Statements.cpp

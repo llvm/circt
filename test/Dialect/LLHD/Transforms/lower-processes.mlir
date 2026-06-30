@@ -157,6 +157,20 @@ hw.module @SkipIfNoWaits() {
   }
 }
 
+// CHECK-LABEL: @SkipIfProcessCanHalt(
+hw.module @SkipIfProcessCanHalt(in %a: i1) {
+  // CHECK: llhd.process
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    cf.cond_br %a, ^bb2, ^bb3
+  ^bb2:
+    llhd.wait (%a : i1), ^bb1
+  ^bb3:
+    llhd.halt
+  }
+}
+
 // CHECK-LABEL: @SkipIfWaitHasDestinationOperands(
 hw.module @SkipIfWaitHasDestinationOperands(in %a: i42) {
   // CHECK: llhd.process

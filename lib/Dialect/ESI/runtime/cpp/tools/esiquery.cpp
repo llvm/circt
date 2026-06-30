@@ -38,6 +38,7 @@ void printInfo(std::ostream &os, AcceleratorConnection &acc, bool details);
 void printHier(std::ostream &os, AcceleratorConnection &acc, bool details);
 void printTelemetry(std::ostream &os, AcceleratorConnection &acc);
 void printTelemetryJson(std::ostream &os, AcceleratorConnection &acc);
+void resetDesign(std::ostream &os, AcceleratorConnection &acc);
 
 int main(int argc, const char *argv[]) {
   CliParser cli("esiquery");
@@ -59,6 +60,8 @@ int main(int argc, const char *argv[]) {
       cli.add_subcommand("telemetry", "Print ESI system telemetry information");
   telemetrySub->add_flag("--json", telemetryJson,
                          "Dump telemetry information as JSON");
+  CLI::App *resetSub =
+      cli.add_subcommand("reset", "Reset the ESI system design");
 
   if (int rc = cli.esiParse(argc, argv))
     return rc;
@@ -81,6 +84,8 @@ int main(int argc, const char *argv[]) {
         printTelemetryJson(std::cout, *acc);
       else
         printTelemetry(std::cout, *acc);
+    } else if (*resetSub) {
+      resetDesign(std::cout, *acc);
     }
     return 0;
   } catch (std::exception &e) {
@@ -239,4 +244,9 @@ void printTelemetry(std::ostream &os, AcceleratorConnection &acc) {
     uint64_t value = port->readInt();
     os << value << std::endl;
   }
+}
+
+void resetDesign(std::ostream &os, AcceleratorConnection &acc) {
+  os << "Resetting design..." << std::endl;
+  acc.reset();
 }

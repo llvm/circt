@@ -386,7 +386,7 @@ func.func @Statements(%arg0: !moore.i42) {
 }
 
 // CHECK-LABEL: func @FormatStrings
-func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64, %arg3: !moore.string) {
+func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64, %arg3: !moore.string, %arg4: !moore.i8) {
   // CHECK: [[TMP:%.+]] = sim.fmt.literal "hello"
   %0 = moore.fmt.literal "hello"
   // CHECK: sim.fmt.concat ([[TMP]], [[TMP]])
@@ -440,6 +440,11 @@ func.func @FormatStrings(%arg0: !moore.i42, %arg1: !moore.f32, %arg2: !moore.f64
 
   // CHECK: sim.proc.print [[TMP]]
   moore.builtin.display %0
+
+  // CHECK: sim.fmt.char %arg0 : i42
+  moore.fmt.char %arg0 : i42
+  // CHECK: sim.fmt.char %arg4 : i8
+  moore.fmt.char %arg4 : i8
   return
 }
 
@@ -755,7 +760,7 @@ func.func @CaseXZ(%arg0: !moore.l8, %arg1: !moore.l8) {
 
 // CHECK-LABEL: func.func @CmpReal
 func.func @CmpReal(%arg0: !moore.f32, %arg1: !moore.f32) {
-  // CHECK: arith.cmpf one, %arg0, %arg1 : f32
+  // CHECK: arith.cmpf une, %arg0, %arg1 : f32
   moore.fne %arg0, %arg1 : f32 -> i1
   // CHECK: arith.cmpf olt, %arg0, %arg1 : f32
   moore.flt %arg0, %arg1 : f32 -> i1
@@ -1901,6 +1906,15 @@ func.func @FDisplay(%arg0: !moore.i32) {
   // CHECK: [[STREAM:%.+]] = sim.sv.channel_to_output_stream %arg0
   // CHECK: sim.proc.print [[MSG]] to [[STREAM]]
   moore.builtin.fdisplay %arg0, %msg
+  return
+}
+
+// CHECK-LABEL: func.func @PlusArgs
+func.func @PlusArgs() {
+  // CHECK: sim.plusargs.test "FOO"
+  %0 = moore.builtin.plusargs_test "FOO" : i1
+  // CHECK: %{{.+}}, %{{.+}} = sim.plusargs.value "BAR=%d" : i32
+  %found, %result = moore.builtin.plusargs_value "BAR=%d" : i1, i32
   return
 }
 

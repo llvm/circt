@@ -613,6 +613,47 @@ hw.module @OpsWithRegions(in %clock: !seq.clock, in %a: i42, in %b: i1, out c: i
   hw.output %0 : i42
 }
 
+// CHECK-LABEL: arc.model @Triggered
+hw.module @Triggered(in %clock: i1, in %a: i42) {
+  // CHECK: [[IN_CLOCK:%.+]] = arc.root_input "clock"
+  // CHECK: [[IN_A:%.+]] = arc.root_input "a"
+  // CHECK: [[A:%.+]] = arc.state_read [[IN_A]]
+  // CHECK: [[CLOCK:%.+]] = arc.state_read [[IN_CLOCK]]
+  // CHECK: [[OLD_CLOCK:%.+]] = arc.state_read
+  // CHECK: arc.state_write
+  // CHECK: [[EDGE:%.+]] = comb.xor [[OLD_CLOCK]], [[CLOCK]]
+  // CHECK: [[POSEDGE:%.+]] = comb.and [[EDGE]], [[CLOCK]]
+  // CHECK: scf.if [[POSEDGE]] {
+  // CHECK:   func.call @ConsumeI42([[A]])
+  // CHECK: }
+  hw.triggered posedge %clock(%a) : i42 {
+  ^bb0(%arg: i42):
+    func.call @ConsumeI42(%arg) : (i42) -> ()
+  }
+}
+
+// CHECK-LABEL: arc.model @TriggeredCurrentTime
+hw.module @TriggeredCurrentTime(in %clock: i1) {
+  // CHECK: [[IN_CLOCK:%.+]] = arc.root_input "clock"
+  // CHECK: [[CLOCK:%.+]] = arc.state_read [[IN_CLOCK]]
+  // CHECK: [[OLD_CLOCK:%.+]] = arc.state_read
+  // CHECK: arc.state_write
+  // CHECK: [[EDGE:%.+]] = comb.xor [[OLD_CLOCK]], [[CLOCK]]
+  // CHECK: [[POSEDGE:%.+]] = comb.and [[EDGE]], [[CLOCK]]
+  // CHECK: scf.if [[POSEDGE]] {
+  // CHECK:   [[TIME_INT:%.+]] = arc.current_time %arg0
+  // CHECK:   [[TIME:%.+]] = llhd.int_to_time [[TIME_INT]]
+  // CHECK:   [[TIME_AS_INT:%.+]] = llhd.time_to_int [[TIME]]
+  // CHECK:   func.call @ConsumeI64([[TIME_AS_INT]])
+  // CHECK: }
+  // CHECK-NOT: llhd.current_time
+  hw.triggered posedge %clock {
+    %0 = llhd.current_time
+    %1 = llhd.time_to_int %0
+    func.call @ConsumeI64(%1) : (i64) -> ()
+  }
+}
+
 // Regression check on worklist producing false positive comb loop errors.
 // CHECK-LABEL: @CombLoopRegression
 hw.module @CombLoopRegression(in %clk: !seq.clock) {
@@ -770,4 +811,50 @@ hw.module @TestSimToArcTerminateFailure(in %clock: !seq.clock, in %cond: i1) {
   // CHECK: }
   
   sim.clocked_terminate %clock, %cond, failure, verbose
+}
+
+// CHECK-LABEL: arc.model @CoroutineInstance
+hw.module @CoroutineInstance(in %in: i42, out o: i42) {
+  // CHECK-DAG: [[PC:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!arc.coroutine_pc<@DummyCoroutine>>
+  // CHECK-DAG: [[STATE:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!arc.coroutine_state<@DummyCoroutine>>
+  // CHECK-DAG: [[WAKEUP:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i64>
+  // CHECK-DAG: [[RESULT:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+
+  // CHECK: [[ARG:%.+]] = arc.state_read %in_in : <i42>
+  // CHECK: [[NOW:%.+]] = arc.current_time %arg0 : !arc.storage
+  // CHECK: [[WK:%.+]] = arc.state_read [[WAKEUP]] : <i64>
+  // CHECK: [[READY:%.+]] = comb.icmp uge [[NOW]], [[WK]] : i64
+  // CHECK: scf.if [[READY]] {
+  // CHECK:   [[OLDSTATE:%.+]] = arc.state_read [[STATE]] : <!arc.coroutine_state<@DummyCoroutine>>
+  // CHECK:   [[OLDPC:%.+]] = arc.state_read [[PC]] : <!arc.coroutine_pc<@DummyCoroutine>>
+  // CHECK:   [[RS:%.+]], [[RPC:%.+]], [[RES:%.+]]:2 = arc.coroutine.call @DummyCoroutine([[OLDSTATE]], [[OLDPC]], [[ARG]])
+  // CHECK:   [[ISHALT:%.+]] = arc.coroutine.pc_is_halt [[RPC]]
+  // CHECK:   [[ISRET:%.+]] = arc.coroutine.pc_is_return [[RPC]]
+  // CHECK:   [[DONE:%.+]] = comb.or [[ISHALT]], [[ISRET]] : i1
+  // CHECK:   [[NEVER:%.+]] = hw.constant -1 : i64
+  // CHECK:   [[WKEFF:%.+]] = comb.mux [[DONE]], [[NEVER]], [[RES]]#1 : i64
+  // CHECK:   arc.state_write [[STATE]] = [[RS]] : <!arc.coroutine_state<@DummyCoroutine>>
+  // CHECK:   arc.state_write [[PC]] = [[RPC]] : <!arc.coroutine_pc<@DummyCoroutine>>
+  // CHECK:   arc.state_write [[WAKEUP]] = [[WKEFF]] : <i64>
+  // CHECK:   arc.state_write [[RESULT]] = [[RES]]#0 : <i42>
+  // CHECK: }
+
+  // CHECK: [[CUR:%.+]] = arc.state_read [[WAKEUP]] : <i64>
+  // CHECK: [[NEXT:%.+]] = arc.get_next_wakeup %arg0 : !arc.storage
+  // CHECK: [[MIN:%.+]] = arith.minui [[CUR]], [[NEXT]] : i64
+  // CHECK: arc.set_next_wakeup %arg0, [[MIN]] : !arc.storage
+  %0 = arc.coroutine.instance @DummyCoroutine(%in) : (i42) -> i42
+
+  // CHECK: [[OUT:%.+]] = arc.state_read [[RESULT]] : <i42>
+  // CHECK: func.call @ConsumeI42([[OUT]])
+  func.call @ConsumeI42(%0) : (i42) -> ()
+
+  // CHECK: [[OUT2:%.+]] = arc.state_read [[RESULT]] : <i42>
+  // CHECK: arc.state_write %out_o = [[OUT2]] : <i42>
+  hw.output %0 : i42
+}
+
+arc.coroutine.define @DummyCoroutine(%arg: i42) -> (i42, i64) {
+  %never = hw.constant -1 : i64
+  arc.coroutine.halt %arg, %never : i42, i64
 }

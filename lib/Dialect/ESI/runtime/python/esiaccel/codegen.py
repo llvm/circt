@@ -1415,6 +1415,35 @@ class CppTypeEmitter:
     return (isinstance(wrapped, types.IntType) and
             not isinstance(wrapped, types.UIntType))
 
+  def _is_byte_packable(self, esi_type: types.ESIType) -> bool:
+    """True if the type's in-memory C++ layout is byte-for-byte identical to
+    its on-wire bit layout, so a flat per-byte copy round-trips it correctly.
+
+    This holds only when every scalar leaf occupies a whole number of bytes
+    that exactly matches its native storage size:
+
+      * an integer / bits type whose width is one of the native storage
+        widths (8/16/32/64). `ui3`, `si5`, a 1-bit `bool`, and even `ui24`
+        (stored in a wider `uint32_t`) all have storage wider than their
+        wire width and are therefore *not* byte-packable.
+      * a struct / union whose total width is a whole number of bytes -- its
+        `_bytes` buffer already mirrors the wire layout.
+      * an array whose element type is itself byte-packable, so successive
+        elements share the same byte stride on the wire and in memory.
+
+    Anything that is not byte-packable must be (un)packed element-by-element
+    from its individual wire bit offset rather than flat-copied.
+    """
+    wrapped = self._unwrap_aliases(esi_type)
+    if isinstance(wrapped, (types.BitsType, types.IntType)):
+      return wrapped.bit_width in (8, 16, 32, 64)
+    if isinstance(wrapped, types.ArrayType):
+      return self._is_byte_packable(wrapped.element_type)
+    if isinstance(wrapped, (types.StructType, types.UnionType)):
+      bit_width = wrapped.bit_width
+      return bit_width is not None and bit_width > 0 and bit_width % 8 == 0
+    return False
+
   def _emit_field_accessor(self, hdr: TextIO, indent: str, raw_member: str,
                            self_type: str, field_name: str,
                            field_type: types.ESIType, bit_offset: int,
@@ -1638,6 +1667,154 @@ class CppTypeEmitter:
     # UIntView}`.
     is_view_array = (isinstance(wrapped, types.ArrayType) and
                      self._is_value_class_type(wrapped.element_type))
+
+    # An array whose C++ element layout does not match its on-wire layout,
+    # so the flat byte-copy / `copyBitsIn` / `copyBitsOut` paths below would
+    # truncate or misplace elements. Two element kinds need this treatment:
+    #
+    #   * native-integer elements whose storage is wider than the wire
+    #     width -- sub-byte elements (`i1` -> `bool`, `ui3`) or odd widths
+    #     that round up to a wider storage type (`ui24` -> `uint32_t`).
+    #   * struct / union elements whose total width is not a whole number of
+    #     bytes (e.g. a 5-bit `{ui3, ui2}`): successive elements pack at a
+    #     sub-byte stride on the wire but at a padded whole-byte stride in
+    #     the C++ `std::array`.
+    #
+    # In both cases each element is (un)packed one at a time from its own
+    # wire bit offset `bit_offset + i * elem_width`. Nested-array and
+    # view-class elements keep their own paths below.
+    packed_elem = (self._unwrap_aliases(wrapped.element_type) if isinstance(
+        wrapped, types.ArrayType) else None)
+    is_packed_array = (isinstance(wrapped, types.ArrayType) and
+                       not is_view_array and
+                       isinstance(packed_elem,
+                                  (types.BitsType, types.IntType,
+                                   types.StructType, types.UnionType)) and
+                       not self._is_byte_packable(wrapped.element_type))
+
+    if is_packed_array:
+      assert isinstance(wrapped, types.ArrayType)
+      elem_type = wrapped.element_type
+      elem_cpp = self._cpp_type(elem_type)
+      elem_width = elem_type.bit_width
+      elem_count = wrapped.size
+
+      if isinstance(packed_elem, (types.StructType, types.UnionType)):
+        # Aggregate element: its own `_bytes` buffer already mirrors the
+        # wire layout, so copy `elem_width` bits between the parent buffer
+        # and the element's bytes (which start at the element's bit 0). The
+        # `reinterpret_cast<uint8_t *>` mirrors the whole-aggregate byte
+        # copy emitted further below.
+        hdr.write(f"{indent}{elem_cpp} {field_name}(std::size_t i) const {{\n")
+        hdr.write(f"{indent}  {elem_cpp} out{{}};\n")
+        hdr.write(f"{indent}  auto *dst = reinterpret_cast<uint8_t *>(&out);\n")
+        hdr.write(f"{indent}  const std::size_t bit_off = "
+                  f"{bit_offset} + i * {elem_width};\n")
+        hdr.write(
+            f"{indent}  for (std::size_t b = 0; b < {elem_width}; ++b) {{\n")
+        hdr.write(f"{indent}    const std::size_t g = bit_off + b;\n")
+        hdr.write(f"{indent}    if (({raw_member}[g / 8] >> (g % 8)) & 1u)\n")
+        hdr.write(f"{indent}      dst[b / 8] |= "
+                  f"static_cast<uint8_t>(uint8_t{{1}} << (b % 8));\n")
+        hdr.write(f"{indent}  }}\n")
+        hdr.write(f"{indent}  return out;\n")
+        hdr.write(f"{indent}}}\n")
+
+        hdr.write(f"{indent}{self_type} &{field_name}(std::size_t i, "
+                  f"const {elem_cpp} &v) {{\n")
+        hdr.write(f"{indent}  const auto *src = "
+                  f"reinterpret_cast<const uint8_t *>(&v);\n")
+        hdr.write(f"{indent}  const std::size_t bit_off = "
+                  f"{bit_offset} + i * {elem_width};\n")
+        hdr.write(
+            f"{indent}  for (std::size_t b = 0; b < {elem_width}; ++b) {{\n")
+        hdr.write(f"{indent}    const std::size_t g = bit_off + b;\n")
+        hdr.write(f"{indent}    const uint8_t bit = static_cast<uint8_t>("
+                  f"(src[b / 8] >> (b % 8)) & 1u);\n")
+        hdr.write(f"{indent}    {raw_member}[g / 8] = static_cast<uint8_t>(\n")
+        hdr.write(
+            f"{indent}        ({raw_member}[g / 8] & static_cast<uint8_t>("
+            f"~(uint8_t{{1}} << (g % 8)))) |\n")
+        hdr.write(f"{indent}        static_cast<uint8_t>(bit << (g % 8)));\n")
+        hdr.write(f"{indent}  }}\n")
+        hdr.write(f"{indent}  return *this;\n")
+        hdr.write(f"{indent}}}\n")
+      else:
+        signed = self._is_signed_int_field(elem_type)
+        is_bool = (elem_cpp == "bool")
+        # Unsigned storage used to assemble/disassemble the element bits; a
+        # signed value is recovered afterwards with an explicit
+        # sign-extension so the shifts never touch the sign bit (mirrors
+        # `readSignedBits`).
+        if is_bool:
+          unsigned_cpp = "uint8_t"
+        elif signed:
+          unsigned_cpp = "u" + elem_cpp
+        else:
+          unsigned_cpp = elem_cpp
+
+        # Per-element getter: assemble `elem_width` bits LSB-first starting
+        # at the element's wire offset `bit_offset + i * elem_width`.
+        hdr.write(f"{indent}{elem_cpp} {field_name}(std::size_t i) const {{\n")
+        hdr.write(f"{indent}  const std::size_t bit_off = "
+                  f"{bit_offset} + i * {elem_width};\n")
+        if is_bool:
+          hdr.write(f"{indent}  return (({raw_member}[bit_off / 8] >> "
+                    f"(bit_off % 8)) & 1u) != 0;\n")
+        else:
+          hdr.write(f"{indent}  {unsigned_cpp} u = 0;\n")
+          hdr.write(
+              f"{indent}  for (std::size_t b = 0; b < {elem_width}; ++b) {{\n")
+          hdr.write(f"{indent}    const std::size_t g = bit_off + b;\n")
+          hdr.write(f"{indent}    u = static_cast<{unsigned_cpp}>(\n")
+          hdr.write(f"{indent}        u | (static_cast<{unsigned_cpp}>("
+                    f"({raw_member}[g / 8] >> (g % 8)) & 1u) << b));\n")
+          hdr.write(f"{indent}  }}\n")
+          if signed:
+            hdr.write(f"{indent}  constexpr {unsigned_cpp} signBit = "
+                      f"static_cast<{unsigned_cpp}>({unsigned_cpp}{{1}} << "
+                      f"{elem_width - 1});\n")
+            hdr.write(f"{indent}  u = static_cast<{unsigned_cpp}>("
+                      f"(u ^ signBit) - signBit);\n")
+          hdr.write(f"{indent}  return static_cast<{elem_cpp}>(u);\n")
+        hdr.write(f"{indent}}}\n")
+
+        # Per-element setter: write `elem_width` bits LSB-first into the
+        # element's wire offset, leaving the surrounding bits untouched.
+        hdr.write(f"{indent}{self_type} &{field_name}(std::size_t i, "
+                  f"{elem_cpp} v) {{\n")
+        hdr.write(f"{indent}  const std::size_t bit_off = "
+                  f"{bit_offset} + i * {elem_width};\n")
+        hdr.write(f"{indent}  const {unsigned_cpp} u = "
+                  f"static_cast<{unsigned_cpp}>(v);\n")
+        hdr.write(
+            f"{indent}  for (std::size_t b = 0; b < {elem_width}; ++b) {{\n")
+        hdr.write(f"{indent}    const std::size_t g = bit_off + b;\n")
+        hdr.write(f"{indent}    const uint8_t bit = static_cast<uint8_t>("
+                  f"(u >> b) & {unsigned_cpp}{{1}});\n")
+        hdr.write(f"{indent}    {raw_member}[g / 8] = static_cast<uint8_t>(\n")
+        hdr.write(
+            f"{indent}        ({raw_member}[g / 8] & static_cast<uint8_t>("
+            f"~(uint8_t{{1}} << (g % 8)))) |\n")
+        hdr.write(f"{indent}        static_cast<uint8_t>(bit << (g % 8)));\n")
+        hdr.write(f"{indent}  }}\n")
+        hdr.write(f"{indent}  return *this;\n")
+        hdr.write(f"{indent}}}\n")
+
+      # Whole-array getter/setter forward to the per-element accessors so the
+      # public API matches the byte-packable array case exactly.
+      hdr.write(f"{indent}{field_cpp} {field_name}() const {{\n")
+      hdr.write(f"{indent}  {field_cpp} out{{}};\n")
+      hdr.write(f"{indent}  for (std::size_t i = 0; i < {elem_count}; ++i)\n")
+      hdr.write(f"{indent}    out[i] = {field_name}(i);\n")
+      hdr.write(f"{indent}  return out;\n")
+      hdr.write(f"{indent}}}\n")
+      hdr.write(f"{indent}{self_type} &{field_name}(const {field_cpp} &v) {{\n")
+      hdr.write(f"{indent}  for (std::size_t i = 0; i < {elem_count}; ++i)\n")
+      hdr.write(f"{indent}    {field_name}(i, v[i]);\n")
+      hdr.write(f"{indent}  return *this;\n")
+      hdr.write(f"{indent}}}\n")
+      return
 
     if not is_view_array:
       if byte_aligned:

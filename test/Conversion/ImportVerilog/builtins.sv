@@ -248,6 +248,20 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   if (0) $fatal(1, "%f", r);
 endfunction
 
+// CHECK-LABEL: func.func private @FormatCharSpecifier(
+function void FormatCharSpecifier();
+  byte ch = 88;
+  int ch_int = 235800858;
+  // CHECK: moore.fmt.char {{%.+}} : i8
+  $display("%c", ch);
+  // CHECK: moore.fmt.char {{%.+}} : i8
+  $display("%C", ch);
+  // CHECK: moore.fmt.char {{%.+}} : i32
+  $display("%c", ch_int);
+  // CHECK: moore.fmt.char {{%.+}} : i32
+  $display("%C", ch_int);
+endfunction
+
 // IEEE 1800-2017 § 20.8 "Math functions"
 // CHECK-LABEL: func.func private @MathBuiltins(
 // CHECK-SAME: [[X:%.+]]: !moore.i32
@@ -420,7 +434,7 @@ module SampleValueBuiltins #() (
 );
   // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
   // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
-  // CHECK: [[DATABITWIRE:%.+]] = moore.variable name "data_bit_i" : <i8>
+  // CHECK: [[DATABITWIRE:%.+]] = moore.net name "data_bit_i" wire : <i8>
   // CHECK: moore.procedure always {
   // CHECK-NEXT: [[C:%.+]] = moore.read [[CLKWIRE]] : <l1>
   // CHECK-NEXT: [[C_INT:%.+]] = moore.logic_to_int [[C]] : l1
@@ -608,16 +622,11 @@ module SampleValueBuiltins #() (
   // CHECK: [[AND:%.+]] = comb.and [[DB]], [[SUB]] : i8
   // CHECK: [[ZERO:%.+]] = hw.constant 0 : i8
   // CHECK: [[EQ:%.+]] = comb.icmp eq [[AND]], [[ZERO]] : i8
-  // CHECK: [[EQ_INT:%.+]] = moore.from_builtin_int [[EQ]] : i1
-  // CHECK: [[EQ_LOGIC:%.+]] = moore.int_to_logic [[EQ_INT]] : i1
-  // CHECK: [[EQ_L2I:%.+]] = moore.logic_to_int [[EQ_LOGIC]] : l1
-  // CHECK: [[EQ_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_L2I]] : i1
   // CHECK: [[FALSE:%.+]] = hw.constant false
-  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[EQ_BUILTIN]] : i1
+  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[EQ]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
-  // CHECK: [[RES_L2I:%.+]] = moore.logic_to_int [[RES_LOGIC]] : l1
-  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_L2I]] : i1
+  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
   // CHECK: ltl.clock [[RES_BUILTIN]]
   onehot0_data: assert property (@(posedge clk_i) $onehot0(data_i));
 
@@ -636,16 +645,11 @@ module SampleValueBuiltins #() (
   // CHECK: [[EQ:%.+]] = comb.icmp eq [[AND]], [[ZERO]] : i8
   // CHECK: [[NE:%.+]] = comb.icmp ne [[DB]], [[ZERO]] : i8
   // CHECK: [[AND2:%.+]] = comb.and [[EQ]], [[NE]] : i1
-  // CHECK: [[RES_INT_2:%.+]] = moore.from_builtin_int [[AND2]] : i1
-  // CHECK: [[RES_LOGIC_2:%.+]] = moore.int_to_logic [[RES_INT_2]] : i1
-  // CHECK: [[RES_L2I_2:%.+]] = moore.logic_to_int [[RES_LOGIC_2]] : l1
-  // CHECK: [[RES_BUILTIN_2:%.+]] = moore.to_builtin_int [[RES_L2I_2]] : i1
   // CHECK: [[FALSE:%.+]] = hw.constant false
-  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[RES_BUILTIN_2]] : i1
+  // CHECK: [[MUX:%.+]] = comb.mux [[ISUNKNOWN_I1]], [[FALSE]], [[AND2]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
-  // CHECK: [[RES_L2I:%.+]] = moore.logic_to_int [[RES_LOGIC]] : l1
-  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_L2I]] : i1
+  // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
   // CHECK: ltl.clock [[RES_BUILTIN]]
   onehot_data: assert property (@(posedge clk_i) $onehot(data_i));
 
@@ -677,20 +681,122 @@ module SampleValueBuiltins #() (
   // CHECK: ltl.clock [[RES_BUILTIN]]
   onehot_bit_data: assert property (@(posedge clk_i) $onehot(data_bit_i));
 
+  // CHECK: moore.procedure always {
+  // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK: [[D_L2I:%.+]] = moore.logic_to_int [[D]] : l8
+  // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D_L2I]] : i8
+  // CHECK: [[Z3:%.+]] = hw.constant 0 : i3
+  // CHECK: [[B0:%.+]] = comb.extract [[DB]] from 0 : (i8) -> i1
+  // CHECK: [[EXT0:%.+]] = comb.concat [[Z3]], [[B0]] : i3, i1
+  // CHECK: [[B1:%.+]] = comb.extract [[DB]] from 1 : (i8) -> i1
+  // CHECK: [[EXT1:%.+]] = comb.concat [[Z3]], [[B1]] : i3, i1
+  // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int {{%.+}} : i4
+  // CHECK: [[SEXT:%.+]] = moore.zext [[RES_INT]] : i4 -> i32
+  // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
+  // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
+  countones_data:
+    assert property (@(posedge clk_i) $countones(data_i) == 0);
+
+  // CHECK: moore.procedure always {
+  // CHECK: [[D:%.+]] = moore.read [[DATABITWIRE]] : <i8>
+  // CHECK: [[DB:%.+]] = moore.to_builtin_int [[D]] : i8
+  // CHECK: [[Z3:%.+]] = hw.constant 0 : i3
+  // CHECK: [[B0:%.+]] = comb.extract [[DB]] from 0 : (i8) -> i1
+  // CHECK: [[EXT0:%.+]] = comb.concat [[Z3]], [[B0]] : i3, i1
+  // CHECK: [[B1:%.+]] = comb.extract [[DB]] from 1 : (i8) -> i1
+  // CHECK: [[EXT1:%.+]] = comb.concat [[Z3]], [[B1]] : i3, i1
+  // CHECK: comb.add
+  // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int {{%.+}} : i4
+  // CHECK: [[SEXT:%.+]] = moore.zext [[RES_INT]] : i4 -> i32
+  // CHECK: [[ZERO:%.+]] = moore.constant 0 : i32
+  // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
+  countones_bit_data:
+    assert property (@(posedge clk_i) $countones(data_bit_i) == 0);
 endmodule
 
+// CHECK-LABEL: func.func private @BitVectorPackedBuiltins(
+// CHECK-SAME: [[S:%[^ ,]+]]: !moore.struct<{a: l4, b: l4}>,
+// CHECK-SAME: [[A:%[^ ,]+]]: !moore.array<2 x l4>)
+function void BitVectorPackedBuiltins(
+    struct packed { logic [3:0] a; logic [3:0] b; } s,
+    logic [1:0][3:0] arr);
+  bit result;
+  int cnt;
+
+  // CHECK: [[SBV:%.+]] = moore.packed_to_sbv [[S]] : struct<{a: l4, b: l4}>
+  // CHECK-NEXT: [[RED:%.+]] = moore.reduce_xor [[SBV]] : l8 -> l1
+  // CHECK-NEXT: [[X:%.+]] = moore.constant bX : l1
+  // CHECK-NEXT: moore.case_eq [[RED]], [[X]] : l1
+  result = $isunknown(s);
+
+  // CHECK: [[SBV2:%.+]] = moore.packed_to_sbv [[S]] : struct<{a: l4, b: l4}>
+  // CHECK: moore.reduce_xor [[SBV2]] : l8 -> l1
+  // CHECK: comb.icmp eq
+  result = $onehot0(s);
+
+  // CHECK: [[SBV3:%.+]] = moore.packed_to_sbv [[S]] : struct<{a: l4, b: l4}>
+  // CHECK: moore.reduce_xor [[SBV3]] : l8 -> l1
+  // CHECK: comb.icmp ne
+  result = $onehot(s);
+
+  // CHECK: [[SBV4:%.+]] = moore.packed_to_sbv [[S]] : struct<{a: l4, b: l4}>
+  // CHECK-NEXT: moore.logic_to_int [[SBV4]] : l8
+  cnt = $countones(s);
+
+  // CHECK: [[SBV5:%.+]] = moore.packed_to_sbv [[A]] : array<2 x l4>
+  // CHECK-NEXT: [[RED2:%.+]] = moore.reduce_xor [[SBV5]] : l8 -> l1
+  // CHECK-NEXT: [[X2:%.+]] = moore.constant bX : l1
+  // CHECK-NEXT: moore.case_eq [[RED2]], [[X2]] : l1
+  result = $isunknown(arr);
+endfunction
+
 // CHECK-LABEL: func.func private @StringBuiltins(
-// CHECK-SAME: [[STR:%.+]]: !moore.string
-// CHECK-SAME: [[INT:%.+]]: !moore.i32
-function void StringBuiltins(string string_in, int int_in);
-  // CHECK: [[LEN:%.+]] = moore.string.len [[STR]]
+// CHECK-SAME: [[STR:%.+]]: !moore.string,
+// CHECK-SAME: [[INT:%.+]]: !moore.i32,
+// CHECK-SAME: [[Other:%.+]]: !moore.string) {
+function void StringBuiltins(string string_in, int int_in, string other);
+  // CHECK: [[VAR:%.+]] = moore.variable [[STR]] : <string>
+  // CHECK: [[READ:%.+]] = moore.read [[VAR]] : <string>
+  // CHECK: [[LEN:%.+]] = moore.string.len [[READ]]
   dummyA(string_in.len());
-  // CHECK: [[LEN:%.+]] = moore.string.toupper [[STR]]
-  dummyD(string_in.toupper());
-  // CHECK: [[LEN:%.+]] = moore.string.tolower [[STR]]
-  dummyD(string_in.tolower());
-  // CHECK: [[CHAR:%.+]] = moore.string.get [[STR]]{{\[}}[[INT]]]
+  // CHECK: moore.string.put [[VAR]]{{\[}}[[INT]]{{\]}}, {{%.+}} : <string>
+  string_in.putc(int_in, "A");
+  // CHECK: [[GET:%.+]] = moore.string.get {{%.+}}{{\[}}{{%.+}}{{\]}}
   dummyE(string_in.getc(int_in));
+  // CHECK: [[UPPER:%.+]] = moore.string.toupper {{%.+}}
+  dummyD(string_in.toupper());
+  // CHECK: [[LOWER:%.+]] = moore.string.tolower {{%.+}}
+  dummyD(string_in.tolower());
+  // CHECK: [[CMP:%.+]] = moore.string.compare {{%.+}}, [[Other]]
+  dummyA(string_in.compare(other));
+  // CHECK: [[ICMP:%.+]] = moore.string.icompare {{%.+}}, [[Other]]
+  dummyA(string_in.icompare(other));
+  // CHECK: [[SUBSTR:%.+]] = moore.string.substr {{%.+}}{{\[}}{{%.+}} : {{%.+}}{{\]}}
+  dummyD(string_in.substr(0, 2));
+  // CHECK: [[ATOI:%.+]] = moore.string.atoi {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOI]]
+  dummyA(string_in.atoi());
+  // CHECK: [[ATOHEX:%.+]] = moore.string.atohex {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOHEX]]
+  dummyA(string_in.atohex());
+  // CHECK: [[ATOOCT:%.+]] = moore.string.atooct {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOOCT]]
+  dummyA(string_in.atooct());
+  // CHECK: [[ATOBIN:%.+]] = moore.string.atobin {{%.+}} : l32
+  // CHECK: moore.logic_to_int [[ATOBIN]]
+  dummyA(string_in.atobin());
+  // CHECK: [[ATOREAL:%.+]] = moore.string.atoreal {{%.+}} : f64
+  dummyB(string_in.atoreal());
+  // CHECK: moore.string.itoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.itoa(int_in);
+  // CHECK: moore.string.hextoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.hextoa(int_in);
+  // CHECK: moore.string.octtoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.octtoa(int_in);
+  // CHECK: moore.string.bintoa [[VAR]], {{%.+}} : <string>, l32
+  string_in.bintoa(int_in);
+  // CHECK: moore.string.realtoa [[VAR]], {{%.+}} : <string>, f64
+  string_in.realtoa(1.5);
 endfunction
 
 // IEEE 1800-2017 § 21.3 "File I/O system tasks and functions"
@@ -851,4 +957,602 @@ function void FileDisplayBuiltins(int fd, int x);
   // CHECK: moore.builtin.fdisplay [[FD]], [[TMP3]]
   $fdisplayh(fd, x);
 
+endfunction
+
+// IEEE 1800-2017 § 21.6 "Command line input"
+// CHECK-LABEL: func.func private @PlusArgsBuiltins(
+function void PlusArgsBuiltins();
+  bit rv;
+  int val;
+
+  // CHECK: [[T:%.+]] = moore.builtin.plusargs_test "FOO" : i1
+  rv = $test$plusargs("FOO");
+
+  // CHECK: [[FOUND:%.+]], [[RESULT:%.+]] = moore.builtin.plusargs_value "BAR=%d" : i1, i32
+  // CHECK: moore.blocking_assign {{%.+}}, [[RESULT]] : i32
+  rv = $value$plusargs("BAR=%d", val);
+endfunction
+
+// CHECK-LABEL: func.func private @FScanfIntegerSpecifiers(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfIntegerSpecifiers(int fd);
+  int x;
+  int res;
+
+  // CHECK: [[XVAR:%.+]] = moore.variable : <i32>
+  // CHECK: moore.variable : <i32>
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] decimal : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%d", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] decimal : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%D", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] binary : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%b", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] binary : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%B", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] octal : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%o", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] octal : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%O", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] hex_lower : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%h", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] hex_lower : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%x", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] hex_upper : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%H", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] hex_upper : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%X", x);
+endfunction
+
+// CHECK-LABEL: func.func private @FScanfRealSpecifiers(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfRealSpecifiers(int fd);
+  real r;
+  time t;
+  int res;
+  // CHECK: [[RVAR:%.+]] = moore.variable : <f64>
+  // CHECK: [[TVAR:%.+]] = moore.variable : <time>
+  // CHECK: moore.variable : <i32>
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.real [[C]] : !moore.f64, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[V]] : f64
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%f", r);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.real [[C]] : !moore.f64, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[V]] : f64
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%e", r);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.real [[C]] : !moore.f64, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[V]] : f64
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%g", r);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.real [[C]] : !moore.f64, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[V]] : f64
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%F", r);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.real [[C]] : !moore.f64, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[V]] : f64
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%E", r);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.real [[C]] : !moore.f64, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[V]] : f64
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%G", r);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.time [[C]] : !moore.time, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[TVAR]], [[V]] : time
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%t", t);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.time [[C]] : !moore.time, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[TVAR]], [[V]] : time
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%T", t);
+endfunction
+
+// CHECK-LABEL: func.func private @FScanfOtherSpecifiers(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfOtherSpecifiers(int fd);
+  string s;
+  byte c;
+  int raw;
+  int res;
+
+  // CHECK: [[SVAR:%.+]] = moore.variable : <string>
+  // CHECK: [[CVAR:%.+]] = moore.variable : <i8>
+  // CHECK: [[RVAR:%.+]] = moore.variable : <i32>
+  // CHECK: moore.variable : <i32>
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.str [[C]] : !moore.string, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[SVAR]], [[V]] : string
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%s", s);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.str [[C]] : !moore.string, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[SVAR]], [[V]] : string
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%S", s);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.char [[C]] : i8, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i8
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[CVAR]], [[MV]] : i8
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%c", c);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.unformatted [[C]] : i32, !moore.i1
+  // CHECK-NOT: four_value
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%u", raw);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.unformatted [[C]] four_value : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%z", raw);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.unformatted [[C]] four_value : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%Z", raw);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.hier_path_match [[C]]
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%m");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.hier_path_match [[C]]
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%M");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.literal [[C]] "%"
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%%");
+endfunction
+
+// CHECK-LABEL: func.func private @FScanfModifiers(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfModifiers(int fd);
+  int x;
+  string s;
+  real r;
+  int res;
+
+  // CHECK: [[IVAR:%.+]] = moore.variable : <i32>
+  // CHECK: [[SVAR:%.+]] = moore.variable : <string>
+  // CHECK: [[RVAR:%.+]] = moore.variable : <f64>
+  // CHECK: moore.variable : <i32>
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.int [[C]] decimal
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%*d");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.int [[C]] binary
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%*b");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.str [[C]]
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%*s");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.real [[C]]
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%*f");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.char [[C]]
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%*c");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] decimal width 8 : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[IVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%8d", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.str [[C]] width 16 : !moore.string, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[SVAR]], [[V]] : string
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%16s", s);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.real [[C]] width 10 : !moore.f64, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[V]] : f64
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%10f", r);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.int [[C]] decimal width 42
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%*42d");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.str [[C]] width 42
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%*42s");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[R:%.+]] = moore.scan.int [[C]] hex_lower width 42
+  // CHECK: moore.scan.end [[R]]
+  res = $fscanf(fd, "%*42h");
+endfunction
+
+// CHECK-LABEL: func.func private @FScanfComposition(
+// CHECK-SAME:  [[FD:%[^ ,]+]]: !moore.i32
+function void FScanfComposition(int fd);
+  int a;
+  string b;
+  real r;
+  int res;
+
+  // CHECK: [[AVAR:%.+]] = moore.variable : <i32>
+  // CHECK: [[BVAR:%.+]] = moore.variable : <string>
+  // CHECK: [[RVAR:%.+]] = moore.variable : <f64>
+  // CHECK: moore.variable : <i32>
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[C1:%.+]], [[V1:%.+]], [[M1:%.+]] = moore.scan.int [[C0]] decimal : i32, !moore.i1
+  // CHECK: [[MV1:%.+]] = moore.from_builtin_int [[V1]] : i32
+  // CHECK: [[C2:%.+]], [[V2:%.+]], [[M2:%.+]] = moore.scan.str [[C1]] : !moore.string, !moore.i1
+  // CHECK: [[CB1:%.+]] = moore.to_builtin_int [[M1]] : i1
+  // CHECK: cf.cond_br [[CB1]], ^[[A1:.+]], ^[[K1:.+]]
+  // CHECK: ^[[A1]]:
+  // CHECK: moore.blocking_assign [[AVAR]], [[MV1]] : i32
+  // CHECK: ^[[K1]]:
+  // CHECK: [[CB2:%.+]] = moore.to_builtin_int [[M2]] : i1
+  // CHECK: cf.cond_br [[CB2]], ^[[A2:.+]], ^[[K2:.+]]
+  // CHECK: ^[[A2]]:
+  // CHECK: moore.blocking_assign [[BVAR]], [[V2]] : string
+  // CHECK: ^[[K2]]:
+  // CHECK: moore.scan.end [[C2]]
+  res = $fscanf(fd, "%d%s", a, b);
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[C1:%.+]], [[V1:%.+]], [[M1:%.+]] = moore.scan.int [[C0]] decimal : i32, !moore.i1
+  // CHECK: [[MV1:%.+]] = moore.from_builtin_int [[V1]] : i32
+  // CHECK: [[C2:%.+]], [[V2:%.+]], [[M2:%.+]] = moore.scan.real [[C1]] : !moore.f64, !moore.i1
+  // CHECK: [[C3:%.+]], [[V3:%.+]], [[M3:%.+]] = moore.scan.str [[C2]] : !moore.string, !moore.i1
+  // CHECK: [[CB1:%.+]] = moore.to_builtin_int [[M1]] : i1
+  // CHECK: cf.cond_br [[CB1]], ^[[A1:.+]], ^[[K1:.+]]
+  // CHECK: ^[[A1]]:
+  // CHECK: moore.blocking_assign [[AVAR]], [[MV1]] : i32
+  // CHECK: ^[[K1]]:
+  // CHECK: [[CB2:%.+]] = moore.to_builtin_int [[M2]] : i1
+  // CHECK: cf.cond_br [[CB2]], ^[[A2:.+]], ^[[K2:.+]]
+  // CHECK: ^[[A2]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[V2]] : f64
+  // CHECK: ^[[K2]]:
+  // CHECK: [[CB3:%.+]] = moore.to_builtin_int [[M3]] : i1
+  // CHECK: cf.cond_br [[CB3]], ^[[A3:.+]], ^[[K3:.+]]
+  // CHECK: ^[[A3]]:
+  // CHECK: moore.blocking_assign [[BVAR]], [[V3]] : string
+  // CHECK: ^[[K3]]:
+  // CHECK: moore.scan.end [[C3]]
+  res = $fscanf(fd, "%d%f%s", a, r, b);
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[C1:%.+]] = moore.scan.literal [[C0]] "val="
+  // CHECK: [[C2:%.+]], [[V1:%.+]], [[M1:%.+]] = moore.scan.int [[C1]] decimal : i32, !moore.i1
+  // CHECK: [[MV1:%.+]] = moore.from_builtin_int [[V1]] : i32
+  // CHECK: [[CB1:%.+]] = moore.to_builtin_int [[M1]] : i1
+  // CHECK: cf.cond_br [[CB1]], ^[[A1:.+]], ^[[K1:.+]]
+  // CHECK: ^[[A1]]:
+  // CHECK: moore.blocking_assign [[AVAR]], [[MV1]] : i32
+  // CHECK: ^[[K1]]:
+  // CHECK: moore.scan.end [[C2]]
+  res = $fscanf(fd, "val=%d", a);
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[C1:%.+]], [[V1:%.+]], [[M1:%.+]] = moore.scan.int [[C0]] decimal : i32, !moore.i1
+  // CHECK: [[MV1:%.+]] = moore.from_builtin_int [[V1]] : i32
+  // CHECK: [[C2:%.+]] = moore.scan.literal [[C1]] " end"
+  // CHECK: [[CB1:%.+]] = moore.to_builtin_int [[M1]] : i1
+  // CHECK: cf.cond_br [[CB1]], ^[[A1:.+]], ^[[K1:.+]]
+  // CHECK: ^[[A1]]:
+  // CHECK: moore.blocking_assign [[AVAR]], [[MV1]] : i32
+  // CHECK: ^[[K1]]:
+  // CHECK: moore.scan.end [[C2]]
+  res = $fscanf(fd, "%d end", a);
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[C1:%.+]], [[V1:%.+]], [[M1:%.+]] = moore.scan.int [[C0]] decimal : i32, !moore.i1
+  // CHECK: [[MV1:%.+]] = moore.from_builtin_int [[V1]] : i32
+  // CHECK: [[C2:%.+]] = moore.scan.literal [[C1]] " , "
+  // CHECK: [[C3:%.+]], [[V2:%.+]], [[M2:%.+]] = moore.scan.str [[C2]] : !moore.string, !moore.i1
+  // CHECK: [[CB1:%.+]] = moore.to_builtin_int [[M1]] : i1
+  // CHECK: cf.cond_br [[CB1]], ^[[A1:.+]], ^[[K1:.+]]
+  // CHECK: ^[[A1]]:
+  // CHECK: moore.blocking_assign [[AVAR]], [[MV1]] : i32
+  // CHECK: ^[[K1]]:
+  // CHECK: [[CB2:%.+]] = moore.to_builtin_int [[M2]] : i1
+  // CHECK: cf.cond_br [[CB2]], ^[[A2:.+]], ^[[K2:.+]]
+  // CHECK: ^[[A2]]:
+  // CHECK: moore.blocking_assign [[BVAR]], [[V2]] : string
+  // CHECK: ^[[K2]]:
+  // CHECK: moore.scan.end [[C3]]
+  res = $fscanf(fd, "%d , %s", a, b);
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[C1:%.+]] = moore.scan.int [[C0]] decimal
+  // CHECK: [[C2:%.+]], [[V1:%.+]], [[M1:%.+]] = moore.scan.str [[C1]] : !moore.string, !moore.i1
+  // CHECK: [[CB1:%.+]] = moore.to_builtin_int [[M1]] : i1
+  // CHECK: cf.cond_br [[CB1]], ^[[A1:.+]], ^[[K1:.+]]
+  // CHECK: ^[[A1]]:
+  // CHECK: moore.blocking_assign [[BVAR]], [[V1]] : string
+  // CHECK: ^[[K1]]:
+  // CHECK: moore.scan.end [[C2]]
+  res = $fscanf(fd, "%*d%s", b);
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[C1:%.+]] = moore.scan.literal [[C0]] "prefix"
+  // CHECK: moore.scan.end [[C1]]
+  res = $fscanf(fd, "prefix");
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: [[C1:%.+]] = moore.scan.literal [[C0]] " "
+  // CHECK: moore.scan.end [[C1]]
+  res = $fscanf(fd, " ");
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_fscanf [[FD]]
+  // CHECK: moore.scan.end [[C0]]
+  res = $fscanf(fd, "");
+endfunction
+
+// CHECK-LABEL: func.func private @SScanfBuiltins(
+// CHECK-SAME:  [[SRC:%[^ ,]+]]: !moore.string
+function void SScanfBuiltins(string src);
+  int x;
+  string s;
+  real r;
+  int res;
+
+  // CHECK: [[XVAR:%.+]] = moore.variable : <i32>
+  // CHECK: [[SVAR:%.+]] = moore.variable : <string>
+  // CHECK: [[RVAR:%.+]] = moore.variable : <f64>
+  // CHECK: moore.variable : <i32>
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_sscanf [[SRC]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.int [[C]] decimal : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $sscanf(src, "%d", x);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_sscanf [[SRC]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.str [[C]] : !moore.string, !moore.i1
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[SVAR]], [[V]] : string
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $sscanf(src, "%s", s);
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_sscanf [[SRC]]
+  // CHECK: [[C1:%.+]], [[V1:%.+]], [[M1:%.+]] = moore.scan.int [[C0]] decimal : i32, !moore.i1
+  // CHECK: [[MV1:%.+]] = moore.from_builtin_int [[V1]] : i32
+  // CHECK: [[C2:%.+]] = moore.scan.literal [[C1]] " "
+  // CHECK: [[C3:%.+]], [[V2:%.+]], [[M2:%.+]] = moore.scan.real [[C2]] : !moore.f64, !moore.i1
+  // CHECK: [[CB1:%.+]] = moore.to_builtin_int [[M1]] : i1
+  // CHECK: cf.cond_br [[CB1]], ^[[A1:.+]], ^[[K1:.+]]
+  // CHECK: ^[[A1]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV1]] : i32
+  // CHECK: ^[[K1]]:
+  // CHECK: [[CB2:%.+]] = moore.to_builtin_int [[M2]] : i1
+  // CHECK: cf.cond_br [[CB2]], ^[[A2:.+]], ^[[K2:.+]]
+  // CHECK: ^[[A2]]:
+  // CHECK: moore.blocking_assign [[RVAR]], [[V2]] : f64
+  // CHECK: ^[[K2]]:
+  // CHECK: moore.scan.end [[C3]]
+  res = $sscanf(src, "%d %f", x, r);
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_sscanf [[SRC]]
+  // CHECK: [[R:%.+]] = moore.scan.int [[C]] decimal width 8
+  // CHECK: moore.scan.end [[R]]
+  res = $sscanf(src, "%*8d");
+
+  // CHECK: [[C:%.+]] = moore.scan.begin_sscanf [[SRC]]
+  // CHECK: [[R:%.+]], [[V:%.+]], [[M:%.+]] = moore.scan.unformatted [[C]] four_value : i32, !moore.i1
+  // CHECK: [[MV:%.+]] = moore.from_builtin_int [[V]] : i32
+  // CHECK: [[CB:%.+]] = moore.to_builtin_int [[M]] : i1
+  // CHECK: cf.cond_br [[CB]], ^[[ASSIGN:.+]], ^[[CONT:.+]]
+  // CHECK: ^[[ASSIGN]]:
+  // CHECK: moore.blocking_assign [[XVAR]], [[MV]] : i32
+  // CHECK: ^[[CONT]]:
+  // CHECK: moore.scan.end [[R]]
+  res = $sscanf(src, "%z", x);
+
+  // CHECK: [[C0:%.+]] = moore.scan.begin_sscanf [[SRC]]
+  // CHECK: moore.scan.end [[C0]]
+  res = $sscanf(src, "");
 endfunction

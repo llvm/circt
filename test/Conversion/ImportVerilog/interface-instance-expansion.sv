@@ -34,7 +34,7 @@ module InterfaceProceduralAssign(input logic clk, output logic y);
   sample_if vif(clk);
   assign y = vif.sampled;
 
-  // CHECK: %[[INNER_CLK:.+]] = moore.variable name "clk" : <l1>
+  // CHECK: %[[INNER_CLK:.+]] = moore.net name "clk" wire : <l1>
   // CHECK: %[[SAMPLED:.+]] = moore.variable : <l1>
   // CHECK: moore.procedure always_comb {
   // CHECK:   %[[CLK_READ:.+]] = moore.read %[[INNER_CLK]] : <l1>

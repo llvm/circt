@@ -15,8 +15,7 @@ using namespace ImportVerilog;
 namespace {
 struct InstBodyVisitor
     : public slang::ast::ASTVisitor<InstBodyVisitor,
-                                    /*VisitStatements=*/true,
-                                    /*VisitExpressions=*/true> {
+                                    slang::ast::VisitFlags::AllGood> {
   InstBodyVisitor(
       Context &context, const slang::ast::Symbol &outermostModule,
       DenseSet<const slang::ast::InstanceBodySymbol *> &visitedBodies)

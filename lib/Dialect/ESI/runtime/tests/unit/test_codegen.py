@@ -35,6 +35,7 @@ requires_cmake = pytest.mark.skipif(shutil.which("cmake") is None,
 
 # Small set of pre-built ESI scalar types shared by the manifest builders.
 _uint1 = types.UIntType("ui1", 1)
+_uint2 = types.UIntType("ui2", 2)
 _uint3 = types.UIntType("ui3", 3)
 _uint7 = types.UIntType("ui7", 7)
 _uint8 = types.UIntType("ui8", 8)
@@ -130,6 +131,45 @@ def _build_harness_manifest():
   arr4_type = types.ArrayType("!hw.array<4xui8>", _uint8, 4)
   arr4_inner = types.StructType("@Arr4::inner", [("r", arr4_type)])
   arr4 = types.TypeAlias("@Arr4", "Arr4", arr4_inner)
+
+  # Arrays whose element storage size differs from the on-wire element
+  # width, so the whole-array accessor must unpack each element from its
+  # own wire bit offset instead of flat-copying. `std::array<uint8_t, 8>`
+  # (ui3), `std::array<bool, 8>` (ui1), `std::array<int8_t, 4>` (si5), and
+  # `std::array<uint32_t, 2>` (ui24) are all wider in memory than the
+  # bit-packed wire layout they represent.
+  u3_arr_inner = types.StructType(
+      "@U3Arr::inner",
+      [("vals", types.ArrayType("!hw.array<8xui3>", _uint3, 8))])
+  u3_arr = types.TypeAlias("@U3Arr", "U3Arr", u3_arr_inner)
+
+  bits1_arr_inner = types.StructType(
+      "@Bits1Arr::inner",
+      [("flags", types.ArrayType("!hw.array<8xui1>", _uint1, 8))])
+  bits1_arr = types.TypeAlias("@Bits1Arr", "Bits1Arr", bits1_arr_inner)
+
+  s5_arr_inner = types.StructType(
+      "@S5Arr::inner",
+      [("vals", types.ArrayType("!hw.array<4xsi5>", _sint5, 4))])
+  s5_arr = types.TypeAlias("@S5Arr", "S5Arr", s5_arr_inner)
+
+  u24_arr_inner = types.StructType(
+      "@U24Arr::inner",
+      [("vals", types.ArrayType("!hw.array<2xui24>", _uint24, 2))])
+  u24_arr = types.TypeAlias("@U24Arr", "U24Arr", u24_arr_inner)
+
+  # Array of sub-byte STRUCT elements. Each `{ui3 hi, ui2 lo}` cell is 5
+  # wire bits, so successive cells pack at a 5-bit stride on the wire but a
+  # padded 1-byte stride in the C++ `std::array<SbCell, 4>`. Exercises the
+  # aggregate arm of the packed-array accessor, which copies each element's
+  # bits into its own `_bytes` buffer.
+  sb_cell_inner = types.StructType("@SbCell::inner", [("hi", _uint3),
+                                                      ("lo", _uint2)])
+  sb_cell = types.TypeAlias("@SbCell", "SbCell", sb_cell_inner)
+  sb_cell_arr_inner = types.StructType(
+      "@SbCellArr::inner",
+      [("cells", types.ArrayType("!hw.array<4xSbCell>", sb_cell, 4))])
+  sb_cell_arr = types.TypeAlias("@SbCellArr", "SbCellArr", sb_cell_arr_inner)
 
   # Union with one narrow and one wide variant.
   union_inner = types.UnionType("@UnionTwo::inner", [("small", _uint8),
@@ -241,8 +281,9 @@ def _build_harness_manifest():
 
   return [
       std_u, std_s, odd_u, odd_s, sub_u, sub_s, bool_field, outer, misaligned,
-      arr4, union_two, list_window, wide_u, wide_s, bits_field, wide_mis,
-      arr_views, arr_views_mis
+      arr4, u3_arr, bits1_arr, s5_arr, u24_arr, sb_cell, sb_cell_arr, union_two,
+      list_window, wide_u, wide_s, bits_field, wide_mis, arr_views,
+      arr_views_mis
   ]
 
 

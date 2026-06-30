@@ -1660,8 +1660,8 @@ module Expressions;
     arr = '{3{'{2{4'd1, 4'd2, 4'd3}}}};
 
     // CHECK: [[TMP0:%.+]] = moore.constant 0 :
-    // CHECK: [[TMP1:%.+]] = moore.constant 0 :
-    // CHECK: [[TMP2:%.+]] = moore.constant 1 :
+    // CHECK: [[TMP1:%.+]] = moore.constant 1 :
+    // CHECK: [[TMP2:%.+]] = moore.constant 0 :
     // CHECK: [[TMP3:%.+]] = moore.constant 0 :
     // CHECK: moore.concat [[TMP3]], [[TMP2]], [[TMP1]], [[TMP0]] : (!moore.l1, !moore.l1, !moore.l1, !moore.l1) -> l4
     m = '{default: '0, 2: '1};
@@ -1859,7 +1859,7 @@ module PortsTop;
   // CHECK: %a = moore.net wire : <l1>
   // CHECK: [[A_VALUE:%.+]] = moore.read %a
   // CHECK: [[X4:%.+]] = moore.read %x4
-  // CHECK: %c = moore.variable : <l1>
+  // CHECK: %c = moore.net wire : <l1>
   // CHECK: [[C_VALUE:%.+]] = moore.read %c
   // CHECK: [[D_VALUE:%.+]], [[E_VALUE:%.+]] = moore.instance "p4" @PortsUnconnected(
   // CHECK-SAME: a: [[A_VALUE]]: !moore.l1
@@ -1990,7 +1990,7 @@ module PortsUnconnected(
   // Internal nets and variables created by Slang for each port.
   // CHECK: [[A_INT:%.+]] = moore.net name "a" wire : <l1>
   // CHECK: [[B_INT:%.+]] = moore.net name "b" wire : <l1>
-  // CHECK: [[C_INT:%.+]] = moore.variable name "c" : <l1>
+  // CHECK: [[C_INT:%.+]] = moore.net name "c" wire : <l1>
   // CHECK: [[D_INT:%.+]] = moore.net wire : <l1>
   // CHECK: [[E_INT:%.+]] = moore.net wire : <l1>
   
@@ -2489,30 +2489,36 @@ module ImmediateAssert(input clk);
   // CHECK: [[A:%.+]] = moore.variable : <i1>
   bit a;
 
-  // CHECK: moore.procedure always
+  // CHECK: moore.procedure always_comb
     // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
     // CHECK: [[OneBX:%.+]] = moore.constant bX : l1
     // CHECK: [[NE:%.+]] = moore.ne [[READ_CLK]], [[OneBX]] : l1 -> l1
     // CHECK: moore.assert immediate [[NE]] : l1
-  assert (clk != 1'bx);
+  always_comb begin
+    assert (clk != 1'bx);
+  end
 
-  // CHECK: moore.procedure always
+  // CHECK: moore.procedure always_comb
     // CHECK: [[C100:%.+]] = moore.constant 100 : i32
     // CHECK: [[BC:%.+]] = moore.bool_cast [[C100]] : i32 -> i1
     // CHECK: moore.assume observed [[BC]] : i1
-  assume #0 (100);
+  always_comb begin
+    assume #0 (100);
+  end
 
-  // CHECK: moore.procedure always
+  // CHECK: moore.procedure always_comb
     // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <i1>
     // CHECK: moore.cover final [[READ_A]] : i1
-  cover final (a);
+  always_comb begin
+    cover final (a);
+  end
 endmodule
 
 // CHECK-LABEL: moore.module @ImmediateAssertiWithActionBlock() 
 module ImmediateAssertiWithActionBlock;
   logic x;
-  int a;
-// CHECK: moore.procedure always {
+  int a, b, c;
+// CHECK: moore.procedure always_comb {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
   // CHECK: [[X_INT:%.+]] = moore.logic_to_int [[READ_X]] : l1
   // CHECK: [[CONV_X:%.+]] = moore.to_builtin_int [[X_INT]] : i1
@@ -2524,9 +2530,11 @@ module ImmediateAssertiWithActionBlock;
 // CHECK: ^bb2:  // 2 preds: ^bb0, ^bb1
   // CHECK:   moore.return
 // CHECK: }
-  assert (x) a = 1;
+  always_comb begin
+    assert (x) a = 1;
+  end
 
-// CHECK: moore.procedure always {
+// CHECK: moore.procedure always_comb {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
   // CHECK: [[X_INT:%.+]] = moore.logic_to_int [[READ_X]] : l1
   // CHECK: [[CONV_X:%.+]] = moore.to_builtin_int [[X_INT]] : i1
@@ -2535,30 +2543,34 @@ module ImmediateAssertiWithActionBlock;
   // CHECK: cf.br ^bb3
 // CHECK: ^bb2:  // pred: ^bb0
   // CHECK: [[C0:%.+]] = moore.constant 0 : i32
-  // CHECK: moore.blocking_assign %a, [[C0]] : i32
+  // CHECK: moore.blocking_assign %b, [[C0]] : i32
   // CHECK: cf.br ^bb3
 // CHECK: ^bb3:  // 2 preds: ^bb1, ^bb2
   // CHECK: moore.return
 // CHECK: }
-  assert (x) else a = 0;
+  always_comb begin
+    assert (x) else b = 0;
+  end
 
-// CHECK: moore.procedure always {
+// CHECK: moore.procedure always_comb {
   // CHECK: [[READ_X:%.+]] = moore.read %x : <l1>
   // CHECK: [[X_INT:%.+]] = moore.logic_to_int [[READ_X]] : l1
   // CHECK: [[CONV_X:%.+]] = moore.to_builtin_int [[X_INT]] : i1
   // CHECK: cf.cond_br [[CONV_X]], ^bb1, ^bb2
 // CHECK: ^bb1:  // pred: ^bb0
   // CHECK: [[C1:%.+]] = moore.constant 1 : i32
-  // CHECK: moore.blocking_assign %a, [[C1]] : i32
+  // CHECK: moore.blocking_assign %c, [[C1]] : i32
   // CHECK: cf.br ^bb3
 // CHECK: ^bb2:  // pred: ^bb0
   // CHECK: [[C0:%.+]] = moore.constant 0 : i32
-  // CHECK: moore.blocking_assign %a, [[C0]] : i32
+  // CHECK: moore.blocking_assign %c, [[C0]] : i32
   // CHECK: cf.br ^bb3
 // CHECK: ^bb3:  // 2 preds: ^bb1, ^bb2
   // CHECK: moore.return
 // CHECK: }
-  assert (x) a = 1; else a = 0;
+  always_comb begin
+    assert (x) c = 1; else c = 0;
+  end
 endmodule
 
 // CHECK-LABEL: moore.module @AssertNoActionBlock
@@ -2584,6 +2596,8 @@ module ConcurrentAssert(input clk);
   bit a;
   // CHECK: [[B:%.+]] = moore.variable : <l1>
   logic b;
+  // CHECK: [[MULTI:%.+]] = moore.variable : <i2>
+  bit [1:0] multi;
 
   // Simple
   // CHECK-NOT: moore.procedure always
@@ -3117,6 +3131,17 @@ module ConcurrentAssert(input clk);
   // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_2_B]], posedge [[CONV_CLK]] : i1
   // CHECK: verif.assert [[CLK_OP]] if [[ENABLE_CONV]] : !ltl.sequence
   assert property (@(posedge clk) disable iff (a) b);
+
+  // CHECK-NOT: moore.procedure always {
+  // CHECK: [[READ_MULTI:%.+]] = moore.read [[MULTI]] : <i2>
+  // CHECK: [[BOOL_CAST:%.+]] = moore.bool_cast [[READ_MULTI]] : i2 -> i1
+  // CHECK: [[CONV_MULTI:%.+]] = moore.to_builtin_int [[BOOL_CAST]] : i1
+  // CHECK: [[READ_CLK:%.+]] = moore.read [[CLK]] : <l1>
+  // CHECK: [[READ_CLK_INT:%.+]] = moore.logic_to_int [[READ_CLK]] : l1
+  // CHECK: [[CONV_CLK:%.+]] = moore.to_builtin_int [[READ_CLK_INT]] : i1
+  // CHECK: [[CLK_OP:%.+]] = ltl.clock [[CONV_MULTI]], posedge [[CONV_CLK]] : i1
+  // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
+  assert property (@(posedge clk) multi);
 endmodule
 
 // CHECK: [[TMP:%.+]] = moore.constant 42 : i32
@@ -3206,8 +3231,8 @@ module RangeElementSelection(
     input reg [3:0] a [0:2],
     output reg [3:0] b,
     input reg [1:0] c);
-    // CHECK: [[A:%.+]] = moore.variable name "a" : <uarray<3 x l4>
-    // CHECK: [[C:%.+]] = moore.variable name "c" : <l2>
+    // CHECK: [[A:%.+]] = moore.net name "a" wire : <uarray<3 x l4>
+    // CHECK: [[C:%.+]] = moore.net name "c" wire : <l2>
 
     always_comb begin
       // CHECK: [[READ_A:%.+]] = moore.read [[A]] : <uarray<3 x l4>>
@@ -3610,6 +3635,10 @@ function automatic void Swrite(string testStr, string otherString, ref string ou
    // CHECK: [[LV:%.+]] = moore.variable : <l64>
    logic [63:0] logicVector;
 
+   // $swrite with a single arg
+   // CHECK-NOT: moore.fstring_to_string
+   $swrite(outputString);
+
    // $swrite to a string output
    // CHECK: [[FMTSTR1:%.+]] = moore.fmt.string [[STR1]]
    // CHECK-NEXT: [[SPC:%.+]] = moore.fmt.literal " "
@@ -3629,6 +3658,26 @@ function automatic void Swrite(string testStr, string otherString, ref string ou
    // CHECK-NEXT: [[CONV:%.+]] = moore.int_to_logic [[CONV0]] : i64
    // CHECK-NEXT: moore.blocking_assign [[LV]], [[CONV]] : l64
    $swrite(logicVector, "%s %s", testStr, otherString);
+endfunction
+
+// CHECK-LABEL: func.func private @SwriteVariants(
+// CHECK-SAME: [[X:%[^,]+]]: !moore.i32
+// CHECK-SAME: [[OUT:%[^,]+]]: !moore.ref<string>
+function automatic void SwriteVariants(int x, ref string outputString);
+  // CHECK: [[FMT1:%.+]] = moore.fmt.int binary [[X]], align right, pad zero : i32
+  // CHECK-NEXT: [[STR1:%.+]] = moore.fstring_to_string [[FMT1]]
+  // CHECK-NEXT: moore.blocking_assign [[OUT]], [[STR1]] : string
+  $swriteb(outputString, x);
+
+  // CHECK: [[FMT2:%.+]] = moore.fmt.int octal [[X]], align right, pad zero : i32
+  // CHECK-NEXT: [[STR2:%.+]] = moore.fstring_to_string [[FMT2]]
+  // CHECK-NEXT: moore.blocking_assign [[OUT]], [[STR2]] : string
+  $swriteo(outputString, x);
+
+  // CHECK: [[FMT3:%.+]] = moore.fmt.int hex_lower [[X]], align right, pad zero : i32
+  // CHECK-NEXT: [[STR3:%.+]] = moore.fstring_to_string [[FMT3]]
+  // CHECK-NEXT: moore.blocking_assign [[OUT]], [[STR3]] : string
+  $swriteh(outputString, x);
 endfunction
 
 // CHECK-LABEL: moore.module @ContinuousAssignment(
@@ -4062,7 +4111,7 @@ function void testRealOps;
 endfunction // testStrLiteralReturn
 
 // CHECK-LABEL:  moore.module @RejectInnerCapture(in %u : !moore.i1, out v : !moore.i1) {
-// CHECK:    [[UVAR:%.*]] = moore.variable name "u" : <i1>
+// CHECK:    [[UVAR:%.*]] = moore.net name "u" wire : <i1>
 // CHECK:    [[VVAR:%.*]] = moore.variable : <i1>
 // CHECK:    [[READU:%.*]] = moore.read [[UVAR]] : <i1>
 // CHECK:    [[CALLBAR:%.*]] = func.call @bar([[READU]]) : (!moore.i1) -> !moore.i1

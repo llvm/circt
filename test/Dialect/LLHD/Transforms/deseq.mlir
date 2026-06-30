@@ -992,6 +992,29 @@ hw.module @ClockExtractedFromBusPosEdge(in %bus: i8, in %data: i4) {
   llhd.drv %sig, %out after %time if %en : i4
 }
 
+// CHECK-LABEL: @ProcessResultAsDriveTime(
+hw.module @ProcessResultAsDriveTime(in %clock: i1, in %d: i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %true = hw.constant true
+  %false = hw.constant false
+  %zero = llhd.constant_time <0ns, 1d, 0e>
+  %one = llhd.constant_time <1ns, 0d, 0e>
+  // CHECK: llhd.process
+  // CHECK-NOT: seq.firreg
+  %value, %time, %enable = llhd.process -> i42, !llhd.time, i1 {
+    cf.br ^bb1(%c0_i42, %zero, %false : i42, !llhd.time, i1)
+  ^bb1(%past_value: i42, %past_time: !llhd.time, %past_enable: i1):
+    llhd.wait yield (%past_value, %past_time, %past_enable : i42, !llhd.time, i1), (%clock : i1), ^bb2(%clock : i1)
+  ^bb2(%past_clock: i1):
+    %not_past = comb.xor bin %past_clock, %true : i1
+    %posedge = comb.and bin %not_past, %clock : i1
+    cf.cond_br %posedge, ^bb1(%d, %one, %true : i42, !llhd.time, i1), ^bb1(%c0_i42, %zero, %false : i42, !llhd.time, i1)
+  }
+  %sig = llhd.sig %c0_i42 : i42
+  // CHECK: llhd.drv {{%.+}}, {{%.+}} after {{%.+}} if {{%.+}} : i42
+  llhd.drv %sig, %value after %time if %enable : i42
+}
+
 // CHECK-LABEL: @ClockExtractedFromBusNegEdge(
 hw.module @ClockExtractedFromBusNegEdge(in %bus: i8, in %data: i4) {
   %c0_i4 = hw.constant 0 : i4

@@ -315,8 +315,31 @@ lowering above on the coerced 2-state value:
 %onehot = comb.mux %isunknown, %zero, %onehot_2state : i1
 ```
 
-> The following functions are not yet supported by CIRCT:  
-> - **`$countones(a)`**     
+- **`$countones(a)`**:
+For 2-state input `%a` (where `%a` has type `iN`):
+The popcount is computed by extracting each bit, zero-extending to
+`iM` (where `M = ceil(log2(N+1))`), and summing them:
+
+```mlir
+// For an 8-bit input, M=4 and padding is i3:
+%b0 = comb.extract %a from 0 : (i8) -> i1
+%ext0 = comb.concat %zeros3, %b0 : i3, i1
+%b1 = comb.extract %a from 1 : (i8) -> i1
+%ext1 = comb.concat %zeros3, %b1 : i3, i1
+%sum = comb.add %ext0, %ext1 : i4
+// ... for each bit
+```
+
+For 4-state input `%a` (where `%a` has type `!moore.lN`):
+x/z bits do not match logic value 1 and are excluded from the count. The value
+is coerced to 2-state (`logic_to_int` maps x/z to 0) and then the 2-state
+lowering is applied:
+
+```mlir
+%coerced_a = moore.logic_to_int %a
+%int_a = moore.to_builtin_int %coerced_a
+%countones = ... // 2-state lowering on %int_a
+```
   
   
 - **`a ##n b`**:   

@@ -33,6 +33,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/PointerUnion.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/DivisionByConstantInfo.h"
 #include <array>
 
 #define DEBUG_TYPE "comb-to-synth"
@@ -267,6 +268,76 @@ static LogicalResult emulateBinaryOpForUnknownBits(
 
   replaceOpAndCopyNamehint(rewriter, op, muxed);
   return success();
+}
+
+static Value createLShrByConstant(OpBuilder &builder, Location loc, Value value,
+                                  unsigned amount) {
+  if (amount == 0)
+    return value;
+  return builder.createOrFold<comb::ShrUOp>(
+      loc, value,
+      hw::ConstantOp::create(
+          builder, loc,
+          APInt(value.getType().getIntOrFloatBitWidth(), amount)));
+}
+
+static Value createAShrByConstant(OpBuilder &builder, Location loc, Value value,
+                                  unsigned amount) {
+  if (amount == 0)
+    return value;
+  return builder.createOrFold<comb::ShrSOp>(
+      loc, value,
+      hw::ConstantOp::create(
+          builder, loc,
+          APInt(value.getType().getIntOrFloatBitWidth(), amount)));
+}
+
+template <bool isSigned>
+static Value createMulHigh(OpBuilder &builder, Location loc, Value lhs,
+                           const APInt &rhs) {
+  unsigned width = lhs.getType().getIntOrFloatBitWidth();
+  auto destTy = builder.getIntegerType(width << 1);
+  // Compute the high half of a double-width product. For signed division,
+  // sign-extend both operands so this acts like a signed multiply-high.
+  Value wideLhs = isSigned ? comb::createOrFoldSExt(builder, loc, lhs, destTy)
+                           : comb::createZExt(builder, loc, lhs, width << 1);
+  Value wideRhs = hw::ConstantOp::create(
+      builder, loc, isSigned ? rhs.sext(width << 1) : rhs.zext(width << 1));
+  Value product = builder.createOrFold<comb::MulOp>(
+      loc, ValueRange{wideLhs, wideRhs}, /*twoState=*/true);
+  return builder.createOrFold<comb::ExtractOp>(loc, product, width, width);
+}
+
+static Value lowerUnsignedDivByConstant(OpBuilder &builder, Location loc,
+                                        Value lhs, const APInt &divisor) {
+  auto info = llvm::UnsignedDivisionByConstantInfo::get(divisor);
+  Value q = createLShrByConstant(builder, loc, lhs, info.PreShift);
+  q = createMulHigh<false>(builder, loc, q, info.Magic);
+  if (info.IsAdd) {
+    Value diff = builder.createOrFold<comb::SubOp>(loc, lhs, q);
+    diff = createLShrByConstant(builder, loc, diff, 1);
+    q = builder.createOrFold<comb::AddOp>(loc, q, diff);
+  }
+  return createLShrByConstant(builder, loc, q, info.PostShift);
+}
+
+static Value lowerSignedDivByConstant(OpBuilder &builder, Location loc,
+                                      Value lhs, const APInt &divisor) {
+  unsigned width = lhs.getType().getIntOrFloatBitWidth();
+  auto info = llvm::SignedDivisionByConstantInfo::get(divisor);
+  Value q = createMulHigh<true>(builder, loc, lhs, info.Magic);
+  // Depending on the magic constant the signed magic may need to
+  // add or subtract the dividend before the final shift.
+  if (divisor.isStrictlyPositive() && info.Magic.isNegative())
+    q = builder.createOrFold<comb::AddOp>(loc, q, lhs);
+  else if (divisor.isNegative() && info.Magic.isStrictlyPositive())
+    q = builder.createOrFold<comb::SubOp>(loc, q, lhs);
+  q = createAShrByConstant(builder, loc, q, info.ShiftAmount);
+  // Signed division rounds to zero. Add one back for negative tentative
+  // quotients after the arithmetic shift.
+  Value signBit = builder.createOrFold<comb::ExtractOp>(loc, q, width - 1, 1);
+  Value signPadded = comb::createZExt(builder, loc, signBit, width);
+  return builder.createOrFold<comb::AddOp>(loc, q, signPadded);
 }
 
 //===----------------------------------------------------------------------===//
@@ -969,6 +1040,23 @@ struct CombDivUOpConversion : DivModOpConversionBase<DivUOp> {
     if (llvm::succeeded(comb::convertDivUByPowerOfTwo(op, rewriter)))
       return success();
 
+    // Lower constant divisors with magic-number division; otherwise fall back
+    // to emulation for small rhs values.
+    if (auto rhsConst = adaptor.getRhs().getDefiningOp<hw::ConstantOp>()) {
+      APInt divisor = rhsConst.getValue();
+      // Division by zero is undefined, just return zero.
+      if (divisor.isZero()) {
+        replaceOpWithNewOpAndCopyNamehint<hw::ConstantOp>(rewriter, op,
+                                                          op.getType(), 0);
+        return success();
+      }
+      replaceOpAndCopyNamehint(rewriter, op,
+                               lowerUnsignedDivByConstant(rewriter, op.getLoc(),
+                                                          adaptor.getLhs(),
+                                                          divisor));
+      return success();
+    }
+
     // When rhs is not power of two and the number of unknown bits are small,
     // create a mux tree that emulates all possible cases.
     return emulateBinaryOpForUnknownBits(
@@ -991,6 +1079,28 @@ struct CombModUOpConversion : DivModOpConversionBase<ModUOp> {
     if (llvm::succeeded(comb::convertModUByPowerOfTwo(op, rewriter)))
       return success();
 
+    // Lower constant divisors by calculating q = lhs / rhs and returning
+    // lhs - q * rhs; otherwise fall back to emulation for small rhs values.
+    if (auto rhsConst = adaptor.getRhs().getDefiningOp<hw::ConstantOp>()) {
+      APInt divisor = rhsConst.getValue();
+      // Remainder by zero is undefined, just return zero.
+      if (divisor.isZero()) {
+        replaceOpWithNewOpAndCopyNamehint<hw::ConstantOp>(rewriter, op,
+                                                          op.getType(), 0);
+        return success();
+      }
+      auto loc = op.getLoc();
+      Value q =
+          lowerUnsignedDivByConstant(rewriter, loc, adaptor.getLhs(), divisor);
+      Value product =
+          rewriter.createOrFold<comb::MulOp>(loc, q, adaptor.getRhs());
+      Value remainder =
+          rewriter.createOrFold<comb::SubOp>(loc, adaptor.getLhs(), product);
+      replaceOpAndCopyNamehint(rewriter, op, remainder);
+
+      return success();
+    }
+
     // When rhs is not power of two and the number of unknown bits are small,
     // create a mux tree that emulates all possible cases.
     return emulateBinaryOpForUnknownBits(
@@ -1010,8 +1120,40 @@ struct CombDivSOpConversion : DivModOpConversionBase<DivSOp> {
   LogicalResult
   matchAndRewrite(DivSOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Currently only lower with emulation.
-    // TODO: Implement a signed division lowering at least for power of two.
+    // Lower constant divisors with magic-number division; otherwise fall back
+    // to emulation for small rhs values.
+    if (auto rhsConst = adaptor.getRhs().getDefiningOp<hw::ConstantOp>()) {
+      APInt divisor = rhsConst.getValue();
+      unsigned width = op.getType().getIntOrFloatBitWidth();
+      // Division by zero is undefined, just return zero.
+      if (divisor.isZero()) {
+        replaceOpWithNewOpAndCopyNamehint<hw::ConstantOp>(rewriter, op,
+                                                          op.getType(), 0);
+        return success();
+      }
+      // divs(lhs, 1) = lhs.
+      if (divisor.isOne()) {
+        replaceOpAndCopyNamehint(rewriter, op, adaptor.getLhs());
+        return success();
+      }
+      // divs(lhs, -1) = -lhs = sub(0, lhs).
+      if (divisor.isAllOnes()) {
+        replaceOpAndCopyNamehint(
+            rewriter, op,
+            rewriter.createOrFold<comb::SubOp>(
+                op.getLoc(),
+                hw::ConstantOp::create(rewriter, op.getLoc(),
+                                       APInt::getZero(width)),
+                adaptor.getLhs()));
+        return success();
+      }
+      replaceOpAndCopyNamehint(rewriter, op,
+                               lowerSignedDivByConstant(rewriter, op.getLoc(),
+                                                        adaptor.getLhs(),
+                                                        divisor));
+      return success();
+    }
+
     return emulateBinaryOpForUnknownBits(
         rewriter, maxEmulationUnknownBits, op,
         [](const APInt &lhs, const APInt &rhs) {
@@ -1028,8 +1170,27 @@ struct CombModSOpConversion : DivModOpConversionBase<ModSOp> {
   LogicalResult
   matchAndRewrite(ModSOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Currently only lower with emulation.
-    // TODO: Implement a signed modulus lowering at least for power of two.
+    // Lower constant divisors by calculating q = lhs / rhs and returning
+    // lhs - q * rhs; otherwise fall back to emulation for small rhs values.
+    if (auto rhsConst = adaptor.getRhs().getDefiningOp<hw::ConstantOp>()) {
+      APInt divisor = rhsConst.getValue();
+      // Remainder by 0 is undefined; remainder by +/-1 is always zero.
+      if (divisor.isZero() || divisor.isOne() || divisor.isAllOnes()) {
+        replaceOpWithNewOpAndCopyNamehint<hw::ConstantOp>(rewriter, op,
+                                                          op.getType(), 0);
+        return success();
+      }
+      auto loc = op.getLoc();
+      Value q =
+          lowerSignedDivByConstant(rewriter, loc, adaptor.getLhs(), divisor);
+      Value product =
+          rewriter.createOrFold<comb::MulOp>(loc, q, adaptor.getRhs());
+      Value remainder =
+          rewriter.createOrFold<comb::SubOp>(loc, adaptor.getLhs(), product);
+      replaceOpAndCopyNamehint(rewriter, op, remainder);
+      return success();
+    }
+
     return emulateBinaryOpForUnknownBits(
         rewriter, maxEmulationUnknownBits, op,
         [](const APInt &lhs, const APInt &rhs) {

@@ -776,4 +776,36 @@ firrtl.module @instance_choice_test(in %a : !firrtl.uint<1>,
   }
 }
 
+
+// Test that sibling layerblocks inside a when each get their own LTL ops and do
+// not share cached values across layerblock boundaries (which would cause
+// dominance violations). See https://github.com/llvm/circt/issues/10104.
+firrtl.layer @LayerBar bind attributes {sym_visibility = "private"} {}
+// CHECK-LABEL: firrtl.module @SiblingLayerblocksImplication
+firrtl.module @SiblingLayerblocksImplication() {
+  %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+  // CHECK: firrtl.layerblock @LayerBar {
+  // CHECK:   firrtl.int.ltl.implication
+  // CHECK:   [[AND1:%.+]] = firrtl.int.ltl.and %c0_ui1, %c0_ui1
+  // CHECK:   [[IMPL1:%.+]] = firrtl.int.ltl.implication [[AND1]], %c0_ui1
+  // CHECK:   firrtl.int.verif.assert [[IMPL1]], %c0_ui1
+  // CHECK: }
+  // CHECK: firrtl.layerblock @LayerBar {
+  // CHECK:   firrtl.int.ltl.implication
+  // CHECK:   [[AND2:%.+]] = firrtl.int.ltl.and %c0_ui1, %c0_ui1
+  // CHECK:   [[IMPL2:%.+]] = firrtl.int.ltl.implication [[AND2]], %c0_ui1
+  // CHECK:   firrtl.int.verif.assert [[IMPL2]], %c0_ui1
+  // CHECK: }
+  firrtl.when %c0_ui1 : !firrtl.uint<1> {
+    firrtl.layerblock @LayerBar {
+      %0 = firrtl.int.ltl.implication %c0_ui1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.int.verif.assert %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+    firrtl.layerblock @LayerBar {
+      %0 = firrtl.int.ltl.implication %c0_ui1, %c0_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+      firrtl.int.verif.assert %0, %c0_ui1 : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  }
+}
+
 }

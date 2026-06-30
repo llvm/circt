@@ -46,6 +46,11 @@ struct PortLowering {
   const slang::ast::PortSymbol &ast;
   Location loc;
   BlockArgument arg;
+  /// Slot index in the module signature. `outputIdx` is set for outputs;
+  /// `inputIdx` is set for inputs and inouts. Regular and expanded
+  /// interface-modport ports share one numbering per direction.
+  std::optional<unsigned> outputIdx;
+  std::optional<unsigned> inputIdx;
 };
 
 /// Lowering information for a single signal flattened from an interface port.
@@ -68,6 +73,9 @@ struct FlattenedIfacePort {
   /// not the underlying interface body variable, so we register both keys in
   /// `valueSymbols` to make the lookup find this port's `BlockArgument`.
   const slang::ast::Symbol *modportPortSym = nullptr;
+  /// Slot index in the module signature; see `PortLowering::outputIdx`.
+  std::optional<unsigned> outputIdx;
+  std::optional<unsigned> inputIdx;
 };
 
 /// Lowering information for an expanded interface instance. Maps each interface
@@ -105,6 +113,10 @@ struct ModuleLowering {
   SmallVector<FlattenedIfacePort> ifacePorts;
   DenseMap<const slang::syntax::SyntaxNode *, const slang::ast::PortSymbol *>
       portsBySyntaxNode;
+  /// Number of explicit-port slots per direction. Hierarchical-name ports
+  /// are appended after these in the module signature.
+  unsigned numExplicitOutputs = 0;
+  unsigned numExplicitInputs = 0;
 };
 
 /// Function lowering information. The `op` field holds either a `func::FuncOp`
@@ -400,6 +412,25 @@ struct Context {
       moore::IntFormat defaultFormat = moore::IntFormat::Decimal,
       bool appendNewline = false);
 
+  /// Result of converting a scan format string. The final cursor of the
+  /// consuming chain and the list of (destination expression, scanned value,
+  /// matched flag) tuples to assign
+  struct ScanStringResult {
+    Value finalCursor;
+    SmallVector<std::tuple<const slang::ast::Expression *, Value, Value>>
+        assignments;
+  };
+
+  /// Convert a scan format string into a consuming chain of `moore.scan.*`
+  /// operations starting from `initialCursor`. Each non-suppressed specifier
+  /// produces an entry in `assignments`; the caller is responsible for emitting
+  /// the corresponding `moore.blocking_assign` ops. Returns failur if an erro
+  /// occurs.
+  FailureOr<ScanStringResult>
+  convertScanString(StringRef formatStr, Value initialCursor,
+                    std::span<const slang::ast::Expression *const> destinations,
+                    Location loc);
+
   /// Convert system function calls. Returns a null `Value` on failure after
   /// emitting an error.
   Value convertSystemCall(const slang::ast::SystemSubroutine &subroutine,
@@ -473,6 +504,9 @@ struct Context {
   DenseMap<const slang::ast::SubroutineSymbol *,
            std::unique_ptr<FunctionLowering>>
       functions;
+
+  /// DPI-C export directives keyed by the SystemVerilog subroutine they expose.
+  DenseMap<const slang::ast::SubroutineSymbol *, std::string> dpiExportCNames;
 
   /// Classes that have already been converted.
   DenseMap<const slang::ast::ClassType *, std::unique_ptr<ClassLowering>>

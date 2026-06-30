@@ -19,6 +19,7 @@
 #include "circt/Dialect/Arc/Runtime/IRInterface.h"
 #include "circt/Dialect/Arc/Runtime/Internal.h"
 #include "circt/Dialect/Arc/Runtime/ModelInstance.h"
+#include "circt/Support/FormatInteger.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
@@ -107,52 +108,6 @@ void arcRuntimeIR_deleteInstance(uint8_t *modelState) {
   arcRuntimeDeleteInstance(arcRuntimeGetStateFromModelState(modelState, 0));
 }
 
-// Emits an integer to `os` using the given format specifiers.
-//
-// Note that this is a copy of formatIntegersByRadix from SimOps.cpp.
-static void formatIntegersByRadix(llvm::raw_ostream &os, int width, int radix,
-                                  const llvm::APInt &value, bool isUpperCase,
-                                  bool isLeftAligned, char paddingChar,
-                                  int specifierWidth, bool isSigned) {
-  llvm::SmallVector<char, 32> strBuf;
-  value.toString(strBuf, radix, isSigned, false, isUpperCase);
-  int strBufSize = static_cast<int>(strBuf.size());
-
-  int padWidth;
-  switch (radix) {
-  case 2:
-    padWidth = width;
-    break;
-  case 8:
-    padWidth = (width + 2) / 3;
-    break;
-  case 16:
-    padWidth = (width + 3) / 4;
-    break;
-  default:
-    padWidth = width;
-    break;
-  }
-
-  int numSpaces = 0;
-  if (specifierWidth >= 0 &&
-      (specifierWidth > std::max(padWidth, strBufSize))) {
-    numSpaces = std::max(0, specifierWidth - std::max(padWidth, strBufSize));
-  }
-
-  llvm::SmallVector<char, 1> spacePadding(numSpaces, ' ');
-
-  padWidth = padWidth > strBufSize ? padWidth - strBufSize : 0;
-
-  llvm::SmallVector<char, 32> padding(padWidth, paddingChar);
-
-  if (isLeftAligned) {
-    os << padding << strBuf << spacePadding;
-  } else {
-    os << spacePadding << padding << strBuf;
-  }
-}
-
 void arcRuntimeIR_format(const FmtDescriptor *fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -174,10 +129,13 @@ void arcRuntimeIR_format(const FmtDescriptor *fmt, ...) {
       uint64_t *words = va_arg(args, uint64_t *);
       int64_t numWords = llvm::divideCeil(fmt->intFmt.bitwidth, 64);
       llvm::APInt apInt(fmt->intFmt.bitwidth, llvm::ArrayRef(words, numWords));
-      formatIntegersByRadix(os, fmt->intFmt.bitwidth, fmt->intFmt.radix, apInt,
-                            fmt->intFmt.isUpperCase, fmt->intFmt.isLeftAligned,
-                            fmt->intFmt.paddingChar, fmt->intFmt.specifierWidth,
-                            fmt->intFmt.isSigned);
+      std::optional<int32_t> specifierWidth;
+      if (fmt->intFmt.specifierWidth >= 0)
+        specifierWidth = fmt->intFmt.specifierWidth;
+      circt::formatInteger(os, apInt, fmt->intFmt.radix,
+                           fmt->intFmt.isUpperCase, fmt->intFmt.isLeftAligned,
+                           fmt->intFmt.paddingChar, specifierWidth,
+                           fmt->intFmt.isSigned);
       break;
     }
     case FmtDescriptor::Action_Char:

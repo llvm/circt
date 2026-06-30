@@ -1739,6 +1739,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
     return getOrCreateIntConstant(APInt(numBits, val, isSigned));
   }
   Attribute getOrCreateAggregateConstantAttribute(Attribute value, Type type);
+  Attribute getZeroAttributeForType(Type type);
+  Value getZeroValueForType(Type type);
   Value getOrCreateXConstant(unsigned numBits);
   Value getOrCreateZConstant(Type type);
   Value getPossiblyInoutLoweredValue(Value value);
@@ -2433,6 +2435,46 @@ Value FIRRTLLowering::getOrCreateZConstant(Type type) {
     entry = sv::ConstantZOp::create(entryBuilder, builder.getLoc(), type);
   }
   return entry;
+}
+
+/// Return a zero-valued attribute for the given lowered HW type, recursing
+/// into struct and array element types.  Used to materialize zero values for
+/// zero-width slots in `hw.struct_create` / `hw.array_create` operands.
+///
+/// The recursion is required because FIRRTL allows arbitrarily nested
+/// aggregates of zero-width content (e.g. `bundle<a: bundle<b: uint<0>>>`).
+/// Such a type lowers to a correspondingly nested HW aggregate (here
+/// `!hw.struct<a: !hw.struct<b: i0>>`), and `hw.aggregate_constant` requires
+/// the supplied `ArrayAttr` to mirror that nesting structure.
+Attribute FIRRTLLowering::getZeroAttributeForType(Type type) {
+  if (auto intType = hw::type_dyn_cast<IntegerType>(type))
+    return builder.getIntegerAttr(intType, 0);
+  if (auto array = hw::type_dyn_cast<hw::ArrayType>(type)) {
+    // All array elements share a single type, and every slot needs the same
+    // zero value, so we build the recursive zero attribute once and replicate
+    // it.  No reverse is necessary as all the types are the same.
+    auto element = getZeroAttributeForType(array.getElementType());
+    SmallVector<Attribute> values(array.getNumElements(), element);
+    return builder.getArrayAttr(values);
+  }
+  if (auto structType = hw::type_dyn_cast<hw::StructType>(type)) {
+    SmallVector<Attribute> values;
+    values.reserve(structType.getElements().size());
+    for (auto &field : structType.getElements())
+      values.push_back(getZeroAttributeForType(field.type));
+    return builder.getArrayAttr(values);
+  }
+  llvm_unreachable("unsupported lowered type for zero attribute");
+}
+
+/// Return a zero-valued constant for the given lowered HW type.  Used to fill
+/// in zero-width slots in `hw.struct_create` / `hw.array_create` when the
+/// corresponding FIRRTL operand was lowered away.
+Value FIRRTLLowering::getZeroValueForType(Type type) {
+  if (auto intType = hw::type_dyn_cast<IntegerType>(type))
+    return getOrCreateIntConstant(intType.getWidth(), 0);
+  return hw::AggregateConstantOp::create(
+      builder, type, cast<ArrayAttr>(getZeroAttributeForType(type)));
 }
 
 /// Return the lowered HW value corresponding to the specified original value.
@@ -3531,12 +3573,17 @@ LogicalResult FIRRTLLowering::visitExpr(SubfieldOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
   auto resultType = lowerType(op.getResult().getType());
+  auto arrayType = cast<hw::ArrayType>(resultType);
   SmallVector<Value> operands;
   // NOTE: The operand order must be inverted.
   for (auto oper : llvm::reverse(op.getOperands())) {
     auto val = getLoweredValue(oper);
-    if (!val)
-      return failure();
+    if (!val) {
+      // Lower zero-bit operands.
+      if (!isZeroBitFIRRTLType(oper.getType()))
+        return failure();
+      val = getZeroValueForType(arrayType.getElementType());
+    }
     operands.push_back(val);
   }
   return setLoweringTo<hw::ArrayCreateOp>(op, resultType, operands);
@@ -3544,11 +3591,17 @@ LogicalResult FIRRTLLowering::visitExpr(VectorCreateOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(BundleCreateOp op) {
   auto resultType = lowerType(op.getResult().getType());
+  auto structType = cast<hw::StructType>(resultType);
   SmallVector<Value> operands;
-  for (auto oper : op.getOperands()) {
+  for (auto [oper, field] :
+       llvm::zip_equal(op.getOperands(), structType.getElements())) {
     auto val = getLoweredValue(oper);
-    if (!val)
-      return failure();
+    if (!val) {
+      // Lower zero-bit operands.
+      if (!isZeroBitFIRRTLType(oper.getType()))
+        return failure();
+      val = getZeroValueForType(field.type);
+    }
     operands.push_back(val);
   }
   return setLoweringTo<hw::StructCreateOp>(op, resultType, operands);
@@ -3566,6 +3619,13 @@ LogicalResult FIRRTLLowering::visitExpr(FEnumCreateOp op) {
   auto element = *oldType.getElement(op.getFieldNameAttr());
 
   if (auto structType = dyn_cast<hw::StructType>(newType)) {
+    // If the input is zero-width, getLoweredValue returns a null Value.
+    // We still need a valid operand for the union body; create an i0 constant.
+    if (!input) {
+      if (!isZeroBitFIRRTLType(op.getInput().getType()))
+        return failure();
+      input = getOrCreateIntConstant(0, 0);
+    }
     auto tagType = structType.getFieldType("tag");
     auto tagValue = IntegerAttr::get(tagType, element.value.getValue());
     auto tag = sv::LocalParamOp::create(builder, op.getLoc(), tagType, tagValue,
@@ -3589,6 +3649,10 @@ LogicalResult FIRRTLLowering::visitExpr(AggregateConstantOp op) {
 }
 
 LogicalResult FIRRTLLowering::visitExpr(IsTagOp op) {
+  // A zero-width enum has exactly one variant, so the tag check is trivially
+  // true.
+  if (isZeroBitFIRRTLType(op.getInput().getType()))
+    return setLowering(op, getOrCreateIntConstant(1, 1));
 
   auto tagName = op.getFieldNameAttr();
   auto lhs = getLoweredValue(op.getInput());

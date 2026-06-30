@@ -221,61 +221,30 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
         return;
       }
 
-      llvm::DenseMap<StringAttr, DelayType> delayByInput;
-      for (auto attr : mappingCost.getArcs()) {
-        auto arc = cast<LinearTimingArcAttr>(attr);
-        if (!arc) {
-          hwModule.emitError(
-              "expected synth.linear_timing_arc in synth.mapping_cost arcs");
-          signalPassFailure();
-          return;
-        }
+      auto arcs = mappingCost.getArcs();
 
-        if (arc.getPin() != outputName) {
-          hwModule.emitError("mapping cost arc output '")
-              << arc.getPin().getValue() << "' does not match module output '"
-              << outputName.getValue() << "'";
-          signalPassFailure();
-          return;
-        }
-
-        int64_t intrinsicDelay = arc.getIntrinsic();
-
-        // TechMapper currently preserves the old integer per-pin delay model.
-        // The sensitivity, polarity, and input capacitance fields are carried
-        // in the attribute for future load-aware mapping.
-        if (!delayByInput
-                 .try_emplace(arc.getRelatedPin(),
-                              static_cast<DelayType>(intrinsicDelay))
-                 .second) {
-          hwModule.emitError("duplicate mapping cost arc for input '")
-              << arc.getRelatedPin().getValue() << "'";
-          signalPassFailure();
-          return;
-        }
-      }
-
-      SmallVector<DelayType> delay;
+      SmallVector<hw::PortInfo> inputPorts;
       for (const auto &port : hwModule.getPortList()) {
         if (!port.isInput())
           continue;
-
-        auto it = delayByInput.find(port.name);
-        if (it == delayByInput.end()) {
-          hwModule.emitError("missing mapping cost arc for input '")
-              << port.name.getValue() << "'";
-          signalPassFailure();
-          return;
-        }
-
-        delay.push_back(it->second);
+        inputPorts.push_back(port);
       }
 
-      if (delay.size() != delayByInput.size()) {
+      if (arcs.size() != inputPorts.size()) {
         hwModule.emitError(
             "synth.mapping_cost arcs do not match module inputs");
         signalPassFailure();
         return;
+      }
+
+      SmallVector<DelayType> delay;
+      for (auto attr : arcs) {
+        auto arc = cast<LinearTimingArcAttr>(attr);
+
+        // TechMapper currently preserves the old integer per-pin delay model.
+        // The sensitivity, polarity, and input capacitance fields are carried
+        // in the attribute for future load-aware mapping.
+        delay.push_back(static_cast<DelayType>(arc.getIntrinsic()));
       }
 
       // Compute NPN Class for the module.

@@ -1,0 +1,5 @@
+add_mlir_dialect(CIRCTStandaloneOps circt_standalone)
+
+set(LLVM_TARGET_DEFINITIONS CIRCTStandalonePasses.td)
+mlir_tablegen(CIRCTStandalonePasses.h.inc -gen-pass-decls)
+add_public_tablegen_target(CIRCTStandalonePassesIncGen)

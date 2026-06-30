@@ -60,16 +60,6 @@ struct StructuralHashKey {
 // DenseMapInfo specialization for StructuralHashKey
 template <>
 struct llvm::DenseMapInfo<StructuralHashKey> {
-  static StructuralHashKey getEmptyKey() {
-    return StructuralHashKey(llvm::DenseMapInfo<OperationName>::getEmptyKey(),
-                             {});
-  }
-
-  static StructuralHashKey getTombstoneKey() {
-    return StructuralHashKey(
-        llvm::DenseMapInfo<OperationName>::getTombstoneKey(), {});
-  }
-
   static unsigned getHashValue(const StructuralHashKey &key) {
     auto hash = hash_value(key.opName);
     for (const auto &operand : key.operandPairs)

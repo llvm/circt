@@ -31,6 +31,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Conversion/UBToLLVM/UBToLLVM.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Index/IR/IndexOps.h"
@@ -941,21 +942,32 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
                                   -> FailureOr<FormatInfo> {
         FmtDescriptor d = FmtDescriptor::createInt(
             op.getValue().getType().getWidth(), 10, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), false, op.getIsSigned());
+            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
+            op.getIsSigned());
         return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
       })
       .Case<sim::FormatHexOp>([&](sim::FormatHexOp op)
                                   -> FailureOr<FormatInfo> {
         FmtDescriptor d = FmtDescriptor::createInt(
             op.getValue().getType().getWidth(), 16, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), op.getIsHexUppercase(), false);
+            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(),
+            op.getIsHexUppercase(), false);
         return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
       })
       .Case<sim::FormatOctOp>([&](sim::FormatOctOp op)
                                   -> FailureOr<FormatInfo> {
         FmtDescriptor d = FmtDescriptor::createInt(
             op.getValue().getType().getWidth(), 8, op.getIsLeftAligned(),
-            op.getSpecifierWidth().value_or(-1), false, false);
+            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
+            false);
+        return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
+      })
+      .Case<sim::FormatBinOp>([&](sim::FormatBinOp op)
+                                  -> FailureOr<FormatInfo> {
+        FmtDescriptor d = FmtDescriptor::createInt(
+            op.getValue().getType().getWidth(), 2, op.getIsLeftAligned(),
+            op.getSpecifierWidth().value_or(-1), op.getPaddingChar(), false,
+            false);
         return FormatInfo{{d}, {reg2mem(rewriter, op.getLoc(), op.getValue())}};
       })
       .Case<sim::FormatLiteralOp>(
@@ -1835,6 +1847,7 @@ void LowerArcToLLVMPass::runOnOperation() {
   cf::populateControlFlowToLLVMConversionPatterns(converter, patterns);
   arith::populateArithToLLVMConversionPatterns(converter, patterns);
   index::populateIndexToLLVMConversionPatterns(converter, patterns);
+  ub::populateUBToLLVMConversionPatterns(converter, patterns);
   populateAnyFunctionOpInterfaceTypeConversionPattern(patterns, converter);
 
   // CIRCT patterns.

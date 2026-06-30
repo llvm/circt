@@ -270,6 +270,18 @@ struct InsertRuntimePass
   void runOnOperation() override;
 
 private:
+  SmallString<32> quoteAndEscapeRuntimeArgument(StringRef input) {
+    SmallString<32> result;
+    result += '"';
+    for (char c : input) {
+      if (c == '"' || c == '\\')
+        result += '\\';
+      result += c;
+    }
+    result += '"';
+    return result;
+  }
+
   // Construct the runtime argument string for an instance
   SmallString<32> buildArgString(unsigned instIdx, StringAttr existingArgs) {
     SmallString<32> str;
@@ -283,16 +295,19 @@ private:
       // Create a unique per-instance file name by adding a suffix before the
       // the file extension
       if (instIdx == 0) {
-        str += traceFileName;
+        str += quoteAndEscapeRuntimeArgument(traceFileName);
       } else {
+        SmallString<32> fileNameWithSuffix;
         auto extension =
             std::filesystem::path(static_cast<std::string>(traceFileName))
                 .extension()
                 .string();
-        str += traceFileName.substr(0, traceFileName.size() - extension.size());
-        str += '_';
-        str += std::to_string(instIdx);
-        str += extension;
+        fileNameWithSuffix +=
+            traceFileName.substr(0, traceFileName.size() - extension.size());
+        fileNameWithSuffix += '_';
+        fileNameWithSuffix += std::to_string(instIdx);
+        fileNameWithSuffix += extension;
+        str += quoteAndEscapeRuntimeArgument(fileNameWithSuffix);
       }
     }
     // Append extra arguments from pass option

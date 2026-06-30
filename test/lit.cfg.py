@@ -19,7 +19,7 @@ from lit.llvm.subst import FindTool
 # name: The name of this test suite.
 config.name = 'CIRCT'
 
-config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
+config.test_format = lit.formats.ShTest()
 
 # suffixes: A list of file extensions to treat as test files.
 config.suffixes = [
@@ -35,6 +35,8 @@ config.test_exec_root = os.path.join(config.circt_obj_root, 'test')
 config.substitutions.append(('%PATH%', config.environment['PATH']))
 config.substitutions.append(('%shlibext', config.llvm_shlib_ext))
 config.substitutions.append(('%shlibdir', config.circt_shlib_dir))
+if config.python_executable:
+  config.substitutions.append(('%PYTHON%', f'"{config.python_executable}"'))
 
 llvm_config.with_system_environment(['HOME', 'INCLUDE', 'LIB', 'TMP', 'TEMP'])
 

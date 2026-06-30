@@ -83,10 +83,7 @@ public:
     // Handle the case when there are more than one Instances for the same
     // target module. Getting the `commonNLA`, in that case is not enough,
     // remove the NLAs that donot have the InstanceOp as the innerSym.
-    for (auto nla : llvm::make_early_inc_range(nlas)) {
-      if (!nla.hasInnerSym(mod, instSym))
-        nlas.erase(nla);
-    }
+    nlas.remove_if([&](auto nla) { return !nla.hasInnerSym(mod, instSym); });
   }
 
   /// Get the NLAs that the module `modName` particiaptes in, and insert them

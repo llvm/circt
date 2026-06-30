@@ -148,22 +148,22 @@ systemc.module @emitcEmission () {
     %0 = "emitc.constant"() {value = #emitc.opaque<"5"> : !emitc.opaque<"int">} : () -> !emitc.opaque<"int">
     %five = systemc.cpp.variable %0 : !emitc.opaque<"int">
 
-    // Test: emitc.apply "&" without having to emit parentheses
+    // Test: emitc.address_of without having to emit parentheses
     // CHECK-NEXT: int f = 5;
     // CHECK-NEXT: int* fiveptr = &f;
-    %f = "emitc.variable"() {value=#emitc.opaque<"5">, name="f"} : () -> !emitc.lvalue<!emitc.opaque<"int">>  
-    %1 = emitc.apply "&"(%f) : (!emitc.lvalue<!emitc.opaque<"int">>) -> !emitc.ptr<!emitc.opaque<"int">>
+    %f = "emitc.variable"() {value=#emitc.opaque<"5">, name="f"} : () -> !emitc.lvalue<!emitc.opaque<"int">>
+    %1 = emitc.address_of %f : !emitc.lvalue<!emitc.opaque<"int">>
     %fiveptr = systemc.cpp.variable %1: !emitc.ptr<!emitc.opaque<"int">>
 
-    // Test: emitc.apply "&" with parentheses to conform to the precedence rules
+    // Test: emitc.address_of with parentheses to conform to the precedence rules
     // TODO: add this test-case once we have support for an inlinable operation that has lower precedence
 
-    // Test: emitc.apply "*" without having to emit parentheses
+    // Test: emitc.dereference without having to emit parentheses
     // CHECK-NEXT: int fivederef = *fiveptr;
-    %2 = emitc.apply "*"(%fiveptr) : (!emitc.ptr<!emitc.opaque<"int">>) -> !emitc.opaque<"int">
-    %fivederef = systemc.cpp.variable %2: !emitc.opaque<"int">
+    %2 = emitc.dereference %fiveptr : !emitc.ptr<!emitc.opaque<"int">>
+    %fivederef = systemc.cpp.variable %2: !emitc.lvalue<!emitc.opaque<"int">>
 
-    // Test: emitc.apply "*" with parentheses to conform to the precedence rules
+    // Test: emitc.dereference with parentheses to conform to the precedence rules
     // TODO: add this test-case once we have support for an inlinable operation that has lower precedence
 
     // Test: emit.call without a result is emitted as a statement, having operands and attribute arguments

@@ -10,7 +10,6 @@ add_circt_dialect_library(CIRCTHWTransforms
   FlattenIO.cpp
   VerifyInnerRefNamespace.cpp
   FlattenModules.cpp
-  FooWires.cpp
   HWVectorization.cpp
 
   DEPENDS

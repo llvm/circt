@@ -305,6 +305,29 @@ def GambleOp : SymmetricThreeInputOp<"gamble", "evaluateGambleLogic"> {
 }];
 }
 
+def CutRewritePatternOp : SynthOp<"cut_rewrite_pattern", [
+  IsolatedFromAbove,
+  SingleBlockImplicitTerminator<"YieldOp">
+]> {
+  let summary = "Declarative cut rewrite pattern";
+
+  let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    MappingCostAttr:$cost
+  );
+
+  let regions = (region SizedRegion<1>:$body);
+  let hasVerifier = 1;
+  let hasCustomAssemblyFormat = 1;
+}
+
+def YieldOp : SynthOp<"yield",
+                   [Pure, Terminator]> {
+  let summary = "Yield synth operations";
+
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let assemblyFormat = "$operands attr-dict `:` type($operands)";
+}
 
 
 #endif // CIRCT_DIALECT_SYNTH_SYNTHOPS_TD

@@ -149,31 +149,6 @@ struct Vectorizer {
 };
 } // namespace
 
-namespace llvm {
-template <>
-struct DenseMapInfo<Key> {
-  static inline Key getEmptyKey() {
-    return Key(0, StringRef(), SmallVector<Type>(), SmallVector<Type>(),
-               DictionaryAttr());
-  }
-
-  static inline Key getTombstoneKey() {
-    static StringRef tombStoneKeyOpName =
-        DenseMapInfo<StringRef>::getTombstoneKey();
-    return Key(1, tombStoneKeyOpName, SmallVector<Type>(), SmallVector<Type>(),
-               DictionaryAttr());
-  }
-
-  static unsigned getHashValue(const Key &key) {
-    return hash_value(std::get<0>(key)) ^ hash_value(std::get<1>(key)) ^
-           hash_value(std::get<2>(key)) ^ hash_value(std::get<3>(key)) ^
-           hash_value(std::get<4>(key));
-  }
-
-  static bool isEqual(const Key &lhs, const Key &rhs) { return lhs == rhs; }
-};
-} // namespace llvm
-
 // When calling this function we assume that we have the candidate groups of
 // isomorphic ops so we need to feed them to the `VectorizeOp`
 LogicalResult

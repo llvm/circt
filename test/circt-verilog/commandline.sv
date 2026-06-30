@@ -4,4 +4,4 @@
 // UNSUPPORTED: valgrind
 
 // CHECK-HELP: OVERVIEW: Verilog and SystemVerilog frontend
-// CHECK-VERSION: slang version 10.
+// CHECK-VERSION: slang version 11.

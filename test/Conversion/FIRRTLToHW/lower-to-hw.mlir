@@ -860,7 +860,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL:  hw.module private @SimpleEnum(in %source : i2, out sink : i2) {
   // CHECK-NEXT:    %valid = sv.localparam {value = 0 : i2} : i2
-  // CHECK-NEXT:    %0 = comb.icmp bin eq %source, %valid : i2 
+  // CHECK-NEXT:    %0 = comb.icmp bin eq %source, %valid : i2
   // CHECK-NEXT:    hw.output %source : i2
   // CHECK-NEXT:  }
   firrtl.module private @SimpleEnum(in %source: !firrtl.enum<valid: uint<0>, ready: uint<0>, data: uint<0>>,
@@ -925,6 +925,35 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                                        out %sink: !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>) {
     %0 = firrtl.enumcreate a (%input) : (!firrtl.uint<2>) -> !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
     firrtl.matchingconnect %sink, %0 : !firrtl.enum<a: uint<2>, b: uint<1>, c: uint<32>>
+  }
+
+  // Test for https://github.com/llvm/circt/issues/7388
+  // enumcreate with a zero-width input on a data enum should not crash.
+  // CHECK-LABEL: hw.module private @DataEnumCreateZeroWidth(out sink : !hw.struct<tag: i1, body: !hw.union<Some: i8, None: i0>>) {
+  // CHECK-NEXT:   %c0_i0 = hw.constant 0 : i0
+  // CHECK-NEXT:   %None = sv.localparam {value = true} : i1
+  // CHECK-NEXT:   %0 = hw.union_create "None", %c0_i0 : !hw.union<Some: i8, None: i0>
+  // CHECK-NEXT:   %1 = hw.struct_create (%None, %0) : !hw.struct<tag: i1, body: !hw.union<Some: i8, None: i0>>
+  // CHECK-NEXT:   hw.output %1 : !hw.struct<tag: i1, body: !hw.union<Some: i8, None: i0>>
+  // CHECK-NEXT: }
+  firrtl.module private @DataEnumCreateZeroWidth(
+      out %sink: !firrtl.enum<Some: uint<8>, None: uint<0>>) {
+    %c0_ui0 = firrtl.constant 0 : !firrtl.uint<0>
+    %0 = firrtl.enumcreate None(%c0_ui0) : (!firrtl.uint<0>) -> !firrtl.enum<Some: uint<8>, None: uint<0>>
+    firrtl.matchingconnect %sink, %0 : !firrtl.enum<Some: uint<8>, None: uint<0>>
+  }
+
+  // Test for https://github.com/llvm/circt/issues/7388
+  // istag on a zero-width enum (single variant, zero-width data) should not
+  // crash. The tag check is trivially true.
+  // CHECK-LABEL: hw.module private @IsTagZeroWidthEnum(out o : i1) {
+  // CHECK-NEXT:   %true = hw.constant true
+  // CHECK-NEXT:   hw.output %true : i1
+  // CHECK-NEXT: }
+  firrtl.module private @IsTagZeroWidthEnum(
+      in %e: !firrtl.enum<A: uint<0>>, out %o: !firrtl.uint<1>) {
+    %0 = firrtl.istag %e A : !firrtl.enum<A: uint<0>>
+    firrtl.matchingconnect %o, %0 : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: IsInvalidIssue572
@@ -1448,6 +1477,28 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK:      %a = hw.wire [[VECTOR:%.+]] : !hw.array<3xi1>
     // CHECK-NEXT: [[VECTOR]] = hw.array_create %j, %i, %i : i1
     // CHECK-NEXT: hw.output %a : !hw.array<3xi1>
+  }
+
+  // Bundle and vector creates with zero-bit operands must still produce well
+  // formed `hw.struct_create` / `hw.array_create` operations whose operand
+  // counts match the lowered aggregate type.  Use a deeply nested zero-width
+  // field (`bundle<a: bundle<b: vector<uint<0>, 2>>>`) so the recursion in
+  // `getZeroAttributeForType` is exercised at multiple levels.
+  // CHECK-LABEL: hw.module @MergeBundleZeroWidth
+  firrtl.module @MergeBundleZeroWidth(in %i: !firrtl.uint<8>, out %o: !firrtl.bundle<foo: bundle<a: bundle<b: vector<uint<0>, 2>>>, t: uint<8>>) {
+    %z = firrtl.aggregateconstant [[[0 : ui0, 0 : ui0]]] : !firrtl.bundle<a: bundle<b: vector<uint<0>, 2>>>
+    %0 = firrtl.bundlecreate %z, %i : (!firrtl.bundle<a: bundle<b: vector<uint<0>, 2>>>, !firrtl.uint<8>) -> !firrtl.bundle<foo: bundle<a: bundle<b: vector<uint<0>, 2>>>, t: uint<8>>
+    firrtl.matchingconnect %o, %0 : !firrtl.bundle<foo: bundle<a: bundle<b: vector<uint<0>, 2>>>, t: uint<8>>
+    // CHECK:               %[[ZAGG:.+]] = hw.aggregate_constant
+    // CHECK{LITERAL}-SAME: [[[0 : i0, 0 : i0]]] : !hw.struct<a: !hw.struct<b: !hw.array<2xi0>>>
+    // CHECK-NEXT:          %[[B:.+]] = hw.struct_create (%[[ZAGG]], %i) : !hw.struct<foo: !hw.struct<a: !hw.struct<b: !hw.array<2xi0>>>, t: i8>
+  }
+
+  // CHECK-LABEL: hw.module @MergeVectorZeroWidth
+  firrtl.module @MergeVectorZeroWidth(in %i: !firrtl.uint<0>, out %o: !firrtl.vector<uint<0>, 2>) {
+    %0 = firrtl.vectorcreate %i, %i : (!firrtl.uint<0>, !firrtl.uint<0>) -> !firrtl.vector<uint<0>, 2>
+    firrtl.matchingconnect %o, %0 : !firrtl.vector<uint<0>, 2>
+    // CHECK:      %[[V:.+]] = hw.aggregate_constant {{.*}} : !hw.array<2xi0>
   }
 
   // CHECK-LABEL: hw.module @aggregateconstant
@@ -1998,7 +2049,7 @@ firrtl.circuit "InstanceChoiceTest" {
     // CHECK-NEXT:   }
     // CHECK-NEXT: }
     // CHECK: hw.output %[[READ]]
-    %inst_in, %inst_out = firrtl.instance_choice inst {instance_macro = @targets$Opt$InstanceChoiceUnit$inst} @ModuleDefault alternatives @Opt 
+    %inst_in, %inst_out = firrtl.instance_choice inst {instance_macro = @targets$Opt$InstanceChoiceUnit$inst} @ModuleDefault alternatives @Opt
                           { @FPGA -> @ModuleFPGA, @ASIC -> @ModuleDefault } (in in: !firrtl.uint<8>, out out: !firrtl.uint<8>)
     firrtl.matchingconnect %inst_in, %in : !firrtl.uint<8>
     firrtl.matchingconnect %out, %inst_out : !firrtl.uint<8>

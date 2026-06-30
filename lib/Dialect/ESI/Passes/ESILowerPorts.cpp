@@ -18,6 +18,8 @@
 
 #include "mlir/Transforms/DialectConversion.h"
 
+#include "llvm/Support/MathExtras.h"
+
 namespace circt {
 namespace esi {
 #define GEN_PASS_DEF_LOWERESIPORTS
@@ -42,19 +44,120 @@ inline static StringRef getStringAttributeOr(Operation *op, StringRef attrName,
 
 namespace {
 
-// Base class for all ESI signaling standards, which handles potentially funky
-// attribute-based naming conventions.
-struct ESISignalingStandad : public PortConversion {
-  ESISignalingStandad(PortConverterImpl &converter, hw::PortInfo origPort)
-      : PortConversion(converter, origPort) {}
+/// Per-channel ESI signaling protocol policies (ValidReady, FIFO, ValidOnly).
+/// These are stateless policy types with only static methods; they are never
+/// instantiated. They are used as the policy type parameter of the
+/// channel-port lowering containers below, which share their logic between
+/// scalar channel ports and arrays of channel ports.
+///
+/// Each protocol has one or more control signals associated with the channel
+/// data to, at minimum, indicate the validity of the data. The protocol defines
+/// how these signals are named and whether there is a backpressure handshake
+/// signal.
+///
+/// Each policy provides:
+///  - getValiditySuffix(module): suffix for the forward validity signal.
+///  - hasBackpressure: compile-time flag, true iff the protocol has a
+///    backpressure handshake signal.
+///  - getBackpressureSuffix(module): suffix for the backpressure handshake
+///    signal (only defined when 'hasBackpressure' is true).
+///  - wrap(b, loc, chanTy, data, validity): recreate a channel of type 'chanTy'
+///    from its 'data' and 'validity' signals; returns {channel, backpressure}
+///    (the backpressure value is null if the protocol has no backpressure
+///    signal).
+///  - unwrap(b, loc, chan, backpressure): break 'chan' into its {data,
+///    validity} signals ('backpressure' is unused for protocols without a
+///    backpressure signal).
+///
+/// Note: if we add a credit control signaling protocol in the future, this will
+/// have to be re-thought.
+
+/// ValidReady: 'valid' validity, 'ready' backpressure handshake.
+struct ValidReadyProtocol {
+  static constexpr bool hasBackpressure = true;
+  static StringRef getValiditySuffix(Operation *module) {
+    return getStringAttributeOr(module, extModPortValidSuffix, "_valid");
+  }
+  static StringRef getBackpressureSuffix(Operation *module) {
+    return getStringAttributeOr(module, extModPortReadySuffix, "_ready");
+  }
+  static std::pair<Value, Value> wrap(OpBuilder &b, Location loc,
+                                      ChannelType chanTy, Value data,
+                                      Value validity) {
+    auto wrap = WrapValidReadyOp::create(b, loc, data, validity);
+    return {wrap.getChanOutput(), wrap.getReady()};
+  }
+  static std::pair<Value, Value> unwrap(OpBuilder &b, Location loc, Value chan,
+                                        Value backpressure) {
+    auto unwrap = UnwrapValidReadyOp::create(b, loc, chan, backpressure);
+    return {unwrap.getRawOutput(), unwrap.getValid()};
+  }
 };
 
-/// Implement the Valid/Ready signaling standard.
-class ValidReady : public ESISignalingStandad {
+/// FIFO: 'empty' validity (empty == !valid), 'rden' (read-enable)
+/// "backpressure" handshake.
+struct FIFOProtocol {
+  static constexpr bool hasBackpressure = true;
+  static StringRef getValiditySuffix(Operation *module) {
+    return getStringAttributeOr(module, extModPortEmptySuffix, "_empty");
+  }
+  static StringRef getBackpressureSuffix(Operation *module) {
+    return getStringAttributeOr(module, extModPortRdenSuffix, "_rden");
+  }
+  static std::pair<Value, Value> wrap(OpBuilder &b, Location loc,
+                                      ChannelType chanTy, Value data,
+                                      Value validity) {
+    auto wrap = WrapFIFOOp::create(
+        b, loc, ArrayRef<Type>({chanTy, b.getI1Type()}), data, validity);
+    return {wrap.getChanOutput(), wrap.getRden()};
+  }
+  static std::pair<Value, Value> unwrap(OpBuilder &b, Location loc, Value chan,
+                                        Value backpressure) {
+    auto unwrap = UnwrapFIFOOp::create(b, loc, chan, backpressure);
+    return {unwrap.getData(), unwrap.getEmpty()};
+  }
+};
+
+/// ValidOnly: forward 'valid' validity, no backpressure handshake.
+struct ValidOnlyProtocol {
+  static constexpr bool hasBackpressure = false;
+  static StringRef getValiditySuffix(Operation *module) {
+    return getStringAttributeOr(module, extModPortValidSuffix, "_valid");
+  }
+  static std::pair<Value, Value> wrap(OpBuilder &b, Location loc,
+                                      ChannelType chanTy, Value data,
+                                      Value validity) {
+    auto wrap = WrapValidOnlyOp::create(b, loc, data, validity);
+    return {wrap.getChanOutput(), Value()};
+  }
+  static std::pair<Value, Value> unwrap(OpBuilder &b, Location loc, Value chan,
+                                        Value /*backpressure*/) {
+    auto unwrap = UnwrapValidOnlyOp::create(b, loc, chan);
+    return {unwrap.getRawOutput(), unwrap.getValid()};
+  }
+};
+
+/// Return true if 'type' contains an ESI channel nested inside an aggregate.
+/// Used to detect (and reject) ports which embed channels in a way this pass
+/// cannot lower (e.g. arrays of arrays of channels, or structs of channels).
+static bool containsChannel(Type type) {
+  if (auto arr = dyn_cast<hw::ArrayType>(type)) {
+    Type elem = arr.getElementType();
+    return isa<esi::ChannelType>(elem) || containsChannel(elem);
+  }
+  if (auto str = dyn_cast<hw::StructType>(type))
+    return llvm::any_of(str.getElements(), [](const auto &field) {
+      return isa<esi::ChannelType>(field.type) || containsChannel(field.type);
+    });
+  return false;
+}
+
+/// Lower a single ESI channel port into its constituent wire-level signals
+/// using the 'Protocol' signaling policy.
+template <typename Protocol>
+class ScalarChannelPort : public PortConversion {
 public:
-  ValidReady(PortConverterImpl &converter, hw::PortInfo origPort)
-      : ESISignalingStandad(converter, origPort), validPort(origPort),
-        readyPort(origPort) {}
+  using PortConversion::PortConversion;
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
@@ -67,16 +170,18 @@ private:
   void buildInputSignals() override;
   void buildOutputSignals() override;
 
-  // Keep around information about the port numbers of the relevant ports and
-  // use that later to update the instances.
-  PortInfo validPort, readyPort, dataPort;
+  // Port info for the lowered signals. 'backpressurePort' is only valid when
+  // 'Protocol::hasBackpressure' is true.
+  PortInfo dataPort, validityPort, backpressurePort;
 };
 
-/// Implement the FIFO signaling standard.
-class FIFO : public ESISignalingStandad {
+/// Lower a port which is an array of ESI channels into arrays of the
+/// constituent wire-level signals (one array element per channel) using the
+/// 'Protocol' signaling policy.
+template <typename Protocol>
+class ArrayChannelPort : public PortConversion {
 public:
-  FIFO(PortConverterImpl &converter, hw::PortInfo origPort)
-      : ESISignalingStandad(converter, origPort) {}
+  using PortConversion::PortConversion;
 
   void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
                        SmallVectorImpl<Value> &newOperands,
@@ -89,32 +194,39 @@ private:
   void buildInputSignals() override;
   void buildOutputSignals() override;
 
-  // Keep around information about the port numbers of the relevant ports and
-  // use that later to update the instances.
-  PortInfo rdenPort, emptyPort, dataPort;
+  // Port info for the lowered signal arrays. 'backpressurePort' is only valid
+  // when 'Protocol::hasBackpressure' is true.
+  PortInfo dataPort, validityPort, backpressurePort;
 };
 
-/// Implement the Valid-only signaling standard (no backpressure).
-class ValidOnly : public ESISignalingStandad {
-public:
-  ValidOnly(PortConverterImpl &converter, hw::PortInfo origPort)
-      : ESISignalingStandad(converter, origPort), validPort(origPort) {}
+// Emit an error about an unknown signaling standard on 'port'.
+static FailureOr<std::unique_ptr<PortConversion>>
+emitUnknownSignaling(Operation *op, hw::PortInfo port,
+                     ChannelSignaling signaling) {
+  auto error =
+      op->emitOpError("encountered unknown signaling standard on port '")
+      << stringifyEnum(signaling) << "'";
+  error.attachNote(port.loc);
+  return error;
+}
 
-  void mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
-                       SmallVectorImpl<Value> &newOperands,
-                       ArrayRef<Backedge> newResults) override;
-  void mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
-                        SmallVectorImpl<Value> &newOperands,
-                        ArrayRef<Backedge> newResults) override;
-
-private:
-  void buildInputSignals() override;
-  void buildOutputSignals() override;
-
-  // Keep around information about the port numbers of the relevant ports and
-  // use that later to update the instances.
-  PortInfo validPort, dataPort;
-};
+/// Instantiate the channel-port lowering container 'PortKind' (e.g.
+/// ScalarChannelPort or ArrayChannelPort) with the protocol policy selected by
+/// 'signaling'. Returns failure for an unknown signaling standard.
+template <template <typename> class PortKind>
+static FailureOr<std::unique_ptr<PortConversion>>
+buildChannelPort(PortConverterImpl &converter, hw::PortInfo port,
+                 ChannelSignaling signaling) {
+  switch (signaling) {
+  case ChannelSignaling::ValidReady:
+    return {std::make_unique<PortKind<ValidReadyProtocol>>(converter, port)};
+  case ChannelSignaling::FIFO:
+    return {std::make_unique<PortKind<FIFOProtocol>>(converter, port)};
+  case ChannelSignaling::ValidOnly:
+    return {std::make_unique<PortKind<ValidOnlyProtocol>>(converter, port)};
+  }
+  return emitUnknownSignaling(converter.getModule(), port, signaling);
+}
 
 class ESIPortConversionBuilder : public PortConversionBuilder {
 public:
@@ -124,276 +236,311 @@ public:
                port.type)
         .Case([&](esi::ChannelType chanTy)
                   -> FailureOr<std::unique_ptr<PortConversion>> {
-          // Determine which ESI signaling standard is specified.
-          ChannelSignaling signaling = chanTy.getSignaling();
-          if (signaling == ChannelSignaling::ValidReady)
-            return {std::make_unique<ValidReady>(converter, port)};
-
-          if (signaling == ChannelSignaling::FIFO)
-            return {std::make_unique<FIFO>(converter, port)};
-
-          if (signaling == ChannelSignaling::ValidOnly)
-            return {std::make_unique<ValidOnly>(converter, port)};
-
-          auto error = converter.getModule().emitOpError(
-                           "encountered unknown signaling standard on port '")
-                       << stringifyEnum(signaling) << "'";
-          error.attachNote(port.loc);
-          return error;
+          return buildChannelPort<ScalarChannelPort>(converter, port,
+                                                     chanTy.getSignaling());
+        })
+        .Case([&](hw::ArrayType arrTy)
+                  -> FailureOr<std::unique_ptr<PortConversion>> {
+          auto chanTy = dyn_cast<esi::ChannelType>(arrTy.getElementType());
+          if (!chanTy) {
+            // Channels nested deeper than a top-level array of channels are
+            // not supported.
+            if (containsChannel(arrTy)) {
+              auto error = converter.getModule().emitOpError(
+                  "cannot lower port containing channels nested inside an "
+                  "aggregate other than a single array of channels");
+              error.attachNote(port.loc);
+              return error;
+            }
+            return PortConversionBuilder::build(port);
+          }
+          // The lowering decomposes the array element-by-element, so the size
+          // must be a known, non-zero constant. A parametric size makes
+          // `getNumElements()` return -1 and a zero size would assert in
+          // hw.array_create; emit a diagnostic rather than crash.
+          if (!isa<IntegerAttr>(arrTy.getSizeAttr()) ||
+              arrTy.getNumElements() == 0)
+            return converter.getModule()
+                .emitOpError("cannot lower array-of-channels port with a "
+                             "non-constant or zero-length size")
+                .attachNote(port.loc);
+          return buildChannelPort<ArrayChannelPort>(converter, port,
+                                                    chanTy.getSignaling());
         })
         .Default([&](auto) { return PortConversionBuilder::build(port); });
   }
 };
 } // namespace
 
-void ValidReady::buildInputSignals() {
-  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
-
-  StringRef inSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
-  StringRef validSuffix(getStringAttributeOr(converter.getModule(),
-                                             extModPortValidSuffix, "_valid"));
-
-  // When we find one, add a data and valid signal to the new args.
-  Value data = converter.createNewInput(
-      origPort, inSuffix, cast<esi::ChannelType>(origPort.type).getInner(),
-      dataPort);
-  Value valid =
-      converter.createNewInput(origPort, validSuffix + inSuffix, i1, validPort);
-
-  Value ready;
-  if (body) {
-    ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
-    // Build the ESI wrap operation to translate the lowered signals to what
-    // they were. (A later pass takes care of eliminating the ESI ops.)
-    auto wrap = WrapValidReadyOp::create(b, data, valid);
-    ready = wrap.getReady();
-    // Replace uses of the old ESI port argument with the new one from the
-    // wrap.
-    body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
-  }
-
-  StringRef readySuffix = getStringAttributeOr(converter.getModule(),
-                                               extModPortReadySuffix, "_ready");
-  StringRef outSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
-  converter.createNewOutput(origPort, readySuffix + outSuffix, i1, ready,
-                            readyPort);
+/// Extract element 'idx' from the array-typed value 'array'.
+static Value getArrayElement(OpBuilder &b, Location loc, Value array,
+                             size_t idx) {
+  auto arrTy = cast<hw::ArrayType>(array.getType());
+  IntegerType idxType = b.getIntegerType(
+      std::max(1u, llvm::Log2_64_Ceil(arrTy.getNumElements())));
+  Value idxVal = hw::ConstantOp::create(b, loc, idxType, idx);
+  return hw::ArrayGetOp::create(b, loc, array, idxVal);
 }
 
-void ValidReady::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
-                                 SmallVectorImpl<Value> &newOperands,
-                                 ArrayRef<Backedge> newResults) {
-  auto unwrap = UnwrapValidReadyOp::create(b, inst->getLoc(),
-                                           inst->getOperand(origPort.argNum),
-                                           newResults[readyPort.argNum]);
-  newOperands[dataPort.argNum] = unwrap.getRawOutput();
-  newOperands[validPort.argNum] = unwrap.getValid();
+/// Pack a list of element values (with 'elements[i]' destined for array index
+/// 'i') into an hw.array. hw.array_create takes its operands in reverse order
+/// (operand 0 becomes the highest index), so the list is reversed to keep
+/// 'elements[i]' at array index 'i'.
+static Value packArray(OpBuilder &b, Location loc, ArrayRef<Value> elements) {
+  SmallVector<Value> reversed(elements.rbegin(), elements.rend());
+  return hw::ArrayCreateOp::create(b, loc, reversed);
 }
 
-void ValidReady::buildOutputSignals() {
-  Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+//===----------------------------------------------------------------------===//
+// ScalarChannelPort
+//===----------------------------------------------------------------------===//
 
-  StringRef readySuffix = getStringAttributeOr(converter.getModule(),
-                                               extModPortReadySuffix, "_ready");
-  StringRef inSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
-
-  Value ready =
-      converter.createNewInput(origPort, readySuffix + inSuffix, i1, readyPort);
-  Value data, valid;
-  if (body) {
-    auto *terminator = body->getTerminator();
-    ImplicitLocOpBuilder b(origPort.loc, terminator);
-
-    auto unwrap = UnwrapValidReadyOp::create(
-        b, terminator->getOperand(origPort.argNum), ready);
-    data = unwrap.getRawOutput();
-    valid = unwrap.getValid();
-  }
-
-  // New outputs.
-  StringRef outSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
-  StringRef validSuffix = getStringAttributeOr(converter.getModule(),
-                                               extModPortValidSuffix, "_valid");
-  converter.createNewOutput(origPort, outSuffix,
-                            cast<esi::ChannelType>(origPort.type).getInner(),
-                            data, dataPort);
-  converter.createNewOutput(origPort, validSuffix + outSuffix, i1, valid,
-                            validPort);
-}
-
-void ValidReady::mapOutputSignals(OpBuilder &b, Operation *inst,
-                                  Value instValue,
-                                  SmallVectorImpl<Value> &newOperands,
-                                  ArrayRef<Backedge> newResults) {
-  auto wrap =
-      WrapValidReadyOp::create(b, inst->getLoc(), newResults[dataPort.argNum],
-                               newResults[validPort.argNum]);
-  inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
-  newOperands[readyPort.argNum] = wrap.getReady();
-}
-
-void FIFO::buildInputSignals() {
+template <typename Protocol>
+void ScalarChannelPort<Protocol>::buildInputSignals() {
+  Operation *module = converter.getModule();
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
   auto chanTy = cast<ChannelType>(origPort.type);
 
-  StringRef rdenSuffix(getStringAttributeOr(converter.getModule(),
-                                            extModPortRdenSuffix, "_rden"));
-  StringRef emptySuffix(getStringAttributeOr(converter.getModule(),
-                                             extModPortEmptySuffix, "_empty"));
-  StringRef inSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
-  StringRef outSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
+  StringRef inSuffix = getStringAttributeOr(module, extModPortInSuffix, "");
+  StringRef outSuffix = getStringAttributeOr(module, extModPortOutSuffix, "");
 
-  // When we find one, add a data and valid signal to the new args.
-  Value data = converter.createNewInput(
-      origPort, inSuffix, cast<esi::ChannelType>(origPort.type).getInner(),
-      dataPort);
-  Value empty =
-      converter.createNewInput(origPort, emptySuffix + inSuffix, i1, emptyPort);
+  // The data and forward validity signals come into the module alongside the
+  // data.
+  Value data =
+      converter.createNewInput(origPort, inSuffix, chanTy.getInner(), dataPort);
+  Value validity = converter.createNewInput(
+      origPort, Protocol::getValiditySuffix(module) + inSuffix, i1,
+      validityPort);
 
-  Value rden;
+  Value backpressure;
   if (body) {
     ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
-    // Build the ESI wrap operation to translate the lowered signals to what
-    // they were. (A later pass takes care of eliminating the ESI ops.)
-    auto wrap = WrapFIFOOp::create(b, ArrayRef<Type>({chanTy, b.getI1Type()}),
-                                   data, empty);
-    rden = wrap.getRden();
-    // Replace uses of the old ESI port argument with the new one from the
-    // wrap.
-    body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+    // Recreate the original channel value from the lowered signals. (A later
+    // pass takes care of eliminating the ESI ops.)
+    auto [chan, bp] = Protocol::wrap(b, b.getLoc(), chanTy, data, validity);
+    backpressure = bp;
+    body->getArgument(origPort.argNum).replaceAllUsesWith(chan);
   }
 
-  converter.createNewOutput(origPort, rdenSuffix + outSuffix, i1, rden,
-                            rdenPort);
+  // The backpressure handshake signal (if any) leaves the module.
+  if constexpr (Protocol::hasBackpressure)
+    converter.createNewOutput(
+        origPort, Protocol::getBackpressureSuffix(module) + outSuffix, i1,
+        backpressure, backpressurePort);
 }
 
-void FIFO::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
-                           SmallVectorImpl<Value> &newOperands,
-                           ArrayRef<Backedge> newResults) {
-  auto unwrap =
-      UnwrapFIFOOp::create(b, inst->getLoc(), inst->getOperand(origPort.argNum),
-                           newResults[rdenPort.argNum]);
-  newOperands[dataPort.argNum] = unwrap.getData();
-  newOperands[emptyPort.argNum] = unwrap.getEmpty();
+template <typename Protocol>
+void ScalarChannelPort<Protocol>::mapInputSignals(
+    OpBuilder &b, Operation *inst, Value, SmallVectorImpl<Value> &newOperands,
+    ArrayRef<Backedge> newResults) {
+  Value backpressure;
+  if constexpr (Protocol::hasBackpressure)
+    backpressure = newResults[backpressurePort.argNum];
+  auto [data, validity] = Protocol::unwrap(
+      b, inst->getLoc(), inst->getOperand(origPort.argNum), backpressure);
+  newOperands[dataPort.argNum] = data;
+  newOperands[validityPort.argNum] = validity;
 }
 
-void FIFO::buildOutputSignals() {
+template <typename Protocol>
+void ScalarChannelPort<Protocol>::buildOutputSignals() {
+  Operation *module = converter.getModule();
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+  auto chanTy = cast<ChannelType>(origPort.type);
 
-  StringRef inSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
-  StringRef outSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
-  StringRef rdenSuffix(getStringAttributeOr(converter.getModule(),
-                                            extModPortRdenSuffix, "_rden"));
-  StringRef emptySuffix(getStringAttributeOr(converter.getModule(),
-                                             extModPortEmptySuffix, "_empty"));
-  Value rden =
-      converter.createNewInput(origPort, rdenSuffix + inSuffix, i1, rdenPort);
-  Value data, empty;
+  StringRef inSuffix = getStringAttributeOr(module, extModPortInSuffix, "");
+  StringRef outSuffix = getStringAttributeOr(module, extModPortOutSuffix, "");
+
+  // The backpressure handshake signal (if any) comes into the module.
+  Value backpressure;
+  if constexpr (Protocol::hasBackpressure)
+    backpressure = converter.createNewInput(
+        origPort, Protocol::getBackpressureSuffix(module) + inSuffix, i1,
+        backpressurePort);
+
+  Value data, validity;
   if (body) {
     auto *terminator = body->getTerminator();
     ImplicitLocOpBuilder b(origPort.loc, terminator);
-
-    auto unwrap =
-        UnwrapFIFOOp::create(b, terminator->getOperand(origPort.argNum), rden);
-    data = unwrap.getData();
-    empty = unwrap.getEmpty();
+    auto unwrapped = Protocol::unwrap(
+        b, b.getLoc(), terminator->getOperand(origPort.argNum), backpressure);
+    data = unwrapped.first;
+    validity = unwrapped.second;
   }
 
-  // New outputs.
-  converter.createNewOutput(origPort, outSuffix,
-                            cast<esi::ChannelType>(origPort.type).getInner(),
-                            data, dataPort);
-  converter.createNewOutput(origPort, emptySuffix + outSuffix, i1, empty,
-                            emptyPort);
+  // The data and forward validity signals leave the module.
+  converter.createNewOutput(origPort, outSuffix, chanTy.getInner(), data,
+                            dataPort);
+  converter.createNewOutput(origPort,
+                            Protocol::getValiditySuffix(module) + outSuffix, i1,
+                            validity, validityPort);
 }
 
-void FIFO::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
-                            SmallVectorImpl<Value> &newOperands,
-                            ArrayRef<Backedge> newResults) {
-  auto wrap = WrapFIFOOp::create(
-      b, inst->getLoc(), ArrayRef<Type>({origPort.type, b.getI1Type()}),
-      newResults[dataPort.argNum], newResults[emptyPort.argNum]);
-  inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
-  newOperands[rdenPort.argNum] = wrap.getRden();
+template <typename Protocol>
+void ScalarChannelPort<Protocol>::mapOutputSignals(
+    OpBuilder &b, Operation *inst, Value, SmallVectorImpl<Value> &newOperands,
+    ArrayRef<Backedge> newResults) {
+  auto chanTy = cast<ChannelType>(origPort.type);
+  auto [chan, backpressure] =
+      Protocol::wrap(b, inst->getLoc(), chanTy, newResults[dataPort.argNum],
+                     newResults[validityPort.argNum]);
+  inst->getResult(origPort.argNum).replaceAllUsesWith(chan);
+  if constexpr (Protocol::hasBackpressure)
+    newOperands[backpressurePort.argNum] = backpressure;
 }
 
 //===----------------------------------------------------------------------===//
-// ValidOnly signaling standard implementation.
+// ArrayChannelPort
 //===----------------------------------------------------------------------===//
 
-void ValidOnly::buildInputSignals() {
+template <typename Protocol>
+void ArrayChannelPort<Protocol>::buildInputSignals() {
+  Operation *module = converter.getModule();
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+  auto arrTy = cast<hw::ArrayType>(origPort.type);
+  auto chanTy = cast<ChannelType>(arrTy.getElementType());
+  size_t numElems = arrTy.getNumElements();
+  auto dataArrTy = hw::ArrayType::get(chanTy.getInner(), numElems);
+  auto validityArrTy = hw::ArrayType::get(i1, numElems);
 
-  StringRef inSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortInSuffix, "");
-  StringRef validSuffix(getStringAttributeOr(converter.getModule(),
-                                             extModPortValidSuffix, "_valid"));
+  StringRef inSuffix = getStringAttributeOr(module, extModPortInSuffix, "");
+  StringRef outSuffix = getStringAttributeOr(module, extModPortOutSuffix, "");
 
-  // When we find one, add a data and valid signal to the new args.
-  Value data = converter.createNewInput(
-      origPort, inSuffix, cast<esi::ChannelType>(origPort.type).getInner(),
-      dataPort);
-  Value valid =
-      converter.createNewInput(origPort, validSuffix + inSuffix, i1, validPort);
+  // The data and forward validity signal arrays come into the module alongside
+  // the data.
+  Value dataArr =
+      converter.createNewInput(origPort, inSuffix, dataArrTy, dataPort);
+  Value validityArr = converter.createNewInput(
+      origPort, Protocol::getValiditySuffix(module) + inSuffix, validityArrTy,
+      validityPort);
 
+  Value backpressureArr;
   if (body) {
     ImplicitLocOpBuilder b(origPort.loc, body, body->begin());
-    auto wrap = WrapValidOnlyOp::create(b, data, valid);
-    body->getArgument(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+    // Recreate the original array of channels by wrapping each element's
+    // lowered signals back into a channel.
+    SmallVector<Value> chans, backpressures;
+    for (size_t i = 0; i < numElems; ++i) {
+      Value data = getArrayElement(b, b.getLoc(), dataArr, i);
+      Value validity = getArrayElement(b, b.getLoc(), validityArr, i);
+      auto [chan, bp] = Protocol::wrap(b, b.getLoc(), chanTy, data, validity);
+      chans.push_back(chan);
+      if constexpr (Protocol::hasBackpressure)
+        backpressures.push_back(bp);
+    }
+    body->getArgument(origPort.argNum)
+        .replaceAllUsesWith(packArray(b, b.getLoc(), chans));
+    if (!backpressures.empty())
+      backpressureArr = packArray(b, b.getLoc(), backpressures);
   }
-  // No ready/rden output port for ValidOnly.
+
+  // The backpressure handshake signal array (if any) leaves the module.
+  if constexpr (Protocol::hasBackpressure)
+    converter.createNewOutput(
+        origPort, Protocol::getBackpressureSuffix(module) + outSuffix,
+        validityArrTy, backpressureArr, backpressurePort);
 }
 
-void ValidOnly::mapInputSignals(OpBuilder &b, Operation *inst, Value instValue,
-                                SmallVectorImpl<Value> &newOperands,
-                                ArrayRef<Backedge> newResults) {
-  auto unwrap = UnwrapValidOnlyOp::create(b, inst->getLoc(),
-                                          inst->getOperand(origPort.argNum));
-  newOperands[dataPort.argNum] = unwrap.getRawOutput();
-  newOperands[validPort.argNum] = unwrap.getValid();
+template <typename Protocol>
+void ArrayChannelPort<Protocol>::mapInputSignals(
+    OpBuilder &b, Operation *inst, Value, SmallVectorImpl<Value> &newOperands,
+    ArrayRef<Backedge> newResults) {
+  Location loc = inst->getLoc();
+  Value chanArr = inst->getOperand(origPort.argNum);
+  size_t numElems = cast<hw::ArrayType>(origPort.type).getNumElements();
+
+  Value backpressureArr;
+  if constexpr (Protocol::hasBackpressure)
+    backpressureArr = newResults[backpressurePort.argNum];
+
+  // Unwrap each channel element into its data and validity signals.
+  SmallVector<Value> datas, validities;
+  for (size_t i = 0; i < numElems; ++i) {
+    Value chan = getArrayElement(b, loc, chanArr, i);
+    Value backpressure;
+    if constexpr (Protocol::hasBackpressure)
+      backpressure = getArrayElement(b, loc, backpressureArr, i);
+    auto [data, validity] = Protocol::unwrap(b, loc, chan, backpressure);
+    datas.push_back(data);
+    validities.push_back(validity);
+  }
+  newOperands[dataPort.argNum] = packArray(b, loc, datas);
+  newOperands[validityPort.argNum] = packArray(b, loc, validities);
 }
 
-void ValidOnly::buildOutputSignals() {
+template <typename Protocol>
+void ArrayChannelPort<Protocol>::buildOutputSignals() {
+  Operation *module = converter.getModule();
   Type i1 = IntegerType::get(getContext(), 1, IntegerType::Signless);
+  auto arrTy = cast<hw::ArrayType>(origPort.type);
+  auto chanTy = cast<ChannelType>(arrTy.getElementType());
+  size_t numElems = arrTy.getNumElements();
+  auto dataArrTy = hw::ArrayType::get(chanTy.getInner(), numElems);
+  auto validityArrTy = hw::ArrayType::get(i1, numElems);
 
-  Value data, valid;
+  StringRef inSuffix = getStringAttributeOr(module, extModPortInSuffix, "");
+  StringRef outSuffix = getStringAttributeOr(module, extModPortOutSuffix, "");
+
+  // The backpressure handshake signal array (if any) comes into the module.
+  Value backpressureArr;
+  if constexpr (Protocol::hasBackpressure)
+    backpressureArr = converter.createNewInput(
+        origPort, Protocol::getBackpressureSuffix(module) + inSuffix,
+        validityArrTy, backpressurePort);
+
+  Value dataArr, validityArr;
   if (body) {
     auto *terminator = body->getTerminator();
     ImplicitLocOpBuilder b(origPort.loc, terminator);
-
-    auto unwrap =
-        UnwrapValidOnlyOp::create(b, terminator->getOperand(origPort.argNum));
-    data = unwrap.getRawOutput();
-    valid = unwrap.getValid();
+    Value chanArr = terminator->getOperand(origPort.argNum);
+    // Unwrap each channel element into its data and validity signals.
+    SmallVector<Value> datas, validities;
+    for (size_t i = 0; i < numElems; ++i) {
+      Value chan = getArrayElement(b, b.getLoc(), chanArr, i);
+      Value backpressure;
+      if constexpr (Protocol::hasBackpressure)
+        backpressure = getArrayElement(b, b.getLoc(), backpressureArr, i);
+      auto [data, validity] =
+          Protocol::unwrap(b, b.getLoc(), chan, backpressure);
+      datas.push_back(data);
+      validities.push_back(validity);
+    }
+    dataArr = packArray(b, b.getLoc(), datas);
+    validityArr = packArray(b, b.getLoc(), validities);
   }
 
-  // New outputs.
-  StringRef outSuffix =
-      getStringAttributeOr(converter.getModule(), extModPortOutSuffix, "");
-  StringRef validSuffix = getStringAttributeOr(converter.getModule(),
-                                               extModPortValidSuffix, "_valid");
-  converter.createNewOutput(origPort, outSuffix,
-                            cast<esi::ChannelType>(origPort.type).getInner(),
-                            data, dataPort);
-  converter.createNewOutput(origPort, validSuffix + outSuffix, i1, valid,
-                            validPort);
-  // No ready/rden input port for ValidOnly.
+  // The data and forward validity signal arrays leave the module.
+  converter.createNewOutput(origPort, outSuffix, dataArrTy, dataArr, dataPort);
+  converter.createNewOutput(origPort,
+                            Protocol::getValiditySuffix(module) + outSuffix,
+                            validityArrTy, validityArr, validityPort);
 }
 
-void ValidOnly::mapOutputSignals(OpBuilder &b, Operation *inst, Value instValue,
-                                 SmallVectorImpl<Value> &newOperands,
-                                 ArrayRef<Backedge> newResults) {
-  auto wrap =
-      WrapValidOnlyOp::create(b, inst->getLoc(), newResults[dataPort.argNum],
-                              newResults[validPort.argNum]);
-  inst->getResult(origPort.argNum).replaceAllUsesWith(wrap.getChanOutput());
+template <typename Protocol>
+void ArrayChannelPort<Protocol>::mapOutputSignals(
+    OpBuilder &b, Operation *inst, Value, SmallVectorImpl<Value> &newOperands,
+    ArrayRef<Backedge> newResults) {
+  Location loc = inst->getLoc();
+  auto arrTy = cast<hw::ArrayType>(origPort.type);
+  auto chanTy = cast<ChannelType>(arrTy.getElementType());
+  size_t numElems = arrTy.getNumElements();
+
+  Value dataArr = newResults[dataPort.argNum];
+  Value validityArr = newResults[validityPort.argNum];
+
+  // Wrap each element's data and validity signals back into a channel.
+  SmallVector<Value> chans, backpressures;
+  for (size_t i = 0; i < numElems; ++i) {
+    Value data = getArrayElement(b, loc, dataArr, i);
+    Value validity = getArrayElement(b, loc, validityArr, i);
+    auto [chan, bp] = Protocol::wrap(b, loc, chanTy, data, validity);
+    chans.push_back(chan);
+    if (bp)
+      backpressures.push_back(bp);
+  }
+  inst->getResult(origPort.argNum).replaceAllUsesWith(packArray(b, loc, chans));
+  if constexpr (Protocol::hasBackpressure)
+    newOperands[backpressurePort.argNum] = packArray(b, loc, backpressures);
 }
 
 namespace {
