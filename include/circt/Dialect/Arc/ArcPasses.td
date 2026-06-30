@@ -172,6 +172,21 @@ def LowerClocksToFuncs : Pass<"arc-lower-clocks-to-funcs", "mlir::ModuleOp"> {
   let dependentDialects = ["mlir::func::FuncDialect", "mlir::scf::SCFDialect"];
 }
 
+def LowerProcessesPass : Pass<"arc-lower-processes", "mlir::ModuleOp"> {
+  let summary = "Outline and instantiate LLHD processes as coroutines";
+  let description = [{
+    Convert each `llhd.process` op into an `arc.coroutine.define` outside of the
+    module, plus an `arc.coroutine.instance` inside the module where the process
+    used to be.
+  }];
+  let dependentDialects = [
+    "arc::ArcDialect",
+    "comb::CombDialect",
+    "hw::HWDialect",
+    "llhd::LLHDDialect",
+  ];
+}
+
 def LowerCoroutinesPass : Pass<"arc-lower-coroutines", "mlir::ModuleOp"> {
   let summary = "Lower coroutines to state machine functions";
   let description = [{
