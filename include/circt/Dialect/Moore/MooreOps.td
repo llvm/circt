@@ -3993,6 +3993,50 @@ def StringConcatOp : StringBuiltin<"concat"> {
   let assemblyFormat = "` ` `(` $inputs `)` attr-dict";
 }
 
+//===----------------------------------------------------------------------===//
+// Enumerated type methods
+//===----------------------------------------------------------------------===//
+
+class EnumBuiltin<string mnemonic, list<Trait> traits = []> :
+    MooreOp<"enum." # mnemonic, traits>;
+
+class EnumReturnOpBase<string mnemonic, list<Trait> traits = []> :
+    EnumBuiltin<mnemonic, traits # [TypesMatchWith<"src and result types match",
+    "src", "result", "$_self"
+  >]> {
+  let summary = "Builtin methods with a enum return type";
+  let arguments = (ins
+    IntType:$src,
+    Optional<TwoValuedI32>:$step
+  );
+  let results = (outs IntType:$result);
+  let assemblyFormat = [{
+    $src (`step` $step^)? attr-dict `:` type($src)
+  }];
+}
+
+def EnumFirstOp : EnumReturnOpBase<"first">;
+def EnumLastOp : EnumReturnOpBase<"last">;
+def EnumNextOp : EnumReturnOpBase<"next">;
+def EnumPrevOp : EnumReturnOpBase<"prev">;
+
+def EnumNumOp : EnumBuiltin<"num"> {
+  let summary = "The number of elements in the given enumeration";
+  let arguments = (ins IntType:$src);
+  let results = (outs TwoValuedI32:$result);
+  let assemblyFormat = [{
+    $src attr-dict `:` type($src)
+  }];
+}
+
+def EnumNameOp : EnumBuiltin<"name"> {
+  let summary = "A name of the given enumeration value";
+  let arguments = (ins IntType:$src);
+  let results = (outs StringType:$result);
+  let assemblyFormat = [{
+    $src attr-dict `:` type($src)
+  }];
+}
 
 //===----------------------------------------------------------------------===//
 // Forking
