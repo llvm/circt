@@ -599,6 +599,10 @@ struct Context {
   /// the `__monitor_active_id` and `__monitor_enabled` globals on first call.
   void ensureMonitorGlobals();
 
+  /// Ensure that the global variable for `$timeformat` state exists.
+  /// This creates the `__timeformat_state` global on first call.
+  void ensureTimeFormatGlobal();
+
   /// Process any pending `$monitor` calls and generate the monitoring
   /// procedures at module level.
   LogicalResult flushPendingMonitors();
@@ -607,6 +611,10 @@ struct Context {
   /// demand by `ensureMonitorGlobals()`.
   moore::GlobalVariableOp monitorActiveIdGlobal = nullptr;
   moore::GlobalVariableOp monitorEnabledGlobal = nullptr;
+
+  /// Global variable ops for `$timeformat` state management. These are created
+  /// on demand by `ensureTimeFormatGlobal()`.
+  moore::GlobalVariableOp timeFormatGlobal = nullptr;
 
   /// The next monitor ID to allocate. ID 0 is reserved for "no monitor active".
   unsigned nextMonitorId = 1;

@@ -59,6 +59,21 @@ static std::string buildPrintTimeScaleMessage(
   return out;
 }
 
+static std::array<Value, 4> getDefaultTimeFormatValues(OpBuilder &builder,
+                                                       Location loc,
+                                                       MLIRContext *context) {
+  auto i32Ty = moore::IntType::getInt(context, 32);
+
+  auto unit = moore::ConstantOp::create(builder, loc, i32Ty, -15);
+  auto precision = moore::ConstantOp::create(builder, loc, i32Ty, 0);
+  auto emptyInt = moore::ConstantStringOp::create(
+      builder, loc, moore::IntType::getInt(context, 0), "");
+  auto suffix = moore::IntToStringOp::create(builder, loc, emptyInt);
+  auto minWidth = moore::ConstantOp::create(builder, loc, i32Ty, 20);
+
+  return {unit, precision, suffix, minWidth};
+}
+
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
 struct StmtVisitor {
@@ -1426,6 +1441,54 @@ struct StmtVisitor {
       return true;
     }
 
+    if (nameId == ksn::TimeFormat) {
+      context.ensureTimeFormatGlobal();
+      auto i32Ty = moore::IntType::getInt(context.getContext(), 32);
+      auto strTy = moore::StringType::get(context.getContext());
+
+      if (args.empty()) {
+        auto defaults = getDefaultTimeFormatValues(context.builder, loc,
+                                                   context.getContext());
+        std::array<StringRef, 4> argNames = {"unit", "precision", "suffix",
+                                             "min_width"};
+        for (auto [name, value] : llvm::zip(argNames, defaults)) {
+          auto base = moore::GetGlobalVariableOp::create(
+              context.builder, loc, context.timeFormatGlobal);
+          auto fieldRef = moore::StructExtractRefOp::create(
+              context.builder, loc,
+              moore::RefType::get(cast<moore::UnpackedType>(value.getType())),
+              StringAttr::get(context.getContext(), name), base);
+          moore::BlockingAssignOp::create(context.builder, loc, fieldRef,
+                                          value);
+        }
+        return true;
+      }
+
+      std::array<std::pair<StringRef, Type>, 4> argsTypes = {{
+          {"unit", i32Ty},
+          {"precision", i32Ty},
+          {"suffix", strTy},
+          {"min_width", i32Ty},
+      }};
+
+      for (auto [i, arg] : llvm::enumerate(argsTypes)) {
+        if (args.size() <= i)
+          break;
+        auto value = context.convertRvalueExpression(*args[i], arg.second);
+        if (!value)
+          return failure();
+
+        auto base = moore::GetGlobalVariableOp::create(
+            context.builder, loc, context.timeFormatGlobal);
+        auto fieldRef = moore::StructExtractRefOp::create(
+            context.builder, loc,
+            moore::RefType::get(cast<moore::UnpackedType>(arg.second)),
+            StringAttr::get(context.getContext(), arg.first), base);
+        moore::BlockingAssignOp::create(context.builder, loc, fieldRef, value);
+      }
+      return true;
+    }
+
     // Give up on any other system tasks. These will be tried again as an
     // expression later.
     return false;
@@ -1636,4 +1699,40 @@ LogicalResult Context::flushPendingMonitors() {
 
   pendingMonitors.clear();
   return success();
+}
+
+//===----------------------------------------------------------------------===//
+// Time format support
+//===----------------------------------------------------------------------===//
+
+void Context::ensureTimeFormatGlobal() {
+  if (timeFormatGlobal)
+    return;
+  OpBuilder::InsertionGuard guard(builder);
+  builder.setInsertionPointToStart(intoModuleOp.getBody());
+
+  auto loc = intoModuleOp.getLoc();
+  auto i32Ty = moore::IntType::getInt(getContext(), 32);
+  auto strTy = moore::StringType::get(getContext());
+
+  SmallVector<moore::StructLikeMember> members{
+      {StringAttr::get(getContext(), "unit"), i32Ty},
+      {StringAttr::get(getContext(), "precision"), i32Ty},
+      {StringAttr::get(getContext(), "suffix"), strTy},
+      {StringAttr::get(getContext(), "min_width"), i32Ty},
+  };
+  auto structTy = moore::UnpackedStructType::get(getContext(), members);
+
+  timeFormatGlobal = moore::GlobalVariableOp::create(
+      builder, loc, "__timeformat_state", structTy);
+  {
+    OpBuilder::InsertionGuard initGuard(builder);
+    builder.setInsertionPointToStart(
+        &timeFormatGlobal.getInitRegion().emplaceBlock());
+    auto defaults = getDefaultTimeFormatValues(builder, loc, getContext());
+    auto init = moore::StructCreateOp::create(builder, loc, structTy,
+                                              ValueRange(defaults));
+    moore::YieldOp::create(builder, loc, init);
+  }
+  symbolTable.insert(timeFormatGlobal);
 }
