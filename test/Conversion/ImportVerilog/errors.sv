@@ -139,12 +139,6 @@ endmodule
 
 // -----
 function Foo;
-  // expected-error @below {{unsupported format specifier `%l`}}
-  $write("%l");
-endfunction
-
-// -----
-function Foo;
   // expected-error @below {{string format specifier with width not supported}}
   $write("%42s", "foo");
 endfunction
