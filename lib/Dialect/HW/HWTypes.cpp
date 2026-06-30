@@ -1106,6 +1106,17 @@ detail::ModuleTypeStorage::ModuleTypeStorage(ArrayRef<ModulePort> inPorts)
 }
 
 //===----------------------------------------------------------------------===//
+// RefType
+//===----------------------------------------------------------------------===//
+
+LogicalResult RefType::verify(function_ref<InFlightDiagnostic()> emitErrorFn,
+                              Type base, bool forceable) {
+  // For HW dialect, we don't have strict constraints
+  // Any type can be referenced
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // BoilerPlate
 //===----------------------------------------------------------------------===//
 
