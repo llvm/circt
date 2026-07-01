@@ -115,3 +115,24 @@ moore.module @QueueRefsWithConcat() {
     moore.return
   }
 }
+
+// CHECK-LABEL: moore.module @DelayedConcatRef()
+moore.module @DelayedConcatRef() {
+  %a = moore.variable : <l7>
+  %b = moore.variable : <l1>
+  %c = moore.variable : <l8>
+  moore.procedure initial {
+    %delay = moore.constant_time 1 fs
+    // CHECK-NOT: moore.concat_ref %a, %b
+    %dst = moore.concat_ref %a, %b : (!moore.ref<l7>, !moore.ref<l1>) -> <l8>
+    // CHECK: %[[C_READ:.+]] = moore.read %c : <l8>
+    %src = moore.read %c : <l8>
+    // CHECK: %[[A_SLICE:.+]] = moore.extract %[[C_READ]] from 1 : l8 -> l7
+    // CHECK: moore.delayed_nonblocking_assign %a, %[[A_SLICE]], %{{.*}} : l7
+    // CHECK: %[[B_SLICE:.+]] = moore.extract %[[C_READ]] from 0 : l8 -> l1
+    // CHECK: moore.delayed_nonblocking_assign %b, %[[B_SLICE]], %{{.*}} : l1
+    moore.delayed_nonblocking_assign %dst, %src, %delay : l8
+    moore.return
+  }
+  moore.output
+}

@@ -22,6 +22,8 @@
 #include "circt/Dialect/Moore/MoorePasses.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include <type_traits>
+
 namespace circt {
 namespace moore {
 #define GEN_PASS_DEF_SIMPLIFYREFS
@@ -49,6 +51,16 @@ static void collectOperands(Value operand, SmallVectorImpl<Value> &operands,
 
   } else
     operands.push_back(operand);
+}
+
+template <typename OpTy>
+static void createSplitAssign(OpTy op, ConversionPatternRewriter &rewriter,
+                              Value dst, Value src) {
+  if constexpr (std::is_same_v<OpTy, DelayedContinuousAssignOp> ||
+                std::is_same_v<OpTy, DelayedNonBlockingAssignOp>)
+    OpTy::create(rewriter, op.getLoc(), dst, src, op.getDelay());
+  else
+    OpTy::create(rewriter, op.getLoc(), dst, src);
 }
 
 template <typename OpTy>
@@ -83,7 +95,7 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
       // description mentioned.
       srcWidth = srcWidth - width;
 
-      OpTy::create(rewriter, op.getLoc(), operand, extract);
+      createSplitAssign(op, rewriter, operand, extract);
     }
     rewriter.eraseOp(op);
     return success();
@@ -137,16 +149,20 @@ void SimplifyRefsPass::runOnOperation() {
   MLIRContext &context = getContext();
   ConversionTarget target(context);
 
-  target.addDynamicallyLegalOp<ContinuousAssignOp, BlockingAssignOp,
-                               NonBlockingAssignOp>([](auto op) {
+  target.addDynamicallyLegalOp<ContinuousAssignOp, DelayedContinuousAssignOp,
+                               BlockingAssignOp, NonBlockingAssignOp,
+                               DelayedNonBlockingAssignOp>([](auto op) {
     return !op->getOperand(0).template getDefiningOp<ConcatRefOp>();
   });
 
   target.addLegalDialect<MooreDialect>();
   RewritePatternSet concatRefPatterns(&context);
   concatRefPatterns.add<ConcatRefLowering<ContinuousAssignOp>,
+                        ConcatRefLowering<DelayedContinuousAssignOp>,
                         ConcatRefLowering<BlockingAssignOp>,
-                        ConcatRefLowering<NonBlockingAssignOp>>(&context);
+                        ConcatRefLowering<NonBlockingAssignOp>,
+                        ConcatRefLowering<DelayedNonBlockingAssignOp>>(
+      &context);
 
   if (failed(applyPartialConversion(getOperation(), target,
                                     std::move(concatRefPatterns)))) {
