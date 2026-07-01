@@ -279,9 +279,22 @@ struct FormatStringParser {
 
   LogicalResult emitString(const slang::ast::Expression &arg,
                            const FormatOptions &options) {
-    if (options.width)
-      return mlir::emitError(loc)
-             << "string format specifier with width not supported";
+    // A field width (e.g. `%20s` / `%-20s`) prints the string in a field of at
+    // least that many characters, right- or left-justified and space-padded
+    // (IEEE 1800-2017 § 21.2.1.2). `moore.fmt.string` carries these attributes.
+    if (options.width) {
+      auto value = context.convertRvalueExpression(
+          arg, moore::StringType::get(context.getContext()));
+      if (!value)
+        return failure();
+      auto alignment = options.leftJustify ? IntAlign::Left : IntAlign::Right;
+      auto padding = options.zeroPad ? IntPadding::Zero : IntPadding::Space;
+      fragments.push_back(moore::FormatStringOp::create(
+          builder, loc, value, builder.getI32IntegerAttr(*options.width),
+          moore::IntAlignAttr::get(context.getContext(), alignment),
+          moore::IntPaddingAttr::get(context.getContext(), padding)));
+      return success();
+    }
 
     // Simplified handling for literals.
     if (auto *lit = arg.as_if<slang::ast::StringLiteral>()) {
