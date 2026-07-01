@@ -1782,6 +1782,56 @@ Context::declareFunction(const slang::ast::SubroutineSymbol &subroutine) {
   return fLowering;
 }
 
+/// Determine whether a subroutine may reach a `$stacktrace` call, either
+/// directly in its own body or transitively through another subroutine that
+/// itself needs the hidden caller-location argument. Such subroutines receive
+/// an extra hidden `!moore.string` argument carrying the caller's stack frame.
+bool Context::needsStacktraceCallerArgument(
+    const slang::ast::SubroutineSymbol &subroutine) {
+  auto state = stacktraceCallerArgState.lookup(&subroutine);
+  if (state == 3)
+    return true;
+  if (state == 2)
+    return false;
+  if (state == 1)
+    return false;
+
+  if (subroutine.flags.has(slang::ast::MethodFlags::DPIImport)) {
+    stacktraceCallerArgState[&subroutine] = 2;
+    return false;
+  }
+
+  stacktraceCallerArgState[&subroutine] = 1;
+
+  struct Visitor : public slang::ast::ASTVisitor<Visitor,
+                                                 /*VisitStatements=*/true,
+                                                 /*VisitExpressions=*/true> {
+    Context &context;
+    bool needs = false;
+
+    explicit Visitor(Context &context) : context(context) {}
+
+    void handle(const slang::ast::CallExpression &expr) {
+      if (needs)
+        return;
+
+      if (expr.getSubroutineName() == "$stacktrace") {
+        needs = true;
+        return;
+      }
+
+      if (auto *callee = std::get_if<const slang::ast::SubroutineSymbol *>(
+              &expr.subroutine))
+        if (*callee && context.needsStacktraceCallerArgument(**callee))
+          needs = true;
+    }
+  } visitor(*this);
+
+  subroutine.getBody().visit(visitor);
+  stacktraceCallerArgState[&subroutine] = visitor.needs ? 3 : 2;
+  return visitor.needs;
+}
+
 /// Helper function to generate the function signature from a SubroutineSymbol
 /// and optional extra arguments (used for %this argument)
 static FunctionType getFunctionSignature(
@@ -1804,6 +1854,11 @@ static FunctionType getFunctionSignature(
           moore::RefType::get(cast<moore::UnpackedType>(type)));
     }
   }
+
+  // Subroutines that may execute `$stacktrace` receive a hidden caller-location
+  // string argument, inserted after the user arguments and before any captures.
+  if (context.needsStacktraceCallerArgument(subroutine))
+    inputTypes.push_back(moore::StringType::get(context.getContext()));
 
   inputTypes.append(suffixParams.begin(), suffixParams.end());
 
@@ -1982,6 +2037,11 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
 
   ValueSymbolScope scope(valueSymbols);
   VirtualInterfaceMemberScope vifMemberScope(virtualIfaceMembers);
+  // Track the subroutine being lowered so `$stacktrace` can report the call
+  // stack of frames currently being imported.
+  currentSubroutineStack.push_back(&subroutine);
+  auto currentSubroutineGuard =
+      llvm::make_scope_exit([&] { currentSubroutineStack.pop_back(); });
   if (isMethod) {
     if (const auto *classTy =
             subroutine.thisVar->getType().as_if<slang::ast::ClassType>()) {
@@ -2024,6 +2084,7 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
   auto valInputs = llvm::ArrayRef<Type>(inputs)
                        .drop_front(prefixCount)
                        .take_front(astArgs.size());
+  const bool needsStacktraceCaller = needsStacktraceCallerArgument(subroutine);
 
   for (auto [astArg, type] : llvm::zip(astArgs, valInputs)) {
     auto loc = convertLocation(astArg->location);
@@ -2046,6 +2107,29 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
     if (const auto *vi = argCanon.as_if<slang::ast::VirtualInterfaceType>())
       if (failed(registerVirtualInterfaceMembers(*astArg, *vi, loc)))
         return failure();
+  }
+
+  // Bind the hidden `$stacktrace` caller-location argument. It sits right after
+  // the user arguments and before any capture arguments in the block-argument
+  // list, mirroring the layout produced by `getFunctionSignature`.
+  bool pushedStacktraceCaller = false;
+  auto stacktraceCallerGuard = llvm::make_scope_exit([&] {
+    if (pushedStacktraceCaller)
+      stacktraceCallerStack.pop_back();
+  });
+  if (needsStacktraceCaller) {
+    size_t callerIndex = prefixCount + astArgs.size();
+    if (callerIndex >= inputs.size()) {
+      mlir::emitError(
+          lowering->op.getLoc(),
+          "internal error: missing `$stacktrace` caller argument for `")
+          << lowering->op.getName() << "`";
+      return failure();
+    }
+    auto callerLoc = convertLocation(subroutine.location);
+    Value callerArg = block.addArgument(inputs[callerIndex], callerLoc);
+    stacktraceCallerStack.push_back(callerArg);
+    pushedStacktraceCaller = true;
   }
 
   // Convert the body of the function.

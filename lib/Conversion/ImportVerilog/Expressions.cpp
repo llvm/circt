@@ -2028,6 +2028,12 @@ struct RvalueExprVisitor : public ExprVisitor {
       arguments.push_back(value);
     }
 
+    // Pass the hidden `$stacktrace` caller-location argument, if this callee
+    // needs one. It is appended after the user arguments and before captures,
+    // matching the order established in `getFunctionSignature`.
+    if (context.needsStacktraceCallerArgument(*subroutine))
+      arguments.push_back(context.materializeStackTraceCallerLocation(loc));
+
     // Pass captured variables as extra arguments. Each captured AST symbol is
     // resolved to an MLIR value through the scoped symbol table, which
     // naturally handles transitive captures (the caller’s own capture block
