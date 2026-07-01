@@ -41,6 +41,17 @@ def RefTypeConstraint : DialectType<ProbeDialect,
     CPred<"::llvm::isa<::circt::probe::RefType>($_self)">,
     "probe ref type", "::circt::probe::RefType">;
 
+class SpecificRefType<Type type> : ConfinedType<RefTypeConstraint,
+  [SubstLeaves<"$_self",
+               "::llvm::cast<::circt::probe::RefType>($_self).getElementType()",
+               type.predicate>],
+  "ref of " # type.summary, "::circt::probe::RefType"
+> {
+  Type elementType = type;
+}
+
+def ArrayRefType : SpecificRefType<ArrayType>;
+
 def ProbeElementType : Type<CPred<
     "::circt::probe::isProbeElementType($_self)">,
     "probe element type">;

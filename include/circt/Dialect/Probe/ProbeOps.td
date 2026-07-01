@@ -24,35 +24,51 @@ class ProbeInferTypeOp<string mnemonic, list<Trait> traits = []> :
       Pure, DeclareOpInterfaceMethods<InferTypeOpInterface, ["inferReturnTypes"]>
     ]>;
 
-def SendOp : ProbeInferTypeOp<"send"> {
+def SendOp : ProbeOp<"send", [
+  Pure,
+  TypesMatchWith<"input and result types match",
+    "input", "result", "::circt::probe::RefType::get($_self)">
+]> {
   let summary = "create a read-only probe handle for a hardware value";
   let arguments = (ins ProbeElementType:$input);
   let results = (outs RefTypeConstraint:$result);
-  let assemblyFormat = "$input attr-dict `:` type($input) `->` qualified(type($result))";
-  let hasVerifier = 1;
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
-def ReadOp : ProbeInferTypeOp<"read"> {
+def ReadOp : ProbeInferTypeOp<"read", [
+  TypesMatchWith<"input and result types match",
+    "input", "result",
+    "cast<::circt::probe::RefType>($_self).getElementType()">
+]> {
   let summary = "read the value observed by a probe handle";
   let arguments = (ins RefTypeConstraint:$input);
   let results = (outs ProbeElementType:$result);
-  let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `->` type($result)";
-  let hasVerifier = 1;
+  let assemblyFormat = "$input attr-dict `:` type($input)";
 }
 
 def SubfieldOp : ProbeInferTypeOp<"subfield"> {
   let summary = "extract a field probe from a struct probe";
   let arguments = (ins RefTypeConstraint:$input, StrAttr:$field);
   let results = (outs RefTypeConstraint:$result);
-  let assemblyFormat = "$input `[` $field `]` attr-dict `:` qualified(type($input)) `->` qualified(type($result))";
+  let assemblyFormat = "$input `[` $field `]` attr-dict `:` type($input) `->` type($result)";
   let hasVerifier = 1;
 }
 
-def SubindexOp : ProbeInferTypeOp<"subindex"> {
+def SubindexOp : ProbeOp<"subindex", [
+  Pure,
+  TypesMatchWith<"result type matches input array element type",
+    "input", "result", [{
+      ::circt::probe::RefType::get(
+        ::circt::hw::type_cast<::circt::hw::ArrayType>(
+          ::llvm::cast<::circt::probe::RefType>($_self).getElementType()
+        ).getElementType()
+      )
+    }]>
+]> {
   let summary = "extract an element probe from an array probe";
-  let arguments = (ins RefTypeConstraint:$input, I32Attr:$index);
+  let arguments = (ins ArrayRefType:$input, I32Attr:$index);
   let results = (outs RefTypeConstraint:$result);
-  let assemblyFormat = "$input `[` $index `]` attr-dict `:` qualified(type($input)) `->` qualified(type($result))";
+  let assemblyFormat = "$input `[` $index `]` attr-dict `:` type($input)";
   let hasVerifier = 1;
 }
 
@@ -60,7 +76,7 @@ def CastOp : ProbeOp<"cast", [Pure]> {
   let summary = "cast between compatible probe handle types";
   let arguments = (ins RefTypeConstraint:$input);
   let results = (outs RefTypeConstraint:$result);
-  let assemblyFormat = "$input attr-dict `:` qualified(type($input)) `->` qualified(type($result))";
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
   let hasVerifier = 1;
 }
 
