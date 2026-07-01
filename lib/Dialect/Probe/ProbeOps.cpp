@@ -77,8 +77,8 @@ LogicalResult SubfieldOp::verify() {
 }
 
 LogicalResult SubindexOp::verify() {
-  auto inputType = hw::type_cast<hw::ArrayType>(
-      getElementType(getInput().getType()));
+  auto inputType =
+      hw::type_cast<hw::ArrayType>(getElementType(getInput().getType()));
 
   auto index = getIndex();
   if (static_cast<uint64_t>(index) >= inputType.getNumElements())

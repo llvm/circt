@@ -41,11 +41,9 @@ struct HWModulePortTypeInterface
   /// Return failure if `type` is not valid for a module port with the given
   /// direction. Dialects can implement this to restrict non-HW-value handle
   /// types in HW module signatures.
-  virtual mlir::LogicalResult
-  verifyHWModulePortType(llvm::function_ref<mlir::InFlightDiagnostic()>
-                             emitError,
-                         ModulePort::Direction direction,
-                         mlir::Type type) const {
+  virtual mlir::LogicalResult verifyHWModulePortType(
+      llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+      ModulePort::Direction direction, mlir::Type type) const {
     return mlir::success();
   }
 };

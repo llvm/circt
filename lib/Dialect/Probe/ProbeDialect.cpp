@@ -16,13 +16,13 @@ using namespace mlir;
 using namespace probe;
 
 namespace {
-struct ProbeHWModulePortTypeInterface
-    : public hw::HWModulePortTypeInterface {
+struct ProbeHWModulePortTypeInterface : public hw::HWModulePortTypeInterface {
   using HWModulePortTypeInterface::HWModulePortTypeInterface;
 
-  LogicalResult verifyHWModulePortType(
-      function_ref<InFlightDiagnostic()> emitError,
-      hw::ModulePort::Direction direction, Type type) const override {
+  LogicalResult
+  verifyHWModulePortType(function_ref<InFlightDiagnostic()> emitError,
+                         hw::ModulePort::Direction direction,
+                         Type type) const override {
     if (!isa<probe::RefType>(type) || direction == hw::ModulePort::Output)
       return success();
     return emitError() << "input probe refs are not supported";
