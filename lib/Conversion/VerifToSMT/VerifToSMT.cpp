@@ -70,6 +70,20 @@ static void attachDebugVariables(
   }
 }
 
+static void attachTraceRecords(
+    OpBuilder &builder, Location loc, Value step, ArrayRef<Type> originalTypes,
+    ValueRange values,
+    const llvm::SmallDenseMap<unsigned, StringAttr> &debugNames) {
+  for (auto [argIndex, value] : llvm::enumerate(values)) {
+    if (isa<seq::ClockType>(originalTypes[argIndex]))
+      continue;
+    auto it = debugNames.find(argIndex);
+    if (it == debugNames.end())
+      continue;
+    debug::TraceOp::create(builder, loc, step, it->second, value);
+  }
+}
+
 /// Lower a verif::AssertOp operation with an i1 operand to a smt::AssertOp,
 /// negated to check for unsatisfiability.
 struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
@@ -558,6 +572,9 @@ struct VerifBoundedModelCheckingOpConversion
         [&](OpBuilder &builder, Location loc, Value i, ValueRange iterArgs) {
           attachDebugVariables(
               builder, loc, oldCircuitInputTy,
+              iterArgs.take_front(circuitFuncOp.getNumArguments()), debugNames);
+          attachTraceRecords(
+              builder, loc, i, oldCircuitInputTy,
               iterArgs.take_front(circuitFuncOp.getNumArguments()), debugNames);
 
           // Drop existing assertions

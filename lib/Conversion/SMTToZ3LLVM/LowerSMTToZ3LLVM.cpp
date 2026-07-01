@@ -1282,6 +1282,18 @@ struct IntAbsOpLowering : public SMTLoweringPattern<IntAbsOp> {
 // For now we want to ignore Debug variable and scope ops - eventually we'll
 // give this debug info to Z3
 
+/// Strip dbg.trace ops.
+struct DbgTraceLowering : public OpConversionPattern<debug::TraceOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(debug::TraceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const final {
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 /// Strip dbg.variable ops.
 struct DbgVariableLowering : public OpConversionPattern<debug::VariableOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -1546,7 +1558,9 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
                BV2IntOpLowering, QuantifierLowering<ForallOp>,
                QuantifierLowering<ExistsOp>>(converter, patterns.getContext(),
                                              globals, options);
-  patterns.add<DbgVariableLowering, DbgScopeLowering>(patterns.getContext());
+  patterns.add<DbgTraceLowering>(patterns.getContext());
+  patterns.add<DbgVariableLowering>(patterns.getContext());
+  patterns.add<DbgScopeLowering>(patterns.getContext());
 }
 
 void LowerSMTToZ3LLVMPass::runOnOperation() {

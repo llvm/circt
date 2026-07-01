@@ -5,9 +5,11 @@ func.func @Foo(%arg0: i32, %arg1: index, %arg2: f64) {
   // CHECK-NEXT: dbg.variable "foo", %arg0 : i32
   // CHECK-NEXT: dbg.variable "bar", %arg1 : index
   // CHECK-NEXT: dbg.variable "baz", %arg2 : f64
+  // CHECK-NEXT: dbg.trace %arg0, "tracefoo", %arg2 : i32, f64
   dbg.variable "foo", %arg0 : i32
   dbg.variable "bar", %arg1 : index
   dbg.variable "baz", %arg2 : f64
+  dbg.trace %arg0, "tracefoo", %arg2 : i32, f64
 
   // CHECK-NEXT: [[TMP:%.+]] = dbg.struct {"foo": %arg0, "bar": %arg1, "baz": %arg2} : i32, index, f64
   // CHECK-NEXT: dbg.variable "megafoo", [[TMP]] : !dbg.struct
@@ -28,4 +30,3 @@ func.func @Foo(%arg0: i32, %arg1: index, %arg2: f64) {
 
   return
 }
-

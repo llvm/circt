@@ -82,6 +82,23 @@ def VariableOp : DebugOp<"variable"> {
   }];
 }
 
+def TraceOp : DebugOp<"trace"> {
+  let summary = "Record a named runtime value for counterexample tracing";
+  let description = [{
+    Records a named value at a specific step for later counterexample
+    materialization. This is intended as an internal bridge from the BMC flow
+    to the final runtime-backed text/VCD emission path.
+  }];
+  let arguments = (ins
+    I32:$step,
+    StrAttr:$name,
+    AnyType:$value
+  );
+  let assemblyFormat = [{
+    $step `,` $name `,` $value attr-dict `:` type($step) `,` type($value)
+  }];
+}
+
 
 def ValueOp : DebugOp<"value"> {
   let summary = "Attach source-language metadata to a value";
