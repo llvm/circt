@@ -310,14 +310,12 @@ firrtl.circuit "Breadcrumb" {
 // and the annotation should be cloned for each parent of the root module.
 // CHECK-LABEL: firrtl.circuit "Context"
 firrtl.circuit "Context" {
-  // CHECK: hw.hierpath private [[NLA3:@nla.*]] [@Context::@[[CONTEXT1:.+]], @Context0::@c0, @ContextLeaf::@w]
-  // CHECK: hw.hierpath private [[NLA1:@nla.*]] [@Context::@[[CONTEXT1]], @Context0::@c0, @ContextLeaf::@in]
-  // CHECK: hw.hierpath private [[NLA2:@nla.*]] [@Context::@[[CONTEXT0:.+]], @Context0::@c0, @ContextLeaf::@w]
-  // CHECK: hw.hierpath private [[NLA0:@nla.*]] [@Context::@[[CONTEXT0]], @Context0::@c0, @ContextLeaf::@in]
-  // CHECK-NOT: @context_nla0
-  // CHECK-NOT: @context_nla1
-  // CHECK-NOT: @context_nla2
-  // CHECK-NOT: @context_nla3
+
+  // Check re-use of singlely used hierpath ops.
+  // CHECK: hw.hierpath private [[NLA0:@context_nla0]] [@Context::@[[CONTEXT0:.+]], @Context0::@c0, @ContextLeaf::@in]
+  // CHECK: hw.hierpath private [[NLA2:@context_nla1]] [@Context::@[[CONTEXT0]], @Context0::@c0, @ContextLeaf::@w]
+  // CHECK: hw.hierpath private [[NLA1:@context_nla2]] [@Context::@[[CONTEXT1:.+]], @Context0::@c0, @ContextLeaf::@in]
+  // CHECK: hw.hierpath private [[NLA3:@context_nla3]] [@Context::@[[CONTEXT1]], @Context0::@c0, @ContextLeaf::@w]
   hw.hierpath private @context_nla0 [@Context0::@c0, @ContextLeaf::@in]
   hw.hierpath private @context_nla1 [@Context0::@c0, @ContextLeaf::@w]
   hw.hierpath private @context_nla2 [@Context1::@c1, @ContextLeaf::@in]
@@ -362,19 +360,16 @@ firrtl.circuit "Context" {
 // CHECK-LABEL: firrtl.circuit "Context"
 firrtl.circuit "Context" {
 
-  // CHECK-NOT: hw.hierpath private @nla0
+  // CHECK: hw.hierpath private [[NLA0:@nla0]] [@Context::@[[CONTEXT0:.+]], @Context0::@leaf0, @ContextLeaf0::@w0]
   hw.hierpath private @nla0 [@Context0::@leaf0, @ContextLeaf0::@w0]
-  // CHECK-NOT: hw.hierpath private @nla1
+  // CHECK: hw.hierpath private [[NLA1:@nla1]] [@Context::@[[CONTEXT1:.+]], @Context0::@leaf0, @ContextLeaf0::@w0]
   hw.hierpath private @nla1 [@Context1::@leaf1, @ContextLeaf1::@w1]
-
-  // CHECK: hw.hierpath private [[NLA0:@.+]] [@Context::@[[CONTEXT1:.+]], @Context0::@leaf0, @ContextLeaf0::@w0]
-  // CHECK: hw.hierpath private [[NLA1:@.+]] [@Context::@[[CONTEXT0:.+]], @Context0::@leaf0, @ContextLeaf0::@w0]
 
   // CHECK: firrtl.module private @ContextLeaf0()
   firrtl.module private @ContextLeaf0() {
     // CHECK: %w0 = firrtl.wire sym @w0  {annotations = [
-    // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "fake0"}
-    // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "fake1"}]}
+    // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "fake0"}
+    // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "fake1"}]}
     %w0 = firrtl.wire sym @w0 {annotations = [
       {circt.nonlocal = @nla0, class = "fake0"}]}: !firrtl.uint<3>
   }
@@ -411,9 +406,9 @@ firrtl.circuit "DuplicateNLAs" {
   hw.hierpath private @annos_nla_2 [@Mid_2::@core, @Core_2]
   hw.hierpath private @annos_nla_3 [@Mid_3::@core, @Core_3]
 
-  // CHECK: hw.hierpath private [[NLA0:@.+]] [@DuplicateNLAs::@core_3, @Mid_1::@core, @Core_1]
-  // CHECK: hw.hierpath private [[NLA1:@.+]] [@DuplicateNLAs::@core_2, @Mid_1::@core, @Core_1]
-  // CHECK: hw.hierpath private [[NLA2:@.+]] [@DuplicateNLAs::@core_1, @Mid_1::@core, @Core_1]
+  // CHECK: hw.hierpath private [[NLA0:@annos_nla_1]] [@DuplicateNLAs::@core_1, @Mid_1::@core, @Core_1]
+  // CHECK: hw.hierpath private [[NLA1:@annos_nla_2]] [@DuplicateNLAs::@core_2, @Mid_1::@core, @Core_1]
+  // CHECK: hw.hierpath private [[NLA2:@annos_nla_3]] [@DuplicateNLAs::@core_3, @Mid_1::@core, @Core_1]
 
   firrtl.module @DuplicateNLAs() {
     firrtl.instance core_1 sym @core_1 @Mid_1()
@@ -434,9 +429,9 @@ firrtl.circuit "DuplicateNLAs" {
   }
 
   // CHECK: firrtl.module private @Core_1() attributes {annotations = [
-  // CHECK-SAME: {circt.nonlocal = [[NLA2]], class = "SomeAnno1"}
+  // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "SomeAnno1"}
   // CHECK-SAME: {circt.nonlocal = [[NLA1]], class = "SomeAnno2"}
-  // CHECK-SAME: {circt.nonlocal = [[NLA0]], class = "SomeAnno3"}
+  // CHECK-SAME: {circt.nonlocal = [[NLA2]], class = "SomeAnno3"}
   firrtl.module private @Core_1() attributes {
     annotations = [
       {circt.nonlocal = @annos_nla_1, class = "SomeAnno1"}
