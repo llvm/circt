@@ -765,6 +765,32 @@ test
 )"""));
 }
 
+TEST(PrettyPrinterTest, NoWrap) {
+  SmallString<128> out;
+  raw_svector_ostream os(out);
+
+  auto test = [&](bool noWrap) {
+    out = "";
+    PrettyPrinter pp(os, 7, 0, 0, PrettyPrinter::kInfinity / 4, nullptr,
+                     noWrap);
+    TokenBuilder<> b(pp);
+    b.ibox();
+    b.literal("test");
+    b.space();
+    b.literal("test");
+    b.newline();
+    b.literal("test");
+    b.end();
+    pp.eof();
+  };
+
+  test(false);
+  EXPECT_EQ(out.str(), StringRef("test\ntest\ntest"));
+
+  test(true);
+  EXPECT_EQ(out.str(), StringRef("test test\ntest"));
+}
+
 TEST(PrettyPrinterTest, NeverBreakGroup) {
   SmallString<128> out;
   raw_svector_ostream os(out);
