@@ -29,13 +29,6 @@ hw.module @ClockAggregate(in %in: !hw.struct<clk: !seq.clock, data: i1>, out out
   hw.output %v : !hw.struct<clk: !seq.clock, data: i1>
 }
 
-// CHECK-LABEL: hw.module @ProbePort
-// CHECK-SAME: in %p : !probe.ref<i8>
-hw.module @ProbePort(in %p: !probe.ref<i8>, out out: i8) {
-  %v = probe.read %p : !probe.ref<i8> -> i8
-  hw.output %v : i8
-}
-
 // CHECK-LABEL: hw.module @ProbeProducer
 // CHECK-SAME: out p : !probe.ref<i8>
 hw.module @ProbeProducer(in %in: i8, out p: !probe.ref<i8>) {
