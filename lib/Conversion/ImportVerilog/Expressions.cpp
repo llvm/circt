@@ -1493,6 +1493,113 @@ struct RvalueExprVisitor : public ExprVisitor {
     return ConcreteOp::create(builder, loc, lhs, rhs);
   }
 
+  Value createStructCompare(slang::ast::BinaryOperator op, Value lhs, Value rhs,
+                            Type resultType) {
+    using slang::ast::BinaryOperator;
+    auto structType = cast<moore::UnpackedStructType>(lhs.getType());
+    const bool isEquality =
+        op == BinaryOperator::Equality || op == BinaryOperator::CaseEquality;
+
+    Value result;
+    for (auto member : structType.getMembers()) {
+      auto lhsField = moore::StructExtractOp::create(builder, loc, member.type,
+                                                     member.name, lhs);
+      auto rhsField = moore::StructExtractOp::create(builder, loc, member.type,
+                                                     member.name, rhs);
+      auto fieldCmp = createFieldCompare(op, lhsField, rhsField, resultType);
+      if (!fieldCmp)
+        return {};
+      fieldCmp =
+          context.materializeConversion(resultType, fieldCmp, false, loc);
+      if (!fieldCmp)
+        return {};
+
+      if (!result) {
+        result = fieldCmp;
+        continue;
+      }
+
+      result =
+          isEquality
+              ? moore::AndOp::create(builder, loc, result, fieldCmp).getResult()
+              : moore::OrOp::create(builder, loc, result, fieldCmp).getResult();
+    }
+
+    if (result)
+      return result;
+
+    auto intType = cast<moore::IntType>(resultType);
+    return moore::ConstantOp::create(builder, loc, intType, isEquality,
+                                     /*isSigned=*/false);
+  }
+
+  Value createFieldCompare(slang::ast::BinaryOperator op, Value lhs, Value rhs,
+                           Type resultType) {
+    using slang::ast::BinaryOperator;
+
+    if (isa<moore::UnpackedStructType>(lhs.getType()))
+      return createStructCompare(op, lhs, rhs, resultType);
+
+    if (isa<moore::ChandleType, moore::ClassHandleType>(lhs.getType())) {
+      switch (op) {
+      case BinaryOperator::Equality:
+        return moore::HandleEqOp::create(builder, loc, lhs, rhs);
+      case BinaryOperator::Inequality:
+        return moore::HandleNeOp::create(builder, loc, lhs, rhs);
+      case BinaryOperator::CaseEquality:
+        return moore::HandleCaseEqOp::create(builder, loc, lhs, rhs);
+      case BinaryOperator::CaseInequality:
+        return moore::HandleCaseNeOp::create(builder, loc, lhs, rhs);
+      default:
+        return {};
+      }
+    }
+
+    if (isa<moore::RealType>(lhs.getType())) {
+      switch (op) {
+      case BinaryOperator::Equality:
+      case BinaryOperator::CaseEquality:
+        return moore::EqRealOp::create(builder, loc, lhs, rhs);
+      case BinaryOperator::Inequality:
+      case BinaryOperator::CaseInequality:
+        return moore::NeRealOp::create(builder, loc, lhs, rhs);
+      default:
+        return {};
+      }
+    }
+
+    switch (op) {
+    case BinaryOperator::Equality:
+      if (isa<moore::UnpackedArrayType>(lhs.getType()))
+        return moore::UArrayCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::eq, lhs, rhs);
+      if (isa<moore::StringType>(lhs.getType()))
+        return moore::StringCmpOp::create(
+            builder, loc, moore::StringCmpPredicate::eq, lhs, rhs);
+      if (isa<moore::QueueType>(lhs.getType()))
+        return moore::QueueCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::eq, lhs, rhs);
+      return createBinary<moore::EqOp>(lhs, rhs);
+    case BinaryOperator::Inequality:
+      if (isa<moore::UnpackedArrayType>(lhs.getType()))
+        return moore::UArrayCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::ne, lhs, rhs);
+      if (isa<moore::StringType>(lhs.getType()))
+        return moore::StringCmpOp::create(
+            builder, loc, moore::StringCmpPredicate::ne, lhs, rhs);
+      if (isa<moore::QueueType>(lhs.getType()))
+        return moore::QueueCmpOp::create(
+            builder, loc, moore::UArrayCmpPredicate::ne, lhs, rhs);
+      return createBinary<moore::NeOp>(lhs, rhs);
+    case BinaryOperator::CaseEquality:
+      return createBinary<moore::CaseEqOp>(lhs, rhs);
+    case BinaryOperator::CaseInequality:
+      return createBinary<moore::CaseNeOp>(lhs, rhs);
+    default:
+      return {};
+    }
+  }
+
   // Handle binary operators.
   Value visit(const slang::ast::BinaryExpression &expr) {
     if (expr.left().kind == slang::ast::ExpressionKind::TypeReference &&
@@ -1554,6 +1661,8 @@ struct RvalueExprVisitor : public ExprVisitor {
     if (expr.type->isFourState() || expr.left().type->isFourState() ||
         expr.right().type->isFourState())
       domain = Domain::FourValued;
+    auto resultType =
+        moore::IntType::get(context.getContext(), /*width=*/1, domain);
 
     using slang::ast::BinaryOperator;
     switch (expr.op) {
@@ -1600,7 +1709,9 @@ struct RvalueExprVisitor : public ExprVisitor {
     }
 
     case BinaryOperator::Equality:
-      if (isa<moore::UnpackedArrayType>(lhs.getType()))
+      if (isa<moore::UnpackedStructType>(lhs.getType()))
+        return createStructCompare(expr.op, lhs, rhs, resultType);
+      else if (isa<moore::UnpackedArrayType>(lhs.getType()))
         return moore::UArrayCmpOp::create(
             builder, loc, moore::UArrayCmpPredicate::eq, lhs, rhs);
       else if (isa<moore::StringType>(lhs.getType()))
@@ -1612,7 +1723,9 @@ struct RvalueExprVisitor : public ExprVisitor {
       else
         return createBinary<moore::EqOp>(lhs, rhs);
     case BinaryOperator::Inequality:
-      if (isa<moore::UnpackedArrayType>(lhs.getType()))
+      if (isa<moore::UnpackedStructType>(lhs.getType()))
+        return createStructCompare(expr.op, lhs, rhs, resultType);
+      else if (isa<moore::UnpackedArrayType>(lhs.getType()))
         return moore::UArrayCmpOp::create(
             builder, loc, moore::UArrayCmpPredicate::ne, lhs, rhs);
       else if (isa<moore::StringType>(lhs.getType()))
@@ -1624,8 +1737,12 @@ struct RvalueExprVisitor : public ExprVisitor {
       else
         return createBinary<moore::NeOp>(lhs, rhs);
     case BinaryOperator::CaseEquality:
+      if (isa<moore::UnpackedStructType>(lhs.getType()))
+        return createStructCompare(expr.op, lhs, rhs, resultType);
       return createBinary<moore::CaseEqOp>(lhs, rhs);
     case BinaryOperator::CaseInequality:
+      if (isa<moore::UnpackedStructType>(lhs.getType()))
+        return createStructCompare(expr.op, lhs, rhs, resultType);
       return createBinary<moore::CaseNeOp>(lhs, rhs);
     case BinaryOperator::WildcardEquality:
       return createBinary<moore::WildcardEqOp>(lhs, rhs);
@@ -2932,6 +3049,13 @@ Value Context::convertToSimpleBitVector(Value value) {
   if (auto packed = dyn_cast<moore::PackedType>(value.getType()))
     if (auto sbvType = packed.getSimpleBitVector())
       return materializeConversion(sbvType, value, false, value.getLoc());
+
+  if (auto unpacked = dyn_cast<moore::UnpackedType>(value.getType()))
+    if (auto bitSize = unpacked.getBitSize()) {
+      auto sbvType = moore::IntType::get(value.getContext(), bitSize.value(),
+                                         unpacked.getDomain());
+      return materializeConversion(sbvType, value, false, value.getLoc());
+    }
 
   mlir::emitError(value.getLoc()) << "expression of type " << value.getType()
                                   << " cannot be cast to a simple bit vector";

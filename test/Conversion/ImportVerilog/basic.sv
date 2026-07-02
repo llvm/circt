@@ -394,6 +394,70 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 endfunction
 
+typedef struct packed {
+  logic [3 : 0] a;
+  logic [1 : 0] b;
+} CasePackedAggregatePair;
+
+// CHECK-LABEL: moore.module @CasePackedAggregateStatements
+module CasePackedAggregateStatements
+    (input logic [5 : 0][4 : 0] state_array,
+     input CasePackedAggregatePair state_struct,
+     input CasePackedAggregatePair match_struct,
+     input logic [3 : 0] lhs_bits,
+     input logic [3 : 0] rhs_bits,
+     output logic array_hit,
+     output logic struct_hit,
+     output logic union_hit);
+  typedef union packed {
+    logic [3 : 0] bits;
+    struct packed {
+      logic [1 : 0] hi;
+      logic [1 : 0] lo;
+    } parts;
+  } CasePackedAggregateUnion;
+
+  CasePackedAggregateUnion lhs;
+  CasePackedAggregateUnion rhs;
+
+  always_comb begin
+    // CHECK: moore.packed_to_sbv {{%.+}} : array<6 x l5>
+    // CHECK: moore.case_eq {{%.+}}, {{%.+}} : l30
+    array_hit = 1'b0;
+    unique case (state_array)
+      {6{5'h03}}:
+        array_hit = 1'b1;
+      default:
+        array_hit = 1'b0;
+    endcase
+
+    // CHECK: moore.packed_to_sbv {{%.+}} : struct<{a: l4, b: l2}>
+    // CHECK: moore.packed_to_sbv {{%.+}} : struct<{a: l4, b: l2}>
+    // CHECK: moore.case_eq {{%.+}}, {{%.+}} : l6
+    struct_hit = 1'b0;
+    unique case (state_struct)
+      match_struct:
+        struct_hit = 1'b1;
+      default:
+        struct_hit = 1'b0;
+    endcase
+
+    lhs.bits = lhs_bits;
+    rhs.bits = rhs_bits;
+
+    // CHECK: moore.packed_to_sbv {{%.+}} : union
+    // CHECK: moore.packed_to_sbv {{%.+}} : union
+    // CHECK: moore.case_eq {{%.+}}, {{%.+}} : l4
+    union_hit = 1'b0;
+    case (lhs)
+      rhs:
+        union_hit = 1'b1;
+      default:
+        union_hit = 1'b0;
+    endcase
+  end
+endmodule
+
 // CHECK-LABEL: func.func private @ForLoopStatements(
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: %arg1: !moore.i32
@@ -5253,6 +5317,68 @@ module DisplayWithStringArg;
   initial $display(i, s);
 endmodule
 
+// CHECK-LABEL: moore.module @StreamingUnpackedArray() {
+// CHECK: [[ARR:%.+]] = moore.variable : <uarray<12 x i8>>
+// CHECK: [[READ:%.+]] = moore.read [[ARR]] : <uarray<12 x i8>>
+// CHECK: [[AS_BITS:%.+]] = moore.conversion [[READ]]
+// CHECK-SAME: : !moore.uarray<12 x i8> -> !moore.i96
+// CHECK: [[SLICE0:%.+]] = moore.extract [[AS_BITS]] from 0 : i96 -> i32
+// CHECK: [[SLICE1:%.+]] = moore.extract [[AS_BITS]] from 32 : i96 -> i32
+// CHECK: [[SLICE2:%.+]] = moore.extract [[AS_BITS]] from 64 : i96 -> i32
+// CHECK: [[STREAMED:%.+]] = moore.concat
+// CHECK-SAME: [[SLICE0]], [[SLICE1]], [[SLICE2]]
+// CHECK: [[AS_ARRAY:%.+]] = moore.conversion [[STREAMED]]
+// CHECK-SAME: : !moore.i96 -> !moore.uarray<12 x i8>
+// CHECK: moore.blocking_assign [[ARR]], [[AS_ARRAY]]
+// CHECK-SAME: : uarray<12 x i8>
+// CHECK: moore.output
+// CHECK: }
+module StreamingUnpackedArray;
+  bit [7 : 0] my_array[12];
+  initial
+    my_array = {<<32{my_array}};
+endmodule
+
+// CHECK-LABEL: moore.module @CompareUnpackedUnionAsBits(
+// CHECK: [[LHS:%.+]] = moore.variable : <uunion<{x: l4, y: l4}>>
+// CHECK: [[RHS:%.+]] = moore.variable : <uunion<{x: l4, y: l4}>>
+// CHECK: [[LHS_READ0:%.+]] = moore.read [[LHS]] : <uunion<{x: l4, y: l4}>>
+// CHECK: [[RHS_READ0:%.+]] = moore.read [[RHS]] : <uunion<{x: l4, y: l4}>>
+// CHECK: [[LHS_BITS0:%.+]] = moore.conversion [[LHS_READ0]]
+// CHECK-SAME: : !moore.uunion<{x: l4, y: l4}> -> !moore.l4
+// CHECK: [[RHS_BITS0:%.+]] = moore.conversion [[RHS_READ0]]
+// CHECK-SAME: : !moore.uunion<{x: l4, y: l4}> -> !moore.l4
+// CHECK: moore.eq [[LHS_BITS0]], [[RHS_BITS0]] : l4 -> l1
+// CHECK: [[LHS_READ1:%.+]] = moore.read [[LHS]] : <uunion<{x: l4, y: l4}>>
+// CHECK: [[RHS_READ1:%.+]] = moore.read [[RHS]] : <uunion<{x: l4, y: l4}>>
+// CHECK: [[LHS_BITS1:%.+]] = moore.conversion [[LHS_READ1]]
+// CHECK-SAME: : !moore.uunion<{x: l4, y: l4}> -> !moore.l4
+// CHECK: [[RHS_BITS1:%.+]] = moore.conversion [[RHS_READ1]]
+// CHECK-SAME: : !moore.uunion<{x: l4, y: l4}> -> !moore.l4
+// CHECK: moore.ne [[LHS_BITS1]], [[RHS_BITS1]] : l4 -> l1
+// CHECK: moore.output
+// CHECK: }
+module CompareUnpackedUnionAsBits
+      (input logic [3 : 0] a,
+       input logic [3 : 0] b,
+       output logic eq,
+       output logic ne);
+  typedef union {
+    logic [3 : 0] x;
+    logic [3 : 0] y;
+  } u_t;
+
+  u_t lhs;
+  u_t rhs;
+
+  always_comb begin
+    lhs.x = a;
+    rhs.y = b;
+    eq = lhs == rhs;
+    ne = lhs != rhs;
+  end
+endmodule
+
 // CHECK-LABEL: func.func private @BuiltinCastTrue(
 // CHECK-SAME:    %arg0: !moore.ref<l32>
 // CHECK-SAME:  ) -> !moore.i32 {
@@ -5304,3 +5430,105 @@ task BuiltinCastFalse;
   $cast(s, 2.3);
   $cast(q, 2.3);
 endtask
+
+// CHECK-LABEL: moore.module @UnpackedStructCompare() {
+// CHECK: moore.struct_extract
+// CHECK: moore.eq
+// CHECK: moore.and
+// CHECK: moore.struct_extract
+// CHECK: moore.ne
+// CHECK: moore.or
+// CHECK: moore.struct_extract
+// CHECK: moore.case_eq
+// CHECK: moore.and
+// CHECK: moore.struct_extract
+// CHECK: moore.case_ne
+// CHECK: moore.or
+// CHECK: moore.output
+// CHECK: }
+module UnpackedStructCompare;
+  typedef struct {
+    logic [2 : 0] a;
+    logic [1 : 0] b;
+  } item_t;
+
+  item_t lhs;
+  item_t rhs;
+  logic eq;
+  logic ne;
+  logic ceq;
+  logic cne;
+
+  always_comb begin
+    eq = lhs == rhs;
+    ne = lhs != rhs;
+    ceq = lhs === rhs;
+    cne = lhs !== rhs;
+  end
+endmodule
+
+// CHECK-LABEL: moore.module @UnpackedStructRealTimeCompare() {
+// CHECK: moore.struct_extract
+// CHECK: moore.feq
+// CHECK: moore.and
+// CHECK: moore.struct_extract
+// CHECK: moore.fne
+// CHECK: moore.or
+// CHECK: moore.output
+// CHECK: }
+module UnpackedStructRealTimeCompare;
+  typedef struct {
+    real r;
+    time t;
+  } item_t;
+
+  item_t lhs;
+  item_t rhs;
+  logic eq;
+  logic ne;
+
+  always_comb begin
+    eq = lhs == rhs;
+    ne = lhs != rhs;
+  end
+endmodule
+
+class UnpackedStructHandleBox;
+endclass
+
+// CHECK-LABEL: moore.module @UnpackedStructHandleCompare() {
+// CHECK: moore.handle_eq
+// CHECK: moore.handle_eq
+// CHECK: moore.and
+// CHECK: moore.handle_ne
+// CHECK: moore.handle_ne
+// CHECK: moore.or
+// CHECK: moore.handle_case_eq
+// CHECK: moore.handle_case_eq
+// CHECK: moore.and
+// CHECK: moore.handle_case_ne
+// CHECK: moore.handle_case_ne
+// CHECK: moore.or
+// CHECK: moore.output
+// CHECK: }
+module UnpackedStructHandleCompare;
+  typedef struct {
+    chandle c;
+    UnpackedStructHandleBox h;
+    logic [2 : 0] bits;
+  } item_t;
+
+  item_t lhs;
+  item_t rhs;
+  logic eq;
+  logic ne;
+  logic ceq;
+  logic cne;
+
+  initial begin
+    eq = lhs == rhs;
+    ne = lhs != rhs;
+    ceq = lhs === rhs;
+    cne = lhs !== rhs;
+  end
+endmodule

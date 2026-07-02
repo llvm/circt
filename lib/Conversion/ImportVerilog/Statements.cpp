@@ -467,16 +467,21 @@ struct StmtVisitor {
           if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
             itemConsts.push_back(defOp.getValueAttr());
 
+          auto lhs = context.convertToSimpleBitVector(caseExpr);
+          auto rhs = context.convertToSimpleBitVector(value);
+          if (!lhs || !rhs)
+            return failure();
+
           // Generate the appropriate equality operator.
           switch (caseStmt.condition) {
           case CaseStatementCondition::Normal:
-            cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
+            cond = moore::CaseEqOp::create(builder, itemLoc, lhs, rhs);
             break;
           case CaseStatementCondition::WildcardXOrZ:
-            cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
+            cond = moore::CaseXZEqOp::create(builder, itemLoc, lhs, rhs);
             break;
           case CaseStatementCondition::WildcardJustZ:
-            cond = moore::CaseZEqOp::create(builder, itemLoc, caseExpr, value);
+            cond = moore::CaseZEqOp::create(builder, itemLoc, lhs, rhs);
             break;
           case CaseStatementCondition::Inside:
             llvm_unreachable("Inside condition has been handled already");
