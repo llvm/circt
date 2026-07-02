@@ -91,10 +91,6 @@ class MutableNLA {
   /// migrates to each instantiator of the original NLA.
   SmallVector<InnerRefAttr> newTops;
 
-  /// Cache of roots that this module participates in.  This is only valid when
-  /// newTops is non-empty.
-  DenseSet<StringAttr> rootSet;
-
   /// Stores the size of the NLA path.
   unsigned int size;
 
@@ -330,15 +326,12 @@ public:
     return inlinedSymbols.find_first_in(1, inlinedSymbols.size()) == -1;
   }
 
-  /// Return true if this NLA has a root that originates from a specific module.
-  bool hasRoot(FModuleLike mod) {
-    return (isDead() && nla.root() == mod.getModuleNameAttr()) ||
-           rootSet.contains(mod.getModuleNameAttr());
-  }
+  /// Return true if either this NLA is rooted at modName, or is retoped to it.
+  bool hasRoot(FModuleLike mod) { return hasRoot(mod.getModuleNameAttr()); }
 
   /// Return true if either this NLA is rooted at modName, or is retoped to it.
   bool hasRoot(StringAttr modName) {
-    return (nla.root() == modName) || rootSet.contains(modName);
+    return symIdx.lookup_or(modName, -1) == 0;
   }
 
   /// Mark a module as inlined.  This will remove it from the NLA.
@@ -376,7 +369,6 @@ public:
       sym = StringAttr::get(nla.getContext(),
                             circuitNamespace->newName(sym.getValue()));
     newTops.push_back(InnerRefAttr::get(module.getNameAttr(), sym));
-    rootSet.insert(module.getNameAttr());
     symIdx.insert({module.getNameAttr(), 0});
     markDead();
     return sym;
@@ -1596,7 +1588,7 @@ LogicalResult Inliner::run() {
         //  - otherwise it is local elsewhere but not here (this module needed
         //    the NLA to selectively enable it), so just drop the annotation.
         if (mnla.isLocal()) {
-          if (mnla.hasRoot(fmodule.getModuleNameAttr())) {
+          if (mnla.hasRoot(fmodule)) {
             anno.removeMember("circt.nonlocal");
             newAnnotations.push_back(anno.getAttr());
           }
