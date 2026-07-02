@@ -1977,6 +1977,10 @@ Context::defineFunction(const slang::ast::SubroutineSymbol &subroutine) {
   // symbol and calls to it are not eliminated.
   if (subroutine.flags.has(slang::ast::MethodFlags::DPIImport))
     return success();
+  // Pure virtual methods only contribute class method declarations and vtable
+  // slots. They have no body to define, including for non-void return types.
+  if (subroutine.flags.has(slang::ast::MethodFlags::Pure))
+    return success();
 
   const bool isMethod = (subroutine.thisVar != nullptr);
 
