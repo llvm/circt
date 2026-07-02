@@ -229,3 +229,27 @@ func.func @funcCallingCoroutine() {
   func.call @someCoroutine() : () -> ()
   return
 }
+
+// -----
+
+func.func @ReadMemFinishWithoutStart(%arg0: !moore.string, %arg1: !moore.ref<uarray<16 x l8>>, %arg2: !moore.i32) {
+  // expected-error @below {{'finishAddr' requires 'startAddr' to be present}}
+  "moore.builtin.readmem"(%arg0, %arg1, %arg2) <{base = 1 : i32, dimDescending = array<i1: false>, dimLows = array<i64: 0>, operandSegmentSizes = array<i32: 1, 1, 0, 1, 0, 0>}> : (!moore.string, !moore.ref<uarray<16 x l8>>, !moore.i32) -> ()
+  return
+}
+
+// -----
+
+func.func @ReadMemDimsMismatch(%arg0: !moore.string, %arg1: !moore.ref<uarray<16 x l8>>) {
+  // expected-error @below {{'dimLows' and 'dimDescending' must have one entry per unpacked dimension}}
+  moore.builtin.readmem hex %arg0, %arg1 {dimDescending = array<i1: false, false>, dimLows = array<i64: 0, 0>} : !moore.ref<uarray<16 x l8>>
+  return
+}
+
+// -----
+
+func.func @ReadMemBadDest(%arg0: !moore.string, %arg1: !moore.ref<i8>) {
+  // expected-error @below {{'dest' must reference an unpacked array or queue}}
+  moore.builtin.readmem hex %arg0, %arg1 {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<i8>
+  return
+}

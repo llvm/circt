@@ -337,3 +337,34 @@ module unsupported_prim(inout A, inout B);
     // expected-error @below {{unsupported instance of primitive `tran`}}
     tran u1 (A, B);
 endmodule
+
+// -----
+
+module ReadMemAssoc;
+  logic [7:0] amem[int];
+  initial begin
+    // expected-error @below {{unsupported: $readmem into associative array}}
+    $readmemh("mem.data", amem);
+  end
+endmodule
+
+// -----
+
+module ReadMemDynamic;
+  logic [7:0] dmem [];
+  initial begin
+    // expected-error @below {{unsupported: $readmem into dynamic array}}
+    $readmemh("mem.data", dmem);
+  end
+endmodule
+
+// -----
+
+module ReadMemIndexedSelect;
+  logic [7:0] mem [0:255];
+  int i;
+  initial begin
+    // expected-error @below {{unsupported: indexed part-select on $readmem memory}}
+    $readmemh("mem.data", mem[i+:8]);
+  end
+endmodule

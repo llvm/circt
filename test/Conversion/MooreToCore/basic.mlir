@@ -1936,3 +1936,66 @@ func.func @FFlushWithArg(%arg0: !moore.i32) {
   moore.builtin.fflush %arg0
   return
 }
+
+// CHECK-LABEL: hw.module @ReadMemArray
+moore.module @ReadMemArray() {
+  %mem = moore.variable : <uarray<4 x l8>>
+  moore.procedure initial {
+    %0 = moore.constant_string "mem.data" : i64
+    %1 = moore.int_to_string %0 : i64
+    // CHECK: [[FD:%.+]] = sim.sv.fopen {{%.+}} mode = r
+    // CHECK: [[STREAM:%.+]] = sim.sv.channel_to_input_stream [[FD]]
+    // CHECK: sim.proc.read from [[STREAM]]
+    // CHECK-DAG: llhd.sig.array_get %mem[{{%.+}}] : <!hw.array<4xi8>>
+    // CHECK-DAG: llhd.drv
+    // CHECK-DAG: sim.sv.fclose [[FD]]
+    moore.builtin.readmem hex %1, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<4 x l8>>
+    moore.return
+  }
+  moore.output
+}
+
+// CHECK-LABEL: hw.module @ReadMemMultiDim
+moore.module @ReadMemMultiDim() {
+  %mem3 = moore.variable : <uarray<3 x uarray<5 x uarray<4 x l32>>>>
+  moore.procedure initial {
+    %0 = moore.constant_string "mem.data" : i64
+    %1 = moore.int_to_string %0 : i64
+    // CHECK: sim.sv.fopen
+    // CHECK-DAG: [[REF0:%.+]] = llhd.sig.array_get %mem3[{{%.+}}] : <!hw.array<3xarray<5xarray<4xi32>>>>
+    // CHECK-DAG: [[REF1:%.+]] = llhd.sig.array_get [[REF0]][{{%.+}}] : <!hw.array<5xarray<4xi32>>>
+    // CHECK-DAG: [[REF2:%.+]] = llhd.sig.array_get [[REF1]][{{%.+}}] : <!hw.array<4xi32>>
+    moore.builtin.readmem hex %1, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !moore.ref<uarray<3 x uarray<5 x uarray<4 x l32>>>>
+    moore.return
+  }
+  moore.output
+}
+
+// CHECK-LABEL: hw.module @ReadMemQueue
+moore.module @ReadMemQueue() {
+  %qmem = moore.variable : <queue<l8, 0>>
+  moore.procedure initial {
+    %0 = moore.constant_string "q.data" : i64
+    %1 = moore.int_to_string %0 : i64
+    // CHECK: sim.queue.size
+    // CHECK-DAG: sim.queue.set
+    moore.builtin.readmem hex %1, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
+    moore.return
+  }
+  moore.output
+}
+
+// CHECK-LABEL: hw.module @ReadMemEnum
+moore.module @ReadMemEnum() {
+  %emem = moore.variable : <uarray<8 x l2>>
+  moore.procedure initial {
+    %0 = moore.constant_string "e.data" : i64
+    %1 = moore.int_to_string %0 : i64
+    // CHECK: sim.sv.fopen
+    // CHECK-DAG: arith.cmpi eq, {{%.+}}, %{{[^ ]+}} : i2
+    // CHECK-DAG: arith.ori
+    moore.builtin.readmem hex %1, %emem {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !moore.ref<uarray<8 x l2>>
+    moore.return
+  }
+  moore.output
+}

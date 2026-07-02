@@ -1303,6 +1303,127 @@ struct StmtVisitor {
       return true;
     }
 
+    if (nameId == ksn::ReadMemH || nameId == ksn::ReadMemB) {
+      assert(args.size() >= 2 && args.size() <= 4 &&
+             "$readmemh/$readmemb takes 2 to 4 arguments");
+
+      auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
+      auto filename = context.convertRvalueExpression(
+          *args[0], moore::StringType::get(builder.getContext()));
+      if (!filename)
+        return failure();
+
+      const auto *destExpr = args[1];
+      if (const auto *assign =
+              destExpr->as_if<slang::ast::AssignmentExpression>())
+        destExpr = &assign->left();
+
+      Value sliceLeft, sliceRight;
+      if (const auto *rangeExpr =
+              destExpr->as_if<slang::ast::RangeSelectExpression>()) {
+        if (rangeExpr->getSelectionKind() !=
+            slang::ast::RangeSelectionKind::Simple) {
+          mlir::emitError(loc)
+              << "unsupported: indexed part-select on $readmem memory";
+          return failure();
+        }
+
+        sliceLeft = context.convertRvalueExpression(rangeExpr->left(), i32Ty);
+        sliceRight = context.convertRvalueExpression(rangeExpr->right(), i32Ty);
+
+        if (!sliceLeft || !sliceRight)
+          return failure();
+
+        destExpr = &rangeExpr->value();
+      }
+
+      auto dest = context.convertLvalueExpression(*destExpr);
+      if (!dest)
+        return failure();
+
+      const auto *curTy = &destExpr->type->getCanonicalType();
+      SmallVector<int64_t> dimLows;
+      SmallVector<bool> dimDescs;
+      const slang::ast::Type *elemSvTy = curTy;
+
+      if (curTy->isAssociativeArray()) {
+        mlir::emitError(loc) << "unsupported: $readmem into associative array";
+        return failure();
+      }
+
+      if (const auto *queueTy = curTy->as_if<slang::ast::QueueType>()) {
+        dimLows.push_back(0);
+        dimDescs.push_back(false);
+        elemSvTy = &queueTy->elementType.getCanonicalType();
+      } else if (curTy->as_if<slang::ast::DynamicArrayType>()) {
+        mlir::emitError(loc) << "unsupported: $readmem into dynamic array";
+        return failure();
+      } else {
+        while (const auto *fixedArr =
+                   curTy->as_if<slang::ast::FixedSizeUnpackedArrayType>()) {
+          dimLows.push_back(fixedArr->range.lower());
+          dimDescs.push_back(fixedArr->range.isDescending());
+          curTy = &fixedArr->elementType.getCanonicalType();
+        }
+        elemSvTy = curTy;
+      }
+
+      if (dimLows.empty()) {
+        mlir::emitError(loc) << "$readmem memory must be an unpacked array";
+        return failure();
+      }
+
+      if (!elemSvTy->isIntegral()) {
+        mlir::emitError(loc)
+            << "unsupported: $readmem element type " << elemSvTy->toString();
+        return failure();
+      }
+
+      DenseI64ArrayAttr enumValuesAttr;
+      if (const auto *enumTy = elemSvTy->as_if<slang::ast::EnumType>()) {
+        SmallVector<int64_t> vals;
+        bool representable = enumTy->getBitWidth() <= 64;
+        if (representable) {
+          for (const auto &ev : enumTy->values()) {
+            auto v = ev.getValue().integer().as<int64_t>();
+            if (!v) {
+              representable = false;
+              break;
+            }
+            vals.push_back(*v);
+          }
+          if (representable)
+            enumValuesAttr = builder.getDenseI64ArrayAttr(vals);
+        }
+      }
+
+      Value startAddr;
+      if (args.size() >= 3 &&
+          args[2]->kind != slang::ast::ExpressionKind::EmptyArgument) {
+        startAddr = context.convertRvalueExpression(*args[2], i32Ty);
+        if (!startAddr)
+          return failure();
+      }
+
+      Value finishAddr;
+      if (args.size() >= 4 &&
+          args[3]->kind != slang::ast::ExpressionKind::EmptyArgument) {
+        finishAddr = context.convertRvalueExpression(*args[3], i32Ty);
+        if (!finishAddr)
+          return failure();
+      }
+
+      auto base = (nameId == ksn::ReadMemB) ? moore::MemBase::Binary
+                                            : moore::MemBase::Hex;
+      moore::ReadMemBIOp::create(
+          builder, loc, filename, dest,
+          moore::MemBaseAttr::get(builder.getContext(), base), startAddr,
+          finishAddr, sliceLeft, sliceRight,
+          builder.getDenseI64ArrayAttr(dimLows),
+          builder.getDenseBoolArrayAttr(dimDescs), enumValuesAttr);
+      return true;
+    }
+
     // String Tasks
     if (args.size() >= 1 && args[0]->type->isString()) {
       auto str = context.convertLvalueExpression(*args[0]);

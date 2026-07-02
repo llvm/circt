@@ -2171,6 +2171,41 @@ FuncDPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
          << referencedOp->getName() << "'";
 }
 
+LogicalResult ReadMemBIOp::verify() {
+  if (getFinishAddr() && !getStartAddr())
+    return emitOpError("'finishAddr' requires 'startAddr' to be present");
+
+  if ((bool)getSliceLeft() != (bool)getSliceRight())
+    return emitOpError("slice bounds must both be present or both absent");
+
+  auto ref = dyn_cast<moore::RefType>(getDest().getType());
+  if (!ref)
+    return emitOpError("'dest' must be a Moore reference type, got ")
+           << getDest().getType();
+
+  unsigned numDims = 0;
+  Type nested = ref.getNestedType();
+
+  if (isa<moore::QueueType>(nested)) {
+    numDims = 1;
+  } else {
+    while (auto arr = dyn_cast<moore::UnpackedArrayType>(nested)) {
+      ++numDims;
+      nested = arr.getElementType();
+    }
+
+    if (numDims == 0)
+      return emitOpError(
+                 "'dest' must reference an unpacked array or queue, got ")
+             << ref.getNestedType();
+  }
+  if (getDimLows().size() != numDims || getDimDescending().size() != numDims)
+    return emitOpError("'dimLows' and 'dimDescending' must have one entry per "
+                       "unpacked dimension");
+
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
