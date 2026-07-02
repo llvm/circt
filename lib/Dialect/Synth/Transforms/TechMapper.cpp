@@ -87,12 +87,22 @@ static llvm::FailureOr<NPNClass> getNPNClassFromModule(hw::HWModuleOp module) {
   return NPNClass::computeNPNCanonicalForm(*truthTable);
 }
 
+struct TechTimingArc {
+  DelayType intrinsic;
+  DelayType sensitivity;
+
+  DelayType getDelay() const {
+    // TODO: Replace unit-load approximation with load-aware delay.
+    return intrinsic + sensitivity;
+  }
+};
+
 /// Simple technology library encoded as a HWModuleOp.
 struct TechLibraryPattern : public CutRewritePattern {
   TechLibraryPattern(hw::HWModuleOp module, double area,
-                     SmallVector<DelayType> delay, NPNClass npnClass)
+                     SmallVector<TechTimingArc> arcs, NPNClass npnClass)
       : CutRewritePattern(module->getContext()), area(area),
-        delay(std::move(delay)), module(module), npnClass(std::move(npnClass)) {
+        arcs(std::move(arcs)), module(module), npnClass(std::move(npnClass)) {
 
     LLVM_DEBUG({
       llvm::dbgs() << "Created Tech Library Pattern for module: "
@@ -118,7 +128,16 @@ struct TechLibraryPattern : public CutRewritePattern {
              .equivalentOtherThanPermutation(npnClass))
       return std::nullopt;
 
-    return MatchResult(area, delay);
+    SmallVector<DelayType, 6> delays;
+    delays.reserve(arcs.size());
+
+    for (const auto &arc : arcs)
+      delays.push_back(arc.getDelay());
+
+    MatchResult result;
+    result.area = area;
+    result.setOwnedDelays(std::move(delays));
+    return result;
   }
 
   /// Enable truth table matching for this pattern
@@ -169,7 +188,7 @@ struct TechLibraryPattern : public CutRewritePattern {
 
 private:
   const double area;
-  const SmallVector<DelayType> delay;
+  const SmallVector<TechTimingArc> arcs;
   hw::HWModuleOp module;
   NPNClass npnClass;
 };
@@ -237,14 +256,11 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
         return;
       }
 
-      SmallVector<DelayType> delay;
+      SmallVector<TechTimingArc> timingArcs;
       for (auto attr : arcs) {
         auto arc = cast<LinearTimingArcAttr>(attr);
-
-        // TechMapper currently preserves the old integer per-pin delay model.
-        // The sensitivity, polarity, and input capacitance fields are carried
-        // in the attribute for future load-aware mapping.
-        delay.push_back(static_cast<DelayType>(arc.getIntrinsic()));
+        timingArcs.push_back({static_cast<DelayType>(arc.getIntrinsic()),
+                              static_cast<DelayType>(arc.getSensitivity())});
       }
 
       // Compute NPN Class for the module.
@@ -256,8 +272,8 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
 
       // Create a CutRewritePattern for the library module
       std::unique_ptr<TechLibraryPattern> pattern =
-          std::make_unique<TechLibraryPattern>(hwModule, area, std::move(delay),
-                                               std::move(*npnClass));
+          std::make_unique<TechLibraryPattern>(
+              hwModule, area, std::move(timingArcs), std::move(*npnClass));
 
       // Update the maximum input size
       maxInputSize = std::max(maxInputSize, pattern->getNumInputs());
