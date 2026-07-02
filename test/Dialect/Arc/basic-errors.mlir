@@ -576,9 +576,10 @@ hw.module @Foo(in %a: i9001) {
   // expected-note @below {{actual type: 'i9001'}}
   arc.coroutine.instance @NeedsI42(%a) : (i9001) -> ()
 }
-arc.coroutine.define @NeedsI42(%arg0: i42) -> i64 {
+arc.coroutine.define @NeedsI42(%arg0: i42) -> (i1, i64) {
+  %c0_i1 = hw.constant 0 : i1
   %c0_i64 = hw.constant 0 : i64
-  arc.coroutine.return %c0_i64 : i64
+  arc.coroutine.return %c0_i1, %c0_i64 : i1, i64
 }
 
 // -----
@@ -629,6 +630,19 @@ hw.module @Foo() {
 arc.coroutine.define @Bar() -> i42 {
   %c0_i42 = hw.constant 0 : i42
   arc.coroutine.return %c0_i42 : i42
+}
+
+// -----
+
+hw.module @Foo(in %a: i42) {
+  // expected-error @below {{referenced coroutine `Bar` must produce an observe bitmask with one bit per argument (`i1`) as its second-to-last result}}
+  arc.coroutine.instance @Bar(%a) : (i42) -> ()
+}
+// One argument, so the bitmask must be `i1`, but here it is `i8`.
+arc.coroutine.define @Bar(%arg0: i42) -> (i8, i64) {
+  %c0_i8 = hw.constant 0 : i8
+  %c0_i64 = hw.constant 0 : i64
+  arc.coroutine.return %c0_i8, %c0_i64 : i8, i64
 }
 
 // -----

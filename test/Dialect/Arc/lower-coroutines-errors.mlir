@@ -27,14 +27,15 @@ arc.coroutine.define @MutualB() {
 
 // -----
 
-arc.coroutine.define @WithWakeup() -> i64 {
+arc.coroutine.define @WithWakeup(%arg0: i42) -> (i1, i64) {
+  %c0_i1 = hw.constant 0 : i1
   %c0_i64 = hw.constant 0 : i64
-  arc.coroutine.return %c0_i64 : i64
+  arc.coroutine.return %c0_i1, %c0_i64 : i1, i64
 }
 
-hw.module @Module() {
+hw.module @Module(in %a: i42) {
   // expected-error @below {{must be lowered before LowerCoroutines}}
-  arc.coroutine.instance @WithWakeup() : () -> ()
+  arc.coroutine.instance @WithWakeup(%a) : (i42) -> ()
 }
 
 // -----
