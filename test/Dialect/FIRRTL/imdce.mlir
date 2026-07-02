@@ -5,16 +5,16 @@ firrtl.circuit "top" {
   // all operations are removed by IMDeadCodeElim pass.
   // CHECK-NOT: @dead_module
   firrtl.module private @dead_module(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>,
-                                     in %clock:!firrtl.clock, in %reset:!firrtl.uint<1>) {
+                                     in %clock:!firrtl.clock, in %reset:!firrtl.reset) {
     %dead_node = firrtl.node %source: !firrtl.uint<1>
 
     %dead_wire = firrtl.wire : !firrtl.uint<1>
     firrtl.matchingconnect %dead_wire, %dead_node : !firrtl.uint<1>
 
-    %dead_reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    %dead_reg = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     firrtl.matchingconnect %dead_reg, %dead_wire : !firrtl.uint<1>
 
-    %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %dead_reg_reset = firrtl.regreset %clock, %reset, %dead_reg  {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.matchingconnect %dead_reg_reset, %dead_reg : !firrtl.uint<1>
 
     %not = firrtl.not %dead_reg_reset : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -45,19 +45,19 @@ firrtl.circuit "top" {
   }
 
   // Ports of public modules should not be modified.
-  // CHECK-LABEL: firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  // CHECK-LABEL: firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>, in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
   firrtl.module @top(in %source: !firrtl.uint<1>, out %dest: !firrtl.uint<1>,
-                     in %clock:!firrtl.clock, in %reset:!firrtl.uint<1>) {
+                     in %clock:!firrtl.clock, in %reset:!firrtl.reset) {
     // CHECK-NEXT: %tmp = firrtl.node %source
     // CHECK-NEXT: firrtl.matchingconnect %dest, %tmp
     %tmp = firrtl.node %source: !firrtl.uint<1>
     firrtl.matchingconnect %dest, %tmp : !firrtl.uint<1>
 
     // CHECK-NOT: @dead_module
-    %source1, %dest1, %clock1, %reset1  = firrtl.instance dead_module @dead_module(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, in clock:!firrtl.clock, in reset:!firrtl.uint<1>)
+    %source1, %dest1, %clock1, %reset1  = firrtl.instance dead_module @dead_module(in source: !firrtl.uint<1>, out dest: !firrtl.uint<1>, in clock:!firrtl.clock, in reset:!firrtl.reset)
     firrtl.matchingconnect %source1, %source : !firrtl.uint<1>
     firrtl.matchingconnect %clock1, %clock : !firrtl.clock
-    firrtl.matchingconnect %reset1, %reset : !firrtl.uint<1>
+    firrtl.matchingconnect %reset1, %reset : !firrtl.reset
 
     // Check that ports with dontTouch are not removed.
     // CHECK-NEXT: %testDontTouch_dontTouch, %testDontTouch_source = firrtl.instance testDontTouch @dontTouch(in dontTouch: !firrtl.uint<1>, in source: !firrtl.uint<1>)
@@ -86,7 +86,7 @@ firrtl.circuit "top"  {
   }
   // CHECK-NOT: @Child2
   firrtl.module private @Child2(in %input: !firrtl.uint<1>, in %clock: !firrtl.clock, out %output: !firrtl.uint<1>) {
-    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    %r = firrtl.reg %clock  {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     firrtl.matchingconnect %r, %input : !firrtl.uint<1>
     firrtl.matchingconnect %output, %r : !firrtl.uint<1>
   }

@@ -325,7 +325,7 @@ hw.module @Mul3(in %a: i2, in %b: i2, out z: i4) {
 // CHECK-NEXT:    [[TMP7:%.+]] = comb.icmp bin eq [[REG:%.+]], [[TMP2]] : i2
 // CHECK-NEXT:    [[TMP8:%.+]] = comb.add bin [[REG]], [[TMP1]] : i2
 // CHECK-NEXT:    [[TMP9:%.+]] = comb.mux bin [[TMP7]], [[TMP3]], [[TMP8]] : i2
-// CHECK-NEXT:    [[REG]] = seq.firreg [[TMP9]] clock [[TMP5]] reset sync [[TMP4]], [[TMP3]] {firrtl.random_init_start = 0 : ui64} : i2
+// CHECK-NEXT:    [[REG]] = seq.firreg [[TMP9]] clock [[TMP5]] reset sync [[TMP4]], [[TMP3]] {clockEdge = 0 : i32, firrtl.random_init_start = 0 : ui64, resetPolarity = 0 : i32} : i2
 // CHECK-NEXT:    [[TMP10:%.+]] = comb.icmp bin ne [[REG]], [[TMP0]] : i2
 // CHECK-NEXT:    verif.clocked_assert [[TMP10]], posedge [[TMP6]] : i1
 // CHECK-NEXT: }
@@ -335,7 +335,7 @@ hw.module @Counter(in %in : i2, out out : i2, in %clock : !seq.clock, in %reset 
   %one = hw.constant 1 : i2
   %max = hw.constant -2 : i2
   %0 = seq.from_clock %clock
-  %reg = seq.firreg %next clock %clock reset sync %reset, %zero {firrtl.random_init_start = 0 : ui64} : i2
+  %reg = seq.firreg %next clock %clock reset sync %reset, %zero {clockEdge = 0 : i32, firrtl.random_init_start = 0 : ui64, resetPolarity = 0 : i32} : i2
   %eq = comb.icmp bin eq %reg, %max : i2
   %added = comb.add bin %reg, %one : i2
   %next = comb.mux bin %eq, %zero, %added : i2

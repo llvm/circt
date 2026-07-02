@@ -188,19 +188,25 @@ firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @HasBeenReset
   firrtl.module @HasBeenReset(
     in %clock: !firrtl.clock,
-    in %reset1: !firrtl.uint<1>,
-    in %reset2: !firrtl.asyncreset,
+    in %reset1: !firrtl.reset,
+    in %reset2: !firrtl.reset,
     out %hbr1: !firrtl.uint<1>,
-    out %hbr2: !firrtl.uint<1>
+    out %hbr2: !firrtl.uint<1>,
+    out %hbr3: !firrtl.uint<1>
   ) {
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clock
     // CHECK-NEXT: [[TMP1:%.+]] = verif.has_been_reset [[CLK]], sync %reset1
+    // The `asyncReset` attribute is the sole source of async-ness now that the
+    // reset type is sync/async-agnostic.
     // CHECK-NEXT: [[TMP2:%.+]] = verif.has_been_reset [[CLK]], async %reset2
-    // CHECK-NEXT: hw.output [[TMP1]], [[TMP2]]
-    %0 = firrtl.int.has_been_reset %clock, %reset1 : !firrtl.uint<1>
-    %1 = firrtl.int.has_been_reset %clock, %reset2 : !firrtl.asyncreset
+    // CHECK-NEXT: [[TMP3:%.+]] = verif.has_been_reset [[CLK]], async %reset1
+    // CHECK-NEXT: hw.output [[TMP1]], [[TMP2]], [[TMP3]]
+    %0 = firrtl.int.has_been_reset %clock, %reset1 : !firrtl.reset
+    %1 = firrtl.int.has_been_reset %clock, %reset2 {asyncReset} : !firrtl.reset
+    %2 = firrtl.int.has_been_reset %clock, %reset1 {asyncReset} : !firrtl.reset
     firrtl.matchingconnect %hbr1, %0 : !firrtl.uint<1>
     firrtl.matchingconnect %hbr2, %1 : !firrtl.uint<1>
+    firrtl.matchingconnect %hbr3, %2 : !firrtl.uint<1>
   }
 
   // CHECK-LABEL: hw.module @FPGAProbe

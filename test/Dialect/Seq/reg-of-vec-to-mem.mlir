@@ -11,12 +11,12 @@ hw.module private @complex_mem(in %CLK : i1, in %D : i46, in %ADR : i13, in %WE 
     %4 = comb.mux %3, %c0_i46, %2 : i46
     %5 = seq.to_clock %CLK
     %6 = comb.mux %1, %4, %Q_int : i46
-    %Q_int = seq.firreg %6 clock %5 : i46
+    %Q_int = seq.firreg %6 clock %5 {clockEdge = 0 : i32} : i46
     // NOTE: The transformation cannot identify the memory read enable signal.
     %7 = comb.and %ME, %WE : i1
     %8 = hw.array_inject %mem_core[%ADR], %D : !hw.array<8192xi46>, i13
     %9 = comb.mux %7, %8, %mem_core : !hw.array<8192xi46>
-    %mem_core = seq.firreg %9 clock %5 : !hw.array<8192xi46>
+    %mem_core = seq.firreg %9 clock %5 {clockEdge = 0 : i32} : !hw.array<8192xi46>
     hw.output %Q_int : i46
 }
 
@@ -37,7 +37,7 @@ hw.module @simple_mem(in %clk : i1, in %addr : i2, in %data : i8, in %we : i1, o
     %read = hw.array_get %mem[%addr] : !hw.array<4xi8>, i2
     %write = hw.array_inject %mem[%addr], %data : !hw.array<4xi8>, i2
     %next = comb.mux %we, %write, %mem : !hw.array<4xi8>
-    %mem = seq.firreg %next clock %clock : !hw.array<4xi8>
+    %mem = seq.firreg %next clock %clock {clockEdge = 0 : i32} : !hw.array<4xi8>
     hw.output %read : i8
 }
 
@@ -56,7 +56,7 @@ hw.module @single_el_mem(in %clk : i1, in %addr : i0, in %data : i8, in %we : i1
     %read = hw.array_get %msingel[%addr] : !hw.array<1xi8>, i0
     %write = hw.array_inject %msingel[%addr], %data : !hw.array<1xi8>, i0
     %next = comb.mux %we, %write, %msingel : !hw.array<1xi8>
-    %msingel = seq.firreg %next clock %clock : !hw.array<1xi8>
+    %msingel = seq.firreg %next clock %clock {clockEdge = 0 : i32} : !hw.array<1xi8>
 }
 
 // CHECK: %[[clock:.+]] = seq.to_clock %clk
@@ -77,7 +77,7 @@ hw.module @shared_mux_test(in %clk: i1, in %addr: i2, in %data: i8, in %we: i1, 
   %write = hw.array_inject %mem[%addr], %data : !hw.array<4xi8>, i2
   %next = comb.mux %we, %write, %mem : !hw.array<4xi8>
   // CHECK: %mem = seq.firreg %{{.*}} clock %{{.*}} : !hw.array<4xi8>
-  %mem = seq.firreg %next clock %clock : !hw.array<4xi8>
+  %mem = seq.firreg %next clock %clock {clockEdge = 0 : i32} : !hw.array<4xi8>
   
   // Mux result used elsewhere - should prevent transformation
   hw.output %next : !hw.array<4xi8>
@@ -91,8 +91,22 @@ hw.module @shared_reg_test(in %clk: i1, in %addr: i2, in %data: i8, in %we: i1, 
   %write = hw.array_inject %mem[%addr], %data : !hw.array<4xi8>, i2
   %next = comb.mux %we, %write, %mem : !hw.array<4xi8>
   // CHECK: %mem = seq.firreg %{{.*}} clock %{{.*}} : !hw.array<4xi8>
-  %mem = seq.firreg %next clock %clock : !hw.array<4xi8>
+  %mem = seq.firreg %next clock %clock {clockEdge = 0 : i32} : !hw.array<4xi8>
   
   // Register used elsewhere - should prevent transformation
   hw.output %mem, %read : !hw.array<4xi8>, i8
+}
+
+// A non-posedge array register must not be folded into a (posedge) memory; it is
+// left as a register so its clock edge is preserved.
+// CHECK-LABEL: hw.module @negedge_mem
+// CHECK: seq.firreg %{{.+}} clock %{{.+}} {clockEdge = 1 : i32} : !hw.array<4xi8>
+// CHECK-NOT: seq.firmem
+hw.module @negedge_mem(in %clk : i1, in %addr : i2, in %data : i8, in %we : i1, out out : i8) {
+  %clock = seq.to_clock %clk
+  %read = hw.array_get %mem[%addr] : !hw.array<4xi8>, i2
+  %write = hw.array_inject %mem[%addr], %data : !hw.array<4xi8>, i2
+  %next = comb.mux %we, %write, %mem : !hw.array<4xi8>
+  %mem = seq.firreg %next clock %clock {clockEdge = 1 : i32} : !hw.array<4xi8>
+  hw.output %read : i8
 }

@@ -15,7 +15,7 @@ circuit Refs:
     define a = probe(p) ; probe is passive
     node q = p.x ; XXX: modified, workaround inability create non-const node w/literal initializer.
     define b = rwprobe(q)
-    reg r: UInt, clock
+    reg r: UInt, posedge clock
     connect r, p.x ; XXX: modified, initialize register
     define c = probe(r)
     define d = probe(clock)

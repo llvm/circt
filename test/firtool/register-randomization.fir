@@ -16,13 +16,13 @@ circuit Foo:
     ; NAMED-NOT: _r = {{.*}};
     ; NONE-NOT:  _r = {{.*}};
     ; LOCAL:     _r <= d;
-    reg _r: UInt<33>, clock
+    reg _r: UInt<33>, posedge clock
     connect _r, d
 
-    reg r: UInt<33>, clock
+    reg r: UInt<33>, posedge clock
     connect r, d
 
-    reg s: UInt<33>, clock
+    reg s: UInt<33>, posedge clock
     connect s, d
 
     connect q, r

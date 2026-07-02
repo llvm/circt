@@ -373,17 +373,17 @@ firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
 
   // CHECK: %reg0 = firrtl.reg %clock
   // CHECK: firrtl.connect %reg0, %reg0
-  %reg0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<2>
+  %reg0 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<2>
 
   // CHECK: %reg1 = firrtl.reg %clock
   // CHECK: firrtl.connect %reg1, %c0_ui2
-  %reg1 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<2>
+  %reg1 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<2>
   firrtl.connect %reg1, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
 
   // CHECK: %reg2 = firrtl.reg %clock
   // CHECK: [[MUX:%.+]] = firrtl.mux(%p, %c0_ui2, %reg2)
   // CHECK: firrtl.connect %reg2, [[MUX]]
-  %reg2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<2>
+  %reg2 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<2>
   firrtl.when %p : !firrtl.uint<1> {
     firrtl.connect %reg2, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   }
@@ -391,7 +391,7 @@ firrtl.module @register_mux(in %p : !firrtl.uint<1>, in %clock: !firrtl.clock) {
   // CHECK: %reg3 = firrtl.reg %clock
   // CHECK: [[MUX:%.+]] = firrtl.mux(%p, %c0_ui2, %c1_ui2)
   // CHECK: firrtl.connect %reg3, [[MUX]]
-  %reg3 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<2>
+  %reg3 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<2>
   firrtl.when %p : !firrtl.uint<1> {
     firrtl.connect %reg3, %c0_ui2 : !firrtl.uint<2>, !firrtl.uint<2>
   } else {
@@ -533,7 +533,7 @@ firrtl.module @vector_of_bundle(in %p : !firrtl.uint<1>, out %ret: !firrtl.vecto
 
 // CHECK-LABEL: @aggregate_register
 firrtl.module @aggregate_register(in %clock: !firrtl.clock) {
-  %0 = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a : uint<1>, b : uint<1>>
+  %0 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.bundle<a : uint<1>, b : uint<1>>
   // CHECK:      %1 = firrtl.subfield %0[a]
   // CHECK-NEXT: firrtl.connect %1, %1
   // CHECK-NEXT: %2 = firrtl.subfield %0[b]
@@ -541,8 +541,8 @@ firrtl.module @aggregate_register(in %clock: !firrtl.clock) {
 }
 
 // CHECK-LABEL: @aggregate_regreset
-firrtl.module @aggregate_regreset(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %resetval: !firrtl.vector<uint<1>, 2>) {
-  %0 = firrtl.regreset %clock, %reset, %resetval : !firrtl.clock, !firrtl.uint<1>, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
+firrtl.module @aggregate_regreset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetval: !firrtl.vector<uint<1>, 2>) {
+  %0 = firrtl.regreset %clock, %reset, %resetval {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.vector<uint<1>, 2>, !firrtl.vector<uint<1>, 2>
   // CHECK:      %1 = firrtl.subindex %0[0]
   // CHECK-NEXT: firrtl.connect %1, %1
   // CHECK-NEXT: %2 = firrtl.subindex %0[1]

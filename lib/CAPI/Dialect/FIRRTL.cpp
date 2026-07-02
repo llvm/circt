@@ -72,14 +72,6 @@ MlirType firrtlTypeGetReset(MlirContext ctx) {
   return wrap(ResetType::get(unwrap(ctx)));
 }
 
-bool firrtlTypeIsAAsyncReset(MlirType type) {
-  return isa<AsyncResetType>(unwrap(type));
-}
-
-MlirType firrtlTypeGetAsyncReset(MlirContext ctx) {
-  return wrap(AsyncResetType::get(unwrap(ctx)));
-}
-
 bool firrtlTypeIsAAnalog(MlirType type) {
   return isa<AnalogType>(unwrap(type));
 }

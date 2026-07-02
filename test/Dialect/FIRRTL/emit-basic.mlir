@@ -26,7 +26,7 @@ firrtl.circuit "Foo" {
   firrtl.module private @PortsAndTypes(
     // CHECK-NEXT: input a00 : Clock
     // CHECK-NEXT: input a01 : Reset
-    // CHECK-NEXT: input a02 : AsyncReset
+    // CHECK-NEXT: input a02 : Reset
     // CHECK-NEXT: input a03 : UInt
     // CHECK-NEXT: input a04 : SInt
     // CHECK-NEXT: input a05 : Analog
@@ -47,7 +47,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: input list : List<List<Path>>
     in %a00: !firrtl.clock,
     in %a01: !firrtl.reset,
-    in %a02: !firrtl.asyncreset,
+    in %a02: !firrtl.reset,
     in %a03: !firrtl.uint,
     in %a04: !firrtl.sint,
     in %a05: !firrtl.analog,
@@ -104,10 +104,10 @@ firrtl.circuit "Foo" {
     }
     // CHECK: wire someWire : UInt<1>
     %someWire = firrtl.wire : !firrtl.uint<1>
-    // CHECK: reg someReg : UInt<1>, someClock
-    %someReg = firrtl.reg %someClock : !firrtl.clock, !firrtl.uint<1>
-    // CHECK: regreset someReg2 : UInt<1>, someClock, someReset, ui1
-    %someReg2 = firrtl.regreset %someClock, %someReset, %ui1 : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: reg someReg : UInt<1>, posedge someClock
+    %someReg = firrtl.reg %someClock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: regreset someReg2 : UInt<1>, posedge someClock, sync activehigh someReset,
+    %someReg2 = firrtl.regreset %someClock, %someReset, %ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     // CHECK: node someNode = ui1
     %someNode = firrtl.node %ui1 : !firrtl.uint<1>
     // CHECK: stop(someClock, ui1, 42) : foo
@@ -142,11 +142,9 @@ firrtl.circuit "Foo" {
     firrtl.matchingconnect %someOut, %invalid_ui2 : !firrtl.uint<1>
 
     // CHECK: connect unknownReset, knownReset
-    %knownReset = firrtl.wire : !firrtl.asyncreset
+    %knownReset = firrtl.wire : !firrtl.reset
     %unknownReset = firrtl.wire : !firrtl.reset
-    %resetCast = firrtl.resetCast %knownReset :
-      (!firrtl.asyncreset) -> !firrtl.reset
-    firrtl.matchingconnect %unknownReset, %resetCast : !firrtl.reset
+    firrtl.matchingconnect %unknownReset, %knownReset : !firrtl.reset
 
     // CHECK: attach(an0, an1)
     %an0 = firrtl.wire : !firrtl.analog<1>
@@ -167,13 +165,13 @@ firrtl.circuit "Foo" {
     %k3 = firrtl.node %3 : !firrtl.sint
 
     // CHECK: node k4 = asClock(UInt<1>(0))
-    // CHECK: node k5 = asAsyncReset(UInt<1>(0))
-    // CHECK: node k6 = UInt<1>(0)
+    // CHECK: node k5 = asReset(UInt<1>(0))
+    // CHECK: node k6 = asReset(UInt<1>(0))
     %4 = firrtl.specialconstant 0 : !firrtl.clock
-    %5 = firrtl.specialconstant 0 : !firrtl.asyncreset
+    %5 = firrtl.specialconstant 0 : !firrtl.reset
     %6 = firrtl.specialconstant 0 : !firrtl.reset
     %k4 = firrtl.node %4 : !firrtl.clock
-    %k5 = firrtl.node %5 : !firrtl.asyncreset
+    %k5 = firrtl.node %5 : !firrtl.reset
     %k6 = firrtl.node %6 : !firrtl.reset
 
     // CHECK: wire bundle : { a : UInt, flip b : UInt }
@@ -250,9 +248,8 @@ firrtl.circuit "Foo" {
 
     // CHECK: node asSIntPrimOp = asSInt(x)
     // CHECK: node asUIntPrimOp = asUInt(x)
-    // CHECK: node asAsyncResetPrimOp = asAsyncReset(x)
     // CHECK: node asResetPrimOp = asReset(ui1)
-    // CHECK: node asClockPrimOp = asClock(x)
+    // CHECK: node asClockPrimOp = asClock(ui1)
     // CHECK: node cvtPrimOp = cvt(x)
     // CHECK: node negPrimOp = neg(x)
     // CHECK: node notPrimOp = not(x)
@@ -261,9 +258,8 @@ firrtl.circuit "Foo" {
     // CHECK: node xorRPrimOp = xorr(x)
     %asSIntPrimOp_tmp = firrtl.asSInt %x : (!firrtl.uint) -> !firrtl.sint
     %asUIntPrimOp_tmp = firrtl.asUInt %x : (!firrtl.uint) -> !firrtl.uint
-    %asAsyncResetPrimOp_tmp = firrtl.asAsyncReset %x : (!firrtl.uint) -> !firrtl.asyncreset
     %asResetPrimOp_tmp = firrtl.asReset %ui1 : (!firrtl.uint<1>) -> !firrtl.reset
-    %asClockPrimOp_tmp = firrtl.asClock %x : (!firrtl.uint) -> !firrtl.clock
+    %asClockPrimOp_tmp = firrtl.asClock %ui1 : (!firrtl.uint<1>) -> !firrtl.clock
     %cvtPrimOp_tmp = firrtl.cvt %x : (!firrtl.uint) -> !firrtl.sint
     %negPrimOp_tmp = firrtl.neg %x : (!firrtl.uint) -> !firrtl.sint
     %notPrimOp_tmp = firrtl.not %x : (!firrtl.uint) -> !firrtl.uint
@@ -272,7 +268,6 @@ firrtl.circuit "Foo" {
     %xorRPrimOp_tmp = firrtl.xorr %x : (!firrtl.uint) -> !firrtl.uint<1>
     %asSIntPrimOp = firrtl.node %asSIntPrimOp_tmp : !firrtl.sint
     %asUIntPrimOp = firrtl.node %asUIntPrimOp_tmp : !firrtl.uint
-    %asAsyncResetPrimOp = firrtl.node %asAsyncResetPrimOp_tmp : !firrtl.asyncreset
     %asResetPrimOp = firrtl.node %asResetPrimOp_tmp : !firrtl.reset
     %asClockPrimOp = firrtl.node %asClockPrimOp_tmp : !firrtl.clock
     %cvtPrimOp = firrtl.node %cvtPrimOp_tmp : !firrtl.sint
@@ -346,10 +341,10 @@ firrtl.circuit "Foo" {
     // CHECK: connect port0, port1
 
     %invalid_clock = firrtl.invalidvalue : !firrtl.clock
-    %dummyReg = firrtl.reg %invalid_clock : !firrtl.clock, !firrtl.uint<42>
+    %dummyReg = firrtl.reg %invalid_clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<42>
     // CHECK: wire [[INV:_invalid.*]] : Clock
     // CHECK-NEXT: invalidate [[INV]]
-    // CHECK-NEXT: reg dummyReg : UInt<42>, [[INV]]
+    // CHECK-NEXT: reg dummyReg : UInt<42>, posedge [[INV]]
   }
 
   // CHECK-LABEL: module RefSource
@@ -462,7 +457,7 @@ firrtl.circuit "Foo" {
   firrtl.module private @ConstTypes(
     // CHECK-NEXT: input a00 : const Clock
     // CHECK-NEXT: input a01 : const Reset
-    // CHECK-NEXT: input a02 : const AsyncReset
+    // CHECK-NEXT: input a02 : const Reset
     // CHECK-NEXT: input a03 : const UInt
     // CHECK-NEXT: input a04 : const SInt
     // CHECK-NEXT: input a05 : const Analog
@@ -475,7 +470,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output b0 : const UInt<42>
     in %a00: !firrtl.const.clock,
     in %a01: !firrtl.const.reset,
-    in %a02: !firrtl.const.asyncreset,
+    in %a02: !firrtl.const.reset,
     in %a03: !firrtl.const.uint,
     in %a04: !firrtl.const.sint,
     in %a05: !firrtl.const.analog,
@@ -503,7 +498,7 @@ firrtl.circuit "Foo" {
   firrtl.module private @"0Foo"(
     // CHECK-NEXT: input `0` : Clock
     // CHECK-NEXT: input `1` : Reset
-    // CHECK-NEXT: input `2` : AsyncReset
+    // CHECK-NEXT: input `2` : Reset
     // CHECK-NEXT: input `3` : UInt<1>
     // CHECK-NEXT: input `4` : SInt
     // CHECK-NEXT: input `5` : Analog
@@ -517,7 +512,7 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: output `13` : RWProbe<UInt<1>>
     in %_0: !firrtl.clock,
     in %_1: !firrtl.reset,
-    in %_2: !firrtl.asyncreset,
+    in %_2: !firrtl.reset,
     in %_3: !firrtl.uint<1>,
     in %_4: !firrtl.sint,
     in %_5: !firrtl.analog,
@@ -536,13 +531,13 @@ firrtl.circuit "Foo" {
     %1 = firrtl.subfield %_9["1"] : !firrtl.bundle<"0": uint, "1" flip: uint>
 
     // CHECK:      wire `14` : UInt<1>
-    // CHECK-NEXT: reg `15` : UInt<1>, `0`
-    // CHECK-NEXT: regreset `16` : UInt<1>, `0`, `1`, `3`
+    // CHECK-NEXT: reg `15` : UInt<1>, posedge `0`
+    // CHECK-NEXT: regreset `16` : UInt<1>, posedge `0`, sync activehigh `1`, `3`
     // CHECK-NEXT: node `17` = `3`
     %_14 = firrtl.wire interesting_name {name = "14"} : !firrtl.uint<1>
-    %_15, %_15_ref = firrtl.reg %_0 forceable {name = "15"} :
+    %_15, %_15_ref = firrtl.reg %_0 forceable {clockEdge = 0 : i32, name = "15"} :
       !firrtl.clock, !firrtl.uint<1>, !firrtl.rwprobe<uint<1>>
-    %_16 = firrtl.regreset %_0, %_1, %_3 {name = "16"} :
+    %_16 = firrtl.regreset %_0, %_1, %_3 {clockEdge = 0 : i32, name = "16", resetPolarity = 0 : i32, resetType = 0 : i32} :
       !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     %_17 = firrtl.node %_3 {name = "17"} : !firrtl.uint<1>
 

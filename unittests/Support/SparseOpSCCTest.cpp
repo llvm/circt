@@ -35,7 +35,7 @@ const char *ir = R"MLIR(
 //   Forward edges: reg->and, and->{reg(next), reg(resetValue), output}
 const char *cycleIr = R"MLIR(
   hw.module private @cycle(in %clock: !seq.clock, in %reset: i1, in %a: i1, out x: i1) {
-    %reg = seq.firreg %and clock %clock reset sync %reset, %and : i1
+    %reg = seq.firreg %and clock %clock reset sync %reset, %and {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i1
     %and = comb.and %reg, %a : i1
     hw.output %and : i1
   }
@@ -430,7 +430,7 @@ TEST(SparseOpSCCsTest, DiamondNoCycle) {
 
 // Graph with a cycle: "and" uses "reg"'s result, "reg" uses "and"'s result.
 //
-//   %reg = seq.firreg %and clock %clock reset sync %reset, %and : i1
+//   %reg = seq.firreg %and clock %clock reset sync %reset, %and ...
 //   %and = comb.and %reg, %a : i1
 //   hw.output %and : i1
 //
@@ -546,20 +546,20 @@ TEST(SparseOpSCCsTest, CycleWithRegister) {
 
 // Two disjoint register cycles sharing a common downstream merge node.
 //
-//   %reg1 = seq.firreg %and1 clock %clock : i1   -. cycle 1
-//   %and1 = comb.and %reg1, %a : i1              -'
-//   %reg2 = seq.firreg %or1  clock %clock : i1   -. cycle 2
-//   %or1  = comb.or  %reg2, %a : i1              -'
-//   %xor  = comb.xor %and1, %or1 : i1              merge node
+//   %reg1 = seq.firreg %and1 ...   -. cycle 1
+//   %and1 = comb.and %reg1, %a      -'
+//   %reg2 = seq.firreg %or1  ...   -. cycle 2
+//   %or1  = comb.or  %reg2, %a      -'
+//   %xor  = comb.xor %and1, %or1      merge node
 //   hw.output %xor : i1
 //
 // Seeds: {and1Op, or1Op}.
 // Expected reverse-topo: [outputOp, xorOp, SCC{reg1,and1}, SCC{reg2,or1}]
 const char *twoCyclesIr = R"MLIR(
   hw.module private @twocycles(in %clock: !seq.clock, in %a: i1, out x: i1) {
-    %reg1 = seq.firreg %and1 clock %clock : i1
+    %reg1 = seq.firreg %and1 clock %clock {clockEdge = 0 : i32} : i1
     %and1 = comb.and %reg1, %a : i1
-    %reg2 = seq.firreg %or1  clock %clock : i1
+    %reg2 = seq.firreg %or1  clock %clock {clockEdge = 0 : i32} : i1
     %or1  = comb.or  %reg2, %a : i1
     %xor  = comb.xor %and1, %or1 : i1
     hw.output %xor : i1
@@ -665,9 +665,9 @@ TEST(SparseOpSCCsTest, TwoCycles) {
 // All five are mutually reachable -> single CyclicOpSCC of size 5.
 const char *twoInternalCyclesIr = R"MLIR(
   hw.module private @largeSCC(in %clock: !seq.clock, in %a: i1, out x: i1) {
-    %r0   = seq.firreg %and1 clock %clock : i1
+    %r0   = seq.firreg %and1 clock %clock {clockEdge = 0 : i32} : i1
     %and1 = comb.and %r0, %r2 : i1
-    %r2   = seq.firreg %or3  clock %clock : i1
+    %r2   = seq.firreg %or3  clock %clock {clockEdge = 0 : i32} : i1
     %or3  = comb.or  %r2, %xor4 : i1
     %xor4 = comb.xor %and1, %a : i1
     hw.output %and1 : i1
@@ -803,12 +803,12 @@ TEST(SparseOpSCCsTest, SelfLoop) {
 // Self-loop via register: both 'next' and 'resetValue' feed back into the
 // register itself, creating two independent self-loop edges.
 //
-//   %reg = seq.firreg %reg clock %clock reset sync %reset, %reg : i1
+//   %reg = seq.firreg %reg clock %clock reset sync %reset, %reg ...
 //
 // Operand 0 (next) and operand 3 (resetValue) are both self-loop edges.
 const char *selfLoopRegIr = R"MLIR(
   hw.module private @selfloopReg(in %clock: !seq.clock, in %reset: i1, out x: i1) {
-    %reg = seq.firreg %reg clock %clock reset sync %reset, %reg : i1
+    %reg = seq.firreg %reg clock %clock reset sync %reset, %reg {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i1
     hw.output %reg : i1
   }
 )MLIR";
@@ -882,7 +882,7 @@ TEST(SparseOpSCCsTest, SelfLoopRegWithEdgeFilter) {
 // or-op that is never reached by a forward DFS from andOp.
 const char *castingIr = R"MLIR(
   hw.module private @casting(in %clock: !seq.clock, in %reset: i1, in %a: i1, out x: i1) {
-    %reg     = seq.firreg %and clock %clock reset sync %reset, %and : i1
+    %reg     = seq.firreg %and clock %clock reset sync %reset, %and {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i1
     %and     = comb.and %reg, %a : i1
     %unused  = comb.or  %a, %a : i1
     hw.output %and : i1

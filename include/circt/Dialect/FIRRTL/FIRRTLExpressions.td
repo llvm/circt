@@ -114,16 +114,15 @@ def SpecialConstantOp : FIRRTLOp<"specialconstant",
       [Pure, ConstantLike, HasCustomSSAName]> {
   let summary = "Produce a constant Reset or Clock value";
   let description = [{
-    The constant operation produces a constant value of Reset, AsyncReset, or
-    Clock type. The value can only be 0 or 1.
+    The constant operation produces a constant value of Reset or Clock type.
+    The value can only be 0 or 1.
     ```
       %result = firrtl.specialconstant 1 : !firrtl.clock
     ```
     }];
 
   let arguments = (ins BoolAttr:$value);
-  let results = (outs
-    AnyTypeOf<[ClockType, ResetType, AsyncResetType]>:$result);
+  let results = (outs AnyTypeOf<[ClockType, ResetType]>:$result);
 
   let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
@@ -759,8 +758,6 @@ let hasCanonicalizer=1 in {
   def AsUIntPrimOp : UnaryPrimOp<"asUInt", FIRRTLBaseType, UIntType>;
   def CvtPrimOp : UnaryPrimOp<"cvt", IntType, SIntType>;
 }
-def AsAsyncResetPrimOp
-  : UnaryPrimOp<"asAsyncReset", OneBitCastableType, AsyncResetType>;
 def AsResetPrimOp : UnaryPrimOp<"asReset", UInt1Type, ResetType>;
 def AsClockPrimOp : UnaryPrimOp<"asClock", OneBitCastableType, ClockType>;
 def NegPrimOp : UnaryPrimOp<"neg", IntType, SIntType>;
@@ -1115,18 +1112,6 @@ class SameGroundTypeOperandConstness<string a, string b>
   : PredOpTrait<
       "operand constness must match",
       CPred<"isConst($" # a # ".getType()) == isConst($" # b # ".getType())">>;
-
-def UninferredResetCastOp : FIRRTLOp<"resetCast", [HasCustomSSAName, Pure, SameGroundTypeOperandConstness<"input", "result">]> {
-  let description = [{
-    Cast between reset types.  This is used to enable matchingconnects early in
-    the pipeline by isolating all uninferred reset connections to a single op.
-  }];
-  let arguments = (ins AnyResetType:$input);
-  let results = (outs AnyResetType:$result);
-  let hasFolder = 1;
-  let assemblyFormat =
-    "$input attr-dict `:` functional-type($input, $result)";
-}
 
 def ConstCastOp : FIRRTLOp<"constCast", [HasCustomSSAName, Pure]> {
   let description = [{

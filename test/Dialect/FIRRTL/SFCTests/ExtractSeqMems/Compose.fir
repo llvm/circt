@@ -88,7 +88,7 @@ circuit TestHarness : %[[
   ; TESTHARNESS-NOT: mem_ext mem_ext
   public module TestHarness :
     input clock : Clock
-    input reset : UInt<1>
+    input reset : Reset
     output io : { foo : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}, bar : { flip addr : UInt<3>, flip dataIn : UInt<8>, flip wen : UInt<1>, dataOut : UInt<8>}}
 
     inst dut of DUTModule

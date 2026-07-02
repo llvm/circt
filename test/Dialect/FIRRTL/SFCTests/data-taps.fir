@@ -68,7 +68,7 @@ circuit Top : %[[
 
   public module Top :
     input clock : Clock
-    input reset : UInt<1>
+    input reset : Reset
     output io : { flip in : UInt<1>, out : UInt<1>}
 
     inst unsigned of ChildWrapper

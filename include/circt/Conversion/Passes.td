@@ -820,7 +820,11 @@ def LowerSeqToSV: Pass<"lower-seq-to-sv",  "mlir::ModuleOp"> {
     Option<"emitSeparateAlwaysBlocks", "emit-separate-always-blocks", "bool", "false",
            "Emit assigments to registers in separate always blocks">,
     Option<"lowerToAlwaysFF", "lower-to-always-ff", "bool", "true",
-           "Place assignments to registers into `always_ff` blocks if possible">
+           "Place assignments to registers into `always_ff` blocks if possible">,
+    Option<"emitFirRegAlwaysFF", "emit-firreg-always-ff", "bool", "false",
+           "Emit firreg registers as SystemVerilog `always_ff` blocks instead "
+           "of plain Verilog `always` blocks (opt-in; plain `always` is the "
+           "Verilog-2001-compatible default)">
   ];
   let statistics = [
     Statistic<"numSubaccessRestored", "num-subaccess-restored",

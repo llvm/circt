@@ -18,7 +18,7 @@ circuit Example :
     input unknown: UInt<1>
     output out: UInt<1>
 
-    reg r : UInt<1>, clock
+    reg r : UInt<1>, posedge clock
     connect r, zero
     node b = and(r, unknown)
     inst p of Passthrough

@@ -700,7 +700,7 @@ Any `MemOp` not satisfying the above conditions is lowered to Register vector.
 #### MemToRegOfVec transformation outline:
 
 The `MemToRegOfVec` pass runs early in the pipeline, after the `LowerCHIRRTL`
-pass and right before the `InferResets` pass.
+pass.
 
 1. Select all MemOps that are not candidates for macro replacement,
 2. Create a reg
@@ -737,12 +737,6 @@ each sub-field of the data and the
 `sifive.enterprise.grandcentral.MemTapAnnotation` annotation is copied from the
 original `MemOp`. The `LowerTypes` pass will handle the subannotations
 appropriately.
-
-#### Interaction with AsyncReset Inference
-
-The `AsyncReset` pass runs right after the `MemToRegOfVec`.  It will transform
-the memory registers to async registers if the corresponding annotations are
-present.
 
 #### `firrtl.mem` Attributes
 

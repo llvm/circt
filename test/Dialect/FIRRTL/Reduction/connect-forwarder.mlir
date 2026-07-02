@@ -23,11 +23,11 @@ firrtl.circuit "DontRemoveSyms" {
 
 firrtl.circuit "ForwardThroughRegs" {
   // CHECK-LABEL: firrtl.module @ForwardThroughRegs
-  firrtl.module @ForwardThroughRegs(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %input: !firrtl.uint<42>) {
+  firrtl.module @ForwardThroughRegs(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %input: !firrtl.uint<42>) {
     // CHECK-NOT: %reg0 = firrtl.reg
     // CHECK-NOT: %reg1 = firrtl.regreset
-    %reg0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<42>
-    %reg1 = firrtl.regreset %clock, %reset, %input : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    %reg0 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<42>
+    %reg1 = firrtl.regreset %clock, %reset, %input {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<42>, !firrtl.uint<42>
     // CHECK-NOT: firrtl.connect
     firrtl.connect %reg0, %input : !firrtl.uint<42>, !firrtl.uint<42>
     firrtl.connect %reg1, %input : !firrtl.uint<42>, !firrtl.uint<42>
@@ -62,10 +62,10 @@ firrtl.circuit "LayerblockCrossBlock" {
 // See: https://github.com/llvm/circt/issues/10049
 firrtl.circuit "PruneUnusedSourceAndDest" {
   // CHECK-LABEL: firrtl.module @PruneUnusedSourceAndDest
-  firrtl.module @PruneUnusedSourceAndDest(in %clk: !firrtl.clock, in %rst: !firrtl.asyncreset) {
+  firrtl.module @PruneUnusedSourceAndDest(in %clk: !firrtl.clock, in %rst: !firrtl.reset) {
     // CHECK-NEXT: }
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-    %reg = firrtl.regreset %clk, %rst, %c0_ui4 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>, !firrtl.uint<4>
+    %reg = firrtl.regreset %clk, %rst, %c0_ui4 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<4>, !firrtl.uint<4>
     firrtl.matchingconnect %reg, %c0_ui4 : !firrtl.uint<4>
   }
 }

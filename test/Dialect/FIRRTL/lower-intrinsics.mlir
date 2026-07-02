@@ -114,12 +114,12 @@ firrtl.circuit "Foo" {
   }
 
   // CHECK-LABEL: @HasBeenReset
-  firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.uint<1>, in %reset2: !firrtl.asyncreset, in %reset3: !firrtl.reset) {
-    // CHECK-NEXT: firrtl.int.has_been_reset %clock, %reset1 : !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.int.has_been_reset %clock, %reset2 : !firrtl.asyncreset
+  firrtl.module @HasBeenReset(in %clock: !firrtl.clock, in %reset1: !firrtl.reset, in %reset2: !firrtl.reset, in %reset3: !firrtl.reset) {
+    // CHECK-NEXT: firrtl.int.has_been_reset %clock, %reset1 : !firrtl.reset
+    // CHECK-NEXT: firrtl.int.has_been_reset %clock, %reset2 : !firrtl.reset
     // CHECK-NEXT: firrtl.int.has_been_reset %clock, %reset3 : !firrtl.reset
-    firrtl.int.generic "circt_has_been_reset"  %clock, %reset1 : (!firrtl.clock, !firrtl.uint<1>) -> !firrtl.uint<1>
-    firrtl.int.generic "circt_has_been_reset"  %clock, %reset2 : (!firrtl.clock, !firrtl.asyncreset) -> !firrtl.uint<1>
+    firrtl.int.generic "circt_has_been_reset"  %clock, %reset1 : (!firrtl.clock, !firrtl.reset) -> !firrtl.uint<1>
+    firrtl.int.generic "circt_has_been_reset"  %clock, %reset2 : (!firrtl.clock, !firrtl.reset) -> !firrtl.uint<1>
     firrtl.int.generic "circt_has_been_reset"  %clock, %reset3 : (!firrtl.clock, !firrtl.reset) -> !firrtl.uint<1>
   }
 

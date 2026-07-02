@@ -107,7 +107,7 @@ hw.module @reg_with_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out
 // CHECK:  }
 hw.module @one_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
   %0 = comb.add %in0, %in1 : i32
-  %single_reg = seq.firreg %0 clock %clk preset 0 : i32
+  %single_reg = seq.firreg %0 clock %clk preset 0 {clockEdge = 0 : i32} : i32
   hw.output %single_reg : i32
 }
 
@@ -118,7 +118,7 @@ hw.module @one_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: 
 hw.module @compreg_and_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
   %0 = comb.add %in0, %in1 : i32
   %1 = seq.compreg %0, %clk : i32
-  %2 = seq.firreg %1 clock %clk : i32
+  %2 = seq.firreg %1 clock %clk {clockEdge = 0 : i32} : i32
   hw.output %2 : i32
 }
 
@@ -128,8 +128,8 @@ hw.module @compreg_and_firreg(in %clk: !seq.clock, in %in0: i32, in %in1: i32, o
 // CHECK:  }
 hw.module @named_firregs(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out out: i32) {
   %0 = comb.add %in0, %in1 : i32
-  %firstreg = seq.firreg %0 clock %clk : i32
-  %secondreg = seq.firreg %firstreg clock %clk : i32
+  %firstreg = seq.firreg %0 clock %clk {clockEdge = 0 : i32} : i32
+  %secondreg = seq.firreg %firstreg clock %clk {clockEdge = 0 : i32} : i32
   hw.output %secondreg : i32
 }
 
@@ -140,6 +140,6 @@ hw.module @named_firregs(in %clk: !seq.clock, in %in0: i32, in %in1: i32, out ou
 // CHECK:  }
 hw.module @firreg_with_sync_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
   %c0_i32 = hw.constant 0 : i32
-  %1 = seq.firreg %in clock %clk reset sync %rst, %c0_i32 : i32
+  %1 = seq.firreg %in clock %clk reset sync %rst, %c0_i32 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i32
   hw.output %1 : i32
 }

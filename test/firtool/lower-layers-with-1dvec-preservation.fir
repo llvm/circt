@@ -23,7 +23,7 @@ circuit Foo :
 
   public module Foo :
     input clock : Clock
-    input reset : UInt<1>
+    input reset : Reset
     input in : UInt<4>[4]
     input addr : UInt<2>
     output out : UInt<4>[4]

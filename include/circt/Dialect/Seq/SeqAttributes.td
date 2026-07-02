@@ -43,6 +43,29 @@ def WUW_PortOrder : I32EnumAttrCase<"PortOrder", 1, "port_order">;
 def WUWAttr : I32EnumAttr<"WUW", "Write-Under-Write Behavior",
                           [WUW_Undefined, WUW_PortOrder]>;
 
+// Register clock edge. Mirrors the FIRRTL/SV event-control concept so that a
+// non-default (negedge or dual-edge) register clock survives lowering to SV.
+def ClockEdgePos : I32EnumAttrCase<"Pos", 0, "pos">;
+def ClockEdgeNeg : I32EnumAttrCase<"Neg", 1, "neg">;
+def ClockEdgeBoth : I32EnumAttrCase<"Both", 2, "both">;
+def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "register clock edge",
+                                [ClockEdgePos, ClockEdgeNeg, ClockEdgeBoth]>;
+
+// Register reset active-level polarity. PosReset is active-high, NegReset is
+// active-low.
+def ResetPos : I32EnumAttrCase<"PosReset", 0, "posreset">;
+def ResetNeg : I32EnumAttrCase<"NegReset", 1, "negreset">;
+def ResetPolarityAttr : I32EnumAttr<"ResetPolarity",
+                                    "register reset active-level polarity",
+                                    [ResetPos, ResetNeg]>;
+
+// Register reset kind. The keyword spellings match the `reset sync|async`
+// assembly sugar on `seq.firreg`.
+def ResetSync : I32EnumAttrCase<"SyncReset", 0, "sync">;
+def ResetAsync : I32EnumAttrCase<"AsyncReset", 1, "async">;
+def ResetTypeAttr : I32EnumAttr<"ResetType", "register reset kind",
+                                [ResetSync, ResetAsync]>;
+
 }
 
 /// An attribute holding information about memory initialization.

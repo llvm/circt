@@ -32,7 +32,7 @@ circuit Foo: %[[{"class": "firrtl.AttributeAnnotation",
     node n = w;
     ; CHECK:      (* keep = "true" *)
     ; CHECK-NEXT: reg r
-    reg r: UInt<1>, clock
+    reg r: UInt<1>, posedge clock
     connect w, a
     connect b1, n
     connect r, a

@@ -746,6 +746,19 @@ bool EmittedExpressionStateManager::dispatchHeuristic(Operation &op) {
 /// Return true if it is beneficial to spill the operation under the specified
 /// spilling heuristic.
 bool EmittedExpressionStateManager::shouldSpillWireBasedOnState(Operation &op) {
+  // A reset-polarity inverter (`sv.resetInverter`, materialized by
+  // FirRegLowering for an active-low reset) must never be spilled to a wire.
+  // An active-low asynchronous reset keys its sensitivity list on the raw reset
+  // signal's edge while the clocked `if` tests this inverter; spilling it to a
+  // separate wire would make that wire lag the sensitivity edge by a delta
+  // cycle and race (the exact hazard this lowering avoids). Keeping it inline
+  // -- past the size/namehint heuristics and any lowering option -- anchors
+  // both uses to the same reset net, matching the always_ff lowering. This
+  // makes race-freedom a structural guarantee rather than a
+  // default-configuration coincidence.
+  if (op.hasAttr("sv.resetInverter"))
+    return false;
+
   // Don't spill wires for inout operations and simple expressions such as read
   // or constant.
   if (op.getNumResults() == 0 ||

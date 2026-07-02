@@ -38,7 +38,7 @@ firrtl.circuit "assert_const" {
 
 firrtl.circuit "assert_reset" {
   // expected-note @below {{reset signal defined here}}
-  firrtl.module @assert_reset(in %en: !firrtl.uint<1>, in %pred: !firrtl.uint<1>, in %reset: !firrtl.reset, in %reset_async: !firrtl.asyncreset, in %clock: !firrtl.clock) {
+  firrtl.module @assert_reset(in %en: !firrtl.uint<1>, in %pred: !firrtl.uint<1>, in %reset: !firrtl.reset, in %reset_async: !firrtl.reset, in %clock: !firrtl.clock) {
     %0 = firrtl.asUInt %reset : (!firrtl.reset) -> !firrtl.uint<1>
     %true = firrtl.constant 1 : !firrtl.uint<1>
     %false = firrtl.constant 0 : !firrtl.uint<1>
@@ -62,7 +62,7 @@ firrtl.circuit "assert_const2" {
 
 firrtl.circuit "assert_reset2" {
   // expected-note @below {{reset signal defined here}}
-  firrtl.module @assert_reset2(in %en: !firrtl.uint<1>, in %pred: !firrtl.uint<1>, in %reset: !firrtl.reset, in %reset_async: !firrtl.asyncreset, in %clock: !firrtl.clock) {
+  firrtl.module @assert_reset2(in %en: !firrtl.uint<1>, in %pred: !firrtl.uint<1>, in %reset: !firrtl.reset, in %reset_async: !firrtl.reset, in %clock: !firrtl.clock) {
     %0 = firrtl.asUInt %reset : (!firrtl.reset) -> !firrtl.uint<1>
     // expected-error @below {{op is guaranteed to fail simulation, as the predicate is a reset signal}}
     firrtl.int.verif.assert %0 : !firrtl.uint<1>
@@ -74,7 +74,7 @@ firrtl.circuit "assert_reset2" {
 firrtl.circuit "assert_reset3" {
 firrtl.layer @GroupFoo bind {}
   // expected-note @below {{reset signal defined here}}
-  firrtl.module @assert_reset3(in %en: !firrtl.uint<1>, in %pred: !firrtl.uint<1>, in %reset: !firrtl.reset, in %reset_async: !firrtl.asyncreset, in %clock: !firrtl.clock) {
+  firrtl.module @assert_reset3(in %en: !firrtl.uint<1>, in %pred: !firrtl.uint<1>, in %reset: !firrtl.reset, in %reset_async: !firrtl.reset, in %clock: !firrtl.clock) {
     %0 = firrtl.asUInt %reset : (!firrtl.reset) -> !firrtl.uint<1>
     firrtl.layerblock @GroupFoo {
       // expected-error @below {{op is guaranteed to fail simulation, as the predicate is a reset signal}}

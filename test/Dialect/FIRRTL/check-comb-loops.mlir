@@ -174,7 +174,7 @@ firrtl.circuit "outputRead"   {
 
 firrtl.circuit "vectorRegInit"   {
   firrtl.module @vectorRegInit(in %clk: !firrtl.clock) {
-    %reg = firrtl.reg %clk : !firrtl.clock, !firrtl.vector<bundle<a: uint<8>>, 2>
+    %reg = firrtl.reg %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<bundle<a: uint<8>>, 2>
     %0 = firrtl.subindex %reg[0] : !firrtl.vector<bundle<a: uint<8>>, 2>
     firrtl.connect %0, %0 : !firrtl.bundle<a:uint<8>>, !firrtl.bundle<a:uint<8>>
   }
@@ -184,7 +184,7 @@ firrtl.circuit "vectorRegInit"   {
 
 firrtl.circuit "bundleRegInit"   {
   firrtl.module @bundleRegInit(in %clk: !firrtl.clock) {
-    %reg = firrtl.reg %clk : !firrtl.clock, !firrtl.bundle<a: uint<1>>
+    %reg = firrtl.reg %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.bundle<a: uint<1>>
     %0 = firrtl.subfield %reg[a] : !firrtl.bundle<a: uint<1>>
     firrtl.connect %0, %0 : !firrtl.uint<1>, !firrtl.uint<1>
   }
@@ -345,7 +345,7 @@ firrtl.circuit "registerLoop"   {
   // CHECK: firrtl.module @registerLoop(in %clk: !firrtl.clock)
   firrtl.module @registerLoop(in %clk: !firrtl.clock) {
     %w = firrtl.wire : !firrtl.bundle<a: uint<1>>
-    %r = firrtl.reg %clk : !firrtl.clock, !firrtl.bundle<a: uint<1>>
+    %r = firrtl.reg %clk {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.bundle<a: uint<1>>
     %0 = firrtl.subfield %w[a]: !firrtl.bundle<a: uint<1>>
     %1 = firrtl.subfield %w[a]: !firrtl.bundle<a: uint<1>>
     %2 = firrtl.subfield %r[a]: !firrtl.bundle<a: uint<1>>
@@ -429,7 +429,7 @@ firrtl.circuit "hasloops"   {
 // CHECK: firrtl.circuit "hasloops"
 firrtl.circuit "hasloops"  {
   firrtl.module @thru1(in %clk: !firrtl.clock, in %in: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
-    %reg = firrtl.reg  %clk  : !firrtl.clock, !firrtl.uint<1>
+    %reg = firrtl.reg  %clk  {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     firrtl.connect %reg, %in : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %reg : !firrtl.uint<1>, !firrtl.uint<1>
   }

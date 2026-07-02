@@ -59,6 +59,23 @@ hw.module @reg_with_instance_initial(in %clk: !seq.clock, in %in: i32, out out: 
 hw.module @firreg_with_async_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
   %c0_i32 = hw.constant 0 : i32
   // expected-error @below {{registers with an async reset are not yet supported}}
-  %1 = seq.firreg %in clock %clk reset async %rst, %c0_i32 : i32
+  %1 = seq.firreg %in clock %clk reset async %rst, %c0_i32 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i32
   hw.output %1 : i32
+}
+
+// -----
+
+hw.module @active_low_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
+  %c0 = hw.constant 0 : i32
+  // expected-error @below {{active-low (NegReset) resets are not supported by externalize-registers}}
+  %r = seq.firreg %in clock %clk reset sync %rst, %c0 {clockEdge = 0 : i32, resetPolarity = 1 : i32} : i32
+  hw.output %r : i32
+}
+
+// -----
+
+hw.module @negedge_clock_reg(in %clk: !seq.clock, in %in: i32, out out: i32) {
+  // expected-error @below {{non-posedge clock edges are not supported by externalize-registers}}
+  %r = seq.firreg %in clock %clk {clockEdge = 1 : i32} : i32
+  hw.output %r : i32
 }

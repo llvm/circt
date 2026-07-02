@@ -14,9 +14,9 @@ hw.module @top(in %clk: !seq.clock, in %rst: i1) {
 
   %true = hw.constant 1 : i1
 
-  %rC = seq.firreg %nextC clock %clk sym @regC reset sync %rst, %cst0 : i32
-  %rB = seq.firreg %nextB clock %clk sym @regB reset sync %rst, %cst0 : i32
-  %rA = seq.firreg %nextA clock %clk sym @regA reset sync %rst, %cst0 : i32
+  %rC = seq.firreg %nextC clock %clk sym @regC reset sync %rst, %cst0 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i32
+  %rB = seq.firreg %nextB clock %clk sym @regB reset sync %rst, %cst0 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i32
+  %rA = seq.firreg %nextA clock %clk sym @regA reset sync %rst, %cst0 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i32
 
   %nextA = comb.add %rA, %cst1 : i32
   %nextB = comb.add %rB, %rA : i32

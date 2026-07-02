@@ -119,7 +119,7 @@ circuit Foo : %[[
 
   public module Foo :
     input clock : Clock
-    input reset : UInt<1>
+    input reset : Reset
     input readAddr : UInt<3>
     output readData : UInt<32>
     input writeEn : UInt<1>

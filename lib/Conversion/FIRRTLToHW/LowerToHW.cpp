@@ -1866,7 +1866,9 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(AsSIntPrimOp op);
   LogicalResult visitExpr(AsUIntPrimOp op);
   LogicalResult visitExpr(AsClockPrimOp op);
-  LogicalResult visitExpr(AsAsyncResetPrimOp op) { return lowerNoopCast(op); }
+  // `asReset` reinterprets a 1-bit value as the (sync/async-agnostic) reset
+  // type; both lower to `i1`, so this is a no-op cast.
+  LogicalResult visitExpr(AsResetPrimOp op) { return lowerNoopCast(op); }
 
   LogicalResult visitExpr(HWStructCastOp op);
   LogicalResult visitExpr(BitCastOp op);
@@ -3796,6 +3798,19 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   return setLowering(op.getResult(), operand);
 }
 
+/// Map a FIRRTL register clock edge onto the equivalent seq.firreg clock edge.
+static seq::ClockEdge lowerRegClockEdge(EventControl edge) {
+  switch (edge) {
+  case EventControl::AtPosEdge:
+    return seq::ClockEdge::Pos;
+  case EventControl::AtNegEdge:
+    return seq::ClockEdge::Neg;
+  case EventControl::AtEdge:
+    return seq::ClockEdge::Both;
+  }
+  return seq::ClockEdge::Pos;
+}
+
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType = lowerType(op.getResult().getType());
   if (!resultType)
@@ -3810,8 +3825,9 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   // Create a reg op, wiring itself to its input.
   auto innerSym = lowerInnerSymbol(op);
   Backedge inputEdge = backedgeBuilder.get(resultType);
-  auto reg = seq::FirRegOp::create(builder, inputEdge, clockVal,
-                                   op.getNameAttr(), innerSym);
+  auto reg =
+      seq::FirRegOp::create(builder, inputEdge, clockVal, op.getNameAttr(),
+                            lowerRegClockEdge(op.getClockEdge()), innerSym);
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
@@ -3846,13 +3862,26 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
-  // Create a reg op, wiring itself to its input.
+  // Create a reg op, wiring itself to its input.  The `resetType` attribute is
+  // the sole authoritative source of truth for whether the reset is
+  // asynchronous; the reset operand has the agnostic `reset` type and is never
+  // consulted here. The attribute is required (front-end-explicit, no default).
   auto innerSym = lowerInnerSymbol(op);
-  bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
   Backedge inputEdge = backedgeBuilder.get(resultType);
-  auto reg =
-      seq::FirRegOp::create(builder, inputEdge, clockVal, op.getNameAttr(),
-                            resetSignal, resetValue, innerSym, isAsync);
+  // Forward the (required) clock edge, reset kind and reset polarity directly
+  // into the Seq builder so they survive emission to SystemVerilog. The
+  // `resetType` attribute is the sole authoritative source of truth for whether
+  // the reset is asynchronous; the reset operand has the agnostic `reset` type
+  // and is never consulted here.
+  auto reg = seq::FirRegOp::create(
+      builder, inputEdge, clockVal, op.getNameAttr(), resetSignal, resetValue,
+      lowerRegClockEdge(op.getClockEdge()),
+      op.getResetType() == RegResetType::AsyncReset ? seq::ResetType::AsyncReset
+                                                    : seq::ResetType::SyncReset,
+      op.getResetPolarity() == RegResetPolarity::NegReset
+          ? seq::ResetPolarity::NegReset
+          : seq::ResetPolarity::PosReset,
+      innerSym);
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
@@ -4856,17 +4885,10 @@ LogicalResult FIRRTLLowering::visitExpr(HasBeenResetIntrinsicOp op) {
   auto reset = getLoweredValue(op.getReset());
   if (!clock || !reset)
     return failure();
-  auto resetType = op.getReset().getType();
-  auto uintResetType = dyn_cast<UIntType>(resetType);
-  auto isSync = uintResetType && uintResetType.getWidth() == 1;
-  auto isAsync = isa<AsyncResetType>(resetType);
-  if (!isAsync && !isSync) {
-    auto d = op.emitError("uninferred reset passed to 'has_been_reset'; "
-                          "requires sync or async reset");
-    d.attachNote() << "reset is of type " << resetType
-                   << ", should be '!firrtl.uint<1>' or '!firrtl.asyncreset'";
-    return failure();
-  }
+  // The `asyncReset` attribute is the authoritative, front-end-supplied reset
+  // kind. The `reset` type is sync/async-agnostic and the dedicated
+  // `asyncreset` type is gone, so the attribute alone decides sync vs. async.
+  bool isAsync = op.getAsyncReset();
   return setLoweringTo<verif::HasBeenResetOp>(op, clock, reset, isAsync);
 }
 
