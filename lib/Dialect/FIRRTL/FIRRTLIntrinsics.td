@@ -183,6 +183,30 @@ def CirctLTLDelay : FIRRTLIntrinsic {
   }];
 }
 
+def CirctLTLClockedDelay : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.clocked_delay";
+  let description = [{
+    Delays the occurrence of a boolean or sequence by a specified number of
+    cycles on an explicit clock and edge, with an optional bound on the length
+    of the delay.
+
+    | Parameter | Type   | Description                               |
+    | --------- | ------ | ----------------------------------------- |
+    | delay     | int    | minimum number of cycles to delay         |
+    | length    | int    | maximum additional delay cycles; optional |
+    | edge      | string | `posedge`, `negedge`, or `edge`; optional |
+
+    | Argument | Type    | Description               |
+    | -------- | ------- | ------------------------- |
+    | in       | UInt<1> | input boolean or sequence |
+    | clock    | Clock   | clock for delay           |
+
+    | Result | Type    | Description             |
+    | ------ | ------- | ----------------------- |
+    | out    | UInt<1> | clocked delay sequence  |
+  }];
+}
+
 def CirctLTLRepeat : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.repeat";
   let description = [{
@@ -273,6 +297,10 @@ def CirctLTLClock : FIRRTLIntrinsic {
   let description = [{
     Associates a clock with a boolean or sequence. This is used to indicate the
     clock domain in which a property is evaluated.
+
+    | Parameter | Type   | Description                                  |
+    | --------- | ------ | -------------------------------------------- |
+    | edge      | string | clock edge: `posedge`, `negedge`, or `edge` |
 
     | Argument | Type    | Description               |
     | -------- | ------- | ------------------------- |

@@ -687,15 +687,15 @@ firrtl.module @WhenAroundPropertyAssertAssumeCover(
   // CHECK: [[P0:%.+]] = firrtl.int.ltl.implication %b, %c :
   %0 = firrtl.int.ltl.implication %b, %c : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
   %p0 = firrtl.node interesting_name %0 : !firrtl.uint<1>
-  // @(posedge clock) b |-> c
-  %1 = firrtl.int.ltl.clock %p0, %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // @(negedge clock) b |-> c
+  %1 = firrtl.int.ltl.clock %p0, negedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
   %p1 = firrtl.node interesting_name %1 : !firrtl.uint<1>
 
   // CHECK-NOT: firrtl.when
   firrtl.when %a : !firrtl.uint<1> {
     // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and %a, %b
     // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], %c
-    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.clock [[TMP2]], %clock
+    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.clock [[TMP2]], negedge %clock
     // CHECK: firrtl.int.verif.assert [[TMP3]], %d :
     // CHECK: firrtl.int.verif.assert [[TMP3]] :
     // CHECK: firrtl.int.verif.assume [[TMP3]], %d :
@@ -705,7 +705,7 @@ firrtl.module @WhenAroundPropertyAssertAssumeCover(
     firrtl.int.verif.assume %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.assume %p1 : !firrtl.uint<1>
     // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and %a, [[P0]]
-    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.clock [[TMP1]], %clock
+    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.clock [[TMP1]], negedge %clock
     // CHECK: firrtl.int.verif.cover [[TMP2]], %d :
     // CHECK: firrtl.int.verif.cover [[TMP2]] :
     firrtl.int.verif.cover %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
@@ -714,7 +714,7 @@ firrtl.module @WhenAroundPropertyAssertAssumeCover(
     // CHECK: [[NOTA:%.+]] = firrtl.not %a
     // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and [[NOTA]], %b
     // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], %c
-    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.clock [[TMP2]], %clock
+    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.clock [[TMP2]], negedge %clock
     // CHECK: firrtl.int.verif.assert [[TMP3]], %d :
     // CHECK: firrtl.int.verif.assert [[TMP3]] :
     // CHECK: firrtl.int.verif.assume [[TMP3]], %d :
@@ -724,7 +724,7 @@ firrtl.module @WhenAroundPropertyAssertAssumeCover(
     firrtl.int.verif.assume %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.assume %p1 : !firrtl.uint<1>
     // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.and [[NOTA]], [[P0]]
-    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.clock [[TMP1]], %clock
+    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.clock [[TMP1]], negedge %clock
     // CHECK: firrtl.int.verif.cover [[TMP2]], %d :
     // CHECK: firrtl.int.verif.cover [[TMP2]] :
     firrtl.int.verif.cover %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>

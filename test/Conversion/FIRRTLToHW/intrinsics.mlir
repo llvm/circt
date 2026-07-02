@@ -66,6 +66,10 @@ firrtl.circuit "Intrinsics" {
     %d0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[D1:%.+]] = ltl.delay %b, 42, 1337 : i1
     %d1 = firrtl.int.ltl.delay %b, 42, 1337 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CD0:%.+]] = ltl.clocked_delay %a, negedge [[CLK]], 2, 0 : i1
+    %cd0 = firrtl.int.ltl.clocked_delay %a, negedge %clk, 2, 0 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CD1:%.+]] = ltl.clocked_delay %b, edge [[CLK]], 3 : i1
+    %cd1 = firrtl.int.ltl.clocked_delay %b, edge %clk, 3 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[L0:%.+]] = ltl.and [[D0]], [[D1]] : !ltl.sequence, !ltl.sequence
     %l0 = firrtl.int.ltl.and %d0, %d1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
@@ -108,7 +112,9 @@ firrtl.circuit "Intrinsics" {
     %p1 = firrtl.int.ltl.past %b, 3, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[K0:%.+]] = ltl.clock [[I0]], posedge [[CLK]] : !ltl.property
-    %k0 = firrtl.int.ltl.clock %i0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    %k0 = firrtl.int.ltl.clock %i0, posedge %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[K1:%.+]] = ltl.clock [[I0]], negedge [[CLK]] : !ltl.property
+    %k1 = firrtl.int.ltl.clock %i0, negedge %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: verif.assert %a : i1
     firrtl.int.verif.assert %a : !firrtl.uint<1>

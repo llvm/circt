@@ -351,6 +351,24 @@ public:
   }
 };
 
+static ParseResult checkLTLEdgeParam(GenericIntrinsic gi) {
+  auto edge = gi.getParamValue<StringAttr>("edge");
+  if (!edge)
+    return success();
+  if (!symbolizeEventControl(edge.getValue()))
+    return gi.emitError() << " has parameter 'edge' with unsupported value '"
+                          << edge.getValue()
+                          << "'; expected 'posedge', 'negedge', or 'edge'";
+  return success();
+}
+
+static EventControl getLTLEdgeParam(GenericIntrinsic gi) {
+  auto edge = gi.getParamValue<StringAttr>("edge");
+  if (!edge)
+    return EventControl::AtPosEdge;
+  return *symbolizeEventControl(edge.getValue());
+}
+
 class CirctLTLDelayConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -372,6 +390,35 @@ public:
     auto length = getI64Attr(gi.getParamValue<IntegerAttr>("length"));
     rewriter.replaceOpWithNewOp<LTLDelayIntrinsicOp>(
         gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], delay, length);
+  }
+};
+
+class CirctLTLClockedDelayConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+           gi.namedIntParam("delay") || gi.namedIntParam("length", true) ||
+           gi.namedParam("edge", true) || checkLTLEdgeParam(gi) ||
+           gi.hasNParam(1, 2);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto operands = adaptor.getOperands();
+    auto delay = getI64Attr(gi.getParamValue<IntegerAttr>("delay"));
+    auto length = getI64Attr(gi.getParamValue<IntegerAttr>("length"));
+    auto edge = EventControlAttr::get(gi.op.getContext(), getLTLEdgeParam(gi));
+    rewriter.replaceOpWithNewOp<LTLClockedDelayIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0], edge, operands[1], delay,
+        length);
   }
 };
 
@@ -400,15 +447,55 @@ public:
   }
 };
 
-class CirctLTLClockConverter
-    : public IntrinsicOpConverter<LTLClockIntrinsicOp> {
+class CirctLTLClockConverter : public IntrinsicConverter {
 public:
-  using IntrinsicOpConverter::IntrinsicOpConverter;
+  using IntrinsicConverter::IntrinsicConverter;
 
   bool check(GenericIntrinsic gi) override {
-    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
-           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
-           gi.hasNParam(0);
+    if (gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+        gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+        gi.hasNParam(0, 1))
+      return true;
+
+    auto params = gi.op.getParameters();
+    if (!params || params.empty())
+      return false;
+
+    auto param = cast<ParamDeclAttr>(*params.begin());
+    if (param.getName().getValue() != "edge") {
+      gi.emitError() << " has unexpected parameter '" << param.getName()
+                     << "', expected 'edge'";
+      return true;
+    }
+    if (!isa<StringAttr>(param.getValue())) {
+      gi.emitError() << " has parameter '" << param.getName()
+                     << "' which should be a string but is not";
+      return true;
+    }
+    return false;
+  }
+
+  LogicalResult checkAndConvert(GenericIntrinsic gi,
+                                GenericIntrinsicOpAdaptor adaptor,
+                                PatternRewriter &rewriter) override {
+    if (check(gi))
+      return failure();
+
+    auto edge = EventControl::AtPosEdge;
+    if (auto edgeAttr = gi.getParamValue<StringAttr>("edge")) {
+      auto parsedEdge = symbolizeEventControl(edgeAttr.getValue());
+      if (!parsedEdge)
+        return gi.emitError()
+               << " has invalid edge parameter '" << edgeAttr.getValue()
+               << "', expected one of [posedge, negedge, edge]";
+      edge = *parsedEdge;
+    }
+
+    auto operands = adaptor.getOperands();
+    rewriter.replaceOpWithNewOp<LTLClockIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0],
+        EventControlAttr::get(rewriter.getContext(), edge), operands[1]);
+    return success();
   }
 };
 
