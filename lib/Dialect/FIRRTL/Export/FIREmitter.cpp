@@ -44,8 +44,11 @@ constexpr size_t defaultTargetLineLength = 80;
 /// An emitter for FIRRTL dialect operations to .fir output.
 struct Emitter {
   Emitter(llvm::raw_ostream &os, FIRVersion version,
-          size_t targetLineLength = defaultTargetLineLength)
-      : pp(os, targetLineLength), ps(pp, saver), version(version) {
+          size_t targetLineLength = defaultTargetLineLength,
+          bool disableLineWrap = false)
+      : pp(os, targetLineLength, 0, 0, PrettyPrinter::kInfinity / 4, nullptr,
+           disableLineWrap),
+        ps(pp, saver), version(version) {
     pp.setListener(&saver);
   }
   LogicalResult finalize();
@@ -2013,13 +2016,14 @@ void Emitter::emitLocation(Location loc) {
 mlir::LogicalResult
 circt::firrtl::exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
                              std::optional<size_t> targetLineLength,
-                             FIRVersion version) {
+                             FIRVersion version, bool disableLineWrap) {
   if (version < minimumFIRVersion)
     return module.emitError("--firrtl-version ")
            << version << " is below the minimum supported "
            << "version " << minimumFIRVersion;
   Emitter emitter(os, version,
-                  targetLineLength.value_or(defaultTargetLineLength));
+                  targetLineLength.value_or(defaultTargetLineLength),
+                  disableLineWrap);
   for (auto &op : *module.getBody()) {
     if (auto circuitOp = dyn_cast<CircuitOp>(op))
       emitter.emitCircuit(circuitOp);
@@ -2033,6 +2037,10 @@ void circt::firrtl::registerToFIRFileTranslation() {
       llvm::cl::desc("Target line length for emitted .fir"),
       llvm::cl::value_desc("number of chars"),
       llvm::cl::init(defaultTargetLineLength));
+  static llvm::cl::opt<bool> disableLineWrap(
+      "disable-line-wrap",
+      llvm::cl::desc("Disable line wrapping in emitted .fir"),
+      llvm::cl::init(false));
   static llvm::cl::opt<std::string> firrtlVersionStr(
       "firrtl-version",
       llvm::cl::desc("FIRRTL version to target (e.g. \"3.0.0\"). "
@@ -2050,7 +2058,8 @@ void circt::firrtl::registerToFIRFileTranslation() {
                    << "', expected format 'major.minor.patch'";
           version = *ver;
         }
-        return exportFIRFile(module, os, targetLineLength, version);
+        return exportFIRFile(module, os, targetLineLength, version,
+                             disableLineWrap);
       },
       [](mlir::DialectRegistry &registry) {
         registry.insert<chirrtl::CHIRRTLDialect>();
