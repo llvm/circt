@@ -211,3 +211,31 @@ hw.module @print_to_file_under_condition(in %clk : i1, in %idx : i8, in %en : i1
     }
   }
 }
+
+// CHECK-LABEL: hw.module @format_to_string_static
+hw.module @format_to_string_static(in %clk: i1) {
+  hw.triggered posedge %clk {
+    %lit = sim.fmt.literal "hello"
+    %str = sim.string.format_to_string %lit
+    %fmt = sim.fmt.string %str : !sim.dstring
+    // CHECK: %[[STR:.+]] = sv.constantStr "hello"
+    // CHECK-NEXT: sv.write "%s"(%[[STR]]) : !hw.string
+    sim.proc.print %fmt
+  }
+}
+
+// CHECK-LABEL: hw.module @format_to_string_dynamic
+hw.module @format_to_string_dynamic(in %clk: i1, in %val: i8) {
+  hw.triggered posedge %clk (%val) : i8 {
+    ^bb0(%val_in: i8):
+    %prefix = sim.fmt.literal "v="
+    %fval = sim.fmt.hex %val_in, isUpper false specifierWidth 2 : i8
+    %fmtin = sim.fmt.concat (%prefix, %fval)
+    %str = sim.string.format_to_string %fmtin
+    %fmt = sim.fmt.string %str : !sim.dstring
+    // CHECK: ^bb0(%[[VAL:.+]]: i8):
+    // CHECK-NEXT: %[[STR:.+]] = sv.sformatf "v=%02x"(%[[VAL]]) : i8
+    // CHECK-NEXT: sv.write "%s"(%[[STR]]) : !hw.string
+    sim.proc.print %fmt
+  }
+}

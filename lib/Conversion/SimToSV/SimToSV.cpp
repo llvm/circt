@@ -912,6 +912,32 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     cleanupSeeds.push_back(printOp);
   }
 
+  SmallVector<FormatToStringOp> formatToStringOps;
+  module.walk([&](FormatToStringOp op) { formatToStringOps.push_back(op); });
+
+  for (auto op : formatToStringOps) {
+    OpBuilder builder(op);
+    SmallString<128> formatStr;
+    SmallVector<Value> args;
+    if (failed(lowerFormatStringToSVFormat(op.getFmtstring(), formatStr, args,
+                                           builder)))
+      return op.emitError(
+          "cannot lower 'sim.string.format_to_string' to SystemVerilog");
+
+    Value svResult;
+    if (args.empty())
+      svResult = sv::ConstantStrOp::create(builder, op.getLoc(),
+                                           builder.getStringAttr(formatStr));
+    else
+      svResult = sv::SFormatFOp::create(builder, op.getLoc(),
+                                        builder.getStringAttr(formatStr), args);
+
+    auto cast = mlir::UnrealizedConversionCastOp::create(
+        builder, op.getLoc(), op.getType(), svResult);
+    op.replaceAllUsesWith(cast.getResult(0));
+    cleanupSeeds.push_back(op);
+  }
+
   cleanupDeadSimFmtOps(cleanupSeeds);
 
   return success();
