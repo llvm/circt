@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FSM/FSMOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -347,7 +348,78 @@ SetVector<StateOp> StateOp::getNextStates() {
   return SetVector<StateOp>(nextStates.begin(), nextStates.end());
 }
 
+/// Returns the i1 value a transition's guard returns, or null if the transition
+/// is unconditional (it has no guard, or its guard returns no value).
+static Value getGuardValue(TransitionOp transition) {
+  if (!transition.hasGuard())
+    return {};
+  auto guardReturn = transition.getGuardReturn();
+  if (guardReturn.getNumOperands() == 0)
+    return {};
+  return guardReturn.getOperand();
+}
+
+/// Returns true if `value` is a constant i1 `true`, expressed via either
+/// hw.constant or arith.constant.
+static bool isConstantTrue(Value value) {
+  if (auto hwConst = value.getDefiningOp<hw::ConstantOp>())
+    return hwConst.getValue().getBitWidth() == 1 &&
+           hwConst.getValue().isAllOnes();
+  if (auto arithConst = value.getDefiningOp<mlir::arith::ConstantOp>())
+    if (auto boolAttr = dyn_cast<BoolAttr>(arithConst.getValue()))
+      return boolAttr.getValue();
+  return false;
+}
+
+/// Returns true if `a` is the boolean complement (logical NOT) of `b`, i.e.
+/// `a == xor(b, true)`. Handles both the comb and arith spellings of xor as
+/// well as operand commutativity.
+static bool isComplementOf(Value a, Value b) {
+  if (!a || !b)
+    return false;
+
+  auto matchXor = [&](Value lhs, Value rhs) {
+    return (lhs == b && isConstantTrue(rhs)) ||
+           (rhs == b && isConstantTrue(lhs));
+  };
+
+  if (auto xorOp = a.getDefiningOp<comb::XorOp>())
+    return xorOp.getNumOperands() == 2 &&
+           matchXor(xorOp.getOperand(0), xorOp.getOperand(1));
+  if (auto xorOp = a.getDefiningOp<mlir::arith::XOrIOp>())
+    return matchXor(xorOp.getLhs(), xorOp.getRhs());
+  return false;
+}
+
 LogicalResult StateOp::canonicalize(StateOp op, PatternRewriter &rewriter) {
+  // Mutually exclusive transition elimination (llvm/circt#3577): when a state
+  // has exactly two transitions and the guards are logical complements of each
+  // other, the second transition is reached only when the first guard failed,
+  // which already implies the second guard holds. The second guard is therefore
+  // redundant, so strip it -- turning the transition into an unconditional
+  // default. This removes the dead complement logic (e.g. a `comb.xor`) that
+  // would otherwise propagate all the way to emitted SystemVerilog.
+  auto transitions = llvm::to_vector(op.getTransitions().getOps<TransitionOp>());
+  if (transitions.size() == 2) {
+    Value firstGuard = getGuardValue(transitions[0]);
+    TransitionOp second = transitions[1];
+    Value secondGuard = getGuardValue(second);
+    // Either guard may carry the complement (xor); in both cases reaching the
+    // second transition implies its guard is true, so it can be dropped.
+    if (firstGuard && secondGuard &&
+        (isComplementOf(secondGuard, firstGuard) ||
+         isComplementOf(firstGuard, secondGuard))) {
+      // Replace the guard's `fsm.return %x` with an operand-less return, making
+      // the transition unconditional. Mirrors TransitionOp::canonicalize; the
+      // now-dead complement op is removed by dead-code elimination.
+      auto guardReturn = second.getGuardReturn();
+      rewriter.setInsertionPoint(guardReturn);
+      fsm::ReturnOp::create(rewriter, guardReturn.getLoc());
+      rewriter.eraseOp(guardReturn);
+      return success();
+    }
+  }
+
   bool hasAlwaysTakenTransition = false;
   SmallVector<TransitionOp, 4> transitionsToErase;
   // Remove all transitions after an "always-taken" transition.
