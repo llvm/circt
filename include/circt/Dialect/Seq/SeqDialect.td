@@ -13,6 +13,8 @@
 #ifndef CIRCT_DIALECT_SEQ_SEQDIALECT
 #define CIRCT_DIALECT_SEQ_SEQDIALECT
 
+include "mlir/IR/DialectBase.td"
+
 def SeqDialect : Dialect {
   let name = "seq";
 

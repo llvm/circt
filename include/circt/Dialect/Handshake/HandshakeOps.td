@@ -10,6 +10,17 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HANDSHAKE_HANDSHAKEOPS_TD
+#define CIRCT_DIALECT_HANDSHAKE_HANDSHAKEOPS_TD
+
+include "circt/Dialect/Handshake/HandshakeDialect.td"
+include "circt/Dialect/Handshake/HandshakeInterfaces.td"
+include "mlir/IR/PatternBase.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/BuiltinTypes.td"
@@ -927,3 +938,5 @@ def PackOp : Handshake_Op<"pack", [
 
   let hasCustomAssemblyFormat = 1;
 }
+
+#endif // CIRCT_DIALECT_HANDSHAKE_HANDSHAKEOPS_TD

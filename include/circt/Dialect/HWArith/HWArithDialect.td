@@ -13,6 +13,9 @@
 #ifndef HWARITHDIALECT_TD
 #define HWARITHDIALECT_TD
 
+include "mlir/IR/DialectBase.td"
+include "mlir/IR/OpBase.td"
+
 def HWArithDialect : Dialect {
   let name = "hwarith";
   let cppNamespace = "::circt::hwarith";

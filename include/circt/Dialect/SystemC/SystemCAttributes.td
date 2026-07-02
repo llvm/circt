@@ -10,6 +10,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SYSTEMC_SYSTEMCATTRIBUTES_TD
+#define CIRCT_DIALECT_SYSTEMC_SYSTEMCATTRIBUTES_TD
+
+include "circt/Dialect/SystemC/SystemCDialect.td"
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/EnumAttr.td"
 
 class SystemCAttrDef<string name> : AttrDef<SystemCDialect, name> { }
+
+#endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCATTRIBUTES_TD

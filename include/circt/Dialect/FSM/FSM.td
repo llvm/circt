@@ -9,34 +9,7 @@
 #ifndef CIRCT_DIALECT_FSM_TD
 #define CIRCT_DIALECT_FSM_TD
 
-include "mlir/IR/AttrTypeBase.td"
-include "mlir/IR/OpBase.td"
-include "mlir/Interfaces/FunctionInterfaces.td"
-
-def FSMDialect : Dialect {
-  let name = "fsm";
-  let cppNamespace = "::circt::fsm";
-
-  let summary = "Types and operations for FSM dialect";
-  let description = [{
-    This dialect defines the `fsm` dialect, which is intended to represent
-    finite-state machines.
-  }];
-
-  let useDefaultTypePrinterParser = 1;
-
-  let dependentDialects = [
-    "circt::seq::SeqDialect"
-  ];
-}
-
-// Base class for the types in this dialect.
-class FSMType<string name> : TypeDef<FSMDialect, name> {}
-
-// Base class for the operations in this dialect.
-class FSMOp<string mnemonic, list<Trait> traits = []> :
-    Op<FSMDialect, mnemonic, traits>;
-
+include "circt/Dialect/FSM/FSMDialect.td"
 include "circt/Dialect/FSM/FSMTypes.td"
 include "circt/Dialect/FSM/FSMOps.td"
 

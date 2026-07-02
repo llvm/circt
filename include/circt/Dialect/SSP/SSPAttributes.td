@@ -10,6 +10,12 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SSP_SSPATTRIBUTES_TD
+#define CIRCT_DIALECT_SSP_SSPATTRIBUTES_TD
+
+include "circt/Dialect/SSP/SSPDialect.td"
+include "mlir/IR/AttrTypeBase.td"
+
 //===----------------------------------------------------------------------===//
 // Dialect attributes
 //===----------------------------------------------------------------------===//
@@ -41,7 +47,7 @@ def DependenceArrayAttr
 // Property definitions for in-tree problems
 //===----------------------------------------------------------------------===//
 
-include "PropertyBase.td"
+include "circt/Dialect/SSP/PropertyBase.td"
 
 // Problem
 def LinkedOperatorTypeProp : OperationProperty<SSPDialect,
@@ -139,3 +145,4 @@ def LimitProp : ResourceTypeProperty<SSPDialect,
   "Limit", "unsigned", "::circt::scheduling::SharedOperatorsProblem"> {
   let mnemonic = "limit";
 }
+#endif // CIRCT_DIALECT_SSP_SSPATTRIBUTES_TD

@@ -31,13 +31,6 @@ include "circt/Dialect/SystemC/SystemCDialect.td"
 // Import EmitC types
 include "mlir/Dialect/EmitC/IR/EmitCTypes.td"
 
-// Base class for the operations in this dialect.
-class SystemCOp<string mnemonic, list<Trait> traits = []> :
-  Op<SystemCDialect, mnemonic, traits>;
-
-def HasCustomSSAName : DeclareOpInterfaceMethods<OpAsmOpInterface,
-                         ["getAsmResultNames"]>;
-
 include "circt/Dialect/SystemC/SystemCAttributes.td"
 include "circt/Dialect/SystemC/SystemCTypes.td"
 include "circt/Dialect/SystemC/SystemCExpressions.td"

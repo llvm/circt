@@ -15,6 +15,7 @@
 
 include "circt/Dialect/Emit/EmitDialect.td"
 include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 class EmitOp<string mnemonic, list<Trait> traits = []> :
     Op<EmitDialect, mnemonic, traits>;

@@ -12,6 +12,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SEQ_SEQOPS_TD
+#define CIRCT_DIALECT_SEQ_SEQOPS_TD
+
+include "circt/Dialect/Seq/SeqDialect.td"
+include "circt/Dialect/Seq/SeqTypes.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/OpAsmInterface.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Sim/SimTypes.td"
@@ -769,3 +776,5 @@ def FromImmutableOp : SeqOp<"from_immutable", [Pure]> {
 
   let assemblyFormat = "$input attr-dict `:` functional-type(operands, results)";
 }
+
+#endif // CIRCT_DIALECT_SEQ_SEQOPS_TD
