@@ -1755,9 +1755,12 @@ struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
       return success();
     }
     if (isa_and_nonnull<llhd::TimeType>(resultType)) {
-      Value timeInt = llhd::TimeToIntOp::create(rewriter, op->getLoc(), adaptor.getInput());
-      Value zero = hw::ConstantOp::create(rewriter, op->getLoc(), rewriter.getI64Type(), 0);
-      rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne, timeInt, zero);
+      Value timeInt =
+          llhd::TimeToIntOp::create(rewriter, op->getLoc(), adaptor.getInput());
+      Value zero = hw::ConstantOp::create(rewriter, op->getLoc(),
+                                          rewriter.getI64Type(), 0);
+      rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
+                                                timeInt, zero);
       return success();
     }
     return failure();
