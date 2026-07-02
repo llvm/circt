@@ -260,6 +260,7 @@ void PrettyPrinter::print(const FormattedToken &f) {
                "newline inside never group");
         bool fits =
             (alwaysFits > 0) || b->neverbreak() ||
+            (noWrap && b->spaces() != kInfinity) ||
             frame.breaks == PrintBreaks::Fits ||
             (frame.breaks == PrintBreaks::Inconsistent && f.size <= space);
         if (fits) {

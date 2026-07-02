@@ -188,14 +188,15 @@ public:
   /// - baseIndent: always indent at least this much (starting 'indent' value).
   /// - currentColumn: current column, used to calculate space remaining.
   /// - maxStartingIndent: max column indentation starts at, must be >= margin.
+  /// - noWrap: disable line wrapping; only explicit newlines break.
   PrettyPrinter(llvm::raw_ostream &os, uint32_t margin, uint32_t baseIndent = 0,
                 uint32_t currentColumn = 0,
                 uint32_t maxStartingIndent = kInfinity / 4,
-                Listener *listener = nullptr)
+                Listener *listener = nullptr, bool noWrap = false)
       : space(margin - std::max(currentColumn, baseIndent)),
         defaultFrame{baseIndent, PrintBreaks::Inconsistent}, indent(baseIndent),
         margin(margin), maxStartingIndent(std::max(maxStartingIndent, margin)),
-        os(os), listener(listener) {
+        os(os), listener(listener), noWrap(noWrap) {
     assert(maxStartingIndent < kInfinity / 2);
     assert(maxStartingIndent > baseIndent);
     assert(margin > currentColumn);
@@ -317,6 +318,9 @@ private:
 
   /// Flag to identify a state when the clear cannot be called.
   bool donotClear = false;
+
+  /// Disables line wrapping on non-newline whitespace
+  const bool noWrap;
 
   /// Threshold for walking scan state and "rebasing" totals/offsets.
   static constexpr decltype(leftTotal) rebaseThreshold =
