@@ -36,7 +36,9 @@ def GenerateCaseOp : SVOp<"generate.case",
                            HasParent<"GenerateOp">]> {
 
   let summary = "A 'case' statement inside of a generate block";
-  let description = "See SystemVerilog 2017 27.5.";
+  let description = [{
+    See SystemVerilog 2017 27.5.
+  }];
 
   let regions = (region VariadicRegion<SizedRegion<1>>:$caseRegions);
   let arguments = (ins TypedAttrInterface:$cond,
