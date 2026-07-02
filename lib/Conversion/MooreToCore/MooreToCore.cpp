@@ -792,6 +792,27 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
     getValuesToObserve(&clonedOp.getBody(), setInsertionPointAfterDef,
                        typeConverter, rewriter, observeValues);
 
+    // If the analysis above did not find any values to observe, the event
+    // operands are read through storage that is invisible to the observer
+    // analysis, such as class fields or virtual interface members accessed
+    // through a pointer. An `llhd.wait` without observed values would suspend
+    // the process forever. Instead, observe the values sampled before the
+    // wait, such that the process wakes up and re-checks for events whenever
+    // any of them changes. The conversion casts are created at the end of the
+    // cloned body, which is inlined before the `llhd.wait` op below.
+    if (observeValues.empty()) {
+      OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToEnd(&clonedOp.getBody().front());
+      for (auto value : valuesBefore) {
+        auto type = typeConverter->convertType(value.getType());
+        if (!type || !hw::isHWValueType(type))
+          continue;
+        if (auto converted = typeConverter->materializeTargetConversion(
+                rewriter, loc, type, value))
+          observeValues.push_back(converted);
+      }
+    }
+
     // Create the `llhd.wait` op that suspends the current process and waits for
     // a change in the interesting values listed in `observeValues`. When a
     // change is detected, execution resumes in the "check" block.
