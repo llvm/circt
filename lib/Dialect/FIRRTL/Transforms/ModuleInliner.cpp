@@ -174,14 +174,14 @@ public:
       // Root of the namepath. If the next module has been inlined, set lastMod
       // to root and skip adding to the namepath. Otherwise, add the root with
       // its inner ref.
-      if (!inlinedSymbols.test(1)) {
+      if (inlinedSymbols.size() == 1 || !inlinedSymbols.test(1)) {
         lastMod = root;
       } else {
         namepath.push_back(InnerRefAttr::get(root, lookupRename(root)));
       }
 
       // Everything in the middle of the namepath (excluding the root and leaf).
-      for (signed i = 1, e = inlinedSymbols.size() - 1; i != e; ++i) {
+      for (signed i = 1, e = inlinedSymbols.size() - 1; i < e; ++i) {
         if (!inlinedSymbols.test(i + 1)) {
           if (!lastMod)
             lastMod = nla.modPart(i);
@@ -260,7 +260,7 @@ public:
       // Root of the namepath. If the next module has been inlined, set lastMod
       // to root and skip adding to the output. Otherwise, write the root with
       // its inner ref.
-      if (!x.inlinedSymbols.test(1)) {
+      if (x.inlinedSymbols.size() == 1 || !x.inlinedSymbols.test(1)) {
         lastMod = root;
       } else {
         writePathSegment(root, x.lookupRename(root));
@@ -268,7 +268,7 @@ public:
       }
 
       // Everything in the middle of the namepath (excluding the root and leaf).
-      for (signed i = 1, e = x.inlinedSymbols.size() - 1; i != e; ++i) {
+      for (signed i = 1, e = x.inlinedSymbols.size() - 1; i < e; ++i) {
         if (!x.inlinedSymbols.test(i + 1)) {
           if (!lastMod)
             lastMod = x.nla.modPart(i);
