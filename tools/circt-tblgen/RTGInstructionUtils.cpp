@@ -60,10 +60,10 @@ void tblgen::rtg::classifyOperandType(const Record &typeRec,
                                       OperandTypeSet &kinds) {
   if (checkType(typeRec, "LabelType"))
     return kinds.appendAndUnique(Label());
-  if (checkType(typeRec, "ImmediateType"))
+  if (checkType(typeRec, "AnySignlessInteger"))
     return kinds.appendAndUnique(AnyImmediate());
-  if (checkType(typeRec, "ImmediateOfWidth"))
-    return kinds.appendAndUnique(Immediate(typeRec.getValueAsInt("immWidth")));
+  if (checkType(typeRec, "I"))
+    return kinds.appendAndUnique(Immediate(typeRec.getValueAsInt("bitwidth")));
   if (checkType(typeRec, "MemoryType"))
     return kinds.appendAndUnique(AnyMemory());
   if (checkType(typeRec, "MemoryWithAddressWidth"))

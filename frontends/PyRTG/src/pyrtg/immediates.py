@@ -115,9 +115,11 @@ class Immediate(Value):
 
   def _get_ssa_value(self) -> ir.Value:
     if isinstance(self._value, int):
-      self = rtg.ConstantOp(rtg.ImmediateAttr.get(self._width, self._value))
+      self = rtg.ConstantOp(
+          ir.IntegerAttr.get(ir.IntegerType.get_signless(self._width),
+                             self._value))
     if isinstance(self._value, Integer):
-      self = rtg.IntToImmediateOp(rtg.ImmediateType.get(self._width),
+      self = rtg.IntToImmediateOp(ir.IntegerType.get_signless(self._width),
                                   self._value)
     return self._value
 
@@ -143,4 +145,4 @@ class ImmediateType(Type):
     return f"ImmediateType<{self.width}>"
 
   def _codegen(self) -> ir.Type:
-    return rtg.ImmediateType.get(self.width)
+    return ir.IntegerType.get(self.width)

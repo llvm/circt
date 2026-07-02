@@ -36,9 +36,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, ir.IndexType):
     from .integers import Integer
     return Integer(value)
-  if isinstance(type, ir.IntegerType) and type.width == 1:
-    from .integers import Bool
-    return Bool(value)
+  if isinstance(type, ir.IntegerType):
+    from .immediates import Immediate
+    return Immediate(type.width, value)
   if isinstance(type, rtgtest.IntegerRegisterType):
     from .resources import IntegerRegister
     return IntegerRegister(value)
@@ -48,9 +48,6 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtgtest.CPUType):
     from .contexts import CPUCore
     return CPUCore(value)
-  if isinstance(type, rtg.ImmediateType):
-    from .immediates import Immediate
-    return Immediate(type.width, value)
   if isinstance(type, rtg.TupleType):
     from .tuples import Tuple
     return Tuple(value)
@@ -80,12 +77,9 @@ def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
   if isinstance(type, rtg.SetType):
     from .sets import SetType
     return SetType(_FromCirctType(type.element_type))
-  if isinstance(type, rtg.ImmediateType):
+  if isinstance(type, ir.IntegerType) and type.is_signless:
     from .immediates import ImmediateType
     return ImmediateType(type.width)
-  if isinstance(type, ir.IntegerType) and type.is_signless and type.width == 1:
-    from .integers import BoolType
-    return BoolType()
   if isinstance(type, ir.IndexType):
     from .integers import IntegerType
     return IntegerType()

@@ -1798,7 +1798,7 @@ public:
                          << " bits";
 
     state[op.getResult()] =
-        ImmediateAttr::get(op.getContext(), APInt(width, input));
+        IntegerAttr::get(IntegerType::get(op.getContext(), width),input);
     return DeletionKind::Delete;
   }
 

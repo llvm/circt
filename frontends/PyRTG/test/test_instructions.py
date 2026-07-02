@@ -116,9 +116,9 @@ def test_instruction_as_seq(config):
   reg = IntegerRegister.virtual()
   imm = Immediate(12, 42)
 
-  # CHECK: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<12, 42>
+  # CHECK: [[IMM:%.+]] = rtg.constant 42 : i12
   # CHECK: [[REG:%.+]] = rtg.virtual_reg
-  # CHECK: [[SEQ:%.+]] = rtg.get_sequence @ADD1 : !rtg.sequence<!rtgtest.ireg, !rtgtest.ireg, !rtg.isa.immediate<12>>
+  # CHECK: [[SEQ:%.+]] = rtg.get_sequence @ADD1 : !rtg.sequence<!rtgtest.ireg, !rtgtest.ireg, i12>
   # CHECK: [[SET:%.+]] = rtg.set_create [[SEQ]], [[SEQ]] :
   # CHECK: [[SELECTED:%.+]] = rtg.set_select_random [[SET]] :
   # CHECK: [[SUBST:%.+]] = rtg.substitute_sequence [[SELECTED]]([[REG]], [[REG]], [[IMM]]) :

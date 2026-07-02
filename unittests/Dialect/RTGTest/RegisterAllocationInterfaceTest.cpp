@@ -37,11 +37,11 @@ protected:
     rs1 = RegS0Attr::get(&context);
     rs2 = RegS1Attr::get(&context);
 
-    imm12 = ImmediateAttr::get(&context, APInt(12, 0));
-    imm13 = ImmediateAttr::get(&context, APInt(13, 0));
-    imm21 = ImmediateAttr::get(&context, APInt(21, 0));
-    imm32 = ImmediateAttr::get(&context, APInt(32, 0));
-    imm5 = ImmediateAttr::get(&context, APInt(5, 0));
+    imm12 = IntegerAttr::get(IntegerType::get(&context, 12), 0);
+    imm13 = IntegerAttr::get(IntegerType::get(&context, 13), 0);
+    imm21 = IntegerAttr::get(IntegerType::get(&context, 21), 0);
+    imm32 = IntegerAttr::get(IntegerType::get(&context, 32), 0);
+    imm5 = IntegerAttr::get(IntegerType::get(&context, 5), 0);
   }
 
   Value createConstant(Attribute attr) {

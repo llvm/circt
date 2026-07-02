@@ -20,7 +20,7 @@ from lit.llvm.subst import FindTool
 # name: The name of this test suite.
 config.name = 'PyRTG'
 
-config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
+config.test_format = lit.formats.ShTest()
 
 # suffixes: A list of file extensions to treat as test files.
 config.suffixes = ['.mlir', '.py']
@@ -43,7 +43,7 @@ llvm_config.use_default_substitutions()
 
 # Set the timeout, if requested.
 if config.timeout is not None and config.timeout != "":
-  lit_config.maxIndividualTestTime = int(config.timeout)
+  config.maxIndividualTestTime = int(config.timeout)
 
 # excludes: A list of directories to exclude from the testsuite. The 'Inputs'
 # subdirectories contain auxiliary inputs for various tests in their parent

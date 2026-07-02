@@ -5,13 +5,13 @@ rtg.test @constants() {
   // CHECK-NEXT: [[STR:%.+]] = rtg.constant "hello" : !rtg.string
   %str = rtg.constant "hello" : !rtg.string
 
-  // CHECK-NEXT: rtg.constant #rtg.isa.immediate<2, -1> : !rtg.isa.immediate<2>
-  %0 = rtg.constant #rtg.isa.immediate<2, -1>
+  // CHECK-NEXT: rtg.constant -1 : i2
+  %0 = rtg.constant -1 : i2
 
   // CHECK-NEXT: [[V0:%.+]] = index.constant 5
-  // CHECK-NEXT: rtg.isa.int_to_immediate [[V0]] : !rtg.isa.immediate<32>
+  // CHECK-NEXT: rtg.isa.int_to_immediate [[V0]] : i32
   %1 = index.constant 5
-  %2 = rtg.isa.int_to_immediate %1 : !rtg.isa.immediate<32>
+  %2 = rtg.isa.int_to_immediate %1 : i32
 
   // CHECK-NEXT: rtg.comment [[STR]]
   rtg.comment %str
@@ -252,8 +252,8 @@ rtg.test @tuples(tup = %tup: !rtg.tuple) {
   rtg.tuple_create
 }
 
-// CHECK-LABEL: @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, mem_block: !rtg.isa.memory_block<32>, mem_size: index>
-rtg.target @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, mem_block: !rtg.isa.memory_block<32>, mem_size: index> {
+// CHECK-LABEL: @memoryBlocks : !rtg.dict<mem_base_address: i32, mem_block: !rtg.isa.memory_block<32>, mem_size: index>
+rtg.target @memoryBlocks : !rtg.dict<mem_base_address: i32, mem_block: !rtg.isa.memory_block<32>, mem_size: index> {
   // CHECK: rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32>
   %0 = rtg.isa.memory_block_declare [0x0 - 0x8] : !rtg.isa.memory_block<32>
 
@@ -266,7 +266,7 @@ rtg.target @memoryBlocks : !rtg.dict<mem_base_address: !rtg.isa.immediate<32>, m
   %2 = rtg.isa.memory_base_address %1 : !rtg.isa.memory<32>
   %3 = rtg.isa.memory_size %1 : !rtg.isa.memory<32>
   
-  rtg.yield %2, %0, %3 : !rtg.isa.immediate<32>, !rtg.isa.memory_block<32>, index
+  rtg.yield %2, %0, %3 : i32, !rtg.isa.memory_block<32>, index
 }
 
 // CHECK-LABEL: rtg.test @template() template "temp_name" target @target {
@@ -275,31 +275,31 @@ rtg.test @template() template "temp_name" target @target { }
 // CHECK-LABEL: rtg.test @validation()
 rtg.test @validation() {
   // CHECK: [[V0:%.+]] = rtg.constant #rtgtest.t0
-  // CHECK: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
+  // CHECK: [[V1:%.+]] = rtg.constant 0 : i32
   %0 = rtg.constant #rtgtest.t0
-  %1 = rtg.constant #rtg.isa.immediate<32, 0>
-  // CHECK: rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  %2 = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  %1 = rtg.constant 0 : i32
+  // CHECK: rtg.validate [[V0]], [[V1]], "some_id" : !rtgtest.ireg -> i32
+  %2 = rtg.validate %0, %1, "some_id" : !rtgtest.ireg -> i32
 
-  // CHECK: rtg.validate [[V0]], [[V1]] : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  %3 = rtg.validate %0, %1 : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK: rtg.validate [[V0]], [[V1]] : !rtgtest.ireg -> i32
+  %3 = rtg.validate %0, %1 : !rtgtest.ireg -> i32
 
-  // CHECK: rtg.validate [[V0]], [[V1]] ([[V1]], [[V1]] else [[V1]], [[V1]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  %4:3 = rtg.validate %0, %1 (%1, %1 else %1, %1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK: rtg.validate [[V0]], [[V1]] ([[V1]], [[V1]] else [[V1]], [[V1]] : i32, i32) : !rtgtest.ireg -> i32
+  %4:3 = rtg.validate %0, %1 (%1, %1 else %1, %1 : i32, i32) : !rtgtest.ireg -> i32
   
-  // CHECK: rtg.validate [[V0]], [[V1]], "some_id" ([[V1]], [[V1]] else [[V1]], [[V1]] : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
-  %5:3 = rtg.validate %0, %1, "some_id" (%1, %1 else %1, %1 : !rtg.isa.immediate<32>, !rtg.isa.immediate<32>) : !rtgtest.ireg -> !rtg.isa.immediate<32>
+  // CHECK: rtg.validate [[V0]], [[V1]], "some_id" ([[V1]], [[V1]] else [[V1]], [[V1]] : i32, i32) : !rtgtest.ireg -> i32
+  %5:3 = rtg.validate %0, %1, "some_id" (%1, %1 else %1, %1 : i32, i32) : !rtgtest.ireg -> i32
 }
 // CHECK-LABEL: @immediateOps
 rtg.test @immediateOps() {
-  // CHECK: rtg.isa.concat_immediate {{.*}}, {{.*}} : !rtg.isa.immediate<4>, !rtg.isa.immediate<8>
-  %0 = rtg.constant #rtg.isa.immediate<4, 15>
-  %1 = rtg.constant #rtg.isa.immediate<8, 175>
-  %2 = rtg.isa.concat_immediate %0, %1 : !rtg.isa.immediate<4>, !rtg.isa.immediate<8>
+  // CHECK: rtg.isa.concat_immediate {{.*}}, {{.*}} : i4, i8
+  %0 = rtg.constant 15 : i4
+  %1 = rtg.constant 175 : i8
+  %2 = rtg.isa.concat_immediate %0, %1 : i4, i8
 
-  // CHECK: rtg.isa.slice_immediate {{.*}} from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
-  %3 = rtg.constant #rtg.isa.immediate<8, 175>
-  %4 = rtg.isa.slice_immediate %3 from 4 : !rtg.isa.immediate<8> -> !rtg.isa.immediate<2>
+  // CHECK: rtg.isa.slice_immediate {{.*}} from 4 : i8 -> i2
+  %3 = rtg.constant 175 : i8
+  %4 = rtg.isa.slice_immediate %3 from 4 : i8 -> i2
 }
 
 // CHECK-LABEL: rtg.test @testReportOps
@@ -326,10 +326,10 @@ rtg.test @strings() {
   // CHECK: [[V3:%.+]] = rtg.int_format {{%.+}}
   rtg.int_format %1
 
-  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<8, 42>
-  %imm = rtg.constant #rtg.isa.immediate<8, 42>
-  // CHECK-NEXT: rtg.immediate_format [[IMM]] : !rtg.isa.immediate<8>
-  rtg.immediate_format %imm : !rtg.isa.immediate<8>
+  // CHECK-NEXT: [[IMM:%.+]] = rtg.constant 42 : i8
+  %imm = rtg.constant 42 : i8
+  // CHECK-NEXT: rtg.immediate_format [[IMM]] : i8
+  rtg.immediate_format %imm : i8
 
   // CHECK-NEXT: [[REG:%.+]] = rtg.constant #rtgtest.t0
   %reg = rtg.constant #rtgtest.t0 : !rtgtest.ireg
