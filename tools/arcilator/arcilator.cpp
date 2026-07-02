@@ -79,9 +79,11 @@
 #define ARC_RUNTIME_JITBIND_FNDECL
 #include "circt/Dialect/Arc/Runtime/Common.h"
 #include "circt/Dialect/Arc/Runtime/JITBind.h"
+#include "circt/Dialect/Arc/Runtime/SimString.h"
 #endif
 
 #include <optional>
+#include <tuple>
 
 using namespace mlir;
 using namespace circt;
@@ -307,6 +309,16 @@ static void bindExecutionEngineSymbol(llvm::orc::SymbolMap &symbolMap,
                                   llvm::JITSymbolFlags::Exported};
 }
 
+template <typename RuntimeSymbols>
+static void bindRuntimeSymbolTuple(llvm::orc::SymbolMap &symbolMap,
+                                   llvm::orc::MangleAndInterner &interner,
+                                   const RuntimeSymbols &symbols) {
+  auto bindSymbol = [&](const auto &sym) {
+    bindExecutionEngineSymbol(symbolMap, interner, sym.name, sym.addr);
+  };
+  std::apply([&](const auto &...sym) { (bindSymbol(sym), ...); }, symbols);
+}
+
 static void bindArcRuntimeSymbols(ExecutionEngine &executionEngine) {
   auto &runtimeCallbacks = runtime::getArcRuntimeAPICallbacks();
   executionEngine.registerSymbols([&](llvm::orc::MangleAndInterner interner) {
@@ -327,8 +339,24 @@ static void bindArcRuntimeSymbols(ExecutionEngine &executionEngine) {
                               runtimeCallbacks.symNameFormat,
                               runtimeCallbacks.fnFormat);
     bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameFormatToString,
+                              runtimeCallbacks.fnFormatToString);
+    bindExecutionEngineSymbol(symbolMap, interner,
+                              runtimeCallbacks.symNameSetTimeFormat,
+                              runtimeCallbacks.fnSetTimeFormat);
+    bindExecutionEngineSymbol(symbolMap, interner,
                               runtimeCallbacks.symNameSwapTraceBuffer,
                               runtimeCallbacks.fnSwapTraceBuffer);
+    return symbolMap;
+  });
+}
+
+// Bind sim dialect runtime symbols to the JIT execution engine.
+static void bindArcSimRuntimeSymbols(ExecutionEngine &executionEngine) {
+  executionEngine.registerSymbols([&](llvm::orc::MangleAndInterner interner) {
+    llvm::orc::SymbolMap symbolMap;
+    bindRuntimeSymbolTuple(symbolMap, interner,
+                           runtime::getSimStringRuntimeSymbols());
     return symbolMap;
   });
 }
@@ -551,8 +579,10 @@ static LogicalResult processBuffer(
       return failure();
     }
 
-    if (!noJitRuntime)
+    if (!noJitRuntime) {
       bindArcRuntimeSymbols(**executionEngine);
+      bindArcSimRuntimeSymbols(**executionEngine);
+    }
 
     auto expectedFunc = (*executionEngine)->lookupPacked(jitEntryPoint);
     if (!expectedFunc) {

@@ -80,25 +80,48 @@ func.func @SimulationControl() {
 
 // CHECK-LABEL: func.func @FormatStrings
 func.func @FormatStrings() {
+  %time = arith.constant 42 : i64
+  %int = arith.constant 42 : i8
+  %unknown = arith.constant 1 : i8
+  // CHECK: sim.fmt.int 10 0 0 %{{.*}} : i8
+  %fmt_int = sim.fmt.int 10 0 0 %int : i8
+  // CHECK: sim.fmt.fvint 2 0 0 %{{.*}}, %{{.*}} : i8
+  %fmt_fvint = sim.fmt.fvint 2 0 0 %int, %unknown : i8
+  // CHECK: sim.fmt.time %{{.*}}, width 3 : i64
+  %fmt_time = sim.fmt.time %time, width 3 : i64
+  // CHECK: sim.proc.timeformat -9, 2, " ns", 0
+  sim.proc.timeformat -9, 2, " ns", 0
   // CHECK: sim.fmt.current_time
   sim.fmt.current_time
   // CHECK: sim.fmt.hier_path
   sim.fmt.hier_path
   // CHECK: sim.fmt.hier_path escaped
   sim.fmt.hier_path escaped
+  // CHECK: sim.fmt.concat
+  %fmt = sim.fmt.concat (%fmt_int, %fmt_fvint, %fmt_time)
+  // CHECK: sim.fmt.to_string
+  %str = sim.fmt.to_string %fmt
   return
 }
 
 // CHECK-LABEL: func.func @DynamicStrings
-func.func @DynamicStrings(%idx: i32) {
+func.func @DynamicStrings(%idx: i32, %end: i32) {
   // CHECK: sim.string.literal "Hello"
   %str = sim.string.literal "Hello"
+  // CHECK: sim.string.literal "World"
+  %rhs = sim.string.literal "World"
   // CHECK: sim.string.length
   %len = sim.string.length %str
+  // CHECK: sim.string.cmp
+  %cmp = sim.string.cmp %str, %rhs
   // CHECK: sim.string.concat
   %concat = sim.string.concat (%str, %str)
   // CHECK: sim.string.get
   %char = sim.string.get %str[%idx]
+  // CHECK: sim.string.get_char
+  %char2 = sim.string.get_char %str[%idx]
+  // CHECK: sim.string.substr
+  %substr = sim.string.substr %str[%idx : %end]
   return
 }
 
