@@ -1696,3 +1696,22 @@ firrtl.circuit "Issue10674" {
     firrtl.instance p @Parent()
   }
 }
+
+// -----
+// https://github.com/llvm/circt/issues/10682
+//
+// Single-element hierpath.
+// CHECK-LABEL: "Issue10682"
+firrtl.circuit "Issue10682" {
+  hw.hierpath private @nla [@M::@w]
+  // CHECK: firrtl.module @Issue10682
+  firrtl.module @Issue10682() {
+    firrtl.instance m @M()
+  }
+  // After inlining @M, the wire is moved into @Issue10682 and localized:
+  // CHECK-NEXT: firrtl.wire sym @w {annotations = [{class = "test"}]}
+  // CHECK-NOT: circt.nonlocal
+  firrtl.module private @M() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
+  }
+}
