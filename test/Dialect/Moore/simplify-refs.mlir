@@ -115,3 +115,20 @@ moore.module @QueueRefsWithConcat() {
     moore.return
   }
 }
+
+// CHECK-LABEL: moore.module @ExtractFromConcatRef()
+moore.module @ExtractFromConcatRef() {
+  // CHECK: %[[A:.+]] = moore.variable : <l32>
+  %a = moore.variable : <l32>
+  // CHECK: %[[B:.+]] = moore.variable : <l16>
+  %b = moore.variable : <l16>
+  moore.procedure always {
+    %cat = moore.concat_ref %a, %b : (!moore.ref<l32>, !moore.ref<l16>) -> <l48>
+    // CHECK: moore.extract_ref %[[B]] from 8 : <l16> -> <l8>
+    %lo = moore.extract_ref %cat from 8 : <l48> -> <l8>
+    // CHECK: moore.extract_ref %[[A]] from 8 : <l32> -> <l8>
+    %hi = moore.extract_ref %cat from 24 : <l48> -> <l8>
+    moore.return
+  }
+  moore.output
+}
