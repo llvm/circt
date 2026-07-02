@@ -14,6 +14,25 @@ sim.func.dpi @dpi(out arg0: i1, in %arg1: i1, return ret: i1)
 sim.func.dpi @dpi_inout(in %arg0: i1, inout %arg1: i1)
 func.func private @func(%arg1: i1) -> (i1, i1)
 
+// CHECK-LABEL: sim.state @STOP stop_enable : i1
+sim.state @STOP stop_enable : i1 {
+  // CHECK: hw.constant true
+  %true = hw.constant true
+  // CHECK: sim.state.yield %true : i1
+  sim.state.yield %true : i1
+}
+
+// CHECK-LABEL: sim.state @PRINTF print_enable : i1
+sim.state @PRINTF print_enable : i1 {
+  // CHECK: sim.state.read @STOP : i1
+  %stop = sim.state.read @STOP : i1
+  %false = hw.constant false
+  // CHECK: %[[ENABLE:.*]] = comb.or
+  %enable = comb.or %stop, %false : i1
+  // CHECK: sim.state.yield %[[ENABLE]] : i1
+  sim.state.yield %enable : i1
+}
+
 // CHECK-LABEL: hw.module @dpi_call
 hw.module @dpi_call(in %clock : !seq.clock, in %enable : i1, in %in: i1) {
   // CHECK: sim.func.dpi.call @dpi(%in) clock %clock enable %enable : (i1) -> (i1, i1)

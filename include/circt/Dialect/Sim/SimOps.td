@@ -42,8 +42,63 @@ def DPIDirection : I32EnumAttr<"DPIDirection",
 }
 
 //===----------------------------------------------------------------------===//
+// Simulator State Enum
+//===----------------------------------------------------------------------===//
+
+def StateKind_StopEnable : I32EnumAttrCase<"StopEnable", 0, "stop_enable">;
+def StateKind_PrintEnable : I32EnumAttrCase<"PrintEnable", 1, "print_enable">;
+
+def StateKindAttr : I32EnumAttr<"StateKind", "simulator state kind",
+    [StateKind_StopEnable, StateKind_PrintEnable]> {
+  let cppNamespace = "circt::sim";
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Operations
 //===----------------------------------------------------------------------===//
+
+def StateOp : SimOp<"state",
+    [IsolatedFromAbove, NoRegionArguments, Symbol, SingleBlock]> {
+  let summary = "A structured simulator runtime state";
+  let description = [{
+    `sim.state` defines a global simulator-level state/control value such as
+    the termination and printing enable conditions. The symbol name is only used
+    as an IR reference target; the structured `kind` attribute carries the
+    simulator semantics.
+
+    The body computes the default state value using constants, reads of other
+    `sim.state` definitions, combinational logic, and selected HW value ops.
+    Simulator runtimes or backends may override the implementation associated
+    with a state kind.
+  }];
+
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    StateKindAttr:$kind,
+    TypeAttrOf<AnyType>:$type
+  );
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let hasRegionVerifier = 1;
+}
+
+def StateReadOp : SimOp<"state.read",
+    [Pure, DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
+  let summary = "Read a simulator runtime state";
+  let arguments = (ins FlatSymbolRefAttr:$state);
+  let results = (outs AnyType:$result);
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+def StateYieldOp : SimOp<"state.yield",
+    [Pure, Terminator, HasParent<"StateOp">]> {
+  let summary = "Yield a simulator runtime state value";
+  let arguments = (ins Variadic<AnyType>:$operands);
+  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
+}
 
 def PlusArgsTestOp : SimOp<"plusargs.test", [Pure]> {
   let summary = "SystemVerilog `$test$plusargs` call";
