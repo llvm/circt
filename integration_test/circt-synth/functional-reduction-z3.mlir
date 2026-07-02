@@ -1,4 +1,4 @@
-// REQUIRES: z3
+// REQUIRES: z3-integration
 // RUN: circt-opt %s -pass-pipeline='builtin.module(hw.module(synth-functional-reduction{num-random-patterns=64 sat-solver=z3}))' -o %t.mlir
 // RUN: cat %t.mlir | FileCheck %s
 
