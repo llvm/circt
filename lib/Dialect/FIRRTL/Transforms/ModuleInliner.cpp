@@ -386,8 +386,11 @@ public:
 
   void setInnerSym(Attribute module, StringAttr innerSym) {
     assert(symIdx.count(module) && "Mutable NLA did not contain symbol");
-    assert(!renames.count(module) && "Module already renamed");
-    renames.insert({module, innerSym});
+    // Idempotent: a module may be renamed more than once in the same context
+    // (e.g., one wire carrying two annotations that reference the same NLA).
+    // Allow this as long as its the /same/ symbol.
+    [[maybe_unused]] auto [it, inserted] = renames.insert({module, innerSym});
+    assert((inserted || it->second == innerSym) && "Conflicting rename");
   }
 };
 } // namespace
