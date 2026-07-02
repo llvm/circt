@@ -174,6 +174,51 @@ static LLVM::LLVMStructType getClassObjectHeaderType(MLIRContext *ctx) {
                              LLVM::LLVMPointerType::get(ctx)});
 }
 
+/// Convert a Moore value type after normal MooreToCore type conversion into a
+/// type suitable for storage in an LLVM class object struct. Moore aggregates
+/// lower to HW aggregate types for value-level operations, but LLVM object
+/// structs cannot contain HW aggregate members directly.
+static Type getClassStorageType(Type type, const DataLayout &layout) {
+  if (LLVM::isCompatibleType(type))
+    return type;
+
+  if (isa<llhd::TimeType>(type))
+    return IntegerType::get(type.getContext(), 64);
+
+  if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
+    auto elementType = getClassStorageType(arrayType.getElementType(), layout);
+    if (!LLVM::isCompatibleType(elementType))
+      return type;
+    return LLVM::LLVMArrayType::get(elementType, arrayType.getNumElements());
+  }
+
+  if (auto structType = dyn_cast<hw::StructType>(type)) {
+    SmallVector<Type> elements;
+    for (auto field : structType.getElements()) {
+      auto fieldType = getClassStorageType(field.type, layout);
+      if (!LLVM::isCompatibleType(fieldType))
+        return type;
+      elements.push_back(fieldType);
+    }
+    return LLVM::LLVMStructType::getLiteral(type.getContext(), elements);
+  }
+
+  if (auto unionType = dyn_cast<hw::UnionType>(type)) {
+    uint64_t maxByteSize = 0;
+    for (auto field : unionType.getElements()) {
+      auto fieldType = getClassStorageType(field.type, layout);
+      if (!LLVM::isCompatibleType(fieldType))
+        return type;
+      maxByteSize =
+          std::max(maxByteSize, layout.getTypeSize(fieldType).getFixedValue());
+    }
+    return LLVM::LLVMArrayType::get(IntegerType::get(type.getContext(), 8),
+                                    maxByteSize);
+  }
+
+  return type;
+}
+
 static std::string getTypeInfoName(SymbolRefAttr className) {
   return className.getRootReference().str() + "::typeinfo";
 }
@@ -284,6 +329,7 @@ static LogicalResult resolveClassStructBody(ClassDeclOp op,
 
   // Properties in source order.
   unsigned iterator = derivedStartIdx;
+  DataLayout layout(op->getParentOfType<ModuleOp>());
   auto &block = op.getBody().front();
   for (Operation &child : block) {
     if (auto prop = dyn_cast<ClassPropertyDeclOp>(child)) {
@@ -293,6 +339,7 @@ static LogicalResult resolveClassStructBody(ClassDeclOp op,
         return prop.emitOpError()
                << "failed to convert property type " << mooreTy;
 
+      llvmTy = getClassStorageType(llvmTy, layout);
       structBodyMembers.push_back(llvmTy);
 
       // Derived field path: either {i} or {1+i} if base is present.
@@ -956,14 +1003,47 @@ static Value createZeroValue(Type type, Location loc,
 
   // Otherwise try to create a zero integer and bitcast it to the result type.
   int64_t width = hw::getBitWidth(type);
-  if (width == -1)
-    return {};
+  if (width != -1) {
+    // TODO: Once the core dialects support four-valued integers, this code
+    // will additionally need to generate an all-X value for four-valued
+    // variables.
+    Value constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+    return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
+  }
 
-  // TODO: Once the core dialects support four-valued integers, this code
-  // will additionally need to generate an all-X value for four-valued
-  // variables.
-  Value constZero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
-  return rewriter.createOrFold<hw::BitcastOp>(loc, type, constZero);
+  if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
+    Value elementZero =
+        createZeroValue(arrayType.getElementType(), loc, rewriter);
+    if (!elementZero)
+      return {};
+
+    SmallVector<Value> elements(arrayType.getNumElements(), elementZero);
+    return hw::ArrayCreateOp::create(rewriter, loc, arrayType, elements);
+  }
+
+  if (auto structType = dyn_cast<hw::StructType>(type)) {
+    SmallVector<Value> fields;
+    for (auto field : structType.getElements()) {
+      Value fieldZero = createZeroValue(field.type, loc, rewriter);
+      if (!fieldZero)
+        return {};
+      fields.push_back(fieldZero);
+    }
+    return hw::StructCreateOp::create(rewriter, loc, structType, fields);
+  }
+
+  if (auto unionType = dyn_cast<hw::UnionType>(type)) {
+    if (unionType.getElements().empty())
+      return {};
+    auto field = unionType.getElements().front();
+    Value fieldZero = createZeroValue(field.type, loc, rewriter);
+    if (!fieldZero)
+      return {};
+    return hw::UnionCreateOp::create(rewriter, loc, unionType, field.name,
+                                     fieldZero);
+  }
+
+  return {};
 }
 
 struct ClassPropertyRefOpConversion
@@ -1188,11 +1268,12 @@ struct NetOpConversion : public OpConversionPattern<NetOp> {
 
     auto elementType = cast<llhd::RefType>(resultType).getNestedType();
     int64_t width = hw::getBitWidth(elementType);
-    if (width == -1)
+    auto init = width == -1 ? createZeroValue(elementType, loc, rewriter)
+                            : createInitialValue(op.getKind(), rewriter, loc,
+                                                 width, elementType);
+    if (!init)
       return failure();
 
-    auto init =
-        createInitialValue(op.getKind(), rewriter, loc, width, elementType);
     auto signal = rewriter.replaceOpWithNewOp<llhd::SignalOp>(
         op, resultType, op.getNameAttr(), init);
 
@@ -2932,6 +3013,114 @@ struct QueueCmpOpConversion : public OpConversionPattern<QueueCmpOp> {
   }
 };
 
+struct UArrayCmpOpConversion : public OpConversionPattern<UArrayCmpOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  static Value createAggregateEquality(Location loc, Value lhs, Value rhs,
+                                       ConversionPatternRewriter &rewriter) {
+    Type inputType = lhs.getType();
+    if (inputType != rhs.getType())
+      return {};
+
+    int64_t bitWidth = hw::getBitWidth(inputType);
+    if (bitWidth > 0) {
+      auto intType = rewriter.getIntegerType(bitWidth);
+      lhs = rewriter.createOrFold<hw::BitcastOp>(loc, intType, lhs);
+      rhs = rewriter.createOrFold<hw::BitcastOp>(loc, intType, rhs);
+      return comb::ICmpOp::create(rewriter, loc, ICmpPredicate::eq, lhs, rhs);
+    }
+
+    if (isa<LLVM::LLVMPointerType>(inputType))
+      return LLVM::ICmpOp::create(rewriter, loc, LLVM::ICmpPredicate::eq, lhs,
+                                  rhs);
+
+    if (isa<FloatType>(inputType))
+      return arith::CmpFOp::create(rewriter, loc, arith::CmpFPredicate::OEQ,
+                                   lhs, rhs);
+
+    if (isa<llhd::TimeType>(inputType)) {
+      Value lhsInt = llhd::TimeToIntOp::create(rewriter, loc, lhs);
+      Value rhsInt = llhd::TimeToIntOp::create(rewriter, loc, rhs);
+      return comb::ICmpOp::create(rewriter, loc, ICmpPredicate::eq, lhsInt,
+                                  rhsInt);
+    }
+
+    SmallVector<Value> equalities;
+    if (auto arrayType = dyn_cast<hw::ArrayType>(inputType)) {
+      unsigned idxWidth = llvm::Log2_64_Ceil(arrayType.getNumElements());
+      auto idxType = rewriter.getIntegerType(idxWidth);
+      for (size_t index = 0, end = arrayType.getNumElements(); index != end;
+           ++index) {
+        Value idx = hw::ConstantOp::create(rewriter, loc, idxType, index);
+        Value lhsElement = hw::ArrayGetOp::create(rewriter, loc, lhs, idx);
+        Value rhsElement = hw::ArrayGetOp::create(rewriter, loc, rhs, idx);
+        Value elementEqual =
+            createAggregateEquality(loc, lhsElement, rhsElement, rewriter);
+        if (!elementEqual)
+          return {};
+        equalities.push_back(elementEqual);
+      }
+    } else if (auto structType = dyn_cast<hw::StructType>(inputType)) {
+      for (auto field : structType.getElements()) {
+        Value lhsElement =
+            hw::StructExtractOp::create(rewriter, loc, lhs, field.name);
+        Value rhsElement =
+            hw::StructExtractOp::create(rewriter, loc, rhs, field.name);
+        Value elementEqual =
+            createAggregateEquality(loc, lhsElement, rhsElement, rewriter);
+        if (!elementEqual)
+          return {};
+        equalities.push_back(elementEqual);
+      }
+    } else {
+      return {};
+    }
+
+    if (equalities.empty())
+      return hw::ConstantOp::create(rewriter, loc, APInt(1, 1));
+    return rewriter.createOrFold<comb::AndOp>(loc, equalities, true);
+  }
+
+  LogicalResult
+  matchAndRewrite(UArrayCmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ICmpPredicate predicate;
+    switch (op.getPredicate()) {
+    case UArrayCmpPredicate::eq:
+      predicate = ICmpPredicate::eq;
+      break;
+    case UArrayCmpPredicate::ne:
+      predicate = ICmpPredicate::ne;
+      break;
+    }
+
+    Type inputType = adaptor.getLhs().getType();
+    int64_t bitWidth = hw::getBitWidth(inputType);
+    if (bitWidth <= 0) {
+      Value equal = createAggregateEquality(op.getLoc(), adaptor.getLhs(),
+                                            adaptor.getRhs(), rewriter);
+      if (!equal)
+        return failure();
+      if (op.getPredicate() == UArrayCmpPredicate::eq) {
+        rewriter.replaceOp(op, equal);
+        return success();
+      }
+      Value trueVal =
+          hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, 1));
+      rewriter.replaceOpWithNewOp<comb::XorOp>(op, equal, trueVal, true);
+      return success();
+    }
+
+    auto intType = rewriter.getIntegerType(bitWidth);
+    Value lhs = rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), intType,
+                                                     adaptor.getLhs());
+    Value rhs = rewriter.createOrFold<hw::BitcastOp>(op.getLoc(), intType,
+                                                     adaptor.getRhs());
+    rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, predicate, lhs, rhs);
+    return success();
+  }
+};
+
 struct QueueFromUnpackedArrayOpConversion
     : public OpConversionPattern<QueueFromUnpackedArrayOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -3648,6 +3837,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     DynQueueExtractOpConversion,
     QueueResizeOpConversion,
     QueueSetOpConversion,
+    UArrayCmpOpConversion,
     QueueCmpOpConversion,
     QueueFromUnpackedArrayOpConversion,
     QueueConcatOpConversion
