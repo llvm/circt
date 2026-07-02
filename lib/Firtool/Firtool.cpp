@@ -133,8 +133,13 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // default connections that are then overridden later.  If this pass is run
   // before ExpandWhens, then users can get errors if they rely on last-connect
   // semantics.
-  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode()))
-    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains({*mode}));
+  if (auto mode = FirtoolOptions::toInferDomainsPassMode(opt.getDomainMode())) {
+    firrtl::InferDomainsOptions passOptions;
+    passOptions.mode = *mode;
+    passOptions.disabledDomains.assign(opt.getDisabledDomains().begin(),
+                                       opt.getDisabledDomains().end());
+    pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferDomains(passOptions));
+  }
 
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createCheckCombLoops());
 
@@ -809,6 +814,11 @@ public:
           clEnumValN(firtool::FirtoolOptions::DomainMode::Strip, "strip",
                      "Erase all domain information"))};
 
+  llvm::cl::list<std::string> disabledDomains{
+      "disable-domain",
+      llvm::cl::desc("Names of domains (e.g. \"ClockDomain\") to exclude from "
+                     "domain checking")};
+
   //===----------------------------------------------------------------------===
   // Lint options
   //===----------------------------------------------------------------------===
@@ -912,4 +922,6 @@ circt::firtool::FirtoolOptions::FirtoolOptions()
   emitAllBindFiles = clOptions->emitAllBindFiles;
   inlineInputOnlyModules = clOptions->inlineInputOnlyModules;
   domainMode = clOptions->domainMode;
+  disabledDomains.assign(clOptions->disabledDomains.begin(),
+                         clOptions->disabledDomains.end());
 }

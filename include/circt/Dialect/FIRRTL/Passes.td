@@ -930,7 +930,9 @@ def InferDomains : Pass<"firrtl-infer-domains", "firrtl::CircuitOp"> {
                    clEnumValN(InferDomainsMode::InferAll, "infer-all",
                      "Check domains with inference for both public and private "
                      "modules"))
-      }]>];
+      }]>,
+                 ListOption<"disabledDomains", "disable-domain", "std::string",
+                            "List of domain names to disable checking for">];
 }
 
 def LowerDomains : Pass<"firrtl-lower-domains", "firrtl::CircuitOp"> {

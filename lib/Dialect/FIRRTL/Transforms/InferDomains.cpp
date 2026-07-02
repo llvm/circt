@@ -27,8 +27,10 @@
 #include "mlir/IR/Iterators.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/TinyPtrVector.h"
 
 #define DEBUG_TYPE "firrtl-infer-domains"
@@ -137,10 +139,11 @@ struct ModuleUpdateInfo {
 namespace {
 struct CircuitState {
   CircuitState(CircuitOp circuit, InstanceGraph &instanceGraph,
-               InnerRefNamespace &innerRefNamespace, InferDomainsMode mode)
+               InnerRefNamespace &innerRefNamespace, InferDomainsMode mode,
+               ArrayRef<std::string> disabledDomains)
       : circuit(circuit), instanceGraph(instanceGraph),
         innerRefNamespace(innerRefNamespace), mode(mode) {
-    processCircuit(circuit);
+    processCircuit(circuit, disabledDomains);
   }
 
   LogicalResult run();
@@ -149,6 +152,13 @@ struct CircuitState {
   size_t getNumDomains() const { return domainTable.size(); }
   DomainOp getDomain(DomainTypeID id) const { return domainTable[id.index]; }
   DomainTypeID getDomainTypeID(Type type) { return typeIDTable[type]; }
+
+  /// True if the domain identified by `id` has been excluded from checking via
+  /// the `disabled-domains` option. Errors involving only disabled domains are
+  /// suppressed.
+  bool isDomainDisabled(DomainTypeID id) const {
+    return disabledDomainIDs.contains(id.index);
+  }
 
   void dirty() { asmState = nullptr; }
   AsmState &getAsmState() {
@@ -182,9 +192,18 @@ private:
     typeIDTable.insert({domainType, {index}});
   }
 
-  void processCircuit(CircuitOp circuit) {
+  void processCircuit(CircuitOp circuit,
+                      ArrayRef<std::string> disabledDomains) {
     for (auto decl : circuit.getOps<DomainOp>())
       processDomain(decl);
+
+    // Resolve the disabled-domain names to type-ids.
+    llvm::StringSet<> disabledNames;
+    for (const auto &name : disabledDomains)
+      disabledNames.insert(name);
+    for (auto [index, decl] : llvm::enumerate(domainTable))
+      if (disabledNames.contains(decl.getName()))
+        disabledDomainIDs.insert(index);
   }
 
   CircuitOp circuit;
@@ -192,6 +211,7 @@ private:
   InnerRefNamespace &innerRefNamespace;
   InferDomainsMode mode;
   SmallVector<DomainOp> domainTable;
+  DenseSet<size_t> disabledDomainIDs;
   DenseMap<Type, DomainTypeID> typeIDTable;
   DenseMap<VariableTerm *, size_t> variableIDTable;
   std::unique_ptr<AsmState> asmState;
@@ -300,6 +320,9 @@ public:
   }
   DomainTypeID getDomainTypeID(DomainValue value) const {
     return globals.getDomainTypeID(value.getType());
+  }
+  bool isDomainDisabled(DomainTypeID id) const {
+    return globals.isDomainDisabled(id);
   }
   auto &getModuleUpdateTable() { return globals.getModuleUpdateTable(); }
 
@@ -597,9 +620,16 @@ LogicalResult ModuleState::unify(RowTerm *lhsRow, Term *rhs) {
     return success();
   }
   if (auto *rhsRow = dyn_cast<RowTerm>(rhs)) {
-    for (auto [x, y] : llvm::zip_equal(lhsRow->elements, rhsRow->elements))
+    for (auto [i, elements] :
+         llvm::enumerate(llvm::zip_equal(lhsRow->elements, rhsRow->elements))) {
+      // Disabled domains are excluded from checking: skip their row slot so a
+      // mismatch there never produces a domain-crossing error.
+      if (isDomainDisabled(DomainTypeID{i}))
+        continue;
+      auto [x, y] = elements;
       if (failed(unify(x, y)))
         return failure();
+    }
     return success();
   }
   return failure();
@@ -922,6 +952,8 @@ void ModuleState::emitDomainCrossingError(Operation *op, Value lhs,
   render(rhsRow, note2);
 
   for (size_t i = 0, e = getNumDomains(); i < e; ++i) {
+    if (isDomainDisabled(DomainTypeID{i}))
+      continue;
     auto *lhsDomain = find(lhsRow->elements[i]);
     auto *rhsDomain = find(rhsRow->elements[i]);
     if (lhsDomain == rhsDomain)
@@ -1102,7 +1134,7 @@ LogicalResult ModuleState::processModulePorts(FModuleOp moduleOp) {
     for (auto domainPortIndex : getPortDomainAssociation(domainInfo, i)) {
       auto domainTypeID = domainTypeIDTable.at(domainPortIndex.getUInt());
       auto prevDomainPortIndex = associations[domainTypeID.index];
-      if (prevDomainPortIndex) {
+      if (prevDomainPortIndex && !isDomainDisabled(domainTypeID)) {
         emitDuplicatePortDomainError(moduleOp, i, domainTypeID,
                                      prevDomainPortIndex, domainPortIndex);
         return failure();
@@ -1155,7 +1187,7 @@ LogicalResult ModuleState::processInstancePorts(T op) {
     for (auto domainPortIndex : getPortDomainAssociation(domainInfo, i)) {
       auto domainTypeID = domainTypeIDTable.at(domainPortIndex.getUInt());
       auto prevDomainPortIndex = associations[domainTypeID.index];
-      if (prevDomainPortIndex) {
+      if (prevDomainPortIndex && !isDomainDisabled(domainTypeID)) {
         emitDuplicatePortDomainError(op, i, domainTypeID, prevDomainPortIndex,
                                      domainPortIndex);
         return failure();
@@ -1232,6 +1264,10 @@ LogicalResult ModuleState::processOp(DomainDefineOp op) {
   auto *srcTerm = getTermForDomain(src);
   auto *dstTerm = getTermForDomain(dst);
   if (succeeded(unify(dstTerm, srcTerm)))
+    return success();
+
+  // Disabled domains are excluded from checking.
+  if (isDomainDisabled(getDomainTypeID(cast<DomainValue>(dst))))
     return success();
 
   auto diag =
@@ -1810,7 +1846,7 @@ LogicalResult ModuleState::checkModulePorts(FModuleLike moduleOp) {
     for (auto domainPortIndex : getPortDomainAssociation(domainInfo, i)) {
       auto domainTypeID = domainTypeIDTable.at(domainPortIndex.getUInt());
       auto prevDomainPortIndex = associations[domainTypeID.index];
-      if (prevDomainPortIndex) {
+      if (prevDomainPortIndex && !isDomainDisabled(domainTypeID)) {
         emitDuplicatePortDomainError(moduleOp, i, domainTypeID,
                                      prevDomainPortIndex, domainPortIndex);
         return failure();
@@ -1821,6 +1857,8 @@ LogicalResult ModuleState::checkModulePorts(FModuleLike moduleOp) {
     // Check the associations for completeness.
     for (size_t domainIndex = 0; domainIndex < numDomains; ++domainIndex) {
       auto typeID = DomainTypeID{domainIndex};
+      if (isDomainDisabled(typeID))
+        continue;
       if (!associations[domainIndex]) {
         emitMissingPortDomainAssociationError(moduleOp, typeID, i);
         return failure();
@@ -1836,6 +1874,9 @@ LogicalResult ModuleState::checkModuleDomainPortDrivers(FModuleOp moduleOp) {
     auto port = dyn_cast<DomainValue>(moduleOp.getArgument(i));
     if (!port || moduleOp.getPortDirection(i) != Direction::Out ||
         isDriven(port))
+      continue;
+
+    if (isDomainDisabled(getDomainTypeID(moduleOp, i)))
       continue;
 
     auto name = moduleOp.getPortNameAttr(i);
@@ -1855,6 +1896,9 @@ LogicalResult ModuleState::checkInstanceDomainPortDrivers(FInstanceLike op) {
     auto type = port.getType();
     if (!isa<DomainType>(type) || op.getPortDirection(i) != Direction::In ||
         isDriven(port))
+      continue;
+
+    if (isDomainDisabled(getDomainTypeID(op, i)))
       continue;
 
     auto name = op.getPortNameAttr(i);
@@ -2059,7 +2103,8 @@ struct InferDomainsPass
         getAnalysis<InnerSymbolTableCollection>();
     circt::hw::InnerRefNamespace innerRefNamespace{symbolTable,
                                                    innerSymbolTableCollection};
-    CircuitState state(circuit, instanceGraph, innerRefNamespace, mode);
+    CircuitState state(circuit, instanceGraph, innerRefNamespace, mode,
+                       disabledDomains);
     if (failed(state.run()))
       signalPassFailure();
   }
