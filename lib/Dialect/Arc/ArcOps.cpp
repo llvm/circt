@@ -807,9 +807,10 @@ CoroutineCallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 // CoroutineInstanceOp
 //===----------------------------------------------------------------------===//
 
-// An instance hides the coroutine's trailing wakeup time. Verify that the
-// callee declares a wakeup as its last result and that the instance's args and
-// results match the callee's signature with that last result removed.
+// An instance hides the coroutine's trailing observe bitmask and wakeup time.
+// Verify that the callee declares a bitmask and wakeup as its last two results
+// and that the instance's args and results match the callee's signature with
+// those two results removed.
 LogicalResult
 CoroutineInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto callee = (*this)->getAttrOfType<FlatSymbolRefAttr>("callee");
@@ -822,15 +823,24 @@ CoroutineInstanceOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   auto fnType = defineOp.getFunctionType();
   auto fnResults = fnType.getResults();
-  if (fnResults.empty() || !fnResults.back().isInteger(64))
+  if (fnResults.size() < 2 || !fnResults.back().isInteger(64))
     return emitOpError() << "referenced coroutine `" << callee.getValue()
                          << "` must produce an `i64` wakeup time as its "
                             "last result";
 
+  // The observe bitmask carries one bit per coroutine argument.
+  auto maskType = dyn_cast<IntegerType>(fnResults[fnResults.size() - 2]);
+  if (!maskType || maskType.getWidth() != fnType.getNumInputs())
+    return emitOpError()
+           << "referenced coroutine `" << callee.getValue()
+           << "` must produce an observe bitmask with one bit per "
+              "argument (`i"
+           << fnType.getNumInputs() << "`) as its second-to-last result";
+
   if (failed(verifyTypeListEquivalence(*this, fnType.getInputs(),
                                        getArgs().getTypes(), "operand")))
     return failure();
-  if (failed(verifyTypeListEquivalence(*this, fnResults.drop_back(),
+  if (failed(verifyTypeListEquivalence(*this, fnResults.drop_back(2),
                                        getResults().getTypes(), "result")))
     return failure();
   return success();

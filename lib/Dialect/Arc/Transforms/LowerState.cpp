@@ -874,11 +874,12 @@ LogicalResult OpLowering::lower(InstanceOp op) {
 LogicalResult OpLowering::lower(CoroutineInstanceOp op) {
   assert(phase == Phase::New);
 
-  // A coroutine samples its arguments at the start of an evaluation, before any
-  // state updates, like a clocked state element.
+  // A coroutine samples its arguments in the New phase, so that a re-entry sees
+  // the up-to-date values produced in the same evaluation and the change
+  // detector below compares against fresh values.
   SmallVector<Value> inputs;
   for (auto input : op.getArgs())
-    inputs.push_back(lowerValue(input, Phase::Old));
+    inputs.push_back(lowerValue(input, Phase::New));
   if (initial)
     return success();
   if (llvm::is_contained(inputs, Value{}))
@@ -917,11 +918,43 @@ LogicalResult OpLowering::lower(CoroutineInstanceOp op) {
     resultSlots.push_back(slot);
   }
 
-  // Re-enter the coroutine if its scheduled wakeup time has been reached.
+  // Detect changes on the observed arguments: each argument's value from the
+  // previous evaluation is held in a state slot, and a change is an inequality
+  // against the freshly sampled value. The observe bitmask reported by the
+  // coroutine on its last run selects which arguments matter; unobserved
+  // changes are ignored. The previous-value slots are updated unconditionally
+  // so they always track the latest value.
+  Value maskSlot;
+  Value anyChange = hw::ConstantOp::create(module.builder, loc,
+                                           module.builder.getI1Type(), 0);
+  if (!inputs.empty()) {
+    auto maskType = module.builder.getIntegerType(inputs.size());
+    maskSlot = AllocStateOp::create(
+        module.allocBuilder, loc, StateType::get(maskType), module.storageArg);
+    auto mask = StateReadOp::create(module.builder, loc, maskSlot);
+    for (auto [index, input] : llvm::enumerate(inputs)) {
+      auto prevSlot = AllocStateOp::create(module.allocBuilder, loc,
+                                           StateType::get(input.getType()),
+                                           module.storageArg);
+      auto prev = StateReadOp::create(module.builder, loc, prevSlot);
+      StateWriteOp::create(module.builder, loc, prevSlot, input);
+      auto changed = comb::ICmpOp::create(module.builder, loc,
+                                          comb::ICmpPredicate::ne, input, prev);
+      auto maskBit =
+          comb::ExtractOp::create(module.builder, loc, mask,
+                                  static_cast<unsigned>(index), /*bitWidth=*/1);
+      auto masked = comb::AndOp::create(module.builder, loc, changed, maskBit);
+      anyChange = comb::OrOp::create(module.builder, loc, anyChange, masked);
+    }
+  }
+
+  // Re-enter the coroutine if its scheduled wakeup time has been reached or if
+  // an observed argument changed.
   auto now = CurrentTimeOp::create(module.builder, loc, module.storageArg);
   auto wakeup = StateReadOp::create(module.builder, loc, wakeupSlot);
-  auto ready = comb::ICmpOp::create(module.builder, loc,
-                                    comb::ICmpPredicate::uge, now, wakeup);
+  auto timeReady = comb::ICmpOp::create(module.builder, loc,
+                                        comb::ICmpPredicate::uge, now, wakeup);
+  auto ready = comb::OrOp::create(module.builder, loc, timeReady, anyChange);
   auto ifOp =
       scf::IfOp::create(module.builder, loc, ready, /*withElseRegion=*/false);
   {
@@ -942,6 +975,7 @@ LogicalResult OpLowering::lower(CoroutineInstanceOp op) {
     auto newState = call.getResult(0);
     auto newPc = call.getResult(1);
     auto wakeupNew = call.getResults().back();
+    auto maskNew = call.getResult(2 + op.getNumResults());
 
     // Force the wakeup time to "never" once the coroutine halts or returns, so
     // the time guard above prevents it from ever being re-entered.
@@ -955,6 +989,8 @@ LogicalResult OpLowering::lower(CoroutineInstanceOp op) {
     StateWriteOp::create(module.builder, loc, stateSlot, newState);
     StateWriteOp::create(module.builder, loc, pcSlot, newPc);
     StateWriteOp::create(module.builder, loc, wakeupSlot, wakeupEff);
+    if (maskSlot)
+      StateWriteOp::create(module.builder, loc, maskSlot, maskNew);
     for (auto [index, slot] : llvm::enumerate(resultSlots))
       StateWriteOp::create(module.builder, loc, slot,
                            call.getResult(2 + index));
