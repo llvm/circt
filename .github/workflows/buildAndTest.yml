@@ -187,6 +187,18 @@ jobs:
               "run_integration_tests": false,
               "runner": "windows-2022",
               "cmake_c_compiler": "cl"
+            },
+            {
+              "name": macOS Test",
+              "install_target": "",
+              "package_name_prefix": "",
+              "cmake_build_type": "release",
+              "llvm_enable_assertions": "ON",
+              "build_shared_libs": "OFF",
+              "run_tests": true,
+              "run_integration_tests": false,
+              "runner": macos-15,
+              "cmake_c_compiler": "clang"
             }
           ]
           EOF
