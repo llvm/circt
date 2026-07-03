@@ -798,6 +798,33 @@ def StringGetOp : SimOp<"string.get", [Pure]> {
   let assemblyFormat = "$str `[` $index `]` attr-dict";
 }
 
+def SimStringCmpPredicateAttr : I64EnumAttr<
+    "StringCmpPredicate", "String comparison predicate",
+    [I64EnumAttrCase<"eq", 0>, I64EnumAttrCase<"ne", 1>,
+    I64EnumAttrCase<"lt", 2>, I64EnumAttrCase<"le", 3>,
+    I64EnumAttrCase<"gt", 4>, I64EnumAttrCase<"ge", 5>]> {
+  let cppNamespace = "circt::sim";
+}
+
+def StringCmpOp : SimOp<"string.cmp", [Pure]> {
+  let summary = "Compare two dynamic strings";
+  let description = [{
+    Compares two dynamic string values using the specified predicates and returns
+    a 1-bit boolean result.
+
+    Equality predicates (`eq`, `ne`) test whether the strings have identical
+    content. Relational predicates (`lt`, `le`, `gt`, `ge`) compare strings
+    lexicographically, byte by byte, following the ordering of byte value.
+  }];
+  let arguments = (ins
+    SimStringCmpPredicateAttr:$predicate,
+    DynamicStringType:$lhs,
+    DynamicStringType:$rhs
+  );
+  let results = (outs I1:$result);
+  let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` type($lhs)";
+}
+
 //===----------------------------------------------------------------------===//
 // Queues
 //===----------------------------------------------------------------------===//

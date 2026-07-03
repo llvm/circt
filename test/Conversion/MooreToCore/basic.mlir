@@ -1543,6 +1543,18 @@ func.func @StringOperations(%arg0: !moore.i32, %arg1: !moore.string, %arg2: !moo
   moore.string.concat (%arg1, %arg2)
   // CHECK: sim.string.length %arg1
   moore.string.len %arg1
+  // CHECK: sim.string.cmp eq %arg1, %arg2 : !sim.dstring
+  moore.string_cmp eq %arg1, %arg2 : string -> i1
+  // CHECK: sim.string.cmp ne %arg1, %arg2 : !sim.dstring
+  moore.string_cmp ne %arg1, %arg2 : string -> i1
+  // CHECK: sim.string.cmp le %arg1, %arg2 : !sim.dstring
+  moore.string_cmp le %arg1, %arg2 : string -> i1
+  // CHECK: sim.string.cmp lt %arg1, %arg2 : !sim.dstring
+  moore.string_cmp lt %arg1, %arg2 : string -> i1
+  // CHECK: sim.string.cmp ge %arg1, %arg2 : !sim.dstring
+  moore.string_cmp ge %arg1, %arg2 : string -> i1
+  // CHECK: sim.string.cmp gt %arg1, %arg2 : !sim.dstring
+  moore.string_cmp gt %arg1, %arg2 : string -> i1
   return
 }
 
