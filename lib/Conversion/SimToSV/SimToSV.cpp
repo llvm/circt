@@ -113,44 +113,6 @@ DPIFunctionTypeToHWModuleType(const DPIFunctionType &dpiFuncType) {
   }
   return hw::ModuleType::get(dpiFuncType.getContext(), hwPorts);
 }
-
-class StringCmpLowering : public OpConversionPattern<sim::StringCmpOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(sim::StringCmpOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const final {
-    std::optional<StringRef> fmt;
-    switch (op.getPredicate()) {
-    case sim::StringCmpPredicate::eq:
-      fmt = "{{0}} == {{1}}";
-      break;
-    case sim::StringCmpPredicate::ne:
-      fmt = "{{0}} != {{1}}";
-      break;
-    case sim::StringCmpPredicate::lt:
-      fmt = "{{0}} < {{1}}";
-      break;
-    case sim::StringCmpPredicate::le:
-      fmt = "{{0}} <= {{1}}";
-      break;
-    case sim::StringCmpPredicate::gt:
-      fmt = "{{0}} > {{1}}";
-      break;
-    case sim::StringCmpPredicate::ge:
-      fmt = "{{0}} >= {{1}}";
-      break;
-    }
-    if (!fmt)
-      return op.emitOpError("unhandled string comparison predicate");
-    rewriter.replaceOpWithNewOp<sv::VerbatimExprOp>(
-        op, rewriter.getI1Type(), *fmt,
-        ValueRange{adaptor.getLhs(), adaptor.getRhs()});
-    return success();
-  }
-};
-
 } // namespace
 
 // Lower `sim.plusargs.test` to a standard SV implementation.
@@ -1002,9 +964,8 @@ struct SimToSVPass : public circt::impl::LowerSimToSVBase<SimToSVPass> {
       patterns.add<PauseOp>(convert);
       patterns.add<TriggeredLowering>(context, state);
       patterns.add<DPICallLowering>(context, state);
-      patterns
-          .add<StringConstantLowering, StringConcatLowering, StringCmpLowering>(
-              typeConverter, context);
+      patterns.add<StringConstantLowering, StringConcatLowering>(typeConverter,
+                                                                 context);
       auto result = applyPartialConversion(module, target, std::move(patterns));
 
       if (failed(result))
