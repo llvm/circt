@@ -23,7 +23,8 @@ struct FIRVersion;
 
 mlir::LogicalResult exportFIRFile(mlir::ModuleOp module, llvm::raw_ostream &os,
                                   std::optional<size_t> targetLineLength,
-                                  FIRVersion version);
+                                  FIRVersion version,
+                                  bool disableLineWrap = false);
 
 void registerToFIRFileTranslation();
 
