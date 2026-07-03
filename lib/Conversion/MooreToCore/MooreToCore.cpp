@@ -522,9 +522,15 @@ static void getValuesToObserve(Region *region,
   Location loc = region->getLoc();
 
   auto probeIfSignal = [&](Value value) -> Value {
-    if (!isa<llhd::RefType>(value.getType()))
-      return value;
-    return llhd::ProbeOp::create(rewriter, loc, value);
+    Type type = value.getType();
+    if (auto refType = dyn_cast<llhd::RefType>(type)) {
+      if (!hw::isHWValueType(refType.getNestedType()))
+        return {};
+      return llhd::ProbeOp::create(rewriter, loc, value);
+    }
+    if (!hw::isHWValueType(type))
+      return {};
+    return value;
   };
 
   region->getParentOp()->walk<WalkOrder::PreOrder, ForwardDominanceIterator<>>(
@@ -544,13 +550,15 @@ static void getValuesToObserve(Region *region,
           OpBuilder::InsertionGuard g(rewriter);
           if (auto remapped = rewriter.getRemappedValue(value)) {
             setInsertionPoint(remapped);
-            observeValues.push_back(probeIfSignal(remapped));
+            if (auto observed = probeIfSignal(remapped))
+              observeValues.push_back(observed);
           } else {
             setInsertionPoint(value);
             auto type = typeConverter->convertType(value.getType());
             auto converted = typeConverter->materializeTargetConversion(
                 rewriter, loc, type, value);
-            observeValues.push_back(probeIfSignal(converted));
+            if (auto observed = probeIfSignal(converted))
+              observeValues.push_back(observed);
           }
         }
       });

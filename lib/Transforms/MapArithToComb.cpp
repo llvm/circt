@@ -220,7 +220,6 @@ public:
       target.addIllegalOp<arith::ShLIOp>();
       target.addIllegalOp<arith::ShRSIOp>();
       target.addIllegalOp<arith::ShRUIOp>();
-      target.addIllegalOp<arith::SelectOp>();
       target.addIllegalOp<arith::ExtSIOp>();
       target.addIllegalOp<arith::ExtUIOp>();
       target.addIllegalOp<arith::TruncIOp>();
@@ -233,6 +232,10 @@ public:
       // Force integer constants to be mapped to `hw.constant`.
       target.addDynamicallyLegalOp<arith::ConstantOp>([](Operation *op) {
         return !isa<IntegerType>(op->getResult(0).getType());
+      });
+
+      target.addDynamicallyLegalOp<arith::SelectOp>([](arith::SelectOp op) {
+        return !hw::isHWValueType(op.getType());
       });
     }
     MapArithTypeConverter typeConverter;

@@ -1358,6 +1358,29 @@ moore.module @blockArgAsObservedValue(in %in0: !moore.i32, in %in1: !moore.i32) 
   }
 }
 
+// CHECK-LABEL: hw.module @StringAssignInAlwaysComb
+moore.module @StringAssignInAlwaysComb(in %cond: !moore.i1) {
+  %str = moore.variable : <!moore.string>
+  // CHECK: llhd.process
+  moore.procedure always_comb {
+    %on = moore.constant_string "on" : i16
+    %on_s = moore.int_to_string %on : i16
+    %off = moore.constant_string "off" : i24
+    %off_s = moore.int_to_string %off : i24
+    %c = moore.to_builtin_int %cond :i1
+    cf.cond_br %c, ^bb1, ^bb2
+  ^bb1:
+    moore.blocking_assign %str, %on_s : string
+    cf.br ^bb3
+  ^bb2:
+    moore.blocking_assign %str, %off_s : string
+    cf.br ^bb3
+  ^bb3:
+    // CHECK: llhd.wait (%cond : i1), ^bb1
+    moore.return
+  }
+}
+
 // CHECK-LABEL: @Time
 // CHECK-SAME: (%arg0: !llhd.time) -> (!llhd.time, !llhd.time)
 func.func @Time(%arg0: !moore.time) -> (!moore.time, !moore.time) {
