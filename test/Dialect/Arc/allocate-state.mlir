@@ -5,7 +5,7 @@
 // CHECK-SAME:  storageBytes 5815
 // NOTAPS-NOT:  traceTaps
 // TAPS-SAME:   traceTaps [#arc.trace_tap<i16, 0, ["foo", "bar"]>, #arc.trace_tap<i1, 2, ["baz"]>]
-arc.model @test io !hw.modty<input x : i1, output y : i1> storageBytes 5815 {
+arc.model @test io !hw.modty<input x : i1, output y : i1> {
 ^bb0(%arg0: !arc.storage):
   // CHECK-NEXT: ([[PTR:%.+]]: !arc.storage):
 
@@ -103,7 +103,7 @@ arc.model @test io !hw.modty<input x : i1, output y : i1> storageBytes 5815 {
 }
 
 // CHECK-LABEL: arc.model @StructPadding
-// CHECK-NEXT: !arc.storage
+// CHECK-SAME:  storageBytes 28
 arc.model @StructPadding io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   // This !hw.struct is only 19 bits wide, but mapped to an !llvm.struct, each
@@ -112,7 +112,7 @@ arc.model @StructPadding io !hw.modty<> {
 }
 
 // CHECK-LABEL: arc.model @ArrayPadding
-// CHECK-NEXT: !arc.storage
+// CHECK-SAME:  storageBytes 28
 arc.model @ArrayPadding io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   // This !hw.array is only 18 bits wide, but mapped to an !llvm.array, each
@@ -121,7 +121,7 @@ arc.model @ArrayPadding io !hw.modty<> {
 }
 
 // CHECK-LABEL: arc.model @UnionMaxVariant
-// CHECK-NEXT: !arc.storage
+// CHECK-SAME:  storageBytes 32
 arc.model @UnionMaxVariant io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   // A !hw.union is sized by its largest variant, not the sum of its variants,
@@ -130,7 +130,7 @@ arc.model @UnionMaxVariant io !hw.modty<> {
 }
 
 // CHECK-LABEL: arc.model @UnionVariantPadding
-// CHECK-NEXT: !arc.storage
+// CHECK-SAME:  storageBytes 26
 arc.model @UnionVariantPadding io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   // Like struct fields and array elements, each variant is widened to a byte
@@ -139,7 +139,7 @@ arc.model @UnionVariantPadding io !hw.modty<> {
 }
 
 // CHECK-LABEL: arc.model @UnionOffset
-// CHECK-NEXT: !arc.storage
+// CHECK-SAME:  storageBytes 41
 arc.model @UnionOffset io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   // An explicit per-variant bit offset is honored when sizing the union: the
@@ -148,10 +148,17 @@ arc.model @UnionOffset io !hw.modty<> {
 }
 
 // CHECK-LABEL: arc.model @UnionNested
-// CHECK-NEXT: !arc.storage
+// CHECK-SAME:  storageBytes 28
 arc.model @UnionNested io !hw.modty<> {
 ^bb0(%arg0: !arc.storage):
   // Variant widths are computed recursively, so the larger struct variant of
   // two i16 fields determines the 4-byte size.
   arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.union<x: !hw.struct<a: i16, b: i16>, y: i8>>
+}
+
+// Check that we always allocate some bytes for the header
+// CHECK-LABEL: arc.model @HeaderOnly
+// CHECK-SAME:  storageBytes {{[1-9]}}
+arc.model @HeaderOnly io !hw.modty<> {
+  ^bb0(%arg0: !arc.storage):
 }
