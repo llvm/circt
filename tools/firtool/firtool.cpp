@@ -35,6 +35,7 @@
 #include "circt/Dialect/Sim/SimDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
+#include "circt/Support/Compression.h"
 #include "circt/Support/LoweringOptions.h"
 #include "circt/Support/LoweringOptionsParser.h"
 #include "circt/Support/Passes.h"
@@ -91,6 +92,14 @@ static cl::opt<InputFormatKind> inputFormat(
 static cl::opt<std::string> inputFilename(cl::Positional,
                                           cl::desc("<input file>"),
                                           cl::init("-"), cl::cat(mainCategory));
+
+static cl::opt<bool> decompressToTempFile(
+    "zstd-decompress-to-temp-file",
+    cl::desc("When reading a zstd-compressed input, decompress it to a "
+             "temporary file and memory-map it instead of holding the entire "
+             "uncompressed contents in memory. Recommended for very large "
+             "(multi-GiB) inputs."),
+    cl::init(false), cl::cat(mainCategory));
 
 static cl::opt<bool>
     splitInputFile("split-input-file",
@@ -783,12 +792,29 @@ static LogicalResult executeFirtool(MLIRContext &context,
     return failure();
   }
 
+  // Transparently decompress zstd-compressed input. The effective filename
+  // (with any `.zst` suffix stripped) is used for format autodetection below.
+  StringRef effectiveInputFilename = inputFilename;
+  if (StringRef(inputFilename).ends_with(".zst") ||
+      circt::hasZstdMagic(*input)) {
+    auto output = decompressToTempFile ? circt::ZstdOutput::TempFile
+                                       : circt::ZstdOutput::InMemory;
+    auto decompressed = circt::decompressZstd(std::move(input), output);
+    if (auto err = decompressed.takeError()) {
+      llvm::errs() << llvm::toString(std::move(err)) << "\n";
+      return failure();
+    }
+    input = std::move(*decompressed);
+    if (effectiveInputFilename.ends_with(".zst"))
+      effectiveInputFilename = effectiveInputFilename.drop_back(4);
+  }
+
   // Figure out the input format if unspecified.
   if (inputFormat == InputUnspecified) {
-    if (StringRef(inputFilename).ends_with(".fir"))
+    if (effectiveInputFilename.ends_with(".fir"))
       inputFormat = InputFIRFile;
-    else if (StringRef(inputFilename).ends_with(".mlir") ||
-             StringRef(inputFilename).ends_with(".mlirbc") ||
+    else if (effectiveInputFilename.ends_with(".mlir") ||
+             effectiveInputFilename.ends_with(".mlirbc") ||
              mlir::isBytecode(*input))
       inputFormat = InputMLIRFile;
     else {

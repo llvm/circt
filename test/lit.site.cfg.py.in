@@ -40,6 +40,7 @@ config.zlib = "@HAVE_ZLIB@"
 config.scheduling_or_tools = "@SCHEDULING_OR_TOOLS@"
 config.slang_frontend_enabled = @CIRCT_SLANG_FRONTEND_ENABLED@
 config.libfst_enabled = @CIRCT_LIBFST_ENABLED@
+config.zstd_enabled = @CIRCT_ZSTD_FOUND@
 
 # Support substitution of the tools_dir with user parameters. This is
 # used when we can't determine the tool dir at configuration time.

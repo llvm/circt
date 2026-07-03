@@ -22,6 +22,7 @@ target_link_libraries(firtool PRIVATE
   CIRCTSVTransforms
   CIRCTTransforms
   CIRCTFirtool
+  CIRCTSupport
   CIRCTTargetDebugInfo
 
   MLIRBytecodeReader

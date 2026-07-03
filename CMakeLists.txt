@@ -764,6 +764,44 @@ if(CIRCT_CADICAL_ENABLED)
 endif()
 
 #-------------------------------------------------------------------------------
+# zstd
+#-------------------------------------------------------------------------------
+
+# Enable transparent decompression of zstd-compressed (`.zst`) input files.
+# This mirrors upstream LLVM's LLVM_ENABLE_ZSTD handling: the option can be ON,
+# OFF, or FORCE_ON. By default it follows whether LLVM itself was built with
+# zstd support.
+set(CIRCT_ENABLE_ZSTD "${LLVM_ENABLE_ZSTD}" CACHE STRING
+  "Use zstd to transparently decompress .zst input files if available. \
+Can be ON, OFF, or FORCE_ON")
+
+set(CIRCT_ZSTD_FOUND 0)
+if(CIRCT_ENABLE_ZSTD)
+  if(CIRCT_ENABLE_ZSTD STREQUAL FORCE_ON)
+    find_package(zstd REQUIRED)
+    if(NOT zstd_FOUND)
+      message(FATAL_ERROR
+        "Failed to configure zstd, but CIRCT_ENABLE_ZSTD is FORCE_ON")
+    endif()
+  else()
+    find_package(zstd QUIET)
+  endif()
+
+  if(zstd_FOUND)
+    set(CIRCT_ZSTD_FOUND 1)
+    if(TARGET zstd::libzstd_shared)
+      set(CIRCT_ZSTD_TARGET zstd::libzstd_shared)
+    else()
+      set(CIRCT_ZSTD_TARGET zstd::libzstd_static)
+    endif()
+    message(STATUS "zstd input decompression is enabled")
+  elseif(CIRCT_ENABLE_ZSTD STREQUAL FORCE_ON)
+    message(FATAL_ERROR
+      "Failed to find zstd, but CIRCT_ENABLE_ZSTD is FORCE_ON")
+  endif()
+endif()
+
+#-------------------------------------------------------------------------------
 # Arcilator JIT
 #-------------------------------------------------------------------------------
 

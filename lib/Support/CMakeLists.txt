@@ -4,6 +4,7 @@ set_source_files_properties("${VERSION_CPP}" PROPERTIES GENERATED TRUE)
 add_circt_library(CIRCTSupport
   APInt.cpp
   BackedgeBuilder.cpp
+  Compression.cpp
   CustomDirectiveImpl.cpp
   Debug.cpp
   FVInt.cpp
@@ -36,6 +37,13 @@ if(CIRCT_CADICAL_ENABLED)
   target_compile_definitions(CIRCTSupport PUBLIC CIRCT_CADICAL_ENABLED=1)
   target_link_libraries(obj.CIRCTSupport PUBLIC cadical)
   target_compile_definitions(obj.CIRCTSupport PUBLIC CIRCT_CADICAL_ENABLED=1)
+endif()
+
+if(CIRCT_ZSTD_FOUND)
+  target_link_libraries(CIRCTSupport PRIVATE ${CIRCT_ZSTD_TARGET})
+  target_compile_definitions(CIRCTSupport PRIVATE CIRCT_ENABLE_ZSTD=1)
+  target_link_libraries(obj.CIRCTSupport PRIVATE ${CIRCT_ZSTD_TARGET})
+  target_compile_definitions(obj.CIRCTSupport PRIVATE CIRCT_ENABLE_ZSTD=1)
 endif()
 
 #-------------------------------------------------------------------------------
