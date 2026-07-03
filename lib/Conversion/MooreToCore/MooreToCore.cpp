@@ -3078,7 +3078,7 @@ struct StringCmpOpConversion : public OpConversionPattern<StringCmpOp> {
   LogicalResult
   matchAndRewrite(StringCmpOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    std::optional<sim::StringCmpPredicate> pred;
+    sim::StringCmpPredicate pred;
     switch (op.getPredicate()) {
     case moore::StringCmpPredicate::eq:
       pred = sim::StringCmpPredicate::eq;
@@ -3099,9 +3099,7 @@ struct StringCmpOpConversion : public OpConversionPattern<StringCmpOp> {
       pred = sim::StringCmpPredicate::ge;
       break;
     }
-    if (!pred)
-      return op.emitOpError("unhandled string comparison predicate");
-    rewriter.replaceOpWithNewOp<sim::StringCmpOp>(op, *pred, adaptor.getLhs(),
+    rewriter.replaceOpWithNewOp<sim::StringCmpOp>(op, pred, adaptor.getLhs(),
                                                   adaptor.getRhs());
     return success();
   }
