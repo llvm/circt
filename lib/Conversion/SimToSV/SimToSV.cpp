@@ -863,12 +863,15 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
                                           SimConversionState &state) {
   SmallVector<GetFileOp> getFileOps;
   SmallVector<PrintFormattedProcOp> printOps;
+  SmallVector<FormatToStringOp> formatToStringOps;
   SmallVector<Operation *, 8> cleanupSeeds;
   module.walk([&](Operation *op) {
     if (auto getFileOp = dyn_cast<GetFileOp>(op))
       getFileOps.push_back(getFileOp);
     if (auto printOp = dyn_cast<PrintFormattedProcOp>(op))
       printOps.push_back(printOp);
+    if (auto formatToStringOp = dyn_cast<FormatToStringOp>(op))
+      formatToStringOps.push_back(formatToStringOp);
   });
 
   for (auto getFileOp : getFileOps) {
@@ -911,9 +914,6 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     }
     cleanupSeeds.push_back(printOp);
   }
-
-  SmallVector<FormatToStringOp> formatToStringOps;
-  module.walk([&](FormatToStringOp op) { formatToStringOps.push_back(op); });
 
   for (auto op : formatToStringOps) {
     OpBuilder builder(op);
