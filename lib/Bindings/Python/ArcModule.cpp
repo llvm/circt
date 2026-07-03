@@ -60,16 +60,10 @@ void circt::python::populateDialectArcSubmodule(nb::module_ &m) {
   mlir_type_subclass(m, "StorageType", arcTypeIsAStorage)
       .def_classmethod(
           "get",
-          [](nb::object cls, MlirContext ctx, nb::object size) {
-            if (size.is_none())
-              return cls(arcStorageTypeGet(ctx));
-            return cls(
-                arcStorageTypeGetWithSize(ctx, nb::cast<unsigned>(size)));
+          [](nb::object cls, MlirContext ctx) {
+            return cls(arcStorageTypeGet(ctx));
           },
-          nb::arg("cls"), nb::arg("context") = nb::none(),
-          nb::arg("size") = nb::none())
-      .def_property_readonly(
-          "size", [](MlirType self) { return arcStorageTypeGetSize(self); });
+          nb::arg("cls"), nb::arg("context") = nb::none());
 
   mlir_type_subclass(m, "SimModelInstanceType", arcTypeIsASimModelInstance)
       .def_classmethod(
