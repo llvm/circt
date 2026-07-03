@@ -3072,6 +3072,41 @@ struct FFlushBIOpConversion : public OpConversionPattern<FFlushBIOp> {
   }
 };
 
+struct StringCmpOpConversion : public OpConversionPattern<StringCmpOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringCmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    std::optional<sim::StringCmpPredicate> pred;
+    switch (op.getPredicate()) {
+    case moore::StringCmpPredicate::eq:
+      pred = sim::StringCmpPredicate::eq;
+      break;
+    case moore::StringCmpPredicate::ne:
+      pred = sim::StringCmpPredicate::ne;
+      break;
+    case moore::StringCmpPredicate::lt:
+      pred = sim::StringCmpPredicate::lt;
+      break;
+    case moore::StringCmpPredicate::le:
+      pred = sim::StringCmpPredicate::le;
+      break;
+    case moore::StringCmpPredicate::gt:
+      pred = sim::StringCmpPredicate::gt;
+      break;
+    case moore::StringCmpPredicate::ge:
+      pred = sim::StringCmpPredicate::ge;
+      break;
+    }
+    if (!pred)
+      return op.emitOpError("unhandled string comparison predicate");
+    rewriter.replaceOpWithNewOp<sim::StringCmpOp>(op, *pred, adaptor.getLhs(),
+                                                  adaptor.getRhs());
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -3635,6 +3670,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     StringLenOpConversion,
     StringConcatOpConversion,
     StringGetOpConversion,
+    StringCmpOpConversion,
 
     // Queue operations
     QueueSizeBIOpConversion,

@@ -211,3 +211,25 @@ hw.module @print_to_file_under_condition(in %clk : i1, in %idx : i8, in %en : i1
     }
   }
 }
+
+// CHECK-LABEL: hw.module @string_cmp
+hw.module @string_cmp(in %clk : i1) {
+  hw.triggered posedge %clk {
+    %lhs = sim.string.literal "hello"
+    %rhs = sim.string.literal "world"
+    %eq = sim.string.cmp eq %lhs, %rhs : !sim.dstring
+    %ne = sim.string.cmp ne %lhs, %rhs : !sim.dstring
+    %lt = sim.string.cmp lt %lhs, %rhs : !sim.dstring
+    %le = sim.string.cmp le %lhs, %rhs : !sim.dstring
+    %gt = sim.string.cmp gt %lhs, %rhs : !sim.dstring
+    %ge = sim.string.cmp ge %lhs, %rhs : !sim.dstring
+    // CHECK: %[[LHS:.+]] = sv.constantStr "hello"
+    // CHECK-NEXT: %[[RHS:.+]] = sv.constantStr "world"
+    // CHECK-NEXT: {{.+}} = sv.verbatim.expr "{{[{][{]0[}][}]}} == {{[{][{]1[}][}]}}"(%[[LHS]], %[[RHS]]) : (!hw.string, !hw.string) -> i1
+    // CHECK-NEXT: {{.+}} = sv.verbatim.expr "{{[{][{]0[}][}]}} != {{[{][{]1[}][}]}}"(%[[LHS]], %[[RHS]]) : (!hw.string, !hw.string) -> i1
+    // CHECK-NEXT: {{.+}} = sv.verbatim.expr "{{[{][{]0[}][}]}} < {{[{][{]1[}][}]}}"(%[[LHS]], %[[RHS]]) : (!hw.string, !hw.string) -> i1
+    // CHECK-NEXT: {{.+}} = sv.verbatim.expr "{{[{][{]0[}][}]}} <= {{[{][{]1[}][}]}}"(%[[LHS]], %[[RHS]]) : (!hw.string, !hw.string) -> i1
+    // CHECK-NEXT: {{.+}} = sv.verbatim.expr "{{[{][{]0[}][}]}} > {{[{][{]1[}][}]}}"(%[[LHS]], %[[RHS]]) : (!hw.string, !hw.string) -> i1
+    // CHECK-NEXT: {{.+}} = sv.verbatim.expr "{{[{][{]0[}][}]}} >= {{[{][{]1[}][}]}}"(%[[LHS]], %[[RHS]]) : (!hw.string, !hw.string) -> i1
+  }
+}
