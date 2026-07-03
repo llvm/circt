@@ -1439,3 +1439,23 @@ firrtl.circuit "InstanceChoiceTest" {
     firrtl.matchingconnect %inst_reset, %reset : !firrtl.reset
   }
 }
+
+// -----
+
+// Reset inference should look through `unsafe_domain_cast` so that reset
+// networks connected across a domain cast are inferred to a concrete type.
+// CHECK-LABEL: firrtl.circuit "UnsafeDomainCast"
+firrtl.circuit "UnsafeDomainCast" {
+  firrtl.domain @ClockDomain
+  // CHECK-LABEL: firrtl.module @UnsafeDomainCast
+  firrtl.module @UnsafeDomainCast(
+    in %B: !firrtl.domain<@ClockDomain()>,
+    in %a: !firrtl.uint<1>
+  ) {
+    // CHECK: %b = firrtl.wire : !firrtl.uint<1>
+    %b = firrtl.wire : !firrtl.reset
+    %0 = firrtl.resetCast %a : (!firrtl.uint<1>) -> !firrtl.reset
+    %1 = firrtl.unsafe_domain_cast %0 domains[%B] : !firrtl.reset domains[!firrtl.domain<@ClockDomain()>]
+    firrtl.matchingconnect %b, %1 : !firrtl.reset
+  }
+}
