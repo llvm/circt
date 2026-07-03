@@ -13,7 +13,6 @@
 #include "circt/Dialect/Arc/ModelInfo.h"
 #include "circt/Dialect/Arc/ArcOps.h"
 #include "llvm/Support/JSON.h"
-#include "llvm/Support/LogicalResult.h"
 
 using namespace mlir;
 using namespace circt;

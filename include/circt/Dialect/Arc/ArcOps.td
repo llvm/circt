@@ -482,7 +482,9 @@ def AllocMemoryOp : ArcOp<"alloc_memory", [MemoryEffects<[MemAlloc]>]> {
 
 def AllocStorageOp : ArcOp<"alloc_storage", [MemoryEffects<[MemAlloc]>]> {
   let summary = "Allocate contiguous storage space from a larger storage space";
-  let arguments = (ins StorageType:$input, UI32Attr:$size, OptionalAttr<I32Attr>:$offset);
+  let arguments = (ins StorageType:$input,
+                       UI32Attr:$size,
+                       OptionalAttr<I32Attr>:$offset);
   let results = (outs StorageType:$output);
   let assemblyFormat = [{
     $input (`[` $offset^ `]`)? `,` $size attr-dict
