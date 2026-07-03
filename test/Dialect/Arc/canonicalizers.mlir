@@ -73,14 +73,14 @@ arc.define @Passthrough2(%arg0: i32, %arg1: i32) -> (i32, i32) {
 // CHECK-LABEL: arc.model @StorageGetCanonicalizers
 arc.model @StorageGetCanonicalizers io !hw.modty<> {
 // CHECK-NEXT: ^bb
-^bb0(%arg0: !arc.storage<512>):
-  %0 = arc.storage.get %arg0[16] : !arc.storage<512> -> !arc.storage<16>
-  %1 = arc.storage.get %0[0] : !arc.storage<16> -> !arc.state<i64>
-  %2 = arc.storage.get %0[8] : !arc.storage<16> -> !arc.state<i64>
+^bb0(%arg0: !arc.storage):
+  %0 = arc.storage.get %arg0[16] : !arc.storage -> !arc.storage
+  %1 = arc.storage.get %0[0] : !arc.storage -> !arc.state<i64>
+  %2 = arc.storage.get %0[8] : !arc.storage -> !arc.state<i64>
   %3 = arc.state_read %1 : <i64>
   arc.state_write %2 = %3 : <i64>
-  // CHECK-NEXT: [[V0:%.+]] = arc.storage.get %arg0[16] : !arc.storage<512> -> !arc.state<i64>
-  // CHECK-NEXT: [[V1:%.+]] = arc.storage.get %arg0[24] : !arc.storage<512> -> !arc.state<i64>
+  // CHECK-NEXT: [[V0:%.+]] = arc.storage.get %arg0[16] : !arc.storage -> !arc.state<i64>
+  // CHECK-NEXT: [[V1:%.+]] = arc.storage.get %arg0[24] : !arc.storage -> !arc.state<i64>
   // CHECK-NEXT: [[V2:%.+]] = arc.state_read [[V0]] : <i64>
   // CHECK-NEXT: arc.state_write [[V1]] = [[V2]] : <i64>
 }

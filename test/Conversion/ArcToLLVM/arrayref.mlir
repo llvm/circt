@@ -8,8 +8,8 @@ func.func @Types(%arg0: !arc.arrayref<2xi32>) -> !arc.arrayref<2xi32> {
 }
 
 // CHECK-LABEL: @StorageGet
-func.func @StorageGet(%arg0: !arc.storage<12>) -> !arc.state<!arc.arrayref<2xi32>> {
-  %0 = arc.storage.get %arg0[4] : !arc.storage<12> -> !arc.state<!arc.arrayref<2xi32>>
+func.func @StorageGet(%arg0: !arc.storage) -> !arc.state<!arc.arrayref<2xi32>> {
+  %0 = arc.storage.get %arg0[4] : !arc.storage -> !arc.state<!arc.arrayref<2xi32>>
   return %0 : !arc.state<!arc.arrayref<2xi32>>
 }
 

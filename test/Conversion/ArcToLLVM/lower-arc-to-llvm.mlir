@@ -52,16 +52,16 @@ func.func @StorageTypes(%arg0: !arc.storage) -> (!arc.state<i1>, !arc.memory<4 x
 
 // CHECK-LABEL: llvm.func @StateAllocation(
 // CHECK-SAME:    %arg0: !llvm.ptr) {
-func.func @StateAllocation(%arg0: !arc.storage<10>) {
-  arc.root_input "a", %arg0 {offset = 0} : (!arc.storage<10>) -> !arc.state<i1>
+func.func @StateAllocation(%arg0: !arc.storage) {
+  arc.root_input "a", %arg0 {offset = 0} : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[0]
-  arc.root_output "b", %arg0 {offset = 1} : (!arc.storage<10>) -> !arc.state<i2>
+  arc.root_output "b", %arg0 {offset = 1} : (!arc.storage) -> !arc.state<i2>
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[1]
-  arc.alloc_state %arg0 {offset = 2} : (!arc.storage<10>) -> !arc.state<i3>
+  arc.alloc_state %arg0 {offset = 2} : (!arc.storage) -> !arc.state<i3>
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[2]
-  arc.alloc_memory %arg0 {offset = 3, stride = 1} : (!arc.storage<10>) -> !arc.memory<4 x i1, i2>
+  arc.alloc_memory %arg0 {offset = 3, stride = 1} : (!arc.storage) -> !arc.memory<4 x i1, i2>
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[3]
-  arc.alloc_storage %arg0[7] : (!arc.storage<10>) -> !arc.storage<3>
+  arc.alloc_storage %arg0[7], 3
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[7]
   return
   // CHECK-NEXT: llvm.return
@@ -70,8 +70,8 @@ func.func @StateAllocation(%arg0: !arc.storage<10>) {
 
 // CHECK-LABEL: llvm.func @StateUpdates(
 // CHECK-SAME:    %arg0: !llvm.ptr) {
-func.func @StateUpdates(%arg0: !arc.storage<1>) {
-  %0 = arc.alloc_state %arg0 {offset = 0} : (!arc.storage<1>) -> !arc.state<i1>
+func.func @StateUpdates(%arg0: !arc.storage) {
+  %0 = arc.alloc_state %arg0 {offset = 0} : (!arc.storage) -> !arc.state<i1>
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[0]
   %1 = arc.state_read %0 : <i1>
   // CHECK-NEXT: [[LOAD:%.+]] = llvm.load [[PTR]] : !llvm.ptr -> i1
@@ -84,8 +84,8 @@ func.func @StateUpdates(%arg0: !arc.storage<1>) {
 
 // CHECK-LABEL: llvm.func @MemoryUpdates(
 // CHECK-SAME:    %arg0: !llvm.ptr, %arg1: i1) {
-func.func @MemoryUpdates(%arg0: !arc.storage<24>, %enable: i1) {
-  %0 = arc.alloc_memory %arg0 {offset = 0, stride = 6} : (!arc.storage<24>) -> !arc.memory<4 x i42, i19>
+func.func @MemoryUpdates(%arg0: !arc.storage, %enable: i1) {
+  %0 = arc.alloc_memory %arg0 {offset = 0, stride = 6} : (!arc.storage) -> !arc.memory<4 x i42, i19>
   // CHECK-NEXT: [[PTR:%.+]] = llvm.getelementptr %arg0[0]
 
   %clk = hw.constant true
@@ -299,11 +299,11 @@ func.func private @Dummy(%arg0: i42, %arg1: !hw.array<4xi19>, %arg2: !arc.storag
 // CHECK-LABEL: llvm.func @Time
 // CHECK-SAME: (%arg0: !llvm.ptr)
 // CHECK-SAME: -> !llvm.struct<(i64, i64, i64)>
-func.func @Time(%arg0: !arc.storage<42>) -> (i64, !llhd.time, i64) {
+func.func @Time(%arg0: !arc.storage) -> (i64, !llhd.time, i64) {
   // CHECK-NEXT: [[TIME:%.+]] = llvm.load %arg0 : !llvm.ptr -> i64
   // CHECK-NOT: int_to_time
   // CHECK-NOT: time_to_int
-  %0 = arc.current_time %arg0 : !arc.storage<42>
+  %0 = arc.current_time %arg0 : !arc.storage
   %1 = llhd.int_to_time %0
   %2 = llhd.time_to_int %1
   // CHECK-NEXT: [[TMP1:%.+]] = llvm.mlir.poison : !llvm.struct<(i64, i64, i64)>
@@ -330,13 +330,13 @@ func.func @ConstantTime() -> (!llhd.time, !llhd.time, !llhd.time) {
 
 // CHECK-LABEL: llvm.func @NextWakeup
 // CHECK-SAME: (%[[STATE:.*]]: !llvm.ptr, %[[T:.*]]: i64)
-func.func @NextWakeup(%state: !arc.storage<42>, %t: i64) -> i64 {
+func.func @NextWakeup(%state: !arc.storage, %t: i64) -> i64 {
   // CHECK-NEXT: %[[WGEP:.*]] = llvm.getelementptr %[[STATE]][16] : (!llvm.ptr) -> !llvm.ptr, i8
   // CHECK-NEXT: llvm.store %[[T]], %[[WGEP]] : i64, !llvm.ptr
-  arc.set_next_wakeup %state, %t : !arc.storage<42>
+  arc.set_next_wakeup %state, %t : !arc.storage
   // CHECK-NEXT: %[[RGEP:.*]] = llvm.getelementptr %[[STATE]][16] : (!llvm.ptr) -> !llvm.ptr, i8
   // CHECK-NEXT: %[[OUT:.*]] = llvm.load %[[RGEP]] : !llvm.ptr -> i64
-  %0 = arc.get_next_wakeup %state : !arc.storage<42>
+  %0 = arc.get_next_wakeup %state : !arc.storage
   // CHECK-NEXT: llvm.return %[[OUT]]
   return %0 : i64
 }
