@@ -121,6 +121,10 @@ void AllocateStatePass::allocateBlock(Block *block, Value rootStorage) {
   // Actually allocate each operation. Root storage gets padding for the model
   // header.
   bool isRootBlock = block == rootStorage.getParentBlock();
+  // Ensure `allocateOps` runs on the root storage, even without allocations,
+  // to set the `storageBytes` attribute.
+  if (isRootBlock)
+    opsByStorage.insert({rootStorage, {}});
   for (auto &[storage, ops] : opsByStorage) {
     unsigned padding = isRootBlock && storage == rootStorage ? kStateOffset : 0;
     allocateOps(storage, block, ops, padding);
