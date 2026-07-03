@@ -106,6 +106,8 @@ struct OpLowering {
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
   LogicalResult lower(llhd::CurrentTimeOp op);
+  LogicalResult lower(llhd::SignalOp op);
+  LogicalResult lower(llhd::DriveOp op);
   LogicalResult lower(sim::ClockedTerminateOp op);
 
   scf::IfOp createIfClockOp(Value clock);
@@ -122,6 +124,7 @@ struct OpLowering {
   Value lowerValue(MemoryReadPortOp op, OpResult result, Phase phase);
   Value lowerValue(seq::InitialOp op, OpResult result, Phase phase);
   Value lowerValue(seq::FromImmutableOp op, OpResult result, Phase phase);
+  Value lowerValue(llhd::ProbeOp op, OpResult result, Phase phase);
 
   void addPending(Value value, Phase phase);
   void addPending(Operation *op, Phase phase);
@@ -270,6 +273,8 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
     phases = {Phase::Final};
   if (isa<StateOp>(op))
     phases = {Phase::Initial, Phase::New};
+  if (isa<llhd::SignalOp>(op))
+    phases = {Phase::Initial};
 
   for (auto phase : phases) {
     if (loweredOps.contains({op, phase}))
@@ -342,10 +347,13 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
     return alloc;
   }
 
-  // Create the allocation op.
-  auto alloc =
-      AllocStateOp::create(allocBuilder, result.getLoc(),
-                           StateType::get(result.getType()), storageArg);
+  // Create the allocation op. Signal references allocate a slot of the
+  // referenced type: the signal's storage.
+  auto allocType = result.getType();
+  if (auto refType = dyn_cast<llhd::RefType>(allocType))
+    allocType = refType.getNestedType();
+  auto alloc = AllocStateOp::create(allocBuilder, result.getLoc(),
+                                    StateType::get(allocType), storageArg);
   allocatedStates.insert({result, alloc});
 
   // HACK: If the result comes from an instance op, add the instance and port
@@ -436,8 +444,8 @@ LogicalResult OpLowering::lower() {
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
             CoroutineInstanceOp, hw::TriggeredOp, hw::OutputOp, seq::InitialOp,
-            llhd::FinalOp, llhd::CurrentTimeOp, sim::ClockedTerminateOp>(
-          [&](auto op) { return lower(op); })
+            llhd::FinalOp, llhd::CurrentTimeOp, llhd::SignalOp, llhd::DriveOp,
+            sim::ClockedTerminateOp>([&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -1254,6 +1262,95 @@ LogicalResult OpLowering::lower(llhd::CurrentTimeOp op) {
   return success();
 }
 
+/// Lower a module-level signal definition: allocate persistent storage of the
+/// referenced type and write the init value in the initial phase. Probes and
+/// drives of the signal read/write the storage; see their lowerings below.
+LogicalResult OpLowering::lower(llhd::SignalOp op) {
+  assert(phase == Phase::Initial);
+  if (initial) {
+    lowerValue(op.getInit(), Phase::Initial);
+    return success();
+  }
+  auto value = lowerValue(op.getInit(), Phase::Initial);
+  if (!value)
+    return failure();
+  auto state = module.getAllocatedState(op->getResult(0));
+  if (!state)
+    return failure();
+  StateWriteOp::create(module.initialBuilder, op.getLoc(), state, value);
+  return success();
+}
+
+/// Lower a module-level drive: a write of the driven value to the signal's
+/// storage. Only zero-real-time (delta/epsilon) delays are supported; they
+/// express update ordering, which the state-slot model resolves per
+/// evaluation. Drives with real-time delays would need a scheduler queue and
+/// are rejected.
+LogicalResult OpLowering::lower(llhd::DriveOp op) {
+  assert(phase == Phase::New);
+
+  auto sigResult = dyn_cast<OpResult>(op.getSignal());
+  if (!sigResult || !isa<llhd::SignalOp>(sigResult.getOwner())) {
+    if (!initial)
+      return op.emitOpError()
+             << "drive of a reference that is not a module-level signal is "
+                "not supported";
+    return success();
+  }
+  auto timeOp = op.getTime().getDefiningOp<llhd::ConstantTimeOp>();
+  if (!timeOp || timeOp.getValue().getTime() != 0) {
+    if (!initial)
+      return op.emitOpError()
+             << "drive with a nonzero real-time delay is not supported";
+    return success();
+  }
+
+  if (initial) {
+    lowerValue(op.getValue(), Phase::New);
+    if (op.getEnable())
+      lowerValue(op.getEnable(), Phase::New);
+    return success();
+  }
+
+  auto value = lowerValue(op.getValue(), Phase::New);
+  if (!value)
+    return failure();
+  auto state = module.getAllocatedState(sigResult);
+  if (!state)
+    return failure();
+  if (op.getEnable()) {
+    auto enable = lowerValue(op.getEnable(), Phase::New);
+    if (!enable)
+      return failure();
+    auto ifOp = scf::IfOp::create(module.builder, op.getLoc(), enable,
+                                  /*withElseRegion=*/false);
+    OpBuilder::InsertionGuard guard(module.builder);
+    module.builder.setInsertionPoint(ifOp.thenYield());
+    StateWriteOp::create(module.builder, op.getLoc(), state, value);
+    return success();
+  }
+  StateWriteOp::create(module.builder, op.getLoc(), state, value);
+  return success();
+}
+
+/// Handle probes of module-level signals: a read of the signal's storage.
+Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
+  auto sigResult = dyn_cast<OpResult>(op.getSignal());
+  if (!sigResult || !isa<llhd::SignalOp>(sigResult.getOwner())) {
+    if (!initial)
+      emitError(op.getLoc())
+          << "probe of a reference that is not a module-level signal is not "
+             "supported";
+    return {};
+  }
+  if (initial)
+    return {};
+  auto state = module.getAllocatedState(sigResult);
+  if (!state)
+    return {};
+  return StateReadOp::create(module.getBuilder(phase), op.getLoc(), state);
+}
+
 LogicalResult OpLowering::lower(sim::ClockedTerminateOp op) {
   if (phase != Phase::New)
     return success();
@@ -1346,6 +1443,23 @@ Value OpLowering::lowerValue(Value value, Phase phase) {
     return lowerValue(initialOp, result, phase);
   if (auto castOp = dyn_cast<seq::FromImmutableOp>(op))
     return lowerValue(castOp, result, phase);
+  if (auto probeOp = dyn_cast<llhd::ProbeOp>(op))
+    return lowerValue(probeOp, result, phase);
+  // Regions cloned into the model (e.g. `llhd.final` bodies) may reference a
+  // module-level signal by its reference value. Hand out the signal's
+  // storage: both are pointers into the model storage representationally;
+  // the bridging cast cancels out during the LLVM lowering.
+  if (auto sigOp = dyn_cast<llhd::SignalOp>(op)) {
+    if (initial)
+      return {};
+    auto state = module.getAllocatedState(result);
+    if (!state)
+      return {};
+    return mlir::UnrealizedConversionCastOp::create(
+               module.getBuilder(phase), sigOp.getLoc(), result.getType(),
+               ValueRange{state})
+        .getResult(0);
+  }
 
   // Otherwise we mark the defining operation as to be lowered first. This will
   // cause the lookup in `loweredValues` above to return a value the next time
