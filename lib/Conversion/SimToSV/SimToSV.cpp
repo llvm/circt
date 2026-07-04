@@ -801,14 +801,21 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
 LogicalResult lowerFormatStringToSVFormat(Value input,
                                           SmallString<128> &formatString,
                                           SmallVectorImpl<Value> &args,
-                                          OpBuilder &builder) {
+                                          OpBuilder &builder,
+                                          bool &requiresFormatting) {
   SmallVector<Value, 8> fragments;
   if (failed(getFlattenedFormatFragments(input, fragments)))
     return failure();
-  for (auto fragment : fragments)
+  requiresFormatting = false;
+  for (auto fragment : fragments) {
     if (failed(appendFormatFragmentToSVFormat(fragment, formatString, args,
                                               builder)))
       return failure();
+    // Non-literal fragments (e.g. %m/%M from FormatHierPathOp) may need
+    // runtime substitution even though they append no argument.
+    if (!isa<FormatLiteralOp>(fragment.getDefiningOp()))
+      requiresFormatting = true;
+  }
   return success();
 }
 
@@ -816,8 +823,9 @@ FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
                                                       OpBuilder &builder) {
   SmallString<128> formatString;
   SmallVector<Value> args;
+  bool requiresFormatting = false;
   if (failed(lowerFormatStringToSVFormat(getFileOp.getFileName(), formatString,
-                                         args, builder))) {
+                                         args, builder, requiresFormatting))) {
     getFileOp.emitError("cannot lower 'sim.get_file' to SystemVerilog")
             .attachNote(getFileOp.getFileName().getLoc())
         << "while lowering file name";
@@ -825,12 +833,12 @@ FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
   }
 
   Value fileName =
-      args.empty()
-          ? sv::ConstantStrOp::create(builder, getFileOp.getLoc(),
-                                      builder.getStringAttr(formatString))
-                .getResult()
-          : sv::SFormatFOp::create(builder, getFileOp.getLoc(),
+      requiresFormatting
+          ? sv::SFormatFOp::create(builder, getFileOp.getLoc(),
                                    builder.getStringAttr(formatString), args)
+                .getResult()
+          : sv::ConstantStrOp::create(builder, getFileOp.getLoc(),
+                                      builder.getStringAttr(formatString))
                 .getResult();
 
   return sv::createProceduralFileDescriptorGetterCall(
@@ -893,8 +901,10 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     OpBuilder builder(printOp);
     SmallString<128> formatString;
     SmallVector<Value> args;
+    bool requiresFormatting = false;
     if (failed(lowerFormatStringToSVFormat(printOp.getInput(), formatString,
-                                           args, builder))) {
+                                           args, builder,
+                                           requiresFormatting))) {
       printOp.emitError("cannot lower 'sim.proc.print' to SystemVerilog")
               .attachNote(printOp.getInput().getLoc())
           << "while lowering format string";
@@ -919,18 +929,19 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     OpBuilder builder(op);
     SmallString<128> formatStr;
     SmallVector<Value> args;
+    bool requiresFormatting = false;
     if (failed(lowerFormatStringToSVFormat(op.getFmtstring(), formatStr, args,
-                                           builder)))
+                                           builder, requiresFormatting)))
       return op.emitError(
           "cannot lower 'sim.string.format_to_string' to SystemVerilog");
 
     Value svResult;
-    if (args.empty())
-      svResult = sv::ConstantStrOp::create(builder, op.getLoc(),
-                                           builder.getStringAttr(formatStr));
-    else
+    if (requiresFormatting)
       svResult = sv::SFormatFOp::create(builder, op.getLoc(),
                                         builder.getStringAttr(formatStr), args);
+    else
+      svResult = sv::ConstantStrOp::create(builder, op.getLoc(),
+                                           builder.getStringAttr(formatStr));
 
     auto cast = mlir::UnrealizedConversionCastOp::create(
         builder, op.getLoc(), op.getType(), svResult);
