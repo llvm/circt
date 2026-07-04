@@ -1338,6 +1338,23 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
   assert(phase == Phase::New);
 
   auto sigResult = dyn_cast<OpResult>(op.getSignal());
+  // A drive of a constant-offset bit-slice of a module-level signal
+  // (`llhd.drv (llhd.sig.extract %sig from K), %v`) lowers as a
+  // read-modify-write splice into the parent signal's storage.
+  llhd::SigExtractOp sliceOp;
+  uint64_t sliceOffset = 0;
+  if (sigResult) {
+    if (auto extract = dyn_cast<llhd::SigExtractOp>(sigResult.getOwner())) {
+      if (auto cst = extract.getLowBit().getDefiningOp<hw::ConstantOp>()) {
+        auto parent = dyn_cast<OpResult>(extract.getInput());
+        if (parent && isa<llhd::SignalOp>(parent.getOwner())) {
+          sliceOp = extract;
+          sliceOffset = cst.getValue().getZExtValue();
+          sigResult = parent;
+        }
+      }
+    }
+  }
   if (!sigResult || !isa<llhd::SignalOp>(sigResult.getOwner())) {
     if (!initial)
       return op.emitOpError()
@@ -1366,6 +1383,36 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
   auto state = module.getAllocatedState(sigResult);
   if (!state)
     return failure();
+
+  // Slice drive: splice the driven bits into the current storage value.
+  if (sliceOp) {
+    auto valueIntTy = dyn_cast<IntegerType>(value.getType());
+    auto curTy = dyn_cast<IntegerType>(
+        cast<StateType>(state.getType()).getType());
+    if (!valueIntTy || !curTy)
+      return op.emitOpError()
+             << "slice drive of a non-integer module-level signal is not "
+                "supported";
+    unsigned parentWidth = curTy.getWidth();
+    unsigned sliceWidth = valueIntTy.getWidth();
+    if (sliceOffset + sliceWidth > parentWidth)
+      return op.emitOpError() << "slice drive out of range";
+    auto &builder = module.builder;
+    Value cur = StateReadOp::create(builder, op.getLoc(), state);
+    SmallVector<Value, 3> pieces; // MSB-first for comb.concat
+    if (sliceOffset + sliceWidth < parentWidth)
+      pieces.push_back(comb::ExtractOp::create(
+          builder, op.getLoc(), cur, sliceOffset + sliceWidth,
+          parentWidth - sliceOffset - sliceWidth));
+    pieces.push_back(value);
+    if (sliceOffset > 0)
+      pieces.push_back(
+          comb::ExtractOp::create(builder, op.getLoc(), cur, 0, sliceOffset));
+    value = pieces.size() == 1
+                ? pieces.front()
+                : Value(comb::ConcatOp::create(builder, op.getLoc(), pieces));
+  }
+
   if (op.getEnable()) {
     auto enable = lowerValue(op.getEnable(), Phase::New);
     if (!enable)
