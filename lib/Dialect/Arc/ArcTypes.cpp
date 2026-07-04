@@ -10,6 +10,7 @@
 #include "circt/Dialect/Arc/ArcDialect.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/Seq/SeqTypes.h"
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -35,6 +36,13 @@ std::optional<uint64_t> circt::arc::computeLLVMBitWidth(Type type) {
 
   if (auto intType = dyn_cast<IntegerType>(type))
     return intType.getWidth();
+
+  // LLVM pointers are opaque runtime handles, e.g. the value of a
+  // module-level signal holding a class object allocated by an initializer.
+  // Reserve one 64-bit slot in storage, which is sufficient on any host the
+  // simulator's storage layout currently targets.
+  if (isa<LLVM::LLVMPointerType>(type))
+    return 64;
 
   auto computeForArrayType = [&](auto arrayType) -> std::optional<uint64_t> {
     // Compute element width.

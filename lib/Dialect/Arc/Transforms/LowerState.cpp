@@ -158,6 +158,15 @@ struct ModuleLowering {
   DenseSet<std::pair<Operation *, Phase>> loweredOps;
   /// The values that have already been lowered.
   DenseMap<std::pair<Value, Phase>, Value> loweredValues;
+  /// Module-level values that flow out of signal initializer expressions
+  /// (`llhd.sig` init operands and everything derived from them at module
+  /// level). Side-effecting module-level ops consuming these are one-time
+  /// initialization actions (object memset, typeinfo/property-initializer
+  /// stores emitted by class `new` at module scope) and must lower in the
+  /// initial phase: lowering them per-eval re-executes the initializer
+  /// chain against a fresh allocation (and leaks it every eval) while the
+  /// signal keeps the pointer from its own, separate initial-phase clone.
+  DenseSet<Value> sigInitClosure;
 
   /// The allocated input ports.
   SmallVector<Value> allocatedInputs;
@@ -241,6 +250,28 @@ LogicalResult ModuleLowering::run() {
     allocatedInputs.push_back(state);
   }
 
+  // Collect the signal-initializer value closure (see `sigInitClosure`):
+  // seed with every `llhd.sig` init operand, then expand forward through
+  // module-level ops deriving values from it (GEPs, casts).
+  for (auto sigOp : moduleOp.getBodyBlock()->getOps<llhd::SignalOp>())
+    if (auto init = sigOp.getInit())
+      sigInitClosure.insert(init);
+  if (!sigInitClosure.empty()) {
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (auto &op : moduleOp.getOps()) {
+        if (op.getNumResults() == 0)
+          continue;
+        if (llvm::any_of(op.getOperands(), [&](Value operand) {
+              return sigInitClosure.contains(operand);
+            }))
+          for (auto result : op.getResults())
+            changed |= sigInitClosure.insert(result).second;
+      }
+    }
+  }
+
   // Lower the ops.
   for (auto &op : moduleOp.getOps()) {
     if (mlir::isMemoryEffectFree(&op) &&
@@ -274,6 +305,23 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
   if (isa<StateOp>(op))
     phases = {Phase::Initial, Phase::New};
   if (isa<llhd::SignalOp>(op))
+    phases = {Phase::Initial};
+
+  // Side-effecting module-level ops consuming OR producing
+  // signal-initializer values (the initializer computation itself plus the
+  // object memset and typeinfo/property stores from class `new` at module
+  // scope) are one-time initialization actions; see `sigInitClosure`.
+  if (!isa<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
+           CoroutineInstanceOp, hw::TriggeredOp, hw::OutputOp, seq::InitialOp,
+           llhd::FinalOp, llhd::CurrentTimeOp, llhd::SignalOp, llhd::DriveOp,
+           sim::ClockedTerminateOp>(op) &&
+      !mlir::isMemoryEffectFree(op) &&
+      (llvm::any_of(
+           op->getOperands(),
+           [&](Value operand) { return sigInitClosure.contains(operand); }) ||
+       llvm::any_of(op->getResults(), [&](Value result) {
+         return sigInitClosure.contains(result);
+       })))
     phases = {Phase::Initial};
 
   for (auto phase : phases) {
