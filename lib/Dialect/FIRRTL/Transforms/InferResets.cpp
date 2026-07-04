@@ -826,7 +826,8 @@ void InferResetsPass::traceResets(CircuitOp circuit) {
             traceResets(baseType, op.getResult(), 0, baseType.getPassiveType(),
                         ref.getValue(), ref.getFieldID(), op.getLoc());
           })
-          .Case<UninferredResetCastOp, ConstCastOp, RefCastOp>([&](auto op) {
+          .Case<UninferredResetCastOp, ConstCastOp, RefCastOp,
+                UnsafeDomainCastOp>([&](auto op) {
             traceResets(op.getResult(), op.getInput(), op.getLoc());
           })
           .Case<InvalidValueOp>([&](auto op) {
