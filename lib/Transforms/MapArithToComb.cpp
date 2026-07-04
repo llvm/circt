@@ -234,9 +234,8 @@ public:
         return !isa<IntegerType>(op->getResult(0).getType());
       });
 
-      target.addDynamicallyLegalOp<arith::SelectOp>([](arith::SelectOp op) {
-        return !hw::isHWValueType(op.getType());
-      });
+      target.addDynamicallyLegalOp<arith::SelectOp>(
+          [](arith::SelectOp op) { return !hw::isHWValueType(op.getType()); });
     }
     MapArithTypeConverter typeConverter;
     RewritePatternSet patterns(ctx);
