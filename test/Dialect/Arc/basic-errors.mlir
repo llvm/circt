@@ -549,7 +549,7 @@ func.func @NotACoroutine() {
 
 hw.module @Foo() {
   // expected-error @below {{`NotACoroutine` does not reference a valid `arc.coroutine.define`}}
-  arc.coroutine.instance @NotACoroutine() : () -> ()
+  arc.coroutine.instance @NotACoroutine() sensitive [] : () -> ()
 }
 func.func @NotACoroutine() {
   return
@@ -574,7 +574,7 @@ hw.module @Foo(in %a: i9001) {
   // expected-error @below {{operand type mismatch: operand #0}}
   // expected-note @below {{expected type: 'i42'}}
   // expected-note @below {{actual type: 'i9001'}}
-  arc.coroutine.instance @NeedsI42(%a) : (i9001) -> ()
+  arc.coroutine.instance @NeedsI42(%a) sensitive [false] : (i9001) -> ()
 }
 arc.coroutine.define @NeedsI42(%arg0: i42) -> (i1, i64) {
   %c0_i1 = hw.constant 0 : i1
@@ -600,7 +600,7 @@ arc.coroutine.define @BarB() {
 
 hw.module @Foo() {
   // expected-error @below {{`DoesNotExist` does not reference a valid `arc.coroutine.define`}}
-  arc.coroutine.instance @DoesNotExist() : () -> ()
+  arc.coroutine.instance @DoesNotExist() sensitive [] : () -> ()
 }
 
 // -----
@@ -615,7 +615,7 @@ func.func @Foo(%arg0: !arc.coroutine_state<@DoesNotExist>, %arg1: !arc.coroutine
 
 hw.module @Foo() {
   // expected-error @below {{referenced coroutine `Bar` must produce an `i64` wakeup time as its last result}}
-  arc.coroutine.instance @Bar() : () -> ()
+  arc.coroutine.instance @Bar() sensitive [] : () -> ()
 }
 arc.coroutine.define @Bar() {
   arc.coroutine.return
@@ -625,7 +625,7 @@ arc.coroutine.define @Bar() {
 
 hw.module @Foo() {
   // expected-error @below {{referenced coroutine `Bar` must produce an `i64` wakeup time as its last result}}
-  arc.coroutine.instance @Bar() : () -> i42
+  arc.coroutine.instance @Bar() sensitive [] : () -> i42
 }
 arc.coroutine.define @Bar() -> i42 {
   %c0_i42 = hw.constant 0 : i42
@@ -636,7 +636,7 @@ arc.coroutine.define @Bar() -> i42 {
 
 hw.module @Foo(in %a: i42) {
   // expected-error @below {{referenced coroutine `Bar` must produce an observe bitmask with one bit per argument (`i1`) as its second-to-last result}}
-  arc.coroutine.instance @Bar(%a) : (i42) -> ()
+  arc.coroutine.instance @Bar(%a) sensitive [false] : (i42) -> ()
 }
 // One argument, so the bitmask must be `i1`, but here it is `i8`.
 arc.coroutine.define @Bar(%arg0: i42) -> (i8, i64) {
@@ -646,6 +646,16 @@ arc.coroutine.define @Bar(%arg0: i42) -> (i8, i64) {
 }
 
 // -----
+
+hw.module @Foo(in %a: i42) {
+  // expected-error @below {{`sensitivityMask` has one bit per argument}}
+  arc.coroutine.instance @Bar(%a) sensitive [false, false] : (i42) -> ()
+}
+arc.coroutine.define @Bar(%arg0: i42) -> (i1, i64) {
+  %c0_i1 = hw.constant 0 : i1
+  %c0_i64 = hw.constant 0 : i64
+  arc.coroutine.return %c0_i1, %c0_i64 : i1, i64
+}
 
 arc.coroutine.define @Foo() -> i42 {
   // expected-error @below {{incorrect number of yielded values: expected 1, but got 0}}

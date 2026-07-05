@@ -933,6 +933,8 @@ LogicalResult OpLowering::lower(CoroutineInstanceOp op) {
         module.allocBuilder, loc, StateType::get(maskType), module.storageArg);
     auto mask = StateReadOp::create(module.builder, loc, maskSlot);
     for (auto [index, input] : llvm::enumerate(inputs)) {
+      if (!op.getSensitivityMask()[index])
+        continue;
       auto prevSlot = AllocStateOp::create(module.allocBuilder, loc,
                                            StateType::get(input.getType()),
                                            module.storageArg);
