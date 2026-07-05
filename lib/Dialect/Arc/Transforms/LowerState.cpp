@@ -142,6 +142,16 @@ struct ModuleLowering {
   OpBuilder initialBuilder;
   /// The builder for the final phase.
   OpBuilder finalBuilder;
+  /// The builder for `Phase::Old` values: a pinned section at the top of the
+  /// eval body, executed before any coroutine instance or drive can mutate
+  /// signal storage. All "old" reads and the pure cones over them thus form a
+  /// consistent pre-eval snapshot (IEEE 1800 preponed-style sampling for
+  /// clocked state elements). Without this, an old read emitted after a
+  /// coroutine call observes mid-eval process writes while cached reads from
+  /// earlier positions observe pre-eval values: registers then commit a mix
+  /// of pre- and post-process operands (the declaration-order-dependent
+  /// stale-select NBA decode).
+  OpBuilder oldBuilder;
 
   /// The storage value that can be used for `arc.alloc_state` and friends.
   Value storageArg;
@@ -192,7 +202,7 @@ struct ModuleLowering {
 
   ModuleLowering(HWModuleOp moduleOp, SymbolTable &symbolTable)
       : moduleOp(moduleOp), builder(moduleOp), allocBuilder(moduleOp),
-        initialBuilder(moduleOp), finalBuilder(moduleOp),
+        initialBuilder(moduleOp), finalBuilder(moduleOp), oldBuilder(moduleOp),
         symbolTable(symbolTable) {}
   LogicalResult run();
   LogicalResult lowerOp(Operation *op);
@@ -237,6 +247,13 @@ LogicalResult ModuleLowering::run() {
   auto finalOp = FinalOp::create(builder, moduleOp.getLoc());
   finalBuilder.setInsertionPointToStart(&finalOp.getBody().emplaceBlock());
 
+  // Anchor the `Phase::Old` section: old-phase values accumulate between the
+  // `arc.final` op and this anchor, i.e. before every eval-phase op. The
+  // anchor is a dead constant erased by the trailing cleanup.
+  auto oldAnchor = hw::ConstantOp::create(builder, moduleOp.getLoc(),
+                                          builder.getI1Type(), 0);
+  oldBuilder.setInsertionPoint(oldAnchor);
+
   // Position the alloc builder such that allocation ops get inserted above the
   // initial op.
   allocBuilder.setInsertionPoint(initialOp);
@@ -272,13 +289,78 @@ LogicalResult ModuleLowering::run() {
     }
   }
 
-  // Lower the ops.
+  // Classify which module ops must lower at the END of the eval body, after
+  // every coroutine instance and signal drive has run: clocked state elements
+  // (registers, memories, clocked DPI/terminate/trigger) detect their clock
+  // edge against the post-process value of the CURRENT evaluation while their
+  // data operands come from the pinned pre-eval `Phase::Old` section. This
+  // pairing implements LRM scheduling-region semantics: a register clocks in
+  // the evaluation in which its clock edge physically occurs, sampling values
+  // from before any same-edge process writes (NBA stores commit after the
+  // active region). Side-effecting consumers of register outputs (drives of
+  // register-fed signals, taps, module outputs) defer with them so they
+  // observe the committed values. Coroutine instances never defer: their
+  // arguments are old-phase samples and their execution order among each
+  // other must follow module order.
+  DenseSet<Value> regClosure;
   for (auto &op : moduleOp.getOps()) {
+    bool seed = isa<StateOp, MemoryOp, MemoryReadPortOp>(op);
+    if (auto dpiOp = dyn_cast<sim::DPICallOp>(&op))
+      seed = !!dpiOp.getClock();
+    if (seed)
+      for (auto result : op.getResults())
+        regClosure.insert(result);
+  }
+  {
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (auto &op : moduleOp.getOps()) {
+        if (op.getNumResults() == 0 || isa<CoroutineInstanceOp>(op))
+          continue;
+        if (llvm::any_of(op.getOperands(), [&](Value operand) {
+              return regClosure.contains(operand);
+            }))
+          for (auto result : op.getResults())
+            changed |= regClosure.insert(result).second;
+      }
+    }
+  }
+  auto deferredToEnd = [&](Operation &op) {
+    if (isa<StateOp, MemoryOp, sim::ClockedTerminateOp, hw::TriggeredOp,
+            hw::OutputOp>(op))
+      return true;
+    if (auto dpiOp = dyn_cast<sim::DPICallOp>(&op); dpiOp && dpiOp.getClock())
+      return true;
+    if (isa<CoroutineInstanceOp>(op))
+      return false;
+    return llvm::any_of(op.getOperands(), [&](Value operand) {
+      return regClosure.contains(operand);
+    });
+  };
+  auto skipInWalk = [](Operation &op) {
     if (mlir::isMemoryEffectFree(&op) &&
         !isa<hw::OutputOp, sim::ClockedTerminateOp>(op))
+      return true;
+    // Handled as part of `MemoryOp`.
+    return isa<MemoryReadPortOp, MemoryWritePortOp>(op);
+  };
+
+  // Lower the ops: first the mid section (coroutine instances, drives, and
+  // other effects not fed by clocked state), then the end section (clocked
+  // state elements and their dependent effects). A mid-section op demanding a
+  // register's new value still pulls that register's lowering forward through
+  // the worklist; data stays consistent (old reads are pinned) and only that
+  // register's edge-detection point degrades to the demand position.
+  for (auto &op : moduleOp.getOps()) {
+    if (skipInWalk(op) || deferredToEnd(op))
       continue;
-    if (isa<MemoryReadPortOp, MemoryWritePortOp>(op))
-      continue; // handled as part of `MemoryOp`
+    if (failed(lowerOp(&op)))
+      return failure();
+  }
+  for (auto &op : moduleOp.getOps()) {
+    if (skipInWalk(op) || !deferredToEnd(op))
+      continue;
     if (failed(lowerOp(&op)))
       return failure();
   }
@@ -451,6 +533,7 @@ OpBuilder &ModuleLowering::getBuilder(Phase phase) {
   case Phase::Initial:
     return initialBuilder;
   case Phase::Old:
+    return oldBuilder;
   case Phase::New:
     return builder;
   case Phase::Final:
@@ -730,12 +813,13 @@ LogicalResult OpLowering::lowerStateful(
   for (auto [state, value] : llvm::zip(states, loweredResults))
     StateWriteOp::create(module.builder, value.getLoc(), state, value);
 
-  // Since we just wrote the new state value to storage, insert read ops just
-  // before the if op that keep the old value around for any later ops that
-  // still need it.
-  module.builder.setInsertionPoint(ifClockOp);
+  // Since we just wrote the new state value to storage, insert read ops in the
+  // pinned old section that keep the old value around for any later ops that
+  // still need it. The old section executes before every state update, so the
+  // reads observe the pre-eval value and dominate all later users.
   for (auto [state, result] : llvm::zip(states, results)) {
-    auto oldValue = StateReadOp::create(module.builder, result.getLoc(), state);
+    auto oldValue =
+        StateReadOp::create(module.oldBuilder, result.getLoc(), state);
     module.loweredValues[{result, Phase::Old}] = oldValue;
   }
 
@@ -1590,10 +1674,9 @@ Value OpLowering::lowerValue(CoroutineInstanceOp op, OpResult result,
     return {};
   }
 
-  // If we want to read the old value, no writes must have been lowered yet.
-  if (phase == Phase::Old)
-    assert(!module.loweredOps.contains({op, Phase::New}) &&
-           "need old value but new value already written");
+  // Old-value reads land in the pinned old section, which executes before the
+  // instance updates its result slots, so they are sound even when the
+  // instance's new value has already been lowered.
 
   auto state = module.getAllocatedState(result);
   return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
@@ -1601,8 +1684,8 @@ Value OpLowering::lowerValue(CoroutineInstanceOp op, OpResult result,
 
 /// Handle uses of a state. This creates an `arc.state_read` op to read from the
 /// state's storage. If the new value after all updates is requested, marks the
-/// state as to be lowered first (which will perform the writes). If the old
-/// value is requested, asserts that no new values have been written.
+/// state as to be lowered first (which will perform the writes). Old-value
+/// reads are emitted into the pinned old section ahead of all writes.
 Value OpLowering::lowerValue(StateOp op, OpResult result, Phase phase) {
   if (initial) {
     // Ensure that the new or initial value has been written by the lowering of
@@ -1612,10 +1695,9 @@ Value OpLowering::lowerValue(StateOp op, OpResult result, Phase phase) {
     return {};
   }
 
-  // If we want to read the old value, no writes must have been lowered yet.
-  if (phase == Phase::Old)
-    assert(!module.loweredOps.contains({op, Phase::New}) &&
-           "need old value but new value already written");
+  // Old-value reads land in the pinned old section, which executes before the
+  // state's write, so they are sound even when the new value has already been
+  // lowered.
 
   auto state = module.getAllocatedState(result);
   return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
@@ -1623,8 +1705,8 @@ Value OpLowering::lowerValue(StateOp op, OpResult result, Phase phase) {
 
 /// Handle uses of a DPI call. This creates an `arc.state_read` op to read from
 /// the state's storage. If the new value after all updates is requested, marks
-/// the state as to be lowered first (which will perform the writes). If the old
-/// value is requested, asserts that no new values have been written.
+/// the state as to be lowered first (which will perform the writes). Old-value
+/// reads are emitted into the pinned old section ahead of all writes.
 Value OpLowering::lowerValue(sim::DPICallOp op, OpResult result, Phase phase) {
   if (initial) {
     // Ensure that the new or initial value has been written by the lowering of
@@ -1634,10 +1716,9 @@ Value OpLowering::lowerValue(sim::DPICallOp op, OpResult result, Phase phase) {
     return {};
   }
 
-  // If we want to read the old value, no writes must have been lowered yet.
-  if (phase == Phase::Old)
-    assert(!module.loweredOps.contains({op, Phase::New}) &&
-           "need old value but new value already written");
+  // Old-value reads land in the pinned old section, which executes before the
+  // state's write, so they are sound even when the new value has already been
+  // lowered.
 
   auto state = module.getAllocatedState(result);
   return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
@@ -1665,13 +1746,10 @@ Value OpLowering::lowerValue(MemoryReadPortOp op, OpResult result,
   if (!address)
     return {};
 
-  if (phase == Phase::Old) {
-    // If we want to read the old value, no writes must have been lowered yet.
-    assert(!module.loweredOps.contains({memOp, Phase::New}) &&
-           "need old memory value but new value already written");
-  } else {
-    assert(phase == Phase::New);
-  }
+  // Old-value reads land in the pinned old section, which executes before all
+  // memory writes, so they are sound even when the writes have already been
+  // lowered.
+  assert(phase == Phase::Old || phase == Phase::New);
 
   auto state = module.getAllocatedState(memOp->getResult(0));
   return MemoryReadOp::create(module.getBuilder(phase), result.getLoc(), state,
