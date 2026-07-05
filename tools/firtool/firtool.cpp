@@ -886,7 +886,7 @@ int main(int argc, char **argv) {
     om::registerPasses();
     sv::registerPasses();
     hw::registerFlattenModulesPass();
-    verif::registerVerifyClockedAssertLikePass();
+    verif::registerPasses();
 
     // Export passes:
     registerExportSplitVerilogPass();
