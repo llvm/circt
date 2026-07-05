@@ -70,6 +70,28 @@ static void attachDebugVariables(
   }
 }
 
+/// Temporary markers used to scope property assertions separately from
+/// assumptions after conversion. They are only ever attached to ops inside
+/// the circuit scope of a verif.bmc op and are consumed (and removed) by this
+/// pass before it finishes; conversions outside BMC circuits are untouched.
+static constexpr StringLiteral kPropertyAttr = "verif.bmc_property";
+static constexpr StringLiteral kCircuitAttr = "verif.bmc_circuit";
+
+/// Returns true if the op lives in the circuit scope of a verif.bmc op:
+/// either still inside the op's circuit region, or inside the circuit
+/// function the BMC conversion split that region into.
+static bool isInBMCCircuit(Operation *op) {
+  for (Region *region = op->getParentRegion(); region;
+       region = region->getParentOp()->getParentRegion()) {
+    Operation *parent = region->getParentOp();
+    if (auto bmcOp = dyn_cast<verif::BoundedModelCheckingOp>(parent))
+      return region == &bmcOp.getCircuit();
+    if (auto funcOp = dyn_cast<func::FuncOp>(parent))
+      return funcOp->hasAttr(kCircuitAttr);
+  }
+  return false;
+}
+
 /// Lower a verif::AssertOp operation with an i1 operand to a smt::AssertOp,
 /// negated to check for unsatisfiability.
 struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
@@ -78,11 +100,14 @@ struct VerifAssertOpConversion : OpConversionPattern<verif::AssertOp> {
   LogicalResult
   matchAndRewrite(verif::AssertOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    bool isProperty = isInBMCCircuit(op);
     Value cond = typeConverter->materializeTargetConversion(
         rewriter, op.getLoc(), smt::BoolType::get(getContext()),
         adaptor.getProperty());
     Value notCond = smt::NotOp::create(rewriter, op.getLoc(), cond);
-    rewriter.replaceOpWithNewOp<smt::AssertOp>(op, notCond);
+    auto assertOp = rewriter.replaceOpWithNewOp<smt::AssertOp>(op, notCond);
+    if (isProperty)
+      assertOp->setAttr(kPropertyAttr, rewriter.getUnitAttr());
     return success();
   }
 };
@@ -461,6 +486,7 @@ struct VerifBoundedModelCheckingOpConversion
                                   loopFuncOp.end());
       circuitFuncOp = func::FuncOp::create(
           rewriter, loc, names.newName("bmc_circuit"), circuitFuncTy);
+      circuitFuncOp->setAttr(kCircuitAttr, rewriter.getUnitAttr());
       rewriter.inlineRegionBefore(op.getCircuit(),
                                   circuitFuncOp.getFunctionBody(),
                                   circuitFuncOp.end());
@@ -486,9 +512,6 @@ struct VerifBoundedModelCheckingOpConversion
     // Call init func to get initial clock values
     ValueRange initVals =
         func::CallOp::create(rewriter, loc, initFuncOp)->getResults();
-
-    // Initial push
-    smt::PushOp::create(rewriter, loc, 1);
 
     // InputDecls order should be <circuit arguments> <state arguments>
     // <wasViolated>
@@ -560,10 +583,6 @@ struct VerifBoundedModelCheckingOpConversion
               builder, loc, oldCircuitInputTy,
               iterArgs.take_front(circuitFuncOp.getNumArguments()), debugNames);
 
-          // Drop existing assertions
-          smt::PopOp::create(builder, loc, 1);
-          smt::PushOp::create(builder, loc, 1);
-
           // Execute the circuit
           ValueRange circuitCallOuts =
               func::CallOp::create(
@@ -625,6 +644,11 @@ struct VerifBoundedModelCheckingOpConversion
 
           // If we created an IfOp, make sure we start inserting after it again
           builder.restoreInsertionPoint(insideForPoint);
+
+          // Discard this step's property assertions (scoped by the push at
+          // the end of the circuit function); assumptions were asserted
+          // before that push and persist across steps.
+          smt::PopOp::create(builder, loc, 1);
 
           // Call loop func to update clock & state arg values
           SmallVector<Value> loopCallInputs;
@@ -800,20 +824,34 @@ void ConvertVerifToSMTPass::runOnOperation() {
             if (auto func = dyn_cast<func::CallOp>(curOp))
               worklist.push_back(symbolTable.lookup(func.getCallee()));
           });
+          // Assertions inside instantiated modules or called functions
+          // convert inside the callee's body, outside the circuit function's
+          // per-step property scope: their negated conditions would be
+          // asserted permanently and mask later violations (a silent false
+          // pass). Reject them instead. Assumptions are fine: persisting is
+          // exactly the lifetime they need.
           // TODO: probably negligible compared to actual model checking time
           // but cacheing the assertion count of modules would speed this up
+          int numNestedAssertions = 0;
           while (!worklist.empty()) {
             auto *module = worklist.pop_back_val();
             module->walk([&](Operation *curOp) {
               if (isa<verif::AssertOp>(curOp))
-                numAssertions++;
+                numNestedAssertions++;
               if (auto inst = dyn_cast<InstanceOp>(curOp))
                 worklist.push_back(symbolTable.lookup(inst.getModuleName()));
               if (auto func = dyn_cast<func::CallOp>(curOp))
                 worklist.push_back(symbolTable.lookup(func.getCallee()));
             });
-            if (numAssertions > 1)
+            if (numNestedAssertions > 0)
               break;
+          }
+          if (numNestedAssertions > 0) {
+            op->emitError(
+                "assertions inside instantiated modules or called functions "
+                "are not supported - inline them into the top module first "
+                "(e.g. with --flatten-modules)");
+            return WalkResult::interrupt();
           }
           if (numAssertions == 0) {
             op->emitWarning("no property provided to check in module - will "
@@ -848,4 +886,27 @@ void ConvertVerifToSMTPass::runOnOperation() {
   if (failed(mlir::applyPartialConversion(getOperation(), target,
                                           std::move(patterns))))
     return signalPassFailure();
+
+  // Sink property assertions in each BMC circuit function past a push, so the
+  // caller's pop after smt.check discards only them; assumptions and
+  // definitions above the push persist across timesteps. Property markers are
+  // only ever attached inside circuit scopes, so no other functions need
+  // visiting.
+  for (auto funcOp : getOperation().getOps<func::FuncOp>()) {
+    if (!funcOp->hasAttr(kCircuitAttr))
+      continue;
+    funcOp->removeAttr(kCircuitAttr);
+    SmallVector<Operation *> properties;
+    funcOp.walk([&](smt::AssertOp assertOp) {
+      if (assertOp->hasAttr(kPropertyAttr)) {
+        assertOp->removeAttr(kPropertyAttr);
+        properties.push_back(assertOp);
+      }
+    });
+    Operation *terminator = funcOp.getBody().front().getTerminator();
+    OpBuilder builder(terminator);
+    smt::PushOp::create(builder, funcOp.getLoc(), 1);
+    for (Operation *property : properties)
+      property->moveBefore(terminator);
+  }
 }

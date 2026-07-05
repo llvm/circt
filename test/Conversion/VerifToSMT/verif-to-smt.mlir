@@ -115,7 +115,6 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK-LABEL:  func.func @test_bmc() -> i1 {
 // CHECK:    [[BMC:%.+]] = smt.solver
 // CHECK:      [[INIT:%.+]]:2 = func.call @bmc_init()
-// CHECK:      smt.push 1
 // CHECK:      [[F0:%.+]] = smt.declare_fun "input_1" : !smt.bv<32>
 // CHECK:      [[F1:%.+]] = smt.declare_fun "reg_0" : !smt.bv<32>
 // CHECK:      [[C42_BV32:%.+]] = smt.bv.constant #smt.bv<42> : !smt.bv<32>
@@ -126,8 +125,6 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:      [[FALSE:%.+]] = arith.constant false
 // CHECK:      [[TRUE:%.+]] = arith.constant true
 // CHECK:      [[FOR:%.+]]:7 = scf.for [[ARG0:%.+]] = [[C0_I32]] to [[C10_I32]] step [[C1_I32]] iter_args([[ARG1:%.+]] = [[INIT]]#0, [[ARG2:%.+]] = [[F0]], [[ARG3:%.+]] = [[F1]], [[ARG4:%.+]] = [[C42_BV32]], [[ARG5:%.+]] = [[ARRAYFUN]], [[ARG6:%.+]] = [[INIT]]#1, [[ARG7:%.+]] = [[FALSE]])
-// CHECK:        smt.pop 1
-// CHECK:        smt.push 1
 // CHECK-NOT:    scf.if
 // CHECK:        [[CIRCUIT:%.+]]:4 = func.call @bmc_circuit([[ARG1]], [[ARG2]], [[ARG3]], [[ARG4]], [[ARG5]])
 // CHECK:        [[SMTCHECK:%.+]] = smt.check sat {
@@ -138,6 +135,7 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:          smt.yield [[FALSE]]
 // CHECK:        }
 // CHECK:        [[ORI:%.+]] = arith.ori [[SMTCHECK]], [[ARG7]]
+// CHECK:        smt.pop 1
 // CHECK:        [[LOOP:%.+]]:2 = func.call @bmc_loop([[ARG1]], [[ARG6]])
 // CHECK:        [[F2:%.+]] = smt.declare_fun "input_1" : !smt.bv<32>
 // CHECK:        [[OLDCLOCKLOW:%.+]] = smt.bv.not [[ARG1]]
@@ -181,6 +179,8 @@ func.func @test_lec(%arg0: !smt.bv<1>) -> (i1, i1, i1) {
 // CHECK:    [[XOR:%.+]] = comb.xor [[C6]], [[CN1_I32]]
 // CHECK:    [[C9:%.+]] = builtin.unrealized_conversion_cast [[XOR]] : i32 to !smt.bv<32>
 // CHECK:    [[C10:%.+]] = builtin.unrealized_conversion_cast [[ADD]] : i32 to !smt.bv<32>
+// CHECK:    smt.push 1
+// CHECK:    smt.assert
 // CHECK:    return [[C9]], [[C10]], [[ARG3]], [[ARG4]]
 // CHECK:  }
 

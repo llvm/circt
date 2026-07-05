@@ -1,5 +1,7 @@
+// Without flattening, the asserts stay inside instantiated modules, where
+// they cannot be scoped correctly; they are rejected rather than mis-scoped.
 //  RUN: not circt-bmc %s -b 10 --module ModuleAsserts --shared-libs=%libz3 --flatten-modules=false 2>&1 | FileCheck %s
-//  CHECK: error: bounded model checking problems with multiple assertions are not yet correctly handled - instead, you can assert the conjunction of your assertions
+//  CHECK: error: assertions inside instantiated modules or called functions are not supported - inline them into the top module first (e.g. with --flatten-modules)
 
 hw.module @OneAssert(in %in: i1) {
   verif.assert %in : i1

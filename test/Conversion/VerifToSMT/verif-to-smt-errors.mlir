@@ -38,8 +38,11 @@ func.func @multiple_assertions_bmc() -> (i1) {
 
 // -----
 
-func.func @multiple_asserting_modules_bmc() -> (i1) {
-  // expected-error @below {{bounded model checking problems with multiple assertions are not yet correctly handled - instead, you can assert the conjunction of your assertions}}
+// Asserts inside instantiated modules are rejected: they would convert
+// inside the callee, outside the per-step property scope, and their negated
+// conditions would be asserted permanently, masking later violations.
+func.func @nested_asserts_via_instances() -> (i1) {
+  // expected-error @below {{assertions inside instantiated modules or called functions are not supported - inline them into the top module first (e.g. with --flatten-modules)}}
   %bmc = verif.bmc bound 10 num_regs 0 initial_values []
   init {}
   loop {}
@@ -59,8 +62,9 @@ hw.module @OneAssertion(in %x: i1) {
 
 // -----
 
-func.func @multiple_asserting_funcs_bmc() -> (i1) {
-  // expected-error @below {{bounded model checking problems with multiple assertions are not yet correctly handled - instead, you can assert the conjunction of your assertions}}
+// Asserts reachable through func.call are rejected as well.
+func.func @nested_asserts_via_calls() -> (i1) {
+  // expected-error @below {{assertions inside instantiated modules or called functions are not supported - inline them into the top module first (e.g. with --flatten-modules)}}
   %bmc = verif.bmc bound 10 num_regs 0 initial_values []
   init {}
   loop {}
@@ -100,9 +104,12 @@ hw.module @empty() {
 
 // -----
 
-// Check that we don't see an error when there's one nested assertion
+// Even a single nested assert is rejected; assumptions in callees are fine
+// (they persist, which is the lifetime assumptions need), but a permanently
+// asserted negated property would mask later violations.
 
 func.func @one_nested_assertion() -> (i1) {
+  // expected-error @below {{assertions inside instantiated modules or called functions are not supported - inline them into the top module first (e.g. with --flatten-modules)}}
   %bmc = verif.bmc bound 10 num_regs 0 initial_values []
   init {}
   loop {}
@@ -122,8 +129,11 @@ hw.module @OneAssertion(in %x: i1) {
 
 // -----
 
-func.func @two_separated_assertions() -> (i1) {
-  // expected-error @below {{bounded model checking problems with multiple assertions are not yet correctly handled - instead, you can assert the conjunction of your assertions}}
+// A nested assert is rejected even when accompanied by a top-level assert
+// (which on its own would be fine). The multiple-assertion diagnostic only
+// counts asserts in the top module, so it does not apply here.
+func.func @nested_and_toplevel_assertions() -> (i1) {
+  // expected-error @below {{assertions inside instantiated modules or called functions are not supported - inline them into the top module first (e.g. with --flatten-modules)}}
   %bmc = verif.bmc bound 10 num_regs 0 initial_values []
   init {}
   loop {}
@@ -143,8 +153,11 @@ hw.module @OneAssertion(in %x: i1) {
 
 // -----
 
-func.func @multiple_nested_assertions() -> (i1) {
-  // expected-error @below {{bounded model checking problems with multiple assertions are not yet correctly handled - instead, you can assert the conjunction of your assertions}}
+// Two asserts inside one instantiated module hit the nested-assert
+// rejection; the multiple-assertion diagnostic only counts top-module
+// asserts.
+func.func @nested_asserts_in_one_module() -> (i1) {
+  // expected-error @below {{assertions inside instantiated modules or called functions are not supported - inline them into the top module first (e.g. with --flatten-modules)}}
   %bmc = verif.bmc bound 10 num_regs 0 initial_values []
   init {}
   loop {}
