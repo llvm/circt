@@ -110,6 +110,10 @@ private:
   /// `addEntryAndResumeBlockArguments` and used by `rewriteTerminators` to
   /// build the observe bitmask.
   SmallDenseMap<Value, uint32_t> argIndices;
+
+  /// Indicates which arguments are relevant for the sensitivity check. This
+  /// matches the bit-wise OR of all dynamically returned sensitivity masks.
+  SmallVector<bool> staticSensitivityMask;
 };
 
 } // namespace
@@ -282,6 +286,7 @@ LogicalResult ProcessLowering::rewriteTerminators() {
   // operands) and values defined inside the body are absent from the map and
   // therefore cannot be observed for changes.
   auto maskWidth = entryArgs.size();
+  staticSensitivityMask.resize(maskWidth, false);
   for (auto &block : coroOp.getBody()) {
     auto *term = block.getTerminator();
     auto loc = term->getLoc();
@@ -294,8 +299,10 @@ LogicalResult ProcessLowering::rewriteTerminators() {
       // (which can never change) and forwarded block arguments contribute none.
       APInt maskBits(maskWidth, 0);
       for (auto observed : wait.getObserved())
-        if (auto it = argIndices.find(observed); it != argIndices.end())
+        if (auto it = argIndices.find(observed); it != argIndices.end()) {
           maskBits.setBit(it->second);
+          staticSensitivityMask[it->second] = true;
+        }
       auto mask = hw::ConstantOp::create(builder, loc, maskBits);
 
       // A wait without a delay never resumes on time; use the sentinel `-1` as
@@ -448,9 +455,11 @@ void ProcessLowering::buildInstance() {
   SmallVector<Value> args(captures.begin(), captures.end());
   args.push_back(nowI64);
 
+  assert(args.size() == staticSensitivityMask.size());
   auto instanceOp = CoroutineInstanceOp::create(
       builder, loc, processOp.getResultTypes(),
-      FlatSymbolRefAttr::get(coroOp.getSymNameAttr()), args);
+      FlatSymbolRefAttr::get(coroOp.getSymNameAttr()), args,
+      builder.getDenseBoolArrayAttr(staticSensitivityMask));
 
   processOp.replaceAllUsesWith(instanceOp.getResults());
   processOp.erase();

@@ -35,7 +35,7 @@ arc.coroutine.define @WithWakeup(%arg0: i42) -> (i1, i64) {
 
 hw.module @Module(in %a: i42) {
   // expected-error @below {{must be lowered before LowerCoroutines}}
-  arc.coroutine.instance @WithWakeup(%a) : (i42) -> ()
+  arc.coroutine.instance @WithWakeup(%a) sensitive [false] : (i42) -> ()
 }
 
 // -----

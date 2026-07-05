@@ -816,6 +816,8 @@ def CoroutineInstanceOp : ArcOp<"coroutine.instance", [
   CallOpInterface,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
   HasParent<"hw::HWModuleOp">,
+  PredOpTrait<"`sensitivityMask` has one bit per argument",
+    CPred<"$sensitivityMask.size() == $args.size()">>,
 ]> {
   let summary = "Continuously run a coroutine in an hw.module";
   let description = [{
@@ -830,17 +832,20 @@ def CoroutineInstanceOp : ArcOp<"coroutine.instance", [
     - An observe bitmask as its second-to-last result, an integer with one bit
       per coroutine argument. A set bit requests that the instance re-enter the
       coroutine whenever the corresponding argument changes value, on top of the
-      time-based wakeup.
+      time-based wakeup. The dynamic returned mask is AND-combined with the
+      `sensitivityMask` attribute. Only arguments with the corresponding static
+      sensitivity bit set are checked for changes.
     - A wakeup time as its last result value, used to schedule the next
       time-based execution.
   }];
   let arguments = (ins
     FlatSymbolRefAttr:$callee,
-    Variadic<AnyType>:$args
+    Variadic<AnyType>:$args,
+    DenseBoolArrayAttr:$sensitivityMask
   );
   let results = (outs Variadic<AnyType>:$results);
   let assemblyFormat = [{
-    $callee `(` $args `)` attr-dict `:` functional-type(operands, results)
+    $callee `(` $args `)` `sensitive` $sensitivityMask attr-dict `:` functional-type(operands, results)
   }];
 
   let extraClassDeclaration = [{
