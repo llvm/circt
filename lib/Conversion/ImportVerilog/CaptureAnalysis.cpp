@@ -73,6 +73,19 @@ static bool isGlobalVariable(const ValueSymbol &var) {
   return true;
 }
 
+bool circt::ImportVerilog::isCompileTimeConstant(SymbolKind kind) {
+  return kind == SymbolKind::Parameter || kind == SymbolKind::EnumValue ||
+         kind == SymbolKind::Genvar || kind == SymbolKind::Specparam;
+}
+
+const InstanceSymbol *
+circt::ImportVerilog::getRootInstance(const HierarchicalReference &ref) {
+  for (auto &elem : ref.path)
+    if (auto *inst = elem.symbol->as_if<InstanceSymbol>())
+      return inst;
+  return nullptr;
+}
+
 namespace {
 
 /// Walk the entire AST to collect captured variables and the call graph for
@@ -97,6 +110,29 @@ struct CaptureWalker
             SmallSetVector<const SubroutineSymbol *, 4>>
       callers;
 
+  /// For each (function, captured symbol) pair, the instance through wich
+  /// the hierarchical reference was first reached. Used to detect captures
+  /// that resolve to one symbol through several instances.
+  DenseMap<std::pair<const SubroutineSymbol *, const ValueSymbol *>,
+           const InstanceSymbol *>
+      hierCaptureRootInstance;
+
+  /// Captures that were reached through more than one instance reported as
+  /// errors since they cannot be wired to a single instance.
+  SmallVector<AmbiguousHierCapture> ambiguousHierCaptures;
+
+  /// Track which root instance each hierarchical capture was reached through;
+  /// the same symbol seen through two different instances is ambiguous.
+  void noteHierCapture(const SubroutineSymbol &func, const ValueSymbol &var,
+                       const InstanceSymbol *rootInst) {
+    if (!rootInst)
+      return;
+    auto key = std::make_pair(&func, &var);
+    auto [it, inserted] = hierCaptureRootInstance.try_emplace(key, rootInst);
+    if (!inserted && it->second != rootInst)
+      ambiguousHierCaptures.push_back({&func, &var});
+  }
+
   /// When we enter a function body, record it as the current function and
   /// recurse into its members and body statements.
   void handle(const SubroutineSymbol &func) {
@@ -120,12 +156,7 @@ struct CaptureWalker
     if (var.kind == SymbolKind::FormalArgument)
       return;
 
-    // Compile-time constants are materialized inline and don't need capturing.
-    // Slang monomorphizes modules and classes per parameterization, so within
-    // any given elaborated scope these are fixed values.
-    if (var.kind == SymbolKind::Parameter ||
-        var.kind == SymbolKind::EnumValue || var.kind == SymbolKind::Genvar ||
-        var.kind == SymbolKind::Specparam)
+    if (isCompileTimeConstant(var.kind))
       return;
 
     // Only capture variables that are non-local and non-global.
@@ -139,6 +170,21 @@ struct CaptureWalker
     if (isVirtualInterfaceMemberAccess(var))
       return;
 
+    capturedVars[currentFunc].insert(&var);
+  }
+
+  /// Hierarchical references (`inst.var`) are captured like ordinary
+  /// non-local variables. Interface-port references are excluded: they are
+  /// handled by the interface lowering machinery, not as captures.
+  void handle(const HierarchicalValueExpression &expr) {
+    if (!currentFunc)
+      return;
+    if (expr.ref.isViaIfacePort())
+      return;
+    auto &var = expr.symbol;
+    if (isCompileTimeConstant(var.kind))
+      return;
+    noteHierCapture(*currentFunc, var, getRootInstance(expr.ref));
     capturedVars[currentFunc].insert(&var);
   }
 
@@ -185,10 +231,14 @@ struct CaptureWalker
         auto callersIt = callers.find(func);
         if (callersIt == callers.end())
           continue;
-        for (auto *caller : callersIt->second)
-          if (!isLocalToFunction(*cap, *caller))
+        for (auto *caller : callersIt->second) {
+          if (!isLocalToFunction(*cap, *caller)) {
+            noteHierCapture(*caller, *cap,
+                            hierCaptureRootInstance.lookup({func, cap}));
             if (capturedVars[caller].insert(cap))
               worklist.insert({caller, cap});
+          }
+        }
       }
     }
   }
@@ -196,9 +246,12 @@ struct CaptureWalker
 
 } // namespace
 
-CaptureMap ImportVerilog::analyzeFunctionCaptures(const RootSymbol &root) {
+CaptureMap ImportVerilog::analyzeFunctionCaptures(
+    const RootSymbol &root, SmallVectorImpl<AmbiguousHierCapture> &ambiguous) {
   CaptureWalker walker;
   root.visit(walker);
   walker.propagateCaptures();
+  ambiguous.assign(walker.ambiguousHierCaptures.begin(),
+                   walker.ambiguousHierCaptures.end());
   return std::move(walker.capturedVars);
 }
