@@ -42,7 +42,9 @@ PROBES = [
     "typed_func_array_result",
     "typed_func_windowed_list",
     "channel_windowed_list_read",
+    "channel_multiburst_list_read",
     "channel_windowed_list_write",
+    "channel_multiburst_list_write",
     "callback_windowed_list",
 ]
 
