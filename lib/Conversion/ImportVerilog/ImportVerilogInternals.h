@@ -160,11 +160,14 @@ struct HierPathInfo {
   std::optional<unsigned int> idx;
   slang::ast::ArgumentDirection direction;
 
-  /// The value symbols associated with this hierarchical path. Multiple
-  /// symbols may be present when different instances resolve the same
-  /// logical variable to different elaborated symbol objects (e.g., due to
-  /// Slang's per-instance elaboration of shared module bodies).
-  llvm::SmallVector<const slang::ast::ValueSymbol *, 2> valueSyms;
+  /// The symbols this path resolves to, each paired with the elaborated
+  /// instance body it was observed in. Sibling instances elaborate the same
+  /// logical variable to distinct symbol objects. The pairing lets instance
+  /// wiring bind each one to the right instance.
+  llvm::SmallVector<std::pair<const slang::ast::ValueSymbol *,
+                              const slang::ast::InstanceBodySymbol *>,
+                    2>
+      valueSyms;
 };
 
 /// ImportVerilog Elaboration Phases for Hierarchical Names
@@ -185,9 +188,10 @@ struct HierPathInfo {
 ///    instance.
 ///
 /// 4. Resolution: In `Expressions.cpp`, visitors for rvalues and lvalues
-///    resolve hierarchical names by first checking the instance-aware
-///    `hierValueSymbols` map (for cross-instance references) and falling back
-///    to standard scoped lookups.
+///    resolve hierarchical names by first checking function captures (inside
+///    a function body the capture argument must be used to respect region
+///    isolation), then the instance-aware `hierValueSymbols` map, and finally
+///    standard scoped lookups.
 
 // A slang::SourceLocation for deterministic comparisons. Comparisons use the
 // buffer's sortKey rather than bufferId.
@@ -331,6 +335,10 @@ struct Context {
   /// if the expression has no instance path.
   std::optional<std::pair<const slang::ast::InstanceSymbol *, mlir::StringAttr>>
   buildHierValueKey(const slang::ast::HierarchicalValueExpression &expr);
+
+  /// If `sym` is captured by the function currently being converted, return the
+  /// value it is bound to (the capture block argument); otherwise return null.
+  Value resolveCapturedValue(const slang::ast::ValueSymbol &sym);
 
   // Convert timing controls into a corresponding set of ops that delay
   // execution of the current block. Produces an error if the implicit event
@@ -589,6 +597,11 @@ struct Context {
   /// Variable to track the value of the current function's implicit `this`
   /// reference
   Value currentThisRef = {};
+
+  /// The function currently being converted, if any. Used to give captured
+  /// symbols priority over module-level hierarchical values inside function
+  /// bodies.
+  FunctionLowering *currentFunctionLowering = nullptr;
 
   /// Variable that tracks the queue which we are currently converting the index
   /// expression for. This is necessary to implement the `$` operator, which

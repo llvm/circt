@@ -42,7 +42,8 @@ protected:
     auto tree = SyntaxTree::fromText(code);
     Compilation compilation;
     compilation.addSyntaxTree(tree);
-    auto captures = analyzeFunctionCaptures(compilation.getRoot());
+    llvm::SmallVector<AmbiguousHierCapture> ambiguous;
+    auto captures = analyzeFunctionCaptures(compilation.getRoot(), ambiguous);
 
     NamedCaptures result;
     for (auto &[func, caps] : captures) {

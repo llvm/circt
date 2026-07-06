@@ -51,72 +51,84 @@ struct InstBodyVisitor
     if (expr.ref.isViaIfacePort())
       return;
 
+    if (isCompileTimeConstant(expr.symbol.kind))
+      return;
+
     auto hierName = builder.getStringAttr(expr.symbol.name);
     const slang::ast::InstanceBodySymbol *parentInstBody = nullptr;
 
-    // Collect hierarchical names that are added to the port list.
-    std::function<void(const slang::ast::InstanceBodySymbol *, bool)>
-        collectHierarchicalPaths = [&](auto sym, bool isUpward) {
-          // Check if this path already exists globally for this module
-          HierPathInfo *existing = nullptr;
-          if (context.hierPaths.contains(sym)) {
-            for (auto &path : context.hierPaths[sym]) {
-              if (path.hierName == hierName) {
-                existing = &path;
-                break;
-              }
-            }
-          }
+    // Record `name` on `body`, or add this symbol as an alias if another
+    // instance already recorded the same path.
+    auto addHierPath = [&](const slang::ast::InstanceBodySymbol *body,
+                           mlir::StringAttr name,
+                           slang::ast::ArgumentDirection direction) {
+      for (auto &path : context.hierPaths[body])
+        if (path.hierName == name) {
+          if (!llvm::any_of(path.valueSyms, [&](auto &alias) {
+                return alias.first == &expr.symbol;
+              }))
+            path.valueSyms.push_back({&expr.symbol, currentInstBody});
+          return;
+        }
+      context.hierPaths[body].push_back(
+          HierPathInfo{name, {}, direction, {{&expr.symbol, currentInstBody}}});
+    };
 
-          if (!existing) {
-            context.hierPaths[sym].push_back(
-                HierPathInfo{hierName,
-                             {},
-                             isUpward ? slang::ast::ArgumentDirection::Out
-                                      : slang::ast::ArgumentDirection::In,
-                             {&expr.symbol}});
-          } else {
-            // The path already exists, but this may be a different instance
-            // resolving to a different symbol object. Add as an alias.
-            if (!llvm::is_contained(existing->valueSyms, &expr.symbol))
-              existing->valueSyms.push_back(&expr.symbol);
-          }
-
-          // Iterate up from the current instance body symbol until meeting the
-          // outermost module.
-          parentInstBody =
-              sym->parentInstance->getParentScope()->getContainingInstance();
-          if (!parentInstBody)
-            return;
-
-          if (isUpward) {
-            // Avoid collecting hierarchical names into the outermost module.
-            if (parentInstBody && parentInstBody != outermostInstBody) {
-              hierName =
-                  builder.getStringAttr(sym->parentInstance->name +
-                                        llvm::Twine(".") + hierName.getValue());
-              collectHierarchicalPaths(parentInstBody, isUpward);
-            }
-          } else {
-            if (parentInstBody && parentInstBody != currentInstBody)
-              collectHierarchicalPaths(parentInstBody, isUpward);
-          }
-        };
-
-    // Determine whether hierarchical names are upward or downward.
     auto *tempInstBody = currentInstBody;
     while (tempInstBody) {
       tempInstBody = tempInstBody->parentInstance->getParentScope()
                          ->getContainingInstance();
       if (tempInstBody == outermostInstBody) {
-        collectHierarchicalPaths(currentInstBody, true);
+        // The value flows upward: expose it as an output port on every module
+        // boundary between the symbol and the outermost module.
+        SmallVector<const slang::ast::InstanceSymbol *> instChain;
+        for (auto *b = currentInstBody; b && b != outermostInstBody;
+             b = b->parentInstance->getParentScope()->getContainingInstance())
+          instChain.push_back(b->parentInstance);
+        // Map each level of the chain to the body that module conversion
+        // will actually visit, descending from the outermost module: slang's
+        // getCanonicalBody only relates instances elaborated within the same
+        // parent body, so a body forced into existence by this reference
+        // does not defer to its equivalent in the canonical sibling subtree.
+        // The by-name lookup only happens at levels that left the canonical
+        // subtree, references on the canonical path skip it entirely.
+        SmallVector<const slang::ast::InstanceBodySymbol *> canonChain(
+            instChain.size());
+        const slang::ast::InstanceBodySymbol *parentCanon = outermostInstBody;
+        for (size_t i = instChain.size(); i-- > 0;) {
+          const slang::ast::InstanceSymbol *inst = instChain[i];
+          if (inst->getParentScope()->getContainingInstance() != parentCanon)
+            if (auto *resolved = parentCanon->find(inst->name))
+              if (auto *resolvedInst =
+                      resolved->as_if<slang::ast::InstanceSymbol>())
+                inst = resolvedInst;
+          canonChain[i] = getCanonicalBody(*inst);
+          parentCanon = canonChain[i];
+        }
+        for (size_t i = 0; i < instChain.size(); ++i) {
+          addHierPath(canonChain[i], hierName,
+                      slang::ast::ArgumentDirection::Out);
+          hierName = builder.getStringAttr(
+              instChain[i]->name + llvm::Twine(".") + hierName.getValue());
+        }
         return;
       }
     }
 
+    // The value flows downward: route it as an input port from the common
+    // ancestor down to the referencing module.
+    std::function<void(const slang::ast::InstanceBodySymbol *)>
+        collectHierarchicalPaths = [&](auto sym) {
+          addHierPath(getCanonicalBody(*sym->parentInstance), hierName,
+                      slang::ast::ArgumentDirection::In);
+          parentInstBody =
+              sym->parentInstance->getParentScope()->getContainingInstance();
+          if (parentInstBody && parentInstBody != currentInstBody)
+            collectHierarchicalPaths(parentInstBody);
+        };
     hierName = builder.getStringAttr(currentInstBody->parentInstance->name +
                                      llvm::Twine(".") + hierName.getValue());
-    collectHierarchicalPaths(outermostInstBody, false);
+    collectHierarchicalPaths(outermostInstBody);
   }
 
   Context &context;

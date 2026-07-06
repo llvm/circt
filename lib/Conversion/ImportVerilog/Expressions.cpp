@@ -1003,12 +1003,22 @@ struct RvalueExprVisitor : public ExprVisitor {
       }
     }
 
-    // For cross-instance hierarchical references, use the instance-aware
-    // hierValueSymbols lookup first. This is required for multi-instance
-    // deduplication where Slang shares the same ValueSymbol* across instances
-    // (e.g., p1.child.child_val and p2.child.child_val may point to the same
-    // ValueSymbol). The scoped valueSymbols lookup would return the wrong
-    // (first-inserted) value in that case.
+    // Inside a function body, a captured symbol must resolve to the capture
+    // argument to respect region isolation.
+    if (auto value = context.resolveCapturedValue(expr.symbol)) {
+      if (isa<moore::RefType>(value.getType())) {
+        auto readOp = moore::ReadOp::create(builder, hierLoc, value);
+        if (context.rvalueReadCallback)
+          context.rvalueReadCallback(readOp);
+        value = readOp.getResult();
+      }
+      return value;
+    }
+
+    // For cross-instance hierarchical references, prefer the isntance-aware
+    // hierValueSymbols lookup. Sibling instances elaborate distinct symbol
+    // objects for the same logical variable, and this map keeps p1 vs p2
+    // resolutions separate where the scoped table could conflate them.
     if (auto key = context.buildHierValueKey(expr)) {
       if (auto it = context.hierValueSymbols.find(*key);
           it != context.hierValueSymbols.end()) {
@@ -1044,8 +1054,27 @@ struct RvalueExprVisitor : public ExprVisitor {
       return value;
     }
 
-    // Try to materialize constant values directly.
-    auto constant = context.evaluateConstant(expr);
+    /// Materialize compile-time constants directly from the symbol: the
+    /// generic evaluateConstant refuses hierarchical references unless slang's
+    /// AllowHierarchicalConst flag is set, which CIRCT does not use.
+    slang::ConstantValue constant;
+    switch (expr.symbol.kind) {
+    case slang::ast::SymbolKind::Parameter:
+      constant = expr.symbol.as<slang::ast::ParameterSymbol>().getValue(
+          expr.sourceRange);
+      break;
+    case slang::ast::SymbolKind::Specparam:
+      constant = expr.symbol.as<slang::ast::SpecparamSymbol>().getValue(
+          expr.sourceRange);
+      break;
+    case slang::ast::SymbolKind::EnumValue:
+      constant = expr.symbol.as<slang::ast::EnumValueSymbol>().getValue(
+          expr.sourceRange);
+      break;
+    default:
+      constant = context.evaluateConstant(expr);
+      break;
+    }
     if (auto value = context.materializeConstant(constant, *expr.type, loc))
       return value;
 
@@ -2574,8 +2603,12 @@ struct LvalueExprVisitor : public ExprVisitor {
       }
     }
 
+    // Same capture priority as the rvalue visitor.
+    if (auto value = context.resolveCapturedValue(expr.symbol))
+      return value;
+
     // For cross-instance hierarchical references, use the instance-aware
-    // hierValueSymbols lookup first (same priority and rationale as rvalue
+    // hierValueSymbols lookup (same priority and rationale as rvalue
     // visitor).
     if (auto key = context.buildHierValueKey(expr)) {
       if (auto it = context.hierValueSymbols.find(*key);
@@ -2689,6 +2722,14 @@ struct LvalueExprVisitor : public ExprVisitor {
 //===----------------------------------------------------------------------===//
 // Hierarchical Name Helpers
 //===----------------------------------------------------------------------===//
+
+Value Context::resolveCapturedValue(const slang::ast::ValueSymbol &sym) {
+  if (!currentFunctionLowering)
+    return {};
+  if (!llvm::is_contained(currentFunctionLowering->capturedSymbols, &sym))
+    return {};
+  return valueSymbols.lookup(&sym);
+}
 
 std::optional<std::pair<const slang::ast::InstanceSymbol *, mlir::StringAttr>>
 Context::buildHierValueKey(
