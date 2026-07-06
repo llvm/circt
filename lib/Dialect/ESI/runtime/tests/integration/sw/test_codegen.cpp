@@ -10,6 +10,8 @@
 
 #include "test_codegen/CallServiceCallback.h"
 #include "test_codegen/CallbackWindowedList.h"
+#include "test_codegen/ChannelMultiBurstListRead.h"
+#include "test_codegen/ChannelMultiBurstListWrite.h"
 #include "test_codegen/ChannelWindowedListRead.h"
 #include "test_codegen/ChannelWindowedListWrite.h"
 #include "test_codegen/CustomServiceDeclChannel.h"
@@ -517,6 +519,54 @@ static int runChannelWindowedListRead(Accelerator *accel) {
 }
 
 //===----------------------------------------------------------------------===//
+// To-host channel whose list is longer than the HW serial encoder's data FIFO,
+// so `ListWindowToSerial` emits it as several header/data bursts terminated by
+// a single count==0 footer. Exercises the host-side
+// `SerialListTypeDeserializer` multi-burst *reassembly* path end-to-end.
+//===----------------------------------------------------------------------===//
+static int runChannelMultiBurstListRead(Accelerator *accel) {
+  esi_system::ChannelMultiBurstListRead mod(
+      findInst(accel, "channel_multiburst_list_read_inst"));
+  auto c = mod.connect();
+
+  using WinT = esi_system::ChannelMultiBurstListRead::dataData;
+
+  // Arm one transfer via the MMIO trigger.
+  c->trigger.write(0x10, 0u);
+
+  std::unique_ptr<WinT> got = c->data.read();
+  if (!got)
+    throw std::runtime_error("channel_multiburst_list_read: null read result");
+  // The HW streams ten items ``[0x1000 .. 0x1009]`` with ``tag = 0xF00D``; the
+  // depth-4 encoder FIFO splits them into three bursts (4 + 4 + 2) that the
+  // host deserializer must reassemble into a single ten-element list.
+  static constexpr uint16_t kTag = 0xF00D;
+  static constexpr size_t kNumItems = 10;
+  if (got->tag() != kTag)
+    throw std::runtime_error(
+        "channel_multiburst_list_read: wrong tag, expected 0x" +
+        toHex(static_cast<uint64_t>(kTag)) + " got 0x" +
+        toHex(static_cast<uint64_t>(got->tag())));
+  if (got->items_count() != kNumItems)
+    throw std::runtime_error(
+        "channel_multiburst_list_read: wrong item count, expected " +
+        std::to_string(kNumItems) + " got " +
+        std::to_string(got->items_count()));
+  size_t i = 0;
+  for (uint32_t v : got->items()) {
+    uint32_t expected = 0x1000u + static_cast<uint32_t>(i);
+    if (v != expected)
+      throw std::runtime_error("channel_multiburst_list_read: element " +
+                               std::to_string(i) + " expected 0x" +
+                               toHex(expected) + " got 0x" + toHex(v));
+    ++i;
+  }
+  std::cout << "channel_multiburst_list_read ok (10 items reassembled from 3 "
+               "bursts)\n";
+  return 0;
+}
+
+//===----------------------------------------------------------------------===//
 // From-host channel of windowed list-with-header. Exercises the typed write
 // path: the host constructs a complete burst from a header tag plus a list of
 // items, and the HW AND-reduces each beat against the expected pattern. The
@@ -551,6 +601,49 @@ static int runChannelWindowedListWrite(Accelerator *accel) {
         toHex(match) + ")");
   std::cout << "channel_windowed_list_write ok (tag=0x"
             << toHex(static_cast<uint64_t>(kTag)) << ", items=[10,20,30,40])\n";
+  return 0;
+}
+
+//===----------------------------------------------------------------------===//
+// From-host channel of a windowed list whose count field is too narrow to
+// encode the whole list in one burst. The host serializer must split the
+// 256-item list into multiple bursts (the window's 8-bit count caps each
+// burst at 255 items); the HW reassembles them and validates every item.
+// Exercises the write-side multi-burst chunking end-to-end.
+//===----------------------------------------------------------------------===//
+static int runChannelMultiBurstListWrite(Accelerator *accel) {
+  esi_system::ChannelMultiBurstListWrite mod(
+      findInst(accel, "channel_multiburst_list_write_inst"));
+  auto c = mod.connect();
+
+  using WinT = esi_system::ChannelMultiBurstListWrite::dataData;
+
+  // 256 items, value == index. The window's 8-bit count caps each burst at
+  // 255, so the host serializer splits this into two bursts (255 + 1).
+  std::vector<uint8_t> items;
+  items.reserve(256);
+  for (int v = 0; v < 256; ++v)
+    items.push_back(static_cast<uint8_t>(v));
+  c->data.write(WinT(items));
+
+  // Poll the match flag MMIO until the (reassembled) burst has been processed
+  // or we time out. The HW updates the latch on the final item's beat.
+  using clock = std::chrono::steady_clock;
+  auto deadline = clock::now() + std::chrono::seconds(5);
+  uint64_t match = 0;
+  while (clock::now() < deadline) {
+    match = c->match.read(0);
+    if (match & 1)
+      break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  if (!(match & 1))
+    throw std::runtime_error(
+        "channel_multiburst_list_write: HW did not report a match within "
+        "timeout (got 0x" +
+        toHex(match) + ")");
+  std::cout << "channel_multiburst_list_write ok (256 items split across 2 "
+               "bursts)\n";
   return 0;
 }
 
@@ -641,5 +734,7 @@ ESI_PROBE_REGISTRY(
     {"typed_func_array_result", &runTypedFuncArrayResult},
     {"typed_func_windowed_list", &runTypedFuncWindowedList},
     {"channel_windowed_list_read", &runChannelWindowedListRead},
+    {"channel_multiburst_list_read", &runChannelMultiBurstListRead},
     {"channel_windowed_list_write", &runChannelWindowedListWrite},
+    {"channel_multiburst_list_write", &runChannelMultiBurstListWrite},
     {"callback_windowed_list", &runCallbackWindowedList}, );

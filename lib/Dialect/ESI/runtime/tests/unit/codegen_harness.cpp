@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <ranges>
 #include <type_traits>
 #include <vector>
@@ -495,6 +496,66 @@ void testWindowList() {
 }
 
 // ---------------------------------------------------------------------------
+// Multi-burst chunking: a window whose count field is too narrow to encode
+// the whole list in one burst must split the list across several
+// header/data bursts (terminated by a zero-count footer) and the read-side
+// deserializer must reassemble it back into the original list.
+// ---------------------------------------------------------------------------
+
+void testWindowListMultiBurst() {
+  // SmallListWindow has a 2-bit count field, so at most 3 items fit in one
+  // burst. A 7-item list therefore splits into 3 bursts of 3 + 3 + 1 items.
+  std::vector<uint32_t> elements = {0x11111111u, 0x22222222u, 0x33333333u,
+                                    0x44444444u, 0x55555555u, 0x66666666u,
+                                    0x77777777u};
+  SmallListWindow win(0xBEEF, elements);
+
+  assert(win.tag() == 0xBEEF);
+  assert(win.items_count() == elements.size());
+
+  // ceil(7 / 3) = 3 bursts -> 3 headers + 3 data + 1 footer = 7 segments.
+  assert(win.numSegments() == 2 * 3 + 1);
+
+  // Each header / footer frame is 4 bytes. Data segments carry 3, 3, then 1
+  // item(s), one ui32 (4 bytes) per item.
+  assert(win.segment(0).size == 4);                    // burst 0 header
+  assert(win.segment(1).size == 3 * sizeof(uint32_t)); // burst 0 data
+  assert(win.segment(2).size == 4);                    // burst 1 header
+  assert(win.segment(3).size == 3 * sizeof(uint32_t)); // burst 1 data
+  assert(win.segment(4).size == 4);                    // burst 2 header
+  assert(win.segment(5).size == 1 * sizeof(uint32_t)); // burst 2 data
+  assert(win.segment(6).size == 4);                    // footer
+
+  // The per-burst count lives in the low 2 bits of header byte 1 (a 1-byte
+  // pad precedes it because the data frame is wider than the header). Verify
+  // the encoded batch counts: 3, 3, 1, and a zero-count footer.
+  assert((win.segment(0).data[1] & 0x3) == 3);
+  assert((win.segment(2).data[1] & 0x3) == 3);
+  assert((win.segment(4).data[1] & 0x3) == 1);
+  assert((win.segment(6).data[1] & 0x3) == 0);
+
+  // Round-trip: flatten the multi-burst stream and feed it back through the
+  // generated serial-list deserializer. It must rebuild one window holding
+  // all 7 items with the original tag.
+  std::unique_ptr<SmallListWindow> decoded;
+  SmallListWindow::TypeDeserializer deser(
+      [&](std::unique_ptr<SmallListWindow> &out) {
+        decoded = std::move(out);
+        return true;
+      });
+  std::unique_ptr<esi::SegmentedMessageData> msg =
+      std::make_unique<esi::MessageData>(win.toMessageData());
+  bool pushed = deser.push(msg);
+  assert(pushed);
+  assert(decoded);
+  assert(decoded->tag() == 0xBEEF);
+  auto reassembled = decoded->items_vector();
+  assert(reassembled.size() == elements.size());
+  for (std::size_t j = 0; j < elements.size(); ++j)
+    assert(reassembled[j] == elements[j]);
+}
+
+// ---------------------------------------------------------------------------
 // Path D — value-class fields (esi::MutableBitVector, esi::Int, esi::UInt)
 // ---------------------------------------------------------------------------
 
@@ -808,6 +869,7 @@ int main() {
   testSubByteStructArray();
   testUnion();
   testWindowList();
+  testWindowListMultiBurst();
   testWideUnsigned();
   testWideSigned();
   testBitsField();

@@ -735,6 +735,85 @@ class ChannelWindowedListRead(Module):
     esi.ChannelService.to_host(AppID("data"), p2s.serial_out)
 
 
+# Multi-burst read: the list is longer than the serial encoder's data FIFO, so
+# `ListWindowToSerial` emits it as several header/data bursts (via its
+# split-on-full path) terminated by a single count==0 footer, rather than one
+# big burst. The host-side `SerialListTypeDeserializer` must stitch those
+# bursts back into a single list. The count field stays 16 bits (byte-aligned,
+# header fills the frame), so this exercises the multi-burst *reassembly*
+# without depending on the sub-byte frame layout the C++ facade codegen does
+# not yet model.
+_MULTIBURST_READ_TAG = 0xF00D
+_MULTIBURST_READ_ITEMS = [0x1000 + i for i in range(10)]
+_MULTIBURST_READ_FIFO_DEPTH = 4
+
+
+class ChannelMultiBurstListRead(Module):
+  """To-host channel that emits a list split across multiple serial bursts.
+
+  Same shape as `ChannelWindowedListRead`, but the ten-element list exceeds
+  the serial encoder's data FIFO (depth 4), so `ListWindowToSerial` emits the
+  list as several header/data bursts (4 + 4 + 2) followed by a single count==0
+  footer. Verifies that the host-side `SerialListTypeDeserializer` reassembles
+  a multi-burst transfer back into one list. A write to offset ``0x10`` of the
+  ``trigger`` MMIO region arms one transfer.
+  """
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    clk = ports.clk
+    rst = ports.rst
+
+    # MMIO trigger: any write to offset 0x10 arms one transfer.
+    trigger_bundle = esi.MMIO.read_write(appid=AppID("trigger"))
+    resp_chan = Wire(Channel(Bits(64)))
+    cmd_chan = trigger_bundle.unpack(data=resp_chan)["cmd"]
+    cmd_xact, cmd = cmd_chan.snoop_xact()
+    resp_chan.assign(cmd_chan.transform(lambda c: Bits(64)(c.data)))
+    trigger_xact = cmd_xact & (cmd.offset == UInt(32)(0x10))
+
+    n_items = len(_MULTIBURST_READ_ITEMS)
+    burst_end = Wire(Bits(1))
+
+    # ``armed`` is high for the duration of one list: set on a trigger write,
+    # cleared on the cycle the final item handshakes. The producer streams all
+    # ten items with a single ``last`` on item 9 -- the split into bursts
+    # happens entirely inside `ListWindowToSerial`.
+    armed = ControlReg(clk, rst, asserts=[trigger_xact], resets=[burst_end])
+
+    par_ready = Wire(Bits(1))
+    handshake = armed & par_ready
+    idx_counter = Counter(4)(clk=clk,
+                             rst=rst,
+                             clear=burst_end,
+                             increment=handshake,
+                             instance_name="multiburst_read_idx")
+    idx = idx_counter.out
+    last_bit = (idx == UInt(4)(n_items - 1))
+    burst_end.assign(handshake & last_bit)
+    item_value = Array(Bits(32), n_items)(_MULTIBURST_READ_ITEMS)[idx.as_bits()]
+
+    parallel_window_type = Window.default_of(_window_probe_struct)
+    par_struct = parallel_window_type.lowered_type({
+        "tag": Bits(16)(_MULTIBURST_READ_TAG),
+        "items": item_value,
+        "last": last_bit,
+    })
+    par_window = parallel_window_type.wrap(par_struct)
+    parallel_chan, parallel_ready = Channel(parallel_window_type).wrap(
+        par_window, armed)
+    par_ready.assign(parallel_ready)
+
+    p2s = ListWindowToSerial(parallel_window_type, _WINDOW_PROBE_BULK_WIDTH,
+                             _WINDOW_PROBE_ITEMS_PER_FRAME,
+                             _MULTIBURST_READ_FIFO_DEPTH)(
+                                 clk=clk, rst=rst, parallel_in=parallel_chan)
+    esi.ChannelService.to_host(AppID("data"), p2s.serial_out)
+
+
 class ChannelWindowedListWrite(Module):
   """From-host channel of ``window<{tag, list<si32>}>``.
 
@@ -812,6 +891,99 @@ class ChannelWindowedListWrite(Module):
             lambda _: final_match.as_bits(1).pad_or_truncate(64).as_bits(64)))
 
 
+# Multi-burst bare-list window. The bulk count is 8 bits, so each burst can
+# carry at most 255 items; a 256-element list must therefore be split by the
+# host serializer into two bursts (255 + 1). Hardware reassembles the bursts
+# via `ListWindowToParallel` and validates every item in order, proving the
+# write-side burst chunking round-trips through hardware.
+#
+# The window is a *bare* list of byte-sized items (no static header fields)
+# with an 8-bit count, so both the header frame (a single ui8 count) and each
+# data frame (one ui8) fill exactly one byte with no frame padding. That keeps
+# the on-wire layout unambiguous: a narrower (sub-byte) count would introduce
+# sub-byte frame padding, which the C++ facade codegen does not currently
+# model.
+_MULTIBURST_N_ITEMS = 256
+_MULTIBURST_BULK_WIDTH = 8
+_MULTIBURST_ITEMS_PER_FRAME = 1
+_multiburst_struct = StructType([("items", List(Bits(8)))])
+_multiburst_window = Window.serial_of(_multiburst_struct,
+                                      _MULTIBURST_BULK_WIDTH,
+                                      _MULTIBURST_ITEMS_PER_FRAME)
+
+
+class ChannelMultiBurstListWrite(Module):
+  """From-host channel of ``window<{list<ui8>}>`` with an 8-bit bulk count.
+
+  The 8-bit bulk count caps each burst at 255 items, so the host splits the
+  256-element list into two bursts (255 + 1). Hardware reassembles the bursts
+  via `ListWindowToParallel`, AND-reduces per-beat equality against the
+  expected ``item[i] == i`` pattern, and latches the result into the ``match``
+  MMIO region. This is the end-to-end check that the host-side multi-burst
+  serialization is correct.
+  """
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    clk = ports.clk
+    rst = ports.rst
+
+    chan = esi.ChannelService.from_host(AppID("data"), _multiburst_window)
+    s2p = ListWindowToParallel(_multiburst_window)(clk=clk,
+                                                   rst=rst,
+                                                   serial_in=chan)
+    par_ready = Wire(Bits(1))
+    par_window, par_valid = s2p.parallel_out.unwrap(par_ready)
+    par_struct = par_window.unwrap()
+    par_ready.assign(Bits(1)(1))
+
+    handshake = par_valid
+    last_bit = par_struct["last"].as_bits(1)
+
+    # Counter cycles 0..255, clears on the burst-end beat. Each item's value
+    # equals its position, so the expected value is simply the index.
+    idx_clr = (handshake & last_bit).as_bits(1)
+    idx_counter = Counter(8)(clk=clk,
+                             rst=rst,
+                             clear=idx_clr,
+                             increment=handshake,
+                             instance_name="multiburst_write_idx")
+    idx = idx_counter.out
+
+    beat_ok = (par_struct["items"].as_bits(8) == idx.as_bits(8)).as_bits(1)
+
+    # Running AND-reduce across the whole (reassembled) list; latches into
+    # ``final_match`` on the last item's beat.
+    running_match = Wire(Bits(1))
+    running_match_reg = Reg(Bits(1),
+                            clk=clk,
+                            rst=rst,
+                            rst_value=1,
+                            ce=handshake,
+                            name="multiburst_match_running")
+    running_match.assign((running_match_reg & beat_ok).as_bits(1))
+    running_match_reg.assign(running_match)
+
+    final_match = Reg(Bits(1),
+                      clk=clk,
+                      rst=rst,
+                      rst_value=0,
+                      ce=idx_clr,
+                      name="multiburst_match_final")
+    final_match.assign(running_match)
+
+    # Expose the latched flag via MMIO read.
+    mmio_bundle = esi.MMIO.read(appid=AppID("match"))
+    resp_chan = Wire(Channel(Bits(64)))
+    addr_chan = mmio_bundle.unpack(data=resp_chan)["offset"]
+    resp_chan.assign(
+        addr_chan.transform(
+            lambda _: final_match.as_bits(1).pad_or_truncate(64).as_bits(64)))
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
@@ -870,9 +1042,16 @@ class Top(Module):
     ChannelWindowedListRead(clk=ports.clk,
                             rst=ports.rst,
                             appid=AppID("channel_windowed_list_read_inst"))
+    ChannelMultiBurstListRead(clk=ports.clk,
+                              rst=ports.rst,
+                              appid=AppID("channel_multiburst_list_read_inst"))
     ChannelWindowedListWrite(clk=ports.clk,
                              rst=ports.rst,
                              appid=AppID("channel_windowed_list_write_inst"))
+    ChannelMultiBurstListWrite(
+        clk=ports.clk,
+        rst=ports.rst,
+        appid=AppID("channel_multiburst_list_write_inst"))
     CallbackWindowedList(clk=ports.clk,
                          rst=ports.rst,
                          appid=AppID("callback_windowed_list_inst"))

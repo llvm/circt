@@ -2145,6 +2145,14 @@ class CppTypeEmitter:
                                                       info["header_pad_bytes"],
                                                       count_type_synth)
 
+    # Largest list length encodable in a single burst's count field. Lists
+    # longer than this are split across multiple header/data bursts (the
+    # read-side `SerialListTypeDeserializer` reassembles them), each burst
+    # carrying at most this many data frames. `count_width` is <= 64 (the
+    # count field's storage type tops out at 64 bits), so this literal always
+    # fits in a `size_t`.
+    max_batch_val = (1 << info["count_width"]) - 1
+
     hdr.write(
         f"struct {info['window_name']} : public esi::SegmentedMessageData {{\n")
     hdr.write("public:\n")
@@ -2156,26 +2164,43 @@ class CppTypeEmitter:
     self._emit_window_frame(hdr, "header_frame", info["frame_bytes"],
                             header_layout)
     hdr.write("\n")
-    hdr.write("  header_frame header{};\n")
+    hdr.write("  // One header per burst (bursts 2..N are continuations whose\n"
+              "  // only meaningful field is the count); the data frames of\n"
+              "  // every burst are stored contiguously in `data_frames` and\n"
+              "  // sliced per burst by `segment()`.\n")
+    hdr.write("  std::vector<header_frame> headers;\n")
     hdr.write("  std::vector<data_frame> data_frames;\n")
     hdr.write("  header_frame footer{};\n\n")
+    hdr.write("  // Largest list length encodable in one burst's count field.\n"
+              "  // Longer lists are chunked across multiple bursts.\n")
+    hdr.write(f"  static constexpr size_t _kMaxBatch = {max_batch_val}ULL;\n\n")
     hdr.write(f"  void construct({frame_ctor_signature}) {{\n")
     hdr.write("    if (frames.empty())\n")
     hdr.write(
         f"      throw std::invalid_argument(\"{info['window_name']}: bulk windowed lists cannot be empty\");\n"
     )
-    hdr.write(
-        "    if (frames.size() > std::numeric_limits<count_type>::max())\n")
-    hdr.write(
-        f"      throw std::invalid_argument(\"{info['window_name']}: list too large for encoded count\");\n"
-    )
-    hdr.write(
-        f"    header.{info['count_field_name']}(static_cast<count_type>(frames.size()));\n"
-    )
-    for name, _ in info["ctor_params"]:
-      hdr.write(f"    header.{name}({name});\n")
-    hdr.write(f"    footer.{info['count_field_name']}(0);\n")
     hdr.write("    data_frames = std::move(frames);\n")
+    hdr.write("    // Split the list into bursts no larger than the count\n"
+              "    // field can encode. The read side reassembles the bursts\n"
+              "    // back into a single list.\n")
+    hdr.write("    const size_t total = data_frames.size();\n")
+    hdr.write(
+        "    const size_t numBatches = (total + _kMaxBatch - 1) / _kMaxBatch;\n"
+    )
+    hdr.write("    headers.assign(numBatches, header_frame{});\n")
+    hdr.write("    for (size_t b = 0; b < numBatches; ++b) {\n")
+    hdr.write(
+        "      const size_t batchSize =\n"
+        "          std::min<size_t>(_kMaxBatch, total - b * _kMaxBatch);\n")
+    hdr.write(
+        f"      headers[b].{info['count_field_name']}(static_cast<count_type>(batchSize));\n"
+    )
+    hdr.write("    }\n")
+    hdr.write(
+        "    // Only the first burst's header carries the static fields.\n")
+    for name, _ in info["ctor_params"]:
+      hdr.write(f"    headers.front().{name}({name});\n")
+    hdr.write(f"    footer.{info['count_field_name']}(0);\n")
     hdr.write("  }\n\n")
     hdr.write("public:\n")
     hdr.write(f"  {info['window_name']}({frame_ctor_signature}) {{\n")
@@ -2190,24 +2215,30 @@ class CppTypeEmitter:
     hdr.write("    }\n")
     hdr.write(f"    construct({helper_call});\n")
     hdr.write("  }\n\n")
-    hdr.write("  size_t numSegments() const override { return 3; }\n")
+    hdr.write("  size_t numSegments() const override {\n"
+              "    return 2 * headers.size() + 1;\n"
+              "  }\n")
     hdr.write("  esi::Segment segment(size_t idx) const override {\n")
-    hdr.write("    if (idx == 0)\n")
-    hdr.write(
-        "      return {reinterpret_cast<const uint8_t *>(&header), sizeof(header)};\n"
-    )
-    hdr.write("    if (idx == 1)\n")
-    hdr.write(
-        "      return {reinterpret_cast<const uint8_t *>(data_frames.data()),\n"
-    )
-    hdr.write("              data_frames.size() * sizeof(data_frame)};\n")
-    hdr.write("    if (idx == 2)\n")
+    hdr.write("    const size_t footerIdx = 2 * headers.size();\n")
+    hdr.write("    if (idx == footerIdx)\n")
     hdr.write(
         "      return {reinterpret_cast<const uint8_t *>(&footer), sizeof(footer)};\n"
     )
+    hdr.write("    if (idx > footerIdx)\n")
     hdr.write(
-        f"    throw std::out_of_range(\"{info['window_name']}: invalid segment index\");\n"
+        f"      throw std::out_of_range(\"{info['window_name']}: invalid segment index\");\n"
     )
+    hdr.write("    const size_t b = idx / 2;\n")
+    hdr.write("    if (idx % 2 == 0)\n")
+    hdr.write("      return {reinterpret_cast<const uint8_t *>(&headers[b]),\n"
+              "              sizeof(header_frame)};\n")
+    hdr.write("    const size_t start = b * _kMaxBatch;\n")
+    hdr.write(
+        "    const size_t batchSize =\n"
+        "        std::min<size_t>(_kMaxBatch, data_frames.size() - start);\n")
+    hdr.write(
+        "    return {reinterpret_cast<const uint8_t *>(data_frames.data() + start),\n"
+        "            batchSize * sizeof(data_frame)};\n")
     hdr.write("  }\n\n")
     hdr.write(
         f"  static constexpr std::string_view _ESI_ID = {self._cpp_string_literal(self._unwrap_aliases(window_type.into_type).id)};\n"
@@ -2239,9 +2270,11 @@ class CppTypeEmitter:
       cpp = self._cpp_type(field_type)
       # The header-frame accessor returns by value (it pulls bytes out of
       # the raw buffer), so this is also returned by value regardless of
-      # whether the underlying type is a scalar or an aggregate.
+      # whether the underlying type is a scalar or an aggregate. The static
+      # fields live on the first burst's header.
       hdr.write(
-          f"  {cpp} {field_name}() const {{ return header.{field_name}(); }}\n")
+          f"  {cpp} {field_name}() const {{ return headers.front().{field_name}(); }}\n"
+      )
     hdr.write(
         f"  size_t {list_field_name}_count() const {{ return data_frames.size(); }}\n"
     )

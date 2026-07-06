@@ -220,6 +220,51 @@ def _build_harness_manifest():
   # Hand-name the window so the harness can spell `ListWindow` directly.
   list_window = types.TypeAlias("@ListWindow", "ListWindow", list_window_inner)
 
+  # Window helper with a *narrow* (2-bit) count field. `maxBatch = 3`, so any
+  # list longer than three items must be chunked into multiple header/data
+  # bursts on the write side (and reassembled by the read-side
+  # `SerialListTypeDeserializer`). Mirrors `ListWindow` otherwise.
+  sw_arg_inner = types.StructType(
+      "@SmallListWindow::arg",
+      [("tag", _uint16), ("items", list_type)],
+  )
+  sw_header_inner = types.StructType(
+      "@SmallListWindow::header",
+      [("tag", _uint16), ("items_count", _uint2)],
+  )
+  sw_data_inner = types.StructType(
+      "@SmallListWindow::data",
+      [("items", types.ArrayType("!hw.array<1xui32>", _uint32, 1))],
+  )
+  sw_lowered = types.UnionType(
+      "@SmallListWindow::lowered",
+      [("header", sw_header_inner), ("data", sw_data_inner)],
+  )
+  sw_window_id = ('!esi.window<"SmallListWindow", @SmallListWindow::arg, '
+                  '[<"header", [<"tag">, <"items" countWidth 2>]>, '
+                  '<"data", [<"items", 1>]>]>')
+  small_list_window_inner = types.WindowType(
+      sw_window_id,
+      "SmallListWindow",
+      sw_arg_inner,
+      sw_lowered,
+      [
+          types.WindowType.Frame(
+              "header",
+              [
+                  types.WindowType.Field("tag", 0, 0),
+                  types.WindowType.Field("items", 0, 2),
+              ],
+          ),
+          types.WindowType.Frame(
+              "data",
+              [types.WindowType.Field("items", 1, 0)],
+          ),
+      ],
+  )
+  small_list_window = types.TypeAlias("@SmallListWindow", "SmallListWindow",
+                                      small_list_window_inner)
+
   # Path D: value-class fields backed by `esi::MutableBitVector` /
   # `esi::Int` / `esi::UInt` from `esi/Values.h`. Covers BitsType at
   # both narrow and wide widths, plus signed/unsigned integers above
@@ -282,8 +327,8 @@ def _build_harness_manifest():
   return [
       std_u, std_s, odd_u, odd_s, sub_u, sub_s, bool_field, outer, misaligned,
       arr4, u3_arr, bits1_arr, s5_arr, u24_arr, sb_cell, sb_cell_arr, union_two,
-      list_window, wide_u, wide_s, bits_field, wide_mis, arr_views,
-      arr_views_mis
+      list_window, small_list_window, wide_u, wide_s, bits_field, wide_mis,
+      arr_views, arr_views_mis
   ]
 
 
