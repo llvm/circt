@@ -1739,8 +1739,14 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[QFROMUP:%.+]] = sim.queue.from_array [[UPR]] : !hw.array<4xi32> -> <i32, 0>
   %2 = moore.queue.from_unpacked_array %upr : !moore.uarray<4 x i32> -> <i32, 0>
 
-  // CHECK: [[CONCAT:%.+]] = sim.queue.concat ([[QR]], [[DIFFB]]) : (!sim.queue<i32, 10>, !sim.queue<i32, 0>) <i32, 5>
-  %concatres = moore.queue.concat (%qr, %diffbounds) : (!moore.queue<i32, 10>, !moore.queue<i32, 0>) <i32, 5>
+  // CHECK: [[CONCAT:%.+]] = sim.queue.concat ([[QR]], [[DIFFB]]) : (!sim.queue<i32, 10>, !sim.queue<i32, 0>) -> !sim.queue<i32, 5>
+  %concatres = moore.queue.concat (%qr, %diffbounds) : (!moore.queue<i32, 10>, !moore.queue<i32, 0>) -> !moore.queue<i32, 5>
+
+  // A zero-operand concat (the empty queue literal `{}`) lowers to the
+  // canonical empty-queue constructor, not a degenerate 0-ary concat.
+  // CHECK: sim.queue.empty : <i32, 5>
+  // CHECK-NOT: sim.queue.concat ()
+  %emptyconcat = moore.queue.concat () : () -> !moore.queue<i32, 5>
 
   return
 }

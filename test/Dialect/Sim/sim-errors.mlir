@@ -133,7 +133,7 @@ sim.func.dpi @dpi_bad_ref_type(ref %arg : i32)
 
 hw.module @queue_concat(in %q1: !sim.queue<i32, 0>, in %q2: !sim.queue<i16, 0>) {
   // expected-error @below {{'sim.queue.concat' op sim::Queue element type 'i16' doesn't match result sim::Queue element type 'i32'}}
-  sim.queue.concat (%q1, %q2) : (!sim.queue<i32, 0>, !sim.queue<i16, 0>) <i32, 5>
+  sim.queue.concat (%q1, %q2) : (!sim.queue<i32, 0>, !sim.queue<i16, 0>) -> !sim.queue<i32, 5>
 }
 
 hw.module @queue_from_array(in %uparr: !hw.array<5xi33>) {

@@ -3050,9 +3050,15 @@ struct QueueConcatOpConversion : public OpConversionPattern<QueueConcatOp> {
   LogicalResult
   matchAndRewrite(QueueConcatOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOpWithNewOp<sim::QueueConcatOp>(
-        op, getTypeConverter()->convertType(op.getResult().getType()),
-        adaptor.getInputs());
+    auto resultType = getTypeConverter()->convertType(op.getResult().getType());
+    // A zero-operand concat (the empty queue literal `{}`) is just an empty
+    // queue; emit the canonical constructor instead of a degenerate concat.
+    if (adaptor.getInputs().empty()) {
+      rewriter.replaceOpWithNewOp<sim::QueueEmptyOp>(op, resultType);
+      return success();
+    }
+    rewriter.replaceOpWithNewOp<sim::QueueConcatOp>(op, resultType,
+                                                    adaptor.getInputs());
     return success();
   }
 };
