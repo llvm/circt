@@ -1771,6 +1771,19 @@ struct BoolCastOpConversion : public OpConversionPattern<BoolCastOp> {
                                                 timeInt, zero);
       return success();
     }
+    if (isa_and_nonnull<hw::StructType, hw::ArrayType, hw::UnionType>(
+            resultType)) {
+      int64_t width = hw::getBitWidth(resultType);
+      if (width < 0)
+        return failure();
+      auto intTy = rewriter.getIntegerType(width);
+      Value input = rewriter.createOrFold<hw::BitcastOp>(op->getLoc(), intTy,
+                                                         adaptor.getInput());
+      Value zero = hw::ConstantOp::create(rewriter, op->getLoc(), intTy, 0);
+      rewriter.replaceOpWithNewOp<comb::ICmpOp>(op, comb::ICmpPredicate::ne,
+                                                input, zero);
+      return success();
+    }
     return failure();
   }
 };

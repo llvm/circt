@@ -1533,6 +1533,20 @@ func.func @TimeConversion(%arg0: !moore.l64, %arg1: !moore.time) -> (!moore.time
   return %0, %1 : !moore.time, !moore.l64
 }
 
+// CHECK-LABEL: func.func @BoolCastAggregates
+func.func @BoolCastAggregates(%arg0: !moore.struct<{valid: l1, is_read: l1}>, %arg1: !moore.array<4 x i8>) -> (!moore.l1, !moore.i1) {
+  // CHECK-NEXT: [[CAST0:%.+]] = hw.bitcast %arg0 : (!hw.struct<valid: i1, is_read: i1>) -> i2
+  // CHECK-NEXT: [[ZERO0:%.+]] = hw.constant 0 : i2
+  // CHECK-NEXT: [[NE0:%.+]] = comb.icmp ne [[CAST0]], [[ZERO0]] : i2
+  %0 = moore.bool_cast %arg0 : !moore.struct<{valid: l1, is_read: l1}> -> !moore.l1
+  // CHECK-NEXT: [[CAST1:%.+]] = hw.bitcast %arg1 : (!hw.array<4xi8>) -> i32
+  // CHECK-NEXT: [[ZERO1:%.+]] = hw.constant 0 : i32
+  // CHECK-NEXT: [[NE1:%.+]] = comb.icmp ne [[CAST1]], [[ZERO1]] : i32
+  %1 = moore.bool_cast %arg1 : !moore.array<4 x i8> -> !moore.i1
+  // CHECK-NEXT: return [[NE0]], [[NE1]]
+  return %0, %1 : !moore.l1, !moore.i1
+}
+
 // CHECK-LABEL: func.func @IntToStringConversion
 func.func @IntToStringConversion(%arg0: !moore.i45) {
   // CHECK-NEXT: sim.string.int_to_string %arg0 : i45
