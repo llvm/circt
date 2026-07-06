@@ -55,13 +55,13 @@ arc.define @LookupTable(%arg0: i32, %arg1: i8) -> () {
 }
 
 // CHECK-LABEL: func.func @StorageAccess
-func.func @StorageAccess(%arg0: !arc.storage<10000>) {
-  // CHECK-NEXT: arc.storage.get %arg0[42] : !arc.storage<10000> -> !arc.state<i9>
-  // CHECK-NEXT: arc.storage.get %arg0[1337] : !arc.storage<10000> -> !arc.memory<4 x i19, i32>
-  // CHECK-NEXT: arc.storage.get %arg0[9001] : !arc.storage<10000> -> !arc.storage<123>
-  %0 = arc.storage.get %arg0[42] : !arc.storage<10000> -> !arc.state<i9>
-  %1 = arc.storage.get %arg0[1337] : !arc.storage<10000> -> !arc.memory<4 x i19, i32>
-  %2 = arc.storage.get %arg0[9001] : !arc.storage<10000> -> !arc.storage<123>
+func.func @StorageAccess(%arg0: !arc.storage) {
+  // CHECK-NEXT: arc.storage.get %arg0[42] : !arc.storage -> !arc.state<i9>
+  // CHECK-NEXT: arc.storage.get %arg0[1337] : !arc.storage -> !arc.memory<4 x i19, i32>
+  // CHECK-NEXT: arc.storage.get %arg0[9001] : !arc.storage -> !arc.storage
+  %0 = arc.storage.get %arg0[42] : !arc.storage -> !arc.state<i9>
+  %1 = arc.storage.get %arg0[1337] : !arc.storage -> !arc.memory<4 x i19, i32>
+  %2 = arc.storage.get %arg0[9001] : !arc.storage -> !arc.storage
   return
 }
 
@@ -348,18 +348,18 @@ func.func @Execute(%arg0: i42) {
 }
 
 // CHECK-LABEL: func.func @CurrentTime
-func.func @CurrentTime(%arg0: !arc.storage<100>) {
-  // CHECK-NEXT: arc.current_time %arg0 : !arc.storage<100>
-  %0 = arc.current_time %arg0 : !arc.storage<100>
+func.func @CurrentTime(%arg0: !arc.storage) {
+  // CHECK-NEXT: arc.current_time %arg0 : !arc.storage
+  %0 = arc.current_time %arg0 : !arc.storage
   return
 }
 
 // CHECK-LABEL: func.func @NextWakeup
-func.func @NextWakeup(%arg0: !arc.storage<100>, %arg1: i64) {
-  // CHECK-NEXT: arc.get_next_wakeup %arg0 : !arc.storage<100>
-  %0 = arc.get_next_wakeup %arg0 : !arc.storage<100>
-  // CHECK-NEXT: arc.set_next_wakeup %arg0, %arg1 : !arc.storage<100>
-  arc.set_next_wakeup %arg0, %arg1 : !arc.storage<100>
+func.func @NextWakeup(%arg0: !arc.storage, %arg1: i64) {
+  // CHECK-NEXT: arc.get_next_wakeup %arg0 : !arc.storage
+  %0 = arc.get_next_wakeup %arg0 : !arc.storage
+  // CHECK-NEXT: arc.set_next_wakeup %arg0, %arg1 : !arc.storage
+  arc.set_next_wakeup %arg0, %arg1 : !arc.storage
   return
 }
 

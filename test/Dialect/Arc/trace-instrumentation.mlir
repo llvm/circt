@@ -1,17 +1,17 @@
 // RUN: circt-opt %s -arc-insert-runtime -lower-arc-to-llvm -canonicalize | FileCheck %s
 
-func.func @bar(%s: !arc.storage<17>, %v: i130) {
-  %s1 = arc.storage.get %s[4] : !arc.storage<17> -> !arc.state<i130>
+func.func @bar(%s: !arc.storage, %v: i130) {
+  %s1 = arc.storage.get %s[4] : !arc.storage -> !arc.state<i130>
   arc.state_write %s1 = %v tap @foo[1] : <i130>
   return
 }
 
-arc.model @foo io !hw.modty<> traceTaps [#arc.trace_tap<i32, 0, ["sig32"]>, #arc.trace_tap<i130, 4, ["sig130"]>] {
-  ^bb0(%arg0: !arc.storage<17>):
+arc.model @foo io !hw.modty<> storageBytes 17 traceTaps [#arc.trace_tap<i32, 0, ["sig32"]>, #arc.trace_tap<i130, 4, ["sig130"]>] {
+  ^bb0(%arg0: !arc.storage):
   %cst_i32 = hw.constant 123 : i32
   %cst_i130 = hw.constant -1 : i130
-  %s0 = arc.storage.get %arg0[0] : !arc.storage<17> -> !arc.state<i32>
-  func.call @bar(%arg0, %cst_i130): (!arc.storage<17>, i130) -> ()
+  %s0 = arc.storage.get %arg0[0] : !arc.storage -> !arc.state<i32>
+  func.call @bar(%arg0, %cst_i130): (!arc.storage, i130) -> ()
   arc.state_write %s0 = %cst_i32 tap @foo[0] : <i32>
 }
 

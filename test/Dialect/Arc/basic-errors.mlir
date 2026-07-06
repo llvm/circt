@@ -438,21 +438,21 @@ func.func @InvalidStateType(%arg0: !arc.state<index>)
 
 // expected-error @below {{initializer 'Bar' does not reference a valid function}}
 arc.model @Foo io !hw.modty<> initializer @Bar {
-^bb0(%arg0: !arc.storage<42>):
+^bb0(%arg0: !arc.storage):
 }
 
 // -----
 
 // expected-error @below {{finalizer 'Bar' does not reference a valid function}}
-arc.model @Foo io !hw.modty<> finalizer @Bar {
-^bb0(%arg0: !arc.storage<42>):
+arc.model @Foo io !hw.modty<> storageBytes 42 finalizer @Bar {
+^bb0(%arg0: !arc.storage):
 }
 
 // -----
 
 // expected-error @below {{initializer 'Bar' does not reference a valid function}}
-arc.model @Foo io !hw.modty<> initializer @Bar {
-^bb0(%arg0: !arc.storage<42>):
+arc.model @Foo io !hw.modty<> storageBytes 42 initializer @Bar {
+^bb0(%arg0: !arc.storage):
 }
 hw.module @Bar() {
 }
@@ -460,8 +460,8 @@ hw.module @Bar() {
 // -----
 
 // expected-error @below {{finalizer 'Bar' does not reference a valid function}}
-arc.model @Foo io !hw.modty<> finalizer @Bar {
-^bb0(%arg0: !arc.storage<42>):
+arc.model @Foo io !hw.modty<> storageBytes 42 finalizer @Bar {
+^bb0(%arg0: !arc.storage):
 }
 hw.module @Bar() {
 }
@@ -469,26 +469,26 @@ hw.module @Bar() {
 // -----
 
 // expected-error @below {{initializer 'Bar' arguments must match arguments of model}}
-arc.model @Foo io !hw.modty<> initializer @Bar {
-^bb0(%arg0: !arc.storage<42>):
+arc.model @Foo io !hw.modty<> storageBytes 42 initializer @Bar {
+^bb0(%arg0: !arc.storage):
 }
 
 // expected-note @below {{initializer declared here:}}
-func.func @Bar(!arc.storage<24>) {
-^bb0(%arg0: !arc.storage<24>):
+func.func @Bar(!arc.state<i1>) {
+^bb0(%arg0: !arc.state<i1>):
   return
 }
 
 // -----
 
 // expected-error @below {{finalizer 'Bar' arguments must match arguments of model}}
-arc.model @Foo io !hw.modty<> finalizer @Bar {
-^bb0(%arg0: !arc.storage<42>):
+arc.model @Foo io !hw.modty<> storageBytes 42 finalizer @Bar {
+^bb0(%arg0: !arc.storage):
 }
 
 // expected-note @below {{finalizer declared here:}}
-func.func @Bar(!arc.storage<24>) {
-^bb0(%arg0: !arc.storage<24>):
+func.func @Bar(!arc.state<i1>) {
+^bb0(%arg0: !arc.state<i1>):
   return
 }
 

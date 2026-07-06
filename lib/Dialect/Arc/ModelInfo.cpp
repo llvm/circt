@@ -123,18 +123,19 @@ LogicalResult circt::arc::collectModels(mlir::ModuleOp module,
                                         SmallVector<ModelInfo> &models) {
 
   for (auto modelOp : module.getOps<ModelOp>()) {
+    if (!modelOp.getStorageBytes().has_value())
+      return modelOp->emitOpError(
+          "missing `storageBytes` attribute; run state allocation first");
     auto storageArg = modelOp.getBody().getArgument(0);
-    auto storageType = cast<StorageType>(storageArg.getType());
 
     SmallVector<StateInfo> states;
     if (failed(collectStates(storageArg, 0, states)))
       return failure();
     llvm::stable_sort(states,
                       [](auto &a, auto &b) { return a.offset < b.offset; });
-
-    models.emplace_back(std::string(modelOp.getName()), storageType.getSize(),
-                        std::move(states), modelOp.getInitialFnAttr(),
-                        modelOp.getFinalFnAttr());
+    models.emplace_back(std::string(modelOp.getName()),
+                        *modelOp.getStorageBytes(), std::move(states),
+                        modelOp.getInitialFnAttr(), modelOp.getFinalFnAttr());
   }
 
   return success();
@@ -196,7 +197,6 @@ circt::arc::ModelInfoAnalysis::ModelInfoAnalysis(Operation *container) {
   for (auto modelOp :
        container->getRegion(0).getBlocks().front().getOps<ModelOp>()) {
     auto storageArg = modelOp.getBody().getArgument(0);
-    auto storageType = cast<StorageType>(storageArg.getType());
 
     SmallVector<StateInfo> states;
     if (failed(collectStates(storageArg, 0, states))) {
@@ -205,8 +205,10 @@ circt::arc::ModelInfoAnalysis::ModelInfoAnalysis(Operation *container) {
     }
     llvm::stable_sort(states,
                       [](auto &a, auto &b) { return a.offset < b.offset; });
+    assert(modelOp.getStorageBytes().has_value() &&
+           "Expected size of storage to be known");
     infoMap.try_emplace(modelOp, std::string(modelOp.getName()),
-                        storageType.getSize(), std::move(states),
+                        *modelOp.getStorageBytes(), std::move(states),
                         modelOp.getInitialFnAttr(), modelOp.getFinalFnAttr());
   }
 }

@@ -92,10 +92,10 @@ func.func @test_array_create(%a: i32, %b: i32) -> !hw.array<2xi32> {
 
 // CHECK-LABEL: func.func @test_storage_get
 // CHECK-SAME: -> !arc.state<!arc.arrayref<2xi32>>
-// CHECK-NEXT: %0 = arc.storage.get %arg0[0] : !arc.storage<8> -> !arc.state<!arc.arrayref<2xi32>>
+// CHECK-NEXT: %0 = arc.storage.get %arg0[0] : !arc.storage -> !arc.state<!arc.arrayref<2xi32>>
 // CHECK-NEXT: return %0 : !arc.state<!arc.arrayref<2xi32>>
-func.func @test_storage_get(%a: !arc.storage<8>) -> !arc.state<!hw.array<2xi32>> {
-  %0 = arc.storage.get %a[0] : !arc.storage<8> -> !arc.state<!hw.array<2xi32>>
+func.func @test_storage_get(%a: !arc.storage) -> !arc.state<!hw.array<2xi32>> {
+  %0 = arc.storage.get %a[0] : !arc.storage -> !arc.state<!hw.array<2xi32>>
   return %0 : !arc.state<!hw.array<2xi32>>
 }
 
@@ -109,9 +109,9 @@ func.func @test_mux(%a: !hw.array<2xi32>, %b: !hw.array<2xi32>, %c: i1) -> !hw.a
 }
 
 // CHECK-LABEL: func.func @test_alloc_state
-// CHECK: arc.alloc_state %arg0 : (!arc.storage<8>) -> !arc.state<!arc.arrayref<2xi32>>
-func.func @test_alloc_state(%arg0: !arc.storage<8>) -> !arc.state<!hw.array<2xi32>> {
-  %0 = arc.alloc_state %arg0 : (!arc.storage<8>) -> !arc.state<!hw.array<2xi32>>
+// CHECK: arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!arc.arrayref<2xi32>>
+func.func @test_alloc_state(%arg0: !arc.storage) -> !arc.state<!hw.array<2xi32>> {
+  %0 = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!hw.array<2xi32>>
   return %0 : !arc.state<!hw.array<2xi32>>
 }
 

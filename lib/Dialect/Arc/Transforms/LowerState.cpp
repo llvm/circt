@@ -202,11 +202,11 @@ LogicalResult ModuleLowering::run() {
   // Create the replacement `ModelOp`.
   auto modelOp =
       ModelOp::create(builder, moduleOp.getLoc(), moduleOp.getModuleNameAttr(),
-                      TypeAttr::get(moduleOp.getModuleType()),
+                      TypeAttr::get(moduleOp.getModuleType()), IntegerAttr{},
                       FlatSymbolRefAttr{}, FlatSymbolRefAttr{}, ArrayAttr{});
   auto &modelBlock = modelOp.getBody().emplaceBlock();
-  storageArg = modelBlock.addArgument(
-      StorageType::get(builder.getContext(), {}), modelOp.getLoc());
+  storageArg = modelBlock.addArgument(StorageType::get(builder.getContext()),
+                                      modelOp.getLoc());
   builder.setInsertionPointToStart(&modelBlock);
 
   // Reset the next wakeup slot to `UINT64_MAX` ("no wakeup pending") at the

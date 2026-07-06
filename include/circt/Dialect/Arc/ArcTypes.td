@@ -49,8 +49,6 @@ def MemoryType : ArcTypeDef<"Memory"> {
 
 def StorageType : ArcTypeDef<"Storage"> {
   let mnemonic = "storage";
-  let parameters = (ins OptionalParameter<"unsigned">:$size);
-  let assemblyFormat = "(`<` $size^ `>`)?";
 }
 
 def SimModelInstance : ArcTypeDef<"SimModelInstance"> {

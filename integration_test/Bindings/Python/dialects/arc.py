@@ -41,21 +41,10 @@ with Context() as ctx, Location.unknown():
   print(f"address_type: {memory_type.address_type}")
   print(f"stride: {memory_type.stride}")
 
-  # Test StorageType without size
+  # Test StorageType
   # CHECK: !arc.storage
-  storage_type_no_size = arc.StorageType.get(ctx)
-  print(storage_type_no_size)
-
-  # CHECK: size: 0
-  print(f"size: {storage_type_no_size.size}")
-
-  # Test StorageType with size
-  # CHECK: !arc.storage<256>
-  storage_type_with_size = arc.StorageType.get(ctx, 256)
-  print(storage_type_with_size)
-
-  # CHECK: size: 256
-  print(f"size: {storage_type_with_size.size}")
+  storage_type = arc.StorageType.get(ctx)
+  print(storage_type)
 
   # Test SimModelInstanceType
   # CHECK: !arc.sim.instance<@model_name>

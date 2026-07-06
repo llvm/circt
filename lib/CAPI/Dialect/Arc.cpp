@@ -77,15 +77,7 @@ bool arcTypeIsAStorage(MlirType type) {
 }
 
 MlirType arcStorageTypeGet(MlirContext ctx) {
-  return wrap(StorageType::get(unwrap(ctx), 0));
-}
-
-MlirType arcStorageTypeGetWithSize(MlirContext ctx, unsigned size) {
-  return wrap(StorageType::get(unwrap(ctx), size));
-}
-
-unsigned arcStorageTypeGetSize(MlirType type) {
-  return llvm::cast<StorageType>(unwrap(type)).getSize();
+  return wrap(StorageType::get(unwrap(ctx)));
 }
 
 bool arcTypeIsASimModelInstance(MlirType type) {

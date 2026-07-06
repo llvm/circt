@@ -482,10 +482,12 @@ def AllocMemoryOp : ArcOp<"alloc_memory", [MemoryEffects<[MemAlloc]>]> {
 
 def AllocStorageOp : ArcOp<"alloc_storage", [MemoryEffects<[MemAlloc]>]> {
   let summary = "Allocate contiguous storage space from a larger storage space";
-  let arguments = (ins StorageType:$input, OptionalAttr<I32Attr>:$offset);
+  let arguments = (ins StorageType:$input,
+                       UI32Attr:$size,
+                       OptionalAttr<I32Attr>:$offset);
   let results = (outs StorageType:$output);
   let assemblyFormat = [{
-    $input (`[` $offset^ `]`)? attr-dict `:` functional-type($input, $output)
+    $input (`[` $offset^ `]`)? `,` $size attr-dict
   }];
 }
 
@@ -1178,6 +1180,7 @@ def ModelOp : ArcOp<"model", [
   }];
   let arguments = (ins SymbolNameAttr:$sym_name,
                        TypeAttrOf<ModuleType>:$io,
+                       OptionalAttr<UI32Attr>:$storageBytes,
                        OptionalAttr<FlatSymbolRefAttr>:$initialFn,
                        OptionalAttr<FlatSymbolRefAttr>:$finalFn,
                        OptionalAttr<TraceTapArrayAttr>:$traceTaps);
@@ -1185,6 +1188,7 @@ def ModelOp : ArcOp<"model", [
 
   let assemblyFormat = [{
     $sym_name `io` $io
+    (`storageBytes` $storageBytes^)?
     (`initializer` $initialFn^)?
     (`finalizer` $finalFn^)?
     (`traceTaps` $traceTaps^)?

@@ -121,6 +121,10 @@ void AllocateStatePass::allocateBlock(Block *block, Value rootStorage) {
   // Actually allocate each operation. Root storage gets padding for the model
   // header.
   bool isRootBlock = block == rootStorage.getParentBlock();
+  // Ensure `allocateOps` runs on the root storage, even without allocations,
+  // to set the `storageBytes` attribute.
+  if (isRootBlock)
+    opsByStorage.insert({rootStorage, {}});
   for (auto &[storage, ops] : opsByStorage) {
     unsigned padding = isRootBlock && storage == rootStorage ? kStateOffset : 0;
     allocateOps(storage, block, ops, padding);
@@ -171,8 +175,8 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
     }
 
     if (auto allocStorageOp = dyn_cast<AllocStorageOp>(op)) {
-      auto offset = builder.getI32IntegerAttr(
-          allocBytes(allocStorageOp.getType().getSize()));
+      auto offset =
+          builder.getI32IntegerAttr(allocBytes(allocStorageOp.getSize()));
       allocStorageOp.setOffsetAttr(offset);
       gettersToCreate.emplace_back(allocStorageOp, allocStorageOp.getInput(),
                                    offset);
@@ -213,11 +217,11 @@ void AllocateStatePass::allocateOps(Value storage, Block *block,
   // root storage type to reflect the total allocation size. Root storage is
   // indicated by non-zero padding.
   if (padding != 0) {
-    storage.setType(StorageType::get(&getContext(), currentByte));
+    getOperation().setStorageBytes(currentByte);
   } else {
     auto substorage = AllocStorageOp::create(
         builder, block->getParentOp()->getLoc(),
-        StorageType::get(&getContext(), currentByte), storage);
+        StorageType::get(&getContext()), storage, currentByte, {});
     for (auto *op : ops)
       op->replaceUsesOfWith(storage, substorage);
     for (auto op : getters)

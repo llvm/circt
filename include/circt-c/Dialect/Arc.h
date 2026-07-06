@@ -39,9 +39,6 @@ MLIR_CAPI_EXPORTED unsigned arcMemoryTypeGetStride(MlirType type);
 
 MLIR_CAPI_EXPORTED bool arcTypeIsAStorage(MlirType type);
 MLIR_CAPI_EXPORTED MlirType arcStorageTypeGet(MlirContext ctx);
-MLIR_CAPI_EXPORTED MlirType arcStorageTypeGetWithSize(MlirContext ctx,
-                                                      unsigned size);
-MLIR_CAPI_EXPORTED unsigned arcStorageTypeGetSize(MlirType type);
 
 MLIR_CAPI_EXPORTED bool arcTypeIsASimModelInstance(MlirType type);
 MLIR_CAPI_EXPORTED MlirType arcSimModelInstanceTypeGet(MlirAttribute model);
