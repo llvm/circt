@@ -809,11 +809,14 @@ struct StmtVisitor {
       return success();
     }
 
-    if (!isa<mlir::func::FuncOp>(parentOp))
+    auto funcOp = dyn_cast<mlir::func::FuncOp>(parentOp);
+    if (!funcOp)
       return mlir::emitError(loc) << "unsupported return statement context";
 
     if (stmt.expr) {
-      auto expr = context.convertRvalueExpression(*stmt.expr);
+      auto resultTypes = funcOp.getFunctionType().getResults();
+      Type resultType = resultTypes.size() == 1 ? resultTypes[0] : Type();
+      auto expr = context.convertRvalueExpression(*stmt.expr, resultType);
       if (!expr)
         return failure();
       mlir::func::ReturnOp::create(builder, loc, expr);
