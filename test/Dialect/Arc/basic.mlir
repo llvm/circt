@@ -447,8 +447,11 @@ hw.module @CoroutineInstanceA(in %a: i42, out z: i9001) {
   %0 = arc.coroutine.instance @CoroutineInstanceB(%a) : (i42) -> i9001
   hw.output %0 : i9001
 }
-arc.coroutine.define @CoroutineInstanceB(%arg0: i42) -> (i9001, i64) {
+// The coroutine produces its result, then an observe bitmask (one bit per
+// argument), then the wakeup time; the instance exposes only the result.
+arc.coroutine.define @CoroutineInstanceB(%arg0: i42) -> (i9001, i1, i64) {
   %c0_i9001 = hw.constant 0 : i9001
+  %c0_i1 = hw.constant 0 : i1
   %c0_i64 = hw.constant 0 : i64
-  arc.coroutine.halt %c0_i9001, %c0_i64 : i9001, i64
+  arc.coroutine.halt %c0_i9001, %c0_i1, %c0_i64 : i9001, i1, i64
 }

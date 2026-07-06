@@ -23,9 +23,11 @@
 
 // Two counting loops with different suspension delays. The current time is
 // supplied as the `%now` argument on every entry. Each iteration yields the
-// loop counter as the `i42` result and `now + delay` as the final `i64` result
-// the instance uses to schedule the next wakeup.
-arc.coroutine.define @Proc(%now: i64) -> (i42, i64) {
+// loop counter as the `i42` result, an `i1` observe bitmask (this coroutine
+// observes nothing, so it is always `0`), and `now + delay` as the final `i64`
+// result the instance uses to schedule the next wakeup.
+arc.coroutine.define @Proc(%now: i64) -> (i42, i1, i64) {
+  %nomask = hw.constant 0 : i1
   // Loop A: count to 5, suspending 100 time units each step.
   %c0 = hw.constant 0 : i42
   cf.br ^loopA(%now, %c0 : i64, i42)
@@ -47,7 +49,7 @@ arc.coroutine.define @Proc(%now: i64) -> (i42, i64) {
   %wakeA = comb.add %t, %d100 : i64
   %one = hw.constant 1 : i42
   %cnA = comb.add %c, %one : i42
-  arc.coroutine.yield (%c, %wakeA : i42, i64), ^resumeA(%cnA : i42)
+  arc.coroutine.yield (%c, %nomask, %wakeA : i42, i1, i64), ^resumeA(%cnA : i42)
 
 ^resumeA(%nowA: i64, %rcA: i42):
   cf.br ^loopA(%nowA, %rcA : i64, i42)
@@ -74,7 +76,7 @@ arc.coroutine.define @Proc(%now: i64) -> (i42, i64) {
   %wakeB = comb.add %t2, %d11 : i64
   %one2 = hw.constant 1 : i42
   %dnB = comb.add %d2, %one2 : i42
-  arc.coroutine.yield (%d2, %wakeB : i42, i64), ^resumeB(%dnB : i42)
+  arc.coroutine.yield (%d2, %nomask, %wakeB : i42, i1, i64), ^resumeB(%dnB : i42)
 
 ^resumeB(%nowB: i64, %rdB: i42):
   cf.br ^loopB(%nowB, %rdB : i64, i42)
@@ -83,7 +85,7 @@ arc.coroutine.define @Proc(%now: i64) -> (i42, i64) {
 ^done:
   %final = hw.constant 5 : i42
   %never = hw.constant -1 : i64
-  arc.coroutine.halt %final, %never : i42, i64
+  arc.coroutine.halt %final, %nomask, %never : i42, i1, i64
 }
 
 // Reads the current simulation time, runs `@Proc` with it, and exposes a

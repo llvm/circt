@@ -17,18 +17,22 @@
 //   as coroutine arguments.
 //
 // - Lifts the body into a new top-level `arc.coroutine.define` whose function
-//   type appends an `i64` "now" argument after the captures and an `i64`
-//   wakeup time result after the process results. The entry block and every
-//   block targeted by an `llhd.wait` receive the coroutine's argument types
-//   as leading block arguments, and a per-value SSA renaming pass threads
-//   each coroutine argument through the CFG so uses see the value bound on
-//   the most recent re-entry.
+//   type appends an `i64` "now" argument after the captures, and appends an
+//   observe bitmask and an `i64` wakeup time result after the process results.
+//   The entry block and every block targeted by an `llhd.wait` receive the
+//   coroutine's argument types as leading block arguments, and a per-value SSA
+//   renaming pass threads each coroutine argument through the CFG so uses see
+//   the value bound on the most recent re-entry.
 //
-// - Rewrites each `llhd.wait` into an `arc.coroutine.yield` whose final yield
-//   operand is `now + delay` (with the delay converted to `i64` via
-//   `llhd.time_to_int`, leaving the time unit opaque to this pass). Each
-//   `llhd.halt` becomes an `arc.coroutine.halt` whose wakeup is the
-//   unit-independent sentinel `-1`.
+// - Rewrites each `llhd.wait` into an `arc.coroutine.yield` (or, for a wait
+//   that can never resume, an `arc.coroutine.halt`) whose trailing yield
+//   operands are an observe bitmask and a wakeup time. The bitmask has one bit
+//   per coroutine argument, set for each observed value; the instance re-enters
+//   the coroutine when a set argument changes. The wakeup is `now + delay`
+//   (with the delay converted to `i64` via `llhd.time_to_int`, leaving the time
+//   unit opaque to this pass), or the unit-independent sentinel `-1` when the
+//   wait has no delay. Each `llhd.halt` becomes an `arc.coroutine.halt` with an
+//   empty mask and the `-1` wakeup.
 //
 // - Replaces the original process with an `arc.coroutine.instance` that
 //   reads the current simulation time and forwards the captured values.
@@ -45,6 +49,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Support/GenericIteratedDominanceFrontier.h"
 
@@ -58,6 +63,7 @@ namespace arc {
 using namespace circt;
 using namespace arc;
 using namespace mlir;
+using llvm::SmallDenseMap;
 using llvm::SmallDenseSet;
 
 namespace {
@@ -96,6 +102,14 @@ private:
   /// coroutine's argument-type prefix as its leading block arguments. (The
   /// entry block cannot appear here: MLIR entry blocks have no predecessors.)
   SetVector<Block *> resumeBlocks;
+
+  /// Maps each block argument that stands in for a coroutine argument to its
+  /// argument index `0..N-1`. This covers the entry block's leading arguments
+  /// and every resume block's leading prefix arguments, so multiple block
+  /// arguments map to the same index. Populated by
+  /// `addEntryAndResumeBlockArguments` and used by `rewriteTerminators` to
+  /// build the observe bitmask.
+  SmallDenseMap<Value, uint32_t> argIndices;
 };
 
 } // namespace
@@ -142,13 +156,18 @@ void ProcessLowering::createCoroutine() {
   assert(hwModule);
   OpBuilder builder(hwModule);
 
-  // Build the function type: (captureTypes..., i64) -> (procResults..., i64).
+  // Build the function type:
+  // `(captureTypes..., i64) -> (procResults..., iN mask, i64 wakeup)`, where
+  // the observe bitmask `iN` carries one bit per coroutine argument and the
+  // trailing `i64` is the next wakeup time.
   auto i64Type = builder.getIntegerType(64);
   SmallVector<Type> argTypes;
   for (auto cap : captures)
     argTypes.push_back(cap.getType());
   argTypes.push_back(i64Type);
+  auto maskType = builder.getIntegerType(argTypes.size());
   SmallVector<Type> resultTypes(processOp.getResultTypes());
+  resultTypes.push_back(maskType);
   resultTypes.push_back(i64Type);
   auto funcType = builder.getFunctionType(argTypes, resultTypes);
 
@@ -194,10 +213,13 @@ void ProcessLowering::addEntryAndResumeBlockArguments() {
     prefixTypes.push_back(capture.getType());
   prefixTypes.push_back(IntegerType::get(coroOp.getContext(), 64));
 
-  // Add arguments to the entry block.
+  // Add arguments to the entry block, recording each one's coroutine argument
+  // index so `rewriteTerminators` can map observed values to bitmask bits.
   auto &entry = body.front();
-  for (auto [index, type] : llvm::enumerate(prefixTypes))
+  for (auto [index, type] : llvm::enumerate(prefixTypes)) {
     entryArgs.push_back(entry.insertArgument(index, type, loc));
+    argIndices[entryArgs.back()] = index;
+  }
 
   // Collect the resume blocks, which are targets of `llhd.wait` ops.
   for (auto &block : body)
@@ -210,7 +232,7 @@ void ProcessLowering::addEntryAndResumeBlockArguments() {
   auto prefixSize = prefixTypes.size();
   for (auto *resumeBlock : resumeBlocks) {
     for (auto [index, type] : llvm::enumerate(prefixTypes))
-      resumeBlock->insertArgument(index, type, loc);
+      argIndices[resumeBlock->insertArgument(index, type, loc)] = index;
 
     // Fix non-wait predecessors. The wait predecessors will become
     // `arc.coroutine.yield`s in the next step; the yield's
@@ -249,10 +271,17 @@ void ProcessLowering::addEntryAndResumeBlockArguments() {
 /// Convert `llhd.wait`/`llhd.halt` terminators to their `arc.coroutine`
 /// equivalents. The wakeup operand is computed against the entry block's
 /// `%now` argument; the per-argument SSA renaming step run afterwards
-/// rewrites that reference to the correct block-local definition. `llhd.wait`
-/// ops with an `observed` clause are rejected; ops without a delay (and no
-/// observed values) can never resume and are treated as halts.
+/// rewrites that reference to the correct block-local definition. A `llhd.wait`
+/// with an `observed` clause yields an observe bitmask with the bit of each
+/// observed coroutine argument set; ops without a delay and without observed
+/// values can never resume and are treated as halts.
 LogicalResult ProcessLowering::rewriteTerminators() {
+  // The observe bitmask has one bit per coroutine argument. `argIndices` maps
+  // the block arguments that stand in for coroutine arguments to their bit
+  // index; block arguments beyond that prefix (a wait's forwarded destination
+  // operands) and values defined inside the body are absent from the map and
+  // therefore cannot be observed for changes.
+  auto maskWidth = entryArgs.size();
   for (auto &block : coroOp.getBody()) {
     auto *term = block.getTerminator();
     auto loc = term->getLoc();
@@ -260,19 +289,29 @@ LogicalResult ProcessLowering::rewriteTerminators() {
 
     // Handle `llhd.wait` ops.
     if (auto wait = dyn_cast<llhd::WaitOp>(term)) {
-      // Reject observed values for now.
-      if (!wait.getObserved().empty())
-        return wait.emitOpError(
-            "observed-value clauses are not supported by arc-lower-processes");
+      // Build the observe bitmask from the observed operands. Only operands
+      // that map to a coroutine argument set a bit; internally-defined values
+      // (which can never change) and forwarded block arguments contribute none.
+      APInt maskBits(maskWidth, 0);
+      for (auto observed : wait.getObserved())
+        if (auto it = argIndices.find(observed); it != argIndices.end())
+          maskBits.setBit(it->second);
+      auto mask = hw::ConstantOp::create(builder, loc, maskBits);
 
-      // Wait ops without delay and observed values can never resume. Treat them
-      // as a halt.
+      // A wait without a delay never resumes on time; use the sentinel `-1` as
+      // its wakeup. It is only a real suspension if it observes something --
+      // otherwise it can never resume and is treated as a halt.
       if (!wait.getDelay()) {
         auto never =
             hw::ConstantOp::create(builder, loc, APInt::getAllOnes(64));
         SmallVector<Value> yieldOperands(wait.getYieldOperands());
+        yieldOperands.push_back(mask);
         yieldOperands.push_back(never);
-        CoroutineHaltOp::create(builder, loc, yieldOperands);
+        if (wait.getObserved().empty())
+          CoroutineHaltOp::create(builder, loc, yieldOperands);
+        else
+          CoroutineYieldOp::create(builder, loc, yieldOperands,
+                                   wait.getDestOperands(), wait.getDest());
         wait.erase();
         continue;
       }
@@ -281,6 +320,7 @@ LogicalResult ProcessLowering::rewriteTerminators() {
       auto delay = llhd::TimeToIntOp::create(builder, loc, wait.getDelay());
       auto wakeup = comb::AddOp::create(builder, loc, now, delay);
       SmallVector<Value> yieldOperands(wait.getYieldOperands());
+      yieldOperands.push_back(mask);
       yieldOperands.push_back(wakeup);
       CoroutineYieldOp::create(builder, loc, yieldOperands,
                                wait.getDestOperands(), wait.getDest());
@@ -290,8 +330,10 @@ LogicalResult ProcessLowering::rewriteTerminators() {
 
     // Handle `llhd.halt` ops.
     if (auto halt = dyn_cast<llhd::HaltOp>(term)) {
+      auto mask = hw::ConstantOp::create(builder, loc, APInt(maskWidth, 0));
       auto never = hw::ConstantOp::create(builder, loc, APInt::getAllOnes(64));
       SmallVector<Value> yieldOperands(halt.getYieldOperands());
+      yieldOperands.push_back(mask);
       yieldOperands.push_back(never);
       CoroutineHaltOp::create(builder, loc, yieldOperands);
       halt.erase();

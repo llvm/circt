@@ -824,9 +824,17 @@ def CoroutineInstanceOp : ArcOp<"coroutine.instance", [
     Execute a coroutine concurrently in an `hw.module`. The program counter and
     state of the coroutine are held implicitly by the instance and passed into
     the coroutine when executed next. The values yielded by the coroutine are
-    produced as results of the instance. The callee must produce a wakeup time
-    as its last result value. This wakeup time is not exposed as a result of
-    the instance op and is instead used to schedule the next execution.
+    produced as results of the instance.
+
+    The callee must produce two additional trailing results that steer
+    scheduling and are *not* exposed as results of the instance op:
+
+    - An observe bitmask as its second-to-last result, an integer with one bit
+      per coroutine argument. A set bit requests that the instance re-enter the
+      coroutine whenever the corresponding argument changes value, on top of the
+      time-based wakeup.
+    - A wakeup time as its last result value, used to schedule the next
+      time-based execution.
   }];
   let arguments = (ins
     FlatSymbolRefAttr:$callee,
