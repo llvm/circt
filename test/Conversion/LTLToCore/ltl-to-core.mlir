@@ -109,7 +109,7 @@ hw.module @Intersect(in %a: i1, in %b: i1, in %c: !ltl.sequence, in %clk: i1) {
   // Convert if there are non-assert users but the result type is i1
   %int2 = ltl.intersect %a, %b : i1, i1
   %user = hw.wire %int2 : i1
-  // Or if there are non-i1 operands (and therefore results)
+  // Don't convert if there are non-i1 operands (and therefore results)
   %int3 = ltl.intersect %b, %c : i1, !ltl.sequence
   verif.assert %int3 : !ltl.sequence
 }
