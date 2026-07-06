@@ -28,7 +28,7 @@
 hw.module @Foo(in %a: i32, out x: i32) {
   // CHECK: [[NOW:%.+]] = llhd.current_time
   // CHECK: [[NOWI:%.+]] = llhd.time_to_int [[NOW]]
-  // CHECK: [[OUT:%.+]] = arc.coroutine.instance @Foo.llhd.process(%a, [[NOWI]]) : (i32, i64) -> i32
+  // CHECK: [[OUT:%.+]] = arc.coroutine.instance @Foo.llhd.process(%a, [[NOWI]]) sensitive [false, false] : (i32, i64) -> i32
   // CHECK: hw.output [[OUT]]
   %c1_i32 = hw.constant 1 : i32
   %c2_i32 = hw.constant 2 : i32
@@ -56,7 +56,7 @@ hw.module @Foo(in %a: i32, out x: i32) {
 
 // CHECK-LABEL: hw.module @NoResults
 hw.module @NoResults() {
-  // CHECK: arc.coroutine.instance @NoResults.llhd.process({{%.+}}) : (i64) -> ()
+  // CHECK: arc.coroutine.instance @NoResults.llhd.process({{%.+}}) sensitive [false] : (i64) -> ()
   %t = llhd.constant_time <1ns, 0d, 0e>
   llhd.process {
     llhd.wait delay %t, ^bb1
@@ -75,7 +75,7 @@ hw.module @NoResults() {
 // CHECK-LABEL: hw.module @NoCaptures
 hw.module @NoCaptures(out o: i32) {
   // CHECK: [[NOWI:%.+]] = llhd.time_to_int
-  // CHECK: arc.coroutine.instance @NoCaptures.llhd.process([[NOWI]]) : (i64) -> i32
+  // CHECK: arc.coroutine.instance @NoCaptures.llhd.process([[NOWI]]) sensitive [false] : (i64) -> i32
   %c7 = hw.constant 7 : i32
   %t = llhd.constant_time <5ns, 0d, 0e>
   %r = llhd.process -> i32 {
@@ -96,7 +96,7 @@ hw.module @NoCaptures(out o: i32) {
 
 // CHECK-LABEL: hw.module @MultiResult
 hw.module @MultiResult(out a: i32, out b: i8) {
-  // CHECK: arc.coroutine.instance @MultiResult.llhd.process({{%.+}}) : (i64) -> (i32, i8)
+  // CHECK: arc.coroutine.instance @MultiResult.llhd.process({{%.+}}) sensitive [false] : (i64) -> (i32, i8)
   %c32 = hw.constant 9 : i32
   %c8 = hw.constant 3 : i8
   %t = llhd.constant_time <1ns, 0d, 0e>
@@ -117,7 +117,7 @@ hw.module @MultiResult(out a: i32, out b: i8) {
 
 // CHECK-LABEL: hw.module @MultiCapture
 hw.module @MultiCapture(in %a: i32, in %b: i8, out o: i32) {
-  // CHECK: arc.coroutine.instance @MultiCapture.llhd.process(%a, %b, {{%.+}}) : (i32, i8, i64) -> i32
+  // CHECK: arc.coroutine.instance @MultiCapture.llhd.process(%a, %b, {{%.+}}) sensitive [false, false, false] : (i32, i8, i64) -> i32
   %c1 = hw.constant 1 : i32
   %t = llhd.constant_time <1ns, 0d, 0e>
   %res = llhd.process -> i32 {
@@ -487,6 +487,7 @@ hw.module @ZeroDelay() {
 
 // CHECK-LABEL: hw.module @ObserveOnly
 hw.module @ObserveOnly(in %clk: i1) {
+  // CHECK: arc.coroutine.instance @ObserveOnly.llhd.process(%clk, %1) sensitive [true, false]
   llhd.process {
     llhd.wait (%clk : i1), ^bb1
   ^bb1:
@@ -508,6 +509,7 @@ hw.module @ObserveOnly(in %clk: i1) {
 
 // CHECK-LABEL: hw.module @ObserveAndDelay
 hw.module @ObserveAndDelay(in %clk: i1) {
+  // CHECK: arc.coroutine.instance @ObserveAndDelay.llhd.process(%clk, %2) sensitive [true, false] : (i1, i64)
   %t = llhd.constant_time <1ns, 0d, 0e>
   llhd.process {
     llhd.wait delay %t, (%clk : i1), ^bb1
@@ -528,6 +530,7 @@ hw.module @ObserveAndDelay(in %clk: i1) {
 
 // CHECK-LABEL: hw.module @ObserveMulti
 hw.module @ObserveMulti(in %a: i1, in %b: i1) {
+  // CHECK: arc.coroutine.instance @ObserveMulti.llhd.process(%a, %b, %2) sensitive [true, true, false]
   %t = llhd.constant_time <1ns, 0d, 0e>
   llhd.process {
     llhd.wait delay %t, (%a, %b : i1, i1), ^bb1
@@ -535,6 +538,26 @@ hw.module @ObserveMulti(in %a: i1, in %b: i1) {
     llhd.halt
   }
 }
+
+//===----------------------------------------------------------------------===//
+// Observe only one of two arguments.
+
+// CHECK-LABEL: arc.coroutine.define @ObserveSome.llhd.process
+// CHECK-SAME: ({{%.+}}: i1, {{%.+}}: i1, {{%.+}}: i64) -> (i1, i3, i64)
+// CHECK:   [[MASK:%.+]] = hw.constant 2 : i3
+// CHECK:   arc.coroutine.yield ({{%.+}}, [[MASK]], {{%.+}} : i1, i3, i64), ^{{.+}}
+
+// CHECK-LABEL: hw.module @ObserveSome
+hw.module @ObserveSome(in %a: i1, in %b: i1) {
+  // CHECK: arc.coroutine.instance @ObserveSome.llhd.process(%a, %b, %2) sensitive [false, true, false]
+  %t = llhd.constant_time <1ns, 0d, 0e>
+  llhd.process -> i1 {
+    llhd.wait yield (%a : i1), delay %t, (%b : i1), ^bb1
+  ^bb1:
+    llhd.halt %a : i1
+  }
+}
+
 
 //===----------------------------------------------------------------------===//
 // An observed value that is defined *inside* the process body can never change

@@ -93,7 +93,7 @@ arc.coroutine.define @Proc(%now: i64) -> (i42, i1, i64) {
 hw.module @CoroutineProc(out o: i42) {
   %now = llhd.current_time
   %nowi = llhd.time_to_int %now
-  %0 = arc.coroutine.instance @Proc(%nowi) : (i64) -> i42
+  %0 = arc.coroutine.instance @Proc(%nowi) sensitive [false] : (i64) -> i42
   %c42 = hw.constant 42 : i42
   %sum = comb.add %0, %c42 : i42
   hw.output %sum : i42

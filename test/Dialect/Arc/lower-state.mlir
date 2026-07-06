@@ -813,8 +813,8 @@ hw.module @TestSimToArcTerminateFailure(in %clock: !seq.clock, in %cond: i1) {
   sim.clocked_terminate %clock, %cond, failure, verbose
 }
 
-// CHECK-LABEL: arc.model @CoroutineInstance
-hw.module @CoroutineInstance(in %in: i42, out o: i42) {
+// CHECK-LABEL: arc.model @CoroutineSensitiveInstance
+hw.module @CoroutineSensitiveInstance(in %in: i42, out o: i42) {
   // CHECK-DAG: [[PC:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!arc.coroutine_pc<@DummyCoroutine>>
   // CHECK-DAG: [[STATE:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<!arc.coroutine_state<@DummyCoroutine>>
   // CHECK-DAG: [[WAKEUP:%.+]] = arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i64>
@@ -854,7 +854,7 @@ hw.module @CoroutineInstance(in %in: i42, out o: i42) {
   // CHECK: [[NEXT:%.+]] = arc.get_next_wakeup %arg0 : !arc.storage
   // CHECK: [[MIN:%.+]] = arith.minui [[CUR]], [[NEXT]] : i64
   // CHECK: arc.set_next_wakeup %arg0, [[MIN]] : !arc.storage
-  %0 = arc.coroutine.instance @DummyCoroutine(%in) : (i42) -> i42
+  %0 = arc.coroutine.instance @DummyCoroutine(%in) sensitive [true] : (i42) -> i42
 
   // CHECK: [[OUT:%.+]] = arc.state_read [[RESULT]] : <i42>
   // CHECK: func.call @ConsumeI42([[OUT]])
@@ -862,6 +862,24 @@ hw.module @CoroutineInstance(in %in: i42, out o: i42) {
 
   // CHECK: [[OUT2:%.+]] = arc.state_read [[RESULT]] : <i42>
   // CHECK: arc.state_write %out_o = [[OUT2]] : <i42>
+  hw.output %0 : i42
+}
+
+// CHECK-LABEL: arc.model @CoroutineInsensitiveInstance
+hw.module @CoroutineInsensitiveInstance(in %in: i42, out o: i42) {
+  // Allocate i42 result but not previous value
+  // CHECK:     arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+  // CHECK-NOT: arc.alloc_state %arg0 : (!arc.storage) -> !arc.state<i42>
+
+  // CHECK: [[FALSE:%.+]] = hw.constant false
+  // CHECK: [[READY:%.+]] = comb.or %{{.+}}, [[FALSE]] : i1
+  // CHECK: scf.if [[READY]] {
+  // CHECK:   arc.coroutine.call @DummyCoroutine
+  // CHECK: }
+
+  %0 = arc.coroutine.instance @DummyCoroutine(%in) sensitive [false] : (i42) -> i42
+
+  func.call @ConsumeI42(%0) : (i42) -> ()
   hw.output %0 : i42
 }
 

@@ -443,8 +443,8 @@ arc.coroutine.start_pc : !arc.coroutine_pc<@CoroutineEmpty>
 
 // CHECK-LABEL: hw.module @CoroutineInstanceA
 hw.module @CoroutineInstanceA(in %a: i42, out z: i9001) {
-  // CHECK: arc.coroutine.instance @CoroutineInstanceB(%a) : (i42) -> i9001
-  %0 = arc.coroutine.instance @CoroutineInstanceB(%a) : (i42) -> i9001
+  // CHECK: arc.coroutine.instance @CoroutineInstanceB(%a) sensitive [false] : (i42) -> i9001
+  %0 = arc.coroutine.instance @CoroutineInstanceB(%a) sensitive [false] : (i42) -> i9001
   hw.output %0 : i9001
 }
 // The coroutine produces its result, then an observe bitmask (one bit per
