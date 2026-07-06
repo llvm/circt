@@ -3896,8 +3896,8 @@ endmodule
 // CHECK-LABEL: func.func private @testStrLiteralReturn()
 // CHECK-SAME: -> !moore.string {
 function string testStrLiteralReturn;
-    // CHECK-NEXT: [[INT:%.+]] = moore.constant_string "\22A string literal\22" : i127
-    // CHECK-NEXT: [[STR:%.+]] = moore.int_to_string [[INT]] : i127
+    // CHECK-NEXT: [[INT:%.+]] = moore.constant_string "A string literal" : i128
+    // CHECK-NEXT: [[STR:%.+]] = moore.int_to_string [[INT]] : i128
     parameter string testStrLiteral = "A string literal";
     // CHECK-NEXT: return [[STR]] : !moore.string
     return testStrLiteral;
@@ -3906,9 +3906,9 @@ endfunction // testStrLiteralReturn
 // CHECK-LABEL: func.func private @testStrLiteralAsIntReturn()
 // CHECK-SAME: -> !moore.i1 {
 function bit testStrLiteralAsIntReturn;
-    // CHECK-NEXT: [[CONST:%.+]] = moore.constant_string "\22A string literal\22" : i127 
-    // CHECK-NEXT: [[STR:%.+]] = moore.int_to_string [[CONST]] : i127 
-    // CHECK-NEXT: [[INT:%.+]] = moore.string_to_int [[STR]] : i1 
+    // CHECK-NEXT: [[CONST:%.+]] = moore.constant_string "A string literal" : i128
+    // CHECK-NEXT: [[STR:%.+]] = moore.int_to_string [[CONST]] : i128
+    // CHECK-NEXT: [[INT:%.+]] = moore.string_to_int [[STR]] : i1
     // CHECK-NEXT: return [[INT]] : !moore.i1
     parameter string testStrLiteral = "A string literal";
     return bit'(testStrLiteral);
