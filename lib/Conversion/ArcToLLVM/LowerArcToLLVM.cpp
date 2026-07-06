@@ -1034,6 +1034,68 @@ FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
   return result;
 }
 
+FailureOr<LLVM::CallOp> emitFmtToStreamCall(OpBuilder &builder, Location loc,
+                                            StringCache &stringCache,
+                                            Value stream,
+                                            ArrayRef<FmtDescriptor> descriptors,
+                                            ValueRange args) {
+  ModuleOp moduleOp =
+      builder.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
+  MLIRContext *ctx = builder.getContext();
+  auto ptrType = LLVM::LLVMPointerType::get(ctx);
+  SmallVector<Type, 2> paramTypes{ptrType, ptrType};
+  auto func = LLVM::lookupOrCreateFn(
+      builder, moduleOp, runtime::APICallbacks::symNameFormatToStream,
+      paramTypes, LLVM::LLVMVoidType::get(ctx), true);
+  if (failed(func))
+    return func;
+
+  StringRef rawDescriptors(reinterpret_cast<const char *>(descriptors.data()),
+                           descriptors.size() * sizeof(FmtDescriptor));
+  Value fmtPtr = stringCache.getOrCreate(builder, rawDescriptors);
+
+  SmallVector<Value> argsVec{stream, fmtPtr};
+  argsVec.append(args.begin(), args.end());
+  auto result = LLVM::CallOp::create(builder, loc, func.value(), argsVec);
+
+  for (Value arg : args) {
+    Operation *definingOp = arg.getDefiningOp();
+    if (auto alloca = dyn_cast_if_present<LLVM::AllocaOp>(definingOp))
+      LLVM::LifetimeEndOp::create(builder, loc, arg);
+  }
+
+  return result;
+}
+
+template <typename SourceOp>
+struct SimStreamOpLowering : public OpConversionPattern<SourceOp> {
+  SimStreamOpLowering(const TypeConverter &typeConverter, MLIRContext *context,
+                      StringRef symbolName)
+      : OpConversionPattern<SourceOp>(typeConverter, context),
+        symbolName(symbolName) {}
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ModuleOp moduleOp = op->template getParentOfType<ModuleOp>();
+    if (!moduleOp)
+      return failure();
+
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+    auto func =
+        LLVM::lookupOrCreateFn(rewriter, moduleOp, symbolName, {}, ptrType);
+    if (failed(func))
+      return failure();
+
+    auto call =
+        LLVM::CallOp::create(rewriter, op.getLoc(), func.value(), ValueRange{});
+    rewriter.replaceOp(op, call.getResults());
+    return success();
+  }
+
+  StringRef symbolName;
+};
+
 struct SimPrintFormattedProcOpLowering
     : public OpConversionPattern<sim::PrintFormattedProcOp> {
   SimPrintFormattedProcOpLowering(const TypeConverter &typeConverter,
@@ -1052,8 +1114,13 @@ struct SimPrintFormattedProcOpLowering
     // Add the end descriptor.
     formatInfo->descriptors.push_back(FmtDescriptor());
 
-    auto result = emitFmtCall(rewriter, op.getLoc(), stringCache,
-                              formatInfo->descriptors, formatInfo->args);
+    FailureOr<LLVM::CallOp> result =
+        op.getStream()
+            ? emitFmtToStreamCall(rewriter, op.getLoc(), stringCache,
+                                  adaptor.getStream(), formatInfo->descriptors,
+                                  formatInfo->args)
+            : emitFmtCall(rewriter, op.getLoc(), stringCache,
+                          formatInfo->descriptors, formatInfo->args);
     if (failed(result))
       return failure();
     rewriter.replaceOp(op, result.value());
@@ -1821,6 +1888,9 @@ void LowerArcToLLVMPass::runOnOperation() {
   converter.addConversion([&](sim::FormatStringType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
+  converter.addConversion([&](sim::OutputStreamType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
   converter.addConversion([&](llhd::TimeType type) {
     // LLHD time is represented as i64 femtoseconds.
     return IntegerType::get(type.getContext(), 64);
@@ -1912,6 +1982,10 @@ void LowerArcToLLVMPass::runOnOperation() {
   StringCache stringCache;
   patterns.add<SimEmitValueOpLowering, SimPrintFormattedProcOpLowering>(
       converter, &getContext(), stringCache);
+  patterns.add<SimStreamOpLowering<sim::StdoutStreamOp>>(
+      converter, &getContext(), runtime::APICallbacks::symNameGetStdoutStream);
+  patterns.add<SimStreamOpLowering<sim::StderrStreamOp>>(
+      converter, &getContext(), runtime::APICallbacks::symNameGetStderrStream);
 
   auto &modelInfo = getAnalysis<ModelInfoAnalysis>();
   llvm::DenseMap<StringRef, ModelInfoMap> modelMap(modelInfo.infoMap.size());
