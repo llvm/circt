@@ -1253,3 +1253,37 @@ hw.module @ClockExtractedFromStructArrayGetThenExtractPosEdge(in %st: !hw.struct
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %sig, %out after %time if %en : i4
 }
+
+// Desequentialization must NOT promote a drive whose signal has another
+// driver: the promoted drive becomes unconditional (continuous) and would
+// clobber the other process's writes on every delta (e.g. an initial block
+// setting an edge-driven variable's t=0 value; last-write-per-event source
+// semantics).
+// CHECK-LABEL: @MultiDrivenSignalKeepsProcess(
+hw.module @MultiDrivenSignalKeepsProcess(in %clock: i1, in %d: i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %c1_i42 = hw.constant 1 : i42
+  %0 = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: seq.firreg
+  // CHECK: llhd.process
+  %1, %2 = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i42, %false : i42, i1)
+  ^bb1(%3: i42, %4: i1):
+    llhd.wait yield (%3, %4 : i42, i1), (%clock : i1), ^bb2(%clock : i1)
+  ^bb2(%5: i1):
+    %6 = comb.xor bin %5, %true : i1
+    %7 = comb.and bin %6, %clock : i1  // posedge clock
+    cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
+  }
+  %3 = llhd.sig %c0_i42 : i42
+  // The t=0 one-shot writer (the "initial process").
+  // CHECK: llhd.process
+  llhd.process {
+    llhd.drv %3, %c1_i42 after %0 : i42
+    llhd.halt
+  }
+  // CHECK: llhd.drv {{%.+}}, {{%.+}} after {{%.+}} if {{%.+}} :
+  llhd.drv %3, %1 after %0 if %2 : i42
+}

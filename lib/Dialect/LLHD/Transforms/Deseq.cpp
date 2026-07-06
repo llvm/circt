@@ -428,6 +428,28 @@ bool Deseq::analyzeProcess() {
     driveInfos.push_back(DriveInfo(driveOp));
   }
 
+  // Desequentialization replaces each fed conditional drive with an
+  // UNCONDITIONAL (continuous) drive of a register result. That is only
+  // sound if this process is the signal's sole driver: a variable written
+  // by several processes takes the last write per write EVENT in the
+  // source semantics (e.g. an `initial` block setting an edge-driven reg's
+  // t=0 value), and a continuous register drive would clobber every such
+  // write on the next delta. Keep the process form in that case.
+  for (auto &info : driveInfos) {
+    for (auto *user : info.op.getSignal().getUsers()) {
+      if (auto otherDrive = dyn_cast<DriveOp>(user)) {
+        if (otherDrive.getSignal() == info.op.getSignal() &&
+            !seenDrives.contains(otherDrive)) {
+          LLVM_DEBUG(llvm::dbgs()
+                     << "Skipping " << process.getLoc()
+                     << ": drives multi-driven signal (other driver at "
+                     << otherDrive.getLoc() << ")\n");
+          return false;
+        }
+      }
+    }
+  }
+
   // Collect triggers from observed values. We support either:
   // 1. Direct i1 observed values (traditional case)
   // 2. Non-i1 observed values where dest operands are i1 projections (e.g.,
