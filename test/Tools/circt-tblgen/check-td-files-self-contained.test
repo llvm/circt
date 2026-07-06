@@ -1,0 +1,1 @@
+// RUN: %PYTHON% %S/check-td-files-self-contained.py --circt_root %S/../../..

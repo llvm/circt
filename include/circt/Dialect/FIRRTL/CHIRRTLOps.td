@@ -13,8 +13,8 @@
 #ifndef CIRCT_DIALECT_FIRRTL_CHIRRTLOPS_TD
 #define CIRCT_DIALECT_FIRRTL_CHIRRTLOPS_TD
 
-include "CHIRRTLDialect.td"
-include "CHIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/CHIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/CHIRRTLTypes.td"
 include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
 include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
 include "circt/Dialect/FIRRTL/FIRRTLTypes.td"

@@ -14,6 +14,9 @@
 #ifndef CIRCT_TYPES
 #define CIRCT_TYPES
 
+include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/OpBase.td"
+
 //===----------------------------------------------------------------------===//
 // Attributes
 //===----------------------------------------------------------------------===//

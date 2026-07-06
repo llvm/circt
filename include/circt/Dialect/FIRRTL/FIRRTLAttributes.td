@@ -13,8 +13,8 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLATTRIBUTES_TD
 
-include "FIRRTLDialect.td"
-include "FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "circt/Types.td"
 
