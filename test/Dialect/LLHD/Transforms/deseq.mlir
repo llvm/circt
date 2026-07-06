@@ -1254,17 +1254,54 @@ hw.module @ClockExtractedFromStructArrayGetThenExtractPosEdge(in %st: !hw.struct
   llhd.drv %sig, %out after %time if %en : i4
 }
 
-// Desequentialization must NOT promote a drive whose signal has another
-// driver: the promoted drive becomes unconditional (continuous) and would
-// clobber the other process's writes on every delta (e.g. an initial block
-// setting an edge-driven variable's t=0 value; last-write-per-event source
-// semantics).
-// CHECK-LABEL: @MultiDrivenSignalKeepsProcess(
-hw.module @MultiDrivenSignalKeepsProcess(in %clock: i1, in %d: i42) {
+// A one-shot t=0 constant init drive by another process (the canonical
+// lowered `initial begin reg = K; end` next to an `always @(posedge clk)`
+// driver) must NOT block promotion: it folds into the register's preset
+// (power-on value), which the continuous register drive reproduces from
+// t=0 onward. Keeping the process form instead skews the DUT against
+// same-clock promoted registers (post-edge reads = one-delta lead).
+// CHECK-LABEL: @MultiDrivenInitFoldsToPreset(
+hw.module @MultiDrivenInitFoldsToPreset(in %clock: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
   %c1_i42 = hw.constant 1 : i42
   %0 = llhd.constant_time <0ns, 1d, 0e>
-  // CHECK-NOT: seq.firreg
+  %1, %2 = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i42, %false : i42, i1)
+  ^bb1(%3: i42, %4: i1):
+    llhd.wait yield (%3, %4 : i42, i1), (%clock : i1), ^bb2(%clock : i1)
+  ^bb2(%5: i1):
+    %6 = comb.xor bin %5, %true : i1
+    %7 = comb.and bin %6, %clock : i1  // posedge clock
+    cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
+  }
+  %3 = llhd.sig %c0_i42 : i42
+  // The t=0 one-shot writer (the "initial process") stays; its write agrees
+  // with the preset. The always process is promoted: firreg with preset 1,
+  // unconditional (continuous) drive.
+  // CHECK: llhd.process
+  // CHECK-NEXT: llhd.drv {{%.+}}, %c1_i42 after
+  // CHECK-NEXT: llhd.halt
+  llhd.process {
+    llhd.drv %3, %c1_i42 after %0 : i42
+    llhd.halt
+  }
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock {{%.+}} preset 1 : i42
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  // CHECK-NOT: llhd.process
+  llhd.drv %3, %1 after %0 if %2 : i42
+}
+
+// Desequentialization must NOT promote a drive whose signal has another
+// driver that is not a one-shot t=0 constant init: the promoted drive
+// becomes unconditional (continuous) and would clobber the other process's
+// writes on every delta (last-write-per-event source semantics). Here the
+// other writer drives a NON-CONSTANT value.
+// CHECK-LABEL: @MultiDrivenSignalKeepsProcess(
+hw.module @MultiDrivenSignalKeepsProcess(in %clock: i1, in %d: i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK: llhd.process
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
@@ -1278,12 +1315,48 @@ hw.module @MultiDrivenSignalKeepsProcess(in %clock: i1, in %d: i42) {
     cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
   }
   %3 = llhd.sig %c0_i42 : i42
-  // The t=0 one-shot writer (the "initial process").
+  // Writes a non-constant at t=0: not foldable into a preset.
   // CHECK: llhd.process
   llhd.process {
-    llhd.drv %3, %c1_i42 after %0 : i42
+    llhd.drv %3, %d after %0 : i42
     llhd.halt
   }
+  // A wrongly-created register would be inserted right before the fed drive.
+  // CHECK-NOT: seq.firreg
+  // CHECK: llhd.drv {{%.+}}, {{%.+}} after {{%.+}} if {{%.+}} :
+  llhd.drv %3, %1 after %0 if %2 : i42
+}
+
+// A delayed init write (`initial reg <= #5ns K;`) does NOT fold: the value
+// must not appear before t=5ns, but a preset holds it from t=0. Keep the
+// process form.
+// CHECK-LABEL: @MultiDrivenDelayedInitKeepsProcess(
+hw.module @MultiDrivenDelayedInitKeepsProcess(in %clock: i1, in %d: i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %c1_i42 = hw.constant 1 : i42
+  %0 = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK: llhd.process
+  %1, %2 = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i42, %false : i42, i1)
+  ^bb1(%3: i42, %4: i1):
+    llhd.wait yield (%3, %4 : i42, i1), (%clock : i1), ^bb2(%clock : i1)
+  ^bb2(%5: i1):
+    %6 = comb.xor bin %5, %true : i1
+    %7 = comb.and bin %6, %clock : i1  // posedge clock
+    cf.cond_br %7, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
+  }
+  %3 = llhd.sig %c0_i42 : i42
+  // Constant write with a nonzero drive delay: not foldable.
+  // CHECK: llhd.process
+  llhd.process {
+    %t5 = llhd.constant_time <5ns, 0d, 0e>
+    llhd.drv %3, %c1_i42 after %t5 : i42
+    llhd.halt
+  }
+  // A wrongly-created register would be inserted right before the fed drive.
+  // CHECK-NOT: seq.firreg
   // CHECK: llhd.drv {{%.+}}, {{%.+}} after {{%.+}} if {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
