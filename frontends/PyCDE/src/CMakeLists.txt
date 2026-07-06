@@ -37,6 +37,7 @@ declare_mlir_python_sources(PyCDESources
   pycde/tracer.py
   pycde/ndarray.py
   pycde/esi.py
+  pycde/esi_testing.py
   pycde/fsm.py
   pycde/testing.py
 )
