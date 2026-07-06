@@ -64,7 +64,7 @@ hw.module @And(in %a: i1, in %b: i1, in %c: !ltl.property, in %clk: i1) {
   // Convert if there are non-assert users but the result type is i1
   %and2 = ltl.and %a, %b : i1, i1
   %user = hw.wire %and2 : i1
-  // Or if there are non-i1 operands (and therefore results)
+  // Don't convert if there are non-i1 operands (and therefore results)
   %and3 = ltl.and %b, %c : i1, !ltl.property
   verif.assert %and3 : !ltl.property
 }
@@ -86,7 +86,7 @@ hw.module @Or(in %a: i1, in %b: i1, in %c: !ltl.property, in %clk: i1) {
   // Convert if there are non-assert users but the result type is i1
   %or2 = ltl.or %a, %b : i1, i1
   %user = hw.wire %or2 : i1
-  // Or if there are non-i1 operands (and therefore results)
+  // Don't convert if there are non-i1 operands (and therefore results)
   %or3 = ltl.or %b, %c : i1, !ltl.property
   verif.assert %or3 : !ltl.property
 }
