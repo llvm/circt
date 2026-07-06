@@ -772,6 +772,16 @@ def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
+def FormatToStringOp : SimOp<"string.format_to_string", [ProceduralOp]> {
+  let summary = "Create a dynamic string by evaluating a format string";
+  let description = [{
+    Evaluates a format string and produces the result as a dynamic string.
+  }];
+  let arguments = (ins FormatStringType:$fmtstring);
+  let results = (outs DynamicStringType:$result);
+  let assemblyFormat = "$fmtstring attr-dict";
+}
+
 def StringGetOp : SimOp<"string.get", [Pure]> {
   let summary = "Get a character from a string at a given index";
   let description = [{

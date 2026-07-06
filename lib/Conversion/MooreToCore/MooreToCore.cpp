@@ -2069,6 +2069,19 @@ struct IntToStringOpConversion : public OpConversionPattern<IntToStringOp> {
   }
 };
 
+struct FormatStringToStringOpConversion
+    : public OpConversionPattern<FormatStringToStringOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(FormatStringToStringOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<sim::FormatToStringOp>(op,
+                                                       adaptor.getFmtstring());
+    return success();
+  }
+};
+
 struct RealToIntOpConversion : public OpConversionPattern<RealToIntOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3435,6 +3448,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([](IntegerType type) { return type; });
   typeConverter.addConversion([](FloatType type) { return type; });
   typeConverter.addConversion([](sim::DynamicStringType type) { return type; });
+  typeConverter.addConversion([](sim::FormatStringType type) { return type; });
   typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });
@@ -3533,6 +3547,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     SIntToRealOpConversion,
     UIntToRealOpConversion,
     IntToStringOpConversion,
+    FormatStringToStringOpConversion,
     RealToIntOpConversion,
     ConvertRealOpConversion,
 

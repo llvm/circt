@@ -801,14 +801,21 @@ LogicalResult appendFormatFragmentToSVFormat(Value fragment,
 LogicalResult lowerFormatStringToSVFormat(Value input,
                                           SmallString<128> &formatString,
                                           SmallVectorImpl<Value> &args,
-                                          OpBuilder &builder) {
+                                          OpBuilder &builder,
+                                          bool &requiresFormatting) {
   SmallVector<Value, 8> fragments;
   if (failed(getFlattenedFormatFragments(input, fragments)))
     return failure();
-  for (auto fragment : fragments)
+  requiresFormatting = false;
+  for (auto fragment : fragments) {
     if (failed(appendFormatFragmentToSVFormat(fragment, formatString, args,
                                               builder)))
       return failure();
+    // Non-literal fragments (e.g. %m/%M from FormatHierPathOp) may need
+    // runtime substitution even though they append no argument.
+    if (!isa<FormatLiteralOp>(fragment.getDefiningOp()))
+      requiresFormatting = true;
+  }
   return success();
 }
 
@@ -816,8 +823,9 @@ FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
                                                       OpBuilder &builder) {
   SmallString<128> formatString;
   SmallVector<Value> args;
+  bool requiresFormatting = false;
   if (failed(lowerFormatStringToSVFormat(getFileOp.getFileName(), formatString,
-                                         args, builder))) {
+                                         args, builder, requiresFormatting))) {
     getFileOp.emitError("cannot lower 'sim.get_file' to SystemVerilog")
             .attachNote(getFileOp.getFileName().getLoc())
         << "while lowering file name";
@@ -825,12 +833,12 @@ FailureOr<Value> createFileDescriptorGetterForGetFile(GetFileOp getFileOp,
   }
 
   Value fileName =
-      args.empty()
-          ? sv::ConstantStrOp::create(builder, getFileOp.getLoc(),
-                                      builder.getStringAttr(formatString))
-                .getResult()
-          : sv::SFormatFOp::create(builder, getFileOp.getLoc(),
+      requiresFormatting
+          ? sv::SFormatFOp::create(builder, getFileOp.getLoc(),
                                    builder.getStringAttr(formatString), args)
+                .getResult()
+          : sv::ConstantStrOp::create(builder, getFileOp.getLoc(),
+                                      builder.getStringAttr(formatString))
                 .getResult();
 
   return sv::createProceduralFileDescriptorGetterCall(
@@ -863,12 +871,15 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
                                           SimConversionState &state) {
   SmallVector<GetFileOp> getFileOps;
   SmallVector<PrintFormattedProcOp> printOps;
+  SmallVector<FormatToStringOp> formatToStringOps;
   SmallVector<Operation *, 8> cleanupSeeds;
   module.walk([&](Operation *op) {
     if (auto getFileOp = dyn_cast<GetFileOp>(op))
       getFileOps.push_back(getFileOp);
     if (auto printOp = dyn_cast<PrintFormattedProcOp>(op))
       printOps.push_back(printOp);
+    if (auto formatToStringOp = dyn_cast<FormatToStringOp>(op))
+      formatToStringOps.push_back(formatToStringOp);
   });
 
   for (auto getFileOp : getFileOps) {
@@ -890,8 +901,10 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
     OpBuilder builder(printOp);
     SmallString<128> formatString;
     SmallVector<Value> args;
+    bool requiresFormatting = false;
     if (failed(lowerFormatStringToSVFormat(printOp.getInput(), formatString,
-                                           args, builder))) {
+                                           args, builder,
+                                           requiresFormatting))) {
       printOp.emitError("cannot lower 'sim.proc.print' to SystemVerilog")
               .attachNote(printOp.getInput().getLoc())
           << "while lowering format string";
@@ -910,6 +923,30 @@ LogicalResult lowerPrintFormattedProcToSV(hw::HWModuleOp module,
       sv::FWriteOp::create(builder, printOp.getLoc(), fd, formatString, args);
     }
     cleanupSeeds.push_back(printOp);
+  }
+
+  for (auto op : formatToStringOps) {
+    OpBuilder builder(op);
+    SmallString<128> formatStr;
+    SmallVector<Value> args;
+    bool requiresFormatting = false;
+    if (failed(lowerFormatStringToSVFormat(op.getFmtstring(), formatStr, args,
+                                           builder, requiresFormatting)))
+      return op.emitError(
+          "cannot lower 'sim.string.format_to_string' to SystemVerilog");
+
+    Value svResult;
+    if (requiresFormatting)
+      svResult = sv::SFormatFOp::create(builder, op.getLoc(),
+                                        builder.getStringAttr(formatStr), args);
+    else
+      svResult = sv::ConstantStrOp::create(builder, op.getLoc(),
+                                           builder.getStringAttr(formatStr));
+
+    auto cast = mlir::UnrealizedConversionCastOp::create(
+        builder, op.getLoc(), op.getType(), svResult);
+    op.replaceAllUsesWith(cast.getResult(0));
+    cleanupSeeds.push_back(op);
   }
 
   cleanupDeadSimFmtOps(cleanupSeeds);

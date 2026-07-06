@@ -1517,6 +1517,13 @@ func.func @IntToStringConversion(%arg0: !moore.i45) {
   return
 }
 
+// CHECK-LABEL: func.func @FormatStringToStringConversion
+func.func @FormatStringToStringConversion(%arg0: !moore.format_string) {
+  // CHECK-NEXT: sim.string.format_to_string %arg0
+  %0 = moore.fstring_to_string %arg0
+  return
+}
+
 // CHECK-LABEL: func.func @ConvertRealOperations
 func.func @ConvertRealOperations(%arg0: !moore.f32, %arg1: !moore.f64) {
   // CHECK: arith.extf %arg0 : f32 to f64
