@@ -166,8 +166,7 @@ struct LTLOrOpConversion : public OpConversionPattern<ltl::OrOp> {
   }
 };
 
-struct LTLIntersectOpConversion
-    : public OpConversionPattern<ltl::IntersectOp> {
+struct LTLIntersectOpConversion : public OpConversionPattern<ltl::IntersectOp> {
   using OpConversionPattern<ltl::IntersectOp>::OpConversionPattern;
 
   LogicalResult
@@ -293,10 +292,10 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns
-      .add<HasBeenResetOpConversion, LTLImplicationConversion, LTLNotConversion,
-           LTLAndOpConversion, LTLOrOpConversion, LTLIntersectOpConversion,
-           LTLPastOpConversion>(converter, patterns.getContext());
+  patterns.add<HasBeenResetOpConversion, LTLImplicationConversion,
+               LTLNotConversion, LTLAndOpConversion, LTLOrOpConversion,
+               LTLIntersectOpConversion, LTLPastOpConversion>(
+      converter, patterns.getContext());
   // Apply the conversions
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
