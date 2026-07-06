@@ -68,6 +68,13 @@ func.func @allow_hw_structs(%arg0: !hw.struct<a: i42, b: i1337>, %arg1: !hw.stru
   return
 }
 
+// CHECK-LABEL: func @allow_non_hw_types
+func.func @allow_non_hw_types(%arg0: !sim.dstring, %arg1: !sim.dstring, %arg2: i1) {
+  // CHECK: arith.select %arg2, %arg0, %arg1 : !sim.dstring
+  %0 = arith.select %arg2, %arg0, %arg1 : !sim.dstring
+  return
+}
+
 // CHECK-LABEL: func @min_max_ops
 func.func @min_max_ops(%arg0: i32, %arg1: i32) {
   // CHECK: [[CMP_MAXS:%.*]] = comb.icmp sge %arg0, %arg1 : i32
