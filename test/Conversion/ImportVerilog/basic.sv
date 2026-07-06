@@ -2143,6 +2143,17 @@ function void simpleFunc5();
   // CHECK: return
 endfunction
 
+// CHECK-LABEL: func.func private @sformatReturn(
+// CHECK-SAME:   %arg0: !moore.i32
+// CHECK-SAME: ) -> !moore.string
+function string sformatReturn(int n);
+  // CHECK: [[FMT:%.+]] = moore.fmt.int
+  // CHECK: [[CONCAT:%.+]] = moore.fmt.concat
+  // CHECK: [[STR:%.+]] = moore.fstring_to_string [[CONCAT]]
+  // CHECK: return [[STR]]
+  return $sformatf("item_%0d", n);
+endfunction
+
 // CHECK-LABEL: func.func private @funcArgs1(
 // CHECK-SAME:    %arg0: !moore.i32
 // CHECK-SAME:    %arg1: !moore.ref<i32>
