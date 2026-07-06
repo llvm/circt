@@ -1,4 +1,4 @@
-# !/usr/bin/env python3
+#!/usr/bin/env python3
 # Smoke test: verify the TableGen files are self-contained.
 #
 # Recursively walks selected directories and runs circt-tblgen --print-records
@@ -20,12 +20,57 @@ import subprocess
 import sys
 
 
-def find_mlir_include(circt_root):
-  """Locate MLIR TableGen headers under the CIRCT-internal llvm/ submodule."""
-  candidate = os.path.join(circt_root, "llvm", "mlir", "include")
-  if os.path.isfile(os.path.join(candidate, "mlir", "IR", "OpBase.td")):
-    return candidate
-  return None
+class Config:
+  """Configuration for the self-contained check."""
+
+  def __init__(self, args):
+    self.circt_tblgen = args.circt_tblgen
+    self.circt_root = os.path.normpath(args.circt_root)
+    # If not using the circt-internal llvm/ submodule (e.g. a separate
+    # llvm-project checkout), use --mlir_include to point to the MLIR
+    # include directory; otherwise auto-detected from circt_root/llvm/.
+    self.mlir_include = self._resolve_mlir_include(args.mlir_include)
+    self.jobs = self._clamp_jobs(args.jobs)
+
+  def _resolve_mlir_include(self, user_path):
+    if user_path:
+      return os.path.normpath(user_path)
+    return os.path.join(self.circt_root, "llvm", "mlir", "include")
+
+  @staticmethod
+  def _clamp_jobs(jobs):
+    cpu_count = os.cpu_count() or 1
+    if jobs <= 0:
+      return cpu_count
+    return min(jobs, cpu_count)
+
+  def check_valid(self):
+    try:
+      subprocess.run([self.circt_tblgen, "--version"],
+                     capture_output=True,
+                     check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+      raise ValueError(
+          f"circt-tblgen not found or not executable: {self.circt_tblgen}")
+
+    dialect_root = os.path.join(self.circt_root, "include", "circt", "Dialect")
+    if not os.path.isdir(dialect_root):
+      raise ValueError(
+          f"CIRCT include/circt/Dialect/ directory not found in {self.circt_root}"
+      )
+
+    opbase = os.path.join(self.mlir_include, "mlir", "IR", "OpBase.td")
+    if not self.mlir_include or not os.path.isfile(opbase):
+      raise ValueError(
+          f"cannot locate MLIR TableGen includes (e.g., '{opbase}')")
+
+  @property
+  def circt_include(self):
+    return os.path.join(self.circt_root, "include")
+
+  @property
+  def include_flags(self):
+    return ["-I", self.circt_include, "-I", self.mlir_include]
 
 
 def collect_td_files(root_dirs):
@@ -59,50 +104,26 @@ def main():
                       required=True,
                       help="CIRCT repository root (e.g. /path/to/circt)")
   parser.add_argument("--mlir_include",
-                      nargs="?",
                       help="MLIR TableGen include directory. "
                       "Defaults to circt_root/llvm/mlir/include")
   parser.add_argument("--jobs",
                       type=int,
                       default=0,
                       help="Number of parallel workers (0 = cpu count)")
-  args = parser.parse_args()
+  config = Config(parser.parse_args())
+  config.check_valid()
 
-  circt_root = os.path.normpath(args.circt_root)
-  circt_include = os.path.join(circt_root, "include")
-
-  if not os.path.isdir(circt_include):
-    print(f"error: CIRCT include directory not found: {circt_include}",
-          file=sys.stderr)
-    sys.exit(1)
-
-  if args.mlir_include:
-    mlir_include = os.path.normpath(args.mlir_include)
-  else:
-    mlir_include = find_mlir_include(circt_root)
-    if not mlir_include:
-      print(
-          "error: cannot locate MLIR TableGen includes "
-          "(mlir/IR/OpBase.td). "
-          "Expected at circt/llvm/mlir/include. "
-          "Set up a symlink: ln -s /path/to/llvm-project circt/llvm",
-          file=sys.stderr)
-      sys.exit(1)
-
-    td_files = collect_td_files([
-        circt_include,
-        os.path.join(circt_root, "lib", "Dialect"),
-        os.path.join(circt_root, "lib", "Bindings", "Python", "dialects"),
-    ])
-
-  include_flags = ["-I", circt_include, "-I", mlir_include]
-  max_workers = args.jobs if args.jobs > 0 else os.cpu_count()
+  td_files = collect_td_files([
+      config.circt_include,
+      os.path.join(config.circt_root, "lib", "Dialect"),
+      os.path.join(config.circt_root, "lib", "Bindings", "Python", "dialects"),
+  ])
 
   failed = []
-  with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+  with concurrent.futures.ThreadPoolExecutor(max_workers=config.jobs) as pool:
     futs = [
-        pool.submit(check_one, args.circt_tblgen, include_flags, circt_root, p)
-        for p in td_files
+        pool.submit(check_one, config.circt_tblgen, config.include_flags,
+                    config.circt_root, p) for p in td_files
     ]
     for f in concurrent.futures.as_completed(futs):
       rel_path, ok, stderr = f.result()
@@ -123,4 +144,8 @@ def main():
 
 
 if __name__ == "__main__":
-  main()
+  try:
+    main()
+  except ValueError as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
