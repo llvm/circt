@@ -166,6 +166,26 @@ struct LTLOrOpConversion : public OpConversionPattern<ltl::OrOp> {
   }
 };
 
+struct LTLIntersectOpConversion : public OpConversionPattern<ltl::IntersectOp> {
+  using OpConversionPattern<ltl::IntersectOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ltl::IntersectOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Can only lower boolean intersects to comb ops; booleans are
+    // instantaneous matches, so intersection is conjunction.
+    if (!isa<IntegerType>(op->getOperandTypes()[0]) ||
+        !isa<IntegerType>(op->getOperandTypes()[1]))
+      return failure();
+    auto loc = op.getLoc();
+    // Explicit twoState value to disambiguate builders
+    auto andOp =
+        comb::AndOp::create(rewriter, loc, adaptor.getOperands(), false);
+    rewriter.replaceOp(op, andOp);
+    return success();
+  }
+};
+
 struct LTLPastOpConversion : public OpConversionPattern<ltl::PastOp> {
   using OpConversionPattern<ltl::PastOp>::OpConversionPattern;
 
@@ -235,6 +255,7 @@ void LowerLTLToCorePass::runOnOperation() {
   target.addDynamicallyLegalOp<ltl::NotOp>(isLegal);
   target.addDynamicallyLegalOp<ltl::AndOp>(isLegal);
   target.addDynamicallyLegalOp<ltl::OrOp>(isLegal);
+  target.addDynamicallyLegalOp<ltl::IntersectOp>(isLegal);
 
   // Create type converters, mostly just to convert an ltl property to a bool
   mlir::TypeConverter converter;
@@ -271,10 +292,10 @@ void LowerLTLToCorePass::runOnOperation() {
 
   // Create the operation rewrite patters
   RewritePatternSet patterns(&getContext());
-  patterns
-      .add<HasBeenResetOpConversion, LTLImplicationConversion, LTLNotConversion,
-           LTLAndOpConversion, LTLOrOpConversion, LTLPastOpConversion>(
-          converter, patterns.getContext());
+  patterns.add<HasBeenResetOpConversion, LTLImplicationConversion,
+               LTLNotConversion, LTLAndOpConversion, LTLOrOpConversion,
+               LTLIntersectOpConversion, LTLPastOpConversion>(
+      converter, patterns.getContext());
   // Apply the conversions
   if (failed(
           applyPartialConversion(getOperation(), target, std::move(patterns))))
