@@ -193,3 +193,21 @@ hw.module @FormatString(in %str: !sim.dstring) {
   // CHECK: sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
   %fmt1 = sim.fmt.string %str isLeftAligned true paddingChar 48 specifierWidth 8 : !sim.dstring
 }
+
+// Queue concat must round-trip at every arity; the zero-operand form (the
+// empty queue literal) regressed under the old parenthesized-type-list
+// format, which printed `() <i8, 0>` and could not be reparsed.
+// CHECK-LABEL: func.func @QueueConcat
+func.func @QueueConcat(%arg0: !sim.queue<i8, 0>, %arg1: !sim.queue<i8, 4>) -> !sim.queue<i8, 0> {
+  // CHECK: sim.queue.concat () : () -> !sim.queue<i8, 0>
+  %0 = sim.queue.concat () : () -> !sim.queue<i8, 0>
+  // CHECK: sim.queue.concat (%arg0) : (!sim.queue<i8, 0>) -> !sim.queue<i8, 0>
+  %1 = sim.queue.concat (%arg0) : (!sim.queue<i8, 0>) -> !sim.queue<i8, 0>
+  // CHECK: sim.queue.concat (%arg0, %arg1) : (!sim.queue<i8, 0>, !sim.queue<i8, 4>) -> !sim.queue<i8, 0>
+  %2 = sim.queue.concat (%arg0, %arg1) : (!sim.queue<i8, 0>, !sim.queue<i8, 4>) -> !sim.queue<i8, 0>
+  // The generic form must stay parseable as well (regression guard for IR
+  // printed with --mlir-print-op-generic).
+  // CHECK: sim.queue.concat () : () -> !sim.queue<i8, 0>
+  %3 = "sim.queue.concat"() : () -> !sim.queue<i8, 0>
+  return %0 : !sim.queue<i8, 0>
+}

@@ -2080,11 +2080,17 @@ def QueueConcatOp : MooreOp<"queue.concat", [Pure]> {
 
     If the total length of the inputs doesn't fit into the queue bound of
     $result, then the excess elements are discarded at the end of the queue.
+
+    With zero inputs (the empty queue literal `{}`) the result is an empty
+    queue.
   }];
   let arguments = (ins Variadic<QueueType>:$inputs);
   let results = (outs QueueType:$result);
+  // Note: functional-type (rather than a plain parenthesized type list) keeps
+  // the zero-input form parseable: `() <i8, 0>` is rejected as a function
+  // type, while `() -> !moore.queue<i8, 0>` round-trips.
   let assemblyFormat = [{
-    ` ` `(` $inputs `)` attr-dict `:` `(` type($inputs) `)` type($result)
+    ` ` `(` $inputs `)` attr-dict `:` functional-type($inputs, $result)
   }];
   let hasVerifier = 1;
 }
