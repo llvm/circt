@@ -13,6 +13,7 @@
 
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
@@ -161,44 +162,26 @@ struct LegalizeAnonEnums
     return {};
   };
 
-  /// Recursively update EnumFieldAttrs nested in attributes, replacing any
-  /// anonymous enum type on the field with its typedecl alias.
-  Attribute processAttribute(Attribute attr, Location loc) {
-    if (auto enumAttr = dyn_cast<EnumFieldAttr>(attr)) {
-      if (auto newType = processType(enumAttr.getType().getValue()))
-        return EnumFieldAttr::get(loc, enumAttr.getField(), newType);
-      return attr;
-    }
-
-    if (auto arrayAttr = dyn_cast<ArrayAttr>(attr)) {
-      bool changed = false;
-      SmallVector<Attribute> newElts;
-      for (auto elt : arrayAttr) {
-        auto newElt = processAttribute(elt, loc);
-        if (newElt != elt)
-          changed = true;
-        newElts.push_back(newElt);
-      }
-      if (changed)
-        return ArrayAttr::get(arrayAttr.getContext(), newElts);
-    }
-
-    return attr;
-  }
-
   void runOnOperation() override {
     enumCount = 0;
     typeScope = {};
+
+    // Use an attribute/type replacer to replace EnumFieldAttrs with the
+    // processed type.
+    mlir::AttrTypeReplacer replacer;
+    replacer.addReplacement([&](EnumFieldAttr enumAttr) -> Attribute {
+      if (auto newType = processType(enumAttr.getType().getValue()))
+        return EnumFieldAttr::get(UnknownLoc::get(enumAttr.getContext()),
+                                  enumAttr.getField(), newType);
+      return enumAttr;
+    });
 
     // Perform the actual walk looking for anonymous enumeration types.
     getOperation().walk([&](Operation *op) {
       // Legalize EnumFieldAttrs in operation attributes (e.g. sv.case
       // casePatterns).
-      for (auto namedAttr : op->getAttrs()) {
-        auto newAttr = processAttribute(namedAttr.getValue(), op->getLoc());
-        if (newAttr != namedAttr.getValue())
-          op->setAttr(namedAttr.getName(), newAttr);
-      }
+      op->setAttrs(
+          cast<DictionaryAttr>(replacer.replace(op->getAttrDictionary())));
 
       // If this is a constant operation, make sure to update the constant
       // to reference the typedef, otherwise we will emit the wrong constant.
