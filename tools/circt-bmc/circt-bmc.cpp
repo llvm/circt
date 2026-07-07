@@ -258,6 +258,8 @@ static LogicalResult executeBMC(MLIRContext &context) {
     // builtin.module
     options.inlinePublic = true;
     pm.addPass(hw::createFlattenModules(options));
+    pm.addPass(verif::createLowerSymbolicValuesPass(
+        {verif::SymbolicValueLowering::HWInput}));
   }
   pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
   pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
