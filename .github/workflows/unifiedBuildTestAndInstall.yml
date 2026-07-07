@@ -208,6 +208,8 @@ jobs:
 # Setup z3 for Linux and macOS.  This hasn't been working on Windows through
 # `choco install z3`, so don't turn on z3 for those runs.
 #
+# 'ld' is known to perform poorly on MLIR, so always use lld on Linux.
+#
 # Any runner-specific CMAKE configuration can be put into the `cmake` output.
 # These will be used when running `cmake` later.
       - name: Setup (linux)
@@ -222,8 +224,8 @@ jobs:
           fi
 
           sudo apt-get update
-          sudo apt-get install "$COMPILER" iverilog libsystemc-dev ninja-build valgrind z3
-          echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON" >> "$GITHUB_OUTPUT"
+          sudo apt-get install "$COMPILER" iverilog libsystemc-dev ninja-build valgrind z3 lld
+          echo cmake="-DLLVM_ENABLE_Z3_SOLVER=ON -DLLVM_ENABLE_LLD=ON" >> "$GITHUB_OUTPUT"
       - name: Restore Verilator Cache (Linux)
         if: inputs.run_integration_tests && runner.os == 'Linux'
         id: cache-verilator
