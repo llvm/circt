@@ -9,6 +9,7 @@
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
+#include "llvm/ADT/DenseSet.h"
 
 using namespace circt;
 using namespace mlir;
@@ -29,6 +30,7 @@ struct LowerSymbolicValuesPass
   void runOnOperation() override;
   LogicalResult lowerToExtModule();
   void lowerToAnySeqWire();
+  LogicalResult lowerToHWInputs();
 };
 } // namespace
 
@@ -40,6 +42,10 @@ void LowerSymbolicValuesPass::runOnOperation() {
     break;
   case SymbolicValueLowering::Yosys:
     lowerToAnySeqWire();
+    break;
+  case SymbolicValueLowering::HWInput:
+    if (failed(lowerToHWInputs()))
+      signalPassFailure();
     break;
   }
 }
@@ -112,4 +118,51 @@ void LowerSymbolicValuesPass::lowerToAnySeqWire() {
     op.replaceAllUsesWith(value);
     op.erase();
   });
+}
+
+/// Replace `SymbolicValueOp`s in `hw.module` bodies with input ports.
+LogicalResult LowerSymbolicValuesPass::lowerToHWInputs() {
+  auto module = getOperation();
+  DenseSet<StringAttr> referencedModules;
+  module.walk([&](InstanceOp op) {
+    referencedModules.insert(op.getReferencedModuleNameAttr());
+  });
+
+  auto result = module.walk([&](SymbolicValueOp op) -> WalkResult {
+    if (!op->getParentOfType<HWModuleOp>())
+      return op.emitError()
+             << "cannot lower symbolic value to hw.module input outside of an "
+                "hw.module";
+    return WalkResult::advance();
+  });
+  if (result.wasInterrupted())
+    return failure();
+
+  for (auto hwModule : module.getOps<HWModuleOp>()) {
+    SmallVector<SymbolicValueOp> symbolicValues;
+    hwModule.walk([&](SymbolicValueOp op) { symbolicValues.push_back(op); });
+    if (symbolicValues.empty())
+      continue;
+
+    if (referencedModules.contains(hwModule.getModuleNameAttr())) {
+      hwModule.emitError()
+          << "cannot lower symbolic values in instantiated module '"
+          << hwModule.getModuleName()
+          << "' to HW inputs; run the 'hw-input' lowering strategy after "
+             "flattening modules";
+      return failure();
+    }
+
+    for (auto symbolicValue : symbolicValues) {
+      auto [name, arg] = hwModule.insertInput(
+          hwModule.getNumInputPorts(),
+          StringAttr::get(module.getContext(), "symbolic_value"),
+          symbolicValue.getType());
+      (void)name;
+      symbolicValue.getResult().replaceAllUsesWith(arg);
+      symbolicValue.erase();
+    }
+  }
+
+  return success();
 }

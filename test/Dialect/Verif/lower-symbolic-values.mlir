@@ -1,5 +1,6 @@
 // RUN: circt-opt --verif-lower-symbolic-values=mode=extmodule %s | FileCheck --check-prefixes=CHECK,CHECK-EXTMODULE %s
 // RUN: circt-opt --verif-lower-symbolic-values=mode=yosys %s | FileCheck --check-prefixes=CHECK,CHECK-YOSYS %s
+// RUN: circt-opt --verif-lower-symbolic-values=mode=hw-input %s | FileCheck --check-prefix=CHECK-HW-INPUT %s
 
 // CHECK-LABEL: hw.module @Foo
 hw.module @Foo() {
@@ -44,3 +45,12 @@ hw.module @Foo() {
 
 // CHECK-EXTMODULE: hw.module.extern @circt.symbolic_value.12<WIDTH: i32>
 // CHECK-EXTMODULE-SAME: verilogName = "circt_symbolic_value"
+
+// CHECK-HW-INPUT-LABEL: hw.module @HWInput(
+// CHECK-HW-INPUT-SAME: in %[[SYM:.+]] : i8, out {{.*}} : i8)
+// CHECK-HW-INPUT-NEXT:    hw.output %[[SYM]] : i8
+// CHECK-HW-INPUT-NEXT:  }
+hw.module @HWInput(out y : i8) {
+  %0 = verif.symbolic_value : i8
+  hw.output %0 : i8
+}
