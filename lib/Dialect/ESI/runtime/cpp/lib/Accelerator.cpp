@@ -121,10 +121,12 @@ AcceleratorConnection::takeOwnership(std::unique_ptr<Accelerator> acc) {
 }
 
 void AcceleratorConnection::clearOwnedObjects() {
-  ownedAccelerator.reset();
-  serviceCache.clear();
+  // Destroy engines (and the ports they own) before the accelerator they may
+  // reference during teardown -- order matters.
   clientEngines.clear();
   ownedEngines.clear();
+  serviceCache.clear();
+  ownedAccelerator.reset();
 }
 
 /// Get the path to the currently running executable.
@@ -499,10 +501,19 @@ void AcceleratorServiceThread::addPoll(HWModule &module) {
 }
 
 void AcceleratorConnection::disconnect() {
+  // Stop polling before tearing down engines.
   if (serviceThread) {
     serviceThread->stop();
     serviceThread.reset();
   }
+  // Drain engines while the accelerator (and its MMIO regions/services) is
+  // still alive, since engine/port teardown may touch accelerator-owned
+  // resources. Idempotent: disconnect() may be called more than once (e.g.
+  // explicitly and again from the destructor).
+  for (auto &[idPath, engine] : ownedEngines)
+    engine->disconnect();
+  clientEngines.clear();
+  ownedEngines.clear();
 }
 
 } // namespace esi

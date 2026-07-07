@@ -45,7 +45,10 @@ public:
   virtual ~Engine() = default;
   /// Start the engine, if applicable.
   virtual void connect() { connected = true; };
-  /// Stop the engine, if applicable.
+  /// Stop the engine, if applicable. Guaranteed to be called (via the
+  /// connection's disconnect()) while the Accelerator and its MMIO regions are
+  /// still alive, so port teardown here may safely touch them. This method
+  /// _must_ be idempotent.
   virtual void disconnect() { connected = false; };
   /// Get a port for a channel, from the cache if it exists or create it. An
   /// engine may override this method if different behavior is desired.

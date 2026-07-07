@@ -100,7 +100,10 @@ public:
   Context &getCtxt() const { return ctxt; }
   Logger &getLogger() const { return ctxt.getLogger(); }
 
-  /// Disconnect from the accelerator cleanly.
+  /// Disconnect from the accelerator cleanly. Drains owned engines before the
+  /// accelerator is released. Backends _must_ call this from their destructor
+  /// while still fully constructed (their vtable/resources alive), since engine
+  /// teardown may reference accelerator-owned objects. Must be idempotent.
   virtual void disconnect();
 
   /// Request a reset of the accelerator design. Returns true if the reset was
