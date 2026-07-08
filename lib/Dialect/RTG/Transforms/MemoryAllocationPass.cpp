@@ -166,6 +166,8 @@ void MemoryAllocationPass::runOnOperation() {
 
     IRRewriter builder(mem);
     builder.replaceOpWithNewOp<ConstantOp>(
-        mem, ImmediateAttr::get(builder.getContext(), nextFreeAligned));
+        mem, builder.getIntegerAttr(
+                 builder.getIntegerType(nextFreeAligned.getBitWidth()),
+                 nextFreeAligned));
   }
 }

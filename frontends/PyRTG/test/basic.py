@@ -2,7 +2,7 @@
 # RUN: %rtgtool% %s --seed=0 --output-format=elaborated | FileCheck %s --check-prefix=ELABORATED
 # RUN: %rtgtool% %s --seed=0 -o %t --output-format=asm && FileCheck %s --input-file=%t --check-prefix=ASM
 
-from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, FloatRegister, Array, ArrayType, Bool, BoolType, Tuple, TupleType, MemoryBlock, Memory, String, report_failure, embed_comment
+from pyrtg import test, sequence, config, Config, Param, PythonParam, rtg, Label, LabelType, Set, SetType, Integer, IntegerType, Bag, rtgtest, Immediate, ImmediateType, IntegerRegister, FloatRegister, Array, ArrayType, Tuple, TupleType, MemoryBlock, Memory, String, embed_comment
 
 # MLIR-LABEL: rtg.target @Singleton : !rtg.dict<>
 # MLIR-NEXT: }
@@ -89,7 +89,7 @@ class Tgt4(Config):
                                            IntegerType()).append(Integer(3)))
 
 
-@sequence([SetType(TupleType([IntegerType(), BoolType()]))])
+@sequence([SetType(TupleType([IntegerType(), ImmediateType(1)]))])
 def seq2(set):
   pass
 
@@ -279,31 +279,31 @@ def test2_labels(config):
 
 
 # MLIR-LABEL: rtg.test @test3_registers_and_immediates()
-# MLIR-NEXT: [[V0:%.+]] = rtg.constant #rtg.isa.immediate<32, 286331153> : !rtg.isa.immediate<32>
-# MLIR-NEXT: [[V1:%.+]] = rtg.constant #rtg.isa.immediate<32, -2147483648> : !rtg.isa.immediate<32>
-# MLIR-NEXT: [[V2:%.+]] = rtg.constant #rtg.isa.immediate<32, 2147483647> : !rtg.isa.immediate<32>
+# MLIR-NEXT: [[V0:%.+]] = rtg.constant 286331153 : i32
+# MLIR-NEXT: [[V1:%.+]] = rtg.constant -2147483648 : i32
+# MLIR-NEXT: [[V2:%.+]] = rtg.constant 2147483647 : i32
 # MLIR-NEXT: %idx2097151 = index.constant 2097151
 # MLIR-NEXT: %idx0 = index.constant 0
-# MLIR-NEXT: [[IMM32:%.+]] = rtg.constant #rtg.isa.immediate<32, 32>
-# MLIR-NEXT: [[IMM21:%.+]] = rtg.constant #rtg.isa.immediate<21, 16>
-# MLIR-NEXT: [[IMM13:%.+]] = rtg.constant #rtg.isa.immediate<13, 9>
+# MLIR-NEXT: [[IMM32:%.+]] = rtg.constant 32 : i32
+# MLIR-NEXT: [[IMM21:%.+]] = rtg.constant 16 : i21
+# MLIR-NEXT: [[IMM13:%.+]] = rtg.constant 9 : i13
 # MLIR-NEXT: [[T2:%.+]] = rtg.constant #rtgtest.t2 : !rtgtest.ireg
-# MLIR-NEXT: [[IMM5:%.+]] = rtg.constant #rtg.isa.immediate<5, 4>
+# MLIR-NEXT: [[IMM5:%.+]] = rtg.constant 4 : i5
 # MLIR-NEXT: [[T1:%.+]] = rtg.constant #rtgtest.t1 : !rtgtest.ireg
-# MLIR-NEXT: [[IMM12:%.+]] = rtg.constant #rtg.isa.immediate<12, 8>
+# MLIR-NEXT: [[IMM12:%.+]] = rtg.constant 8 : i12
 # MLIR-NEXT: [[T0:%.+]] = rtg.constant #rtgtest.t0 : !rtgtest.ireg
 # MLIR-NEXT: [[VREG:%.+]] = rtg.virtual_reg [#rtgtest.t0 : !rtgtest.ireg, #rtgtest.t1 : !rtgtest.ireg, #rtgtest.t2 : !rtgtest.ireg, #rtgtest.t3 : !rtgtest.ireg, #rtgtest.t4 : !rtgtest.ireg, #rtgtest.t5 : !rtgtest.ireg, #rtgtest.t6 : !rtgtest.ireg, #rtgtest.a7 : !rtgtest.ireg, #rtgtest.a6 : !rtgtest.ireg, #rtgtest.a5 : !rtgtest.ireg, #rtgtest.a4 : !rtgtest.ireg, #rtgtest.a3 : !rtgtest.ireg, #rtgtest.a2 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg, #rtgtest.a0 : !rtgtest.ireg, #rtgtest.s1 : !rtgtest.ireg, #rtgtest.s2 : !rtgtest.ireg, #rtgtest.s3 : !rtgtest.ireg, #rtgtest.s4 : !rtgtest.ireg, #rtgtest.s5 : !rtgtest.ireg, #rtgtest.s6 : !rtgtest.ireg, #rtgtest.s7 : !rtgtest.ireg, #rtgtest.s8 : !rtgtest.ireg, #rtgtest.s9 : !rtgtest.ireg, #rtgtest.s10 : !rtgtest.ireg, #rtgtest.s11 : !rtgtest.ireg, #rtgtest.s0 : !rtgtest.ireg, #rtgtest.ra : !rtgtest.ireg, #rtgtest.sp : !rtgtest.ireg]
 # MLIR-NEXT: rtgtest.addi [[VREG]], [[T0]], [[IMM12]]
 # MLIR-NEXT: rtgtest.slli [[VREG]], [[T1]], [[IMM5]]
-# MLIR-NEXT: rtgtest.beq [[VREG]], [[T2]], [[IMM13]] : !rtg.isa.immediate<13>
-# MLIR-NEXT: rtgtest.jal [[VREG]], [[IMM21]] : !rtg.isa.immediate<21>
-# MLIR-NEXT: rtgtest.auipc [[VREG]], [[IMM32]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.beq [[VREG]], [[T2]], [[IMM13]] : i13
+# MLIR-NEXT: rtgtest.jal [[VREG]], [[IMM21]] : i21
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[IMM32]] : i32
 # MLIR-NEXT: [[RND:%.+]] = rtg.random_number_in_range [%idx0, %idx2097151]
 # MLIR-NEXT: [[RND_IMM:%.+]] = rtg.isa.int_to_immediate [[RND]]
-# MLIR-NEXT: rtgtest.jal [[VREG]], [[RND_IMM]] : !rtg.isa.immediate<21>
-# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V0]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V2]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V1]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: rtgtest.jal [[VREG]], [[RND_IMM]] : i21
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V0]] : i32
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V2]] : i32
+# MLIR-NEXT: rtgtest.auipc [[VREG]], [[V1]] : i32
 # MLIR-NEXT: }
 
 
@@ -326,7 +326,7 @@ def test3_registers_and_immediates(config):
 # MLIR-LABEL: rtg.test @test4_integer_to_immediate()
 # MLIR-NEXT: [[V0:%.+]] = rtg.constant
 # MLIR-NEXT: [[V1:%.+]] = index.constant 2
-# MLIR-NEXT: [[V2:%.+]] = rtg.isa.int_to_immediate [[V1]] : !rtg.isa.immediate<12>
+# MLIR-NEXT: [[V2:%.+]] = rtg.isa.int_to_immediate [[V1]] : i12
 # MLIR-NEXT: rtgtest.addi [[V0]], [[V0]], [[V2]]
 
 
@@ -342,8 +342,8 @@ def test4_integer_to_immediate(config):
 # MLIR-NEXT: [[IDX4:%.+]] = index.constant 4
 # MLIR-NEXT: [[MEM:%.+]] = rtg.isa.memory_alloc %mem_blk, [[IDX8]], [[IDX4]] : !rtg.isa.memory_block<32>
 # MLIR-NEXT: [[SIZE:%.+]] = rtg.isa.memory_size [[MEM]] : !rtg.isa.memory<32>
-# MLIR-NEXT: [[IMM:%.+]] = rtg.isa.int_to_immediate [[SIZE]] : !rtg.isa.immediate<32>
-# MLIR-NEXT: rtgtest.auipc [[REG]], [[IMM]] : !rtg.isa.immediate<32>
+# MLIR-NEXT: [[IMM:%.+]] = rtg.isa.int_to_immediate [[SIZE]] : i32
+# MLIR-NEXT: rtgtest.auipc [[REG]], [[IMM]] : i32
 
 
 @test(Tgt2)
@@ -353,8 +353,8 @@ def test6_memories(config):
 
 
 # MLIR-LABEL: rtg.test @test7_bools
-# MLIR: index.bool.constant false
-# MLIR: index.bool.constant true
+# MLIR: rtg.constant false
+# MLIR: rtg.constant true
 # MLIR: index.cmp eq(%a, %b)
 # MLIR: index.cmp ne(%a, %b)
 # MLIR: index.cmp ult(%a, %b)
@@ -369,15 +369,15 @@ class TwoIntegers(Config):
   b = Param(loader=lambda: Integer(1))
 
 
-@sequence([BoolType()])
+@sequence([ImmediateType(1)])
 def consumer(b):
   pass
 
 
 @test(TwoIntegers)
 def test7_bools(config):
-  consumer(Bool(True))
-  consumer(Bool(False))
+  consumer(Immediate(1, 1))
+  consumer(Immediate(1, 0))
   consumer(config.a == config.b)
   consumer(config.a != config.b)
   consumer(config.a < config.b)
@@ -435,8 +435,8 @@ def test9_integer_arithmetic_ops(config):
 class Test90Config(Config):
 
   a = Param(loader=lambda: Integer(0))
-  b = Param(loader=lambda: Bool(True))
-  tup = Param(loader=lambda: Tuple.create(Integer(1), Bool(False)))
+  b = Param(loader=lambda: Immediate(1, 1))
+  tup = Param(loader=lambda: Tuple.create(Integer(1), Immediate(1, 0)))
 
 
 @test(Test90Config)
@@ -455,7 +455,7 @@ def test90_tuples(config):
 class Test91Config(Config):
 
   a = Param(loader=lambda: Set.create(Integer(0)))
-  b = Param(loader=lambda: Set.create(Bool(True)))
+  b = Param(loader=lambda: Set.create(Immediate(1, 1)))
   c = Param(loader=lambda: Bag.create((0, Integer(0))))
 
 
@@ -487,8 +487,8 @@ def test92_python_params(config):
 
 
 # MLIR-LABEL: rtg.test @test93_immediate_ops
-# MLIR-NEXT: [[IMM:%.+]] = rtg.constant #rtg.isa.immediate<4, 4>
-# MLIR: rtg.substitute_sequence {{%.+}}([[IMM]]) : !rtg.sequence<!rtg.isa.immediate<4>>
+# MLIR-NEXT: [[IMM:%.+]] = rtg.constant 4 : i4
+# MLIR: rtg.substitute_sequence {{%.+}}([[IMM]]) : !rtg.sequence<i4>
 
 
 @sequence([ImmediateType(4)])

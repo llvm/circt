@@ -223,7 +223,7 @@ def ImmediateFormatOp : RTGOp<"immediate_format", [Pure]> {
     The immediate is formatted as a decimal number.
   }];
 
-  let arguments = (ins ImmediateType:$value);
+  let arguments = (ins AnySignlessInteger:$value);
   let results = (outs StringType:$result);
 
   let assemblyFormat = "$value `:` qualified(type($value)) attr-dict";
@@ -983,7 +983,7 @@ def IntToImmediateOp : RTGISAOp<"int_to_immediate", [Pure]> {
   }];
 
   let arguments = (ins Index:$input);
-  let results = (outs ImmediateType:$result);
+  let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = "$input `:` qualified(type($result)) attr-dict";
 }
@@ -999,8 +999,8 @@ def ConcatImmediateOp : RTGISAOp<"concat_immediate", [
     becoming the most significant bits of the result.
   }];
 
-  let arguments = (ins Variadic<ImmediateType>:$operands);
-  let results = (outs ImmediateType:$result);
+  let arguments = (ins Variadic<AnySignlessInteger>:$operands);
+  let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = "$operands `:` qualified(type($operands)) attr-dict";
 
@@ -1016,8 +1016,8 @@ def SliceImmediateOp : RTGISAOp<"slice_immediate", [Pure]> {
     immediate's width.
   }];
 
-  let arguments = (ins ImmediateType:$input, I32Attr:$lowBit);
-  let results = (outs ImmediateType:$result);
+  let arguments = (ins AnySignlessInteger:$input, I32Attr:$lowBit);
+  let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = [{
     $input `from` $lowBit `:`
@@ -1140,7 +1140,7 @@ def MemoryBaseAddressOp : RTGISAOp<"memory_base_address", [
   }];
 
   let arguments = (ins MemoryType:$memory);
-  let results = (outs ImmediateType:$result);
+  let results = (outs AnySignlessInteger:$result);
 
   let assemblyFormat = "$memory `:` qualified(type($memory)) attr-dict";
 }

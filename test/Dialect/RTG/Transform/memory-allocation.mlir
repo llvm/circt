@@ -8,17 +8,17 @@ rtg.target @target : !rtg.dict<mem_blk: !rtg.isa.memory_block<32>> {
 
 // CHECK-LABEL: rtg.test @test
 rtg.test @test(mem_blk = %mem_blk: !rtg.isa.memory_block<32>) target @target {
-  // CHECK: [[IMM0:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
+  // CHECK: [[IMM0:%.+]] = rtg.constant 0 : i32
   // CHECK: [[REG:%.+]] = rtg.constant
-  // CHECK: rtgtest.la [[REG]], [[IMM0]] : !rtg.isa.immediate<32>
+  // CHECK: rtgtest.la [[REG]], [[IMM0]] : i32
   %idx4 = index.constant 4
   %idx7 = index.constant 7
   %0 = rtg.isa.memory_alloc %mem_blk, %idx7, %idx4 : !rtg.isa.memory_block<32>
   %reg = rtg.constant #rtgtest.t0
   rtgtest.la %reg, %0 : !rtg.isa.memory<32>
 
-  // CHECK: [[IMM1:%.+]] = rtg.constant #rtg.isa.immediate<32, 8>
-  // CHECK: rtgtest.la [[REG]], [[IMM1]] : !rtg.isa.immediate<32>
+  // CHECK: [[IMM1:%.+]] = rtg.constant 8 : i32
+  // CHECK: rtgtest.la [[REG]], [[IMM1]] : i32
   %1 = rtg.isa.memory_alloc %mem_blk, %idx7, %idx4 : !rtg.isa.memory_block<32>
   rtgtest.la %reg, %1 : !rtg.isa.memory<32>
 }
@@ -169,11 +169,11 @@ rtg.test @test_entry_matching(
   %idx4 = index.constant 4
   %reg = rtg.constant #rtgtest.t0
 
-  // CHECK: [[MEM_A:%.+]] = rtg.constant #rtg.isa.immediate<32, 0>
+  // CHECK: [[MEM_A:%.+]] = rtg.constant 0 : i32
   %0 = rtg.isa.memory_alloc %mem_a, %idx8, %idx4 : !rtg.isa.memory_block<32>
   rtgtest.la %reg, %0 : !rtg.isa.memory<32>
 
-  // CHECK: [[MEM_C:%.+]] = rtg.constant #rtg.isa.immediate<32, 200>
+  // CHECK: [[MEM_C:%.+]] = rtg.constant 200 : i32
   %2 = rtg.isa.memory_alloc %mem_c, %idx8, %idx4 : !rtg.isa.memory_block<32>
   rtgtest.la %reg, %2 : !rtg.isa.memory<32>
 }

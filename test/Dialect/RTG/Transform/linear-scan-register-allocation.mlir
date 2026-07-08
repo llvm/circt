@@ -15,7 +15,7 @@ rtg.test @test0() {
     %1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
     %2 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
     %3 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-    %imm = rtg.constant #rtg.isa.immediate<12, 0>
+    %imm = rtg.constant 0 : i12
     rtgtest.jalr %0, %2, %imm
     rtgtest.jalr %1, %0, %imm
     rtgtest.jalr %3, %1, %imm
@@ -38,7 +38,7 @@ rtg.test @withFixedRegs() {
     %1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
     %2 = rtg.constant #rtgtest.s0
     %3 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-    %imm = rtg.constant #rtg.isa.immediate<12, 0>
+    %imm = rtg.constant 0 : i12
     rtgtest.jalr %0, %2, %imm
     rtgtest.jalr %1, %0, %imm
     rtgtest.jalr %3, %1, %imm
@@ -50,10 +50,10 @@ rtg.test @withFixedRegs() {
 rtg.test @validation() {
   rtg.isa.segment text {
     %reg = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-    %default = rtg.constant #rtg.isa.immediate<32, 0>
+    %default = rtg.constant 0 : i32
     // CHECK: rtg.validate
-    %0 = rtg.validate %reg, %default, "some_id" : !rtgtest.ireg -> !rtg.isa.immediate<32>
-    rtgtest.lui %reg, %0 : !rtg.isa.immediate<32>
+    %0 = rtg.validate %reg, %default, "some_id" : !rtgtest.ireg -> i32
+    rtgtest.lui %reg, %0 : i32
   }
 }
 
@@ -63,7 +63,7 @@ rtg.test @spilling() {
   rtg.isa.segment text {
     // expected-note @below {{cannot choose 'ra' because of overlapping live-range with this register}}
     %0 = rtg.virtual_reg [#rtgtest.ra]
-    %imm = rtg.constant #rtg.isa.immediate<12, 0>
+    %imm = rtg.constant 0 : i12
     // expected-error @below {{no register available for allocation within constraints}}
     %1 = rtg.virtual_reg [#rtgtest.ra]
     // expected-note @below {{live range starts here}}
@@ -83,7 +83,7 @@ rtg.test @nonOverlappingRanges() {
     // CHECK: rtgtest.jalr [[V1]]
     %0 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
     %1 = rtg.virtual_reg [#rtgtest.ra, #rtgtest.s0, #rtgtest.s1]
-    %imm = rtg.constant #rtg.isa.immediate<12, 0>
+    %imm = rtg.constant 0 : i12
     rtgtest.jalr %0, %0, %imm
     rtgtest.jalr %1, %1, %imm
   }

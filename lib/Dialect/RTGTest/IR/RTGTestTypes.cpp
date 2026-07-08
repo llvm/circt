@@ -32,12 +32,12 @@ using namespace rtgtest;
 //===----------------------------------------------------------------------===//
 
 bool IntegerRegisterType::isValidContentType(Type type) const {
-  return llvm::isa<rtg::ImmediateType>(type);
+  return llvm::isa<IntegerType>(type);
 }
 
 TypedAttr IntegerRegisterType::parseContentValue(llvm::StringRef valueString,
                                                  Type contentType) const {
-  auto immType = dyn_cast<rtg::ImmediateType>(contentType);
+  auto immType = dyn_cast<IntegerType>(contentType);
   if (!immType)
     return {};
 
@@ -53,7 +53,8 @@ TypedAttr IntegerRegisterType::parseContentValue(llvm::StringRef valueString,
     intValue = intValue.trunc(immType.getWidth());
   }
 
-  return rtg::ImmediateAttr::get(getContext(), intValue);
+  return IntegerAttr::get(
+      IntegerType::get(getContext(), intValue.getBitWidth()), intValue);
 }
 
 std::string IntegerRegisterType::getIntrinsicLabel(Attribute value,
