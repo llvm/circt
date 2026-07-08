@@ -38,11 +38,10 @@ hw.module @carry_in_one(in %arg0: i4, in %arg1: i4) {
 // CHECK-LABEL: @sub
 hw.module @sub(in %arg0: i4, in %arg1: i4, out out: i4) {
   %0 = comb.sub %arg0, %arg1 : i4
-  // CHECK-NEXT: %[[C_NEG1:.+]] = hw.constant -1 : i4
-  // CHECK-NEXT: %[[XOR:.+]] = comb.xor %arg1, %[[C_NEG1]] : i4
-  // CHECK-NEXT: %[[C1:.+]] = hw.constant 1 : i4
-  // CHECK-NEXT: %[[COMP:.+]]:2 = datapath.compress %arg0, %[[XOR]], %[[C1]] : i4 [3 -> 2]
-  // CHECK-NEXT: %[[ADD:.+]] = comb.add bin %[[COMP]]#0, %[[COMP]]#1 : i4
+  // CHECK-NEXT: %c-1_i4 = hw.constant -1 : i4
+  // CHECK-NEXT: %[[XOR:.+]] = comb.xor %arg1, %c-1_i4 : i4
+  // CHECK-NEXT: %c1_i4 = hw.constant 1 : i4
+  // CHECK-NEXT: %[[ADD:.+]] = comb.add %arg0, %[[XOR]], %c1_i4 : i4
   // CHECK-NEXT: hw.output %[[ADD]] : i4
   hw.output %0 : i4
 }
