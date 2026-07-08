@@ -53,7 +53,8 @@ TypedAttr IntegerRegisterType::parseContentValue(llvm::StringRef valueString,
     intValue = intValue.trunc(immType.getWidth());
   }
 
-  return IntegerAttr::get(IntegerType::get(getContext(), intValue.getBitWidth()), intValue);
+  return IntegerAttr::get(
+      IntegerType::get(getContext(), intValue.getBitWidth()), intValue);
 }
 
 std::string IntegerRegisterType::getIntrinsicLabel(Attribute value,

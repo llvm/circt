@@ -517,8 +517,8 @@ genIfThenElse(IfThenElseNode *node, const DenseSet<StringRef> &decls,
   auto name = node->getCondition()->getName();
   if (!decls.contains(name))
     os << "::llvm::APInt " << name
-       << " = ::llvm::cast<::mlir::IntegerAttr>(adaptor."
-       << getGetterName(name) << "()).getValue();\n";
+       << " = ::llvm::cast<::mlir::IntegerAttr>(adaptor." << getGetterName(name)
+       << "()).getValue();\n";
 
   os << "if (" << name;
   if (!node->isThenBranchEmpty() && !node->isElseBranchEmpty()) {
@@ -578,8 +578,8 @@ void BinaryFormatGen::genDecl(OperandNode *node) {
          << ", ::llvm::cast<::circt::rtg::RegisterAttrInterface>(adaptor."
          << getterName << "()).getClassIndex());\n";
     else if (node->kinds.contains<Immediate, AnyImmediate>())
-      os << " = ::llvm::cast<::mlir::IntegerAttr>(adaptor."
-         << getterName << "()).getValue();\n";
+      os << " = ::llvm::cast<::mlir::IntegerAttr>(adaptor." << getterName
+         << "()).getValue();\n";
     else
       PrintFatalError(node->getLoc(),
                       "unsupported operand type in binary format");
