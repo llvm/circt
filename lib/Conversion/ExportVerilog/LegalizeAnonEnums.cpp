@@ -111,7 +111,8 @@ struct LegalizeAnonEnums
   AttrTypeReplacerWithSkippedOps &
   addReplacementFns(AttrTypeReplacerWithSkippedOps &replacer) {
     replacer.addReplacement(
-        [&](Type type) -> AttrTypeReplacer::ReplaceFnResult<Type> {
+        [&](Type type)
+            -> AttrTypeReplacerWithSkippedOps::ReplaceFnResult<Type> {
           if (isa<TypeAliasType>(type))
             return std::make_pair(type, WalkResult::skip());
           if (auto enumType = dyn_cast<EnumType>(type))
