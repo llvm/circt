@@ -30,6 +30,50 @@ using namespace sv;
 using namespace mlir;
 
 namespace {
+
+/// Helper class extending AttrTypeReplacer to skip specific operation subtrees.
+/// Registered operation types will be ignored during recursive replacement.
+class AttrTypeReplacerWithSkippedOps : public AttrTypeReplacer {
+public:
+  /// Register operation types to be skipped.
+  template <typename... SkippedOps>
+  void addSkippedOps() {
+    (addSkippedOpImpl<SkippedOps>(), ...);
+  }
+
+  /// Recursively replace elements, skipping subtrees of registered ops.
+  void recursivelyReplaceElementsIn(Operation *op, bool replaceAttrs = true,
+                                    bool replaceLocs = false,
+                                    bool replaceTypes = false) {
+    op->walk([&](Operation *nestedOp) -> WalkResult {
+      if (!contains(nestedOp)) {
+        replaceElementsIn(nestedOp, replaceAttrs, replaceLocs, replaceTypes);
+        return WalkResult::advance();
+      }
+      return WalkResult::skip();
+    });
+  };
+
+  /// Checks whether the given operation is in the skip list.
+  bool contains(Operation *op) const {
+    if (auto info = op->getRegisteredInfo())
+      return skippedOps.contains(info->getTypeID());
+    return false;
+  }
+
+private:
+  /// Insert the TypeID of a single operation type into the skip set.
+  template <typename T>
+  void addSkippedOpImpl() {
+    static_assert(std::is_base_of_v<::mlir::OpState, T>,
+                  "Unexpected type of inserted operation");
+    skippedOps.insert(TypeID::get<T>());
+  }
+
+  /// Storage for type IDs of operations to skip.
+  DenseSet<TypeID> skippedOps;
+};
+
 struct LegalizeAnonEnums
     : public circt::impl::LegalizeAnonEnumsBase<LegalizeAnonEnums> {
   /// Creates a TypeScope on demand for anonymous enumerations.
@@ -62,42 +106,10 @@ struct LegalizeAnonEnums
     return typeAlias;
   }
 
-  AttrTypeReplacer &addReplacementFns(AttrTypeReplacer &replacer) {
-    // We globally skip all TypeAttr so that existing TypedeclOps keep their
-    // direct !hw.enum defining type rather than having it replaced with a
-    // TypeAliasType.
-    //
-    // However, this global skip has a side effect, which means it also skips
-    // e.g. EnumFieldAttr's Type and hw.module's ModuleType, preventing their
-    // inner types from being replaced with TypeAliasType. So we add two manual
-    // compensations below.
-    //
-    // TODO: Once the upstream AttrTypeReplacer has per-op replacement
-    // filtering, we can simplify this by adding a per-op replacement filter
-    // that skips only TypedeclOp's TypeAttr. This would eliminate the need for
-    // the two manual compensations below.
-    replacer.addReplacement(
-        [&](Attribute attr) -> AttrTypeReplacer::ReplaceFnResult<Attribute> {
-          // Side-effect compensation: manually update EnumFieldAttr's inner
-          // type, which would otherwise be skipped by the TypeAttr skip.
-          if (auto fieldAttr = dyn_cast<EnumFieldAttr>(attr)) {
-            auto innerType = fieldAttr.getType().getValue();
-            if (auto enumType = dyn_cast<EnumType>(innerType)) {
-              Type newType = getEnumTypeDecl(enumType);
-              if (newType != innerType)
-                return std::make_pair(Attribute(EnumFieldAttr::get(
-                                          UnknownLoc::get(&getContext()),
-                                          fieldAttr.getField(), newType)),
-                                      WalkResult::skip());
-            }
-          }
-          // Skip TypeAttr instances inside TypedeclOps.
-          if (isa<TypeAttr>(attr))
-            return std::make_pair(attr, WalkResult::skip());
-          return std::nullopt;
-        });
-    // Type replacement: skip existing TypeAliasType sub-elements to prevent
-    // nested aliases, and replace bare EnumType with a TypeAliasType.
+  /// Replace bare EnumType with TypeAliasType, and skip TypedeclOp subtrees to
+  /// keep their property-backed raw EnumType intact.
+  AttrTypeReplacerWithSkippedOps &
+  addReplacementFns(AttrTypeReplacerWithSkippedOps &replacer) {
     replacer.addReplacement(
         [&](Type type) -> AttrTypeReplacer::ReplaceFnResult<Type> {
           if (isa<TypeAliasType>(type))
@@ -107,6 +119,7 @@ struct LegalizeAnonEnums
                                   WalkResult::advance());
           return std::nullopt;
         });
+    replacer.addSkippedOps<TypedeclOp>();
     return replacer;
   }
 
@@ -114,15 +127,15 @@ struct LegalizeAnonEnums
     enumCount = 0;
     typeScope = {};
 
-    AttrTypeReplacer replacer;
+    AttrTypeReplacerWithSkippedOps replacer;
     addReplacementFns(replacer).recursivelyReplaceElementsIn(
         getOperation(), /*replaceAttrs=*/true,
         /*replaceLocs=*/true,
         /*replaceTypes=*/true);
 
-    // Side-effect compensation: explicitly update HWModuleLike types to keep
-    // them in sync with block arguments, which would otherwise be skipped by
-    // the TypeAttr skip.
+    // hw.module stores its module_type as a property, not a discardable attr,
+    // so the replacer can't touch it. Manually sync it with the already-updated
+    // block argument types.
     getOperation()->walk([&](HWModuleLike modLike) {
       auto modType = modLike.getHWModuleType();
       bool changed = false;
