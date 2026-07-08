@@ -1938,6 +1938,28 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
     Type resultType =
         ConversionPattern::typeConverter->convertType(op.getResult().getType());
 
+    // Case equality against a constant carrying x/z bits: this two-valued
+    // lowering never materializes x/z at run time, so an x/z constant bit
+    // can never case-match (IEEE 1800-2017 11.4.5: `===` compares x/z
+    // literally). Dropping the unknown bits in the converted constant would
+    // silently turn `v === 'x` into `v === 0` -- the `$isunknown` payload
+    // shape, which then fails on every all-zero sample -- so fold the
+    // comparison to its static verdict instead.
+    if constexpr (std::is_same_v<SourceOp, CaseEqOp> ||
+                  std::is_same_v<SourceOp, CaseNeOp>) {
+      auto hasUnknownConstBits = [](Value value) {
+        auto constant = value.getDefiningOp<ConstantOp>();
+        return constant && constant.getValue().hasUnknown();
+      };
+      if (hasUnknownConstBits(op.getLhs()) ||
+          hasUnknownConstBits(op.getRhs())) {
+        bool verdict = std::is_same_v<SourceOp, CaseNeOp>;
+        rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, resultType,
+                                                    verdict ? 1 : 0);
+        return success();
+      }
+    }
+
     rewriter.replaceOpWithNewOp<comb::ICmpOp>(
         op, resultType, pred, adaptor.getLhs(), adaptor.getRhs());
     return success();
