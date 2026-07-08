@@ -540,9 +540,10 @@ void testWindowList() {
   auto data_seg = win.segment(1);
   auto footer_seg = win.segment(2);
   assert(data_seg.size == elements.size() * sizeof(uint32_t));
-  // Header carries `tag` at the MSB end and the count at the LSB end.
-  // Layout: count (ui16, 2 bytes) then tag (ui16, 2 bytes) in reversed
-  // declaration order; header bytes = [count_lo, count_hi, tag_lo, tag_hi].
+  // Content is MSB-aligned within the 32-bit frame: `tag` (ui16) occupies
+  // the top 16 bits (bytes 2..3) and the count (ui16) the low 16 bits
+  // (bytes 0..1). Here the content fills the frame exactly, so header bytes =
+  // [count_lo, count_hi, tag_lo, tag_hi].
   assert(header_seg.size == 4);
   assert(header_seg.data[0] == (static_cast<uint8_t>(elements.size()) & 0xFF));
   assert(header_seg.data[1] == 0); // count high byte (size < 256)
@@ -586,13 +587,34 @@ void testWindowListMultiBurst() {
   assert(win.segment(5).size == 1 * sizeof(uint32_t)); // burst 2 data
   assert(win.segment(6).size == 4);                    // footer
 
-  // The per-burst count lives in the low 2 bits of header byte 1 (a 1-byte
-  // pad precedes it because the data frame is wider than the header). Verify
-  // the encoded batch counts: 3, 3, 1, and a zero-count footer.
-  assert((win.segment(0).data[1] & 0x3) == 3);
-  assert((win.segment(2).data[1] & 0x3) == 3);
-  assert((win.segment(4).data[1] & 0x3) == 1);
-  assert((win.segment(6).data[1] & 0x3) == 0);
+  // The header content is MSB-aligned within the 32-bit frame, exactly as
+  // CIRCT lowers the frame union: `tag` (ui16) sits at bits [31:16]
+  // (bytes 2..3) and the 2-bit count immediately below it at bits [15:14] --
+  // the top two bits of byte 1 -- with the remaining low bits zero. Only the
+  // first burst's header carries the static tag; later bursts and the footer
+  // leave it zero. (The old byte-granular codegen put the count in the low
+  // bits of byte 1, which the hardware would have read as zero.)
+  auto headerCount = [](const auto &s) -> unsigned {
+    return (s.data[1] >> 6) & 0x3;
+  };
+  assert(headerCount(win.segment(0)) == 3);
+  assert(headerCount(win.segment(2)) == 3);
+  assert(headerCount(win.segment(4)) == 1);
+  assert(headerCount(win.segment(6)) == 0);
+  // Exact header-frame bytes. Burst 0 (count 3, tag 0xBEEF):
+  //   byte0 = 0x00 (pad), byte1 = 0xC0 (count 3 at bits [15:14]),
+  //   byte2 = 0xEF, byte3 = 0xBE (tag, little-endian, at bits [31:16]).
+  assert(win.segment(0).data[0] == 0x00);
+  assert(win.segment(0).data[1] == 0xC0);
+  assert(win.segment(0).data[2] == 0xEF);
+  assert(win.segment(0).data[3] == 0xBE);
+  // Later bursts repeat the count but not the tag (bytes 2..3 stay zero).
+  assert(win.segment(2).data[1] == 0xC0); // count 3
+  assert(win.segment(2).data[2] == 0x00);
+  assert(win.segment(2).data[3] == 0x00);
+  assert(win.segment(4).data[1] == 0x40); // count 1
+  // Footer: zero count, zero tag.
+  assert(win.segment(6).data[1] == 0x00);
 
   // Round-trip: flatten the multi-burst stream and feed it back through the
   // generated serial-list deserializer. It must rebuild one window holding

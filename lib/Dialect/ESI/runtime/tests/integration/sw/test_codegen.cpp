@@ -12,6 +12,7 @@
 #include "test_codegen/CallbackWindowedList.h"
 #include "test_codegen/ChannelMultiBurstListRead.h"
 #include "test_codegen/ChannelMultiBurstListWrite.h"
+#include "test_codegen/ChannelNarrowCountListWrite.h"
 #include "test_codegen/ChannelWindowedListRead.h"
 #include "test_codegen/ChannelWindowedListWrite.h"
 #include "test_codegen/CustomServiceDeclChannel.h"
@@ -648,6 +649,50 @@ static int runChannelMultiBurstListWrite(Accelerator *accel) {
 }
 
 //===----------------------------------------------------------------------===//
+// From-host channel of a windowed list with a *narrow* (2-bit) bulk count and
+// a static header field. The 2-bit count caps each burst at 3 items, so the
+// host serializer splits the 7-item list into three bursts (3 + 3 + 1). The
+// header content (ui16 tag + 2-bit count = 18 bits) does not fill the 32-bit
+// data frame, so this exercises the MSB-aligned, sub-byte frame layout
+// end-to-end: the generated facade must place the count at bits [15:14] and
+// the tag at bits [31:16] to match CIRCT's frame lowering, or the HW reads a
+// garbage count and never reports a match.
+//===----------------------------------------------------------------------===//
+static int runChannelNarrowCountListWrite(Accelerator *accel) {
+  esi_system::ChannelNarrowCountListWrite mod(
+      findInst(accel, "channel_narrow_count_list_write_inst"));
+  auto c = mod.connect();
+
+  using WinT = esi_system::ChannelNarrowCountListWrite::dataData;
+
+  static constexpr uint16_t kTag = 0xBEEF;
+  std::vector<uint32_t> items{0x1000u, 0x1001u, 0x1002u, 0x1003u,
+                              0x1004u, 0x1005u, 0x1006u};
+  c->data.write(WinT(kTag, items));
+
+  // Poll the match flag MMIO until the (reassembled) list has been processed
+  // or we time out. The HW updates the latch on the final item's beat.
+  using clock = std::chrono::steady_clock;
+  auto deadline = clock::now() + std::chrono::seconds(5);
+  uint64_t match = 0;
+  while (clock::now() < deadline) {
+    match = c->match.read(0);
+    if (match & 1)
+      break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  if (!(match & 1))
+    throw std::runtime_error(
+        "channel_narrow_count_list_write: HW did not report a match within "
+        "timeout (got 0x" +
+        toHex(match) + ")");
+  std::cout << "channel_narrow_count_list_write ok (2-bit count, tag=0x"
+            << toHex(static_cast<uint64_t>(kTag))
+            << ", 7 items split across 3 bursts)\n";
+  return 0;
+}
+
+//===----------------------------------------------------------------------===//
 // Callback with windowed list argument: HW sends a serial-burst windowed
 // list (tag + items) into a host callback. Verifies that the
 // `SerialListTypeDeserializer` works end-to-end through the
@@ -737,4 +782,5 @@ ESI_PROBE_REGISTRY(
     {"channel_multiburst_list_read", &runChannelMultiBurstListRead},
     {"channel_windowed_list_write", &runChannelWindowedListWrite},
     {"channel_multiburst_list_write", &runChannelMultiBurstListWrite},
+    {"channel_narrow_count_list_write", &runChannelNarrowCountListWrite},
     {"callback_windowed_list", &runCallbackWindowedList}, );
