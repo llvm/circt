@@ -262,6 +262,11 @@ struct DriveInfo {
   /// The optional reset that triggers a change of the driven value to a fixed
   /// reset value. Null if no reset was detected.
   ResetInfo reset;
+  /// The optional power-on value folded from another process's one-shot t=0
+  /// constant drive of the same signal (the `initial begin reg = K; end`
+  /// idiom next to an `always @(posedge clk)` driver). Becomes the lowered
+  /// register's preset. Null if the signal has no such extra driver.
+  IntegerAttr initPreset;
 
   DriveInfo() {}
   explicit DriveInfo(DriveOp op) : op(op) {}
