@@ -823,11 +823,11 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       if (!constOp || !constOp.getValue().isOne())
         return failure();
 
-      // Make a single bit value of width 
+      // Make a single bit constant 1 
       auto constOne = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1,1));
 
-      // Detected a add with a constant carryIn of 1 - this can be fed into the
-      // parallel prefix adder as a carry-in - essentially for free
+      // Every adder (parallel prefix or ripple-carry) can consume a single-bit 
+      // carry-in without additional logic.
       return lowerAdder(op, inputs.take_front(2), constOne, rewriter);
     }
 
@@ -897,8 +897,10 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
   LogicalResult lowerAdder(comb::AddOp op, ValueRange inputs, Value carryIn,
                            ConversionPatternRewriter &rewriter) const {
 
+    // Check that the carryIn is a 1-bit value if it is provided (not necessarily a constant 1).
     assert(carryIn == nullptr || carryIn.getType().getIntOrFloatBitWidth() == 1 &&
            "carryIn must be a 1-bit value");
+    
     // Check if the architecture is specified by an attribute.
     auto width = op.getType().getIntOrFloatBitWidth();
     auto arch = determineAdderArch(op, width);
@@ -934,8 +936,12 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       for (int64_t i = 0; i < width; ++i) {
         // p_i = a_i XOR b_i
         llvm::dbgs() << "P0" << i << " = A" << i << " XOR B" << i << "\n";
-        // g_i = a_i AND b_i
-        llvm::dbgs() << "G0" << i << " = A" << i << " AND B" << i << "\n";
+        if (i==0 && carryIn)
+          llvm::dbgs() << "G0" << i << " = (A" << i << " AND B" << i
+                       << ") OR (P" << i << " AND CARRY_IN)\n";
+        else
+          // g_i = a_i AND b_i
+          llvm::dbgs() << "G0" << i << " = A" << i << " AND B" << i << "\n";
       }
     });
 
@@ -946,7 +952,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     // Select the Parallel Prefix Architecture
     switch (arch) {
     case AdderArchitecture::RippleCarry:
-      llvm_unreachable("Ripple-Carry should be handled separately");
+      llvm_unreachable("Ripple-Carry handled above");
       break;
     case AdderArchitecture::Sklanskey:
       lowerSklanskeyPrefixTree(rewriter, op.getLoc(), pPrefix, gPrefix);
