@@ -822,6 +822,25 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
              "mismatched types after clone op");
       auto beforeType = cast<IntType>(before.getType());
 
+      // Materialize the live "after" sample and, for edge-sensitive detects,
+      // pin it to the containing check block with an `llhd.resample` marker.
+      // The "after" value is frequently a value captured from outside the
+      // process (a hoisted probe or a module port); the per-resume-block
+      // renaming in the process/coroutine lowering re-binds *direct* uses of
+      // such captures at every wake, but pure terms derived from them (the
+      // negedge `comb.xor(%after, true)` in particular) are identical across
+      // consecutive check blocks and CSE merges them into the first one,
+      // where the merged term is persisted across the suspension -- later
+      // waits would then test the first wake's sample. The marker's read
+      // effect keeps each check block's derived chain rooted in a
+      // block-local op; it folds to an identity once the renaming has bound
+      // the sample to its resume epoch.
+      auto afterIntType = rewriter.getIntegerType(beforeType.getWidth());
+      after = typeConverter->materializeTargetConversion(rewriter, loc,
+                                                         afterIntType, after);
+      if (edge != Edge::AnyChange)
+        after = llhd::ResampleOp::create(rewriter, loc, after);
+
       // 9.4.2 IEEE 1800-2017: An edge event shall be detected only on the LSB
       // of the expression
       if (beforeType.getWidth() != 1 && edge != Edge::AnyChange) {
@@ -830,14 +849,15 @@ struct WaitEventOpConversion : public OpConversionPattern<WaitEventOp> {
             IntType::get(rewriter.getContext(), 1, beforeType.getDomain());
         before =
             moore::ExtractOp::create(rewriter, loc, beforeType, before, LSB);
-        after = moore::ExtractOp::create(rewriter, loc, beforeType, after, LSB);
+        after = comb::ExtractOp::create(rewriter, loc, rewriter.getI1Type(),
+                                        after, LSB);
       }
 
       auto intType = rewriter.getIntegerType(beforeType.getWidth());
       before = typeConverter->materializeTargetConversion(rewriter, loc,
                                                           intType, before);
-      after = typeConverter->materializeTargetConversion(rewriter, loc, intType,
-                                                         after);
+      assert(before.getType() == after.getType() &&
+             "before/after sample width mismatch");
 
       if (edge == Edge::AnyChange)
         return comb::ICmpOp::create(rewriter, loc, ICmpPredicate::ne, before,

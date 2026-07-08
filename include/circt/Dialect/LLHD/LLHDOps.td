@@ -126,6 +126,38 @@ def IntToTimeOp : LLHDOp<"int_to_time", [Pure]> {
   let assemblyFormat = "$input attr-dict";
 }
 
+def ResampleOp : LLHDOp<"resample", [
+  SameOperandsAndResultType, MemoryEffects<[MemRead]>
+]> {
+  let summary = "Mark a value as a live per-wake sample inside a process";
+  let description = [{
+    Returns its operand unchanged. The operation marks the use of a value as a
+    sample taken in the block in which the operation resides, for values that
+    are captured from outside a process or coroutine and consumed by the
+    event-trigger checks that follow a suspension point.
+
+    Process and coroutine lowering re-bind captured values at every resume
+    block, so a direct use of a captured value observes the binding of the
+    most recent re-entry. Pure operations derived from such a value, however,
+    are subject to CSE across sibling check blocks: two identical polarity
+    terms (such as the negedge `comb.xor(%clk, true)`) computed in
+    consecutive check blocks merge into the first block, where the merged
+    term is live across the suspension and gets persisted -- later checks
+    would then test the sample of an earlier wake. `llhd.resample` carries a
+    memory read side effect (like `llhd.current_time`) precisely so that CSE
+    and code motion cannot merge or hoist samples across blocks; every
+    derived chain stays rooted in a block-local operation.
+
+    The marker is an identity for simulation semantics. It is folded away by
+    the passes that establish the per-resume-block bindings
+    (`arc-lower-processes` and `arc-lower-coroutines`), at which point
+    block-local freshness is guaranteed structurally.
+  }];
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input)";
+}
+
 //===----------------------------------------------------------------------===//
 // Signal Operations
 //===----------------------------------------------------------------------===//

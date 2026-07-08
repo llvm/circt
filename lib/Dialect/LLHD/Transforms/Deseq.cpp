@@ -108,6 +108,13 @@ static ValueField getValueField(Value value) {
   if (!value)
     return {};
 
+  // `llhd.resample` markers are identities whose read effect only guards the
+  // event-trigger samples against cross-check-block CSE. For the analysis
+  // they are fully transparent: unwrap them so trigger atoms and projections
+  // resolve to the underlying sampled value.
+  while (auto resampleOp = value.getDefiningOp<ResampleOp>())
+    value = resampleOp.getInput();
+
   // Struct field.
   if (auto se = value.getDefiningOp<hw::StructExtractOp>()) {
     Value base = se.getInput();
@@ -359,10 +366,13 @@ void Deseq::deseq() {
 /// the wait and drive ops that are relevant.
 bool Deseq::analyzeProcess() {
   // We can only desequentialize processes with no side-effecting ops besides
-  // the `WaitOp` or `HaltOp` terminators.
+  // the `WaitOp` or `HaltOp` terminators. `llhd.resample` markers are exempt:
+  // their read effect only guards the event-trigger samples against
+  // cross-check-block CSE; they compute nothing and the analysis sees through
+  // them (see `getValueField`).
   for (auto &block : process.getBody()) {
     for (auto &op : block) {
-      if (isa<WaitOp, HaltOp>(op))
+      if (isa<WaitOp, HaltOp, ResampleOp>(op))
         continue;
       if (!isMemoryEffectFree(&op)) {
         LLVM_DEBUG({

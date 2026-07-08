@@ -47,6 +47,35 @@ hw.module @ClockNegEdge(in %clock: i1, in %d: i42) {
   llhd.drv %3, %1 after %0 if %2 : i42
 }
 
+// Same as @ClockNegEdge, but the live clock sample is pinned to the check
+// block with an `llhd.resample` marker (the shape MooreToCore emits for
+// edge-sensitive waits). The marker is analysis-transparent and must not
+// block register inference.
+// CHECK-LABEL: @ClockNegEdgeResample(
+hw.module @ClockNegEdgeResample(in %clock: i1, in %d: i42) {
+  %c0_i42 = hw.constant 0 : i42
+  %0 = llhd.constant_time <0ns, 1d, 0e>
+  // CHECK-NOT: llhd.process
+  // CHECK: [[CLK:%.+]] = seq.to_clock %clock
+  // CHECK: [[CLK_INV:%.+]] = seq.clock_inv [[CLK]]
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK_INV]] : i42
+  %1, %2 = llhd.process -> i42, i1 {
+    %true = hw.constant true
+    %false = hw.constant false
+    cf.br ^bb1(%c0_i42, %false : i42, i1)
+  ^bb1(%3: i42, %4: i1):
+    llhd.wait yield (%3, %4 : i42, i1), (%clock : i1), ^bb2(%clock : i1)
+  ^bb2(%5: i1):
+    %6 = llhd.resample %clock : i1
+    %7 = comb.xor bin %6, %true : i1
+    %8 = comb.and bin %5, %7 : i1  // negedge clock
+    cf.cond_br %8, ^bb1(%d, %true : i42, i1), ^bb1(%c0_i42, %false : i42, i1)
+  }
+  %3 = llhd.sig %c0_i42 : i42
+  // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
+  llhd.drv %3, %1 after %0 if %2 : i42
+}
+
 // CHECK-LABEL: @ClockPosEdgeWithActiveLowReset(
 hw.module @ClockPosEdgeWithActiveLowReset(in %clock: i1, in %reset: i1, in %d: i42) {
   %c0_i42 = hw.constant 0 : i42
