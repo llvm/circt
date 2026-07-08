@@ -2816,20 +2816,14 @@ Value Context::materializeSVReal(const slang::ConstantValue &svreal,
 Value Context::materializeString(const slang::ConstantValue &stringLiteral,
                                  const slang::ast::Type &astType,
                                  Location loc) {
-  slang::ConstantValue intVal = stringLiteral.convertToInt();
-  auto effectiveWidth = intVal.getEffectiveWidth();
-  if (!effectiveWidth)
+  if (!astType.isString())
     return {};
-
-  auto intTy = moore::IntType::getInt(getContext(), effectiveWidth.value());
-
-  if (astType.isString()) {
-    auto immInt = moore::ConstantStringOp::create(builder, loc, intTy,
-                                                  stringLiteral.toString())
-                      .getResult();
-    return moore::IntToStringOp::create(builder, loc, immInt).getResult();
-  }
-  return {};
+  const std::string &str = stringLiteral.str();
+  auto intTy = moore::IntType::getInt(getContext(),
+                                      static_cast<unsigned>(str.size() * 8));
+  auto immInt =
+      moore::ConstantStringOp::create(builder, loc, intTy, str).getResult();
+  return moore::IntToStringOp::create(builder, loc, immInt).getResult();
 }
 
 /// Materialize a Slang integer literal as a constant op.
