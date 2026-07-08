@@ -816,16 +816,19 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto inputs = adaptor.getInputs();
 
-    if (inputs.size == 3) {
+    if (inputs.size() == 3) {
       // Detect add with a constant carryIn
       auto constOp =
           dyn_cast_or_null<hw::ConstantOp>(op.getOperand(2).getDefiningOp());
       if (!constOp || !constOp.getValue().isOne())
         return failure();
 
+      // Make a single bit value of width 
+      auto constOne = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1,1));
+
       // Detected a add with a constant carryIn of 1 - this can be fed into the
       // parallel prefix adder as a carry-in - essentially for free
-      return lowerAdder(op, inputs.take_front(2), constOp, rewriter);
+      return lowerAdder(op, inputs.take_front(2), constOne, rewriter);
     }
 
     // Lower only when there are two inputs.
@@ -842,9 +845,6 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     }
 
     return lowerAdder(op, inputs, Value(), rewriter);
-    // Check if the architecture is specified by an attribute.
-
-    return lowerParallelPrefixAdder(op, inputs, rewriter);
   }
 
   // Implement a basic ripple-carry adder for small bitwidths.
@@ -897,12 +897,13 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
   LogicalResult lowerAdder(comb::AddOp op, ValueRange inputs, Value carryIn,
                            ConversionPatternRewriter &rewriter) const {
 
+    assert(carryIn == nullptr || carryIn.getType().getIntOrFloatBitWidth() == 1 &&
+           "carryIn must be a 1-bit value");
     // Check if the architecture is specified by an attribute.
+    auto width = op.getType().getIntOrFloatBitWidth();
     auto arch = determineAdderArch(op, width);
     if (arch == AdderArchitecture::RippleCarry)
       return lowerRippleCarryAdder(op, inputs, carryIn, rewriter);
-
-    auto width = op.getType().getIntOrFloatBitWidth();
 
     auto aBits = extractBits(rewriter, inputs[0]);
     auto bBits = extractBits(rewriter, inputs[1]);
