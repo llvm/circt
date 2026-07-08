@@ -816,8 +816,8 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto inputs = adaptor.getInputs();
 
+    // Detect add with a constant carryIn
     if (inputs.size() == 3) {
-      // Detect add with a constant carryIn
       auto constOp =
           dyn_cast_or_null<hw::ConstantOp>(op.getOperand(2).getDefiningOp());
       if (!constOp || !constOp.getValue().isOne())

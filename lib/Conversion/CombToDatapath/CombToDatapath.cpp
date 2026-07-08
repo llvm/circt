@@ -101,8 +101,8 @@ void ConvertCombToDatapathPass::runOnOperation() {
   target.addLegalDialect<datapath::DatapathDialect, comb::CombDialect,
                          hw::HWDialect>();
 
-  // Permit 2-input adders (carry-propagate adders) and 3-input adds with a
-  // constant-1 carry-in operand.
+  // Permit 2-input adders and 3-input adds with a constant-1 carry-in operand
+  // (carry-propagate adders).
   target.addDynamicallyLegalOp<comb::AddOp>([](comb::AddOp op) {
     if (op.getNumOperands() <= 2)
       return true;
