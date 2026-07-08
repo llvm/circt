@@ -555,7 +555,6 @@ AdderArchitecture determineAdderArch(Operation *op, int64_t width) {
 //===----------------------------------------------------------------------===//
 // Parallel Prefix Tree
 //===----------------------------------------------------------------------===//
-
 // Implement the Kogge-Stone parallel prefix tree
 // Described in https://en.wikipedia.org/wiki/Kogge%E2%80%93Stone_adder
 // Slightly better delay than Brent-Kung, but more area.
@@ -816,6 +815,19 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
   matchAndRewrite(AddOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto inputs = adaptor.getInputs();
+
+    if (inputs.size == 3) {
+      // Detect add with a constant carryIn
+      auto constOp =
+          dyn_cast_or_null<hw::ConstantOp>(op.getOperand(2).getDefiningOp());
+      if (!constOp || !constOp.getValue().isOne())
+        return failure();
+
+      // Detected a add with a constant carryIn of 1 - this can be fed into the
+      // parallel prefix adder as a carry-in - essentially for free
+      return lowerAdder(op, inputs.take_front(2), constOp, rewriter);
+    }
+
     // Lower only when there are two inputs.
     // Variadic operands must be lowered in a different pattern.
     if (inputs.size() != 2)
@@ -829,20 +841,19 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       return success();
     }
 
+    return lowerAdder(op, inputs, Value(), rewriter);
     // Check if the architecture is specified by an attribute.
-    auto arch = determineAdderArch(op, width);
-    if (arch == AdderArchitecture::RippleCarry)
-      return lowerRippleCarryAdder(op, inputs, rewriter);
+
     return lowerParallelPrefixAdder(op, inputs, rewriter);
   }
 
   // Implement a basic ripple-carry adder for small bitwidths.
   LogicalResult
-  lowerRippleCarryAdder(comb::AddOp op, ValueRange inputs,
+  lowerRippleCarryAdder(comb::AddOp op, ValueRange inputs, Value carryIn,
                         ConversionPatternRewriter &rewriter) const {
     auto width = op.getType().getIntOrFloatBitWidth();
     // Implement a naive Ripple-carry full adder.
-    Value carry;
+    Value carry = carryIn;
 
     auto aBits = extractBits(rewriter, inputs[0]);
     auto bBits = extractBits(rewriter, inputs[1]);
@@ -883,9 +894,14 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
   // Implement a parallel prefix adder - with Kogge-Stone or Brent-Kung trees
   // Will introduce unused signals for the carry bits but these will be removed
   // by the AIG pass.
-  LogicalResult
-  lowerParallelPrefixAdder(comb::AddOp op, ValueRange inputs,
+  LogicalResult lowerAdder(comb::AddOp op, ValueRange inputs, Value carryIn,
                            ConversionPatternRewriter &rewriter) const {
+
+    // Check if the architecture is specified by an attribute.
+    auto arch = determineAdderArch(op, width);
+    if (arch == AdderArchitecture::RippleCarry)
+      return lowerRippleCarryAdder(op, inputs, carryIn, rewriter);
+
     auto width = op.getType().getIntOrFloatBitWidth();
 
     auto aBits = extractBits(rewriter, inputs[0]);
@@ -901,6 +917,13 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       p.push_back(comb::XorOp::create(rewriter, op.getLoc(), aBit, bBit));
       // g_i = a_i AND b_i
       g.push_back(comb::AndOp::create(rewriter, op.getLoc(), aBit, bBit));
+    }
+
+    // With carry_in, adjust g[0]: g[0] = (a[0] AND b[0]) OR (p[0] AND carry_in)
+    // This bakes the carry_in into the prefix tree, avoiding a separate adder.
+    if (carryIn) {
+      Value pAndC = comb::AndOp::create(rewriter, op.getLoc(), p[0], carryIn);
+      g[0] = comb::OrOp::create(rewriter, op.getLoc(), g[0], pAndC);
     }
 
     LLVM_DEBUG({
@@ -919,9 +942,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     SmallVector<Value> pPrefix = p;
     SmallVector<Value> gPrefix = g;
 
-    // Check if the architecture is specified by an attribute.
-    auto arch = determineAdderArch(op, width);
-
+    // Select the Parallel Prefix Architecture
     switch (arch) {
     case AdderArchitecture::RippleCarry:
       llvm_unreachable("Ripple-Carry should be handled separately");
@@ -941,8 +962,10 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     // NOTE: The result is stored in reverse order.
     SmallVector<Value> results;
     results.resize(width);
-    // Sum bit 0 is just p[0] since carry_in = 0
-    results[width - 1] = p[0];
+    // sum[0] = p[0] XOR carry_in (carry_in = 0 when null -> just p[0])
+    results[width - 1] =
+        carryIn ? comb::XorOp::create(rewriter, op.getLoc(), p[0], carryIn)
+                : p[0];
 
     // For remaining bits, sum_i = p_i XOR g_(i-1)
     // The carry into position i is the group generate from position i-1

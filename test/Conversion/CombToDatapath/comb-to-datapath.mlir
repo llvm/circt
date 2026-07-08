@@ -26,6 +26,15 @@ hw.module @zero_width(in %arg0: i0, in %arg1: i0, in %arg2: i0) {
   // CHECK-NEXT: hw.constant 0 : i0
   %0 = comb.add %arg0, %arg1, %arg2 : i0
 }
+
+// CHECK-LABEL: @carry_in_one
+hw.module @carry_in_one(in %arg0: i4, in %arg1: i4) {
+  // CHECK-NEXT: %[[C1:.+]] = hw.constant 1 : i4
+  %c1 = hw.constant 1 : i4
+  // CHECK-NEXT: comb.add %arg0, %arg1, %[[C1]] : i4
+  %0 = comb.add %arg0, %arg1, %c1 : i4
+}
+
 // CHECK-LABEL: @sub
 hw.module @sub(in %arg0: i4, in %arg1: i4, out out: i4) {
   %0 = comb.sub %arg0, %arg1 : i4
