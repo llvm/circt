@@ -823,10 +823,11 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       if (!constOp || !constOp.getValue().isOne())
         return failure();
 
-      // Make a single bit constant 1 
-      auto constOne = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1,1));
+      // Make a single bit constant 1
+      auto constOne =
+          hw::ConstantOp::create(rewriter, op.getLoc(), APInt(1, 1));
 
-      // Every adder (parallel prefix or ripple-carry) can consume a single-bit 
+      // Every adder (parallel prefix or ripple-carry) can consume a single-bit
       // carry-in without additional logic.
       return lowerAdder(op, inputs.take_front(2), constOne, rewriter);
     }
@@ -897,10 +898,12 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
   LogicalResult lowerAdder(comb::AddOp op, ValueRange inputs, Value carryIn,
                            ConversionPatternRewriter &rewriter) const {
 
-    // Check that the carryIn is a 1-bit value if it is provided (not necessarily a constant 1).
-    assert(carryIn == nullptr || carryIn.getType().getIntOrFloatBitWidth() == 1 &&
-           "carryIn must be a 1-bit value");
-    
+    // Check that the carryIn is a 1-bit value if it is provided (not
+    // necessarily a constant 1).
+    assert(carryIn == nullptr ||
+           carryIn.getType().getIntOrFloatBitWidth() == 1 &&
+               "carryIn must be a 1-bit value");
+
     // Check if the architecture is specified by an attribute.
     auto width = op.getType().getIntOrFloatBitWidth();
     auto arch = determineAdderArch(op, width);
@@ -936,7 +939,7 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
       for (int64_t i = 0; i < width; ++i) {
         // p_i = a_i XOR b_i
         llvm::dbgs() << "P0" << i << " = A" << i << " XOR B" << i << "\n";
-        if (i==0 && carryIn)
+        if (i == 0 && carryIn)
           llvm::dbgs() << "G0" << i << " = (A" << i << " AND B" << i
                        << ") OR (P" << i << " AND CARRY_IN)\n";
         else
@@ -983,8 +986,12 @@ struct CombAddOpConversion : OpConversionPattern<AddOp> {
     replaceOpWithNewOpAndCopyNamehint<comb::ConcatOp>(rewriter, op, results);
 
     LLVM_DEBUG({
-      llvm::dbgs() << "--------------------------------------- Completion\n"
-                   << "RES0 = P0\n";
+      llvm::dbgs() << "--------------------------------------- Completion\n";
+
+      if (carryIn)
+        llvm::dbgs() << "RES0 = P0 XOR CARRY_IN\n";
+      else
+        llvm::dbgs() << "RES0 = P0\n";
       for (int64_t i = 1; i < width; ++i)
         llvm::dbgs() << "RES" << i << " = P" << i << " XOR G" << i - 1 << "\n";
     });
