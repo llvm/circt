@@ -596,6 +596,29 @@ firrtl.circuit "Test" {
     }
   }
 
+  // Test that domain.create operations work within layerblocks.
+  //
+  // CHECK-LABEL:  firrtl.module private @DomainCreateInLayer_A(
+  // CHECK-SAME:     out %myDomain: !firrtl.domain<@ClockDomain()>
+  //
+  // CHECK-NEXT:   %[[DOM:.+]] = firrtl.domain.create
+  // CHECK-NEXT:   firrtl.domain.define %[[DOM]], %0 : !firrtl.domain<@ClockDomain()>
+  //
+  // CHECK-LABEL:      firrtl.module @DomainCreateInLayer(
+  //
+  // CHECK-NEXT:   %a_b_myDomain = firrtl.instance a_b {{.*}} @DomainCreateInLayer_A_B
+  // CHECK-NEXT:   %a_myDomain = firrtl.instance a {{.*}} @DomainCreateInLayer_A
+  // CHECK-NEXT:   firrtl.domain.define %a_b_myDomain, %a_myDomain : !firrtl.domain<@ClockDomain()>
+  firrtl.module @DomainCreateInLayer() {
+    firrtl.layerblock @A {
+      %0 = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
+      firrtl.layerblock @A::@B {
+        %a = firrtl.wire : !firrtl.domain<@ClockDomain()>
+        firrtl.domain.define %a, %0 : !firrtl.domain<@ClockDomain()>
+      }
+    }
+  }
+
   //===--------------------------------------------------------------------===//
   // Cloning of special operations
   //===--------------------------------------------------------------------===//
