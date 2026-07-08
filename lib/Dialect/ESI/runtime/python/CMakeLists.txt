@@ -5,7 +5,11 @@
 set(ESIPythonRuntimeSources
   esiaccel/__init__.py
   esiaccel/accelerator.py
-  esiaccel/codegen.py
+  esiaccel/codegen/__init__.py
+  esiaccel/codegen/__main__.py
+  esiaccel/codegen/generator.py
+  esiaccel/codegen/indented_writer.py
+  esiaccel/codegen/ports.py
   esiaccel/esitester.py
   esiaccel/types.py
   esiaccel/utils.py

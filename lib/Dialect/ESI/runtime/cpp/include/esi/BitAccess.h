@@ -147,6 +147,105 @@ inline constexpr void copyBitsOut(uint8_t *dst, const uint8_t *src) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Runtime-offset variants.
+//
+// The compile-time templates above are used for struct/union fields, whose
+// bit offset and width are known constants. Array elements, however, live at
+// `baseOffset + index * elementWidth`, where `index` is only known at run
+// time, so the generator emits per-element loops that call these `*Dyn`
+// overloads instead. They are otherwise bit-for-bit identical to their
+// templated counterparts; `bitOffset` / `width` simply move from template
+// parameters to ordinary arguments (so the per-bit loop is a real runtime
+// loop rather than a fully-unrolled one). Callers must ensure `width` is
+// non-zero and that `Storage` is wide enough to hold it.
+// ---------------------------------------------------------------------------
+
+/// Runtime-offset form of `readUnsignedBits`.
+template <typename Storage>
+inline Storage readUnsignedBitsDyn(const uint8_t *bytes, std::size_t bitOffset,
+                                   std::size_t width) {
+  static_assert(std::is_unsigned<Storage>::value,
+                "readUnsignedBitsDyn Storage must be unsigned");
+  Storage result = 0;
+  for (std::size_t i = 0; i < width; ++i) {
+    std::size_t src = bitOffset + i;
+    Storage bit = static_cast<Storage>((bytes[src >> 3] >> (src & 7)) & 1u);
+    result |= static_cast<Storage>(bit << i);
+  }
+  return result;
+}
+
+/// Runtime-offset form of `readSignedBits`.
+template <typename Signed>
+inline Signed readSignedBitsDyn(const uint8_t *bytes, std::size_t bitOffset,
+                                std::size_t width) {
+  static_assert(std::is_signed<Signed>::value,
+                "readSignedBitsDyn Signed must be signed");
+  using Unsigned = typename std::make_unsigned<Signed>::type;
+  Unsigned u = readUnsignedBitsDyn<Unsigned>(bytes, bitOffset, width);
+  if (width < sizeof(Unsigned) * 8) {
+    Unsigned signBit =
+        static_cast<Unsigned>(static_cast<Unsigned>(1) << (width - 1));
+    u = static_cast<Unsigned>((u ^ signBit) - signBit);
+  }
+  return static_cast<Signed>(u);
+}
+
+/// Runtime-offset form of `writeUnsignedBits`.
+template <typename Storage>
+inline void writeUnsignedBitsDyn(uint8_t *bytes, Storage value,
+                                 std::size_t bitOffset, std::size_t width) {
+  static_assert(std::is_unsigned<Storage>::value,
+                "writeUnsignedBitsDyn Storage must be unsigned");
+  for (std::size_t i = 0; i < width; ++i) {
+    std::size_t dst = bitOffset + i;
+    std::size_t shift = dst & 7;
+    uint8_t mask = static_cast<uint8_t>(1u << shift);
+    uint8_t bit = static_cast<uint8_t>((value >> i) & static_cast<Storage>(1));
+    bytes[dst >> 3] =
+        static_cast<uint8_t>((bytes[dst >> 3] & static_cast<uint8_t>(~mask)) |
+                             static_cast<uint8_t>(bit << shift));
+  }
+}
+
+/// Runtime-offset form of `writeSignedBits`.
+template <typename Signed>
+inline void writeSignedBitsDyn(uint8_t *bytes, Signed value,
+                               std::size_t bitOffset, std::size_t width) {
+  static_assert(std::is_signed<Signed>::value,
+                "writeSignedBitsDyn Signed must be signed");
+  using Unsigned = typename std::make_unsigned<Signed>::type;
+  writeUnsignedBitsDyn<Unsigned>(bytes, static_cast<Unsigned>(value), bitOffset,
+                                 width);
+}
+
+/// Runtime-offset form of `copyBitsIn`. `dst` must be zero-initialised on
+/// entry (only `1` bits are set) and hold at least `ceil(width / 8)` bytes.
+inline void copyBitsInDyn(const uint8_t *src, std::size_t srcBitOffset,
+                          uint8_t *dst, std::size_t width) {
+  for (std::size_t i = 0; i < width; ++i) {
+    std::size_t s = srcBitOffset + i;
+    uint8_t bit = static_cast<uint8_t>((src[s >> 3] >> (s & 7)) & 1u);
+    dst[i >> 3] = static_cast<uint8_t>(dst[i >> 3] | (bit << (i & 7)));
+  }
+}
+
+/// Runtime-offset form of `copyBitsOut`. Bits outside the written range in
+/// the affected bytes of `dst` are preserved.
+inline void copyBitsOutDyn(uint8_t *dst, std::size_t dstBitOffset,
+                           const uint8_t *src, std::size_t width) {
+  for (std::size_t i = 0; i < width; ++i) {
+    std::size_t d = dstBitOffset + i;
+    std::size_t shift = d & 7;
+    uint8_t mask = static_cast<uint8_t>(1u << shift);
+    uint8_t bit = static_cast<uint8_t>((src[i >> 3] >> (i & 7)) & 1u);
+    dst[d >> 3] =
+        static_cast<uint8_t>((dst[d >> 3] & static_cast<uint8_t>(~mask)) |
+                             static_cast<uint8_t>(bit << shift));
+  }
+}
+
 } // namespace detail
 } // namespace esi
 
