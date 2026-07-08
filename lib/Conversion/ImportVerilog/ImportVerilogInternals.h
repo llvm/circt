@@ -73,6 +73,15 @@ struct FlattenedIfacePort {
   /// not the underlying interface body variable, so we register both keys in
   /// `valueSymbols` to make the lookup find this port's `BlockArgument`.
   const slang::ast::Symbol *modportPortSym = nullptr;
+  /// For ports connected to an ARRAY of interface instances (`interface
+  /// intr[4]` connected to `interrupt_if IRQ[4]()`), the element index this
+  /// flattened port belongs to. Element ports are NOT registered in the plain
+  /// `valueSymbols` table (slang's canonical-body caching can alias
+  /// `intr[0].irq` and `intr[1].irq` to the same `VariableSymbol`, and a
+  /// last-wins insert would silently mis-resolve); in-body accesses resolve
+  /// through `lookupExpandedInterfaceMember` via the per-element
+  /// `InterfaceLowering` keyed by `ifaceInstance` instead.
+  std::optional<unsigned> elementIdx;
   /// Slot index in the module signature; see `PortLowering::outputIdx`.
   std::optional<unsigned> outputIdx;
   std::optional<unsigned> inputIdx;
@@ -498,6 +507,13 @@ struct Context {
   /// Owning storage for InterfaceLowering objects
   /// because ScopedHashTable stores values by copy.
   SmallVector<std::unique_ptr<InterfaceLowering>> interfaceInstanceStorage;
+  /// Per-element interface lowerings for generic interface ports connected to
+  /// an ARRAY of interface instances, keyed by (interface port symbol,
+  /// element index). Body-level accesses like `intr[K].member` resolve
+  /// through this map when the hierarchical reference path carries the port
+  /// symbol with an index selector (see `lookupExpandedInterfaceMember`).
+  DenseMap<std::pair<const slang::ast::Symbol *, unsigned>, InterfaceLowering *>
+      ifacePortElementLowerings;
 
   /// Module instances already emitted by the predeclaration pass. These are
   /// skipped during the later source-order module-body walk to avoid emitting
