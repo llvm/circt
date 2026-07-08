@@ -1515,6 +1515,24 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
 /// Handle probes of module-level signals: a read of the signal's storage.
 Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
   auto sigResult = dyn_cast<OpResult>(op.getSignal());
+  // A probe of a constant-offset bit-slice of a module-level signal
+  // (`llhd.prb (llhd.sig.extract %sig from K)`) lowers as a read of the
+  // parent signal's storage plus an extract of the slice -- the probe-side
+  // mirror of the slice-drive splice above.
+  llhd::SigExtractOp sliceOp;
+  uint64_t sliceOffset = 0;
+  if (sigResult) {
+    if (auto extract = dyn_cast<llhd::SigExtractOp>(sigResult.getOwner())) {
+      if (auto cst = extract.getLowBit().getDefiningOp<hw::ConstantOp>()) {
+        auto parent = dyn_cast<OpResult>(extract.getInput());
+        if (parent && isa<llhd::SignalOp>(parent.getOwner())) {
+          sliceOp = extract;
+          sliceOffset = cst.getValue().getZExtValue();
+          sigResult = parent;
+        }
+      }
+    }
+  }
   if (!sigResult || !isa<llhd::SignalOp>(sigResult.getOwner())) {
     if (!initial)
       emitError(op.getLoc())
@@ -1527,7 +1545,22 @@ Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
   auto state = module.getAllocatedState(sigResult);
   if (!state)
     return {};
-  return StateReadOp::create(module.getBuilder(phase), op.getLoc(), state);
+  Value read =
+      StateReadOp::create(module.getBuilder(phase), op.getLoc(), state);
+  if (sliceOp) {
+    auto resTy = dyn_cast<IntegerType>(op.getResult().getType());
+    auto curTy =
+        dyn_cast<IntegerType>(cast<StateType>(state.getType()).getType());
+    if (!resTy || !curTy || sliceOffset + resTy.getWidth() > curTy.getWidth()) {
+      emitError(op.getLoc())
+          << "slice probe of a non-integer module-level signal is not "
+             "supported";
+      return {};
+    }
+    read = comb::ExtractOp::create(module.getBuilder(phase), op.getLoc(), read,
+                                   sliceOffset, resTy.getWidth());
+  }
+  return read;
 }
 
 LogicalResult OpLowering::lower(sim::ClockedTerminateOp op) {
