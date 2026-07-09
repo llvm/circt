@@ -31,6 +31,14 @@
 // STDOUT-NOT:  [ArcRuntime] Argument string
 // STDOUT-NOT:  [ArcRuntime] Parsed argument
 
+// STDOUT:      [ArcRuntime] Argument string for instance ID 3: workDir=tmpWorkDir;traceFile=overridden;debug;traceFile=overriding
+// STDOUT-NEXT: [ArcRuntime] Parsed argument(s):
+// STDOUT-NEXT: [ArcRuntime]   debug
+// STDOUT-NEXT: [ArcRuntime]   traceFile = "overriding"
+// STDOUT-NEXT: [ArcRuntime]   workDir = "tmpWorkDir"
+// STDOUT-NEXT: [ArcRuntime] Working directory for instance ID 3: {{.+}}{{/|\\}}tmpWorkDir
+
+
 hw.module @dummy() {
   hw.output
 }
@@ -41,6 +49,8 @@ func.func @main() {
   arc.sim.instantiate @dummy as %model runtime ("debug;=badKey;=;\"=;badVal=x\"\";badVal2=\"\"x;badVal3=\"\\x\";foo;unterm=\"") {
   }
   arc.sim.instantiate @dummy as %model runtime ("foo;truncEscape=\"\\") {
+  }
+  arc.sim.instantiate @dummy as %model runtime ("workDir=tmpWorkDir;traceFile=overridden;debug;traceFile=overriding") {
   }
   return
 }

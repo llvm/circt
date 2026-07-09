@@ -47,13 +47,32 @@ public:
   uint64_t *swapTraceBuffer();
 
 private:
+  // Runtime argument keys
+  /// Enable verbose debug output
+  inline static const std::string kArgKeyDebug = "debug";
+  /// Select FST trace mode
+  inline static const std::string kArgKeyFst = "fst";
+  /// Workdir-relative or absolute path to trace file
+  inline static const std::string kArgKeyTraceFile = "traceFile";
+  /// Select VCD trace mode
+  inline static const std::string kArgKeyVcd = "vcd";
+  /// Instance's working directory. Absolute or relative to process workdir.
+  inline static const std::string kArgKeyWorkDir = "workDir";
+
+  /// Parse and initialize the instance settings from the given argument string.
   void parseArgs(const char *args);
+  /// Get the path to the output trace file. Creates a default file name within
+  /// with the given suffix within working directory if not explicitly set
+  /// by the runtime arguments.
   std::filesystem::path getTraceFilePath(const std::string &suffix);
 
   const uint64_t instanceID;
   const ArcRuntimeModelInfo *const modelInfo;
   const ArcState *const state;
   std::map<std::string, std::optional<std::string>> arguments;
+  /// The path to the instance's working directory. Matches the process
+  /// working directory if not provided by a runtime argument.
+  std::filesystem::path workDir;
   // FST is always in the enum so headers don't depend on build configuration.
   // If FST is selected at runtime but not compiled in, an error is emitted.
   enum class TraceMode { DUMMY, VCD, FST };

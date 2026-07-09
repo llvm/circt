@@ -283,32 +283,17 @@ private:
   }
 
   // Construct the runtime argument string for an instance
-  SmallString<32> buildArgString(unsigned instIdx, StringAttr existingArgs) {
+  SmallString<32> buildArgString(StringAttr existingArgs) {
     SmallString<32> str;
-    if (existingArgs)
-      str.append(existingArgs);
-    // If requested, append the trace file name
+    // If requested, prepend the trace file name
     if (!traceFileName.empty()) {
+      str += "traceFile=";
+      str += quoteAndEscapeRuntimeArgument(traceFileName);
+    }
+    if (existingArgs) {
       if (!str.empty())
         str += ';';
-      str += "traceFile=";
-      // Create a unique per-instance file name by adding a suffix before the
-      // the file extension
-      if (instIdx == 0) {
-        str += quoteAndEscapeRuntimeArgument(traceFileName);
-      } else {
-        SmallString<32> fileNameWithSuffix;
-        auto extension =
-            std::filesystem::path(static_cast<std::string>(traceFileName))
-                .extension()
-                .string();
-        fileNameWithSuffix +=
-            traceFileName.substr(0, traceFileName.size() - extension.size());
-        fileNameWithSuffix += '_';
-        fileNameWithSuffix += std::to_string(instIdx);
-        fileNameWithSuffix += extension;
-        str += quoteAndEscapeRuntimeArgument(fileNameWithSuffix);
-      }
+      str.append(existingArgs);
     }
     // Append extra arguments from pass option
     if (!extraArgs.empty()) {
@@ -649,8 +634,8 @@ void InsertRuntimePass::runOnOperation() {
   for (auto &[_, model] : globalContext->models) {
     // If provided, append extra instance arguments
     if (!extraArgs.empty() || !traceFileName.empty()) {
-      for (auto [idx, instance] : llvm::enumerate(model->instances)) {
-        auto newArgs = buildArgString(idx, instance.getRuntimeArgsAttr());
+      for (auto instance : model->instances) {
+        auto newArgs = buildArgString(instance.getRuntimeArgsAttr());
         auto newArgAttr = StringAttr::get(&getContext(), newArgs);
         instance.setRuntimeArgsAttr(newArgAttr);
       }
