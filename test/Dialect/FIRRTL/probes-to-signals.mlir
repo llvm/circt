@@ -126,11 +126,13 @@ firrtl.circuit "DbgsMemPort" {
 
 // CHECK-LABEL: "ForceableRWProbeExport"
 firrtl.circuit "ForceableRWProbeExport" {
-  // CHECK: @ForceableRWProbeExport(out %p: !firrtl.uint<2>)
+  // CHECK: @ForceableRWProbeExport(out %p: !firrtl.uint<2>, in %p_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>)
   firrtl.module @ForceableRWProbeExport(out %p : !firrtl.rwprobe<uint<2>>) {
-    // CHECK-NEXT: %w = firrtl.wire : !firrtl.uint<2>
-    // CHECK-NEXT: firrtl.matchingconnect %p, %w
-    // CHECK-NEXT: }
+    // CHECK-NEXT: %[[CTRL:.+]] = firrtl.wire : !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>
+    // CHECK-NEXT: %[[FA:.+]] = firrtl.subfield %[[CTRL]][forceActive]
+    // CHECK-NEXT: %[[RA:.+]] = firrtl.subfield %[[CTRL]][releaseActive]
+    // CHECK-NEXT: %[[FV:.+]] = firrtl.subfield %[[CTRL]][forcedValue]
+    // CHECK-NEXT: %[[CLK:.+]] = firrtl.subfield %[[CTRL]][clk]
     %w, %w_f = firrtl.wire forceable : !firrtl.uint<2>, !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %p, %w_f : !firrtl.rwprobe<uint<2>>
   }
@@ -159,11 +161,13 @@ firrtl.circuit "ForceableToRead" {
 
 // CHECK-LABEL: "RWProbeOp"
 firrtl.circuit "RWProbeOp" {
-  // CHECK: @RWProbeOp(out %p: !firrtl.uint<2>)
+  // CHECK: @RWProbeOp(out %p: !firrtl.uint<2>, in %p_force_ctrl: !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>)
   firrtl.module @RWProbeOp(out %p: !firrtl.rwprobe<uint<2>>) {
-    // CHECK-NEXT: %w = firrtl.wire sym @sym
-    // CHECK-NEXT: firrtl.matchingconnect %p, %w
-    // CHECK-NEXT: }
+    // CHECK-NEXT: %[[CTRL:.+]] = firrtl.wire : !firrtl.bundle<forceActive: uint<1>, releaseActive: uint<1>, forcedValue: uint<2>, clk: clock>
+    // CHECK-NEXT: %[[FA:.+]] = firrtl.subfield %[[CTRL]][forceActive]
+    // CHECK-NEXT: %[[RA:.+]] = firrtl.subfield %[[CTRL]][releaseActive]
+    // CHECK-NEXT: %[[FV:.+]] = firrtl.subfield %[[CTRL]][forcedValue]
+    // CHECK-NEXT: %[[CLK:.+]] = firrtl.subfield %[[CTRL]][clk]
     %w = firrtl.wire sym @sym : !firrtl.uint<2>
     %rwprobe = firrtl.ref.rwprobe <@RWProbeOp::@sym> : !firrtl.rwprobe<uint<2>>
     firrtl.ref.define %p, %rwprobe : !firrtl.rwprobe<uint<2>>
