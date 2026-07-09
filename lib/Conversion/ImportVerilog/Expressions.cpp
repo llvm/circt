@@ -291,10 +291,22 @@ struct ExprVisitor {
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
              moore::QueueType, moore::AssocArrayType, moore::StringType,
-             moore::OpenUnpackedArrayType>(derefType)) {
+             moore::OpenUnpackedArrayType, moore::StructType, moore::UnionType>(
+            derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
+    }
+
+    // A packed struct or union is a vector of bits (IEEE 1800-2017 § 7.2.1);
+    // element select into it is a bit select. The `extract_ref` and
+    // `dyn_extract_ref` ops support packed aggregates directly; for rvalues,
+    // convert the aggregate to its simple bit vector equivalent first.
+    if (!isLvalue && isa<moore::StructType, moore::UnionType>(derefType)) {
+      value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
+      derefType = value.getType();
     }
 
     // Associative Arrays are a special case so handle them separately.
@@ -438,6 +450,15 @@ struct ExprVisitor {
 
     if (isa<moore::QueueType>(derefType)) {
       return handleQueueRangeSelectExpressions(expr, type, value);
+    }
+    // Packed structs and unions are bit vectors (IEEE 1800-2017 § 7.2.1); a
+    // range select into them is a part select. The ref-typed extract ops
+    // support packed aggregates directly; convert rvalues to the simple bit
+    // vector equivalent first.
+    if (!isLvalue && isa<moore::StructType, moore::UnionType>(derefType)) {
+      value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
     }
     return handleArrayRangeSelectExpressions(expr, type, value);
   }
