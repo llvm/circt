@@ -229,6 +229,20 @@ function void DisplayAndSeverityBuiltins(int x, real r);
   // CHECK: [[TMP:%.+]] = moore.fmt.real
   // CHECK: moore.builtin.severity warning [[TMP]]
   $warning("%f", r);
+  // A leading non-string literal is a displayed argument, and any string
+  // literal among the arguments acts as a format string, exactly like
+  // `$display` (IEEE 1800-2023 § 20.10).
+  // CHECK: [[VERB:%.+]] = moore.fmt.int
+  // CHECK: [[MSG:%.+]] = moore.fmt.int
+  // CHECK: [[CAT:%.+]] = moore.fmt.concat ([[VERB]], [[MSG]])
+  // CHECK: moore.builtin.severity warning [[CAT]]
+  $warning(1, "%d", x);
+  // CHECK: [[ARG0:%.+]] = moore.fmt.int
+  // CHECK: [[LIT:%.+]] = moore.fmt.literal " x="
+  // CHECK: [[ARG1:%.+]] = moore.fmt.int
+  // CHECK: [[CAT:%.+]] = moore.fmt.concat ([[ARG0]], [[LIT]], [[ARG1]])
+  // CHECK: moore.builtin.severity error [[CAT]]
+  $error(x, " x=", x);
   // CHECK: [[TMP:%.+]] = moore.fmt.literal ""
   // CHECK: moore.builtin.severity error [[TMP]]
   $error;

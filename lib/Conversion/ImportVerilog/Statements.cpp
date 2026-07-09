@@ -1083,8 +1083,12 @@ struct StmtVisitor {
       return context.convertRvalueExpression(
           *args[0], builder.getType<moore::FormatStringType>());
     }
-    // Otherwise this looks invalid. Raise an error.
-    return emitError(loc) << "Failed to convert Display Message!";
+    // Otherwise treat the arguments exactly like `$display` does (IEEE
+    // 1800-2023 Section 20.10: severity tasks display their arguments in the
+    // same way as `$display`). A leading non-string literal, as in
+    // `$warning(1, "fmt", ...)`, is simply a displayed argument; any string
+    // literal among the arguments acts as a format string.
+    return context.convertFormatString(args, loc);
   }
 
   /// Convert a `$readmemb`/`$readmemh` system task call into a
