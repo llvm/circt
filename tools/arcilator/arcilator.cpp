@@ -49,6 +49,7 @@
 #include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/LLVMIR/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/AsmState.h"
@@ -726,6 +727,7 @@ static LogicalResult executeArcilator(MLIRContext &context) {
     mlir::index::IndexDialect,
     mlir::LLVM::LLVMDialect,
     mlir::scf::SCFDialect,
+    mlir::ub::UBDialect,
     om::OMDialect,
     seq::SeqDialect,
     sim::SimDialect,
