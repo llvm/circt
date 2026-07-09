@@ -40,6 +40,7 @@ set(libs
   MLIRParser
   MLIRSCFDialect
   MLIRTargetLLVMIRExport
+  MLIRUBDialect
 )
 
 add_circt_tool(arcilator arcilator.cpp DEPENDS ${libs} ${ARCILATOR_JIT_DEPS})
