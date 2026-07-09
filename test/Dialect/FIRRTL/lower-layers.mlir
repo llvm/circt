@@ -599,21 +599,22 @@ firrtl.circuit "Test" {
   // Test that domain.create operations work within layerblocks.
   //
   // CHECK-LABEL: firrtl.module private @DomainCreateInLayer_A_B(
-  // CHECK-SAME:    in %0: !firrtl.domain<@ClockDomain()>
+  // CHECK-SAME:    in %anonDomain: !firrtl.domain<@ClockDomain()>
   //
   // CHECK-NEXT:    %a = firrtl.wire : !firrtl.domain<@ClockDomain()>
-  // CHECK-NEXT:    firrtl.domain.define %a, %0 : !firrtl.domain<@ClockDomain()>
+  // CHECK-NEXT:    firrtl.domain.define %a, %anonDomain : !firrtl.domain<@ClockDomain()>
   //
   // CHECK-LABEL: firrtl.module private @DomainCreateInLayer_A(
-  // CHECK-SAME:    out %myDomain: !firrtl.domain<@ClockDomain()>
+  // CHECK-SAME:    out %anonDomain: !firrtl.domain<@ClockDomain()>
   //
   // CHECK-NEXT:    %[[DOM:.+]] = firrtl.domain.create
-  // CHECK-NEXT:    firrtl.instance a_b {{.*}} @DomainCreateInLayer_A_B(in %0: !firrtl.domain<@ClockDomain()>)
-  // CHECK-NEXT:    firrtl.domain.define %a_b_0, %[[DOM]] : !firrtl.domain<@ClockDomain()>
+  // CHECK-NEXT:    firrtl.domain.define %anonDomain, %[[DOM]] : !firrtl.domain<@ClockDomain()>
   //
   // CHECK-LABEL: firrtl.module @DomainCreateInLayer(
   //
-  // CHECK-NEXT:    %a_myDomain = firrtl.instance a {{.*}} @DomainCreateInLayer_A(out myDomain: !firrtl.domain<@ClockDomain()>)
+  // CHECK-NEXT:    %a_b_anonDomain = firrtl.instance a_b {{.*}} @DomainCreateInLayer_A_B(in anonDomain: !firrtl.domain<@ClockDomain()>)
+  // CHECK-NEXT:    %a_anonDomain = firrtl.instance a {{.*}} @DomainCreateInLayer_A(out anonDomain: !firrtl.domain<@ClockDomain()>)
+  // CHECK-NEXT:    firrtl.domain.define %a_b_anonDomain, %a_anonDomain : !firrtl.domain<@ClockDomain()>
   firrtl.module @DomainCreateInLayer() {
     firrtl.layerblock @A {
       %0 = firrtl.domain.create : !firrtl.domain<@ClockDomain()>
