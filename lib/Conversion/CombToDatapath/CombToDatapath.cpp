@@ -108,8 +108,7 @@ void ConvertCombToDatapathPass::runOnOperation() {
       return true;
 
     if (op.getNumOperands() == 3) {
-      if (auto constOp = dyn_cast_or_null<hw::ConstantOp>(
-              op.getOperand(2).getDefiningOp()))
+      if (auto constOp = op.getOperand(2).getDefiningOp<hw::ConstantOp>())
         return constOp.getValue().isOne();
     }
     return false;

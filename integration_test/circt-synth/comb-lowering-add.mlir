@@ -31,3 +31,18 @@ hw.module @add_brent_kung(in %arg0: i4, in %arg1: i4, in %arg2: i4,  out add: i4
   hw.output %0 : i4
 }
 
+// RUN: circt-lec.sh %t.mlir %s -c1=add_ripple_carry_with_carry -c2=add_ripple_carry_with_carry
+hw.module @add_ripple_carry_with_carry(in %arg0: i4, in %arg1: i4, out add: i4) {
+  %c1_i4 = hw.constant 1 : i4
+  %0 = comb.add %arg0, %arg1, %c1_i4 {synth.test.arch = "RIPPLE-CARRY"} : i4
+  hw.output %0 : i4
+}
+
+// RUN: circt-lec.sh %t.mlir %s -c1=add_kogge_stone_with_carry -c2=add_kogge_stone_with_carry
+hw.module @add_kogge_stone_with_carry(in %arg0: i4, in %arg1: i4, in %arg2: i4,  out add: i4) {
+  %c1_i4 = hw.constant 1 : i4
+  %0 = comb.add %arg0, %arg1, %c1_i4 {synth.test.arch = "KOGGE-STONE"} : i4
+  hw.output %0 : i4
+}
+
+
