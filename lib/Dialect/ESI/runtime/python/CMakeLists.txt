@@ -13,6 +13,10 @@ set(ESIPythonRuntimeSources
   esiaccel/esitester.py
   esiaccel/types.py
   esiaccel/utils.py
+
+  esiaccel/components/__init__.py
+  esiaccel/components/channel_arbiter.py
+
   esiaccel/cosim/questa.py
   esiaccel/cosim/pytest.py
   esiaccel/cosim/simulator.py
