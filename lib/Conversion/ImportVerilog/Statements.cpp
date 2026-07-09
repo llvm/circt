@@ -8,6 +8,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/Moore/MooreTypes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Diagnostics.h"
@@ -74,6 +75,63 @@ static std::array<Value, 4> getDefaultTimeFormatValues(OpBuilder &builder,
   return {unit, precision, suffix, minWidth};
 }
 
+// Get the runtime size of a dynamically-sized array at the given level of a
+// foreach loop.
+static FailureOr<Value>
+getRuntimeSizeAtLevel(Context &context, Location loc,
+                      const slang::ast::ForeachLoopStatement &stmt,
+                      uint32_t level, const moore::IntType &idxType) {
+  auto &builder = context.builder;
+  const auto &loopDim = stmt.loopDims[level];
+
+  // Get array at the current level
+  Value array = context.convertRvalueExpression(stmt.arrayRef);
+  for (uint32_t i = 0; i < level; ++i) {
+    const auto &dim = stmt.loopDims[i];
+    const auto &loopVar = dim.loopVar;
+    if (!dim.loopVar)
+      mlir::emitError(loc, "unsupported foreach with missing loop variable");
+
+    auto nestedType =
+        llvm::TypeSwitch<Type, Type>(array.getType())
+            .Case<moore::OpenUnpackedArrayType, moore::UnpackedArrayType,
+                  moore::ArrayType, moore::OpenArrayType, moore::QueueType,
+                  moore::AssocArrayType>(
+                [](auto ty) { return ty.getElementType(); })
+            .Default([](Type) { return Type(); });
+
+    auto curIdx = moore::ReadOp::create(builder, loc,
+                                        context.valueSymbols.lookup(loopVar));
+    if (dim.range.has_value()) {
+      Value offset = getSelectIndex(context, loc, curIdx, dim.range.value());
+      array =
+          moore::DynExtractOp::create(builder, loc, nestedType, array, offset);
+    } else {
+      array =
+          moore::DynExtractOp::create(builder, loc, nestedType, array, curIdx);
+    }
+  }
+
+  Value size;
+  if (loopDim.loopVar->arrayType.isQueue()) {
+    size = moore::QueueSizeBIOp::create(builder, loc, array);
+  } else if (loopDim.loopVar->arrayType.getCanonicalType().kind ==
+             slang::ast::SymbolKind::DynamicArrayType) {
+    size = moore::OpenUArraySizeOp::create(builder, loc, array);
+  } else {
+    // TODO: Associative arrays cannot be iterated on using an induction
+    // variable. Supporting them requires rewriting `recursiveForeach` to use
+    // the correct iterator type. For now, we just emit an error.
+    mlir::emitError(loc, "unsupported foreach loop on type: ")
+        << loopDim.loopVar->arrayType.toString();
+    return failure();
+  }
+
+  auto one = moore::ConstantOp::create(builder, loc, idxType, 1);
+  auto sizeMinusOne = moore::SubOp::create(builder, loc, size, one).getResult();
+  return sizeMinusOne;
+}
+
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
 struct StmtVisitor {
@@ -96,10 +154,8 @@ struct StmtVisitor {
 
   LogicalResult recursiveForeach(const slang::ast::ForeachLoopStatement &stmt,
                                  uint32_t level) {
-    // find current dimension we are operate.
+    // find current dimension we are operating on.
     const auto &loopDim = stmt.loopDims[level];
-    if (!loopDim.range.has_value())
-      return mlir::emitError(loc) << "dynamic loop variable is unsupported";
     auto &exitBlock = createBlock();
     auto &stepBlock = createBlock();
     auto &bodyBlock = createBlock();
@@ -109,17 +165,23 @@ struct StmtVisitor {
     context.loopStack.push_back({&stepBlock, &exitBlock});
     llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
+    // Get the loop variable's type
     const auto &iter = loopDim.loopVar;
-    auto type = context.convertType(*iter->getDeclaredType());
-    if (!type)
+    auto idxType = context.convertType(*iter->getDeclaredType());
+    if (!idxType)
       return failure();
+    auto intIdxType = cast<moore::IntType>(idxType);
 
-    Value initial = moore::ConstantOp::create(
-        builder, loc, cast<moore::IntType>(type), loopDim.range->lower());
+    // Get the loop's lower bound
+    Value initial =
+        loopDim.range.has_value()
+            ? moore::ConstantOp::create(builder, loc, intIdxType,
+                                        loopDim.range->lower())
+            : moore::ConstantOp::create(builder, loc, intIdxType, 0);
 
-    // Create loop varirable in this dimension
+    // Create loop variable in this dimension
     Value varOp = moore::VariableOp::create(
-        builder, loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+        builder, loc, moore::RefType::get(cast<moore::UnpackedType>(idxType)),
         builder.getStringAttr(iter->name), initial);
     context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
                                          iter, varOp);
@@ -128,8 +190,14 @@ struct StmtVisitor {
     builder.setInsertionPointToEnd(&checkBlock);
 
     // When the loop variable is greater than the upper bound, goto exit
-    auto upperBound = moore::ConstantOp::create(
-        builder, loc, cast<moore::IntType>(type), loopDim.range->upper());
+    auto upperBound =
+        loopDim.range.has_value()
+            ? moore::ConstantOp::create(builder, loc, intIdxType,
+                                        loopDim.range->upper())
+            : getRuntimeSizeAtLevel(context, loc, stmt, level, intIdxType)
+                  .value_or(Value());
+    if (!upperBound)
+      return failure();
 
     auto var = moore::ReadOp::create(builder, loc, varOp);
     Value cond = moore::SleOp::create(builder, loc, var, upperBound);
@@ -169,8 +237,7 @@ struct StmtVisitor {
 
     // add one to loop variable
     var = moore::ReadOp::create(builder, loc, varOp);
-    auto one =
-        moore::ConstantOp::create(builder, loc, cast<moore::IntType>(type), 1);
+    auto one = moore::ConstantOp::create(builder, loc, intIdxType, 1);
     auto postValue = moore::AddOp::create(builder, loc, var, one).getResult();
     moore::BlockingAssignOp::create(builder, loc, varOp, postValue);
     cf::BranchOp::create(builder, loc, &checkBlock);
