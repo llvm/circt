@@ -77,6 +77,42 @@ moore.module @Nested() {
   moore.output
 }
 
+// Delayed assignment variants keep their delay on every slice
+// (`{a, b} <= #1 c;` and `assign #1 {a, b} = c;`).
+// CHECK-LABEL: moore.module @DelayedConcatDst()
+moore.module @DelayedConcatDst() {
+  %a = moore.variable : <l7>
+  %b = moore.variable : <l1>
+  %c = moore.variable : <l8>
+  %d = moore.variable : <l8>
+  // CHECK: [[T0:%.+]] = moore.constant_time 2000000 fs
+  %t0 = moore.constant_time 2000000 fs
+  // CHECK-NOT: moore.concat_ref
+  %2 = moore.concat_ref %a, %b : (!moore.ref<l7>, !moore.ref<l1>) -> <l8>
+  // CHECK: %[[D_READ:.+]] = moore.read %d : <l8>
+  %3 = moore.read %d : <l8>
+  // CHECK: %[[SL1:.+]] = moore.extract %[[D_READ]] from 1 : l8 -> l7
+  // CHECK: moore.delayed_assign %a, %[[SL1]], [[T0]] : l7
+  // CHECK: %[[SL2:.+]] = moore.extract %[[D_READ]] from 0 : l8 -> l1
+  // CHECK: moore.delayed_assign %b, %[[SL2]], [[T0]] : l1
+  moore.delayed_assign %2, %3, %t0 : l8
+  moore.procedure always {
+    // CHECK: [[T1:%.+]] = moore.constant_time 1000000 fs
+    %t = moore.constant_time 1000000 fs
+    // CHECK-NOT: moore.concat_ref
+    %0 = moore.concat_ref %a, %b : (!moore.ref<l7>, !moore.ref<l1>) -> <l8>
+    // CHECK: %[[C_READ:.+]] = moore.read %c : <l8>
+    %1 = moore.read %c : <l8>
+    // CHECK: %[[TMP1:.+]] = moore.extract %[[C_READ]] from 1 : l8 -> l7
+    // CHECK: moore.delayed_nonblocking_assign %a, %[[TMP1]], [[T1]] : l7
+    // CHECK: %[[TMP2:.+]] = moore.extract %[[C_READ]] from 0 : l8 -> l1
+    // CHECK: moore.delayed_nonblocking_assign %b, %[[TMP2]], [[T1]] : l1
+    moore.delayed_nonblocking_assign %0, %1, %t : l8
+    moore.return
+  }
+  moore.output
+}
+
 // CHECK-LABEL: moore.module @QueueRefs()
 moore.module @QueueRefs() {
   %q = moore.variable : <queue<i32, 5>>
