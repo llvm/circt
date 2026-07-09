@@ -101,9 +101,18 @@ void ConvertCombToDatapathPass::runOnOperation() {
   target.addLegalDialect<datapath::DatapathDialect, comb::CombDialect,
                          hw::HWDialect>();
 
-  // Permit 2-input adders (carry-propagate adders)
-  target.addDynamicallyLegalOp<comb::AddOp>(
-      [](comb::AddOp op) { return op.getNumOperands() <= 2; });
+  // Permit 2-input adders and 3-input adds with a constant-1 carry-in operand
+  // (carry-propagate adders).
+  target.addDynamicallyLegalOp<comb::AddOp>([](comb::AddOp op) {
+    if (op.getNumOperands() <= 2)
+      return true;
+
+    if (op.getNumOperands() == 3) {
+      if (auto constOp = op.getOperand(2).getDefiningOp<hw::ConstantOp>())
+        return constOp.getValue().isOne();
+    }
+    return false;
+  });
   // TODO: determine lowering of multi-input multipliers
   target.addDynamicallyLegalOp<comb::MulOp>(
       [](comb::MulOp op) { return op.getNumOperands() > 2; });
