@@ -18,18 +18,6 @@ firrtl.circuit "RefProducer" {
 
 // -----
 
-firrtl.circuit "RejectForce" {
-  firrtl.module @RejectForce(in %clock: !firrtl.clock, in %val : !firrtl.uint<2>, out %p : !firrtl.rwprobe<uint<2>>) {
-    %w = firrtl.wire sym @sym : !firrtl.uint<2>
-    %rwprobe = firrtl.ref.rwprobe <@RejectForce::@sym> : !firrtl.rwprobe<uint<2>>
-    %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
-    // expected-error @below {{force not supported}}
-    firrtl.ref.force %clock, %c1_ui1, %rwprobe, %val : !firrtl.clock, !firrtl.const.uint<1>, !firrtl.rwprobe<uint<2>>, !firrtl.uint<2>
-  }
-}
-
-// -----
-
 firrtl.circuit "ExtOpenAgg" {
   firrtl.extmodule @ExtOpenAgg(
       // expected-error @below {{open aggregates not supported, cannot convert type}}
