@@ -15,6 +15,7 @@
 
 #include "circt/Dialect/Comb/CombDialect.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/HW/HWOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -47,6 +48,10 @@ using llvm::KnownBits;
 /// guaranteed to always be one (these must be exclusive!).  A bit that exists
 /// in neither set is unknown.
 KnownBits computeKnownBits(Value value);
+
+/// Return true when both operands are wider than 16 bits and should use Booth
+/// encoding.
+bool boothEncode(Value lhs, Value rhs);
 
 /// Create the ops to zero-extend a value to an integer of equal or larger type.
 Value createZExt(OpBuilder &builder, Location loc, Value value,
@@ -111,6 +116,38 @@ bool foldMuxChainWithComparison(
     llvm::function_ref<MuxChainWithComparisonFoldingStyle(size_t indexWidth,
                                                           size_t numEntries)>
         styleFn);
+
+// Check if the operand is zext() and return the unextended operand:
+// zext = comb.concat(0, baseValue)
+template <typename SubType>
+struct ZextMatcher {
+  SubType lhs;
+  ZextMatcher(SubType lhs) : lhs(std::move(lhs)) {}
+  bool match(Operation *op) {
+    // Check if operand is a concat operation
+    auto concatOp = dyn_cast<ConcatOp>(op);
+    if (!concatOp)
+      return false;
+
+    auto operands = concatOp.getOperands();
+    // ConcatOp must have exactly 2 operands: (0, base_value)
+    if (operands.size() != 2)
+      return false;
+
+    auto constOp = operands[0].getDefiningOp<hw::ConstantOp>();
+    if (!constOp || !constOp.getValue().isZero())
+      return false;
+
+    // Match the base unextended value against the sub-matcher
+    return mlir::detail::matchOperandOrValueAtIndex(op, 1, lhs);
+  }
+};
+
+/// Helper function to create a zero extension matcher
+template <typename SubType>
+static inline ZextMatcher<SubType> m_Zext(const SubType &subExpr) {
+  return ZextMatcher<SubType>(subExpr);
+}
 
 // Check if the operand is sext() and return the unextended operand:
 // signBit = comb.extract(baseValue, width-1, 1)

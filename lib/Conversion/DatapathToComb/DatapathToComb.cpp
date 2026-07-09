@@ -140,7 +140,7 @@ struct DatapathPartialProductOpConversion : OpRewritePattern<PartialProductOp> {
 
     // Use result rows as a heuristic to guide partial product
     // implementation
-    if (op.getNumResults() > 16 || forceBooth)
+    if (comb::boothEncode(a, b) || forceBooth)
       return lowerBoothArray(rewriter, a, b, op, width);
     else
       return lowerAndArray(rewriter, a, b, op, width);

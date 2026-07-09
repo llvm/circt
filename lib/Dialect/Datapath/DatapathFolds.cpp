@@ -469,6 +469,10 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
   // negations with constant corrections that can be folded together.
   LogicalResult matchAndRewrite(PartialProductOp op,
                                 PatternRewriter &rewriter) const override {
+    // Booth encoding will automatically handle signed multiplications
+    if (comb::boothEncode(op.getOperand(0), op.getOperand(1)))
+      return failure();
+    
     auto inputWidth = op.getOperand(0).getType().getIntOrFloatBitWidth();
     Value lhs;
     Value rhs;
