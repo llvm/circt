@@ -979,12 +979,6 @@ class CppTypeEmitter:
       return False
     return wrapped.bit_width > 64
 
-  def _type_byte_width(self, wrapped: types.ESIType) -> int:
-    """Return the size of a fixed-width type in bytes."""
-    if wrapped.bit_width < 0:
-      raise ValueError(f"Unsupported unbounded type width for '{wrapped}'")
-    return (wrapped.bit_width + 7) // 8
-
   def _array_base_and_dims(
       self, array_type: types.ArrayType) -> Tuple[str, List[int]]:
     """Return the base C++ type and outer-to-inner dimensions of a nested array."""
@@ -1148,33 +1142,42 @@ class CppTypeEmitter:
                    for name, field_type in into_type.fields
                    if name != list_field_name]
 
+    # Frame fields are kept in declared (MSB-first) order and laid out
+    # MSB-aligned within the frame/union bit width, matching how CIRCT
+    # lowers the frame union (content packed from the most-significant bit
+    # down, with any slack as low-end padding). Widths are exact bit widths
+    # -- no per-field byte rounding -- so sub-byte count/static fields land
+    # at the same offsets the hardware uses.
     header_fields = []
-    header_bytes = 0
+    header_bits = 0
     count_field_name = f"{list_field_name}_count"
     count_width = header_field.bulk_count_width
     count_cpp = self._storage_type(count_width, signed=False)
-    count_bytes = (count_width + 7) // 8
-    for field in reversed(header_frame.fields):
+    for field in header_frame.fields:
       if field.name == list_field_name:
         header_fields.append((count_field_name, None))
-        header_bytes += count_bytes
+        header_bits += count_width
       else:
         field_type = field_map[field.name]
         header_fields.append((field.name, field_type))
-        header_bytes += self._type_byte_width(field_type)
+        header_bits += field_type.bit_width
 
     data_fields = []
-    data_bytes = 0
-    for field in reversed(data_frame.fields):
+    data_bits = 0
+    for field in data_frame.fields:
       if field.name == list_field_name:
         data_fields.append((list_field_name, list_type.element_type))
-        data_bytes += self._type_byte_width(list_type.element_type)
+        data_bits += list_type.element_type.bit_width
       else:
         field_type = field_map[field.name]
         data_fields.append((field.name, field_type))
-        data_bytes += self._type_byte_width(field_type)
+        data_bits += field_type.bit_width
 
-    frame_bytes = max(header_bytes, data_bytes)
+    # The frame/union width is the wider of the two variants' content. The
+    # byte-array storage rounds that up to whole bytes (any extra high bits
+    # stay zero); both frames share it so `sizeof(header) == sizeof(data)`.
+    frame_bits = max(header_bits, data_bits)
+    frame_bytes = (frame_bits + 7) // 8
 
     return {
         "ctor_params": ctor_params,
@@ -1182,11 +1185,10 @@ class CppTypeEmitter:
         "count_field_name": count_field_name,
         "count_width": count_width,
         "data_fields": data_fields,
-        "data_pad_bytes": frame_bytes - data_bytes,
         "element_cpp": self._cpp_type(list_type.element_type),
+        "frame_bits": frame_bits,
         "frame_bytes": frame_bytes,
         "header_fields": header_fields,
-        "header_pad_bytes": frame_bytes - header_bytes,
         "list_field_name": list_field_name,
         "window_name": self.type_id_map[window_type],
     }
@@ -1710,26 +1712,43 @@ class CppTypeEmitter:
     w.line()
 
   def _compute_window_frame_layout(
-      self, fields: List[Tuple[str, Optional[types.ESIType]]], pad_bytes: int,
+      self, fields: List[Tuple[str, Optional[types.ESIType]]], frame_bits: int,
       count_type_synth: types.ESIType
   ) -> List[Tuple[str, types.ESIType, int, int]]:
-    """Compute (name, type, byte_offset, bit_width) for each window frame field.
+    """Compute (name, type, bit_offset, bit_width) for each window frame field.
 
-    Fields are listed in C++ declaration order. They start after `pad_bytes`
-    bytes of padding and each field consumes `ceil(bit_width/8)` bytes —
-    matching what the `#pragma pack(1)` layout produced.
+    Fields are listed in declared (MSB-first) order and laid out MSB-aligned
+    within `frame_bits`, matching how CIRCT lowers the serial-window frame
+    union: the first field occupies the highest bits, each subsequent field
+    sits immediately below it with no inter-field padding, and any slack
+    (`frame_bits - content_bits`) is left as zero padding at the LSB end.
+    The returned `bit_offset` is the field's LSB position within the frame's
+    little-endian `_bytes` array, ready to hand straight to
+    `_emit_field_accessor`.
 
     The sentinel `(name, None)` count field is materialised as
     `count_type_synth` so it can flow through the standard
     `_emit_field_accessor` path.
+
+    Raises `ValueError` if a field is unbounded (`bit_width < 0`) or if the
+    accumulated content overflows `frame_bits` -- either would produce bogus
+    offsets, so fail fast rather than emit silently-wrong accessors.
     """
     layout = []
-    byte_offset = pad_bytes
+    bit_top = frame_bits
     for name, ftype in fields:
       actual_type = count_type_synth if ftype is None else ftype
       bit_width = actual_type.bit_width
-      layout.append((name, actual_type, byte_offset, bit_width))
-      byte_offset += (bit_width + 7) // 8
+      if bit_width < 0:
+        raise ValueError(
+            f"window frame field '{name}' has an unbounded width; window "
+            f"codegen requires every frame field to be fixed-width")
+      bit_top -= bit_width
+      if bit_top < 0:
+        raise ValueError(
+            f"window frame field '{name}' overflows the {frame_bits}-bit frame "
+            f"(content is wider than the frame width)")
+      layout.append((name, actual_type, bit_top, bit_width))
     return layout
 
   def _emit_window_frame(
@@ -1746,9 +1765,9 @@ class CppTypeEmitter:
       w.line(f"std::array<uint8_t, {frame_bytes}> _bytes{{}};")
       w.line()
       w.access("public:")
-      for name, ftype, byte_offset, bit_width in layout:
+      for name, ftype, bit_offset, bit_width in layout:
         self._emit_field_accessor(w, "_bytes", frame_name, name, ftype,
-                                  byte_offset * 8, bit_width)
+                                  bit_offset, bit_width)
         w.line()
     self._emit_size_assert(w, frame_name, frame_bytes)
 
@@ -1783,10 +1802,10 @@ class CppTypeEmitter:
     count_type_synth = types.UIntType(f"_count_ui{info['count_width']}",
                                       info["count_width"])
     data_layout = self._compute_window_frame_layout(info["data_fields"],
-                                                    info["data_pad_bytes"],
+                                                    info["frame_bits"],
                                                     count_type_synth)
     header_layout = self._compute_window_frame_layout(info["header_fields"],
-                                                      info["header_pad_bytes"],
+                                                      info["frame_bits"],
                                                       count_type_synth)
 
     # Largest list length encodable in a single burst's count field. Lists

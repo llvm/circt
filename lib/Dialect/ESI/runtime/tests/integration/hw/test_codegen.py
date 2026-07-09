@@ -984,6 +984,100 @@ class ChannelMultiBurstListWrite(Module):
             lambda _: final_match.as_bits(1).pad_or_truncate(64).as_bits(64)))
 
 
+# Narrow (sub-byte) bulk count with a static header field. The 2-bit count caps
+# each burst at 3 items, so the host serializer splits a 7-element list into
+# three bursts (3 + 3 + 1). Unlike `ChannelMultiBurstListWrite` (8-bit,
+# byte-aligned count where every frame fills whole bytes), the header frame
+# here is `{tag: ui16, items_count: ui2}` -- 18 bits of content that does NOT
+# fill the 32-bit data frame. CIRCT lowers the frame union MSB-first, so on the
+# wire `tag` occupies bits [31:16] and the 2-bit count sits at bits [15:14].
+# The C++ facade codegen must place them at exactly those offsets; the old
+# byte-granular layout put the count in the low bits and the HW would read a
+# garbage (zero) count and stall. This probe therefore exercises the sub-byte /
+# misaligned-static-field frame layout end-to-end.
+_NARROW_TAG = 0xBEEF
+_NARROW_ITEMS = [0x1000 + i for i in range(7)]
+_NARROW_BULK_WIDTH = 2
+_NARROW_ITEMS_PER_FRAME = 1
+_narrow_struct = StructType([("tag", Bits(16)), ("items", List(Bits(32)))])
+_narrow_window = Window.serial_of(_narrow_struct, _NARROW_BULK_WIDTH,
+                                  _NARROW_ITEMS_PER_FRAME)
+
+
+class ChannelNarrowCountListWrite(Module):
+  """From-host ``window<{tag, list<ui32>}>`` with a 2-bit bulk count.
+
+  The 2-bit count caps each burst at 3 items, so the host splits the 7-element
+  list into three bursts (3 + 3 + 1). Because the header content (ui16 tag +
+  2-bit count = 18 bits) is narrower than the 32-bit data frame, this is the
+  sub-byte / misaligned-static-field frame layout the byte-granular codegen got
+  wrong. Hardware reassembles the bursts via `ListWindowToParallel`, checks the
+  tag and every item, and latches the result into the ``match`` MMIO region.
+  """
+
+  clk = Clock()
+  rst = Reset()
+
+  @generator
+  def construct(ports):
+    clk = ports.clk
+    rst = ports.rst
+
+    chan = esi.ChannelService.from_host(AppID("data"), _narrow_window)
+    s2p = ListWindowToParallel(_narrow_window)(clk=clk, rst=rst, serial_in=chan)
+    par_ready = Wire(Bits(1))
+    par_window, par_valid = s2p.parallel_out.unwrap(par_ready)
+    par_struct = par_window.unwrap()
+    par_ready.assign(Bits(1)(1))
+
+    handshake = par_valid
+    last_bit = par_struct["last"].as_bits(1)
+
+    # Counter cycles 0..N-1 over the reassembled list, clears on the burst-end
+    # beat. Each item is checked against the expected pattern by index.
+    n_items = len(_NARROW_ITEMS)
+    idx_clr = (handshake & last_bit).as_bits(1)
+    idx_counter = Counter(3)(clk=clk,
+                             rst=rst,
+                             clear=idx_clr,
+                             increment=handshake,
+                             instance_name="narrow_write_idx")
+    idx = idx_counter.out
+
+    expected_bits = Array(Bits(32), n_items)(_NARROW_ITEMS)[idx.as_bits()]
+    tag_ok = (par_struct["tag"].as_bits(16) == Bits(16)(_NARROW_TAG))
+    item_ok = (par_struct["items"].as_bits(32) == expected_bits)
+    beat_ok = (tag_ok & item_ok).as_bits(1)
+
+    # Running AND-reduce across the whole (reassembled) list; latches into
+    # ``final_match`` on the last item's beat.
+    running_match = Wire(Bits(1))
+    running_match_reg = Reg(Bits(1),
+                            clk=clk,
+                            rst=rst,
+                            rst_value=1,
+                            ce=handshake,
+                            name="narrow_match_running")
+    running_match.assign((running_match_reg & beat_ok).as_bits(1))
+    running_match_reg.assign(running_match)
+
+    final_match = Reg(Bits(1),
+                      clk=clk,
+                      rst=rst,
+                      rst_value=0,
+                      ce=idx_clr,
+                      name="narrow_match_final")
+    final_match.assign(running_match)
+
+    # Expose the latched flag via MMIO read.
+    mmio_bundle = esi.MMIO.read(appid=AppID("match"))
+    resp_chan = Wire(Channel(Bits(64)))
+    addr_chan = mmio_bundle.unpack(data=resp_chan)["offset"]
+    resp_chan.assign(
+        addr_chan.transform(
+            lambda _: final_match.as_bits(1).pad_or_truncate(64).as_bits(64)))
+
+
 class Top(Module):
   clk = Clock()
   rst = Reset()
@@ -1052,6 +1146,10 @@ class Top(Module):
         clk=ports.clk,
         rst=ports.rst,
         appid=AppID("channel_multiburst_list_write_inst"))
+    ChannelNarrowCountListWrite(
+        clk=ports.clk,
+        rst=ports.rst,
+        appid=AppID("channel_narrow_count_list_write_inst"))
     CallbackWindowedList(clk=ports.clk,
                          rst=ports.rst,
                          appid=AppID("callback_windowed_list_inst"))
