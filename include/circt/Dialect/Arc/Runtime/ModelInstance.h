@@ -61,9 +61,9 @@ private:
 
   /// Parse and initialize the instance settings from the given argument string.
   void parseArgs(const char *args);
-  /// Get the path to the output trace file. Creates a default file name within
-  /// with the given suffix within working directory if not explicitly set
-  /// by the runtime arguments.
+  /// Get the path to the output trace file. Creates a default file name with
+  /// the given suffix within the working directory if not explicitly set by the
+  /// runtime arguments.
   std::filesystem::path getTraceFilePath(const std::string &suffix);
 
   const uint64_t instanceID;
