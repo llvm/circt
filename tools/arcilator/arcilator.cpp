@@ -280,6 +280,11 @@ static llvm::cl::opt<std::string> jitVcdFile(
         "Create a VCD trace for JIT runs and output it to the specified file"),
     llvm::cl::init(""), llvm::cl::cat(mainCategory));
 
+static llvm::cl::opt<std::string> jitObjectFile(
+    "jit-object-file",
+    llvm::cl::desc("Write the JIT-compiled object code to the specified file"),
+    llvm::cl::init(""), llvm::cl::cat(mainCategory));
+
 #ifdef CIRCT_LIBFST_ENABLED
 static llvm::cl::opt<std::string> jitFstFile(
     "jit-fst-file",
@@ -539,6 +544,8 @@ static LogicalResult processBuffer(
             /*targetMachine=*/nullptr);
     engineOptions.transformer = transformer;
     engineOptions.sharedLibPaths = sharedLibraries;
+    if (!jitObjectFile.empty())
+      engineOptions.enableObjectDump = true;
 
     auto tsCompile = tsJit.nest("Compile");
     auto executionEngine =
@@ -554,6 +561,9 @@ static LogicalResult processBuffer(
 
     if (!noJitRuntime)
       bindArcRuntimeSymbols(**executionEngine);
+
+    if (!jitObjectFile.empty())
+      (*executionEngine)->dumpToObjectFile(jitObjectFile);
 
     auto expectedFunc = (*executionEngine)->lookupPacked(jitEntryPoint);
     if (!expectedFunc) {
