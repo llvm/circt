@@ -1856,6 +1856,39 @@ struct NegOpConversion : public OpConversionPattern<NegOp> {
   }
 };
 
+struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(Clog2BIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Value input = adaptor.getValue();
+    auto intType = dyn_cast<IntegerType>(input.getType());
+    if (!intType || intType.getWidth() == 0)
+      return failure();
+    unsigned width = intType.getWidth();
+
+    // $clog2(x) is the index of the highest set bit of (x - 1) plus one, and
+    // 0 for x <= 1 ($clog2(0) is defined as 0; IEEE 1800-2017 § 20.8.1).
+    // Priority-encode (x - 1) with a mux chain from LSB to MSB.
+    Value one = hw::ConstantOp::create(rewriter, loc, intType, 1);
+    Value zero = hw::ConstantOp::create(rewriter, loc, intType, 0);
+    Value xm1 = comb::SubOp::create(rewriter, loc, input, one);
+    Value result = zero;
+    for (unsigned i = 0; i < width; ++i) {
+      Value bit = comb::ExtractOp::create(rewriter, loc, xm1, i, 1);
+      Value count = hw::ConstantOp::create(rewriter, loc, intType, i + 1);
+      result = comb::MuxOp::create(rewriter, loc, bit, count, result, false);
+    }
+    // (0 - 1) is all-ones and would priority-encode to `width`; force the
+    // defined result 0 for a zero input.
+    Value isZero = comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq,
+                                        input, zero);
+    rewriter.replaceOpWithNewOp<comb::MuxOp>(op, isZero, zero, result, false);
+    return success();
+  }
+};
+
 struct NegRealOpConversion : public OpConversionPattern<NegRealOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -3863,6 +3896,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     BoolCastOpConversion,
     NotOpConversion,
     NegOpConversion,
+    Clog2BIOpConversion,
 
     // Patterns of binary operations.
     BinaryOpConversion<AddOp, comb::AddOp>,
