@@ -634,7 +634,7 @@ LogicalResult LowerLayersPass::runOnModuleBody(FModuleOp moduleOp,
                     op.getPortDomain(cast<OpResult>(value).getResultNumber());
                 return success();
               })
-              .Case<DomainCreateAnonOp>([&](auto op) {
+              .Case<DomainCreateAnonOp, DomainCreateOp>([&](auto op) {
                 domain = op.getDomainAttr();
                 return success();
               })
