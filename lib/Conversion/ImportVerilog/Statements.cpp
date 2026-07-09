@@ -493,6 +493,15 @@ struct StmtVisitor {
     if (!caseExpr)
       return failure();
 
+    // Packed aggregates compare as their vector-of-bits equivalent (IEEE
+    // 1800-2017 § 7.2.1); the case comparison ops require simple bit
+    // vectors.
+    if (isa<moore::StructType, moore::UnionType>(caseExpr.getType())) {
+      caseExpr = context.convertToSimpleBitVector(caseExpr);
+      if (!caseExpr)
+        return failure();
+    }
+
     // Check each case individually. This currently ignores the `unique`,
     // `unique0`, and `priority` modifiers which would allow for additional
     // optimizations.
@@ -524,6 +533,13 @@ struct StmtVisitor {
           if (!value)
             return failure();
           itemLoc = value.getLoc();
+
+          // Packed aggregate items compare as bit vectors as well.
+          if (isa<moore::StructType, moore::UnionType>(value.getType())) {
+            value = context.convertToSimpleBitVector(value);
+            if (!value)
+              return failure();
+          }
 
           // Take note if the expression is a constant.
           auto maybeConst = value;
