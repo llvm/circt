@@ -2404,6 +2404,37 @@ struct PowSOpConversion : public OpConversionPattern<PowSOp> {
   }
 };
 
+struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(Clog2BIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    Location loc = op.getLoc();
+    unsigned width = resultType.getIntOrFloatBitWidth();
+    Value value = adaptor.getValue();
+
+    // Ceiling of log2 can be computed as follows:
+    // if (x == 0) return 0;
+    // else bitWidth(x) - countLeadingZeros(x - 1);
+    Value zero = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+    Value one = hw::ConstantOp::create(rewriter, loc, APInt(width, 1));
+    Value bitWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, width));
+
+    Value valueMinusOne = comb::SubOp::create(rewriter, loc, value, one, false);
+    Value clz =
+        mlir::math::CountLeadingZerosOp::create(rewriter, loc, valueMinusOne);
+    Value bitLength = comb::SubOp::create(rewriter, loc, bitWidth, clz, false);
+
+    Value isZero = comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq,
+                                        value, zero, false);
+    rewriter.replaceOpWithNewOp<comb::MuxOp>(op, isZero, zero, bitLength,
+                                             false);
+    return success();
+  }
+};
+
 struct AShrOpConversion : public OpConversionPattern<AShrOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3971,6 +4002,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
 
     // Patterns of power operations.
     PowUOpConversion, PowSOpConversion,
+    Clog2BIOpConversion,
 
     // Patterns of relational operations.
     ICmpOpConversion<UltOp, ICmpPredicate::ult>,
