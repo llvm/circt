@@ -142,6 +142,15 @@ MLIR_CAPI_EXPORTED bool rtgTypeIsAString(MlirType type);
 /// Creates an RTG string type in the context.
 MLIR_CAPI_EXPORTED MlirType rtgStringTypeGet(MlirContext ctxt);
 
+/// If the type is an RTG continuation type.
+MLIR_CAPI_EXPORTED bool rtgTypeIsAContinuation(MlirType type);
+
+/// Creates an RTG continuation type with the given resume type.
+MLIR_CAPI_EXPORTED MlirType rtgContinuationTypeGet(MlirType resumeType);
+
+/// Returns the resume type of an RTG continuation type.
+MLIR_CAPI_EXPORTED MlirType rtgContinuationTypeGetResumeType(MlirType type);
+
 //===----------------------------------------------------------------------===//
 // Attribute API.
 //===----------------------------------------------------------------------===//

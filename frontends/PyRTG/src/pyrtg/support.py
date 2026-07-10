@@ -57,6 +57,9 @@ def _FromCirctValue(value: ir.Value) -> Value:
   if isinstance(type, rtg.MemoryBlockType):
     from .memories import MemoryBlock
     return MemoryBlock(value)
+  if isinstance(type, rtg.ContinuationType):
+    from .effects import Continuation
+    return Continuation(value)
   assert False, "Unsupported value"
 
 
@@ -111,6 +114,13 @@ def _FromCirctType(type: Union[ir.Type, Type]) -> Type:
   if isinstance(type, rtg.MemoryBlockType):
     from .memories import MemoryBlockType
     return MemoryBlockType(type.address_width)
+  if isinstance(type, rtg.ContinuationType):
+    from .effects import ContinuationType
+    resume = type.resume_type
+    if isinstance(resume, ir.NoneType):
+      from .effects import VoidType
+      return ContinuationType(VoidType())
+    return ContinuationType(_FromCirctType(resume))
   raise ValueError("unsupported type")
 
 
