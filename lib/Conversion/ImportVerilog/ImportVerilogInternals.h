@@ -656,6 +656,12 @@ private:
                       llvm::SmallVectorImpl<Type> &extraParams);
 };
 
+/// Map an index into an array, with bounds `range`, to a bit offset of the
+/// underlying bit storage. This is a dynamic version of
+/// `slang::ConstantRange::translateIndex`.
+Value getSelectIndex(Context &context, Location loc, Value index,
+                     const slang::ConstantRange &range);
+
 } // namespace ImportVerilog
 } // namespace circt
 #endif // CONVERSION_IMPORTVERILOG_IMPORTVERILOGINTERNALS_H

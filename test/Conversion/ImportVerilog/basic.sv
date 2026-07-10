@@ -542,6 +542,100 @@ function void ForeachStatements(int x, bit y);
   end
 endfunction
 
+// CHECK: func.func private @UnboundedArrayForeachStatements(%[[ARG0:.*]]: !moore.i32, %[[ARG1:.*]]: !moore.i1) {
+function void UnboundedArrayForeachStatements(int x, bit y);
+  // CHECK: %[[ARRAY:.*]] = moore.variable : <uarray<3 x open_uarray<queue<l8, 0>>>>
+  logic [7:0] array[4:2][][$];
+
+  // CHECK: %[[C2:.*]] = moore.constant 2 : i32
+  // CHECK: %[[I:.*]] = moore.variable %[[C2]] : <i32>
+  // CHECK: cf.br ^[[BB1:.*]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: %[[C4:.*]] = moore.constant 4 : i32
+  // CHECK: %[[I_VAL:.*]] = moore.read %[[I]] : <i32>
+  // CHECK: %[[CMP1:.*]] = moore.sle %[[I_VAL]], %[[C4]] : i32 -> i1
+  // CHECK: %[[CONV1:.*]] = moore.to_builtin_int %[[CMP1]] : i1
+  // CHECK: cf.cond_br %[[CONV1]], ^[[BB2:.*]], ^[[BB14:.*]]
+  // CHECK: ^[[BB2]]:
+  // CHECK: %[[C0_J:.*]] = moore.constant 0 : i32
+  // CHECK: %[[J:.*]] = moore.variable %[[C0_J]] : <i32>
+  // CHECK: cf.br ^[[BB3:.*]]
+  // CHECK: ^[[BB3]]:
+  // CHECK: %[[ARRAY_VAL1:.*]] = moore.read %[[ARRAY]] : <uarray<3 x open_uarray<queue<l8, 0>>>>
+  // CHECK: %[[I_VAL2:.*]] = moore.read %[[I]] : <i32>
+  // CHECK: %[[C2_0:.*]] = moore.constant 2 : i32
+  // CHECK: %[[I_VAL_FINAL:.*]] = moore.sub %[[I_VAL2]], %[[C2_0]] : i32
+  // CHECK: %[[DYN1:.*]] = moore.dyn_extract %[[ARRAY_VAL1]] from %[[I_VAL_FINAL]] : uarray<3 x open_uarray<queue<l8, 0>>>, i32 -> open_uarray<queue<l8, 0>>
+  // CHECK: %[[SIZE1:.*]] = moore.open_uarray_size %[[DYN1]] : <queue<l8, 0>>
+  // CHECK: %[[C1_J:.*]] = moore.constant 1 : i32
+  // CHECK: %[[SUB1:.*]] = moore.sub %[[SIZE1]], %[[C1_J]] : i32
+  // CHECK: %[[J_VAL:.*]] = moore.read %[[J]] : <i32>
+  // CHECK: %[[CMP2:.*]] = moore.sle %[[J_VAL]], %[[SUB1]] : i32 -> i1
+  // CHECK: %[[CONV2:.*]] = moore.to_builtin_int %[[CMP2]] : i1
+  // CHECK: cf.cond_br %[[CONV2]], ^[[BB4:.*]], ^[[BB12:.*]]
+  // CHECK: ^[[BB4]]:
+  // CHECK: %[[C0_K:.*]] = moore.constant 0 : i32
+  // CHECK: %[[K:.*]] = moore.variable %[[C0_K]] : <i32>
+  // CHECK: cf.br ^[[BB5:.*]]
+  // CHECK: ^[[BB5]]:
+  // CHECK: %[[ARRAY_VAL2:.*]] = moore.read %[[ARRAY]] : <uarray<3 x open_uarray<queue<l8, 0>>>>
+  // CHECK: %[[I_VAL3:.*]] = moore.read %[[I]] : <i32>
+  // CHECK: %[[C2_1:.*]] = moore.constant 2 : i32
+  // CHECK: %[[I_VAL3_FINAL:.*]] = moore.sub %[[I_VAL3]], %[[C2_1]] : i32
+  // CHECK: %[[DYN2:.*]] = moore.dyn_extract %[[ARRAY_VAL2]] from %[[I_VAL3_FINAL]] : uarray<3 x open_uarray<queue<l8, 0>>>, i32 -> open_uarray<queue<l8, 0>>
+  // CHECK: %[[J_VAL2:.*]] = moore.read %[[J]] : <i32>
+  // CHECK: %[[DYN3:.*]] = moore.dyn_extract %[[DYN2]] from %[[J_VAL2]] : open_uarray<queue<l8, 0>>, i32 -> queue<l8, 0>
+  // CHECK: %[[SIZE2:.*]] = moore.builtin.size %[[DYN3]] : <l8, 0>
+  // CHECK: %[[C1_K:.*]] = moore.constant 1 : i32
+  // CHECK: %[[SUB2:.*]] = moore.sub %[[SIZE2]], %[[C1_K]] : i32
+  // CHECK: %[[K_VAL:.*]] = moore.read %[[K]] : <i32>
+  // CHECK: %[[CMP3:.*]] = moore.sle %[[K_VAL]], %[[SUB2]] : i32 -> i1
+  // CHECK: %[[CONV3:.*]] = moore.to_builtin_int %[[CMP3]] : i1
+  // CHECK: cf.cond_br %[[CONV3]], ^[[BB6:.*]], ^[[BB10:.*]]
+  foreach (array[i, j, k]) begin
+    // CHECK: ^[[BB6]]:
+    // CHECK: %[[CONV4:.*]] = moore.to_builtin_int %[[ARG1]] : i1
+    // CHECK: cf.cond_br %[[CONV4]], ^[[BB7:.*]], ^[[BB8:.*]]
+    if (y) begin
+      // CHECK: ^[[BB7]]:
+      // CHECK: call @dummyA() : () -> ()
+      // CHECK: cf.br ^[[BB10]]
+      dummyA();
+      break;
+    end else begin
+      // CHECK: ^[[BB8]]:
+      // CHECK: call @dummyB() : () -> ()
+      // CHECK: cf.br ^[[BB9:.*]]
+      dummyB();
+      continue;
+    end
+  end
+  // CHECK: ^[[BB9]]:
+  // CHECK: %[[K_VAL2:.*]] = moore.read %[[K]] : <i32>
+  // CHECK: %[[C1_K2:.*]] = moore.constant 1 : i32
+  // CHECK: %[[ADD1:.*]] = moore.add %[[K_VAL2]], %[[C1_K2]] : i32
+  // CHECK: moore.blocking_assign %[[K]], %[[ADD1]] : i32
+  // CHECK: cf.br ^[[BB5]]
+  // CHECK: ^[[BB10]]:
+  // CHECK: cf.br ^[[BB11:.*]]
+  // CHECK: ^[[BB11]]:
+  // CHECK: %[[J_VAL3:.*]] = moore.read %[[J]] : <i32>
+  // CHECK: %[[C1_J2:.*]] = moore.constant 1 : i32
+  // CHECK: %[[ADD2:.*]] = moore.add %[[J_VAL3]], %[[C1_J2]] : i32
+  // CHECK: moore.blocking_assign %[[J]], %[[ADD2]] : i32
+  // CHECK: cf.br ^[[BB3]]
+  // CHECK: ^[[BB12]]:
+  // CHECK: cf.br ^[[BB13:.*]]
+  // CHECK: ^[[BB13]]:
+  // CHECK: %[[I_VAL4:.*]] = moore.read %[[I]] : <i32>
+  // CHECK: %[[C1_I:.*]] = moore.constant 1 : i32
+  // CHECK: %[[ADD3:.*]] = moore.add %[[I_VAL4]], %[[C1_I]] : i32
+  // CHECK: moore.blocking_assign %[[I]], %[[ADD3]] : i32
+  // CHECK: cf.br ^[[BB1]]
+  // CHECK: ^[[BB14]]:
+  // CHECK: return
+endfunction
+
 
 // CHECK-LABEL: func.func private @WhileLoopStatements(
 // CHECK-SAME: %arg0: !moore.i1

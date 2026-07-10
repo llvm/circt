@@ -62,11 +62,8 @@ static Value coerceToBuiltinInt(OpBuilder &builder, Location loc, Value value,
   return builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
 }
 
-/// Map an index into an array, with bounds `range`, to a bit offset of the
-/// underlying bit storage. This is a dynamic version of
-/// `slang::ConstantRange::translateIndex`.
-static Value getSelectIndex(Context &context, Location loc, Value index,
-                            const slang::ConstantRange &range) {
+Value ImportVerilog::getSelectIndex(Context &context, Location loc, Value index,
+                                    const slang::ConstantRange &range) {
   auto &builder = context.builder;
   auto indexType = cast<moore::UnpackedType>(index.getType());
 
