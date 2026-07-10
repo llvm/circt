@@ -1937,63 +1937,30 @@ func.func @FFlushWithArg(%arg0: !moore.i32) {
   return
 }
 
-// CHECK-LABEL: hw.module @ReadMemArray
-moore.module @ReadMemArray() {
-  %mem = moore.variable : <uarray<4 x l8>>
-  moore.procedure initial {
-    %0 = moore.constant_string "mem.data" : i64
-    %1 = moore.int_to_string %0 : i64
-    // CHECK: [[FD:%.+]] = sim.sv.fopen {{%.+}} mode = r
-    // CHECK: [[STREAM:%.+]] = sim.sv.channel_to_input_stream [[FD]]
-    // CHECK: sim.proc.read from [[STREAM]]
-    // CHECK-DAG: llhd.sig.array_get %mem[{{%.+}}] : <!hw.array<4xi8>>
-    // CHECK-DAG: llhd.drv
-    // CHECK-DAG: sim.sv.fclose [[FD]]
-    moore.builtin.readmem hex %1, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<4 x l8>>
-    moore.return
-  }
-  moore.output
-}
-
-// CHECK-LABEL: hw.module @ReadMemMultiDim
-moore.module @ReadMemMultiDim() {
+// CHECK-LABEL: hw.module @ReadMem
+moore.module @ReadMem() {
+  %mem = moore.variable : <uarray<256 x l8>>
   %mem3 = moore.variable : <uarray<3 x uarray<5 x uarray<4 x l32>>>>
-  moore.procedure initial {
-    %0 = moore.constant_string "mem.data" : i64
-    %1 = moore.int_to_string %0 : i64
-    // CHECK: sim.sv.fopen
-    // CHECK-DAG: [[REF0:%.+]] = llhd.sig.array_get %mem3[{{%.+}}] : <!hw.array<3xarray<5xarray<4xi32>>>>
-    // CHECK-DAG: [[REF1:%.+]] = llhd.sig.array_get [[REF0]][{{%.+}}] : <!hw.array<5xarray<4xi32>>>
-    // CHECK-DAG: [[REF2:%.+]] = llhd.sig.array_get [[REF1]][{{%.+}}] : <!hw.array<4xi32>>
-    moore.builtin.readmem hex %1, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !moore.ref<uarray<3 x uarray<5 x uarray<4 x l32>>>>
-    moore.return
-  }
-  moore.output
-}
-
-// CHECK-LABEL: hw.module @ReadMemQueue
-moore.module @ReadMemQueue() {
   %qmem = moore.variable : <queue<l8, 0>>
-  moore.procedure initial {
-    %0 = moore.constant_string "q.data" : i64
-    %1 = moore.int_to_string %0 : i64
-    // CHECK: sim.queue.size
-    // CHECK-DAG: sim.queue.set
-    moore.builtin.readmem hex %1, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
-    moore.return
-  }
-  moore.output
-}
-
-// CHECK-LABEL: hw.module @ReadMemEnum
-moore.module @ReadMemEnum() {
   %emem = moore.variable : <uarray<8 x l2>>
   moore.procedure initial {
-    %0 = moore.constant_string "e.data" : i64
+    %0 = moore.constant_string "mem.data" : i64
     %1 = moore.int_to_string %0 : i64
-    // CHECK: sim.sv.fopen
-    // CHECK-DAG: arith.cmpi eq, {{%.+}}, %{{[^ ]+}} : i2
-    // CHECK-DAG: arith.ori
+    %start = moore.constant 16 : i32
+    %finish = moore.constant 128 : i32
+    // CHECK: sim.sv.readmem %{{.+}}, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !llhd.ref<!hw.array<256xi8>>
+    moore.builtin.readmem hex %1, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    // CHECK: sim.sv.readmem %{{.+}}, %mem start = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>, isBinary = true} : !llhd.ref<!hw.array<256xi8>>
+    moore.builtin.readmem bin %1, %mem start = %start {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    // CHECK: sim.sv.readmem %{{.+}}, %mem start = %{{.+}} finish = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !llhd.ref<!hw.array<256xi8>>
+    moore.builtin.readmem hex %1, %mem start = %start finish = %finish {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    // CHECK: sim.sv.readmem %{{.+}}, %mem slice[%{{.+}}, %{{.+}}] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !llhd.ref<!hw.array<256xi8>>
+    moore.builtin.readmem hex %1, %mem slice[%start, %finish] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    // CHECK: sim.sv.readmem %{{.+}}, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !llhd.ref<!hw.array<3xarray<5xarray<4xi32>>>>
+    moore.builtin.readmem hex %1, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !moore.ref<uarray<3 x uarray<5 x uarray<4 x l32>>>>
+    // CHECK: sim.sv.readmem %{{.+}}, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !llhd.ref<!sim.queue<i8, 0>>
+    moore.builtin.readmem hex %1, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
+    // CHECK: sim.sv.readmem %{{.+}}, %emem {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !llhd.ref<!hw.array<8xi2>>
     moore.builtin.readmem hex %1, %emem {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !moore.ref<uarray<8 x l2>>
     moore.return
   }

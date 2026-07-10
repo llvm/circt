@@ -682,22 +682,6 @@ def StderrStreamOp : SimOp<"stderr_stream", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
-// Input Streams
-//===----------------------------------------------------------------------===//
-
-def ProcReadOp : SimOp<"proc.read", [ProceduralOp]> {
-  let summary = "Read one byte from an input stream";
-  let description = [{
-    Reads the next byte from `stream`. If `eof` is set, the stream is
-    exhausted and `result` is undefined. Otherwise, `result` holds the
-    byte value in the range [0, 255].
-  }];
-  let arguments = (ins InputStreamType:$stream);
-  let results = (outs I8:$result, I1:$eof);
-  let assemblyFormat = "`from` $stream attr-dict";
-}
-
-//===----------------------------------------------------------------------===//
 // Dynamic Strings
 //===----------------------------------------------------------------------===//
 
@@ -1306,23 +1290,6 @@ def SVFCloseOp : SimOp<"sv.fclose", [ProceduralOp]> {
   let assemblyFormat = "$fd attr-dict";
 }
 
-def SVChannelToInputStreamOp : SimOp<"sv.channel_to_input_stream", [ProceduralOp]> {
-  let summary = "Cast a SV file descriptor or multichannel descriptor to an input stream";
-  let description = [{
-    Casts a SystemVerilog input channel (an integer returned by `sv.fopen`,
-    or a predefined channel such as stdin (`32'h8000_0000`)) to an
-    `!sim.input_stream`.
-    The input must represent a valid SystemVerilog file descriptor or
-    multichannel descriptor, which can be used for reading. Otherwise,
-    this operation causes undefined behavior.
-
-    See IEEE 1800-2017 § 21.3.1 "Opening and closing files".
-  }];
-  let arguments = (ins I32:$channel);
-  let results = (outs InputStreamType:$stream);
-  let assemblyFormat = "$channel attr-dict";
-}
-
 def SVChannelToOutputStreamOp : SimOp<"sv.channel_to_output_stream", [ProceduralOp]> {
   let summary = "Cast a SV file descriptor or multichannel descriptor to an output stream";
   let description = [{
@@ -1350,6 +1317,41 @@ def SVFFlushAllOp : SimOp<"sv.fflush_all", [ProceduralOp]> {
   }];
 
   let assemblyFormat = "attr-dict";
+}
+
+def SVReadMemOp : SimOp<"sv.readmem", [AttrSizedOperandSegments, ProceduralOp]> {
+  let summary = "Load a memory from a file as with $readmemb/$readmemh";
+  let description = [{
+    Load data from a file into a memory reference, following the file format
+    of the SystemVerilog `$readmemb`/`$readmemh` system tasks (IEEE 1800-2017
+    § 21.4). If `isBinary` is set the file contains binary words, otherwise
+    hexadecimal.
+
+    `dimLows` and `dimDescending` record the declared low bound and direction
+    of every unpacked dimension of the memory (outermost first).
+    `sliceLeft`/`sliceRight` narrow the addressable window of the highest
+    dimension. When `enumValues` is present, loaded words are checked against
+    it and the load stops with an error on the first mismatch.
+  }];
+  let arguments = (ins
+    DynamicStringType:$filename,
+    AnyType:$dest,
+    DefaultValuedAttr<BoolAttr, "false">:$isBinary,
+    Optional<I32>:$startAddr,
+    Optional<I32>:$finishAddr,
+    Optional<I32>:$sliceLeft,
+    Optional<I32>:$sliceRight,
+    DenseI64ArrayAttr:$dimLows,
+    DenseBoolArrayAttr:$dimDescending,
+    OptionalAttr<DenseI64ArrayAttr>:$enumValues
+  );
+  let assemblyFormat = [{
+    $filename `,` $dest
+    (`start` `=` $startAddr^)? (`finish` `=` $finishAddr^)?
+    (`slice` `` `[`$sliceLeft^ `,` $sliceRight `]`)?
+    attr-dict `:` type($dest)
+  }];
+  let hasVerifier = 1;
 }
 
 def FlushOp : SimOp<"flush", [ProceduralOp]> {

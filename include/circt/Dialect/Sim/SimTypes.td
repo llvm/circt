@@ -111,18 +111,6 @@ def DPIFunctionType : SimTypeDef<"DPIFunction"> {
   }];
 }
 
-def InputStreamType : SimTypeDef<"InputStream"> {
-  let summary = "a type representing an input stream";
-  let description = [{
-    Represents a simulation input stream resource.
-    This type models the existence of a readable stream resource at the Sim
-    dialect level, while leaving its concrete representation to the lowering
-    backend. Backends may realize this as a file descriptor, object handle,
-    pointer, or any other target-specific resource representation.
-  }];
-  let mnemonic = "input_stream";
-}
-
 def OutputStreamType : SimTypeDef<"OutputStream"> {
   let summary = "a type representing an output stream";
   let description = [{

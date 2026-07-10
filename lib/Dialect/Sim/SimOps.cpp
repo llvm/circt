@@ -766,6 +766,21 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
 }
 
 //===----------------------------------------------------------------------===//
+// SVReadMemOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult SVReadMemOp::verify() {
+  if (getFinishAddr() && !getStartAddr())
+    return emitOpError("'finishAddr' requires 'startAddr' to be present");
+  if ((bool)getSliceLeft() != (bool)getSliceRight())
+    return emitOpError("slice bounds must both be present or both absent");
+  if (getDimLows().empty() || getDimLows().size() != getDimDescending().size())
+    return emitOpError("'dimLows' and 'dimDescending' must have one entry per "
+                       "unpacked dimension");
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 
