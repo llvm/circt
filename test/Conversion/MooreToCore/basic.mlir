@@ -1372,6 +1372,20 @@ func.func @PowSOp(%arg0: !moore.i32, %arg1: !moore.i32) {
   return
 }
 
+// CHECK-LABEL: func.func @Clog2
+func.func @Clog2(%arg0: !moore.i32) {
+  // CHECK: [[C0:%.+]] = hw.constant 0 : i32
+  // CHECK: [[C1:%.+]] = hw.constant 1 : i32
+  // CHECK: [[WIDTH:%.+]] = hw.constant 32 : i32
+  // CHECK: [[VALMINUS1:%.+]] = comb.sub %arg0, [[C1]] : i32
+  // CHECK: [[NZEROS:%.+]] = math.ctlz [[VALMINUS1]] : i32
+  // CHECK: [[SUB:%.+]] = comb.sub [[WIDTH]], [[NZEROS]] : i32
+  // CHECK: [[ISZERO:%.+]] = comb.icmp eq %arg0, [[C0]] : i32
+  // CHECK: comb.mux [[ISZERO]], [[C0]], [[SUB]] : i32
+  %0 = moore.builtin.clog2 %arg0 : i32
+  return
+}
+
 // CHECK-LABEL: @scfInsideProcess
 moore.module @scfInsideProcess(in %in0: !moore.i32, in %in1: !moore.i32) {
   %var = moore.variable : <!moore.i32>
@@ -1620,7 +1634,7 @@ func.func @ConvertRealOperations(%arg0: !moore.f32, %arg1: !moore.f64) {
 
   // CHECK: arith.truncf %arg1 : f64 to f32
   moore.convert_real %arg1 : f64 -> f32
-  
+
   return
 }
 
@@ -1697,7 +1711,7 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[NEWQ:%.+]] = sim.queue.insert %arg0 into [[QR]] at %arg1 : <i32, 10>
   // CHECK: llhd.drv [[Q]], [[NEWQ]]
   moore.queue.insert %arg0 into %q at %arg1 : <!moore.queue<i32, 10>>
-  
+
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]] = sim.queue.set [[QR]][%arg1] = %arg0 : <i32, 10>
   // CHECK: llhd.drv [[Q]], [[NEWQ]]
