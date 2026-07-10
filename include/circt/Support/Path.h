@@ -26,6 +26,12 @@ namespace circt {
 void appendPossiblyAbsolutePath(llvm::SmallVectorImpl<char> &base,
                                 const llvm::Twine &suffix);
 
+/// Truncate `a` in place to the longest common directory prefix of `a` and `b`,
+/// ensuring that the result ends on a directory separator (or is empty). This
+/// computes the lowest common ancestor directory of two paths and is used, for
+/// example, to pick a shared output directory for deduplicated operations.
+void makeCommonDirectoryPrefix(llvm::SmallVectorImpl<char> &a, StringRef b);
+
 /// Creates an output file with the given filename in the specified directory.
 /// The function will create any parent directories as needed. If an error
 /// occurs during file or directory creation, it will use the provided emitError
