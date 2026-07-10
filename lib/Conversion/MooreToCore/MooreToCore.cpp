@@ -962,6 +962,31 @@ static Value createZeroValue(Type type, Location loc,
   if (auto queueType = dyn_cast<sim::QueueType>(type))
     return sim::QueueEmptyOp::create(rewriter, loc, queueType);
 
+  // Handle aggregate
+  if (auto arrayType = dyn_cast<hw::ArrayType>(type)) {
+    if (hw::getBitWidth(type) == -1) {
+      Value zeroElement =
+          createZeroValue(arrayType.getElementType(), loc, rewriter);
+      if (!zeroElement)
+        return {};
+      SmallVector<Value> elements(arrayType.getNumElements(), zeroElement);
+      return hw::ArrayCreateOp::create(rewriter, loc, elements);
+    }
+  }
+
+  if (auto structType = dyn_cast<hw::StructType>(type)) {
+    if (hw::getBitWidth(type) == -1) {
+      SmallVector<Value> fields;
+      for (auto field : structType.getElements()) {
+        Value zeroField = createZeroValue(field.type, loc, rewriter);
+        if (!zeroField)
+          return {};
+        fields.push_back(zeroField);
+      }
+      return hw::StructCreateOp::create(rewriter, loc, structType, fields);
+    }
+  }
+
   // Otherwise try to create a zero integer and bitcast it to the result type.
   int64_t width = hw::getBitWidth(type);
   if (width == -1)
