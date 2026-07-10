@@ -7,9 +7,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "FirMemLowering.h"
+#include "circt/Dialect/HW/HWAttributes.h"
+#include "circt/Support/Path.h"
 #include "mlir/IR/Threading.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/Path.h"
 
 using namespace circt;
 using namespace hw;
@@ -17,6 +20,27 @@ using namespace seq;
 using llvm::MapVector;
 
 #define DEBUG_TYPE "lower-seq-firmem"
+
+/// Return the lowest common ancestor directory of all memory ops provided.
+static Attribute computeCommonOutputFile(ArrayRef<seq::FirMemOp> memOps) {
+  auto getDirectory = [](seq::FirMemOp op) -> StringRef {
+    if (auto file = op->getAttrOfType<hw::OutputFileAttr>("output_file"))
+      return file.getDirectory();
+    return "";
+  };
+
+  SmallString<64> commonDir(getDirectory(memOps.front()));
+  for (auto memOp : memOps.drop_front()) {
+    if (commonDir.empty())
+      break;
+    makeCommonDirectoryPrefix(commonDir, getDirectory(memOp));
+  }
+
+  if (commonDir.empty())
+    return {};
+  return hw::OutputFileAttr::getAsDirectory(memOps.front()->getContext(),
+                                            commonDir);
+}
 
 FirMemLowering::FirMemLowering(ModuleOp circuit)
     : context(circuit.getContext()), circuit(circuit) {
@@ -295,8 +319,10 @@ FirMemLowering::createMemoryModule(FirMemConfig &mem,
   auto genOp =
       hw::HWModuleGeneratedOp::create(builder, loc, schemaSymRef, name, ports,
                                       StringRef{}, ArrayAttr{}, genAttrs);
-  if (mem.outputFile)
-    genOp->setAttr("output_file", mem.outputFile);
+
+  // Put the memory in the lowest common ancestor directory.
+  if (auto outputFile = computeCommonOutputFile(memOps))
+    genOp->setAttr("output_file", outputFile);
 
   return genOp;
 }
