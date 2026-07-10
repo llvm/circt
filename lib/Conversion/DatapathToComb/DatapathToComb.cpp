@@ -38,7 +38,8 @@ static SmallVector<Value> extractBits(OpBuilder &builder, Value val) {
 }
 
 // Check whether a value is zero-extended or sign-extended
-static std::pair<bool, Value> getBaseWidth(Value val) {
+static std::pair<bool, Value> getBaseWidth(PatternRewriter &rewriter,
+                                           Location loc, Value val) {
 
   Value valBase;
   // Check for zext
@@ -46,8 +47,13 @@ static std::pair<bool, Value> getBaseWidth(Value val) {
     return {false, valBase};
 
   // Check for sext of the value
-  if (matchPattern(val, comb::m_Sext(mlir::matchers::m_Any(&valBase))))
+  Value replBits;
+  if (matchPattern(val, comb::m_Sext(mlir::matchers::m_Any(&replBits)))) {
+    auto baseWidth = val.getType().getIntOrFloatBitWidth() -
+                     replBits.getType().getIntOrFloatBitWidth();
+    valBase = rewriter.createOrFold<comb::ExtractOp>(loc, val, 0, baseWidth);
     return {true, valBase};
+  }
 
   // Not extended, return original value
   return {false, val};
@@ -285,21 +291,17 @@ private:
     Location loc = op.getLoc();
     auto zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
 
-    auto [aSigned, aBase] = getBaseWidth(op.getLhs());
-    auto [bSigned, bBase] = getBaseWidth(op.getRhs());
+    auto [aSigned, aBase] = getBaseWidth(rewriter, loc, op.getLhs());
+    auto [bSigned, bBase] = getBaseWidth(rewriter, loc, op.getRhs());
 
     auto aBaseWidth = aBase.getType().getIntOrFloatBitWidth();
     auto bBaseWidth = bBase.getType().getIntOrFloatBitWidth();
 
-    // Will handle signedMult separately
-    auto unsignedMult = !aSigned && !bSigned;
-
     // Detect leading zeros in multiplicand due to zero-extension
     // and truncate to reduce partial product bits {'0, a} * {'0, b}
     auto rowWidth = width;
-    if (unsignedMult && aBaseWidth < width) {
-      // Retain one leading zero to represent 2*{1'b0, a} = {a, 1'b0}
-      // {'0, a} -> {1'b0, a}
+    if (aBaseWidth < width) {
+      // Retain one leading zero/sign-bit to represent 2*a
       rowWidth = aBaseWidth + 1;
       a = rewriter.createOrFold<comb::ExtractOp>(loc, a, 0, rowWidth);
     }
@@ -408,6 +410,17 @@ private:
         break;
     }
 
+    // Add the final sign-correction row for signed multiplication
+    if (bSigned) {
+      auto numPP = partialProducts.size();
+      Value shiftByFinal =
+          hw::ConstantOp::create(rewriter, loc, APInt((numPP - 1) * 2, 0));
+      Value finalSignCorrection = rewriter.createOrFold<comb::ConcatOp>(
+          loc, ValueRange{zeroFalse, encNegPrev, shiftByFinal});
+      partialProducts.push_back(finalSignCorrection);
+      encNegs.push_back(zeroFalse); // No sign-extension for the final row
+    }
+
     // Sign-extension:
     // { s1, s1, s1, s1, s1, p1}
     // { s2, s2, s2,   p2      }
@@ -417,10 +430,14 @@ private:
     // canonicalization patterns
     for (unsigned i = 0; i < partialProducts.size(); ++i) {
       auto ppRow = partialProducts[i];
-      auto encNeg = encNegs[i];
+
       auto ppWidth = ppRow.getType().getIntOrFloatBitWidth();
       if (ppWidth < width) {
         auto padding = width - ppWidth;
+        auto encNeg = encNegs[i];
+        if (aSigned)
+          encNeg = rewriter.createOrFold<comb::ExtractOp>(loc, ppRow,
+                                                          ppWidth - 1, 1);
 
         // Replicate the encNeg bit for sign-extension
         Value encNegPad =
@@ -606,10 +623,11 @@ void ConvertDatapathToCombPass::runOnOperation() {
   synth::IncrementalLongestPathAnalysis *analysis = nullptr;
   if (timingAware)
     analysis = &getAnalysis<synth::IncrementalLongestPathAnalysis>();
+
   if (lowerCompressToAdd)
     // Lower compressors to simple add operations for downstream optimisations
     patterns.add<DatapathCompressOpAddConversion>(patterns.getContext());
-  else
+  if (lowerCompress)
     // Lower compressors to a complete gate-level implementation
     patterns.add<DatapathCompressOpConversion>(patterns.getContext(), analysis);
 
@@ -621,6 +639,9 @@ void ConvertDatapathToCombPass::runOnOperation() {
   // Walk the operation and check for any remaining Datapath dialect
   // operations.
   auto result = getOperation()->walk([&](Operation *op) {
+    if (llvm::isa<datapath::CompressOp>(op) && !lowerCompress &&
+        !lowerCompressToAdd)
+      return WalkResult::advance();
     if (llvm::isa_and_nonnull<datapath::DatapathDialect>(op->getDialect())) {
       op->emitError("Datapath operation not converted: ") << *op;
       return WalkResult::interrupt();

@@ -20,7 +20,6 @@
 #include "llvm/Support/FormatVariadic.h"
 #include <limits>
 
-
 using namespace mlir;
 using namespace circt;
 using namespace comb;
@@ -33,7 +32,7 @@ bool comb::boothEncode(Value lhs, Value rhs) {
 
   auto lhsWidth = lhs.getType().getIntOrFloatBitWidth();
   auto rhsWidth = rhs.getType().getIntOrFloatBitWidth();
-  
+
   // Check for zext of the multiplicands
   Value lhsZext, rhsZext;
   if (matchPattern(lhs, comb::m_Zext(m_Any(&lhsZext))))
@@ -42,14 +41,14 @@ bool comb::boothEncode(Value lhs, Value rhs) {
     rhsWidth = rhsZext.getType().getIntOrFloatBitWidth();
 
   // Check for sext of the multiplicands
-  Value lhsSext, rhsSext;
-  if (matchPattern(lhs, comb::m_Sext(m_Any(&lhsSext))))
-    lhsWidth = lhsSext.getType().getIntOrFloatBitWidth();
-  if (matchPattern(rhs, comb::m_Sext(m_Any(&rhsSext))))
-    rhsWidth = rhsSext.getType().getIntOrFloatBitWidth();
+  Value lhsSextBits, rhsSextBits;
+  if (matchPattern(lhs, comb::m_Sext(m_Any(&lhsSextBits))))
+    lhsWidth = lhsWidth - lhsSextBits.getType().getIntOrFloatBitWidth();
+  if (matchPattern(rhs, comb::m_Sext(m_Any(&rhsSextBits))))
+    rhsWidth = rhsWidth - rhsSextBits.getType().getIntOrFloatBitWidth();
 
   // If either operand is less than 16 bits, don't use Booth encoding.
-  return lhsWidth > 16 && rhsWidth > 16;
+  return lhsWidth >= 16 && rhsWidth >= 16;
 }
 
 Value comb::createZExt(OpBuilder &builder, Location loc, Value value,
@@ -329,8 +328,6 @@ LogicalResult comb::convertModUByPowerOfTwo(ModUOp modOp,
   return convertDivModUByPowerOfTwo(rewriter, modOp, modOp.getLhs(),
                                     modOp.getRhs(), /*isDiv=*/false);
 }
-
-
 
 //===----------------------------------------------------------------------===//
 // ICmpOp

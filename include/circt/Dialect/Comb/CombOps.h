@@ -14,8 +14,8 @@
 #define CIRCT_DIALECT_COMB_COMBOPS_H
 
 #include "circt/Dialect/Comb/CombDialect.h"
-#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -167,7 +167,7 @@ struct SextMatcher {
 
     auto operands = concatOp.getOperands();
     // ConcatOp must have exactly 2 operands: (sign_bits, base_value)
-    if (operands.size() != 2)
+    if (operands.size() < 2)
       return false;
 
     Value signBits = operands[0];
@@ -192,7 +192,7 @@ struct SextMatcher {
       return false;
 
     // Match the base unextended value against the sub-matcher
-    return mlir::detail::matchOperandOrValueAtIndex(op, 1, lhs);
+    return mlir::detail::matchOperandOrValueAtIndex(op, 0, lhs);
   }
 };
 

@@ -1424,19 +1424,6 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
     }
   }
 
-  // xor(sext(x), -1) -> sext(xor(x,-1))
-  // More concisely: ~sext(x) = sext(~x)
-  Value base;
-  // Check for sext of the inverted value
-  if (matchPattern(op.getResult(), m_Complement(m_Sext(m_Any(&base))))) {
-    // Create negated sext: ~sext(x) = sext(~x)
-    auto negBase = createOrFoldNot(rewriter, op.getLoc(), base, true);
-    auto sextNegBase =
-        createOrFoldSExt(rewriter, op.getLoc(), negBase, op.getType());
-    replaceOpAndCopyNamehint(rewriter, op, sextNegBase);
-    return success();
-  }
-
   // xor(x, xor(...)) -> xor(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();
