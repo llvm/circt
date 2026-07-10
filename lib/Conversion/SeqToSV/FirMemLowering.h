@@ -43,16 +43,15 @@ struct FirMemConfig {
                               dataWidth, depth, readLatency, writeLatency,
                               maskBits, readUnderWrite, writeUnderWrite,
                               initFilename, initIsBinary, initIsInline,
-                              outputFile, prefix) ^
+                              prefix) ^
            llvm::hash_combine_range(writeClockIDs.begin(), writeClockIDs.end());
   }
 
   auto getTuple() const {
-    return std::make_tuple(numReadPorts, numWritePorts, numReadWritePorts,
-                           dataWidth, depth, readLatency, writeLatency,
-                           maskBits, readUnderWrite, writeUnderWrite,
-                           writeClockIDs, initFilename, initIsBinary,
-                           initIsInline, outputFile, prefix);
+    return std::make_tuple(
+        numReadPorts, numWritePorts, numReadWritePorts, dataWidth, depth,
+        readLatency, writeLatency, maskBits, readUnderWrite, writeUnderWrite,
+        writeClockIDs, initFilename, initIsBinary, initIsInline, prefix);
   }
 
   bool operator==(const FirMemConfig &other) const {

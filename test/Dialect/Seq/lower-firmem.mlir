@@ -77,15 +77,37 @@ hw.module @Foo(in %clk: !seq.clock, in %en: i1, in %addr: i4, in %wdata: i42, in
   comb.xor %3, %4 : i42
 }
 
-// CHECK: hw.module.generated @m1_mem1_24x1337, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 1337 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, output_file = "foo", readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 1337 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
-// CHECK: hw.module.generated @m1_mem2_24x1337, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 1337 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, output_file = "bar", readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 1337 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+// Memories that share a configuration but live in different output directories
+// are deduplicated into a single generated module.  The module is emitted in
+// the longest common directory prefix of all the memories so that it is visible
+// from every instantiation site and does not leak into a broader scope than
+// necessary.
+//
+// Disjoint directories collapse to the root, so no output file is set.
+// CHECK: hw.module.generated @m1_mem_24x1337, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 1337 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 1337 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+// CHECK-NOT: hw.module.generated @m1_mem2_24x1337
+//
+// CHECK-LABEL: hw.module @DedupDisjointOutputDirs
+hw.module @DedupDisjointOutputDirs() {
+  // CHECK-NEXT: hw.instance "m1_mem1_ext" @m1_mem_24x1337(
+  // CHECK-NEXT: hw.instance "m1_mem2_ext" @m1_mem_24x1337(
+  %m1_mem1 = seq.firmem 0, 1, undefined, port_order {name = "m1_mem1", output_file = #hw.output_file<"foo/">} : <24 x 1337>
+  %m1_mem2 = seq.firmem 0, 1, undefined, port_order {name = "m1_mem2", output_file = #hw.output_file<"bar/">} : <24 x 1337>
+}
 
-// CHECK-LABEL: hw.module @SeparateOutputFiles
-hw.module @SeparateOutputFiles() {
-  // CHECK-NEXT: hw.instance "m1_mem1_ext" @m1_mem1_24x1337(
-  // CHECK-NEXT: hw.instance "m1_mem2_ext" @m1_mem2_24x1337(
-  %m1_mem1 = seq.firmem 0, 1, undefined, port_order {output_file = "foo"} : <24 x 1337>
-  %m1_mem2 = seq.firmem 0, 1, undefined, port_order {output_file = "bar"} : <24 x 1337>
+// A shared parent directory becomes the output directory of the deduped
+// module.  Here "x/LayerA/" and "x/LayerB/" have the common prefix "x/".
+// A distinct width (1338) keeps this memory from deduplicating with the one
+// above.
+// CHECK: hw.module.generated @m1a_mem_24x1338, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 1338 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, output_file = #hw.output_file<"x{{/|\\\\}}">, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 1338 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
+// CHECK-NOT: hw.module.generated @m1a_mem2_24x1338
+//
+// CHECK-LABEL: hw.module @DedupCommonOutputDir
+hw.module @DedupCommonOutputDir() {
+  // CHECK-NEXT: hw.instance "m1a_mem1_ext" @m1a_mem_24x1338(
+  // CHECK-NEXT: hw.instance "m1a_mem2_ext" @m1a_mem_24x1338(
+  %m1a_mem1 = seq.firmem 0, 1, undefined, port_order {name = "m1a_mem1", output_file = #hw.output_file<"x/LayerA/">} : <24 x 1338>
+  %m1a_mem2 = seq.firmem 0, 1, undefined, port_order {name = "m1a_mem2", output_file = #hw.output_file<"x/LayerB/">} : <24 x 1338>
 }
 
 // CHECK: hw.module.generated @foo_m2_mem1_24x9001, @FIRRTLMem() attributes {depth = 24 : i64, initFilename = "", initIsBinary = false, initIsInline = false, maskGran = 9001 : ui32, numReadPorts = 0 : ui32, numReadWritePorts = 0 : ui32, numWritePorts = 0 : ui32, readLatency = 0 : ui32, readUnderWrite = 0 : i32, width = 9001 : ui32, writeClockIDs = [], writeLatency = 1 : ui32, writeUnderWrite = 1 : i32}
