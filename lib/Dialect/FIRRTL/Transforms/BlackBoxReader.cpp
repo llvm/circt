@@ -214,8 +214,8 @@ void BlackBoxReaderPass::runOnOperation() {
       } else {
         auto &fileAttr = ptr->second.outputFileAttr;
         SmallString<64> directory(fileAttr.getDirectory());
-        makeCommonPrefix(directory,
-                         annotationInfo.outputFileAttr.getDirectory());
+        makeCommonDirectoryPrefix(directory,
+                                  annotationInfo.outputFileAttr.getDirectory());
         fileAttr = hw::OutputFileAttr::getFromDirectoryAndFilename(
             context, directory, annotationInfo.name.getValue(),
             /*excludeFromFileList=*/
