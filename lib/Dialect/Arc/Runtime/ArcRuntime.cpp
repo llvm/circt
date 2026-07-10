@@ -154,14 +154,6 @@ void arcRuntimeIR_format(const FmtDescriptor *fmt, ...) {
   va_end(args);
 }
 
-uint8_t *arcRuntimeIR_getStdoutStream() {
-  return reinterpret_cast<uint8_t *>(&llvm::outs());
-}
-
-uint8_t *arcRuntimeIR_getStderrStream() {
-  return reinterpret_cast<uint8_t *>(&llvm::errs());
-}
-
 void arcRuntimeIR_formatToStream(uint8_t *stream, const FmtDescriptor *fmt,
                                  ...) {
   if (!stream)
@@ -173,6 +165,14 @@ void arcRuntimeIR_formatToStream(uint8_t *stream, const FmtDescriptor *fmt,
   formatToStream(*reinterpret_cast<llvm::raw_ostream *>(stream), fmt, args);
 
   va_end(args);
+}
+
+uint8_t *arcRuntimeIR_getStdoutStream() {
+  return reinterpret_cast<uint8_t *>(&llvm::outs());
+}
+
+uint8_t *arcRuntimeIR_getStderrStream() {
+  return reinterpret_cast<uint8_t *>(&llvm::errs());
 }
 
 uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
@@ -190,8 +190,8 @@ namespace circt::arc::runtime {
 static const APICallbacks apiCallbacksGlobal{
     &arcRuntimeIR_allocInstance,   &arcRuntimeIR_deleteInstance,
     &arcRuntimeIR_onEval,          &arcRuntimeIR_onInitialized,
-    &arcRuntimeIR_format,          &arcRuntimeIR_getStdoutStream,
-    &arcRuntimeIR_getStderrStream, &arcRuntimeIR_formatToStream,
+    &arcRuntimeIR_format,          &arcRuntimeIR_formatToStream,
+    &arcRuntimeIR_getStdoutStream, &arcRuntimeIR_getStderrStream,
     &arcRuntimeIR_swapTraceBuffer};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }

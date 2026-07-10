@@ -1005,14 +1005,21 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
 FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
                                     StringCache &stringCache,
                                     ArrayRef<FmtDescriptor> descriptors,
-                                    ValueRange args) {
+                                    ValueRange args, Value stream = {}) {
   ModuleOp moduleOp =
       builder.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
-  // Lookup or create the arcRuntimeFormat function symbol.
   MLIRContext *ctx = builder.getContext();
-  auto func = LLVM::lookupOrCreateFn(
-      builder, moduleOp, runtime::APICallbacks::symNameFormat,
-      LLVM::LLVMPointerType::get(ctx), LLVM::LLVMVoidType::get(ctx), true);
+  auto ptrType = LLVM::LLVMPointerType::get(ctx);
+  SmallVector<Type, 2> paramTypes;
+  StringRef symbolName = runtime::APICallbacks::symNameFormat;
+  if (stream) {
+    symbolName = runtime::APICallbacks::symNameFormatToStream;
+    paramTypes.push_back(ptrType);
+  }
+  paramTypes.push_back(ptrType);
+
+  auto func = LLVM::lookupOrCreateFn(builder, moduleOp, symbolName, paramTypes,
+                                     LLVM::LLVMVoidType::get(ctx), true);
   if (failed(func))
     return func;
 
@@ -1020,7 +1027,10 @@ FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
                            descriptors.size() * sizeof(FmtDescriptor));
   Value fmtPtr = stringCache.getOrCreate(builder, rawDescriptors);
 
-  SmallVector<Value> argsVec(1, fmtPtr);
+  SmallVector<Value> argsVec;
+  if (stream)
+    argsVec.push_back(stream);
+  argsVec.push_back(fmtPtr);
   argsVec.append(args.begin(), args.end());
   auto result = LLVM::CallOp::create(builder, loc, func.value(), argsVec);
 
@@ -1029,39 +1039,6 @@ FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
     if (auto alloca = dyn_cast_if_present<LLVM::AllocaOp>(definingOp)) {
       LLVM::LifetimeEndOp::create(builder, loc, arg);
     }
-  }
-
-  return result;
-}
-
-FailureOr<LLVM::CallOp> emitFmtToStreamCall(OpBuilder &builder, Location loc,
-                                            StringCache &stringCache,
-                                            Value stream,
-                                            ArrayRef<FmtDescriptor> descriptors,
-                                            ValueRange args) {
-  ModuleOp moduleOp =
-      builder.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
-  MLIRContext *ctx = builder.getContext();
-  auto ptrType = LLVM::LLVMPointerType::get(ctx);
-  SmallVector<Type, 2> paramTypes{ptrType, ptrType};
-  auto func = LLVM::lookupOrCreateFn(
-      builder, moduleOp, runtime::APICallbacks::symNameFormatToStream,
-      paramTypes, LLVM::LLVMVoidType::get(ctx), true);
-  if (failed(func))
-    return func;
-
-  StringRef rawDescriptors(reinterpret_cast<const char *>(descriptors.data()),
-                           descriptors.size() * sizeof(FmtDescriptor));
-  Value fmtPtr = stringCache.getOrCreate(builder, rawDescriptors);
-
-  SmallVector<Value> argsVec{stream, fmtPtr};
-  argsVec.append(args.begin(), args.end());
-  auto result = LLVM::CallOp::create(builder, loc, func.value(), argsVec);
-
-  for (Value arg : args) {
-    Operation *definingOp = arg.getDefiningOp();
-    if (auto alloca = dyn_cast_if_present<LLVM::AllocaOp>(definingOp))
-      LLVM::LifetimeEndOp::create(builder, loc, arg);
   }
 
   return result;
@@ -1114,13 +1091,9 @@ struct SimPrintFormattedProcOpLowering
     // Add the end descriptor.
     formatInfo->descriptors.push_back(FmtDescriptor());
 
-    FailureOr<LLVM::CallOp> result =
-        op.getStream()
-            ? emitFmtToStreamCall(rewriter, op.getLoc(), stringCache,
-                                  adaptor.getStream(), formatInfo->descriptors,
-                                  formatInfo->args)
-            : emitFmtCall(rewriter, op.getLoc(), stringCache,
-                          formatInfo->descriptors, formatInfo->args);
+    auto result =
+        emitFmtCall(rewriter, op.getLoc(), stringCache, formatInfo->descriptors,
+                    formatInfo->args, adaptor.getStream());
     if (failed(result))
       return failure();
     rewriter.replaceOp(op, result.value());
