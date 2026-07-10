@@ -25,6 +25,7 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMapInfoVariant.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/Debug.h"
 #include <random>
 
@@ -108,6 +109,7 @@ struct MemoryBlockStorage;
 struct SymbolicComputationWithIdentityStorage;
 struct SymbolicComputationWithIdentityValue;
 struct SymbolicComputationStorage;
+struct OpaqueExternalStorage;
 
 /// The abstract base class for elaborated values.
 using ElaboratorValue =
@@ -117,7 +119,7 @@ using ElaboratorValue =
                  ArrayStorage *, TupleStorage *, MemoryStorage *,
                  MemoryBlockStorage *, SymbolicComputationWithIdentityStorage *,
                  SymbolicComputationWithIdentityValue *,
-                 SymbolicComputationStorage *>;
+                 SymbolicComputationStorage *, OpaqueExternalStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const ElaboratorValue &val) {
@@ -512,6 +514,15 @@ struct SymbolicComputationWithIdentityValue : IdentityValue {
   const unsigned idx;
 };
 
+/// Storage for SSA values produced by external ops with regions — block
+/// arguments and results. Carries identity only; the corresponding new-IR
+/// `Value` is registered via `Materializer::map()` immediately upon creation so
+/// `Materializer::materialize()` always hits its cache and never dispatches
+// through `visit()`.
+struct OpaqueExternalStorage : IdentityValue {
+  OpaqueExternalStorage(Type type, Location loc) : IdentityValue(type, loc) {}
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -717,6 +728,10 @@ static void print(const SymbolicComputationStorage *val,
   os << ">";
 }
 
+static void print(const OpaqueExternalStorage *val, llvm::raw_ostream &os) {
+  os << "<opaque-external " << val->type << ">";
+}
+
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const ElaboratorValue &value) {
   std::visit([&](auto val) { print(val, os); }, value);
@@ -874,6 +889,7 @@ private:
   VISIT_UNSUPPORTED(SymbolicComputationWithIdentityStorage)
   VISIT_UNSUPPORTED(SymbolicComputationWithIdentityValue)
   VISIT_UNSUPPORTED(SymbolicComputationStorage)
+  VISIT_UNSUPPORTED(OpaqueExternalStorage)
 
 #undef VISIT_UNSUPPORTED
 
@@ -922,8 +938,9 @@ public:
   Materializer(OpBuilder builder, TestState &testState,
                SharedState &sharedState,
                SmallVector<ElaboratorValue> &blockArgs)
-      : builder(builder), testState(testState), sharedState(sharedState),
-        blockArgs(blockArgs), attrConverter(builder.getContext()) {}
+      : builder(builder), rootBlock(builder.getBlock()), testState(testState),
+        sharedState(sharedState), blockArgs(blockArgs),
+        attrConverter(builder.getContext()) {}
 
   /// Materialize IR representing the provided `ElaboratorValue` and return the
   /// `Value` or a null value on failure.
@@ -984,6 +1001,14 @@ public:
   /// before the insertion point.
   LogicalResult materialize(Operation *op,
                             DenseMap<Value, ElaboratorValue> &state) {
+    // Region-bearing ops must be elaborated away before reaching here (either
+    // by a dedicated visitor, or by visitExternalOp which performs its own
+    // structural rewrite). Routing them through this generic operand-only
+    // materialize path would silently keep un-elaborated regions in the
+    // output.
+    if (op->getNumRegions() > 0)
+      return op->emitOpError("ops with nested regions must be elaborated away");
+
     // We don't support opaque values. If there is an SSA value that has a
     // use-site it needs an equivalent ElaborationValue representation.
     // NOTE: We could support cases where there is initially a use-site but that
@@ -1063,6 +1088,13 @@ public:
 private:
   Value tryMaterializeAsConstant(ElaboratorValue val, Location loc) {
     if (auto attr = attrConverter.convert(val)) {
+      // Hoist constants to the materializer's root block when the builder's
+      // current insertion point is in a nested region. This ensures the
+      // constant's defining region dominates every potential use, including
+      // sibling regions that share this materializer's value cache.
+      OpBuilder::InsertionGuard guard(builder);
+      if (builder.getBlock() != rootBlock)
+        builder.setInsertionPointToStart(rootBlock);
       Value res = ConstantOp::create(builder, loc, attr);
       materializedValues[val] = res;
       return res;
@@ -1335,6 +1367,16 @@ private:
     return op->getResult(0);
   }
 
+  Value visit(OpaqueExternalStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    // Opaque external values (block arguments and results of external
+    // region-bearing ops) are always pre-mapped to a concrete SSA value by
+    // visitExternalOp, so materialize() short-circuits via the cache before
+    // reaching here.
+    emitError() << "cannot materialize opaque external value";
+    return {};
+  }
+
 private:
   /// Cache values we have already materialized to reuse them later. We start
   /// with an insertion point at the start of the block and cache the (updated)
@@ -1346,6 +1388,10 @@ private:
   /// Cache the builder to continue insertions at their current insertion point
   /// for the reason stated above.
   OpBuilder builder;
+
+  /// The block this materializer was constructed at. Used as the hoist target
+  /// for constants that would otherwise be sunk into nested sibling regions.
+  Block *rootBlock;
 
   SmallVector<Operation *> toDelete;
 
@@ -1405,11 +1451,69 @@ public:
 
     // Elaborate all regions of unknown external ops. Any op appearing inside
     // an RTG test body with regions is expected to contain RTG constructs.
+    //
+    // The new op is a structural shell:
+    //   - Its operands are re-materialized from the elaborator state so that
+    //     references to RTG-elaborated values become the corresponding new
+    //     SSA values (and don't dangle after finalize() erases the old ops).
+    //   - Each region gets a fresh block whose arguments mirror the old
+    //     block's argument types/locations. Old block args are registered as
+    //     opaque IdentityValues mapped to the new block args, so RTG ops
+    //     inside the region can resolve them via state lookup.
+    //   - Each result is registered as an opaque IdentityValue mapped to the
+    //     corresponding new result, so downstream RTG ops consuming them
+    //     find them in state.
     auto *newOp = op->cloneWithoutRegions();
     materializer.getBuilder().insert(newOp);
 
-    for (unsigned i = 0; i < op->getNumRegions(); ++i) {
-      Block &newBlock = newOp->getRegion(i).emplaceBlock();
+    // Re-map operands: substitute each operand with the SSA value
+    // corresponding to its current ElaboratorValue. Materialization of
+    // operands must happen *before* `newOp` so the defs dominate the use;
+    // anchor the builder at `newOp` for the duration of operand re-map, then
+    // advance past it.
+    materializer.getBuilder().setInsertionPoint(newOp);
+    for (auto &operand : newOp->getOpOperands()) {
+      auto emitError = [&]() {
+        auto diag = newOp->emitError();
+        diag.attachNote(newOp->getLoc())
+            << "while materializing operand#" << operand.getOperandNumber()
+            << " of external region op";
+        return diag;
+      };
+      auto elabVal = state.at(operand.get());
+      Value val = materializer.materialize(elabVal, newOp->getLoc(), emitError);
+      if (!val)
+        return failure();
+      operand.set(val);
+    }
+    materializer.getBuilder().setInsertionPointAfter(newOp);
+
+    // Register an old value as an opaque external value mapped to the
+    // corresponding new SSA value. RTG ops that consume `oldVal` will find the
+    // opaque value in `state` (it is treated as symbolic), and materializing it
+    // yields `newVal` directly via the materializer's cache.
+    auto mapOpaque = [&](Value oldVal, Value newVal) {
+      auto *storage = sharedState.internalizer.create<OpaqueExternalStorage>(
+          oldVal.getType(), oldVal.getLoc());
+      state[oldVal] = storage;
+      materializer.map(storage, newVal);
+    };
+
+    for (auto [oldRegion, newRegion] :
+         llvm::zip(op->getRegions(), newOp->getRegions())) {
+      if (oldRegion.empty())
+        continue;
+
+      // Give the new region a block whose arguments mirror the old block's
+      // argument types/locations, and register the old args as opaque values
+      // mapped to the new args so region-internal RTG ops can resolve them.
+      Block &oldBlock = oldRegion.front();
+      Block &newBlock = newRegion.emplaceBlock();
+      for (auto oldArg : oldBlock.getArguments()) {
+        Value newArg = newBlock.addArgument(oldArg.getType(), oldArg.getLoc());
+        mapOpaque(oldArg, newArg);
+      }
+
       {
         OpBuilder::InsertionGuard guard(materializer.getBuilder());
         materializer.getBuilder().setInsertionPoint(&newBlock,
@@ -1418,11 +1522,17 @@ public:
         // keepTerminator=true: the original terminator (rtg.yield, scf.yield,
         // etc.) is cloned into the new block, preserving the op's expected
         // terminator type.
-        if (failed(elaborate(op->getRegion(i), {},
+        if (failed(elaborate(oldRegion, {},
                              /*keepTerminator=*/true, unused)))
           return failure();
       }
     }
+
+    // Register each result as an opaque value mapped to the new op's result so
+    // downstream RTG ops consuming them find them in `state`.
+    for (auto [oldRes, newRes] :
+         llvm::zip(op->getResults(), newOp->getResults()))
+      mapOpaque(oldRes, newRes);
 
     return DeletionKind::Delete;
   }
@@ -2203,7 +2313,8 @@ public:
                val) ||
            std::holds_alternative<SymbolicComputationWithIdentityStorage *>(
                val) ||
-           std::holds_alternative<SymbolicComputationStorage *>(val);
+           std::holds_alternative<SymbolicComputationStorage *>(val) ||
+           std::holds_alternative<OpaqueExternalStorage *>(val);
   }
 
   bool isSymbolic(Operation *op) {
@@ -2334,6 +2445,31 @@ public:
     if (region.getBlocks().size() > 1)
       return region.getParentOp()->emitOpError(
           "regions with more than one block are not supported");
+
+    // Save any prior bindings for this region's block arguments so that a
+    // recursive re-entry of the same region (e.g. nested invocation of the
+    // same handler region during a multi-shot resume whose continuation body
+    // re-performs the handled effect) does not clobber the outer frame's
+    // bindings of those args. Without this, the outer handler's continuation
+    // SSA value is rebound to the inner frame's continuation, and the outer
+    // handler's subsequent `rtg.resume %k, ...` resumes the inner frame.
+    SmallVector<std::pair<Value, std::optional<ElaboratorValue>>> savedArgs;
+    savedArgs.reserve(region.getNumArguments());
+    for (auto arg : region.getArguments()) {
+      auto it = state.find(arg);
+      if (it != state.end())
+        savedArgs.emplace_back(arg, it->second);
+      else
+        savedArgs.emplace_back(arg, std::nullopt);
+    }
+    llvm::scope_exit restoreArgs([&] {
+      for (auto &[arg, prev] : savedArgs) {
+        if (prev.has_value())
+          state[arg] = *prev;
+        else
+          state.erase(arg);
+      }
+    });
 
     for (auto [arg, elabArg] :
          llvm::zip(region.getArguments(), regionArguments))

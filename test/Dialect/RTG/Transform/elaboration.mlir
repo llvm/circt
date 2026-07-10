@@ -1157,6 +1157,60 @@ rtg.test @externalOpRegionElaborated(singleton = %none: index) {
 
 // -----
 
+// External region op produces a result that is consumed by an RTG op.
+
+rtg.target @singletonTarget : !rtg.dict<singleton: index> {
+  %0 = index.constant 0
+  rtg.yield %0 : index
+}
+
+func.func @consume_index_b(%arg0: index) -> () { return }
+
+// CHECK-LABEL: rtg.test @externalOpResultUsedByRTG
+rtg.test @externalOpResultUsedByRTG(singleton = %none: index) {
+  // CHECK: [[C5:%.+]] = rtg.constant 5
+  // CHECK: [[R:%.+]] = scf.execute_region -> index {
+  // CHECK-NEXT: scf.yield [[C5]]
+  %r = scf.execute_region -> index {
+    %c = index.constant 5
+    scf.yield %c : index
+  }
+  // The result [[R]] of the external op is an opaque value that downstream ops
+  // resolve to the new op's SSA result.
+  // CHECK: func.call @consume_index_b([[R]])
+  func.call @consume_index_b(%r) : (index) -> ()
+}
+
+// -----
+
+// External region op with block arguments.
+
+rtg.target @singletonTarget : !rtg.dict<singleton: index> {
+  %0 = index.constant 0
+  rtg.yield %0 : index
+}
+
+func.func @consume_index_c(%arg0: index) -> () { return }
+
+// CHECK-LABEL: rtg.test @externalOpRegionWithBlockArgs
+rtg.test @externalOpRegionWithBlockArgs(singleton = %none: index) {
+  %c0 = index.constant 0
+  %c10 = index.constant 10
+  %c1 = index.constant 1
+  // CHECK: scf.while ({{.+}}) : (index) -> index
+  %r = scf.while (%i = %c0) : (index) -> index {
+    %cond = index.cmp ult(%i, %c10)
+    scf.condition(%cond) %i : index
+  } do {
+  ^bb0(%j: index):
+    %next = index.add %j, %c1
+    scf.yield %next : index
+  }
+  func.call @consume_index_c(%r) : (index) -> ()
+}
+
+// -----
+
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   %0 = rtg.constant 0 : index
   rtg.yield %0 : index
