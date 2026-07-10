@@ -13,6 +13,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWAttributes.h"
 #include "circt/Support/Debug.h"
+#include "circt/Support/Path.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -59,9 +60,9 @@ static void makeCommonPrefix(StringRef outputDir, SmallString<64> &a,
   if (attr) {
     SmallString<64> b(attr.getDirectory());
     makeAbsolute(outputDir, b);
-    makeCommonPrefix(a, b);
+    makeCommonDirectoryPrefix(a, b);
   } else {
-    makeCommonPrefix(a, outputDir);
+    makeCommonDirectoryPrefix(a, outputDir);
   }
 }
 

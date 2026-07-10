@@ -340,13 +340,6 @@ parseFormatString(mlir::OpBuilder &builder, mlir::Location loc,
                   llvm::SmallVectorImpl<mlir::Value> &operands);
 
 //===----------------------------------------------------------------------===//
-// File utilities
-//===----------------------------------------------------------------------===//
-
-/// Truncate `a` to the common prefix of `a` and `b`.
-void makeCommonPrefix(SmallString<64> &a, StringRef b);
-
-//===----------------------------------------------------------------------===//
 // Object related utilities
 //===----------------------------------------------------------------------===//
 
