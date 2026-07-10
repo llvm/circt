@@ -37,6 +37,22 @@ static SmallVector<Value> extractBits(OpBuilder &builder, Value val) {
   return bits;
 }
 
+// Check whether a value is zero-extended or sign-extended
+static std::pair<bool, Value> getBaseWidth(Value val) {
+
+  Value valBase;
+  // Check for zext
+  if (matchPattern(val, comb::m_Zext(mlir::matchers::m_Any(&valBase))))
+    return {false, valBase};
+
+  // Check for sext of the value
+  if (matchPattern(val, comb::m_Sext(mlir::matchers::m_Any(&valBase))))
+    return {true, valBase};
+
+  // Not extended, return original value
+  return {false, val};
+}
+
 //===----------------------------------------------------------------------===//
 // Conversion patterns
 //===----------------------------------------------------------------------===//
@@ -265,46 +281,53 @@ private:
   static LogicalResult lowerBoothArray(PatternRewriter &rewriter, Value a,
                                        Value b, PartialProductOp op,
                                        unsigned width) {
+    // TODO: sort a and b based on non-zero bits to encode the smaller input
     Location loc = op.getLoc();
     auto zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
-    auto zeroWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
+
+    auto [aSigned, aBase] = getBaseWidth(op.getLhs());
+    auto [bSigned, bBase] = getBaseWidth(op.getRhs());
+
+    auto aBaseWidth = aBase.getType().getIntOrFloatBitWidth();
+    auto bBaseWidth = bBase.getType().getIntOrFloatBitWidth();
+
+    // Will handle signedMult separately
+    auto unsignedMult = !aSigned && !bSigned;
 
     // Detect leading zeros in multiplicand due to zero-extension
-    // and truncate to reduce partial product bits
-    // {'0, a} * {'0, b}
+    // and truncate to reduce partial product bits {'0, a} * {'0, b}
     auto rowWidth = width;
-    auto knownBitsA = comb::computeKnownBits(a);
-    if (!knownBitsA.Zero.isZero()) {
-      if (knownBitsA.Zero.countLeadingOnes() > 1) {
-        // Retain one leading zero to represent 2*{1'b0, a} = {a, 1'b0}
-        // {'0, a} -> {1'b0, a}
-        rowWidth -= knownBitsA.Zero.countLeadingOnes() - 1;
-        a = rewriter.createOrFold<comb::ExtractOp>(loc, a, 0, rowWidth);
-      }
+    if (unsignedMult && aBaseWidth < width) {
+      // Retain one leading zero to represent 2*{1'b0, a} = {a, 1'b0}
+      // {'0, a} -> {1'b0, a}
+      rowWidth = aBaseWidth + 1;
+      a = rewriter.createOrFold<comb::ExtractOp>(loc, a, 0, rowWidth);
     }
 
-    // TODO - replace with a concatenation to aid longest path analysis
-    auto oneRowWidth =
-        hw::ConstantOp::create(rewriter, loc, APInt(rowWidth, 1));
     // Booth encoding will select each row from {-2a, -1a, 0, 1a, 2a}
-    Value twoA = rewriter.createOrFold<comb::ShlOp>(loc, a, oneRowWidth);
+    Value twoAPre =
+        rewriter.createOrFold<comb::ConcatOp>(loc, ValueRange{a, zeroFalse});
+    Value twoA = rewriter.createOrFold<comb::ExtractOp>(
+        loc, twoAPre, 0, rowWidth); // Truncate to width bits
 
     // Encode based on the bits of b
-    // TODO: sort a and b based on non-zero bits to encode the smaller input
-    SmallVector<Value> bBits = extractBits(rewriter, b);
 
-    // Identify zero bits of b to reduce height of partial product array
-    auto bWidth = b.getType().getIntOrFloatBitWidth();
-    auto knownBitsB = comb::computeKnownBits(b);
-    if (!knownBitsB.Zero.isZero()) {
-      bWidth -= knownBitsB.Zero.countLeadingOnes();
-      for (unsigned i = 0; i < width; ++i)
-        if (knownBitsB.Zero[i])
-          bBits[i] = zeroFalse;
-    }
+    SmallVector<Value> bBits = extractBits(rewriter, b);
+    // Pad with two zeros
+    bBits.push_back(zeroFalse); // Add a zero bit for the first row
+    bBits.push_back(zeroFalse); // Add a zero bit for the last row
+
+    // Retain two leading zeros as when b has an even number of bits we just
+    // need to retain two leading zeros
+    if (!bSigned)
+      bBits.resize(bBaseWidth + 2);
+
+    // If b is signed, we need to sign-extend with a single sign-bit
+    if (bSigned)
+      bBits.resize(bBaseWidth + 1);
 
     SmallVector<Value> partialProducts;
-    partialProducts.reserve(width);
+    partialProducts.reserve(op.getNumResults());
 
     // Booth encoding halves array height by grouping three bits at a time:
     // partialProducts[i] = a * (-2*b[2*i+1] + b[2*i] + b[2*i-1]) << 2*i
@@ -315,11 +338,11 @@ private:
     Value encNegPrev;
 
     // For even width - additional row contains the final sign correction
-    for (unsigned i = 0; i <= width; i += 2) {
+    for (unsigned i = 0; i + 1 < bBits.size(); i += 2) {
       // Get Booth bits: b[i+1], b[i], b[i-1] (b[-1] = 0)
       Value bim1 = (i == 0) ? zeroFalse : bBits[i - 1];
-      Value bi = (i < width) ? bBits[i] : zeroFalse;
-      Value bip1 = (i + 1 < width) ? bBits[i + 1] : zeroFalse;
+      Value bi = bBits[i];
+      Value bip1 = bBits[i + 1];
 
       // Is the encoding zero or negative (an approximation)
       Value encNeg = bip1;
@@ -383,12 +406,6 @@ private:
 
       if (partialProducts.size() == op.getNumResults())
         break;
-
-      // Next row would be all zeros - need to account for the sign-correction
-      // of the previous row so the last row added is:
-      // {0, 0, 0, 0, 0, encNegPrev} << i
-      if (i > bWidth + 1)
-        break;
     }
 
     // Sign-extension:
@@ -423,6 +440,7 @@ private:
     }
 
     // Zero-pad to match the required output width
+    auto zeroWidth = hw::ConstantOp::create(rewriter, loc, APInt(width, 0));
     while (partialProducts.size() < op.getNumResults())
       partialProducts.push_back(zeroWidth);
 
