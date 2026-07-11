@@ -2451,6 +2451,75 @@ getBlockingOrContinuousAssignDelay(mlir::MLIRContext *context) {
   return llhd::TimeAttr::get(context, 0U, "ns", 0, 1);
 }
 
+static Value computeAssignDelay(Operation *assignOp,
+                                ConversionPatternRewriter &rewriter) {
+  if (assignOp->getNumOperands() == 3)
+    return rewriter.getRemappedValue(assignOp->getOperand(2));
+
+  if (isa<NonBlockingAssignOp>(assignOp))
+    return llhd::ConstantTimeOp::create(
+        rewriter, assignOp->getLoc(),
+        llhd::TimeAttr::get(assignOp->getContext(), 0U, "ns", 1, 0));
+  return llhd::ConstantTimeOp::create(
+      rewriter, assignOp->getLoc(),
+      getBlockingOrContinuousAssignDelay(assignOp->getContext()));
+}
+
+struct ConcatRefOpConversion : public OpConversionPattern<ConcatRefOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConcatRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!op->hasOneUse())
+      return rewriter.notifyMatchFailure(op, "concat_ref must have one use");
+
+    Operation *user = *op->getUsers().begin();
+    if (user->getOperand(0) != op.getResult() ||
+        !isa<ContinuousAssignOp, DelayedContinuousAssignOp, BlockingAssignOp,
+             NonBlockingAssignOp, DelayedNonBlockingAssignOp>(user))
+      return rewriter.notifyMatchFailure(
+          op, "concat_ref is only supported as an assignment destination");
+
+    rewriter.setInsertionPoint(user);
+    Value src = rewriter.getRemappedValue(user->getOperand(1));
+    if (!src)
+      return failure();
+    Value delay = computeAssignDelay(user, rewriter);
+    if (!delay)
+      return failure();
+
+    ValueRange operands = op.getValues();
+    ValueRange converted = adaptor.getValues();
+    int32_t offset = 0;
+    for (int32_t i = static_cast<int32_t>(operands.size()) - 1; i >= 0; --i) {
+      if (operands[i].getDefiningOp<ConcatRefOp>())
+        return rewriter.notifyMatchFailure(
+            op, "nested concat_ref is not supported yet");
+
+      auto refType = dyn_cast<llhd::RefType>(converted[i].getType());
+      if (!refType)
+        return failure();
+
+      int32_t width = hw::getBitWidth(refType.getNestedType());
+      if (width == -1)
+        return failure();
+
+      Value slice = rewriter.createOrFold<comb::ExtractOp>(
+          op.getLoc(), rewriter.getIntegerType(width), src, offset);
+      Value bitcast = rewriter.createOrFold<hw::BitcastOp>(
+          op.getLoc(), refType.getNestedType(), slice);
+      llhd::DriveOp::create(rewriter, op.getLoc(), converted[i], bitcast, delay,
+                            Value{});
+      offset += width;
+    }
+
+    rewriter.eraseOp(user);
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 template <typename OpTy>
 struct AssignOpConversion : public OpConversionPattern<OpTy> {
   using OpConversionPattern<OpTy>::OpConversionPattern;
@@ -3927,6 +3996,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     AShrOpConversion,
 
     // Patterns of assignment operations.
+    ConcatRefOpConversion,
     AssignOpConversion<ContinuousAssignOp>,
     AssignOpConversion<DelayedContinuousAssignOp>,
     AssignOpConversion<BlockingAssignOp>,
