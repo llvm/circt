@@ -99,7 +99,7 @@ jobs:
         run: python -m cibuildwheel --output-dir wheelhouse ./lib/Bindings/Python
         env:
           CIBW_BUILD: ${{ matrix.config.cibw_build }}
-          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_BUILD_FRONTEND: build
           CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=14.0
           SETUPTOOLS_SCM_DEBUG: True
