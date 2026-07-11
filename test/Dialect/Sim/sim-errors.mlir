@@ -140,3 +140,19 @@ hw.module @queue_from_array(in %uparr: !hw.array<5xi33>) {
   // expected-error @below {{'sim.queue.from_array' op sim::Queue element type 'i32' doesn't match hw::ArrayType element type 'i33'}}
   sim.queue.from_array %uparr : !hw.array<5xi33> -> <i32, 0>
 }
+
+// -----
+
+hw.module @config_get() {
+  // expected-error @below {{cannot find config declaration 'PRINTF_COND'}}
+  sim.config.get @PRINTF_COND
+}
+
+// -----
+
+sv.macro.decl @PRINTF_COND 
+
+hw.module @config_get() {
+  // expected-error @below {{config must reference 'sim.config.decl' but got 'sv.macro.decl'}}
+  sim.config.get @PRINTF_COND
+}
