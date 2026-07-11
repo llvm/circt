@@ -108,11 +108,8 @@ void arcRuntimeIR_deleteInstance(uint8_t *modelState) {
   arcRuntimeDeleteInstance(arcRuntimeGetStateFromModelState(modelState, 0));
 }
 
-void arcRuntimeIR_format(const FmtDescriptor *fmt, ...) {
-  va_list args;
-  va_start(args, fmt);
-
-  llvm::raw_ostream &os = llvm::outs();
+static void formatToStream(llvm::raw_ostream &os, const FmtDescriptor *fmt,
+                           va_list args) {
   while (fmt->action != FmtDescriptor::Action_End) {
     switch (fmt->action) {
     case FmtDescriptor::Action_Literal: {
@@ -146,8 +143,36 @@ void arcRuntimeIR_format(const FmtDescriptor *fmt, ...) {
     }
     fmt++;
   }
+}
+
+void arcRuntimeIR_format(const FmtDescriptor *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+
+  formatToStream(llvm::outs(), fmt, args);
 
   va_end(args);
+}
+
+void arcRuntimeIR_formatToStream(uint8_t *stream, const FmtDescriptor *fmt,
+                                 ...) {
+  if (!stream)
+    impl::fatalError("Output stream pointer is null");
+
+  va_list args;
+  va_start(args, fmt);
+
+  formatToStream(*reinterpret_cast<llvm::raw_ostream *>(stream), fmt, args);
+
+  va_end(args);
+}
+
+uint8_t *arcRuntimeIR_getStdoutStream() {
+  return reinterpret_cast<uint8_t *>(&llvm::outs());
+}
+
+uint8_t *arcRuntimeIR_getStderrStream() {
+  return reinterpret_cast<uint8_t *>(&llvm::errs());
 }
 
 uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
@@ -163,9 +188,11 @@ uint64_t *arcRuntimeIR_swapTraceBuffer(const uint8_t *modelState) {
 namespace circt::arc::runtime {
 
 static const APICallbacks apiCallbacksGlobal{
-    &arcRuntimeIR_allocInstance, &arcRuntimeIR_deleteInstance,
-    &arcRuntimeIR_onEval,        &arcRuntimeIR_onInitialized,
-    &arcRuntimeIR_format,        &arcRuntimeIR_swapTraceBuffer};
+    &arcRuntimeIR_allocInstance,   &arcRuntimeIR_deleteInstance,
+    &arcRuntimeIR_onEval,          &arcRuntimeIR_onInitialized,
+    &arcRuntimeIR_format,          &arcRuntimeIR_formatToStream,
+    &arcRuntimeIR_getStdoutStream, &arcRuntimeIR_getStderrStream,
+    &arcRuntimeIR_swapTraceBuffer};
 
 const APICallbacks &getArcRuntimeAPICallbacks() { return apiCallbacksGlobal; }
 
