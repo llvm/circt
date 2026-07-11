@@ -28,6 +28,7 @@ set(libs
   CIRCTSupport
   CIRCTTransforms
   CIRCTVerif
+  LLVMTargetParser
   MLIRArithDialect
   MLIRBuiltinToLLVMIRTranslation
   MLIRControlFlowDialect
@@ -40,6 +41,7 @@ set(libs
   MLIRParser
   MLIRSCFDialect
   MLIRTargetLLVMIRExport
+  MLIRTargetLLVMIRImport
   MLIRUBDialect
 )
 

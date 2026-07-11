@@ -60,12 +60,15 @@
 #include "mlir/Pass/PassInstrumentation.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Support/Timing.h"
 #include "mlir/Support/ToolUtilities.h"
 #include "mlir/Target/LLVMIR/Dialect/All.h"
 #include "mlir/Target/LLVMIR/Export.h"
+#include "mlir/Target/LLVMIR/Import.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -75,6 +78,8 @@
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "llvm/TargetParser/Host.h"
+#include "llvm/TargetParser/Triple.h"
 
 #ifdef ARCILATOR_ENABLE_JIT
 #define ARC_RUNTIME_JITBIND_FNDECL
@@ -199,6 +204,19 @@ static llvm::cl::opt<bool> traceTaps(
     "trace-taps",
     llvm::cl::desc("Insert trace instrumentation for observed values"),
     llvm::cl::init(false), llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<bool> shouldAddDataLayoutAttribute(
+    "add-data-layout-information",
+    llvm::cl::desc(
+        "Add Data Layout and Target Information (DLTI) to the module"),
+    llvm::cl::init(true), llvm::cl::cat(mainCategory));
+
+static llvm::cl::opt<std::string> dltiTargetTriple(
+    "target-triple",
+    llvm::cl::desc("Target Triple for creating DLTI. If unspecified, the DLTI "
+                   "of the current process is used."),
+    llvm::cl::value_desc("triple"), llvm::cl::init(""),
+    llvm::cl::cat(mainCategory));
 
 // Options to control early-out from pipeline.
 enum Until {
@@ -413,6 +431,38 @@ static void populateHwModuleToArcPipeline(PassManager &pm) {
   populateArcStateAllocationPipeline(pm, allocationOpt);
 }
 
+static LogicalResult addDataLayoutAttribute(ModuleOp moduleOp) {
+  moduleOp.getContext()->loadDialect<DLTIDialect, LLVM::LLVMDialect>();
+
+  auto tripleStr = dltiTargetTriple.empty() ? llvm::sys::getProcessTriple()
+                                            : dltiTargetTriple;
+  auto triple = llvm::Triple(tripleStr);
+  if (triple.getArch() == llvm::Triple::UnknownArch) {
+    llvm::errs() << "Failed to determine architecture for target triple \""
+                 << tripleStr << "\".\n";
+    return failure();
+  }
+
+  // These assumptions are hardcoded in various passes:
+  if (!triple.isArch64Bit() || !triple.isLittleEndian()) {
+    llvm::errs() << "Unsupported target architecture \"" << tripleStr
+                 << "\".\n";
+    return failure();
+  }
+
+  // Check if there already is an DLTI attribute.
+  if (moduleOp->getAttr(DLTIDialect::kDataLayoutAttrName))
+    moduleOp.emitWarning("Existing DLTI specification will be overridden. Use "
+                         "`--add-data-layout-information=false` to retain it.");
+
+  // Create the attribute.
+  auto dataLayout = llvm::DataLayout(triple.computeDataLayout());
+  auto dataLayoutSpec =
+      mlir::translateDataLayout(dataLayout, moduleOp->getContext());
+  moduleOp->setAttr(DLTIDialect::kDataLayoutAttrName, dataLayoutSpec);
+  return success();
+}
+
 static LogicalResult processBuffer(
     MLIRContext &context, TimingScope &ts, llvm::SourceMgr &sourceMgr,
     std::optional<std::unique_ptr<llvm::ToolOutputFile>> &outputFile) {
@@ -422,6 +472,8 @@ static LogicalResult processBuffer(
     module = parseSourceFile<ModuleOp>(sourceMgr, &context);
   }
   if (!module)
+    return failure();
+  if (shouldAddDataLayoutAttribute && failed(addDataLayoutAttribute(*module)))
     return failure();
 
   // Lower HwModule to Arc model.
