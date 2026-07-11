@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Dialect/SV/SVOps.h"
@@ -26,6 +27,158 @@
 using namespace mlir;
 using namespace circt;
 using namespace sim;
+
+//===----------------------------------------------------------------------===//
+// StateOp
+//===----------------------------------------------------------------------===//
+
+ParseResult StateOp::parse(OpAsmParser &parser, OperationState &result) {
+  StringAttr nameAttr;
+  if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  StringRef kindKeyword;
+  if (parser.parseKeyword(&kindKeyword))
+    return failure();
+  auto kind = symbolizeStateKind(kindKeyword);
+  if (!kind)
+    return parser.emitError(parser.getNameLoc(),
+                            "expected simulator state kind");
+  result.addAttribute(StateOp::getKindAttrName(result.name),
+                      StateKindAttr::get(parser.getContext(), *kind));
+
+  Type stateType;
+  if (parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(stateType))
+    return failure();
+
+  result.addAttribute(StateOp::getTypeAttrName(result.name),
+                      TypeAttr::get(stateType));
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body))
+    return failure();
+  return success();
+}
+
+void StateOp::print(OpAsmPrinter &p) {
+  p << ' ';
+  p.printSymbolName(getSymName());
+  p << ' ' << stringifyStateKind(getKind());
+  p.printOptionalAttrDict(
+      (*this)->getAttrs(),
+      {SymbolTable::getSymbolAttrName(), getKindAttrName(), getTypeAttrName()});
+  p << " : ";
+  p.printType(getType());
+  p << ' ';
+  p.printRegion(getBody(), /*printEntryBlockArgs=*/false,
+                /*printBlockTerminators=*/true);
+}
+
+static bool isSupportedStateBodyOp(Operation *op) {
+  if (isa<StateReadOp>(op) ||
+      isa_and_nonnull<comb::CombDialect>(op->getDialect()))
+    return true;
+  return isa<hw::ConstantOp, hw::AggregateConstantOp, hw::ArrayCreateOp,
+             hw::ArrayConcatOp, hw::ArraySliceOp, hw::ArrayGetOp,
+             hw::ArrayInjectOp, hw::StructCreateOp, hw::StructExtractOp,
+             hw::StructInjectOp, hw::StructExplodeOp, hw::UnionCreateOp,
+             hw::UnionExtractOp, hw::BitcastOp, hw::EnumConstantOp,
+             hw::EnumCmpOp>(op);
+}
+
+LogicalResult StateOp::verify() {
+  if (!getType().isInteger(1))
+    return emitOpError("currently only supports i1 state values");
+  Operation *symbolTableOp = SymbolTable::getNearestSymbolTable(getOperation());
+  if (!symbolTableOp)
+    return success();
+  for (Region &region : symbolTableOp->getRegions()) {
+    for (Block &block : region) {
+      for (Operation &op : block) {
+        auto state = dyn_cast<StateOp>(op);
+        if (!state)
+          continue;
+        if (state == *this)
+          return success();
+        if (state.getKind() == getKind())
+          return emitOpError()
+                 << "duplicate sim.state kind '"
+                 << stringifyStateKind(getKind()) << "' in symbol table";
+      }
+    }
+  }
+  return success();
+}
+
+LogicalResult StateOp::verifyRegions() {
+  auto *terminator = getBody().front().getTerminator();
+  auto yield = dyn_cast<StateYieldOp>(terminator);
+  if (!yield)
+    return emitOpError("must terminate with 'sim.state.yield'");
+  if (yield.getNumOperands() != 1)
+    return yield.emitError("must yield exactly one value");
+  if (yield.getOperand(0).getType() != getType())
+    return yield.emitError()
+           << "yield operand type " << yield.getOperand(0).getType()
+           << " does not match state type " << getType();
+
+  WalkResult result = getBody().walk<WalkOrder::PreOrder>([&](Operation *op) {
+    if (op == getOperation() || isa<StateYieldOp>(op))
+      return WalkResult::advance();
+    if (isSupportedStateBodyOp(op))
+      return WalkResult::advance();
+    op->emitError()
+        << "ops in 'sim.state' must be hw.constant, sim.state.read, comb ops, "
+           "or supported hw value ops";
+    return WalkResult::interrupt();
+  });
+  return failure(result.wasInterrupted());
+}
+
+//===----------------------------------------------------------------------===//
+// StateReadOp
+//===----------------------------------------------------------------------===//
+
+ParseResult StateReadOp::parse(OpAsmParser &parser, OperationState &result) {
+  FlatSymbolRefAttr stateAttr;
+  Type resultType;
+  if (parser.parseAttribute(stateAttr,
+                            StateReadOp::getStateAttrName(result.name),
+                            result.attributes) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(resultType))
+    return failure();
+  result.addTypes(resultType);
+  return success();
+}
+
+void StateReadOp::print(OpAsmPrinter &p) {
+  p << ' ' << getStateAttr();
+  p.printOptionalAttrDict((*this)->getAttrs(), {getStateAttrName()});
+  p << " : ";
+  p.printType(getResult().getType());
+}
+
+LogicalResult
+StateReadOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  Operation *symbol =
+      symbolTable.lookupNearestSymbolFrom(*this, getStateAttr());
+  if (!symbol)
+    return emitOpError() << "references unknown symbol " << getStateAttr();
+
+  auto state = dyn_cast<StateOp>(symbol);
+  if (!state)
+    return emitOpError() << "must reference a 'sim.state', but "
+                         << getStateAttr() << " is a '" << symbol->getName()
+                         << "'";
+
+  if (getType() != state.getType())
+    return emitOpError() << "result type " << getType()
+                         << " does not match state type " << state.getType();
+
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // DPIFuncOp
