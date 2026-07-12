@@ -73,6 +73,30 @@ def QueueType : SimTypeDef<"Queue"> {
   ];
 }
 
+def AssocArrayType : SimTypeDef<"AssocArray"> {
+  let mnemonic = "assoc_array";
+  let summary = "an associative array type";
+  let description = [{
+    An associative array (hash map) type. Even though practical lowerings of
+    this type likely have to hold the contents in dynamically-allocated heap
+    memory, *this type has value semantics*.
+  }];
+
+  let parameters = (ins
+    "::mlir::Type":$elementType,
+    "::mlir::Type":$indexType
+  );
+  let assemblyFormat = [{
+    `<` $elementType `,` $indexType `>`
+  }];
+  let builders = [
+    AttrBuilderWithInferredContext<
+      (ins "Type":$elementType, "Type":$indexType), [{
+        return $_get(elementType.getContext(), elementType, indexType);
+      }]>
+  ];
+}
+
 def DPIFunctionType : SimTypeDef<"DPIFunction"> {
   let summary = "DPI function type with first-class argument directions";
   let description = [{

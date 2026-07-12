@@ -2248,6 +2248,31 @@ def AssocArrayExtractRefOp : MooreOp<"assoc_array_extract_ref",
   }];
 }
 
+def AssocArraySetOp : MooreOp<"assoc_array.set", [
+    TypesMatchWith<"element type of associative array and given value must match",
+    "assoc_array", "value",
+    "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getElementType()">,
+    TypesMatchWith<"associative array index and given index must match",
+    "assoc_array", "index",
+    "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {
+  let summary = "Overwrite (or insert) the element at a given index in an "
+                "associative array";
+  let description = [{
+    See IEEE 1800-2017 § 7.8.7 "Allocating associative array elements".
+    Writes $value at $index in the associative array, creating the entry
+    if it did not already exist.
+    This op is produced by the `SimplifyRefs` pass folding an
+    `assoc_array_extract_ref` immediately consumed by a blocking assignment;
+    ImportVerilog never emits it directly.
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, UnpackedType:$index,
+    UnpackedType:$value);
+  let results = (outs);
+  let assemblyFormat = [{
+    $assoc_array `[` $index `]` `=` $value attr-dict `:` type($assoc_array)
+  }];
+}
+
 def AssocArrayDeleteOp : MooreOp<"assoc_array.delete", 
     [TypesMatchWith<"associative array index and given index must match",
     "assoc_array", "index", "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {

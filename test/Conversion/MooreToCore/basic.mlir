@@ -510,6 +510,18 @@ moore.module private @PreservePortOrder(in %x: !moore.i42, out y: !moore.i42, in
   moore.output %x : !moore.i42
 }
 
+// CHECK-LABEL: hw.module @AssocArrayInputPort
+// CHECK-SAME: (in %assoc_array_port : !sim.assoc_array<i32, !sim.dstring>)
+moore.module @AssocArrayInputPort(in %assoc_array_port : !moore.assoc_array<i32, string>) {
+  moore.output
+}
+
+// CHECK-LABEL: hw.module @MixedPortsWithAssocArray
+// CHECK-SAME: (in %valid : i1, in %data : !sim.assoc_array<i32, !sim.dstring>, out out : i1)
+moore.module @MixedPortsWithAssocArray(in %valid : !moore.l1, in %data : !moore.assoc_array<i32, string>, out out : !moore.l1) {
+  moore.output %valid : !moore.l1
+}
+
 // CHECK-LABEL: hw.module @Variable
 moore.module @Variable() {
   // CHECK: [[TMP0:%.+]] = hw.constant 0 : i32
@@ -1695,6 +1707,68 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
 
   // CHECK: [[CONCAT:%.+]] = sim.queue.concat ([[QR]], [[DIFFB]]) : (!sim.queue<i32, 10>, !sim.queue<i32, 0>) <i32, 5>
   %concatres = moore.queue.concat (%qr, %diffbounds) : (!moore.queue<i32, 10>, !moore.queue<i32, 0>) <i32, 5>
+
+  return
+}
+
+// CHECK-LABEL: func.func @AssocArrayOperations
+func.func @AssocArrayOperations(%arg0: !moore.i32, %arg1: !moore.i8) {
+  // CHECK: [[EMPTY:%.+]] = sim.assoc_array.empty : <i8, i32>
+  // CHECK: [[AA:%.+]] = llhd.sig [[EMPTY]] : !sim.assoc_array<i8, i32>
+  %aa = moore.variable : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR:%.+]] = llhd.prb [[AA]]
+  %aar = moore.read %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[ZERO:%.+]] = hw.constant 0 : i8
+  // CHECK: [[RAW:%.+]] = sim.assoc_array.get [[AAR]][%arg0] : <i8, i32>
+  // CHECK: [[FOUND:%.+]] = sim.assoc_array.exists %arg0 in [[AAR]] : <i8, i32>
+  // CHECK: [[C0:%.+]] = hw.constant 0 : i32
+  // CHECK: [[EXISTSBIT:%.+]] = comb.icmp ne [[FOUND]], [[C0]] : i32
+  // CHECK: [[EL:%.+]] = comb.mux [[EXISTSBIT]], [[RAW]], [[ZERO]] : i8
+  %el = moore.assoc_array_extract %aar[%arg0] : <i8, i32>
+
+  // CHECK: [[AAR2:%.+]] = llhd.prb [[AA]]
+  // CHECK: [[NEWAA:%.+]] = sim.assoc_array.set [[AAR2]][%arg0] = %arg1 : <i8, i32>
+  // CHECK: llhd.drv [[AA]], [[NEWAA]]
+  moore.assoc_array.set %aa[%arg0] = %arg1 : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR3:%.+]] = llhd.prb [[AA]]
+  // CHECK: [[NEWAA2:%.+]] = sim.assoc_array.delete index %arg0 of [[AAR3]] : <i8, i32>
+  // CHECK: llhd.drv [[AA]], [[NEWAA2]]
+  moore.assoc_array.delete index %arg0 from %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[NEWAA3:%.+]] = sim.assoc_array.empty : <i8, i32>
+  // CHECK: llhd.drv [[AA]], [[NEWAA3]]
+  moore.assoc_array.clear %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR4:%.+]] = llhd.prb [[AA]]
+  // CHECK: sim.assoc_array.size [[AAR4]] : <i8, i32>
+  moore.assoc_array.size %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR5:%.+]] = llhd.prb [[AA]]
+  // CHECK: sim.assoc_array.exists %arg0 in [[AAR5]] : <i8, i32>
+  moore.assoc_array.exists %arg0 in %aa : <!moore.assoc_array<i8, i32>>
+
+  %idx = moore.variable : <i32>
+
+  // CHECK: [[AAR6:%.+]] = llhd.prb [[AA]]
+  // CHECK: sim.assoc_array.first [[AAR6]] : <i8, i32>
+  moore.assoc_array.first to %idx from %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR7:%.+]] = llhd.prb [[AA]]
+  // CHECK: sim.assoc_array.last [[AAR7]] : <i8, i32>
+  moore.assoc_array.last to %idx from %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR8:%.+]] = llhd.prb [[AA]]
+  // CHECK: [[CURIDX1:%.+]] = llhd.prb
+  // CHECK: sim.assoc_array.next [[AAR8]][[[CURIDX1]]] : <i8, i32>
+  moore.assoc_array.next to %idx from %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR9:%.+]] = llhd.prb [[AA]]
+  // CHECK: [[CURIDX2:%.+]] = llhd.prb
+  // CHECK: sim.assoc_array.prev [[AAR9]][[[CURIDX2]]] : <i8, i32>
+  moore.assoc_array.prev to %idx from %aa : <!moore.assoc_array<i8, i32>>
 
   return
 }
