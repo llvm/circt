@@ -1,4 +1,4 @@
-// RUN: circt-opt %s --convert-hw-to-llvm=spill-arrays-early=false | FileCheck %s
+// RUN: circt-opt %s --split-input-file  --convert-hw-to-llvm=spill-arrays-early=false | FileCheck %s
 
 // CHECK-LABEL: @convertArray
 // CHECK-SAME: (%arg0: i1, %arg1: !llvm.array<2 x i32>,
@@ -243,4 +243,15 @@ func.func @issue9171(%idx: i1) -> i32 {
   // CHECK: return [[RETVAL]]
   %get = hw.array_get %cst[%idx] : !hw.array<2xi32>, i1
   return %get : i32
+}
+
+// -----
+
+// Check that the DLTI is considered when calculating the size for the union by over-aligning i64 to 16 byte.
+module attributes {dlti.dl_spec = #dlti.dl_spec<i64 = dense<128> : vector<2xi64>>} {
+  func.func @unionOfStructSize(%arg0: !hw.struct<foo: i64, bar: i64>, %arg1: !hw.union<s: !hw.struct<foo: i64, bar: i64>, i: i32>) {
+    // CHECK: llvm.alloca %{{.*}} x !llvm.array<32 x i8>
+    %0 = hw.union_create "s", %arg0 : !hw.union<s: !hw.struct<foo: i64, bar: i64>, i: i32>
+    return
+  }
 }

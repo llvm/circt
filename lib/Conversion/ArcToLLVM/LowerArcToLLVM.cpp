@@ -41,6 +41,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
@@ -1894,8 +1895,9 @@ void LowerArcToLLVMPass::runOnOperation() {
   populateAnyFunctionOpInterfaceTypeConversionPattern(patterns, converter);
 
   // CIRCT patterns.
+  DataLayout layout = DataLayout::closest(getOperation());
   DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
-  populateHWToLLVMTypeConversions(converter);
+  populateHWToLLVMTypeConversions(converter, layout);
   std::optional<HWToLLVMArraySpillCache> spillCacheOpt =
       HWToLLVMArraySpillCache();
   {
