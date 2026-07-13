@@ -1364,8 +1364,18 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
     // TODO: return X if the domain is four-valued for out-of-bounds accesses
     // once we support four-valued lowering
     Type resultType = typeConverter->convertType(op.getResult().getType());
-    Type inputType = adaptor.getInput().getType();
+    Value input = adaptor.getInput();
+    Type inputType = input.getType();
     int32_t low = adaptor.getLowBit();
+
+    if (auto structTy = dyn_cast<hw::StructType>(inputType)) {
+      int32_t width = hw::getBitWidth(structTy);
+      if (width == -1)
+        return failure();
+      input = rewriter.createOrFold<hw::BitcastOp>(
+          op.getLoc(), rewriter.getIntegerType(width), input);
+      inputType = input.getType();
+    }
 
     if (isa<IntegerType>(inputType)) {
       int32_t inputWidth = inputType.getIntOrFloatBitWidth();
@@ -1383,7 +1393,7 @@ struct ExtractOpConversion : public OpConversionPattern<ExtractOp> {
             op.getLoc(),
             rewriter.getIntegerType(
                 std::min(resultWidth, std::min(high, inputWidth) - lowIdx)),
-            adaptor.getInput(), lowIdx);
+            input, lowIdx);
         toConcat.push_back(middle);
       }
 
