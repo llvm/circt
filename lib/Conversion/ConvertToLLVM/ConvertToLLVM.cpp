@@ -26,6 +26,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -61,9 +62,10 @@ void ConvertToLLVMPass::convertFuncOp(func::FuncOp funcOp) {
   MLIRContext *context = &getContext();
   RewritePatternSet patterns(context);
   auto converter = mlir::LLVMTypeConverter(context);
+  DataLayout layout = DataLayout::closest(funcOp);
 
   // Add HW to LLVM type conversions
-  populateHWToLLVMTypeConversions(converter);
+  populateHWToLLVMTypeConversions(converter, layout);
 
   LLVMConversionTarget target(*context);
   target.addIllegalDialect<comb::CombDialect>();

@@ -871,8 +871,8 @@ static Type convertStructType(hw::StructType type,
 
 /// Convert a union to a flat byte buffer large enough to hold the LLVM
 /// representation of its widest member, including any alignment padding.
-static Type convertUnionType(hw::UnionType type, LLVMTypeConverter &converter) {
-  DataLayout layout;
+static Type convertUnionType(hw::UnionType type, DataLayout &layout,
+                             LLVMTypeConverter &converter) {
   uint64_t maxBytes = 0;
   for (auto field : type.getElements()) {
     auto llvmFieldTy = converter.convertType(field.type);
@@ -927,18 +927,21 @@ void circt::populateHWToLLVMConversionPatterns(
                                                                 spillCacheOpt);
 }
 
-void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter) {
+void circt::populateHWToLLVMTypeConversions(LLVMTypeConverter &converter,
+                                            DataLayout &layout) {
   converter.addConversion(
       [&](hw::ArrayType arr) { return convertArrayType(arr, converter); });
   converter.addConversion(
       [&](hw::StructType tup) { return convertStructType(tup, converter); });
-  converter.addConversion(
-      [&](hw::UnionType uni) { return convertUnionType(uni, converter); });
+  converter.addConversion([&](hw::UnionType uni) {
+    return convertUnionType(uni, layout, converter);
+  });
 }
 
 void HWToLLVMLoweringPass::runOnOperation() {
   DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
   std::optional<HWToLLVMArraySpillCache> spillCacheOpt = {};
+  DataLayout layout = DataLayout::closest(getOperation());
   Namespace globals;
   SymbolCache cache;
   cache.addDefinitions(getOperation());
@@ -946,7 +949,7 @@ void HWToLLVMLoweringPass::runOnOperation() {
 
   RewritePatternSet patterns(&getContext());
   auto converter = mlir::LLVMTypeConverter(&getContext());
-  populateHWToLLVMTypeConversions(converter);
+  populateHWToLLVMTypeConversions(converter, layout);
 
   if (spillArraysEarly) {
     spillCacheOpt = HWToLLVMArraySpillCache();
