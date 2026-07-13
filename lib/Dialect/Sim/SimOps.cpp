@@ -772,8 +772,10 @@ void TriggeredOp::build(OpBuilder &builder, OperationState &odsState,
 LogicalResult SVReadMemOp::verify() {
   if (getFinishAddr() && !getStartAddr())
     return emitOpError("'finishAddr' requires 'startAddr' to be present");
-  if ((bool)getSliceLeft() != (bool)getSliceRight())
-    return emitOpError("slice bounds must both be present or both absent");
+  if (getSliceLeft() && !getSliceRight())
+    return emitOpError("'sliceLeft' requires 'sliceRight' to be present");
+  if (getSliceRight() && !getSliceLeft())
+    return emitOpError("'sliceRight' requires 'sliceLeft' to be present");
   if (getDimLows().empty() || getDimLows().size() != getDimDescending().size())
     return emitOpError("'dimLows' and 'dimDescending' must have one entry per "
                        "unpacked dimension");

@@ -1319,12 +1319,15 @@ def SVFFlushAllOp : SimOp<"sv.fflush_all", [ProceduralOp]> {
   let assemblyFormat = "attr-dict";
 }
 
-def SVReadMemOp : SimOp<"sv.readmem", [AttrSizedOperandSegments, ProceduralOp]> {
+def SVReadMemOp : SimOp<"sv.readmem", [AttrSizedOperandSegments, ProceduralOp,
+    AllTypesMatch<["memory", "result"]>]> {
   let summary = "Load a memory from a file as with $readmemb/$readmemh";
   let description = [{
-    Load data from a file into a memory reference, following the file format
-    of the SystemVerilog `$readmemb`/`$readmemh` system tasks (IEEE 1800-2017
-    § 21.4). If `isBinary` is set the file contains binary words, otherwise
+    Takes the current contents of a memory and returns the contents updated
+    with the data read from a file, following the file format of the
+    SystemVerilog `$readmemb`/`$readmemh` system tasks (IEEE 1800-2017
+    § 21.4). Addresses for which the file holds no data keep their input
+    value. If `isBinary` is set the file contains binary words, otherwise
     hexadecimal.
 
     `dimLows` and `dimDescending` record the declared low bound and direction
@@ -1335,7 +1338,7 @@ def SVReadMemOp : SimOp<"sv.readmem", [AttrSizedOperandSegments, ProceduralOp]> 
   }];
   let arguments = (ins
     DynamicStringType:$filename,
-    AnyType:$dest,
+    AnyType:$memory,
     DefaultValuedAttr<BoolAttr, "false">:$isBinary,
     Optional<I32>:$startAddr,
     Optional<I32>:$finishAddr,
@@ -1345,11 +1348,12 @@ def SVReadMemOp : SimOp<"sv.readmem", [AttrSizedOperandSegments, ProceduralOp]> 
     DenseBoolArrayAttr:$dimDescending,
     OptionalAttr<DenseI64ArrayAttr>:$enumValues
   );
+  let results = (outs AnyType:$result);
   let assemblyFormat = [{
-    $filename `,` $dest
+    $filename `,` $memory
     (`start` `=` $startAddr^)? (`finish` `=` $finishAddr^)?
-    (`slice` `` `[`$sliceLeft^ `,` $sliceRight `]`)?
-    attr-dict `:` type($dest)
+    (`slice` `` `[` $sliceLeft^ `,` $sliceRight `]`)?
+    attr-dict `:` type($memory)
   }];
   let hasVerifier = 1;
 }

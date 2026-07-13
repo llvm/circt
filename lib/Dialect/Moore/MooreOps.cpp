@@ -2175,8 +2175,10 @@ LogicalResult ReadMemBIOp::verify() {
   if (getFinishAddr() && !getStartAddr())
     return emitOpError("'finishAddr' requires 'startAddr' to be present");
 
-  if ((bool)getSliceLeft() != (bool)getSliceRight())
-    return emitOpError("slice bounds must both be present or both absent");
+  if (getSliceLeft() && !getSliceRight())
+    return emitOpError("'sliceLeft' requires 'sliceRight' to be present");
+  if (getSliceRight() && !getSliceLeft())
+    return emitOpError("'sliceRight' requires 'sliceLeft' to be present");
 
   auto ref = dyn_cast<moore::RefType>(getDest().getType());
   if (!ref)

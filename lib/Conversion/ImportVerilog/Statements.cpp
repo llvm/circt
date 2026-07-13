@@ -1020,6 +1020,147 @@ struct StmtVisitor {
     return emitError(loc) << "Failed to convert Display Message!";
   }
 
+  /// Convert a `$readmemb`/`$readmemh` system task call into a
+  /// `moore.builtin.readmem` op. See IEEE 1800-2017 § 21.4.
+  LogicalResult
+  convertReadMemTask(std::span<const slang::ast::Expression *const> args,
+                     bool isBinary) {
+    assert(args.size() >= 2 && args.size() <= 4 &&
+           "$readmemh/$readmemb takes 2 to 4 arguments");
+
+    auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
+    auto filename = context.convertRvalueExpression(
+        *args[0], moore::StringType::get(builder.getContext()));
+    if (!filename)
+      return failure();
+
+    const auto *destExpr = args[1];
+
+    // Slang wraps the memory argument in an assignment to the lvalue;
+    // unwrap it to get at the memory itslef.
+    if (const auto *assign =
+            destExpr->as_if<slang::ast::AssignmentExpression>())
+      destExpr = &assign->left();
+
+    // The memory may use slice syntax on its rightmost specified dimension.
+    // The slice only narrows the address window of the selected array's highest
+    // dimension; the destination stays the full array.
+    Value sliceLeft, sliceRight;
+    if (const auto *rangeExpr =
+            destExpr->as_if<slang::ast::RangeSelectExpression>()) {
+      if (rangeExpr->getSelectionKind() !=
+          slang::ast::RangeSelectionKind::Simple) {
+        mlir::emitError(loc)
+            << "unsupported: indexed part-select on $readmem memory";
+        return failure();
+      }
+
+      sliceLeft = context.convertRvalueExpression(rangeExpr->left(), i32Ty);
+      sliceRight = context.convertRvalueExpression(rangeExpr->right(), i32Ty);
+
+      if (!sliceLeft || !sliceRight)
+        return failure();
+
+      destExpr = &rangeExpr->value();
+    }
+
+    auto dest = context.convertLvalueExpression(*destExpr);
+    if (!dest)
+      return failure();
+
+    // Collect the declared low bound and direction of every unpacked dimension
+    // (outermost first): the Moore array types do not carry them, but the
+    // row-major file layout (§21.4.3) and the address mapping of the lowering
+    // depend on them. Queues load with their current size fixed (§21.4.1).
+    const auto *curTy = &destExpr->type->getCanonicalType();
+    SmallVector<int64_t> dimLows;
+    SmallVector<bool> dimDescs;
+    const slang::ast::Type *elemSvTy = curTy;
+
+    if (curTy->isAssociativeArray()) {
+      mlir::emitError(loc) << "unsupported: $readmem into associative array";
+      return failure();
+    }
+
+    if (const auto *queueTy = curTy->as_if<slang::ast::QueueType>()) {
+      dimLows.push_back(0);
+      dimDescs.push_back(false);
+      elemSvTy = &queueTy->elementType.getCanonicalType();
+    } else if (curTy->as_if<slang::ast::DynamicArrayType>()) {
+      mlir::emitError(loc) << "unsupported: $readmem into dynamic array";
+      return failure();
+    } else {
+      while (const auto *fixedArr =
+                 curTy->as_if<slang::ast::FixedSizeUnpackedArrayType>()) {
+        dimLows.push_back(fixedArr->range.lower());
+        dimDescs.push_back(fixedArr->range.isDescending());
+        curTy = &fixedArr->elementType.getCanonicalType();
+      }
+      elemSvTy = curTy;
+    }
+
+    if (dimLows.empty()) {
+      mlir::emitError(loc) << "$readmem memory must be an unpacked array";
+      return failure();
+    }
+
+    // The file contains binary or hexadecimal numbers, so elements must be
+    // packed data.
+    if (!elemSvTy->isIntegral()) {
+      mlir::emitError(loc) << "unsupported: $readmem element type "
+                           << elemSvTy->toString();
+      return failure();
+    }
+
+    // Values outside the enumeration must be rejected during the load. Collect
+    // the legal values so the lowering can check membership; wider enumerations
+    // cannot be represented in the attribute.
+    DenseI64ArrayAttr enumValuesAttr;
+    if (const auto *enumTy = elemSvTy->as_if<slang::ast::EnumType>()) {
+      if (enumTy->getBitWidth() > 64) {
+        mlir::emitError(loc)
+            << "unsupported: $readmem into enumeration wider than 64 bits";
+        return failure();
+      }
+      SmallVector<int64_t> vals;
+      for (const auto &ev : enumTy->values()) {
+        auto v = ev.getValue().integer().as<int64_t>();
+        if (!v) {
+          mlir::emitError(loc)
+              << "unsupported: $readmem enumeration value with unknown bits";
+          return failure();
+        }
+        vals.push_back(*v);
+      }
+      enumValuesAttr = builder.getDenseI64ArrayAttr(vals);
+    }
+
+    Value startAddr;
+    if (args.size() >= 3 &&
+        args[2]->kind != slang::ast::ExpressionKind::EmptyArgument) {
+      startAddr = context.convertRvalueExpression(*args[2], i32Ty);
+      if (!startAddr)
+        return failure();
+    }
+
+    Value finishAddr;
+    if (args.size() >= 4 &&
+        args[3]->kind != slang::ast::ExpressionKind::EmptyArgument) {
+      finishAddr = context.convertRvalueExpression(*args[3], i32Ty);
+      if (!finishAddr)
+        return failure();
+    }
+
+    auto base = isBinary ? moore::MemBase::Binary : moore::MemBase::Hex;
+    moore::ReadMemBIOp::create(
+        builder, loc, filename, dest,
+        moore::MemBaseAttr::get(builder.getContext(), base), startAddr,
+        finishAddr, sliceLeft, sliceRight,
+        builder.getDenseI64ArrayAttr(dimLows),
+        builder.getDenseBoolArrayAttr(dimDescs), enumValuesAttr);
+    return success();
+  }
+
   /// Handle the subset of system calls that return no result value. Return
   /// true if the called system task could be handled, false otherwise. Return
   /// failure if an error occurred.
@@ -1304,123 +1445,8 @@ struct StmtVisitor {
     }
 
     if (nameId == ksn::ReadMemH || nameId == ksn::ReadMemB) {
-      assert(args.size() >= 2 && args.size() <= 4 &&
-             "$readmemh/$readmemb takes 2 to 4 arguments");
-
-      auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
-      auto filename = context.convertRvalueExpression(
-          *args[0], moore::StringType::get(builder.getContext()));
-      if (!filename)
+      if (failed(convertReadMemTask(args, nameId == ksn::ReadMemB)))
         return failure();
-
-      const auto *destExpr = args[1];
-      if (const auto *assign =
-              destExpr->as_if<slang::ast::AssignmentExpression>())
-        destExpr = &assign->left();
-
-      Value sliceLeft, sliceRight;
-      if (const auto *rangeExpr =
-              destExpr->as_if<slang::ast::RangeSelectExpression>()) {
-        if (rangeExpr->getSelectionKind() !=
-            slang::ast::RangeSelectionKind::Simple) {
-          mlir::emitError(loc)
-              << "unsupported: indexed part-select on $readmem memory";
-          return failure();
-        }
-
-        sliceLeft = context.convertRvalueExpression(rangeExpr->left(), i32Ty);
-        sliceRight = context.convertRvalueExpression(rangeExpr->right(), i32Ty);
-
-        if (!sliceLeft || !sliceRight)
-          return failure();
-
-        destExpr = &rangeExpr->value();
-      }
-
-      auto dest = context.convertLvalueExpression(*destExpr);
-      if (!dest)
-        return failure();
-
-      const auto *curTy = &destExpr->type->getCanonicalType();
-      SmallVector<int64_t> dimLows;
-      SmallVector<bool> dimDescs;
-      const slang::ast::Type *elemSvTy = curTy;
-
-      if (curTy->isAssociativeArray()) {
-        mlir::emitError(loc) << "unsupported: $readmem into associative array";
-        return failure();
-      }
-
-      if (const auto *queueTy = curTy->as_if<slang::ast::QueueType>()) {
-        dimLows.push_back(0);
-        dimDescs.push_back(false);
-        elemSvTy = &queueTy->elementType.getCanonicalType();
-      } else if (curTy->as_if<slang::ast::DynamicArrayType>()) {
-        mlir::emitError(loc) << "unsupported: $readmem into dynamic array";
-        return failure();
-      } else {
-        while (const auto *fixedArr =
-                   curTy->as_if<slang::ast::FixedSizeUnpackedArrayType>()) {
-          dimLows.push_back(fixedArr->range.lower());
-          dimDescs.push_back(fixedArr->range.isDescending());
-          curTy = &fixedArr->elementType.getCanonicalType();
-        }
-        elemSvTy = curTy;
-      }
-
-      if (dimLows.empty()) {
-        mlir::emitError(loc) << "$readmem memory must be an unpacked array";
-        return failure();
-      }
-
-      if (!elemSvTy->isIntegral()) {
-        mlir::emitError(loc)
-            << "unsupported: $readmem element type " << elemSvTy->toString();
-        return failure();
-      }
-
-      DenseI64ArrayAttr enumValuesAttr;
-      if (const auto *enumTy = elemSvTy->as_if<slang::ast::EnumType>()) {
-        SmallVector<int64_t> vals;
-        bool representable = enumTy->getBitWidth() <= 64;
-        if (representable) {
-          for (const auto &ev : enumTy->values()) {
-            auto v = ev.getValue().integer().as<int64_t>();
-            if (!v) {
-              representable = false;
-              break;
-            }
-            vals.push_back(*v);
-          }
-          if (representable)
-            enumValuesAttr = builder.getDenseI64ArrayAttr(vals);
-        }
-      }
-
-      Value startAddr;
-      if (args.size() >= 3 &&
-          args[2]->kind != slang::ast::ExpressionKind::EmptyArgument) {
-        startAddr = context.convertRvalueExpression(*args[2], i32Ty);
-        if (!startAddr)
-          return failure();
-      }
-
-      Value finishAddr;
-      if (args.size() >= 4 &&
-          args[3]->kind != slang::ast::ExpressionKind::EmptyArgument) {
-        finishAddr = context.convertRvalueExpression(*args[3], i32Ty);
-        if (!finishAddr)
-          return failure();
-      }
-
-      auto base = (nameId == ksn::ReadMemB) ? moore::MemBase::Binary
-                                            : moore::MemBase::Hex;
-      moore::ReadMemBIOp::create(
-          builder, loc, filename, dest,
-          moore::MemBaseAttr::get(builder.getContext(), base), startAddr,
-          finishAddr, sliceLeft, sliceRight,
-          builder.getDenseI64ArrayAttr(dimLows),
-          builder.getDenseBoolArrayAttr(dimDescs), enumValuesAttr);
       return true;
     }
 

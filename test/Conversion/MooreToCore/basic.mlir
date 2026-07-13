@@ -1948,19 +1948,33 @@ moore.module @ReadMem() {
     %1 = moore.int_to_string %0 : i64
     %start = moore.constant 16 : i32
     %finish = moore.constant 128 : i32
-    // CHECK: sim.sv.readmem %{{.+}}, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !llhd.ref<!hw.array<256xi8>>
+    // CHECK: [[M1:%.+]] = llhd.prb %mem
+    // CHECK: [[L1:%.+]] = sim.sv.readmem %{{.+}}, [[M1]] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !hw.array<256xi8>
+    // CHECK: llhd.drv %mem, [[L1]] after %{{.+}}
     moore.builtin.readmem hex %1, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
-    // CHECK: sim.sv.readmem %{{.+}}, %mem start = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>, isBinary = true} : !llhd.ref<!hw.array<256xi8>>
+    // CHECK: [[M2:%.+]] = llhd.prb %mem
+    // CHECK: [[L2:%.+]] = sim.sv.readmem %{{.+}}, [[M2]] start = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>, isBinary = true} : !hw.array<256xi8>
+    // CHECK: llhd.drv %mem, [[L2]] after %{{.+}}
     moore.builtin.readmem bin %1, %mem start = %start {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
-    // CHECK: sim.sv.readmem %{{.+}}, %mem start = %{{.+}} finish = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !llhd.ref<!hw.array<256xi8>>
+    // CHECK: [[M3:%.+]] = llhd.prb %mem
+    // CHECK: [[L3:%.+]] = sim.sv.readmem %{{.+}}, [[M3]] start = %{{.+}} finish = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !hw.array<256xi8>
+    // CHECK: llhd.drv %mem, [[L3]] after %{{.+}}
     moore.builtin.readmem hex %1, %mem start = %start finish = %finish {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
-    // CHECK: sim.sv.readmem %{{.+}}, %mem slice[%{{.+}}, %{{.+}}] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !llhd.ref<!hw.array<256xi8>>
+    // CHECK: [[M4:%.+]] = llhd.prb %mem
+    // CHECK: [[L4:%.+]] = sim.sv.readmem %{{.+}}, [[M4]] slice[%{{.+}}, %{{.+}}] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !hw.array<256xi8>
+    // CHECK: llhd.drv %mem, [[L4]] after %{{.+}}
     moore.builtin.readmem hex %1, %mem slice[%start, %finish] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
-    // CHECK: sim.sv.readmem %{{.+}}, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !llhd.ref<!hw.array<3xarray<5xarray<4xi32>>>>
+    // CHECK: [[M5:%.+]] = llhd.prb %mem3
+    // CHECK: [[L5:%.+]] = sim.sv.readmem %{{.+}}, [[M5]] {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !hw.array<3xarray<5xarray<4xi32>>>
+    // CHECK: llhd.drv %mem3, [[L5]] after %{{.+}}
     moore.builtin.readmem hex %1, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !moore.ref<uarray<3 x uarray<5 x uarray<4 x l32>>>>
-    // CHECK: sim.sv.readmem %{{.+}}, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !llhd.ref<!sim.queue<i8, 0>>
+    // CHECK: [[M6:%.+]] = llhd.prb %qmem
+    // CHECK: [[L6:%.+]] = sim.sv.readmem %{{.+}}, [[M6]] {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !sim.queue<i8, 0>
+    // CHECK: llhd.drv %qmem, [[L6]] after %{{.+}}
     moore.builtin.readmem hex %1, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
-    // CHECK: sim.sv.readmem %{{.+}}, %emem {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !llhd.ref<!hw.array<8xi2>>
+    // CHECK: [[M7:%.+]] = llhd.prb %emem
+    // CHECK: [[L7:%.+]] = sim.sv.readmem %{{.+}}, [[M7]] {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !hw.array<8xi2>
+    // CHECK: llhd.drv %emem, [[L7]] after %{{.+}}
     moore.builtin.readmem hex %1, %emem {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !moore.ref<uarray<8 x l2>>
     moore.return
   }
