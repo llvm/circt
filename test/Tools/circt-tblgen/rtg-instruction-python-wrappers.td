@@ -1,5 +1,5 @@
-// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=mock_return_val_func -I %S/../../../include -I %S/../../../llvm/mlir/include %s | FileCheck %s
-// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=mock_return_val_func --header-file=%S/rtg-instruction-python-wrappers-header.py -I %S/../../../include -I %S/../../../llvm/mlir/include %s | FileCheck %s --check-prefix=HEADER
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=mock_return_val_func %TABLEGEN_INC% %s | FileCheck %s
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=mock_return_val_func --header-file=%S/rtg-instruction-python-wrappers-header.py %TABLEGEN_INC% %s | FileCheck %s --check-prefix=HEADER
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/AttrTypeBase.td"
@@ -253,10 +253,10 @@ def Test15_MetadataOp : TestOp<"metadata"> {
 // CHECK-EMPTY:
 
 #ifdef TEST_EXTENSION_FILTER
-// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --extension=nonexistent -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EXTENSION_FILTER 2>&1 | FileCheck %s --check-prefix=NO-MATCH --allow-empty
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --extension=nonexistent %TABLEGEN_INC% %s -DTEST_EXTENSION_FILTER 2>&1 | FileCheck %s --check-prefix=NO-MATCH --allow-empty
 // NO-MATCH-NOT: @instruction
 
-// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --extension=extension_name -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_EXTENSION_FILTER 2>&1 | FileCheck %s --check-prefix=EXTENSION-MATCH
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --extension=extension_name %TABLEGEN_INC% %s -DTEST_EXTENSION_FILTER 2>&1 | FileCheck %s --check-prefix=EXTENSION-MATCH
 // EXTENSION-MATCH: @instruction
 
 def FilterTestOp : TestOp<"filter_test"> {
@@ -265,15 +265,15 @@ def FilterTestOp : TestOp<"filter_test"> {
 #endif
 
 #ifdef TEST_XLEN_FILTER
-// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --xlen=128 -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_XLEN_FILTER 2>&1 | FileCheck %s --check-prefix=XLEN-NO-MATCH --allow-empty
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --xlen=128 %TABLEGEN_INC% %s -DTEST_XLEN_FILTER 2>&1 | FileCheck %s --check-prefix=XLEN-NO-MATCH --allow-empty
 // XLEN-NO-MATCH-NOT: xlen_filter_test_both
 // XLEN-NO-MATCH-NOT: xlen_filter_test_32_only
 
-// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --xlen=32 -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_XLEN_FILTER 2>&1 | FileCheck %s --check-prefix=XLEN-MATCH
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --xlen=32 %TABLEGEN_INC% %s -DTEST_XLEN_FILTER 2>&1 | FileCheck %s --check-prefix=XLEN-MATCH
 // XLEN-MATCH-DAG: xlen_filter_test_both
 // XLEN-MATCH-DAG: xlen_filter_test_32_only
 
-// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --xlen=32,64 -I %S/../../../include -I %S/../../../llvm/mlir/include %s -DTEST_XLEN_FILTER 2>&1 | FileCheck %s --check-prefix=XLEN-BOTH-MATCH
+// RUN: circt-tblgen -gen-rtg-instruction-python-wrappers --return-val-func=test_func --xlen=32,64 %TABLEGEN_INC% %s -DTEST_XLEN_FILTER 2>&1 | FileCheck %s --check-prefix=XLEN-BOTH-MATCH
 // XLEN-BOTH-MATCH: xlen_filter_test_both
 // XLEN-BOTH-MATCH-NOT: xlen_filter_test_32_only
 
