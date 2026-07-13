@@ -490,10 +490,22 @@ struct ModuleVisitor : public BaseVisitor {
     SmallDenseMap<const PortSymbol *, Value> portValues;
     portValues.reserve(moduleType.getNumPorts());
 
-    // Map each InterfacePortSymbol to the connected interface instance(s):
+    // Map each interface port to the connected interface instance(s):
     // one element for a scalar connection, N for an interface-instance-array
-    // connection, in array order.
-    SmallDenseMap<const slang::ast::InterfacePortSymbol *,
+    // connection, in array order. Keyed by the port's SYNTAX node (falling
+    // back to the symbol pointer) rather than the `InterfacePortSymbol`
+    // itself: the flattened ports (`ifacePorts`) were built from the module's
+    // CANONICAL instance body, while the connections iterated here carry the
+    // port symbols of THIS instance's body — distinct symbols for the same
+    // source declaration on every non-canonical instance. The syntax node is
+    // shared across all instance bodies (same trick `portsBySyntaxNode` uses
+    // for regular ports above).
+    auto ifaceConnKey = [](const slang::ast::Symbol &port) -> const void * {
+      if (const auto *syntax = port.getSyntax())
+        return syntax;
+      return &port;
+    };
+    SmallDenseMap<const void *,
                   SmallVector<const slang::ast::InstanceSymbol *, 4>>
         ifaceConnMap;
 
@@ -630,12 +642,12 @@ struct ModuleVisitor : public BaseVisitor {
         auto ifaceConn = con->getIfaceConn();
         if (const auto *connInst =
                 ifaceConn.first->as_if<slang::ast::InstanceSymbol>()) {
-          ifaceConnMap[ifacePort].push_back(connInst);
+          ifaceConnMap[ifaceConnKey(*ifacePort)].push_back(connInst);
         } else if (const auto *connArray =
                        ifaceConn.first
                            ->as_if<slang::ast::InstanceArraySymbol>()) {
           // Array connection: collect the element instances in order.
-          auto &elements = ifaceConnMap[ifacePort];
+          auto &elements = ifaceConnMap[ifaceConnKey(*ifacePort)];
           for (const auto *element : connArray->elements) {
             const auto *elemInst =
                 element ? element->as_if<slang::ast::InstanceSymbol>()
@@ -679,7 +691,7 @@ struct ModuleVisitor : public BaseVisitor {
       if (!fp.bodySym || !fp.origin)
         continue;
       // Find which interface instance is connected to this port.
-      auto it = ifaceConnMap.find(fp.origin);
+      auto it = ifaceConnMap.find(ifaceConnKey(*fp.origin));
       if (it == ifaceConnMap.end() || it->second.empty()) {
         mlir::emitError(loc)
             << "no interface connection for port `" << fp.name << "`";
@@ -699,14 +711,23 @@ struct ModuleVisitor : public BaseVisitor {
             << "interface instance `" << connInst->name << "` was not expanded";
         return failure();
       }
-      // Find the expanded SSA value for this body member.
+      // Find the expanded SSA value for this body member. Fall back to the
+      // member NAME if the symbol pointer misses: the flattened port's
+      // `bodySym` was recorded from the canonical connection's body, while the
+      // connected instance here may have been expanded from a non-canonical
+      // body carrying distinct member symbols for the same declarations.
+      Value val;
       auto valIt = ifaceLowering->expandedMembers.find(fp.bodySym);
-      if (valIt == ifaceLowering->expandedMembers.end()) {
+      if (valIt != ifaceLowering->expandedMembers.end())
+        val = valIt->second;
+      else
+        val = ifaceLowering->expandedMembersByName.lookup(
+            builder.getStringAttr(fp.bodySym->name));
+      if (!val) {
         mlir::emitError(loc)
             << "unresolved interface port signal `" << fp.name << "`";
         return failure();
       }
-      Value val = valIt->second;
       if (fp.direction == hw::ModulePort::Output) {
         outputValues[*fp.outputIdx] = val;
       } else {
@@ -1459,35 +1480,72 @@ Context::convertModuleHeader(const slang::ast::InstanceBodySymbol *module) {
 
       if (modportSym) {
         // Modport specified: iterate modport members for signal directions.
-        for (const auto &member : modportSym->members()) {
-          const auto *mpp = member.as_if<slang::ast::ModportPortSymbol>();
-          if (!mpp)
-            continue;
-          auto type = convertType(mpp->getType());
-          if (!type)
-            return failure();
-          auto name =
-              builder.getStringAttr(Twine(portPrefix) + StringRef(mpp->name));
-          BlockArgument arg;
-          hw::ModulePort::Direction dir;
-          std::optional<unsigned> ifaceOutputIdx;
-          std::optional<unsigned> ifaceInputIdx;
-          if (mpp->direction == ArgumentDirection::Out) {
-            dir = hw::ModulePort::Output;
-            modulePorts.push_back({name, type, dir});
-            ifaceOutputIdx = outputIdx++;
-          } else {
-            dir = hw::ModulePort::Input;
-            if (mpp->direction != ArgumentDirection::In)
-              type = moore::RefType::get(cast<moore::UnpackedType>(type));
-            modulePorts.push_back({name, type, dir});
-            arg = block->addArgument(type, portLoc);
-            ifaceInputIdx = inputIdx++;
+        // `flattenModport` flattens the modport members once for a scalar
+        // connection; for an interface-instance-ARRAY connection each element
+        // is flattened separately (port prefix `<port>_<i>_`, per-element
+        // instance resolution), mirroring the generic (no-modport) array path
+        // below.
+        auto flattenModport =
+            [&](const slang::ast::InstanceSymbol *instSym, StringRef pfx,
+                std::optional<unsigned> elemIdx) -> LogicalResult {
+          for (const auto &member : modportSym->members()) {
+            const auto *mpp = member.as_if<slang::ast::ModportPortSymbol>();
+            if (!mpp)
+              continue;
+            auto type = convertType(mpp->getType());
+            if (!type)
+              return failure();
+            auto name =
+                builder.getStringAttr(Twine(pfx) + StringRef(mpp->name));
+            BlockArgument arg;
+            hw::ModulePort::Direction dir;
+            std::optional<unsigned> ifaceOutputIdx;
+            std::optional<unsigned> ifaceInputIdx;
+            if (mpp->direction == ArgumentDirection::Out) {
+              dir = hw::ModulePort::Output;
+              modulePorts.push_back({name, type, dir});
+              ifaceOutputIdx = outputIdx++;
+            } else {
+              dir = hw::ModulePort::Input;
+              if (mpp->direction != ArgumentDirection::In)
+                type = moore::RefType::get(cast<moore::UnpackedType>(type));
+              modulePorts.push_back({name, type, dir});
+              arg = block->addArgument(type, portLoc);
+              ifaceInputIdx = inputIdx++;
+            }
+            lowering.ifacePorts.push_back(
+                {name, dir, type, portLoc, arg, &ifacePort, mpp->internalSymbol,
+                 instSym, mpp, elemIdx, ifaceOutputIdx, ifaceInputIdx});
           }
-          lowering.ifacePorts.push_back(
-              {name, dir, type, portLoc, arg, &ifacePort, mpp->internalSymbol,
-               ifaceInst, mpp, std::nullopt, ifaceOutputIdx, ifaceInputIdx});
+          return success();
+        };
+        if (!ifaceInst && connSym) {
+          if (const auto *arraySym =
+                  connSym->as_if<slang::ast::InstanceArraySymbol>()) {
+            // Array-of-interface-instances connection: flatten the modport
+            // members once per element so element connections and in-body
+            // `port[i].member` accesses resolve per element.
+            for (auto [i, element] : llvm::enumerate(arraySym->elements)) {
+              const auto *elemInst =
+                  element ? element->as_if<slang::ast::InstanceSymbol>()
+                          : nullptr;
+              if (!elemInst) {
+                mlir::emitError(portLoc)
+                    << "unsupported interface port array connection for `"
+                    << ifacePort.name
+                    << "` (multi-dimensional arrays are not supported)";
+                return failure();
+              }
+              auto pfx = (Twine(portPrefix) + Twine(i) + "_").str();
+              if (failed(
+                      flattenModport(elemInst, pfx, static_cast<unsigned>(i))))
+                return failure();
+            }
+            return success();
+          }
         }
+        if (failed(flattenModport(ifaceInst, portPrefix, std::nullopt)))
+          return failure();
       } else {
         // No modport: iterate interface body for all variables and nets.
         // Treat them all as inout (input with ref type).
@@ -1834,6 +1892,14 @@ Context::convertModuleBody(const slang::ast::InstanceBodySymbol *module) {
     if (!valueSym)
       continue;
     Value ref = valueSymbols.lookup(valueSym);
+    if (!ref && fp.elementIdx) {
+      // Element ports of an interface-array connection are not registered in
+      // `valueSymbols` (by design; see the flattening comment above); resolve
+      // the internal reference through the per-element interface lowering.
+      if (auto *elemLowering =
+              ifacePortElementLowerings.lookup({fp.origin, *fp.elementIdx}))
+        ref = elemLowering->expandedMembers.lookup(fp.bodySym);
+    }
     if (!ref)
       continue;
     outputs[*fp.outputIdx] =
