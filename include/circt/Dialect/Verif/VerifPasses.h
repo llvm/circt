@@ -31,6 +31,8 @@ enum class SymbolicValueLowering {
   ExtModule,
   /// Lower to wire declarations with a `(* anyseq *)` attribute.
   Yosys,
+  /// Lower to input ports on the containing `hw.module`.
+  HWInput,
 };
 
 /// Construct the command line options to pick one of the symbolic value
@@ -40,7 +42,9 @@ static inline llvm::cl::ValuesClass symbolicValueLoweringCLValues() {
       clEnumValN(SymbolicValueLowering::ExtModule, "extmodule",
                  "Lower to instances of an external module"),
       clEnumValN(SymbolicValueLowering::Yosys, "yosys",
-                 "Lower to `(* anyseq *)` wire declarations"));
+                 "Lower to `(* anyseq *)` wire declarations"),
+      clEnumValN(SymbolicValueLowering::HWInput, "hw-input",
+                 "Lower to input ports on the containing `hw.module`"));
 }
 
 #define GEN_PASS_DECL
