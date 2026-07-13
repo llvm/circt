@@ -1578,3 +1578,45 @@ function void SScanfBuiltins(string src);
   // CHECK: moore.scan.end [[C0]]
   res = $sscanf(src, "");
 endfunction
+
+// IEEE 1800-2017 § 21.4 "Loading memory array data from a file"
+// CHECK-LABEL: moore.module @ReadMemBuiltins
+module ReadMemBuiltins;
+  logic [7:0] mem [1:256];
+  logic [7:0] memDesc [255:0];
+  logic [31:0] mem3 [0:2][0:4][5:8];
+  logic [7:0] memS [0:255];
+  logic [7:0] qmem [$];
+  typedef enum logic [1:0] {A=0, B=1, C=2} e_t;
+  e_t emem [0:7];
+  typedef struct packed { logic [3:0] a; logic [3:0] b; } s_t;
+  s_t smem [0:7];
+  int startDyn, finishDyn;
+  initial begin
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", mem);
+    // CHECK: moore.builtin.readmem bin %{{[0-9]+}}, %mem start = %{{[0-9]+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    $readmemb("mem.data", mem, 16);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %mem start = %{{[0-9]+}} finish = %{{[0-9]+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", mem, 128, 1);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %memDesc {dimDescending = array<i1: true>, dimLows = array<i64: 0>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", memDesc);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !moore.ref<uarray<3 x uarray<5 x uarray<4 x l32>>>>
+    $readmemh("mem.data", mem3);
+    // CHECK: [[SUBARR:%[0-9]+]] = moore.extract_ref %mem3 from 1
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, [[SUBARR]] {dimDescending = array<i1: false, false>, dimLows = array<i64: 0, 5>} : !moore.ref<uarray<5 x uarray<4 x l32>>>
+    $readmemh("mem.data", mem3[1]);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %memS slice[%{{[0-9]+}}, %{{[0-9]+}}] {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", memS[16:31]);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %memS start = %{{[0-9]+}} finish = %{{[0-9]+}} slice[%{{[0-9]+}}, %{{[0-9]+}}] {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", memS[16:31], 20, 24);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
+    $readmemh("mem.data", qmem);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %emem {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !moore.ref<uarray<8 x l2>>
+    $readmemh("mem.data", emem);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %smem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<8 x struct<{a: l4, b: l4}>>>
+    $readmemh("mem.data", smem);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %mem start = %{{[0-9]+}} finish = %{{[0-9]+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", mem, startDyn, finishDyn);
+  end
+endmodule

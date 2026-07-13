@@ -1319,6 +1319,45 @@ def SVFFlushAllOp : SimOp<"sv.fflush_all", [ProceduralOp]> {
   let assemblyFormat = "attr-dict";
 }
 
+def SVReadMemOp : SimOp<"sv.readmem", [AttrSizedOperandSegments, ProceduralOp,
+    AllTypesMatch<["memory", "result"]>]> {
+  let summary = "Load a memory from a file as with $readmemb/$readmemh";
+  let description = [{
+    Takes the current contents of a memory and returns the contents updated
+    with the data read from a file, following the file format of the
+    SystemVerilog `$readmemb`/`$readmemh` system tasks (IEEE 1800-2017
+    § 21.4). Addresses for which the file holds no data keep their input
+    value. If `isBinary` is set the file contains binary words, otherwise
+    hexadecimal.
+
+    `dimLows` and `dimDescending` record the declared low bound and direction
+    of every unpacked dimension of the memory (outermost first).
+    `sliceLeft`/`sliceRight` narrow the addressable window of the highest
+    dimension. When `enumValues` is present, loaded words are checked against
+    it and the load stops with an error on the first mismatch.
+  }];
+  let arguments = (ins
+    DynamicStringType:$filename,
+    AnyTypeOf<[ArrayType, QueueType]>:$memory,
+    DefaultValuedAttr<BoolAttr, "false">:$isBinary,
+    Optional<I32>:$startAddr,
+    Optional<I32>:$finishAddr,
+    Optional<I32>:$sliceLeft,
+    Optional<I32>:$sliceRight,
+    DenseI64ArrayAttr:$dimLows,
+    DenseBoolArrayAttr:$dimDescending,
+    OptionalAttr<DenseI64ArrayAttr>:$enumValues
+  );
+  let results = (outs AnyTypeOf<[ArrayType, QueueType]>:$result);
+  let assemblyFormat = [{
+    $filename `,` $memory
+    (`start` `=` $startAddr^)? (`finish` `=` $finishAddr^)?
+    (`slice` `` `[` $sliceLeft^ `,` $sliceRight `]`)?
+    attr-dict `:` type($memory)
+  }];
+  let hasVerifier = 1;
+}
+
 def FlushOp : SimOp<"flush", [ProceduralOp]> {
   let summary = "Flush a output stream";
   let description = [{

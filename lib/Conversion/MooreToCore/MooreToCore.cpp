@@ -3148,6 +3148,29 @@ struct StringCmpOpConversion : public OpConversionPattern<StringCmpOp> {
   }
 };
 
+struct ReadMemBIOpConversion : public OpConversionPattern<ReadMemBIOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ReadMemBIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto loc = op.getLoc();
+    Value memory = llhd::ProbeOp::create(rewriter, loc, adaptor.getDest());
+    Value loaded = sim::SVReadMemOp::create(
+        rewriter, loc, memory.getType(), adaptor.getFilename(), memory,
+        rewriter.getBoolAttr(op.getBase() == MemBase::Binary),
+        adaptor.getStartAddr(), adaptor.getFinishAddr(), adaptor.getSliceLeft(),
+        adaptor.getSliceRight(), op.getDimLowsAttr(), op.getDimDescendingAttr(),
+        op.getEnumValuesAttr());
+    Value delay = llhd::ConstantTimeOp::create(
+        rewriter, loc,
+        llhd::TimeAttr::get(rewriter.getContext(), 0U, "ns", 0, 1));
+    rewriter.replaceOpWithNewOp<llhd::DriveOp>(op, adaptor.getDest(), loaded,
+                                               delay, Value{});
+    return success();
+  }
+};
+
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -3704,6 +3727,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FOpenBIOpConversion,
     FCloseBIOpConversion,
     FFlushBIOpConversion,
+    ReadMemBIOpConversion,
 
     // Command line input operations
     PlusArgsTestBIOpConversion,
