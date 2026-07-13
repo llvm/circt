@@ -1338,7 +1338,7 @@ def SVReadMemOp : SimOp<"sv.readmem", [AttrSizedOperandSegments, ProceduralOp,
   }];
   let arguments = (ins
     DynamicStringType:$filename,
-    AnyType:$memory,
+    AnyTypeOf<[ArrayType, QueueType]>:$memory,
     DefaultValuedAttr<BoolAttr, "false">:$isBinary,
     Optional<I32>:$startAddr,
     Optional<I32>:$finishAddr,
@@ -1348,7 +1348,7 @@ def SVReadMemOp : SimOp<"sv.readmem", [AttrSizedOperandSegments, ProceduralOp,
     DenseBoolArrayAttr:$dimDescending,
     OptionalAttr<DenseI64ArrayAttr>:$enumValues
   );
-  let results = (outs AnyType:$result);
+  let results = (outs AnyTypeOf<[ArrayType, QueueType]>:$result);
   let assemblyFormat = [{
     $filename `,` $memory
     (`start` `=` $startAddr^)? (`finish` `=` $finishAddr^)?
