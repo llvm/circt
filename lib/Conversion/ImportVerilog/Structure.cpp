@@ -947,6 +947,12 @@ struct ModuleVisitor : public BaseVisitor {
     return success();
   }
 
+  // Ignore clocking blocks. The clocking is already inferred by slang at
+  // each use.
+  LogicalResult visit(const slang::ast::ClockingBlockSymbol &) {
+    return success();
+  }
+
   // Ignore let declarations. Slang expands uses into AssertionInstance
   // expressions, which are lowered when the use site is imported.
   LogicalResult visit(const slang::ast::LetDeclSymbol &) { return success(); }
@@ -1244,7 +1250,7 @@ LogicalResult Context::convertCompilation() {
 
   // Analyze the compilation to infer clocks for assertion system calls
   // using Slang's LRM clock inference.
-  populateAssertionClocks();
+  populateSampledValueClocks();
 
   // Visit all top-level declarations in all compilation units. This does not
   // include instantiable constructs like modules, interfaces, and programs,

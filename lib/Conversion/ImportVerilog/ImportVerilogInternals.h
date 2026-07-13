@@ -300,13 +300,14 @@ struct Context {
     return currentThisRef; // block arg added in declareFunction
   }
 
-  /// Maps assertion system calls to their corresponding clocks
+  /// Maps sampled value system calls to their corresponding clocks
   DenseMap<const slang::ast::CallExpression *,
            const slang::ast::TimingControl *>
-      assertionCallClocks;
+      sampledValueCallClocks;
 
-  /// Generates a map from assertions to clocks using Slang's analysis
-  void populateAssertionClocks();
+  /// Generates a map from sampled value system calls to clocks using Slang's
+  /// analysis
+  void populateSampledValueClocks();
 
   Value getIndexedQueue() const { return currentQueue; }
 
@@ -322,8 +323,8 @@ struct Context {
   Value convertAssertionExpression(const slang::ast::AssertionExpr &expr,
                                    Location loc);
 
-  // Convert an assertion expression AST node to MLIR ops.
-  Value convertAssertionCallExpression(
+  // Convert a sampled value system call expression AST node to MLIR ops.
+  Value convertSampledValueCallExpression(
       const slang::ast::CallExpression &expr,
       const slang::ast::CallExpression::SystemCallInfo &info, Location loc);
 
@@ -445,11 +446,11 @@ struct Context {
                           Location loc,
                           std::span<const slang::ast::Expression *const> args);
 
-  /// Convert system function calls within properties and assertion with a
-  /// single argument.
-  FailureOr<Value> convertAssertionSystemCallArity1(
-      const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
-      Type originalType, Value clockVal);
+  /// Convert sampled value system function calls with a single argument.
+  FailureOr<Value>
+  convertSampledValueCallArity1(const slang::ast::SystemSubroutine &subroutine,
+                                Location loc, Value value, Type originalType,
+                                Value clockVal);
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
