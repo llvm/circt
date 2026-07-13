@@ -410,7 +410,7 @@ Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
       builder, getLoc(),
       IntType::get(getContext(), *bitWidth, packedType.getDomain()), fvint);
   if (value.getType() != packedType)
-    SBVToPackedOp::create(builder, getLoc(), packedType, value);
+    value = SBVToPackedOp::create(builder, getLoc(), packedType, value);
   return value;
 }
 

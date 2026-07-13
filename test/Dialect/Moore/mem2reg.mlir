@@ -46,3 +46,13 @@ func.func @InitialValueDoesNotDominateDefault() {
   moore.blocking_assign %1, %2 : i32
   cf.br ^bb1
 }
+
+// CHECK-LABEL: func.func @StructDefaultValue(
+// CHECK-NEXT: [[DEFAULT:%.+]] = moore.constant hXXXXXX : l24
+// CHECK-NEXT: [[PACKED:%.+]] = moore.sbv_to_packed [[DEFAULT]] : struct<{a: l8, b: l16}>
+// CHECK-NEXT: return [[PACKED]] : !moore.struct<{a: l8, b: l16}>
+func.func @StructDefaultValue() -> !moore.struct<{a: l8, b: l16}> {
+  %0 = moore.variable : <struct<{a: l8, b: l16}>>
+  %1 = moore.read %0 : <struct<{a: l8, b: l16}>>
+  return %1 : !moore.struct<{a: l8, b: l16}>
+}
