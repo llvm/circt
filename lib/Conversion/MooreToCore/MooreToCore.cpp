@@ -1164,13 +1164,14 @@ struct VariableOpConversion : public OpConversionPattern<VariableOp> {
     if (!resultType)
       return rewriter.notifyMatchFailure(op.getLoc(), "invalid variable type");
 
+    auto refType = dyn_cast<llhd::RefType>(resultType);
+    if (!refType)
+      return rewriter.notifyMatchFailure(
+          op.getLoc(), "variable type did not convert to llhd::RefType");
+
     // Determine the initial value of the signal.
     Value init = adaptor.getInitial();
     if (!init) {
-      auto refType = dyn_cast<llhd::RefType>(resultType);
-      if (!refType)
-        return rewriter.notifyMatchFailure(
-            op.getLoc(), "variable type did not convert to llhd::RefType");
       init = createZeroValue(refType.getNestedType(), loc, rewriter);
       if (!init)
         return failure();
