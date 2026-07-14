@@ -27,6 +27,7 @@ add_circt_dialect_library(CIRCTArcTransforms
   RemoveI0Types.cpp
   ResolveXMRRef.cpp
   SimplifyVariadicOps.cpp
+  SplitFalseCombLoops.cpp
   SplitFuncs.cpp
   SplitLoops.cpp
   StripSV.cpp

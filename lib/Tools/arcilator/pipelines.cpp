@@ -65,6 +65,10 @@ void circt::populateArcConversionPipeline(OpPassManager &pm,
     pm.addNestedPass<hw::HWModuleOp>(sim::createSquashSimTriggered(opts));
   }
   pm.addPass(arc::createLowerProcessesPass());
+  // Break combinational loops that only exist at whole-value granularity
+  // (element-disjoint aggregate updates, disjoint bitwise feedback) before
+  // the fan-in analysis in ConvertToArcs rejects them.
+  pm.addNestedPass<hw::HWModuleOp>(arc::createSplitFalseCombLoops());
   {
     ConvertToArcsPassOptions opts;
     opts.tapRegisters = options.observeRegisters;

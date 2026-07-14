@@ -389,6 +389,35 @@ def SimplifyVariadicOps : Pass<"arc-simplify-variadic-ops", "mlir::ModuleOp"> {
   ];
 }
 
+def SplitFalseCombLoops : Pass<"arc-split-false-comb-loops", "hw::HWModuleOp"> {
+  let summary = "Split combinational loops that are false per element or bit";
+  let description = [{
+    ConvertToArcs' fan-in analysis detects combinational loops at whole
+    SSA-value granularity. Aggregate update chains that write element `i`
+    while reading element `j` (unrolled per-way state updates, register
+    files, struct field updates) and narrow bitwise feedback (bit 0 depending
+    on bit 1) form SSA cycles in the `hw.module` graph region even though
+    they are acyclic per array element, struct field, or bit. This pass finds
+    strongly connected components among non-arc-breaking combinational ops
+    and, when every member op is decomposable, splits the participating
+    values one type level at a time. Integers are only split into bits for
+    pure bitwise components up to `max-bit-split-width` bits wide. Genuine
+    loops are left in place for ConvertToArcs to diagnose.
+  }];
+  let dependentDialects = ["comb::CombDialect", "hw::HWDialect"];
+  let options = [
+    Option<"maxBitSplitWidth", "max-bit-split-width", "unsigned", "64",
+           "Maximum integer width to split into bits when breaking pure "
+           "bitwise loops">
+  ];
+  let statistics = [
+    Statistic<"numAggregateLoopsSplit", "num-aggregate-loops-split",
+              "Number of aggregate value loops split">,
+    Statistic<"numBitwiseLoopsSplit", "num-bitwise-loops-split",
+              "Number of bitwise integer loops split">
+  ];
+}
+
 def SplitFuncs : Pass<"arc-split-funcs", "mlir::ModuleOp"> {
   let summary = "Split large funcs into multiple smaller funcs";
   let dependentDialects = ["mlir::func::FuncDialect"];
