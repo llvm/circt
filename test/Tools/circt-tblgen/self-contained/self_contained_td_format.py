@@ -16,47 +16,57 @@ import lit.Test
 class SelfContainedTDFormat(lit.formats.TestFormat):
   """Lit test format that checks TableGen files are self-contained."""
 
-  def __init__(self, circt_tblgen, tablegen_includes, td_dirs, timeout):
+  def __init__(self, circt_tblgen):
     super().__init__()
-    self.td_dirs = td_dirs
-    # Build the fixed part of the command.
-    self._cmd_prefix = [circt_tblgen, "--print-records"]
-    for inc in tablegen_includes:
-      self._cmd_prefix += ["-I", inc]
-    self.timeout = timeout
+    self._circt_tblgen = circt_tblgen
+    self._dir_specs = []
     self._seen = set()
 
+  def add_dir_spec(self, tablegen_includes, td_dirs):
+    """Register a group of include paths and source directories."""
+    cmd_prefix = [self._circt_tblgen, "--print-records"]
+    for inc in tablegen_includes:
+      cmd_prefix += ["-I", inc]
+    self._dir_specs.append((cmd_prefix, td_dirs))
+
   def _walk_td_files(self):
-    """Yield (absolute_path, rel_path_from_circt_root) for each .td file."""
-    for root in self.td_dirs:
-      if not os.path.isdir(root):
-        continue
-      for dirpath, dirnames, filenames in os.walk(root):
-        # Prevent walking into hidden directories, llvm directories,
-        # and build* directories.
-        dirnames[:] = [
-            d for d in dirnames if not d.startswith(".") and
-            not d.startswith("build") and d != "llvm"
-        ]
-        for f in sorted(filenames):
-          if f.endswith(".td"):
-            full = os.path.join(dirpath, f)
-            if full not in self._seen:
-              self._seen.add(full)
-              yield full
+    """Yield (absolute_path, cmd_prefix) for each .td file."""
+    for cmd_prefix, td_dirs in self._dir_specs:
+      for root in td_dirs:
+        if not os.path.isdir(root):
+          continue
+        for dirpath, dirnames, filenames in os.walk(root):
+          dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+          for f in sorted(filenames):
+            if f.endswith(".td"):
+              full = os.path.join(dirpath, f)
+              if full not in self._seen:
+                self._seen.add(full)
+                yield full, cmd_prefix
 
   def getTestsInDirectory(self, tests, path_in_suite, litConfig, localConfig):
-    for td_file in self._walk_td_files():
-      yield lit.Test.Test(tests, (td_file,), localConfig)
+    circt_src_root = localConfig.circt_src_root
+    for td_file, cmd_prefix in self._walk_td_files():
+      rel_path = os.path.relpath(td_file, circt_src_root)
+      test = lit.Test.Test(tests, path_in_suite + tuple(rel_path.split(os.sep)),
+                           localConfig)
+      test.td_file = td_file
+      test.cmd_prefix = cmd_prefix
+      yield test
 
   def execute(self, test, litConfig):
-    td_file = test.getSourcePath()
-    cmd = [*self._cmd_prefix, td_file]
+    if litConfig.noExecute:
+      return (lit.Test.PASS, "")
+
+    td_file = test.td_file
+    cmd = [*test.cmd_prefix, td_file]
+    timeout = litConfig.maxIndividualTestTime or None
     try:
       result = subprocess.run(cmd,
-                              capture_output=True,
+                              stderr=subprocess.PIPE,
+                              stdout=subprocess.DEVNULL,
                               text=True,
-                              timeout=self.timeout)
+                              timeout=timeout)
       if result.returncode == 0:
         return (lit.Test.PASS, "")
       return (
@@ -64,12 +74,9 @@ class SelfContainedTDFormat(lit.formats.TestFormat):
           f"{td_file} is not self-contained\n" + (result.stderr or ""),
       )
     except subprocess.TimeoutExpired:
-      return (
-          lit.Test.FAIL,
-          f"checking {td_file} took longer than {self.timeout} seconds",
-      )
+      return (lit.Test.FAIL, f"checking {td_file} timed out")
     except Exception as exc:
       return (
-          lit.Test.FAIL,
+          lit.Test.UNRESOLVED,
           f"could not run circt-tblgen on {td_file}: {exc}",
       )
