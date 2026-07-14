@@ -371,7 +371,8 @@ Value Context::convertSampledValueCallExpression(
     const slang::ast::CallExpression::SystemCallInfo &info, Location loc) {
   const auto clockIt = sampledValueCallClocks.find(&expr);
   if (clockIt == sampledValueCallClocks.end()) {
-    mlir::emitError(loc, "couldn't infer clock for sampled value function");
+    mlir::emitError(loc) << "could not determine clocking event for `"
+                         << expr.getSubroutineName() << "`";
     return {};
   }
 
