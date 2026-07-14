@@ -99,6 +99,8 @@ func.func @DynamicStrings(%idx: i32) {
   %concat = sim.string.concat (%str, %str)
   // CHECK: sim.string.get
   %char = sim.string.get %str[%idx]
+  // CHECK: sim.string.string_to_int
+  %int = sim.string.string_to_int %str : i32
   return
 }
 

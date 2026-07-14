@@ -772,6 +772,22 @@ def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
+def StringToIntOp : SimOp<"string.string_to_int", [Pure]> {
+  let summary = "Convert a string into an integer";
+  let description = [{
+    Packs the characters of a string into a big-endian bit sequence, one
+    byte per character, with the last character forming the
+    least-significant bits of the sequence. That sequence is then fit to
+    the result width: zero-extended on the most-significant end if the
+    result is wider, or truncated from the most-significant end if it is
+    narrower.
+  }];
+  let arguments = (ins DynamicStringType:$input);
+  let results = (outs AnyInteger:$result);
+
+  let assemblyFormat = "$input attr-dict `:` qualified(type($result))";
+}
+
 def FormatToStringOp : SimOp<"string.format_to_string", [ProceduralOp]> {
   let summary = "Create a dynamic string by evaluating a format string";
   let description = [{
