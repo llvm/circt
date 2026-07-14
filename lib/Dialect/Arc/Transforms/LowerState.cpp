@@ -1439,6 +1439,20 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
       }
     }
   }
+  // A drive of an array element of a module-level signal
+  // (`llhd.drv (llhd.sig.array_get %sig[%idx]), %v`) lowers as a
+  // read-modify-write of the parent signal's storage through
+  // `hw.array_inject` -- the array-typed sibling of the bit-slice splice.
+  llhd::SigArrayGetOp elementOp;
+  if (sigResult) {
+    if (auto get = dyn_cast<llhd::SigArrayGetOp>(sigResult.getOwner())) {
+      auto parent = dyn_cast<OpResult>(get.getInput());
+      if (parent && isa<llhd::SignalOp>(parent.getOwner())) {
+        elementOp = get;
+        sigResult = parent;
+      }
+    }
+  }
   if (!sigResult || !isa<llhd::SignalOp>(sigResult.getOwner())) {
     if (!initial)
       return op.emitOpError()
@@ -1458,6 +1472,8 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
     lowerValue(op.getValue(), Phase::New);
     if (op.getEnable())
       lowerValue(op.getEnable(), Phase::New);
+    if (elementOp)
+      lowerValue(elementOp.getIndex(), Phase::New);
     return success();
   }
 
@@ -1495,6 +1511,16 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
     value = pieces.size() == 1
                 ? pieces.front()
                 : Value(comb::ConcatOp::create(builder, op.getLoc(), pieces));
+  }
+
+  // Element drive: read-modify-write of the parent array signal's storage.
+  if (elementOp) {
+    auto index = lowerValue(elementOp.getIndex(), Phase::New);
+    if (!index)
+      return failure();
+    Value cur = StateReadOp::create(module.builder, op.getLoc(), state);
+    value = hw::ArrayInjectOp::create(module.builder, op.getLoc(), cur, index,
+                                      value);
   }
 
   if (op.getEnable()) {
