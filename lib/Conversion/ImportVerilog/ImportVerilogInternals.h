@@ -382,6 +382,14 @@ struct Context {
   /// if the given value is null.
   Value convertToSimpleBitVector(Value value);
 
+  /// Helper function to convert a `PackedType` value to its simple bit
+  /// vector representation, with special handling for time values which
+  /// require scaling by the local timescale. If `fallible` is true,
+  /// conversion failures are reported by returning a null value without
+  /// emitting diagnostics.
+  Value materializePackedToSBVConversion(Value value, Location loc,
+                                         bool fallible);
+
   /// Helper function to insert the necessary operations to cast a value from
   /// one type to another. If `fallible` is true, conversion failures are
   /// reported by returning a null value without emitting diagnostics.

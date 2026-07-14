@@ -2970,15 +2970,11 @@ Value Context::convertToSimpleBitVector(Value value) {
   return {};
 }
 
-/// Create the necessary operations to convert from a `PackedType` to the
-/// corresponding simple bit vector `IntType`. This will apply special handling
-/// to time values, which requires scaling by the local timescale.
-static Value materializePackedToSBVConversion(Context &context, Value value,
-                                              Location loc, bool fallible) {
+Value Context::materializePackedToSBVConversion(Value value, Location loc,
+                                                bool fallible) {
   if (isa<moore::IntType>(value.getType()))
     return value;
 
-  auto &builder = context.builder;
   auto packedType = cast<moore::PackedType>(value.getType());
   auto intType = packedType.getSimpleBitVector();
   assert(intType);
@@ -2989,7 +2985,7 @@ static Value materializePackedToSBVConversion(Context &context, Value value,
       moore::isIntType(intType, 64, moore::Domain::FourValued)) {
     value = builder.createOrFold<moore::TimeToLogicOp>(loc, value);
     auto scale = moore::ConstantOp::create(builder, loc, intType,
-                                           getTimeScaleInFemtoseconds(context));
+                                           getTimeScaleInFemtoseconds(*this));
     return builder.createOrFold<moore::DivUOp>(loc, value, scale);
   }
 
@@ -3095,7 +3091,7 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
 
   if (dstInt && srcInt) {
     // Convert the value to a simple bit vector if it isn't one already.
-    value = materializePackedToSBVConversion(*this, value, loc, fallible);
+    value = materializePackedToSBVConversion(value, loc, fallible);
     if (!value)
       return {};
 
@@ -3396,7 +3392,7 @@ Value Context::convertSystemCall(
         mlir::emitError(loc) << "expected integer argument for `$isunknown`";
         return {};
       }
-      value = materializePackedToSBVConversion(*this, value, loc,
+      value = materializePackedToSBVConversion(value, loc,
                                                /*fallible=*/false);
       if (!value)
         return {};
@@ -3416,7 +3412,7 @@ Value Context::convertSystemCall(
             << "expected integer argument for `$onehot`/`$onehot0`";
         return {};
       }
-      value = materializePackedToSBVConversion(*this, value, loc,
+      value = materializePackedToSBVConversion(value, loc,
                                                /*fallible=*/false);
       if (!value)
         return {};
@@ -3477,7 +3473,7 @@ Value Context::convertSystemCall(
         mlir::emitError(loc) << "expected integer argument for `$countones`";
         return {};
       }
-      value = materializePackedToSBVConversion(*this, value, loc,
+      value = materializePackedToSBVConversion(value, loc,
                                                /*fallible=*/false);
       if (!value)
         return {};
