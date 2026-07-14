@@ -32,8 +32,11 @@ class SelfContainedTDFormat(lit.formats.TestFormat):
       if not os.path.isdir(root):
         continue
       for dirpath, dirnames, filenames in os.walk(root):
+        # Prevent walking into hidden directories, llvm directories,
+        # and build* directories.
         dirnames[:] = [
-            d for d in dirnames if not d.startswith(".") and d != "llvm"
+            d for d in dirnames if not d.startswith(".") and
+            not d.startswith("build") and d != "llvm"
         ]
         for f in sorted(filenames):
           if f.endswith(".td"):
