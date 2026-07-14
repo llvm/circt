@@ -3781,16 +3781,25 @@ Value Context::convertSystemCall(
   }
 
   //===--------------------------------------------------------------------===//
-  // Associative Array Methods
+  // Associative Array/Enum Methods
   //===--------------------------------------------------------------------===//
 
   if (nameId == ksn::Num) {
+    assert(numArgs == 1 && "`num` takes 1 argument");
+    // Associative array size
     if (args[0]->type->isAssociativeArray()) {
-      assert(numArgs == 1 && "`num` takes 1 argument");
       auto value = convertLvalueExpression(*args[0]);
       if (!value)
         return {};
       return moore::AssocArraySizeOp::create(builder, loc, value);
+    }
+
+    // The number of values in an enum
+    if (args[0]->type->isEnum()) {
+      auto value = convertRvalueExpression(*args[0]);
+      if (!value)
+        return {};
+      return moore::EnumNumOp::create(builder, loc, value);
     }
     emitError(loc) << "unsupported system call `" << name << "`";
     return {};
@@ -3810,10 +3819,11 @@ Value Context::convertSystemCall(
 
   // Associative array traversal methods (all take 2 arguments: array ref, key
   // ref). These names are shared with enum built-in methods (next/prev/first/
-  // last), which take 1 or 2 arguments. Only handle the associative array case
+  // last), which take 1 or 2 arguments. Handle the associative array/enum case
   // here; fall through to the unsupported diagnostic for other types.
   if (nameId == ksn::First || nameId == ksn::Last || nameId == ksn::Next ||
       nameId == ksn::Prev) {
+    // Associative array methods
     if (args[0]->type->isAssociativeArray()) {
       assert(numArgs == 2 && "traversal methods take 2 arguments");
       auto array = convertLvalueExpression(*args[0]);
@@ -3829,6 +3839,49 @@ Value Context::convertSystemCall(
       if (nameId == ksn::Prev)
         return moore::AssocArrayPrevOp::create(builder, loc, array, key);
       llvm_unreachable("all traversal cases handled above");
+    }
+
+    // Enum methods
+    if (args[0]->type->isEnum()) {
+      assert((numArgs == 1 || numArgs == 2) &&
+             "enum traversal methods take 1 or 2 arguments");
+      ValueRange operands;
+      auto src = convertRvalueExpression(*args[0]);
+      if (!src)
+        return {};
+      operands = {src};
+
+      if (numArgs == 2) {
+        auto step = convertRvalueExpression(*args[1]);
+        if (!step)
+          return {};
+        operands = {src, step};
+      }
+
+      switch (nameId) {
+      case ksn::First:
+        return moore::EnumFirstOp::create(builder, loc, operands);
+      case ksn::Last:
+        return moore::EnumLastOp::create(builder, loc, operands);
+      case ksn::Next:
+        return moore::EnumNextOp::create(builder, loc, operands);
+      case ksn::Prev:
+        return moore::EnumPrevOp::create(builder, loc, operands);
+      default:
+        llvm_unreachable("all traversal cases handled above");
+      }
+    }
+    emitError(loc) << "unsupported system call `" << name << "`";
+    return {};
+  }
+
+  if (nameId == ksn::Name) {
+    assert(numArgs == 1 && "`name` takes 1 argument");
+    if (args[0]->type->isEnum()) {
+      auto value = convertRvalueExpression(*args[0]);
+      if (!value)
+        return {};
+      return moore::EnumNameOp::create(builder, loc, value);
     }
     emitError(loc) << "unsupported system call `" << name << "`";
     return {};
