@@ -1563,6 +1563,13 @@ func.func @IntToStringConversion(%arg0: !moore.i45) {
   return
 }
 
+// CHECK-LABEL: func.func @StringToIntConversion
+func.func @StringToIntConversion(%arg0: !moore.string) {
+  // CHECK-NEXT: sim.string.string_to_int %arg0 : i45
+  moore.string_to_int %arg0 : i45
+  return
+}
+
 // CHECK-LABEL: func.func @FormatStringToStringConversion
 func.func @FormatStringToStringConversion(%arg0: !moore.format_string) {
   // CHECK-NEXT: sim.string.format_to_string %arg0

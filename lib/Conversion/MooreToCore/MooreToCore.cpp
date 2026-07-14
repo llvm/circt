@@ -2126,6 +2126,21 @@ struct IntToStringOpConversion : public OpConversionPattern<IntToStringOp> {
   }
 };
 
+struct StringToIntOpConversion : public OpConversionPattern<StringToIntOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(StringToIntOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultTy = typeConverter->convertType(op.getType());
+    if (!resultTy)
+      return failure();
+    rewriter.replaceOpWithNewOp<sim::StringToIntOp>(op, resultTy,
+                                                    adaptor.getInput());
+    return success();
+  }
+};
+
 struct FormatStringToStringOpConversion
     : public OpConversionPattern<FormatStringToStringOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -3627,6 +3642,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     SIntToRealOpConversion,
     UIntToRealOpConversion,
     IntToStringOpConversion,
+    StringToIntOpConversion,
     FormatStringToStringOpConversion,
     RealToIntOpConversion,
     ConvertRealOpConversion,
