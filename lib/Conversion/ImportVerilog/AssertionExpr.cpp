@@ -376,7 +376,7 @@ Value Context::convertSampledValueCallExpression(
     clock = clockIt->second;
 
   // Non-procedural expressions don't have a clock registered in
-  // assertionCallClocks but we can get it from their scope's default clock
+  // sampledValueCallClocks but we can get it from their scope's default clock
   if (!clock && !info.scope->isProceduralContext())
     if (auto defClk =
             info.scope->getCompilation().getDefaultClocking(*info.scope))
