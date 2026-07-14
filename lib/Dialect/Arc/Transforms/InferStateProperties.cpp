@@ -207,7 +207,14 @@ applyEnableTransformation(arc::DefineOp arcOp, arc::StateOp stateOp,
   stateOp.getEnableMutable().assign(enableCond);
 
   for (size_t i = 0, e = outputOp.getOutputs().size(); i < e; ++i) {
-    if (enableInfos[i].selfArg.hasOneUse())
+    // Sever the now-dead self-feedback operand by passing a zero constant.
+    // `hw.constant` can only represent integers; leave aggregate-typed
+    // self-arguments (e.g. array-state memories behind a write-enable mux)
+    // in place — the forced-true condition makes the arc body ignore them,
+    // and building the constant for a non-integer type would produce a
+    // garbage-width integer (UB cast) instead.
+    if (enableInfos[i].selfArg.hasOneUse() &&
+        isa<IntegerType>(enableInfos[i].selfArg.getType()))
       inputs[enableInfos[i].selfArg.getArgNumber()] = hw::ConstantOp::create(
           builder, stateOp.getLoc(), enableInfos[i].selfArg.getType(), 0);
   }
