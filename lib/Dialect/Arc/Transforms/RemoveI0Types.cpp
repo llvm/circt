@@ -127,14 +127,17 @@ struct ConvertGeneric : public ConversionPattern {
   }
 };
 
-// An array_get with i0 index just returns the array input, which will have been
-// scalarized.
+// An array_get with i0 index, or of a 1-element array (whose type gets
+// scalarized regardless of the index width used), just returns the array
+// input.
 struct ConvertArrayGet : public OpConversionPattern<hw::ArrayGetOp> {
   using OpConversionPattern<hw::ArrayGetOp>::OpConversionPattern;
   LogicalResult
   matchAndRewrite(hw::ArrayGetOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (adaptor.getIndex().empty()) {
+    if (adaptor.getIndex().empty() ||
+        hw::type_cast<hw::ArrayType>(op.getInput().getType())
+                .getNumElements() == 1) {
       assert(adaptor.getInput().size() == 1);
       rewriter.replaceOp(op, adaptor.getInput().front());
       return success();
@@ -159,13 +162,17 @@ struct ConvertArrayCreate : public OpConversionPattern<hw::ArrayCreateOp> {
   }
 };
 
-// Converts array_inject with i0 index to just return the element.
+// Converts array_inject with i0 index, or into a 1-element array (whose type
+// gets scalarized regardless of the index width used), to just return the
+// element.
 struct ConvertArrayInject : public OpConversionPattern<hw::ArrayInjectOp> {
   using OpConversionPattern<hw::ArrayInjectOp>::OpConversionPattern;
   LogicalResult
   matchAndRewrite(hw::ArrayInjectOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (adaptor.getIndex().empty()) {
+    if (adaptor.getIndex().empty() ||
+        hw::type_cast<hw::ArrayType>(op.getInput().getType())
+                .getNumElements() == 1) {
       rewriter.replaceOp(op, adaptor.getElement());
       return success();
     }
