@@ -122,6 +122,33 @@ struct QueueRefLowering : public OpConversionPattern<DynQueueRefElementOp> {
   }
 };
 
+struct AssocArrayRefLowering
+    : public OpConversionPattern<AssocArrayExtractRefOp> {
+  using OpConversionPattern<AssocArrayExtractRefOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(AssocArrayExtractRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    for (auto *consumer : op->getUsers()) {
+      if (isa<BlockingAssignOp>(consumer)) {
+        auto assignOp = cast<BlockingAssignOp>(consumer);
+        rewriter.setInsertionPoint(consumer);
+        moore::AssocArraySetOp::create(rewriter, op->getLoc(), op.getInput(),
+                                       op.getIndex(), assignOp.getSrc());
+        rewriter.eraseOp(assignOp);
+      } else {
+        return mlir::emitError(op.getLoc())
+               << "Associative array element reference couldn't be reduced "
+                  "to setting the value at an index: consuming op "
+               << consumer << " is not supported";
+      }
+    }
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct SimplifyRefsPass
     : public circt::moore::impl::SimplifyRefsBase<SimplifyRefsPass> {
   void runOnOperation() override;
@@ -161,5 +188,14 @@ void SimplifyRefsPass::runOnOperation() {
   queueRefPatterns.add<QueueRefLowering>(&context);
   if (failed(applyPartialConversion(getOperation(), target,
                                     std::move(queueRefPatterns))))
+    signalPassFailure();
+
+  // Once we have removed AssocArrayExtractRefOps, attempt to rewrite any
+  // associative array element references to assoc_array.set
+  RewritePatternSet assocArrayRefPatterns(&context);
+  target.addIllegalOp<AssocArrayExtractRefOp>();
+  assocArrayRefPatterns.add<AssocArrayRefLowering>(&context);
+  if (failed(applyPartialConversion(getOperation(), target,
+                                    std::move(assocArrayRefPatterns))))
     signalPassFailure();
 }

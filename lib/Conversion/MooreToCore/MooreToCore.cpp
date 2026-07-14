@@ -958,6 +958,10 @@ static Value createZeroValue(Type type, Location loc,
   if (auto strType = dyn_cast<sim::DynamicStringType>(type))
     return sim::StringConstantOp::create(rewriter, loc, strType, "");
 
+  // Handle associative arrays
+  if (auto assocArrayType = dyn_cast<sim::AssocArrayType>(type))
+    return sim::AssocArrayEmptyOp::create(rewriter, loc, assocArrayType);
+
   // Handle queues
   if (auto queueType = dyn_cast<sim::QueueType>(type))
     return sim::QueueEmptyOp::create(rewriter, loc, queueType);
@@ -3053,6 +3057,172 @@ struct QueueConcatOpConversion : public OpConversionPattern<QueueConcatOp> {
   }
 };
 
+struct AssocArrayExtractOpConversion
+    : public OpConversionPattern<AssocArrayExtractOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AssocArrayExtractOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultType = getTypeConverter()->convertType(op.getResult().getType());
+    if (!resultType)
+      return failure();
+
+    Value zero = createZeroValue(resultType, op.getLoc(), rewriter);
+    if (!zero)
+      return failure();
+    Value raw =
+        sim::AssocArrayGetOp::create(rewriter, op.getLoc(), resultType,
+                                     adaptor.getInput(), adaptor.getIndex());
+    Value exists = sim::AssocArrayExistsOp::create(
+        rewriter, op.getLoc(), adaptor.getInput(), adaptor.getIndex());
+    Value zeroI32 = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(32, 0));
+    Value existsBit = comb::ICmpOp::create(
+        rewriter, op.getLoc(), comb::ICmpPredicate::ne, exists, zeroI32, false);
+    rewriter.replaceOpWithNewOp<comb::MuxOp>(op, existsBit, raw, zero, false);
+    return success();
+  }
+};
+
+struct AssocArraySetOpConversion : public OpConversionPattern<AssocArraySetOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AssocArraySetOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getAssocArray(), [&](Value array) {
+          return sim::AssocArraySetOp::create(rewriter, op.getLoc(), array,
+                                              adaptor.getIndex(),
+                                              adaptor.getValue())
+              .getOutArray();
+        });
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct AssocArrayDeleteOpConversion
+    : public OpConversionPattern<AssocArrayDeleteOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AssocArrayDeleteOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    probeRefAndDriveWithResult(
+        rewriter, op.getLoc(), adaptor.getAssocArray(), [&](Value array) {
+          return sim::AssocArrayDeleteOp::create(rewriter, op.getLoc(), array,
+                                                 adaptor.getIndex())
+              .getOutArray();
+        });
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct AssocArrayClearOpConversion
+    : public OpConversionPattern<AssocArrayClearOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AssocArrayClearOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto refType = cast<llhd::RefType>(adaptor.getAssocArray().getType());
+    Value emptyArray = sim::AssocArrayEmptyOp::create(rewriter, op->getLoc(),
+                                                      refType.getNestedType());
+    Value delay = llhd::ConstantTimeOp::create(
+        rewriter, op.getLoc(),
+        getBlockingOrContinuousAssignDelay(rewriter.getContext()));
+    llhd::DriveOp::create(rewriter, op.getLoc(), adaptor.getAssocArray(),
+                          emptyArray, delay, Value{});
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
+struct AssocArraySizeOpConversion
+    : public OpConversionPattern<AssocArraySizeOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AssocArraySizeOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value array =
+        llhd::ProbeOp::create(rewriter, op.getLoc(), adaptor.getAssocArray());
+    rewriter.replaceOpWithNewOp<sim::AssocArraySizeOp>(op, array);
+    return success();
+  }
+};
+
+struct AssocArrayExistsOpConversion
+    : public OpConversionPattern<AssocArrayExistsOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(AssocArrayExistsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value array =
+        llhd::ProbeOp::create(rewriter, op.getLoc(), adaptor.getAssocArray());
+    rewriter.replaceOpWithNewOp<sim::AssocArrayExistsOp>(op, array,
+                                                         adaptor.getIndex());
+    return success();
+  }
+};
+
+template <typename MooreOpTy, typename SimOpTy>
+struct AssocArrayEndpointOpConversion : public OpConversionPattern<MooreOpTy> {
+  using OpConversionPattern<MooreOpTy>::OpConversionPattern;
+  using OpAdaptor = typename MooreOpTy::Adaptor;
+  LogicalResult
+  matchAndRewrite(MooreOpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value array =
+        llhd::ProbeOp::create(rewriter, op.getLoc(), adaptor.getAssocArray());
+    auto endpointOp = SimOpTy::create(rewriter, op.getLoc(), array);
+    Value curIndex =
+        llhd::ProbeOp::create(rewriter, op.getLoc(), adaptor.getIndex());
+    Value zero = hw::ConstantOp::create(rewriter, op.getLoc(), APInt(32, 0));
+    Value foundBit =
+        comb::ICmpOp::create(rewriter, op.getLoc(), comb::ICmpPredicate::ne,
+                             endpointOp->getResult(0), zero, false);
+    Value newIndex =
+        comb::MuxOp::create(rewriter, op.getLoc(), foundBit,
+                            endpointOp->getResult(1), curIndex, false);
+    Value delay = llhd::ConstantTimeOp::create(
+        rewriter, op.getLoc(),
+        getBlockingOrContinuousAssignDelay(rewriter.getContext()));
+    llhd::DriveOp::create(rewriter, op.getLoc(), adaptor.getIndex(), newIndex,
+                          delay, Value{});
+    rewriter.replaceOp(op, endpointOp->getResult(0));
+    return success();
+  }
+};
+
+template <typename MooreOpTy, typename SimOpTy>
+struct AssocArrayStepOpConversion : public OpConversionPattern<MooreOpTy> {
+  using OpConversionPattern<MooreOpTy>::OpConversionPattern;
+  using OpAdaptor = typename MooreOpTy::Adaptor;
+  LogicalResult
+  matchAndRewrite(MooreOpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value array =
+        llhd::ProbeOp::create(rewriter, op.getLoc(), adaptor.getAssocArray());
+    Value curIndex =
+        llhd::ProbeOp::create(rewriter, op.getLoc(), adaptor.getIndex());
+    auto stepOp = SimOpTy::create(rewriter, op.getLoc(), array, curIndex);
+    Value delay = llhd::ConstantTimeOp::create(
+        rewriter, op.getLoc(),
+        getBlockingOrContinuousAssignDelay(rewriter.getContext()));
+    llhd::DriveOp::create(rewriter, op.getLoc(), adaptor.getIndex(),
+                          stepOp->getResult(1), delay, Value{});
+    rewriter.replaceOp(op, stepOp->getResult(0));
+    return success();
+  }
+};
+
+using AssocArrayFirstOpConversion =
+    AssocArrayEndpointOpConversion<AssocArrayFirstOp, sim::AssocArrayFirstOp>;
+using AssocArrayLastOpConversion =
+    AssocArrayEndpointOpConversion<AssocArrayLastOp, sim::AssocArrayLastOp>;
+using AssocArrayNextOpConversion =
+    AssocArrayStepOpConversion<AssocArrayNextOp, sim::AssocArrayNextOp>;
+using AssocArrayPrevOpConversion =
+    AssocArrayStepOpConversion<AssocArrayPrevOp, sim::AssocArrayPrevOp>;
+
 struct DisplayBIOpConversion : public OpConversionPattern<DisplayBIOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -3441,6 +3611,14 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return {};
   });
 
+  typeConverter.addConversion([&](AssocArrayType type) -> std::optional<Type> {
+    auto elementType = typeConverter.convertType(type.getElementType());
+    auto indexType = typeConverter.convertType(type.getIndexType());
+    if (!elementType || !indexType)
+      return {};
+    return sim::AssocArrayType::get(type.getContext(), elementType, indexType);
+  });
+
   // FIXME: Unpacked arrays support more element types than their packed
   // variants, and as such, mapping them to hw::Array is somewhat naive. See
   // also the analogous note below concerning unpacked struct type conversion.
@@ -3551,6 +3729,7 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
   typeConverter.addConversion([](FloatType type) { return type; });
   typeConverter.addConversion([](sim::DynamicStringType type) { return type; });
   typeConverter.addConversion([](sim::FormatStringType type) { return type; });
+  typeConverter.addConversion([](sim::AssocArrayType type) { return type; });
   typeConverter.addConversion([](llhd::TimeType type) { return type; });
   typeConverter.addConversion([](debug::ArrayType type) { return type; });
   typeConverter.addConversion([](debug::ScopeType type) { return type; });
@@ -3812,7 +3991,19 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     QueueSetOpConversion,
     QueueCmpOpConversion,
     QueueFromUnpackedArrayOpConversion,
-    QueueConcatOpConversion
+    QueueConcatOpConversion,
+
+    // Associative array operations
+    AssocArrayExtractOpConversion,
+    AssocArraySetOpConversion,
+    AssocArrayDeleteOpConversion,
+    AssocArrayClearOpConversion,
+    AssocArraySizeOpConversion,
+    AssocArrayExistsOpConversion,
+    AssocArrayFirstOpConversion,
+    AssocArrayLastOpConversion,
+    AssocArrayNextOpConversion,
+    AssocArrayPrevOpConversion
   >(typeConverter, patterns.getContext());
   // clang-format on
 

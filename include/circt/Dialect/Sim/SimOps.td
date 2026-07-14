@@ -1139,6 +1139,150 @@ def QueueConcatOp : SimOp<"queue.concat", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Associative array operations
+//===----------------------------------------------------------------------===//
+
+def AssocArrayEmptyOp : SimOp<"assoc_array.empty", [Pure]> {
+  let summary = "Creates an empty associative array";
+  let description = [{
+    Creates an empty associative array, which is the default value for a
+    variable holding an associative array.
+  }];
+  let arguments = (ins);
+  let results = (outs AssocArrayType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
+def AssocArrayGetOp : SimOp<"assoc_array.get", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    TypesMatchWith<"array and result types must match",
+      "array", "result", "cast<AssocArrayType>($_self).getElementType()">]> {
+  let summary = "Reads an element from an associative array";
+  let description = [{
+    Returns the element stored at $index. If no entry exists for $index, the
+    returned value is unspecified; use `assoc_array.exists` to distinguish a
+    missing entry from a stored value.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$array `[` $index `]` attr-dict `:` type($array)";
+}
+
+def AssocArraySetOp : SimOp<"assoc_array.set", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    TypesMatchWith<"array and value types must match",
+      "array", "value", "cast<AssocArrayType>($_self).getElementType()">,
+    AllTypesMatch<["array", "outArray"]>]> {
+  let summary = "Writes an element into an associative array";
+  let description = [{
+    Returns an updated associative array with $value stored at $index,
+    creating the entry if it did not already exist.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index, AnyType:$value);
+  let results = (outs AssocArrayType:$outArray);
+  let assemblyFormat = "$array `[` $index `]` `=` $value attr-dict `:` type($array)";
+}
+
+def AssocArrayDeleteOp : SimOp<"assoc_array.delete", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    AllTypesMatch<["array", "outArray"]>]> {
+  let summary = "Deletes an entry from an associative array";
+  let description = [{
+    Returns an updated associative array with the entry at $index removed.
+    Deleting an entry that does not exist returns the array unchanged.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs AssocArrayType:$outArray);
+  let assemblyFormat = "`index` $index `of` $array attr-dict `:` type($array)";
+}
+
+def AssocArraySizeOp : SimOp<"assoc_array.size", [Pure]> {
+  let summary = "Number of entries in an associative array";
+  let description = [{
+    Returns the number of entries stored in the associative array. An empty
+    array has size 0.
+  }];
+  let arguments = (ins AssocArrayType:$array);
+  let results = (outs I32:$result);
+  let assemblyFormat = "$array attr-dict `:` type($array)";
+}
+
+def AssocArrayExistsOp : SimOp<"assoc_array.exists", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Checks whether an entry exists in an associative array";
+  let description = [{
+    Returns a nonzero value if an entry exists at $index, and 0 otherwise.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs I32:$result);
+  let assemblyFormat = "$index `in` $array attr-dict `:` type($array)";
+}
+
+def AssocArrayFirstOp : SimOp<"assoc_array.first", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Finds the first (lowest) index in an associative array";
+  let description = [{
+    Finds the smallest index that has an entry in the array. If the array is
+    not empty, $found is nonzero and $index is that index. Otherwise $found
+    is 0 and $index is unspecified.
+  }];
+  let arguments = (ins AssocArrayType:$array);
+  let results = (outs I32:$found, AnyType:$index);
+  let assemblyFormat = "$array attr-dict `:` type($array)";
+}
+
+def AssocArrayLastOp : SimOp<"assoc_array.last", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Finds the last (highest) index in an associative array";
+  let description = [{
+    Finds the largest index that has an entry in the array. If the array is
+    not empty, $found is nonzero and $index is that index. Otherwise $found
+    is 0 and $index is unspecified.
+  }];
+  let arguments = (ins AssocArrayType:$array);
+  let results = (outs I32:$found, AnyType:$index);
+  let assemblyFormat = "$array attr-dict `:` type($array)";
+}
+
+def AssocArrayNextOp : SimOp<"assoc_array.next", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    TypesMatchWith<"array and nextIndex types must match",
+      "array", "nextIndex", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Finds the next index in an associative array";
+  let description = [{
+    Finds the smallest index strictly greater than $index. If such an entry
+    exists, $found is nonzero and $nextIndex is that index. Otherwise $found
+    is 0 and $nextIndex is $index, unchanged.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs I32:$found, AnyType:$nextIndex);
+  let assemblyFormat = "$array `[` $index `]` attr-dict `:` type($array)";
+}
+
+def AssocArrayPrevOp : SimOp<"assoc_array.prev", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    TypesMatchWith<"array and prevIndex types must match",
+      "array", "prevIndex", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Finds the previous index in an associative array";
+  let description = [{
+    Finds the largest index strictly smaller than $index. If such an entry
+    exists, $found is nonzero and $prevIndex is that index. Otherwise $found
+    is 0 and $prevIndex is $index, unchanged.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs I32:$found, AnyType:$prevIndex);
+  let assemblyFormat = "$array `[` $index `]` attr-dict `:` type($array)";
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
 

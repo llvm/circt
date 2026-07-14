@@ -115,3 +115,17 @@ moore.module @QueueRefsWithConcat() {
     moore.return
   }
 }
+
+// CHECK-LABEL: moore.module @AssocArrayRefs()
+moore.module @AssocArrayRefs() {
+  %aa = moore.variable : <assoc_array<i32, i32>>
+  moore.procedure initial {
+    %0 = moore.constant 0 : i32
+    %1 = moore.constant 1 : i32
+
+    // CHECK: moore.assoc_array.set %aa[%0] = %1 : <assoc_array<i32, i32>>
+    %el = moore.assoc_array_extract_ref %aa[%0] : <assoc_array<i32, i32>>
+    moore.blocking_assign %el, %1 : i32
+    moore.return
+  }
+}
