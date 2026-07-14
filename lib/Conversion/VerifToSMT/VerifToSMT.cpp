@@ -80,7 +80,7 @@ static void attachTraceRecords(
     auto it = debugNames.find(argIndex);
     if (it == debugNames.end())
       continue;
-    debug::TraceOp::create(builder, loc, step, it->second, value);
+    verif::BMCTraceOp::create(builder, loc, step, it->second, value);
   }
 }
 
@@ -766,6 +766,7 @@ void ConvertVerifToSMTPass::runOnOperation() {
   target.addLegalDialect<debug::DebugDialect, smt::SMTDialect,
                          arith::ArithDialect, scf::SCFDialect,
                          func::FuncDialect>();
+  target.addLegalOp<verif::BMCTraceOp>();
   target.addLegalOp<UnrealizedConversionCastOp>();
 
   // Check BMC ops contain only one assertion (done outside pattern to avoid

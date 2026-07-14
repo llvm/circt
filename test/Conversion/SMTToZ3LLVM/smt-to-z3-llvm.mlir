@@ -391,8 +391,8 @@ func.func @test(%arg0: i32) {
     // CHECK: llvm.call @Z3_mk_bv2int({{%[0-9a-zA-Z_]+}}, [[BV0]], [[SIGNEDCONST]]) : (!llvm.ptr, !llvm.ptr, i1) -> !llvm.ptr
     smt.bv2int %c0_bv4 signed : !smt.bv<4>
 
-    // CHECK-NOT: dbg.trace
-    dbg.trace %arg1, "var0", %c0_bv4 : i32, !smt.bv<4>
+    // CHECK-NOT: verif.bmc.trace
+    verif.bmc.trace %arg1, "var0", %c0_bv4 : i32, !smt.bv<4>
 
     // CHECK-NOT: dbg.variable
     dbg.variable "var1", %c0_bv4 : !smt.bv<4>

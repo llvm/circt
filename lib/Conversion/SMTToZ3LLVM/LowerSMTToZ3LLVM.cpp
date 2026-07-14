@@ -9,6 +9,7 @@
 #include "circt/Conversion/SMTToZ3LLVM.h"
 #include "circt/Dialect/Debug/DebugDialect.h"
 #include "circt/Dialect/Debug/DebugOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/Conversion/ArithToLLVM/ArithToLLVM.h"
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -1282,12 +1283,12 @@ struct IntAbsOpLowering : public SMTLoweringPattern<IntAbsOp> {
 // For now we want to ignore Debug variable and scope ops - eventually we'll
 // give this debug info to Z3
 
-/// Strip dbg.trace ops.
-struct DbgTraceLowering : public OpConversionPattern<debug::TraceOp> {
+/// Strip verif.bmc.trace ops until counterexample materialization is lowered.
+struct BMCTraceLowering : public OpConversionPattern<verif::BMCTraceOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(debug::TraceOp op, OpAdaptor adaptor,
+  matchAndRewrite(verif::BMCTraceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
     rewriter.eraseOp(op);
     return success();
@@ -1558,9 +1559,8 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
                BV2IntOpLowering, QuantifierLowering<ForallOp>,
                QuantifierLowering<ExistsOp>>(converter, patterns.getContext(),
                                              globals, options);
-  patterns.add<DbgTraceLowering>(patterns.getContext());
-  patterns.add<DbgVariableLowering>(patterns.getContext());
-  patterns.add<DbgScopeLowering>(patterns.getContext());
+  patterns.add<BMCTraceLowering>(patterns.getContext());
+  patterns.add<DbgVariableLowering, DbgScopeLowering>(patterns.getContext());
 }
 
 void LowerSMTToZ3LLVMPass::runOnOperation() {
@@ -1637,6 +1637,7 @@ void LowerSMTToZ3LLVMPass::runOnOperation() {
   target.addLegalOp<mlir::ModuleOp>();
   target.addLegalOp<scf::YieldOp>();
   target.addIllegalDialect<debug::DebugDialect>();
+  target.addIllegalOp<verif::BMCTraceOp>();
 
   if (failed(applyFullConversion(getOperation(), target, std::move(patterns))))
     return signalPassFailure();
