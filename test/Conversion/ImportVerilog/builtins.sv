@@ -850,6 +850,32 @@ module SampleValueBuiltinsDefaultClocking #() (
   always_ff @(posedge clk2_i) clk2_assign_past <= $past(data_i);
 endmodule
 
+// IEEE 1800-2023 § 16.9.3 "Sampled value functions" with default clocking
+// outside of procedures
+// CHECK-LABEL: moore.module @SampleValueBuiltinsDefaultClockingNoProcedure(
+// CHECK-SAME: in [[CLK:%.+]] : !moore.l1
+module SampleValueBuiltinsDefaultClockingNoProcedure #() (
+    input clk_i,
+    input [7:0] data_i
+);
+  // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
+  // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
+  // CHECK: [[WIRE_PAST:%.+]] = moore.net wire [[WIRE_PAST_VAL:%.+]] : <l8>
+
+  default clocking @(posedge clk_i); endclocking
+
+  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[WIRE_PAST_VAL:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  wire [7:0] wire_past = $past(data_i);
+endmodule
+
 // CHECK-LABEL: func.func private @BitVectorPackedBuiltins(
 // CHECK-SAME: [[S:%[^ ,]+]]: !moore.struct<{a: l4, b: l4}>,
 // CHECK-SAME: [[A:%[^ ,]+]]: !moore.array<2 x l4>)
