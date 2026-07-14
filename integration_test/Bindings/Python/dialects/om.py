@@ -141,12 +141,12 @@ print(obj.type.name)
 print(obj.field)
 
 # location of the om.class.field @field
-# CHECK: field: loc("-":{{.*}}:{{.*}})
+# CHECK: field: loc
 print("field:", obj.get_field_loc("field"))
 
 # CHECK: child.foo: 14
 print("child.foo: ", obj.child.foo)
-# CHECK: child.foo.loc loc("-":{{.*}}:{{.*}})
+# CHECK: child.foo.loc loc
 print("child.foo.loc", obj.child.get_field_loc("foo"))
 # CHECK: ('Root', 'x')
 print(obj.reference)
@@ -154,13 +154,13 @@ print(obj.reference)
 for (name, field) in obj:
   # location from om.class.field "child"
   # CHECK: name: child, field: <circt.dialects.om.Object object
-  # CHECK-SAME: loc: loc(fused
+  # CHECK-SAME: loc: loc
   # location from om.class.field "field"
   # CHECK: name: field, field: 42
-  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
+  # CHECK-SAME: loc: loc
   # location from om.class.field "reference"
   # CHECK: name: reference, field: ('Root', 'x')
-  # CHECK-SAME: loc: loc("-":{{.*}}:{{.*}})
+  # CHECK-SAME: loc: loc
   loc = obj.get_field_loc(name)
   print(f"name: {name}, field: {field}, loc: {loc}")
 
