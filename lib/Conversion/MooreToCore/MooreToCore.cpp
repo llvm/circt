@@ -1529,6 +1529,56 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
     Type inputType =
         cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
 
+    // Statically fully out-of-range constant part/bit-select references
+    // (e.g. `slave_select[4] = 1;` on `logic [3:0] slave_select` under a
+    // statically-false parameter guard) reach lowering because the frontend
+    // demotes the diagnostic to a warning. IEEE 1800-2017 § 11.5.1 gives
+    // out-of-range select WRITES discard semantics (reads yield X; the
+    // two-valued core yields the scratch initializer instead). Route the
+    // reference at a detached scratch signal so the write lands nowhere.
+    // Partial straddles keep failing loudly below.
+    if (auto resultRefType = dyn_cast_or_null<llhd::RefType>(resultType)) {
+      int64_t inputWidth = hw::getBitWidth(inputType);
+      int64_t resultWidth = hw::getBitWidth(resultRefType.getNestedType());
+      if (inputWidth >= 0 && resultWidth >= 0 &&
+          adaptor.getLowBit() >= static_cast<uint64_t>(inputWidth)) {
+        Value init = createZeroValue(resultRefType.getNestedType(), op.getLoc(),
+                                     rewriter);
+        if (!init)
+          return failure();
+        op.emitRemark("out-of-range reference discards writes (IEEE "
+                      "1800-2017 11.5.1); routed to a scratch signal");
+        rewriter.replaceOpWithNewOp<llhd::SignalOp>(
+            op, resultType, rewriter.getStringAttr("oob_scratch"), init);
+        return success();
+      }
+    }
+
+    // Statically fully out-of-range constant part/bit-select references
+    // (e.g. `slave_select[4] = 1;` on `logic [3:0] slave_select` under a
+    // statically-false parameter guard) reach lowering because the frontend
+    // demotes the diagnostic to a warning. IEEE 1800-2017 § 11.5.1 gives
+    // out-of-range select WRITES discard semantics (reads yield X; the
+    // two-valued core yields the scratch initializer instead). Route the
+    // reference at a detached scratch signal so the write lands nowhere.
+    // Partial straddles keep failing loudly below.
+    if (auto resultRefType = dyn_cast_or_null<llhd::RefType>(resultType)) {
+      int64_t inputWidth = hw::getBitWidth(inputType);
+      int64_t resultWidth = hw::getBitWidth(resultRefType.getNestedType());
+      if (inputWidth >= 0 && resultWidth >= 0 &&
+          adaptor.getLowBit() >= static_cast<uint64_t>(inputWidth)) {
+        Value init = createZeroValue(resultRefType.getNestedType(), op.getLoc(),
+                                     rewriter);
+        if (!init)
+          return failure();
+        op.emitRemark("out-of-range reference discards writes (IEEE "
+                      "1800-2017 11.5.1); routed to a scratch signal");
+        rewriter.replaceOpWithNewOp<llhd::SignalOp>(
+            op, resultType, rewriter.getStringAttr("oob_scratch"), init);
+        return success();
+      }
+    }
+
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
       if (width == -1)
