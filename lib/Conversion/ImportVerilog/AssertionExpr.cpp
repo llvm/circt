@@ -369,20 +369,30 @@ FailureOr<Value> Context::convertSampledValueCallArity1(
 Value Context::convertSampledValueCallExpression(
     const slang::ast::CallExpression &expr,
     const slang::ast::CallExpression::SystemCallInfo &info, Location loc) {
-  const auto clockIt = sampledValueCallClocks.find(&expr);
-  if (clockIt == sampledValueCallClocks.end()) {
+
+  const slang::ast::TimingControl *clock = nullptr;
+  auto clockIt = sampledValueCallClocks.find(&expr);
+  if (clockIt != sampledValueCallClocks.end())
+    clock = clockIt->second;
+
+  // Non-procedural expressions don't have a clock registered in
+  // assertionCallClocks but we can get it from their scope's default clock
+  if (!clock && !info.scope->isProceduralContext())
+    if (auto defClk =
+            info.scope->getCompilation().getDefaultClocking(*info.scope))
+      clock = &defClk->as<slang::ast::ClockingBlockSymbol>().getEvent();
+
+  if (!clock) {
     mlir::emitError(loc) << "could not determine clocking event for `"
                          << expr.getSubroutineName() << "`";
     return {};
   }
 
-  const slang::ast::TimingControl &clock = *clockIt->second;
-
   Value clockVal;
   const slang::ast::SignalEventControl *signal = nullptr;
-  if (clock.kind == slang::ast::TimingControlKind::SignalEvent) {
-    signal = &clock.as<slang::ast::SignalEventControl>();
-  } else if (clock.kind == slang::ast::TimingControlKind::EventList) {
+  if (clock->kind == slang::ast::TimingControlKind::SignalEvent) {
+    signal = &clock->as<slang::ast::SignalEventControl>();
+  } else if (clock->kind == slang::ast::TimingControlKind::EventList) {
     mlir::emitError(loc, "sampled value functions with multiple event "
                          "triggers are not supported");
     return {};
