@@ -3428,6 +3428,13 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
                                type.getBound());
   });
 
+  typeConverter.addConversion([&](sim::QueueType type) -> std::optional<Type> {
+    if (auto elementType = typeConverter.convertType(type.getElementType()))
+      return sim::QueueType::get(type.getContext(), elementType,
+                                 type.getBound());
+    return {};
+  });
+
   typeConverter.addConversion([&](ArrayType type) -> std::optional<Type> {
     if (auto elementType = typeConverter.convertType(type.getElementType()))
       return hw::ArrayType::get(elementType, type.getSize());

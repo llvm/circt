@@ -623,6 +623,24 @@ moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i
   moore.output %0 : !moore.i32
 }
 
+// CHECK-LABEL: hw.module private @QueueRefPort(out mem : !llhd.ref<!sim.queue<i8, 0>>)
+moore.module private @QueueRefPort(out mem : !moore.ref<queue<i8, 0>>) {
+  // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i8, 0>
+  // CHECK: [[SIG:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i8, 0>
+  %mem = moore.variable : <queue<i8, 0>>
+  // CHECK: hw.output [[SIG]] : !llhd.ref<!sim.queue<i8, 0>>
+  moore.output %mem : !moore.ref<queue<i8, 0>>
+}
+
+// CHECK-LABEL: hw.module @QueueHierRef()
+moore.module @QueueHierRef() {
+  // CHECK: [[INST:%.+]] = hw.instance "u_leaf" @QueueRefPort() -> (mem: !llhd.ref<!sim.queue<i8, 0>>)
+  %u_leaf.mem = moore.instance "u_leaf" @QueueRefPort() -> (mem: !moore.ref<queue<i8, 0>>)
+  // CHECK: llhd.prb [[INST]] : !sim.queue<i8, 0>
+  %0 = moore.read %u_leaf.mem : <queue<i8, 0>>
+  moore.output
+}
+
 // CHECK-LABEL: hw.module @Struct
 moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.struct<{exp_bits: i32, man_bits: i32}>, in %arg1 : !moore.ref<!moore.struct<{exp_bits: i32, man_bits: i32}>>, out a : !moore.i32, out b : !moore.struct<{exp_bits: i32, man_bits: i32}>, out c : !moore.struct<{exp_bits: i32, man_bits: i32}>) {
   // CHECK: hw.struct_extract %arg0["exp_bits"] : !hw.struct<exp_bits: i32, man_bits: i32>
