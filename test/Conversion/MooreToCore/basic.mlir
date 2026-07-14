@@ -1989,3 +1989,34 @@ moore.module @ReadMem() {
   }
   moore.output
 }
+
+// CHECK-LABEL: hw.module @StringArrayVariable
+moore.module @StringArrayVariable() {
+  // CHECK-NEXT: [[ZERO:%.+]] = sim.string.literal ""
+  // CHECK-NEXT: [[INIT:%.+]] = hw.array_create [[ZERO]], [[ZERO]] : !sim.dstring
+  // CHECK-NEXT: [[SIG:%.+]] = llhd.sig [[INIT]] : !hw.array<2x!sim.dstring>
+  %names = moore.variable : <uarray<2 x string>>
+
+  // CHECK-NEXT: llhd.process
+  moore.procedure initial {
+    // CHECK-NEXT: [[LIT:%.+]] = hw.constant {{.*}} : i32
+    %0 = moore.constant_string "zero" : i32
+    // CHECK-NEXT: [[STR:%.+]] = sim.string.int_to_string [[LIT]] : i32
+    %1 = moore.int_to_string %0 : i32
+    // CHECK-NEXT: [[IDX:%.+]] = hw.constant false
+    // CHECK-NEXT: [[ELEM:%.+]] = llhd.sig.array_get [[SIG]]{{\[}}[[IDX]]{{\]}} : <!hw.array<2x!sim.dstring>>
+    %ref = moore.extract_ref %names from 0 : !moore.ref<!moore.uarray<2 x string>> -> !moore.ref<!moore.string>
+    // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK-NEXT: llhd.drv [[ELEM]], [[STR]] after [[TIME]] : !sim.dstring
+    moore.blocking_assign %ref, %1 : string
+
+    // CHECK-NEXT: [[READ:%.+]] = llhd.prb [[ELEM]] : !sim.dstring
+    %2 = moore.read %ref : <string>
+    // CHECK-NEXT: [[FMT:%.+]] = sim.fmt.string [[READ]] : !sim.dstring
+    %3 = moore.fmt.string %2
+    // CHECK-NEXT: sim.proc.print [[FMT]]
+    moore.builtin.display %3
+    // CHECK-NEXT: llhd.halt
+    moore.return
+  }
+}
