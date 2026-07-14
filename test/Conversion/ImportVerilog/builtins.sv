@@ -622,6 +622,25 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
   past_data: assert property (@(posedge clk_i) data_i == $past(data_i));
 
+  // Test $past in a process
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: moore.wait_event {
+  // CHECK-NEXT:   [[CLKEDGE:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT:   moore.detect_event posedge [[CLKEDGE]] : l1
+  // CHECK-NEXT: }
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: moore.nonblocking_assign {{%.+}}, [[PAST_LOGIC]] : l8
+  logic [7:0] past_data_i;
+  always @(posedge clk_i) past_data_i <= $past(data_i);
+
   // CHECK: moore.procedure always {
   // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
   // CHECK: [[RED:%.+]] = moore.reduce_xor [[D]] : l8 -> l1
@@ -734,6 +753,127 @@ module SampleValueBuiltins #() (
   // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
   countones_bit_data:
     assert property (@(posedge clk_i) $countones(data_bit_i) == 0);
+endmodule
+
+// IEEE 1800-2023 § 16.9.3 "Sampled value functions" with default clocking
+// This is in a separate module to SampleValueBuiltins as default clocking
+// silently propagates to all potential users in the scope.
+// CHECK-LABEL: moore.module @SampleValueBuiltinsDefaultClocking(
+// CHECK-SAME: in [[CLK:%.+]] : !moore.l1
+module SampleValueBuiltinsDefaultClocking #() (
+    input clk_i,
+    input clk2_i,
+    input [7:0] data_i
+);
+  // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
+  // CHECK: [[CLK2WIRE:%.+]] = moore.net name "clk2_i" wire : <l1>
+  // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
+
+  default clocking @(posedge clk_i); endclocking
+
+  // Test default clocking inference for $past in an assertion
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D2_INT:%.+]] = moore.logic_to_int [[D2]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D2_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
+  assert_past: assert property (data_i == $past(data_i));
+
+  // Test overriden clock in an assertion
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLK2WIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D2_INT:%.+]] = moore.logic_to_int [[D2]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D2_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
+  assert_past_clk2: assert property (@(posedge clk2_i) data_i == $past(data_i));
+
+  // Test default clocking inference for $past in a continuous assignment
+  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: moore.assign {{%.+}}, [[PAST_LOGIC]] : l8
+  logic [7:0] assign_past;
+  assign assign_past = $past(data_i);
+
+  // Test default clocking inference for $past in a combinational procedure
+  // CHECK: moore.procedure always_comb {
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: moore.blocking_assign {{%.+}}, [[PAST_LOGIC]] : l8
+  logic [7:0] comb_assign_past;
+  always_comb comb_assign_past = $past(data_i);
+
+  // Test overriden clock for $past in a procedure
+  // CHECK: moore.procedure always_ff {
+  // CHECK-NEXT: moore.wait_event {
+  // CHECK-NEXT:   [[CLKEDGE:%.+]] = moore.read [[CLK2WIRE]] : <l1>
+  // CHECK-NEXT:   moore.detect_event posedge [[CLKEDGE]] : l1
+  // CHECK-NEXT: }
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLK2WIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: moore.nonblocking_assign {{%.+}}, [[PAST_LOGIC]] : l8
+  logic [7:0] clk2_assign_past;
+  always_ff @(posedge clk2_i) clk2_assign_past <= $past(data_i);
+endmodule
+
+// IEEE 1800-2023 § 16.9.3 "Sampled value functions" with default clocking
+// outside of procedures
+// CHECK-LABEL: moore.module @SampleValueBuiltinsDefaultClockingNoProcedure(
+// CHECK-SAME: in [[CLK:%.+]] : !moore.l1
+module SampleValueBuiltinsDefaultClockingNoProcedure #() (
+    input clk_i,
+    input [7:0] data_i
+);
+  // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
+  // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
+  // CHECK: [[WIRE_PAST:%.+]] = moore.net wire [[WIRE_PAST_VAL:%.+]] : <l8>
+
+  default clocking @(posedge clk_i); endclocking
+
+  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[WIRE_PAST_VAL:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  wire [7:0] wire_past = $past(data_i);
 endmodule
 
 // CHECK-LABEL: func.func private @BitVectorPackedBuiltins(

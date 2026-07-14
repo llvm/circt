@@ -2112,8 +2112,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto nameId = subroutine.knownNameId;
 
     // $rose, $fell, $stable, $changed, $past, and $sampled are only valid in
-    // the context of properties and assertions. Those are treated in the
-    // LTLDialect; treat them there instead.
+    // the contexts with clocks. Those are treated in AssertionExpr.
     switch (nameId) {
     case ksn::Rose:
     case ksn::Fell:
@@ -2121,7 +2120,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     case ksn::Changed:
     case ksn::Past:
     case ksn::Sampled:
-      return context.convertAssertionCallExpression(expr, info, loc);
+      return context.convertSampledValueCallExpression(expr, info, loc);
     default:
       break;
     }
