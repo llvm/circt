@@ -1431,6 +1431,18 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
     if (auto extract = dyn_cast<llhd::SigExtractOp>(sigResult.getOwner())) {
       if (auto cst = extract.getLowBit().getDefiningOp<hw::ConstantOp>()) {
         auto parent = dyn_cast<OpResult>(extract.getInput());
+        // Look through ref-typed unrealized casts: the packed-aggregate
+        // bit-view idiom (an aggregate signal cast to !llhd.ref<iN> and
+        // bit-sliced). The splice below bitcasts the aggregate storage to
+        // its bit view and back.
+        while (parent) {
+          auto castOp =
+              dyn_cast<mlir::UnrealizedConversionCastOp>(parent.getOwner());
+          if (!castOp || castOp->getNumOperands() != 1 ||
+              !isa<llhd::RefType>(castOp->getOperand(0).getType()))
+            break;
+          parent = dyn_cast<OpResult>(castOp->getOperand(0));
+        }
         if (parent && isa<llhd::SignalOp>(parent.getOwner())) {
           sliceOp = extract;
           sliceOffset = cst.getValue().getZExtValue();
@@ -1439,19 +1451,25 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
       }
     }
   }
-  // A drive of an array element of a module-level signal
-  // (`llhd.drv (llhd.sig.array_get %sig[%idx]), %v`) lowers as a
+  // A drive of an aggregate member of a module-level signal
+  // (`llhd.drv (llhd.sig.array_get %sig[%idx]), %v` or
+  // `llhd.drv (llhd.sig.struct_extract %sig["f"]), %v`) lowers as a
   // read-modify-write of the parent signal's storage through
-  // `hw.array_inject` -- the array-typed sibling of the bit-slice splice.
-  llhd::SigArrayGetOp elementOp;
-  if (sigResult) {
-    if (auto get = dyn_cast<llhd::SigArrayGetOp>(sigResult.getOwner())) {
-      auto parent = dyn_cast<OpResult>(get.getInput());
-      if (parent && isa<llhd::SignalOp>(parent.getOwner())) {
-        elementOp = get;
-        sigResult = parent;
-      }
-    }
+  // `hw.array_inject` / `hw.struct_inject` -- the aggregate-typed siblings
+  // of the bit-slice splice. Chains of member refs (multi-dimensional
+  // arrays, structs of arrays, e.g. veer-eh1's
+  // `sig.array_get (sig.array_get %sig[%i])[%j]`) unwrap outward toward the
+  // signal here and re-inject inward-out below.
+  SmallVector<Operation *> refChain; // innermost (driven) first
+  while (sigResult && !isa<llhd::SignalOp>(sigResult.getOwner())) {
+    Operation *owner = sigResult.getOwner();
+    if (!isa<llhd::SigArrayGetOp, llhd::SigStructExtractOp>(owner))
+      break;
+    auto parent = dyn_cast<OpResult>(owner->getOperand(0));
+    if (!parent)
+      break;
+    refChain.push_back(owner);
+    sigResult = parent;
   }
   if (!sigResult || !isa<llhd::SignalOp>(sigResult.getOwner())) {
     if (!initial)
@@ -1472,8 +1490,9 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
     lowerValue(op.getValue(), Phase::New);
     if (op.getEnable())
       lowerValue(op.getEnable(), Phase::New);
-    if (elementOp)
-      lowerValue(elementOp.getIndex(), Phase::New);
+    for (auto *ref : refChain)
+      if (auto get = dyn_cast<llhd::SigArrayGetOp>(ref))
+        lowerValue(get.getIndex(), Phase::New);
     return success();
   }
 
@@ -1487,18 +1506,31 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
   // Slice drive: splice the driven bits into the current storage value.
   if (sliceOp) {
     auto valueIntTy = dyn_cast<IntegerType>(value.getType());
-    auto curTy = dyn_cast<IntegerType>(
-        cast<StateType>(state.getType()).getType());
-    if (!valueIntTy || !curTy)
+    Type stateEltTy = cast<StateType>(state.getType()).getType();
+    auto curTy = dyn_cast<IntegerType>(stateEltTy);
+    int64_t aggWidth = 0;
+    if (!curTy) {
+      // Aggregate signal driven through its bit view (the ref-cast idiom
+      // matched above): splice on the hw.bitcast of the storage, cast back.
+      aggWidth = hw::getBitWidth(stateEltTy);
+      if (aggWidth <= 0)
+        return op.emitOpError()
+               << "slice drive of a non-integer module-level signal is not "
+                  "supported";
+    }
+    if (!valueIntTy)
       return op.emitOpError()
              << "slice drive of a non-integer module-level signal is not "
                 "supported";
-    unsigned parentWidth = curTy.getWidth();
+    unsigned parentWidth = curTy ? curTy.getWidth() : (unsigned)aggWidth;
     unsigned sliceWidth = valueIntTy.getWidth();
     if (sliceOffset + sliceWidth > parentWidth)
       return op.emitOpError() << "slice drive out of range";
     auto &builder = module.builder;
     Value cur = StateReadOp::create(builder, op.getLoc(), state);
+    if (!curTy)
+      cur = hw::BitcastOp::create(builder, op.getLoc(),
+                                  builder.getIntegerType(parentWidth), cur);
     SmallVector<Value, 3> pieces; // MSB-first for comb.concat
     if (sliceOffset + sliceWidth < parentWidth)
       pieces.push_back(comb::ExtractOp::create(
@@ -1511,16 +1543,59 @@ LogicalResult OpLowering::lower(llhd::DriveOp op) {
     value = pieces.size() == 1
                 ? pieces.front()
                 : Value(comb::ConcatOp::create(builder, op.getLoc(), pieces));
+    if (!curTy)
+      value = hw::BitcastOp::create(builder, op.getLoc(), stateEltTy, value);
   }
 
-  // Element drive: read-modify-write of the parent array signal's storage.
-  if (elementOp) {
-    auto index = lowerValue(elementOp.getIndex(), Phase::New);
-    if (!index)
-      return failure();
-    Value cur = StateReadOp::create(module.builder, op.getLoc(), state);
-    value = hw::ArrayInjectOp::create(module.builder, op.getLoc(), cur, index,
-                                      value);
+  // Member drive: read-modify-write of the parent aggregate signal's
+  // storage. For a chain, peel the storage value outward-in with
+  // hw.array_get / hw.struct_extract down to the driven member's parent,
+  // then re-inject inward-out with hw.array_inject / hw.struct_inject.
+  if (!refChain.empty()) {
+    unsigned n = refChain.size();
+    auto loc = op.getLoc();
+    Value cur = StateReadOp::create(module.builder, loc, state);
+    SmallVector<Value> parents;   // parents[k] = aggregate at nesting depth k
+    SmallVector<Value> indices;   // per-level array index (null for structs)
+    SmallVector<uint32_t> fields; // per-level struct field index
+    parents.push_back(cur);
+    for (unsigned k = 0; k < n; ++k) {
+      Operation *ref = refChain[n - 1 - k]; // outermost first
+      if (auto get = dyn_cast<llhd::SigArrayGetOp>(ref)) {
+        auto index = lowerValue(get.getIndex(), Phase::New);
+        if (!index)
+          return failure();
+        indices.push_back(index);
+        fields.push_back(0);
+        if (k + 1 < n)
+          parents.push_back(hw::ArrayGetOp::create(module.builder, loc,
+                                                   parents.back(), index));
+        continue;
+      }
+      auto extract = cast<llhd::SigStructExtractOp>(ref);
+      auto structTy = dyn_cast<hw::StructType>(parents.back().getType());
+      std::optional<uint32_t> fieldIndex;
+      if (structTy)
+        fieldIndex = structTy.getFieldIndex(extract.getFieldAttr());
+      if (!fieldIndex)
+        return op.emitOpError()
+               << "struct field drive does not match the signal type";
+      indices.push_back(Value());
+      fields.push_back(*fieldIndex);
+      if (k + 1 < n)
+        parents.push_back(hw::StructExtractOp::create(
+            module.builder, loc, structTy.getElements()[*fieldIndex].type,
+            parents.back(), module.builder.getI32IntegerAttr(*fieldIndex)));
+    }
+    for (unsigned k = n; k-- > 0;) {
+      if (indices[k])
+        value = hw::ArrayInjectOp::create(module.builder, loc, parents[k],
+                                          indices[k], value);
+      else
+        value = hw::StructInjectOp::create(module.builder, loc,
+                                           parents[k].getType(), parents[k],
+                                           fields[k], value);
+    }
   }
 
   if (op.getEnable()) {
@@ -1551,6 +1626,16 @@ Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
     if (auto extract = dyn_cast<llhd::SigExtractOp>(sigResult.getOwner())) {
       if (auto cst = extract.getLowBit().getDefiningOp<hw::ConstantOp>()) {
         auto parent = dyn_cast<OpResult>(extract.getInput());
+        // Look through ref-typed unrealized casts (the packed-aggregate
+        // bit-view idiom); mirrors the drive-side matcher.
+        while (parent) {
+          auto castOp =
+              dyn_cast<mlir::UnrealizedConversionCastOp>(parent.getOwner());
+          if (!castOp || castOp->getNumOperands() != 1 ||
+              !isa<llhd::RefType>(castOp->getOperand(0).getType()))
+            break;
+          parent = dyn_cast<OpResult>(castOp->getOperand(0));
+        }
         if (parent && isa<llhd::SignalOp>(parent.getOwner())) {
           sliceOp = extract;
           sliceOffset = cst.getValue().getZExtValue();
@@ -1575,9 +1660,23 @@ Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
       StateReadOp::create(module.getBuilder(phase), op.getLoc(), state);
   if (sliceOp) {
     auto resTy = dyn_cast<IntegerType>(op.getResult().getType());
-    auto curTy =
-        dyn_cast<IntegerType>(cast<StateType>(state.getType()).getType());
-    if (!resTy || !curTy || sliceOffset + resTy.getWidth() > curTy.getWidth()) {
+    Type stateEltTy = cast<StateType>(state.getType()).getType();
+    auto curTy = dyn_cast<IntegerType>(stateEltTy);
+    unsigned parentWidth = 0;
+    if (curTy) {
+      parentWidth = curTy.getWidth();
+    } else {
+      // Aggregate signal probed through its bit view: read, bitcast, slice.
+      int64_t aggWidth = hw::getBitWidth(stateEltTy);
+      if (aggWidth > 0) {
+        parentWidth = aggWidth;
+        read = hw::BitcastOp::create(
+            module.getBuilder(phase), op.getLoc(),
+            IntegerType::get(op.getContext(), parentWidth), read);
+      }
+    }
+    if (!resTy || !parentWidth ||
+        sliceOffset + resTy.getWidth() > parentWidth) {
       emitError(op.getLoc())
           << "slice probe of a non-integer module-level signal is not "
              "supported";
