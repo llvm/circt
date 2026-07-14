@@ -60,13 +60,15 @@ class SelfContainedTDFormat(lit.formats.TestFormat):
 
     td_file = test.td_file
     cmd = [*test.cmd_prefix, td_file]
-    timeout = litConfig.maxIndividualTestTime or None
+    timeout = test.config.maxIndividualTestTime or None
+    env = test.config.environment
     try:
       result = subprocess.run(cmd,
                               stderr=subprocess.PIPE,
                               stdout=subprocess.DEVNULL,
                               text=True,
-                              timeout=timeout)
+                              timeout=timeout,
+                              env=env)
       if result.returncode == 0:
         return (lit.Test.PASS, "")
       return (
@@ -74,7 +76,7 @@ class SelfContainedTDFormat(lit.formats.TestFormat):
           f"{td_file} is not self-contained\n" + (result.stderr or ""),
       )
     except subprocess.TimeoutExpired:
-      return (lit.Test.FAIL, f"checking {td_file} timed out")
+      return (lit.Test.TIMEOUT, f"checking {td_file} timed out")
     except Exception as exc:
       return (
           lit.Test.UNRESOLVED,
