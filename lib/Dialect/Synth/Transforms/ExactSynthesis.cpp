@@ -48,7 +48,6 @@ using namespace mlir;
 namespace {
 
 static constexpr unsigned kMaxExactSynthesisInputs = 6;
-static constexpr unsigned kMaxExactSearchArea = 32;
 
 static SmallString<32> formatTruthTable(const APInt &truthTable) {
   SmallString<32> text;
@@ -640,7 +639,7 @@ static FailureOr<Value>
 exactSynthesizeAreaMinimized(OpBuilder &builder, Location loc, APInt truthTable,
                              ArrayRef<Value> operands,
                              const ExactSynthesisPolicy &policy,
-                             StringRef satSolver) {
+                             StringRef satSolver, unsigned maxArea) {
   ExactNetworkMaterializer materializer(builder, loc, operands);
   unsigned numInputs = operands.size();
   LDBG() << "Exact synthesis request: inputs=" << numInputs << " truthTable=0x"
@@ -659,7 +658,7 @@ exactSynthesizeAreaMinimized(OpBuilder &builder, Location loc, APInt truthTable,
     return materializer.materialize(*network);
   }
 
-  for (unsigned area = 1; area <= kMaxExactSearchArea; ++area) {
+  for (unsigned area = 1; area <= maxArea; ++area) {
     LDBG() << "Trying area=" << area << "\n";
     auto solver = createExactSynthesisSATSolver(satSolver);
     if (!solver)
@@ -674,8 +673,7 @@ exactSynthesizeAreaMinimized(OpBuilder &builder, Location loc, APInt truthTable,
     LDBG() << "Found solution at area=" << area << "\n";
     return materializer.materialize(*solved);
   }
-  LDBG() << "No exact solution found up to area limit " << kMaxExactSearchArea
-         << "\n";
+  LDBG() << "No exact solution found up to area limit " << maxArea << "\n";
   return failure();
 }
 
@@ -683,15 +681,25 @@ exactSynthesizeAreaMinimized(OpBuilder &builder, Location loc, APInt truthTable,
 // Rewrite Pass
 //===----------------------------------------------------------------------===//
 
+struct ExactSynthesisStatistics {
+  unsigned numSolved = 0;
+  unsigned numUnsolved = 0;
+};
+
 struct ExactSynthesisPattern : public OpRewritePattern<comb::TruthTableOp> {
   ExactSynthesisPattern(MLIRContext *context,
-                        const ExactSynthesisPolicy &policy, StringRef satSolver)
-      : OpRewritePattern(context), policy(policy), satSolver(satSolver.str()) {}
+                        const ExactSynthesisPolicy &policy, StringRef satSolver,
+                        unsigned maxInputs, unsigned maxArea,
+                        ExactSynthesisStatistics &statistics)
+      : OpRewritePattern(context), policy(policy), satSolver(satSolver.str()),
+        maxInputs(maxInputs), maxArea(maxArea), statistics(statistics) {}
 
   LogicalResult matchAndRewrite(comb::TruthTableOp op,
                                 PatternRewriter &rewriter) const override {
-    if (op.getInputs().size() > kMaxExactSynthesisInputs)
+    if (op.getInputs().size() > maxInputs) {
+      ++statistics.numUnsolved;
       return failure();
+    }
 
     SmallVector<Value> operands;
     operands.reserve(op.getInputs().size());
@@ -704,18 +712,25 @@ struct ExactSynthesisPattern : public OpRewritePattern<comb::TruthTableOp> {
     APInt truthTable(op.getLookupTable().size(), 0);
     for (size_t index = 0, e = op.getLookupTable().size(); index != e; ++index)
       truthTable.setBitVal(index, op.getLookupTable()[index]);
-    auto result = exactSynthesizeAreaMinimized(
-        rewriter, op.getLoc(), truthTable, operands, policy, satSolver);
-    if (failed(result))
+    auto result =
+        exactSynthesizeAreaMinimized(rewriter, op.getLoc(), truthTable,
+                                     operands, policy, satSolver, maxArea);
+    if (failed(result)) {
+      ++statistics.numUnsolved;
       return failure();
+    }
 
     rewriter.replaceOp(op, *result);
+    ++statistics.numSolved;
     return success();
   }
 
 private:
   const ExactSynthesisPolicy &policy;
   std::string satSolver;
+  unsigned maxInputs;
+  unsigned maxArea;
+  ExactSynthesisStatistics &statistics;
 };
 
 struct ExactSynthesisPass
@@ -794,6 +809,13 @@ struct ExactSynthesisPass
   }
 
   LogicalResult initialize(MLIRContext *context) override {
+    if (maxInputs > kMaxExactSynthesisInputs) {
+      emitError(UnknownLoc::get(context))
+          << "maximum exact-synthesis input count is "
+          << kMaxExactSynthesisInputs;
+      return failure();
+    }
+
     auto parsedPolicy = parsePolicy(context);
     if (failed(parsedPolicy))
       return failure();
@@ -810,9 +832,13 @@ struct ExactSynthesisPass
   }
 
   void runOnOperation() override {
+    ExactSynthesisStatistics statistics;
     RewritePatternSet patterns(&getContext());
-    patterns.add<ExactSynthesisPattern>(&getContext(), policy, satSolver);
+    patterns.add<ExactSynthesisPattern>(&getContext(), policy, satSolver,
+                                        maxInputs, maxArea, statistics);
     walkAndApplyPatterns(getOperation(), std::move(patterns));
+    numSolved += statistics.numSolved;
+    numUnsolved += statistics.numUnsolved;
   }
 
 private:
