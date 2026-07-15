@@ -52,3 +52,148 @@ firrtl.circuit "IllegalDomainCrossing" {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
+
+// Negative colorless case: two genuinely different colors combined through an
+// otherwise-colorless-looking add is still an illegal crossing (neither
+// operand is actually colorless).
+
+// CHECK-LABEL: TwoColorsStillError
+firrtl.circuit "TwoColorsStillError" {
+  firrtl.domain @ClockDomain
+  firrtl.module @TwoColorsStillError(
+    // expected-note @below {{input module port A declared here}}
+    in %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{input module port B declared here}}
+    in %B: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{a has domains [A : ClockDomain]}}
+    in %a: !firrtl.uint<4> domains [%A],
+    // expected-note @below {{b has domains [B : ClockDomain]}}
+    in %b: !firrtl.uint<4> domains [%B],
+    out %c: !firrtl.uint<5> domains [%A]
+  ) {
+    // expected-error @below {{illegal domain crossing in operation}}
+    %0 = firrtl.add %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    firrtl.matchingconnect %c, %0 : !firrtl.uint<5>
+  }
+}
+
+// Negative colorless case: a value that mixes a colored operand with a
+// colorless one is colored, not colorless, and still conflicts when used in
+// a different domain.
+
+// CHECK-LABEL: ColorlessPlusColoredStillError
+firrtl.circuit "ColorlessPlusColoredStillError" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ColorlessPlusColoredStillError(
+    // expected-note @below {{input module port A declared here}}
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %x: !firrtl.uint<1> domains [%A],
+    // expected-note @below {{input module port B declared here}}
+    in %B: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{b has domains [B : ClockDomain]}}
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %y = firrtl.node %c1_ui1 : !firrtl.uint<1>
+    // expected-note @below {{%0 has domains [A : ClockDomain]}}
+    %0 = firrtl.eq %x, %y : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+  }
+}
+
+// Negative colorless case: a public output port driven by a pure constant
+// still requires an explicit domain association (Q2 restriction preserved).
+
+// CHECK-LABEL: PublicPortConstantStillMissing
+firrtl.circuit "PublicPortConstantStillMissing" {
+  firrtl.domain @ClockDomain
+  // expected-note @below {{in module "PublicPortConstantStillMissing"}}
+  firrtl.module @PublicPortConstantStillMissing(
+    // expected-error @below {{missing "ClockDomain" association for port "a"}}
+    out %a: !firrtl.uint<1>
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %c1_ui1 : !firrtl.uint<1>
+  }
+}
+
+// Robustness: an undriven wire is not colorless (it behaves like an invalid
+// value) and still errors when used in two different domains.
+
+// CHECK-LABEL: UndrivenWireNotColorless
+firrtl.circuit "UndrivenWireNotColorless" {
+  firrtl.domain @ClockDomain
+  firrtl.module @UndrivenWireNotColorless(
+    // expected-note @below {{input module port A declared here}}
+    in %A: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{input module port B declared here}}
+    in %B: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{b has domains [B : ClockDomain]}}
+    out %b: !firrtl.uint<1> domains [%B],
+    out %a: !firrtl.uint<1> domains [%A]
+  ) {
+    // expected-note @below {{w has domains [A : ClockDomain]}}
+    %w = firrtl.wire : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %w : !firrtl.uint<1>
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.matchingconnect %b, %w : !firrtl.uint<1>
+  }
+}
+
+// Robustness: invalidvalue is not constant-like (it is a fresh unique value
+// on every use) and must not be treated as colorless.
+
+// CHECK-LABEL: InvalidValueNotColorless
+firrtl.circuit "InvalidValueNotColorless" {
+  firrtl.domain @ClockDomain
+  firrtl.module @InvalidValueNotColorless(
+    // expected-note @below {{input module port A declared here}}
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    // expected-note @below {{input module port B declared here}}
+    in %B: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{b has domains [B : ClockDomain]}}
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    // expected-note @below {{%invalid_ui1 has domains [A : ClockDomain]}}
+    %0 = firrtl.invalidvalue : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %0 : !firrtl.uint<1>
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+  }
+}
+
+// Known limitation (Q3, cross-module colorless propagation is out of scope):
+// a private module whose output is a purely-constant expression is *not*
+// treated as colorless at its instantiation sites, so this still errors.
+// This is intentional; a follow-up session may relax it.
+
+// CHECK-LABEL: PrivateModuleConstantOutputStillErrors
+firrtl.circuit "PrivateModuleConstantOutputStillErrors" {
+  firrtl.domain @ClockDomain
+
+  firrtl.module private @Bar(out %o: !firrtl.uint<4>) {
+    %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
+    %c2_ui4 = firrtl.constant 2 : !firrtl.uint<4>
+    %0 = firrtl.add %c1_ui4, %c2_ui4 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    %1 = firrtl.bits %0 3 to 0 : (!firrtl.uint<5>) -> !firrtl.uint<4>
+    firrtl.matchingconnect %o, %1 : !firrtl.uint<4>
+  }
+
+  firrtl.module @PrivateModuleConstantOutputStillErrors(
+    // expected-note @below {{input module port A declared here}}
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<4> domains [%A],
+    // expected-note @below {{input module port B declared here}}
+    in %B: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{b has domains [B : ClockDomain]}}
+    out %b: !firrtl.uint<4> domains [%B]
+  ) {
+    // expected-note @below {{bar.o has domains [A : ClockDomain]}}
+    %bar_o = firrtl.instance bar @Bar(out o: !firrtl.uint<4>)
+    firrtl.matchingconnect %a, %bar_o : !firrtl.uint<4>
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.matchingconnect %b, %bar_o : !firrtl.uint<4>
+  }
+}

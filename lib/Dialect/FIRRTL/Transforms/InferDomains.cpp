@@ -98,16 +98,7 @@ static bool isHardware(Type type) {
 }
 
 /// True if the given value could be association with a domain.
-static bool isHardware(Value value) {
-  if (!isHardware(value.getType()))
-    return false;
-
-  if (auto *op = value.getDefiningOp())
-    if (op->hasTrait<OpTrait::ConstantLike>())
-      return false;
-
-  return true;
-}
+static bool isHardware(Value value) { return isHardware(value.getType()); }
 
 //====--------------------------------------------------------------------------
 // Global State.
@@ -345,6 +336,12 @@ public:
   Term *getDomainAssociation(Value value);
   void setDomainAssociation(Value value, Term *term);
 
+  /// True if the value is "colorless": it is fully composed of constants and
+  /// therefore not tied to any domain. A colorless value imposes and inherits
+  /// no domain constraints, and may be freely consumed by a value in any
+  /// domain. Computed structurally over the SSA graph, memoized per module.
+  bool isColorless(Value value);
+
   void processDomainDefinition(DomainValue domain);
   RowTerm *getDomainAssociationAsRow(Value value);
 
@@ -447,6 +444,10 @@ private:
   CircuitState &globals;
   DenseMap<Value, Term *> termTable;
   DenseMap<Value, Term *> associationTable;
+  /// Memoization for isColorless. Absent = not computed; present = result.
+  /// A value currently being computed is marked pending in colorlessPending.
+  DenseMap<Value, bool> colorlessTable;
+  DenseSet<Value> colorlessPending;
   llvm::BumpPtrAllocator allocator;
 };
 } // namespace
@@ -701,7 +702,7 @@ void ModuleState::setTermForDomain(DomainValue value, Term *term) {
 }
 
 Term *ModuleState::getOptDomainAssociation(Value value) {
-  assert(isHardware(value));
+  assert(isHardware(value) && !isColorless(value));
   auto it = associationTable.find(value);
   if (it == associationTable.end())
     return nullptr;
@@ -715,7 +716,7 @@ Term *ModuleState::getDomainAssociation(Value value) {
 }
 
 void ModuleState::setDomainAssociation(Value value, Term *term) {
-  assert(isHardware(value));
+  assert(isHardware(value) && !isColorless(value));
   assert(term);
   term = find(term);
   associationTable.insert({value, term});
@@ -723,6 +724,121 @@ void ModuleState::setDomainAssociation(Value value, Term *term) {
     llvm::dbgs().indent(6) << "set domains(" << render(value)
                            << ") := " << render(term) << "\n";
   });
+}
+
+// NOLINTNEXTLINE(misc-no-recursion)
+bool ModuleState::isColorless(Value value) {
+  // Only hardware-typed values can be colored; property/domain-typed operands
+  // never participate in coloring, so treat them as colorless (they impose no
+  // constraint).
+  if (!isHardware(value))
+    return true;
+
+  // Consult the memo table.
+  if (auto it = colorlessTable.find(value); it != colorlessTable.end())
+    return it->second;
+
+  // Cycle guard: a value currently being computed is treated conservatively as
+  // non-colorless. This breaks combinational loops (including wire -> connect
+  // src -> ... -> wire) without infinite recursion.
+  if (!colorlessPending.insert(value).second)
+    return false;
+
+  auto finish = [&](bool result) {
+    colorlessPending.erase(value);
+    colorlessTable[value] = result;
+    return result;
+  };
+
+  // Block arguments (ports) are never colorless by structure.
+  auto *op = value.getDefiningOp();
+  if (!op)
+    return finish(false);
+
+  // A wire is colorless iff every driver connected to it is colorless. An
+  // undriven wire has no colorless drivers to constrain it and is treated
+  // conservatively as non-colorless (it behaves like an invalid value). Wires
+  // with explicit declared domains are colored. A forceable wire (has an
+  // inner symbol, or an rwprobe result) can be targeted externally via
+  // `firrtl.ref.rwprobe` / force, so it is never colorless: a force could
+  // later drive it with a colored value regardless of its own connect
+  // drivers.
+  if (auto wireOp = dyn_cast<WireOp>(op)) {
+    if (!wireOp.getDomains().empty())
+      return finish(false);
+    if (wireOp.isForceable() || wireOp.getInnerSymAttr())
+      return finish(false);
+    bool hasDriver = false;
+    for (auto *user : value.getUsers()) {
+      auto connect = dyn_cast<FConnectLike>(user);
+      if (!connect || connect.getDest() != value)
+        continue;
+      hasDriver = true;
+      if (!isColorless(connect.getSrc()))
+        return finish(false);
+    }
+    return finish(hasDriver);
+  }
+
+  // Constants are colorless roots.
+  if (op->hasTrait<OpTrait::ConstantLike>())
+    return finish(true);
+
+  // A node is a transparent pass-through of its single input.
+  if (auto nodeOp = dyn_cast<NodeOp>(op))
+    return finish(isColorless(nodeOp.getInput()));
+
+  // An unsafe domain cast with explicit domain operands is always explicitly
+  // colored (regardless of whether its input is colorless): the whole point
+  // of the op is to assign a concrete domain. Only a cast with no domain
+  // operands (a pure forwarding cast) inherits colorlessness from its input.
+  if (auto castOp = dyn_cast<UnsafeDomainCastOp>(op)) {
+    if (!castOp.getDomains().empty())
+      return finish(false);
+    return finish(isColorless(castOp.getInput()));
+  }
+
+  // A rwprobe references its target by attribute (no value operand), so it
+  // is never colorless by structure -- it aliases a forced/probed value.
+  if (isa<RWProbeOp>(op))
+    return finish(false);
+
+  // ref.send sends a value through a reference that may be read/probed
+  // through module ports (e.g. RefDefineOp routes it to an output port);
+  // like other module-boundary-crossing constructs, do not treat it as
+  // colorless so its color, if any, is faithfully propagated to consumers on
+  // the other side.
+  if (isa<RefSendOp>(op))
+    return finish(false);
+
+  // Pure expression ops (prim ops, muxes, casts, aggregate projections) are
+  // colorless iff all their hardware-typed operands are colorless. Non-hardware
+  // operands (indices, domains, properties) are ignored by isColorless.
+  // invalidvalue is an expression but has a MemAlloc effect (it is a unique
+  // fresh value), so it is excluded by the memory-effect-free check.
+  //
+  // Ops with *no* hardware-typed operands are "roots". Only explicit
+  // constants are colorless roots (handled above); anything else that
+  // produces a hardware value with no hardware operands references external
+  // state (e.g. `xmr.ref`, `xmr.deref`, a `verbatim.expr` with no
+  // substitutions) and must not be treated as colorless.
+  if (isExpression(op) && mlir::isMemoryEffectFree(op)) {
+    bool sawHardwareOperand = false;
+    for (auto operand : op->getOperands()) {
+      if (!isHardware(operand))
+        continue;
+      sawHardwareOperand = true;
+      if (!isColorless(operand))
+        return finish(false);
+    }
+    if (!sawHardwareOperand)
+      return finish(false);
+    return finish(true);
+  }
+
+  // Anything else (instance results, reg, regreset, mem, invalidvalue,
+  // unsafe.domain.cast, forced/probed values) is not colorless by structure.
+  return finish(false);
 }
 
 void ModuleState::processDomainDefinition(DomainValue domain) {
@@ -739,7 +855,7 @@ void ModuleState::processDomainDefinition(DomainValue domain) {
 }
 
 RowTerm *ModuleState::getDomainAssociationAsRow(Value value) {
-  assert(isHardware(value));
+  assert(isHardware(value) && !isColorless(value));
   auto *term = getOptDomainAssociation(value);
 
   // If the term is unknown, allocate a fresh row and set the association.
@@ -1020,6 +1136,11 @@ LogicalResult ModuleState::unifyAssociations(Operation *op, Value lhs,
   if (!isHardware(lhs) || !isHardware(rhs))
     return success();
 
+  // Colorless values impose and receive no association: colorless is below
+  // every color in the lattice.
+  if (isColorless(lhs) || isColorless(rhs))
+    return success();
+
   LLVM_DEBUG({
     llvm::dbgs().indent(6) << "unify domains(" << render(lhs) << ") = domains("
                            << render(rhs) << ")\n";
@@ -1055,7 +1176,7 @@ template <typename T>
 LogicalResult ModuleState::unifyAssociations(Operation *op, T &&range) {
   Value lhs;
   for (auto rhs : std::forward<T>(range)) {
-    if (!isHardware(rhs))
+    if (!isHardware(rhs) || isColorless(rhs))
       continue;
     if (failed(unifyAssociations(op, lhs, rhs)))
       return failure();
@@ -1209,7 +1330,7 @@ LogicalResult ModuleState::processOp(UnsafeDomainCastOp op) {
   auto input = op.getInput();
 
   SmallVector<Term *> elements(getNumDomains());
-  if (isHardware(input)) {
+  if (isHardware(input) && !isColorless(input)) {
     auto *inputRow = getDomainAssociationAsRow(input);
     elements.assign(inputRow->elements);
   }
@@ -1250,8 +1371,14 @@ LogicalResult ModuleState::processOp(WireOp op) {
   // contains only fresh variables that unify unconditionally. Any conflict
   // between an explicit wire domain and a connection's inferred domain is
   // caught later by the connection's own processOp.
-  if (op.getDomains().empty())
+  if (op.getDomains().empty()) {
+    // A colorless wire (no explicit domains, all drivers colorless) imposes
+    // nothing and gets no association.
+    if (llvm::all_of(op.getResults(),
+                     [&](Value result) { return isColorless(result); }))
+      return success();
     return unifyAssociations(op, op.getResults());
+  }
 
   // Build a row with the explicitly-specified domain slots filled in and set
   // it as the association for this wire result.
@@ -1696,7 +1823,7 @@ ModuleState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
     llvm_unreachable("unhandled domain term type");
   }
 
-  if (!isHardware(result))
+  if (!isHardware(result) || isColorless(result))
     return success();
 
   LLVM_DEBUG(llvm::dbgs().indent(4) << "update " << render(wireOp) << "\n");

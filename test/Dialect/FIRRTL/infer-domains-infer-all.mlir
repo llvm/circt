@@ -582,18 +582,20 @@ firrtl.circuit "WireInferSecondDomain" {
 firrtl.circuit "DoNotReUseAnonDomain" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
-  firrtl.module @DoNotReUseAnonDomain() {
-    // CHECK: %ClockDomain = firrtl.domain.anon
-    // CHECK: %PowerDomain = firrtl.domain.anon
+  // CHECK: firrtl.module @DoNotReUseAnonDomain(
+  // CHECK-SAME: in %ClockDomain: !firrtl.domain<@ClockDomain()>,
+  // CHECK-SAME: in %PowerDomain: !firrtl.domain<@PowerDomain()>,
+  // CHECK-SAME: in %x: !firrtl.uint<1> domains [%ClockDomain, %PowerDomain],
+  // CHECK-SAME: in %ClockDomain_0: !firrtl.domain<@ClockDomain()>,
+  // CHECK-SAME: in %PowerDomain_0: !firrtl.domain<@PowerDomain()>,
+  // CHECK-SAME: in %y: !firrtl.uint<1> domains [%ClockDomain_0, %PowerDomain_0]
+  firrtl.module @DoNotReUseAnonDomain(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>) {
     // CHECK: %w1 = firrtl.wire domains[%ClockDomain, %PowerDomain]
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %w1 = firrtl.wire : !firrtl.uint<1>
-    // CHECK: %ClockDomain_0 = firrtl.domain.anon
-    // CHECK: %PowerDomain_1 = firrtl.domain.anon
-    // CHECK: %w2 = firrtl.wire domains[%ClockDomain_0, %PowerDomain_1]
+    // CHECK: %w2 = firrtl.wire domains[%ClockDomain_0, %PowerDomain_0]
     %w2 = firrtl.wire : !firrtl.uint<1>
-    firrtl.matchingconnect %w1, %c0_ui1 : !firrtl.uint<1>
-    firrtl.matchingconnect %w2, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %w1, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %w2, %y : !firrtl.uint<1>
   }
 }
 
@@ -601,15 +603,16 @@ firrtl.circuit "DoNotReUseAnonDomain" {
 firrtl.circuit "ReUseAnonDomain" {
   firrtl.domain @ClockDomain
   firrtl.domain @PowerDomain
-  firrtl.module @ReUseAnonDomain() {
-    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %ClockDomain = firrtl.domain.anon
-    // CHECK: %PowerDomain = firrtl.domain.anon
-    // CHECK: %w1 = firrtl.wire domains[%ClockDomain, %PowerDomain] 
+  // CHECK: firrtl.module @ReUseAnonDomain(
+  // CHECK-SAME: in %ClockDomain: !firrtl.domain<@ClockDomain()>,
+  // CHECK-SAME: in %PowerDomain: !firrtl.domain<@PowerDomain()>,
+  // CHECK-SAME: in %x: !firrtl.uint<1> domains [%ClockDomain, %PowerDomain]
+  firrtl.module @ReUseAnonDomain(in %x: !firrtl.uint<1>) {
+    // CHECK: %w1 = firrtl.wire domains[%ClockDomain, %PowerDomain]
     %w1 = firrtl.wire : !firrtl.uint<1>
     // CHECK: %w2 = firrtl.wire domains[%ClockDomain, %PowerDomain]
     %w2 = firrtl.wire : !firrtl.uint<1>
-    firrtl.matchingconnect %w1, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %w1, %x : !firrtl.uint<1>
     firrtl.matchingconnect %w2, %w1 : !firrtl.uint<1>
   }
 }
@@ -663,7 +666,9 @@ firrtl.circuit "ProbeWire" {
   // CHECK: firrtl.module @ProbeWire(in %ClockDomain: !firrtl.domain<@ClockDomain()>, out %probe: !firrtl.probe<uint<1>> domains [%ClockDomain]) {
   firrtl.module @ProbeWire(out %probe: !firrtl.probe<uint<1>>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %w = firrtl.wire domains[%ClockDomain] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    // The wire is driven only by a constant, so it is colorless and gets no
+    // explicit domain annotation, even though it is read through a probe.
+    // CHECK: %w = firrtl.wire : !firrtl.uint<1>
     %w = firrtl.wire : !firrtl.uint<1>
     %0 = firrtl.ref.send %w : !firrtl.uint<1>
     firrtl.ref.define %probe, %0 : !firrtl.probe<uint<1>>
@@ -772,5 +777,178 @@ firrtl.circuit "CastConstantNoDomains" {
     %0 = firrtl.constant 0 : !firrtl.uint<1>
     %1 = firrtl.unsafe_domain_cast %0 domains[] : !firrtl.uint<1>
     firrtl.connect %o, %1 : !firrtl.uint<1>
+  }
+}
+
+//===----------------------------------------------------------------------===//
+// Colorless (constant-derived) values (llvm/circt#10830).
+//
+// A value is colorless iff it is a constant, or a pure expression / node /
+// wire whose inputs are all colorless. Colorless values impose no domain
+// constraint and may be freely used in any domain without an explicit cast.
+//===----------------------------------------------------------------------===//
+
+// A node bound directly to a constant may be used in two different domains.
+// CHECK-LABEL: firrtl.circuit "ConstantNodeTwoDomains"
+firrtl.circuit "ConstantNodeTwoDomains" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ConstantNodeTwoDomains(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %x = firrtl.node %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %x : !firrtl.uint<1>
+  }
+}
+
+// A node bound to a constant *expression* (not just a bare constant) may
+// also be used in two different domains.
+// CHECK-LABEL: firrtl.circuit "ConstantExprNodeTwoDomains"
+firrtl.circuit "ConstantExprNodeTwoDomains" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ConstantExprNodeTwoDomains(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.eq %c1_ui1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %x = firrtl.node %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %x : !firrtl.uint<1>
+  }
+}
+
+// A deeply nested constant expression is still colorless and can be used
+// across multiple domains.
+// CHECK-LABEL: firrtl.circuit "DeeplyNestedConstantExpr"
+firrtl.circuit "DeeplyNestedConstantExpr" {
+  firrtl.domain @ClockDomain
+  firrtl.module @DeeplyNestedConstantExpr(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<4> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<4> domains [%B]
+  ) {
+    %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
+    %c2_ui4 = firrtl.constant 2 : !firrtl.uint<4>
+    %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %0 = firrtl.mux(%c0_ui1, %c2_ui4, %c3_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    %1 = firrtl.add %c1_ui4, %0 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    %2 = firrtl.bits %1 3 to 0 : (!firrtl.uint<5>) -> !firrtl.uint<4>
+    %3 = firrtl.not %2 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+    firrtl.matchingconnect %a, %3 : !firrtl.uint<4>
+    firrtl.matchingconnect %b, %3 : !firrtl.uint<4>
+  }
+}
+
+// A colorless subexpression mixed with a colored operand takes on the
+// operand's color: the result is usable wherever the colored operand's
+// domain is legal, but no longer colorless.
+// CHECK-LABEL: firrtl.circuit "ColorlessMixedWithColoredAdoptsColor"
+firrtl.circuit "ColorlessMixedWithColoredAdoptsColor" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ColorlessMixedWithColoredAdoptsColor(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %x: !firrtl.uint<1> domains [%A],
+    // CHECK: out %y: !firrtl.uint<1> domains [%A]
+    out %y: !firrtl.uint<1>
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %1 = firrtl.eq %0, %x : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %y, %1 : !firrtl.uint<1>
+  }
+}
+
+// constCast of a constant preserves colorlessness.
+// CHECK-LABEL: firrtl.circuit "ConstCastPreservesColorless"
+firrtl.circuit "ConstCastPreservesColorless" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ConstCastPreservesColorless(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.const.uint<1>
+    %0 = firrtl.constCast %c1_ui1 : (!firrtl.const.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %a, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+  }
+}
+
+// specialconstant (e.g. a clock/reset constant) is a colorless root.
+// CHECK-LABEL: firrtl.circuit "SpecialConstantColorless"
+firrtl.circuit "SpecialConstantColorless" {
+  firrtl.domain @ClockDomain
+  firrtl.module @SpecialConstantColorless(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.clock domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.clock domains [%B]
+  ) {
+    %c = firrtl.specialconstant 0 : !firrtl.clock
+    firrtl.matchingconnect %a, %c : !firrtl.clock
+    firrtl.matchingconnect %b, %c : !firrtl.clock
+  }
+}
+
+// aggregateconstant is a colorless root.
+// CHECK-LABEL: firrtl.circuit "AggregateConstantColorless"
+firrtl.circuit "AggregateConstantColorless" {
+  firrtl.domain @ClockDomain
+  firrtl.module @AggregateConstantColorless(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.bundle<x: uint<1>> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.bundle<x: uint<1>> domains [%B]
+  ) {
+    %c = firrtl.aggregateconstant [1 : ui1] : !firrtl.bundle<x: uint<1>>
+    firrtl.matchingconnect %a, %c : !firrtl.bundle<x: uint<1>>
+    firrtl.matchingconnect %b, %c : !firrtl.bundle<x: uint<1>>
+  }
+}
+
+// A wire fed only by constants is colorless and may be used in two domains.
+// CHECK-LABEL: firrtl.circuit "ColorlessWireConstOnly"
+firrtl.circuit "ColorlessWireConstOnly" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ColorlessWireConstOnly(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %w = firrtl.wire : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %w : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %w : !firrtl.uint<1>
+  }
+}
+
+// A wire with mixed drivers (one constant, one colored) is not colorless: it
+// takes on the colored driver's domain.
+// CHECK-LABEL: firrtl.circuit "MixedDriverWireTakesColor"
+firrtl.circuit "MixedDriverWireTakesColor" {
+  firrtl.domain @ClockDomain
+  firrtl.module @MixedDriverWireTakesColor(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %x: !firrtl.uint<1> domains [%A],
+    // CHECK: out %a: !firrtl.uint<1> domains [%A]
+    out %a: !firrtl.uint<1>
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %w = firrtl.wire : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %w : !firrtl.uint<1>
   }
 }
