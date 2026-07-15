@@ -799,6 +799,47 @@ hw.module @ModuleUsingMacroWithVerilogName(in %a : i1) {
   }
 }
 
+// CHECK-LABEL: module PrecedenceEqualityRelational(
+// CHECK-NEXT:   input  [3:0] a,{{.*}}
+// CHECK-NEXT:                b,{{.*}}
+// CHECK-NEXT:   input        c,{{.*}}
+// CHECK-NEXT:   output       out_eq,{{.*}}
+// CHECK-NEXT:                out_ne,{{.*}}
+// CHECK-NEXT:                out_ceq,{{.*}}
+// CHECK-NEXT:                out_cne,{{.*}}
+// CHECK-NEXT:                out_weq,{{.*}}
+// CHECK-NEXT:                out_wne{{.*}}
+// CHECK-NEXT:  );
+// CHECK-DAG:     assign out_eq = (a == b) < c;
+// CHECK-DAG:     assign out_ne = (a != b) < c;
+// CHECK-DAG:     assign out_ceq = (a === b) < c;
+// CHECK-DAG:     assign out_cne = (a !== b) < c;
+// CHECK-DAG:     assign out_weq = (a ==? b) < c;
+// CHECK-DAG:     assign out_wne = (a !=? b) < c;
+// CHECK-NEXT:  endmodule
+hw.module @PrecedenceEqualityRelational(in %a: i4, in %b: i4, in %c: i1,
+  out out_eq: i1, out out_ne: i1, out out_ceq: i1, out out_cne: i1, out out_weq: i1, out out_wne: i1) {
+  %eq = comb.icmp eq %a, %b : i4
+  %out_eq = comb.icmp ult %eq, %c : i1
+
+  %ne = comb.icmp ne %a, %b : i4
+  %out_ne = comb.icmp ult %ne, %c : i1
+
+  %ceq = comb.icmp ceq %a, %b : i4
+  %out_ceq = comb.icmp ult %ceq, %c : i1
+
+  %cne = comb.icmp cne %a, %b : i4
+  %out_cne = comb.icmp ult %cne, %c : i1
+
+  %weq = comb.icmp weq %a, %b : i4
+  %out_weq = comb.icmp ult %weq, %c : i1
+
+  %wne = comb.icmp wne %a, %b : i4
+  %out_wne = comb.icmp ult %wne, %c : i1
+
+  hw.output %out_eq, %out_ne, %out_ceq, %out_cne, %out_weq, %out_wne : i1, i1, i1, i1, i1, i1
+}
+
 hw.module @BindInterface() {
   %bar = sv.interface.instance sym @__Interface__ {doNotPrint} : !sv.interface<@Interface>
   hw.output
