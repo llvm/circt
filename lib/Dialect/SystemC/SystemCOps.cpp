@@ -118,11 +118,15 @@ SCModuleOp::getPortsOfDirection(hw::ModulePort::Direction direction) {
 
 SmallVector<::circt::hw::PortInfo> SCModuleOp::getPortList() {
   SmallVector<hw::PortInfo> ports;
+  size_t inputIdx = 0, outputIdx = 0;
   for (int i = 0, e = getNumArguments(); i < e; ++i) {
     hw::PortInfo info;
+    auto argType = getArgument(i).getType();
     info.name = cast<StringAttr>(getPortNames()[i]);
-    info.type = getSignalBaseType(getArgument(i).getType());
-    info.dir = getDirection(info.type);
+    info.type = getSignalBaseType(argType);
+    info.dir = getDirection(argType);
+    info.argNum = info.dir == hw::ModulePort::Direction::Output ? outputIdx++
+                                                                : inputIdx++;
     ports.push_back(info);
   }
   return ports;
