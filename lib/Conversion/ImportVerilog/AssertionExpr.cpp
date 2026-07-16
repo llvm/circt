@@ -426,9 +426,20 @@ Value Context::convertSampledValueCallExpression(
     originalType = value.getType();
     valTy = dyn_cast<moore::IntType>(value.getType());
     if (!valTy) {
-      mlir::emitError(loc) << "expected integer argument for `"
-                           << subroutine.name << "`";
-      return {};
+      if (!isa<moore::PackedType>(value.getType())) {
+        mlir::emitError(loc)
+            << "expected integer argument for `" << subroutine.name << "`";
+        return {};
+      }
+      value = materializePackedToSBVConversion(value, loc, /*fallible=*/false);
+      if (!value)
+        return {};
+      valTy = dyn_cast<moore::IntType>(value.getType());
+      if (!valTy) {
+        mlir::emitError(loc)
+            << "expected integer argument for `" << subroutine.name << "`";
+        return {};
+      }
     }
 
     // If the value is four-valued, we need to map it to two-valued before we
