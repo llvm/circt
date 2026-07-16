@@ -342,6 +342,10 @@ public:
   /// domain. Computed structurally over the SSA graph, memoized per module.
   bool isColorless(Value value);
 
+  /// Classify a value reached as a terminal driver by `walkDrivers`.
+  /// Returns true if colorless.
+  bool isColorlessDriver(Value value);
+
   void processDomainDefinition(DomainValue domain);
   RowTerm *getDomainAssociationAsRow(Value value);
 
@@ -445,9 +449,7 @@ private:
   DenseMap<Value, Term *> termTable;
   DenseMap<Value, Term *> associationTable;
   /// Memoization for isColorless. Absent = not computed; present = result.
-  /// A value currently being computed is marked pending in colorlessPending.
   DenseMap<Value, bool> colorlessTable;
-  DenseSet<Value> colorlessPending;
   llvm::BumpPtrAllocator allocator;
 };
 } // namespace
@@ -738,14 +740,7 @@ bool ModuleState::isColorless(Value value) {
   if (auto it = colorlessTable.find(value); it != colorlessTable.end())
     return it->second;
 
-  // Cycle guard: a value currently being computed is treated conservatively as
-  // non-colorless. This breaks combinational loops (including wire -> connect
-  // src -> ... -> wire) without infinite recursion.
-  if (!colorlessPending.insert(value).second)
-    return false;
-
   auto finish = [&](bool result) {
-    colorlessPending.erase(value);
     colorlessTable[value] = result;
     return result;
   };
@@ -763,82 +758,149 @@ bool ModuleState::isColorless(Value value) {
   // `firrtl.ref.rwprobe` / force, so it is never colorless: a force could
   // later drive it with a colored value regardless of its own connect
   // drivers.
-  if (auto wireOp = dyn_cast<WireOp>(op)) {
-    if (!wireOp.getDomains().empty())
-      return finish(false);
-    if (wireOp.isForceable() || wireOp.getInnerSymAttr())
-      return finish(false);
-    bool hasDriver = false;
-    for (auto *user : value.getUsers()) {
-      auto connect = dyn_cast<FConnectLike>(user);
-      if (!connect || connect.getDest() != value)
-        continue;
-      hasDriver = true;
-      if (!isColorless(connect.getSrc()))
-        return finish(false);
-    }
-    return finish(hasDriver);
-  }
-
-  // Constants are colorless roots.
-  if (op->hasTrait<OpTrait::ConstantLike>())
-    return finish(true);
-
-  // A node is a transparent pass-through of its single input.
-  if (auto nodeOp = dyn_cast<NodeOp>(op))
-    return finish(isColorless(nodeOp.getInput()));
-
-  // An unsafe domain cast with explicit domain operands is always explicitly
-  // colored (regardless of whether its input is colorless): the whole point
-  // of the op is to assign a concrete domain. Only a cast with no domain
-  // operands (a pure forwarding cast) inherits colorlessness from its input.
-  if (auto castOp = dyn_cast<UnsafeDomainCastOp>(op)) {
-    if (!castOp.getDomains().empty())
-      return finish(false);
-    return finish(isColorless(castOp.getInput()));
-  }
-
-  // A rwprobe references its target by attribute (no value operand), so it
-  // is never colorless by structure -- it aliases a forced/probed value.
-  if (isa<RWProbeOp>(op))
-    return finish(false);
-
-  // ref.send sends a value through a reference that may be read/probed
-  // through module ports (e.g. RefDefineOp routes it to an output port);
-  // like other module-boundary-crossing constructs, do not treat it as
-  // colorless so its color, if any, is faithfully propagated to consumers on
-  // the other side.
-  if (isa<RefSendOp>(op))
-    return finish(false);
-
-  // Pure expression ops (prim ops, muxes, casts, aggregate projections) are
-  // colorless iff all their hardware-typed operands are colorless. Non-hardware
-  // operands (indices, domains, properties) are ignored by isColorless.
-  // invalidvalue is an expression but has a MemAlloc effect (it is a unique
-  // fresh value), so it is excluded by the memory-effect-free check.
   //
-  // Ops with *no* hardware-typed operands are "roots". Only explicit
-  // constants are colorless roots (handled above); anything else that
-  // produces a hardware value with no hardware operands references external
-  // state (e.g. `xmr.ref`, `xmr.deref`, a `verbatim.expr` with no
-  // substitutions) and must not be treated as colorless.
-  if (isExpression(op) && mlir::isMemoryEffectFree(op)) {
-    bool sawHardwareOperand = false;
-    for (auto operand : op->getOperands()) {
-      if (!isHardware(operand))
-        continue;
-      sawHardwareOperand = true;
-      if (!isColorless(operand))
-        return finish(false);
-    }
-    if (!sawHardwareOperand)
-      return finish(false);
-    return finish(true);
-  }
+  // The only non-base hardware values are references (probe / rwprobe). A
+  // ref is never colorless: it is rooted at a real ref.send/rwprobe target,
+  // never a constant, and its color must propagate to probe consumers.
+  // (walkDrivers is also typed on FIRRTLBaseValue and cannot accept a ref.)
+  if (type_isa<RefType>(value.getType()))
+    return finish(false);
 
-  // Anything else (instance results, reg, regreset, mem, invalidvalue,
-  // unsafe.domain.cast, forced/probed values) is not colorless by structure.
-  return finish(false);
+  // Everything else is a passive base value. InferDomains runs after
+  // LowerFIRRTLTypes, which scalarizes every non-passive aggregate, so all
+  // base values are passive here.
+  assert(type_cast<FIRRTLBaseType>(value.getType()).isPassive() &&
+         "expected passive base values after LowerFIRRTLTypes");
+
+  // Per-walk visited set of looked-through drivers.  It serves two purposes:
+  //   * Wires: break combinational loops.  In valid SSA the only way to form a
+  //     combinational loop is through a wire (connect-driven, use may precede
+  //     def), so a re-visited wire closes a loop and is treated as a terminal
+  //     (conservatively non-colorless).
+  //   * Pure ops: dedup reconvergent fan-out.  A pure op's colorlessness
+  //     depends only on its operands, so once it has been walked on one branch
+  //     a later re-visit contributes nothing and is skipped.  Without this, a
+  //     reconvergent combinational cone would be re-walked exponentially.
+  // The set is keyed on `FieldRef` (not `Operation *`) so distinct subfields of
+  // one aggregate value are tracked independently.
+  DenseSet<FieldRef> walkVisited;
+
+  // Two callbacks steer the walk.  `lookThrough` decides, per driver, how to
+  // proceed: nodes and forwarding domain casts forward their input; pure
+  // memory-effect-free expression ops fan out to all their hardware-typed
+  // operands; wires are connect-driven (look through with no drivers) unless
+  // colored or loop-closing.  Colored/loop-closing wires, constants, explicit
+  // domain casts, rwprobe/ref.send, and everything else are terminals; an
+  // already-visited pure op is skipped.  `onTerminal` classifies each terminal
+  // driver: a colored terminal stops the walk (returns false), a colorless one
+  // keeps walking.  A completed walk that reached no terminal (e.g. an undriven
+  // wire) is not colorless.
+  bool sawTerminal = false;
+  auto lookThrough =
+      [&](const FieldRef &ref,
+          SmallVectorImpl<Value> &drivers) -> WalkDriverLookThrough {
+    auto *op = ref.getValue().getDefiningOp();
+    // Wires are connect-driven: look through by scanning their connects (push
+    // no drivers), unless colored or already visited.  A re-visited wire closes
+    // a combinational loop, so treat it as a terminal (conservatively
+    // non-colorless) rather than skipping it.
+    if (auto wireOp = dyn_cast<WireOp>(op)) {
+      bool colored = !wireOp.getDomains().empty() || wireOp.isForceable() ||
+                     wireOp.getInnerSymAttr();
+      if (colored || !walkVisited.insert(ref).second)
+        return WalkDriverLookThrough::Terminal;
+      return WalkDriverLookThrough::LookThrough;
+    }
+
+    // A node forwards its input.
+    if (auto node = dyn_cast<NodeOp>(op)) {
+      if (!walkVisited.insert(ref).second)
+        return WalkDriverLookThrough::Skip;
+      drivers.push_back(node.getInput());
+      return WalkDriverLookThrough::LookThrough;
+    }
+
+    // A forwarding domain cast (no explicit domains) is transparent; a cast
+    // with domain operands is an explicit coloring terminal.
+    if (auto castOp = dyn_cast<UnsafeDomainCastOp>(op)) {
+      if (!castOp.getDomains().empty())
+        return WalkDriverLookThrough::Terminal;
+      if (!walkVisited.insert(ref).second)
+        return WalkDriverLookThrough::Skip;
+      drivers.push_back(castOp.getInput());
+      return WalkDriverLookThrough::LookThrough;
+    }
+
+    // A rwprobe references its target by attribute (no value operand) and
+    // ref.send crosses a module boundary; both are structural terminals whose
+    // color must be propagated, so never fan into them.
+    if (isa<RWProbeOp, RefSendOp>(op))
+      return WalkDriverLookThrough::Terminal;
+
+    // Constants are colorless roots; keep them terminals so `onTerminal`
+    // classifies them (fanning would push no drivers and stall the walk).
+    if (op->hasTrait<OpTrait::ConstantLike>())
+      return WalkDriverLookThrough::Terminal;
+
+    // Pure, memory-effect-free expression ops (prim ops, muxes, casts,
+    // aggregate projections) fan out to all their hardware-typed operands;
+    // non-hardware operands (indices, domains, properties) impose no coloring
+    // constraint.  A pure op with no hardware operands is a non-constant root
+    // (e.g. `xmr.ref`, a substitution-free `verbatim.expr`) that references
+    // external state and stays a terminal.  invalidvalue is an expression but
+    // has a MemAlloc effect, so it is excluded here and treated as a terminal.
+    if (isExpression(op) && mlir::isMemoryEffectFree(op)) {
+      // A reconvergent re-visit contributes nothing (its colorlessness is fully
+      // determined by its operands, already walked on the first visit).
+      if (!walkVisited.insert(ref).second)
+        return WalkDriverLookThrough::Skip;
+      bool sawHardwareOperand = false;
+      for (auto operand : op->getOperands()) {
+        if (!isHardware(operand))
+          continue;
+        sawHardwareOperand = true;
+        drivers.push_back(operand);
+      }
+      return sawHardwareOperand ? WalkDriverLookThrough::LookThrough
+                                : WalkDriverLookThrough::Terminal;
+    }
+
+    // Everything else (instance results, reg, regreset, mem, invalidvalue,
+    // forced/probed values) is a terminal driver.
+    return WalkDriverLookThrough::Terminal;
+  };
+  auto onTerminal = [&](const FieldRef &dst, const FieldRef &src) -> bool {
+    sawTerminal = true;
+    return isColorlessDriver(src.getValue());
+  };
+  bool walkOk =
+      walkDrivers(cast<FIRRTLBaseValue>(value), lookThrough, onTerminal);
+  return finish(walkOk && sawTerminal);
+}
+
+// Classify a value reached as a terminal driver by `walkDrivers`. Returns true
+// if the value is colorless. `walkDrivers` looks through and fans into all the
+// ops that could inherit colorlessness (wires, nodes, forwarding domain casts,
+// pure expression ops), so terminals are only ever roots or coloring points
+// and this classification is a simple structural test.
+bool ModuleState::isColorlessDriver(Value value) {
+  // Non-hardware operands impose no coloring constraint.
+  if (!isHardware(value))
+    return true;
+
+  auto *op = value.getDefiningOp();
+  if (!op)
+    return false;
+
+  // Constants are the only colorless roots.
+  if (op->hasTrait<OpTrait::ConstantLike>())
+    return true;
+
+  // Everything else reported as a terminal is not colorless: colored or
+  // loop-closing wires, unsafe domain casts with explicit domains, rwprobe,
+  // ref.send, instance results, reg/regreset/mem, invalidvalue, and
+  // non-constant expression roots (e.g. xmr) that reference external state.
+  return false;
 }
 
 void ModuleState::processDomainDefinition(DomainValue domain) {
@@ -1216,6 +1278,11 @@ LogicalResult ModuleState::processModulePorts(FModuleOp moduleOp) {
     if (!isHardware(port))
       continue;
 
+    // A colorless port (e.g. an output driven only by constants) imposes and
+    // receives no domain association.
+    if (isColorless(port))
+      continue;
+
     LLVM_DEBUG(llvm::dbgs().indent(4)
                << "process port " << render(port) << "\n");
 
@@ -1270,6 +1337,11 @@ LogicalResult ModuleState::processInstancePorts(T op) {
   for (size_t i = 0; i < numPorts; ++i) {
     Value port = op->getResult(i);
     if (!isHardware(port))
+      continue;
+
+    // A colorless port (e.g. an input driven only by constants) imposes and
+    // receives no domain association.
+    if (isColorless(port))
       continue;
 
     SmallVector<IntegerAttr> associations(numDomains);

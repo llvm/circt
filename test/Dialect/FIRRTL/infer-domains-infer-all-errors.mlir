@@ -261,3 +261,32 @@ firrtl.circuit "TraceThroughOutputPort" {
     firrtl.matchingconnect %a, %cg_a : !firrtl.uint<1>
   }
 }
+
+// A wire chain must not bypass an intermediate wire's explicit color: `w1`
+// has an explicit domain association, so `w2` (which is driven only by
+// `w1`) is colored by `w1`'s domain and is not colorless, even though `w1`
+// is itself ultimately driven only by a constant. This guards against a
+// `walkDrivers`-based implementation of `isColorless` that looks through
+// every wire in the chain (including colored ones) down to the constant.
+firrtl.circuit "WireChainDoesNotBypassColoredWire" {
+  firrtl.domain @ClockDomain
+  firrtl.module @WireChainDoesNotBypassColoredWire(
+    // expected-note @below {{input module port A declared here}}
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    // expected-note @below {{input module port B declared here}}
+    in %B: !firrtl.domain<@ClockDomain()>,
+    // expected-note @below {{b has domains [B : ClockDomain]}}
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c = firrtl.constant 1 : !firrtl.uint<1>
+    %w1 = firrtl.wire domains[%A] : !firrtl.uint<1> domains[!firrtl.domain<@ClockDomain()>]
+    firrtl.matchingconnect %w1, %c : !firrtl.uint<1>
+    // expected-note @below {{w2 has domains [A : ClockDomain]}}
+    %w2 = firrtl.wire : !firrtl.uint<1>
+    firrtl.matchingconnect %w2, %w1 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %w2 : !firrtl.uint<1>
+    // expected-error @below {{illegal domain crossing in operation}}
+    firrtl.matchingconnect %b, %w2 : !firrtl.uint<1>
+  }
+}
