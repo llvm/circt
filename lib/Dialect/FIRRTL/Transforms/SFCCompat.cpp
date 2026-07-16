@@ -86,12 +86,12 @@ void SFCCompatPass::runOnOperation() {
                    ref.getValue().getDefiningOp())
             .Case<WireOp>(
                 [](auto) { return WalkDriverLookThrough::LookThrough; })
-            .Case<NodeOp, PadPrimOp, TailPrimOp>([&](auto *op) {
+            .Case<NodeOp, PadPrimOp, TailPrimOp>([&](auto op) {
               drivers.push_back(op->getOperand(0));
               return WalkDriverLookThrough::LookThrough;
             })
             .Case<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp,
-                  AsAsyncResetPrimOp>([&](auto *op) {
+                  AsAsyncResetPrimOp>([&](auto op) {
               if (!lookThroughCasts)
                 return WalkDriverLookThrough::Terminal;
               drivers.push_back(op->getOperand(0));
