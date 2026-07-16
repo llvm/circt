@@ -3923,6 +3923,20 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {
+  // Emit `not (s_eventually X)` as `always ...` by duality, pulling the
+  // quantifier to the top and cancelling any inner negation.
+  if (auto ev = op.getInput().getDefiningOp<ltl::EventuallyOp>()) {
+    ps << "always" << PP::space;
+    if (auto innerNot = ev.getInput().getDefiningOp<ltl::NotOp>()) {
+      // `not(strong_eventually(not(X)))` -> `always X`.
+      emitNestedProperty(innerNot.getInput(), PropertyPrecedence::Qualifier);
+    } else {
+      // `not(strong_eventually(X))` -> `always (not X)`.
+      ps << "not" << PP::space;
+      emitNestedProperty(ev.getInput(), PropertyPrecedence::Unary);
+    }
+    return {PropertyPrecedence::Qualifier};
+  }
   ps << "not" << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Unary);
   return {PropertyPrecedence::Unary};
