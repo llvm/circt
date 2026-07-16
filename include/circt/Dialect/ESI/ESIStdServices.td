@@ -6,6 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_ESISTDSERVICES_TD
+#define CIRCT_DIALECT_ESI_ESISTDSERVICES_TD
+
 include "circt/Dialect/ESI/ESIServices.td"
 include "circt/Dialect/HW/HWTypes.td"
 
@@ -169,3 +172,5 @@ def TelemetryServiceDeclOp: ESI_Op<"service.std.telemetry",
     std::optional<StringRef> getTypeName() { return "esi.service.std.telemetry"; }
   }];
 }
+
+#endif // CIRCT_DIALECT_ESI_ESISTDSERVICES_TD

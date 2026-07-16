@@ -13,14 +13,7 @@
 #ifndef HWARITH_TD
 #define HWARITH_TD
 
-include "mlir/IR/OpBase.td"
-
 include "circt/Dialect/HWArith/HWArithDialect.td"
-
-// Base class for the operation in this dialect.
-class HWArithOp<string mnemonic, list<Trait> traits = []> :
-    Op<HWArithDialect, mnemonic, traits>;
-
 include "circt/Dialect/HWArith/HWArithTypes.td"
 // It is important that HWArithTypes.td is included first
 include "circt/Dialect/HWArith/HWArithOps.td"

@@ -13,29 +13,12 @@
 #ifndef COMB_TD
 #define COMB_TD
 
-include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferIntRangeInterface.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-def CombDialect : Dialect {
-  let name = "comb";
-
-  let summary = "Types and operations for comb dialect";
-  let description = [{
-    This dialect defines the `comb` dialect, which is intended to be a generic
-    representation of combinational logic outside of a particular use-case.
-  }];
-  let hasConstantMaterializer = 1;
-  let cppNamespace = "::circt::comb";
-  let dependentDialects = ["hw::HWDialect"];
-}
-
-// Base class for the operation in this dialect.
-class CombOp<string mnemonic, list<Trait> traits = []> :
-    Op<CombDialect, mnemonic, traits>;
-
+include "circt/Dialect/Comb/CombDialect.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/Comb/Combinational.td"
 

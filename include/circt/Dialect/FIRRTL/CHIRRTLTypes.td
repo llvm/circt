@@ -13,7 +13,8 @@
 #ifndef CIRCT_DIALECT_FIRRTL_CHIRRTLTYPES_TD
 #define CIRCT_DIALECT_FIRRTL_CHIRRTLTYPES_TD
 
-include "CHIRRTL.td"
+include "circt/Dialect/FIRRTL/CHIRRTLDialect.td"
+include "mlir/IR/AttrTypeBase.td"
 
 //===----------------------------------------------------------------------===//
 // CHIRRTL Types Definitions

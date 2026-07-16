@@ -13,10 +13,10 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLSTATEMENTS_TD
 
-include "FIRRTLDialect.td"
-include "FIRRTLEnums.td"
-include "FIRRTLOpInterfaces.td"
-include "FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/FIRRTLEnums.td"
+include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.td"
+include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
 include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
 include "mlir/IR/SymbolInterfaces.td"

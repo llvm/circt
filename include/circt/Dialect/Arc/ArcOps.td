@@ -10,6 +10,7 @@
 #define CIRCT_DIALECT_ARC_ARCOPS_TD
 
 include "circt/Dialect/Arc/ArcDialect.td"
+include "circt/Dialect/Arc/ArcAttributes.td"
 include "circt/Dialect/Arc/ArcInterfaces.td"
 include "circt/Dialect/Arc/ArcTypes.td"
 include "circt/Dialect/HW/HWTypes.td"
