@@ -24,6 +24,7 @@
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
 #define DEBUG_TYPE "firrtl-remove-resets"
@@ -75,9 +76,35 @@ void SFCCompatPass::runOnOperation() {
     if (!reg)
       return WalkResult::advance();
 
+    // Look-through policy shared by both driver walks below: always look
+    // through wires, nodes, and the Pad/Tail ops emitted by emitConnect; the
+    // boolean controls whether the AsX casts are also traversed.
+    auto lookThrough = [](bool lookThroughCasts) {
+      return [=](const FieldRef &ref,
+                 SmallVectorImpl<Value> &drivers) -> WalkDriverLookThrough {
+        return TypeSwitch<Operation *, WalkDriverLookThrough>(
+                   ref.getValue().getDefiningOp())
+            .Case<WireOp>(
+                [](auto) { return WalkDriverLookThrough::LookThrough; })
+            .Case<NodeOp, PadPrimOp, TailPrimOp>([&](auto *op) {
+              drivers.push_back(op->getOperand(0));
+              return WalkDriverLookThrough::LookThrough;
+            })
+            .Case<AsUIntPrimOp, AsSIntPrimOp, AsClockPrimOp,
+                  AsAsyncResetPrimOp>([&](auto *op) {
+              if (!lookThroughCasts)
+                return WalkDriverLookThrough::Terminal;
+              drivers.push_back(op->getOperand(0));
+              return WalkDriverLookThrough::LookThrough;
+            })
+            .Default(WalkDriverLookThrough::Terminal);
+      };
+    };
+
     // If the `RegResetOp` has an invalidated initialization and we
     // are not running FART, then replace it with a `RegOp`.
-    if (!fullResetExists && walkDrivers(reg.getResetValue(), true, true, false,
+    if (!fullResetExists && walkDrivers(reg.getResetValue(),
+                                        lookThrough(/*lookThroughCasts=*/false),
                                         [](FieldRef dst, FieldRef src) {
                                           return src.isa<InvalidValueOp>();
                                         })) {
@@ -98,7 +125,7 @@ void SFCCompatPass::runOnOperation() {
     if (!isa<AsyncResetType>(reg.getResetSignal().getType()))
       return WalkResult::advance();
     if (walkDrivers(
-            reg.getResetValue(), true, true, true,
+            reg.getResetValue(), lookThrough(/*lookThroughCasts=*/true),
             [&](FieldRef dst, FieldRef src) {
               if (src.isa<ConstantOp, InvalidValueOp, SpecialConstantOp,
                           AggregateConstantOp>())
