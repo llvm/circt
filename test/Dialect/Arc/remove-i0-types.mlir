@@ -214,3 +214,53 @@ func.func @AggregateConstantStaysAggregate() -> !hw.array<2x!hw.array<1xi32>> {
   %0 = hw.aggregate_constant [[0 : i32], [1 : i32]] : !hw.array<2x!hw.array<1xi32>>
   return %0 : !hw.array<2x!hw.array<1xi32>>
 }
+
+// Ref-typed accessors with i0 indices (the LLHD index-width constraint
+// forces i0 exactly for 1-element arrays / 1-bit slices). Ref types are not
+// scalarized, so the element ref bridges to the whole ref through an
+// unrealized cast that cancels in the LLVM lowering.
+// CHECK-LABEL: func.func @SigArrayGetI0
+// CHECK-SAME: (%[[REF:.*]]: !llhd.ref<!hw.array<1xi32>>)
+// CHECK-NEXT: %[[CAST:.*]] = builtin.unrealized_conversion_cast %[[REF]] : !llhd.ref<!hw.array<1xi32>> to !llhd.ref<i32>
+// CHECK-NEXT: return %[[CAST]] : !llhd.ref<i32>
+func.func @SigArrayGetI0(%sig: !llhd.ref<!hw.array<1xi32>>) -> !llhd.ref<i32> {
+  %c0_i0 = hw.constant 0 : i0
+  %0 = llhd.sig.array_get %sig[%c0_i0] : <!hw.array<1xi32>>
+  return %0 : !llhd.ref<i32>
+}
+
+// A same-type bridge (1-bit slice of a 1-bit signal) folds to the input.
+// CHECK-LABEL: func.func @SigExtractI0
+// CHECK-SAME: (%[[REF:.*]]: !llhd.ref<i1>)
+// CHECK-NEXT: return %[[REF]] : !llhd.ref<i1>
+func.func @SigExtractI0(%sig: !llhd.ref<i1>) -> !llhd.ref<i1> {
+  %c0_i0 = hw.constant 0 : i0
+  %0 = llhd.sig.extract %sig from %c0_i0 : <i1> -> <i1>
+  return %0 : !llhd.ref<i1>
+}
+
+// Probes and drives bridge refs (layout preserved) to values (1-element
+// arrays scalarized): the ref re-points through an unrealized cast to the
+// converted element type.
+// CHECK-LABEL: func.func @ProbeScalarized
+// CHECK-SAME: (%[[REF:.*]]: !llhd.ref<!hw.array<1xi32>>)
+// CHECK-NEXT: %[[CAST:.*]] = builtin.unrealized_conversion_cast %[[REF]] : !llhd.ref<!hw.array<1xi32>> to !llhd.ref<i32>
+// CHECK-NEXT: %[[PRB:.*]] = llhd.prb %[[CAST]] : i32
+// CHECK-NEXT: return %[[PRB]] : i32
+func.func @ProbeScalarized(%sig: !llhd.ref<!hw.array<1xi32>>) -> i32 {
+  %0 = llhd.prb %sig : !hw.array<1xi32>
+  %c0_i0 = hw.constant 0 : i0
+  %1 = hw.array_get %0[%c0_i0] : !hw.array<1xi32>, i0
+  return %1 : i32
+}
+
+// CHECK-LABEL: func.func @DriveScalarized
+// CHECK-SAME: (%[[REF:.*]]: !llhd.ref<!hw.array<1xi32>>, %[[V:.*]]: i32)
+// CHECK: %[[CAST:.*]] = builtin.unrealized_conversion_cast %[[REF]] : !llhd.ref<!hw.array<1xi32>> to !llhd.ref<i32>
+// CHECK: llhd.drv %[[CAST]], %[[V]] after %{{.+}} : i32
+func.func @DriveScalarized(%sig: !llhd.ref<!hw.array<1xi32>>, %v: i32) {
+  %t = llhd.constant_time <0ns, 0d, 1e>
+  %0 = hw.array_create %v : i32
+  llhd.drv %sig, %0 after %t : !hw.array<1xi32>
+  return
+}

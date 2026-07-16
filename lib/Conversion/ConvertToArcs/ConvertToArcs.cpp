@@ -32,6 +32,12 @@ using mlir::ConversionConfig;
 static bool isArcBreakingOp(Operation *op) {
   if (isa<TapOp>(op))
     return false;
+  // `llhd.prb` is memory-effect free in graph regions but carries a read
+  // effect in SSACFG regions; absorbing it into an arc moves it into the
+  // latter context where the arc's purity verifier rejects it. Keep it
+  // outside of arcs; the state lowering handles module-level signals.
+  if (isa<llhd::ProbeOp>(op))
+    return true;
   return op->hasTrait<OpTrait::ConstantLike>() ||
          isa<hw::InstanceOp, seq::CompRegOp, MemoryOp, MemoryReadPortOp,
              ClockedOpInterface, seq::InitialOp, seq::ClockGateOp,

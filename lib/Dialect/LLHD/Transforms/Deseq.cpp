@@ -355,6 +355,39 @@ void Deseq::deseq() {
 // Process Analysis
 //===----------------------------------------------------------------------===//
 
+/// Match a drive that is the canonical lowered form of a one-shot `initial`
+/// block initialization of a register variable: an unconditional zero-time
+/// (delta/epsilon) drive of a constant, executed exactly once at time zero
+/// (it sits in the entry block of some *other* process, so it runs in that
+/// process's first activation, before any wait, and can never re-execute).
+/// Returns the constant as an IntegerAttr, or null if the drive does not
+/// match.
+static IntegerAttr matchOneShotInitDrive(DriveOp drive) {
+  // Unconditional drives only.
+  if (drive.getEnable())
+    return {};
+  // Must execute inside a process (drives at module level are continuous
+  // drivers; drives in `llhd.final` run at end of simulation).
+  auto proc = drive->getParentOfType<ProcessOp>();
+  if (!proc)
+    return {};
+  // Exactly-once-at-t=0: the process entry block executes in the first
+  // activation (at time zero, before any wait terminator) and has no
+  // predecessors, so it cannot re-execute.
+  auto *block = drive->getBlock();
+  if (block != &proc.getBody().front() || !block->hasNoPredecessors())
+    return {};
+  // The value must land at t=0: zero-time (delta/epsilon) delay.
+  TimeAttr time;
+  if (!matchPattern(drive.getTime(), m_Constant(&time)) || time.getTime() != 0)
+    return {};
+  // Constant integer value.
+  IntegerAttr value;
+  if (!matchPattern(drive.getValue(), m_Constant(&value)))
+    return {};
+  return value;
+}
+
 /// Determine whether we can desequentialize the current process. Also gather
 /// the wait and drive ops that are relevant.
 bool Deseq::analyzeProcess() {
@@ -426,6 +459,53 @@ bool Deseq::analyzeProcess() {
       continue;
 
     driveInfos.push_back(DriveInfo(driveOp));
+  }
+
+  // Desequentialization replaces each fed conditional drive with an
+  // UNCONDITIONAL (continuous) drive of a register result. That is only
+  // sound if this process is the signal's sole driver: a variable written
+  // by several processes takes the last write per write EVENT in the
+  // source semantics, and a continuous register drive would clobber every
+  // such write on the next delta.
+  //
+  // EXCEPTION (the ubiquitous bench idiom):
+  //   initial begin reg = K; ... end     // one-shot t=0 constant init
+  //   always @(posedge clk) reg <= ...;  // edge updates
+  // Here the extra driver writes a constant exactly once at t=0, which
+  // folds into the register's PRESET (power-on value): the continuous
+  // register drive then reproduces K from t=0 onward, byte-equivalent to
+  // the initial block's write for every t >= 0 observation. Folding is
+  // strictly better than keeping the process form: sibling registers on
+  // the same clock that DO promote commit their state before a kept
+  // process resumes, so a kept process observes post-edge values of
+  // same-clock registers -- a one-delta skew against the LRM's preponed
+  // sampling that breaks lockstep pipelines (receipt: the 16.10 SVA
+  // local-var rows' clk_gen DUT).
+  //
+  // Any other extra driver (non-constant, conditional, delayed, repeated,
+  // continuous, or in llhd.final) keeps the genuinely-correct process form.
+  for (auto &info : driveInfos) {
+    for (auto *user : info.op.getSignal().getUsers()) {
+      auto otherDrive = dyn_cast<DriveOp>(user);
+      if (!otherDrive || otherDrive.getSignal() != info.op.getSignal() ||
+          seenDrives.contains(otherDrive))
+        continue;
+      auto preset = matchOneShotInitDrive(otherDrive);
+      if (!preset) {
+        LLVM_DEBUG(llvm::dbgs()
+                   << "Skipping " << process.getLoc()
+                   << ": drives multi-driven signal (other driver at "
+                   << otherDrive.getLoc() << ")\n");
+        return false;
+      }
+      if (info.initPreset && info.initPreset != preset) {
+        LLVM_DEBUG(llvm::dbgs() << "Skipping " << process.getLoc()
+                                << ": conflicting one-shot init drives on "
+                                << info.op.getSignal() << "\n");
+        return false;
+      }
+      info.initPreset = preset;
+    }
   }
 
   // Collect triggers from observed values. We support either:
@@ -1437,11 +1517,13 @@ void Deseq::implementRegister(DriveInfo &drive) {
   if (!name)
     name = builder.getStringAttr("");
 
-  // Create the register op.
-  auto reg = seq::FirRegOp::create(builder, loc, value, clock, name,
-                                   hw::InnerSymAttr{},
-                                   /*preset=*/IntegerAttr{}, reset, resetValue,
-                                   /*isAsync=*/reset != Value{});
+  // Create the register op. A one-shot t=0 constant init drive by another
+  // process (the `initial begin reg = K; end` idiom) has been folded into
+  // the register's preset (power-on value) by `analyzeProcess`.
+  auto reg = seq::FirRegOp::create(
+      builder, loc, value, clock, name, hw::InnerSymAttr{},
+      /*preset=*/drive.initPreset, reset, resetValue,
+      /*isAsync=*/reset != Value{});
 
   // If the register has an enable, insert a self-mux in front of the register.
   // Set the `bin` flag on the mux specifically to make up for a subtle

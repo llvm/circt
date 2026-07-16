@@ -59,9 +59,11 @@ func.func @StorageAccess(%arg0: !arc.storage) {
   // CHECK-NEXT: arc.storage.get %arg0[42] : !arc.storage -> !arc.state<i9>
   // CHECK-NEXT: arc.storage.get %arg0[1337] : !arc.storage -> !arc.memory<4 x i19, i32>
   // CHECK-NEXT: arc.storage.get %arg0[9001] : !arc.storage -> !arc.storage
+  // CHECK-NEXT: arc.storage.get %arg0[9009] : !arc.storage -> !arc.state<!llvm.ptr>
   %0 = arc.storage.get %arg0[42] : !arc.storage -> !arc.state<i9>
   %1 = arc.storage.get %arg0[1337] : !arc.storage -> !arc.memory<4 x i19, i32>
   %2 = arc.storage.get %arg0[9001] : !arc.storage -> !arc.storage
+  %3 = arc.storage.get %arg0[9009] : !arc.storage -> !arc.state<!llvm.ptr>
   return
 }
 

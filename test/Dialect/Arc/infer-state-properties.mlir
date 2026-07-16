@@ -247,3 +247,21 @@ hw.module @testModule (in %arg0: i1, in %arg1: i1, in %arg2: i1, in %arg3: i1, i
 
 // TODO: test that patterns handle the case where the output is used for another thing as well properly
 // TODO: test that reset and enable are only added when the latency is actually 1 or higher
+
+// An aggregate-typed enable pattern (write-enable mux around an array
+// state, the memory shape): the enable is pulled out and the condition
+// input forced true, but the array-typed self-feedback operand must stay in
+// place — `hw.constant` cannot represent aggregates, so replacing it would
+// build a garbage-width integer constant.
+// CHECK-LABEL: arc.define @arrayEnable
+arc.define @arrayEnable(%arg0: i1, %arg1: !hw.array<4xi8>, %arg2: !hw.array<4xi8>) -> !hw.array<4xi8> {
+  %0 = comb.mux %arg0, %arg1, %arg2 : !hw.array<4xi8>
+  arc.output %0 : !hw.array<4xi8>
+}
+
+// CHECK-LABEL: hw.module @arrayEnableModule
+hw.module @arrayEnableModule(in %we: i1, in %data: !hw.array<4xi8>, in %clock: !seq.clock, out out: !hw.array<4xi8>) {
+  // CHECK: [[S:%.+]] = arc.state @arrayEnable(%true{{(_[0-9]+)?}}, %data, [[S]]) clock %clock enable %we latency 1 : (i1, !hw.array<4xi8>, !hw.array<4xi8>) -> !hw.array<4xi8>
+  %0 = arc.state @arrayEnable(%we, %data, %0) clock %clock latency 1 : (i1, !hw.array<4xi8>, !hw.array<4xi8>) -> !hw.array<4xi8>
+  hw.output %0 : !hw.array<4xi8>
+}

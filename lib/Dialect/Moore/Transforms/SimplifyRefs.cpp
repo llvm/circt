@@ -83,7 +83,16 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
       // description mentioned.
       srcWidth = srcWidth - width;
 
-      OpTy::create(rewriter, op.getLoc(), operand, extract);
+      // Delayed assignment variants carry their delay over to every slice:
+      // the RHS is still evaluated at statement execution time (the extract
+      // above), and each slice is scheduled with the original delay, which
+      // matches the intra-assignment delay semantics of the unsliced
+      // assignment (IEEE 1800-2017 § 9.4.5).
+      if constexpr (std::is_same_v<OpTy, DelayedNonBlockingAssignOp> ||
+                    std::is_same_v<OpTy, DelayedContinuousAssignOp>)
+        OpTy::create(rewriter, op.getLoc(), operand, extract, op.getDelay());
+      else
+        OpTy::create(rewriter, op.getLoc(), operand, extract);
     }
     rewriter.eraseOp(op);
     return success();
@@ -165,7 +174,8 @@ void SimplifyRefsPass::runOnOperation() {
   ConversionTarget target(context);
 
   target.addDynamicallyLegalOp<ContinuousAssignOp, BlockingAssignOp,
-                               NonBlockingAssignOp>([](auto op) {
+                               NonBlockingAssignOp, DelayedContinuousAssignOp,
+                               DelayedNonBlockingAssignOp>([](auto op) {
     return !op->getOperand(0).template getDefiningOp<ConcatRefOp>();
   });
 
@@ -173,7 +183,10 @@ void SimplifyRefsPass::runOnOperation() {
   RewritePatternSet concatRefPatterns(&context);
   concatRefPatterns.add<ConcatRefLowering<ContinuousAssignOp>,
                         ConcatRefLowering<BlockingAssignOp>,
-                        ConcatRefLowering<NonBlockingAssignOp>>(&context);
+                        ConcatRefLowering<NonBlockingAssignOp>,
+                        ConcatRefLowering<DelayedContinuousAssignOp>,
+                        ConcatRefLowering<DelayedNonBlockingAssignOp>>(
+      &context);
 
   if (failed(applyPartialConversion(getOperation(), target,
                                     std::move(concatRefPatterns)))) {

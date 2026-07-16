@@ -11,6 +11,7 @@
 #include "circt/Dialect/Arc/ArcTypes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/HWTypes.h"
+#include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Support/LLVM.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
@@ -127,14 +128,17 @@ struct ConvertGeneric : public ConversionPattern {
   }
 };
 
-// An array_get with i0 index just returns the array input, which will have been
-// scalarized.
+// An array_get with i0 index, or of a 1-element array (whose type gets
+// scalarized regardless of the index width used), just returns the array
+// input.
 struct ConvertArrayGet : public OpConversionPattern<hw::ArrayGetOp> {
   using OpConversionPattern<hw::ArrayGetOp>::OpConversionPattern;
   LogicalResult
   matchAndRewrite(hw::ArrayGetOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (adaptor.getIndex().empty()) {
+    if (adaptor.getIndex().empty() ||
+        hw::type_cast<hw::ArrayType>(op.getInput().getType())
+                .getNumElements() == 1) {
       assert(adaptor.getInput().size() == 1);
       rewriter.replaceOp(op, adaptor.getInput().front());
       return success();
@@ -159,18 +163,117 @@ struct ConvertArrayCreate : public OpConversionPattern<hw::ArrayCreateOp> {
   }
 };
 
-// Converts array_inject with i0 index to just return the element.
+// Converts array_inject with i0 index, or into a 1-element array (whose type
+// gets scalarized regardless of the index width used), to just return the
+// element.
 struct ConvertArrayInject : public OpConversionPattern<hw::ArrayInjectOp> {
   using OpConversionPattern<hw::ArrayInjectOp>::OpConversionPattern;
   LogicalResult
   matchAndRewrite(hw::ArrayInjectOp op, OneToNOpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (adaptor.getIndex().empty()) {
+    if (adaptor.getIndex().empty() ||
+        hw::type_cast<hw::ArrayType>(op.getInput().getType())
+                .getNumElements() == 1) {
       rewriter.replaceOp(op, adaptor.getElement());
       return success();
     }
     // Handled by ConvertGeneric.
     return failure();
+  }
+};
+
+// A sig.array_get with an i0 index (the LLHD index-width constraint forces
+// i0 exactly for 1-element arrays): the element ref aliases the whole-array
+// ref (same address, [1 x T] layout). Ref TYPES are not scalarized (the
+// signal's storage keeps its layout), so bridge the two ref types with an
+// unrealized cast — the same bridging idiom the state lowering uses; both
+// sides become plain pointers in the LLVM lowering and the cast cancels.
+struct ConvertSigArrayGet : public OpConversionPattern<llhd::SigArrayGetOp> {
+  using OpConversionPattern<llhd::SigArrayGetOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::SigArrayGetOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!adaptor.getIndex().empty())
+      return failure();
+    assert(adaptor.getInput().size() == 1);
+    Value input = adaptor.getInput().front();
+    if (input.getType() == op.getResult().getType()) {
+      rewriter.replaceOp(op, input);
+      return success();
+    }
+    auto castOp = mlir::UnrealizedConversionCastOp::create(
+        rewriter, op.getLoc(), op.getResult().getType(), input);
+    rewriter.replaceOp(op, castOp.getResults());
+    return success();
+  }
+};
+
+// The bit-slice sibling: an i0 low-bit index (1-bit signals) slices the
+// whole width; the sliced ref aliases the input ref.
+struct ConvertSigExtract : public OpConversionPattern<llhd::SigExtractOp> {
+  using OpConversionPattern<llhd::SigExtractOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::SigExtractOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    if (!adaptor.getLowBit().empty())
+      return failure();
+    assert(adaptor.getInput().size() == 1);
+    Value input = adaptor.getInput().front();
+    if (input.getType() == op.getResult().getType()) {
+      rewriter.replaceOp(op, input);
+      return success();
+    }
+    auto castOp = mlir::UnrealizedConversionCastOp::create(
+        rewriter, op.getLoc(), op.getResult().getType(), input);
+    rewriter.replaceOp(op, castOp.getResults());
+    return success();
+  }
+};
+
+// Probes and drives bridge the ref world (ref types keep the signal's
+// storage layout and are not converted) to the value world (1-element
+// arrays scalarized). When the value-side type converts, re-point the ref
+// through an unrealized cast to the converted element type -- same address,
+// a [1 x T] layout is byte-identical to T -- and rebuild the op.
+struct ConvertProbe : public OpConversionPattern<llhd::ProbeOp> {
+  using OpConversionPattern<llhd::ProbeOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::ProbeOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type oldType = op.getResult().getType();
+    Type newType = getTypeConverter()->convertType(oldType);
+    if (!newType || newType == oldType)
+      return failure();
+    assert(adaptor.getSignal().size() == 1);
+    Value ref = mlir::UnrealizedConversionCastOp::create(
+                    rewriter, op.getLoc(), llhd::RefType::get(newType),
+                    adaptor.getSignal().front())
+                    .getResult(0);
+    rewriter.replaceOpWithNewOp<llhd::ProbeOp>(op, ref);
+    return success();
+  }
+};
+
+struct ConvertLLHDDrive : public OpConversionPattern<llhd::DriveOp> {
+  using OpConversionPattern<llhd::DriveOp>::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(llhd::DriveOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type oldType = op.getValue().getType();
+    Type newType = getTypeConverter()->convertType(oldType);
+    if (!newType || newType == oldType)
+      return failure();
+    assert(adaptor.getSignal().size() == 1 && adaptor.getValue().size() == 1 &&
+           adaptor.getTime().size() == 1);
+    Value ref = mlir::UnrealizedConversionCastOp::create(
+                    rewriter, op.getLoc(), llhd::RefType::get(newType),
+                    adaptor.getSignal().front())
+                    .getResult(0);
+    Value enable =
+        adaptor.getEnable().empty() ? Value() : adaptor.getEnable().front();
+    rewriter.replaceOpWithNewOp<llhd::DriveOp>(
+        op, ref, adaptor.getValue().front(), adaptor.getTime().front(), enable);
+    return success();
   }
 };
 
@@ -310,8 +413,10 @@ void RemoveI0TypesPass::runOnOperation() {
 
   patterns.add<LegalizeGeneric<func::ReturnOp>, LegalizeGeneric<func::CallOp>,
                LegalizeGeneric<hw::StructCreateOp>, ConvertArrayGet,
-               ConvertArrayCreate, ConvertArrayInject, ConvertGeneric,
-               ConvertAggregateConstant>(converter, &getContext());
+               ConvertArrayCreate, ConvertArrayInject, ConvertSigArrayGet,
+               ConvertSigExtract, ConvertProbe, ConvertLLHDDrive,
+               ConvertGeneric, ConvertAggregateConstant>(converter,
+                                                         &getContext());
   ConversionConfig config;
   config.allowPatternRollback = false;
   if (failed(applyFullConversion(getOperation(), target, std::move(patterns),

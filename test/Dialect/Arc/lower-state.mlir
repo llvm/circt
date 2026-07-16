@@ -68,13 +68,15 @@ hw.module @InputToOutput(in %a: i42, out b: i42) {
 hw.module @ReadsBeforeUpdate(in %clock: !seq.clock, in %a: i42, out b: i42) {
   // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
   // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
+  // Old-phase reads are pinned to the top of the eval, before any process or
+  // state update can mutate storage.
+  // CHECK: [[TMP1:%.+]] = arc.state_read [[Q0]]
+  // CHECK: [[TMP2:%.+]] = arc.state_read %in_a
   // CHECK:      scf.if {{%.+}} {
-  // CHECK-NEXT:   [[TMP1:%.+]] = arc.state_read [[Q0]]
-  // CHECK-NEXT:   [[TMP2:%.+]] = arc.call @IdI42Arc([[TMP1]])
-  // CHECK-NEXT:   arc.state_write [[Q1]] = [[TMP2]]
-  // CHECK-NEXT:   [[TMP1:%.+]] = arc.state_read %in_a
-  // CHECK-NEXT:   [[TMP2:%.+]] = arc.call @IdI42Arc([[TMP1]])
-  // CHECK-NEXT:   arc.state_write [[Q0]] = [[TMP2]]
+  // CHECK-NEXT:   [[TMP3:%.+]] = arc.call @IdI42Arc([[TMP1]])
+  // CHECK-NEXT:   arc.state_write [[Q1]] = [[TMP3]]
+  // CHECK-NEXT:   [[TMP4:%.+]] = arc.call @IdI42Arc([[TMP2]])
+  // CHECK-NEXT:   arc.state_write [[Q0]] = [[TMP4]]
   // CHECK-NEXT: }
   %q1 = arc.state @IdI42Arc(%q0) clock %clock latency 1 {names = ["q1"]} : (i42) -> i42
   %q0 = arc.state @IdI42Arc(%a) clock %clock latency 1 {names = ["q0"]} : (i42) -> i42
@@ -87,9 +89,9 @@ hw.module @ReadsBeforeUpdate(in %clock: !seq.clock, in %a: i42, out b: i42) {
 hw.module @ReadsAfterUpdate(in %clock: !seq.clock, in %a: i42, out b: i42) {
   // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
   // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // CHECK: [[TMP1:%.+]] = arc.state_read %in_a
   // CHECK: [[Q0_OLD:%.+]] = arc.state_read [[Q0]]
   // CHECK:      scf.if {{%.+}} {
-  // CHECK-NEXT:   [[TMP1:%.+]] = arc.state_read %in_a
   // CHECK-NEXT:   [[TMP2:%.+]] = arc.call @IdI42Arc([[TMP1]])
   // CHECK-NEXT:   arc.state_write [[Q0]] = [[TMP2]]
   // CHECK-NEXT:   [[TMP:%.+]] = arc.call @IdI42Arc([[Q0_OLD]])
@@ -127,8 +129,8 @@ hw.module @ClockDivBy4(in %clock: !seq.clock, out z: !seq.clock) {
 
 // CHECK-LABEL: arc.model @EnablePort
 hw.module @EnablePort(in %clock: !seq.clock, in %a: i42, in %en: i1) {
+  // CHECK: [[EN:%.+]] = arc.state_read %in_en
   // CHECK: scf.if {{%.+}} {
-  // CHECK:   [[EN:%.+]] = arc.state_read %in_en
   // CHECK:   scf.if [[EN]] {
   // CHECK:     arc.state_write
   // CHECK:     arc.state_write
@@ -157,8 +159,8 @@ hw.module @EnableLocal(in %clock: !seq.clock, in %a: i42) {
 
 // CHECK-LABEL: arc.model @Reset
 hw.module @Reset(in %clock: !seq.clock, in %a: i42, in %reset: i1) {
+  // CHECK: [[RESET:%.+]] = arc.state_read %in_reset
   // CHECK: scf.if {{%.+}} {
-  // CHECK:   [[RESET:%.+]] = arc.state_read %in_reset
   // CHECK:   scf.if [[RESET]] {
   // CHECK:     arc.state_write
   // CHECK:     arc.state_write
@@ -191,25 +193,37 @@ hw.module @ResetAndEnable(in %clock: !seq.clock, in %a: i42, in %reset: i1, in %
   // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
   // CHECK: [[Q2:%.+]] = arc.alloc_state %arg0 {name = "q2"}
   // CHECK: [[Q3:%.+]] = arc.alloc_state %arg0 {name = "q3"}
+  // Enable/reset/input reads are pinned to the pre-eval old section.
+  // CHECK: [[EN0:%.+]] = arc.state_read %in_en
+  // CHECK: [[RESET1:%.+]] = arc.state_read %in_reset
+  // CHECK: [[EN1:%.+]] = arc.state_read %in_en
+  // CHECK: [[RESET2:%.+]] = arc.state_read %in_reset
+  // CHECK: [[EN2:%.+]] = arc.state_read %in_en
+  // CHECK: [[RESET3:%.+]] = arc.state_read %in_reset
   // CHECK: scf.if {{%.+}} {
-  // CHECK:   [[EN:%.+]] = arc.state_read %in_en
-  // CHECK:   scf.if [[EN]] {
+  // CHECK:   scf.if [[EN0]] {
   // CHECK:     arc.state_write [[Q0]]
   // CHECK:   }
-  // CHECK:   [[RESET:%.+]] = arc.state_read %in_reset
-  // CHECK:   scf.if [[RESET]] {
+  // CHECK:   scf.if [[RESET1]] {
   // CHECK:     [[TMP:%.+]] = hw.constant 0
   // CHECK:     arc.state_write [[Q1]] = [[TMP]]
+  // CHECK:   } else {
+  // CHECK:     scf.if [[EN1]] {
+  // CHECK:       arc.state_write [[Q1]]
+  // CHECK:     }
+  // CHECK:   }
+  // CHECK:   scf.if [[RESET2]] {
   // CHECK:     [[TMP:%.+]] = hw.constant 0
   // CHECK:     arc.state_write [[Q2]] = [[TMP]]
+  // CHECK:   } else {
+  // CHECK:     scf.if [[EN2]] {
+  // CHECK:       arc.state_write [[Q2]]
+  // CHECK:     }
+  // CHECK:   }
+  // CHECK:   scf.if [[RESET3]] {
   // CHECK:     [[TMP:%.+]] = hw.constant 0
   // CHECK:     arc.state_write [[Q3]] = [[TMP]]
   // CHECK:   } else {
-  // CHECK:     [[EN:%.+]] = arc.state_read %in_en
-  // CHECK:     scf.if [[EN]] {
-  // CHECK:       arc.state_write [[Q1]]
-  // CHECK:       arc.state_write [[Q2]]
-  // CHECK:     }
   // CHECK:     arc.state_write [[Q3]]
   // CHECK:   }
   // CHECK: }
@@ -227,6 +241,8 @@ hw.module @BlackBox(in %clock: !seq.clock, in %a: i42, out b: i42) {
   // CHECK: [[Q:%.+]] = arc.alloc_state %arg0 {name = "ext/q"}
   // CHECK: [[R:%.+]] = arc.alloc_state %arg0 {name = "ext/r"}
   // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // Old-phase register inputs read in the pinned pre-eval section.
+  // CHECK: [[S_OLD:%.+]] = arc.state_read [[S]]
   // CHECK: scf.if {{%.+}} {
   // CHECK:   arc.state_write [[Q0]]
   // CHECK: }
@@ -240,8 +256,7 @@ hw.module @BlackBox(in %clock: !seq.clock, in %a: i42, out b: i42) {
   %1 = comb.and %0, %3 : i42
   %2, %3 = hw.instance "ext" @BlackBoxExt(p: %0: i42, q: %1: i42) -> (r: i42, s: i42)
   // CHECK: scf.if {{%.+}} {
-  // CHECK:   [[S_NEW:%.+]] = arc.state_read [[S]]
-  // CHECK:   [[TMP:%.+]] = arc.call @IdI42Arc([[S_NEW]])
+  // CHECK:   [[TMP:%.+]] = arc.call @IdI42Arc([[S_OLD]])
   // CHECK:   arc.state_write [[Q1]] = [[TMP]]
   // CHECK: }
   %4 = arc.state @IdI42Arc(%3) clock %clock latency 1 {names = ["q1"]} : (i42) -> i42
@@ -258,9 +273,9 @@ hw.module.extern private @BlackBoxExt(in %p: i42, in %q: i42, out r: i42, out s:
 // CHECK-LABEL: arc.model @MemoryInputToOutput
 hw.module @MemoryInputToOutput(in %clock: !seq.clock, in %a: i2, in %b: i42, out c: i42) {
   // CHECK: [[MEM:%.+]] = arc.alloc_memory
+  // CHECK: [[A:%.+]] = arc.state_read %in_a
+  // CHECK: [[B:%.+]] = arc.state_read %in_b
   // CHECK: scf.if {{%.+}} {
-  // CHECK:   [[A:%.+]] = arc.state_read %in_a
-  // CHECK:   [[B:%.+]] = arc.state_read %in_b
   // CHECK:   [[TMP:%.+]]:2 = arc.call @IdI2AndI42Arc([[A]], [[B]])
   // CHECK:   arc.memory_write [[MEM]][[[TMP]]#0], [[TMP]]#1
   // CHECK: }
@@ -281,14 +296,16 @@ hw.module @MemoryReadBeforeUpdate(in %clock: !seq.clock, in %a: i2, in %b: i42, 
   // are used by an op.
   %0 = arc.memory_read_port %mem[%a] : <4 x i42, i2>
   arc.memory_write_port %mem, @IdI2AndI42Arc(%a, %b) clock %clock latency 1 : <4 x i42, i2>, i2, i42
+  // Old-phase reads (memory read address and data, write inputs) are pinned
+  // to the pre-eval section.
+  // CHECK: [[A0:%.+]] = arc.state_read %in_a
+  // CHECK: [[READ_OLD:%.+]] = arc.memory_read [[MEM]][[[A0]]]
+  // CHECK: [[A:%.+]] = arc.state_read %in_a
+  // CHECK: [[B:%.+]] = arc.state_read %in_b
   // CHECK: scf.if {{%.+}} {
-  // CHECK:   [[A:%.+]] = arc.state_read %in_a
-  // CHECK:   [[TMP1:%.+]] = arc.memory_read [[MEM]][[[A]]]
-  // CHECK:   [[TMP2:%.+]] = arc.call @IdI42Arc([[TMP1]])
+  // CHECK:   [[TMP2:%.+]] = arc.call @IdI42Arc([[READ_OLD]])
   // CHECK:   arc.state_write [[Q0]] = [[TMP2]]
   %q0 = arc.state @IdI42Arc(%0) clock %clock latency 1 {names = ["q0"]} : (i42) -> i42
-  // CHECK:   [[A:%.+]] = arc.state_read %in_a
-  // CHECK:   [[B:%.+]] = arc.state_read %in_b
   // CHECK:   [[TMP:%.+]]:2 = arc.call @IdI2AndI42Arc([[A]], [[B]])
   // CHECK:   arc.memory_write [[MEM]][[[TMP]]#0], [[TMP]]#1
   %mem = arc.memory <4 x i42, i2>
@@ -306,11 +323,11 @@ hw.module @MemoryReadAfterUpdate(in %clock: !seq.clock, in %a: i2, in %b: i42, i
   // are used by an op.
   %0 = arc.memory_read_port %mem[%a] : <4 x i42, i2>
   arc.memory_write_port %mem, @IdI2AndI42Arc(%a, %b) clock %clock latency 1 : <4 x i42, i2>, i2, i42
+  // CHECK: [[A0:%.+]] = arc.state_read %in_a
+  // CHECK: [[READ_OLD:%.+]] = arc.memory_read [[MEM]][[[A0]]]
   // CHECK: [[A:%.+]] = arc.state_read %in_a
-  // CHECK: [[READ_OLD:%.+]] = arc.memory_read [[MEM]][[[A]]]
+  // CHECK: [[B:%.+]] = arc.state_read %in_b
   // CHECK: scf.if {{%.+}} {
-  // CHECK:   [[A:%.+]] = arc.state_read %in_a
-  // CHECK:   [[B:%.+]] = arc.state_read %in_b
   // CHECK:   [[TMP:%.+]]:2 = arc.call @IdI2AndI42Arc([[A]], [[B]])
   // CHECK:   arc.memory_write [[MEM]][[[TMP]]#0], [[TMP]]#1
   %mem = arc.memory <4 x i42, i2>
@@ -326,10 +343,10 @@ hw.module @MemoryReadAfterUpdate(in %clock: !seq.clock, in %a: i2, in %b: i42, i
 // CHECK-LABEL: arc.model @MemoryEnable
 hw.module @MemoryEnable(in %clock: !seq.clock, in %a: i2, in %b: i42, in %en: i1) {
   // CHECK: [[MEM:%.+]] = arc.alloc_memory
+  // CHECK: [[A:%.+]] = arc.state_read %in_a
+  // CHECK: [[B:%.+]] = arc.state_read %in_b
+  // CHECK: [[EN:%.+]] = arc.state_read %in_en
   // CHECK: scf.if {{%.+}} {
-  // CHECK:   [[A:%.+]] = arc.state_read %in_a
-  // CHECK:   [[B:%.+]] = arc.state_read %in_b
-  // CHECK:   [[EN:%.+]] = arc.state_read %in_en
   // CHECK:   [[TMP:%.+]]:3 = arc.call @IdI2AndI42AndI1Arc([[A]], [[B]], [[EN]])
   // CHECK:   scf.if [[TMP]]#2 {
   // CHECK:     arc.memory_write [[MEM]][[[TMP]]#0], [[TMP]]#1
@@ -342,11 +359,11 @@ hw.module @MemoryEnable(in %clock: !seq.clock, in %a: i2, in %b: i42, in %en: i1
 // CHECK-LABEL: arc.model @MemoryEnableAndMask
 hw.module @MemoryEnableAndMask(in %clock: !seq.clock, in %a: i2, in %b: i42, in %en: i1, in %mask: i42) {
   // CHECK: [[MEM:%.+]] = arc.alloc_memory
+  // CHECK: [[A:%.+]] = arc.state_read %in_a
+  // CHECK: [[B:%.+]] = arc.state_read %in_b
+  // CHECK: [[EN:%.+]] = arc.state_read %in_en
+  // CHECK: [[MASK:%.+]] = arc.state_read %in_mask
   // CHECK: scf.if {{%.+}} {
-  // CHECK:   [[A:%.+]] = arc.state_read %in_a
-  // CHECK:   [[B:%.+]] = arc.state_read %in_b
-  // CHECK:   [[EN:%.+]] = arc.state_read %in_en
-  // CHECK:   [[MASK:%.+]] = arc.state_read %in_mask
   // CHECK:   [[TMP:%.+]]:4 = arc.call @IdI2AndI42AndI1AndI42Arc([[A]], [[B]], [[EN]], [[MASK]])
   // CHECK:   scf.if [[TMP]]#2 {
   // CHECK:     [[ALL_ONES:%.+]] = hw.constant -1
@@ -565,9 +582,9 @@ hw.module @UnclockedDpiCall(in %a: i42, out b: i42) {
 hw.module @ClockedDpiCall(in %clock: !seq.clock, in %a: i42, out b: i42) {
   // CHECK: [[Q0:%.+]] = arc.alloc_state %arg0 {name = "q0"}
   // CHECK: [[Q1:%.+]] = arc.alloc_state %arg0 {name = "q1"}
+  // CHECK: [[TMP1:%.+]] = arc.state_read %in_a
   // CHECK: [[Q0_OLD:%.+]] = arc.state_read [[Q0]]
   // CHECK:      scf.if {{%.+}} {
-  // CHECK-NEXT:   [[TMP1:%.+]] = arc.state_read %in_a
   // CHECK-NEXT:   [[TMP2:%.+]] = func.call @IdI42([[TMP1]])
   // CHECK-NEXT:   arc.state_write [[Q0]] = [[TMP2]]
   // CHECK-NEXT:   [[TMP3:%.+]] = func.call @IdI42([[Q0_OLD]])
@@ -739,19 +756,21 @@ hw.module @LLHDTimeOps(in %clock: !seq.clock, out t: i64) {
     llhd.halt
   }
 
+  // Phase::Old - llhd.current_time used as data input to a state. Old-phase
+  // values live in the pinned pre-eval section, ahead of the new-phase chain.
+  // CHECK: [[TIME_INT_OLD:%.+]] = arc.current_time %arg0
+  // CHECK: [[TIME_OLD:%.+]] = llhd.int_to_time [[TIME_INT_OLD]]
+  // CHECK: [[TIME_OLD_INT:%.+]] = llhd.time_to_int [[TIME_OLD]]
+  %2 = llhd.current_time
+  %3 = llhd.time_to_int %2
+
   // Phase::New - llhd.current_time used directly in module body.
   // CHECK: [[TIME_INT_NEW:%.+]] = arc.current_time %arg0
   // CHECK: [[TIME_NEW:%.+]] = llhd.int_to_time [[TIME_INT_NEW]]
   %0 = llhd.current_time
   %1 = llhd.time_to_int %0
 
-  // Phase::Old - llhd.current_time used as data input to a state.
-  // CHECK: [[TIME_INT_OLD:%.+]] = arc.current_time %arg0
-  // CHECK: [[TIME_OLD:%.+]] = llhd.int_to_time [[TIME_INT_OLD]]
-  // CHECK: [[TIME_OLD_INT:%.+]] = llhd.time_to_int [[TIME_OLD]]
   // CHECK: arc.call @IdI64Arc([[TIME_OLD_INT]])
-  %2 = llhd.current_time
-  %3 = llhd.time_to_int %2
   %q0 = arc.state @IdI64Arc(%3) clock %clock latency 1 : (i64) -> i64
 
   // Write the output from Phase::New.

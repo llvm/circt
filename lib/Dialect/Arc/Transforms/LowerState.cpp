@@ -106,6 +106,8 @@ struct OpLowering {
   LogicalResult lower(seq::InitialOp op);
   LogicalResult lower(llhd::FinalOp op);
   LogicalResult lower(llhd::CurrentTimeOp op);
+  LogicalResult lower(llhd::SignalOp op);
+  LogicalResult lower(llhd::DriveOp op);
   LogicalResult lower(sim::ClockedTerminateOp op);
 
   scf::IfOp createIfClockOp(Value clock);
@@ -122,6 +124,7 @@ struct OpLowering {
   Value lowerValue(MemoryReadPortOp op, OpResult result, Phase phase);
   Value lowerValue(seq::InitialOp op, OpResult result, Phase phase);
   Value lowerValue(seq::FromImmutableOp op, OpResult result, Phase phase);
+  Value lowerValue(llhd::ProbeOp op, OpResult result, Phase phase);
 
   void addPending(Value value, Phase phase);
   void addPending(Operation *op, Phase phase);
@@ -139,6 +142,16 @@ struct ModuleLowering {
   OpBuilder initialBuilder;
   /// The builder for the final phase.
   OpBuilder finalBuilder;
+  /// The builder for `Phase::Old` values: a pinned section at the top of the
+  /// eval body, executed before any coroutine instance or drive can mutate
+  /// signal storage. All "old" reads and the pure cones over them thus form a
+  /// consistent pre-eval snapshot (IEEE 1800 preponed-style sampling for
+  /// clocked state elements). Without this, an old read emitted after a
+  /// coroutine call observes mid-eval process writes while cached reads from
+  /// earlier positions observe pre-eval values: registers then commit a mix
+  /// of pre- and post-process operands (the declaration-order-dependent
+  /// stale-select NBA decode).
+  OpBuilder oldBuilder;
 
   /// The storage value that can be used for `arc.alloc_state` and friends.
   Value storageArg;
@@ -155,6 +168,15 @@ struct ModuleLowering {
   DenseSet<std::pair<Operation *, Phase>> loweredOps;
   /// The values that have already been lowered.
   DenseMap<std::pair<Value, Phase>, Value> loweredValues;
+  /// Module-level values that flow out of signal initializer expressions
+  /// (`llhd.sig` init operands and everything derived from them at module
+  /// level). Side-effecting module-level ops consuming these are one-time
+  /// initialization actions (object memset, typeinfo/property-initializer
+  /// stores emitted by class `new` at module scope) and must lower in the
+  /// initial phase: lowering them per-eval re-executes the initializer
+  /// chain against a fresh allocation (and leaks it every eval) while the
+  /// signal keeps the pointer from its own, separate initial-phase clone.
+  DenseSet<Value> sigInitClosure;
 
   /// The allocated input ports.
   SmallVector<Value> allocatedInputs;
@@ -180,7 +202,7 @@ struct ModuleLowering {
 
   ModuleLowering(HWModuleOp moduleOp, SymbolTable &symbolTable)
       : moduleOp(moduleOp), builder(moduleOp), allocBuilder(moduleOp),
-        initialBuilder(moduleOp), finalBuilder(moduleOp),
+        initialBuilder(moduleOp), finalBuilder(moduleOp), oldBuilder(moduleOp),
         symbolTable(symbolTable) {}
   LogicalResult run();
   LogicalResult lowerOp(Operation *op);
@@ -225,6 +247,13 @@ LogicalResult ModuleLowering::run() {
   auto finalOp = FinalOp::create(builder, moduleOp.getLoc());
   finalBuilder.setInsertionPointToStart(&finalOp.getBody().emplaceBlock());
 
+  // Anchor the `Phase::Old` section: old-phase values accumulate between the
+  // `arc.final` op and this anchor, i.e. before every eval-phase op. The
+  // anchor is a dead constant erased by the trailing cleanup.
+  auto oldAnchor = hw::ConstantOp::create(builder, moduleOp.getLoc(),
+                                          builder.getI1Type(), 0);
+  oldBuilder.setInsertionPoint(oldAnchor);
+
   // Position the alloc builder such that allocation ops get inserted above the
   // initial op.
   allocBuilder.setInsertionPoint(initialOp);
@@ -238,13 +267,100 @@ LogicalResult ModuleLowering::run() {
     allocatedInputs.push_back(state);
   }
 
-  // Lower the ops.
+  // Collect the signal-initializer value closure (see `sigInitClosure`):
+  // seed with every `llhd.sig` init operand, then expand forward through
+  // module-level ops deriving values from it (GEPs, casts).
+  for (auto sigOp : moduleOp.getBodyBlock()->getOps<llhd::SignalOp>())
+    if (auto init = sigOp.getInit())
+      sigInitClosure.insert(init);
+  if (!sigInitClosure.empty()) {
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (auto &op : moduleOp.getOps()) {
+        if (op.getNumResults() == 0)
+          continue;
+        if (llvm::any_of(op.getOperands(), [&](Value operand) {
+              return sigInitClosure.contains(operand);
+            }))
+          for (auto result : op.getResults())
+            changed |= sigInitClosure.insert(result).second;
+      }
+    }
+  }
+
+  // Classify which module ops must lower at the END of the eval body, after
+  // every coroutine instance and signal drive has run: clocked state elements
+  // (registers, memories, clocked DPI/terminate/trigger) detect their clock
+  // edge against the post-process value of the CURRENT evaluation while their
+  // data operands come from the pinned pre-eval `Phase::Old` section. This
+  // pairing implements LRM scheduling-region semantics: a register clocks in
+  // the evaluation in which its clock edge physically occurs, sampling values
+  // from before any same-edge process writes (NBA stores commit after the
+  // active region). Side-effecting consumers of register outputs (drives of
+  // register-fed signals, taps, module outputs) defer with them so they
+  // observe the committed values. Coroutine instances never defer: their
+  // arguments are old-phase samples and their execution order among each
+  // other must follow module order.
+  DenseSet<Value> regClosure;
   for (auto &op : moduleOp.getOps()) {
+    bool seed = isa<StateOp, MemoryOp, MemoryReadPortOp>(op);
+    if (auto dpiOp = dyn_cast<sim::DPICallOp>(&op))
+      seed = !!dpiOp.getClock();
+    if (seed)
+      for (auto result : op.getResults())
+        regClosure.insert(result);
+  }
+  {
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (auto &op : moduleOp.getOps()) {
+        if (op.getNumResults() == 0 || isa<CoroutineInstanceOp>(op))
+          continue;
+        if (llvm::any_of(op.getOperands(), [&](Value operand) {
+              return regClosure.contains(operand);
+            }))
+          for (auto result : op.getResults())
+            changed |= regClosure.insert(result).second;
+      }
+    }
+  }
+  auto deferredToEnd = [&](Operation &op) {
+    if (isa<StateOp, MemoryOp, sim::ClockedTerminateOp, hw::TriggeredOp,
+            hw::OutputOp>(op))
+      return true;
+    if (auto dpiOp = dyn_cast<sim::DPICallOp>(&op); dpiOp && dpiOp.getClock())
+      return true;
+    if (isa<CoroutineInstanceOp>(op))
+      return false;
+    return llvm::any_of(op.getOperands(), [&](Value operand) {
+      return regClosure.contains(operand);
+    });
+  };
+  auto skipInWalk = [](Operation &op) {
     if (mlir::isMemoryEffectFree(&op) &&
         !isa<hw::OutputOp, sim::ClockedTerminateOp>(op))
+      return true;
+    // Handled as part of `MemoryOp`.
+    return isa<MemoryReadPortOp, MemoryWritePortOp>(op);
+  };
+
+  // Lower the ops: first the mid section (coroutine instances, drives, and
+  // other effects not fed by clocked state), then the end section (clocked
+  // state elements and their dependent effects). A mid-section op demanding a
+  // register's new value still pulls that register's lowering forward through
+  // the worklist; data stays consistent (old reads are pinned) and only that
+  // register's edge-detection point degrades to the demand position.
+  for (auto &op : moduleOp.getOps()) {
+    if (skipInWalk(op) || deferredToEnd(op))
       continue;
-    if (isa<MemoryReadPortOp, MemoryWritePortOp>(op))
-      continue; // handled as part of `MemoryOp`
+    if (failed(lowerOp(&op)))
+      return failure();
+  }
+  for (auto &op : moduleOp.getOps()) {
+    if (skipInWalk(op) || !deferredToEnd(op))
+      continue;
     if (failed(lowerOp(&op)))
       return failure();
   }
@@ -270,6 +386,25 @@ LogicalResult ModuleLowering::lowerOp(Operation *op) {
     phases = {Phase::Final};
   if (isa<StateOp>(op))
     phases = {Phase::Initial, Phase::New};
+  if (isa<llhd::SignalOp>(op))
+    phases = {Phase::Initial};
+
+  // Side-effecting module-level ops consuming OR producing
+  // signal-initializer values (the initializer computation itself plus the
+  // object memset and typeinfo/property stores from class `new` at module
+  // scope) are one-time initialization actions; see `sigInitClosure`.
+  if (!isa<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
+           CoroutineInstanceOp, hw::TriggeredOp, hw::OutputOp, seq::InitialOp,
+           llhd::FinalOp, llhd::CurrentTimeOp, llhd::SignalOp, llhd::DriveOp,
+           sim::ClockedTerminateOp>(op) &&
+      !mlir::isMemoryEffectFree(op) &&
+      (llvm::any_of(
+           op->getOperands(),
+           [&](Value operand) { return sigInitClosure.contains(operand); }) ||
+       llvm::any_of(op->getResults(), [&](Value result) {
+         return sigInitClosure.contains(result);
+       })))
+    phases = {Phase::Initial};
 
   for (auto phase : phases) {
     if (loweredOps.contains({op, phase}))
@@ -342,10 +477,13 @@ Value ModuleLowering::getAllocatedState(OpResult result) {
     return alloc;
   }
 
-  // Create the allocation op.
-  auto alloc =
-      AllocStateOp::create(allocBuilder, result.getLoc(),
-                           StateType::get(result.getType()), storageArg);
+  // Create the allocation op. Signal references allocate a slot of the
+  // referenced type: the signal's storage.
+  auto allocType = result.getType();
+  if (auto refType = dyn_cast<llhd::RefType>(allocType))
+    allocType = refType.getNestedType();
+  auto alloc = AllocStateOp::create(allocBuilder, result.getLoc(),
+                                    StateType::get(allocType), storageArg);
   allocatedStates.insert({result, alloc});
 
   // HACK: If the result comes from an instance op, add the instance and port
@@ -395,6 +533,7 @@ OpBuilder &ModuleLowering::getBuilder(Phase phase) {
   case Phase::Initial:
     return initialBuilder;
   case Phase::Old:
+    return oldBuilder;
   case Phase::New:
     return builder;
   case Phase::Final:
@@ -436,8 +575,8 @@ LogicalResult OpLowering::lower() {
       // Operations with special lowering.
       .Case<StateOp, sim::DPICallOp, MemoryOp, TapOp, InstanceOp,
             CoroutineInstanceOp, hw::TriggeredOp, hw::OutputOp, seq::InitialOp,
-            llhd::FinalOp, llhd::CurrentTimeOp, sim::ClockedTerminateOp>(
-          [&](auto op) { return lower(op); })
+            llhd::FinalOp, llhd::CurrentTimeOp, llhd::SignalOp, llhd::DriveOp,
+            sim::ClockedTerminateOp>([&](auto op) { return lower(op); })
 
       // Operations that should be skipped entirely and never land on the
       // worklist to be lowered.
@@ -674,12 +813,13 @@ LogicalResult OpLowering::lowerStateful(
   for (auto [state, value] : llvm::zip(states, loweredResults))
     StateWriteOp::create(module.builder, value.getLoc(), state, value);
 
-  // Since we just wrote the new state value to storage, insert read ops just
-  // before the if op that keep the old value around for any later ops that
-  // still need it.
-  module.builder.setInsertionPoint(ifClockOp);
+  // Since we just wrote the new state value to storage, insert read ops in the
+  // pinned old section that keep the old value around for any later ops that
+  // still need it. The old section executes before every state update, so the
+  // reads observe the pre-eval value and dominate all later users.
   for (auto [state, result] : llvm::zip(states, results)) {
-    auto oldValue = StateReadOp::create(module.builder, result.getLoc(), state);
+    auto oldValue =
+        StateReadOp::create(module.oldBuilder, result.getLoc(), state);
     module.loweredValues[{result, Phase::Old}] = oldValue;
   }
 
@@ -1254,6 +1394,300 @@ LogicalResult OpLowering::lower(llhd::CurrentTimeOp op) {
   return success();
 }
 
+/// Lower a module-level signal definition: allocate persistent storage of the
+/// referenced type and write the init value in the initial phase. Probes and
+/// drives of the signal read/write the storage; see their lowerings below.
+LogicalResult OpLowering::lower(llhd::SignalOp op) {
+  assert(phase == Phase::Initial);
+  if (initial) {
+    lowerValue(op.getInit(), Phase::Initial);
+    return success();
+  }
+  auto value = lowerValue(op.getInit(), Phase::Initial);
+  if (!value)
+    return failure();
+  auto state = module.getAllocatedState(op->getResult(0));
+  if (!state)
+    return failure();
+  StateWriteOp::create(module.initialBuilder, op.getLoc(), state, value);
+  return success();
+}
+
+/// Lower a module-level drive: a write of the driven value to the signal's
+/// storage. Only zero-real-time (delta/epsilon) delays are supported; they
+/// express update ordering, which the state-slot model resolves per
+/// evaluation. Drives with real-time delays would need a scheduler queue and
+/// are rejected.
+LogicalResult OpLowering::lower(llhd::DriveOp op) {
+  assert(phase == Phase::New);
+
+  auto sigResult = dyn_cast<OpResult>(op.getSignal());
+  // A drive of a constant-offset bit-slice of a module-level signal
+  // (`llhd.drv (llhd.sig.extract %sig from K), %v`) lowers as a
+  // read-modify-write splice into the parent signal's storage.
+  llhd::SigExtractOp sliceOp;
+  uint64_t sliceOffset = 0;
+  if (sigResult) {
+    if (auto extract = dyn_cast<llhd::SigExtractOp>(sigResult.getOwner())) {
+      if (auto cst = extract.getLowBit().getDefiningOp<hw::ConstantOp>()) {
+        auto parent = dyn_cast<OpResult>(extract.getInput());
+        // Look through ref-typed unrealized casts: the packed-aggregate
+        // bit-view idiom (an aggregate signal cast to !llhd.ref<iN> and
+        // bit-sliced). The splice below bitcasts the aggregate storage to
+        // its bit view and back.
+        while (parent) {
+          auto castOp =
+              dyn_cast<mlir::UnrealizedConversionCastOp>(parent.getOwner());
+          if (!castOp || castOp->getNumOperands() != 1 ||
+              !isa<llhd::RefType>(castOp->getOperand(0).getType()))
+            break;
+          parent = dyn_cast<OpResult>(castOp->getOperand(0));
+        }
+        if (parent && isa<llhd::SignalOp>(parent.getOwner())) {
+          sliceOp = extract;
+          sliceOffset = cst.getValue().getZExtValue();
+          sigResult = parent;
+        }
+      }
+    }
+  }
+  // A drive of an aggregate member of a module-level signal
+  // (`llhd.drv (llhd.sig.array_get %sig[%idx]), %v` or
+  // `llhd.drv (llhd.sig.struct_extract %sig["f"]), %v`) lowers as a
+  // read-modify-write of the parent signal's storage through
+  // `hw.array_inject` / `hw.struct_inject` -- the aggregate-typed siblings
+  // of the bit-slice splice. Chains of member refs (multi-dimensional
+  // arrays, structs of arrays, e.g. veer-eh1's
+  // `sig.array_get (sig.array_get %sig[%i])[%j]`) unwrap outward toward the
+  // signal here and re-inject inward-out below.
+  SmallVector<Operation *> refChain; // innermost (driven) first
+  while (sigResult && !isa<llhd::SignalOp>(sigResult.getOwner())) {
+    Operation *owner = sigResult.getOwner();
+    if (!isa<llhd::SigArrayGetOp, llhd::SigStructExtractOp>(owner))
+      break;
+    auto parent = dyn_cast<OpResult>(owner->getOperand(0));
+    if (!parent)
+      break;
+    refChain.push_back(owner);
+    sigResult = parent;
+  }
+  if (!sigResult || !isa<llhd::SignalOp>(sigResult.getOwner())) {
+    if (!initial)
+      return op.emitOpError()
+             << "drive of a reference that is not a module-level signal is "
+                "not supported";
+    return success();
+  }
+  auto timeOp = op.getTime().getDefiningOp<llhd::ConstantTimeOp>();
+  if (!timeOp || timeOp.getValue().getTime() != 0) {
+    if (!initial)
+      return op.emitOpError()
+             << "drive with a nonzero real-time delay is not supported";
+    return success();
+  }
+
+  if (initial) {
+    lowerValue(op.getValue(), Phase::New);
+    if (op.getEnable())
+      lowerValue(op.getEnable(), Phase::New);
+    for (auto *ref : refChain)
+      if (auto get = dyn_cast<llhd::SigArrayGetOp>(ref))
+        lowerValue(get.getIndex(), Phase::New);
+    return success();
+  }
+
+  auto value = lowerValue(op.getValue(), Phase::New);
+  if (!value)
+    return failure();
+  auto state = module.getAllocatedState(sigResult);
+  if (!state)
+    return failure();
+
+  // Slice drive: splice the driven bits into the current storage value.
+  if (sliceOp) {
+    auto valueIntTy = dyn_cast<IntegerType>(value.getType());
+    Type stateEltTy = cast<StateType>(state.getType()).getType();
+    auto curTy = dyn_cast<IntegerType>(stateEltTy);
+    int64_t aggWidth = 0;
+    if (!curTy) {
+      // Aggregate signal driven through its bit view (the ref-cast idiom
+      // matched above): splice on the hw.bitcast of the storage, cast back.
+      aggWidth = hw::getBitWidth(stateEltTy);
+      if (aggWidth <= 0)
+        return op.emitOpError()
+               << "slice drive of a non-integer module-level signal is not "
+                  "supported";
+    }
+    if (!valueIntTy)
+      return op.emitOpError()
+             << "slice drive of a non-integer module-level signal is not "
+                "supported";
+    unsigned parentWidth = curTy ? curTy.getWidth() : (unsigned)aggWidth;
+    unsigned sliceWidth = valueIntTy.getWidth();
+    if (sliceOffset + sliceWidth > parentWidth)
+      return op.emitOpError() << "slice drive out of range";
+    auto &builder = module.builder;
+    Value cur = StateReadOp::create(builder, op.getLoc(), state);
+    if (!curTy)
+      cur = hw::BitcastOp::create(builder, op.getLoc(),
+                                  builder.getIntegerType(parentWidth), cur);
+    SmallVector<Value, 3> pieces; // MSB-first for comb.concat
+    if (sliceOffset + sliceWidth < parentWidth)
+      pieces.push_back(comb::ExtractOp::create(
+          builder, op.getLoc(), cur, sliceOffset + sliceWidth,
+          parentWidth - sliceOffset - sliceWidth));
+    pieces.push_back(value);
+    if (sliceOffset > 0)
+      pieces.push_back(
+          comb::ExtractOp::create(builder, op.getLoc(), cur, 0, sliceOffset));
+    value = pieces.size() == 1
+                ? pieces.front()
+                : Value(comb::ConcatOp::create(builder, op.getLoc(), pieces));
+    if (!curTy)
+      value = hw::BitcastOp::create(builder, op.getLoc(), stateEltTy, value);
+  }
+
+  // Member drive: read-modify-write of the parent aggregate signal's
+  // storage. For a chain, peel the storage value outward-in with
+  // hw.array_get / hw.struct_extract down to the driven member's parent,
+  // then re-inject inward-out with hw.array_inject / hw.struct_inject.
+  if (!refChain.empty()) {
+    unsigned n = refChain.size();
+    auto loc = op.getLoc();
+    Value cur = StateReadOp::create(module.builder, loc, state);
+    SmallVector<Value> parents;   // parents[k] = aggregate at nesting depth k
+    SmallVector<Value> indices;   // per-level array index (null for structs)
+    SmallVector<uint32_t> fields; // per-level struct field index
+    parents.push_back(cur);
+    for (unsigned k = 0; k < n; ++k) {
+      Operation *ref = refChain[n - 1 - k]; // outermost first
+      if (auto get = dyn_cast<llhd::SigArrayGetOp>(ref)) {
+        auto index = lowerValue(get.getIndex(), Phase::New);
+        if (!index)
+          return failure();
+        indices.push_back(index);
+        fields.push_back(0);
+        if (k + 1 < n)
+          parents.push_back(hw::ArrayGetOp::create(module.builder, loc,
+                                                   parents.back(), index));
+        continue;
+      }
+      auto extract = cast<llhd::SigStructExtractOp>(ref);
+      auto structTy = dyn_cast<hw::StructType>(parents.back().getType());
+      std::optional<uint32_t> fieldIndex;
+      if (structTy)
+        fieldIndex = structTy.getFieldIndex(extract.getFieldAttr());
+      if (!fieldIndex)
+        return op.emitOpError()
+               << "struct field drive does not match the signal type";
+      indices.push_back(Value());
+      fields.push_back(*fieldIndex);
+      if (k + 1 < n)
+        parents.push_back(hw::StructExtractOp::create(
+            module.builder, loc, structTy.getElements()[*fieldIndex].type,
+            parents.back(), module.builder.getI32IntegerAttr(*fieldIndex)));
+    }
+    for (unsigned k = n; k-- > 0;) {
+      if (indices[k])
+        value = hw::ArrayInjectOp::create(module.builder, loc, parents[k],
+                                          indices[k], value);
+      else
+        value = hw::StructInjectOp::create(module.builder, loc,
+                                           parents[k].getType(), parents[k],
+                                           fields[k], value);
+    }
+  }
+
+  if (op.getEnable()) {
+    auto enable = lowerValue(op.getEnable(), Phase::New);
+    if (!enable)
+      return failure();
+    auto ifOp = scf::IfOp::create(module.builder, op.getLoc(), enable,
+                                  /*withElseRegion=*/false);
+    OpBuilder::InsertionGuard guard(module.builder);
+    module.builder.setInsertionPoint(ifOp.thenYield());
+    StateWriteOp::create(module.builder, op.getLoc(), state, value);
+    return success();
+  }
+  StateWriteOp::create(module.builder, op.getLoc(), state, value);
+  return success();
+}
+
+/// Handle probes of module-level signals: a read of the signal's storage.
+Value OpLowering::lowerValue(llhd::ProbeOp op, OpResult result, Phase phase) {
+  auto sigResult = dyn_cast<OpResult>(op.getSignal());
+  // A probe of a constant-offset bit-slice of a module-level signal
+  // (`llhd.prb (llhd.sig.extract %sig from K)`) lowers as a read of the
+  // parent signal's storage plus an extract of the slice -- the probe-side
+  // mirror of the slice-drive splice above.
+  llhd::SigExtractOp sliceOp;
+  uint64_t sliceOffset = 0;
+  if (sigResult) {
+    if (auto extract = dyn_cast<llhd::SigExtractOp>(sigResult.getOwner())) {
+      if (auto cst = extract.getLowBit().getDefiningOp<hw::ConstantOp>()) {
+        auto parent = dyn_cast<OpResult>(extract.getInput());
+        // Look through ref-typed unrealized casts (the packed-aggregate
+        // bit-view idiom); mirrors the drive-side matcher.
+        while (parent) {
+          auto castOp =
+              dyn_cast<mlir::UnrealizedConversionCastOp>(parent.getOwner());
+          if (!castOp || castOp->getNumOperands() != 1 ||
+              !isa<llhd::RefType>(castOp->getOperand(0).getType()))
+            break;
+          parent = dyn_cast<OpResult>(castOp->getOperand(0));
+        }
+        if (parent && isa<llhd::SignalOp>(parent.getOwner())) {
+          sliceOp = extract;
+          sliceOffset = cst.getValue().getZExtValue();
+          sigResult = parent;
+        }
+      }
+    }
+  }
+  if (!sigResult || !isa<llhd::SignalOp>(sigResult.getOwner())) {
+    if (!initial)
+      emitError(op.getLoc())
+          << "probe of a reference that is not a module-level signal is not "
+             "supported";
+    return {};
+  }
+  if (initial)
+    return {};
+  auto state = module.getAllocatedState(sigResult);
+  if (!state)
+    return {};
+  Value read =
+      StateReadOp::create(module.getBuilder(phase), op.getLoc(), state);
+  if (sliceOp) {
+    auto resTy = dyn_cast<IntegerType>(op.getResult().getType());
+    Type stateEltTy = cast<StateType>(state.getType()).getType();
+    auto curTy = dyn_cast<IntegerType>(stateEltTy);
+    unsigned parentWidth = 0;
+    if (curTy) {
+      parentWidth = curTy.getWidth();
+    } else {
+      // Aggregate signal probed through its bit view: read, bitcast, slice.
+      int64_t aggWidth = hw::getBitWidth(stateEltTy);
+      if (aggWidth > 0) {
+        parentWidth = aggWidth;
+        read = hw::BitcastOp::create(
+            module.getBuilder(phase), op.getLoc(),
+            IntegerType::get(op.getContext(), parentWidth), read);
+      }
+    }
+    if (!resTy || !parentWidth ||
+        sliceOffset + resTy.getWidth() > parentWidth) {
+      emitError(op.getLoc())
+          << "slice probe of a non-integer module-level signal is not "
+             "supported";
+      return {};
+    }
+    read = comb::ExtractOp::create(module.getBuilder(phase), op.getLoc(), read,
+                                   sliceOffset, resTy.getWidth());
+  }
+  return read;
+}
+
 LogicalResult OpLowering::lower(sim::ClockedTerminateOp op) {
   if (phase != Phase::New)
     return success();
@@ -1346,6 +1780,23 @@ Value OpLowering::lowerValue(Value value, Phase phase) {
     return lowerValue(initialOp, result, phase);
   if (auto castOp = dyn_cast<seq::FromImmutableOp>(op))
     return lowerValue(castOp, result, phase);
+  if (auto probeOp = dyn_cast<llhd::ProbeOp>(op))
+    return lowerValue(probeOp, result, phase);
+  // Regions cloned into the model (e.g. `llhd.final` bodies) may reference a
+  // module-level signal by its reference value. Hand out the signal's
+  // storage: both are pointers into the model storage representationally;
+  // the bridging cast cancels out during the LLVM lowering.
+  if (auto sigOp = dyn_cast<llhd::SignalOp>(op)) {
+    if (initial)
+      return {};
+    auto state = module.getAllocatedState(result);
+    if (!state)
+      return {};
+    return mlir::UnrealizedConversionCastOp::create(
+               module.getBuilder(phase), sigOp.getLoc(), result.getType(),
+               ValueRange{state})
+        .getResult(0);
+  }
 
   // Otherwise we mark the defining operation as to be lowered first. This will
   // cause the lookup in `loweredValues` above to return a value the next time
@@ -1381,10 +1832,9 @@ Value OpLowering::lowerValue(CoroutineInstanceOp op, OpResult result,
     return {};
   }
 
-  // If we want to read the old value, no writes must have been lowered yet.
-  if (phase == Phase::Old)
-    assert(!module.loweredOps.contains({op, Phase::New}) &&
-           "need old value but new value already written");
+  // Old-value reads land in the pinned old section, which executes before the
+  // instance updates its result slots, so they are sound even when the
+  // instance's new value has already been lowered.
 
   auto state = module.getAllocatedState(result);
   return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
@@ -1392,8 +1842,8 @@ Value OpLowering::lowerValue(CoroutineInstanceOp op, OpResult result,
 
 /// Handle uses of a state. This creates an `arc.state_read` op to read from the
 /// state's storage. If the new value after all updates is requested, marks the
-/// state as to be lowered first (which will perform the writes). If the old
-/// value is requested, asserts that no new values have been written.
+/// state as to be lowered first (which will perform the writes). Old-value
+/// reads are emitted into the pinned old section ahead of all writes.
 Value OpLowering::lowerValue(StateOp op, OpResult result, Phase phase) {
   if (initial) {
     // Ensure that the new or initial value has been written by the lowering of
@@ -1403,10 +1853,9 @@ Value OpLowering::lowerValue(StateOp op, OpResult result, Phase phase) {
     return {};
   }
 
-  // If we want to read the old value, no writes must have been lowered yet.
-  if (phase == Phase::Old)
-    assert(!module.loweredOps.contains({op, Phase::New}) &&
-           "need old value but new value already written");
+  // Old-value reads land in the pinned old section, which executes before the
+  // state's write, so they are sound even when the new value has already been
+  // lowered.
 
   auto state = module.getAllocatedState(result);
   return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
@@ -1414,8 +1863,8 @@ Value OpLowering::lowerValue(StateOp op, OpResult result, Phase phase) {
 
 /// Handle uses of a DPI call. This creates an `arc.state_read` op to read from
 /// the state's storage. If the new value after all updates is requested, marks
-/// the state as to be lowered first (which will perform the writes). If the old
-/// value is requested, asserts that no new values have been written.
+/// the state as to be lowered first (which will perform the writes). Old-value
+/// reads are emitted into the pinned old section ahead of all writes.
 Value OpLowering::lowerValue(sim::DPICallOp op, OpResult result, Phase phase) {
   if (initial) {
     // Ensure that the new or initial value has been written by the lowering of
@@ -1425,10 +1874,9 @@ Value OpLowering::lowerValue(sim::DPICallOp op, OpResult result, Phase phase) {
     return {};
   }
 
-  // If we want to read the old value, no writes must have been lowered yet.
-  if (phase == Phase::Old)
-    assert(!module.loweredOps.contains({op, Phase::New}) &&
-           "need old value but new value already written");
+  // Old-value reads land in the pinned old section, which executes before the
+  // state's write, so they are sound even when the new value has already been
+  // lowered.
 
   auto state = module.getAllocatedState(result);
   return StateReadOp::create(module.getBuilder(phase), result.getLoc(), state);
@@ -1456,13 +1904,10 @@ Value OpLowering::lowerValue(MemoryReadPortOp op, OpResult result,
   if (!address)
     return {};
 
-  if (phase == Phase::Old) {
-    // If we want to read the old value, no writes must have been lowered yet.
-    assert(!module.loweredOps.contains({memOp, Phase::New}) &&
-           "need old memory value but new value already written");
-  } else {
-    assert(phase == Phase::New);
-  }
+  // Old-value reads land in the pinned old section, which executes before all
+  // memory writes, so they are sound even when the writes have already been
+  // lowered.
+  assert(phase == Phase::Old || phase == Phase::New);
 
   auto state = module.getAllocatedState(memOp->getResult(0));
   return MemoryReadOp::create(module.getBuilder(phase), result.getLoc(), state,
