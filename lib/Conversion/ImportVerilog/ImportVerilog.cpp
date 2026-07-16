@@ -468,15 +468,14 @@ void circt::populateVerilogToMoorePipeline(OpPassManager &pm) {
   pm.addPass(mlir::createSymbolDCEPass());
 
   {
-    // Perform module-specific transformations.
-    auto &modulePM = pm.nest<moore::SVModuleOp>();
-    modulePM.addPass(moore::createSimplifyRefsPass());
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(moore::createSimplifyRefsPass());
     // TODO: Enable the following once it not longer interferes with @(...)
     // event control checks. The introduced dummy variables make the event
     // control observe a static local variable that never changes, instead of
     // observing a module-wide signal.
-    // modulePM.addPass(moore::createSimplifyProceduresPass());
-    modulePM.addPass(mlir::createSROA());
+    // anyPM.addPass(moore::createSimplifyProceduresPass());
+    anyPM.addPass(mlir::createSROA());
   }
 
   {

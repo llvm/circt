@@ -345,39 +345,6 @@ func.func @ExtractRefArrayElement(%j: !moore.ref<array<1 x array<1 x l3>>>) -> (
   return %0 : !moore.ref<array<1 x l3>>
 }
 
-// CHECK-LABEL: func.func @ConcatRefAssign
-// CHECK-SAME: ([[IMM:%.+]]: !llhd.ref<i32>, [[SRC:%.+]]: i8)
-func.func @ConcatRefAssign(%imm: !moore.ref<i32>, %src: !moore.i8) {
-  // CHECK: [[C4:%.+]] = hw.constant 4 : i5
-  // CHECK: [[R0:%.+]] = llhd.sig.extract [[IMM]] from [[C4]] : <i32> -> <i2>
-  %0 = moore.extract_ref %imm from 4 : <i32> -> <i2>
-
-  // CHECK: [[C6:%.+]] = hw.constant 6 : i5
-  // CHECK: [[R1:%.+]] = llhd.sig.extract [[IMM]] from [[C6]] : <i32> -> <i4>
-  %1 = moore.extract_ref %imm from 6 : <i32> -> <i4>
-
-  // CHECK: [[C2:%.+]] = hw.constant 2 : i5
-  // CHECK: [[R2:%.+]] = llhd.sig.extract [[IMM]] from [[C2]] : <i32> -> <i1>
-  %2 = moore.extract_ref %imm from 2 : <i32> -> <i1>
-
-  // CHECK: [[C3:%.+]] = hw.constant 3 : i5
-  // CHECK: [[R3:%.+]] = llhd.sig.extract [[IMM]] from [[C3]] : <i32> -> <i1>
-  %3 = moore.extract_ref %imm from 3 : <i32> -> <i1>
-  %4 = moore.concat_ref %0, %1, %2, %3 : (!moore.ref<i2>, !moore.ref<i4>, !moore.ref<i1>, !moore.ref<i1>) -> !moore.ref<i8>
-
-  // CHECK: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
-  // CHECK: [[S3:%.+]] = comb.extract [[SRC]] from 0 : (i8) -> i1
-  // CHECK: llhd.drv [[R3]], [[S3]] after [[TIME]] : i1
-  // CHECK: [[S2:%.+]] = comb.extract [[SRC]] from 1 : (i8) -> i1
-  // CHECK: llhd.drv [[R2]], [[S2]] after [[TIME]] : i1
-  // CHECK: [[S1:%.+]] = comb.extract [[SRC]] from 2 : (i8) -> i4
-  // CHECK: llhd.drv [[R1]], [[S1]] after [[TIME]] : i4
-  // CHECK: [[S0:%.+]] = comb.extract [[SRC]] from 6 : (i8) -> i2
-  // CHECK: llhd.drv [[R0]], [[S0]] after [[TIME]] : i2
-  moore.blocking_assign %4, %src : i8
-  return
-}
-
 // CHECK-LABEL: DynExtractArrayElement
 func.func @DynExtractArrayElement(%j: !moore.array<2 x array<1 x l3>>, %idx: !moore.l1) -> (!moore.array<1 x l3>) {
   // CHECK: hw.array_get

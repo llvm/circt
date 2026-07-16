@@ -20,6 +20,7 @@
 
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 namespace circt {
@@ -83,7 +84,13 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
       // description mentioned.
       srcWidth = srcWidth - width;
 
-      OpTy::create(rewriter, op.getLoc(), operand, extract);
+      // Clone the original op (preserving any extra operand, e.g. a delay on
+      // the delayed assign variants) and remap dst/src to the leaf ref and its
+      // extracted slice.
+      IRMapping mapping;
+      mapping.map(op.getDst(), operand);
+      mapping.map(op.getSrc(), Value(extract));
+      rewriter.clone(*op.getOperation(), mapping);
     }
     rewriter.eraseOp(op);
     return success();
@@ -165,18 +172,22 @@ void SimplifyRefsPass::runOnOperation() {
   ConversionTarget target(context);
 
   target.addDynamicallyLegalOp<ContinuousAssignOp, BlockingAssignOp,
-                               NonBlockingAssignOp>([](auto op) {
+                               NonBlockingAssignOp, DelayedContinuousAssignOp,
+                               DelayedNonBlockingAssignOp>([](auto op) {
     return !op->getOperand(0).template getDefiningOp<ConcatRefOp>();
   });
 
-  target.addLegalDialect<MooreDialect>();
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
   RewritePatternSet concatRefPatterns(&context);
   concatRefPatterns.add<ConcatRefLowering<ContinuousAssignOp>,
                         ConcatRefLowering<BlockingAssignOp>,
-                        ConcatRefLowering<NonBlockingAssignOp>>(&context);
+                        ConcatRefLowering<NonBlockingAssignOp>,
+                        ConcatRefLowering<DelayedContinuousAssignOp>,
+                        ConcatRefLowering<DelayedNonBlockingAssignOp>>(
+      &context);
 
-  if (failed(applyPartialConversion(getOperation(), target,
-                                    std::move(concatRefPatterns)))) {
+  if (failed(applyFullConversion(getOperation(), target,
+                                 std::move(concatRefPatterns)))) {
     signalPassFailure();
     return;
   }
