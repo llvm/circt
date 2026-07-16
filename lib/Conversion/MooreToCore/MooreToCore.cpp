@@ -1833,11 +1833,12 @@ struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
                   ConversionPatternRewriter &rewriter) const override {
     auto intBitWidth = adaptor.getValue().getType().getIntOrFloatBitWidth();
     Type withType = rewriter.getIntegerType(intBitWidth);
-    Value bitWidth = rewriter.create<arith::ConstantOp>(op.getLoc(), 
-                  withType, rewriter.getIntegerAttr(withType,intBitWidth));
-    auto leadingZeros = math::CountLeadingZerosOp::create(
-                          rewriter, op.getLoc(), adaptor.getValue());
-    Value out = arith::SubIOp::create(rewriter,op.getLoc(), bitWidth, leadingZeros);
+    Value bitWidth = rewriter.create<arith::ConstantOp>(
+        op.getLoc(), withType, rewriter.getIntegerAttr(withType, intBitWidth));
+    auto leadingZeros = math::CountLeadingZerosOp::create(rewriter, op.getLoc(),
+                                                          adaptor.getValue());
+    Value out =
+        arith::SubIOp::create(rewriter, op.getLoc(), bitWidth, leadingZeros);
     rewriter.replaceOp(op, out);
     return success();
   }
@@ -1914,7 +1915,6 @@ struct RealMathFuncTwoArg : public OpConversionPattern<SourceOp> {
     return success();
   }
 };
-
 
 template <typename SourceOp, ICmpPredicate pred>
 struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
