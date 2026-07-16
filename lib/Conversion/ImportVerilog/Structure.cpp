@@ -849,6 +849,37 @@ struct ModuleVisitor : public BaseVisitor {
                                  const slang::ast::Statement &body) {
     if (body.as_if<slang::ast::ConcurrentAssertionStatement>())
       return context.convertStatement(body);
+
+    // A labeled module-level concurrent assertion (`CHK: assert property
+    // (p);`) arrives wrapped in a single-statement block, which would fall
+    // through into the generic procedure path below: the assertion then
+    // converts inside a `moore.procedure always` while its unlabeled twin
+    // converts at module scope, so a label silently changes which lowering
+    // an assertion gets (and downstream consumers of module-scope assertions
+    // never see the labeled one). Look through label blocks so labeled and
+    // unlabeled assertions take the same path. Only the `always` wrapper is
+    // treated this way -- for a body that reduces to a single concurrent
+    // assertion the two forms are equivalent (IEEE 1800-2017 16.14.6);
+    // concurrent assertions in initial/final procedures have one-attempt
+    // semantics and must not become continuous module-scope assertions.
+    if (kind == moore::ProcedureKind::Always) {
+      const slang::ast::Statement *stmt = &body;
+      while (true) {
+        if (auto *block = stmt->as_if<slang::ast::BlockStatement>()) {
+          stmt = &block->body;
+          continue;
+        }
+        if (auto *list = stmt->as_if<slang::ast::StatementList>();
+            list && list->list.size() == 1) {
+          stmt = list->list[0];
+          continue;
+        }
+        break;
+      }
+      if (stmt->as_if<slang::ast::ConcurrentAssertionStatement>())
+        return context.convertStatement(*stmt);
+    }
+
     auto procOp = moore::ProcedureOp::create(builder, loc, kind);
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToEnd(&procOp.getBody().emplaceBlock());
