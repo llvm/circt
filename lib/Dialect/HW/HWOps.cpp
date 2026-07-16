@@ -3026,12 +3026,32 @@ Type TypedeclOp::getAliasType() {
 // BitcastOp
 //===----------------------------------------------------------------------===//
 
-OpFoldResult BitcastOp::fold(FoldAdaptor) {
+OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
   // Identity.
   // bitcast(%a) : A -> A ==> %a
   if (getOperand().getType() == getType())
     return getOperand();
 
+  // bitcast(int_constant)
+  if (auto intAttr = dyn_cast_or_null<IntegerAttr>(adaptor.getInput())) {
+    ArrayAttr arrVal;
+    if (succeeded(apIntToAggregateAttr(getType(), intAttr.getValue(), arrVal)))
+      return arrVal;
+  }
+
+  // bitcast(aggregate_constant)
+  if (auto arrayAttr = dyn_cast_or_null<ArrayAttr>(adaptor.getInput())) {
+    APInt intVal;
+    if (succeeded(
+            aggregateAttrToAPInt(getInput().getType(), arrayAttr, intVal))) {
+      if (auto intType = dyn_cast<IntegerType>(getType()))
+        return IntegerAttr::get(intType, intVal);
+
+      ArrayAttr arrVal;
+      if (succeeded(apIntToAggregateAttr(getType(), intVal, arrVal)))
+        return arrVal;
+    }
+  }
   return {};
 }
 
