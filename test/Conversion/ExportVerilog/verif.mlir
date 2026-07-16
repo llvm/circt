@@ -214,6 +214,19 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   %e0 = ltl.eventually %a : i1
   sv.assert_property %e0 : !ltl.property
 
+  // Emit `not(eventually(not(x)))` as `always x` (case A, cancelling nots).
+  // CHECK: assert property (always a);
+  %ag0 = ltl.not %a : i1
+  %ag1 = ltl.eventually %ag0 : !ltl.property
+  %ag2 = ltl.not %ag1 : !ltl.property
+  sv.assert_property %ag2 : !ltl.property
+
+  // Emit `not(eventually(x))` as `always not x` (case B, quantifier pull-up).
+  // CHECK: assert property (always not a);
+  %ag3 = ltl.eventually %a : i1
+  %ag4 = ltl.not %ag3 : !ltl.property
+  sv.assert_property %ag4 : !ltl.property
+
   // CHECK: assert property (@(posedge clk) a |-> b);
   // CHECK: assert property (@(posedge clk) a ##1 b |-> (@(negedge b) not a));
   // CHECK: assert property (@(posedge clk) disable iff (b) not a);
@@ -259,6 +272,34 @@ hw.module @Precedence(in %a: i1, in %b: i1) {
   %u0 = ltl.until %a, %b : i1, i1
   %u1 = ltl.and %u0, %a : !ltl.property, i1
   sv.assert_property %u1 : !ltl.property
+
+  // `always` sugar precedence. The inner value under `always` gets Qualifier
+  // context (case A) or Unary context (case B, because it sits under the
+  // synthesized `not`). `until` has Until precedence, which is tighter than
+  // Qualifier but looser than Unary, so it differentiates the two.
+  // CHECK: assert property (always a until b);
+  // CHECK: assert property (always not (a until b));
+  %ag0 = ltl.not %u0 : !ltl.property
+  %ag1 = ltl.eventually %ag0 : !ltl.property
+  %ag2 = ltl.not %ag1 : !ltl.property
+  sv.assert_property %ag2 : !ltl.property
+  %ag3 = ltl.eventually %u0 : !ltl.property
+  %ag4 = ltl.not %ag3 : !ltl.property
+  sv.assert_property %ag4 : !ltl.property
+
+  // `always ...` returns Qualifier precedence, so wrapping it in a tighter
+  // context adds parens.
+  // CHECK: assert property ((always a) and b);
+  // CHECK: assert property (b and (always not a));
+  %ag5 = ltl.not %a : i1
+  %ag6 = ltl.eventually %ag5 : !ltl.property
+  %ag7 = ltl.not %ag6 : !ltl.property
+  %ag8 = ltl.and %ag7, %b : !ltl.property, i1
+  sv.assert_property %ag8 : !ltl.property
+  %ag9 = ltl.eventually %a : i1
+  %ag10 = ltl.not %ag9 : !ltl.property
+  %ag11 = ltl.and %b, %ag10 : i1, !ltl.property
+  sv.assert_property %ag11 : !ltl.property
 }
 
 // CHECK-LABEL: module SystemVerilogSpecExamples
