@@ -42,44 +42,13 @@ struct HWAggregateConstantOpConversion
     : OpConversionPattern<hw::AggregateConstantOp> {
   using OpConversionPattern<hw::AggregateConstantOp>::OpConversionPattern;
 
-  static LogicalResult peelAttribute(Location loc, Attribute attr,
-                                     ConversionPatternRewriter &rewriter,
-                                     APInt &intVal) {
-    SmallVector<Attribute> worklist;
-    worklist.push_back(attr);
-    unsigned nextInsertion = intVal.getBitWidth();
-
-    while (!worklist.empty()) {
-      auto current = worklist.pop_back_val();
-      if (auto innerArray = dyn_cast<ArrayAttr>(current)) {
-        for (auto elem : llvm::reverse(innerArray))
-          worklist.push_back(elem);
-        continue;
-      }
-
-      if (auto intAttr = dyn_cast<IntegerAttr>(current)) {
-        auto chunk = intAttr.getValue();
-        nextInsertion -= chunk.getBitWidth();
-        intVal.insertBits(chunk, nextInsertion);
-        continue;
-      }
-
-      return failure();
-    }
-
-    return success();
-  }
-
   LogicalResult
   matchAndRewrite(hw::AggregateConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // Lower to concat.
-    SmallVector<Value> results;
-    auto bitWidth = hw::getBitWidth(op.getType());
-    assert(bitWidth >= 0 && "bit width must be known for constant");
-    APInt intVal(bitWidth, 0);
-    if (failed(peelAttribute(op.getLoc(), adaptor.getFieldsAttr(), rewriter,
-                             intVal)))
+    APInt intVal;
+    if (failed(hw::aggregateAttrToAPInt(op.getType(), adaptor.getFieldsAttr(),
+                                        intVal)))
       return failure();
     rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, intVal);
     return success();

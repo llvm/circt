@@ -177,6 +177,19 @@ int64_t getBitWidth(mlir::Type type);
 /// false on known InOut types, rather than any unknown types.
 bool hasHWInOutType(mlir::Type type);
 
+/// Convert an APInt value into a nested aggregate attribute matching the given
+/// HWAggregateType. Returns failure() if the type is not an HWAggregateType or
+/// recursively contains a type other than HWAggregateType or IntegerType.
+LogicalResult apIntToAggregateAttr(mlir::Type aggregateType,
+                                   const APInt &intVal, ArrayAttr &result);
+
+/// Convert an ArrayAttr into an APInt value matching the given type.
+/// The type is used to determine the bit width of the resulting APInt.
+/// Returns failure() if the attribute recursively contains anything other than
+/// ArrayAttr or IntegerAttr.
+LogicalResult aggregateAttrToAPInt(mlir::Type type, ArrayAttr attr,
+                                   APInt &result);
+
 template <typename... BaseTy>
 bool type_isa(Type type) {
   // First check if the type is the requested type.
