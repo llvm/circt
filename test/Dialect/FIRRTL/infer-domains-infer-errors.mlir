@@ -53,33 +53,8 @@ firrtl.circuit "IllegalDomainCrossing" {
   }
 }
 
-// Negative colorless case: two genuinely different colors combined through an
-// otherwise-colorless-looking add is still an illegal crossing (neither
-// operand is actually colorless).
-
-// CHECK-LABEL: TwoColorsStillError
-firrtl.circuit "TwoColorsStillError" {
-  firrtl.domain @ClockDomain
-  firrtl.module @TwoColorsStillError(
-    // expected-note @below {{input module port A declared here}}
-    in %A: !firrtl.domain<@ClockDomain()>,
-    // expected-note @below {{input module port B declared here}}
-    in %B: !firrtl.domain<@ClockDomain()>,
-    // expected-note @below {{a has domains [A : ClockDomain]}}
-    in %a: !firrtl.uint<4> domains [%A],
-    // expected-note @below {{b has domains [B : ClockDomain]}}
-    in %b: !firrtl.uint<4> domains [%B],
-    out %c: !firrtl.uint<5> domains [%A]
-  ) {
-    // expected-error @below {{illegal domain crossing in operation}}
-    %0 = firrtl.add %a, %b : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
-    firrtl.matchingconnect %c, %0 : !firrtl.uint<5>
-  }
-}
-
-// Negative colorless case: a value that mixes a colored operand with a
-// colorless one is colored, not colorless, and still conflicts when used in
-// a different domain.
+// A value that mixes a colored operand with a colorless one is colored, not
+// colorless, and still conflicts when used in a different domain.
 
 // CHECK-LABEL: ColorlessPlusColoredStillError
 firrtl.circuit "ColorlessPlusColoredStillError" {
@@ -102,8 +77,8 @@ firrtl.circuit "ColorlessPlusColoredStillError" {
   }
 }
 
-// Negative colorless case: a public output port driven by a pure constant
-// still requires an explicit domain association.
+// A public output port driven by a pure constant still requires an explicit
+// domain association.
 
 // CHECK-LABEL: PublicPortConstantStillMissing
 firrtl.circuit "PublicPortConstantStillMissing" {
@@ -118,8 +93,8 @@ firrtl.circuit "PublicPortConstantStillMissing" {
   }
 }
 
-// Robustness: an undriven wire is colored (it is not colorless) and still
-// errors when used in two different domains.
+// An undriven wire is colored (it is not colorless) and still errors when used
+// in two different domains.
 
 // CHECK-LABEL: UndrivenWireNotColorless
 firrtl.circuit "UndrivenWireNotColorless" {
@@ -141,8 +116,8 @@ firrtl.circuit "UndrivenWireNotColorless" {
   }
 }
 
-// Robustness: invalidvalue is not constant-like (it is a fresh unique value
-// on every use) and must not be treated as colorless.
+// Invalidvalue is not constant-like (it is a fresh unique value on every use)
+// and must not be treated as colorless.
 
 // CHECK-LABEL: InvalidValueNotColorless
 firrtl.circuit "InvalidValueNotColorless" {
@@ -165,7 +140,7 @@ firrtl.circuit "InvalidValueNotColorless" {
 }
 
 // Cross-module colorless propagation is out of scope: a private module whose
-// output is a purely-constant expression is *not* treated as colorless at its
+// output is a purely-constant expression is _not_ treated as colorless at its
 // instantiation sites, so this still errors.
 
 // CHECK-LABEL: PrivateModuleConstantOutputStillErrors

@@ -1,4 +1,3 @@
-; RUN: firtool %s -domain-mode=infer -o /dev/null
 ; RUN: firtool %s -domain-mode=infer -output-final-mlir - -o /dev/null | FileCheck %s
 
 ; Reproducer for llvm/circt#10830: a constant, or an expression fully composed

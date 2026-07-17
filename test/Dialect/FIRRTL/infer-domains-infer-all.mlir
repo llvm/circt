@@ -605,7 +605,7 @@ firrtl.circuit "ReUseAnonDomain" {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: %ClockDomain = firrtl.domain.anon
     // CHECK: %PowerDomain = firrtl.domain.anon
-    // CHECK: %w1 = firrtl.wire domains[%ClockDomain, %PowerDomain] 
+    // CHECK: %w1 = firrtl.wire domains[%ClockDomain, %PowerDomain]
     %w1 = firrtl.wire : !firrtl.uint<1>
     // CHECK: %w2 = firrtl.wire domains[%ClockDomain, %PowerDomain]
     %w2 = firrtl.wire : !firrtl.uint<1>
@@ -793,8 +793,8 @@ firrtl.circuit "ConstantNodeTwoDomains" {
   }
 }
 
-// A node bound to a constant *expression* (not just a bare constant) may
-// also be used in two different domains.
+// A node bound to a constant _expression_ (not just a bare constant) may also
+// be used in two different domains.
 // CHECK-LABEL: firrtl.circuit "ConstantExprNodeTwoDomains"
 firrtl.circuit "ConstantExprNodeTwoDomains" {
   firrtl.domain @ClockDomain
@@ -856,6 +856,10 @@ firrtl.circuit "ColorlessMixedWithColoredAdoptsColor" {
 }
 
 // constCast of a constant preserves colorlessness.
+//
+// Note: this is expected to be removed by this point in the pipeline, but test
+// that it works anyway.
+//
 // CHECK-LABEL: firrtl.circuit "ConstCastPreservesColorless"
 firrtl.circuit "ConstCastPreservesColorless" {
   firrtl.domain @ClockDomain
