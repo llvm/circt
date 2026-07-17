@@ -717,12 +717,31 @@ struct ModuleVisitor : public BaseVisitor {
       if (!value)
         return mlir::emitError(loc) << "unsupported port";
 
+    // Determine the name of the instance. Slang clears the name of instance
+    // array elements during elaboration; only the outermost array symbol
+    // retains the name written in the source. Reconstruct per-element names by
+    // appending the source index of each array dimension to the array name,
+    // such that `foo u [2:0][1:0]` produces `u_0_0`, `u_0_1`, `u_1_0`, etc.
+    // This mirrors the naming scheme used for for-generate blocks.
+    SmallString<64> instName(blockNamePrefix);
+    if (instNode.arrayPath.empty()) {
+      instName += instNode.name;
+    } else {
+      instName += instNode.getArrayName();
+      slang::SmallVector<slang::ConstantRange, 4> dims;
+      instNode.getArrayDimensions(dims);
+      for (auto [dim, index] : llvm::zip(dims, instNode.arrayPath)) {
+        instName += '_';
+        Twine(dim.lower() + int32_t(index)).toVector(instName);
+      }
+    }
+
     // Create the instance op itself.
     auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
     auto outputNames = builder.getArrayAttr(moduleType.getOutputNames());
     auto inst = moore::InstanceOp::create(
         builder, loc, moduleType.getOutputTypes(),
-        builder.getStringAttr(Twine(blockNamePrefix) + instNode.name),
+        builder.getStringAttr(instName),
         FlatSymbolRefAttr::get(module.getSymNameAttr()), inputValues,
         inputNames, outputNames);
 
@@ -969,6 +988,15 @@ struct ModuleVisitor : public BaseVisitor {
     return context.convertPrimitiveInstance(prim);
   }
 
+  // Handle instance arrays.
+  LogicalResult visit(const slang::ast::InstanceArraySymbol &arrNode) {
+    // Slang already nicely unrolls these into distinct instances for us.
+    for (const auto *element : arrNode.elements)
+      if (failed(element->visit(*this)))
+        return failure();
+    return success();
+  }
+
   /// Emit an error for all other members.
   template <typename T>
   LogicalResult visit(T &&node) {
@@ -1151,6 +1179,13 @@ struct ModulePredeclaration {
           return failure();
         context.predeclaredInstances.insert(instNode);
       }
+      return success();
+    }
+
+    if (const auto *arrNode = member.as_if<slang::ast::InstanceArraySymbol>()) {
+      for (const auto *element : arrNode->elements)
+        if (failed(predeclareModuleInstanceMember(*element, blockNamePrefix)))
+          return failure();
       return success();
     }
 
