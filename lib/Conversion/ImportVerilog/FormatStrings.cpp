@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "ImportVerilogInternals.h"
+#include "circt/Support/FVInt.h"
 #include "slang/ast/SFormat.h"
 
 using namespace mlir;
@@ -157,6 +158,9 @@ struct FormatStringParser {
       return emitString(arg, options);
     case 'c':
       return emitChar(arg, options);
+
+    case 'v':
+      return emitStrength(arg);
 
     default:
       return mlir::emitError(loc)
@@ -328,6 +332,77 @@ struct FormatStringParser {
       return failure();
 
     fragments.push_back(moore::FormatCharOp::create(builder, loc, bitValue));
+    return success();
+  }
+
+  /// Emit a value formatted as net signal strength (%v). See IEEE 1800-2017
+  /// § 21.2.1.5 "Strength format". The Moore dialect does not model drive
+  /// strength, so driven bits are reported with strong strength: `St0`, `St1`,
+  /// `StX`, or `HiZ` for high-impedance bits. Vector operands print one
+  /// strength per bit, most significant bit first, separated by underscores.
+  LogicalResult emitStrength(const slang::ast::Expression &arg) {
+    auto value =
+        context.convertToSimpleBitVector(context.convertRvalueExpression(arg));
+    if (!value)
+      return failure();
+    auto intTy = cast<moore::IntType>(value.getType());
+    auto bitTy =
+        moore::IntType::get(context.getContext(), 1, intTy.getDomain());
+
+    // Create a string carrying the given literal text.
+    auto mkString = [&](StringRef text) -> Value {
+      auto literal = moore::FormatLiteralOp::create(builder, loc, text);
+      return moore::FormatStringToStringOp::create(builder, loc, literal);
+    };
+
+    // Select between two strings based on a single-bit condition.
+    auto selectString = [&](Value cond, Value trueValue,
+                            Value falseValue) -> Value {
+      auto strTy = moore::StringType::get(context.getContext());
+      auto condOp = moore::ConditionalOp::create(builder, loc, strTy, cond);
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(&condOp.getTrueRegion().emplaceBlock());
+      moore::YieldOp::create(builder, loc, trueValue);
+      builder.setInsertionPointToStart(&condOp.getFalseRegion().emplaceBlock());
+      moore::YieldOp::create(builder, loc, falseValue);
+      return condOp.getResult();
+    };
+
+    for (unsigned i = intTy.getWidth(); i > 0; i--) {
+      if (i != intTy.getWidth())
+        emitLiteral("_");
+      Value bit = value;
+      if (intTy.getWidth() != 1)
+        bit = moore::ExtractOp::create(builder, loc, bitTy, value, i - 1);
+      Value strength;
+      if (intTy.getDomain() == moore::Domain::FourValued) {
+        // Compare the bit against constant 0, 1, and Z; anything else is X.
+        auto isEq = [&](const FVInt &fvValue) -> Value {
+          auto constant =
+              moore::ConstantOp::create(builder, loc, bitTy, fvValue);
+          return moore::CaseEqOp::create(builder, loc, bit, constant);
+        };
+        Value isZ = isEq(FVInt::getAllZ(1));
+        Value isZero = isEq(FVInt::getZero(1));
+        Value isOne = isEq(FVInt::getAllOnes(1));
+        // Create each literal in its own statement, in order of use with the
+        // true operand first, to keep the emitted op order independent of the
+        // host compiler's argument evaluation order.
+        Value st1 = mkString("St1");
+        Value stX = mkString("StX");
+        Value oneOrX = selectString(isOne, st1, stX);
+        Value st0 = mkString("St0");
+        Value zeroOrOther = selectString(isZero, st0, oneOrX);
+        Value hiZ = mkString("HiZ");
+        strength = selectString(isZ, hiZ, zeroOrOther);
+      } else {
+        Value st1 = mkString("St1");
+        Value st0 = mkString("St0");
+        strength = selectString(bit, st1, st0);
+      }
+      fragments.push_back(
+          moore::FormatStringOp::create(builder, loc, strength, {}, {}, {}));
+    }
     return success();
   }
 
