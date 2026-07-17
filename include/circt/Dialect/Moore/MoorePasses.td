@@ -29,7 +29,7 @@ def SimplifyProcedures : Pass<"moore-simplify-procedures", "moore::SVModuleOp"> 
     let constructor = "circt::moore::createSimplifyProceduresPass()";
 }
 
-def SimplifyRefs : Pass<"moore-simplify-refs", "moore::SVModuleOp"> {
+def SimplifyRefs : Pass<"moore-simplify-refs"> {
     let summary = [{
       Split aggregate assignment left-hand-sides into multiple
       simple assignments
