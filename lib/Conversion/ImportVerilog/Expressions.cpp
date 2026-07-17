@@ -3548,9 +3548,31 @@ Value Context::convertSystemCall(
   if (nameId == ksn::Atanh)
     return convertRealMathBI<moore::AtanhBIOp>(*this, loc, name, args);
 
+  if (nameId == ksn::Pow) {
+    assert(numArgs == 2 && "`$pow` takes 2 arguments");
+    auto realType = moore::RealType::get(getContext(), moore::RealWidth::f64);
+    auto lhs = convertRvalueExpression(*args[0], realType);
+    auto rhs = convertRvalueExpression(*args[1], realType);
+    if (!lhs || !rhs)
+      return {};
+    return moore::PowRealOp::create(builder, loc, lhs, rhs);
+  }
+
   //===--------------------------------------------------------------------===//
   // Type Conversion System Functions
   //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::Itor) {
+    assert(numArgs == 1 && "`$itor` takes 1 argument");
+    auto realType = moore::RealType::get(getContext(), moore::RealWidth::f64);
+    return convertRvalueExpression(*args[0], realType);
+  }
+
+  if (nameId == ksn::Rtoi) {
+    assert(numArgs == 1 && "`$rtoi` takes 1 argument");
+    auto intType = moore::IntType::get(getContext(), 32, Domain::TwoValued);
+    return convertRvalueExpression(*args[0], intType);
+  }
 
   if (nameId == ksn::Signed || nameId == ksn::Unsigned) {
     // Slang already checks the arity of `$signed`/`$unsigned`.
