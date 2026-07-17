@@ -7120,11 +7120,13 @@ void SharedEmitterState::gatherFiles(bool separateModules) {
   auto collectInstanceSymbolsAndBinds = [&](Operation *moduleOp) {
     moduleOp->walk([&](Operation *op) {
       // Populate the symbolCache with all operations that can define a symbol.
+      // Register every property, including per-field inner symbols.
       if (auto name = op->getAttrOfType<InnerSymAttr>(
               hw::InnerSymbolTable::getInnerSymbolAttrName()))
-        symbolCache.addDefinition(
-            cast<mlir::SymbolOpInterface>(moduleOp).getNameAttr(),
-            name.getSymName(), op);
+        for (auto prop : name)
+          symbolCache.addDefinition(
+              cast<mlir::SymbolOpInterface>(moduleOp).getNameAttr(),
+              prop.getName(), op);
       if (isa<BindOp>(op))
         modulesContainingBinds.insert(moduleOp);
     });
