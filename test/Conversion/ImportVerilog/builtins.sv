@@ -292,10 +292,11 @@ endfunction
 
 // IEEE 1800-2017 § 20.8 "Math functions"
 // CHECK-LABEL: func.func private @MathBuiltins(
-// CHECK-SAME: [[X:%.+]]: !moore.i32
-// CHECK-SAME: [[Y:%.+]]: !moore.l42
-// CHECK-SAME: [[R:%.+]]: !moore.f64
-function void MathBuiltins(int x, logic [41:0] y, real r);
+// CHECK-SAME: [[X:%.+]]: !moore.i32,
+// CHECK-SAME: [[Y:%.+]]: !moore.l42,
+// CHECK-SAME: [[R:%.+]]: !moore.f64,
+// CHECK-SAME: [[S:%.+]]: !moore.f64
+function void MathBuiltins(int x, logic [41:0] y, real r, real s);
   // CHECK: moore.builtin.clog2 [[X]] : i32
   dummyA($clog2(x));
   // CHECK: moore.builtin.clog2 [[Y]] : l42
@@ -337,6 +338,12 @@ function void MathBuiltins(int x, logic [41:0] y, real r);
   dummyB($acosh(r));
   // CHECK:  moore.builtin.atanh [[R]] : f64
   dummyB($atanh(r));
+  // CHECK: moore.fpow [[R]], [[S]] : f64
+  dummyB($pow(r, s));
+  // CHECK: moore.sint_to_real [[X]] : i32 -> f64
+  dummyB($itor(x));
+  // CHECK: moore.real_to_int [[R]] : f64 -> i32
+  dummyA($rtoi(r));
 
 endfunction
 
