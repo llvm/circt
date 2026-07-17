@@ -26,6 +26,7 @@
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Iterators.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
@@ -98,16 +99,7 @@ static bool isHardware(Type type) {
 }
 
 /// True if the given value could be association with a domain.
-static bool isHardware(Value value) {
-  if (!isHardware(value.getType()))
-    return false;
-
-  if (auto *op = value.getDefiningOp())
-    if (op->hasTrait<OpTrait::ConstantLike>())
-      return false;
-
-  return true;
-}
+static bool isHardware(Value value) { return isHardware(value.getType()); }
 
 //====--------------------------------------------------------------------------
 // Global State.
@@ -345,6 +337,14 @@ public:
   Term *getDomainAssociation(Value value);
   void setDomainAssociation(Value value, Term *term);
 
+  /// True if the value is "colorless": it is only driven by nodes or primops
+  /// whose inputs all terminate in constants, and therefore is not tied to any
+  /// domain. A colorless value imposes and inherits no domain constraints and
+  /// may be freely consumed by a value in any domain. All ports and wires are
+  /// treated as colored. Computed structurally over the SSA graph, memoized per
+  /// module.
+  bool isColorless(Value value);
+
   void processDomainDefinition(DomainValue domain);
   RowTerm *getDomainAssociationAsRow(Value value);
 
@@ -447,6 +447,8 @@ private:
   CircuitState &globals;
   DenseMap<Value, Term *> termTable;
   DenseMap<Value, Term *> associationTable;
+  /// Memoization for `isColorless`. Absent = not computed; present = result.
+  DenseMap<Value, bool> colorlessTable;
   llvm::BumpPtrAllocator allocator;
 };
 } // namespace
@@ -723,6 +725,167 @@ void ModuleState::setDomainAssociation(Value value, Term *term) {
     llvm::dbgs().indent(6) << "set domains(" << render(value)
                            << ") := " << render(term) << "\n";
   });
+}
+
+bool ModuleState::isColorless(Value value) {
+  // Non-hardware values (domains, properties, indices, ...) never participate
+  // in coloring, so treat them as colorless: they impose no constraint.
+  if (!isHardware(value))
+    return true;
+
+  // Consult the memo table.  A value is visited (expanded) at most once.
+  if (auto it = colorlessTable.find(value); it != colorlessTable.end())
+    return it->second;
+
+  // Classify a single value structurally, without recursing.  A "look-through"
+  // value (a node or a pure primop) is colorless iff all of its hardware
+  // operands are colorless; its hardware operands are collected into
+  // `operands`.  Everything else is either a colorless constant root or a
+  // colored leaf.  In particular, all ports (block arguments, instance
+  // results) and wires are colored and must be assigned a domain.
+  enum class Kind { Colorless, Colored, LookThrough };
+  auto classify = [&](Value v, SmallVectorImpl<Value> &operands) -> Kind {
+    if (!isHardware(v))
+      return Kind::Colorless;
+
+    auto *op = v.getDefiningOp();
+    // Block arguments (ports) have no defining op and are always colored.
+    if (!op)
+      return Kind::Colored;
+
+    // Constants are the only colorless roots.
+    if (op->hasTrait<OpTrait::ConstantLike>())
+      return Kind::Colorless;
+
+    // A node forwards its single input.
+    if (auto node = dyn_cast<NodeOp>(op)) {
+      operands.push_back(node.getInput());
+      return Kind::LookThrough;
+    }
+
+    // An unsafe domain cast with explicit domain operands is an explicit
+    // coloring point and is always colored.  A cast with no domain operands is
+    // a pure forwarding cast that inherits colorlessness from its input.
+    if (auto castOp = dyn_cast<UnsafeDomainCastOp>(op)) {
+      if (!castOp.getDomains().empty())
+        return Kind::Colored;
+      operands.push_back(castOp.getInput());
+      return Kind::LookThrough;
+    }
+
+    // Pure, memory-effect-free expression ops (prim ops, muxes, casts,
+    // aggregate projections) fan out to their hardware-typed operands.  For
+    // the ops that are eligible to propagate colorlessness (arithmetic and
+    // bitwise prim ops, muxes, casts, aggregate projections) every SSA operand
+    // is hardware-typed; scalar indices and amounts are attributes, not
+    // operands.  A non-hardware SSA operand (a property, domain, or other
+    // opaque value, e.g. a `verbatim.expr` substitution) therefore only
+    // appears on ops that reference external state, which are colored.  An
+    // expression with no hardware operands is likewise a non-constant root
+    // (e.g. an `xmr.ref`) and is colored.
+    if (isExpression(op) && mlir::isMemoryEffectFree(op)) {
+      if (op->getNumOperands() == 0)
+        return Kind::Colored;
+      for (auto operand : op->getOperands())
+        if (!isHardware(operand))
+          return Kind::Colored;
+      operands.assign(op->operand_begin(), op->operand_end());
+      return Kind::LookThrough;
+    }
+
+    // Everything else (wires, instance results, registers, memories, explicit
+    // domain casts, invalid values, probes, ...) is a colored leaf.
+    return Kind::Colored;
+  };
+
+  // Iterative post-order DFS.  Each frame tracks a look-through value (a value
+  // whose colorlessness is not yet known) and requires exploring its operands.
+  // This then tracks the operands that should be explored and the index of the
+  // _next_ operand to visit.  A value's colorlessness is the conjunction of its
+  // operands' colorlessness.  As soon as a colored operand is found the frame
+  // short-circuits to colored.  Since look-through values (constants, nodes,
+  // primops) reference only dominating SSA operands, the explored subgraph is
+  // acyclic (combinational loops only close through wires, which are colored
+  // leaves).
+  //
+  // Note: this DFS is _not_ sufficient to determine colorlessness through
+  // nodes.  It is assumed that a post-condition of this pass is that all wires
+  // are assigned domains.
+  struct Frame {
+    // The lookthrough value.
+    Value value;
+    // The operands to explore.
+    SmallVector<Value, 4> operands;
+    // The operand of the next operand to explored.
+    unsigned index = 0;
+  };
+  SmallVector<Frame> stack;
+
+  // Push the first value onto the stack (or exit).
+  {
+    SmallVector<Value, 4> operands;
+    switch (classify(value, operands)) {
+    case Kind::Colored:
+      return colorlessTable[value] = false;
+    case Kind::Colorless:
+      return colorlessTable[value] = true;
+    case Kind::LookThrough:
+      stack.push_back({value, std::move(operands)});
+      break;
+    }
+  }
+
+  // Run the DFS.
+  while (!stack.empty()) {
+    auto &frame = stack.back();
+    bool colored = false, pushed = false;
+
+    while (frame.index < frame.operands.size()) {
+      Value child = frame.operands[frame.index];
+
+      // If already resolved, short-circuit on a colored operand or advance.
+      if (auto it = colorlessTable.find(child); it != colorlessTable.end()) {
+        if (!it->second) {
+          colored = true;
+          break;
+        }
+        ++frame.index;
+        continue;
+      }
+
+      // Classify the operand.  Classify if not lookthrough.  Otherwise, push
+      // the lookthrough operand onto the stack and break so that we descend
+      // into it.
+      SmallVector<Value, 4> childOperands;
+      switch (classify(child, childOperands)) {
+      case Kind::Colored:
+        colorlessTable[child] = false;
+        colored = true;
+        break;
+      case Kind::Colorless:
+        colorlessTable[child] = true;
+        ++frame.index;
+        continue;
+      case Kind::LookThrough:
+        stack.push_back({child, std::move(childOperands)});
+        pushed = true;
+        break;
+      }
+      break;
+    }
+
+    // We hit a lookthrough operand.  Dexcend into this.  We will revist the
+    // current frame.index once we have an answer for that operand.
+    if (pushed)
+      continue;
+
+    // All operands resolved (or a colored operand short-circuited).  Record the
+    // result and pop this frame.
+    colorlessTable[frame.value] = !colored;
+    stack.pop_back();
+  }
+
+  return colorlessTable[value];
 }
 
 void ModuleState::processDomainDefinition(DomainValue domain) {
@@ -1020,6 +1183,11 @@ LogicalResult ModuleState::unifyAssociations(Operation *op, Value lhs,
   if (!isHardware(lhs) || !isHardware(rhs))
     return success();
 
+  // Colorless values impose and receive no association: colorless is below
+  // every color in the lattice.
+  if (isColorless(lhs) || isColorless(rhs))
+    return success();
+
   LLVM_DEBUG({
     llvm::dbgs().indent(6) << "unify domains(" << render(lhs) << ") = domains("
                            << render(rhs) << ")\n";
@@ -1055,7 +1223,7 @@ template <typename T>
 LogicalResult ModuleState::unifyAssociations(Operation *op, T &&range) {
   Value lhs;
   for (auto rhs : std::forward<T>(range)) {
-    if (!isHardware(rhs))
+    if (!isHardware(rhs) || isColorless(rhs))
       continue;
     if (failed(unifyAssociations(op, lhs, rhs)))
       return failure();
@@ -1209,7 +1377,7 @@ LogicalResult ModuleState::processOp(UnsafeDomainCastOp op) {
   auto input = op.getInput();
 
   SmallVector<Term *> elements(getNumDomains());
-  if (isHardware(input)) {
+  if (isHardware(input) && !isColorless(input)) {
     auto *inputRow = getDomainAssociationAsRow(input);
     elements.assign(inputRow->elements);
   }
@@ -1696,7 +1864,7 @@ ModuleState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
     llvm_unreachable("unhandled domain term type");
   }
 
-  if (!isHardware(result))
+  if (!isHardware(result) || isColorless(result))
     return success();
 
   LLVM_DEBUG(llvm::dbgs().indent(4) << "update " << render(wireOp) << "\n");
