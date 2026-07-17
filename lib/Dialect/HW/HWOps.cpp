@@ -2480,6 +2480,34 @@ OpFoldResult StructExtractOp::fold(FoldAdaptor adaptor) {
   if (auto foldResult =
           foldStructExtract(getInput().getDefiningOp(), getFieldIndex()))
     return foldResult;
+
+  // struct_extract(bitcast(c), "field") -> slice of c. The first field
+  // occupies the most significant bits, so the field's offset from the LSB is
+  // the total width minus the widths of all fields up to and including it.
+  if (auto bitcast = getInput().getDefiningOp<hw::BitcastOp>()) {
+    auto intTy = dyn_cast<IntegerType>(getType());
+    if (!intTy)
+      return {};
+    auto bitcastInputOp = bitcast.getInput().getDefiningOp<hw::ConstantOp>();
+    if (!bitcastInputOp)
+      return {};
+    auto bitcastInputCst = bitcastInputOp.getValue();
+    // Bitcast only verifies when its operand and result have identical known
+    // bit widths, so the integer constant is exactly as wide as the struct.
+    auto structType = type_cast<StructType>(getInput().getType());
+    uint64_t startIdx = bitcastInputCst.getBitWidth();
+    for (const auto &field :
+         structType.getElements().take_front(getFieldIndex() + 1)) {
+      int64_t fieldWidth = getBitWidth(field.type);
+      if (fieldWidth < 0)
+        return {};
+      startIdx -= fieldWidth;
+    }
+    // Extract [startIdx + width - 1 : startIdx].
+    return IntegerAttr::get(intTy, bitcastInputCst.lshr(startIdx).trunc(
+                                       intTy.getIntOrFloatBitWidth()));
+  }
+
   return {};
 }
 
