@@ -86,6 +86,31 @@ struct InlineCallsPass
 };
 } // namespace
 
+/// Check whether the given function transitively contains an operation that
+/// suspends execution. Calls to such functions must be inlined into their
+/// enclosing process and cannot remain as calls.
+static bool suspendsExecution(func::FuncOp funcOp,
+                              const SymbolTable &symbolTable,
+                              SmallPtrSetImpl<Operation *> &visited) {
+  if (!visited.insert(funcOp).second)
+    return false;
+  return funcOp
+      .walk([&](Operation *op) {
+        // Coroutine calls suspend the caller until the coroutine returns.
+        // Waits and halts cannot currently appear in functions directly, but
+        // check for them defensively.
+        if (isa<WaitOp, HaltOp, CallCoroutineOp>(op))
+          return WalkResult::interrupt();
+        if (auto callOp = dyn_cast<func::CallOp>(op))
+          if (auto calledOp = dyn_cast_or_null<func::FuncOp>(
+                  symbolTable.lookup(callOp.getCalleeAttr().getAttr())))
+            if (suspendsExecution(calledOp, symbolTable, visited))
+              return WalkResult::interrupt();
+        return WalkResult::advance();
+      })
+      .wasInterrupted();
+}
+
 void InlineCallsPass::runOnOperation() {
   auto &symbolTable = getAnalysis<SymbolTable>();
   if (failed(failableParallelForEach(
@@ -147,10 +172,23 @@ LogicalResult InlineCallsPass::runOnRegion(Region &region,
       if (funcOp.isDeclaration())
         continue;
 
-      // Ensure that we are not recursively inlining a function, which would
-      // just expand infinitely in the IR.
-      if (!callStack.insert(funcOp))
-        return callOp.emitError("recursive function call cannot be inlined");
+      // Recursively inlining a function would just expand infinitely in the
+      // IR. If the function never suspends execution it can remain a regular
+      // function call; leave it in place. Recursive calls that reach a
+      // suspending op must be fully inlined and remain an error.
+      if (!callStack.insert(funcOp)) {
+        SmallPtrSet<Operation *, 4> visited;
+        if (suspendsExecution(funcOp, symbolTable, visited)) {
+          auto d =
+              callOp.emitError("recursive function call cannot be inlined");
+          d.attachNote(funcOp.getLoc())
+              << "call target suspends execution and must be inlined";
+          return failure();
+        }
+        LLVM_DEBUG(llvm::dbgs() << "- Leaving recursive call un-inlined: "
+                                << callOp << "\n");
+        continue;
+      }
       inlineEndMarkers.push_back({op.getNextNode(), funcOp});
 
       // Inline the function body and remember the call for later removal. The

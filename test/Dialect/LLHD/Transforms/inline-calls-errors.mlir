@@ -11,19 +11,20 @@ func.func @foo() {
 
 // -----
 
-hw.module @RecursiveCalls() {
-  llhd.combinational {
+hw.module @RecursiveSuspendingCalls() {
+  llhd.process {
     func.call @foo() : () -> ()
-    llhd.yield
+    llhd.halt
   }
 }
 
-func.func @foo() {
-  call @bar() : () -> ()
-  return
+llhd.coroutine @tick() {
+  llhd.return
 }
 
-func.func @bar() {
+// expected-note @below {{call target suspends execution and must be inlined}}
+func.func @foo() {
+  llhd.call_coroutine @tick() : () -> ()
   // expected-error @below {{recursive function call cannot be inlined}}
   call @foo() : () -> ()
   return
