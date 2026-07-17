@@ -422,13 +422,13 @@ circuit Top11 : %[[
   ; CHECK: firrtl.module private @A(
   module A :
     input x: UInt<1>
-    output y: UInt<1>
+    output y: UInt<3>
     ; CHECK: firrtl.node {{.+}} {annotations = [{circt.nonlocal = @[[nlaSym1]], class = "circt.test", data = "hello"}, {circt.nonlocal = @[[nlaSym2]], class = "circt.test", data = "hello"}]}
     node a = add(x, UInt(1))
     connect y, add(a, a)
   module A_ :
     input x: UInt<1>
-    output y: UInt<1>
+    output y: UInt<3>
     node b = add(x, UInt(1))
     connect y, add(b, b)
 
