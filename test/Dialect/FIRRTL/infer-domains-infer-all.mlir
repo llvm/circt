@@ -872,6 +872,25 @@ firrtl.circuit "ConstCastPreservesColorless" {
   }
 }
 
+// A domainless unsafe_domain_cast (a pure forwarding cast) preserves the
+// colorlessness of its input, so a constant cast through it may still be used
+// in two different domains.
+// CHECK-LABEL: firrtl.circuit "ForwardingCastPreservesColorless"
+firrtl.circuit "ForwardingCastPreservesColorless" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ForwardingCastPreservesColorless(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.unsafe_domain_cast %c1_ui1 domains[] : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
+  }
+}
+
 // specialconstant (e.g. a clock/reset constant) is a colorless root.
 // CHECK-LABEL: firrtl.circuit "SpecialConstantColorless"
 firrtl.circuit "SpecialConstantColorless" {
