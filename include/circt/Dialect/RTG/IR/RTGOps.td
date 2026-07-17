@@ -288,6 +288,21 @@ def StringToLabelOp : RTGOp<"string_to_label", [Pure]> {
   let hasFolder = 1;
 }
 
+def StringToASCIIArrayOp : RTGOp<"string_to_ascii_array", [Pure]> {
+  let summary = "converts a string to an array of 8-bit ASCII immediates";
+  let description = [{
+    This operation decomposes a string into an array of 8-bit immediates, one
+    per byte, in the same order as the string. No NULL terminator is appended.
+  }];
+
+  let arguments = (ins StringType:$string);
+  let results = (outs ArrayTypeOf<I8>:$result);
+
+  let assemblyFormat = "$string `:` qualified(type($result)) attr-dict";
+
+  let hasCanonicalizeMethod = 1;
+}
+
 def LabelVisibilityAttr : I32EnumAttr<"LabelVisibility",
                                       "visibility specifiers for labels", [
   I32EnumAttrCase<"local",  0>,

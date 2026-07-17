@@ -8,7 +8,10 @@ from .base import ir
 from .core import Value, Type
 from .rtg import rtg
 
-from typing import Union
+from typing import Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+  from .arrays import Array
 
 
 class String(Value):
@@ -68,6 +71,14 @@ class String(Value):
       result.append(convert_to_string(arg))
 
     return rtg.StringConcatOp(result)
+
+  def to_ascii_array(self) -> Array:
+    """
+    Decomposes this string into an array of 8-bit ASCII immediates, one per
+    byte.
+    """
+
+    return rtg.StringToASCIIArrayOp(self)
 
   def get_type(self) -> Type:
     return StringType()
