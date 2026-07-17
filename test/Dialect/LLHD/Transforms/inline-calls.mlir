@@ -68,3 +68,30 @@ func.func private @bar_wrapper(%arg0: i42) -> i42 {
   %0 = call @bar(%arg0) : (i42) -> i42
   return %0 : i42
 }
+
+// Inlining a multi-block function with an `ub.unreachable` terminator must not
+// crash and must keep the terminator in place.
+// CHECK-LABEL: @Unreachable
+hw.module @Unreachable(in %a: i1, out u: i42) {
+  // CHECK: llhd.combinational
+  %0 = llhd.combinational -> i42 {
+    // CHECK-NOT: call @maybeUnreachable
+    %1 = func.call @maybeUnreachable(%a) : (i1) -> i42
+    // CHECK:      cf.cond_br %a, [[BB1:\^.+]], [[BB2:\^.+]]
+    // CHECK-NEXT: [[BB1]]:
+    // CHECK-NEXT:   ub.unreachable
+    // CHECK-NEXT: [[BB2]]:
+    llhd.yield %1 : i42
+  }
+  hw.output %0 : i42
+}
+
+// CHECK-DCE-NOT: @maybeUnreachable
+func.func private @maybeUnreachable(%arg0: i1) -> i42 {
+  cf.cond_br %arg0, ^bb1, ^bb2
+^bb1:
+  ub.unreachable
+^bb2:
+  %0 = hw.constant 42 : i42
+  return %0 : i42
+}

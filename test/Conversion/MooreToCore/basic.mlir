@@ -1433,9 +1433,15 @@ func.func @Time(%arg0: !moore.time) -> (!moore.time, !moore.time) {
 moore.module @Unreachable() {
   // CHECK: llhd.process
   moore.procedure initial {
-    // CHECK-NEXT: llhd.halt
+    // CHECK-NEXT: ub.unreachable
     moore.unreachable
   }
+}
+
+// CHECK-LABEL: @UnreachableInFunction
+func.func @UnreachableInFunction() {
+  // CHECK-NEXT: ub.unreachable
+  moore.unreachable
 }
 
 // CHECK-LABEL: @SimulationControl

@@ -27,6 +27,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/Iterators.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -924,10 +925,10 @@ static LogicalResult convert(WaitDelayOp op, WaitDelayOp::Adaptor adaptor,
   return success();
 }
 
-// moore.unreachable -> llhd.halt
+// moore.unreachable -> ub.unreachable
 static LogicalResult convert(UnreachableOp op, UnreachableOp::Adaptor adaptor,
                              ConversionPatternRewriter &rewriter) {
-  rewriter.replaceOpWithNewOp<llhd::HaltOp>(op, ValueRange{});
+  rewriter.replaceOpWithNewOp<ub::UnreachableOp>(op);
   return success();
 }
 
@@ -3540,6 +3541,7 @@ static void populateLegality(ConversionTarget &target,
   target.addLegalDialect<mlir::math::MathDialect>();
   target.addLegalDialect<sim::SimDialect>();
   target.addLegalDialect<mlir::LLVM::LLVMDialect>();
+  target.addLegalDialect<mlir::ub::UBDialect>();
   target.addLegalDialect<verif::VerifDialect>();
   target.addLegalDialect<arith::ArithDialect>();
 

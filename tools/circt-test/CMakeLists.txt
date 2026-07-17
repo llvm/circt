@@ -17,6 +17,7 @@ set(libs
   MLIRLLVMDialect
   MLIRSCFDialect
   MLIRSMT
+  MLIRUBDialect
 
   MLIRBytecodeReader
   MLIRIR
