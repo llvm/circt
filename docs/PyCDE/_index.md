@@ -8,8 +8,7 @@ vast majority of the work is done by CIRCT.
 ## Installation
 
 Because PyCDE is rapidly evolving, we recommend always using the latest
-pre-release. New packages are posted nightly if there have been updates (and so
-long as the build and CI are working).
+pre-release. New packages are posted with PyCDE releases.
 
 ```
 pip install pycde --pre

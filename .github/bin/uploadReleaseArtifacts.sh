@@ -4,14 +4,14 @@ set -eo pipefail
 
 usage() {
   cat << EOF
-USAGE: $0 -o <os> -e <github-event> -b <build-type> [-t -a]
+USAGE: $0 -o <os> -e <github-event> -b <build-type> [-t -u -a]
 
 Generate a JSON payload to drive unifiedBuildAndTest* scripts.
 
 OPTIONS:
     -a                    Enable assertions
     -b                    The CMAKE build type: [release, relwithdebinfo, debug]
-    -e                    GitHub event name: [workflow_dispatch, schedule]
+    -e                    GitHub event name: [release, workflow_dispatch]
     -h                    Display available options
     -o                    OS to target: [linux, macos, windows]
     -t                    Run tests
@@ -47,11 +47,11 @@ while getopts "ab:e:ho:tu" option; do
       ;;
     e)
       case "$OPTARG" in
-        "release" | "schedule" | "workflow_dispatch")
+        "release" | "workflow_dispatch")
           OPT_GITHUB_EVENT_NAME=$OPTARG
           ;;
         *)
-          echo "unsupported GitHub event '$OPTARG', must be one of ['release', 'schedule', 'workflow_dispatch']"
+          echo "unsupported GitHub event '$OPTARG', must be one of ['release', 'workflow_dispatch']"
           exit 1
           ;;
       esac
@@ -98,20 +98,14 @@ fi
 
 # Certain GitHub events have pre-programmed options.  For "release", these are
 # the settings used for the artifacts we will publish and intend for every
-# downstream project to use.  For "schedule", these artifacts will be used by
-# nightly testing.  For "workflow_dispatch", everything is in the user's
-# control and _not_ defaults are set.
+# downstream project to use. For "workflow_dispatch", everything is in the
+# user's control and no defaults are set.
 case "$OPT_GITHUB_EVENT_NAME" in
   "release")
     OPT_ASSERTIONS=OFF
     OPT_CMAKE_BUILD_TYPE=release
     OPT_OS=("linux" "macos" "windows")
     OPT_RUN_TESTS=true
-    ;;
-  "schedule")
-    OPT_ASSERTIONS=ON
-    OPT_CMAKE_BUILD_TYPE=release
-    OPT_OS=("linux")
     ;;
   "workflow_dispatch")
     ;;

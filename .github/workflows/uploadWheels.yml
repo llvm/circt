@@ -102,8 +102,6 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_BUILD_FRONTEND: build
           CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=14.0
-          CIBW_BEFORE_ALL_LINUX: dnf install -y lld
-          CIBW_ENVIRONMENT_LINUX: CIRCT_PARALLEL_LINK_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=3
           SETUPTOOLS_SCM_DEBUG: True
 
       - name: Upload (stage) wheels as artifacts
@@ -117,7 +115,7 @@ jobs:
   push_wheels:
     name: Push wheels
     runs-on: ubuntu-22.04
-    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || github.event_name == 'schedule' || ((github.event_name == 'workflow_dispatch') && inputs.upload-to-pypi))
+    if: github.repository == 'llvm/circt' && (github.ref_type == 'tag' || ((github.event_name == 'workflow_dispatch') && inputs.upload-to-pypi))
     needs: build_wheels
     environment:
       name: pypi

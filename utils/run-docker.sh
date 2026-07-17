@@ -7,8 +7,8 @@
 #
 ##===----------------------------------------------------------------------===##
 #
-# Make it easier to run tests in a clean testing environment (the same as the
-# nightly tests) to tease out implicit dependencies on your local environment.
+# Make it easier to run tests in the clean integration CI environment to tease
+# out implicit dependencies on your local environment.
 #
 # Assumes that you've got a working docker set up which your user is authorized
 # to invoke. If you lack this, follow these guides:
