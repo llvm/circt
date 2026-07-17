@@ -291,10 +291,18 @@ struct ExprVisitor {
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
              moore::QueueType, moore::AssocArrayType, moore::StringType,
-             moore::OpenUnpackedArrayType>(derefType)) {
+             moore::OpenUnpackedArrayType, moore::StructType, moore::UnionType>(
+            derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
+    }
+
+    if (!isLvalue && isa<moore::StructType, moore::UnionType>(derefType)) {
+      value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
+      derefType = value.getType();
     }
 
     // Associative Arrays are a special case so handle them separately.
@@ -439,6 +447,12 @@ struct ExprVisitor {
     if (isa<moore::QueueType>(derefType)) {
       return handleQueueRangeSelectExpressions(expr, type, value);
     }
+    if (!isLvalue && isa<moore::StructType, moore::UnionType>(derefType)) {
+      value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
+    }
+
     return handleArrayRangeSelectExpressions(expr, type, value);
   }
 
