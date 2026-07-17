@@ -158,21 +158,14 @@ void MMIOServiceDeclOp::getPortList(SmallVectorImpl<ServicePortInfo> &ports) {
 
 ServicePortInfo HostMemServiceDeclOp::writePortInfo() {
   auto *ctxt = getContext();
-  auto addressType =
-      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
 
-  // Write port
-  hw::StructType writeType = hw::StructType::get(
-      ctxt,
-      {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), addressType},
-       hw::StructType::FieldInfo{
-           StringAttr::get(ctxt, "tag"),
-           IntegerType::get(ctxt, 8,
-                            IntegerType::SignednessSemantics::Unsigned)},
-       hw::StructType::FieldInfo{StringAttr::get(ctxt, "data"),
-                                 AnyType::get(ctxt)}});
+  // Unified write port. The request is 'AnyType' so a single connection can be
+  // either a single-message write (struct{address, tag, data}) or a burst/list
+  // write (a window over struct{address, tag, data: list}, framed at the engine
+  // width); the concrete request type is supplied per-connection. Responds with
+  // an 'ackTag' per written element.
   return createReqResp(
-      getSymNameAttr(), "write", "req", writeType, "ackTag",
+      getSymNameAttr(), "write", "req", AnyType::get(ctxt), "ackTag",
       IntegerType::get(ctxt, 8, IntegerType::SignednessSemantics::Unsigned));
 }
 
@@ -181,6 +174,8 @@ ServicePortInfo HostMemServiceDeclOp::readPortInfo() {
   auto addressType =
       IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
 
+  // Single-message read: request struct{address, tag}, response struct{tag,
+  // data}. The client supplies the concrete 'data' type per-connection.
   hw::StructType readReqType = hw::StructType::get(
       ctxt, {
                 hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"),
@@ -203,10 +198,31 @@ ServicePortInfo HostMemServiceDeclOp::readPortInfo() {
                        readRespType);
 }
 
+ServicePortInfo HostMemServiceDeclOp::readListPortInfo() {
+  auto *ctxt = getContext();
+  auto ui64 =
+      IntegerType::get(ctxt, 64, IntegerType::SignednessSemantics::Unsigned);
+  auto ui8 =
+      IntegerType::get(ctxt, 8, IntegerType::SignednessSemantics::Unsigned);
+
+  // Burst (list) read: read 'length' list items starting at 'address' and
+  // return them as a list. To receive the list, the client requests a
+  // *windowed channel* for the response (a window over the returned list,
+  // framed at the engine width), so the concrete response type is supplied
+  // per-connection -- hence 'AnyType' for 'resp'.
+  hw::StructType readReqType = hw::StructType::get(
+      ctxt, {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), ui64},
+             hw::StructType::FieldInfo{StringAttr::get(ctxt, "tag"), ui8},
+             hw::StructType::FieldInfo{StringAttr::get(ctxt, "length"), ui64}});
+  return createReqResp(getSymNameAttr(), "read_list", "req", readReqType,
+                       "resp", AnyType::get(ctxt));
+}
+
 void HostMemServiceDeclOp::getPortList(
     SmallVectorImpl<ServicePortInfo> &ports) {
   ports.push_back(writePortInfo());
   ports.push_back(readPortInfo());
+  ports.push_back(readListPortInfo());
 }
 
 void TelemetryServiceDeclOp::getPortList(

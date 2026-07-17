@@ -532,11 +532,15 @@ def WindowFieldType : ESI_Type<"WindowField"> {
     For lists, there are two possible encodings:
       - Parallel (default): a 'last' field to the struct to indicate that the
       end of the list is this frame.  If 'numItems' is specified for a list, a
-      '<fieldName>_size' (representing the number of valid items in the array)
-      field will be added to the struct.  When `<fieldName>_size` is less than
-      'numItems', `last` MUST be true meaning that all frames must be full
-      except for the last one. This format matches typical on-chip hardware
-      streaming interfaces but is terribly inefficient for serial links.
+      '<fieldName>_size' field will be added to the struct representing the
+      number of valid items in this frame, encoded as `(number of valid items -
+      1)`.  The number of valid items is always at least one, so a full frame
+      has `<fieldName>_size` == 'numItems' - 1 and the field is only
+      clog2('numItems') bits wide.  When `<fieldName>_size` is less than
+      'numItems' - 1 (i.e. the frame is not full), `last` MUST be true, meaning
+      that all frames must be full except for the last one. This format matches
+      typical on-chip hardware streaming interfaces but is terribly inefficient
+      for serial links.
       - Serial (bulk transfer): in this encoding, there must be a 'header' frame
       immediately preceding the frame which contains the list field. That frame
       must include a special 'count' field which indicates how many items of the

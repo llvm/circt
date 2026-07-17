@@ -148,6 +148,7 @@ def HostMemServiceDeclOp: ESI_Op<"service.std.hostmem",
   let extraClassDeclaration = [{
     ServicePortInfo readPortInfo();
     ServicePortInfo writePortInfo();
+    ServicePortInfo readListPortInfo();
     std::optional<StringRef> getTypeName() { return "esi.service.std.hostmem"; }
   }];
 }

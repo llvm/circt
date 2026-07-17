@@ -575,6 +575,10 @@ def AddressCommand(width: int):
     # Channel which indicates when the read/write operation is done.
     hostmem_cmd_done = InputChannel(Bits(0))
 
+    # Single burst {address, tag, length} request, issued once per command for
+    # read_list / windowed clients. Held valid until accepted.
+    burst_req = OutputChannel(esi.HostMem.ReadReqBurstType)
+
     @generator
     def construct(ports):
       # MMIO command channel setup.
@@ -665,7 +669,29 @@ def AddressCommand(width: int):
                                       ChannelSignaling.ValidReady).wrap(
                                           current_addr, addr_valid)
       issue_xact = addr_valid & addr_ready
-      issue_incr.assign(issue_xact)
+
+      # Burst request: a single {address, tag, length} emitted once per command
+      # (for read_list / windowed clients), held valid until accepted. Its
+      # acceptance counts as one issued command.
+      burst_accepted = Wire(Bits(1))
+      burst_pending = ControlReg(
+          clk=ports.clk,
+          rst=ports.rst,
+          asserts=[start_op_we],
+          resets=[burst_accepted],
+          name="burst_pending",
+      )
+      burst_req_chan, burst_req_ready = Channel(
+          esi.HostMem.ReadReqBurstType).wrap(
+              esi.HostMem.ReadReqBurstType({
+                  "address": start_addr,
+                  "tag": UInt(8)(0),
+                  "length": flits_total,
+              }), burst_pending)
+      burst_accepted.assign((burst_pending & burst_req_ready).as_bits())
+      ports.burst_req = burst_req_chan
+
+      issue_incr.assign((issue_xact | burst_accepted).as_bits())
 
       # Consume hostmem_cmd_done (Bits(0) channel) for completed responses.
       _, done_valid = ports.hostmem_cmd_done.unwrap(Bits(1)(1))
@@ -768,21 +794,26 @@ def ReadMem(width: int):
           hostmem_cmd_done=address_cmd_resp,
           instance_name="address_command",
       )
+      # This burst read uses the single-shot burst request, not the per-flit
+      # address stream; hold that stream un-ready so it stays idle.
+      addresses.hostmem_cmd_address.unwrap(Bits(1)(0))
 
-      read_cmd_chan = addresses.hostmem_cmd_address.transform(
-          lambda addr: esi.HostMem.ReadReqType({
-              "tag": UInt(8)(0),
-              "address": addr
-          }))
-      read_responses = esi.HostMem.read(
+      # Burst read: issue ONE read_list request per command and receive the
+      # flits back as a windowed list (num_items=1 -> one element per frame,
+      # with a per-frame 'last').
+      read_responses = esi.HostMem.read_list(
           appid=AppID("host"),
-          data_type=Bits(width),
-          req=read_cmd_chan,
+          req=addresses.burst_req,
+          element_type=Bits(width),
+          num_items=1,
       )
-      # Signal completion to AddressCommand (each response -> Bits(0)).
+      # Signal completion to AddressCommand (each list element -> Bits(0)).
       address_cmd_resp.assign(read_responses.transform(lambda resp: Bits(0)(0)))
-      # Snoop the response channel to capture the low 64 bits without consuming it.
+      # Snoop the response channel to capture the low 64 bits without consuming
+      # it. The response is a windowed list frame; unwrap it to the lowered
+      # struct {tag, data, last} to read the element.
       read_resp_valid, _, read_resp_data = read_responses.snoop()
+      read_resp_frame = read_resp_data.unwrap()
       last_read_lsb = Reg(
           UInt(64),
           clk=ports.clk,
@@ -791,7 +822,7 @@ def ReadMem(width: int):
           ce=read_resp_valid,
           name="last_read_lsb",
       )
-      last_read_lsb.assign(read_resp_data.data.as_uint(64))
+      last_read_lsb.assign(read_resp_frame["data"][0].as_uint(64))
       esi.Telemetry.report_signal(
           ports.clk,
           ports.rst,
@@ -849,14 +880,10 @@ def WriteMem(width: int) -> Type[Module]:
       clk = ports.clk
       rst = ports.rst
 
-      cycle_counter_reset = Wire(Bits(1))
-      cycle_counter = Counter(32)(
-          clk=clk,
-          rst=rst,
-          clear=Bits(1)(0),
-          increment=Bits(1)(1),
-      )
-
+      # MMIO + burst control via AddressCommand (base address, flit count,
+      # start). We use its single-shot {base, tag, length} burst request and
+      # completion tracking; the per-flit address stream is replaced by a single
+      # windowed (list) write, so that stream is left idle.
       address_cmd_resp = Wire(Channel(Bits(0)))
       addresses = AddressCommand(width)(
           clk=clk,
@@ -864,20 +891,62 @@ def WriteMem(width: int) -> Type[Module]:
           hostmem_cmd_done=address_cmd_resp,
           instance_name="address_command",
       )
-      cycle_counter_reset.assign(addresses.command_go)
+      addresses.hostmem_cmd_address.unwrap(Bits(1)(0))
 
-      write_cmd_chan = addresses.hostmem_cmd_address.transform(
-          lambda addr: esi.HostMem.write_req_channel_type(UInt(width))({
-              "tag": UInt(8)(0),
-              "address": addr,
-              "data": cycle_counter.out.as_uint(width),
-          }))
+      # Windowed (list) write: consume the single {base, tag, length} burst
+      # request and stream 'length' list elements written to sequential
+      # addresses (num_items=1 -> one element per frame, 'last' on the final).
+      write_win = esi.HostMem.write_window(Bits(width), 1)
+      lowered = write_win.lowered_type
+
+      streaming = Wire(Bits(1))
+      frame_xact = Wire(Bits(1))
+      burst_ready = (~streaming).as_bits()
+      burst, burst_valid = addresses.burst_req.unwrap(burst_ready)
+      burst_accept = (burst_valid & ~streaming).as_bits()
+      base_addr = burst.address.reg(clk=clk,
+                                    rst=rst,
+                                    rst_value=0,
+                                    ce=burst_accept,
+                                    name="base_addr")
+      total = burst.length.reg(clk=clk,
+                               rst=rst,
+                               rst_value=0,
+                               ce=burst_accept,
+                               name="total")
+
+      frame_counter = Counter(64)(clk=clk,
+                                  rst=rst,
+                                  clear=burst_accept,
+                                  increment=frame_xact)
+      is_last = (frame_counter.out == (total -
+                                       UInt(64)(1)).as_uint(64)).as_bits(1)
+      last_accept = (frame_xact & is_last).as_bits()
+      streaming.assign(
+          ControlReg(clk=clk,
+                     rst=rst,
+                     asserts=[burst_accept],
+                     resets=[last_accept],
+                     name="streaming"))
+
+      # Data pattern: the frame index (non-0xFF), sized to the element width.
+      element = frame_counter.out.as_uint(width).as_bits()
+      frame_val = lowered({
+          "address": base_addr,
+          "tag": UInt(8)(0),
+          "data": [element],
+          "data_size": Bits(0)(0),
+          "last": is_last,
+      })
+      frame_chan, frame_ready = Channel(write_win).wrap(
+          write_win.wrap(frame_val), streaming)
+      frame_xact.assign((streaming & frame_ready).as_bits())
 
       write_responses = esi.HostMem.write(
           appid=AppID("host"),
-          req=write_cmd_chan,
+          req=frame_chan,
       )
-      # Signal completion to AddressCommand (each response -> Bits(0)).
+      # Signal completion to AddressCommand (each write ack -> Bits(0)).
       address_cmd_resp.assign(
           write_responses.transform(lambda resp: Bits(0)(0)))
 
