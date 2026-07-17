@@ -394,6 +394,27 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 endfunction
 
+// CHECK-LABEL: func.func private @CaseStatementsOnReal(
+// CHECK-SAME: %arg0: !moore.f64
+function void CaseStatementsOnReal(real x);
+  case (x)
+    // CHECK: [[ITEM1:%.+]] = moore.constant_real 1.000000e+00 : f64
+    // CHECK: [[COND1:%.+]] = moore.feq %arg0, [[ITEM1]] : f64 -> i1
+    // CHECK-NOT: moore.case_eq
+    // CHECK: [[FLAG1:%.+]] = moore.to_builtin_int [[COND1]] : i1
+    // CHECK: cf.cond_br [[FLAG1]]
+    1.0: dummyA();
+    // CHECK: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f64
+    // CHECK: [[ITEM2:%.+]] = moore.fneg [[ONE]] : f64
+    // CHECK: [[COND2:%.+]] = moore.feq %arg0, [[ITEM2]] : f64 -> i1
+    // CHECK-NOT: moore.case_eq
+    // CHECK: [[FLAG2:%.+]] = moore.to_builtin_int [[COND2]] : i1
+    // CHECK: cf.cond_br [[FLAG2]]
+    -1.0: dummyB();
+    default: dummyC();
+  endcase
+endfunction
+
 // CHECK-LABEL: func.func private @ForLoopStatements(
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: %arg1: !moore.i32
