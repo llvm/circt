@@ -170,6 +170,49 @@ static Value constructAggregateRecursively(OpBuilder builder, Location loc,
   return {};
 }
 
+// Build the `fields` attribute of an `hw.aggregate_constant` equivalent to
+// bitcasting the constant integer `bits` onto `targetType`, following the bit
+// conventions above: for arrays lower bits correspond to lower indices and
+// attribute position 0 holds the highest index (matching ArrayGetOp::fold);
+// for structs higher bits correspond to lower field indices. Only aggregates
+// with non-zero-width integer leaves are materialized, since consumers of the
+// fields attribute (such as the Arc array lowering's buffer initialization)
+// expect integer leaves; all other target types return a null attribute and
+// keep the generic expansion.
+static ArrayAttr convertConstantToFields(OpBuilder &builder, const APInt &bits,
+                                         Type targetType) {
+  if (auto arrayTy = type_dyn_cast<ArrayType>(targetType)) {
+    auto elementTy = dyn_cast<IntegerType>(arrayTy.getElementType());
+    if (!elementTy || elementTy.getWidth() == 0)
+      return {};
+    unsigned width = elementTy.getWidth();
+    unsigned numElements = arrayTy.getNumElements();
+    SmallVector<Attribute> fields;
+    fields.reserve(numElements);
+    for (unsigned i = 0; i < numElements; ++i)
+      fields.push_back(builder.getIntegerAttr(
+          elementTy, bits.extractBits(width, width * (numElements - 1 - i))));
+    return builder.getArrayAttr(fields);
+  }
+
+  if (auto structTy = type_dyn_cast<StructType>(targetType)) {
+    unsigned offset = bits.getBitWidth();
+    SmallVector<Attribute> fields;
+    fields.reserve(structTy.getElements().size());
+    for (auto fieldInfo : structTy.getElements()) {
+      auto fieldTy = dyn_cast<IntegerType>(fieldInfo.type);
+      if (!fieldTy || fieldTy.getWidth() == 0)
+        return {};
+      offset -= fieldTy.getWidth();
+      fields.push_back(builder.getIntegerAttr(
+          fieldTy, bits.extractBits(fieldTy.getWidth(), offset)));
+    }
+    return builder.getArrayAttr(fields);
+  }
+
+  return {};
+}
+
 LogicalResult HWConvertBitcastsPass::convertBitcastOp(OpBuilder builder,
                                                       BitcastOp bitcastOp) {
   bool inputSupported = isTypeSupported(bitcastOp.getInput().getType());
@@ -184,6 +227,21 @@ LogicalResult HWConvertBitcastsPass::convertBitcastOp(OpBuilder builder,
     return failure();
 
   builder.setInsertionPoint(bitcastOp);
+
+  // A constant integer source materializes directly as a constant aggregate.
+  // The generic expansion below would emit one comb.extract of the full-width
+  // source per scalar element, which is prohibitively large for wide constants
+  // such as memory initialization values.
+  if (auto constantOp = bitcastOp.getInput().getDefiningOp<ConstantOp>()) {
+    if (auto fields = convertConstantToFields(builder, constantOp.getValue(),
+                                              bitcastOp.getType())) {
+      auto aggregate = AggregateConstantOp::create(builder, bitcastOp.getLoc(),
+                                                   bitcastOp.getType(), fields);
+      bitcastOp.getResult().replaceAllUsesWith(aggregate.getResult());
+      bitcastOp.erase();
+      return success();
+    }
+  }
 
   // Convert input value to a packed integer
   SmallVector<Value> integers;
