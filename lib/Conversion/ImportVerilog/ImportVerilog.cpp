@@ -28,9 +28,11 @@
 
 #include "slang/analysis/AnalysisManager.h"
 #include "slang/diagnostics/DiagnosticClient.h"
+#include "slang/diagnostics/Diagnostics.h"
 #include "slang/driver/Driver.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/SyntaxPrinter.h"
+#include "slang/syntax/SyntaxTree.h"
 #include "slang/util/VersionInfo.h"
 
 using namespace mlir;
@@ -308,6 +310,23 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
   auto parseTimer = ts.nest("Verilog parser");
   bool parseSuccess = driver.parseAllSources();
   parseTimer.stop();
+
+  // If we were only supposed to parse the input, gather the parse diagnostics
+  // and report them here, then return without elaborating. This mirrors
+  // slang-driver's `--parse-only`: errors that only surface during elaboration
+  // or IR conversion (unknown modules, constraint blocks, ...) don't run, so
+  // this succeeds on such inputs while still flagging genuine syntax errors.
+  // The module is left empty.
+  if (options.mode == ImportVerilogOptions::Mode::OnlyParse) {
+    slang::Diagnostics parseDiags;
+    for (const auto &tree : driver.sourceLoader.getLibraryMaps())
+      parseDiags.append_range(tree->diagnostics());
+    for (const auto &tree : driver.syntaxTrees)
+      parseDiags.append_range(tree->diagnostics());
+    parseDiags.sort(driver.sourceManager);
+    driver.diagEngine.issue(parseDiags);
+    return success(parseSuccess && driver.diagEngine.getNumErrors() == 0);
+  }
 
   // Elaborate the input.
   auto compileTimer = ts.nest("Verilog elaboration");
