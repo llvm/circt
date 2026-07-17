@@ -345,6 +345,14 @@ public:
   Term *getDomainAssociation(Value value);
   void setDomainAssociation(Value value, Term *term);
 
+  /// True if the value is "colorless": it is not tied to any domain and may be
+  /// freely consumed by a value in any domain without an explicit cast. A value
+  /// is colorless if it is only driven by nodes or primops whose inputs all
+  /// terminate in a constant. Ports, wires, instance results, and any other
+  /// stateful or boundary-crossing value are "colored" and never colorless.
+  /// The result is memoized so each value is visited at most once.
+  bool isColorless(Value value);
+
   void processDomainDefinition(DomainValue domain);
   RowTerm *getDomainAssociationAsRow(Value value);
 
@@ -447,6 +455,8 @@ private:
   CircuitState &globals;
   DenseMap<Value, Term *> termTable;
   DenseMap<Value, Term *> associationTable;
+  /// Memoization for isColorless. Absent means not yet computed.
+  DenseMap<Value, bool> colorlessTable;
   llvm::BumpPtrAllocator allocator;
 };
 } // namespace
@@ -723,6 +733,136 @@ void ModuleState::setDomainAssociation(Value value, Term *term) {
     llvm::dbgs().indent(6) << "set domains(" << render(value)
                            << ") := " << render(term) << "\n";
   });
+}
+
+bool ModuleState::isColorless(Value value) {
+  // Determine how a value participates in the colorless computation:
+  //   * Colorless   -- a root that is not tied to any domain (constant or
+  //                    non-hardware value).  Imposes no constraint.
+  //   * LookThrough -- an op whose colorlessness is derived from its inputs
+  //                    (a node or a pure primop).  Its hardware operands must
+  //                    all be colorless for it to be colorless.
+  //   * Colored     -- anything else (ports, wires, instance results, casts,
+  //                    registers, probes, ...).  Always colored.
+  enum class Kind { Colorless, LookThrough, Colored };
+  auto classify = [](Value value) -> Kind {
+    // Non-hardware operands (indices, domains, properties) and constants are
+    // colorless roots that impose no domain constraint.
+    if (!isHardware(value))
+      return Kind::Colorless;
+
+    auto *op = value.getDefiningOp();
+    if (!op)
+      return Kind::Colored;
+
+    // A node forwards its single input.
+    if (isa<NodeOp>(op))
+      return Kind::LookThrough;
+
+    // A domain cast explicitly assigns (or forwards) a domain.  It is a
+    // coloring operation, not a plain primop, so it is never colorless.
+    if (isa<UnsafeDomainCastOp>(op))
+      return Kind::Colored;
+
+    // Pure, memory-effect-free expression ops (prim ops, muxes, casts) are
+    // colorless iff all their hardware-typed operands are colorless.  Their
+    // non-hardware operands (constants, indices) impose no constraint, so an
+    // expression whose operands are all constants is colorless.  An expression
+    // with *no* operands at all (e.g. `xmr.deref`) references external state
+    // and is therefore colored.
+    if (isExpression(op) && mlir::isMemoryEffectFree(op) &&
+        op->getNumOperands() != 0)
+      return Kind::LookThrough;
+
+    // Everything else is colored.
+    return Kind::Colored;
+  };
+
+  // Consult the memo table.
+  if (auto it = colorlessTable.find(value); it != colorlessTable.end())
+    return it->second;
+
+  // Explicit DFS over the driver graph.  There are no cycles to guard against:
+  // combinational loops in valid FIRRTL must pass through a wire or register,
+  // both of which are colored terminals and never looked through.  Each value
+  // is therefore visited at most once, and the result is memoized in
+  // post-order.  As soon as a colored counterexample is found, every value on
+  // the current DFS path is marked colored and the walk short-circuits.
+  struct Frame {
+    Value value;
+    SmallVector<Value> children;
+    size_t next = 0;
+  };
+  SmallVector<Frame> stack;
+
+  auto push = [&](Value value) {
+    switch (classify(value)) {
+    case Kind::Colorless:
+      colorlessTable[value] = true;
+      return;
+    case Kind::Colored:
+      colorlessTable[value] = false;
+      return;
+    case Kind::LookThrough:
+      break;
+    }
+
+    Frame frame;
+    frame.value = value;
+    for (auto operand : value.getDefiningOp()->getOperands())
+      if (isHardware(operand))
+        frame.children.push_back(operand);
+    stack.push_back(std::move(frame));
+  };
+
+  push(value);
+  while (!stack.empty()) {
+    // Find the next unresolved child of the top frame.  We index by position
+    // rather than holding a reference because `push` below may reallocate the
+    // stack and invalidate any outstanding `Frame &`.
+    Value pending;
+    bool colored = false;
+    bool descend = false;
+    {
+      auto &frame = stack.back();
+      while (frame.next < frame.children.size()) {
+        auto child = frame.children[frame.next];
+        auto it = colorlessTable.find(child);
+        if (it == colorlessTable.end()) {
+          // Descend into the child and revisit this frame afterwards.
+          pending = child;
+          descend = true;
+          break;
+        }
+        if (!it->second) {
+          colored = true;
+          break;
+        }
+        ++frame.next;
+      }
+    }
+
+    // Descend into an unresolved child.
+    if (descend) {
+      push(pending);
+      continue;
+    }
+
+    // A colored child colors this value; short-circuit by coloring every
+    // value still on the DFS path.
+    if (colored) {
+      for (auto &f : stack)
+        colorlessTable[f.value] = false;
+      stack.clear();
+      break;
+    }
+
+    // All children are colorless, so this value is colorless (post-order).
+    colorlessTable[stack.back().value] = true;
+    stack.pop_back();
+  }
+
+  return colorlessTable[value];
 }
 
 void ModuleState::processDomainDefinition(DomainValue domain) {
@@ -1020,6 +1160,11 @@ LogicalResult ModuleState::unifyAssociations(Operation *op, Value lhs,
   if (!isHardware(lhs) || !isHardware(rhs))
     return success();
 
+  // Colorless values impose and receive no domain association: they may be
+  // freely used in any domain.
+  if (isColorless(lhs) || isColorless(rhs))
+    return success();
+
   LLVM_DEBUG({
     llvm::dbgs().indent(6) << "unify domains(" << render(lhs) << ") = domains("
                            << render(rhs) << ")\n";
@@ -1055,7 +1200,7 @@ template <typename T>
 LogicalResult ModuleState::unifyAssociations(Operation *op, T &&range) {
   Value lhs;
   for (auto rhs : std::forward<T>(range)) {
-    if (!isHardware(rhs))
+    if (!isHardware(rhs) || isColorless(rhs))
       continue;
     if (failed(unifyAssociations(op, lhs, rhs)))
       return failure();
@@ -1209,7 +1354,7 @@ LogicalResult ModuleState::processOp(UnsafeDomainCastOp op) {
   auto input = op.getInput();
 
   SmallVector<Term *> elements(getNumDomains());
-  if (isHardware(input)) {
+  if (isHardware(input) && !isColorless(input)) {
     auto *inputRow = getDomainAssociationAsRow(input);
     elements.assign(inputRow->elements);
   }

@@ -774,3 +774,143 @@ firrtl.circuit "CastConstantNoDomains" {
     firrtl.connect %o, %1 : !firrtl.uint<1>
   }
 }
+
+//===----------------------------------------------------------------------===//
+// Colorless (constant-derived) values (llvm/circt#10830).
+//
+// A value is colorless if it is only driven by nodes or primops whose inputs
+// all terminate in a constant. Colorless values impose no domain constraint
+// and may be freely used in any domain without an explicit cast. Ports and
+// wires are always colored.
+//===----------------------------------------------------------------------===//
+
+// A node bound directly to a constant may be used in two different domains.
+// CHECK-LABEL: firrtl.circuit "ConstantNodeTwoDomains"
+firrtl.circuit "ConstantNodeTwoDomains" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ConstantNodeTwoDomains(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %x = firrtl.node %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %x : !firrtl.uint<1>
+  }
+}
+
+// A node bound to a constant *expression* (not just a bare constant) may
+// also be used in two different domains.
+// CHECK-LABEL: firrtl.circuit "ConstantExprNodeTwoDomains"
+firrtl.circuit "ConstantExprNodeTwoDomains" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ConstantExprNodeTwoDomains(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.eq %c1_ui1, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    %x = firrtl.node %0 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %x : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %x : !firrtl.uint<1>
+  }
+}
+
+// A deeply nested constant expression is still colorless and can be used
+// across multiple domains.
+// CHECK-LABEL: firrtl.circuit "DeeplyNestedConstantExpr"
+firrtl.circuit "DeeplyNestedConstantExpr" {
+  firrtl.domain @ClockDomain
+  firrtl.module @DeeplyNestedConstantExpr(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<4> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<4> domains [%B]
+  ) {
+    %c1_ui4 = firrtl.constant 1 : !firrtl.uint<4>
+    %c2_ui4 = firrtl.constant 2 : !firrtl.uint<4>
+    %c3_ui4 = firrtl.constant 3 : !firrtl.uint<4>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    %0 = firrtl.mux(%c0_ui1, %c2_ui4, %c3_ui4) : (!firrtl.uint<1>, !firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<4>
+    %1 = firrtl.add %c1_ui4, %0 : (!firrtl.uint<4>, !firrtl.uint<4>) -> !firrtl.uint<5>
+    %2 = firrtl.bits %1 3 to 0 : (!firrtl.uint<5>) -> !firrtl.uint<4>
+    %3 = firrtl.not %2 : (!firrtl.uint<4>) -> !firrtl.uint<4>
+    firrtl.matchingconnect %a, %3 : !firrtl.uint<4>
+    firrtl.matchingconnect %b, %3 : !firrtl.uint<4>
+  }
+}
+
+// A colorless subexpression mixed with a colored operand takes on the
+// operand's color: the result is usable wherever the colored operand's
+// domain is legal, but no longer colorless.
+// CHECK-LABEL: firrtl.circuit "ColorlessMixedWithColoredAdoptsColor"
+firrtl.circuit "ColorlessMixedWithColoredAdoptsColor" {
+  firrtl.domain @ClockDomain
+  firrtl.module @ColorlessMixedWithColoredAdoptsColor(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %x: !firrtl.uint<1> domains [%A],
+    // CHECK: out %y: !firrtl.uint<1> domains [%A]
+    out %y: !firrtl.uint<1>
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %0 = firrtl.not %c1_ui1 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    %1 = firrtl.eq %0, %x : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    firrtl.matchingconnect %y, %1 : !firrtl.uint<1>
+  }
+}
+
+// A chain of nodes ending in a constant is colorless.
+// CHECK-LABEL: firrtl.circuit "NodeChainColorless"
+firrtl.circuit "NodeChainColorless" {
+  firrtl.domain @ClockDomain
+  firrtl.module @NodeChainColorless(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A],
+    in %B: !firrtl.domain<@ClockDomain()>,
+    out %b: !firrtl.uint<1> domains [%B]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    %n0 = firrtl.node %c1_ui1 : !firrtl.uint<1>
+    %n1 = firrtl.node %n0 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %n1 : !firrtl.uint<1>
+    firrtl.matchingconnect %b, %n1 : !firrtl.uint<1>
+  }
+}
+
+// A node driven by a colored port is not colorless and must be assigned a
+// domain.
+// CHECK-LABEL: firrtl.circuit "NodeOfPortColored"
+firrtl.circuit "NodeOfPortColored" {
+  firrtl.domain @ClockDomain
+  firrtl.module @NodeOfPortColored(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    in %x: !firrtl.uint<1> domains [%A],
+    // CHECK: out %o: !firrtl.uint<1> domains [%A]
+    out %o: !firrtl.uint<1>
+  ) {
+    %n = firrtl.node %x : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %n : !firrtl.uint<1>
+  }
+}
+
+// A wire fed only by constants is still colored (wires are always colored in
+// this implementation) and gets an inferred domain.
+// CHECK-LABEL: firrtl.circuit "WireOfConstantColored"
+firrtl.circuit "WireOfConstantColored" {
+  firrtl.domain @ClockDomain
+  // CHECK: firrtl.module @WireOfConstantColored(in %A: !firrtl.domain<@ClockDomain()>, out %a: !firrtl.uint<1> domains [%A])
+  firrtl.module @WireOfConstantColored(
+    in %A: !firrtl.domain<@ClockDomain()>,
+    out %a: !firrtl.uint<1> domains [%A]
+  ) {
+    %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
+    // CHECK: %w = firrtl.wire domains[%A]
+    %w = firrtl.wire : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %c1_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %a, %w : !firrtl.uint<1>
+  }
+}
