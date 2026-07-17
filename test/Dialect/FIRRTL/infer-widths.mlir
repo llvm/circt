@@ -499,6 +499,7 @@ firrtl.circuit "Foo" {
     // CHECK: firrtl.connect %x, %c200_si9 : !firrtl.sint<9>
     %x = firrtl.wire : !firrtl.sint
     %c200_si = firrtl.constant 200 : !firrtl.sint
+    // expected-warning @+1 {{RHS width 9 exceeds LHS width 4, inserting implicit truncation}}
     firrtl.connect %y, %x : !firrtl.sint<4>, !firrtl.sint
     firrtl.connect %x, %c200_si : !firrtl.sint, !firrtl.sint
   }
@@ -512,6 +513,7 @@ firrtl.circuit "Foo" {
     %w1 = firrtl.wire  : !firrtl.uint<0>
     // CHECK: %0 = firrtl.tail %w, 1 : (!firrtl.uint<1>) -> !firrtl.uint<0>
     // CHECK: firrtl.connect %w1, %0 : !firrtl.uint<0>
+    // expected-warning @+1 {{RHS width 1 exceeds LHS width 0, inserting implicit truncation}}
     firrtl.connect %w1, %w : !firrtl.uint<0>, !firrtl.uint
   }
 
