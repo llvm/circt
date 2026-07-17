@@ -5471,3 +5471,51 @@ function logic LogicalOrReal(real rval, logic val);
   // CHECK: moore.or [[L]], [[VAL]] : l1
   return rval || val;
 endfunction
+
+// CHECK-LABEL: moore.module private @ArrayInstSub
+module ArrayInstSub(input a, output y);
+  assign y = a;
+endmodule
+
+// CHECK-LABEL: moore.module @ArrayInstTop
+module ArrayInstTop(input [3:0] a, output [3:0] y);
+  // CHECK: [[A0:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
+  // CHECK: [[Y0:%.+]] = moore.extract_ref %y from 0 : <l4> -> <l1>
+  // CHECK: [[R0:%.+]] = moore.instance "u_0" @ArrayInstSub(a: [[A0]]: !moore.l1) -> (y: !moore.l1)
+  // CHECK: moore.assign [[Y0]], [[R0]] : l1
+  // CHECK: [[A1:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
+  // CHECK: [[Y1:%.+]] = moore.extract_ref %y from 1 : <l4> -> <l1>
+  // CHECK: [[R1:%.+]] = moore.instance "u_1" @ArrayInstSub(a: [[A1]]: !moore.l1) -> (y: !moore.l1)
+  // CHECK: moore.assign [[Y1]], [[R1]] : l1
+  // CHECK: [[A2:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
+  // CHECK: [[Y2:%.+]] = moore.extract_ref %y from 2 : <l4> -> <l1>
+  // CHECK: [[R2:%.+]] = moore.instance "u_2" @ArrayInstSub(a: [[A2]]: !moore.l1) -> (y: !moore.l1)
+  // CHECK: moore.assign [[Y2]], [[R2]] : l1
+  // CHECK: [[A3:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
+  // CHECK: [[Y3:%.+]] = moore.extract_ref %y from 3 : <l4> -> <l1>
+  // CHECK: [[R3:%.+]] = moore.instance "u_3" @ArrayInstSub(a: [[A3]]: !moore.l1) -> (y: !moore.l1)
+  // CHECK: moore.assign [[Y3]], [[R3]] : l1
+  ArrayInstSub u [3:0] (.a(a), .y(y));
+endmodule
+
+// CHECK-LABEL: moore.module @ArrayInstMultiDim
+module ArrayInstMultiDim(input [5:0] a, output [5:0] y);
+  // CHECK: moore.instance "u_1_2" @ArrayInstSub
+  // CHECK: moore.instance "u_1_3" @ArrayInstSub
+  // CHECK: moore.instance "u_1_4" @ArrayInstSub
+  // CHECK: moore.instance "u_2_2" @ArrayInstSub
+  // CHECK: moore.instance "u_2_3" @ArrayInstSub
+  // CHECK: moore.instance "u_2_4" @ArrayInstSub
+  ArrayInstSub u [1:2][4:2] (.a(a), .y(y));
+endmodule
+
+// CHECK-LABEL: moore.module @ArrayGateTop
+module ArrayGateTop(input [3:0] a, input [3:0] b, output [3:0] y);
+  // CHECK: [[G0:%.+]] = moore.extract_ref %y from 0 : <l4> -> <l1>
+  // CHECK: [[GA0:%.+]] = moore.and
+  // CHECK: moore.assign [[G0]], [[GA0]] : l1
+  // CHECK: [[G3:%.+]] = moore.extract_ref %y from 3 : <l4> -> <l1>
+  // CHECK: [[GA3:%.+]] = moore.and
+  // CHECK: moore.assign [[G3]], [[GA3]] : l1
+  and g [3:0] (y, a, b);
+endmodule
