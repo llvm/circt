@@ -1324,8 +1324,8 @@ bool firrtl::hasHardwareElements(FIRRTLType type) {
     return true;
   // Check each element of the aggregate
   if (auto bundle = dyn_cast<OpenBundleType>(type))
-    return llvm::any_of(
-        bundle, [](auto elt) { return hasHardwareElements(elt.type); });
+    return llvm::any_of(bundle,
+                        [](auto elt) { return hasHardwareElements(elt.type); });
   if (auto vector = dyn_cast<OpenVectorType>(type))
     return hasHardwareElements(vector.getElementType());
   return false;
