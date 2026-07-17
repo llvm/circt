@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This file defines the SimplifyRefs pass.
-// It has two purposes:
+// It has three purposes:
 // - To disassemble the moore.concat_ref. Which is tricky to lower
 // directly. For example, disassemble "{a, b} = c" onto "a = c[7:3]"
 // and "b = c[2:0]".
@@ -15,6 +15,9 @@
 // immediately has a value assigned via blocking assignment, replacing it with
 // moore.queue.set. Queue element references are tricky to lower into LLHD,
 // so it's best to get rid of them.
+// - To rewrite assignments to ExtractOp expressions on a packed struct,
+// e.g. "s[7:0] = v", into an assignment to a concatenation of the struct's
+// (possibly further sliced) fields.
 //
 //===----------------------------------------------------------------------===//
 
@@ -97,6 +100,131 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
   }
 };
 
+struct FieldInfo {
+  Value field = nullptr;
+  uint32_t size = 0;
+  uint32_t offset = 0;
+};
+
+// A helper function that recursively collects the members of a struct.
+static LogicalResult collectFields(Value structRef,
+                                   SmallVector<FieldInfo> &fields,
+                                   ConversionPatternRewriter &rewriter,
+                                   uint32_t initialOffset = 0) {
+  auto structType =
+      cast<StructType>(cast<RefType>(structRef.getType()).getNestedType());
+  uint32_t offset = initialOffset;
+  // Visit fields in reverse order (declaration order is MSB-first)
+  for (auto &member : llvm::reverse(structType.getMembers())) {
+    auto fieldRef = StructExtractRefOp::create(rewriter, structRef.getLoc(),
+                                               RefType::get(member.type),
+                                               member.name, structRef);
+
+    auto fieldSize = member.type.getBitSize();
+    if (!fieldSize)
+      return mlir::emitError(structRef.getLoc())
+             << "unsupported: field with unknown size in struct flattening";
+
+    if (isa<StructType>(member.type)) {
+      auto result = collectFields(fieldRef, fields, rewriter, offset);
+      if (failed(result))
+        return result;
+    } else if (isa<UnionType>(member.type)) {
+      return mlir::emitError(structRef.getLoc())
+             << "unsupported: union member in struct flattening";
+    } else {
+      fields.push_back({fieldRef, *fieldSize, offset});
+    }
+    offset += *fieldSize;
+  }
+  return success();
+}
+
+template <typename OpTy>
+struct StructExtractLowering : public OpConversionPattern<OpTy> {
+  using OpConversionPattern<OpTy>::OpConversionPattern;
+  using OpAdaptor = typename OpTy::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(OpTy op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value dst = op.getDst();
+
+    // We are specifically matching cases in which the LHS of the assignment is
+    // an ExtractRef operation on a struct.
+    auto extractRefOp = dyn_cast<ExtractRefOp>(dst.getDefiningOp());
+    auto baseStructType = dyn_cast_if_present<StructType>(
+        cast<RefType>(extractRefOp.getInput().getType()).getNestedType());
+    if (!baseStructType)
+      return success();
+
+    // Get the boundaries of the ExtractOp.
+    uint32_t extractedLow = extractRefOp.getLowBit();
+    auto targetWidth =
+        cast<RefType>(dst.getType()).getNestedType().getBitSize();
+    if (!targetWidth)
+      return mlir::emitError(op.getLoc())
+             << "unsupported: found field with unknown size in struct "
+                "flattening";
+
+    rewriter.setInsertionPoint(op);
+    Location loc = op.getLoc();
+
+    // Collect all the fields of the struct.
+    SmallVector<FieldInfo> fields;
+    if (failed(collectFields(extractRefOp.getInput(), fields, rewriter))) {
+      return failure();
+    }
+
+    // Select only the fields revelant to the ExtractOp
+    SmallVector<Value> relevantFields;
+    uint32_t offsetInStruct = extractedLow;
+    uint32_t remaining = *targetWidth;
+    for (auto &field : fields) {
+      if (remaining == 0)
+        break;
+
+      if (field.offset <= offsetInStruct &&
+          field.offset + field.size > offsetInStruct) {
+        uint32_t offsetInField = offsetInStruct - field.offset;
+        uint32_t remainingInField = field.size - offsetInField;
+        uint32_t sizeToExtract = std::min(remaining, remainingInField);
+
+        auto fieldType = cast<RefType>(field.field.getType()).getNestedType();
+        auto extractType =
+            IntType::get(rewriter.getContext(), sizeToExtract,
+                         cast<PackedType>(fieldType).getDomain());
+        auto newLhs =
+            ExtractRefOp::create(rewriter, loc, RefType::get(extractType),
+                                 field.field, offsetInField);
+        relevantFields.push_back(newLhs);
+
+        offsetInStruct += sizeToExtract;
+        remaining -= sizeToExtract;
+      }
+    }
+
+    if (relevantFields.size() == 0)
+      return mlir::emitError(op.getLoc()) << "Struct extract is out of range";
+
+    // Reverse the fields order to match Concat order
+    std::reverse(relevantFields.begin(), relevantFields.end());
+
+    Value finalRef =
+        relevantFields.size() == 1
+            ? relevantFields.front()
+            : Value(ConcatRefOp::create(rewriter, loc, relevantFields));
+
+    IRMapping mapping;
+    mapping.map(op.getDst(), finalRef);
+    rewriter.clone(*op.getOperation(), mapping);
+
+    rewriter.eraseOp(op);
+    rewriter.eraseOp(extractRefOp);
+    return success();
+  }
+};
+
 struct QueueRefLowering : public OpConversionPattern<DynQueueRefElementOp> {
   using OpConversionPattern<DynQueueRefElementOp>::OpConversionPattern;
 
@@ -174,10 +302,37 @@ void SimplifyRefsPass::runOnOperation() {
   target.addDynamicallyLegalOp<ContinuousAssignOp, BlockingAssignOp,
                                NonBlockingAssignOp, DelayedContinuousAssignOp,
                                DelayedNonBlockingAssignOp>([](auto op) {
-    return !op->getOperand(0).template getDefiningOp<ConcatRefOp>();
+    auto extractRefOp =
+        op->getOperand(0).template getDefiningOp<ExtractRefOp>();
+    if (!extractRefOp)
+      return true;
+    auto nestedType =
+        cast<RefType>(extractRefOp.getInput().getType()).getNestedType();
+    return !isa<StructType>(nestedType);
   });
 
   target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
+
+  RewritePatternSet extractRefOnStructPatterns(&context);
+  extractRefOnStructPatterns
+      .add<StructExtractLowering<ContinuousAssignOp>,
+           StructExtractLowering<BlockingAssignOp>,
+           StructExtractLowering<NonBlockingAssignOp>,
+           StructExtractLowering<DelayedContinuousAssignOp>,
+           StructExtractLowering<DelayedNonBlockingAssignOp>>(&context);
+
+  if (failed(applyFullConversion(getOperation(), target,
+                                 std::move(extractRefOnStructPatterns)))) {
+    signalPassFailure();
+    return;
+  }
+
+  target.addDynamicallyLegalOp<ContinuousAssignOp, BlockingAssignOp,
+                               NonBlockingAssignOp, DelayedContinuousAssignOp,
+                               DelayedNonBlockingAssignOp>([](auto op) {
+    return !op->getOperand(0).template getDefiningOp<ConcatRefOp>();
+  });
+
   RewritePatternSet concatRefPatterns(&context);
   concatRefPatterns.add<ConcatRefLowering<ContinuousAssignOp>,
                         ConcatRefLowering<BlockingAssignOp>,
