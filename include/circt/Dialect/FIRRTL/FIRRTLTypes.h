@@ -261,6 +261,9 @@ mlir::Type getPassiveType(mlir::Type anyBaseFIRRTLType);
 /// analog types. Non-HW types (e.g., ref types) are never considered InOut.
 bool isTypeInOut(mlir::Type type);
 
+/// Return true if the given type contains any elements of hardware types.
+bool hasHardwareElements(FIRRTLType type);
+
 //===----------------------------------------------------------------------===//
 // Width Qualified Ground Types
 //===----------------------------------------------------------------------===//

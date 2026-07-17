@@ -1317,6 +1317,21 @@ bool firrtl::isTypeInOut(Type type) {
       .Default(false);
 }
 
+// NOLINTBEGIN(misc-no-recursion)
+bool firrtl::hasHardwareElements(FIRRTLType type) {
+  // Is a hardware base type
+  if (isa<FIRRTLBaseType>(type))
+    return true;
+  // Check each element of the aggregate
+  if (auto bundle = dyn_cast<OpenBundleType>(type))
+    return llvm::any_of(
+        bundle, [](auto elt) { return hasHardwareElements(elt.type); });
+  if (auto vector = dyn_cast<OpenVectorType>(type))
+    return hasHardwareElements(vector.getElementType());
+  return false;
+}
+// NOLINTEND(misc-no-recursion)
+
 //===----------------------------------------------------------------------===//
 // IntType
 //===----------------------------------------------------------------------===//

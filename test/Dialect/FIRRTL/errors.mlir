@@ -2973,6 +2973,22 @@ firrtl.circuit "SimulationExtraHardwarePort" {
 
 // -----
 
+firrtl.circuit "SimulationExtraHardwareInBundlePort" {
+  firrtl.extmodule @SimulationExtraHardwareInBundlePort()
+  // expected-error @below {{op target @Foo port 4 may only be a property type, got '!firrtl.openbundle<x: uint<8>>' instead}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>,
+    out extra: !firrtl.openbundle<x: uint<8>>
+  )
+}
+
+// -----
+
 firrtl.circuit "BindTargetMissingModule" {
   firrtl.module @BindTargetMissing() {}
   // expected-error @below {{target #hw.innerNameRef<@XXX::@YYY> cannot be resolved}}
