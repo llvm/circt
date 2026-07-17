@@ -534,10 +534,15 @@ struct StmtVisitor {
           if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
             itemConsts.push_back(defOp.getValueAttr());
 
-          // Generate the appropriate equality operator.
+          // Generate the appropriate equality operator. A case statement with
+          // real operands uses ordinary equality (`==`) per IEEE 1800 § 11.4.5,
+          // not case-equality; wildcard case kinds on reals are illegal SV.
           switch (caseStmt.condition) {
           case CaseStatementCondition::Normal:
-            cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
+            if (isa<moore::RealType>(caseExpr.getType()))
+              cond = moore::EqRealOp::create(builder, itemLoc, caseExpr, value);
+            else
+              cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
             break;
           case CaseStatementCondition::WildcardXOrZ:
             cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
