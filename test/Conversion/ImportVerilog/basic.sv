@@ -5409,3 +5409,44 @@ task BuiltinCastFalse;
   $cast(s, 2.3);
   $cast(q, 2.3);
 endtask
+
+// CHECK-LABEL: func.func private @LogicalEquivReal
+// CHECK-SAME: ([[RVAL:%.+]]: !moore.f64, [[VAL:%.+]]: !moore.l1)
+function logic LogicalEquivReal(real rval, logic val);
+  // CHECK: [[B:%.+]] = moore.bool_cast [[RVAL]] : f64 -> i1
+  // CHECK: [[L:%.+]] = moore.int_to_logic [[B]] : i1
+  // CHECK: [[NL:%.+]] = moore.not [[L]] : l1
+  // CHECK: [[NV:%.+]] = moore.not [[VAL]] : l1
+  // CHECK: [[BOTH:%.+]] = moore.and [[L]], [[VAL]] : l1
+  // CHECK: [[NBOTH:%.+]] = moore.and [[NL]], [[NV]] : l1
+  // CHECK: moore.or [[BOTH]], [[NBOTH]] : l1
+  return rval <-> val;
+endfunction
+
+// CHECK-LABEL: func.func private @LogicalImplReal
+// CHECK-SAME: ([[RVAL:%.+]]: !moore.f64, [[VAL:%.+]]: !moore.l1)
+function logic LogicalImplReal(real rval, logic val);
+  // CHECK: [[B:%.+]] = moore.bool_cast [[RVAL]] : f64 -> i1
+  // CHECK: [[L:%.+]] = moore.int_to_logic [[B]] : i1
+  // CHECK: [[NL:%.+]] = moore.not [[L]] : l1
+  // CHECK: moore.or [[NL]], [[VAL]] : l1
+  return rval -> val;
+endfunction
+
+// CHECK-LABEL: func.func private @LogicalAndReal
+// CHECK-SAME: ([[RVAL:%.+]]: !moore.f64, [[VAL:%.+]]: !moore.l1)
+function logic LogicalAndReal(real rval, logic val);
+  // CHECK: [[B:%.+]] = moore.bool_cast [[RVAL]] : f64 -> i1
+  // CHECK: [[L:%.+]] = moore.int_to_logic [[B]] : i1
+  // CHECK: moore.and [[L]], [[VAL]] : l1
+  return rval && val;
+endfunction
+
+// CHECK-LABEL: func.func private @LogicalOrReal
+// CHECK-SAME: ([[RVAL:%.+]]: !moore.f64, [[VAL:%.+]]: !moore.l1)
+function logic LogicalOrReal(real rval, logic val);
+  // CHECK: [[B:%.+]] = moore.bool_cast [[RVAL]] : f64 -> i1
+  // CHECK: [[L:%.+]] = moore.int_to_logic [[B]] : i1
+  // CHECK: moore.or [[L]], [[VAL]] : l1
+  return rval || val;
+endfunction
