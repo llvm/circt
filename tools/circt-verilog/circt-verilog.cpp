@@ -34,6 +34,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser/Parser.h"
@@ -562,6 +563,7 @@ int main(int argc, char **argv) {
     scf::SCFDialect,
     seq::SeqDialect,
     sim::SimDialect,
+    ub::UBDialect,
     verif::VerifDialect
   >();
   // clang-format on

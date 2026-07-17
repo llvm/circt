@@ -39,6 +39,7 @@ target_link_libraries(circt-opt
   MLIRFuncInlinerExtension
   MLIRVectorDialect
   MLIRIndexDialect
+  MLIRUBDialect
   MLIRLLVMIRTransforms
 )
 

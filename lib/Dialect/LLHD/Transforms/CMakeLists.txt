@@ -26,4 +26,5 @@ add_circt_dialect_library(CIRCTLLHDTransforms
   MLIRIR
   MLIRSCFDialect
   MLIRTransformUtils
+  MLIRUBDialect
 )
