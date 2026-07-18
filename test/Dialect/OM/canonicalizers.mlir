@@ -112,7 +112,7 @@ om.class @PropEqFold(%str: !om.string, %b: i1, %n: !om.integer) -> (out1: i1, ou
                                                                      out3: i1, out4: i1,
                                                                      out5: i1, out6: i1,
                                                                      out7: i1, out8: i1,
-                                                                     out9: i1) {
+                                                                     out9: i1, out10: i1) {
   %hello1 = om.constant "hello" : !om.string
   %hello2 = om.constant "hello" : !om.string
   %world  = om.constant "world" : !om.string
@@ -145,20 +145,24 @@ om.class @PropEqFold(%str: !om.string, %b: i1, %n: !om.integer) -> (out1: i1, ou
 
   %i42a = om.constant #om.integer<42 : si64> : !om.integer
   %i42b = om.constant #om.integer<42 : si64> : !om.integer
+  %i42_signless = om.constant #om.integer<42 : i64> : !om.integer
   %i0   = om.constant #om.integer<0 : si64> : !om.integer
 
   // Equal constant integers fold to true.
   %6 = om.prop.eq %i42a, %i42b : !om.integer
 
+  // Equal constant integers with different signedness fold to true.
+  %7 = om.prop.eq %i42a, %i42_signless : !om.integer
+
   // Unequal constant integers fold to false.
-  %7 = om.prop.eq %i42a, %i0 : !om.integer
+  %8 = om.prop.eq %i42a, %i0 : !om.integer
 
   // Non-constant integer operands do not fold.
   // CHECK: [[IEQ:%.+]] = om.prop.eq %n, %n : !om.integer
-  %8 = om.prop.eq %n, %n : !om.integer
+  %9 = om.prop.eq %n, %n : !om.integer
 
-  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[EQ]], [[TRUE]], [[FALSE]], [[BEQ]], [[TRUE]], [[FALSE]], [[IEQ]]
-  om.class.fields %0, %1, %2, %3, %4, %5, %6, %7, %8 : i1, i1, i1, i1, i1, i1, i1, i1, i1
+  // CHECK: om.class.fields [[TRUE]], [[FALSE]], [[EQ]], [[TRUE]], [[FALSE]], [[BEQ]], [[TRUE]], [[TRUE]], [[FALSE]], [[IEQ]]
+  om.class.fields %0, %1, %2, %3, %4, %5, %6, %7, %8, %9 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
 }
 
 // CHECK-LABEL: @IntegerBitwiseFold
