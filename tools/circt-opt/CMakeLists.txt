@@ -41,6 +41,7 @@ target_link_libraries(circt-opt
   MLIRIndexDialect
   MLIRUBDialect
   MLIRLLVMIRTransforms
+  MLIRDLTIDialect
 )
 
 export_executable_symbols_for_plugins(circt-opt)
