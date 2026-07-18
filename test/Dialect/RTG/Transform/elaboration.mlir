@@ -18,6 +18,8 @@ func.func @dummy15(%arg0: i32) -> () {return}
 func.func @dummy16(%arg0: i12) -> () {return}
 func.func @dummy17(%arg0: i3) -> () {return}
 func.func @dummy18(%arg0: !rtg.string) -> () {return}
+func.func @dummy19(%arg0: i8) -> () {return}
+func.func @dummy20(%arg0: !rtg.array<i8>) -> () {return}
 func.func @dummy_reg(%arg0: !rtgtest.ireg) -> () {return}
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
@@ -1095,6 +1097,44 @@ rtg.test @strings(singleton = %none: index) {
   // CHECK-NEXT: [[V0:%.+]] = rtg.constant "hello4" : !rtg.string
   // CHECK-NEXT: func.call @dummy18([[V0]])
   func.call @dummy18(%5) : (!rtg.string) -> ()
+}
+
+// CHECK-LABEL: rtg.test @stringToASCIIArray
+rtg.test @stringToASCIIArray(singleton = %none: index) {
+  %idx0 = index.constant 0
+  %idx1 = index.constant 1
+  %0 = rtg.constant "hi" : !rtg.string
+  %1 = rtg.string_to_ascii_array %0 : !rtg.array<i8>
+
+  // CHECK-NEXT: [[C104:%.+]] = rtg.constant 104 : i8
+  // CHECK-NEXT: func.call @dummy19([[C104]])
+  %2 = rtg.array_extract %1[%idx0] : !rtg.array<i8>
+  func.call @dummy19(%2) : (i8) -> ()
+
+  // CHECK-NEXT: [[C105:%.+]] = rtg.constant 105 : i8
+  // CHECK-NEXT: func.call @dummy19([[C105]])
+  %3 = rtg.array_extract %1[%idx1] : !rtg.array<i8>
+  func.call @dummy19(%3) : (i8) -> ()
+
+  // CHECK-NEXT: [[SZ:%.+]] = rtg.constant 2 : index
+  // CHECK-NEXT: func.call @dummy2([[SZ]])
+  %4 = rtg.array_size %1 : !rtg.array<i8>
+  func.call @dummy2(%4) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @stringToASCIIArraySymbolic
+rtg.test @stringToASCIIArraySymbolic(singleton = %none: index) {
+  // A virtual register is not known concretely during elaboration, so the
+  // string it formats to, and thus the array derived from it, must stay
+  // symbolic instead of being decomposed into concrete byte constants.
+  // CHECK-NEXT: [[REG:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
+  %reg = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
+  // CHECK-NEXT: [[STR:%.+]] = rtg.register_format [[REG]] : !rtgtest.ireg
+  %str = rtg.register_format %reg : !rtgtest.ireg
+  // CHECK-NEXT: [[ARR:%.+]] = rtg.string_to_ascii_array [[STR]] : !rtg.array<i8>
+  %arr = rtg.string_to_ascii_array %str : !rtg.array<i8>
+  // CHECK-NEXT: func.call @dummy20([[ARR]])
+  func.call @dummy20(%arr) : (!rtg.array<i8>) -> ()
 }
 
 // CHECK-LABEL: rtg.test @attributeToElabValueConversion

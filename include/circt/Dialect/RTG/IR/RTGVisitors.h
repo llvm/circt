@@ -64,6 +64,7 @@ public:
             SpaceOp, StringDataOp, SegmentOp,
             // String ops
             StringConcatOp, IntFormatOp, ImmediateFormatOp, RegisterFormatOp,
+            StringToASCIIArrayOp,
             // Misc ops
             CommentOp, ConstraintOp, RandomScopeOp>(
             [&](auto expr) -> ResultType {
@@ -156,6 +157,7 @@ public:
   HANDLE(ImmediateFormatOp, Unhandled);
   HANDLE(RegisterFormatOp, Unhandled);
   HANDLE(StringToLabelOp, Unhandled);
+  HANDLE(StringToASCIIArrayOp, Unhandled);
   HANDLE(RandomScopeOp, Unhandled);
 #undef HANDLE
 };

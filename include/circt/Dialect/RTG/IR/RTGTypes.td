@@ -148,6 +148,13 @@ def ArrayType : RTGTypeDef<"Array"> {
   ];
 }
 
+class ArrayTypeOf<Type elementType> : ContainerType<
+  elementType, ArrayType.predicate,
+  "llvm::cast<rtg::ArrayType>($_self).getElementType()", "array">,
+  SameBuildabilityAs<elementType,
+    "::circt::rtg::ArrayType::get($_builder.getContext(), " #
+    elementType.builderCall # ")">;
+
 def MapType : RTGTypeDef<"Map"> {
   let summary = "a map from keys to values";
   let description = [{

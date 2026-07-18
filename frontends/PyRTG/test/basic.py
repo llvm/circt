@@ -573,3 +573,16 @@ def test96_float_registers(config):
 
   vreg = FloatRegister.virtual()
   vreg.to_string()
+
+
+# ASM-LABEL: Begin of test 'test97_string_to_ascii_array
+# ASM-NEXT: # byte0=0x68{{$}}
+# ASM-NEXT: # byte1=0x69{{$}}
+# ASM: End of test 'test97_string_to_ascii_array
+
+
+@test(Singleton)
+def test97_string_to_ascii_array(config):
+  arr = String("hi").to_ascii_array()
+  embed_comment(String("byte0=") + arr[0].to_string())
+  embed_comment(String("byte1=") + arr[1].to_string())

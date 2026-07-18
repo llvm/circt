@@ -343,6 +343,9 @@ rtg.test @strings() {
 
   // CHECK-NEXT: rtg.string_concat
   rtg.string_concat
+
+  // CHECK-NEXT: rtg.string_to_ascii_array [[V0]] : !rtg.array<i8>
+  rtg.string_to_ascii_array %0 : !rtg.array<i8>
 }
 
 // CHECK-LABEL: rtg.test @registerConversion
