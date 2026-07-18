@@ -52,3 +52,16 @@ firrtl.circuit "IllegalDomainCrossing" {
     firrtl.matchingconnect %b, %a : !firrtl.uint<1>
   }
 }
+
+// Test that accessing a subfield of an undriven domain wire produces an error.
+// This catches the issue early in InferDomains instead of in LowerClasses.
+
+// CHECK-LABEL: UndrivenDomainWireSubfield
+firrtl.circuit "UndrivenDomainWireSubfield" {
+  firrtl.domain @ClockDomain [#firrtl.domain.field<"source", !firrtl.string>]
+  firrtl.module @UndrivenDomainWireSubfield() {
+    %wire = firrtl.wire : !firrtl.domain<@ClockDomain(source: !firrtl.string)>
+    // expected-error @below {{accesses an undriven domain; domain wires must be driven before their subfields can be accessed}}
+    %1 = firrtl.domain.subfield %wire[source] : !firrtl.domain<@ClockDomain(source: !firrtl.string)>
+  }
+}
