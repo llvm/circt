@@ -13,6 +13,7 @@ from types import ModuleType
 import pyrtg
 from pyrtg.circt import ir, passmanager, register_dialects
 from pyrtg.diagnostics import Verbosity
+from pyrtg.core import MemoryUsage, CodeGenContext
 
 
 class InputFormat(Enum):
@@ -87,6 +88,13 @@ def parse_args() -> argparse.Namespace:
                       choices=list(Verbosity),
                       default=Verbosity.NORMAL,
                       help="Verbosity level for diagnostic output")
+  parser.add_argument(
+      "--memory-usage",
+      type=MemoryUsage,
+      choices=list(MemoryUsage),
+      default=MemoryUsage.NORMAL,
+      help="How constrained the generated program may be with memory usage "
+      "for the program binary and its global data")
 
   args = parser.parse_args()
 
@@ -130,7 +138,8 @@ def frontend_codegen(args: argparse.Namespace) -> ir.Module:
 
     module = ir.Module.create(loc=ir.Location.file(args.file, 0, 0))
     with ir.InsertionPoint(module.body):
-      pyrtg.core.CodeGenRoot._codegen_all_instances()
+      pyrtg.core.CodeGenRoot._codegen_all_instances(
+          CodeGenContext(memory_usage=args.memory_usage))
     return module
 
   assert False, "input format must be one of the above"
