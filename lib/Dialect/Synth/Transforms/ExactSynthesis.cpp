@@ -134,20 +134,6 @@ struct ExactSynthesisPolicy {
   SmallVector<ExactNodeInfo, 4> primitiveInfos;
 };
 
-static std::unique_ptr<IncrementalSATSolver>
-createExactSynthesisSATSolver(StringRef backend) {
-  if (backend == "auto") {
-    if (auto solver = createCadicalSATSolver())
-      return solver;
-    return createZ3SATSolver();
-  }
-  if (backend == "cadical")
-    return createCadicalSATSolver();
-  if (backend == "z3")
-    return createZ3SATSolver();
-  return {};
-}
-
 static SmallString<64>
 formatPrimitiveSummary(const ExactSynthesisPolicy &policy) {
   SmallString<64> text;
@@ -660,7 +646,7 @@ exactSynthesizeAreaMinimized(OpBuilder &builder, Location loc, APInt truthTable,
 
   for (unsigned area = 1; area <= maxArea; ++area) {
     LDBG() << "Trying area=" << area << "\n";
-    auto solver = createExactSynthesisSATSolver(satSolver);
+    auto solver = createSATSolver(satSolver);
     if (!solver)
       return failure();
     GenericExactSATProblem problem(policy, *solver, numInputs, truthTable,
@@ -821,7 +807,7 @@ struct ExactSynthesisPass
       return failure();
     policy = *parsedPolicy;
 
-    if (!createExactSynthesisSATSolver(satSolver)) {
+    if (!createSATSolver(satSolver)) {
       emitError(UnknownLoc::get(context))
           << "unsupported or unavailable SAT solver '" << satSolver
           << "' (expected auto, z3, or cadical)";
