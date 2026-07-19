@@ -1912,6 +1912,34 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
   }
 };
 
+struct NullOpConversion : public OpConversionPattern<NullOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(NullOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type ptrTy = getTypeConverter()->convertType(op.getResult().getType());
+    if (!ptrTy)
+      return rewriter.notifyMatchFailure(op, "failed to convert null type");
+    rewriter.replaceOpWithNewOp<LLVM::ZeroOp>(op, ptrTy);
+    return success();
+  }
+};
+
+template <typename SourceOp, LLVM::ICmpPredicate pred>
+struct HandleCmpOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    rewriter.replaceOpWithNewOp<LLVM::ICmpOp>(op, pred, adaptor.getLhs(),
+                                              adaptor.getRhs());
+    return success();
+  }
+};
+
 template <typename SourceOp, arith::CmpFPredicate pred>
 struct FCmpOpConversion : public OpConversionPattern<SourceOp> {
   using OpConversionPattern<SourceOp>::OpConversionPattern;
@@ -3718,6 +3746,11 @@ static void populateTypeConversion(TypeConverter &typeConverter) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
 
+  // NullType -> !llvm.ptr
+  typeConverter.addConversion([&](NullType type) -> std::optional<Type> {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
+
   typeConverter.addConversion([&](RefType type) -> std::optional<Type> {
     if (isa<OpenArrayType, OpenUnpackedArrayType>(type.getNestedType()))
       return LLVM::LLVMPointerType::get(type.getContext());
@@ -3812,6 +3845,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
   // clang-format off
   patterns.add<
     ClassUpcastOpConversion,
+    NullOpConversion,
     // Patterns of declaration operations.
     VariableOpConversion,
     NetOpConversion,
@@ -3914,6 +3948,8 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FCmpOpConversion<EqRealOp, arith::CmpFPredicate::OEQ>,
     CaseXZEqOpConversion<CaseZEqOp, true>,
     CaseXZEqOpConversion<CaseXZEqOp, false>,
+    HandleCmpOpConversion<HandleEqOp, LLVM::ICmpPredicate::eq>,
+    HandleCmpOpConversion<HandleNeOp, LLVM::ICmpPredicate::ne>,
 
     // Patterns of structural operations.
     SVModuleOpConversion,
