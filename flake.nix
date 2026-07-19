@@ -381,7 +381,7 @@
                   # Keep the value containing whitespace as one CMake argv.
                   # The generic hook splits string-valued cmakeFlags on
                   # whitespace before appending cmakeFlagsArray.
-                  cmakeFlagsArray+=("-DLLVM_LIT_ARGS=-v --show-unsupported")
+                  cmakeFlagsArray+=("-DLLVM_LIT_ARGS=-v --show-unsupported --timeout=300")
                 '';
                 cmakeFlags =
                   builtins.filter
@@ -472,6 +472,27 @@
             pkgs.z3
           ];
 
+          # Publish compiler objects as soon as the build phase completes.  A
+          # separate host step promotes this staging directory and uploads it
+          # before any test starts, so a later timeout cannot discard hours of
+          # compilation.  Keep the cache itself build-owned inside the sandbox
+          # because sccache updates its local LRU metadata while reading.
+          sccacheCheckpoint = ''
+            ${ciPkgs.sccache}/bin/sccache --show-stats
+            ${ciPkgs.sccache}/bin/sccache --stop-server >/dev/null
+            if [[ -s "$SCCACHE_ERROR_LOG" ]]; then
+              echo "Last 200 lines from the sccache error log:" >&2
+              tail -n 200 "$SCCACHE_ERROR_LOG" >&2
+            fi
+            if [[ -d /var/cache/circt-sccache-publish \
+                  && -w /var/cache/circt-sccache-publish ]]; then
+              find /var/cache/circt-sccache-publish -mindepth 1 -delete
+              cp -R --no-preserve=ownership,mode,timestamps \
+                "$SCCACHE_DIR/." /var/cache/circt-sccache-publish/
+              touch /var/cache/circt-sccache-publish/.ready
+            fi
+          '';
+
           mkCirctCheck =
             {
               name,
@@ -495,6 +516,7 @@
                 (old.cmakeFlags or [ ])
                 ++ extraCmakeFlags
                 ++ [
+                  "-DBUILD_TESTING=ON"
                   "-DPython_EXECUTABLE=${python}/bin/python3"
                   "-DPython3_EXECUTABLE=${python}/bin/python3"
                   "-DCMAKE_C_COMPILER_LAUNCHER=${ciPkgs.sccache}/bin/sccache"
@@ -514,7 +536,10 @@
                   cp -R --no-preserve=ownership,mode,timestamps \
                     /var/cache/circt-sccache/. "$SCCACHE_DIR/"
                 fi
-                export SCCACHE_BASEDIRS="$NIX_BUILD_TOP"
+                # Normalize both the sandbox root and derivation-specific
+                # output paths so the build-only and checked derivations hash
+                # otherwise identical compiler commands to the same keys.
+                export SCCACHE_BASEDIRS="$NIX_BUILD_TOP:$out:$lib:$dev"
                 export SCCACHE_CACHE_SIZE=1G
                 export SCCACHE_ERROR_LOG="''${TMPDIR:-/build}/sccache-errors.log"
                 export SCCACHE_IDLE_TIMEOUT=0
@@ -523,6 +548,7 @@
                 export CMAKE_C_COMPILER_LAUNCHER="${ciPkgs.sccache}/bin/sccache"
                 export CMAKE_CXX_COMPILER_LAUNCHER="${ciPkgs.sccache}/bin/sccache"
               '';
+              postBuild = (old.postBuild or "") + sccacheCheckpoint;
               doCheck = true;
               checkTarget = pkgs.lib.concatStringsSep " " (
                 [
@@ -578,6 +604,7 @@
                     -DCIRCT_DIR="$PWD/lib/cmake/circt" \
                     -DMLIR_DIR="${pkgs.lib.getDev mlir}/lib/cmake/mlir" \
                     -DLLVM_EXTERNAL_LIT="${python}/bin/.lit-wrapped" \
+                    "-DLLVM_LIT_ARGS=-v --show-unsupported --timeout=300" \
                     -DPython_EXECUTABLE="${python}/bin/python3" \
                     -DPython3_EXECUTABLE="${python}/bin/python3"
                   cmake --build "$PWD/circt-standalone" \
@@ -641,25 +668,42 @@
                       "$CIRCT_SOURCE_ROOT/lib/Dialect/ESI/runtime/tests/unit" \
                       -v --log-cli-level=INFO
                 ''
-                + ''
-                  ${ciPkgs.sccache}/bin/sccache --show-stats
-                  ${ciPkgs.sccache}/bin/sccache --stop-server >/dev/null
-                  if [[ -s "$SCCACHE_ERROR_LOG" ]]; then
-                    echo "Last 200 lines from the sccache error log:" >&2
-                    tail -n 200 "$SCCACHE_ERROR_LOG" >&2
-                  fi
-                  # Replace the staging cache with the LRU-bounded local
-                  # snapshot. Merging would resurrect entries sccache evicted.
-                  if [[ -d /var/cache/circt-sccache \
-                        && -w /var/cache/circt-sccache ]]; then
-                    find /var/cache/circt-sccache -mindepth 1 -delete
-                    cp -R --no-preserve=ownership,mode,timestamps \
-                      "$SCCACHE_DIR/." /var/cache/circt-sccache/
-                  fi
-                '';
+                + sccacheCheckpoint;
               passthru = (old.passthru or { }) // {
                 inherit libllvm mlir;
               };
+            });
+
+          # This derivation intentionally performs the exact same configure and
+          # build as its checked counterpart, but stops before the check phase.
+          # BUILD_TESTING must remain enabled because the CMake setup hook
+          # otherwise disables test binaries whenever doCheck is false.
+          mkCirctBuild =
+            name: checked:
+            checked.overrideAttrs (old: {
+              pname = "circt-${name}-build";
+              doCheck = false;
+              # Unit tests are deliberately excluded from Ninja's default all
+              # target.  Compile their aggregate here without invoking lit so
+              # no compiler work remains interleaved with the check phase.
+              ninjaFlagsArray = (old.ninjaFlagsArray or [ ]) ++ [
+                "all"
+                "CIRCTUnitTests"
+              ];
+              postCheck = "";
+              # The compiler objects are the useful result of this warm-up.
+              # Avoid installing and uploading a second full CIRCT package to
+              # the repository Nix cache; the checked derivation below remains
+              # the sole package/artifact producer.
+              installPhase = ''
+                mkdir -p "$out" "$lib" "$dev"
+                touch "$out/.circt-ci-build-complete"
+              '';
+              postInstall = "";
+              # A substituted output would skip compilation and therefore
+              # produce no compiler-object cache for the following checks.
+              allowSubstitutes = false;
+              preferLocalBuild = true;
             });
 
           # Normal CI directly reuses these cached libllvm and mlir derivations.
@@ -676,9 +720,8 @@
             # CIRCT configuration from the previous matrix.
             enableAssertions = true;
           };
-        in
-        {
-          full = mkCirctCheck {
+
+          fullCheck = mkCirctCheck {
             name = "full-check";
             circt = fullCirct;
             inherit mlir;
@@ -708,7 +751,8 @@
               "ESIRuntimeCppTests"
             ];
           };
-          clang = mkCirctCheck {
+
+          clangCheck = mkCirctCheck {
             name = "clang-check";
             circt = clangCirct;
             inherit mlir;
@@ -722,6 +766,12 @@
               "-DMLIR_ENABLE_BINDINGS_PYTHON=OFF"
             ];
           };
+        in
+        {
+          full = fullCheck;
+          full-build = mkCirctBuild "full" fullCheck;
+          clang = clangCheck;
+          clang-build = mkCirctBuild "clang" clangCheck;
         }
       );
 
