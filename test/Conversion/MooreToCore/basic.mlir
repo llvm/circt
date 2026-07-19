@@ -1624,6 +1624,22 @@ func.func @ConvertRealOperations(%arg0: !moore.f32, %arg1: !moore.f64) {
   return
 }
 
+// CHECK-LABEL: func.func @RealBitsLowering
+func.func @RealBitsLowering(%arg0: !moore.f64, %arg1: !moore.i64, %arg2: !moore.f32, %arg3: !moore.i32) {
+  // CHECK-NEXT: arith.bitcast %arg0 : f64 to i64
+  %0 = moore.builtin.realtobits %arg0
+
+  // CHECK-NEXT: arith.bitcast %arg1 : i64 to f64
+  %1 = moore.builtin.bitstoreal %arg1 : i64
+
+  // CHECK-NEXT: arith.bitcast %arg2 : f32 to i32
+  %2 = moore.builtin.shortrealtobits %arg2
+
+  // CHECK-NEXT: arith.bitcast %arg3 : i32 to f32
+  %3 = moore.builtin.bitstoshortreal %arg3 : i32
+  return
+}
+
 // CHECK-LABEL: func.func @StringOperations
 // CHECK-SAME: %arg0: i32
 // CHECK-SAME: %arg1: !sim.dstring
