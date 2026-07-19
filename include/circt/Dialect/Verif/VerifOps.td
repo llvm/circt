@@ -226,6 +226,23 @@ def BoundedModelCheckingOp : VerifOp<"bmc", [
   let hasRegionVerifier = true;
 }
 
+def BMCTraceOp : VerifOp<"bmc.trace"> {
+  let summary = "Record a named value for BMC counterexample tracing";
+  let description = [{
+    Records a named value at a specific step for later BMC counterexample
+    materialization. This is intended as an internal marker within the BMC
+    lowering pipeline.
+  }];
+  let arguments = (ins
+    I32:$step,
+    StrAttr:$name,
+    AnyType:$value
+  );
+  let assemblyFormat = [{
+    $step `,` $name `,` $value attr-dict `:` type($step) `,` type($value)
+  }];
+}
+
 // Attempt to prove a binary relation between two circuits
 class CircuitRelationCheckOp<string mnemonic, list<Trait> traits = []>
   : VerifOp<mnemonic, !listconcat(traits,

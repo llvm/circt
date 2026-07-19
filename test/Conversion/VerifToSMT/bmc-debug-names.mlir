@@ -5,9 +5,11 @@
 // CHECK: [[REG_DECL:%.+]] = smt.declare_fun "state_q" : !smt.bv<8>
 // CHECK: dbg.variable "data_in", [[INPUT_DECL]] : !smt.bv<8>
 // CHECK: dbg.variable "state_q", [[REG_DECL]] : !smt.bv<8>
-// CHECK: scf.for {{%.+}} iter_args([[CLK_ARG:%.+]] = {{%.+}}, [[INPUT_ARG:%.+]] = [[INPUT_DECL]], [[REG_ARG:%.+]] = [[REG_DECL]], {{%.+}})
+// CHECK: scf.for [[STEP:%.+]] = {{%.+}} iter_args([[CLK_ARG:%.+]] = {{%.+}}, [[INPUT_ARG:%.+]] = [[INPUT_DECL]], [[REG_ARG:%.+]] = [[REG_DECL]], {{%.+}})
 // CHECK: dbg.variable "data_in", [[INPUT_ARG]] : !smt.bv<8>
 // CHECK: dbg.variable "state_q", [[REG_ARG]] : !smt.bv<8>
+// CHECK: verif.bmc.trace [[STEP]], "data_in", [[INPUT_ARG]] : i32, !smt.bv<8>
+// CHECK: verif.bmc.trace [[STEP]], "state_q", [[REG_ARG]] : i32, !smt.bv<8>
 // CHECK: [[CIRCUIT_RESULT:%.+]] = func.call @bmc_circuit{{(_[0-9]+)?}}([[CLK_ARG]], [[INPUT_ARG]], [[REG_ARG]]) : (!smt.bv<1>, !smt.bv<8>, !smt.bv<8>) -> !smt.bv<8>
 // CHECK-NOT: smt.declare_fun "input_1"
 // CHECK-NOT: smt.declare_fun "reg_0"
