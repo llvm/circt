@@ -16,6 +16,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include <memory>
 
 namespace circt {
@@ -241,6 +242,11 @@ std::unique_ptr<IncrementalSATSolver>
 createCadicalSATSolver(const CadicalSATSolverOptions &options = {});
 /// Return true when at least one incremental SAT backend is available.
 bool hasIncrementalSATSolverBackend();
+
+/// Construct an incremental SAT solver using the requested backend. The
+/// `auto` backend prefers CaDiCaL and falls back to Z3.
+std::unique_ptr<IncrementalSATSolver>
+createSATSolver(llvm::StringRef backend = "auto");
 
 } // namespace circt
 
