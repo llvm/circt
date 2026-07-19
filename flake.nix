@@ -686,10 +686,9 @@
               # Unit tests are deliberately excluded from Ninja's default all
               # target.  Compile their aggregate here without invoking lit so
               # no compiler work remains interleaved with the check phase.
-              ninjaFlagsArray = (old.ninjaFlagsArray or [ ]) ++ [
-                "all"
-                "CIRCTUnitTests"
-              ];
+              preBuild = (old.preBuild or "") + ''
+                ninjaFlagsArray+=("all" "CIRCTUnitTests")
+              '';
               postCheck = "";
               # The compiler objects are the useful result of this warm-up.
               # Avoid installing and uploading a second full CIRCT package to

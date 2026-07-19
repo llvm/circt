@@ -492,7 +492,8 @@ jobs:
                   and .env.preferLocalBuild == "1"
                   and .env.doCheck == ""
                   and (.env.cmakeFlags | contains("-DBUILD_TESTING=ON"))
-                  and .env.ninjaFlagsArray == "all CIRCTUnitTests"
+                  and (.env.preBuild
+                    | contains("ninjaFlagsArray+=(\"all\" \"CIRCTUnitTests\")"))
                   and (.env.postBuild
                     | contains("/var/cache/circt-sccache-publish"))
                   and (.env.postBuild | contains(".ready"))
@@ -705,6 +706,7 @@ jobs:
             core.setOutput('trusted', String(trusted));
       - name: Look up trusted sccache snapshot
         id: sccache_lookup
+        continue-on-error: true
         if: >-
           ${{
             success() &&
@@ -945,7 +947,10 @@ jobs:
           ${{
             !cancelled() &&
             steps.sccache_trust.outcome == 'success' &&
-            steps.sccache_trust.outputs.trusted == 'true'
+            steps.sccache_trust.outputs.trusted == 'true' &&
+            ((steps.circt_check_cache.outputs.full_cached == 'true' &&
+              steps.circt_check_cache.outputs.clang_cached == 'true') ||
+             steps.sccache_lookup.outcome == 'success')
           }}
         env:
           CLANG_CACHED: ${{ steps.circt_check_cache.outputs.clang_cached }}
