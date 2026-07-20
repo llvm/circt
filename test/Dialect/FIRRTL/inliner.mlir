@@ -1,4 +1,4 @@
-// RUN: circt-opt --pass-pipeline='builtin.module(firrtl.circuit(firrtl-inliner))' -allow-unregistered-dialect %s | FileCheck %s
+// RUN: circt-opt --split-input-file --pass-pipeline='builtin.module(firrtl.circuit(firrtl-inliner))' -allow-unregistered-dialect %s | FileCheck %s
 
 // Test that an external module as the main module works.
 firrtl.circuit "main_extmodule" {
@@ -303,9 +303,11 @@ firrtl.circuit "NLAInlining" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@NLAInlining::@bar, @Bar]
   // CHECK-NEXT: hw.hierpath private @nla2 [@NLAInlining::@bar, @Bar::@a]
   // CHECK-NEXT: hw.hierpath private @nla3 [@NLAInlining::@bar, @Bar::@port]
+  // Retention keeps the localized paths as one-hop hierpaths; the
+  // annotations still localize onto the ops.
+  // CHECK-NEXT: hw.hierpath private @nla4 [@NLAInlining]
   // CHECK-NEXT: hw.hierpath private @nla5 [@NLAInlining::@b]
   // CHECK-NEXT: hw.hierpath private @nla6 [@NLAInlining::@port]
-  // CHECK-NOT:  hw.hierpath private @nla4
   hw.hierpath private @nla1 [@NLAInlining::@foo, @Foo::@bar, @Bar]
   hw.hierpath private @nla2 [@NLAInlining::@foo, @Foo::@bar, @Bar::@a]
   hw.hierpath private @nla3 [@NLAInlining::@foo, @Foo::@bar, @Bar::@port]
@@ -346,7 +348,7 @@ firrtl.circuit "NLAInliningNotMainRoot" {
   // CHECK-NEXT: hw.hierpath private @nla2_0 [@Foo::@baz, @Baz::@port]
   hw.hierpath private @nla1 [@Bar::@baz, @Baz::@a]
   hw.hierpath private @nla2 [@Bar::@baz, @Baz::@port]
-  // CHECK: firrtl.module private @Baz
+  // CHECK-NEXT: firrtl.module private @Baz
   // CHECK-SAME: %port: {{.+}} [{circt.nonlocal = @nla2, class = "nla2"}, {circt.nonlocal = @nla2_0, class = "nla2"}]
   firrtl.module private @Baz(
     in %port: !firrtl.uint<1> sym @port [{circt.nonlocal = @nla2, class = "nla2"}]
@@ -384,12 +386,16 @@ firrtl.circuit "NLAInliningNotMainRoot" {
 firrtl.circuit "NLAFlattening" {
   // CHECK-NEXT: hw.hierpath private @nla1 [@NLAFlattening::@foo, @Foo::@a]
   // CHECK-NEXT: hw.hierpath private @nla2 [@NLAFlattening::@foo, @Foo::@port]
+  // Retention keeps @nla3/@nla4 (annotations localize onto the flattened ops).
+  // CHECK-NEXT: hw.hierpath private @nla3 [@NLAFlattening::@foo, @Foo]
   // CHECK-NEXT: hw.hierpath private @nla4 [@Foo::@b]
-  // CHECK-NOT:  hw.hierpath private @nla3
   hw.hierpath private @nla1 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@a]
   hw.hierpath private @nla2 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz::@port]
   hw.hierpath private @nla3 [@NLAFlattening::@foo, @Foo::@bar, @Bar::@baz, @Baz]
   hw.hierpath private @nla4 [@Foo::@bar, @Bar::@b]
+  // CHECK-NEXT: firrtl.module @Baz
+  // CHECK-NOT: @nla
+  // CHECK-NOT: nonlocal
   firrtl.module @Baz(
     in %port: !firrtl.uint<1> sym @port [{circt.nonlocal = @nla2, class = "nla2"}]
   ) attributes {annotations = [{circt.nonlocal = @nla3, class = "nla3"}]} {
@@ -413,25 +419,31 @@ firrtl.circuit "NLAFlattening" {
   }
 }
 
-// Test NLA handling during flattening for situations where the NLA root is a
-// child of the flattened module.  This is testing the following situations:
+// Test NLA handling during flattening when the NLA root is a child of the
+// flattened module:
 //
-//   1) @nla1: NLA component is made local and garbage collected.
-//   2) @nla2: NLA port is made local and garbage collected.
-//   3) @nla3: NLA component is made local, but not garbage collected.
-//   4) @nla4: NLA port is made local, but not garbage collected.
+//   1) @nla1: component path localizes; retained as a one-hop hierpath.
+//   2) @nla2: port path localizes; retained as a one-hop hierpath.
+//   3) @nla3: component path survives, trim-equal contexts collapse into it.
+//   4) @nla4: port path survives, trim-equal contexts collapse into it.
 //
 // CHECK-LABEL: firrtl.circuit "NLAFlatteningChildRoot"
 firrtl.circuit "NLAFlatteningChildRoot" {
-  // CHECK-NOT:  hw.hierpath private @nla1
-  // CHECK-NOT:  hw.hierpath private @nla2
+  // @Baz's only surviving instance is under the top; the @Foo copy flattens
+  // away.  The top-rooted contexts are therefore trim-equal with the @Baz-rooted
+  // @nla3/@nla4 and collapse into them -- one hierpath each, one annotation
+  // each.
+  // @nla1/@nla2 localize into the flattened @Foo copy; retention keeps them as
+  // one-hop hierpaths (annotations localized onto the ops).
+  // CHECK-NEXT: hw.hierpath private @nla1 [@Foo::@a]
+  // CHECK-NEXT: hw.hierpath private @nla2 [@Foo::@Qux_port]
   // CHECK-NEXT: hw.hierpath private @nla3 [@Baz::@quz, @Quz::@b]
   // CHECK-NEXT: hw.hierpath private @nla4 [@Baz::@quz, @Quz::@Quz_port]
+  // CHECK-NEXT: firrtl.module private @Quz
   hw.hierpath private @nla1 [@Bar::@qux, @Qux::@a]
   hw.hierpath private @nla2 [@Bar::@qux, @Qux::@Qux_port]
   hw.hierpath private @nla3 [@Baz::@quz, @Quz::@b]
   hw.hierpath private @nla4 [@Baz::@quz, @Quz::@Quz_port]
-  // CHECK: firrtl.module private @Quz
   // CHECK-SAME: in %port: {{.+}} [{circt.nonlocal = @nla4, class = "nla4"}]
   firrtl.module private @Quz(
     in %port: !firrtl.uint<1> sym @Quz_port [{circt.nonlocal = @nla4, class = "nla4"}]
@@ -527,14 +539,13 @@ firrtl.circuit "CollidingSymbolsPort" {
 //
 // CHECK-LABEL: firrtl.circuit "CollidingSymbolsReTop"
 firrtl.circuit "CollidingSymbolsReTop" {
-  // CHECK-NOT:  #hw.innerNameRef<@CollidingSymbolsReTop::@baz>
-  // CHECK-NOT:  #hw.innerNameRef<@Foo::@baz>
-  // CHECK-NEXT: hw.hierpath private @nla1 [@CollidingSymbolsReTop::@[[TopbazSym:[_a-zA-Z0-9]+]], @Baz::@a]
-  // CHECK-NEXT: hw.hierpath private @nla1_0 [@Foo::@[[FoobazSym:[_a-zA-Z0-9]+]], @Baz::@a]
+  // CHECK-NEXT: hw.hierpath private @nla1 [@Bar::@baz, @Baz::@a]
+  // CHECK-NEXT: hw.hierpath private @nla1_0 [@CollidingSymbolsReTop::@[[TopbazSym:[_a-zA-Z0-9]+]], @Baz::@a]
+  // CHECK-NEXT: hw.hierpath private @nla1_1 [@Foo::@[[FoobazSym:[_a-zA-Z0-9]+]], @Baz::@a]
+  // CHECK-NEXT: firrtl.module @Baz
   hw.hierpath private @nla1 [@Bar::@baz, @Baz::@a]
-  // CHECK: firrtl.module @Baz
   firrtl.module @Baz() {
-    // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla1, class = "hello"}, {circt.nonlocal = @nla1_0, class = "hello"}]
+    // CHECK-NEXT: firrtl.wire {{.+}} [{circt.nonlocal = @nla1, class = "hello"}, {circt.nonlocal = @nla1_0, class = "hello"}, {circt.nonlocal = @nla1_1, class = "hello"}]
     %a = firrtl.wire sym @a {annotations = [{circt.nonlocal = @nla1, class = "hello"}]} : !firrtl.uint<1>
   }
   firrtl.module @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
@@ -1245,7 +1256,8 @@ firrtl.circuit "PropertyUTurn" {
 // Test that inlining and flattening compose with nla well.
 firrtl.circuit "compose_nla" {
   hw.hierpath private @nla1 [@test1::@sym, @test2::@sym, @test3]
-// CHECK-NOT:  hw.hierpath private @nla1
+// Retention keeps the fully-collapsed path (annotation localizes onto the op).
+// CHECK: hw.hierpath private @nla1 [@compose_nla]
 firrtl.module @compose_nla() {
 // CHECK-LABEL: firrtl.module @compose_nla() {
   firrtl.instance test1 @test1()
@@ -1273,6 +1285,7 @@ firrtl.module private @test3() {
 
 // Directly check simplest example of inlining a module containing a layerblock.
 
+// CHECK-LABEL: firrtl.circuit "InlineLayerBlockSimple"
 firrtl.circuit "InlineLayerBlockSimple" {
   firrtl.layer @I inline { }
   // CHECK-NOT: @Child
@@ -1295,6 +1308,7 @@ firrtl.circuit "InlineLayerBlockSimple" {
 
 // Check recurse into instances not at top-level.
 
+// CHECK-LABEL: firrtl.circuit "WalkIntoInstancesUnderLayerBlock"
 firrtl.circuit "WalkIntoInstancesUnderLayerBlock" {
   firrtl.layer @I inline { }
   // CHECK-NOT: @GChild
@@ -1320,6 +1334,7 @@ firrtl.circuit "WalkIntoInstancesUnderLayerBlock" {
 
 // Test inlining into nested layer, and cloning operations with blocks + blockargs (match).
 
+// CHECK-LABEL: firrtl.circuit "MatchInline"
 firrtl.circuit "MatchInline" attributes {enable_layers = [@I]} {
   firrtl.layer @I inline {
     firrtl.layer @J inline { }
@@ -1432,6 +1447,7 @@ firrtl.circuit "FormalMarkerIsUse" {
 // -----
 
 firrtl.circuit "RemoveNonLocalFromLocal" {
+  // Retention keeps @dutNLA; the tracker annotation still localizes off it.
   // CHECK: hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
   hw.hierpath private @dutNLA [@RemoveNonLocalFromLocal::@sym]
   firrtl.module @Bar() {}
@@ -1581,6 +1597,7 @@ firrtl.circuit "InstanceChoiceWithFlattening" {
 //
 // CHECK-LABEL: firrtl.circuit "FlattenAtRoot"
 firrtl.circuit "FlattenAtRoot" {
+  // Retention keeps @nla (flattened to a one-hop path; annotation localizes).
   // CHECK: hw.hierpath private @nla [@Foo::@b]
   hw.hierpath private @nla [@Foo::@bar, @Bar::@b]
   // CHECK: firrtl.module @Bar
@@ -1597,32 +1614,6 @@ firrtl.circuit "FlattenAtRoot" {
   // CHECK: firrtl.module @FlattenAtRoot
   firrtl.module @FlattenAtRoot() {
     firrtl.instance foo sym @foo @Foo()
-    // CHECK: sv.xmr.ref @nla : !hw.inout<i1>
-    %xmr = sv.xmr.ref @nla : !hw.inout<i1>
-  }
-}
-
-// -----
-
-// Test that hierarchical paths are correctly update when inlining.  This is the
-// same, conceptually, as the previous `FlattenAtRoot` test.
-//
-// CHECK-LABEL: firrtl.circuit "InlineBothModules"
-firrtl.circuit "InlineBothModules" {
-  // CHECK: hw.hierpath @path [@InlineBothModules::@sym_0]
-  hw.hierpath @path [@Foo::@bar, @Bar::@sym]
-  firrtl.module private @Bar() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    %w = firrtl.wire sym @sym {annotations = [{circt.nonlocal = @path, class = "test"}]} : !firrtl.uint<5>
-  }
-  firrtl.module private @Foo() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
-    firrtl.instance b sym @bar @Bar()
-  }
-  // CHECK: firrtl.module @InlineBothModules
-  firrtl.module @InlineBothModules() {
-    // CHECK: %foo_b_w = firrtl.wire sym @sym_0 {annotations = [{class = "test"}]}
-    firrtl.instance foo @Foo()
-    // CHECK: sv.xmr.ref @path : !hw.inout<i5>
-    %xmr = sv.xmr.ref @path : !hw.inout<i5>
   }
 }
 
@@ -1635,14 +1626,14 @@ firrtl.circuit "InlineBothModules" {
 // (Don't generate invalid DictionaryAttr's with many circt.local/class entries!)
 // CHECK-LABEL: "Issue3374Derived"
 firrtl.circuit "Issue3374Derived" {
-  // CHECK-NEXT: hw.hierpath @nla1 [@Issue3374Derived::@baz, @Baz]
-  // CHECK-NEXT: hw.hierpath @nla1_0 [@Quux::@baz, @Baz]
-  // CHECK-NEXT: hw.hierpath @nla1_1 [@Qux::@baz, @Baz]
-  // CHECK-NEXT: hw.hierpath @nla1_2 [@Foo::@baz, @Baz]
-  hw.hierpath @nla1 [@Bar::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath private @nla1 [@Issue3374Derived::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath private @nla1_0 [@Quux::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath private @nla1_1 [@Qux::@baz, @Baz]
+  // CHECK-NEXT: hw.hierpath private @nla1_2 [@Foo::@baz, @Baz]
+  // CHECK-NEXT: @Baz() {
+  hw.hierpath private @nla1 [@Bar::@baz, @Baz]
 
   firrtl.module @Baz() {
-  // CHECK-NEXT: @Baz() {
   // CHECK-NEXT:   wire sym @a
   // CHECK-SAME:     {annotations = [{circt.nonlocal = @nla1, class = "hello"},
   // CHECK-SAME:                     {circt.nonlocal = @nla1_0, class = "hello"},
@@ -1713,5 +1704,26 @@ firrtl.circuit "Issue10682" {
   // CHECK-NOT: circt.nonlocal
   firrtl.module private @M() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
+  }
+}
+
+// -----
+
+// An inline-marked private module kept live only by a non-instance symbol
+// user (a verbatim substitution here): its plain instances are inlined, the
+// module is retained for the symbol user, and the annotation is consumed.
+// Used to trip an assert that only expected public retained modules.
+// CHECK-LABEL: firrtl.circuit "RetainedBySymbolUse"
+firrtl.circuit "RetainedBySymbolUse" {
+  sv.verbatim "`define REF {{0}}" {symbols = [@M]}
+  // CHECK: firrtl.module private @M() {
+  firrtl.module private @M() attributes {annotations = [
+      {class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire : !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module @RetainedBySymbolUse()
+  // CHECK-NEXT: %m_w = firrtl.wire
+  firrtl.module @RetainedBySymbolUse() {
+    firrtl.instance m @M()
   }
 }

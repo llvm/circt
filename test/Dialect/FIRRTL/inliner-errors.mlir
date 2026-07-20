@@ -89,3 +89,57 @@ firrtl.circuit "InlineLayerIntoLayer" {
     }
   }
 }
+
+// -----
+
+// Flatten/inline annotations are only meaningful on regular modules.
+
+firrtl.circuit "FlattenExtModule" {
+  // expected-error @below {{inline/flatten annotations are only valid on a regular module}}
+  firrtl.extmodule private @Ext() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}
+  firrtl.module @FlattenExtModule() {
+    firrtl.instance e @Ext()
+  }
+}
+
+// -----
+
+firrtl.circuit "InlineExtModule" {
+  // expected-error @below {{inline/flatten annotations are only valid on a regular module}}
+  firrtl.extmodule private @Ext() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}
+  firrtl.module @InlineExtModule() {
+    firrtl.instance e @Ext()
+  }
+}
+
+// -----
+
+// Class-likes are FModuleLike but live in the property world; inline/flatten
+// annotations on them are rejected like on any other non-regular module.
+firrtl.circuit "InlineClass" {
+  // expected-error @below {{inline/flatten annotations are only valid on a regular module}}
+  firrtl.class private @C() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {}
+  firrtl.module @InlineClass() {
+    %o = firrtl.object @C()
+  }
+}
+
+// -----
+
+// An inner reference smuggled into an annotation payload names another
+// module; the inliner cannot know its semantics (its target may itself be
+// inlined away), so inlining an op carrying one is rejected rather than
+// silently relocating the clone around it.
+firrtl.circuit "ForeignInnerRef" {
+  firrtl.module private @A() attributes {annotations = [
+      {class = "firrtl.passes.InlineAnnotation"}]} {
+    // expected-error @below {{unsupported inner reference #hw.innerNameRef<@ForeignInnerRef::@tw> found while inlining}}
+    %w = firrtl.wire {annotations = [
+        {class = "test", target = #hw.innerNameRef<@ForeignInnerRef::@tw>}]} : !firrtl.uint<1>
+  }
+  firrtl.module @ForeignInnerRef() {
+    %tw = firrtl.wire sym @tw : !firrtl.uint<1>
+    firrtl.instance a @A()
+  }
+}
+

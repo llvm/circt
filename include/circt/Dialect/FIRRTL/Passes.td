@@ -160,6 +160,26 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
     ```
   }];
   let dependentDialects = ["debug::DebugDialect"];
+  let statistics = [
+    Statistic<"numInstancesInlined", "num-instances-inlined",
+      "Number of instances inlined into their parent">,
+    Statistic<"numInstancesFlattened", "num-instances-flattened",
+      "Number of instances absorbed by flattening">,
+    Statistic<"numDeadModules", "num-dead-modules",
+      "Number of unreachable modules erased">,
+    Statistic<"numHierPathsUpdated", "num-hierpaths-updated",
+      "Number of hierarchical paths retargeted in place">,
+    Statistic<"numHierPathsForked", "num-hierpaths-forked",
+      "Number of fork contexts emitted as new hierpaths under fresh symbols">,
+    Statistic<"numHierPathsMerged", "num-hierpaths-merged",
+      "Number of non-primary path contexts merged onto a canonical path (primaries never merge)">,
+    Statistic<"numHierPathsErased", "num-hierpaths-erased",
+      "Number of source hierarchical paths erased for lack of a surviving target">,
+    Statistic<"numHierPathsOldStyle", "num-hierpaths-old-style",
+      "Number of source hierarchical paths ending at an inner symbol">,
+    Statistic<"numHierPathsNewStyle", "num-hierpaths-new-style",
+      "Number of source hierarchical paths ending at a module">
+  ];
 }
 
 def AddSeqMemPorts : Pass<"firrtl-add-seqmem-ports", "firrtl::CircuitOp"> {
