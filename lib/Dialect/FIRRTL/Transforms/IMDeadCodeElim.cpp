@@ -8,6 +8,7 @@
 
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Dialect/HW/HWOps.h"
 #include "circt/Dialect/HW/InnerSymbolTable.h"
@@ -351,6 +352,13 @@ void IMDeadCodeElimPass::forwardConstantOutputPort(FModuleOp module) {
     for (auto [index, constant] : constantPortIndicesAndValues) {
       auto result = instance.getResult(index);
       assert(ports[index].isOutput() && "must be an output port");
+
+      // Keep a live instance as the carrier for a declaration comment. A
+      // comment alone is not a liveness root, so unused results
+      // still take the normal forwarding and dead-code path.
+      if ((hasDeclarationComment(instance) || hasDeclarationComment(module)) &&
+          !result.use_empty())
+        continue;
 
       // Replace the port with the constant or invalid value.
       Value replacement;

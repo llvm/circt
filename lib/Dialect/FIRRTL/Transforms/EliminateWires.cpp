@@ -87,7 +87,8 @@ void EliminateWiresPass::runOnOperation() {
     mlir::ImplicitLocOpBuilder builder(wire->getLoc(), writer);
     auto node = NodeOp::create(builder, writer.getSrc(), wire.getName(),
                                wire.getNameKind(), wire.getAnnotations(),
-                               wire.getInnerSymAttr(), wire.getForceable());
+                               wire.getInnerSymAttr(), wire.getForceable(),
+                               wire.getCommentAttr());
     sv::setSVAttributes(node, sv::getSVAttributes(wire));
     wire.replaceAllUsesWith(node);
     wire.erase();

@@ -1322,7 +1322,7 @@ firrtl.circuit "GCTMemTap" attributes {
 } {
   firrtl.module @GCTMemTap() {
     %mem = chirrtl.combmem  : !chirrtl.cmemory<uint<1>, 2>
-    %memTap = firrtl.wire : !firrtl.vector<uint<1>, 2>
+    %memTap = firrtl.wire {comment = "mem tap comment"} : !firrtl.vector<uint<1>, 2>
   }
 }
 
@@ -1335,6 +1335,7 @@ firrtl.circuit "GCTMemTap" attributes {
 // CHECK-SAME:     (!chirrtl.cmemory<uint<1>, 2>) -> !firrtl.probe<vector<uint<1>, 2>>
 // CHECK-NEXT:   %[[debug_port_resolve:[a-zA-Z0-9_]+]] = firrtl.ref.resolve %[[debug_port]]
 // CHECK-NEXT:   %memTap = firrtl.node %[[debug_port_resolve]]
+// CHECK-SAME:     comment = "mem tap comment"
 
 // -----
 

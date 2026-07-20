@@ -1095,10 +1095,12 @@ static void buildClass(OpBuilder &builder, OperationState &result,
 void FModuleOp::build(OpBuilder &builder, OperationState &result,
                       StringAttr name, ConventionAttr convention,
                       ArrayRef<PortInfo> ports, ArrayAttr annotations,
-                      ArrayAttr layers) {
+                      ArrayAttr layers, StringAttr comment) {
   buildModule<FModuleOp>(builder, result, name, ports, annotations, layers);
   auto &properties = result.getOrAddProperties<Properties>();
   properties.setConvention(convention);
+  if (comment)
+    properties.setComment(comment);
 
   // Create a region and a block for the body.
   auto *bodyRegion = result.regions[0].get();
@@ -2401,11 +2403,13 @@ void InstanceOp::build(
     ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
     ArrayRef<Attribute> domainInfo, ArrayRef<Attribute> annotations,
     ArrayRef<Attribute> portAnnotations, ArrayRef<Attribute> layers,
-    bool lowerToBind, bool doNotPrint, StringAttr innerSym) {
+    bool lowerToBind, bool doNotPrint, StringAttr innerSym,
+    StringAttr comment) {
   build(builder, result, resultTypes, moduleName, name, nameKind,
         portDirections, portNames, domainInfo, annotations, portAnnotations,
         layers, lowerToBind, doNotPrint,
-        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr());
+        innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
+        comment);
 }
 
 void InstanceOp::build(
@@ -2414,7 +2418,8 @@ void InstanceOp::build(
     ArrayRef<Direction> portDirections, ArrayRef<Attribute> portNames,
     ArrayRef<Attribute> domainInfo, ArrayRef<Attribute> annotations,
     ArrayRef<Attribute> portAnnotations, ArrayRef<Attribute> layers,
-    bool lowerToBind, bool doNotPrint, hw::InnerSymAttr innerSym) {
+    bool lowerToBind, bool doNotPrint, hw::InnerSymAttr innerSym,
+    StringAttr comment) {
   result.addTypes(resultTypes);
   result.getOrAddProperties<Properties>().setModuleName(
       SymbolRefAttr::get(builder.getContext(), moduleName));
@@ -2447,6 +2452,8 @@ void InstanceOp::build(
         builder.getUnitAttr());
   if (innerSym)
     result.getOrAddProperties<Properties>().setInnerSym(innerSym);
+  if (comment)
+    result.getOrAddProperties<Properties>().setComment(comment);
 
   result.getOrAddProperties<Properties>().setNameKind(
       NameKindEnumAttr::get(builder.getContext(), nameKind));
@@ -2467,7 +2474,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        FModuleLike module, StringRef name,
                        NameKindEnum nameKind, ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> portAnnotations, bool lowerToBind,
-                       bool doNotPrint, hw::InnerSymAttr innerSym) {
+                       bool doNotPrint, hw::InnerSymAttr innerSym,
+                       StringAttr comment) {
 
   // Gather the result types.
   SmallVector<Type> resultTypes;
@@ -2500,7 +2508,7 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
       module.getPortDirectionsAttr(), module.getPortNamesAttr(), domainInfoAttr,
       builder.getArrayAttr(annotations), portAnnotationsAttr,
       module.getLayersAttr(), lowerToBind ? builder.getUnitAttr() : UnitAttr(),
-      doNotPrint ? builder.getUnitAttr() : UnitAttr(), innerSym);
+      doNotPrint ? builder.getUnitAttr() : UnitAttr(), innerSym, comment);
 }
 
 void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
@@ -2508,7 +2516,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
                        StringRef name, NameKindEnum nameKind,
                        ArrayRef<Attribute> annotations,
                        ArrayRef<Attribute> layers, bool lowerToBind,
-                       bool doNotPrint, hw::InnerSymAttr innerSym) {
+                       bool doNotPrint, hw::InnerSymAttr innerSym,
+                       StringAttr comment) {
   // Gather the result types.
   SmallVector<Type> newResultTypes;
   SmallVector<Direction> newPortDirections;
@@ -2532,7 +2541,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &odsState,
 
   return build(builder, odsState, newResultTypes, moduleName, name, nameKind,
                newPortDirections, newPortNames, newDomainInfo, annotations,
-               newPortAnnotations, layers, lowerToBind, doNotPrint, innerSym);
+               newPortAnnotations, layers, lowerToBind, doNotPrint, innerSym,
+               comment);
 }
 
 LogicalResult InstanceOp::verify() {
@@ -2615,6 +2625,7 @@ InstanceOp::cloneWithErasedPorts(const llvm::BitVector &erasures) {
 
   if (auto outputFile = (*this)->getAttr("output_file"))
     clone->setAttr("output_file", outputFile);
+  copyDeclarationComment(*this, clone);
 
   return clone;
 }
@@ -2720,6 +2731,7 @@ FInstanceLike InstanceOp::cloneWithInsertedPorts(
 
   if (auto outputFile = (*this)->getAttr("output_file"))
     clone->setAttr("output_file", outputFile);
+  copyDeclarationComment(*this, clone);
 
   return clone;
 }

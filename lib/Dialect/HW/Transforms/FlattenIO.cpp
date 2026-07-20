@@ -154,7 +154,7 @@ struct InstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
         rewriter, loc, newResultTypes, op.getInstanceNameAttr(),
         FlatSymbolRefAttr::get(referencedMod), convOperands,
         op.getArgNamesAttr(), op.getResultNamesAttr(), op.getParametersAttr(),
-        op.getInnerSymAttr(), op.getDoNotPrintAttr());
+        op.getInnerSymAttr(), op.getDoNotPrintAttr(), op.getCommentAttr());
 
     // re-create any structs in the result.
     llvm::SmallVector<Value> convResults;

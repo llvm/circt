@@ -35,14 +35,16 @@ def WireOp : SVOp<"wire", [NonProceduralOp,
      See SV Spec 6.7, pp97.
     }];
 
-  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<StrAttr>:$comment);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                    CArg<"StringAttr", "StringAttr()">:$name,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
+                   CArg<"StringAttr", "StringAttr()">:$comment)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));
@@ -73,7 +75,8 @@ def RegOp : SVOp<"reg", [
   let arguments = (ins
     StrAttr:$name,
     Optional<AnyType>:$init,
-    OptionalAttr<InnerSymAttr>:$inner_sym);
+    OptionalAttr<InnerSymAttr>:$inner_sym,
+    OptionalAttr<StrAttr>:$comment);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
@@ -81,7 +84,8 @@ def RegOp : SVOp<"reg", [
     OpBuilder<(ins "::mlir::Type":$elementType,
                     CArg<"StringAttr", "StringAttr()">:$name,
                     CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
-                    CArg<"mlir::Value", "{}">:$init)>
+                    CArg<"mlir::Value", "{}">:$init,
+                    CArg<"StringAttr", "StringAttr()">:$comment)>
   ];
 
   // We handle the name in a custom way, so we use a customer parser/printer.
@@ -253,14 +257,16 @@ def LogicOp : SVOp<"logic", [
     See SV Spec 6.8, pp100.
     }];
 
-  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym);
+  let arguments = (ins StrAttr:$name, OptionalAttr<InnerSymAttr>:$inner_sym,
+                       OptionalAttr<StrAttr>:$comment);
   let results = (outs InOutType:$result);
 
   let skipDefaultBuilders = 1;
   let builders = [
     OpBuilder<(ins "::mlir::Type":$elementType,
                    CArg<"StringAttr", "StringAttr()">:$name,
-                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+                   CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
+                   CArg<"StringAttr", "StringAttr()">:$comment)>,
     OpBuilder<(ins "::mlir::Type":$elementType, CArg<"StringRef">:$name), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name));

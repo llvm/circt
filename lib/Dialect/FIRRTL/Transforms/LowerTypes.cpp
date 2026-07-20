@@ -775,6 +775,7 @@ bool TypeLoweringVisitor::lowerProducer(
 
       // Clone discardable attributes as well.
       newOp->setDiscardableAttrs(op->getDiscardableAttrDictionary());
+      copyDeclarationComment(op, newOp);
     }
     lowered.push_back(newVal);
   }
@@ -1659,6 +1660,7 @@ bool TypeLoweringVisitor::lowerInstanceLike(
       sym ? hw::InnerSymAttr::get(sym) : hw::InnerSymAttr());
 
   newInstance->setDiscardableAttrs(op->getDiscardableAttrDictionary());
+  copyDeclarationComment(op, newInstance);
 
   SmallVector<Value> lowered;
   for (size_t aggIndex = 0, eAgg = op->getNumResults(); aggIndex != eAgg;
@@ -1693,7 +1695,7 @@ bool TypeLoweringVisitor::visitDecl(InstanceOp op) {
         op.getNameKindAttr(), direction::packAttribute(context, newDirs),
         newNames, newDomains, op.getAnnotations(), newPortAnno,
         op.getLayersAttr(), op.getLowerToBindAttr(), op.getDoNotPrintAttr(),
-        sym);
+        sym, StringAttr());
   };
 
   return lowerInstanceLike(op, mode, op.getPortAnnotations(),

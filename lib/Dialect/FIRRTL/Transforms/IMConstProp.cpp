@@ -1020,17 +1020,38 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     return cst->getResult(0);
   };
 
+  auto isReplaceableUse = [](OpOperand &operand) {
+    return !isa<FConnectLike>(operand.getOwner()) ||
+           operand.getOperandNumber() != 0;
+  };
+
+  auto mustPreserveDeclaration = [&](Value value) {
+    // Trace aggregate indexers back to the declaration which owns the field.
+    // The uses below deliberately remain those of the original field value:
+    // a comment is not itself a liveness root.
+    auto *definingOp = getOrCacheFieldRefFromValue(value).getDefiningOp();
+    if (!definingOp ||
+        (!isWireOrReg(definingOp) && !isa<NodeOp, InstanceOp>(definingOp)))
+      return false;
+
+    bool hasComment = hasDeclarationComment(definingOp);
+    if (auto instance = dyn_cast<InstanceOp>(definingOp))
+      if (auto module = instance.getReferencedModule<FModuleOp>(*instanceGraph))
+        hasComment |= hasDeclarationComment(module);
+    if (!hasComment)
+      return false;
+
+    return llvm::any_of(value.getUses(), isReplaceableUse);
+  };
+
   // If the lattice value for the specified value is a constant update it and
   // return true.  Otherwise return false.
   auto replaceValueIfPossible = [&](Value value) -> bool {
     // Lambda to replace all uses of this value a replacement, unless this is
     // the destination of a connect.  We leave connects alone to avoid upsetting
     // flow, i.e., to avoid trying to connect to a constant.
-    auto replaceIfNotConnect = [&value](Value replacement) {
-      value.replaceUsesWithIf(replacement, [](OpOperand &operand) {
-        return !isa<FConnectLike>(operand.getOwner()) ||
-               operand.getOperandNumber() != 0;
-      });
+    auto replaceIfNotConnect = [&](Value replacement) {
+      value.replaceUsesWithIf(replacement, isReplaceableUse);
     };
 
     // TODO: Replace entire aggregate.
@@ -1044,6 +1065,12 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
     // Presently it asserts on unsupported combinations, so check this here.
     if (!type_isa<FIRRTLBaseType, RefType, FIntegerType, StringType, BoolType>(
             value.getType()))
+      return false;
+
+    // A live declaration carrying a comment needs to remain as the carrier for
+    // that comment. Truly dead declarations, including
+    // declarations only used as a connect destination, remain deletable.
+    if (mustPreserveDeclaration(value))
       return false;
 
     auto cstValue =
@@ -1107,6 +1134,7 @@ void IMConstPropPass::rewriteModuleBody(FModuleOp module) {
             if (baseType && !baseType.isGround())
               return WalkResult::advance();
             if (isDeletableWireOrRegOrNode(destOp) &&
+                !mustPreserveDeclaration(connect.getDest()) &&
                 !isOverdefined(fieldRef)) {
               connect.erase();
               ++numErasedOp;

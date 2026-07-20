@@ -69,7 +69,7 @@ def InstanceOp : HardwareDeclOp<"instance", [
       StrArrayAttr:$portNames, DomainInfoAttr:$domainInfo,
       AnnotationArrayAttr:$annotations, PortAnnotationsAttr:$portAnnotations,
       LayerArrayAttr:$layers, UnitAttr:$lowerToBind, UnitAttr:$doNotPrint,
-      OptionalAttr<InnerSymAttr>:$inner_sym);
+      OptionalAttr<InnerSymAttr>:$inner_sym, OptionalAttr<StrAttr>:$comment);
 
   let results = (outs Variadic<AnyType>:$results);
 
@@ -87,7 +87,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
            CArg<"::mlir::ArrayRef<Attribute>", "{}">:$layers,
            CArg<"bool", "false">:$lowerToBind,
            CArg<"bool", "false">:$doNotPrint,
-           CArg<"StringAttr", "StringAttr()">:$innerSym)>,
+           CArg<"StringAttr", "StringAttr()">:$innerSym,
+           CArg<"StringAttr", "StringAttr()">:$comment)>,
        OpBuilder<(ins "::mlir::TypeRange":$resultTypes,
            "::mlir::StringRef":$moduleName, "::mlir::StringRef":$name,
            "::circt::firrtl::NameKindEnum":$nameKind,
@@ -97,7 +98,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
            "ArrayRef<Attribute>":$annotations,
            "ArrayRef<Attribute>":$portAnnotations,
            "::mlir::ArrayRef<Attribute>":$layers, "bool":$lowerToBind,
-           "bool":$doNotPrint, "hw::InnerSymAttr":$innerSym)>,
+           "bool":$doNotPrint, "hw::InnerSymAttr":$innerSym,
+           CArg<"StringAttr", "StringAttr()">:$comment)>,
 
        /// Constructor when you have the target module in hand.
        OpBuilder<(ins "FModuleLike":$module, "mlir::StringRef":$name,
@@ -106,7 +108,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
            CArg<"ArrayRef<Attribute>", "{}">:$portAnnotations,
            CArg<"bool", "false">:$lowerToBind,
            CArg<"bool", "false">:$doNotPrint,
-           CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>,
+           CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
+           CArg<"StringAttr", "StringAttr()">:$comment)>,
 
        /// Constructor when you have a port info list in hand.
        OpBuilder<(ins "ArrayRef<PortInfo>":$ports,
@@ -116,7 +119,8 @@ def InstanceOp : HardwareDeclOp<"instance", [
            CArg<"ArrayRef<Attribute>", "{}">:$layers,
            CArg<"bool", "false">:$lowerToBind,
            CArg<"bool", "false">:$doNotPrint,
-           CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym)>];
+           CArg<"hw::InnerSymAttr", "hw::InnerSymAttr()">:$innerSym,
+           CArg<"StringAttr", "StringAttr()">:$comment)>];
 
   let extraClassDeclaration = [{
     //===------------------------------------------------------------------===//
@@ -345,7 +349,8 @@ def NodeOp : HardwareDeclOp<"node", [
                        NameKindAttr:$nameKind,
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
-                       UnitAttr:$forceable); // ReferenceKinds
+                       UnitAttr:$forceable,
+                       OptionalAttr<StrAttr>:$comment); // ReferenceKinds
   let results = (outs PassiveType:$result, Optional<RefType>:$ref);
 
   let builders = [
@@ -354,21 +359,23 @@ def NodeOp : HardwareDeclOp<"node", [
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>", "{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
-                   CArg<"bool", "false">:$forceable), [{
+                   CArg<"bool", "false">:$forceable,
+                   CArg<"StringAttr", "StringAttr()">:$comment), [{
       return build($_builder, $_state, input, name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable);
+                   forceable, comment);
     }]>,
     OpBuilder<(ins "::mlir::Value":$input,
                    "StringRef":$name, "NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
-                   CArg<"bool", "false">:$forceable), [{
+                   CArg<"bool", "false">:$forceable,
+                   CArg<"StringAttr", "StringAttr()">:$comment), [{
       return build($_builder, $_state, input, name, nameKind,
                    annotations,
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable);
+                   forceable, comment);
     }]>
   ];
 
@@ -397,7 +404,8 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
         OptionalAttr<InnerSymAttr>:$inner_sym,
         UnitAttr:$forceable,
         OptionalAttr<APSIntAttr>:$initial,
-        OptionalAttr<EventControlAttr>:$clockEdge);
+        OptionalAttr<EventControlAttr>:$clockEdge,
+        OptionalAttr<StrAttr>:$comment);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let skipDefaultBuilders = true;
@@ -425,7 +433,8 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "::mlir::UnitAttr":$forceable,
-                   "::mlir::IntegerAttr":$initial), [{
+                   "::mlir::IntegerAttr":$initial,
+                   CArg<"::mlir::StringAttr", "{}">:$comment), [{
       $_state.addOperands(clockVal);
       $_state.addAttribute(getNameAttrName($_state.name), name);
       $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
@@ -436,6 +445,8 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
       if (initial) {
         $_state.addAttribute(getInitialAttrName($_state.name), initial);
       }
+      if (comment)
+        $_state.addAttribute(getCommentAttrName($_state.name), comment);
       $_state.addTypes(elementType);
       if (forceable) {
         $_state.addAttribute(getForceableAttrName($_state.name), forceable);
@@ -450,12 +461,13 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "bool":$forceable,
-                   "::mlir::IntegerAttr":$initial), [{
+                   "::mlir::IntegerAttr":$initial,
+                   CArg<"::mlir::StringAttr", "{}">:$comment), [{
       return build($_builder, $_state, elementType, clockVal,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    annotations, innerSym,
-                   forceable ? $_builder.getUnitAttr() : nullptr, initial);
+                   forceable ? $_builder.getUnitAttr() : nullptr, initial, comment);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    CArg<"StringRef", "{}">:$name,
@@ -463,22 +475,24 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
                    CArg<"bool", "false">:$forceable,
-                   CArg<"::mlir::IntegerAttr", "{}">:$initial), [{
+                   CArg<"::mlir::IntegerAttr", "{}">:$initial,
+                   CArg<"::mlir::StringAttr", "{}">:$comment), [{
       return build($_builder, $_state, elementType,
                    clockVal, $_builder.getStringAttr(name), nameKind,
                    $_builder.getArrayAttr(annotations),
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable, initial);
+                   forceable, initial, comment);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "StringRef":$name, "NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotation, "StringAttr":$innerSym,
                    CArg<"bool", "false">:$forceable,
-                   CArg<"::mlir::IntegerAttr", "{}">:$initial), [{
+                   CArg<"::mlir::IntegerAttr", "{}">:$initial,
+                   CArg<"::mlir::StringAttr", "{}">:$comment), [{
       return build($_builder, $_state, elementType,
                    clockVal, $_builder.getStringAttr(name), nameKind, annotation,
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable, initial);
+                   forceable, initial, comment);
     }]>
   ];
 
@@ -517,7 +531,8 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
         OptionalAttr<APSIntAttr>:$initial,
         OptionalAttr<EventControlAttr>:$clockEdge,
         OptionalAttr<RegResetTypeAttr>:$resetType,
-        OptionalAttr<RegResetPolarityAttr>:$resetPolarity);
+        OptionalAttr<RegResetPolarityAttr>:$resetPolarity,
+        OptionalAttr<StrAttr>:$comment);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let skipDefaultBuilders = true;
@@ -538,7 +553,8 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "::mlir::UnitAttr":$forceable,
-                   "::mlir::IntegerAttr":$initial), [{
+                   "::mlir::IntegerAttr":$initial,
+                   CArg<"::mlir::StringAttr", "{}">:$comment), [{
       $_state.addOperands(clockVal);
       odsState.addOperands(resetSignal);
       odsState.addOperands(resetValue);
@@ -551,6 +567,8 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
       if (initial) {
         $_state.addAttribute(getInitialAttrName($_state.name), initial);
       }
+      if (comment)
+        $_state.addAttribute(getCommentAttrName($_state.name), comment);
       $_state.addTypes(elementType);
       if (forceable) {
         $_state.addAttribute(getForceableAttrName($_state.name), forceable);
@@ -565,28 +583,30 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
                    CArg<"bool", "false">:$forceable,
-                   CArg<"::mlir::IntegerAttr", "{}">:$initial), [{
+                   CArg<"::mlir::IntegerAttr", "{}">:$initial,
+                   CArg<"::mlir::StringAttr", "{}">:$comment), [{
       return build($_builder, $_state, elementType,
                    clockVal, resetSignal, resetValue,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    $_builder.getArrayAttr(annotations),
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable ? $_builder.getUnitAttr() : nullptr, initial);
+                   forceable ? $_builder.getUnitAttr() : nullptr, initial, comment);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
                    "StringRef":$name, "NameKindEnum":$nameKind,
                     "::mlir::ArrayAttr":$annotation, "StringAttr":$innerSym,
                     CArg<"bool", "false">:$forceable,
-                    CArg<"::mlir::IntegerAttr", "{}">:$initial), [{
+                    CArg<"::mlir::IntegerAttr", "{}">:$initial,
+                   CArg<"::mlir::StringAttr", "{}">:$comment), [{
       return build($_builder, $_state, elementType,
                    clockVal, resetSignal, resetValue,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    annotation,
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
-                   forceable ? $_builder.getUnitAttr() : nullptr, initial);
+                   forceable ? $_builder.getUnitAttr() : nullptr, initial, comment);
     }]>
   ];
 
@@ -636,6 +656,7 @@ def WireOp : HardwareDeclOp<"wire", [
                        AnnotationArrayAttr:$annotations,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
                        UnitAttr:$forceable, // ReferenceKinds
+                       OptionalAttr<StrAttr>:$comment,
                        Variadic<DomainType>:$domains);
   let results = (outs AnyType:$result, Optional<RefType>:$ref);
 
@@ -657,13 +678,16 @@ def WireOp : HardwareDeclOp<"wire", [
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "::mlir::UnitAttr":$forceable,
-                   CArg<"::mlir::ValueRange", "{}">:$domains), [{
+                   CArg<"::mlir::ValueRange", "{}">:$domains,
+                   CArg<"::mlir::StringAttr", "{}">:$comment), [{
       $_state.addAttribute(getNameAttrName($_state.name), name);
       $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
       $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
       if (innerSym) {
         $_state.addAttribute(getInnerSymAttrName($_state.name), innerSym);
       }
+      if (comment)
+        $_state.addAttribute(getCommentAttrName($_state.name), comment);
       if (forceable) {
         $_state.addAttribute(getForceableAttrName($_state.name), forceable);
       }
@@ -680,13 +704,14 @@ def WireOp : HardwareDeclOp<"wire", [
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "bool":$forceable,
-                   CArg<"::mlir::ValueRange", "{}">:$domains), [{
+                   CArg<"::mlir::ValueRange", "{}">:$domains,
+                   CArg<"::mlir::StringAttr", "{}">:$comment), [{
       return build($_builder, $_state, elementType,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    annotations, innerSym,
                    forceable ? $_builder.getUnitAttr() : nullptr,
-                   domains);
+                   domains, comment);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
                       CArg<"StringRef", "{}">:$name,
@@ -694,24 +719,26 @@ def WireOp : HardwareDeclOp<"wire", [
                       CArg<"ArrayRef<Attribute>","{}">:$annotations,
                       CArg<"StringAttr", "StringAttr()">:$innerSym,
                       CArg<"bool", "false">:$forceable,
-                      CArg<"::mlir::ValueRange", "{}">:$domains), [{
+                      CArg<"::mlir::ValueRange", "{}">:$domains,
+                      CArg<"StringAttr", "StringAttr()">:$comment), [{
       return build($_builder, $_state, elementType,
                    name, nameKind,
                    $_builder.getArrayAttr(annotations),
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
                    forceable,
-                   domains);
+                   domains, comment);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "StringRef":$name,
                    "NameKindEnum":$nameKind, "::mlir::ArrayAttr":$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
                    CArg<"bool", "false">:$forceable,
-                   CArg<"::mlir::ValueRange", "{}">:$domains), [{
+                   CArg<"::mlir::ValueRange", "{}">:$domains,
+                   CArg<"StringAttr", "StringAttr()">:$comment), [{
       return build($_builder, $_state, elementType,
                    name, nameKind, annotations,
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
                    forceable,
-                   domains);
+                   domains, comment);
     }]>
   ];
 

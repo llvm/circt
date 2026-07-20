@@ -240,6 +240,8 @@ void PortConverterImpl::updateInstance(hw::InstanceOp inst) {
   auto newInst =
       InstanceOp::create(b, mod, inst.getInstanceNameAttr(), newOperands,
                          inst.getParameters(), inst.getInnerSymAttr());
+  if (auto comment = inst.getCommentAttr())
+    newInst.setCommentAttr(comment);
   newInst->setDialectAttrs(inst->getDialectAttrs());
   if (auto doNotPrint = inst.getDoNotPrintAttr())
     newInst.setDoNotPrintAttr(doNotPrint);

@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/FIRRTLVisitors.h"
 #include "circt/Dialect/FIRRTL/FieldRefCache.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
@@ -666,19 +667,22 @@ LogicalResult Visitor::visitDecl(WireOp op) {
            << "annotations on open aggregates not handled yet";
 
   // Create the new HW wire.
-  if (mappings.hwType)
-    hwOnlyAggMap[op.getResult()] =
+  if (mappings.hwType) {
+    auto newWire =
         WireOp::create(builder, mappings.hwType, op.getName(), op.getNameKind(),
-                       op.getAnnotations(), mappings.newSym, op.getForceable())
-            .getResult();
+                       op.getAnnotations(), mappings.newSym, op.getForceable());
+    copyDeclarationComment(op, newWire);
+    hwOnlyAggMap[op.getResult()] = newWire.getResult();
+  }
 
   // Create the non-HW wires.  Non-HW wire names are always droppable.
-  for (auto &[type, fieldID, _, suffix] : mappings.fields)
-    nonHWValues[FieldRef(op.getResult(), fieldID)] =
-        WireOp::create(builder, type,
-                       builder.getStringAttr(Twine(op.getName()) + suffix),
-                       NameKindEnum::DroppableName)
-            .getResult();
+  for (auto &[type, fieldID, _, suffix] : mappings.fields) {
+    auto newWire = WireOp::create(
+        builder, type, builder.getStringAttr(Twine(op.getName()) + suffix),
+        NameKindEnum::DroppableName);
+    copyDeclarationComment(op, newWire);
+    nonHWValues[FieldRef(op.getResult(), fieldID)] = newWire.getResult();
+  }
 
   for (auto fieldID : mappings.mapToNullInteriors)
     nonHWValues[FieldRef(op.getResult(), fieldID)] = {};

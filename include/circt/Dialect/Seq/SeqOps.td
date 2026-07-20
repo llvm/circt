@@ -244,7 +244,8 @@ def FirRegOp : SeqOp<"firreg",
     Optional<I1>:$reset, Optional<AnyType>:$resetValue,
     OptionalAttr<ResetTypeAttr>:$resetType,
     OptionalAttr<ClockEdgeAttr>:$clockEdge,
-    OptionalAttr<ResetPolarityAttr>:$resetPolarity
+    OptionalAttr<ResetPolarityAttr>:$resetPolarity,
+    OptionalAttr<StrAttr>:$comment
   );
   let results = (outs AnyType:$data);
 
@@ -254,13 +255,15 @@ def FirRegOp : SeqOp<"firreg",
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
                    CArg<"hw::InnerSymAttr", "{}">:$innerSym,
-                   CArg<"Attribute","{}">:$preset)>,
+                   CArg<"Attribute","{}">:$preset,
+                   CArg<"StringAttr", "{}">:$comment)>,
     OpBuilder<(ins "Value":$next, "Value":$clk,
                    "StringAttr":$name,
                    "Value":$reset, "Value":$resetValue,
                    CArg<"hw::InnerSymAttr", "{}">:$innerSym,
                    CArg<"bool", "false">:$isAsync,
-                   CArg<"Attribute","{}">:$preset)>
+                   CArg<"Attribute","{}">:$preset,
+                   CArg<"StringAttr", "{}">:$comment)>
   ];
 
   let hasCustomAssemblyFormat = 1;

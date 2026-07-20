@@ -145,6 +145,7 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
            ArrayRefAttr:$portNames,
            ArrayRefAttr:$portTypes,
            DefaultValuedAttr<AnnotationArrayAttr, "{}">:$annotations,
+           OptionalAttr<StrAttr>:$comment,
            DefaultValuedAttr<LayerArrayAttr, "{}">:$layers,
            DefaultValuedAttr<ArrayRefAttr, "{}">:$domainInfo
       );
@@ -159,7 +160,8 @@ def FModuleOp : FIRRTLModuleLike<"module", [SingleBlock, NoTerminator]> {
     OpBuilder<(ins "StringAttr":$name, "ConventionAttr":$convention,
                "ArrayRef<PortInfo>":$ports,
                CArg<"ArrayAttr", "ArrayAttr()">:$annotations,
-               CArg<"ArrayAttr", "ArrayAttr()">:$layers)>
+               CArg<"ArrayAttr", "ArrayAttr()">:$layers,
+               CArg<"StringAttr", "StringAttr()">:$comment)>
   ];
 
   let extraModuleClassDeclaration = [{

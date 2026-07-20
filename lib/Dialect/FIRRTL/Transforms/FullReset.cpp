@@ -1256,6 +1256,7 @@ LogicalResult FullResetRunner::implementFullReset(FModuleOp module,
             builder, nodeOp.getResult().getType(), nodeOp.getNameAttr(),
             nodeOp.getNameKindAttr(), nodeOp.getAnnotationsAttr(),
             nodeOp.getInnerSymAttr(), nodeOp.getForceableAttr());
+        moveDeclarationComment(nodeOp, wireOp);
         // Don't delete the node, since it might be in use in worklists.
         nodeOp->replaceAllUsesWith(wireOp);
         nodeOp->removeAttr(nodeOp.getInnerSymAttrName());
@@ -1414,6 +1415,7 @@ LogicalResult FullResetRunner::implementFullReset(Operation *op,
       newRegOp.setClockEdgeAttr(clockEdge);
     if (type_isa<AsyncResetType>(actualReset.getType()))
       newRegOp.setResetType(RegResetType::AsyncReset);
+    copyDeclarationComment(regOp, newRegOp);
     regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
     if (regOp.getForceable())
       regOp.getRef().replaceAllUsesWith(newRegOp.getRef());

@@ -300,6 +300,8 @@ static LogicalResult specializeModule(
   target = HWModuleOp::create(
       builder, source.getLoc(),
       StringAttr::get(ctx, generateModuleName(ns, source, parameters)), ports);
+  if (auto comment = source.getCommentAttr())
+    target.setCommentAttr(comment);
 
   // Erase the default created hw.output op - we'll copy the correct operation
   // during body elaboration.

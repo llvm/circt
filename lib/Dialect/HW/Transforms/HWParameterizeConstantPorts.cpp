@@ -201,7 +201,7 @@ void HWParameterizeConstantPortsPass::processModule(
         inst.getInstanceNameAttr(), inst.getModuleNameAttr(), newInputs,
         newPortNamesAttr, inst.getResultNamesAttr(),
         builder.getArrayAttr(instParams), inst.getInnerSymAttr(),
-        inst.getDoNotPrintAttr());
+        inst.getDoNotPrintAttr(), inst.getCommentAttr());
 
     // Replace old instance
     instanceGraph.replaceInstance(inst, newInst);

@@ -139,7 +139,8 @@ static InstanceOp cloneWithErasedPorts(InstanceOp &instance,
       builder, instance->getLoc(), newResultTypes,
       instance.getInstanceNameAttr(), instance.getModuleName(), newOperands,
       newOpNamesArrayAttr, newResultNamesArrayAttr, instance.getParameters(),
-      instance.getInnerSymAttr());
+      instance.getInnerSymAttr(), /*doNotPrint=*/false,
+      instance.getCommentAttr());
 
   return newInstance;
 }

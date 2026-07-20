@@ -24,6 +24,15 @@ struct InnerSymbolNamespace;
 } // namespace hw
 
 namespace firrtl {
+/// Return true if `op` carries a non-empty declaration comment.
+bool hasDeclarationComment(Operation *op);
+
+/// Copy the declaration comment from `source` to `target` when present.
+void copyDeclarationComment(Operation *source, Operation *target);
+
+/// Move the declaration comment from `source` to `target`.
+void moveDeclarationComment(Operation *source, Operation *target);
+
 /// Emit a connect between two values.
 void emitConnect(OpBuilder &builder, Location loc, Value lhs, Value rhs,
                  bool warnOnTruncation = false);

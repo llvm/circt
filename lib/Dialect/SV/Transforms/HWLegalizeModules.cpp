@@ -213,6 +213,8 @@ bool HWLegalizeModulesPass::tryLoweringPackedArrayOp(Operation &op) {
         for (size_t i = 0, e = ty.getNumElements(); i < e; i++) {
           auto loc = op.getLoc();
           auto element = sv::RegOp::create(builder, loc, ty.getElementType());
+          if (auto comment = regOp.getCommentAttr())
+            element.setCommentAttr(comment);
           if (auto nameAttr = regOp->getAttrOfType<StringAttr>(name)) {
             element.setNameAttr(
                 StringAttr::get(regOp.getContext(), nameAttr.getValue()));

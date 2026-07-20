@@ -32,6 +32,7 @@ hw.module @read_write(inout %a: i42, out out: i42) {
 // CHECK:           %[[VAL_0:.*]] = sv.wire : !hw.inout<i42>
 // CHECK:           %[[VAL_1:.*]] = sv.read_inout %[[VAL_0]] : !hw.inout<i42>
 // CHECK:           %[[VAL_2:.*]] = hw.instance "read" @read(a_rd: %[[VAL_1]]: i42) -> (out: i42)
+// CHECK-SAME:        {comment = "port converter instance"}
 // CHECK:           sv.assign %[[VAL_0]], %[[VAL_3:.*]] : i42
 // CHECK:           %[[VAL_3]] = hw.instance "write" @write() -> (a_wr: i42)
 // CHECK:           %[[VAL_4:.*]] = sv.read_inout %[[VAL_0]] : !hw.inout<i42>
@@ -44,7 +45,7 @@ hw.module @oneLevel() {
   // pass will only error upon the recursive case when it inspects a module
   // and sees that there are multiple writers to an inout *port*.
   %0 = sv.wire : !hw.inout<i42>
-  %read = hw.instance "read" @read(a : %0 : !hw.inout<i42>) -> (out: i42)
+  %read = hw.instance "read" @read(a : %0 : !hw.inout<i42>) -> (out: i42) {comment = "port converter instance"}
   hw.instance "write" @write(a : %0 : !hw.inout<i42>) -> ()
   %read_write = hw.instance "readWrite" @read_write(a : %0 : !hw.inout<i42>) -> (out: i42)
 }

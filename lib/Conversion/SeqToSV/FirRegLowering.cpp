@@ -739,6 +739,9 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
                                 hw::InnerSymAttr(), initValue);
   svReg.width = hw::getBitWidth(regTy);
 
+  if (auto comment = reg.getCommentAttr())
+    svReg.reg.setCommentAttr(comment);
+
   if (auto attr = reg->getAttrOfType<IntegerAttr>("firrtl.random_init_start"))
     svReg.randStart = attr.getUInt();
 
