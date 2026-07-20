@@ -14,6 +14,7 @@ add_circt_dialect_library(CIRCTFIRRTLTransforms
   EliminateWires.cpp
   ExpandWhens.cpp
   ExtractInstances.cpp
+  FIRRTLInliningInfo.cpp
   FinalizeIR.cpp
   FlattenMemory.cpp
   GrandCentral.cpp
