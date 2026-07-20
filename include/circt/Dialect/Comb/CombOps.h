@@ -129,7 +129,12 @@ struct ZextByMatcher {
     if (!concatOp)
       return false;
 
-    auto constOp = concatOp.getOperand(0).getDefiningOp<hw::ConstantOp>();
+    auto operands = concatOp.getOperands();
+    // ConcatOp must have at least 2 operands: (sign_bits, base_value_1,...)
+    if (operands.size() < 2)
+      return false;
+
+    auto constOp = operands[0].getDefiningOp<hw::ConstantOp>();
     if (!constOp || !constOp.getValue().isZero())
       return false;
 
@@ -161,7 +166,7 @@ struct SextByMatcher {
       return false;
 
     auto operands = concatOp.getOperands();
-    // ConcatOp must have exactly 2 operands: (sign_bits, base_value)
+    // ConcatOp must have at least 2 operands: (sign_bits, base_value_1,...)
     if (operands.size() < 2)
       return false;
 

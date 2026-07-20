@@ -29,6 +29,7 @@ using namespace matchers;
 // lowered to Booth encoded array. Identifies zext/sext of the operands. Only
 // valid for binary multiplication.
 bool comb::boothEncode(Value lhs, Value rhs) {
+  // Do not booth encode multiplication by a constant
   if (lhs.getDefiningOp<hw::ConstantOp>() ||
       rhs.getDefiningOp<hw::ConstantOp>())
     return false;
