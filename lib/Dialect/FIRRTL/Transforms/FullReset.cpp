@@ -1438,6 +1438,10 @@ LogicalResult FullResetRunner::implementFullReset(Operation *op,
         zero, regOp.getNameAttr(), regOp.getNameKindAttr(),
         regOp.getAnnotations(), regOp.getInnerSymAttr(),
         regOp.getForceableAttr());
+    // Preserve a non-default clock edge across the reset insertion; the
+    // authoritative `resetType` is stamped later by InferResets.
+    if (auto clockEdge = regOp.getClockEdgeAttr())
+      newRegOp.setClockEdgeAttr(clockEdge);
     regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
     if (regOp.getForceable())
       regOp.getRef().replaceAllUsesWith(newRegOp.getRef());

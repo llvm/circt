@@ -990,7 +990,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // https://github.com/llvm/circt/issues/699
   firrtl.module private @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
+    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin", resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
   }
 
   // CHECK-LABEL: hw.module private @Struct0bits(in %source : !hw.struct<valid: i1, ready: i1, data: i0>) {
@@ -1057,9 +1057,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %c9_ui42 = firrtl.constant 9 : !firrtl.uint<42>
     %c-9_si42 = firrtl.constant -9 : !firrtl.sint<42>
     // The following should not error because the reset values are constant.
-    %r0 = firrtl.regreset %clock, %arst, %c9_ui42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
+    %r0 = firrtl.regreset %clock, %arst, %c9_ui42 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
     %r1 = firrtl.regreset %clock, %srst, %c9_ui42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
-    %r2 = firrtl.regreset %clock, %arst, %c-9_si42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.sint<42>, !firrtl.sint<42>
+    %r2 = firrtl.regreset %clock, %arst, %c-9_si42 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.sint<42>, !firrtl.sint<42>
     %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>
   }
 
@@ -1378,7 +1378,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
                            in %reset: !firrtl.asyncreset,
                            in %value: !firrtl.uint<2>,
                            out %result: !firrtl.uint<2>) {
-    %count = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    %count = firrtl.regreset %clock, %reset, %value {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
 
     // CHECK: %count = seq.firreg %value clock %clock reset async %reset, %value : i2
     // CHECK: hw.output %count : i2

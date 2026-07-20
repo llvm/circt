@@ -131,7 +131,7 @@ firrtl.module @ConstSubtag(in %in : !firrtl.const.enum<a: uint<1>, b: uint<2>>,
 
 // CHECK-LABEL: firrtl.module @ConstRegResetValue
 firrtl.module @ConstRegResetValue(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetValue: !firrtl.const.sint<1>) {
-  %0 = firrtl.regreset %clock, %reset, %resetValue : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.sint<1>, !firrtl.sint<1>
+  %0 = firrtl.regreset %clock, %reset, %resetValue {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.sint<1>, !firrtl.sint<1>
 }
 
 // CHECK-LABEL: firrtl.module @ConstCast

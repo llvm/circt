@@ -242,7 +242,9 @@ def FirRegOp : SeqOp<"firreg",
     OptionalAttr<InnerSymAttr>:$inner_sym,
     OptionalAttr<APIntAttr>:$preset,
     Optional<I1>:$reset, Optional<AnyType>:$resetValue,
-    UnitAttr:$isAsync
+    OptionalAttr<ResetTypeAttr>:$resetType,
+    OptionalAttr<ClockEdgeAttr>:$clockEdge,
+    OptionalAttr<ResetPolarityAttr>:$resetPolarity
   );
   let results = (outs AnyType:$data);
 
@@ -268,6 +270,16 @@ def FirRegOp : SeqOp<"firreg",
     bool hasReset() { return !!getReset(); }
     /// Check whether the register has a preset value.
     bool hasPresetValue() { return !!getPresetAttr(); }
+    /// The effective reset kind, defaulting to a synchronous reset when the
+    /// `resetType` attribute is absent.
+    ResetType getResetTypeOrDefault() {
+      return getResetType().value_or(ResetType::SyncReset);
+    }
+    /// Compatibility helper: whether the reset is asynchronous. The reset kind
+    /// is stored in the `resetType` enum; this derives the legacy boolean.
+    bool getIsAsync() {
+      return getResetTypeOrDefault() == ResetType::AsyncReset;
+    }
   }];
 }
 

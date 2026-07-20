@@ -132,3 +132,20 @@ hw.module @to_clock_reuse(in %a : i1, in %b : i1, in %c : i32) {
   // expected-error @below {{Multi-clock designs are not currently supported.}}
   %3 = seq.compreg %c, %1 : i32
 }
+
+// -----
+
+hw.module @active_low_reset(in %clk: !seq.clock, in %rst: i1, in %in: i32, out out: i32) {
+  %c0 = hw.constant 0 : i32
+  // expected-error @below {{active-low (NegReset) resets are not supported by the BTOR2 conversion}}
+  %r = seq.firreg %in clock %clk reset sync %rst, %c0 {resetPolarity = 1 : i32} : i32
+  hw.output %r : i32
+}
+
+// -----
+
+hw.module @negedge_clock_reg(in %clk: !seq.clock, in %in: i32, out out: i32) {
+  // expected-error @below {{non-posedge clock edges are not supported by the BTOR2 conversion}}
+  %r = seq.firreg %in clock %clk {clockEdge = 1 : i32} : i32
+  hw.output %r : i32
+}

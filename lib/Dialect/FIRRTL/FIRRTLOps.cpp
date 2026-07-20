@@ -3808,6 +3808,20 @@ RegOp::computeDataFlow() {
   return {};
 }
 
+LogicalResult RegOp::verify() {
+  // Reset behavior attributes are meaningless on a register that has no reset.
+  // Reject them rather than silently ignoring them so that mis-stamped IR is
+  // caught instead of producing surprising hardware.
+  for (StringRef attrName : {"resetType", "resetPolarity"})
+    if ((*this)->hasAttr(attrName))
+      return emitOpError("has reset attribute '")
+             << attrName
+             << "', which is only valid on 'firrtl.regreset' (this register "
+                "has no reset)";
+
+  return success();
+}
+
 LogicalResult RegResetOp::verify() {
   auto reset = getResetValue();
 
@@ -3818,6 +3832,20 @@ LogicalResult RegResetOp::verify() {
   if (!areTypesEquivalent(regType, resetType))
     return emitError("type mismatch between register ")
            << regType << " and reset value " << resetType;
+
+  // The `resetType` attribute is the sole authoritative source of async-vs-sync
+  // behavior for lowering. A reset signal that is asynchronously typed but
+  // lacks an explicit `resetType = AsyncReset` would lower as synchronous,
+  // silently changing the hardware. Fail closed: require such registers to
+  // carry the attribute so the asynchronous intent is recorded in the IR.
+  if (type_isa<AsyncResetType>(getResetSignal().getType())) {
+    auto kind = getResetType();
+    if (!kind || *kind != RegResetType::AsyncReset)
+      return emitOpError(
+          "has an 'asyncreset'-typed reset but its 'resetType' attribute is "
+          "not 'AsyncReset'; set 'resetType = AsyncReset' to record the "
+          "asynchronous reset explicitly");
+  }
 
   return success();
 }

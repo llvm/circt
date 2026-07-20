@@ -387,6 +387,9 @@ void FirRegLowering::createAsyncResetInitialization(
   for (auto &reset : asyncResets) {
     OpBuilder::InsertionGuard guard(builder);
 
+    // The map is keyed by the active-level reset condition: the raw signal for
+    // an active-high reset, the inverted signal for an active-low reset. So the
+    // force fires exactly when the reset is asserted, for either polarity.
     //  if (reset) begin
     //    ..
     //  end
@@ -685,6 +688,22 @@ void FirRegLowering::createTree(OpBuilder &builder, Value reg, Value term,
   }
 }
 
+/// Map a seq.firreg clock edge onto the SystemVerilog event control used for
+/// the register's clocked always block.  An unset edge defaults to posedge.
+static sv::EventControl lowerSeqClockEdge(std::optional<seq::ClockEdge> edge) {
+  if (!edge)
+    return sv::EventControl::AtPosEdge;
+  switch (*edge) {
+  case seq::ClockEdge::Pos:
+    return sv::EventControl::AtPosEdge;
+  case seq::ClockEdge::Neg:
+    return sv::EventControl::AtNegEdge;
+  case seq::ClockEdge::Both:
+    return sv::EventControl::AtEdge;
+  }
+  return sv::EventControl::AtPosEdge;
+}
+
 void FirRegLowering::lowerReg(FirRegOp reg) {
   Location loc = reg.getLoc();
   Type regTy = typeConverter.convertType(reg.getType());
@@ -714,29 +733,58 @@ void FirRegLowering::lowerReg(FirRegOp reg) {
 
   auto regVal = sv::ReadInOutOp::create(builder, loc, svReg.reg);
 
+  auto clockEdge = lowerSeqClockEdge(reg.getClockEdge());
+
   if (reg.hasReset()) {
+    bool isAsync = reg.getIsAsync();
+    bool activeLow = reg.getResetPolarity() == seq::ResetPolarity::NegReset;
+
+    // An active-low reset is modeled by inverting the reset signal once and
+    // using that single inverted value everywhere: the asynchronous sensitivity
+    // list, the clocked `sv.if` condition, and the initial block. Because the
+    // inverted value is multi-use, ExportVerilog emits it as a wire and the
+    // always block both triggers on and tests that same wire --
+    // `always @(posedge clk or posedge _GEN) if (_GEN) ...` with `_GEN = ~rst`.
+    // This is:
+    //   * race-free: the sensitivity edge and the `sv.if` condition are the
+    //     same signal, unlike `@(negedge rst) if (_GEN)` where a spilled `_GEN`
+    //     could be stale relative to `rst`;
+    //   * X-correct: `if (_GEN)` takes the non-reset branch when the reset is
+    //     X/Z, matching a hand-written `if (!rst)`. Emitting `negedge rst` with
+    //     an inline `!rst` is not viable because ExportVerilog rewrites
+    //     `if (~rst) reset else normal` into `if (rst) normal else reset`,
+    //     which instead resets on an X reset.
+    // The rising edge of `~rst` is exactly the falling edge of `rst`, so the
+    // asynchronous trigger is preserved.
+    Value resetSignal = reg.getReset();
+    Value resetCond =
+        activeLow ? comb::createOrFoldNot(builder, resetSignal) : resetSignal;
+
     addToAlwaysBlock(
-        reg->getBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
+        reg->getBlock(), clockEdge, reg.getClk(),
         [&](OpBuilder &b) {
           // If this is an AsyncReset, ensure that we emit a self connect to
           // avoid erroneously creating a latch construct.
-          if (reg.getIsAsync() && areEquivalentValues(reg, reg.getNext()))
+          if (isAsync && areEquivalentValues(reg, reg.getNext()))
             sv::PAssignOp::create(b, reg.getLoc(), svReg.reg, reg);
           else
             createTree(b, svReg.reg, reg, reg.getNext());
         },
-        reg.getIsAsync() ? sv::ResetType::AsyncReset : sv::ResetType::SyncReset,
-        sv::EventControl::AtPosEdge, reg.getReset(),
+        isAsync ? sv::ResetType::AsyncReset : sv::ResetType::SyncReset,
+        sv::EventControl::AtPosEdge, resetCond,
         [&](OpBuilder &builder) {
           sv::PAssignOp::create(builder, loc, svReg.reg, reg.getResetValue());
-        });
-    if (reg.getIsAsync()) {
-      svReg.asyncResetSignal = reg.getReset();
+        },
+        resetCond);
+    if (isAsync) {
+      // The initial block forces the reset value while the reset is asserted,
+      // so it keys on the same (possibly inverted) active-level condition.
+      svReg.asyncResetSignal = resetCond;
       svReg.asyncResetValue = reg.getResetValue();
     }
   } else {
     addToAlwaysBlock(
-        reg->getBlock(), sv::EventControl::AtPosEdge, reg.getClk(),
+        reg->getBlock(), clockEdge, reg.getClk(),
         [&](OpBuilder &b) { createTree(b, svReg.reg, reg, reg.getNext()); });
   }
 
@@ -874,11 +922,18 @@ void FirRegLowering::addToAlwaysBlock(
     Block *block, sv::EventControl clockEdge, Value clock,
     const std::function<void(OpBuilder &)> &body, sv::ResetType resetStyle,
     sv::EventControl resetEdge, Value reset,
-    const std::function<void(OpBuilder &)> &resetBody) {
+    const std::function<void(OpBuilder &)> &resetBody, Value resetCond) {
   auto loc = clock.getLoc();
   ImplicitLocOpBuilder builder(loc, block, getBlockEnd(block));
-  AlwaysKeyType key{builder.getBlock(), clockEdge, clock,
-                    resetStyle,         resetEdge, reset};
+  // The `sv.if` tests `resetCond`, which defaults to the sensitivity signal.
+  // Active-low lowering passes the same inverted value as both `reset` and
+  // `resetCond`. Its multiple uses make ExportVerilog materialize a shared
+  // wire, so the async sensitivity and condition cannot observe different
+  // values.
+  if (reset && !resetCond)
+    resetCond = reset;
+  AlwaysKeyType key{builder.getBlock(), clockEdge, clock,    resetStyle,
+                    resetEdge,          reset,     resetCond};
 
   sv::AlwaysOp alwaysOp;
   sv::IfOp insideIfOp;
@@ -891,10 +946,12 @@ void FirRegLowering::addToAlwaysBlock(
       assert(resetStyle != sv::ResetType::NoReset);
       // Here, we want to create the following structure with sv.always and
       // sv.if. If `reset` is async, we need to add `reset` to a sensitivity
-      // list.
+      // list. For an active-low async reset, the caller passes the inverted
+      // signal to both the posedge sensitivity and the condition. A posedge of
+      // the inverted signal is equivalent to a negedge of the original reset.
       //
-      // sv.always @(clockEdge or reset) {
-      //   sv.if (reset) {
+      // sv.always @(clockEdge or [pos|neg]edge reset) {
+      //   sv.if (resetCond) {
       //     resetBody
       //   } else {
       //     body
@@ -904,18 +961,14 @@ void FirRegLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, []() {}, []() {});
+        insideIfOp = sv::IfOp::create(builder, resetCond, []() {}, []() {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
         Value clocks[] = {clock, reset};
 
-        alwaysOp = sv::AlwaysOp::create(builder, events, clocks, [&]() {
-          if (resetEdge == sv::EventControl::AtNegEdge)
-            llvm_unreachable("negative edge for reset is not expected");
-          createIfOp();
-        });
+        alwaysOp = sv::AlwaysOp::create(builder, events, clocks,
+                                        [&]() { createIfOp(); });
       } else {
         alwaysOp = sv::AlwaysOp::create(builder, clockEdge, clock, createIfOp);
       }

@@ -662,10 +662,19 @@ def CatBitsBits : Pat <
   (MoveNameHint $old, (BitsPrimOp $x, $hi, $low)),
   [(AdjInt $mid2, $mid)]>;
 
+// An optional attribute is absent (unset).  Used to restrict canonicalizations
+// to registers that keep the default reset polarity (active-high).
+def AttrIsAbsent : Constraint<CPred<"!$0">, "attribute is not set">;
+
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
+// Only valid for active-high reset, where a constant-zero reset never asserts.
+// The clock edge is preserved; the (now removed) reset kind/polarity are
+// dropped along with the reset.  Restricted to the default (absent, i.e.
+// active-high) reset polarity so an active-low reset is never silently dropped.
 def RegResetWithZeroReset : Pat<
-  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable),
-  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable), [(ZeroConstantOp $reset)]>;
+  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable, $clockEdge, $resetType, $resetPolarity),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable, $clockEdge),
+  [(ZeroConstantOp $reset), (AttrIsAbsent $resetPolarity)]>;
 
 // ref.resolve(ref.send(a)) -> a
 def RefResolveOfRefSend : Pat<

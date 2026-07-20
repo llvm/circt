@@ -2,7 +2,28 @@
 
 hw.module @NeedsBothResetAndResetValue(in %input: i1, in %clk: !seq.clock) {
   // expected-error@+1 {{'seq.firreg' op must specify reset and reset value}}
-  "seq.firreg"(%input, %clk) { name = "reg", isAsync } : (i1, !seq.clock) -> i1
+  "seq.firreg"(%input, %clk) { name = "reg", resetType = 1 : i32 } : (i1, !seq.clock) -> i1
+}
+
+// -----
+
+hw.module @ResetPolarityWithoutReset(in %input: i1, in %clk: !seq.clock) {
+  // expected-error@+1 {{'seq.firreg' op 'resetPolarity' is only valid on a register with a reset}}
+  "seq.firreg"(%input, %clk) { name = "reg", resetPolarity = 1 : i32 } : (i1, !seq.clock) -> i1
+}
+
+// -----
+
+hw.module @ResetTypeWithoutReset(in %input: i1, in %clk: !seq.clock) {
+  // expected-error@+1 {{'seq.firreg' op 'resetType' is only valid on a register with a reset}}
+  "seq.firreg"(%input, %clk) { name = "reg", resetType = 0 : i32 } : (i1, !seq.clock) -> i1
+}
+
+// -----
+
+hw.module @LegacyIsAsyncAttr(in %input: i1, in %clk: !seq.clock) {
+  // expected-error@+1 {{'seq.firreg' op has the legacy 'isAsync' attribute}}
+  %r = seq.firreg %input clock %clk {isAsync} : i1
 }
 
 // -----

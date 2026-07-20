@@ -1361,9 +1361,13 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
-    return RegOp::create(*builder, field.type, op.getClockVal(), "",
-                         NameKindEnum::DroppableName, attrs, StringAttr{})
-        .getResult();
+    auto newReg =
+        RegOp::create(*builder, field.type, op.getClockVal(), "",
+                      NameKindEnum::DroppableName, attrs, StringAttr{});
+    // Preserve a non-default clock edge on the per-field registers.
+    if (auto clockEdge = op.getClockEdgeAttr())
+      newReg.setClockEdgeAttr(clockEdge);
+    return newReg.getResult();
   };
   return lowerProducer(op, clone);
 }
@@ -1376,10 +1380,20 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto resetVal = getSubWhatever(op.getResetValue(), field.index);
-    return RegResetOp::create(*builder, field.type, op.getClockVal(),
-                              op.getResetSignal(), resetVal, "",
-                              NameKindEnum::DroppableName, attrs, StringAttr{})
-        .getResult();
+    auto newReg = RegResetOp::create(
+        *builder, field.type, op.getClockVal(), op.getResetSignal(), resetVal,
+        "", NameKindEnum::DroppableName, attrs, StringAttr{});
+    // Forward the clock-edge / reset-type / reset-polarity attributes so the
+    // per-field registers keep the same behavior. `resetType` in particular
+    // must be carried because the reset operand is reused unchanged and the
+    // verifier requires an `asyncreset`-typed reset to be marked async.
+    if (auto clockEdge = op.getClockEdgeAttr())
+      newReg.setClockEdgeAttr(clockEdge);
+    if (auto resetType = op.getResetTypeAttr())
+      newReg.setResetTypeAttr(resetType);
+    if (auto resetPolarity = op.getResetPolarityAttr())
+      newReg.setResetPolarityAttr(resetPolarity);
+    return newReg.getResult();
   };
   return lowerProducer(op, clone);
 }

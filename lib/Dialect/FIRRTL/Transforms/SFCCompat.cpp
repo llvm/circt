@@ -86,6 +86,9 @@ void SFCCompatPass::runOnOperation() {
           builder, reg.getResult().getType(), reg.getClockVal(),
           reg.getNameAttr(), reg.getNameKindAttr(), reg.getAnnotationsAttr(),
           reg.getInnerSymAttr(), reg.getForceableAttr());
+      // Preserve a non-default clock edge when dropping the reset.
+      if (auto clockEdge = reg.getClockEdgeAttr())
+        newReg.setClockEdgeAttr(clockEdge);
       reg.replaceAllUsesWith(newReg);
       reg.erase();
       madeModifications = true;
@@ -94,8 +97,10 @@ void SFCCompatPass::runOnOperation() {
 
     // If the `RegResetOp` has an asynchronous reset and the reset value is not
     // a module-scoped constant when looking through wires and nodes, then
-    // generate an error.  This implements the SFC's CheckResets pass.
-    if (!isa<AsyncResetType>(reg.getResetSignal().getType()))
+    // generate an error.  This implements the SFC's CheckResets pass. Whether
+    // the reset is asynchronous is read from the authoritative `resetType`
+    // attribute (stamped at import and by InferResets), not the operand type.
+    if (reg.getResetTypeOrDefault() != RegResetType::AsyncReset)
       return WalkResult::advance();
     if (walkDrivers(
             reg.getResetValue(), true, true, true,

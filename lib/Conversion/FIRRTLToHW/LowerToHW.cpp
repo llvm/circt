@@ -3796,6 +3796,19 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   return setLowering(op.getResult(), operand);
 }
 
+/// Map a FIRRTL register clock edge onto the equivalent seq.firreg clock edge.
+static seq::ClockEdge lowerRegClockEdge(EventControl edge) {
+  switch (edge) {
+  case EventControl::AtPosEdge:
+    return seq::ClockEdge::Pos;
+  case EventControl::AtNegEdge:
+    return seq::ClockEdge::Neg;
+  case EventControl::AtEdge:
+    return seq::ClockEdge::Both;
+  }
+  return seq::ClockEdge::Pos;
+}
+
 LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   auto resultType = lowerType(op.getResult().getType());
   if (!resultType)
@@ -3812,6 +3825,10 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg = seq::FirRegOp::create(builder, inputEdge, clockVal,
                                    op.getNameAttr(), innerSym);
+
+  // Preserve a non-default clock edge onto the lowered register.
+  if (op.getClockEdge())
+    reg.setClockEdge(lowerRegClockEdge(op.getClockEdgeOrDefault()));
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))
@@ -3846,13 +3863,27 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   if (!clockVal || !resetSignal || !resetValue)
     return failure();
 
-  // Create a reg op, wiring itself to its input.
+  // Create a reg op, wiring itself to its input.  The `resetType` attribute is
+  // the sole authoritative source of truth for whether the reset is
+  // asynchronous; the reset operand type is never consulted here. The attribute
+  // is absent only for synchronous resets (the elided default), because an
+  // `asyncreset`-typed reset is required to carry `resetType = AsyncReset`.
   auto innerSym = lowerInnerSymbol(op);
-  bool isAsync = type_isa<AsyncResetType>(op.getResetSignal().getType());
+  bool isAsync = op.getResetTypeOrDefault() == RegResetType::AsyncReset;
   Backedge inputEdge = backedgeBuilder.get(resultType);
   auto reg =
       seq::FirRegOp::create(builder, inputEdge, clockVal, op.getNameAttr(),
                             resetSignal, resetValue, innerSym, isAsync);
+
+  // Preserve a non-default clock edge and reset polarity onto the lowered
+  // register so they survive emission to SystemVerilog.
+  if (op.getClockEdge())
+    reg.setClockEdge(lowerRegClockEdge(op.getClockEdgeOrDefault()));
+  if (op.getResetPolarity())
+    reg.setResetPolarity(op.getResetPolarityOrDefault() ==
+                                 RegResetPolarity::NegReset
+                             ? seq::ResetPolarity::NegReset
+                             : seq::ResetPolarity::PosReset);
 
   // Pass along the start and end random initialization bits for this register.
   if (auto randomRegister = op->getAttr("firrtl.random_init_register"))

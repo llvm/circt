@@ -735,16 +735,25 @@ LogicalResult CellIFTInstrumentPass::instrumentModuleBody(
 
           Value nextT = getTaint(taintOf, pendingTaints, backedgeBuilder,
                                  firreg.getNext());
-          Value tReg;
+          seq::FirRegOp tRegOp;
           if (firreg.hasReset()) {
             Value rstVal = getZero(b, firreg.getType());
-            tReg = seq::FirRegOp::create(
+            tRegOp = seq::FirRegOp::create(
                 b, nextT, firreg.getClk(), name, firreg.getReset(), rstVal,
                 firreg.getInnerSymAttr(), firreg.getIsAsync());
+            // Mirror the reset polarity so the taint register's reset condition
+            // matches the source register.
+            if (auto resetPolarity = firreg.getResetPolarityAttr())
+              tRegOp.setResetPolarityAttr(resetPolarity);
           } else {
-            tReg = seq::FirRegOp::create(b, nextT, firreg.getClk(), name);
+            tRegOp = seq::FirRegOp::create(b, nextT, firreg.getClk(), name);
           }
-          setTaint(taintOf, pendingTaints, firreg.getData(), tReg);
+          // Mirror the clock edge regardless of whether the register has a
+          // reset so a negedge/dual-edge register's taint clone stays on the
+          // same edge.
+          if (auto clockEdge = firreg.getClockEdgeAttr())
+            tRegOp.setClockEdgeAttr(clockEdge);
+          setTaint(taintOf, pendingTaints, firreg.getData(), tRegOp);
         })
         .Case<hw::ConstantOp>([&](auto o) {
           setTaint(taintOf, pendingTaints, o.getResult(),

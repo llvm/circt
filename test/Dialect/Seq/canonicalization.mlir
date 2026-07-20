@@ -54,6 +54,27 @@ hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i
   // CHECK: %reg1 = seq.firreg %in clock %clk : i32
   // CHECK: hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
 
+  // Dropping a never-asserting (active-high constant-zero) reset must preserve a
+  // non-default clock edge.
+  %reg1edge = seq.firreg %in clock %clk reset sync %false, %v {clockEdge = 1 : i32} : i32
+  hw.instance "reg1edge" @Observe(x: %reg1edge: i32) -> ()
+  // CHECK: %reg1edge = seq.firreg %in clock %clk {clockEdge = 1 : i32} : i32
+  // CHECK: hw.instance "reg1edge" @Observe(x: %reg1edge: i32) -> ()
+
+  // An active-low (NegReset) constant-zero reset is always asserted, so the
+  // reset-removal canonicalization must NOT drop it; instead the register is
+  // permanently in reset and folds to its reset value.
+  %reg1low = seq.firreg %in clock %clk reset sync %false, %v {resetPolarity = 1 : i32} : i32
+  hw.instance "reg1low" @Observe(x: %reg1low: i32) -> ()
+  // CHECK: hw.instance "reg1low" @Observe(x: %v: i32) -> ()
+
+  // An active-low (NegReset) constant-one reset is never asserted, so the
+  // register must be kept (it must NOT fold to its reset value).
+  %reg1lowOne = seq.firreg %in clock %clk reset sync %true, %v {resetPolarity = 1 : i32} : i32
+  hw.instance "reg1lowOne" @Observe(x: %reg1lowOne: i32) -> ()
+  // CHECK: %reg1lowOne = seq.firreg %in clock %clk reset sync %true, %v {resetPolarity = 1 : i32} : i32
+  // CHECK: hw.instance "reg1lowOne" @Observe(x: %reg1lowOne: i32) -> ()
+
   // Registers that are permanently reset should be replaced with their reset
   // value.
   %reg2a = seq.firreg %in clock %clk reset sync %true, %v : i32
@@ -120,6 +141,19 @@ hw.module @UninitializedArrayElement(in %a : i1, in %clock : !seq.clock, out b: 
   %0 = hw.array_get %r[%true] : !hw.array<2xi1>, i1
   %1 = hw.array_create %0, %a : i1
   hw.output %r : !hw.array<2xi1>
+}
+
+// When the self-looping array-create has multiple uses the whole register is
+// rebuilt; the non-default clock edge must be preserved on the replacement.
+// CHECK-LABEL: @ArraySelfLoopElementClockEdge
+hw.module @ArraySelfLoopElementClockEdge(in %a : i1, in %clock : !seq.clock,
+    out b: !hw.array<2xi1>, out c: !hw.array<2xi1>) {
+  // CHECK: %r = seq.firreg %{{.*}} clock %clock {clockEdge = 1 : i32} : !hw.array<2xi1>
+  %true = hw.constant true
+  %r = seq.firreg %1 clock %clock {clockEdge = 1 : i32} : !hw.array<2xi1>
+  %0 = hw.array_get %r[%true] : !hw.array<2xi1>, i1
+  %1 = hw.array_create %0, %a : i1
+  hw.output %r, %1 : !hw.array<2xi1>, !hw.array<2xi1>
 }
 
 // CHECK-LABEL: hw.module @ClockGate

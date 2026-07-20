@@ -249,6 +249,7 @@ struct InferResetsPass
   FailureOr<ResetKind> inferReset(ResetNetwork net);
   LogicalResult updateReset(ResetNetwork net, ResetKind kind);
   bool updateReset(FieldRef field, FIRRTLBaseType resetType);
+  void stampAsyncResetTypes();
 
   LogicalResult verifyNoAbstractReset();
 
@@ -308,9 +309,30 @@ void InferResetsPass::runOnOperationInner() {
                           getAnalysis<InstanceInfo>())))
     return signalPassFailure();
 
+  // Now that all reset networks are resolved to concrete async/sync types,
+  // stamp the authoritative `resetType` attribute on every register whose reset
+  // ended up asynchronous. This keeps the attribute the single source of truth
+  // for downstream lowering and satisfies the fail-closed verifier (an
+  // `asyncreset`-typed reset must carry `resetType = AsyncReset`).
+  stampAsyncResetTypes();
+
   // Require that no Abstract Resets exist on ports in the design.
   if (failed(verifyNoAbstractReset()))
     return signalPassFailure();
+}
+
+/// Record the authoritative asynchronous reset kind on every `RegResetOp` whose
+/// reset operand is `asyncreset`-typed. Synchronous resets keep the elided
+/// default, so only the async case needs an explicit attribute.
+void InferResetsPass::stampAsyncResetTypes() {
+  getOperation()->walk([](RegResetOp regOp) {
+    if (!type_isa<AsyncResetType>(regOp.getResetSignal().getType()))
+      return;
+    if (regOp.getResetType() == RegResetType::AsyncReset)
+      return;
+    regOp.setResetTypeAttr(
+        RegResetTypeAttr::get(regOp.getContext(), RegResetType::AsyncReset));
+  });
 }
 
 ResetSignal InferResetsPass::guessRoot(ResetNetwork net) {
