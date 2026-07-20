@@ -865,13 +865,13 @@ static void applyWireLowerings(Block &block,
     ImplicitLocOpBuilder builder(hwWireOp.getLoc(), &block, declarePoint);
     Value decl;
     if (isProceduralRegion) {
-      decl =
-          LogicOp::create(builder, hwWireOp.getType(), hwWireOp.getNameAttr(),
-                          hwWireOp.getInnerSymAttr());
+      decl = LogicOp::create(builder, hwWireOp.getType(),
+                             hwWireOp.getNameAttr(), hwWireOp.getInnerSymAttr(),
+                             hwWireOp.getCommentAttr());
     } else {
-      decl = sv::WireOp::create(builder, hwWireOp.getType(),
-                                hwWireOp.getNameAttr(),
-                                hwWireOp.getInnerSymAttr());
+      decl = sv::WireOp::create(
+          builder, hwWireOp.getType(), hwWireOp.getNameAttr(),
+          hwWireOp.getInnerSymAttr(), hwWireOp.getCommentAttr());
     }
 
     // Carry attributes over to the lowered operation.

@@ -189,6 +189,57 @@ firrtl.circuit "ForwardConstant" {
 
 // -----
 
+// Constant forwarding must retain a live instance carrying a comment, while a
+// comment alone must not keep a dead instance.
+// CHECK-LABEL: "CommentForwardConstant"
+firrtl.circuit "CommentForwardConstant" {
+  // CHECK: firrtl.module private @ConstantChild
+  firrtl.module private @ConstantChild(out %o: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %c0_ui1 : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module private @CommentedConstantChild
+  // CHECK-SAME: attributes {comment = "imdce module comment"
+  firrtl.module private @CommentedConstantChild(out %o: !firrtl.uint<1>) attributes {comment = "imdce module comment"} {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %c0_ui1 : !firrtl.uint<1>
+  }
+
+  // A comment does not make an originally unreachable module live.
+  // CHECK-NOT: @DeadCommentedChild
+  firrtl.module private @DeadCommentedChild(out %o: !firrtl.uint<1>) attributes {comment = "dead module comment"} {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %c0_ui1 : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: @CommentForwardConstant
+  firrtl.module @CommentForwardConstant(out %o: !firrtl.uint<1>, out %module_o: !firrtl.uint<1>) {
+    // CHECK: %live_instance_o = firrtl.instance live_instance
+    // CHECK-SAME: comment = "imdce instance comment"
+    %live_instance_o = firrtl.instance live_instance {comment = "imdce instance comment"} @ConstantChild(out o: !firrtl.uint<1>)
+    // CHECK: firrtl.matchingconnect %o, %live_instance_o
+    firrtl.matchingconnect %o, %live_instance_o : !firrtl.uint<1>
+
+    // A referenced module's comment also keeps constant forwarding from
+    // deleting its live instance carrier.
+    // CHECK: %module_instance_o = firrtl.instance module_instance
+    %module_instance_o = firrtl.instance module_instance @CommentedConstantChild(out o: !firrtl.uint<1>)
+    // CHECK: firrtl.matchingconnect %module_o, %module_instance_o
+    firrtl.matchingconnect %module_o, %module_instance_o : !firrtl.uint<1>
+
+    // CHECK-NOT: dead_instance
+    firrtl.instance dead_instance {comment = "dead instance comment"} @ConstantChild(out o: !firrtl.uint<1>)
+
+    // CHECK-NOT: dead_aggregate_wire
+    %dead_aggregate_wire = firrtl.wire {comment = "dead aggregate wire comment"} : !firrtl.bundle<a: uint<1>>
+    %dead_aggregate_wire_a = firrtl.subfield %dead_aggregate_wire[a] : !firrtl.bundle<a: uint<1>>
+    firrtl.matchingconnect %dead_aggregate_wire_a, %live_instance_o : !firrtl.uint<1>
+  }
+}
+
+// -----
+
 // Test handling of ref ports and ops.
 
 // CHECK-LABEL: "RefPorts"

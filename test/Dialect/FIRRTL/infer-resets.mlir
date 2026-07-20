@@ -631,11 +631,13 @@ firrtl.circuit "FullAsyncExcluded" {
 firrtl.circuit "WireShouldDominate" {
   // CHECK-LABEL: firrtl.module @WireShouldDominate
   firrtl.module @WireShouldDominate(in %clock: !firrtl.clock) {
-    %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
+    %reg = firrtl.reg %clock {comment = "inferred reset comment"} : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
     %localReset = firrtl.wire {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
     // CHECK-NEXT: %localReset = firrtl.wire
     // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
-    // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]] {resetType = 1 : i32}
+    // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]]
+    // CHECK-SAME: comment = "inferred reset comment"
+    // CHECK-SAME: resetType = 1 : i32
   }
 }
 
@@ -666,8 +668,9 @@ firrtl.circuit "UnmovableNodeShouldDominate" {
   firrtl.module @UnmovableNodeShouldDominate(in %clock: !firrtl.clock, in %ui1: !firrtl.uint<1>) {
     %reg = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8> // gets wired to localReset
     %0 = firrtl.asAsyncReset %ui1 : (!firrtl.uint<1>) -> !firrtl.asyncreset // blocks move of node
-    %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}]} : !firrtl.asyncreset
+    %localReset = firrtl.node sym @theReset %0 {annotations = [{class = "circt.FullResetAnnotation", resetType = "async"}], comment = "promoted reset comment"} : !firrtl.asyncreset
     // CHECK-NEXT: %localReset = firrtl.wire sym @theReset
+    // CHECK-SAME: comment = "promoted reset comment"
     // CHECK-NEXT: [[RV:%.+]] = firrtl.constant 0
     // CHECK-NEXT: %reg = firrtl.regreset %clock, %localReset, [[RV]] {resetType = 1 : i32}
     // CHECK-NEXT: %0 = firrtl.asAsyncReset %ui1

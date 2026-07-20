@@ -1447,7 +1447,8 @@ void Deseq::implementRegister(DriveInfo &drive) {
                                    /*preset=*/IntegerAttr{}, reset, resetValue,
                                    /*resetType=*/resetType,
                                    /*clockEdge=*/seq::ClockEdgeAttr{},
-                                   /*resetPolarity=*/seq::ResetPolarityAttr{});
+                                   /*resetPolarity=*/seq::ResetPolarityAttr{},
+                                   /*comment=*/StringAttr{});
 
   // If the register has an enable, insert a self-mux in front of the register.
   // Set the `bin` flag on the mux specifically to make up for a subtle

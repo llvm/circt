@@ -806,8 +806,9 @@ LogicalResult LowerAnnotationsPass::solveWiringProblems(ApplyState &state) {
           baseType && baseType.isPassive()) {
         // Note that the wire is replaced with the source type
         // regardless, continue this behavior.
-        NodeOp::create(builder, src, destOp.getName())
-            .setAnnotationsAttr(destOp.getAnnotations());
+        auto node = NodeOp::create(builder, src, destOp.getName());
+        node.setAnnotationsAttr(destOp.getAnnotations());
+        copyDeclarationComment(destOp, node);
         opsToErase.push_back(destOp);
         return success();
       }

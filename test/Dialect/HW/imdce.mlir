@@ -96,6 +96,7 @@ module {
   // ELIMINATE:           %[[CONSTANT_0:.*]] = hw.constant false
   // ELIMINATE:           %[[CONSTANT_1:.*]] = hw.constant true
   // ELIMINATE:           %[[INSTANCE_0:.*]] = hw.instance "dead_port_alive_module_instance" @dead_port_alive_module(source2: %[[CONSTANT_1]]: i1) -> (dest: i1)
+  // ELIMINATE-SAME:        comment = "IMDCE instance comment"
   // ELIMINATE:           %[[INSTANCE_1:.*]] = hw.instance "public_with_dead_port_instance" @public_with_dead_port(source1: %[[CONSTANT_0]]: i1, source2: %[[CONSTANT_1]]: i1) -> (dest: i1)
   // ELIMINATE:           hw.output %[[INSTANCE_0]], %[[INSTANCE_1]] : i1, i1
   // ELIMINATE:         }
@@ -111,7 +112,7 @@ module {
     // LIVENESS: hw.instance "dead_port_alive_module_instance"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]
-    %dest1 = hw.instance "dead_port_alive_module_instance" @dead_port_alive_module(source1: %s1 : i1, source2 : %s2 : i1) -> (dest : i1)
+    %dest1 = hw.instance "dead_port_alive_module_instance" @dead_port_alive_module(source1: %s1 : i1, source2 : %s2 : i1) -> (dest : i1) {comment = "IMDCE instance comment"}
     // LIVENESS: hw.instance "public_with_dead_port_instance"
     // LIVENESS-SAME: "op-liveness" = "LIVE"
     // LIVENESS-SAME: "val-liveness" = ["LIVE"]

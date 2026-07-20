@@ -40,8 +40,8 @@ module {
   // CHECK-SAME: out xmr_bored_secret_node_{{[0-9]+}} : i1
   hw.module @Mid() {
     %c0 = hw.constant 0 : i32
-    // CHECK: %[[LI_OUT:.+]] = hw.instance "leaf_li" sym @leaf_li @LeafInternal(in_data: %{{.+}}: i32) -> (xmr_bored_signal_{{[0-9]+}}: i32)
-    hw.instance "leaf_li" sym @leaf_li @LeafInternal(in_data: %c0 : i32) -> ()
+    // CHECK: %[[LI_OUT:.+]] = hw.instance "leaf_li" sym @leaf_li @LeafInternal(in_data: %{{.+}}: i32) -> (xmr_bored_signal_{{[0-9]+}}: i32) {comment = "leaf instance"}
+    hw.instance "leaf_li" sym @leaf_li @LeafInternal(in_data: %c0 : i32) -> () {comment = "leaf instance"}
 
     // CHECK: %[[FALSE:.+]] = hw.constant false
     // CHECK: %[[CG_OUT:.+]] = hw.instance "cg_inst" sym @cg_inst @ClockGate() -> (out_clk: i1)

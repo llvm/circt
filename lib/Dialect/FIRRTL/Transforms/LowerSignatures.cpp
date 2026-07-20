@@ -428,6 +428,7 @@ static void lowerModuleBody(FModuleOp mod,
     for (auto na : oldDict)
       if (!newDict.contains(na.getName()))
         newOp->setDiscardableAttr(na.getName(), na.getValue());
+    copyDeclarationComment(inst, newOp);
 
     // Connect up the old instance users to the new instance
     SmallVector<WireOp> bounce(inst.getNumResults());

@@ -816,7 +816,7 @@ void ESIPortsPass::updateInstance(HWModuleExternOp mod, InstanceOp inst) {
   // Create the new instance!
   auto newInst = hw::InstanceOp::create(
       instBuilder, mod, inst.getInstanceNameAttr(), newOperands,
-      inst.getParameters(), inst.getInnerSymAttr());
+      inst.getParameters(), inst.getInnerSymAttr(), inst.getCommentAttr());
 
   // Go through the old list of non-ESI result values, and replace them with
   // the new non-ESI results.

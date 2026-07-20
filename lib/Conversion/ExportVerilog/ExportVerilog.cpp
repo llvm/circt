@@ -5676,8 +5676,10 @@ LogicalResult StmtEmitter::visitStmt(InstanceOp op) {
     return success();
 
   // Emit SV attributes if the op is not emitted as a bind statement.
-  if (!doNotPrint)
+  if (!doNotPrint) {
+    emitComment(op.getCommentAttr());
     emitSVAttributes(op);
+  }
   startStatement();
   ps.addCallback({op, true});
   if (doNotPrint) {
@@ -6143,6 +6145,7 @@ static bool checkDominanceOfUsers(Operation *op1, Operation *op2) {
 }
 
 LogicalResult StmtEmitter::emitDeclaration(Operation *op) {
+  emitComment(op->getAttrOfType<StringAttr>("comment"));
   emitSVAttributes(op);
   auto value = op->getResult(0);
   SmallPtrSet<Operation *, 8> opsForLocation;
@@ -6372,6 +6375,7 @@ void ModuleEmitter::emitBind(BindOp op) {
   if (hasSVAttributes(op))
     emitError(op, "SV attributes emission is unimplemented for the op");
   InstanceOp inst = op.getReferencedInstance(&state.symbolCache);
+  emitComment(inst.getCommentAttr());
 
   HWModuleOp parentMod = inst->getParentOfType<hw::HWModuleOp>();
   ModulePortInfo parentPortList(parentMod.getPortList());

@@ -396,7 +396,7 @@ LogicalResult ShiftRegOp::verify() {
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
                      Value clk, StringAttr name, hw::InnerSymAttr innerSym,
-                     Attribute preset) {
+                     Attribute preset, StringAttr comment) {
 
   OpBuilder::InsertionGuard guard(builder);
 
@@ -411,12 +411,16 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
   if (preset)
     result.addAttribute(getPresetAttrName(result.name), preset);
 
+  if (comment)
+    result.addAttribute(getCommentAttrName(result.name), comment);
+
   result.addTypes(input.getType());
 }
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
                      Value clk, StringAttr name, Value reset, Value resetValue,
-                     hw::InnerSymAttr innerSym, bool isAsync) {
+                     hw::InnerSymAttr innerSym, bool isAsync,
+                     StringAttr comment) {
 
   OpBuilder::InsertionGuard guard(builder);
 
@@ -433,6 +437,9 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
 
   if (innerSym)
     result.addAttribute(getInnerSymAttrName(result.name), innerSym);
+
+  if (comment)
+    result.addAttribute(getCommentAttrName(result.name), comment);
 
   result.addTypes(input.getType());
 }
@@ -617,7 +624,36 @@ void FirRegOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 
 std::optional<size_t> FirRegOp::getTargetResultIndex() { return 0; }
 
+static bool hasComment(FirRegOp op) {
+  auto comment = op.getCommentAttr();
+  return comment && !comment.getValue().empty();
+}
+
+/// Return true if the register value is used outside a one-operation
+/// next-state feedback loop. The register's own `next` operand is not an
+/// external use. A feedback operation is ignored only when all of its results
+/// feed the register itself.
+static bool hasUseOutsideFeedbackLoop(FirRegOp op, Operation *feedback) {
+  auto *reg = op.getOperation();
+  bool isFeedbackUser =
+      feedback && llvm::is_contained(op.getResult().getUsers(), feedback);
+  if (llvm::any_of(op.getResult().getUsers(), [&](Operation *user) {
+        return user != reg && (!isFeedbackUser || user != feedback);
+      }))
+    return true;
+  return isFeedbackUser &&
+         llvm::any_of(feedback->getUsers(),
+                      [&](Operation *user) { return user != reg; });
+}
+
+static void setFirRegComment(FirRegOp op, StringAttr comment) {
+  if (comment)
+    op.setCommentAttr(comment);
+}
+
 LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
+
+  auto comment = op.getCommentAttr();
 
   // If the register has a constant zero reset, drop the reset and reset value
   // altogether (And preserve the PresetAttr and clock edge). This is only valid
@@ -634,6 +670,7 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
             op.getInnerSymAttr(), op.getPresetAttr());
         if (auto clockEdge = op.getClockEdgeAttr())
           newReg.setClockEdgeAttr(clockEdge);
+        setFirRegComment(newReg, comment);
         return success();
       }
     }
@@ -662,6 +699,9 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
       replaceWithConstZero = false;
 
   if (isConstant() && !op.getResetValue() && replaceWithConstZero) {
+    if (hasComment(op) &&
+        hasUseOutsideFeedbackLoop(op, op.getNext().getDefiningOp()))
+      return failure();
     if (isa<seq::ClockType>(op.getType())) {
       rewriter.replaceOpWithNewOp<seq::ConstClockOp>(
           op, seq::ClockConstAttr::get(rewriter.getContext(), ClockConst::Low));
@@ -714,6 +754,8 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
     }
 
     assert(replacedValue);
+    if (hasComment(op) && hasUseOutsideFeedbackLoop(op, nextMux.getOperation()))
+      return failure();
     // Apply the optimization if all conditions are met
     rewriter.replaceOp(op, replacedValue);
     return success();
@@ -762,12 +804,14 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
             rewriter.replaceOp(arrayCreate, newNextVal);
           else {
             // Otherwise, replace the entire firreg with a new one, preserving
-            // the clock edge (the register here is reset- and preset-less).
+            // the clock edge and comment (the register here is reset- and
+            // preset-less).
             auto newReg = rewriter.replaceOpWithNewOp<FirRegOp>(
                 op, newNextVal, op.getClk(), op.getNameAttr(),
                 op.getInnerSymAttr());
             if (auto clockEdge = op.getClockEdgeAttr())
               newReg.setClockEdgeAttr(clockEdge);
+            setFirRegComment(newReg, comment);
           }
 
           return success();
@@ -780,6 +824,12 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
+  // Do not eliminate the declaration carrying a comment when its value is
+  // live. The comment itself does not make an unused result live.
+  if (hasComment(*this) &&
+      hasUseOutsideFeedbackLoop(*this, getNext().getDefiningOp()))
+    return {};
+
   // If the register has a symbol or preset value, we can't optimize it away.
   // TODO: Handle a preset value.
   if (getInnerSymAttr())

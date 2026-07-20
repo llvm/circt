@@ -327,6 +327,22 @@ firrtl.circuit "NonHWWiresHaveDroppableNames" {
 
 // -----
 
+// CHECK-LABEL: circuit "WireComment"
+firrtl.circuit "WireComment" {
+  // CHECK-LABEL: module @WireComment
+  firrtl.module @WireComment() {
+    // A 1-to-N open aggregate split broadcasts the comment to both
+    // the hardware and non-hardware carriers.
+    // CHECK: %w = firrtl.wire
+    // CHECK-SAME: comment = "open aggregate wire comment"
+    // CHECK: %w_b = firrtl.wire
+    // CHECK-SAME: comment = "open aggregate wire comment"
+    %w = firrtl.wire {comment = "open aggregate wire comment"} : !firrtl.openbundle<a: uint<1>, b: probe<uint<1>>>
+  }
+}
+
+// -----
+
 // CHECK-LABEL: circuit "DomainInfo"
 firrtl.circuit "DomainInfo" {
   firrtl.domain @ClockDomain

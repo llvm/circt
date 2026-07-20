@@ -505,7 +505,7 @@ struct InstanceOpConversion : public OpConversionPattern<InstanceOp> {
         rewriter, op.getLoc(), op.getResultTypes(), instName, moduleName,
         op.getInputs(), op.getInputNamesAttr(), op.getOutputNamesAttr(),
         /*Parameter*/ rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr,
-        /*doNotPrint*/ nullptr);
+        /*doNotPrint*/ nullptr, /*comment*/ nullptr);
 
     // Replace uses chain and erase the original op.
     op.replaceAllUsesWith(instOp.getResults());
@@ -2276,9 +2276,9 @@ struct HWInstanceOpConversion : public OpConversionPattern<hw::InstanceOp> {
 
     rewriter.replaceOpWithNewOp<hw::InstanceOp>(
         op, convResTypes, op.getInstanceName(), op.getModuleName(),
-        adaptor.getOperands(), op.getArgNames(),
-        op.getResultNames(), /*Parameter*/
-        rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr);
+        adaptor.getOperands(), op.getArgNames(), op.getResultNames(),
+        /*Parameter*/ rewriter.getArrayAttr({}), /*InnerSymbol*/ nullptr,
+        /*doNotPrint*/ false, op.getCommentAttr());
 
     return success();
   }

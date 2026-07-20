@@ -15,10 +15,10 @@ module {
   // CHECK-LABEL: hw.module @Host
   // CHECK-SAME: in %src_in : i8
   // CHECK-SAME: out out : i8
-  // CHECK-NEXT: %[[P:.+]] = hw.instance "payload" sym @payload @Payload(xmr_capture_src_{{[0-9]+}}: %src_in: i8) -> (o: i8) {doNotPrint}
+  // CHECK-NEXT: %[[P:.+]] = hw.instance "payload" sym @payload @Payload(xmr_capture_src_{{[0-9]+}}: %src_in: i8) -> (o: i8) {comment = "bind instance", doNotPrint}
   // CHECK-NEXT: hw.output %[[P]] : i8
   hw.module @Host(in %src_in : i8 {hw.exportPort = #hw<innerSym@src>}, out out : i8) {
-    %p = hw.instance "payload" sym @payload @Payload() -> (o: i8) {doNotPrint}
+    %p = hw.instance "payload" sym @payload @Payload() -> (o: i8) {comment = "bind instance", doNotPrint}
     hw.output %p : i8
   }
 

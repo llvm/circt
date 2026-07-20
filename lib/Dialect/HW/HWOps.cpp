@@ -372,6 +372,12 @@ void WireOp::getAsmResultNames(OpAsmSetValueNameFn setNameFn) {
 std::optional<size_t> WireOp::getTargetResultIndex() { return 0; }
 
 OpFoldResult WireOp::fold(FoldAdaptor adaptor) {
+  // A comment does not make an otherwise dead wire live, but a live wire cannot
+  // be folded into its input without losing the declaration that carries it.
+  auto comment = getCommentAttr();
+  if (comment && !comment.getValue().empty() && !getResult().use_empty())
+    return {};
+
   // If the wire has no additional attributes, no name, and no symbol, just
   // forward its input.
   if (!hasAdditionalAttributes(*this, {"sv.namehint"}) && !getNameAttr() &&
@@ -381,6 +387,12 @@ OpFoldResult WireOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
+  // Preserve a live declaration that carries a comment. Dead wires remain
+  // removable; comments are not liveness roots.
+  auto comment = wire.getCommentAttr();
+  if (comment && !comment.getValue().empty() && !wire.getResult().use_empty())
+    return failure();
+
   // Block if the wire has any attributes.
   if (hasAdditionalAttributes(wire, {"sv.namehint"}))
     return failure();
@@ -1477,7 +1489,7 @@ static PortInfo getPort(ModuleTy &mod, size_t idx) {
 void InstanceOp::build(OpBuilder &builder, OperationState &result,
                        Operation *module, StringAttr name,
                        ArrayRef<Value> inputs, ArrayAttr parameters,
-                       InnerSymAttr innerSym) {
+                       InnerSymAttr innerSym, StringAttr comment) {
   if (!parameters)
     parameters = builder.getArrayAttr({});
 
@@ -1496,7 +1508,8 @@ void InstanceOp::build(OpBuilder &builder, OperationState &result,
   FunctionType funcType = resolvedModType->getFuncType();
   build(builder, result, funcType.getResults(), name,
         FlatSymbolRefAttr::get(SymbolTable::getSymbolName(module)), inputs,
-        argNames, resultNames, parameters, innerSym, /*doNotPrint=*/{});
+        argNames, resultNames, parameters, innerSym, /*doNotPrint=*/{},
+        comment);
 }
 
 std::optional<size_t> InstanceOp::getTargetResultIndex() {

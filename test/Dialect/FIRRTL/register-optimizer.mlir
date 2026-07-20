@@ -90,4 +90,39 @@ firrtl.circuit "invalidReg"   {
     firrtl.matchingconnect %r, %r : !firrtl.uint<2>
     firrtl.matchingconnect %out, %0 : !firrtl.uint<4>
   }
+
+  // CHECK-LABEL: @CommentsBlockRemoval
+  firrtl.module @CommentsBlockRemoval(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %reg_out: !firrtl.uint<1>, out %regreset_out: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+    // CHECK: %commented_reg = firrtl.reg %clock
+    // CHECK-SAME: comment = "register optimizer reg comment"
+    %commented_reg = firrtl.reg %clock {comment = "register optimizer reg comment"} : !firrtl.clock, !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %commented_reg, %c0_ui1
+    firrtl.matchingconnect %commented_reg, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %reg_out, %commented_reg : !firrtl.uint<1>
+
+    // CHECK: %commented_regreset = firrtl.regreset %clock, %reset, %c0_ui1
+    // CHECK-SAME: comment = "register optimizer regreset comment"
+    %commented_regreset = firrtl.regreset %clock, %reset, %c0_ui1 {comment = "register optimizer regreset comment"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %commented_regreset, %c0_ui1
+    firrtl.matchingconnect %commented_regreset, %c0_ui1 : !firrtl.uint<1>
+    firrtl.matchingconnect %regreset_out, %commented_regreset : !firrtl.uint<1>
+  }
+
+  // Comments do not make an otherwise dead feedback loop live.
+  // CHECK-LABEL: @DeadComments
+  // CHECK-NOT: %dead_reg =
+  // CHECK-NOT: %dead_regreset =
+  // CHECK-NOT: dead optimizer reg comment
+  // CHECK-NOT: dead optimizer regreset comment
+  firrtl.module private @DeadComments(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+    %dead_reg = firrtl.reg %clock {comment = "dead optimizer reg comment"} : !firrtl.clock, !firrtl.uint<1>
+    firrtl.matchingconnect %dead_reg, %dead_reg : !firrtl.uint<1>
+
+    %dead_regreset = firrtl.regreset %clock, %reset, %c0_ui1 {comment = "dead optimizer regreset comment"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    firrtl.matchingconnect %dead_regreset, %dead_regreset : !firrtl.uint<1>
+  }
 }

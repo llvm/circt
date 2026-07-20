@@ -290,7 +290,8 @@ Value ResolveXMRRefPass::resolveViaBindContext(sv::XMRRefOp xmrRefOp,
       OpBuilder ib(userInst);
       auto newInst = hw::InstanceOp::create(
           ib, userInst.getLoc(), payloadMod, userInst.getInstanceNameAttr(),
-          operands, userInst.getParameters(), userInst.getInnerSymAttr());
+          operands, userInst.getParameters(), userInst.getInnerSymAttr(),
+          userInst.getCommentAttr());
 
       for (unsigned i = 0; i < userInst.getNumResults(); ++i)
         userInst.getResult(i).replaceAllUsesWith(newInst.getResult(i));
@@ -527,7 +528,8 @@ Value ResolveXMRRefPass::boreRecursively(ArrayAttr pathArray, unsigned index,
     OpBuilder b(userInst);
     auto newInst = hw::InstanceOp::create(
         b, userInst.getLoc(), childMod, userInst.getInstanceNameAttr(),
-        operands, userInst.getParameters(), userInst.getInnerSymAttr());
+        operands, userInst.getParameters(), userInst.getInnerSymAttr(),
+        userInst.getCommentAttr());
 
     for (unsigned i = 0; i < userInst.getNumResults(); ++i)
       userInst.getResult(i).replaceAllUsesWith(newInst.getResult(i));

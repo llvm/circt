@@ -1,5 +1,30 @@
 // RUN: circt-opt --firrtl-dedup %s | FileCheck %s
 
+// CHECK-LABEL: firrtl.circuit "CommentDedup"
+firrtl.circuit "CommentDedup" {
+  // Identical comments permit the normal N-to-1 deduplication.
+  // CHECK: firrtl.module private @Same0()
+  // CHECK-SAME: comment = "same comment"
+  firrtl.module private @Same0() attributes {comment = "same comment"} {}
+  // CHECK-NOT: firrtl.module private @Same1
+  firrtl.module private @Same1() attributes {comment = "same comment"} {}
+
+  // Different comments are observable and must prevent merging.
+  // CHECK: firrtl.module private @DifferentComment()
+  // CHECK-SAME: comment = "different comment"
+  firrtl.module private @DifferentComment() attributes {comment = "different comment"} {}
+
+  // CHECK-LABEL: firrtl.module @CommentDedup
+  firrtl.module @CommentDedup() {
+    // CHECK: firrtl.instance same0 @Same0()
+    firrtl.instance same0 @Same0()
+    // CHECK: firrtl.instance same1 @Same0()
+    firrtl.instance same1 @Same1()
+    // CHECK: firrtl.instance different_comment @DifferentComment()
+    firrtl.instance different_comment @DifferentComment()
+  }
+}
+
 // CHECK-LABEL: firrtl.circuit "Empty"
 firrtl.circuit "Empty" {
   // CHECK: firrtl.module private @Empty0

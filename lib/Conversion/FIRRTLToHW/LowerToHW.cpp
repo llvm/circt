@@ -1362,8 +1362,7 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
   auto newModule =
       hw::HWModuleOp::create(builder, oldModule.getLoc(), nameAttr, ports);
 
-  if (auto comment = oldModule->getAttrOfType<StringAttr>("comment"))
-    newModule.setCommentAttr(comment);
+  copyDeclarationComment(oldModule, newModule);
 
   // Copy over any attributes which are not required for FModuleOp.
   SmallVector<StringRef, 13> attrNames = {
@@ -1403,8 +1402,16 @@ FIRRTLModuleLowering::lowerModule(FModuleOp oldModule, Block *topLevelModule,
         newModule->setAttr("output_file", testBenchDir);
       newModule->setAttr("firrtl.extract.do_not_extract",
                          builder.getUnitAttr());
-      newModule.setCommentAttr(
-          builder.getStringAttr("VCS coverage exclude_file"));
+      constexpr StringLiteral generatedComment = "VCS coverage exclude_file";
+      if (auto sourceComment = newModule.getCommentAttr()) {
+        SmallString<64> combined(sourceComment.getValue());
+        if (!combined.empty())
+          combined += '\n';
+        combined += generatedComment;
+        newModule.setCommentAttr(builder.getStringAttr(combined));
+      } else {
+        newModule.setCommentAttr(builder.getStringAttr(generatedComment));
+      }
     }
 
   if (handleForceNameAnnos(oldModule, annos, loweringState))
@@ -3739,6 +3746,7 @@ LogicalResult FIRRTLLowering::visitDecl(WireOp op) {
 
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(wire, svAttrs);
+  copyDeclarationComment(op, wire);
 
   return setLowering(op.getResult(), wire);
 }
@@ -3783,15 +3791,26 @@ LogicalResult FIRRTLLowering::visitDecl(NodeOp op) {
   // that we have a symbol name so we can keep the node as a wire.
   auto name = op.getNameAttr();
   auto innerSym = lowerInnerSymbol(op);
+  bool hasDeclarationCarrier = false;
 
-  if (innerSym)
+  if (innerSym) {
     operand = hw::WireOp::create(builder, operand, name, innerSym);
+    hasDeclarationCarrier = true;
+  }
 
   // Move SV attributes.
   if (auto svAttrs = sv::getSVAttributes(op)) {
-    if (!innerSym)
+    if (!innerSym) {
       operand = hw::WireOp::create(builder, operand, name);
+      hasDeclarationCarrier = true;
+    }
     sv::setSVAttributes(operand.getDefiningOp(), svAttrs);
+  }
+
+  if (hasDeclarationComment(op)) {
+    if (!hasDeclarationCarrier)
+      operand = hw::WireOp::create(builder, operand, name);
+    copyDeclarationComment(op, operand.getDefiningOp());
   }
 
   return setLowering(op.getResult(), operand);
@@ -3842,6 +3861,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegOp op) {
   // Move SV attributes.
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(reg, svAttrs);
+  copyDeclarationComment(op, reg);
 
   inputEdge.setValue(reg);
   (void)setLowering(op.getResult(), reg);
@@ -3897,6 +3917,7 @@ LogicalResult FIRRTLLowering::visitDecl(RegResetOp op) {
   // Move SV attributes.
   if (auto svAttrs = sv::getSVAttributes(op))
     sv::setSVAttributes(reg, svAttrs);
+  copyDeclarationComment(op, reg);
 
   inputEdge.setValue(reg);
   (void)setLowering(op.getResult(), reg);
@@ -4146,6 +4167,7 @@ LogicalResult FIRRTLLowering::visitDecl(InstanceOp oldInstance) {
   auto newInstance =
       hw::InstanceOp::create(builder, newModule, oldInstance.getNameAttr(),
                              operands, parameters, innerSym);
+  copyDeclarationComment(oldInstance, newInstance);
 
   if (oldInstance.getLowerToBind() || oldInstance.getDoNotPrint())
     newInstance.setDoNotPrintAttr(builder.getUnitAttr());

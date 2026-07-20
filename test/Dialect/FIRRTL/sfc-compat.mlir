@@ -12,7 +12,8 @@ firrtl.circuit "SFCCompatTests" {
     %invalid_ui1_dead = firrtl.invalidvalue : !firrtl.uint<1>
     %invalid_ui1 = firrtl.invalidvalue : !firrtl.uint<1>
     // CHECK: firrtl.reg %clock
-    %r = firrtl.regreset %clock, %reset, %invalid_ui1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK-SAME: comment = "reset removal comment"
+    %r = firrtl.regreset %clock, %reset, %invalid_ui1 {comment = "reset removal comment"} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %q, %r : !firrtl.uint<1>, !firrtl.uint<1>
   }

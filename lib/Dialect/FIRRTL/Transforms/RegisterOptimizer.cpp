@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
+#include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
 #include "circt/Support/Debug.h"
 #include "mlir/IR/Dominance.h"
@@ -34,6 +35,12 @@ template <typename T>
 static bool canErase(T op) {
   return !(hasDontTouch(op.getResult()) || op.isForceable() ||
            (op.getAnnotationsAttr() && !op.getAnnotationsAttr().empty()));
+}
+
+/// Return true if `value` has a user other than its sole writer.
+static bool hasUseOtherThanWriter(Value value, Operation *writer) {
+  return llvm::any_of(value.getUsers(),
+                      [&](Operation *user) { return user != writer; });
 }
 
 namespace {
@@ -60,6 +67,9 @@ void RegisterOptimizerPass::checkReg(mlir::DominanceInfo &dom,
     return;
   auto con = getSingleConnectUserOf(reg.getResult());
   if (!con)
+    return;
+  if (hasDeclarationComment(reg) &&
+      hasUseOtherThanWriter(reg.getResult(), con.getOperation()))
     return;
 
   // Register is only written by itself, replace with invalid.
@@ -117,6 +127,9 @@ void RegisterOptimizerPass::checkRegReset(mlir::DominanceInfo &dom,
     return;
   auto con = getSingleConnectUserOf(reg.getResult());
   if (!con)
+    return;
+  if (hasDeclarationComment(reg) &&
+      hasUseOtherThanWriter(reg.getResult(), con.getOperation()))
     return;
 
   // Register is only written by itself, and reset with a constant.

@@ -1032,3 +1032,85 @@ firrtl.circuit "InstanceChoiceAndNormalInstance" {
     firrtl.matchingconnect %out, %inst1_result : !firrtl.uint<8>
   }
 }
+
+// -----
+
+// CHECK-LABEL: firrtl.circuit "CommentPropagation"
+firrtl.circuit "CommentPropagation" {
+  firrtl.module private @ConstantChild(out %o: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %c0_ui1 : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module private @CommentedConstantChild
+  // CHECK-SAME: attributes {comment = "imconstprop module comment"
+  firrtl.module private @CommentedConstantChild(out %o: !firrtl.uint<1>) attributes {comment = "imconstprop module comment"} {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.matchingconnect %o, %c0_ui1 : !firrtl.uint<1>
+  }
+
+  firrtl.module private @AggregateConstantChild(out %o: !firrtl.bundle<a: uint<1>>) {
+    %o_a = firrtl.subfield %o[a] : !firrtl.bundle<a: uint<1>>
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.matchingconnect %o_a, %c0_ui1 : !firrtl.uint<1>
+  }
+
+  // CHECK-LABEL: firrtl.module @CommentPropagation
+  firrtl.module @CommentPropagation(out %wire_out: !firrtl.uint<1>, out %node_out: !firrtl.uint<1>, out %instance_out: !firrtl.uint<1>, out %module_instance_out: !firrtl.uint<1>, out %aggregate_wire_out: !firrtl.uint<1>, out %aggregate_instance_out: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+
+    // Constant propagation must not bypass a live declaration carrying a
+    // comment.
+    // CHECK: %live_wire = firrtl.wire
+    // CHECK-SAME: comment = "imconstprop wire comment"
+    %live_wire = firrtl.wire {comment = "imconstprop wire comment"} : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %live_wire, %c0_ui1
+    firrtl.matchingconnect %live_wire, %c0_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %wire_out, %live_wire
+    firrtl.matchingconnect %wire_out, %live_wire : !firrtl.uint<1>
+
+    // CHECK: %live_node = firrtl.node %c0_ui1
+    // CHECK-SAME: comment = "imconstprop node comment"
+    %live_node = firrtl.node %c0_ui1 {comment = "imconstprop node comment"} : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %node_out, %live_node
+    firrtl.matchingconnect %node_out, %live_node : !firrtl.uint<1>
+
+    // Do not bypass a live instance carrying a comment, even when
+    // intermodule analysis proves that one of its outputs is constant.
+    // CHECK: %live_instance_o = firrtl.instance live_instance
+    // CHECK-SAME: comment = "imconstprop instance comment"
+    %live_instance_o = firrtl.instance live_instance {comment = "imconstprop instance comment"} @ConstantChild(out o: !firrtl.uint<1>)
+    // CHECK: firrtl.matchingconnect %instance_out, %live_instance_o
+    firrtl.matchingconnect %instance_out, %live_instance_o : !firrtl.uint<1>
+
+    // A referenced module's comment also needs its live instance carrier.
+    // CHECK: %module_instance_o = firrtl.instance module_instance
+    %module_instance_o = firrtl.instance module_instance @CommentedConstantChild(out o: !firrtl.uint<1>)
+    // CHECK: firrtl.matchingconnect %module_instance_out, %module_instance_o
+    firrtl.matchingconnect %module_instance_out, %module_instance_o : !firrtl.uint<1>
+
+    // Preserve aggregate declaration identity when a constant field is live.
+    // CHECK: %aggregate_wire = firrtl.wire
+    // CHECK-SAME: comment = "imconstprop aggregate wire comment"
+    %aggregate_wire = firrtl.wire {comment = "imconstprop aggregate wire comment"} : !firrtl.bundle<a: uint<1>>
+    // CHECK: [[AGGREGATE_WIRE_FIELD:%[^ ]+]] = firrtl.subfield %aggregate_wire[a]
+    %aggregate_wire_a = firrtl.subfield %aggregate_wire[a] : !firrtl.bundle<a: uint<1>>
+    firrtl.matchingconnect %aggregate_wire_a, %c0_ui1 : !firrtl.uint<1>
+    // CHECK: firrtl.matchingconnect %aggregate_wire_out, [[AGGREGATE_WIRE_FIELD]]
+    firrtl.matchingconnect %aggregate_wire_out, %aggregate_wire_a : !firrtl.uint<1>
+
+    // CHECK: %aggregate_instance_o = firrtl.instance aggregate_instance
+    // CHECK-SAME: comment = "imconstprop aggregate instance comment"
+    %aggregate_instance_o = firrtl.instance aggregate_instance {comment = "imconstprop aggregate instance comment"} @AggregateConstantChild(out o: !firrtl.bundle<a: uint<1>>)
+    // CHECK: [[AGGREGATE_INSTANCE_FIELD:%[^ ]+]] = firrtl.subfield %aggregate_instance_o[a]
+    %aggregate_instance_o_a = firrtl.subfield %aggregate_instance_o[a] : !firrtl.bundle<a: uint<1>>
+    // CHECK: firrtl.matchingconnect %aggregate_instance_out, [[AGGREGATE_INSTANCE_FIELD]]
+    firrtl.matchingconnect %aggregate_instance_out, %aggregate_instance_o_a : !firrtl.uint<1>
+
+    // A comment is not a liveness root: this declaration and its sole
+    // destination connect are still removed.
+    // CHECK-NOT: dead_wire
+    %dead_wire = firrtl.wire {comment = "dead wire comment"} : !firrtl.uint<1>
+    firrtl.matchingconnect %dead_wire, %c0_ui1 : !firrtl.uint<1>
+  }
+}

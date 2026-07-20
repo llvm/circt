@@ -142,6 +142,19 @@ static OpTy replaceOpWithNewOpAndCopyName(PatternRewriter &rewriter,
   return newOp;
 }
 
+/// Replace a declaration with a new declaration while preserving its name and
+/// comment.
+template <typename OpTy, typename... Args>
+static OpTy replaceDeclWithNewOp(PatternRewriter &rewriter, Operation *op,
+                                 Args &&...args) {
+  auto name = op->getAttrOfType<StringAttr>("name");
+  auto comment = op->getAttrOfType<StringAttr>("comment");
+  auto newOp = rewriter.replaceOpWithNewOp<OpTy>(
+      op, std::forward<Args>(args)..., comment);
+  updateName(rewriter, newOp, name);
+  return newOp;
+}
+
 /// Return true if the name is droppable. Note that this is different from
 /// `isUselessName` because non-useless names may be also droppable.
 bool circt::firrtl::hasDroppableName(Operation *op) {
@@ -2306,8 +2319,21 @@ static LogicalResult canonicalizeSingleSetConnect(MatchingConnectOp op,
   if (getSingleConnectUserOf(op.getDest()) != op)
     return failure();
 
-  // Only forward if there is more than one use
-  if (connectedDecl->hasOneUse())
+  // A declaration whose sole use is its writer is dead. A comment is not a
+  // liveness root, so erase a declaration carrying one instead of
+  // retaining an otherwise unobservable carrier. Preserve the pre-existing
+  // canonicalization behavior for declarations without comments.
+  if (connectedDecl->hasOneUse()) {
+    if (!hasDeclarationComment(connectedDecl))
+      return failure();
+    rewriter.eraseOp(op);
+    rewriter.eraseOp(connectedDecl);
+    return success();
+  }
+
+  // Forwarding a live declaration would discard its comment without another
+  // legal declaration carrier.
+  if (hasDeclarationComment(connectedDecl))
     return failure();
 
   // Only do this if the connectee and the declaration are in the same block.
@@ -2408,7 +2434,7 @@ LogicalResult AttachOp::canonicalize(AttachOp op, PatternRewriter &rewriter) {
     // annotations.
     if (auto wire = dyn_cast_or_null<WireOp>(operand.getDefiningOp())) {
       if (!hasDontTouch(wire.getOperation()) && wire->hasOneUse() &&
-          !wire.isForceable()) {
+          !wire.isForceable() && !hasDeclarationComment(wire)) {
         SmallVector<Value> newOperands;
         for (auto newOperand : op.getOperands())
           if (newOperand != operand) // Don't the add wire.
@@ -2473,7 +2499,8 @@ struct FoldNodeName : public mlir::OpRewritePattern<NodeOp> {
                                 PatternRewriter &rewriter) const override {
     auto name = node.getNameAttr();
     if (!node.hasDroppableName() || node.getInnerSym() ||
-        !AnnotationSet(node).empty() || node.isForceable())
+        !AnnotationSet(node).empty() || node.isForceable() ||
+        (hasDeclarationComment(node) && !node.use_empty()))
       return failure();
     auto *newOp = node.getInput().getDefiningOp();
     if (newOp)
@@ -2489,7 +2516,7 @@ struct NodeBypass : public mlir::OpRewritePattern<NodeOp> {
   LogicalResult matchAndRewrite(NodeOp node,
                                 PatternRewriter &rewriter) const override {
     if (node.getInnerSym() || !AnnotationSet(node).empty() ||
-        node.use_empty() || node.isForceable())
+        node.use_empty() || node.isForceable() || hasDeclarationComment(node))
       return failure();
     rewriter.replaceAllUsesWith(node.getResult(), node.getInput());
     return success();
@@ -2518,6 +2545,8 @@ LogicalResult NodeOp::fold(FoldAdaptor adaptor,
   if (getAnnotationsAttr() && !AnnotationSet(getAnnotationsAttr()).empty())
     return failure();
   if (isForceable())
+    return failure();
+  if (hasDeclarationComment(*this) && !use_empty())
     return failure();
   if (!adaptor.getInput())
     return failure();
@@ -2731,6 +2760,19 @@ OpFoldResult UninferredResetCastOp::fold(FoldAdaptor adaptor) {
 }
 
 namespace {
+/// Return true if `value` has a use outside a next-state feedback loop formed
+/// by `feedback` and `writer`.
+static bool hasUseOutsideFeedbackLoop(Value value, Operation *writer,
+                                      Operation *feedback) {
+  if (llvm::any_of(value.getUsers(), [&](Operation *user) {
+        return user != writer && user != feedback;
+      }))
+    return true;
+  return feedback && llvm::any_of(feedback->getUsers(), [&](Operation *user) {
+           return user != writer;
+         });
+}
+
 // A register with constant reset and all connection to either itself or the
 // same constant, must be replaced by the constant.
 struct FoldResetMux : public mlir::OpRewritePattern<RegResetOp> {
@@ -2761,6 +2803,11 @@ struct FoldResetMux : public mlir::OpRewritePattern<RegResetOp> {
 
     if (!constOp || constOp.getType() != reset.getType() ||
         constOp.getValue() != reset.getValue())
+      return failure();
+
+    if (hasDeclarationComment(reg) &&
+        hasUseOutsideFeedbackLoop(reg.getResult(), con.getOperation(),
+                                  mux.getOperation()))
       return failure();
 
     // Check all types should be typed by now
@@ -2804,9 +2851,9 @@ canonicalizeRegResetWithOneReset(RegResetOp reg, PatternRewriter &rewriter) {
 
   // Ignore 'passthrough'.
   (void)dropWrite(rewriter, reg->getResult(0), {});
-  replaceOpWithNewOpAndCopyName<NodeOp>(
-      rewriter, reg, resetValue, reg.getNameAttr(), reg.getNameKind(),
-      reg.getAnnotationsAttr(), reg.getInnerSymAttr(), reg.getForceable());
+  replaceDeclWithNewOp<NodeOp>(rewriter, reg, resetValue, reg.getNameAttr(),
+                               reg.getNameKind(), reg.getAnnotationsAttr(),
+                               reg.getInnerSymAttr(), reg.getForceable());
   return success();
 }
 
@@ -3638,6 +3685,13 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
   if (!constOp)
     return failure();
 
+  // Replacing a register with a constant has no declaration on which its
+  // comment can remain. Keep such live registers intact.
+  if (constReg && hasDeclarationComment(reg) &&
+      hasUseOutsideFeedbackLoop(reg.getResult(), con.getOperation(),
+                                mux.getOperation()))
+    return failure();
+
   // For a non-constant register, reset should be a module port (heuristic to
   // limit to intended reset lines). Replace the register anyway if constant.
   if (!isa<BlockArgument>(mux.getSel()) && !constReg)
@@ -3658,7 +3712,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
 
   if (!constReg) {
     SmallVector<NamedAttribute, 2> attrs(reg->getDialectAttrs());
-    auto newReg = replaceOpWithNewOpAndCopyName<RegResetOp>(
+    auto newReg = replaceDeclWithNewOp<RegResetOp>(
         rewriter, reg, reg.getResult().getType(), reg.getClockVal(),
         mux.getSel(), mux.getHigh(), reg.getNameAttr(), reg.getNameKindAttr(),
         reg.getAnnotationsAttr(), reg.getInnerSymAttr(),

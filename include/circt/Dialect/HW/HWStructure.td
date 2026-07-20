@@ -473,7 +473,8 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
                        StrArrayAttr:$argNames, StrArrayAttr:$resultNames,
                        ParamDeclArrayAttr:$parameters,
                        OptionalAttr<InnerSymAttr>:$inner_sym,
-                       UnitAttr:$doNotPrint);
+                       UnitAttr:$doNotPrint,
+                       OptionalAttr<StrAttr>:$comment);
   let results = (outs Variadic<AnyType>:$results);
 
   let builders = [
@@ -481,14 +482,16 @@ def InstanceOp : HWInstanceOpBase<"instance", [HWInstanceLike]> {
     OpBuilder<(ins "Operation*":$module, "StringAttr":$name,
                    "ArrayRef<Value>":$inputs,
                    CArg<"ArrayAttr", "{}">:$parameters,
-                   CArg<"InnerSymAttr", "{}">:$innerSym)>,
+                   CArg<"InnerSymAttr", "{}">:$innerSym,
+                   CArg<"StringAttr", "{}">:$comment)>,
     /// Create a instance that refers to a known module.
     OpBuilder<(ins "Operation*":$module, "StringRef":$name,
                    "ArrayRef<Value>":$inputs,
                    CArg<"ArrayAttr", "{}">:$parameters,
-                   CArg<"InnerSymAttr", "{}">:$innerSym), [{
+                   CArg<"InnerSymAttr", "{}">:$innerSym,
+                   CArg<"StringAttr", "{}">:$comment), [{
       build($_builder, $_state, module, $_builder.getStringAttr(name), inputs,
-            parameters, innerSym);
+            parameters, innerSym, comment);
     }]>,
   ];
 

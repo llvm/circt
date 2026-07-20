@@ -380,13 +380,15 @@ static void printImplicitInitType(OpAsmPrinter &p, Operation *op,
 
 void RegOp::build(OpBuilder &builder, OperationState &odsState,
                   Type elementType, StringAttr name, hw::InnerSymAttr innerSym,
-                  mlir::Value initValue) {
+                  mlir::Value initValue, StringAttr comment) {
   if (!name)
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
                           innerSym);
+  if (comment)
+    odsState.addAttribute(getCommentAttrName(odsState.name), comment);
   odsState.addTypes(hw::InOutType::get(elementType));
   if (initValue)
     odsState.addOperands(initValue);
@@ -433,13 +435,15 @@ LogicalResult RegOp::canonicalize(RegOp op, PatternRewriter &rewriter) {
 
 void LogicOp::build(OpBuilder &builder, OperationState &odsState,
                     Type elementType, StringAttr name,
-                    hw::InnerSymAttr innerSym) {
+                    hw::InnerSymAttr innerSym, StringAttr comment) {
   if (!name)
     name = builder.getStringAttr("");
   odsState.addAttribute("name", name);
   if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
                           innerSym);
+  if (comment)
+    odsState.addAttribute(getCommentAttrName(odsState.name), comment);
   odsState.addTypes(hw::InOutType::get(elementType));
 }
 
@@ -1754,13 +1758,15 @@ LogicalResult ReadInterfaceSignalOp::verify() {
 //===----------------------------------------------------------------------===//
 
 void WireOp::build(OpBuilder &builder, OperationState &odsState,
-                   Type elementType, StringAttr name,
-                   hw::InnerSymAttr innerSym) {
+                   Type elementType, StringAttr name, hw::InnerSymAttr innerSym,
+                   StringAttr comment) {
   if (!name)
     name = builder.getStringAttr("");
   if (innerSym)
     odsState.addAttribute(hw::InnerSymbolTable::getInnerSymbolAttrName(),
                           innerSym);
+  if (comment)
+    odsState.addAttribute(getCommentAttrName(odsState.name), comment);
 
   odsState.addAttribute("name", name);
   odsState.addTypes(InOutType::get(elementType));
@@ -1812,6 +1818,13 @@ LogicalResult WireOp::canonicalize(WireOp wire, PatternRewriter &rewriter) {
 
     write = assign;
   }
+
+  // A comment is not a liveness root, so a declaration with no reads may still
+  // be removed. If reads exist, replacing them with the connected value would
+  // eliminate the only valid carrier for the comment.
+  auto comment = wire.getCommentAttr();
+  if (!reads.empty() && comment && !comment.getValue().empty())
+    return failure();
 
   Value connected;
   if (!write) {

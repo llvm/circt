@@ -29,7 +29,7 @@ hw.module.extern @i0SenderReceiver(in %in: !esi.channel<i0>, out out: !esi.chann
 
 hw.module @test(in %clk: !seq.clock, in %rst:i1) {
 
-  %esiChan2, %0 = hw.instance "sender2" @Sender(clk: %clk: !seq.clock) -> (x: !esi.channel<i4>, y: i8)
+  %esiChan2, %0 = hw.instance "sender2" @Sender(clk: %clk: !seq.clock) -> (x: !esi.channel<i4>, y: i8) {comment = "ESI instance"}
   %bufferedChan2 = esi.buffer %clk, %rst, %esiChan2 { stages = 4 } : !esi.channel<i4> -> !esi.channel<i4>
   hw.instance "recv2" @Reciever (a: %bufferedChan2: !esi.channel<i4>, clk: %clk: !seq.clock) -> ()
 
@@ -45,7 +45,7 @@ hw.module @test(in %clk: !seq.clock, in %rst:i1) {
   // IFACE-NEXT:    %[[#modport1:]] = sv.modport.get %i4FromSender2 @source : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@source>
   // IFACE-NEXT:    %[[#channel:]] = esi.wrap.iface %[[#modport1:]] : !sv.modport<@IValidReady_i4::@source> -> !esi.channel<i4>
   // IFACE-NEXT:    %[[#modport2:]] = sv.modport.get %i4FromSender2 @sink : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@sink>
-  // IFACE-NEXT:    %sender2.y = hw.instance "sender2" @Sender(clk: %clk: !seq.clock, x: %2: !sv.modport<@IValidReady_i4::@sink>) -> (y: i8)
+  // IFACE-NEXT:    %sender2.y = hw.instance "sender2" @Sender(clk: %clk: !seq.clock, x: %2: !sv.modport<@IValidReady_i4::@sink>) -> (y: i8) {comment = "ESI instance"}
   // IFACE-NEXT:    %[[#buffer:]] = esi.buffer %clk, %rst, %[[#channel:]] {stages = 4 : i64} : !esi.channel<i4> -> !esi.channel<i4>
   // IFACE-NEXT:    %i4ToRecv2 = sv.interface.instance : !sv.interface<@IValidReady_i4>
   // IFACE-NEXT:    %[[#modport3:]] = sv.modport.get %i4ToRecv2 @sink : !sv.interface<@IValidReady_i4> -> !sv.modport<@IValidReady_i4::@sink>

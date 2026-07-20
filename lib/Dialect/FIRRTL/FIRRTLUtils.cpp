@@ -23,6 +23,24 @@
 using namespace circt;
 using namespace firrtl;
 
+bool circt::firrtl::hasDeclarationComment(Operation *op) {
+  if (auto comment = op->getAttrOfType<StringAttr>("comment"))
+    return !comment.getValue().empty();
+  return false;
+}
+
+void circt::firrtl::copyDeclarationComment(Operation *source,
+                                           Operation *target) {
+  if (auto comment = source->getAttr("comment"))
+    target->setAttr("comment", comment);
+}
+
+void circt::firrtl::moveDeclarationComment(Operation *source,
+                                           Operation *target) {
+  copyDeclarationComment(source, target);
+  source->removeAttr("comment");
+}
+
 //===----------------------------------------------------------------------===//
 // TieOffCache
 //===----------------------------------------------------------------------===//

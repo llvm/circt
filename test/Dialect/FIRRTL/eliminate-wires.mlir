@@ -38,4 +38,16 @@ firrtl.circuit "TopLevel" {
     firrtl.matchingconnect %w, %source : !firrtl.uint<1>
     firrtl.matchingconnect %sink, %w : !firrtl.uint<1>
   }
+
+  // CHECK-LABEL: @CommentPreserved
+  // Verify that wire comments are propagated to nodes.
+  firrtl.module private @CommentPreserved(in %source: !firrtl.uint<1>,
+                                          out %sink: !firrtl.uint<1>) {
+    // CHECK-NOT: firrtl.wire
+    // CHECK-NEXT: %w = firrtl.node
+    // CHECK-SAME: comment = "wire comment"
+    %w = firrtl.wire {comment = "wire comment"} : !firrtl.uint<1>
+    firrtl.matchingconnect %w, %source : !firrtl.uint<1>
+    firrtl.matchingconnect %sink, %w : !firrtl.uint<1>
+  }
 }

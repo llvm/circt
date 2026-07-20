@@ -276,7 +276,8 @@ struct ModuleOutputPruner : public Reduction {
           instOp.getInstanceNameAttr(), instOp.getModuleNameAttr(),
           instOp.getInputs(), instOp.getArgNamesAttr(),
           builder.getArrayAttr(newResultNames), instOp.getParametersAttr(),
-          instOp.getInnerSymAttr(), instOp.getDoNotPrintAttr());
+          instOp.getInnerSymAttr(), instOp.getDoNotPrintAttr(),
+          instOp.getCommentAttr());
       for (auto [oldResult, newResult] :
            llvm::zip(oldResults, newOp.getResults()))
         oldResult.replaceAllUsesWith(newResult);

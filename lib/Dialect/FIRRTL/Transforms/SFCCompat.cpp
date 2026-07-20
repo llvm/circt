@@ -89,6 +89,7 @@ void SFCCompatPass::runOnOperation() {
       // Preserve a non-default clock edge when dropping the reset.
       if (auto clockEdge = reg.getClockEdgeAttr())
         newReg.setClockEdgeAttr(clockEdge);
+      copyDeclarationComment(reg, newReg);
       reg.replaceAllUsesWith(newReg);
       reg.erase();
       madeModifications = true;

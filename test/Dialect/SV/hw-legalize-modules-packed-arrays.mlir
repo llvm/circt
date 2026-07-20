@@ -217,9 +217,13 @@ hw.module @array_muxed_constant_get_comb(in %array_sel: i1, in %index_sel: i2, o
 
 // CHECK-LABEL: hw.module @array_reg_mux_2
 hw.module @array_reg_mux_2(in %clock: i1, in %arg0: i8, in %arg1: i8, in %sel: i1, out a: i8) {
-  // CHECK: %reg = sv.reg : !hw.inout<i8>
-  // CHECK: %reg_0 = sv.reg name "reg" : !hw.inout<i8>
-  %reg = sv.reg : !hw.inout<array<2xi8>>
+  // CHECK: %reg = sv.reg
+  // CHECK-SAME: comment = "aggregate register comment"
+  // CHECK-SAME: : !hw.inout<i8>
+  // CHECK: %reg_0 = sv.reg name "reg"
+  // CHECK-SAME: comment = "aggregate register comment"
+  // CHECK-SAME: : !hw.inout<i8>
+  %reg = sv.reg {comment = "aggregate register comment"} : !hw.inout<array<2xi8>>
   // CHECK: sv.alwaysff(posedge %clock) {
   sv.alwaysff(posedge %clock)  {
     // CHECK: sv.passign %reg, %arg1 : i8

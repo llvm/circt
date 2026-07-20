@@ -300,10 +300,11 @@ struct ContainerInstanceOpConversionPattern
     // Create the hw.instance op.
     StringRef moduleName = modSymMap[op.getTargetNameAttr()];
     auto hwInst = hw::InstanceOp::create(
-        rewriter, op.getLoc(), retTypes, op.getInnerSym().getSymName(),
+        rewriter, op.getLoc(), retTypes, op.getInnerSym().getSymName().strref(),
         moduleName, operands, rewriter.getArrayAttr(argNames),
         rewriter.getArrayAttr(resNames),
-        /*parameters*/ rewriter.getArrayAttr({}), /*innerSym*/ nullptr);
+        /*parameters*/ rewriter.getArrayAttr({}), /*innerSym*/ {},
+        /*doNotPrint*/ false, /*comment*/ {});
 
     // Replace the reads of the output ports with the hw.instance results.
     for (auto [output, value] :

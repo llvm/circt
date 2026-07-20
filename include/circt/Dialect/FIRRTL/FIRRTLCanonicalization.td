@@ -672,8 +672,10 @@ def AttrIsAbsent : Constraint<CPred<"!$0">, "attribute is not set">;
 // dropped along with the reset.  Restricted to the default (absent, i.e.
 // active-high) reset polarity so an active-low reset is never silently dropped.
 def RegResetWithZeroReset : Pat<
-  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable, $clockEdge, $resetType, $resetPolarity),
-  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable, $clockEdge),
+  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym,
+    $forceable, $clockEdge, $resetType, $resetPolarity, $comment),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable,
+    $clockEdge, $comment),
   [(ZeroConstantOp $reset), (AttrIsAbsent $resetPolarity)]>;
 
 // ref.resolve(ref.send(a)) -> a
