@@ -874,7 +874,7 @@ bool ModuleState::isColorless(Value value) {
       break;
     }
 
-    // We hit a lookthrough operand.  Dexcend into this.  We will revist the
+    // We hit a lookthrough operand.  Dexcend into this.  We will revisit the
     // current frame.index once we have an answer for that operand.
     if (pushed)
       continue;
