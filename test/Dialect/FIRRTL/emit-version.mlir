@@ -65,7 +65,7 @@ firrtl.circuit "Versions" {
     // V300:      regreset r : UInt<1>
     // V400:      regreset r : UInt<1>
     // CHECK:     %r = firrtl.regreset {{.*}}%clk, %rst, %in
-    %r = firrtl.regreset %clk, %rst, %in
+    %r = firrtl.regreset %clk, %rst, %in {resetType = 1 : i32}
         : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

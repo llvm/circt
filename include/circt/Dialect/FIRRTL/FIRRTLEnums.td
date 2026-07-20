@@ -116,6 +116,26 @@ def EventControlAttr : I32EnumAttr<"EventControl", "edge control trigger",
                                    [AtPosEdge, AtNegEdge, AtEdge]>  {}
 
 //===----------------------------------------------------------------------===//
+// Register Reset Kind and Polarity
+//===----------------------------------------------------------------------===//
+
+/// Whether a register's reset is synchronous or asynchronous. This attribute
+/// is the authoritative encoding of a register's reset kind; it is no longer
+/// derived from the reset signal's type.
+def RegSyncReset : I32EnumAttrCase<"SyncReset", 0, "syncreset">;
+def RegAsyncReset : I32EnumAttrCase<"AsyncReset", 1, "asyncreset">;
+def RegResetTypeAttr : I32EnumAttr<"RegResetType", "register reset kind",
+                                   [RegSyncReset, RegAsyncReset]>  {}
+
+/// The active level (polarity) of a register's reset. PosReset is active-high
+/// (reset asserted when the signal is 1); NegReset is active-low.
+def RegPosReset : I32EnumAttrCase<"PosReset", 0, "posreset">;
+def RegNegReset : I32EnumAttrCase<"NegReset", 1, "negreset">;
+def RegResetPolarityAttr : I32EnumAttr<"RegResetPolarity",
+                                       "register reset active-level polarity",
+                                       [RegPosReset, RegNegReset]>  {}
+
+//===----------------------------------------------------------------------===//
 // OM Targets
 //===----------------------------------------------------------------------===//
 

@@ -311,14 +311,14 @@ firrtl.circuit "Top" {
   // CHECK: firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
   // CHECK:   firrtl.layerblock @A {
   // CHECK:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  // CHECK:     %r = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:     %r = firrtl.regreset %clock, %reset, %c0_ui1 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:     firrtl.matchingconnect %r, %r : !firrtl.uint<1>
   // CHECK:     "unknown"(%r) : (!firrtl.uint<1>) -> ()
   // CHECK:   }
   // CHECK: }
   firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %r = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %reset, %c0_ui1 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.layerblock @A {
       "unknown"(%r) : (!firrtl.uint<1>) -> ()
     }

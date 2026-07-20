@@ -396,7 +396,8 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym,
         UnitAttr:$forceable,
-        OptionalAttr<APSIntAttr>:$initial);
+        OptionalAttr<APSIntAttr>:$initial,
+        OptionalAttr<EventControlAttr>:$clockEdge);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let skipDefaultBuilders = true;
@@ -481,6 +482,13 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
     }]>
   ];
 
+  let extraClassDeclaration = [{
+    /// The effective clock edge, defaulting to posedge when unspecified.
+    EventControl getClockEdgeOrDefault() {
+      return getClockEdge().value_or(EventControl::AtPosEdge);
+    }
+  }];
+
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)
     operands (`forceable` $forceable^)? `` custom<FIRRTLImplicitSSAName>(attr-dict) `:` type($clockVal) `,` qualified(type($result)) (`,` qualified(type($ref))^)?
@@ -506,7 +514,10 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym,
         UnitAttr:$forceable,
-        OptionalAttr<APSIntAttr>:$initial);
+        OptionalAttr<APSIntAttr>:$initial,
+        OptionalAttr<EventControlAttr>:$clockEdge,
+        OptionalAttr<RegResetTypeAttr>:$resetType,
+        OptionalAttr<RegResetPolarityAttr>:$resetPolarity);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let skipDefaultBuilders = true;
@@ -578,6 +589,25 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
                    forceable ? $_builder.getUnitAttr() : nullptr, initial);
     }]>
   ];
+
+  let extraClassDeclaration = [{
+    /// The effective clock edge, defaulting to posedge when unspecified.
+    EventControl getClockEdgeOrDefault() {
+      return getClockEdge().value_or(EventControl::AtPosEdge);
+    }
+    /// The effective reset kind. The `resetType` attribute is the sole
+    /// authoritative source of truth for async-vs-sync; the reset operand
+    /// type is never consulted. The attribute is absent only for synchronous
+    /// resets (the elided default), because the verifier rejects a register
+    /// with an `asyncreset`-typed reset that lacks an explicit `resetType`.
+    RegResetType getResetTypeOrDefault() {
+      return getResetType().value_or(RegResetType::SyncReset);
+    }
+    /// The effective reset polarity, defaulting to active-high (PosReset).
+    RegResetPolarity getResetPolarityOrDefault() {
+      return getResetPolarity().value_or(RegResetPolarity::PosReset);
+    }
+  }];
 
   let assemblyFormat = [{
     (`sym` $inner_sym^)? `` custom<NameKind>($nameKind)

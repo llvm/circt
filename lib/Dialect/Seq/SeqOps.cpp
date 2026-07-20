@@ -428,7 +428,9 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
 
   result.addAttribute(getNameAttrName(result.name), name);
   if (isAsync)
-    result.addAttribute(getIsAsyncAttrName(result.name), builder.getUnitAttr());
+    result.addAttribute(
+        getResetTypeAttrName(result.name),
+        ResetTypeAttr::get(builder.getContext(), ResetType::AsyncReset));
 
   if (innerSym)
     result.addAttribute(getInnerSymAttrName(result.name), innerSym);
@@ -468,7 +470,9 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
     else
       return parser.emitError(loc, "invalid reset, expected 'sync' or 'async'");
     if (isAsync)
-      result.attributes.append("isAsync", builder.getUnitAttr());
+      result.attributes.append(
+          "resetType",
+          ResetTypeAttr::get(builder.getContext(), ResetType::AsyncReset));
 
     resetAndValue = {{}, {}};
     if (parser.parseOperand(resetAndValue->first) || parser.parseComma() ||
@@ -538,7 +542,7 @@ ParseResult FirRegOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void FirRegOp::print(::mlir::OpAsmPrinter &p) {
   SmallVector<StringRef> elidedAttrs = {
-      getInnerSymAttrName(), getIsAsyncAttrName(), getPresetAttrName()};
+      getInnerSymAttrName(), getResetTypeAttrName(), getPresetAttrName()};
 
   p << ' ' << getNext() << " clock " << getClk();
 
@@ -572,12 +576,31 @@ void FirRegOp::print(::mlir::OpAsmPrinter &p) {
 
 /// Verifier for the FIR register op.
 LogicalResult FirRegOp::verify() {
+  // The reset kind used to be encoded with a `isAsync` unit attribute, which
+  // has been replaced by the `resetType` enum. Reject leftover `isAsync` from
+  // pre-migration IR rather than silently lowering it as a synchronous reset.
+  if ((*this)->hasAttr("isAsync"))
+    return emitOpError("has the legacy 'isAsync' attribute; use 'resetType = "
+                       "AsyncReset' instead");
+
+  bool hasResetOperands = getReset() && getResetValue();
   if (getReset() || getResetValue() || getIsAsync()) {
     if (!getReset() || !getResetValue())
       return emitOpError("must specify reset and reset value");
   } else {
     if (getIsAsync())
       return emitOpError("register with no reset cannot be async");
+  }
+  // The reset-behavior attributes only have meaning when the register actually
+  // has a reset; reject them otherwise so passes cannot disagree about a
+  // resetless register's reset semantics.
+  if (!hasResetOperands) {
+    if (getResetTypeAttr())
+      return emitOpError(
+          "'resetType' is only valid on a register with a reset");
+    if (getResetPolarityAttr())
+      return emitOpError(
+          "'resetPolarity' is only valid on a register with a reset");
   }
   if (auto preset = getPresetAttr()) {
     int64_t presetWidth = hw::getBitWidth(preset.getType());
@@ -601,13 +624,20 @@ std::optional<size_t> FirRegOp::getTargetResultIndex() { return 0; }
 LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
 
   // If the register has a constant zero reset, drop the reset and reset value
-  // altogether (And preserve the PresetAttr).
+  // altogether (And preserve the PresetAttr and clock edge). This is only valid
+  // for an active-high reset, where a constant-zero reset never asserts; an
+  // active-low (NegReset) reset that is constantly zero is always asserted and
+  // must not be dropped.
   if (auto reset = op.getReset()) {
     if (auto constOp = reset.getDefiningOp<hw::ConstantOp>()) {
-      if (constOp.getValue().isZero()) {
-        rewriter.replaceOpWithNewOp<FirRegOp>(
+      if (constOp.getValue().isZero() &&
+          op.getResetPolarity().value_or(seq::ResetPolarity::PosReset) ==
+              seq::ResetPolarity::PosReset) {
+        auto newReg = rewriter.replaceOpWithNewOp<FirRegOp>(
             op, op.getNext(), op.getClk(), op.getNameAttr(),
             op.getInnerSymAttr(), op.getPresetAttr());
+        if (auto clockEdge = op.getClockEdgeAttr())
+          newReg.setClockEdgeAttr(clockEdge);
         return success();
       }
     }
@@ -735,10 +765,13 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
             // value directly.
             rewriter.replaceOp(arrayCreate, newNextVal);
           else {
-            // Otherwise, replace the entire firreg with a new one.
-            rewriter.replaceOpWithNewOp<FirRegOp>(op, newNextVal, op.getClk(),
-                                                  op.getNameAttr(),
-                                                  op.getInnerSymAttr());
+            // Otherwise, replace the entire firreg with a new one, preserving
+            // the clock edge (the register here is reset- and preset-less).
+            auto newReg = rewriter.replaceOpWithNewOp<FirRegOp>(
+                op, newNextVal, op.getClk(), op.getNameAttr(),
+                op.getInnerSymAttr());
+            if (auto clockEdge = op.getClockEdgeAttr())
+              newReg.setClockEdgeAttr(clockEdge);
           }
 
           return success();
@@ -767,9 +800,19 @@ OpFoldResult FirRegOp::fold(FoldAdaptor adaptor) {
   // value. Works only if no preset.
   if (!presetAttr)
     if (auto reset = getReset())
-      if (auto constOp = reset.getDefiningOp<hw::ConstantOp>())
-        if (constOp.getValue().isOne())
+      if (auto constOp = reset.getDefiningOp<hw::ConstantOp>()) {
+        // Whether a constant reset signal holds the register permanently in
+        // reset depends on its active level: an active-high reset asserts on a
+        // constant one, an active-low (NegReset) reset asserts on a constant
+        // zero.
+        bool activeLow =
+            getResetPolarity().value_or(seq::ResetPolarity::PosReset) ==
+            seq::ResetPolarity::NegReset;
+        bool resetAsserted = activeLow ? constOp.getValue().isZero()
+                                       : constOp.getValue().isOne();
+        if (resetAsserted)
           return getResetValue();
+      }
 
   // If the register's next value is trivially it's current value, or the
   // register is never clocked, we can replace the register with a constant

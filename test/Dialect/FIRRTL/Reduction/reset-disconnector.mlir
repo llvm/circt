@@ -15,7 +15,7 @@ firrtl.circuit "Test" {
     // KEEP_REG1: %reg2 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<16>
     %c0_ui8 = firrtl.constant 0 : !firrtl.uint<8>
     %c0_ui16 = firrtl.constant 0 : !firrtl.uint<16>
-    %reg1 = firrtl.regreset %clock, %reset, %c0_ui8 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
-    %reg2 = firrtl.regreset %clock, %reset, %c0_ui16 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<16>, !firrtl.uint<16>
+    %reg1 = firrtl.regreset %clock, %reset, %c0_ui8 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<8>, !firrtl.uint<8>
+    %reg2 = firrtl.regreset %clock, %reset, %c0_ui16 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<16>, !firrtl.uint<16>
   }
 }

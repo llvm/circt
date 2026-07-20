@@ -65,7 +65,7 @@ firrtl.circuit "PruneUnusedSourceAndDest" {
   firrtl.module @PruneUnusedSourceAndDest(in %clk: !firrtl.clock, in %rst: !firrtl.asyncreset) {
     // CHECK-NEXT: }
     %c0_ui4 = firrtl.constant 0 : !firrtl.uint<4>
-    %reg = firrtl.regreset %clk, %rst, %c0_ui4 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>, !firrtl.uint<4>
+    %reg = firrtl.regreset %clk, %rst, %c0_ui4 {resetType = 1 : i32} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<4>, !firrtl.uint<4>
     firrtl.matchingconnect %reg, %c0_ui4 : !firrtl.uint<4>
   }
 }

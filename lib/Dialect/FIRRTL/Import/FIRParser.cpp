@@ -5471,12 +5471,19 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
-  if (resetSignal)
-    result =
+  if (resetSignal) {
+    auto regReset =
         RegResetOp::create(builder, type, clock, resetSignal, resetValue, id,
-                           NameKindEnum::InterestingName, annotations, sym)
-            .getResult();
-  else
+                           NameKindEnum::InterestingName, annotations, sym);
+    // Stamp the authoritative async/sync reset kind from the (legacy) reset
+    // operand type so the imported IR is self-describing. Synchronous resets
+    // keep the elided default; abstract `reset`-typed signals are resolved and
+    // stamped later by InferResets.
+    if (type_isa<AsyncResetType>(resetSignal.getType()))
+      regReset.setResetTypeAttr(RegResetTypeAttr::get(
+          builder.getContext(), RegResetType::AsyncReset));
+    result = regReset.getResult();
+  } else
     result = RegOp::create(builder, type, clock, id,
                            NameKindEnum::InterestingName, annotations, sym)
                  .getResult();
@@ -5512,13 +5519,19 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto result =
+  auto regReset =
       RegResetOp::create(builder, type, clock, resetSignal, resetValue, id,
                          NameKindEnum::InterestingName,
-                         getConstants().emptyArrayAttr, StringAttr{})
-          .getResult();
+                         getConstants().emptyArrayAttr, StringAttr{});
+  // Stamp the authoritative async/sync reset kind from the reset operand type
+  // (see parseRegister); synchronous resets keep the elided default and
+  // abstract `reset`-typed signals are stamped later by InferResets.
+  if (type_isa<AsyncResetType>(resetSignal.getType()))
+    regReset.setResetTypeAttr(
+        RegResetTypeAttr::get(builder.getContext(), RegResetType::AsyncReset));
 
-  return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
+  return moduleContext.addSymbolEntry(id, regReset.getResult(),
+                                      startTok.getLoc());
 }
 
 /// contract ::= 'contract' (id,+ '=' exp,+) ':' info? contract_body
