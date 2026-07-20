@@ -1961,6 +1961,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLOrIntrinsicOp op);
   LogicalResult visitExpr(LTLIntersectIntrinsicOp op);
   LogicalResult visitExpr(LTLDelayIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedDelayIntrinsicOp op);
   LogicalResult visitExpr(LTLConcatIntrinsicOp op);
   LogicalResult visitExpr(LTLRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLGoToRepeatIntrinsicOp op);
@@ -4765,6 +4766,27 @@ LogicalResult FIRRTLLowering::visitExpr(LTLDelayIntrinsicOp op) {
                                         op.getDelayAttr(), op.getLengthAttr());
 }
 
+static ltl::ClockEdge firrtlToLTLClockEdge(EventControl eventControl) {
+  switch (eventControl) {
+  case EventControl::AtPosEdge:
+    return ltl::ClockEdge::Pos;
+  case EventControl::AtEdge:
+    return ltl::ClockEdge::Both;
+  case EventControl::AtNegEdge:
+    return ltl::ClockEdge::Neg;
+  }
+  llvm_unreachable("unhandled FIRRTL event control");
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedDelayIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedDelayOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()), op.getDelayAttr(),
+      op.getLengthAttr());
+}
+
 LogicalResult FIRRTLLowering::visitExpr(LTLConcatIntrinsicOp op) {
   return setLoweringToLTL<ltl::ConcatOp>(
       op,
@@ -4815,7 +4837,7 @@ LogicalResult FIRRTLLowering::visitExpr(LTLPastIntrinsicOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
   return setLoweringToLTL<ltl::ClockOp>(op, getLoweredValue(op.getInput()),
-                                        ltl::ClockEdge::Pos,
+                                        firrtlToLTLClockEdge(op.getEdge()),
                                         getLoweredNonClockValue(op.getClock()));
 }
 
