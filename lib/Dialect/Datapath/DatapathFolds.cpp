@@ -668,7 +668,100 @@ struct ReduceNumPosPartialProducts
   }
 };
 
+struct SignedPosPartialProducts : public OpRewritePattern<PosPartialProductOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  // Inspired by the classical Baugh-Wooley algorithm for signed mulitplication.
+  // Paper: A Two's Complement Parallel Array Multiplication Algorithm
+  //
+  // Consider a p-bit signed pos - producing a 2p-bit result:
+  // a_sign = a[p-1], a_mag = a[p-2:0],
+  // b_sign = b[p-1], b_mag = b[p-2:0]
+  // (sext(a) + sext(b)) * c = (a_mag + b_mag) * c               [unsigned pos]
+  //                           - 2^(p-1) * (a_sign + b_sign) * c [sign correct]
+  //
+  // We implement optimizations to turn the subtractions into bitwise
+  // negations with constant corrections that can be folded together.
+  LogicalResult matchAndRewrite(PosPartialProductOp op,
+                                PatternRewriter &rewriter) const override {
+
+    auto a = op.getAddend0();
+    auto b = op.getAddend1();
+    auto c = op.getMultiplicand();
+    auto loc = op.getLoc();
+    auto inputWidth = a.getType().getIntOrFloatBitWidth();
+    Value aReplBits;
+    Value bReplBits;
+    if (!matchPattern(a, comb::m_Sext(m_Any(&aReplBits))) ||
+        !matchPattern(b, comb::m_Sext(m_Any(&bReplBits))))
+      return failure();
+
+    size_t aWidth = inputWidth - aReplBits.getType().getIntOrFloatBitWidth();
+    size_t bWidth = inputWidth - bReplBits.getType().getIntOrFloatBitWidth();
+
+    // TODO: add support for different width inputs
+    // Need to have a sign bit in both inputs
+    if (aWidth != bWidth || aWidth <= 1 || bWidth <= 1)
+      return failure();
+
+    // Minus 1 as we handle the sign-bits separately
+    auto maxPartialProducts = aWidth - 1;
+    // No further reduction possible - already reduced to min partial products
+    if (maxPartialProducts >= op.getNumResults())
+      return failure();
+
+    // Pull off the sign bits
+    auto baseWidth = aWidth - 1;
+    auto aSign = comb::ExtractOp::create(rewriter, loc, a, baseWidth, 1);
+    auto bSign = comb::ExtractOp::create(rewriter, loc, b, baseWidth, 1);
+    auto aBase = comb::ExtractOp::create(rewriter, loc, a, 0, baseWidth);
+    auto bBase = comb::ExtractOp::create(rewriter, loc, b, 0, baseWidth);
+
+    // Create the unsigned pos partial product of the unextended inputs
+    auto aBaseZext = comb::createZExt(rewriter, loc, aBase, inputWidth);
+    auto bBaseZext = comb::createZExt(rewriter, loc, bBase, inputWidth);
+    auto newPP = datapath::PosPartialProductOp::create(
+        rewriter, loc, ValueRange{aBaseZext, bBaseZext, op.getMultiplicand()},
+        maxPartialProducts);
+
+    // Optimization:
+    // -2^(p-1)*(a_sign + b_sign) * c =
+    // ~(((a_sign & b_sign)*2c | (a_sign ^ b_sign)*c)  << (p-1)) + 1
+    //          CARRY                   SAVE
+
+    auto cWidth = c.getType().getIntOrFloatBitWidth();
+    auto carry = rewriter.createOrFold<comb::AndOp>(loc, aSign, bSign);
+    auto save = rewriter.createOrFold<comb::XorOp>(loc, aSign, bSign);
+    auto one = hw::ConstantOp::create(rewriter, loc, APInt(cWidth, 1));
+    auto twoC = rewriter.createOrFold<comb::ShlOp>(loc, c, one);
+    auto replSave = rewriter.createOrFold<comb::ReplicateOp>(loc, save, cWidth);
+    auto replCarry =
+        rewriter.createOrFold<comb::ReplicateOp>(loc, carry, cWidth);
+    auto carryAnd = rewriter.createOrFold<comb::AndOp>(loc, replCarry, twoC);
+    auto saveAnd = rewriter.createOrFold<comb::AndOp>(loc, replSave, c);
+    auto ppRow = rewriter.createOrFold<comb::OrOp>(loc, carryAnd, saveAnd);
+    auto shiftBy =
+        hw::ConstantOp::create(rewriter, loc, APInt(cWidth, baseWidth));
+    auto ppRowShift = rewriter.createOrFold<comb::ShlOp>(loc, ppRow, shiftBy);
+    auto ppRowNot = comb::createOrFoldNot(rewriter, loc, ppRowShift);
+
+    // Collect newPP results and pad with zeros if needed
+    SmallVector<Value> newResults(newPP.getResults().begin(),
+                                  newPP.getResults().end());
+
+    newResults.push_back(ppRowNot);
+    newResults.push_back(one); // Constant correction for the sign correction
+    // Zero pad if necessary
+    auto zero = hw::ConstantOp::create(rewriter, op.getLoc(),
+                                       APInt::getZero(inputWidth));
+    newResults.append(op.getNumResults() - newResults.size(), zero);
+
+    rewriter.replaceOp(op, newResults);
+    return success();
+  }
+};
+
 void PosPartialProductOp::getCanonicalizationPatterns(
     RewritePatternSet &results, MLIRContext *context) {
-  results.add<ReduceNumPosPartialProducts>(context);
+  results.add<ReduceNumPosPartialProducts, SignedPosPartialProducts>(context);
 }

@@ -513,21 +513,21 @@ private:
 
     // Reduce c width based on leading zeros
     auto rowWidth = width;
-    auto knownBitsC = comb::computeKnownBits(c);
-    if (!knownBitsC.Zero.isZero()) {
-      if (knownBitsC.Zero.countLeadingOnes() > 1) {
-        // Retain one leading zero to represent 2*{1'b0, c} = {c, 1'b0}
-        // {'0, c} -> {1'b0, c}
-        rowWidth -= knownBitsC.Zero.countLeadingOnes() - 1;
-        c = rewriter.createOrFold<comb::ExtractOp>(loc, c, 0, rowWidth);
-      }
+    auto [cSigned, cBase] = getBaseWidth(rewriter, loc, c);
+    auto cBaseWidth = cBase.getType().getIntOrFloatBitWidth();
+
+    if (cBaseWidth < width && !cSigned) {
+      // Retain one leading zero to represent 2*c
+      rowWidth = cBaseWidth + 1;
+      c = rewriter.createOrFold<comb::ExtractOp>(loc, c, 0, rowWidth);
     }
 
     // Compute 2*c for use in array construction
-    Value zero = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
-    Value twoCWider =
-        comb::ConcatOp::create(rewriter, loc, ValueRange{c, zero});
-    Value twoC = comb::ExtractOp::create(rewriter, loc, twoCWider, 0, rowWidth);
+    Value zeroFalse = hw::ConstantOp::create(rewriter, loc, APInt(1, 0));
+    Value twoCPre =
+        comb::ConcatOp::create(rewriter, loc, ValueRange{c, zeroFalse});
+    Value twoC = rewriter.createOrFold<comb::ExtractOp>(loc, twoCPre, 0,
+                                                        rowWidth); // Truncate
 
     // AND Array Construction:
     // pp[i] = ( (carry[i] * (c<<1)) | (save[i] * c) ) << i
@@ -564,11 +564,8 @@ private:
       }
       // May need to zero pad to approriate width
       if (rowWidth + i < width) {
-        auto padding = width - rowWidth - i;
-        Value zeroPad =
-            hw::ConstantOp::create(rewriter, loc, APInt(padding, 0));
-        partialProducts.push_back(rewriter.createOrFold<comb::ConcatOp>(
-            loc, ValueRange{zeroPad, ppAlign})); // Pad to full width
+        auto extPPAlign = comb::createZExt(rewriter, loc, ppAlign, width);
+        partialProducts.push_back(extPPAlign);
         continue;
       }
 
