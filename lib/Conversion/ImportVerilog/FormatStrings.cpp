@@ -8,6 +8,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "slang/ast/SFormat.h"
+#include "slang/ast/types/AllTypes.h"
 
 using namespace mlir;
 using namespace circt;
@@ -157,6 +158,8 @@ struct FormatStringParser {
       return emitString(arg, options);
     case 'c':
       return emitChar(arg, options);
+    case 'p':
+      return emitPack(arg, options);
 
     default:
       return mlir::emitError(loc)
@@ -329,6 +332,85 @@ struct FormatStringParser {
 
     fragments.push_back(moore::FormatCharOp::create(builder, loc, bitValue));
     return success();
+  }
+
+  LogicalResult emitPackedValue(Value value, const slang::ast::Type &type) {
+    if (type.isString()) {
+      emitLiteral("\"");
+      fragments.push_back(
+          moore::FormatStringOp::create(builder, loc, value, {}, {}, {}));
+      emitLiteral("\"");
+      return success();
+    }
+
+    if (type.isStruct()) {
+      auto &ct = type.getCanonicalType();
+      const slang::ast::Scope *scope = nullptr;
+      if (auto packed = ct.as_if<slang::ast::PackedStructType>())
+        scope = packed;
+      else if (auto unpacked = ct.as_if<slang::ast::UnpackedStructType>())
+        scope = unpacked;
+      if (!scope)
+        return mlir::emitError(loc) << "unsupported struct type for %p";
+
+      emitLiteral("'{");
+      bool first = true;
+      for (auto &field : scope->membersOfType<slang::ast::FieldSymbol>()) {
+        if (!first)
+          emitLiteral(", ");
+        first = false;
+        emitLiteral(field.name);
+        emitLiteral(":");
+
+        auto &fieldType = field.getType();
+        Type fieldMooreTy = context.convertType(fieldType);
+        if (!fieldMooreTy)
+          return failure();
+        auto fieldVal = moore::StructExtractOp::create(
+            builder, loc, fieldMooreTy, builder.getStringAttr(field.name),
+            value);
+        if (failed(emitPackedValue(fieldVal, fieldType)))
+          return failure();
+      }
+      emitLiteral("}");
+      return success();
+    }
+
+    if (type.isEnum() || type.isUnion())
+      return mlir::emitError(loc)
+             << "%p format specifier does not yet support type `"
+             << type.toString() << "`";
+
+    if (!type.isIntegral())
+      return mlir::emitError(loc)
+             << "%p format specifier does not yet support type `"
+             << type.toString() << "`";
+
+    bool isSigned = type.isSigned() && defaultFormat == IntFormat::Decimal;
+    auto bitValue = context.convertToSimpleBitVector(value);
+    if (!bitValue)
+      return failure();
+    auto padding = defaultFormat == IntFormat::Decimal ? IntPadding::Space
+                                                       : IntPadding::Zero;
+    fragments.push_back(moore::FormatIntOp::create(
+        builder, loc, bitValue, defaultFormat, IntAlign::Right, padding,
+        /*specifierWidth=*/IntegerAttr{}, isSigned));
+    return success();
+  }
+
+  LogicalResult emitPack(const slang::ast::Expression &arg,
+                         const FormatOptions &options) {
+    if (options.width)
+      return mlir::emitError(loc)
+             << "%p format specifier with field width is not yet supported";
+    if (options.zeroPad)
+      return mlir::emitError(loc)
+             << "%0p (abbreviated assignment pattern) is not yet supported";
+
+    auto rval = context.convertRvalueExpression(arg);
+    if (!rval)
+      return failure();
+    return emitPackedValue(rval, *arg.type);
   }
 
   /// Emit an expression argument with the appropriate default formatting.
