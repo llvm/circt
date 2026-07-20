@@ -739,12 +739,16 @@ bool ModuleState::isColorless(Value value) {
 
   // Classify a single value structurally, without recursing.  A "look-through"
   // value (a node or a pure primop) is colorless iff all of its hardware
-  // operands are colorless; its hardware operands are collected into
-  // `operands`.  Everything else is either a colorless constant root or a
-  // colored leaf.  In particular, all ports (block arguments, instance
-  // results) and wires are colored and must be assigned a domain.
+  // operands are colorless.  For every look-through op the operands to explore
+  // are exactly all of its operands (a node and a forwarding cast have a single
+  // input operand; a pure expression is only look-through when all of its
+  // operands are hardware), so the caller can iterate the defining op's operand
+  // list directly rather than collecting a subset here.  Everything else is
+  // either a colorless constant root or a colored leaf.  In particular, all
+  // ports (block arguments, instance results) and wires are colored and must be
+  // assigned a domain.
   enum class Kind { Colorless, Colored, LookThrough };
-  auto classify = [&](Value v, SmallVectorImpl<Value> &operands) -> Kind {
+  auto classify = [&](Value v) -> Kind {
     if (!isHardware(v))
       return Kind::Colorless;
 
@@ -758,10 +762,8 @@ bool ModuleState::isColorless(Value value) {
       return Kind::Colorless;
 
     // A node forwards its single input.
-    if (auto node = dyn_cast<NodeOp>(op)) {
-      operands.push_back(node.getInput());
+    if (isa<NodeOp>(op))
       return Kind::LookThrough;
-    }
 
     // An unsafe domain cast with explicit domain operands is an explicit
     // coloring point and is always colored.  A cast with no domain operands is
@@ -769,7 +771,6 @@ bool ModuleState::isColorless(Value value) {
     if (auto castOp = dyn_cast<UnsafeDomainCastOp>(op)) {
       if (!castOp.getDomains().empty())
         return Kind::Colored;
-      operands.push_back(castOp.getInput());
       return Kind::LookThrough;
     }
 
@@ -789,7 +790,6 @@ bool ModuleState::isColorless(Value value) {
       for (auto operand : op->getOperands())
         if (!isHardware(operand))
           return Kind::Colored;
-      operands.assign(op->operand_begin(), op->operand_end());
       return Kind::LookThrough;
     }
 
@@ -800,7 +800,8 @@ bool ModuleState::isColorless(Value value) {
 
   // Iterative post-order DFS.  Each frame tracks a look-through value (a value
   // whose colorlessness is not yet known) and requires exploring its operands.
-  // This then tracks the operands that should be explored and the index of the
+  // Every look-through op explores all of its operands, so the frame only needs
+  // the value (whose defining op supplies the operands) and the index of the
   // _next_ operand to visit.  A value's colorlessness is the conjunction of its
   // operands' colorlessness.  As soon as a colored operand is found the frame
   // short-circuits to colored.  Since look-through values (constants, nodes,
@@ -812,36 +813,34 @@ bool ModuleState::isColorless(Value value) {
   // nodes.  It is assumed that a post-condition of this pass is that all wires
   // are assigned domains.
   struct Frame {
-    // The lookthrough value.
+    // The lookthrough value whose colorlessness is being resolved.  Its
+    // defining op supplies the operands to explore; every look-through op
+    // explores all of its operands.
     Value value;
-    // The operands to explore.
-    SmallVector<Value, 4> operands;
-    // The operand of the next operand to explored.
+    // The index of the next operand to explore.
     unsigned index = 0;
   };
   SmallVector<Frame> stack;
 
   // Push the first value onto the stack (or exit).
-  {
-    SmallVector<Value, 4> operands;
-    switch (classify(value, operands)) {
-    case Kind::Colored:
-      return colorlessTable[value] = false;
-    case Kind::Colorless:
-      return colorlessTable[value] = true;
-    case Kind::LookThrough:
-      stack.push_back({value, std::move(operands)});
-      break;
-    }
+  switch (classify(value)) {
+  case Kind::Colored:
+    return colorlessTable[value] = false;
+  case Kind::Colorless:
+    return colorlessTable[value] = true;
+  case Kind::LookThrough:
+    stack.push_back({value});
+    break;
   }
 
   // Run the DFS.
   while (!stack.empty()) {
     auto &frame = stack.back();
+    auto *op = frame.value.getDefiningOp();
     bool colored = false, pushed = false;
 
-    while (frame.index < frame.operands.size()) {
-      Value child = frame.operands[frame.index];
+    while (frame.index < op->getNumOperands()) {
+      Value child = op->getOperand(frame.index);
 
       // If already resolved, short-circuit on a colored operand or advance.
       if (auto it = colorlessTable.find(child); it != colorlessTable.end()) {
@@ -856,8 +855,7 @@ bool ModuleState::isColorless(Value value) {
       // Classify the operand.  Classify if not lookthrough.  Otherwise, push
       // the lookthrough operand onto the stack and break so that we descend
       // into it.
-      SmallVector<Value, 4> childOperands;
-      switch (classify(child, childOperands)) {
+      switch (classify(child)) {
       case Kind::Colored:
         colorlessTable[child] = false;
         colored = true;
@@ -867,7 +865,7 @@ bool ModuleState::isColorless(Value value) {
         ++frame.index;
         continue;
       case Kind::LookThrough:
-        stack.push_back({child, std::move(childOperands)});
+        stack.push_back({child});
         pushed = true;
         break;
       }
