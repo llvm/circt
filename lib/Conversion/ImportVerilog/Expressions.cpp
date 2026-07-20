@@ -134,19 +134,45 @@ static uint64_t getTimeScaleInFemtoseconds(Context &context) {
 static Value lookupExpandedInterfaceMember(
     Context &context, const slang::ast::HierarchicalValueExpression &expr) {
   auto nameAttr = context.builder.getStringAttr(expr.symbol.name);
-  for (const auto &element : expr.ref.path) {
-    auto *inst = element.symbol->as_if<slang::ast::InstanceSymbol>();
-    if (!inst)
-      continue;
-    auto *lowering = context.interfaceInstances.lookup(inst);
+  auto findIn = [&](InterfaceLowering *lowering) -> Value {
     if (!lowering)
-      continue;
+      return {};
     if (auto it = lowering->expandedMembers.find(&expr.symbol);
         it != lowering->expandedMembers.end())
       return it->second;
     if (auto it = lowering->expandedMembersByName.find(nameAttr);
         it != lowering->expandedMembersByName.end())
       return it->second;
+    return {};
+  };
+  for (const auto &element : expr.ref.path) {
+    // Element accesses on interface-instance ARRAYS (`intr[K].member`)
+    // traverse with an index selector. Depending on how slang resolved the
+    // reference, the traversed symbol is the element InstanceSymbol itself
+    // (handled by the InstanceSymbol case below), the enclosing
+    // InstanceArraySymbol, or a generic interface PORT connected to an
+    // array (resolved through the per-element port lowerings).
+    if (const auto *idx = std::get_if<int32_t>(&element.selector);
+        idx && *idx >= 0) {
+      if (Value value = findIn(context.ifacePortElementLowerings.lookup(
+              {element.symbol.get(), static_cast<unsigned>(*idx)})))
+        return value;
+      if (const auto *array =
+              element.symbol->as_if<slang::ast::InstanceArraySymbol>()) {
+        if (static_cast<size_t>(*idx) < array->elements.size()) {
+          if (const auto *elemInst = array->elements[static_cast<size_t>(*idx)]
+                                         ->as_if<slang::ast::InstanceSymbol>())
+            if (Value value =
+                    findIn(context.interfaceInstances.lookup(elemInst)))
+              return value;
+        }
+      }
+    }
+    auto *inst = element.symbol->as_if<slang::ast::InstanceSymbol>();
+    if (!inst)
+      continue;
+    if (Value value = findIn(context.interfaceInstances.lookup(inst)))
+      return value;
   }
   return {};
 }
@@ -291,10 +317,22 @@ struct ExprVisitor {
 
     if (!isa<moore::IntType, moore::ArrayType, moore::UnpackedArrayType,
              moore::QueueType, moore::AssocArrayType, moore::StringType,
-             moore::OpenUnpackedArrayType>(derefType)) {
+             moore::OpenUnpackedArrayType, moore::StructType, moore::UnionType>(
+            derefType)) {
       mlir::emitError(loc) << "unsupported expression: element select into "
                            << expr.value().type->toString() << "\n";
       return {};
+    }
+
+    // A packed struct or union is a vector of bits (IEEE 1800-2017 § 7.2.1);
+    // element select into it is a bit select. The `extract_ref` and
+    // `dyn_extract_ref` ops support packed aggregates directly; for rvalues,
+    // convert the aggregate to its simple bit vector equivalent first.
+    if (!isLvalue && isa<moore::StructType, moore::UnionType>(derefType)) {
+      value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
+      derefType = value.getType();
     }
 
     // Associative Arrays are a special case so handle them separately.
@@ -438,6 +476,15 @@ struct ExprVisitor {
 
     if (isa<moore::QueueType>(derefType)) {
       return handleQueueRangeSelectExpressions(expr, type, value);
+    }
+    // Packed structs and unions are bit vectors (IEEE 1800-2017 § 7.2.1); a
+    // range select into them is a part select. The ref-typed extract ops
+    // support packed aggregates directly; convert rvalues to the simple bit
+    // vector equivalent first.
+    if (!isLvalue && isa<moore::StructType, moore::UnionType>(derefType)) {
+      value = context.convertToSimpleBitVector(value);
+      if (!value)
+        return {};
     }
     return handleArrayRangeSelectExpressions(expr, type, value);
   }

@@ -1530,6 +1530,56 @@ struct ExtractRefOpConversion : public OpConversionPattern<ExtractRefOp> {
     Type inputType =
         cast<llhd::RefType>(adaptor.getInput().getType()).getNestedType();
 
+    // Statically fully out-of-range constant part/bit-select references
+    // (e.g. `slave_select[4] = 1;` on `logic [3:0] slave_select` under a
+    // statically-false parameter guard) reach lowering because the frontend
+    // demotes the diagnostic to a warning. IEEE 1800-2017 § 11.5.1 gives
+    // out-of-range select WRITES discard semantics (reads yield X; the
+    // two-valued core yields the scratch initializer instead). Route the
+    // reference at a detached scratch signal so the write lands nowhere.
+    // Partial straddles keep failing loudly below.
+    if (auto resultRefType = dyn_cast_or_null<llhd::RefType>(resultType)) {
+      int64_t inputWidth = hw::getBitWidth(inputType);
+      int64_t resultWidth = hw::getBitWidth(resultRefType.getNestedType());
+      if (inputWidth >= 0 && resultWidth >= 0 &&
+          adaptor.getLowBit() >= static_cast<uint64_t>(inputWidth)) {
+        Value init = createZeroValue(resultRefType.getNestedType(), op.getLoc(),
+                                     rewriter);
+        if (!init)
+          return failure();
+        op.emitRemark("out-of-range reference discards writes (IEEE "
+                      "1800-2017 11.5.1); routed to a scratch signal");
+        rewriter.replaceOpWithNewOp<llhd::SignalOp>(
+            op, resultType, rewriter.getStringAttr("oob_scratch"), init);
+        return success();
+      }
+    }
+
+    // Statically fully out-of-range constant part/bit-select references
+    // (e.g. `slave_select[4] = 1;` on `logic [3:0] slave_select` under a
+    // statically-false parameter guard) reach lowering because the frontend
+    // demotes the diagnostic to a warning. IEEE 1800-2017 § 11.5.1 gives
+    // out-of-range select WRITES discard semantics (reads yield X; the
+    // two-valued core yields the scratch initializer instead). Route the
+    // reference at a detached scratch signal so the write lands nowhere.
+    // Partial straddles keep failing loudly below.
+    if (auto resultRefType = dyn_cast_or_null<llhd::RefType>(resultType)) {
+      int64_t inputWidth = hw::getBitWidth(inputType);
+      int64_t resultWidth = hw::getBitWidth(resultRefType.getNestedType());
+      if (inputWidth >= 0 && resultWidth >= 0 &&
+          adaptor.getLowBit() >= static_cast<uint64_t>(inputWidth)) {
+        Value init = createZeroValue(resultRefType.getNestedType(), op.getLoc(),
+                                     rewriter);
+        if (!init)
+          return failure();
+        op.emitRemark("out-of-range reference discards writes (IEEE "
+                      "1800-2017 11.5.1); routed to a scratch signal");
+        rewriter.replaceOpWithNewOp<llhd::SignalOp>(
+            op, resultType, rewriter.getStringAttr("oob_scratch"), init);
+        return success();
+      }
+    }
+
     if (auto intType = dyn_cast<IntegerType>(inputType)) {
       int64_t width = hw::getBitWidth(inputType);
       if (width == -1)
@@ -1857,6 +1907,39 @@ struct NegOpConversion : public OpConversionPattern<NegOp> {
   }
 };
 
+struct Clog2BIOpConversion : public OpConversionPattern<Clog2BIOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(Clog2BIOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    Value input = adaptor.getValue();
+    auto intType = dyn_cast<IntegerType>(input.getType());
+    if (!intType || intType.getWidth() == 0)
+      return failure();
+    unsigned width = intType.getWidth();
+
+    // $clog2(x) is the index of the highest set bit of (x - 1) plus one, and
+    // 0 for x <= 1 ($clog2(0) is defined as 0; IEEE 1800-2017 § 20.8.1).
+    // Priority-encode (x - 1) with a mux chain from LSB to MSB.
+    Value one = hw::ConstantOp::create(rewriter, loc, intType, 1);
+    Value zero = hw::ConstantOp::create(rewriter, loc, intType, 0);
+    Value xm1 = comb::SubOp::create(rewriter, loc, input, one);
+    Value result = zero;
+    for (unsigned i = 0; i < width; ++i) {
+      Value bit = comb::ExtractOp::create(rewriter, loc, xm1, i, 1);
+      Value count = hw::ConstantOp::create(rewriter, loc, intType, i + 1);
+      result = comb::MuxOp::create(rewriter, loc, bit, count, result, false);
+    }
+    // (0 - 1) is all-ones and would priority-encode to `width`; force the
+    // defined result 0 for a zero input.
+    Value isZero = comb::ICmpOp::create(rewriter, loc, comb::ICmpPredicate::eq,
+                                        input, zero);
+    rewriter.replaceOpWithNewOp<comb::MuxOp>(op, isZero, zero, result, false);
+    return success();
+  }
+};
+
 struct NegRealOpConversion : public OpConversionPattern<NegRealOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -1905,6 +1988,28 @@ struct ICmpOpConversion : public OpConversionPattern<SourceOp> {
                   ConversionPatternRewriter &rewriter) const override {
     Type resultType =
         ConversionPattern::typeConverter->convertType(op.getResult().getType());
+
+    // Case equality against a constant carrying x/z bits: this two-valued
+    // lowering never materializes x/z at run time, so an x/z constant bit
+    // can never case-match (IEEE 1800-2017 11.4.5: `===` compares x/z
+    // literally). Dropping the unknown bits in the converted constant would
+    // silently turn `v === 'x` into `v === 0` -- the `$isunknown` payload
+    // shape, which then fails on every all-zero sample -- so fold the
+    // comparison to its static verdict instead.
+    if constexpr (std::is_same_v<SourceOp, CaseEqOp> ||
+                  std::is_same_v<SourceOp, CaseNeOp>) {
+      auto hasUnknownConstBits = [](Value value) {
+        auto constant = value.getDefiningOp<ConstantOp>();
+        return constant && constant.getValue().hasUnknown();
+      };
+      if (hasUnknownConstBits(op.getLhs()) ||
+          hasUnknownConstBits(op.getRhs())) {
+        bool verdict = std::is_same_v<SourceOp, CaseNeOp>;
+        rewriter.replaceOpWithNewOp<hw::ConstantOp>(op, resultType,
+                                                    verdict ? 1 : 0);
+        return success();
+      }
+    }
 
     rewriter.replaceOpWithNewOp<comb::ICmpOp>(
         op, resultType, pred, adaptor.getLhs(), adaptor.getRhs());
@@ -3865,6 +3970,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     BoolCastOpConversion,
     NotOpConversion,
     NegOpConversion,
+    Clog2BIOpConversion,
 
     // Patterns of binary operations.
     BinaryOpConversion<AddOp, comb::AddOp>,

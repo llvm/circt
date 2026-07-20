@@ -2125,3 +2125,16 @@ moore.module @StringArrayVariable() {
     moore.return
   }
 }
+
+// Fully out-of-range constant ref extracts (statically-dead parameterized
+// writes like `slave_select[4] = 1;` on `logic [3:0]`) route to a detached
+// scratch signal: IEEE 1800-2017 11.5.1 discard semantics for writes.
+// CHECK-LABEL: func.func @OutOfBoundsExtractRef
+func.func @OutOfBoundsExtractRef(%arg0: !moore.ref<l4>) -> !moore.ref<l1> {
+  // CHECK: [[INIT:%.+]] = hw.constant false
+  // CHECK: %oob_scratch = llhd.sig [[INIT]] : i1
+  // CHECK: return %oob_scratch
+  // expected-remark @below {{out-of-range reference discards writes}}
+  %0 = moore.extract_ref %arg0 from 4 : <l4> -> <l1>
+  return %0 : !moore.ref<l1>
+}

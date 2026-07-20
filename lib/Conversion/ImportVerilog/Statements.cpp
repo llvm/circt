@@ -493,6 +493,15 @@ struct StmtVisitor {
     if (!caseExpr)
       return failure();
 
+    // Packed aggregates compare as their vector-of-bits equivalent (IEEE
+    // 1800-2017 § 7.2.1); the case comparison ops require simple bit
+    // vectors.
+    if (isa<moore::StructType, moore::UnionType>(caseExpr.getType())) {
+      caseExpr = context.convertToSimpleBitVector(caseExpr);
+      if (!caseExpr)
+        return failure();
+    }
+
     // Check each case individually. This currently ignores the `unique`,
     // `unique0`, and `priority` modifiers which would allow for additional
     // optimizations.
@@ -524,6 +533,13 @@ struct StmtVisitor {
           if (!value)
             return failure();
           itemLoc = value.getLoc();
+
+          // Packed aggregate items compare as bit vectors as well.
+          if (isa<moore::StructType, moore::UnionType>(value.getType())) {
+            value = context.convertToSimpleBitVector(value);
+            if (!value)
+              return failure();
+          }
 
           // Take note if the expression is a constant.
           auto maybeConst = value;
@@ -1088,8 +1104,12 @@ struct StmtVisitor {
       return context.convertRvalueExpression(
           *args[0], builder.getType<moore::FormatStringType>());
     }
-    // Otherwise this looks invalid. Raise an error.
-    return emitError(loc) << "Failed to convert Display Message!";
+    // Otherwise treat the arguments exactly like `$display` does (IEEE
+    // 1800-2023 Section 20.10: severity tasks display their arguments in the
+    // same way as `$display`). A leading non-string literal, as in
+    // `$warning(1, "fmt", ...)`, is simply a displayed argument; any string
+    // literal among the arguments acts as a format string.
+    return context.convertFormatString(args, loc);
   }
 
   /// Convert a `$readmemb`/`$readmemh` system task call into a
