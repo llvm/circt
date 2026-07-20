@@ -294,6 +294,22 @@ jobs:
       }}
     runs-on: ubuntu-24.04
     steps:
+      - name: Select CIRCT check variants
+        id: variants
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.ref }}
+        run: |
+          variants=(full)
+          run_clang=false
+          if [[ "$EVENT_NAME" == push \
+                && "$EVENT_REF" == refs/heads/master ]]; then
+            variants+=(clang)
+            run_clang=true
+          fi
+          printf 'CIRCT_CHECK_VARIANTS=%s\n' "${variants[*]}" \
+            >> "$GITHUB_ENV"
+          echo "run-clang=$run_clang" >> "$GITHUB_OUTPUT"
       - name: Initialize diagnostics
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -304,11 +320,15 @@ jobs:
           package_root="$RUNNER_TEMP/circt-ci-packages"
           echo "ARTIFACTS=$artifact_root" >> "$GITHUB_ENV"
           echo "PACKAGES=$package_root" >> "$GITHUB_ENV"
-          mkdir -p "$artifact_root/dependencies" \
-            "$artifact_root/full" "$artifact_root/clang"
+          mkdir -p "$artifact_root/dependencies"
+          read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
+          for variant in "${variants[@]}"; do
+            mkdir -p "$artifact_root/$variant"
+          done
           mkdir -p "$package_root"
-          printf 'event=%s\nrun-id=%s\nsource-sha=%s\n' \
+          printf 'event=%s\nrun-id=%s\nsource-sha=%s\nvariants=%s\n' \
             "$EVENT_NAME" "$RUN_ID" "$SOURCE_SHA" \
+            "$CIRCT_CHECK_VARIANTS" \
             > "$artifact_root/run-metadata.txt"
       - name: Free disk space for Nix builds
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
@@ -444,7 +464,8 @@ jobs:
           nix path-info -S --json .nix-results/mlir \
             > "$ARTIFACTS/dependencies/mlir-path-info.json"
 
-          for variant in full clang; do
+          read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
+          for variant in "${variants[@]}"; do
             for phase in check build; do
               attribute="$variant"
               if [[ "$phase" == build ]]; then
@@ -536,7 +557,8 @@ jobs:
         run: |
           echo "full_cached=false" >> "$GITHUB_OUTPUT"
           echo "clang_cached=false" >> "$GITHUB_OUTPUT"
-          for variant in full clang; do
+          read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
+          for variant in "${variants[@]}"; do
             check_drv=$(cat "$ARTIFACTS/$variant/check-derivation.txt")
             cached=false
             if nix build -L --max-jobs 0 --builders '' \
@@ -713,7 +735,8 @@ jobs:
             steps.sccache_trust.outcome == 'success' &&
             steps.sccache_trust.outputs.trusted == 'true' &&
             (steps.circt_check_cache.outputs.full_cached != 'true' ||
-             steps.circt_check_cache.outputs.clang_cached != 'true')
+             (steps.variants.outputs.run-clang == 'true' &&
+              steps.circt_check_cache.outputs.clang_cached != 'true'))
           }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -798,6 +821,7 @@ jobs:
         if: >-
           ${{
             !cancelled() &&
+            steps.variants.outputs.run-clang == 'true' &&
             steps.sccache_trust.outcome == 'success' &&
             steps.sccache_trust.outputs.trusted == 'true' &&
             steps.circt_check_cache.outputs.clang_cached != 'true' &&
@@ -820,6 +844,7 @@ jobs:
         if: >-
           ${{
             !cancelled() &&
+            steps.variants.outputs.run-clang == 'true' &&
             steps.sccache_trust.outcome == 'success' &&
             steps.sccache_trust.outputs.trusted == 'true' &&
             (steps.sccache_compile_clang.outcome == 'success' ||
@@ -875,7 +900,8 @@ jobs:
             steps.sccache_trust.outcome == 'success' &&
             steps.sccache_trust.outputs.trusted == 'true' &&
             ((steps.circt_check_cache.outputs.full_cached == 'true' &&
-              steps.circt_check_cache.outputs.clang_cached == 'true') ||
+              (steps.variants.outputs.run-clang != 'true' ||
+               steps.circt_check_cache.outputs.clang_cached == 'true')) ||
              steps.sccache_lookup.outcome == 'success')
           }}
         env:
@@ -885,6 +911,7 @@ jobs:
           FULL_CACHED: ${{ steps.circt_check_cache.outputs.full_cached }}
           FULL_BUILD: ${{ steps.sccache_compile_full.outcome }}
           FULL_PROMOTE: ${{ steps.sccache_promote_full.outcome }}
+          RUN_CLANG: ${{ steps.variants.outputs.run-clang }}
           SAVE_RESULT: ${{ steps.sccache_save.outcome }}
           VERIFY_RESULT: ${{ steps.sccache_save_verify.outcome }}
         run: |
@@ -895,10 +922,11 @@ jobs:
           if [[ "$FULL_CACHED" != true ]]; then
             [[ "$FULL_BUILD/$FULL_PROMOTE" == success/success ]]
           fi
-          if [[ "$CLANG_CACHED" != true ]]; then
+          if [[ "$RUN_CLANG" == true && "$CLANG_CACHED" != true ]]; then
             [[ "$CLANG_BUILD/$CLANG_PROMOTE" == success/success ]]
           fi
-          if [[ "$FULL_CACHED" != true || "$CLANG_CACHED" != true ]]; then
+          if [[ "$FULL_CACHED" != true \
+                || ("$RUN_CLANG" == true && "$CLANG_CACHED" != true) ]]; then
             [[ "$SAVE_RESULT" == success ]]
             [[ "$VERIFY_RESULT" == success ]]
           fi
@@ -967,9 +995,10 @@ jobs:
           }
 
           status=0
-          # Separate Nix sandboxes must not concurrently mutate sccache's
-          # local LRU metadata, so keep the two compiler variants sequential.
-          for variant in full clang; do
+          # Separate Nix sandboxes must not concurrently mutate sccache's local
+          # LRU metadata, so keep selected compiler variants sequential.
+          read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
+          for variant in "${variants[@]}"; do
             if ! run_variant "$variant"; then
               status=1
             fi
@@ -979,7 +1008,8 @@ jobs:
         if: ${{ always() }}
         continue-on-error: true
         run: |
-          for variant in full clang; do
+          read -r -a variants <<< "$CIRCT_CHECK_VARIANTS"
+          for variant in "${variants[@]}"; do
             drv_file="$ARTIFACTS/$variant/check-derivation.txt"
             if [[ -s "$drv_file" ]]; then
               nix log "$(cat "$drv_file")" \
@@ -1021,7 +1051,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Upload Clang Nix output snapshot
-        if: ${{ always() }}
+        if: ${{ always() && steps.variants.outputs.run-clang == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nix-ci-package-clang
