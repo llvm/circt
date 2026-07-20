@@ -41,17 +41,22 @@ static SmallVector<Value> extractBits(OpBuilder &builder, Value val) {
 static std::pair<bool, Value> getBaseWidth(PatternRewriter &rewriter,
                                            Location loc, Value val) {
 
-  Value valBase;
-  // Check for zext
-  if (matchPattern(val, comb::m_Zext(mlir::matchers::m_Any(&valBase))))
-    return {false, valBase};
-
-  // Check for sext of the value
   Value replBits;
-  if (matchPattern(val, comb::m_Sext(mlir::matchers::m_Any(&replBits)))) {
+  // Check for zext
+  if (matchPattern(val, comb::m_ZextBy(mlir::matchers::m_Any(&replBits)))) {
     auto baseWidth = val.getType().getIntOrFloatBitWidth() -
                      replBits.getType().getIntOrFloatBitWidth();
-    valBase = rewriter.createOrFold<comb::ExtractOp>(loc, val, 0, baseWidth);
+    auto valBase =
+        rewriter.createOrFold<comb::ExtractOp>(loc, val, 0, baseWidth);
+    return {false, valBase};
+  }
+
+  // Check for sext of the value
+  if (matchPattern(val, comb::m_SextBy(mlir::matchers::m_Any(&replBits)))) {
+    auto baseWidth = val.getType().getIntOrFloatBitWidth() -
+                     replBits.getType().getIntOrFloatBitWidth();
+    auto valBase =
+        rewriter.createOrFold<comb::ExtractOp>(loc, val, 0, baseWidth);
     return {true, valBase};
   }
 

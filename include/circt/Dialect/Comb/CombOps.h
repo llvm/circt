@@ -49,8 +49,8 @@ using llvm::KnownBits;
 /// in neither set is unknown.
 KnownBits computeKnownBits(Value value);
 
-/// Return true when both operands are wider than 16 bits and should use Booth
-/// encoding.
+/// Return true when both operands are wider than the bitwidth threshold and
+/// should use Booth encoding.
 bool boothEncode(Value lhs, Value rhs);
 
 /// Create the ops to zero-extend a value to an integer of equal or larger type.
@@ -117,48 +117,43 @@ bool foldMuxChainWithComparison(
                                                           size_t numEntries)>
         styleFn);
 
-// Check if the operand is zext() and return the unextended operand:
+// Check if the operand is zext() and return the extension bits:
 // zext = comb.concat(0, baseValue)
 template <typename SubType>
-struct ZextMatcher {
+struct ZextByMatcher {
   SubType lhs;
-  ZextMatcher(SubType lhs) : lhs(std::move(lhs)) {}
+  ZextByMatcher(SubType lhs) : lhs(std::move(lhs)) {}
   bool match(Operation *op) {
     // Check if operand is a concat operation
     auto concatOp = dyn_cast<ConcatOp>(op);
     if (!concatOp)
       return false;
 
-    auto operands = concatOp.getOperands();
-    // ConcatOp must have exactly 2 operands: (0, base_value)
-    if (operands.size() != 2)
-      return false;
-
-    auto constOp = operands[0].getDefiningOp<hw::ConstantOp>();
+    auto constOp = concatOp.getOperand(0).getDefiningOp<hw::ConstantOp>();
     if (!constOp || !constOp.getValue().isZero())
       return false;
 
-    // Match the base unextended value against the sub-matcher
-    return mlir::detail::matchOperandOrValueAtIndex(op, 1, lhs);
+    // Match the most significant argument of the concat
+    return mlir::detail::matchOperandOrValueAtIndex(op, 0, lhs);
   }
 };
 
 /// Helper function to create a zero extension matcher
 template <typename SubType>
-static inline ZextMatcher<SubType> m_Zext(const SubType &subExpr) {
-  return ZextMatcher<SubType>(subExpr);
+static inline ZextByMatcher<SubType> m_ZextBy(const SubType &subExpr) {
+  return ZextByMatcher<SubType>(subExpr);
 }
 
-// Check if the operand is sext() and return the unextended operand:
+// Check if the operand is sext() and return the extension bits:
 // signBit = comb.extract(baseValue, width-1, 1)
 // ext = comb.replicate(signBit, width-baseWidth)
 // sext = comb.concat(ext, baseValue)
 // Also matches the single bit case:
 // sext = comb.concat(signBit, baseValue)
 template <typename SubType>
-struct SextMatcher {
+struct SextByMatcher {
   SubType lhs;
-  SextMatcher(SubType lhs) : lhs(std::move(lhs)) {}
+  SextByMatcher(SubType lhs) : lhs(std::move(lhs)) {}
   bool match(Operation *op) {
     // Check if operand is a concat operation
     auto concatOp = dyn_cast<ConcatOp>(op);
@@ -191,15 +186,15 @@ struct SextMatcher {
         (extractOp.getLowBit() != baseWidth - 1))
       return false;
 
-    // Match the base unextended value against the sub-matcher
+    // Match the most significant argument of the concat
     return mlir::detail::matchOperandOrValueAtIndex(op, 0, lhs);
   }
 };
 
 /// Helper function to create a sign extension matcher
 template <typename SubType>
-static inline SextMatcher<SubType> m_Sext(const SubType &subExpr) {
-  return SextMatcher<SubType>(subExpr);
+static inline SextByMatcher<SubType> m_SextBy(const SubType &subExpr) {
+  return SextByMatcher<SubType>(subExpr);
 }
 
 } // namespace comb

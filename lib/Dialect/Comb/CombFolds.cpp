@@ -1430,7 +1430,7 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
   Value signExtBits;
   // Check for sext of the inverted value
   if (matchPattern(op.getResult(), m_Complement(m_Any(&complementVal))) &&
-      matchPattern(complementVal, m_Sext(m_Any(&signExtBits)))) {
+      matchPattern(complementVal, m_SextBy(m_Any(&signExtBits)))) {
     // Matched an sext with signExtBits - extract the base (unextended) value
     auto baseWidth = op.getType().getIntOrFloatBitWidth() -
                      signExtBits.getType().getIntOrFloatBitWidth();
