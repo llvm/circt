@@ -236,6 +236,19 @@ firrtl.extmodule @SimulationTopWithProps(
   out anotherProp: !firrtl.integer
 )
 
+// Simulation targets may have additional ports that are composed only
+// of non-hardware types
+firrtl.simulation @mySimulationTestWithPropAgg, @SimulationTopWithPropAgg {}
+
+firrtl.extmodule @SimulationTopWithPropAgg(
+  in clock: !firrtl.clock,
+  in init: !firrtl.uint<1>,
+  out done: !firrtl.uint<1>,
+  out success: !firrtl.uint<1>,
+  out status: !firrtl.openbundle<flag: bool, label: string>,
+  out listOfProps: !firrtl.openvector<string, 2>
+)
+
 firrtl.module @Contracts(in %a: !firrtl.uint<42>, in %b: !firrtl.bundle<x: uint<1337>>) {
   firrtl.contract {}
   firrtl.contract %a, %b : !firrtl.uint<42>, !firrtl.bundle<x: uint<1337>> {
