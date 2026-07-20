@@ -1742,6 +1742,16 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[UPR:%.+]] = llhd.prb [[UPVAR]]
   %upr = moore.read %uparray : <!moore.uarray<4 x i32>>
 
+  // CHECK: [[LHSI:%.+]] = hw.bitcast [[UPR]] : (!hw.array<4xi32>) -> i128
+  // CHECK: [[RHSI:%.+]] = hw.bitcast [[UPR]] : (!hw.array<4xi32>) -> i128
+  // CHECK: comb.icmp eq [[LHSI]], [[RHSI]] : i128
+  moore.uarray_cmp eq %upr, %upr : !moore.uarray<4 x i32> -> i1
+
+  // CHECK: [[LHSI2:%.+]] = hw.bitcast [[UPR]] : (!hw.array<4xi32>) -> i128
+  // CHECK: [[RHSI2:%.+]] = hw.bitcast [[UPR]] : (!hw.array<4xi32>) -> i128
+  // CHECK: comb.icmp ne [[LHSI2]], [[RHSI2]] : i128
+  moore.uarray_cmp ne %upr, %upr : !moore.uarray<4 x i32> -> i1
+
   // CHECK: [[QFROMUP:%.+]] = sim.queue.from_array [[UPR]] : !hw.array<4xi32> -> <i32, 0>
   %2 = moore.queue.from_unpacked_array %upr : !moore.uarray<4 x i32> -> <i32, 0>
 
@@ -2124,4 +2134,44 @@ moore.module @StringArrayVariable() {
     // CHECK-NEXT: llhd.halt
     moore.return
   }
+}
+
+// CHECK-LABEL: func.func @UArrayCmpElementFallback
+func.func @UArrayCmpElementFallback(
+  %s1: !moore.uarray<2 x string>, %s2: !moore.uarray<2 x string>,
+  %q1: !moore.uarray<2 x queue<i32, 0>>, %q2: !moore.uarray<2 x queue<i32, 0>>,
+  %a1: !moore.uarray<2 x assoc_array<i32, string>>,
+  %a2: !moore.uarray<2 x assoc_array<i32, string>>,
+  %r1: !moore.uarray<2 x f64>, %r2: !moore.uarray<2 x f64>) {
+
+  // CHECK: arith.cmpf oeq, %{{.+}}, %{{.+}} : f64
+  // CHECK: arith.cmpf oeq, %{{.+}}, %{{.+}} : f64
+  // CHECK: comb.and bin %{{.+}}, %{{.+}} : i1
+  %0 = moore.uarray_cmp eq %r1, %r2 : !moore.uarray<2 x f64> -> i1
+
+  // CHECK: [[SL0:%.+]] = hw.array_get %{{.+}}[%{{.+}}] : !hw.array<2x!sim.dstring>
+  // CHECK: [[SR0:%.+]] = hw.array_get %{{.+}}[%{{.+}}] : !hw.array<2x!sim.dstring>
+  // CHECK: [[SEQ0:%.+]] = sim.string.cmp eq [[SL0]], [[SR0]] : !sim.dstring
+  // CHECK: [[SL1:%.+]] = hw.array_get %{{.+}}[%{{.+}}] : !hw.array<2x!sim.dstring>
+  // CHECK: [[SR1:%.+]] = hw.array_get %{{.+}}[%{{.+}}] : !hw.array<2x!sim.dstring>
+  // CHECK: [[SEQ1:%.+]] = sim.string.cmp eq [[SL1]], [[SR1]] : !sim.dstring
+  // CHECK: comb.and bin [[SEQ0]], [[SEQ1]] : i1
+  %1 = moore.uarray_cmp eq %s1, %s2 : !moore.uarray<2 x string> -> i1
+
+  // CHECK: sim.string.cmp ne %{{.+}}, %{{.+}} : !sim.dstring
+  // CHECK: sim.string.cmp ne %{{.+}}, %{{.+}} : !sim.dstring
+  // CHECK: comb.or bin %{{.+}}, %{{.+}} : i1
+  %2 = moore.uarray_cmp ne %s1, %s2 : !moore.uarray<2 x string> -> i1
+
+  // CHECK: sim.queue.cmp eq %{{.+}}, %{{.+}} : <i32, 0>
+  // CHECK: sim.queue.cmp eq %{{.+}}, %{{.+}} : <i32, 0>
+  // CHECK: comb.and bin %{{.+}}, %{{.+}} : i1
+  %3 = moore.uarray_cmp eq %q1, %q2 : !moore.uarray<2 x queue<i32, 0>> -> i1
+
+  // CHECK: sim.assoc_array.cmp eq %{{.+}}, %{{.+}}
+  // CHECK: sim.assoc_array.cmp eq %{{.+}}, %{{.+}}
+  // CHECK: comb.and bin %{{.+}}, %{{.+}} : i1
+  %4 = moore.uarray_cmp eq %a1, %a2 : !moore.uarray<2 x assoc_array<i32, string>> -> i1
+
+  func.return
 }

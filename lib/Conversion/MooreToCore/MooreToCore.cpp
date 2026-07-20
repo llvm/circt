@@ -2999,34 +2999,94 @@ struct QueueSetOpConversion : public OpConversionPattern<QueueSetOp> {
   }
 };
 
+// SystemVerilog unpacked array elements may be of any type. Bitcast handles
+// statically-sized elements; reals bypass it so NaN/signed zero still compare
+// correctly. Everything else recurses or dispatches to the matching comparison
+// op.
+static Value buildUArrayElementEq(ConversionPatternRewriter &rewriter,
+                                  Location loc, Value lhs, Value rhs, Type type,
+                                  UArrayCmpPredicate pred) {
+  bool isEq = pred == UArrayCmpPredicate::eq;
+
+  if (isa<mlir::FloatType>(type))
+    return arith::CmpFOp::create(
+        rewriter, loc,
+        isEq ? arith::CmpFPredicate::OEQ : arith::CmpFPredicate::UNE, lhs, rhs);
+
+  if (int64_t width = hw::getBitWidth(type); width != -1) {
+    auto intTy = rewriter.getIntegerType(width);
+    Value lhsInt = hw::BitcastOp::create(rewriter, loc, intTy, lhs);
+    Value rhsInt = hw::BitcastOp::create(rewriter, loc, intTy, rhs);
+    return comb::ICmpOp::create(rewriter, loc,
+                                isEq ? ICmpPredicate::eq : ICmpPredicate::ne,
+                                lhsInt, rhsInt);
+  }
+
+  if (isa<sim::DynamicStringType>(type))
+    return sim::StringCmpOp::create(rewriter, loc,
+                                    isEq ? sim::StringCmpPredicate::eq
+                                         : sim::StringCmpPredicate::ne,
+                                    lhs, rhs);
+
+  if (isa<sim::QueueType>(type)) {
+    auto pred = sim::UArrayCmpPredicateAttr::get(
+        rewriter.getContext(),
+        isEq ? sim::UArrayCmpPredicate::eq : sim::UArrayCmpPredicate::ne);
+    return sim::QueueCmpOp::create(rewriter, loc, pred, lhs, rhs);
+  }
+
+  if (isa<sim::AssocArrayType>(type)) {
+    auto pred = sim::UArrayCmpPredicateAttr::get(
+        rewriter.getContext(),
+        isEq ? sim::UArrayCmpPredicate::eq : sim::UArrayCmpPredicate::ne);
+    return sim::AssocArrayCmpOp::create(rewriter, loc, pred, lhs, rhs);
+  }
+
+  auto arrayTy = dyn_cast<hw::ArrayType>(type);
+  if (!arrayTy)
+    return {};
+
+  unsigned size = arrayTy.getNumElements();
+  if (size == 0)
+    return hw::ConstantOp::create(rewriter, loc, APInt(1, isEq ? 1 : 0));
+
+  unsigned idxWidth = size == 1 ? 1 : llvm::Log2_64_Ceil(size);
+  auto idxTy = rewriter.getIntegerType(idxWidth);
+
+  SmallVector<Value> elemEqs;
+  elemEqs.reserve(size);
+  for (unsigned i = 0; i < size; ++i) {
+    Value idx = hw::ConstantOp::create(rewriter, loc, idxTy, i);
+    Value lhsElem = hw::ArrayGetOp::create(rewriter, loc, lhs, idx);
+    Value rhsElem = hw::ArrayGetOp::create(rewriter, loc, rhs, idx);
+    Value elemEq = buildUArrayElementEq(rewriter, loc, lhsElem, rhsElem,
+                                        arrayTy.getElementType(), pred);
+    if (!elemEq)
+      return {};
+    elemEqs.push_back(elemEq);
+  }
+
+  return (isEq ? comb::AndOp::create(rewriter, loc, elemEqs, /*twoState=*/true)
+                     .getResult()
+               : comb::OrOp::create(rewriter, loc, elemEqs, /*twoState=*/true)
+                     .getResult());
+}
+
 struct QueueCmpOpConversion : public OpConversionPattern<QueueCmpOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(QueueCmpOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // TODO: Right now Moore uses `UArrayCmpPredicate` for both queues/unpacked
-    // arrays - reasonable because, per SV spec, queues *are* a type of unpacked
-    // array). Once we support comparing unpacked arrays in core, it will make
-    // sense to rename `QueueCmpPredicate` to `UArrayCmpPredicate` and use it
-    // for both forms of comparisons.
-
-    // Convert the UArrayCmpPredicate into a QueueCmpPredicate
-    auto unpackedPred = adaptor.getPredicateAttr().getValue();
-    sim::QueueCmpPredicate queuePred;
-    switch (unpackedPred) {
-    case circt::moore::UArrayCmpPredicate::eq:
-      queuePred = sim::QueueCmpPredicate::eq;
-      break;
-    case circt::moore::UArrayCmpPredicate::ne:
-      queuePred = sim::QueueCmpPredicate::ne;
-      break;
-    }
-
-    auto cmpPred = sim::QueueCmpPredicateAttr::get(getContext(), queuePred);
-
-    rewriter.replaceOpWithNewOp<sim::QueueCmpOp>(op, cmpPred, adaptor.getLhs(),
-                                                 adaptor.getRhs());
+    // Per IEEE 1800-2017 7.4.2, queues are themselves a form of unpacked array,
+    // so this reuses the same element-comparison dispatch as
+    // UArrayCmpOpConversion (see buildUArrayElementEq), for a QueueType operand
+    // it resolves directly to `sim.queue.cmp`.
+    Value lhs = adaptor.getLhs();
+    Value result =
+        buildUArrayElementEq(rewriter, op.getLoc(), lhs, adaptor.getRhs(),
+                             lhs.getType(), op.getPredicate());
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
@@ -3080,6 +3140,26 @@ struct AssocArrayExtractOpConversion
     Value existsBit = comb::ICmpOp::create(
         rewriter, op.getLoc(), comb::ICmpPredicate::ne, exists, zeroI32, false);
     rewriter.replaceOpWithNewOp<comb::MuxOp>(op, existsBit, raw, zero, false);
+    return success();
+  }
+};
+
+struct UArrayCmpOpConversion : public OpConversionPattern<UArrayCmpOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(UArrayCmpOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Value lhs = adaptor.getLhs();
+    Value rhs = adaptor.getRhs();
+    auto pred = op.getPredicate();
+    Value eq = buildUArrayElementEq(rewriter, op.getLoc(), lhs, rhs,
+                                    lhs.getType(), pred);
+
+    if (!eq)
+      return rewriter.notifyMatchFailure(
+          op, "unpacked array element type does not support comparison");
+
+    rewriter.replaceOp(op, eq);
     return success();
   }
 };
@@ -3854,6 +3934,7 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     UnionExtractRefOpConversion,
     ConditionalOpConversion,
     ArrayCreateOpConversion,
+    UArrayCmpOpConversion,
     YieldOpConversion,
     OutputOpConversion,
     ConstantStringOpConv,

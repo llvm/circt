@@ -855,9 +855,9 @@ def StringCmpOp : SimOp<"string.cmp", [Pure]> {
 // Queues
 //===----------------------------------------------------------------------===//
 
-def QueueCmpPredicateAttr : I64EnumAttr<
-    "QueueCmpPredicate",
-    "queue.cmp comparison predicate",
+def UArrayCmpPredicateAttr : I64EnumAttr<
+    "UArrayCmpPredicate",
+    "unpacked-array-like container comparison predicate",
     [I64EnumAttrCase<"eq", 0>,
       I64EnumAttrCase<"ne", 1>]> {
   let cppNamespace = "circt::sim";
@@ -872,7 +872,7 @@ def QueueCmpOp : SimOp<"queue.cmp", [Pure, Commutative, SameTypeOperands]> {
     Comparing for equality and inequality are both supported.
   }];
 
-  let arguments = (ins QueueCmpPredicateAttr:$predicate, QueueType:$lhs, QueueType:$rhs);
+  let arguments = (ins UArrayCmpPredicateAttr:$predicate, QueueType:$lhs, QueueType:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` type($lhs)";
@@ -1208,6 +1208,23 @@ def AssocArraySizeOp : SimOp<"assoc_array.size", [Pure]> {
   let arguments = (ins AssocArrayType:$array);
   let results = (outs I32:$result);
   let assemblyFormat = "$array attr-dict `:` type($array)";
+}
+
+def AssocArrayCmpOp : SimOp<"assoc_array.cmp",
+    [Pure, Commutative, SameTypeOperands]> {
+  let summary = "Compares two associative arrays";
+  let description = [{
+    Carries out a comparison on two associative arrays. Two associative
+    arrays are equal if they have the same set of keys and each key maps to
+    an equal value in both arrays.
+
+    Comparing for equality and inequality are both supported.
+  }];
+
+  let arguments = (ins UArrayCmpPredicateAttr:$predicate, AssocArrayType:$lhs, AssocArrayType:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 
 def AssocArrayExistsOp : SimOp<"assoc_array.exists", [Pure,
