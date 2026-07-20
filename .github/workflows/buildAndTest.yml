@@ -792,44 +792,7 @@ jobs:
           }}
         continue-on-error: true
         run: |
-          cache=/var/cache/circt-sccache
-          publish=/var/cache/circt-sccache-publish
-          next=/var/cache/circt-sccache-next
-          previous=/var/cache/circt-sccache-previous
-          if [[ ! -d "$cache" && -d "$previous" ]]; then
-            sudo mv "$previous" "$cache"
-          fi
-          sudo chmod -R a+rwX \
-            "$cache" "$publish"
-          test -f "$publish/.ready"
-          find "$publish" -type f ! -name .ready -print -quit | grep -q .
-          sudo find "$publish" -maxdepth 1 -name .ready -delete
-          for stale in "$next" "$previous"; do
-            if [[ -d "$stale" ]]; then
-              sudo find "$stale" -mindepth 1 -delete
-              sudo rmdir "$stale"
-            fi
-          done
-          sudo install -d -m 0777 "$next"
-          sudo cp -R --no-preserve=ownership,mode,timestamps \
-            "$publish/." "$next/"
-          find "$next" -type f -print -quit | grep -q .
-          sudo chmod -R a+rwX "$next"
-          recover_cache() {
-            if [[ ! -d "$cache" && -d "$previous" ]]; then
-              sudo mv "$previous" "$cache"
-            fi
-          }
-          trap recover_cache EXIT
-          sudo mv "$cache" "$previous"
-          sudo mv "$next" "$cache"
-          trap - EXIT
-          sudo find "$previous" -mindepth 1 -delete
-          sudo rmdir "$previous"
-          sudo find "$publish" -mindepth 1 -delete
-          find "$cache" -type f -print -quit | grep -q .
-          du -sh "$cache" \
-            > "$ARTIFACTS/full/sccache-size-after-compile.txt"
+          .github/bin/promoteSccacheSnapshot.sh "$ARTIFACTS/full"
       - name: Compile trusted Clang variant before tests
         id: sccache_compile_clang
         if: >-
@@ -864,44 +827,7 @@ jobs:
           }}
         continue-on-error: true
         run: |
-          cache=/var/cache/circt-sccache
-          publish=/var/cache/circt-sccache-publish
-          next=/var/cache/circt-sccache-next
-          previous=/var/cache/circt-sccache-previous
-          if [[ ! -d "$cache" && -d "$previous" ]]; then
-            sudo mv "$previous" "$cache"
-          fi
-          sudo chmod -R a+rwX \
-            "$cache" "$publish"
-          test -f "$publish/.ready"
-          find "$publish" -type f ! -name .ready -print -quit | grep -q .
-          sudo find "$publish" -maxdepth 1 -name .ready -delete
-          for stale in "$next" "$previous"; do
-            if [[ -d "$stale" ]]; then
-              sudo find "$stale" -mindepth 1 -delete
-              sudo rmdir "$stale"
-            fi
-          done
-          sudo install -d -m 0777 "$next"
-          sudo cp -R --no-preserve=ownership,mode,timestamps \
-            "$publish/." "$next/"
-          find "$next" -type f -print -quit | grep -q .
-          sudo chmod -R a+rwX "$next"
-          recover_cache() {
-            if [[ ! -d "$cache" && -d "$previous" ]]; then
-              sudo mv "$previous" "$cache"
-            fi
-          }
-          trap recover_cache EXIT
-          sudo mv "$cache" "$previous"
-          sudo mv "$next" "$cache"
-          trap - EXIT
-          sudo find "$previous" -mindepth 1 -delete
-          sudo rmdir "$previous"
-          sudo find "$publish" -mindepth 1 -delete
-          find "$cache" -type f -print -quit | grep -q .
-          du -sh "$cache" \
-            > "$ARTIFACTS/clang/sccache-size-after-compile.txt"
+          .github/bin/promoteSccacheSnapshot.sh "$ARTIFACTS/clang"
       - name: Finalize pre-test sccache snapshot
         id: sccache_finalize
         if: >-
