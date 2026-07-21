@@ -149,7 +149,7 @@ def ChannelArbiterMod(channel_type: Channel, num_inputs: int,
                       telemetry: bool, mux_pipeline_levels: Optional[int]):
   """Build a pipelined, list-aware N:1 channel multiplexer module. See the
   `ChannelArbiter` convenience function for the user-facing entry point and
-  `docs/ChannelArbiter.md` for the design."""
+  `docs/components/ChannelArbiter.md` for the design."""
 
   assert num_inputs >= 2, "ChannelArbiterMod requires at least two inputs"
   inner = channel_type.inner_type
@@ -448,7 +448,7 @@ def ChannelArbiter(input_channels: List[ChannelSignal],
       credit counter. `None` (default) uses a flat combinational mux.
     telemetry: emit telemetry (selected channel, list-length stats, etc.).
 
-  See `docs/ChannelArbiter.md`."""
+  See `docs/components/ChannelArbiter.md`."""
 
   assert len(input_channels) > 0
   num_inputs = len(input_channels)

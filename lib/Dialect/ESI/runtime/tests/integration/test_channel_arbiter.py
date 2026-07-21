@@ -52,8 +52,8 @@ def _check_mux(conn: AcceleratorConnection, dut_name: str,
     p.connect()
   out.connect()
 
-  # The value encodes its source input in bits [17:16] and a round counter in
-  # the low bits, so the received multiset uniquely identifies every message.
+  # The value encodes its source input in the upper bits (i << 16) and a round
+  # counter in the low bits, so the received multiset uniquely identifies every message.
   rounds = 6
   writes = [
       ((i << 16) | r, ins[i]) for r in range(rounds) for i in range(num_inputs)
@@ -78,7 +78,7 @@ def _check_mux(conn: AcceleratorConnection, dut_name: str,
   assert sorted(recv) == sorted(sent), \
       "arbiter dropped, duplicated or corrupted a value"
 
-  # Every input (encoded in bits [17:16]) is served exactly `rounds` times.
+  # Every input (decoded by v >> 16) is served exactly `rounds` times.
   by_src = Counter(v >> 16 for v in recv)
   for i in range(num_inputs):
     assert by_src[i] == rounds, \
