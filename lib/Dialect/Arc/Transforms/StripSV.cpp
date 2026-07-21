@@ -154,6 +154,12 @@ void StripSVPass::runOnOperation() {
       if (auto reg = dyn_cast<seq::FirRegOp>(&op)) {
         OpBuilder builder(reg);
 
+        if (reg.getClockEdge() != seq::ClockEdge::Pos) {
+          reg.emitOpError("only positive-edge registers are currently "
+                          "supported");
+          return signalPassFailure();
+        }
+
         if (reg.getIsAsync() && !asyncResetsAsSync) {
           reg.emitOpError("only synchronous resets are currently supported");
           return signalPassFailure();

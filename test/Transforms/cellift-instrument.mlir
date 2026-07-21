@@ -286,6 +286,16 @@ hw.module @test_firreg(in %d : i8, in %clk : !seq.clock, out q : i8) {
 }
 
 // -----
+// Test: the taint clone of a reset-less seq.firreg preserves the clock edge.
+// CHECK-LABEL: hw.module @test_firreg_noreset_attrs
+hw.module @test_firreg_noreset_attrs(in %d : i8, in %clk : !seq.clock, out q : i8) {
+  // CHECK: %myreg = seq.firreg %d clock %clk {clockEdge = 1 : i32} : i8
+  // CHECK: %myreg_t = seq.firreg %d_t clock %clk {clockEdge = 1 : i32} : i8
+  %reg = seq.firreg %d clock %clk {name = "myreg", clockEdge = 1 : i32} : i8
+  hw.output %reg : i8
+}
+
+// -----
 // Test: Multi-operation dataflow: the demo from the CellIFT paper.
 // module demo(input [7:0] a, b, input s, output [7:0] y);
 //   assign y = s ? (a + b) : (a ^ b);

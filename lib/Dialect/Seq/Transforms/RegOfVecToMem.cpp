@@ -85,6 +85,10 @@ bool RegOfVecToMemPass::analyzeMemoryPattern(FirRegOp reg,
                                              MemoryPattern &pattern) {
   LLVM_DEBUG(llvm::dbgs() << "Analyzing register: " << reg << "\n");
 
+  // FirMem ports are positive-edge triggered.
+  if (reg.getClockEdge() != ClockEdge::Pos)
+    return false;
+
   // Check if register has array type
   if (!isArrayType(reg.getType()))
     return false;

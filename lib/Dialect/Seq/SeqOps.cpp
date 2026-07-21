@@ -396,7 +396,7 @@ LogicalResult ShiftRegOp::verify() {
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
                      Value clk, StringAttr name, hw::InnerSymAttr innerSym,
-                     Attribute preset) {
+                     Attribute preset, ClockEdgeAttr clockEdge) {
 
   OpBuilder::InsertionGuard guard(builder);
 
@@ -411,12 +411,16 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
   if (preset)
     result.addAttribute(getPresetAttrName(result.name), preset);
 
+  if (clockEdge)
+    result.addAttribute(getClockEdgeAttrName(result.name), clockEdge);
+
   result.addTypes(input.getType());
 }
 
 void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
                      Value clk, StringAttr name, Value reset, Value resetValue,
-                     hw::InnerSymAttr innerSym, bool isAsync) {
+                     hw::InnerSymAttr innerSym, bool isAsync,
+                     ClockEdgeAttr clockEdge) {
 
   OpBuilder::InsertionGuard guard(builder);
 
@@ -431,6 +435,9 @@ void FirRegOp::build(OpBuilder &builder, OperationState &result, Value input,
 
   if (innerSym)
     result.addAttribute(getInnerSymAttrName(result.name), innerSym);
+
+  if (clockEdge)
+    result.addAttribute(getClockEdgeAttrName(result.name), clockEdge);
 
   result.addTypes(input.getType());
 }
@@ -561,6 +568,8 @@ void FirRegOp::print(::mlir::OpAsmPrinter &p) {
 
   if (canElideName(p, *this))
     elidedAttrs.push_back("name");
+  if (getClockEdge() == ClockEdge::Pos)
+    elidedAttrs.push_back(getClockEdgeAttrName());
 
   p.printOptionalAttrDict((*this)->getAttrs(), elidedAttrs);
   p << " : " << getNext().getType();
@@ -597,13 +606,13 @@ std::optional<size_t> FirRegOp::getTargetResultIndex() { return 0; }
 LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
 
   // If the register has a constant zero reset, drop the reset and reset value
-  // altogether (And preserve the PresetAttr).
+  // altogether (And preserve the PresetAttr and clock edge).
   if (auto reset = op.getReset()) {
     if (auto constOp = reset.getDefiningOp<hw::ConstantOp>()) {
       if (constOp.getValue().isZero()) {
         rewriter.replaceOpWithNewOp<FirRegOp>(
             op, op.getNext(), op.getClk(), op.getNameAttr(),
-            op.getInnerSymAttr(), op.getPresetAttr());
+            op.getInnerSymAttr(), op.getPresetAttr(), op.getClockEdgeAttr());
         return success();
       }
     }
@@ -731,10 +740,11 @@ LogicalResult FirRegOp::canonicalize(FirRegOp op, PatternRewriter &rewriter) {
             // value directly.
             rewriter.replaceOp(arrayCreate, newNextVal);
           else {
-            // Otherwise, replace the entire firreg with a new one.
-            rewriter.replaceOpWithNewOp<FirRegOp>(op, newNextVal, op.getClk(),
-                                                  op.getNameAttr(),
-                                                  op.getInnerSymAttr());
+            // Otherwise, replace the entire firreg with a new one, preserving
+            // the clock edge (the register here is reset- and preset-less).
+            rewriter.replaceOpWithNewOp<FirRegOp>(
+                op, newNextVal, op.getClk(), op.getNameAttr(),
+                op.getInnerSymAttr(), Attribute{}, op.getClockEdgeAttr());
           }
 
           return success();
