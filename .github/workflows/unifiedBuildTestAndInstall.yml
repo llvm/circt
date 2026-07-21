@@ -315,6 +315,7 @@ jobs:
           echo setup=./utils/find-vs.ps1 >> "$GITHUB_OUTPUT"
       - name: Python Bindings Setup (Generic)
         id: python-bindings-setup-generic
+        shell: bash
         run: |
           # Install Python dependencies needed for the MLIR/CIRCT Python
           # bindings (used by PyRTG and by the integration tests below).
