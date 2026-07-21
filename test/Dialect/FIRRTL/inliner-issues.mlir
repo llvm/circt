@@ -3,8 +3,9 @@
 // Regression tests for the FIRRTL ModuleInliner.
 //
 // Issue-paired circuits are reduced reproducers from GitHub issues, linked
-// above each circuit.  The remaining sections pin reduced crash and
-// miscompile shapes the issue reproducers do not reach.
+// above each circuit.
+// The remaining sections pin reduced crash and miscompile shapes the issue
+// reproducers do not reach.
 //
 // When a hierpath survives in several contexts, the first keeps the symbol
 // and later ones fork fresh names (@nla_0, @nla_1, ...).
@@ -15,7 +16,8 @@
 //
 // The issue's own reproducer.  @Bar0 (private+inline, root of the module-leaf
 // NLA @nla_3) is instantiated twice, so re-rooting must emit one context per site;
-// @Bar1's wire carries both.  Previously asserted "Module already renamed".
+// @Bar1's wire carries both.
+// Previously asserted "Module already renamed".
 // CHECK-LABEL:  "Inliner"
 firrtl.circuit "Inliner"  {
   // CHECK-NEXT:     hw.hierpath @nla_3 [@Inliner::@w_1, @Bar1]
@@ -79,9 +81,11 @@ firrtl.circuit "Unreachable" {
 //
 // The issue's own reproducer.  @Bar (private+inline, root of module-leaf NLA
 // @nla1) is instantiated once via @Foo and twice directly under the top; @Foo is
-// public so it is itself a live context.  Every instantiation site becomes a
-// distinct re-rooted context, all preserved on @Baz's wire.  Previously produced a
-// DictionaryAttr with duplicate keys (assert / n^2 broken annotations off).
+// public so it is itself a live context.
+// Every instantiation site becomes a distinct re-rooted context, all preserved
+// on @Baz's wire.
+// Previously produced a DictionaryAttr with duplicate keys (assert / n^2
+// broken annotations off).
 // CHECK-LABEL:  "CollidingSymbolsReTop"
 firrtl.circuit "CollidingSymbolsReTop" {
   // CHECK-NEXT:     hw.hierpath @nla1 [@Bar::@baz, @Baz]
@@ -112,7 +116,8 @@ firrtl.circuit "CollidingSymbolsReTop" {
 //
 // Diamond via a chain of inline modules: extmodule @D is the leaf of NLA @nla,
 // rooted at @B; both @B and @C are inline, and @B is instantiated twice under the
-// top.  Both surviving contexts must annotate @D, and the leaf annotation on the
+// top.
+// Both surviving contexts must annotate @D, and the leaf annotation on the
 // FExtModuleOp must be duplicated so each context's hierpath has a consumer.
 // Previously the hierpath retained only one instance; the other was left
 // unannotated.
@@ -145,7 +150,8 @@ firrtl.circuit "Test" {
 // Same diamond shape as #10588 but reached through an inline wrapper: @X (inline,
 // NLA root) sits under @Wrapper (also inline), instantiated twice under the top.
 // Previously crashed in MutableNLA::inlineModule ("unable to inline the root
-// module").  Both contexts must annotate extmodule @A.
+// module").
+// Both contexts must annotate extmodule @A.
 // CHECK-LABEL:  "Test2"
 firrtl.circuit "Test2" {
   // CHECK-NEXT:     hw.hierpath private @nla [@Test2::@a_0, @A]
@@ -174,7 +180,8 @@ firrtl.circuit "Test2" {
 //
 // Flatten from above the NLA root, active in only one path.  @B (NLA root's leaf
 // module) is reached by a flattened parent (@FlattenParent) and a plain parent
-// (@NonFlattenParent).  The annotation targets only the @FlattenParent context;
+// (@NonFlattenParent).
+// The annotation targets only the @FlattenParent context;
 // after flattening it must be local there and not leak onto @B (still live under
 // @NonFlattenParent) or onto the @NonFlattenParent path.
 // CHECK-LABEL:  "FlattenPartialLocalNLA"
@@ -209,10 +216,10 @@ firrtl.circuit "FlattenPartialLocalNLA" {
 // https://github.com/llvm/circt/issues/10608
 //
 // Flatten from above where the NLA root (@A) is instantiated multiple times under
-// a single flattened top (re-rooting + flatten combined).  Previously crashed in
-// setInnerSym ("Mutable NLA did not contain symbol").  @A's two paths (a, a2)
-// each localize the leaf annotation; @B's path (b) is not part of the NLA and
-// stays unannotated.
+// a single flattened top (re-rooting + flatten combined).
+// Previously crashed in setInnerSym ("Mutable NLA did not contain symbol").
+// @A's two paths (a, a2) each localize the leaf annotation; @B's path (b) is
+// not part of the NLA and stays unannotated.
 // CHECK-LABEL:  "FlattenNLA"
 firrtl.circuit "FlattenNLA" {
   // Retention keeps the collapsed path (both @A contexts localize the leaf).
@@ -245,9 +252,10 @@ firrtl.circuit "FlattenNLA" {
 // https://github.com/llvm/circt/issues/10678
 //
 // A module with both inline and flatten annotations (@Bar), NLA rooted at it and
-// targeting a child port.  Inline wins (the module disappears), the child
-// instance becomes a wire, and the port annotation must survive as a local
-// annotation on that wire.  Previously the annotation was dropped entirely.
+// targeting a child port.
+// Inline wins (the module disappears), the child instance becomes a wire, and
+// the port annotation must survive as a local annotation on that wire.
+// Previously the annotation was dropped entirely.
 // CHECK-LABEL:  "Top"
 firrtl.circuit "Top" {
   // Retention keeps the collapsed module-only path (annotation localizes).
@@ -283,7 +291,8 @@ firrtl.circuit "Top" {
 // persist and are inlined up the chain.  @nla (rooted at @Grandchild) must keep
 // a context for @Grandchild, @Child, and @Parent -- all three instantiation
 // contexts of @GreatGrandchild -- since making it local would be invalid for the
-// public modules.  Previously only one context was retained.
+// public modules.
+// Previously only one context was retained.
 // CHECK-LABEL:  "Parent"
 firrtl.circuit "Parent" {
   // CHECK-NEXT:     hw.hierpath private @nla [@Grandchild::@ggc_sym, @GreatGrandchild::@target]
@@ -313,7 +322,9 @@ firrtl.circuit "Parent" {
 // A module marked both inline and flatten (@Bar), reached through an already-
 // inlined ancestor (@Foo, inline) that is itself instantiated twice -- a diamond
 // above the dual-annotated module, with the NLA threading through a grandchild
-// port.  This is the one shape not otherwise covered.  Previously UNREACHABLE.
+// port.
+// This is the one shape not otherwise covered.
+// Previously UNREACHABLE.
 // Both top-level paths localize the leaf annotation.
 // CHECK-LABEL:  "Top10750"
 firrtl.circuit "Top10750" {
@@ -342,10 +353,12 @@ firrtl.circuit "Top10750" {
 
 //===----------------------------------------------------------------------===//
 // Re-rooting + inner-symbol-conflict characterization (diamond bug class,
-// #10588/#10589).  These are not 1:1 issue reproducers -- they are reduced
-// real-world crash shapes exercising the rename-on-conflict paths that the
-// clean-symbol issue reproducers above do not reach: an inlined leaf whose inner sym collides in the target module must
-// be renamed and every affected NLA context re-pointed at the new sym.
+// #10588/#10589).
+// These are not 1:1 issue reproducers -- they are reduced real-world crash
+// shapes exercising the rename-on-conflict paths that the clean-symbol issue
+// reproducers above do not reach: an inlined leaf whose inner sym collides in
+// the target module must be renamed and every affected NLA context re-pointed
+// at the new sym.
 //===----------------------------------------------------------------------===//
 
 // -----
@@ -373,9 +386,9 @@ firrtl.circuit "InlineRetopSymConflict" {
 
 // -----
 // Two-level inline chain (@Outer wraps @Inner, both inline) inlined into two
-// distinct non-inline parents, one with a sym conflict.  Each parent gets its
-// own reTop'd NLA pointing at its own (renamed or kept) leaf instance, and the
-// extmodule annotation references both.
+// distinct non-inline parents, one with a sym conflict.
+// Each parent gets its own re-rooted NLA pointing at its own (renamed or kept)
+// leaf instance, and the extmodule annotation references both.
 // CHECK-LABEL:  "InlineRetopNestedTwoParents"
 firrtl.circuit "InlineRetopNestedTwoParents" {
   // CHECK-NEXT:     hw.hierpath private @nla [@Root2::@sym, @Leaf]
@@ -411,9 +424,10 @@ firrtl.circuit "InlineRetopNestedTwoParents" {
 
 // -----
 // Port NLA on an inline module inlined into two non-inline parents, one with the
-// port sym already occupied.  Exercises port-to-wire lowering on the multi-context
-// path: the port wire is renamed in the conflicting context and
-// both wires carry the localized annotation once the NLA is fully inlined away.
+// port sym already occupied.
+// Exercises port-to-wire lowering on the multi-context path: the port wire is
+// renamed in the conflicting context and both wires carry the localized
+// annotation once the NLA is fully inlined away.
 // CHECK-LABEL:  "InlineRetopPortMultiParent"
 firrtl.circuit "InlineRetopPortMultiParent" {
   // Retention keeps the collapsed path (both port wires localize the anno).
@@ -450,10 +464,12 @@ firrtl.circuit "InlineRetopPortMultiParent" {
 
 // -----
 // Two non-inline parents route to the same inline @Qux through the same shared
-// inline @Wrapper.  The @Qux instance in @Wrapper's body accumulates a context
-// sym from each parent's inline pass -- exercising "last context sym wins"
-// disambiguation across separate inlineInstances calls.  One parent has a sym
-// conflict (leaf renamed @sym_0); both contexts survive on @Bar.
+// inline @Wrapper.
+// The @Qux instance in @Wrapper's body accumulates a context sym from each
+// parent's inline pass -- exercising "last context sym wins" disambiguation
+// across separate inlineInstances calls.
+// One parent has a sym conflict (leaf renamed @sym_0); both contexts survive on
+// @Bar.
 // CHECK-LABEL:  "SharedWrapperTwoParents"
 firrtl.circuit "SharedWrapperTwoParents" {
   // CHECK-NEXT:     hw.hierpath private @nla [@ParentNoConflict::@sym, @Bar]
@@ -488,10 +504,11 @@ firrtl.circuit "SharedWrapperTwoParents" {
 }
 
 //===----------------------------------------------------------------------===//
-// Context-enumeration shape tests.  The pass enumerates a superset of the
-// minimal set of contexts (the any-parent-flattens over-approximation); spurious
-// upper hops are trimmed back to the minimal root and trim-equal contexts
-// collapse onto one hierpath.  These lock the collapsed outputs.
+// Context-enumeration shape tests.
+// The pass enumerates a superset of the minimal set of contexts (the
+// any-parent-flattens over-approximation); spurious upper hops are trimmed back
+// to the minimal root and trim-equal contexts collapse onto one hierpath.
+// These lock the collapsed outputs.
 //===----------------------------------------------------------------------===//
 
 // -----
@@ -499,10 +516,11 @@ firrtl.circuit "SharedWrapperTwoParents" {
 // root's parent) is reached by a flattened parent (@P1, localizes) and a plain
 // parent (@P2, stays non-local).
 // @Mid's only surviving instantiation is via @P2 (@P1 flattens @Mid away), so
-// the @Mid-rooted context and the @P2-rooted reTop denote the same physical
-// path.  The non-evaporating @P2 prefix is trimmed back to @Mid and the two
-// trim-equal contexts collapse to a single hierpath (no doubled annotation, no
-// inner sym stamped on @P2's instance).
+// the @Mid-rooted context and the re-rooted @P2 context denote the same
+// physical path.
+// The non-evaporating @P2 prefix is trimmed back to @Mid and the two trim-equal
+// contexts collapse to a single hierpath (no doubled annotation, no inner sym
+// stamped on @P2's instance).
 // CHECK-LABEL:  "FlattenFromAbove"
 firrtl.circuit "FlattenFromAbove" {
   // CHECK-NEXT:     hw.hierpath private @[[NLA:[a-zA-Z0-9_]+]] [@Mid::@ci, @Child::@w]
@@ -538,12 +556,14 @@ firrtl.circuit "FlattenFromAbove" {
 }
 
 // -----
-// A transit path (@nla1, already rooted at the top) and a reTop'd context path
+// A transit path (@nla1, already rooted at the top) and a re-rooted context
 // (@nla2, rooted at inline @Y) that converge to the same namepath once @Y is
-// inlined.  Both annotations are distinct (test1/test2) so both must survive;
+// inlined.
+// Both annotations are distinct (test1/test2) so both must survive;
 // Under retention both survive as their own primaries -- primaries never merge
 // (either may have external references) -- so each annotation stays on its own
-// symbol.  IMDCE/Dedup may collapse the redundant pair later.
+// symbol.
+// IMDCE/Dedup may collapse the redundant pair later.
 // CHECK-LABEL:  "TransitAndContextSameRef"
 firrtl.circuit "TransitAndContextSameRef" {
   // CHECK:          hw.hierpath private @nla1 [@TransitAndContextSameRef::@leaf_sym, @Leaf]
@@ -567,10 +587,11 @@ firrtl.circuit "TransitAndContextSameRef" {
 }
 
 //===----------------------------------------------------------------------===//
-// Per-field inner symbols as NLA leaves.  An NLA whose leaf names a per-field
-// inner symbol (fieldID != 0 on an aggregate) must have that leaf sym updated
-// when inlining renames it, resolving the leaf by field ID (#5776).  These
-// pin the per-field leaf path for both wires and ports.
+// Per-field inner symbols as NLA leaves.
+// An NLA whose leaf names a per-field inner symbol (fieldID != 0 on an
+// aggregate) must have that leaf sym updated when inlining renames it,
+// resolving the leaf by field ID (#5776).
+// These pin the per-field leaf path for both wires and ports.
 //===----------------------------------------------------------------------===//
 
 // -----
@@ -599,9 +620,9 @@ firrtl.circuit "PerFieldPort" {
 }
 
 // -----
-// Per-field port sym as NLA leaf carried through reTop: @Child (NLA leaf owner)
-// is reached via inline @Mid instantiated twice, so the leaf stays non-local and
-// the per-field leaf sym @pf must be preserved in both reTop'd contexts.
+// Per-field port sym as NLA leaf carried through re-rooting: @Child (NLA leaf
+// owner) is reached via inline @Mid instantiated twice, so the leaf stays
+// non-local and the per-field leaf sym @pf is preserved in both contexts.
 // CHECK-LABEL:  "PerFieldPortRetop"
 firrtl.circuit "PerFieldPortRetop" {
   // CHECK-NEXT:     hw.hierpath private @nla [@PerFieldPortRetop::@i_0, @Child::@pf]
@@ -627,19 +648,21 @@ firrtl.circuit "PerFieldPortRetop" {
 }
 
 //===----------------------------------------------------------------------===//
-// Determinism / multi-root.  Writeback must emit HierPathOps -- and stamp
-// disambiguated inner-symbol suffixes -- in a run-to-run stable order (iterate
-// creation order, not DenseMap hash order).  This circuit has
-// four source NLAs across three distinct roots, three of which reTop into
-// multiple contexts, so a nondeterministic writeback would reorder the emitted
-// hierpaths and/or shuffle the @_N suffixes.  The full CHECK-NEXT chains below
-// pin both orders.
+// Determinism / multi-root.
+// Writeback must emit HierPathOps -- and stamp disambiguated inner-symbol
+// suffixes -- in a run-to-run stable order (iterate creation order, not DenseMap
+// hash order).
+// This circuit has four source NLAs across three distinct roots, three of which
+// re-root into multiple contexts, so a nondeterministic writeback would
+// reorder the emitted hierpaths and/or shuffle the @_N suffixes.
+// The full CHECK-NEXT chains below pin both orders.
 //===----------------------------------------------------------------------===//
 
 // -----
 // @nlaA/@nlaB are rooted at inline @Mid (instantiated 3x) -> three contexts each;
 // @nlaD is rooted at inline @Mid2 (instantiated 2x) -> two contexts; @nlaT is a
-// plain transit NLA -> one context.  Nine hierpaths total, order fully pinned.
+// plain transit NLA -> one context.
+// Nine hierpaths total, order fully pinned.
 // CHECK-LABEL:  "MultiRootDeterminism"
 firrtl.circuit "MultiRootDeterminism" {
   // CHECK-NEXT:     hw.hierpath private @nlaA [@MultiRootDeterminism::@a_1, @A::@w]
@@ -680,7 +703,7 @@ firrtl.circuit "MultiRootDeterminism" {
   firrtl.module private @Mid2() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
     firrtl.instance d sym @d @D()
   }
-  // Inner-sym suffixes on the reTop'd instances are pinned too.
+  // Inner-sym suffixes on the re-rooted instances are pinned too.
   // CHECK:          firrtl.module @MultiRootDeterminism
   // CHECK-NEXT:       firrtl.instance m1_a sym @a @A()
   // CHECK-NEXT:       firrtl.instance m1_b sym @b @B()

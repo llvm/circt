@@ -176,8 +176,8 @@ firrtl.module private @leaf() {
 // CHECK-NOT: annotation
 // CHECK-NOT: @leaf
 
-// This is testing that connects are properly replaced when inlining. This is
-// also testing that the deep clone and remapping values is working correctly.
+// This is testing that connects are properly replaced when inlining.
+// This is also testing that deep-cloning and value remapping work correctly.
 firrtl.circuit "TestConnections" {
 firrtl.module @InlineMe0(in %in0: !firrtl.uint<4>, in %in1: !firrtl.uint<4>,
                          out %out0: !firrtl.uint<4>, out %out1: !firrtl.uint<4>)
@@ -289,7 +289,8 @@ sv.verbatim "hello"
 }
 
 // Test NLA handling during inlining for situations involving NLAs where the NLA
-// begins at the main module.  There are four behaviors being tested:
+// begins at the main module.
+// There are four behaviors being tested:
 //
 //   1) @nla1: Targeting a module should be updated
 //   2) @nla2: Targeting a component should be updated
@@ -336,9 +337,9 @@ firrtl.circuit "NLAInlining" {
   }
 }
 
-// Test NLA handling during inlining for situations where the NLA does NOT start
-// at the root.  This checks that the NLA, on either a component or a port, is
-// properly copied for each new instantiation.
+// Test NLA handling during inlining where the NLA does NOT start at the root.
+// This checks that the NLA, on either a component or a port, is properly copied
+// for each new instantiation.
 //
 // CHECK-LABEL: firrtl.circuit "NLAInliningNotMainRoot"
 firrtl.circuit "NLAInliningNotMainRoot" {
@@ -374,8 +375,8 @@ firrtl.circuit "NLAInliningNotMainRoot" {
 }
 
 // Test NLA handling during flattening for situations where the root of an NLA
-// is the flattened module or an ancestor of the flattened module.  This is
-// testing the following conditions:
+// is the flattened module or an ancestor of the flattened module.
+// This is testing the following conditions:
 //
 //   1) @nla1: Targeting a reference should be updated.
 //   2) @nla1: Targeting a port should be updated.
@@ -429,8 +430,8 @@ firrtl.circuit "NLAFlattening" {
 //
 // CHECK-LABEL: firrtl.circuit "NLAFlatteningChildRoot"
 firrtl.circuit "NLAFlatteningChildRoot" {
-  // @Baz's only surviving instance is under the top; the @Foo copy flattens
-  // away.  The top-rooted contexts are therefore trim-equal with the @Baz-rooted
+  // @Baz's only surviving instance is under the top; @Foo flattens away.
+  // The top-rooted contexts are therefore trim-equal with the @Baz-rooted
   // @nla3/@nla4 and collapse into them -- one hierpath each, one annotation
   // each.
   // @nla1/@nla2 localize into the flattened @Foo copy; retention keeps them as
@@ -569,8 +570,9 @@ firrtl.circuit "CollidingSymbolsReTop" {
 }
 
 // Test that when inlining two instances of a module and the port names collide,
-// that the NLA is properly updated.  Specifically in this test case, the second
-// instance inlined should be renamed, and it should *not* update the NLA.
+// that the NLA is properly updated.
+// Specifically in this test case, the second instance inlined should be
+// renamed, and it should *not* update the NLA.
 // CHECK-LABEL: firrtl.circuit "CollidingSymbolsNLAFixup"
 firrtl.circuit "CollidingSymbolsNLAFixup" {
   // CHECK: hw.hierpath private @nla0 [@Foo::@bar, @Bar::@io]
@@ -648,8 +650,9 @@ firrtl.module @AnnotationSplit0() {
 }
 
 // Test that when an operation is inlined into two locations and an annotation
-// on it should only be copied to a specific clone. This differs from the test
-// above in that the annotation does not become a regular local annotation.
+// on it should only be copied to a specific clone.
+// This differs from the test above in that the annotation does not become a
+// regular local annotation.
 // CHECK-LABEL: firrtl.circuit "AnnotationSplit1"
 firrtl.circuit "AnnotationSplit1" {
 hw.hierpath private @nla_5560 [@AnnotationSplit1::@bar0, @Bar0::@leaf, @Leaf::@w]
@@ -1222,7 +1225,8 @@ firrtl.circuit "InlinerRefs" {
 // -----
 // Issue #5941.
 
-// Test for U-Turn in property ports. The inlined module propassign's and uses the property.
+// Test for U-Turn in property ports.
+// The inlined module propassign's and uses the property.
 // CHECK-LABEL: firrtl.circuit "PropertyUTurn"
 firrtl.circuit "PropertyUTurn" {
   // CHECK: module @PropertyUTurn

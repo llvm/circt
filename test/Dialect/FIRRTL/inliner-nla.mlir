@@ -7,8 +7,9 @@
 // -----
 //===--- Annotation retargeting
 //
-// Annotations must be rewritten against each context's final namepath, exactly
-// once. These pin bugs in that contract:
+// Annotations are rewritten against each context's final namepath, exactly
+// once.
+// These pin bugs in that contract:
 //  * an annotation cloned mid-walk is already final and carries a
 //    planner-minted symbol; the final writeback sweep must recognize it and
 //    pass it through, not drop it as a dangling reference.
@@ -26,9 +27,10 @@
 //===----------------------------------------------------------------------===//
 // @B's wire @w is inlined into @A, colliding with @A's own @w and renamed
 // @w_0 -- so @nla1 finalizes to [.., @A::@w_0]. @nla2 legitimately owns
-// [.., @A::@w] (A's own wire). If the merge keyed on @nla1's pre-rename path
-// it would fuse them and point @nla2's annotation at the wrong wire; they must
-// stay two distinct hierpaths with their annotations on the right wires.
+// [.., @A::@w] (A's own wire).
+// If the merge keyed on @nla1's pre-rename path it would fuse them and point
+// @nla2's annotation at the wrong wire; they must stay two distinct hierpaths
+// with their annotations on the right wires.
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "LeafSymCollision"
 firrtl.circuit "LeafSymCollision" {
@@ -62,8 +64,9 @@ firrtl.circuit "LeafSymCollision" {
 //===----------------------------------------------------------------------===//
 // A collision-renamed port that is a context's leaf must update the surviving
 // hierpath even when the port itself carries no annotations (the path is kept
-// alive by an annotation on another op). The emitted path must name the
-// renamed port wire @p_0, not @A's unrelated pre-existing @p.
+// alive by an annotation on another op).
+// The emitted path must name the renamed port wire @p_0, not @A's unrelated
+// pre-existing @p.
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "PortLeafCollision"
 firrtl.circuit "PortLeafCollision" {
@@ -91,8 +94,8 @@ firrtl.circuit "PortLeafCollision" {
 //===----------------------------------------------------------------------===//
 // @R (inline) is reached from two live parents, so @nla forks into two
 // fresh-named contexts. @L (inline) collapses into surviving @D, so the wire's
-// annotation is rewritten during the walk to the forked symbols. The final
-// sweep re-visits that wire and must keep both rewritten annotations.
+// annotation is rewritten during the walk to the forked symbols.
+// The final sweep re-visits that wire and must keep both rewritten annotations.
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "ForkedThenCollapsed"
 firrtl.circuit "ForkedThenCollapsed" {
@@ -131,9 +134,9 @@ firrtl.circuit "ForkedThenCollapsed" {
 
 //===----------------------------------------------------------------------===//
 // @M is public (retained) and inline (copied into its parent), so the wire in
-// inline @L lands twice: once in @M's retained body, once in the parent. Both
-// contexts route through the same original instance @l, but each copy must get
-// its localized annotation exactly once -- the parent-copy context must not
+// inline @L lands twice: once in @M's retained body, once in the parent.
+// Both contexts route through the same original instance @l, but each copy must
+// get its localized annotation exactly once -- the parent-copy context must not
 // also be written while @M's own body is processed.
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "RetainedBodyOwnership"
@@ -165,17 +168,21 @@ firrtl.circuit "RetainedBodyOwnership" {
 //===--- Convergent forks: merging
 //
 // Late convergence: two hierpaths sourced from different roots can realize to a
-// byte-identical namepath once inlining relocates their shared leaf. A hierpath
-// is defined solely by its namepath, so the inliner materializes just one and
-// retargets every converging annotation at it.
+// byte-identical namepath once inlining relocates their shared leaf.
+// A hierpath is defined solely by its namepath, so the inliner materializes
+// just one and retargets every converging annotation at it.
 //
 // @nla1 is a transit path already rooted at the top; @nla2 is a context rooted
-// at the inline module @Y. Once @Y is inlined, both namepaths converge to
-// [@LateConvergeMerge::@leaf_sym, @Leaf] -- identical. Retention keeps both:
+// at the inline module @Y.
+// Once @Y is inlined, both namepaths converge to
+// [@LateConvergeMerge::@leaf_sym, @Leaf] -- identical.
+// Retention keeps both:
 // they are distinct source symbols (primaries), and primaries never merge --
 // either may be referenced from outside the pass's view, so collapsing one
-// would orphan that reference. Each annotation stays on its own symbol. The
-// redundant pair is IMDCE/Dedup's to collapse later, with full user accounting.
+// would orphan that reference.
+// Each annotation stays on its own symbol.
+// The redundant pair is IMDCE/Dedup's to collapse later, with full user
+// accounting.
 // CHECK-LABEL:  firrtl.circuit "LateConvergeMerge"
 firrtl.circuit "LateConvergeMerge" {
   // CHECK:          hw.hierpath private @nla1 [@LateConvergeMerge::@leaf_sym, @Leaf]
@@ -199,11 +206,13 @@ firrtl.circuit "LateConvergeMerge" {
 // -----
 
 // @nla1 (the transit path) carries NO annotation; only @nla2 (rooted at inline
-// @Y) does. After @Y inlines, both converge to
-// [@ConvergeDupKeepsAlive::@leaf_sym, @Leaf]. Under retention both survive as
-// their own primaries: no cross-source-symbol merge, so @nla2 keeps test2 on its own
-// symbol and @nla1 is a retained orphan (no annotation names it). IMDCE/Dedup
-// may collapse the redundant pair later.
+// @Y) does.
+// After @Y inlines, both converge to
+// [@ConvergeDupKeepsAlive::@leaf_sym, @Leaf].
+// Under retention both survive as their own primaries: no cross-source-symbol
+// merge, so @nla2 keeps test2 on its own symbol and @nla1 is a retained orphan
+// (no annotation names it).
+// IMDCE/Dedup may collapse the redundant pair later.
 // CHECK-LABEL:  firrtl.circuit "ConvergeDupKeepsAlive"
 firrtl.circuit "ConvergeDupKeepsAlive" {
   // CHECK:          hw.hierpath private @nla1 [@ConvergeDupKeepsAlive::@leaf_sym, @Leaf]
@@ -227,23 +236,24 @@ firrtl.circuit "ConvergeDupKeepsAlive" {
 //===--- Convergent forks: kept distinct
 //
 // Canonicalization merges hierpaths that realize to the same namepath (see
-// inliner-converge-merge.mlir). These guard the other direction: contexts that
-// look identical up to their surviving hops but denote different physical
-// paths must stay distinct. The discriminator is the resolved namepath, which
-// only exists after the walk assigns each relocated instance its final sym --
-// so the merge keys on that, never on the pre-inlining hop identity.
+// inliner-converge-merge.mlir).
+// These guard the other direction: contexts that look identical up to their
+// surviving hops but denote different physical paths must stay distinct.
+// The discriminator is the resolved namepath, which only exists after the walk
+// assigns each relocated instance its final sym -- so the merge keys on that,
+// never on the pre-inlining hop identity.
 
 // -----
 
 //===----------------------------------------------------------------------===//
 // Same inline module instantiated twice in one parent. @M is inlined into @Two
 // via both @m1 and @m2, so the leaf instance @i lands in @Two twice with two
-// distinct collision-resolved syms. The two contexts share the same source
-// hop (@M::@i) and the same destination (@Two), differing only in the
-// evaporated @m1/@m2 hop -- so a key over surviving hops (final instances
-// still unresolved) would wrongly fuse them and point one annotation at the
-// wrong instance. They must remain two
-// hierpaths, one per instance.
+// distinct collision-resolved syms.
+// The two contexts share the same source hop (@M::@i) and the same destination
+// (@Two), differing only in the evaporated @m1/@m2 hop -- so a key over
+// surviving hops (final instances still unresolved) would wrongly fuse them and
+// point one annotation at the wrong instance.
+// They must remain two hierpaths, one per instance.
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "TwoInst"
 firrtl.circuit "TwoInst" {
@@ -271,9 +281,10 @@ firrtl.circuit "TwoInst" {
 //===----------------------------------------------------------------------===//
 // AnnotationSplit: an NLA rooted at inline @Mid, reached through two distinct
 // live parents @A and @B. @Mid evaporates upward into each, splitting the path
-// into two different-rooted namepaths ([@A::...] and [@B::...]). Both target the
-// one shared @Leaf op via distinct hierarchies, so both must survive -- this is
-// required, not redundant, and the differing root keeps them from merging.
+// into two different-rooted namepaths ([@A::...] and [@B::...]).
+// Both target the one shared @Leaf op via distinct hierarchies, so both must
+// survive -- this is required, not redundant, and the differing root keeps them
+// from merging.
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "AnnoSplit"
 firrtl.circuit "AnnoSplit" {
@@ -357,10 +368,10 @@ firrtl.circuit "FlattenExtTerminalDup" {
 // -----
 //===--- Flatten: extmodule liveness
 //
-// @M carries a FlattenAnnotation and instantiates the extmodule @Leaf.  Flatten
-// dissolves @M's regular-module subtree but must stop at @Leaf (extmodules are
-// blackboxes -- there is nothing to inline), keeping the instance in place and
-// marking @Leaf live.
+// @M carries a FlattenAnnotation and instantiates the extmodule @Leaf.
+// Flatten dissolves @M's regular-module subtree but must stop at @Leaf
+// (extmodules are blackboxes -- there is nothing to inline), keeping the
+// instance in place and marking @Leaf live.
 firrtl.circuit "Top" {
   // CHECK-LABEL:  firrtl.circuit "Top"
   // CHECK:          firrtl.extmodule private @Leaf()
@@ -381,12 +392,13 @@ firrtl.circuit "Top" {
 // -----
 //===--- Inline/flatten combinations
 //
-// A module carrying both inline and flatten annotations. The two compose: the
-// module is inlined into its parent (inline), and its whole subtree is absorbed
-// as it goes (flatten). @M is inline+flatten, so @M -- and everything below it
-// (@A, @B) -- collapses into @Top. This differs from either alone: pure inline
-// would leave @A/@B as instances in @Top; pure flatten would keep @M as a
-// module with its subtree absorbed into it.
+// A module carrying both inline and flatten annotations.
+// The two compose: the module is inlined into its parent (inline), and its
+// whole subtree is absorbed as it goes (flatten). @M is inline+flatten, so
+// @M -- and everything below it (@A, @B) -- collapses into @Top.
+// This differs from either alone: pure inline would leave @A/@B as instances in
+// @Top; pure flatten would keep @M as a module with its subtree absorbed into
+// it.
 
 // CHECK-LABEL:  firrtl.circuit "InlineFlattenCombo"
 firrtl.circuit "InlineFlattenCombo" {
@@ -499,8 +511,7 @@ firrtl.circuit "ChoiceHopUntouched" {
 // -----
 
 // A hierpath through a choice whose leaf is the inline-marked default target:
-// retention keeps the path valid verbatim and the annotation on the retained
-// wire.
+// retention keeps the path verbatim and the annotation on the retained wire.
 // CHECK-LABEL:  firrtl.circuit "ChoiceHopInlineTarget"
 firrtl.circuit "ChoiceHopInlineTarget" {
   firrtl.option @Opt {
@@ -527,8 +538,7 @@ firrtl.circuit "ChoiceHopInlineTarget" {
 
 // The module holding the choice hop is itself inlined: the choice op
 // relocates into the parent and the hop is retargeted with it -- an
-// instance_choice instantiation is never absorbed, so the hop never
-// evaporates.
+// instance_choice is never absorbed, so the hop never evaporates.
 // CHECK-LABEL:  firrtl.circuit "ChoiceHopParentInlined"
 firrtl.circuit "ChoiceHopParentInlined" {
   firrtl.option @Opt {
@@ -558,8 +568,9 @@ firrtl.circuit "ChoiceHopParentInlined" {
 // A hierpath rooted at an inline module that a choice keeps alive: the
 // retained definition keeps the original path (it covers the choice
 // instantiation, which still references it), and each plain-instance copy
-// forks its own context.  No context is enumerated "through" the choice --
-// that instantiation is never absorbed.
+// forks its own context.
+// No context is enumerated "through" the choice; that instantiation is never
+// absorbed.
 // CHECK-LABEL:  firrtl.circuit "ChoiceRootRetained"
 firrtl.circuit "ChoiceRootRetained" {
   firrtl.option @Opt {
@@ -619,9 +630,9 @@ firrtl.circuit "FlattenChoiceHopRetained" {
 // -----
 
 // Same, one level deeper and with the flatten module also inlined: the path
-// crosses a choice, a retained subtree, and a second choice.  The relocated
-// namepath stays a valid instance path (a bare module symbol in a non-leaf
-// position fails the hierpath verifier).
+// crosses a choice, a retained subtree, and a second choice.
+// The relocated namepath stays a valid instance path (a bare module symbol in a
+// non-leaf position fails the hierpath verifier).
 // CHECK-LABEL:  firrtl.circuit "FlattenInlineChoiceDeep"
 firrtl.circuit "FlattenInlineChoiceDeep" {
   firrtl.option @Opt { firrtl.option_case @A }
@@ -652,8 +663,7 @@ firrtl.circuit "FlattenInlineChoiceDeep" {
 // `circt.nonlocal` users inside the per-port annotations of memories (and
 // instances) are annotation users like any other: an untouched hierpath they
 // reference must survive, and one that localizes must be rewritten in place.
-// The hazard is erasing such a hierpath as unused while the port annotation
-// still names it.
+// The hazard: erasing the hierpath as unused while a port annotation names it.
 
 // -----
 
@@ -736,20 +746,22 @@ firrtl.circuit "PublicFork" {
 // -----
 //===--- Trimming: equal-path collapse
 //
-// Regression target for prefix-trimming / trim-equal collapse.  Asserts the
-// minimal output.
+// Regression target for prefix-trimming / trim-equal collapse.
+// Asserts the minimal output.
 //
 // The companion `FlattenFromAbove` in inliner-issues.mlir exercises the same
 // shape in the issue suite; both now collapse to a single hierpath.
 //
 // @Mid (the NLA root's parent) is reached by a flattening parent @P1 (localizes)
-// and a plain parent @P2 (stays non-local).  Because @P1 flattens @Mid away,
+// and a plain parent @P2 (stays non-local).
+// Because @P1 flattens @Mid away,
 // @Mid's only surviving instantiation is via @P2, so the @Mid-rooted context and
-// the re-rooted @P2 context denote the same physical path.  Today the pass
-// emits both (the any-parent-flattens over-approximation); trimming removes the
-// non-evaporating @P2 prefix back to the original root @Mid, dedups the two
-// trim-equal contexts into one, reuses the original sym (group stays size 1),
-// and never stamps the now-unneeded @sym on @P2's instance.
+// the re-rooted @P2 context denote the same physical path.
+// Today the pass emits both (the any-parent-flattens over-approximation);
+// trimming removes the non-evaporating @P2 prefix back to the original root
+// @Mid, dedups the two trim-equal contexts into one, reuses the original sym
+// (group stays size 1), and never stamps the now-unneeded @sym on @P2's
+// instance.
 //
 // Minimal target:
 //   - exactly one hierpath, rooted at @Mid (source-symbol reuse);
@@ -792,20 +804,22 @@ firrtl.circuit "TrimEqualCollapse" {
 //===--- Trimming: root boundaries
 //
 // The inliner traces an NLA's root upward through instantiation contexts, then
-// trims leading upper hops that don't actually evaporate under inlining. The
-// trim boundary must consult the root module's own fate -- not just the upper
-// hops -- because the trace may have been triggered by a context-insensitive
+// trims leading upper hops that don't actually evaporate under inlining.
+// The trim boundary must consult the root module's own fate -- not just the
+// upper hops -- because the trace may have been triggered by a
+// context-insensitive
 // "is-flattened-somewhere" over-approximation that doesn't hold on the concrete
-// path in question. These two circuits pin both sides of that boundary.
+// path in question.
+// These two circuits pin both sides of that boundary.
 
 //===----------------------------------------------------------------------===//
 // (1) The root survives on a concrete non-flattening path: trim back to it.
 //
 // @R is reached by a flattening parent @F (where it evaporates -> local) and by
-// a plain two-level chain @Keep -> @Mid2 -> @R (where it survives). On the
-// surviving path the trace above @R was spurious, so the whole [@Keep, @Mid2]
-// prefix trims back to @R: one hierpath rooted at @R, a single local annotation
-// in @F, and no inner syms stamped on the trimmed-through instances.
+// a plain two-level chain @Keep -> @Mid2 -> @R (where it survives).
+// On the surviving path the trace above @R was spurious, so the whole [@Keep,
+// @Mid2] prefix trims back to @R: one hierpath rooted at @R, a single local
+// annotation in @F, and no inner syms stamped on the trimmed-through instances.
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "RootSurvives"
 firrtl.circuit "RootSurvives" {
@@ -851,9 +865,11 @@ firrtl.circuit "RootSurvives" {
 // (2) The root itself is inline: do not trim to it -- it is deleted.
 //
 // @R is the NLA root and carries an InlineAnnotation, so it evaporates into its
-// parent @Keep. The trace above @R was founded (@R really is gone), so the trim
-// must stop at @Keep and re-root the path there. Rooting at @R would leave a
-// hierpath naming a module that inlining removed -> invalid IR.
+// parent @Keep.
+// The trace above @R was founded (@R really is gone), so the trim must stop at
+// @Keep and re-root the path there.
+// Rooting at @R would leave a hierpath naming a module that inlining removed ->
+// invalid IR.
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "InlineRootNotTrimmed"
 firrtl.circuit "InlineRootNotTrimmed" {
@@ -883,22 +899,25 @@ firrtl.circuit "InlineRootNotTrimmed" {
 //===--- Trimming: through inline modules
 //
 // Trimming an NLA's spurious upper prefix must pass through inline modules but
-// stop at flatten modules -- they evaporate differently. Flatten localizes a
-// subtree into the flattening module (nothing below survives to root at);
+// stop at flatten modules -- they evaporate differently.
+// Flatten localizes a subtree into the flattening module (nothing below
+// survives to root at);
 // inline merely relocates a body up into its parent (everything below keeps its
-// identity and survives, just re-parented). So an inline module on the upper
-// path is transparent to the trim, while a flatten pins the root.
+// identity and survives, just re-parented).
+// So an inline module on the upper path is transparent to the trim, while a
+// flatten pins the root.
 
 // -----
 
 //===----------------------------------------------------------------------===//
 // Inline module between the root and solid ground: trim through it.
 //
-// @P (and so @R) are conservatively treated as flattened via @Flat. On the concrete
-// path @S -> @I -> @P -> @R, @I is inline (relocates @P up into @S) and nothing
-// flattens @R, so @R survives and is the minimal root. The @S-rooted context the
-// trace produces must collapse into the single @R-rooted path -- one hierpath,
-// one annotation on the leaf -- not linger as a redundant longer path.
+// @P (and so @R) are conservatively treated as flattened via @Flat.
+// On the concrete path @S -> @I -> @P -> @R, @I is inline (relocates @P up into
+// @S) and nothing flattens @R, so @R survives and is the minimal root.
+// The @S-rooted context the trace produces must collapse into the single
+// @R-rooted path -- one hierpath, one annotation on the leaf -- not linger as a
+// redundant longer path.
 //===----------------------------------------------------------------------===//
 // CHECK-LABEL:  firrtl.circuit "InlineOnUpperPath"
 firrtl.circuit "InlineOnUpperPath" {
@@ -1033,8 +1052,9 @@ firrtl.circuit "ModuleOnlyGCUntouched" {
 
 // A hierpath rooted in a module that is dead-erased is itself erased: the dead
 // root is never live, so traceUpUntilSurviving discovers no context, the source
-// path has no surviving target, and the writeback removes it (num-hierpaths-
-// erased). Pins the one remaining erase path.
+// path has no surviving target, and the writeback removes it
+// (num-hierpaths-erased).
+// Pins the one remaining erase path.
 // CHECK-LABEL:  firrtl.circuit "DeadRootedHierPath"
 firrtl.circuit "DeadRootedHierPath" {
   // CHECK-NOT:      hw.hierpath
