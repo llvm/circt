@@ -9,7 +9,8 @@ from .module import (generator, modparams, Module, ModuleLikeBuilderBase,
                      PortProxyBase)
 from .signals import (BitsSignal, BundleSignal, ChannelSignal, ClockSignal,
                       Signal, _FromCirctValue, UIntSignal)
-from .support import clog2, optional_dict_to_dict_attr, get_user_loc
+from .support import (clog2, optional_dict_to_optional_dict_attr, get_user_loc,
+                      optional_dict_to_dict_attr)
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
                     ChannelDirection, ChannelSignaling, StructType, Type,
@@ -17,6 +18,7 @@ from .types import (Any, Bits, Bundle, BundledChannel, Channel,
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
+from .circt.support import attribute_to_var
 
 import inspect
 from pathlib import Path
@@ -40,40 +42,6 @@ PortValidSuffix = "esi.portValidSuffix"
 PortReadySuffix = "esi.portReadySuffix"
 PortRdenSuffix = "esi.portRdenSuffix"
 PortEmptySuffix = "esi.portEmptySuffix"
-
-
-def _options_to_dict_attr(
-    options: Optional[Dict[str, object]]) -> Optional[ir.DictAttr]:
-  """Convert a service-request 'options' dict to an ir.DictAttr, or return
-  None if there are no options. Returning None keeps the underlying op's
-  OptionalAttr<DictionaryAttr> unset so no `opts { ... }` clause is
-  emitted in the IR."""
-  if options is None or len(options) == 0:
-    return None
-  return optional_dict_to_dict_attr(options)
-
-
-def _attr_to_pyobj(attr: ir.Attribute) -> object:
-  """Best-effort inverse of `_obj_to_attribute` for the common attribute
-  kinds emitted by `optional_dict_to_dict_attr`. Falls back to returning
-  the raw attribute when the kind isn't recognized."""
-  if isinstance(attr, ir.StringAttr):
-    return attr.value
-  if isinstance(attr, ir.BoolAttr):
-    return attr.value
-  if isinstance(attr, ir.IntegerAttr):
-    return attr.value
-  if isinstance(attr, ir.ArrayAttr):
-    return [_attr_to_pyobj(a) for a in attr]
-  if isinstance(attr, ir.DictAttr):
-    return _dict_attr_to_dict(attr)
-  return attr
-
-
-def _dict_attr_to_dict(attr: ir.DictAttr) -> Dict[str, object]:
-  """Convert an ir.DictAttr to a plain dict, downcasting each value with
-  `_attr_to_pyobj`."""
-  return {attr[i].name: _attr_to_pyobj(attr[i].attr) for i in range(len(attr))}
 
 
 class ServiceDecl(_PyProxy):
@@ -170,11 +138,12 @@ class _RequestConnection:
       type = self.type
     self.decl._materialize_service_decl()
     return _FromCirctValue(
-        raw_esi.RequestConnectionOp(type._type,
-                                    self.service_port,
-                                    appid._appid,
-                                    options=_options_to_dict_attr(options),
-                                    loc=get_user_loc()).toClient)
+        raw_esi.RequestConnectionOp(
+            type._type,
+            self.service_port,
+            appid._appid,
+            options=optional_dict_to_optional_dict_attr(options),
+            loc=get_user_loc()).toClient)
 
 
 def Cosim(decl: ServiceDecl, clk, rst):
@@ -225,12 +194,10 @@ class _OutputBundleSetter(AssignableSignal):
     """Return the request-specific options set at the `esi.service.req` /
     `esi.service.req(..., options=...)` call site, as a plain dict. Returns
     an empty dict when no options were set. Service-implementation generators
-    can inspect these options to influence how the request is fulfilled (e.g.
-    forwarding them into the manifest client record via `add_record(details=...)`).
-    """
+    can inspect these options to influence how the request is fulfilled."""
     if "options" not in self.req.attributes:
       return {}
-    return _dict_attr_to_dict(ir.DictAttr(self.req.attributes["options"]))
+    return attribute_to_var(ir.DictAttr(self.req.attributes["options"]))
 
   def add_record(self,
                  channel_assignments: Optional[Dict] = None,
@@ -757,13 +724,12 @@ class _HostMem(ServiceDecl):
     return cast(
         BundleSignal,
         _FromCirctValue(
-            raw_esi.RequestConnectionOp(write_bundle_type._type,
-                                        hw.InnerRefAttr.get(
-                                            self.symbol,
-                                            ir.StringAttr.get("write")),
-                                        appid._appid,
-                                        options=_options_to_dict_attr(options),
-                                        loc=get_user_loc()).toClient))
+            raw_esi.RequestConnectionOp(
+                write_bundle_type._type,
+                hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("write")),
+                appid._appid,
+                options=optional_dict_to_optional_dict_attr(options),
+                loc=get_user_loc()).toClient))
 
   def read_bundle_type(self, resp_type: Type) -> Bundle:
     """Build a read bundle type for the given data type."""
@@ -786,13 +752,12 @@ class _HostMem(ServiceDecl):
     return cast(
         BundleSignal,
         _FromCirctValue(
-            raw_esi.RequestConnectionOp(read_bundle_type._type,
-                                        hw.InnerRefAttr.get(
-                                            self.symbol,
-                                            ir.StringAttr.get("read")),
-                                        appid._appid,
-                                        options=_options_to_dict_attr(options),
-                                        loc=get_user_loc()).toClient))
+            raw_esi.RequestConnectionOp(
+                read_bundle_type._type,
+                hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("read")),
+                appid._appid,
+                options=optional_dict_to_optional_dict_attr(options),
+                loc=get_user_loc()).toClient))
 
   def read(self,
            appid: AppID,
@@ -834,7 +799,7 @@ class _ChannelService(ServiceDecl):
         bundle_type._type,
         hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("from_host")),
         name._appid,
-        options=_options_to_dict_attr(options),
+        options=optional_dict_to_optional_dict_attr(options),
         loc=get_user_loc())
     from_host = _FromCirctValue(from_host.toClient)
     assert isinstance(from_host, BundleSignal)
@@ -851,7 +816,7 @@ class _ChannelService(ServiceDecl):
         bundle_type._type,
         hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("to_host")),
         name._appid,
-        options=_options_to_dict_attr(options),
+        options=optional_dict_to_optional_dict_attr(options),
         loc=get_user_loc())
     to_host = _FromCirctValue(to_host.toClient)
     assert isinstance(to_host, BundleSignal)
@@ -934,7 +899,7 @@ class _FuncService(ServiceDecl):
         bundle._type,
         hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
         name._appid,
-        options=_options_to_dict_attr(options),
+        options=optional_dict_to_optional_dict_attr(options),
         loc=get_user_loc())
     to_funcs = _FromCirctValue(func_call.toClient).unpack(result=result)
     return to_funcs['arg']
@@ -977,12 +942,12 @@ class _CallService(ServiceDecl):
     self._materialize_service_decl()
 
     func_call = _FromCirctValue(
-        raw_esi.RequestConnectionOp(func_type._type,
-                                    hw.InnerRefAttr.get(
-                                        self.symbol, ir.StringAttr.get("call")),
-                                    name._appid,
-                                    options=_options_to_dict_attr(options),
-                                    loc=get_user_loc()).toClient)
+        raw_esi.RequestConnectionOp(
+            func_type._type,
+            hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
+            name._appid,
+            options=optional_dict_to_optional_dict_attr(options),
+            loc=get_user_loc()).toClient)
     assert isinstance(func_call, BundleSignal)
     return func_call
 

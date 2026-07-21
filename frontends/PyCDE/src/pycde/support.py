@@ -69,6 +69,15 @@ def optional_dict_to_dict_attr(d: Optional[Dict]) -> ir.DictAttr:
   return ir.DictAttr.get({k: _obj_to_attribute(v) for k, v in d.items()})
 
 
+def optional_dict_to_optional_dict_attr(
+    d: Optional[Dict]) -> Optional[ir.DictAttr]:
+  """Convert a dictionary to an MLIR dictionary attribute, or return None if
+  the input is None or empty."""
+  if d is None or len(d) == 0:
+    return None
+  return optional_dict_to_dict_attr(d)
+
+
 __dir__ = os.path.dirname(__file__)
 _hidden_filenames = set(["functools.py", "support.py"])
 
