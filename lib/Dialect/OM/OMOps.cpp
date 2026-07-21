@@ -748,6 +748,17 @@ PathCreateOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 // IntegerBinaryOp (arithmetic)
 //===----------------------------------------------------------------------===//
 
+static APSInt getAPSIntForOMIntegerAttr(circt::om::IntegerAttr attr) {
+  auto value = attr.getValue();
+  if (value.getType().isSignedInteger())
+    return value.getAPSInt();
+
+  // OM integers use signed semantics, but their underlying IntegerAttr may be
+  // signless. Construct an APSInt with signed interpretation explicitly instead
+  // of calling IntegerAttr::getAPSInt(), which asserts for signless integers.
+  return APSInt(value.getValue(), /*isUnsigned=*/false);
+}
+
 static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryOp op,
                                                 Attribute lhsAttr,
                                                 Attribute rhsAttr) {
@@ -759,8 +770,8 @@ static OpFoldResult foldIntegerBinaryArithmetic(IntegerBinaryOp op,
   // on APSInt asserts that both operands are the same bitwidth, but the
   // IntegerAttrs we are working with may have used the smallest necessary
   // bitwidth to represent the number they hold, and won't necessarily match.
-  APSInt lhsVal = lhs.getValue().getAPSInt();
-  APSInt rhsVal = rhs.getValue().getAPSInt();
+  APSInt lhsVal = getAPSIntForOMIntegerAttr(lhs);
+  APSInt rhsVal = getAPSIntForOMIntegerAttr(rhs);
   if (lhsVal.getBitWidth() > rhsVal.getBitWidth())
     rhsVal = rhsVal.extend(lhsVal.getBitWidth());
   else if (rhsVal.getBitWidth() > lhsVal.getBitWidth())
@@ -1010,8 +1021,8 @@ PropEqOp::evaluateBinaryEquality(mlir::Attribute lhsAttr,
   // OM integer equality (arbitrary precision).
   if (auto lhs = dyn_cast<om::IntegerAttr>(lhsAttr))
     if (auto rhs = dyn_cast<om::IntegerAttr>(rhsAttr)) {
-      APSInt lhsVal = lhs.getValue().getAPSInt();
-      APSInt rhsVal = rhs.getValue().getAPSInt();
+      APSInt lhsVal = getAPSIntForOMIntegerAttr(lhs);
+      APSInt rhsVal = getAPSIntForOMIntegerAttr(rhs);
       if (lhsVal.getBitWidth() > rhsVal.getBitWidth())
         rhsVal = rhsVal.extend(lhsVal.getBitWidth());
       else if (rhsVal.getBitWidth() > lhsVal.getBitWidth())

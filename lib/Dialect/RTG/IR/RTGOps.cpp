@@ -1040,6 +1040,31 @@ OpFoldResult StringToLabelOp::fold(FoldAdaptor adaptor) {
 }
 
 //===----------------------------------------------------------------------===//
+// StringToASCIIArrayOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult StringToASCIIArrayOp::canonicalize(StringToASCIIArrayOp op,
+                                                 PatternRewriter &rewriter) {
+  auto constOp = op.getString().getDefiningOp<ConstantOp>();
+  if (!constOp)
+    return failure();
+
+  auto strAttr = dyn_cast<StringAttr>(constOp.getValue());
+  if (!strAttr)
+    return failure();
+
+  auto i8Ty = rewriter.getIntegerType(8);
+  SmallVector<Value> bytes;
+  bytes.reserve(strAttr.getValue().size());
+  for (unsigned char c : strAttr.getValue())
+    bytes.push_back(ConstantOp::create(rewriter, op.getLoc(),
+                                       rewriter.getIntegerAttr(i8Ty, c)));
+
+  rewriter.replaceOpWithNewOp<ArrayCreateOp>(op, op.getType(), bytes);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // TableGen generated logic.
 //===----------------------------------------------------------------------===//
 

@@ -142,12 +142,37 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [
 def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "The canonical form of a connection request";
+  let description = [{
+    The canonical form of a connection request produced by the ESI connect-
+    services pass from a `service.req`. Lives inside a `service.impl_req`
+    region and is what a service implementation consumes when materializing
+    the request.
+
+    Arguments:
+
+    - `$servicePort`: inner-ref to the service port being requested (i.e. an
+      `esi.service.port` inside an `esi.service.decl`).
+    - `$relativeAppIDPath`: array of `AppIDAttr`s describing the client's
+      location relative to the enclosing `service.impl_req`, from the outer-
+      most instance inward.
+    - `$options`: optional dictionary of request-specific options carried
+      verbatim from the originating `service.req`. Service implementations
+      can inspect these to configure how the request is fulfilled (for
+      example, to select a particular channel engine).
+
+    Result:
+
+    - `$toClient`: the bundle the service implementation must supply to
+      fulfill this connection request.
+  }];
 
   let arguments = (ins InnerRefAttr:$servicePort,
-                       AppIDArrayAttr:$relativeAppIDPath);
+                       AppIDArrayAttr:$relativeAppIDPath,
+                       OptionalAttr<DictionaryAttr>:$options);
   let results = (outs ChannelBundleType:$toClient);
   let assemblyFormat = [{
     $servicePort `(` $relativeAppIDPath `)`
+      (`opts` $options^)?
       attr-dict `:` qualified(type($toClient))
   }];
 
@@ -160,12 +185,36 @@ def RequestConnectionOp : ESI_Op<"service.req", [
         DeclareOpInterfaceMethods<HasAppIDOpInterface>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to receive data";
+  let description = [{
+    Request a bundle connection to a service port. The connect-services pass
+    surfaces this request up the instance hierarchy and rewrites it into a
+    `service.impl_req.req` inside the matching `service.impl_req` region.
+
+    Arguments:
+
+    - `$servicePort`: inner-ref to the service port being requested (i.e. an
+      `esi.service.port` inside an `esi.service.decl`).
+    - `$appID`: `AppIDAttr` identifying this specific client of the service.
+    - `$options`: optional dictionary of request-specific options. Threaded
+      verbatim through the connect-services pass onto the resulting
+      `service.impl_req.req` where the service implementation can consume
+      it (for example, to configure how the request is fulfilled or to
+      select a particular channel engine). Keys and value types are not
+      interpreted by the dialect.
+
+    Result:
+
+    - `$toClient`: the bundle the service implementation will supply to
+      fulfill this connection request.
+  }];
 
   let arguments = (ins InnerRefAttr:$servicePort,
-                       AppIDAttr:$appID);
+                       AppIDAttr:$appID,
+                       OptionalAttr<DictionaryAttr>:$options);
   let results = (outs ChannelBundleType:$toClient);
   let assemblyFormat = [{
     $servicePort `(` qualified($appID) `)`
+      (`opts` $options^)?
       attr-dict `:` qualified(type($toClient))
   }];
 }

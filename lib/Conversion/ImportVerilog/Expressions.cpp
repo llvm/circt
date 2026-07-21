@@ -1495,8 +1495,12 @@ struct RvalueExprVisitor : public ExprVisitor {
     case BinaryOperator::LogicalAnd:
     case BinaryOperator::LogicalOr:
     case BinaryOperator::LogicalImplication:
-    case BinaryOperator::LogicalEquivalence:
-      return buildLogicalBOp(expr.op, lhs, rhs);
+    case BinaryOperator::LogicalEquivalence: {
+      Domain domain = Domain::TwoValued;
+      if (expr.left().type->isFourState() || expr.right().type->isFourState())
+        domain = Domain::FourValued;
+      return buildLogicalBOp(expr.op, lhs, rhs, domain);
+    }
 
     default:
       mlir::emitError(loc) << "Binary operator "

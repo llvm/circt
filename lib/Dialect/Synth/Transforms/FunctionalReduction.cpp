@@ -56,20 +56,6 @@ using namespace circt::synth;
 namespace {
 enum class EquivResult { Proved, Disproved, Unknown };
 
-std::unique_ptr<IncrementalSATSolver>
-createFunctionalReductionSATSolver(llvm::StringRef backend) {
-  if (backend == "auto") {
-    if (auto solver = createCadicalSATSolver())
-      return solver;
-    return createZ3SATSolver();
-  }
-  if (backend == "cadical")
-    return createCadicalSATSolver();
-  if (backend == "z3")
-    return createZ3SATSolver();
-  return {};
-}
-
 class FunctionalReductionSATBuilder {
 public:
   FunctionalReductionSATBuilder(IncrementalSATSolver &solver,
@@ -799,7 +785,7 @@ struct FunctionalReductionPass
 
     std::unique_ptr<IncrementalSATSolver> satSolver;
     if (!testTransformation) {
-      satSolver = createFunctionalReductionSATSolver(this->satSolver);
+      satSolver = createSATSolver(this->satSolver);
       if (!satSolver) {
         module.emitError() << "unsupported or unavailable SAT solver '"
                            << this->satSolver

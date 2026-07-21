@@ -3,6 +3,7 @@
 func.func @dummy(%arg0: !rtg.isa.label) -> () {return}
 func.func @dummy1(%arg0: !rtg.string) -> () {return}
 func.func @dummy2(%arg0: !rtg.array<index>) -> () {return}
+func.func @dummy3(%arg0: !rtg.array<i8>) -> () {return}
 func.func @dummy6(%arg0: index) -> () {return}
 func.func @dummy7(%arg0: !rtgtest.ireg) -> () {return}
 
@@ -94,6 +95,22 @@ rtg.test @arrays() {
   %3 = rtg.array_create %idx1, %idx1 : index
   %4 = rtg.array_append %3, %idx1 : !rtg.array<index>
   func.call @dummy2(%4) : (!rtg.array<index>) -> ()
+}
+
+// CHECK-LABEL: @stringToASCIIArray
+rtg.test @stringToASCIIArray(str = %str: !rtg.string) {
+  // CHECK-NEXT: [[C104:%.+]] = rtg.constant 104 : i8
+  // CHECK-NEXT: [[C105:%.+]] = rtg.constant 105 : i8
+  // CHECK-NEXT: [[V0:%.+]] = rtg.array_create [[C104]], [[C105]] : i8
+  // CHECK-NEXT: func.call @dummy3([[V0]])
+  %0 = rtg.constant "hi" : !rtg.string
+  %1 = rtg.string_to_ascii_array %0 : !rtg.array<i8>
+  func.call @dummy3(%1) : (!rtg.array<i8>) -> ()
+
+  // CHECK-NEXT: [[V1:%.+]] = rtg.string_to_ascii_array %str : !rtg.array<i8>
+  // CHECK-NEXT: func.call @dummy3([[V1]])
+  %2 = rtg.string_to_ascii_array %str : !rtg.array<i8>
+  func.call @dummy3(%2) : (!rtg.array<i8>) -> ()
 }
 
 // CHECK-LABEL: @testRegisterToIndex

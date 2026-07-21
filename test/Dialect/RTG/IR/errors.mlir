@@ -337,3 +337,10 @@ rtg.test @setAttrExplicitTypeRequired() {
   // expected-error @below {{all elements must be of the set element type 'i32'}}
   rtg.constant #rtg.set<0 : index> : !rtg.set<i32>
 }
+
+// -----
+
+rtg.test @stringToASCIIArrayWrongElementType(str = %str: !rtg.string) {
+  // expected-error @below {{must be array of 8-bit signless integer values}}
+  rtg.string_to_ascii_array %str : !rtg.array<i16>
+}

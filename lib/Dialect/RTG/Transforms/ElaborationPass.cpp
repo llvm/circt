@@ -1827,6 +1827,26 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(StringToASCIIArrayOp op) {
+    auto opaque = state.at(op.getString());
+    if (isSymbolic(opaque))
+      return visitOpGeneric(op);
+
+    auto strAttr = dyn_cast<StringAttr>(std::get<TypedAttr>(opaque));
+    if (!strAttr)
+      return op->emitError("expected a string attribute");
+
+    auto i8Ty = IntegerType::get(op.getContext(), 8);
+    SmallVector<ElaboratorValue> array;
+    array.reserve(strAttr.getValue().size());
+    for (unsigned char c : strAttr.getValue())
+      array.push_back(ElaboratorValue(IntegerAttr::get(i8Ty, c)));
+
+    state[op.getResult()] = sharedState.internalizer.internalize<ArrayStorage>(
+        op.getResult().getType(), std::move(array));
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(ArrayExtractOp op) {
     auto array = get<ArrayStorage *>(op.getArray())->array;
     size_t idx = get<size_t>(op.getIndex());

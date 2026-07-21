@@ -2959,7 +2959,7 @@ firrtl.circuit "SimulationPortType3" {
 
 firrtl.circuit "SimulationExtraHardwarePort" {
   firrtl.extmodule @SimulationExtraHardwarePort()
-  // expected-error @below {{op target @Foo port 4 may only be a property type, got '!firrtl.uint<8>' instead}}
+  // expected-error @below {{op target @Foo port 4 contains hardware types: '!firrtl.uint<8>'}}
   firrtl.simulation @foo, @Foo {}
   // expected-note @below {{target defined here}}
   firrtl.extmodule @Foo(
@@ -2968,6 +2968,22 @@ firrtl.circuit "SimulationExtraHardwarePort" {
     out done: !firrtl.uint<1>,
     out success: !firrtl.uint<1>,
     in extra: !firrtl.uint<8>
+  )
+}
+
+// -----
+
+firrtl.circuit "SimulationExtraHardwareInBundlePort" {
+  firrtl.extmodule @SimulationExtraHardwareInBundlePort()
+  // expected-error @below {{op target @Foo port 4 contains hardware types: '!firrtl.openbundle<x: uint<8>>'}}
+  firrtl.simulation @foo, @Foo {}
+  // expected-note @below {{target defined here}}
+  firrtl.extmodule @Foo(
+    in clock: !firrtl.clock,
+    in init: !firrtl.uint<1>,
+    out done: !firrtl.uint<1>,
+    out success: !firrtl.uint<1>,
+    out extra: !firrtl.openbundle<x: uint<8>>
   )
 }
 

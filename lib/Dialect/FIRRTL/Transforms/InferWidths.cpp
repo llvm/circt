@@ -2088,6 +2088,8 @@ FailureOr<bool> InferenceTypeUpdate::updateOperation(Operation *op) {
     auto lhsWidth = lhsType.getBitWidthOrSentinel();
     auto rhsWidth = rhsType.getBitWidthOrSentinel();
     if (lhsWidth >= 0 && rhsWidth >= 0 && lhsWidth < rhsWidth) {
+      con.emitWarning() << "RHS width " << rhsWidth << " exceeds LHS width "
+                        << lhsWidth << ", inserting implicit truncation";
       OpBuilder builder(op);
       auto trunc = builder.createOrFold<TailPrimOp>(con.getLoc(), con.getSrc(),
                                                     rhsWidth - lhsWidth);
