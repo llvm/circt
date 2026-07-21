@@ -194,7 +194,7 @@ def CirctLTLClockedDelay : FIRRTLIntrinsic {
     | --------- | ------ | ----------------------------------------- |
     | delay     | int    | minimum number of cycles to delay         |
     | length    | int    | maximum additional delay cycles; optional |
-    | edge      | string | `posedge`, `negedge`, or `edge`; optional |
+    | edge      | string | `posedge`, `negedge`, or `edge`; optional, defaults to `posedge` |
 
     | Argument | Type    | Description               |
     | -------- | ------- | ------------------------- |
@@ -298,9 +298,9 @@ def CirctLTLClock : FIRRTLIntrinsic {
     Associates a clock with a boolean or sequence. This is used to indicate the
     clock domain in which a property is evaluated.
 
-    | Parameter | Type   | Description                                  |
-    | --------- | ------ | -------------------------------------------- |
-    | edge      | string | clock edge: `posedge`, `negedge`, or `edge` |
+    | Parameter | Type   | Description                                                           |
+    | --------- | ------ | --------------------------------------------------------------------- |
+    | edge      | string | clock edge: `posedge`, `negedge`, or `edge`; optional, defaults to `posedge` |
 
     | Argument | Type    | Description               |
     | -------- | ------- | ------------------------- |
