@@ -1143,6 +1143,18 @@ def FromHostDMATest(width: int):
   return FromHostDMATest
 
 
+# Factory returning the same (to_host, from_host) engine pair the cosim_dma
+# BSP wires in by default. Used below to exercise the per-request engine
+# override on `ChannelService` requests: the resolver imports this path,
+# calls it, and the returned pair replaces the default pair for just that
+# one request's channel. Kept module-scope so it is importable as
+# 'esiaccel.esitester._one_item_buffers_pair' from a service-request
+# `options={"engine": ...}` value.
+def _one_item_buffers_pair():
+  from .bsp.dma import OneItemBuffersToHost, OneItemBuffersFromHost
+  return (OneItemBuffersToHost, OneItemBuffersFromHost)
+
+
 class ChannelTest(Module):
   """Test the ChannelService with a to_host producer and a from_host loopback.
 
@@ -1198,7 +1210,14 @@ class ChannelTest(Module):
     mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)["cmd"]
     cmd_chan_wire.assign(mmio_rw_cmd_chan)
 
-    esi.ChannelService.to_host(AppID("producer"), data_chan)
+    # Per-request engine override: on cosim_dma this resolves to the same
+    # (OneItemBuffersToHost, OneItemBuffersFromHost) pair the BSP already
+    # uses by default, so this exercises the resolver + substitution path
+    # end-to-end without altering the observed runtime behavior.
+    esi.ChannelService.to_host(
+        AppID("producer"),
+        data_chan,
+        options={"engine": "esiaccel.esitester._one_item_buffers_pair"})
 
     # from_host -> to_host loopback.
     loopback_in = esi.ChannelService.from_host(AppID("loopback_in"), UInt(32))
