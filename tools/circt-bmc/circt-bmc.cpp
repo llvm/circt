@@ -31,6 +31,7 @@
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Tools/circt-bmc/BMCTrace.h"
 #include "circt/Tools/circt-bmc/Passes.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -52,6 +53,7 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -365,6 +367,18 @@ static LogicalResult executeBMC(MLIRContext &context) {
 
     engine = std::move(*expectedEngine);
   }
+
+  engine->registerSymbols([](llvm::orc::MangleAndInterner interner) {
+    llvm::orc::SymbolMap symbolMap;
+    symbolMap[interner("circt_bmc_record_trace")] = {
+        llvm::orc::ExecutorAddr::fromPtr(&bmc::circt_bmc_record_trace),
+        llvm::JITSymbolFlags::Exported};
+    return symbolMap;
+  });
+
+  bmc::BMCTrace trace(moduleName);
+  bmc::setActiveBMCTrace(&trace);
+  llvm::scope_exit clearActiveTrace([] { bmc::setActiveBMCTrace(nullptr); });
 
   auto timer = ts.nest("JIT Execution");
   if (auto err = engine->invokePacked(moduleName))

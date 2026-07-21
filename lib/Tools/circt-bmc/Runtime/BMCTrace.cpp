@@ -9,8 +9,20 @@
 #include "circt/Tools/circt-bmc/BMCTrace.h"
 
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/StringMap.h"
 
 #include <cassert>
+
+namespace {
+
+struct ActiveTraceState {
+  circt::bmc::BMCTrace *trace = nullptr;
+  llvm::StringMap<size_t> signals;
+};
+
+thread_local ActiveTraceState activeTrace;
+
+} // namespace
 
 circt::bmc::BMCTrace::BMCTrace(llvm::StringRef topName) : topName(topName) {}
 
@@ -59,4 +71,25 @@ bool circt::bmc::BMCTrace::printTextTrace(llvm::raw_ostream &os,
     }
   }
   return true;
+}
+
+void circt::bmc::setActiveBMCTrace(BMCTrace *trace) {
+  activeTrace.trace = trace;
+  activeTrace.signals.clear();
+}
+
+extern "C" void circt::bmc::circt_bmc_record_trace(uint32_t step,
+                                                   const char *name,
+                                                   uint32_t width,
+                                                   BMCTrace::Handle handle) {
+  if (!activeTrace.trace)
+    return;
+
+  auto [it, inserted] = activeTrace.signals.try_emplace(name, 0);
+  if (inserted)
+    it->second = activeTrace.trace->addSignal(name, width);
+  else
+    assert(activeTrace.trace->getSignals()[it->second].width == width &&
+           "trace signal width changed");
+  activeTrace.trace->record(step, it->second, handle);
 }

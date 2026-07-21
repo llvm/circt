@@ -12,6 +12,16 @@ func.func @multiple_set_logics() {
 
 // -----
 
+func.func @duplicate_bmc_trace_names(%step: i32, %a: !smt.bv<8>, %b: !smt.bv<8>) {
+  // expected-note @+1 {{first BMC trace with this name is here}}
+  verif.bmc.trace %step, "x", %a : i32, !smt.bv<8>
+  // expected-error @+1 {{duplicate BMC trace name 'x'}}
+  verif.bmc.trace %step, "x", %b : i32, !smt.bv<8>
+  func.return
+}
+
+// -----
+
 func.func @multiple_set_logics() {
   // expected-error @below {{set-logic operation must be the first non-constant operation in a solver operation}}
   smt.solver () : () -> () {

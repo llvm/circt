@@ -54,6 +54,7 @@ hw.module @Sequential(in %clk: !seq.clock, in %in: i8, in %state_q: i8,
 // AGGREGATE: scf.for [[STEP:%.+]] = {{%.+}} iter_args({{.*}}[[STATE:%.+]] = [[STATE_INIT]]{{.*}})
 // AGGREGATE: verif.bmc.trace [[STEP]], "res_state", [[STATE]] : i32, !smt.array<[!smt.bv<1> -> !smt.bv<32>]>
 // AGGREGATE-LLVM-LABEL: define void @Aggregate()
+// AGGREGATE-LLVM-NOT: call void @circt_bmc_record_trace
 
 hw.module @Aggregate(in %clk: !seq.clock) {
   %zero = hw.constant 0 : i32

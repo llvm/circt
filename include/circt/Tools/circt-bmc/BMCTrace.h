@@ -19,6 +19,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -70,6 +71,14 @@ private:
   std::vector<Signal> signals;
   std::vector<Step> recorded;
 };
+
+/// Select the trace populated by the JIT runtime callback. Passing null
+/// disables trace recording. This state is local to the calling thread.
+void setActiveBMCTrace(BMCTrace *trace);
+
+/// Runtime entry point called by JIT-compiled BMC code.
+extern "C" void circt_bmc_record_trace(uint32_t step, const char *name,
+                                       uint32_t width, BMCTrace::Handle handle);
 
 } // namespace circt::bmc
 

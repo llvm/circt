@@ -97,4 +97,26 @@ TEST(BMCTraceTest, SupportsZeroWidthSignals) {
   EXPECT_THAT(output, HasSubstr("cycle 0:\n  empty = 0x0\n"));
 }
 
+TEST(BMCTraceTest, RuntimeCallbackRegistersAndRecordsSignals) {
+  BMCTrace trace("top");
+  setActiveBMCTrace(&trace);
+
+  auto data0 = reinterpret_cast<BMCTrace::Handle>(static_cast<uintptr_t>(0x12));
+  auto state0 =
+      reinterpret_cast<BMCTrace::Handle>(static_cast<uintptr_t>(0x34));
+  auto data1 = reinterpret_cast<BMCTrace::Handle>(static_cast<uintptr_t>(0x56));
+  circt_bmc_record_trace(0, "data_in", 8, data0);
+  circt_bmc_record_trace(0, "state_q", 8, state0);
+  circt_bmc_record_trace(1, "data_in", 8, data1);
+  setActiveBMCTrace(nullptr);
+
+  ASSERT_EQ(trace.getSignals().size(), 2u);
+  EXPECT_EQ(trace.getSignals()[0].name, "data_in");
+  EXPECT_EQ(trace.getSignals()[0].width, 8u);
+  EXPECT_EQ(trace.getSignals()[1].name, "state_q");
+  EXPECT_EQ(trace.lookup(0, 0), data0);
+  EXPECT_EQ(trace.lookup(0, 1), state0);
+  EXPECT_EQ(trace.lookup(1, 0), data1);
+}
+
 } // namespace

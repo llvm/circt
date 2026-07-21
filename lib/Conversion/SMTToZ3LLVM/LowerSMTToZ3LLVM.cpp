@@ -28,6 +28,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -1283,13 +1284,31 @@ struct IntAbsOpLowering : public SMTLoweringPattern<IntAbsOp> {
 // For now we want to ignore Debug variable and scope ops - eventually we'll
 // give this debug info to Z3
 
-/// Strip verif.bmc.trace ops until counterexample materialization is lowered.
-struct BMCTraceLowering : public OpConversionPattern<verif::BMCTraceOp> {
-  using OpConversionPattern::OpConversionPattern;
+/// Lower bit-vector verif.bmc.trace ops to the circt-bmc runtime callback.
+/// Other SMT values are discarded until their trace materialization is
+/// supported.
+struct BMCTraceLowering : public SMTLoweringPattern<verif::BMCTraceOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
 
   LogicalResult
   matchAndRewrite(verif::BMCTraceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    auto bitVectorType = dyn_cast<smt::BitVectorType>(op.getValue().getType());
+    if (!bitVectorType) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    Location loc = op.getLoc();
+    Value name = buildString(rewriter, loc, op.getName());
+    Value width = LLVM::ConstantOp::create(rewriter, loc, rewriter.getI32Type(),
+                                           bitVectorType.getWidth());
+    auto voidType = LLVM::LLVMVoidType::get(rewriter.getContext());
+    buildCall(rewriter, loc, "circt_bmc_record_trace",
+              LLVM::LLVMFunctionType::get(
+                  voidType, {adaptor.getStep().getType(), name.getType(),
+                             width.getType(), adaptor.getValue().getType()}),
+              {adaptor.getStep(), name, width, adaptor.getValue()});
     rewriter.eraseOp(op);
     return success();
   }
@@ -1559,7 +1578,8 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
                BV2IntOpLowering, QuantifierLowering<ForallOp>,
                QuantifierLowering<ExistsOp>>(converter, patterns.getContext(),
                                              globals, options);
-  patterns.add<BMCTraceLowering>(patterns.getContext());
+  patterns.add<BMCTraceLowering>(converter, patterns.getContext(), globals,
+                                 options);
   patterns.add<DbgVariableLowering, DbgScopeLowering>(patterns.getContext());
 }
 
@@ -1594,6 +1614,22 @@ void LowerSMTToZ3LLVMPass::runOnOperation() {
     return WalkResult::advance();
   });
   if (setLogicCheck.wasInterrupted())
+    return signalPassFailure();
+
+  llvm::StringMap<Operation *> traceNames;
+  auto traceNameCheck =
+      getOperation().walk([&](verif::BMCTraceOp traceOp) -> WalkResult {
+        auto [it, inserted] =
+            traceNames.try_emplace(traceOp.getName(), traceOp.getOperation());
+        if (inserted)
+          return WalkResult::advance();
+        auto error = traceOp.emitError() << "duplicate BMC trace name '"
+                                         << traceOp.getName() << "'";
+        error.attachNote(it->second->getLoc())
+            << "first BMC trace with this name is here";
+        return WalkResult::interrupt();
+      });
+  if (traceNameCheck.wasInterrupted())
     return signalPassFailure();
 
   // Set up the type converter
