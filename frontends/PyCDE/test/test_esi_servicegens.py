@@ -28,7 +28,14 @@ class LoopbackInOut(Module):
   @generator
   def construct(self):
     loopback = Wire(Channel(Bits(16)))
-    call_bundle = HostComms.req_resp(AppID("loopback_inout"))
+    # Attach per-request options; these should flow through the connect-
+    # services pass onto the `service.impl_req.req` op and become visible
+    # to the service-impl generator via `bundle.options`.
+    call_bundle = HostComms.req_resp(AppID("loopback_inout"),
+                                     options={
+                                         "engine": "myMod.MyEngine",
+                                         "priority": 5,
+                                     })
     froms = call_bundle.unpack(resp=loopback)
     from_host = froms['req']
     ready = Wire(Bits(1))
@@ -56,6 +63,9 @@ class MultiplexerService(esi.ServiceImplementation):
     assert len(
         bundles.to_client_reqs) == 1, "Only one connection request supported"
     bundle = bundles.to_client_reqs[0]
+    # Exercise the new per-request options surface on the service-impl side.
+    # Print in a stable form so FileCheck can pin the observed dict.
+    print("options:", sorted(bundle.options.items()))
     bundle.add_record(details={"foo": 5, "client_name": bundle.client_name})
     to_req_types = {}
     for bundled_chan in bundle.type.channels:
@@ -131,6 +141,11 @@ class MultiplexerTop(Module):
 
     LoopbackInOut()
 
+
+# The service-impl generator prints its observed options dict; verify the
+# per-request `options=` kwarg on `HostComms.req_resp(...)` flows through
+# the connect-services pass to `bundle.options`.
+# CHECK: options: [('engine', 'myMod.MyEngine'), ('priority', 5)]
 
 # CHECK-LABEL: hw.module @MultiplexerTop(in %clk : i1, in %rst : i1, in %trunk_in : i256, in %trunk_in_valid : i1, in %trunk_out_ready : i1, out trunk_in_ready : i1, out trunk_out : i256, out trunk_out_valid : i1) attributes {output_file = #hw.output_file<"MultiplexerTop.sv", includeReplicatedOps>} {
 # CHECK:         %c0_i240 = hw.constant 0 : i240
