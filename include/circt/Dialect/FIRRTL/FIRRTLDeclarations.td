@@ -395,7 +395,9 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
     ins ClockType:$clockVal, StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym,
-        UnitAttr:$forceable);
+        UnitAttr:$forceable,
+        DefaultValuedAttr<EventControlAttr,
+                          "EventControl::AtPosEdge">:$clockEdge);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let skipDefaultBuilders = true;
@@ -496,7 +498,9 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
         StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym,
-        UnitAttr:$forceable);
+        UnitAttr:$forceable,
+        DefaultValuedAttr<EventControlAttr,
+                          "EventControl::AtPosEdge">:$clockEdge);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let skipDefaultBuilders = true;

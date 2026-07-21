@@ -6461,6 +6461,10 @@ static void printFIRRTLImplicitSSAName(OpAsmPrinter &p, Operation *op,
   SmallVector<StringRef, 4> elides;
   elides.push_back(hw::InnerSymbolTable::getInnerSymbolAttrName());
   elides.push_back(Forceable::getForceableAttrName());
+  if (isa<RegOp, RegResetOp>(op) &&
+      cast<EventControlAttr>(op->getAttr("clockEdge")).getValue() ==
+          EventControl::AtPosEdge)
+    elides.push_back("clockEdge");
   elideImplicitSSAName(p, op, attrs, elides);
   printElideAnnotations(p, op, attrs, elides);
 }

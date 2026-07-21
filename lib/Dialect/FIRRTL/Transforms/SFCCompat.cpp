@@ -86,6 +86,7 @@ void SFCCompatPass::runOnOperation() {
           builder, reg.getResult().getType(), reg.getClockVal(),
           reg.getNameAttr(), reg.getNameKindAttr(), reg.getAnnotationsAttr(),
           reg.getInnerSymAttr(), reg.getForceableAttr());
+      newReg.setClockEdgeAttr(reg.getClockEdgeAttr());
       reg.replaceAllUsesWith(newReg);
       reg.erase();
       madeModifications = true;
