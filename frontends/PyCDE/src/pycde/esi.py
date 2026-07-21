@@ -42,6 +42,40 @@ PortRdenSuffix = "esi.portRdenSuffix"
 PortEmptySuffix = "esi.portEmptySuffix"
 
 
+def _options_to_dict_attr(
+    options: Optional[Dict[str, object]]) -> Optional[ir.DictAttr]:
+  """Convert a service-request 'options' dict to an ir.DictAttr, or return
+  None if there are no options. Returning None keeps the underlying op's
+  OptionalAttr<DictionaryAttr> unset so no `opts { ... }` clause is
+  emitted in the IR."""
+  if options is None or len(options) == 0:
+    return None
+  return optional_dict_to_dict_attr(options)
+
+
+def _attr_to_pyobj(attr: ir.Attribute) -> object:
+  """Best-effort inverse of `_obj_to_attribute` for the common attribute
+  kinds emitted by `optional_dict_to_dict_attr`. Falls back to returning
+  the raw attribute when the kind isn't recognized."""
+  if isinstance(attr, ir.StringAttr):
+    return attr.value
+  if isinstance(attr, ir.BoolAttr):
+    return attr.value
+  if isinstance(attr, ir.IntegerAttr):
+    return attr.value
+  if isinstance(attr, ir.ArrayAttr):
+    return [_attr_to_pyobj(a) for a in attr]
+  if isinstance(attr, ir.DictAttr):
+    return _dict_attr_to_dict(attr)
+  return attr
+
+
+def _dict_attr_to_dict(attr: ir.DictAttr) -> Dict[str, object]:
+  """Convert an ir.DictAttr to a plain dict, downcasting each value with
+  `_attr_to_pyobj`."""
+  return {attr[i].name: _attr_to_pyobj(attr[i].attr) for i in range(len(attr))}
+
+
 class ServiceDecl(_PyProxy):
   """Declare an ESI service interface."""
 
@@ -128,7 +162,10 @@ class _RequestConnection:
   def service_port(self) -> hw.InnerRefAttr:
     return hw.InnerRefAttr.get(self.decl.symbol, self._name)
 
-  def __call__(self, appid: AppID, type: Optional[Bundle] = None):
+  def __call__(self,
+               appid: AppID,
+               type: Optional[Bundle] = None,
+               options: Optional[Dict[str, object]] = None):
     if type is None:
       type = self.type
     self.decl._materialize_service_decl()
@@ -136,6 +173,7 @@ class _RequestConnection:
         raw_esi.RequestConnectionOp(type._type,
                                     self.service_port,
                                     appid._appid,
+                                    options=_options_to_dict_attr(options),
                                     loc=get_user_loc()).toClient)
 
 
@@ -181,6 +219,18 @@ class _OutputBundleSetter(AssignableSignal):
     self.type: Bundle = _FromCirctType(req.toClient.type)
     self.port = hw.InnerRefAttr(req.servicePort).name.value
     self._bundle_to_replace: Optional[ir.OpResult] = old_value_to_replace
+
+  @property
+  def options(self) -> Dict[str, object]:
+    """Return the request-specific options set at the `esi.service.req` /
+    `esi.service.req(..., options=...)` call site, as a plain dict. Returns
+    an empty dict when no options were set. Service-implementation generators
+    can inspect these options to influence how the request is fulfilled (e.g.
+    forwarding them into the manifest client record via `add_record(details=...)`).
+    """
+    if "options" not in self.req.attributes:
+      return {}
+    return _dict_attr_to_dict(ir.DictAttr(self.req.attributes["options"]))
 
   def add_record(self,
                  channel_assignments: Optional[Dict] = None,
@@ -685,17 +735,23 @@ class _HostMem(ServiceDecl):
             "data": data,
         }), valid)
 
-  def write(self, appid: AppID, req: ChannelSignal) -> ChannelSignal:
+  def write(self,
+            appid: AppID,
+            req: ChannelSignal,
+            options: Optional[Dict[str, object]] = None) -> ChannelSignal:
     """Create a write request to the host memory out of a request channel."""
     # Extract the data type from the request channel and call the helper to get
     # the write bundle type for the req channel.
     write_bundle_type = self.write_req_bundle_type(req.type.inner_type.data)
-    bundle = self.write_from_bundle(appid, write_bundle_type)
+    bundle = self.write_from_bundle(appid, write_bundle_type, options=options)
     resp = bundle.unpack(req=req)['ackTag']
     return resp
 
-  def write_from_bundle(self, appid: AppID,
-                        write_bundle_type: Bundle) -> BundleSignal:
+  def write_from_bundle(
+      self,
+      appid: AppID,
+      write_bundle_type: Bundle,
+      options: Optional[Dict[str, object]] = None) -> BundleSignal:
     self._materialize_service_decl()
 
     return cast(
@@ -706,6 +762,7 @@ class _HostMem(ServiceDecl):
                                             self.symbol,
                                             ir.StringAttr.get("write")),
                                         appid._appid,
+                                        options=_options_to_dict_attr(options),
                                         loc=get_user_loc()).toClient))
 
   def read_bundle_type(self, resp_type: Type) -> Bundle:
@@ -720,8 +777,11 @@ class _HostMem(ServiceDecl):
     ])
     return read_bundle_type
 
-  def read_from_bundle(self, appid: AppID,
-                       read_bundle_type: Bundle) -> BundleSignal:
+  def read_from_bundle(
+      self,
+      appid: AppID,
+      read_bundle_type: Bundle,
+      options: Optional[Dict[str, object]] = None) -> BundleSignal:
     """Request a connection based for a given read bundle type."""
     return cast(
         BundleSignal,
@@ -731,17 +791,21 @@ class _HostMem(ServiceDecl):
                                             self.symbol,
                                             ir.StringAttr.get("read")),
                                         appid._appid,
+                                        options=_options_to_dict_attr(options),
                                         loc=get_user_loc()).toClient))
 
-  def read(self, appid: AppID, req: ChannelSignal,
-           data_type: Type) -> ChannelSignal:
+  def read(self,
+           appid: AppID,
+           req: ChannelSignal,
+           data_type: Type,
+           options: Optional[Dict[str, object]] = None) -> ChannelSignal:
     """Create a read request to the host memory out of a request channel and
     return the response channel with the specified data type."""
 
     self._materialize_service_decl()
 
     read_bundle_type = self.read_bundle_type(data_type)
-    bundle_sig = self.read_from_bundle(appid, read_bundle_type)
+    bundle_sig = self.read_from_bundle(appid, read_bundle_type, options=options)
     resp = bundle_sig.unpack(req=req)['resp']
     return resp
 
@@ -759,30 +823,36 @@ class _ChannelService(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
-  def from_host(self, name: AppID, type: Type) -> ChannelSignal:
+  def from_host(self,
+                name: AppID,
+                type: Type,
+                options: Optional[Dict[str, object]] = None) -> ChannelSignal:
     bundle_type = Bundle(
         [BundledChannel("data", ChannelDirection.TO, Channel(type))])
     self._materialize_service_decl()
-    from_host = raw_esi.RequestConnectionOp(bundle_type._type,
-                                            hw.InnerRefAttr.get(
-                                                self.symbol,
-                                                ir.StringAttr.get("from_host")),
-                                            name._appid,
-                                            loc=get_user_loc())
+    from_host = raw_esi.RequestConnectionOp(
+        bundle_type._type,
+        hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("from_host")),
+        name._appid,
+        options=_options_to_dict_attr(options),
+        loc=get_user_loc())
     from_host = _FromCirctValue(from_host.toClient)
     assert isinstance(from_host, BundleSignal)
     return from_host.unpack()["data"]
 
-  def to_host(self, name: AppID, chan: ChannelSignal) -> None:
+  def to_host(self,
+              name: AppID,
+              chan: ChannelSignal,
+              options: Optional[Dict[str, object]] = None) -> None:
     bundle_type = Bundle(
         [BundledChannel("data", ChannelDirection.FROM, chan.type)])
     self._materialize_service_decl()
-    to_host = raw_esi.RequestConnectionOp(bundle_type._type,
-                                          hw.InnerRefAttr.get(
-                                              self.symbol,
-                                              ir.StringAttr.get("to_host")),
-                                          name._appid,
-                                          loc=get_user_loc())
+    to_host = raw_esi.RequestConnectionOp(
+        bundle_type._type,
+        hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("to_host")),
+        name._appid,
+        options=_options_to_dict_attr(options),
+        loc=get_user_loc())
     to_host = _FromCirctValue(to_host.toClient)
     assert isinstance(to_host, BundleSignal)
     to_host.unpack(data=chan)
@@ -801,7 +871,10 @@ class _FuncService(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
-  def get(self, name: AppID, bundle_type: Bundle) -> BundleSignal:
+  def get(self,
+          name: AppID,
+          bundle_type: Bundle,
+          options: Optional[Dict[str, object]] = None) -> BundleSignal:
     """Treat any bi-directional bundle as a function by getting a proper
     function bundle with the appropriate types, then renaming the channels to
     match the 'bundle_type'. Returns a bundle signal of type 'bundle_type'."""
@@ -828,14 +901,21 @@ class _FuncService(ServiceDecl):
     # Get the function channels and wire them up to create the non-function
     # bundle 'bundle_type'.
     from_channel = Wire(from_channel_bc.channel)
-    arg_channel = self.get_call_chans(name, to_channel_bc.channel, from_channel)
+    arg_channel = self.get_call_chans(name,
+                                      to_channel_bc.channel,
+                                      from_channel,
+                                      options=options)
     ret_bundle, from_chans = bundle_type.pack(
         **{to_channel_bc.name: arg_channel})
     from_channel.assign(from_chans[from_channel_bc.name])
     return ret_bundle
 
-  def get_call_chans(self, name: AppID, arg_type: Type,
-                     result: Signal) -> ChannelSignal:
+  def get_call_chans(
+      self,
+      name: AppID,
+      arg_type: Type,
+      result: Signal,
+      options: Optional[Dict[str, object]] = None) -> ChannelSignal:
     """Expose a function to the ESI system. Arguments:
       'name' is an AppID which is the function name.
       'arg_type' is the type of the argument to the function.
@@ -850,12 +930,12 @@ class _FuncService(ServiceDecl):
         BundledChannel("result", ChannelDirection.FROM, result.type)
     ])
     self._materialize_service_decl()
-    func_call = raw_esi.RequestConnectionOp(bundle._type,
-                                            hw.InnerRefAttr.get(
-                                                self.symbol,
-                                                ir.StringAttr.get("call")),
-                                            name._appid,
-                                            loc=get_user_loc())
+    func_call = raw_esi.RequestConnectionOp(
+        bundle._type,
+        hw.InnerRefAttr.get(self.symbol, ir.StringAttr.get("call")),
+        name._appid,
+        options=_options_to_dict_attr(options),
+        loc=get_user_loc())
     to_funcs = _FromCirctValue(func_call.toClient).unpack(result=result)
     return to_funcs['arg']
 
@@ -873,19 +953,25 @@ class _CallService(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
-  def call(self, name: AppID, arg: ChannelSignal,
-           result_type: Type) -> ChannelSignal:
+  def call(self,
+           name: AppID,
+           arg: ChannelSignal,
+           result_type: Type,
+           options: Optional[Dict[str, object]] = None) -> ChannelSignal:
     """Call a function with the given argument. 'arg' must be a ChannelSignal
     with the argument value."""
     func_bundle = Bundle([
         BundledChannel("arg", ChannelDirection.FROM, arg.type),
         BundledChannel("result", ChannelDirection.TO, result_type)
     ])
-    call_bundle = self.get(name, func_bundle)
+    call_bundle = self.get(name, func_bundle, options=options)
     bundle_rets = call_bundle.unpack(arg=arg)
     return bundle_rets['result']
 
-  def get(self, name: AppID, func_type: Bundle) -> BundleSignal:
+  def get(self,
+          name: AppID,
+          func_type: Bundle,
+          options: Optional[Dict[str, object]] = None) -> BundleSignal:
     """Expose a bundle to the host as a function. Bundle _must_ have 'arg' and
     'result' channels going FROM the server and TO the server, respectively."""
     self._materialize_service_decl()
@@ -895,6 +981,7 @@ class _CallService(ServiceDecl):
                                     hw.InnerRefAttr.get(
                                         self.symbol, ir.StringAttr.get("call")),
                                     name._appid,
+                                    options=_options_to_dict_attr(options),
                                     loc=get_user_loc()).toClient)
     assert isinstance(func_call, BundleSignal)
     return func_call
@@ -918,15 +1005,19 @@ class _Telemetry(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
-  def report_signal(self, clk: ClockSignal, rst: BitsSignal, name: AppID,
-                    data: Signal) -> None:
+  def report_signal(self,
+                    clk: ClockSignal,
+                    rst: BitsSignal,
+                    name: AppID,
+                    data: Signal,
+                    options: Optional[Dict[str, object]] = None) -> None:
     """Report a value to the telemetry service. 'data' is the value to report."""
     bundle_type = Bundle([
         BundledChannel("get", ChannelDirection.TO, Bits(0)),
         BundledChannel("data", ChannelDirection.FROM, data.type)
     ])
 
-    report_bundle = self.report(name, bundle_type)
+    report_bundle = self.report(name, bundle_type, options=options)
     get_valid_wire = Wire(Bits(1))
     data_channel, data_ready = Channel(data.type).wrap(data, get_valid_wire)
     data_channel = data_channel.buffer(clk, rst, stages=1)

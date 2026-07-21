@@ -258,3 +258,33 @@ hw.module @TelemetryTest1(in %clk : !seq.clock, in %rst : i1, in %value: !esi.ch
   %telemetryBundle = esi.service.req <@telemetry::@report> (#esi.appid<"telemetry">) : !esi.bundle<[!esi.channel<i0> to "get", !esi.channel<ui64> from "data"]>
   esi.bundle.unpack %value from %telemetryBundle : !esi.bundle<[!esi.channel<i0> to "get", !esi.channel<ui64> from "data"]>
 }
+
+// Per-request 'opts' dictionary: verify round-trip on `service.req` and
+// `service.impl_req.req`, and that the connect-services pass threads the
+// dict verbatim from the client-side `service.req` into the emitted
+// `service.impl_req.req`. Uses an unregistered impl_type so the
+// `service.impl_req` (and its inner `service.impl_req.req` ops) survive
+// the pass and can be inspected.
+
+!optsBundle = !esi.bundle<[!esi.channel<i8> to "recv"]>
+
+esi.service.decl @HostCommsOpts {
+  esi.service.port @Recv : !optsBundle
+}
+
+// CONN-LABEL: hw.module @OptsTop(in %clk : !seq.clock, in %rst : i1) {
+// CONN:         esi.service.impl_req #esi.appid<"optcomms"> svc @HostCommsOpts impl as "myOptImpl"(%clk) : (!seq.clock) -> !esi.bundle<[!esi.channel<i8> to "recv"]> {
+// CONN-NEXT:      esi.service.impl_req.req <@HostCommsOpts::@Recv>([#esi.appid<"opt_client">]) opts {engine = "myMod.MyEngine", flag = true, priority = 5 : i32} : !esi.bundle<[!esi.channel<i8> to "recv"]>
+// CONN-NEXT:    }
+hw.module @OptsTop(in %clk: !seq.clock, in %rst: i1) {
+  esi.service.instance #esi.appid<"optcomms"> svc @HostCommsOpts impl as "myOptImpl" (%clk) : (!seq.clock) -> ()
+  hw.instance "m1" @OptsClient(clk: %clk: !seq.clock) -> ()
+}
+
+// CONN-LABEL: hw.module @OptsClient(in %clk : !seq.clock, in %opt_client : !esi.bundle<[!esi.channel<i8> to "recv"]>) {
+// CONN-NEXT:    esi.manifest.req #esi.appid<"opt_client">, <@HostCommsOpts::@Recv>, !esi.bundle<[!esi.channel<i8> to "recv"]>
+// CONN-NEXT:    esi.bundle.unpack  from %opt_client : !esi.bundle<[!esi.channel<i8> to "recv"]>
+hw.module @OptsClient(in %clk: !seq.clock) {
+  %b = esi.service.req <@HostCommsOpts::@Recv> (#esi.appid<"opt_client">) opts {engine = "myMod.MyEngine", flag = true, priority = 5 : i32} : !optsBundle
+  esi.bundle.unpack from %b : !optsBundle
+}

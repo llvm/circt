@@ -142,12 +142,22 @@ def ServiceImplementReqOp : ESI_Op<"service.impl_req", [
 def ServiceImplementConnReqOp : ESI_Op<"service.impl_req.req", [
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "The canonical form of a connection request";
+  let description = [{
+    The canonical form of a connection request produced by the ESI connect-
+    services pass from a `service.req`. Carries an optional dictionary of
+    request-specific options (`opts { ... }`) which the service
+    implementation can inspect (for example, to pick a specific channel
+    engine or configure how the request is fulfilled). Options are copied
+    verbatim from the originating `service.req`.
+  }];
 
   let arguments = (ins InnerRefAttr:$servicePort,
-                       AppIDArrayAttr:$relativeAppIDPath);
+                       AppIDArrayAttr:$relativeAppIDPath,
+                       OptionalAttr<DictionaryAttr>:$options);
   let results = (outs ChannelBundleType:$toClient);
   let assemblyFormat = [{
     $servicePort `(` $relativeAppIDPath `)`
+      (`opts` $options^)?
       attr-dict `:` qualified(type($toClient))
   }];
 
@@ -160,12 +170,22 @@ def RequestConnectionOp : ESI_Op<"service.req", [
         DeclareOpInterfaceMethods<HasAppIDOpInterface>,
         DeclareOpInterfaceMethods<SymbolUserOpInterface>]> {
   let summary = "Request a connection to receive data";
+  let description = [{
+    Request a bundle connection to a service port. Optionally carries a
+    request-specific dictionary of options (`opts { ... }`) which is
+    threaded through the connect-services pass onto the resulting
+    `service.impl_req.req` where the service implementation can consume
+    it (for example, to configure how the request is fulfilled or to
+    select a particular channel engine).
+  }];
 
   let arguments = (ins InnerRefAttr:$servicePort,
-                       AppIDAttr:$appID);
+                       AppIDAttr:$appID,
+                       OptionalAttr<DictionaryAttr>:$options);
   let results = (outs ChannelBundleType:$toClient);
   let assemblyFormat = [{
     $servicePort `(` qualified($appID) `)`
+      (`opts` $options^)?
       attr-dict `:` qualified(type($toClient))
   }];
 }
