@@ -13,3 +13,10 @@ hw.module @AsyncHasBeenReset(in %clock: i1, in %reset: i1, out z: i1) {
   %0 = verif.has_been_reset %clock, async %reset
   hw.output %0 : i1
 }
+
+// -----
+
+hw.module @NegEdgeReg(in %clk : !seq.clock, in %arg0: i8) {
+  // expected-error @below {{only positive-edge registers are currently supported}}
+  %reg = seq.firreg %arg0 clock %clk {clockEdge = 1 : i32} : i8
+}
