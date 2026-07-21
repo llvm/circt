@@ -901,6 +901,12 @@ void Emitter::emitStatement(WireOp op) {
 }
 
 void Emitter::emitStatement(RegOp op) {
+  if (op.getClockEdge() != EventControl::AtPosEdge) {
+    emitOpError(op, "has a clock edge that cannot be represented in FIRRTL "
+                    "text");
+    return;
+  }
+
   auto legalName = legalize(op.getNameAttr());
   addForceable(op, legalName);
   startStatement();
@@ -914,6 +920,11 @@ void Emitter::emitStatement(RegOp op) {
 }
 
 void Emitter::emitStatement(RegResetOp op) {
+  if (op.getClockEdge() != EventControl::AtPosEdge) {
+    emitOpError(op, "has a clock edge that cannot be represented in FIRRTL "
+                    "text");
+    return;
+  }
   auto legalName = legalize(op.getNameAttr());
   addForceable(op, legalName);
   startStatement();

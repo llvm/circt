@@ -3663,6 +3663,7 @@ static LogicalResult foldHiddenReset(RegOp reg, PatternRewriter &rewriter) {
         mux.getSel(), mux.getHigh(), reg.getNameAttr(), reg.getNameKindAttr(),
         reg.getAnnotationsAttr(), reg.getInnerSymAttr(),
         reg.getForceableAttr());
+    newReg.setClockEdgeAttr(reg.getClockEdgeAttr());
     newReg->setDialectAttrs(attrs);
   }
   auto pt = rewriter.saveInsertionPoint();
