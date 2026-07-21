@@ -319,15 +319,17 @@ jobs:
         run: |
           # Install Python dependencies needed for the MLIR/CIRCT Python
           # bindings (used by PyRTG and by the integration tests below).
-          pip config set global.break-system-packages true
-          pip install psutil pybind11==2.11.2 nanobind==2.9.2
+          python -m pip config set global.break-system-packages true
+          python -m pip install psutil pybind11==2.11.2 nanobind==2.9.2
+
+          PYTHON_EXECUTABLE=$(python -c "import sys; print(sys.executable)")
 
           # A statically-linked libstdc++ conflicts with Python extension
           # modules that get dlopen'd into a live python3 process alongside
           # other dynamically-linked C++ code: the duplicated libstdc++
           # symbols get interposed process-wide and corrupt the heap. So
           # disable it whenever the Python bindings are enabled.
-          echo cmake="-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON -DCIRCT_ENABLE_FRONTENDS=PyRTG -DLLVM_STATIC_LINK_CXX_STDLIB=OFF" >> "$GITHUB_OUTPUT"
+          echo cmake="-DMLIR_ENABLE_BINDINGS_PYTHON=ON -DCIRCT_BINDINGS_PYTHON_ENABLED=ON -DCIRCT_ENABLE_FRONTENDS=PyRTG -DLLVM_STATIC_LINK_CXX_STDLIB=OFF -DPython3_EXECUTABLE=\"$PYTHON_EXECUTABLE\" -DPython_EXECUTABLE=\"$PYTHON_EXECUTABLE\"" >> "$GITHUB_OUTPUT"
       - name: Integration Test Setup (Generic)
         if: inputs.run_integration_tests
         run: |
