@@ -30,10 +30,10 @@ def _is_user_code(loc: ir.Location):
   Check if a file is user code (not part of PyRTG library).
   """
 
-  if loc.is_a_name():
+  if isinstance(loc, ir.NameLoc):
     loc = loc.child_loc
 
-  if not loc.is_a_file():
+  if not isinstance(loc, ir.FileLineColLoc):
     return True
 
   # Filter out Python internal frames
@@ -177,23 +177,23 @@ class Printer:
     self.traceback_indent -= 1
 
   def print_loc(self, loc: ir.Location):
-    if loc.is_a_name():
+    if isinstance(loc, ir.NameLoc):
       self.print_loc(loc.child_loc)
-    elif loc.is_a_callsite():
+    elif isinstance(loc, ir.CallSiteLoc):
       trace = []
-      while loc.is_a_callsite():
+      while isinstance(loc, ir.CallSiteLoc):
         trace.append(loc.callee)
         loc = loc.caller
       trace.append(loc)
       self.print_traceback(trace)
-    elif loc.is_a_file():
+    elif isinstance(loc, ir.FileLineColLoc):
       self.print(colored("--> ", Color.CYAN),
                  f"{loc.filename}:{loc.start_line}:{loc.start_col}")
       self.print_source_line(loc)
-    elif loc == ir.Location.unknown():
+    elif isinstance(loc, ir.UnknownLoc):
       self.print(colored("--> ", Color.CYAN), "unknown location")
     else:
-      raise ValueError("unexpected location type")
+      raise ValueError(f"unexpected location type: {type(loc).__name__}")
 
 
 def get_diagnostic_handler(verbosity: Verbosity):
