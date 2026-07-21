@@ -1309,6 +1309,10 @@ def _resolve_engine_pair(path: str) -> Tuple[Callable, Callable]:
     - a zero-arg factory callable returning such a tuple.
   """
   import importlib
+  if not isinstance(path, str):
+    raise TypeError(
+        "Engine override path must be a dotted 'pkg.mod.attr' string; "
+        f"got {type(path).__name__}")
   module_path, _, attr_path = path.rpartition(".")
   if not module_path or not attr_path:
     raise ValueError(
@@ -1323,6 +1327,10 @@ def _resolve_engine_pair(path: str) -> Tuple[Callable, Callable]:
     raise TypeError(
         f"Engine override {path!r} must resolve to a 2-tuple "
         f"(to_host_engine_gen, from_host_engine_gen); got {type(obj).__name__}")
+  if not (callable(obj[0]) and callable(obj[1])):
+    raise TypeError(
+        f"Engine override {path!r} must resolve to a 2-tuple of callables; got "
+        f"({type(obj[0]).__name__}, {type(obj[1]).__name__})")
   return obj
 
 
