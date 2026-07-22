@@ -7,16 +7,16 @@
 //===----------------------------------------------------------------------===//
 //
 // This file defines the InliningInfo helper.
-// It computes, per module, the facts the FIRRTL module inliner needs before
-// it rewrites anything: whether the module is marked inline or flatten,
-// whether it can be reached through a module that is being flattened, and
-// whether it survives inlining at all.
-// It also records the parents-before-children module order the inliner's
-// rewrite walk uses.
+// It computes the per-module facts the inliner needs before rewriting:
+// 1. Whether a module is marked inline or flatten.
+// 2. Whether it can be reached through a module being flattened.
+// 3. Whether it survives inlining at all.
 //
-// This is a private helper of the ModuleInliner pass, not a registered
-// AnalysisManager analysis: computing the facts validates the annotations and
-// can fail with diagnostics, which an analysis constructor cannot surface.
+// It also records the parents-before-children order the rewrite walk uses.
+//
+// A private helper of the ModuleInliner pass, not a registered analysis:
+// computing the facts validates annotations and can fail with diagnostics,
+// which an analysis constructor cannot surface.
 // Construct it directly and check the result of run().
 //
 //===----------------------------------------------------------------------===//
@@ -40,14 +40,13 @@ public:
     /// The module carries a flatten annotation.
     bool hasFlatten : 1;
 
-    /// Some instantiation path to this module passes through a module being
-    /// flattened.
-    /// This is a context-insensitive over-approximation: any parent
-    /// flattening it sets the bit, not all parents.
+    /// Some instantiation path reaches this module through one being flattened.
+    /// This is a context-insensitive over-approximation (MOP):
+    /// any parent flattening it sets the bit, not all parents.
     bool underFlatten : 1;
 
-    /// Some instantiation path reaches this module that no flattened
-    /// ancestor absorbs (underFlatten's dual).
+    /// The dual of underFlatten:
+    /// there exists a path along which this module isn't flattened away.
     /// Analysis-internal stepping stone for `isLive`; consumers want that.
     /// (isLive = this, minus regular modules absorbed by their inline mark.)
     bool hasUnflattenedPath : 1;
@@ -55,21 +54,19 @@ public:
     /// Will this module exist in the final result?
     bool isLive : 1;
 
-    /// Derived predicates over the facts above, named for the walk that
-    /// consumes them.
+    /// Derived named predicates over the facts above, used in the walk.
 
-    /// This module's regular children remain instantiated: some path keeps
-    /// this module instantiated and it is not flattening them away.
+    /// This module's regular children remain instantiated:
+    /// some path keeps it instantiated and it is not flattening them away.
     bool keepsChildrenInstantiated() const {
       return hasUnflattenedPath && !hasFlatten;
     }
 
-    /// Some copy of this module's body may be flattened -- by its own
-    /// annotation or a flattening ancestor.
+    /// Some copy of this module's body may be flattened,
+    /// by its own annotation or a flattening ancestor.
     bool mayBeFlattened() const { return underFlatten || hasFlatten; }
 
-    // Can't have default member initialization of bitfield members until
-    // C++20.
+    // No default member initialization of bitfield members until C++20.
     ModuleInfo()
         : hasInline(false), hasFlatten(false), underFlatten(false),
           hasUnflattenedPath(false), isLive(false) {}
@@ -82,28 +79,26 @@ public:
       : circuit(circuit), instanceGraph(instanceGraph),
         symbolTable(symbolTable) {}
 
-  /// Compute the per-module facts.  Fails (with a diagnostic) on annotations
-  /// the inliner rejects, e.g., inline/flatten on a non-regular module; warns
-  /// on annotations it can only partially honor.  On failure the IR is
-  /// untouched.
+  /// Compute the per-module facts, leaving the IR untouched on failure.
+  /// Rejected annotations (e.g., inline/flatten on a non-regular module)
+  /// fail with a diagnostic; partially-honored ones draw a warning.
   ///
-  /// Closed world: liveness sees instance-graph uses plus symbol uses on
-  /// circuit-level ops.  Instance-graph uses include instance_choice targets
-  /// and alternatives, seeded live even from a dead holder.  A module
-  /// referenced only from inside another module's body by a non-instance op
-  /// is invisible and may be erased under that reference.  In-contract for
-  /// the stock pipeline, where body references to modules are
-  /// instance-mediated before LowerXMR, and strictly broader than the old
-  /// inliner's scan -- but a closed world, and this line is its boundary.
+  /// Closed world:
+  /// - Liveness sees instance-graph uses plus symbol uses on circuit-level ops.
+  /// - Instance-graph uses include instance_choice targets and alternatives,
+  ///   seeded live even from a dead holder.
+  /// - A module referenced only inside a module body by a non-instance op
+  ///   is invisible and may be erased under that reference.
+  ///
+  /// Contract (correctness precondition):
+  /// Body-to-module references are only from instance operations.
   LogicalResult run();
 
   const ModuleInfoMap &getModuleInfoMap() const { return modInfoMap; }
 
-  /// All regular modules in inverse post-order: parents strictly before
-  /// children.
-  /// Recorded during the propagation walk so a consumer need not recompute
-  /// it.
-  /// Valid as long as the instance graph is not mutated after run().
+  /// Regular modules in inverse post-order: parents strictly before children.
+  /// Recorded during the propagation walk so a consumer need not recompute it.
+  /// Frozen with the facts, it is the order this analysis was computed over.
   ArrayRef<FModuleOp> getIPOModules() const { return ipoModules; }
 
   /// Print the computed facts in a stable, test-friendly format.
