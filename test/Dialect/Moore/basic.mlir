@@ -478,11 +478,53 @@ func.func @SeverityAndDisplayBuiltins(%arg0: !moore.format_string) {
 }
 
 // CHECK-LABEL: func.func @MathBuiltins
-func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42) {
+func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42, %arg2: !moore.f64) {
   // CHECK: moore.builtin.clog2 %arg0 : i32
   moore.builtin.clog2 %arg0 : i32
   // CHECK: moore.builtin.clog2 %arg1 : l42
   moore.builtin.clog2 %arg1 : l42
+    // CHECK: moore.builtin.ln %arg2 : f64
+  moore.builtin.ln %arg2 : f64
+  // CHECK: moore.builtin.log10 %arg2 : f64
+  moore.builtin.log10 %arg2 : f64
+  // CHECK: moore.builtin.pow %arg2, %arg2 : f64
+  moore.builtin.pow %arg2, %arg2 : f64
+  // CHECK: moore.builtin.exp %arg2 : f64
+  moore.builtin.exp %arg2 : f64
+  // CHECK: moore.builtin.sqrt %arg2 : f64
+  moore.builtin.sqrt %arg2 : f64
+  // CHECK: moore.builtin.floor %arg2 : f64
+  moore.builtin.floor %arg2 : f64
+  // CHECK: moore.builtin.ceil %arg2 : f64
+  moore.builtin.ceil %arg2 : f64
+  // CHECK: moore.builtin.sin %arg2 : f64
+  moore.builtin.sin %arg2 : f64
+  // CHECK: moore.builtin.cos %arg2 : f64
+  moore.builtin.cos %arg2 : f64
+  // CHECK: moore.builtin.tan %arg2 : f64
+  moore.builtin.tan %arg2 : f64
+  // CHECK: moore.builtin.asin %arg2 : f64
+  moore.builtin.asin %arg2 : f64
+  // CHECK: moore.builtin.acos %arg2 : f64
+  moore.builtin.acos %arg2 : f64
+  // CHECK: moore.builtin.atan %arg2 : f64
+  moore.builtin.atan %arg2 : f64
+  // CHECK: moore.builtin.atan2 %arg2, %arg2 : f64
+  moore.builtin.atan2 %arg2, %arg2  : f64
+  // CHECK: moore.builtin.hypot %arg2, %arg2 : f64
+  moore.builtin.hypot %arg2, %arg2  : f64
+  // CHECK: moore.builtin.sinh %arg2 : f64
+  moore.builtin.sinh %arg2 : f64
+  // CHECK: moore.builtin.cosh %arg2 : f64
+  moore.builtin.cosh %arg2 : f64
+  // CHECK: moore.builtin.tanh %arg2 : f64
+  moore.builtin.tanh %arg2 : f64
+  // CHECK: moore.builtin.asinh %arg2 : f64
+  moore.builtin.asinh %arg2 : f64
+  // CHECK: moore.builtin.acosh %arg2 : f64
+  moore.builtin.acosh %arg2 : f64
+  // CHECK: moore.builtin.atanh %arg2 : f64
+  moore.builtin.atanh %arg2 : f64
   return
 }
 

@@ -3506,6 +3506,22 @@ class RealMathFunc<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "$value attr-dict `:` type($value)";
 }
 
+class RealMathFuncTwoIn<string mnemonic, list<Trait> traits = []> :
+    Builtin<mnemonic, traits # [SameOperandsAndResultType]> {
+  let description = [{
+    The system real math functions shall accept two real value arguments and return
+    a real result type. Their behavior shall match the equivalent C language
+    standard math library function indicated.
+
+    See IEEE 1800-2017 § 20.8.2 "Real math functions".
+   }];
+  let arguments = (ins RealType:$lhs, RealType:$rhs);
+  let results = (outs RealType:$result);
+  let assemblyFormat = [{
+    $lhs `,` $rhs attr-dict `:` type($result)
+  }];
+}
+
 def Clog2BIOp : Builtin<"clog2", [SameOperandsAndResultType]> {
   let summary = "Compute ceil(log2(x)) of x";
   let description = [{
@@ -3540,6 +3556,22 @@ def SqrtBIOp : RealMathFunc<"sqrt"> {
   let summary = "Square root";
 }
 
+def MinBIOp : RealMathFuncTwoIn<"min"> {
+  let summary = "Minimum";
+}
+
+def MaxBIOp : RealMathFuncTwoIn<"max"> {
+  let summary = "Maximum";
+}
+
+def AbsBIOp : RealMathFunc<"abs"> {
+  let summary = "Absolute";
+}
+
+def PowBIOp : RealMathFuncTwoIn<"pow"> {
+  let summary = "Power (x^y)";
+}
+
 def FloorBIOp : RealMathFunc<"floor"> {
   let summary = "Floor";
 }
@@ -3570,6 +3602,14 @@ def AcosBIOp : RealMathFunc<"acos"> {
 
 def AtanBIOp : RealMathFunc<"atan"> {
   let summary = "Arc-tangent";
+}
+
+def Atan2BIOp : RealMathFuncTwoIn<"atan2"> {
+  let summary = "Arc-tangent of y/x";
+}
+
+def HypotBIOp : RealMathFuncTwoIn<"hypot"> {
+  let summary = "Hypotenusis function ((x^2+y^2)^(1/2))";
 }
 
 def SinhBIOp : RealMathFunc<"sinh"> {
