@@ -2789,7 +2789,7 @@ firrtl.circuit "ModuleOnlyGCUntouched" {
 // -----
 
 // A hierpath rooted in a module that is dead-erased is itself erased: the dead
-// root is never live, so traceUpUntilSurviving discovers no context, the source
+// root is never live, so the upward trace discovers no context, the source
 // path has no surviving target, and the writeback removes it
 // (num-hierpaths-erased).
 // Pins the one remaining erase path.
@@ -3461,8 +3461,8 @@ firrtl.circuit "PerFieldPortRetop" {
 //===----------------------------------------------------------------------===//
 // Determinism / multi-root.
 // Writeback must emit HierPathOps -- and stamp disambiguated inner-symbol
-// suffixes -- in a run-to-run stable order (iterate creation order, not DenseMap
-// hash order).
+// suffixes -- in a run-to-run stable order (iterate creation order, not hash-map
+// order).
 // This circuit has four source NLAs across three distinct roots, three of which
 // re-root into multiple contexts, so a nondeterministic writeback would
 // reorder the emitted hierpaths and/or shuffle the @_N suffixes.
