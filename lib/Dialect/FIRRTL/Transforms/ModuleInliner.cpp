@@ -231,7 +231,8 @@ public:
     return {getTrailingObjects(), numHops};
   }
 
-  void dump() const {
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  LLVM_DUMP_METHOD void dump() const {
     llvm::dbgs() << llvm::formatv("    VirtualNLA {0}: origSym @{1}", id,
                                   origSym);
     if (isLocal()) {
@@ -246,6 +247,7 @@ public:
       }
     }
   }
+#endif
 };
 
 static_assert(std::is_trivially_destructible_v<VirtualNLA>,
@@ -304,7 +306,9 @@ public:
         instanceGraph(instanceGraph), moduleInfoMap(moduleInfoMap) {}
 
   LogicalResult run();
-  void dump();
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  LLVM_DUMP_METHOD void dump();
+#endif
 
   /// Source-path style counters, copied into the pass statistics.
   /// Only old-style terminals need the leaf-rename machinery
@@ -686,7 +690,8 @@ void NLAPlanner::processSinglePathContext(
       pathRoutingTable[hop.inst].push_back(vnla);
 }
 
-void NLAPlanner::dump() {
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD void NLAPlanner::dump() {
   llvm::dbgs() << "\nVirtualNLAs (creation order):\n";
   for (auto *vnla : allVNLAs)
     vnla->dump();
@@ -727,6 +732,7 @@ void NLAPlanner::dump() {
 
   llvm::dbgs() << "\n";
 }
+#endif
 
 //===----------------------------------------------------------------------===//
 // Module Inlining Support
