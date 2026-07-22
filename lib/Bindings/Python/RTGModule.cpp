@@ -149,6 +149,17 @@ void circt::python::populateDialectRTGSubmodule(nb::module_ &m) {
           },
           nb::arg("self"), nb::arg("ctxt") = nullptr);
 
+  mlir_type_subclass(m, "ContinuationType", rtgTypeIsAContinuation)
+      .def_classmethod(
+          "get",
+          [](nb::object cls, MlirType resumeType) {
+            return cls(rtgContinuationTypeGet(resumeType));
+          },
+          nb::arg("self"), nb::arg("resume_type"))
+      .def_property_readonly("resume_type", [](MlirType self) {
+        return rtgContinuationTypeGetResumeType(self);
+      });
+
   // Types for ISA targets
   //===--------------------------------------------------------------------===//
 

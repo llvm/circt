@@ -2697,6 +2697,15 @@ module ImmediateAssertiWithActionBlock;
   always_comb begin
     assert (x) c = 1; else c = 0;
   end
+
+  // Assert in function block
+  // CHECK:func.func private @check([[ARG:%.*]]: !moore.l32) {
+  // CHECK:  [[C0:%.+]] = moore.constant 0 : l32
+  // CHECK:  [[COND:%.+]] = moore.ugt [[ARG]], [[C0]] : l32 -> l1
+  // CHECK:  moore.assert immediate [[COND]] : l1
+  function automatic void check(logic[31:0] w);
+    assert (w > 0);
+  endfunction
 endmodule
 
 // CHECK-LABEL: moore.module @AssertNoActionBlock

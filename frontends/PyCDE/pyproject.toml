@@ -7,8 +7,10 @@ requires = [
   "ninja>=1.10",
   "executing",
 
-  # MLIR build depends.
+  # Test requires numpy
   "numpy",
+
+  # MLIR build depends.
   "nanobind>=2.2",
   "PyYAML",
 ]

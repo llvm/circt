@@ -27,6 +27,7 @@
 #include "llvm/ADT/DenseMapInfoVariant.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/Debug.h"
+#include <memory>
 #include <random>
 
 namespace circt {
@@ -110,6 +111,7 @@ struct SymbolicComputationWithIdentityStorage;
 struct SymbolicComputationWithIdentityValue;
 struct SymbolicComputationStorage;
 struct OpaqueExternalStorage;
+struct ContinuationStorage;
 
 /// The abstract base class for elaborated values.
 using ElaboratorValue =
@@ -119,7 +121,8 @@ using ElaboratorValue =
                  ArrayStorage *, TupleStorage *, MemoryStorage *,
                  MemoryBlockStorage *, SymbolicComputationWithIdentityStorage *,
                  SymbolicComputationWithIdentityValue *,
-                 SymbolicComputationStorage *, OpaqueExternalStorage *>;
+                 SymbolicComputationStorage *, OpaqueExternalStorage *,
+                 ContinuationStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const ElaboratorValue &val) {
@@ -523,6 +526,30 @@ struct OpaqueExternalStorage : IdentityValue {
   OpaqueExternalStorage(Type type, Location loc) : IdentityValue(type, loc) {}
 };
 
+/// Maps effect names to their handler regions within a single rtg.handle op.
+struct HandlerFrame {
+  DenseMap<StringAttr, Region *> handlers;
+};
+
+/// Storage object for '!rtg.continuation<T>' — a captured elaboration frame.
+/// Holds the ops to elaborate on resume and the handler-stack snapshot.
+struct ContinuationStorage : IdentityValue {
+  ContinuationStorage(SmallVector<Operation *> remainingOps,
+                      Value performResult,
+                      SmallVector<HandlerFrame> capturedHandlerStack,
+                      Type resumeType, Location loc)
+      : IdentityValue(ContinuationType::get(loc.getContext(), resumeType), loc),
+        remainingOps(std::move(remainingOps)), performResult(performResult),
+        capturedHandlerStack(std::move(capturedHandlerStack)) {}
+
+  /// Ops from the HandleOp body that appear after the rtg.perform.
+  SmallVector<Operation *> remainingOps;
+  /// The SSA result of the rtg.perform op (null for unit-result effects).
+  Value performResult;
+  /// Handler-stack snapshot at the point the perform was triggered.
+  SmallVector<HandlerFrame> capturedHandlerStack;
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -732,6 +759,11 @@ static void print(const OpaqueExternalStorage *val, llvm::raw_ostream &os) {
   os << "<opaque-external " << val->type << ">";
 }
 
+static void print(const ContinuationStorage *val, llvm::raw_ostream &os) {
+  os << "<continuation with " << val->remainingOps.size() << " ops at " << val
+     << ">";
+}
+
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const ElaboratorValue &value) {
   std::visit([&](auto val) { print(val, os); }, value);
@@ -890,6 +922,7 @@ private:
   VISIT_UNSUPPORTED(SymbolicComputationWithIdentityValue)
   VISIT_UNSUPPORTED(SymbolicComputationStorage)
   VISIT_UNSUPPORTED(OpaqueExternalStorage)
+  VISIT_UNSUPPORTED(ContinuationStorage)
 
 #undef VISIT_UNSUPPORTED
 
@@ -1307,6 +1340,12 @@ private:
     return res;
   }
 
+  Value visit(ContinuationStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    emitError() << "continuation cannot be materialized into IR";
+    return {};
+  }
+
   Value visit(SymbolicComputationWithIdentityValue *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
     auto *noConstStorage =
@@ -1419,7 +1458,13 @@ private:
 
 /// Used to signal to the elaboration driver whether the operation should be
 /// removed.
-enum class DeletionKind { Keep, Delete };
+enum class DeletionKind {
+  Keep,
+  Delete,
+  /// Stop iterating the current block; used when rtg.perform triggers a
+  /// handler that elaborates the continuation inline.
+  StopElaboration
+};
 
 /// Interprets the IR to perform and lower the represented randomizations.
 class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>> {
@@ -1469,8 +1514,8 @@ public:
     // Re-map operands: substitute each operand with the SSA value
     // corresponding to its current ElaboratorValue. Materialization of
     // operands must happen *before* `newOp` so the defs dominate the use;
-    // anchor the builder at `newOp` for the duration of operand re-map, then
-    // advance past it.
+    // anchor the builder at `newOp` (= immediately before it) for the
+    // duration of operand re-map, then advance past it.
     materializer.getBuilder().setInsertionPoint(newOp);
     for (auto &operand : newOp->getOpOperands()) {
       auto emitError = [&]() {
@@ -2057,6 +2102,128 @@ public:
     return DeletionKind::Delete;
   }
 
+  // Effect handler ops
+  //===--------------------------------------------------------------------===//
+
+  FailureOr<DeletionKind> visitOp(EffectOp op) { return DeletionKind::Keep; }
+
+  FailureOr<DeletionKind> visitOp(WithHandlersOp op) {
+    // Build the handler frame for this with_handlers scope.
+    HandlerFrame frame;
+    for (auto [effectAttr, handlerRegion] :
+         llvm::zip(op.getEffects(), op.getHandlerRegions()))
+      frame.handlers[cast<FlatSymbolRefAttr>(effectAttr).getAttr()] =
+          &handlerRegion;
+    handlerStack.push_back(std::move(frame));
+
+    SmallVector<ElaboratorValue> unused;
+    if (failed(elaborate(op.getBody(), {}, /*keepTerminator=*/false, unused)))
+      return failure();
+
+    // Pop only if not already consumed by a StopElaboration return.
+    if (!handlerStack.empty())
+      handlerStack.pop_back();
+
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(PerformOp op) {
+    StringAttr effectName = op.getEffectAttr().getAttr();
+
+    // Search innermost-first for a handler for this effect.
+    Region *handlerRegion = nullptr;
+    for (int i = (int)handlerStack.size() - 1; i >= 0; --i) {
+      auto it = handlerStack[i].handlers.find(effectName);
+      if (it != handlerStack[i].handlers.end()) {
+        handlerRegion = it->second;
+        break;
+      }
+    }
+    if (!handlerRegion)
+      return op->emitError("no handler for effect @") << effectName.getValue();
+
+    // Collect remaining ops after this perform (for the continuation).
+    SmallVector<Operation *> remaining;
+    auto *block = op->getBlock();
+    for (auto it = std::next(op->getIterator());
+         it != block->end() && !it->hasTrait<OpTrait::IsTerminator>(); ++it)
+      remaining.push_back(&*it);
+
+    // Determine the resume type (null Value → unit-result effect).
+    Value performResultSSAVal =
+        op.getNumResults() > 0 ? Value(op.getResult()) : Value();
+    Type resumeType = performResultSSAVal ? performResultSSAVal.getType()
+                                          : NoneType::get(op.getContext());
+
+    auto *cont = sharedState.internalizer.create<ContinuationStorage>(
+        std::move(remaining), performResultSSAVal,
+        SmallVector<HandlerFrame>(handlerStack), resumeType, op.getLoc());
+
+    // Build handler arguments: effect operands followed by the continuation.
+    SmallVector<ElaboratorValue> handlerArgs;
+    for (auto operand : op.getOperands())
+      handlerArgs.push_back(state.at(operand));
+    handlerArgs.push_back(cont);
+
+    // Pop the frame that owns this handler before entering the handler body
+    // so the handler itself doesn't see its own effect.
+    HandlerFrame savedFrame = handlerStack.back();
+    handlerStack.pop_back();
+
+    SmallVector<ElaboratorValue> unused;
+    if (failed(elaborate(*handlerRegion, handlerArgs,
+                         /*keepTerminator=*/false, unused)))
+      return failure();
+
+    handlerStack.push_back(std::move(savedFrame));
+
+    return DeletionKind::StopElaboration;
+  }
+
+  FailureOr<DeletionKind> visitOp(ResumeOp op) {
+    auto *cont =
+        std::get<ContinuationStorage *>(state.at(op.getContinuation()));
+
+    // If the perform had a result, map it to the resume value.
+    if (cont->performResult && op.getValue())
+      state[cont->performResult] = state.at(op.getValue());
+
+    // Temporarily restore the handler stack from when perform was triggered.
+    auto savedStack = std::move(handlerStack);
+    handlerStack = cont->capturedHandlerStack;
+
+    for (auto *contOp : cont->remainingOps) {
+      auto result = dispatchOpVisitor(contOp);
+      if (failed(result)) {
+        handlerStack = std::move(savedStack);
+        return failure();
+      }
+      if (*result == DeletionKind::StopElaboration)
+        break;
+      if (*result == DeletionKind::Keep)
+        if (failed(materializer.materialize(contOp, state))) {
+          handlerStack = std::move(savedStack);
+          return failure();
+        }
+      LLVM_DEBUG({
+        llvm::dbgs() << "Elaborated continuation op " << *contOp << " to\n[";
+        llvm::interleaveComma(contOp->getResults(), llvm::dbgs(),
+                              [&](auto res) {
+                                if (state.contains(res))
+                                  llvm::dbgs() << state.at(res);
+                                else
+                                  llvm::dbgs() << "unknown";
+                              });
+        llvm::dbgs() << "]\n\n";
+      });
+    }
+
+    handlerStack = std::move(savedStack);
+    return DeletionKind::Delete;
+  }
+
+  //===--------------------------------------------------------------------===//
+
   FailureOr<DeletionKind> visitOp(TupleCreateOp op) {
     SmallVector<ElaboratorValue> values;
     values.reserve(op.getElements().size());
@@ -2502,6 +2669,11 @@ public:
       if (failed(result))
         return failure();
 
+      // A perform op elaborated the continuation inline; remaining ops in this
+      // block will be deleted by finalizer.
+      if (*result == DeletionKind::StopElaboration)
+        return success();
+
       if (*result == DeletionKind::Keep)
         if (failed(materializer.materialize(&op, state)))
           return failure();
@@ -2554,6 +2726,9 @@ private:
 
   // Allows us to convert ElaboratorValues to attributes.
   ElaboratorValueToAttributeConverter elabValConverter;
+
+  // Stack of handler frames for rtg.handle scopes, innermost last.
+  SmallVector<HandlerFrame> handlerStack;
 };
 } // namespace
 

@@ -2674,8 +2674,8 @@ def DeferAssertAttr : I32EnumAttr<
   let cppNamespace = "circt::moore";
 }
 
-class ImmediateAssertOp<string mnemonic, list<Trait> traits = []> : 
-    MooreOp<mnemonic, traits # [HasParent<"ProcedureOp">]>{
+class ImmediateAssertOp<string mnemonic, list<Trait> traits = []> :
+    MooreOp<mnemonic, traits # [ParentOneOf<["ProcedureOp", "::mlir::func::FuncOp"]>]>{
   let arguments = (ins
     DeferAssertAttr:$defer,
     AnySingleBitType:$cond,

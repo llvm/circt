@@ -253,6 +253,118 @@ intend to be only used for one (or a few) specific use-cases/test-targets.
 * *Register Allocation Pass*
 * *Assembly Emission Pass*
 
+## Effect Handlers
+
+### Motivation
+
+As tests grow more complex, sequences often need to make requests that can only
+be satisfied by their calling context, for example:
+  - "transition to U mode before this snippet runs",
+  - "acquire a free register from whatever pool the outer test is managing", 
+  - "emit a marker so the coverage tracker can observe this path".
+Hard-coding the answer inside the sequence couples it to one particular context
+and makes it impossible to reuse.
+
+Algebraic effect handlers solve this by separating the *declaration* of a
+request from its *interpretation*.  An effect is declared globally
+(`rtg.effect`), a sequence performs it (`rtg.perform`), and is oblivious to how
+the caller will handle it.  The caller installs a handler (`rtg.handle`) that
+provides the interpretation.  The handler receives the remainder of the sequence
+body as an explicit, first-class continuation that it can resume zero, one, or
+multiple times.
+
+Critically, RTG effects operate entirely at **elaboration time**.  They shape
+how the test generator constructs the IR; they produce no operations in the
+emitted assembly.
+
+### Design decisions
+
+#### Effects are declared as named symbols, not encoded in types
+A functional language like Koka or Eff encodes effects in the function's type
+signature as a row of labels, enabling a type-checked proof that every effect
+is handled before the program compiles.  RTG does not do this.  The reason is
+pragmatic: RTG IR is generated from Python via a dynamic builder API.  There is
+no type-level function signature to attach an effect row to, and adding one
+would require either a full dependent-type system or a separate static analysis
+pass.  Named symbols give the same scoping semantics and are straightforward to
+verify dynamically (an unhandled `rtg.perform` signals failure at elaboration
+time, not silently miscompiles).
+
+#### Continuations are explicit and multi-shot
+Every handler body receives the remainder of the sequence after the
+`rtg.perform` as an explicit `!rtg.continuation<T>` block argument.  The
+handler resumes the continuation with `rtg.resume %k, %value` and may do so
+any number of times.  Calling `rtg.resume` twice causes the continuation body
+to be elaborated twice, each time with its own injected resume value, while
+shared mutable state (`rtg.mut`) accumulates across all shots.  This enables
+backtracking-style patterns: a single `@choose` effect can be handled by
+resuming with every candidate value in turn, producing one copy of the
+continuation body per candidate in the emitted assembly.
+
+The elaborator implements multi-shot by storing the continuation as an
+immutable snapshot of the remaining ops and the handler stack at the time of
+`rtg.perform`.  Each `rtg.resume` re-elaborates from that snapshot into the
+current output position, so the clone cost is proportional to the number of
+resumes rather than the size of the captured continuation.
+
+`rtg.resume` may appear inside an `rtg.with_handlers` body region.  In that
+case, the continuation body is elaborated directly into the `with_handlers`
+body, so the generated code runs while the hardware trap handler is active.
+
+#### Deep handlers only
+RTG uses deep handler semantics: an installed handler intercepts all matching
+`rtg.perform` operations anywhere in the lexical scope of the enclosing
+`rtg.handle` region, including those inside called sequences.  Shallow handlers
+(which intercept only the first matching perform, then require reinstallation)
+are not provided because the observed use cases — mode transitions, resource
+accounting, coverage tracking — all require the handler to remain active for
+the entire scope.
+
+#### Handler scoping is lexical (static extent) rather than dynamic
+In Koka a handler catches effects raised anywhere in its dynamic call stack.
+RTG `rtg.handle` catches effects in its lexical body region.  Because sequences
+are inlined at elaboration time before handlers are resolved, dynamic and static
+extent coincide in practice for the primary use case.  Lexical scoping is
+simpler to implement (no handler stack to thread through closure calls) and
+easier to reason about in an IR where sequences are opaque closures.
+
+### Comparison with prior art
+
+**Koka** is the canonical reference for row-polymorphic algebraic effects.
+Its effect rows provide static, type-checked guarantees that every effect is
+handled.  Its continuations are first-class values and multi-shot by default,
+supporting patterns like backtracking search, cooperative scheduling, and
+iterator-style lazy sequences.  Tail-resumptive handlers compile to tight loops
+via evidence passing.  RTG shares the multi-shot continuation model but
+deliberately trades away row polymorphism in exchange for a simpler IR
+representation and a natural embedding in a Python builder API.  The payoff is
+that the subset RTG implements — multi-shot, named-effect, deep handlers —
+covers the observed test-generation patterns without requiring a typed
+intermediate representation.
+
+**Eff** introduced the first practical implementation of algebraic effects with
+handlers and demonstrated that the semantics compose cleanly with mutable state.
+RTG's `rtg.mut` / mutable elaboration-time cells serve a similar role to Eff's
+state effect, and the same insight applies: by tracking mutable state through
+effect-visible cells rather than hidden Python variables, the elaborator can
+emit correct conditional branches (`scf.if`) in the output IR rather than baking
+a single static decision into the emitted code at Python execution time.
+
+**Frank** emphasises that effects should be handled at the *call site* rather
+than at the *definition site*, and uses a "do-notation" style that makes effect
+use syntactically explicit.  RTG's `perform` call is the do-notation equivalent;
+the separation between sequence bodies (which call `perform`) and test bodies
+(which install handlers) mirrors Frank's caller/callee distinction.
+
+### Known limitations
+
+* No static check that effects are handled.  An unhandled `rtg.perform` is a
+  runtime elaboration failure.  A companion type-inference or lint pass could
+  provide earlier feedback.
+* No effect polymorphism.  A sequence cannot be generic over which effects it
+  performs; it must name them concretely.  This limits reuse across contexts
+  that provide different handler interpretations.
+
 ## Frontends
 
 Any dialect or entry point is allowed to generate valid RTG IR with a companion
