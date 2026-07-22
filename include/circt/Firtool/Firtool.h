@@ -185,6 +185,8 @@ public:
 
   DomainMode getDomainMode() const { return domainMode; }
 
+  ArrayRef<std::string> getSkippedDomains() const { return skippedDomains; }
+
   // Setters, used by the CAPI
   FirtoolOptions &setOutputFilename(StringRef name) {
     outputFilename = name;
@@ -477,6 +479,7 @@ private:
   bool emitAllBindFiles;
   bool inlineInputOnlyModules;
   DomainMode domainMode;
+  SmallVector<std::string> skippedDomains;
 };
 
 void registerFirtoolCLOptions();
