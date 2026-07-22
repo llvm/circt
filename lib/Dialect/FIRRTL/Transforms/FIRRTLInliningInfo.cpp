@@ -89,9 +89,6 @@ LogicalResult InliningInfo::run() {
     if (!modInfo.hasUnflattenedPath && !modInfo.underFlatten)
       return;
 
-    bool childrenInstantiated =
-        modInfo.hasUnflattenedPath && !modInfo.hasFlatten;
-    bool moduleMayBeFlattened = modInfo.underFlatten || modInfo.hasFlatten;
     for (auto *edge : node) {
       auto *childMod = edge->getTarget()->getModule().getOperation();
       auto &childInfo = modInfoMap[childMod];
@@ -99,12 +96,12 @@ LogicalResult InliningInfo::run() {
       assert(
           (isRegularModule || !(childInfo.hasInline || childInfo.hasFlatten)) &&
           "non-fmoduleop with inline/flatten annotation");
-      if (isRegularModule && moduleMayBeFlattened)
+      if (isRegularModule && modInfo.mayBeFlattened())
         childInfo.underFlatten = true;
 
       // A non-regular child is never absorbed, so it stays instantiated.
       // A regular child does iff this module does and isn't flattening it.
-      if (childrenInstantiated || !isRegularModule)
+      if (modInfo.keepsChildrenInstantiated() || !isRegularModule)
         childInfo.hasUnflattenedPath = true;
 
       // Set liveness.
