@@ -2089,107 +2089,106 @@ LogicalResult ModuleState::checkAndInferModule(FModuleOp moduleOp) {
 /// predicate takes a domain name and returns true if that domain should be
 /// stripped.
 static LogicalResult
-stripModuleImpl(FModuleLike moduleOp,
+stripModuleImpl(FModuleLike op,
                 llvm::function_ref<bool(StringAttr)> shouldStripDomain) {
   auto shouldStripType = [&](Type type) {
     if (auto domainType = dyn_cast<DomainType>(type))
       return shouldStripDomain(domainType.getName().getAttr());
     return false;
   };
-  auto processOp = [&](Operation *op) -> WalkResult {
-    return TypeSwitch<Operation *, WalkResult>(op)
-        .Case<FModuleLike>([&](FModuleLike op) {
-          BitVector erasures(op.getNumPorts());
-          for (size_t i = 0, e = op.getNumPorts(); i < e; ++i)
-            if (shouldStripType(op.getPortType(i)))
-              erasures.set(i);
-          if (erasures.any())
-            op.erasePorts(erasures);
-          return WalkResult::advance();
-        })
-        .Case<DomainDefineOp>([&](DomainDefineOp op) {
-          if (shouldStripType(op.getDest().getType()) ||
-              shouldStripType(op.getSrc().getType()))
-            op.erase();
-          return WalkResult::advance();
-        })
-        .Case<DomainCreateOp>([&](DomainCreateOp op) {
-          if (shouldStripType(op.getType()))
-            op.erase();
-          return WalkResult::advance();
-        })
-        .Case<DomainCreateAnonOp>([&](DomainCreateAnonOp op) {
-          if (shouldStripType(op.getType()))
-            op.erase();
-          return WalkResult::advance();
-        })
-        .Case<DomainSubfieldOp>([&](DomainSubfieldOp op) {
-          // The subfield's result is a property value; decide whether
-          // to strip based on the domain it reads from.
-          if (shouldStripType(op.getInput().getType())) {
-            if (!op->use_empty()) {
-              OpBuilder builder(op);
-              op.replaceAllUsesWith(
-                  UnknownValueOp::create(builder, op.getLoc(), op.getType())
-                      .getResult());
-            }
-            op.erase();
-          }
-          return WalkResult::advance();
-        })
-        .Case<UnsafeDomainCastOp>([&](UnsafeDomainCastOp op) {
-          // Strip cast if any of the domains being cast should be
-          // stripped
-          if (llvm::any_of(op.getDomains(), [&](Value domain) {
-                return shouldStripType(domain.getType());
-              })) {
-            op.replaceAllUsesWith(op.getInput());
-            op.erase();
-          }
-          return WalkResult::advance();
-        })
-        .Case<WireOp>([&](WireOp op) {
-          // Erase wires of DomainType that should be stripped
-          if (shouldStripType(op.getType(0))) {
-            op->erase();
-            return WalkResult::advance();
-          }
-          // Erase domain operands from regular wires (reverse order to
-          // maintain indices)
-          for (int i = op.getDomains().size() - 1; i >= 0; --i)
-            if (shouldStripType(op.getDomains()[i].getType()))
-              op->eraseOperand(i);
-          return WalkResult::advance();
-        })
-        .Case<FInstanceLike>([&](auto op) {
-          auto n = op.getNumPorts();
-          BitVector erasures(n);
-          for (size_t i = 0; i < n; ++i)
-            if (shouldStripType(op->getResult(i).getType()))
-              erasures.set(i);
-          if (erasures.any()) {
-            op.cloneWithErasedPortsAndReplaceUses(erasures);
-            op.erase();
-          }
-          return WalkResult::advance();
-        })
-        .Default([&](Operation *op) {
-          // All operations that can have DomainType are handled above.
-          // If we encounter one here, it's a bug in the IR or this
-          // pass.
-          for (auto type :
-               concat<Type>(op->getOperandTypes(), op->getResultTypes())) {
-            if (isa<DomainType>(type)) {
-              op->emitOpError("cannot be stripped");
-              return WalkResult::interrupt();
-            }
-          }
-          return WalkResult::advance();
-        });
-  };
-  return failure(
-      moduleOp->walk<mlir::WalkOrder::PostOrder, ReverseIterator>(processOp)
-          .wasInterrupted());
+  WalkResult result = op->walk<mlir::WalkOrder::PostOrder, ReverseIterator>(
+      [&](Operation *op) -> WalkResult {
+        return TypeSwitch<Operation *, WalkResult>(op)
+            .Case<FModuleLike>([&](FModuleLike op) {
+              BitVector erasures(op.getNumPorts());
+              for (size_t i = 0, e = op.getNumPorts(); i < e; ++i)
+                if (shouldStripType(op.getPortType(i)))
+                  erasures.set(i);
+              if (erasures.any())
+                op.erasePorts(erasures);
+              return WalkResult::advance();
+            })
+            .Case<DomainDefineOp>([&](DomainDefineOp op) {
+              if (shouldStripType(op.getDest().getType()) ||
+                  shouldStripType(op.getSrc().getType()))
+                op.erase();
+              return WalkResult::advance();
+            })
+            .Case<DomainCreateOp>([&](DomainCreateOp op) {
+              if (shouldStripType(op.getType()))
+                op.erase();
+              return WalkResult::advance();
+            })
+            .Case<DomainCreateAnonOp>([&](DomainCreateAnonOp op) {
+              if (shouldStripType(op.getType()))
+                op.erase();
+              return WalkResult::advance();
+            })
+            .Case<DomainSubfieldOp>([&](DomainSubfieldOp op) {
+              // The subfield's result is a property value; decide
+              // whether to strip based on the domain it reads from.
+              if (shouldStripType(op.getInput().getType())) {
+                if (!op->use_empty()) {
+                  OpBuilder builder(op);
+                  op.replaceAllUsesWith(
+                      UnknownValueOp::create(builder, op.getLoc(), op.getType())
+                          .getResult());
+                }
+                op.erase();
+              }
+              return WalkResult::advance();
+            })
+            .Case<UnsafeDomainCastOp>([&](UnsafeDomainCastOp op) {
+              // Strip cast if any of the domains being cast should be
+              // stripped
+              if (llvm::any_of(op.getDomains(), [&](Value domain) {
+                    return shouldStripType(domain.getType());
+                  })) {
+                op.replaceAllUsesWith(op.getInput());
+                op.erase();
+              }
+              return WalkResult::advance();
+            })
+            .Case<WireOp>([&](WireOp op) {
+              // Erase wires of DomainType that should be stripped
+              if (shouldStripType(op.getType(0))) {
+                op->erase();
+                return WalkResult::advance();
+              }
+              // Erase domain operands from regular wires (reverse order
+              // to maintain indices)
+              for (int i = op.getDomains().size() - 1; i >= 0; --i)
+                if (shouldStripType(op.getDomains()[i].getType()))
+                  op->eraseOperand(i);
+              return WalkResult::advance();
+            })
+            .Case<FInstanceLike>([&](auto op) {
+              auto n = op.getNumPorts();
+              BitVector erasures(n);
+              for (size_t i = 0; i < n; ++i)
+                if (shouldStripType(op->getResult(i).getType()))
+                  erasures.set(i);
+              if (erasures.any()) {
+                op.cloneWithErasedPortsAndReplaceUses(erasures);
+                op.erase();
+              }
+              return WalkResult::advance();
+            })
+            .Default([&](Operation *op) {
+              // All operations that can have DomainType are handled
+              // above. If we encounter one here, it's a bug in the IR
+              // or this pass.
+              for (auto type :
+                   concat<Type>(op->getOperandTypes(), op->getResultTypes())) {
+                if (isa<DomainType>(type)) {
+                  op->emitOpError("cannot be stripped");
+                  return WalkResult::interrupt();
+                }
+              }
+              return WalkResult::advance();
+            });
+      });
+  return failure(result.wasInterrupted());
 }
 
 static LogicalResult stripDomainsFromCircuit(
