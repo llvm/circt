@@ -136,4 +136,6 @@ void InliningInfo::print(raw_ostream &os) const {
   os << "\n";
 }
 
-void InliningInfo::dump() const { print(llvm::dbgs()); }
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+LLVM_DUMP_METHOD void InliningInfo::dump() const { print(llvm::dbgs()); }
+#endif
