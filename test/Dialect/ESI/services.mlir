@@ -260,35 +260,33 @@ hw.module @HostmemRW(in %clk : !seq.clock, in %rst : i1, in %write : !esi.channe
 // width -- here 'ui32' -- and response type 'AnyType') returns a windowed,
 // list-carrying burst read.
 
-// Burst/list write request: a window over struct{address, tag, data: list},
-// framed at the engine width. Accepted by the unified 'write' port because its
-// request type is 'AnyType'.
+// Burst/list write request: a parallel window over struct{address, tag, data:
+// list} carrying 'num_items' items in a single frame. Accepted by the unified
+// 'write' port because its request type is 'AnyType'.
 !WriteListWindow = !esi.window<
   "HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<i64>>, [
-    <"HeaderFrame", [<"address">, <"tag">, <"data" countWidth 8>]>,
-    <"DataFrame", [<"data", 4>]>
+    <"", [<"address">, <"tag">, <"data", 4>]>
   ]>
 !hostmemWriteListReq = !esi.bundle<[!esi.channel<!WriteListWindow> from "req", !esi.channel<ui8> to "ackTag"]>
 
 // Burst/list read: request struct{address, tag, length}; the response is a
-// window over struct{tag, data: list}. The 'read_list' port response type is
-// 'AnyType', so the concrete windowed response is supplied per-connection. The
-// port's 'length' field is 'AnyType' too, so any-width unsigned integer is
-// accepted; this request uses 'ui32' (not the engine-native 'ui64') to
-// exercise that.
+// parallel window over struct{tag, data: list} carrying 'num_items' items in a
+// single frame. The 'read_list' port response type is 'AnyType', so the
+// concrete windowed response is supplied per-connection. The port's 'length'
+// field is 'AnyType' too, so any-width unsigned integer is accepted; this
+// request uses 'ui32' (not the engine-native 'ui64') to exercise that.
 !ReadListRespWindow = !esi.window<
   "HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [
-    <"HeaderFrame", [<"tag">, <"data" countWidth 8>]>,
-    <"DataFrame", [<"data", 4>]>
+    <"", [<"tag">, <"data", 4>]>
   ]>
 !hostmemReadListReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>> from "req", !esi.channel<!ReadListRespWindow> to "resp"]>
 
-// CONN-LABEL:  hw.module @HostmemLists(in %clk : !seq.clock, in %rst : i1, in %writeReq : !esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<i64>>, [<"HeaderFrame", [<"address">, <"tag">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>>, in %readListReq : !esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>>, in %hostmemWriteList : !esi.bundle<[!esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<i64>>, [<"HeaderFrame", [<"address">, <"tag">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>> from "req", !esi.channel<ui8> to "ackTag"]>, in %hostmemReadList : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"HeaderFrame", [<"tag">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>> to "resp"]>, out readListData : !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"HeaderFrame", [<"tag">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>>, out writeDone : !esi.channel<ui8>) {
-// CONN-NEXT:     esi.manifest.req #esi.appid<"hostmemWriteList">, <@hostmem::@write> std "esi.service.std.hostmem", !esi.bundle<[!esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<i64>>, [<"HeaderFrame", [<"address">, <"tag">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>> from "req", !esi.channel<ui8> to "ackTag"]>
-// CONN-NEXT:     %ackTag = esi.bundle.unpack %writeReq from %hostmemWriteList : !esi.bundle<[!esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<i64>>, [<"HeaderFrame", [<"address">, <"tag">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>> from "req", !esi.channel<ui8> to "ackTag"]>
-// CONN-NEXT:     esi.manifest.req #esi.appid<"hostmemReadList">, <@hostmem::@read_list> std "esi.service.std.hostmem", !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"HeaderFrame", [<"tag">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>> to "resp"]>
-// CONN-NEXT:     %resp = esi.bundle.unpack %readListReq from %hostmemReadList : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"HeaderFrame", [<"tag">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>> to "resp"]>
-// CONN-NEXT:     hw.output %resp, %ackTag : !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"HeaderFrame", [<"tag">, <"data" countWidth 8>]>, <"DataFrame", [<"data", 4>]>]>>, !esi.channel<ui8>
+// CONN-LABEL:  hw.module @HostmemLists(in %clk : !seq.clock, in %rst : i1, in %writeReq : !esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<i64>>, [<"", [<"address">, <"tag">, <"data", 4>]>]>>, in %readListReq : !esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>>, in %hostmemWriteList : !esi.bundle<[!esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<i64>>, [<"", [<"address">, <"tag">, <"data", 4>]>]>> from "req", !esi.channel<ui8> to "ackTag"]>, in %hostmemReadList : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"", [<"tag">, <"data", 4>]>]>> to "resp"]>, out readListData : !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"", [<"tag">, <"data", 4>]>]>>, out writeDone : !esi.channel<ui8>) {
+// CONN-NEXT:     esi.manifest.req #esi.appid<"hostmemWriteList">, <@hostmem::@write> std "esi.service.std.hostmem", !esi.bundle<[!esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<i64>>, [<"", [<"address">, <"tag">, <"data", 4>]>]>> from "req", !esi.channel<ui8> to "ackTag"]>
+// CONN-NEXT:     %ackTag = esi.bundle.unpack %writeReq from %hostmemWriteList : !esi.bundle<[!esi.channel<!esi.window<"HostMemWriteReq", !hw.struct<address: ui64, tag: ui8, data: !esi.list<i64>>, [<"", [<"address">, <"tag">, <"data", 4>]>]>> from "req", !esi.channel<ui8> to "ackTag"]>
+// CONN-NEXT:     esi.manifest.req #esi.appid<"hostmemReadList">, <@hostmem::@read_list> std "esi.service.std.hostmem", !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"", [<"tag">, <"data", 4>]>]>> to "resp"]>
+// CONN-NEXT:     %resp = esi.bundle.unpack %readListReq from %hostmemReadList : !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>> from "req", !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"", [<"tag">, <"data", 4>]>]>> to "resp"]>
+// CONN-NEXT:     hw.output %resp, %ackTag : !esi.channel<!esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"", [<"tag">, <"data", 4>]>]>>, !esi.channel<ui8>
 hw.module @HostmemLists(in %clk : !seq.clock, in %rst : i1, in %writeReq : !esi.channel<!WriteListWindow>, in %readListReq : !esi.channel<!hw.struct<address: ui64, tag: ui8, length: ui32>>, out readListData : !esi.channel<!ReadListRespWindow>, out writeDone : !esi.channel<ui8>) {
   %writeBundle = esi.service.req <@hostmem::@write> (#esi.appid<"hostmemWriteList">) : !hostmemWriteListReq
   %ackTag = esi.bundle.unpack %writeReq from %writeBundle : !hostmemWriteListReq
