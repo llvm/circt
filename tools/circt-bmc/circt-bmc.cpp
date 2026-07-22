@@ -53,7 +53,6 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
-#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -330,6 +329,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
   };
 
   std::unique_ptr<mlir::ExecutionEngine> engine;
+  bool hasTraceContext = false;
   std::function<llvm::Error(llvm::Module *)> transformer =
       mlir::makeOptimizingTransformer(
           /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
@@ -343,11 +343,14 @@ static LogicalResult executeBMC(MLIRContext &context) {
       return failure();
     }
 
-    if (entryPoint.getNumArguments() != 0) {
+    if (entryPoint.getNumArguments() > 1 ||
+        (entryPoint.getNumArguments() == 1 &&
+         !isa<LLVM::LLVMPointerType>(entryPoint.getArgumentTypes().front()))) {
       llvm::errs() << "entry point '" << moduleName
-                   << "' must have no arguments";
+                   << "' must have no arguments or one trace context pointer";
       return failure();
     }
+    hasTraceContext = entryPoint.getNumArguments() == 1;
 
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
@@ -377,11 +380,13 @@ static LogicalResult executeBMC(MLIRContext &context) {
   });
 
   bmc::BMCTrace trace(moduleName);
-  bmc::setActiveBMCTrace(&trace);
-  llvm::scope_exit clearActiveTrace([] { bmc::setActiveBMCTrace(nullptr); });
+  void *traceContext = &trace;
+  SmallVector<void *> packedArgs;
+  if (hasTraceContext)
+    packedArgs.push_back(&traceContext);
 
   auto timer = ts.nest("JIT Execution");
-  if (auto err = engine->invokePacked(moduleName))
+  if (auto err = engine->invokePacked(moduleName, packedArgs))
     return handleErr(std::move(err));
 
   return success();

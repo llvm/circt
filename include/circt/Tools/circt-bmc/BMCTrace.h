@@ -16,6 +16,7 @@
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/FunctionExtras.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -50,6 +51,9 @@ public:
   size_t addSignal(llvm::StringRef name, unsigned width);
   /// Record the value handle for a tracked signal at the given cycle.
   void record(size_t step, size_t signal, Handle handle);
+  /// Register a signal by name if necessary and record its value handle at the
+  /// given cycle.
+  void record(size_t step, llvm::StringRef name, unsigned width, Handle handle);
 
   llvm::StringRef getTopName() const { return topName; }
   llvm::ArrayRef<Signal> getSignals() const { return signals; }
@@ -69,16 +73,14 @@ private:
 
   std::string topName;
   std::vector<Signal> signals;
+  llvm::StringMap<size_t> signalIndices;
   std::vector<Step> recorded;
 };
 
-/// Select the trace populated by the JIT runtime callback. Passing null
-/// disables trace recording. This state is local to the calling thread.
-void setActiveBMCTrace(BMCTrace *trace);
-
 /// Runtime entry point called by JIT-compiled BMC code.
-extern "C" void circt_bmc_record_trace(uint32_t step, const char *name,
-                                       uint32_t width, BMCTrace::Handle handle);
+extern "C" void circt_bmc_record_trace(BMCTrace *trace, uint32_t step,
+                                       const char *name, uint32_t width,
+                                       BMCTrace::Handle handle);
 
 } // namespace circt::bmc
 

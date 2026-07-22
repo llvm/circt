@@ -9,24 +9,13 @@
 #include "circt/Tools/circt-bmc/BMCTrace.h"
 
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringMap.h"
-
 #include <cassert>
-
-namespace {
-
-struct ActiveTraceState {
-  circt::bmc::BMCTrace *trace = nullptr;
-  llvm::StringMap<size_t> signals;
-};
-
-thread_local ActiveTraceState activeTrace;
-
-} // namespace
 
 circt::bmc::BMCTrace::BMCTrace(llvm::StringRef topName) : topName(topName) {}
 
 size_t circt::bmc::BMCTrace::addSignal(llvm::StringRef name, unsigned width) {
+  assert(!signalIndices.contains(name) && "duplicate trace signal");
+  signalIndices.try_emplace(name, signals.size());
   signals.push_back({name.str(), width});
   for (auto &step : recorded)
     step.resize(signals.size());
@@ -42,6 +31,19 @@ void circt::bmc::BMCTrace::record(size_t step, size_t signal, Handle handle) {
   assert(signal < signals.size() && "signal index out of range");
   ensureStep(step);
   recorded[step][signal] = handle;
+}
+
+void circt::bmc::BMCTrace::record(size_t step, llvm::StringRef name,
+                                  unsigned width, Handle handle) {
+  auto it = signalIndices.find(name);
+  size_t signal;
+  if (it == signalIndices.end()) {
+    signal = addSignal(name, width);
+  } else {
+    signal = it->second;
+    assert(signals[signal].width == width && "trace signal width changed");
+  }
+  record(step, signal, handle);
 }
 
 std::optional<circt::bmc::BMCTrace::Handle>
@@ -73,23 +75,12 @@ bool circt::bmc::BMCTrace::printTextTrace(llvm::raw_ostream &os,
   return true;
 }
 
-void circt::bmc::setActiveBMCTrace(BMCTrace *trace) {
-  activeTrace.trace = trace;
-  activeTrace.signals.clear();
-}
-
-extern "C" void circt::bmc::circt_bmc_record_trace(uint32_t step,
+extern "C" void circt::bmc::circt_bmc_record_trace(BMCTrace *trace,
+                                                   uint32_t step,
                                                    const char *name,
                                                    uint32_t width,
                                                    BMCTrace::Handle handle) {
-  if (!activeTrace.trace)
+  if (!trace)
     return;
-
-  auto [it, inserted] = activeTrace.signals.try_emplace(name, 0);
-  if (inserted)
-    it->second = activeTrace.trace->addSignal(name, width);
-  else
-    assert(activeTrace.trace->getSignals()[it->second].width == width &&
-           "trace signal width changed");
-  activeTrace.trace->record(step, it->second, handle);
+  trace->record(step, name, width, handle);
 }

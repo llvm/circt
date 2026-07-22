@@ -20,7 +20,8 @@ llvm.mlir.global internal @solver() {alignment = 8 : i64} : !llvm.ptr {
 }
 
 
-// CHECK-LABEL: llvm.func @test
+// CHECK-LABEL: llvm.func @test(
+// CHECK-SAME: !llvm.ptr)
 // CHECK:   [[CONFIG:%.+]] = llvm.call @Z3_mk_config() : () -> !llvm.ptr
 // CHECK-DEBUG: [[PROOF_STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
 // CHECK-DEBUG: [[TRUE_STR:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
@@ -58,7 +59,7 @@ llvm.mlir.global internal @solver() {alignment = 8 : i64} : !llvm.ptr {
 // CHECK:   llvm.return
 
 // CHECK-LABEL: llvm.func @solver
-// CHECK-SAME: ([[TRACE_STEP:%.+]]: i32)
+// CHECK-SAME: ([[TRACE_STEP:%.+]]: i32, [[TRACE_CONTEXT:%.+]]: !llvm.ptr)
 func.func @test(%arg0: i32) {
   %0 = smt.solver (%arg0) : (i32) -> (i32) {
   ^bb0(%arg1: i32):
@@ -394,11 +395,11 @@ func.func @test(%arg0: i32) {
 
     // CHECK: [[TRACE_NAME:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
     // CHECK: [[TRACE_WIDTH0:%.+]] = llvm.mlir.constant(4 : i32) : i32
-    // CHECK: llvm.call @circt_bmc_record_trace([[TRACE_STEP]], [[TRACE_NAME]], [[TRACE_WIDTH0]], [[BV0]]) : (i32, !llvm.ptr, i32, !llvm.ptr) -> ()
+    // CHECK: llvm.call @circt_bmc_record_trace([[TRACE_CONTEXT]], [[TRACE_STEP]], [[TRACE_NAME]], [[TRACE_WIDTH0]], [[BV0]]) : (!llvm.ptr, i32, !llvm.ptr, i32, !llvm.ptr) -> ()
     verif.bmc.trace %arg1, "var0", %c0_bv4 : i32, !smt.bv<4>
     // CHECK: [[TRACE_NAME1:%.+]] = llvm.mlir.addressof @str{{.*}} : !llvm.ptr
     // CHECK: [[TRACE_WIDTH1:%.+]] = llvm.mlir.constant(4 : i32) : i32
-    // CHECK: llvm.call @circt_bmc_record_trace([[TRACE_STEP]], [[TRACE_NAME1]], [[TRACE_WIDTH1]], [[BV0]]) : (i32, !llvm.ptr, i32, !llvm.ptr) -> ()
+    // CHECK: llvm.call @circt_bmc_record_trace([[TRACE_CONTEXT]], [[TRACE_STEP]], [[TRACE_NAME1]], [[TRACE_WIDTH1]], [[BV0]]) : (!llvm.ptr, i32, !llvm.ptr, i32, !llvm.ptr) -> ()
     verif.bmc.trace %arg1, "var1", %c0_bv4 : i32, !smt.bv<4>
 
     // CHECK-NOT: dbg.variable
