@@ -322,7 +322,7 @@ jobs:
           python -m pip config set global.break-system-packages true
           python -m pip install psutil pybind11==2.11.2 nanobind==2.9.2
 
-          PYTHON_EXECUTABLE=$(python -c "import sys; print(sys.executable)")
+          PYTHON_EXECUTABLE=$(python -c "import sys; print(sys.executable.replace('\\\\', '/'))")
 
           # A statically-linked libstdc++ conflicts with Python extension
           # modules that get dlopen'd into a live python3 process alongside
