@@ -83,7 +83,7 @@ public:
         symbolTable(symbolTable) {}
 
   /// Compute the per-module facts.  Fails (with a diagnostic) on annotations
-  /// the inliner rejects, e.g. inline/flatten on a non-regular module; warns
+  /// the inliner rejects, e.g., inline/flatten on a non-regular module; warns
   /// on annotations it can only partially honor.  On failure the IR is
   /// untouched.
   ///
