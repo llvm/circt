@@ -13,8 +13,8 @@ from .support import (clog2, optional_dict_to_optional_dict_attr, get_user_loc,
                       optional_dict_to_dict_attr)
 from .system import System
 from .types import (Any, Bits, Bundle, BundledChannel, Channel,
-                    ChannelDirection, ChannelSignaling, StructType, Type,
-                    Window, UInt, _FromCirctType)
+                    ChannelDirection, ChannelSignaling, List as EsiListType,
+                    StructType, Type, Window, UInt, _FromCirctType)
 
 from .circt import ir
 from .circt.dialects import esi as raw_esi, hw, msft
@@ -670,6 +670,40 @@ class _HostMem(ServiceDecl):
   def __init__(self):
     super().__init__(self.__class__)
 
+  @staticmethod
+  def read_req_burst_type(length_width: int = 64) -> StructType:
+    """Burst (list) read request type: struct{address, tag, length}. 'length'
+    selects how many list items to read from the host, returned as a windowed
+    list (used by 'read_list'; the single-message 'read' has no 'length'
+    field). 'length_width' sets the bit width of the unsigned 'length' field --
+    the 'read_list' service port accepts any width."""
+    return StructType([
+        ("address", UInt(64)),
+        ("tag", _HostMem.TagType),
+        ("length", UInt(length_width)),
+    ])
+
+  @staticmethod
+  def read_window(list_element: Type, num_items: int) -> Window:
+    """Parallel window framing a list read response on the wire: a window over
+    struct{tag, data: list<list_element>} carrying 'num_items' items per frame
+    (plus the auto-added '<data>_size' and 'last' fields)."""
+    into = StructType([("tag", _HostMem.TagType),
+                       ("data", EsiListType(list_element))])
+    return Window("HostMemReadResp", into,
+                  [Window.Frame(None, ["tag", ("data", num_items)])])
+
+  @staticmethod
+  def write_window(list_element: Type, num_items: int) -> Window:
+    """Parallel window framing a list write request on the wire: a window over
+    struct{address, tag, data: list<list_element>} carrying 'num_items' items
+    per frame (plus the auto-added '<data>_size' and 'last' fields). The items
+    are written to sequential addresses starting at 'address'."""
+    into = StructType([("address", UInt(64)), ("tag", _HostMem.TagType),
+                       ("data", EsiListType(list_element))])
+    return Window("HostMemWriteReq", into,
+                  [Window.Frame(None, ["address", "tag", ("data", num_items)])])
+
   def write_req_bundle_type(self, data_type: Type) -> Bundle:
     """Build a write request bundle type for the given data type."""
     write_req_type = StructType([
@@ -706,10 +740,18 @@ class _HostMem(ServiceDecl):
             appid: AppID,
             req: ChannelSignal,
             options: Optional[Dict[str, object]] = None) -> ChannelSignal:
-    """Create a write request to the host memory out of a request channel."""
-    # Extract the data type from the request channel and call the helper to get
-    # the write bundle type for the req channel.
-    write_bundle_type = self.write_req_bundle_type(req.type.inner_type.data)
+    """Create a write request to host memory out of a request channel.
+
+    'req' is a struct{address, tag, data} channel for a single-message write, or
+    a windowed channel (a parallel window over struct{address, tag, data: list},
+    see 'write_window') for a burst/list write. Returns the 'ackTag' response
+    channel."""
+    # Build the write bundle type directly from the request channel's type so
+    # both single-message structs and windowed (list) requests are accepted.
+    write_bundle_type = Bundle([
+        BundledChannel("req", ChannelDirection.FROM, req.type.inner_type),
+        BundledChannel("ackTag", ChannelDirection.TO, _HostMem.TagType),
+    ])
     bundle = self.write_from_bundle(appid, write_bundle_type, options=options)
     resp = bundle.unpack(req=req)['ackTag']
     return resp
@@ -749,6 +791,8 @@ class _HostMem(ServiceDecl):
       read_bundle_type: Bundle,
       options: Optional[Dict[str, object]] = None) -> BundleSignal:
     """Request a connection based for a given read bundle type."""
+    self._materialize_service_decl()
+
     return cast(
         BundleSignal,
         _FromCirctValue(
@@ -759,18 +803,61 @@ class _HostMem(ServiceDecl):
                 options=optional_dict_to_optional_dict_attr(options),
                 loc=get_user_loc()).toClient))
 
+  def read_list_from_bundle(
+      self,
+      appid: AppID,
+      read_bundle_type: Bundle,
+      options: Optional[Dict[str, object]] = None) -> BundleSignal:
+    """Request a 'read_list' (burst) connection for a given read bundle type."""
+    self._materialize_service_decl()
+
+    return cast(
+        BundleSignal,
+        _FromCirctValue(
+            raw_esi.RequestConnectionOp(
+                read_bundle_type._type,
+                hw.InnerRefAttr.get(self.symbol,
+                                    ir.StringAttr.get("read_list")),
+                appid._appid,
+                options=optional_dict_to_optional_dict_attr(options),
+                loc=get_user_loc()).toClient))
+
   def read(self,
            appid: AppID,
            req: ChannelSignal,
            data_type: Type,
            options: Optional[Dict[str, object]] = None) -> ChannelSignal:
-    """Create a read request to the host memory out of a request channel and
-    return the response channel with the specified data type."""
-
-    self._materialize_service_decl()
+    """Create a single-message read request to host memory out of a request
+    channel and return the response channel (struct{tag, data: data_type}). To
+    read a list, use 'read_list'."""
 
     read_bundle_type = self.read_bundle_type(data_type)
     bundle_sig = self.read_from_bundle(appid, read_bundle_type, options=options)
+    resp = bundle_sig.unpack(req=req)['resp']
+    return resp
+
+  def read_list(self,
+                appid: AppID,
+                req: ChannelSignal,
+                element_type: Type,
+                num_items: int,
+                options: Optional[Dict[str, object]] = None) -> ChannelSignal:
+    """Create a burst (list) read of host memory. 'req' is a channel of
+    'read_req_burst_type()' ({address, tag, length}), where the request's
+    'length' is the number of list items to read starting at 'address'; the
+    items are returned as a list. To receive the list, the client requests a
+    *windowed channel*: the response is a window over struct{tag, data:
+    list<element_type>} carrying 'num_items' items per frame (see
+    'read_window'), consumed frame by frame."""
+
+    resp_type = _HostMem.read_window(element_type, num_items)
+    read_bundle_type = Bundle([
+        BundledChannel("req", ChannelDirection.FROM, req.type.inner_type),
+        BundledChannel("resp", ChannelDirection.TO, resp_type),
+    ])
+    bundle_sig = self.read_list_from_bundle(appid,
+                                            read_bundle_type,
+                                            options=options)
     resp = bundle_sig.unpack(req=req)['resp']
     return resp
 
