@@ -55,6 +55,19 @@ public:
     /// Will this module exist in the final result?
     bool isLive : 1;
 
+    /// Derived predicates over the facts above, named for the walk that
+    /// consumes them.
+
+    /// This module's regular children remain instantiated: some path keeps
+    /// this module instantiated and it is not flattening them away.
+    bool keepsChildrenInstantiated() const {
+      return hasUnflattenedPath && !hasFlatten;
+    }
+
+    /// Some copy of this module's body may be flattened -- by its own
+    /// annotation or a flattening ancestor.
+    bool mayBeFlattened() const { return underFlatten || hasFlatten; }
+
     // Can't have default member initialization of bitfield members until
     // C++20.
     ModuleInfo()
