@@ -81,6 +81,10 @@
 //  * Inlining an instance sitting under anything but a module or layer block.
 //  * Inlining a body with an inner reference to another module's body.
 //
+// Both fire during the clone walk (P3), folding into walks we already perform.
+// The pass fails, but the IR may be left partially inlined.
+// Only a P1/P2 rejection guarantees the input is untouched.
+//
 // The invariants this rests on, referenced by number at their use sites.
 // [asserted]/[diagnosed] marks the ones that break loudly.  The rest are
 // structural (upheld by construction, no runtime check).
@@ -1935,8 +1939,9 @@ LogicalResult Inliner::inlineModules() {
       continue;
     // Consume the inline/flatten annotations: InliningFacts is their only
     // reader (everything else consults the frozen ModuleClassification, I1).
-    // Every fail-fast diagnosis has already run, so a run that fails before
-    // this loop leaves the input untouched.
+    // Every P1/P2 diagnosis has already run, so a run that fails before this
+    // loop leaves the input untouched; the walk's own diagnoses (instance
+    // parents, foreign inner refs) fire mid-clone and do not.
     if (info.hasFlatten || info.hasInline)
       AnnotationSet::removeAnnotations(moduleOp, [](Annotation anno) {
         return anno.isClass(flattenAnnoClass, inlineAnnoClass);
