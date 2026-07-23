@@ -173,3 +173,14 @@ firrtl.circuit "UnsafeDomainCastMismatch" {
     firrtl.matchingconnect %b, %0 : !firrtl.uint<1>
   }
 }
+
+// https://github.com/llvm/circt/issues/10885
+firrtl.circuit "Issue10885" {
+  firrtl.module @Child(out %x: !firrtl.uint<1>) {
+    %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
+    firrtl.matchingconnect %x, %c0_ui1 : !firrtl.uint<1>
+  }
+  firrtl.module @Issue10885() {
+    %x = firrtl.instance c @Child(out x: !firrtl.uint<1>)
+  }
+}
