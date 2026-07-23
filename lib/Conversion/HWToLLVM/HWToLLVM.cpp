@@ -87,12 +87,42 @@ static Value zextByOne(Location loc, ConversionPatternRewriter &rewriter,
 // HWToLLVMArraySpillCache
 //===----------------------------------------------------------------------===//
 
-static Value spillValueOnStack(OpBuilder &builder, Location loc,
-                               Value spillVal) {
+/// Create a fixed-count alloca in the entry block of the enclosing
+/// function-like frame, leaving the insertion point untouched for the
+/// accompanying stores. Allocas emitted at their use site re-execute on
+/// every pass through the surrounding control flow; allocas outside the
+/// entry block are only reclaimed on function return, so a use inside a
+/// run-to-completion process loop grows the stack every iteration (ivtest
+/// br_gh661a/b overflow the default 8 MiB stack through a dynamic-index
+/// array access in a 256k-iteration loop). Entry-block constant-size
+/// allocas become static frame slots instead. Mirrors `stackSlotFor` in
+/// LowerArcToLLVM.
+static Value createEntryBlockAlloca(OpBuilder &builder, Location loc,
+                                    Type elemType, unsigned alignment) {
+  OpBuilder::InsertionGuard guard(builder);
+  Block *block = builder.getInsertionBlock();
+  assert(block && "expected an insertion block when allocating a stack slot");
+  Region *region = block->getParent();
+  while (region && region->getParentOp() &&
+         !region->getParentOp()->hasTrait<OpTrait::IsIsolatedFromAbove>())
+    region = region->getParentOp()->getParentRegion();
+  // Only reposition when the insertion point sits OUTSIDE the frame's entry
+  // block: an entry block has no predecessors, so an alloca anywhere in it
+  // already executes exactly once per activation.
+  if (region && region->getParentOp() &&
+      !isa<mlir::ModuleOp>(region->getParentOp()) && !region->empty() &&
+      block != &region->front())
+    builder.setInsertionPointToStart(&region->front());
   auto oneC = LLVM::ConstantOp::create(
       builder, loc, IntegerType::get(builder.getContext(), 32),
       builder.getI32IntegerAttr(1));
+  return LLVM::AllocaOp::create(
+      builder, loc, LLVM::LLVMPointerType::get(builder.getContext()), elemType,
+      oneC, alignment);
+}
 
+static Value spillValueOnStack(OpBuilder &builder, Location loc,
+                               Value spillVal) {
   Block *block = builder.getInsertionBlock();
   assert(block && "expected an insertion block when spilling a value");
 
@@ -100,9 +130,8 @@ static Value spillValueOnStack(OpBuilder &builder, Location loc,
       static_cast<unsigned>(DataLayout::closest(block->getParentOp())
                                 .getTypePreferredAlignment(spillVal.getType()));
   alignment = std::max(4u, alignment);
-  Value ptr = LLVM::AllocaOp::create(
-      builder, loc, LLVM::LLVMPointerType::get(builder.getContext()),
-      spillVal.getType(), oneC, alignment);
+  Value ptr =
+      createEntryBlockAlloca(builder, loc, spillVal.getType(), alignment);
   LLVM::StoreOp::create(builder, loc, spillVal, ptr);
   return ptr;
 }
@@ -293,9 +322,6 @@ struct ArrayInjectOpConversion
       return success();
     }
 
-    auto oneC =
-        LLVM::ConstantOp::create(rewriter, op->getLoc(), rewriter.getI32Type(),
-                                 rewriter.getI32IntegerAttr(1));
     auto zextIndex = zextByOne(op->getLoc(), rewriter, op.getIndex());
 
     if (arrElems == 1 || !llvm::isPowerOf2_64(arrElems)) {
@@ -314,10 +340,8 @@ struct ArrayInjectOpConversion
     auto allocaAlignment = std::max(
         4u, static_cast<unsigned>(DataLayout::closest(op.getOperation())
                                       .getTypePreferredAlignment(newArrTy)));
-    Value arrPtr = LLVM::AllocaOp::create(
-        rewriter, op->getLoc(),
-        LLVM::LLVMPointerType::get(rewriter.getContext()), newArrTy, oneC,
-        allocaAlignment);
+    Value arrPtr = createEntryBlockAlloca(rewriter, op->getLoc(), newArrTy,
+                                          allocaAlignment);
 
     LLVM::StoreOp::create(rewriter, op->getLoc(), adaptor.getInput(), arrPtr);
 
@@ -462,14 +486,10 @@ namespace {
 static Value allocateUnionBuffer(ConversionPatternRewriter &rewriter,
                                  Location loc, Type bufferType,
                                  Type accessType) {
-  auto *context = rewriter.getContext();
   auto align =
       std::max<uint64_t>(1, DataLayout().getTypePreferredAlignment(accessType));
-  Value one = LLVM::ConstantOp::create(rewriter, loc, rewriter.getI32Type(),
-                                       rewriter.getI32IntegerAttr(1));
-  return LLVM::AllocaOp::create(rewriter, loc,
-                                LLVM::LLVMPointerType::get(context), bufferType,
-                                one, align);
+  return createEntryBlockAlloca(rewriter, loc, bufferType,
+                                static_cast<unsigned>(align));
 }
 
 /// Convert a UnionCreateOp to the LLVM dialect by storing the member value into
