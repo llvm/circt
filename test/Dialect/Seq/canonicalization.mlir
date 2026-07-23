@@ -103,9 +103,7 @@ hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i
 
 // CHECK-LABEL: @FirRegAggregate
 hw.module @FirRegAggregate(in %clk : !seq.clock, out out : !hw.struct<foo: i32>) {
-  // TODO: Use constant aggregate attribute once supported.
-  // CHECK:      %c0_i32 = hw.constant 0 : i32
-  // CHECK-NEXT: %0 = hw.bitcast %c0_i32 : (i32) -> !hw.struct<foo: i32>
+  // CHECK:      %0 = hw.aggregate_constant [0 : i32] : !hw.struct<foo: i32>
   // CHECK-NEXT: hw.output %0
   %reg = seq.firreg %reg clock %clk : !hw.struct<foo: i32>
   hw.output %reg : !hw.struct<foo: i32>

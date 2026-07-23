@@ -144,6 +144,115 @@ bool circt::hw::hasHWInOutType(Type type) {
   return isa<InOutType>(type);
 }
 
+struct AggregateAttrFrame {
+  SmallVector<Attribute> attrs;
+  SmallVector<Type> types;
+  unsigned childIndex = 0;
+
+  AggregateAttrFrame(SmallVector<Type> types)
+      : attrs(types.size()), types(std::move(types)) {}
+
+  void setChild(Attribute attr) { attrs[childIndex++] = attr; }
+  Type getNextChildType() { return types[childIndex]; }
+  bool isFinished() const { return types.size() == childIndex; }
+};
+
+/// Convert an APInt value into a nested aggregate attribute matching the given
+/// HWAggregateType. Returns failure() if the type is not an HWAggregateType or
+/// recursively contains a type other than HWAggregateType or IntegerType.
+LogicalResult circt::hw::apIntToAggregateAttr(Type aggregateType,
+                                              const APInt &intVal,
+                                              ArrayAttr &result) {
+  auto ctx = aggregateType.getContext();
+  SmallVector<AggregateAttrFrame> stack;
+  unsigned nextInsertion = intVal.getBitWidth();
+
+  auto pushToStack = [&](Type type) -> bool {
+    return TypeSwitch<Type, bool>(type)
+        .Case<StructType>([&](auto structType) {
+          auto len = structType.getElements().size();
+          SmallVector<Type> types;
+          types.reserve(len);
+          for (auto &element : structType.getElements())
+            types.push_back(getCanonicalType(element.type));
+          stack.push_back(std::move(types));
+          return true;
+        })
+        .Case<ArrayType, UnpackedArrayType>([&](auto arrayType) {
+          SmallVector<Type> types(arrayType.getNumElements(),
+                                  getCanonicalType(arrayType.getElementType()));
+          stack.push_back(std::move(types));
+          return true;
+        })
+        .Default([](Type) {
+          // Unsupported type
+          return false;
+        });
+  };
+
+  if (!pushToStack(getCanonicalType(aggregateType)))
+    return failure();
+
+  while (!stack.empty()) {
+    if (stack.back().isFinished()) {
+      auto frame = stack.pop_back_val();
+      result = ArrayAttr::get(ctx, frame.attrs);
+      if (!stack.empty())
+        stack.back().setChild(result);
+      continue;
+    }
+
+    auto curType = stack.back().getNextChildType();
+    if (auto intType = dyn_cast<IntegerType>(curType)) {
+      auto width = intType.getWidth();
+      nextInsertion -= width;
+      auto elemValue =
+          width ? intVal.extractBits(width, nextInsertion) : APInt(0, 0, false);
+      stack.back().setChild(IntegerAttr::get(intType, elemValue));
+    } else {
+      if (!pushToStack(curType))
+        return failure();
+    }
+  }
+
+  assert(nextInsertion == 0 && "constant wasn't fully processed");
+  return success();
+}
+
+/// Convert an ArrayAttr into an APInt value matching the given type.
+/// The type is used to determine the bit width of the resulting APInt.
+/// Returns failure() if the attribute recursively contains anything other than
+/// ArrayAttr or IntegerAttr.
+LogicalResult circt::hw::aggregateAttrToAPInt(Type type, ArrayAttr attr,
+                                              APInt &result) {
+  SmallVector<Attribute> worklist;
+  worklist.push_back(attr);
+  auto bitWidth = hw::getBitWidth(type);
+  assert(bitWidth >= 0 && "bit width must be known for constant");
+  result = APInt(bitWidth, 0);
+  unsigned nextInsertion = 0;
+
+  while (!worklist.empty()) {
+    auto current = worklist.pop_back_val();
+    if (auto innerArray = dyn_cast<ArrayAttr>(current)) {
+      worklist.append(innerArray.begin(), innerArray.end());
+      continue;
+    }
+
+    if (auto intAttr = dyn_cast<IntegerAttr>(current)) {
+      auto chunk = intAttr.getValue();
+      result.insertBits(chunk, nextInsertion);
+      nextInsertion += chunk.getBitWidth();
+      continue;
+    }
+
+    return failure();
+  }
+
+  assert(nextInsertion == bitWidth && "constant wasn't fully processed");
+  return success();
+}
+
 /// Parse and print nested HW types nicely.  These helper methods allow eliding
 /// the "hw." prefix on array, inout, and other types when in a context that
 /// expects HW subelement types.

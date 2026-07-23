@@ -131,8 +131,8 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: hw.constant 0 : i4
   moore.extract %arg2 from 6 : !moore.i6 -> !moore.i4
 
-  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i64
-  // CHECK-NEXT: [[V0:%..+]] = hw.bitcast [[C0]] : (i64) -> !hw.array<2xi32>
+  // CHECK-NEXT: hw.constant 0 : i64
+  // CHECK-NEXT: [[V0:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.array<2xi32>
   // CHECK-NEXT: hw.constant 0 : i3
   // CHECK-NEXT: [[C1:%.+]] = hw.constant 0 : i64
   // CHECK-NEXT: [[V1:%.+]] = hw.bitcast [[C1]] : (i64) -> !hw.array<2xi32>
@@ -146,15 +146,15 @@ func.func @Expressions(%arg0: !moore.i1, %arg1: !moore.l1, %arg2: !moore.i6, %ar
   // CHECK-NEXT: hw.array_concat [[V0]], [[V1]] : !hw.array<3xi32>, !hw.array<1xi32>
   moore.extract %arg5 from 2 : !moore.array<5 x i32> -> !moore.array<4 x i32>
 
-  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i32
-  // CHECK-NEXT: [[V0:%.+]] = hw.bitcast [[C0]] : (i32) -> !hw.array<1xi32>
+  // CHECK-NEXT: hw.constant 0 : i32
+  // CHECK-NEXT: [[V0:%.+]] = hw.aggregate_constant [0 : i32] : !hw.array<1xi32>
   // CHECK-NEXT: [[IDX:%.+]] = hw.constant 0 : i3
   // CHECK-NEXT: [[V1:%.+]] = hw.array_slice %arg5[[[IDX]]] : (!hw.array<5xi32>) -> !hw.array<1xi32>
   // CHECK-NEXT: hw.array_concat [[V0]], [[V1]] : !hw.array<1xi32>, !hw.array<1xi32>
   moore.extract %arg5 from -1 : !moore.array<5 x i32> -> !moore.array<2 x i32>
 
-  // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i64
-  // CHECK-NEXT: hw.bitcast [[C0]] : (i64) -> !hw.array<2xi32>
+  // CHECK-NEXT: hw.constant 0 : i64
+  // CHECK-NEXT: hw.aggregate_constant [0 : i32, 0 : i32] : !hw.array<2xi32>
   moore.extract %arg5 from -2 : !moore.array<5 x i32> -> !moore.array<2 x i32>
 
   // CHECK-NEXT: [[C0:%.+]] = hw.constant 0 : i64
@@ -617,8 +617,7 @@ moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i
   // CHECK: hw.array_get %arr[[[TRUE]]] : !hw.array<2xi32>, i1
   %1 = moore.extract %arr from 1 : !moore.uarray<2 x i32> -> !moore.i32
 
-  // CHECK: [[C0_128:%.+]] = hw.constant 0 : i128
-  // CHECK: [[INIT:%.+]] = hw.bitcast [[C0_128]] : (i128) -> !hw.array<4xi32>
+  // CHECK: [[INIT:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32, 0 : i32, 0 : i32] : !hw.array<4xi32>
   // CHECK: [[SIG_0:%.+]] = llhd.sig [[INIT]] : !hw.array<4xi32>
   %2 = moore.variable : <uarray<4 x i32>>
 
@@ -627,8 +626,8 @@ moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i
   %3 = moore.extract_ref %2 from 1 : !moore.ref<!moore.uarray<4 x i32>> -> !moore.ref<!moore.i32>
   moore.assign %3, %0 : i32
 
-  // CHECK: [[C0_1024:%.+]] = hw.constant 0 : i1024
-  // CHECK: [[INIT:%.+]] = hw.bitcast [[C0_1024]] : (i1024) -> !hw.array<4xarray<8xarray<8xi4>>>
+  // CHECK: [[INIT:%.+]] = hw.aggregate_constant
+  // CHECK-SAME{LITERAL}: [[[0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4]], [[0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4]], [[0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4]], [[0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4], [0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4, 0 : i4]]] : !hw.array<4xarray<8xarray<8xi4>>>
   // CHECK: [[SIG_1:%.+]] = llhd.sig [[INIT]] : !hw.array<4xarray<8xarray<8xi4>>>
   %4 = moore.variable : <uarray<4 x uarray<8 x array<8 x i4>>>>
 
@@ -662,8 +661,7 @@ moore.module @Struct(in %a : !moore.i32, in %b : !moore.i32, in %arg0 : !moore.s
   %ref = moore.struct_extract_ref %arg1, "exp_bits" : <!moore.struct<{exp_bits: i32, man_bits: i32}>> -> <i32>
   moore.assign %ref, %0 : !moore.i32
 
-  // CHECK: [[C0:%.+]] = hw.constant 0 : i64
-  // CHECK: [[INIT:%.+]] = hw.bitcast [[C0]] : (i64) -> !hw.struct<exp_bits: i32, man_bits: i32>
+  // CHECK: [[INIT:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.struct<exp_bits: i32, man_bits: i32>
   // CHECK: llhd.sig [[INIT]] : !hw.struct<exp_bits: i32, man_bits: i32>
   // CHECK: llhd.sig %arg0 : !hw.struct<exp_bits: i32, man_bits: i32>
   %1 = moore.variable : <struct<{exp_bits: i32, man_bits: i32}>>
@@ -722,8 +720,7 @@ moore.module @UnpackedStruct() {
   %0 = moore.constant 1 : i32
   %1 = moore.constant 0 : i32
 
-  // CHECK: %[[C0_64:.*]] = hw.constant 0 : i64
-  // CHECK: %[[INIT:.*]] = hw.bitcast %[[C0_64]] : (i64) -> !hw.struct<a: i32, b: i32>
+  // CHECK: %[[INIT:.*]] = hw.aggregate_constant [0 : i32, 0 : i32] : !hw.struct<a: i32, b: i32>
   // CHECK: %[[USTRUCT:.*]] = llhd.sig %[[INIT]] : !hw.struct<a: i32, b: i32>
   %ms = moore.variable : <ustruct<{a: i32, b: i32}>>
 
@@ -1749,8 +1746,7 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[CMPR:%.+]] = sim.queue.cmp ne [[QR]], [[QR2]] : <i32, 10>
   moore.queue.cmp ne %qr, %qr2 : <i32, 10>
 
-  // CHECK: [[ZERO:%.+]] = hw.constant 0 : i128
-  // CHECK: [[UPARR:%.+]] = hw.bitcast [[ZERO]] : (i128) -> !hw.array<4xi32>
+  // CHECK: [[UPARR:%.+]] = hw.aggregate_constant [0 : i32, 0 : i32, 0 : i32, 0 : i32] : !hw.array<4xi32>
   // CHECK: [[UPVAR:%.+]] = llhd.sig [[UPARR]] : !hw.array<4xi32>
   %uparray = moore.variable : <!moore.uarray<4 x i32>>
   // CHECK: [[UPR:%.+]] = llhd.prb [[UPVAR]]

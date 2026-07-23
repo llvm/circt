@@ -1069,6 +1069,97 @@ hw.module @bitcast_canonicalization(in %arg0 : i4, out r1: i4, out r2: !hw.array
   hw.output %id, %b : i4, !hw.array<2xi2>
 }
 
+// CHECK-LABEL: hw.module @bitcast_int_to_struct
+hw.module @bitcast_int_to_struct(out result : !hw.struct<a: i4, b: i4>) {
+  %c = hw.constant 0x42 : i8
+  %0 = hw.bitcast %c : (i8) -> !hw.struct<a: i4, b: i4>
+  // CHECK-NEXT: %[[OUT:.+]] = hw.aggregate_constant [4 : i4, 2 : i4] : !hw.struct<a: i4, b: i4>
+  // CHECK-NEXT: hw.output %[[OUT]] : !hw.struct<a: i4, b: i4>
+  hw.output %0 : !hw.struct<a: i4, b: i4>
+}
+
+// CHECK-LABEL: hw.module @bitcast_struct_to_int
+hw.module @bitcast_struct_to_int(out result : i8) {
+  %c = hw.aggregate_constant [4 : i4, 2 : i4] : !hw.struct<a: i4, b: i4>
+  %0 = hw.bitcast %c : (!hw.struct<a: i4, b: i4>) -> i8
+  // CHECK-NEXT: %[[OUT:.+]] = hw.constant 66 : i8
+  // CHECK-NEXT: hw.output %[[OUT]] : i8
+  hw.output %0 : i8
+}
+
+// CHECK-LABEL: hw.module @bitcast_int_to_array
+hw.module @bitcast_int_to_array(out result : !hw.array<2xi4>) {
+  %c = hw.constant 0x42 : i8
+  // CHECK-NEXT: %[[OUT:.+]] = hw.aggregate_constant [4 : i4, 2 : i4] : !hw.array<2xi4>
+  // CHECK-NEXT: hw.output %[[OUT]] : !hw.array<2xi4>
+  %0 = hw.bitcast %c : (i8) -> !hw.array<2xi4>
+  hw.output %0 : !hw.array<2xi4>
+}
+
+// CHECK-LABEL: hw.module @bitcast_array_to_int
+hw.module @bitcast_array_to_int(out result : i8) {
+  %c = hw.aggregate_constant [4 : i4, 2 : i4] : !hw.array<2xi4>
+  // CHECK-NEXT: %[[OUT:.+]] = hw.constant 66 : i8
+  // CHECK-NEXT: hw.output %[[OUT]] : i8
+  %0 = hw.bitcast %c : (!hw.array<2xi4>) -> i8
+  hw.output %0 : i8
+}
+
+// CHECK-LABEL: hw.module @bitcast_int_to_0array
+hw.module @bitcast_int_to_0array(out result : !hw.array<0xi4>) {
+  %c = hw.constant 0 : i0
+  // CHECK-NEXT: %[[OUT:.+]] = hw.aggregate_constant [] : !hw.array<0xi4>
+  // CHECK-NEXT: hw.output %[[OUT]] : !hw.array<0xi4>
+  %0 = hw.bitcast %c : (i0) -> !hw.array<0xi4>
+  hw.output %0 : !hw.array<0xi4>
+}
+
+// CHECK-LABEL: hw.module @bitcast_0array_to_int
+hw.module @bitcast_0array_to_int(out result : i0) {
+  %c = hw.aggregate_constant [] : !hw.array<0xi4>
+  // CHECK-NEXT: %[[OUT:.+]] = hw.constant 0 : i0
+  // CHECK-NEXT: hw.output %[[OUT]] : i0
+  %0 = hw.bitcast %c : (!hw.array<0xi4>) -> i0
+  hw.output %0 : i0
+}
+
+// CHECK-LABEL: hw.module @bitcast_int_to_uarray
+hw.module @bitcast_int_to_uarray(out result : !hw.uarray<2xi4>) {
+  %c = hw.constant 0x42 : i8
+  // CHECK-NEXT: %[[OUT:.+]] = hw.aggregate_constant [4 : i4, 2 : i4] : !hw.uarray<2xi4>
+  // CHECK-NEXT: hw.output %[[OUT]] : !hw.uarray<2xi4>
+  %0 = hw.bitcast %c : (i8) -> !hw.uarray<2xi4>
+  hw.output %0 : !hw.uarray<2xi4>
+}
+
+// CHECK-LABEL: hw.module @bitcast_uarray_to_int
+hw.module @bitcast_uarray_to_int(out result : i8) {
+  %c = hw.aggregate_constant [4 : i4, 2 : i4] : !hw.uarray<2xi4>
+  // CHECK-NEXT: %[[OUT:.+]] = hw.constant 66 : i8
+  // CHECK-NEXT: hw.output %[[OUT]] : i8
+  %0 = hw.bitcast %c : (!hw.uarray<2xi4>) -> i8
+  hw.output %0 : i8
+}
+
+// CHECK-LABEL: hw.module @bitcast_int_to_nested_aggregate
+hw.module @bitcast_int_to_nested_aggregate(out result : !hw.array<2xstruct<a: i4, b: i4>>) {
+  %c = hw.constant 0x1234 : i16
+  %0 = hw.bitcast %c : (i16) -> !hw.array<2xstruct<a: i4, b: i4>>
+  // CHECK-NEXT: %[[OUT:.+]] = 
+  // CHECK-SAME{LITERAL}: hw.aggregate_constant [[1 : i4, 2 : i4], [3 : i4, 4 : i4]] : !hw.array<2xstruct<a: i4, b: i4>>
+  // CHECK-NEXT: hw.output %[[OUT]] : !hw.array<2xstruct<a: i4, b: i4>>
+  hw.output %0 : !hw.array<2xstruct<a: i4, b: i4>>
+}
+
+// CHECK-LABEL: hw.module @bitcast_nested_aggregate_to_int
+hw.module @bitcast_nested_aggregate_to_int(out result : i16) {
+  %c = hw.aggregate_constant [[1 : i4, 2 : i4], [3 : i4, 4 : i4]] : !hw.array<2xstruct<a: i4, b: i4>>
+  %0 = hw.bitcast %c : (!hw.array<2xstruct<a: i4, b: i4>>) -> i16
+  // CHECK-NEXT: %[[OUT:.+]] = hw.constant 4660 : i16
+  // CHECK-NEXT: hw.output %[[OUT]] : i16
+  hw.output %0 : i16
+}
+
 // CHECK-LABEL: hw.module @array_create
 // CHECK-NEXT:    %0 = hw.aggregate_constant [0 : i2, 1 : i2, 0 : i2] : !hw.array<3xi2>
 // CHECK-NEXT:    hw.output %0 : !hw.array<3xi2
