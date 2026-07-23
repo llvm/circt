@@ -210,14 +210,10 @@ ServicePortInfo HostMemServiceDeclOp::readListPortInfo() {
   // *windowed channel* for the response (a window over the returned list,
   // framed at the engine width), so the concrete response type is supplied
   // per-connection -- hence 'AnyType' for 'resp'. 'length' is likewise
-  // 'AnyType' so the client may supply an unsigned integer of any width.
-  //
-  // TODO: 'AnyType' also permits non-integer or signed 'length' types, since
-  // there is no "unsigned integer of any width" constraint the op verifier can
-  // enforce today. A future (infra) PR should add that validation -- e.g. a
-  // per-service request-verify hook on ServiceDeclOpInterface, or an "any
-  // unsigned int" constraint type handled by checkInnerTypeMatch -- so a
-  // non-uint 'length' is rejected at op-verification time.
+  // 'AnyType' so the client may supply an unsigned integer of any width. Since
+  // 'AnyType' cannot itself express "unsigned integer of any width",
+  // 'verifyRequest' (below) rejects a non-unsigned-integer 'length' at
+  // op-verification time.
   hw::StructType readReqType = hw::StructType::get(
       ctxt, {hw::StructType::FieldInfo{StringAttr::get(ctxt, "address"), ui64},
              hw::StructType::FieldInfo{StringAttr::get(ctxt, "tag"), ui8},
@@ -232,6 +228,35 @@ void HostMemServiceDeclOp::getPortList(
   ports.push_back(writePortInfo());
   ports.push_back(readPortInfo());
   ports.push_back(readListPortInfo());
+}
+
+LogicalResult HostMemServiceDeclOp::verifyRequest(const ServicePortInfo &port,
+                                                  ChannelBundleType reqType,
+                                                  Operation *reqOp) {
+  // Only the 'read_list' port constrains 'length'. Its request struct declares
+  // 'length' as 'AnyType' (so the generic type match accepts any bit width),
+  // but here we additionally require it to be an unsigned integer -- the
+  // constraint 'AnyType' alone cannot express.
+  if (port.port.getName().getValue() != "read_list")
+    return success();
+
+  for (BundledChannel ch : reqType.getChannels()) {
+    if (ch.name.getValue() != "req")
+      continue;
+    auto structType = dyn_cast<hw::StructType>(ch.type.getInner());
+    if (!structType)
+      break;
+    Type lengthType = structType.getFieldType("length");
+    if (!lengthType)
+      break;
+    if (auto intType = dyn_cast<IntegerType>(lengthType);
+        intType && intType.isUnsigned())
+      return success();
+    return reqOp->emitOpError()
+           << "'read_list' request 'length' must be an unsigned integer, got "
+           << lengthType;
+  }
+  return success();
 }
 
 void TelemetryServiceDeclOp::getPortList(
