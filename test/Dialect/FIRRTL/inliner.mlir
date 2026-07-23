@@ -1467,6 +1467,29 @@ firrtl.circuit "RefRootIsUse" {
 
 // -----
 
+// An NLA hop through an instance sitting inside a layer block: the body
+// inlines in place under the layer block, the hop evaporates, and the
+// annotation localizes onto the relocated leaf.
+// Retention keeps the hierpath pinned through its one-element path.
+firrtl.circuit "NLAThroughLayer" {
+  firrtl.layer @L bind {}
+  // CHECK: hw.hierpath private @nla [@NLAThroughLayer::@leafsym]
+  hw.hierpath private @nla [@NLAThroughLayer::@childsym, @Child::@leafsym]
+  firrtl.module private @Child() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {
+    %w = firrtl.wire sym @leafsym {annotations = [{circt.nonlocal = @nla, class = "test"}]} : !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module @NLAThroughLayer
+  firrtl.module @NLAThroughLayer() {
+    // CHECK-NEXT: firrtl.layerblock @L
+    firrtl.layerblock @L {
+      // CHECK-NEXT: %child_w = firrtl.wire sym @leafsym {annotations = [{class = "test"}]}
+      firrtl.instance child sym @childsym @Child()
+    }
+  }
+}
+
+// -----
+
 // The circuit op's own attributes resolve inside it (enable_layers,
 // select_inst_choice); a module reference there is a use.
 firrtl.circuit "CircuitAttrIsUse" attributes {test.ref = @KeptByCircuitAttr} {
