@@ -2155,11 +2155,14 @@ stripModuleImpl(FModuleLike op,
                 op->erase();
                 return WalkResult::advance();
               }
-              // Erase domain operands from regular wires (reverse order
-              // to maintain indices).
-              for (int i = op.getDomains().size() - 1; i >= 0; --i)
+              BitVector erasures(op.getDomains().size());
+
+              // Erase domain operands from regular wires.
+              for (int i = 0, e = op.getDomains().size(); i < e; ++i)
                 if (shouldStripType(op.getDomains()[i].getType()))
-                  op->eraseOperand(i);
+                  erasures.set(i);
+
+              op->eraseOperands(erasures);
               return WalkResult::advance();
             })
             .Case<FInstanceLike>([&](auto op) {
