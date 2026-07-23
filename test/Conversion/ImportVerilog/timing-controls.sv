@@ -9,6 +9,7 @@ module RepeatedEventControl;
   int a, b;
   bit clk;
   bit [31:0] n;
+  real r;
 
   // Intra-assignment repeated event control with a signed count. The
   // right-hand side is evaluated first, then the event control is awaited
@@ -43,5 +44,15 @@ module RepeatedEventControl;
     // CHECK: moore.detect_event negedge
     // CHECK: moore.blocking_assign %a
     a = repeat (n) @(negedge clk) b;
+  end
+
+  // A floating count converts to a signed integer and uses a signed
+  // comparison, so a negative count skips the event control.
+  initial begin
+    // CHECK: moore.sgt
+    // CHECK: moore.wait_event
+    // CHECK: moore.detect_event posedge
+    // CHECK: moore.blocking_assign %a
+    a = repeat (r) @(posedge clk) b;
   end
 endmodule

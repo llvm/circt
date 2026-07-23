@@ -190,11 +190,13 @@ static LogicalResult handleRoot(Context &context,
     mlir::cf::BranchOp::create(builder, loc, &checkBlock, count);
 
     // Loop while the remaining count is greater than zero, honoring the
-    // signedness of the count expression.
+    // signedness of the count expression. Floating count expressions convert
+    // to a signed integer, so compare them signed as well such that negative
+    // counts skip the event control entirely.
     builder.setInsertionPointToEnd(&checkBlock);
     Value zero = moore::ConstantOp::create(builder, loc, countType, 0);
     Value cond =
-        repeatCtrl.expr.type->isSigned()
+        repeatCtrl.expr.type->isSigned() || repeatCtrl.expr.type->isFloating()
             ? moore::SgtOp::create(builder, loc, currentCount, zero).getResult()
             : moore::UgtOp::create(builder, loc, currentCount, zero)
                   .getResult();
