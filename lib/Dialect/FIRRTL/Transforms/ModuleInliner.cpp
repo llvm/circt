@@ -1975,6 +1975,14 @@ void Inliner::eraseDeadModules() {
 ArrayAttr Inliner::materializeNamepath(VirtualNLA *vnla) {
   SmallVector<Attribute> pathAttrs;
   for (auto &hop : vnla->getPath()) {
+    // Hops that originally had inner symbols must have their final symbols
+    // assigned by now.  These were set during plan (in-place/terminal) or
+    // filled in during cloning in P3.
+    //
+    // This going wrong will corrupt the deduplication mechanisms,
+    // so be sure to check it.
+    assert((hop.finalSym || !hop.origSym) &&
+           "materializing a hop whose final symbol was never filled");
     if (hop.finalSym)
       pathAttrs.push_back(InnerRefAttr::get(hop.finalMod, hop.finalSym));
     else
