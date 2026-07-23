@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import subprocess
+
 import esiaccel
 from esiaccel.accelerator import AcceleratorConnection
 from esiaccel.cosim.pytest import cosim_test
@@ -174,6 +176,25 @@ class TestCosimEsitesterDma:
   def test_hostmem(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
     run_cmd(["esitester", "cosim", conn, "hostmem"])
+
+  def test_hostmembw(self, host: str, port: int) -> None:
+    conn = f"{host}:{port}"
+    # A 1000-element read burst at 32 bits (8 bytes/element) is 8000 bytes,
+    # which exceeds the PCIe maximum read request size (256 bytes) and so
+    # exercises the read-request splitter. Capture stderr too and assert the
+    # runtime never sees an oversized (unsplit) read request.
+    result = subprocess.run(
+        [
+            "esitester", "cosim", conn, "hostmembw", "-w", "-r", "-c", "1000",
+            "--widths", "32", "128"
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    combined = result.stdout + result.stderr
+    assert "exceeds the PCIe maximum read request size" not in combined, \
+        combined
 
   def test_dma(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
