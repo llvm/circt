@@ -386,7 +386,7 @@ class HostMemReq(Module):
     c1 = Bits(1)(0)
 
     read_address, _ = Channel(esi.HostMem.ReadReqType).wrap(
-        esi.HostMem.ReadReqType({
+        esi.HostMem.read_req_burst_type(64)({
             "tag": 0,
             "address": u64
         }), c1)
