@@ -1447,6 +1447,24 @@ firrtl.circuit "FormalMarkerIsUse" {
   // CHECK: firrtl.module private @Bar
 }
 
+// -----
+
+// Liveness resolves symbol uses through their root reference: a nested or
+// inner reference on a circuit-level op keeps the referenced module alive.
+firrtl.circuit "RefRootIsUse" {
+  firrtl.module @RefRootIsUse() {}
+  "some_unknown_dialect.op"() { magic = @KeptByNestedRef::@x } : () -> ()
+  "some_unknown_dialect.op"() { magic = #hw.innerNameRef<@KeptByInnerRef::@x> } : () -> ()
+  // CHECK: firrtl.module private @KeptByNestedRef
+  firrtl.module private @KeptByNestedRef() {
+    %w = firrtl.wire sym @x : !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module private @KeptByInnerRef
+  firrtl.module private @KeptByInnerRef() {
+    %w = firrtl.wire sym @x : !firrtl.uint<1>
+  }
+}
+
 
 // -----
 

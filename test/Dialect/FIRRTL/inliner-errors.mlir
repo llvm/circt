@@ -143,3 +143,17 @@ firrtl.circuit "ForeignInnerRef" {
   }
 }
 
+
+// -----
+
+// An unregistered circuit-level op with regions may itself be a symbol
+// table, so its symbol uses cannot be analyzed; the analysis then sees no
+// uses on the op at all, legible or not.  Reject rather than risk erasing a
+// referenced module.
+firrtl.circuit "UnanalyzableSymbolUses" {
+  firrtl.module @UnanalyzableSymbolUses() {}
+  // expected-error @below {{cannot analyze symbol uses of this operation; the inliner requires circuit-level references to be legible}}
+  "some_unknown_dialect.container"() ({
+    "some_unknown_dialect.leaf"() { magic = @UnanalyzableSymbolUses } : () -> ()
+  }) : () -> ()
+}

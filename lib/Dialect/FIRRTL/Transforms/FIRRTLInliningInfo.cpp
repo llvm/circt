@@ -22,6 +22,34 @@ LogicalResult InliningInfo::run() {
       StringAttr::get(circuit.getContext(), inlineAnnoClass);
   auto flattenAnnoClassAttr =
       StringAttr::get(circuit.getContext(), flattenAnnoClass);
+
+  // Mark modules live whose symbols `op` references.
+  // Uses resolve through their root reference: a nested reference (@M::@x)
+  // must keep @M alive, or it dangles when @M is erased.
+  // A flat reference is its own root.
+  // Sub-attributes are walked, so an inner reference's module component
+  // (#hw.innerNameRef<@M::@x>) surfaces as a flat use of @M.
+  // Root liveness is all this promises: the leaf must also survive the
+  // rewrite of @M's body, which is the referent's concern.
+  auto markSymbolUses = [&](Operation &op) -> LogicalResult {
+    // getSymbolUses fails on an unregistered op with regions (it may be a
+    // symbol table), discarding every use on the op, legible or not.
+    // Fail fast rather than silently under-approximate liveness.
+    auto symbolUses = SymbolTable::getSymbolUses(&op);
+    if (!symbolUses)
+      return op.emitError(
+          "cannot analyze symbol uses of this operation; the inliner "
+          "requires circuit-level references to be legible");
+    for (const auto &use : *symbolUses) {
+      auto root = use.getSymbolRef().getRootReference();
+      if (auto moduleLike = symbolTable.lookup<FModuleLike>(root)) {
+        auto &info = modInfoMap[moduleLike];
+        info.isLive = info.hasUnflattenedPath = true;
+      }
+    }
+    return success();
+  };
+
   for (auto &op : circuit.getOps()) {
     // Initialize module information.  Not order-dependent.
     if (auto module = dyn_cast<FModuleLike>(op)) {
@@ -64,17 +92,8 @@ LogicalResult InliningInfo::run() {
     if (isa<hw::HierPathOp>(op))
       continue;
 
-    // Mark modules live whose symbols are referenced in other ops.
-    auto symbolUses = SymbolTable::getSymbolUses(&op);
-    if (!symbolUses)
-      continue;
-    for (const auto &use : *symbolUses) {
-      if (auto flat = dyn_cast<FlatSymbolRefAttr>(use.getSymbolRef()))
-        if (auto moduleLike = symbolTable.lookup<FModuleLike>(flat.getAttr())) {
-          auto &info = modInfoMap[moduleLike];
-          info.isLive = info.hasUnflattenedPath = true;
-        }
-    }
+    if (failed(markSymbolUses(op)))
+      return failure();
   }
 
   // Calculate inlining info top-down.

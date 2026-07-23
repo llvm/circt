@@ -85,6 +85,10 @@ public:
   ///
   /// Closed world:
   /// - Liveness sees instance-graph uses plus symbol uses on circuit-level ops.
+  /// - Symbol uses resolve through their root: a nested or inner reference
+  ///   keeps its root module alive.  Its leaf is the referent's promise.
+  /// - A circuit-level op whose symbol uses cannot be analyzed is rejected
+  ///   with a diagnostic rather than under-approximated.
   /// - Instance-graph uses include instance_choice targets and alternatives,
   ///   seeded live even from a dead holder.
   /// - A module referenced only inside a module body by a non-instance op
