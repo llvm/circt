@@ -51,7 +51,7 @@ KnownBits computeKnownBits(Value value);
 
 /// Return true when both operands are wider than the bitwidth threshold and
 /// should use Booth encoding.
-bool boothEncode(Value lhs, Value rhs);
+bool shouldUseBoothEncoding(Value lhs, Value rhs, unsigned threshold = 16);
 
 /// Create the ops to zero-extend a value to an integer of equal or larger type.
 Value createZExt(OpBuilder &builder, Location loc, Value value,

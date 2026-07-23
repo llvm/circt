@@ -28,7 +28,8 @@ using namespace matchers;
 // Common function to identify when multipliers/partial products should be
 // lowered to Booth encoded array. Identifies zext/sext of the operands. Only
 // valid for binary multiplication.
-bool comb::boothEncode(Value lhs, Value rhs) {
+// Threshold default is 16
+bool comb::shouldUseBoothEncoding(Value lhs, Value rhs, unsigned threshold) {
   // Do not booth encode multiplication by a constant
   if (lhs.getDefiningOp<hw::ConstantOp>() ||
       rhs.getDefiningOp<hw::ConstantOp>())
@@ -53,8 +54,8 @@ bool comb::boothEncode(Value lhs, Value rhs) {
 
   // Heuristic threshold based on:
   // "Datapath Synthesis for Standard-Cell Design", Reto Zimmerman 2009
-  // If either operand is less than 16 bits, don't use Booth encoding.
-  return lhsWidth > 16 && rhsWidth > 16;
+  // If either operand is less than 16 bits (default), don't use Booth encoding.
+  return lhsWidth > threshold && rhsWidth > threshold;
 }
 
 Value comb::createZExt(OpBuilder &builder, Location loc, Value value,
