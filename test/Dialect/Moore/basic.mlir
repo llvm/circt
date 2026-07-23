@@ -487,8 +487,8 @@ func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42, %arg2: !moore.f64)
   moore.builtin.ln %arg2 : f64
   // CHECK: moore.builtin.log10 %arg2 : f64
   moore.builtin.log10 %arg2 : f64
-  // CHECK: moore.builtin.pow %arg2, %arg2 : f64
-  moore.builtin.pow %arg2, %arg2 : f64
+  // CHECK: moore.fpow %arg2, %arg2 : f64
+  moore.fpow %arg2, %arg2 : f64
   // CHECK: moore.builtin.exp %arg2 : f64
   moore.builtin.exp %arg2 : f64
   // CHECK: moore.builtin.sqrt %arg2 : f64

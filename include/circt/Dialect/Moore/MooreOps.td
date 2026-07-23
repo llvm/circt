@@ -3568,10 +3568,6 @@ def AbsBIOp : RealMathFunc<"abs"> {
   let summary = "Absolute";
 }
 
-def PowBIOp : RealMathFuncTwoIn<"pow"> {
-  let summary = "Power (x^y)";
-}
-
 def FloorBIOp : RealMathFunc<"floor"> {
   let summary = "Floor";
 }

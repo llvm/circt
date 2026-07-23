@@ -3574,16 +3574,6 @@ Value Context::convertSystemCall(
   if (nameId == ksn::Hypot)
     return convertRealMathTwoBI<moore::HypotBIOp>(*this, loc, name, args);
 
-  if (nameId == ksn::Pow) {
-    assert(numArgs == 2 && "`$pow` takes 2 arguments");
-    auto realType = moore::RealType::get(getContext(), moore::RealWidth::f64);
-    auto lhs = convertRvalueExpression(*args[0], realType);
-    auto rhs = convertRvalueExpression(*args[1], realType);
-    if (!lhs || !rhs)
-      return {};
-    return moore::PowRealOp::create(builder, loc, lhs, rhs);
-  }
-
   //===--------------------------------------------------------------------===//
   // Type Conversion System Functions
   //===--------------------------------------------------------------------===//
