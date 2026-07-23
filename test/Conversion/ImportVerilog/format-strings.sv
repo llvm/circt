@@ -6,7 +6,7 @@
 // § 21.2.1.5 "Strength format"). The Moore dialect does not model drive
 // strength, so driven bits report strong strength: St0, St1, StX, or HiZ for
 // high-impedance bits. Vector operands print one strength per bit, most
-// significant bit first, separated by underscores.
+// significant bit first, separated by spaces.
 
 // CHECK-LABEL: moore.module @FormatStrength(
 // CHECK-DAG: [[ONE:%.+]] = moore.constant 1 : l1
@@ -37,11 +37,11 @@ module FormatStrength(input wire w, input wire [1:0] v);
     // CHECK: moore.fmt.string [[SELZ]]
     $display("%v", w);
 
-    // Vector: one strength per bit, MSB first, separated by underscores.
+    // Vector: one strength per bit, MSB first, separated by spaces.
     // CHECK: [[V:%.+]] = moore.read %v
     // CHECK: moore.extract [[V]] from 1 : l2 -> l1
     // CHECK: moore.fmt.string
-    // CHECK: moore.fmt.literal "_"
+    // CHECK: moore.fmt.literal " "
     // CHECK: moore.extract [[V]] from 0 : l2 -> l1
     // CHECK: moore.fmt.string
     $display("%v", v);

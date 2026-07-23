@@ -339,7 +339,7 @@ struct FormatStringParser {
   /// § 21.2.1.5 "Strength format". The Moore dialect does not model drive
   /// strength, so driven bits are reported with strong strength: `St0`, `St1`,
   /// `StX`, or `HiZ` for high-impedance bits. Vector operands print one
-  /// strength per bit, most significant bit first, separated by underscores.
+  /// strength per bit, most significant bit first, separated by spaces.
   LogicalResult emitStrength(const slang::ast::Expression &arg) {
     auto value =
         context.convertToSimpleBitVector(context.convertRvalueExpression(arg));
@@ -370,7 +370,7 @@ struct FormatStringParser {
 
     for (unsigned i = intTy.getWidth(); i > 0; i--) {
       if (i != intTy.getWidth())
-        emitLiteral("_");
+        emitLiteral(" ");
       Value bit = value;
       if (intTy.getWidth() != 1)
         bit = moore::ExtractOp::create(builder, loc, bitTy, value, i - 1);
