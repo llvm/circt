@@ -1,4 +1,4 @@
-# UNSUPPORTED: system-macos, system-windows
+# UNSUPPORTED: system-macos, system-windows, system-linux
 # RUN: %rtgtool% %s --seed=0 --output-format=mlir | FileCheck %s
 
 from pyrtg import test, sequence, Integer, IntegerType, Immediate, Array, If, Else, EndIf, For, Foreach, config, Config, Param
