@@ -50,6 +50,13 @@ LogicalResult InliningInfo::run() {
     return success();
   };
 
+  // The circuit's own attributes resolve inside it by dialect convention
+  // (enable_layers, select_inst_choice); the generic symbol model places an
+  // op's attributes in its parent's scope, so the loop below never sees them.
+  // On a symbol-table op, getSymbolUses walks only the op's own attributes.
+  if (failed(markSymbolUses(*circuit.getOperation())))
+    return failure();
+
   for (auto &op : circuit.getOps()) {
     // Initialize module information.  Not order-dependent.
     if (auto module = dyn_cast<FModuleLike>(op)) {

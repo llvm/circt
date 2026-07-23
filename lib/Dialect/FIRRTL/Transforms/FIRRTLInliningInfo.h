@@ -84,7 +84,8 @@ public:
   /// fail with a diagnostic; partially-honored ones draw a warning.
   ///
   /// Closed world:
-  /// - Liveness sees instance-graph uses plus symbol uses on circuit-level ops.
+  /// - Liveness sees instance-graph uses plus symbol uses on circuit-level
+  ///   ops and on the circuit op itself (its attributes resolve inward).
   /// - Symbol uses resolve through their root: a nested or inner reference
   ///   keeps its root module alive.  Its leaf is the referent's promise.
   /// - A circuit-level op whose symbol uses cannot be analyzed is rejected

@@ -1465,6 +1465,16 @@ firrtl.circuit "RefRootIsUse" {
   }
 }
 
+// -----
+
+// The circuit op's own attributes resolve inside it (enable_layers,
+// select_inst_choice); a module reference there is a use.
+firrtl.circuit "CircuitAttrIsUse" attributes {test.ref = @KeptByCircuitAttr} {
+  firrtl.module @CircuitAttrIsUse() {}
+  // CHECK: firrtl.module private @KeptByCircuitAttr
+  firrtl.module private @KeptByCircuitAttr() {}
+}
+
 
 // -----
 
