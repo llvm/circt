@@ -770,7 +770,14 @@ def TaggedReadGearbox(input_bitwidth: int,
         # sel==1.
         counter = Wire(UInt(counter_width), name="chunk_counter")
         client_xact = Wire(Bits(1))
-        incremented = (counter + 1).as_uint(counter_width)
+        # Wrap the next index at 'chunks - 1' so the counter never advances to
+        # an unreachable value when 'chunks' is not a power of two (e.g.
+        # chunks=3 must wrap 2 -> 0, not step to the invalid state 3, which
+        # would assert no reg_ce and drop the accepted word, deadlocking the
+        # stream).
+        incremented = Mux(counter == UInt(counter_width)(chunks - 1),
+                          (counter + 1).as_uint(counter_width),
+                          UInt(counter_width)(0))
         counter.assign(
             Mux(
                 client_xact, Mux(upstream_xact, counter, incremented),
@@ -1073,9 +1080,14 @@ def HostmemReadProcessor(read_width: int, hostmem_module,
           # then sees one contiguous response stream. 'splitter_resp' breaks the
           # request/response construction cycle (the client request is derived
           # from the packed response bundle).
-          max_chunk_bytes = max(
-              1, PCIE_MAX_READ_REQUEST_BYTES // elem_stride_bytes) * \
-              elem_stride_bytes
+          if elem_stride_bytes > PCIE_MAX_READ_REQUEST_BYTES:
+            raise ValueError(
+                f"read_list element stride ({elem_stride_bytes} bytes) exceeds "
+                f"the PCIe maximum read request size "
+                f"({PCIE_MAX_READ_REQUEST_BYTES} bytes); a single element must "
+                f"fit in one read request.")
+          max_chunk_bytes = (PCIE_MAX_READ_REQUEST_BYTES //
+                             elem_stride_bytes) * elem_stride_bytes
           splitter_resp = Wire(demuxed_upstream_channel.type)
           gearbox = TaggedReadGearbox(read_width,
                                       element_bits)(clk=ports.clk,
