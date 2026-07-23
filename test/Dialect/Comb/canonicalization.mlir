@@ -54,14 +54,13 @@ hw.module @bailOnRecursiveOps(in %a: i1, in %b: i1, out z0: i42, out z1: i1) {
 }
 
 // CHECK-LABEL: @bailOnRecursiveExtractOfConcat
-// https://github.com/llvm/circt/issues/10877
 hw.module @bailOnRecursiveExtractOfConcat(out o: i6) {
   %false = hw.constant false
-  // CHECK: %0 = comb.extract %2 from 2 : (i6) -> i4
+  // CHECK: %[[EXT0:.+]] = comb.extract %[[CONCAT:.+]] from 2 : (i6) -> i4
   %0 = comb.extract %2 from 2 : (i6) -> i4
-  // CHECK: %1 = comb.extract %2 from 0 : (i6) -> i1
+  // CHECK: %[[EXT1:.+]] = comb.extract %[[CONCAT]] from 0 : (i6) -> i1
   %1 = comb.extract %2 from 0 : (i6) -> i1
-  // CHECK: %2 = comb.concat %0, %false, %1 : i4, i1, i1
+  // CHECK: %[[CONCAT]] = comb.concat %[[EXT0]], %false, %[[EXT1]] : i4, i1, i1
   %2 = comb.concat %0, %false, %1 : i4, i1, i1
   hw.output %2 : i6
 }
