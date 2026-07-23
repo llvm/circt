@@ -2140,7 +2140,7 @@ stripModuleImpl(FModuleLike op,
             })
             .Case<UnsafeDomainCastOp>([&](UnsafeDomainCastOp op) {
               // Strip cast if any of the domains being cast should be
-              // stripped
+              // stripped.
               if (llvm::any_of(op.getDomains(), [&](Value domain) {
                     return shouldStripType(domain.getType());
                   })) {
@@ -2150,13 +2150,13 @@ stripModuleImpl(FModuleLike op,
               return WalkResult::advance();
             })
             .Case<WireOp>([&](WireOp op) {
-              // Erase wires of DomainType that should be stripped
+              // Erase wires of DomainType that should be stripped.
               if (shouldStripType(op.getType(0))) {
                 op->erase();
                 return WalkResult::advance();
               }
               // Erase domain operands from regular wires (reverse order
-              // to maintain indices)
+              // to maintain indices).
               for (int i = op.getDomains().size() - 1; i >= 0; --i)
                 if (shouldStripType(op.getDomains()[i].getType()))
                   op->eraseOperand(i);
@@ -2194,19 +2194,19 @@ stripModuleImpl(FModuleLike op,
 static LogicalResult stripDomainsFromCircuit(
     MLIRContext *context, CircuitOp circuit,
     llvm::function_ref<bool(StringAttr)> shouldStripDomain) {
-  // Collect modules and erase matching DomainOp declarations
+  // Collect modules and erase matching DomainOp declarations.
   llvm::SmallVector<FModuleLike> modules;
   for (Operation &op : make_early_inc_range(*circuit.getBodyBlock())) {
     TypeSwitch<Operation *, void>(&op)
         .Case<FModuleLike>([&](FModuleLike op) { modules.push_back(op); })
         .Case<DomainOp>([&](DomainOp op) {
-          // Erase domain declaration if its name should be stripped
+          // Erase domain declaration if its name should be stripped.
           if (shouldStripDomain(op.getNameAttr()))
             op.erase();
         });
   }
 
-  // Strip domains from all modules in parallel
+  // Strip domains from all modules in parallel.
   return failableParallelForEach(context, modules, [&](FModuleLike module) {
     return stripModuleImpl(module, shouldStripDomain);
   });

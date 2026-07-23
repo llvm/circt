@@ -818,7 +818,8 @@ public:
   llvm::cl::list<std::string> skippedDomains{
       "skip-domain",
       llvm::cl::desc("Names of domains (e.g. \"ClockDomain\") to exclude from "
-                     "domain checking")};
+                     "domain checking. Skipped domains will be erased from the "
+                     "circuit after inference")};
 
   //===----------------------------------------------------------------------===
   // Lint options
