@@ -29,3 +29,22 @@ func.func @foo() {
   call @foo() : () -> ()
   return
 }
+
+// -----
+
+hw.module @RecursiveCallsAccessingModuleState() {
+  %init = hw.constant 0 : i32
+  %sig = llhd.sig %init : i32
+  llhd.combinational {
+    func.call @foo(%sig) : (!llhd.ref<i32>) -> ()
+    llhd.yield
+  }
+}
+
+// expected-note @below {{call target suspends execution and must be inlined}}
+func.func @foo(%arg0: !llhd.ref<i32>) {
+  %0 = llhd.prb %arg0 : i32
+  // expected-error @below {{recursive function call cannot be inlined}}
+  call @foo(%arg0) : (!llhd.ref<i32>) -> ()
+  return
+}
