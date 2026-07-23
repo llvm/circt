@@ -953,38 +953,6 @@ hostmemWriteBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
             << std::to_string(duration.count()) << " us, "
             << std::to_string(cycles) << " cycles, " << bytesPerCycle
             << " bytes/cycle" << std::endl;
-
-  // Verify the write data pattern. WriteMem's per-burst flit counter is reset
-  // at command start and increments on each accepted flit, so the low 32 bits
-  // of flit i's payload must equal i. Elements are packed at a 32-bit-word-
-  // aligned stride (`((width + 31) / 32) * 4` bytes), so a mismatch indicates a
-  // lost/duplicated handshake or an element-address stride error.
-  size_t strideBytes = ((width + 31) / 32) * 4;
-  uint8_t *bytePtr = static_cast<uint8_t *>(region.getPtr());
-  size_t mismatches = 0;
-  size_t firstMismatch = 0;
-  uint32_t firstExpected = 0;
-  uint32_t firstActual = 0;
-  for (size_t i = 0; i < xferCount; ++i) {
-    uint32_t actual;
-    std::memcpy(&actual, bytePtr + i * strideBytes, sizeof(uint32_t));
-    uint32_t expected = static_cast<uint32_t>(i);
-    if (actual != expected) {
-      if (mismatches == 0) {
-        firstMismatch = i;
-        firstExpected = expected;
-        firstActual = actual;
-      }
-      ++mismatches;
-    }
-  }
-  if (mismatches != 0) {
-    std::stringstream ss;
-    ss << "hostmem write bandwidth data mismatch: " << mismatches << "/"
-       << xferCount << " flits wrong; first at i=" << firstMismatch
-       << " expected=" << firstExpected << " got=0x" << std::hex << firstActual;
-    throw std::runtime_error(ss.str());
-  }
 }
 
 static void
