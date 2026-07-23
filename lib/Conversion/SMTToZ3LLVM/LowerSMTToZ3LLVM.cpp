@@ -25,9 +25,12 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SMT/IR/SMTOps.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallPtrSet.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Debug.h"
 
@@ -636,6 +639,29 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
             typeConverter->convertTypes(op->getResultTypes(), convertedTypes)))
       return failure();
 
+    // Solver regions are outlined below. If one contains a trace marker,
+    // forward the enclosing function's trace context through the outlined
+    // function as its final argument.
+    bool containsBMCTrace = false;
+    op.getBodyRegion().walk(
+        [&](verif::BMCTraceOp) { containsBMCTrace = true; });
+    Value traceContext;
+    SmallVector<Type> inputTypes(adaptor.getInputs().getTypes());
+    SmallVector<Value> callOperands(adaptor.getInputs());
+    if (containsBMCTrace) {
+      auto parentFunction = op->getParentOfType<FunctionOpInterface>();
+      if (!parentFunction || parentFunction.getNumArguments() == 0)
+        return rewriter.notifyMatchFailure(op, "missing BMC trace context");
+      traceContext =
+          parentFunction.getArgument(parentFunction.getNumArguments() - 1);
+      if (!isa<LLVM::LLVMPointerType>(traceContext.getType()))
+        return rewriter.notifyMatchFailure(op,
+                                           "invalid BMC trace context type");
+      inputTypes.push_back(traceContext.getType());
+      callOperands.push_back(traceContext);
+      op.getBodyRegion().addArgument(traceContext.getType(), loc);
+    }
+
     func::FuncOp funcOp;
     {
       OpBuilder::InsertionGuard guard(rewriter);
@@ -644,15 +670,13 @@ struct SolverOpLowering : public SMTLoweringPattern<SolverOp> {
 
       funcOp = func::FuncOp::create(
           rewriter, loc, globals.names.newName("solver"),
-          rewriter.getFunctionType(adaptor.getInputs().getTypes(),
-                                   convertedTypes));
+          rewriter.getFunctionType(inputTypes, convertedTypes));
       rewriter.inlineRegionBefore(op.getBodyRegion(), funcOp.getBody(),
                                   funcOp.end());
     }
 
     ValueRange results =
-        func::CallOp::create(rewriter, loc, funcOp, adaptor.getInputs())
-            ->getResults();
+        func::CallOp::create(rewriter, loc, funcOp, callOperands)->getResults();
 
     // At the end of the region, decrease the solver's reference counter and
     // delete the context.
@@ -1283,13 +1307,39 @@ struct IntAbsOpLowering : public SMTLoweringPattern<IntAbsOp> {
 // For now we want to ignore Debug variable and scope ops - eventually we'll
 // give this debug info to Z3
 
-/// Strip verif.bmc.trace ops until counterexample materialization is lowered.
-struct BMCTraceLowering : public OpConversionPattern<verif::BMCTraceOp> {
-  using OpConversionPattern::OpConversionPattern;
+/// Lower bit-vector verif.bmc.trace ops to the circt-bmc runtime callback.
+/// Other SMT values are discarded until their trace materialization is
+/// supported.
+struct BMCTraceLowering : public SMTLoweringPattern<verif::BMCTraceOp> {
+  using SMTLoweringPattern::SMTLoweringPattern;
 
   LogicalResult
   matchAndRewrite(verif::BMCTraceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const final {
+    auto bitVectorType = dyn_cast<smt::BitVectorType>(op.getValue().getType());
+    if (!bitVectorType) {
+      rewriter.eraseOp(op);
+      return success();
+    }
+
+    Location loc = op.getLoc();
+    Value name = buildString(rewriter, loc, op.getName());
+    Value width = LLVM::ConstantOp::create(rewriter, loc, rewriter.getI32Type(),
+                                           bitVectorType.getWidth());
+    auto function = op->getParentOfType<FunctionOpInterface>();
+    if (!function || function.getNumArguments() == 0)
+      return rewriter.notifyMatchFailure(op, "missing BMC trace context");
+    Value traceContext = function.getArgument(function.getNumArguments() - 1);
+    if (!isa<LLVM::LLVMPointerType>(traceContext.getType()))
+      return rewriter.notifyMatchFailure(op, "invalid BMC trace context type");
+    auto voidType = LLVM::LLVMVoidType::get(rewriter.getContext());
+    buildCall(
+        rewriter, loc, "circt_bmc_record_trace",
+        LLVM::LLVMFunctionType::get(voidType, {traceContext.getType(),
+                                               adaptor.getStep().getType(),
+                                               name.getType(), width.getType(),
+                                               adaptor.getValue().getType()}),
+        {traceContext, adaptor.getStep(), name, width, adaptor.getValue()});
     rewriter.eraseOp(op);
     return success();
   }
@@ -1559,7 +1609,8 @@ void circt::populateSMTToZ3LLVMConversionPatterns(
                BV2IntOpLowering, QuantifierLowering<ForallOp>,
                QuantifierLowering<ExistsOp>>(converter, patterns.getContext(),
                                              globals, options);
-  patterns.add<BMCTraceLowering>(patterns.getContext());
+  patterns.add<BMCTraceLowering>(converter, patterns.getContext(), globals,
+                                 options);
   patterns.add<DbgVariableLowering, DbgScopeLowering>(patterns.getContext());
 }
 
@@ -1595,6 +1646,42 @@ void LowerSMTToZ3LLVMPass::runOnOperation() {
   });
   if (setLogicCheck.wasInterrupted())
     return signalPassFailure();
+
+  llvm::StringMap<Operation *> traceNames;
+  auto traceNameCheck =
+      getOperation().walk([&](verif::BMCTraceOp traceOp) -> WalkResult {
+        auto [it, inserted] =
+            traceNames.try_emplace(traceOp.getName(), traceOp.getOperation());
+        if (inserted)
+          return WalkResult::advance();
+        auto error = traceOp.emitError() << "duplicate BMC trace name '"
+                                         << traceOp.getName() << "'";
+        error.attachNote(it->second->getLoc())
+            << "first BMC trace with this name is here";
+        return WalkResult::interrupt();
+      });
+  if (traceNameCheck.wasInterrupted())
+    return signalPassFailure();
+
+  // Thread an opaque runtime context into every function containing a BMC
+  // trace marker. The lowering below forwards this argument to the runtime
+  // callback, making trace state explicit in the generated code.
+  llvm::SmallPtrSet<Operation *, 4> traceFunctions;
+  getOperation().walk([&](verif::BMCTraceOp traceOp) {
+    auto function = traceOp->getParentOfType<FunctionOpInterface>();
+    if (function)
+      traceFunctions.insert(function.getOperation());
+  });
+  auto traceContextType = LLVM::LLVMPointerType::get(&getContext());
+  for (Operation *operation : traceFunctions) {
+    auto function = cast<FunctionOpInterface>(operation);
+    if (failed(function.insertArgument(function.getNumArguments(),
+                                       traceContextType, {},
+                                       function.getLoc()))) {
+      function.emitError("failed to add BMC trace context argument");
+      return signalPassFailure();
+    }
+  }
 
   // Set up the type converter
   LLVMTypeConverter converter(&getContext());
