@@ -53,6 +53,18 @@ hw.module @bailOnRecursiveOps(in %a: i1, in %b: i1, out z0: i42, out z1: i1) {
   hw.output %z0, %z1 : i42, i1
 }
 
+// CHECK-LABEL: @bailOnRecursiveExtractOfConcat
+hw.module @bailOnRecursiveExtractOfConcat(out o: i6) {
+  %false = hw.constant false
+  // CHECK: %[[EXT0:.+]] = comb.extract %[[CONCAT:.+]] from 2 : (i6) -> i4
+  %0 = comb.extract %2 from 2 : (i6) -> i4
+  // CHECK: %[[EXT1:.+]] = comb.extract %[[CONCAT]] from 0 : (i6) -> i1
+  %1 = comb.extract %2 from 0 : (i6) -> i1
+  // CHECK: %[[CONCAT]] = comb.concat %[[EXT0]], %false, %[[EXT1]] : i4, i1, i1
+  %2 = comb.concat %0, %false, %1 : i4, i1, i1
+  hw.output %2 : i6
+}
+
 // CHECK-LABEL: @narrowMux
 hw.module @narrowMux(in %a: i8, in %b: i8, in %c: i1, out o: i4) {
 // CHECK-NEXT: %0 = comb.extract %a from 1 : (i8) -> i4
