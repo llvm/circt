@@ -252,14 +252,16 @@ struct SextCompress : public OpRewritePattern<CompressOp> {
     APInt value;
     SmallVector<Value> newInputs;
     for (auto input : inputs) {
-      Value sextInput;
+      Value replBits;
       // Check for sext of the inverted value
-      if (!matchPattern(input, comb::m_Sext(m_Any(&sextInput)))) {
+      if (!matchPattern(input, comb::m_SextBy(m_Any(&replBits)))) {
         newInputs.push_back(input);
         continue;
       }
+      auto baseWidth = opSize - replBits.getType().getIntOrFloatBitWidth();
+      auto sextInput =
+          comb::ExtractOp::create(rewriter, op.getLoc(), input, 0, baseWidth);
 
-      auto baseWidth = sextInput.getType().getIntOrFloatBitWidth();
       // Need a separate sign-bit that gets extended by at least two bits to
       // be beneficial
       if (baseWidth <= 1 || (opSize - baseWidth) <= 1) {
@@ -469,15 +471,21 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
   // negations with constant corrections that can be folded together.
   LogicalResult matchAndRewrite(PartialProductOp op,
                                 PatternRewriter &rewriter) const override {
-    auto inputWidth = op.getOperand(0).getType().getIntOrFloatBitWidth();
-    Value lhs;
-    Value rhs;
-    if (!matchPattern(op.getOperand(0), comb::m_Sext(m_Any(&lhs))) ||
-        !matchPattern(op.getOperand(1), comb::m_Sext(m_Any(&rhs))))
+    // Booth encoding will automatically handle signed multiplications
+    if (comb::shouldUseBoothEncoding(op.getLhs(), op.getRhs()))
       return failure();
 
-    size_t lhsWidth = lhs.getType().getIntOrFloatBitWidth();
-    size_t rhsWidth = rhs.getType().getIntOrFloatBitWidth();
+    auto inputWidth = op.getLhs().getType().getIntOrFloatBitWidth();
+    Value lhsReplBits;
+    Value rhsReplBits;
+    if (!matchPattern(op.getLhs(), comb::m_SextBy(m_Any(&lhsReplBits))) ||
+        !matchPattern(op.getRhs(), comb::m_SextBy(m_Any(&rhsReplBits))))
+      return failure();
+
+    size_t lhsWidth =
+        inputWidth - lhsReplBits.getType().getIntOrFloatBitWidth();
+    size_t rhsWidth =
+        inputWidth - rhsReplBits.getType().getIntOrFloatBitWidth();
     // Subtract 1 as will handle sign-bit separately
     size_t maxRows = std::max(lhsWidth, rhsWidth) - 1;
 
@@ -493,14 +501,14 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
     // Pull off the sign bits
     auto lhsBaseWidth = lhsWidth - 1;
     auto rhsBaseWidth = rhsWidth - 1;
-    auto lhsSignBit =
-        comb::ExtractOp::create(rewriter, op.getLoc(), lhs, lhsBaseWidth, 1);
-    auto rhsSignBit =
-        comb::ExtractOp::create(rewriter, op.getLoc(), rhs, rhsBaseWidth, 1);
-    auto lhsBase =
-        comb::ExtractOp::create(rewriter, op.getLoc(), lhs, 0, lhsBaseWidth);
-    auto rhsBase =
-        comb::ExtractOp::create(rewriter, op.getLoc(), rhs, 0, rhsBaseWidth);
+    auto lhsSignBit = comb::ExtractOp::create(rewriter, op.getLoc(),
+                                              op.getLhs(), lhsBaseWidth, 1);
+    auto rhsSignBit = comb::ExtractOp::create(rewriter, op.getLoc(),
+                                              op.getRhs(), rhsBaseWidth, 1);
+    auto lhsBase = comb::ExtractOp::create(rewriter, op.getLoc(), op.getLhs(),
+                                           0, lhsBaseWidth);
+    auto rhsBase = comb::ExtractOp::create(rewriter, op.getLoc(), op.getRhs(),
+                                           0, rhsBaseWidth);
 
     // Create the unsigned partial product of the unextended inputs
     auto lhsBaseZext =
