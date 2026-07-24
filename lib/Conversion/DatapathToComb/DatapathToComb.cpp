@@ -520,7 +520,7 @@ private:
 
     // Reduce c width based on leading zeros
     auto rowWidth = width;
-    auto [cSigned, cBase] = getBaseWidth(rewriter, loc, c);
+    auto [cSigned, cBase] = getBaseOfExt(rewriter, loc, c);
     auto cBaseWidth = cBase.getType().getIntOrFloatBitWidth();
 
     if (cBaseWidth < width && !cSigned) {

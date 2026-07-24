@@ -692,8 +692,8 @@ struct SignedPosPartialProducts : public OpRewritePattern<PosPartialProductOp> {
     auto inputWidth = a.getType().getIntOrFloatBitWidth();
     Value aReplBits;
     Value bReplBits;
-    if (!matchPattern(a, comb::m_Sext(m_Any(&aReplBits))) ||
-        !matchPattern(b, comb::m_Sext(m_Any(&bReplBits))))
+    if (!matchPattern(a, comb::m_SextBy(m_Any(&aReplBits))) ||
+        !matchPattern(b, comb::m_SextBy(m_Any(&bReplBits))))
       return failure();
 
     size_t aWidth = inputWidth - aReplBits.getType().getIntOrFloatBitWidth();
