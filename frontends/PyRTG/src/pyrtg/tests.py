@@ -51,7 +51,7 @@ class Test(CodeGenRoot):
               param, PythonParam) else _FromCirctValue(arg)))
 
     with ir.InsertionPoint(block):
-      self.test_func(SimpleNamespace(new_config))
+      self.test_func(SimpleNamespace(**dict(new_config)))
 
 
 def test(config):
