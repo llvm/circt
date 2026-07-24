@@ -374,6 +374,10 @@ private:
       if (!atFormat) {
         buffer << quote() << identifier << quote() << equals() << value;
       } else {
+        // don't emit external(0)
+        if (identifier == "external" && intAttr.getValue() == 0) {
+          return "";
+        }
         buffer << addressSymbol() << identifier;
         // The only time we may omit the value is when it is a Boolean attribute
         // with value 1.
@@ -875,6 +879,7 @@ void Emitter::emitSeqMemory(SeqMemoryOp memory) {
                         "supported by the native Calyx compiler.");
     return;
   }
+
   bool isRef = !memory->hasAttr("external");
   indent();
   if (isRef)
