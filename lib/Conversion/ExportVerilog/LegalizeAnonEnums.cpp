@@ -13,6 +13,7 @@
 
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
@@ -165,12 +166,25 @@ struct LegalizeAnonEnums
     enumCount = 0;
     typeScope = {};
 
+    // Use an attribute/type replacer to replace EnumFieldAttrs with the
+    // processed type.
+    mlir::AttrTypeReplacer replacer;
+    replacer.addReplacement([&](EnumFieldAttr enumAttr) -> Attribute {
+      if (auto newType = processType(enumAttr.getType().getValue()))
+        return EnumFieldAttr::get(UnknownLoc::get(enumAttr.getContext()),
+                                  enumAttr.getField(), newType);
+      return enumAttr;
+    });
+
     // Perform the actual walk looking for anonymous enumeration types.
     getOperation().walk([&](Operation *op) {
+      // Legalize EnumFieldAttrs in operation attributes (e.g. sv.case
+      // casePatterns).
+      op->setAttrs(
+          cast<DictionaryAttr>(replacer.replace(op->getAttrDictionary())));
+
       // If this is a constant operation, make sure to update the constant
       // to reference the typedef, otherwise we will emit the wrong constant.
-      // Theoretically we should be searching all attributes on every operation
-      // for EnumFieldAttrs.
       if (auto enumConst = dyn_cast<EnumConstantOp>(op)) {
         auto fieldAttr = enumConst.getField();
         if (auto newType = processType(fieldAttr.getType().getValue()))
