@@ -346,3 +346,14 @@ firrtl.module @RUWOld() {
   %0:2 = firrtl.mem Old {depth = 12 : i64, name = "RUWOld", portNames = ["read", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
 }
 }
+
+
+// Check that the memory initialization attribute is preserved
+
+// CHECK-LABEL: "MemInit"
+firrtl.circuit "MemInit" {
+// CHECK: firrtl.memmodule private @MemInit_ext{{.*}}, init = #firrtl.meminit<"init.mem", false, true>
+firrtl.module @MemInit() {
+  %0:2 = firrtl.mem New {init = #firrtl.meminit<"init.mem", false, true>, depth = 12 : i64, name = "MemInit", portNames = ["read", "write"], readLatency = 1 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>, !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data: uint<42>, mask: uint<1>>
+}
+}
