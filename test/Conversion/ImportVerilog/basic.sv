@@ -1850,6 +1850,36 @@ module intToFormatStringConversion();
   end
 endmodule
 
+// CHECK-LABEL: moore.module @FormatPack(
+module FormatPack;
+  typedef struct { int a; byte b; } pair_t;
+
+  int x;
+  string s;
+  pair_t p;
+  byte y;
+
+  initial begin
+    // CHECK: [[V:%.+]] = moore.read %x
+    // CHECK: moore.fmt.int decimal [[V]], align right, pad space signed : i32
+    $display("%p", x);
+
+    // CHECK: [[V:%.+]] = moore.read %s
+    // CHECK: moore.fmt.literal "\22"
+    // CHECK: [[FS:%.+]] = moore.fmt.string [[V]]
+    $display("%p", s);
+
+    // CHECK: [[A:%.+]] = moore.struct_extract %{{.+}}, "a" : ustruct<{a: i32, b: i8}> -> i32
+    // CHECK: moore.fmt.int decimal [[A]], align right, pad space signed : i32
+    // CHECK: [[B:%.+]] = moore.struct_extract %{{.+}}, "b" : ustruct<{a: i32, b: i8}> -> i8
+    // CHECK: moore.fmt.int decimal [[B]], align right, pad space signed : i8
+    $display("%p", p);
+
+    // CHECK: moore.fmt.int binary [[V:%.+]], align right, pad zero : i8
+    $displayb("%p", y);
+  end
+endmodule
+
 // CHECK-LABEL: moore.module @realToTimeConversion
 module realToTimeConversion;
   // CHECK: procedure initial
