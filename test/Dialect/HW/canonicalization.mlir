@@ -1197,6 +1197,50 @@ hw.module @struct_extract2(out r0: i3, out r1: i7) {
   hw.output %r0, %r1 : i3, i7
 }
 
+// Fold struct_extract of a bitcast of a constant to the field's bits. The
+// first field occupies the MSBs: 0xB2C5 -> a=0b101, b=0b10010, c=0xC5.
+// CHECK-LABEL: hw.module @struct_extract_of_bitcast_constant
+// CHECK-DAG:     %c-3_i3 = hw.constant -3 : i3
+// CHECK-DAG:     %c-14_i5 = hw.constant -14 : i5
+// CHECK-DAG:     %c-59_i8 = hw.constant -59 : i8
+// CHECK:         hw.output %c-3_i3, %c-14_i5, %c-59_i8 : i3, i5, i8
+hw.module @struct_extract_of_bitcast_constant(out r0: i3, out r1: i5, out r2: i8) {
+  %c = hw.constant 45765 : i16
+  %s = hw.bitcast %c : (i16) -> !hw.struct<a: i3, b: i5, c: i8>
+  %r0 = hw.struct_extract %s["a"] : !hw.struct<a: i3, b: i5, c: i8>
+  %r1 = hw.struct_extract %s["b"] : !hw.struct<a: i3, b: i5, c: i8>
+  %r2 = hw.struct_extract %s["c"] : !hw.struct<a: i3, b: i5, c: i8>
+  hw.output %r0, %r1, %r2 : i3, i5, i8
+}
+
+// Integer fields around an aggregate-typed field still fold; the
+// aggregate-typed field itself is left unchanged.
+// CHECK-LABEL: hw.module @struct_extract_of_bitcast_constant_agg_field
+// CHECK-DAG:     %c1_i2 = hw.constant 1 : i2
+// CHECK-DAG:     %c5_i4 = hw.constant 5 : i4
+// CHECK-DAG:     %[[CAST:.+]] = hw.bitcast
+// CHECK-DAG:     %[[ARR:.+]] = hw.struct_extract %[[CAST]]["arr"]
+// CHECK:         hw.output %c1_i2, %[[ARR]], %c5_i4 : i2, !hw.array<3xi2>, i4
+hw.module @struct_extract_of_bitcast_constant_agg_field(out r0: i2, out r1: !hw.array<3xi2>, out r2: i4) {
+  %c = hw.constant 1861 : i12
+  %s = hw.bitcast %c : (i12) -> !hw.struct<x: i2, arr: !hw.array<3xi2>, y: i4>
+  %r0 = hw.struct_extract %s["x"] : !hw.struct<x: i2, arr: !hw.array<3xi2>, y: i4>
+  %r1 = hw.struct_extract %s["arr"] : !hw.struct<x: i2, arr: !hw.array<3xi2>, y: i4>
+  %r2 = hw.struct_extract %s["y"] : !hw.struct<x: i2, arr: !hw.array<3xi2>, y: i4>
+  hw.output %r0, %r1, %r2 : i2, !hw.array<3xi2>, i4
+}
+
+// Do not fold a struct_extract of a bitcast of a non-constant value.
+// CHECK-LABEL: hw.module @struct_extract_of_bitcast_nonconstant
+// CHECK-NEXT:    %[[CAST:.+]] = hw.bitcast %v : (i16) -> !hw.struct<a: i3, b: i5, c: i8>
+// CHECK-NEXT:    %[[R:.+]] = hw.struct_extract %[[CAST]]["b"]
+// CHECK-NEXT:    hw.output %[[R]] : i5
+hw.module @struct_extract_of_bitcast_nonconstant(in %v: i16, out r: i5) {
+  %s = hw.bitcast %v : (i16) -> !hw.struct<a: i3, b: i5, c: i8>
+  %r = hw.struct_extract %s["b"] : !hw.struct<a: i3, b: i5, c: i8>
+  hw.output %r : i5
+}
+
 // CHECK-LABEL: hw.module @struct_explode0
 // CHECK-NEXT:    %c0_i2 = hw.constant 0 : i2
 // CHECK-NEXT:    hw.output %c0_i2 : i2
