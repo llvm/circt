@@ -17,6 +17,7 @@
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/DenseSet.h"
 
 namespace circt {
 namespace firrtl {
@@ -184,6 +185,38 @@ struct GenericIntrinsic {
   }
 };
 
+/// key: parent fqn, value: subfield leaves.
+using DebugLeafMap =
+    llvm::DenseMap<mlir::StringAttr, llvm::SmallVector<mlir::DictionaryAttr>>;
+
+/// Enum definition data staged per FQN by `liftDebugIntrinsics`, for use sites
+/// to build a `dbg.enum` inline.
+struct EnumDefData {
+  mlir::StringAttr typeName;
+  mlir::DictionaryAttr variantsMap;
+  mlir::StringAttr fqn;
+};
+
+/// Named SSA declarations (ports, wires, nodes, regs) of one module, indexed by
+/// name for the 0-operand `circt_debug_var` lookup. A name maps to >1 value
+/// when it is ambiguous; memory names are tracked separately as they carry no
+/// single SSA value. Built once per module by `liftDebugIntrinsics`.
+struct NamedDeclIndex {
+  llvm::DenseMap<mlir::StringAttr, llvm::SmallVector<mlir::Value, 1>> byName;
+  llvm::DenseSet<mlir::StringAttr> memoryNames;
+};
+
+/// Per-invocation context for `IntrinsicLowerings::lower`. Non-owning;
+/// pointers may be null when no debug staging is needed.
+struct IntrinsicConvertContext {
+  const DebugLeafMap *debugLeaves = nullptr;
+  const llvm::StringMap<EnumDefData> *enumDefByFqn = nullptr;
+  const NamedDeclIndex *namedDecls = nullptr;
+  /// Accumulator for emitted `dbg.variable` names; a failed insert means a
+  /// duplicate was seen and triggers a warning. Null disables the check.
+  llvm::StringSet<> *existingVariableNames = nullptr;
+};
+
 /// Base class for Intrinsic Converters.
 ///
 /// Intrinsic converters contain validation logic, along with a converter
@@ -220,7 +253,8 @@ public:
   /// recomputing work done during check needed for the conversion.
   virtual LogicalResult checkAndConvert(GenericIntrinsic gi,
                                         GenericIntrinsicOpAdaptor adaptor,
-                                        PatternRewriter &rewriter) {
+                                        PatternRewriter &rewriter,
+                                        IntrinsicConvertContext ctx) {
     if (check(gi))
       return failure();
     convert(gi, adaptor, rewriter);
@@ -264,16 +298,18 @@ public:
   }
 
   /// Lowers all intrinsics in a module.  Returns number converted or failure.
-  FailureOr<size_t> lower(FModuleOp mod, bool allowUnknownIntrinsics = false);
+  FailureOr<size_t> lower(FModuleOp mod, bool allowUnknownIntrinsics = false,
+                          IntrinsicConvertContext ctx = {});
 
 private:
-  template <typename T>
+  template <typename T, typename... Args>
   typename std::enable_if_t<std::is_base_of_v<IntrinsicConverter, T>>
-  addConverter(StringRef name) {
+  addConverter(StringRef name, Args &&...args) {
     auto nameAttr = StringAttr::get(context, name);
     assert(!conversions.contains(nameAttr) &&
            "duplicate conversion for intrinsic");
-    conversions.try_emplace(nameAttr, std::make_unique<T>());
+    conversions.try_emplace(nameAttr,
+                            std::make_unique<T>(std::forward<Args>(args)...));
   }
 };
 
@@ -300,6 +336,15 @@ struct FIRRTLIntrinsicLoweringDialectInterface
   using IntrinsicLoweringDialectInterface::IntrinsicLoweringDialectInterface;
   void populateIntrinsicLowerings(IntrinsicLowerings &lowerings) const override;
 };
+
+/// Pre-pass over one module, run before `IntrinsicLowerings::lower`: stages
+/// enumdef data by fqn into `outEnumDefByFqn`, groups subfield leaves by
+/// `parent` into `outLeaves`, indexes named declarations into `outDecls`, and
+/// erases the lifted intrinsics. `parent` is the var<->leaf linkage key, `name`
+/// the dotted display path. Fails on a malformed intrinsic.
+LogicalResult liftDebugIntrinsics(FModuleOp mod, DebugLeafMap &outLeaves,
+                                  llvm::StringMap<EnumDefData> &outEnumDefByFqn,
+                                  NamedDeclIndex &outDecls);
 
 } // namespace firrtl
 } // namespace circt

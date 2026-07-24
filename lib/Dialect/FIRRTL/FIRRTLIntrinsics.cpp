@@ -7,7 +7,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/FIRRTL/FIRRTLIntrinsics.h"
+#include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
+#include "circt/Dialect/FIRRTL/CHIRRTLDialect.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotationHelper.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -115,10 +117,10 @@ public:
 
   IntrinsicOpConversion(TypeConverter &typeConverter, MLIRContext *context,
                         const ConversionMapTy &conversions,
-                        size_t &numConversions,
+                        size_t &numConversions, IntrinsicConvertContext convCtx,
                         bool allowUnknownIntrinsics = false)
       : OpConversionPattern(typeConverter, context), conversions(conversions),
-        numConversions(numConversions),
+        numConversions(numConversions), convCtx(convCtx),
         allowUnknownIntrinsics(allowUnknownIntrinsics) {}
 
   LogicalResult
@@ -133,7 +135,8 @@ public:
     }
 
     auto &conv = *it->second;
-    auto result = conv.checkAndConvert(GenericIntrinsic(op), adaptor, rewriter);
+    auto result =
+        conv.checkAndConvert(GenericIntrinsic(op), adaptor, rewriter, convCtx);
     if (succeeded(result))
       ++numConversions;
     return result;
@@ -142,6 +145,7 @@ public:
 private:
   const ConversionMapTy &conversions;
   size_t &numConversions;
+  IntrinsicConvertContext convCtx;
   const bool allowUnknownIntrinsics;
 };
 } // namespace
@@ -151,7 +155,8 @@ private:
 //===----------------------------------------------------------------------===//
 
 FailureOr<size_t> IntrinsicLowerings::lower(FModuleOp mod,
-                                            bool allowUnknownIntrinsics) {
+                                            bool allowUnknownIntrinsics,
+                                            IntrinsicConvertContext ctx) {
 
   ConversionTarget target(*context);
 
@@ -193,7 +198,7 @@ FailureOr<size_t> IntrinsicLowerings::lower(FModuleOp mod,
   RewritePatternSet patterns(context);
   size_t count = 0;
   patterns.add<IntrinsicOpConversion>(typeConverter, context, conversions,
-                                      count, allowUnknownIntrinsics);
+                                      count, ctx, allowUnknownIntrinsics);
 
   if (failed(mlir::applyPartialConversion(mod, target, std::move(patterns))))
     return failure();
@@ -570,7 +575,8 @@ public:
 
   LogicalResult checkAndConvert(GenericIntrinsic gi,
                                 GenericIntrinsicOpAdaptor adaptor,
-                                PatternRewriter &rewriter) override {
+                                PatternRewriter &rewriter,
+                                IntrinsicConvertContext) override {
     // Check structure of the intrinsic.
     if (gi.typedInput<ClockType>(0) || gi.sizedInput<UIntType>(1, 1) ||
         gi.sizedInput<UIntType>(2, 1) ||
@@ -756,6 +762,442 @@ public:
 };
 
 //===----------------------------------------------------------------------===//
+// Debug intrinsic converters
+//===----------------------------------------------------------------------===//
+
+static ArrayAttr parseParamsJSON(MLIRContext *ctx, StringAttr paramsStr,
+                                 Operation *warnAt);
+
+class CirctDebugModuleInfoConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(0) || gi.namedParam("typeName") ||
+           gi.namedParam("params", /*optional=*/true) || gi.hasNParam(1, 1) ||
+           gi.hasNoOutput();
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto *context = rewriter.getContext();
+    auto typeName = gi.getParamValue<StringAttr>("typeName");
+    auto paramsStr = gi.getParamValue<StringAttr>("params");
+
+    // Module-level type info goes on a discardable attribute, not a dedicated
+    // op: it has no SSA semantics and survives FIRRTL->HW lowering unchanged.
+    SmallVector<NamedAttribute> fields;
+    fields.emplace_back(StringAttr::get(context, "typeName"), typeName);
+    if (paramsStr)
+      fields.emplace_back(StringAttr::get(context, "params"),
+                          parseParamsJSON(context, paramsStr, gi.op));
+    auto modOp = gi.op->getParentOfType<FModuleOp>();
+    rewriter.modifyOpInPlace(modOp, [&] {
+      modOp->setAttr("dbg.moduleinfo", DictionaryAttr::get(context, fields));
+    });
+    rewriter.eraseOp(gi.op);
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// Debug intrinsic helpers
+//===----------------------------------------------------------------------===//
+
+static std::optional<Attribute>
+jsonValueToAttr(MLIRContext *ctx, const llvm::json::Value &v, bool &skipped) {
+  if (auto b = v.getAsBoolean())
+    return BoolAttr::get(ctx, *b);
+  if (auto s = v.getAsString())
+    return StringAttr::get(ctx, *s);
+  if (auto i = v.getAsInteger())
+    return IntegerAttr::get(IntegerType::get(ctx, 64), *i);
+  if (v.getAsNumber() || v.getAsObject() || v.getAsArray())
+    skipped = true;
+  return std::nullopt;
+}
+
+static ArrayAttr parseParamsJSON(MLIRContext *ctx, StringAttr paramsStr,
+                                 Operation *warnAt) {
+  if (!paramsStr || paramsStr.getValue().empty())
+    return {};
+
+  auto parsed = llvm::json::parse(paramsStr.strref());
+  if (auto err = parsed.takeError()) {
+    auto msg = llvm::toString(std::move(err));
+    if (warnAt)
+      warnAt->emitWarning()
+          << "debug params JSON failed to parse (type-parameter info "
+             "dropped): "
+          << msg;
+    return {};
+  }
+
+  auto *arr = parsed->getAsArray();
+  if (!arr) {
+    if (warnAt)
+      warnAt->emitWarning()
+          << "debug params JSON is not a JSON array (type-parameter info "
+             "dropped)";
+    return {};
+  }
+
+  bool skippedUnsupported = false;
+  SmallVector<Attribute> entries{};
+  for (const auto &item : *arr) {
+    auto *obj = item.getAsObject();
+    if (!obj)
+      continue;
+
+    SmallVector<NamedAttribute> fields;
+    for (auto &[k, v] : *obj) {
+      if (auto attr = jsonValueToAttr(ctx, v, skippedUnsupported))
+        fields.push_back({StringAttr::get(ctx, StringRef(k)), *attr});
+    }
+
+    entries.push_back(DictionaryAttr::get(ctx, fields));
+  }
+
+  if (skippedUnsupported && warnAt)
+    warnAt->emitWarning() << "debug params JSON contains unsupported value "
+                             "types (float/object/array); those fields are "
+                             "dropped";
+  return ArrayAttr::get(ctx, entries);
+}
+
+namespace {
+struct LeafMeta {
+  StringAttr typeName;
+  ArrayAttr params;
+  StringAttr enumTypeName;
+  StringAttr enumFqn;
+  DictionaryAttr enumVariantsMap;
+};
+} // namespace
+using LeafMetaMap = llvm::StringMap<LeafMeta>;
+
+namespace {
+class DebugAggregateBuilder {
+public:
+  DebugAggregateBuilder(PatternRewriter &rewriter, Location loc,
+                        const LeafMetaMap &leafMetaMap, Operation *warnAt)
+      : rewriter(rewriter), leafMetaMap(leafMetaMap), loc(loc), warnAt(warnAt) {
+  }
+
+  /// Entry point. Builds the aggregate without wrapping the root; the caller
+  /// attaches root-level metadata. Children are wrapped by `build`.
+  Value buildRoot(Value value, StringRef parentPath) {
+    return FIRRTLTypeSwitch<Type, Value>(value.getType())
+        .Case<BundleType>(
+            [&](BundleType t) { return buildBundle(value, t, parentPath); })
+        .Case<FVectorType>(
+            [&](FVectorType t) { return buildVector(value, t, parentPath); })
+        .Case<FEnumType>([&](FEnumType t) -> Value { return value; })
+        .Case<FIRRTLBaseType>([&](FIRRTLBaseType t) -> Value {
+          return t.isGround() ? value : Value{};
+        })
+        .Default([](auto) -> Value { return {}; });
+  }
+
+private:
+  /// Recursive builder for non-root sub-values; each result is wrapped to
+  /// carry its own leaf metadata.
+  Value build(Value value, StringRef parentPath) {
+    return FIRRTLTypeSwitch<Type, Value>(value.getType())
+        .Case<BundleType>([&](BundleType t) {
+          Value agg = buildBundle(value, t, parentPath);
+          return agg ? wrap(agg, parentPath) : agg;
+        })
+        .Case<FVectorType>([&](FVectorType t) {
+          Value agg = buildVector(value, t, parentPath);
+          return agg ? wrap(agg, parentPath) : agg;
+        })
+        .Case<FEnumType>(
+            [&](FEnumType t) -> Value { return wrap(value, parentPath); })
+        .Case<FIRRTLBaseType>([&](FIRRTLBaseType t) -> Value {
+          if (!t.isGround())
+            return {};
+          return wrap(value, parentPath);
+        })
+        .Default([](auto) -> Value { return {}; });
+  }
+
+  Value wrap(Value inner, StringRef parentPath) {
+    ArrayAttr params{};
+    StringAttr typeName{};
+    StringAttr enumTypeName{};
+    StringAttr enumFqn{};
+    DictionaryAttr enumVariantsMap{};
+    if (auto it = leafMetaMap.find(parentPath); it != leafMetaMap.end()) {
+      typeName = it->second.typeName;
+      params = it->second.params;
+      enumTypeName = it->second.enumTypeName;
+      enumFqn = it->second.enumFqn;
+      enumVariantsMap = it->second.enumVariantsMap;
+    }
+
+    if (enumVariantsMap)
+      inner = debug::EnumOp::create(rewriter, loc, inner, enumTypeName,
+                                    enumVariantsMap, enumFqn)
+                  .getResult();
+
+    return debug::ValueOp::create(rewriter, loc, inner, typeName, params)
+        .getResult();
+  }
+
+  void eraseUnused(ArrayRef<Operation *> ops) {
+    for (auto *op : ops)
+      if (op->use_empty())
+        rewriter.eraseOp(op);
+  }
+
+  Value buildBundle(Value value, BundleType type, StringRef parentPath) {
+    SmallVector<Value> fields{};
+    SmallVector<Attribute> names{};
+    SmallVector<Operation *> subOps{};
+    for (auto [index, element] : llvm::enumerate(type.getElements())) {
+      auto subOp = SubfieldOp::create(rewriter, loc, value, index);
+      subOps.push_back(subOp.getOperation());
+
+      std::string fieldPath =
+          (Twine(parentPath) + "." + element.name.getValue()).str();
+      if (auto dbgVal = build(subOp.getResult(), fieldPath)) {
+        fields.push_back(dbgVal);
+        names.push_back(element.name);
+      } else if (warnAt) {
+        warnAt->emitWarning() << "dbg.struct field '" << element.name.getValue()
+                              << "' has unsupported type; skipping";
+      }
+    }
+
+    if (fields.empty())
+      return {};
+
+    Value result = debug::StructOp::create(rewriter, loc, fields,
+                                           rewriter.getArrayAttr(names));
+    eraseUnused(subOps);
+    return result;
+  }
+
+  Value buildVector(Value value, FVectorType type, StringRef parentPath) {
+    SmallVector<Value> elements{};
+    SmallVector<Operation *> subOps{};
+    for (std::size_t i = 0; i < type.getNumElements(); ++i) {
+      auto subOp = SubindexOp::create(rewriter, loc, value, i);
+      subOps.push_back(subOp.getOperation());
+
+      std::string elemPath = (Twine(parentPath) + "[" + Twine(i) + "]").str();
+      if (auto dbgVal = build(subOp.getResult(), elemPath))
+        elements.push_back(dbgVal);
+    }
+
+    if (elements.size() != type.getNumElements()) {
+      if (warnAt)
+        warnAt->emitWarning()
+            << "dbg.array for '" << parentPath << "' has " << elements.size()
+            << "/" << type.getNumElements()
+            << " elements due to unsupported element types; skipping";
+      eraseUnused(subOps);
+      return {};
+    }
+
+    Value result = debug::ArrayOp::create(rewriter, loc, elements);
+    eraseUnused(subOps);
+    return result;
+  }
+
+  PatternRewriter &rewriter;
+  const LeafMetaMap &leafMetaMap;
+
+  Location loc;
+  Operation *warnAt;
+};
+} // namespace
+
+/// Converts `circt_debug_var` to `dbg.variable`, reading the enum table and
+/// leaf list staged by `liftDebugIntrinsics` via `IntrinsicConvertContext`.
+class CirctDebugVarConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    // 0 operands for memories (no SSA), 1 operand for normal values.
+    unsigned n = gi.op.getNumOperands();
+    if (n != 0 && n != 1)
+      return true;
+    return gi.namedParam("name") || gi.namedParam("typeName") ||
+           gi.namedParam("params", /*optional=*/true) ||
+           gi.namedParam("enumFqn", /*optional=*/true) || gi.hasNParam(2, 2) ||
+           gi.hasNoOutput();
+  }
+
+  LogicalResult checkAndConvert(GenericIntrinsic gi,
+                                GenericIntrinsicOpAdaptor adaptor,
+                                PatternRewriter &rewriter,
+                                IntrinsicConvertContext ctx) override {
+    if (check(gi))
+      return failure();
+    auto varName = gi.getParamValue<StringAttr>("name");
+    auto typeName = gi.getParamValue<StringAttr>("typeName");
+    auto location = gi.op.getLoc();
+
+    if (varName && ctx.existingVariableNames &&
+        !ctx.existingVariableNames->insert(varName.getValue()).second)
+      gi.op->emitWarning("duplicate circt_debug_var with name '")
+          << varName.getValue() << "'";
+
+    ArrayAttr params;
+    if (auto paramAttr = gi.getParamValue<StringAttr>("params"))
+      params = parseParamsJSON(rewriter.getContext(), paramAttr, gi.op);
+
+    if (!ctx.enumDefByFqn) {
+      gi.op->emitError("CirctDebugVarConverter requires liftDebugIntrinsics to "
+                       "publish enumDefByFqn via IntrinsicConvertContext");
+      return success();
+    }
+
+    const EnumDefData *enumDef = lookupEnumDef(
+        *ctx.enumDefByFqn, gi.getParamValue<StringAttr>("enumFqn"), gi.op);
+    LeafMetaMap leafMap =
+        collectLeafMeta(*ctx.enumDefByFqn, ctx.debugLeaves, varName);
+
+    Value rawSignal = resolveRootSignal(gi, adaptor, ctx, varName, rewriter);
+    if (!rawSignal)
+      return success();
+
+    StringRef varPath = varName ? varName.getValue() : StringRef{};
+    Value dbgValue = DebugAggregateBuilder(rewriter, location, leafMap, gi.op)
+                         .buildRoot(rawSignal, varPath);
+    if (!dbgValue)
+      dbgValue = rawSignal;
+
+    // Scalar enum variable: wrap the value in a `dbg.enum` cast so the enum
+    // type travels with the value, with no separate op or FQN linkage.
+    if (enumDef)
+      dbgValue =
+          debug::EnumOp::create(rewriter, location, dbgValue, enumDef->typeName,
+                                enumDef->variantsMap, enumDef->fqn)
+              .getResult();
+
+    // Root type metadata goes on a `dbg.value` wrapper, so `dbg.variable`
+    // itself stays metadata-free.
+    if (typeName || params)
+      dbgValue =
+          debug::ValueOp::create(rewriter, location, dbgValue, typeName, params)
+              .getResult();
+
+    rewriter.replaceOpWithNewOp<debug::VariableOp>(gi.op, varName, dbgValue,
+                                                   /*scope=*/Value{});
+    return success();
+  }
+
+private:
+  /// Resolves `fqnAttr` against the staged enumdef table. An unresolved FQN is
+  /// not fatal: it warns on `warnAt` (when set) and returns null.
+  static const EnumDefData *
+  lookupEnumDef(const llvm::StringMap<EnumDefData> &enumDefByFqn,
+                StringAttr fqnAttr, Operation *warnAt) {
+    if (!fqnAttr || fqnAttr.getValue().empty())
+      return nullptr;
+    auto it = enumDefByFqn.find(fqnAttr.getValue());
+    if (it == enumDefByFqn.end()) {
+      if (warnAt)
+        warnAt->emitWarning()
+            << "no circt_debug_enumdef found for '" << fqnAttr.getValue()
+            << "'; leaf will be emitted without enum binding";
+      return nullptr;
+    }
+    return &it->second;
+  }
+
+  /// Collects this var's leaves, keyed by display path (what
+  /// `DebugAggregateBuilder` reconstructs). Linkage is by FQN: a leaf's
+  /// `parent` must exactly equal this var's FQN.
+  static LeafMetaMap
+  collectLeafMeta(const llvm::StringMap<EnumDefData> &enumDefByFqn,
+                  const DebugLeafMap *debugLeaves, StringAttr varName) {
+    LeafMetaMap leafMap;
+    if (!varName || !debugLeaves)
+      return leafMap;
+    auto it = debugLeaves->find(varName);
+    if (it == debugLeaves->end())
+      return leafMap;
+    for (auto entry : it->second) {
+      auto pathAttr = entry.getAs<StringAttr>("name");
+      if (!pathAttr)
+        continue;
+      LeafMeta meta;
+      meta.typeName = entry.getAs<StringAttr>("typeName");
+      meta.params = entry.getAs<ArrayAttr>("params");
+      // No warnAt: a missing enumdef is expected for a non-enum leaf; the FQN
+      // string on the leaf is the binding to the staged definition.
+      if (const EnumDefData *ed = lookupEnumDef(
+              enumDefByFqn, entry.getAs<StringAttr>("enumFqn"), nullptr)) {
+        meta.enumTypeName = ed->typeName;
+        meta.enumFqn = ed->fqn;
+        meta.enumVariantsMap = ed->variantsMap;
+      }
+      leafMap[pathAttr.getValue()] = meta;
+    }
+    return leafMap;
+  }
+
+  /// Locates the SSA root to walk: the direct operand, or (for 0-operand vars)
+  /// a port/wire/reg named `varName` from the staged declaration index. Returns
+  /// null and erases the op for the no-SSA cases (memory, unresolved name,
+  /// ambiguous name); the caller then returns early.
+  ///
+  /// Name lookup assumes this runs BEFORE LowerTypes/PrettifyVerilogNames,
+  /// which rewrite port/wire names. Re-ordering passes breaks it silently.
+  static Value resolveRootSignal(GenericIntrinsic gi,
+                                 GenericIntrinsicOpAdaptor adaptor,
+                                 IntrinsicConvertContext ctx,
+                                 StringAttr varName,
+                                 PatternRewriter &rewriter) {
+    if (!adaptor.getOperands().empty())
+      return adaptor.getOperands()[0];
+
+    bool isMemory = false;
+    if (ctx.namedDecls && varName) {
+      ArrayRef<Value> candidates;
+      if (auto it = ctx.namedDecls->byName.find(varName);
+          it != ctx.namedDecls->byName.end())
+        candidates = it->second;
+      isMemory = ctx.namedDecls->memoryNames.contains(varName);
+
+      size_t totalMatches = candidates.size() + (isMemory ? 1 : 0);
+      if (totalMatches > 1) {
+        gi.op->emitError("circt_debug_var: name '")
+            << varName.getValue() << "' is ambiguous (matches " << totalMatches
+            << " signals)";
+        rewriter.eraseOp(gi.op);
+        return {};
+      }
+      if (!isMemory && candidates.size() == 1)
+        return candidates[0];
+    }
+
+    // A memory has no single SSA root; drop the var silently. Anything else
+    // unresolved warns.
+    if (varName && !isMemory)
+      gi.op->emitWarning("circt_debug_var: no wire, port, or register named '")
+          << varName.getValue() << "' found";
+    rewriter.eraseOp(gi.op);
+    return {};
+  }
+};
+
+/// Drops `circt_debug_typedef`: there is no `dbg.typedef` op yet.
+class CirctDebugTypeDefConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+  bool check(GenericIntrinsic gi) override { return false; }
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor,
+               PatternRewriter &rewriter) override {
+    rewriter.eraseOp(gi.op);
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // View intrinsic converter and helpers
 //===----------------------------------------------------------------------===//
 
@@ -910,7 +1352,8 @@ class ViewConverter : public IntrinsicConverter {
 public:
   LogicalResult checkAndConvert(GenericIntrinsic gi,
                                 GenericIntrinsicOpAdaptor adaptor,
-                                PatternRewriter &rewriter) override {
+                                PatternRewriter &rewriter,
+                                IntrinsicConvertContext) override {
     // Check structure of the intrinsic.
     if (gi.hasNoOutput() || gi.namedParam("info") || gi.namedParam("name") ||
         gi.namedParam("yaml", true))
@@ -1006,4 +1449,254 @@ public:
 void FIRRTLIntrinsicLoweringDialectInterface::populateIntrinsicLowerings(
     IntrinsicLowerings &lowering) const {
   populateLowerings(lowering);
+  lowering.add<CirctDebugTypeDefConverter>("circt_debug_typedef");
+  lowering.add<CirctDebugVarConverter>("circt_debug_var");
+  lowering.add<CirctDebugModuleInfoConverter>("circt_debug_moduleinfo");
 }
+
+namespace {
+
+/// Reads the optional `width` IntParam (default i64; width 0 keeps the default
+/// as i0 is meaningless) into `outWidth`.
+LogicalResult parseEnumWidth(GenericIntrinsic gi, GenericIntrinsicOp op,
+                             unsigned &outWidth) {
+  outWidth = 64;
+  auto w = gi.getParamValue<IntegerAttr>("width");
+  if (!w)
+    return success();
+  // `width` is an unsigned BigInt IntParam; use APInt (not .getInt(), which is
+  // signless) and guard getZExtValue(), which asserts above 64 bits.
+  if (w.getValue().getActiveBits() > 64)
+    return op.emitError("circt_debug_enumdef: 'width' parameter exceeds 64 "
+                        "bits");
+  uint64_t wv = w.getValue().getZExtValue();
+  if (wv == 0)
+    return success();
+  if (wv > IntegerType::kMaxWidth)
+    return op.emitError("circt_debug_enumdef: 'width' exceeds MLIR IntegerType "
+                        "max (")
+           << IntegerType::kMaxWidth << ")";
+  outWidth = static_cast<unsigned>(wv);
+  return success();
+}
+
+/// Parses the `variants` JSON array into a name->value DictionaryAttr.
+LogicalResult parseEnumVariants(const llvm::json::Array &arr,
+                                GenericIntrinsicOp op, MLIRContext *ctx,
+                                unsigned variantWidth,
+                                DictionaryAttr &outVariantsMap) {
+  auto variantIntType = IntegerType::get(ctx, variantWidth);
+  SmallVector<NamedAttribute> variants;
+  // `variantsMap` is built as a DictionaryAttr, which silently collapses
+  // duplicate keys; reject duplicate variant names up front so two source
+  // variants cannot merge into one.
+  llvm::SmallDenseSet<StringRef> seenNames;
+  for (const auto &item : arr) {
+    auto *obj = item.getAsObject();
+    if (!obj)
+      return op.emitError(
+          "circt_debug_enumdef: variant entry is not a JSON object");
+
+    auto varNameOpt = obj->getString("name");
+    if (!varNameOpt)
+      return op.emitError("circt_debug_enumdef: variant is missing 'name'");
+    if (!seenNames.insert(*varNameOpt).second)
+      return op.emitError("circt_debug_enumdef: duplicate variant name '")
+             << *varNameOpt << "'";
+
+    // Frontend emits value as a string; tolerate integers for tests.
+    APInt valAP;
+    if (auto s = obj->getString("value")) {
+      if (StringRef(*s).getAsInteger(10, valAP))
+        return op.emitError("circt_debug_enumdef: variant '")
+               << *varNameOpt << "' has non-integer value '" << *s << "'";
+    } else if (auto i = obj->getInteger("value")) {
+      valAP = APInt(64, static_cast<uint64_t>(*i), /*isSigned=*/true);
+    } else {
+      return op.emitError("circt_debug_enumdef: variant '")
+             << *varNameOpt << "' is missing 'value'";
+    }
+
+    // A value that does not fit `width` is an error, not a warning: truncating
+    // it can collapse two variants to the same tag and mislabel debug output.
+    unsigned checkWidth = std::max(variantWidth + 1, valAP.getBitWidth());
+    if (!valAP.zextOrTrunc(checkWidth).isIntN(variantWidth))
+      return op.emitError("circt_debug_enumdef: variant '")
+             << *varNameOpt << "' value "
+             << llvm::toString(valAP, 10, /*Signed=*/false)
+             << " does not fit in " << variantWidth << " bits";
+
+    variants.push_back(
+        {StringAttr::get(ctx, *varNameOpt),
+         IntegerAttr::get(variantIntType, valAP.zextOrTrunc(variantWidth))});
+  }
+
+  outVariantsMap = DictionaryAttr::get(ctx, variants);
+  return success();
+}
+
+/// Validate one `circt_debug_enumdef` and stage its data under `fqn` in
+/// `seen` (deduplicated by fqn).
+LogicalResult processEnumDefIntrinsic(GenericIntrinsicOp op, FModuleOp mod,
+                                      llvm::StringMap<EnumDefData> &seen) {
+  GenericIntrinsic gi{op};
+
+  auto fqn = gi.getParamValue<StringAttr>("fqn");
+  auto typeName = gi.getParamValue<StringAttr>("typeName");
+  auto variantsStr = gi.getParamValue<StringAttr>("variants");
+  if (!fqn || !typeName || !variantsStr)
+    return op.emitError("circt_debug_enumdef: missing required parameter(s) "
+                        "'fqn', 'typeName', or 'variants'");
+
+  auto parsed = llvm::json::parse(variantsStr.strref());
+  if (auto err = parsed.takeError())
+    return op.emitError("circt_debug_enumdef: failed to parse 'variants': ")
+           << llvm::toString(std::move(err));
+
+  auto *arr = parsed->getAsArray();
+  if (!arr)
+    return op.emitError("circt_debug_enumdef: 'variants' is not a JSON array");
+
+  auto *ctx = mod.getContext();
+
+  unsigned variantWidth;
+  if (failed(parseEnumWidth(gi, op, variantWidth)))
+    return failure();
+
+  DictionaryAttr variantsMap;
+  if (failed(parseEnumVariants(*arr, op, ctx, variantWidth, variantsMap)))
+    return failure();
+
+  auto [it, inserted] = seen.try_emplace(fqn.getValue(), EnumDefData{});
+  if (inserted) {
+    it->second = EnumDefData{typeName, variantsMap, fqn};
+  } else if (it->second.variantsMap != variantsMap ||
+             it->second.typeName != typeName) {
+    op.emitWarning("duplicate circt_debug_enumdef for fqn '")
+        << fqn.getValue()
+        << "' with differing variants or typeName; first definition wins";
+  }
+  return success();
+}
+
+/// Validate one `circt_debug_subfield` and append a leaf descriptor to
+/// `entries`.
+LogicalResult processSubfieldIntrinsic(GenericIntrinsicOp op,
+                                       DebugLeafMap &entries) {
+  GenericIntrinsic gi{op};
+  auto nameAttr = gi.getParamValue<StringAttr>("name");
+  if (!nameAttr)
+    return op.emitError(
+        "circt_debug_subfield: missing required parameter 'name'");
+
+  auto parentAttr = gi.getParamValue<StringAttr>("parent");
+  if (!parentAttr)
+    return op.emitError(
+        "circt_debug_subfield: missing required parameter 'parent' "
+        "(must equal the 'name' of the enclosing circt_debug_var)");
+
+  // `name` must be a path rooted at `parent`; this catches a frontend that
+  // drops or mangles the root prefix.
+  auto name = nameAttr.getValue();
+  auto parent = parentAttr.getValue();
+  if (name.empty())
+    return op.emitError("circt_debug_subfield: 'name' must not be empty");
+  if (parent.empty())
+    return op.emitError("circt_debug_subfield: 'parent' must not be empty");
+  if (!name.starts_with(parent))
+    return op.emitError("circt_debug_subfield: 'name' (")
+           << name << ") is not rooted at 'parent' (" << parent
+           << "); expected '" << parent << ".<field>' or '" << parent
+           << "[<idx>]...'";
+
+  auto rest = name.drop_front(parent.size());
+  if (rest.empty() || (rest[0] != '.' && rest[0] != '['))
+    return op.emitError("circt_debug_subfield: 'name' (")
+           << name << ") is not rooted at 'parent' (" << parent
+           << "); expected '" << parent << ".<field>' or '" << parent
+           << "[<idx>]...'";
+
+  auto *ctx = op.getContext();
+  SmallVector<NamedAttribute> fields{};
+  fields.push_back({StringAttr::get(ctx, "name"), nameAttr});
+  fields.push_back({StringAttr::get(ctx, "parent"), parentAttr});
+  if (auto tn = gi.getParamValue<StringAttr>("typeName"))
+    fields.push_back({StringAttr::get(ctx, "typeName"), tn});
+  if (auto fqn = gi.getParamValue<StringAttr>("enumFqn");
+      fqn && !fqn.getValue().empty())
+    fields.push_back({StringAttr::get(ctx, "enumFqn"), fqn});
+  // `enumTypeName` is the bare source name (e.g. "AluOp"), mirrored as a
+  // string so EmitUHDI can resolve the type-pool entry by FQN even when the
+  // `circt_debug_enumdef` is in another module (shared enums across modules).
+  if (auto etn = gi.getParamValue<StringAttr>("enumTypeName");
+      etn && !etn.getValue().empty())
+    fields.push_back({StringAttr::get(ctx, "enumTypeName"), etn});
+  if (auto paramsStr = gi.getParamValue<StringAttr>("params"))
+    if (auto params = parseParamsJSON(ctx, paramsStr, op))
+      fields.push_back({StringAttr::get(ctx, "params"), params});
+
+  entries[parentAttr].push_back(DictionaryAttr::get(ctx, fields));
+  return success();
+}
+
+} // namespace
+
+namespace circt::firrtl {
+
+LogicalResult liftDebugIntrinsics(FModuleOp mod, DebugLeafMap &outLeaves,
+                                  llvm::StringMap<EnumDefData> &outEnumDefByFqn,
+                                  NamedDeclIndex &outDecls) {
+  // Index ports up front; their SSA values are the module's block arguments.
+  for (auto [port, arg] : llvm::zip(mod.getPorts(), mod.getArguments()))
+    outDecls.byName[port.name].push_back(arg);
+
+  // A single walk collects the lifted intrinsics and the named declarations a
+  // 0-operand `circt_debug_var` may resolve to. Collecting enumdefs here (vs at
+  // their use site) also dedups ones nested in layerblocks by fqn.
+  SmallVector<GenericIntrinsicOp> intrinsics{};
+  mod.walk([&](Operation *op) {
+    TypeSwitch<Operation *>(op)
+        .Case<GenericIntrinsicOp>([&](auto gi) {
+          auto kind = gi.getIntrinsic();
+          if (kind == "circt_debug_enumdef" || kind == "circt_debug_subfield")
+            intrinsics.push_back(gi);
+        })
+        .Case<WireOp, NodeOp, RegOp, RegResetOp>([&](auto decl) {
+          outDecls.byName[decl.getNameAttr()].push_back(decl.getResult());
+        })
+        .Case<chirrtl::CombMemOp, chirrtl::SeqMemOp, MemOp>([&](auto mem) {
+          if (auto nameAttr = mem->template getAttrOfType<StringAttr>("name"))
+            outDecls.memoryNames.insert(nameAttr);
+        });
+  });
+
+  bool hadError = false;
+  SmallVector<GenericIntrinsicOp> toErase{};
+  for (auto op : intrinsics) {
+    auto kind = op.getIntrinsic();
+    if (kind == "circt_debug_enumdef") {
+      toErase.push_back(op);
+      if (failed(processEnumDefIntrinsic(op, mod, outEnumDefByFqn)))
+        hadError = true;
+    } else if (kind == "circt_debug_subfield") {
+      toErase.push_back(op);
+      if (failed(processSubfieldIntrinsic(op, outLeaves)))
+        hadError = true;
+    }
+  }
+
+  for (auto op : toErase)
+    op.erase();
+
+  if (hadError) {
+    outLeaves.clear();
+    outEnumDefByFqn.clear();
+    outDecls.byName.clear();
+    outDecls.memoryNames.clear();
+    return failure();
+  }
+
+  return success();
+}
+
+} // namespace circt::firrtl
