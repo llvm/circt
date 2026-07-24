@@ -101,3 +101,54 @@ hw.module @mixedRoundtrip(in %raw: i32, out o : i32) {
   // CANON: hw.output %raw : i32
   hw.output %2 : i32
 }
+
+// Bitcasts of constant integers materialize directly as constant aggregates
+// instead of expanding into one comb.extract per element.
+// Arrays: lower bits are lower indices; attribute position 0 holds the
+// highest index. 4660 = (1 << 12) | (2 << 8) | (3 << 4) | 4.
+// NOCANON-LABEL: hw.module @constToArray
+hw.module @constToArray(out o : !hw.array<4xi4>) {
+  // NOCANON-NOT: comb.extract
+  // NOCANON: %[[AGG:.+]] = hw.aggregate_constant [1 : i4, 2 : i4, 3 : i4, 4 : i4] : !hw.array<4xi4>
+  %k = hw.constant 4660 : i16
+  %o = hw.bitcast %k : (i16) -> !hw.array<4xi4>
+  // NOCANON: hw.output %[[AGG]]
+  hw.output %o : !hw.array<4xi4>
+}
+
+// Structs: higher bits are lower field indices. 19481 = (1 << 14) | (6 << 9) | 25.
+// NOCANON-LABEL: hw.module @constToStruct
+hw.module @constToStruct(out o : !hw.struct<a: i2, b: i5, c: i9>) {
+  // NOCANON-NOT: comb.extract
+  // NOCANON: %[[AGG:.+]] = hw.aggregate_constant [1 : i2, 6 : i5, 25 : i9] : !hw.struct<a: i2, b: i5, c: i9>
+  %k = hw.constant 19481 : i16
+  %o = hw.bitcast %k : (i16) -> !hw.struct<a: i2, b: i5, c: i9>
+  // NOCANON: hw.output %[[AGG]]
+  hw.output %o : !hw.struct<a: i2, b: i5, c: i9>
+}
+
+// Nested aggregate targets keep the generic expansion: consumers of the
+// aggregate constant fields attribute expect integer leaves.
+// NOCANON-LABEL: hw.module @constToNested
+hw.module @constToNested(out o : !hw.array<2xstruct<x: i3, y: i5>>) {
+  // NOCANON-NOT: hw.aggregate_constant
+  // NOCANON: comb.extract
+  // NOCANON: hw.struct_create
+  // NOCANON: hw.array_create
+  // NOCANON-NOT: hw.aggregate_constant
+  // NOCANON: hw.output
+  %k = hw.constant 43981 : i16
+  %o = hw.bitcast %k : (i16) -> !hw.array<2xstruct<x: i3, y: i5>>
+  hw.output %o : !hw.array<2xstruct<x: i3, y: i5>>
+}
+
+// Zero-element arrays materialize as an empty aggregate constant.
+// NOCANON-LABEL: hw.module @constToEmptyArray
+hw.module @constToEmptyArray(out o : !hw.array<0xi4>) {
+  // NOCANON-NOT: comb.extract
+  // NOCANON: %[[AGG:.+]] = hw.aggregate_constant [] : !hw.array<0xi4>
+  %k = hw.constant 0 : i0
+  %o = hw.bitcast %k : (i0) -> !hw.array<0xi4>
+  // NOCANON: hw.output %[[AGG]]
+  hw.output %o : !hw.array<0xi4>
+}
