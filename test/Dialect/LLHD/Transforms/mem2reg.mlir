@@ -1016,6 +1016,7 @@ hw.module @CombCreateDynamicInject(in %u: i42, in %v: i10, in %q: i1) {
 }
 
 func.func private @use_i8(%arg0: i8)
+func.func private @use_i210(%arg0: i210)
 func.func private @use_i42(%arg0: i42)
 func.func private @use_ref_i42(%arg0: !llhd.ref<i42>)
 func.func private @use_array_i42(%arg0: !hw.array<4xi42>)
@@ -1390,4 +1391,66 @@ hw.module private @Timeout_10314() {
     llhd.wait (%c0_i3, %c0_i8, %c0_i32, %false, %false, %c0_i3, %c0_i8, %c0_i8, %c0_i4, %c0_i4 : i3, i8, i32, i1, i1, i3, i8, i8, i4, i4), ^bb1
   }
   hw.output
+}
+
+// Check that probes live across a wait are captured as destination block
+// arguments in region program order. Uses enough probes to push the live-out
+// set out of small-set mode: the set is pointer-keyed, and capturing in its
+// iteration order would emit differently-ordered IR from run to run on
+// identical input.
+// CHECK-LABEL: @WaitCaptureProgramOrder
+hw.module @WaitCaptureProgramOrder(
+    in %v1: i1, in %v2: i2, in %v3: i3, in %v4: i4, in %v5: i5, in %v6: i6,
+    in %v7: i7, in %v8: i8, in %v9: i9, in %v10: i10, in %v11: i11,
+    in %v12: i12, in %v13: i13, in %v14: i14, in %v15: i15, in %v16: i16,
+    in %v17: i17, in %v18: i18, in %v19: i19, in %v20: i20) {
+  %s1 = llhd.sig %v1 : i1
+  %s2 = llhd.sig %v2 : i2
+  %s3 = llhd.sig %v3 : i3
+  %s4 = llhd.sig %v4 : i4
+  %s5 = llhd.sig %v5 : i5
+  %s6 = llhd.sig %v6 : i6
+  %s7 = llhd.sig %v7 : i7
+  %s8 = llhd.sig %v8 : i8
+  %s9 = llhd.sig %v9 : i9
+  %s10 = llhd.sig %v10 : i10
+  %s11 = llhd.sig %v11 : i11
+  %s12 = llhd.sig %v12 : i12
+  %s13 = llhd.sig %v13 : i13
+  %s14 = llhd.sig %v14 : i14
+  %s15 = llhd.sig %v15 : i15
+  %s16 = llhd.sig %v16 : i16
+  %s17 = llhd.sig %v17 : i17
+  %s18 = llhd.sig %v18 : i18
+  %s19 = llhd.sig %v19 : i19
+  %s20 = llhd.sig %v20 : i20
+  llhd.process {
+    %p1 = llhd.prb %s1 : i1
+    %p2 = llhd.prb %s2 : i2
+    %p3 = llhd.prb %s3 : i3
+    %p4 = llhd.prb %s4 : i4
+    %p5 = llhd.prb %s5 : i5
+    %p6 = llhd.prb %s6 : i6
+    %p7 = llhd.prb %s7 : i7
+    %p8 = llhd.prb %s8 : i8
+    %p9 = llhd.prb %s9 : i9
+    %p10 = llhd.prb %s10 : i10
+    %p11 = llhd.prb %s11 : i11
+    %p12 = llhd.prb %s12 : i12
+    %p13 = llhd.prb %s13 : i13
+    %p14 = llhd.prb %s14 : i14
+    %p15 = llhd.prb %s15 : i15
+    %p16 = llhd.prb %s16 : i16
+    %p17 = llhd.prb %s17 : i17
+    %p18 = llhd.prb %s18 : i18
+    %p19 = llhd.prb %s19 : i19
+    %p20 = llhd.prb %s20 : i20
+    // CHECK: llhd.wait ^bb1({{.*}} : i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14, i15, i16, i17, i18, i19, i20)
+    llhd.wait ^bb1
+  ^bb1:
+    // CHECK: ^bb1({{.*}}: i1, {{.*}}: i2, {{.*}}: i3, {{.*}}: i4, {{.*}}: i5, {{.*}}: i6, {{.*}}: i7, {{.*}}: i8, {{.*}}: i9, {{.*}}: i10, {{.*}}: i11, {{.*}}: i12, {{.*}}: i13, {{.*}}: i14, {{.*}}: i15, {{.*}}: i16, {{.*}}: i17, {{.*}}: i18, {{.*}}: i19, {{.*}}: i20):
+    %all = comb.concat %p1, %p2, %p3, %p4, %p5, %p6, %p7, %p8, %p9, %p10, %p11, %p12, %p13, %p14, %p15, %p16, %p17, %p18, %p19, %p20 : i1, i2, i3, i4, i5, i6, i7, i8, i9, i10, i11, i12, i13, i14, i15, i16, i17, i18, i19, i20
+    func.call @use_i210(%all) : (i210) -> ()
+    llhd.halt
+  }
 }

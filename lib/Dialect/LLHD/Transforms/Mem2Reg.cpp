@@ -1021,11 +1021,35 @@ void Promoter::captureAcrossWait() {
     return v.getParentRegion() == &region;
   };
 
+  // `Liveness` hands out pointer-keyed sets; capturing in their iteration
+  // order would add the wait ops' destination block arguments in a
+  // run-to-run varying order (ASLR), making the emitted IR nondeterministic
+  // on identical input. Record each region-defined value's program-order
+  // position once; live-out sets are sorted by it below. Region-defined
+  // live-out values are exactly the block arguments and op results of this
+  // region's blocks.
+  DenseMap<Value, unsigned> captureOrder;
+  for (auto &block : region) {
+    for (auto arg : block.getArguments())
+      captureOrder.insert({arg, captureOrder.size()});
+    for (auto &op : block)
+      for (auto result : op.getResults())
+        captureOrder.insert({result, captureOrder.size()});
+  }
+
   for (auto waitOp : waitOps) {
     Block *waitBlock = waitOp->getBlock();
     const auto &liveOutValues = liveness.getLiveOut(waitBlock);
 
-    for (Value v : liveOutValues) {
+    // Values defined outside the region have no recorded position; ties
+    // among them are harmless since they are filtered out below.
+    SmallVector<Value> orderedLiveOut(liveOutValues.begin(),
+                                      liveOutValues.end());
+    llvm::sort(orderedLiveOut, [&](Value a, Value b) {
+      return captureOrder.lookup(a) < captureOrder.lookup(b);
+    });
+
+    for (Value v : orderedLiveOut) {
       if (!isDefinedInRegion(v))
         continue;
 
