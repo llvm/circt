@@ -429,6 +429,7 @@ def LowerFIRRTLToHW : Pass<"lower-firrtl-to-hw", "mlir::ModuleOp"> {
     "emit::EmitDialect",
     "hw::HWDialect",
     "ltl::LTLDialect",
+    "mlir::scf::SCFDialect",
     "seq::SeqDialect",
     "sim::SimDialect",
     "sv::SVDialect",

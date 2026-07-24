@@ -34,6 +34,7 @@
 #include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/BackedgeBuilder.h"
 #include "circt/Support/Namespace.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -1810,6 +1811,8 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
                      sv::EventControl(), Value(), body,
                      std::function<void(void)>());
   }
+  void addToSimTriggeredBlock(Value clock, Value condition,
+                              const std::function<void(void)> &body = {});
 
   LogicalResult emitGuards(Location loc, ArrayRef<Attribute> guards,
                            std::function<void(void)> emit);
@@ -2109,6 +2112,10 @@ private:
                                    sv::ResetType, sv::EventControl, Value>;
   llvm::SmallDenseMap<AlwaysKeyType, std::pair<sv::AlwaysOp, sv::IfOp>>
       alwaysBlocks;
+  llvm::SmallDenseMap<std::pair<Block *, Value>, sim::TriggeredOp>
+      simTriggeredBlocks;
+  llvm::SmallDenseMap<sim::TriggeredOp, std::pair<Value, mlir::scf::IfOp>>
+      simTriggeredLastConditionBlocks;
   llvm::SmallDenseMap<std::pair<Block *, Attribute>, sv::IfDefOp> ifdefBlocks;
   llvm::SmallDenseMap<Block *, sv::InitialOp> initialBlocks;
 
@@ -3310,6 +3317,48 @@ void FIRRTLLowering::addToAlwaysBlock(
   // defined ahead of the uses, which leads to better generated Verilog.
   alwaysOp->moveBefore(builder.getInsertionBlock(),
                        builder.getInsertionPoint());
+}
+
+void FIRRTLLowering::addToSimTriggeredBlock(
+    Value clock, Value condition, const std::function<void(void)> &body) {
+  auto key = std::make_pair(builder.getBlock(), clock);
+  auto triggered = simTriggeredBlocks.lookup(key);
+  if (!triggered) {
+    triggered = sim::TriggeredOp::create(builder, clock);
+    simTriggeredBlocks[key] = triggered;
+  }
+
+  if (condition) {
+    auto &lastConditionBlock = simTriggeredLastConditionBlocks[triggered];
+    auto ifOp = lastConditionBlock.first == condition
+                    ? lastConditionBlock.second
+                    : mlir::scf::IfOp();
+    if (!ifOp) {
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToEnd(triggered.getBodyBlock());
+      ifOp = mlir::scf::IfOp::create(builder, builder.getLoc(), TypeRange{},
+                                     condition, true, false);
+      builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
+      mlir::scf::YieldOp::create(builder, builder.getLoc());
+      lastConditionBlock = {condition, ifOp};
+    }
+
+    OpBuilder::InsertionGuard guard(builder);
+    auto &thenBlock = ifOp.getThenRegion().front();
+    builder.setInsertionPoint(thenBlock.getTerminator());
+    body();
+  } else {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToEnd(triggered.getBodyBlock());
+    body();
+    simTriggeredLastConditionBlocks[triggered] = {};
+  }
+
+  // Move the earlier triggered block(s) down to where the last would have been
+  // inserted.  This ensures that any values used by the triggered blocks are
+  // defined ahead of the uses.
+  triggered->moveBefore(builder.getInsertionBlock(),
+                        builder.getInsertionPoint());
 }
 
 LogicalResult FIRRTLLowering::emitGuards(Location loc,
@@ -5519,7 +5568,7 @@ LogicalResult FIRRTLLowering::visitStmt(PrintFOp op) {
     return failure();
 
   auto stderrOp = sim::StderrStreamOp::create(builder);
-  sim::TriggeredOp::create(builder, clock, cond, [&] {
+  addToSimTriggeredBlock(clock, cond, [&] {
     sim::PrintFormattedProcOp::create(builder, *formatString, stderrOp);
   });
   return success();
@@ -5542,7 +5591,7 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
     if (failed(formatString))
       return failure();
 
-    sim::TriggeredOp::create(builder, clock, cond, [&] {
+    addToSimTriggeredBlock(clock, cond, [&] {
       auto fileOp = sim::GetFileOp::create(builder, *fileFormatString);
       sim::PrintFormattedProcOp::create(builder, *formatString, fileOp);
     });
@@ -5562,8 +5611,28 @@ LogicalResult FIRRTLLowering::visitStmt(FPrintFOp op) {
 
 // FFlush lowers into $fflush statement.
 LogicalResult FIRRTLLowering::visitStmt(FFlushOp op) {
-  if (circuitState.lowerToCore)
-    return op.emitOpError("lower-to-core does not support firrtl.fflush yet");
+  if (circuitState.lowerToCore) {
+    auto clock = getLoweredValue(op.getClock());
+    auto cond = getLoweredValue(op.getCond());
+    if (!clock || !cond)
+      return failure();
+
+    if (!op.getOutputFileAttr()) {
+      auto stderrOp = sim::StderrStreamOp::create(builder);
+      addToSimTriggeredBlock(clock, cond,
+                             [&] { sim::FlushOp::create(builder, stderrOp); });
+    } else {
+      auto fileFormatString = lowerSimFormatString(
+          op.getOutputFileAttr(), op.getOutputFileSubstitutions());
+      if (failed(fileFormatString))
+        return failure();
+      addToSimTriggeredBlock(clock, cond, [&] {
+        auto fileOp = sim::GetFileOp::create(builder, *fileFormatString);
+        sim::FlushOp::create(builder, fileOp);
+      });
+    }
+    return success();
+  }
 
   auto clock = getLoweredNonClockValue(op.getClock());
   auto cond = getLoweredValue(op.getCond());
