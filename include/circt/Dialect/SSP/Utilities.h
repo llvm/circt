@@ -630,7 +630,7 @@ struct Default<scheduling::ChainingProblem> {
 };
 
 template <>
-struct Default<scheduling::SharedOperatorsProblem> {
+struct Default<scheduling::SharedResourcesProblem> {
   static constexpr auto operationProperties =
       Default<scheduling::Problem>::operationProperties;
   static constexpr auto operatorTypeProperties =
@@ -647,9 +647,9 @@ struct Default<scheduling::ModuloProblem> {
   static constexpr auto operationProperties =
       Default<scheduling::Problem>::operationProperties;
   static constexpr auto operatorTypeProperties =
-      Default<scheduling::SharedOperatorsProblem>::operatorTypeProperties;
+      Default<scheduling::SharedResourcesProblem>::operatorTypeProperties;
   static constexpr auto resourceTypeProperties =
-      Default<scheduling::SharedOperatorsProblem>::resourceTypeProperties;
+      Default<scheduling::SharedResourcesProblem>::resourceTypeProperties;
   static constexpr auto dependenceProperties =
       Default<scheduling::CyclicProblem>::dependenceProperties;
   static constexpr auto instanceProperties =
