@@ -197,6 +197,23 @@ hw.module @partial_product_booth_zext(in %a : i3, in %b : i3, out pp0 : i6, out 
   hw.output %2#0, %2#1, %2#2 : i6, i6, i6
 }
 
+// https://github.com/llvm/circt/issues/10875
+// FORCE-BOOTH-LABEL: @partial_product_signed_booth_few_results
+hw.module @partial_product_signed_booth_few_results(in %a : i3, in %b : i3, out sum : i6) {
+  // FORCE-BOOTH-NOT: datapath.partial_product
+  // FORCE-BOOTH: comb.add {{.*}} : i6
+  // FORCE-BOOTH-NEXT: hw.output {{.*}} : i6
+  %aSign = comb.extract %a from 2 : (i3) -> i1
+  %aExt = comb.replicate %aSign : (i1) -> i3
+  %aSigned = comb.concat %aExt, %a : i3, i3
+  %bSign = comb.extract %b from 2 : (i3) -> i1
+  %bExt = comb.replicate %bSign : (i1) -> i3
+  %bSigned = comb.concat %bExt, %b : i3, i3
+  %pp:2 = datapath.partial_product %aSigned, %bSigned : (i6, i6) -> (i6, i6)
+  %sum = comb.add %pp#0, %pp#1 : i6
+  hw.output %sum : i6
+}
+
 // CHECK-LABEL: @partial_product_24
 hw.module @partial_product_24(in %a : i24, in %b : i24, out sum : i24) {
   %0:24 = datapath.partial_product %a, %b : (i24, i24) -> (i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24, i24)

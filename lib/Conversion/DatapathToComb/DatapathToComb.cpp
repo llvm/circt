@@ -416,9 +416,11 @@ private:
         break;
     }
 
-    // Add the final sign-correction row for signed multiplication
-    // Not necessary for unsigned multiplication as the final row is positive
-    if (bSigned) {
+    // Add the final sign-correction row for signed multiplication.
+    // Not necessary for unsigned multiplication as the final row is positive.
+    // Skip when the caller already requested fewer rows than a full Booth
+    // array would produce.
+    if (bSigned && partialProducts.size() < op.getNumResults()) {
       auto numPP = partialProducts.size();
       Value shiftByFinal =
           hw::ConstantOp::create(rewriter, loc, APInt((numPP - 1) * 2, 0));
