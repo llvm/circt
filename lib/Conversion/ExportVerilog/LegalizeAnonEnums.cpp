@@ -13,8 +13,10 @@
 
 #include "ExportVerilogInternals.h"
 #include "circt/Conversion/ExportVerilog.h"
+#include "mlir/IR/AttrTypeSubElements.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Support/WalkResult.h"
 #include "llvm/ADT/DenseSet.h"
 
 namespace circt {
@@ -25,8 +27,53 @@ namespace circt {
 using namespace circt;
 using namespace hw;
 using namespace sv;
+using namespace mlir;
 
 namespace {
+
+/// Helper class extending AttrTypeReplacer to skip specific operation subtrees.
+/// Registered operation types will be ignored during recursive replacement.
+class AttrTypeReplacerWithSkippedOps : public AttrTypeReplacer {
+public:
+  /// Register operation types to be skipped.
+  template <typename... SkippedOps>
+  void addSkippedOps() {
+    (addSkippedOpImpl<SkippedOps>(), ...);
+  }
+
+  /// Recursively replace elements, skipping subtrees of registered ops.
+  void recursivelyReplaceElementsIn(Operation *op, bool replaceAttrs = true,
+                                    bool replaceLocs = false,
+                                    bool replaceTypes = false) {
+    op->walk([&](Operation *nestedOp) -> WalkResult {
+      if (!contains(nestedOp)) {
+        replaceElementsIn(nestedOp, replaceAttrs, replaceLocs, replaceTypes);
+        return WalkResult::advance();
+      }
+      return WalkResult::skip();
+    });
+  };
+
+  /// Checks whether the given operation is in the skip list.
+  bool contains(Operation *op) const {
+    if (auto info = op->getRegisteredInfo())
+      return skippedOps.contains(info->getTypeID());
+    return false;
+  }
+
+private:
+  /// Insert the TypeID of a single operation type into the skip set.
+  template <typename T>
+  void addSkippedOpImpl() {
+    static_assert(std::is_base_of_v<::mlir::OpState, T>,
+                  "Unexpected type of inserted operation");
+    skippedOps.insert(TypeID::get<T>());
+  }
+
+  /// Storage for type IDs of operations to skip.
+  DenseSet<TypeID> skippedOps;
+};
+
 struct LegalizeAnonEnums
     : public circt::impl::LegalizeAnonEnumsBase<LegalizeAnonEnums> {
   /// Creates a TypeScope on demand for anonymous enumerations.
@@ -59,146 +106,57 @@ struct LegalizeAnonEnums
     return typeAlias;
   }
 
-  /// Process a type, replacing any anonymous enumerations contained within.
-  Type processType(Type type) {
-    auto *context = &getContext();
-    if (auto structType = dyn_cast<StructType>(type)) {
-      bool changed = false;
-      SmallVector<StructType::FieldInfo> fields;
-      for (auto &element : structType.getElements()) {
-        if (auto newFieldType = processType(element.type)) {
-          changed = true;
-          fields.push_back({element.name, newFieldType});
-        } else {
-          fields.push_back(element);
-        }
-      }
-      if (changed)
-        return StructType::get(context, fields);
-      return {};
-    }
-
-    if (auto arrayType = dyn_cast<ArrayType>(type)) {
-      if (auto newElementType = processType(arrayType.getElementType()))
-        return ArrayType::get(newElementType, arrayType.getNumElements());
-      return {};
-    }
-
-    if (auto unionType = dyn_cast<UnionType>(type)) {
-      bool changed = false;
-      SmallVector<UnionType::FieldInfo> fields;
-      for (const auto &element : unionType.getElements()) {
-        if (auto newFieldType = processType(element.type)) {
-          fields.push_back({element.name, newFieldType, element.offset});
-          changed = true;
-        } else {
-          fields.push_back(element);
-        }
-      }
-      if (changed)
-        return UnionType::get(context, fields);
-      return {};
-    }
-
-    if (auto typeAlias = dyn_cast<TypeAliasType>(type)) {
-      // Enum type aliases have already been handled.
-      if (isa<EnumType>(typeAlias.getInnerType()))
-        return {};
-      // Otherwise recursively update the type alias.
-      return processType(typeAlias.getInnerType());
-    }
-
-    if (auto inoutType = dyn_cast<InOutType>(type)) {
-      if (auto newType = processType(inoutType.getElementType()))
-        return InOutType::get(newType);
-      return {};
-    }
-
-    // EnumTypes must be changed into TypeAlias.
-    if (auto enumType = dyn_cast<EnumType>(type))
-      return getEnumTypeDecl(enumType);
-
-    if (auto funcType = dyn_cast<FunctionType>(type)) {
-      bool changed = false;
-      SmallVector<Type> inputs;
-      for (auto &type : funcType.getInputs()) {
-        if (auto newType = processType(type)) {
-          inputs.push_back(newType);
-          changed = true;
-        } else {
-          inputs.push_back(type);
-        }
-      }
-      SmallVector<Type> results;
-      for (auto &type : funcType.getResults()) {
-        if (auto newType = processType(type)) {
-          results.push_back(newType);
-          changed = true;
-        } else {
-          results.push_back(type);
-        }
-      }
-      if (changed)
-        return FunctionType::get(context, inputs, results);
-      return {};
-    }
-    if (auto modType = dyn_cast<ModuleType>(type)) {
-      bool changed = false;
-      SmallVector<ModulePort> ports;
-      for (auto &p : modType.getPorts()) {
-        ports.push_back(p);
-        if (auto newType = processType(p.type)) {
-          ports.back().type = newType;
-          changed = true;
-        }
-      }
-      if (changed)
-        return ModuleType::get(context, ports);
-      return {};
-    }
-
-    // Default case is that it is not an aggregate type.
-    return {};
-  };
+  /// Replace bare EnumType with TypeAliasType, and skip TypedeclOp subtrees to
+  /// keep their property-backed raw EnumType intact.
+  AttrTypeReplacerWithSkippedOps &
+  addReplacementFns(AttrTypeReplacerWithSkippedOps &replacer) {
+    replacer.addReplacement(
+        [&](Type type)
+            -> AttrTypeReplacerWithSkippedOps::ReplaceFnResult<Type> {
+          if (isa<TypeAliasType>(type))
+            return std::make_pair(type, WalkResult::skip());
+          if (auto enumType = dyn_cast<EnumType>(type))
+            return std::make_pair(getEnumTypeDecl(enumType),
+                                  WalkResult::advance());
+          return std::nullopt;
+        });
+    replacer.addSkippedOps<TypedeclOp>();
+    return replacer;
+  }
 
   void runOnOperation() override {
     enumCount = 0;
     typeScope = {};
 
-    // Perform the actual walk looking for anonymous enumeration types.
-    getOperation().walk([&](Operation *op) {
-      // If this is a constant operation, make sure to update the constant
-      // to reference the typedef, otherwise we will emit the wrong constant.
-      // Theoretically we should be searching all attributes on every operation
-      // for EnumFieldAttrs.
-      if (auto enumConst = dyn_cast<EnumConstantOp>(op)) {
-        auto fieldAttr = enumConst.getField();
-        if (auto newType = processType(fieldAttr.getType().getValue()))
-          enumConst.setFieldAttr(
-              EnumFieldAttr::get(op->getLoc(), fieldAttr.getField(), newType));
+    AttrTypeReplacerWithSkippedOps replacer;
+    addReplacementFns(replacer).recursivelyReplaceElementsIn(
+        getOperation(), /*replaceAttrs=*/true,
+        /*replaceLocs=*/true,
+        /*replaceTypes=*/true);
+
+    // hw.module stores its module_type as a property, not a discardable attr,
+    // so the replacer can't touch it. Manually sync it with the already-updated
+    // block argument types.
+    getOperation()->walk([&](HWModuleLike modLike) {
+      auto modType = modLike.getHWModuleType();
+      bool changed = false;
+      SmallVector<ModulePort> ports(modType.getPorts());
+      for (auto &p : ports) {
+        if (Type newType = replacer.replace(p.type)) {
+          if (newType != p.type) {
+            p.type = newType;
+            changed = true;
+          }
+        }
       }
-
-      // Update the operation signature if it is function-like.
-      if (auto modLike = dyn_cast<HWModuleLike>(op))
-        if (auto newType = processType(modLike.getHWModuleType()))
-          modLike.setHWModuleType(cast<ModuleType>(newType));
-
-      // Update all operations results.
-      for (auto result : op->getResults())
-        if (auto newType = processType(result.getType()))
-          result.setType(newType);
-
-      // Update all block arguments.
-      for (auto &region : op->getRegions())
-        for (auto &block : region.getBlocks())
-          for (auto arg : block.getArguments())
-            if (auto newType = processType(arg.getType()))
-              arg.setType(newType);
+      if (changed)
+        modLike.setHWModuleType(ModuleType::get(modLike.getContext(), ports));
     });
 
     enumTypeAliases.clear();
   }
 
+private:
   TypeScopeOp typeScope;
   unsigned enumCount;
   DenseMap<Type, Type> enumTypeAliases;
