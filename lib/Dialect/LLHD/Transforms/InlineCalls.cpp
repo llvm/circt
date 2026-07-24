@@ -86,6 +86,38 @@ struct InlineCallsPass
 };
 } // namespace
 
+/// Check whether the given function transitively contains an operation that
+/// suspends execution, contains any other LLHD op, or passes LLHD references
+/// through a function signature. Calls to such functions must be inlined into
+/// their enclosing process and cannot remain as calls.
+static bool mustBeInlined(func::FuncOp funcOp, const SymbolTable &symbolTable,
+                          SmallPtrSetImpl<Operation *> &visited) {
+  if (!visited.insert(funcOp).second)
+    return false;
+  // LLHD references in the signature tie the function to module state, even
+  // if the function itself contains no LLHD ops.
+  auto isRefType = [](Type type) { return isa<RefType>(type); };
+  if (llvm::any_of(funcOp.getArgumentTypes(), isRefType) ||
+      llvm::any_of(funcOp.getResultTypes(), isRefType))
+    return true;
+  return funcOp
+      .walk([&](Operation *op) {
+        // Any LLHD op must end up in a procedural region after inlining. This
+        // covers ops that suspend execution (llhd.wait, llhd.halt,
+        // llhd.call_coroutine) as well as ops that access module state
+        // (llhd.prb, llhd.drv, llhd.sig).
+        if (isa_and_nonnull<LLHDDialect>(op->getDialect()))
+          return WalkResult::interrupt();
+        if (auto callOp = dyn_cast<func::CallOp>(op))
+          if (auto calledOp = dyn_cast_or_null<func::FuncOp>(
+                  symbolTable.lookup(callOp.getCalleeAttr().getAttr())))
+            if (mustBeInlined(calledOp, symbolTable, visited))
+              return WalkResult::interrupt();
+        return WalkResult::advance();
+      })
+      .wasInterrupted();
+}
+
 void InlineCallsPass::runOnOperation() {
   auto &symbolTable = getAnalysis<SymbolTable>();
   if (failed(failableParallelForEach(
@@ -147,10 +179,24 @@ LogicalResult InlineCallsPass::runOnRegion(Region &region,
       if (funcOp.isDeclaration())
         continue;
 
-      // Ensure that we are not recursively inlining a function, which would
-      // just expand infinitely in the IR.
-      if (!callStack.insert(funcOp))
-        return callOp.emitError("recursive function call cannot be inlined");
+      // Recursively inlining a function would just expand infinitely in the
+      // IR. If the function never suspends execution and is self-contained
+      // (no LLHD ops or LLHD references anywhere in its call graph) it can
+      // remain a regular function call; leave it in place. Recursive calls
+      // that must be inlined remain an error.
+      if (!callStack.insert(funcOp)) {
+        SmallPtrSet<Operation *, 4> visited;
+        if (mustBeInlined(funcOp, symbolTable, visited)) {
+          auto d =
+              callOp.emitError("recursive function call cannot be inlined");
+          d.attachNote(funcOp.getLoc())
+              << "call target suspends execution and must be inlined";
+          return failure();
+        }
+        LLVM_DEBUG(llvm::dbgs() << "- Leaving recursive call un-inlined: "
+                                << callOp << "\n");
+        continue;
+      }
       inlineEndMarkers.push_back({op.getNextNode(), funcOp});
 
       // Inline the function body and remember the call for later removal. The
