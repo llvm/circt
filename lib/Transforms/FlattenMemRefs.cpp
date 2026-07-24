@@ -21,6 +21,8 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Utils/ReshapeOpsUtils.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/DialectResourceBlobManager.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OperationSupport.h"
@@ -209,22 +211,33 @@ struct GlobalOpConversion : public OpConversionPattern<memref::GlobalOp> {
       return failure();
     MemRefType newType = getFlattenedMemRefType(type);
 
-    auto cstAttr =
-        llvm::dyn_cast_or_null<DenseElementsAttr>(op.getConstantInitValue());
+    auto initValue = op.getConstantInitValue();
+    Attribute newInitValue;
+    if (auto cstAttr = llvm::dyn_cast_or_null<DenseElementsAttr>(initValue)) {
+      SmallVector<Attribute> flattenedVals;
+      for (auto attr : cstAttr.getValues<Attribute>())
+        flattenedVals.push_back(attr);
 
-    SmallVector<Attribute> flattenedVals;
-    for (auto attr : cstAttr.getValues<Attribute>())
-      flattenedVals.push_back(attr);
+      RankedTensorType tensorType = RankedTensorType::get(
+          {static_cast<int64_t>(flattenedVals.size())}, type.getElementType());
+      newInitValue = DenseElementsAttr::get(tensorType, flattenedVals);
+    } else if (auto resourceAttr =
+                   llvm::dyn_cast_or_null<DenseResourceElementsAttr>(
+                       initValue)) {
+      RankedTensorType tensorType =
+          RankedTensorType::get({type.getNumElements()}, type.getElementType());
+      newInitValue =
+          DenseResourceElementsAttr::get(tensorType, resourceAttr.getRawHandle());
+    } else if (initValue) {
+      return rewriter.notifyMatchFailure(
+          op, "unsupported memref.global init attribute while flattening");
+    }
 
     auto newTypeAttr = TypeAttr::get(newType);
     auto newNameStr =
         getFlattenedMemRefName(state, op.getConstantAttrName(), type);
     auto newName = rewriter.getStringAttr(newNameStr);
     state.nameMap[op.getSymNameAttr()] = newName;
-
-    RankedTensorType tensorType = RankedTensorType::get(
-        {static_cast<int64_t>(flattenedVals.size())}, type.getElementType());
-    auto newInitValue = DenseElementsAttr::get(tensorType, flattenedVals);
 
     rewriter.replaceOpWithNewOp<memref::GlobalOp>(
         op, newName, op.getSymVisibilityAttr(), newTypeAttr, newInitValue,
