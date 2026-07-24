@@ -674,7 +674,7 @@ struct SignedPosPartialProducts : public OpRewritePattern<PosPartialProductOp> {
   // Inspired by the classical Baugh-Wooley algorithm for signed mulitplication.
   // Paper: A Two's Complement Parallel Array Multiplication Algorithm
   //
-  // Consider a p-bit signed pos - producing a 2p-bit result:
+  // Consider a p-bit signed pos - producing a q-bit result:
   // a_sign = a[p-1], a_mag = a[p-2:0],
   // b_sign = b[p-1], b_mag = b[p-2:0]
   // (sext(a) + sext(b)) * c = (a_mag + b_mag) * c               [unsigned pos]
@@ -704,14 +704,13 @@ struct SignedPosPartialProducts : public OpRewritePattern<PosPartialProductOp> {
     if (aWidth != bWidth || aWidth <= 1 || bWidth <= 1)
       return failure();
 
-    // Minus 1 as we handle the sign-bits separately
-    auto maxPartialProducts = aWidth - 1;
-    // No further reduction possible - already reduced to min partial products
-    if (maxPartialProducts >= op.getNumResults())
-      return failure();
-
     // Pull off the sign bits
     auto baseWidth = aWidth - 1;
+    // No further reduction possible - already reduced to min partial products
+    // Need baseWidth rows + 2 for sign correction and constant correction
+    if (baseWidth + 2 >= op.getNumResults())
+      return failure();
+
     auto aSign = comb::ExtractOp::create(rewriter, loc, a, baseWidth, 1);
     auto bSign = comb::ExtractOp::create(rewriter, loc, b, baseWidth, 1);
     auto aBase = comb::ExtractOp::create(rewriter, loc, a, 0, baseWidth);
@@ -722,7 +721,7 @@ struct SignedPosPartialProducts : public OpRewritePattern<PosPartialProductOp> {
     auto bBaseZext = comb::createZExt(rewriter, loc, bBase, inputWidth);
     auto newPP = datapath::PosPartialProductOp::create(
         rewriter, loc, ValueRange{aBaseZext, bBaseZext, op.getMultiplicand()},
-        maxPartialProducts);
+        baseWidth);
 
     // Optimization:
     // -2^(p-1)*(a_sign + b_sign) * c =
@@ -749,6 +748,8 @@ struct SignedPosPartialProducts : public OpRewritePattern<PosPartialProductOp> {
     SmallVector<Value> newResults(newPP.getResults().begin(),
                                   newPP.getResults().end());
 
+    // Can safely append rows as we know original operation had at least
+    // baseWidth + 2 rows
     newResults.push_back(ppRowNot);
     newResults.push_back(one); // Constant correction for the sign correction
     // Zero pad if necessary
