@@ -14,17 +14,22 @@ firrtl.module @RegAttrs(in %clock: !firrtl.clock,
   %r0 = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<8>
 
   // A plain register with a non-default (negedge) clock edge round-trips.
-  // CHECK: %r1 = firrtl.reg %clock {clockEdge = 1 : i32} : !firrtl.clock, !firrtl.uint<8>
-  %r1 = firrtl.reg %clock {clockEdge = 1 : i32} : !firrtl.clock, !firrtl.uint<8>
+  // CHECK: %r1 = firrtl.reg negedge %clock : !firrtl.clock, !firrtl.uint<8>
+  %r1 = firrtl.reg negedge %clock : !firrtl.clock, !firrtl.uint<8>
 
   // A regreset with a non-default clock edge preserves it too.
-  // CHECK: %r2 = firrtl.regreset %clock, %sreset, %in {clockEdge = 1 : i32} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
-  %r2 = firrtl.regreset %clock, %sreset, %in {clockEdge = 1 : i32} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  // CHECK: %r2 = firrtl.regreset negedge %clock, %sreset, %in : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
+  %r2 = firrtl.regreset negedge %clock, %sreset, %in : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
 
   // A regreset with the default clock edge elides the attribute.
   // CHECK: %r3 = firrtl.regreset %clock, %sreset, %in : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
   %r3 = firrtl.regreset %clock, %sreset, %in : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
 
+  // A dual-edge register round-trips.
+  // CHECK: %r4 = firrtl.reg edge %clock : !firrtl.clock, !firrtl.uint<8>
+  %r4 = firrtl.reg edge %clock : !firrtl.clock, !firrtl.uint<8>
+
   // LOWER-COUNT-2: {clockEdge = 1 : i32}
+  // LOWER: {clockEdge = 2 : i32}
 }
 }

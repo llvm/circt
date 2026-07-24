@@ -1747,7 +1747,7 @@ struct ResetDisconnector : public OpReduction<RegResetOp> {
         builder, regResetOp.getResult().getType(), regResetOp.getClockVal(),
         regResetOp.getNameAttr(), regResetOp.getNameKindAttr(),
         regResetOp.getAnnotationsAttr(), regResetOp.getInnerSymAttr(),
-        regResetOp.getForceableAttr());
+        regResetOp.getForceableAttr(), regResetOp.getClockEdgeAttr());
 
     regResetOp.getResult().replaceAllUsesWith(regOp.getResult());
     if (regResetOp.getForceable())

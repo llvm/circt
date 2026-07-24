@@ -4187,8 +4187,8 @@ firrtl.circuit "RegResetToRegPreservesClockEdge" {
   firrtl.module @RegResetToRegPreservesClockEdge(in %clock: !firrtl.clock,
       in %dummy: !firrtl.uint<1>, out %out: !firrtl.uint<1>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
-    // CHECK: %reg = firrtl.reg %clock {clockEdge = 1 : i32}
-    %reg = firrtl.regreset %clock, %zero, %dummy {clockEdge = 1 : i32} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: %reg = firrtl.reg negedge %clock
+    %reg = firrtl.regreset negedge %clock, %zero, %dummy : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %out, %reg : !firrtl.uint<1>, !firrtl.uint<1>
   }
 
@@ -4197,10 +4197,10 @@ firrtl.circuit "RegResetToRegPreservesClockEdge" {
       in %reset: !firrtl.uint<1>, in %in: !firrtl.uint<8>,
       out %out: !firrtl.uint<8>) {
     %zero = firrtl.constant 0 : !firrtl.uint<8>
-    %reg = firrtl.reg %clock {clockEdge = 1 : i32} : !firrtl.clock, !firrtl.uint<8>
+    %reg = firrtl.reg negedge %clock : !firrtl.clock, !firrtl.uint<8>
     %next = firrtl.mux(%reset, %zero, %in) : (!firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>) -> !firrtl.uint<8>
     firrtl.connect %reg, %next : !firrtl.uint<8>, !firrtl.uint<8>
     firrtl.connect %out, %reg : !firrtl.uint<8>, !firrtl.uint<8>
-    // CHECK: %reg = firrtl.regreset %clock, %reset, {{.*}} {clockEdge = 1 : i32}
+    // CHECK: %reg = firrtl.regreset negedge %clock, %reset, {{.*}}
   }
 }
