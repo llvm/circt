@@ -13,14 +13,18 @@
 #include "circt/Dialect/Datapath/DatapathOps.h"
 #include "circt/Dialect/Comb/CombOps.h"
 #include "circt/Dialect/HW/HWOps.h"
+#include "mlir/IR/Matchers.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/KnownBits.h"
 
 #define DEBUG_TYPE "datapath-ops"
 
+using namespace mlir;
 using namespace circt;
 using namespace datapath;
+using namespace matchers;
 
 LogicalResult CompressOp::verify() {
   // The compressor must reduce the number of operands by at least 1 otherwise
@@ -325,6 +329,59 @@ void CompressorTree::dump() const {
     }
     llvm::dbgs() << "]\n";
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Partial Product Operation
+//===----------------------------------------------------------------------===//
+LogicalResult PartialProductOp::verify() {
+  // A partial product array with N-bit inputs requires a minimum number of rows
+  // to represent the result of a multiplication - this depends on whether the
+  // inputs are signed or unsigned.
+  // The minimum we can do is a Booth radix-4 encoding currently.
+  auto lhs = getLhs();
+  auto rhs = getRhs();
+  unsigned lhsWidth = lhs.getType().getIntOrFloatBitWidth();
+  unsigned rhsWidth = rhs.getType().getIntOrFloatBitWidth();
+  Value lhsReplBits, rhsReplBits;
+  // Test for sign-extended inputs - if we match we can verify the number of
+  // partial products required
+  if (matchPattern(lhs, comb::m_SextBy(m_Any(&lhsReplBits))) &&
+      matchPattern(rhs, comb::m_SextBy(m_Any(&rhsReplBits)))) {
+    lhsWidth -= lhsReplBits.getType().getIntOrFloatBitWidth();
+    rhsWidth -= rhsReplBits.getType().getIntOrFloatBitWidth();
+    unsigned minWidth = std::min(lhsWidth, rhsWidth);
+
+    if (getNumResults() < ((minWidth + 1) / 2) + 1)
+      return emitOpError("requires at least ")
+             << ((minWidth + 1) / 2) + 1
+             << " results for sign-extended inputs of width " << minWidth;
+    // Booth encoding for sign-extended inputs requiures floor((N+1)/2) + 1 rows
+    // (for the sign correction of the last row)
+    return success();
+  }
+
+  // Test for zero-extended inputs - if we match we can verify the number of
+  // partial products required
+  if (matchPattern(lhs, comb::m_ZextBy(m_Any(&lhsReplBits))) &&
+      matchPattern(rhs, comb::m_ZextBy(m_Any(&rhsReplBits)))) {
+    lhsWidth -= lhsReplBits.getType().getIntOrFloatBitWidth();
+    rhsWidth -= rhsReplBits.getType().getIntOrFloatBitWidth();
+    unsigned minWidth = std::min(lhsWidth, rhsWidth);
+
+    // Booth encoding for sign-extended inputs requiures N/2 + 1 rows (for the
+    // sign correction of the last row)
+    if (getNumResults() < (minWidth / 2) + 1)
+      return emitOpError("requires at least ")
+             << (minWidth / 2) + 1
+             << " results for zero-extended inputs of width " << minWidth;
+
+    return success();
+  }
+
+  // Otherwise we were not able to recognise a specific extension so cannot
+  // conduct any checks on the number of partial products required
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

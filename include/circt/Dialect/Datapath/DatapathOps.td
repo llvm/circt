@@ -91,6 +91,7 @@ def PartialProductOp : DatapathOp<"partial_product",
   let assemblyFormat = [{
     $lhs `,` $rhs attr-dict `:` functional-type(operands, results)
   }];
+  let hasVerifier = 1;
   let hasCanonicalizer = true;
 
   let builders = [
