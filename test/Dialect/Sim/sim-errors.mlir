@@ -140,3 +140,27 @@ hw.module @queue_from_array(in %uparr: !hw.array<5xi33>) {
   // expected-error @below {{'sim.queue.from_array' op sim::Queue element type 'i32' doesn't match hw::ArrayType element type 'i33'}}
   sim.queue.from_array %uparr : !hw.array<5xi33> -> <i32, 0>
 }
+
+// -----
+
+func.func @ReadMemFinishWithoutStart(%arg0: !sim.dstring, %arg1: !hw.array<16xi8>, %arg2: i32) {
+  // expected-error @below {{'finishAddr' requires 'startAddr' to be present}}
+  %0 = "sim.sv.readmem"(%arg0, %arg1, %arg2) <{dimDescending = array<i1: false>, dimLows = array<i64: 0>, operandSegmentSizes = array<i32: 1, 1, 0, 1, 0, 0>}> : (!sim.dstring, !hw.array<16xi8>, i32) -> !hw.array<16xi8>
+  return
+}
+
+// -----
+
+func.func @ReadMemSliceUnpaired(%arg0: !sim.dstring, %arg1: !hw.array<16xi8>, %arg2: i32) {
+  // expected-error @below {{'sliceLeft' requires 'sliceRight' to be present}}
+  %0 = "sim.sv.readmem"(%arg0, %arg1, %arg2) <{dimDescending = array<i1: false>, dimLows = array<i64: 0>, operandSegmentSizes = array<i32: 1, 1, 0, 0, 1, 0>}> : (!sim.dstring, !hw.array<16xi8>, i32) -> !hw.array<16xi8>
+  return
+}
+
+// -----
+
+func.func @ReadMemDimsMismatch(%arg0: !sim.dstring, %arg1: !hw.array<16xi8>) {
+  // expected-error @below {{'dimLows' and 'dimDescending' must have one entry per unpacked dimension}}
+  %0 = sim.sv.readmem %arg0, %arg1 {dimDescending = array<i1: false, false>, dimLows = array<i64: 0>} : !hw.array<16xi8>
+  return
+}

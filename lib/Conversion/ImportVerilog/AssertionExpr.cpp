@@ -301,7 +301,7 @@ struct AssertionExprVisitor {
 };
 } // namespace
 
-FailureOr<Value> Context::convertAssertionSystemCallArity1(
+FailureOr<Value> Context::convertSampledValueCallArity1(
     const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
     Type originalType, Value clockVal) {
   using ksn = slang::parsing::KnownSystemName;
@@ -366,40 +366,50 @@ FailureOr<Value> Context::convertAssertionSystemCallArity1(
   }
 }
 
-Value Context::convertAssertionCallExpression(
+Value Context::convertSampledValueCallExpression(
     const slang::ast::CallExpression &expr,
     const slang::ast::CallExpression::SystemCallInfo &info, Location loc) {
 
   const slang::ast::TimingControl *clock = nullptr;
-  auto clockIt = assertionCallClocks.find(&expr);
-  if (clockIt != assertionCallClocks.end())
+  auto clockIt = sampledValueCallClocks.find(&expr);
+  if (clockIt != sampledValueCallClocks.end())
     clock = clockIt->second;
 
-  Value clockVal;
-  if (clock) {
-    const slang::ast::SignalEventControl *signal = nullptr;
-    if (clock->kind == slang::ast::TimingControlKind::SignalEvent) {
-      signal = &clock->as<slang::ast::SignalEventControl>();
-    } else if (clock->kind == slang::ast::TimingControlKind::EventList) {
-      mlir::emitError(loc, "sampled value functions with multiple event "
-                           "triggers are not supported");
-      return {};
-    } else {
-      llvm_unreachable("unexpected clock kind for assertion");
-    }
+  // Non-procedural expressions don't have a clock registered in
+  // sampledValueCallClocks but we can get it from their scope's default clock
+  if (!clock && !info.scope->isProceduralContext())
+    if (auto defClk =
+            info.scope->getCompilation().getDefaultClocking(*info.scope))
+      clock = &defClk->as<slang::ast::ClockingBlockSymbol>().getEvent();
 
-    if (signal->edge != slang::ast::EdgeKind::PosEdge) {
-      mlir::emitError(
-          loc,
-          "sampled value functions are only supported with posedge clocks");
-      return {};
-    }
-    clockVal = convertRvalueExpression(signal->expr);
-    if (clockVal)
-      clockVal = convertToI1(clockVal);
-    if (!clockVal)
-      return {};
+  if (!clock) {
+    mlir::emitError(loc) << "could not determine clocking event for `"
+                         << expr.getSubroutineName() << "`";
+    return {};
   }
+
+  Value clockVal;
+  const slang::ast::SignalEventControl *signal = nullptr;
+  if (clock->kind == slang::ast::TimingControlKind::SignalEvent) {
+    signal = &clock->as<slang::ast::SignalEventControl>();
+  } else if (clock->kind == slang::ast::TimingControlKind::EventList) {
+    mlir::emitError(loc, "sampled value functions with multiple event "
+                         "triggers are not supported");
+    return {};
+  } else {
+    llvm_unreachable("unexpected clock kind for assertion");
+  }
+
+  if (signal->edge != slang::ast::EdgeKind::PosEdge) {
+    mlir::emitError(
+        loc, "sampled value functions are only supported with posedge clocks");
+    return {};
+  }
+  clockVal = convertRvalueExpression(signal->expr);
+  if (clockVal)
+    clockVal = convertToI1(clockVal);
+  if (!clockVal)
+    return {};
 
   const auto &subroutine = *info.subroutine;
   auto args = expr.arguments();
@@ -416,9 +426,20 @@ Value Context::convertAssertionCallExpression(
     originalType = value.getType();
     valTy = dyn_cast<moore::IntType>(value.getType());
     if (!valTy) {
-      mlir::emitError(loc) << "expected integer argument for `"
-                           << subroutine.name << "`";
-      return {};
+      if (!isa<moore::PackedType>(value.getType())) {
+        mlir::emitError(loc)
+            << "expected integer argument for `" << subroutine.name << "`";
+        return {};
+      }
+      value = materializePackedToSBVConversion(value, loc, /*fallible=*/false);
+      if (!value)
+        return {};
+      valTy = dyn_cast<moore::IntType>(value.getType());
+      if (!valTy) {
+        mlir::emitError(loc)
+            << "expected integer argument for `" << subroutine.name << "`";
+        return {};
+      }
     }
 
     // If the value is four-valued, we need to map it to two-valued before we
@@ -429,8 +450,8 @@ Value Context::convertAssertionCallExpression(
     intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
     if (!intVal)
       return {};
-    result = this->convertAssertionSystemCallArity1(subroutine, loc, intVal,
-                                                    originalType, clockVal);
+    result = this->convertSampledValueCallArity1(subroutine, loc, intVal,
+                                                 originalType, clockVal);
     break;
 
   default:
@@ -486,7 +507,7 @@ struct AssertionClockVisitor
 
   void handle(const slang::ast::CallExpression &node) {
     if (currentClock)
-      context.assertionCallClocks[&node] = currentClock;
+      context.sampledValueCallClocks[&node] = currentClock;
     visitDefault(node);
   }
 
@@ -502,12 +523,18 @@ struct AssertionClockVisitor
 };
 } // namespace
 
-void Context::populateAssertionClocks() {
+void Context::populateSampledValueClocks() {
   compilation.freeze();
   slang::analysis::AnalysisManager am;
   am.addListener([this](const slang::analysis::AnalyzedAssertion &assertion) {
     AssertionClockVisitor visitor{*this, assertion};
     assertion.getRoot().visit(visitor);
+  });
+  // AnalyzedProcedure captures both procedures and continuous assignments
+  am.addListener([this](const slang::analysis::AnalyzedProcedure &procedure) {
+    if (const auto clock = procedure.getInferredClock())
+      for (const auto *call : procedure.getCallExpressions())
+        sampledValueCallClocks[call] = clock;
   });
   am.analyze(compilation);
   compilation.unfreeze();

@@ -2248,6 +2248,31 @@ def AssocArrayExtractRefOp : MooreOp<"assoc_array_extract_ref",
   }];
 }
 
+def AssocArraySetOp : MooreOp<"assoc_array.set", [
+    TypesMatchWith<"element type of associative array and given value must match",
+    "assoc_array", "value",
+    "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getElementType()">,
+    TypesMatchWith<"associative array index and given index must match",
+    "assoc_array", "index",
+    "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {
+  let summary = "Overwrite (or insert) the element at a given index in an "
+                "associative array";
+  let description = [{
+    See IEEE 1800-2017 § 7.8.7 "Allocating associative array elements".
+    Writes $value at $index in the associative array, creating the entry
+    if it did not already exist.
+    This op is produced by the `SimplifyRefs` pass folding an
+    `assoc_array_extract_ref` immediately consumed by a blocking assignment;
+    ImportVerilog never emits it directly.
+  }];
+  let arguments = (ins AssocArrayRefType:$assoc_array, UnpackedType:$index,
+    UnpackedType:$value);
+  let results = (outs);
+  let assemblyFormat = [{
+    $assoc_array `[` $index `]` `=` $value attr-dict `:` type($assoc_array)
+  }];
+}
+
 def AssocArrayDeleteOp : MooreOp<"assoc_array.delete", 
     [TypesMatchWith<"associative array index and given index must match",
     "assoc_array", "index", "cast<AssocArrayType>(cast<RefType>($_self).getNestedType()).getIndexType()">]> {
@@ -2649,8 +2674,8 @@ def DeferAssertAttr : I32EnumAttr<
   let cppNamespace = "circt::moore";
 }
 
-class ImmediateAssertOp<string mnemonic, list<Trait> traits = []> : 
-    MooreOp<mnemonic, traits # [HasParent<"ProcedureOp">]>{
+class ImmediateAssertOp<string mnemonic, list<Trait> traits = []> :
+    MooreOp<mnemonic, traits # [ParentOneOf<["ProcedureOp", "::mlir::func::FuncOp"]>]>{
   let arguments = (ins
     DeferAssertAttr:$defer,
     AnySingleBitType:$cond,
@@ -3351,6 +3376,54 @@ def FCloseBIOp : Builtin<"fclose"> {
   let arguments = (ins TwoValuedI32:$fd);
   let results = (outs);
   let assemblyFormat = "$fd attr-dict";
+}
+
+def MooreMemBaseBin : I32EnumAttrCase<"Binary", 0, "bin">;
+def MooreMemBaseHex : I32EnumAttrCase<"Hex", 1, "hex">;
+def MooreMemBaseAttr : I32EnumAttr<"MemBase",
+    "encoding base for $readmem[bh]",
+    [MooreMemBaseBin, MooreMemBaseHex]> {
+  let cppNamespace = "circt::moore";
+}
+
+def ReadMemBIOp : Builtin<"readmem", [AttrSizedOperandSegments]> {
+  let summary = "Load a memory array from a file";
+  let description = [{
+    Loads data from a file into an unpacked array or queue using binary
+    or hexadecimal encoding. This corresponds to the
+    `$readmemb` / `$readmemh` system tasks.
+
+    `dimLows` and `dimDescending` record the declared low bound and
+    direction of every unpacked dimension (outermost first), which the
+    Moore array types do not carry. `sliceLeft`/`sliceRight` narrow the
+    addressable window of the highest dimension when the memory argument
+    uses slice syntax. When `enumValues` is present, loaded words are
+    checked against the enumeration's value set and the load stops with
+    an error on the first mismatch. Since the core dialects are
+    two-state, `x` and `z` digits load as 0 even for four-state elements.
+
+    See IEEE 1800-2017 § 21.4 "Loading memory array data from a file".
+  }];
+  let arguments = (ins
+    StringType:$filename,
+    AnyType:$dest,
+    MooreMemBaseAttr:$base,
+    Optional<TwoValuedI32>:$startAddr,
+    Optional<TwoValuedI32>:$finishAddr,
+    Optional<TwoValuedI32>:$sliceLeft,
+    Optional<TwoValuedI32>:$sliceRight,
+    DenseI64ArrayAttr:$dimLows,
+    DenseBoolArrayAttr:$dimDescending,
+    OptionalAttr<DenseI64ArrayAttr>:$enumValues
+  );
+  let results = (outs);
+  let assemblyFormat = [{
+    $base $filename `,` $dest
+    (`start` `=` $startAddr^)? (`finish` `=` $finishAddr^)?
+    (`slice` `` `[` $sliceLeft^ `,` $sliceRight `]`)?
+    attr-dict `:` type($dest)
+  }];
+  let hasVerifier = 1;
 }
 
 def FFlushBIOp : Builtin<"fflush"> {

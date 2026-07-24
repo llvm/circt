@@ -18,6 +18,8 @@ func.func @dummy15(%arg0: i32) -> () {return}
 func.func @dummy16(%arg0: i12) -> () {return}
 func.func @dummy17(%arg0: i3) -> () {return}
 func.func @dummy18(%arg0: !rtg.string) -> () {return}
+func.func @dummy19(%arg0: i8) -> () {return}
+func.func @dummy20(%arg0: !rtg.array<i8>) -> () {return}
 func.func @dummy_reg(%arg0: !rtgtest.ireg) -> () {return}
 
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
@@ -1097,6 +1099,44 @@ rtg.test @strings(singleton = %none: index) {
   func.call @dummy18(%5) : (!rtg.string) -> ()
 }
 
+// CHECK-LABEL: rtg.test @stringToASCIIArray
+rtg.test @stringToASCIIArray(singleton = %none: index) {
+  %idx0 = index.constant 0
+  %idx1 = index.constant 1
+  %0 = rtg.constant "hi" : !rtg.string
+  %1 = rtg.string_to_ascii_array %0 : !rtg.array<i8>
+
+  // CHECK-NEXT: [[C104:%.+]] = rtg.constant 104 : i8
+  // CHECK-NEXT: func.call @dummy19([[C104]])
+  %2 = rtg.array_extract %1[%idx0] : !rtg.array<i8>
+  func.call @dummy19(%2) : (i8) -> ()
+
+  // CHECK-NEXT: [[C105:%.+]] = rtg.constant 105 : i8
+  // CHECK-NEXT: func.call @dummy19([[C105]])
+  %3 = rtg.array_extract %1[%idx1] : !rtg.array<i8>
+  func.call @dummy19(%3) : (i8) -> ()
+
+  // CHECK-NEXT: [[SZ:%.+]] = rtg.constant 2 : index
+  // CHECK-NEXT: func.call @dummy2([[SZ]])
+  %4 = rtg.array_size %1 : !rtg.array<i8>
+  func.call @dummy2(%4) : (index) -> ()
+}
+
+// CHECK-LABEL: rtg.test @stringToASCIIArraySymbolic
+rtg.test @stringToASCIIArraySymbolic(singleton = %none: index) {
+  // A virtual register is not known concretely during elaboration, so the
+  // string it formats to, and thus the array derived from it, must stay
+  // symbolic instead of being decomposed into concrete byte constants.
+  // CHECK-NEXT: [[REG:%.+]] = rtg.virtual_reg [#rtgtest.a0 : !rtgtest.ireg, #rtgtest.a1 : !rtgtest.ireg]
+  %reg = rtg.virtual_reg [#rtgtest.a0, #rtgtest.a1]
+  // CHECK-NEXT: [[STR:%.+]] = rtg.register_format [[REG]] : !rtgtest.ireg
+  %str = rtg.register_format %reg : !rtgtest.ireg
+  // CHECK-NEXT: [[ARR:%.+]] = rtg.string_to_ascii_array [[STR]] : !rtg.array<i8>
+  %arr = rtg.string_to_ascii_array %str : !rtg.array<i8>
+  // CHECK-NEXT: func.call @dummy20([[ARR]])
+  func.call @dummy20(%arr) : (!rtg.array<i8>) -> ()
+}
+
 // CHECK-LABEL: rtg.test @attributeToElabValueConversion
 rtg.test @attributeToElabValueConversion(singleton = %none: index) {
   %set = rtg.constant #rtg.set<2 : index, 3 : index, 4 : index> : !rtg.set<index>
@@ -1125,14 +1165,88 @@ rtg.test @registerIndexConversions(singleton = %none: index) {
 
 // -----
 
+// Test: external ops (from non-RTG dialects) that have regions have their
+// regions elaborated in-place by visitExternalOp.  RTG constructs inside the
+// region are resolved; the op itself and its (dialect-appropriate) terminator
+// survive unchanged.
+
 rtg.target @singletonTarget : !rtg.dict<singleton: index> {
   %0 = index.constant 0
   rtg.yield %0 : index
 }
 
-rtg.test @nestedRegionsNotSupported(singleton = %none: index) {
-  // expected-error @below {{ops with nested regions must be elaborated away}}
-  scf.execute_region { scf.yield }
+func.func @consume_index(%arg0: index) -> () { return }
+
+// CHECK-LABEL: rtg.test @externalOpRegionElaborated
+rtg.test @externalOpRegionElaborated(singleton = %none: index) {
+  %c1 = index.constant 1
+  %c2 = index.constant 2
+  %set = rtg.set_create %c1, %c2 : index
+  // scf.execute_region is an external (non-RTG) op with a region.
+  scf.execute_region {
+    %sel = rtg.set_select_random %set : !rtg.set<index>
+    func.call @consume_index(%sel) : (index) -> ()
+    scf.yield
+  }
+}
+// The external op survives; RTG constructs inside its region are resolved.
+// CHECK: scf.execute_region
+// CHECK-NOT: rtg.set_select_random
+// CHECK: func.call @consume_index
+// CHECK-NOT: scf.execute_region
+
+// -----
+
+// External region op produces a result that is consumed by an RTG op.
+
+rtg.target @singletonTarget : !rtg.dict<singleton: index> {
+  %0 = index.constant 0
+  rtg.yield %0 : index
+}
+
+func.func @consume_index_b(%arg0: index) -> () { return }
+
+// CHECK-LABEL: rtg.test @externalOpResultUsedByRTG
+rtg.test @externalOpResultUsedByRTG(singleton = %none: index) {
+  // CHECK: [[C5:%.+]] = rtg.constant 5
+  // CHECK: [[R:%.+]] = scf.execute_region -> index {
+  // CHECK-NEXT: scf.yield [[C5]]
+  %r = scf.execute_region -> index {
+    %c = index.constant 5
+    scf.yield %c : index
+  }
+  // The result [[R]] of the external op is an opaque value that downstream ops
+  // resolve to the new op's SSA result.
+  // CHECK: func.call @consume_index_b([[R]])
+  func.call @consume_index_b(%r) : (index) -> ()
+}
+
+// -----
+
+// External region op with block arguments.
+
+rtg.target @singletonTarget : !rtg.dict<singleton: index> {
+  %0 = index.constant 0
+  rtg.yield %0 : index
+}
+
+func.func @consume_index_c(%arg0: index) -> () { return }
+
+// CHECK-LABEL: rtg.test @externalOpRegionWithBlockArgs
+rtg.test @externalOpRegionWithBlockArgs(singleton = %none: index) {
+  %c0 = index.constant 0
+  %c10 = index.constant 10
+  %c1 = index.constant 1
+  // CHECK: scf.while ({{.+}}) : (index) -> index
+  %r = scf.while (%i = %c0) : (index) -> index {
+    %cond = index.cmp ult(%i, %c10)
+    scf.condition(%cond) %i : index
+  } do {
+  ^bb0(%j: index):
+    %next = index.add %j, %c1
+    scf.yield %next : index
+  }
+  func.call @consume_index_c(%r) : (index) -> ()
 }
 
 // -----

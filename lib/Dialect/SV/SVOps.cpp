@@ -2161,7 +2161,9 @@ SmallVector<hw::PortInfo> SVVerbatimModuleOp::getPortList() {
             : (port.dir == hw::ModulePort::Direction::Output
                    ? hw::PortInfo::Direction::Output
                    : hw::PortInfo::Direction::InOut);
-    ports.push_back({{port.name, port.type, dir}, i, attrs, loc});
+    size_t argNum = moduleType.isOutput(i) ? moduleType.getOutputIdForPortId(i)
+                                           : moduleType.getInputIdForPortId(i);
+    ports.push_back({{port.name, port.type, dir}, argNum, attrs, loc});
   }
   return ports;
 }

@@ -28,6 +28,7 @@ set(libs
   CIRCTSupport
   CIRCTTransforms
   CIRCTVerif
+  LLVMTargetParser
   MLIRArithDialect
   MLIRBuiltinToLLVMIRTranslation
   MLIRControlFlowDialect
@@ -40,6 +41,8 @@ set(libs
   MLIRParser
   MLIRSCFDialect
   MLIRTargetLLVMIRExport
+  MLIRTargetLLVMIRImport
+  MLIRUBDialect
 )
 
 add_circt_tool(arcilator arcilator.cpp DEPENDS ${libs} ${ARCILATOR_JIT_DEPS})

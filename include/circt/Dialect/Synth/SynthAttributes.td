@@ -14,6 +14,7 @@ include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/DialectBase.td"
 include "mlir/IR/EnumAttr.td"
 include "circt/Dialect/Synth/SynthEnums.td"
+include "circt/Dialect/Synth/SynthDialect.td"
 
 // A single resolved 2D NLDM lookup table. Values are stored in row-major order
 // with dimensions index1.size x index2.size.

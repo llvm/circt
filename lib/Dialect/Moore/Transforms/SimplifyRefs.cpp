@@ -20,6 +20,7 @@
 
 #include "circt/Dialect/Moore/MooreOps.h"
 #include "circt/Dialect/Moore/MoorePasses.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 namespace circt {
@@ -83,7 +84,13 @@ struct ConcatRefLowering : public OpConversionPattern<OpTy> {
       // description mentioned.
       srcWidth = srcWidth - width;
 
-      OpTy::create(rewriter, op.getLoc(), operand, extract);
+      // Clone the original op (preserving any extra operand, e.g. a delay on
+      // the delayed assign variants) and remap dst/src to the leaf ref and its
+      // extracted slice.
+      IRMapping mapping;
+      mapping.map(op.getDst(), operand);
+      mapping.map(op.getSrc(), Value(extract));
+      rewriter.clone(*op.getOperation(), mapping);
     }
     rewriter.eraseOp(op);
     return success();
@@ -122,6 +129,33 @@ struct QueueRefLowering : public OpConversionPattern<DynQueueRefElementOp> {
   }
 };
 
+struct AssocArrayRefLowering
+    : public OpConversionPattern<AssocArrayExtractRefOp> {
+  using OpConversionPattern<AssocArrayExtractRefOp>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(AssocArrayExtractRefOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    for (auto *consumer : op->getUsers()) {
+      if (isa<BlockingAssignOp>(consumer)) {
+        auto assignOp = cast<BlockingAssignOp>(consumer);
+        rewriter.setInsertionPoint(consumer);
+        moore::AssocArraySetOp::create(rewriter, op->getLoc(), op.getInput(),
+                                       op.getIndex(), assignOp.getSrc());
+        rewriter.eraseOp(assignOp);
+      } else {
+        return mlir::emitError(op.getLoc())
+               << "Associative array element reference couldn't be reduced "
+                  "to setting the value at an index: consuming op "
+               << consumer << " is not supported";
+      }
+    }
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 struct SimplifyRefsPass
     : public circt::moore::impl::SimplifyRefsBase<SimplifyRefsPass> {
   void runOnOperation() override;
@@ -138,18 +172,22 @@ void SimplifyRefsPass::runOnOperation() {
   ConversionTarget target(context);
 
   target.addDynamicallyLegalOp<ContinuousAssignOp, BlockingAssignOp,
-                               NonBlockingAssignOp>([](auto op) {
+                               NonBlockingAssignOp, DelayedContinuousAssignOp,
+                               DelayedNonBlockingAssignOp>([](auto op) {
     return !op->getOperand(0).template getDefiningOp<ConcatRefOp>();
   });
 
-  target.addLegalDialect<MooreDialect>();
+  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
   RewritePatternSet concatRefPatterns(&context);
   concatRefPatterns.add<ConcatRefLowering<ContinuousAssignOp>,
                         ConcatRefLowering<BlockingAssignOp>,
-                        ConcatRefLowering<NonBlockingAssignOp>>(&context);
+                        ConcatRefLowering<NonBlockingAssignOp>,
+                        ConcatRefLowering<DelayedContinuousAssignOp>,
+                        ConcatRefLowering<DelayedNonBlockingAssignOp>>(
+      &context);
 
-  if (failed(applyPartialConversion(getOperation(), target,
-                                    std::move(concatRefPatterns)))) {
+  if (failed(applyFullConversion(getOperation(), target,
+                                 std::move(concatRefPatterns)))) {
     signalPassFailure();
     return;
   }
@@ -161,5 +199,14 @@ void SimplifyRefsPass::runOnOperation() {
   queueRefPatterns.add<QueueRefLowering>(&context);
   if (failed(applyPartialConversion(getOperation(), target,
                                     std::move(queueRefPatterns))))
+    signalPassFailure();
+
+  // Once we have removed AssocArrayExtractRefOps, attempt to rewrite any
+  // associative array element references to assoc_array.set
+  RewritePatternSet assocArrayRefPatterns(&context);
+  target.addIllegalOp<AssocArrayExtractRefOp>();
+  assocArrayRefPatterns.add<AssocArrayRefLowering>(&context);
+  if (failed(applyPartialConversion(getOperation(), target,
+                                    std::move(assocArrayRefPatterns))))
     signalPassFailure();
 }

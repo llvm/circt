@@ -19,7 +19,6 @@
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/TypeSwitch.h"
-#include "llvm/Support/Path.h"
 
 using namespace circt;
 using namespace firrtl;
@@ -158,6 +157,10 @@ void circt::firrtl::emitConnect(ImplicitLocOpBuilder &builder, Value dst,
 
   // The source must be extended or truncated.
   if (dstWidth < srcWidth) {
+    mlir::emitWarning(builder.getLoc())
+        << "RHS width " << srcWidth << " exceeds LHS width " << dstWidth
+        << ", inserting implicit truncation";
+
     // firrtl.tail always returns uint even for sint operands.
     IntType tmpType =
         type_cast<IntType>(dstType).getConstType(srcType.isConst());
@@ -1083,21 +1086,6 @@ Type circt::firrtl::lowerType(
     return IntegerType::get(type.getContext(), width);
 
   return {};
-}
-
-void circt::firrtl::makeCommonPrefix(SmallString<64> &a, StringRef b) {
-  // truncate 'a' to the common prefix of 'a' and 'b'.
-  size_t i = 0;
-  size_t e = std::min(a.size(), b.size());
-  for (; i < e; ++i)
-    if (a[i] != b[i])
-      break;
-  a.resize(i);
-
-  // truncate 'a' so it ends on a directory seperator.
-  auto sep = llvm::sys::path::get_separator();
-  while (!a.empty() && !a.ends_with(sep))
-    a.pop_back();
 }
 
 PathOp circt::firrtl::createPathRef(Operation *op, hw::HierPathOp nla,

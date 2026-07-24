@@ -3915,9 +3915,9 @@ SimulationOp::verifySymbolUses(mlir::SymbolTableCollection &symbolTable) {
   // Additional non-hardware ports are allowed.
   for (unsigned i = 4; i < numPorts; ++i) {
     auto type = module.getPortType(i);
-    if (!isa<PropertyType>(type))
-      return complain() << "port " << i << " may only be a property type, got "
-                        << type << " instead";
+    auto firrtlType = type_dyn_cast<FIRRTLType>(type);
+    if (!firrtlType || hasHardwareElements(firrtlType))
+      return complain() << "port " << i << " contains hardware types: " << type;
   }
 
   return success();

@@ -6,6 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_ESI_ESISTDSERVICES_TD
+#define CIRCT_DIALECT_ESI_ESISTDSERVICES_TD
+
 include "circt/Dialect/ESI/ESIServices.td"
 include "circt/Dialect/HW/HWTypes.td"
 
@@ -145,7 +148,11 @@ def HostMemServiceDeclOp: ESI_Op<"service.std.hostmem",
   let extraClassDeclaration = [{
     ServicePortInfo readPortInfo();
     ServicePortInfo writePortInfo();
+    ServicePortInfo readListPortInfo();
     std::optional<StringRef> getTypeName() { return "esi.service.std.hostmem"; }
+    LogicalResult verifyRequest(const ServicePortInfo &portInfo,
+                                ChannelBundleType reqBundleType,
+                                Operation *reqOp);
   }];
 }
 
@@ -169,3 +176,5 @@ def TelemetryServiceDeclOp: ESI_Op<"service.std.telemetry",
     std::optional<StringRef> getTypeName() { return "esi.service.std.telemetry"; }
   }];
 }
+
+#endif // CIRCT_DIALECT_ESI_ESISTDSERVICES_TD

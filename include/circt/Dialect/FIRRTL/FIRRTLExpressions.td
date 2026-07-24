@@ -13,9 +13,9 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLEXPRESSIONS_TD
 
-include "FIRRTLDialect.td"
-include "FIRRTLTypes.td"
-include "FIRRTLEnums.td"
+include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLEnums.td"
 include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"

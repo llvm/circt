@@ -22,6 +22,7 @@
 #include <cctype>
 #include <iostream>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 using namespace circt::arc::runtime;
@@ -103,9 +104,9 @@ ModelInstance::~ModelInstance() {
 
 std::filesystem::path
 ModelInstance::getTraceFilePath(const std::string &suffix) {
-  auto it = arguments.find("traceFile");
+  auto it = arguments.find(kArgKeyTraceFile);
   if (it != arguments.end() && it->second.has_value())
-    return std::filesystem::path(*it->second);
+    return workDir / std::filesystem::path(*it->second);
 
   std::string saneName;
   if (modelInfo->modelName)
@@ -117,7 +118,7 @@ ModelInstance::getTraceFilePath(const std::string &suffix) {
   saneName += '_';
   saneName += std::to_string(instanceID);
   saneName += suffix;
-  return std::filesystem::current_path() / std::filesystem::path(saneName);
+  return workDir / std::filesystem::path(saneName);
 }
 
 void ModelInstance::onEval(ArcState *mutableState) {
@@ -282,13 +283,8 @@ void ModelInstance::parseArgs(const char *args) {
     return;
   auto argStr = std::string_view(args);
   arguments = parseArgsToMap(argStr);
-
-  if (arguments.count("debug"))
+  if (arguments.count(kArgKeyDebug))
     verbose = true;
-  if (arguments.count("vcd"))
-    traceMode = TraceMode::VCD;
-  if (arguments.count("fst"))
-    traceMode = TraceMode::FST;
 
   // Dump arguments
   if (verbose) {
@@ -302,6 +298,38 @@ void ModelInstance::parseArgs(const char *args) {
       std::cout << std::endl;
     }
   }
+
+  // Initialize workDir. A relative argument is resolved against the process
+  // working directory; an absolute argument replaces it entirely.
+  std::error_code ec;
+  workDir = std::filesystem::current_path(ec);
+  if (ec) {
+    std::cerr << "[ArcRuntime] WARNING: Could not determine current working "
+                 "directory: "
+              << ec.message() << std::endl;
+    workDir.clear();
+  }
+  auto workDirIt = arguments.find(kArgKeyWorkDir);
+  if (workDirIt != arguments.end() && workDirIt->second.has_value()) {
+    workDir /= *workDirIt->second;
+    workDir = workDir.lexically_normal();
+
+    // Create the working directory if it does not exist yet.
+    std::filesystem::create_directories(workDir, ec);
+    if (ec)
+      std::cerr << "[ArcRuntime] WARNING: Could not create working directory \""
+                << workDir.string() << "\": " << ec.message() << std::endl;
+  }
+
+  if (verbose)
+    std::cout << "[ArcRuntime] Working directory for instance ID " << instanceID
+              << ": " << workDir.string() << std::endl;
+
+  // Select Trace Mode
+  if (arguments.count(kArgKeyVcd))
+    traceMode = TraceMode::VCD;
+  if (arguments.count(kArgKeyFst))
+    traceMode = TraceMode::FST;
 }
 
 } // namespace circt::arc::runtime::impl

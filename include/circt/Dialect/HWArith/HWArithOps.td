@@ -13,10 +13,16 @@
 #ifndef CIRCT_DIALECT_HWARITH_HWARITHOPS_TD
 #define CIRCT_DIALECT_HWARITH_HWARITHOPS_TD
 
+include "circt/Dialect/HWArith/HWArithDialect.td"
+include "circt/Dialect/HWArith/HWArithTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+
+// Base class for the operation in this dialect.
+class HWArithOp<string mnemonic, list<Trait> traits = []> :
+    Op<HWArithDialect, mnemonic, traits>;
 
 def ConstantOp : HWArithOp<"constant",
     [ConstantLike, Pure, FirstAttrDerivedResultType]> {
@@ -75,7 +81,7 @@ def AddOp : BinOp<"add", [Commutative]> {
     The `add` operation takes two operands and returns one result. The result
     type is inferred from the operand types, which may be signed or unsigned
     scalar integer types of arbitrary bitwidth.
-    
+
     | LHS type | RHS type | Result type                              |
     | :------- | :------- | :--------------------------------------- |
     | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = max(*a*, *b*) + 1         |
@@ -100,7 +106,7 @@ def SubOp : BinOp<"sub"> {
     The `sub` operation takes two operands and returns one result. The result
     type is inferred from the operand types, which may be signed or unsigned
     scalar integer types of arbitrary bitwidth.
-    
+
     | LHS type | RHS type | Result type                              |
     | :------- | :------- | :--------------------------------------- |
     | `ui<a>`  | `ui<b>`  | `si<r>`, *r* = max(*a*, *b*) + 1         |
@@ -125,7 +131,7 @@ def MulOp : BinOp<"mul", [Commutative]> {
     The `mul` operation takes two operands and returns one result. The result
     type is inferred from the operand types, which may be signed or unsigned
     scalar integer types of arbitrary bitwidth.
-    
+
     | LHS type | RHS type | Result type                              |
     | :------- | :------- | :--------------------------------------- |
     | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = *a* + *b*                 |
@@ -148,7 +154,7 @@ def DivOp : BinOp<"div"> {
     The `div` operation takes two operands and returns one result. The result
     type is inferred from the operand types, which may be signed or unsigned
     scalar integer types of arbitrary bitwidth.
-    
+
     | LHS type | RHS type | Result type                              |
     | :------- | :------- | :--------------------------------------- |
     | `ui<a>`  | `ui<b>`  | `ui<r>`, *r* = *a*                       |

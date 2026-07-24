@@ -13,6 +13,7 @@
 #ifndef CIRCT_DIALECT_OM_OMATTRIBUTES_TD
 #define CIRCT_DIALECT_OM_OMATTRIBUTES_TD
 
+include "circt/Dialect/OM/OMDialect.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/IR/BuiltinAttributeInterfaces.td"
 

@@ -13,7 +13,9 @@
 #ifndef CIRCT_DIALECT_SV_SVTYPES
 #define CIRCT_DIALECT_SV_SVTYPES
 
+include "circt/Dialect/HW/HWTypes.td"
 include "circt/Dialect/SV/SVDialect.td"
+include "mlir/IR/AttrTypeBase.td"
 
 // TODO: The following should go into a `SVTypesImpl.td` if we ever actually
 // define any SV-specific types. Doing so will keep this `SVTypes.td` file

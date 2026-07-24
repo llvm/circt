@@ -540,7 +540,8 @@ void ESIConnectServicesPass::convertReq(RequestConnectionOp req) {
   OpBuilder b(req);
   auto newReq = ServiceImplementConnReqOp::create(
       b, req.getLoc(), req.getToClient().getType(), req.getServicePortAttr(),
-      ArrayAttr::get(&getContext(), {req.getAppIDAttr()}));
+      ArrayAttr::get(&getContext(), {req.getAppIDAttr()}),
+      /*options=*/req.getOptionsAttr());
   newReq->setDialectAttrs(req->getDialectAttrs());
   req.getToClient().replaceAllUsesWith(newReq.getToClient());
 
@@ -740,7 +741,8 @@ ESIConnectServicesPass::surfaceReqs(hw::HWMutableModuleLike mod,
       // Clone the request.
       auto clone = ServiceImplementConnReqOp::create(
           b, req.getLoc(), req.getToClient().getType(),
-          req.getServicePortAttr(), appIDPath);
+          req.getServicePortAttr(), appIDPath,
+          /*options=*/req.getOptionsAttr());
       clone->setDialectAttrs(req->getDialectAttrs());
       newOperands.push_back(clone.getToClient());
     }

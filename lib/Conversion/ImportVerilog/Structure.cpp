@@ -717,12 +717,31 @@ struct ModuleVisitor : public BaseVisitor {
       if (!value)
         return mlir::emitError(loc) << "unsupported port";
 
+    // Determine the name of the instance. Slang clears the name of instance
+    // array elements during elaboration; only the outermost array symbol
+    // retains the name written in the source. Reconstruct per-element names by
+    // appending the source index of each array dimension to the array name,
+    // such that `foo u [2:0][1:0]` produces `u_0_0`, `u_0_1`, `u_1_0`, etc.
+    // This mirrors the naming scheme used for for-generate blocks.
+    SmallString<64> instName(blockNamePrefix);
+    if (instNode.arrayPath.empty()) {
+      instName += instNode.name;
+    } else {
+      instName += instNode.getArrayName();
+      slang::SmallVector<slang::ConstantRange, 4> dims;
+      instNode.getArrayDimensions(dims);
+      for (auto [dim, index] : llvm::zip(dims, instNode.arrayPath)) {
+        instName += '_';
+        Twine(dim.lower() + int32_t(index)).toVector(instName);
+      }
+    }
+
     // Create the instance op itself.
     auto inputNames = builder.getArrayAttr(moduleType.getInputNames());
     auto outputNames = builder.getArrayAttr(moduleType.getOutputNames());
     auto inst = moore::InstanceOp::create(
         builder, loc, moduleType.getOutputTypes(),
-        builder.getStringAttr(Twine(blockNamePrefix) + instNode.name),
+        builder.getStringAttr(instName),
         FlatSymbolRefAttr::get(module.getSymNameAttr()), inputValues,
         inputNames, outputNames);
 
@@ -947,6 +966,12 @@ struct ModuleVisitor : public BaseVisitor {
     return success();
   }
 
+  // Ignore clocking blocks. The clocking is already inferred by slang at
+  // each use.
+  LogicalResult visit(const slang::ast::ClockingBlockSymbol &) {
+    return success();
+  }
+
   // Ignore let declarations. Slang expands uses into AssertionInstance
   // expressions, which are lowered when the use site is imported.
   LogicalResult visit(const slang::ast::LetDeclSymbol &) { return success(); }
@@ -961,6 +986,15 @@ struct ModuleVisitor : public BaseVisitor {
   // Handle primitive instances.
   LogicalResult visit(const slang::ast::PrimitiveInstanceSymbol &prim) {
     return context.convertPrimitiveInstance(prim);
+  }
+
+  // Handle instance arrays.
+  LogicalResult visit(const slang::ast::InstanceArraySymbol &arrNode) {
+    // Slang already nicely unrolls these into distinct instances for us.
+    for (const auto *element : arrNode.elements)
+      if (failed(element->visit(*this)))
+        return failure();
+    return success();
   }
 
   /// Emit an error for all other members.
@@ -1148,6 +1182,13 @@ struct ModulePredeclaration {
       return success();
     }
 
+    if (const auto *arrNode = member.as_if<slang::ast::InstanceArraySymbol>()) {
+      for (const auto *element : arrNode->elements)
+        if (failed(predeclareModuleInstanceMember(*element, blockNamePrefix)))
+          return failure();
+      return success();
+    }
+
     if (const auto *genNode = member.as_if<slang::ast::GenerateBlockSymbol>())
       return predeclareModuleInstanceGenerateBlock(*genNode, blockNamePrefix);
 
@@ -1244,7 +1285,7 @@ LogicalResult Context::convertCompilation() {
 
   // Analyze the compilation to infer clocks for assertion system calls
   // using Slang's LRM clock inference.
-  populateAssertionClocks();
+  populateSampledValueClocks();
 
   // Visit all top-level declarations in all compilation units. This does not
   // include instantiable constructs like modules, interfaces, and programs,

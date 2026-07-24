@@ -14,12 +14,12 @@
 #define CHIRRTL_TD
 
 // Dialect
-include "CHIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/CHIRRTLDialect.td"
 
 // Operations
-include "CHIRRTLOps.td"
+include "circt/Dialect/FIRRTL/CHIRRTLOps.td"
 
 // Types
-include "CHIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/CHIRRTLTypes.td"
 
 #endif // CHIRRTL_TD

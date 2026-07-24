@@ -8,6 +8,7 @@
 
 #include "ImportVerilogInternals.h"
 #include "circt/Dialect/Moore/MooreOps.h"
+#include "circt/Dialect/Moore/MooreTypes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Diagnostics.h"
@@ -74,6 +75,63 @@ static std::array<Value, 4> getDefaultTimeFormatValues(OpBuilder &builder,
   return {unit, precision, suffix, minWidth};
 }
 
+// Get the runtime size of a dynamically-sized array at the given level of a
+// foreach loop.
+static FailureOr<Value>
+getRuntimeSizeAtLevel(Context &context, Location loc,
+                      const slang::ast::ForeachLoopStatement &stmt,
+                      uint32_t level, const moore::IntType &idxType) {
+  auto &builder = context.builder;
+  const auto &loopDim = stmt.loopDims[level];
+
+  // Get array at the current level
+  Value array = context.convertRvalueExpression(stmt.arrayRef);
+  for (uint32_t i = 0; i < level; ++i) {
+    const auto &dim = stmt.loopDims[i];
+    const auto &loopVar = dim.loopVar;
+    if (!dim.loopVar)
+      mlir::emitError(loc, "unsupported foreach with missing loop variable");
+
+    auto nestedType =
+        llvm::TypeSwitch<Type, Type>(array.getType())
+            .Case<moore::OpenUnpackedArrayType, moore::UnpackedArrayType,
+                  moore::ArrayType, moore::OpenArrayType, moore::QueueType,
+                  moore::AssocArrayType>(
+                [](auto ty) { return ty.getElementType(); })
+            .Default([](Type) { return Type(); });
+
+    auto curIdx = moore::ReadOp::create(builder, loc,
+                                        context.valueSymbols.lookup(loopVar));
+    if (dim.range.has_value()) {
+      Value offset = getSelectIndex(context, loc, curIdx, dim.range.value());
+      array =
+          moore::DynExtractOp::create(builder, loc, nestedType, array, offset);
+    } else {
+      array =
+          moore::DynExtractOp::create(builder, loc, nestedType, array, curIdx);
+    }
+  }
+
+  Value size;
+  if (loopDim.loopVar->arrayType.isQueue()) {
+    size = moore::QueueSizeBIOp::create(builder, loc, array);
+  } else if (loopDim.loopVar->arrayType.getCanonicalType().kind ==
+             slang::ast::SymbolKind::DynamicArrayType) {
+    size = moore::OpenUArraySizeOp::create(builder, loc, array);
+  } else {
+    // TODO: Associative arrays cannot be iterated on using an induction
+    // variable. Supporting them requires rewriting `recursiveForeach` to use
+    // the correct iterator type. For now, we just emit an error.
+    mlir::emitError(loc, "unsupported foreach loop on type: ")
+        << loopDim.loopVar->arrayType.toString();
+    return failure();
+  }
+
+  auto one = moore::ConstantOp::create(builder, loc, idxType, 1);
+  auto sizeMinusOne = moore::SubOp::create(builder, loc, size, one).getResult();
+  return sizeMinusOne;
+}
+
 // NOLINTBEGIN(misc-no-recursion)
 namespace {
 struct StmtVisitor {
@@ -96,10 +154,8 @@ struct StmtVisitor {
 
   LogicalResult recursiveForeach(const slang::ast::ForeachLoopStatement &stmt,
                                  uint32_t level) {
-    // find current dimension we are operate.
+    // find current dimension we are operating on.
     const auto &loopDim = stmt.loopDims[level];
-    if (!loopDim.range.has_value())
-      return mlir::emitError(loc) << "dynamic loop variable is unsupported";
     auto &exitBlock = createBlock();
     auto &stepBlock = createBlock();
     auto &bodyBlock = createBlock();
@@ -109,17 +165,23 @@ struct StmtVisitor {
     context.loopStack.push_back({&stepBlock, &exitBlock});
     llvm::scope_exit done([&] { context.loopStack.pop_back(); });
 
+    // Get the loop variable's type
     const auto &iter = loopDim.loopVar;
-    auto type = context.convertType(*iter->getDeclaredType());
-    if (!type)
+    auto idxType = context.convertType(*iter->getDeclaredType());
+    if (!idxType)
       return failure();
+    auto intIdxType = cast<moore::IntType>(idxType);
 
-    Value initial = moore::ConstantOp::create(
-        builder, loc, cast<moore::IntType>(type), loopDim.range->lower());
+    // Get the loop's lower bound
+    Value initial =
+        loopDim.range.has_value()
+            ? moore::ConstantOp::create(builder, loc, intIdxType,
+                                        loopDim.range->lower())
+            : moore::ConstantOp::create(builder, loc, intIdxType, 0);
 
-    // Create loop varirable in this dimension
+    // Create loop variable in this dimension
     Value varOp = moore::VariableOp::create(
-        builder, loc, moore::RefType::get(cast<moore::UnpackedType>(type)),
+        builder, loc, moore::RefType::get(cast<moore::UnpackedType>(idxType)),
         builder.getStringAttr(iter->name), initial);
     context.valueSymbols.insertIntoScope(context.valueSymbols.getCurScope(),
                                          iter, varOp);
@@ -128,8 +190,14 @@ struct StmtVisitor {
     builder.setInsertionPointToEnd(&checkBlock);
 
     // When the loop variable is greater than the upper bound, goto exit
-    auto upperBound = moore::ConstantOp::create(
-        builder, loc, cast<moore::IntType>(type), loopDim.range->upper());
+    auto upperBound =
+        loopDim.range.has_value()
+            ? moore::ConstantOp::create(builder, loc, intIdxType,
+                                        loopDim.range->upper())
+            : getRuntimeSizeAtLevel(context, loc, stmt, level, intIdxType)
+                  .value_or(Value());
+    if (!upperBound)
+      return failure();
 
     auto var = moore::ReadOp::create(builder, loc, varOp);
     Value cond = moore::SleOp::create(builder, loc, var, upperBound);
@@ -169,8 +237,7 @@ struct StmtVisitor {
 
     // add one to loop variable
     var = moore::ReadOp::create(builder, loc, varOp);
-    auto one =
-        moore::ConstantOp::create(builder, loc, cast<moore::IntType>(type), 1);
+    auto one = moore::ConstantOp::create(builder, loc, intIdxType, 1);
     auto postValue = moore::AddOp::create(builder, loc, var, one).getResult();
     moore::BlockingAssignOp::create(builder, loc, varOp, postValue);
     cf::BranchOp::create(builder, loc, &checkBlock);
@@ -467,10 +534,15 @@ struct StmtVisitor {
           if (auto defOp = maybeConst.getDefiningOp<moore::ConstantOp>())
             itemConsts.push_back(defOp.getValueAttr());
 
-          // Generate the appropriate equality operator.
+          // Generate the appropriate equality operator. A case statement with
+          // real operands uses ordinary equality (`==`) per IEEE 1800 § 11.4.5,
+          // not case-equality; wildcard case kinds on reals are illegal SV.
           switch (caseStmt.condition) {
           case CaseStatementCondition::Normal:
-            cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
+            if (isa<moore::RealType>(caseExpr.getType()))
+              cond = moore::EqRealOp::create(builder, itemLoc, caseExpr, value);
+            else
+              cond = moore::CaseEqOp::create(builder, itemLoc, caseExpr, value);
             break;
           case CaseStatementCondition::WildcardXOrZ:
             cond = moore::CaseXZEqOp::create(builder, itemLoc, caseExpr, value);
@@ -1020,6 +1092,147 @@ struct StmtVisitor {
     return emitError(loc) << "Failed to convert Display Message!";
   }
 
+  /// Convert a `$readmemb`/`$readmemh` system task call into a
+  /// `moore.builtin.readmem` op. See IEEE 1800-2017 § 21.4.
+  LogicalResult
+  convertReadMemTask(std::span<const slang::ast::Expression *const> args,
+                     bool isBinary) {
+    assert(args.size() >= 2 && args.size() <= 4 &&
+           "$readmemh/$readmemb takes 2 to 4 arguments");
+
+    auto i32Ty = moore::IntType::getInt(builder.getContext(), 32);
+    auto filename = context.convertRvalueExpression(
+        *args[0], moore::StringType::get(builder.getContext()));
+    if (!filename)
+      return failure();
+
+    const auto *destExpr = args[1];
+
+    // Slang wraps the memory argument in an assignment to the lvalue;
+    // unwrap it to get at the memory itslef.
+    if (const auto *assign =
+            destExpr->as_if<slang::ast::AssignmentExpression>())
+      destExpr = &assign->left();
+
+    // The memory may use slice syntax on its rightmost specified dimension.
+    // The slice only narrows the address window of the selected array's highest
+    // dimension; the destination stays the full array.
+    Value sliceLeft, sliceRight;
+    if (const auto *rangeExpr =
+            destExpr->as_if<slang::ast::RangeSelectExpression>()) {
+      if (rangeExpr->getSelectionKind() !=
+          slang::ast::RangeSelectionKind::Simple) {
+        mlir::emitError(loc)
+            << "unsupported: indexed part-select on $readmem memory";
+        return failure();
+      }
+
+      sliceLeft = context.convertRvalueExpression(rangeExpr->left(), i32Ty);
+      sliceRight = context.convertRvalueExpression(rangeExpr->right(), i32Ty);
+
+      if (!sliceLeft || !sliceRight)
+        return failure();
+
+      destExpr = &rangeExpr->value();
+    }
+
+    auto dest = context.convertLvalueExpression(*destExpr);
+    if (!dest)
+      return failure();
+
+    // Collect the declared low bound and direction of every unpacked dimension
+    // (outermost first): the Moore array types do not carry them, but the
+    // row-major file layout (§21.4.3) and the address mapping of the lowering
+    // depend on them. Queues load with their current size fixed (§21.4.1).
+    const auto *curTy = &destExpr->type->getCanonicalType();
+    SmallVector<int64_t> dimLows;
+    SmallVector<bool> dimDescs;
+    const slang::ast::Type *elemSvTy = curTy;
+
+    if (curTy->isAssociativeArray()) {
+      mlir::emitError(loc) << "unsupported: $readmem into associative array";
+      return failure();
+    }
+
+    if (const auto *queueTy = curTy->as_if<slang::ast::QueueType>()) {
+      dimLows.push_back(0);
+      dimDescs.push_back(false);
+      elemSvTy = &queueTy->elementType.getCanonicalType();
+    } else if (curTy->as_if<slang::ast::DynamicArrayType>()) {
+      mlir::emitError(loc) << "unsupported: $readmem into dynamic array";
+      return failure();
+    } else {
+      while (const auto *fixedArr =
+                 curTy->as_if<slang::ast::FixedSizeUnpackedArrayType>()) {
+        dimLows.push_back(fixedArr->range.lower());
+        dimDescs.push_back(fixedArr->range.isDescending());
+        curTy = &fixedArr->elementType.getCanonicalType();
+      }
+      elemSvTy = curTy;
+    }
+
+    if (dimLows.empty()) {
+      mlir::emitError(loc) << "$readmem memory must be an unpacked array";
+      return failure();
+    }
+
+    // The file contains binary or hexadecimal numbers, so elements must be
+    // packed data.
+    if (!elemSvTy->isIntegral()) {
+      mlir::emitError(loc) << "unsupported: $readmem element type "
+                           << elemSvTy->toString();
+      return failure();
+    }
+
+    // Values outside the enumeration must be rejected during the load. Collect
+    // the legal values so the lowering can check membership; wider enumerations
+    // cannot be represented in the attribute.
+    DenseI64ArrayAttr enumValuesAttr;
+    if (const auto *enumTy = elemSvTy->as_if<slang::ast::EnumType>()) {
+      if (enumTy->getBitWidth() > 64) {
+        mlir::emitError(loc)
+            << "unsupported: $readmem into enumeration wider than 64 bits";
+        return failure();
+      }
+      SmallVector<int64_t> vals;
+      for (const auto &ev : enumTy->values()) {
+        auto v = ev.getValue().integer().as<int64_t>();
+        if (!v) {
+          mlir::emitError(loc)
+              << "unsupported: $readmem enumeration value with unknown bits";
+          return failure();
+        }
+        vals.push_back(*v);
+      }
+      enumValuesAttr = builder.getDenseI64ArrayAttr(vals);
+    }
+
+    Value startAddr;
+    if (args.size() >= 3 &&
+        args[2]->kind != slang::ast::ExpressionKind::EmptyArgument) {
+      startAddr = context.convertRvalueExpression(*args[2], i32Ty);
+      if (!startAddr)
+        return failure();
+    }
+
+    Value finishAddr;
+    if (args.size() >= 4 &&
+        args[3]->kind != slang::ast::ExpressionKind::EmptyArgument) {
+      finishAddr = context.convertRvalueExpression(*args[3], i32Ty);
+      if (!finishAddr)
+        return failure();
+    }
+
+    auto base = isBinary ? moore::MemBase::Binary : moore::MemBase::Hex;
+    moore::ReadMemBIOp::create(
+        builder, loc, filename, dest,
+        moore::MemBaseAttr::get(builder.getContext(), base), startAddr,
+        finishAddr, sliceLeft, sliceRight,
+        builder.getDenseI64ArrayAttr(dimLows),
+        builder.getDenseBoolArrayAttr(dimDescs), enumValuesAttr);
+    return success();
+  }
+
   /// Handle the subset of system calls that return no result value. Return
   /// true if the called system task could be handled, false otherwise. Return
   /// failure if an error occurred.
@@ -1300,6 +1513,12 @@ struct StmtVisitor {
           return failure();
       }
       moore::FFlushBIOp::create(builder, loc, fd);
+      return true;
+    }
+
+    if (nameId == ksn::ReadMemH || nameId == ksn::ReadMemB) {
+      if (failed(convertReadMemTask(args, nameId == ksn::ReadMemB)))
+        return failure();
       return true;
     }
 

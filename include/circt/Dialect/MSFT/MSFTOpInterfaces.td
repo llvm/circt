@@ -6,6 +6,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_MSFT_MSFTOPINTERFACES_TD
+#define CIRCT_DIALECT_MSFT_MSFTOPINTERFACES_TD
+
 include "mlir/IR/OpBase.td"
 
 def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
@@ -63,3 +66,5 @@ def DynInstDataOpInterface : OpInterface<"DynInstDataOpInterface"> {
     >
   ];
 }
+
+#endif // CIRCT_DIALECT_MSFT_MSFTOPINTERFACES_TD

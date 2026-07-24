@@ -10,13 +10,19 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_COMB_COMBINATIONAL_TD
+#define CIRCT_DIALECT_COMB_COMBINATIONAL_TD
+
+include "circt/Dialect/Comb/CombDialect.td"
+include "circt/Dialect/HW/HWTypes.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/InferIntRangeInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/EnumAttr.td"
+
 //===----------------------------------------------------------------------===//
 // Arithmetic and Logical Operations
 //===----------------------------------------------------------------------===//
-
-include "mlir/Interfaces/InferTypeOpInterface.td"
-include "mlir/Interfaces/InferIntRangeInterface.td"
-include "mlir/IR/EnumAttr.td"
 
 // Base class for binary operators.
 class BinOp<string mnemonic, list<Trait> traits = []> :
@@ -353,3 +359,5 @@ def ReverseOp : CombOp<"reverse", [
 
   let assemblyFormat = "$input attr-dict `:` type($input)";
 }
+
+#endif // CIRCT_DIALECT_COMB_COMBINATIONAL_TD

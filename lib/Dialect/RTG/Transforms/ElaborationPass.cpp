@@ -25,7 +25,9 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/DenseMapInfoVariant.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/Support/Debug.h"
+#include <memory>
 #include <random>
 
 namespace circt {
@@ -108,6 +110,8 @@ struct MemoryBlockStorage;
 struct SymbolicComputationWithIdentityStorage;
 struct SymbolicComputationWithIdentityValue;
 struct SymbolicComputationStorage;
+struct OpaqueExternalStorage;
+struct ContinuationStorage;
 
 /// The abstract base class for elaborated values.
 using ElaboratorValue =
@@ -117,7 +121,8 @@ using ElaboratorValue =
                  ArrayStorage *, TupleStorage *, MemoryStorage *,
                  MemoryBlockStorage *, SymbolicComputationWithIdentityStorage *,
                  SymbolicComputationWithIdentityValue *,
-                 SymbolicComputationStorage *>;
+                 SymbolicComputationStorage *, OpaqueExternalStorage *,
+                 ContinuationStorage *>;
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 llvm::hash_code hash_value(const ElaboratorValue &val) {
@@ -512,6 +517,39 @@ struct SymbolicComputationWithIdentityValue : IdentityValue {
   const unsigned idx;
 };
 
+/// Storage for SSA values produced by external ops with regions — block
+/// arguments and results. Carries identity only; the corresponding new-IR
+/// `Value` is registered via `Materializer::map()` immediately upon creation so
+/// `Materializer::materialize()` always hits its cache and never dispatches
+// through `visit()`.
+struct OpaqueExternalStorage : IdentityValue {
+  OpaqueExternalStorage(Type type, Location loc) : IdentityValue(type, loc) {}
+};
+
+/// Maps effect names to their handler regions within a single rtg.handle op.
+struct HandlerFrame {
+  DenseMap<StringAttr, Region *> handlers;
+};
+
+/// Storage object for '!rtg.continuation<T>' — a captured elaboration frame.
+/// Holds the ops to elaborate on resume and the handler-stack snapshot.
+struct ContinuationStorage : IdentityValue {
+  ContinuationStorage(SmallVector<Operation *> remainingOps,
+                      Value performResult,
+                      SmallVector<HandlerFrame> capturedHandlerStack,
+                      Type resumeType, Location loc)
+      : IdentityValue(ContinuationType::get(loc.getContext(), resumeType), loc),
+        remainingOps(std::move(remainingOps)), performResult(performResult),
+        capturedHandlerStack(std::move(capturedHandlerStack)) {}
+
+  /// Ops from the HandleOp body that appear after the rtg.perform.
+  SmallVector<Operation *> remainingOps;
+  /// The SSA result of the rtg.perform op (null for unit-result effects).
+  Value performResult;
+  /// Handler-stack snapshot at the point the perform was triggered.
+  SmallVector<HandlerFrame> capturedHandlerStack;
+};
+
 /// An 'Internalizer' object internalizes storages and takes ownership of them.
 /// When the initializer object is destroyed, all owned storages are also
 /// deallocated and thus must not be accessed anymore.
@@ -717,6 +755,15 @@ static void print(const SymbolicComputationStorage *val,
   os << ">";
 }
 
+static void print(const OpaqueExternalStorage *val, llvm::raw_ostream &os) {
+  os << "<opaque-external " << val->type << ">";
+}
+
+static void print(const ContinuationStorage *val, llvm::raw_ostream &os) {
+  os << "<continuation with " << val->remainingOps.size() << " ops at " << val
+     << ">";
+}
+
 static llvm::raw_ostream &operator<<(llvm::raw_ostream &os,
                                      const ElaboratorValue &value) {
   std::visit([&](auto val) { print(val, os); }, value);
@@ -874,6 +921,8 @@ private:
   VISIT_UNSUPPORTED(SymbolicComputationWithIdentityStorage)
   VISIT_UNSUPPORTED(SymbolicComputationWithIdentityValue)
   VISIT_UNSUPPORTED(SymbolicComputationStorage)
+  VISIT_UNSUPPORTED(OpaqueExternalStorage)
+  VISIT_UNSUPPORTED(ContinuationStorage)
 
 #undef VISIT_UNSUPPORTED
 
@@ -922,8 +971,9 @@ public:
   Materializer(OpBuilder builder, TestState &testState,
                SharedState &sharedState,
                SmallVector<ElaboratorValue> &blockArgs)
-      : builder(builder), testState(testState), sharedState(sharedState),
-        blockArgs(blockArgs), attrConverter(builder.getContext()) {}
+      : builder(builder), rootBlock(builder.getBlock()), testState(testState),
+        sharedState(sharedState), blockArgs(blockArgs),
+        attrConverter(builder.getContext()) {}
 
   /// Materialize IR representing the provided `ElaboratorValue` and return the
   /// `Value` or a null value on failure.
@@ -984,6 +1034,11 @@ public:
   /// before the insertion point.
   LogicalResult materialize(Operation *op,
                             DenseMap<Value, ElaboratorValue> &state) {
+    // Region-bearing ops must be elaborated away before reaching here (either
+    // by a dedicated visitor, or by visitExternalOp which performs its own
+    // structural rewrite). Routing them through this generic operand-only
+    // materialize path would silently keep un-elaborated regions in the
+    // output.
     if (op->getNumRegions() > 0)
       return op->emitOpError("ops with nested regions must be elaborated away");
 
@@ -1056,6 +1111,8 @@ public:
 
   void map(ElaboratorValue eval, Value val) { materializedValues[eval] = val; }
 
+  OpBuilder &getBuilder() { return builder; }
+
   template <typename OpTy, typename... Args>
   OpTy create(Location location, Args &&...args) {
     return OpTy::create(builder, location, std::forward<Args>(args)...);
@@ -1064,6 +1121,13 @@ public:
 private:
   Value tryMaterializeAsConstant(ElaboratorValue val, Location loc) {
     if (auto attr = attrConverter.convert(val)) {
+      // Hoist constants to the materializer's root block when the builder's
+      // current insertion point is in a nested region. This ensures the
+      // constant's defining region dominates every potential use, including
+      // sibling regions that share this materializer's value cache.
+      OpBuilder::InsertionGuard guard(builder);
+      if (builder.getBlock() != rootBlock)
+        builder.setInsertionPointToStart(rootBlock);
       Value res = ConstantOp::create(builder, loc, attr);
       materializedValues[val] = res;
       return res;
@@ -1276,6 +1340,12 @@ private:
     return res;
   }
 
+  Value visit(ContinuationStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    emitError() << "continuation cannot be materialized into IR";
+    return {};
+  }
+
   Value visit(SymbolicComputationWithIdentityValue *val, Location loc,
               function_ref<InFlightDiagnostic()> emitError) {
     auto *noConstStorage =
@@ -1336,6 +1406,16 @@ private:
     return op->getResult(0);
   }
 
+  Value visit(OpaqueExternalStorage *val, Location loc,
+              function_ref<InFlightDiagnostic()> emitError) {
+    // Opaque external values (block arguments and results of external
+    // region-bearing ops) are always pre-mapped to a concrete SSA value by
+    // visitExternalOp, so materialize() short-circuits via the cache before
+    // reaching here.
+    emitError() << "cannot materialize opaque external value";
+    return {};
+  }
+
 private:
   /// Cache values we have already materialized to reuse them later. We start
   /// with an insertion point at the start of the block and cache the (updated)
@@ -1347,6 +1427,10 @@ private:
   /// Cache the builder to continue insertions at their current insertion point
   /// for the reason stated above.
   OpBuilder builder;
+
+  /// The block this materializer was constructed at. Used as the hoist target
+  /// for constants that would otherwise be sunk into nested sibling regions.
+  Block *rootBlock;
 
   SmallVector<Operation *> toDelete;
 
@@ -1374,7 +1458,13 @@ private:
 
 /// Used to signal to the elaboration driver whether the operation should be
 /// removed.
-enum class DeletionKind { Keep, Delete };
+enum class DeletionKind {
+  Keep,
+  Delete,
+  /// Stop iterating the current block; used when rtg.perform triggers a
+  /// handler that elaborates the continuation inline.
+  StopElaboration
+};
 
 /// Interprets the IR to perform and lower the represented randomizations.
 class Elaborator : public RTGOpVisitor<Elaborator, FailureOr<DeletionKind>> {
@@ -1401,7 +1491,95 @@ public:
   }
 
   FailureOr<DeletionKind> visitExternalOp(Operation *op) {
-    return visitOpGeneric(op);
+    if (op->getNumRegions() == 0)
+      return visitOpGeneric(op);
+
+    // Elaborate all regions of unknown external ops. Any op appearing inside
+    // an RTG test body with regions is expected to contain RTG constructs.
+    //
+    // The new op is a structural shell:
+    //   - Its operands are re-materialized from the elaborator state so that
+    //     references to RTG-elaborated values become the corresponding new
+    //     SSA values (and don't dangle after finalize() erases the old ops).
+    //   - Each region gets a fresh block whose arguments mirror the old
+    //     block's argument types/locations. Old block args are registered as
+    //     opaque IdentityValues mapped to the new block args, so RTG ops
+    //     inside the region can resolve them via state lookup.
+    //   - Each result is registered as an opaque IdentityValue mapped to the
+    //     corresponding new result, so downstream RTG ops consuming them
+    //     find them in state.
+    auto *newOp = op->cloneWithoutRegions();
+    materializer.getBuilder().insert(newOp);
+
+    // Re-map operands: substitute each operand with the SSA value
+    // corresponding to its current ElaboratorValue. Materialization of
+    // operands must happen *before* `newOp` so the defs dominate the use;
+    // anchor the builder at `newOp` (= immediately before it) for the
+    // duration of operand re-map, then advance past it.
+    materializer.getBuilder().setInsertionPoint(newOp);
+    for (auto &operand : newOp->getOpOperands()) {
+      auto emitError = [&]() {
+        auto diag = newOp->emitError();
+        diag.attachNote(newOp->getLoc())
+            << "while materializing operand#" << operand.getOperandNumber()
+            << " of external region op";
+        return diag;
+      };
+      auto elabVal = state.at(operand.get());
+      Value val = materializer.materialize(elabVal, newOp->getLoc(), emitError);
+      if (!val)
+        return failure();
+      operand.set(val);
+    }
+    materializer.getBuilder().setInsertionPointAfter(newOp);
+
+    // Register an old value as an opaque external value mapped to the
+    // corresponding new SSA value. RTG ops that consume `oldVal` will find the
+    // opaque value in `state` (it is treated as symbolic), and materializing it
+    // yields `newVal` directly via the materializer's cache.
+    auto mapOpaque = [&](Value oldVal, Value newVal) {
+      auto *storage = sharedState.internalizer.create<OpaqueExternalStorage>(
+          oldVal.getType(), oldVal.getLoc());
+      state[oldVal] = storage;
+      materializer.map(storage, newVal);
+    };
+
+    for (auto [oldRegion, newRegion] :
+         llvm::zip(op->getRegions(), newOp->getRegions())) {
+      if (oldRegion.empty())
+        continue;
+
+      // Give the new region a block whose arguments mirror the old block's
+      // argument types/locations, and register the old args as opaque values
+      // mapped to the new args so region-internal RTG ops can resolve them.
+      Block &oldBlock = oldRegion.front();
+      Block &newBlock = newRegion.emplaceBlock();
+      for (auto oldArg : oldBlock.getArguments()) {
+        Value newArg = newBlock.addArgument(oldArg.getType(), oldArg.getLoc());
+        mapOpaque(oldArg, newArg);
+      }
+
+      {
+        OpBuilder::InsertionGuard guard(materializer.getBuilder());
+        materializer.getBuilder().setInsertionPoint(&newBlock,
+                                                    newBlock.begin());
+        SmallVector<ElaboratorValue> unused;
+        // keepTerminator=true: the original terminator (rtg.yield, scf.yield,
+        // etc.) is cloned into the new block, preserving the op's expected
+        // terminator type.
+        if (failed(elaborate(oldRegion, {},
+                             /*keepTerminator=*/true, unused)))
+          return failure();
+      }
+    }
+
+    // Register each result as an opaque value mapped to the new op's result so
+    // downstream RTG ops consuming them find them in `state`.
+    for (auto [oldRes, newRes] :
+         llvm::zip(op->getResults(), newOp->getResults()))
+      mapOpaque(oldRes, newRes);
+
+    return DeletionKind::Delete;
   }
 
   FailureOr<DeletionKind> visitOp(GetSequenceOp op) {
@@ -1694,6 +1872,26 @@ public:
     return DeletionKind::Delete;
   }
 
+  FailureOr<DeletionKind> visitOp(StringToASCIIArrayOp op) {
+    auto opaque = state.at(op.getString());
+    if (isSymbolic(opaque))
+      return visitOpGeneric(op);
+
+    auto strAttr = dyn_cast<StringAttr>(std::get<TypedAttr>(opaque));
+    if (!strAttr)
+      return op->emitError("expected a string attribute");
+
+    auto i8Ty = IntegerType::get(op.getContext(), 8);
+    SmallVector<ElaboratorValue> array;
+    array.reserve(strAttr.getValue().size());
+    for (unsigned char c : strAttr.getValue())
+      array.push_back(ElaboratorValue(IntegerAttr::get(i8Ty, c)));
+
+    state[op.getResult()] = sharedState.internalizer.internalize<ArrayStorage>(
+        op.getResult().getType(), std::move(array));
+    return DeletionKind::Delete;
+  }
+
   FailureOr<DeletionKind> visitOp(ArrayExtractOp op) {
     auto array = get<ArrayStorage *>(op.getArray())->array;
     size_t idx = get<size_t>(op.getIndex());
@@ -1903,6 +2101,128 @@ public:
     state[op.getResult()] = memory->size;
     return DeletionKind::Delete;
   }
+
+  // Effect handler ops
+  //===--------------------------------------------------------------------===//
+
+  FailureOr<DeletionKind> visitOp(EffectOp op) { return DeletionKind::Keep; }
+
+  FailureOr<DeletionKind> visitOp(WithHandlersOp op) {
+    // Build the handler frame for this with_handlers scope.
+    HandlerFrame frame;
+    for (auto [effectAttr, handlerRegion] :
+         llvm::zip(op.getEffects(), op.getHandlerRegions()))
+      frame.handlers[cast<FlatSymbolRefAttr>(effectAttr).getAttr()] =
+          &handlerRegion;
+    handlerStack.push_back(std::move(frame));
+
+    SmallVector<ElaboratorValue> unused;
+    if (failed(elaborate(op.getBody(), {}, /*keepTerminator=*/false, unused)))
+      return failure();
+
+    // Pop only if not already consumed by a StopElaboration return.
+    if (!handlerStack.empty())
+      handlerStack.pop_back();
+
+    return DeletionKind::Delete;
+  }
+
+  FailureOr<DeletionKind> visitOp(PerformOp op) {
+    StringAttr effectName = op.getEffectAttr().getAttr();
+
+    // Search innermost-first for a handler for this effect.
+    Region *handlerRegion = nullptr;
+    for (int i = (int)handlerStack.size() - 1; i >= 0; --i) {
+      auto it = handlerStack[i].handlers.find(effectName);
+      if (it != handlerStack[i].handlers.end()) {
+        handlerRegion = it->second;
+        break;
+      }
+    }
+    if (!handlerRegion)
+      return op->emitError("no handler for effect @") << effectName.getValue();
+
+    // Collect remaining ops after this perform (for the continuation).
+    SmallVector<Operation *> remaining;
+    auto *block = op->getBlock();
+    for (auto it = std::next(op->getIterator());
+         it != block->end() && !it->hasTrait<OpTrait::IsTerminator>(); ++it)
+      remaining.push_back(&*it);
+
+    // Determine the resume type (null Value → unit-result effect).
+    Value performResultSSAVal =
+        op.getNumResults() > 0 ? Value(op.getResult()) : Value();
+    Type resumeType = performResultSSAVal ? performResultSSAVal.getType()
+                                          : NoneType::get(op.getContext());
+
+    auto *cont = sharedState.internalizer.create<ContinuationStorage>(
+        std::move(remaining), performResultSSAVal,
+        SmallVector<HandlerFrame>(handlerStack), resumeType, op.getLoc());
+
+    // Build handler arguments: effect operands followed by the continuation.
+    SmallVector<ElaboratorValue> handlerArgs;
+    for (auto operand : op.getOperands())
+      handlerArgs.push_back(state.at(operand));
+    handlerArgs.push_back(cont);
+
+    // Pop the frame that owns this handler before entering the handler body
+    // so the handler itself doesn't see its own effect.
+    HandlerFrame savedFrame = handlerStack.back();
+    handlerStack.pop_back();
+
+    SmallVector<ElaboratorValue> unused;
+    if (failed(elaborate(*handlerRegion, handlerArgs,
+                         /*keepTerminator=*/false, unused)))
+      return failure();
+
+    handlerStack.push_back(std::move(savedFrame));
+
+    return DeletionKind::StopElaboration;
+  }
+
+  FailureOr<DeletionKind> visitOp(ResumeOp op) {
+    auto *cont =
+        std::get<ContinuationStorage *>(state.at(op.getContinuation()));
+
+    // If the perform had a result, map it to the resume value.
+    if (cont->performResult && op.getValue())
+      state[cont->performResult] = state.at(op.getValue());
+
+    // Temporarily restore the handler stack from when perform was triggered.
+    auto savedStack = std::move(handlerStack);
+    handlerStack = cont->capturedHandlerStack;
+
+    for (auto *contOp : cont->remainingOps) {
+      auto result = dispatchOpVisitor(contOp);
+      if (failed(result)) {
+        handlerStack = std::move(savedStack);
+        return failure();
+      }
+      if (*result == DeletionKind::StopElaboration)
+        break;
+      if (*result == DeletionKind::Keep)
+        if (failed(materializer.materialize(contOp, state))) {
+          handlerStack = std::move(savedStack);
+          return failure();
+        }
+      LLVM_DEBUG({
+        llvm::dbgs() << "Elaborated continuation op " << *contOp << " to\n[";
+        llvm::interleaveComma(contOp->getResults(), llvm::dbgs(),
+                              [&](auto res) {
+                                if (state.contains(res))
+                                  llvm::dbgs() << state.at(res);
+                                else
+                                  llvm::dbgs() << "unknown";
+                              });
+        llvm::dbgs() << "]\n\n";
+      });
+    }
+
+    handlerStack = std::move(savedStack);
+    return DeletionKind::Delete;
+  }
+
+  //===--------------------------------------------------------------------===//
 
   FailureOr<DeletionKind> visitOp(TupleCreateOp op) {
     SmallVector<ElaboratorValue> values;
@@ -2180,7 +2500,8 @@ public:
                val) ||
            std::holds_alternative<SymbolicComputationWithIdentityStorage *>(
                val) ||
-           std::holds_alternative<SymbolicComputationStorage *>(val);
+           std::holds_alternative<SymbolicComputationStorage *>(val) ||
+           std::holds_alternative<OpaqueExternalStorage *>(val);
   }
 
   bool isSymbolic(Operation *op) {
@@ -2312,6 +2633,31 @@ public:
       return region.getParentOp()->emitOpError(
           "regions with more than one block are not supported");
 
+    // Save any prior bindings for this region's block arguments so that a
+    // recursive re-entry of the same region (e.g. nested invocation of the
+    // same handler region during a multi-shot resume whose continuation body
+    // re-performs the handled effect) does not clobber the outer frame's
+    // bindings of those args. Without this, the outer handler's continuation
+    // SSA value is rebound to the inner frame's continuation, and the outer
+    // handler's subsequent `rtg.resume %k, ...` resumes the inner frame.
+    SmallVector<std::pair<Value, std::optional<ElaboratorValue>>> savedArgs;
+    savedArgs.reserve(region.getNumArguments());
+    for (auto arg : region.getArguments()) {
+      auto it = state.find(arg);
+      if (it != state.end())
+        savedArgs.emplace_back(arg, it->second);
+      else
+        savedArgs.emplace_back(arg, std::nullopt);
+    }
+    llvm::scope_exit restoreArgs([&] {
+      for (auto &[arg, prev] : savedArgs) {
+        if (prev.has_value())
+          state[arg] = *prev;
+        else
+          state.erase(arg);
+      }
+    });
+
     for (auto [arg, elabArg] :
          llvm::zip(region.getArguments(), regionArguments))
       state[arg] = elabArg;
@@ -2322,6 +2668,11 @@ public:
       auto result = dispatchOpVisitor(&op);
       if (failed(result))
         return failure();
+
+      // A perform op elaborated the continuation inline; remaining ops in this
+      // block will be deleted by finalizer.
+      if (*result == DeletionKind::StopElaboration)
+        return success();
 
       if (*result == DeletionKind::Keep)
         if (failed(materializer.materialize(&op, state)))
@@ -2375,6 +2726,9 @@ private:
 
   // Allows us to convert ElaboratorValues to attributes.
   ElaboratorValueToAttributeConverter elabValConverter;
+
+  // Stack of handler frames for rtg.handle scopes, innermost last.
+  SmallVector<HandlerFrame> handlerStack;
 };
 } // namespace
 

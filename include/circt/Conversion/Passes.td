@@ -537,6 +537,7 @@ def ConvertMooreToCore : Pass<"convert-moore-to-core", "mlir::ModuleOp"> {
     "mlir::scf::SCFDialect",
     "mlir::math::MathDialect",
     "mlir::LLVM::LLVMDialect",
+    "mlir::ub::UBDialect",
     "sim::SimDialect",
     "verif::VerifDialect",
   ];
@@ -757,7 +758,8 @@ def ConvertVerifToSMT : Pass<"convert-verif-to-smt", "mlir::ModuleOp"> {
     "mlir::smt::SMTDialect",
     "mlir::arith::ArithDialect",
     "mlir::scf::SCFDialect",
-    "mlir::func::FuncDialect"
+    "mlir::func::FuncDialect",
+    "verif::VerifDialect"
   ];
   let options = [
     Option<"risingClocksOnly", "rising-clocks-only", "bool",
@@ -791,7 +793,8 @@ def LowerSMTToZ3LLVM : Pass<"lower-smt-to-z3-llvm", "mlir::ModuleOp"> {
   let summary = "Lower the SMT dialect to LLVM IR calling the Z3 API";
   let dependentDialects = [
     "mlir::smt::SMTDialect", "mlir::LLVM::LLVMDialect", "mlir::scf::SCFDialect",
-    "mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect"
+    "mlir::cf::ControlFlowDialect", "mlir::func::FuncDialect",
+    "verif::VerifDialect"
   ];
   let options = [
     Option<"debug", "debug", "bool", "false",
@@ -923,6 +926,8 @@ def ConvertDatapathToComb : Pass<"convert-datapath-to-comb"> {
     "circt::hw::HWDialect"
   ];
   let options = [
+    Option<"lowerCompress", "lower-compress", "bool", "true",
+           "Lower compress operators to a tree of compressor cells.">,
     Option<"lowerCompressToAdd", "lower-compress-to-add", "bool", "false",
            "Lower compress operators to variadic add.">,
     Option<"forceBooth", "lower-partial-product-to-booth", "bool", "false",

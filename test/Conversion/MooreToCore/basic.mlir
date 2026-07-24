@@ -359,6 +359,15 @@ func.func @DynExtractRefArrayElement(%j: !moore.ref<array<2 x array<1 x l3>>>, %
   return %0 : !moore.ref<array<1 x l3>>
 }
 
+// CHECK-LABEL: func.func @ExtractFromPackedStruct
+func.func @ExtractFromPackedStruct(%arg0: !moore.struct<{a: l1, b: l1, c: l2}>) -> !moore.l3 {
+  // CHECK: [[BITCAST:%.+]] = hw.bitcast %arg0 : (!hw.struct<a: i1, b: i1, c: i2>) -> i4
+  // CHECK: [[RES:%.+]] = comb.extract [[BITCAST]] from 1 : (i4) -> i3
+  %0 = moore.extract %arg0 from 1 : struct<{a: l1, b: l1, c: l2}> -> l3
+  // CHECK: return [[RES]]
+  return %0 : !moore.l3
+}
+
 // CHECK-LABEL: func @AdvancedConversion
 func.func @AdvancedConversion(%arg0: !moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>) -> (!moore.array<5 x struct<{exp_bits: i32, man_bits: i32}>>, !moore.i320) {
   // CHECK: [[V0:%.+]] = hw.constant 3978585893941511189997889893581765703992223160870725712510875979948892565035285336817671 : i320
@@ -510,6 +519,18 @@ moore.module private @PreservePortOrder(in %x: !moore.i42, out y: !moore.i42, in
   moore.output %x : !moore.i42
 }
 
+// CHECK-LABEL: hw.module @AssocArrayInputPort
+// CHECK-SAME: (in %assoc_array_port : !sim.assoc_array<i32, !sim.dstring>)
+moore.module @AssocArrayInputPort(in %assoc_array_port : !moore.assoc_array<i32, string>) {
+  moore.output
+}
+
+// CHECK-LABEL: hw.module @MixedPortsWithAssocArray
+// CHECK-SAME: (in %valid : i1, in %data : !sim.assoc_array<i32, !sim.dstring>, out out : i1)
+moore.module @MixedPortsWithAssocArray(in %valid : !moore.l1, in %data : !moore.assoc_array<i32, string>, out out : !moore.l1) {
+  moore.output %valid : !moore.l1
+}
+
 // CHECK-LABEL: hw.module @Variable
 moore.module @Variable() {
   // CHECK: [[TMP0:%.+]] = hw.constant 0 : i32
@@ -612,6 +633,24 @@ moore.module @UnpackedArray(in %arr : !moore.uarray<2 x i32>, in %sel : !moore.i
   %4 = moore.variable : <uarray<4 x uarray<8 x array<8 x i4>>>>
 
   moore.output %0 : !moore.i32
+}
+
+// CHECK-LABEL: hw.module private @QueueRefPort(out mem : !llhd.ref<!sim.queue<i8, 0>>)
+moore.module private @QueueRefPort(out mem : !moore.ref<queue<i8, 0>>) {
+  // CHECK: [[EMPTY:%.+]] = sim.queue.empty : <i8, 0>
+  // CHECK: [[SIG:%.+]] = llhd.sig [[EMPTY]] : !sim.queue<i8, 0>
+  %mem = moore.variable : <queue<i8, 0>>
+  // CHECK: hw.output [[SIG]] : !llhd.ref<!sim.queue<i8, 0>>
+  moore.output %mem : !moore.ref<queue<i8, 0>>
+}
+
+// CHECK-LABEL: hw.module @QueueHierRef()
+moore.module @QueueHierRef() {
+  // CHECK: [[INST:%.+]] = hw.instance "u_leaf" @QueueRefPort() -> (mem: !llhd.ref<!sim.queue<i8, 0>>)
+  %u_leaf.mem = moore.instance "u_leaf" @QueueRefPort() -> (mem: !moore.ref<queue<i8, 0>>)
+  // CHECK: llhd.prb [[INST]] : !sim.queue<i8, 0>
+  %0 = moore.read %u_leaf.mem : <queue<i8, 0>>
+  moore.output
 }
 
 // CHECK-LABEL: hw.module @Struct
@@ -1333,6 +1372,20 @@ func.func @PowSOp(%arg0: !moore.i32, %arg1: !moore.i32) {
   return
 }
 
+// CHECK-LABEL: func.func @Clog2
+func.func @Clog2(%arg0: !moore.i32) {
+  // CHECK: [[C0:%.+]] = hw.constant 0 : i32
+  // CHECK: [[C1:%.+]] = hw.constant 1 : i32
+  // CHECK: [[WIDTH:%.+]] = hw.constant 32 : i32
+  // CHECK: [[VALMINUS1:%.+]] = comb.sub %arg0, [[C1]] : i32
+  // CHECK: [[NZEROS:%.+]] = math.ctlz [[VALMINUS1]] : i32
+  // CHECK: [[SUB:%.+]] = comb.sub [[WIDTH]], [[NZEROS]] : i32
+  // CHECK: [[ISZERO:%.+]] = comb.icmp eq %arg0, [[C0]] : i32
+  // CHECK: comb.mux [[ISZERO]], [[C0]], [[SUB]] : i32
+  %0 = moore.builtin.clog2 %arg0 : i32
+  return
+}
+
 // CHECK-LABEL: @scfInsideProcess
 moore.module @scfInsideProcess(in %in0: !moore.i32, in %in1: !moore.i32) {
   %var = moore.variable : <!moore.i32>
@@ -1394,9 +1447,15 @@ func.func @Time(%arg0: !moore.time) -> (!moore.time, !moore.time) {
 moore.module @Unreachable() {
   // CHECK: llhd.process
   moore.procedure initial {
-    // CHECK-NEXT: llhd.halt
+    // CHECK-NEXT: ub.unreachable
     moore.unreachable
   }
+}
+
+// CHECK-LABEL: @UnreachableInFunction
+func.func @UnreachableInFunction() {
+  // CHECK-NEXT: ub.unreachable
+  moore.unreachable
 }
 
 // CHECK-LABEL: @SimulationControl
@@ -1554,6 +1613,13 @@ func.func @IntToStringConversion(%arg0: !moore.i45) {
   return
 }
 
+// CHECK-LABEL: func.func @StringToIntConversion
+func.func @StringToIntConversion(%arg0: !moore.string) {
+  // CHECK-NEXT: sim.string.string_to_int %arg0 : i45
+  moore.string_to_int %arg0 : i45
+  return
+}
+
 // CHECK-LABEL: func.func @FormatStringToStringConversion
 func.func @FormatStringToStringConversion(%arg0: !moore.format_string) {
   // CHECK-NEXT: sim.string.format_to_string %arg0
@@ -1568,7 +1634,23 @@ func.func @ConvertRealOperations(%arg0: !moore.f32, %arg1: !moore.f64) {
 
   // CHECK: arith.truncf %arg1 : f64 to f32
   moore.convert_real %arg1 : f64 -> f32
-  
+
+  return
+}
+
+// CHECK-LABEL: func.func @RealBitsLowering
+func.func @RealBitsLowering(%arg0: !moore.f64, %arg1: !moore.i64, %arg2: !moore.f32, %arg3: !moore.i32) {
+  // CHECK-NEXT: arith.bitcast %arg0 : f64 to i64
+  %0 = moore.builtin.realtobits %arg0
+
+  // CHECK-NEXT: arith.bitcast %arg1 : i64 to f64
+  %1 = moore.builtin.bitstoreal %arg1 : i64
+
+  // CHECK-NEXT: arith.bitcast %arg2 : f32 to i32
+  %2 = moore.builtin.shortrealtobits %arg2
+
+  // CHECK-NEXT: arith.bitcast %arg3 : i32 to f32
+  %3 = moore.builtin.bitstoshortreal %arg3 : i32
   return
 }
 
@@ -1645,7 +1727,7 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[NEWQ:%.+]] = sim.queue.insert %arg0 into [[QR]] at %arg1 : <i32, 10>
   // CHECK: llhd.drv [[Q]], [[NEWQ]]
   moore.queue.insert %arg0 into %q at %arg1 : <!moore.queue<i32, 10>>
-  
+
   // CHECK: [[QR:%.+]] = llhd.prb [[Q]]
   // CHECK: [[NEWQ:%.+]] = sim.queue.set [[QR]][%arg1] = %arg0 : <i32, 10>
   // CHECK: llhd.drv [[Q]], [[NEWQ]]
@@ -1690,11 +1772,83 @@ func.func @QueueOperations(%arg0: !moore.i32, %arg1: !moore.i32) {
   // CHECK: [[UPR:%.+]] = llhd.prb [[UPVAR]]
   %upr = moore.read %uparray : <!moore.uarray<4 x i32>>
 
+  // CHECK: [[LHSI:%.+]] = hw.bitcast [[UPR]] : (!hw.array<4xi32>) -> i128
+  // CHECK: [[RHSI:%.+]] = hw.bitcast [[UPR]] : (!hw.array<4xi32>) -> i128
+  // CHECK: comb.icmp eq [[LHSI]], [[RHSI]] : i128
+  moore.uarray_cmp eq %upr, %upr : !moore.uarray<4 x i32> -> i1
+
+  // CHECK: [[LHSI2:%.+]] = hw.bitcast [[UPR]] : (!hw.array<4xi32>) -> i128
+  // CHECK: [[RHSI2:%.+]] = hw.bitcast [[UPR]] : (!hw.array<4xi32>) -> i128
+  // CHECK: comb.icmp ne [[LHSI2]], [[RHSI2]] : i128
+  moore.uarray_cmp ne %upr, %upr : !moore.uarray<4 x i32> -> i1
+
   // CHECK: [[QFROMUP:%.+]] = sim.queue.from_array [[UPR]] : !hw.array<4xi32> -> <i32, 0>
   %2 = moore.queue.from_unpacked_array %upr : !moore.uarray<4 x i32> -> <i32, 0>
 
   // CHECK: [[CONCAT:%.+]] = sim.queue.concat ([[QR]], [[DIFFB]]) : (!sim.queue<i32, 10>, !sim.queue<i32, 0>) <i32, 5>
   %concatres = moore.queue.concat (%qr, %diffbounds) : (!moore.queue<i32, 10>, !moore.queue<i32, 0>) <i32, 5>
+
+  return
+}
+
+// CHECK-LABEL: func.func @AssocArrayOperations
+func.func @AssocArrayOperations(%arg0: !moore.i32, %arg1: !moore.i8) {
+  // CHECK: [[EMPTY:%.+]] = sim.assoc_array.empty : <i8, i32>
+  // CHECK: [[AA:%.+]] = llhd.sig [[EMPTY]] : !sim.assoc_array<i8, i32>
+  %aa = moore.variable : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR:%.+]] = llhd.prb [[AA]]
+  %aar = moore.read %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[ZERO:%.+]] = hw.constant 0 : i8
+  // CHECK: [[RAW:%.+]] = sim.assoc_array.get [[AAR]][%arg0] : <i8, i32>
+  // CHECK: [[FOUND:%.+]] = sim.assoc_array.exists %arg0 in [[AAR]] : <i8, i32>
+  // CHECK: [[C0:%.+]] = hw.constant 0 : i32
+  // CHECK: [[EXISTSBIT:%.+]] = comb.icmp ne [[FOUND]], [[C0]] : i32
+  // CHECK: [[EL:%.+]] = comb.mux [[EXISTSBIT]], [[RAW]], [[ZERO]] : i8
+  %el = moore.assoc_array_extract %aar[%arg0] : <i8, i32>
+
+  // CHECK: [[AAR2:%.+]] = llhd.prb [[AA]]
+  // CHECK: [[NEWAA:%.+]] = sim.assoc_array.set [[AAR2]][%arg0] = %arg1 : <i8, i32>
+  // CHECK: llhd.drv [[AA]], [[NEWAA]]
+  moore.assoc_array.set %aa[%arg0] = %arg1 : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR3:%.+]] = llhd.prb [[AA]]
+  // CHECK: [[NEWAA2:%.+]] = sim.assoc_array.delete index %arg0 of [[AAR3]] : <i8, i32>
+  // CHECK: llhd.drv [[AA]], [[NEWAA2]]
+  moore.assoc_array.delete index %arg0 from %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[NEWAA3:%.+]] = sim.assoc_array.empty : <i8, i32>
+  // CHECK: llhd.drv [[AA]], [[NEWAA3]]
+  moore.assoc_array.clear %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR4:%.+]] = llhd.prb [[AA]]
+  // CHECK: sim.assoc_array.size [[AAR4]] : <i8, i32>
+  moore.assoc_array.size %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR5:%.+]] = llhd.prb [[AA]]
+  // CHECK: sim.assoc_array.exists %arg0 in [[AAR5]] : <i8, i32>
+  moore.assoc_array.exists %arg0 in %aa : <!moore.assoc_array<i8, i32>>
+
+  %idx = moore.variable : <i32>
+
+  // CHECK: [[AAR6:%.+]] = llhd.prb [[AA]]
+  // CHECK: sim.assoc_array.first [[AAR6]] : <i8, i32>
+  moore.assoc_array.first to %idx from %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR7:%.+]] = llhd.prb [[AA]]
+  // CHECK: sim.assoc_array.last [[AAR7]] : <i8, i32>
+  moore.assoc_array.last to %idx from %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR8:%.+]] = llhd.prb [[AA]]
+  // CHECK: [[CURIDX1:%.+]] = llhd.prb
+  // CHECK: sim.assoc_array.next [[AAR8]][[[CURIDX1]]] : <i8, i32>
+  moore.assoc_array.next to %idx from %aa : <!moore.assoc_array<i8, i32>>
+
+  // CHECK: [[AAR9:%.+]] = llhd.prb [[AA]]
+  // CHECK: [[CURIDX2:%.+]] = llhd.prb
+  // CHECK: sim.assoc_array.prev [[AAR9]][[[CURIDX2]]] : <i8, i32>
+  moore.assoc_array.prev to %idx from %aa : <!moore.assoc_array<i8, i32>>
 
   return
 }
@@ -1935,4 +2089,119 @@ func.func @FFlushWithArg(%arg0: !moore.i32) {
   // CHECK-NEXT: sim.flush [[STREAM]]
   moore.builtin.fflush %arg0
   return
+}
+
+// CHECK-LABEL: hw.module @ReadMem
+moore.module @ReadMem() {
+  %mem = moore.variable : <uarray<256 x l8>>
+  %mem3 = moore.variable : <uarray<3 x uarray<5 x uarray<4 x l32>>>>
+  %qmem = moore.variable : <queue<l8, 0>>
+  %emem = moore.variable : <uarray<8 x l2>>
+  moore.procedure initial {
+    %0 = moore.constant_string "mem.data" : i64
+    %1 = moore.int_to_string %0 : i64
+    %start = moore.constant 16 : i32
+    %finish = moore.constant 128 : i32
+    // CHECK: [[M1:%.+]] = llhd.prb %mem
+    // CHECK: [[L1:%.+]] = sim.sv.readmem %{{.+}}, [[M1]] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !hw.array<256xi8>
+    // CHECK: llhd.drv %mem, [[L1]] after %{{.+}}
+    moore.builtin.readmem hex %1, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    // CHECK: [[M2:%.+]] = llhd.prb %mem
+    // CHECK: [[L2:%.+]] = sim.sv.readmem %{{.+}}, [[M2]] start = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>, isBinary = true} : !hw.array<256xi8>
+    // CHECK: llhd.drv %mem, [[L2]] after %{{.+}}
+    moore.builtin.readmem bin %1, %mem start = %start {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    // CHECK: [[M3:%.+]] = llhd.prb %mem
+    // CHECK: [[L3:%.+]] = sim.sv.readmem %{{.+}}, [[M3]] start = %{{.+}} finish = %{{.+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !hw.array<256xi8>
+    // CHECK: llhd.drv %mem, [[L3]] after %{{.+}}
+    moore.builtin.readmem hex %1, %mem start = %start finish = %finish {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    // CHECK: [[M4:%.+]] = llhd.prb %mem
+    // CHECK: [[L4:%.+]] = sim.sv.readmem %{{.+}}, [[M4]] slice[%{{.+}}, %{{.+}}] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !hw.array<256xi8>
+    // CHECK: llhd.drv %mem, [[L4]] after %{{.+}}
+    moore.builtin.readmem hex %1, %mem slice[%start, %finish] {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    // CHECK: [[M5:%.+]] = llhd.prb %mem3
+    // CHECK: [[L5:%.+]] = sim.sv.readmem %{{.+}}, [[M5]] {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !hw.array<3xarray<5xarray<4xi32>>>
+    // CHECK: llhd.drv %mem3, [[L5]] after %{{.+}}
+    moore.builtin.readmem hex %1, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !moore.ref<uarray<3 x uarray<5 x uarray<4 x l32>>>>
+    // CHECK: [[M6:%.+]] = llhd.prb %qmem
+    // CHECK: [[L6:%.+]] = sim.sv.readmem %{{.+}}, [[M6]] {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !sim.queue<i8, 0>
+    // CHECK: llhd.drv %qmem, [[L6]] after %{{.+}}
+    moore.builtin.readmem hex %1, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
+    // CHECK: [[M7:%.+]] = llhd.prb %emem
+    // CHECK: [[L7:%.+]] = sim.sv.readmem %{{.+}}, [[M7]] {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !hw.array<8xi2>
+    // CHECK: llhd.drv %emem, [[L7]] after %{{.+}}
+    moore.builtin.readmem hex %1, %emem {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !moore.ref<uarray<8 x l2>>
+    moore.return
+  }
+  moore.output
+}
+
+// CHECK-LABEL: hw.module @StringArrayVariable
+moore.module @StringArrayVariable() {
+  // CHECK-NEXT: [[ZERO:%.+]] = sim.string.literal ""
+  // CHECK-NEXT: [[INIT:%.+]] = hw.array_create [[ZERO]], [[ZERO]] : !sim.dstring
+  // CHECK-NEXT: [[SIG:%.+]] = llhd.sig [[INIT]] : !hw.array<2x!sim.dstring>
+  %names = moore.variable : <uarray<2 x string>>
+
+  // CHECK-NEXT: llhd.process
+  moore.procedure initial {
+    // CHECK-NEXT: [[LIT:%.+]] = hw.constant {{.*}} : i32
+    %0 = moore.constant_string "zero" : i32
+    // CHECK-NEXT: [[STR:%.+]] = sim.string.int_to_string [[LIT]] : i32
+    %1 = moore.int_to_string %0 : i32
+    // CHECK-NEXT: [[IDX:%.+]] = hw.constant false
+    // CHECK-NEXT: [[ELEM:%.+]] = llhd.sig.array_get [[SIG]]{{\[}}[[IDX]]{{\]}} : <!hw.array<2x!sim.dstring>>
+    %ref = moore.extract_ref %names from 0 : !moore.ref<!moore.uarray<2 x string>> -> !moore.ref<!moore.string>
+    // CHECK-NEXT: [[TIME:%.+]] = llhd.constant_time <0ns, 0d, 1e>
+    // CHECK-NEXT: llhd.drv [[ELEM]], [[STR]] after [[TIME]] : !sim.dstring
+    moore.blocking_assign %ref, %1 : string
+
+    // CHECK-NEXT: [[READ:%.+]] = llhd.prb [[ELEM]] : !sim.dstring
+    %2 = moore.read %ref : <string>
+    // CHECK-NEXT: [[FMT:%.+]] = sim.fmt.string [[READ]] : !sim.dstring
+    %3 = moore.fmt.string %2
+    // CHECK-NEXT: sim.proc.print [[FMT]]
+    moore.builtin.display %3
+    // CHECK-NEXT: llhd.halt
+    moore.return
+  }
+}
+
+// CHECK-LABEL: func.func @UArrayCmpElementFallback
+func.func @UArrayCmpElementFallback(
+  %s1: !moore.uarray<2 x string>, %s2: !moore.uarray<2 x string>,
+  %q1: !moore.uarray<2 x queue<i32, 0>>, %q2: !moore.uarray<2 x queue<i32, 0>>,
+  %a1: !moore.uarray<2 x assoc_array<i32, string>>,
+  %a2: !moore.uarray<2 x assoc_array<i32, string>>,
+  %r1: !moore.uarray<2 x f64>, %r2: !moore.uarray<2 x f64>) {
+
+  // CHECK: arith.cmpf oeq, %{{.+}}, %{{.+}} : f64
+  // CHECK: arith.cmpf oeq, %{{.+}}, %{{.+}} : f64
+  // CHECK: comb.and bin %{{.+}}, %{{.+}} : i1
+  %0 = moore.uarray_cmp eq %r1, %r2 : !moore.uarray<2 x f64> -> i1
+
+  // CHECK: [[SL0:%.+]] = hw.array_get %{{.+}}[%{{.+}}] : !hw.array<2x!sim.dstring>
+  // CHECK: [[SR0:%.+]] = hw.array_get %{{.+}}[%{{.+}}] : !hw.array<2x!sim.dstring>
+  // CHECK: [[SEQ0:%.+]] = sim.string.cmp eq [[SL0]], [[SR0]] : !sim.dstring
+  // CHECK: [[SL1:%.+]] = hw.array_get %{{.+}}[%{{.+}}] : !hw.array<2x!sim.dstring>
+  // CHECK: [[SR1:%.+]] = hw.array_get %{{.+}}[%{{.+}}] : !hw.array<2x!sim.dstring>
+  // CHECK: [[SEQ1:%.+]] = sim.string.cmp eq [[SL1]], [[SR1]] : !sim.dstring
+  // CHECK: comb.and bin [[SEQ0]], [[SEQ1]] : i1
+  %1 = moore.uarray_cmp eq %s1, %s2 : !moore.uarray<2 x string> -> i1
+
+  // CHECK: sim.string.cmp ne %{{.+}}, %{{.+}} : !sim.dstring
+  // CHECK: sim.string.cmp ne %{{.+}}, %{{.+}} : !sim.dstring
+  // CHECK: comb.or bin %{{.+}}, %{{.+}} : i1
+  %2 = moore.uarray_cmp ne %s1, %s2 : !moore.uarray<2 x string> -> i1
+
+  // CHECK: sim.queue.cmp eq %{{.+}}, %{{.+}} : <i32, 0>
+  // CHECK: sim.queue.cmp eq %{{.+}}, %{{.+}} : <i32, 0>
+  // CHECK: comb.and bin %{{.+}}, %{{.+}} : i1
+  %3 = moore.uarray_cmp eq %q1, %q2 : !moore.uarray<2 x queue<i32, 0>> -> i1
+
+  // CHECK: sim.assoc_array.cmp eq %{{.+}}, %{{.+}}
+  // CHECK: sim.assoc_array.cmp eq %{{.+}}, %{{.+}}
+  // CHECK: comb.and bin %{{.+}}, %{{.+}} : i1
+  %4 = moore.uarray_cmp eq %a1, %a2 : !moore.uarray<2 x assoc_array<i32, string>> -> i1
+
+  func.return
 }

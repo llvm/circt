@@ -1,5 +1,5 @@
-// RUN: circt-verilog --parse-only --always-at-star-as-comb=0 %s | FileCheck %s --check-prefixes=CHECK,CHECK-STAR
-// RUN: circt-verilog --parse-only --always-at-star-as-comb=1 %s | FileCheck %s --check-prefixes=CHECK,CHECK-COMB
+// RUN: circt-verilog --import-only --always-at-star-as-comb=0 %s | FileCheck %s --check-prefixes=CHECK,CHECK-STAR
+// RUN: circt-verilog --import-only --always-at-star-as-comb=1 %s | FileCheck %s --check-prefixes=CHECK,CHECK-COMB
 // REQUIRES: slang
 
 // Internal issue in Slang v3 about jump depending on uninitialised value.

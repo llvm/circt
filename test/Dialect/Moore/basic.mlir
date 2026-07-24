@@ -588,3 +588,14 @@ moore.module @CoroutineCallTest() {
   }
   moore.output
 }
+
+// CHECK-LABEL: func.func @ReadMemOps
+func.func @ReadMemOps(%arg0: !moore.string, %arg1: !moore.ref<uarray<16 x l8>>, %arg2: !moore.ref<queue<l8, 0>>, %arg3: !moore.i32) {
+  // CHECK: moore.builtin.readmem hex %arg0, %arg1 {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<16 x l8>>
+  moore.builtin.readmem hex %arg0, %arg1 {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<16 x l8>>
+  // CHECK: moore.builtin.readmem bin %arg0, %arg1 start = %arg3 finish = %arg3 slice[%arg3, %arg3] {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !moore.ref<uarray<16 x l8>>
+  moore.builtin.readmem bin %arg0, %arg1 start = %arg3 finish = %arg3 slice[%arg3, %arg3] {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !moore.ref<uarray<16 x l8>>
+  // CHECK: moore.builtin.readmem hex %arg0, %arg2 {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
+  moore.builtin.readmem hex %arg0, %arg2 {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
+  return
+}

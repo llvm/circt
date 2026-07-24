@@ -394,6 +394,27 @@ function void CaseStatements(int x, int a, int b, int c);
   endcase
 endfunction
 
+// CHECK-LABEL: func.func private @CaseStatementsOnReal(
+// CHECK-SAME: %arg0: !moore.f64
+function void CaseStatementsOnReal(real x);
+  case (x)
+    // CHECK: [[ITEM1:%.+]] = moore.constant_real 1.000000e+00 : f64
+    // CHECK: [[COND1:%.+]] = moore.feq %arg0, [[ITEM1]] : f64 -> i1
+    // CHECK-NOT: moore.case_eq
+    // CHECK: [[FLAG1:%.+]] = moore.to_builtin_int [[COND1]] : i1
+    // CHECK: cf.cond_br [[FLAG1]]
+    1.0: dummyA();
+    // CHECK: [[ONE:%.+]] = moore.constant_real 1.000000e+00 : f64
+    // CHECK: [[ITEM2:%.+]] = moore.fneg [[ONE]] : f64
+    // CHECK: [[COND2:%.+]] = moore.feq %arg0, [[ITEM2]] : f64 -> i1
+    // CHECK-NOT: moore.case_eq
+    // CHECK: [[FLAG2:%.+]] = moore.to_builtin_int [[COND2]] : i1
+    // CHECK: cf.cond_br [[FLAG2]]
+    -1.0: dummyB();
+    default: dummyC();
+  endcase
+endfunction
+
 // CHECK-LABEL: func.func private @ForLoopStatements(
 // CHECK-SAME: %arg0: !moore.i32
 // CHECK-SAME: %arg1: !moore.i32
@@ -540,6 +561,100 @@ function void ForeachStatements(int x, bit y);
 // CHECK: ^[[BB10]]:
 // CHECK: return
   end
+endfunction
+
+// CHECK: func.func private @UnboundedArrayForeachStatements(%[[ARG0:.*]]: !moore.i32, %[[ARG1:.*]]: !moore.i1) {
+function void UnboundedArrayForeachStatements(int x, bit y);
+  // CHECK: %[[ARRAY:.*]] = moore.variable : <uarray<3 x open_uarray<queue<l8, 0>>>>
+  logic [7:0] array[4:2][][$];
+
+  // CHECK: %[[C2:.*]] = moore.constant 2 : i32
+  // CHECK: %[[I:.*]] = moore.variable %[[C2]] : <i32>
+  // CHECK: cf.br ^[[BB1:.*]]
+  // CHECK: ^[[BB1]]:
+  // CHECK: %[[C4:.*]] = moore.constant 4 : i32
+  // CHECK: %[[I_VAL:.*]] = moore.read %[[I]] : <i32>
+  // CHECK: %[[CMP1:.*]] = moore.sle %[[I_VAL]], %[[C4]] : i32 -> i1
+  // CHECK: %[[CONV1:.*]] = moore.to_builtin_int %[[CMP1]] : i1
+  // CHECK: cf.cond_br %[[CONV1]], ^[[BB2:.*]], ^[[BB14:.*]]
+  // CHECK: ^[[BB2]]:
+  // CHECK: %[[C0_J:.*]] = moore.constant 0 : i32
+  // CHECK: %[[J:.*]] = moore.variable %[[C0_J]] : <i32>
+  // CHECK: cf.br ^[[BB3:.*]]
+  // CHECK: ^[[BB3]]:
+  // CHECK: %[[ARRAY_VAL1:.*]] = moore.read %[[ARRAY]] : <uarray<3 x open_uarray<queue<l8, 0>>>>
+  // CHECK: %[[I_VAL2:.*]] = moore.read %[[I]] : <i32>
+  // CHECK: %[[C2_0:.*]] = moore.constant 2 : i32
+  // CHECK: %[[I_VAL_FINAL:.*]] = moore.sub %[[I_VAL2]], %[[C2_0]] : i32
+  // CHECK: %[[DYN1:.*]] = moore.dyn_extract %[[ARRAY_VAL1]] from %[[I_VAL_FINAL]] : uarray<3 x open_uarray<queue<l8, 0>>>, i32 -> open_uarray<queue<l8, 0>>
+  // CHECK: %[[SIZE1:.*]] = moore.open_uarray_size %[[DYN1]] : <queue<l8, 0>>
+  // CHECK: %[[C1_J:.*]] = moore.constant 1 : i32
+  // CHECK: %[[SUB1:.*]] = moore.sub %[[SIZE1]], %[[C1_J]] : i32
+  // CHECK: %[[J_VAL:.*]] = moore.read %[[J]] : <i32>
+  // CHECK: %[[CMP2:.*]] = moore.sle %[[J_VAL]], %[[SUB1]] : i32 -> i1
+  // CHECK: %[[CONV2:.*]] = moore.to_builtin_int %[[CMP2]] : i1
+  // CHECK: cf.cond_br %[[CONV2]], ^[[BB4:.*]], ^[[BB12:.*]]
+  // CHECK: ^[[BB4]]:
+  // CHECK: %[[C0_K:.*]] = moore.constant 0 : i32
+  // CHECK: %[[K:.*]] = moore.variable %[[C0_K]] : <i32>
+  // CHECK: cf.br ^[[BB5:.*]]
+  // CHECK: ^[[BB5]]:
+  // CHECK: %[[ARRAY_VAL2:.*]] = moore.read %[[ARRAY]] : <uarray<3 x open_uarray<queue<l8, 0>>>>
+  // CHECK: %[[I_VAL3:.*]] = moore.read %[[I]] : <i32>
+  // CHECK: %[[C2_1:.*]] = moore.constant 2 : i32
+  // CHECK: %[[I_VAL3_FINAL:.*]] = moore.sub %[[I_VAL3]], %[[C2_1]] : i32
+  // CHECK: %[[DYN2:.*]] = moore.dyn_extract %[[ARRAY_VAL2]] from %[[I_VAL3_FINAL]] : uarray<3 x open_uarray<queue<l8, 0>>>, i32 -> open_uarray<queue<l8, 0>>
+  // CHECK: %[[J_VAL2:.*]] = moore.read %[[J]] : <i32>
+  // CHECK: %[[DYN3:.*]] = moore.dyn_extract %[[DYN2]] from %[[J_VAL2]] : open_uarray<queue<l8, 0>>, i32 -> queue<l8, 0>
+  // CHECK: %[[SIZE2:.*]] = moore.builtin.size %[[DYN3]] : <l8, 0>
+  // CHECK: %[[C1_K:.*]] = moore.constant 1 : i32
+  // CHECK: %[[SUB2:.*]] = moore.sub %[[SIZE2]], %[[C1_K]] : i32
+  // CHECK: %[[K_VAL:.*]] = moore.read %[[K]] : <i32>
+  // CHECK: %[[CMP3:.*]] = moore.sle %[[K_VAL]], %[[SUB2]] : i32 -> i1
+  // CHECK: %[[CONV3:.*]] = moore.to_builtin_int %[[CMP3]] : i1
+  // CHECK: cf.cond_br %[[CONV3]], ^[[BB6:.*]], ^[[BB10:.*]]
+  foreach (array[i, j, k]) begin
+    // CHECK: ^[[BB6]]:
+    // CHECK: %[[CONV4:.*]] = moore.to_builtin_int %[[ARG1]] : i1
+    // CHECK: cf.cond_br %[[CONV4]], ^[[BB7:.*]], ^[[BB8:.*]]
+    if (y) begin
+      // CHECK: ^[[BB7]]:
+      // CHECK: call @dummyA() : () -> ()
+      // CHECK: cf.br ^[[BB10]]
+      dummyA();
+      break;
+    end else begin
+      // CHECK: ^[[BB8]]:
+      // CHECK: call @dummyB() : () -> ()
+      // CHECK: cf.br ^[[BB9:.*]]
+      dummyB();
+      continue;
+    end
+  end
+  // CHECK: ^[[BB9]]:
+  // CHECK: %[[K_VAL2:.*]] = moore.read %[[K]] : <i32>
+  // CHECK: %[[C1_K2:.*]] = moore.constant 1 : i32
+  // CHECK: %[[ADD1:.*]] = moore.add %[[K_VAL2]], %[[C1_K2]] : i32
+  // CHECK: moore.blocking_assign %[[K]], %[[ADD1]] : i32
+  // CHECK: cf.br ^[[BB5]]
+  // CHECK: ^[[BB10]]:
+  // CHECK: cf.br ^[[BB11:.*]]
+  // CHECK: ^[[BB11]]:
+  // CHECK: %[[J_VAL3:.*]] = moore.read %[[J]] : <i32>
+  // CHECK: %[[C1_J2:.*]] = moore.constant 1 : i32
+  // CHECK: %[[ADD2:.*]] = moore.add %[[J_VAL3]], %[[C1_J2]] : i32
+  // CHECK: moore.blocking_assign %[[J]], %[[ADD2]] : i32
+  // CHECK: cf.br ^[[BB3]]
+  // CHECK: ^[[BB12]]:
+  // CHECK: cf.br ^[[BB13:.*]]
+  // CHECK: ^[[BB13]]:
+  // CHECK: %[[I_VAL4:.*]] = moore.read %[[I]] : <i32>
+  // CHECK: %[[C1_I:.*]] = moore.constant 1 : i32
+  // CHECK: %[[ADD3:.*]] = moore.add %[[I_VAL4]], %[[C1_I]] : i32
+  // CHECK: moore.blocking_assign %[[I]], %[[ADD3]] : i32
+  // CHECK: cf.br ^[[BB1]]
+  // CHECK: ^[[BB14]]:
+  // CHECK: return
 endfunction
 
 
@@ -2582,6 +2697,15 @@ module ImmediateAssertiWithActionBlock;
   always_comb begin
     assert (x) c = 1; else c = 0;
   end
+
+  // Assert in function block
+  // CHECK:func.func private @check([[ARG:%.*]]: !moore.l32) {
+  // CHECK:  [[C0:%.+]] = moore.constant 0 : l32
+  // CHECK:  [[COND:%.+]] = moore.ugt [[ARG]], [[C0]] : l32 -> l1
+  // CHECK:  moore.assert immediate [[COND]] : l1
+  function automatic void check(logic[31:0] w);
+    assert (w > 0);
+  endfunction
 endmodule
 
 // CHECK-LABEL: moore.module @AssertNoActionBlock
@@ -5315,3 +5439,92 @@ task BuiltinCastFalse;
   $cast(s, 2.3);
   $cast(q, 2.3);
 endtask
+
+// CHECK-LABEL: func.func private @LogicalEquivReal
+// CHECK-SAME: ([[RVAL:%.+]]: !moore.f64, [[VAL:%.+]]: !moore.l1)
+function logic LogicalEquivReal(real rval, logic val);
+  // CHECK: [[B:%.+]] = moore.bool_cast [[RVAL]] : f64 -> i1
+  // CHECK: [[L:%.+]] = moore.int_to_logic [[B]] : i1
+  // CHECK: [[NL:%.+]] = moore.not [[L]] : l1
+  // CHECK: [[NV:%.+]] = moore.not [[VAL]] : l1
+  // CHECK: [[BOTH:%.+]] = moore.and [[L]], [[VAL]] : l1
+  // CHECK: [[NBOTH:%.+]] = moore.and [[NL]], [[NV]] : l1
+  // CHECK: moore.or [[BOTH]], [[NBOTH]] : l1
+  return rval <-> val;
+endfunction
+
+// CHECK-LABEL: func.func private @LogicalImplReal
+// CHECK-SAME: ([[RVAL:%.+]]: !moore.f64, [[VAL:%.+]]: !moore.l1)
+function logic LogicalImplReal(real rval, logic val);
+  // CHECK: [[B:%.+]] = moore.bool_cast [[RVAL]] : f64 -> i1
+  // CHECK: [[L:%.+]] = moore.int_to_logic [[B]] : i1
+  // CHECK: [[NL:%.+]] = moore.not [[L]] : l1
+  // CHECK: moore.or [[NL]], [[VAL]] : l1
+  return rval -> val;
+endfunction
+
+// CHECK-LABEL: func.func private @LogicalAndReal
+// CHECK-SAME: ([[RVAL:%.+]]: !moore.f64, [[VAL:%.+]]: !moore.l1)
+function logic LogicalAndReal(real rval, logic val);
+  // CHECK: [[B:%.+]] = moore.bool_cast [[RVAL]] : f64 -> i1
+  // CHECK: [[L:%.+]] = moore.int_to_logic [[B]] : i1
+  // CHECK: moore.and [[L]], [[VAL]] : l1
+  return rval && val;
+endfunction
+
+// CHECK-LABEL: func.func private @LogicalOrReal
+// CHECK-SAME: ([[RVAL:%.+]]: !moore.f64, [[VAL:%.+]]: !moore.l1)
+function logic LogicalOrReal(real rval, logic val);
+  // CHECK: [[B:%.+]] = moore.bool_cast [[RVAL]] : f64 -> i1
+  // CHECK: [[L:%.+]] = moore.int_to_logic [[B]] : i1
+  // CHECK: moore.or [[L]], [[VAL]] : l1
+  return rval || val;
+endfunction
+
+// CHECK-LABEL: moore.module private @ArrayInstSub
+module ArrayInstSub(input a, output y);
+  assign y = a;
+endmodule
+
+// CHECK-LABEL: moore.module @ArrayInstTop
+module ArrayInstTop(input [3:0] a, output [3:0] y);
+  // CHECK: [[A0:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
+  // CHECK: [[Y0:%.+]] = moore.extract_ref %y from 0 : <l4> -> <l1>
+  // CHECK: [[R0:%.+]] = moore.instance "u_0" @ArrayInstSub(a: [[A0]]: !moore.l1) -> (y: !moore.l1)
+  // CHECK: moore.assign [[Y0]], [[R0]] : l1
+  // CHECK: [[A1:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
+  // CHECK: [[Y1:%.+]] = moore.extract_ref %y from 1 : <l4> -> <l1>
+  // CHECK: [[R1:%.+]] = moore.instance "u_1" @ArrayInstSub(a: [[A1]]: !moore.l1) -> (y: !moore.l1)
+  // CHECK: moore.assign [[Y1]], [[R1]] : l1
+  // CHECK: [[A2:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
+  // CHECK: [[Y2:%.+]] = moore.extract_ref %y from 2 : <l4> -> <l1>
+  // CHECK: [[R2:%.+]] = moore.instance "u_2" @ArrayInstSub(a: [[A2]]: !moore.l1) -> (y: !moore.l1)
+  // CHECK: moore.assign [[Y2]], [[R2]] : l1
+  // CHECK: [[A3:%.+]] = moore.dyn_extract {{.*}}from {{.*}} : l4, i32 -> l1
+  // CHECK: [[Y3:%.+]] = moore.extract_ref %y from 3 : <l4> -> <l1>
+  // CHECK: [[R3:%.+]] = moore.instance "u_3" @ArrayInstSub(a: [[A3]]: !moore.l1) -> (y: !moore.l1)
+  // CHECK: moore.assign [[Y3]], [[R3]] : l1
+  ArrayInstSub u [3:0] (.a(a), .y(y));
+endmodule
+
+// CHECK-LABEL: moore.module @ArrayInstMultiDim
+module ArrayInstMultiDim(input [5:0] a, output [5:0] y);
+  // CHECK: moore.instance "u_1_2" @ArrayInstSub
+  // CHECK: moore.instance "u_1_3" @ArrayInstSub
+  // CHECK: moore.instance "u_1_4" @ArrayInstSub
+  // CHECK: moore.instance "u_2_2" @ArrayInstSub
+  // CHECK: moore.instance "u_2_3" @ArrayInstSub
+  // CHECK: moore.instance "u_2_4" @ArrayInstSub
+  ArrayInstSub u [1:2][4:2] (.a(a), .y(y));
+endmodule
+
+// CHECK-LABEL: moore.module @ArrayGateTop
+module ArrayGateTop(input [3:0] a, input [3:0] b, output [3:0] y);
+  // CHECK: [[G0:%.+]] = moore.extract_ref %y from 0 : <l4> -> <l1>
+  // CHECK: [[GA0:%.+]] = moore.and
+  // CHECK: moore.assign [[G0]], [[GA0]] : l1
+  // CHECK: [[G3:%.+]] = moore.extract_ref %y from 3 : <l4> -> <l1>
+  // CHECK: [[GA3:%.+]] = moore.and
+  // CHECK: moore.assign [[G3]], [[GA3]] : l1
+  and g [3:0] (y, a, b);
+endmodule

@@ -10,6 +10,7 @@ add_circt_conversion_library(CIRCTHWToLLVM
   LINK_LIBS PUBLIC
   CIRCTHW
   CIRCTSupport
+  MLIRDataLayoutInterfaces
   MLIRFuncDialect
   MLIRFuncTransforms
   MLIRLLVMCommonConversion

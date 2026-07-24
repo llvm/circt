@@ -9,7 +9,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "circt/Analysis/FIRRTLInstanceInfo.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLUtils.h"
@@ -112,14 +111,12 @@ struct LowerMemoryPass
   FMemModuleOp emitMemoryModule(MemOp op, const FirMemory &summary,
                                 const SmallVectorImpl<PortInfo> &ports);
   FMemModuleOp getOrCreateMemModule(MemOp op, const FirMemory &summary,
-                                    const SmallVectorImpl<PortInfo> &ports,
-                                    bool shouldDedup);
-  FModuleOp createWrapperModule(MemOp op, const FirMemory &summary,
-                                bool shouldDedup);
+                                    const SmallVectorImpl<PortInfo> &ports);
+  FModuleOp createWrapperModule(MemOp op, const FirMemory &summary);
   InstanceOp emitMemoryInstance(MemOp op, FModuleOp moduleOp,
                                 const FirMemory &summary);
-  void lowerMemory(MemOp mem, const FirMemory &summary, bool shouldDedup);
-  LogicalResult runOnModule(FModuleOp moduleOp, bool shouldDedup);
+  void lowerMemory(MemOp mem, const FirMemory &summary);
+  LogicalResult runOnModule(FModuleOp moduleOp);
   void runOnOperation() override;
 
   /// Cached module namespaces.
@@ -214,30 +211,23 @@ LowerMemoryPass::emitMemoryModule(MemOp op, const FirMemory &mem,
 
 FMemModuleOp
 LowerMemoryPass::getOrCreateMemModule(MemOp op, const FirMemory &summary,
-                                      const SmallVectorImpl<PortInfo> &ports,
-                                      bool shouldDedup) {
-  // Try to find a matching memory blackbox that we already created.  If
-  // shouldDedup is true, we will just generate a new memory module.
-  if (shouldDedup) {
-    auto it = memories.find(summary);
-    if (it != memories.end())
-      return it->second;
-  }
+                                      const SmallVectorImpl<PortInfo> &ports) {
+  // Try to find a matching memory blackbox that we already created.
+  auto it = memories.find(summary);
+  if (it != memories.end())
+    return it->second;
 
   // Create a new module for this memory. This can update the name recorded in
   // the memory's summary.
   auto moduleOp = emitMemoryModule(op, summary, ports);
 
-  // Record the memory module.  We don't want to use this module for other
-  // memories, then we don't add it to the table.
-  if (shouldDedup)
-    memories[summary] = moduleOp;
+  // Record the memory module so it can be reused for equivalent memories.
+  memories[summary] = moduleOp;
 
   return moduleOp;
 }
 
-void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
-                                  bool shouldDedup) {
+void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary) {
   auto *context = &getContext();
   auto ports = getMemoryModulePorts(summary);
 
@@ -258,7 +248,7 @@ void LowerMemoryPass::lowerMemory(MemOp mem, const FirMemory &summary,
 
   // Create an instance of the external memory module. The instance has the
   // same name as the target module.
-  auto memModule = getOrCreateMemModule(mem, summary, ports, shouldDedup);
+  auto memModule = getOrCreateMemModule(mem, summary, ports);
   b.setInsertionPointToStart(wrapper.getBodyBlock());
   auto memInst = InstanceOp::create(
       b, mem->getLoc(), memModule, (mem.getName() + "_ext").str(),
@@ -513,8 +503,7 @@ InstanceOp LowerMemoryPass::emitMemoryInstance(MemOp op, FModuleOp module,
   return inst;
 }
 
-LogicalResult LowerMemoryPass::runOnModule(FModuleOp moduleOp,
-                                           bool shouldDedup) {
+LogicalResult LowerMemoryPass::runOnModule(FModuleOp moduleOp) {
   assert(operationsToErase.empty() && "operationsToErase must be empty");
 
   auto result = moduleOp.walk([&](MemOp op) {
@@ -526,7 +515,7 @@ LogicalResult LowerMemoryPass::runOnModule(FModuleOp moduleOp,
 
     auto summary = getSummary(op);
     if (summary.isSeqMem())
-      lowerMemory(op, summary, shouldDedup);
+      lowerMemory(op, summary);
 
     return WalkResult::advance();
   });
@@ -544,18 +533,16 @@ LogicalResult LowerMemoryPass::runOnModule(FModuleOp moduleOp,
 
 void LowerMemoryPass::runOnOperation() {
   auto circuit = getOperation();
-  auto &instanceInfo = getAnalysis<InstanceInfo>();
   symbolTable = &getAnalysis<SymbolTable>();
   circuitNamespace.add(circuit);
 
   // We iterate the circuit from top-to-bottom.  This ensures that we get
   // consistent memory names.  (Memory modules will be inserted before the
   // module we are processing to prevent these being unnecessarily visited.)
-  // Deduplication of memories is allowed if the module is under the "effective"
-  // design-under-test (DUT).
+  // All memories are eligible for deduplication with equivalent memories,
+  // regardless of whether they are in the design.
   for (auto moduleOp : circuit.getBodyBlock()->getOps<FModuleOp>()) {
-    auto shouldDedup = instanceInfo.anyInstanceInEffectiveDesign(moduleOp);
-    if (failed(runOnModule(moduleOp, shouldDedup)))
+    if (failed(runOnModule(moduleOp)))
       return signalPassFailure();
   }
 

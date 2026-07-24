@@ -254,7 +254,7 @@ struct SextCompress : public OpRewritePattern<CompressOp> {
     for (auto input : inputs) {
       Value replBits;
       // Check for sext of the inverted value
-      if (!matchPattern(input, comb::m_Sext(m_Any(&replBits)))) {
+      if (!matchPattern(input, comb::m_SextBy(m_Any(&replBits)))) {
         newInputs.push_back(input);
         continue;
       }
@@ -472,14 +472,14 @@ struct SignedPartialProducts : public OpRewritePattern<PartialProductOp> {
   LogicalResult matchAndRewrite(PartialProductOp op,
                                 PatternRewriter &rewriter) const override {
     // Booth encoding will automatically handle signed multiplications
-    if (comb::boothEncode(op.getLhs(), op.getRhs()))
+    if (comb::shouldUseBoothEncoding(op.getLhs(), op.getRhs()))
       return failure();
 
     auto inputWidth = op.getLhs().getType().getIntOrFloatBitWidth();
     Value lhsReplBits;
     Value rhsReplBits;
-    if (!matchPattern(op.getLhs(), comb::m_Sext(m_Any(&lhsReplBits))) ||
-        !matchPattern(op.getRhs(), comb::m_Sext(m_Any(&rhsReplBits))))
+    if (!matchPattern(op.getLhs(), comb::m_SextBy(m_Any(&lhsReplBits))) ||
+        !matchPattern(op.getRhs(), comb::m_SextBy(m_Any(&rhsReplBits))))
       return failure();
 
     size_t lhsWidth =

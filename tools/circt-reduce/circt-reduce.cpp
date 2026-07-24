@@ -29,6 +29,7 @@
 #include "mlir/Dialect/Index/IR/IndexDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/FileUtilities.h"
@@ -527,9 +528,9 @@ int main(int argc, char **argv) {
   // Register all the dialects.
   mlir::DialectRegistry registry;
   registerAllDialects(registry);
-  registry
-      .insert<func::FuncDialect, scf::SCFDialect, cf::ControlFlowDialect,
-              LLVM::LLVMDialect, index::IndexDialect, arith::ArithDialect>();
+  registry.insert<func::FuncDialect, scf::SCFDialect, cf::ControlFlowDialect,
+                  LLVM::LLVMDialect, index::IndexDialect, arith::ArithDialect,
+                  ub::UBDialect>();
   arc::registerReducePatternDialectInterface(registry);
   emit::registerReducePatternDialectInterface(registry);
   firrtl::registerReducePatternDialectInterface(registry);

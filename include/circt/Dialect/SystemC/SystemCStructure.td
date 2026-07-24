@@ -11,6 +11,20 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SYSTEMC_SYSTEMCSTRUCTURE_TD
+#define CIRCT_DIALECT_SYSTEMC_SYSTEMCSTRUCTURE_TD
+
+include "circt/Dialect/SystemC/SystemCDialect.td"
+include "circt/Dialect/SystemC/SystemCTypes.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "mlir/Dialect/EmitC/IR/EmitCTypes.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
 def SCModuleOp : SystemCOp<"module", [
     Symbol,
     DeclareOpInterfaceMethods<InstanceGraphModuleOpInterface>,
@@ -453,3 +467,5 @@ def ReturnOp : SystemCOp<"cpp.return", [
   let assemblyFormat = "attr-dict ($returnValues^ `:` type($returnValues))?";
   let hasVerifier = 1;
 }
+
+#endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCSTRUCTURE_TD

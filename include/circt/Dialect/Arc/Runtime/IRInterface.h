@@ -100,6 +100,22 @@ ARC_IR_EXPORT void arcRuntimeIR_onInitialized(uint8_t *modelState);
 ARC_IR_EXPORT void
 arcRuntimeIR_format(const circt::arc::runtime::FmtDescriptor *fmt, ...);
 
+/// Prints a formatted string to the given stream.
+///
+/// `fmt` is an array of `FmtDescriptor` objects, ending in a descriptor with
+/// action `Action_End`.
+///
+/// The values to format are passed as variadic arguments.
+ARC_IR_EXPORT void
+arcRuntimeIR_formatToStream(uint8_t *stream,
+                            const circt::arc::runtime::FmtDescriptor *fmt, ...);
+
+/// Return the standard output stream.
+ARC_IR_EXPORT uint8_t *arcRuntimeIR_getStdoutStream();
+
+/// Return the standard error stream.
+ARC_IR_EXPORT uint8_t *arcRuntimeIR_getStderrStream();
+
 /// Release the active trace buffer and request an empty new buffer.
 ///
 /// Invoked by the model to signal that the currently active trace buffer,

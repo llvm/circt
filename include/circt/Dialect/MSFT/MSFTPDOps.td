@@ -6,6 +6,13 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_MSFT_MSFTPDOPS_TD
+#define CIRCT_DIALECT_MSFT_MSFTPDOPS_TD
+
+include "circt/Dialect/MSFT/MSFTDialect.td"
+include "circt/Dialect/MSFT/MSFTAttributes.td"
+include "circt/Dialect/MSFT/MSFTOpInterfaces.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "circt/Dialect/HW/HWAttributesNaming.td"
 include "circt/Dialect/HW/HWTypes.td"
 
@@ -183,3 +190,5 @@ def DynamicInstanceVerbatimAttrOp : MSFTOp<
     }
   }];
 }
+
+#endif // CIRCT_DIALECT_MSFT_MSFTPDOPS_TD

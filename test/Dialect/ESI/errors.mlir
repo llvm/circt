@@ -223,3 +223,17 @@ hw.module @wrap_vo_multi_unwrap(in %a_data: i8, in %a_valid: i1) {
   // expected-note @+1 {{channel used here}}
   %ab_data, %ab_valid = esi.unwrap.vo %a_chan : !esi.channel<i8, ValidOnly>
 }
+
+// -----
+
+// HostMem 'read_list' requires the request's 'length' field to be an unsigned
+// integer (of any width).
+esi.service.std.hostmem @hostmem
+!respWin = !esi.window<"HostMemReadResp", !hw.struct<tag: ui8, data: !esi.list<i64>>, [<"", [<"tag">, <"data", 4>]>]>
+!badReadListReq = !esi.bundle<[!esi.channel<!hw.struct<address: ui64, tag: ui8, length: i32>> from "req", !esi.channel<!respWin> to "resp"]>
+hw.module @BadReadListLength(in %req : !esi.channel<!hw.struct<address: ui64, tag: ui8, length: i32>>, out resp : !esi.channel<!respWin>) {
+  // expected-error @+1 {{'read_list' request 'length' must be an unsigned integer, got 'i32'}}
+  %bundle = esi.service.req <@hostmem::@read_list> (#esi.appid<"badReadList">) : !badReadListReq
+  %resp = esi.bundle.unpack %req from %bundle : !badReadListReq
+  hw.output %resp : !esi.channel<!respWin>
+}

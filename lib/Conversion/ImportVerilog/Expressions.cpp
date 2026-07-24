@@ -62,11 +62,8 @@ static Value coerceToBuiltinInt(OpBuilder &builder, Location loc, Value value,
   return builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
 }
 
-/// Map an index into an array, with bounds `range`, to a bit offset of the
-/// underlying bit storage. This is a dynamic version of
-/// `slang::ConstantRange::translateIndex`.
-static Value getSelectIndex(Context &context, Location loc, Value index,
-                            const slang::ConstantRange &range) {
+Value ImportVerilog::getSelectIndex(Context &context, Location loc, Value index,
+                                    const slang::ConstantRange &range) {
   auto &builder = context.builder;
   auto indexType = cast<moore::UnpackedType>(index.getType());
 
@@ -1498,8 +1495,12 @@ struct RvalueExprVisitor : public ExprVisitor {
     case BinaryOperator::LogicalAnd:
     case BinaryOperator::LogicalOr:
     case BinaryOperator::LogicalImplication:
-    case BinaryOperator::LogicalEquivalence:
-      return buildLogicalBOp(expr.op, lhs, rhs);
+    case BinaryOperator::LogicalEquivalence: {
+      Domain domain = Domain::TwoValued;
+      if (expr.left().type->isFourState() || expr.right().type->isFourState())
+        domain = Domain::FourValued;
+      return buildLogicalBOp(expr.op, lhs, rhs, domain);
+    }
 
     default:
       mlir::emitError(loc) << "Binary operator "
@@ -2115,8 +2116,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto nameId = subroutine.knownNameId;
 
     // $rose, $fell, $stable, $changed, $past, and $sampled are only valid in
-    // the context of properties and assertions. Those are treated in the
-    // LTLDialect; treat them there instead.
+    // the contexts with clocks. Those are treated in AssertionExpr.
     switch (nameId) {
     case ksn::Rose:
     case ksn::Fell:
@@ -2124,7 +2124,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     case ksn::Changed:
     case ksn::Past:
     case ksn::Sampled:
-      return context.convertAssertionCallExpression(expr, info, loc);
+      return context.convertSampledValueCallExpression(expr, info, loc);
     default:
       break;
     }
@@ -2973,15 +2973,11 @@ Value Context::convertToSimpleBitVector(Value value) {
   return {};
 }
 
-/// Create the necessary operations to convert from a `PackedType` to the
-/// corresponding simple bit vector `IntType`. This will apply special handling
-/// to time values, which requires scaling by the local timescale.
-static Value materializePackedToSBVConversion(Context &context, Value value,
-                                              Location loc, bool fallible) {
+Value Context::materializePackedToSBVConversion(Value value, Location loc,
+                                                bool fallible) {
   if (isa<moore::IntType>(value.getType()))
     return value;
 
-  auto &builder = context.builder;
   auto packedType = cast<moore::PackedType>(value.getType());
   auto intType = packedType.getSimpleBitVector();
   assert(intType);
@@ -2992,7 +2988,7 @@ static Value materializePackedToSBVConversion(Context &context, Value value,
       moore::isIntType(intType, 64, moore::Domain::FourValued)) {
     value = builder.createOrFold<moore::TimeToLogicOp>(loc, value);
     auto scale = moore::ConstantOp::create(builder, loc, intType,
-                                           getTimeScaleInFemtoseconds(context));
+                                           getTimeScaleInFemtoseconds(*this));
     return builder.createOrFold<moore::DivUOp>(loc, value, scale);
   }
 
@@ -3098,7 +3094,7 @@ Value Context::materializeConversion(Type type, Value value, bool isSigned,
 
   if (dstInt && srcInt) {
     // Convert the value to a simple bit vector if it isn't one already.
-    value = materializePackedToSBVConversion(*this, value, loc, fallible);
+    value = materializePackedToSBVConversion(value, loc, fallible);
     if (!value)
       return {};
 
@@ -3399,7 +3395,7 @@ Value Context::convertSystemCall(
         mlir::emitError(loc) << "expected integer argument for `$isunknown`";
         return {};
       }
-      value = materializePackedToSBVConversion(*this, value, loc,
+      value = materializePackedToSBVConversion(value, loc,
                                                /*fallible=*/false);
       if (!value)
         return {};
@@ -3419,7 +3415,7 @@ Value Context::convertSystemCall(
             << "expected integer argument for `$onehot`/`$onehot0`";
         return {};
       }
-      value = materializePackedToSBVConversion(*this, value, loc,
+      value = materializePackedToSBVConversion(value, loc,
                                                /*fallible=*/false);
       if (!value)
         return {};
@@ -3480,7 +3476,7 @@ Value Context::convertSystemCall(
         mlir::emitError(loc) << "expected integer argument for `$countones`";
         return {};
       }
-      value = materializePackedToSBVConversion(*this, value, loc,
+      value = materializePackedToSBVConversion(value, loc,
                                                /*fallible=*/false);
       if (!value)
         return {};
@@ -3556,9 +3552,31 @@ Value Context::convertSystemCall(
   if (nameId == ksn::Atanh)
     return convertRealMathBI<moore::AtanhBIOp>(*this, loc, name, args);
 
+  if (nameId == ksn::Pow) {
+    assert(numArgs == 2 && "`$pow` takes 2 arguments");
+    auto realType = moore::RealType::get(getContext(), moore::RealWidth::f64);
+    auto lhs = convertRvalueExpression(*args[0], realType);
+    auto rhs = convertRvalueExpression(*args[1], realType);
+    if (!lhs || !rhs)
+      return {};
+    return moore::PowRealOp::create(builder, loc, lhs, rhs);
+  }
+
   //===--------------------------------------------------------------------===//
   // Type Conversion System Functions
   //===--------------------------------------------------------------------===//
+
+  if (nameId == ksn::Itor) {
+    assert(numArgs == 1 && "`$itor` takes 1 argument");
+    auto realType = moore::RealType::get(getContext(), moore::RealWidth::f64);
+    return convertRvalueExpression(*args[0], realType);
+  }
+
+  if (nameId == ksn::Rtoi) {
+    assert(numArgs == 1 && "`$rtoi` takes 1 argument");
+    auto intType = moore::IntType::get(getContext(), 32, Domain::TwoValued);
+    return convertRvalueExpression(*args[0], intType);
+  }
 
   if (nameId == ksn::Signed || nameId == ksn::Unsigned) {
     // Slang already checks the arity of `$signed`/`$unsigned`.

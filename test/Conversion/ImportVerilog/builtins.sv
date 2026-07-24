@@ -292,10 +292,11 @@ endfunction
 
 // IEEE 1800-2017 § 20.8 "Math functions"
 // CHECK-LABEL: func.func private @MathBuiltins(
-// CHECK-SAME: [[X:%.+]]: !moore.i32
-// CHECK-SAME: [[Y:%.+]]: !moore.l42
-// CHECK-SAME: [[R:%.+]]: !moore.f64
-function void MathBuiltins(int x, logic [41:0] y, real r);
+// CHECK-SAME: [[X:%.+]]: !moore.i32,
+// CHECK-SAME: [[Y:%.+]]: !moore.l42,
+// CHECK-SAME: [[R:%.+]]: !moore.f64,
+// CHECK-SAME: [[S:%.+]]: !moore.f64
+function void MathBuiltins(int x, logic [41:0] y, real r, real s);
   // CHECK: moore.builtin.clog2 [[X]] : i32
   dummyA($clog2(x));
   // CHECK: moore.builtin.clog2 [[Y]] : l42
@@ -337,6 +338,12 @@ function void MathBuiltins(int x, logic [41:0] y, real r);
   dummyB($acosh(r));
   // CHECK:  moore.builtin.atanh [[R]] : f64
   dummyB($atanh(r));
+  // CHECK: moore.fpow [[R]], [[S]] : f64
+  dummyB($pow(r, s));
+  // CHECK: moore.sint_to_real [[X]] : i32 -> f64
+  dummyB($itor(x));
+  // CHECK: moore.real_to_int [[R]] : f64 -> i32
+  dummyA($rtoi(r));
 
 endfunction
 
@@ -622,6 +629,25 @@ module SampleValueBuiltins #() (
   // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
   past_data: assert property (@(posedge clk_i) data_i == $past(data_i));
 
+  // Test $past in a process
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: moore.wait_event {
+  // CHECK-NEXT:   [[CLKEDGE:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT:   moore.detect_event posedge [[CLKEDGE]] : l1
+  // CHECK-NEXT: }
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: moore.nonblocking_assign {{%.+}}, [[PAST_LOGIC]] : l8
+  logic [7:0] past_data_i;
+  always @(posedge clk_i) past_data_i <= $past(data_i);
+
   // CHECK: moore.procedure always {
   // CHECK: [[D:%.+]] = moore.read [[DATAWIRE]] : <l8>
   // CHECK: [[RED:%.+]] = moore.reduce_xor [[D]] : l8 -> l1
@@ -734,6 +760,127 @@ module SampleValueBuiltins #() (
   // CHECK: [[EQ:%.+]] = moore.eq [[SEXT]], [[ZERO]] : i32 -> i1
   countones_bit_data:
     assert property (@(posedge clk_i) $countones(data_bit_i) == 0);
+endmodule
+
+// IEEE 1800-2023 § 16.9.3 "Sampled value functions" with default clocking
+// This is in a separate module to SampleValueBuiltins as default clocking
+// silently propagates to all potential users in the scope.
+// CHECK-LABEL: moore.module @SampleValueBuiltinsDefaultClocking(
+// CHECK-SAME: in [[CLK:%.+]] : !moore.l1
+module SampleValueBuiltinsDefaultClocking #() (
+    input clk_i,
+    input clk2_i,
+    input [7:0] data_i
+);
+  // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
+  // CHECK: [[CLK2WIRE:%.+]] = moore.net name "clk2_i" wire : <l1>
+  // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
+
+  default clocking @(posedge clk_i); endclocking
+
+  // Test default clocking inference for $past in an assertion
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D2_INT:%.+]] = moore.logic_to_int [[D2]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D2_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
+  assert_past: assert property (data_i == $past(data_i));
+
+  // Test overriden clock in an assertion
+  // CHECK: moore.procedure always {
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLK2WIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D2:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D2_INT:%.+]] = moore.logic_to_int [[D2]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D2_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: [[EQ:%.+]] = moore.eq [[D1]], [[PAST_LOGIC]] : l8 -> l1
+  assert_past_clk2: assert property (@(posedge clk2_i) data_i == $past(data_i));
+
+  // Test default clocking inference for $past in a continuous assignment
+  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: moore.assign {{%.+}}, [[PAST_LOGIC]] : l8
+  logic [7:0] assign_past;
+  assign assign_past = $past(data_i);
+
+  // Test default clocking inference for $past in a combinational procedure
+  // CHECK: moore.procedure always_comb {
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: moore.blocking_assign {{%.+}}, [[PAST_LOGIC]] : l8
+  logic [7:0] comb_assign_past;
+  always_comb comb_assign_past = $past(data_i);
+
+  // Test overriden clock for $past in a procedure
+  // CHECK: moore.procedure always_ff {
+  // CHECK-NEXT: moore.wait_event {
+  // CHECK-NEXT:   [[CLKEDGE:%.+]] = moore.read [[CLK2WIRE]] : <l1>
+  // CHECK-NEXT:   moore.detect_event posedge [[CLKEDGE]] : l1
+  // CHECK-NEXT: }
+  // CHECK-NEXT: [[CLK:%.+]] = moore.read [[CLK2WIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[PAST_LOGIC:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  // CHECK-NEXT: moore.nonblocking_assign {{%.+}}, [[PAST_LOGIC]] : l8
+  logic [7:0] clk2_assign_past;
+  always_ff @(posedge clk2_i) clk2_assign_past <= $past(data_i);
+endmodule
+
+// IEEE 1800-2023 § 16.9.3 "Sampled value functions" with default clocking
+// outside of procedures
+// CHECK-LABEL: moore.module @SampleValueBuiltinsDefaultClockingNoProcedure(
+// CHECK-SAME: in [[CLK:%.+]] : !moore.l1
+module SampleValueBuiltinsDefaultClockingNoProcedure #() (
+    input clk_i,
+    input [7:0] data_i
+);
+  // CHECK: [[CLKWIRE:%.+]] = moore.net name "clk_i" wire : <l1>
+  // CHECK: [[DATAWIRE:%.+]] = moore.net name "data_i" wire : <l8>
+  // CHECK: [[WIRE_PAST:%.+]] = moore.net wire [[WIRE_PAST_VAL:%.+]] : <l8>
+
+  default clocking @(posedge clk_i); endclocking
+
+  // CHECK: [[CLK:%.+]] = moore.read [[CLKWIRE]] : <l1>
+  // CHECK-NEXT: [[CLK_INT:%.+]] = moore.logic_to_int [[CLK]] : l1
+  // CHECK-NEXT: [[CLK_I1:%.+]] = moore.to_builtin_int [[CLK_INT]] : i1
+  // CHECK-NEXT: [[D1:%.+]] = moore.read [[DATAWIRE]] : <l8>
+  // CHECK-NEXT: [[D1_INT:%.+]] = moore.logic_to_int [[D1]] : l8
+  // CHECK-NEXT: [[DB:%.+]] = moore.to_builtin_int [[D1_INT]] : i8
+  // CHECK-NEXT: [[PAST:%.+]] = ltl.past [[DB]], 1 clk [[CLK_I1]] : i8
+  // CHECK-NEXT: [[PAST_INT:%.+]] = moore.from_builtin_int [[PAST]] : i8
+  // CHECK-NEXT: [[WIRE_PAST_VAL:%.+]] = moore.int_to_logic [[PAST_INT]] : i8
+  wire [7:0] wire_past = $past(data_i);
 endmodule
 
 // CHECK-LABEL: func.func private @BitVectorPackedBuiltins(
@@ -1578,3 +1725,45 @@ function void SScanfBuiltins(string src);
   // CHECK: moore.scan.end [[C0]]
   res = $sscanf(src, "");
 endfunction
+
+// IEEE 1800-2017 § 21.4 "Loading memory array data from a file"
+// CHECK-LABEL: moore.module @ReadMemBuiltins
+module ReadMemBuiltins;
+  logic [7:0] mem [1:256];
+  logic [7:0] memDesc [255:0];
+  logic [31:0] mem3 [0:2][0:4][5:8];
+  logic [7:0] memS [0:255];
+  logic [7:0] qmem [$];
+  typedef enum logic [1:0] {A=0, B=1, C=2} e_t;
+  e_t emem [0:7];
+  typedef struct packed { logic [3:0] a; logic [3:0] b; } s_t;
+  s_t smem [0:7];
+  int startDyn, finishDyn;
+  initial begin
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %mem {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", mem);
+    // CHECK: moore.builtin.readmem bin %{{[0-9]+}}, %mem start = %{{[0-9]+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    $readmemb("mem.data", mem, 16);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %mem start = %{{[0-9]+}} finish = %{{[0-9]+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", mem, 128, 1);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %memDesc {dimDescending = array<i1: true>, dimLows = array<i64: 0>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", memDesc);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %mem3 {dimDescending = array<i1: false, false, false>, dimLows = array<i64: 0, 0, 5>} : !moore.ref<uarray<3 x uarray<5 x uarray<4 x l32>>>>
+    $readmemh("mem.data", mem3);
+    // CHECK: [[SUBARR:%[0-9]+]] = moore.extract_ref %mem3 from 1
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, [[SUBARR]] {dimDescending = array<i1: false, false>, dimLows = array<i64: 0, 5>} : !moore.ref<uarray<5 x uarray<4 x l32>>>
+    $readmemh("mem.data", mem3[1]);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %memS slice[%{{[0-9]+}}, %{{[0-9]+}}] {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", memS[16:31]);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %memS start = %{{[0-9]+}} finish = %{{[0-9]+}} slice[%{{[0-9]+}}, %{{[0-9]+}}] {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", memS[16:31], 20, 24);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %qmem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<queue<l8, 0>>
+    $readmemh("mem.data", qmem);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %emem {dimDescending = array<i1: false>, dimLows = array<i64: 0>, enumValues = array<i64: 0, 1, 2>} : !moore.ref<uarray<8 x l2>>
+    $readmemh("mem.data", emem);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %smem {dimDescending = array<i1: false>, dimLows = array<i64: 0>} : !moore.ref<uarray<8 x struct<{a: l4, b: l4}>>>
+    $readmemh("mem.data", smem);
+    // CHECK: moore.builtin.readmem hex %{{[0-9]+}}, %mem start = %{{[0-9]+}} finish = %{{[0-9]+}} {dimDescending = array<i1: false>, dimLows = array<i64: 1>} : !moore.ref<uarray<256 x l8>>
+    $readmemh("mem.data", mem, startDyn, finishDyn);
+  end
+endmodule

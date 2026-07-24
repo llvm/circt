@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_HWARITH_HWARITHTYPES_TD
+#define CIRCT_DIALECT_HWARITH_HWARITHTYPES_TD
+
 include "circt/Dialect/HWArith/HWArithDialect.td"
 
 // Type constraint to enforce signedness semantics
@@ -17,3 +20,5 @@ def HWArithIntegerType : DialectType<HWArithDialect,
     CPred<"isHWArithIntegerType($_self)">,
     "an arbitrary precision integer with signedness semantics",
     "::mlir::IntegerType">;
+
+#endif // CIRCT_DIALECT_HWARITH_HWARITHTYPES_TD

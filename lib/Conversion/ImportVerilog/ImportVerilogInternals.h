@@ -300,13 +300,14 @@ struct Context {
     return currentThisRef; // block arg added in declareFunction
   }
 
-  /// Maps assertion system calls to their corresponding clocks
+  /// Maps sampled value system calls to their corresponding clocks
   DenseMap<const slang::ast::CallExpression *,
            const slang::ast::TimingControl *>
-      assertionCallClocks;
+      sampledValueCallClocks;
 
-  /// Generates a map from assertions to clocks using Slang's analysis
-  void populateAssertionClocks();
+  /// Generates a map from sampled value system calls to clocks using Slang's
+  /// analysis
+  void populateSampledValueClocks();
 
   Value getIndexedQueue() const { return currentQueue; }
 
@@ -322,8 +323,8 @@ struct Context {
   Value convertAssertionExpression(const slang::ast::AssertionExpr &expr,
                                    Location loc);
 
-  // Convert an assertion expression AST node to MLIR ops.
-  Value convertAssertionCallExpression(
+  // Convert a sampled value system call expression AST node to MLIR ops.
+  Value convertSampledValueCallExpression(
       const slang::ast::CallExpression &expr,
       const slang::ast::CallExpression::SystemCallInfo &info, Location loc);
 
@@ -381,6 +382,14 @@ struct Context {
   /// representation, if it has one. Otherwise returns null. Also returns null
   /// if the given value is null.
   Value convertToSimpleBitVector(Value value);
+
+  /// Helper function to convert a `PackedType` value to its simple bit
+  /// vector representation, with special handling for time values which
+  /// require scaling by the local timescale. If `fallible` is true,
+  /// conversion failures are reported by returning a null value without
+  /// emitting diagnostics.
+  Value materializePackedToSBVConversion(Value value, Location loc,
+                                         bool fallible);
 
   /// Helper function to insert the necessary operations to cast a value from
   /// one type to another. If `fallible` is true, conversion failures are
@@ -445,11 +454,11 @@ struct Context {
                           Location loc,
                           std::span<const slang::ast::Expression *const> args);
 
-  /// Convert system function calls within properties and assertion with a
-  /// single argument.
-  FailureOr<Value> convertAssertionSystemCallArity1(
-      const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
-      Type originalType, Value clockVal);
+  /// Convert sampled value system function calls with a single argument.
+  FailureOr<Value>
+  convertSampledValueCallArity1(const slang::ast::SystemSubroutine &subroutine,
+                                Location loc, Value value, Type originalType,
+                                Value clockVal);
 
   /// Evaluate the constant value of an expression.
   slang::ConstantValue evaluateConstant(const slang::ast::Expression &expr);
@@ -655,6 +664,12 @@ private:
                       mlir::StringRef qualifiedName,
                       llvm::SmallVectorImpl<Type> &extraParams);
 };
+
+/// Map an index into an array, with bounds `range`, to a bit offset of the
+/// underlying bit storage. This is a dynamic version of
+/// `slang::ConstantRange::translateIndex`.
+Value getSelectIndex(Context &context, Location loc, Value index,
+                     const slang::ConstantRange &range);
 
 } // namespace ImportVerilog
 } // namespace circt

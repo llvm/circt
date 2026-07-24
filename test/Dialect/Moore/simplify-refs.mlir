@@ -115,3 +115,48 @@ moore.module @QueueRefsWithConcat() {
     moore.return
   }
 }
+
+// CHECK-LABEL: moore.module @AssocArrayRefs()
+moore.module @AssocArrayRefs() {
+  %aa = moore.variable : <assoc_array<i32, i32>>
+  moore.procedure initial {
+    %0 = moore.constant 0 : i32
+    %1 = moore.constant 1 : i32
+
+    // CHECK: moore.assoc_array.set %aa[%0] = %1 : <assoc_array<i32, i32>>
+    %el = moore.assoc_array_extract_ref %aa[%0] : <assoc_array<i32, i32>>
+    moore.blocking_assign %el, %1 : i32
+    moore.return
+  }
+}
+
+// CHECK-LABEL: func.func @InFunction
+func.func @InFunction(%arg0: !moore.i32) -> !moore.i32 {
+  %imm = moore.variable : <i32>
+  // CHECK-NOT: moore.concat_ref
+  %0 = moore.concat_ref %imm : (!moore.ref<i32>) -> <i32>
+  // CHECK: moore.blocking_assign %imm, %{{.+}} : i32
+  moore.blocking_assign %0, %arg0 : i32
+  %1 = moore.read %imm : <i32>
+  return %1 : !moore.i32
+}
+
+// CHECK-LABEL: moore.module @DelayedAssigns()
+moore.module @DelayedAssigns() {
+  %a = moore.variable : <i16>
+  %b = moore.variable : <i16>
+  %c = moore.variable : <i32>
+  moore.procedure always {
+    // CHECK-NOT: moore.concat_ref
+    %0 = moore.concat_ref %a, %b : (!moore.ref<i16>, !moore.ref<i16>) -> <i32>
+    %1 = moore.read %c : <i32>
+    %2 = moore.constant_time 3000000 fs
+    // CHECK: [[EXTR1:%.+]] = moore.extract %{{.+}} from 16 : i32 -> i16
+    // CHECK: moore.delayed_nonblocking_assign %a, [[EXTR1]], [[DELAY:%.+]] : i16
+    // CHECK: [[EXTR2:%.+]] = moore.extract %{{.+}} from 0 : i32 -> i16
+    // CHECK: moore.delayed_nonblocking_assign %b, [[EXTR2]], [[DELAY]] : i16
+    moore.delayed_nonblocking_assign %0, %1, %2 : i32
+    moore.return
+  }
+  moore.output
+}

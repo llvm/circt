@@ -302,3 +302,39 @@ hw.module @Top() {
   %bar = sv.reg : !hw.inout<i64>
   %agg = sv.reg : !hw.inout<struct<dw: i1, fn: i4, in: i64>>
 }
+
+// -----
+
+// Check handling of very long instance-port names.
+// They shouldn't force all ports to break!
+
+hw.module.extern @Child(in %verylongportname_verylongportname_verylongportname_verylongportname_verylongportname_verylongportname : i1, in %foo : i1, in %bar : i1, in %baz : i1)
+// CHECK-LABEL:module PPInstPort({{.*}}
+//      CHECK:  Child c ({{.*}}
+// CHECK-NEXT:    .verylongportname_verylongportname_verylongportname_verylongportname_verylongportname_verylongportname (in),{{.*}}
+// CHECK-NEXT:    .foo (in),{{.*}}
+// CHECK-NEXT:    .bar (in),{{.*}}
+// CHECK-NEXT:    .baz (in){{.*}}
+// CHECK-NEXT:  );{{.*}}
+hw.module @PPInstPort(in %in : i1) {
+  hw.instance "c" @Child (verylongportname_verylongportname_verylongportname_verylongportname_verylongportname_verylongportname: %in: i1, foo: %in: i1, bar: %in: i1, baz: %in: i1) -> ()
+}
+
+// -----
+
+// Check handling of very long bind port names.
+// They shouldn't force all ports to break!
+
+hw.module.extern @BChild(in %bindverylongportname_bindverylongportname_bindverylongportname_bindverylongportname_bindverylongportname : i1, in %foo : i1, in %bar : i1)
+hw.module @BParent(in %in : i1) {
+  hw.instance "c" sym @bi @BChild (bindverylongportname_bindverylongportname_bindverylongportname_bindverylongportname_bindverylongportname: %in: i1, foo: %in: i1, bar: %in: i1) -> () {doNotPrint}
+}
+// CHECK-LABEL:module BParent({{.*}}
+//      CHECK:  bind BParent BChild c ({{.*}}
+// CHECK-NEXT:    .bindverylongportname_bindverylongportname_bindverylongportname_bindverylongportname_bindverylongportname (in),{{.*}}
+// CHECK-NEXT:    .foo (in),{{.*}}
+// CHECK-NEXT:    .bar (in){{.*}}
+// CHECK-NEXT:  );{{.*}}
+hw.module @BTop() {
+  sv.bind #hw.innerNameRef<@BParent::@bi>
+}

@@ -25,7 +25,12 @@ using namespace circt;
 using namespace comb;
 using namespace matchers;
 
-bool comb::boothEncode(Value lhs, Value rhs) {
+// Common function to identify when multipliers/partial products should be
+// lowered to Booth encoded array. Identifies zext/sext of the operands. Only
+// valid for binary multiplication.
+// Threshold default is 16
+bool comb::shouldUseBoothEncoding(Value lhs, Value rhs, unsigned threshold) {
+  // Do not booth encode multiplication by a constant
   if (lhs.getDefiningOp<hw::ConstantOp>() ||
       rhs.getDefiningOp<hw::ConstantOp>())
     return false;
@@ -35,20 +40,22 @@ bool comb::boothEncode(Value lhs, Value rhs) {
 
   // Check for zext of the multiplicands
   Value lhsZext, rhsZext;
-  if (matchPattern(lhs, comb::m_Zext(m_Any(&lhsZext))))
-    lhsWidth = lhsZext.getType().getIntOrFloatBitWidth();
-  if (matchPattern(rhs, comb::m_Zext(m_Any(&rhsZext))))
-    rhsWidth = rhsZext.getType().getIntOrFloatBitWidth();
+  if (matchPattern(lhs, comb::m_ZextBy(m_Any(&lhsZext))))
+    lhsWidth -= lhsZext.getType().getIntOrFloatBitWidth();
+  if (matchPattern(rhs, comb::m_ZextBy(m_Any(&rhsZext))))
+    rhsWidth -= rhsZext.getType().getIntOrFloatBitWidth();
 
   // Check for sext of the multiplicands
   Value lhsSextBits, rhsSextBits;
-  if (matchPattern(lhs, comb::m_Sext(m_Any(&lhsSextBits))))
-    lhsWidth = lhsWidth - lhsSextBits.getType().getIntOrFloatBitWidth();
-  if (matchPattern(rhs, comb::m_Sext(m_Any(&rhsSextBits))))
-    rhsWidth = rhsWidth - rhsSextBits.getType().getIntOrFloatBitWidth();
+  if (matchPattern(lhs, comb::m_SextBy(m_Any(&lhsSextBits))))
+    lhsWidth -= lhsSextBits.getType().getIntOrFloatBitWidth();
+  if (matchPattern(rhs, comb::m_SextBy(m_Any(&rhsSextBits))))
+    rhsWidth -= rhsSextBits.getType().getIntOrFloatBitWidth();
 
-  // If either operand is less than 16 bits, don't use Booth encoding.
-  return lhsWidth >= 16 && rhsWidth >= 16;
+  // Heuristic threshold based on:
+  // "Datapath Synthesis for Standard-Cell Design", Reto Zimmerman 2009
+  // If either operand is less than 16 bits (default), don't use Booth encoding.
+  return lhsWidth > threshold && rhsWidth > threshold;
 }
 
 Value comb::createZExt(OpBuilder &builder, Location loc, Value value,

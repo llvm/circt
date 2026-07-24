@@ -1424,6 +1424,27 @@ LogicalResult XorOp::canonicalize(XorOp op, PatternRewriter &rewriter) {
     }
   }
 
+  // xor(sext(x), -1) -> sext(xor(x,-1))
+  // More concisely: ~sext(x) = sext(~x)
+  Value complementVal;
+  Value signExtBits;
+  // Check for sext of the inverted value
+  if (matchPattern(op.getResult(), m_Complement(m_Any(&complementVal))) &&
+      matchPattern(complementVal, m_SextBy(m_Any(&signExtBits)))) {
+    // Matched an sext with signExtBits - extract the base (unextended) value
+    auto baseWidth = op.getType().getIntOrFloatBitWidth() -
+                     signExtBits.getType().getIntOrFloatBitWidth();
+    auto base =
+        ExtractOp::create(rewriter, op.getLoc(), complementVal, 0, baseWidth);
+
+    // Create negated sext: ~sext(x) = sext(~x)
+    auto negBase = createOrFoldNot(rewriter, op.getLoc(), base, true);
+    auto sextNegBase =
+        createOrFoldSExt(rewriter, op.getLoc(), negBase, op.getType());
+    replaceOpAndCopyNamehint(rewriter, op, sextNegBase);
+    return success();
+  }
+
   // xor(x, xor(...)) -> xor(x, ...) -- flatten
   if (tryFlatteningOperands(op, rewriter))
     return success();

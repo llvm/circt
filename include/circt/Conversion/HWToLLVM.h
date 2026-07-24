@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/HW/HWTypes.h"
 #include "circt/Support/LLVM.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include <memory>
 
 namespace mlir {
@@ -71,7 +72,8 @@ private:
 };
 
 /// Get the HW to LLVM type conversions.
-void populateHWToLLVMTypeConversions(mlir::LLVMTypeConverter &converter);
+void populateHWToLLVMTypeConversions(mlir::LLVMTypeConverter &converter,
+                                     mlir::DataLayout &layout);
 
 /// Get the HW to LLVM conversion patterns.
 /// Note: The spill cache may only be used when conversion

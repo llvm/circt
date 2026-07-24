@@ -10,6 +10,16 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SYSTEMC_SYSTEMCSTATEMENTS_TD
+#define CIRCT_DIALECT_SYSTEMC_SYSTEMCSTATEMENTS_TD
+
+include "circt/Dialect/SystemC/SystemCDialect.td"
+include "circt/Dialect/SystemC/SystemCTypes.td"
+include "circt/Dialect/HW/HWOpInterfaces.td"
+include "mlir/Dialect/EmitC/IR/EmitCTypes.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
+
 def SignalWriteOp : SystemCOp<"signal.write", [
     TypesMatchWith<"dest has to be the base type of the src",
                    "dest", "src", "systemc::getSignalBaseType($_self)">]> {
@@ -391,3 +401,5 @@ def CallOp : SystemCOp<"cpp.call", [
 
   let hasVerifier = 1;
 }
+
+#endif // CIRCT_DIALECT_SYSTEMC_SYSTEMCSTATEMENTS_TD

@@ -33,6 +33,24 @@ void circt::appendPossiblyAbsolutePath(llvm::SmallVectorImpl<char> &base,
   }
 }
 
+void circt::makeCommonDirectoryPrefix(llvm::SmallVectorImpl<char> &a,
+                                      StringRef b) {
+  // Truncate `a` to the common character prefix of `a` and `b`.
+  StringRef aRef(a.data(), a.size());
+  size_t e = std::min(aRef.size(), b.size());
+  size_t i = 0;
+  for (; i < e; ++i)
+    if (aRef[i] != b[i])
+      break;
+  a.truncate(i);
+
+  // Truncate `a` so it ends on a directory separator.
+  auto sep = llvm::sys::path::get_separator();
+  StringRef sepRef(sep);
+  while (!a.empty() && !StringRef(a.data(), a.size()).ends_with(sepRef))
+    a.pop_back();
+}
+
 std::unique_ptr<llvm::ToolOutputFile>
 circt::createOutputFile(StringRef filename, StringRef dirname,
                         function_ref<InFlightDiagnostic()> emitError) {

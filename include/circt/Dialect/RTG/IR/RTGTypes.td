@@ -148,6 +148,13 @@ def ArrayType : RTGTypeDef<"Array"> {
   ];
 }
 
+class ArrayTypeOf<Type elementType> : ContainerType<
+  elementType, ArrayType.predicate,
+  "llvm::cast<rtg::ArrayType>($_self).getElementType()", "array">,
+  SameBuildabilityAs<elementType,
+    "::circt::rtg::ArrayType::get($_builder.getContext(), " #
+    elementType.builderCall # ")">;
+
 def MapType : RTGTypeDef<"Map"> {
   let summary = "a map from keys to values";
   let description = [{
@@ -263,5 +270,23 @@ class ISAMemoryWithAddressWidth<int width> : AnyTypeOf<[
   MemoryWithAddressWidth<width>,
   I<width>,
   LabelType]>;
+
+
+def ContinuationType : RTGTypeDef<"Continuation"> {
+  let mnemonic = "continuation";
+  let summary = "first-class continuation value";
+  let description = [{
+    A first-class continuation value.  `T` is the type the performer receives
+    back (i.e., what `rtg.resume` provides).  Use `NoneType` for void effects.
+  }];
+
+  let parameters = (ins "::mlir::Type":$resumeType);
+  let assemblyFormat = "`<` $resumeType `>`";
+
+  let builders = [
+    TypeBuilderWithInferredContext<(ins "::mlir::Type":$resumeType),
+      "return $_get(resumeType.getContext(), resumeType);">,
+  ];
+}
 
 #endif // CIRCT_DIALECT_RTG_IR_RTGTYPES_TD

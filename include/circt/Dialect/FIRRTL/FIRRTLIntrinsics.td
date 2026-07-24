@@ -13,9 +13,9 @@
 #ifndef CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
 #define CIRCT_DIALECT_FIRRTL_FIRRTLINTRINSICS_TD
 
-include "FIRRTLAttributes.td"
-include "FIRRTLDialect.td"
-include "FIRRTLTypes.td"
+include "circt/Dialect/FIRRTL/FIRRTLAttributes.td"
+include "circt/Dialect/FIRRTL/FIRRTLDialect.td"
+include "circt/Dialect/FIRRTL/FIRRTLTypes.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 

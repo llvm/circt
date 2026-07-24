@@ -28,9 +28,11 @@
 
 #include "slang/analysis/AnalysisManager.h"
 #include "slang/diagnostics/DiagnosticClient.h"
+#include "slang/diagnostics/Diagnostics.h"
 #include "slang/driver/Driver.h"
 #include "slang/parsing/Preprocessor.h"
 #include "slang/syntax/SyntaxPrinter.h"
+#include "slang/syntax/SyntaxTree.h"
 #include "slang/util/VersionInfo.h"
 
 using namespace mlir;
@@ -309,6 +311,23 @@ LogicalResult ImportDriver::importVerilog(ModuleOp module) {
   bool parseSuccess = driver.parseAllSources();
   parseTimer.stop();
 
+  // If we were only supposed to parse the input, gather the parse diagnostics
+  // and report them here, then return without elaborating. This mirrors
+  // slang-driver's `--parse-only`: errors that only surface during elaboration
+  // or IR conversion (unknown modules, constraint blocks, ...) don't run, so
+  // this succeeds on such inputs while still flagging genuine syntax errors.
+  // The module is left empty.
+  if (options.mode == ImportVerilogOptions::Mode::OnlyParse) {
+    slang::Diagnostics parseDiags;
+    for (const auto &tree : driver.sourceLoader.getLibraryMaps())
+      parseDiags.append_range(tree->diagnostics());
+    for (const auto &tree : driver.syntaxTrees)
+      parseDiags.append_range(tree->diagnostics());
+    parseDiags.sort(driver.sourceManager);
+    driver.diagEngine.issue(parseDiags);
+    return success(parseSuccess && driver.diagEngine.getNumErrors() == 0);
+  }
+
   // Elaborate the input.
   auto compileTimer = ts.nest("Verilog elaboration");
   auto compilation = driver.createCompilation();
@@ -468,9 +487,13 @@ void circt::populateVerilogToMoorePipeline(OpPassManager &pm) {
   pm.addPass(mlir::createSymbolDCEPass());
 
   {
+    auto &anyPM = pm.nestAny();
+    anyPM.addPass(moore::createSimplifyRefsPass());
+  }
+
+  {
     // Perform module-specific transformations.
     auto &modulePM = pm.nest<moore::SVModuleOp>();
-    modulePM.addPass(moore::createSimplifyRefsPass());
     // TODO: Enable the following once it not longer interferes with @(...)
     // event control checks. The introduced dummy variables make the event
     // control observe a static local variable that never changes, instead of

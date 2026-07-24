@@ -410,7 +410,7 @@ Value VariableOp::getDefaultValue(const MemorySlot &slot, OpBuilder &builder) {
       builder, getLoc(),
       IntType::get(getContext(), *bitWidth, packedType.getDomain()), fvint);
   if (value.getType() != packedType)
-    SBVToPackedOp::create(builder, getLoc(), packedType, value);
+    value = SBVToPackedOp::create(builder, getLoc(), packedType, value);
   return value;
 }
 
@@ -2169,6 +2169,43 @@ FuncDPICallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return success();
   return emitError("callee must be 'moore.func.dpi' or 'func.func' but got '")
          << referencedOp->getName() << "'";
+}
+
+LogicalResult ReadMemBIOp::verify() {
+  if (getFinishAddr() && !getStartAddr())
+    return emitOpError("'finishAddr' requires 'startAddr' to be present");
+
+  if (getSliceLeft() && !getSliceRight())
+    return emitOpError("'sliceLeft' requires 'sliceRight' to be present");
+  if (getSliceRight() && !getSliceLeft())
+    return emitOpError("'sliceRight' requires 'sliceLeft' to be present");
+
+  auto ref = dyn_cast<moore::RefType>(getDest().getType());
+  if (!ref)
+    return emitOpError("'dest' must be a Moore reference type, got ")
+           << getDest().getType();
+
+  unsigned numDims = 0;
+  Type nested = ref.getNestedType();
+
+  if (isa<moore::QueueType>(nested)) {
+    numDims = 1;
+  } else {
+    while (auto arr = dyn_cast<moore::UnpackedArrayType>(nested)) {
+      ++numDims;
+      nested = arr.getElementType();
+    }
+
+    if (numDims == 0)
+      return emitOpError(
+                 "'dest' must reference an unpacked array or queue, got ")
+             << ref.getNestedType();
+  }
+  if (getDimLows().size() != numDims || getDimDescending().size() != numDims)
+    return emitOpError("'dimLows' and 'dimDescending' must have one entry per "
+                       "unpacked dimension");
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//

@@ -26,6 +26,7 @@ set(libs
   MLIRParser
   MLIRSCFDialect
   MLIRSupport
+  MLIRUBDialect
 )
 
 add_circt_tool(circt-verilog circt-verilog.cpp DEPENDS ${libs})

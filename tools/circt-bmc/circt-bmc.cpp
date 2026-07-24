@@ -27,9 +27,11 @@
 #include "circt/Dialect/OM/OMPasses.h"
 #include "circt/Dialect/Seq/SeqDialect.h"
 #include "circt/Dialect/Verif/VerifDialect.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Tools/circt-bmc/BMCTrace.h"
 #include "circt/Tools/circt-bmc/Passes.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -42,6 +44,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/OwningOpRef.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
@@ -50,6 +53,7 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
@@ -163,6 +167,49 @@ static cl::opt<OutputFormat> outputFormat(
 // Tool implementation
 //===----------------------------------------------------------------------===//
 
+static void collectTopLevelSymbolDeps(Operation *op, Operation *topLevel,
+                                      SymbolTable &symbolTable,
+                                      DenseSet<Operation *> &liveOps) {
+  SmallVector<Operation *> worklist{op};
+  while (!worklist.empty()) {
+    auto *current = worklist.pop_back_val();
+    if (!liveOps.insert(current).second)
+      continue;
+
+    auto symbolUses = SymbolTable::getSymbolUses(current);
+    if (!symbolUses)
+      continue;
+
+    for (auto &use : *symbolUses) {
+      auto symbolRef = dyn_cast<FlatSymbolRefAttr>(use.getSymbolRef());
+      if (!symbolRef)
+        continue;
+      auto *symbol = symbolTable.lookup(symbolRef.getValue());
+      if (!symbol || symbol->getParentOp() != topLevel)
+        continue;
+      worklist.push_back(symbol);
+    }
+  }
+}
+
+static void isolateFormalTest(ModuleOp module) {
+  if (moduleName.empty())
+    return;
+
+  auto formalOp = module.lookupSymbol<verif::FormalOp>(moduleName);
+  if (!formalOp)
+    return;
+
+  SymbolTable symbolTable(module);
+  DenseSet<Operation *> liveOps;
+  collectTopLevelSymbolDeps(formalOp, module, symbolTable, liveOps);
+
+  for (auto &op : llvm::make_early_inc_range(module.getBody()->getOperations()))
+    if (!liveOps.contains(&op) &&
+        isa<hw::HWModuleOp, verif::FormalOp, verif::SimulationOp>(op))
+      op.erase();
+}
+
 /// This function initializes the various components of the tool and
 /// orchestrates the work to be done.
 static LogicalResult executeBMC(MLIRContext &context) {
@@ -179,6 +226,8 @@ static LogicalResult executeBMC(MLIRContext &context) {
   }
   if (!module)
     return failure();
+
+  isolateFormalTest(*module);
 
   // Create the output directory or output file depending on our mode.
   std::optional<std::unique_ptr<llvm::ToolOutputFile>> outputFile;
@@ -210,6 +259,8 @@ static LogicalResult executeBMC(MLIRContext &context) {
     // builtin.module
     options.inlinePublic = true;
     pm.addPass(hw::createFlattenModules(options));
+    pm.addPass(verif::createLowerSymbolicValuesPass(
+        {verif::SymbolicValueLowering::HWInput}));
   }
   pm.addNestedPass<hw::HWModuleOp>(createLowerLTLToCorePass());
   pm.addNestedPass<hw::HWModuleOp>(verif::createCombineAssertLikePass());
@@ -278,6 +329,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
   };
 
   std::unique_ptr<mlir::ExecutionEngine> engine;
+  bool hasTraceContext = false;
   std::function<llvm::Error(llvm::Module *)> transformer =
       mlir::makeOptimizingTransformer(
           /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
@@ -291,11 +343,14 @@ static LogicalResult executeBMC(MLIRContext &context) {
       return failure();
     }
 
-    if (entryPoint.getNumArguments() != 0) {
+    if (entryPoint.getNumArguments() > 1 ||
+        (entryPoint.getNumArguments() == 1 &&
+         !isa<LLVM::LLVMPointerType>(entryPoint.getArgumentTypes().front()))) {
       llvm::errs() << "entry point '" << moduleName
-                   << "' must have no arguments";
+                   << "' must have no arguments or one trace context pointer";
       return failure();
     }
+    hasTraceContext = entryPoint.getNumArguments() == 1;
 
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
@@ -316,8 +371,22 @@ static LogicalResult executeBMC(MLIRContext &context) {
     engine = std::move(*expectedEngine);
   }
 
+  engine->registerSymbols([](llvm::orc::MangleAndInterner interner) {
+    llvm::orc::SymbolMap symbolMap;
+    symbolMap[interner("circt_bmc_record_trace")] = {
+        llvm::orc::ExecutorAddr::fromPtr(&bmc::circt_bmc_record_trace),
+        llvm::JITSymbolFlags::Exported};
+    return symbolMap;
+  });
+
+  bmc::BMCTrace trace(moduleName);
+  void *traceContext = &trace;
+  SmallVector<void *> packedArgs;
+  if (hasTraceContext)
+    packedArgs.push_back(&traceContext);
+
   auto timer = ts.nest("JIT Execution");
-  if (auto err = engine->invokePacked(moduleName))
+  if (auto err = engine->invokePacked(moduleName, packedArgs))
     return handleErr(std::move(err));
 
   return success();

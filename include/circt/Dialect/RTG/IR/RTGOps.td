@@ -10,6 +10,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_RTG_IR_RTGOPS_TD
+#define CIRCT_DIALECT_RTG_IR_RTGOPS_TD
+
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/EnumAttr.td"
 include "mlir/IR/CommonTypeConstraints.td"
@@ -24,10 +27,17 @@ include "circt/Dialect/RTG/IR/RTGAttributes.td"
 include "circt/Dialect/RTG/IR/RTGInterfaces.td"
 include "circt/Dialect/RTG/IR/RTGISAAssemblyInterfaces.td"
 include "circt/Dialect/Emit/EmitOpInterfaces.td"
+include "circt/Dialect/RTG/IR/RTGDialect.td"
+include "circt/Dialect/RTG/IR/RTGTypes.td"
+include "circt/Dialect/RTG/IR/RTGAttributes.td"
 
 // Resource representing the RNG state. Operations that read from or write to
 // the RNG state should declare effects on this resource to prevent CSE and DCE.
 def RNGStateResource : Resource<"RNGStateResource">;
+
+// Abstract resource for RTG mutable-cell memory effects. Used both by the
+// effect handler ops (to anchor resume side effects) and the mutable-cell ops.
+def MutResource : Resource<"MutResource">;
 
 // Base class for the operation in this dialect.
 class RTGOp<string mnemonic, list<Trait> traits = []> :
@@ -280,6 +290,21 @@ def StringToLabelOp : RTGOp<"string_to_label", [Pure]> {
   let assemblyFormat = "$string attr-dict";
 
   let hasFolder = 1;
+}
+
+def StringToASCIIArrayOp : RTGOp<"string_to_ascii_array", [Pure]> {
+  let summary = "converts a string to an array of 8-bit ASCII immediates";
+  let description = [{
+    This operation decomposes a string into an array of 8-bit immediates, one
+    per byte, in the same order as the string. No NULL terminator is appended.
+  }];
+
+  let arguments = (ins StringType:$string);
+  let results = (outs ArrayTypeOf<I8>:$result);
+
+  let assemblyFormat = "$string `:` qualified(type($result)) attr-dict";
+
+  let hasCanonicalizeMethod = 1;
 }
 
 def LabelVisibilityAttr : I32EnumAttr<"LabelVisibility",
@@ -1192,3 +1217,122 @@ def SegmentOp : RTGISAOp<"segment", [
 
   let assemblyFormat = "$kind attr-dict-with-keyword $bodyRegion";
 }
+
+//===- Algebraic Effect Handler Operations --------------------------------===//
+
+def EffectOp : RTGOp<"effect", [
+  Symbol,
+  HasParent<"mlir::ModuleOp">,
+]> {
+  let summary = "algebraic effect signature";
+  let description = [{
+    Declares a named effect with its input and result types.  At most one
+    `rtg.effect` with a given name may exist in a module.
+
+    Example:
+    ```mlir
+    rtg.effect @choose : (!rtg.set<index>) -> index
+    rtg.effect @log_value : (index) -> none
+    ```
+  }];
+
+  let arguments = (ins SymbolNameAttr:$sym_name,
+                       TypeAttrOf<FunctionType>:$function_type);
+
+  let assemblyFormat = "$sym_name `:` $function_type attr-dict";
+}
+
+def WithHandlersOp : RTGOp<"with_handlers", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  RecursiveMemoryEffects,
+]> {
+  let summary = "install algebraic effect handlers for a protected body region";
+  let description = [{
+    Establishes a set of algebraic effect handlers that are active during
+    elaboration of the `body` region.  Every `rtg.perform` in the body (or
+    transitively in sequences it calls) dispatches to the innermost enclosing
+    handler for the matching effect symbol.
+
+    The `effects` array attribute contains one `FlatSymbolRefAttr` per handled
+    effect.  There must be exactly one handler region for each entry in
+    `effects`.  Each handler region has block arguments equal to the effect's
+    input types followed by a trailing `!rtg.continuation<R>` where `R` is the
+    effect's result type.
+
+    All regions are terminated by `rtg.yield`.
+
+    Example:
+    ```mlir
+    rtg.with_handlers {
+      handle @choose(%s: !rtg.set<index>, %k: !rtg.continuation<index>) {
+        %sel = rtg.set_select_random %s : !rtg.set<index>
+        rtg.resume %k, %sel : !rtg.continuation<index>, index
+        rtg.yield
+      }
+      do {
+        %result = rtg.perform @choose(%set) : (!rtg.set<index>) -> index
+        rtg.yield
+      }
+    }
+    ```
+  }];
+
+  let arguments = (ins ArrayAttr:$effects);
+  let regions   = (region SizedRegion<1>:$body,
+                          VariadicRegion<SizedRegion<1>>:$handlerRegions);
+
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def PerformOp : RTGOp<"perform", [
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+]> {
+  let summary = "perform an algebraic effect";
+  let description = [{
+    Suspends the current elaboration frame and dispatches to the innermost
+    handler installed by an enclosing `rtg.with_handlers` for `$effect`.  If no
+    handler is in scope, elaboration fails with a diagnostic.
+
+    Example:
+    ```mlir
+    %winner = rtg.perform @choose(%regs) : (!rtg.set<index>) -> index
+    rtg.perform @log_value(%winner) : (index) -> none
+    ```
+  }];
+
+  let arguments = (ins FlatSymbolRefAttr:$effect,
+                       Variadic<AnyType>:$operands);
+  let results   = (outs Optional<AnyType>:$result);
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+def ResumeOp : RTGOp<"resume", [
+  DeclareOpInterfaceMethods<MemoryEffectsOpInterface>,
+]> {
+  let summary = "resume a continuation, optionally providing its return value";
+  let description = [{
+    Resumes the continuation `%k`, optionally passing a return value.
+    `Write<MutResource>` prevents DCE of a resume whose side effects are
+    the point of the operation.
+
+    Example:
+    ```mlir
+    rtg.resume %k, %v   // continuation expects index
+    rtg.resume %k       // continuation expects none (void effect)
+    ```
+  }];
+
+  let arguments = (ins ContinuationType:$continuation,
+                       Optional<AnyType>:$value);
+
+  let assemblyFormat = [{
+    $continuation (`,` $value^)? attr-dict `:` type($continuation)
+    (`,` type($value)^)?
+  }];
+  let hasVerifier = 1;
+}
+
+#endif // CIRCT_DIALECT_RTG_IR_RTGOPS_TD

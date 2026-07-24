@@ -64,8 +64,11 @@ public:
             SpaceOp, StringDataOp, SegmentOp,
             // String ops
             StringConcatOp, IntFormatOp, ImmediateFormatOp, RegisterFormatOp,
+            StringToASCIIArrayOp,
             // Misc ops
-            CommentOp, ConstraintOp, RandomScopeOp>(
+            CommentOp, ConstraintOp, RandomScopeOp,
+            // Effect handler ops
+            EffectOp, WithHandlersOp, PerformOp, ResumeOp>(
             [&](auto expr) -> ResultType {
               return thisCast->visitOp(expr, args...);
             })
@@ -156,7 +159,12 @@ public:
   HANDLE(ImmediateFormatOp, Unhandled);
   HANDLE(RegisterFormatOp, Unhandled);
   HANDLE(StringToLabelOp, Unhandled);
+  HANDLE(StringToASCIIArrayOp, Unhandled);
   HANDLE(RandomScopeOp, Unhandled);
+  HANDLE(EffectOp, Unhandled);
+  HANDLE(WithHandlersOp, Unhandled);
+  HANDLE(PerformOp, Unhandled);
+  HANDLE(ResumeOp, Unhandled);
 #undef HANDLE
 };
 

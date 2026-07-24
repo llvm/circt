@@ -34,6 +34,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/Transforms/InlinerInterfaceImpl.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Parser/Parser.h"
@@ -64,6 +65,7 @@ enum class LoweringMode {
   OnlyPreprocess,
   OnlyLint,
   OnlyParse,
+  OnlyImport,
   OutputIRMoore,
   OutputIRLLHD,
   OutputIRHW,
@@ -115,8 +117,12 @@ struct CLOptions {
                      "Only lint the input, without elaboration and mapping to "
                      "CIRCT IR"),
           clEnumValN(LoweringMode::OnlyParse, "parse-only",
-                     "Only parse and elaborate the input, without mapping to "
-                     "CIRCT IR"),
+                     "Only parse the input syntax and report diagnostics; do "
+                     "not elaborate or map to IR"),
+          clEnumValN(
+              LoweringMode::OnlyImport, "import-only",
+              "Parse and elaborate the input and map it to Moore IR, but "
+              "do not run any lowering passes"),
           clEnumValN(LoweringMode::OutputIRMoore, "ir-moore",
                      "Run the entire pass manager to just before MooreToCore "
                      "conversion, and emit the resulting Moore dialect IR"),
@@ -345,6 +351,8 @@ static LogicalResult executeWithSources(MLIRContext *context,
     options.mode = ImportVerilogOptions::Mode::OnlyLint;
   else if (opts.loweringMode == LoweringMode::OnlyParse)
     options.mode = ImportVerilogOptions::Mode::OnlyParse;
+  else if (opts.loweringMode == LoweringMode::OnlyImport)
+    options.mode = ImportVerilogOptions::Mode::OnlyImport;
   options.debugInfo = opts.debugInfo;
   options.lowerAlwaysAtStarAsComb = opts.lowerAlwaysAtStarAsComb;
 
@@ -406,9 +414,10 @@ static LogicalResult executeWithSources(MLIRContext *context,
     if (failed(importVerilog(sourceMgr, context, ts, module.get(), &options)))
       return failure();
 
-    // If the user requested for the files to be only linted, the module remains
-    // empty and there is nothing left to do.
-    if (opts.loweringMode == LoweringMode::OnlyLint)
+    // If the user requested for the files to be only linted or parsed, the
+    // module remains empty and there is nothing left to do.
+    if (opts.loweringMode == LoweringMode::OnlyLint ||
+        opts.loweringMode == LoweringMode::OnlyParse)
       return success();
   } break;
 
@@ -420,9 +429,10 @@ static LogicalResult executeWithSources(MLIRContext *context,
   if (!module)
     return failure();
 
-  // If the user requested anything besides simply parsing the input, run the
-  // appropriate transformation passes according to the command line options.
-  if (opts.loweringMode != LoweringMode::OnlyParse) {
+  // If the user requested anything besides importing the input to Moore IR, run
+  // the appropriate transformation passes according to the command line
+  // options.
+  if (opts.loweringMode != LoweringMode::OnlyImport) {
     PassManager pm(context);
     pm.enableVerifier(true);
     pm.enableTiming(ts);
@@ -562,6 +572,7 @@ int main(int argc, char **argv) {
     scf::SCFDialect,
     seq::SeqDialect,
     sim::SimDialect,
+    ub::UBDialect,
     verif::VerifDialect
   >();
   // clang-format on

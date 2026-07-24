@@ -41,6 +41,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinDialect.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "llvm/Support/Debug.h"
@@ -1005,14 +1006,21 @@ foldFormatString(ConversionPatternRewriter &rewriter, Value fstringValue,
 FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
                                     StringCache &stringCache,
                                     ArrayRef<FmtDescriptor> descriptors,
-                                    ValueRange args) {
+                                    ValueRange args, Value stream = {}) {
   ModuleOp moduleOp =
       builder.getInsertionBlock()->getParent()->getParentOfType<ModuleOp>();
-  // Lookup or create the arcRuntimeFormat function symbol.
   MLIRContext *ctx = builder.getContext();
-  auto func = LLVM::lookupOrCreateFn(
-      builder, moduleOp, runtime::APICallbacks::symNameFormat,
-      LLVM::LLVMPointerType::get(ctx), LLVM::LLVMVoidType::get(ctx), true);
+  auto ptrType = LLVM::LLVMPointerType::get(ctx);
+  SmallVector<Type, 2> paramTypes;
+  StringRef symbolName = runtime::APICallbacks::symNameFormat;
+  if (stream) {
+    symbolName = runtime::APICallbacks::symNameFormatToStream;
+    paramTypes.push_back(ptrType);
+  }
+  paramTypes.push_back(ptrType);
+
+  auto func = LLVM::lookupOrCreateFn(builder, moduleOp, symbolName, paramTypes,
+                                     LLVM::LLVMVoidType::get(ctx), true);
   if (failed(func))
     return func;
 
@@ -1020,7 +1028,10 @@ FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
                            descriptors.size() * sizeof(FmtDescriptor));
   Value fmtPtr = stringCache.getOrCreate(builder, rawDescriptors);
 
-  SmallVector<Value> argsVec(1, fmtPtr);
+  SmallVector<Value> argsVec;
+  if (stream)
+    argsVec.push_back(stream);
+  argsVec.push_back(fmtPtr);
   argsVec.append(args.begin(), args.end());
   auto result = LLVM::CallOp::create(builder, loc, func.value(), argsVec);
 
@@ -1033,6 +1044,35 @@ FailureOr<LLVM::CallOp> emitFmtCall(OpBuilder &builder, Location loc,
 
   return result;
 }
+
+template <typename SourceOp>
+struct SimStreamOpLowering : public OpConversionPattern<SourceOp> {
+  SimStreamOpLowering(const TypeConverter &typeConverter, MLIRContext *context,
+                      StringRef symbolName)
+      : OpConversionPattern<SourceOp>(typeConverter, context),
+        symbolName(symbolName) {}
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ModuleOp moduleOp = op->template getParentOfType<ModuleOp>();
+    if (!moduleOp)
+      return failure();
+
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+    auto func =
+        LLVM::lookupOrCreateFn(rewriter, moduleOp, symbolName, {}, ptrType);
+    if (failed(func))
+      return failure();
+
+    auto call =
+        LLVM::CallOp::create(rewriter, op.getLoc(), func.value(), ValueRange{});
+    rewriter.replaceOp(op, call.getResults());
+    return success();
+  }
+
+  StringRef symbolName;
+};
 
 struct SimPrintFormattedProcOpLowering
     : public OpConversionPattern<sim::PrintFormattedProcOp> {
@@ -1052,8 +1092,9 @@ struct SimPrintFormattedProcOpLowering
     // Add the end descriptor.
     formatInfo->descriptors.push_back(FmtDescriptor());
 
-    auto result = emitFmtCall(rewriter, op.getLoc(), stringCache,
-                              formatInfo->descriptors, formatInfo->args);
+    auto result =
+        emitFmtCall(rewriter, op.getLoc(), stringCache, formatInfo->descriptors,
+                    formatInfo->args, adaptor.getStream());
     if (failed(result))
       return failure();
     rewriter.replaceOp(op, result.value());
@@ -1821,6 +1862,9 @@ void LowerArcToLLVMPass::runOnOperation() {
   converter.addConversion([&](sim::FormatStringType type) {
     return LLVM::LLVMPointerType::get(type.getContext());
   });
+  converter.addConversion([&](sim::OutputStreamType type) {
+    return LLVM::LLVMPointerType::get(type.getContext());
+  });
   converter.addConversion([&](llhd::TimeType type) {
     // LLHD time is represented as i64 femtoseconds.
     return IntegerType::get(type.getContext(), 64);
@@ -1851,8 +1895,9 @@ void LowerArcToLLVMPass::runOnOperation() {
   populateAnyFunctionOpInterfaceTypeConversionPattern(patterns, converter);
 
   // CIRCT patterns.
+  DataLayout layout = DataLayout::closest(getOperation());
   DenseMap<std::pair<Type, ArrayAttr>, LLVM::GlobalOp> constAggregateGlobalsMap;
-  populateHWToLLVMTypeConversions(converter);
+  populateHWToLLVMTypeConversions(converter, layout);
   std::optional<HWToLLVMArraySpillCache> spillCacheOpt =
       HWToLLVMArraySpillCache();
   {
@@ -1912,6 +1957,10 @@ void LowerArcToLLVMPass::runOnOperation() {
   StringCache stringCache;
   patterns.add<SimEmitValueOpLowering, SimPrintFormattedProcOpLowering>(
       converter, &getContext(), stringCache);
+  patterns.add<SimStreamOpLowering<sim::StdoutStreamOp>>(
+      converter, &getContext(), runtime::APICallbacks::symNameGetStdoutStream);
+  patterns.add<SimStreamOpLowering<sim::StderrStreamOp>>(
+      converter, &getContext(), runtime::APICallbacks::symNameGetStderrStream);
 
   auto &modelInfo = getAnalysis<ModelInfoAnalysis>();
   llvm::DenseMap<StringRef, ModelInfoMap> modelMap(modelInfo.infoMap.size());

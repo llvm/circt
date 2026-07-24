@@ -772,6 +772,22 @@ def IntToStringOp: SimOp<"string.int_to_string", [Pure]> {
   let assemblyFormat = "$input attr-dict `:` qualified(type($input))";
 }
 
+def StringToIntOp : SimOp<"string.string_to_int", [Pure]> {
+  let summary = "Convert a string into an integer";
+  let description = [{
+    Packs the characters of a string into a big-endian bit sequence, one
+    byte per character, with the last character forming the
+    least-significant bits of the sequence. That sequence is then fit to
+    the result width: zero-extended on the most-significant end if the
+    result is wider, or truncated from the most-significant end if it is
+    narrower.
+  }];
+  let arguments = (ins DynamicStringType:$input);
+  let results = (outs AnyInteger:$result);
+
+  let assemblyFormat = "$input attr-dict `:` qualified(type($result))";
+}
+
 def FormatToStringOp : SimOp<"string.format_to_string", [ProceduralOp]> {
   let summary = "Create a dynamic string by evaluating a format string";
   let description = [{
@@ -839,9 +855,9 @@ def StringCmpOp : SimOp<"string.cmp", [Pure]> {
 // Queues
 //===----------------------------------------------------------------------===//
 
-def QueueCmpPredicateAttr : I64EnumAttr<
-    "QueueCmpPredicate",
-    "queue.cmp comparison predicate",
+def UArrayCmpPredicateAttr : I64EnumAttr<
+    "UArrayCmpPredicate",
+    "unpacked-array-like container comparison predicate",
     [I64EnumAttrCase<"eq", 0>,
       I64EnumAttrCase<"ne", 1>]> {
   let cppNamespace = "circt::sim";
@@ -856,7 +872,7 @@ def QueueCmpOp : SimOp<"queue.cmp", [Pure, Commutative, SameTypeOperands]> {
     Comparing for equality and inequality are both supported.
   }];
 
-  let arguments = (ins QueueCmpPredicateAttr:$predicate, QueueType:$lhs, QueueType:$rhs);
+  let arguments = (ins UArrayCmpPredicateAttr:$predicate, QueueType:$lhs, QueueType:$rhs);
   let results = (outs I1:$result);
 
   let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` type($lhs)";
@@ -1123,6 +1139,167 @@ def QueueConcatOp : SimOp<"queue.concat", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// Associative array operations
+//===----------------------------------------------------------------------===//
+
+def AssocArrayEmptyOp : SimOp<"assoc_array.empty", [Pure]> {
+  let summary = "Creates an empty associative array";
+  let description = [{
+    Creates an empty associative array, which is the default value for a
+    variable holding an associative array.
+  }];
+  let arguments = (ins);
+  let results = (outs AssocArrayType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+}
+
+def AssocArrayGetOp : SimOp<"assoc_array.get", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    TypesMatchWith<"array and result types must match",
+      "array", "result", "cast<AssocArrayType>($_self).getElementType()">]> {
+  let summary = "Reads an element from an associative array";
+  let description = [{
+    Returns the element stored at $index. If no entry exists for $index, the
+    returned value is unspecified; use `assoc_array.exists` to distinguish a
+    missing entry from a stored value.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$array `[` $index `]` attr-dict `:` type($array)";
+}
+
+def AssocArraySetOp : SimOp<"assoc_array.set", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    TypesMatchWith<"array and value types must match",
+      "array", "value", "cast<AssocArrayType>($_self).getElementType()">,
+    AllTypesMatch<["array", "outArray"]>]> {
+  let summary = "Writes an element into an associative array";
+  let description = [{
+    Returns an updated associative array with $value stored at $index,
+    creating the entry if it did not already exist.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index, AnyType:$value);
+  let results = (outs AssocArrayType:$outArray);
+  let assemblyFormat = "$array `[` $index `]` `=` $value attr-dict `:` type($array)";
+}
+
+def AssocArrayDeleteOp : SimOp<"assoc_array.delete", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    AllTypesMatch<["array", "outArray"]>]> {
+  let summary = "Deletes an entry from an associative array";
+  let description = [{
+    Returns an updated associative array with the entry at $index removed.
+    Deleting an entry that does not exist returns the array unchanged.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs AssocArrayType:$outArray);
+  let assemblyFormat = "`index` $index `of` $array attr-dict `:` type($array)";
+}
+
+def AssocArraySizeOp : SimOp<"assoc_array.size", [Pure]> {
+  let summary = "Number of entries in an associative array";
+  let description = [{
+    Returns the number of entries stored in the associative array. An empty
+    array has size 0.
+  }];
+  let arguments = (ins AssocArrayType:$array);
+  let results = (outs I32:$result);
+  let assemblyFormat = "$array attr-dict `:` type($array)";
+}
+
+def AssocArrayCmpOp : SimOp<"assoc_array.cmp",
+    [Pure, Commutative, SameTypeOperands]> {
+  let summary = "Compares two associative arrays";
+  let description = [{
+    Carries out a comparison on two associative arrays. Two associative
+    arrays are equal if they have the same set of keys and each key maps to
+    an equal value in both arrays.
+
+    Comparing for equality and inequality are both supported.
+  }];
+
+  let arguments = (ins UArrayCmpPredicateAttr:$predicate, AssocArrayType:$lhs, AssocArrayType:$rhs);
+  let results = (outs I1:$result);
+
+  let assemblyFormat = "$predicate $lhs `,` $rhs attr-dict `:` type($lhs)";
+}
+
+def AssocArrayExistsOp : SimOp<"assoc_array.exists", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Checks whether an entry exists in an associative array";
+  let description = [{
+    Returns a nonzero value if an entry exists at $index, and 0 otherwise.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs I32:$result);
+  let assemblyFormat = "$index `in` $array attr-dict `:` type($array)";
+}
+
+def AssocArrayFirstOp : SimOp<"assoc_array.first", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Finds the first (lowest) index in an associative array";
+  let description = [{
+    Finds the smallest index that has an entry in the array. If the array is
+    not empty, $found is nonzero and $index is that index. Otherwise $found
+    is 0 and $index is unspecified.
+  }];
+  let arguments = (ins AssocArrayType:$array);
+  let results = (outs I32:$found, AnyType:$index);
+  let assemblyFormat = "$array attr-dict `:` type($array)";
+}
+
+def AssocArrayLastOp : SimOp<"assoc_array.last", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Finds the last (highest) index in an associative array";
+  let description = [{
+    Finds the largest index that has an entry in the array. If the array is
+    not empty, $found is nonzero and $index is that index. Otherwise $found
+    is 0 and $index is unspecified.
+  }];
+  let arguments = (ins AssocArrayType:$array);
+  let results = (outs I32:$found, AnyType:$index);
+  let assemblyFormat = "$array attr-dict `:` type($array)";
+}
+
+def AssocArrayNextOp : SimOp<"assoc_array.next", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    TypesMatchWith<"array and nextIndex types must match",
+      "array", "nextIndex", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Finds the next index in an associative array";
+  let description = [{
+    Finds the smallest index strictly greater than $index. If such an entry
+    exists, $found is nonzero and $nextIndex is that index. Otherwise $found
+    is 0 and $nextIndex is $index, unchanged.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs I32:$found, AnyType:$nextIndex);
+  let assemblyFormat = "$array `[` $index `]` attr-dict `:` type($array)";
+}
+
+def AssocArrayPrevOp : SimOp<"assoc_array.prev", [Pure,
+    TypesMatchWith<"array and index types must match",
+      "array", "index", "cast<AssocArrayType>($_self).getIndexType()">,
+    TypesMatchWith<"array and prevIndex types must match",
+      "array", "prevIndex", "cast<AssocArrayType>($_self).getIndexType()">]> {
+  let summary = "Finds the previous index in an associative array";
+  let description = [{
+    Finds the largest index strictly smaller than $index. If such an entry
+    exists, $found is nonzero and $prevIndex is that index. Otherwise $found
+    is 0 and $prevIndex is $index, unchanged.
+  }];
+  let arguments = (ins AssocArrayType:$array, AnyType:$index);
+  let results = (outs I32:$found, AnyType:$prevIndex);
+  let assemblyFormat = "$array `[` $index `]` attr-dict `:` type($array)";
+}
+
+//===----------------------------------------------------------------------===//
 // Simulation Control
 //===----------------------------------------------------------------------===//
 
@@ -1317,6 +1494,45 @@ def SVFFlushAllOp : SimOp<"sv.fflush_all", [ProceduralOp]> {
   }];
 
   let assemblyFormat = "attr-dict";
+}
+
+def SVReadMemOp : SimOp<"sv.readmem", [AttrSizedOperandSegments, ProceduralOp,
+    AllTypesMatch<["memory", "result"]>]> {
+  let summary = "Load a memory from a file as with $readmemb/$readmemh";
+  let description = [{
+    Takes the current contents of a memory and returns the contents updated
+    with the data read from a file, following the file format of the
+    SystemVerilog `$readmemb`/`$readmemh` system tasks (IEEE 1800-2017
+    § 21.4). Addresses for which the file holds no data keep their input
+    value. If `isBinary` is set the file contains binary words, otherwise
+    hexadecimal.
+
+    `dimLows` and `dimDescending` record the declared low bound and direction
+    of every unpacked dimension of the memory (outermost first).
+    `sliceLeft`/`sliceRight` narrow the addressable window of the highest
+    dimension. When `enumValues` is present, loaded words are checked against
+    it and the load stops with an error on the first mismatch.
+  }];
+  let arguments = (ins
+    DynamicStringType:$filename,
+    AnyTypeOf<[ArrayType, QueueType]>:$memory,
+    DefaultValuedAttr<BoolAttr, "false">:$isBinary,
+    Optional<I32>:$startAddr,
+    Optional<I32>:$finishAddr,
+    Optional<I32>:$sliceLeft,
+    Optional<I32>:$sliceRight,
+    DenseI64ArrayAttr:$dimLows,
+    DenseBoolArrayAttr:$dimDescending,
+    OptionalAttr<DenseI64ArrayAttr>:$enumValues
+  );
+  let results = (outs AnyTypeOf<[ArrayType, QueueType]>:$result);
+  let assemblyFormat = [{
+    $filename `,` $memory
+    (`start` `=` $startAddr^)? (`finish` `=` $finishAddr^)?
+    (`slice` `` `[` $sliceLeft^ `,` $sliceRight `]`)?
+    attr-dict `:` type($memory)
+  }];
+  let hasVerifier = 1;
 }
 
 def FlushOp : SimOp<"flush", [ProceduralOp]> {

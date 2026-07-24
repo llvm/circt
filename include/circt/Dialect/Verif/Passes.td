@@ -132,7 +132,7 @@ def LowerContractsPass : Pass<"lower-contracts", "mlir::ModuleOp"> {
 
 def LowerSymbolicValuesPass : Pass<"verif-lower-symbolic-values",
                                    "mlir::ModuleOp"> {
-  let summary = "Lower symbolic values to blackbox instances or wires";
+  let summary = "Lower symbolic values to blackbox instances, wires, or inputs";
   let description = [{
     Converts `verif.symbolic_value` ops into one of the following
     representations that formal tools can work with:
@@ -142,6 +142,8 @@ def LowerSymbolicValuesPass : Pass<"verif-lower-symbolic-values",
       outputs.
     - Wire declarations marked with `(* anyseq *)`, which Yosys treats like a
       top-level input port.
+    - Input ports on the containing `hw.module`, for downstream lowerings that
+      already model module inputs as unconstrained values.
   }];
   let options = [
     Option<

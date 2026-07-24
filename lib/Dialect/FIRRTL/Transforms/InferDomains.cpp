@@ -26,7 +26,9 @@
 #include "mlir/IR/AsmState.h"
 #include "mlir/IR/Iterators.h"
 #include "mlir/IR/Threading.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TinyPtrVector.h"
@@ -98,16 +100,7 @@ static bool isHardware(Type type) {
 }
 
 /// True if the given value could be association with a domain.
-static bool isHardware(Value value) {
-  if (!isHardware(value.getType()))
-    return false;
-
-  if (auto *op = value.getDefiningOp())
-    if (op->hasTrait<OpTrait::ConstantLike>())
-      return false;
-
-  return true;
-}
+static bool isHardware(Value value) { return isHardware(value.getType()); }
 
 //====--------------------------------------------------------------------------
 // Global State.
@@ -345,6 +338,14 @@ public:
   Term *getDomainAssociation(Value value);
   void setDomainAssociation(Value value, Term *term);
 
+  /// True if the value is "colorless": it is only driven by nodes or primops
+  /// whose inputs all terminate in constants, and therefore is not tied to any
+  /// domain. A colorless value imposes and inherits no domain constraints and
+  /// may be freely consumed by a value in any domain. All ports and wires are
+  /// treated as colored. Computed structurally over the SSA graph, memoized per
+  /// module.
+  bool isColorless(Value value);
+
   void processDomainDefinition(DomainValue domain);
   RowTerm *getDomainAssociationAsRow(Value value);
 
@@ -447,6 +448,8 @@ private:
   CircuitState &globals;
   DenseMap<Value, Term *> termTable;
   DenseMap<Value, Term *> associationTable;
+  /// Memoization for `isColorless`. Absent = not computed; present = result.
+  DenseMap<Value, bool> colorlessTable;
   llvm::BumpPtrAllocator allocator;
 };
 } // namespace
@@ -723,6 +726,165 @@ void ModuleState::setDomainAssociation(Value value, Term *term) {
     llvm::dbgs().indent(6) << "set domains(" << render(value)
                            << ") := " << render(term) << "\n";
   });
+}
+
+bool ModuleState::isColorless(Value value) {
+  // Non-hardware values (domains, properties, indices, ...) never participate
+  // in coloring, so treat them as colorless: they impose no constraint.
+  if (!isHardware(value))
+    return true;
+
+  // Consult the memo table.  A value is visited (expanded) at most once.
+  if (auto it = colorlessTable.find(value); it != colorlessTable.end())
+    return it->second;
+
+  // Classify a single value structurally, without recursing.  A "look-through"
+  // value (a node or a pure primop) is colorless iff all of its hardware
+  // operands are colorless.  For every look-through op the operands to explore
+  // are exactly all of its operands (a node and a forwarding cast have a single
+  // input operand; a pure expression is only look-through when all of its
+  // operands are hardware), so the caller can iterate the defining op's operand
+  // list directly rather than collecting a subset here.  Everything else is
+  // either a colorless constant root or a colored leaf.  In particular, all
+  // ports (block arguments, instance results) and wires are colored and must be
+  // assigned a domain.
+  enum class Kind { Colorless, Colored, LookThrough };
+  auto classify = [&](Value v) -> Kind {
+    if (!isHardware(v))
+      return Kind::Colorless;
+
+    auto *op = v.getDefiningOp();
+    // Block arguments (ports) have no defining op and are always colored.
+    if (!op)
+      return Kind::Colored;
+
+    // Constants are the only colorless roots.
+    if (op->hasTrait<OpTrait::ConstantLike>())
+      return Kind::Colorless;
+
+    // A node forwards its single input.
+    if (isa<NodeOp>(op))
+      return Kind::LookThrough;
+
+    // An unsafe domain cast with explicit domain operands is an explicit
+    // coloring point and is always colored.  A cast with no domain operands is
+    // a pure forwarding cast that inherits colorlessness from its input.
+    if (auto castOp = dyn_cast<UnsafeDomainCastOp>(op)) {
+      if (!castOp.getDomains().empty())
+        return Kind::Colored;
+      return Kind::LookThrough;
+    }
+
+    // Pure, memory-effect-free expression ops (prim ops, muxes, casts,
+    // aggregate projections) fan out to their hardware-typed operands.  For
+    // the ops that are eligible to propagate colorlessness (arithmetic and
+    // bitwise prim ops, muxes, casts, aggregate projections) every SSA operand
+    // is hardware-typed; scalar indices and amounts are attributes, not
+    // operands.  A non-hardware SSA operand (a property, domain, or other
+    // opaque value, e.g. a `verbatim.expr` substitution) therefore only
+    // appears on ops that reference external state, which are colored.  An
+    // expression with no hardware operands is likewise a non-constant root
+    // (e.g. an `xmr.ref`) and is colored.
+    if (isExpression(op) && mlir::isMemoryEffectFree(op)) {
+      if (op->getNumOperands() == 0)
+        return Kind::Colored;
+      for (auto operand : op->getOperands())
+        if (!isHardware(operand))
+          return Kind::Colored;
+      return Kind::LookThrough;
+    }
+
+    // Everything else (wires, instance results, registers, memories, explicit
+    // domain casts, invalid values, probes, ...) is a colored leaf.
+    return Kind::Colored;
+  };
+
+  // Iterative post-order DFS.  Each frame tracks a look-through value (a value
+  // whose colorlessness is not yet known) and requires exploring its operands.
+  // Every look-through op explores all of its operands, so the frame only needs
+  // the value (whose defining op supplies the operands) and the index of the
+  // _next_ operand to visit.  A value's colorlessness is the conjunction of its
+  // operands' colorlessness.  As soon as a colored operand is found the frame
+  // short-circuits to colored.  Since look-through values (constants, nodes,
+  // primops) reference only dominating SSA operands, the explored subgraph is
+  // acyclic (combinational loops only close through wires, which are colored
+  // leaves).
+  //
+  // Note: this DFS is _not_ sufficient to determine colorlessness through
+  // nodes.  It is assumed that a post-condition of this pass is that all wires
+  // are assigned domains.
+  struct Frame {
+    // The lookthrough value whose colorlessness is being resolved.  Its
+    // defining op supplies the operands to explore; every look-through op
+    // explores all of its operands.
+    Value value;
+    // The index of the next operand to explore.
+    unsigned index = 0;
+  };
+  SmallVector<Frame> stack;
+
+  // Push the first value onto the stack (or exit).
+  switch (classify(value)) {
+  case Kind::Colored:
+    return colorlessTable[value] = false;
+  case Kind::Colorless:
+    return colorlessTable[value] = true;
+  case Kind::LookThrough:
+    stack.push_back({value});
+    break;
+  }
+
+  // Run the DFS.
+  while (!stack.empty()) {
+    auto &frame = stack.back();
+    auto *op = frame.value.getDefiningOp();
+    bool colored = false, pushed = false;
+
+    while (frame.index < op->getNumOperands()) {
+      Value child = op->getOperand(frame.index);
+
+      // If already resolved, short-circuit on a colored operand or advance.
+      if (auto it = colorlessTable.find(child); it != colorlessTable.end()) {
+        if (!it->second) {
+          colored = true;
+          break;
+        }
+        ++frame.index;
+        continue;
+      }
+
+      // Classify the operand.  Classify if not lookthrough.  Otherwise, push
+      // the lookthrough operand onto the stack and break so that we descend
+      // into it.
+      switch (classify(child)) {
+      case Kind::Colored:
+        colorlessTable[child] = false;
+        colored = true;
+        break;
+      case Kind::Colorless:
+        colorlessTable[child] = true;
+        ++frame.index;
+        continue;
+      case Kind::LookThrough:
+        stack.push_back({child});
+        pushed = true;
+        break;
+      }
+      break;
+    }
+
+    // We hit a lookthrough operand.  Dexcend into this.  We will revisit the
+    // current frame.index once we have an answer for that operand.
+    if (pushed)
+      continue;
+
+    // All operands resolved (or a colored operand short-circuited).  Record the
+    // result and pop this frame.
+    colorlessTable[frame.value] = !colored;
+    stack.pop_back();
+  }
+
+  return colorlessTable[value];
 }
 
 void ModuleState::processDomainDefinition(DomainValue domain) {
@@ -1020,6 +1182,11 @@ LogicalResult ModuleState::unifyAssociations(Operation *op, Value lhs,
   if (!isHardware(lhs) || !isHardware(rhs))
     return success();
 
+  // Colorless values impose and receive no association: colorless is below
+  // every color in the lattice.
+  if (isColorless(lhs) || isColorless(rhs))
+    return success();
+
   LLVM_DEBUG({
     llvm::dbgs().indent(6) << "unify domains(" << render(lhs) << ") = domains("
                            << render(rhs) << ")\n";
@@ -1055,7 +1222,7 @@ template <typename T>
 LogicalResult ModuleState::unifyAssociations(Operation *op, T &&range) {
   Value lhs;
   for (auto rhs : std::forward<T>(range)) {
-    if (!isHardware(rhs))
+    if (!isHardware(rhs) || isColorless(rhs))
       continue;
     if (failed(unifyAssociations(op, lhs, rhs)))
       return failure();
@@ -1209,7 +1376,7 @@ LogicalResult ModuleState::processOp(UnsafeDomainCastOp op) {
   auto input = op.getInput();
 
   SmallVector<Term *> elements(getNumDomains());
-  if (isHardware(input)) {
+  if (isHardware(input) && !isColorless(input)) {
     auto *inputRow = getDomainAssociationAsRow(input);
     elements.assign(inputRow->elements);
   }
@@ -1696,7 +1863,7 @@ ModuleState::updateWire(DenseMap<DomainValue, DomainValue> &domainsInScope,
     llvm_unreachable("unhandled domain term type");
   }
 
-  if (!isHardware(result))
+  if (!isHardware(result) || isColorless(result))
     return success();
 
   LLVM_DEBUG(llvm::dbgs().indent(4) << "update " << render(wireOp) << "\n");
@@ -1851,10 +2018,7 @@ LogicalResult ModuleState::checkModuleDomainPortDrivers(FModuleOp moduleOp) {
 LogicalResult ModuleState::checkInstanceDomainPortDrivers(FInstanceLike op) {
   for (size_t i = 0, e = op->getNumResults(); i < e; ++i) {
     auto port = dyn_cast<DomainValue>(op->getResult(i));
-
-    auto type = port.getType();
-    if (!isa<DomainType>(type) || op.getPortDirection(i) != Direction::In ||
-        isDriven(port))
+    if (!port || op.getPortDirection(i) != Direction::In || isDriven(port))
       continue;
 
     auto name = op.getPortNameAttr(i);
@@ -1921,62 +2085,102 @@ LogicalResult ModuleState::checkAndInferModule(FModuleOp moduleOp) {
 // Domain Stripping.
 //===---------------------------------------------------------------------------
 
-static LogicalResult stripModule(FModuleLike op) {
+/// A helper for stripping domains from a module based on a predicate. The
+/// predicate takes a domain name and returns true if that domain should be
+/// stripped.
+static LogicalResult
+stripModuleImpl(FModuleLike op,
+                llvm::function_ref<bool(StringAttr)> shouldStripDomain) {
+  auto shouldStripType = [&](Type type) {
+    if (auto domainType = dyn_cast<DomainType>(type))
+      return shouldStripDomain(domainType.getName().getAttr());
+    return false;
+  };
   WalkResult result = op->walk<mlir::WalkOrder::PostOrder, ReverseIterator>(
-      [=](Operation *op) -> WalkResult {
+      [&](Operation *op) -> WalkResult {
         return TypeSwitch<Operation *, WalkResult>(op)
-            .Case<FModuleLike>([](FModuleLike op) {
-              auto n = op.getNumPorts();
-              BitVector erasures(n);
-              for (size_t i = 0; i < n; ++i)
-                if (isa<DomainType>(op.getPortType(i)))
+            .Case<FModuleLike>([&](FModuleLike op) {
+              BitVector erasures(op.getNumPorts());
+              for (size_t i = 0, e = op.getNumPorts(); i < e; ++i)
+                if (shouldStripType(op.getPortType(i)))
                   erasures.set(i);
-              op.erasePorts(erasures);
+              if (erasures.any())
+                op.erasePorts(erasures);
               return WalkResult::advance();
             })
-            .Case<DomainDefineOp, DomainCreateAnonOp, DomainCreateOp>(
-                [](Operation *op) {
-                  op->erase();
-                  return WalkResult::advance();
-                })
-            .Case<DomainSubfieldOp>([](DomainSubfieldOp op) {
-              if (!op->use_empty()) {
-                OpBuilder builder(op);
-                op.replaceAllUsesWith(
-                    UnknownValueOp::create(builder, op.getLoc(), op.getType())
-                        .getResult());
+            .Case<DomainDefineOp>([&](DomainDefineOp op) {
+              if (shouldStripType(op.getDest().getType()) ||
+                  shouldStripType(op.getSrc().getType()))
+                op.erase();
+              return WalkResult::advance();
+            })
+            .Case<DomainCreateOp>([&](DomainCreateOp op) {
+              if (shouldStripType(op.getType()))
+                op.erase();
+              return WalkResult::advance();
+            })
+            .Case<DomainCreateAnonOp>([&](DomainCreateAnonOp op) {
+              if (shouldStripType(op.getType()))
+                op.erase();
+              return WalkResult::advance();
+            })
+            .Case<DomainSubfieldOp>([&](DomainSubfieldOp op) {
+              // The subfield's result is a property value; decide
+              // whether to strip based on the domain it reads from.
+              if (shouldStripType(op.getInput().getType())) {
+                if (!op->use_empty()) {
+                  OpBuilder builder(op);
+                  op.replaceAllUsesWith(
+                      UnknownValueOp::create(builder, op.getLoc(), op.getType())
+                          .getResult());
+                }
+                op.erase();
               }
-              op.erase();
               return WalkResult::advance();
             })
-            .Case<UnsafeDomainCastOp>([](UnsafeDomainCastOp op) {
-              op.replaceAllUsesWith(op.getInput());
-              op.erase();
+            .Case<UnsafeDomainCastOp>([&](UnsafeDomainCastOp op) {
+              // Strip cast if any of the domains being cast should be
+              // stripped.
+              if (llvm::any_of(op.getDomains(), [&](Value domain) {
+                    return shouldStripType(domain.getType());
+                  })) {
+                op.replaceAllUsesWith(op.getInput());
+                op.erase();
+              }
               return WalkResult::advance();
             })
-            .Case<WireOp>([](WireOp op) {
-              // Erase wires of DomainType
-              if (isa<DomainType>(op.getType(0))) {
+            .Case<WireOp>([&](WireOp op) {
+              // Erase wires of DomainType that should be stripped.
+              if (shouldStripType(op.getType(0))) {
                 op->erase();
                 return WalkResult::advance();
               }
-              // Erase domain operands from regular wires
-              if (!op.getDomains().empty()) {
-                op->eraseOperands(0, op.getNumOperands());
-              }
+              BitVector erasures(op.getDomains().size());
+
+              // Erase domain operands from regular wires.
+              for (int i = 0, e = op.getDomains().size(); i < e; ++i)
+                if (shouldStripType(op.getDomains()[i].getType()))
+                  erasures.set(i);
+
+              op->eraseOperands(erasures);
               return WalkResult::advance();
             })
-            .Case<FInstanceLike>([](auto op) {
+            .Case<FInstanceLike>([&](auto op) {
               auto n = op.getNumPorts();
               BitVector erasures(n);
               for (size_t i = 0; i < n; ++i)
-                if (isa<DomainType>(op->getResult(i).getType()))
+                if (shouldStripType(op->getResult(i).getType()))
                   erasures.set(i);
-              op.cloneWithErasedPortsAndReplaceUses(erasures);
-              op.erase();
+              if (erasures.any()) {
+                op.cloneWithErasedPortsAndReplaceUses(erasures);
+                op.erase();
+              }
               return WalkResult::advance();
             })
-            .Default([](Operation *op) {
+            .Default([&](Operation *op) {
+              // All operations that can have DomainType are handled
+              // above. If we encounter one here, it's a bug in the IR
+              // or this pass.
               for (auto type :
                    concat<Type>(op->getOperandTypes(), op->getResultTypes())) {
                 if (isa<DomainType>(type)) {
@@ -1990,14 +2194,25 @@ static LogicalResult stripModule(FModuleLike op) {
   return failure(result.wasInterrupted());
 }
 
-static LogicalResult stripCircuit(MLIRContext *context, CircuitOp circuit) {
+static LogicalResult stripDomainsFromCircuit(
+    MLIRContext *context, CircuitOp circuit,
+    llvm::function_ref<bool(StringAttr)> shouldStripDomain) {
+  // Collect modules and erase matching DomainOp declarations.
   llvm::SmallVector<FModuleLike> modules;
   for (Operation &op : make_early_inc_range(*circuit.getBodyBlock())) {
     TypeSwitch<Operation *, void>(&op)
         .Case<FModuleLike>([&](FModuleLike op) { modules.push_back(op); })
-        .Case<DomainOp>([](DomainOp op) { op.erase(); });
+        .Case<DomainOp>([&](DomainOp op) {
+          // Erase domain declaration if its name should be stripped.
+          if (shouldStripDomain(op.getNameAttr()))
+            op.erase();
+        });
   }
-  return failableParallelForEach(context, modules, stripModule);
+
+  // Strip domains from all modules in parallel.
+  return failableParallelForEach(context, modules, [&](FModuleLike module) {
+    return stripModuleImpl(module, shouldStripDomain);
+  });
 }
 
 //===---------------------------------------------------------------------------
@@ -2048,9 +2263,25 @@ struct InferDomainsPass
     auto circuit = getOperation();
 
     if (mode == InferDomainsMode::Strip) {
-      if (failed(stripCircuit(&getContext(), circuit)))
+      // Strip all domain types
+      if (failed(stripDomainsFromCircuit(&getContext(), circuit,
+                                         [](StringAttr) { return true; })))
         signalPassFailure();
       return;
+    }
+
+    // Strip skipped domains in a prepass before checking/inference
+    if (!skippedDomains.empty()) {
+      DenseSet<StringAttr> skippedNames;
+      auto *context = &getContext();
+      for (const auto &name : skippedDomains)
+        skippedNames.insert(StringAttr::get(context, name));
+
+      if (failed(
+              stripDomainsFromCircuit(context, circuit, [&](StringAttr name) {
+                return skippedNames.contains(name);
+              })))
+        return signalPassFailure();
     }
 
     auto &instanceGraph = getAnalysis<InstanceGraph>();

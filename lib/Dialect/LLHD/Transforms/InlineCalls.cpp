@@ -10,6 +10,7 @@
 #include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/LLHD/LLHDPasses.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/IR/Visitors.h"
@@ -63,6 +64,16 @@ struct FunctionInliner : public InlinerInterface {
   }
 
   bool shouldAnalyzeRecursively(Operation *op) const override { return false; }
+
+  /// The UB dialect does not implement this inliner hook for its
+  /// `ub.unreachable` terminator, which causes the default implementation to
+  /// abort. Handle the op here instead: like a branch op, it needs no rewrite
+  /// when inlined, since it never transfers control to the continuation block.
+  void handleTerminator(Operation *op, Block *newDest) const override {
+    if (isa<mlir::ub::UnreachableOp>(op))
+      return;
+    InlinerInterface::handleTerminator(op, newDest);
+  }
 };
 
 /// Pass implementation.

@@ -103,6 +103,30 @@ def ClockOp : LTLOp<"clock", [
   }];
 }
 
+def ClockedAtomOp : LTLOp<"clocked_atom", [Pure]> {
+  let arguments = (ins I1:$input, ClockEdgeAttr:$edge, I1:$clock);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $edge $clock attr-dict `:` type($input)
+  }];
+
+  let summary = "Convert a boolean into a sequence on an explicit clock.";
+  let description = [{
+    Converts the boolean `$input` into a one-cycle sequence which matches when
+    `$input` is true on the specified `$edge` of `$clock`.
+
+    This operation is an explicitly clocked atomic sequence. Unlike `ltl.clock`,
+    it does not establish a clocking scope for a property or sequence expression
+    tree. It only records the clocking event associated with a single boolean
+    atom and returns an `!ltl.sequence`.
+
+    For example:
+
+    - `ltl.clocked_atom %a, posedge %clk : i1` matches `%a` on the positive
+      edge of `%clk`.
+  }];
+}
+
 //===----------------------------------------------------------------------===//
 // Sequences
 //===----------------------------------------------------------------------===//

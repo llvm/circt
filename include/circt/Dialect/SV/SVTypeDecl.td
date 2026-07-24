@@ -10,10 +10,17 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef CIRCT_DIALECT_SV_SVTYPEDECL_TD
+#define CIRCT_DIALECT_SV_SVTYPEDECL_TD
+
+include "circt/Dialect/HW/HWAttributes.td"
 include "circt/Dialect/HW/HWOpInterfaces.td"
 include "circt/Dialect/HW/HWTypes.td"
-include "circt/Dialect/HW/HWAttributes.td"
+include "circt/Dialect/SV/SVDialect.td"
+include "circt/Dialect/SV/SVTypes.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/IR/EnumAttr.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // Interface operations
@@ -443,3 +450,5 @@ def ReadInterfaceSignalOp : SVOp<"interface.signal.read", [Pure]> {
 
   let hasVerifier = 1;
 }
+
+#endif // CIRCT_DIALECT_SV_SVTYPEDECL_TD
