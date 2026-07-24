@@ -61,6 +61,13 @@ void circt::synth::buildCombLoweringPipeline(
         pm.addPass(datapath::createDatapathReduceDelay());
       circt::ConvertDatapathToCombOptions datapathOptions;
       datapathOptions.timingAware = options.timingAware;
+      datapathOptions.lowerCompress = false;
+      // Incrementally lower - first lower partial product operations
+      pm.addPass(createConvertDatapathToComb(datapathOptions));
+      pm.addPass(createSimpleCanonicalizerPass());
+      datapathOptions.lowerCompress = true;
+      // Then lower compress operations after canononicalization to reduce the
+      // number of compress operations.
       pm.addPass(createConvertDatapathToComb(datapathOptions));
     }
     pm.addPass(createCSEPass());

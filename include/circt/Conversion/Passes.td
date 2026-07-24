@@ -926,6 +926,8 @@ def ConvertDatapathToComb : Pass<"convert-datapath-to-comb"> {
     "circt::hw::HWDialect"
   ];
   let options = [
+    Option<"lowerCompress", "lower-compress", "bool", "true",
+           "Lower compress operators to a tree of compressor cells.">,
     Option<"lowerCompressToAdd", "lower-compress-to-add", "bool", "false",
            "Lower compress operators to variadic add.">,
     Option<"forceBooth", "lower-partial-product-to-booth", "bool", "false",

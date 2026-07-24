@@ -31,6 +31,7 @@
 #include "circt/Dialect/Verif/VerifPasses.h"
 #include "circt/Support/Passes.h"
 #include "circt/Support/Version.h"
+#include "circt/Tools/circt-bmc/BMCTrace.h"
 #include "circt/Tools/circt-bmc/Passes.h"
 #include "circt/Transforms/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -328,6 +329,7 @@ static LogicalResult executeBMC(MLIRContext &context) {
   };
 
   std::unique_ptr<mlir::ExecutionEngine> engine;
+  bool hasTraceContext = false;
   std::function<llvm::Error(llvm::Module *)> transformer =
       mlir::makeOptimizingTransformer(
           /*optLevel*/ 3, /*sizeLevel=*/0, /*targetMachine=*/nullptr);
@@ -341,11 +343,14 @@ static LogicalResult executeBMC(MLIRContext &context) {
       return failure();
     }
 
-    if (entryPoint.getNumArguments() != 0) {
+    if (entryPoint.getNumArguments() > 1 ||
+        (entryPoint.getNumArguments() == 1 &&
+         !isa<LLVM::LLVMPointerType>(entryPoint.getArgumentTypes().front()))) {
       llvm::errs() << "entry point '" << moduleName
-                   << "' must have no arguments";
+                   << "' must have no arguments or one trace context pointer";
       return failure();
     }
+    hasTraceContext = entryPoint.getNumArguments() == 1;
 
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
@@ -366,8 +371,22 @@ static LogicalResult executeBMC(MLIRContext &context) {
     engine = std::move(*expectedEngine);
   }
 
+  engine->registerSymbols([](llvm::orc::MangleAndInterner interner) {
+    llvm::orc::SymbolMap symbolMap;
+    symbolMap[interner("circt_bmc_record_trace")] = {
+        llvm::orc::ExecutorAddr::fromPtr(&bmc::circt_bmc_record_trace),
+        llvm::JITSymbolFlags::Exported};
+    return symbolMap;
+  });
+
+  bmc::BMCTrace trace(moduleName);
+  void *traceContext = &trace;
+  SmallVector<void *> packedArgs;
+  if (hasTraceContext)
+    packedArgs.push_back(&traceContext);
+
   auto timer = ts.nest("JIT Execution");
-  if (auto err = engine->invokePacked(moduleName))
+  if (auto err = engine->invokePacked(moduleName, packedArgs))
     return handleErr(std::move(err));
 
   return success();
