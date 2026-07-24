@@ -34,6 +34,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Casting.h"
+#include <type_traits>
 
 using namespace circt;
 using namespace circt::calyx;
@@ -2370,6 +2371,24 @@ static std::optional<EnableOp> getLastEnableOp(OpTy parent) {
   return std::nullopt;
 }
 
+static bool isOnlyNestedEnable(Block *body, EnableOp enableOp);
+
+static bool isOnlyNestedEnable(Operation *op, EnableOp enableOp) {
+  if (op == enableOp.getOperation())
+    return true;
+  if (auto seqOp = dyn_cast<SeqOp>(op))
+    return isOnlyNestedEnable(seqOp.getBodyBlock(), enableOp);
+  if (auto staticSeqOp = dyn_cast<StaticSeqOp>(op))
+    return isOnlyNestedEnable(staticSeqOp.getBodyBlock(), enableOp);
+  return false;
+}
+
+static bool isOnlyNestedEnable(Block *body, EnableOp enableOp) {
+  if (!llvm::hasSingleElement(*body))
+    return false;
+  return isOnlyNestedEnable(&body->front(), enableOp);
+}
+
 /// Returns a mapping of {enabled Group name, EnableOp} for all EnableOps within
 /// the immediate ParOp's body.
 template <typename OpTy>
@@ -2436,6 +2455,21 @@ static LogicalResult commonTailPatternWithSeq(IfOpTy ifOp,
     return failure();
   if (lastThenEnableOp->getGroupName() != lastElseEnableOp->getGroupName())
     return failure();
+
+  // If the common tail is the entire contents of both branches, replace the
+  // conditional directly. Otherwise, extracting the tail first may leave an
+  // invalid intermediate IR state before the empty-control canonicalizations
+  // run, which is rejected by MLIR expensive pattern API checks.
+  if (isOnlyNestedEnable(thenControl.getBodyBlock(), *lastThenEnableOp) &&
+      isOnlyNestedEnable(elseControl.getBodyBlock(), *lastElseEnableOp)) {
+    rewriter.setInsertionPoint(ifOp);
+    EnableOp::create(rewriter, ifOp.getLoc(), lastThenEnableOp->getGroupName());
+    if constexpr (std::is_same_v<IfOpTy, IfOp>)
+      eraseControlWithGroupAndConditional(ifOp, rewriter);
+    else
+      eraseControlWithConditional(ifOp, rewriter);
+    return success();
+  }
 
   // Place the IfOp and pulled EnableOp inside a sequential region, in case
   // this IfOp is nested in a ParOp. This avoids unintentionally
