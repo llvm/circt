@@ -8,64 +8,86 @@
 //
 // This file implements FIRRTL module instance inlining.
 //
-// The pass runs as four phases.
-// Outputs freeze before the next phase reads them; analysis only flows forward.
+// The challenge here is the robust and efficient computation of the final paths
+// along all inlining contexts, and ensuring the actual inlining can be done
+// directly and reliably.
 //
-//  * P1  Classify (InliningInfo):
-//          Compute per-module facts (inline/flatten, liveness, ...).
+// The actual inlining is done top-down, recursing from each module to clone
+// directly everything we've been directed to clone.  This transformation can
+// have a number of effects on the annotations on cloned modules and the paths
+// used to encode their behavior.
+//
+// The glossary, phase architecture, and invariants almost exclusively focus
+// around ensuring all the possible outcomes are known and ready before the
+// inlining actually begins, greatly simplifying its task.
+//
+// Read the invariants alongside the phases they correspond to, top to bottom.
+//
+// Glossary:
+//
+//   VNLA            VirtualNLA.  Defined below.
+//   context (VNLA)  one (source hierpath x surviving copy); the planning unit
+//   - origSym       the source hw.hierpath's symbol
+//   - realizedSym   the hierpath symbol a context is emitted under (P4):
+//                   the primary keeps origSym, forks mint fresh names with
+//                   canonicalization to reuse equal hierpaths effectively.
+//   - wasUsed       an annotation referenced this context, used to gate
+//                   fork-context emission.
+//
+//   Context kinds:
+//   - fork          a non-primary context; emitted under a fresh symbol
+//                   or folded into a path-equal canonical context
+//   - convergent    a fork folded onto a canonical from a different origSym
+//   - canonical     the emitted representative of path-equal contexts
+//   - duplicate     a context folded onto its canonical context
+//   - local         a context whose path collapsed to its terminal alone
+//   - ghost         a context P2 minted whose copy P3 never realizes
+//
+//   Other:
+//   - activeNLAs    the active set of contexts at a given inlining level:
+//                   narrowed by the recursive walk's path down to the leaf
+//   - dead-rooted   a hierpath left with no surviving context at all
+//
+// The pass runs as four phases.  Outputs freeze before the next phase reads
+// them; analysis only flows forward.
+//
+//  * P1  Classify (InliningFacts):
+//          Compute per-module classifications (inline/flatten, liveness, ...),
+//          and the parent-first order used for the computation.
 //  * P2  Plan (NLAPlanner):
-//          A `VirtualNLA` per surviving hierpath context,
-//          and the routing table of contexts through each instance.
-//          Enumerate approximately (bottom-up), refine exactly (top-down).
-//          Read-only; a rejected plan leaves the IR untouched.
+//          A `VirtualNLA` per surviving hierpath context, and the routing table
+//          of contexts through each instance.  Enumerates contexts
+//          approximately with a bottom-up walk, and then top-down precisely
+//          refines to the actual root.  This and InliningFacts (P1) leave the
+//          IR untouched in all cases.
 //  * P3  Clone (Inliner):
-//          Top-down walk absorbing marked bodies into parents --
-//          patching inner-symbol users, filling hops' final symbols,
-//          recording nonlocal-annotation ownership.
-//          Writes no annotation.
+//          Top-down walk absorbing marked bodies into parents: patching
+//          inner-symbol users, filling hops' final symbols, recording
+//          nonlocal-annotation ownership.  Writes no annotation.
 //  * P4  Write back:
-//          Serially canonicalize contexts (minting symbols),
-//          rewrite all annotations in parallel (the single writer),
-//          then materialize/erase hierpaths serially.
+//          Serially canonicalize contexts (minting symbols), rewrite all
+//          annotations in parallel (the single writer), then materialize/erase
+//          hierpaths serially.
 //
 // Prerequisites:
 //  * Inline/flatten markers are annotations on regular modules.
 //    LowerAnnotations attaches them there; hand-written IR is checked in P1.
 //  * Hierpath roots must resolve to modules (diagnosed in P2).
-//  * The instance graph is acyclic -- a pipeline-wide contract.
-//    If this changes, SCC condensation is the usual remedy.
-//    However, rejecting or other approaches may be more fitting.
-//    Until then acyclicity is load-bearing and not diagnosed.
+//  * The instance graph is required (assumed) to be acyclic.  In assert builds
+//    this is tracked and diagnosed.  This is a compiler-wide contract and not
+//    worth production cycles (same reason we don't do it in our verifiers).
 //
 // Diagnosed and rejected:
 //  * Inlining an instance sitting under anything but a module or layer block.
 //  * Inlining a body with an inner reference to another module's body.
 //
-// Glossary -- the working nouns; the invariants below use them freely:
-//
-//   context (VNLA)   one (source hierpath x surviving copy); the planning unit
-//   origSym          the source hw.hierpath's symbol
-//   realizedSym      the symbol a context materializes under (assigned in P4)
-//   primary          the one context per origSym that keeps origSym
-//   fork (context)   a non-primary context; emitted as a canonical under a
-//                    fresh symbol, or folded onto a path-equal canonical and
-//                    resolved through its symbol -- convergent when that
-//                    canonical belongs to another origSym
-//   canonical        the emitted representative of path-equal contexts
-//   duplicate        a context folded onto its canonical
-//   local            a context whose path collapsed to its terminal alone
-//   wasUsed          an annotation referenced this context;
-//                    gates fork-context emission
-//   activeNLAs       route-narrowed active set (annotations; leaf-owned)
-//   dead-rooted      a hierpath left with no surviving context at all
-//
 // The invariants this rests on, referenced by number at their use sites.
-// [asserted]/[diagnosed] marks the ones that break loudly.
-// The rest are structural (upheld by construction, no runtime check).
+// [asserted]/[diagnosed] marks the ones that break loudly.  The rest are
+// structural (upheld by construction, no runtime check).
 //
 // Frozen state and identity (P1/P2):
 //  * I1  (frozen-facts)
-//        The `ModuleInfoMap` is frozen after P1 (passed as `const &`).
+//        The `ModuleClassification` is frozen after P1.
 //  * I2  (pointer-identity)
 //        The `VirtualNLA` pool is frozen after P2.
 //        P3/P4 identify a context by its raw pointer.
@@ -78,7 +100,7 @@
 //        Ids are creation-ordered, contiguous per source symbol and per root.
 //  * I5  (routing-sorted)
 //        Routing-table entries are born id-sorted and duplicate-free.
-//        [asserted: planning freeze]
+//        [asserted: NLAPlanner::run]
 //  * I6  (active-sorted)
 //        Every level's `activeNLAs` is id-sorted.
 //  * I7  (stable-keys)
@@ -110,7 +132,8 @@
 //        and each context's leaf op is cloned exactly once.
 //  * I13 (activation-vs-ownership)
 //        Activation is route-based and can exceed ownership.
-//        Every mutation is also gated on `finalMod == destination`
+//        Every mutation is also gated on the current inlining destination
+//        matching the precomputed final module (`finalMod`).
 //        (I14, single-writer -- filed under write back).
 //
 // Write back (P4):
@@ -125,7 +148,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "FIRRTLInliningInfo.h"
 #include "circt/Dialect/Debug/DebugOps.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
@@ -145,6 +167,7 @@
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/Debug.h"
@@ -164,21 +187,278 @@ using namespace circt;
 using namespace firrtl;
 
 using hw::InnerRefAttr;
-
 using InnerRefToNewNameMap = DenseMap<hw::InnerRefAttr, StringAttr>;
 
 //===----------------------------------------------------------------------===//
-// NLA Planning
+// Module classification (P1)
 //===----------------------------------------------------------------------===//
+
+namespace {
+/// Module facts regarding inlining.
+struct ModuleInfo {
+  /// The module carries an inline annotation.
+  bool hasInline : 1;
+
+  /// The module carries a flatten annotation.
+  bool hasFlatten : 1;
+
+  /// Does /any/ instantiation path flatten this module?
+  bool underFlatten : 1;
+
+  /// Does /any/ instantiation path NOT flatten this module?
+  ///
+  /// Note: Only used during computation, consumers want isLive.
+  bool hasUnflattenedPath : 1;
+
+  /// Will this module exist in the final result?
+  bool isLive : 1;
+
+  /// Derived named predicates over the facts above, used in the walk.
+  /// @{
+
+  /// This module's regular children remain instantiated: some path keeps it
+  /// instantiated and it is not flattening them away.
+  bool keepsChildrenInstantiated() const {
+    return hasUnflattenedPath && !hasFlatten;
+  }
+
+  /// Whether this module's body may be flattened.
+  bool mayBeFlattened() const { return underFlatten || hasFlatten; }
+  /// @}
+
+  // (No default member initialization of bitfield members until C++20)
+  ModuleInfo()
+      : hasInline(false), hasFlatten(false), underFlatten(false),
+        hasUnflattenedPath(false), isLive(false) {}
+};
+
+class InliningFacts {
+public:
+  using ModuleClassification = DenseMap<Operation *, ModuleInfo>;
+
+private:
+  ModuleClassification classification;
+  SmallVector<FModuleOp, 0> schedule;
+
+  InliningFacts(ModuleClassification &&classification,
+                SmallVector<FModuleOp, 0> &&schedule)
+      : classification(std::move(classification)),
+        schedule(std::move(schedule)) {}
+
+public:
+  /// Analyze circuit and compute per-module inlining facts.
+  ///
+  /// Returns facts on success, on failure emits diagnostics.
+  static FailureOr<InliningFacts> compute(CircuitOp circuit,
+                                          InstanceGraph &instanceGraph,
+                                          mlir::SymbolTable &symbolTable);
+
+  /// Get per-module classification information.
+  const ModuleInfo &lookup(FModuleLike fmod) const {
+    assert(fmod && "attempted lookup with null fmodulelike");
+    auto it = classification.find(fmod);
+    assert(it != classification.end() && "module not found");
+    return it->second;
+  }
+
+  /// Get classification for the specified operation, if known.
+  std::optional<ModuleInfo> lookupIfPresent(Operation *op) const {
+    auto it = classification.find(op);
+    if (it == classification.end())
+      return std::nullopt;
+    return it->second;
+  }
+
+  /// Convenience helpers, projecting out common fields.
+  /// @{
+
+  bool isLive(FModuleLike mod) const { return lookup(mod).isLive; }
+  bool hasInline(FModuleLike mod) const { return lookup(mod).hasInline; }
+  bool hasFlatten(FModuleLike mod) const { return lookup(mod).hasFlatten; }
+
+  // Convenience helper to project out `isLive` if operation is known, or false.
+  bool isKnownLive(Operation *op) const {
+    auto ret = lookupIfPresent(op);
+    return ret && ret->isLive;
+  }
+  /// @}
+
+  /// Regular modules in inverse post-order: parents strictly before children.
+  /// Frozen with the facts, it is the order this analysis was computed over.
+  /// Entries are op handles: they dangle once modules are erased.
+  ArrayRef<FModuleOp> getSchedule() const { return schedule; }
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  void dump() const {
+    auto &os = llvm::dbgs();
+    auto printOne = [&os](StringRef name, ModuleInfo info) {
+      os << "@" << name << ": inline=" << info.hasInline
+         << " flatten=" << info.hasFlatten
+         << " underFlatten=" << info.underFlatten
+         << " unflattenedPath=" << info.hasUnflattenedPath
+         << " live=" << info.isLive << "\n";
+    };
+    // Schedule order for regular modules, then the residue sorted by name.
+    for (auto module : schedule)
+      printOne(module.getModuleName(), classification.lookup(module));
+    SmallVector<std::pair<StringRef, ModuleInfo>> rest;
+    for (auto &[op, info] : classification)
+      if (!isa<FModuleOp>(op))
+        rest.emplace_back(cast<FModuleLike>(op).getModuleName(), info);
+    llvm::sort(rest, llvm::less_first());
+    for (auto &[name, info] : rest)
+      printOne(name, info);
+  }
+#endif
+};
+
+} // namespace
+
+FailureOr<InliningFacts>
+InliningFacts::compute(CircuitOp circuit, InstanceGraph &instanceGraph,
+                       mlir::SymbolTable &symbolTable) {
+  InliningFacts::ModuleClassification classification;
+  SmallVector<FModuleOp, 0> schedule;
+
+  // Cache these attributes.
+  auto inlineAnnoClassAttr =
+      StringAttr::get(circuit.getContext(), inlineAnnoClass);
+  auto flattenAnnoClassAttr =
+      StringAttr::get(circuit.getContext(), flattenAnnoClass);
+
+  // Find roots of symbol uses within `op` and mark them live.  Root liveness is
+  // all that's promised here (and all likely/able to encounter in practice).
+  // The symbol portion of inner refs are kept alive through this walk too.
+  auto markSymbolUses = [&](Operation &op) -> LogicalResult {
+    // If we can't compute uses, bail.
+    auto symbolUses = SymbolTable::getSymbolUses(&op);
+    if (!symbolUses)
+      return op.emitError(
+          "cannot analyze symbol uses of this operation; the inliner "
+          "requires circuit-level references to be legible");
+    for (const auto &use : *symbolUses) {
+      auto root = use.getSymbolRef().getRootReference();
+      if (auto moduleLike = symbolTable.lookup<FModuleLike>(root)) {
+        auto &info = classification[moduleLike];
+        info.isLive = info.hasUnflattenedPath = true;
+      }
+    }
+    return success();
+  };
+
+  // The circuit's attributes contain symbol references that are expected to
+  // resolve within the circuit, walk those now.  Since the circuit is itself a
+  // symbol table this will only walk the attributes.  FYI: These attributes
+  // technically are interpreted by MLIR to resolve in the circuit parent's
+  // table, but we use them to name operations within the circuit.  None of
+  // these are known to point to modules today, check anyway.
+  if (failed(markSymbolUses(*circuit.getOperation())))
+    return failure();
+
+  for (auto &op : circuit.getOps()) {
+    // Initialize module information.  Not order-dependent.
+    if (auto module = dyn_cast<FModuleLike>(op)) {
+      auto &info = classification[module];
+      AnnotationSet anno(module);
+      info.hasInline = anno.hasAnnotation(inlineAnnoClassAttr);
+      info.hasFlatten = anno.hasAnnotation(flattenAnnoClassAttr);
+
+      // Reject inline/flatten on anything but a regular module.
+      // LowerAnnotations restricts these to FModuleOp; this catches raw IR.
+      if (!isa<FModuleOp>(module) && (info.hasInline || info.hasFlatten))
+        return emitError(module.getLoc())
+               << "inline/flatten annotations are only valid on a regular "
+                  "module";
+
+      // Does anything other than an InstanceOp instantiate this?
+      auto instantiators = instanceGraph.lookup(module)->uses();
+      auto nonInstanceRecIt =
+          llvm::find_if(instantiators, [](InstanceRecord *rec) {
+            return !isa<InstanceOp>(rec->getInstance());
+          });
+      bool hasNonInstanceUse = nonInstanceRecIt != instantiators.end();
+
+      if (!module.canDiscardOnUseEmpty() || hasNonInstanceUse)
+        info.isLive = info.hasUnflattenedPath = true;
+      if (info.hasInline && hasNonInstanceUse) {
+        auto diag = mlir::emitWarning(module.getLoc())
+                    << "module marked inline is also instantiated by an "
+                       "operation that cannot be inlined; it is inlined only "
+                       "into its 'firrtl.instance' parents and retained";
+        diag.attachNote((*nonInstanceRecIt)->getInstance()->getLoc())
+            << "instantiated here";
+      }
+      continue;
+    }
+
+    // Symbol use analysis:
+
+    // Ignore symbol uses in NLAs.
+    if (isa<hw::HierPathOp>(op))
+      continue;
+
+    if (failed(markSymbolUses(op)))
+      return failure();
+  }
+
+  // Calculate inlining info top-down.
+  instanceGraph.walkInversePostOrder([&](igraph::InstanceGraphNode &node) {
+    auto *mod = node.getModule().getOperation();
+    assert(isa<FModuleLike>(mod) && "instance graph contains non-fmodulelike");
+
+    // Save IPO over FModuleOp's for later.
+    if (auto fmod = dyn_cast<FModuleOp>(mod))
+      schedule.push_back(fmod);
+    auto &modInfo = classification[mod];
+
+    // Skip if no non-inlined path to this module.
+    if (!modInfo.hasUnflattenedPath && !modInfo.underFlatten)
+      return;
+
+    for (auto *edge : node) {
+      auto *childMod = edge->getTarget()->getModule().getOperation();
+      auto &childInfo = classification[childMod];
+      bool isRegularModule = isa<FModuleOp>(childMod);
+      assert(
+          (isRegularModule || !(childInfo.hasInline || childInfo.hasFlatten)) &&
+          "non-fmoduleop with inline/flatten annotation");
+      if (isRegularModule && modInfo.mayBeFlattened())
+        childInfo.underFlatten = true;
+
+      // A non-regular child is never inlined and so it is always instantiated.
+      // A regular child does iff this module does and isn't flattening it.
+      if (modInfo.keepsChildrenInstantiated() || !isRegularModule)
+        childInfo.hasUnflattenedPath = true;
+
+      // Set liveness.
+      if (childInfo.hasUnflattenedPath &&
+          (!isRegularModule || !childInfo.hasInline))
+        childInfo.isLive = true;
+    }
+  });
+
+  return InliningFacts(std::move(classification), std::move(schedule));
+}
+
+//===----------------------------------------------------------------------===//
+// NLA Planning (P2)
+//===----------------------------------------------------------------------===//
+
+/// Compute the final shape of all NLAs and their routing through the design.
+/// All NLAs in the design are converted into one or more VNLA (VirtualNLA),
+/// which contain surviving portions of the original NLA as well as new context
+/// needed to handle situations where an NLA root is inlined and "forks".
 
 namespace {
 
 /// One hop of a VirtualNLA's surviving path.
+///
 /// Tracks the original and final module/symbol locations for a hierpath hop.
 struct SurvivingHop {
   /// The original module containing this hop.
   StringAttr origMod;
   /// Inner symbol within origMod, when the hop has one.
+  ///
   /// A terminal hop's sym may name a non-instance (old-style wire/port leaf).
   /// A module-only terminal hop has none.
   StringAttr origSym;
@@ -190,7 +470,6 @@ struct SurvivingHop {
 };
 
 /// A virtual NLA representing one surviving hierpath context after inlining.
-/// Arena-allocated with a trailing array of SurvivingHop.
 /// Frozen after P2 (I2); only `finalSym` is mutated by P3 (I3).
 class VirtualNLA final : llvm::TrailingObjects<VirtualNLA, SurvivingHop> {
   friend TrailingObjects;
@@ -207,19 +486,19 @@ public:
   unsigned id;
   /// The original hierpath symbol this context was derived from.
   StringAttr origSym;
-  /// The symbol this context's hierpath is emitted under, minted by P4.
-  /// The first canonical claimant of an origSym keeps it.
-  /// Later ones mint fresh names; duplicates and locals get none.
+  /// The symbol that this context's hierpath is emitted under, minted by P4.
+  /// The first canonical claimant of an origSym keeps it.  Later ones mint
+  /// fresh names; duplicates and locals get none.
   StringAttr realizedSym;
-  /// Whether this context was referenced by any annotation (I9).
-  /// Duplicates propagate to canonical; gates hierpath emission.
+  /// Whether this context was referenced by any annotation (I9).  Duplicates
+  /// use canonical context symbols.  New hierpaths are emitted iff set.
   bool wasUsed = false;
 
   static VirtualNLA *create(llvm::BumpPtrAllocator &alloc, unsigned id,
                             StringAttr origSym, ArrayRef<SurvivingHop> path) {
     // Every context keeps at least its terminal hop (I8), so the path is never
-    // empty; `back()`/`isLocal()` and the writeback rely on this.
-    // Enforce it once, at the single construction site, not at each use.
+    // empty; `back()`/`isLocal()` and the writeback rely on this.  Enforce it
+    // once, at the single construction site, not at each use.
     assert(!path.empty() && "a VNLA always keeps its terminal hop (I8)");
     size_t size = totalSizeToAlloc<SurvivingHop>(path.size());
     auto *mem = alloc.Allocate(size, alignof(VirtualNLA));
@@ -268,11 +547,12 @@ static bool vnlaIdLess(const VirtualNLA *a, const VirtualNLA *b) {
 namespace {
 
 /// One hop of an absolute NLA path.
-/// Hops that are instances have their operation stored in `inst`.
-/// If the hop has an inner symbol, it is stored in `sym` (else null).
 ///
-/// Non-terminal hops are instances; terminal can be module or innerref.
-/// A module-only terminal has neither `inst` nor `sym`.
+/// Hops that are instances have their operation stored in `inst`.  If the hop
+/// has an inner symbol, it is stored in `sym` (else null).
+///
+/// Non-terminal hops must be instances, while terminal hops can be module or
+/// innerrefs.  A module-only terminal has neither `inst` nor `sym`.
 struct PathHop {
   StringAttr mod;  ///< Containing module.
   Operation *inst; ///< The instance op, if this hop is an instance.
@@ -303,10 +583,9 @@ struct TrimmedPathRef {
 class NLAPlanner {
 public:
   NLAPlanner(CircuitOp circuit, SymbolTable &symbolTable,
-             InstanceGraph &instanceGraph,
-             const InliningInfo::ModuleInfoMap &moduleInfoMap)
+             InstanceGraph &instanceGraph, const InliningFacts &facts)
       : circuit(circuit), symbolTable(symbolTable),
-        instanceGraph(instanceGraph), moduleInfoMap(moduleInfoMap) {}
+        instanceGraph(instanceGraph), facts(facts) {}
 
   LogicalResult run();
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
@@ -314,9 +593,12 @@ public:
 #endif
 
   /// Source-path style counters, copied into the pass statistics.
-  /// Only old-style terminals need the leaf-rename machinery!
+  ///
+  /// We can drop the leaf-rename machinery (!) if we lock-in and enforce the
+  /// deprecation of the old-style paths.  Namely `updateVirtualNLALeafSymbols`
+  /// and the scan in `rename`.
+  ///
   /// These measure whether that support is still worth carrying.
-  /// If it's not, drop updateVirtualNLALeafSymbols and the scan in rename.
   struct Statistics {
     size_t oldStyle = 0;
     size_t newStyle = 0;
@@ -333,21 +615,21 @@ private:
   void processSinglePathContext(StringAttr origSym,
                                 const SmallVectorImpl<PathHop> &absPath);
 
-  /// Return the index of the minimal root within `upperPath`:
-  /// how many leading hops to drop so the context roots at the deepest module
-  /// still surviving on this concrete path.
+  /// Return the index of the minimal root within `upperPath`: how many leading
+  /// hops to drop so the context roots at the deepest module still surviving on
+  /// this concrete path.
   ///
-  /// `rootMod` is the NLA root the last upper hop climbs into.
+  /// `rootMod` is the (original) NLA root that the last upper hop climbs into.
   /// Its own fate decides: real climb above (keep) or spurious (trim).
   size_t minimalRootIndex(ArrayRef<PathHop> upperPath, StringAttr rootMod);
 
   /// Resolve an instance named by (`module`, `innerSym`) to its op.
   ///
-  /// Every non-terminal namepath hop is an instance by definition,
-  /// and the instance graph already holds those ops (no IR walk / IST needed).
+  /// Every non-terminal namepath hop is an instance by definition, and the
+  /// instance graph already holds those ops (no IR walk / IST needed).
   ///
-  /// Each module's instances are indexed once, on its first hop.
-  /// Total cost is one graph-node sweep per distinct hop module, not per hop.
+  /// Each module's instances are indexed once, on its first hop.  Total cost is
+  /// one graph-node sweep per distinct hop module, not per hop.
   ///
   /// Returns null when the sym names a non-instance (a terminal wire/port hop)
   /// or the module is unknown; such hops are not routed through.
@@ -356,10 +638,10 @@ private:
   CircuitOp circuit;
   SymbolTable &symbolTable;
   InstanceGraph &instanceGraph;
-  const InliningInfo::ModuleInfoMap &moduleInfoMap;
+  const InliningFacts &facts;
 
-  /// Per-module instance index for `resolveInstanceHop`.
-  /// Only modules hierpaths hop through are indexed.
+  /// Per-module instance index for `resolveInstanceHop`.  Only modules
+  /// hierpaths hop through are indexed.
   DenseMap<StringAttr, DenseMap<StringAttr, Operation *>> instanceHopIndex;
 
   /// Stable pool allocation for virtual NLA structures.
@@ -369,16 +651,16 @@ private:
   using VirtualNLAHandles = SmallVector<VirtualNLA *>;
 
 public:
-  /// Instance op -> VNLAs routing through that instance (safe per I7).
+  /// Instance op -> the VNLAs routing through that instance (safe per I7).
   /// Keyed on the op: one lookup per descent, no (module, sym) probing.
   DenseMap<Operation *, VirtualNLAHandles> pathRoutingTable;
-  /// NLA sym -> its VNLA's: contiguous slices of `allVNLAs` (I4).
+  /// NLA sym -> set of its VNLA's: contiguous slices of `allVNLAs` (I4).
   /// Materialized once the pool freezes; appending after would dangle them.
   DenseMap<StringAttr, ArrayRef<VirtualNLA *>> origToVNLAs;
   /// All VNLA's in creation order, contiguous per origSym (I4).
   SmallVector<VirtualNLA *> allVNLAs;
 
-  /// Source symbol -> its HierPathOp, recorded while bucketing in run().
+  /// Source symbol -> its HierPathOp, recorded while bucketing during run().
   /// Valid pass-wide: hierpath ops are untouched until the final writeback.
   DenseMap<StringAttr, hw::HierPathOp> hierPathOps;
 };
@@ -397,10 +679,12 @@ struct llvm::DenseMapInfo<TrimmedPathRef> {
 };
 
 LogicalResult NLAPlanner::run() {
-  // Bucket HierPathOps by root, preserving encounter order.
-  // traceUpUntilSurviving depends only on the root, so it runs once per root
-  // and its upperPaths are shared by every NLA in the bucket.
-  // VNLA creation stays contiguous per origSym (I4), grouped by root.
+  // Bucket HierPathOps by their root, preserving their encounter order.
+  //
+  // Allows us to reuse `traceUpUntilSurviving` and the trimming/dedup work
+  // across all NLA's sharing a root (bucket).
+  //
+  // VNLA creation is contiguous per origSym (I4), grouped by root.
   llvm::MapVector<StringAttr, SmallVector<hw::HierPathOp>> byRoot;
   for (auto nla : circuit.getBodyBlock()->getOps<hw::HierPathOp>()) {
     byRoot[nla.root()].push_back(nla);
@@ -408,15 +692,15 @@ LogicalResult NLAPlanner::run() {
   }
 
   for (auto &[origRoot, nlas] : byRoot) {
+    // 1. Perform the work shared by all NLA's in this bucket:
+
+    // 1.1 Calculate all the upperPaths by tracing upwards as needed.
     SmallVector<SmallVector<PathHop>> upperPaths;
     if (failed(traceUpUntilSurviving(origRoot, nlas.front(), upperPaths)))
       return failure();
 
-    // Trim + dedup upper prefixes once per root (trim is bucket-invariant).
-    // Same trimmed prefix = same physical path: collapse to one context.
-    // `trimmedUppers` keeps discovery order; `seenTrimmed` is membership-only
-    // and never iterated, so its order can't leak.
-    // Probe hits compare full paths, so a collision cannot drop a context.
+    // 1.2 Trim these back down and dedup, being careful to preserve their
+    // order.  Hash equivalence (collision) does not mean contexts are lost.
     SmallVector<SmallVector<PathHop>> trimmedUppers;
     llvm::SmallDenseSet<TrimmedPathRef, 8> seenTrimmed;
     for (auto &upperPath : upperPaths) {
@@ -426,9 +710,11 @@ LogicalResult NLAPlanner::run() {
         trimmedUppers.emplace_back(trimmed.begin(), trimmed.end());
     }
 
+    // 2. Process each NLA in the bucket.
     for (auto nla : nlas) {
       auto origSym = nla.getSymNameAttr();
 
+      // 2.1 Extract the "hop"s from the NLA.
       SmallVector<PathHop> nlaHops;
       for (auto element : nla.getNamepath()) {
         if (auto ref = dyn_cast<InnerRefAttr>(element)) {
@@ -444,6 +730,8 @@ LogicalResult NLAPlanner::run() {
       // Old style ends at an inner symbol; new style ends at a module.
       ++(nlaHops.back().sym ? stats.oldStyle : stats.newStyle);
 
+      // 2.2 Construct each (bucket-common) prefix + NLA path, and hand to
+      // helper to walk the full path and produce final VNLA for each.
       for (auto &trimmedUpper : trimmedUppers) {
         SmallVector<PathHop> absolutePath;
         llvm::append_range(absolutePath, trimmedUpper);
@@ -455,15 +743,15 @@ LogicalResult NLAPlanner::run() {
   }
 
   // I5: routing entries are born id-sorted and duplicate-free.
-  // Check once where the table freezes; per-descent asserts are quadratic.
   assert(llvm::all_of(pathRoutingTable,
                       [](const auto &entry) {
                         return llvm::is_sorted(entry.second, vnlaIdLess);
                       }) &&
          "routing entries must be born id-sorted (I5)");
 
-  // Materialize the per-symbol group views:
+  // 3. Materialize the per-symbol group views that point to VNLA ranges:
   // contexts are contiguous per origSym in creation order (I4).
+  //
   // The pool is frozen from here on (I2).
   for (size_t i = 0, e = allVNLAs.size(); i < e;) {
     StringAttr origSym = allVNLAs[i]->origSym;
@@ -494,6 +782,10 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
   SmallVector<Frame, 16> stack;
   SmallVector<PathHop, 8> currentPath;
 
+#ifndef NDEBUG
+  DenseMap<StringAttr, bool> visited;
+#endif
+
   // Edge-derived names come from the instance graph itself: always resolve.
   // Only the root, straight from the namepath, can name a missing module.
   auto pushState = [&](StringAttr name) -> LogicalResult {
@@ -503,7 +795,25 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
              << "names non-existent root module @" << name;
     auto uses = node->uses();
     stack.push_back({name, uses.begin(), uses.end(), /*isFirstVisit=*/true});
+
+#ifndef NDEBUG
+    if (visited[name])
+      return mlir::emitError(node->getModule().getLoc(),
+                             "instance graph contains cycle");
+    visited[name] = true;
+#endif
+
     return success();
+  };
+  auto popState = [&]() {
+#ifndef NDEBUG
+    auto name = stack.back().modName;
+    auto it = visited.find(name);
+    assert(it != visited.end() && "visited map missing module");
+    assert(it->second && "visited not set for module");
+    it->second = false;
+#endif
+    stack.pop_back();
   };
 
   if (failed(pushState(rootModName)))
@@ -516,7 +826,15 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
 
       auto *currentModNode = instanceGraph.lookup(frame.modName);
       auto *currentModOp = currentModNode->getModule().getOperation();
-      auto info = moduleInfoMap.lookup(currentModOp);
+      auto infoIfValid = facts.lookupIfPresent(currentModOp);
+      // This is expected unreachable, but diagnose for safety.
+      if (!infoIfValid)
+        return mlir::emitError(
+                   currentModOp->getLoc(),
+                   "hierarchical path traced up through unknown operation")
+                   .attachNote(diagAnchor.getLoc())
+               << "encountered tracing up from root of this hierarchical path";
+      auto info = *infoIfValid;
 
       // If this module is live in the output in any context, emit VNLA for it.
       // A live root's own context is discovered first (frame pushed first).
@@ -526,7 +844,7 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
 
       // If this module is unconditionally live, we're done tracing upwards.
       if (!info.hasInline && !info.underFlatten) {
-        stack.pop_back();
+        popState();
         if (!stack.empty())
           currentPath.pop_back();
         continue;
@@ -534,7 +852,7 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
     }
     // If we've exhausted all edges, we're done with this frame.
     if (frame.currentEdge == frame.endEdge) {
-      stack.pop_back();
+      popState();
       if (!stack.empty())
         currentPath.pop_back();
       continue;
@@ -545,10 +863,11 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
     ++frame.currentEdge;
 
     auto *instOp = edge->getInstance().getOperation();
-    // Only a plain instance's body is absorbed into its parent.
-    // An instance_choice keeps referencing the retained definition,
-    // whose own context (minted above; the module is live) covers it.
-    // There is no copy in this parent to enumerate -- don't climb.
+    // Only climb through regular instance operations.  These are the only kind
+    // we can ever inline through, and for others their targets are kept alive
+    // and are handled above.
+    //
+    // There is no copy in this parent to enumerate -> don't climb!
     if (!isa<InstanceOp>(instOp))
       continue;
     auto parentName = edge->getParent()->getModule().getModuleNameAttr();
@@ -562,32 +881,29 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
 
 size_t NLAPlanner::minimalRootIndex(ArrayRef<PathHop> upperPath,
                                     StringAttr rootMod) {
-  // The BU trace upwards uses the over-approximation to ensure coverage,
-  // here we TD precisely to find the minimal root point.
+  // The BU trace upwards uses the over-approximation to ensure coverage, here
+  // we TD precisely to find the minimal root point.
   //
   // Returns its index in `upperPath`; `upperPath.size()` roots at `rootMod`.
   // The namepath itself is the user's spec and is never trimmed.
   //
   // This logic is of course coupled to inline/flatten knowledge.
+  //   -->
   // A new way a module is absorbed or relocated must re-derive this rooting,
   // or a surviving root is misidentified (misrouted annotation; I9 churn).
   //
-  // Inline and flatten evaporate differently, deciding how deep to root:
-  //  - Inline relocates a body into its parent: it never survives as a root,
-  //    but modules below it do.  Keep looking past it.
-  //  - Flatten localizes the whole subtree: nothing below survives.
-  //    The flattening module is as deep as we can root.
+  // Inline and flatten act differently, deciding how deep to root:
+  //  - Inline: never survives as a root but children do.  Keep looking.
+  //  - Flatten: subtree doesn't survive, this is as deep as we can root.
   //
-  // The outermost module is the climb's stopping point, hence not inline,
-  // so `root` never stays unset.
   // The dropped prefix has no flatten, so the kept suffix evaluates the same.
   bool isTransitiveFlatten = false;
+  // `root` never stays unset: we traced upwards until this was certain.
   size_t root = 0;
   for (size_t i = 0, e = upperPath.size(); i <= e; ++i) {
     StringAttr mod = i < e ? upperPath[i].mod : rootMod;
-    const auto &info = moduleInfoMap.lookup(symbolTable.lookup(mod));
-    // A flatten at an ancestor localizes this module away: can't root here
-    // or deeper, so keep the deepest surviving root found so far.
+    const auto &info = facts.lookup(symbolTable.lookup<FModuleLike>(mod));
+    // Flatten means we're done searching, use the deepest we've found.
     if (isTransitiveFlatten)
       break;
     // Inline modules don't survive as a root; can still root below them.
@@ -620,8 +936,8 @@ void NLAPlanner::processSinglePathContext(
   assert(!absPath.empty() && "empty absolute path -- empty namepath?");
 
   StringAttr currentDest = absPath.front().mod;
-  auto *destMod = symbolTable.lookup(currentDest);
-  const auto &destInfo = moduleInfoMap.lookup(destMod);
+  auto destMod = symbolTable.lookup<FModuleLike>(currentDest);
+  const auto &destInfo = facts.lookup(destMod);
 
   bool isTransitiveFlatten = destInfo.hasFlatten;
   for (auto it = absPath.begin(), end = absPath.end(); it != end;) {
@@ -634,24 +950,23 @@ void NLAPlanner::processSinglePathContext(
     bool nextIsRegular = false;
     if (!isTerminal) {
       nextModName = it->mod;
-      auto *modOp = symbolTable.lookup(nextModName);
+      auto modOp = symbolTable.lookup<FModuleLike>(nextModName);
       assert(modOp && "interior namepath module missing -- ran unverified?");
-      const auto &info = moduleInfoMap.lookup(modOp);
+      const auto &info = facts.lookup(modOp);
       nextHasInline = info.hasInline;
       nextHasFlatten = info.hasFlatten;
       nextIsRegular = isa<FModuleOp>(modOp);
     }
 
-    // A hop evaporates only when a plain regular-module instance is absorbed.
-    // Terminal hops never evaporate (I8).
-    // Non-regular modules are never absorbed; their instances relocate.
-    // Neither are instance_choice hops; they relocate with the choice op.
+    // - A hop evaporates only when a plain regular-module instance is absorbed.
+    // - Terminal hops never evaporate (I8).
+    // - Non-regular modules are never absorbed; their instances relocate.
+    // - Neither are instance_choice hops; they relocate with the choice op.
     bool isEvaporating = !isTerminal && nextIsRegular &&
                          (isTransitiveFlatten || nextHasInline) &&
                          (!hop.inst || isa<InstanceOp>(hop.inst));
-    // A choice target begins a fresh flatten scope.
-    // Flatten does not reach through it (as with an extmodule).
-    // Inheriting it would wrongly localize the subtree below the choice.
+    // A choice target begins a fresh flatten scope -- flatten does not reach
+    // through it (as with an extmodule).
     if (hop.inst && !isa<InstanceOp>(hop.inst))
       isTransitiveFlatten = nextHasFlatten;
     else
@@ -833,8 +1148,8 @@ class Inliner {
 public:
   /// Initialize the inliner to run on this circuit.
   Inliner(CircuitOp circuit, SymbolTable &symbolTable,
-          CircuitNamespace &circuitNamespace, InliningInfo &inliningInfo,
-          NLAPlanner &nlaPlanner);
+          CircuitNamespace &circuitNamespace,
+          const InliningFacts &inliningFacts, NLAPlanner &nlaPlanner);
 
   /// Run the inliner.
   LogicalResult run();
@@ -950,10 +1265,10 @@ private:
   //===- P3: the walk -----------------------------------------------------===//
 
   /// Returns true if the operation is annotated to be flattened.
-  bool shouldFlatten(Operation *op);
+  bool shouldFlatten(FModuleLike mod);
 
   /// Returns true if the operation is annotated to be inlined.
-  bool shouldInline(Operation *op);
+  bool shouldInline(FModuleLike mod);
 
   /// Check not inlining into anything other than layerblock or module.
   /// In the future, could check this per-inlined-operation.
@@ -1058,8 +1373,10 @@ private:
   CircuitNamespace &circuitNamespace;
 
   /// Analysis / planner results (P1 and P2).
-  InliningInfo &inliningInfo;
+  /// @{
+  const InliningFacts &inliningFacts;
   NLAPlanner &nlaPlanner;
+  /// @}
 
   /// Late-convergence canonicalization side tables.
   /// Inliner-owned so VirtualNLA stays frozen after the prepass (I2).
@@ -1070,8 +1387,10 @@ private:
   ///
   /// A duplicate is skipped at emission, borrows the owner's realizedSym,
   /// and propagates usedness onto it.
+  /// @{
   DenseMap<ArrayAttr, VirtualNLA *> canonicalByPath;
   DenseMap<VirtualNLA *, VirtualNLA *> canonicalOf;
+  /// @}
 
   /// Assert-only bookkeeping: origSyms claimed by their group's primary,
   /// so `canonicalize` can check the claim order (I15).
@@ -1112,10 +1431,10 @@ private:
 //===- Driver -------------------------------------------------------------===//
 
 Inliner::Inliner(CircuitOp circuit, SymbolTable &symbolTable,
-                 CircuitNamespace &circuitNamespace, InliningInfo &inliningInfo,
-                 NLAPlanner &nlaPlanner)
+                 CircuitNamespace &circuitNamespace,
+                 const InliningFacts &inliningFacts, NLAPlanner &nlaPlanner)
     : circuit(circuit), context(circuit.getContext()), symbolTable(symbolTable),
-      circuitNamespace(circuitNamespace), inliningInfo(inliningInfo),
+      circuitNamespace(circuitNamespace), inliningFacts(inliningFacts),
       nlaPlanner(nlaPlanner) {}
 
 LogicalResult Inliner::run() {
@@ -1383,12 +1702,12 @@ void Inliner::cloneAndRename(StringRef prefix, InliningLevel &il,
 
 //===- P3: the walk -------------------------------------------------------===//
 
-bool Inliner::shouldFlatten(Operation *op) {
-  return inliningInfo.getModuleInfoMap().lookup(op).hasFlatten;
+bool Inliner::shouldFlatten(FModuleLike mod) {
+  return inliningFacts.hasFlatten(mod);
 }
 
-bool Inliner::shouldInline(Operation *op) {
-  return inliningInfo.getModuleInfoMap().lookup(op).hasInline;
+bool Inliner::shouldInline(FModuleLike mod) {
+  return inliningFacts.hasInline(mod);
 }
 
 LogicalResult Inliner::inliningWalk(
@@ -1499,7 +1818,7 @@ LogicalResult Inliner::processInto(StringRef prefix, InliningLevel &il,
     auto *moduleOp = symbolTable.lookup(instance.getModuleName());
     auto childModule = dyn_cast<FModuleOp>(moduleOp);
     if (!childModule) {
-      assert(inliningInfo.getModuleInfoMap().lookup(moduleOp).isLive &&
+      assert(inliningFacts.isKnownLive(moduleOp) &&
              "a kept non-module instance must target a live module");
       cloneAndRename(prefix, il, mapper, *op);
       return success();
@@ -1508,7 +1827,7 @@ LogicalResult Inliner::processInto(StringRef prefix, InliningLevel &il,
     // Flatten absorbs every child; inlining only those marked for it.
     // A child the pass keeps is cloned as a live instance.
     if (!flatten && !shouldInline(childModule)) {
-      assert(inliningInfo.getModuleInfoMap().lookup(childModule).isLive &&
+      assert(inliningFacts.isLive(childModule) &&
              "a kept child module must be live");
       cloneAndRename(prefix, il, mapper, *op);
       return success();
@@ -1549,10 +1868,10 @@ LogicalResult Inliner::processInstances(FModuleOp module, bool flatten) {
     if (!instance)
       return WalkResult::advance();
     // Not a regular module: uninlinable; the analysis marked it live.
-    auto *moduleOp = symbolTable.lookup(instance.getModuleName());
-    auto target = dyn_cast<FModuleOp>(moduleOp);
+    auto moduleOp = symbolTable.lookup<FModuleLike>(instance.getModuleName());
+    auto target = dyn_cast<FModuleOp>(*moduleOp);
     if (!target) {
-      assert(inliningInfo.getModuleInfoMap().lookup(moduleOp).isLive &&
+      assert(inliningFacts.isLive(moduleOp) &&
              "a kept non-module instance must target a live module");
       return WalkResult::advance();
     }
@@ -1610,13 +1929,12 @@ LogicalResult Inliner::inlineModules() {
   // (I12): a parent always clones a child's pristine definition body, since
   // a retained child's own body is only mutated by its later self-visit.
   // Dead modules are skipped here and erased after.
-  for (auto moduleOp : inliningInfo.getIPOModules()) {
-    InliningInfo::ModuleInfo info =
-        inliningInfo.getModuleInfoMap().lookup(moduleOp);
+  for (auto moduleOp : inliningFacts.getSchedule()) {
+    const auto &info = inliningFacts.lookup(moduleOp);
     if (!info.isLive)
       continue;
-    // Consume the inline/flatten annotations: InliningInfo is their only
-    // reader (everything else consults the frozen ModuleInfoMap, I1).
+    // Consume the inline/flatten annotations: InliningFacts is their only
+    // reader (everything else consults the frozen ModuleClassification, I1).
     // Every fail-fast diagnosis has already run, so a run that fails before
     // this loop leaves the input untouched.
     if (info.hasFlatten || info.hasInline)
@@ -1640,7 +1958,7 @@ LogicalResult Inliner::inlineModules() {
 void Inliner::eraseDeadModules() {
   for (auto mod : llvm::make_early_inc_range(
            circuit.getBodyBlock()->getOps<FModuleLike>())) {
-    if (inliningInfo.getModuleInfoMap().lookup(mod).isLive)
+    if (inliningFacts.isKnownLive(mod))
       continue;
     mod.erase();
     ++stats.deadModules;
@@ -1920,9 +2238,8 @@ void Inliner::writebackHierPaths() {
     assert(origIt != existingPaths.end() &&
            "origSym has no source hw.hierpath");
 
+    // Same symbol survives -> mutate the original op in place.
     if (vnla->realizedSym == vnla->origSym) {
-      // Same symbol survives: mutate the original op in place
-      // (as Dedup/LowerLayers/InjectDUTHierarchy retarget NLAs elsewhere).
       // Count (and store) only real retargets, so a no-op run reports zero.
       if (arrayAttr != origIt->second.getNamepathAttr()) {
         origIt->second.setNamepathAttr(arrayAttr);
@@ -1932,8 +2249,8 @@ void Inliner::writebackHierPaths() {
       continue;
     }
 
-    // Forked into a fresh symbol: reuse the original op's location
-    // so the fork keeps its provenance for diagnostics.
+    // Forked into a fresh symbol: reuse the original op's location so the fork
+    // keeps its provenance for diagnostics.
     auto hp = hw::HierPathOp::create(b, origIt->second.getLoc(),
                                      vnla->realizedSym, arrayAttr);
     hp.setPrivate();
@@ -1954,7 +2271,8 @@ void Inliner::writebackHierPaths() {
 
 namespace {
 /// The FIRRTL inliner pass.
-/// Runs InliningInfo (P1), NLAPlanner (P2), and Inliner (P3/P4) in sequence.
+///
+/// Runs InliningFacts (P1), NLAPlanner (P2), and Inliner (P3/P4) in sequence.
 class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
   using InlinerBase::InlinerBase;
 
@@ -1965,17 +2283,16 @@ class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
     auto &instanceGraph = getAnalysis<InstanceGraph>();
 
     // Classify modules (P1).
-    InliningInfo inliningInfo(circuit, instanceGraph, symbolTable);
-    if (failed(inliningInfo.run()))
+    auto facts = InliningFacts::compute(circuit, instanceGraph, symbolTable);
+    if (failed(facts))
       return signalPassFailure();
     LLVM_DEBUG({
-      llvm::dbgs() << "\n=== InliningInfo Results ===\n";
-      inliningInfo.dump();
+      llvm::dbgs() << "\n=== InliningFacts Results ===\n";
+      facts->dump();
     });
 
     // Run NLA planning (P2).
-    NLAPlanner nlaPlanner(circuit, symbolTable, instanceGraph,
-                          inliningInfo.getModuleInfoMap());
+    NLAPlanner nlaPlanner(circuit, symbolTable, instanceGraph, *facts);
     if (failed(nlaPlanner.run()))
       return signalPassFailure();
     LLVM_DEBUG({
@@ -1987,8 +2304,7 @@ class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
 
     // Run Inlining: Clone (P3), and writeback (P4).
     CircuitNamespace circuitNamespace(circuit);
-    Inliner inliner(circuit, symbolTable, circuitNamespace, inliningInfo,
-                    nlaPlanner);
+    Inliner inliner(circuit, symbolTable, circuitNamespace, *facts, nlaPlanner);
     if (failed(inliner.run()))
       signalPassFailure();
 
