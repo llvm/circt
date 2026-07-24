@@ -2186,6 +2186,22 @@ struct ConvertRealOpConversion : public OpConversionPattern<ConvertRealOp> {
   }
 };
 
+template <typename SourceOp>
+struct RealBitcastOpConversion : public OpConversionPattern<SourceOp> {
+  using OpConversionPattern<SourceOp>::OpConversionPattern;
+  using OpAdaptor = typename SourceOp::Adaptor;
+
+  LogicalResult
+  matchAndRewrite(SourceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type resultTy =
+        ConversionPattern::typeConverter->convertType(op.getResult().getType());
+    rewriter.replaceOpWithNewOp<arith::BitcastOp>(op, resultTy,
+                                                  adaptor.getValue());
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Statement Conversion
 //===----------------------------------------------------------------------===//
@@ -3945,6 +3961,10 @@ static void populateOpConversion(ConversionPatternSet &patterns,
     FormatStringToStringOpConversion,
     RealToIntOpConversion,
     ConvertRealOpConversion,
+    RealBitcastOpConversion<RealtobitsBIOp>,
+    RealBitcastOpConversion<BitstorealBIOp>,
+    RealBitcastOpConversion<ShortrealtobitsBIOp>,
+    RealBitcastOpConversion<BitstoshortrealBIOp>,
 
     // Patterns of miscellaneous operations.
     ConstantOpConv,
