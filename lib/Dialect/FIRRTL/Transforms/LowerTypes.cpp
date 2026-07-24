@@ -1361,11 +1361,10 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
 
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
-    auto newReg =
-        RegOp::create(*builder, field.type, op.getClockVal(), "",
-                      NameKindEnum::DroppableName, attrs, StringAttr{});
-    newReg.setClockEdgeAttr(op.getClockEdgeAttr());
-    return newReg.getResult();
+    return RegOp::create(*builder, field.type, op.getClockVal(), "",
+                         NameKindEnum::DroppableName, attrs, StringAttr{},
+                         /*forceable=*/false, op.getClockEdgeAttr())
+        .getResult();
   };
   return lowerProducer(op, clone);
 }
@@ -1378,11 +1377,11 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     auto resetVal = getSubWhatever(op.getResetValue(), field.index);
-    auto newReg = RegResetOp::create(
-        *builder, field.type, op.getClockVal(), op.getResetSignal(), resetVal,
-        "", NameKindEnum::DroppableName, attrs, StringAttr{});
-    newReg.setClockEdgeAttr(op.getClockEdgeAttr());
-    return newReg.getResult();
+    return RegResetOp::create(*builder, field.type, op.getClockVal(),
+                              op.getResetSignal(), resetVal, "",
+                              NameKindEnum::DroppableName, attrs, StringAttr{},
+                              /*forceable=*/false, op.getClockEdgeAttr())
+        .getResult();
   };
   return lowerProducer(op, clone);
 }
