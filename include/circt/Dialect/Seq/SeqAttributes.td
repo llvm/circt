@@ -43,6 +43,14 @@ def WUW_PortOrder : I32EnumAttrCase<"PortOrder", 1, "port_order">;
 def WUWAttr : I32EnumAttr<"WUW", "Write-Under-Write Behavior",
                           [WUW_Undefined, WUW_PortOrder]>;
 
+// Register clock edge. Mirrors the FIRRTL/SV event-control concept so that a
+// non-default (negedge or dual-edge) register clock survives lowering to SV.
+def ClockEdgePos : I32EnumAttrCase<"Pos", 0, "pos">;
+def ClockEdgeNeg : I32EnumAttrCase<"Neg", 1, "neg">;
+def ClockEdgeBoth : I32EnumAttrCase<"Both", 2, "both">;
+def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "register clock edge",
+                                [ClockEdgePos, ClockEdgeNeg, ClockEdgeBoth]>;
+
 }
 
 /// An attribute holding information about memory initialization.

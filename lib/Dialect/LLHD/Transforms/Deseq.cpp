@@ -1441,7 +1441,8 @@ void Deseq::implementRegister(DriveInfo &drive) {
   auto reg = seq::FirRegOp::create(builder, loc, value, clock, name,
                                    hw::InnerSymAttr{},
                                    /*preset=*/IntegerAttr{}, reset, resetValue,
-                                   /*isAsync=*/reset != Value{});
+                                   /*isAsync=*/reset != Value{},
+                                   /*clockEdge=*/seq::ClockEdge::Pos);
 
   // If the register has an enable, insert a self-mux in front of the register.
   // Set the `bin` flag on the mux specifically to make up for a subtle

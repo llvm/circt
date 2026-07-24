@@ -663,9 +663,11 @@ def CatBitsBits : Pat <
   [(AdjInt $mid2, $mid)]>;
 
 // regreset(clock, constant_zero, resetValue) -> reg(clock)
+// Preserve the register's clock edge when dropping the reset.
 def RegResetWithZeroReset : Pat<
-  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable),
-  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable), [(ZeroConstantOp $reset)]>;
+  (RegResetOp $clock, $reset, $_, $name, $nameKind, $annotations, $inner_sym, $forceable, $clockEdge),
+  (RegOp $clock, $name, $nameKind, $annotations, $inner_sym, $forceable, $clockEdge),
+  [(ZeroConstantOp $reset)]>;
 
 // ref.resolve(ref.send(a)) -> a
 def RefResolveOfRefSend : Pat<

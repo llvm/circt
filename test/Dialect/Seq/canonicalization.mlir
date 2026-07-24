@@ -54,6 +54,13 @@ hw.module @FirRegReset(in %clk : !seq.clock, in %in : i32, in %r : i1, in %v : i
   // CHECK: %reg1 = seq.firreg %in clock %clk : i32
   // CHECK: hw.instance "reg1" @Observe(x: %reg1: i32) -> ()
 
+  // Dropping a never-asserting (active-high constant-zero) reset must preserve a
+  // non-default clock edge.
+  %reg1edge = seq.firreg %in clock %clk reset sync %false, %v {clockEdge = 1 : i32} : i32
+  hw.instance "reg1edge" @Observe(x: %reg1edge: i32) -> ()
+  // CHECK: %reg1edge = seq.firreg %in clock %clk {clockEdge = 1 : i32} : i32
+  // CHECK: hw.instance "reg1edge" @Observe(x: %reg1edge: i32) -> ()
+
   // Registers that are permanently reset should be replaced with their reset
   // value.
   %reg2a = seq.firreg %in clock %clk reset sync %true, %v : i32
@@ -122,6 +129,19 @@ hw.module @UninitializedArrayElement(in %a : i1, in %clock : !seq.clock, out b: 
   %0 = hw.array_get %r[%true] : !hw.array<2xi1>, i1
   %1 = hw.array_create %0, %a : i1
   hw.output %r : !hw.array<2xi1>
+}
+
+// When the self-looping array-create has multiple uses the whole register is
+// rebuilt; the non-default clock edge must be preserved on the replacement.
+// CHECK-LABEL: @ArraySelfLoopElementClockEdge
+hw.module @ArraySelfLoopElementClockEdge(in %a : i1, in %clock : !seq.clock,
+    out b: !hw.array<2xi1>, out c: !hw.array<2xi1>) {
+  // CHECK: %r = seq.firreg %{{.*}} clock %clock {clockEdge = 1 : i32} : !hw.array<2xi1>
+  %true = hw.constant true
+  %r = seq.firreg %1 clock %clock {clockEdge = 1 : i32} : !hw.array<2xi1>
+  %0 = hw.array_get %r[%true] : !hw.array<2xi1>, i1
+  %1 = hw.array_create %0, %a : i1
+  hw.output %r, %1 : !hw.array<2xi1>, !hw.array<2xi1>
 }
 
 // CHECK-LABEL: hw.module @ClockGate

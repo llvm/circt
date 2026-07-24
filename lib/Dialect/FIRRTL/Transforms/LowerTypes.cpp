@@ -1362,7 +1362,8 @@ bool TypeLoweringVisitor::visitDecl(RegOp op) {
   auto clone = [&](const FlatBundleFieldEntry &field,
                    ArrayAttr attrs) -> Value {
     return RegOp::create(*builder, field.type, op.getClockVal(), "",
-                         NameKindEnum::DroppableName, attrs, StringAttr{})
+                         NameKindEnum::DroppableName, attrs, StringAttr{},
+                         /*forceable=*/false, op.getClockEdgeAttr())
         .getResult();
   };
   return lowerProducer(op, clone);
@@ -1378,7 +1379,8 @@ bool TypeLoweringVisitor::visitDecl(RegResetOp op) {
     auto resetVal = getSubWhatever(op.getResetValue(), field.index);
     return RegResetOp::create(*builder, field.type, op.getClockVal(),
                               op.getResetSignal(), resetVal, "",
-                              NameKindEnum::DroppableName, attrs, StringAttr{})
+                              NameKindEnum::DroppableName, attrs, StringAttr{},
+                              /*forceable=*/false, op.getClockEdgeAttr())
         .getResult();
   };
   return lowerProducer(op, clone);

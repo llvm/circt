@@ -1963,7 +1963,7 @@ void InferResetsPass::implementFullReset(Operation *op, FModuleOp module,
         builder, regOp.getResult().getType(), regOp.getClockVal(), actualReset,
         zero, regOp.getNameAttr(), regOp.getNameKindAttr(),
         regOp.getAnnotations(), regOp.getInnerSymAttr(),
-        regOp.getForceableAttr());
+        regOp.getForceableAttr(), regOp.getClockEdgeAttr());
     regOp.getResult().replaceAllUsesWith(newRegOp.getResult());
     if (regOp.getForceable())
       regOp.getRef().replaceAllUsesWith(newRegOp.getRef());

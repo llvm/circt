@@ -82,10 +82,11 @@ void SFCCompatPass::runOnOperation() {
                                           return src.isa<InvalidValueOp>();
                                         })) {
       ImplicitLocOpBuilder builder(reg.getLoc(), reg);
-      RegOp newReg = RegOp::create(
-          builder, reg.getResult().getType(), reg.getClockVal(),
-          reg.getNameAttr(), reg.getNameKindAttr(), reg.getAnnotationsAttr(),
-          reg.getInnerSymAttr(), reg.getForceableAttr());
+      RegOp newReg =
+          RegOp::create(builder, reg.getResult().getType(), reg.getClockVal(),
+                        reg.getNameAttr(), reg.getNameKindAttr(),
+                        reg.getAnnotationsAttr(), reg.getInnerSymAttr(),
+                        reg.getForceableAttr(), reg.getClockEdgeAttr());
       reg.replaceAllUsesWith(newReg);
       reg.erase();
       madeModifications = true;

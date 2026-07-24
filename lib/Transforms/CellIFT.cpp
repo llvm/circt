@@ -735,16 +735,19 @@ LogicalResult CellIFTInstrumentPass::instrumentModuleBody(
 
           Value nextT = getTaint(taintOf, pendingTaints, backedgeBuilder,
                                  firreg.getNext());
-          Value tReg;
+          auto clockEdge = firreg.getClockEdgeAttr();
+          seq::FirRegOp tRegOp;
           if (firreg.hasReset()) {
             Value rstVal = getZero(b, firreg.getType());
-            tReg = seq::FirRegOp::create(
+            tRegOp = seq::FirRegOp::create(
                 b, nextT, firreg.getClk(), name, firreg.getReset(), rstVal,
-                firreg.getInnerSymAttr(), firreg.getIsAsync());
+                firreg.getInnerSymAttr(), firreg.getIsAsync(), clockEdge);
           } else {
-            tReg = seq::FirRegOp::create(b, nextT, firreg.getClk(), name);
+            tRegOp = seq::FirRegOp::create(b, nextT, firreg.getClk(), name,
+                                           hw::InnerSymAttr{}, Attribute{},
+                                           clockEdge);
           }
-          setTaint(taintOf, pendingTaints, firreg.getData(), tReg);
+          setTaint(taintOf, pendingTaints, firreg.getData(), tRegOp);
         })
         .Case<hw::ConstantOp>([&](auto o) {
           setTaint(taintOf, pendingTaints, o.getResult(),
