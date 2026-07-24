@@ -280,9 +280,11 @@ def AlwaysFFOp : SVOp<"alwaysff", [SingleBlock, NoTerminator, NoRegionArguments,
     of registers.  This block takes a clock signal and edge sensitivity and
     reset type.  If the reset type is anything but 'noreset', the block takes a
     reset signal, reset sensitivity, and reset block.  Appropriate if conditions
-    are generated in the output code based on the reset type.  A negative-edge,
-    asynchronous reset will check the inverse of the reset condition
-    (if (!reset) begin resetblock end) to match the sensitivity.
+    are generated in the output code based on the reset type.  A negative-edge
+    reset (active-low) checks the inverse of the reset condition
+    (if (!reset) begin resetblock end); for an asynchronous reset this also
+    matches the sensitivity-list edge, and a synchronous active-low reset uses
+    the same inverted condition without an entry in the sensitivity list.
   }];
 
   let regions = (region SizedRegion<1>:$bodyBlk, AnyRegion:$resetBlk);

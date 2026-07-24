@@ -119,7 +119,7 @@ firrtl.circuit "Test" {
 firrtl.circuit "Issue1188"  {
   firrtl.module @Issue1188(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, out %io_out: !firrtl.uint<6>, out %io_out3: !firrtl.uint<3>) {
     %c1_ui6 = firrtl.constant 1 : !firrtl.uint<6>
-    %D0123456 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<6>
+    %D0123456 = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<6>
     %0 = firrtl.bits %D0123456 4 to 0 : (!firrtl.uint<6>) -> !firrtl.uint<5>
     %1 = firrtl.bits %D0123456 5 to 5 : (!firrtl.uint<6>) -> !firrtl.uint<1>
     %2 = firrtl.cat %0, %1 : (!firrtl.uint<5>, !firrtl.uint<1>) -> !firrtl.uint<6>
@@ -145,7 +145,7 @@ firrtl.circuit "testDontTouch"  {
   firrtl.module private @blockProp1(in %clock: !firrtl.clock,
     in %a: !firrtl.uint<1> sym @dntSym, out %b: !firrtl.uint<1>){
     //CHECK: %c = firrtl.reg
-    %c = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    %c = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     firrtl.matchingconnect %c, %a : !firrtl.uint<1>
     firrtl.matchingconnect %b, %c : !firrtl.uint<1>
   }
@@ -160,7 +160,7 @@ firrtl.circuit "testDontTouch"  {
   // CHECK-LABEL: firrtl.module private @blockProp3
   firrtl.module private @blockProp3(in %clock: !firrtl.clock, in %a: !firrtl.uint<1> , out %b: !firrtl.uint<1>) {
     //CHECK: %c = firrtl.reg
-    %c = firrtl.reg sym @s2 %clock : !firrtl.clock, !firrtl.uint<1>
+    %c = firrtl.reg sym @s2 %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     firrtl.matchingconnect %c, %a : !firrtl.uint<1>
     firrtl.matchingconnect %b, %c : !firrtl.uint<1>
   }
@@ -298,7 +298,7 @@ firrtl.circuit "InstanceOut2"   {
 firrtl.circuit "invalidReg1"   {
   // CHECK-LABEL: @invalidReg1
   firrtl.module @invalidReg1(in %clock: !firrtl.clock, out %a: !firrtl.uint<1>) {
-    %foobar = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    %foobar = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
       //CHECK: %0 = firrtl.not %foobar : (!firrtl.uint<1>) -> !firrtl.uint<1>
       %0 = firrtl.not %foobar : (!firrtl.uint<1>) -> !firrtl.uint<1>
       //CHECK: firrtl.matchingconnect %foobar, %0 : !firrtl.uint<1>
@@ -320,12 +320,12 @@ firrtl.circuit "invalidReg1"   {
 // CHECK-LABEL: "Oscillators"
 firrtl.circuit "Oscillators"   {
   // CHECK: firrtl.module private @Foo
-  firrtl.module private @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+  firrtl.module private @Foo(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %a: !firrtl.uint<1>) {
     // CHECK: firrtl.reg
-    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: firrtl.regreset
-    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.not %r : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.not %s : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -334,12 +334,12 @@ firrtl.circuit "Oscillators"   {
     firrtl.matchingconnect %a, %2 : !firrtl.uint<1>
   }
   // CHECK: firrtl.module private @Bar
-  firrtl.module private @Bar(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+  firrtl.module private @Bar(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %a: !firrtl.uint<1>) {
     // CHECK: %r = firrtl.reg
-    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: firrtl.regreset
-    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %0 = firrtl.xor %a, %c1_ui1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %r, %0 : !firrtl.uint<1>
@@ -349,12 +349,12 @@ firrtl.circuit "Oscillators"   {
     firrtl.matchingconnect %a, %2 : !firrtl.uint<1>
   }
   // CHECK: firrtl.module private @Baz
-  firrtl.module private @Baz(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+  firrtl.module private @Baz(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %a: !firrtl.uint<1>) {
     // CHECK: firrtl.reg
-    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: firrtl.regreset
-    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.not %a : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -364,13 +364,13 @@ firrtl.circuit "Oscillators"   {
   }
   firrtl.extmodule @Ext(in a: !firrtl.uint<1>)
   // CHECK: firrtl.module private @Qux
-  firrtl.module private @Qux(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %a: !firrtl.uint<1>) {
+  firrtl.module private @Qux(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %a: !firrtl.uint<1>) {
     %ext_a = firrtl.instance ext @Ext(in a: !firrtl.uint<1>)
     // CHECK: firrtl.reg
-    %r = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // CHECK: firrtl.regreset
-    %s = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %s = firrtl.regreset %clock, %reset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     %0 = firrtl.not %ext_a : (!firrtl.uint<1>) -> !firrtl.uint<1>
     firrtl.matchingconnect %r, %0 : !firrtl.uint<1>
     %1 = firrtl.not %ext_a : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -379,22 +379,22 @@ firrtl.circuit "Oscillators"   {
     firrtl.matchingconnect %ext_a, %2 : !firrtl.uint<1>
     firrtl.matchingconnect %a, %ext_a : !firrtl.uint<1>
   }
-  firrtl.module @Oscillators(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %foo_a: !firrtl.uint<1>, out %bar_a: !firrtl.uint<1>, out %baz_a: !firrtl.uint<1>, out %qux_a: !firrtl.uint<1>) {
-    %foo_clock, %foo_reset, %foo_a_0 = firrtl.instance foo @Foo(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.uint<1>)
+  firrtl.module @Oscillators(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %foo_a: !firrtl.uint<1>, out %bar_a: !firrtl.uint<1>, out %baz_a: !firrtl.uint<1>, out %qux_a: !firrtl.uint<1>) {
+    %foo_clock, %foo_reset, %foo_a_0 = firrtl.instance foo @Foo(in clock: !firrtl.clock, in reset: !firrtl.reset, out a: !firrtl.uint<1>)
     firrtl.matchingconnect %foo_clock, %clock : !firrtl.clock
-    firrtl.matchingconnect %foo_reset, %reset : !firrtl.asyncreset
+    firrtl.matchingconnect %foo_reset, %reset : !firrtl.reset
     firrtl.matchingconnect %foo_a, %foo_a_0 : !firrtl.uint<1>
-    %bar_clock, %bar_reset, %bar_a_1 = firrtl.instance bar @Bar (in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.uint<1>)
+    %bar_clock, %bar_reset, %bar_a_1 = firrtl.instance bar @Bar (in clock: !firrtl.clock, in reset: !firrtl.reset, out a: !firrtl.uint<1>)
     firrtl.matchingconnect %bar_clock, %clock : !firrtl.clock
-    firrtl.matchingconnect %bar_reset, %reset : !firrtl.asyncreset
+    firrtl.matchingconnect %bar_reset, %reset : !firrtl.reset
     firrtl.matchingconnect %bar_a, %bar_a_1 : !firrtl.uint<1>
-    %baz_clock, %baz_reset, %baz_a_2 = firrtl.instance baz @Baz(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.uint<1>)
+    %baz_clock, %baz_reset, %baz_a_2 = firrtl.instance baz @Baz(in clock: !firrtl.clock, in reset: !firrtl.reset, out a: !firrtl.uint<1>)
     firrtl.matchingconnect %baz_clock, %clock : !firrtl.clock
-    firrtl.matchingconnect %baz_reset, %reset : !firrtl.asyncreset
+    firrtl.matchingconnect %baz_reset, %reset : !firrtl.reset
     firrtl.matchingconnect %baz_a, %baz_a_2 : !firrtl.uint<1>
-    %qux_clock, %qux_reset, %qux_a_3 = firrtl.instance qux @Qux(in clock: !firrtl.clock, in reset: !firrtl.asyncreset, out a: !firrtl.uint<1>)
+    %qux_clock, %qux_reset, %qux_a_3 = firrtl.instance qux @Qux(in clock: !firrtl.clock, in reset: !firrtl.reset, out a: !firrtl.uint<1>)
     firrtl.matchingconnect %qux_clock, %clock : !firrtl.clock
-    firrtl.matchingconnect %qux_reset, %reset : !firrtl.asyncreset
+    firrtl.matchingconnect %qux_reset, %reset : !firrtl.reset
     firrtl.matchingconnect %qux_a, %qux_a_3 : !firrtl.uint<1>
   }
 }
@@ -471,7 +471,8 @@ firrtl.circuit "Issue3372"  {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     %c1_ui1 = firrtl.constant 1 : !firrtl.uint<1>
     %other_zero = firrtl.instance other interesting_name  @Other(out zero: !firrtl.uint<1>)
-    %shared = firrtl.regreset interesting_name %clock, %other_zero, %c1_ui1  : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.uint<1>
+    %other_zero_reset = firrtl.asReset %other_zero : (!firrtl.uint<1>) -> !firrtl.reset
+    %shared = firrtl.regreset interesting_name %clock, %other_zero_reset, %c1_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.matchingconnect %shared, %shared : !firrtl.uint<1>
     %test = firrtl.wire interesting_name  : !firrtl.uint<1>
     firrtl.matchingconnect %test, %shared : !firrtl.uint<1>
@@ -594,7 +595,7 @@ firrtl.circuit "Verbatim"  {
 firrtl.circuit "Issue4498"  {
   firrtl.module @Issue4498(in %clock: !firrtl.clock) {
     %a = firrtl.wire : !firrtl.uint<1>
-    %r = firrtl.reg interesting_name %clock : !firrtl.clock, !firrtl.uint<1>
+    %r = firrtl.reg interesting_name %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     firrtl.matchingconnect %r, %a : !firrtl.uint<1>
   }
 }

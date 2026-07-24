@@ -6,7 +6,7 @@ hw.module @ClockPosEdge(in %clock: i1, in %d: i42) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] {clockEdge = 0 : i32} : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -30,7 +30,7 @@ hw.module @ClockNegEdge(in %clock: i1, in %d: i42) {
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[CLK_INV:%.+]] = seq.clock_inv [[CLK]]
-  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK_INV]] : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK_INV]] {clockEdge = 0 : i32} : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -54,7 +54,7 @@ hw.module @ClockPosEdgeWithActiveLowReset(in %clock: i1, in %reset: i1, in %d: i
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[RST_INV:%.+]] = comb.xor %reset, %true
-  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async [[RST_INV]], %c42_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async [[RST_INV]], %c42_i42 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -84,7 +84,7 @@ hw.module @ClockNegEdgeWithActiveHighReset(in %clock: i1, in %reset: i1, in %d: 
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[CLK_INV:%.+]] = seq.clock_inv [[CLK]]
-  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK_INV]] reset async %reset, %c42_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK_INV]] reset async %reset, %c42_i42 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -133,7 +133,7 @@ hw.module @ClockWithEnable(in %clock: i1, in %d: i42, in %en: i1) {
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
-  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
+  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] {clockEdge = 0 : i32} : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -170,7 +170,7 @@ hw.module @ClockWithEnableAndReset(in %clock: i1, in %reset: i1, in %d: i42, in 
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
-  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] reset async %reset, %c42_i42 : i42
+  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] reset async %reset, %c42_i42 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -350,7 +350,7 @@ hw.module @AcceptMuxForReset(in %clock: i1, in %reset: i1, in %d: i42) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async %reset, %c42_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async %reset, %c42_i42 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -423,7 +423,7 @@ hw.module @ComplexControlFlow(in %clock: i1, in %d: i42) {
   %3 = llhd.sig %c0_i42 : i42
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
   // CHECK: [[MUX:%.+]] = comb.mux bin [[ER]]#1, [[ER]]#0, [[REG:%.+]] : i42
-  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] : i42
+  // CHECK: [[REG]] = seq.firreg [[MUX]] clock [[CLK]] {clockEdge = 0 : i32} : i42
   // CHECK: llhd.drv {{%.+}}, [[REG]] after {{%.+}} :
   llhd.drv %3, %1 after %0 if %2 : i42
 }
@@ -434,7 +434,7 @@ hw.module @ClockAndResetSameConst(in %clock: i1, in %reset: i1) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.firreg %c42_i42 clock [[CLK]] reset async %reset, %c42_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %c42_i42 clock [[CLK]] reset async %reset, %c42_i42 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -463,7 +463,7 @@ hw.module @ClockAndResetDifferentConst(in %clock: i1, in %reset: i1) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.firreg %c42_i42 clock [[CLK]] reset async %reset, %c0_i42 : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %c42_i42 clock [[CLK]] reset async %reset, %c0_i42 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -495,7 +495,7 @@ hw.module @NonConstButStaticReset(in %clock: i1, in %reset: i1, in %d: i42) {
   %2 = hw.struct_extract %1["a"] : !hw.struct<a: i42, b: i42>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async %reset, [[FIELD]] : i42
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock [[CLK]] reset async %reset, [[FIELD]] {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i42
   %3, %4 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false
@@ -939,7 +939,7 @@ hw.module @OpOnConstantInputsMistakenlyPoison(in %clock: i1, in %d: i42) {
   %0 = llhd.constant_time <0ns, 1d, 0e>
   // CHECK-NOT: llhd.process
   // CHECK: [[CLK:%.+]] = seq.to_clock %clock
-  // CHECK: [[REG:%.+]] = seq.firreg {{%.+}} clock [[CLK]] : i42
+  // CHECK: [[REG:%.+]] = seq.firreg {{%.+}} clock [[CLK]] {clockEdge = 0 : i32} : i42
   %1, %2 = llhd.process -> i42, i1 {
     %true = hw.constant true
     %false = hw.constant false

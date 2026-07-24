@@ -100,7 +100,7 @@ hw.module private @LargeModuleWithState(in %clk: !seq.clock, in %a: i4, out b: i
   %5 = comb.add %4, %a : i4
   %6 = comb.mul %5, %a : i4
   %7 = comb.xor %6, %a : i4
-  %reg = seq.firreg %7 clock %clk : i4
+  %reg = seq.firreg %7 clock %clk {clockEdge = 0 : i32} : i4
   hw.output %reg : i4
 }
 

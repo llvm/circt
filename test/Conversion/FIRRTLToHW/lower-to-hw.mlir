@@ -287,7 +287,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
     // Noop
     %47 = firrtl.asClock %44 : (!firrtl.uint<1>) -> !firrtl.clock
-    %48 = firrtl.asAsyncReset %44 : (!firrtl.uint<1>) -> !firrtl.asyncreset
+    %48 = firrtl.asReset %44 : (!firrtl.uint<1>) -> !firrtl.reset
 
     // CHECK: [[VERB1:%.+]] = sv.verbatim.expr "MAGIC_CONSTANT" : () -> i42
     // CHECK: [[VERB2:%.+]] = sv.verbatim.expr "$bits({{[{][{]0[}][}]}}, {{[{][{]1[}][}]}})"([[VERB1]]) : (i42) -> i32 {symbols = [@Simple]}
@@ -988,9 +988,9 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: ASQ
   // https://github.com/llvm/circt/issues/699
-  firrtl.module private @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
+  firrtl.module private @ASQ(in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {name = "widx_widx_bin"} : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<4>
+    %widx_widx_bin = firrtl.regreset %clock, %reset, %c0_ui1 {clockEdge = 0 : i32, name = "widx_widx_bin", resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<4>
   }
 
   // CHECK-LABEL: hw.module private @Struct0bits(in %source : !hw.struct<valid: i1, ready: i1, data: i0>) {
@@ -1010,7 +1010,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: issue1303
   firrtl.module private @issue1303(out %out: !firrtl.reset) {
     %c1_ui = firrtl.constant 1 : !firrtl.uint<1>
-    firrtl.connect %out, %c1_ui : !firrtl.reset, !firrtl.uint<1>
+    %r = firrtl.asReset %c1_ui : (!firrtl.uint<1>) -> !firrtl.reset
+    firrtl.connect %out, %r : !firrtl.reset, !firrtl.reset
     // CHECK-NEXT: %true = hw.constant true
     // CHECK-NEXT: hw.output %true
   }
@@ -1053,14 +1054,14 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @AsyncResetBasic(
-  firrtl.module private @AsyncResetBasic(in %clock: !firrtl.clock, in %arst: !firrtl.asyncreset, in %srst: !firrtl.uint<1>) {
+  firrtl.module private @AsyncResetBasic(in %clock: !firrtl.clock, in %arst: !firrtl.reset, in %srst: !firrtl.reset) {
     %c9_ui42 = firrtl.constant 9 : !firrtl.uint<42>
     %c-9_si42 = firrtl.constant -9 : !firrtl.sint<42>
     // The following should not error because the reset values are constant.
-    %r0 = firrtl.regreset %clock, %arst, %c9_ui42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<42>, !firrtl.uint<42>
-    %r1 = firrtl.regreset %clock, %srst, %c9_ui42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
-    %r2 = firrtl.regreset %clock, %arst, %c-9_si42 : !firrtl.clock, !firrtl.asyncreset, !firrtl.sint<42>, !firrtl.sint<42>
-    %r3 = firrtl.regreset %clock, %srst, %c-9_si42 : !firrtl.clock, !firrtl.uint<1>, !firrtl.sint<42>, !firrtl.sint<42>
+    %r0 = firrtl.regreset %clock, %arst, %c9_ui42 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<42>, !firrtl.uint<42>
+    %r1 = firrtl.regreset %clock, %srst, %c9_ui42 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<42>, !firrtl.uint<42>
+    %r2 = firrtl.regreset %clock, %arst, %c-9_si42 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.sint<42>, !firrtl.sint<42>
+    %r3 = firrtl.regreset %clock, %srst, %c-9_si42 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.sint<42>, !firrtl.sint<42>
   }
 
   // CHECK-LABEL: hw.module private @BitCast1
@@ -1120,12 +1121,13 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     %wireName = firrtl.wire sym @wireSym : !firrtl.uint<42>
 
     // CHECK: %wireName = hw.wire %z_i42 sym @wireSym : i42
-    %regName = firrtl.reg sym @regSym %clock : !firrtl.clock, !firrtl.uint<42>
+    %regName = firrtl.reg sym @regSym %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<42>
 
-    // CHECK: %regName = seq.firreg %regName clock %clock sym @regSym : i42
-    %regResetName = firrtl.regreset sym @regResetSym %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<42>, !firrtl.uint<42>
+    // CHECK: %regName = seq.firreg %regName clock %clock sym @regSym {clockEdge = 0 : i32} : i42
+    %resetCast = firrtl.asReset %reset : (!firrtl.uint<1>) -> !firrtl.reset
+    %regResetName = firrtl.regreset sym @regResetSym %clock, %resetCast, %value {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<42>, !firrtl.uint<42>
 
-    // CHECK: %regResetName = seq.firreg %regResetName clock %clock sym @regResetSym reset sync %reset, %value : i42
+    // CHECK: %regResetName = seq.firreg %regResetName clock %clock sym @regResetSym reset sync %reset, %value {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i42
     %memName_port = firrtl.mem sym @memSym Undefined {depth = 12 : i64, name = "memName", portNames = ["port"], readLatency = 0 : i32, writeLatency = 1 : i32} : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %memName_port.clk = firrtl.subfield %memName_port[clk] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
     %memName_port.en = firrtl.subfield %memName_port[en] : !firrtl.bundle<addr: uint<4>, en: uint<1>, clk: clock, data flip: uint<42>>
@@ -1143,11 +1145,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @connectNarrowUIntVector
   firrtl.module private @connectNarrowUIntVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<uint<1>, 1>, out %b: !firrtl.vector<uint<3>, 1>) {
-    %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<uint<2>, 1>
+    %r1 = firrtl.reg %clock  {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<uint<2>, 1>
     firrtl.connect %r1, %a : !firrtl.vector<uint<2>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<uint<3>, 1>, !firrtl.vector<uint<2>, 1>
     // CHECK:      [[OUT:%.+]] = hw.wire [[T6:%.+]] : !hw.array<1xi3>
-    // CHECK-NEXT: %r1 = seq.firreg [[T3:%.+]] clock %clock : !hw.array<1xi2>
+    // CHECK-NEXT: %r1 = seq.firreg [[T3:%.+]] clock %clock {clockEdge = 0 : i32} : !hw.array<1xi2>
     // CHECK-NEXT: [[T1:%.+]] = hw.array_get %a[%false] : !hw.array<1xi1>
     // CHECK-NEXT: [[T2:%.+]] = comb.concat %false, [[T1]] : i1, i1
     // CHECK-NEXT: [[T3]] = hw.array_create [[T2]] : i2
@@ -1159,11 +1161,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @connectNarrowSIntVector
   firrtl.module private @connectNarrowSIntVector(in %clock: !firrtl.clock, in %a: !firrtl.vector<sint<1>, 1>, out %b: !firrtl.vector<sint<3>, 1>) {
-    %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<sint<2>, 1>
+    %r1 = firrtl.reg %clock  {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<sint<2>, 1>
     firrtl.connect %r1, %a : !firrtl.vector<sint<2>, 1>, !firrtl.vector<sint<1>, 1>
     firrtl.connect %b, %r1 : !firrtl.vector<sint<3>, 1>, !firrtl.vector<sint<2>, 1>
     // CHECK:      [[OUT:%.+]] = hw.wire [[T7:%.+]] : !hw.array<1xi3>
-    // CHECK-NEXT: %r1 = seq.firreg [[T3:%.+]] clock %clock : !hw.array<1xi2>
+    // CHECK-NEXT: %r1 = seq.firreg [[T3:%.+]] clock %clock {clockEdge = 0 : i32} : !hw.array<1xi2>
     // CHECK-NEXT: [[T1:%.+]] = hw.array_get %a[%false] : !hw.array<1xi1>
     // CHECK-NEXT: [[T2:%.+]] = comb.concat [[T1]], [[T1]] : i1, i1
     // CHECK-NEXT: [[T3]] = hw.array_create [[T2]] : i2
@@ -1176,16 +1178,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @SubIndex
   firrtl.module private @SubIndex(in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 1>) {
-    %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    %r2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<uint<1>, 1>
+    %r1 = firrtl.reg %clock  {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    %r2 = firrtl.reg %clock  {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     %0 = firrtl.subindex %a[0] : !firrtl.vector<vector<uint<1>, 1>, 1>
     %1 = firrtl.subindex %0[0] : !firrtl.vector<uint<1>, 1>
     firrtl.connect %r1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r2, %0 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %o1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %o2, %r2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
-    // CHECK:      %r1 = seq.firreg %1 clock %clock : i1
-    // CHECK-NEXT: %r2 = seq.firreg %0 clock %clock : !hw.array<1xi1>
+    // CHECK:      %r1 = seq.firreg %1 clock %clock {clockEdge = 0 : i32} : i1
+    // CHECK-NEXT: %r2 = seq.firreg %0 clock %clock {clockEdge = 0 : i32} : !hw.array<1xi1>
     // CHECK-NEXT: %0 = hw.array_get %a[%false] : !hw.array<1xarray<1xi1>>
     // CHECK-NEXT: %1 = hw.array_get %0[%false] : !hw.array<1xi1>
     // CHECK-NEXT: hw.output %r1, %r2 : i1, !hw.array<1xi1>
@@ -1193,16 +1195,16 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module private @SubAccess
   firrtl.module private @SubAccess(in %x: !firrtl.uint<1>, in %y: !firrtl.uint<1>, in %a: !firrtl.vector<vector<uint<1>, 1>, 1>, in %clock: !firrtl.clock, out %o1: !firrtl.uint<1>, out %o2: !firrtl.vector<uint<1>, 1>) {
-    %r1 = firrtl.reg %clock  : !firrtl.clock, !firrtl.uint<1>
-    %r2 = firrtl.reg %clock  : !firrtl.clock, !firrtl.vector<uint<1>, 1>
+    %r1 = firrtl.reg %clock  {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
+    %r2 = firrtl.reg %clock  {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<uint<1>, 1>
     %0 = firrtl.subaccess %a[%x] : !firrtl.vector<vector<uint<1>, 1>, 1>, !firrtl.uint<1>
     %1 = firrtl.subaccess %0[%y] : !firrtl.vector<uint<1>, 1>, !firrtl.uint<1>
     firrtl.connect %r1, %1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %r2, %0 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %o1, %r1 : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.connect %o2, %r2 : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
-    // CHECK:      %r1 = seq.firreg %1 clock %clock : i1
-    // CHECK-NEXT: %r2 = seq.firreg %0 clock %clock : !hw.array<1xi1>
+    // CHECK:      %r1 = seq.firreg %1 clock %clock {clockEdge = 0 : i32} : i1
+    // CHECK-NEXT: %r2 = seq.firreg %0 clock %clock {clockEdge = 0 : i32} : !hw.array<1xi1>
     // CHECK-NEXT: %0 = hw.array_get %a[%x] : !hw.array<1xarray<1xi1>>, i1
     // CHECK-NEXT: %1 = hw.array_get %0[%y] : !hw.array<1xi1>, i1
     // CHECK-NEXT: hw.output %r1, %r2 : i1, !hw.array<1xi1>
@@ -1217,22 +1219,22 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   }
 
   // CHECK-LABEL: hw.module private @RegResetStructWiden
-  firrtl.module private @RegResetStructWiden(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>, in %init: !firrtl.bundle<a: uint<2>>) {
+  firrtl.module private @RegResetStructWiden(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %init: !firrtl.bundle<a: uint<2>>) {
     // CHECK:      [[FALSE:%.*]] = hw.constant false
     // CHECK-NEXT: [[A:%.*]] = hw.struct_extract %init["a"] : !hw.struct<a: i2>
     // CHECK-NEXT: [[PADDED:%.*]] = comb.concat [[FALSE]], [[A]] : i1, i2
     // CHECK-NEXT: [[STRUCT:%.*]] = hw.struct_create ([[PADDED]]) : !hw.struct<a: i3>
-    // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, [[STRUCT]] : !hw.struct<a: i3>
-    %reg = firrtl.regreset %clock, %reset, %init  : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<3>>
+    // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, [[STRUCT]] {clockEdge = 0 : i32, resetPolarity = 0 : i32} : !hw.struct<a: i3>
+    %reg = firrtl.regreset %clock, %reset, %init  {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.bundle<a: uint<2>>, !firrtl.bundle<a: uint<3>>
   }
 
   // CHECK-LABEL: hw.module private @AggregateInvalidValue
-  firrtl.module private @AggregateInvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.uint<1>) {
+  firrtl.module private @AggregateInvalidValue(in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
     %invalid = firrtl.invalidvalue : !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
-    %reg = firrtl.regreset %clock, %reset, %invalid : !firrtl.clock, !firrtl.uint<1>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
+    %reg = firrtl.regreset %clock, %reset, %invalid {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>, !firrtl.bundle<a: uint<1>, b: vector<uint<10>, 10>>
     // CHECK:      %c0_i101 = hw.constant 0 : i101
     // CHECK-NEXT: %0 = hw.bitcast %c0_i101 : (i101) -> !hw.struct<a: i1, b: !hw.array<10xi10>>
-    // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, %0 : !hw.struct<a: i1, b: !hw.array<10xi10>>
+    // CHECK-NEXT: %reg = seq.firreg %reg clock %clock reset sync %reset, %0 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : !hw.struct<a: i1, b: !hw.array<10xi10>>
   }
 
   // CHECK-LABEL: hw.module private @ForceNameSubmodule
@@ -1349,25 +1351,25 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-LABEL: hw.module @LowerToFirReg(in %clock : !seq.clock, in %reset : i1, in %value : i2)
   firrtl.module @LowerToFirReg(
     in %clock: !firrtl.clock,
-    in %reset: !firrtl.uint<1>,
+    in %reset: !firrtl.reset,
     in %value: !firrtl.uint<2>
   ) {
-    %regA = firrtl.reg %clock: !firrtl.clock, !firrtl.uint<2>
-    %regB = firrtl.regreset %clock, %reset, %value: !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %regA = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<2>
+    %regB = firrtl.regreset %clock, %reset, %value {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<2>, !firrtl.uint<2>
     firrtl.matchingconnect %regA, %value : !firrtl.uint<2>
     firrtl.matchingconnect %regB, %value : !firrtl.uint<2>
-    // CHECK-NEXT: %regA = seq.firreg %value clock %clock : i2
-    // CHECK-NEXT: %regB = seq.firreg %value clock %clock reset sync %reset, %value : i2
+    // CHECK-NEXT: %regA = seq.firreg %value clock %clock {clockEdge = 0 : i32} : i2
+    // CHECK-NEXT: %regB = seq.firreg %value clock %clock reset sync %reset, %value {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i2
   }
 
   // CHECK-LABEL: hw.module @SyncReset(in %clock : !seq.clock, in %reset : i1, in %value : i2, out result : i2)
   firrtl.module @SyncReset(in %clock: !firrtl.clock,
-                           in %reset: !firrtl.uint<1>,
+                           in %reset: !firrtl.reset,
                            in %value: !firrtl.uint<2>,
                            out %result: !firrtl.uint<2>) {
-    %count = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<2>, !firrtl.uint<2>
+    %count = firrtl.regreset %clock, %reset, %value {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<2>, !firrtl.uint<2>
 
-    // CHECK: %count = seq.firreg %count clock %clock reset sync %reset, %value : i2
+    // CHECK: %count = seq.firreg %count clock %clock reset sync %reset, %value {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i2
     // CHECK: hw.output %count : i2
 
     firrtl.matchingconnect %result, %count : !firrtl.uint<2>
@@ -1375,12 +1377,12 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
 
   // CHECK-LABEL: hw.module @AsyncReset(in %clock : !seq.clock, in %reset : i1, in %value : i2, out result : i2)
   firrtl.module @AsyncReset(in %clock: !firrtl.clock,
-                           in %reset: !firrtl.asyncreset,
+                           in %reset: !firrtl.reset,
                            in %value: !firrtl.uint<2>,
                            out %result: !firrtl.uint<2>) {
-    %count = firrtl.regreset %clock, %reset, %value : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<2>, !firrtl.uint<2>
+    %count = firrtl.regreset %clock, %reset, %value {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<2>, !firrtl.uint<2>
 
-    // CHECK: %count = seq.firreg %value clock %clock reset async %reset, %value : i2
+    // CHECK: %count = seq.firreg %value clock %clock reset async %reset, %value {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i2
     // CHECK: hw.output %count : i2
 
     firrtl.matchingconnect %count, %value : !firrtl.uint<2>
@@ -1391,8 +1393,8 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   firrtl.module @NoConnect(in %clock: !firrtl.clock,
                      in %reset: !firrtl.uint<1>,
                      out %result: !firrtl.uint<2>) {
-    %count = firrtl.reg %clock: !firrtl.clock, !firrtl.uint<2>
-    // CHECK: %count = seq.firreg %count clock %clock : i2
+    %count = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<2>
+    // CHECK: %count = seq.firreg %count clock %clock {clockEdge = 0 : i32} : i2
 
     firrtl.matchingconnect %result, %count : !firrtl.uint<2>
 
@@ -1562,7 +1564,7 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
     // CHECK-NEXT: %r = seq.firreg %w clock %clk sym @{{.+}} : i4
     %n, %n_ref = firrtl.node %in forceable : !firrtl.uint<4>
     %w, %w_ref = firrtl.wire forceable : !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
-    %r, %r_ref = firrtl.reg %clk forceable : !firrtl.clock, !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
+    %r, %r_ref = firrtl.reg %clk forceable {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<4>, !firrtl.rwprobe<uint<4>>
 
     firrtl.matchingconnect %w, %n : !firrtl.uint<4>
     firrtl.matchingconnect %r, %w : !firrtl.uint<4>
@@ -1612,11 +1614,11 @@ firrtl.circuit "Simple"   attributes {annotations = [{class =
   // CHECK-SAME:  attributes {sv.attributes = [#sv.attribute<"keep_hierarchy = \22true\22">]}
   // CHECK-NEXT: %w = hw.wire %a {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]}
   // CHECK-NEXT: %n = hw.wire %w {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]}
-  // CHECK-NEXT: %r = seq.firreg %a clock %clock {firrtl.random_init_start = 0 : ui64, sv.attributes = [#sv.attribute<"keep = \22true\22", emitAsComment>]}
+  // CHECK-NEXT: %r = seq.firreg %a clock %clock {clockEdge = 0 : i32, firrtl.random_init_start = 0 : ui64, sv.attributes = [#sv.attribute<"keep = \22true\22", emitAsComment>]}
   firrtl.module @SVAttr(in %a: !firrtl.uint<1>, in %clock: !firrtl.clock, out %b1: !firrtl.uint<1>, out %b2: !firrtl.uint<1>) attributes {convention = #firrtl<convention scalarized>, sv.attributes = [#sv.attribute<"keep_hierarchy = \22true\22">]} {
     %w = firrtl.wire {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]} : !firrtl.uint<1>
     %n = firrtl.node %w {sv.attributes = [#sv.attribute<"mark_debug = \22yes\22">]} : !firrtl.uint<1>
-    %r = firrtl.reg %clock {firrtl.random_init_start = 0 : ui64, sv.attributes = [#sv.attribute<"keep = \22true\22", emitAsComment>]} : !firrtl.clock, !firrtl.uint<1>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32, firrtl.random_init_start = 0 : ui64, sv.attributes = [#sv.attribute<"keep = \22true\22", emitAsComment>]} : !firrtl.clock, !firrtl.uint<1>
     firrtl.matchingconnect %w, %a : !firrtl.uint<1>
     firrtl.matchingconnect %b1, %n : !firrtl.uint<1>
     firrtl.matchingconnect %r, %a : !firrtl.uint<1>

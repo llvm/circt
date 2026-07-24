@@ -216,7 +216,7 @@ firrtl.circuit "RegisterInference" {
     // CHECK: out %q: !firrtl.uint<1> domains [%A]
     out %q: !firrtl.uint<1>
   ) {
-    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.uint<1>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.uint<1>
     firrtl.matchingconnect %r, %d : !firrtl.uint<1>
     firrtl.matchingconnect %q, %r : !firrtl.uint<1>
   }

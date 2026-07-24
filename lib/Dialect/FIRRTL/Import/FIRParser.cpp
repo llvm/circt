@@ -926,7 +926,6 @@ ParseResult FIRParser::parseListType(FIRRTLType &result) {
 
 /// type ::= 'Clock'
 ///      ::= 'Reset'
-///      ::= 'AsyncReset'
 ///      ::= 'UInt' optional-width
 ///      ::= 'SInt' optional-width
 ///      ::= 'Analog' optional-width
@@ -996,9 +995,10 @@ ParseResult FIRParser::parseType(FIRRTLType &result, const Twine &message) {
     break;
 
   case FIRToken::kw_AsyncReset:
-    consumeToken(FIRToken::kw_AsyncReset);
-    result = AsyncResetType::get(getContext());
-    break;
+    return emitError("the 'AsyncReset' type is not supported; represent the "
+                     "reset as 'Reset' and record the asynchronous behavior "
+                     "with the register's reset kind"),
+           failure();
 
   case FIRToken::kw_UInt:
     consumeToken(FIRToken::kw_UInt);
@@ -2114,6 +2114,9 @@ private:
   ParseResult parseWire();
   ParseResult parseRegister(unsigned regIndent);
   ParseResult parseRegisterWithReset();
+  ParseResult parseClockEdgeQualifier(EventControl &result);
+  ParseResult parseResetKindQualifier(RegResetType &result);
+  ParseResult parseResetPolarityQualifier(RegResetPolarity &result);
   ParseResult parseContract(unsigned blockIndent);
 
   // Helper to fetch a module referenced by an instance-like statement.
@@ -5297,7 +5300,69 @@ ParseResult FIRStmtParser::parseWire() {
                                       startTok.getLoc());
 }
 
-/// register    ::= 'reg' id ':' type exp ('with' ':' reset_block)? info?
+/// Parse the required inline clock-edge qualifier that precedes a register's
+/// clock expression:
+///   clock_edge ::= 'posedge' | 'negedge'
+ParseResult FIRStmtParser::parseClockEdgeQualifier(EventControl &result) {
+  switch (getToken().getKind()) {
+  case FIRToken::kw_posedge:
+    result = EventControl::AtPosEdge;
+    break;
+  case FIRToken::kw_negedge:
+    result = EventControl::AtNegEdge;
+    break;
+  default:
+    return emitError("expected 'posedge' or 'negedge' clock-edge qualifier "
+                     "before the register clock"),
+           failure();
+  }
+  consumeToken();
+  return success();
+}
+
+/// Parse the required inline reset-kind qualifier that precedes a reset-bearing
+/// register's reset expression:
+///   reset_kind ::= 'sync' | 'async'
+ParseResult FIRStmtParser::parseResetKindQualifier(RegResetType &result) {
+  switch (getToken().getKind()) {
+  case FIRToken::kw_sync:
+    result = RegResetType::SyncReset;
+    break;
+  case FIRToken::kw_async:
+    result = RegResetType::AsyncReset;
+    break;
+  default:
+    return emitError("expected 'sync' or 'async' reset-kind qualifier before "
+                     "the register reset"),
+           failure();
+  }
+  consumeToken();
+  return success();
+}
+
+/// Parse the required inline reset-polarity qualifier that precedes a
+/// reset-bearing register's reset expression:
+///   reset_polarity ::= 'activehigh' | 'activelow'
+ParseResult
+FIRStmtParser::parseResetPolarityQualifier(RegResetPolarity &result) {
+  switch (getToken().getKind()) {
+  case FIRToken::kw_activehigh:
+    result = RegResetPolarity::PosReset;
+    break;
+  case FIRToken::kw_activelow:
+    result = RegResetPolarity::NegReset;
+    break;
+  default:
+    return emitError("expected 'activehigh' or 'activelow' reset-polarity "
+                     "qualifier before the register reset"),
+           failure();
+  }
+  consumeToken();
+  return success();
+}
+
+/// register    ::= 'reg' id ':' type ',' clock_edge exp ('with' ':'
+/// reset_block)? info?
 ///
 /// reset_block ::= INDENT simple_reset info? NEWLINE DEDENT
 ///             ::= '(' simple_reset ')'
@@ -5318,6 +5383,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   StringRef id;
   FIRRTLType type;
   Value clock;
+  EventControl clockEdge;
 
   // TODO(firrtl spec): info? should come after the clock expression before
   // the 'with'.
@@ -5325,6 +5391,7 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
       parseToken(FIRToken::colon, "expected ':' in reg") ||
       parseType(type, "expected reg type") ||
       parseToken(FIRToken::comma, "expected ','") ||
+      parseClockEdgeQualifier(clockEdge) ||
       parseExp(clock, "expected expression for register clock"))
     return failure();
 
@@ -5390,15 +5457,20 @@ ParseResult FIRStmtParser::parseRegister(unsigned regIndent) {
   ArrayAttr annotations = getConstants().emptyArrayAttr;
   Value result;
   StringAttr sym = {};
-  if (resetSignal)
-    result =
-        RegResetOp::create(builder, type, clock, resetSignal, resetValue, id,
-                           NameKindEnum::InterestingName, annotations, sym)
-            .getResult();
-  else
-    result = RegOp::create(builder, type, clock, id,
-                           NameKindEnum::InterestingName, annotations, sym)
-                 .getResult();
+  if (resetSignal) {
+    // The legacy `reg ... with : (reset => ...)` form (FIRRTL < 3.0.0) has no
+    // inline reset-kind/polarity qualifiers, so it is a synchronous active-high
+    // reset; the clock edge comes from the parsed clock-edge qualifier.
+    auto regReset = RegResetOp::create(
+        builder, type, clock, resetSignal, resetValue, clockEdge,
+        RegResetType::SyncReset, RegResetPolarity::PosReset, id,
+        NameKindEnum::InterestingName, annotations, sym);
+    result = regReset.getResult();
+  } else {
+    auto reg = RegOp::create(builder, type, clock, clockEdge, id,
+                             NameKindEnum::InterestingName, annotations, sym);
+    result = reg.getResult();
+  }
   return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
 }
 
@@ -5413,13 +5485,19 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
   StringRef id;
   FIRRTLType type;
   Value clock, resetSignal, resetValue;
+  EventControl clockEdge;
+  RegResetType resetKind;
+  RegResetPolarity resetPolarity;
 
   if (parseId(id, "expected reg name") ||
       parseToken(FIRToken::colon, "expected ':' in reg") ||
       parseType(type, "expected reg type") ||
       parseToken(FIRToken::comma, "expected ','") ||
+      parseClockEdgeQualifier(clockEdge) ||
       parseExp(clock, "expected expression for register clock") ||
       parseToken(FIRToken::comma, "expected ','") ||
+      parseResetKindQualifier(resetKind) ||
+      parseResetPolarityQualifier(resetPolarity) ||
       parseExp(resetSignal, "expected expression for register reset") ||
       parseToken(FIRToken::comma, "expected ','") ||
       parseExp(resetValue, "expected expression for register reset value") ||
@@ -5431,13 +5509,15 @@ ParseResult FIRStmtParser::parseRegisterWithReset() {
 
   locationProcessor.setLoc(startTok.getLoc());
 
-  auto result =
-      RegResetOp::create(builder, type, clock, resetSignal, resetValue, id,
-                         NameKindEnum::InterestingName,
-                         getConstants().emptyArrayAttr, StringAttr{})
-          .getResult();
+  // The clock edge, reset kind, and reset polarity are required and come from
+  // the inline qualifiers parsed above (front-end-explicit, no defaults).
+  auto regReset = RegResetOp::create(
+      builder, type, clock, resetSignal, resetValue, clockEdge, resetKind,
+      resetPolarity, id, NameKindEnum::InterestingName,
+      getConstants().emptyArrayAttr, StringAttr{});
 
-  return moduleContext.addSymbolEntry(id, result, startTok.getLoc());
+  return moduleContext.addSymbolEntry(id, regReset.getResult(),
+                                      startTok.getLoc());
 }
 
 /// contract ::= 'contract' (id,+ '=' exp,+) ':' info? contract_body

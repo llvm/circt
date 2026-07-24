@@ -530,43 +530,26 @@ static LogicalResult applyOutputDirAnno(const AnnoPathValue &target,
   return success();
 }
 
-/// Convert from FullAsyncResetAnnotation to FullResetAnnotation
-static LogicalResult convertToFullResetAnnotation(const AnnoPathValue &target,
-                                                  DictionaryAttr anno,
-                                                  ApplyState &state) {
-  auto *op = target.ref.getOp();
-  auto *context = op->getContext();
-
-  mlir::emitWarning(op->getLoc())
-      << "'" << fullAsyncResetAnnoClass << "' is deprecated, use '"
-      << fullResetAnnoClass << "' instead";
-
-  NamedAttrList newAnno(anno.getValue());
-  newAnno.set("class", StringAttr::get(context, fullResetAnnoClass));
-  newAnno.append("resetType", StringAttr::get(context, "async"));
-
-  DictionaryAttr newDictionary = DictionaryAttr::get(op->getContext(), newAnno);
-
-  return applyWithoutTarget<false>(target, newDictionary, state);
-}
-
-/// Convert from IgnoreFullAsyncResetAnnotation to
-/// ExcludeFromFullResetAnnotation
-static LogicalResult convertToExcludeFromFullResetAnnotation(
-    const AnnoPathValue &target, DictionaryAttr anno, ApplyState &state) {
-  auto *op = target.ref.getOp();
-  auto *context = op->getContext();
-
-  mlir::emitWarning(op->getLoc())
-      << "'" << ignoreFullAsyncResetAnnoClass << "' is deprecated, use '"
-      << excludeFromFullResetAnnoClass << "' instead";
-
-  NamedAttrList newAnno(anno.getValue());
-  newAnno.set("class", StringAttr::get(context, excludeFromFullResetAnnoClass));
-
-  DictionaryAttr newDictionary = DictionaryAttr::get(op->getContext(), newAnno);
-
-  return applyWithoutTarget<true, FModuleOp>(target, newDictionary, state);
+/// Reject the full-reset family of annotations
+/// (`circt.FullResetAnnotation` / `ExcludeFromFullResetAnnotation` and the
+/// deprecated `sifive...FullAsyncResetAnnotation` /
+/// `IgnoreFullAsyncResetAnnotation`). These were implemented by the
+/// `InferResets` pass, which inserted resets into reset-less registers in the
+/// annotated hierarchy. Reset inference has been removed (reset kind is now
+/// front-end-explicit on the register), so these annotations no longer have an
+/// implementation. Reject them here rather than silently dropping them, which
+/// would leave annotated registers without the reset they request.
+static LogicalResult rejectRemovedFullResetAnno(const AnnoPathValue &target,
+                                                DictionaryAttr anno,
+                                                ApplyState &state) {
+  auto classAttr = anno.getAs<StringAttr>("class");
+  StringRef className =
+      classAttr ? classAttr.getValue() : StringRef("<unknown>");
+  return target.ref.getOp()->emitError()
+         << "the '" << className
+         << "' annotation is no longer supported: CIRCT no longer performs "
+            "reset inference (the 'InferResets' pass was removed); register "
+            "resets must be specified explicitly";
 }
 
 //===----------------------------------------------------------------------===//

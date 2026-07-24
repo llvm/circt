@@ -82,7 +82,7 @@ hw.module private @parent(in %a : i1, in %b : i1, out x : i1) {
 hw.module private @firreg(in %a : i1, in %clk : !seq.clock, out x : i1) {
   // expected-remark @below {{root=firreg, endPoint=Object($root.r[0]), startPoint=Object($root.r[0], delay=1)}}
   // expected-remark-re @below {{root=firreg, endPoint=Object($root.r[0]), startPoint=Object($root.a[0], delay=1, history=[{{.+}}])}}
-  %r = seq.firreg %flip clock %clk : i1
+  %r = seq.firreg %flip clock %clk {clockEdge = 0 : i32} : i1
   %flip = synth.aig.and_inv not %r, %a : i1
   hw.output %flip : i1
 }

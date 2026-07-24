@@ -20,7 +20,7 @@ circuit top:
 
   public module top:
     input clk: Clock
-    input rst: UInt<1>
+    input rst: Reset
     ; CHECK:       wire [31:0] [[RESULT:.+]];
     ; CHECK-NEXT:  `ifdef targets$Platform$FPGA
     ; CHECK-NEXT:    FPGATarget proc_FPGA (

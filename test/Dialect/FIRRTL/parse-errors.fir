@@ -369,12 +369,6 @@ circuit circuit:
 
 ;// -----
 
-FIRRTL version 6.0.0
-circuit circuit:
-  public module circuit :
-    input in: {|A : Reset|} ; expected-error {{enum field "A" has uninferred reset}}
-
-;// -----
 
 FIRRTL version 6.0.0
 circuit circuit:
@@ -1587,13 +1581,6 @@ circuit UnknownWidthExt:
 
 ;// -----
 FIRRTL version 4.0.0
-circuit AbstractResetPublic:
-  public module AbstractResetPublic:
-    ; expected-error @below {{public module port must have concrete reset type}}
-    input r: Reset
-
-;// -----
-FIRRTL version 4.0.0
 circuit PrivateMainModule:
   ; expected-error @below {{private main modules were removed in FIRRTL 4.0.0}}
   module PrivateMainModule:
@@ -1662,7 +1649,7 @@ circuit RegWith:
     input clock: Clock
 
     ; expected-error @below {{'reg with' registers were removed in FIRRTL 3.0.0}}
-    reg r_0 : UInt<5>, clock with :
+    reg r_0 : UInt<5>, posedge clock with :
       reset => (UInt<1>(0h0), r_0)
 
 ;// -----
@@ -1964,3 +1951,14 @@ circuit OOBFormatString:
     input clk : Clock
     ; expected-error @below {{not enough operands for format string}}
     printf(clk, UInt<1>(0h1), "oops: %d")
+
+;// -----
+
+; The 'AsyncReset' type has been removed; async-vs-sync now lives in the
+; register reset kind, so 'AsyncReset' is rejected on import. 'Reset' is still
+; accepted.
+FIRRTL version 4.0.0
+circuit AsyncResetRejected:
+  public module AsyncResetRejected:
+    ; expected-error @+1 {{the 'AsyncReset' type is not supported}}
+    input r : AsyncReset

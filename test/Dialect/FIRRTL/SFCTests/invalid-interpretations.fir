@@ -8,7 +8,7 @@ FIRRTL version 4.0.0
 circuit InvalidInterpretations:
   public module InvalidInterpretations:
     input clock: Clock
-    input reset: UInt<1>
+    input reset: Reset
     input cond: UInt<1>
     input a: UInt<8>
     output out_when: UInt<8>
@@ -19,7 +19,7 @@ circuit InvalidInterpretations:
     wire _inv: UInt<8>
     invalidate _inv
 
-    regreset r: UInt<8>, clock, reset, _inv
+    regreset r: UInt<8>, posedge clock, sync activehigh reset, _inv
     connect r, a
     connect out_reg, r
     ; Interpretation 1: Invalid is undefined if used as the initialization value
@@ -53,7 +53,7 @@ FIRRTL version 4.0.0
 circuit InvalidInOtherModule :
   public module InvalidInOtherModule :
     input clock: Clock
-    input reset: UInt<1>
+    input reset: Reset
     output b: SInt<8>
 
     inst other of OtherModule
@@ -63,7 +63,7 @@ circuit InvalidInOtherModule :
     ; CHECK-NEXT:     r <= 8'h4;
     ; CHECK-NEXT:   else
     ; CHECK-NEXT:     r <= 8'h0;
-    regreset r : SInt<8>, clock, reset, SInt<8>(4)
+    regreset r : SInt<8>, posedge clock, sync activehigh reset, SInt<8>(4)
     connect r, other.b
     connect b, r
 

@@ -185,7 +185,7 @@ firrtl.module @Foo() {
 firrtl.circuit "Foo" {
 firrtl.module @Foo() {
   // expected-error @+1 {{special constants can only be 0 or 1}}
-  firrtl.specialconstant 2 : !firrtl.asyncreset
+  firrtl.specialconstant 2 : !firrtl.reset
 }
 }
 
@@ -195,7 +195,7 @@ firrtl.circuit "Foo" {
   firrtl.module @Foo(in %clk: !firrtl.clock, in %reset: !firrtl.uint<2>) {
     %zero = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @+1 {{'firrtl.regreset' op operand #1 must be Reset, but got '!firrtl.uint<2>'}}
-    %a = firrtl.regreset %clk, %reset, %zero {name = "a"} : !firrtl.clock, !firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<1>
+    %a = firrtl.regreset %clk, %reset, %zero {clockEdge = 0 : i32, name = "a", resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.uint<2>, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 
@@ -967,7 +967,7 @@ firrtl.circuit "Top" {
 firrtl.circuit "AnalogRegister" {
   firrtl.module @AnalogRegister(in %clock: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.analog'}}
-    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.analog
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.analog
   }
 }
 
@@ -976,17 +976,17 @@ firrtl.circuit "AnalogRegister" {
 firrtl.circuit "AnalogVectorRegister" {
   firrtl.module @AnalogVectorRegister(in %clock: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.vector<analog, 2>'}}
-    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<analog, 2>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<analog, 2>
   }
 }
 
 // -----
 
 firrtl.circuit "MismatchedRegister" {
-  firrtl.module @MismatchedRegister(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, out %z: !firrtl.vector<uint<1>, 1>) {
+  firrtl.module @MismatchedRegister(in %clock: !firrtl.clock, in %reset: !firrtl.reset, out %z: !firrtl.vector<uint<1>, 1>) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
     // expected-error @+1 {{type mismatch between register '!firrtl.vector<uint<1>, 1>' and reset value '!firrtl.uint<1>'}}
-    %r = firrtl.regreset %clock, %reset, %c0_ui1  : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>
+    %r = firrtl.regreset %clock, %reset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32}  : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.vector<uint<1>, 1>
     firrtl.connect %z, %r : !firrtl.vector<uint<1>, 1>, !firrtl.vector<uint<1>, 1>
   }
 }
@@ -1122,7 +1122,7 @@ firrtl.module @NonRefNode() {
 firrtl.circuit "NonRefRegister" {
   firrtl.module @NonRefRegister(in %clock: !firrtl.clock) {
     // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog}}
-    %r = firrtl.reg %clock : !firrtl.clock, !firrtl.probe<uint<8>>
+    %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.probe<uint<8>>
   }
 }
 
@@ -1549,7 +1549,7 @@ firrtl.module @SubtagNoCase(in %in : !firrtl.enum<None: uint<0>, Some: uint<8>>)
 firrtl.circuit "ConstReg" {
 firrtl.module @ConstReg(in %clock: !firrtl.clock) {
   // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.uint<1>'}}
-  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.const.uint<1>
+  %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.const.uint<1>
 }
 }
 
@@ -1559,7 +1559,7 @@ firrtl.module @ConstReg(in %clock: !firrtl.clock) {
 firrtl.circuit "ConstBundleReg" {
 firrtl.module @ConstBundleReg(in %clock: !firrtl.clock) {
   // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.bundle<a: uint<1>>'}}
-  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.const.bundle<a: uint<1>>
+  %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.const.bundle<a: uint<1>>
 }
 }
 
@@ -1569,7 +1569,7 @@ firrtl.module @ConstBundleReg(in %clock: !firrtl.clock) {
 firrtl.circuit "ConstVectorReg" {
 firrtl.module @ConstVectorReg(in %clock: !firrtl.clock) {
   // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.vector<uint<1>, 3>'}}
-  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.const.vector<uint<1>, 3>
+  %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.const.vector<uint<1>, 3>
 }
 }
 
@@ -1579,7 +1579,7 @@ firrtl.module @ConstVectorReg(in %clock: !firrtl.clock) {
 firrtl.circuit "ConstEnumReg" {
 firrtl.module @ConstEnumReg(in %clock: !firrtl.clock) {
   // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.enum<a: uint<1>>'}}
-  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.const.enum<a: uint<1>>
+  %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.const.enum<a: uint<1>>
 }
 }
 
@@ -1587,9 +1587,9 @@ firrtl.module @ConstEnumReg(in %clock: !firrtl.clock) {
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "ConstRegReset" {
-firrtl.module @ConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.uint<1>) {
+firrtl.module @ConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetVal: !firrtl.const.uint<1>) {
   // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.uint<1>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<1>, !firrtl.const.uint<1>
+  %r = firrtl.regreset %clock, %reset, %resetVal {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.uint<1>, !firrtl.const.uint<1>
 }
 }
 
@@ -1597,9 +1597,9 @@ firrtl.module @ConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncr
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "ConstRegReset" {
-firrtl.module @ConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.uint<1>) {
+firrtl.module @ConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetVal: !firrtl.const.uint<1>) {
   // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.uint<1>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.uint<1>, !firrtl.const.uint<1>
+  %r = firrtl.regreset %clock, %reset, %resetVal {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.uint<1>, !firrtl.const.uint<1>
 }
 }
 
@@ -1607,9 +1607,9 @@ firrtl.module @ConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncr
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "ConstBundleRegReset" {
-firrtl.module @ConstBundleRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.bundle<a: uint<1>>) {
+firrtl.module @ConstBundleRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetVal: !firrtl.const.bundle<a: uint<1>>) {
   // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.bundle<a: uint<1>>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.bundle<a: uint<1>>, !firrtl.const.bundle<a: uint<1>>
+  %r = firrtl.regreset %clock, %reset, %resetVal {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.bundle<a: uint<1>>, !firrtl.const.bundle<a: uint<1>>
 }
 }
 
@@ -1617,9 +1617,9 @@ firrtl.module @ConstBundleRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "ConstVectorRegReset" {
-firrtl.module @ConstVectorRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.vector<uint<1>, 3>) {
+firrtl.module @ConstVectorRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetVal: !firrtl.const.vector<uint<1>, 3>) {
   // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.vector<uint<1>, 3>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
+  %r = firrtl.regreset %clock, %reset, %resetVal {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.vector<uint<1>, 3>, !firrtl.const.vector<uint<1>, 3>
 }
 }
 
@@ -1627,9 +1627,9 @@ firrtl.module @ConstVectorRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "ConstEnumRegReset" {
-firrtl.module @ConstEnumRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.enum<a: uint<1>>) {
+firrtl.module @ConstEnumRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetVal: !firrtl.const.enum<a: uint<1>>) {
   // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.enum<a: uint<1>>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a: uint<1>>, !firrtl.const.enum<a: uint<1>>
+  %r = firrtl.regreset %clock, %reset, %resetVal {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.enum<a: uint<1>>, !firrtl.const.enum<a: uint<1>>
 }
 }
 
@@ -1639,7 +1639,7 @@ firrtl.module @ConstEnumRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.as
 firrtl.circuit "BundleNestedConstReg" {
 firrtl.module @BundleNestedConstReg(in %clock: !firrtl.clock) {
   // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.bundle<a: const.uint<1>>'}}
-  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.bundle<a: const.uint<1>>
+  %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.bundle<a: const.uint<1>>
 }
 }
 
@@ -1649,7 +1649,7 @@ firrtl.module @BundleNestedConstReg(in %clock: !firrtl.clock) {
 firrtl.circuit "VectorNestedConstReg" {
 firrtl.module @VectorNestedConstReg(in %clock: !firrtl.clock) {
   // expected-error @+1 {{'firrtl.reg' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.vector<const.uint<1>, 3>'}}
-  %r = firrtl.reg %clock : !firrtl.clock, !firrtl.vector<const.uint<1>, 3>
+  %r = firrtl.reg %clock {clockEdge = 0 : i32} : !firrtl.clock, !firrtl.vector<const.uint<1>, 3>
 }
 }
 
@@ -1657,9 +1657,9 @@ firrtl.module @VectorNestedConstReg(in %clock: !firrtl.clock) {
 // nested 'const' firrtl.regreset is invalid
 
 firrtl.circuit "BundleNestedConstRegReset" {
-firrtl.module @BundleNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.bundle<a: uint<1>>) {
+firrtl.module @BundleNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetVal: !firrtl.const.bundle<a: uint<1>>) {
   // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.bundle<a: const.uint<1>>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.bundle<a: uint<1>>, !firrtl.bundle<a: const.uint<1>>
+  %r = firrtl.regreset %clock, %reset, %resetVal {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.bundle<a: uint<1>>, !firrtl.bundle<a: const.uint<1>>
 }
 }
 
@@ -1667,9 +1667,9 @@ firrtl.module @BundleNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !f
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "VectorNestedConstRegReset" {
-firrtl.module @VectorNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.vector<const.uint<1>, 3>) {
+firrtl.module @VectorNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetVal: !firrtl.vector<const.uint<1>, 3>) {
   // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.vector<const.uint<1>, 3>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.vector<const.uint<1>, 3>, !firrtl.vector<const.uint<1>, 3>
+  %r = firrtl.regreset %clock, %reset, %resetVal {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.vector<const.uint<1>, 3>, !firrtl.vector<const.uint<1>, 3>
 }
 }
 
@@ -1677,9 +1677,9 @@ firrtl.module @VectorNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !f
 // 'const' firrtl.regreset is invalid
 
 firrtl.circuit "EnumNestedConstRegReset" {
-firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset, in %resetVal: !firrtl.const.enum<a: uint<1>>) {
+firrtl.module @EnumNestedConstRegReset(in %clock: !firrtl.clock, in %reset: !firrtl.reset, in %resetVal: !firrtl.const.enum<a: uint<1>>) {
   // expected-error @+1 {{'firrtl.regreset' op result #0 must be a passive non-'const' base type that does not contain analog, but got '!firrtl.const.enum<a: uint<1>>'}}
-  %r = firrtl.regreset %clock, %reset, %resetVal : !firrtl.clock, !firrtl.asyncreset, !firrtl.const.enum<a: uint<1>>, !firrtl.const.enum<a: uint<1>>
+  %r = firrtl.regreset %clock, %reset, %resetVal {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.const.enum<a: uint<1>>, !firrtl.const.enum<a: uint<1>>
 }
 }
 
@@ -1742,14 +1742,6 @@ firrtl.circuit "BitcastNonConstToConstContaining" {
 }
 
 // -----
-
-// Uninferred reset cast non-const to const
-firrtl.circuit "UninferredWidthCastNonConstToConst" {
-  firrtl.module @UninferredWidthCastNonConstToConst(in %a: !firrtl.reset) {
-    // expected-error @+1 {{operand constness must match}}
-    %b = firrtl.resetCast %a : (!firrtl.reset) -> !firrtl.const.asyncreset
-  }
-}
 
 // -----
 
@@ -1826,13 +1818,6 @@ firrtl.circuit "EnumAnalog" {
 firrtl.circuit "EnumUninferredWidth" {
   // expected-error @+1 {{enum field "a" has uninferred width}}
   firrtl.module @EnumUninferredWidth(in %enum : !firrtl.enum<a: uint>) { }
-}
-
-// -----
-
-firrtl.circuit "EnumUninferredReset" {
-  // expected-error @+1 {{enum field "a" has uninferred reset}}
-  firrtl.module @EnumUninferredReset(in %enum : !firrtl.enum<a: reset>) { }
 }
 
 // -----
@@ -3556,5 +3541,28 @@ firrtl.circuit "PropAssertFalseInModule" {
     %false = firrtl.bool false
     // expected-error @below {{property assertion is statically false: module invariant violated}}
     firrtl.property_assert %false, "module invariant violated" : !firrtl.bool
+  }
+}
+
+// -----
+
+// The dedicated 'asyncreset' type has been removed; a reset is the single,
+// sync/async-agnostic 'reset' type, with async-ness recorded by the register's
+// 'resetType' attribute. Parsing '!firrtl.asyncreset' must be rejected.
+firrtl.circuit "AsyncResetTypeRemoved" {
+  // expected-error @+1 {{the 'asyncreset' type has been removed}}
+  firrtl.module @AsyncResetTypeRemoved(in %r: !firrtl.asyncreset) {}
+}
+
+// -----
+
+// A register reset operand must be the agnostic `reset` type; a bare `UInt<1>`
+// is not a reset signal and is rejected (use `asReset` or a `Reset` port).
+firrtl.circuit "UIntResetOperandRejected" {
+  firrtl.module @UIntResetOperandRejected(in %clock: !firrtl.clock,
+                                          in %reset: !firrtl.uint<1>,
+                                          in %in: !firrtl.uint<8>) {
+    // expected-error @+1 {{operand #1 must be Reset}}
+    %r = firrtl.regreset %clock, %reset, %in {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32} : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<8>, !firrtl.uint<8>
   }
 }

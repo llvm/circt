@@ -252,7 +252,6 @@ void testTypeDiscriminantsAndQueries(MlirContext ctx) {
   assert(firrtlTypeIsASInt(firrtlTypeGetSInt(ctx, 32)));
   assert(firrtlTypeIsAClock(firrtlTypeGetClock(ctx)));
   assert(firrtlTypeIsAReset(firrtlTypeGetReset(ctx)));
-  assert(firrtlTypeIsAAsyncReset(firrtlTypeGetAsyncReset(ctx)));
   assert(firrtlTypeIsAAnalog(firrtlTypeGetAnalog(ctx, 32)));
   assert(firrtlTypeIsAVector(
       firrtlTypeGetVector(ctx, firrtlTypeGetUInt(ctx, 32), 4)));
@@ -278,7 +277,6 @@ void testTypeDiscriminantsAndQueries(MlirContext ctx) {
   assert(!firrtlTypeIsASInt(firrtlTypeGetUInt(ctx, 32)));
   assert(!firrtlTypeIsAClock(firrtlTypeGetReset(ctx)));
   assert(!firrtlTypeIsAReset(firrtlTypeGetClock(ctx)));
-  assert(!firrtlTypeIsAAsyncReset(firrtlTypeGetReset(ctx)));
   assert(!firrtlTypeIsAAnalog(firrtlTypeGetReset(ctx)));
   assert(!firrtlTypeIsABundle(openBundle));
   assert(!firrtlTypeIsAOpenBundle(bundle));

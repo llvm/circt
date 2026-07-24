@@ -346,20 +346,6 @@ def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
   }];
 }
 
-def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
-  let summary = "Infer reset synchronicity and add implicit resets";
-  let description = [{
-    This pass infers whether resets are synchronous or asynchronous, and extends
-    reset-less registers with a reset based on the following
-    annotations:
-
-    - `circt.FullResetAnnotation`
-    - `circt.ExcludeFromFullResetAnnotation`
-    - `sifive.enterprise.firrtl.FullAsyncResetAnnotation` (deprecated)
-    - `sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation` (deprecated)
-  }];
-}
-
 def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
   let summary = "Load source files for black boxes into the IR";
   let description = [{
@@ -864,8 +850,8 @@ def ProbesToSignals : Pass<"firrtl-probes-to-signals", "firrtl::CircuitOp"> {
     Run after LowerOpenAggs, ExpandWhens (so ref.define can always be replaced),
     and any colored probes are removed through specialization.
 
-    Due to differences in width and reset inference, it is suggested to run
-    those first as well but not required.
+    Due to differences in width inference, it is suggested to run that first as
+    well but not required.
 
     RWProbes and related operations are not supported.
   }];

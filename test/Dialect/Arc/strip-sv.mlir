@@ -12,7 +12,7 @@ sv.ifdef  @RANDOMIZE_REG_INIT {
 // CHECK-LABEL: hw.module @Foo(
 hw.module @Foo(in %clock: !seq.clock, in %a: i4, out z: i4) {
   // CHECK-NEXT: [[REG:%.+]] = seq.compreg %a, %clock
-  %0 = seq.firreg %a clock %clock : i4
+  %0 = seq.firreg %a clock %clock {clockEdge = 0 : i32} : i4
   %1 = sv.wire : !hw.inout<i4>
   sv.assign %1, %0 : i4
   %2 = sv.read_inout %1 : !hw.inout<i4>
@@ -29,7 +29,7 @@ hw.module @Top() {
   // CHECK: %subsystem_pbus.clock, %subsystem_pbus.reset = hw.instance "subsystem_pbus" @PeripheryBus() -> (clock: !seq.clock, reset: i1)
   %subsystem_pbus.clock, %subsystem_pbus.reset = hw.instance "subsystem_pbus" @PeripheryBus() -> (clock: !seq.clock, reset: i1)
   // CHECK: %int_rtc_tick_value = seq.compreg %int_rtc_tick_value, %subsystem_pbus.clock reset %subsystem_pbus.reset, %c0_i7 : i7
-  %int_rtc_tick_value = seq.firreg %int_rtc_tick_value clock %subsystem_pbus.clock reset sync %subsystem_pbus.reset, %c0_i7 : i7
+  %int_rtc_tick_value = seq.firreg %int_rtc_tick_value clock %subsystem_pbus.clock reset sync %subsystem_pbus.reset, %c0_i7 {clockEdge = 0 : i32, resetPolarity = 0 : i32} : i7
 }
 
 // CHECK-NOT: sv.macro.decl

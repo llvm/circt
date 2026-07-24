@@ -4,9 +4,9 @@ FIRRTL version 4.0.0
 circuit Counter :
   public module Counter :
     input clock : Clock
-    input reset : UInt<1>
+    input reset : Reset
 
-    regreset count : UInt<32>, clock, reset, UInt<32>(0h0)
+    regreset count : UInt<32>, posedge clock, sync activehigh reset, UInt<32>(0h0)
     node _T = eq(count, UInt<5>(0h16))
     when _T :
       connect count, UInt<1>(0h0)

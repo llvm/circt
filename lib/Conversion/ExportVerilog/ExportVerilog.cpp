@@ -184,6 +184,41 @@ static bool isDuplicatableExpression(Operation *op) {
     return false;
   }
 
+  // A 1-bit NOT of a leaf (`comb.xor x, allones`) is cheap to duplicate inline.
+  // This keeps a multi-use inverted reset condition (`!rst`) inline at each use
+  // instead of spilling it to a wire, which would otherwise race against an
+  // asynchronous `negedge rst` sensitivity edge (see FirRegLowering active-low
+  // reset emission). Restricted to a NOT of a *leaf* operand (block arg /
+  // constant / read of a port or wire) so we never duplicate an arbitrary
+  // subtree.
+  if (auto xorOp = dyn_cast<comb::XorOp>(op)) {
+    if (xorOp.getType().isInteger(1) && xorOp.getInputs().size() == 2) {
+      // A reset-polarity inverter (`sv.resetInverter`, materialized by
+      // FirRegLowering for an active-low reset) is always duplicated inline,
+      // even for a non-leaf reset operand: an asynchronous always block spills
+      // the reset to a sensitivity wire `_GEN`, so inlining `!_GEN` at the
+      // if-condition and initial-block uses anchors both to that same wire and
+      // is race-free for any reset expression (leaf or not).
+      if (op->hasAttr("sv.resetInverter"))
+        return true;
+      Value data;
+      for (auto [i, in] : llvm::enumerate(xorOp.getInputs())) {
+        if (auto c = in.getDefiningOp<hw::ConstantOp>())
+          if (c.getValue().isAllOnes())
+            data = xorOp.getInputs()[1 - i];
+      }
+      if (data) {
+        auto *dataOp = data.getDefiningOp();
+        if (!dataOp || isa<ConstantOp>(dataOp))
+          return true;
+        if (auto read = dyn_cast<ReadInOutOp>(dataOp)) {
+          auto *readSrc = read.getInput().getDefiningOp();
+          return !readSrc || isa<sv::WireOp, LogicOp>(readSrc);
+        }
+      }
+    }
+  }
+
   return false;
 }
 
@@ -2451,8 +2486,17 @@ private:
     return emitBinary(op, Or, "|");
   }
   SubExprInfo visitComb(XorOp op) {
-    if (op.isBinaryNot())
+    if (op.isBinaryNot()) {
+      // A reset-polarity inverter materialized by FirRegLowering for an
+      // active-low reset carries the `sv.resetInverter` mark and renders as a
+      // logical `!rst` -- the conventional active-low reset condition -- rather
+      // than a bitwise `~rst`. The two are equivalent for the 1-bit reset, but
+      // `!` matches the hand-written SystemVerilog idiom and the always_ff
+      // lowering. Ordinary bitwise NOTs (no mark) still emit `~`.
+      if (op->hasAttr("sv.resetInverter"))
+        return emitUnary(op, "!");
       return emitUnary(op, "~");
+    }
     assert(op.getNumOperands() == 2 && "prelowering should handle variadics");
     return emitBinary(op, Xor, "^");
   }
@@ -5568,12 +5612,20 @@ LogicalResult StmtEmitter::visitSV(AlwaysFFOp op) {
       startStatement();
       ps << "if (";
       // TODO: group, like normal 'if'.
-      // Negative edge async resets need to invert the reset condition. This
-      // is noted in the op description.
-      if (op.getResetStyle() == ResetType::AsyncReset &&
-          *op.getResetEdge() == sv::EventControl::AtNegEdge)
+      // An active-low (negative-edge) reset inverts the reset condition so the
+      // block tests `if (!reset)` on the original reset signal -- for both
+      // synchronous and asynchronous resets. (Only an async reset is added to
+      // the sensitivity list above.) This is noted in the op description.
+      bool activeLowReset = op.getResetEdge() &&
+                            *op.getResetEdge() == sv::EventControl::AtNegEdge;
+      if (activeLowReset)
         ps << "!";
-      emitExpression(op.getReset(), ops);
+      // When the condition is inverted, emit the reset operand at unary
+      // precedence so a compound reset expression is parenthesized
+      // (`!(a & b)`, not `!a & b` which would parse as `(!a) & b`). A leaf
+      // operand stays bare (`!rst`).
+      emitExpression(op.getReset(), ops,
+                     activeLowReset ? Unary : LowestPrecedence);
       ps << ")";
       emitBlockAsStatement(op.getResetBlock(), ops);
       startStatement();

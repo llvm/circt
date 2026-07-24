@@ -99,8 +99,6 @@ def SizedPassiveType : FIRRTLDialectType<And<[SizedType.predicate,PassiveType.pr
     "::circt::firrtl::FIRRTLBaseType">;
 def SizedPassiveOrForeignType : AnyTypeOf<[SizedPassiveType, ForeignType]>;
 
-def AsyncResetType : FIRRTLDialectAliasTypeHelper<"AsyncResetType", "async reset type">;
-
 def ResetType : FIRRTLDialectAliasTypeHelper<"ResetType", "reset type">;
 
 def RefType : FIRRTLDialectTypeHelper<"RefType", "reference type">;
@@ -182,8 +180,8 @@ def 1DVecIntType : FIRRTLDialectType<
   "1d vector with Int element type", "::circt::firrtl::FIRRTLBaseType">;
 
 def OneBitCastableType : AnyTypeOf<
-  [OneBitType, AnyResetType, AsyncResetType, ClockType],
-  "1-bit uint/sint/analog, reset, asyncreset, or clock",
+  [OneBitType, AnyResetType, ClockType],
+  "1-bit uint/sint/analog, reset, or clock",
                                   "::circt::firrtl::FIRRTLBaseType">;
 
 //===----------------------------------------------------------------------===//

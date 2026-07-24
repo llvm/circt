@@ -159,6 +159,19 @@ void StripSVPass::runOnOperation() {
           return signalPassFailure();
         }
 
+        // `seq.compreg` has no clock-edge or reset-polarity attribute, so it is
+        // implicitly a posedge-clocked, active-high-reset register. Reject a
+        // non-default `seq.firreg` rather than silently converting a negedge or
+        // active-low register into a posedge / active-high one.
+        if (reg.getClockEdge() != seq::ClockEdge::Pos) {
+          reg.emitOpError("only posedge clocks are currently supported");
+          return signalPassFailure();
+        }
+        if (reg.getResetPolarity() == seq::ResetPolarity::NegReset) {
+          reg.emitOpError("only active-high resets are currently supported");
+          return signalPassFailure();
+        }
+
         Value presetValue;
         // Materialize initial value, assume zero initialization as default.
         if (reg.getPreset() && !reg.getPreset()->isZero()) {

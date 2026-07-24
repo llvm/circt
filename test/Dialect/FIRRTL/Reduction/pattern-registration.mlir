@@ -23,7 +23,6 @@
 // CHECK-DAG: firrtl-expand-whens
 // CHECK-DAG: firrtl-force-dedup
 // CHECK-DAG: firrtl-imconstprop
-// CHECK-DAG: firrtl-infer-resets
 // CHECK-DAG: firrtl-infer-widths
 // CHECK-DAG: firrtl-inliner
 // CHECK-DAG: firrtl-lower-chirrtl

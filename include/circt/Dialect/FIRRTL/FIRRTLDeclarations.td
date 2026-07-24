@@ -395,7 +395,8 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
     ins ClockType:$clockVal, StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym,
-        UnitAttr:$forceable);
+        UnitAttr:$forceable,
+        EventControlAttr:$clockEdge);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let skipDefaultBuilders = true;
@@ -418,6 +419,7 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
                    "::mlir::Value":$clockVal,
+                   "::circt::firrtl::EventControl":$clockEdge,
                    "::mlir::StringAttr":$name,
                    "::circt::firrtl::NameKindEnumAttr":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
@@ -427,6 +429,11 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
       $_state.addAttribute(getNameAttrName($_state.name), name);
       $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
       $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
+      // The clock edge is a required, front-end-explicit attribute supplied by the
+      // caller (no default). Clone/forward paths pass the source register's edge;
+      // fresh conventional registers pass `EventControl::AtPosEdge`.
+      $_state.addAttribute(getClockEdgeAttrName($_state.name),
+          EventControlAttr::get($_state.getContext(), clockEdge));
       if (innerSym) {
         $_state.addAttribute(getInnerSymAttrName($_state.name), innerSym);
       }
@@ -439,35 +446,38 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType,
                    "::mlir::Value":$clockVal,
+                   "::circt::firrtl::EventControl":$clockEdge,
                    "::llvm::StringRef":$name,
                    "::circt::firrtl::NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
                    "::circt::hw::InnerSymAttr":$innerSym,
                    "bool":$forceable), [{
-      return build($_builder, $_state, elementType, clockVal,
+      return build($_builder, $_state, elementType, clockVal, clockEdge,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    annotations, innerSym,
                    forceable ? $_builder.getUnitAttr() : nullptr);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
+                   "::circt::firrtl::EventControl":$clockEdge,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
                    CArg<"StringAttr", "StringAttr()">:$innerSym,
                    CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
-                   clockVal, $_builder.getStringAttr(name), nameKind,
+                   clockVal, clockEdge, $_builder.getStringAttr(name), nameKind,
                    $_builder.getArrayAttr(annotations),
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
                    forceable);
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
+                   "::circt::firrtl::EventControl":$clockEdge,
                    "StringRef":$name, "NameKindEnum":$nameKind,
                    "::mlir::ArrayAttr":$annotation, "StringAttr":$innerSym,
                    CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
-                   clockVal, $_builder.getStringAttr(name), nameKind, annotation,
+                   clockVal, clockEdge, $_builder.getStringAttr(name), nameKind, annotation,
                    innerSym ? hw::InnerSymAttr::get(innerSym) : hw::InnerSymAttr(),
                    forceable);
     }]>
@@ -479,6 +489,7 @@ def RegOp : HardwareDeclOp<"reg", [Forceable, DeclareOpInterfaceMethods<CombData
 
   }];
   let hasCanonicalizeMethod = true;
+  let hasVerifier = 1;
 }
 
 def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethods<CombDataflow>]> {
@@ -496,7 +507,10 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
         StrAttr:$name, NameKindAttr:$nameKind,
         AnnotationArrayAttr:$annotations,
         OptionalAttr<InnerSymAttr>:$inner_sym,
-        UnitAttr:$forceable);
+        UnitAttr:$forceable,
+        EventControlAttr:$clockEdge,
+        RegResetTypeAttr:$resetType,
+        RegResetPolarityAttr:$resetPolarity);
   let results = (outs AnyRegisterType:$result, Optional<RefType>:$ref);
 
   let skipDefaultBuilders = true;
@@ -512,6 +526,9 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
     OpBuilder<(ins "::mlir::Type":$elementType,
                    "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
+                   "::circt::firrtl::EventControl":$clockEdge,
+                   "::circt::firrtl::RegResetType":$resetType,
+                   "::circt::firrtl::RegResetPolarity":$resetPolarity,
                    "::mlir::StringAttr":$name,
                    "::circt::firrtl::NameKindEnumAttr":$nameKind,
                    "::mlir::ArrayAttr":$annotations,
@@ -523,6 +540,16 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
       $_state.addAttribute(getNameAttrName($_state.name), name);
       $_state.addAttribute(getNameKindAttrName($_state.name), nameKind);
       $_state.addAttribute(getAnnotationsAttrName($_state.name), annotations);
+      // The clock edge, reset kind, and reset polarity are required,
+      // front-end-explicit attributes supplied by the caller (no default).
+      // Clone/forward paths pass the source register's values; fresh conventional
+      // reset registers pass posedge / SyncReset / PosReset.
+      $_state.addAttribute(getClockEdgeAttrName($_state.name),
+          EventControlAttr::get($_state.getContext(), clockEdge));
+      $_state.addAttribute(getResetTypeAttrName($_state.name),
+          RegResetTypeAttr::get($_state.getContext(), resetType));
+      $_state.addAttribute(getResetPolarityAttrName($_state.name),
+          RegResetPolarityAttr::get($_state.getContext(), resetPolarity));
       if (innerSym) {
         $_state.addAttribute(getInnerSymAttrName($_state.name), innerSym);
       }
@@ -535,6 +562,9 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
+                   "::circt::firrtl::EventControl":$clockEdge,
+                   "::circt::firrtl::RegResetType":$resetType,
+                   "::circt::firrtl::RegResetPolarity":$resetPolarity,
                    CArg<"StringRef", "{}">:$name,
                    CArg<"NameKindEnum", "NameKindEnum::DroppableName">:$nameKind,
                    CArg<"ArrayRef<Attribute>","{}">:$annotations,
@@ -542,6 +572,7 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
                    CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
                    clockVal, resetSignal, resetValue,
+                   clockEdge, resetType, resetPolarity,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    $_builder.getArrayAttr(annotations),
@@ -550,11 +581,15 @@ def RegResetOp : HardwareDeclOp<"regreset", [Forceable, DeclareOpInterfaceMethod
     }]>,
     OpBuilder<(ins "::mlir::Type":$elementType, "::mlir::Value":$clockVal,
                    "::mlir::Value":$resetSignal, "::mlir::Value":$resetValue,
+                   "::circt::firrtl::EventControl":$clockEdge,
+                   "::circt::firrtl::RegResetType":$resetType,
+                   "::circt::firrtl::RegResetPolarity":$resetPolarity,
                    "StringRef":$name, "NameKindEnum":$nameKind,
                     "::mlir::ArrayAttr":$annotation, "StringAttr":$innerSym,
                     CArg<"bool", "false">:$forceable), [{
       return build($_builder, $_state, elementType,
                    clockVal, resetSignal, resetValue,
+                   clockEdge, resetType, resetPolarity,
                    $_builder.getStringAttr(name),
                    ::circt::firrtl::NameKindEnumAttr::get(odsBuilder.getContext(), nameKind),
                    annotation,

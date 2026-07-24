@@ -61,7 +61,7 @@ hw.module @do_not_guess_from_suffix(in %foo_state: i1, out foo_next: i1) {
 hw.module @mixed_named_and_unnamed_regs(in %clk: !seq.clock, in %in: i32, out out: i32) {
   %named_comp = seq.compreg %in, %clk : i32
   %0 = seq.compreg %named_comp, %clk : i32
-  %named_fir = seq.firreg %0 clock %clk : i32
-  %1 = seq.firreg %named_fir clock %clk : i32
+  %named_fir = seq.firreg %0 clock %clk {clockEdge = 0 : i32} : i32
+  %1 = seq.firreg %named_fir clock %clk {clockEdge = 0 : i32} : i32
   hw.output %1 : i32
 }

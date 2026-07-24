@@ -47,7 +47,7 @@ firrtl.circuit "Versions" {
   // V400:   public module Versions
   // CHECK:  firrtl.module @Versions(
   firrtl.module @Versions(in %clk: !firrtl.clock,
-                          in %rst: !firrtl.asyncreset,
+                          in %rst: !firrtl.reset,
                           in %in: !firrtl.uint<1>,
                           out %out: !firrtl.uint<1>) {
     // Connect: 'connect' keyword on >= 3.0.0; '<=' on older versions.
@@ -59,13 +59,13 @@ firrtl.circuit "Versions" {
     firrtl.matchingconnect %out, %in : !firrtl.uint<1>
 
     // RegReset: 'regreset' on >= 3.0.0; 'reg ... with :' on older versions.
-    // LATEST:    regreset r : UInt<1>
-    // V200:      reg r : UInt<1>, clk with :
+    // LATEST:    regreset r : UInt<1>, posedge clk, sync activehigh rst, in
+    // V200:      reg r : UInt<1>, posedge clk with :
     // V200-NEXT:   reset => (rst, in)
-    // V300:      regreset r : UInt<1>
-    // V400:      regreset r : UInt<1>
+    // V300:      regreset r : UInt<1>, posedge clk, sync activehigh rst, in
+    // V400:      regreset r : UInt<1>, posedge clk, sync activehigh rst, in
     // CHECK:     %r = firrtl.regreset {{.*}}%clk, %rst, %in
-    %r = firrtl.regreset %clk, %rst, %in
-        : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clk, %rst, %in {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 0 : i32}
+        : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
   }
 }

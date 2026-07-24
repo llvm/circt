@@ -89,7 +89,9 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createMemToRegOfVec(
       {/*replSeqMemFile=*/opt.shouldIgnoreReadEnableMemories()}));
 
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
+  // Reset inference has been removed: reset kind is front-end-explicit via the
+  // register `resetType` attribute. Resets use the single, sync/async-agnostic
+  // `reset` type (the `asyncreset` type was removed); CIRCT does not infer it.
 
   // TODO: Move this to the same location as SpecializeLayers.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOption(

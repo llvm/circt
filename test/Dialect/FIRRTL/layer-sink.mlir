@@ -308,17 +308,17 @@ firrtl.circuit "Top" {
 // Sink a self-connected register.
 firrtl.circuit "Top" {
  firrtl.layer @A bind {}
-  // CHECK: firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
+  // CHECK: firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
   // CHECK:   firrtl.layerblock @A {
   // CHECK:     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-  // CHECK:     %r = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+  // CHECK:     %r = firrtl.regreset %clock, %reset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
   // CHECK:     firrtl.matchingconnect %r, %r : !firrtl.uint<1>
   // CHECK:     "unknown"(%r) : (!firrtl.uint<1>) -> ()
   // CHECK:   }
   // CHECK: }
-  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.asyncreset) {
+  firrtl.module @Top(in %clock: !firrtl.clock, in %reset: !firrtl.reset) {
     %c0_ui1 = firrtl.constant 0 : !firrtl.uint<1>
-    %r = firrtl.regreset %clock, %reset, %c0_ui1 : !firrtl.clock, !firrtl.asyncreset, !firrtl.uint<1>, !firrtl.uint<1>
+    %r = firrtl.regreset %clock, %reset, %c0_ui1 {clockEdge = 0 : i32, resetPolarity = 0 : i32, resetType = 1 : i32} : !firrtl.clock, !firrtl.reset, !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.layerblock @A {
       "unknown"(%r) : (!firrtl.uint<1>) -> ()
     }

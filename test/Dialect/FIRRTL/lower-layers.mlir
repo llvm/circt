@@ -402,30 +402,30 @@ firrtl.circuit "Test" {
   // CHECK:      firrtl.module @InstanceInputPortCapture(
   // CHECK-SAME:   in %clock: !firrtl.clock sym @[[sym_clock]]
   // CHECK-NEXT:   %ext_reset, %ext_clock = firrtl.instance ext @InstanceInputPortCapture_ext
-  // CHECK:        %invalid_asyncreset = firrtl.invalidvalue
-  // CHECK-NEXT:   %_layerCapture = firrtl.node sym @[[sym_reset]] %invalid_asyncreset
+  // CHECK:        %invalid_reset = firrtl.invalidvalue
+  // CHECK-NEXT:   %_layerCapture = firrtl.node sym @[[sym_reset]] %invalid_reset
   // CHECK-NEXT:   firrtl.matchingconnect %ext_reset, %_layerCapture
   // CHECK-NEXT:   firrtl.matchingconnect %ext_clock, %clock
   // CHECK-NEXT: }
   firrtl.extmodule @InstanceInputPortCapture_ext(
-    in reset: !firrtl.asyncreset,
+    in reset: !firrtl.reset,
     in clock: !firrtl.clock
   )
   firrtl.module @InstanceInputPortCapture(
     in %clock: !firrtl.clock
   ) {
     %ext_reset, %ext_clock = firrtl.instance ext @InstanceInputPortCapture_ext(
-      in reset: !firrtl.asyncreset,
+      in reset: !firrtl.reset,
       in clock: !firrtl.clock
     )
     firrtl.layerblock @A {
-      %wire_reset = firrtl.wire : !firrtl.asyncreset
-      firrtl.matchingconnect %wire_reset, %ext_reset : !firrtl.asyncreset
+      %wire_reset = firrtl.wire : !firrtl.reset
+      firrtl.matchingconnect %wire_reset, %ext_reset : !firrtl.reset
       %wire_clock = firrtl.wire : !firrtl.clock
       firrtl.matchingconnect %wire_clock, %ext_clock : !firrtl.clock
     }
-    %invalid_asyncreset = firrtl.invalidvalue : !firrtl.asyncreset
-    firrtl.matchingconnect %ext_reset, %invalid_asyncreset : !firrtl.asyncreset
+    %invalid_reset = firrtl.invalidvalue : !firrtl.reset
+    firrtl.matchingconnect %ext_reset, %invalid_reset : !firrtl.reset
     firrtl.matchingconnect %ext_clock, %clock : !firrtl.clock
   }
 

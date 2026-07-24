@@ -10,7 +10,7 @@ circuit RefProducer :
     output thereg : Probe<UInt>
 
     when en :
-      reg myreg : UInt, clk
+      reg myreg : UInt, posedge clk
       connect myreg, a
       define thereg = probe(myreg)
   ; SPEC EXAMPLE END

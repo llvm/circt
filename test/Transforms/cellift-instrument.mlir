@@ -279,9 +279,31 @@ hw.module @test_compreg_reset(in %d : i8, in %clk : !seq.clock, in %rst : i1, ou
 // CHECK-LABEL: hw.module @test_firreg
 // CHECK-SAME: (in %d : i8, in %d_t : i8, in %clk : !seq.clock, out q : i8, out q_t : i8)
 hw.module @test_firreg(in %d : i8, in %clk : !seq.clock, out q : i8) {
-  // CHECK: [[REG:%.+]] = seq.firreg %d clock %clk : i8
-  // CHECK: [[TREG:%.+]] = seq.firreg %d_t clock %clk : i8
-  %reg = seq.firreg %d clock %clk : i8
+  // CHECK: [[REG:%.+]] = seq.firreg %d clock %clk {clockEdge = 0 : i32} : i8
+  // CHECK: [[TREG:%.+]] = seq.firreg %d_t clock %clk {clockEdge = 0 : i32} : i8
+  %reg = seq.firreg %d clock %clk {clockEdge = 0 : i32} : i8
+  hw.output %reg : i8
+}
+
+// -----
+// Test: the taint clone of a seq.firreg preserves the reset kind, clock edge,
+// and reset polarity so it lowers to identical clocking/reset behavior.
+// CHECK-LABEL: hw.module @test_firreg_attrs
+hw.module @test_firreg_attrs(in %d : i8, in %clk : !seq.clock, in %rst : i1, out q : i8) {
+  %c0 = hw.constant 0 : i8
+  // CHECK: %myreg = seq.firreg %d clock %clk reset async %rst, %c0_i8 {clockEdge = 1 : i32, resetPolarity = 1 : i32} : i8
+  // CHECK: %myreg_t = seq.firreg %d_t clock %clk reset async %rst, %c0_i8{{.*}} {clockEdge = 1 : i32, resetPolarity = 1 : i32} : i8
+  %reg = seq.firreg %d clock %clk reset async %rst, %c0 {name = "myreg", clockEdge = 1 : i32, resetPolarity = 1 : i32} : i8
+  hw.output %reg : i8
+}
+
+// -----
+// Test: the taint clone of a reset-less seq.firreg preserves the clock edge.
+// CHECK-LABEL: hw.module @test_firreg_noreset_attrs
+hw.module @test_firreg_noreset_attrs(in %d : i8, in %clk : !seq.clock, out q : i8) {
+  // CHECK: %myreg = seq.firreg %d clock %clk {clockEdge = 1 : i32} : i8
+  // CHECK: %myreg_t = seq.firreg %d_t clock %clk {clockEdge = 1 : i32} : i8
+  %reg = seq.firreg %d clock %clk {name = "myreg", clockEdge = 1 : i32} : i8
   hw.output %reg : i8
 }
 
