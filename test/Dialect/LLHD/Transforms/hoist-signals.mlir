@@ -67,6 +67,32 @@ hw.module @DontHoistProbesAcrossSideEffects() {
   }
 }
 
+// `llhd.resample` markers only pin an SSA value sample to its block; their
+// read effect must not act as a probe-hoisting barrier (reads commute with
+// reads). Probes positioned after a marker in a resuming block keep hoisting.
+// CHECK-LABEL: @HoistProbesPastResampleMarkers
+hw.module @HoistProbesPastResampleMarkers(in %x: i1) {
+  %c0_i42 = hw.constant 0 : i42
+  %a = llhd.sig %c0_i42 : i42
+  // CHECK: llhd.sig
+  // CHECK-NEXT: [[A:%.+]] = llhd.prb %a
+  // CHECK-NEXT: llhd.process
+  llhd.process {
+    cf.br ^bb1
+  ^bb1:
+    llhd.wait ^bb2
+  ^bb2:
+    // CHECK: ^bb2:
+    // CHECK-NEXT: llhd.resample %x
+    %0 = llhd.resample %x : i1
+    // CHECK-NOT: llhd.prb
+    %1 = llhd.prb %a : i42
+    // CHECK: call @use_i42([[A]])
+    func.call @use_i42(%1) : (i42) -> ()
+    llhd.halt
+  }
+}
+
 // CHECK-LABEL: @DontHoistProbesIfLeakingAcrossWait
 hw.module @DontHoistProbesIfLeakingAcrossWait() {
   %c0_i42 = hw.constant 0 : i42

@@ -996,9 +996,10 @@ moore.module @WaitEvent() {
     // CHECK:   llhd.wait ([[PRB_A3]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
+    // CHECK:   [[LIVE:%.+]] = llhd.resample [[AFTER]]
     // CHECK:   [[TRUE:%.+]] = hw.constant true
     // CHECK:   [[TMP1:%.+]] = comb.xor bin [[BEFORE]], [[TRUE]]
-    // CHECK:   [[TMP2:%.+]] = comb.and bin [[TMP1]], [[AFTER]]
+    // CHECK:   [[TMP2:%.+]] = comb.and bin [[TMP1]], [[LIVE]]
     // CHECK:   cf.cond_br [[TMP2]]
     moore.wait_event {
       %0 = moore.read %a : <i1>
@@ -1013,8 +1014,9 @@ moore.module @WaitEvent() {
     // CHECK:   llhd.wait ([[PRB_A4]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
+    // CHECK:   [[LIVE:%.+]] = llhd.resample [[AFTER]]
     // CHECK:   [[TRUE:%.+]] = hw.constant true
-    // CHECK:   [[TMP1:%.+]] = comb.xor bin [[AFTER]], [[TRUE]]
+    // CHECK:   [[TMP1:%.+]] = comb.xor bin [[LIVE]], [[TRUE]]
     // CHECK:   [[TMP2:%.+]] = comb.and bin [[BEFORE]], [[TMP1]]
     // CHECK:   cf.cond_br [[TMP2]]
     moore.wait_event {
@@ -1030,10 +1032,11 @@ moore.module @WaitEvent() {
     // CHECK:   llhd.wait ([[PRB_A5]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %a
+    // CHECK:   [[LIVE:%.+]] = llhd.resample [[AFTER]]
     // CHECK:   [[TRUE:%.+]] = hw.constant true
     // CHECK:   [[TMP1:%.+]] = comb.xor bin [[BEFORE]], [[TRUE]]
-    // CHECK:   [[TMP2:%.+]] = comb.and bin [[TMP1]], [[AFTER]]
-    // CHECK:   [[TMP3:%.+]] = comb.xor bin [[AFTER]], [[TRUE]]
+    // CHECK:   [[TMP2:%.+]] = comb.and bin [[TMP1]], [[LIVE]]
+    // CHECK:   [[TMP3:%.+]] = comb.xor bin [[LIVE]], [[TRUE]]
     // CHECK:   [[TMP4:%.+]] = comb.and bin [[BEFORE]], [[TMP3]]
     // CHECK:   [[TMP5:%.+]] = comb.or bin [[TMP2]], [[TMP4]]
     // CHECK:   cf.cond_br [[TMP5]]
@@ -1050,8 +1053,9 @@ moore.module @WaitEvent() {
     // CHECK:   llhd.wait ([[PRB_D2]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %d
+    // CHECK:   [[RS:%.+]] = llhd.resample [[AFTER]]
     // CHECK:   [[TMP1:%.+]] = comb.extract [[BEFORE]] from 0 : (i4) -> i1
-    // CHECK:   [[TMP2:%.+]] = comb.extract [[AFTER]] from 0 : (i4) -> i1
+    // CHECK:   [[TMP2:%.+]] = comb.extract [[RS]] from 0 : (i4) -> i1
     // CHECK:   [[TRUE:%.+]] = hw.constant true
     // CHECK:   [[TMP3:%.+]] = comb.xor bin [[TMP1]], [[TRUE]]
     // CHECK:   [[TMP4:%.+]] = comb.and bin [[TMP3]], [[TMP2]]
@@ -1069,8 +1073,9 @@ moore.module @WaitEvent() {
     // CHECK:   llhd.wait ([[PRB_D3]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %d
+    // CHECK:   [[RS:%.+]] = llhd.resample [[AFTER]]
     // CHECK:   [[TMP1:%.+]] = comb.extract [[BEFORE]] from 0 : (i4) -> i1
-    // CHECK:   [[TMP2:%.+]] = comb.extract [[AFTER]] from 0 : (i4) -> i1
+    // CHECK:   [[TMP2:%.+]] = comb.extract [[RS]] from 0 : (i4) -> i1
     // CHECK:   [[TRUE:%.+]] = hw.constant true
     // CHECK:   [[TMP3:%.+]] = comb.xor bin [[TMP2]], [[TRUE]]
     // CHECK:   [[TMP4:%.+]] = comb.and bin [[TMP1]], [[TMP3]]
@@ -1088,8 +1093,9 @@ moore.module @WaitEvent() {
     // CHECK:   llhd.wait ([[PRB_D4]] : {{.+}}), ^[[CHECK:.+]]
     // CHECK: ^[[CHECK]]:
     // CHECK:   [[AFTER:%.+]] = llhd.prb %d
+    // CHECK:   [[RS:%.+]] = llhd.resample [[AFTER]]
     // CHECK:   [[TMP1:%.+]] = comb.extract [[BEFORE]] from 0 : (i4) -> i1
-    // CHECK:   [[TMP2:%.+]] = comb.extract [[AFTER]] from 0 : (i4) -> i1
+    // CHECK:   [[TMP2:%.+]] = comb.extract [[RS]] from 0 : (i4) -> i1
     // CHECK:   [[TRUE:%.+]] = hw.constant true
     // CHECK:   [[TMP3:%.+]] = comb.xor bin [[TMP1]], [[TRUE]]
     // CHECK:   [[TMP4:%.+]] = comb.and bin [[TMP3]], [[TMP2]]

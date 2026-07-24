@@ -484,6 +484,16 @@ LogicalResult ProcessLowering::run() {
       renameCoroutineArgument(argIdx, liveness, dominance);
   }
 
+  // The `llhd.resample` markers protecting live event-trigger samples from
+  // cross-check-block CSE have done their job: the renaming above bound each
+  // block's uses of the captured values to that block's re-entry arguments,
+  // so every derived chain is rooted in a block-local binding. Fold the
+  // markers to their operand.
+  coroOp.getBody().walk([](llhd::ResampleOp resampleOp) {
+    resampleOp.getResult().replaceAllUsesWith(resampleOp.getInput());
+    resampleOp.erase();
+  });
+
   buildInstance();
   return success();
 }
