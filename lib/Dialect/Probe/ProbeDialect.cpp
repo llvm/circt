@@ -25,7 +25,7 @@ struct ProbeHWModulePortTypeInterface : public hw::HWModulePortTypeInterface {
                          Type type) const override {
     if (!isa<probe::RefType>(type) || direction == hw::ModulePort::Output)
       return success();
-    return emitError() << "input probe refs are not supported";
+    return emitError() << "probe refs are only supported on output ports";
   }
 };
 } // namespace

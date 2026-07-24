@@ -21,9 +21,11 @@ def RefType : ProbeTypeDef<"Ref"> {
   let mnemonic = "ref";
   let summary = "read-only hardware probe handle";
   let description = [{
-    A `probe.ref` type is an SSA handle for observing a hardware value without
-    eagerly resolving the handle to a hierarchical path. Its payload type is a
-    non-inout HW value type.
+    A `probe.ref` type is an SSA handle providing by-name, read-only access to
+    the value of observed hardware without eagerly resolving the handle to a
+    hierarchical path. It refers to the hardware's value, not to a writable
+    hardware object, and therefore cannot be used for assignment, force, or
+    release. Its payload type is a non-inout HW value type.
   }];
 
   let parameters = (ins "::mlir::Type":$elementType);
