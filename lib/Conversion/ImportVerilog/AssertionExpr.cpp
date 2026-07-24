@@ -366,6 +366,43 @@ FailureOr<Value> Context::convertSampledValueCallArity1(
   }
 }
 
+FailureOr<Value> Context::convertSampledValueCallArity2(
+    const slang::ast::SystemSubroutine &subroutine, Location loc, Value value,
+    Type originalType, Value clockVal,
+    const slang::ast::Expression &secondArg) {
+  using ksn = slang::parsing::KnownSystemName;
+  auto nameId = subroutine.knownNameId;
+
+  if (nameId != ksn::Past) {
+    mlir::emitError(loc) << "explicit clocking event argument for `"
+                         << subroutine.name << "` is not yet supported";
+    return failure();
+  }
+
+  auto ticks = evaluateConstant(secondArg).integer().as<int64_t>();
+  if (!ticks) {
+    mlir::emitError(loc)
+        << "`$past` number of ticks must be a constant expression";
+    return failure();
+  }
+  if (*ticks < 1) {
+    mlir::emitError(loc) << "`$past` number of ticks must be >= 1";
+    return failure();
+  }
+
+  auto castToMoore = [&](Value v) -> Value {
+    if (auto ty = dyn_cast<moore::IntType>(originalType)) {
+      v = moore::FromBuiltinIntOp::create(builder, loc, v);
+      if (ty.getDomain() == Domain::FourValued)
+        v = moore::IntToLogicOp::create(builder, loc, v);
+    }
+    return v;
+  };
+
+  return castToMoore(
+      ltl::PastOp::create(builder, loc, value, *ticks, clockVal));
+}
+
 Value Context::convertSampledValueCallExpression(
     const slang::ast::CallExpression &expr,
     const slang::ast::CallExpression::SystemCallInfo &info, Location loc) {
@@ -422,6 +459,7 @@ Value Context::convertSampledValueCallExpression(
 
   switch (args.size()) {
   case (1):
+  case (2):
     value = this->convertRvalueExpression(*args[0]);
     originalType = value.getType();
     valTy = dyn_cast<moore::IntType>(value.getType());
@@ -450,12 +488,19 @@ Value Context::convertSampledValueCallExpression(
     intVal = builder.createOrFold<moore::ToBuiltinIntOp>(loc, value);
     if (!intVal)
       return {};
-    result = this->convertSampledValueCallArity1(subroutine, loc, intVal,
-                                                 originalType, clockVal);
+
+    if (args.size() == 1)
+      result = this->convertSampledValueCallArity1(subroutine, loc, intVal,
+                                                   originalType, clockVal);
+    else
+      result = this->convertSampledValueCallArity2(
+          subroutine, loc, intVal, originalType, clockVal, *args[1]);
     break;
 
   default:
-    break;
+    mlir::emitError(loc) << "`" << subroutine.name << "` with " << args.size()
+                         << " arguments is not yet supported";
+    return {};
   }
 
   if (failed(result))
