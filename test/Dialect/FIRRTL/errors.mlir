@@ -62,6 +62,13 @@ firrtl.module @foo(in %a : !firrtl.uint<1>) attributes {portAnnotations=[[], []]
 // -----
 
 firrtl.circuit "foo" {
+// expected-error @+1 {{input probe not allowed}}
+firrtl.module @foo(in %p : !firrtl.probe<uint<1>>) {}
+}
+
+// -----
+
+firrtl.circuit "foo" {
 // expected-error @+1 {{annotations must be dictionaries or subannotations}}
 firrtl.module @foo(in %a: !firrtl.uint<1> ["hello"]) {}
 }
