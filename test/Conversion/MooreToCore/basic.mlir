@@ -839,6 +839,73 @@ func.func @BinaryRealOps(%arg0: !moore.f32, %arg1: !moore.f32) {
   return
 }
 
+// CHECK-LABEL: func.func @MathBuiltins
+func.func @MathBuiltins(%arg0: !moore.i32, %arg1: !moore.l42,
+                            %arg2: !moore.f64, %arg3: !moore.f64) {
+    // CHECK-DAG: %c0_i32 = hw.constant 0 : i32
+    // CHECK-DAG: %c32_i32 = hw.constant 32 : i32
+    // CHECK-DAG: %c1_i32 = hw.constant 1 : i32
+    // CHECK-DAG: [[V0:%.+]] = comb.sub %arg0, %c1_i32 : i32
+    // CHECK-DAG: [[V1:%.+]] = math.ctlz [[V0:%.+]] : i32
+    // CHECK-DAG: [[V2:%.+]] = comb.sub %c32_i32, [[V1:%.+]] : i32
+    // CHECK-DAG: [[V3:%.+]] = comb.icmp eq %arg0, %c0_i32  : i32
+    // CHECK: [[V4:%.+]] = comb.mux [[V3:%.+]], %c0_i32, [[V2:%.+]]: i32
+    moore.builtin.clog2 %arg0 : i32
+    // CHECK-DAG: %c0_i42 = hw.constant 0 : i42
+    // CHECK-DAG: %c42_i42 = hw.constant 42 : i42
+    // CHECK-DAG: %c1_i42 = hw.constant 1 : i42
+    // CHECK-DAG: [[V5:%.+]] = comb.sub %arg1, %c1_i42 : i42
+    // CHECK-DAG: [[V6:%.+]] = math.ctlz [[V5:%.+]] : i42
+    // CHECK-DAG: [[V7:%.+]] = comb.sub %c42_i42, [[V5:%.+]] : i42
+    // CHECK-DAG: [[V8:%.+]] = comb.icmp eq %arg1, %c0_i42 : i42
+    // CHECK: [[V9:%.+]] = comb.mux [[V14:%.+]], %c0_i42, [[V7:%.+]]: i42
+    moore.builtin.clog2 %arg1 : l42
+    // CHECK: math.log %arg2 : f64
+    moore.builtin.ln %arg2 : f64
+    // CHECK: math.log10 %arg2 : f64
+    moore.builtin.log10 %arg2 : f64
+    // CHECK: math.powf %arg2, %arg3 : f64
+    moore.fpow %arg2, %arg3 : f64
+    // CHECK: math.exp %arg2 : f64
+    moore.builtin.exp %arg2 : f64
+    // CHECK: math.floor %arg2 : f64
+    moore.builtin.floor %arg2 : f64
+    // CHECK: math.ceil %arg2 : f64
+    moore.builtin.ceil %arg2 : f64
+    // CHECK: math.sin %arg2 : f64
+    moore.builtin.sin %arg2 : f64
+    // CHECK: math.cos %arg2 : f64
+    moore.builtin.cos %arg2 : f64
+    // CHECK: math.tan %arg2 : f64
+    moore.builtin.tan %arg2 : f64
+    // CHECK: math.asin %arg2 : f64
+    moore.builtin.asin %arg2 : f64
+    // CHECK: math.acos %arg2 : f64
+    moore.builtin.acos %arg2 : f64
+    // CHECK: math.atan %arg2 : f64
+    moore.builtin.atan %arg2 : f64
+    // CHECK math.atan2 %arg2, %arg3 : f64
+    moore.builtin.atan2 %arg2, %arg3  : f64
+    // CHECK-DAG: [[V6:%.+]] = arith.mulf %arg2, %arg2 : f64
+    // CHECK-DAG: [[V7:%.+]] = arith.mulf %arg3, %arg3 : f64
+    // CHECK-DAG: [[V8:%.+]] = arith.addf [[V6]], [[V7]] : f64
+    // CHECK: math.sqrt [[V8]] : f64
+    moore.builtin.hypot %arg2, %arg3  : f64
+    // CHECK: math.sinh %arg2 : f64
+    moore.builtin.sinh %arg2 : f64
+    // CHECK: math.cosh %arg2 : f64
+    moore.builtin.cosh %arg2 : f64
+    // CHECK: math.tanh %arg2 : f64
+    moore.builtin.tanh %arg2 : f64
+    // CHECK: math.asinh %arg2 : f64
+    moore.builtin.asinh %arg2 : f64
+    // CHECK: math.acosh %arg2 : f64
+    moore.builtin.acosh %arg2 : f64
+    // CHECK: math.atanh %arg2 : f64
+    moore.builtin.atanh %arg2 : f64
+  return
+}
+
 // CHECK-LABEL: hw.module @Procedures
 moore.module @Procedures() {
   // CHECK: llhd.process {
