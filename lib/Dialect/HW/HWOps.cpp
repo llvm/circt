@@ -1097,6 +1097,23 @@ static LogicalResult verifyModuleCommon(HWModuleLike module) {
              << module.getNumPorts() << " port locations but got "
              << portLocs.size();
 
+  for (auto port : module.getPortList()) {
+    auto result = success();
+    port.type.walk([&](Type type) {
+      if (failed(result))
+        return;
+      auto &dialect = type.getDialect();
+      auto *interface =
+          dialect.getRegisteredInterface<hw::HWModulePortTypeInterface>();
+      if (!interface)
+        return;
+      result = interface->verifyHWModulePortType(
+          [&] { return module->emitOpError(); }, port.dir, type);
+    });
+    if (failed(result))
+      return result;
+  }
+
   SmallPtrSet<Attribute, 4> paramNames;
 
   // Check parameter default values are sensible.

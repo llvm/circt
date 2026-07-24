@@ -16,6 +16,7 @@
 
 #include "circt/Dialect/HW/HWDialect.h"
 #include "circt/Dialect/HW/HWTypeInterfaces.h"
+#include "mlir/IR/DialectInterface.h"
 #include "mlir/Interfaces/MemorySlotInterfaces.h"
 
 #include "circt/Support/LLVM.h"
@@ -31,6 +32,20 @@ struct ModulePort {
   mlir::StringAttr name;
   mlir::Type type;
   Direction dir;
+};
+
+struct HWModulePortTypeInterface
+    : public mlir::DialectInterface::Base<HWModulePortTypeInterface> {
+  HWModulePortTypeInterface(mlir::Dialect *dialect) : Base(dialect) {}
+
+  /// Return failure if `type` is not valid for a module port with the given
+  /// direction. Dialects can implement this to restrict non-HW-value handle
+  /// types in HW module signatures.
+  virtual mlir::LogicalResult verifyHWModulePortType(
+      llvm::function_ref<mlir::InFlightDiagnostic()> emitError,
+      ModulePort::Direction direction, mlir::Type type) const {
+    return mlir::success();
+  }
 };
 
 static bool operator==(const ModulePort &a, const ModulePort &b) {
