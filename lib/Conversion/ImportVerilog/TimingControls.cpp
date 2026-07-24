@@ -162,16 +162,60 @@ static LogicalResult handleRoot(Context &context,
 
   using slang::ast::TimingControlKind;
   switch (ctrl.kind) {
-    // TODO: Actually implement a lowering for repeated event control. The main
-    // way to trigger this is through an intra-assignment timing control, which
-    // is not yet supported:
-    //
-    //   a = repeat(3) @(posedge b) c;
-    //
-    // This will want to recursively call this function at the right insertion
-    // point to handle the timing control being repeated.
-  case TimingControlKind::RepeatedEvent:
-    return mlir::emitError(loc) << "unsupported repeated event control";
+    // Handle repeated event control, `repeat (<count>) @(...)`. This appears
+    // as an intra-assignment timing control, `a = repeat(3) @(posedge b) c;`,
+    // where the assignment first evaluates its right-hand side and then waits
+    // for the nested event control to trigger the given number of times.
+    // Lower it as a count-down loop around the nested event control. A count
+    // of zero or less skips the event control entirely (IEEE 1800-2017
+    // 9.4.5).
+  case TimingControlKind::RepeatedEvent: {
+    auto &repeatCtrl = ctrl.as<slang::ast::RepeatedEventControl>();
+    auto count = context.convertRvalueExpression(
+        repeatCtrl.expr, moore::IntType::getInt(builder.getContext(), 32));
+    if (!count)
+      return failure();
+    auto countType = cast<moore::IntType>(count.getType());
+
+    // Create the blocks for the loop condition check, body, and exit.
+    auto createBlock = [&]() -> Block & {
+      auto block = std::make_unique<Block>();
+      block->insertAfter(builder.getInsertionBlock());
+      return *block.release();
+    };
+    auto &exitBlock = createBlock();
+    auto &bodyBlock = createBlock();
+    auto &checkBlock = createBlock();
+    auto currentCount = checkBlock.addArgument(count.getType(), count.getLoc());
+    mlir::cf::BranchOp::create(builder, loc, &checkBlock, count);
+
+    // Loop while the remaining count is greater than zero, honoring the
+    // signedness of the count expression. Floating count expressions convert
+    // to a signed integer, so compare them signed as well such that negative
+    // counts skip the event control entirely.
+    builder.setInsertionPointToEnd(&checkBlock);
+    Value zero = moore::ConstantOp::create(builder, loc, countType, 0);
+    Value cond =
+        repeatCtrl.expr.type->isSigned() || repeatCtrl.expr.type->isFloating()
+            ? moore::SgtOp::create(builder, loc, currentCount, zero).getResult()
+            : moore::UgtOp::create(builder, loc, currentCount, zero)
+                  .getResult();
+    cond = moore::ToBuiltinIntOp::create(builder, loc, cond);
+    mlir::cf::CondBranchOp::create(builder, loc, cond, &bodyBlock, &exitBlock);
+
+    // Wait for the nested event control once per iteration and decrement the
+    // remaining count.
+    builder.setInsertionPointToEnd(&bodyBlock);
+    if (failed(handleRoot(context, repeatCtrl.event, nullptr)))
+      return failure();
+    Value one = moore::ConstantOp::create(builder, loc, countType, 1);
+    Value nextCount = moore::SubOp::create(builder, loc, currentCount, one);
+    mlir::cf::BranchOp::create(builder, loc, &checkBlock, nextCount);
+
+    // Continue after the loop.
+    builder.setInsertionPointToEnd(&exitBlock);
+    return success();
+  }
 
     // Handle implicit events, i.e. `@*` and `@(*)`. This implicitly includes
     // all variables read within the statement that follows after the event
