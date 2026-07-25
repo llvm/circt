@@ -33,24 +33,60 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
+/// Return true if `anno` is a full-reset annotation that requests asynchronous
+/// reset.
+bool isAsyncFullResetAnnotation(Annotation anno) {
+  if (!anno.isClass(fullResetAnnoClass))
+    return false;
+  auto resetType = anno.getMember<StringAttr>("resetType");
+  return resetType && resetType.getValue() == "async";
+}
+
+/// Return true if any module port or wire/node in the circuit carries an
+/// asynchronous full-reset annotation. When present, combinational memories
+/// must be turned into registers so InferResets can attach the async reset.
+bool hasAsyncFullResetAnnotation(CircuitOp circuitOp) {
+  return llvm::any_of(circuitOp.getOps<FModuleOp>(), [](FModuleOp moduleOp) {
+    if (llvm::any_of(moduleOp.getArguments(), [](BlockArgument arg) {
+          return llvm::any_of(AnnotationSet::get(arg),
+                              isAsyncFullResetAnnotation);
+        }))
+      return true;
+
+    // Only wires/nodes are valid in-body FullReset targets.
+    auto found = moduleOp.getBodyBlock()->walk([](Operation *op) {
+      if (!isa<WireOp, NodeOp>(op))
+        return WalkResult::advance();
+      if (llvm::any_of(AnnotationSet::get(op->getResult(0)),
+                       isAsyncFullResetAnnotation))
+        return WalkResult::interrupt();
+      return WalkResult::advance();
+    });
+    return found.wasInterrupted();
+  });
+}
+
 struct MemToRegOfVecPass
     : public circt::firrtl::impl::MemToRegOfVecBase<MemToRegOfVecPass> {
   using Base::Base;
 
   void runOnOperation() override {
-    auto circtOp = getOperation();
+    auto circuitOp = getOperation();
     auto &instanceInfo = getAnalysis<InstanceInfo>();
 
-    if (!AnnotationSet::removeAnnotations(circtOp,
-                                          convertMemToRegOfVecAnnoClass))
+    // Always consume the explicit circuit-level enable annotation. Also run
+    // when an asynchronous full-reset is present.
+    if (!AnnotationSet::removeAnnotations(circuitOp,
+                                          convertMemToRegOfVecAnnoClass) &&
+        !hasAsyncFullResetAnnotation(circuitOp))
       return markAllAnalysesPreserved();
 
     DenseSet<Operation *> dutModuleSet;
-    for (auto moduleOp : circtOp.getOps<FModuleOp>())
+    for (auto moduleOp : circuitOp.getOps<FModuleOp>())
       if (instanceInfo.anyInstanceInEffectiveDesign(moduleOp))
         dutModuleSet.insert(moduleOp);
 
-    mlir::parallelForEach(circtOp.getContext(), dutModuleSet,
+    mlir::parallelForEach(circuitOp.getContext(), dutModuleSet,
                           [&](Operation *op) {
                             if (auto mod = dyn_cast<FModuleOp>(op))
                               runOnModule(mod);

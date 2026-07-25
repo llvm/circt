@@ -86,6 +86,7 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // Width inference creates canonicalization opportunities.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
 
+  // MemToRefOfVec must be ran before InferResets for FART.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createMemToRegOfVec(
       {/*replSeqMemFile=*/opt.shouldIgnoreReadEnableMemories()}));
 
