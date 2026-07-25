@@ -21,6 +21,9 @@ MLIR_CAPI_EXPORTED void registerSeqPasses(void);
 /// If the type is an clock type
 MLIR_CAPI_EXPORTED bool seqTypeIsAClock(MlirType type);
 
+/// Get the TypeID is an clock type
+MLIR_CAPI_EXPORTED MlirTypeID seqClockTypeGetTypeID(void);
+
 /// Creates an seq clock type
 MLIR_CAPI_EXPORTED MlirType seqClockTypeGet(MlirContext ctx);
 
