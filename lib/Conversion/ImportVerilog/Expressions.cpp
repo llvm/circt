@@ -1105,7 +1105,7 @@ struct RvalueExprVisitor : public ExprVisitor {
     auto type = context.convertType(*expr.type);
     if (!type)
       return {};
-    return context.convertRvalueExpression(expr.operand(), type);
+    return context.convertRvalueExpression(expr.operand(), type, expr.type->isSigned());
   }
 
   // Handle blocking and non-blocking assignments.
@@ -2767,6 +2767,15 @@ Value Context::convertRvalueExpression(const slang::ast::Expression &expr,
   if (value && requiredType)
     value =
         materializeConversion(requiredType, value, expr.type->isSigned(), loc);
+  return value;
+}
+Value Context::convertRvalueExpression(const slang::ast::Expression &expr,
+                                       Type requiredType,bool conversionIsSigned) {
+  auto loc = convertLocation(expr.sourceRange);
+  auto value = expr.visit(RvalueExprVisitor(*this, loc));
+  if (value && requiredType)
+    value =
+        materializeConversion(requiredType, value, conversionIsSigned, loc);
   return value;
 }
 
