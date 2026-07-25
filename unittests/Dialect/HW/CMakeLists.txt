@@ -10,5 +10,6 @@ add_circt_unittest(CIRCTHWTests
 target_link_libraries(CIRCTHWTests
   PRIVATE
   CIRCTHW
+  CIRCTVerif #Instance graphs can contain verif::FormalOp
   CIRCTCAPIHW
 )
