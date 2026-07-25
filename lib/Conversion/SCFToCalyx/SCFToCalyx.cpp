@@ -30,6 +30,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Support/raw_ostream.h"
@@ -38,6 +39,7 @@
 #include <fstream>
 
 #include <locale>
+#include <mlir/IR/BuiltinAttributes.h>
 #include <numeric>
 #include <variant>
 
@@ -1333,25 +1335,32 @@ static LogicalResult buildAllocOp(ComponentLoweringState &componentState,
         getGlobalOp->template getParentWithTrait<mlir::OpTrait::SymbolTable>();
     auto globalOp = dyn_cast_or_null<memref::GlobalOp>(
         SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.getNameAttr()));
-    // Flatten the values in the attribute
-    auto cstAttr = llvm::dyn_cast_or_null<DenseElementsAttr>(
-        globalOp.getConstantInitValue());
-    int sizeCount = 0;
-    for (auto attr : cstAttr.template getValues<Attribute>()) {
-      assert((isa<mlir::FloatAttr, mlir::IntegerAttr>(attr)) &&
-             "memory attributes must be float or int");
-      if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr)) {
-        flattenedVals[sizeCount++] =
-            bit_cast<uint64_t>(fltAttr.getValueAsDouble());
-      } else {
-        auto intAttr = dyn_cast<mlir::IntegerAttr>(attr);
-        APInt value = intAttr.getValue();
-        flattenedVals[sizeCount++] = *value.getRawData();
-      }
-    }
 
-    rewriter.eraseOp(globalOp);
+   // getConstantIntialValue() returns null for hex-encoded values
+    auto cstAttr = llvm::dyn_cast_or_null<DenseElementsAttr>(
+        globalOp.getInitialValueAttr());
+
+    if (cstAttr){
+        int sizeCount = 0;
+        // Flatten the values in the attribute
+        for (auto attr : cstAttr.template getValues<Attribute>()) {
+            assert((isa<mlir::FloatAttr, mlir::IntegerAttr>(attr)) &&
+                 "memory attributes must be float or int");
+            if (auto fltAttr = dyn_cast<mlir::FloatAttr>(attr)) {
+                flattenedVals[sizeCount++] =
+                bit_cast<uint64_t>(fltAttr.getValueAsDouble());
+
+            } else {
+                auto intAttr = dyn_cast<mlir::IntegerAttr>(attr);
+                APInt value = intAttr.getValue();
+                flattenedVals[sizeCount++] = *value.getRawData();
+
+            }
+        }
+        rewriter.eraseOp(globalOp);
+    }
   }
+  
 
   llvm::json::Array result;
   result.reserve(std::max(static_cast<int>(shape.size()), 1));
