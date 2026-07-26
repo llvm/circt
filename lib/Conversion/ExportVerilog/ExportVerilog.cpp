@@ -798,6 +798,10 @@ static bool isExpressionUnableToInline(Operation *op,
               // LTL Clock op's clock operand must be a name.
               return clockOp.getClock() == use.get();
             })
+            .Case<ltl::ClockedAtomOp>([&](auto atomOp) {
+              // LTL ClockedAtom op's clock operand must be a name.
+              return atomOp.getClock() == use.get();
+            })
             .Case<sv::AssertConcurrentOp, sv::AssumeConcurrentOp,
                   sv::CoverConcurrentOp>(
                 [&](auto op) { return op.getClock() == use.get(); })
@@ -3642,6 +3646,7 @@ private:
   EmittedProperty visitLTL(ltl::ClockOp op);
   EmittedProperty visitLTL(ltl::WeakOp op);
   EmittedProperty visitLTL(ltl::StrongOp op);
+  EmittedProperty visitLTL(ltl::ClockedAtomOp op);
 
   EmittedProperty emitWeakStrongOp(StringRef mnemonic, Value input);
   void emitLTLDelay(int64_t delay, std::optional<int64_t> length);
@@ -4013,6 +4018,13 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::WeakOp op) {
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::StrongOp op) {
   return emitWeakStrongOp("strong", op.getInput());
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedAtomOp op) {
+  emitLTLClockingEvent(op.getEdge(), op.getClock());
+  ps << PP::space;
+  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
+  return {PropertyPrecedence::Clocking};
 }
 
 // NOLINTEND(misc-no-recursion)
