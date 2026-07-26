@@ -28,6 +28,7 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/LogicalResult.h"
 #include "llvm/Support/raw_ostream.h"
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -136,6 +137,9 @@ struct LogicNetworkGate {
   /// inversion bit is encoded in each edge.
   Signal edges[3];
 
+  /// Number of uses by logic gates in this network.
+  unsigned logicFanoutCount = 0;
+
   /// Number of uses outside the logic network.
   unsigned externalUseCount = 0;
 
@@ -194,6 +198,11 @@ struct LogicNetworkGate {
   bool isPrimaryOutput() const { return externalUseCount != 0; }
 
   unsigned getExternalUseCount() const { return externalUseCount; }
+
+  unsigned getTotalRefCount() const {
+    unsigned refCount = logicFanoutCount + externalUseCount;
+    return refCount == 0 ? 1 : refCount;
+  }
 };
 
 /// Flat logic network representation for efficient cut enumeration.
@@ -276,6 +285,11 @@ public:
   /// Get the total number of nodes in the network.
   size_t size() const { return gates.size(); }
 
+  /// Get the structural reference count used for initial area-flow estimates.
+  unsigned getTotalRefCount(uint32_t index) const {
+    return gates[index].getTotalRefCount();
+  }
+
   /// Check if a node is observed outside the logic network.
   bool isPrimaryOutput(uint32_t index) const {
     return gates[index].isPrimaryOutput();
@@ -307,6 +321,7 @@ public:
   void clear();
 
 private:
+  void recordLogicUse(uint32_t index) { ++gates[index].logicFanoutCount; }
   void recordExternalUse(uint32_t index) { ++gates[index].externalUseCount; }
 
   /// Map from MLIR Value to network index.
@@ -463,6 +478,8 @@ private:
       arrivalTimes; ///< Arrival times of outputs from this pattern
   /// Saved match data we reuse during area-flow reselection.
   MatchResult match;
+  /// Area-flow estimate used by priority-cut ranking.
+  double areaFlow = 0.0;
 
 public:
   /// Default constructor creates an invalid matched pattern.
@@ -470,9 +487,10 @@ public:
 
   /// Constructor for a valid matched pattern.
   MatchedPattern(const CutRewritePattern *pattern,
-                 SmallVector<DelayType, 1> arrivalTimes, MatchResult match)
+                 SmallVector<DelayType, 1> arrivalTimes, MatchResult match,
+                 double areaFlow = 0.0)
       : pattern(pattern), arrivalTimes(std::move(arrivalTimes)),
-        match(std::move(match)) {}
+        match(std::move(match)), areaFlow(areaFlow) {}
 
   /// Get the arrival time of signals through this pattern.
   DelayType getArrivalTime(unsigned outputIndex) const;
@@ -484,6 +502,9 @@ public:
 
   /// Get the area cost of using this pattern.
   double getArea() const;
+
+  /// Get the area-flow estimate of this implementation.
+  double getAreaFlow() const { return areaFlow; }
 
   /// Get the per-input delays used when scoring this match.
   ArrayRef<DelayType> getDelays() const;
@@ -696,6 +717,23 @@ public:
   void setBestCut(Cut *cut) { bestCut = cut; }
 };
 
+/// Ordering hook for retaining a cut under an additional optimization view.
+/// Return true when the first cut should rank before the second cut.
+using CutComparator = std::function<bool(const Cut &, const Cut &)>;
+
+/// A secondary cut ranking and the number of distinct candidates it may
+/// reserve. The primary ranking always retains at least one candidate.
+struct AdditionalCutRanking {
+  CutComparator comparator;
+  unsigned maxCuts = 1;
+};
+
+/// Compare matched cuts by area flow, then timing and cut size.
+bool compareCutsByAreaFlow(const Cut &lhs, const Cut &rhs);
+
+/// Compare matched cuts by local area, then timing and cut size.
+bool compareCutsByArea(const Cut &lhs, const Cut &rhs);
+
 /// Configuration options for the cut-based rewriting algorithm.
 ///
 /// These options control various aspects of the rewriting process including
@@ -710,9 +748,13 @@ struct CutRewriterOptions {
   unsigned maxCutInputSize;
 
   /// Maximum number of cuts to maintain per logic node.
-  /// The priority cuts algorithm keeps only the most promising cuts
-  /// to prevent exponential explosion.
+  /// This bounds non-trivial cuts; the trivial cut is retained separately.
   unsigned maxCutSizePerRoot;
+
+  /// Additional ranking views that reserve cuts in the bounded set. This
+  /// allows a mapper to preserve candidates that are promising for a later
+  /// optimization phase even when the primary seed ranking differs.
+  SmallVector<AdditionalCutRanking, 1> additionalCutRankings;
 
   /// Fail if there is a root operation that has no matching pattern.
   bool allowNoMatch = false;
@@ -809,6 +851,9 @@ public:
 
   /// Re-select cuts using exact-area deref/ref while preserving required times.
   void reselectCutsForExactArea();
+
+  /// Return the total area of the currently selected cut cover.
+  double getSelectedArea();
 
   /// Get cut sets (indexed by LogicNetwork index).
   const llvm::DenseMap<uint32_t, CutSet *> &getCutSets() const {

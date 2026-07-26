@@ -350,6 +350,8 @@ struct SOPBalancingPass
     options.maxCutInputSize = maxCutInputSize;
     options.maxCutSizePerRoot = maxCutsPerRoot;
     options.allowNoMatch = true;
+    options.additionalCutRankings.push_back({compareCutsByAreaFlow, 1});
+    options.additionalCutRankings.push_back({compareCutsByArea, 1});
 
     SOPCache sopCache;
     SmallVector<std::unique_ptr<CutRewritePattern>, 2> patterns;

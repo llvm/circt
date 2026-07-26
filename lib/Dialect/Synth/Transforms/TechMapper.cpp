@@ -282,6 +282,8 @@ struct TechMapperPass : public impl::TechMapperBase<TechMapperPass> {
     options.maxCutSizePerRoot = maxCutsPerRoot;
     options.attachDebugTiming = test;
     options.npnTable = npnTable.get();
+    options.additionalCutRankings.push_back({compareCutsByAreaFlow, 1});
+    options.additionalCutRankings.push_back({compareCutsByArea, 1});
     std::atomic<uint64_t> numCutsCreatedCount = 0;
     std::atomic<uint64_t> numCutSetsCreatedCount = 0;
     std::atomic<uint64_t> numCutsRewrittenCount = 0;

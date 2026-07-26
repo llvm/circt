@@ -271,9 +271,12 @@ LogicalResult LogicNetwork::buildFromBlock(Block *block) {
     if (index == kConstant0 || index == kConstant1)
       continue;
 
-    // Record observations that remain visible after cut covering.
+    // Record structural fanout for initial area-flow estimates and
+    // observations that remain visible after cut covering.
     for (OpOperand &use : value.getUses()) {
-      if (!isInternalLogicUser(use.getOwner()))
+      if (isInternalLogicUser(use.getOwner()))
+        recordLogicUse(index);
+      else
         recordExternalUse(index);
     }
   }
@@ -861,6 +864,34 @@ void CutSet::addCut(Cut *cut) {
 
 ArrayRef<Cut *> CutSet::getCuts() const { return cuts; }
 
+bool circt::synth::compareCutsByAreaFlow(const Cut &lhs, const Cut &rhs) {
+  const auto &lhsMatch = lhs.getMatchedPattern();
+  const auto &rhsMatch = rhs.getMatchedPattern();
+  if (!lhsMatch || !rhsMatch)
+    return lhsMatch.has_value();
+
+  if (!areEquivalent(lhsMatch->getAreaFlow(), rhsMatch->getAreaFlow()))
+    return lhsMatch->getAreaFlow() < rhsMatch->getAreaFlow();
+  if (lhsMatch->getArrivalTimes() != rhsMatch->getArrivalTimes())
+    return lhsMatch->getArrivalTimes() < rhsMatch->getArrivalTimes();
+  if (lhs.getInputSize() != rhs.getInputSize())
+    return lhs.getInputSize() < rhs.getInputSize();
+  return lhsMatch->getArea() < rhsMatch->getArea();
+}
+
+bool circt::synth::compareCutsByArea(const Cut &lhs, const Cut &rhs) {
+  const auto &lhsMatch = lhs.getMatchedPattern();
+  const auto &rhsMatch = rhs.getMatchedPattern();
+  if (!lhsMatch || !rhsMatch)
+    return lhsMatch.has_value();
+
+  if (!areEquivalent(lhsMatch->getArea(), rhsMatch->getArea()))
+    return lhsMatch->getArea() < rhsMatch->getArea();
+  if (lhsMatch->getArrivalTimes() != rhsMatch->getArrivalTimes())
+    return lhsMatch->getArrivalTimes() < rhsMatch->getArrivalTimes();
+  return lhs.getInputSize() < rhs.getInputSize();
+}
+
 // Remove duplicate cuts and non-minimal cuts. A cut is non-minimal if there
 // exists another cut that is a subset of it.
 static void removeDuplicateAndNonMinimalCuts(SmallVectorImpl<Cut *> &cuts) {
@@ -984,9 +1015,67 @@ void CutSet::finalize(
   };
   std::stable_sort(trivialCutsEnd, cuts.end(), isBetterCut);
 
-  // Keep only the top-K cuts to bound growth.
-  if (cuts.size() > options.maxCutSizePerRoot)
-    cuts.resize(options.maxCutSizePerRoot);
+  // Keep the primary ranking while reserving a bounded top-k set for each
+  // additional optimization view. The trivial cut is carried separately,
+  // matching the usual priority-cut convention that the configured limit
+  // counts non-trivial candidates.
+  SmallVector<Cut *, 12> rankedCuts(trivialCutsEnd, cuts.end());
+  unsigned nonTrivialLimit = options.maxCutSizePerRoot;
+  unsigned requestedReserved = 0;
+  for (const AdditionalCutRanking &ranking : options.additionalCutRankings) {
+    if (requestedReserved == nonTrivialLimit)
+      break;
+    requestedReserved +=
+        std::min(ranking.maxCuts, nonTrivialLimit - requestedReserved);
+  }
+  unsigned maxReserved = nonTrivialLimit == 0 ? 0 : nonTrivialLimit - 1;
+  unsigned numReserved = std::min(requestedReserved, maxReserved);
+  unsigned primaryLimit = nonTrivialLimit - numReserved;
+  unsigned trivialCount = trivialCutsEnd - cuts.begin();
+
+  SmallVector<Cut *, 12> retainedCuts(cuts.begin(), trivialCutsEnd);
+  retainedCuts.append(rankedCuts.begin(),
+                      rankedCuts.begin() +
+                          std::min<unsigned>(primaryLimit, rankedCuts.size()));
+
+  auto isBetterFor = [](const Cut *lhs, const Cut *rhs,
+                        const CutComparator &comparator) {
+    bool lhsMatched = lhs->getMatchedPattern().has_value();
+    bool rhsMatched = rhs->getMatchedPattern().has_value();
+    if (lhsMatched != rhsMatched)
+      return lhsMatched;
+    return comparator(*lhs, *rhs);
+  };
+
+  unsigned remainingReserved = numReserved;
+  for (const AdditionalCutRanking &ranking : options.additionalCutRankings) {
+    SmallVector<Cut *, 12> additionallyRankedCuts(rankedCuts);
+    std::stable_sort(additionallyRankedCuts.begin(),
+                     additionallyRankedCuts.end(), [&](Cut *lhs, Cut *rhs) {
+                       return isBetterFor(lhs, rhs, ranking.comparator);
+                     });
+    unsigned rankingLimit =
+        std::min<unsigned>(ranking.maxCuts, additionallyRankedCuts.size());
+    for (Cut *cut :
+         ArrayRef<Cut *>(additionallyRankedCuts).take_front(rankingLimit)) {
+      if (remainingReserved == 0)
+        break;
+      if (llvm::is_contained(retainedCuts, cut))
+        continue;
+      retainedCuts.push_back(cut);
+      --remainingReserved;
+    }
+  }
+
+  // A reserved view may select a cut already kept by the primary ranking.
+  // Fill any remaining capacity with the next primary candidates.
+  for (Cut *cut : rankedCuts) {
+    if (retainedCuts.size() >= trivialCount + nonTrivialLimit)
+      break;
+    if (!llvm::is_contained(retainedCuts, cut))
+      retainedCuts.push_back(cut);
+  }
+  cuts = std::move(retainedCuts);
 
   // Select the best cut from the remaining candidates.
   bestCut = nullptr;
@@ -996,7 +1085,7 @@ void CutSet::finalize(
       continue;
     bestCut = cut;
     bestArrivalTime = currentMatch->getWorstOutputArrivalTime();
-    areaFlow = currentMatch->getArea();
+    areaFlow = currentMatch->getAreaFlow();
     break;
   }
 
@@ -1396,8 +1485,8 @@ void CutEnumerator::dump() const {
         llvm::outs() << getTestVariableName(inputVal, opCounter);
       });
       auto &pattern = cut->getMatchedPattern();
-      llvm::outs() << "}"
-                   << "@t" << cut->getTruthTable()->table.getZExtValue() << "d";
+      llvm::outs() << "}" << "@t" << cut->getTruthTable()->table.getZExtValue()
+                   << "d";
       if (pattern) {
         llvm::outs() << *std::max_element(pattern->getArrivalTimes().begin(),
                                           pattern->getArrivalTimes().end());
@@ -1411,6 +1500,14 @@ void CutEnumerator::dump() const {
 }
 
 void CutEnumerator::computeRequiredTimes() {
+  // Required times depend on the currently selected cover. Reset the values
+  // before every propagation so this can be called between area-recovery
+  // passes after representative cuts have changed.
+  for (auto &[index, cutSet] : cutSets) {
+    (void)index;
+    cutSet->requiredTime = std::numeric_limits<DelayType>::max();
+  }
+
   DelayType globalWorstArrival = 0;
   SmallVector<CutSet *, 16> outputCutSets;
   for (auto &[index, cutSet] : cutSets) {
@@ -1476,7 +1573,8 @@ public:
 
   unsigned get(uint32_t index) const { return refCounts[index]; }
 
-  void referenceSelectedCover(ArrayRef<uint32_t> processingOrder) {
+  double referenceSelectedCover(ArrayRef<uint32_t> processingOrder) {
+    double area = 0.0;
     for (auto index : processingOrder) {
       if (refCounts[index] == 0)
         continue;
@@ -1485,8 +1583,9 @@ public:
       if (!cutSet)
         continue;
 
-      referenceCut(cutSet->getBestMatchedCut());
+      area += referenceCut(cutSet->getBestMatchedCut());
     }
+    return area;
   }
 
   double referenceCut(const Cut *cut) {
@@ -1556,6 +1655,11 @@ private:
 };
 } // namespace
 
+double CutEnumerator::getSelectedArea() {
+  SelectedCoverRefCounts selectedRefs(cutSets, logicNetwork);
+  return selectedRefs.referenceSelectedCover(processingOrder);
+}
+
 // Pick cuts again using area-flow, while staying within the timing bound set
 // by the current mapping.
 void CutEnumerator::reselectCutsForAreaFlow() {
@@ -1574,7 +1678,7 @@ void CutEnumerator::reselectCutsForAreaFlow() {
     it->second->bestArrivalTime =
         bestCut->getMatchedPattern()->getWorstOutputArrivalTime();
   }
-  selectedRefs.referenceSelectedCover(processingOrder);
+  (void)selectedRefs.referenceSelectedCover(processingOrder);
 
   for (auto index : processingOrder) {
     auto cutSetIt = cutSets.find(index);
@@ -1642,9 +1746,9 @@ void CutEnumerator::reselectCutsForAreaFlow() {
         bestFlowArrival = arrivalTime;
         bestLocalArea = candidateMatch->getArea();
         bestAreaFlowCut = cut;
-        bestAreaFlowMatch = MatchedPattern(candidateMatch->getPattern(),
-                                           std::move(outputArrivalTimes),
-                                           candidateMatch->getMatch());
+        bestAreaFlowMatch = MatchedPattern(
+            candidateMatch->getPattern(), std::move(outputArrivalTimes),
+            candidateMatch->getMatch(), bestFlow);
       }
     }
 
@@ -1684,9 +1788,9 @@ void CutEnumerator::reselectCutsForExactArea() {
     it->second->bestArrivalTime =
         bestCut->getMatchedPattern()->getWorstOutputArrivalTime();
   }
-  selectedRefs.referenceSelectedCover(processingOrder);
+  (void)selectedRefs.referenceSelectedCover(processingOrder);
 
-  for (auto index : processingOrder) {
+  for (uint32_t index : processingOrder) {
     auto cutSetIt = cutSets.find(index);
     if (cutSetIt == cutSets.end())
       continue;
@@ -1743,9 +1847,9 @@ void CutEnumerator::reselectCutsForExactArea() {
         bestExactArrival = arrivalTime;
         bestLocalArea = candidateMatch->getArea();
         bestExactCut = cut;
-        bestExactMatch = MatchedPattern(candidateMatch->getPattern(),
-                                        std::move(outputArrivalTimes),
-                                        candidateMatch->getMatch());
+        bestExactMatch = MatchedPattern(
+            candidateMatch->getPattern(), std::move(outputArrivalTimes),
+            candidateMatch->getMatch(), candidateMatch->getAreaFlow());
       }
     }
 
@@ -1810,9 +1914,66 @@ LogicalResult CutRewriter::run(Operation *topOp) {
   // TODO: This selection must be controlled by the strategy option, but
   // currently it runs area recovery unconditionally since it improves area
   // regardless of the strategy.
-  cutEnumerator.computeRequiredTimes();
-  cutEnumerator.reselectCutsForAreaFlow();
-  cutEnumerator.reselectCutsForExactArea();
+  struct SelectedMapping {
+    struct Selection {
+      CutSet *cutSet;
+      Cut *cut;
+      MatchedPattern match;
+    };
+
+    double area;
+    SmallVector<Selection> selections;
+  };
+
+  auto captureMapping = [&]() {
+    SelectedMapping mapping;
+    mapping.area = cutEnumerator.getSelectedArea();
+    for (auto &[index, cutSet] : cutEnumerator.getCutSets()) {
+      (void)index;
+      Cut *cut = cutSet->getBestMatchedCut();
+      if (!cut)
+        continue;
+      mapping.selections.push_back({cutSet, cut, *cut->getMatchedPattern()});
+    }
+    return mapping;
+  };
+
+  auto restoreMapping = [](const SelectedMapping &mapping) {
+    for (const auto &selection : mapping.selections) {
+      selection.cut->setMatchedPattern(selection.match);
+      selection.cutSet->setBestCut(selection.cut);
+      selection.cutSet->bestArrivalTime =
+          selection.match.getWorstOutputArrivalTime();
+    }
+  };
+
+  // Multiple recovery rounds matter more than their runtime here: area-flow
+  // exposes globally useful sharing opportunities, while exact-area rounds
+  // polish the selected cover. Keep the best cover seen so a later round can
+  // never regress the estimated mapped area.
+  constexpr unsigned areaFlowRecoveryIterations = 2;
+  constexpr unsigned exactAreaPolishingIterations = 3;
+  SelectedMapping bestMapping = captureMapping();
+  for (unsigned iteration = 0; iteration != areaFlowRecoveryIterations;
+       ++iteration) {
+    cutEnumerator.computeRequiredTimes();
+    cutEnumerator.reselectCutsForAreaFlow();
+    cutEnumerator.computeRequiredTimes();
+    cutEnumerator.reselectCutsForExactArea();
+
+    SelectedMapping candidate = captureMapping();
+    if (candidate.area < bestMapping.area)
+      bestMapping = std::move(candidate);
+  }
+  for (unsigned iteration = 0; iteration != exactAreaPolishingIterations;
+       ++iteration) {
+    cutEnumerator.computeRequiredTimes();
+    cutEnumerator.reselectCutsForExactArea();
+    SelectedMapping candidate = captureMapping();
+    if (candidate.area < bestMapping.area)
+      bestMapping = std::move(candidate);
+  }
+  restoreMapping(bestMapping);
 
   // Select best cuts and perform mapping
   if (failed(runBottomUpRewrite(topOp)))
@@ -1920,8 +2081,22 @@ std::optional<MatchedPattern> CutRewriter::patternMatchCut(const Cut &cut) {
   if (!bestPattern)
     return {}; // No matching pattern found
 
+  double areaFlow = bestMatch->area;
+  for (uint32_t inputIndex : cut.inputs) {
+    if (isCutLeaf(network, inputIndex))
+      continue;
+    auto inputIt = cutEnumerator.getCutSets().find(inputIndex);
+    if (inputIt == cutEnumerator.getCutSets().end())
+      continue;
+    Cut *inputCut = inputIt->second->getBestMatchedCut();
+    if (!inputCut)
+      continue;
+    areaFlow += inputCut->getMatchedPattern()->getAreaFlow() /
+                network.getTotalRefCount(inputIndex);
+  }
+
   return MatchedPattern(bestPattern, std::move(bestArrivalTimes),
-                        std::move(*bestMatch));
+                        std::move(*bestMatch), areaFlow);
 }
 
 LogicalResult CutRewriter::runBottomUpRewrite(Operation *top) {
