@@ -1098,7 +1098,7 @@ LLVM_DUMP_METHOD void NLAPlanner::dump() {
 // Module Inlining Support
 //===----------------------------------------------------------------------===//
 
-/// Map each of the instance's results to its replacement port-wire.
+/// Map each of the instance's results to its corresponding replacement wire.
 /// Later clones from the parent block then read the wires.
 static void mapResultsToWires(IRMapping &mapper, SmallVectorImpl<Value> &wires,
                               InstanceOp instance) {
@@ -1109,10 +1109,10 @@ static void mapResultsToWires(IRMapping &mapper, SmallVectorImpl<Value> &wires,
 /// Process each operation, updating InnerRefAttr's using the specified map,
 /// with the given name as the containing IST of the mapped-to sym names.
 ///
-/// Every inner-ref in the cloned ops names the child being inlined,
-/// so `map` covers them all (I11).
+/// Every inner-ref in the cloned ops names the child being inlined, so `map`
+/// covers them all (I11).
 ///
-/// A miss is a reference to another module, in an unknown capacity.
+/// A miss is a reference to another module, in an unknown capacity (!).
 /// There is no correct update, so it is diagnosed.
 static LogicalResult replaceInnerRefUsers(ArrayRef<Operation *> newOps,
                                           const InnerRefToNewNameMap &map,
@@ -1188,8 +1188,8 @@ static hw::InnerSymAttr uniqueInNamespace(hw::InnerSymAttr old,
 /// Dead modules are erased at the end.
 ///
 /// Every cloned operation with a name gets the instance-name prefix.
-/// Top-down, the entire prefix is known at clone time,
-/// so the name attribute is set exactly once (no interned intermediates).
+/// Top-down, the entire prefix is known at clone time, so the name attribute is
+/// set exactly once (no interned intermediates).
 namespace {
 class Inliner {
 public:
@@ -1274,30 +1274,31 @@ private:
   void cloneAndRename(StringRef prefix, InliningLevel &il, IRMapping &mapper,
                       Operation &op);
 
-  /// Record, for a freshly cloned op, which contexts own its hierpath uses:
-  /// annotation uses (for-all: `circt.nonlocal` in the annotation payload)
-  /// and value uses (single-valued: a hierpath ref in any other attribute).
+  /// Record, for a freshly cloned op, which contexts own its nonlocal
+  /// annotations (`circt.nonlocal` in the annotation payload).
   ///
-  /// Per hierpath the active contexts (route) gated on ownership (I13).
-  /// The route cannot be recomputed after the walk, hence the record.
-  /// P3 records and later P4 writes/repoints.
+  /// For each hierpath named by the clone's annotations, record the owning
+  /// contexts: those whose route (surviving instance path) passes through this
+  /// level, gated on ownership (I13).  Only the walk knows a clone's position
+  /// on any route (afterwards clones are indistinguishable), hence the record.
+  /// P3 records, P4 writes.
   ///
   /// Every clone with nonlocal annotations still gets an entry, possibly empty,
   /// so the writeback never applies the original-op rule to it.
   void recordContexts(Operation *newOp, const InliningLevel &il);
 
-  /// Reflect a renamed leaf inner symbol on the active non-local contexts.
-  /// Renaming to dodge a collision must update every context naming that leaf,
-  /// or the materialized path dangles.
+  /// Record a renamed leaf inner symbol on the active contexts, or the
+  /// materialized path dangles.
+  ///
   /// Matching is per-field by (origMod, origSym), destination-gated (I12/I13).
   /// Needed only to preserve old-style NLA leaf symbols; remove with them.
   void updateVirtualNLALeafSymbols(Inliner::InliningLevel &il,
                                    hw::InnerSymAttr oldSymAttr,
                                    hw::InnerSymAttr newSymAttr);
 
-  /// Compute the contexts active inside a child inlining level:
-  /// the intersection (I5/I6) of the parent's active set
-  /// with the contexts routed through `instance`.
+  /// Compute the contexts active inside a child inlining level: the
+  /// intersection (I5/I6) of the parent's active set with the contexts routed
+  /// through `instance`.
   ///
   /// `std::nullopt` = top-level entry, no parent filter.
   /// Inputs are id-sorted; the result stays id-sorted.
@@ -1317,13 +1318,14 @@ private:
   /// Returns true if the operation is annotated to be inlined.
   bool shouldInline(FModuleLike mod);
 
-  /// Check not inlining into anything other than layerblock or module.
+  /// Check we're not inlining into anything other than layerblock or module.
   /// In the future, could check this per-inlined-operation.
   LogicalResult checkInstanceParents(InstanceOp instance);
 
   /// Walk the specified block, invoking `process` forward, pre-order.
-  /// Handles cloning supported operations with regions,
-  /// so that `process` is only invoked on regionless operations.
+  ///
+  /// Handles cloning supported operations with regions, so that `process` is
+  /// only invoked on regionless operations.
   LogicalResult
   inliningWalk(OpBuilder &builder, Block *block, IRMapping &mapper,
                llvm::function_ref<LogicalResult(Operation *op)> process);
@@ -1369,7 +1371,7 @@ private:
   void appendContextAnno(Annotation anno, StringAttr origSym,
                          VirtualNLA *matched, SmallVectorImpl<Attribute> &out);
 
-  /// P4: serially canonicalize every non-local context; see `canonicalize`.
+  /// P4: (serially) canonicalize every non-local context; see `canonicalize`.
   /// Also mints each emitted context's `realizedSym`.
   void canonicalizeContexts();
 
@@ -1382,6 +1384,7 @@ private:
 
   /// Build the resolved namepath (an ArrayAttr of inner-refs / flat symbols)
   /// from a VNLA's surviving hops.
+  ///
   /// Callable once a VNLA's path is final.
   ArrayAttr materializeNamepath(VirtualNLA *vnla);
 
@@ -1392,15 +1395,15 @@ private:
   ///
   /// The mapping lands in `canonicalOf`.
   ///
-  /// Also mints `realizedSym` for canonicals -- the primary claimed origSym
-  /// at selection, so a canonical fork always mints; duplicates borrow.
+  /// Also mints `realizedSym` for canonicals -- the primary already claimed
+  /// origSym at selection, so a canonical fork always mints; duplicates borrow.
   ///
   /// Serial-sweep only, once every path is final.
   void canonicalize(VirtualNLA *vnla);
 
   /// Read-only canonical lookup for the parallel annotation rewrite:
-  /// every non-local VNLA has been through `canonicalize` by then,
-  /// so this only reads `canonicalOf`.
+  /// every non-local VNLA has been through `canonicalize` by then, so this only
+  /// reads `canonicalOf`.
   ///
   /// Returns `vnla` itself when it is canonical or excluded.
   VirtualNLA *canonicalOrSelf(VirtualNLA *vnla) const {
@@ -1432,17 +1435,15 @@ private:
   /// owns its hierpath; `canonicalOf` maps every non-local VNLA to that owner
   /// (itself when canonical).
   ///
-  /// A duplicate is skipped at emission, borrows the owner's realizedSym,
-  /// and propagates usedness onto it.
+  /// A duplicate is skipped at emission, borrows the owner's realizedSym, and
+  /// propagates usedness onto it.
   /// @{
   DenseMap<ArrayAttr, VirtualNLA *> canonicalByPath;
   DenseMap<VirtualNLA *, VirtualNLA *> canonicalOf;
   /// @}
 
-  /// Assert-only bookkeeping: origSyms claimed by their group's primary,
-  /// so `canonicalize` can check the claim order (I15).
-  /// `claim` compiles to nothing in release and `has` reads true there,
-  /// so no release build does the bookkeeping.
+  /// Assert-only bookkeeping: origSyms claimed by their group's primary, so
+  /// `canonicalize` can check the claim order (I15).
   struct ClaimedSyms {
 #ifndef NDEBUG
     DenseSet<StringAttr> syms;
@@ -1573,11 +1574,12 @@ bool Inliner::renameInstance(StringRef prefix, InliningLevel &il,
 void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
   StringAttr destMod = il.mic.module.getModuleNameAttr();
 
-  // Intersect a hierpath symbol's context group with the id-sorted active
-  // set, keeping only those this destination module owns.
+  // Intersect a hierpath symbol's context group with the id-sorted active set,
+  // keeping only those this destination module owns.
 
   // A sym's group spans a gap-free id interval (I4; ids globally unique).
-  // Its intersection with the id-sorted set (I6) is one contiguous slice:
+  //
+  // Its intersection with the id-sorted set (I6) forms one contiguous slice:
   // two searches at the bounds, no per-member probing, id-ordered result.
   auto matchContexts = [&](FlatSymbolRefAttr sym, ArrayRef<VirtualNLA *> active,
                            SmallVectorImpl<VirtualNLA *> &out) {
@@ -1590,13 +1592,17 @@ void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
         std::upper_bound(lo, active.end(), group.back(), vnlaIdLess);
     for (; lo != hi; ++lo) {
       // I13: ownership.
-      // An annotation is written by the module holding the context's leaf:
-      // the annotated op lives there, and it clones into the destination.
+      //
+      // An annotation is written by the module holding the context's leaf: the
+      // annotated op lives there, and it clones into the destination.
+      //
       // Activation can be broader than ownership: parent-copy contexts route
       // through the same original instance ops but belong to the parent's
       // clone, not this one.
+      //
       // Nonempty per I8: the terminal hop always survives.
       auto path = (*lo)->getPath();
+      assert(!path.empty() && "terminal hop is expected to always survive");
       if (path.back().finalMod != destMod)
         continue;
       // One op may name a hierpath more than once; record each owned context
@@ -1607,6 +1613,7 @@ void Inliner::recordContexts(Operation *newOp, const InliningLevel &il) {
   };
 
   // Annotations: record the owning contexts for the writeback.
+  //
   // A clone with nonlocal annotations always gets an entry, possibly empty,
   // so the writeback never applies the original-op rule to it.
   bool hasNonlocal = false;
@@ -1642,11 +1649,12 @@ void Inliner::updateVirtualNLALeafSymbols(Inliner::InliningLevel &il,
   for (auto *nla : il.activeNLAs) {
     // A local context is tracked too: retention can pin it as a one-hop
     // primary, whose leaf symbol must then reflect this rename.
+    //
     // `back()` is safe local or not -- a VNLA always has its terminal hop
     // (I8, asserted at construction).
     auto &last = nla->getPathMutable().back();
-    // `finalMod` is the I13 ownership gate; `origMod` matching is total
-    // because the leaf is cloned from its original def exactly once (I12).
+    // `finalMod` is the I13 ownership gate; `origMod` matching is total because
+    // the leaf is cloned from its original def exactly once (I12).
     if (last.origMod == origMod && last.finalMod == destMod) {
       for (auto prop : oldSymAttr.getProps()) {
         if (last.origSym == prop.getName()) {
@@ -1661,8 +1669,8 @@ void Inliner::updateVirtualNLALeafSymbols(Inliner::InliningLevel &il,
 void Inliner::setActiveNLAsForChild(
     std::optional<ArrayRef<VirtualNLA *>> activeNLAs, InliningLevel &childIL,
     Operation *instance) {
-  // One lookup by the instance op; the routing entry is born id-sorted
-  // and duplicate-free (I5, verified once at the end of planning).
+  // One lookup by the instance op; the routing entry is born id-sorted and
+  // duplicate-free (I5, verified once at the end of planning).
   ArrayRef<VirtualNLA *> instNLAs;
   if (auto it = nlaPlanner.pathRoutingTable.find(instance);
       it != nlaPlanner.pathRoutingTable.end())
@@ -1673,9 +1681,12 @@ void Inliner::setActiveNLAsForChild(
     childIL.setActivePaths(instNLAs);
   } else if (!activeNLAs->empty() && !instNLAs.empty()) {
     // Both ranges are id-sorted (I5/I6).
-    // A shared instance's routing entry can be fork-count-sized
-    // while the active set has narrowed, or the reverse.
-    // So: walk the smaller range, binary-search the larger.
+    //
+    // A shared instance's routing entry can be fork-count-sized while the
+    // active set has narrowed, or the reverse.
+    //
+    // So: walk the smaller range, binary-search the larger range.
+    //
     // The smaller is walked in id order, so the result stays sorted (I6).
     ArrayRef<VirtualNLA *> probe = instNLAs, in = *activeNLAs;
     if (probe.size() > in.size())
@@ -1688,8 +1699,8 @@ void Inliner::setActiveNLAsForChild(
   }
 }
 
-/// Create a wire per target-module port at the insertion point, mapping
-/// each port to its wire; the cloned body then reads the wires.
+/// Create a wire per target-module port at the insertion point, mapping each
+/// port to its wire; the cloned body then reads the wires.
 void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
                               IRMapping &mapper) {
   auto target = il.childModule;
@@ -1703,9 +1714,10 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
         uniqueInNamespace(oldSymAttr, il.relocatedInnerSyms,
                           il.mic.modNamespace, target.getNameAttr());
 
-    // Record the renamed port symbol on the active contexts' leaf hops:
-    // a renamed port that is an NLA leaf must be reflected even when the
-    // port itself carries no annotations.
+    // Record the renamed port symbol on the active contexts' leaf hops: a
+    // renamed port that is an NLA leaf must be reflected even when the port
+    // itself carries no annotations.
+    //
     // The path may be kept alive by an annotation elsewhere.
     updateVirtualNLALeafSymbols(il, oldSymAttr, newSymAttr);
 
@@ -1729,9 +1741,10 @@ void Inliner::mapPortsToWires(StringRef prefix, InliningLevel &il,
 void Inliner::cloneAndRename(StringRef prefix, InliningLevel &il,
                              IRMapping &mapper, Operation &op) {
   // Clone and rename.
-  // Annotations are copied verbatim: the walk only records which contexts
-  // own them; the final writeback is the single annotation writer (P4),
-  // running when every context's path is final.
+  //
+  // Annotations are copied verbatim: the walk only records which contexts own
+  // them; the final writeback is the single annotation writer (P4), running
+  // when every context's path is final.
   assert(op.getNumRegions() == 0 &&
          "operation with regions should not reach cloneAndRename");
   auto *newOp = il.mic.b.cloneWithoutRegions(op, mapper);
@@ -1975,6 +1988,7 @@ LogicalResult Inliner::inlineModules() {
   // Process live modules in the analysis's parents-before-children order
   // (I12): a parent always clones a child's pristine definition body, since
   // a retained child's own body is only mutated by its later self-visit.
+  //
   // Dead modules are skipped here and erased after.
   for (auto moduleOp : inliningFacts.getSchedule()) {
     const auto &info = inliningFacts.lookup(moduleOp);
@@ -1982,6 +1996,7 @@ LogicalResult Inliner::inlineModules() {
       continue;
     // Consume the inline/flatten annotations: InliningFacts is their only
     // reader (everything else consults the frozen ModuleClassification, I1).
+    //
     // Every P1/P2 diagnosis has already run, so a run that fails before this
     // loop leaves the input untouched; the walk's own diagnoses (instance
     // parents, foreign inner refs) fire mid-clone and do not.
@@ -2036,6 +2051,7 @@ ArrayAttr Inliner::materializeNamepath(VirtualNLA *vnla) {
 
 void Inliner::canonicalize(VirtualNLA *vnla) {
   // A local context never canonicalizes.
+  //
   // The annotation localizes onto the op and the path is dropped.
   assert(!vnla->isLocal() && "local VNLAs have no hierpath to canonicalize");
   assert(!vnla->realizedSym && "context canonicalized twice");
@@ -2080,12 +2096,13 @@ void Inliner::canonicalizeContexts() {
   //
   // Retention: an original hierpath symbol can be named by users the inliner
   // does not rewrite (an sv.xmr.ref target, a circuit-level annotation).
-  // Those are invisible here, so every origSym with a surviving context is
-  // kept 1:1 rather than dropped when no annotation happens to name it:
-  // pinned to a `primary` context, emitted unconditionally by writeback.
+  //
+  // Those are invisible here, so every origSym with a surviving context is kept
+  // 1:1 rather than dropped when no annotation happens to name it: pinned to a
+  // `primary` context and emitted unconditionally by writeback.
   //
   // Only fork symbols stay usedness-gated, since we created them.
-  // GC of a genuinely dead path is IMDeadCodeElim's job, not ours.
+  // GC of genuinely dead paths is not this the job of this pass.
   //
   // Process one origSym group at a time (contiguous per I4).
   for (size_t i = 0, e = nlaPlanner.allVNLAs.size(); i < e;) {
@@ -2113,10 +2130,10 @@ void Inliner::canonicalizeContexts() {
 
     // Each original may have its own external user:
     // both must survive, so primaries never merge -- only forks do.
-    // Seed `canonicalByPath` so forks can still attach to a primary.
     primary->realizedSym = origSym;
     claimed.claim(origSym);
     canonicalOf[primary] = primary;
+    // Seed `canonicalByPath` so forks can still attach to a primary.
     if (!primary->isLocal())
       canonicalByPath.try_emplace(materializeNamepath(primary), primary);
 
@@ -2164,8 +2181,8 @@ void Inliner::rewriteAnnotations() {
         continue;
       for (auto *matched : it->second) {
         // Drop the annotation unless this module owns the context's leaf
-        // (I14/I13); a path is never empty (I8) -- a local context is one
-        // hop, not zero.
+        // (I14/I13); a path is never empty (I8) -- a local context is one hop,
+        // not zero.
         if (matched->getPath().back().finalMod != modName)
           continue;
         appendContextAnno(anno, sym.getAttr(), matched, newAnnos);
@@ -2208,7 +2225,7 @@ void Inliner::rewriteAnnotations() {
   // Parallel per module: P2 state is read-only here (I2/I3).
   // Each context has a single writer (I14).
   // Only regular modules are worth a parallel task.
-  // Other module-likes are each a trivial walk, handled inline
+  // Other module-likes are each a trivial walk done serially, handled inline
   // (the same split as verifyInnerRefNamespace).
   SmallVector<FModuleOp> bodyModules;
   for (auto fmodule : circuit.getBodyBlock()->getOps<FModuleLike>()) {
@@ -2238,8 +2255,8 @@ void Inliner::writebackHierPaths() {
 #ifndef NDEBUG
   // I15: exactly one primary claimant per origSym group, emitted in place
   // below, so the symbol always survives for a user the inliner cannot see.
-  // Supersedes the usedness-uniformity assert: emitted regardless of
-  // usedness, the churn it guarded against cannot arise.
+  // Supersedes the usedness-uniformity assert: emitted regardless of usedness,
+  // the churn it guarded against cannot arise.
   for (size_t i = 0, e = nlaPlanner.allVNLAs.size(); i < e;) {
     StringAttr origSym = nlaPlanner.allVNLAs[i]->origSym;
     unsigned claimants = 0;
@@ -2264,9 +2281,11 @@ void Inliner::writebackHierPaths() {
   //   local/duplicate/unused -> nothing; unreferenced originals are erased
   //
   // Iterate in creation order for determinism (contiguous per origSym).
+  //
   // At a group boundary, set the insertion point after its hw.hierpath op
   // so forks land beside their source, not clumped at the block's end.
   StringAttr curGroup;
+
   // Ops kept alive by in-place reuse below.
   // A group can hold both a reusing context and later forks.
   // The forks still need the original's location, so keep its entry.
