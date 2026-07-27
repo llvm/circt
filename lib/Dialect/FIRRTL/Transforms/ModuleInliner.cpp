@@ -619,8 +619,10 @@ private:
                         SmallVectorImpl<SmallVector<PathHop>> &discoveredPaths);
 
   /// Create a VirtualNLA for one concrete path context.
-  void processSinglePathContext(StringAttr origSym,
-                                const SmallVectorImpl<PathHop> &absPath);
+  LogicalResult
+  processSinglePathContext(StringAttr origSym,
+                           const SmallVectorImpl<PathHop> &absPath,
+                           hw::HierPathOp diagAnchor);
 
   /// Return the index of the minimal root within `upperPath`: how many leading
   /// hops to drop so the context roots at the deepest module still surviving on
@@ -743,7 +745,8 @@ LogicalResult NLAPlanner::run() {
         llvm::append_range(absolutePath, trimmedUpper);
         llvm::append_range(absolutePath, nlaHops);
 
-        processSinglePathContext(origSym, absolutePath);
+        if (failed(processSinglePathContext(origSym, absolutePath, nla)))
+          return failure();
       }
     }
   }
@@ -945,8 +948,10 @@ Operation *NLAPlanner::resolveInstanceHop(StringAttr module,
   return entry->second.lookup(innerSym);
 }
 
-void NLAPlanner::processSinglePathContext(
-    StringAttr origSym, const SmallVectorImpl<PathHop> &absPath) {
+LogicalResult
+NLAPlanner::processSinglePathContext(StringAttr origSym,
+                                     const SmallVectorImpl<PathHop> &absPath,
+                                     hw::HierPathOp diagAnchor) {
   SmallVector<SurvivingHop> survivingHops;
   assert(!absPath.empty() && "empty absolute path -- empty namepath?");
 
@@ -963,6 +968,8 @@ void NLAPlanner::processSinglePathContext(
 
     bool isTerminal = it == end;
     bool nextIsRegular = false;
+
+    bool isInstanceHop = false;
     if (!isTerminal) {
       nextModName = it->mod;
       auto modOp = symbolTable.lookup<FModuleLike>(nextModName);
@@ -971,15 +978,40 @@ void NLAPlanner::processSinglePathContext(
       nextHasInline = info.hasInline;
       nextHasFlatten = info.hasFlatten;
       nextIsRegular = isa<FModuleOp>(modOp);
+      isInstanceHop = true;
+    } else if (auto inst = dyn_cast_or_null<InstanceOp>(hop.inst)) {
+      nextModName = inst.getReferencedModuleNameAttr();
+      auto modOp = symbolTable.lookup<FModuleLike>(nextModName);
+      assert(modOp && "interior namepath module missing -- ran unverified?");
+      const auto &info = facts.lookup(modOp);
+      nextHasInline = info.hasInline;
+      nextHasFlatten = info.hasFlatten;
+      nextIsRegular = isa<FModuleOp>(modOp);
+      isInstanceHop = true;
     }
 
     // - A hop evaporates only when a plain regular-module instance is absorbed.
     // - Terminal hops never evaporate (I8).
     // - Non-regular modules are never absorbed; their instances relocate.
     // - Neither are instance_choice hops; they relocate with the choice op.
-    bool isEvaporating = !isTerminal && nextIsRegular &&
+    bool isEvaporating = isInstanceHop && nextIsRegular &&
                          (isTransitiveFlatten || nextHasInline) &&
                          (!hop.inst || isa<InstanceOp>(hop.inst));
+
+    // Diagnose evaporated terminal instance hops, keep I8 accurate and avoid
+    // bugs.  Only old-style annotations have this shape, which is recoverable
+    // if that is the only user.  Other users (e.g., XMR or verbatim) must be
+    // detected and rejected.  This will be handled in follow-on.  Expected to
+    // be unreachable from current frontend + pipeline.
+    // https://github.com/llvm/circt/issues/10908
+    if (isEvaporating && isTerminal) {
+      assert(hop.inst && "expected instance operation");
+      return diagAnchor
+          .emitError("hierpath points to inlined instance, cannot proceed")
+          .attachNote(hop.inst->getLoc())
+          .append("hierpath targets this inlined instance");
+    }
+
     // A choice target begins a fresh flatten scope -- flatten does not reach
     // through it (as with an extmodule).
     if (hop.inst && !isa<InstanceOp>(hop.inst))
@@ -1014,6 +1046,8 @@ void NLAPlanner::processSinglePathContext(
   for (const auto &hop : absPath)
     if (hop.inst)
       pathRoutingTable[hop.inst].push_back(vnla);
+
+  return success();
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

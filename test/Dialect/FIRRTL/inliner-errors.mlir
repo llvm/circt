@@ -157,3 +157,71 @@ firrtl.circuit "UnanalyzableSymbolUses" {
     "some_unknown_dialect.leaf"() { magic = @UnanalyzableSymbolUses } : () -> ()
   }) : () -> ()
 }
+
+// -----
+
+// Check that inlining an instance pointed to by a hierpath errors.
+// https://github.com/llvm/circt/issues/10908
+// These are unconditionally diagnosed for now.
+
+firrtl.circuit "Issue10908" {
+  // expected-error @below {{hierpath points to inlined instance, cannot proceed}}
+  hw.hierpath private @nla [@Issue10908::@m, @Mid::@j]
+  firrtl.module private @X() {
+    %w = firrtl.wire sym @j : !firrtl.uint<5>
+    %z = firrtl.constant 0 : !firrtl.uint<5>
+    firrtl.matchingconnect %w, %z : !firrtl.uint<5>
+  }
+  firrtl.module private @Mid() {
+    // expected-note @below {{hierpath targets this inlined instance}}
+    firrtl.instance j sym @j {annotations = [{circt.nonlocal = @nla, class = "test"}]} @X()
+  }
+  firrtl.module @Issue10908() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    firrtl.instance m sym @m @Mid()
+  }
+  sv.verbatim "important instance: {{0}}" {symbols = [@nla]}
+}
+
+// -----
+
+// Inline-annotation variant of #10908 (previously an assert crash).
+
+firrtl.circuit "Issue10908Inline" {
+  // expected-error @below {{hierpath points to inlined instance, cannot proceed}}
+  hw.hierpath private @nla [@Issue10908Inline::@m, @Mid::@j]
+  firrtl.module private @X() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {}
+  firrtl.module private @Mid() {
+    // expected-note @below {{hierpath targets this inlined instance}}
+    firrtl.instance j sym @j {annotations = [{circt.nonlocal = @nla, class = "test"}]} @X()
+  }
+  firrtl.module @Issue10908Inline() {
+    firrtl.instance m sym @m @Mid()
+  }
+}
+
+// -----
+
+// The terminal may be absorbed in only some of a hierpath's contexts!
+// Here, @Mid is flattened into one parent and kept under the other.
+// Diagnosed conservatively (any broken context rejects); future work will
+// instead demote only the broken context.
+
+firrtl.circuit "Issue10908MixedContexts" {
+  // expected-error @below {{hierpath points to inlined instance, cannot proceed}}
+  hw.hierpath private @nla [@Mid::@j]
+  firrtl.module private @X() {}
+  firrtl.module private @Mid() {
+    // expected-note @below {{hierpath targets this inlined instance}}
+    firrtl.instance j sym @j {annotations = [{circt.nonlocal = @nla, class = "test"}]} @X()
+  }
+  firrtl.module private @FlatParent() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    firrtl.instance m sym @m @Mid()
+  }
+  firrtl.module private @PlainParent() {
+    firrtl.instance m sym @m @Mid()
+  }
+  firrtl.module @Issue10908MixedContexts() {
+    firrtl.instance f @FlatParent()
+    firrtl.instance p @PlainParent()
+  }
+}

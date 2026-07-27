@@ -2418,6 +2418,57 @@ firrtl.circuit "FlattenChoiceHopRetained" {
 
 // -----
 
+// A hierpath terminating at instance_choice survives inlining around it:
+// these hops relocate rather than absorb, so the terminal stays valid.
+// The path re-roots to the relocated op and the annotation localizes.
+// (Contrast issue #10908: a terminal at a plain absorbed instance diagnoses.)
+
+// CHECK-LABEL:  firrtl.circuit "ChoiceTerminalSurvives"
+firrtl.circuit "ChoiceTerminalSurvives" {
+  firrtl.option @Opt { firrtl.option_case @A }
+  // CHECK:          hw.hierpath private @nla [@ChoiceTerminalSurvives::@sel]
+  // CHECK:          hw.hierpath private @nla2 [@ChoiceTerminalSurvives::@sel]
+  hw.hierpath private @nla [@ChoiceTerminalSurvives::@m, @Mid::@sel]
+  hw.hierpath private @nla2 [@Mid::@sel]
+  firrtl.module @ChoiceTerminalSurvives() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    firrtl.instance m sym @m @Mid()
+  }
+  firrtl.module private @Mid() {
+    // CHECK:          firrtl.instance_choice m_sel sym @sel {annotations = [{class = "test"}, {class = "test"}]}
+    firrtl.instance_choice sel sym @sel {annotations = [{circt.nonlocal = @nla, class = "test"}, {circt.nonlocal = @nla2, class = "test"}]} @X alternatives @Opt { @A -> @Y }()
+  }
+  firrtl.module private @X() {}
+  firrtl.module private @Y() {}
+}
+
+// -----
+
+// The #10908 diagnostic is specific to the pointed-at instance: absorbing a
+// /different/ instance of the same module (here under a flatten root) must not
+// reject a hierpath whose own terminal instance survives.
+
+// CHECK-LABEL:  firrtl.circuit "TerminalOtherInstanceAbsorbed"
+firrtl.circuit "TerminalOtherInstanceAbsorbed" {
+  // CHECK:          hw.hierpath private @nla [@TerminalOtherInstanceAbsorbed::@p, @Keep::@j]
+  hw.hierpath private @nla [@TerminalOtherInstanceAbsorbed::@p, @Keep::@j]
+  firrtl.module private @X() {
+    %w = firrtl.wire : !firrtl.uint<1>
+  }
+  firrtl.module private @Keep() {
+    // CHECK:          firrtl.instance j sym @j {annotations = [{circt.nonlocal = @nla, class = "test"}]}
+    firrtl.instance j sym @j {annotations = [{circt.nonlocal = @nla, class = "test"}]} @X()
+  }
+  firrtl.module private @FlatParent() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    firrtl.instance x @X()
+  }
+  firrtl.module @TerminalOtherInstanceAbsorbed() {
+    firrtl.instance p sym @p @Keep()
+    firrtl.instance f @FlatParent()
+  }
+}
+
+// -----
+
 // Same, one level deeper and with the flatten module also inlined: the path
 // crosses a choice, a retained subtree, and a second choice.
 // The relocated namepath stays a valid instance path (a bare module symbol in a
