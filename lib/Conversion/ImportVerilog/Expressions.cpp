@@ -3287,8 +3287,9 @@ convertRealMathTwoBI(Context &context, Location loc, StringRef name,
                      std::span<const slang::ast::Expression *const> args) {
   // Slang already checks the arity of real math builtins.
   assert(args.size() == 2 && "real math builtin expects 2 arguments");
-  auto lhs = context.convertRvalueExpression(*args[0]);
-  auto rhs = context.convertRvalueExpression(*args[1]);
+  auto realType = moore::RealType::get(context.getContext(), moore::RealWidth::f64);
+  auto lhs = context.convertRvalueExpression(*args[0], realType);
+  auto rhs = context.convertRvalueExpression(*args[1], realType);
   if (!lhs || !rhs)
     return {};
   return OpTy::create(context.builder, loc, lhs, rhs);
