@@ -796,6 +796,10 @@ def TaggedReadGearbox(input_bitwidth: int,
                                                  ports.rst,
                                                  rst_value=0,
                                                  ce=upstream_xact | client_xact,
+                                                 name="chunk_counter_reg"))
+        set_client_valid = counter == (chunks - 1)
+        client_valid = ControlReg(ports.clk, ports.rst,
+                                  [set_client_valid & upstream_xact],
                                   [client_xact])
         client_xact.assign(client_valid & ready_for_upstream)
         for idx, reg_ce in enumerate(reg_ces):
@@ -855,7 +859,8 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   On the response path the per-chunk end-of-list markers are dropped and a
   single burst-final `last` is re-derived from the total transfer length, so the
   gearbox and client see one contiguous response stream identical to an unsplit
-  read.
+  read. This will be a performance limiter.
+  TODO: make this able to issue >1 one read at a time.
 
   Only one logical request is in flight at a time (matching the read processor's
   one-outstanding-transaction-per-client model): a new request is not accepted

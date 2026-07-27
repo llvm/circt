@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import subprocess
+
 import esiaccel
 from esiaccel.accelerator import AcceleratorConnection
 from esiaccel.cosim.pytest import cosim_test
