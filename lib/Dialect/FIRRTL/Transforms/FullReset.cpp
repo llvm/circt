@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "MemToRegOfVec.h"
 #include "circt/Dialect/FIRRTL/AnnotationDetails.h"
 #include "circt/Dialect/FIRRTL/FIRRTLInstanceGraph.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOpInterfaces.h"
@@ -255,7 +254,6 @@ static bool insertResetMux(ImplicitLocOpBuilder &builder, Value target,
   return resetValueUsed;
 }
 
-
 namespace {
 /// Whether a reset is sync or async.
 enum class ResetKind { Async, Sync };
@@ -271,6 +269,359 @@ static StringRef resetKindToStringRef(const ResetKind &kind) {
 }
 } // namespace
 
+//===----------------------------------------------------------------------===
+// Combinational Memory -> Register Vector
+//===----------------------------------------------------------------------===
+
+namespace {
+/// Helper that lowers combinational memories in a module to register vectors.
+struct MemToRegOfVecConverter {
+  explicit MemToRegOfVecConverter(bool ignoreReadEnable)
+      : ignoreReadEnable(ignoreReadEnable) {}
+
+  void runOnModule(FModuleOp mod, unsigned &numConverted) {
+    mod.getBodyBlock()->walk([&](MemOp memOp) {
+      LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
+
+      auto firMem = memOp.getSummary();
+      // Ignore sequential memories (SRAMs). Later passes either blackbox them
+      // or lower to a behavioral model; blowing them out here would break
+      // async-reset attachment expectations and SRAM metadata.
+      if (firMem.isSeqMem())
+        return;
+
+      generateMemory(memOp, firMem);
+      ++numConverted;
+      memOp.erase();
+    });
+  }
+
+  Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages, Value clock,
+                          Value pipeInput, StringRef name, Value gate = {}) {
+    if (!stages)
+      return pipeInput;
+
+    while (stages--) {
+      auto reg = RegOp::create(b, pipeInput.getType(), clock, name).getResult();
+      if (gate) {
+        WhenOp::create(b, gate, /*withElseRegion*/ false,
+                       [&]() { MatchingConnectOp::create(b, reg, pipeInput); });
+      } else
+        MatchingConnectOp::create(b, reg, pipeInput);
+
+      pipeInput = reg;
+    }
+
+    return pipeInput;
+  }
+
+  Value getClock(ImplicitLocOpBuilder &builder, Value bundle) {
+    return SubfieldOp::create(builder, bundle, "clk");
+  }
+
+  Value getAddr(ImplicitLocOpBuilder &builder, Value bundle) {
+    return SubfieldOp::create(builder, bundle, "addr");
+  }
+
+  Value getWmode(ImplicitLocOpBuilder &builder, Value bundle) {
+    return SubfieldOp::create(builder, bundle, "wmode");
+  }
+
+  Value getEnable(ImplicitLocOpBuilder &builder, Value bundle) {
+    return SubfieldOp::create(builder, bundle, "en");
+  }
+
+  Value getMask(ImplicitLocOpBuilder &builder, Value bundle) {
+    auto bType = type_cast<BundleType>(bundle.getType());
+    if (bType.getElement("mask"))
+      return SubfieldOp::create(builder, bundle, "mask");
+    return SubfieldOp::create(builder, bundle, "wmask");
+  }
+
+  Value getData(ImplicitLocOpBuilder &builder, Value bundle,
+                bool getWdata = false) {
+    auto bType = type_cast<BundleType>(bundle.getType());
+    if (bType.getElement("data"))
+      return SubfieldOp::create(builder, bundle, "data");
+    if (bType.getElement("rdata") && !getWdata)
+      return SubfieldOp::create(builder, bundle, "rdata");
+    return SubfieldOp::create(builder, bundle, "wdata");
+  }
+
+  void generateRead(const FirMemory &firMem, Value clock, Value addr,
+                    Value enable, Value data, Value regOfVec,
+                    ImplicitLocOpBuilder &builder) {
+    if (ignoreReadEnable) {
+      // If read enable is ignored, then guard the address update with read
+      // enable.
+      for (size_t j = 0, e = firMem.readLatency; j != e; ++j) {
+        auto enLast = enable;
+        if (j < e - 1)
+          enable = addPipelineStages(builder, 1, clock, enable, "en");
+        addr = addPipelineStages(builder, 1, clock, addr, "addr", enLast);
+      }
+    } else {
+      // Add pipeline stages to respect the read latency. One register for each
+      // latency cycle.
+      enable =
+          addPipelineStages(builder, firMem.readLatency, clock, enable, "en");
+      addr =
+          addPipelineStages(builder, firMem.readLatency, clock, addr, "addr");
+    }
+
+    // Read the register[address] into a temporary.
+    Value rdata = SubaccessOp::create(builder, regOfVec, addr);
+    if (!ignoreReadEnable) {
+      // Initialize read data out with invalid.
+      MatchingConnectOp::create(
+          builder, data, InvalidValueOp::create(builder, data.getType()));
+      // If enable is true, then connect the data read from memory register.
+      WhenOp::create(builder, enable, /*withElseRegion*/ false, [&]() {
+        MatchingConnectOp::create(builder, data, rdata);
+      });
+    } else {
+      // Ignore read enable signal.
+      MatchingConnectOp::create(builder, data, rdata);
+    }
+  }
+
+  void generateWrite(const FirMemory &firMem, Value clock, Value addr,
+                     Value enable, Value maskBits, Value wdataIn,
+                     Value regOfVec, ImplicitLocOpBuilder &builder) {
+
+    auto numStages = firMem.writeLatency - 1;
+    // Add pipeline stages to respect the write latency. Intermediate registers
+    // for each stage.
+    addr = addPipelineStages(builder, numStages, clock, addr, "addr");
+    enable = addPipelineStages(builder, numStages, clock, enable, "en");
+    wdataIn = addPipelineStages(builder, numStages, clock, wdataIn, "wdata");
+    maskBits = addPipelineStages(builder, numStages, clock, maskBits, "wmask");
+    // Create the register access.
+    FIRRTLBaseValue rdata = SubaccessOp::create(builder, regOfVec, addr);
+
+    // The tuple for the access to individual fields of an aggregate data type.
+    // Tuple::<register, data, mask>
+    // The logic:
+    // if (mask)
+    //  register = data
+    SmallVector<std::tuple<Value, Value, Value>, 8> loweredRegDataMaskFields;
+
+    // Write to each aggregate data field is guarded by the corresponding mask
+    // field. This means we have to generate read and write access for each
+    // individual field of the aggregate type.
+    // There are two options to handle this,
+    // 1. FlattenMemory: cast the aggregate data into a UInt and generate
+    // appropriate mask logic.
+    // 2. Create access for each individual field of the aggregate type.
+    // Here we implement the option 2 using getFields.
+    // getFields, creates an access to each individual field of the data and
+    // mask, and the corresponding field into the register.  It populates
+    // the loweredRegDataMaskFields vector.
+    // This is similar to what happens in LowerTypes.
+    //
+    if (!getFields(rdata, wdataIn, maskBits, loweredRegDataMaskFields,
+                   builder)) {
+      wdataIn.getDefiningOp()->emitOpError(
+          "Cannot convert memory to bank of registers");
+      return;
+    }
+    // If enable:
+    WhenOp::create(builder, enable, /*withElseRegion*/ false, [&]() {
+      // For each data field. Only one field if not aggregate.
+      for (auto regDataMask : loweredRegDataMaskFields) {
+        auto regField = std::get<0>(regDataMask);
+        auto dataField = std::get<1>(regDataMask);
+        auto maskField = std::get<2>(regDataMask);
+        // If mask, then update the register field.
+        WhenOp::create(builder, maskField, /*withElseRegion*/ false, [&]() {
+          MatchingConnectOp::create(builder, regField, dataField);
+        });
+      }
+    });
+  }
+
+  void generateReadWrite(const FirMemory &firMem, Value clock, Value addr,
+                         Value enable, Value maskBits, Value wdataIn,
+                         Value rdataOut, Value wmode, Value regOfVec,
+                         ImplicitLocOpBuilder &builder) {
+
+    // Add pipeline stages to respect the write latency. Intermediate registers
+    // for each stage. Number of pipeline stages, max of read/write latency.
+    auto numStages = std::max(firMem.readLatency, firMem.writeLatency) - 1;
+    addr = addPipelineStages(builder, numStages, clock, addr, "addr");
+    enable = addPipelineStages(builder, numStages, clock, enable, "en");
+    wdataIn = addPipelineStages(builder, numStages, clock, wdataIn, "wdata");
+    maskBits = addPipelineStages(builder, numStages, clock, maskBits, "wmask");
+
+    // Read the register[address] into a temporary.
+    Value rdata = SubaccessOp::create(builder, regOfVec, addr);
+
+    SmallVector<std::tuple<Value, Value, Value>, 8> loweredRegDataMaskFields;
+    if (!getFields(rdata, wdataIn, maskBits, loweredRegDataMaskFields,
+                   builder)) {
+      wdataIn.getDefiningOp()->emitOpError(
+          "Cannot convert memory to bank of registers");
+      return;
+    }
+    // Initialize read data out with invalid.
+    MatchingConnectOp::create(
+        builder, rdataOut, InvalidValueOp::create(builder, rdataOut.getType()));
+    // If enable:
+    WhenOp::create(builder, enable, /*withElseRegion*/ false, [&]() {
+      // If write mode:
+      WhenOp::create(
+          builder, wmode, true,
+          // Write block:
+          [&]() {
+            // For each data field. Only one field if not aggregate.
+            for (auto regDataMask : loweredRegDataMaskFields) {
+              auto regField = std::get<0>(regDataMask);
+              auto dataField = std::get<1>(regDataMask);
+              auto maskField = std::get<2>(regDataMask);
+              // If mask true, then set the field.
+              WhenOp::create(
+                  builder, maskField, /*withElseRegion*/ false, [&]() {
+                    MatchingConnectOp::create(builder, regField, dataField);
+                  });
+            }
+          },
+          // Read block:
+          [&]() { MatchingConnectOp::create(builder, rdataOut, rdata); });
+    });
+  }
+
+  // Generate individual field accesses for an aggregate type. Return false if
+  // it fails. Which can happen if invalid fields are present of the mask and
+  // input types donot match. The assumption is that, \p reg and \p input have
+  // exactly the same type. And \p mask has the same bundle fields, but each
+  // field is of type UInt<1> So, populate the \p results with each field
+  // access. For example, the first entry should be access to first field of \p
+  // reg, first field of \p input and first field of \p mask.
+  bool getFields(Value reg, Value input, Value mask,
+                 SmallVectorImpl<std::tuple<Value, Value, Value>> &results,
+                 ImplicitLocOpBuilder &builder) {
+
+    // Check if the number of fields of mask and input type match.
+    auto isValidMask = [&](FIRRTLType inType, FIRRTLType maskType) -> bool {
+      if (auto bundle = type_dyn_cast<BundleType>(inType)) {
+        if (auto mBundle = type_dyn_cast<BundleType>(maskType))
+          return mBundle.getNumElements() == bundle.getNumElements();
+      } else if (auto vec = type_dyn_cast<FVectorType>(inType)) {
+        if (auto mVec = type_dyn_cast<FVectorType>(maskType))
+          return mVec.getNumElements() == vec.getNumElements();
+      } else
+        return true;
+      return false;
+    };
+
+    std::function<bool(Value, Value, Value)> flatAccess =
+        [&](Value reg, Value input, Value mask) -> bool {
+      FIRRTLType inType = type_cast<FIRRTLType>(input.getType());
+      if (!isValidMask(inType, type_cast<FIRRTLType>(mask.getType()))) {
+        input.getDefiningOp()->emitOpError("Mask type is not valid");
+        return false;
+      }
+      return FIRRTLTypeSwitch<FIRRTLType, bool>(inType)
+          .Case<BundleType>([&](BundleType bundle) {
+            for (size_t i = 0, e = bundle.getNumElements(); i != e; ++i) {
+              auto regField = SubfieldOp::create(builder, reg, i);
+              auto inputField = SubfieldOp::create(builder, input, i);
+              auto maskField = SubfieldOp::create(builder, mask, i);
+              if (!flatAccess(regField, inputField, maskField))
+                return false;
+            }
+            return true;
+          })
+          .Case<FVectorType>([&](auto vector) {
+            for (size_t i = 0, e = vector.getNumElements(); i != e; ++i) {
+              auto regField = SubindexOp::create(builder, reg, i);
+              auto inputField = SubindexOp::create(builder, input, i);
+              auto maskField = SubindexOp::create(builder, mask, i);
+              if (!flatAccess(regField, inputField, maskField))
+                return false;
+            }
+            return true;
+          })
+          .Case<IntType>([&](auto iType) {
+            results.push_back({reg, input, mask});
+            return iType.getWidth().has_value();
+          })
+          .Default([&](auto) { return false; });
+    };
+    if (flatAccess(reg, input, mask))
+      return true;
+    return false;
+  }
+
+  /// Generate the logic for implementing the memory using Registers.
+  void generateMemory(MemOp memOp, FirMemory &firMem) {
+    ImplicitLocOpBuilder builder(memOp.getLoc(), memOp);
+    auto dataType = memOp.getDataType();
+
+    auto innerSym = memOp.getInnerSym();
+    SmallVector<Value> debugPorts;
+
+    RegOp regOfVec = {};
+    for (size_t index = 0, rend = memOp.getNumResults(); index < rend;
+         ++index) {
+      auto result = memOp.getResult(index);
+      if (type_isa<RefType>(result.getType())) {
+        debugPorts.push_back(result);
+        continue;
+      }
+      // Create a temporary wire to replace the memory port. This makes it
+      // simpler to delete the memOp.
+      auto wire = WireOp::create(
+          builder, result.getType(),
+          (memOp.getName() + "_" + memOp.getPortName(index)).str(),
+          memOp.getNameKind());
+      result.replaceAllUsesWith(wire.getResult());
+      result = wire.getResult();
+      // Create an access to all the common subfields.
+      auto adr = getAddr(builder, result);
+      auto enb = getEnable(builder, result);
+      auto clk = getClock(builder, result);
+      auto dta = getData(builder, result);
+      // IF the register is not yet created.
+      if (!regOfVec) {
+        // Create the register corresponding to the memory.
+        regOfVec =
+            RegOp::create(builder, FVectorType::get(dataType, firMem.depth),
+                          clk, memOp.getNameAttr());
+
+        // Copy all the memory annotations.
+        if (!memOp.getAnnotationsAttr().empty())
+          regOfVec.setAnnotationsAttr(memOp.getAnnotationsAttr());
+        if (innerSym)
+          regOfVec.setInnerSymAttr(memOp.getInnerSymAttr());
+      }
+      auto portKind = memOp.getPortKind(index);
+      if (portKind == MemOp::PortKind::Read) {
+        generateRead(firMem, clk, adr, enb, dta, regOfVec.getResult(), builder);
+      } else if (portKind == MemOp::PortKind::Write) {
+        auto mask = getMask(builder, result);
+        generateWrite(firMem, clk, adr, enb, mask, dta, regOfVec.getResult(),
+                      builder);
+      } else {
+        auto wmode = getWmode(builder, result);
+        auto wDta = getData(builder, result, true);
+        auto mask = getMask(builder, result);
+        generateReadWrite(firMem, clk, adr, enb, mask, wDta, dta, wmode,
+                          regOfVec.getResult(), builder);
+      }
+    }
+    // If a valid register is created, then replace all the debug port users
+    // with a RefType of the register. The RefType is obtained by using a
+    // RefSend on the register.
+    if (regOfVec)
+      for (auto r : debugPorts)
+        r.replaceAllUsesWith(RefSendOp::create(builder, regOfVec.getResult()));
+  }
+
+  bool ignoreReadEnable = false;
+};
+} // namespace
+
 //===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
@@ -281,7 +632,8 @@ namespace {
 /// Builds reset domains from FullReset / ExcludeFromFullReset annotations,
 /// converts combinational memories in asynchronous domains to register
 /// vectors, then implements full reset on registers and instance ports.
-struct FullResetPass : public circt::firrtl::impl::FullResetBase<FullResetPass> {
+struct FullResetPass
+    : public circt::firrtl::impl::FullResetBase<FullResetPass> {
   void runOnOperation() override;
   void runOnOperationInner();
 
@@ -393,7 +745,9 @@ void FullResetPass::convertMemsInAsyncDomains() {
   });
 
   unsigned converted = 0;
-  convertCombMemsToRegOfVec(asyncDomainMods, ignoreReadEnable, converted);
+  MemToRegOfVecConverter converter(ignoreReadEnable);
+  for (auto mod : asyncDomainMods)
+    converter.runOnModule(mod, converted);
   numConvertedMems = converted;
 }
 
@@ -422,8 +776,7 @@ LogicalResult FullResetPass::collectAnnos(CircuitOp circuit) {
   return success();
 }
 
-FailureOr<std::optional<Value>>
-FullResetPass::collectAnnos(FModuleOp module) {
+FailureOr<std::optional<Value>> FullResetPass::collectAnnos(FModuleOp module) {
   bool anyFailed = false;
   SmallSetVector<std::pair<Annotation, Location>, 4> conflictingAnnos;
 
@@ -651,10 +1004,9 @@ LogicalResult FullResetPass::buildDomains(CircuitOp circuit) {
   return failure(anyFailed);
 }
 
-void FullResetPass::buildDomains(FModuleOp module,
-                                   const InstancePath &instPath,
-                                   Value parentReset, InstanceGraph &instGraph,
-                                   unsigned indent) {
+void FullResetPass::buildDomains(FModuleOp module, const InstancePath &instPath,
+                                 Value parentReset, InstanceGraph &instGraph,
+                                 unsigned indent) {
   LLVM_DEBUG({
     llvm::dbgs().indent(indent * 2) << "Visiting ";
     if (instPath.empty())
@@ -735,7 +1087,7 @@ LogicalResult FullResetPass::determineImpl() {
 /// - Otherwise indicates that a port with the reset's name should be created.
 ///
 LogicalResult FullResetPass::determineImpl(FModuleOp module,
-                                             ResetDomain &domain) {
+                                           ResetDomain &domain) {
   // Nothing to do if the module needs no reset.
   if (!domain)
     return success();
@@ -818,7 +1170,7 @@ LogicalResult FullResetPass::implementFullReset() {
 /// in the module, and update any instantiated submodules with their
 /// corresponding reset implementation details.
 LogicalResult FullResetPass::implementFullReset(FModuleOp module,
-                                                  ResetDomain &domain) {
+                                                ResetDomain &domain) {
   // For modules in no-domain contexts, we skip local transformations (adding
   // reset ports, converting registers) but still process instances to tie off
   // reset ports of children that have a real reset domain.
@@ -961,8 +1313,8 @@ LogicalResult FullResetPass::implementFullReset(FModuleOp module,
 /// Helper to implement full reset for instance-like operations.
 /// This handles the common logic of adding reset ports and connecting them.
 void FullResetPass::implementFullReset(FInstanceLike inst,
-                                         StringAttr moduleName,
-                                         Value actualReset) {
+                                       StringAttr moduleName,
+                                       Value actualReset) {
   // Lookup the reset domain of the default target module. If there is no
   // reset domain associated with that module, as indicated by an empty list
   // of domains, simply skip it.
@@ -1029,7 +1381,7 @@ void FullResetPass::implementFullReset(FInstanceLike inst,
 /// module. If actualReset is null and op is an `InstanceOp`, creates a tie-off
 /// constant for added reset ports. If the op is not an instance, aborts.
 void FullResetPass::implementFullReset(Operation *op, FModuleOp module,
-                                         Value actualReset) {
+                                       Value actualReset) {
   ImplicitLocOpBuilder builder(op->getLoc(), op);
 
   // Handle instances.
@@ -1091,4 +1443,3 @@ void FullResetPass::implementFullReset(Operation *op, FModuleOp module,
     regOp.getResetValueMutable().assign(zero);
   }
 }
-

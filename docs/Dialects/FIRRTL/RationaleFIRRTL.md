@@ -697,14 +697,11 @@ conditions for macro replacement are as follows:
 
 Any `MemOp` not satisfying the above conditions is lowered to Register vector.
 
-#### MemToRegOfVec transformation outline:
+#### Mem conversion within FullReset:
 
-In the production Firtool pipeline, combinational-memory-to-register conversion
-is performed by `FullReset` for modules in asynchronous full-reset domains
-(after `InferResets` has made reset types concrete). The standalone
-`firrtl-mem-to-reg-of-vec` pass remains available for custom pipelines and unit
-tests; it converts combinational memories in modules that appear in the
-effective design.
+Combinational-memory-to-register conversion is performed by `FullReset` for
+modules in asynchronous full-reset domains (after `InferResets` has made reset
+types concrete). There is no separate MemToRegOfVec pass.
 
 1. Select all MemOps that are not candidates for macro replacement,
 2. Create a reg
@@ -735,7 +732,7 @@ to registers, this annotation must be properly scattered such that
 GrandCentralTaps can generate the appropriate code.
 
 The memtap module has memtap annotations, where the number of ports with the
-annotation is equal to the memory depth. In the `MemToRegOfVec` transformation,
+annotation is equal to the memory depth. When `FullReset` converts a memory to a register vector,
 after lowering the memory to the register vector, a subannotation is created for
 each sub-field of the data and the
 `sifive.enterprise.grandcentral.MemTapAnnotation` annotation is copied from the
