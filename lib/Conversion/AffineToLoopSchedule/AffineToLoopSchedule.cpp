@@ -448,8 +448,8 @@ LogicalResult AffineToLoopSchedule::createLoopSchedulePipeline(
   // If possible, attach a constant trip count attribute. This could be
   // generalized to support non-constant trip counts by supporting an AffineMap.
   std::optional<IntegerAttr> tripCountAttr;
-  if (auto tripCount = getConstantTripCount(forOp))
-    tripCountAttr = builder.getI64IntegerAttr(*tripCount);
+  if (auto tripCount = forOp.getStaticTripCount())
+    tripCountAttr = builder.getI64IntegerAttr(tripCount->getZExtValue());
 
   auto pipeline = LoopSchedulePipelineOp::create(builder, resultTypes, ii,
                                                  tripCountAttr, iterArgs);
