@@ -161,8 +161,8 @@ def HeaderMMIO(manifest_loc: int) -> Module:
       # the response stage. 'DesignResetController' latches it, so a single-cycle
       # pulse is sufficient to trigger the reset.
       reset_detect = (cmd.write & (slot == Bits(3)(7)) &
-                      (cmd.data == Bits(64)(ResetMagicNumber))).as_bits()
-      ports.reset_request = (reset_detect & s1_to_s2_xact).as_bits()
+                      (cmd.data == Bits(64)(ResetMagicNumber)))
+      ports.reset_request = reset_detect & s1_to_s2_xact
 
   return HeaderMMIO
 
@@ -248,11 +248,11 @@ def ChannelDemuxN_HalfStage_ReadyBlocking(
         consume.assign(valid_reg & ch_ready)
 
         # Accumulate selected_valid expression.
-        selected_valid_expr = (selected_valid_expr | (
-            (in_sel == Bits(sel_width)(i)) & valid_reg)).as_bits()
+        selected_valid_expr = selected_valid_expr | (
+            (in_sel == Bits(sel_width)(i)) & valid_reg)
 
       # Input ready only when selected output has no valid data latched.
-      input_ready.assign((selected_valid_expr ^ Bits(1)(1)).as_bits())
+      input_ready.assign(selected_valid_expr ^ Bits(1)(1))
 
     def get_out(self, index: int) -> ChannelSignal:
       return getattr(self, f"output_{index}")
@@ -409,12 +409,11 @@ def DesignResetController(
       # Count cycles while a reset is pending.
       count = Counter(counter_width)(clk=ports.clk,
                                      rst=ports.rst,
-                                     clear=(fire | ~pending).as_bits(),
+                                     clear=fire | ~pending,
                                      increment=pending,
                                      instance_name="reset_delay_counter")
-      fire.assign(
-          (pending &
-           (count.out == UInt(counter_width)(delay_cycles - 1))).as_bits())
+      fire.assign(pending &
+                  (count.out == UInt(counter_width)(delay_cycles - 1)))
       ports.design_reset = fire
       ports.reset_pending = pending
 
@@ -770,11 +769,6 @@ def TaggedReadGearbox(input_bitwidth: int,
         # sel==1.
         counter = Wire(UInt(counter_width), name="chunk_counter")
         client_xact = Wire(Bits(1))
-        # Wrap the next index at 'chunks - 1' so the counter never advances to
-        # an unreachable value when 'chunks' is not a power of two (e.g.
-        # chunks=3 must wrap 2 -> 0, not step to the invalid state 3, which
-        # would assert no reg_ce and drop the accepted word, deadlocking the
-        # stream).
         incremented = Mux(counter == UInt(counter_width)(chunks - 1),
                           (counter + 1).as_uint(counter_width),
                           UInt(counter_width)(0))
@@ -786,8 +780,7 @@ def TaggedReadGearbox(input_bitwidth: int,
                     UInt(counter_width)(1))).reg(ports.clk,
                                                  ports.rst,
                                                  rst_value=0,
-                                                 ce=(upstream_xact |
-                                                     client_xact).as_bits(),
+                                                 ce=upstream_xact | client_xact,
                                                  name="chunk_counter_reg"))
         set_client_valid = counter == (chunks - 1)
         client_valid = ControlReg(ports.clk, ports.rst,
@@ -851,7 +844,8 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
   On the response path the per-chunk end-of-list markers are dropped and a
   single burst-final `last` is re-derived from the total transfer length, so the
   gearbox and client see one contiguous response stream identical to an unsplit
-  read.
+  read. This will be a performance limiter.
+  TODO: make this able to issue >1 one read at a time.
 
   Only one logical request is in flight at a time (matching the read processor's
   one-outstanding-transaction-per-client model): a new request is not accepted
@@ -898,17 +892,17 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
       tag_reg = Wire(tag_type, name="tag_reg")
       words_left = Wire(UInt(words_width), name="words_left")  # resp words left
 
-      idle = ((~emit_busy) & (~resp_busy)).as_bits()
+      idle = (~emit_busy) & (~resp_busy)
 
       # --- Request intake and splitting ---
       req_ready = Wire(Bits(1))
       req_payload, req_valid = ports.req_in.unwrap(req_ready)
-      accept = (idle & req_valid).as_bits()
+      accept = idle & req_valid
       req_ready.assign(accept)
 
       max_chunk = UInt(length_width)(max_chunk_bytes)
       chunk_len = Mux(remaining > max_chunk, remaining, max_chunk)
-      last_chunk = (remaining <= max_chunk).as_bits()
+      last_chunk = remaining <= max_chunk
 
       req_out_ch, req_out_ready = req_channel_type.wrap(
           req_struct({
@@ -917,11 +911,11 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
               "tag": tag_reg,
           }), emit_busy)
       ports.req_out = req_out_ch
-      chunk_xact = (emit_busy & req_out_ready).as_bits()
+      chunk_xact = emit_busy & req_out_ready
 
       emit_busy.assign(
           ControlReg(clk,
-                     rst, [accept], [(chunk_xact & last_chunk).as_bits()],
+                     rst, [accept], [chunk_xact & last_chunk],
                      name="emit_busy_reg"))
 
       # cur_addr: load base on accept, advance by the chunk on each issue.
@@ -932,7 +926,7 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
               req_payload.address).reg(clk,
                                        rst,
                                        rst_value=0,
-                                       ce=(accept | chunk_xact).as_bits(),
+                                       ce=accept | chunk_xact,
                                        name="cur_addr_reg"))
 
       # remaining: load length on accept, subtract each issued chunk.
@@ -942,7 +936,7 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
               req_payload.length).reg(clk,
                                       rst,
                                       rst_value=0,
-                                      ce=(accept | chunk_xact).as_bits(),
+                                      ce=accept | chunk_xact,
                                       name="remaining_reg"))
 
       tag_reg.assign(req_payload.tag.reg(clk, rst, ce=accept, name="tag_reg_r"))
@@ -951,7 +945,7 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
       total_words = req_payload.length.as_bits()[word_shift:].as_uint()
       resp_ready = Wire(Bits(1))
       resp_payload, resp_valid = ports.resp_in.unwrap(resp_ready)
-      is_final_word = (words_left == UInt(words_width)(1)).as_bits()
+      is_final_word = words_left == UInt(words_width)(1)
       resp_out_ch, resp_out_ready = resp_channel_type.wrap(
           resp_struct({
               "tag": resp_payload.tag,
@@ -960,7 +954,7 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
           }), resp_valid)
       ports.resp_out = resp_out_ch
       resp_ready.assign(resp_out_ready)
-      resp_xact = (resp_valid & resp_out_ready).as_bits()
+      resp_xact = resp_valid & resp_out_ready
 
       # words_left: load total on accept, decrement per received word.
       words_dec = (words_left - UInt(words_width)(1)).as_uint(words_width)
@@ -969,12 +963,12 @@ def HostMemReadReqSplitter(req_channel_type: Channel,
               total_words).reg(clk,
                                rst,
                                rst_value=0,
-                               ce=(accept | resp_xact).as_bits(),
+                               ce=accept | resp_xact,
                                name="words_left_reg"))
 
       resp_busy.assign(
           ControlReg(clk,
-                     rst, [accept], [(resp_xact & is_final_word).as_bits()],
+                     rst, [accept], [resp_xact & is_final_word],
                      name="resp_busy_reg"))
 
   return HostMemReadReqSplitterImpl
@@ -1304,9 +1298,9 @@ def TaggedWriteGearbox(input_bitwidth: int, output_bitwidth: int,
           # transaction-framing 'last' changes.
           burst_shift = clog2(max_burst_words)
           burst_end = counter.out.as_bits()[:burst_shift].and_reduce()
-          last = (elem_end | burst_end).as_bits()
+          last = elem_end | burst_end
         else:
-          last = elem_end.as_bits()
+          last = elem_end
 
       upstream_channel, upstrm_ready_sig = TaggedWriteGearboxImpl.out.type.wrap(
           {
@@ -1477,7 +1471,7 @@ def HostMemWriteProcessor(
                                      rst=ports.rst,
                                      clear=elem_clear,
                                      increment=frame_xact)
-          elem_clear.assign((frame_xact & frame["last"]).as_bits())
+          elem_clear.assign(frame_xact & frame["last"])
           elem_addr = (frame["address"] +
                        elem_counter.out * UInt(64)(elem_stride)).as_uint(64)
           gearbox_in_chan, gearbox_in_ready = Channel(gearbox_in_type).wrap(

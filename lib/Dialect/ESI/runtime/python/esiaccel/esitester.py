@@ -22,11 +22,239 @@ from typing import Type
 import pycde.esi as esi
 from pycde import Clock, Module, Reset, System, generator, modparams
 from esiaccel.bsp import get_bsp
-from pycde.common import AppID, Constant, InputChannel, Output, OutputChannel
+from pycde.common import AppID, Constant, Input, InputChannel, Output, OutputChannel
 from pycde.constructs import ControlReg, Counter, Mux, NamedWire, Reg, Wire
 from pycde.module import Metadata
 from pycde.testing import print_info
 from pycde.types import Bits, Channel, ChannelSignaling, UInt
+
+# ---------------------------------------------------------------------------
+# Reusable building blocks for timing-friendly MMIO-controlled test modules.
+#
+# Both helpers keep the BSP's MMIO mux and the consumer-facing channel inside
+# this user module isolated from each other's combinational paths:
+#
+#   * `MmioRegistry` drives the MMIO bundle's `cmd_ready` and response `valid`
+#     from a single `resp_pending` ControlReg. The BSP MMIO mux therefore
+#     only sees FF outputs, and the user module's internal write-enable
+#     strobes are 1-cycle-late registered pulses gated by `cmd_xact_r`.
+#
+#   * `IterationGate` exposes a counter+limit "run for N iterations" widget
+#     whose `active` output is a ControlReg (FF) and whose only consumer-
+#     driven input (`iter_xact`) terminates at the counter's clock enable.
+#     The consumer's channel-ready signal never re-emerges combinationally
+#     from this module. It also always reports `cycles` telemetry for the
+#     active window.
+#
+# Use both together to build a test that drives a single channel with N
+# iterations under MMIO control without exposing the BSP arbitration mux to
+# wide internal combinational logic.
+# ---------------------------------------------------------------------------
+
+
+class MmioRegistry(Module):
+  """PyCDE submodule that owns an `esi.MMIO.read_write` request and
+    exposes a FF-bounded command/response surface.
+
+    The MMIO bundle is created inside this submodule's `@generator`, so
+    the service request's AppID is anchored at this instance's
+    hierarchical position. Callers should set `instance_name="mmio"` and
+    `appid=AppID("mmio", ...)` so the leaf MMIO AppID is always
+    `<parent>/.../mmio/cmd`.
+
+    The submodule drives the MMIO bundle's `cmd_ready` and response
+    `valid` from a single `resp_pending` ControlReg, so the BSP MMIO mux
+    only sees this submodule's outputs through a FF. Per-offset write-
+    enable strobes (computed by the caller via the `mmio_write_we`
+    helper) are derived from `cmd_xact_r` -- a 1-cycle-late registered
+    accept pulse -- so the caller's decoded write-enables never depend
+    combinationally on the BSP MMIO `cmd_valid`.
+
+    Ports:
+        resp_data  : Input  Bits(64)
+            64-bit MMIO read response value. Latched internally on
+            cmd_xact and presented to MMIO the cycle resp_pending
+            asserts.
+        cmd_r      : Output StructType (esi.MMIOReadWriteCmdType)
+            Registered MMIO command (the most recently accepted one).
+        cmd_xact_r : Output Bits(1)
+            One-cycle pulse one cycle after a command is accepted.
+            Combine with `cmd_r` to derive per-offset write-enable
+            strobes; see `mmio_write_we`.
+    """
+
+  clk = Clock()
+  rst = Reset()
+
+  resp_data = Input(Bits(64))
+
+  cmd_r = Output(esi.MMIOReadWriteCmdType)
+  cmd_xact_r = Output(Bits(1))
+
+  @generator
+  def construct(ports):
+    clk = ports.clk
+    rst = ports.rst
+
+    mmio_bundle = esi.MMIO.read_write(appid=AppID("cmd"))
+
+    cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
+    cmd_ready_wire = Wire(Bits(1))
+    cmd, cmd_valid = cmd_chan_wire.unwrap(cmd_ready_wire)
+
+    resp_pending_wire = Wire(Bits(1))
+    resp_data_r = Wire(Bits(64))
+    resp_chan, resp_ready = Channel(Bits(64)).wrap(resp_data_r,
+                                                   resp_pending_wire)
+    resp_xact = resp_pending_wire & resp_ready
+    cmd_xact = cmd_valid & ~resp_pending_wire
+    cmd_ready_wire.assign(~resp_pending_wire)
+    resp_pending_wire.assign(
+        ControlReg(
+            clk=clk,
+            rst=rst,
+            asserts=[cmd_xact],
+            resets=[resp_xact],
+            name="resp_pending",
+        ))
+
+    ports.cmd_r = cmd.reg(clk=clk, rst=rst, ce=cmd_xact, name="cmd_r")
+    ports.cmd_xact_r = cmd_xact.reg(
+        clk=clk,
+        rst=rst,
+        rst_value=Bits(1)(0),
+        name="cmd_xact_r",
+    )
+
+    resp_data_r.assign(
+        ports.resp_data.reg(
+            clk=clk,
+            rst=rst,
+            rst_value=Bits(64)(0),
+            ce=cmd_xact,
+            name="resp_data_r",
+        ))
+
+    mmio_rw_cmd_chan = mmio_bundle.unpack(data=resp_chan)["cmd"]
+    cmd_chan_wire.assign(mmio_rw_cmd_chan)
+
+
+def mmio_write_we(mmio, offset: int):
+  """Registered 1-cycle write-enable strobe for writes to `offset`.
+
+    Asserts for one cycle the cycle AFTER the MMIO command is accepted.
+    Use as the `ce` of registers that latch `mmio.cmd_r.data`.
+    """
+  return (mmio.cmd_xact_r & mmio.cmd_r.write &
+          (mmio.cmd_r.offset == UInt(32)(offset)))
+
+
+@modparams
+def IterationGate(count_width: int):
+  """Run an internal counter for `limit` iterations gated by `iter_xact`,
+    and always report cycle telemetry for the active window.
+
+    `start_pulse` asserts `active` (and clears the counters) for one cycle.
+    `iter_xact` is the per-iteration handshake strobe; it feeds only a
+    Counter clock enable. `active` clears the cycle after `iter_count`
+    reaches `limit`.
+
+    The consumer's channel-ready signal can flow into `iter_xact` without
+    re-emerging combinationally through any output: only Counters (FFs)
+    consume it.
+
+    Telemetry reported under this instance's AppID:
+        cycles : ui64
+            Cycles `active` was asserted between `start_pulse` and
+            `count_reached`; latched on `count_reached` so the host always
+            reads the final value of the most recent run.
+
+    Ports:
+        start_pulse   : Input  Bits(1)
+        limit         : Input  UInt(count_width)
+        iter_xact     : Input  Bits(1)
+        active        : Output Bits(1)            -- ControlReg, FF output
+        count_reached : Output Bits(1)            -- iter_count == limit
+        iter_count    : Output UInt(count_width)
+        iters_left    : Output UInt(count_width)
+    """
+
+  class IterationGate(Module):
+    clk = Clock()
+    rst = Reset()
+
+    start_pulse = Input(Bits(1))
+    limit = Input(UInt(count_width))
+    iter_xact = Input(Bits(1))
+
+    active = Output(Bits(1))
+    count_reached = Output(Bits(1))
+    iter_count = Output(UInt(count_width))
+    iters_left = Output(UInt(count_width))
+
+    @generator
+    def construct(ports):
+      clk = ports.clk
+      rst = ports.rst
+
+      # `count_reached_sig` fires combinationally on the last
+      # `iter_xact` (when `iter_count` is about to become
+      # `limit`), so `active` drops the cycle the consumer would
+      # have issued the (limit+1)th transaction. Without this,
+      # there is a 2-cycle race between `iter_count` reaching
+      # `limit` and the ControlReg dropping `active`, during
+      # which the consumer issues one extra transaction -- and
+      # for `limit=1` the host-visible counters jump straight
+      # from 0 to 2, so any host poll for "== 1" never catches.
+      # `count_reached` is combinational on `iter_xact` (which is
+      # consumer-driven), but it only feeds the ControlReg reset
+      # (a flop) and telemetry, so the consumer's ready signal
+      # does not re-emerge combinationally on `active`.
+      count_reached_wire = Wire(Bits(1))
+      active_r = ControlReg(
+          clk=clk,
+          rst=rst,
+          asserts=[ports.start_pulse],
+          resets=[count_reached_wire],
+          name="active_r",
+      )
+      counter = Counter(count_width)(
+          clk=clk,
+          rst=rst,
+          clear=ports.start_pulse,
+          increment=ports.iter_xact,
+          instance_name="iter_counter",
+      )
+      last_iter = (counter.out.as_uint() == (
+          ports.limit - UInt(count_width)(1)).as_uint(count_width)).as_bits(1)
+      count_reached_sig = ports.iter_xact & last_iter
+      count_reached_wire.assign(count_reached_sig)
+
+      ports.active = active_r
+      ports.count_reached = count_reached_sig
+      ports.iter_count = counter.out.as_uint()
+      ports.iters_left = (ports.limit -
+                          counter.out.as_uint()).as_uint(count_width)
+
+      cycles_cnt = Counter(64)(
+          clk=clk,
+          rst=rst,
+          clear=ports.start_pulse,
+          increment=active_r,
+          instance_name="cycle_counter",
+      )
+      final_cycles = Reg(
+          UInt(64),
+          clk=clk,
+          rst=rst,
+          rst_value=0,
+          ce=count_reached_sig,
+          name="final_cycles",
+      )
+      final_cycles.assign(cycles_cnt.out.as_uint())
+      esi.Telemetry.report_signal(clk, rst, AppID("cycles"), final_cycles)
+
+  return IterationGate
 
 
 class CallbackTest(Module):
@@ -547,208 +775,129 @@ def MMIOAdd(add_amt: int) -> Type[Module]:
 
 
 @modparams
-def AddressCommand(width: int):
+def BurstCommand(width: int):
+  """MMIO-controlled single-burst command surface. Replaces AddressCommand's
+    per-flit address stream: exposes one {address, tag, length} burst request
+    per command -- for a ``read_list`` or a windowed (list) write -- and tracks
+    completion.
 
-  class AddressCommand(Module):
-    """Constructs an module which takes MMIO commands and issues host memory
-        commands based on those commands. Tracks the number of cycles to issue
-        addresses and get all of the expected responses.
+    MMIO offsets: 0x10 base address, 0x18 list length (flits), 0x20 start.
+    """
 
-        MMIO offsets:
-            0x10: Starting address for host memory operations.
-            0x18: Number of flits to read/write.
-            0x20: Start read/write operation.
-        """
-
+  class BurstCommand(Module):
     clk = Clock()
     rst = Reset()
 
-    # Number of flits left to issue.
+    # Remaining elements (for MMIO read-back).
     flits_left = Output(UInt(64))
-    # Signal to start the operation.
-    command_go = Output(Bits(1))
-
-    # Channel which issues hostmem addresses. Must be transformed into
-    # read/write requests by the instantiator.
-    hostmem_cmd_address = OutputChannel(UInt(64))
-
-    # Channel which indicates when the read/write operation is done.
+    # Single {address, tag, length} burst request, held valid until
+    # accepted.
+    burst_req = OutputChannel(esi.HostMem.read_req_burst_type())
+    # One Bits(0) completion token per received element / write ack.
     hostmem_cmd_done = InputChannel(Bits(0))
 
     @generator
     def construct(ports):
-      # MMIO command channel setup.
-      cmd_chan_wire = Wire(Channel(esi.MMIOReadWriteCmdType))
-      resp_ready_wire = Wire(Bits(1))
-      cmd, cmd_valid = cmd_chan_wire.unwrap(resp_ready_wire)
-      mmio_xact = cmd_valid & resp_ready_wire
+      clk = ports.clk
+      rst = ports.rst
 
-      # Write enables.
-      start_addr_we = (mmio_xact & cmd.write & (cmd.offset == UInt(32)(0x10)))
-      flits_we = mmio_xact & cmd.write & (cmd.offset == UInt(32)(0x18))
-      start_op_we = mmio_xact & cmd.write & (cmd.offset == UInt(32)(0x20))
-      ports.command_go = start_op_we
+      resp_data_wire = Wire(Bits(64))
+      mmio = MmioRegistry(
+          clk=clk,
+          rst=rst,
+          resp_data=resp_data_wire,
+          instance_name="mmio",
+          appid=AppID("mmio", width),
+      )
 
-      # Registers for start address and number of flits.
-      start_addr = cmd.data.as_uint().reg(
-          clk=ports.clk,
-          rst=ports.rst,
+      start_addr = mmio.cmd_r.data.as_uint().reg(
+          clk=clk,
+          rst=rst,
           rst_value=0,
-          ce=start_addr_we,
+          ce=mmio_write_we(mmio, 0x10),
           name="start_addr",
       )
-      flits_total = cmd.data.as_uint().reg(
-          clk=ports.clk,
-          rst=ports.rst,
+      flits_total = mmio.cmd_r.data.as_uint().reg(
+          clk=clk,
+          rst=rst,
           rst_value=0,
-          ce=flits_we,
+          ce=mmio_write_we(mmio, 0x18),
           name="flits_total",
       )
+      start_op_we = mmio_write_we(mmio, 0x20)
 
-      # Response counter.
-      responses_incr = Wire(Bits(1))
-      responses_cnt = Counter(64)(
-          clk=ports.clk,
-          rst=ports.rst,
-          clear=start_op_we,
-          increment=responses_incr,
-          instance_name="addr_cmd_responses_cnt",
-      )
-
-      operation_done = responses_cnt.out.as_uint() == flits_total
-      operation_active = ControlReg(
-          clk=ports.clk,
-          rst=ports.rst,
-          asserts=[start_op_we],
-          resets=[operation_done],
-          name="operation_active",
-      )
-      # Cycle counter while active.
-      cycles_cnt = Counter(64)(
-          clk=ports.clk,
-          rst=ports.rst,
-          clear=start_op_we,
-          increment=operation_active,
-          instance_name="addr_cmd_cycle_counter",
-      )
-      # Latch final cycle count at completion.
-      final_cycles = Reg(
-          UInt(64),
-          clk=ports.clk,
-          rst=ports.rst,
-          rst_value=0,
-          ce=operation_done,
-          name="addr_cmd_cycles",
-      )
-      final_cycles.assign(cycles_cnt.out.as_uint())
-
-      # Issue counter.
-      issue_incr = Wire(Bits(1))
-      issue_cnt = Counter(64)(
-          clk=ports.clk,
-          rst=ports.rst,
-          clear=start_op_we,
-          increment=issue_incr,
-      )
-
-      # Increment by number of bytes per flit, rounded up to nearest 32
-      # bits (double word).
-      incr_bytes = UInt(64)(((width + 31) // 32) * 4)
-
-      # Generate current address.
-      current_addr = (start_addr +
-                      (issue_cnt.out.as_uint() * incr_bytes)).as_uint(64)
-
-      # Valid when active and still have flits to issue.
-      addr_valid = operation_active & (issue_cnt.out.as_uint() < flits_total)
-      addr_chan, addr_ready = Channel(UInt(64),
-                                      ChannelSignaling.ValidReady).wrap(
-                                          current_addr, addr_valid)
-      issue_xact = addr_valid & addr_ready
-      issue_incr.assign(issue_xact)
-
-      # Consume hostmem_cmd_done (Bits(0) channel) for completed responses.
+      # Response side: count completed elements; auto-reports cycles.
       _, done_valid = ports.hostmem_cmd_done.unwrap(Bits(1)(1))
-      responses_incr.assign(done_valid)
-
-      # flits_left = total - responses received.
-      flits_left_val = (flits_total - responses_cnt.out.as_uint()).as_uint(64)
-      ports.flits_left = flits_left_val  # direct assignment
-
-      # Drive output channel.
-      ports.hostmem_cmd_address = addr_chan  # direct assignment
-
-      # MMIO read response: return flits_left.
-      response_data = flits_left_val.as_bits(64)
-      response_chan, response_ready = Channel(Bits(64)).wrap(
-          response_data, cmd_valid)
-      resp_ready_wire.assign(response_ready)
-
-      mmio_rw = esi.MMIO.read_write(appid=AppID("cmd", width))
-      mmio_rw_cmd_chan = mmio_rw.unpack(data=response_chan)["cmd"]
-      cmd_chan_wire.assign(mmio_rw_cmd_chan)
-
-      # Report telemetry.
-      esi.Telemetry.report_signal(
-          ports.clk,
-          ports.rst,
-          esi.AppID("addrCmdCycles"),
-          final_cycles,
+      resp_gate = IterationGate(64)(
+          clk=clk,
+          rst=rst,
+          start_pulse=start_op_we,
+          limit=flits_total,
+          iter_xact=done_valid,
+          instance_name="resp_gate",
+          appid=AppID("addrCmdResp"),
       )
-      esi.Telemetry.report_signal(
-          ports.clk,
-          ports.rst,
-          esi.AppID("addrCmdIssued"),
-          issue_cnt.out,
+      ports.flits_left = resp_gate.iters_left
+      resp_data_wire.assign(resp_gate.iters_left.as_bits(64))
+
+      # Single burst request, held valid from start until accepted.
+      burst_accepted = Wire(Bits(1))
+      burst_pending = ControlReg(
+          clk=clk,
+          rst=rst,
+          asserts=[start_op_we],
+          resets=[burst_accepted],
+          name="burst_pending",
       )
-      esi.Telemetry.report_signal(
-          ports.clk,
-          ports.rst,
-          esi.AppID("addrCmdResponses"),
-          responses_cnt.out,
+      burst_req_t = esi.HostMem.read_req_burst_type()
+      burst_chan, burst_ready = Channel(burst_req_t).wrap(
+          burst_req_t({
+              "address": start_addr,
+              "tag": UInt(8)(0),
+              "length": flits_total,
+          }),
+          burst_pending,
+      )
+      burst_accepted.assign((burst_pending & burst_ready).as_bits())
+      ports.burst_req = burst_chan
+
+      # Issue side: one issued command per accepted burst.
+      issue_cnt = Counter(64)(
+          clk=clk,
+          rst=rst,
+          clear=start_op_we,
+          increment=burst_accepted,
       )
 
-  return AddressCommand
+      esi.Telemetry.report_signal(clk, rst, esi.AppID("addrCmdIssued"),
+                                  issue_cnt.out)
+      esi.Telemetry.report_signal(clk, rst, esi.AppID("addrCmdResponses"),
+                                  resp_gate.iter_count)
+
+  return BurstCommand
 
 
 @modparams
 def ReadMem(width: int):
 
   class ReadMem(Module):
-    """Host memory read test module.
+    """Host memory burst (list) read test module.
 
-        Function:
-          Issues a sequence of host memory read requests using an internal
-          address/control submodule which is configured via MMIO writes. Each
-          read returns 'width' bits; the low 64 bits of the most recent
-          response are latched and exported as telemetry (lastReadLSB).
+        Issues a single ``read_list`` burst of 'flits' elements starting at the
+        base address (both configured via MMIO) and receives the elements back
+        as a windowed list (num_items=1 -> one element per frame). The low 64
+        bits of the most recent element are exported as telemetry (lastReadLSB).
 
-        Flit width:
-          'width' is the number of payload data bits per read flit. The address
-          stride between successive requests is ceil(width/32) 32-bit words
-          (= ceil(width/32) * 4 bytes). Non–power‑of‑two widths are supported
-          and packed into the minimum whole 32‑bit word count.
-
-        MMIO command interface:
-          0x10  Write: Starting base address for the read operation.
-          0x18  Write: Number of flits (read transactions) to perform.
-          0x20  Write: Start the operation (assert once to launch).
-          Reads return the current flits_left (remaining responses).
-
-        Operation:
-          After 0x20 is written, sequential addresses are generated:
-            addr = start_addr + i * ceil(width/32)   (i = 0 .. flits-1)
-          Each address produces one host memory read request.
+        MMIO command interface (via BurstCommand):
+          0x10  Write: base address for the read.
+          0x18  Write: number of list elements (flits) to read.
+          0x20  Write: start the operation.
+          Reads return the remaining element count.
 
         Telemetry (AppID -> signal):
-          addrCmdCycles     Total cycles elapsed during the active window.
-          addrCmdIssued     Count of host memory commands issued.
-          addrCmdResponses  Count of host memory responses received.
-          lastReadLSB       Low 64 bits of the most recently received read data.
-
-        Notes:
-          Backpressure on the read response channel naturally throttles issue.
-          Completion occurs when responses == requested flits.
+          addrCmdIssued     Count of burst commands issued (1 per command).
+          addrCmdResponses  Count of list elements received.
+          lastReadLSB       Low 64 bits of the most recent element.
         """
 
     clk = Clock()
@@ -761,37 +910,35 @@ def ReadMem(width: int):
       clk = ports.clk
       rst = ports.rst
 
-      address_cmd_resp = Wire(Channel(Bits(0)))
-      addresses = AddressCommand(width)(
+      done_wire = Wire(Channel(Bits(0)))
+      cmd = BurstCommand(width)(
           clk=clk,
           rst=rst,
-          hostmem_cmd_done=address_cmd_resp,
-          instance_name="address_command",
+          hostmem_cmd_done=done_wire,
+          instance_name="burst_command",
       )
 
-      read_cmd_chan = addresses.hostmem_cmd_address.transform(
-          lambda addr: esi.HostMem.ReadReqType({
-              "tag": UInt(8)(0),
-              "address": addr
-          }))
-      read_responses = esi.HostMem.read(
+      # One read_list request per command; elements come back as a
+      # windowed list.
+      read_responses = esi.HostMem.read_list(
           appid=AppID("host"),
-          data_type=Bits(width),
-          req=read_cmd_chan,
+          req=cmd.burst_req,
+          element_type=Bits(width),
+          num_items=1,
       )
-      # Signal completion to AddressCommand (each response -> Bits(0)).
-      address_cmd_resp.assign(read_responses.transform(lambda resp: Bits(0)(0)))
-      # Snoop the response channel to capture the low 64 bits without consuming it.
-      read_resp_valid, _, read_resp_data = read_responses.snoop()
+      # Each received element -> one completion token to BurstCommand.
+      done_wire.assign(read_responses.transform(lambda resp: Bits(0)(0)))
+      # Snoop the low 64 bits of each element without consuming it.
+      read_resp_valid_snoop, _, read_resp_data = read_responses.snoop()
       last_read_lsb = Reg(
           UInt(64),
           clk=ports.clk,
           rst=ports.rst,
           rst_value=0,
-          ce=read_resp_valid,
+          ce=read_resp_valid_snoop,
           name="last_read_lsb",
       )
-      last_read_lsb.assign(read_resp_data.data.as_uint(64))
+      last_read_lsb.assign(read_resp_data.unwrap()["data"][0].as_uint(64))
       esi.Telemetry.report_signal(
           ports.clk,
           ports.rst,
@@ -806,37 +953,23 @@ def ReadMem(width: int):
 def WriteMem(width: int) -> Type[Module]:
 
   class WriteMem(Module):
-    """Host memory write test module.
+    """Host memory burst (list) write test module.
 
-        Function:
-          Issues sequential host memory write requests produced by an internal
-          address/control submodule configured via MMIO writes. Data for each
-          flit is the current free‑running 32‑bit cycle counter value
-          (zero‑extended or truncated to 'width').
+        Issues a single windowed (list) write of 'flits' elements to sequential
+        addresses starting at the base address (both configured via MMIO). The
+        elements are streamed as a windowed list (num_items=1 -> one element per
+        frame, 'last' on the final); each element's payload is its frame index.
 
-        Flit width:
-          'width' is the number of payload data bits per write flit. The address
-          stride between successive writes is ceil(width/32) 32‑bit words
-          (= ceil(width/32) * 4 bytes). Wider payloads span multiple words;
-          narrower payloads still consume one word of address space per flit.
-
-        MMIO command interface:
-          0x10  Write: Starting base address for the write operation.
-          0x18  Write: Number of flits (write transactions) to perform.
-          0x20  Write: Start the operation (assert once to launch).
-          Reads return the current flits_left (remaining responses).
-
-        Data pattern:
-          data[i] = cycle_counter sampled when the write command for flit i is formed.
+        MMIO command interface (via BurstCommand):
+          0x10  Write: base address for the write.
+          0x18  Write: number of list elements (flits) to write.
+          0x20  Write: start the operation.
+          Reads return the remaining element count.
 
         Telemetry (AppID -> signal):
-          addrCmdCycles     Total cycles elapsed during the active window.
-          addrCmdIssued     Count of host memory commands issued.
-          addrCmdResponses  Count of host memory responses received.
-
-        Notes:
-          No additional telemetry beyond the above signals is generated here.
-          Completion occurs when write responses == requested flits.
+          addrCmdIssued     Count of burst commands issued (1 per command).
+          addrCmdResponses  Count of write acks received.
+          addrCmdResp/cycles  Active-window cycle count.
         """
 
     clk = Clock()
@@ -849,37 +982,77 @@ def WriteMem(width: int) -> Type[Module]:
       clk = ports.clk
       rst = ports.rst
 
-      cycle_counter_reset = Wire(Bits(1))
-      cycle_counter = Counter(32)(
+      done_wire = Wire(Channel(Bits(0)))
+      cmd = BurstCommand(width)(
           clk=clk,
           rst=rst,
-          clear=Bits(1)(0),
-          increment=Bits(1)(1),
+          hostmem_cmd_done=done_wire,
+          instance_name="burst_command",
       )
 
-      address_cmd_resp = Wire(Channel(Bits(0)))
-      addresses = AddressCommand(width)(
+      # Windowed (list) write: consume the single {base, tag, length}
+      # burst request and stream 'length' elements to sequential
+      # addresses (num_items=1 -> one element per frame).
+      write_win = esi.HostMem.write_window(Bits(width), 1)
+      lowered = write_win.lowered_type
+
+      streaming = Wire(Bits(1))
+      frame_xact = Wire(Bits(1))
+      burst_ready = (~streaming).as_bits()
+      burst, burst_valid = cmd.burst_req.unwrap(burst_ready)
+      burst_accept = (burst_valid & ~streaming).as_bits()
+      base_addr = burst.address.reg(
           clk=clk,
           rst=rst,
-          hostmem_cmd_done=address_cmd_resp,
-          instance_name="address_command",
+          rst_value=0,
+          ce=burst_accept,
+          name="base_addr",
       )
-      cycle_counter_reset.assign(addresses.command_go)
+      total = burst.length.reg(
+          clk=clk,
+          rst=rst,
+          rst_value=0,
+          ce=burst_accept,
+          name="total",
+      )
 
-      write_cmd_chan = addresses.hostmem_cmd_address.transform(
-          lambda addr: esi.HostMem.write_req_channel_type(UInt(width))({
-              "tag": UInt(8)(0),
-              "address": addr,
-              "data": cycle_counter.out.as_uint(width),
-          }))
+      frame_counter = Counter(64)(
+          clk=clk,
+          rst=rst,
+          clear=burst_accept,
+          increment=frame_xact,
+      )
+      is_last = (frame_counter.out == (total -
+                                       UInt(64)(1)).as_uint(64)).as_bits(1)
+      last_accept = (frame_xact & is_last).as_bits()
+      streaming.assign(
+          ControlReg(
+              clk=clk,
+              rst=rst,
+              asserts=[burst_accept],
+              resets=[last_accept],
+              name="streaming",
+          ))
+
+      # Data pattern: the frame index (non-0xFF), sized to the element.
+      element = frame_counter.out.as_uint(width).as_bits()
+      frame_val = lowered({
+          "address": base_addr,
+          "tag": UInt(8)(0),
+          "data": [element],
+          "data_size": Bits(0)(0),
+          "last": is_last,
+      })
+      frame_chan, frame_ready = Channel(write_win).wrap(
+          write_win.wrap(frame_val), streaming)
+      frame_xact.assign((streaming & frame_ready).as_bits())
 
       write_responses = esi.HostMem.write(
           appid=AppID("host"),
-          req=write_cmd_chan,
+          req=frame_chan,
       )
-      # Signal completion to AddressCommand (each response -> Bits(0)).
-      address_cmd_resp.assign(
-          write_responses.transform(lambda resp: Bits(0)(0)))
+      # Each write ack -> one completion token to BurstCommand.
+      done_wire.assign(write_responses.transform(lambda resp: Bits(0)(0)))
 
   return WriteMem
 

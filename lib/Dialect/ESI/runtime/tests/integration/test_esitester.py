@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import subprocess
+
 import esiaccel
 from esiaccel.accelerator import AcceleratorConnection
 from esiaccel.cosim.pytest import cosim_test
@@ -104,15 +106,15 @@ class TestCosimEsitester:
     check_lines(stdout, [
         "* Telemetry",
         "fromhostdma[32].fromHostCycles: 0",
-        "readmem[32].addrCmdCycles: 0",
         "readmem[32].addrCmdIssued: 0",
         "readmem[32].addrCmdResponses: 0",
         "readmem[32].lastReadLSB: 0",
         "tohostdma[32].toHostCycles: 0",
         "tohostdma[32].totalWrites: 0",
-        "writemem[32].addrCmdCycles: 0",
         "writemem[32].addrCmdIssued: 0",
         "writemem[32].addrCmdResponses: 0",
+        "readmem[32].addrCmdResp.cycles: 0",
+        "writemem[32].addrCmdResp.cycles: 0",
     ])
 
   def test_reset(self, host: str, port: int) -> None:
@@ -178,6 +180,35 @@ class TestCosimEsitesterDma:
   def test_dma(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
     run_cmd(["esitester", "cosim", conn, "dma", "-w", "-r"])
+
+  def test_hostmembw(self, host: str, port: int) -> None:
+    conn = f"{host}:{port}"
+    # A 1000-element read burst at 32 bits (8 bytes/element) is 8000 bytes,
+    # which exceeds the PCIe maximum read request size and so exercises the
+    # read-request splitter. Capture stderr too and assert the runtime never
+    # sees an oversized (unsplit) read request.
+    result = subprocess.run(
+        [
+            "esitester", "cosim", conn, "hostmembw", "-w", "-r", "-c", "1000",
+            "--widths", "32", "128"
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    combined = result.stdout + result.stderr
+    assert "exceeds the PCIe maximum read request size" not in combined, \
+        combined
+
+  def test_aggbandwidth(self, host: str, port: int) -> None:
+    conn = f"{host}:{port}"
+    # Aggregate bandwidth across the width-512 readmem*/writemem* units
+    # (4 read + 4 write), exercising the multi-unit nested-AppID resolution
+    # (mmio[width]/cmd and addrCmdResp/cycles) of the burst modules.
+    run_cmd([
+        "esitester", "cosim", conn, "aggbandwidth", "--width", "512", "-r",
+        "-w", "-c", "64"
+    ])
 
   def test_telemetry(self, host: str, port: int) -> None:
     conn = f"{host}:{port}"
