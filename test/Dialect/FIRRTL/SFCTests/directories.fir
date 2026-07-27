@@ -1,9 +1,7 @@
-; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.sitestblackboxes.anno.json | FileCheck %s -check-prefixes=CHECK,SITEST_NODUT
-; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.sitestblackboxes.anno.json -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,SITEST_DUT
-; RUN: firtool %s -repl-seq-mem -repl-seq-mem-file=mems.conf -disable-all-randomization -disable-opt | FileCheck %s -check-prefixes=CHECK,MEMS_NODUT
-; RUN: firtool %s -repl-seq-mem -repl-seq-mem-file=mems.conf -disable-all-randomization -disable-opt -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,MEMS_DUT
-; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.memtoregofvec.anno.json | FileCheck %s -check-prefixes=CHECK,MEMTOREG_NODUT
-; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.memtoregofvec.anno.json -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=CHECK,MEMTOREG_DUT
+; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.sitestblackboxes.anno.json | FileCheck %s -check-prefixes=SITEST_NODUT
+; RUN: firtool %s -disable-all-randomization -disable-opt -annotation-file %s.sitestblackboxes.anno.json -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=SITEST_DUT
+; RUN: firtool %s -repl-seq-mem -repl-seq-mem-file=mems.conf -disable-all-randomization -disable-opt | FileCheck %s -check-prefixes=MEMS_NODUT
+; RUN: firtool %s -repl-seq-mem -repl-seq-mem-file=mems.conf -disable-all-randomization -disable-opt -annotation-file %s.markdut.anno.json | FileCheck %s -check-prefixes=MEMS_DUT
 ; RUN: firtool %s -disable-all-randomization -disable-opt -repl-seq-mem -repl-seq-mem-file=mems.conf -annotation-file %s.sitestblackboxes.anno.json --ir-verilog | FileCheck %s -check-prefix=MLIR_OUT
 
 FIRRTL version 4.0.0
@@ -107,21 +105,6 @@ circuit TestHarness:
     inst baz of Baz
     inst baz_bbox of Baz_BlackBox
 
-
-; CHECK:            module Foo()
-; MEMTOREG_DUT-NOT:   reg [7:0] foo_combmem
-; MEMTOREG_NODUT:     reg [7:0] foo_combmem
-; CHECK:            endmodule
-
-; CHECK:            module Bar()
-; MEMTOREG_DUT:       reg [7:0] bar_combmem
-; MEMTOREG_NODUT:     reg [7:0] bar_combmem
-; CHECK:            endmodule
-
-; CHECK:            module Baz()
-; MEMTOREG_DUT:       reg [7:0] baz_combmem
-; MEMTOREG_NODUT:     reg [7:0] baz_combmem
-; CHECK:            endmodule
 
 ; SITEST_DUT:       FILE "testbench.sitest.json"
 ; SITEST_DUT-NOT:   FILE

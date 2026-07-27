@@ -347,17 +347,32 @@ def InferWidths : Pass<"firrtl-infer-widths", "firrtl::CircuitOp"> {
 }
 
 def InferResets : Pass<"firrtl-infer-resets", "firrtl::CircuitOp"> {
-  let summary = "Infer reset synchronicity and add implicit resets";
+  let summary = "Infer the concrete type of abstract resets";
   let description = [{
-    This pass infers whether resets are synchronous or asynchronous, and extends
-    reset-less registers with a reset based on the following
-    annotations:
-
-    - `circt.FullResetAnnotation`
-    - `circt.ExcludeFromFullResetAnnotation`
-    - `sifive.enterprise.firrtl.FullAsyncResetAnnotation` (deprecated)
-    - `sifive.enterprise.firrtl.IgnoreFullAsyncResetAnnotation` (deprecated)
+    This pass traces abstract `reset` networks throughout a circuit, infers
+    whether each network is synchronous (`uint<1>`) or asynchronous
+    (`asyncreset`), and rewrites types accordingly. It also diagnoses ports
+    that remain abstract after inference.
   }];
+}
+
+def FullReset : Pass<"firrtl-full-reset", "firrtl::CircuitOp"> {
+  let summary = "Implement FullResetAnnotation domains and convert async-domain comb mems";
+  let description = [{
+    Consumes `circt.FullResetAnnotation` / `circt.ExcludeFromFullResetAnnotation`
+    (and deprecated FullAsync / Ignore variants after LowerAnnotations).
+    Builds reset domains, converts combinational memories to register
+    vectors in modules that are in *asynchronous* full-reset domains,
+    then implements full reset on registers (ports, muxing, zeros).
+  }];
+  let options = [
+    Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool", "false",
+      "ignore the read enable signal when converting mems">
+  ];
+  let statistics = [
+    Statistic<"numConvertedMems", "num-converted-mems",
+      "Number of memories converted to registers">,
+  ];
 }
 
 def BlackBoxReader : Pass<"firrtl-blackbox-reader", "CircuitOp"> {
@@ -530,7 +545,11 @@ def ExtractInstances : Pass<"firrtl-extract-instances", "firrtl::CircuitOp"> {
 def MemToRegOfVec : Pass<"firrtl-mem-to-reg-of-vec", "firrtl::CircuitOp"> {
   let summary = "Convert combinational memories to a vector of registers";
   let description = [{
-    This pass generates the logic to implement a memory using Registers.
+    Utility pass that converts combinational memories in modules that appear
+    in the effective design into vectors of registers. Production pipelines
+    perform this conversion through `firrtl-full-reset` for modules in
+    asynchronous full-reset domains; this pass remains available for custom
+    pipelines and unit tests.
   }];
   let options = [
     Option<"ignoreReadEnable", "ignore-read-enable-mem", "bool",

@@ -1,6 +1,6 @@
 // RUN: circt-opt -pass-pipeline='builtin.module(firrtl.circuit(firrtl-mem-to-reg-of-vec))' %s | FileCheck  %s
 
-firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}]}{
+firrtl.circuit "Mem"{
   firrtl.module public @Mem(out %d : !firrtl.probe<vector<uint<8>, 8>>, out %d2 : !firrtl.probe<vector<uint<8>, 8>>) attributes {annotations = [
     {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
   ]} {
@@ -50,28 +50,7 @@ firrtl.circuit "Mem" attributes {annotations = [{class = "sifive.enterprise.firr
 
 }
 
-firrtl.circuit "Mem_Ignore" {
-  firrtl.module public @Mem_Ignore() attributes {annotations = [
-    {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
-  ]} {
-    %mem_read, %mem_write = firrtl.mem Undefined {
-      depth = 8 : i64,
-      name = "mem",
-      portNames = ["read", "write"],
-      readLatency = 0 : i32,
-      writeLatency = 1 : i32
-    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
-        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-    // CHECK:      %mem_read, %mem_write = firrtl.mem Undefined
-    // CHECK-SAME:   {depth = 8 : i64, name = "mem", portNames = ["read", "write"], readLatency = 0 : i32, writeLatency = 1 : i32}
-    // CHECK-SAME:   : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
-    // CHECK-SAME:     !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-  }
-}
-
-firrtl.circuit  "GCTModule" attributes {annotations = [
-  {class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}
-]} {
+firrtl.circuit  "GCTModule" {
   firrtl.module public @GCTModule() attributes {annotations = [
     {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
   ]} {
@@ -155,9 +134,7 @@ firrtl.circuit  "GCTModule" attributes {annotations = [
   }
 }
 
-firrtl.circuit "WriteMask" attributes {annotations = [
-  {class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}
-]} {
+firrtl.circuit "WriteMask" {
   firrtl.module public @WriteMask() attributes {annotations = [
     {class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}
   ]} {
@@ -198,9 +175,7 @@ firrtl.circuit "WriteMask" attributes {annotations = [
 // format work correctly.
 //
 // CHECK-LABEL: "NLA"
-firrtl.circuit "NLA" attributes {annotations = [
-  {class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"}
-]} {
+firrtl.circuit "NLA" {
   // The hierachical paths are unchanged.
   // CHECK:      hw.hierpath private @path_old [@NLA::@foo, @Foo::@old]
   // CHECK-NEXT: hw.hierpath private @path_new [@NLA::@foo, @Foo]
@@ -247,8 +222,7 @@ firrtl.circuit "NLA" attributes {annotations = [
 firrtl.circuit "SkipMemoryMacros" attributes {
   annotations = [
     {
-      class = "sifive.enterprise.firrtl.ConvertMemToRegOfVecAnnotation$"
-    }
+      }
   ]
 } {
   firrtl.module @SkipMemoryMacros() {
@@ -282,48 +256,5 @@ firrtl.circuit "SkipMemoryMacros" attributes {
       readLatency = 4 : i32,
       writeLatency = 4 : i32
     } : !firrtl.bundle<addr: uint<1>, en: uint<1>, clk: clock, rdata flip: uint<1>, wmode: uint<1>, wdata: uint<1>, wmask: uint<1>>
-  }
-}
-
-// An asynchronous FullResetAnnotation is enough to enable the pass; the
-// explicit ConvertMemToRegOfVecAnnotation is not required.
-// CHECK-LABEL: firrtl.circuit "AsyncFullResetEnables"
-firrtl.circuit "AsyncFullResetEnables" {
-  firrtl.module public @AsyncFullResetEnables(
-      in %clock: !firrtl.clock,
-      in %reset: !firrtl.asyncreset [{class = "circt.FullResetAnnotation", resetType = "async"}]) attributes {
-    annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]
-  } {
-    // CHECK-NOT: firrtl.mem
-    // CHECK: firrtl.reg
-    %mem_read, %mem_write = firrtl.mem Undefined {
-      depth = 8 : i64,
-      name = "mem",
-      portNames = ["read", "write"],
-      readLatency = 0 : i32,
-      writeLatency = 1 : i32
-    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
-        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
-  }
-}
-
-// A synchronous FullResetAnnotation must not enable the pass by itself.
-// CHECK-LABEL: firrtl.circuit "SyncFullResetDoesNotEnable"
-firrtl.circuit "SyncFullResetDoesNotEnable" {
-  firrtl.module public @SyncFullResetDoesNotEnable(
-      in %clock: !firrtl.clock,
-      in %reset: !firrtl.uint<1> [{class = "circt.FullResetAnnotation", resetType = "sync"}]) attributes {
-    annotations = [{class = "sifive.enterprise.firrtl.MarkDUTAnnotation"}]
-  } {
-    // CHECK: firrtl.mem
-    // CHECK-NOT: firrtl.reg
-    %mem_read, %mem_write = firrtl.mem Undefined {
-      depth = 8 : i64,
-      name = "mem",
-      portNames = ["read", "write"],
-      readLatency = 0 : i32,
-      writeLatency = 1 : i32
-    } : !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data flip: uint<8>>,
-        !firrtl.bundle<addr: uint<3>, en: uint<1>, clk: clock, data: uint<8>, mask: uint<1>>
   }
 }

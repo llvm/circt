@@ -86,11 +86,12 @@ LogicalResult firtool::populateCHIRRTLToLowFIRRTL(mlir::PassManager &pm,
   // Width inference creates canonicalization opportunities.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferWidths());
 
-  // MemToRefOfVec must be ran before InferResets for FART.
-  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createMemToRegOfVec(
-      {/*replSeqMemFile=*/opt.shouldIgnoreReadEnableMemories()}));
-
+  // Infer abstract reset types first so FullReset can validate concrete
+  // reset signals. FullReset then builds domains, converts comb mems in
+  // async full-reset domains, and implements FART.
   pm.nest<firrtl::CircuitOp>().addPass(firrtl::createInferResets());
+  pm.nest<firrtl::CircuitOp>().addPass(firrtl::createFullReset(
+      {/*ignoreReadEnable=*/opt.shouldIgnoreReadEnableMemories()}));
 
   // TODO: Move this to the same location as SpecializeLayers.
   pm.addNestedPass<firrtl::CircuitOp>(firrtl::createSpecializeOption(

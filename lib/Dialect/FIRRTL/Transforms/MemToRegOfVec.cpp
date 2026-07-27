@@ -6,17 +6,16 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the MemToRegOfVec pass.
+// This file defines the MemToRegOfVec pass and a shared helper used by
+// FullReset to convert combinational memories in async full-reset domains.
 //
 //===----------------------------------------------------------------------===//
 
+#include "MemToRegOfVec.h"
 #include "circt/Analysis/FIRRTLInstanceInfo.h"
-#include "circt/Dialect/FIRRTL/AnnotationDetails.h"
-#include "circt/Dialect/FIRRTL/FIRRTLAnnotations.h"
 #include "circt/Dialect/FIRRTL/FIRRTLOps.h"
 #include "circt/Dialect/FIRRTL/FIRRTLTypes.h"
 #include "circt/Dialect/FIRRTL/Passes.h"
-#include "mlir/IR/Threading.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/Support/Debug.h"
 
@@ -33,86 +32,28 @@ using namespace circt;
 using namespace firrtl;
 
 namespace {
-/// Return true if `anno` is a full-reset annotation that requests asynchronous
-/// reset.
-bool isAsyncFullResetAnnotation(Annotation anno) {
-  if (!anno.isClass(fullResetAnnoClass))
-    return false;
-  auto resetType = anno.getMember<StringAttr>("resetType");
-  return resetType && resetType.getValue() == "async";
-}
+/// Helper that lowers combinational memories in a module to register vectors.
+struct MemToRegOfVecConverter {
+  explicit MemToRegOfVecConverter(bool ignoreReadEnable)
+      : ignoreReadEnable(ignoreReadEnable) {}
 
-/// Return true if any module port or wire/node in the circuit carries an
-/// asynchronous full-reset annotation. When present, combinational memories
-/// must be turned into registers so InferResets can attach the async reset.
-bool hasAsyncFullResetAnnotation(CircuitOp circuitOp) {
-  return llvm::any_of(circuitOp.getOps<FModuleOp>(), [](FModuleOp moduleOp) {
-    if (llvm::any_of(moduleOp.getArguments(), [](BlockArgument arg) {
-          return llvm::any_of(AnnotationSet::get(arg),
-                              isAsyncFullResetAnnotation);
-        }))
-      return true;
-
-    // Only wires/nodes are valid in-body FullReset targets.
-    auto found = moduleOp.getBodyBlock()->walk([](Operation *op) {
-      if (!isa<WireOp, NodeOp>(op))
-        return WalkResult::advance();
-      if (llvm::any_of(AnnotationSet::get(op->getResult(0)),
-                       isAsyncFullResetAnnotation))
-        return WalkResult::interrupt();
-      return WalkResult::advance();
-    });
-    return found.wasInterrupted();
-  });
-}
-
-struct MemToRegOfVecPass
-    : public circt::firrtl::impl::MemToRegOfVecBase<MemToRegOfVecPass> {
-  using Base::Base;
-
-  void runOnOperation() override {
-    auto circuitOp = getOperation();
-    auto &instanceInfo = getAnalysis<InstanceInfo>();
-
-    // Always consume the explicit circuit-level enable annotation. Also run
-    // when an asynchronous full-reset is present.
-    if (!AnnotationSet::removeAnnotations(circuitOp,
-                                          convertMemToRegOfVecAnnoClass) &&
-        !hasAsyncFullResetAnnotation(circuitOp))
-      return markAllAnalysesPreserved();
-
-    DenseSet<Operation *> dutModuleSet;
-    for (auto moduleOp : circuitOp.getOps<FModuleOp>())
-      if (instanceInfo.anyInstanceInEffectiveDesign(moduleOp))
-        dutModuleSet.insert(moduleOp);
-
-    mlir::parallelForEach(circuitOp.getContext(), dutModuleSet,
-                          [&](Operation *op) {
-                            if (auto mod = dyn_cast<FModuleOp>(op))
-                              runOnModule(mod);
-                          });
-  }
-
-  void runOnModule(FModuleOp mod) {
-
+  void runOnModule(FModuleOp mod, unsigned &numConverted) {
     mod.getBodyBlock()->walk([&](MemOp memOp) {
       LLVM_DEBUG(llvm::dbgs() << "\n Memory op:" << memOp);
 
       auto firMem = memOp.getSummary();
-      // Ignore if the memory is a sequential memory, i.e., something that is
-      // supposed to be an SRAM.  In either possible eventual lowering by later
-      // passes (blackboxing or lowering to a behavioral model) we don't want to
-      // blow this out here as it both breaks expectations about later passes
-      // that may add asynchronous resets (InferResets) or that expect metadata
-      // on SRAMs to not be split up (LowerClasses).
+      // Ignore sequential memories (SRAMs). Later passes either blackbox them
+      // or lower to a behavioral model; blowing them out here would break
+      // async-reset attachment expectations and SRAM metadata.
       if (firMem.isSeqMem())
         return;
 
       generateMemory(memOp, firMem);
-      ++numConvertedMems;
+      ++numConverted;
       memOp.erase();
     });
   }
+
   Value addPipelineStages(ImplicitLocOpBuilder &b, size_t stages, Value clock,
                           Value pipeInput, StringRef name, Value gate = {}) {
     if (!stages)
@@ -434,5 +375,42 @@ struct MemToRegOfVecPass
       for (auto r : debugPorts)
         r.replaceAllUsesWith(RefSendOp::create(builder, regOfVec.getResult()));
   }
+
+  bool ignoreReadEnable = false;
 };
-} // end anonymous namespace
+} // namespace
+
+void circt::firrtl::convertCombMemsToRegOfVec(FModuleOp mod,
+                                              bool ignoreReadEnable,
+                                              unsigned &numConverted) {
+  MemToRegOfVecConverter(ignoreReadEnable).runOnModule(mod, numConverted);
+}
+
+void circt::firrtl::convertCombMemsToRegOfVec(ArrayRef<FModuleOp> mods,
+                                              bool ignoreReadEnable,
+                                              unsigned &numConverted) {
+  MemToRegOfVecConverter converter(ignoreReadEnable);
+  for (auto mod : mods)
+    converter.runOnModule(mod, numConverted);
+}
+
+namespace {
+struct MemToRegOfVecPass
+    : public circt::firrtl::impl::MemToRegOfVecBase<MemToRegOfVecPass> {
+  using Base::Base;
+
+  void runOnOperation() override {
+    auto circuitOp = getOperation();
+    auto &instanceInfo = getAnalysis<InstanceInfo>();
+
+    SmallVector<FModuleOp> modules;
+    for (auto moduleOp : circuitOp.getOps<FModuleOp>())
+      if (instanceInfo.anyInstanceInEffectiveDesign(moduleOp))
+        modules.push_back(moduleOp);
+
+    unsigned converted = 0;
+    convertCombMemsToRegOfVec(modules, ignoreReadEnable, converted);
+    numConvertedMems = converted;
+  }
+};
+} // namespace

@@ -699,8 +699,12 @@ Any `MemOp` not satisfying the above conditions is lowered to Register vector.
 
 #### MemToRegOfVec transformation outline:
 
-The `MemToRegOfVec` pass runs early in the pipeline, after the `LowerCHIRRTL`
-pass and right before the `InferResets` pass.
+In the production Firtool pipeline, combinational-memory-to-register conversion
+is performed by `FullReset` for modules in asynchronous full-reset domains
+(after `InferResets` has made reset types concrete). The standalone
+`firrtl-mem-to-reg-of-vec` pass remains available for custom pipelines and unit
+tests; it converts combinational memories in modules that appear in the
+effective design.
 
 1. Select all MemOps that are not candidates for macro replacement,
 2. Create a reg
@@ -738,11 +742,12 @@ each sub-field of the data and the
 original `MemOp`. The `LowerTypes` pass will handle the subannotations
 appropriately.
 
-#### Interaction with AsyncReset Inference
+#### Interaction with FullReset
 
-The `AsyncReset` pass runs right after the `MemToRegOfVec`.  It will transform
-the memory registers to async registers if the corresponding annotations are
-present.
+`FullReset` converts combinational memories in asynchronous full-reset domains
+to register vectors *before* implementing full reset, so the resulting registers
+receive the domain reset. Modules outside an async full-reset domain (including
+sync-only domains and `ExcludeFromFullReset` cuts) keep their memories.
 
 #### `firrtl.mem` Attributes
 
