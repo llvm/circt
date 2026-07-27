@@ -609,6 +609,9 @@ public:
   } stats;
 
 private:
+  /// Create a VNLA using our allocator; its `id` is its index in `allVNLAs`.
+  VirtualNLA *createVNLA(StringAttr origSym, ArrayRef<SurvivingHop> path);
+
   /// Trace upward from a root module until reaching surviving modules,
   /// discovering all contexts where the root appears after inlining.
   LogicalResult
@@ -651,7 +654,6 @@ private:
   /// Stable pool allocation for virtual NLA structures.
   llvm::BumpPtrAllocator alloc;
 
-  unsigned nextVNLAId = 0;
   using VirtualNLAHandles = SmallVector<VirtualNLA *>;
 
 public:
@@ -767,6 +769,15 @@ LogicalResult NLAPlanner::run() {
   }
 
   return success();
+}
+
+VirtualNLA *NLAPlanner::createVNLA(StringAttr origSym,
+                                   ArrayRef<SurvivingHop> path) {
+  // I4: VNLA id is monotonic and P2 processes one hierpath at a time,
+  // so ids are creation-ordered and contiguous per source symbol.
+  auto id = allVNLAs.size();
+  allVNLAs.push_back(VirtualNLA::create(alloc, id, origSym, path));
+  return allVNLAs.back();
 }
 
 LogicalResult NLAPlanner::traceUpUntilSurviving(
@@ -994,10 +1005,8 @@ void NLAPlanner::processSinglePathContext(
     }
   }
 
-  // I4: `nextVNLAId` is monotonic and P2 processes one hierpath at a time,
-  // so ids are creation-ordered and contiguous per source symbol.
-  auto *vnla = VirtualNLA::create(alloc, nextVNLAId++, origSym, survivingHops);
-  allVNLAs.push_back(vnla);
+  // Create the VNLA using the next id.
+  auto *vnla = createVNLA(origSym, survivingHops);
 
   // Register this context under each instance it descends through.
   // Non-instance hops (module-only, terminal wire/port) are not routed.
