@@ -122,7 +122,7 @@
 //        `underFlatten` ORs over parents (any, not all):
 //        P2 may mint contexts P3 never realizes.
 //        `wasUsed` gates fork emission, not the primary.
-//        With retention (I15) a ghost can no longer rename a survivor's symbol.
+//        Retention (I15) prevents a ghost renaming a survivor's symbol.
 //
 // Clone walk (P3):
 //  * I10 (mint-once)
@@ -138,7 +138,7 @@
 //        Activation is route-based and can exceed ownership.
 //        Every mutation is also gated on the current inlining destination
 //        matching the precomputed final module (`finalMod`).
-//        (I14, single-writer -- filed under write back).
+//        (I14, single-writer; filed under write back).
 //
 // Write back (P4):
 //  * I14 (single-writer)
@@ -209,7 +209,7 @@ struct ModuleInfo {
   /// Does /any/ instantiation path flatten this module?
   bool underFlatten : 1;
 
-  /// Does /any/ instantiation path NOT flatten this module?
+  /// Does any instantiation path /not/ flatten this module?
   ///
   /// Note: Only used during computation, consumers want isLive.
   bool hasUnflattenedPath : 1;
@@ -468,7 +468,8 @@ struct SurvivingHop {
   StringAttr origSym;
   /// The module this hop lands in after inlining.
   StringAttr finalMod;
-  /// I3: the only field P3 mutates -- set when the walk realizes the hop.
+  /// I3: the only field P3 mutates, set when the walk realizes the hop.
+  ///
   /// Everything else on a hop and its VirtualNLA is read-only after P2.
   StringAttr finalSym;
 };
@@ -1012,7 +1013,7 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
           .append("hierpath targets this inlined instance");
     }
 
-    // A choice target begins a fresh flatten scope -- flatten does not reach
+    // A choice target begins a fresh flatten scope: flatten does not reach
     // through it (as with an extmodule).
     if (hop.inst && !isa<InstanceOp>(hop.inst))
       isTransitiveFlatten = nextHasFlatten;
@@ -1395,7 +1396,7 @@ private:
   ///
   /// The mapping lands in `canonicalOf`.
   ///
-  /// Also mints `realizedSym` for canonicals -- the primary already claimed
+  /// Also mints `realizedSym` for canonicals: the primary already claimed
   /// origSym at selection, so a canonical fork always mints; duplicates borrow.
   ///
   /// Serial-sweep only, once every path is final.
@@ -1650,8 +1651,8 @@ void Inliner::updateVirtualNLALeafSymbols(Inliner::InliningLevel &il,
     // A local context is tracked too: retention can pin it as a one-hop
     // primary, whose leaf symbol must then reflect this rename.
     //
-    // `back()` is safe local or not -- a VNLA always has its terminal hop
-    // (I8, asserted at construction).
+    // `back()` is safe local or not: a VNLA always has its terminal hop (I8,
+    // asserted at construction).
     auto &last = nla->getPathMutable().back();
     // `finalMod` is the I13 ownership gate; `origMod` matching is total because
     // the leaf is cloned from its original def exactly once (I12).
@@ -2129,7 +2130,7 @@ void Inliner::canonicalizeContexts() {
     // even when another origSym's primary already claimed this exact path.
 
     // Each original may have its own external user:
-    // both must survive, so primaries never merge -- only forks do.
+    // both must survive, so primaries never merge; only forks do.
     primary->realizedSym = origSym;
     claimed.claim(origSym);
     canonicalOf[primary] = primary;
@@ -2181,7 +2182,7 @@ void Inliner::rewriteAnnotations() {
         continue;
       for (auto *matched : it->second) {
         // Drop the annotation unless this module owns the context's leaf
-        // (I14/I13); a path is never empty (I8) -- a local context is one hop,
+        // (I14/I13); a path is never empty (I8); a local context is one hop,
         // not zero.
         if (matched->getPath().back().finalMod != modName)
           continue;
