@@ -798,6 +798,8 @@ static bool isExpressionUnableToInline(Operation *op,
               // LTL Clock op's clock operand must be a name.
               return clockOp.getClock() == use.get();
             })
+            .Case<ltl::ClockedAtomOp>(
+                [&](auto atomOp) { return atomOp.getClock() == use.get(); })
             .Case<sv::AssertConcurrentOp, sv::AssumeConcurrentOp,
                   sv::CoverConcurrentOp>(
                 [&](auto op) { return op.getClock() == use.get(); })
@@ -3638,10 +3640,34 @@ private:
   EmittedProperty visitLTL(ltl::UntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
   EmittedProperty visitLTL(ltl::ClockOp op);
+  EmittedProperty visitLTL(ltl::ClockedAtomOp op);
 
   void emitLTLDelay(int64_t delay, std::optional<int64_t> length);
   void emitLTLClockingEvent(ltl::ClockEdge edge, Value clock);
   void emitLTLConcat(ValueRange inputs);
+
+  // Emit a clocking event `@(edge clk)` unless that exact clock is already in
+  // scope, then emit `body` with the clock installed as ambient. Merges
+  // redundant same-clock events (single-clocked tree -> one leading event);
+  // different clocks nest inline (legal multiclocked SVA).
+  template <typename BodyFn>
+  EmittedProperty emitClocked(ltl::ClockEdge edge, Value clock, BodyFn body) {
+    std::pair<ltl::ClockEdge, Value> clk{edge, clock};
+    if (currentClock == clk)
+      return body(); // already in scope; suppress the redundant event
+    auto saved = currentClock;
+    emitLTLClockingEvent(edge, clock);
+    ps << PP::space;
+    currentClock = clk;
+    body();
+    currentClock = saved;
+    return {PropertyPrecedence::Clocking};
+  }
+
+  // The `edge`+`clock` currently in scope while emitting a clocked property
+  // subtree. Used to merge redundant clocking events so a single-clocked tree
+  // emits exactly one leading `@(edge clk)`.
+  std::optional<std::pair<ltl::ClockEdge, Value>> currentClock;
 
 public:
   ModuleEmitter &emitter;
@@ -3848,6 +3874,12 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedDelayOp op) {
   ps << PP::space;
   emitNestedProperty(op.getInput(), PropertyPrecedence::Concat);
   return {PropertyPrecedence::Clocking};
+}
+
+EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedAtomOp op) {
+  return emitClocked(op.getEdge(), op.getClock(), [&] {
+    return emitNestedProperty(op.getInput(), PropertyPrecedence::Symbol);
+  });
 }
 
 void PropertyEmitter::emitLTLConcat(ValueRange inputs) {

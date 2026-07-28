@@ -95,6 +95,10 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   %cd2 = ltl.clocked_delay %a, edge %clk, 7 : i1
   sv.assert_property %cd2 : !ltl.sequence
 
+  // CHECK: assert property (@(posedge clk) a);
+  %ca = ltl.clocked_atom %a, posedge %clk : i1
+  sv.assert_property %ca : !ltl.sequence
+
   // CHECK: assert property (a ##0 a);
   %c0 = ltl.concat %a, %a : i1, i1
   sv.assert_property %c0 : !ltl.sequence
