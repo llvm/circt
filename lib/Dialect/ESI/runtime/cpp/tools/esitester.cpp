@@ -505,9 +505,9 @@ static void hostmemWriteTest(Accelerator *acc,
   for (size_t i = 0, e = 9; i < e; ++i)
     dataPtr[i] = 0xFFFFFFFFFFFFFFFFull;
   region.flush();
-  cmdMMIO->write(0x10, reinterpret_cast<uint64_t>(region.getDevicePtr()));
+  cmdMMIO->write(0x08, reinterpret_cast<uint64_t>(region.getDevicePtr()));
+  cmdMMIO->write(0x10, 1);
   cmdMMIO->write(0x18, 1);
-  cmdMMIO->write(0x20, 1);
   bool done = false;
   for (int i = 0; i < 100; ++i) {
     auto issued = addrCmdIssuedPort->readInt();
@@ -589,9 +589,9 @@ static void hostmemReadTest(Accelerator *acc,
     dataPtr[0] = 0x12345678ull << i;
     dataPtr[1] = 0xDEADBEEFull << i;
     region.flush();
-    addrCmdMMIO->write(0x10, reinterpret_cast<uint64_t>(region.getDevicePtr()));
+    addrCmdMMIO->write(0x08, reinterpret_cast<uint64_t>(region.getDevicePtr()));
+    addrCmdMMIO->write(0x10, 1);
     addrCmdMMIO->write(0x18, 1);
-    addrCmdMMIO->write(0x20, 1);
     bool done = false;
     for (int waitLoop = 0; waitLoop < 100; ++waitLoop) {
       auto issued = addrCmdIssuedPort->readInt();
@@ -943,9 +943,9 @@ hostmemWriteBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
   auto start = std::chrono::high_resolution_clock::now();
   // Fire off xferCount write commands (one flit each).
   uint64_t devPtr = reinterpret_cast<uint64_t>(region.getDevicePtr());
-  cmdMMIO->write(0x10, devPtr);    // address
-  cmdMMIO->write(0x18, xferCount); // flits
-  cmdMMIO->write(0x20, 1);         // start
+  cmdMMIO->write(0x08, devPtr);    // address
+  cmdMMIO->write(0x10, xferCount); // flits
+  cmdMMIO->write(0x18, 1);         // start
 
   // Wait for responses counter to reach target.
   bool completed = false;
@@ -1027,9 +1027,9 @@ hostmemReadBandwidthTest(AcceleratorConnection *conn, Accelerator *acc,
   uint64_t devPtr = reinterpret_cast<uint64_t>(region.getDevicePtr());
   auto start = std::chrono::high_resolution_clock::now();
 
-  cmdMMIO->write(0x10, devPtr);
-  cmdMMIO->write(0x18, xferCount);
-  cmdMMIO->write(0x20, 1);
+  cmdMMIO->write(0x08, devPtr);
+  cmdMMIO->write(0x10, xferCount);
+  cmdMMIO->write(0x18, 1);
 
   bool timeout = true;
   for (int wait = 0; wait < 100000; ++wait) {
@@ -1338,9 +1338,9 @@ static void aggregateHostmemBandwidthTest(AcceleratorConnection *conn,
   // Launch sequentially.
   for (auto &u : units) {
     uint64_t devPtr = reinterpret_cast<uint64_t>(u.region->getDevicePtr());
-    u.cmd->write(0x10, devPtr);
-    u.cmd->write(0x18, xferCount);
-    u.cmd->write(0x20, 1);
+    u.cmd->write(0x08, devPtr);
+    u.cmd->write(0x10, xferCount);
+    u.cmd->write(0x18, 1);
     u.start = std::chrono::high_resolution_clock::now();
     u.launched = true;
   }

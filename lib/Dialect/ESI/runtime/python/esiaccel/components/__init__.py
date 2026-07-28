@@ -15,5 +15,9 @@
 
 from .channel_arbiter import ChannelArbiter, ChannelArbiterMod
 from .flow import MaxOutstandingLimiter
+from .mmio import MmioRegistry, mmio_write_we
 
-__all__ = ["ChannelArbiter", "ChannelArbiterMod", "MaxOutstandingLimiter"]
+__all__ = [
+    "ChannelArbiter", "ChannelArbiterMod", "MaxOutstandingLimiter",
+    "MmioRegistry", "mmio_write_we"
+]
