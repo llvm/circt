@@ -10,7 +10,7 @@ endmodule
 
 // -----
 // clang-format off
-// expected-error @below {{`iff` qualifiers on LTL clocking events are not supported}}
+// expected-error @+2 {{`iff` qualifiers on LTL clocking events are not supported}}
 module UnsupportedLTLClockIff(input logic clk, enable, a);
   assert property (@(posedge clk iff enable) a);
 endmodule
