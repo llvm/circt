@@ -121,83 +121,95 @@ struct LTLClockControlVisitor {
   Location loc;
   OpBuilder &builder;
   Value seqOrPro;
+  DenseMap<Value, Value> clockedValues;
 
   Value addExplicitClock(Value value, ltl::ClockEdge edge, Value clock) {
-    if (isa<IntegerType>(value.getType()))
-      return ltl::ClockedAtomOp::create(builder, loc, value, edge, clock);
+    if (auto it = clockedValues.find(value); it != clockedValues.end())
+      return it->second;
+
+    if (isa<IntegerType>(value.getType())) {
+      auto result =
+          ltl::ClockedAtomOp::create(builder, loc, value, edge, clock);
+      clockedValues.insert({value, result});
+      return result;
+    }
 
     auto edgeAttr = ltl::ClockEdgeAttr::get(builder.getContext(), edge);
     auto *def = value.getDefiningOp();
     if (!def)
       return value;
 
-    return llvm::TypeSwitch<Operation *, Value>(def)
-        .Case<ltl::BooleanConstantOp>([&](auto) { return value; })
-        .Case<ltl::AndOp>([&](auto op) {
-          SmallVector<Value> inputs;
-          for (auto input : op.getInputs())
-            inputs.push_back(addExplicitClock(input, edge, clock));
-          return ltl::AndOp::create(builder, loc, inputs);
-        })
-        .Case<ltl::OrOp>([&](auto op) {
-          SmallVector<Value> inputs;
-          for (auto input : op.getInputs())
-            inputs.push_back(addExplicitClock(input, edge, clock));
-          return ltl::OrOp::create(builder, loc, inputs);
-        })
-        .Case<ltl::IntersectOp>([&](auto op) {
-          SmallVector<Value> inputs;
-          for (auto input : op.getInputs())
-            inputs.push_back(addExplicitClock(input, edge, clock));
-          return ltl::IntersectOp::create(builder, loc, inputs);
-        })
-        .Case<ltl::ConcatOp>([&](auto op) {
-          SmallVector<Value> inputs;
-          for (auto input : op.getInputs())
-            inputs.push_back(addExplicitClock(input, edge, clock));
-          return ltl::ConcatOp::create(builder, loc, inputs);
-        })
-        .Case<ltl::DelayOp>([&](auto op) {
-          return ltl::ClockedDelayOp::create(
-              builder, loc, addExplicitClock(op.getInput(), edge, clock),
-              edgeAttr, clock, op.getDelayAttr(), op.getLengthAttr());
-        })
-        .Case<ltl::RepeatOp>([&](auto op) {
-          return ltl::ClockedRepeatOp::create(
-              builder, loc, addExplicitClock(op.getInput(), edge, clock),
-              edgeAttr, clock, op.getBaseAttr(), op.getMoreAttr());
-        })
-        .Case<ltl::GoToRepeatOp>([&](auto op) {
-          return ltl::ClockedGoToRepeatOp::create(
-              builder, loc, addExplicitClock(op.getInput(), edge, clock),
-              edgeAttr, clock, op.getBaseAttr(), op.getMoreAttr());
-        })
-        .Case<ltl::NonConsecutiveRepeatOp>([&](auto op) {
-          return ltl::ClockedNonConsecutiveRepeatOp::create(
-              builder, loc, addExplicitClock(op.getInput(), edge, clock),
-              edgeAttr, clock, op.getBaseAttr(), op.getMoreAttr());
-        })
-        .Case<ltl::NotOp>([&](auto op) {
-          return ltl::NotOp::create(
-              builder, loc, addExplicitClock(op.getInput(), edge, clock));
-        })
-        .Case<ltl::ImplicationOp>([&](auto op) {
-          return ltl::ImplicationOp::create(
-              builder, loc, addExplicitClock(op.getAntecedent(), edge, clock),
-              addExplicitClock(op.getConsequent(), edge, clock));
-        })
-        .Case<ltl::UntilOp>([&](auto op) {
-          return ltl::ClockedUntilOp::create(
-              builder, loc, addExplicitClock(op.getInput(), edge, clock),
-              edgeAttr, clock,
-              addExplicitClock(op.getCondition(), edge, clock));
-        })
-        .Case<ltl::EventuallyOp>([&](auto op) {
-          return ltl::ClockedEventuallyOp::create(
-              builder, loc, addExplicitClock(op.getInput(), edge, clock),
-              edgeAttr, clock);
-        })
-        .Default([&](auto) { return value; });
+    auto result =
+        llvm::TypeSwitch<Operation *, Value>(def)
+            .Case<ltl::BooleanConstantOp>([&](auto) { return value; })
+            .Case<ltl::AndOp>([&](auto op) {
+              SmallVector<Value> inputs;
+              for (auto input : op.getInputs())
+                inputs.push_back(addExplicitClock(input, edge, clock));
+              return ltl::AndOp::create(builder, loc, inputs);
+            })
+            .Case<ltl::OrOp>([&](auto op) {
+              SmallVector<Value> inputs;
+              for (auto input : op.getInputs())
+                inputs.push_back(addExplicitClock(input, edge, clock));
+              return ltl::OrOp::create(builder, loc, inputs);
+            })
+            .Case<ltl::IntersectOp>([&](auto op) {
+              SmallVector<Value> inputs;
+              for (auto input : op.getInputs())
+                inputs.push_back(addExplicitClock(input, edge, clock));
+              return ltl::IntersectOp::create(builder, loc, inputs);
+            })
+            .Case<ltl::ConcatOp>([&](auto op) {
+              SmallVector<Value> inputs;
+              for (auto input : op.getInputs())
+                inputs.push_back(addExplicitClock(input, edge, clock));
+              return ltl::ConcatOp::create(builder, loc, inputs);
+            })
+            .Case<ltl::DelayOp>([&](auto op) {
+              return ltl::ClockedDelayOp::create(
+                  builder, loc, addExplicitClock(op.getInput(), edge, clock),
+                  edgeAttr, clock, op.getDelayAttr(), op.getLengthAttr());
+            })
+            .Case<ltl::RepeatOp>([&](auto op) {
+              return ltl::ClockedRepeatOp::create(
+                  builder, loc, addExplicitClock(op.getInput(), edge, clock),
+                  edgeAttr, clock, op.getBaseAttr(), op.getMoreAttr());
+            })
+            .Case<ltl::GoToRepeatOp>([&](auto op) {
+              return ltl::ClockedGoToRepeatOp::create(
+                  builder, loc, addExplicitClock(op.getInput(), edge, clock),
+                  edgeAttr, clock, op.getBaseAttr(), op.getMoreAttr());
+            })
+            .Case<ltl::NonConsecutiveRepeatOp>([&](auto op) {
+              return ltl::ClockedNonConsecutiveRepeatOp::create(
+                  builder, loc, addExplicitClock(op.getInput(), edge, clock),
+                  edgeAttr, clock, op.getBaseAttr(), op.getMoreAttr());
+            })
+            .Case<ltl::NotOp>([&](auto op) {
+              return ltl::NotOp::create(
+                  builder, loc, addExplicitClock(op.getInput(), edge, clock));
+            })
+            .Case<ltl::ImplicationOp>([&](auto op) {
+              return ltl::ImplicationOp::create(
+                  builder, loc,
+                  addExplicitClock(op.getAntecedent(), edge, clock),
+                  addExplicitClock(op.getConsequent(), edge, clock));
+            })
+            .Case<ltl::UntilOp>([&](auto op) {
+              return ltl::ClockedUntilOp::create(
+                  builder, loc, addExplicitClock(op.getInput(), edge, clock),
+                  edgeAttr, clock,
+                  addExplicitClock(op.getCondition(), edge, clock));
+            })
+            .Case<ltl::EventuallyOp>([&](auto op) {
+              return ltl::ClockedEventuallyOp::create(
+                  builder, loc, addExplicitClock(op.getInput(), edge, clock),
+                  edgeAttr, clock);
+            })
+            .Default([&](auto) { return value; });
+    clockedValues.insert({value, result});
+    return result;
   }
 
   Value visit(const slang::ast::SignalEventControl &ctrl) {
@@ -205,12 +217,10 @@ struct LTLClockControlVisitor {
     auto expr = context.convertRvalueExpression(ctrl.expr);
     if (!expr)
       return Value{};
-    Value condition;
     if (ctrl.iffCondition) {
-      condition = context.convertRvalueExpression(*ctrl.iffCondition);
-      condition = context.convertToBool(condition, Domain::TwoValued);
-      if (!condition)
-        return Value{};
+      mlir::emitError(loc, "`iff` qualifiers on LTL clocking events are not "
+                           "supported");
+      return {};
     }
     expr = context.convertToI1(expr);
     if (!expr)

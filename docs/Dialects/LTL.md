@@ -217,7 +217,14 @@ under which it is evaluated, mirroring `ltl.clocked_delay`.
 
 The purely logical combinators — `ltl.and`, `ltl.or`, `ltl.not`, `ltl.intersect`, `ltl.concat`, and `ltl.implication` — remain clockless. They do not carry a clock operand of their own; instead they simply combine already-clocked (or clockless) operands, inheriting whatever clock(s) those operands carry.
 
-Building a property entirely out of clocked leaves (`ltl.clocked_atom`, `ltl.clocked_delay`, `ltl.clocked_until`, etc.) combined via clockless combinators produces an IR tree where every leaf independently records its own `edge`/`clock`, without an enclosing clock scope. When such a tree is asserted via a plain `verif.assert` (or `verif.assume`/`verif.cover`), ExportVerilog performs the clock merge **at emission time only** — it does not rewrite the IR. If every clocked leaf in the tree agrees on the same edge and clock, the emitted SVA collapses to a single leading `@(edge clock)` on the `assert property (...)` statement instead of repeating the clock at every leaf. For example, the FIRRTL intrinsics
+Building a property out of clocked operations and clockless combinators
+produces an IR tree where each temporal operation independently records its
+own `edge`/`clock`, without an enclosing clock scope. ExportVerilog suppresses
+a clocking event when a clocked operation is nested inside another operation
+with the same edge and clock. This happens **at emission time only** and does
+not rewrite the IR. Clockless combinators do not create an ambient clock, so
+clocked sibling branches retain their individual clocking events. For example,
+the FIRRTL intrinsics
 
 ```
 node ca = intrinsic(circt_ltl_clocked_atom<edge="posedge"> : UInt<1>, a, clock)

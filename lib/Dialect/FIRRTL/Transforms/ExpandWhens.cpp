@@ -580,6 +580,62 @@ private:
     return newOp;
   }
 
+  /// Find the unique explicit clock used by an LTL property. Returns no clock
+  /// if the property is unclocked or contains multiple clock domains.
+  std::optional<std::pair<EventControlAttr, Value>>
+  findUniqueLTLClock(Value property, bool &hasConflict) {
+    while (auto nodeOp = property.getDefiningOp<NodeOp>())
+      property = nodeOp.getInput();
+
+    auto *def = property.getDefiningOp();
+    if (!def)
+      return std::nullopt;
+
+    auto directClock =
+        TypeSwitch<Operation *,
+                   std::optional<std::pair<EventControlAttr, Value>>>(def)
+            .Case<LTLClockedAtomIntrinsicOp, LTLClockedDelayIntrinsicOp,
+                  LTLClockedRepeatIntrinsicOp, LTLClockedGoToRepeatIntrinsicOp,
+                  LTLClockedNonConsecutiveRepeatIntrinsicOp,
+                  LTLClockedUntilIntrinsicOp, LTLClockedEventuallyIntrinsicOp>(
+                [](auto op) {
+                  return std::pair{op.getEdgeAttr(), op.getClock()};
+                })
+            .Default([](auto) { return std::nullopt; });
+    // Logical LTL combinators do not carry a clock. Inspect their operands to
+    // determine whether the complete property has one unique clock domain.
+    // Clocked operations are inspected as well to detect a differently
+    // clocked nested operand.
+    if (!directClock &&
+        !def->getName().getStringRef().starts_with("firrtl.int.ltl."))
+      return std::nullopt;
+
+    auto uniqueClock = directClock;
+    for (auto operand : def->getOperands()) {
+      auto operandClock = findUniqueLTLClock(operand, hasConflict);
+      if (hasConflict)
+        return std::nullopt;
+      if (!operandClock)
+        continue;
+      if (uniqueClock && uniqueClock != operandClock) {
+        hasConflict = true;
+        return std::nullopt;
+      }
+      uniqueClock = operandClock;
+    }
+    return uniqueClock;
+  }
+
+  /// Sample the current when condition on the property's unique clock. Leave
+  /// it unclocked for an unclocked or genuinely multi-clock property.
+  Value conditionForProperty(Operation *op, Value property) {
+    bool hasConflict = false;
+    auto clock = findUniqueLTLClock(property, hasConflict);
+    if (!clock)
+      return condition;
+    return clockedConditionWithClock(op, clock->first, clock->second);
+  }
+
   /// Concurrent and of a property with the current condition.  If we are in
   /// the outer scope, i.e. not in a WhenOp region, then there is no condition.
   Value ltlAndWithCondition(Operation *op, Value property) {
@@ -587,12 +643,10 @@ private:
     while (auto nodeOp = property.getDefiningOp<NodeOp>())
       property = nodeOp.getInput();
 
-    // If the property is already an explicitly clocked atom, apply the
-    // condition as an atom sampled by the same clock.
-    if (auto clockedAtomOp =
-            property.getDefiningOp<LTLClockedAtomIntrinsicOp>()) {
-      auto clockedCondition = clockedConditionWithClock(
-          op, clockedAtomOp.getEdgeAttr(), clockedAtomOp.getClock());
+    // If the property has one explicit clock domain, sample the condition on
+    // that same clock.
+    if (auto clockedCondition = conditionForProperty(op, property);
+        clockedCondition != condition) {
       auto &newOp = createdLTLAndOps[{clockedCondition, property}];
       if (!newOp)
         newOp = OpBuilder(op).createOrFold<LTLAndIntrinsicOp>(
@@ -616,19 +670,6 @@ private:
     while (auto nodeOp = property.getDefiningOp<NodeOp>())
       property = nodeOp.getInput();
 
-    // If the property is already an explicitly clocked atom, apply the
-    // condition as an atom sampled by the same clock.
-    if (auto clockedAtomOp =
-            property.getDefiningOp<LTLClockedAtomIntrinsicOp>()) {
-      auto clockedCondition = clockedConditionWithClock(
-          op, clockedAtomOp.getEdgeAttr(), clockedAtomOp.getClock());
-      auto &newImplOp = createdLTLImplicationOps[{clockedCondition, property}];
-      if (!newImplOp)
-        newImplOp = OpBuilder(op).createOrFold<LTLImplicationIntrinsicOp>(
-            condition.getLoc(), property.getType(), clockedCondition, property);
-      return newImplOp;
-    }
-
     // Merge condition into `ltl.implication` left-hand side.
     if (auto implOp = property.getDefiningOp<LTLImplicationIntrinsicOp>()) {
       auto lhs = ltlAndWithCondition(op, implOp.getLhs());
@@ -638,6 +679,17 @@ private:
         clonedOp.getLhsMutable().assign(lhs);
         newImplOp = clonedOp;
       }
+      return newImplOp;
+    }
+
+    // If the property has one explicit clock domain, sample the condition on
+    // that same clock.
+    if (auto clockedCondition = conditionForProperty(op, property);
+        clockedCondition != condition) {
+      auto &newImplOp = createdLTLImplicationOps[{clockedCondition, property}];
+      if (!newImplOp)
+        newImplOp = OpBuilder(op).createOrFold<LTLImplicationIntrinsicOp>(
+            condition.getLoc(), property.getType(), clockedCondition, property);
       return newImplOp;
     }
 

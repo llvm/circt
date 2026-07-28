@@ -9,6 +9,14 @@ module Foo 4;
 endmodule
 
 // -----
+// clang-format off
+// expected-error @below {{`iff` qualifiers on LTL clocking events are not supported}}
+module UnsupportedLTLClockIff(input logic clk, enable, a);
+  assert property (@(posedge clk iff enable) a);
+endmodule
+// clang-format on
+
+// -----
 // expected-note @below {{expanded from macro 'FOO'}}
 `define FOO input
 // expected-note @below {{expanded from macro 'BAR'}}

@@ -674,7 +674,7 @@ firrtl.module @ModuleWithObjectWire(in %in: !firrtl.class<@ClassWithInput(in in:
 }
 
 // Conditions of when blocks should be folded into the LHS of implications in
-// assert/assume ops, or int othe LHS of ands in cover ops.
+// assert/assume ops, or into the LHS of ands in cover ops.
 // CHECK-LABEL: firrtl.module @WhenAroundPropertyAssertAssumeCover
 firrtl.module @WhenAroundPropertyAssertAssumeCover(
   in %clock: !firrtl.clock,
@@ -705,7 +705,7 @@ firrtl.module @WhenAroundPropertyAssertAssumeCover(
     firrtl.int.verif.assert %p1 : !firrtl.uint<1>
     firrtl.int.verif.assume %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.assume %p1 : !firrtl.uint<1>
-    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.and %a, [[P0]]
+    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.and [[COND]], [[P0]]
     // CHECK: firrtl.int.verif.cover [[TMP3]], %d :
     // CHECK: firrtl.int.verif.cover [[TMP3]] :
     firrtl.int.verif.cover %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
@@ -723,7 +723,7 @@ firrtl.module @WhenAroundPropertyAssertAssumeCover(
     firrtl.int.verif.assert %p1 : !firrtl.uint<1>
     firrtl.int.verif.assume %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
     firrtl.int.verif.assume %p1 : !firrtl.uint<1>
-    // CHECK: [[TMP6:%.+]] = firrtl.int.ltl.and [[NOTA]], [[P0]]
+    // CHECK: [[TMP6:%.+]] = firrtl.int.ltl.and [[ELSE_COND]], [[P0]]
     // CHECK: firrtl.int.verif.cover [[TMP6]], %d :
     // CHECK: firrtl.int.verif.cover [[TMP6]] :
     firrtl.int.verif.cover %p1, %d : !firrtl.uint<1>, !firrtl.uint<1>
@@ -792,6 +792,54 @@ firrtl.module @WhenAroundClockedAtomMixedEdges(
     // CHECK: [[IMPL_NEG:%.+]] = firrtl.int.ltl.implication [[NEG_COND]], [[C_ATOM]]
     // CHECK: firrtl.int.verif.assert [[IMPL_NEG]], %d :
     firrtl.int.verif.assert %1, %d : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// Look through clocked temporal ops and clockless combinators when determining
+// how to sample a wrapping when condition.
+// CHECK-LABEL: firrtl.module @WhenAroundClockedProperty
+firrtl.module @WhenAroundClockedProperty(
+  in %clock: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %c: !firrtl.uint<1>
+) {
+  // CHECK: [[B_ATOM:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock :
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[EVENTUALLY:%.+]] = firrtl.int.ltl.clocked_eventually [[B_ATOM]], posedge %clock :
+  %1 = firrtl.int.ltl.clocked_eventually %0, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.when
+  firrtl.when %a : !firrtl.uint<1> {
+    // CHECK: [[COND:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+    // CHECK: [[IMPL:%.+]] = firrtl.int.ltl.implication [[COND]], [[EVENTUALLY]]
+    // CHECK: firrtl.int.verif.assert [[IMPL]], %c :
+    firrtl.int.verif.assert %1, %c : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// A wrapping condition cannot be assigned arbitrarily to one side of a
+// genuinely multi-clock property.
+// CHECK-LABEL: firrtl.module @WhenAroundMultiClockProperty
+firrtl.module @WhenAroundMultiClockProperty(
+  in %clock0: !firrtl.clock,
+  in %clock1: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %c: !firrtl.uint<1>
+) {
+  // CHECK: [[B0:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock0 :
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock0 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[B1:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock1 :
+  %1 = firrtl.int.ltl.clocked_atom %b, posedge %clock1 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[MULTI:%.+]] = firrtl.int.ltl.and [[B0]], [[B1]]
+  %2 = firrtl.int.ltl.and %0, %1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.when
+  firrtl.when %a : !firrtl.uint<1> {
+    // CHECK: [[GATED:%.+]] = firrtl.int.ltl.and %a, [[MULTI]]
+    // CHECK: firrtl.int.verif.cover [[GATED]], %c :
+    firrtl.int.verif.cover %2, %c : !firrtl.uint<1>, !firrtl.uint<1>
   }
 }
 

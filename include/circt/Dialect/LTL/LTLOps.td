@@ -155,7 +155,6 @@ def ClockedDelayOp : LTLOp<"clocked_delay", [Pure]> {
   let assemblyFormat = [{
     $input `,` $edge $clock `,` $delay (`,` $length^)? attr-dict `:` type($input)
   }];
-  let hasFolder = 1;
   let hasCanonicalizer = 1;
 
   let summary = "Delay a sequence by a number of cycles on an explicit clock.";
@@ -304,7 +303,6 @@ def ClockedRepeatOp : LTLOp<"clocked_repeat", [Pure]> {
   let assemblyFormat = [{
     $input `,` $edge $clock `,` $base (`,` $more^)? attr-dict `:` type($input)
   }];
-  let hasFolder = 1;
   let summary = "`ltl.repeat` on an explicit clock.";
   let description = [{
     Like `ltl.repeat`, but records the explicit `$edge` of `$clock` for the
@@ -341,7 +339,6 @@ def ClockedGoToRepeatOp : LTLOp<"clocked_goto_repeat", [Pure]> {
   let assemblyFormat = [{
     $input `,` $edge $clock `,` $base `,` $more attr-dict `:` type($input)
   }];
-  let hasFolder = 1;
   let summary = "`ltl.goto_repeat` on an explicit clock.";
   let description = [{ Like `ltl.goto_repeat`, on the explicit `$edge` of `$clock`. }];
 }
@@ -376,7 +373,6 @@ def ClockedNonConsecutiveRepeatOp : LTLOp<"clocked_non_consecutive_repeat", [Pur
   let assemblyFormat = [{
     $input `,` $edge $clock `,` $base `,` $more attr-dict `:` type($input)
   }];
-  let hasFolder = 1;
   let summary = "`ltl.non_consecutive_repeat` on an explicit clock.";
   let description = [{ Like `ltl.non_consecutive_repeat`, on `$edge` of `$clock`. }];
 }

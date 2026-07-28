@@ -21,8 +21,8 @@ public:
   ResultType dispatchVerifVisitor(Operation *op, ExtraArgs... args) {
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
-        .template Case<AssertOp, AssumeOp, CoverOp, ContractOp, SymbolicValueOp>(
-            [&](auto op) -> ResultType {
+        .template Case<AssertOp, AssumeOp, CoverOp, ContractOp,
+                       SymbolicValueOp>([&](auto op) -> ResultType {
           return thisCast->visitVerif(op, args...);
         })
         .Default([&](auto) -> ResultType {

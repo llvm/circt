@@ -21,7 +21,9 @@ circuit Foo :
       ; CHECK: assume property (disable iff (d)
       ; CHECK-NEXT: (@(posedge clock) a) and (@(posedge clock) b)
       ; CHECK-NEXT: |-> (@(posedge clock) c));
-      ; CHECK: cover property (disable iff (d) a and ((@(posedge clock) b) |-> (@(posedge clock) c)));
+      ; CHECK: cover property (disable iff (d)
+      ; CHECK-NEXT: (@(posedge clock) a)
+      ; CHECK-NEXT: and ((@(posedge clock) b) |-> (@(posedge clock) c)));
       intrinsic(circt_verif_assert, p1, not(d))
       intrinsic(circt_verif_assume, p1, not(d))
       intrinsic(circt_verif_cover, p1, not(d))
@@ -30,7 +32,8 @@ circuit Foo :
       ; CHECK-NEXT: |-> (@(posedge clock) c));
       ; CHECK: assume property ((@(posedge clock) a) and (@(posedge clock) b)
       ; CHECK-NEXT: |-> (@(posedge clock) c));
-      ; CHECK: cover property (a and ((@(posedge clock) b) |-> (@(posedge clock) c)));
+      ; CHECK: cover property ((@(posedge clock) a)
+      ; CHECK-NEXT: and ((@(posedge clock) b) |-> (@(posedge clock) c)));
       intrinsic(circt_verif_assert, p1)
       intrinsic(circt_verif_assume, p1)
       intrinsic(circt_verif_cover, p1)
@@ -42,7 +45,9 @@ circuit Foo :
       ; CHECK: assume property (disable iff (d)
       ; CHECK-NEXT: (@(posedge clock) ~a) and (@(posedge clock) b)
       ; CHECK-NEXT: |-> (@(posedge clock) c));
-      ; CHECK: cover property (disable iff (d) ~a and ((@(posedge clock) b) |-> (@(posedge clock) c)));
+      ; CHECK: cover property (disable iff (d)
+      ; CHECK-NEXT: (@(posedge clock) ~a)
+      ; CHECK-NEXT: and ((@(posedge clock) b) |-> (@(posedge clock) c)));
       intrinsic(circt_verif_assert, p1, not(d))
       intrinsic(circt_verif_assume, p1, not(d))
       intrinsic(circt_verif_cover, p1, not(d))
@@ -51,7 +56,8 @@ circuit Foo :
       ; CHECK-NEXT: |-> (@(posedge clock) c));
       ; CHECK: assume property ((@(posedge clock) ~a) and (@(posedge clock) b)
       ; CHECK-NEXT: |-> (@(posedge clock) c));
-      ; CHECK: cover property (~a and ((@(posedge clock) b) |-> (@(posedge clock) c)));
+      ; CHECK: cover property ((@(posedge clock) ~a)
+      ; CHECK-NEXT: and ((@(posedge clock) b) |-> (@(posedge clock) c)));
       intrinsic(circt_verif_assert, p1)
       intrinsic(circt_verif_assume, p1)
       intrinsic(circt_verif_cover, p1)

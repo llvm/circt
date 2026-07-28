@@ -67,10 +67,11 @@ func.func @DelayFolds(%arg0: !ltl.sequence, %arg1: i1) {
 // CHECK-LABEL: @ClockedDelayFolds
 // CHECK-SAME: (%[[S:.+]]: !ltl.sequence, %[[I:.+]]: i1, %[[CLK:.+]]: i1)
 func.func @ClockedDelayFolds(%arg0: !ltl.sequence, %arg1: i1, %clk: i1) {
-  // clocked_delay(seq, posedge clk, 0, 0) -> seq
-  // clocked_delay(i1, posedge clk, 0, 0) stays because it converts i1 to sequence.
+  // Clocked delays must not fold away, even for a zero delay, because doing so
+  // would drop their explicit clock.
+  // CHECK-NEXT: %[[SAME:.+]] = ltl.clocked_delay %[[S]], posedge %[[CLK]], 0, 0 : !ltl.sequence
   // CHECK-NEXT: %[[D:.+]] = ltl.clocked_delay %[[I]], posedge %[[CLK]], 0, 0 : i1
-  // CHECK-NEXT: call @Seq(%[[S]])
+  // CHECK-NEXT: call @Seq(%[[SAME]])
   // CHECK-NEXT: call @Seq(%[[D]])
   %0 = ltl.clocked_delay %arg0, posedge %clk, 0, 0 : !ltl.sequence
   %n0 = ltl.clocked_delay %arg1, posedge %clk, 0, 0 : i1
@@ -197,7 +198,8 @@ func.func @RepeatFolds(%arg0: !ltl.sequence) {
 }
 
 // CHECK-LABEL: @ClockedRepeatFold
-// CHECK: return %arg0
+// CHECK: %[[REPEAT:.+]] = ltl.clocked_repeat %arg0, posedge %{{.+}}, 1, 0
+// CHECK: return %[[REPEAT]]
 func.func @ClockedRepeatFold(%s: !ltl.sequence, %clk: i1) -> !ltl.sequence {
   %0 = ltl.clocked_repeat %s, posedge %clk, 1, 0 : !ltl.sequence
   return %0 : !ltl.sequence

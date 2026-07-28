@@ -358,8 +358,8 @@ hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
   sv.assert_property %liveness_after_reset disable_iff %reset : !ltl.property
   sv.assume_property %liveness_after_reset disable_iff %reset : !ltl.property
 
-  // CHECK: assert property (disable iff (reset) (@(posedge clock) isLive) ##0 (@(posedge clock) ##1 (@(posedge clock) _GEN)) |-> (@(posedge clock) s_eventually isLive));
-  // CHECK-NEXT: assume property (disable iff (reset) (@(posedge clock) isLive) ##0 (@(posedge clock) ##1 (@(posedge clock) _GEN)) |-> (@(posedge clock) s_eventually isLive));
+  // CHECK: assert property (disable iff (reset) (@(posedge clock) isLive) ##0 (@(posedge clock) ##1 _GEN) |-> (@(posedge clock) s_eventually isLive));
+  // CHECK-NEXT: assume property (disable iff (reset) (@(posedge clock) isLive) ##0 (@(posedge clock) ##1 _GEN) |-> (@(posedge clock) s_eventually isLive));
   %clockedNotLive = ltl.clocked_atom %not_isLive, posedge %clock : i1
   %4 = ltl.clocked_delay %clockedNotLive, posedge %clock, 1, 0 : !ltl.sequence
   %5 = ltl.concat %clockedLive, %4 : !ltl.sequence, !ltl.sequence
@@ -404,6 +404,14 @@ hw.module @Contracts(in %a: i42, out b : i42) {
 
 // CHECK-LABEL: module MultiClock
 hw.module @MultiClock(in %clkA: i1, in %clkB: i1, in %a: i1, in %b: i1) {
+  // Clockless combinators do not create an ambient clock. Same-clock sibling
+  // branches therefore retain their individual events.
+  // CHECK: assert property ((@(posedge clkA) a) and (@(posedge clkA) b));
+  %sameA = ltl.clocked_atom %a, posedge %clkA : i1
+  %sameB = ltl.clocked_atom %b, posedge %clkA : i1
+  %same = ltl.and %sameA, %sameB : !ltl.sequence, !ltl.sequence
+  sv.assert_property %same : !ltl.sequence
+
   // Two distinct clocks: the ambient-clock merge must not suppress either
   // event, so the inner @(...) stays inline.
   // CHECK: assert property (@(posedge clkA) a until (@(posedge clkB) b));

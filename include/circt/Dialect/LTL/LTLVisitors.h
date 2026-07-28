@@ -24,9 +24,9 @@ public:
         .template Case<AndOp, OrOp, DelayOp, ClockedDelayOp, ConcatOp, RepeatOp,
                        ClockedRepeatOp, NotOp, ImplicationOp, UntilOp,
                        ClockedUntilOp, EventuallyOp, ClockedEventuallyOp,
-                       ClockedAtomOp, IntersectOp,
-                       NonConsecutiveRepeatOp, ClockedNonConsecutiveRepeatOp,
-                       GoToRepeatOp, ClockedGoToRepeatOp, BooleanConstantOp>(
+                       ClockedAtomOp, IntersectOp, NonConsecutiveRepeatOp,
+                       ClockedNonConsecutiveRepeatOp, GoToRepeatOp,
+                       ClockedGoToRepeatOp, BooleanConstantOp>(
             [&](auto op) -> ResultType {
               return thisCast->visitLTL(op, args...);
             })

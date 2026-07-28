@@ -2748,6 +2748,7 @@ module AssertNoActionBlock(input clk_i, input rst_ni, input eret_o);
 endmodule
 
 // CHECK-LABEL: moore.module @ConcurrentAssert(in %clk : !moore.l1)
+// clang-format off
 module ConcurrentAssert(input clk);
   // CHECK: [[CLK:%.+]] = moore.net name "clk" wire : <l1>
   // CHECK: [[A:%.+]] = moore.variable : <i1>
@@ -3301,6 +3302,7 @@ module ConcurrentAssert(input clk);
   // CHECK: verif.assert [[CLK_OP]] : !ltl.sequence
   assert property (@(posedge clk) multi);
 endmodule
+// clang-format on
 
 // CHECK: [[TMP:%.+]] = moore.constant 42 : i32
 // CHECK: dbg.variable "rootParam1", [[TMP]] : !moore.i32
