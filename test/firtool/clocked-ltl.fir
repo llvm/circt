@@ -9,8 +9,8 @@ circuit Foo:
     input c: UInt<1>
 
     ; `a until b`, built entirely from explicit-clock LTL intrinsics and
-    ; asserted via a plain `circt_verif_assert` (no `circt_ltl_clock`, no
-    ; `verif.clocked_assert` involved). The ambient-clock merge performed at
+    ; asserted via a plain `circt_verif_assert` (no outer clock wrapper or
+    ; legacy clocked assertion). The ambient-clock merge performed at
     ; ExportVerilog emission time collapses the two clocked leaves down to a
     ; single leading `@(posedge clock)`.
     node ca = intrinsic(circt_ltl_clocked_atom<edge="posedge"> : UInt<1>, a, clock)

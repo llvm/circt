@@ -327,7 +327,8 @@ hw.module @Mul3(in %a: i2, in %b: i2, out z: i4) {
 // CHECK-NEXT:    [[TMP9:%.+]] = comb.mux bin [[TMP7]], [[TMP3]], [[TMP8]] : i2
 // CHECK-NEXT:    [[REG]] = seq.firreg [[TMP9]] clock [[TMP5]] reset sync [[TMP4]], [[TMP3]] {firrtl.random_init_start = 0 : ui64} : i2
 // CHECK-NEXT:    [[TMP10:%.+]] = comb.icmp bin ne [[REG]], [[TMP0]] : i2
-// CHECK-NEXT:    verif.clocked_assert [[TMP10]], posedge [[TMP6]] : i1
+// CHECK-NEXT:    [[TMP11:%.+]] = ltl.clocked_atom [[TMP10]], posedge [[TMP6]] : i1
+// CHECK-NEXT:    verif.assert [[TMP11]] : !ltl.sequence
 // CHECK-NEXT: }
 
 hw.module @Counter(in %in : i2, out out : i2, in %clock : !seq.clock, in %reset : i1) {
@@ -343,7 +344,7 @@ hw.module @Counter(in %in : i2, out out : i2, in %clock : !seq.clock, in %reset 
     %never = hw.constant -1 : i2
     %ne = comb.icmp bin ne %4, %never : i2
     %6 = verif.has_been_reset %0, sync %reset
-    %7 = ltl.clock %ne, posedge %0 : i1
+    %7 = ltl.clocked_atom %ne, posedge %0 : i1
     verif.ensure %7 if %6 : !ltl.sequence
   }
   hw.output %4 : i2

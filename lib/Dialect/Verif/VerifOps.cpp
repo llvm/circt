@@ -26,18 +26,6 @@ using namespace circt;
 using namespace verif;
 using namespace mlir;
 
-static ClockEdge ltlToVerifClockEdge(ltl::ClockEdge ce) {
-  switch (ce) {
-  case ltl::ClockEdge::Pos:
-    return ClockEdge::Pos;
-  case ltl::ClockEdge::Neg:
-    return ClockEdge::Neg;
-  case ltl::ClockEdge::Both:
-    return ClockEdge::Both;
-  }
-  llvm_unreachable("Unknown event control kind");
-}
-
 //===----------------------------------------------------------------------===//
 // HasBeenResetOp
 //===----------------------------------------------------------------------===//
@@ -131,23 +119,6 @@ struct EraseIfPropertyTrue : public OpRewritePattern<Op> {
   }
 };
 
-/// Convert `op(ltl.clock(prop, clk), en)` to `clocked_op(prop, en, clk)`.
-template <typename TargetOp, typename Op>
-struct LowerToClocked : public OpRewritePattern<Op> {
-  using OpRewritePattern<Op>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(Op op,
-                                PatternRewriter &rewriter) const override {
-    auto clockOp = op.getProperty().template getDefiningOp<ltl::ClockOp>();
-    if (!clockOp)
-      return failure();
-
-    rewriter.replaceOpWithNewOp<TargetOp>(
-        op, clockOp.getInput(), ltlToVerifClockEdge(clockOp.getEdge()),
-        clockOp.getClock(), op.getEnable(), op.getLabelAttr());
-    return success();
-  }
-};
 } // namespace
 
 //===----------------------------------------------------------------------===//
@@ -157,8 +128,7 @@ struct LowerToClocked : public OpRewritePattern<Op> {
 void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.add<EraseIfEnableFalse<AssertOp>, EraseIfPropertyTrue<AssertOp>,
-              RemoveEnableTrue<AssertOp>,
-              LowerToClocked<ClockedAssertOp, AssertOp>>(context);
+              RemoveEnableTrue<AssertOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -168,8 +138,7 @@ void AssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
 void AssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                            MLIRContext *context) {
   results.add<EraseIfEnableFalse<AssumeOp>, EraseIfPropertyTrue<AssumeOp>,
-              RemoveEnableTrue<AssumeOp>,
-              LowerToClocked<ClockedAssumeOp, AssumeOp>>(context);
+              RemoveEnableTrue<AssumeOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//
@@ -180,42 +149,7 @@ void CoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {
   // Covers are NOT canonicalized to remove trivially true properties or
   // constant false enables. See the comment in the test file for details.
-  results
-      .add<RemoveEnableTrue<CoverOp>, LowerToClocked<ClockedCoverOp, CoverOp>>(
-          context);
-}
-
-//===----------------------------------------------------------------------===//
-// ClockedAssertOp
-//===----------------------------------------------------------------------===//
-
-void ClockedAssertOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                                  MLIRContext *context) {
-  results.add<RemoveEnableTrue<ClockedAssertOp>,
-              EraseIfEnableFalse<ClockedAssertOp>,
-              EraseIfPropertyTrue<ClockedAssertOp>>(context);
-}
-
-//===----------------------------------------------------------------------===//
-// ClockedAssumeOp
-//===----------------------------------------------------------------------===//
-
-void ClockedAssumeOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                                  MLIRContext *context) {
-  results.add<RemoveEnableTrue<ClockedAssumeOp>,
-              EraseIfEnableFalse<ClockedAssumeOp>,
-              EraseIfPropertyTrue<ClockedAssumeOp>>(context);
-}
-
-//===----------------------------------------------------------------------===//
-// ClockedCoverOp
-//===----------------------------------------------------------------------===//
-
-void ClockedCoverOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                                 MLIRContext *context) {
-  // Covers are NOT canonicalized to remove trivially true properties or
-  // constant false enables. See the comment in the test file for details.
-  results.add<RemoveEnableTrue<ClockedCoverOp>>(context);
+  results.add<RemoveEnableTrue<CoverOp>>(context);
 }
 
 //===----------------------------------------------------------------------===//

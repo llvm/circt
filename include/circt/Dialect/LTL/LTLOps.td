@@ -80,29 +80,6 @@ def ClockEdgeAttr : I32EnumAttr<"ClockEdge", "clock edge",
   let cppNamespace = "circt::ltl";
 }
 
-def ClockOp : LTLOp<"clock", [
-  Pure, InferTypeOpInterface, DeclareOpInterfaceMethods<InferTypeOpInterface>
-]> {
-  let arguments = (ins LTLAnyPropertyType:$input, ClockEdgeAttr:$edge, I1:$clock);
-  let results = (outs LTLSequenceOrPropertyType:$result);
-  let assemblyFormat = [{
-    $input `,` $edge $clock attr-dict `:` type($input)
-  }];
-
-  let summary = "Specify the clock for a property or sequence.";
-  let description = [{
-    Specifies the `$edge` on a given `$clock` to be the clock for an `$input`
-    property or sequence. All cycle delays in the `$input` implicitly refer to a
-    clock that advances the state to the next cycle. The `ltl.clock` operation
-    provides that clock. The clock applies to the entire property or sequence
-    expression tree below `$input`, up to any other nested `ltl.clock`
-    operations.
-
-    The operation returns a property if the `$input` is a property, and a
-    sequence otherwise.
-  }];
-}
-
 def ClockedAtomOp : LTLOp<"clocked_atom", [Pure]> {
   let arguments = (ins I1:$input, ClockEdgeAttr:$edge, I1:$clock);
   let results = (outs LTLSequenceType:$result);
@@ -115,9 +92,7 @@ def ClockedAtomOp : LTLOp<"clocked_atom", [Pure]> {
     Converts the boolean `$input` into a one-cycle sequence which matches when
     `$input` is true on the specified `$edge` of `$clock`.
 
-    This operation is an explicitly clocked atomic sequence. Unlike `ltl.clock`,
-    it does not establish a clocking scope for a property or sequence expression
-    tree. It only records the clocking event associated with a single boolean
+    This operation records the clocking event associated with a single boolean
     atom and returns an `!ltl.sequence`.
 
     For example:
@@ -163,11 +138,9 @@ def DelayOp : LTLOp<"delay", [Pure]> {
 
     #### Clocking
 
-    The cycle delay specified on the operation refers to a clocking event. This
-    event is not directly specified by the delay operation itself. Instead, the
-    [`ltl.clock`](#ltlclock-circtltlclockop) operation can be used to associate
-    all delays within a sequence with a clock. Use `ltl.clocked_delay` for
-    explicitly clocked delays.
+    This operation does not record a clocking event. Use
+    `ltl.clocked_delay` when the delay is evaluated on an explicit hardware
+    clock.
   }];
 }
 
@@ -502,9 +475,8 @@ def ClockedUntilOp : LTLOp<"clocked_until", [Pure]> {
   let summary = "`ltl.until` on an explicit clock.";
   let description = [{
     Like `ltl.until`, but records the explicit `$edge` of `$clock` under which
-    the temporal `until` is evaluated, instead of relying on an enclosing
-    `ltl.clock` scope. `$input` must hold until `$condition` holds once (weak,
-    non-overlapping).
+    the temporal `until` is evaluated. `$input` must hold until `$condition`
+    holds once (weak, non-overlapping).
   }];
 }
 

@@ -12,7 +12,8 @@ firrtl.circuit "LowerToCore" {
     %hier = firrtl.fstring.hierarchicalmodulename : !firrtl.fstring
 
     // CHECK: [[CLK:%.+]] = seq.from_clock %clock
-    // CHECK: verif.clocked_assert %pred if %enable, posedge [[CLK]] : i1
+    // CHECK: [[PROP:%.+]] = ltl.clocked_atom %pred, posedge [[CLK]] : i1
+    // CHECK: verif.assert [[PROP]] if %enable : !ltl.sequence
     firrtl.assert %clock, %pred, %enable, "assert failed: %d"(%x)
         : !firrtl.clock, !firrtl.uint<1>, !firrtl.uint<1>, !firrtl.sint<4>
 

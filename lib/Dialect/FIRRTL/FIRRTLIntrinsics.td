@@ -372,27 +372,6 @@ def CirctLTLPast : FIRRTLIntrinsic {
   }];
 }
 
-def CirctLTLClock : FIRRTLIntrinsic {
-  let mnemonic = "circt.ltl.clock";
-  let description = [{
-    Associates a clock with a boolean or sequence. This is used to indicate the
-    clock domain in which a property is evaluated.
-
-    | Parameter | Type   | Description                                                           |
-    | --------- | ------ | --------------------------------------------------------------------- |
-    | edge      | string | clock edge: `posedge`, `negedge`, or `edge`; optional, defaults to `posedge` |
-
-    | Argument | Type    | Description               |
-    | -------- | ------- | ------------------------- |
-    | in       | UInt<1> | input boolean or sequence |
-    | clock    | Clock   | clock for the property    |
-
-    | Result | Type    | Description      |
-    | ------ | ------- | ---------------- |
-    | out    | UInt<1> | clocked sequence |
-  }];
-}
-
 def CirctLTLAnd : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.and";
   let converter = "CirctLTLBinaryConverter<LTLAndIntrinsicOp>";

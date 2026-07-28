@@ -154,11 +154,8 @@ Non-consecutive repetition checks that a sequence holds a certain number of time
 
 ### Clocking
 
-Sequence and property expressions in SVAs can specify a clock with respect to which all cycle delays are expressed. (See IEEE 1800-2017 section 16.16 "Clock resolution".) These map to the `ltl.clock` operation.
-
-- `@(posedge clk) seqOrProp`. **Trigger on low-to-high clock edge.** Equivalent to `ltl.clock %seqOrProp, posedge %clk`.
-- `@(negedge clk) seqOrProp`. **Trigger on high-to-low clock edge.** Equivalent to `ltl.clock %seqOrProp, negedge %clk`.
-- `@(edge clk) seqOrProp`. **Trigger on any clock edge.** Equivalent to `ltl.clock %seqOrProp, edge %clk`.
+Sequence and property expressions carry clocking information directly on each
+temporal operation. The clock edge is `posedge`, `negedge`, or `edge`.
 
 #### Atomic clocking
 
@@ -188,7 +185,8 @@ ltl.clocked_delay %input, <edge> %clock, <delay>[, <length>]
 
 `%clock` is an `i1` value (e.g. a module clock); `<edge>` is `posedge`, `negedge`, or `edge`. For example, `ltl.clocked_delay %s, posedge %clk, 3` means `%s` must hold 3 cycles later on `%clk` rising edges.
 
-`ltl.delay` is unclocked and may be resolved by an enclosing `ltl.clock` or by the `InferLTLClocks` pass. `ltl.clock` globally associates a sequence/property with a clock/edge; `ltl.clocked_delay` carries an explicit per-delay clock.
+`ltl.delay` is unclocked. Use `ltl.clocked_delay` whenever the delay is
+evaluated on a hardware clock.
 
 Examples:
 
@@ -201,7 +199,9 @@ ltl.clocked_delay %s, posedge %clk, 3, 0
 
 #### Explicit-Clock Model
 
-Alongside the ambient `ltl.clock` scoping operator, the dialect provides a family of *clocked* variants of its core sequence/property operations that carry their clock explicitly as part of the operation itself, rather than relying on an enclosing `ltl.clock`:
+The dialect provides a family of *clocked* variants of its core
+sequence/property operations that carry their clock explicitly as part of the
+operation itself:
 
 - `ltl.clocked_atom` — clocked form of a boolean atom (see [Atomic clocking](#atomic-clocking) above).
 - `ltl.clocked_delay` — clocked form of `ltl.delay` (see [Delay clocking](#delay-clocking) above). This is the **canonical example** of the pattern: it takes the same `<input>, <delay>[, <length>]` operands as `ltl.delay`, plus an explicit `<edge> %clock`, e.g. `ltl.clocked_delay %s, posedge %clk, 3, 0`.
@@ -211,11 +211,13 @@ Alongside the ambient `ltl.clock` scoping operator, the dialect provides a famil
 - `ltl.clocked_goto_repeat` — clocked form of `ltl.goto_repeat`.
 - `ltl.clocked_non_consecutive_repeat` — clocked form of `ltl.non_consecutive_repeat`.
 
-Each of these ops takes the same operands as its unclocked counterpart, plus a `ClockEdgeAttr:$edge` and an `i1:$clock` operand recording the clocking event under which it is evaluated — mirroring `ltl.clocked_delay`. Unlike `ltl.clock`, they do not establish a clocking *scope* over a subtree; they only record the clock used to sample their own input(s).
+Each of these ops takes the same operands as its unclocked counterpart, plus a
+`ClockEdgeAttr:$edge` and an `i1:$clock` operand recording the clocking event
+under which it is evaluated, mirroring `ltl.clocked_delay`.
 
 The purely logical combinators — `ltl.and`, `ltl.or`, `ltl.not`, `ltl.intersect`, `ltl.concat`, and `ltl.implication` — remain clockless. They do not carry a clock operand of their own; instead they simply combine already-clocked (or clockless) operands, inheriting whatever clock(s) those operands carry.
 
-Building a property entirely out of clocked leaves (`ltl.clocked_atom`, `ltl.clocked_delay`, `ltl.clocked_until`, etc.) combined via clockless combinators produces an IR tree where every leaf independently records its own `edge`/`clock`, with no `ltl.clock` anywhere in the tree. When such a tree is asserted via a plain `verif.assert` (or `verif.assume`/`verif.cover`), ExportVerilog performs the clock merge **at emission time only** — it does not rewrite the IR. If every clocked leaf in the tree agrees on the same edge and clock, the emitted SVA collapses to a single leading `@(edge clock)` on the `assert property (...)` statement instead of repeating the clock at every leaf. For example, the FIRRTL intrinsics
+Building a property entirely out of clocked leaves (`ltl.clocked_atom`, `ltl.clocked_delay`, `ltl.clocked_until`, etc.) combined via clockless combinators produces an IR tree where every leaf independently records its own `edge`/`clock`, without an enclosing clock scope. When such a tree is asserted via a plain `verif.assert` (or `verif.assume`/`verif.cover`), ExportVerilog performs the clock merge **at emission time only** — it does not rewrite the IR. If every clocked leaf in the tree agrees on the same edge and clock, the emitted SVA collapses to a single leading `@(edge clock)` on the `assert property (...)` statement instead of repeating the clock at every leaf. For example, the FIRRTL intrinsics
 
 ```
 node ca = intrinsic(circt_ltl_clocked_atom<edge="posedge"> : UInt<1>, a, clock)
@@ -230,7 +232,9 @@ lower through `ltl.clocked_atom`/`ltl.clocked_until` to a single merged assertio
 assert property (@(posedge clock) a until b);
 ```
 
-with no repeated per-leaf clocking and no `ltl.clock` involved. See `test/firtool/clocked-ltl.fir` for a complete end-to-end example, and `test/firtool/verif-clock-edge.fir` for the mixed `ltl.clock`/`ltl.clocked_delay` case where a differing leaf edge (`negedge`) is *not* merged into the ambient clock and instead emits its own nested `@(negedge clock)`.
+with no repeated per-leaf clocking. See `test/firtool/clocked-ltl.fir` for a
+complete end-to-end example. A tree with differing clock operands or edges
+retains the nested clocking events instead of merging them.
 
 
 ### Disable Iff

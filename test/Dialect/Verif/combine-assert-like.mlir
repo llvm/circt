@@ -149,16 +149,14 @@ verif.formal @formal {} {
 //------
 
 // CHECK-LABEL: hw.module @IgnoreLTL
-// CHECK-NEXT:   [[TMP0:%.+]] = ltl.clock %prop, posedge %a : !ltl.property
-// CHECK-NEXT:   verif.assert [[TMP0]] : !ltl.property
+// CHECK-NEXT:   verif.assert %prop : !ltl.property
 // CHECK-NEXT:   [[TMP1:%.+]] = comb.icmp ugt %a, %b : i1
 // CHECK-NEXT:   verif.assert [[TMP1]] : i1
 // CHECK-NEXT:   hw.output [[TMP1]] : i1
 // CHECK-NEXT: }
 
 hw.module @IgnoreLTL(in %a: i1, in %b: i1, in %prop: !ltl.property, out z: i1) {
-  %0 = ltl.clock %prop, posedge %a : !ltl.property
-  verif.assert %0 : !ltl.property
+  verif.assert %prop : !ltl.property
   %1 = comb.icmp ugt %a, %b : i1
   verif.assert %1 : i1
   hw.output %1 : i1
@@ -237,4 +235,3 @@ hw.module @ManyBlocks(in %clk: i1, in %a: i42, in %en_assume: i1, in %en_assert:
   }
   hw.output %0 : i42
 }
-

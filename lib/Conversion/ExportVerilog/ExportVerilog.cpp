@@ -794,10 +794,6 @@ static bool isExpressionUnableToInline(Operation *op,
       // based on what the operation using it is and as which operand.
       auto usedInExprControl = [user, &use]() {
         return TypeSwitch<Operation *, bool>(user)
-            .Case<ltl::ClockOp>([&](auto clockOp) {
-              // LTL Clock op's clock operand must be a name.
-              return clockOp.getClock() == use.get();
-            })
             .Case<ltl::ClockedAtomOp, ltl::ClockedUntilOp,
                   ltl::ClockedEventuallyOp, ltl::ClockedRepeatOp,
                   ltl::ClockedGoToRepeatOp, ltl::ClockedNonConsecutiveRepeatOp>(
@@ -2322,8 +2318,7 @@ private:
 
   /// Emit braced list of values surrounded by `{` and `}`.
   void emitBracedList(ValueRange ops) {
-    return emitBracedList(
-        ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
+    return emitBracedList(ops, [&]() { ps << "{"; }, [&]() { ps << "}"; });
   }
 
   /// Print an APInt constant.
@@ -3626,7 +3621,6 @@ private:
   using ltl::Visitor<PropertyEmitter, EmittedProperty>::visitLTL;
   friend class ltl::Visitor<PropertyEmitter, EmittedProperty>;
 
-  EmittedProperty visitUnhandledLTL(Operation *op);
   EmittedProperty visitLTL(ltl::BooleanConstantOp op);
   EmittedProperty visitLTL(ltl::AndOp op);
   EmittedProperty visitLTL(ltl::OrOp op);
@@ -3646,7 +3640,6 @@ private:
   EmittedProperty visitLTL(ltl::ClockedUntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
   EmittedProperty visitLTL(ltl::ClockedEventuallyOp op);
-  EmittedProperty visitLTL(ltl::ClockOp op);
   EmittedProperty visitLTL(ltl::ClockedAtomOp op);
 
   void emitLTLDelay(int64_t delay, std::optional<int64_t> length);
@@ -3792,12 +3785,6 @@ EmittedProperty PropertyEmitter::emitNestedProperty(
   // Remember that we emitted this.
   emittedOps.insert(property.getDefiningOp());
   return info;
-}
-
-EmittedProperty PropertyEmitter::visitUnhandledLTL(Operation *op) {
-  emitOpError(op, "emission as Verilog property or sequence not supported");
-  ps << "<<unsupported: " << PPExtString(op->getName().getStringRef()) << ">>";
-  return {PropertyPrecedence::Symbol};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::BooleanConstantOp op) {
@@ -4099,13 +4086,6 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedEventuallyOp op) {
     emitNestedProperty(op.getInput(), PropertyPrecedence::Qualifier);
     return EmittedProperty{PropertyPrecedence::Qualifier};
   });
-}
-
-EmittedProperty PropertyEmitter::visitLTL(ltl::ClockOp op) {
-  emitLTLClockingEvent(op.getEdge(), op.getClock());
-  ps << PP::space;
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Clocking);
-  return {PropertyPrecedence::Clocking};
 }
 
 // NOLINTEND(misc-no-recursion)

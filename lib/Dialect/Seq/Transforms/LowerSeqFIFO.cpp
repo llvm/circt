@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "circt/Dialect/Comb/CombOps.h"
+#include "circt/Dialect/LTL/LTLOps.h"
 #include "circt/Dialect/SV/SVOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Seq/SeqPasses.h"
@@ -188,16 +189,18 @@ public:
     Value notEmptyAndRden = comb::createOrFoldNot(
         rewriter, loc,
         comb::AndOp::create(rewriter, loc, adaptor.getRdEn(), fifoEmpty));
-    verif::ClockedAssertOp::create(
-        rewriter, loc, notEmptyAndRden, verif::ClockEdge::Pos, clkI1,
-        /*enable=*/Value(),
+    auto notEmptyProperty = ltl::ClockedAtomOp::create(
+        rewriter, loc, notEmptyAndRden, ltl::ClockEdge::Pos, clkI1);
+    verif::AssertOp::create(
+        rewriter, loc, notEmptyProperty, /*enable=*/Value(),
         rewriter.getStringAttr("FIFO empty when read enabled"));
     Value notFullAndWren = comb::createOrFoldNot(
         rewriter, loc,
         comb::AndOp::create(rewriter, loc, adaptor.getWrEn(), fifoFull));
-    verif::ClockedAssertOp::create(
-        rewriter, loc, notFullAndWren, verif::ClockEdge::Pos, clkI1,
-        /*enable=*/Value(),
+    auto notFullProperty = ltl::ClockedAtomOp::create(
+        rewriter, loc, notFullAndWren, ltl::ClockEdge::Pos, clkI1);
+    verif::AssertOp::create(
+        rewriter, loc, notFullProperty, /*enable=*/Value(),
         rewriter.getStringAttr("FIFO full when write enabled"));
 
     rewriter.replaceOp(mem, results);
@@ -219,7 +222,7 @@ void LowerSeqFIFOPass::runOnOperation() {
   // Lowering patterns must lower away all HLMem-related operations.
   target.addIllegalOp<seq::FIFOOp>();
   target.addLegalDialect<seq::SeqDialect, hw::HWDialect, comb::CombDialect,
-                         verif::VerifDialect>();
+                         ltl::LTLDialect, verif::VerifDialect>();
   RewritePatternSet patterns(&ctxt);
   patterns.add<FIFOLowering>(&ctxt);
 

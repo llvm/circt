@@ -135,11 +135,6 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[P1:%.+]] = ltl.past %b, 3 clk [[CLK]] : i1
     %p1 = firrtl.int.ltl.past %b, 3, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[K0:%.+]] = ltl.clock [[I0]], posedge [[CLK]] : !ltl.property
-    %k0 = firrtl.int.ltl.clock %i0, posedge %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK-NEXT: [[K1:%.+]] = ltl.clock [[I0]], negedge [[CLK]] : !ltl.property
-    %k1 = firrtl.int.ltl.clock %i0, negedge %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-
     // CHECK-NEXT: verif.assert %a : i1
     firrtl.int.verif.assert %a : !firrtl.uint<1>
     // CHECK-NEXT: verif.assert %a label "hello" : i1
@@ -148,10 +143,10 @@ firrtl.circuit "Intrinsics" {
     firrtl.int.verif.assume %c0 : !firrtl.uint<1>
     // CHECK-NEXT: verif.assume [[C0]] label "hello" : !ltl.sequence
     firrtl.int.verif.assume %c0 {label = "hello"} : !firrtl.uint<1>
-    // CHECK-NEXT: verif.cover [[K0]] : !ltl.property
-    firrtl.int.verif.cover %k0 : !firrtl.uint<1>
-    // CHECK-NEXT: verif.cover [[K0]] label "hello" : !ltl.property
-    firrtl.int.verif.cover %k0 {label = "hello"} : !firrtl.uint<1>
+    // CHECK-NEXT: verif.cover [[I0]] : !ltl.property
+    firrtl.int.verif.cover %i0 : !firrtl.uint<1>
+    // CHECK-NEXT: verif.cover [[I0]] label "hello" : !ltl.property
+    firrtl.int.verif.cover %i0 {label = "hello"} : !firrtl.uint<1>
     // CHECK-NEXT: verif.assert %a : i1
     firrtl.int.verif.require %a : !firrtl.uint<1>
     // CHECK-NEXT: verif.assert %a : i1

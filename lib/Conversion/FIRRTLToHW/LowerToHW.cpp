@@ -1983,7 +1983,6 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLPastIntrinsicOp op);
-  LogicalResult visitExpr(LTLClockIntrinsicOp op);
 
   template <typename TargetOp, typename IntrinsicOp>
   LogicalResult lowerVerifIntrinsicOp(IntrinsicOp op);
@@ -4945,12 +4944,6 @@ LogicalResult FIRRTLLowering::visitExpr(LTLPastIntrinsicOp op) {
                                        op.getDelayAttr(), clk);
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLClockIntrinsicOp op) {
-  return setLoweringToLTL<ltl::ClockOp>(op, getLoweredValue(op.getInput()),
-                                        firrtlToLTLClockEdge(op.getEdge()),
-                                        getLoweredNonClockValue(op.getClock()));
-}
-
 template <typename TargetOp, typename IntrinsicOp>
 LogicalResult FIRRTLLowering::lowerVerifIntrinsicOp(IntrinsicOp op) {
   auto property = getLoweredValue(op.getProperty());
@@ -5775,18 +5768,6 @@ static Operation *buildConcurrentVerifOp(ImplicitLocOpBuilder &builder,
   llvm_unreachable("unknown verification op");
 }
 
-static verif::ClockEdge firrtlToVerifClockEdge(EventControl eventControl) {
-  switch (eventControl) {
-  case EventControl::AtPosEdge:
-    return verif::ClockEdge::Pos;
-  case EventControl::AtEdge:
-    return verif::ClockEdge::Both;
-  case EventControl::AtNegEdge:
-    return verif::ClockEdge::Neg;
-  }
-  llvm_unreachable("unknown FIRRTL event control");
-}
-
 LogicalResult FIRRTLLowering::lowerVerificationStatementToCore(
     Operation *op, StringRef labelPrefix, Value opClock, Value opPredicate,
     Value opEnable, StringAttr opNameAttr, EventControl opEventControl) {
@@ -5806,21 +5787,19 @@ LogicalResult FIRRTLLowering::lowerVerificationStatementToCore(
     label = StringAttr::get(builder.getContext(),
                             labelPrefix + opNameAttr.getValue());
 
-  auto edge = firrtlToVerifClockEdge(opEventControl);
+  auto property = ltl::ClockedAtomOp::create(
+      builder, predicate, firrtlToLTLClockEdge(opEventControl), clock);
   auto opName = op->getName().stripDialect();
   if (opName == "assert") {
-    verif::ClockedAssertOp::create(builder, predicate, edge, clock, enable,
-                                   label);
+    verif::AssertOp::create(builder, property, enable, label);
     return success();
   }
   if (opName == "assume") {
-    verif::ClockedAssumeOp::create(builder, predicate, edge, clock, enable,
-                                   label);
+    verif::AssumeOp::create(builder, property, enable, label);
     return success();
   }
   if (opName == "cover") {
-    verif::ClockedCoverOp::create(builder, predicate, edge, clock, enable,
-                                  label);
+    verif::CoverOp::create(builder, property, enable, label);
     return success();
   }
   llvm_unreachable("unknown verification op");

@@ -90,16 +90,6 @@ def PrepareForFormalPass : Pass<"prepare-for-formal", "hw::HWModuleOp"> {
   }];
 }
 
-def VerifyClockedAssertLikePass : Pass<"verify-clocked-assert-like",
-                                       "hw::HWModuleOp"> {
-  let summary = "Check that clocked-assert-like are valid";
-  let description = [{
-    Checks that every `clocked_assert`, `clocked_assume` or `clocked_cover` op
-    does not contain a nested `ltl.clock` or `ltl.disable` operation in its
-    operand tree.
-  }];
-}
-
 def LowerTestsPass : Pass<"verif-lower-tests", "mlir::ModuleOp"> {
   let summary = "Convert Verif tests into HW modules";
   let description = [{

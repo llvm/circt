@@ -24,7 +24,7 @@ public:
         .template Case<AndOp, OrOp, DelayOp, ClockedDelayOp, ConcatOp, RepeatOp,
                        ClockedRepeatOp, NotOp, ImplicationOp, UntilOp,
                        ClockedUntilOp, EventuallyOp, ClockedEventuallyOp,
-                       ClockOp, ClockedAtomOp, IntersectOp,
+                       ClockedAtomOp, IntersectOp,
                        NonConsecutiveRepeatOp, ClockedNonConsecutiveRepeatOp,
                        GoToRepeatOp, ClockedGoToRepeatOp, BooleanConstantOp>(
             [&](auto op) -> ResultType {
@@ -65,7 +65,6 @@ public:
   HANDLE(ClockedUntilOp, Unhandled);
   HANDLE(EventuallyOp, Unhandled);
   HANDLE(ClockedEventuallyOp, Unhandled);
-  HANDLE(ClockOp, Unhandled);
   HANDLE(ClockedAtomOp, Unhandled);
   HANDLE(IntersectOp, Unhandled);
   HANDLE(NonConsecutiveRepeatOp, Unhandled);

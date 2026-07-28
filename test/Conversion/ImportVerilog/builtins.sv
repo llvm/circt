@@ -658,7 +658,7 @@ module SampleValueBuiltins #() (
   // CHECK: [[X:%.+]] = moore.constant bX : l1
   // CHECK: [[CEQ:%.+]] = moore.case_eq [[RED]], [[X]] : l1
   // CHECK: [[CEQ_I1:%.+]] = moore.to_builtin_int [[CEQ]] : i1
-  // CHECK: ltl.clock [[CEQ_I1]]
+  // CHECK: ltl.clocked_atom [[CEQ_I1]]
   isunknown_data: assert property (@(posedge clk_i) $isunknown(data_i));
 
   // CHECK: moore.procedure always {
@@ -679,7 +679,7 @@ module SampleValueBuiltins #() (
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
   // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
-  // CHECK: ltl.clock [[RES_BUILTIN]]
+  // CHECK: ltl.clocked_atom [[RES_BUILTIN]]
   onehot0_data: assert property (@(posedge clk_i) $onehot0(data_i));
 
   // CHECK: moore.procedure always {
@@ -702,7 +702,7 @@ module SampleValueBuiltins #() (
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[MUX]] : i1
   // CHECK: [[RES_LOGIC:%.+]] = moore.int_to_logic [[RES_INT]] : i1
   // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
-  // CHECK: ltl.clock [[RES_BUILTIN]]
+  // CHECK: ltl.clocked_atom [[RES_BUILTIN]]
   onehot_data: assert property (@(posedge clk_i) $onehot(data_i));
 
   // CHECK: moore.procedure always {
@@ -715,7 +715,7 @@ module SampleValueBuiltins #() (
   // CHECK: [[EQ:%.+]] = comb.icmp eq [[AND]], [[ZERO]] : i8
   // CHECK: [[EQ_INT:%.+]] = moore.from_builtin_int [[EQ]] : i1
   // CHECK: [[EQ_BUILTIN:%.+]] = moore.to_builtin_int [[EQ_INT]] : i1
-  // CHECK: ltl.clock [[EQ_BUILTIN]]
+  // CHECK: ltl.clocked_atom [[EQ_BUILTIN]]
   onehot0_bit_data: assert property (@(posedge clk_i) $onehot0(data_bit_i));
 
   // CHECK: moore.procedure always {
@@ -730,7 +730,7 @@ module SampleValueBuiltins #() (
   // CHECK: [[AND2:%.+]] = comb.and [[EQ]], [[NE]] : i1
   // CHECK: [[RES_INT:%.+]] = moore.from_builtin_int [[AND2]] : i1
   // CHECK: [[RES_BUILTIN:%.+]] = moore.to_builtin_int [[RES_INT]] : i1
-  // CHECK: ltl.clock [[RES_BUILTIN]]
+  // CHECK: ltl.clocked_atom [[RES_BUILTIN]]
   onehot_bit_data: assert property (@(posedge clk_i) $onehot(data_bit_i));
 
   // CHECK: moore.procedure always {

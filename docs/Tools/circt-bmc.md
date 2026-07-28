@@ -64,8 +64,7 @@ hw.module @mod(in %clk: !seq.clock, in %arg0: i32, in %rst: i1,
   %4 = comb.xor %rst, %true : i1
   %5 = ltl.delay %4, 2 : i1
   %6 = ltl.concat %rst, %5 : i1, !ltl.sequence
-  %7 = ltl.clock %6, posedge %clk : !ltl.sequence
-  verif.assume %7 : !ltl.sequence
+  verif.assume %6 : !ltl.sequence
   %state0 = seq.compreg %8, %clk reset %rst, %rst_val : i32
   %8 = comb.add %arg0, %state0 : i32
   %9 = comb.xor %state0, %c-1_i32 : i32
@@ -97,8 +96,7 @@ verif.bmc bound 10 {
   %4 = comb.xor %rst, %true : i1
   %5 = ltl.delay %4, 2 : i1
   %6 = ltl.concat %rst, %5 : i1, !ltl.sequence
-  %7 = ltl.clock %6, posedge %clk : !ltl.sequence
-  verif.assume %7 : !ltl.sequence
+  verif.assume %6 : !ltl.sequence
   %8 = comb.add %arg0, %state0 : i32
   %9 = comb.xor %state0, %c-1_i32 : i32
   %10 = comb.modu %9, %c2_i32 : i32

@@ -157,9 +157,10 @@ module attributes {circt.loweringOptions = "disallowExpressionInliningInPorts"} 
     // CHECK: %[[WIRE:.+]] = sv.wire
     // CHECK: sv.assign %[[WIRE]], %[[XOR]]
     // CHECK: %[[READ:.+]] = sv.read_inout %[[WIRE]]
-    // CHECK: ltl.clock %{{.+}} posedge %[[READ]]
-    %i0 = ltl.implication %a, %b : i1, i1
-    %k0 = ltl.clock %i0, posedge %clk_xor_b : !ltl.property
+    // CHECK: ltl.clocked_atom %{{.+}}, posedge %[[READ]]
+    %a0 = ltl.clocked_atom %a, posedge %clk_xor_b : i1
+    %b0 = ltl.clocked_atom %b, posedge %clk_xor_b : i1
+    %k0 = ltl.implication %a0, %b0 : !ltl.sequence, !ltl.sequence
 
     verif.assert %k0 : !ltl.property
   }

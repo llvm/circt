@@ -587,17 +587,6 @@ private:
     while (auto nodeOp = property.getDefiningOp<NodeOp>())
       property = nodeOp.getInput();
 
-    // Look through `ltl.clock` ops.
-    if (auto clockOp = property.getDefiningOp<LTLClockIntrinsicOp>()) {
-      auto input = ltlAndWithCondition(op, clockOp.getInput());
-      auto &newClockOp = createdLTLClockOps[{clockOp, input}];
-      if (!newClockOp) {
-        newClockOp = OpBuilder(op).cloneWithoutRegions(clockOp);
-        newClockOp.getInputMutable().assign(input);
-      }
-      return newClockOp;
-    }
-
     // If the property is already an explicitly clocked atom, apply the
     // condition as an atom sampled by the same clock.
     if (auto clockedAtomOp =
@@ -626,17 +615,6 @@ private:
     // Look through nodes.
     while (auto nodeOp = property.getDefiningOp<NodeOp>())
       property = nodeOp.getInput();
-
-    // Look through `ltl.clock` ops.
-    if (auto clockOp = property.getDefiningOp<LTLClockIntrinsicOp>()) {
-      auto input = ltlImplicationWithCondition(op, clockOp.getInput());
-      auto &newClockOp = createdLTLClockOps[{clockOp, input}];
-      if (!newClockOp) {
-        newClockOp = OpBuilder(op).cloneWithoutRegions(clockOp);
-        newClockOp.getInputMutable().assign(input);
-      }
-      return newClockOp;
-    }
 
     // If the property is already an explicitly clocked atom, apply the
     // condition as an atom sampled by the same clock.
@@ -680,10 +658,6 @@ private:
 
   /// The `ltl.implication` operations that have been created.
   SmallDenseMap<std::pair<Value, Value>, Value> createdLTLImplicationOps;
-
-  /// The `ltl.clock` operations that have been created.
-  SmallDenseMap<std::pair<LTLClockIntrinsicOp, Value>, LTLClockIntrinsicOp>
-      createdLTLClockOps;
 
   /// The clocked atoms for when conditions that have been created.  Keyed
   /// on the condition, clock, *and* edge, since two clocked atoms on the
@@ -758,7 +732,6 @@ void WhenOpVisitor::visitStmt(LayerBlockOp layerBlockOp) {
   // remain available inside the layerblock since they dominate it.
   llvm::SaveAndRestore savedLTLAndOps(createdLTLAndOps);
   llvm::SaveAndRestore savedLTLImplicationOps(createdLTLImplicationOps);
-  llvm::SaveAndRestore savedLTLClockOps(createdLTLClockOps);
   llvm::SaveAndRestore savedLTLClockedConditionOps(
       createdLTLClockedConditionOps);
 

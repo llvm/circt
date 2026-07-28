@@ -32,16 +32,6 @@ firrtl.circuit "MissingParam" {
 
 // -----
 
-firrtl.circuit "InvalidLTLClockEdge" {
-  firrtl.module @InvalidLTLClockEdge(in %in: !firrtl.uint<1>, in %clk: !firrtl.clock) {
-    // expected-error @below {{circt_ltl_clock has invalid edge parameter 'falling', expected one of [posedge, negedge, edge]}}
-    // expected-error @below {{failed to legalize}}
-    %0 = firrtl.int.generic "circt_ltl_clock" <edge: none = "falling"> %in, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-  }
-}
-
-// -----
-
 firrtl.circuit "InvalidLTLEdge" {
   firrtl.module @InvalidLTLEdge(in %in: !firrtl.uint<1>, in %clk: !firrtl.clock) {
     // expected-error @below {{circt_ltl_clocked_delay has parameter 'edge' with unsupported value 'foo'; expected 'posedge', 'negedge', or 'edge'}}

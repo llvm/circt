@@ -182,23 +182,20 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   sv.assert_property %ncr2 : !ltl.sequence
 
   // CHECK: assert property (@(posedge clk) a);
-  %k0 = ltl.clock %a, posedge %clk : i1
+  %k0 = ltl.clocked_atom %a, posedge %clk : i1
   sv.assert_property %k0 : !ltl.sequence
   // CHECK: assert property (@(negedge clk) a);
-  %k1 = ltl.clock %a, negedge %clk : i1
+  %k1 = ltl.clocked_atom %a, negedge %clk : i1
   sv.assert_property %k1 : !ltl.sequence
   // CHECK: assert property (@(edge clk) a);
-  %k2 = ltl.clock %a, edge %clk : i1
+  %k2 = ltl.clocked_atom %a, edge %clk : i1
   sv.assert_property %k2 : !ltl.sequence
   // CHECK: assert property (@(posedge clk) ##4 a);
-  %k3 = ltl.clock %d1, posedge %clk : !ltl.sequence
+  %k3 = ltl.clocked_delay %a, posedge %clk, 4, 0 : i1
   sv.assert_property %k3 : !ltl.sequence
   // CHECK: assert property (b ##0 (@(posedge clk) a));
   %k4 = ltl.concat %b, %k0 : i1, !ltl.sequence
   sv.assert_property %k4 : !ltl.sequence
-  // CHECK: assert property (@(edge clk) @(posedge clk) ##4 b);
-  %k5 = ltl.clock %cd3, edge %clk : !ltl.sequence
-  sv.assert_property %k5 : !ltl.sequence
 }
 
 // CHECK-LABEL: module Properties
@@ -257,15 +254,7 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   %ag4 = ltl.not %ag3 : !ltl.property
   sv.assert_property %ag4 : !ltl.property
 
-  // CHECK: assert property (@(posedge clk) a |-> b);
-  // CHECK: assert property (@(posedge clk) a ##1 b |-> (@(negedge b) not a));
   // CHECK: assert property (@(posedge clk) disable iff (b) not a);
-  %k0 = ltl.clock %i0, posedge %clk : !ltl.property
-  %k1 = ltl.clock %n0, negedge %b : !ltl.property
-  %k2 = ltl.implication %i2, %k1 : !ltl.sequence, !ltl.property
-  %k3 = ltl.clock %k2, posedge %clk : !ltl.property
-  sv.assert_property %k0 : !ltl.property
-  sv.assert_property %k3 : !ltl.property
   sv.assert_property %n0 on posedge %clk disable_iff %b: !ltl.property
 }
 
@@ -346,19 +335,6 @@ hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i
 
   // Section 16.12.20 "Property examples"
 
-  // CHECK: assert property (@(posedge clk) a |-> b ##1 c ##1 d);
-  %b0 = ltl.delay %c, 1, 0 : i1
-  %b1 = ltl.concat %b, %b0, %a1 : i1, !ltl.sequence, !ltl.sequence
-  %b2 = ltl.implication %a, %b1 : i1, !ltl.sequence
-  %b3 = ltl.clock %b2, posedge %clk : !ltl.property
-  sv.assert_property %b3 : !ltl.property
-
-  // CHECK: assert property (disable iff (e) @(posedge clk) a |-> not b ##1 c ##1 d);
-  %c0 = ltl.not %b1 : !ltl.sequence
-  %c1 = ltl.implication %a, %c0 : i1, !ltl.property
-  %c3 = ltl.clock %c1, posedge %clk : !ltl.property
-  sv.assert_property %c3 disable_iff %e : !ltl.property
-
   // CHECK: assert property (##1 a |-> b);
   %d0 = ltl.delay %a, 1, 0 : i1
   %d1 = ltl.implication %d0, %b : !ltl.sequence, i1
@@ -370,23 +346,24 @@ hw.module @LivenessExample(in %clock: i1, in %reset: i1, in %isLive: i1) {
   %true = hw.constant true
 
   // CHECK: wire _GEN = ~isLive;
-  // CHECK: assert property (disable iff (reset) @(posedge clock) $fell(reset) & _GEN |-> (s_eventually isLive));
-  // CHECK: assume property (disable iff (reset) @(posedge clock) $fell(reset) & _GEN |-> (s_eventually isLive));
+  // CHECK: assert property (disable iff (reset) (@(posedge clock) $fell(reset) & _GEN) |-> (@(posedge clock) s_eventually isLive));
+  // CHECK: assume property (disable iff (reset) (@(posedge clock) $fell(reset) & _GEN) |-> (@(posedge clock) s_eventually isLive));
   %not_isLive = comb.xor %isLive, %true : i1
   %fell_reset = sv.verbatim.expr "$fell({{0}})"(%reset) : (i1) -> i1
   %0 = comb.and %fell_reset, %not_isLive : i1
-  %1 = ltl.eventually %isLive : i1
-  %2 = ltl.implication %0, %1 : i1, !ltl.property
-  %liveness_after_reset = ltl.clock %2, posedge %clock : !ltl.property
+  %clocked0 = ltl.clocked_atom %0, posedge %clock : i1
+  %clockedLive = ltl.clocked_atom %isLive, posedge %clock : i1
+  %1 = ltl.clocked_eventually %clockedLive, posedge %clock : !ltl.sequence
+  %liveness_after_reset = ltl.implication %clocked0, %1 : !ltl.sequence, !ltl.property
   sv.assert_property %liveness_after_reset disable_iff %reset : !ltl.property
   sv.assume_property %liveness_after_reset disable_iff %reset : !ltl.property
 
-  // CHECK: assert property (disable iff (reset) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
-  // CHECK-NEXT: assume property (disable iff (reset) @(posedge clock) isLive ##1 _GEN |-> (s_eventually isLive));
-  %4 = ltl.delay %not_isLive, 1, 0 : i1
-  %5 = ltl.concat %isLive, %4 : i1, !ltl.sequence
-  %6 = ltl.implication %5, %1 : !ltl.sequence, !ltl.property
-  %liveness_after_fall = ltl.clock %6, posedge %clock : !ltl.property
+  // CHECK: assert property (disable iff (reset) (@(posedge clock) isLive) ##0 (@(posedge clock) ##1 (@(posedge clock) _GEN)) |-> (@(posedge clock) s_eventually isLive));
+  // CHECK-NEXT: assume property (disable iff (reset) (@(posedge clock) isLive) ##0 (@(posedge clock) ##1 (@(posedge clock) _GEN)) |-> (@(posedge clock) s_eventually isLive));
+  %clockedNotLive = ltl.clocked_atom %not_isLive, posedge %clock : i1
+  %4 = ltl.clocked_delay %clockedNotLive, posedge %clock, 1, 0 : !ltl.sequence
+  %5 = ltl.concat %clockedLive, %4 : !ltl.sequence, !ltl.sequence
+  %liveness_after_fall = ltl.implication %5, %1 : !ltl.sequence, !ltl.property
   sv.assert_property %liveness_after_fall disable_iff %reset : !ltl.property
   sv.assume_property %liveness_after_fall disable_iff %reset : !ltl.property
 }
