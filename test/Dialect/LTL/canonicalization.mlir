@@ -196,6 +196,13 @@ func.func @RepeatFolds(%arg0: !ltl.sequence) {
   return
 }
 
+// CHECK-LABEL: @ClockedRepeatFold
+// CHECK: return %arg0
+func.func @ClockedRepeatFold(%s: !ltl.sequence, %clk: i1) -> !ltl.sequence {
+  %0 = ltl.clocked_repeat %s, posedge %clk, 1, 0 : !ltl.sequence
+  return %0 : !ltl.sequence
+}
+
 // CHECK-LABEL: @GoToRepeatFolds
 func.func @GoToRepeatFolds(%arg0: !ltl.sequence) {
   // repeat(s, 1, 0) -> s

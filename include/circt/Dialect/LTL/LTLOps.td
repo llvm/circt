@@ -324,6 +324,21 @@ def RepeatOp : LTLOp<"repeat", [Pure]> {
   }];
 }
 
+def ClockedRepeatOp : LTLOp<"clocked_repeat", [Pure]> {
+  let arguments = (ins LTLAnySequenceType:$input, ClockEdgeAttr:$edge, I1:$clock,
+                       I64Attr:$base, OptionalAttr<I64Attr>:$more);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $edge $clock `,` $base (`,` $more^)? attr-dict `:` type($input)
+  }];
+  let hasFolder = 1;
+  let summary = "`ltl.repeat` on an explicit clock.";
+  let description = [{
+    Like `ltl.repeat`, but records the explicit `$edge` of `$clock` for the
+    cycle repetition.
+  }];
+}
+
 def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
@@ -344,6 +359,18 @@ def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
     and the range `$more` can't be omitted. For example, a !b b b !b !b b c represents
     a matching observation of `ltl.goto_repeat %b, 1, 2`, but a !b b b !b !b b !b c doesn't.
   }];
+}
+
+def ClockedGoToRepeatOp : LTLOp<"clocked_goto_repeat", [Pure]> {
+  let arguments = (ins LTLAnySequenceType:$input, ClockEdgeAttr:$edge, I1:$clock,
+                       I64Attr:$base, I64Attr:$more);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $edge $clock `,` $base `,` $more attr-dict `:` type($input)
+  }];
+  let hasFolder = 1;
+  let summary = "`ltl.goto_repeat` on an explicit clock.";
+  let description = [{ Like `ltl.goto_repeat`, on the explicit `$edge` of `$clock`. }];
 }
 
 def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
@@ -367,6 +394,18 @@ def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
     a !b b b !b !b b !b c represent matching observations of
     `ltl.non_consecutive_repeat %b, 1, 2`.
   }];
+}
+
+def ClockedNonConsecutiveRepeatOp : LTLOp<"clocked_non_consecutive_repeat", [Pure]> {
+  let arguments = (ins LTLAnySequenceType:$input, ClockEdgeAttr:$edge, I1:$clock,
+                       I64Attr:$base, I64Attr:$more);
+  let results = (outs LTLSequenceType:$result);
+  let assemblyFormat = [{
+    $input `,` $edge $clock `,` $base `,` $more attr-dict `:` type($input)
+  }];
+  let hasFolder = 1;
+  let summary = "`ltl.non_consecutive_repeat` on an explicit clock.";
+  let description = [{ Like `ltl.non_consecutive_repeat`, on `$edge` of `$clock`. }];
 }
 
 
@@ -451,6 +490,24 @@ def UntilOp: LTLOp<"until", [Pure]> {
   }];
 }
 
+def ClockedUntilOp : LTLOp<"clocked_until", [Pure]> {
+  let arguments = (ins LTLAnyPropertyType:$input, ClockEdgeAttr:$edge, I1:$clock,
+                       LTLAnyPropertyType:$condition);
+  let results = (outs LTLPropertyType:$result);
+  let assemblyFormat = [{
+    $input `,` $edge $clock `,` $condition attr-dict `:`
+    type($input) `,` type($condition)
+  }];
+
+  let summary = "`ltl.until` on an explicit clock.";
+  let description = [{
+    Like `ltl.until`, but records the explicit `$edge` of `$clock` under which
+    the temporal `until` is evaluated, instead of relying on an enclosing
+    `ltl.clock` scope. `$input` must hold until `$condition` holds once (weak,
+    non-overlapping).
+  }];
+}
+
 def EventuallyOp : LTLOp<"eventually", [Pure]> {
   let arguments = (ins LTLAnyPropertyType:$input);
   let results = (outs LTLPropertyType:$result);
@@ -464,6 +521,19 @@ def EventuallyOp : LTLOp<"eventually", [Pure]> {
     is strong: it requires that the `$input` holds after a *finite* number of
     cycles. The operator does *not* hold if the `$input` can't hold in the
     future.
+  }];
+}
+
+def ClockedEventuallyOp : LTLOp<"clocked_eventually", [Pure]> {
+  let arguments = (ins LTLAnyPropertyType:$input, ClockEdgeAttr:$edge, I1:$clock);
+  let results = (outs LTLPropertyType:$result);
+  let assemblyFormat = [{
+    $input `,` $edge $clock attr-dict `:` type($input)
+  }];
+  let summary = "`ltl.eventually` on an explicit clock.";
+  let description = [{
+    Like `ltl.eventually`, but records the explicit `$edge` of `$clock`. Strong:
+    `$input` must hold after a finite number of cycles of `$clock`.
   }];
 }
 
