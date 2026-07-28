@@ -1648,6 +1648,34 @@ firrtl.circuit "InstanceChoiceWithFlattening" {
 
 // -----
 
+// A choice target begins a fresh flatten scope: its own flatten annotation
+// absorbs the path below it, even though no flatten reaches through the
+// choice from above.
+// CHECK-LABEL: firrtl.circuit "ChoiceTargetFlattens"
+firrtl.circuit "ChoiceTargetFlattens" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+  // The @Impl::@leaf hop is absorbed by @Impl's own flatten.
+  // CHECK: hw.hierpath private @nla [@ChoiceTargetFlattens::@c, @Impl::@w]
+  hw.hierpath private @nla [@ChoiceTargetFlattens::@c, @Impl::@leaf, @Leaf::@w]
+  firrtl.module private @Leaf() {
+    %w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "nla"}]} : !firrtl.uint<1>
+  }
+  // CHECK: firrtl.module private @Impl
+  firrtl.module private @Impl() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    // CHECK: %leaf_w = firrtl.wire sym @w {annotations = [{circt.nonlocal = @nla, class = "nla"}]}
+    firrtl.instance leaf sym @leaf @Leaf()
+  }
+  firrtl.module @ChoiceTargetFlattens() {
+    firrtl.instance_choice c sym @c @Impl alternatives @Platform {
+      @FPGA -> @Impl
+    } ()
+  }
+}
+
+// -----
+
 // Test that NLAs are correctly updated when flattening.
 //
 // CHECK-LABEL: firrtl.circuit "FlattenAtRoot"

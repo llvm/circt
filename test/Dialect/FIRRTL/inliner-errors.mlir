@@ -95,7 +95,7 @@ firrtl.circuit "InlineLayerIntoLayer" {
 // Flatten/inline annotations are only meaningful on regular modules.
 
 firrtl.circuit "FlattenExtModule" {
-  // expected-error @below {{inline/flatten annotations are only valid on a regular module}}
+  // expected-error @below {{inline/flatten annotations are only valid on a 'firrtl.module'}}
   firrtl.extmodule private @Ext() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]}
   firrtl.module @FlattenExtModule() {
     firrtl.instance e @Ext()
@@ -105,7 +105,7 @@ firrtl.circuit "FlattenExtModule" {
 // -----
 
 firrtl.circuit "InlineExtModule" {
-  // expected-error @below {{inline/flatten annotations are only valid on a regular module}}
+  // expected-error @below {{inline/flatten annotations are only valid on a 'firrtl.module'}}
   firrtl.extmodule private @Ext() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]}
   firrtl.module @InlineExtModule() {
     firrtl.instance e @Ext()
@@ -117,7 +117,7 @@ firrtl.circuit "InlineExtModule" {
 // Class-likes are FModuleLike but live in the property world; inline/flatten
 // annotations on them are rejected like on any other non-regular module.
 firrtl.circuit "InlineClass" {
-  // expected-error @below {{inline/flatten annotations are only valid on a regular module}}
+  // expected-error @below {{inline/flatten annotations are only valid on a 'firrtl.module'}}
   firrtl.class private @C() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {}
   firrtl.module @InlineClass() {
     %o = firrtl.object @C()
@@ -152,7 +152,7 @@ firrtl.circuit "ForeignInnerRef" {
 // referenced module.
 firrtl.circuit "UnanalyzableSymbolUses" {
   firrtl.module @UnanalyzableSymbolUses() {}
-  // expected-error @below {{cannot analyze symbol uses of this operation; the inliner requires circuit-level references to be legible}}
+  // expected-error @below {{cannot analyze symbol uses of this operation}}
   "some_unknown_dialect.container"() ({
     "some_unknown_dialect.leaf"() { magic = @UnanalyzableSymbolUses } : () -> ()
   }) : () -> ()
@@ -176,6 +176,7 @@ firrtl.circuit "Issue10908" {
     // expected-note @below {{hierpath targets this inlined instance}}
     firrtl.instance j sym @j {annotations = [{circt.nonlocal = @nla, class = "test"}]} @X()
   }
+  // expected-note @below {{flattening this module absorbs the instance}}
   firrtl.module @Issue10908() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
     firrtl.instance m sym @m @Mid()
   }
@@ -189,6 +190,7 @@ firrtl.circuit "Issue10908" {
 firrtl.circuit "Issue10908Inline" {
   // expected-error @below {{hierpath points to inlined instance, cannot proceed}}
   hw.hierpath private @nla [@Issue10908Inline::@m, @Mid::@j]
+  // expected-note @below {{target module is marked inline}}
   firrtl.module private @X() attributes {annotations = [{class = "firrtl.passes.InlineAnnotation"}]} {}
   firrtl.module private @Mid() {
     // expected-note @below {{hierpath targets this inlined instance}}
@@ -196,6 +198,32 @@ firrtl.circuit "Issue10908Inline" {
   }
   firrtl.module @Issue10908Inline() {
     firrtl.instance m sym @m @Mid()
+  }
+}
+
+// -----
+
+// The named flatten culprit is scope-aware: a flatten above a choice hop is
+// not a cause (the choice began a fresh scope).  The note must point at the
+// most recent flatten in the scope that absorbed the terminal.
+
+firrtl.circuit "Issue10908ChoiceScopedCause" {
+  firrtl.option @Platform {
+    firrtl.option_case @FPGA
+  }
+  // expected-error @below {{hierpath points to inlined instance, cannot proceed}}
+  hw.hierpath private @nla [@Issue10908ChoiceScopedCause::@c, @Mid::@i]
+  firrtl.module private @Inner() {}
+  // expected-note @below {{flattening this module absorbs the instance}}
+  firrtl.module private @Mid() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    // expected-note @below {{hierpath targets this inlined instance}}
+    firrtl.instance i sym @i {annotations = [{circt.nonlocal = @nla, class = "test"}]} @Inner()
+  }
+  // This flatten is not the cause: it does not reach through the choice.
+  firrtl.module @Issue10908ChoiceScopedCause() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
+    firrtl.instance_choice c sym @c @Mid alternatives @Platform {
+      @FPGA -> @Mid
+    } ()
   }
 }
 
@@ -214,6 +242,7 @@ firrtl.circuit "Issue10908MixedContexts" {
     // expected-note @below {{hierpath targets this inlined instance}}
     firrtl.instance j sym @j {annotations = [{circt.nonlocal = @nla, class = "test"}]} @X()
   }
+  // expected-note @below {{flattening this module absorbs the instance}}
   firrtl.module private @FlatParent() attributes {annotations = [{class = "firrtl.transforms.FlattenAnnotation"}]} {
     firrtl.instance m sym @m @Mid()
   }

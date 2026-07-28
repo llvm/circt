@@ -210,6 +210,7 @@ struct ModuleInfo {
   bool underFlatten : 1;
 
   /// Does any instantiation path /not/ flatten this module?
+  /// Note: zero-length path counts as well (e.g., public).
   ///
   /// Note: Only used during computation, consumers want isLive.
   bool hasUnflattenedPath : 1;
@@ -218,7 +219,6 @@ struct ModuleInfo {
   bool isLive : 1;
 
   /// Derived named predicates over the facts above, used in the walk.
-  /// @{
 
   /// This module's regular children remain instantiated: some path keeps it
   /// instantiated and it is not flattening them away.
@@ -228,7 +228,6 @@ struct ModuleInfo {
 
   /// Whether this module's body may be flattened.
   bool mayBeFlattened() const { return underFlatten || hasFlatten; }
-  /// @}
 
   // (No default member initialization of bitfield members until C++20)
   ModuleInfo()
@@ -255,18 +254,18 @@ public:
   /// Returns facts on success, on failure emits diagnostics.
   static FailureOr<InliningFacts> compute(CircuitOp circuit,
                                           InstanceGraph &instanceGraph,
-                                          mlir::SymbolTable &symbolTable);
+                                          const mlir::SymbolTable &symbolTable);
 
   /// Get per-module classification information.
-  const ModuleInfo &lookup(FModuleLike fmod) const {
-    assert(fmod && "attempted lookup with null fmodulelike");
+  const ModuleInfo &getModuleInfo(FModuleLike fmod) const {
+    assert(fmod && "queried with null fmodulelike");
     auto it = classification.find(fmod);
     assert(it != classification.end() && "module not found");
     return it->second;
   }
 
   /// Get classification for the specified operation, if known.
-  std::optional<ModuleInfo> lookupIfPresent(Operation *op) const {
+  std::optional<ModuleInfo> getModuleInfoIfPresent(Operation *op) const {
     auto it = classification.find(op);
     if (it == classification.end())
       return std::nullopt;
@@ -274,18 +273,18 @@ public:
   }
 
   /// Convenience helpers, projecting out common fields.
-  /// @{
 
-  bool isLive(FModuleLike mod) const { return lookup(mod).isLive; }
-  bool hasInline(FModuleLike mod) const { return lookup(mod).hasInline; }
-  bool hasFlatten(FModuleLike mod) const { return lookup(mod).hasFlatten; }
+  bool isLive(FModuleLike mod) const { return getModuleInfo(mod).isLive; }
+  bool hasInline(FModuleLike mod) const { return getModuleInfo(mod).hasInline; }
+  bool hasFlatten(FModuleLike mod) const {
+    return getModuleInfo(mod).hasFlatten;
+  }
 
   // Convenience helper to project out `isLive` if operation is known, or false.
   bool isKnownLive(Operation *op) const {
-    auto ret = lookupIfPresent(op);
+    auto ret = getModuleInfoIfPresent(op);
     return ret && ret->isLive;
   }
-  /// @}
 
   /// Regular modules in inverse post-order: parents strictly before children.
   /// Frozen with the facts, it is the order this analysis was computed over.
@@ -320,15 +319,14 @@ public:
 
 FailureOr<InliningFacts>
 InliningFacts::compute(CircuitOp circuit, InstanceGraph &instanceGraph,
-                       mlir::SymbolTable &symbolTable) {
+                       const mlir::SymbolTable &symbolTable) {
   InliningFacts::ModuleClassification classification;
   SmallVector<FModuleOp, 0> schedule;
 
   // Cache these attributes.
-  auto inlineAnnoClassAttr =
-      StringAttr::get(circuit.getContext(), inlineAnnoClass);
-  auto flattenAnnoClassAttr =
-      StringAttr::get(circuit.getContext(), flattenAnnoClass);
+  auto *ctx = circuit.getContext();
+  auto inlineAnnoClassAttr = StringAttr::get(ctx, inlineAnnoClass);
+  auto flattenAnnoClassAttr = StringAttr::get(ctx, flattenAnnoClass);
 
   // Find roots of symbol uses within `op` and mark them live.  Root liveness is
   // all that's promised here (and all likely/able to encounter in practice).
@@ -337,14 +335,13 @@ InliningFacts::compute(CircuitOp circuit, InstanceGraph &instanceGraph,
     // If we can't compute uses, bail.
     auto symbolUses = SymbolTable::getSymbolUses(&op);
     if (!symbolUses)
-      return op.emitError(
-          "cannot analyze symbol uses of this operation; the inliner "
-          "requires circuit-level references to be legible");
+      return op.emitError("cannot analyze symbol uses of this operation");
     for (const auto &use : *symbolUses) {
       auto root = use.getSymbolRef().getRootReference();
       if (auto moduleLike = symbolTable.lookup<FModuleLike>(root)) {
         auto &info = classification[moduleLike];
-        info.isLive = info.hasUnflattenedPath = true;
+        info.isLive = true;
+        info.hasUnflattenedPath = true;
       }
     }
     return success();
@@ -367,12 +364,11 @@ InliningFacts::compute(CircuitOp circuit, InstanceGraph &instanceGraph,
       info.hasInline = anno.hasAnnotation(inlineAnnoClassAttr);
       info.hasFlatten = anno.hasAnnotation(flattenAnnoClassAttr);
 
-      // Reject inline/flatten on anything but a regular module.
+      // Reject inline/flatten on anything but a regular module (FModuleOp).
       // LowerAnnotations restricts these to FModuleOp; this catches raw IR.
       if (!isa<FModuleOp>(module) && (info.hasInline || info.hasFlatten))
-        return emitError(module.getLoc())
-               << "inline/flatten annotations are only valid on a regular "
-                  "module";
+        return emitError(module.getLoc()) << "inline/flatten annotations are "
+                                             "only valid on a 'firrtl.module'";
 
       // Does anything other than an InstanceOp instantiate this?
       auto instantiators = instanceGraph.lookup(module)->uses();
@@ -382,8 +378,10 @@ InliningFacts::compute(CircuitOp circuit, InstanceGraph &instanceGraph,
           });
       bool hasNonInstanceUse = nonInstanceRecIt != instantiators.end();
 
-      if (!module.canDiscardOnUseEmpty() || hasNonInstanceUse)
-        info.isLive = info.hasUnflattenedPath = true;
+      if (!module.canDiscardOnUseEmpty() || hasNonInstanceUse) {
+        info.isLive = true;
+        info.hasUnflattenedPath = true;
+      }
       if (info.hasInline && hasNonInstanceUse) {
         auto diag = mlir::emitWarning(module.getLoc())
                     << "module marked inline is also instantiated by an "
@@ -845,7 +843,7 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
 
       auto *currentModNode = instanceGraph.lookup(frame.modName);
       auto *currentModOp = currentModNode->getModule().getOperation();
-      auto infoIfValid = facts.lookupIfPresent(currentModOp);
+      auto infoIfValid = facts.getModuleInfoIfPresent(currentModOp);
       // This is expected unreachable, but diagnose for safety.
       if (!infoIfValid)
         return mlir::emitError(
@@ -921,7 +919,8 @@ size_t NLAPlanner::minimalRootIndex(ArrayRef<PathHop> upperPath,
   size_t root = 0;
   for (size_t i = 0, e = upperPath.size(); i <= e; ++i) {
     StringAttr mod = i < e ? upperPath[i].mod : rootMod;
-    const auto &info = facts.lookup(symbolTable.lookup<FModuleLike>(mod));
+    const auto &info =
+        facts.getModuleInfo(symbolTable.lookup<FModuleLike>(mod));
     // Flatten means we're done searching, use the deepest we've found.
     if (isTransitiveFlatten)
       break;
@@ -958,9 +957,12 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
 
   StringAttr currentDest = absPath.front().mod;
   auto destMod = symbolTable.lookup<FModuleLike>(currentDest);
-  const auto &destInfo = facts.lookup(destMod);
+  const auto &destInfo = facts.getModuleInfo(destMod);
 
   bool isTransitiveFlatten = destInfo.hasFlatten;
+  // The module whose flatten most recently set `isTransitiveFlatten`;
+  // non-null exactly when the flag is set.  Names the culprit in diagnostics.
+  StringAttr flattenCause = isTransitiveFlatten ? currentDest : StringAttr{};
   for (auto it = absPath.begin(), end = absPath.end(); it != end;) {
     const auto &hop = *it++;
     bool nextHasInline = false;
@@ -970,34 +972,33 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
     bool isTerminal = it == end;
     bool nextIsRegular = false;
 
-    bool isInstanceHop = false;
-    if (!isTerminal) {
-      nextModName = it->mod;
-      auto modOp = symbolTable.lookup<FModuleLike>(nextModName);
-      assert(modOp && "interior namepath module missing -- ran unverified?");
-      const auto &info = facts.lookup(modOp);
-      nextHasInline = info.hasInline;
-      nextHasFlatten = info.hasFlatten;
-      nextIsRegular = isa<FModuleOp>(modOp);
-      isInstanceHop = true;
-    } else if (auto inst = dyn_cast_or_null<InstanceOp>(hop.inst)) {
-      nextModName = inst.getReferencedModuleNameAttr();
-      auto modOp = symbolTable.lookup<FModuleLike>(nextModName);
-      assert(modOp && "interior namepath module missing -- ran unverified?");
-      const auto &info = facts.lookup(modOp);
-      nextHasInline = info.hasInline;
-      nextHasFlatten = info.hasFlatten;
-      nextIsRegular = isa<FModuleOp>(modOp);
-      isInstanceHop = true;
-    }
+    // A hop's operation is null, a plain instance, or a choice.
+    auto hopInst = dyn_cast_or_null<InstanceOp>(hop.inst);
+    bool isChoiceHop = hop.inst && !hopInst;
 
+    // Interior hops read the recorded next module; a terminal names one only
+    // through a plain instance.
+    if (!isTerminal)
+      nextModName = it->mod;
+    else if (hopInst)
+      nextModName = hopInst.getReferencedModuleNameAttr();
+    if (nextModName) {
+      assert((isTerminal || !hopInst ||
+              it->mod == hopInst.getReferencedModuleNameAttr()) &&
+             "recorded next module disagrees with the instance");
+      auto modOp = symbolTable.lookup<FModuleLike>(nextModName);
+      assert(modOp && "interior namepath module missing -- ran unverified?");
+      const auto &info = facts.getModuleInfo(modOp);
+      nextHasInline = info.hasInline;
+      nextHasFlatten = info.hasFlatten;
+      nextIsRegular = isa<FModuleOp>(modOp);
+    }
     // - A hop evaporates only when a plain regular-module instance is absorbed.
     // - Terminal hops never evaporate (I8).
     // - Non-regular modules are never absorbed; their instances relocate.
     // - Neither are instance_choice hops; they relocate with the choice op.
-    bool isEvaporating = isInstanceHop && nextIsRegular &&
-                         (isTransitiveFlatten || nextHasInline) &&
-                         (!hop.inst || isa<InstanceOp>(hop.inst));
+    bool isEvaporating = nextModName && nextIsRegular && !isChoiceHop &&
+                         (isTransitiveFlatten || nextHasInline);
 
     // Diagnose evaporated terminal instance hops, keep I8 accurate and avoid
     // bugs.  Only old-style annotations have this shape, which is recoverable
@@ -1007,18 +1008,38 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
     // https://github.com/llvm/circt/issues/10908
     if (isEvaporating && isTerminal) {
       assert(hop.inst && "expected instance operation");
-      return diagAnchor
-          .emitError("hierpath points to inlined instance, cannot proceed")
-          .attachNote(hop.inst->getLoc())
-          .append("hierpath targets this inlined instance");
+      auto diag = diagAnchor.emitError(
+          "hierpath points to inlined instance, cannot proceed");
+      diag.attachNote(hop.inst->getLoc())
+          << "hierpath targets this inlined instance";
+      // Name the absorption cause to make the fix actionable.
+      if (nextHasInline) {
+        diag.attachNote(symbolTable.lookup(nextModName)->getLoc())
+            << "target module is marked inline";
+      } else {
+        // The walk's own scope state names the culprit: the most recent
+        // flatten still active here.  A flatten above a choice hop is not a
+        // cause; the choice began a fresh scope.
+        assert(flattenCause && "flatten-caused absorption without a cause");
+        diag.attachNote(symbolTable.lookup(flattenCause)->getLoc())
+            << "flattening this module absorbs the instance";
+      }
+      return failure();
     }
 
     // A choice target begins a fresh flatten scope: flatten does not reach
-    // through it (as with an extmodule).
-    if (hop.inst && !isa<InstanceOp>(hop.inst))
-      isTransitiveFlatten = nextHasFlatten;
-    else
-      isTransitiveFlatten |= nextHasFlatten;
+    // through it (as with an extmodule).  Terminal state is never carried
+    // forward (the loop ends); don't let it redefine the locals.
+    if (!isTerminal) {
+      if (isChoiceHop) {
+        isTransitiveFlatten = nextHasFlatten;
+        flattenCause = nextHasFlatten ? nextModName : StringAttr{};
+      } else {
+        isTransitiveFlatten |= nextHasFlatten;
+        if (nextHasFlatten)
+          flattenCause = nextModName;
+      }
+    }
     if (!isEvaporating) {
       // `sym` is null only for a non-instance hop (terminal or module-only).
       // Namepath InnerRefs always name a sym.
@@ -1033,7 +1054,7 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
       survivingHops.push_back({/*origMod=*/hop.mod, /*origSym=*/sym,
                                /*finalMod=*/currentDest,
                                /*finalSym=*/finalSym});
-      if (nextModName)
+      if (!isTerminal && nextModName)
         currentDest = nextModName;
     }
   }
@@ -1424,10 +1445,8 @@ private:
   CircuitNamespace &circuitNamespace;
 
   /// Analysis / planner results (P1 and P2).
-  /// @{
   const InliningFacts &inliningFacts;
   NLAPlanner &nlaPlanner;
-  /// @}
 
   /// Late-convergence canonicalization side tables.
   /// Inliner-owned so VirtualNLA stays frozen after the prepass (I2).
@@ -1438,10 +1457,8 @@ private:
   ///
   /// A duplicate is skipped at emission, borrows the owner's realizedSym, and
   /// propagates usedness onto it.
-  /// @{
   DenseMap<ArrayAttr, VirtualNLA *> canonicalByPath;
   DenseMap<VirtualNLA *, VirtualNLA *> canonicalOf;
-  /// @}
 
   /// Assert-only bookkeeping: origSyms claimed by their group's primary, so
   /// `canonicalize` can check the claim order (I15).
@@ -1992,7 +2009,7 @@ LogicalResult Inliner::inlineModules() {
   //
   // Dead modules are skipped here and erased after.
   for (auto moduleOp : inliningFacts.getSchedule()) {
-    const auto &info = inliningFacts.lookup(moduleOp);
+    const auto &info = inliningFacts.getModuleInfo(moduleOp);
     if (!info.isLive)
       continue;
     // Consume the inline/flatten annotations: InliningFacts is their only
