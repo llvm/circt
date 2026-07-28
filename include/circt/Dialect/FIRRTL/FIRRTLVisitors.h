@@ -52,16 +52,14 @@ public:
             IsXIntrinsicOp, PlusArgsValueIntrinsicOp, PlusArgsTestIntrinsicOp,
             SizeOfIntrinsicOp, ClockGateIntrinsicOp, ClockInverterIntrinsicOp,
             ClockDividerIntrinsicOp, LTLAndIntrinsicOp, LTLOrIntrinsicOp,
-            LTLIntersectIntrinsicOp, LTLDelayIntrinsicOp, LTLConcatIntrinsicOp,
+            LTLIntersectIntrinsicOp, LTLConcatIntrinsicOp,
             LTLClockedDelayIntrinsicOp, LTLClockedAtomIntrinsicOp,
-            LTLRepeatIntrinsicOp, LTLClockedRepeatIntrinsicOp,
-            LTLGoToRepeatIntrinsicOp, LTLClockedGoToRepeatIntrinsicOp,
-            LTLNonConsecutiveRepeatIntrinsicOp,
+            LTLClockedRepeatIntrinsicOp, LTLClockedGoToRepeatIntrinsicOp,
             LTLClockedNonConsecutiveRepeatIntrinsicOp, LTLNotIntrinsicOp,
-            LTLImplicationIntrinsicOp, LTLUntilIntrinsicOp,
-            LTLClockedUntilIntrinsicOp, LTLEventuallyIntrinsicOp,
-            LTLClockedEventuallyIntrinsicOp, LTLPastIntrinsicOp,
-            Mux2CellIntrinsicOp, Mux4CellIntrinsicOp, HasBeenResetIntrinsicOp,
+            LTLImplicationIntrinsicOp, LTLClockedUntilIntrinsicOp,
+            LTLEventuallyIntrinsicOp, LTLClockedEventuallyIntrinsicOp,
+            LTLPastIntrinsicOp, Mux2CellIntrinsicOp, Mux4CellIntrinsicOp,
+            HasBeenResetIntrinsicOp,
             // Miscellaneous.
             BitsPrimOp, HeadPrimOp, MuxPrimOp, PadPrimOp, ShlPrimOp, ShrPrimOp,
             TailPrimOp, VerbatimExprOp, HWStructCastOp, BitCastOp, RefSendOp,
@@ -185,19 +183,14 @@ public:
   HANDLE(LTLAndIntrinsicOp, Unhandled);
   HANDLE(LTLOrIntrinsicOp, Unhandled);
   HANDLE(LTLIntersectIntrinsicOp, Unhandled);
-  HANDLE(LTLDelayIntrinsicOp, Unhandled);
   HANDLE(LTLClockedDelayIntrinsicOp, Unhandled);
   HANDLE(LTLClockedAtomIntrinsicOp, Unhandled);
   HANDLE(LTLConcatIntrinsicOp, Unhandled);
-  HANDLE(LTLRepeatIntrinsicOp, Unhandled);
   HANDLE(LTLClockedRepeatIntrinsicOp, Unhandled);
-  HANDLE(LTLGoToRepeatIntrinsicOp, Unhandled);
   HANDLE(LTLClockedGoToRepeatIntrinsicOp, Unhandled);
-  HANDLE(LTLNonConsecutiveRepeatIntrinsicOp, Unhandled);
   HANDLE(LTLClockedNonConsecutiveRepeatIntrinsicOp, Unhandled);
   HANDLE(LTLNotIntrinsicOp, Unhandled);
   HANDLE(LTLImplicationIntrinsicOp, Unhandled);
-  HANDLE(LTLUntilIntrinsicOp, Unhandled);
   HANDLE(LTLClockedUntilIntrinsicOp, Unhandled);
   HANDLE(LTLEventuallyIntrinsicOp, Unhandled);
   HANDLE(LTLClockedEventuallyIntrinsicOp, Unhandled);

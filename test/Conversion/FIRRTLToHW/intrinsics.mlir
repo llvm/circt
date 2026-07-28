@@ -62,10 +62,10 @@ firrtl.circuit "Intrinsics" {
   // CHECK-LABEL: hw.module @LTLAndVerif
   firrtl.module @LTLAndVerif(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
     // CHECK-NEXT: [[CLK:%.+]] = seq.from_clock %clk
-    // CHECK-NEXT: [[D0:%.+]] = ltl.delay %a, 42 : i1
-    %d0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: [[D1:%.+]] = ltl.delay %b, 42, 1337 : i1
-    %d1 = firrtl.int.ltl.delay %b, 42, 1337 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[D0:%.+]] = ltl.clocked_delay %a, posedge [[CLK]], 42 : i1
+    %d0 = firrtl.int.ltl.clocked_delay %a, posedge %clk, 42 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[D1:%.+]] = ltl.clocked_delay %b, posedge [[CLK]], 42, 1337 : i1
+    %d1 = firrtl.int.ltl.clocked_delay %b, posedge %clk, 42, 1337 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CD0:%.+]] = ltl.clocked_delay %a, negedge [[CLK]], 2, 0 : i1
     %cd0 = firrtl.int.ltl.clocked_delay %a, negedge %clk, 2, 0 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CD1:%.+]] = ltl.clocked_delay %b, edge [[CLK]], 3 : i1
@@ -85,28 +85,16 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[C0:%.+]] = ltl.concat [[D0]], [[L1]] : !ltl.sequence, !ltl.sequence
     %c0 = firrtl.int.ltl.concat %d0, %l1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[R0:%.+]] = ltl.repeat %a, 42 : i1
-    %r0 = firrtl.int.ltl.repeat %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: [[R1:%.+]] = ltl.repeat %b, 42, 1337 : i1
-    %r1 = firrtl.int.ltl.repeat %b, 42, 1337 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CR0:%.+]] = ltl.clocked_repeat %a, posedge [[CLK]], 42 : i1
     %cr0 = firrtl.int.ltl.clocked_repeat %a, posedge %clk, 42 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CR1:%.+]] = ltl.clocked_repeat %b, negedge [[CLK]], 42, 1337 : i1
     %cr1 = firrtl.int.ltl.clocked_repeat %b, negedge %clk, 42, 1337 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[GTR0:%.+]] = ltl.goto_repeat %a, 42, 0 : i1
-    %gtr0 = firrtl.int.ltl.goto_repeat %a, 42, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: [[GTR1:%.+]] = ltl.goto_repeat %b, 1337, 9001 : i1
-    %gtr1 = firrtl.int.ltl.goto_repeat %b, 1337, 9001 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CGTR0:%.+]] = ltl.clocked_goto_repeat %a, posedge [[CLK]], 42, 0 : i1
     %cgtr0 = firrtl.int.ltl.clocked_goto_repeat %a, posedge %clk, 42, 0 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CGTR1:%.+]] = ltl.clocked_goto_repeat %b, negedge [[CLK]], 1337, 9001 : i1
     %cgtr1 = firrtl.int.ltl.clocked_goto_repeat %b, negedge %clk, 1337, 9001 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[NCR0:%.+]] = ltl.non_consecutive_repeat %a, 42, 0 : i1
-    %ncr0 = firrtl.int.ltl.non_consecutive_repeat %a, 42, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: [[NCR1:%.+]] = ltl.non_consecutive_repeat %b, 1337, 9001 : i1
-    %ncr1 = firrtl.int.ltl.non_consecutive_repeat %b, 1337, 9001 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CNCR0:%.+]] = ltl.clocked_non_consecutive_repeat %a, posedge [[CLK]], 42, 0 : i1
     %cncr0 = firrtl.int.ltl.clocked_non_consecutive_repeat %a, posedge %clk, 42, 0 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CNCR1:%.+]] = ltl.clocked_non_consecutive_repeat %b, negedge [[CLK]], 1337, 9001 : i1
@@ -118,8 +106,6 @@ firrtl.circuit "Intrinsics" {
     // CHECK-NEXT: [[I0:%.+]] = ltl.implication [[C0]], [[N0]] : !ltl.sequence, !ltl.property
     %i0 = firrtl.int.ltl.implication %c0, %n0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: [[U0:%.+]] = ltl.until [[N0]], [[N0]] : !ltl.property, !ltl.property
-    %u0 = firrtl.int.ltl.until %n0, %n0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CU0:%.+]] = ltl.clocked_until [[N0]], posedge [[CLK]], [[N0]] : !ltl.property, !ltl.property
     %cu0 = firrtl.int.ltl.clocked_until %n0, posedge %clk, %n0 : (!firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[CU1:%.+]] = ltl.clocked_until [[N0]], negedge [[CLK]], [[N0]] : !ltl.property, !ltl.property
@@ -165,7 +151,7 @@ firrtl.circuit "Intrinsics" {
   }
 
   // CHECK-LABEL: hw.module @LowerIntrinsicStyle
-  firrtl.module @LowerIntrinsicStyle(in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
+  firrtl.module @LowerIntrinsicStyle(in %clk: !firrtl.clock, in %a: !firrtl.uint<1>, in %b: !firrtl.uint<1>) {
     // Wires can make the lowering really weird. Try some strange setup where
     // the ops are totally backwards. This is tricky to lower since a lot of the
     // LTL ops' result type depends on the inputs, and LowerToHW lowers them
@@ -177,6 +163,7 @@ firrtl.circuit "Intrinsics" {
     %f = firrtl.wire : !firrtl.uint<1>
     %g = firrtl.wire : !firrtl.uint<1>
 
+    // CHECK-NEXT: [[STYLE_CLK:%.+]] = seq.from_clock %clk
     // CHECK-NEXT: verif.assert [[E:%.+]] : !ltl.sequence
     // CHECK-NEXT: verif.assert [[F:%.+]] : !ltl.property
     // CHECK-NEXT: verif.assert [[G:%.+]] : !ltl.property
@@ -205,8 +192,8 @@ firrtl.circuit "Intrinsics" {
     firrtl.matchingconnect %d, %1 : !firrtl.uint<1>
 
     // !ltl.sequence
-    // CHECK-NEXT: [[C]] = ltl.delay %a, 42 : i1
-    %0 = firrtl.int.ltl.delay %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[C]] = ltl.clocked_delay %a, posedge [[STYLE_CLK]], 42 : i1
+    %0 = firrtl.int.ltl.clocked_delay %a, posedge %clk, 42 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     firrtl.matchingconnect %c, %0 : !firrtl.uint<1>
   }
 

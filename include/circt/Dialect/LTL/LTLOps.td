@@ -106,44 +106,6 @@ def ClockedAtomOp : LTLOp<"clocked_atom", [Pure]> {
 // Sequences
 //===----------------------------------------------------------------------===//
 
-def DelayOp : LTLOp<"delay", [Pure]> {
-  let arguments = (ins
-    LTLAnySequenceType:$input,
-    I64Attr:$delay,
-    OptionalAttr<I64Attr>:$length);
-  let results = (outs LTLSequenceType:$result);
-  let assemblyFormat = [{
-    $input `,` $delay (`,` $length^)? attr-dict `:` type($input)
-  }];
-  let hasFolder = 1;
-  let hasCanonicalizer = 1;
-
-  let summary = "Delay a sequence by a number of cycles.";
-  let description = [{
-    Delays the `$input` sequence by the number of cycles specified by `$delay`.
-    The delay must be greater than or equal to zero. The optional `$length`
-    specifies during how many cycles after the initial delay the sequence can
-    match. Omitting `$length` indicates an unbounded but finite delay. For
-    example:
-
-    - `ltl.delay %seq, 2, 0` delays `%seq` by exactly 2 cycles. The resulting
-      sequence matches if `%seq` matches exactly 2 cycles in the future.
-    - `ltl.delay %seq, 2, 2` delays `%seq` by 2, 3, or 4 cycles. The resulting
-      sequence matches if `%seq` matches 2, 3, or 4 cycles in the future.
-    - `ltl.delay %seq, 2` delays `%seq` by 2 or more cycles. The number of
-      cycles is unbounded but finite, which means that `%seq` *has* to match at
-      some point, instead of effectively never occuring by being delayed an
-      infinite number of cycles.
-    - `ltl.delay %seq, 0, 0` is equivalent to just `%seq`.
-
-    #### Clocking
-
-    This operation does not record a clocking event. Use
-    `ltl.clocked_delay` when the delay is evaluated on an explicit hardware
-    clock.
-  }];
-}
-
 def ClockedDelayOp : LTLOp<"clocked_delay", [Pure]> {
   let arguments = (ins
     LTLAnySequenceType:$input,
@@ -189,8 +151,8 @@ def PastOp : LTLOp<"past", [TypesMatchWith<"input and result types must match",
 
   let summary = "Observe the sequence $delay cycles earlier.";
   let description = [{
-      Semantically works like `ltl.delay %seq, -$delay, 0`, clocked by the
-      `$clk` operand.
+      Observes the input `$delay` cycles before the current cycle, sampled by
+      the `$clk` operand.
   }];
 }
 
@@ -232,10 +194,10 @@ def ConcatOp : LTLOp<"concat", [Pure]> {
     If a sequence should follow in the cycle after another sequence finishes,
     that cycle of delay needs to be explicit. For example, *"u followed by v in
     next cycle"* (`u ##1 v` in SVA) is represented as
-    `concat(u, delay(v, 1, 0))`:
+    `concat(u, clocked_delay(v, posedge clk, 1, 0))`:
     ```
-    %0 = ltl.delay %v, 1, 0 : i1
-    ltl.concat %u, %v : !ltl.sequence, !ltl.sequence
+    %0 = ltl.clocked_delay %v, posedge %clk, 1, 0 : i1
+    ltl.concat %u, %0 : !ltl.sequence, !ltl.sequence
     ```
     The resulting sequence checks for `u` in the first cycle and `v` in the
     second, `[u, v]` in short.
@@ -271,31 +233,6 @@ def ConcatOp : LTLOp<"concat", [Pure]> {
   }];
 }
 
-def RepeatOp : LTLOp<"repeat", [Pure]> {
-  let arguments = (ins
-    LTLAnySequenceType:$input,
-    I64Attr:$base,
-    OptionalAttr<I64Attr>:$more);
-  let results = (outs LTLSequenceType:$result);
-  let assemblyFormat = [{
-    $input `,` $base (`,` $more^)? attr-dict `:` type($input)
-  }];
-  let hasFolder = 1;
-
-  let summary = "Repeats a sequence by a number of times.";
-  let description = [{
-    Repeat the `$input` sequence at least `$base` times, at most `$base` +
-    `$more` times. The number must be greater than or equal to zero. Omitting
-    `$more` indicates an unbounded but finite repetition. For example:
-
-    - `ltl.repeat %seq, 2, 0` repeats `%seq` exactly 2 times.
-    - `ltl.repeat %seq, 2, 2` repeats `%seq` 2, 3, or 4 times.
-    - `ltl.repeat %seq, 2` repeats `%seq` 2 or more times. The number of times
-      is unbounded but finite.
-    - `ltl.repeat %seq, 0, 0` represents an empty sequence.
-  }];
-}
-
 def ClockedRepeatOp : LTLOp<"clocked_repeat", [Pure]> {
   let arguments = (ins LTLAnySequenceType:$input, ClockEdgeAttr:$edge, I1:$clock,
                        I64Attr:$base, OptionalAttr<I64Attr>:$more);
@@ -303,32 +240,11 @@ def ClockedRepeatOp : LTLOp<"clocked_repeat", [Pure]> {
   let assemblyFormat = [{
     $input `,` $edge $clock `,` $base (`,` $more^)? attr-dict `:` type($input)
   }];
-  let summary = "`ltl.repeat` on an explicit clock.";
+  let summary = "Repeat a sequence on an explicit clock.";
   let description = [{
-    Like `ltl.repeat`, but records the explicit `$edge` of `$clock` for the
-    cycle repetition.
-  }];
-}
-
-def GoToRepeatOp : LTLOp<"goto_repeat", [Pure]> {
-  let arguments = (ins
-    LTLAnySequenceType:$input,
-    I64Attr:$base,
-    I64Attr:$more);
-  let results = (outs LTLSequenceType:$result);
-  let assemblyFormat = [{
-    $input `,` $base `,` $more attr-dict `:` type($input)
-  }];
-
-  let hasFolder = 1;
-
-  let summary = "`goto`-style non-consecutively repeating sequence.";
-  let description = [{
-    Non-consecutive repetition of the `$input` sequence. This must hold between `$base`
-    and `$base + $more` times in a finite number of evaluations. The final evaluation
-    in the sequence has to match. The `$base` must be greater than or equal to zero
-    and the range `$more` can't be omitted. For example, a !b b b !b !b b c represents
-    a matching observation of `ltl.goto_repeat %b, 1, 2`, but a !b b b !b !b b !b c doesn't.
+    Repeats `$input` at least `$base` times and at most `$base + $more` times,
+    sampled at the explicit `$edge` of `$clock`. Omitting `$more` indicates an
+    unbounded but finite repetition.
   }];
 }
 
@@ -339,30 +255,11 @@ def ClockedGoToRepeatOp : LTLOp<"clocked_goto_repeat", [Pure]> {
   let assemblyFormat = [{
     $input `,` $edge $clock `,` $base `,` $more attr-dict `:` type($input)
   }];
-  let summary = "`ltl.goto_repeat` on an explicit clock.";
-  let description = [{ Like `ltl.goto_repeat`, on the explicit `$edge` of `$clock`. }];
-}
-
-def NonConsecutiveRepeatOp : LTLOp<"non_consecutive_repeat", [Pure]> {
-  let arguments = (ins
-    LTLAnySequenceType:$input,
-    I64Attr:$base,
-    I64Attr:$more);
-  let results = (outs LTLSequenceType:$result);
-  let assemblyFormat = [{
-    $input `,` $base `,` $more attr-dict `:` type($input)
-  }];
-
-  let hasFolder = 1;
-
-  let summary = "`goto`-style non-consecutively repeating sequence.";
+  let summary = "Clocked `goto`-style non-consecutive repetition.";
   let description = [{
-    Non-consecutive repetition of the `$input` sequence. This must hold between `$base`
-    and `$base + $more` times in a finite number of evaluations. The final evaluation
-    in the sequence does not have to match. The `$base` must be greater than or equal to zero
-    and the range `$more` can't be omitted. For example, both a !b b b !b !b b c and
-    a !b b b !b !b b !b c represent matching observations of
-    `ltl.non_consecutive_repeat %b, 1, 2`.
+    Non-consecutively repeats `$input` between `$base` and `$base + $more`
+    times, sampled at the explicit `$edge` of `$clock`. The final evaluation
+    in the sequence must match.
   }];
 }
 
@@ -373,8 +270,12 @@ def ClockedNonConsecutiveRepeatOp : LTLOp<"clocked_non_consecutive_repeat", [Pur
   let assemblyFormat = [{
     $input `,` $edge $clock `,` $base `,` $more attr-dict `:` type($input)
   }];
-  let summary = "`ltl.non_consecutive_repeat` on an explicit clock.";
-  let description = [{ Like `ltl.non_consecutive_repeat`, on `$edge` of `$clock`. }];
+  let summary = "Clocked non-consecutive repetition.";
+  let description = [{
+    Non-consecutively repeats `$input` between `$base` and `$base + $more`
+    times, sampled at `$edge` of `$clock`. The final evaluation in the sequence
+    does not have to match.
+  }];
 }
 
 
@@ -442,23 +343,6 @@ def ImplicationOp : LTLOp<"implication", [Pure]> {
   }];
 }
 
-def UntilOp: LTLOp<"until", [Pure]> {
-  let arguments = (ins LTLAnyPropertyType:$input,
-                       LTLAnyPropertyType:$condition);
-  let results = (outs LTLPropertyType:$result);
-  let assemblyFormat = [{
-    operands attr-dict `:` type(operands)
-  }];
-
-  let summary = "Property always holds until another property holds.";
-  let description = [{
-    Checks that the `$input` property always holds until the `$condition`
-    property holds once. This operator is weak: the property will hold even if
-    `$input` always holds and `$condition` never holds. This operator is
-    nonoverlapping: `$input` does not have to hold when `$condition` holds.
-  }];
-}
-
 def ClockedUntilOp : LTLOp<"clocked_until", [Pure]> {
   let arguments = (ins LTLAnyPropertyType:$input, ClockEdgeAttr:$edge, I1:$clock,
                        LTLAnyPropertyType:$condition);
@@ -468,11 +352,10 @@ def ClockedUntilOp : LTLOp<"clocked_until", [Pure]> {
     type($input) `,` type($condition)
   }];
 
-  let summary = "`ltl.until` on an explicit clock.";
+  let summary = "Clocked weak-until property.";
   let description = [{
-    Like `ltl.until`, but records the explicit `$edge` of `$clock` under which
-    the temporal `until` is evaluated. `$input` must hold until `$condition`
-    holds once (weak, non-overlapping).
+    Checks that `$input` holds until `$condition` holds once, sampled at the
+    explicit `$edge` of `$clock`. This operator is weak and non-overlapping.
   }];
 }
 

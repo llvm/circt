@@ -52,12 +52,8 @@ unrealized_conversion_cast %p3 : !ltl.property to index
 // Sequences
 //===----------------------------------------------------------------------===//
 
-// CHECK: ltl.delay {{%.+}}, 0 : !ltl.sequence
-// CHECK: ltl.delay {{%.+}}, 42, 1337 : !ltl.sequence
 // CHECK: ltl.clocked_delay {{%.+}}, posedge {{%.+}}, 0 : !ltl.sequence
 // CHECK: ltl.clocked_delay {{%.+}}, posedge {{%.+}}, 42, 1337 : !ltl.sequence
-ltl.delay %s, 0 : !ltl.sequence
-ltl.delay %s, 42, 1337 : !ltl.sequence
 ltl.clocked_delay %s, posedge %clk, 0 : !ltl.sequence
 ltl.clocked_delay %s, posedge %clk, 42, 1337 : !ltl.sequence
 
@@ -67,13 +63,6 @@ ltl.clocked_delay %s, posedge %clk, 42, 1337 : !ltl.sequence
 ltl.concat %s : !ltl.sequence
 ltl.concat %s, %s : !ltl.sequence, !ltl.sequence
 ltl.concat %s, %s, %s : !ltl.sequence, !ltl.sequence, !ltl.sequence
-
-// CHECK: ltl.repeat {{%.+}}, 0 : !ltl.sequence
-// CHECK: ltl.repeat {{%.+}}, 42 : !ltl.sequence
-// CHECK: ltl.repeat {{%.+}}, 42, 1337 : !ltl.sequence
-ltl.repeat %s, 0 : !ltl.sequence
-ltl.repeat %s, 42 : !ltl.sequence
-ltl.repeat %s, 42, 1337 : !ltl.sequence
 
 // CHECK: ltl.clocked_repeat {{%.+}}, posedge {{%.+}}, 2, 2 : !ltl.sequence
 %cr = ltl.clocked_repeat %s, posedge %true, 2, 2 : !ltl.sequence
@@ -101,9 +90,6 @@ ltl.not %p : !ltl.property
 
 // CHECK: ltl.implication {{%.+}}, {{%.+}} : !ltl.sequence, !ltl.property
 ltl.implication %s, %p : !ltl.sequence, !ltl.property
-
-// CHECK: ltl.until {{%.+}}, {{%.+}} : !ltl.property, !ltl.property
-ltl.until %p, %p : !ltl.property, !ltl.property
 
 // CHECK: ltl.clocked_until {{%.+}}, posedge {{%.+}}, {{%.+}} : !ltl.property, !ltl.property
 %cu = ltl.clocked_until %p, posedge %true, %p : !ltl.property, !ltl.property

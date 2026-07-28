@@ -66,23 +66,14 @@ hw.module @BasicEmissionTemporal(in %a: i1) {
 
 // CHECK-LABEL: module Sequences
 hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
-  // CHECK: assert property (##0 a);
-  %d0 = ltl.delay %a, 0, 0 : i1
+  // CHECK: assert property (@(posedge clk) ##0 a);
+  %d0 = ltl.clocked_delay %a, posedge %clk, 0, 0 : i1
   sv.assert_property %d0 : !ltl.sequence
-  // CHECK: assert property (##4 a);
-  %d1 = ltl.delay %a, 4, 0 : i1
-  sv.assert_property %d1 : !ltl.sequence
-  // CHECK: assert property (##[5:6] a);
-  %d2 = ltl.delay %a, 5, 1 : i1
-  sv.assert_property %d2 : !ltl.sequence
-  // CHECK: assert property (##[7:$] a);
-  %d3 = ltl.delay %a, 7 : i1
-  sv.assert_property %d3 : !ltl.sequence
-  // CHECK: assert property (##[*] a);
-  %d4 = ltl.delay %a, 0 : i1
+  // CHECK: assert property (@(posedge clk) ##[*] a);
+  %d4 = ltl.clocked_delay %a, posedge %clk, 0 : i1
   sv.assert_property %d4 : !ltl.sequence
-  // CHECK: assert property (##[+] a);
-  %d5 = ltl.delay %a, 1 : i1
+  // CHECK: assert property (@(posedge clk) ##[+] a);
+  %d5 = ltl.clocked_delay %a, posedge %clk, 1 : i1
   sv.assert_property %d5 : !ltl.sequence
 
   // CHECK: assert property (@(posedge clk) ##4 a);
@@ -115,70 +106,70 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (a ##0 a);
   %c0 = ltl.concat %a, %a : i1, i1
   sv.assert_property %c0 : !ltl.sequence
-  // CHECK: assert property (a ##4 a);
-  %c1 = ltl.concat %a, %d1 : i1, !ltl.sequence
+  // CHECK: assert property (a ##0 (@(posedge clk) ##4 a));
+  %c1 = ltl.concat %a, %cd0 : i1, !ltl.sequence
   sv.assert_property %c1 : !ltl.sequence
-  // CHECK: assert property (a ##4 a ##[5:6] a);
-  %c2 = ltl.concat %a, %d1, %d2 : i1, !ltl.sequence, !ltl.sequence
+  // CHECK: assert property (a ##0 (@(posedge clk) ##4 a) ##0 (@(negedge clk) ##[5:6] a));
+  %c2 = ltl.concat %a, %cd0, %cd1 : i1, !ltl.sequence, !ltl.sequence
   sv.assert_property %c2 : !ltl.sequence
-  // CHECK: assert property (##4 a ##[5:6] a ##[7:$] a);
-  %c3 = ltl.concat %d1, %d2, %d3 : !ltl.sequence, !ltl.sequence, !ltl.sequence
+  // CHECK: assert property ((@(posedge clk) ##4 a) ##0 (@(negedge clk) ##[5:6] a) ##0 (@(edge clk) ##[7:$] a));
+  %c3 = ltl.concat %cd0, %cd1, %cd2 : !ltl.sequence, !ltl.sequence, !ltl.sequence
   sv.assert_property %c3 : !ltl.sequence
   // CHECK: assert property (a ##0 (@(posedge clk) ##4 b));
   %cd3 = ltl.clocked_delay %b, posedge %clk, 4, 0 : i1
   %c4 = ltl.concat %a, %cd3 : i1, !ltl.sequence
   sv.assert_property %c4 : !ltl.sequence
 
-  // CHECK: assert property (a and ##0 a);
+  // CHECK: assert property (a and (@(posedge clk) ##0 a));
   %g0 = ltl.and %a, %d0 : i1, !ltl.sequence
   sv.assert_property %g0 : !ltl.sequence
-  // CHECK: assert property (a ##0 a and a ##4 a);
+  // CHECK: assert property (a ##0 a and a ##0 (@(posedge clk) ##4 a));
   %g1 = ltl.and %c0, %c1 : !ltl.sequence, !ltl.sequence
   sv.assert_property %g1 : !ltl.sequence
-  // CHECK: assert property (a or ##0 a);
+  // CHECK: assert property (a or (@(posedge clk) ##0 a));
   %g2 = ltl.or %a, %d0 : i1, !ltl.sequence
   sv.assert_property %g2 : !ltl.sequence
-  // CHECK: assert property (a ##0 a or a ##4 a);
+  // CHECK: assert property (a ##0 a or a ##0 (@(posedge clk) ##4 a));
   %g3 = ltl.or %c0, %c1 : !ltl.sequence, !ltl.sequence
   sv.assert_property %g3 : !ltl.sequence
 
-  // CHECK: assert property (a[*0]);
-  %r0 = ltl.repeat %a, 0, 0 : i1
+  // CHECK: assert property (@(posedge clk) a[*0]);
+  %r0 = ltl.clocked_repeat %a, posedge %clk, 0, 0 : i1
   sv.assert_property %r0 : !ltl.sequence
-  // CHECK: assert property (a[*4]);
-  %r1 = ltl.repeat %a, 4, 0 : i1
+  // CHECK: assert property (@(posedge clk) a[*4]);
+  %r1 = ltl.clocked_repeat %a, posedge %clk, 4, 0 : i1
   sv.assert_property %r1 : !ltl.sequence
-  // CHECK: assert property (a[*5:6]);
-  %r2 = ltl.repeat %a, 5, 1 : i1
+  // CHECK: assert property (@(posedge clk) a[*5:6]);
+  %r2 = ltl.clocked_repeat %a, posedge %clk, 5, 1 : i1
   sv.assert_property %r2 : !ltl.sequence
-  // CHECK: assert property (a[*7:$]);
-  %r3 = ltl.repeat %a, 7 : i1
+  // CHECK: assert property (@(posedge clk) a[*7:$]);
+  %r3 = ltl.clocked_repeat %a, posedge %clk, 7 : i1
   sv.assert_property %r3 : !ltl.sequence
-  // CHECK: assert property (a[*]);
-  %r4 = ltl.repeat %a, 0 : i1
+  // CHECK: assert property (@(posedge clk) a[*]);
+  %r4 = ltl.clocked_repeat %a, posedge %clk, 0 : i1
   sv.assert_property %r4 : !ltl.sequence
-  // CHECK: assert property (a[+]);
-  %r5 = ltl.repeat %a, 1 : i1
+  // CHECK: assert property (@(posedge clk) a[+]);
+  %r5 = ltl.clocked_repeat %a, posedge %clk, 1 : i1
   sv.assert_property %r5 : !ltl.sequence
 
-  // CHECK: assert property (a[->0]);
-  %gtr0 = ltl.goto_repeat %a, 0, 0 : i1
+  // CHECK: assert property (@(posedge clk) a[->0]);
+  %gtr0 = ltl.clocked_goto_repeat %a, posedge %clk, 0, 0 : i1
   sv.assert_property %gtr0 : !ltl.sequence
-  // CHECK: assert property (a[->4]);
-  %gtr1 = ltl.goto_repeat %a, 4, 0 : i1
+  // CHECK: assert property (@(posedge clk) a[->4]);
+  %gtr1 = ltl.clocked_goto_repeat %a, posedge %clk, 4, 0 : i1
   sv.assert_property %gtr1 : !ltl.sequence
-  // CHECK: assert property (a[->5:6]);
-  %gtr2 = ltl.goto_repeat %a, 5, 1 : i1
+  // CHECK: assert property (@(posedge clk) a[->5:6]);
+  %gtr2 = ltl.clocked_goto_repeat %a, posedge %clk, 5, 1 : i1
   sv.assert_property %gtr2 : !ltl.sequence
 
-  // CHECK: assert property (a[=0]);
-  %ncr0 = ltl.non_consecutive_repeat %a, 0, 0 : i1
+  // CHECK: assert property (@(posedge clk) a[=0]);
+  %ncr0 = ltl.clocked_non_consecutive_repeat %a, posedge %clk, 0, 0 : i1
   sv.assert_property %ncr0 : !ltl.sequence
-  // CHECK: assert property (a[=4]);
-  %ncr1 = ltl.non_consecutive_repeat %a, 4, 0 : i1
+  // CHECK: assert property (@(posedge clk) a[=4]);
+  %ncr1 = ltl.clocked_non_consecutive_repeat %a, posedge %clk, 4, 0 : i1
   sv.assert_property %ncr1 : !ltl.sequence
-  // CHECK: assert property (a[=5:6]);
-  %ncr2 = ltl.non_consecutive_repeat %a, 5, 1 : i1
+  // CHECK: assert property (@(posedge clk) a[=5:6]);
+  %ncr2 = ltl.clocked_non_consecutive_repeat %a, posedge %clk, 5, 1 : i1
   sv.assert_property %ncr2 : !ltl.sequence
 
   // CHECK: assert property (@(posedge clk) a);
@@ -207,21 +198,21 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   sv.assert_property %n0 : !ltl.property
 
   // CHECK: assert property (a |-> b);
-  // CHECK: assert property (a ##1 b |-> not a);
-  // CHECK: assert property (a ##1 b |=> not a);
+  // CHECK: assert property (a ##0 (@(posedge clk) ##1 b) |-> not a);
+  // CHECK: assert property (a ##0 (@(posedge clk) ##1 b) ##0 (@(posedge clk) ##1 1'h1) |-> not a);
   %i0 = ltl.implication %a, %b : i1, i1
   sv.assert_property %i0 : !ltl.property
-  %i1 = ltl.delay %b, 1, 0 : i1
+  %i1 = ltl.clocked_delay %b, posedge %clk, 1, 0 : i1
   %i2 = ltl.concat %a, %i1 : i1, !ltl.sequence
   %i3 = ltl.implication %i2, %n0 : !ltl.sequence, !ltl.property
   sv.assert_property %i3 : !ltl.property
-  %i4 = ltl.delay %true, 1, 0 : i1
+  %i4 = ltl.clocked_delay %true, posedge %clk, 1, 0 : i1
   %i5 = ltl.concat %a, %i1, %i4 : i1, !ltl.sequence, !ltl.sequence
   %i6 = ltl.implication %i5, %n0 : !ltl.sequence, !ltl.property
   sv.assert_property %i6 : !ltl.property
 
-  // CHECK: assert property (a until b);
-  %u0 = ltl.until %a, %b : i1, i1
+  // CHECK: assert property (@(posedge clk) a until b);
+  %u0 = ltl.clocked_until %a, posedge %clk, %b : i1, i1
   sv.assert_property %u0 : !ltl.property
 
   // CHECK: assert property (s_eventually a);
@@ -259,18 +250,18 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
 }
 
 // CHECK-LABEL: module Precedence
-hw.module @Precedence(in %a: i1, in %b: i1) {
-  // CHECK: assert property ((a or ##0 b) and b);
-  %a0 = ltl.delay %b, 0, 0 : i1
+hw.module @Precedence(in %clk: i1, in %a: i1, in %b: i1) {
+  // CHECK: assert property ((a or (@(posedge clk) ##0 b)) and b);
+  %a0 = ltl.clocked_delay %b, posedge %clk, 0, 0 : i1
   %a1 = ltl.or %a, %a0 : i1, !ltl.sequence
   %a2 = ltl.and %a1, %b : !ltl.sequence, i1
   sv.assert_property %a2 : !ltl.sequence
 
-  // CHECK: assert property (##1 (a or ##0 b));
-  %d0 = ltl.delay %a1, 1, 0 : !ltl.sequence
+  // CHECK: assert property (@(posedge clk) ##1 (a or ##0 b));
+  %d0 = ltl.clocked_delay %a1, posedge %clk, 1, 0 : !ltl.sequence
   sv.assert_property %d0 : !ltl.sequence
 
-  // CHECK: assert property (not (a or ##0 b));
+  // CHECK: assert property (not (a or (@(posedge clk) ##0 b)));
   %n0 = ltl.not %a1 : !ltl.sequence
   sv.assert_property %n0 : !ltl.property
 
@@ -287,8 +278,8 @@ hw.module @Precedence(in %a: i1, in %b: i1) {
   sv.assert_property %e1 : !ltl.property
   sv.assert_property %e2 : !ltl.property
 
-  // CHECK: assert property ((a until b) and a);
-  %u0 = ltl.until %a, %b : i1, i1
+  // CHECK: assert property ((@(posedge clk) a until b) and a);
+  %u0 = ltl.clocked_until %a, posedge %clk, %b : i1, i1
   %u1 = ltl.and %u0, %a : !ltl.property, i1
   sv.assert_property %u1 : !ltl.property
 
@@ -296,8 +287,8 @@ hw.module @Precedence(in %a: i1, in %b: i1) {
   // context (case A) or Unary context (case B, because it sits under the
   // synthesized `not`). `until` has Until precedence, which is tighter than
   // Qualifier but looser than Unary, so it differentiates the two.
-  // CHECK: assert property (always a until b);
-  // CHECK: assert property (always not (a until b));
+  // CHECK: assert property (always (@(posedge clk) a until b));
+  // CHECK: assert property (always not (@(posedge clk) a until b));
   %ag0 = ltl.not %u0 : !ltl.property
   %ag1 = ltl.eventually %ag0 : !ltl.property
   %ag2 = ltl.not %ag1 : !ltl.property
@@ -325,9 +316,9 @@ hw.module @Precedence(in %a: i1, in %b: i1) {
 hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i1, in %d: i1, in %e: i1) {
   // Section 16.7 "Sequences"
 
-  // CHECK: assert property (a ##1 b ##0 c ##1 d);
-  %a0 = ltl.delay %b, 1, 0 : i1
-  %a1 = ltl.delay %d, 1, 0 : i1
+  // CHECK: assert property (a ##0 (@(posedge clk) ##1 b) ##0 c ##0 (@(posedge clk) ##1 d));
+  %a0 = ltl.clocked_delay %b, posedge %clk, 1, 0 : i1
+  %a1 = ltl.clocked_delay %d, posedge %clk, 1, 0 : i1
   %a2 = ltl.concat %a, %a0 : i1, !ltl.sequence
   %a3 = ltl.concat %c, %a1 : i1, !ltl.sequence
   %a4 = ltl.concat %a2, %a3 : !ltl.sequence, !ltl.sequence
@@ -335,8 +326,8 @@ hw.module @SystemVerilogSpecExamples(in %clk: i1, in %a: i1, in %b: i1, in %c: i
 
   // Section 16.12.20 "Property examples"
 
-  // CHECK: assert property (##1 a |-> b);
-  %d0 = ltl.delay %a, 1, 0 : i1
+  // CHECK: assert property ((@(posedge clk) ##1 a) |-> b);
+  %d0 = ltl.clocked_delay %a, posedge %clk, 1, 0 : i1
   %d1 = ltl.implication %d0, %b : !ltl.sequence, i1
   sv.assert_property %d1 : !ltl.property
 }

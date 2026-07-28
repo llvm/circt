@@ -25,30 +25,12 @@ def concatValues : NativeCodeCall<
 // before merging. Accepts (outerClock, innerClock, outerEdge, innerEdge).
 def SameClockAndEdge : Constraint<CPred<"$0 == $1 && $2 == $3">>;
 
-//===----------------------------------------------------------------------===//
-// DelayOp
-//===----------------------------------------------------------------------===//
-
-// delay(delay(s, I), J) -> delay(s, I+J)
-// delay(delay(s, I), J, N) -> delay(s, I+J)
-// delay(delay(s, I, N), J) -> delay(s, I+J)
-// delay(delay(s, I, N), J, M) -> delay(s, I+J, N+M)
 def mergedDelays : NativeCodeCall<
   "$_builder.getI64IntegerAttr($0.getInt() + $1.getInt())">;
 def mergedLengths : NativeCodeCall<[{
   $0 && $1 ? $_builder.getI64IntegerAttr($0.getInt() + $1.getInt())
            : IntegerAttr{}
 }]>;
-def NestedDelays : Pat<
-  (DelayOp (DelayOp $input, $delay1, $length1), $delay2, $length2),
-  (DelayOp $input, (mergedDelays $delay1, $delay2),
-                   (mergedLengths $length1, $length2))>;
-
-// delay(concat(s, ...), N, M) -> concat(delay(s, N, M), ...)
-def MoveDelayIntoConcat : Pat<
-  (DelayOp (ConcatOp $inputs), $delay, $length),
-  (ConcatOp (concatValues (DelayOp (valueHead $inputs), $delay, $length),
-                          (valueTail $inputs)))>;
 
 //===----------------------------------------------------------------------===//
 // ClockedDelayOp

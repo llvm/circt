@@ -162,27 +162,6 @@ def CirctClockDivider : FIRRTLIntrinsic {
   }];
 }
 
-def CirctLTLDelay : FIRRTLIntrinsic {
-  let mnemonic = "circt.ltl.delay";
-  let description = [{
-    Delays the occurrence of a boolean or sequence by a specified number of
-    cycles, with an optional bound on the length of the delay.
-
-    | Parameter | Type | Description                               |
-    | --------- | ---- | ----------------------------------------- |
-    | delay     | int  | minimum number of cycles to delay         |
-    | length    | int  | maximum additional delay cycles; optional |
-
-    | Argument | Type    | Description               |
-    | -------- | ------- | ------------------------- |
-    | in       | UInt<1> | input boolean or sequence |
-
-    | Result | Type    | Description      |
-    | ------ | ------- | ---------------- |
-    | out    | UInt<1> | delayed sequence |
-  }];
-}
-
 def CirctLTLClockedDelay : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.clocked_delay";
   let description = [{
@@ -215,27 +194,6 @@ def CirctLTLClockedAtom : FIRRTLIntrinsic {
   }];
 }
 
-def CirctLTLRepeat : FIRRTLIntrinsic {
-  let mnemonic = "circt.ltl.repeat";
-  let description = [{
-    Repeats a boolean or sequence a specified number of times consecutively,
-    with an optional bound on the number of additional repetitions.
-
-    | Parameter | Type | Description                               |
-    | --------- | ---- | ----------------------------------------- |
-    | base      | int  | minimum number of consecutive repetitions |
-    | more      | int  | maximum additional repetitions; optional  |
-
-    | Argument | Type    | Description               |
-    | -------- | ------- | ------------------------- |
-    | in       | UInt<1> | input boolean or sequence |
-
-    | Result | Type    | Description       |
-    | ------ | ------- | ----------------- |
-    | out    | UInt<1> | repeated sequence |
-  }];
-}
-
 def CirctLTLClockedRepeat : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.clocked_repeat";
   let description = [{
@@ -260,28 +218,6 @@ def CirctLTLClockedRepeat : FIRRTLIntrinsic {
   }];
 }
 
-def CirctLTLGoToRepeat : FIRRTLIntrinsic {
-  let mnemonic = "circt.ltl.goto_repeat";
-  let description = [{
-    Repeats a boolean or sequence a specified number of times, not necessarily
-    consecutively. The repetitions may be interspersed with cycles where the
-    property does not hold.
-
-    | Parameter | Type | Description                              |
-    | --------- | ---- | ---------------------------------------- |
-    | base      | int  | minimum number of repetitions            |
-    | more      | int  | maximum additional repetitions; optional |
-
-    | Argument | Type    | Description               |
-    | -------- | ------- | ------------------------- |
-    | in       | UInt<1> | input boolean or sequence |
-
-    | Result | Type    | Description           |
-    | ------ | ------- | --------------------- |
-    | out    | UInt<1> | go-to repeat sequence |
-  }];
-}
-
 def CirctLTLClockedGoToRepeat : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.clocked_goto_repeat";
   let description = [{
@@ -303,27 +239,6 @@ def CirctLTLClockedGoToRepeat : FIRRTLIntrinsic {
     | Result | Type    | Description                   |
     | ------ | ------- | ------------------------------ |
     | out    | UInt<1> | clocked go-to repeat sequence |
-  }];
-}
-
-def CirctLTLNonConsecutiveRepeat : FIRRTLIntrinsic {
-  let mnemonic = "circt.ltl.non_consecutive_repeat";
-  let description = [{
-    Like `circt.ltl.goto_repeat`, but allows additional cycles after the last
-    repetition before the overall sequence completes.
-
-    | Parameter | Type | Description                              |
-    | --------- | ---- | ---------------------------------------- |
-    | base      | int  | minimum number of repetitions            |
-    | more      | int  | maximum additional repetitions; optional |
-
-    | Argument | Type    | Description               |
-    | -------- | ------- | ------------------------- |
-    | in       | UInt<1> | input boolean or sequence |
-
-    | Result | Type    | Description                     |
-    | ------ | ------- | ------------------------------- |
-    | out    | UInt<1> | non-consecutive repeat sequence |
   }];
 }
 
@@ -457,23 +372,6 @@ def CirctLTLImplication : FIRRTLIntrinsic {
     | Result | Type    | Description          |
     | ------ | ------- | -------------------- |
     | out    | UInt<1> | implication property |
-  }];
-}
-
-def CirctLTLUntil : FIRRTLIntrinsic {
-  let mnemonic = "circt.ltl.until";
-  let converter = "CirctLTLBinaryConverter<LTLUntilIntrinsicOp>";
-  let description = [{
-    The first property must hold until the second property holds.
-
-    | Argument | Type    | Description                          |
-    | -------- | ------- | ------------------------------------ |
-    | lhs      | UInt<1> | property that must hold continuously |
-    | rhs      | UInt<1> | property that releases lhs           |
-
-    | Result | Type    | Description    |
-    | ------ | ------- | -------------- |
-    | out    | UInt<1> | until property |
   }];
 }
 

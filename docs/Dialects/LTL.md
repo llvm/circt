@@ -48,54 +48,54 @@ a ##1 b ##1 c      // 1 cycle delay between a, b, and c
 
 In the simplest form, a cycle delay can appear as a prefix of another sequence, e.g., `##1 a`. This is essentially a concatenation with only one sequence, `a`, and an initial cycle delay of the concatenation of `1`. The prefix delays map to the LTL dialect as follows:
 
-- `##N seq`. **Fixed delay.** Sequence `seq` has to match exactly `N` cycles in the future. Equivalent to `ltl.delay %seq, N, 0`.
-- `##[N:M] seq`. **Bounded range delay.** Sequence `seq` has to match anywhere between `N` and `M` cycles in the future, inclusive. Equivalent to `ltl.delay %seq, N, (M-N)`
-- `##[N:$] seq`. **Unbounded range delay.** Sequence `seq` has to match anywhere at or beyond `N` cycles in the future, after a finite amount of cycles. Equivalent to `ltl.delay %seq, N`.
-- `##[*] seq`. Shorthand for `##[0:$]`. Equivalent to `ltl.delay %seq, 0`.
-- `##[+] seq`. Shorthand for `##[1:$]`. Equivalent to `ltl.delay %seq, 1`.
+- `##N seq`. **Fixed delay.** Sequence `seq` has to match exactly `N` cycles in the future. Equivalent to `ltl.clocked_delay %seq, posedge %clk, N, 0`.
+- `##[N:M] seq`. **Bounded range delay.** Sequence `seq` has to match anywhere between `N` and `M` cycles in the future, inclusive. Equivalent to `ltl.clocked_delay %seq, posedge %clk, N, (M-N)`
+- `##[N:$] seq`. **Unbounded range delay.** Sequence `seq` has to match anywhere at or beyond `N` cycles in the future, after a finite amount of cycles. Equivalent to `ltl.clocked_delay %seq, posedge %clk, N`.
+- `##[*] seq`. Shorthand for `##[0:$]`. Equivalent to `ltl.clocked_delay %seq, posedge %clk, 0`.
+- `##[+] seq`. Shorthand for `##[1:$]`. Equivalent to `ltl.clocked_delay %seq, posedge %clk, 1`.
 
 Concatenation of two sequences always involves a cycle delay specification in between them, e.g., `a ##1 b` where sequence `b` starts in the cycle after `a` ends. Zero-cycle delays can be specified, e.g., `a ##0 b` where `b` starts in the same cycle as `a` ends. If `a` and `b` are booleans, `a ##0 b` is equivalent to `a && b`.
 
-The dialect separates concatenation and cycle delay into two orthogonal operations, `ltl.concat` and `ltl.delay`, respectively. The former models concatenation as `a ##0 b`, and the latter models delay as a prefix `##1 c`. The SVA concatenations with their infix delays map to the LTL dialect as follows:
+The dialect separates concatenation and cycle delay into two orthogonal operations, `ltl.concat` and `ltl.clocked_delay`, respectively. The former models concatenation as `a ##0 b`, and the latter models delay as a prefix `##1 c`. The SVA concatenations with their infix delays map to the LTL dialect as follows:
 
 - `seqA ##N seqB`. **Binary concatenation.** Sequence `seqB` follows `N` cycles after `seqA`. This can be represented as `seqA ##0 (##N seqB)`, which is equivalent to
   ```
-  %0 = ltl.delay %seqB, N, 0
+  %0 = ltl.clocked_delay %seqB, posedge %clk, N, 0
   ltl.concat %seqA, %0
   ```
 
 - `seqA ##N seqB ##M seqC`. **Variadic concatenation.** Sequence `seqC` follows `M` cycles after `seqB`, which itself follows `N` cycles after `seqA`. This can be represented as `seqA ##0 (##N seqB) ##0 (##M seqC)`, which is equivalent to
   ```
-  %0 = ltl.delay %seqB, N, 0
-  %1 = ltl.delay %seqC, M, 0
+  %0 = ltl.clocked_delay %seqB, posedge %clk, N, 0
+  %1 = ltl.clocked_delay %seqC, posedge %clk, M, 0
   ltl.concat %seqA, %0, %1
   ```
   Since concatenation is associative, this is also equivalent to `seqA ##N (seqB ##M seqC)`:
   ```
-  %0 = ltl.delay %seqC, M, 0
+  %0 = ltl.clocked_delay %seqC, posedge %clk, M, 0
   %1 = ltl.concat %seqB, %0
-  %2 = ltl.delay %1, N, 0
+  %2 = ltl.clocked_delay %1, posedge %clk, N, 0
   ltl.concat %seqA, %2
   ```
   And also `(seqA ##N seqB) ##M seqC`:
   ```
-  %0 = ltl.delay %seqB, N, 0
+  %0 = ltl.clocked_delay %seqB, posedge %clk, N, 0
   %1 = ltl.concat %seqA, %0
-  %2 = ltl.delay %seqC, M, 0
+  %2 = ltl.clocked_delay %seqC, posedge %clk, M, 0
   ltl.concat %1, %2
   ```
 
 - `##N seqA ##M seqB`. **Initial delay.** Sequence `seqB` follows `M` cycles afer `seqA`, which itself starts `N` cycles in the future. This is equivalent to a delay on `seqA` within the concatenation:
   ```
-  %0 = ltl.delay %seqA, N, 0
-  %1 = ltl.delay %seqB, M, 0
+  %0 = ltl.clocked_delay %seqA, posedge %clk, N, 0
+  %1 = ltl.clocked_delay %seqB, posedge %clk, M, 0
   ltl.concat %0, %1
   ```
   Alternatively, the delay can also be placed on the entire concatenation:
   ```
-  %0 = ltl.delay %seqB, M, 0
+  %0 = ltl.clocked_delay %seqB, posedge %clk, M, 0
   %1 = ltl.concat %seqA, %0
-  ltl.delay %1, N, 0
+  ltl.clocked_delay %1, posedge %clk, N, 0
   ```
 
 - Only the fixed delay `##N` is shown here for simplicity, but the examples extend to the other delay flavors `##[N:M]`, `##[N:$]`, `##[*]`, and `##[+]`.
@@ -124,32 +124,34 @@ The `ltl.implication` op implements the overlapping case `|->`, such that the tw
 - `seq |=> prop`. **Non-overlapping implication.** Equivalent to
   ```
   %true = hw.constant true
-  %0 = ltl.delay %true, 1, 0
+  %0 = ltl.clocked_delay %true, posedge %clk, 1, 0
   %1 = ltl.concat %seq, %0
   ltl.implication %1, %prop
   ```
 
-An important benefit of only modeling the overlapping `|->` implication operator is that it does not interact with a clock. The end point of the left-hand sequence is the starting point of the right-hand sequence. There is no notion of delay between the end of the left and the start of the right sequence. Compare this to the `|=>` operator in SVA, which implies that the right-hand sequence happens at "strictly the next clock tick", which requires the operator to have a notion of time and clocking. As described above, it is still possible to model this using an explicit `ltl.delay` op, which already has an established interaction with a clock.
+An important benefit of only modeling the overlapping `|->` implication operator is that it does not interact with a clock. The end point of the left-hand sequence is the starting point of the right-hand sequence. There is no notion of delay between the end of the left and the start of the right sequence. Compare this to the `|=>` operator in SVA, which implies that the right-hand sequence happens at "strictly the next clock tick", which requires the operator to have a notion of time and clocking. As described above, it is still possible to model this using an explicit `ltl.clocked_delay` op, which already has an established interaction with a clock.
 
 
 ### Repetition
 
 Consecutive repetition repeats the sequence by a number of times. For example, `s[*3]` repeats the sequence `s` three times, which is equivalent to `s ##1 s ##1 s`. This also applies when the sequence `s` matches different traces with different lengths. For example `(##[0:3] a)[*2]` is equivalent to the disjunction of all the combinations such as `a ##1 a`, `a ##1 (##3 a)`, `(##3 a) ##1 (##2 a)`. However, the repetition with unbounded range cannot be expanded to the concatenations as it produces an infinite formula.
 
-The definition of `ltl.repeat` is similar to that of `ltl.delay`. The mapping from SVA's consecutive repetition to the LTL dialect is as follows:
+The base and optional range encoding of `ltl.clocked_repeat` follows the same
+convention as `ltl.clocked_delay`. The mapping from SVA's consecutive
+repetition to the LTL dialect is as follows:
 
-- `seq[*N]`. **Fixed repeat.** Repeats `N` times. Equivalent to `ltl.repeat %seq, N, 0`.
-- `seq[*N:M]`. **Bounded range repeat.** Repeats `N` to `M` times. Equivalent to `ltl.repeat %seq, N, (M-N)`.
-- `seq[*N:$]`. **Unbounded range repeat.** Repeats `N` to an indefinite finite number of times. Equivalent to `ltl.repeat %seq, N`.
-- `seq[*]`. Shorthand for `seq[*0:$]`. Equivalent to `ltl.repeat %seq, 0`.
-- `seq[+]`. Shorthand for `seq[*1:$]`. Equivalent to `ltl.repeat %seq, 1`.
+- `seq[*N]`. **Fixed repeat.** Repeats `N` times. Equivalent to `ltl.clocked_repeat %seq, posedge %clk, N, 0`.
+- `seq[*N:M]`. **Bounded range repeat.** Repeats `N` to `M` times. Equivalent to `ltl.clocked_repeat %seq, posedge %clk, N, (M-N)`.
+- `seq[*N:$]`. **Unbounded range repeat.** Repeats `N` to an indefinite finite number of times. Equivalent to `ltl.clocked_repeat %seq, posedge %clk, N`.
+- `seq[*]`. Shorthand for `seq[*0:$]`. Equivalent to `ltl.clocked_repeat %seq, posedge %clk, 0`.
+- `seq[+]`. Shorthand for `seq[*1:$]`. Equivalent to `ltl.clocked_repeat %seq, posedge %clk, 1`.
   
 #### Non-Consecutive Repetition  
 
-Non-consecutive repetition checks that a sequence holds a certain number of times within an arbitrary repetition of the sequence. There are two ways of expressing non-consecutive repetition, either by including the last iteration in the count or not. If the last iteration is included, then this is called a "go-to" style non-consecutive repetition and can be defined using the `ltl.goto_repeat <input>, <N>, <window>` operation, e.g. `a !b b b !b !b b c` is a valid observation of `ltl.goto_repeat %b, 1, 2`, but `a !b b b !b !b b !b !b c` is not. If we omit the constraint of having the last iteration hold, then this is simply called a non-consecutive repetition, and can be defined using the `ltl.non_consecutive_repeat <input, <N>, <window>` operation, e.g. both `a !b b b !b !b b c` and `a !b b b !b !b b !b !b c` are valid observations of `ltl.non_consecutive_repeat %b, 1, 2`. The SVA mapping of these operations is as follows:
+Non-consecutive repetition checks that a sequence holds a certain number of times within an arbitrary repetition of the sequence. There are two ways of expressing non-consecutive repetition, either by including the last iteration in the count or not. If the last iteration is included, then this is called a "go-to" style non-consecutive repetition and uses `ltl.clocked_goto_repeat`. If we omit the constraint of having the last iteration hold, then this uses `ltl.clocked_non_consecutive_repeat`. The SVA mapping of these operations is as follows:
 
-- `seq[->n:m]`: **Go-To Style Repetition**, equivalent to `ltl.goto_repeat %seq, n, (m-n)`.  
-- `seq[=n:m]` : **Non-Consecutive Repetition** equivalent to `ltl.non_consecutive_repeat %seq, n, (m-n)`.  
+- `seq[->n:m]`: **Go-To Style Repetition**, equivalent to `ltl.clocked_goto_repeat %seq, posedge %clk, n, (m-n)`.
+- `seq[=n:m]` : **Non-Consecutive Repetition** equivalent to `ltl.clocked_non_consecutive_repeat %seq, posedge %clk, n, (m-n)`.
 
 
 ### Clocking
@@ -171,13 +173,8 @@ For example, `ltl.clocked_atom %a, posedge %clk : i1` represents the atomic sequ
 
 #### Delay clocking
 
-`ltl.delay` takes the delayed input first, followed by the delay window:
-
-```
-ltl.delay %input, <delay>[, <length>]
-```
-
-For explicitly clocked delays, use `ltl.clocked_delay`:
+`ltl.clocked_delay` takes the delayed input first, followed by the clocking
+event and delay window:
 
 ```
 ltl.clocked_delay %input, <edge> %clock, <delay>[, <length>]
@@ -185,15 +182,12 @@ ltl.clocked_delay %input, <edge> %clock, <delay>[, <length>]
 
 `%clock` is an `i1` value (e.g. a module clock); `<edge>` is `posedge`, `negedge`, or `edge`. For example, `ltl.clocked_delay %s, posedge %clk, 3` means `%s` must hold 3 cycles later on `%clk` rising edges.
 
-`ltl.delay` is unclocked. Use `ltl.clocked_delay` whenever the delay is
-evaluated on a hardware clock.
-
 Examples:
 
 ```mlir
-ltl.delay %s, 3
-ltl.delay %s, 3, 0
+ltl.clocked_delay %s, posedge %clk, 3
 ltl.clocked_delay %s, posedge %clk, 3, 0
+ltl.clocked_delay %s, negedge %clk, 3, 0
 ```
 
 
@@ -204,16 +198,15 @@ sequence/property operations that carry their clock explicitly as part of the
 operation itself:
 
 - `ltl.clocked_atom` — clocked form of a boolean atom (see [Atomic clocking](#atomic-clocking) above).
-- `ltl.clocked_delay` — clocked form of `ltl.delay` (see [Delay clocking](#delay-clocking) above). This is the **canonical example** of the pattern: it takes the same `<input>, <delay>[, <length>]` operands as `ltl.delay`, plus an explicit `<edge> %clock`, e.g. `ltl.clocked_delay %s, posedge %clk, 3, 0`.
-- `ltl.clocked_until` — clocked form of `ltl.until`.
+- `ltl.clocked_delay` — cycle delay on an explicit clock (see [Delay clocking](#delay-clocking) above).
+- `ltl.clocked_until` — weak-until evaluated on an explicit clock.
 - `ltl.clocked_eventually` — clocked form of `ltl.eventually`.
-- `ltl.clocked_repeat` — clocked form of `ltl.repeat`.
-- `ltl.clocked_goto_repeat` — clocked form of `ltl.goto_repeat`.
-- `ltl.clocked_non_consecutive_repeat` — clocked form of `ltl.non_consecutive_repeat`.
+- `ltl.clocked_repeat` — consecutive repetition on an explicit clock.
+- `ltl.clocked_goto_repeat` — go-to repetition on an explicit clock.
+- `ltl.clocked_non_consecutive_repeat` — non-consecutive repetition on an explicit clock.
 
-Each of these ops takes the same operands as its unclocked counterpart, plus a
-`ClockEdgeAttr:$edge` and an `i1:$clock` operand recording the clocking event
-under which it is evaluated, mirroring `ltl.clocked_delay`.
+Each clocked temporal op has a `ClockEdgeAttr:$edge` and an `i1:$clock` operand
+recording the clocking event under which it is evaluated.
 
 The purely logical combinators — `ltl.and`, `ltl.or`, `ltl.not`, `ltl.intersect`, `ltl.concat`, and `ltl.implication` — remain clockless. They do not carry a clock operand of their own; instead they simply combine already-clocked (or clockless) operands, inheriting whatever clock(s) those operands carry.
 
@@ -401,50 +394,50 @@ lowering is applied:
   
 - **`a ##n b`**:   
 ```mlir
-%a_n = ltl.delay %a, n, 0 : i1
+%a_n = ltl.clocked_delay %a, posedge %clk, n, 0 : i1
 %anb = ltl.concat %a_n, %b : !ltl.sequence 
 ```
 
 - **`a ##[n:m] b`**:
 ```mlir
-%a_n = ltl.delay %a, n, (m-n) : i1
+%a_n = ltl.clocked_delay %a, posedge %clk, n, (m-n) : i1
 %anb = ltl.concat %a_n, %b : !ltl.sequence   
 ```
 
 - **`s [*n]`**:  
 ```mlir
-%repsn = ltl.repeat %s, n, 0 : !ltl.sequence  
+%repsn = ltl.clocked_repeat %s, posedge %clk, n, 0 : !ltl.sequence
 ```
 
 - **`s [*n:m]`**: 
 ```mlir
-%repsnm = ltl.repeat %s, n, (m-n) : !ltl.sequence  
+%repsnm = ltl.clocked_repeat %s, posedge %clk, n, (m-n) : !ltl.sequence
 ```
 
 - **`s[*n:$]`**:   
 ```mlir
-%repsninf = ltl.repeat %s, n : !ltl.sequence  
+%repsninf = ltl.clocked_repeat %s, posedge %clk, n : !ltl.sequence
 ```
 
 - **`s[->n:m]`**:   
 ```mlir
-%1 = ltl.goto_repeat %s, n, (m-n) : !ltl.sequence
+%1 = ltl.clocked_goto_repeat %s, posedge %clk, n, (m-n) : !ltl.sequence
 ```  
 
 - **`s[=n:m]`**:   
 ```mlir
-%1 = ltl.non_consecutive_repeat %s, n, (m-n) : !ltl.sequence  
+%1 = ltl.clocked_non_consecutive_repeat %s, posedge %clk, n, (m-n) : !ltl.sequence
 ```  
 
 - **`s1 ##[+] s2`**:   
 ```mlir
-%ds1 = ltl.delay %s1, 1
+%ds1 = ltl.clocked_delay %s1, posedge %clk, 1
 %s1s2 = ltl.concat %ds1, %s2 : !ltl.sequence  
 ```  
 
 - **`s1 ##[*] s2`**:   
 ```mlir
-%ds1 = ltl.delay %s1, 0
+%ds1 = ltl.clocked_delay %s1, posedge %clk, 0
 %s1s2 = ltl.concat %ds1, %s2 : !ltl.sequence  
 ```  
 
@@ -472,16 +465,16 @@ ltl.not %s1 : !ltl.sequence
 
 - **`expr throughout s`**:   
 ```mlir
-%repexpr = ltl.repeat %expr, 0 : !ltl.sequence
+%repexpr = ltl.clocked_repeat %expr, posedge %clk, 0 : !ltl.sequence
 %res = ltl.intersect %repexpr, %s : !ltl.sequence  
 ```
 
 - **`s1 within s2`**:     
 ```mlir
 %c1 = hw.constant 1 : i1
-%rep1 = ltl.repeat %c1, 0 : !ltl.sequence
-%drep1 = ltl.delay %rep1, 1, 0 : !ltl.sequence
-%ds1 = ltl.delay %s1, 1, 0 : !ltl.sequence
+%rep1 = ltl.clocked_repeat %c1, posedge %clk, 0 : !ltl.sequence
+%drep1 = ltl.clocked_delay %rep1, posedge %clk, 1, 0 : !ltl.sequence
+%ds1 = ltl.clocked_delay %s1, posedge %clk, 1, 0 : !ltl.sequence
 %evs1 = ltl.concat %drep1, %ds1, %c1 : !ltl.sequence
 %res = ltl.intersect %evs1, %s2 : !ltl.sequence  
 ```
@@ -494,7 +487,7 @@ ltl.not %s1 : !ltl.sequence
 - **`s |=> p`**:  
 ```mlir
 %c1 = hw.constant 1 : i1
-%ds = ltl.delay %s, 1, 0 : i1
+%ds = ltl.clocked_delay %s, posedge %clk, 1, 0 : i1
 %antecedent = ltl.concat %ds, %c1 : !ltl.sequence
 %impl = ltl.implication %antecedent, %p : !ltl.property  
 ```
@@ -523,7 +516,7 @@ ltl.not %s1 : !ltl.sequence
 - **`s #=# p`**:  
 ```mlir
 %np = ltl.not %p : !ltl.property	
-%ds = ltl.delay %s, 1, 0 : !ltl.sequence
+%ds = ltl.clocked_delay %s, posedge %clk, 1, 0 : !ltl.sequence
 %c1 = hw.constant 1 : i1
 %ant = ltl.concat %ds, c1 : !ltl.sequence 
 %impl = ltl.implication %ant, %np : !ltl.property
@@ -535,12 +528,12 @@ ltl.not %s1 : !ltl.sequence
 
 - **`nexttime p`**:   
 ```mlir
-ltl.delay %p, 1, 0 : !ltl.sequence   
+ltl.clocked_delay %p, posedge %clk, 1, 0 : !ltl.sequence
 ```  
 
 - **`nexttime[n] p`**:  
 ```mlir
-ltl.delay %p, n, 0 : !ltl.sequence   
+ltl.clocked_delay %p, posedge %clk, n, 0 : !ltl.sequence
 ```  
 
 - **`s_nexttime p`**: not really distinguishable from the weak version in CIRCT.
@@ -548,12 +541,12 @@ ltl.delay %p, n, 0 : !ltl.sequence
 
 - **`always p`**:   
 ```mlir
-ltl.repeat %p, 0 : !ltl.sequence   
+ltl.clocked_repeat %p, posedge %clk, 0 : !ltl.sequence
 ```  
 
 - **`always[n:m] p`**:   
 ```mlir
-ltl.repeat %p, n, m : !ltl.sequence 
+ltl.clocked_repeat %p, posedge %clk, n, m : !ltl.sequence
 ```  
 - **`s_always[n:m] p`**: not really distinguishable in CIRCT  
 
@@ -568,14 +561,14 @@ ltl.eventually %p : !ltl.property
 
 - **`p1 until p2`**:   
 ```mlir
-%1 = ltl.until %p1, %p2 : !ltl.sequence  
+%1 = ltl.clocked_until %p1, posedge %clk, %p2 : !ltl.sequence
 ```  
 
 - **`p1 s_until p2`**: not really distinguishable from the weak version in CIRCT.
 
 - **`p1 until_with p2`**: Equivalent to `(p1 until p2) implies (p1 and p2)`  
 ```mlir
-%1 = ltl.until %p1, %p2 : !ltl.sequence
+%1 = ltl.clocked_until %p1, posedge %clk, %p2 : !ltl.sequence
 %2 = ltl.and %p1, %p2 : !ltl:property
 %n1 = ltl.not %1 : !ltl.property
 %res = ltl.or %n1, %2 : !ltl.property  
@@ -595,33 +588,33 @@ ltl.eventually %p : !ltl.property
 
 ### Next / Delay
 
-The `ltl.delay` sequence operation represents various shorthands for the *next*/**X** operator in LTL:
+The `ltl.clocked_delay` sequence operation represents various shorthands for the *next*/**X** operator in LTL:
 
 | Operation            | LTL Formula                 |
 |----------------------|-----------------------------|
-| `ltl.delay %a, 0, 0` | a                           |
-| `ltl.delay %a, 1, 0` | **X**a                      |
-| `ltl.delay %a, 3, 0` | **XXX**a                    |
-| `ltl.delay %a, 0, 2` | a ∨ **X**a ∨ **XX**a        |
-| `ltl.delay %a, 1, 2` | **X**(a ∨ **X**a ∨ **XX**a) |
-| `ltl.delay %a, 0`    | **F**a                      |
-| `ltl.delay %a, 2`    | **XXF**a                    |
+| `ltl.clocked_delay %a, posedge %clk, 0, 0` | a                           |
+| `ltl.clocked_delay %a, posedge %clk, 1, 0` | **X**a                      |
+| `ltl.clocked_delay %a, posedge %clk, 3, 0` | **XXX**a                    |
+| `ltl.clocked_delay %a, posedge %clk, 0, 2` | a ∨ **X**a ∨ **XX**a        |
+| `ltl.clocked_delay %a, posedge %clk, 1, 2` | **X**(a ∨ **X**a ∨ **XX**a) |
+| `ltl.clocked_delay %a, posedge %clk, 0`    | **F**a                      |
+| `ltl.clocked_delay %a, posedge %clk, 2`    | **XXF**a                    |
 
 
 ### Until and Eventually
 
-`ltl.until` is *weak*, meaning the property will hold even if the trace does not contain enough clock cycles to evaluate the property. `ltl.eventually` is *strong*, where `ltl.eventually %p` means `p` must hold at some point in the trace.
+`ltl.clocked_until` is *weak*, meaning the property will hold even if the trace does not contain enough clock cycles to evaluate the property. `ltl.eventually` is *strong*, where `ltl.eventually %p` means `p` must hold at some point in the trace.
 
 
 ### Concatenation and Repetition
 
 The `ltl.concat` sequence operation does not have a direct equivalent in LTL. It builds a longer sequence by composing multiple shorter sequences one after another. LTL has no concept of concatenation, or a *"v happens after u"*, where the point in time at which v starts is dependent on how long the sequence u was.
 
-For a sequence u with a fixed length of 2, concatenation can be represented as *"(u happens) and (v happens 2 cycles in the future)"*, u ∧ **XX**v. If u has a dynamic length though, for example a delay between 1 and 2, `ltl.delay %u, 1, 1` or **X**u ∨ **XX**u in LTL, there is no fixed number of cycles by which the sequence v can be delayed to make it start after u. Instead, all different-length variants of sequence u have to be enumerated and combined with a copy of sequence v delayed by the appropriate amount: (**X**u ∧ **XX**v) ∨ (**XX**u ∧ **XXX**v). This is basically saying "u delayed by 1 to 2 cycles followed by v" is the same as either *"u delayed by 1 cycle and v delayed by 2 cycles"*, or *"u delayed by 2 cycles and v delayed by 3 cycles"*.
+For a sequence u with a fixed length of 2, concatenation can be represented as *"(u happens) and (v happens 2 cycles in the future)"*, u ∧ **XX**v. If u has a dynamic length though, for example a delay between 1 and 2, `ltl.clocked_delay %u, posedge %clk, 1, 1` or **X**u ∨ **XX**u in LTL, there is no fixed number of cycles by which the sequence v can be delayed to make it start after u. Instead, all different-length variants of sequence u have to be enumerated and combined with a copy of sequence v delayed by the appropriate amount: (**X**u ∧ **XX**v) ∨ (**XX**u ∧ **XXX**v). This is basically saying "u delayed by 1 to 2 cycles followed by v" is the same as either *"u delayed by 1 cycle and v delayed by 2 cycles"*, or *"u delayed by 2 cycles and v delayed by 3 cycles"*.
 
 The *"v happens after u"* relationship is crucial to express sequences efficiently, which is why the LTL dialect has the `ltl.concat` op. If sequences are thought of as regular expressions over time, for example, `a(b|cd)` or *"a followed by either (b) or (c followed by d)"*, the importance of having a concatenation operation as temporal connective becomes apparent. Why LTL formalisms tend to not include such an operator is unclear.
 
-As for `ltl.repeat`, it also relies on the semantics of *v happens after u* to compose the repeated sequences. Unlike `ltl.concat`, which can be expanded by LTL operators within a finite formula size, unbounded repetition cannot be expanded by listing all cases. This means unbounded repetition imports semantics that LTL cannot describe. The LTL dialect has this operation because it is necessary and useful for regular expressions and SVA.
+As for `ltl.clocked_repeat`, it also relies on the semantics of *v happens after u* to compose the repeated sequences. Unlike `ltl.concat`, which can be expanded by LTL operators within a finite formula size, unbounded repetition cannot be expanded by listing all cases. This means unbounded repetition imports semantics that LTL cannot describe. The LTL dialect has this operation because it is necessary and useful for regular expressions and SVA.
 
 
 ## Types

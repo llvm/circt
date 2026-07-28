@@ -1966,19 +1966,14 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLAndIntrinsicOp op);
   LogicalResult visitExpr(LTLOrIntrinsicOp op);
   LogicalResult visitExpr(LTLIntersectIntrinsicOp op);
-  LogicalResult visitExpr(LTLDelayIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedDelayIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedAtomIntrinsicOp op);
   LogicalResult visitExpr(LTLConcatIntrinsicOp op);
-  LogicalResult visitExpr(LTLRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedRepeatIntrinsicOp op);
-  LogicalResult visitExpr(LTLGoToRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedGoToRepeatIntrinsicOp op);
-  LogicalResult visitExpr(LTLNonConsecutiveRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedNonConsecutiveRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLNotIntrinsicOp op);
   LogicalResult visitExpr(LTLImplicationIntrinsicOp op);
-  LogicalResult visitExpr(LTLUntilIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedUntilIntrinsicOp op);
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedEventuallyIntrinsicOp op);
@@ -4817,11 +4812,6 @@ LogicalResult FIRRTLLowering::visitExpr(LTLIntersectIntrinsicOp op) {
       ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLDelayIntrinsicOp op) {
-  return setLoweringToLTL<ltl::DelayOp>(op, getLoweredValue(op.getInput()),
-                                        op.getDelayAttr(), op.getLengthAttr());
-}
-
 static ltl::ClockEdge firrtlToLTLClockEdge(EventControl eventControl) {
   switch (eventControl) {
   case EventControl::AtPosEdge:
@@ -4857,11 +4847,6 @@ LogicalResult FIRRTLLowering::visitExpr(LTLConcatIntrinsicOp op) {
       ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLRepeatIntrinsicOp op) {
-  return setLoweringToLTL<ltl::RepeatOp>(op, getLoweredValue(op.getInput()),
-                                         op.getBaseAttr(), op.getMoreAttr());
-}
-
 LogicalResult FIRRTLLowering::visitExpr(LTLClockedRepeatIntrinsicOp op) {
   auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
                                       firrtlToLTLClockEdge(op.getEdge()));
@@ -4871,11 +4856,6 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockedRepeatIntrinsicOp op) {
       op.getMoreAttr());
 }
 
-LogicalResult FIRRTLLowering::visitExpr(LTLGoToRepeatIntrinsicOp op) {
-  return setLoweringToLTL<ltl::GoToRepeatOp>(
-      op, getLoweredValue(op.getInput()), op.getBaseAttr(), op.getMoreAttr());
-}
-
 LogicalResult FIRRTLLowering::visitExpr(LTLClockedGoToRepeatIntrinsicOp op) {
   auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
                                       firrtlToLTLClockEdge(op.getEdge()));
@@ -4883,11 +4863,6 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockedGoToRepeatIntrinsicOp op) {
       op, getLoweredValue(op.getInput()), edge,
       getLoweredNonClockValue(op.getClock()), op.getBaseAttr(),
       op.getMoreAttr());
-}
-
-LogicalResult FIRRTLLowering::visitExpr(LTLNonConsecutiveRepeatIntrinsicOp op) {
-  return setLoweringToLTL<ltl::NonConsecutiveRepeatOp>(
-      op, getLoweredValue(op.getInput()), op.getBaseAttr(), op.getMoreAttr());
 }
 
 LogicalResult
@@ -4906,12 +4881,6 @@ LogicalResult FIRRTLLowering::visitExpr(LTLNotIntrinsicOp op) {
 
 LogicalResult FIRRTLLowering::visitExpr(LTLImplicationIntrinsicOp op) {
   return setLoweringToLTL<ltl::ImplicationOp>(
-      op,
-      ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
-}
-
-LogicalResult FIRRTLLowering::visitExpr(LTLUntilIntrinsicOp op) {
-  return setLoweringToLTL<ltl::UntilOp>(
       op,
       ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
 }

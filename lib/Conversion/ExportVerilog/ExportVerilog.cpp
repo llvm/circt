@@ -3625,18 +3625,13 @@ private:
   EmittedProperty visitLTL(ltl::AndOp op);
   EmittedProperty visitLTL(ltl::OrOp op);
   EmittedProperty visitLTL(ltl::IntersectOp op);
-  EmittedProperty visitLTL(ltl::DelayOp op);
   EmittedProperty visitLTL(ltl::ClockedDelayOp op);
   EmittedProperty visitLTL(ltl::ConcatOp op);
-  EmittedProperty visitLTL(ltl::RepeatOp op);
   EmittedProperty visitLTL(ltl::ClockedRepeatOp op);
-  EmittedProperty visitLTL(ltl::GoToRepeatOp op);
   EmittedProperty visitLTL(ltl::ClockedGoToRepeatOp op);
-  EmittedProperty visitLTL(ltl::NonConsecutiveRepeatOp op);
   EmittedProperty visitLTL(ltl::ClockedNonConsecutiveRepeatOp op);
   EmittedProperty visitLTL(ltl::NotOp op);
   EmittedProperty visitLTL(ltl::ImplicationOp op);
-  EmittedProperty visitLTL(ltl::UntilOp op);
   EmittedProperty visitLTL(ltl::ClockedUntilOp op);
   EmittedProperty visitLTL(ltl::EventuallyOp op);
   EmittedProperty visitLTL(ltl::ClockedEventuallyOp op);
@@ -3853,13 +3848,6 @@ void PropertyEmitter::emitLTLClockingEvent(ltl::ClockEdge edge, Value clock) {
   });
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::DelayOp op) {
-  emitLTLDelay(op.getDelay(), op.getLength());
-  ps << PP::space;
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Concat);
-  return {PropertyPrecedence::Concat};
-}
-
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedDelayOp op) {
   return emitClocked(op.getEdge(), op.getClock(), [&] {
     emitLTLDelay(op.getDelay(), op.getLength());
@@ -3880,7 +3868,11 @@ void PropertyEmitter::emitLTLConcat(ValueRange inputs) {
   for (auto input : inputs) {
     if (addSeparator) {
       ps << PP::space;
-      if (!input.getDefiningOp<ltl::DelayOp>())
+      auto delayOp = input.getDefiningOp<ltl::ClockedDelayOp>();
+      bool delayUsesCurrentClock = delayOp && currentClock &&
+                                   currentClock->first == delayOp.getEdge() &&
+                                   currentClock->second == delayOp.getClock();
+      if (!delayUsesCurrentClock)
         ps << "##0" << PP::space;
     }
     addSeparator = true;
@@ -3891,30 +3883,6 @@ void PropertyEmitter::emitLTLConcat(ValueRange inputs) {
 EmittedProperty PropertyEmitter::visitLTL(ltl::ConcatOp op) {
   emitLTLConcat(op.getInputs());
   return {PropertyPrecedence::Concat};
-}
-
-EmittedProperty PropertyEmitter::visitLTL(ltl::RepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
-  if (auto more = op.getMore()) {
-    ps << "[*";
-    ps.addAsString(op.getBase());
-    if (*more != 0) {
-      ps << ":";
-      ps.addAsString(op.getBase() + *more);
-    }
-    ps << "]";
-  } else {
-    if (op.getBase() == 0) {
-      ps << "[*]";
-    } else if (op.getBase() == 1) {
-      ps << "[+]";
-    } else {
-      ps << "[*";
-      ps.addAsString(op.getBase());
-      ps << ":$]";
-    }
-  }
-  return {PropertyPrecedence::Repeat};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedRepeatOp op) {
@@ -3943,21 +3911,6 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedRepeatOp op) {
   });
 }
 
-EmittedProperty PropertyEmitter::visitLTL(ltl::GoToRepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
-  // More always exists
-  auto more = op.getMore();
-  ps << "[->";
-  ps.addAsString(op.getBase());
-  if (more != 0) {
-    ps << ":";
-    ps.addAsString(op.getBase() + more);
-  }
-  ps << "]";
-
-  return {PropertyPrecedence::Repeat};
-}
-
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedGoToRepeatOp op) {
   return emitClocked(op.getEdge(), op.getClock(), [&] {
     emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
@@ -3973,21 +3926,6 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedGoToRepeatOp op) {
 
     return EmittedProperty{PropertyPrecedence::Repeat};
   });
-}
-
-EmittedProperty PropertyEmitter::visitLTL(ltl::NonConsecutiveRepeatOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Repeat);
-  // More always exists
-  auto more = op.getMore();
-  ps << "[=";
-  ps.addAsString(op.getBase());
-  if (more != 0) {
-    ps << ":";
-    ps.addAsString(op.getBase() + more);
-  }
-  ps << "]";
-
-  return {PropertyPrecedence::Repeat};
 }
 
 EmittedProperty
@@ -4028,40 +3966,11 @@ EmittedProperty PropertyEmitter::visitLTL(ltl::NotOp op) {
   return {PropertyPrecedence::Unary};
 }
 
-/// For a value `concat(..., delay(const(true), 1, 0))`, return `...`. This is
-/// useful for emitting `(seq ##1 true) |-> prop` as `seq |=> prop`.
-static ValueRange getNonOverlappingConcatSubrange(Value value) {
-  auto concatOp = value.getDefiningOp<ltl::ConcatOp>();
-  if (!concatOp || concatOp.getInputs().size() < 2)
-    return {};
-  auto delayOp = concatOp.getInputs().back().getDefiningOp<ltl::DelayOp>();
-  if (!delayOp || delayOp.getDelay() != 1 || delayOp.getLength() != 0)
-    return {};
-  auto constOp = delayOp.getInput().getDefiningOp<ConstantOp>();
-  if (!constOp || !constOp.getValue().isOne())
-    return {};
-  return concatOp.getInputs().drop_back();
-}
-
 EmittedProperty PropertyEmitter::visitLTL(ltl::ImplicationOp op) {
-  // Emit `(seq ##1 true) |-> prop` as `seq |=> prop`.
-  if (auto range = getNonOverlappingConcatSubrange(op.getAntecedent());
-      !range.empty()) {
-    emitLTLConcat(range);
-    ps << PP::space << "|=>" << PP::nbsp;
-  } else {
-    emitNestedProperty(op.getAntecedent(), PropertyPrecedence::Implication);
-    ps << PP::space << "|->" << PP::nbsp;
-  }
+  emitNestedProperty(op.getAntecedent(), PropertyPrecedence::Implication);
+  ps << PP::space << "|->" << PP::nbsp;
   emitNestedProperty(op.getConsequent(), PropertyPrecedence::Implication);
   return {PropertyPrecedence::Implication};
-}
-
-EmittedProperty PropertyEmitter::visitLTL(ltl::UntilOp op) {
-  emitNestedProperty(op.getInput(), PropertyPrecedence::Until);
-  ps << PP::space << "until" << PP::space;
-  emitNestedProperty(op.getCondition(), PropertyPrecedence::Until);
-  return {PropertyPrecedence::Until};
 }
 
 EmittedProperty PropertyEmitter::visitLTL(ltl::ClockedUntilOp op) {

@@ -52,29 +52,17 @@ firrtl.circuit "Foo" {
     // CHECK-NEXT: firrtl.int.ltl.intersect %in0, %in1 :
     firrtl.int.generic "circt_ltl_intersect"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42 :
-    firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.int.ltl.delay %in0, 42, 1337 :
-    firrtl.int.generic "circt_ltl_delay" <delay: i64 = 42, length: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_delay %in0, negedge %clk, 42, 1337 :
     firrtl.int.generic "circt_ltl_clocked_delay" <delay: i64 = 42, length: i64 = 1337, edge: none = "negedge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_atom %in0, negedge %clk :
     firrtl.int.generic "circt_ltl_clocked_atom" <edge: none = "negedge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
-    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42 :
-    firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.int.ltl.repeat %in0, 42, 1337 :
-    firrtl.int.generic "circt_ltl_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_repeat %in0, posedge %clk, 42 :
     firrtl.int.generic "circt_ltl_clocked_repeat" <base: i64 = 42> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_repeat %in0, negedge %clk, 42, 1337 :
     firrtl.int.generic "circt_ltl_clocked_repeat" <base: i64 = 42, more: i64 = 1337, edge: none = "negedge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.int.ltl.goto_repeat %in0, 42, 1337 :
-    firrtl.int.generic "circt_ltl_goto_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_goto_repeat %in0, negedge %clk, 42, 1337 :
     firrtl.int.generic "circt_ltl_clocked_goto_repeat" <base: i64 = 42, more: i64 = 1337, edge: none = "negedge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.int.ltl.non_consecutive_repeat %in0, 42, 1337 :
-    firrtl.int.generic "circt_ltl_non_consecutive_repeat" <base: i64 = 42, more: i64 = 1337> %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_non_consecutive_repeat %in0, negedge %clk, 42, 1337 :
     firrtl.int.generic "circt_ltl_clocked_non_consecutive_repeat" <base: i64 = 42, more: i64 = 1337, edge: none = "negedge"> %in0, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
@@ -84,8 +72,6 @@ firrtl.circuit "Foo" {
     firrtl.int.generic "circt_ltl_not"  %in0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.implication %in0, %in1 :
     firrtl.int.generic "circt_ltl_implication"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
-    // CHECK-NEXT: firrtl.int.ltl.until %in0, %in1 :
-    firrtl.int.generic "circt_ltl_until"  %in0, %in1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_until %in0, posedge %clk, %in1 :
     firrtl.int.generic "circt_ltl_clocked_until" %in0, %clk, %in1 : (!firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: firrtl.int.ltl.clocked_until %in0, negedge %clk, %in1 :

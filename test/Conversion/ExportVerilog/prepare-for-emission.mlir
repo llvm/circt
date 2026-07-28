@@ -270,7 +270,7 @@ hw.module @Issue5613(in %a: i1, in %b: i1) {
   %1 = ltl.or %b, %3 : i1, !ltl.property
   %2 = ltl.and %b, %4 : i1, !ltl.sequence
   %3 = ltl.not %b : i1
-  %4 = ltl.delay %a, 42 : i1
+  %4 = ltl.clocked_delay %a, posedge %b, 42 : i1
   hw.output
 }
 

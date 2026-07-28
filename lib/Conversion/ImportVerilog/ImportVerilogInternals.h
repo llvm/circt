@@ -355,9 +355,9 @@ struct Context {
   /// Helper function to convert a value to a MLIR I1 value.
   Value convertToI1(Value value);
 
-  // Convert a slang timing control for LTL
-  Value convertLTLTimingControl(const slang::ast::TimingControl &ctrl,
-                                const Value &seqOrPro);
+  // Convert a slang timing control into an explicit LTL clock and edge.
+  FailureOr<std::pair<ltl::ClockEdgeAttr, Value>>
+  convertLTLTimingControl(const slang::ast::TimingControl &ctrl);
 
   LogicalResult
   convertNInputPrimitive(const slang::ast::PrimitiveInstanceSymbol &prim);
@@ -599,6 +599,9 @@ struct Context {
   /// callback to avoid adding reads from explicit event controls to the
   /// implicit sensitivity list.
   bool isInsideTimingControl = false;
+
+  /// The explicit clock used while lowering an assertion expression.
+  std::optional<std::pair<ltl::ClockEdgeAttr, Value>> currentLTLClock;
 
   /// The time scale currently in effect.
   slang::TimeScale timeScale;
