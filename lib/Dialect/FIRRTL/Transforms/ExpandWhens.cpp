@@ -568,6 +568,18 @@ private:
         condition.getLoc(), condition.getType(), condition, value);
   }
 
+  /// Sample the current condition as an atom clocked by the given clock,
+  /// reusing a previously created clocked atom for the same condition/clock
+  /// pair if one exists.
+  Value clockedConditionWithClock(Operation *op, EventControlAttr edge,
+                                  Value clock) {
+    auto &newOp = createdLTLClockedConditionOps[{condition, clock, edge}];
+    if (!newOp)
+      newOp = OpBuilder(op).createOrFold<LTLClockedAtomIntrinsicOp>(
+          condition.getLoc(), condition.getType(), condition, edge, clock);
+    return newOp;
+  }
+
   /// Concurrent and of a property with the current condition.  If we are in
   /// the outer scope, i.e. not in a WhenOp region, then there is no condition.
   Value ltlAndWithCondition(Operation *op, Value property) {
@@ -584,6 +596,19 @@ private:
         newClockOp.getInputMutable().assign(input);
       }
       return newClockOp;
+    }
+
+    // If the property is already an explicitly clocked atom, apply the
+    // condition as an atom sampled by the same clock.
+    if (auto clockedAtomOp =
+            property.getDefiningOp<LTLClockedAtomIntrinsicOp>()) {
+      auto clockedCondition = clockedConditionWithClock(
+          op, clockedAtomOp.getEdgeAttr(), clockedAtomOp.getClock());
+      auto &newOp = createdLTLAndOps[{clockedCondition, property}];
+      if (!newOp)
+        newOp = OpBuilder(op).createOrFold<LTLAndIntrinsicOp>(
+            condition.getLoc(), property.getType(), clockedCondition, property);
+      return newOp;
     }
 
     // Otherwise create a new `ltl.and` with the condition.
@@ -611,6 +636,19 @@ private:
         newClockOp.getInputMutable().assign(input);
       }
       return newClockOp;
+    }
+
+    // If the property is already an explicitly clocked atom, apply the
+    // condition as an atom sampled by the same clock.
+    if (auto clockedAtomOp =
+            property.getDefiningOp<LTLClockedAtomIntrinsicOp>()) {
+      auto clockedCondition = clockedConditionWithClock(
+          op, clockedAtomOp.getEdgeAttr(), clockedAtomOp.getClock());
+      auto &newImplOp = createdLTLImplicationOps[{clockedCondition, property}];
+      if (!newImplOp)
+        newImplOp = OpBuilder(op).createOrFold<LTLImplicationIntrinsicOp>(
+            condition.getLoc(), property.getType(), clockedCondition, property);
+      return newImplOp;
     }
 
     // Merge condition into `ltl.implication` left-hand side.
@@ -646,6 +684,12 @@ private:
   /// The `ltl.clock` operations that have been created.
   SmallDenseMap<std::pair<LTLClockIntrinsicOp, Value>, LTLClockIntrinsicOp>
       createdLTLClockOps;
+
+  /// The clocked atoms for when conditions that have been created.  Keyed
+  /// on the condition, clock, *and* edge, since two clocked atoms on the
+  /// same clock but different edges must not be conflated.
+  SmallDenseMap<std::tuple<Value, Value, EventControlAttr>, Value>
+      createdLTLClockedConditionOps;
 };
 } // namespace
 
@@ -715,6 +759,8 @@ void WhenOpVisitor::visitStmt(LayerBlockOp layerBlockOp) {
   llvm::SaveAndRestore savedLTLAndOps(createdLTLAndOps);
   llvm::SaveAndRestore savedLTLImplicationOps(createdLTLImplicationOps);
   llvm::SaveAndRestore savedLTLClockOps(createdLTLClockOps);
+  llvm::SaveAndRestore savedLTLClockedConditionOps(
+      createdLTLClockedConditionOps);
 
   process(*layerBlockOp.getBody());
 }

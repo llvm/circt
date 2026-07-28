@@ -732,6 +732,106 @@ firrtl.module @WhenAroundPropertyAssertAssumeCover(
   }
 }
 
+// CHECK-LABEL: firrtl.module @WhenAroundClockedAtom
+firrtl.module @WhenAroundClockedAtom(
+  in %clock: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %d: !firrtl.uint<1>
+) {
+  // CHECK: [[B_ATOM:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock :
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.when
+  firrtl.when %a : !firrtl.uint<1> {
+    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.assert [[TMP2]], %d :
+    firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.and [[TMP1]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.cover [[TMP3]] :
+    firrtl.int.verif.cover %0 : !firrtl.uint<1>
+  } else {
+    // CHECK: [[NOTA:%.+]] = firrtl.not %a
+    // CHECK: [[TMP1:%.+]] = firrtl.int.ltl.clocked_atom [[NOTA]], posedge %clock :
+    // CHECK: [[TMP2:%.+]] = firrtl.int.ltl.implication [[TMP1]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.assert [[TMP2]], %d :
+    firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    // CHECK: [[TMP3:%.+]] = firrtl.int.ltl.and [[TMP1]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.cover [[TMP3]] :
+    firrtl.int.verif.cover %0 : !firrtl.uint<1>
+  }
+}
+
+// Test that when two clocked-atom properties under the same `when` share a
+// clock but use different edges, the `when` condition is sampled at each
+// atom's OWN edge rather than reusing a cached atom built for a different
+// edge on the same clock. See ExpandWhens' clockedConditionWithClock helper,
+// whose cache key must include the edge.
+// CHECK-LABEL: firrtl.module @WhenAroundClockedAtomMixedEdges
+firrtl.module @WhenAroundClockedAtomMixedEdges(
+  in %clock: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %c: !firrtl.uint<1>,
+  in %d: !firrtl.uint<1>
+) {
+  // CHECK: [[B_ATOM:%.+]] = firrtl.int.ltl.clocked_atom %b, posedge %clock :
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: [[C_ATOM:%.+]] = firrtl.int.ltl.clocked_atom %c, negedge %clock :
+  %1 = firrtl.int.ltl.clocked_atom %c, negedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+
+  // CHECK-NOT: firrtl.when
+  firrtl.when %a : !firrtl.uint<1> {
+    // CHECK: [[POS_COND:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+    // CHECK: [[IMPL_POS:%.+]] = firrtl.int.ltl.implication [[POS_COND]], [[B_ATOM]]
+    // CHECK: firrtl.int.verif.assert [[IMPL_POS]], %d :
+    firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    // The negedge atom must sample %a with its OWN edge (negedge), not reuse
+    // the posedge atom created above for the same condition/clock pair.
+    // CHECK: [[NEG_COND:%.+]] = firrtl.int.ltl.clocked_atom %a, negedge %clock :
+    // CHECK: [[IMPL_NEG:%.+]] = firrtl.int.ltl.implication [[NEG_COND]], [[C_ATOM]]
+    // CHECK: firrtl.int.verif.assert [[IMPL_NEG]], %d :
+    firrtl.int.verif.assert %1, %d : !firrtl.uint<1>, !firrtl.uint<1>
+  }
+}
+
+// Test that sibling layerblocks inside a when each get their own clocked-atom
+// when-condition sample and do not share a cached clocked_atom across
+// layerblock boundaries (which would cause dominance violations). This
+// mirrors @SiblingLayerblocksImplication above, but for the clocked-atom
+// when-condition cache (createdLTLClockedConditionOps), which must be
+// snapshotted/restored around layerblock processing just like the other LTL
+// op caches.
+firrtl.layer @LayerClockedAtom bind attributes {sym_visibility = "private"} {}
+// CHECK-LABEL: firrtl.module @SiblingLayerblocksClockedAtom
+firrtl.module @SiblingLayerblocksClockedAtom(
+  in %clock: !firrtl.clock,
+  in %a: !firrtl.uint<1>,
+  in %b: !firrtl.uint<1>,
+  in %d: !firrtl.uint<1>
+) {
+  %0 = firrtl.int.ltl.clocked_atom %b, posedge %clock : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+  // CHECK: firrtl.layerblock @LayerClockedAtom {
+  // CHECK:   [[COND1:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+  // CHECK:   [[IMPL1:%.+]] = firrtl.int.ltl.implication [[COND1]],
+  // CHECK:   firrtl.int.verif.assert [[IMPL1]], %d :
+  // CHECK: }
+  // CHECK: firrtl.layerblock @LayerClockedAtom {
+  // CHECK:   [[COND2:%.+]] = firrtl.int.ltl.clocked_atom %a, posedge %clock :
+  // CHECK:   [[IMPL2:%.+]] = firrtl.int.ltl.implication [[COND2]],
+  // CHECK:   firrtl.int.verif.assert [[IMPL2]], %d :
+  // CHECK: }
+  firrtl.when %a : !firrtl.uint<1> {
+    firrtl.layerblock @LayerClockedAtom {
+      firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+    firrtl.layerblock @LayerClockedAtom {
+      firrtl.int.verif.assert %0, %d : !firrtl.uint<1>, !firrtl.uint<1>
+    }
+  }
+}
+
 // CHECK-LABEL:   firrtl.module @dpi(in %clock: !firrtl.clock, in %cond: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %in: !firrtl.uint<8>)
 firrtl.module @dpi(
   in %clock: !firrtl.clock, in %cond: !firrtl.uint<1>, in %enable: !firrtl.uint<1>, in %in: !firrtl.uint<8>
