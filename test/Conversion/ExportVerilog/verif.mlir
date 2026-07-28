@@ -99,6 +99,19 @@ hw.module @Sequences(in %clk: i1, in %a: i1, in %b: i1) {
   %ca = ltl.clocked_atom %a, posedge %clk : i1
   sv.assert_property %ca : !ltl.sequence
 
+  // CHECK: assert property (@(posedge clk) a[*2:4]);
+  %ra = ltl.clocked_atom %a, posedge %clk : i1
+  %cr0 = ltl.clocked_repeat %ra, posedge %clk, 2, 2 : !ltl.sequence
+  sv.assert_property %cr0 : !ltl.sequence
+  // CHECK: assert property (@(posedge clk) a[->1:3]);
+  %gra = ltl.clocked_atom %a, posedge %clk : i1
+  %cgr0 = ltl.clocked_goto_repeat %gra, posedge %clk, 1, 2 : !ltl.sequence
+  sv.assert_property %cgr0 : !ltl.sequence
+  // CHECK: assert property (@(posedge clk) a[=1:3]);
+  %nra = ltl.clocked_atom %a, posedge %clk : i1
+  %cncr0 = ltl.clocked_non_consecutive_repeat %nra, posedge %clk, 1, 2 : !ltl.sequence
+  sv.assert_property %cncr0 : !ltl.sequence
+
   // CHECK: assert property (a ##0 a);
   %c0 = ltl.concat %a, %a : i1, i1
   sv.assert_property %c0 : !ltl.sequence
@@ -217,6 +230,19 @@ hw.module @Properties(in %clk: i1, in %a: i1, in %b: i1) {
   // CHECK: assert property (s_eventually a);
   %e0 = ltl.eventually %a : i1
   sv.assert_property %e0 : !ltl.property
+
+  // Single-clock merge: one leading @(posedge clk), no inner events.
+  // CHECK: assert property (@(posedge clk) a until b);
+  %ua = ltl.clocked_atom %a, posedge %clk : i1
+  %ub = ltl.clocked_atom %b, posedge %clk : i1
+  %cu0 = ltl.clocked_until %ua, posedge %clk, %ub : !ltl.sequence, !ltl.sequence
+  sv.assert_property %cu0 : !ltl.property
+
+  // Eventually.
+  // CHECK: assert property (@(posedge clk) s_eventually a);
+  %ea = ltl.clocked_atom %a, posedge %clk : i1
+  %cev0 = ltl.clocked_eventually %ea, posedge %clk : !ltl.sequence
+  sv.assert_property %cev0 : !ltl.property
 
   // Emit `not(eventually(not(x)))` as `always x` (case A, cancelling nots).
   // CHECK: assert property (always a);
@@ -397,4 +423,15 @@ hw.module @Contracts(in %a: i42, out b : i42) {
   }
   // CHECK: assign b = a;
   hw.output %0 : i42
+}
+
+// CHECK-LABEL: module MultiClock
+hw.module @MultiClock(in %clkA: i1, in %clkB: i1, in %a: i1, in %b: i1) {
+  // Two distinct clocks: the ambient-clock merge must not suppress either
+  // event, so the inner @(...) stays inline.
+  // CHECK: assert property (@(posedge clkA) a until (@(posedge clkB) b));
+  %ca = ltl.clocked_atom %a, posedge %clkA : i1
+  %cb = ltl.clocked_atom %b, posedge %clkB : i1
+  %u  = ltl.clocked_until %ca, posedge %clkA, %cb : !ltl.sequence, !ltl.sequence
+  sv.assert_property %u : !ltl.property
 }

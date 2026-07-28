@@ -22,9 +22,11 @@ public:
     auto *thisCast = static_cast<ConcreteType *>(this);
     return TypeSwitch<Operation *, ResultType>(op)
         .template Case<AndOp, OrOp, DelayOp, ClockedDelayOp, ConcatOp, RepeatOp,
-                       NotOp, ImplicationOp, UntilOp, EventuallyOp, ClockOp,
-                       ClockedAtomOp, IntersectOp, NonConsecutiveRepeatOp,
-                       GoToRepeatOp, BooleanConstantOp>(
+                       ClockedRepeatOp, NotOp, ImplicationOp, UntilOp,
+                       ClockedUntilOp, EventuallyOp, ClockedEventuallyOp,
+                       ClockOp, ClockedAtomOp, IntersectOp,
+                       NonConsecutiveRepeatOp, ClockedNonConsecutiveRepeatOp,
+                       GoToRepeatOp, ClockedGoToRepeatOp, BooleanConstantOp>(
             [&](auto op) -> ResultType {
               return thisCast->visitLTL(op, args...);
             })
@@ -56,15 +58,20 @@ public:
   HANDLE(ClockedDelayOp, Unhandled);
   HANDLE(ConcatOp, Unhandled);
   HANDLE(RepeatOp, Unhandled);
+  HANDLE(ClockedRepeatOp, Unhandled);
   HANDLE(NotOp, Unhandled);
   HANDLE(ImplicationOp, Unhandled);
   HANDLE(UntilOp, Unhandled);
+  HANDLE(ClockedUntilOp, Unhandled);
   HANDLE(EventuallyOp, Unhandled);
+  HANDLE(ClockedEventuallyOp, Unhandled);
   HANDLE(ClockOp, Unhandled);
   HANDLE(ClockedAtomOp, Unhandled);
   HANDLE(IntersectOp, Unhandled);
   HANDLE(NonConsecutiveRepeatOp, Unhandled);
+  HANDLE(ClockedNonConsecutiveRepeatOp, Unhandled);
   HANDLE(GoToRepeatOp, Unhandled);
+  HANDLE(ClockedGoToRepeatOp, Unhandled);
   HANDLE(BooleanConstantOp, Unhandled);
 #undef HANDLE
 };
