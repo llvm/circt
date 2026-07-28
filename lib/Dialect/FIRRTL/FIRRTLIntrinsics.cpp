@@ -422,6 +422,26 @@ public:
   }
 };
 
+class CirctLTLClockedAtomConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+           gi.namedParam("edge", true) || checkLTLEdgeParam(gi) ||
+           gi.hasNParam(0, 1);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto operands = adaptor.getOperands();
+    auto edge = EventControlAttr::get(gi.op.getContext(), getLTLEdgeParam(gi));
+    rewriter.replaceOpWithNewOp<LTLClockedAtomIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0], edge, operands[1]);
+  }
+};
+
 class CirctLTLPastConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;

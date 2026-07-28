@@ -1969,6 +1969,7 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLIntersectIntrinsicOp op);
   LogicalResult visitExpr(LTLDelayIntrinsicOp op);
   LogicalResult visitExpr(LTLClockedDelayIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedAtomIntrinsicOp op);
   LogicalResult visitExpr(LTLConcatIntrinsicOp op);
   LogicalResult visitExpr(LTLRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLGoToRepeatIntrinsicOp op);
@@ -4838,6 +4839,14 @@ LogicalResult FIRRTLLowering::visitExpr(LTLClockedDelayIntrinsicOp op) {
       op, getLoweredValue(op.getInput()), edge,
       getLoweredNonClockValue(op.getClock()), op.getDelayAttr(),
       op.getLengthAttr());
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedAtomIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedAtomOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLConcatIntrinsicOp op) {

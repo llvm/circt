@@ -207,6 +207,14 @@ def CirctLTLClockedDelay : FIRRTLIntrinsic {
   }];
 }
 
+def CirctLTLClockedAtom : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.clocked_atom";
+  let description = [{
+    Associates an explicit clock (and edge) with a boolean atom, producing a
+    one-cycle sequence sampled on that edge. See `ltl.clocked_atom`.
+  }];
+}
+
 def CirctLTLRepeat : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.repeat";
   let description = [{
