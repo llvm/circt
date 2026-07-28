@@ -159,3 +159,46 @@ moore.class.classdecl @VirtualC {
   moore.class.propertydecl @a : !moore.i32
   moore.class.methoddecl @f : (!moore.class<@VirtualC>) -> ()
 }
+
+// CHECK-LABEL: func.func private @test_null1() -> !llvm.ptr
+// CHECK: [[NULL:%.+]] = llvm.mlir.zero : !llvm.ptr
+// CHECK: return [[NULL]] : !llvm.ptr
+func.func private @test_null1() -> !moore.null {
+  %null = moore.null
+  return %null : !moore.null
+}
+
+// CHECK-LABEL: func.func private @test_handle_eq1
+// CHECK-SAME: (%arg0: !llvm.ptr) -> i1
+// CHECK: [[NULL:%.+]] = llvm.mlir.zero : !llvm.ptr
+// CHECK: [[EQ:%.+]] = llvm.icmp "eq" %arg0, [[NULL]] : !llvm.ptr
+// CHECK: return [[EQ]] : i1
+func.func private @test_handle_eq1(%arg0: !moore.class<@H>) -> !moore.i1 {
+  %null = moore.null
+  %eq = moore.handle_eq %arg0, %null : !moore.class<@H> : !moore.null -> i1
+  return %eq : !moore.i1
+}
+moore.class.classdecl @H {
+  moore.class.propertydecl @a : !moore.i32
+}
+
+// CHECK-LABEL: func.func private @test_handle_ne1
+// CHECK-SAME: (%arg0: !llvm.ptr, %arg1: !llvm.ptr) -> i1
+// CHECK: [[NE:%.+]] = llvm.icmp "ne" %arg0, %arg1 : !llvm.ptr
+// CHECK: return [[NE]] : i1
+func.func private @test_handle_ne1(%arg0: !moore.chandle, %arg1: !moore.chandle) -> !moore.i1 {
+  %ne = moore.handle_ne %arg0, %arg1 : !moore.chandle : !moore.chandle -> i1
+  return %ne : !moore.i1
+}
+
+// CHECK-LABEL: func.func private @test_null_eq_null
+// CHECK: [[N0:%.+]] = llvm.mlir.zero : !llvm.ptr
+// CHECK: [[N1:%.+]] = llvm.mlir.zero : !llvm.ptr
+// CHECK: [[EQ:%.+]] = llvm.icmp "eq" [[N0]], [[N1]] : !llvm.ptr
+// CHECK: return [[EQ]] : i1
+func.func private @test_null_eq_null() -> !moore.i1 {
+  %n0 = moore.null
+  %n1 = moore.null
+  %eq = moore.handle_eq %n0, %n1 : !moore.null : !moore.null -> i1
+  return %eq : !moore.i1
+}
