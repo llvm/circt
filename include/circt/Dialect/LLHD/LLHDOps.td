@@ -500,7 +500,7 @@ def SigStructExtractOp : LLHDOp<"sig.struct_extract", [
 
   let extraClassDeclaration = [{
     hw::StructType getStructType() {
-      return cast<hw::StructType>(
+      return hw::type_dyn_cast<hw::StructType>(
         cast<RefType>(getInput().getType()).getNestedType()
       );
     }
