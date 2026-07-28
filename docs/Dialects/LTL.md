@@ -199,6 +199,40 @@ ltl.clocked_delay %s, posedge %clk, 3, 0
 ```
 
 
+#### Explicit-Clock Model
+
+Alongside the ambient `ltl.clock` scoping operator, the dialect provides a family of *clocked* variants of its core sequence/property operations that carry their clock explicitly as part of the operation itself, rather than relying on an enclosing `ltl.clock`:
+
+- `ltl.clocked_atom` — clocked form of a boolean atom (see [Atomic clocking](#atomic-clocking) above).
+- `ltl.clocked_delay` — clocked form of `ltl.delay` (see [Delay clocking](#delay-clocking) above). This is the **canonical example** of the pattern: it takes the same `<input>, <delay>[, <length>]` operands as `ltl.delay`, plus an explicit `<edge> %clock`, e.g. `ltl.clocked_delay %s, posedge %clk, 3, 0`.
+- `ltl.clocked_until` — clocked form of `ltl.until`.
+- `ltl.clocked_eventually` — clocked form of `ltl.eventually`.
+- `ltl.clocked_repeat` — clocked form of `ltl.repeat`.
+- `ltl.clocked_goto_repeat` — clocked form of `ltl.goto_repeat`.
+- `ltl.clocked_non_consecutive_repeat` — clocked form of `ltl.non_consecutive_repeat`.
+
+Each of these ops takes the same operands as its unclocked counterpart, plus a `ClockEdgeAttr:$edge` and an `i1:$clock` operand recording the clocking event under which it is evaluated — mirroring `ltl.clocked_delay`. Unlike `ltl.clock`, they do not establish a clocking *scope* over a subtree; they only record the clock used to sample their own input(s).
+
+The purely logical combinators — `ltl.and`, `ltl.or`, `ltl.not`, `ltl.intersect`, `ltl.concat`, and `ltl.implication` — remain clockless. They do not carry a clock operand of their own; instead they simply combine already-clocked (or clockless) operands, inheriting whatever clock(s) those operands carry.
+
+Building a property entirely out of clocked leaves (`ltl.clocked_atom`, `ltl.clocked_delay`, `ltl.clocked_until`, etc.) combined via clockless combinators produces an IR tree where every leaf independently records its own `edge`/`clock`, with no `ltl.clock` anywhere in the tree. When such a tree is asserted via a plain `verif.assert` (or `verif.assume`/`verif.cover`), ExportVerilog performs the clock merge **at emission time only** — it does not rewrite the IR. If every clocked leaf in the tree agrees on the same edge and clock, the emitted SVA collapses to a single leading `@(edge clock)` on the `assert property (...)` statement instead of repeating the clock at every leaf. For example, the FIRRTL intrinsics
+
+```
+node ca = intrinsic(circt_ltl_clocked_atom<edge="posedge"> : UInt<1>, a, clock)
+node cb = intrinsic(circt_ltl_clocked_atom<edge="posedge"> : UInt<1>, b, clock)
+node u  = intrinsic(circt_ltl_clocked_until<edge="posedge"> : UInt<1>, ca, clock, cb)
+intrinsic(circt_verif_assert, u)
+```
+
+lower through `ltl.clocked_atom`/`ltl.clocked_until` to a single merged assertion:
+
+```systemverilog
+assert property (@(posedge clock) a until b);
+```
+
+with no repeated per-leaf clocking and no `ltl.clock` involved. See `test/firtool/clocked-ltl.fir` for a complete end-to-end example, and `test/firtool/verif-clock-edge.fir` for the mixed `ltl.clock`/`ltl.clocked_delay` case where a differing leaf edge (`negedge`) is *not* merged into the ambient clock and instead emits its own nested `@(negedge clock)`.
+
+
 ### Disable Iff
 
 Properties in SVA can have a disable condition attached, which allows for preemptive resets to be expressed. If the disable condition is true at any time during the evaluation of a property, the property is considered disabled. (See IEEE 1800-2017 end of section 16.12 "Declaring properties".)
