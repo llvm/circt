@@ -146,11 +146,23 @@ def IMDeadCodeElim : Pass<"firrtl-imdeadcodeelim", "mlir::ModuleOp"> {
 def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
   let summary = "Performs inlining, flattening, and dead module elimination";
   let description = [{
-    This inliner pass will inline any instance of module marked as inline, and
-    recursively inline all instances inside of a module marked with flatten.
-    This pass performs renaming of every entity with a name that is inlined by
-    prefixing it with the instance name.  This pass also will remove any module
-    which is not reachable from the top level module.
+    Inline the body of every instance whose target module is annotated inline,
+    and recursively absorb every plain instance under a module annotated
+    flatten.  Inlined entities keep their names, prefixed with the instance
+    name.
+
+    Modules with no remaining use, whether arriving unused or fully absorbed
+    by inlining, are erased.  Modules referenced by symbol, or instantiated
+    by an operation the pass cannot inline through (e.g.,
+    `firrtl.instance_choice`), are retained.
+
+    Hierarchical paths remain valid across inlining.  Their symbols are not
+    stable: a path split across surviving contexts continues under fresh
+    symbols, and paths left with no surviving use are removed.
+
+    Operations whose symbol uses cannot be analyzed are diagnosed rather than
+    silently kept, as are paths terminating at an instance directed to be
+    inlined away.
 
     The inline and flatten annotation attributes are attached to module
     definitions, and they are:
@@ -175,9 +187,9 @@ def Inliner : Pass<"firrtl-inliner", "firrtl::CircuitOp"> {
       "Number of non-primary path contexts merged onto a canonical path (primaries never merge)">,
     Statistic<"numHierPathsErased", "num-hierpaths-erased",
       "Number of source hierarchical paths erased for lack of a surviving target">,
-    Statistic<"numHierPathsOldStyle", "num-hierpaths-old-style",
+    Statistic<"numHierPathsEndInnerSym", "num-hierpaths-end-inner-sym",
       "Number of source hierarchical paths ending at an inner symbol">,
-    Statistic<"numHierPathsNewStyle", "num-hierpaths-new-style",
+    Statistic<"numHierPathsEndModule", "num-hierpaths-end-module",
       "Number of source hierarchical paths ending at a module">
   ];
 }

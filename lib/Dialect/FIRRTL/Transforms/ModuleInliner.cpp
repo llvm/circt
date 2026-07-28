@@ -487,8 +487,8 @@ struct SurvivingHop {
   StringAttr origMod;
   /// Inner symbol within origMod, when the hop has one.
   ///
-  /// A terminal hop's sym may name a non-instance (old-style wire/port leaf).
-  /// A module-only terminal hop has none.
+  /// A terminal hop's sym may name a non-instance, a module-only terminal hop
+  /// has none.
   StringAttr origSym;
   /// The module this hop lands in after inlining.
   StringAttr finalMod;
@@ -621,16 +621,13 @@ public:
   LLVM_DUMP_METHOD void dump();
 #endif
 
-  /// Source-path style counters, copied into the pass statistics.
+  /// Source-path terminal-shape counters, copied into the pass statistics.
   ///
-  /// We can drop the leaf-rename machinery (!) if we lock-in and enforce the
-  /// deprecation of the old-style paths.  Namely `updateVirtualNLALeafSymbols`
-  /// and the scan in `rename`.
-  ///
-  /// These measure whether that support is still worth carrying.
+  /// The leaf-rename machinery (`updateVirtualNLALeafSymbols` and the scan in
+  /// `rename`) exists to serve paths ending at an inner symbol.
   struct Statistics {
-    size_t oldStyle = 0;
-    size_t newStyle = 0;
+    size_t endInnerSym = 0;
+    size_t endModule = 0;
   } stats;
 
 private:
@@ -760,8 +757,8 @@ LogicalResult NLAPlanner::run() {
           llvm_unreachable("NLA element must be innerref or flat symbol");
       }
 
-      // Old style ends at an inner symbol; new style ends at a module.
-      ++(nlaHops.back().sym ? stats.oldStyle : stats.newStyle);
+      // Track statistics about terminal shape.
+      ++(nlaHops.back().sym ? stats.endInnerSym : stats.endModule);
 
       // 2.2 Construct each (bucket-common) prefix + NLA path, and hand to
       // helper to walk the full path and produce final VNLA for each.
@@ -1075,7 +1072,7 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
       assert((sym || isTerminal || !hop.inst) &&
              "surviving instance hop without an inner symbol");
       StringAttr finalSym;
-      if (currentDest == hop.mod || isTerminal /* preserve old-style */)
+      if (currentDest == hop.mod || isTerminal /* terminals keep their sym */)
         finalSym = sym;
       survivingHops.push_back({/*origMod=*/hop.mod, /*origSym=*/sym,
                                /*finalMod=*/currentDest,
@@ -1339,7 +1336,7 @@ private:
   /// materialized path dangles.
   ///
   /// Matching is per-field by (origMod, origSym), destination-gated (I12/I13).
-  /// Needed only to preserve old-style NLA leaf symbols; remove with them.
+  /// Needed only to preserve NLA leaf symbols.
   void updateVirtualNLALeafSymbols(Inliner::InliningLevel &il,
                                    hw::InnerSymAttr oldSymAttr,
                                    hw::InnerSymAttr newSymAttr);
@@ -2418,8 +2415,8 @@ class InlinerPass : public circt::firrtl::impl::InlinerBase<InlinerPass> {
       llvm::dbgs() << "\n=== NLA Planner Results ===\n";
       nlaPlanner.dump();
     });
-    numHierPathsOldStyle += nlaPlanner.stats.oldStyle;
-    numHierPathsNewStyle += nlaPlanner.stats.newStyle;
+    numHierPathsEndInnerSym += nlaPlanner.stats.endInnerSym;
+    numHierPathsEndModule += nlaPlanner.stats.endModule;
 
     // Run Inlining: Clone (P3), and writeback (P4).
     CircuitNamespace circuitNamespace(circuit);
