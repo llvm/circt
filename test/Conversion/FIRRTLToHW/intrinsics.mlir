@@ -72,6 +72,8 @@ firrtl.circuit "Intrinsics" {
     %cd1 = firrtl.int.ltl.clocked_delay %b, edge %clk, 3 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
     // CHECK-NEXT: [[A0:%.+]] = ltl.clocked_atom %a, posedge [[CLK]] : i1
     %a0 = firrtl.int.ltl.clocked_atom %a, posedge %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[AN:%.+]] = ltl.clocked_atom %a, negedge [[CLK]] : i1
+    %an = firrtl.int.ltl.clocked_atom %a, negedge %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[L0:%.+]] = ltl.and [[D0]], [[D1]] : !ltl.sequence, !ltl.sequence
     %l0 = firrtl.int.ltl.and %d0, %d1 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
