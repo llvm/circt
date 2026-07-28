@@ -236,6 +236,30 @@ def CirctLTLRepeat : FIRRTLIntrinsic {
   }];
 }
 
+def CirctLTLClockedRepeat : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.clocked_repeat";
+  let description = [{
+    Repeats a boolean or sequence a specified number of times consecutively
+    on an explicit clock and edge, with an optional bound on the number of
+    additional repetitions. See `ltl.clocked_repeat`.
+
+    | Parameter | Type   | Description                               |
+    | --------- | ------ | ----------------------------------------- |
+    | base      | int    | minimum number of consecutive repetitions |
+    | more      | int    | maximum additional repetitions; optional  |
+    | edge      | string | `posedge`, `negedge`, or `edge`; optional, defaults to `posedge` |
+
+    | Argument | Type    | Description               |
+    | -------- | ------- | ------------------------- |
+    | in       | UInt<1> | input boolean or sequence |
+    | clock    | Clock   | clock for the repetition  |
+
+    | Result | Type    | Description               |
+    | ------ | ------- | ------------------------- |
+    | out    | UInt<1> | clocked repeated sequence |
+  }];
+}
+
 def CirctLTLGoToRepeat : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.goto_repeat";
   let description = [{
@@ -258,6 +282,30 @@ def CirctLTLGoToRepeat : FIRRTLIntrinsic {
   }];
 }
 
+def CirctLTLClockedGoToRepeat : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.clocked_goto_repeat";
+  let description = [{
+    Repeats a boolean or sequence a specified number of times, not
+    necessarily consecutively, on an explicit clock and edge. See
+    `ltl.clocked_goto_repeat`.
+
+    | Parameter | Type   | Description                                                      |
+    | --------- | ------ | ------------------------------------------------------------------ |
+    | base      | int    | minimum number of repetitions                                    |
+    | more      | int    | maximum additional repetitions                                   |
+    | edge      | string | `posedge`, `negedge`, or `edge`; optional, defaults to `posedge` |
+
+    | Argument | Type    | Description               |
+    | -------- | ------- | ------------------------- |
+    | in       | UInt<1> | input boolean or sequence |
+    | clock    | Clock   | clock for the repetition  |
+
+    | Result | Type    | Description                   |
+    | ------ | ------- | ------------------------------ |
+    | out    | UInt<1> | clocked go-to repeat sequence |
+  }];
+}
+
 def CirctLTLNonConsecutiveRepeat : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.non_consecutive_repeat";
   let description = [{
@@ -276,6 +324,30 @@ def CirctLTLNonConsecutiveRepeat : FIRRTLIntrinsic {
     | Result | Type    | Description                     |
     | ------ | ------- | ------------------------------- |
     | out    | UInt<1> | non-consecutive repeat sequence |
+  }];
+}
+
+def CirctLTLClockedNonConsecutiveRepeat : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.clocked_non_consecutive_repeat";
+  let description = [{
+    Like `circt.ltl.clocked_goto_repeat`, but allows additional cycles after
+    the last repetition before the overall sequence completes. See
+    `ltl.clocked_non_consecutive_repeat`.
+
+    | Parameter | Type   | Description                                                      |
+    | --------- | ------ | ------------------------------------------------------------------ |
+    | base      | int    | minimum number of repetitions                                    |
+    | more      | int    | maximum additional repetitions                                   |
+    | edge      | string | `posedge`, `negedge`, or `edge`; optional, defaults to `posedge` |
+
+    | Argument | Type    | Description               |
+    | -------- | ------- | ------------------------- |
+    | in       | UInt<1> | input boolean or sequence |
+    | clock    | Clock   | clock for the repetition  |
+
+    | Result | Type    | Description                            |
+    | ------ | ------- | --------------------------------------- |
+    | out    | UInt<1> | clocked non-consecutive repeat sequence |
   }];
 }
 
@@ -426,6 +498,11 @@ def CirctLTLUntil : FIRRTLIntrinsic {
   }];
 }
 
+def CirctLTLClockedUntil : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.clocked_until";
+  let description = [{ Explicitly-clocked `until`. See `ltl.clocked_until`. }];
+}
+
 def CirctLTLNot : FIRRTLIntrinsic {
   let mnemonic = "circt.ltl.not";
   let converter = "CirctLTLUnaryConverter<LTLNotIntrinsicOp>";
@@ -455,6 +532,13 @@ def CirctLTLEventually : FIRRTLIntrinsic {
     | Result | Type    | Description         |
     | ------ | ------- | ------------------- |
     | out    | UInt<1> | eventually property |
+  }];
+}
+
+def CirctLTLClockedEventually : FIRRTLIntrinsic {
+  let mnemonic = "circt.ltl.clocked_eventually";
+  let description = [{
+    Explicitly-clocked `eventually`. See `ltl.clocked_eventually`.
   }];
 }
 

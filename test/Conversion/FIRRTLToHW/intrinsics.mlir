@@ -89,16 +89,28 @@ firrtl.circuit "Intrinsics" {
     %r0 = firrtl.int.ltl.repeat %a, 42 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[R1:%.+]] = ltl.repeat %b, 42, 1337 : i1
     %r1 = firrtl.int.ltl.repeat %b, 42, 1337 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CR0:%.+]] = ltl.clocked_repeat %a, posedge [[CLK]], 42 : i1
+    %cr0 = firrtl.int.ltl.clocked_repeat %a, posedge %clk, 42 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CR1:%.+]] = ltl.clocked_repeat %b, negedge [[CLK]], 42, 1337 : i1
+    %cr1 = firrtl.int.ltl.clocked_repeat %b, negedge %clk, 42, 1337 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[GTR0:%.+]] = ltl.goto_repeat %a, 42, 0 : i1
     %gtr0 = firrtl.int.ltl.goto_repeat %a, 42, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[GTR1:%.+]] = ltl.goto_repeat %b, 1337, 9001 : i1
     %gtr1 = firrtl.int.ltl.goto_repeat %b, 1337, 9001 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CGTR0:%.+]] = ltl.clocked_goto_repeat %a, posedge [[CLK]], 42, 0 : i1
+    %cgtr0 = firrtl.int.ltl.clocked_goto_repeat %a, posedge %clk, 42, 0 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CGTR1:%.+]] = ltl.clocked_goto_repeat %b, negedge [[CLK]], 1337, 9001 : i1
+    %cgtr1 = firrtl.int.ltl.clocked_goto_repeat %b, negedge %clk, 1337, 9001 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[NCR0:%.+]] = ltl.non_consecutive_repeat %a, 42, 0 : i1
     %ncr0 = firrtl.int.ltl.non_consecutive_repeat %a, 42, 0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
     // CHECK-NEXT: [[NCR1:%.+]] = ltl.non_consecutive_repeat %b, 1337, 9001 : i1
     %ncr1 = firrtl.int.ltl.non_consecutive_repeat %b, 1337, 9001 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CNCR0:%.+]] = ltl.clocked_non_consecutive_repeat %a, posedge [[CLK]], 42, 0 : i1
+    %cncr0 = firrtl.int.ltl.clocked_non_consecutive_repeat %a, posedge %clk, 42, 0 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CNCR1:%.+]] = ltl.clocked_non_consecutive_repeat %b, negedge [[CLK]], 1337, 9001 : i1
+    %cncr1 = firrtl.int.ltl.clocked_non_consecutive_repeat %b, negedge %clk, 1337, 9001 : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[N0:%.+]] = ltl.not [[C0]] : !ltl.sequence
     %n0 = firrtl.int.ltl.not %c0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
@@ -108,9 +120,17 @@ firrtl.circuit "Intrinsics" {
 
     // CHECK-NEXT: [[U0:%.+]] = ltl.until [[N0]], [[N0]] : !ltl.property, !ltl.property
     %u0 = firrtl.int.ltl.until %n0, %n0 : (!firrtl.uint<1>, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CU0:%.+]] = ltl.clocked_until [[N0]], posedge [[CLK]], [[N0]] : !ltl.property, !ltl.property
+    %cu0 = firrtl.int.ltl.clocked_until %n0, posedge %clk, %n0 : (!firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CU1:%.+]] = ltl.clocked_until [[N0]], negedge [[CLK]], [[N0]] : !ltl.property, !ltl.property
+    %cu1 = firrtl.int.ltl.clocked_until %n0, negedge %clk, %n0 : (!firrtl.uint<1>, !firrtl.clock, !firrtl.uint<1>) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[E0:%.+]] = ltl.eventually [[I0]] : !ltl.property
     %e0 = firrtl.int.ltl.eventually %i0 : (!firrtl.uint<1>) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CE0:%.+]] = ltl.clocked_eventually [[I0]], posedge [[CLK]] : !ltl.property
+    %ce0 = firrtl.int.ltl.clocked_eventually %i0, posedge %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
+    // CHECK-NEXT: [[CE1:%.+]] = ltl.clocked_eventually [[I0]], negedge [[CLK]] : !ltl.property
+    %ce1 = firrtl.int.ltl.clocked_eventually %i0, negedge %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>
 
     // CHECK-NEXT: [[P1:%.+]] = ltl.past %b, 3 clk [[CLK]] : i1
     %p1 = firrtl.int.ltl.past %b, 3, %clk : (!firrtl.uint<1>, !firrtl.clock) -> !firrtl.uint<1>

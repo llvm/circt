@@ -442,6 +442,45 @@ public:
   }
 };
 
+class CirctLTLClockedUntilConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(3) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedInput<UIntType>(2, 1) ||
+           gi.sizedOutput<UIntType>(1) || gi.namedParam("edge", true) ||
+           checkLTLEdgeParam(gi) || gi.hasNParam(0, 1);
+  }
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto operands = adaptor.getOperands();
+    auto edge = EventControlAttr::get(gi.op.getContext(), getLTLEdgeParam(gi));
+    rewriter.replaceOpWithNewOp<LTLClockedUntilIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0], edge, operands[1],
+        operands[2]);
+  }
+};
+
+class CirctLTLClockedEventuallyConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+           gi.namedParam("edge", true) || checkLTLEdgeParam(gi) ||
+           gi.hasNParam(0, 1);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto operands = adaptor.getOperands();
+    auto edge = EventControlAttr::get(gi.op.getContext(), getLTLEdgeParam(gi));
+    rewriter.replaceOpWithNewOp<LTLClockedEventuallyIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0], edge, operands[1]);
+  }
+};
+
 class CirctLTLPastConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -543,6 +582,35 @@ public:
   }
 };
 
+class CirctLTLClockedRepeatConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+           gi.namedIntParam("base") || gi.namedIntParam("more", true) ||
+           gi.namedParam("edge", true) || checkLTLEdgeParam(gi) ||
+           gi.hasNParam(1, 2);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto operands = adaptor.getOperands();
+    auto base = getI64Attr(gi.getParamValue<IntegerAttr>("base"));
+    auto more = getI64Attr(gi.getParamValue<IntegerAttr>("more"));
+    auto edge = EventControlAttr::get(gi.op.getContext(), getLTLEdgeParam(gi));
+    rewriter.replaceOpWithNewOp<LTLClockedRepeatIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0], edge, operands[1], base,
+        more);
+  }
+};
+
 class CirctLTLGoToRepeatConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -567,6 +635,35 @@ public:
   }
 };
 
+class CirctLTLClockedGoToRepeatConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+           gi.namedIntParam("base") || gi.namedIntParam("more") ||
+           gi.namedParam("edge", true) || checkLTLEdgeParam(gi) ||
+           gi.hasNParam(2, 1);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto operands = adaptor.getOperands();
+    auto base = getI64Attr(gi.getParamValue<IntegerAttr>("base"));
+    auto more = getI64Attr(gi.getParamValue<IntegerAttr>("more"));
+    auto edge = EventControlAttr::get(gi.op.getContext(), getLTLEdgeParam(gi));
+    rewriter.replaceOpWithNewOp<LTLClockedGoToRepeatIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0], edge, operands[1], base,
+        more);
+  }
+};
+
 class CirctLTLNonConsecutiveRepeatConverter : public IntrinsicConverter {
 public:
   using IntrinsicConverter::IntrinsicConverter;
@@ -588,6 +685,35 @@ public:
     auto more = getI64Attr(gi.getParamValue<IntegerAttr>("more"));
     rewriter.replaceOpWithNewOp<LTLNonConsecutiveRepeatIntrinsicOp>(
         gi.op, gi.op.getResultTypes(), adaptor.getOperands()[0], base, more);
+  }
+};
+
+class CirctLTLClockedNonConsecutiveRepeatConverter : public IntrinsicConverter {
+public:
+  using IntrinsicConverter::IntrinsicConverter;
+
+  bool check(GenericIntrinsic gi) override {
+    return gi.hasNInputs(2) || gi.sizedInput<UIntType>(0, 1) ||
+           gi.typedInput<ClockType>(1) || gi.sizedOutput<UIntType>(1) ||
+           gi.namedIntParam("base") || gi.namedIntParam("more") ||
+           gi.namedParam("edge", true) || checkLTLEdgeParam(gi) ||
+           gi.hasNParam(2, 1);
+  }
+
+  void convert(GenericIntrinsic gi, GenericIntrinsicOpAdaptor adaptor,
+               PatternRewriter &rewriter) override {
+    auto getI64Attr = [&](IntegerAttr val) {
+      if (!val)
+        return IntegerAttr();
+      return rewriter.getI64IntegerAttr(val.getValue().getZExtValue());
+    };
+    auto operands = adaptor.getOperands();
+    auto base = getI64Attr(gi.getParamValue<IntegerAttr>("base"));
+    auto more = getI64Attr(gi.getParamValue<IntegerAttr>("more"));
+    auto edge = EventControlAttr::get(gi.op.getContext(), getLTLEdgeParam(gi));
+    rewriter.replaceOpWithNewOp<LTLClockedNonConsecutiveRepeatIntrinsicOp>(
+        gi.op, gi.op.getResultTypes(), operands[0], edge, operands[1], base,
+        more);
   }
 };
 

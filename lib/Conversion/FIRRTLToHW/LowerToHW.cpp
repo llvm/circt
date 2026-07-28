@@ -881,8 +881,7 @@ void FIRRTLModuleLowering::lowerFileHeader(CircuitOp op,
 
   // Helper function to emit #ifndef guard.
   auto emitGuard = [&](const char *guard, llvm::function_ref<void(void)> body) {
-    sv::IfDefOp::create(
-        b, guard, [] {}, body);
+    sv::IfDefOp::create(b, guard, [] {}, body);
   };
 
   if (state.usedFileDescriptorLib)
@@ -1972,12 +1971,17 @@ struct FIRRTLLowering : public FIRRTLVisitor<FIRRTLLowering, LogicalResult> {
   LogicalResult visitExpr(LTLClockedAtomIntrinsicOp op);
   LogicalResult visitExpr(LTLConcatIntrinsicOp op);
   LogicalResult visitExpr(LTLRepeatIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLGoToRepeatIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedGoToRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLNonConsecutiveRepeatIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedNonConsecutiveRepeatIntrinsicOp op);
   LogicalResult visitExpr(LTLNotIntrinsicOp op);
   LogicalResult visitExpr(LTLImplicationIntrinsicOp op);
   LogicalResult visitExpr(LTLUntilIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedUntilIntrinsicOp op);
   LogicalResult visitExpr(LTLEventuallyIntrinsicOp op);
+  LogicalResult visitExpr(LTLClockedEventuallyIntrinsicOp op);
   LogicalResult visitExpr(LTLPastIntrinsicOp op);
   LogicalResult visitExpr(LTLClockIntrinsicOp op);
 
@@ -3283,8 +3287,7 @@ void FIRRTLLowering::addToAlwaysBlock(
       auto createIfOp = [&]() {
         // It is weird but intended. Here we want to create an empty sv.if
         // with an else block.
-        insideIfOp = sv::IfOp::create(
-            builder, reset, [] {}, [] {});
+        insideIfOp = sv::IfOp::create(builder, reset, [] {}, [] {});
       };
       if (resetStyle == sv::ResetType::AsyncReset) {
         sv::EventControl events[] = {clockEdge, resetEdge};
@@ -4860,14 +4863,42 @@ LogicalResult FIRRTLLowering::visitExpr(LTLRepeatIntrinsicOp op) {
                                          op.getBaseAttr(), op.getMoreAttr());
 }
 
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedRepeatIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedRepeatOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()), op.getBaseAttr(),
+      op.getMoreAttr());
+}
+
 LogicalResult FIRRTLLowering::visitExpr(LTLGoToRepeatIntrinsicOp op) {
   return setLoweringToLTL<ltl::GoToRepeatOp>(
       op, getLoweredValue(op.getInput()), op.getBaseAttr(), op.getMoreAttr());
 }
 
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedGoToRepeatIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedGoToRepeatOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()), op.getBaseAttr(),
+      op.getMoreAttr());
+}
+
 LogicalResult FIRRTLLowering::visitExpr(LTLNonConsecutiveRepeatIntrinsicOp op) {
   return setLoweringToLTL<ltl::NonConsecutiveRepeatOp>(
       op, getLoweredValue(op.getInput()), op.getBaseAttr(), op.getMoreAttr());
+}
+
+LogicalResult
+FIRRTLLowering::visitExpr(LTLClockedNonConsecutiveRepeatIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedNonConsecutiveRepeatOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()), op.getBaseAttr(),
+      op.getMoreAttr());
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLNotIntrinsicOp op) {
@@ -4886,9 +4917,26 @@ LogicalResult FIRRTLLowering::visitExpr(LTLUntilIntrinsicOp op) {
       ValueRange{getLoweredValue(op.getLhs()), getLoweredValue(op.getRhs())});
 }
 
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedUntilIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedUntilOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()),
+      getLoweredValue(op.getCondition()));
+}
+
 LogicalResult FIRRTLLowering::visitExpr(LTLEventuallyIntrinsicOp op) {
   return setLoweringToLTL<ltl::EventuallyOp>(op,
                                              getLoweredValue(op.getInput()));
+}
+
+LogicalResult FIRRTLLowering::visitExpr(LTLClockedEventuallyIntrinsicOp op) {
+  auto edge = ltl::ClockEdgeAttr::get(builder.getContext(),
+                                      firrtlToLTLClockEdge(op.getEdge()));
+  return setLoweringToLTL<ltl::ClockedEventuallyOp>(
+      op, getLoweredValue(op.getInput()), edge,
+      getLoweredNonClockValue(op.getClock()));
 }
 
 LogicalResult FIRRTLLowering::visitExpr(LTLPastIntrinsicOp op) {
