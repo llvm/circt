@@ -198,6 +198,33 @@ using InnerRefToNewNameMap = DenseMap<hw::InnerRefAttr, StringAttr>;
 //===----------------------------------------------------------------------===//
 
 namespace {
+
+/// Answer the operation-kind part of absorbability: is this a construct the
+/// pass can splice a body through at all?
+///
+/// Centralize this for use throughout.
+///
+/// Today that is exactly whether the operation is a plain InstanceOp.
+///
+/// Absorbing an instance takes three checks (AND'd):
+/// 1. this one (operation kind)
+/// 2. the target (a regular firrtl.module)
+/// 3. policy (inline/flatten marks)
+///
+/// Accordingly if this predicate returns null, that is definitive.
+///
+/// Note: This doesn't have to be tied to the operation kind: more precisely
+/// this is the meet over the operation's possible targets in the instance
+/// graph.  This framing would allow inlining through instance choice where all
+/// alternatives name the same module.  This is unlikely to matter in practice
+/// but is mentioned here to help a potential future instantiation kind slot in.
+/// Similarly exploring changes to 2 or 3 above fits into same framing neatly.
+///
+/// This implementation is the conservative approximation of that meet.
+static InstanceOp getAbsorbableInstance(Operation *op) {
+  return dyn_cast_or_null<InstanceOp>(op);
+}
+
 /// Module facts regarding inlining.
 struct ModuleInfo {
   /// The module carries an inline annotation.
@@ -370,24 +397,23 @@ InliningFacts::compute(CircuitOp circuit, InstanceGraph &instanceGraph,
         return emitError(module.getLoc()) << "inline/flatten annotations are "
                                              "only valid on a 'firrtl.module'";
 
-      // Does anything other than an InstanceOp instantiate this?
+      // Does anything opaque (see getAbsorbableInstance) instantiate this?
       auto instantiators = instanceGraph.lookup(module)->uses();
-      auto nonInstanceRecIt =
-          llvm::find_if(instantiators, [](InstanceRecord *rec) {
-            return !isa<InstanceOp>(rec->getInstance());
-          });
-      bool hasNonInstanceUse = nonInstanceRecIt != instantiators.end();
+      auto opaqueRecIt = llvm::find_if(instantiators, [](InstanceRecord *rec) {
+        return !getAbsorbableInstance(rec->getInstance());
+      });
+      bool hasOpaqueUse = opaqueRecIt != instantiators.end();
 
-      if (!module.canDiscardOnUseEmpty() || hasNonInstanceUse) {
+      if (!module.canDiscardOnUseEmpty() || hasOpaqueUse) {
         info.isLive = true;
         info.hasUnflattenedPath = true;
       }
-      if (info.hasInline && hasNonInstanceUse) {
+      if (info.hasInline && hasOpaqueUse) {
         auto diag = mlir::emitWarning(module.getLoc())
                     << "module marked inline is also instantiated by an "
                        "operation that cannot be inlined; it is inlined only "
                        "into its 'firrtl.instance' parents and retained";
-        diag.attachNote((*nonInstanceRecIt)->getInstance()->getLoc())
+        diag.attachNote((*opaqueRecIt)->getInstance()->getLoc())
             << "instantiated here";
       }
       continue;
@@ -880,12 +906,11 @@ LogicalResult NLAPlanner::traceUpUntilSurviving(
     ++frame.currentEdge;
 
     auto *instOp = edge->getInstance().getOperation();
-    // Only climb through regular instance operations.  These are the only kind
-    // we can ever inline through, and for others their targets are kept alive
-    // and are handled above.
+    // Only climb through absorbable instances (see getAbsorbableInstance).
+    // Opaque instantiations keep their targets alive and are handled above.
     //
     // There is no copy in this parent to enumerate -> don't climb!
-    if (!isa<InstanceOp>(instOp))
+    if (!getAbsorbableInstance(instOp))
       continue;
     auto parentName = edge->getParent()->getModule().getModuleNameAttr();
     currentPath.push_back({parentName, instOp, getInnerSymName(instOp)});
@@ -972,9 +997,10 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
     bool isTerminal = it == end;
     bool nextIsRegular = false;
 
-    // A hop's operation is null, a plain instance, or a choice.
-    auto hopInst = dyn_cast_or_null<InstanceOp>(hop.inst);
-    bool isChoiceHop = hop.inst && !hopInst;
+    // A hop's operation is null, absorbable, or opaque
+    // (see getAbsorbableInstance).
+    auto hopInst = getAbsorbableInstance(hop.inst);
+    bool isOpaqueInstanceHop = hop.inst && !hopInst;
 
     // Interior hops read the recorded next module; a terminal names one only
     // through a plain instance.
@@ -997,7 +1023,7 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
     // - Terminal hops never evaporate (I8).
     // - Non-regular modules are never absorbed; their instances relocate.
     // - Neither are instance_choice hops; they relocate with the choice op.
-    bool isEvaporating = nextModName && nextIsRegular && !isChoiceHop &&
+    bool isEvaporating = nextModName && nextIsRegular && !isOpaqueInstanceHop &&
                          (isTransitiveFlatten || nextHasInline);
 
     // Diagnose evaporated terminal instance hops, keep I8 accurate and avoid
@@ -1027,11 +1053,11 @@ NLAPlanner::processSinglePathContext(StringAttr origSym,
       return failure();
     }
 
-    // A choice target begins a fresh flatten scope: flatten does not reach
-    // through it (as with an extmodule).  Terminal state is never carried
-    // forward (the loop ends); don't let it redefine the locals.
+    // An opaque instance's target begins a fresh flatten scope: flatten does
+    // not reach through it (as with an extmodule).  Terminal state is never
+    // carried forward (the loop ends); don't let it redefine the locals.
     if (!isTerminal) {
-      if (isChoiceHop) {
+      if (isOpaqueInstanceHop) {
         isTransitiveFlatten = nextHasFlatten;
         flattenCause = nextHasFlatten ? nextModName : StringAttr{};
       } else {
@@ -1885,8 +1911,8 @@ LogicalResult Inliner::processInto(StringRef prefix, InliningLevel &il,
                           << il.mic.module.getModuleName() << "\n");
 
   auto visit = [&](Operation *op) {
-    // If it's not an instance op, clone it and continue.
-    auto instance = dyn_cast<InstanceOp>(op);
+    // If the pass can't absorb through it, clone it and continue.
+    auto instance = getAbsorbableInstance(op);
     if (!instance) {
       cloneAndRename(prefix, il, mapper, *op);
       return success();
@@ -1942,7 +1968,7 @@ LogicalResult Inliner::processInstances(FModuleOp module, bool flatten) {
   LLVM_DEBUG(llvm::dbgs() << "inlining instances within " << moduleName
                           << "...\n");
   auto visit = [&](FInstanceLike instanceLike) {
-    auto instance = dyn_cast<InstanceOp>(*instanceLike);
+    auto instance = getAbsorbableInstance(instanceLike.getOperation());
     if (!instance)
       return WalkResult::advance();
     // Not a regular module: uninlinable; the analysis marked it live.
