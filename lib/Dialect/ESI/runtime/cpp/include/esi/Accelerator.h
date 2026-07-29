@@ -28,11 +28,18 @@
 #include "esi/Ports.h"
 #include "esi/Services.h"
 
+#include <atomic>
 #include <functional>
+#include <future>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
+#include <tuple>
 #include <typeinfo>
+#include <utility>
+#include <vector>
 
 namespace esi {
 // Forward declarations.
@@ -116,7 +123,7 @@ public:
   /// called. `std::thread` is used. If users don't want the runtime to spin up
   /// threads, don't call this method. `AcceleratorServiceThread` is owned by
   /// AcceleratorConnection and governed by the lifetime of the this object.
-  AcceleratorServiceThread *getServiceThread();
+  virtual AcceleratorServiceThread *getServiceThread();
 
   using Service = services::Service;
   /// Get a typed reference to a particular service type. Caller does *not* take
@@ -222,26 +229,72 @@ struct RegisterAccelerator {
 
 /// Background thread which services various requests. Currently, it listens on
 /// ports and calls callbacks for incoming messages on said ports.
+///
+/// All methods are virtual so that users may provide their own service thread
+/// implementation. Overriders can reuse the default implementation piecemeal by
+/// invoking the base-class methods -- typically overriding `poll()` (to change
+/// what a single iteration does) or `loop()` (to change how iterations are
+/// scheduled). Subclasses that need to run their own `loop()` from the outset
+/// should use the protected `DeferStart` constructor to prevent the base class
+/// from starting the thread, then call `start()` themselves.
 class AcceleratorServiceThread {
 public:
   AcceleratorServiceThread();
-  ~AcceleratorServiceThread();
+  virtual ~AcceleratorServiceThread();
 
   /// When there's data on any of the listenPorts, call the callback. Callable
   /// from any thread.
-  void
+  virtual void
   addListener(std::initializer_list<ReadChannelPort *> listenPorts,
               std::function<void(ReadChannelPort *, MessageData)> callback);
 
   /// Poll this module.
-  void addPoll(HWModule &module);
+  virtual void addPoll(HWModule &module);
+
+  /// Add a task to be invoked on every service iteration. Callable from any
+  /// thread.
+  virtual void addTask(std::function<void(void)> task);
 
   /// Instruct the service thread to stop running.
-  void stop();
+  virtual void stop();
 
-private:
-  struct Impl;
-  std::unique_ptr<Impl> impl;
+protected:
+  /// Tag type used to construct the base class without starting the service
+  /// thread. Intended for subclasses that need to run their own loop from the
+  /// start.
+  struct DeferStart {};
+  explicit AcceleratorServiceThread(DeferStart);
+
+  /// Start the service thread. Called by the default constructor. Spawns a
+  /// std::thread which invokes `loop()` via virtual dispatch.
+  virtual void start();
+
+  /// The main service loop. Runs until `shutdown` is set to true. The default
+  /// implementation yields and then calls `poll()` on every iteration.
+  virtual void loop();
+
+  /// Perform a single iteration of servicing: drain any ready listener
+  /// futures, invoke their callbacks, and run all registered tasks.
+  /// Overriders can invoke this from a custom loop to reuse the default
+  /// servicing behavior.
+  virtual void poll();
+
+  /// Set to true to request the service loop to exit.
+  std::atomic<bool> shutdown{false};
+  /// The thread running `loop()`.
+  std::thread me;
+
+  /// Protects `listeners` and `taskList`.
+  std::mutex m;
+
+  /// Map of read ports to callbacks and their in-flight async reads.
+  std::map<ReadChannelPort *,
+           std::pair<std::function<void(ReadChannelPort *, MessageData)>,
+                     std::future<MessageData>>>
+      listeners;
+
+  /// Tasks which should be called on every loop iteration.
+  std::vector<std::function<void(void)>> taskList;
 };
 } // namespace esi
 
