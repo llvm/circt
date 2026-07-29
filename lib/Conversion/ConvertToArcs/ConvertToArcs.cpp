@@ -12,6 +12,7 @@
 #include "circt/Dialect/LLHD/LLHDOps.h"
 #include "circt/Dialect/Seq/SeqOps.h"
 #include "circt/Dialect/Sim/SimOps.h"
+#include "circt/Dialect/Verif/VerifOps.h"
 #include "circt/Support/ConversionPatternSet.h"
 #include "circt/Support/Namespace.h"
 #include "mlir/IR/PatternMatch.h"
@@ -25,6 +26,7 @@
 using namespace circt;
 using namespace arc;
 using namespace hw;
+using namespace verif;
 using llvm::MapVector;
 using llvm::SmallSetVector;
 using mlir::ConversionConfig;
@@ -511,6 +513,28 @@ LogicalResult Converter::absorbRegs(HWModuleOp module) {
   return success();
 }
 
+struct VerifAssertLowering : public OpConversionPattern<verif::AssertOp> {
+  using OpConversionPattern<verif::AssertOp>::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(verif::AssertOp op,
+                                OpAdaptor adaptor,
+                                ConversionPatternRewriter &rewriter) const override {
+    SmallVector<NamedAttribute> attrs;
+    if (auto label = op.getLabelAttr())
+      attrs.push_back(rewriter.getNamedAttr("msg", label));
+
+    ImplicitLocOpBuilder builder(op.getLoc(), rewriter);
+    builder.create<arc::AssertOp>(
+        TypeRange{},
+        ValueRange{op.getProperty()},
+        ArrayRef<NamedAttribute>{attrs}
+    );
+
+    rewriter.eraseOp(op);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // LLHD Conversion
 //===----------------------------------------------------------------------===//
@@ -548,6 +572,27 @@ static LogicalResult convert(llhd::YieldOp op, llhd::YieldOp::Adaptor adaptor,
 }
 
 //===----------------------------------------------------------------------===//
+// Verif to Arc Conversion
+//===----------------------------------------------------------------------===//
+
+/// `verif.assert` -> `arc.assert`
+static LogicalResult convert(verif::AssertOp op,
+                             verif::AssertOp::Adaptor adaptor,
+                             ConversionPatternRewriter &rewriter) {
+  SmallVector<NamedAttribute> attrs;
+  if (auto label = op.getLabelAttr())
+    attrs.push_back(NamedAttribute(
+        StringAttr::get(op.getContext(), "msg"), label));
+
+  ImplicitLocOpBuilder builder(op.getLoc(), rewriter);
+  builder.create<arc::AssertOp>(TypeRange{}, ValueRange{op.getProperty()},
+                                ArrayRef<NamedAttribute>{attrs});
+
+  rewriter.eraseOp(op);
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Pass Infrastructure
 //===----------------------------------------------------------------------===//
 
@@ -573,13 +618,17 @@ void ConvertToArcsPass::runOnOperation() {
   ConversionPatternSet patterns(&getContext(), converter);
   patterns.add<llhd::CombinationalOp>(convert);
   patterns.add<llhd::YieldOp>(convert);
+  patterns.add<VerifAssertLowering>(&getContext());
 
   // `llhd.combinational` and `llhd.yield` are the only LLHD ops rewritten by
   // this pass; all other ops are left untouched for subsequent lowering
   // passes to handle.
   ConversionTarget target(getContext());
   target.addIllegalOp<llhd::CombinationalOp, llhd::YieldOp>();
-  target.markUnknownOpDynamicallyLegal([](Operation *) { return true; });
+  target.addIllegalDialect<VerifDialect>();
+  target.markUnknownOpDynamicallyLegal([](Operation *op) {
+    return !isa<VerifDialect>(op->getDialect());
+  });
 
   // Disable pattern rollback to use the faster one-shot dialect conversion.
   ConversionConfig config;

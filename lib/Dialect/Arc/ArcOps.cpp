@@ -935,6 +935,17 @@ LogicalResult ArrayRefAllocOp::verify() {
   return success();
 }
 
+//===----------------------------------------------------------------------===//
+// AssertOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult AssertOp::verify() {
+  if (getMsg().has_value() && getMsg().value().empty())
+    return emitOpError("assertion message cannot be empty");
+
+  return success();
+}
+
 #include "circt/Dialect/Arc/ArcInterfaces.cpp.inc"
 
 #define GET_OP_CLASSES

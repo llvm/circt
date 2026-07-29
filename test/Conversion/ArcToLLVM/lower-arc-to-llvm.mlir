@@ -363,3 +363,42 @@ func.func @test_failure_eval(%state: !arc.storage, %cond: i1) {
   arc.terminate %state, false : !arc.storage
   return
 }
+
+module {
+  func.func private @exit(i32)
+
+  func.func @comb_assert_eval(%arg0: !arc.storage) {
+    arc.execute {
+      %true = hw.constant true
+      arc.assert %true
+      arc.output
+    }
+    return
+  }
+}
+
+// CHECK-DAG: llvm.func @__assert_fail(!llvm.ptr, !llvm.ptr, i32, !llvm.ptr)
+// CHECK-DAG: llvm.func @exit(i32) attributes {sym_visibility = "private"}
+// CHECK-DAG: llvm.mlir.global internal constant @_arc_assert_msg_0{{.*}}("assertion failed\00")
+// CHECK-DAG: llvm.mlir.global internal constant @_arc_assert_file_name_0{{.*}}("{{.*}}\00")
+// CHECK-DAG: llvm.mlir.global internal constant @_arc_assert_func_name_0{{.*}}("comb_assert_eval\00")
+
+// CHECK-LABEL: llvm.func @comb_assert_eval(
+// CHECK-SAME:    %arg0: !llvm.ptr
+// CHECK-SAME:  ) {
+
+// CHECK:         [[IS_FAIL:%.+]] = llvm.mlir.constant(false) : i1
+// CHECK:         llvm.cond_br [[IS_FAIL]], [[FAIL_BB:\^bb[0-9]+]], [[CONT_BB:\^bb[0-9]+]]
+
+// CHECK:       [[FAIL_BB]]:
+// CHECK-DAG:     [[MSG:%.+]] = llvm.mlir.addressof @_arc_assert_msg_0 :{{.*}} !llvm.ptr
+// CHECK-DAG:     [[FILE:%.+]] = llvm.mlir.addressof @_arc_assert_file_name_0 :{{.*}} !llvm.ptr
+// CHECK-DAG:     [[FUNC:%.+]] = llvm.mlir.addressof @_arc_assert_func_name_0 :{{.*}} !llvm.ptr
+// CHECK-DAG:     [[LINE:%.+]] = llvm.mlir.constant({{[0-9]+}} : i32) : i32
+
+// CHECK:         llvm.call @__assert_fail([[MSG]], [[FILE]], [[LINE]], [[FUNC]])
+// CHECK:         llvm.br [[CONT_BB]]
+
+// CHECK:       [[CONT_BB]]:
+// CHECK:         llvm.return
+// CHECK:       }
