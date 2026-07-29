@@ -58,13 +58,13 @@ moore.module @Nested() {
     %4 = moore.read %z : <i32>
     // CHECK: %[[TMP2:.+]] = moore.zext %[[Z_READ]] : i32 -> i96
     %6 = moore.zext %4 : !moore.i32 -> !moore.i96
-    
+
     // CHECK-NOT: moore.concat_ref %x, %x
     %0 = moore.concat_ref %x, %x : (!moore.ref<i32>, !moore.ref<i32>) -> <i64>
     %1 = moore.concat_ref %0 : (!moore.ref<i64>) -> <i64>
     %2 = moore.concat_ref %y : (!moore.ref<i32>) -> <i32>
     %3 = moore.concat_ref %1, %2 : (!moore.ref<i64>, !moore.ref<i32>) -> <i96>
-    
+
     // CHECK: %[[TMP3:.+]] = moore.extract %[[TMP2]] from 64 : i96 -> i32
     // CHECK: moore.blocking_assign %x, %[[TMP3]] : i32
     // CHECK: %[[TMP4:.+]] = moore.extract %[[TMP2]] from 32 : i96 -> i32
@@ -159,4 +159,54 @@ moore.module @DelayedAssigns() {
     moore.return
   }
   moore.output
+}
+
+
+// CHECK-LABEL: moore.module @PackedStructExtract()
+// Extract a single bit from a packed struct and use it as LHS of an assignment.
+// Something like:
+//    struct0[0] = 1'b1;
+moore.module @PackedStructExtract() {
+  %aa = moore.variable : <struct<{a: i32, b: i32}>>
+  moore.procedure initial {
+    %0 = moore.constant 1 : i1
+
+    // CHECK: [[TMP0:%.+]] = moore.struct_extract_ref %aa, "b" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %aa, "a" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[LHS:%.+]] = moore.extract_ref [[TMP0]] from 0 : <i32> -> <i1>
+    // CHECK: moore.blocking_assign [[LHS]], %0 : i1
+    %el = moore.extract_ref %aa from 0 : <struct<{a: i32, b: i32}>> -> <i1>
+    moore.blocking_assign %el, %0 : i1
+    moore.return
+  }
+}
+
+// CHECK-LABEL: moore.module @PackedStructExtractRange()
+// Extract a range of bits from a packed struct that cover multiple members and use it as LHS of an assignment.
+// Something like:
+//  struct packed {
+//    struct packed {
+//        int a, b;
+//      } c, d;
+//    } struct1;
+//  struct1[32:30] = 3'b0
+moore.module @PackedStructExtractRange() {
+  %aa = moore.variable : <struct<{inner: struct<{a: i32, b: i32}>, d: i32}>>
+  moore.procedure initial {
+    %0 = moore.constant 0 : i3
+
+    // CHECK: [[D:%.+]] = moore.struct_extract_ref %aa, "d" : <struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> <i32>
+    // CHECK: [[TMP1:%.+]] = moore.struct_extract_ref %aa, "inner" : <struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> <struct<{a: i32, b: i32}>>
+    // CHECK: [[INNER_B:%.+]] = moore.struct_extract_ref [[TMP1]], "b" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[INNER_A:%.+]] = moore.struct_extract_ref [[TMP1]], "a" : <struct<{a: i32, b: i32}>> -> <i32>
+    // CHECK: [[LHS2:%.+]] = moore.extract_ref [[D]] from 30 : <i32> -> <i2>
+    // CHECK: [[LHS1:%.+]] = moore.extract_ref [[INNER_B]] from 0 : <i32> -> <i1>
+    // CHECK: [[RHS1:%.+]] = moore.extract %0 from 2 : i3 -> i1
+    // CHECK: moore.blocking_assign [[LHS1]], [[RHS1]] : i1
+    // CHECK: [[RHS2:%.+]] = moore.extract %0 from 0 : i3 -> i2
+    // CHECK: moore.blocking_assign [[LHS2]], [[RHS2]] : i2
+    %el = moore.extract_ref %aa from 30 : <struct<{inner: struct<{a: i32, b: i32}>, d: i32}>> -> <i3>
+    moore.blocking_assign %el, %0 : i3
+    moore.return
+  }
 }
