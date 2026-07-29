@@ -358,6 +358,7 @@ public:
   uint64_t read(uint32_t addr) const override {
     MMIOCmd cmd{.data = 0, .offset = addr, .write = false};
     auto arg = MessageData::from(cmd);
+    std::lock_guard<std::mutex> g(mmioCmdLock);
     std::future<MessageData> result = cmdMMIO->call(arg);
     result.wait();
     uint64_t ret = *result.get().as<uint64_t>();
@@ -380,6 +381,7 @@ public:
         });
     MMIOCmd cmd{.data = data, .offset = addr, .write = true};
     auto arg = MessageData::from(cmd);
+    std::lock_guard<std::mutex> g(mmioCmdLock);
     std::future<MessageData> result = cmdMMIO->call(arg);
     result.wait();
   }
