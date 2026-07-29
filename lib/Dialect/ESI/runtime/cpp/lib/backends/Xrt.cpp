@@ -130,7 +130,7 @@ public:
       : MMIO(conn, idPath, clients), ip(ip) {}
 
   uint64_t read(uint32_t addr) const override {
-    std::lock_guard<std::mutex> lock(m);
+    std::lock_guard<std::mutex> lock(mmioCmdLock);
 
     // Write the address to the indirect location register.
     xrt_write(IndirectLocation, addr);
@@ -146,7 +146,7 @@ public:
     return ret;
   }
   void write(uint32_t addr, uint64_t data) override {
-    std::lock_guard<std::mutex> lock(m);
+    std::lock_guard<std::mutex> lock(mmioCmdLock);
 
     // Write the address to the indirect location register.
     xrt_write(IndirectLocation, addr);
@@ -176,7 +176,6 @@ public:
 
 private:
   ::xrt::ip &ip;
-  mutable std::mutex m;
 };
 } // namespace
 

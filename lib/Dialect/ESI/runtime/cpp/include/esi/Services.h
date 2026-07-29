@@ -172,6 +172,12 @@ public:
   virtual BundlePort *getPort(AppIDPath id,
                               const BundleType *type) const override;
 
+protected:
+  // The current ESI hardware implementations only support one MMIO command at a
+  // time but don't enforce it. So we must grab a lock to enforce it on the
+  // software side.
+  mutable std::mutex mmioCmdLock;
+
 private:
   /// MMIO base address table.
   std::map<AppIDPath, RegionDescriptor> regions;

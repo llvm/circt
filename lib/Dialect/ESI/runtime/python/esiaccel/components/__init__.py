@@ -14,5 +14,6 @@
 # ===-----------------------------------------------------------------------===//
 
 from .channel_arbiter import ChannelArbiter, ChannelArbiterMod
+from .flow import MaxOutstandingLimiter
 
-__all__ = ["ChannelArbiter", "ChannelArbiterMod"]
+__all__ = ["ChannelArbiter", "ChannelArbiterMod", "MaxOutstandingLimiter"]

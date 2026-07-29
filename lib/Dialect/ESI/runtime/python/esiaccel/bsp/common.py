@@ -16,6 +16,8 @@ from pycde.system import System
 from pycde.types import (Array, Bits, Bundle, BundledChannel, Channel,
                          ChannelDirection, StructType, Type, UInt, Window)
 
+from ..components.flow import MaxOutstandingLimiter
+
 from typing import Callable, Dict, List, Tuple
 import typing
 
@@ -429,8 +431,11 @@ class ChannelMMIO(esi.ServiceImplementation):
   and manifest do not support unaligned accesses and throw away the lower three
   bits.
 
-  Only allows for one outstanding request at a time. If a client doesn't return
-  a response, the MMIO service will hang. TODO: add some kind of timeout.
+  Only allows one outstanding request at a time. This is enforced in hardware
+  by a `MaxOutstandingLimiter` on the command channel, which stalls incoming
+  commands until the previous response has been consumed. If a client fails to
+  return a response, the MMIO service will hang. TODO: add some kind of
+  timeout.
 
   Implementation-defined MMIO layout:
     - 0x0: 0 constant
@@ -462,9 +467,6 @@ class ChannelMMIO(esi.ServiceImplementation):
   # be replaced by parameterizable services.
   # TODO: make the amount of register space each client gets a parameter.
   # Supporting this will require more address decode logic.
-  #
-  # TODO: only supports one outstanding transaction at a time. This is NOT
-  # enforced or checked! Enforce this.
 
   RegisterSpace = 0x400
   RegisterSpaceBits = RegisterSpace.bit_length() - 1
@@ -528,6 +530,21 @@ class ChannelMMIO(esi.ServiceImplementation):
     counted_output = Wire(Channel(esi.MMIODataType))
     cmd_channel = ports.cmd.unpack(data=counted_output)["cmd"]
     counted_output.assign(data_resp_channel)
+
+    # Enforce the single-outstanding-transaction invariant in hardware: hold
+    # off accepting a new command until the response to the previous command
+    # has been consumed by the host. Snoop the response wire for the
+    # completion pulse.
+    resp_xact, _ = counted_output.snoop_xact()
+    cmd_limiter = MaxOutstandingLimiter(cmd_channel.type.inner_type,
+                                        max_outstanding=1)(
+                                            clk=ports.clk,
+                                            rst=ports.rst,
+                                            in_=cmd_channel,
+                                            complete=resp_xact,
+                                            instance_name="cmd_rate_limiter",
+                                        )
+    cmd_channel = cmd_limiter.out
 
     # Get the selection index and the address to hand off to the clients.
     sel_bits, client_cmd_chan = ChannelMMIO.build_addr_read(
