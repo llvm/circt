@@ -328,6 +328,10 @@ function void MathBuiltins(int x, logic [41:0] y, real r, real s);
   dummyB($atan(r));
   // CHECK:  moore.builtin.sinh [[R]] : f64
   dummyB($sinh(r));
+  // CHECK:  moore.builtin.atan2 [[R]], [[S]] : f64
+  dummyB($atan2(r, s));
+  // CHECK:  moore.builtin.hypot [[R]], [[S]] : f64
+  dummyB($hypot(r, s));
   // CHECK:  moore.builtin.cosh [[R]] : f64
   dummyB($cosh(r));
   // CHECK:  moore.builtin.tanh [[R]] : f64
