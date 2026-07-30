@@ -117,7 +117,8 @@ static ValueField getValueField(Value value) {
     }
     auto baseVF = getValueField(base);
 
-    auto structType = dyn_cast<hw::StructType>(se.getInput().getType());
+    auto structType =
+        hw::type_dyn_cast<hw::StructType>(se.getInput().getType());
     if (!structType)
       return {value, 0, value};
 
